@@ -2077,6 +2077,11 @@ function MicroSecFrom(Start: QWord): TShort16;
 // with two fractional digits
 procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 
+/// convert a micro seconds elapsed time into a human readable value
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function MicroSecToText(Micro: QWord): RawUtf8;
+
 /// convert a nano seconds elapsed time into a human readable value
 // - append 'ns', 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value
 // range, with two fractional digits
@@ -10121,6 +10126,14 @@ begin
     AppendShortCardinal(Micro div QWord(86400000000), result);
     AppendShortChar('d', @result);
   end;
+end;
+
+function MicroSecToText(Micro: QWord): RawUtf8;
+var
+  tmp: TShort16;
+begin
+  MicroSecToString(Micro, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
 procedure NanoSecToString(Nano: QWord; out result: TShort16);
