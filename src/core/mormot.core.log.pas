@@ -2658,7 +2658,7 @@ begin
   // main decoding loop
   level := 0;
   abbr := read.VarUInt32;
-  typname := '';
+  typname[0] := #0;
   while abbr <> 0 do
   begin
     with Abbrev[abbr] do
@@ -2688,7 +2688,7 @@ begin
         if low_pc < high_pc then
         begin
           s := debug.fSymbols.NewPtr;
-          if (typname <> '') and
+          if (typname[0] <> #0) and
              (typname[ord(typname[0])] <> '.') then
             AppendShortCharSafe('.', @typname);
           // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
@@ -2705,7 +2705,7 @@ begin
               ((Tag = DW_TAG_class_type) or
                (Tag = DW_TAG_structure_type)) then
       begin
-        typname := '';
+        typname[0] := #0;
         for i := 0 to AttrsCount - 1 do
           with Attrs[i] do
             if (attr = DW_AT_name) and
@@ -2725,7 +2725,7 @@ begin
           (abbr = 0) do
     begin
       if level = 1 then
-        typname := '';
+        typname[0] := #0;
       // skip entries signaling that no more child entries are following
       dec(level);
       if read.EOF then
@@ -5141,7 +5141,7 @@ end;
 {$ifdef OSLINUX}
 procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
 var
-  tmp: TShort16;
+  priority: TShort16;
   mtmp: RawUtf8;
   jvec: array[0..1] of TIoVec;
 const
@@ -5151,9 +5151,9 @@ begin
      not sd.IsAvailable then
     // should be at last "20200615 08003008  "
     exit;
-  FormatShort16('PRIORITY=%', [LOG_TO_SYSLOG[Level]], tmp);
-  jvec[0].iov_base := @tmp[1];
-  jvec[0].iov_len := length(tmp);
+  FormatShort16('PRIORITY=%', [LOG_TO_SYSLOG[Level]], priority);
+  jvec[0].iov_base := @priority[1];
+  jvec[0].iov_len := ord(priority[0]);
   // skip time "20200615 08003008  ." which should not be part of the jvec[]
   TrimCopy(Text, 18 - 8, Utf8TruncatedLength(Text, 1500) - (18 - 8 - 1), mtmp);
   // systemd truncates to LINE_MAX = 2048 anyway and expects valid UTF-8

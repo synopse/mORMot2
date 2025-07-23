@@ -546,7 +546,7 @@ function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
 
 /// compute a subnet/CIDR value from a 32-bit IPv4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
-function IP4Subnet(ip4, netmask4: cardinal): ShortString; overload;
+function IP4Subnet(ip4, netmask4: cardinal): TShort23; overload;
 
 /// compute a subnet/CIDR value from an IPv4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
@@ -564,7 +564,7 @@ function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
 /// convert an IPv4 raw value into a ShortString text
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
-procedure IP4Short(ip4addr: PByteArray; var s: ShortString); 
+procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
 
 /// convert an IPv4 raw value into a ShortString text
 function IP4ToShort(ip4addr: PByteArray): TShort16;
@@ -3550,7 +3550,7 @@ begin
     result := 0;
 end;
 
-function IP4Subnet(ip4, netmask4: cardinal): ShortString;
+function IP4Subnet(ip4, netmask4: cardinal): TShort23;
 var
   w: integer;
 begin
@@ -3599,7 +3599,7 @@ begin
     end;
 end;
 
-procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
+procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
 begin
   s[0] := #0;
   AppendShortCardinal(ip4addr[0], s);
