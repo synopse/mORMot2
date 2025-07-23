@@ -2610,12 +2610,11 @@ function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
 { ************ RawByteString Buffers Aggregation via TRawByteStringGroup }
 
 type
-  /// item as stored in a TRawByteStringGroup instance
+  /// one item as stored in a TRawByteStringGroup instance
   TRawByteStringGroupValue = record
     Position: integer;
     Value: RawByteString;
   end;
-
   PRawByteStringGroupValue = ^TRawByteStringGroupValue;
 
   /// items as stored in a TRawByteStringGroup instance
@@ -2637,7 +2636,7 @@ type
     /// naive but efficient cache for Find()
     LastFind: integer;
     /// add a new item to Values[]
-    procedure Add(const aItem: RawByteString); overload;
+    procedure Add(const aItem: RawByteString; aWeakAssign: boolean = false); overload;
     /// add a new item to Values[]
     procedure Add(aItem: pointer; aItemLen: integer); overload;
     /// add another TRawByteStringGroup to Values[]
@@ -11024,7 +11023,7 @@ end;
 
 { TRawByteStringGroup }
 
-procedure TRawByteStringGroup.Add(const aItem: RawByteString);
+procedure TRawByteStringGroup.Add(const aItem: RawByteString; aWeakAssign: boolean);
 begin
   if Values = nil then
     Clear; // ensure all fields are initialized, even if on stack
@@ -11033,7 +11032,10 @@ begin
   with Values[Count] do
   begin
     Position := self.Position;
-    Value := aItem;
+    if aWeakAssign then
+      pointer(Value) := pointer(aItem)
+    else
+      Value := aItem;
   end;
   LastFind := Count;
   inc(Count);
@@ -11042,10 +11044,13 @@ end;
 
 procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
 var
-  tmp: RawByteString;
+  tmp: pointer;
 begin
-  FastSetRawByteString(tmp, aItem, aItemLen);
-  Add(tmp);
+  if aItemLen <= 0 then
+    exit;
+  tmp := FastNewString(aItemLen, CP_UTF8); // CP_UTF8 for FPC RTL bug
+  MoveFast(aItem^, tmp^, aItemLen);
+  Add(RawByteString(tmp), {weakassign=}true);
 end;
 
 procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
@@ -11140,16 +11145,16 @@ procedure TRawByteStringGroup.Compact;
 var
   i: integer;
   v: PRawByteStringGroupValue;
-  tmp: RawUtf8;
+  tmp: PByteArray;
 begin
   if (Values <> nil) and
      (Count > 1) then
   begin
-    FastSetString(tmp, Position); // assume CP_UTF8 for FPC RTL bug
+    tmp := FastNewString(Position, CP_UTF8); // CP_UTF8 for FPC RTL bug
     v := pointer(Values);
     for i := 1 to Count do
     begin
-      MoveFast(pointer(v^.Value)^, PByteArray(tmp)[v^.Position], length(v^.Value));
+      MoveFast(pointer(v^.Value)^, tmp[v^.Position], length(v^.Value));
       {$ifdef FPC}
       FastAssignNew(v^.Value);
       {$else}
@@ -11157,9 +11162,9 @@ begin
       {$endif FPC}
       inc(v);
     end;
-    Values[0].Value := tmp; // use result for absolute compaction ;)
-    if Count > 128 then
-      SetLength(Values, 128);
+    pointer(Values[0].Value) := tmp; // absolute compaction ;)
+    if Count > 255 then
+      Values := nil; // not too many void pointers
     Count := 1;
     LastFind := 0;
   end;
