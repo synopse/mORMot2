@@ -329,7 +329,7 @@ type
     twJsonEscape,
     twOnSameLine);
 
-  /// available global options for a TTextWriter / TJsonWriter instance
+  /// available options for TTextWriter / TJsonWriter output rendering format
   // - TTextWriter.WriteObject() method behavior would be set via their own
   // TTextWriterWriteObjectOptions, and work in conjunction with those settings
   // - by default, custom serializers set via TRttiJson.RegisterCustomSerializer()
@@ -365,7 +365,7 @@ type
     twoDateTimeWithZ,
     twoNonExpandedArrays);
 
-  /// available internal flags for a TTextWriter / TJsonWriter instance
+  /// available internal flags defining TTextWriter / TJsonWriter process
   // - twfStreamIsOwned is set if the associated TStream is owned by the
   // TTextWriter instance - as a TRawByteStringStream with twfStreamIsRawByteString
   // - twfFlushToStreamNoAutoResize would forbid FlushToStream to resize the
@@ -581,18 +581,6 @@ type
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
-    {$ifndef PUREMORMOT2}
-    /// allow to override the default (JSON) serialization of enumerations and
-    // sets as text, which would write the whole identifier (e.g. 'sllError')
-    // - calling SetDefaultEnumTrim(true) would force the enumerations to
-    // be trimmed for any lower case char, e.g. sllError -> 'Error'
-    // - this is global to the current process, and should be use mainly for
-    // compatibility purposes for the whole process
-    // - you may change the default behavior by setting twoTrimLeftEnumSets
-    // in the TTextWriter.CustomOptions property of a given serializer
-    // - note that unserialization process would recognize both formats
-    class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
-    {$endif PUREMORMOT2}
 
     /// write pending data, then retrieve the whole text as a UTF-8 string
     // - call CancelAll to reuse this instance after this method (or FlushFinal)
@@ -1076,8 +1064,9 @@ type
     property CustomOptions: TTextWriterOptions
       read fCustomOptions write fCustomOptions;
     /// the internal flags used by this TTextWriter instance
-    // - should not be modified by the end-user code
-    // - use the FlushToStreamNoAutoResize property to set the corresponding flag
+    // - should not be modified by the end-user code directly
+    // - use the FlushToStreamNoAutoResize or NoWriteToStreamException
+    // properties to set the corresponding flags just after Create
     property Flags: TTextWriterFlags
       read fFlags;
     /// optional event called before FlushToStream method process
@@ -4067,16 +4056,6 @@ end;
 
 { TTextWriter }
 
-{$ifndef PUREMORMOT2}
-var
-  DefaultTextWriterTrimEnum: boolean; // see TTextWriter.SetDefaultEnumTrim()
-
-class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
-begin
-  DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
-end;
-{$endif PUREMORMOT2}
-
 procedure TTextWriter.InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
 begin
   fTempBufSize := aBufSize;
@@ -4084,10 +4063,6 @@ begin
   dec(aBuf);
   B := aBuf;   // Add() methods will append at B+1
   BEnd := @aBuf[aBufSize - 15]; // BEnd := B+size-16 to avoid overwrite/overread
-  {$ifndef PUREMORMOT2}
-  if DefaultTextWriterTrimEnum then
-    Include(fCustomOptions, twoTrimLeftEnumSets);
-  {$endif PUREMORMOT2}
 end;
 
 constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
