@@ -3117,8 +3117,8 @@ end;
 var
   // 16*4=64 random bytes set at startup to avoid hash flooding
   // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
-  AESNIHASHKEYSCHED: pointer; // = AesNiHashAntiFuzzTable
-  AESNIHASHKEYSCHED_: RawByteString;
+  AesNiHashKey: pointer; // = 512-bit AesNiHashAntiFuzzTable
+  AesNiHashMem: RawByteString;
 
 procedure _AesNiHashXmm0; forward;
 

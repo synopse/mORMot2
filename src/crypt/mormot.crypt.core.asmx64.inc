@@ -6861,8 +6861,8 @@ var
   // random 16*4=64 bytes filled at startup to make collisions harder to engineer
   // - to avoid hash flooding http://ocert.org/advisories/ocert-2012-001.html
   // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
-  AESNIHASHKEYSCHED: pointer; // = AesNiHashAntiFuzzTable
-  AESNIHASHKEYSCHED_: RawByteString;
+  AesNiHashKey: pointer; // = AesNiHashAntiFuzzTable
+  AesNiHashMem: RawByteString;
 
 procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt); forward;
 

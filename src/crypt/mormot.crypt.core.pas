@@ -187,7 +187,7 @@ procedure RawSha512Compress(var Hash; Data: pointer);
 var
   /// 32-bit truncation of GoLang runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing
-  // - only defined if AES-NI and SSE 4.1 are available on this CPU
+  // - Assigned(AesNiHash32) only if AES-NI and SSE 3 are available on this CPU
   // - faster than our SSE4.2+pclmulqdq crc32c() function, with less collision
   // - warning: the hashes will be consistent only during a process: at startup,
   // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
@@ -197,8 +197,7 @@ var
   /// 64-bit aeshash as implemented in GoLang runtime, using aesni opcode
   // - is the fastest and probably one of the safest non-cryptographic hash
   // - just a wrapper around AesNiHash128() with proper 64-bit zeroing
-  // - only defined if AES-NI and SSE 4.1 are available on this CPU, so you
-  // should always check if Assigned(AesNiHash64) then ...
+  // - Assigned(AesNiHash64) only if AES-NI and SSE 3 are available on this CPU
   // - warning: the hashes will be consistent only during a process: at startup,
   // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
   // - DefaultHasher64() is assigned to this function, when available on the CPU
@@ -206,7 +205,7 @@ var
 
   /// 128-bit aeshash as implemented in GoLang runtime, using aesni opcode
   // - access to the raw function implementing both AesNiHash64 and AesNiHash32
-  // - only defined if AES-NI and SSE 4.1 are available on this CPU
+  // - Assigned(AesNiHash128) only if AES-NI and SSE 3 are available on this CPU
   // - warning: the hashes will be consistent only during a process: at startup,
   // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
   // - DefaultHasher128() is assigned to this function, when available on the CPU
@@ -214,7 +213,8 @@ var
 
   /// if AesNiHash128() is available, points to the internal 64 bytes
   // anti-fuzzing random table - published for low-level testing
-  // - never change it at runtime, because it would break e.g. all hash tables
+  // - never modify its content at runtime, to not break e.g. all hash tables
+  // - AesNiHashAntiFuzzTable <> nil if AES-NI and SSE 3 are available on this CPU
   AesNiHashAntiFuzzTable: PHash512;
 
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
@@ -7614,11 +7614,11 @@ begin
     sha3.Update(Executable.ProgramFullSpec);
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    {$ifdef USEAESNIHASH}
-    sha3.Update(AESNIHASHKEYSCHED_); // 256 bytes of AesNiHash random state
-    {$endif USEAESNIHASH}
-    // 512-bit randomness and entropy from mormot.core.base
-    SharedRandom.Fill(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
+    // 512-bit from gsl_rng_taus2 retrieved at startup for AesNiHash128()
+    if AesNiHashAntiFuzzTable <> nil then
+      sha3.Update(AesNiHashAntiFuzzTable, SizeOf(AesNiHashAntiFuzzTable^));
+    // 512-bit randomness and entropy from gsl_rng_taus2 current state
+    SharedRandom.Fill(@data, SizeOf(data));
     sha3.Update(@data, SizeOf(data));
     // 512-bit from _Fill256FromOs + RdRand/Rdtsc + Lecuyer + thread
     XorEntropy(data);
@@ -11063,10 +11063,11 @@ begin
   if (cfAesNi in CpuFeatures) and   // AES-NI
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
-    // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
-    GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 4, AESNIHASHKEYSCHED);
-    PHash128Rec(AESNIHASHKEYSCHED)^ := StartupEntropy; // some salt
-    RandomBytes(AESNIHASHKEYSCHED, 16 * 4); // filled using Lecuyer's
+    // 32-128-bit aeshash as implemented in Go runtime, using aesenc opcode
+    GetMemAligned(AesNiHashMem, nil, 16 * 4, AesNiHashKey, {align=}16);
+    AesNiHashAntiFuzzTable := AesNiHashKey;
+    PHash128Rec(AesNiHashKey)^ := StartupEntropy; // some salt
+    SharedRandom.Fill(AesNiHashKey, 16 * 4);     // 512-bit seed using Lecuyer's
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;
@@ -11074,7 +11075,6 @@ begin
     InterningHasher  := @_AesNiHash32;
     DefaultHasher64  := @_AesNiHash64;
     DefaultHasher128 := @_AesNiHash128;
-    AesNiHashAntiFuzzTable := AESNIHASHKEYSCHED;
   end;
   {$endif USEAESNIHASH}
   {$ifdef USEARMCRYPTO}
