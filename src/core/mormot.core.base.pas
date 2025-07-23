@@ -9902,7 +9902,7 @@ var
 begin
   _Fill256FromOs(tmp);           // fast 256-bit random from OS APIs
   XorMemory(e.r[0], tmp.l);
-  XorMemory(e.r[1], tmp.h);
+  XorMemory(e.r[1], tmp.h);      // on Linux, tmp.h is from getrandom syscall
   lec := @_Lecuyer;              // PtrUInt(lec) is genuine per thread
   e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor tmp.d3;
   e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor tmp.d2;

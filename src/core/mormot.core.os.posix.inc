@@ -2930,7 +2930,6 @@ begin
   if (host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
        proccount, info, infocount) <> 0) or
      (proccount = 0) or
-     //(proccount <> SystemInfo.dwNumberOfProcessors) or
      (infocount <> proccount * 4) or
      (info = nil) then
     exit;
@@ -2939,7 +2938,7 @@ begin
     inc(UserTime,   info[0] + info[3]);  // CPU_STATE_USER + CPU_STATE_NICE
     inc(KernelTime, info[1]);            // CPU_STATE_SYSTEM
     inc(IdleTime,   info[2]);            // CPU_STATE_IDLE
-    info := @info[4];
+    info := @info[4];                    // next cpu
     dec(proccount);
   until proccount = 0;
   inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
@@ -2947,14 +2946,40 @@ begin
   //writeln('I:',IdleTime,',K:',KernelTime,',U:',UserTime,'  result=',result);
 end;
 
+procedure XorOSEntropy(var e: THash512Rec);
+var
+  mem: TMemoryInfo;
+  tix1: UInt64         absolute mem.memtotal; // in ticks (ns) resolution
+  tix2: UInt64         absolute mem.memfree;
+  avg: TLoadAvg        absolute mem.memfree;  // array[0..2] of double
+  proccount: cardinal  absolute mem.vmfree;
+  infocount: cardinal  absolute mem.percent;
+  info: PCardinalArray absolute mem.allocused;
+begin
+  // some minimal OS entropy we could get on Darwin
+  tix1 := mach_absolute_time;                 // monotonic hi-res clock
+  getloadavg(avg, 3);                         // system stats
+  DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // include values on stack
+  GetMemoryInfo(mem, {withalloc=}false);      // also fill mem with zeros
+  DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+  infocount := 0;
+  host_processor_info(mach_host_self,         // detailed per-cpu times
+    PROCESSOR_CPU_LOAD_INFO, proccount, info, infocount);
+  DefaultHasher128(@e.h2, pointer(info), infocount * SizeOf(info^[0]));
+  tix1 := mach_continuous_time;               // wall clock time since boot
+  tix2 := mach_absolute_time;                 // should have changed in-between
+  crcblock(@e.h3, @mem);                      // another algo
+end;
+
 {$else}
+
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
   times: TBsdProcTimes;
 begin
   // on BSD, use kern.cp_time 0=user/1=nice/2=system/3=interrupt/4=idle values
   // see https://man.openbsd.org/sysctl.2#KERN_CPTIME~2
-  // - note: this does not work on MacOS - we will use host_processorinfo() instead
+  // - note: this does not work on MacOS - we use host_processorinfo() instead
   // https://freebsd-hackers.freebsd.narkive.com/DBF0kxOC/cpu-utilization-break-down-via-sysctl#post3
   FillCharFast(times, SizeOf(times), 0);
   BsdProcTimes(times);
@@ -2963,44 +2988,27 @@ begin
   IdleTime   := times[4];
   result := (UserTime + KernelTime) <> 0;
 end;
-{$endif OSDARWIN}
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
-  us: Int64            absolute mem.memtotal;
-  avg: TLoadAvg        absolute mem.memfree; // just after us value
-  guid: THash128Rec    absolute mem.memfree; // fill up to mem.vmfree
-  {$ifdef OSDARWIN}
-  proccount: cardinal  absolute mem.vmfree;
-  infocount: cardinal  absolute mem.percent;
-  info: PCardinalArray absolute mem.allocused;
-  {$else}
-  times: TBsdProcTimes absolute mem.filefree;
-  {$endif OSDARWIN}
+  tp: timespec         absolute mem;          // in nanoseconds resolution
+  avg: TLoadAvg        absolute mem.memtotal; // array[0..2] of double
+  times: TBsdProcTimes absolute mem.vmtotal;  // array[0..4] of clong
 begin
-  // some minimal OS entropy we could get for BSD/Darwin
-  QueryPerformanceMicroSeconds(us);
-  getloadavg(avg, 3); // cpu stats and random stack data in mem
-  DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // may be AesNiHash128
-  GetMemoryInfo(mem, {withalloc=}false); // also fill mem with zeros
-  mem.vmtotal := GetTickCount64; // not retrieved by GetMemoryInfo()
+  // some minimal high-res OS entropy we could get on BSD
+  clock_gettime(CLOCK_MONOTONIC_HIRES, @tp);  // fast VDSO call
+  DefaultHasher128(@e.h0, @tp, SizeOf(tp));   // may be AesNiHash128
+  GetMemoryInfo(mem, {withalloc=}false);      // also fill mem with zeros
   DefaultHasher128(@e.h1, @mem, SizeOf(mem));
-  {$ifdef OSDARWIN}
-  infocount := 0;
-  host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
-    proccount, info, infocount); // detailed per-cpu times
-  DefaultHasher128(@e.h2, pointer(info), infocount * SizeOf(cardinal));
-  guid.Lo := mach_absolute_time; // monotonic clocks in nanoseconds resolution
-  guid.Hi := mach_continuous_time;
-  {$else}
-  CreateGuid(guid.guid); // use e.g. FreeBSD syscall or /dev/urandom
-  XorMemory(e.r[2], guid);
-  BsdProcTimes(times);
-  {$endif OSDARWIN}
-  QueryPerformanceMicroSeconds(us); // should have changed in-between
-  crcblocks(@e.h3, @mem, SizeOf(mem) shr 4); // another algo
+  getloadavg(avg, 3);                         // system stats
+  BsdProcTimes(times);                        // cpu stats
+  DefaultHasher128(@e.h2, @mem, SizeOf(mem));
+  clock_gettime(CLOCK_MONOTONIC_HIRES, @tp);  // should have changed in-between
+  crcblock(@e.h3, @tp);                       // another algo
 end;
+
+{$endif OSDARWIN}
 
 {$else} // Linux (and Android) specific code
 
