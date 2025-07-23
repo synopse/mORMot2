@@ -172,7 +172,7 @@ begin
   fRd.AsText(b64);
   decoded := Base64ToBinSafe(TrimControlChars(b64));
   if decoded = '' then
-    exit; // maybe some pending command chars
+    exit; // maybe some pending command chars - retry later
   fRd.Reset;
   rtsp := fOwner.ConnectionFindAndLock(fRtspTag, cReadOnly);
   if rtsp <> nil then

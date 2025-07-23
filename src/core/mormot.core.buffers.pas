@@ -2759,10 +2759,10 @@ type
     fBuffer: RawUtf8; // actual storage, with length(fBuffer) as Capacity
     fLen: PtrInt;
   public
-    /// set Len to 0, but doesn't clear/free the Buffer itself
+    /// set Len to 0, but doesn't clear/free the fBuffer working mem itself
     procedure Reset;
       {$ifdef HASINLINE}inline;{$endif}
-    /// release/free the internal Buffer storage
+    /// set Len to 0, and release/free the internal fBuffer storage
     // - returns the released memory bytes, i.e. former Capacity before clearing
     function Clear: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2812,11 +2812,9 @@ type
     function ExtractAt(var Dest: PAnsiChar; var Count: PtrInt;
       var Pos: PtrInt): PtrInt;
     /// retrieve the current Buffer/Len content as RawUtf8 text
-    // - with some optional overhead for faster reallocmem at concatenation
+    // - with some optional overhead bytes to avoid reallocmem at concatenation
     // - won't force Len to 0: caller should call Reset if done with it
-    // - UseMainBuffer=true will return a copy of fBuffer into Text
-    procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0;
-      UseMainBuffer: boolean = false);
+    procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0);
     /// how many bytes are currently used in the Buffer
     property Len: PtrInt
       read fLen write fLen;
@@ -11608,30 +11606,17 @@ begin
   dec(Count, result);
 end;
 
-procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt;
-  UseMainBuffer: boolean);
+procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt);
 begin
-  if (Len = 0) or
+  if (fLen = 0) or
      (fBuffer = '') or
      (OverHead < 0) then
     exit;
-  if UseMainBuffer and
-     (PStrCnt(PAnsiChar(pointer(fBuffer)) - _STRCNT)^ = 1) and
-     (Len + Overhead <= length(fBuffer)) then
-  begin
-    pointer(Text) := pointer(fBuffer); // fast pointer move for refcount=1
-    pointer(fBuffer) := nil;
-  end
-  else
-  begin
-    pointer(Text) := FastNewString(Len + Overhead, CP_UTF8);
-    MoveFast(pointer(fBuffer)^, pointer(Text)^, Len);
-    if OverHead = 0 then
-      exit;
-  end;
-  // keep OverHead allocated, but SetLength(Len) and put #0 at right position
-  FakeLength(Text, Len);
-end;
+  pointer(Text) := FastNewString(fLen + Overhead, CP_UTF8);
+  MoveFast(pointer(fBuffer)^, pointer(Text)^, fLen);
+  if OverHead <> 0 then
+    FakeLength(Text, fLen); // put Text[fLen] := #0 and set PStrRec^.length
+end; // keep fLen since may be not final - see e.g. TPostConnection.OnRead
 
 
 procedure SetBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);

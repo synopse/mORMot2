@@ -106,9 +106,9 @@ type
     /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
     fInternalFlags: set of (
       ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing);
-    /// the current (reusable) read data buffer of this connection
+    /// the current (reusable) receiving data buffer of this connection
     fRd: TRawByteStringBuffer;
-    /// the current (reusable) write data buffer of this connection
+    /// the current (reusable) sending data buffer of this connection
     fWr: TRawByteStringBuffer;
     /// re-entrant TryLock/Unlock R/W thread acquisition
     // - by default, a single lock is used for all connection access, but
@@ -1492,7 +1492,7 @@ function TPollAsyncConnection.ReleaseWriteMemoryOnIdle: PtrInt;
 begin
   // caller made fRWSafe[0/1].TryLock
   if fWr.Len <> 0 then
-    result := 0
+    result := 0 // the buffer is still in use - wait until fWr.Reset
   else
     result := fWr.Clear;
 end;
