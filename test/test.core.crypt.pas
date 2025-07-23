@@ -1473,37 +1473,6 @@ begin
     AES[b].Free;
 end;
 
-const
-  // AesNiHash128() responses with fixed byte-increasing AesNiHashAntiFuzzTable
-  // - to validate one identical algorithm on both i386 and x64 platforms
-  AESNIHASH_REF: PAnsiChar = '00000000000000000000000000000000' +
-    'ebcaa5d9d3111481ca62776f7cc716d5078f6490103c58d95b5e16001d40cf6b' +
-    '9b0e47ebccb12f80270b0d17caafa8e1e64ef4b87ee4dd8743650db1ac9d59b0' +
-    '345407a79f54f73c6a8120cd19ec289750bc08c882e7f30a72295534c6d5ad1c' +
-    '2a4d337351355ef19da8ac689bc9abf5f4eea591f6845c428e70a22f16704d7c' +
-    '7b6d2e6ba7fc17afe99577fdd4396a5400f82e31242f8f4837b128170def4d81' +
-    '5ce88e10dd957cd5256cf17305668d7187e3a5f8364c2f11bf22cfab5c97e57c' +
-    '9d62a4ea395e1a66c6da14059a5b046594887b40c2fd6beb93cb2c0ea3a6d826' +
-    'e448eb7ff07caa6e91d9a2a8cdbf8ffb17e3839f9fd9b5db11fcc27ec73d90b6' +
-    'ea5aa1a2c33f8507d4a4548ee3e951619e19c45be7fc245f2062b8a67200e933' +
-    'e2bc6aee7eb66c9c626a5e24c294d64f9577d432b98b33e09b31b129956c9453' +
-    '982c1746186eeeb2e725be97e486dc3343ab8f9474c99e6e38bd2d13a580f299' +
-    'bba44ec2bfd7c869f719965d6b2232f0b7716a42122245c86fde9b2fcf8687cd' +
-    'a9a2236e62424e427b7262ebc57694e5e3cf2be5086c55492ae1df51e642b16b' +
-    'fa28fa2aa2b2b6470d03d915a77173d0222a5fdb927c149a2ed29ec6f39611b1' +
-    'dfc2957b933caeac4206e5cd6b54505cf734b02d838621386f011a488a0aaa21' +
-    'ca21a1cc16a0de4c7c1706a3d63a54196685816076f0bf423f62cc39c6e65cbe' +
-    'eb71ecb63a7b6bff1f2501040a9cdd4d29d986eec0ba0eeb3cc81f107493fa26' +
-    '8d16ede5b6c2311331043f392d75775205ea71c47441f88fb921091f36429447' +
-    '5440c3a28156fcf83362c7de4563b9e5c74f2ae31c0892ba2416d9433fbec5e8' +
-    'aa066e0839a2ff380eef8a50fdb8abf1a8e264d80d52547c19e8fc8c4cb0b6a9' +
-    '228873ffd35acbd862051ba5972d1ea5c77da42d0932de9862d213d9c2a8e1be' +
-    'ada5d458399c4aaa1047ae56ed803da266fc0be094eb5e1091e2f23842380209' +
-    '75d184ec6b0f6cad9474dc5b335f7894aff4754b5ea5502a27ca73ff14328196' +
-    '5539828fe6b11948b5be01053fbe212da322fa592d28db34898f824faddb1ebb' +
-    '0f2071856be7a84df01aa15cc78b0e77959885fad4117d0d2f428db9a04557a3' +
-    '097c7ffed3b8ad6e1a341610a40e852f70b117853a6de37263f5e726d67c3466';
-
 {
 Some results for our 32-bit hashes (typical TSynDictionary use):
 
@@ -2852,21 +2821,64 @@ begin
 end;
 {$endif PUREMORMOT2}
 
+const
+  // AesNiHash128() responses with fixed byte-increasing AesNiHashAntiFuzzTable
+  // - to validate one identical algorithm on both i386 and x64 platforms
+  AESNIHASH_REF128: PAnsiChar = '00000000000000000000000000000000' +
+    'ebcaa5d9d3111481ca62776f7cc716d5078f6490103c58d95b5e16001d40cf6b' +
+    '9b0e47ebccb12f80270b0d17caafa8e1e64ef4b87ee4dd8743650db1ac9d59b0' +
+    '345407a79f54f73c6a8120cd19ec289750bc08c882e7f30a72295534c6d5ad1c' +
+    '2a4d337351355ef19da8ac689bc9abf5f4eea591f6845c428e70a22f16704d7c' +
+    '7b6d2e6ba7fc17afe99577fdd4396a5400f82e31242f8f4837b128170def4d81' +
+    '5ce88e10dd957cd5256cf17305668d7187e3a5f8364c2f11bf22cfab5c97e57c' +
+    '9d62a4ea395e1a66c6da14059a5b046594887b40c2fd6beb93cb2c0ea3a6d826' +
+    'e448eb7ff07caa6e91d9a2a8cdbf8ffb17e3839f9fd9b5db11fcc27ec73d90b6' +
+    'ea5aa1a2c33f8507d4a4548ee3e951619e19c45be7fc245f2062b8a67200e933' +
+    'e2bc6aee7eb66c9c626a5e24c294d64f9577d432b98b33e09b31b129956c9453' +
+    '982c1746186eeeb2e725be97e486dc3343ab8f9474c99e6e38bd2d13a580f299' +
+    'bba44ec2bfd7c869f719965d6b2232f0b7716a42122245c86fde9b2fcf8687cd' +
+    'a9a2236e62424e427b7262ebc57694e5e3cf2be5086c55492ae1df51e642b16b' +
+    'fa28fa2aa2b2b6470d03d915a77173d0222a5fdb927c149a2ed29ec6f39611b1' +
+    'dfc2957b933caeac4206e5cd6b54505cf734b02d838621386f011a488a0aaa21' +
+    'ca21a1cc16a0de4c7c1706a3d63a54196685816076f0bf423f62cc39c6e65cbe' +
+    'eb71ecb63a7b6bff1f2501040a9cdd4d29d986eec0ba0eeb3cc81f107493fa26' +
+    '8d16ede5b6c2311331043f392d75775205ea71c47441f88fb921091f36429447' +
+    '5440c3a28156fcf83362c7de4563b9e5c74f2ae31c0892ba2416d9433fbec5e8' +
+    'aa066e0839a2ff380eef8a50fdb8abf1a8e264d80d52547c19e8fc8c4cb0b6a9' +
+    '228873ffd35acbd862051ba5972d1ea5c77da42d0932de9862d213d9c2a8e1be' +
+    'ada5d458399c4aaa1047ae56ed803da266fc0be094eb5e1091e2f23842380209' +
+    '75d184ec6b0f6cad9474dc5b335f7894aff4754b5ea5502a27ca73ff14328196' +
+    '5539828fe6b11948b5be01053fbe212da322fa592d28db34898f824faddb1ebb' +
+    '0f2071856be7a84df01aa15cc78b0e77959885fad4117d0d2f428db9a04557a3' +
+    '097c7ffed3b8ad6e1a341610a40e852f70b117853a6de37263f5e726d67c3466';
+  // AesNiHash32() responses with fixed byte-increasing AesNiHashAntiFuzzTable
+  // - to validate one identical algorithm on both i386 and x64 platforms
+  AESNIHASH_REF32: array[0 .. 52] of cardinal = (
+    $00000000, $7ebbb034, $031c3f98, $84720a5e, $a838babc, $fbb8855b,
+    $1c301a13, $611fff36, $9826aa67, $6e1939cf, $1a54fda0, $9dbffd04,
+    $86308d64, $3593ea6e, $59276b61, $4341c163, $b88e7728, $11eca1e0,
+    $1e1c27e1, $de24287e, $1af49bbc, $c0d1bf44, $e2606908, $bc8bc0f3,
+    $932baa5c, $1211661d, $43fbca34, $67e4e4a0, $bb68c8c0, $1c17c3b0,
+    $7dce27fa, $95a911c6, $04a499b3, $cda40a55, $d062c08f, $7f3a8f3f,
+    $d4b99c7b, $1f110334, $ba207aaa, $f395c480, $19dbc289, $e50746b3,
+    $bbc251fc, $ee5b2935, $70d8e8cf, $02a7706c, $f0ad90cf, $020670e0,
+    $1322057e, $d9b7a878, $671232c8, $bbc2d9f4, $85676d1f);
+
 procedure TTestCoreCrypto.Hashes;
 var
   i, n: PtrInt;
   exp: cardinal;
   md: TMd5;
   dig, dig2: TMd5Digest;
-  tmp: TByteDynArray;
+  bytes: TByteToByte;
   ismd4: boolean;
   ref: PAnsiChar;
+  ref32: PCardinal;
   h128, ref128: THash128;
   bak: THash512;
 begin
-  SetLength(tmp, 256);
-  for i := 0 to high(tmp) do
-    tmp[i] := i;
+  for i := 0 to high(bytes) do
+    bytes[i] := i;
   // validate AesNiHash128() against reference vectors
   // - should be done FIRST with no process in the background
   if Assigned(AesNiHash128) and
@@ -2874,20 +2886,24 @@ begin
      not CheckFailed(Assigned(AesNiHashAntiFuzzTable)) then
   begin
     bak := AesNiHashAntiFuzzTable^;
-    AesNiHashAntiFuzzTable^ := PHash512(tmp)^; // replace to get AESNIHASH_REF
-    ref := AESNIHASH_REF;
+    AesNiHashAntiFuzzTable^ := PHash512(@bytes)^; // replace to get AESNIHASH_REF
+    ref := AESNIHASH_REF128;
+    ref32 := @AESNIHASH_REF32;
     n := 0;
+    writeln;
     repeat
-      exp := AesNiHash32(n, pointer(tmp), n);
+      exp := AesNiHash32(n, @bytes, n);
+      CheckUtf8((n = 0) = (exp = 0), 'aesni32n1(%)', [n]);
+      CheckUtf8(exp = ref32^, 'aesni32ref(%)', [n]);
       FillZero(h128);
-      AesNiHash128(@h128, pointer(tmp), n);
+      AesNiHash128(@h128, @bytes, n);
       Check(mormot.core.text.HexToBin(ref, @ref128, SizeOf(ref128)));
       inc(ref, SizeOf(ref128) * 2);
-      CheckUtf8(IsEqual(h128, ref128), 'aesni(%)', [n]);
-      CheckUtf8(AesNiHash32(0, pointer(pointer(tmp)), n) =
-        PCardinal(@ref128)^, 'aesni32(%)', [n]);
-      CheckUtf8(AesNiHash32(n, pointer(pointer(tmp)), n) =
-        exp, 'aesni32b(%)', [n]);
+      CheckUtf8(IsEqual(h128, ref128), 'aesni128ref(%)', [n]);
+      exp := PCardinal(@ref128)^;
+      CheckUtf8(AesNiHash32(0, @bytes, n) = exp, 'aesni32trunc(%)', [n]);
+      CheckUtf8(AesNiHash32(n, @bytes, n) = ref32^, 'aesni32n2(%)', [n]);
+      inc(ref32);
       if n < 20 then
         inc(n) // specific verification of pshufb process for 1..16 bytes
       else
@@ -2926,9 +2942,9 @@ begin
       else
         md.Init;
       for i := 0 to n - 1 do
-        md.Update(tmp[i], 1);
+        md.Update(bytes[i], 1);
       md.Final(dig);
-      md.Full(pointer(tmp), n, dig2, ismd4);
+      md.Full(@bytes, n, dig2, ismd4);
       check(IsEqual(dig, dig2), 'MDrefA');
       check(CompareMem(@dig, @dig2, SizeOf(dig)), 'MDrefB');
     end;
