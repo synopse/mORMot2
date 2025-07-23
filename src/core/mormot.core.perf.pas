@@ -2595,6 +2595,7 @@ end;
 
 function TSynMonitorSize.GetAsText: TShort16;
 begin
+  result[0] := #0;
   AppendKB(fBytes, result, not fTextNoSpace);
 end;
 
@@ -2602,6 +2603,7 @@ end;
 
 function TSynMonitorOneSize.GetAsText: TShort16;
 begin
+  result[0] := #0;
   AppendKB(fBytes, result, not fTextNoSpace);
 end;
 
@@ -2609,6 +2611,7 @@ end;
 
 function TSynMonitorThroughput.GetAsText: TShort16;
 begin
+  result[0] := #0;
   AppendKB(fBytesPerSec, result, not fTextNoSpace);
   AppendShortTwoChars(ord('/') + ord('s') shl 8, @result);
 end;
@@ -3861,7 +3864,7 @@ begin
           end;
           if PInt64(@result[i].Timestamp)^ = 0 then
           begin
-            SetLength(result, i); // truncate to latest available sample
+            SetLength(result, i - 1); // truncate to latest available sample
             break;
           end;
         end;
