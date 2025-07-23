@@ -773,7 +773,7 @@ begin
   // finalize service execution context
   FreeAndNil(fBackgroundThread);
   ObjArrayClear(fStats, true);
-  ObjArrayClear(fExecuteCached);
+  ObjArrayClear(fExecuteCached); // before inherited Destroy
   inherited Destroy;
   fExecuteLock.Done;
 end;

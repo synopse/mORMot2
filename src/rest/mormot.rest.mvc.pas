@@ -1284,8 +1284,8 @@ begin
             TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),
             '<', '{'), '>', '}'), v^.FileName);
         end;
-        v^.ContentTypeHeader := GetMimeContentTypeHeader('', v^.ShortFileName);
       end;
+      v^.ContentTypeHeader := GetMimeContentTypeHeader('', v^.ShortFileName);
     end;
     inc(v);
     inc(m);
@@ -1760,7 +1760,6 @@ end;
 procedure TMvcRendererAbstract.ExecuteCommand;
 var
   exec: TInterfaceMethodExecuteCached;
-  context: PPointer;
   isAction: boolean;
   renderContext: TDocVariantData;
   info: variant;
@@ -1768,13 +1767,11 @@ var
   err: ShortString;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
-  context := @_CurrentRenderer;
   try
     if fMethod <> nil then
     repeat
       try
         // execute the method and generate the JSON output
-        context^ := self;
         isAction := imfResultIsServiceCustomAnswer in fMethod^.Flags;
         exec := fApplication.fExecuteCached[fMethodIndex].Acquire(
                   [], [twoForceJsonExtended]);
@@ -1806,7 +1803,6 @@ begin
           end;
         finally
           fApplication.fExecuteCached[fMethodIndex].Release(exec);
-          context^ := nil;
         end;
         if not isAction then
         begin
@@ -2261,6 +2257,7 @@ begin
   if fMethod <> nil then
     fMethodIndex := aMethod^.ExecutionMethodIndex;
   dec(fMethodIndex, RESERVED_VTABLE_SLOTS);
+  _CurrentRenderer := self;
 end;
 
 function TMvcRendererReturningData.GetCookie(const CookieName: RawUtf8;
@@ -2526,10 +2523,10 @@ end;
 
 destructor TMvcApplication.Destroy;
 begin
-  inherited;
+  ObjArrayClear(fExecuteCached); // should be done beore inherited
+  inherited Destroy;
   fMainRunner.Free;
   fSession.Free;
-  ObjArrayClear(fExecuteCached);
 end;
 
 procedure TMvcApplication.Error(var Msg: RawUtf8; var Scope: variant);
