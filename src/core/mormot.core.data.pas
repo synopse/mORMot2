@@ -4415,7 +4415,7 @@ begin
   nestedcount := 0;
   W := DefaultJsonWriter.CreateOwnedStream(tmp);
   try
-    W.CustomOptions := W.CustomOptions + [twoTrimLeftEnumSets];
+    W.CustomOptions := [twoTrimLeftEnumSets];
     W.Add('[%]'#10, [SectionName]);
     r := Rtti.RegisterClass(Instance);
     p := pointer(r.Props.List);
@@ -7678,7 +7678,7 @@ begin
   begin
     W := DefaultJsonWriter.CreateOwnedStream(temp);
     try
-      W.CustomOptions := W.CustomOptions + Options;
+      W.CustomOptions := Options;
       SaveToJson(W, ObjectOptions);
       W.SetText(result, reformat);
     finally

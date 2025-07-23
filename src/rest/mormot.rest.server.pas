@@ -3521,7 +3521,7 @@ begin
     W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
       true, FieldsCsv, {knownrows=}0, 0, @tmp);
     try
-      W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
+      W.CustomOptions := [twoForceJsonStandard]; // regular JSON
       W.OrmOptions := Options; // SetOrmOptions() may refine ColNames[]
       rec.AppendFillAsJsonValues(W);
       W.SetText(fCall^.OutBody);
@@ -4855,7 +4855,7 @@ begin
     if not aCtxt.Server.Orm.RetrieveBlobFields(fUser) then
       aCtxt.fLog.Log(sllError, 'Create: RetrieveBlobFields(%.ID=%) failed',
         [fUser, fUser.IDValue], self);
-  // compute the next Session ID and the associated private key
+  // compute the next Session ID and its associated private key
   fID := InterlockedIncrement(aCtxt.Server.fSessionCounter); // 20-bit number
   if PInteger(@ServerProcessKdf)^ <> 0 then  // use our thread-safe CSPRNG
     ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 bytes to be <> nonce

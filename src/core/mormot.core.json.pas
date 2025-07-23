@@ -11534,9 +11534,9 @@ function SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions;
 var
   temp: TTextWriterStackBuffer;
 begin
-  with TJsonWriter.CreateOwnedStream(temp, twoNoSharedStream in Options) do
+  with TJsonWriter.CreateOwnedStream(temp) do
   try
-    CustomOptions := CustomOptions + Options;
+    CustomOptions := Options;
     result := AddTypedJson(@Value, TypeInfo, ObjectOptions);
     SetText(Json);
   finally
@@ -11666,7 +11666,7 @@ begin
   with TJsonWriter.CreateOwnedStream(temp) do
   try
     if woEnumSetsAsText in aOptions then
-      CustomOptions := CustomOptions + [twoEnumSetsAsTextInRecord];
+      CustomOptions := [twoEnumSetsAsTextInRecord];
     AddObjArrayJson(aObjArray, aOptions);
     SetText(result);
   finally

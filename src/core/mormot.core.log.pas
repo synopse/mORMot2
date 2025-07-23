@@ -6087,12 +6087,12 @@ begin
     if fWriterClass = nil then // may be overriden by an inherited class
       fWriterClass := TJsonWriter; // mormot.core.json.pas is linked
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize);
-    fWriter.CustomOptions := fWriter.CustomOptions
-      + [twoEnumSetsAsTextInRecord, // debug-friendly text output
-         twoFullSetsAsStar,
-         twoForceJsonExtended,
-         twoNoWriteToStreamException];   // if TFileStreamNoWriteError is not set
+    fWriter.CustomOptions :=
+      [twoEnumSetsAsTextInRecord, // debug-friendly text output
+       twoFullSetsAsStar,
+       twoForceJsonExtended];
     fWriter.FlushToStreamNoAutoResize := true; // stick to BufferSize
+    fWriter.NoWriteToStreamException := true;  // if TFileStreamNoWriteError is not set
   end;
   // create fWriterEcho instance
   if fWriterEcho = nil then

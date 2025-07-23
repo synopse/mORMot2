@@ -5153,8 +5153,9 @@ begin
   s := TFileStreamNoWriteError.CreateAndRenameIfLocked(fRotate.FileName);
   s.Seek(0, soEnd); // append
   inherited Create(s, 65536);
-  fFlags := [twfStreamIsOwned, twfFlushToStreamNoAutoResize];
-  fCustomOptions := [twoNoWriteToStreamException];
+  fFlags := [twfStreamIsOwned,
+             twfFlushToStreamNoAutoResize,
+             twfNoWriteToStreamException];
 end;
 
 destructor THttpLoggerWriter.Destroy;

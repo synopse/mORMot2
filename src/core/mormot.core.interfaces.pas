@@ -3264,7 +3264,8 @@ procedure TInterfacedObjectFake.FakeCallGetJsonFromStack(
   var ctxt: TFakeCallContext; var Json: RawUtf8);
 var
   W: TJsonWriter;
-  opt: TTextWriterWriteObjectOptions;
+  wopt: TTextWriterOptions;
+  oopt: TTextWriterWriteObjectOptions;
   arg: PtrInt;
   a: PInterfaceMethodArgument;
   V: PPointer;
@@ -3281,17 +3282,17 @@ begin
     // paranoid thread-safety call with its own temp buffer (hardly called)
     W := TJsonWriter.CreateOwnedStream(8192);
   try
+    wopt := [twoForceJsonStandard]; // e.g. for AJAX
     if ifoJsonAsExtended in fOptions then
-      W.CustomOptions := W.CustomOptions + [twoForceJsonExtended]
-    else // e.g. for AJAX
-      W.CustomOptions := W.CustomOptions + [twoForceJsonStandard];
+      wopt := [twoForceJsonExtended];
     if ifoDontStoreVoidJson in fOptions then
     begin
-      opt := DEFAULT_WRITEOPTIONS[true];
-      W.CustomOptions := W.CustomOptions + [twoIgnoreDefaultInRecord];
+      oopt := DEFAULT_WRITEOPTIONS[true];
+      include(wopt, twoIgnoreDefaultInRecord);
     end
     else
-      opt := DEFAULT_WRITEOPTIONS[false];
+      oopt := DEFAULT_WRITEOPTIONS[false];
+    W.CustomOptions := wopt;
     a := @ctxt.Method^.Args[ctxt.Method^.ArgsInFirst];
     for arg := ctxt.Method^.ArgsInFirst to ctxt.Method^.ArgsInLast do
     begin
@@ -3303,7 +3304,7 @@ begin
           InterfaceWrite(W, ctxt.Method^, a^, V^)
         else
         begin
-          a^.AddJson(W, V, opt);
+          a^.AddJson(W, V, oopt);
           W.AddComma;
         end;
       end;
@@ -7111,7 +7112,7 @@ begin
   if fTempTextWriter = nil then
   begin
     fTempTextWriter := TJsonWriter.CreateOwnedStream;
-    fTempTextWriter.CustomOptions := fTempTextWriter.CustomOptions +
+    fTempTextWriter.CustomOptions :=
       [twoForceJsonExtended, twoIgnoreDefaultInRecord]; // shorter
   end;
   result := fTempTextWriter;
@@ -7413,8 +7414,7 @@ begin
     // on thread contention, will use a transient temporary instance
     result := TInterfaceMethodExecuteCached.Create(
       fFactory, fMethod, ExecuteOptions);
-  if WROptions <> [] then
-    fWR.CustomOptions := fWR.CustomOptions + WROptions;
+  fWR.CustomOptions := WROptions;
 end;
 
 procedure TInterfaceMethodExecuteCached.Release(exec: TInterfaceMethodExecuteCached);

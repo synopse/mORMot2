@@ -6410,7 +6410,7 @@ begin
     with TJsonWriter.CreateOwnedStream(temp) do
     try
       if ExtendedJson then // smaller content
-        CustomOptions := CustomOptions + [twoForceJsonExtended];
+        CustomOptions := [twoForceJsonExtended];
       AddDynArrayJson(da);
       SetText(RawUtf8(data));
     finally
@@ -11241,7 +11241,7 @@ begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
     if sfoExtendedJson in Format then
-      W.CustomOptions := W.CustomOptions + [twoForceJsonExtended];
+      W.CustomOptions := [twoForceJsonExtended];
     W.AddDirect('{');
     if (decoded <> 0) and
        (sfoPutIDFirst in Format) then

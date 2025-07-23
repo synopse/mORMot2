@@ -11264,7 +11264,7 @@ begin
   fPreviousTable := nil;
   fTable := aTable;
   if boExtendedJson in Options then
-    fBatch.CustomOptions := fBatch.CustomOptions + [twoForceJsonExtended];
+    fBatch.CustomOptions := [twoForceJsonExtended];
   if (aTable <> nil) and
      (fModel <> nil) and
      not (boOnlyObjects in fOptions) then

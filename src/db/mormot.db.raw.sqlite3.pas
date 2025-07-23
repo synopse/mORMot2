@@ -8208,7 +8208,7 @@ begin
   result := 0;
   W := TResultsWriter.Create(Json, Expand, false, nil, 0, @tmp);
   try
-    W.CustomOptions := W.CustomOptions + Options;
+    W.CustomOptions := Options;
     // prepare the SQL request
     if aSql <> '' then // if not already prepared, reset and bound by caller
       Prepare(aDB, aSql); // will raise an ESqlite3Exception on error

@@ -353,8 +353,6 @@ type
   // - twoNonExpandedArrays will force the 'non expanded' optimized JSON layout
   // for array of records or classes, ignoring other formatting options:
   // $ {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
-  // - twoNoSharedStream will force to create a new stream for each instance
-  // - twoNoWriteToStreamException let TTextWriter.WriteToStream silently fail
   TTextWriterOption = (
     twoEnumSetsAsTextInRecord,
     twoEnumSetsAsBooleanInRecord,
@@ -365,22 +363,23 @@ type
     twoEndOfLineCRLF,
     twoIgnoreDefaultInRecord,
     twoDateTimeWithZ,
-    twoNonExpandedArrays,
-    twoNoSharedStream,
-    twoNoWriteToStreamException);
+    twoNonExpandedArrays);
 
   /// available internal flags for a TTextWriter / TJsonWriter instance
   // - twfStreamIsOwned is set if the associated TStream is owned by the
   // TTextWriter instance - as a TRawByteStringStream with twfStreamIsRawByteString
   // - twfFlushToStreamNoAutoResize would forbid FlushToStream to resize the
   // internal memory buffer when it appears undersized - FlushFinal will set it
-  // before calling a last FlushToStream - use TTextWriter.FlushToStreamNoAutoResize
-  // to specify this option
+  // before calling a last FlushToStream - use
+  // TTextWriter.FlushToStreamNoAutoResize to specify this option
   // - twfBufferIsOnStack would be set if the temporary buffer is external to
   // this instance, but specified at constructor, maybe from the stack
+  // - twfNoWriteToStreamException let WriteToStream silently fail - use
+  // TTextWriter.NoWriteToStreamException property to specify this option
   TTextWriterFlag = (
     twfStreamIsOwned,
     twfFlushToStreamNoAutoResize,
+    twfNoWriteToStreamException,
     twfStreamIsRawByteString,
     twfBufferIsOnStack);
 
@@ -537,8 +536,8 @@ type
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
     class procedure RaiseUnimplemented(const Method: ShortString);
-    function GetFlushToStreamNoAutoResize: boolean;
-    procedure SetFlushToStreamNoAutoResize(Value: boolean);
+    function GetFlag(one: TTextWriterFlag): boolean;
+    procedure SetFlag(one: TTextWriterFlag; value: boolean);
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -1087,7 +1086,10 @@ type
       read fOnFlushToStream write fOnFlushToStream;
     /// set twfFlushToStreamNoAutoResize in the internal Flags of this instance
     property FlushToStreamNoAutoResize: boolean
-      read GetFlushToStreamNoAutoResize write SetFlushToStreamNoAutoResize;
+      index twfFlushToStreamNoAutoResize read GetFlag write SetFlag;
+    /// set twfNoWriteToStreamException in the internal flags of this instance
+    property NoWriteToStreamException: boolean
+      index twfNoWriteToStreamException read GetFlag write SetFlag;
   end;
 
   /// class of our simple TEXT format writer to a Stream
@@ -1298,7 +1300,7 @@ type
     // - by default (FALSE), it will append a LF (#10) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
     // be appended instead
-    // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
+    // - is just a wrapper around twoEndOfLineCRLF item in Writer.CustomOptions
     property EndOfLineCRLF: boolean
       read GetEndOfLineCRLF write SetEndOfLineCRLF;
     /// if EchoPendingExecute is about to be executed in the background
@@ -4290,19 +4292,18 @@ begin
   result := nil;
 end;
 
-function TTextWriter.GetFlushToStreamNoAutoResize: boolean;
+function TTextWriter.GetFlag(one: TTextWriterFlag): boolean;
 begin
   result := (self <> nil) and
-            (twfFlushToStreamNoAutoResize in fFlags);
+            (one in fFlags);
 end;
-
-procedure TTextWriter.SetFlushToStreamNoAutoResize(Value: boolean);
+procedure TTextWriter.SetFlag(one: TTextWriterFlag; value: boolean);
 begin
   if self <> nil then
-    if Value then
-      include(fFlags, twfFlushToStreamNoAutoResize)
+    if value then
+      include(fFlags, one)
     else
-      exclude(fFlags, twfFlushToStreamNoAutoResize);
+      exclude(fFlags, one);
 end;
 
 function TTextWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
@@ -4396,7 +4397,7 @@ begin
     repeat
       written := fStream.Write(data^, len);
       if PtrInt(written) <= 0 then
-        if twoNoWriteToStreamException in fCustomOptions then
+        if twfNoWriteToStreamException in fFlags then
           break // silent failure
         else
           ESynException.RaiseUtf8('%.WriteToStream failed on %', [self, fStream]);
@@ -6035,7 +6036,7 @@ begin
   else
     with DefaultJsonWriter.CreateOwnedStream(temp) do
     try
-      include(fCustomOptions, twoForceJsonStandard);
+      fCustomOptions := [twoForceJsonStandard];
       WriteObject(Value, Options);
       SetText(Result);
     finally
