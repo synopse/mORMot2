@@ -866,6 +866,7 @@ procedure FastAssignNewNotVoid(var d; s: pointer = nil); overload;
   {$ifndef FPC_CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// internal function used by FastSetString/FastSetStringCP
+// - caller should fill the pointer result, and eventually call FastAssignNew()
 function FastNewString(len: PtrInt; codepage: PtrInt = CP_RAWBYTESTRING): pointer;
   {$ifdef HASSAFEFPCINLINE}inline;{$endif}
 
@@ -3801,7 +3802,7 @@ function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 // - will use optimized asm for x86/x64, or a pascal version on other CPUs
 function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
 
-/// shuffle a 32-bit value using the last stage of xxHash32 algorithm
+/// shuffle/scramble a 32-bit value using the last stage of xxHash32 algorithm
 // - is a cascade of binary shifts and multiplications by prime numbers
 // - see also (c * KNUTH_HASH32_MUL) shr (32 - bits) as weaker alternative
 function xxHash32Mixup(crc: cardinal): cardinal;
@@ -4934,7 +4935,7 @@ begin
   {$endif FPC}
   {$ifdef HASCODEPAGE} // also set elemSize := 1
   {$ifdef FPC}
-  rec^.codePageElemSize := codepage + (1 shl 16);
+  rec^.codePageElemSize := codepage + (1 shl 16); // with constant propagation
   {$else}
   PCardinal(@rec^.codePage)^ := codepage + (1 shl 16);
   {$endif FPC}
@@ -9905,14 +9906,14 @@ begin
   XorMemory(e.r[0], tmp.l);
   XorMemory(e.r[1], tmp.h);      // on Linux, tmp.h is from getrandom syscall
   lec := @_Lecuyer;              // PtrUInt(lec) is genuine per thread
-  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor tmp.d3;
+  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor tmp.d3; // xor tmp.h
   e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor tmp.d2;
   {$ifdef CPUINTEL}
   if cfTSC in CpuFeatures then   // may trigger GPF if CR4.TSD bit is set
-    tmp.d0 := Rdtsc;             // 64-bit CPU cycles
-  RdRand32(@tmp.l, 4);           // 128-bit XOR: no-op if no cfSSE42
+    tmp.d0 := tmp.d0 xor Rdtsc;  // 64-bit CPU cycles
+  RdRand32(@tmp.l, 4);           // 128-bit HW CSPRNG: no-op if no cfSSE42
   {$endif CPUINTEL}
-  crcblock(@e.r[3], @tmp.l);
+  crcblock(@e.r[3], @tmp.l);     // crc32c 128-bit diffusion
 end;
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough

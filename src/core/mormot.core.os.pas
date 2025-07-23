@@ -10978,7 +10978,7 @@ end;
 function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
 begin
   FastSetStringCP(Dest, nil, Count, CodePage);
-  RandomBytes(pointer(Dest), Count);
+  SharedRandom.Fill(pointer(Dest), Count);
   result := pointer(Dest);
 end;
 
