@@ -352,6 +352,8 @@ const
   __TTestCustomJsonGitHub =
       'name RawUtf8 id cardinal description RawUtf8 ' +
      'fork boolean owner{login RawUtf8 id currency}';
+  __TTestCustomJsonMixed =
+     'status: RawUtf8; results: variant; price: double;';
   __TTestCustomJson2Title =
       'TITYPE,TIID,TICID,TIDSC30,TIORDER,TIDEL RawUtf8';
   __TTestCustomJson2 =
@@ -1280,8 +1282,13 @@ type
       id: currency;
     end;
   end;
-
   TTestCustomJsonGitHubs = array of TTestCustomJsonGitHub;
+
+  TTestCustomJsonMixed = packed record
+    status: RawUtf8;
+    results: variant;
+    price: double;
+  end;
 
   TTestCustomJson2Title = packed record
     TITYPE, TIID, TICID, TIDSC30, TIORDER, TIDEL: RawUtf8;
@@ -1835,6 +1842,7 @@ var
     X: RawUtf8;
     AA, AB: TRawUtf8DynArrayDynArray;
     i, a, v: PtrInt;
+    mix1: TTestCustomJsonMixed;
     {$ifdef HASEXTRECORDRTTI}
     nav, nav2: TConsultaNav;
     nrtti, nrtti2: TNewRtti;
@@ -2266,6 +2274,34 @@ var
     Check(Cache.Timestamp512 = 2300);
     Check(Cache.Json = 'test3');
     Check(Cache.Tag = 12);
+
+    mix1.price := 10;
+    CheckEqual(mix1.status, '');
+    Check(VarIsEmpty(mix1.results));
+    CheckEqual(RecordSaveJson(mix1, TypeInfo(TTestCustomJsonMixed)),
+      '{"status":"","results":null,"price":10}');
+    Check(RecordLoadJson(mix1, '{status:"toto",results:1}',
+      TypeInfo(TTestCustomJsonMixed)));
+    CheckEqual(mix1.status, 'toto');
+    Check(mix1.results = 1);
+    CheckSame(mix1.price, 10);
+    Finalize(mix1);
+    CheckEqual(mix1.status, '');
+    Check(VarIsEmpty(mix1.results));
+    CheckEqual(RecordSaveJson(mix1, TypeInfo(TTestCustomJsonMixed)),
+      '{"status":"","results":null,"price":10}');
+    Check(RecordLoadJson(mix1, '{status:"toto",results:{a:10,b:[{c:"cee"}]}}',
+      TypeInfo(TTestCustomJsonMixed)));
+    CheckEqual(mix1.status, 'toto');
+    CheckSame(mix1.price, 10);
+    CheckEqual(RecordSaveJson(mix1, TypeInfo(TTestCustomJsonMixed)),
+      '{"status":"toto","results":{"a":10,"b":[{"c":"cee"}]},"price":10}');
+    Check(RecordLoadJson(mix1, '{status:"titi",price:3,results:[1]}',
+      TypeInfo(TTestCustomJsonMixed)));
+    CheckEqual(mix1.status, 'titi');
+    CheckSame(mix1.price, 3);
+    CheckEqual(RecordSaveJson(mix1, TypeInfo(TTestCustomJsonMixed)),
+      '{"status":"titi","results":[1],"price":3}');
 
     {$ifdef HASEXTRECORDRTTI}
     FillCharFast(nav, SizeOf(nav), 0);
@@ -3216,16 +3252,16 @@ begin
   TestJSONSerialization;
   {$endif HASEXTRECORDRTTI}
   // test TJsonRecordTextDefinition JSON serialization
-  Rtti.RegisterFromText(TypeInfo(TSubAB), __TSubAB);
-  Rtti.RegisterFromText(TypeInfo(TSubCD), __TSubCD);
-  Rtti.RegisterFromText(TypeInfo(TAggregate), __TAggregate);
-  Rtti.RegisterFromText(TypeInfo(TTestCustomJsonRecord), __TTestCustomJsonRecord);
-  Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArray), __TTestCustomJsonArray);
-  Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArraySimple),
-    __TTestCustomJsonArraySimple);
-  Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayVariant),
-    __TTestCustomJsonArrayVariant);
-  Rtti.RegisterFromText(TypeInfo(TEntry), __TEntry);
+  Rtti.RegisterFromText([
+    TypeInfo(TSubAB),                      __TSubAB,
+    TypeInfo(TSubCD),                      __TSubCD,
+    TypeInfo(TAggregate),                  __TAggregate,
+    TypeInfo(TTestCustomJsonRecord),       __TTestCustomJsonRecord,
+    TypeInfo(TTestCustomJsonMixed),        __TTestCustomJsonMixed,
+    TypeInfo(TTestCustomJsonArray),        __TTestCustomJsonArray,
+    TypeInfo(TTestCustomJsonArraySimple),  __TTestCustomJsonArraySimple,
+    TypeInfo(TTestCustomJsonArrayVariant), __TTestCustomJsonArrayVariant,
+    TypeInfo(TEntry),                      __TEntry]);
   TestJSONSerialization;
   TestJSONSerialization; // test twice for safety
   Rtti.RegisterFromText(TypeInfo(TEntry), '');
@@ -3233,6 +3269,7 @@ begin
   Rtti.RegisterFromText(TypeInfo(TSubCD), '');
   Rtti.RegisterFromText(TypeInfo(TAggregate), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonRecord), '');
+  Rtti.RegisterFromText(TypeInfo(TTestCustomJsonMixed), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArray), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayVariant), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArraySimple), '');
@@ -3241,6 +3278,7 @@ begin
   // test JSON serialization defined by Enhanced RTTI
   TestJSONSerialization;
   {$endif HASEXTRECORDRTTI}
+
   // tests parsing options
   Parser := Rtti.RegisterFromText(
     TypeInfo(TTestCustomJsonRecord), __TTestCustomJsonRecord);
