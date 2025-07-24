@@ -2897,17 +2897,16 @@ begin
   // touch the TAuthSession deprecation timestamp
   AuthSession.fTimeOutTix := (TickCount64 shr 10) + AuthSession.fTimeoutShr10;
   // make local copy of TAuthSession information
-  fSession := AuthSession.ID;
-  fSessionOS := AuthSession.fRemoteOsVersion;
-  fSessionUser := AuthSession.User.IDValue;
-  fSessionGroup := AuthSession.User.GroupRights.IDValue;
-  fSessionUserName := AuthSession.User.LogonName;
-  fSessionAccessRights := AuthSession.fAccessRights;
-  if (AuthSession.RemoteIP <> '') and
-     (fCall^.LowLevelRemoteIP = '') then
+  fAuthSession              := AuthSession; // for TRestServer internal use only
+  fSession                  := AuthSession.ID;
+  fSessionOS                := AuthSession.fRemoteOsVersion;
+  fSessionUser              := AuthSession.User.IDValue;
+  fSessionGroup             := AuthSession.User.GroupRights.IDValue;
+  fSessionUserName          := AuthSession.User.LogonName;
+  fSessionAccessRights      := AuthSession.fAccessRights;
+  if fCall^.LowLevelRemoteIP = '' then
     fCall^.LowLevelRemoteIP := AuthSession.RemoteIP;
-  fCall^.RestAccessRights := @fSessionAccessRights;
-  fAuthSession := AuthSession; // for TRestServer internal use only
+  fCall^.RestAccessRights   := @fSessionAccessRights;
 end;
 
 var
@@ -5166,34 +5165,40 @@ function TRestServerAuthenticationSignedUri.RetrieveSession(
 var
   ts, sign, minticks, expectedsign: cardinal;
   P: PAnsiChar;
-  len: PtrInt;
+  reslen: PtrInt;
 begin
-  result := inherited RetrieveSession(Ctxt);
+  // /uri/name=params?session_signature=xxSessionID|xxTimestamp|xxSignature
+  //       reslen             19           8           8           8
+  result := nil;
+  if Ctxt = nil then
+    exit;
+  P := pointer(Ctxt.Call^.Url);
+  if P = nil then
+    exit;
+  reslen := Ctxt.UriSessionSignaturePos - 1;
+  if (reslen <= 0) or
+     (reslen + (19 + 8 + 8 + 8) > PStrLen(P - _STRLEN)^) or
+     not HexDisplayToCardinal(P + reslen + 19, Ctxt.fSession) then
+    exit;
+  result := fServer.LockedSessionAccess(Ctxt); // retrieve Ctxt.Session ID
   if result = nil then
-    // no valid session ID in session_signature
-    exit;
-  len := Ctxt.UriSessionSignaturePos - 1;
-  if len >= length(Ctxt.Call^.Url) - (18 + 8 + 8 + 8) then
-  begin
-    result := nil;
-    exit;
-  end;
-  P := @Ctxt.Call^.Url[len + (20 + 8)]; // points to Hexa8(Timestamp)
+    exit; // unknown Session
+  P := @P[reslen + (19 + 8)]; // points to Hexa8(Timestamp)
   minticks := result.fLastTimestamp - fTimestampCoherencyTicks;
-  if HexDisplayToBin(P, @ts, SizeOf(ts)) and
+  if HexDisplayToCardinal(P, ts) and
      (fNoTimestampCoherencyCheck or
       (integer(minticks) < 0) or // <0 just after computer startup
       ({%H-}ts >= minticks)) then
   begin
     expectedsign := fComputeSignature(result.fPrivateSaltHash,
-      P, pointer(Ctxt.Call^.Url), len);
-    if HexDisplayToBin(P + 8, @sign, SizeOf(sign)) and
+      P, pointer(Ctxt.Call^.Url), reslen);
+    if HexDisplayToCardinal(P + 8, sign) and // Hexa8(Signature)
        ({%H-}sign = expectedsign) then
     begin
       if not fNoTimestampCoherencyCheck then
         if ts > result.fLastTimestamp then
           result.fLastTimestamp := ts;
-      exit;
+      exit; // success
     end
     else if Assigned(Ctxt.fLog) and
             (sllUserAuth in fServer.fLogLevel) then
