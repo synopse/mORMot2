@@ -428,9 +428,9 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TSqlFieldBits = TFieldBits;
-  PSqlFieldBits = PFieldBits;
-  TSqlFieldIndex = TFieldIndex;
+  TSqlFieldBits          = TFieldBits;
+  PSqlFieldBits          = PFieldBits;
+  TSqlFieldIndex         = TFieldIndex;
   TSqlFieldIndexDynArray = TFieldIndexDynArray;
 
 {$endif PUREMORMOT2}

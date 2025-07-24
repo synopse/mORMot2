@@ -5024,36 +5024,36 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TSqlRecord = TOrm;
-  PSqlRecord = POrm;
-  TSqlRecordArray = TOrmArray;
-  PSqlRecordArray = POrmArray;
-  TSqlRecordObjArray = TOrmObjArray;
-  TSqlRecordClass = TOrmClass;
-  TSqlRecordClassDynArray = TOrmClassDynArray;
-  PSqlClass = POrmClass;
-  TSqlTable = TOrmTable;
-  TSqlTableJson = TOrmTableJson;
-  TSqlInitializeTableOption = TOrmInitializeTableOption;
-  TSqlInitializeTableOptions = TOrmInitializeTableOptions;
-  TSqlAccessRights = TOrmAccessRights;
-  PSqlAccessRights = POrmAccessRights;
-  TSqlFieldType = TOrmFieldType;
-  TSqlFieldTables = TOrmTableBits;
-  TSqlModel = TOrmModel;
-  TSqlModelProperties = TOrmModelProperties;
-  TSqlModelPropertiesObjArray = TOrmModelPropertiesObjArray;
-  TSqlProperties = TOrmProperties;
-  TSqlPropInfo = TOrmPropInfo;
-  TSqlPropInfoObjArray = TOrmPropInfoObjArray;
-  TSqlPropInfoClass = TOrmPropInfoClass;
-  TSqlPropInfoListOptions = TOrmPropInfoListOptions;
-  TSqlPropInfoAttribute = TOrmPropInfoAttribute;
-  TSqlPropInfoAttributes = TOrmPropInfoAttributes;
-  TSqlRestCache = TOrmCache;
-  TSqlRestBatch = TRestBatch;
-  TSqlRestBatchLocked = TRestBatchLocked;
-  TOrmPropertiesMapping = TOrmMapping;
+  TSqlRecord                   = TOrm;
+  PSqlRecord                   = POrm;
+  TSqlRecordArray              = TOrmArray;
+  PSqlRecordArray              = POrmArray;
+  TSqlRecordObjArray           = TOrmObjArray;
+  TSqlRecordClass              = TOrmClass;
+  TSqlRecordClassDynArray      = TOrmClassDynArray;
+  PSqlClass                    = POrmClass;
+  TSqlTable                    = TOrmTable;
+  TSqlTableJson                = TOrmTableJson;
+  TSqlInitializeTableOption    = TOrmInitializeTableOption;
+  TSqlInitializeTableOptions   = TOrmInitializeTableOptions;
+  TSqlAccessRights             = TOrmAccessRights;
+  PSqlAccessRights             = POrmAccessRights;
+  TSqlFieldType                = TOrmFieldType;
+  TSqlFieldTables              = TOrmTableBits;
+  TSqlModel                    = TOrmModel;
+  TSqlModelProperties          = TOrmModelProperties;
+  TSqlModelPropertiesObjArray  = TOrmModelPropertiesObjArray;
+  TSqlProperties               = TOrmProperties;
+  TSqlPropInfo                 = TOrmPropInfo;
+  TSqlPropInfoObjArray         = TOrmPropInfoObjArray;
+  TSqlPropInfoClass            = TOrmPropInfoClass;
+  TSqlPropInfoListOptions      = TOrmPropInfoListOptions;
+  TSqlPropInfoAttribute        = TOrmPropInfoAttribute;
+  TSqlPropInfoAttributes       = TOrmPropInfoAttributes;
+  TSqlRestCache                = TOrmCache;
+  TSqlRestBatch                = TRestBatch;
+  TSqlRestBatchLocked          = TRestBatchLocked;
+  TOrmPropertiesMapping        = TOrmMapping;
   TOrmPropertiesMappingOptions = TOrmMappingOptions;
 
 {$endif PUREMORMOT2}

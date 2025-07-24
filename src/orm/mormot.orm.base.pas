@@ -422,7 +422,6 @@ const
     ooDelete,    // oeDelete
     ooUpdate);   // oeUpdateBlob
 
-
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
 

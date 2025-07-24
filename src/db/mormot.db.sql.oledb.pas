@@ -664,20 +664,20 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TOleDBConnectionProperties = TSqlDBOleDBConnectionProperties;
-  TOleDBOracleConnectionProperties = TSqlDBOleDBOracleConnectionProperties;
-  TOleDBMSOracleConnectionProperties = TSqlDBOleDBMSOracleConnectionProperties;
-  TOleDBMSSQLConnectionProperties = TSqlDBOleDBMSSQLConnectionProperties;
+  TOleDBConnectionProperties          = TSqlDBOleDBConnectionProperties;
+  TOleDBOracleConnectionProperties    = TSqlDBOleDBOracleConnectionProperties;
+  TOleDBMSOracleConnectionProperties  = TSqlDBOleDBMSOracleConnectionProperties;
+  TOleDBMSSQLConnectionProperties     = TSqlDBOleDBMSSQLConnectionProperties;
   TOleDBMSSQL2005ConnectionProperties = TSqlDBOleDBMSSQL2005ConnectionProperties;
   TOleDBMSSQL2008ConnectionProperties = TSqlDBOleDBMSSQL2008ConnectionProperties;
   TOleDBMSSQL2012ConnectionProperties = TSqlDBOleDBMSSQL2012ConnectionProperties;
-  TOleDBMySQLConnectionProperties = TSqlDBOleDBMySQLConnectionProperties;
+  TOleDBMySQLConnectionProperties     = TSqlDBOleDBMySQLConnectionProperties;
   {$ifdef CPU32} // Jet is not available on Win64
-  TOleDBJetConnectionProperties = TSqlDBOleDBJetConnectionProperties;
+  TOleDBJetConnectionProperties       = TSqlDBOleDBJetConnectionProperties;
   {$endif CPU32}
-  TOleDBACEConnectionProperties = TSqlDBOleDBACEConnectionProperties;
-  TOleDBAS400ConnectionProperties = TSqlDBOleDBAS400ConnectionProperties;
-  TOleDBOdbcSQLConnectionProperties = TSqlDBOleDBOdbcSQLConnectionProperties;
+  TOleDBACEConnectionProperties       = TSqlDBOleDBACEConnectionProperties;
+  TOleDBAS400ConnectionProperties     = TSqlDBOleDBAS400ConnectionProperties;
+  TOleDBOdbcSQLConnectionProperties   = TSqlDBOleDBOdbcSQLConnectionProperties;
 
 {$endif PUREMORMOT2}
 

@@ -1035,7 +1035,7 @@ type
 {$ifndef PUREMORMOT2}
 
   /// deprecated alias to TBufferWriter binary serializer
-  TFileBufferWriter = TBufferWriter;
+  TFileBufferWriter     = TBufferWriter;
   TFileBufferWriterKind = TBufferWriterKind;
 
 const

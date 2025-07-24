@@ -516,16 +516,16 @@ var
 {$ifndef PUREMORMOT2}
 
 type
-  TSqlRestHttpClientWinSock = TRestHttpClientSocket;
+  TSqlRestHttpClientWinSock    = TRestHttpClientSocket;
   {$ifndef NOHTTPCLIENTWEBSOCKETS}
   TSqlRestHttpClientWebsockets = TRestHttpClientWebsockets;
   {$endif NOHTTPCLIENTWEBSOCKETS}
   {$ifdef USEWININET}
-  TSqlRestHttpClientWinINet = TRestHttpClientWinINet;
-  TSqlRestHttpClientWinHttp = TRestHttpClientWinHttp;
+  TSqlRestHttpClientWinINet    = TRestHttpClientWinINet;
+  TSqlRestHttpClientWinHttp    = TRestHttpClientWinHttp;
   {$endif USEWININET}
   {$ifdef USELIBCURL}
-  TSqlRestHttpClientCurl = TRestHttpClientCurl;
+  TSqlRestHttpClientCurl       = TRestHttpClientCurl;
   {$endif USELIBCURL}
 
 {$endif PUREMORMOT2}

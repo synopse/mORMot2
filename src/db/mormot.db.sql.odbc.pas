@@ -265,8 +265,8 @@ type
 
 type
   TODBCConnectionProperties = TSqlDBOdbcConnectionProperties;
-  TODBCConnection = TSqlDBOdbcConnection;
-  TODBCStatement = TSqlDBOdbcStatement;
+  TODBCConnection           = TSqlDBOdbcConnection;
+  TODBCStatement            = TSqlDBOdbcStatement;
 
 {$endif PUREMORMOT2}
 

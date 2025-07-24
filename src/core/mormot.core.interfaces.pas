@@ -115,12 +115,15 @@ type
   // - vIsDynArrayString is set for ValueType=imvDynArray of string values
   // - vIsInterfaceJson is set for an interface with custom JSON serializers
   // - vIsOnStack is set when the Value is to be located on stack
+  // - vIsHFA is set for Homogeneous Floating-point Aggregate records (at most
+  // four continuous floating point members on SYSVABI)
   TInterfaceMethodValueAsm = set of (
     vPassedByReference,
     vIsQword,
     vIsDynArrayString,
     vIsInterfaceJson,
-    vIsOnStack);
+    vIsOnStack,
+    vIsHFA);
 
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
@@ -388,18 +391,18 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TServiceMethodValueType = TInterfaceMethodValueType;
-  TServiceMethodValueTypes = TInterfaceMethodValueTypes;
-  TServiceMethodValueVar = TInterfaceMethodValueVar;
-  TServiceMethodValueDirection = TInterfaceMethodValueDirection;
-  TServiceMethodValueDirections = TInterfaceMethodValueDirections;
-  TServiceMethodArgument = TInterfaceMethodArgument;
-  PServiceMethodArgument = PInterfaceMethodArgument;
-  TServiceMethodArgumentDynArray = TInterfaceMethodArgumentDynArray;
+  TServiceMethodValueType            = TInterfaceMethodValueType;
+  TServiceMethodValueTypes           = TInterfaceMethodValueTypes;
+  TServiceMethodValueVar             = TInterfaceMethodValueVar;
+  TServiceMethodValueDirection       = TInterfaceMethodValueDirection;
+  TServiceMethodValueDirections      = TInterfaceMethodValueDirections;
+  TServiceMethodArgument             = TInterfaceMethodArgument;
+  PServiceMethodArgument             = PInterfaceMethodArgument;
+  TServiceMethodArgumentDynArray     = TInterfaceMethodArgumentDynArray;
   TServiceMethodParamsDocVariantKind = TInterfaceMethodParamsDocVariantKind;
-  TServiceMethod = TInterfaceMethod;
-  TServiceMethodDynArray = TInterfaceMethodDynArray;
-  PServiceMethod = PInterfaceMethod;
+  TServiceMethod                     = TInterfaceMethod;
+  TServiceMethodDynArray             = TInterfaceMethodDynArray;
+  PServiceMethod                     = PInterfaceMethod;
 
 const
   // TServiceMethodValueType = TInterfaceMethodValueType items
@@ -3692,6 +3695,22 @@ begin
   Rtti.RegisterUnsafeSpiType(Types);
 end;
 
+function RecordIsHfa(const Props: TRttiCustomProps): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if not (Props.Count in [1 .. 4]) then
+    exit;
+  for i := 0 to Props.Count - 1 do
+    with Props.List[i] do
+      if (Value.Cache.Kind <> rkFloat) or
+         (Value.Cache.RttiFloat <> rfDouble) or
+         (OffsetGet <> i * SizeOf(double)) then
+        exit; // we only support records of packed double/TDateTime fields
+  result := true;
+end;
+
 constructor TInterfaceFactory.Create(aInterface: PRttiInfo);
 var
   nm, na, reg: integer;
@@ -3986,6 +4005,13 @@ begin
                  a^.ParamName^, POINTERBYTES + 1]);
               // to be fair, both WIN64ABI and SYSVABI could handle those and
               // transmit them within na register
+            {$ifdef HAS_FPREG}
+            if RecordIsHfa(a^.ArgRtti.Props) then
+            begin
+              include(a^.ValueKindAsm, vIsHFA); // e.g. record x, y: double end;
+              SizeInFPR := a^.ArgRtti.Size shr 3;
+            end;
+            {$endif HAS_FPREG}
          end;
       end;
       a^.OffsetAsValue := m^.ArgsSizeAsValue;

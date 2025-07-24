@@ -1877,19 +1877,19 @@ var
 {$ifndef PUREMORMOT2}
 
 type
-  TJsonToObjectOption = TJsonParserOption;
+  TJsonToObjectOption  = TJsonParserOption;
   TJsonToObjectOptions = TJsonParserOptions;
 
 const
-  j2oSQLRawBlobAsBase64 = woRawBlobAsBase64;
-  j2oIgnoreUnknownProperty = jpoIgnoreUnknownProperty;
-  j2oIgnoreStringType = jpoIgnoreStringType;
-  j2oIgnoreUnknownEnum = jpoIgnoreUnknownEnum;
-  j2oHandleCustomVariants = jpoHandleCustomVariants;
+  j2oSQLRawBlobAsBase64               = woRawBlobAsBase64;
+  j2oIgnoreUnknownProperty            = jpoIgnoreUnknownProperty;
+  j2oIgnoreStringType                 = jpoIgnoreStringType;
+  j2oIgnoreUnknownEnum                = jpoIgnoreUnknownEnum;
+  j2oHandleCustomVariants             = jpoHandleCustomVariants;
   j2oHandleCustomVariantsWithinString = jpoHandleCustomVariantsWithinString;
-  j2oSetterExpectsToFreeTempInstance = jpoSetterExpectsToFreeTempInstance;
-  j2oSetterNoCreate = jpoSetterNoCreate;
-  j2oAllowInt64Hex = jpoAllowInt64Hex;
+  j2oSetterExpectsToFreeTempInstance  = jpoSetterExpectsToFreeTempInstance;
+  j2oSetterNoCreate                   = jpoSetterNoCreate;
+  j2oAllowInt64Hex                    = jpoAllowInt64Hex;
 
 const
   JSONTOOBJECT_TOLERANTOPTIONS: TJsonParserOptions =

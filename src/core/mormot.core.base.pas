@@ -4502,8 +4502,8 @@ type
      const Args: array of const; Instance: TObject = nil) of object;
 
 {$ifndef PUREMORMOT2}
-  TSynLogInfo  = TSynLogLevel;
-  TSynLogInfos = TSynLogLevels;
+  TSynLogInfo         = TSynLogLevel;
+  TSynLogInfos        = TSynLogLevels;
   TSynLogInfoDynArray = TSynLogLevelDynArray;
 {$endif PUREMORMOT2}
 

@@ -568,9 +568,9 @@ type
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
 
-  TSQLHTTPServerOptions = TRestHttpServerUse;
-  TSQLHTTPServerSecurity = TRestHttpServerSecurity;
-  TSQLHTTPServer = TRestHttpServer;
+  TSQLHTTPServerOptions   = TRestHttpServerUse;
+  TSQLHTTPServerSecurity  = TRestHttpServerSecurity;
+  TSQLHTTPServer          = TRestHttpServer;
   TSQLHTTPRemoteLogServer = TRestHttpRemoteLogServer;
 
 const

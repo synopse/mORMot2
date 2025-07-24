@@ -2755,13 +2755,13 @@ const
 {$ifndef PUREMORMOT2}
 
 type
-  TSqlRestServer = TRestServer;
-  TSqlRestServerClass = TRestServerClass;
-  TSqlRestServerUriContext = TRestServerUriContext;
-  TSqlRestServerUriContextClass = TRestServerUriContextClass;
-  TSqlRestServerAuthenticationClass = TRestServerAuthenticationClass;
-  TSqlRestServerAuthenticationNone  = TRestServerAuthenticationNone;
-  TSqlRestServerAuthenticationDefault = TRestServerAuthenticationDefault;
+  TSqlRestServer                        = TRestServer;
+  TSqlRestServerClass                   = TRestServerClass;
+  TSqlRestServerUriContext              = TRestServerUriContext;
+  TSqlRestServerUriContextClass         = TRestServerUriContextClass;
+  TSqlRestServerAuthenticationClass     = TRestServerAuthenticationClass;
+  TSqlRestServerAuthenticationNone      = TRestServerAuthenticationNone;
+  TSqlRestServerAuthenticationDefault   = TRestServerAuthenticationDefault;
   TSqlRestServerAuthenticationHttpBasic = TRestServerAuthenticationHttpBasic;
 
 {$endif PUREMORMOT2}

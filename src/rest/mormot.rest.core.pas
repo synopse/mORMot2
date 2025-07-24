@@ -264,9 +264,9 @@ type
 {$ifndef PUREMORMOT2}
 
   TSqlRestServerUriContextCommand = TRestServerUriContextCommand;
-  TSqlRestServerAcquireMode = TRestServerAcquireMode;
-  TSqlRestAcquireExecution = TRestAcquireExecution;
-  TSqlRestBackgroundTimer = TRestBackgroundTimer;
+  TSqlRestServerAcquireMode       = TRestServerAcquireMode;
+  TSqlRestAcquireExecution        = TRestAcquireExecution;
+  TSqlRestBackgroundTimer         = TRestBackgroundTimer;
 
 {$endif PUREMORMOT2}
 
@@ -880,8 +880,8 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TSqlRest = TRest;
-  TSqlRestClass = TRestClass;
+  TSqlRest         = TRest;
+  TSqlRestClass    = TRestClass;
   TSqlRestDynArray = TRestDynArray;
 
 {$endif PUREMORMOT2}
@@ -1542,7 +1542,7 @@ type
 
 {$ifndef PUREMORMOT2}
 type
-  TSqlUriMethod = TUriMethod;
+  TSqlUriMethod  = TUriMethod;
   TSqlUriMethods = TUriMethods;
 {$endif PUREMORMOT2}
 
