@@ -855,7 +855,7 @@ type
     fID: cardinal; // should be the first field for LockedSessionFind()
     fTimeOutTix: cardinal;
     fTimeOutShr10: cardinal;
-    fLastTimestamp: cardinal;   // client-side generated timestamp
+    fLastClientTimestamp: cardinal;   // client-side generated timestamp
     fPrivateSaltHash: cardinal; // pre-computed 32-bit seed for signature
     fRemoteOsVersion: TOperatingSystemVersion; // stored as 32-bit
     fUser: TAuthUser;
@@ -1837,7 +1837,8 @@ type
     // - returns nil if not found, or fill aContext.User/Group values if matchs
     // - this method will also check for outdated sessions, and delete them
     // - this method is not thread-safe: caller should use Sessions.Safe.ReadOnlyLock
-    function LockedSessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
+    function LockedSessionAccess(Ctxt: TRestServerUriContext;
+      FullyAuthenticated: boolean = true): TAuthSession;
     /// delete a session from its index in Sessions[]
     // - will perform any needed clean-up, and log the event
     // - this method is not thread-safe: caller should use Sessions.Safe.WriteLock
@@ -5180,11 +5181,11 @@ begin
      (reslen + (19 + 8 + 8 + 8) > PStrLen(P - _STRLEN)^) or
      not HexDisplayToCardinal(P + reslen + 19, Ctxt.fSession) then
     exit;
-  result := fServer.LockedSessionAccess(Ctxt); // retrieve Ctxt.Session ID
+  result := fServer.LockedSessionAccess(Ctxt, {done=}false); // retrieve Ctxt.Session ID
   if result = nil then
     exit; // unknown Session
   P := @P[reslen + (19 + 8)]; // points to Hexa8(Timestamp)
-  minticks := result.fLastTimestamp - fTimestampCoherencyTicks;
+  minticks := result.fLastClientTimestamp - fTimestampCoherencyTicks;
   if HexDisplayToCardinal(P, ts) and
      (fNoTimestampCoherencyCheck or
       (integer(minticks) < 0) or // <0 just after computer startup
@@ -5196,8 +5197,9 @@ begin
        ({%H-}sign = expectedsign) then
     begin
       if not fNoTimestampCoherencyCheck then
-        if ts > result.fLastTimestamp then
-          result.fLastTimestamp := ts;
+        if ts > result.fLastClientTimestamp then
+          result.fLastClientTimestamp := ts;
+      Ctxt.SessionAssign(result); // set TimeOutTix and fill Ctxt.Session*
       exit; // success
     end
     else if Assigned(Ctxt.fLog) and
@@ -7203,7 +7205,7 @@ begin
     for i := fSessions.Count - 1 downto 0 do // backward for deletion
     begin
       dec(a);
-      if tix > a^.TimeOutTix then
+      if tix > a^.fTimeOutTix then
       begin
         if result = 0 then
         begin
@@ -7225,7 +7227,8 @@ begin
   end;
 end;
 
-function TRestServer.LockedSessionAccess(Ctxt: TRestServerUriContext): TAuthSession;
+function TRestServer.LockedSessionAccess(Ctxt: TRestServerUriContext;
+  FullyAuthenticated: boolean): TAuthSession;
 var
   ndx: PtrInt;
 begin
@@ -7252,7 +7255,8 @@ begin
         exit;
       end;
     // found the session: assign it to the request Ctxt
-    Ctxt.SessionAssign(result);
+    if FullyAuthenticated then
+      Ctxt.SessionAssign(result);
   end
   else
     result := nil;
