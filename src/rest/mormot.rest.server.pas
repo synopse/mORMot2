@@ -4839,17 +4839,15 @@ begin
   begin
     // on error: set GroupRights back to the pseudo TAuthGroup = ID
     aUser.GroupRights.Free;
-    aUser.GroupRights := pointer(gid);
+    aUser.GroupRights := pointer(PtrUInt(gid));
     ESecurityException.RaiseUtf8('Invalid %.Create(%,%): no %.ID=%',
       [self, aCtxt, aUser, aCtxt.Server.fAuthGroupClass, gid]);
   end;
   fUser := aUser;
   // store the REST/HTTP execution context
   fConnectionID := aCtxt.Call^.LowLevelConnectionID;
-  if (aCtxt.fCall <> nil) and
-     (aCtxt.fCall^.InHead <> '') then
-    fSentHeaders := aCtxt.fCall^.InHead;
-  aCtxt.SetRemoteIP(fRemoteIP);
+  fSentHeaders := aCtxt.Call^.InHead;
+  aCtxt.Call^.GetRemoteIP(fRemoteIP);
   fRemoteOsVersion := aCtxt.SessionOS;
   if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
     if not aCtxt.Server.Orm.RetrieveBlobFields(fUser) then
@@ -4858,7 +4856,7 @@ begin
   // compute the next Session ID and its associated private key
   fID := InterlockedIncrement(aCtxt.Server.fSessionCounter); // 20-bit number
   if PInteger(@ServerProcessKdf)^ <> 0 then  // use our thread-safe CSPRNG
-    ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 bytes to be <> nonce
+    ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 > 4 bytes nonce ticks
   else
     RandomBytes(rnd.Lo); // Lecuyer as fallback (paranoid)
   XorMemory(rnd.l, StartupEntropy); // always obfuscate
