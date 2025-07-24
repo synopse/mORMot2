@@ -2505,12 +2505,12 @@ implementation
 
 { ************ IInvokable Interface Methods and Parameters RTTI Extraction }
 
-procedure TInterfaceMethodArgument.SerializeToContract(WR: TJsonWriter);
 const
-  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
   // convert into generic in/out direction (assume result is out)
+  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
     'in', 'both', 'out', 'out');
-  // AnsiString (Delphi <2009) may loose data depending on the client
+  // normalize simple type names e.g. int64=qword or all strings to "utf8"
+  // - note: AnsiString (Delphi <2009) may loose data depending on the client
   ARGTYPETOJSON: array[TInterfaceMethodValueType] of string[8] = (
     '??',       // imvNone
     'self',     // imvSelf
@@ -2533,6 +2533,8 @@ const
     'json',     // imvRawJson
     '',         // imvDynArray
     '');        // imvInterface
+
+procedure TInterfaceMethodArgument.SerializeToContract(WR: TJsonWriter);
 begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
@@ -2540,11 +2542,11 @@ begin
   WR.AddShort(ARGDIRTOJSON[ValueDirection]);
   WR.AddShort('","type":"');
   if ARGTYPETOJSON[ValueType] = '' then
-    WR.AddShort(ArgRtti.Info.Name^)
+    WR.AddString(ArgRtti.Name) // use pascal type name
   else
-    WR.AddShort(ARGTYPETOJSON[ValueType]);
+    WR.AddShort(ARGTYPETOJSON[ValueType]); // normalized
 {$ifdef SOA_DEBUG}
-  WR.Add('"', ',');
+  WR.AddDirect('"', ',');
   WR.AddPropInt64('index', IndexVar);
   WR.AddPropJsonString('var',
     GetEnumNameTrimed(TypeInfo(TInterfaceMethodValueVar), ValueVar));
