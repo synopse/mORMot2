@@ -5622,7 +5622,7 @@ begin
   Definition.fHashCached.DeleteDeprecated(tix);
   // supplied URI should be a safe local file
   result := HTTP_NOTFOUND;
-  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {name=}true);
+  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
   NormalizeFileNameU(name);
   if not SafePathNameU(name) then
     exit;

@@ -8674,7 +8674,7 @@ begin
   begin
     s := DateTimeToIso8601(Now / 20 + RandomDouble * 20, true);
     t := UrlEncode(s);
-    Check(UrlDecode(t) = s);
+    CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     Check(UrlDecodeNeedParameters(pointer(d), 'where,select'));
     Check(not UrlDecodeNeedParameters(pointer(d), 'foo,select'));

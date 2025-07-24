@@ -1587,8 +1587,8 @@ function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
 function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
 
 /// decode a UrlEncode/UrlEncodeName() URI encoded string into its original value
-// - name=false for parameters (after ?), to replace spaces by '+'
-procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; name: boolean);
+// - space='+' for parameters (after ?), to replace spaces by '+' in names
+procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; space: AnsiChar);
 
 /// decode a specified parameter compatible with URI encoding into its original
 // textual value
@@ -8260,58 +8260,71 @@ begin
     result := URI;
 end;
 
-procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; name: boolean);
+function DoUrlDecode(P, U: PByte; replace: AnsiChar): PUtf8Char;
 var
-  P: PUtf8Char;
+  c, b: byte;
+begin
+  repeat
+    c := U^;
+    if c = 0 then
+      break; // reached end of URI
+    if c <> ord('%') then
+    begin
+      if c = ord('+') then
+        c := ord(replace);
+    end
+    else
+    begin
+      b := ConvertHexToShl[PAnsiChar(U)[1]];
+      if b <> 255 then // browsers may not follow the RFC e.g. encode % as %
+      begin
+        c := ConvertHexToBin[PAnsiChar(U)[2]];
+        if c <> 255 then
+        begin
+          inc(U, 3);
+          inc(c, b);
+          P^ := c;
+          inc(P);
+          continue;
+        end;
+        c := U^;
+      end;
+    end;
+    inc(U);
+    P^ := c;
+    inc(P);
+  until false;
+  result := pointer(P);
+end;
+
+procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; space: AnsiChar);
+var
   tmp: TSynTempBuffer;
 begin
   if L = 0 then
-  begin
-    result := '';
-    exit;
-  end;
-  P := tmp.Init(L);
-  repeat
-    case U^ of
-      #0:
-        break; // reached end of URI
-      '%':
-        if not HexToChar(PAnsiChar(U + 1), P) then
-          P^ := U^ // browsers may not follow the RFC (e.g. encode % as % !)
-        else
-          inc(U, 2);
-      '+':
-        if name then
-          P^ := '+'
-        else
-          P^ := ' ';
-    else
-      P^ := U^;
-    end;
-    inc(U);
-    inc(P);
-  until false;
-  tmp.Done(P, result);
+    result := ''
+  else
+    tmp.Done(DoUrlDecode(tmp.Init(L), pointer(U), space), result);
 end;
 
 function UrlDecode(U: PUtf8Char): RawUtf8;
 begin
-  UrlDecodeVar(U, StrLen(U), result, {name=}false);
+  UrlDecodeVar(U, StrLen(U), result, {space=}' ');
 end;
 
 function UrlDecode(const s: RawUtf8): RawUtf8;
 begin
-  UrlDecodeVar(pointer(s), length(s), result, {name=}false);
+  UrlDecodeVar(pointer(s), length(s), result, {space=}' ');
 end;
 
 function UrlDecodeName(U: PUtf8Char): RawUtf8;
 begin
-  UrlDecodeVar(U, StrLen(U), result, {name=}true);
+  UrlDecodeVar(U, StrLen(U), result, {space=}'+');
 end;
 
 function UrlDecodeName(const s: RawUtf8): RawUtf8;
 begin
-  UrlDecodeVar(pointer(s), length(s), result, {name=}true);
+  UrlDecodeVar(pointer(s), length(s), result, {space=}'+');
 end;
 
 function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;

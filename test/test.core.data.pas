@@ -6979,7 +6979,7 @@ begin
   end;
   str := Utf8ToString(UrlEncode(StringToUtf8('https://test3.diavgeia.gov.gr/doc/')));
   check(str = 'https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
-  Check(UrlDecode('where=name%20like%20:(%27Arnaud%%27):') =
+  CheckEqual(UrlDecode('where=name%20like%20:(%27Arnaud%%27):'),
     'where=name like :(''Arnaud%''):', 'URI from browser');
   P := UrlDecodeNextNameValue('where=name+like+%3A%28%27Arnaud%25%27%29%3A', name, value);
   Check(P <> nil);

@@ -4710,7 +4710,7 @@ begin
       if (par^ = '[') or
          IdemPChar(par, '%5B') then
         // as json array (input is e.g. '+%5B...' for ' [...')
-        UrlDecodeVar(par, StrLen(par), RawUtf8(fCall^.InBody), {name=}false)
+        UrlDecodeVar(par, StrLen(par), RawUtf8(fCall^.InBody), {space=}' ')
       else
       begin
         // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
