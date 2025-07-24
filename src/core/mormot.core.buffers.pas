@@ -1579,16 +1579,16 @@ function UrlDecode(U: PUtf8Char): RawUtf8; overload;
 function UrlDecode(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
-// - only parameters - i.e. after '?' - should replace spaces by '+'
+// - used over parameters - i.e. after '?' - to replace spaces by '+'
 function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
-// - only parameters - i.e. after '?' - should replace spaces by '+'
+// - used over parameters - i.e. after '?' - to replace spaces by '+'
 function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
 
 /// decode a UrlEncode/UrlEncodeName() URI encoded string into its original value
-// - space='+' for parameters (after ?), to replace spaces by '+' in names
-procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; space: AnsiChar);
+// - space='+' to replace spaces by '+' as with UrlDecodeName()
+procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; space: AnsiChar = ' ');
 
 /// decode a specified parameter compatible with URI encoding into its original
 // textual value

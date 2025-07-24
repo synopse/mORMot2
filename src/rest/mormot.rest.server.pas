@@ -4709,7 +4709,8 @@ begin
       while par^ = '+' do
         inc(par); // ignore trailing spaces
       if (par^ = '[') or
-         IdemPChar(par, '%5B') then
+         ((PCardinal(par)^ and $00dfffff) =
+           ord('%') + ord('5') shl 8 + ord('B') shl 16) then
         // as json array (input is e.g. '+%5B...' for ' [...')
         UrlDecodeVar(par, StrLen(par), RawUtf8(fCall^.InBody), {space=}' ')
       else
