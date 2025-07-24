@@ -6855,7 +6855,7 @@ begin
   fCurrentDir := fCurrentDir + PathDelim;
   if fRecursive then
     if FindFirst(Make(FILES_ALL), faDirectory, f) = 0 then
-    begin
+    try
       repeat
         if SearchRecValidFolder(f) then
         begin
@@ -6867,11 +6867,12 @@ begin
           fCurrentDir := prev; // back to the parent folder
         end;
       until FindNext(f) <> 0;
+    finally // OnFile/OnFolder may trigger some exception
       FindClose(f);
     end;
   for i := 0 to length(fFileMask) - 1 do
     if FindFirst(Make(fFileMask[i]), faAnyfile - faDirectory, f) = 0 then
-    begin
+    try
       repeat
         if SearchRecValidFile(f) then
           if not OnFile(f, Make(f.Name)) then
@@ -6880,9 +6881,10 @@ begin
             exit;
           end;
       until FindNext(f) <> 0;
+    finally // OnFile/OnFolder may trigger some exception
       FindClose(f);
     end;
-  fAborted := OnFolder(fCurrentDir); // always called last
+  fAborted := not OnFolder(fCurrentDir); // always called last
 end;
 
 function DirectorySize(const Path: TFileName; Recursive: boolean;
