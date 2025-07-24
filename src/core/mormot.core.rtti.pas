@@ -1768,7 +1768,8 @@ type
   // - IN, IN/OUT, OUT directions can be applied to arguments, e.g. to be
   // available through our JSON-serialized remote access: rmdVar and rmdOut
   // kind of parameters will be returned within the "result": JSON array
-  // - rmdResult is used for a function method, to handle the returned value
+  // - rmdResult is used for the function method, to handle the returned value
+  // - FPC "constref" is not yet supported - use plain "const" instead
   TRttiMethodArgDirection = (
     rmdConst,
     rmdVar,
@@ -2734,7 +2735,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// allow low-level customization of the Cache.NewInstance pointer for rkClass/rkInterface
     procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
-    /// check if this type has ClassNewInstance information for rkClass
+    /// check if this type has ClassNewInstance information for rkClass/rkInterface
     function HasClassNewInstance: boolean;
     /// copy one rkClass instance into another - as used by CopyObject()
     // - return the destination object, optionally creating it if aTo = nil
@@ -6483,7 +6484,7 @@ begin
     begin
       if aFlags * [pfConst, pfVar, pfOut] = [] then
         RaiseError('%: % parameter should be declared as const, var or out',
-          [a^.ParamName^, aTypeName^]);
+          [a^.ParamName^, aTypeName^]); // e.g. FPC constref is not yet supported
     end
     else if aInfo^.Kind = rkInterface then
       if Rtti.FindType(aInfo).HasClassNewInstance then
@@ -7502,7 +7503,9 @@ begin
       if IdemPropNameUSameLenNotNull(Name, 'array', 5) then
         result := ptArray
       else if IdemPropNameUSameLenNotNull(Name, 'TDate', 5) then
-        result := ptDateTime;
+        result := ptDateTime
+      else if IdemPropNameUSameLenNotNull(Name, 'TGuid', 5) then
+        result := ptGuid; // Delphi defines uppercase TGUID in System.pas
     6:
       {$ifdef FPC}
       // TypeInfo(string)=TypeInfo(AnsiString) on FPC
@@ -9050,7 +9053,12 @@ begin
   fParser := aParser;
   fParserComplex := aParserComplex;
   if fCache.Info <> nil then
-    ShortStringToAnsi7String(fCache.Info.Name^, fName);
+    case aParser of
+      ptGuid:
+        fName := PT_NAME[aParser]; // normalize for Delphi
+    else
+      ShortStringToAnsi7String(fCache.Info.Name^, fName);
+    end;
   fFlags := fFlags + fProps.AdjustAfterAdded;
   if (fArrayRtti <> nil) and
      (rcfIsManaged in fArrayRtti.Flags) then
