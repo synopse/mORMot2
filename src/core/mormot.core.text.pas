@@ -2591,8 +2591,7 @@ function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean;
 // unsigned integer
 // - returns true and set aValue with the decoded number, on success
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
-  {$ifdef ISDELPHI}{$ifdef HASINLINE}inline;{$endif}{$endif}
-  // inline gives an error under release conditions with (old?) FPC
+  {$ifdef CPUX86NOTPIC}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fast conversion from hexa chars in reverse order into a cardinal
 // - reverse function of Int64ToHex()

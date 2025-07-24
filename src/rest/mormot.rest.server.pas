@@ -4213,7 +4213,7 @@ begin
   v := GetInputValue(ParamName);
   if (v = nil) or
      (length(v^) <> 8) or
-     not HexDisplayToBin(pointer(v^), @result, SizeOf(result)) then
+     not HexDisplayToCardinal(pointer(v^), result) then
     result := 0;
 end;
 
@@ -4869,7 +4869,7 @@ begin
     aCtxt.fLog.Log(sllUserAuth,
       'New [%] session %/% created at %/% running % {%}',
       [fUser.GroupRights.Ident, fUser.LogonName, fID, fRemoteIP,
-       aCtxt.Call^.LowLevelConnectionID, aCtxt.Call^.LowLevelUserAgent,
+       fConnectionID, aCtxt.Call^.LowLevelUserAgent,
        ToTextOS(integer(fRemoteOsVersion))], self);
 end;
 
@@ -5363,7 +5363,7 @@ var
       // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
       if (length(nonce^) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
          (nonce^[9] = '_') and
-         HexDisplayToBin(pointer(nonce^), @os, SizeOf(os)) and
+         HexDisplayToCardinal(pointer(nonce^), PCardinal(@os)^) and
          (os.os <= high(os.os)) then
         Ctxt.fSessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
