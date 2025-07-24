@@ -174,7 +174,8 @@ type
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: SmallInt;
     /// how TInterfaceMethodExecuteRaw.RawExecute should handle this value
-    RawExecute: (reValReg, reValStack, reRefReg, reRefStack, reValFpReg, reNone);
+    RawExecute: (reValReg, reValRegs, reValStack, reRefReg, reRefStack,
+                 reValFpReg, reValFpRegs, reNone);
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
     OffsetAsValue: cardinal;
     /// serialize the argument into the TServiceContainer.Contract JSON format
@@ -492,7 +493,7 @@ const
   SERVICE_PSEUDO_METHOD_COUNT = length(SERVICE_PSEUDO_METHOD);
 
 var
-  /// default value for TInterfaceFactory.JsonParserOptions
+  /// default value for TInterfaceFactory.JsonParserOptions - tolerant enough
   JSONPARSER_SERVICE: TJsonParserOptions =
     [jpoHandleCustomVariants,
      jpoIgnoreUnknownEnum,
@@ -7012,14 +7013,10 @@ begin
     inc(pv);
     case arg^.RawExecute of
       reValReg:
-        begin
-          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv^)^;
-          {$ifdef CPUARM}
-          // e.g. Int64 on 32-bit ARM systems are passed in two registers
-          if arg^.SizeInStack > POINTERBYTES then
-            call.ParamRegs[arg^.RegisterIdent + 1] := PPtrInt(pv^ + POINTERBYTES)^;
-          {$endif CPUARM}
-        end;
+        call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv^)^;
+      reValRegs:
+        // e.g. Int64 on 32-bit ARM systems are passed in two registers
+        MoveFast(pv^^, call.ParamRegs[arg^.RegisterIdent], arg^.SizeInStack);
       reValStack:
         MoveFast(pv^^, Stack[arg^.InStackOffset], arg^.SizeInStack);
       reRefReg:
@@ -7028,7 +7025,10 @@ begin
         PPointer(@Stack[arg^.InStackOffset])^ := pv^;
       {$ifdef HAS_FPREG}
       reValFpReg:
-        call.FPRegs[arg^.FPRegisterIdent] := unaligned(PDouble(pv^)^);
+        PInt64(@call.FPRegs[arg^.FPRegisterIdent])^ := PInt64(pv^)^;
+      reValFpRegs:
+        // e.g. HFA on SYSVABI systems are passed in several FP registers
+        MoveFast(pv^^, call.FPRegs[arg^.FPRegisterIdent], arg^.SizeInStack);
       {$endif HAS_FPREG}
     end;
   end;
