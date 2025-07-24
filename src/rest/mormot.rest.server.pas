@@ -442,7 +442,6 @@ type
     /// low-level access to the associated Session
     // - may be nil depending on the context: you should NOT use it, but the
     // safe Session, SessionGroup, SessionUser, SessionUserName fields instead
-    // - is used internally
     property AuthSession: TAuthSession
       read fAuthSession write fAuthSession;
     /// the associated routing class on the client side
@@ -518,7 +517,7 @@ type
     // - as set by TRestTreeNode.LookupParam from <path:fulluri> place holder
     property UriMethodPath: RawUtf8
       read fUriMethodPath;
-    /// position of the &session_signature=... text in Call^.Url string
+    /// 1-indexed position of the &session_signature=... text in Call^.Url string
     property UriSessionSignaturePos: integer
       read fUriSessionSignaturePos;
     /// URI inlined parameters position within Call^.Url, just after trailing '?'
@@ -1062,16 +1061,6 @@ type
       read fOptions write fOptions;
   end;
 
-  /// weak authentication scheme using URL-level parameter
-  TRestServerAuthenticationUri = class(TRestServerAuthentication)
-  public
-    /// will check URI-level signature
-    // - retrieve the session ID from 'session_signature=...' parameter
-    // - method execution is protected by TRestServer.Sessions.ReadOnlyLock
-    function RetrieveSession(
-      Ctxt: TRestServerUriContext): TAuthSession; override;
-  end;
-
   /// secure authentication scheme using URL-level digital signature
   // - match TRestClientAuthenticationSignedUri on Client side
   // - for instance, default suaCRC32 format of session_signature is
@@ -1079,7 +1068,7 @@ type
   // !Hexa8(Timestamp)+
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
   // !            Hexa8(Timestamp)+url))
-  TRestServerAuthenticationSignedUri = class(TRestServerAuthenticationUri)
+  TRestServerAuthenticationSignedUri = class(TRestServerAuthentication)
   protected
     fTimestampCoherencySeconds: cardinal;
     fTimestampCoherencyTicks: cardinal;
@@ -1185,8 +1174,13 @@ type
   // - on client side, this scheme is not called by TRestClientUri.SetUser()
   // method - so you have to write:
   // ! TRestServerAuthenticationNone.ClientSetUser(Client,'User','');
-  TRestServerAuthenticationNone = class(TRestServerAuthenticationUri)
+  TRestServerAuthenticationNone = class(TRestServerAuthentication)
   public
+    /// will check URI-level signature
+    // - retrieve the session ID from 'session_signature=...' parameter
+    // - method execution is protected by TRestServer.Sessions.ReadOnlyLock
+    function RetrieveSession(
+      Ctxt: TRestServerUriContext): TAuthSession; override;
     /// will try to handle the Auth RESTful method with mORMot authentication
     // - to be called in a weak one pass request:
     // $ GET ModelRoot/auth?UserName=...
@@ -5124,26 +5118,6 @@ begin
 end;
 
 
-{ TRestServerAuthenticationUri }
-
-function TRestServerAuthenticationUri.RetrieveSession(
-  Ctxt: TRestServerUriContext): TAuthSession;
-var
-  sigpos: PtrInt;
-begin
-  result := nil;
-  if Ctxt = nil then
-    exit;
-  sigpos := Ctxt.UriSessionSignaturePos;
-  // expected format is 'session_signature='Hexa8(SessionID)'...
-  if (sigpos > 0) and
-     (sigpos + (18 + 8) <= length(Ctxt.Call^.Url)) and
-     HexDisplayToBin(PAnsiChar(pointer(Ctxt.Call^.Url)) + sigpos + 18,
-       @Ctxt.fSession, SizeOf(Ctxt.fSession)) then
-    result := fServer.LockedSessionAccess(Ctxt);
-end;
-
-
 { TRestServerAuthenticationSignedUri }
 
 // expected format is session_signature=
@@ -5424,6 +5398,26 @@ end;
 
 
 { TRestServerAuthenticationNone }
+
+function TRestServerAuthenticationNone.RetrieveSession(
+  Ctxt: TRestServerUriContext): TAuthSession;
+var
+  sigpos: PtrInt;
+  p: PAnsiChar;
+begin
+  result := nil;
+  if Ctxt = nil then
+    exit;
+  p := pointer(Ctxt.Call^.Url);
+  if p = nil then
+    exit;
+  sigpos := Ctxt.UriSessionSignaturePos;
+  // expected format is ?session_signature=xxSessionID|xxTimestamp|xxSignature
+  if (sigpos > 0) and
+     (sigpos + (18 + 8) <= PStrLen(P - _STRLEN)^) and
+     HexDisplayToCardinal(p + sigpos + 18, Ctxt.fSession) then
+    result := fServer.LockedSessionAccess(Ctxt);
+end;
 
 function TRestServerAuthenticationNone.Auth(Ctxt: TRestServerUriContext;
   const aUserName: RawUtf8): boolean;
