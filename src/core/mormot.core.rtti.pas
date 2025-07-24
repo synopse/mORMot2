@@ -1786,6 +1786,8 @@ type
     /// the low-level RTTI information of this argument
     TypeInfo: PRttiInfo;
     /// how the parameter has been defined (const/var/out/result)
+    // - we don't support the FPC "constref" kind of argument by now, and
+    // follow the standard WIN64ABI / SYSVABI specs with "const"
     Direction: TRttiMethodArgDirection;
   end;
   PRttiMethodArg = ^TRttiMethodArg;

@@ -1796,7 +1796,18 @@ function ToText(op: TInterfaceStubRuleOperator): PShortString; overload;
 
 { ************ TInterfacedObjectFake with JITted Methods Execution }
 
-// see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
+{ some reference material
+ WIN32 (Delphi + FPC register calling convention):
+ http://docwiki.embarcadero.com/RADStudio/en/Program_Control
+ WIN64INTEL:
+ https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing
+ WINARM64:
+ https://learn.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions#parameter-passing
+ SYSVAMD64:
+ https://gitlab.com/x86-psABIs/x86-64-ABI/-/jobs/artifacts/master/raw/x86-64-ABI/abi.pdf?job=build
+ SYSVARM64:
+ https://c9x.me/compile/bib/abi-arm64.pdf
+}
 
 const
 {$ifdef CPU64}
@@ -1817,7 +1828,7 @@ const
   REGEDX = 2;
   REGECX = 3;
   PARAMREG_FIRST = REGEAX;
-  PARAMREG_LAST = REGECX;
+  PARAMREG_LAST  = REGECX;
   // floating-point params are passed by reference
   VMTSTUBSIZE = 24 {$ifdef OSPOSIX} + 4 {$endif};
 {$endif CPUX86}
@@ -1829,16 +1840,16 @@ const
   REGRSI = 2;
   REGRDX = 3;
   REGRCX = 4;
-  REGR8 = 5;
-  REGR9 = 6;
-  PARAMREG_FIRST = REGRDI;
+  REGR8  = 5;
+  REGR9  = 6;
+  PARAMREG_FIRST  = REGRDI;
   PARAMREG_RESULT = REGRSI;
   {$else}
   REGRCX = 1;
   REGRDX = 2;
-  REGR8 = 3;
-  REGR9 = 4;
-  PARAMREG_FIRST = REGRCX;
+  REGR8  = 3;
+  REGR9  = 4;
+  PARAMREG_FIRST  = REGRCX;
   PARAMREG_RESULT = REGRDX;
   {$endif SYSVABI}
   PARAMREG_LAST = REGR9;
@@ -1853,7 +1864,7 @@ const
   REGXMM6 = 7;
   REGXMM7 = 8;
   FPREG_FIRST = REGXMM0;
-  FPREG_LAST = REGXMM7;
+  FPREG_LAST  = REGXMM7;
   {$else}
   FPREG_FIRST = REGXMM0;
   FPREG_LAST = REGXMM3;
@@ -1868,8 +1879,8 @@ const
   REGR1 = 2;
   REGR2 = 3;
   REGR3 = 4;
-  PARAMREG_FIRST = REGR0;
-  PARAMREG_LAST = REGR3;
+  PARAMREG_FIRST  = REGR0;
+  PARAMREG_LAST   = REGR3;
   PARAMREG_RESULT = REGR1;
   // 64-bit floating-point (double) registers
   {$ifdef CPUARMHF}
@@ -1882,7 +1893,7 @@ const
   REGD6 = 7;
   REGD7 = 8;
   FPREG_FIRST = REGD0;
-  FPREG_LAST = REGD7;
+  FPREG_LAST  = REGD7;
   {$define HAS_FPREG}
   {$endif CPUARMHF}
   VMTSTUBSIZE = 16;
@@ -1898,8 +1909,8 @@ const
   REGX5 = 6;
   REGX6 = 7;
   REGX7 = 8;
-  PARAMREG_FIRST = REGX0;
-  PARAMREG_LAST = REGX7;
+  PARAMREG_FIRST  = REGX0;
+  PARAMREG_LAST   = REGX7;
   PARAMREG_RESULT = REGX1;
   // 64-bit floating-point (double) registers
   REGD0 = 1; // map REGV0 128-bit NEON register
@@ -1911,7 +1922,7 @@ const
   REGD6 = 7; // REGV6
   REGD7 = 8; // REGV7
   FPREG_FIRST = REGD0;
-  FPREG_LAST = REGD7;
+  FPREG_LAST  = REGD7;
   {$define HAS_FPREG}
   VMTSTUBSIZE = 28;
 {$endif CPUAARCH64}
@@ -3957,6 +3968,8 @@ begin
               '%.Create: % record too small in %.% method % parameter: it ' +
               'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
               [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES + 1]);
+            // to be fair, both WIN64ABI and SYSVABI could handle those and
+            // transmit them within a register
       end;
       OffsetAsValue := ArgsSizeAsValue;
       inc(ArgsSizeAsValue, ArgRtti.Size);
@@ -3997,7 +4010,7 @@ begin
         {$ifdef FPC}
         or ((ValueType in [imvRecord]) and
           // trunk i386/x86_64\cpupara.pas: DynArray const is passed as register
-          not (vPassedByReference in ValueKindAsm))
+           not (vPassedByReference in ValueKindAsm))
         {$endif FPC} then
       begin
         // this parameter will go on the stack
