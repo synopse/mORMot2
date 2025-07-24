@@ -11811,9 +11811,8 @@ end;
 procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUtf8);
 begin
   if EndBuf = nil then
-    Dest := ''
-  else
-    FastSetString(Dest, buf, PAnsiChar(EndBuf) - PAnsiChar(buf));
+    EndBuf := buf; // return ''
+  FastSetString(Dest, buf, PAnsiChar(EndBuf) - PAnsiChar(buf));
   if (buf <> @tmp) and
      (buf <> nil) then
     FreeMem(buf);
