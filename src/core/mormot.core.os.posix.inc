@@ -3609,15 +3609,13 @@ begin
   if Len <= 0 then
     exit;
   // retrieve up to MAXFROMOS bytes max from OS
-  rd := MAXFROMOS;
-  if Len < MAXFROMOS then
-    rd := Len;
+  rd := MinPtrInt(Len, MAXFROMOS);
   {$ifdef OSLINUX} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);
   if not result then
   {$endif OSLINUX}
   begin
-    dev := -1;
+    dev := 0;
     if not __NoURandom then
       // /dev/urandom non blocking on Linux, but may block at boot time on BSD
       dev := FileOpenSequentialRead('/dev/urandom');
