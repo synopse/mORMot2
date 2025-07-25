@@ -4807,6 +4807,7 @@ var
   release: RawUtf8;
   procid, phyid, phyndx: integer;
   phy: TIntegerDynArray;
+  auxv: PPtrUInt;
   {$ifdef OSLINUX}
   dist: RawUtf8;
   SR: TSearchRec;
@@ -5138,6 +5139,21 @@ begin
   {$endif OSLINUX}
   {$endif CPUX64}
   {$endif OSDARWIN}
+  {$ifdef OSLINUXANDROID}
+  // add entropy from auxiliary vectors - https://lwn.net/Articles/519085/
+  auxv := pointer(system.envp);
+  while auxv^ <> 0 do
+    inc(auxv);
+  inc(auxv); // set by kernel's ELF binary loader after all env PPAnsiChar
+  P := pointer(auxv);
+  while auxv[0] <> 0 do
+  begin
+    if auxv[0] = 25 then // AT_RANDOM: 16 random bytes (used for stacks canary)
+      XorMemory(StartupEntropy, PHash128Rec(auxv[1])^);
+    auxv := @auxv[2];
+  end;
+  crc32c128(@StartupEntropy, P, PAnsiChar(auxv) - P); // include all auxv info
+  {$endif OSLINUXANDROID}
 end;
 
 procedure FinalizeSpecificUnit;
