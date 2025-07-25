@@ -3575,11 +3575,14 @@ begin
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time;
   e.d1 := mach_continuous_time;
+  crcblock(@e.l, @StartupEntropy);
+  inc(StartupEntropy.Lo, e.d1); // StartupEntropy is a bit weak at startup
+  dec(StartupEntropy.Hi, e.d0);
   {$else}
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
-  {$endif OSDARWIN}
   crcblock(@e.l, @StartupEntropy); // 128-bit entropy over nanosecond timestamp
+  {$endif OSDARWIN}
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
