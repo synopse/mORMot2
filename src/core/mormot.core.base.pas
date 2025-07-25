@@ -10885,10 +10885,8 @@ const
 
 procedure TestCpuFeatures;
 var
-  p: PPtrUInt;
+  p, e, eend: PPtrUInt;
   caps: packed array[0..1] of PtrUInt;
-  entropy: PCardinalArray;
-  i: PtrUInt;
 begin
   // C library function getauxval() is not always available -> use system.envp
   caps[0] := 0;
@@ -10898,8 +10896,8 @@ begin
     while p^ <> 0 do
       inc(p);
     inc(p); // auxv is located after the last textual environment variable
-    entropy := @LecuyerEntropy.c;
-    i := 0;
+    e := @LecuyerEntropy;
+    eend := @PByteArray(e)[SizeOf(LecuyerEntropy)];
     while p[0] <> 0 do
     begin
       case p[0] of // 32-bit or 64-bit entries = PtrUInt
@@ -10908,10 +10906,12 @@ begin
         AT_HWCAP2:
           caps[1] := p[1];
         AT_RANDOM: // 16 random bytes (used as stacks canaries)
-          XorMemory(PHash128Rec(entropy)^, PHash128Rec(p[1])^);
+          XorMemory(LecuyerEntropy.r[0], PHash128Rec(p[1])^);
       end;
-      entropy^[i] := entropy^[i] xor fnv32(p[0], @p[1], SizeOf(p[1]));
-      i := (i + 1) and 15;
+      inc(e^, p[0] xor p[1]);
+      inc(e);
+      if e = eend then
+        dec(PByte(e), SizeOf(LecuyerEntropy));
       p := @p[2];
     end;
     MoveFast(caps, CpuFeatures, SizeOf(CpuFeatures));
