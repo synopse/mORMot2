@@ -3089,9 +3089,6 @@ begin
     result := copy(TableName, j, maxInt);
 end;
 
-const
-  SQL_KEYWORDS_BY2: array[0..19] of AnsiChar = 'ASATBYIFINISOFONORTO';
-
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
   aStripSemicolon: boolean): integer;
 var
@@ -3155,8 +3152,7 @@ begin
           end
           else
             inc(c[1]);
-        until WordScanIndex(@SQL_KEYWORDS_BY2, length(SQL_KEYWORDS_BY2) shr 1,
-                PWord(@c[1])^) < 0;
+        until not IsSqlReservedByTwo(@c[1]);
         inc(result);
         inc(i); // jump '?'
       until i = L;
