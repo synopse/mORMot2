@@ -3962,6 +3962,7 @@ const
     'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,' +
     'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
     'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible';
+
   /// CSV of the known reserved keywords per database engine, in alphabetic order
   DB_KEYWORDS_CSV: array[TSqlDBDefinition] of PUtf8Char = (
     // dUnknown
@@ -3988,11 +3989,11 @@ const
     'timestamp,timezone_hour,timezone_minute,to,trailing,transaction,translate,' +
     'translation,trim,true,union,unique,unknown,update,upper,usage,user,using,value,values,' +
     'varchar,varying,view,when,whenever,where,with,work,write,year,zone',
-  // dOracle specific keywords (in addition to dDefault)
+    // dOracle specific keywords (in addition to dDefault)
     'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,' +
     'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,' +
     'pctfree',
-  // dMSSQL specific keywords (in addition to dDefault)
+    // dMSSQL specific keywords (in addition to dDefault)
     'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,' +
     'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,' +
     'clustered,collect,completion,compute,condition,constructor,contains,containstable,' +
@@ -4022,17 +4023,15 @@ const
     'xmlattributes,xmlbinary,xmlcast,xmlcomment,xmlconcat,xmldocument,xmlelement,' +
     'xmlexists,xmlforest,xmliterate,xmlnamespaces,xmlparse,xmlpi,xmlquery,xmlserialize,' +
     'xmltable,xmltext,xmlvalidate',
-  // dJet specific keywords (in addition to dDefault)
+    // dJet specific keywords (in addition to dDefault)
     'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,' +
     'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,' +
     'varbinary,varp,yesno',
-  // dMySQL specific keywords (in addition to dDefault)
+    // dMySQL specific keywords (in addition to dDefault)
      MYSQL_KEYWORDS_CSV,
-  // dSQLite keywords (dDefault is not added to this list)
-    'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,' +
-    'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,' +
-    'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
-  // dFirebird specific keywords (in addition to dDefault)
+    // dSQLite keywords will use IsSqliteReserved() from mormot.db.core
+    '',
+    // dFirebird specific keywords (in addition to dDefault)
     'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,' +
     'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,' +
     'entry_point,exit,file,filter,function,gdscode,gen_id,generator,' +
@@ -4042,7 +4041,7 @@ const
     'raw_partitions,rdb$db_key,record_version,reserv,reserving,retain,return,' +
     'returning_values,returns,segment,shadow,shared,singular,snapshot,sort,stability,' +
     'start,starting,starts,statistics,sub_type,suspend,trigger,type,variable,wait,while',
-  // dNexusDB specific keywords (in addition to dDefault)
+    // dNexusDB specific keywords (in addition to dDefault)
     'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,' +
     'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,' +
     'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,' +
@@ -4068,7 +4067,7 @@ const
     'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,' +
     'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,' +
     'xmlroot,xmlserialize,yes',
-  // dDB2 specific keywords (in addition to dDefault)
+    // dDB2 specific keywords (in addition to dDefault)
     'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,' +
     'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,' +
     'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,' +
@@ -4113,14 +4112,19 @@ class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
 var
   db: TSqlDBDefinition;
 begin
+  // use SQLite3 function using https://sqlite.org/lang_keywords.html
+  if aDB = dSQLite then
+  begin
+    result := IsSqliteReserved(aWord);
+    exit;
+  end;
   // prepare the keywords arrays from the per-DB CSV references
   if DB_KEYWORDS[dDefault] = nil then
     for db := low(DB_KEYWORDS) to high(DB_KEYWORDS) do
       CsvToRawUtf8DynArray(DB_KEYWORDS_CSV[db], DB_KEYWORDS[db]);
   // search using fast binary lookup in the alphabetic ordered arrays
   aWord := TrimU(LowerCase(aWord));
-  if (aDB = dSQLite) or
-     (FastFindPUtf8CharSorted(pointer(DB_KEYWORDS[dDefault]),
+  if (FastFindPUtf8CharSorted(pointer(DB_KEYWORDS[dDefault]),
        high(DB_KEYWORDS[dDefault]), pointer(aWord)) < 0) then
     if aDB <= dDefault then
       result := false
@@ -5631,7 +5635,7 @@ begin
     result := ''
   else
     Join(['select ', FieldsFromList(aFields, aExcludeTypes),
-      ' from ', SqlTableName(aTableName)], result);
+          ' from ', SqlTableName(aTableName)], result);
 end;
 
 {$ifdef ISDELPHI20062007}
