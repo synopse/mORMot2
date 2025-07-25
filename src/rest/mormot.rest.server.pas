@@ -7906,24 +7906,31 @@ end;
 
 procedure TRestServer.Timestamp(Ctxt: TRestServerUriContext);
 var
-  info: TDocVariantData;
-  tix: cardinal;
+  tix: Int64;
+
+  procedure ComputeInfo;
+  var
+    info: TDocVariantData;
+  begin
+    fTimestampInfoCacheTix := tix shr 12;
+    {%H-}info.InitFast;
+    InternalInfo(Ctxt, info);
+    fSessions.Safe.WriteLock;
+    fTimestampInfoCache := info.ToHumanJson;
+    fSessions.Safe.WriteUnlock;
+  end;
+
 begin
+  tix := Ctxt.TickCount64;
   if PropNameEquals(Ctxt.fUriMethodPath, 'info') and
      not (rsoTimestampInfoUriDisable in fOptions) then
   begin
-    tix := Ctxt.TickCount64 shr 12; // cache refreshed every 4.096 seconds
-    if tix <> fTimestampInfoCacheTix then
-    begin
-      fTimestampInfoCacheTix := tix;
-      {%H-}info.InitFast;
-      InternalInfo(Ctxt, info);
-      fTimestampInfoCache := info.ToHumanJson;
-    end;
+    if tix shr 12 <> fTimestampInfoCacheTix then
+      ComputeInfo; // cache refreshed every 4.096 seconds
     Ctxt.Returns(fTimestampInfoCache);
   end
   else
-    Ctxt.Returns(Int64ToUtf8(GetServerTimestamp(Ctxt.TickCount64)),
+    Ctxt.Returns(Int64ToUtf8(GetServerTimestamp(tix)),
       HTTP_SUCCESS, TEXT_CONTENT_TYPE_HEADER);
 end;
 
