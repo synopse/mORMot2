@@ -507,7 +507,7 @@ end;
 
 procedure TTestOrmCore._TOrm;
 var
-  i: integer;
+  i: PtrInt;
   P: PRttiProp;
   s, s1, s2: RawUtf8;
   wa: WinAnsiString;
@@ -520,6 +520,40 @@ var
   valid: boolean;
   obj, v: Variant;
 begin
+  Check(IsSqlReserved('in'));
+  Check(IsSqlReserved('iF'));
+  Check(IsSqlReserved('TO'));
+  Check(not IsSqlReserved('inz'));
+  Check(not IsSqlReserved('iz'));
+  Check(not IsSqlReserved('TOo'));
+  Check(IsSQLiteReserved('in'));
+  Check(IsSQLiteReserved('iF'));
+  Check(IsSQLiteReserved('TO'));
+  Check(not IsSQLiteReserved('inz'));
+  Check(not IsSQLiteReserved('iz'));
+  Check(not IsSQLiteReserved('TOo'));
+  for i := 0 to high(SQL_KEYWORDS) do
+  begin
+    s := SQL_KEYWORDS[i];
+    Check(IsSqlReserved(s));
+    Check(IsSqliteReserved(s));
+    LowerCaseSelf(s);
+    Check(IsSqlReserved(s));
+    Check(IsSqliteReserved(s));
+    Append(s, 'u');
+    Check(not IsSqlReserved(s));
+    Check(not IsSqliteReserved(s));
+  end;
+  for i := 0 to high(SQLITE_KEYWORDS) do
+  begin
+    s := SQLITE_KEYWORDS[i];
+    Check(IsSqliteReserved(s));
+    LowerCaseSelf(s);
+    Check(IsSqliteReserved(s));
+    Append(s, 'u');
+    Check(not IsSqlReserved(s));
+    Check(not IsSqliteReserved(s));
+  end;
   Check(IsSelect('select * from toto'));
   Check(IsSelect(' select * from toto'));
   Check(IsSelect('vacuum'));
@@ -553,7 +587,7 @@ begin
   M := TOrmModel.Create([TOrmTest, TOrmJson]);
   for i := 0 to GetRttiProp(TOrmTest, P) - 1 do
   begin
-    Check(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)) = i);
+    CheckEqual(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)), i);
     Check(T.OrmProps.Fields.ByRawUtf8Name(P^.NameUtf8) <> nil);
     P := P^.Next;
   end;
