@@ -7620,15 +7620,15 @@ begin
     // 512-bit randomness and entropy from gsl_rng_taus2 current state
     SharedRandom.Fill(@data, SizeOf(data));
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from _Fill256FromOs + RdRand/Rdtsc + Lecuyer + thread
-    XorEntropy(data);
-    sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
     if Assigned(OpenSslRandBytes) then
     begin
       OpenSslRandBytes(@data, SizeOf(data));
       sha3.Update(@data, SizeOf(data));
     end;
+    // 512-bit from _Fill256FromOs + RdRand/Rdtsc + Lecuyer + thread
+    XorEntropy(data);
+    sha3.Update(@data, SizeOf(data));
     // 512-bit from /dev/urandom or CryptGenRandom operating system PRNG
     with _OSEntropySeed do
     begin
@@ -11066,8 +11066,8 @@ begin
     // 32-128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AesNiHashMem, nil, 16 * 4, AesNiHashKey, {align=}16);
     AesNiHashAntiFuzzTable := AesNiHashKey;
-    PHash128Rec(AesNiHashKey)^ := StartupEntropy; // some salt
-    SharedRandom.Fill(AesNiHashKey, 16 * 4);     // 512-bit seed using Lecuyer's
+    XorMemory(PHash128Rec(AesNiHashKey)^, StartupEntropy); // 128-bit salt
+    SharedRandom.Fill(AesNiHashKey, 16 * 4); // 512-bit seed using Lecuyer's
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;
