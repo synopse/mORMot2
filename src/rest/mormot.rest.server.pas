@@ -5329,31 +5329,49 @@ end;
 
 { TRestServerAuthenticationDefault }
 
+const
+  _NIL: pointer = nil; // so that PRawUtf8^ = ''
+
 function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerUriContext;
   const aUserName: RawUtf8): boolean;
 var
-  nonce: PRawUtf8;
+  nonce, pwd: PRawUtf8;
+  os: TOperatingSystemVersion;
+  usr: TAuthUser;
 
-  procedure DoAuthWithNonce;
-  var
-    pwd: RawUtf8;
-    usr: TAuthUser;
-    os: TOperatingSystemVersion;
+  procedure DoAuthReturnNonce;
   begin
+    Ctxt.Results([CurrentNonce(Ctxt)]);
+  end;
+
+begin
+  result := aUserName <> '';
+  if not result then // let's try another TRestServerAuthentication class
+    exit;
+  result := true;
+  if AuthSessionRelease(Ctxt, aUserName) then
+    exit;
+  nonce := Ctxt.GetInputValue('ClientNonce');
+  if (nonce <> nil) and
+     (length(nonce^) > 32) then
+  begin
+    // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
     usr := GetUser(Ctxt, aUserName);
     if usr <> nil then
     try
-      // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
-      if (length(nonce^) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
-         (nonce^[9] = '_') and
-         HexDisplayToCardinal(pointer(nonce^), PCardinal(@os)^) and
-         (os.os <= high(os.os)) then
-        Ctxt.fSessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
-      Ctxt.RetrieveInputUtf8OrVoid('Password', pwd);
-      if CheckPassword(Ctxt, usr, nonce^, pwd) then
+      pwd := Ctxt.GetInputValue('Password');
+      if pwd = nil then
+        pwd := @_NIL;
+      if CheckPassword(Ctxt, usr, nonce^, pwd^) then
       begin
         Ctxt.InputRemoveFromUri('PASSWORD='); // anti-forensic
+        // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
+        if (length(nonce^) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
+           (nonce^[9] = '_') and
+           HexDisplayToCardinal(pointer(nonce^), PCardinal(@os)^) and
+           (os.os <= high(os.os)) then
+          Ctxt.fSessionOS := os; // the nonce included some hidden client info
         // setup a new TAuthSession
         // SessionCreate would call Ctxt.AuthenticationFailed on error
         SessionCreate(Ctxt, usr);
@@ -5365,29 +5383,10 @@ var
     end
     else
       Ctxt.AuthenticationFailed(afUnknownUser);
-  end;
-
-  procedure DoAuthReturnNonce;
-  begin
-    Ctxt.Results([CurrentNonce(Ctxt)]);
-  end;
-
-begin
-  result := true;
-  if AuthSessionRelease(Ctxt, aUserName) then
-    exit;
-  nonce := Ctxt.GetInputValue('ClientNonce');
-  if (aUserName <> '') and
-     (nonce <> nil) and
-     (length(nonce^) > 32) then
-    // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
-    DoAuthWithNonce
-  else if aUserName <> '' then
-    // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
-    DoAuthReturnNonce
+  end
   else
-    // parameters does not match any expected layout -> try next authentication
-    result := false;
+    // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
+    DoAuthReturnNonce;
 end;
 
 function TRestServerAuthenticationDefault.CheckPassword(
@@ -7877,9 +7876,6 @@ begin
     W.Free;
   end;
 end;
-
-const
-  _NIL: pointer = nil; // so that PRawUtf8^ = ''
 
 procedure TRestServer.Auth(Ctxt: TRestServerUriContext);
 var
