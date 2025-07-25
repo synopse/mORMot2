@@ -4006,13 +4006,13 @@ begin
                  a^.ParamName^, POINTERBYTES + 1]);
               // to be fair, both WIN64ABI and SYSVABI could handle those and
               // transmit them within a register
-            {$ifdef HAS_FPREG}
             if RecordIsHfa(a^.ArgRtti.Props) then
             begin
               include(a^.ValueKindAsm, vIsHFA); // e.g. record x, y: double end;
+              {$ifdef HAS_FPREG}
               SizeInFPR := a^.ArgRtti.Size shr 3;
+              {$endif HAS_FPREG}
             end;
-            {$endif HAS_FPREG}
          end;
       end;
       a^.OffsetAsValue := m^.ArgsSizeAsValue;
