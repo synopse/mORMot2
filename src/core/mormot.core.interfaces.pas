@@ -3813,13 +3813,13 @@ begin
               'call Rtti.RegisterCollection() first'
           else if a^.ValueDirection = imdResult then
             ErrorMsg := ' - class not allowed as function result: ' +
-              'use na var/out parameter';
+              'use a var/out parameter';
         imvInterface:
           if Assigned(a^.ArgRtti.JsonWriter.Code) then
             include(a^.ValueKindAsm, vIsInterfaceJson) // e.g. IDocList
           else if a^.ValueDirection <> imdConst then
             ErrorMsg := ' - interface not allowed as output: ' +
-              'use na const parameter';
+              'use a const parameter';
       end;
       if ErrorMsg <> '' then
         EInterfaceFactory.RaiseUtf8(
@@ -3901,7 +3901,7 @@ begin
         else if not (rcfIsManaged in a^.ArgRtti.Flags) then
           EInterfaceFactory.RaiseUtf8(
             '%.Create: I% record result type % is unsupported on aarch64:' +
-            'use an OUT parameter instead, or include na managed field',
+            'use an OUT parameter instead, or include a managed field',
             [self, m^.InterfaceDotMethodName, a^.ArgTypeName^]);
         {$endif CPUAARCH64}
       end;
@@ -4001,11 +4001,11 @@ begin
               // handle records only when passed by ref
               EInterfaceFactory.RaiseUtf8(
                 '%.Create: % record too small in %.% method % parameter: it ' +
-                'should be at least % bytes (i.e. bigger than na pointer) to be on stack',
+                'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
                 [self, a^.ArgTypeName^, fInterfaceName, m^.URI,
                  a^.ParamName^, POINTERBYTES + 1]);
               // to be fair, both WIN64ABI and SYSVABI could handle those and
-              // transmit them within na register
+              // transmit them within a register
             {$ifdef HAS_FPREG}
             if RecordIsHfa(a^.ArgRtti.Props) then
             begin
@@ -4071,9 +4071,9 @@ begin
           a^.SizeInStack := a^.ArgRtti.Size;
         {$else}
         {$ifdef CPUARM}
-        // parameter must be aligned on na SizeInStack boundary
+        // parameter must be aligned on a SizeInStack boundary
         if a^.SizeInStack > POINTERBYTES then
-          inc(m^.ArgsSizeInStack, m^.ArgsSizeInStack mod cardinal(SizeInStack));
+          inc(m^.ArgsSizeInStack, m^.ArgsSizeInStack mod cardinal(a^.SizeInStack));
         {$endif CPUARM}
         {$endif OSDARWINARM}
         a^.InStackOffset := m^.ArgsSizeInStack;
@@ -4081,7 +4081,7 @@ begin
       end
       else
       begin
-        // this parameter will go in na register
+        // this parameter will go in a register
         a^.InStackOffset := -1;
         {$ifndef CPUX86}
         if (m^.ArgsResultIndex >= 0) and
@@ -4167,24 +4167,24 @@ begin
           a^.RawExecute := reValStack
         else if a^.RegisterIdent > 0 then
           if a^.SizeInStack = POINTERBYTES then
-            a^.RawExecute := reValReg   // use na single register
+            a^.RawExecute := reValReg   // use a single register
           else
             a^.RawExecute := reValRegs  // several registers (e.g. SYSVABI TGuid)
         {$ifdef HAS_FPREG}
         else if a^.FPRegisterIdent > 0 then
           if a^.SizeInStack = SizeOf(double) then
-            a^.RawExecute := reValFpReg  // use na single FP register
+            a^.RawExecute := reValFpReg  // use a single FP register
           else
             a^.RawExecute := reValFpRegs // several FP registers (e.g. SYSVABI HFA)
         {$endif HAS_FPREG}
         else
-          a^.RawExecute := reNone; // e.g. for na result register
+          a^.RawExecute := reNone; // e.g. for a result register
       inc(a);
     end;
     {$ifdef OSDARWINARM}
     // the Mac M1 does NOT follow the ARM ABI standard on stack :(
-    while ArgsSizeInStack and 7 <> 0 do
-      inc(ArgsSizeInStack); // ensure pointer-aligned
+    while m^.ArgsSizeInStack and 7 <> 0 do
+      inc(m^.ArgsSizeInStack); // ensure pointer-aligned
     {$endif OSDARWINARM}
     if m^.ArgsSizeInStack > MAX_EXECSTACK then
       EInterfaceFactory.RaiseUtf8(
