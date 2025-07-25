@@ -9934,12 +9934,16 @@ begin
   until n = 0;
 end;
 
+var
+  LecuyerEntropy: THash512Rec; // set at startup from Intel cpuid/rdtsc/random
+
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
   e: THash512Rec;
   h: THash128Rec;
   i, j: PtrInt;
 begin
+  e := LecuyerEntropy;
   if entropy <> nil then
     for i := 0 to entropylen - 1 do
     begin
@@ -9958,6 +9962,7 @@ begin
   seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
   for i := 1 to h.i3 and 7 do
     RawNext; // warm up
+  LecuyerEntropy := e; // forward security
 end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: QWord);
@@ -10264,31 +10269,49 @@ end;
 
 procedure TestCpuFeatures;
 var
-  regs: TIntelRegisters;
-  c: cardinal;
+  regs: ^TIntelRegisters;
 begin
   // retrieve CPUID raw flags
-  GetCpuid({eax=}1, {ecx=}0, regs);
-  PIntegerArray(@CpuFeatures)^[0] := regs.edx;
-  PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
-  GetCpuid(7, 0, regs);
-  PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
-  PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
-  PIntegerArray(@CpuFeatures)^[4] := regs.edx;
-  if regs.eax in [1..9] then // returned the maximum ecx value for eax=7 in eax
+  regs := @LecuyerEntropy.h1; // h0 is set by Rdts/RdRand32
+  GetCpuid({eax=}1, {ecx=}0, regs^);
+  PIntegerArray(@CpuFeatures)^[0] := regs^.edx;
+  PIntegerArray(@CpuFeatures)^[1] := regs^.ecx;
+  regs := @LecuyerEntropy.h2;
+  GetCpuid(7, 0, regs^);
+  PIntegerArray(@CpuFeatures)^[2] := regs^.ebx;
+  PIntegerArray(@CpuFeatures)^[3] := regs^.ecx;
+  PIntegerArray(@CpuFeatures)^[4] := regs^.edx;
+  if regs^.eax in [1..9] then // returned the maximum ecx value for eax=7 in eax
   begin
-    GetCpuid(7, 1, regs);
-    PIntegerArray(@CpuFeatures)^[5] := regs.eax; // just ignore regs.ebx
-    PIntegerArray(@CpuFeatures)^[6] := regs.edx;
+    regs := @LecuyerEntropy.h3;
+    GetCpuid(7, 1, regs^);
+    PIntegerArray(@CpuFeatures)^[5] := regs^.eax; // just ignore regs.ebx
+    PIntegerArray(@CpuFeatures)^[6] := regs^.edx;
     if cfAVX10 in CpuFeatures then
     begin
-      GetCpuid($24, 0, regs);
-      CpuAvx10.MaxSubLeaf := regs.eax;
-      CpuAvx10.Version := ToByte(regs.ebx);
-      PByte(@CpuAvx10.Vector)^ := (regs.ebx shr 16) and 7;
+      GetCpuid($24, 0, regs^);
+      CpuAvx10.MaxSubLeaf := regs^.eax;
+      CpuAvx10.Version := ToByte(regs^.ebx);
+      PByte(@CpuAvx10.Vector)^ := (regs^.ebx shr 16) and 7;
     end;
   end;
   // validate accuracy of most used HW opcodes against flags reported by CPUID
+  if cfTSC in CpuFeatures then
+    try
+      LecuyerEntropy.c[0] := Rdtsc;  // number of ticks at process startup
+    except // may trigger a GPF if CR4.TSD bit is set on hardened systems
+      exclude(CpuFeatures, cfTSC);
+    end;
+  if cfRAND in CpuFeatures then
+    try
+      LecuyerEntropy.c[1] := RdRand32; // don't loose those random values
+      LecuyerEntropy.c[2] := RdRand32;
+      if LecuyerEntropy.c[1] = LecuyerEntropy.c[2] then
+        // most probably a RDRAND bug, e.g. on AMD Rizen 3000
+        exclude(CpuFeatures, cfRAND);
+    except // may trigger an illegal instruction exception on some Ivy Bridge
+      exclude(CpuFeatures, cfRAND);
+    end;
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
@@ -10298,21 +10321,6 @@ begin
      not IsXmmYmmOSEnabled then
     // AVX is available on the CPU, but not supported at OS context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfAVX10, cfFMA];
-  {$endif DISABLE_SSE42}
-  if cfTSC in CpuFeatures then
-    try
-      Rdtsc;
-    except // may trigger a GPF if CR4.TSD bit is set on hardened systems
-      exclude(CpuFeatures, cfTSC);
-    end;
-  if cfRAND in CpuFeatures then
-    try
-      c := RdRand32;
-      if RdRand32 = c then // most probably a RDRAND bug, e.g. on AMD Rizen 3000
-        exclude(CpuFeatures, cfRAND);
-    except // may trigger an illegal instruction exception on some Ivy Bridge
-      exclude(CpuFeatures, cfRAND);
-    end;
   if cfSSE42 in CpuFeatures then
     try
       if crc32cby4sse42(0, 1) <> 3712330424 then
@@ -10338,6 +10346,7 @@ begin
       include(X64CpuFeatures, cpuHaswell);
   end;
   {$endif ASMX64}
+  {$endif DISABLE_SSE42}
   // redirect some CPU-aware functions
   {$ifdef ASMX86} 
   {$ifndef HASNOSSE2}
