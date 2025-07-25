@@ -372,6 +372,7 @@ type
   TSynList = class(TSynPersistent)
   protected
     fCount: integer;
+    fOwnObjects: boolean; // used by TSynObjectList - here for CPU64 alignment
     fList: TPointerDynArray;
     function Get(index: integer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -412,9 +413,9 @@ type
   TSynListClass = class of TSynList;
 
   /// simple and efficient TObjectList, without any notification
+  // - see TSynObjectListLocked for a locked/thread-safe variant
   TSynObjectList = class(TSynList)
   protected
-    fOwnObjects: boolean;
     fItemClass: TClass;
   public
     /// initialize the object list
@@ -424,6 +425,7 @@ type
     /// add one TObject to the list and a variable slot, or release it
     // - return true and store item into sharedslot if it is nil
     // - return false and call item.Free if sharedslot <> nil
+    // - typically used as a local/private garbage collection
     function AddOnceInto(item: TObject; sharedslot: PObject): boolean; virtual;
     /// delete one object from the list
     // - will also Free the item if OwnObjects was set, and dontfree is false
@@ -509,7 +511,7 @@ type
     /// add one item to the list using Safe.WriteLock
     function Add(item: pointer): PtrInt; override;
     /// add one TObject to the list and a variable slot using Safe.WriteLock
-    // - can be used e.g. for thread-safe garbage collection of TObject instances
+    // - typically used as a local/private thread-safe garbage collection
     function AddOnceInto(item: TObject; sharedslot: PObject): boolean; override;
     /// delete all items of the list using Safe.WriteLock
     procedure Clear; override;

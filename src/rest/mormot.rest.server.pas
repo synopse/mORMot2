@@ -7278,7 +7278,7 @@ begin
        (s.User = nil) then
       exit;
     result := s.User.CreateCopy as fAuthUserClass;
-    result.GroupRights := pointer(s.User.GroupRights.IDValue); // as TID
+    result.GroupRights := pointer(PtrUInt(s.User.GroupRights.IDValue)); // as TID
   finally
     fSessions.Safe.ReadOnlyUnLock;
   end;
