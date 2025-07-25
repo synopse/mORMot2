@@ -116,7 +116,7 @@ type
   // - vIsInterfaceJson is set for an interface with custom JSON serializers
   // - vIsOnStack is set when the Value is to be located on stack
   // - vIsHFA is set for Homogeneous Floating-point Aggregate records (at most
-  // four continuous floating point members on SYSVABI)
+  // four continuous floating point members on SYSVABI) - pointless on x86
   TInterfaceMethodValueAsm = set of (
     vPassedByReference,
     vIsQword,
@@ -1802,43 +1802,35 @@ function ToText(op: TInterfaceStubRuleOperator): PShortString; overload;
 { ************ TInterfacedObjectFake with JITted Methods Execution }
 
 { some reference material
- WIN32 (Delphi + FPC register calling convention):
+WIN32 i386 (Delphi + FPC "register" calling convention):
  http://docwiki.embarcadero.com/RADStudio/en/Program_Control
- WIN64INTEL:
+WIN64 x64:
  https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing
- WINARM64:
+WIN aarch64:
  https://learn.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions#parameter-passing
- SYSVAMD64:
+SYSV x64:
  https://gitlab.com/x86-psABIs/x86-64-ABI/-/jobs/artifacts/master/raw/x86-64-ABI/abi.pdf?job=build
- SYSVARM64:
+SYSV aarch64:
  https://c9x.me/compile/bib/abi-arm64.pdf
 }
 
 const
-{$ifdef CPU64}
-  // maximum stack size at method execution must match .PARAMS 64 (minus 4 regs)
-  MAX_EXECSTACK = 60 * 8;
-{$else}
-  // maximum stack size at method execution
-  {$ifdef CPUARM}
-  MAX_EXECSTACK = 60 * 4;
-  {$else}
-  MAX_EXECSTACK = 1024;
-  {$endif CPUARM}
-{$endif CPU64}
-
 {$ifdef CPUX86}
-  // 32-bit integer param registers (in "register" calling convention)
+  MAX_EXECSTACK = 1024;
+  VMTSTUBSIZE = 24 {$ifdef OSPOSIX} + 4 {$endif};
+  // 32-bit integer param registers (in Delphi + FPC calling convention)
   REGEAX = 1;
   REGEDX = 2;
   REGECX = 3;
   PARAMREG_FIRST = REGEAX;
   PARAMREG_LAST  = REGECX;
-  // floating-point params are passed by reference
-  VMTSTUBSIZE = 24 {$ifdef OSPOSIX} + 4 {$endif};
+  // x87 floating-point params are passed by reference, but result with fstp
+  {$undef HAS_FPREG}
 {$endif CPUX86}
 
 {$ifdef CPUX64}
+  MAX_EXECSTACK = MAX_METHOD_ARGS * 8; // match .PARAMS 32
+  VMTSTUBSIZE = 24;
   // 64-bit integer param registers
   {$ifdef SYSVABI}
   REGRDI = 1;
@@ -1859,6 +1851,7 @@ const
   {$endif SYSVABI}
   PARAMREG_LAST = REGR9;
   // 64-bit floating-point (double) registers
+  {$define HAS_FPREG} // XMM0..XMM3 (WIN64ABI) or XMM0..XMM7 (SYSVABI)
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
@@ -1874,11 +1867,11 @@ const
   FPREG_FIRST = REGXMM0;
   FPREG_LAST  = REGXMM3;
   {$endif SYSVABI}
-  {$define HAS_FPREG}
-  VMTSTUBSIZE = 24;
 {$endif CPUX64}
 
 {$ifdef CPUARM}
+  MAX_EXECSTACK = (MAX_METHOD_ARGS - 4) * 8; // may store only doubles on stack
+  VMTSTUBSIZE = 16;
   // 32-bit integer param registers
   REGR0 = 1;
   REGR1 = 2;
@@ -1888,6 +1881,7 @@ const
   PARAMREG_LAST   = REGR3;
   PARAMREG_RESULT = REGR1;
   // 64-bit floating-point (double) registers
+  {$define HAS_FPREG} // D0..D7
   {$ifdef CPUARMHF}
   REGD0 = 1;
   REGD1 = 2;
@@ -1899,12 +1893,12 @@ const
   REGD7 = 8;
   FPREG_FIRST = REGD0;
   FPREG_LAST  = REGD7;
-  {$define HAS_FPREG}
   {$endif CPUARMHF}
-  VMTSTUBSIZE = 16;
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
+  MAX_EXECSTACK = (MAX_METHOD_ARGS - 8) * 8;
+  VMTSTUBSIZE = 28;
   // 64-bit integer param registers
   REGX0 = 1;
   REGX1 = 2;
@@ -1918,6 +1912,7 @@ const
   PARAMREG_LAST   = REGX7;
   PARAMREG_RESULT = REGX1;
   // 64-bit floating-point (double) registers
+  {$define HAS_FPREG} // D0..D7
   REGD0 = 1; // map REGV0 128-bit NEON register
   REGD1 = 2; // REGV1
   REGD2 = 3; // REGV2
@@ -1928,8 +1923,6 @@ const
   REGD7 = 8; // REGV7
   FPREG_FIRST = REGD0;
   FPREG_LAST  = REGD7;
-  {$define HAS_FPREG}
-  VMTSTUBSIZE = 28;
 {$endif CPUAARCH64}
 
   // ordinal values are stored within 64-bit buffer, and records in a RawUtf8
@@ -4188,8 +4181,9 @@ begin
     {$endif OSDARWINARM}
     if m^.ArgsSizeInStack > MAX_EXECSTACK then
       EInterfaceFactory.RaiseUtf8(
-        '%.Create: Stack size % > % for %.% method parameters',
-        [self, m^.ArgsSizeInStack, MAX_EXECSTACK, fInterfaceName, m^.URI]);
+        '%.Create: Stack size % > % for %.% method % parameters',
+        [self, m^.ArgsSizeInStack, MAX_EXECSTACK, fInterfaceName, m^.URI,
+         m^.ArgsInputValuesCount]);
     {$ifdef CPUX86}
     // pascal/register convention are passed left-to-right -> reverse order
     offs := m^.ArgsSizeInStack;
@@ -6735,13 +6729,13 @@ asm
         push    rbp
         push    r12
         mov     rbp, rsp
-        // simulate .params 60 ... size for 60 parameters
+        // simulate .params 32
         lea     rsp, [rsp - MAX_EXECSTACK]
         // align stack to 16 bytes
         and     rsp, -16
 {$else DELPHI} // ensure we use regular .params command for easier debugging
 asm
-        .params 64     // size for 64 parameters
+        .params 32    // size for MAX_METHOD_ARG = 32 parameters
         .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
 {$endif FPC}
         // get Args
