@@ -9921,8 +9921,8 @@ begin
   until n = 0;
 end;
 
-var
-  LecuyerEntropy: THash512Rec; // set at startup from Intel cpuid/rdtsc/random
+var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random or Linux auxv
+  LecuyerEntropy: THash512Rec;
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
@@ -10874,38 +10874,50 @@ end;
 
 {$ifdef CPUARM3264} // ARM-specific code
 
-{$ifdef OSLINUXANDROID} // read CpuFeatures from Linux envp
+{$ifdef OSLINUXANDROID} // read CpuFeatures + auxv from Linux envp
 
 {$ifdef FPC}
 
 const
   AT_HWCAP  = 16;
+  AT_RANDOM = 25;
   AT_HWCAP2 = 26;
 
 procedure TestCpuFeatures;
 var
-  p: PPAnsiChar;
-  caps: TArmHwCaps;
+  p: PPtrUInt;
+  caps: packed array[0..1] of PtrUInt;
+  entropy: PCardinalArray;
+  i: PtrUInt;
 begin
   // C library function getauxval() is not always available -> use system.envp
-  caps := [];
+  caps[0] := 0;
+  caps[1] := 0;
   try
-    p := system.envp;
-    while p^ <> nil do
+    p := pointer(system.envp); // PPAnsiChar
+    while p^ <> 0 do
       inc(p);
     inc(p); // auxv is located after the last textual environment variable
-    repeat
-      if PtrUInt(p[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
-        PPtrUIntArray(@caps)[0] := PtrUInt(p[1])
-      else if PtrUInt(p[0]) = AT_HWCAP2 then
-        PPtrUIntArray(@caps)[1] := PtrUInt(p[1]);
+    entropy := @LecuyerEntropy.c;
+    i := 0;
+    while p[0] <> 0 do
+    begin
+      case p[0] of // 32-bit or 64-bit entries = PtrUInt
+        AT_HWCAP:
+          caps[0] := p[1];
+        AT_HWCAP2:
+          caps[1] := p[1];
+        AT_RANDOM: // 16 random bytes (used as stacks canaries)
+          XorMemory(PHash128Rec(entropy)^, PHash128Rec(p[1])^);
+      end;
+      entropy^[i] := entropy^[i] xor fnv32(p[0], @p[1], SizeOf(p[1]));
+      i := (i + 1) and 15;
       p := @p[2];
-    until p[0] = nil;
+    end;
+    MoveFast(caps, CpuFeatures, SizeOf(CpuFeatures));
   except
     // may happen on some untested Operating System
-    caps := []; // is likely to be invalid
   end;
-  CpuFeatures := caps;
 end;
 
 {$else}
