@@ -11041,11 +11041,11 @@ begin
     repeat
       c := tab[Hex[0]];
       if c = 255 then
-        exit;
+        break;
       c := c shl 4;
       b := tab[Hex[1]];
       if b = 255 then
-        exit;
+        break;
       inc(b, c);
       Bin^ := b;
       dec(Bin);
