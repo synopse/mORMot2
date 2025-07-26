@@ -5081,7 +5081,7 @@ begin
                          (mach_timeinfo.Denom = 1);
   PInt64Array(@uts)[0] := mach_absolute_time;
   PInt64Array(@uts)[1] := PInt64(@mach_timecoeff)^;
-  crc32c128(@StartupEntropy, @uts, 16); // nanoseconds timestamp + coeff
+  crcblock(@StartupEntropy, @uts); // nanoseconds timestamp + coeff
   {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   tpfail := 0;

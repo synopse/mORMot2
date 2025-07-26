@@ -10906,9 +10906,9 @@ begin
         AT_HWCAP2:
           caps[1] := p[1];
         AT_RANDOM: // 16 random bytes (used as stacks canaries)
-          XorMemory(LecuyerEntropy.r[0], PHash128Rec(p[1])^);
+          XorMemory(LecuyerEntropy.r[3], PHash128Rec(p[1])^);
       end;
-      inc(e^, p[0] xor p[1]);
+      inc(e^, (p[0] shl 20) xor p[1]);
       inc(e);
       if e = eend then
         dec(PByte(e), SizeOf(LecuyerEntropy));
