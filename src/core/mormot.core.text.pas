@@ -11061,53 +11061,50 @@ var
   v, b, err: cardinal;
   tab: PAnsiCharToByte;
 begin // unrolled version for x86_64 and arm/aarch64 - used mainly in REST auth
-  tab := @ConvertHexToBin;
-  err := 255;
-  repeat
-    v := tab[Hex[0]];
-    if v = err then
-      break;
-    b := tab[Hex[1]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    b := tab[Hex[2]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    b := tab[Hex[3]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    b := tab[Hex[4]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    b := tab[Hex[5]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    b := tab[Hex[6]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    b := tab[Hex[7]];
-    v := v shl 4;
-    if b = err then
-      break;
-    inc(v, b);
-    aValue := v;
-    result := true;
-    exit;
-  until false;
   aValue := 0;
   result := false;
+  tab := @ConvertHexToBin;
+  err := 255;
+  v := tab[Hex[0]];
+  if v = err then
+    exit;
+  b := tab[Hex[1]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  b := tab[Hex[2]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  b := tab[Hex[3]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  b := tab[Hex[4]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  b := tab[Hex[5]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  b := tab[Hex[6]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  b := tab[Hex[7]];
+  v := v shl 4;
+  if b = err then
+    exit;
+  inc(v, b);
+  aValue := v;
+  result := true;
 end;
 {$endif CPUX86NOTPIC}
 
