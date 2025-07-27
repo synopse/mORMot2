@@ -285,8 +285,9 @@ begin
   for i := 0 to high(SQL_KEYWORDS) do
   begin
     s := SQL_KEYWORDS[i]; // such basic SQL keywords should always be detected
-    for def := low(def) to high(def) do
-      CheckUtf8(TSqlDBConnectionProperties.IsSQLKeyword(def, s), s);
+    if not IdemPropNameU(s, 'LIMIT') then // only LIMIT is SQLite3 specific
+      for def := low(def) to high(def) do
+        CheckUtf8(TSqlDBConnectionProperties.IsSQLKeyword(def, s), s);
   end;
 
   Server := TRestServerFullMemory.Create(fExternalModel);

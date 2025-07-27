@@ -2890,7 +2890,6 @@ begin
     ref := AESNIHASH_REF128;
     ref32 := @AESNIHASH_REF32;
     n := 0;
-    writeln;
     repeat
       exp := AesNiHash32(n, @bytes, n);
       CheckUtf8((n = 0) = (exp = 0), 'aesni32n1(%)', [n]);
