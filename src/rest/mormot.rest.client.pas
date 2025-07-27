@@ -1343,7 +1343,7 @@ begin
   aServerNonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if aServerNonce = '' then
     exit;
-  SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
+  SharedRandom.Fill(@rnd, SizeOf(rnd)); // public and unique: use Lecuyer
   Join([CardinalToHex(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
     aClientNonce); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [

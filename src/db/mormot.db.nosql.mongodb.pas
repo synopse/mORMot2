@@ -3701,7 +3701,7 @@ begin
     // SCRAM-SHA-1
     // https://tools.ietf.org/html/rfc5802#section-5
     user := StringReplaceAll(UserName, ['=', '=3D', ',', '=2C']);
-    SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
+    SharedRandom.Fill(@rnd, SizeOf(rnd)); // public and unique: use Lecuyer
     nonce := BinToBase64(@rnd, SizeOf(rnd));
     FormatUtf8('n=%,r=%', [user, nonce], first);
     BsonVariantType.FromBinary('n,,' + first, bbtGeneric, bson);

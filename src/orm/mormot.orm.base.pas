@@ -1084,6 +1084,7 @@ type
     // - this default implementation will call GetValueVar() for slow comparison
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; virtual;
     /// retrieve an unsigned 32-bit hash of the corresponding property
+    // - as used by TRestStorageInMemoryUnique when indexing this property
     // - not all kind of properties are handled: only main types
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8-bit uppercase,
     // handling RawUtf8 properties just like the SYSTEMNOCASE collation
@@ -11682,7 +11683,8 @@ procedure InitializeUnit;
 var
   ptc: TRttiParserComplexType;
 begin
-  OrmHashSeed := SharedRandom.Generator.Next; // avoid hash flooding
+  // in-memory hashing are seeded from random to avoid hash flooding
+  OrmHashSeed := SharedRandom.Generator.Next xor StartupEntropy.c1;
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;
