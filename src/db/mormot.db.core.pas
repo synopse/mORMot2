@@ -276,15 +276,16 @@ function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): Ptr
 function FieldIndexToBits(const Index: TFieldIndexDynArray): TFieldBits; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-const { published for testing - do not use! }
+const { published only for regression tests - do not use! }
   // "as at by do if in is no of on or to" char pairs
   SQL_KEYWORDS_BY2: array[0 .. 12 * 2 - 1] of AnsiChar =
     'ASATBYDOIFINISNOOFONORTO';
 
-  // minimal list - see https://sqlite.org/lang_createtable.html
-  SQL_KEYWORDS: array[0 .. 11] of PUtf8Char = (
-    'CHECK', 'COLLATE', 'CONSTRAINT', 'DEFAULT', 'FOREIGN', 'FROM', 'GROUP',
-    'NOT', 'ORDER', 'PRIMARY', 'UNIQUE', 'WHERE');
+  // minimal list - https://sqlite.org/lang_createtable.html + SQL_KEYWORDS_BY2
+  SQL_KEYWORDS: array[0 .. 16] of PUtf8Char = (
+    'AND', 'CHECK', 'COLLATE', 'CONSTRAINT', 'DEFAULT', 'FOREIGN', 'FROM',
+    'GROUP', 'JOIN', 'LIKE', 'LIMIT', 'NOT', 'NULL', 'ORDER', 'PRIMARY',
+    'UNIQUE', 'WHERE');
 
   // see https://sqlite.org/lang_keywords.html + SQL_KEYWORDS_BY2
   SQLITE_KEYWORDS: array[0 ..  135] of PUtf8Char = (
