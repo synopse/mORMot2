@@ -3326,7 +3326,7 @@ procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
 // - will call _Fill256FromOs() once at process startup for Intel/AMD,
 // or each time on other CPUs with no RdRand32/Rdtsc opcodes (e.g. on ARM)
-// - the resulting output is expected to contain at least 128-bit of true
+// - the resulting output is expected to contain at least 88-bit of true
 // entropy, and is to be hashed - e.g. with DefaultHasher128() by TLecuyer.Seed
 // - execution is fast and safe, but not secure enough for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
@@ -9928,17 +9928,13 @@ procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
   e: THash512Rec;
   h: THash128Rec;
-  i, j: PtrInt;
+  i: integer;
 begin
-  e := LecuyerEntropy;
+  e := LecuyerEntropy; // we only need 88-bit of entropy within these 512-bit
   if entropy <> nil then
-    for i := 0 to entropylen - 1 do
-    begin
-      j := i and (SizeOf(e) - 1); // insert into the 64 bytes of e.b[]
-      e.b[j] := {%H-}e.b[j] xor entropy^[i];
-    end;
+    crc32c128(@e.h0, pointer(entropy), entropylen); // user-supplied entropy
   repeat
-    XorEntropy(e); // 512-bit from _Fill256FromOs + RdRand32 + Rdtsc
+    XorEntropy(e); // xor 512-bit from _Fill256FromOs + RdRand32 + Rdtsc
     DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
     rs1 := rs1 xor h.c0;
     rs2 := rs2 xor h.c1;
@@ -10213,7 +10209,7 @@ begin
 end;
 
 type
-  TIntelRegisters = record
+  TIntelRegisters = packed record
     eax, ebx, ecx, edx: cardinal;
   end;
 
