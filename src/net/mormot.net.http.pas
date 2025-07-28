@@ -3011,14 +3011,15 @@ var
 begin
   result := '';
   u.From(Uri);
-  if (u.Server = '') or
-     PropNameEquals(u.Server, 'localhost') or
-     IsLocalHost(pointer(u.Server)) then // supports only local files
+  if (u.UriScheme = usFile) and
+     ((u.Server = '') or
+      PropNameEquals(u.Server, 'localhost') or
+      IsLocalHost(pointer(u.Server))) then // supports only local files
   begin
     Utf8ToFileName(UrlDecodeName(u.Address), result);
     if (result <> '') and
        (result[1] <> '/') then
-      insert('/', result, 1);
+      insert('/', result, 1); // 'path/to' -> '/path/to'
   end;
 end;
 {$endif OSPOSIX}
@@ -4095,8 +4096,8 @@ begin
   exclude(ResponseFlags, rfContentStreamNeedFree);
 end;
 
-function THttpRequestContext.ContentFromFile(
-  const FileName: TFileName; CompressGz: integer): integer;
+function THttpRequestContext.ContentFromFile(const FileName: TFileName;
+  CompressGz: integer): integer;
 var
   gz: TFileName;
   h: THandle;
