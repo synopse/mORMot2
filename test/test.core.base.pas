@@ -8899,8 +8899,10 @@ begin
   end;
   s := '<?xml';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   s := '<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   s := '<!doctype html><html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '<!doctype note>';
@@ -8912,8 +8914,10 @@ begin
   s := '<!DocType HTML<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '{"json":123}';
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
   s := '["json",123]';
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
   s := '["json",'#0'123]';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
@@ -8927,6 +8931,7 @@ begin
   Check(IsContentTypeCompressibleU('APPLICATION/JSON'));
   Check(IsContentTypeCompressibleU('application/xml'));
   Check(IsContentTypeCompressibleU('application/rtf'));
+  Check(not IsContentTypeCompressibleU('application/octet-stream'));
   Check(not IsContentTypeCompressibleU('application/zrtf'));
   Check(not IsContentTypeCompressibleU('application/xm'));
   Check(IsContentTypeCompressibleU('application/javascript'));
@@ -8959,6 +8964,7 @@ begin
   Check(IsContentTypeTextU('application/json'));
   Check(IsContentTypeTextU('APPLICATION/JSON'));
   Check(IsContentTypeTextU('application/xml'));
+  Check(not IsContentTypeTextU('application/octet-stream'));
   Check(IsContentTypeTextU('application/javascript'));
   Check(IsContentTypeTextU('application/VND.API+JSON'));
   Check(IsContentTypeTextU('application/vnd.mysoft.v1+json'));
