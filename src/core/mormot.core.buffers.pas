@@ -8732,8 +8732,9 @@ begin
         end;
       '{', '[':
         begin
-          if (Len < 65535) and (StrLen(Content) = Len) then
-            result := mtJson;
+          if (PByteArray(Content)[Len - 1] = PByte(Content)^ + 2) and // {} []
+             (ByteScanIndex(Content, MinPtrInt(256, Len), 0) < 0) then
+            result := mtJson; // likely to be JSON if no #0 in first 256 bytes
           exit;
         end;
     end;

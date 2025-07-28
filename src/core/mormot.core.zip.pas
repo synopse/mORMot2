@@ -1993,7 +1993,7 @@ begin
   if self = nil then
     exit;
   if (Size < ZIP_MINSIZE_DEFLATE) or
-     IsContentCompressed(Buf, Size, {checkfortext=}true)  then
+     IsContentCompressed(Buf, Size)  then
   begin
     AddStored(aZipName, Buf, Size, FileAge);
     exit;
@@ -3859,7 +3859,7 @@ begin
   result := fCompressionLevel;
   if (PlainLen < CompSizeTrigger) or
      (CheckCompressed and
-      IsContentCompressed(Plain, PlainLen, {checkfortext=}true)) then
+      IsContentCompressed(Plain, PlainLen)) then
     result := Z_NO_COMPRESSION; // already compressed: use .gz format but stored
 end;
 
