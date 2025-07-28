@@ -1735,7 +1735,8 @@ type
     mtSQlite3,
     mtXcomp,
     mtDicom,
-    mtZstd);
+    mtZstd,
+    mtHeic);
   PMimeType = ^TMimeType;
 
 const
@@ -1779,7 +1780,8 @@ const
     'application/x-sqlite3',         // mtSQlite3
     'application/x-compress',        // mtXcomp
     'application/dicom',             // mtDicom
-    'application/zstd');             // mtZstd RFC 8878
+    'application/zstd',              // mtZstd RFC 8878
+    'image/heic');                   // mtHeic
 
 /// retrieve the MIME content type from its file name
 function GetMimeContentTypeFromExt(const FileName: TFileName;
@@ -8827,20 +8829,21 @@ begin
 end;
 
 const
-  MIME_EXT: array[0..47] of PUtf8Char = ( // for IdemPPChar() start check
+  MIME_EXT: array[0..48] of PUtf8Char = ( // for IdemPPChar() start check
     'PNG',  'GIF',  'TIF',  'JP',  'BMP',  'DOC',  'HTM',  'CSS',
     'JSON', 'ICO',  'WOF',  'TXT', 'SVG',  'ATOM', 'RDF',  'RSS',
     'WEBP', 'APPC', 'MANI', 'XML', 'JS',   'MJS',  'OGG',  'OGV',
     'MP4',  'M2V',  'M2P',  'MP3', 'H264', 'TEXT', 'LOG',  'GZ',
     'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2',  'WMA',  'WMV',  'AVI',
-    'PPT',  'XLS',  'PDF',  'DCM', 'DICOM', 'SQLITE', 'DB3', nil);
+    'PPT',  'XLS',  'PDF',  'DCM', 'DICOM', 'SQLITE', 'DB3', 'HEIC', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtOgg,
     mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
     mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
-    mtAvi,  mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3);
+    mtAvi,  mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3,
+    mtHeic);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
@@ -8967,7 +8970,7 @@ begin
         result := true;
     else
       case PCardinalArray(Content)^[1] of // ignore variable 4 byte offset
-        $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
+        $70797466, // mp4,mov,heic = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
         $766f6f6d: // mov = 6D 6F 6F 76
           result := true;
       end;
