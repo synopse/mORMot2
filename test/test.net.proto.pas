@@ -1705,8 +1705,8 @@ begin
   try
     CheckEqual(sub.AfterAdd, 0);
     bin := sub.SaveToBinary;
-    if CheckEqual(length(bin), 4) then
-      CheckEqual(PInteger(bin)^, 0);
+    if CheckEqual(length(bin), 8) then
+      CheckEqual(PInt64(bin)^, IP4SUBNET_MAGIC);
     Check(not sub.Match('190.16.1.1'));
     Check(not sub.Match('190.16.1.135'));
     Check(not sub.Match('190.16.1.250'));
@@ -1725,7 +1725,7 @@ begin
     Check(not sub.Match('190.16.1.1'));
     Check(not sub.Match('190.16.1.135'));
     Check(not sub.Match('190.16.1.250'));
-    Check(sub.LoadFromBinary(bin), 'load1');
+    CheckEqual(sub.LoadFromBinary(bin), 1, 'load1');
     CheckEqual(sub.AfterAdd, 1);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
@@ -1749,7 +1749,7 @@ begin
     bin := sub.SaveToBinary;
     sub.Clear;
     Check(not sub.Match('190.16.43.1'));
-    Check(sub.LoadFromBinary(bin), 'load2');
+    CheckEqual(sub.LoadFromBinary(bin), 2, 'load');
     CheckEqual(sub.AfterAdd, 2);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
@@ -1820,13 +1820,14 @@ begin
         sub.Clear;
         Check(not sub.Match('10.18.1.1'), '10');
         Check(sub.AddFromText(txt) > 1000, 'spamhaus=1525');
+        Check(not sub.Match('62.210.254.173'), 'cauterets.site');
         Check(sub.Match('223.254.0.1') ,'a2'); // 223.254.0.0/16
         Check(sub.Match('223.254.1.1'), 'b2');
         Check(sub.Match('223.254.200.129'), 'c2');
         CheckEqual(sub.AddFromText(txt), 0, 'twice');
       end;
       sub.Clear;
-      Check(sub.LoadFromBinary(bin), 'loadbin');
+      CheckEqual(sub.LoadFromBinary(bin), n, 'loadbin');
       Check(sub.SaveToBinary = bin, 'savebin');
       Check(sub.Match('223.254.0.1') ,'a3'); // 223.254.0.0/16
       Check(sub.Match('223.254.1.1'), 'b3');
