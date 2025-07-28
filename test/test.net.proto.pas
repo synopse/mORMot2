@@ -1614,12 +1614,12 @@ end;
 
 procedure TNetworkProtocols.IPAddresses;
 var
-  i, n: PtrInt;
+  i, n, n2: PtrInt;
   s: ShortString;
-  txt: RawUtf8;
+  txt, uri: RawUtf8;
   ip: THash128Rec;
   sub: TIp4SubNets;
-  bin: RawByteString;
+  bin, bin2: RawByteString;
   timer: TPrecisionTimer;
 begin
   FillZero(ip.b);
@@ -1778,7 +1778,8 @@ begin
       'refs/heads/master/firehol_level1.netset', 'firehol.netset');
     if txt <> '' then
     begin
-      Check(DownloadFile(Make(['file://', WorkDir, 'firehol.netset'])) = txt, 'file:');
+      Make(['file://', WorkDir, 'firehol.netset'], uri);
+      CheckUtf8(DownloadFile(uri) = txt, uri);
       sub.Clear;
       timer.Start;
       n := sub.AddFromText(txt);
@@ -1820,15 +1821,20 @@ begin
         Check(sub.AddFromText(txt) < 1000, 'spamhaus within firehol');
         sub.Clear;
         Check(not sub.Match('10.18.1.1'), '10');
-        Check(sub.AddFromText(txt) > 1000, 'spamhaus=1525');
+        n2 := sub.AddFromText(txt);
+        Check(n2 > 1000, 'spamhaus=1525');
         Check(not sub.Match('62.210.254.173'), 'cauterets.site');
         Check(sub.Match('223.254.0.1') ,'a2'); // 223.254.0.0/16
         Check(sub.Match('223.254.1.1'), 'b2');
         Check(sub.Match('223.254.200.129'), 'c2');
+        bin2 := sub.SaveToBinary;
         CheckEqual(sub.AddFromText(txt), 0, 'twice');
+        CheckEqual(sub.SaveToBinary, bin2);
+        sub.Clear;
+        CheckEqual(sub.LoadFrom(txt), n2, 'loadtxt');
+        Check(sub.SaveToBinary = bin2, 'savebin');
       end;
-      sub.Clear;
-      CheckEqual(sub.LoadFromBinary(bin), n, 'loadbin');
+      CheckEqual(sub.LoadFrom(bin), n, 'loadfrom');
       Check(sub.SaveToBinary = bin, 'savebin');
       Check(sub.Match('223.254.0.1') ,'a3'); // 223.254.0.0/16
       Check(sub.Match('223.254.1.1'), 'b3');
