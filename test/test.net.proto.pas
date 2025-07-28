@@ -1778,11 +1778,12 @@ begin
       'refs/heads/master/firehol_level1.netset', 'firehol.netset');
     if txt <> '' then
     begin
+      Check(DownloadFile(Make(['file://', WorkDir, 'firehol.netset'])) = txt, 'file:');
       sub.Clear;
       timer.Start;
       n := sub.AddFromText(txt);
       NotifyTestSpeed('parse TIp4SubNets', n, length(txt), @timer);
-      Check(n > 4000);
+      Check(n > 4000); // typically 4520 subnets, 612,853,888 unique IPs
       CheckEqual(sub.AfterAdd, n);
       CheckUtf8(length(sub.SubNet) in [17 .. 18], 'sub=%', [length(sub.SubNet)]);
       Check(not sub.Match('1.2.3.4'));
