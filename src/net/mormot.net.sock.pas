@@ -1719,7 +1719,8 @@ type
   end;
 
 const
-  IP4SUBNET_MAGIC: cardinal = $a5a54400;
+  /// 'MEL1' 32-bit magic marker used for TIp4SubNets.SaveToBinary format
+  IP4SUBNET_MAGIC: cardinal = $314c454d;
 
 /// check if a 32-bit IPv4 matches a registered CIDR sub-network binary buffer
 // - directly parse TIp4SubNets.SaveToBinary output for conveniency
