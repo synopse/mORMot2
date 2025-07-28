@@ -5418,13 +5418,12 @@ begin
     p := @p^[p^[2] + 2];
     inc(d);
   end;
-  result := true;
 end;
 
 function TIp4SubNets.AddFromText(const text: RawUtf8): integer;
 var
   p: PUtf8Char;
-  sub: TIp4SubNet;
+  ip, mask: cardinal;
 begin
   result := 0;
   p := pointer(text);
@@ -5432,16 +5431,16 @@ begin
   begin
     while p^ in [#1 .. ' ' ] do
       inc(p);
-    if NetIsIP4(p, @sub.ip) then // ignore any line starting e.g. with # or ;
+    if NetIsIP4(p, @ip) then // ignore any line starting e.g. with # or ;
     begin
       while p^ in ['0' .. '9', '.', ' '] do
         inc(p);
       if p^ <> '/' then
-        sub.mask := cardinal(-1) // single IP has 255.255.255.255 mask
+        mask := cardinal(-1) // single IP has 255.255.255.255 mask
       else
-        sub.mask := IP4Netmask(GetCardinal(p + 1)); // CIDR
-      if (sub.mask <> 0) and
-         Add(sub) then
+        mask := IP4Netmask(GetCardinal(p + 1)); // CIDR
+      if (mask <> 0) and
+         Add(ip, mask) then
         inc(result); // first time seen
     end;
     p := GotoNextLine(p);
