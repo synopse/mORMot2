@@ -1703,6 +1703,11 @@ type
     procedure Clear;
     /// persist this list as optimized binary
     function SaveToBinary: RawByteString;
+    /// clear, decode and add all IP and CIDR listed in a text or binary buffer
+    // - is a wrapper around Clear + AddFromText/LoadFromBinary + AfterAdd
+    // - returns the number of stored IP or CIDR, clearing any existing content
+    // - if buffer is in fact a SaveToBinary content, will detect and load it
+    function LoadFrom(const buffer: RawByteString): integer;
     /// clear and retrieve from a binary buffer persisted via SaveToBinary
     // - returns the number of stored IP or CIDR, clearing any existing content
     function LoadFromBinary(const bin: RawByteString): integer;
@@ -5465,6 +5470,19 @@ begin
   until n = 0;
 end;
 
+function TIp4SubNets.LoadFrom(const buffer: RawBytestring): integer;
+begin
+  Clear;
+  if (buffer <> '') and
+     (PCardinal(buffer)^ = IP4SUBNET_MAGIC) then
+    result := LoadFromBinary(buffer)
+  else
+    result := AddFromText(buffer);
+  if AfterAdd = result then
+    exit;
+  Clear; // paranoid
+  result := -1;
+end;
 
 function IP4SubNetMatch(P: PCardinalArray; ip4: cardinal): boolean;
 var

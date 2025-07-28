@@ -4486,8 +4486,7 @@ begin
   fBlackListUriCrc := crc;
   ban.Safe.Lock; // protect ban.BlackList access
   try
-    ban.BlackList.Clear;
-    n := ban.BlackList.AddFromText(list);
+    n := ban.BlackList.LoadFrom(list);
   finally
     ban.Safe.UnLock;
   end;
