@@ -1037,6 +1037,10 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
 /// purge all output fields for a TNetTlsContext instance for proper reuse
 procedure ResetNetTlsContext(var TLS: TNetTlsContext);
 
+/// setup and return a PNetTlsContext parameter from the specified parameters
+function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
+  var Context: TNetTlsContext; Forced: PNetTlsContext = nil): PNetTlsContext;
+
 /// compare the main fields of twoTNetTlsContext instances
 // - won't compare the callbacks
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
@@ -1052,7 +1056,6 @@ var
   // - is set e.g. by mormot.net.acme.pas initialization section
   // - not used on SChannel yet
   EnableOnNetTlsAcceptServerName: boolean;
-
 
 {$ifdef OSWINDOWS}
 var
@@ -4190,6 +4193,20 @@ begin
   FastAssignNew(TLS.PeerInfo);
   TLS.PeerCert := nil;
   FastAssignNew(TLS.LastError);
+end;
+
+function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
+  var Context: TNetTlsContext; Forced: PNetTlsContext): PNetTlsContext;
+begin
+  result := nil;
+  if not TlsEnabled then
+    exit;
+  result := Forced;
+  if result <> nil then
+    exit;
+  InitNetTlsContext(Context);
+  Context.IgnoreCertificateErrors := IgnoreTlsCertError;
+  result := @Context;
 end;
 
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
