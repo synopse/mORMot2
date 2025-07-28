@@ -8763,8 +8763,8 @@ begin
           end;
         end;
       mtWebp:
-        if Len > 16 then // RIFF
-          case PCardinalArray(Content)^[2] of
+        if Len > 16 then // RIFF - Content[1] is the file size
+          case PCardinalArray(Content)^[2] of // tag
             $50424557:
               result := mtWebp;
             $20495641:
@@ -8906,38 +8906,40 @@ begin
   result := GetEnumName(TypeInfo(TMimeType), ord(t));
 end;
 
-const
-  MIME_COMPRESSED: array[0..40] of cardinal = ( // may use SSE2
-    $04034b50, // 'application/zip' = 50 4B 03 04
-    $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+const // stored by likelyhood, then by big-endian order
+  MIME_COMPRESSED: array[0..42] of cardinal = ( // may use SSE2
+    $04034b50,  // 'application/zip' = 50 4B 03 04
     $e0ffd8ff, $e1ffd8ff, // 'image/jpeg' FF D8 FF E0/E1
+    $474e5089,  // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+    $38464947,  // 'image/gif' = 47 49 46 38 = GIF89a
     $002a4949, $2a004d4d, $2b004d4d, // 'image/tiff'
-    $184d2204, // LZ4 stream format = 04 22 4D 18
-    $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
-    $28635349, // cab = 49 53 63 28
-    $32464f77, // 'application/font-woff2' = wOF2 in BigEndian
-    $38464947, // 'image/gif' = 47 49 46 38 = GIF89a
-    $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
-    $4643534d, // cab = 4D 53 43 46 [MSCF]
-    $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
-    $46464f77, // 'application/font-woff' = wOFF in BigEndian
-    $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
-    $72613c21, // .ar/.deb package file = '!<arch>' (assuming compressed)
-    $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
-    $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
-    $89a8275f, // jar = 5F 27 A8 89
-    $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
-    $a5a5a5a5, // mORMot 1 .mab file
-    $a5a5a55a, // .mab file = MAGIC_MAB in mormot.core.log.pas
-    $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server.pas
-    LOG_MAGIC, // .log.synlz/.log.synliz compression = $aba51051
+    $184d2204,  // LZ4 stream format = 04 22 4D 18
+    $21726152,  // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
+    $28635349,  // cab = 49 53 63 28
+    $314c454d,  // TIp4SubNets.SaveToBinary format (not really compressible)
+    $32464f77,  // 'application/font-woff2' = wOF2 in BigEndian
+    $43614c66,  // FLAC = 66 4C 61 43 00 00 00 22
+    $4643534d,  // cab = 4D 53 43 46 [MSCF]
+    $46464952,  // avi,webp,wav = 52 49 46 46 [RIFF] considered as compressed
+    $46464f77,  // 'application/font-woff' = wOFF in BigEndian
+    $4d5a4cff,  // LZMA = FF 4C 5A 4D 41 00
+    $72613c21,  // .ar/.deb package file = '!<arch>' (assuming compressed)
+    $75b22630,  // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+    $766f6f6d,  // mov = 6D 6F 6F 76 [....moov]
+    $89a8275f,  // jar = 5F 27 A8 89
+    $9ac6cdd7,  // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+    $a3df451a,  // .mkv/.webm EBML format = 1A 45 DF A3
+    $a5a5a5a5,  // mORMot 1 .mab file
+    $a5a5a55a,  // .mab file = MAGIC_MAB in mormot.core.log.pas
+    $a5aba5a5,  // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server.pas
+    LOG_MAGIC,  // .log.synlz/.log.synliz compression = $aba51051
     $aba5a5ab, $aba5a5ab + 1, $aba5a5ab + 2, $aba5a5ab + 3, $aba5a5ab + 4,
-    $aba5a5ab + 5, $aba5a5ab + 6, $aba5a5ab + 7, // .dbsynlz = SQLITE3_MAGIC
-    $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+    $aba5a5ab +  5, $aba5a5ab + 6, $aba5a5ab + 7, // .dbsynlz = SQLITE3_MAGIC
+    $afbc7a37,  // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
     $b7010000, $ba010000, // mpeg = 00 00 01 Bx
-    $cececece, // jceks = CE CE CE CE
-    $dbeeabed, // .rpm package file
-    $e011cfd0, // msi = D0 CF 11 E0 A1 B1 1A E1
+    $cececece,  // jceks = CE CE CE CE
+    $dbeeabed,  // .rpm package file
+    $e011cfd0,  // msi = D0 CF 11 E0 A1 B1 1A E1
     $fd2fb528); // Zstandard frame
 
 function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
