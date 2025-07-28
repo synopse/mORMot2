@@ -1677,13 +1677,12 @@ type
   TIp4SubNets = class(TSynPersistent)
   protected
     fSubNet: TIp4SubNetMasks;
-    function FindMask(mask4: cardinal): PIp4SubNetMask;
   public
     /// decode and register the supplied CIDR address text e.g. as '1.2.3.4/24'
     function Add(const subnet: RawUtf8): boolean; overload;
-    /// decode and register the supplied CIDR address as TIp4SubNet
+    /// decode and register the supplied CIDR address as TIp4SubNet ip/mask
     // - by definition, private IP like 192.168.x.x are not added
-    function Add(const subnet: TIp4SubNet): boolean; overload;
+    function Add(ip, mask: cardinal): boolean; overload;
     /// decode and add all IP and CIDR listed in a text content
     // - i.e. netsets as IP or CIDR with # or ; comments e.g. as in
     // https://www.spamhaus.org/drop/drop.txt or
@@ -5276,16 +5275,16 @@ end;
 
 { TIp4SubNets }
 
-function TIp4SubNets.FindMask(mask4: cardinal): PIp4SubNetMask;
+function FindIp4SubNetsMask(m: PIp4SubNetMask; mask4: cardinal): PIp4SubNetMask;
 var
   n: integer;
 begin
-  result := pointer(fSubNet);
+  result := m;
   if result = nil then
     exit;
-  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  n := PDALen(PAnsiChar(m) - _DALEN)^ + _DAOFF;
   repeat
-    if result^.Mask = mask4 then
+    if result^.Mask = mask4 then // less than 20 masks in practice: O(n) is fine
       exit;
     inc(result);
     dec(n);
@@ -5293,24 +5292,24 @@ begin
   result := nil;
 end;
 
-function TIp4SubNets.Add(const subnet: TIp4SubNet): boolean;
+function TIp4SubNets.Add(ip, mask: cardinal): boolean;
 var
   p: PIp4SubNetMask;
   n: PtrInt;
 begin
   result := false;
-  if (subnet.ip = cardinal(-1)) or  // 255.255.255.255
-     not IsPublicIP(subnet.ip) then // e.g. 192.168.1.1
+  if (ip = cardinal(-1)) or  // 255.255.255.255
+     not IsPublicIP(ip) then // e.g. 192.168.1.1
     exit;
-  p := FindMask(subnet.mask);
+  p := FindIp4SubNetsMask(pointer(fSubNet), mask);
   if p = nil then
   begin
     n := length(fSubNet);
     SetLength(fSubNet, n + 1);
     p := @fSubNet[n];
-    p^.Mask := subnet.mask;
+    p^.Mask := mask;
   end;
-  result := AddSortedInteger(p^.IP, p^.IPCount, subnet.ip) >= 0;
+  result := AddSortedInteger(p^.IP, p^.IPCount, ip) >= 0;
 end;
 
 function TIp4SubNets.Add(const subnet: RawUtf8): boolean;
@@ -5318,7 +5317,7 @@ var
   sub: TIp4SubNet;
 begin
   result := sub.From(subnet) and
-            Add(sub);
+            Add(sub.ip, sub.mask);
 end;
 
 function TIp4SubNets.Match(ip4: cardinal): boolean;
