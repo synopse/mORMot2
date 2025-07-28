@@ -5125,6 +5125,17 @@ var
   end;
 
 begin
+  CheckEqual(SizeOf(TDecimal128), 16);
+  CheckEqual(ord(betEof), $00);
+  CheckEqual(ord(betInt64), $12);
+  CheckEqual(ord(betDecimal128), $13);
+  CheckEqual(ord(bbtGeneric), $00);
+  CheckEqual(ord(bbtMD5), $05);
+  CheckEqual(ord(bbtEncryptedBsonValue), $06);
+  CheckEqual(ord(bbtCompressedBsonColumn), $07);
+  CheckEqual(ord(bbtUser), $80);
+  CheckEqual(SizeOf(TBsonObjectID), 12);
+  CheckEqual(SizeOf(TBsonVariantData), SizeOf(variant));
   Check(@PBsonVariantData(nil)^.VBlob = @PVarData(nil)^.VAny);
   Check(@PBsonVariantData(nil)^.VText = @PVarData(nil)^.VAny);
   // see http://docs.mongodb.org/manual/reference/object-id

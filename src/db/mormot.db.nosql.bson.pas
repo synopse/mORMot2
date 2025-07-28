@@ -76,6 +76,7 @@ type
     dsvMax);
 
   /// handles a 128-bit decimal value
+  // - https://www.mongodb.com/docs/manual/reference/bson-types/#decimal128-bson-data-type
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
   // BSON Decimal128 format, i.e. betDecimal128 TBsonElementType
   // - the betFloat BSON format stores a 64-bit floating point value, which
@@ -215,7 +216,7 @@ function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
 { ************ BSON ObjectID Value }
 
 type
-    /// 24-bit storage, mapped as a 3 bytes buffer
+  /// 24-bit storage, mapped as a 3 bytes buffer
   // - as used fo TBsonObjectID.MachineID and TBsonObjectID.Counter
   TBson24 = record
     b1, b2, b3: byte;
@@ -226,7 +227,8 @@ type
 
   {$A-}
 
-  /// BSON ObjectID 12-byte internal binary representation
+  /// BSON ObjectID 12 bytes / 96-bit internal binary representation
+  // - https://www.mongodb.com/docs/manual/reference/bson-types/#std-label-objectid
   // - in MongoDB, documents stored in a collection require a unique _id field
   // that acts as a primary key: by default, it uses such a 12-byte ObjectID
   // - by design, sorting by _id: ObjectID is roughly equivalent to sorting by
@@ -240,16 +242,16 @@ type
   TBsonObjectID = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// big-endian 4-byte value representing the seconds since the Unix epoch
+    /// big-endian 32-bit value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     UnixCreateTime: cardinal;
-    /// 3-byte machine identifier
+    /// 24-bit machine identifier
     // - ComputeNew will use a hash of Executable.Host and Executable.User
     MachineID: TBson24;
-    /// 2-byte process id
+    /// 16-bit process id
     // - ComputeNew will derivate it from MainThreadID
     ProcessID: word;
-    /// 3-byte counter, starting with a random value
+    /// 24-bit counter, starting with a random value
     // - used to avoid collision
     Counter: TBson24;
     /// set all internal fields to zero
@@ -313,6 +315,9 @@ type
   TBsonDocumentDynArray = array of TBsonDocument;
 
   /// element types for BSON internal representation
+  // - see https://www.mongodb.com/docs/manual/reference/bson-types
+  // - betMinKey and betMaxKey are not part of this enumerate, because they
+  // are "fake types" with abnormal -1 and 127 order
   TBsonElementType = (
     betEOF,
     betFloat,
@@ -329,7 +334,7 @@ type
     betDeprecatedDbptr,
     betJS,
     betDeprecatedSymbol,
-    betJSScope,
+    betDeprecatedJSScope,
     betInt32,
     betTimestamp,
     betInt64,
@@ -339,6 +344,7 @@ type
   PBsonElementType = ^TBsonElementType;
 
   /// sub-types for betBinary element BSON internal representation
+  // - https://www.mongodb.com/docs/manual/reference/bson-types/#binary-data
   TBsonElementBinaryType = (
     bbtGeneric,
     bbtFunction,
@@ -348,6 +354,8 @@ type
     bbtMD5,
     bbtEncryptedBsonValue, { MongoDB 4.2 introduced client side encryption }
     bbtCompressedBsonColumn,
+    bbtSensitiveData,
+    bbtVectorData,
     bbtUser = $80);
 
   {$A-}
@@ -357,7 +365,7 @@ type
   // - betBinary kind will store a BLOB content as RawByteString in VBlob
   // - betDoc and betArray kind will store a BSON document, in its original
   // binary format as RawByteString (TBsonDocument) in VBlob
-  // - betDeprecatedDbptr, betJSScope, betTimestamp and betRegEx will store the
+  // - betDeprecatedDbptr, betDeprecatedJSScope, betTimestamp and betRegEx will store the
   // raw original BSON content as RawByteString in VBlob
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
   // as a RawUtf8 in VBlob
@@ -372,6 +380,7 @@ type
       betObjectID:
         /// store 12-byte of TBsonObjectID raw binary with no memory allocation
         (VObjectID: TBsonObjectID;
+         // TVarData/variant padding: 1 byte on CPU32, 9 bytes on CPU64
          VPaddingToVarData: array[1 .. SizeOf(TVarData) - SizeOf(TVarType) 
            - SizeOf(TBsonElementType) - SizeOf(TBsonObjectID) ] of byte;);
       betBinary,
@@ -380,7 +389,7 @@ type
       betRegEx,
       betDeprecatedDbptr,
       betTimestamp,
-      betJSScope,
+      betDeprecatedJSScope,
       betDecimal128:
         (// to match TVarData.VAny alignment
         VBlobPad: array[0 .. 4] of byte;
@@ -600,7 +609,7 @@ type
            RegExLen: integer;
            RegExOptions: PUtf8Char;
            RegExOptionsLen: integer;);
-        betJSScope:
+        betDeprecatedJSScope:
           (JavaScript: PUtf8Char;
            JavaScriptLen: integer;
            ScopeDocument: PByte;);
@@ -917,7 +926,7 @@ const
   // - i.e. TBsonVariantData.VBlob/VText field is to be managed
   BSON_ELEMENTVARIANTMANAGED =
     [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
-     betJSScope, betJS, betDeprecatedSymbol, betDecimal128];
+     betDeprecatedJSScope, betJS, betDeprecatedSymbol, betDecimal128];
 
   /// by definition, maximum MongoDB document size is 16 MB
   BSON_MAXDOCUMENTSIZE = 16 * 1024 * 1024;
@@ -1004,7 +1013,7 @@ function JavaScript(const JS: RawUtf8): variant; overload;
 
 /// create a TBsonVariant JavaScript and associated scope custom variant type
 // from a supplied code and document
-// - will set a BSON element of betJSScope kind
+// - will set a BSON element of betDeprecatedJSScope kind
 function JavaScript(const JS: RawUtf8; const Scope: TBsonDocument): variant; overload;
 
 /// create a TBsonVariant Decimal128 from some text corresponding to
@@ -1961,9 +1970,9 @@ var
   GlobalBsonObjectID: record
     Safe: TLightLock;
     DefaultValues: packed record
-      Counter: cardinal;
-      MachineID: TBson24;
-      ProcessID: word;
+      Counter: cardinal;   // 32-bit
+      MachineID: TBson24;  // 24-bit
+      ProcessID: word;     // 16-bit
     end;
     LastCreateTime: cardinal;
     LastCounter: cardinal;
@@ -1974,12 +1983,12 @@ begin
   with GlobalBsonObjectID.DefaultValues do
   begin
     repeat
-      Counter := SharedRandom.Generator.Next and COUNTER_MASK;
+      Counter := SharedRandom.Generator.Next and COUNTER_MASK;         // 32-bit
     until Counter <> 0;
     with Executable do
       PCardinal(@MachineID)^ := crc32c(crc32c(
-        0, pointer(Host), length(Host)), pointer(User), length(User));
-    ProcessID := crc32c(0, @MainThreadID, SizeOf(MainThreadID)); // lower 16-bit
+        0, pointer(Host), length(Host)), pointer(User), length(User)); // 24-bit
+    ProcessID := crc32c(0, @MainThreadID, SizeOf(MainThreadID));       // 16-bit
   end;
 end;
 
@@ -2793,7 +2802,7 @@ var
     0, SizeOf(TBsonObjectID), 1, SizeOf(Int64),
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     0, -1, -1, -1, -1,
-    //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
+    //betDeprecatedJSScope, betInt32, betTimestamp, betInt64, betDecimal128
     -1, SizeOf(integer), SizeOf(Int64), SizeOf(Int64), SizeOf(TDecimal128));
 
   /// types which do not have an exact equivalency to a standard variant
@@ -2806,7 +2815,7 @@ var
     varEmpty, varUnknown,                  varBoolean, varDate,
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown,         varUnknown, varUnknown,
-    //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
+    //betDeprecatedJSScope, betInt32, betTimestamp, betInt64, betDecimal128
     varUnknown,   varInteger, varUnknown, varInt64, varUnknown);
 
 function TBsonElement.ToVariant(DocArrayConversion: TBsonDocArrayConversion): variant;
@@ -2842,7 +2851,7 @@ begin
     betBinary,
     betRegEx,
     betDeprecatedDbptr,
-    betJSScope,
+    betDeprecatedJSScope,
     betTimestamp,
     betDecimal128:
       FastSetRawByteString(RawByteString(resBSON.VBlob), Element, ElementBytes);
@@ -3035,7 +3044,7 @@ regex:      W.AddShort(BSON_JSON_REGEX[0]);
       end;
     ord(betDeprecatedDbptr):
       goto Bin; // no specific JSON construct for this deprecated item
-    ord(betJSScope):
+    ord(betDeprecatedJSScope):
       goto Bin; // no specific JSON construct for this item yet
     ord(betTimestamp):
       goto Bin; // internal content will always be written as raw binary
@@ -3253,7 +3262,7 @@ begin
         Data.RegExOptionsLen := StrLen(Data.RegExOptions);
         ElementBytes := Data.RegExLen + Data.RegExOptionsLen + 2;
       end;
-    betJSScope:
+    betDeprecatedJSScope:
       begin
         // "\x0F" e_name  int32 string document
         ElementBytes := PInteger(bson)^;
@@ -4376,7 +4385,7 @@ begin
   with TBsonVariantData(result) do
   begin
     VType := BsonVariantType.VarType;
-    VKind := betJSScope;
+    VKind := betDeprecatedJSScope;
     JSLen := Length(JS) + 1;                            // string = int32 text#0
     Len := SizeOf(integer) * 2 + JSLen + length(Scope); // int32 string document
     VBlob := nil; // avoid GPF
