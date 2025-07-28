@@ -6959,19 +6959,11 @@ function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
   aTLSContext: PNetTlsContext; aTunnel: PUri;
   aTLSIgnoreCertError: boolean): TCrtSocket;
 var
-  c: TNetTlsContext;
+  tmp: TNetTlsContext;
 begin
-  if aTls and
-     (aTLSContext = nil) and
-     aTLSIgnoreCertError then
-  begin
-    InitNetTlsContext(c);
-    c.IgnoreCertificateErrors := true;
-    aTLSContext := @c;
-  end;
   try
-    result := TCrtSocket.Open(
-      aServer, aPort, nlTcp, 10000, aTLS, aTLSContext, aTunnel);
+    result := TCrtSocket.Open(aServer, aPort, nlTcp, 10000, aTLS,
+      GetTlsContext(aTLS, aTLSIgnoreCertError, tmp, aTLSContext) , aTunnel);
   except
     result := nil;
   end;
