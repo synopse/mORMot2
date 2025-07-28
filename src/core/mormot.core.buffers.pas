@@ -1825,8 +1825,7 @@ const
 // - returns TRUE, if the header in binary buffer "may" be compressed (this
 // method can trigger false positives), e.g. begin with most common already
 // compressed zip/gz/gif/png/jpeg/avi/mp3/mp4 markers (aka "magic numbers")
-function IsContentCompressed(Content: pointer; Len: PtrInt;
-  CheckForTextFirst: boolean = false): boolean;
+function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 
 /// recognize e.g. 'text/css' or 'application/json' as compressible
 // - as used by THttpSocketCompressList.CompressContent
@@ -5335,7 +5334,7 @@ begin
   crc := AlgoHash(0, Plain, PlainLen);
   if (PlainLen < CompressionSizeTrigger) or
      (CheckMagicForCompressed and
-      IsContentCompressed(Plain, PlainLen, {checkfortext=}true)) then
+      IsContentCompressed(Plain, PlainLen)) then
   begin
     R := FastNewString(PlainLen + BufferOffset + 9);
     pointer(result) := R;
@@ -5392,7 +5391,7 @@ begin
   PCardinal(Comp)^ := AlgoHash(0, Plain, PlainLen);
   if (PlainLen >= CompressionSizeTrigger) and
      not (CheckMagicForCompressed and
-          IsContentCompressed(Plain, PlainLen, {checkfortext=}true)) then
+          IsContentCompressed(Plain, PlainLen)) then
   begin
     len := CompressDestLen(PlainLen);
     if CompLen < len then
@@ -8943,17 +8942,14 @@ const // stored by likelyhood, then by big-endian order
     $e011cfd0,  // msi = D0 CF 11 E0 A1 B1 1A E1
     $fd2fb528); // Zstandard frame
 
-function IsContentCompressed(Content: pointer; Len: PtrInt; CheckForTextFirst: boolean): boolean;
+function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 begin
   // see http://www.garykessler.net/library/file_sigs.html
   result := false;
   if (Content = nil) or
-     (Len <= 8) then
+     (Len <= 8) or
+     (PAnsiChar(Content)^ in ['{', '[', '<', '@']) then // json/html/xml/css
     exit;
-  if CheckForTextFirst then
-    if (PAnsiChar(Content)^ in ['{', '[', '<', '@']) and
-       (ByteScanIndex(Content, MinPtrInt(256, Len), 0) < 0) then
-      exit; // likely to be json, html, xml or css - false positive won't hurt
   if IntegerScanExists(@MIME_COMPRESSED, length(MIME_COMPRESSED), PCardinal(Content)^) then
     result := true
   else
