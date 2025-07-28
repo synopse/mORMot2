@@ -1562,10 +1562,14 @@ type
 { *************************** TUri parsing/generating URL wrapper }
 
 type
+  /// the main URI schemes recognized by TUri.UriScheme
+  TUriScheme = (
+    usUnknown, usHttp, usWs, usHttps, usWss, usUdp, usFile, usFtp, usFtps);
+
   /// structure used to parse an URI into its components
   // - ready to be supplied e.g. to a THttpRequest sub-class
   // - used e.g. by class function THttpRequest.Get()
-  // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
+  // - will decode standard HTTP/HTTPS urls or our custom Unix sockets URI like
   // 'http://unix:/path/to/socket.sock:/url/path'
   {$ifdef USERECORDWITHMETHODS}
   TUri = record
@@ -1577,7 +1581,9 @@ type
     Https: boolean;
     /// either nlTcp for HTTP/HTTPS or nlUnix for Unix socket URI
     Layer: TNetLayer;
-    /// the protocol defined for this URI
+    /// used to identify most known schemes
+    UriScheme: TUriScheme;
+    /// the protocol as specified for this URI
     // - e.g. 'http'/'https' for http:// https:// or 'ws'/'wss' for ws:// wss://
     Scheme: RawUtf8;
     /// the server name
@@ -1598,10 +1604,11 @@ type
     /// reset all stored information
     procedure Clear;
     /// fill the members from a supplied URI
-    // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
-    // 'Server/Address' (as http), or 'http://unix:/Server:/Address' (as nlUnix)
-    // - recognize 'https://user:password@server:port/address' authentication
-    // - returns TRUE is at least the Server has been extracted, FALSE on error
+    // - recognize e.g. 'http://server:port/address', 'https://server/address',
+    // 'server/address' (as http), 'http://unix:/server:/address' (as nlUnix),
+    // 'https://user:password@server:port/address' (authenticated),
+    // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
+    // - returns TRUE if the Server has been extracted and is not ''
     function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
     /// check if a connection need to be re-established to follow this URI
     function Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
@@ -1609,6 +1616,7 @@ type
     function SameUri(const aUri: RawUtf8): boolean;
     /// compute the whole normalized URI
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
+    // - User/Password property values won't be included
     function URI: RawUtf8;
     /// compute the normalized URI of the server and port
     // - e.g. 'https://Server:Port/' or 'http://unix:/Server:/'
@@ -1728,6 +1736,8 @@ const
   /// quick access to http:// or https:// constants
   HTTPS_TEXT: array[boolean] of RawUtf8 = (
     'http://', 'https://');
+  /// the HTTP-based URI schemes recognized by TUri.UriScheme
+  HTTP_SCHEME = [usHttp, usWs, usHttps, usWss];
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
@@ -5482,8 +5492,15 @@ procedure TUri.Clear;
 begin
   Https := false;
   Layer := nlTcp;
+  UriScheme := usUnknown;
   Finalize(self); // reset all RawUtf8 fields
 end;
+
+const
+  _US: array[succ(low(TUriScheme)) .. high(TUriScheme)] of RawUtf8 = (
+    'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps');
+  _US_PORT: array[TUriScheme] of RawUtf8 = (
+    '', '80', '80', '443', '443', '', '', '20', '989');
 
 function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var
@@ -5500,14 +5517,21 @@ begin
   s := p;
   while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
     inc(s);
+  UriScheme := usHttp; // fallback to http:// if no scheme specified
   if PInteger(s)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
   begin
     FastSetString(Scheme, p, s - p);
-    if NetStartWith(pointer(p), 'HTTPS') or
-       NetStartWith(pointer(p), 'WSS') then // wss: is just an upgraded https:
-      Https := true
-    else if NetStartWith(pointer(p), 'UDP') then
-      Layer := nlUdp; // 'udp://server:port';
+    UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + 1);
+    case UriScheme of
+      usHttps,
+      usWss:  // wss:// is just an upgraded https:
+        Https := true;
+      usUdp:  // 'udp://server:port'
+        Layer := nlUdp;
+      usFile: // https://en.wikipedia.org/wiki/File_URI_scheme#Number_of_slash_characters
+        if PWord(s + 3)^ = ord('/') + ord('/') shl 8 then
+          inc(s, 2); // support 'file:////server/folder/data.xml' form
+    end;
     p := s + 3;
   end;
   // parse Server
@@ -5517,7 +5541,7 @@ begin
     Layer := nlUnix;
     s := p;
     while not (s^ in [#0, ':']) do
-      inc(s); // Server='path/to/socket.sock'
+      inc(s); // Server='/path/to/socket.sock'
   end
   else
   begin
@@ -5540,27 +5564,29 @@ begin
       end;
     end;
     s := p;
-    while not (s^ in [#0, ':', '/']) do
+    while not (s^ in [#0, ':', '/', '?']) do
       inc(s); // 'server:port/address' or 'server/address'
   end;
   FastSetString(Server, p, s - p);
   // optional Port
-  if s^ = ':' then
-  begin
-    inc(s);
-    p := s;
-    while not (s^ in [#0, '/']) do
+  if Server <> '' then // we need a server to have a port
+    if s^ = ':' then
+    begin
       inc(s);
-    FastSetString(Port, p, s - p); // Port='' for nlUnix
-  end
-  else if DefaultPort <> '' then
-    Port := DefaultPort
-  else
-    Port := DEFAULT_PORT[Https];
+      p := s;
+      while not (s^ in [#0, '/']) do
+        inc(s);
+      FastSetString(Port, p, s - p); // Port='' for nlUnix
+    end
+    else if DefaultPort <> '' then
+      Port := DefaultPort
+    else
+      Port := _US_PORT[UriScheme];
   // all the remaining text is the Address
-  if s^ <> #0 then // ':' or '/'
+  if s^ <> #0 then // ':' or '/' or '?'
   begin
-    inc(s);
+    if s^ <> '?' then
+      inc(s);
     FastSetString(Address, s, StrLen(s));
   end;
   if Server <> '' then
@@ -5591,13 +5617,21 @@ end;
 function TUri.ServerPort: RawUtf8;
 begin
   if layer = nlUnix then
-    Join(['http://unix:', Server, ':/'], result)
-  else if (Port = '') or
-          (Port = '0') or
-          (Port = DEFAULT_PORT[Https]) then
-    Join([HTTPS_TEXT[Https], Server, '/'], result)
+  begin
+    Join(['http://unix:', Server, ':/'], result); // our own layout
+    exit;
+  end;
+  if UriScheme = usUnknown then
+    result := Scheme // as specified
   else
-    Join([HTTPS_TEXT[Https], Server, ':', Port, '/'], result);
+    result := _US[UriScheme]; // normalized or default 'http://'
+  if result <> '' then
+    if (Port = '') or
+       (Port = '0') or
+       (Port = _US_PORT[UriScheme]) then
+      result := Join([result, '://', Server, '/'])
+    else
+      result := Join([result, '://', Server, ':', Port, '/']);
 end;
 
 function TUri.PortInt: TNetPort;
