@@ -1704,7 +1704,8 @@ type
     /// persist this list as optimized binary
     function SaveToBinary: RawByteString;
     /// clear and retrieve from a binary buffer persisted via SaveToBinary
-    function LoadFromBinary(const bin: RawByteString): boolean;
+    // - returns the number of stored IP or CIDR, clearing any existing content
+    function LoadFromBinary(const bin: RawByteString): integer;
     /// low-level access to the internal storage
     // - warning: length(IP) may be > IPCount - do not use "for in SubNet[].IP"
     // pattern unless you called AfterAdd or LoadFromBinary
@@ -1712,11 +1713,14 @@ type
       read fSubNet;
   end;
 
+const
+  IP4SUBNET_MAGIC: cardinal = $a5a54400;
+
 /// check if a 32-bit IPv4 matches a registered CIDR sub-network binary buffer
 // - directly parse TIp4SubNets.SaveToBinary output for conveniency
-// - seems slightly faster than TIp4SubNets.Match - perhaps due to better
-// CPU cache locality of the content (wild guess)
-function IP4SubNetMatch(P: PIntegerArray; ip4: cardinal): boolean; overload;
+// - performance is in pair with TIp4SubNets.Match - so could be an option
+// if you do not need to Add() items at runtime, but only check a fixed list
+function IP4SubNetMatch(P: PCardinalArray; ip4: cardinal): boolean; overload;
 
 /// check if a textual IPv4 matches a registered CIDR sub-network binary buffer
 function IP4SubNetMatch(const bin: RawByteString; const ip4: RawUtf8): boolean; overload;
@@ -5357,37 +5361,41 @@ end;
 function TIp4SubNets.SaveToBinary: RawByteString;
 var
   i, n, L: PtrInt;
-  p: PIntegerArray;
+  p: PCardinalArray;
 begin
   n := length(fSubNet);
-  L := n * 8 + 4;
+  L := n * 8 + 8;
   for i := 0 to n - 1 do
     inc(L, fSubNet[i].IPCount * 4);
   p := FastNewRawByteString(result, L);
-  p^[0] := n;
+  p^[0] := IP4SUBNET_MAGIC;
+  p^[1] := n;
+  p := @p^[2];
   for i := 0 to n - 1 do
     with fSubNet[i] do
     begin
-      p^[1] := Mask;
-      p^[2] := IPCount;
-      MoveFast(pointer(IP)^, p^[3], p^[2] * 4);
-      p := @p^[p^[2] + 2];
+      p^[0] := Mask;
+      p^[1] := IPCount;
+      MoveFast(pointer(IP)^, p^[2], p^[1] * 4);
+      p := @p^[p^[1] + 2];
     end;
 end;
 
-function TIp4SubNets.LoadFromBinary(const bin: RawByteString): boolean;
+function TIp4SubNets.LoadFromBinary(const bin: RawByteString): integer;
 var
   i, n: PtrInt;
-  p: PIntegerArray;
+  p: PCardinalArray;
   d: PIp4SubNetMask;
 begin
-  result := false;
+  result := 0;
   Clear;
   n := length(bin);
-  if (n and 3) <> 0 then
+  if (n <= 8) or
+     (PCardinal(bin)^ <> IP4SUBNET_MAGIC) or
+     ((n and 3) <> 0) then // should be an exact array of 32-bit integers
     exit;
-  n := n shr 2;
-  p := pointer(bin);
+  p := @PCardinalArray(bin)[1];
+  n := (n shr 2) - 1;
   for i := 0 to p^[0] - 1 do
   begin
     if n < 2 then
@@ -5397,7 +5405,7 @@ begin
   end;
   if n <> 1 then
     exit; // decoded size should be an exact match with supplied bin
-  p := pointer(bin);
+  p := @PCardinalArray(bin)[1];
   SetLength(fSubNet, p^[0]);
   d := pointer(fSubNet);
   for i := 0 to p^[0] - 1 do
@@ -5406,6 +5414,7 @@ begin
     d^.IPCount := p^[2];
     SetLength(d^.IP, p^[2]);
     MoveFast(p^[3], pointer(d^.IP)^, p^[2] * 4);
+    inc(result, p^[2]);
     p := @p^[p^[2] + 2];
     inc(d);
   end;
@@ -5458,18 +5467,19 @@ begin
 end;
 
 
-function IP4SubNetMatch(P: PIntegerArray; ip4: cardinal): boolean;
+function IP4SubNetMatch(P: PCardinalArray; ip4: cardinal): boolean;
 var
   n: integer;
 begin
-  if P <> nil then
+  if (P <> nil) and
+     (P^[0] = IP4SUBNET_MAGIC) then
   begin
     result := true;
-    n := P^[0]; // try all masks - warning: won't check for buffer overflow
+    n := P^[1]; // try all masks - warning: won't check for buffer overflow
     repeat
-      if FastFindIntegerSorted(@P^[3], P^[2] - 1, ip4 and P^[1]) >= 0 then
+      if FastFindIntegerSorted(@P^[4], P^[3] - 1, ip4 and P^[2]) >= 0 then
         exit;
-      P := @P^[P^[2] + 2]; // O(log(n)) search the binary buffer in-place
+      P := @P^[P^[3] + 2]; // O(log(n)) search the binary buffer in-place
       dec(n);
     until n = 0;
   end;
@@ -5480,7 +5490,9 @@ function IP4SubNetMatch(const bin: RawByteString; const ip4: RawUtf8): boolean;
 var
   ip32: cardinal;
 begin
-  result := NetIsIP4(pointer(ip4), @ip32) and
+  result := (bin <> '') and
+            (PCardinal(bin)^ = IP4SUBNET_MAGIC) and
+            NetIsIP4(pointer(ip4), @ip32) and
             IP4SubNetMatch(pointer(bin), ip32{%H-});
 end;
 
