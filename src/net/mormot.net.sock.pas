@@ -1682,6 +1682,7 @@ type
     function AddFromText(const text: RawUtf8): integer;
     /// ensure all length(SubNet[].IP) = IPCount after Add/AddFromText usage
     // - returns the current total number of stored IP or CIDR
+    // - not needed at runtime - just here e.g. for testing or specific usecases
     function AfterAdd: integer;
     /// check if a 32-bit IPv4 matches a registered CIDR sub-network
     // - reach 16M/s per core with spamhaus or firehol databases
@@ -1703,6 +1704,8 @@ type
 
 /// check if a 32-bit IPv4 matches a registered CIDR sub-network binary buffer
 // - directly parse TIp4SubNets.SaveToBinary output for conveniency
+// - seems slightly faster than TIp4SubNets.Match - perhaps due to better
+// CPU cache locality of the content (wild guess)
 function IP4SubNetMatch(P: PIntegerArray; ip4: cardinal): boolean; overload;
 
 /// check if a textual IPv4 matches a registered CIDR sub-network binary buffer

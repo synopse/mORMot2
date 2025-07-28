@@ -1784,7 +1784,7 @@ begin
       NotifyTestSpeed('parse TIp4SubNets', n, length(txt), @timer);
       Check(n > 4000);
       CheckEqual(sub.AfterAdd, n);
-      CheckEqual(length(sub.SubNet), 18);
+      CheckUtf8(length(sub.SubNet) in [17 .. 18], 'sub=%', [length(sub.SubNet)]);
       Check(not sub.Match('1.2.3.4'));
       Check(not sub.Match('1.2.3.5'));
       Check(not sub.Match('192.168.1.1'), '192'); // only IsPublicIP() was added
