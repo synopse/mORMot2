@@ -1867,7 +1867,11 @@ type
     // - returns TUri.Address as parsed from aUri
     constructor OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
-      aTLSContext: PNetTlsContext = nil); virtual;
+      aTLSContext: PNetTlsContext = nil); overload;
+    /// constructor to create a client connection to a given URI
+    // - returns TUri.Address as parsed from aUri
+    constructor OpenUri(const aUri: TUri; const aUriFull, aTunnel: RawUtf8;
+      aTimeOut: cardinal; aTLSContext: PNetTlsContext); overload; virtual;
     /// constructor to bind to an address
     // - just a wrapper around Create(aTimeOut) and BindPort()
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
@@ -5756,18 +5760,27 @@ begin
     aTLSContext^ := TLS; // copy back information to the caller TNetTlsContext
 end;
 
+constructor TCrtSocket.OpenUri(const aUri: TUri; const aUriFull, aTunnel: RawUtf8;
+  aTimeOut: cardinal; aTLSContext: PNetTlsContext);
+var
+  t: TUri;
+begin
+  if aUri.Server = '' then
+    raise ENetSock.Create('%s.OpenUri(%s): invalid URI',
+                          [ClassNameShort(self)^, aUriFull]);
+  fOpenUriFull := aUriFull;
+  t.From(aTunnel);
+  Open(aUri.Server, aUri.Port, nlTcp, aTimeOut, aUri.Https, aTLSContext, @t);
+end;
+
 constructor TCrtSocket.OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
   const aTunnel: RawUtf8; aTimeOut: cardinal; aTLSContext: PNetTlsContext);
 var
-  u, t: TUri;
+  u: TUri;
 begin
-  if not u.From(aUri) then
-    raise ENetSock.Create('%s.OpenUri(%s): invalid URI',
-            [ClassNameShort(self)^, aUri]);
-  fOpenUriFull := aUri;
+  u.From(aUri); // e.g. 'file:///path/to' = false (since Server='') but is valid
+  OpenUri(u, aUri, aTunnel, aTimeOut, aTLSContext);
   aAddress := u.Address;
-  t.From(aTunnel);
-  Open(u.Server, u.Port, nlTcp, aTimeOut, u.Https, aTLSContext, @t);
 end;
 
 constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
