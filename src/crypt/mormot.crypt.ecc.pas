@@ -2613,7 +2613,7 @@ begin
     EEccException.RaiseUtf8(
       '%.Encrypt: missing cuDataEncipherment/cuEncipherOnly Usage', [self]);
   if Algo = ecaUnknown then // use safest algorithm by default
-    if IsContentCompressed(pointer(Plain), length(Plain)) then
+    if IsContentCompressed(pointer(Plain), length(Plain), {checkfortext=}true) then
       Algo := ecaPBKDF2_HMAC_SHA256_AES256_CFB
     else
       Algo := ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ;

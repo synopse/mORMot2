@@ -1825,7 +1825,8 @@ const
 // - returns TRUE, if the header in binary buffer "may" be compressed (this
 // method can trigger false positives), e.g. begin with most common already
 // compressed zip/gz/gif/png/jpeg/avi/mp3/mp4 markers (aka "magic numbers")
-function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
+function IsContentCompressed(Content: pointer; Len: PtrInt;
+  CheckForTextFirst: boolean = false): boolean;
 
 /// recognize e.g. 'text/css' or 'application/json' as compressible
 // - as used by THttpSocketCompressList.CompressContent
@@ -5334,7 +5335,7 @@ begin
   crc := AlgoHash(0, Plain, PlainLen);
   if (PlainLen < CompressionSizeTrigger) or
      (CheckMagicForCompressed and
-      IsContentCompressed(Plain, PlainLen)) then
+      IsContentCompressed(Plain, PlainLen, {checkfortext=}true)) then
   begin
     R := FastNewString(PlainLen + BufferOffset + 9);
     pointer(result) := R;
@@ -5391,7 +5392,7 @@ begin
   PCardinal(Comp)^ := AlgoHash(0, Plain, PlainLen);
   if (PlainLen >= CompressionSizeTrigger) and
      not (CheckMagicForCompressed and
-          IsContentCompressed(Plain, PlainLen)) then
+          IsContentCompressed(Plain, PlainLen, {checkfortext=}true)) then
   begin
     len := CompressDestLen(PlainLen);
     if CompLen < len then
@@ -8942,33 +8943,38 @@ const // stored by likelyhood, then by big-endian order
     $e011cfd0,  // msi = D0 CF 11 E0 A1 B1 1A E1
     $fd2fb528); // Zstandard frame
 
-function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
+function IsContentCompressed(Content: pointer; Len: PtrInt; CheckForTextFirst: boolean): boolean;
 begin
   // see http://www.garykessler.net/library/file_sigs.html
   result := false;
-  if (Content <> nil) and
-     (Len > 8) then
-    if IntegerScanExists(@MIME_COMPRESSED, length(MIME_COMPRESSED), PCardinal(Content)^) then
-      result := true
+  if (Content = nil) or
+     (Len <= 8) then
+    exit;
+  if CheckForTextFirst then
+    if (PAnsiChar(Content)^ in ['{', '[', '<', '@']) and
+       (ByteScanIndex(Content, MinPtrInt(256, Len), 0) < 0) then
+      exit; // likely to be json, html, xml or css - false positive won't hurt
+  if IntegerScanExists(@MIME_COMPRESSED, length(MIME_COMPRESSED), PCardinal(Content)^) then
+    result := true
+  else
+    case PCardinal(Content)^ and $00ffffff of // 24-bit magic
+      $088b1f, // 'application/gzip' = 1F 8B 08
+      $334449, // mp3 = 49 44 33 [ID3]
+      $492049, // 'image/tiff' = 49 20 49
+      $535746, // swf = 46 57 53 [FWS]
+      $535743, // swf = 43 57 53 [zlib]
+      $53575a, // zws/swf = 5A 57 53 [FWS]
+      $564c46, // flv = 46 4C 56 [FLV]
+      $685a42, // 'application/bzip2' = 42 5A 68
+      $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
+        result := true;
     else
-      case PCardinal(Content)^ and $00ffffff of // 24-bit magic
-        $088b1f, // 'application/gzip' = 1F 8B 08
-        $334449, // mp3 = 49 44 33 [ID3]
-        $492049, // 'image/tiff' = 49 20 49
-        $535746, // swf = 46 57 53 [FWS]
-        $535743, // swf = 43 57 53 [zlib]
-        $53575a, // zws/swf = 5A 57 53 [FWS]
-        $564c46, // flv = 46 4C 56 [FLV]
-        $685a42, // 'application/bzip2' = 42 5A 68
-        $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
+      case PCardinalArray(Content)^[1] of // ignore variable 4 byte offset
+        $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
+        $766f6f6d: // mov = 6D 6F 6F 76
           result := true;
-      else
-        case PCardinalArray(Content)^[1] of // ignore variable 4 byte offset
-          $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
-          $766f6f6d: // mov = 6D 6F 6F 76
-            result := true;
-        end;
       end;
+    end;
 end;
 
 function IsApplicationCompressible(ContentType: PCardinalArray): boolean;
@@ -8980,7 +8986,7 @@ begin
   if c = ord('J') + ord('S') shl 8 + ord('O') shl 16 + ord('N') shl 24 then
     result := true // application/json
   else if c = ord('O') + ord('C') shl 8 + ord('T') shl 16 + ord('E') shl 24 then
-    result := false // application/octet-stream is the 2nd most common
+    result := false // application/octet-stream is likely to be compressed
   else if c = ord('J') + ord('A') shl 8 + ord('V') shl 16 + ord('A') shl 24 then
     result := (ContentType^[1] and $dfdfdfdf) = // application/javascript
               ord('S') + ord('C') shl 8 + ord('R') shl 16 + ord('I') shl 24
