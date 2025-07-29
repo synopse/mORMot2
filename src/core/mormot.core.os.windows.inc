@@ -720,7 +720,7 @@ var
 
 function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 var
-  len: DWORD;
+  len: DWord;
   u: TSynTempBuffer;
   fn: array[0..MAX_PATH] of WideChar;
 begin
@@ -1302,8 +1302,8 @@ const
   SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE = 2; // devmode
 var
   CreateSymbolicLinkW: function(lpSymlinkFileName, lpTargetFileName: PWideChar;
-    dwFlags: DWORD): BOOL; stdcall;
-  CreateSymbolicLinkFlags: DWORD = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
+    dwFlags: DWord): BOOL; stdcall;
+  CreateSymbolicLinkFlags: DWord = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
 
 function FileSymLink(const SymLink, Target: TFileName): boolean;
 var
@@ -2107,15 +2107,15 @@ end;
 // some definitions missing on Delphi and/or FPC
 type
   TProcessEntry32 = record
-    dwSize: DWORD;
-    cntUsage: DWORD;
-    th32ProcessID: DWORD;          // this process
+    dwSize: DWord;
+    cntUsage: DWord;
+    th32ProcessID: DWord;          // this process
     th32DefaultHeapID: PtrUInt;
-    th32ModuleID:DWORD;            // associated exe
-    cntThreads: DWORD;
-    th32ParentProcessID: DWORD;    // this process's parent process
+    th32ModuleID:DWord;            // associated exe
+    cntThreads: DWord;
+    th32ParentProcessID: DWord;    // this process's parent process
     pcPriClassBase: integer;          // Base priority of process's threads
-    dwFlags: DWORD;
+    dwFlags: DWord;
     szExeFile: array [0..MAX_PATH - 1] of WideChar;   // Path
   end;
 
@@ -3009,7 +3009,7 @@ begin
 end;
 
 function TWinRegistry.ReadMax(const entry: SynUnicode;
-  Data: pointer; MaxDataLen: DWORD): DWORD;
+  Data: pointer; MaxDataLen: DWord): DWord;
 var
   tmp: RawByteString;
 begin
@@ -3071,7 +3071,7 @@ var
 function IsUacVirtualizationEnabled: boolean;
 var
   token: THandle;
-  enabled, len: DWORD;
+  enabled, len: DWord;
 begin
   if IsUacEnabled = lsUntested then
     if OSVersion < wVista then
@@ -3229,9 +3229,9 @@ type
   PCERT_INFO = pointer;
 
   CERT_CONTEXT = record
-    dwCertEncodingType: DWORD;
+    dwCertEncodingType: DWord;
     pbCertEncoded: PByte;
-    cbCertEncoded: DWORD;
+    cbCertEncoded: DWord;
     pCertInfo: PCERT_INFO;
     hCertStore: HCERTSTORE;
   end;
@@ -4173,7 +4173,7 @@ end;
 var
   OnHandleCtrlC: TThreadMethod;
 
-function ConsoleCtrlHandler(typ : dword) : BOOL; stdcall;
+function ConsoleCtrlHandler(typ : DWord) : BOOL; stdcall;
 begin
   result := false;
   if Assigned(OnHandleCtrlC) then
@@ -4681,14 +4681,14 @@ type
     ProcessorMask: PtrUInt;
     case Relationship: TSystemLogicalProcessorRelation of
       RelationProcessorCore: (
-        ProcessorCoreFlags: BYTE);
+        ProcessorCoreFlags: byte);
       RelationNumaNode: (
         NumaNodeNumber: DWord);
       RelationCache: (
         Cache: record
-          Level: BYTE;
-          Associativity: BYTE;
-          LineSize: WORD;
+          Level: byte;
+          Associativity: byte;
+          LineSize: Word;
           Size: DWord;
           CacheType: TSystemLogicalProcessorCache;
         end);

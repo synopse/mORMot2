@@ -11400,7 +11400,7 @@ begin
         o := 0;
         a := {%H-}pointer(PtrUInt(data) +
              SizeOf(TEMRPolyPolyline) - SizeOf(TPoint) +
-             (data^.nPolys - 1) * SizeOf(DWORD));
+             (data^.nPolys - 1) * SizeOf(DWord));
         for i := 1 to data^.nPolys do
         begin
           f := o;
@@ -11423,7 +11423,7 @@ begin
         o := 0;
         a16 := {%H-}pointer(PtrUInt(data16) +
                SizeOf(TEMRPolyPolyline16) - SizeOf(TSmallPoint) +
-               (data16^.nPolys - 1) * SizeOf(DWORD));
+               (data16^.nPolys - 1) * SizeOf(DWord));
         for i := 1 to data16^.nPolys do
         begin
           f := o;

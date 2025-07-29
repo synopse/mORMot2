@@ -423,7 +423,7 @@ begin
 end;
 
 const
-  // for CompareStringW()
+  // for CompareStringW() Windows-like call in Unicode_CompareString()
   LOCALE_USER_DEFAULT = $400; // ignored in practice
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
   U_FOLD_CASE_DEFAULT = 0;

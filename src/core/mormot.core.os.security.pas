@@ -2250,7 +2250,7 @@ type
   HCERTSTORE = pointer;
 
   CRYPTOAPI_BLOB = record
-    cbData: DWORD;
+    cbData: DWord;
     pbData: PByteArray;
   end;
   CRYPT_INTEGER_BLOB = CRYPTOAPI_BLOB;
@@ -2258,9 +2258,9 @@ type
   CRYPT_OBJID_BLOB   = CRYPTOAPI_BLOB;
 
   CRYPT_BIT_BLOB = record
-    cbData: DWORD;
+    cbData: DWord;
     pbData: PByteArray;
-    cUnusedBits: DWORD;
+    cUnusedBits: DWord;
   end;
 
   CRYPT_ALGORITHM_IDENTIFIER = record
@@ -2283,7 +2283,7 @@ type
   PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
 
   CERT_INFO = record
-    dwVersion: DWORD;
+    dwVersion: DWord;
     SerialNumber: CRYPT_INTEGER_BLOB;
     SignatureAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
     Issuer: CERT_NAME_BLOB;
@@ -2293,15 +2293,15 @@ type
     SubjectPublicKeyInfo: CERT_PUBLIC_KEY_INFO;
     IssuerUniqueId: CRYPT_BIT_BLOB;
     SubjectUniqueId: CRYPT_BIT_BLOB;
-    cExtension: DWORD;
+    cExtension: DWord;
     rgExtension: PCERT_EXTENSIONS;
   end;
   PCERT_INFO = ^CERT_INFO;
 
   CERT_CONTEXT = record
-    dwCertEncodingType: DWORD;
+    dwCertEncodingType: DWord;
     pbCertEncoded: PByte;
-    cbCertEncoded: DWORD;
+    cbCertEncoded: DWord;
     pCertInfo: PCERT_INFO;
     hCertStore: HCERTSTORE;
   end;
@@ -2309,34 +2309,34 @@ type
   PPCCERT_CONTEXT = ^PCCERT_CONTEXT;
 
   CRYPT_KEY_PROV_PARAM = record
-    dwParam: DWORD;
+    dwParam: DWord;
     pbData: PByte;
-    cbData: DWORD;
-    dwFlags: DWORD;
+    cbData: DWord;
+    dwFlags: DWord;
   end;
   PCRYPT_KEY_PROV_PARAM = ^CRYPT_KEY_PROV_PARAM;
 
   CRYPT_KEY_PROV_INFO = record
     pwszContainerName: PWideChar;
     pwszProvName: PWideChar;
-    dwProvType: DWORD;
-    dwFlags: DWORD;
-    cProvParam: DWORD;
+    dwProvType: DWord;
+    dwFlags: DWord;
+    cProvParam: DWord;
     rgProvParam: PCRYPT_KEY_PROV_PARAM;
-    dwKeySpec: DWORD;
+    dwKeySpec: DWord;
   end;
   PCRYPT_KEY_PROV_INFO = ^CRYPT_KEY_PROV_INFO;
 
   CRYPT_OID_INFO = record
-    cbSize: DWORD;
+    cbSize: DWord;
     pszOID: PAnsiChar;
     pwszName: PWideChar;
-    dwGroupId: DWORD;
+    dwGroupId: DWord;
     Union: record
       case integer of
-        0: (dwValue:  DWORD);
-        1: (Algid:    DWORD);
-        2: (dwLength: DWORD);
+        0: (dwValue:  DWord);
+        1: (Algid:    DWord);
+        2: (dwLength: DWord);
     end;
     ExtraInfo: CRYPTOAPI_BLOB;
   end;
@@ -2347,31 +2347,31 @@ type
   PCRYPT_ATTRIBUTE = pointer;
 
   CRYPT_SIGN_MESSAGE_PARA = record
-    cbSize: DWORD;
-    dwMsgEncodingType: DWORD;
+    cbSize: DWord;
+    dwMsgEncodingType: DWord;
     pSigningCert: PCCERT_CONTEXT;
     HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
     pvHashAuxInfo: pointer;
-    cMsgCert: DWORD;
+    cMsgCert: DWord;
     rgpMsgCert: PPCCERT_CONTEXT;
-    cMsgCrl: DWORD;
+    cMsgCrl: DWord;
     rgpMsgCrl: PPCCRL_CONTEXT;
-    cAuthAttr: DWORD;
+    cAuthAttr: DWord;
     rgAuthAttr: PCRYPT_ATTRIBUTE;
-    cUnauthAttr: DWORD;
+    cUnauthAttr: DWord;
     rgUnauthAttr: PCRYPT_ATTRIBUTE;
-    dwFlags: DWORD;
-    dwInnerContentType: DWORD;
+    dwFlags: DWord;
+    dwInnerContentType: DWord;
     HashEncryptionAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
     pvHashEncryptionAuxInfo: pointer;
   end;
 
   PFN_CRYPT_GET_SIGNER_CERTIFICATE = function(pvGetArg: pointer;
-    dwCertEncodingType: DWORD; pSignerId: PCERT_INFO;
+    dwCertEncodingType: DWord; pSignerId: PCERT_INFO;
     hMsgCertStore: HCERTSTORE): PCCERT_CONTEXT; stdcall;
   CRYPT_VERIFY_MESSAGE_PARA = record
-    cbSize: DWORD;
-    dwMsgAndCertEncodingType: DWORD;
+    cbSize: DWord;
+    dwMsgAndCertEncodingType: DWord;
     hCryptProv: HCRYPTPROV;
     pfnGetSignerCertificate: PFN_CRYPT_GET_SIGNER_CERTIFICATE;
     pvGetArg: pointer;
@@ -2405,34 +2405,34 @@ type
     /// acquire a handle to a particular key container within a
     // particular cryptographic service provider (CSP)
     AcquireContextA: function(var phProv: HCRYPTPROV; pszContainer: PAnsiChar;
-      pszProvider: PAnsiChar; dwProvType: DWORD; dwFlags: DWORD): BOOL; stdcall;
+      pszProvider: PAnsiChar; dwProvType: DWord; dwFlags: DWord): BOOL; stdcall;
     /// releases the handle of a cryptographic service provider (CSP) and a
     // key container
     ReleaseContext: function(hProv: HCRYPTPROV; dwFlags: PtrUInt): BOOL; stdcall;
     /// transfers a cryptographic key from a key BLOB into a cryptographic
     // service provider (CSP)
-    ImportKey: function(hProv: HCRYPTPROV; pbData: pointer; dwDataLen: DWORD;
-      hPubKey: HCRYPTKEY; dwFlags: DWORD; var phKey: HCRYPTKEY): BOOL; stdcall;
+    ImportKey: function(hProv: HCRYPTPROV; pbData: pointer; dwDataLen: DWord;
+      hPubKey: HCRYPTKEY; dwFlags: DWord; var phKey: HCRYPTKEY): BOOL; stdcall;
     /// customizes various aspects of a session key's operations
-    SetKeyParam: function(hKey: HCRYPTKEY; dwParam: DWORD; pbData: pointer;
-      dwFlags: DWORD): BOOL; stdcall;
+    SetKeyParam: function(hKey: HCRYPTKEY; dwParam: DWord; pbData: pointer;
+      dwFlags: DWord): BOOL; stdcall;
     /// releases the handle referenced by the hKey parameter
     DestroyKey: function(hKey: HCRYPTKEY): BOOL; stdcall;
     /// encrypt the data designated by the key held by the CSP module
     // referenced by the hKey parameter
     Encrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
-      dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD; dwBufLen: DWORD): BOOL; stdcall;
+      dwFlags: DWord; pbData: pointer; var pdwDataLen: DWord; dwBufLen: DWord): BOOL; stdcall;
     /// decrypts data previously encrypted by using the CryptEncrypt function
     Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
-      dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD): BOOL; stdcall;
+      dwFlags: DWord; pbData: pointer; var pdwDataLen: DWord): BOOL; stdcall;
     /// fills a buffer with cryptographically random bytes
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
     // based PRNG specified in NIST Special Publication 800-90 is used
-    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: pointer): BOOL; stdcall;
+    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWord; pbBuffer: pointer): BOOL; stdcall;
     /// converts a security descriptor to a string format
     ConvertSecurityDescriptorToStringSecurityDescriptorA: function(
-      SecurityDescriptor: PSECURITY_DESCRIPTOR; RequestedStringSDRevision: DWORD;
-      SecurityInformation: DWORD; var StringSecurityDescriptor: PAnsiChar;
+      SecurityDescriptor: PSECURITY_DESCRIPTOR; RequestedStringSDRevision: DWord;
+      SecurityInformation: DWord; var StringSecurityDescriptor: PAnsiChar;
       StringSecurityDescriptorLen: LPDWORD): BOOL; stdcall;
 
     /// try to load the CryptoApi on this system
@@ -2447,7 +2447,7 @@ const
   PROV_RSA_FULL        = 1;
   PROV_RSA_AES         = 24;
   CRYPT_NEWKEYSET      = 8;
-  CRYPT_VERIFYCONTEXT  = DWORD($F0000000);
+  CRYPT_VERIFYCONTEXT  = DWord($F0000000);
   PLAINTEXTKEYBLOB     = 8;
   CUR_BLOB_VERSION     = 2;
   KP_IV                = 1;
@@ -2658,7 +2658,7 @@ type
     DynamicDaylightTimeDisabled: boolean;
   end;
 
-function GetTimeZoneInformation(var info: TTimeZoneInformation): DWORD;
+function GetTimeZoneInformation(var info: TTimeZoneInformation): DWord;
   stdcall; external kernel32;
 
 /// allow to change the current system time zone on Windows
@@ -4852,7 +4852,7 @@ begin
   StorageSize := length(Input);
   Count := 0;
   if (Storage = nil) or
-     (StorageSize and 3 <> 0) or // should be DWORD-aligned
+     (StorageSize and 3 <> 0) or // should be DWord-aligned
      (StorageSize >= MAX_TREE_BYTES) or
      (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
     exit;
@@ -7206,7 +7206,7 @@ type
   PMS_PEB = ^MS_PEB;
   MS_PEB = packed record
     Reserved1: array[0..1] of byte;
-    BeingDebugged: BYTE;
+    BeingDebugged: byte;
     Reserved2: array[0..0] of byte;
     {$ifdef CPUX64}
     _align1: array[0..3] of byte;

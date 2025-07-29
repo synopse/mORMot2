@@ -1045,17 +1045,17 @@ const
 type
   /// low-level API structure, not defined in old Delphi versions
   TOSVersionInfoEx = record
-    dwOSVersionInfoSize: DWORD;
-    dwMajorVersion: DWORD;
-    dwMinorVersion: DWORD;
-    dwBuildNumber: DWORD;
-    dwPlatformId: DWORD;
+    dwOSVersionInfoSize: DWord;
+    dwMajorVersion: DWord;
+    dwMinorVersion: DWord;
+    dwBuildNumber: DWord;
+    dwPlatformId: DWord;
     szCSDVersion: array[0..127] of char;
-    wServicePackMajor: WORD;
-    wServicePackMinor: WORD;
-    wSuiteMask: WORD;
-    wProductType: BYTE;
-    wReserved: BYTE;
+    wServicePackMajor: Word;
+    wServicePackMinor: Word;
+    wSuiteMask: Word;
+    wProductType: Byte;
+    wReserved: Byte;
   end;
 
 {$endif UNICODE}
@@ -1648,7 +1648,7 @@ type
     /// typically 0 for SMBIOS 2.1, 1 for SMBIOS 3.0
     DmiRevision: byte;
     /// the length of encoded binary in data
-    Length: DWORD;
+    Length: DWord;
     /// low-level binary of the SMBIOS Structure Table
     Data: RawByteString;
   end;
@@ -1785,7 +1785,7 @@ type
 
   /// Windows handle for a Thread - for cross-platform/cross-compiler clarity
   // - note that on POSIX TThreadID is a pointer and not a 32-bit file handle
-  TThreadID = DWORD;
+  TThreadID = DWord;
   /// a TThreadID-sized unsigned integer, to ease TThreadID alignment
   TThreadIDInt = cardinal;
 
@@ -1830,10 +1830,10 @@ type
     function ReadQword(const entry: SynUnicode): QWord;
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - just a wrapper around RegQueryValueExW() API call
-    function ReadBuffer(const entry: SynUnicode; data: pointer; datalen: DWORD): boolean;
+    function ReadBuffer(const entry: SynUnicode; data: pointer; datalen: DWord): boolean;
     /// read a Windows Registry content as length-specified buffer after ReadOpen()
     // - returns the number of bytes written to Data
-    function ReadMax(const entry: SynUnicode; data: pointer; maxdatalen: DWORD): DWORD;
+    function ReadMax(const entry: SynUnicode; data: pointer; maxdatalen: DWord): DWord;
     /// retrieve a Windows Registry content size as binary bytes after ReadOpen()
     // - returns -1 if the entry is not found
     function ReadSize(const entry: SynUnicode): integer;
@@ -1950,18 +1950,18 @@ function RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture: cardinal;
 
 /// retrieves the current thread ID
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
-function GetCurrentThreadId: DWORD; stdcall;
+function GetCurrentThreadId: DWord; stdcall;
 
 /// retrieves the current process ID
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
-function GetCurrentProcessId: DWORD; stdcall;
+function GetCurrentProcessId: DWord; stdcall;
 
 /// retrieves the current process ID
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcess: THandle; stdcall;
 
 /// redefined in mormot.core.os to avoid dependency to the Windows unit
-function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD; stdcall;
+function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWord): DWord; stdcall;
 
 /// redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetEnvironmentStringsW: PWideChar; stdcall;
@@ -1991,18 +1991,18 @@ procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
 /// initialize Windows IOCP instance
 // - renamed in mormot.core.os to avoid dependency to the Windows unit
 function IocpCreate(FileHandle, ExistingCompletionPort: THandle;
-  CompletionKey: pointer; NumberOfConcurrentThreads: DWORD): THandle; stdcall;
+  CompletionKey: pointer; NumberOfConcurrentThreads: DWord): THandle; stdcall;
 
 /// retrieve Windows IOCP instance status
 // - renamed in mormot.core.os to avoid dependency to the Windows unit
 function IocpGetQueuedStatus(CompletionPort: THandle;
-  var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: pointer;
-  var lpOverlapped: pointer; dwMilliseconds: DWORD): BOOL; stdcall;
+  var lpNumberOfBytesTransferred: DWord; var lpCompletionKey: pointer;
+  var lpOverlapped: pointer; dwMilliseconds: DWord): BOOL; stdcall;
 
 /// trigger a Windows IOCP instance
 // - renamed in mormot.core.os to avoid dependency to the Windows unit
 function IocpPostQueuedStatus(CompletionPort: THandle;
-  NumberOfBytesTransferred: DWORD; dwCompletionKey: pointer;
+  NumberOfBytesTransferred: DWord; dwCompletionKey: pointer;
   lpOverlapped: POverlapped): BOOL; stdcall;
 
 /// finalize a Windows resource (e.g. IOCP instance)
@@ -3994,7 +3994,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     Flags: PtrUInt;      // is also the reentrant > 0 counter
-    ThreadID: TThreadID; // pointer on POSIX, DWORD on Windows
+    ThreadID: TThreadID; // pointer on POSIX, DWord on Windows
     procedure LockSpin;  // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
@@ -5150,10 +5150,10 @@ function OpenServiceInstance(hSCManager: SC_HANDLE; const ServiceName: RawUtf8;
 
 function GetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
   SecurityInfo: cardinal; ppsidOwner, ppsidGroup, ppDacl, ppSacl: pointer;
-  var ppSecurityDescriptor: PSECURITY_DESCRIPTOR): DWORD; stdcall; external advapi32;
+  var ppSecurityDescriptor: PSECURITY_DESCRIPTOR): DWord; stdcall; external advapi32;
 function SetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
   SecurityInfo: cardinal; psidOwner, psidGroup: pointer;
-  pDacl, pSacl: pointer): DWORD; stdcall; external advapi32;
+  pDacl, pSacl: pointer): DWord; stdcall; external advapi32;
 
 
 { *** high level classes to define and manage Windows Services }
@@ -6629,8 +6629,8 @@ end;
 function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt;
   IgnoreCase: boolean): integer;
 const
-  _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
-begin
+  _CASEFLAG: array[boolean] of DWord = (0, NORM_IGNORECASE);
+begin // mormot.core.os.posix.inc CompareStringW() may be using ICU or the RTL
   result := CompareStringW(LOCALE_USER_DEFAULT, _CASEFLAG[IgnoreCase], PW1, L1, PW2, L2);
 end;
 
@@ -7804,7 +7804,7 @@ procedure SynRaiseProc(Obj: TObject; Addr: CodePointer;
   FrameCount: integer; Frame: PCodePointer);
 var
   ctxt: TSynLogExceptionContext;
-  backuplasterror: DWORD;
+  backuplasterror: DWord;
   backuphandler: TOnRawLogException;
 begin
   if (Obj <> nil) and

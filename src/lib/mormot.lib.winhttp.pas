@@ -373,7 +373,7 @@ type
   HTTP_SERVICE_CONFIG_URLACL_QUERY = record
     QueryDesc: THttpServiceConfigQueryType;
     KeyDesc: HTTP_SERVICE_CONFIG_URLACL_KEY;
-    dwToken: DWORD;
+    dwToken: DWord;
   end;
 
   HTTP_REQUEST_INFO_TYPE = (
@@ -1372,7 +1372,7 @@ const
   SECURITY_FLAG_IGNORE_CERT_CN_INVALID     = $00001000; // bad common name in X509 Cert
   SECURITY_FLAG_IGNORE_CERT_DATE_INVALID   = $00002000; // expired X509 Cert
 
-  SECURITY_FLAG_IGNORE_CERTIFICATES: DWORD =
+  SECURITY_FLAG_IGNORE_CERTIFICATES: DWord =
     SECURITY_FLAG_IGNORE_UNKNOWN_CA or
     SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE or
     SECURITY_FLAG_IGNORE_CERT_CN_INVALID or
@@ -1406,7 +1406,7 @@ const
   WINHTTP_OPTION_REDIRECT_POLICY_DEFAULT =
     WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
 
-  REDIRECT_POLICY_ALWAYS: DWORD = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
+  REDIRECT_POLICY_ALWAYS: DWord = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
 
   WINHTTP_AUTH_TARGET_SERVER    = 0;
   WINHTTP_AUTH_TARGET_PROXY     = 1;
@@ -1442,23 +1442,23 @@ type
   WINHTTP_WEB_SOCKET_BUFFER_TYPE = ULONG;
 
   WINHTTP_STATUS_CALLBACK = procedure(hInternet: HINTERNET; dwContext: PDWORD;
-    dwInternetStatus: DWORD; lpvStatusInformation: pointer;
-    dwStatusInformationLength: DWORD); stdcall;
+    dwInternetStatus: DWord; lpvStatusInformation: pointer;
+    dwStatusInformationLength: DWord); stdcall;
 
   PWINHTTP_STATUS_CALLBACK = ^WINHTTP_STATUS_CALLBACK;
 
   WINHTTP_AUTOPROXY_OPTIONS = record
-    dwFlags: DWORD;
-    dwAutoDetectFlags: DWORD;
+    dwFlags: DWord;
+    dwAutoDetectFlags: DWord;
     lpszAutoConfigUrl: PWideChar;
     lpvReserved: pointer;
-    dwReserved: DWORD;
+    dwReserved: DWord;
     fAutoLogonIfChallenged: BOOL;
   end;
   PWINHTTP_AUTOPROXY_OPTIONS = ^WINHTTP_AUTOPROXY_OPTIONS;
 
   WINHTTP_PROXY_INFO = record
-    dwAccessType: DWORD;          // see WINHTTP_ACCESS_* types
+    dwAccessType: DWord;          // see WINHTTP_ACCESS_* types
     lpszProxy: PWideChar;         // proxy server list
     lpszProxyBypass: PWideChar;   // proxy bypass list
   end;
@@ -1480,40 +1480,40 @@ type
     /// depends on the published .dll functions
     WebSocketEnabled: boolean;
     /// Initializes an application's use of the WinHttp functions.
-    Open: function(pwszUserAgent: PWideChar; dwAccessType: DWORD; pwszProxyName,
-      pwszProxyBypass: PWideChar; dwFlags: DWORD): HINTERNET; stdcall;
+    Open: function(pwszUserAgent: PWideChar; dwAccessType: DWord; pwszProxyName,
+      pwszProxyBypass: PWideChar; dwFlags: DWord): HINTERNET; stdcall;
     /// Sets up a callback function that WinHttp can call as progress is made during an operation.
     SetStatusCallback: function(hSession: HINTERNET;
-      lpfnInternetCallback: WINHTTP_STATUS_CALLBACK; dwNotificationFlags: DWORD;
+      lpfnInternetCallback: WINHTTP_STATUS_CALLBACK; dwNotificationFlags: DWord;
       dwReserved: PDWORD): WINHTTP_STATUS_CALLBACK; stdcall;
     /// Specifies the initial target server of an HTTP request.
     Connect: function(hSession: HINTERNET; pswzServerName: PWideChar;
-      nServerPort: INTERNET_PORT; dwReserved: DWORD): HINTERNET; stdcall;
+      nServerPort: INTERNET_PORT; dwReserved: DWord): HINTERNET; stdcall;
     /// Creates an HTTP request handle.
     OpenRequest: function(hConnect: HINTERNET; pwszVerb: PWideChar;
       pwszObjectName: PWideChar; pwszVersion: PWideChar; pwszReferer: PWideChar;
-      ppwszAcceptTypes: PLPWSTR; dwFlags: DWORD): HINTERNET; stdcall;
+      ppwszAcceptTypes: PLPWSTR; dwFlags: DWord): HINTERNET; stdcall;
     /// Closes a single HINTERNET handle.
     CloseHandle: function(hInternet: HINTERNET): BOOL; stdcall;
     /// Adds one or more HTTP request headers to the HTTP request handle.
     AddRequestHeaders: function(hRequest: HINTERNET; pwszHeaders: PWideChar;
-      dwHeadersLength: DWORD; dwModifiers: DWORD): BOOL; stdcall;
+      dwHeadersLength: DWord; dwModifiers: DWord): BOOL; stdcall;
     /// Sends the specified request to the HTTP server.
     SendRequest: function(hRequest: HINTERNET; pwszHeaders: PWideChar;
-      dwHeadersLength: DWORD; lpOptional: pointer; dwOptionalLength: DWORD;
-      dwTotalLength: DWORD; dwContext: DWORD): BOOL; stdcall;
+      dwHeadersLength: DWord; lpOptional: pointer; dwOptionalLength: DWord;
+      dwTotalLength: DWord; dwContext: DWord): BOOL; stdcall;
     /// Ends an HTTP request that is initiated by WinHttpSendRequest.
     ReceiveResponse: function(hRequest: HINTERNET; lpReserved: pointer): BOOL; stdcall;
     /// Retrieves header information associated with an HTTP request.
-    QueryHeaders: function(hRequest: HINTERNET; dwInfoLevel: DWORD;
+    QueryHeaders: function(hRequest: HINTERNET; dwInfoLevel: DWord;
       pwszName: PWideChar; lpBuffer: pointer; var lpdwBufferLength,
-      lpdwIndex: DWORD): BOOL; stdcall;
+      lpdwIndex: DWord): BOOL; stdcall;
     /// Returns the amount of data, in bytes, available to be read with WinHttpReadData.
     QueryDataAvailable: function(hRequest: HINTERNET;
-      var lpdwNumberOfBytesAvailable: DWORD): BOOL; stdcall;
+      var lpdwNumberOfBytesAvailable: DWord): BOOL; stdcall;
     /// Retrieves some options about the current connection.
-    QueryOption: function(hInet: HINTERNET; dwOption: DWORD;
-      lpBuffer: pointer; var lpdwBufferLength: DWORD): BOOL; stdcall;
+    QueryOption: function(hInet: HINTERNET; dwOption: DWord;
+      lpBuffer: pointer; var lpdwBufferLength: DWord): BOOL; stdcall;
     /// Retrieves the low-level Proxy information for a given URI.
     GetProxyForUrl: function(hSession: HINTERNET; lpcwszUrl: LPCWSTR;
       pAutoProxyOptions: PWINHTTP_AUTOPROXY_OPTIONS;
@@ -1523,38 +1523,38 @@ type
       var pProxyInfo: WINHTTP_CURRENT_USER_IE_PROXY_CONFIG): BOOL; stdcall;
     /// Reads data from a handle opened by the WinHttpOpenRequest function.
     ReadData: function(hRequest: HINTERNET; lpBuffer: pointer;
-      dwNumberOfBytesToRead: DWORD; var lpdwNumberOfBytesRead: DWORD): BOOL; stdcall;
+      dwNumberOfBytesToRead: DWord; var lpdwNumberOfBytesRead: DWord): BOOL; stdcall;
     /// Sets the various time-outs that are involved with HTTP transactions.
-    SetTimeouts: function(hInternet: HINTERNET; dwResolveTimeout: DWORD;
-      dwConnectTimeout: DWORD; dwSendTimeout: DWORD; dwReceiveTimeout: DWORD): BOOL; stdcall;
+    SetTimeouts: function(hInternet: HINTERNET; dwResolveTimeout: DWord;
+      dwConnectTimeout: DWord; dwSendTimeout: DWord; dwReceiveTimeout: DWord): BOOL; stdcall;
     /// Sets an Internet option.
-    SetOption: function(hInternet: HINTERNET; dwOption: DWORD; lpBuffer: pointer;
-      dwBufferLength: DWORD): BOOL; stdcall;
+    SetOption: function(hInternet: HINTERNET; dwOption: DWord; lpBuffer: pointer;
+      dwBufferLength: DWord): BOOL; stdcall;
     /// Passes the required authorization credentials to the server.
-    SetCredentials: function(hRequest: HINTERNET; AuthTargets: DWORD;
-      AuthScheme: DWORD; pwszUserName: PWideChar; pwszPassword: PWideChar;
+    SetCredentials: function(hRequest: HINTERNET; AuthTargets: DWord;
+      AuthScheme: DWord; pwszUserName: PWideChar; pwszPassword: PWideChar;
       pAuthParams: pointer): BOOL; stdcall;
     /// Completes a WebSocket handshake started by WinHttpSendRequest.
     WebSocketCompleteUpgrade: function(hRequest: HINTERNET;
       lpReserved: pointer): HINTERNET; stdcall;
     /// Closes a WebSocket connection.
     WebSocketClose: function(hWebSocket: HINTERNET; usStatus: Word;
-      pvReason: pointer; dwReasonLength: DWORD): DWORD; stdcall;
+      pvReason: pointer; dwReasonLength: DWord): DWord; stdcall;
     /// Retrieves the close status sent by a server
     WebSocketQueryCloseStatus: function(hWebSocket: HINTERNET;
-      out usStatus: Word; pvReason: pointer; dwReasonLength: DWORD;
-      out dwReasonLengthConsumed: DWORD): DWORD; stdcall;
+      out usStatus: Word; pvReason: pointer; dwReasonLength: DWord;
+      out dwReasonLengthConsumed: DWord): DWord; stdcall;
     /// Sends data over a WebSocket connection.
     WebSocketSend: function(hWebSocket: HINTERNET;
       eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE; pvBuffer: pointer;
-      dwBufferLength: DWORD): DWORD; stdcall;
+      dwBufferLength: DWord): DWord; stdcall;
     /// Receives data from a WebSocket connection.
     WebSocketReceive: function(hWebSocket: HINTERNET; pvBuffer: pointer;
-      dwBufferLength: DWORD; out dwBytesRead: DWORD;
-      out eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWORD; stdcall;
+      dwBufferLength: DWord; out dwBytesRead: DWord;
+      out eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWord; stdcall;
     /// Writes data to a handle opened by the WinHttpOpenRequest function.
     WriteData: function(hRequest: HINTERNET; lpBuffer: pointer;
-      dwNumberOfBytesToWrite: DWORD; var lpdwNumberOfBytesWritten: DWORD): BOOL; stdcall;
+      dwNumberOfBytesToWrite: DWord; var lpdwNumberOfBytesWritten: DWord): BOOL; stdcall;
   end;
 
 var
@@ -1650,7 +1650,7 @@ type
 // in case of connection failure
 // - as called by cross-platform GetProxyForUri() function from mormot.net.client
 function WinHttpGetProxyInfo(const URL: SynUnicode;
-  out ProxyInfo: TProxyInfo): DWORD;
+  out ProxyInfo: TProxyInfo): DWord;
 
 
 { ******************** websocket.dll Windows API Definitions }
@@ -2263,7 +2263,7 @@ end;
 
 function SysErrorMessageWinInet(error: integer): RawUtf8;
 var
-  dwError, extendedLen: DWORD;
+  dwError, extendedLen: DWord;
   tmp: array[0..511] of WideChar;
 begin
   extendedLen := 0;
@@ -2288,7 +2288,7 @@ procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwStatusInformationLength: cardinal); stdcall;
 var
   err: string;
-  code: DWORD;
+  code: DWord;
 begin
   code := PDWORD(lpvStatusInformation)^;
   if code and $00000001 <> 0 then
@@ -2315,7 +2315,7 @@ begin
 end;
 
 function WinHttpGetProxyInfo(const URL: SynUnicode;
-  out ProxyInfo: TProxyInfo): DWORD;
+  out ProxyInfo: TProxyInfo): DWord;
 // see https://stackoverflow.com/a/8961399/458259
 var
   Session: HINTERNET;
