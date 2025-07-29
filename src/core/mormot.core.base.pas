@@ -9895,17 +9895,19 @@ procedure XorEntropy(var e: THash512Rec);
 var
   tmp: THash256Rec;  // keep existing (custom) entropy in e
 begin
-  _Fill256FromOs(tmp);             // fast 256-bit random from OS APIs
+  _Fill256FromOs(tmp);              // fast 256-bit random from OS APIs
   XorMemory(e.r[0], tmp.l);
-  XorMemory(e.r[1], tmp.h);        // on Linux, tmp.h is from getrandom syscall
+  XorMemory(e.r[1], tmp.h);         // on Linux, tmp.h is from getrandom syscall
   e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3;
   e.r[2].H := e.r[2].H xor PtrUInt(GetCurrentThreadId) xor tmp.d2;
   {$ifdef CPUINTEL}
-  if cfTSC in CpuFeatures then     // may trigger GPF if CR4.TSD bit is set
-    tmp.d0 := tmp.d0 xor Rdtsc;    // 64-bit CPU cycles
-  RdRand32(@tmp.l, 4);             // 128-bit HW CSPRNG: no-op if no cfSSE42
+  if cfTSC in CpuFeatures then      // may trigger GPF if CR4.TSD bit is set
+    tmp.d0 := tmp.d0 xor Rdtsc;     // 64-bit CPU cycles
+  RdRand32(@tmp.l, 4);              // 128-bit HW CSPRNG: no-op if no cfSSE42
+  if cfTSC in CpuFeatures then
+    e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
   {$endif CPUINTEL}
-  crcblock(@e.r[3], @tmp.l);       // crc32c 128-bit diffusion
+  crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end;
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
@@ -10906,10 +10908,10 @@ begin
           caps[0] := p[1];
         AT_HWCAP2:
           caps[1] := p[1];
-        AT_RANDOM: // 16 random bytes (used as stacks canaries)
+        AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
           XorMemory(LecuyerEntropy.r[3], PHash128Rec(p[1])^);
       end;
-      inc(e^, (p[0] shl 20) xor p[1]);
+      inc(e^, (p[0] shl 20) xor p[1]); // fill LecuyerEntropy with those values
       inc(e);
       if e = eend then
         dec(PByte(e), SizeOf(LecuyerEntropy));
