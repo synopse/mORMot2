@@ -3154,12 +3154,15 @@ function IsDer(const Rdn: RawUtf8): boolean;
 
 /// main resolver of the randomness generators
 // - a shared TCryptRandom instance is returned: caller should NOT free it
-// - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine
+// - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine,
+// which redirects in fact to our secure TAesPrng.Main generator
+// - alternative generators are 'rnd-aes' (same as 'rnd-default'), 'rnd-lecuyer'
+// (fast on small content), 'rnd-system'/'rnd-systemblocking' (mapping
+// FillSystemRandom, which may be slow and even blocking), 'rnd-delphi' which
+// follows the weak but known Delphi RTL Random(), and 'rnd-rdrand' which calls
+// the homonymous CPU HW opcode (if cfRAND in CpuFeatures)
 // - call Rnd('rnd-entropy').Get() to gather OS entropy (which may be slow),
 // optionally as 'rnd-entropysys', 'rnd-entropysysblocking', 'rnd-entropyuser'
-// - alternative generators are 'rnd-aes' (same as 'rnd-default'), 'rnd-lecuyer'
-// (fast on small content) and 'rnd-system'/'rnd-systemblocking' (mapping
-// FillSystemRandom, which may be slow and even blocking)
 function Rnd(const name: RawUtf8 = 'rnd-default'): TCryptRandom;
 
 /// main resolver of the registered hashers
@@ -6880,6 +6883,32 @@ begin
   system.Random();
 end;
 
+{ TCryptRandomDelphi }
+
+type
+  TCryptRandomDelphi = class(TCryptRandom32) // 'rnd-delphi'
+  protected
+    fSafe: TLightLock;
+    fSeed: cardinal;
+  public
+    function Get32: cardinal; override;
+  end;
+
+function TCryptRandomDelphi.Get32: cardinal;
+begin
+  fSafe.Lock; // we make this generator thread-safe - whereas Delphi's is not
+  if fSeed = 0 then
+    fSeed := Random32; // good enough - better than Delphi/FPC Randomize anyway
+  // the Delphi RTL uses such a weak deterministic linear congruential generator
+  result := fSeed * 134775813 + 1;
+  fSeed := result;
+  fSafe.UnLock;
+end;
+
+// note: the FPC RTL has a better Mersenne Twister algorithm, but its 32-bit
+// core is not published outside of the system unit, it consumes 2KB for a weak
+// 32-bit seed from GetTickCount/fptime, and is not thread-safe either
+
 {$ifdef CPUINTEL}
 
 { TCryptRandomRdRand }
@@ -8853,6 +8882,7 @@ begin
     // register mormot.crypt.core engines into our factories
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
     TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
+    TCryptRandomDelphi.Implements('rnd-delphi');
     {$ifdef CPUINTEL}
     if cfRAND in CpuFeatures then
       TCryptRandomRdRand.Implements('rnd-rdrand');
