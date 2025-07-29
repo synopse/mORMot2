@@ -3571,7 +3571,7 @@ procedure __Fill256FromOs(out e: THash256Rec);
 var
   si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
 begin
-  // no /dev/random needed for XorEntropy() to avoid endless recursive calls
+  // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time;
   e.d1 := mach_continuous_time;

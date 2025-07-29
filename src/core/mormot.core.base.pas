@@ -3264,6 +3264,7 @@ type
   // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy to initialize the internal state
+  // - you can seed and use your own TLecuyer (threadvar) instance, if needed
   {$ifdef USERECORDWITHMETHODS}
   TLecuyer = record
   {$else}

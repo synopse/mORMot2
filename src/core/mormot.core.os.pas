@@ -4711,7 +4711,7 @@ type
     procedure Fill(dest: pointer; count: integer);
     /// fill some string[31] with 7-bit ASCII random text
     procedure FillShort31(var dest: TShort31);
-    /// seed this gsl_rng_taus2 Random32 generator
+    /// seed this gsl_rng_taus2 generator
     procedure Seed(entropy: pointer; entropylen: PtrInt);
   end;
 
@@ -4719,16 +4719,16 @@ type
 
 var
   /// a global thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
-  // - could be used if a threadvar is overkill, e.g. for short-living threads
   // - called e.g. by Random32/Random31/Random64/RandomDouble/RandomBytes functions
+  // - you can always seed and use your own TLecuyer (threadvar) instance, if needed
   SharedRandom: TLecuyerThreadSafe;
 
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
 // - this function will use well documented and proven Pierre L'Ecuyer software
 // generator - which happens to be faster (and safer) than RDRAND opcode (which
 // is used for seeding anyway)
-// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
-// randomness, but is twice slower (even with AES-NI)
+// - note that TAesPrng.Main.Random32() cryptographic-level seems pointless for
+// only 32-bit of output - and it is twice slower (even with AES-NI)
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 function Random32: cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -4753,8 +4753,6 @@ function Random64: QWord;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
 // - returns 0 <= Random32(max) < max, calling the overloaded Random32 function
-// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
-// randomness, but is twice slower (even with AES-NI)
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 function Random32(max: cardinal): cardinal; overload;
 

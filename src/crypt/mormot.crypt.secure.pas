@@ -6840,7 +6840,7 @@ type
 
 procedure TCryptRandomLecuyerPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
-  SharedRandom.Fill(dst, dstlen); // use Lecuyer's gsl_rng_taus2 generator
+  SharedRandom.Fill(dst, dstlen); // global Lecuyer's gsl_rng_taus2 generator
 end;
 
 function TCryptRandomLecuyerPrng.Get32: cardinal;
