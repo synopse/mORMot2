@@ -33,9 +33,17 @@ begin
             (PCardinalArray(Name)[1] = ord('?') + ord('\') shl 16);
 end;
 
-procedure ExtendedPathName(Name: PWideChar; Len: PtrInt; var Temp: TW32Temp);
+function Win32FullPathW(Name, Dest: PWideChar; MaxDest: DWord): boolean;
 var
-  fp: PWideChar;
+  len: DWord;
+  dummy: PWideChar;
+begin
+  len := GetFullPathNameW(Name, MaxDest, Dest, dummy);
+  result := (len > 0) and
+            (len <= MaxDest); // ensure was not actually truncated in Dest[]
+end;
+
+procedure ExtendedPathName(Name: PWideChar; Len: PtrInt; var Temp: TW32Temp);
 begin
   Len := Len * 2 + 2; // in bytes, +2 to include ending #0
   if (Len <= MAX_PATH * 2) or
@@ -61,8 +69,8 @@ begin
     PCardinal(@Temp[6])^ := ord('C') + ord('\') shl 16;
     MoveFast(Name[2], Temp[8], Len - 4);
   end
-  else if GetFullPathNameW(Name, high(Temp) - 4, @Temp[4], fp) = 0 then
-    Temp[0] := #0; // Name can't be expanded
+  else if not Win32FullPathW(Name, @Temp[4], high(Temp) - 4) then
+    Temp[0] := #0; // GetFullPathNameW() failure or W32_MAX overflow
 end;
 
 {$ifdef UNICODE}
@@ -1268,7 +1276,7 @@ end;
 
 function ExpandFileName(const FileName: TFileName): TFileName;
 var
-  w, fp: PWideChar;
+  w: PWideChar;
   t1, t2: TW32Temp;
 begin
   result := FileName;
@@ -1277,11 +1285,11 @@ begin
   w := W32(FileName, t1);
   if w = nil then
     exit;
-  if not IsExtendedPathNameW(w) then // W32() may have converted to extended-length
-    if GetFullPathNameW(w, high(t2), @t2, fp) = 0 then
-      exit
+  if not IsExtendedPathNameW(w) then // W32() may have converted w^ to \\?\
+    if Win32FullPathW(w, @t2, high(t2)) then
+      w := @t2 // full expanded file name from Windows API
     else
-      w := @t2; // full expanded file name from Windows API
+      exit; // GetFullPathNameW() failure or W32_MAX overflow
   Win32PWideCharToFileName(w, result);
 end;
 
