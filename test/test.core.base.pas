@@ -8706,37 +8706,50 @@ end;
 
 procedure TTestCoreBase.MimeTypes;
 const
-  MIMES: array[0..51] of TFileName = (
-    'png',  'image/png',
-    'PNg',  'image/png',
-    'gif',  'image/gif',
-    'tif',  'image/tiff',
-    'tiff', 'image/tiff',
-    'jpg',  'image/jpeg',
-    'JPG',  'image/jpeg',
-    'jpeg', 'image/jpeg',
-    'bmp',  'image/bmp',
-    'doc',  'application/msword',
-    'docx', 'application/msword',
-    'htm',  HTML_CONTENT_TYPE,
-    'html', HTML_CONTENT_TYPE,
-    'HTML', HTML_CONTENT_TYPE,
-    'css',  'text/css',
-    'js',   'text/javascript',
-    'ico',  'image/x-icon',
-    'pdf',  'application/pdf',
-    'PDF',  'application/pdf',
-    'Json', JSON_CONTENT_TYPE,
-    'webp', 'image/webp',
+  MIMES: array[0 .. 27 * 2 - 1] of TFileName = (
+    'png',      'image/png',
+    'PNg',      'image/png',
+    'gif',      'image/gif',
+    'tif',      'image/tiff',
+    'tiff',     'image/tiff',
+    'heic',     'image/heic',
+    'jpg',      'image/jpeg',
+    'JPG',      'image/jpeg',
+    'jpeg',     'image/jpeg',
+    'bmp',      'image/bmp',
+    'doc',      'application/msword',
+    'docx',     'application/msword',
+    'htm',      HTML_CONTENT_TYPE,
+    'html',     HTML_CONTENT_TYPE,
+    'HTML',     HTML_CONTENT_TYPE,
+    'css',      'text/css',
+    'js',       'text/javascript',
+    'ico',      'image/x-icon',
+    'pdf',      'application/pdf',
+    'PDF',      'application/pdf',
+    'Json',     JSON_CONTENT_TYPE,
+    'webp',     'image/webp',
     'manifest', 'text/cache-manifest',
     'appcache', 'text/cache-manifest',
-    'h264', 'video/H264',
-    'x',    'application/x-compress',
-    'ogg',  'video/ogg');
-  BIN: array[0..1] of Cardinal = (
-    $04034B50, $38464947);
-  BIN_MIME: array[0..1] of RawUtf8 = (
-    'application/zip', 'image/gif');
+    'h264',     'video/H264',
+    'x',        'application/x-compress',
+    'ogv',      'video/ogg');
+  BIN: array[0 .. 2] of Cardinal = (
+    $04034B50, $38464947, $fd2fb528);
+  BIN_MIME: array[0 .. high(BIN)] of RawUtf8 = (
+    'application/zip', 'image/gif', 'application/zstd');
+  HEX: array[0 .. 5] of RawUtf8 = (
+    '000000186674797069736F6D0000000069736F6D6D703432',
+    '000000186674797068656963000000006D69663168656963',
+    '0000001C66747970663476200000000069736F6D6D70343266347620',
+    '000000206674797061766966000000006D696631617669666D696166',
+    '4F67675300020000000000000000123456780000000012345678011E01766F7262697' +
+      '3000000000244AC0000000000000000000000000000060F',
+    '4F67675300020000000000000000ABCDEF120000000087654321012A807468656F726' +
+      '10302000050004001E001200000003C00000001000000');
+  HEX_MIME: array[0 .. high(HEX)] of RawUtf8 = (
+    'video/mp4', 'image/heic', 'video/H264', 'image/avif',
+    'audio/ogg', 'video/ogg');
 var
   i, j, n: integer;
   fa: TFileAge;
@@ -8746,6 +8759,7 @@ var
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
   s, ct, mpc, mpct: RawUtf8;
+  b: RawByteString;
   st: THttpMultiPartStream;
   rfc2388: boolean;
 
@@ -8759,14 +8773,14 @@ var
     for i := 0 to high(mp2) do
       if i <= n then
       begin
-        CheckEqual(mp2[i].Name, StringToUtf8(MIMES[i * 2]));
+        CheckEqual(mp2[i].Name,    StringToUtf8(MIMES[i * 2]));
         CheckEqual(mp2[i].Content, StringToUtf8(MIMES[i * 2 + 1]));
       end
       else
       begin
         j := i - n - 1;
         CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
-        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[j * 2 + 1]));
+        CheckEqual(mp2[i].Content,  StringToUtf8(MIMES[j * 2 + 1]));
       end;
   end;
 
@@ -8888,7 +8902,7 @@ begin
   for i := 0 to high(MIMES) shr 1 do
     CheckEqual(GetMimeContentType('', 'toto.' + MIMES[i * 2]),
       ToUtf8(MIMES[i * 2 + 1]));
-  FastSetString(s, 34);
+  FastSetString(s, 63);
   for i := 0 to high(BIN) do
   begin
     PCardinal(s)^ := BIN[i];
@@ -8896,6 +8910,15 @@ begin
     ct := '';
     Check(GetMimeContentTypeFromBuffer(s, ct) <> mtUnknown);
     CheckEqual(ct, BIN_MIME[i]);
+  end;
+  for i := 0 to high(HEX) do
+  if not CheckFailed(length(HEX[i]) shr 1 < length(s)) then
+  begin
+    Check(mormot.core.text.HexToBin(pointer(HEX[i]), pointer(s), length(HEX[i]) shr 1));
+    CheckEqual(GetMimeContentType(s), HEX_MIME[i]);
+    ct := '';
+    Check(GetMimeContentTypeFromBuffer(s, ct) <> mtUnknown);
+    CheckEqual(ct, HEX_MIME[i]);
   end;
   s := '<?xml';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
