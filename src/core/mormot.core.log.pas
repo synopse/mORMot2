@@ -510,6 +510,15 @@ type
   // using TSynLog.Enter: the ISynLog will be released automaticaly by the
   // compiler at the end of the method block, marking it's executation end
   // - all logging expect UTF-8 encoded text, i.e. usualy English text
+  // - warning: NEVER use this ISynLog with TSynLog.Add or direclty from
+  // a TSynLog instance: this interface requires the TSynLog.Enter class method:
+  // ! var logger: ISynLog;
+  // ! begin
+  // !   logger := TSynLog.Enter(self,'MyMethod');
+  // !   // do some stuff
+  // !   if Assigned(logger) then // may be nil if sllEnter is not enabled
+  // !     logger.Log(sllInfo,'method called');
+  // ! end; // when logger is out-of-scope, will log the method leaving
   ISynLog = interface(IUnknown)
     ['{527AC81F-BC41-4717-B089-3F74DE56F1AE}']
     /// call this method to add some information to the log at a specified level
@@ -566,6 +575,8 @@ type
     procedure LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char;
       aInstance: TObject = nil; const IgnoreWhenStartWith: PAnsiChar = nil);
     /// retrieve the associated logging instance
+    // - warning: NEVER assign the returned instance to a ISynLog variable - use
+    // the existing ISynLog, or call TSynLog.Enter/EnterLocal instead
     function Instance: TSynLog;
   end;
 
@@ -645,15 +656,15 @@ type
   // !   DestinationPath := 'C:\Logs';
   // !   Level := LOG_VERBOSE; // should better be set last
   // ! end;
-  //- then use the logging system inside a method:
+  //- then use the logging system fropm this class, e.g. inside a method:
   // ! procedure TMyDB.MyMethod;
-  // ! var ILog: ISynLog;
+  // ! var logger: ISynLog;
   // ! begin
-  // !   ILog := TSynLogDB.Enter(self,'MyMethod');
+  // !   logger := TSynLogDB.Enter(self,'MyMethod');
   // !   // do some stuff
-  // !   if Assigned(ILog) then // may be nil if sllEnter is not enabled
-  // !     ILog.Log(sllInfo,'method called');
-  // ! end; // when ILog is out-of-scope, will log the method leaving
+  // !   if Assigned(logger) then // may be nil if sllEnter is not enabled
+  // !     logger.Log(sllInfo,'method called');
+  // ! end; // when logger is out-of-scope, will log the method leaving
   TSynLogFamily = class
   protected
     fLevel, fLevelStackTrace, fLevelSysInfo: TSynLogLevels;
@@ -727,6 +738,8 @@ type
 
     /// retrieve the corresponding log file of this thread and family
     // - calls GetLog if needed (e.g. at startup or if fGlobalLog is not set)
+    // - warning: NEVER assign the returned instance to a ISynLog variable - use
+    // TSynLog.Enter or TSynLog.EnterLocal if you want to have a ISynLog
     function Add: TSynLog;
       {$ifdef HASINLINE} inline; {$endif}
     /// register one object and one echo callback for remote logging
@@ -1216,13 +1229,30 @@ type
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
-    // - optionally return the TSynLog instance (or nil) for direct usage
+    // - optionally return the TSynLog instance (or nil) for direct call
+    // - typical usage is the following, very close to TSynLog.Enter:
+    // ! var logger: ISynLog;
+    // ! begin
+    // !   TSynLog.EnterLocal(logger, self, 'MyMethod');
+    // !   // do some stuff
+    // !   if Assigned(logger) then // may be nil if sllEnter is not enabled
+    // !     logger.Log(sllInfo,'method called');
+    // ! end; // when logger is out-of-scope, will log the method leaving
     class function EnterLocal(var Local: ISynLog; aInstance: TObject;
       aMethodName: PUtf8Char): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
     // - optionally return the TSynLog instance (or nil) for direct usage
+    // - optionally return the TSynLog instance (or nil) for direct call
+    // - typical usage is the following, very close to TSynLog.Enter:
+    // ! var logger: ISynLog;
+    // ! begin
+    // !   TSynLog.EnterLocal(logger, 'MyMethodWithParams(%,%)', [a, b], self);
+    // !   // do some stuff
+    // !   if Assigned(logger) then // may be nil if sllEnter is not enabled
+    // !     logger.Log(sllInfo,'method called');
+    // ! end; // when logger is out-of-scope, will log the method leaving
     class function EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
       const TextArgs: array of const; aInstance: TObject = nil): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom string arguments
@@ -1238,6 +1268,8 @@ type
     // ! TSynLogDB.Add.Log(llError,'The % statement didn''t work',SQL);
     // - is just a wrapper around Family.SynLog - the same code will work:
     // ! TSynLogDB.Family.SynLog.Log(llError,'The % statement didn''t work',[SQL]);
+    // - warning: NEVER assign the returned instance to a ISynLog variable - use
+    // TSynLog.Enter or TSynLog.EnterLocal if you want to have a ISynLog
     class function Add: TSynLog;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the family of this TSynLog class type
@@ -4344,7 +4376,7 @@ end;
 
 function TSynLogFamily.GetExistingLog(MaximumKB: cardinal): RawUtf8;
 const
-  // a 128 MB RawUtf8 is fair enough
+  // a 128 MB RawUtf8 seems fair enough
   MAXPREVIOUSCONTENTSIZE = 128 shl 20;
 var
   log: TSynLog;
