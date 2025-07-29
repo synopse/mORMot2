@@ -2012,7 +2012,7 @@ type
     class function UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJson;
     /// register TypeInfo() custom JSON serialization for a given dynamic
     // array or record
-    // - to be used instead of homonomous Rtti.RegisterFromText() to supply
+    // - to be used instead of homonymous Rtti.RegisterFromText() to supply
     // an additional set of serialization/unserialization JSON options
     class function RegisterFromText(DynArrayOrRecord: PRttiInfo;
       const RttiDefinition: RawUtf8;
