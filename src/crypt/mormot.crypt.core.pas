@@ -323,7 +323,7 @@ const
      {$ifdef USEAESNI32} + SizeOf(pointer)  {$endif};
 
   /// power of two for a standard AES block size during cypher/uncypher
-  // - to be used as 1 shl AesBlockShift or 1 shr AesBlockShift for fast div/mod
+  // - used as "1 shl AesBlockShift" or "1 shr AesBlockShift" for fast */div
   AesBlockShift = 4;
 
   /// bit mask for fast modulo of AES block size
@@ -1624,11 +1624,11 @@ type
     procedure XorRandom(Buffer: pointer; Len: PtrInt);
     /// returns a 32-bit unsigned random number
     // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
-    // is cryptographic secure
+    // is cryptographic secure - probably pointless for a 32-bit value
     function Random32: cardinal; overload;
     /// returns a 32-bit unsigned random number, with a maximum value
     // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
-    // is cryptographic secure
+    // is cryptographic secure - probably pointless for a 32-bit value
     // - returns a value in range 0 <= Random32(max) < max
     function Random32(max: cardinal): cardinal; overload;
     /// returns a 64-bit unsigned random number
@@ -7608,7 +7608,7 @@ begin
     // XOR with some userland entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
-    sha3.Update(@StartupEntropy, SizeOf(StartupEntropy));
+    sha3.Update(@StartupEntropy, SizeOf(StartupEntropy)); // 128-bit
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
@@ -7626,7 +7626,7 @@ begin
       OpenSslRandBytes(@data, SizeOf(data));
       sha3.Update(@data, SizeOf(data));
     end;
-    // 512-bit from _Fill256FromOs + RdRand/Rdtsc + Lecuyer + thread
+    // 512-bit from _Fill256FromOs + RdRand/Rdtsc + threadid
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
     // 512-bit from /dev/urandom or CryptGenRandom operating system PRNG
@@ -7776,7 +7776,7 @@ begin
   inc(fTotalBytes, Len);
   if main <= 16 then
   begin
-    // small buffers can be set within the lock
+    // small buffers (up to 16 * 16 = 256 bytes) are filled within the lock
     DoRnd(TAesContext(fAes), Buffer, main, remain);
     fSafe.UnLock;
     exit;
@@ -7786,7 +7786,7 @@ begin
   h := bswap64(local.iv.Hi); // start at 0, seed after 21-bit: never overflows
   TAesContext(fAes).iv.Hi := bswap64(h + (main + ord(remain <> 0)));
   fSafe.UnLock;
-  // unlocked local AES-CTR computation
+  // unlocked local AES-CTR computation of buffers > 256 bytes
   DoRnd(local, Buffer, main, remain);
   FillCharFast(local, SizeOf(local), 0); // anti-forensic
 end;

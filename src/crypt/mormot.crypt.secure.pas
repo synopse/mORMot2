@@ -6811,7 +6811,7 @@ procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
 var
   tmp: RawByteString;
 begin
-  tmp := TAesPrng.GetEntropy(dstlen, fSource); // may be slow
+  tmp := TAesPrng.GetEntropy(dstlen, fSource); // may be slow for a few bytes
   MoveFast(pointer(tmp)^, dst^, dstlen);
   FillZero(tmp);
 end;
