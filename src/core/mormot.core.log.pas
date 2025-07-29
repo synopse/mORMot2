@@ -4803,12 +4803,14 @@ var
   nfo: PSynLogThreadInfo;
   refcnt: PByte;
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
+  result := 1; // should never be 0 (would release TSynLog instance)
   nfo := @PerThreadInfo; // access the threadvar - InitThreadNumber() already done
+  if nfo^.RecursionCount = 0 then
+    exit; // paranoid - but could happen if ISynLog is used from TSynLog.Add
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   inc(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ = 0 then
     ESynLogException.RaiseUtf8('Too many %._AddRef', [self]);
-  result := 1; // should never be 0 (would release TSynLog instance)
 end;
 
 function TSynLog._Release: TIntCnt; // efficient ISynLog per-thread refcount
@@ -4820,6 +4822,8 @@ var
 begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   result := 1; // should never be 0 (would release TSynLog instance)
   nfo := @PerThreadInfo; // threadvar access - InitThreadNumber() already done
+  if nfo^.RecursionCount = 0 then
+    exit; // paranoid - but could happen if ISynLog is used from TSynLog.Add
   refcnt := @nfo^.Recursion[nfo^.RecursionCount - 1];
   dec(refcnt^); // stores ISynLog.RefCnt in lowest 8-bit
   if refcnt^ <> 0 then
