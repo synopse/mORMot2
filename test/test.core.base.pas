@@ -8706,7 +8706,7 @@ end;
 
 procedure TTestCoreBase.MimeTypes;
 const
-  MIMES: array[0 .. 27 * 2 - 1] of TFileName = (
+  MIM: array[0 .. 27 * 2 - 1] of RawUtf8 = (
     'png',      'image/png',
     'PNg',      'image/png',
     'gif',      'image/gif',
@@ -8759,7 +8759,6 @@ var
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
   s, ct, mpc, mpct: RawUtf8;
-  b: RawByteString;
   st: THttpMultiPartStream;
   rfc2388: boolean;
 
@@ -8773,14 +8772,14 @@ var
     for i := 0 to high(mp2) do
       if i <= n then
       begin
-        CheckEqual(mp2[i].Name,    StringToUtf8(MIMES[i * 2]));
-        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[i * 2 + 1]));
+        CheckEqual(mp2[i].Name,    MIM[i * 2]);
+        CheckEqual(mp2[i].Content, MIM[i * 2 + 1]);
       end
       else
       begin
         j := i - n - 1;
         CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
-        CheckEqual(mp2[i].Content,  StringToUtf8(MIMES[j * 2 + 1]));
+        CheckEqual(mp2[i].Content,  MIM[j * 2 + 1]);
       end;
   end;
 
@@ -8899,9 +8898,9 @@ begin
   CheckEqual(GetMimeContentType('', 'toto.a', 'def3'), 'application/a');
   CheckEqual(GetMimeContentType('', 'toto.1', 'def4'), 'def4');
   CheckEqual(GetMimeContentType('', 'toto.ab', 'def5'), 'application/ab');
-  for i := 0 to high(MIMES) shr 1 do
-    CheckEqual(GetMimeContentType('', 'toto.' + MIMES[i * 2]),
-      ToUtf8(MIMES[i * 2 + 1]));
+  for i := 0 to high(MIM) shr 1 do
+    CheckEqual(GetMimeContentType('',
+      MakeString(['toto.', MIM[i * 2]])), MIM[i * 2 + 1]);
   FastSetString(s, 63);
   for i := 0 to high(BIN) do
   begin
@@ -9002,14 +9001,13 @@ begin
   begin
     mp := nil;
     mp2 := nil;
-    n := high(MIMES) shr 1;
+    n := high(MIM) shr 1;
     for i := 0 to n do
-      Check(MultiPartFormDataAddField(
-        StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]), mp));
+      Check(MultiPartFormDataAddField(MIM[i * 2], MIM[i * 2 + 1], mp));
     for i := 0 to high(fn) do
     begin
       fn[i] := WorkDir + 'mp' + IntToStr(i);
-      StringToUtf8(MIMES[i * 2 + 1], s);
+      s := MIM[i * 2 + 1];
       FileFromString(s, fn[i]);
       Check(MultiPartFormDataAddFile(fn[i], mp));
       fa := sysutils.FileAge(fn[i]);
@@ -9039,7 +9037,7 @@ begin
     st := THttpMultiPartStream.Create;
     st.Rfc2388NestedFiles := rfc2388;
     for i := 0 to n do
-      st.AddContent(StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]));
+      st.AddContent(MIM[i * 2], MIM[i * 2 + 1]);
     for i := 0 to high(fn) do
       st.AddFile('', fn[i]);
     st.Flush;
