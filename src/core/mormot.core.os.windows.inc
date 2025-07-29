@@ -39,7 +39,7 @@ var
 begin
   Len := Len * 2 + 2; // in bytes, +2 to include ending #0
   if (Len <= MAX_PATH * 2) or
-     ((Len <= SizeOf(Temp) - 8) and
+     ((Len <= SizeOf(Temp)) and
       IsExtendedPathNameW(Name)) then // in '\\?\...' format
   begin
     MoveFast(Name^, Temp[0], Len); // we can use the supplied UTF-16 file name
@@ -47,17 +47,22 @@ begin
   end;
   // need to switch to extended-length path
   Temp[0] := #0;
-  if Len > SizeOf(Temp) - 8 then
+  if Len >= SizeOf(Temp) - 16 then
     exit; // avoid buffer overflow
   // append the full path name to the \\?\ prefix
-  Temp[0] := '\';
-  Temp[1] := '\';
-  Temp[2] := '?';
-  Temp[3] := '\';
-  if ((ord(Name[0]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
-      (Name[1] = ':')) or
-     (GetFullPathNameW(Name, high(Temp) - 4, @Temp[4], fp) = 0) then
-    MoveFast(Name^, Temp[4], Len);
+  PCardinal(@Temp[0])^ := ord('\') + ord('\') shl 16;
+  PCardinal(@Temp[2])^ := ord('?') + ord('\') shl 16;
+  if (ord(Name[0]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
+     (Name[1] = ':') then // 'c:\toto' can directly return '\\?\c:\toto'
+    MoveFast(Name^, Temp[4], Len)
+  else if PCardinal(Name)^ = ord('\') + ord('\') shl 16 then
+  begin // '\\server\toto' should return '\\?\UNC\server\toto'
+    PCardinal(@Temp[4])^ := ord('U') + ord('N') shl 16;
+    PCardinal(@Temp[6])^ := ord('C') + ord('\') shl 16;
+    MoveFast(Name[2], Temp[8], Len - 4);
+  end
+  else if GetFullPathNameW(Name, high(Temp) - 4, @Temp[4], fp) = 0 then
+    Temp[0] := #0; // Name can't be expanded
 end;
 
 {$ifdef UNICODE}
@@ -303,8 +308,18 @@ begin
   if not fExtendedPath and
      (length(fCurrentDir) + length(fn) >= MAX_PATH - 5) then
   begin
+    // use long path prefix from now on
     fExtendedPath := true;
-    fCurrentDir := '\\?\' + fCurrentDir;  // use long path prefix from now on
+    if (fCurrentDir[1] <> '\') and
+       (fCurrentDir[2] <> '\') then
+      // convert e.g. into '\\?\c:\toto\'
+      fCurrentDir := '\\?\' + fCurrentDir
+    else
+    begin
+      // '\\server\toto\' should translate into '\\?\UNC\server\toto\'
+      delete(fCurrentDir, 1, 1);
+      fCurrentDir := '\\?\UNC' + fCurrentDir;
+    end;
   end;
   result := fCurrentDir + fn;
 end;

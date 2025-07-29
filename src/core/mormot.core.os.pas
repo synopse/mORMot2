@@ -1878,8 +1878,8 @@ const
 
 type
   /// 4KB stack buffer for no heap allocation during UTF-16 path encoding or
-  // switch to extended-length on > MAX_PATH
-  TW32Temp = array[0..W32_MAX] of WideChar;
+  // switch to extended-length on > MAX_PATH up to 2047 widechars
+  TW32Temp = array[0 .. W32_MAX] of WideChar;
 
 /// efficiently return a PWideChar from a TFileName on all compilers
 // - without any memory allocation, and with proper Unicode support
