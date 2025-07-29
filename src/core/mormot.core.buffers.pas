@@ -8702,16 +8702,18 @@ end;
 { *********** Basic MIME Content Types Support }
 
 const
-  MIME_MAGIC: array[0 .. 19] of cardinal = (
+  MIME_MAGIC: array[0 .. 18] of cardinal = (
      $04034b50 + 1, $46445025 + 1, $21726152 + 1, $afbc7a37 + 1,
      $694c5153 + 1, $75b22630 + 1, $9ac6cdd7 + 1, $474e5089 + 1,
      $38464947 + 1, $46464f77 + 1, $a3df451a + 1, $002a4949 + 1,
      $2a004d4d + 1, $2b004d4d + 1, $46464952 + 1, $e011cfd0 + 1,
-     $5367674f + 1, $1c000000 + 1, $4d434944 + 1, $fd2fb528 + 1);
+     $5367674f + 1, $4d434944 + 1, $fd2fb528 + 1);
   MIME_MAGIC_TYPE: array[0..high(MIME_MAGIC)] of TMimeType = (
-     mtZip, mtPdf, mtRar, mt7z, mtSQlite3, mtWma, mtWmv, mtPng, mtGif, mtFont,
-     mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4,
-     mtDicom, mtZstd);
+     mtZip, mtPdf, mtRar, mt7z,
+     mtSQlite3, mtWma, mtWmv, mtPng,
+     mtGif, mtFont, mtWebm, mtTiff,
+     mtTiff, mtTiff, mtWebp{=riff}, mtDoc,
+     mtOgg, mtDicom, mtZstd);
 
 function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 var
@@ -8719,120 +8721,130 @@ var
 begin
   result := mtUnknown;
   // see http://www.garykessler.net/library/file_sigs.html for magic numbers
-  if (Content <> nil) and
-     (Len > 4) then
-  begin
-    case PAnsiChar(Content)^ of
-      '<':
-        case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
-          ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
-            begin
-              result := mtHtml; // legacy HTML document
-              exit;
-            end;
-          ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
-            begin
-              if (PCardinal(PAnsiChar(Content) + 5)^ or $20202020 =
-                 ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24) and
-                 (PAnsiChar(Content)[9] = ' ') then
-                if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 =
-                   ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24) then
-                  result := mtHtml // HTML5 markup
-                else
-                  result := mtXml; // malformed XML document
-              exit;
-            end;
-          ord('?') + ord('x') shl 8 + ord('m') shl 16 + ord('l') shl 24:
-            begin
-              result := mtXml; // "well formed" XML document
-              exit;
-            end;
-        end;
-      '{', '[':
-        begin
-          if (PByteArray(Content)[Len - 1] = PByte(Content)^ + 2) and // {} []
-             (ByteScanIndex(Content, MinPtrInt(256, Len), 0) < 0) then
-            result := mtJson; // likely to be JSON if no #0 in first 256 bytes
-          exit;
-        end;
-    end;
-    i := IntegerScanIndex(@MIME_MAGIC, length(MIME_MAGIC), PCardinal(Content)^ + 1);
-    // + 1 to avoid finding it in the exe - may use SSE2
-    if i >= 0 then
-      result := MIME_MAGIC_TYPE[i];
-    case result of // identify some partial matches
-      mtUnknown:
-        case PCardinal(Content)^ and $00ffffff of // identify 3 bytes magic
-          $685a42:
-            result := mtBz2;  // 42 5A 68
-          $088b1f:
-            result := mtGzip; // 1F 8B 08
-          $492049:
-            result := mtTiff; // 49 20 49
-          $ffd8ff:
-            result := mtJpg;  // FF D8 FF DB/E0/E1/E2/E3/E8
-        else
-          case PWord(Content)^ of
-            $4D42:
-              result := mtBmp; // 42 4D
+  if (Content = nil) or
+     (Len <= 4) then
+    exit;
+  case PAnsiChar(Content)^ of
+    '<':
+      case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
+        ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+          result := mtHtml; // legacy HTML document
+        ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
+          if (PCardinal(PAnsiChar(Content) + 5)^ or $20202020 =
+             ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24) and
+             (PAnsiChar(Content)[9] = ' ') then
+            if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 =
+               ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24) then
+              result := mtHtml // HTML5 markup
             else
-              if (Len > 132) and // 'DICOM' prefix may appear at offset 128
-                 (PCardinalArray(Content)^[32] = $4d434944) then
+              result := mtXml // malformed XML document
+          else
+            exit; // '<' = 3C is not part of any MIME_MAGIC[] nor 'ftyp' length
+        ord('?') + ord('x') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+          result := mtXml; // "well formed" XML document
+      else
+        exit; // '<' = 3C is not part of any MIME_MAGIC[] nor any 'ftyp' length
+      end;
+    '{', '[':
+      if (PByteArray(Content)[Len - 1] = PByte(Content)^ + 2) and // {} []
+         (ByteScanIndex(Content, MinPtrInt(256, Len), 0) < 0) then
+        result := mtJson // likely to be JSON if no #0 in first 256 bytes
+      else
+        exit; // '{' = 7B or '[' = 5B is not part of any MIME_MAGIC[]
+  end;
+  i := IntegerScanIndex(@MIME_MAGIC, length(MIME_MAGIC), PCardinal(Content)^ + 1);
+  // + 1 to avoid finding it in the exe - may use SSE2
+  if i >= 0 then
+    result := MIME_MAGIC_TYPE[i];
+  case result of // identify some partial matches
+    mtUnknown:
+      case PCardinal(Content)^ and $00ffffff of // identify 3 bytes magic
+        $685a42:
+          result := mtBz2;  // 42 5A 68
+        $088b1f:
+          result := mtGzip; // 1F 8B 08
+        $492049:
+          result := mtTiff; // 49 20 49
+        $ffd8ff:
+          result := mtJpg;  // FF D8 FF DB/E0/E1/E2/E3/E8
+      else
+        case PWord(Content)^ of
+          $4D42:
+            result := mtBmp; // 42 4D
+          else if Len > 12 then // [0]=boxlen [1]='ftyp'box [2]=brand
+            if (PtrInt(bswap32(PCardinal(Content)^)) <= Len) and
+               (PCardinalArray(Content)^[1] = $70797466) then // 'ftyp'
+              case PCardinalArray(Content)^[2] of // brand
+                $20207471, // qt   Apple’s QuickTime File Format
+                $3134706d, // mp41 old ISO/IEC 14496-1 MPEG-4 Version 1
+                $3234706d, // mp42 MPEG-4 Version 2 video/QuickTime file
+                $326f7369, // iso2 ISO Base Media file (MPEG-4) v2
+                $336f7369, // iso3 ISO Base Media file (MPEG-4) v3
+                $346f7369, // iso4 ISO Base Media file (MPEG-4) v4
+                $34706733, // 3gp5 Mobile optimized 3GPP Release 4 = MPEG-4
+                $68736164, // dash Adapative Streaming within a MP4 container
+                $6d6f7369: // isom ISO Base Media file (MPEG-4) v1
+                  result := mtMp4;
+                $20763466, // f4v  Adobe Flash Video
+                $2076346d, // m4v  Apple’s iTunes and QuickTime
+                $31637661, // avc1 H.264/AVC codec
+                $35706733, // 3gp5 Mobile optimized 3GPP Release 5
+                $36706733: // 3gp6 Mobile optimized 3GPP Release 6
+                  result := mtH264;
+                $63696568, // heic
+                $3166696d: // mif1
+                  result := mtHeic;
+                $66697661: // avif
+                  result := mtAvif;
+              end // note: mtH265 may appear as isom mp42 or heic brand
+            else if (Len > 132) and // 'DICOM' prefix may appear at offset 128
+                    (PCardinalArray(Content)^[32] = $4d434944) then
               result := mtDicom;
-          end;
         end;
-      mtWebp:
+      end;
+    mtWebp:
+      begin
+        result := mtUnknown;
         if Len > 16 then // RIFF - Content[1] is the file size
-          case PCardinalArray(Content)^[2] of // tag
+          case PCardinalArray(Content)^[2] of // check the actual RIFF tag
             $50424557:
               result := mtWebp;
             $20495641:
               if PCardinalArray(Content)^[3] = $5453494c then
                 result := mtAvi; // Windows Audio Video Interleave file
-          else
-            result := mtUnknown;
-          end
-        else
-          result := mtUnknown;
-      mtDoc: // Microsoft Office applications D0 CF 11 E0=DOCFILE
+          end;
+      end;
+    mtDoc: // Microsoft Office applications D0 CF 11 E0 = DOCFILE
+      begin
+        result := mtUnknown;
         if Len > 600 then
           case PWordArray(Content)^[256] of // at offset 512
             $a5ec:
               result := mtDoc; // EC A5 C1 00
             $fffd: // FD FF FF
               case PByteArray(Content)^[516] of
-                $0E, $1c, $43:
+                $0e, $1c, $43:
                   result := mtPpt;
                 $10, $1f, $20, $22, $23, $28, $29:
                   result := mtXls;
-                else
-                  result := mtUnknown;
-              end
-            else
-              result := mtUnknown;
-          end
-        else
-          result := mtUnknown;
-      mtOgg:
-        if (Len < 14) or
-           (PCardinalArray(Content)^[1] <> $00000200) or
-           (PCardinalArray(Content)^[2] <> $00000000) or
-           (PWordArray(Content)^[6] <> $0000) then
-            result := mtUnknown;
-      mtMp4:
-        if (Len < 12) or
-           (PCardinalArray(Content)^[1] <> $70797466) then  // ftyp
-            case PCardinalArray(Content)^[2] of
-              $6d6f7369, // isom: ISO Base Media file (MPEG-4) v1
-              $3234706d, // mp42: MPEG-4 video/QuickTime file
-              $35706733: // 3gp5: MPEG-4 video files
-                ;
-            else
-              result := mtUnknown
-            end
-       else
-         result := mtUnknown;
-    end;
+              end;
+          end;
+      end;
+    mtOgg: // 4F 67 67 53: 'OggS' magic
+      if (Len >= 32) and
+         (PCardinalArray(Content)^[1] = $00000200) and // Vers2, Header2, Pos4
+         (PCardinalArray(Content)^[2] = $00000000) and // Pos8
+         (PWordArray(Content)^[6] = $0000) then        // Pos4
+        case PCardinal(PAnsiChar(Content) + 28)^ of
+          $726f7601, // 01 76 6F 72 62 69 73    = $01'vorbis'
+          $7375704f, // 4F 70 75 73 48 65 61 64 = 'OpusHead'
+          $414c467f: // 7F 46 4C 41 43          = $7F'FLAC'
+            result := mtOga; // mime type 'audio/ogg' is valid for those
+          $65687480: // 80 74 68 65 6F 72 61    = $80'theora'
+            result := mtOgv;
+        end
+      else
+        result := mtUnknown; // not a valid OGG stream
   end;
 end;
 
