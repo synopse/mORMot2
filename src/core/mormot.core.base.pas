@@ -3253,13 +3253,14 @@ function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
 type
-  /// 32-bit Pierre L'Ecuyer software (random) generator
+  /// 32-bit oriented Pierre L'Ecuyer software (random) generator
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
   // - used by Random32/RandomBytes/Random* function from mormot.core.os
-  // - consumes only 16 bytes per instance - a stronger algorithm like Mersenne
-  // Twister (as used by FPC RTL) requires 5KB
+  // - consumes only 16 bytes per instance for a period of 2^88 rounds - in
+  // comparison, the FPC RTL Mersenne Twister requires 2496 bytes for a very weak
+  // seed of a few bits and is not thread-safe - the Delphi RTL is even weaker
   // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy to initialize the internal state
@@ -3312,9 +3313,12 @@ type
   end;
   PLecuyer = ^TLecuyer;
 
-/// return the 32-bit Pierre L'Ecuyer software generator for the current thread
-// - can be used as an alternative to SharedRandom/Random32 function calls
+{$ifndef PUREMORMOT2}
+/// return the gsl_rng_taus2 Pierre L'Ecuyer generator of the current thread
+// - was an alternative to SharedRandom/Random32 functions from mormot.core.os
+// - you should better define your own local threadvar for any specific purpose
 function Lecuyer: PLecuyer;
+{$endif PUREMORMOT2}
 
 /// internal function used e.g. by TLecuyer.FillShort/FillShort31
 procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
@@ -9868,6 +9872,7 @@ begin
   Dest.Hi := Dest.Hi xor Source.Hi;
 end;
 
+{$ifndef PUREMORMOT2}
 threadvar // do not publish for compilation within Delphi packages
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
@@ -9875,6 +9880,7 @@ function Lecuyer: PLecuyer;
 begin
   result := @_Lecuyer;
 end;
+{$endif PUREMORMOT2}
 
 // note: we don't use RTL Random() below because it is not thread-safe
 
@@ -9886,21 +9892,19 @@ end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
 
 procedure XorEntropy(var e: THash512Rec);
 var
-  lec: PHash128Rec;
   tmp: THash256Rec;  // keep existing (custom) entropy in e
 begin
-  _Fill256FromOs(tmp);           // fast 256-bit random from OS APIs
+  _Fill256FromOs(tmp);             // fast 256-bit random from OS APIs
   XorMemory(e.r[0], tmp.l);
-  XorMemory(e.r[1], tmp.h);      // on Linux, tmp.h is from getrandom syscall
-  lec := @_Lecuyer;              // PtrUInt(lec) is genuine per thread
-  e.r[2].L := e.r[2].L xor PtrUInt(@e)  xor lec^.L xor tmp.d3; // xor tmp.h
-  e.r[2].H := e.r[2].H xor PtrUInt(lec) xor lec^.H xor tmp.d2;
+  XorMemory(e.r[1], tmp.h);        // on Linux, tmp.h is from getrandom syscall
+  e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3;
+  e.r[2].H := e.r[2].H xor PtrUInt(GetCurrentThreadId) xor tmp.d2;
   {$ifdef CPUINTEL}
-  if cfTSC in CpuFeatures then   // may trigger GPF if CR4.TSD bit is set
-    tmp.d0 := tmp.d0 xor Rdtsc;  // 64-bit CPU cycles
-  RdRand32(@tmp.l, 4);           // 128-bit HW CSPRNG: no-op if no cfSSE42
+  if cfTSC in CpuFeatures then     // may trigger GPF if CR4.TSD bit is set
+    tmp.d0 := tmp.d0 xor Rdtsc;    // 64-bit CPU cycles
+  RdRand32(@tmp.l, 4);             // 128-bit HW CSPRNG: no-op if no cfSSE42
   {$endif CPUINTEL}
-  crcblock(@e.r[3], @tmp.l);     // crc32c 128-bit diffusion
+  crcblock(@e.r[3], @tmp.l);       // crc32c 128-bit diffusion
 end;
 
 function bswap16(a: cardinal): cardinal; // inlining is good enough
