@@ -4616,7 +4616,7 @@ begin
   // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
   dec(num);
   nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] value
-  nfo^.ThreadBitHi := num shr 5; // index in fThreadNameLogged[]
+  nfo^.ThreadBitHi := num shr 5;          // index in fThreadNameLogged[]
 end;
 
 function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}

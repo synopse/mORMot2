@@ -8940,7 +8940,7 @@ begin
 end;
 
 const // stored by likelyhood, then by big-endian order
-  MIME_COMPRESSED: array[0..42] of cardinal = ( // may use SSE2
+  MIME_COMPRESSED: array[0..43] of cardinal = ( // may use SSE2
     $04034b50,  // 'application/zip' = 50 4B 03 04
     $e0ffd8ff, $e1ffd8ff, // 'image/jpeg' FF D8 FF E0/E1
     $474e5089,  // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
@@ -8956,6 +8956,7 @@ const // stored by likelyhood, then by big-endian order
     $46464952,  // avi,webp,wav = 52 49 46 46 [RIFF] considered as compressed
     $46464f77,  // 'application/font-woff' = wOFF in BigEndian
     $4d5a4cff,  // LZMA = FF 4C 5A 4D 41 00
+    $5367674f,  // OggS = 4F 67 67 53
     $72613c21,  // .ar/.deb package file = '!<arch>' (assuming compressed)
     $75b22630,  // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
     $766f6f6d,  // mov = 6D 6F 6F 76 [....moov]
@@ -8978,11 +8979,11 @@ const // stored by likelyhood, then by big-endian order
 function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 begin
   // see http://www.garykessler.net/library/file_sigs.html
-  result := false;
+  result := false; // false positive won't hurt here
   if (Content = nil) or
      (Len <= 8) or
      (PAnsiChar(Content)^ in ['{', '[', '<', '@']) then // json/html/xml/css
-    exit;
+    exit; // 7B 5B 3C 40 not part of any MIME_COMPRESSED[][0] nor ftyp boxlen
   if IntegerScanExists(@MIME_COMPRESSED, length(MIME_COMPRESSED), PCardinal(Content)^) then
     result := true
   else
@@ -8998,8 +8999,8 @@ begin
       $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
         result := true;
     else
-      case PCardinalArray(Content)^[1] of // ignore variable 4 byte offset
-        $70797466, // mp4,mov,heic = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
+      case PCardinalArray(Content)^[1] of // ignore [0] = bigend boxlen 000000xx
+        $70797466, // 'ftyp' mp4,mov,heic = 66 74 79 70
         $766f6f6d: // mov = 6D 6F 6F 76
           result := true;
       end;
