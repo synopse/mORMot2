@@ -1708,6 +1708,9 @@ type
     mtXls,
     mtHtml,
     mtCss,
+    mtCsv,
+    mtMarkdown,
+    mtICalendar,
     mtJS,
     mtXIcon,
     mtFont,
@@ -1718,9 +1721,12 @@ type
     mtManifest,
     mtJson,
     mtOgg,
+    mtOga,
+    mtOgv,
     mtMp4,
     mtMp2,
     mtMpeg,
+    mtAac,
     mtH264,
     mtH265,
     mtWma,
@@ -1755,6 +1761,9 @@ const
     'application/vnd.ms-excel',      // mtXls
     HTML_CONTENT_TYPE,               // mtHtml
     'text/css',                      // mtCss
+    'text/csv',                      // mtCsv
+    'text/markdown',                 // mtMarkdown
+    'text/calendar',                 // mtICalendar
     'text/javascript',               // mtJS RFC 9239
     'image/x-icon',                  // mtXIcon
     'font/woff',                     // mtFont RFC 8081
@@ -1764,10 +1773,13 @@ const
     'image/webp',                    // mtWebp
     'text/cache-manifest',           // mtManifest
     JSON_CONTENT_TYPE,               // mtJson
-    'video/ogg',                     // mtOgg RFC 5334
+    'application/ogg',               // mtOgg
+    'audio/ogg',                     // mtOga
+    'video/ogg',                     // mtOgv RFC 5334
     'video/mp4',                     // mtMp4 RFC 4337 6381
     'video/mp2',                     // mtMp2
-    'audio/mpeg',                    // mtMpeg RFC 3003
+    'audio/mpeg',                    // mtMpeg RFC 3003 = MP3
+    'audio/aac',                     // mtAac
     'video/H264',                    // mtH264 RFC 6184
     'video/H265',                    // mtH265 RFC 7798
     'audio/x-ms-wma',                // mtWma
@@ -8832,22 +8844,23 @@ begin
     ContentType := MIME_TYPE[result];
 end;
 
-const
-  MIME_EXT: array[0..48] of PUtf8Char = ( // for IdemPPChar() start check
+const // https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
+  MIME_EXT: array[0 .. 57] of PUtf8Char = ( // for IdemPPChar() start check
     'PNG',  'GIF',  'TIF',  'JP',  'BMP',  'DOC',  'HTM',  'CSS',
     'JSON', 'ICO',  'WOF',  'TXT', 'SVG',  'ATOM', 'RDF',  'RSS',
-    'WEBP', 'APPC', 'MANI', 'XML', 'JS',   'MJS',  'OGG',  'OGV',
+    'WEBP', 'APPC', 'MANI', 'XML', 'JS',   'MJS',  'OGA',  'OGV',
     'MP4',  'M2V',  'M2P',  'MP3', 'H264', 'TEXT', 'LOG',  'GZ',
     'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2',  'WMA',  'WMV',  'AVI',
-    'PPT',  'XLS',  'PDF',  'DCM', 'DICOM', 'SQLITE', 'DB3', 'HEIC', nil);
+    'PPT',  'XLS',  'PDF',  'DCM', 'DICOM', 'SQLIT', 'DB3', 'HEIC',
+    'H265', 'AVIF', 'AAC', 'CSV',  'MD',   'ICS', 'OGX',  'OGG', 'OPUS', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
-    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtOgg,
-    mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
-    mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
-    mtAvi,  mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3,
-    mtHeic);
+    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS, mtOga, mtOgv,
+    mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText, mtGzip,
+    mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv, mtAvi,
+    mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3, mtHeic,
+    mtH265, mtAvif,  mtAac,  mtCsv,  mtMarkdown, mtICalendar, mtOgg,  mtOga, mtOga);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
@@ -8863,7 +8876,7 @@ begin
       end;
   else
     begin
-      i := IdemPPChar(pointer(Ext), @MIME_EXT);
+      i := IdemPPChar(pointer(Ext), @MIME_EXT); // quick search by first 2 chars
       if i >= 0 then
         result := MIME_EXT_TYPE[i]
     end;
