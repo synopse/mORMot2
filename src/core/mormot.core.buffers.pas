@@ -1722,6 +1722,7 @@ type
     mtMp2,
     mtMpeg,
     mtH264,
+    mtH265,
     mtWma,
     mtWmv,
     mtAvi,
@@ -1736,6 +1737,7 @@ type
     mtXcomp,
     mtDicom,
     mtZstd,
+    mtAvif,
     mtHeic);
   PMimeType = ^TMimeType;
 
@@ -1766,7 +1768,8 @@ const
     'video/mp4',                     // mtMp4 RFC 4337 6381
     'video/mp2',                     // mtMp2
     'audio/mpeg',                    // mtMpeg RFC 3003
-    'video/H264',                    // mtH264  RFC 6184
+    'video/H264',                    // mtH264 RFC 6184
+    'video/H265',                    // mtH265 RFC 7798
     'audio/x-ms-wma',                // mtWma
     'video/x-ms-wmv',                // mtWmv
     'video/x-msvideo',               // mtAvi
@@ -1781,6 +1784,7 @@ const
     'application/x-compress',        // mtXcomp
     'application/dicom',             // mtDicom
     'application/zstd',              // mtZstd RFC 8878
+    'image/avif',                    // mtAvif
     'image/heic');                   // mtHeic
 
 /// retrieve the MIME content type from its file name
