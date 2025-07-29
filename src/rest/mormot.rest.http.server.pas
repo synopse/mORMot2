@@ -1388,6 +1388,9 @@ function TRestHttpServer.WebSocketsEnable(const aWSURI, aWSEncryptionKey: RawUtf
   aWSAjax: boolean; aWSBinaryOptions: TWebSocketProtocolBinaryOptions;
   const aOnWSUpgraded: TOnWebSocketProtocolUpgraded;
   const aOnWSClosed: TOnWebSocketProtocolClosed): PWebSocketProcessSettings;
+var
+  wsa: TWebSocketAsyncServer;
+  wss: TWebSocketServer;
 begin
   if not (fUse in HTTP_BIDIR) then
     EHttpServer.RaiseUtf8(
@@ -1395,28 +1398,35 @@ begin
       [self, ToText(fUse)^]);
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
     aWSURI, aWSEncryptionKey, aWSAjax, aWSBinaryOptions);
-    if fHttpServer is TWebSocketAsyncServer then
+  if fHttpServer is TWebSocketAsyncServer then
+  begin
+    wsa := TWebSocketAsyncServer(fHttpServer);
+    if Assigned(aOnWSUpgraded) or
+       Assigned(aOnWSClosed) then
     begin
-      if Assigned(aOnWSUpgraded) or
-         Assigned(aOnWSClosed) then
-      begin
-        TWebSocketAsyncServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
-        TWebSocketAsyncServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
-      end;
-      // Ensure that the OnWSClose is called regardless of whether the client
-      // connection is disconnected normally or abnormally
-      TWebSocketAsyncServer(fHttpServer).OnWebSocketDisconnect := OnWSAsyncClose;
-    end
-    else if fHttpServer is TWebSocketServer then
-    begin
-      if Assigned(aOnWSUpgraded) or
-         Assigned(aOnWSClosed) then
-      begin
-        TWebSocketServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
-        TWebSocketServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
-      end;
-      TWebSocketServer(fHttpServer).OnWebSocketDisconnect := OnWSSocketClose;
+      wsa.OnWebSocketUpgraded := aOnWSUpgraded;
+      wsa.OnWebSocketClose    := aOnWSClosed;
     end;
+    // ensure that TRestHttpServer.OnWSClose() is called regardless of whether
+    // the client connection is disconnected normally or abnormally
+    wsa.OnWebSocketDisconnect := OnWSAsyncClose;
+  end
+  else if fHttpServer is TWebSocketServer then
+  begin
+    wss := TWebSocketServer(fHttpServer);
+    if Assigned(aOnWSUpgraded) or
+       Assigned(aOnWSClosed) then
+    begin
+      wss.OnWebSocketUpgraded := aOnWSUpgraded;
+      wss.OnWebSocketClose    := aOnWSClosed;
+    end;
+    // ensure that TRestHttpServer.OnWSClose() is called regardless of whether
+    // the client connection is disconnected normally or abnormally
+    wss.OnWebSocketDisconnect := OnWSSocketClose;
+  end
+  else
+    EHttpServer.RaiseUtf8(
+      'Unexpected %.WebSocketsEnable over %', [self, fHttpServer]);
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
@@ -1485,7 +1495,7 @@ procedure TRestHttpServer.OnWSClose(aConnectionID: TRestConnectionID;
   aConnectionOpaque: pointer);
 var
   i: PtrInt;
-  services: TServiceContainer;
+  services: TServiceContainerServer;
 begin
   if aConnectionID = 0 then
     exit;
@@ -1495,10 +1505,9 @@ begin
   try
     for i := 0 to length(fRestServers) - 1 do
     begin
-      services := fRestServers[i].Server.Services;
+      services := TServiceContainerServer(fRestServers[i].Server.Services);
       if services <> nil then
-        (services as TServiceContainerServer).
-          RemoveFakeCallbackOnConnectionClose(aConnectionID, aConnectionOpaque);
+        services.RemoveFakeCallbackOnConnectionClose(aConnectionID);
     end;
   finally
     fSafe.ReadLock;
@@ -1506,12 +1515,12 @@ begin
 end;
 
 procedure TRestHttpServer.OnWSSocketClose(Sender: TWebSocketServerSocket);
-begin
+begin // from TWebSocketServer
   OnWSClose(Sender.RemoteConnectionID, Sender.GetConnectionOpaque);
 end;
 
 procedure TRestHttpServer.OnWSAsyncClose(Sender: TWebSocketAsyncConnection);
-begin
+begin // from TWebSocketAsyncServer
   OnWSClose(Sender.Handle, Sender.GetConnectionOpaque);
 end;
 
