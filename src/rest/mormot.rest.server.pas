@@ -2463,9 +2463,9 @@ type
     // of the specified record
     // - POST ModelRoot/CacheFlush/_callback_ URI will be called by the client
     // to notify the server that an interface callback instance has been released
-    // - POST ModelRoot/CacheFlush/_ping_ URI will be called by the client after
-    // every half session timeout (or at least every hour) to notify the server
-    // that the connection is still alive
+    // - POST ModelRoot/CacheFlush/_ping_ URI could be called e.g. by the client
+    // after every half session timeout (or at least every hour) to notify the
+    // server that this connection is still alive
     procedure CacheFlush(Ctxt: TRestServerUriContext);
     /// REST service accessible from ModelRoot/Stat URI to gather detailed information
     // - returns the current execution statistics of this server, as a JSON object
@@ -7937,14 +7937,14 @@ end;
 
 procedure TRestServer.CacheFlush(Ctxt: TRestServerUriContext);
 var
-  i, count: PtrInt;
+  n: integer;
   old: TRestConnectionID;
   cache: TOrmCache;
 begin
   case Ctxt.Method of
     mGET:
       begin
-        // POST root/cacheflush[/table[/id]]
+        // GET root/cacheflush[/table[/id]]
         cache := TRestOrmServer(fOrmInstance).CacheOrNil;
         if cache <> nil then
           if Ctxt.Table = nil then
@@ -7956,38 +7956,40 @@ begin
         Ctxt.Success;
       end;
     mPOST:
-      if Ctxt.fUriMethodPath = '_ping_' then
       begin
-        // POST root/cacheflush/_ping_
-        count := 0;
-        if Ctxt.Session > CONST_AUTHENTICATION_NOT_USED then
-          for i := 0 to Services.Count - 1 do
-            inc(count, TServiceFactoryServer(Services.InterfaceList[i].Service).
-              RenewSession(Ctxt));
-        if sllUserAuth in fLogLevel then
-          InternalLog('Renew % authenticated session % from %: count=%',
-            [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, count], sllUserAuth);
-        Ctxt.Returns(['count', count]);
-      end
-      else if (fServices <> nil) and
-              (llfWebsockets in Ctxt.Call^.LowLevelConnectionFlags) then
-        if Ctxt.fUriMethodPath = '_callback_' then
-          // POST root/cacheflush/_callback_ with {"ICallbackName":1234} body
-          // as called from TRestHttpClientWebsockets.FakeCallbackUnregister
-          (fServices as TServiceContainerServer).ReleaseFakeCallback(Ctxt)
-        else if Ctxt.fUriMethodPath = '_replaceconn_' then
+        // POST root/cacheflush/* for services
+        soa := pointer(fServices);
+        if soa = nil then
+          exit;
+        if Ctxt.fUriMethodPath = '_ping_' then
         begin
-          // POST root/cacheflush/_replaceconn_ (over a secured connection)
-          old := GetInt64(pointer(Ctxt.Call^.InBody));
-          count := (fServices as TServiceContainerServer).
-            FakeCallbackReplaceConnectionID(old, Ctxt.Call^.LowLevelConnectionID);
-          if sllHTTP in fLogLevel then
-            InternalLog('%: Connection % replaced by % from % on %',
-              [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
-               Ctxt.RemoteIPNotLocal, Plural('interface', count)], sllHTTP);
-          Ctxt.Returns(['count', count]);
-        end;
-    mPUT:
+          // POST root/cacheflush/_ping_
+          n := 0;
+          if Ctxt.Session > CONST_AUTHENTICATION_NOT_USED then
+            n := soa.ClientSessionRenew(Ctxt);
+          if sllUserAuth in fLogLevel then
+            InternalLog('Renew % authenticated session % from %: n=%',
+              [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, n], sllUserAuth);
+          Ctxt.Returns(['n', n]);
+        end
+        else if llfWebsockets in Ctxt.Call^.LowLevelConnectionFlags then
+          if Ctxt.fUriMethodPath = '_callback_' then
+            // POST root/cacheflush/_callback_ with {"ICallbackName":1234} body
+            // as called from TRestHttpClientWebsockets.FakeCallbackUnregister
+            soa.ClientFakeCallbackRelease(Ctxt)
+          else if Ctxt.fUriMethodPath = '_replaceconn_' then
+          begin
+            // POST root/cacheflush/_replaceconn_ (over a secured connection)
+            old := GetInt64(pointer(Ctxt.Call^.InBody));
+            n := soa.ClientFakeCallbackReplaceConnectionID(
+                   old, Ctxt.Call^.LowLevelConnectionID);
+            if sllHTTP in fLogLevel then
+              InternalLog('%: Connection % replaced by % from % on %',
+                [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
+                 Ctxt.RemoteIPNotLocal, Plural('interface', n)], sllHTTP);
+            Ctxt.Returns(['n', n]);
+          end;
+      end;
   end;
 end;
 

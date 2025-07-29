@@ -795,8 +795,8 @@ type
     ['{8D518FCB-62C3-42EB-9AE7-96ED322140F7}']
     /// will be called when a callback is released on the client side
     // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
-    // signature, so that it will be called with the interface instance by
-    // TServiceContainerServer.ReleaseFakeCallback
+    // signature, so that it will be called as POST root/cacheflush/_callback_
+    // to execute TServiceContainerServer.ClientFakeCallbackRelease()
     // - you may use it as such - see sample restws_chatserver.dpr:
     // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
     // !   const interfaceName: RawUtf8);

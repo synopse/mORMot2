@@ -61,11 +61,11 @@ const
   /// after how many parameters inlining is not worth it
   INLINED_MAX = 10;
 
-  /// the used TAuthSession.IDCardinal value if the session not started yet
+  /// the used TAuthSession.ID value if the session not started yet
   // - i.e. if the session handling is still in its handshaking phase
   CONST_AUTHENTICATION_SESSION_NOT_STARTED = 0;
 
-  /// the used TAuthSession.IDCardinal value if authentication mode is not set
+  /// the used TAuthSession.ID value if authentication mode is not set
   // - i.e. if TRest.HandleAuthentication equals FALSE
   CONST_AUTHENTICATION_NOT_USED = 1;
 

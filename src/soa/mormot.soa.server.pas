@@ -403,10 +403,17 @@ type
     /// initialize and register a server-side interface callback instance
     procedure GetFakeCallback(Ctxt: TRestServerUriContext;
       ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
-    /// low-level function called from TRestServer.CacheFlush URI method
-    procedure ReleaseFakeCallback(Ctxt: TRestServerUriContext);
+    /// low-level method called from client root/cacheflush/_ping_ URI
+    // - returns the number of renewed instances
+    function ClientSessionRenew(Ctxt: TRestServerUriContext): integer;
+    /// low-level method called from client root/cacheflush/_callback_ URI
+    procedure ClientFakeCallbackRelease(Ctxt: TRestServerUriContext);
+    /// low-level method called from client root/cacheflush/_replaceconn_ URI
+    // - returns the number of callbacks changed
+    function ClientFakeCallbackReplaceConnectionID(
+      aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
     /// purge a fake callback from the internal list
-    // - called e.g. by ReleaseFakeCallback() or
+    // - called e.g. by ClientFakeCallbackRelease() or
     // RemoveFakeCallbackOnConnectionClose()
     procedure RemoveFakeCallback(FakeObj: TObject; {TInterfacedObjectFakeServer}
       Ctxt: TRestServerUriContext);
@@ -427,10 +434,6 @@ type
       Opaque: pointer);
     /// class method able to associate an Opaque pointer to a fake callback
     class function CallbackGetOpaque(const callback: IInterface): pointer;
-    /// replace the connection ID of callbacks after a reconnection
-    // - returns the number of callbacks changed
-    function FakeCallbackReplaceConnectionID(
-      aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
     /// register a callback interface which will be called each time a write
     // operation is performed on a given TOrm with a TRecordVersion field
     // - called e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster
@@ -1823,12 +1826,32 @@ end;
 
 function TServiceContainerServer.OnCloseSession(aSessionID: cardinal): integer;
 var
-  i: PtrInt;
+  i: integer;
+  f: ^TServiceContainerInterface;
 begin
   result := 0;
-  for i := 0 to high(fInterface) do
-    inc(result, TServiceFactoryServer(fInterface[i].Service).
-      OnCloseSession(aSessionID));
+  f := pointer(fInterface);
+  if f <> nil then
+    for i := 1 to PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF do
+    begin
+      inc(result, TServiceFactoryServer(f^.Service).OnCloseSession(aSessionID));
+      inc(f);
+    end;
+end;
+
+function TServiceContainerServer.ClientSessionRenew(Ctxt: TRestServerUriContext): integer;
+var
+  i: integer;
+  f: ^TServiceContainerInterface;
+begin
+  result := 0;
+  f := pointer(fInterface);
+  if f <> nil then
+    for i := 1 to PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF do
+    begin
+      inc(result, TServiceFactoryServer(f^.Service).RenewSession(Ctxt));
+      inc(f);
+    end;
 end;
 
 procedure TServiceContainerServer.ClearServiceList;
@@ -1930,21 +1953,6 @@ begin
   fRestServer.ResetRoutes; // (dis)active root/interface/_signature_ URI
 end;
 
-function FakeCallbackFind(list: PPointer; n: integer; id: TInterfacedObjectFakeID;
-  conn: TRestConnectionID): TInterfacedObjectFakeServer;
-begin
-  if n <> 0 then
-    repeat
-      result := list^;
-      inc(list);
-      if (result.fFakeID = id) and
-         (result.fLowLevelConnectionID = conn) then
-        exit;
-      dec(n);
-    until n = 0;
-  result := nil;
-end;
-
 procedure TServiceContainerServer.RemoveFakeCallback(FakeObj: TObject;
   Ctxt: TRestServerUriContext);
 var
@@ -2022,7 +2030,22 @@ begin
   end;
 end;
 
-procedure TServiceContainerServer.ReleaseFakeCallback(
+function FakeCallbackFind(list: PPointer; n: integer; id: TInterfacedObjectFakeID;
+  conn: TRestConnectionID): TInterfacedObjectFakeServer;
+begin
+  if n <> 0 then
+    repeat
+      result := list^;
+      inc(list);
+      if (result.fFakeID = id) and
+         (result.fLowLevelConnectionID = conn) then
+        exit;
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
+
+procedure TServiceContainerServer.ClientFakeCallbackRelease(
   Ctxt: TRestServerUriContext);
 var
   connectionID: TRestConnectionID;
@@ -2049,7 +2072,7 @@ begin
     exit;
   if not params[0].Name.Idem('ISynLogCallback') then // avoid stack overflow
     if sllDebug in fRestServer.LogLevel then
-      fRestServer.InternalLog('%.ReleaseFakeCallback(%,"%") remote call',
+      fRestServer.InternalLog('%.ClientFakeCallbackRelease(%,"%") remote call',
         [ClassType, fakeID, params[0].Name.Text], sllDebug);
   fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
   try
@@ -2177,7 +2200,7 @@ begin
     until n = 0;
 end;
 
-function TServiceContainerServer.FakeCallbackReplaceConnectionID(
+function TServiceContainerServer.ClientFakeCallbackReplaceConnectionID(
   aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
 begin
   result := 0;
