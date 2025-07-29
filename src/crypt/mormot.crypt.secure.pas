@@ -1730,6 +1730,13 @@ type
     function GetDouble: double;
   end;
 
+  /// an abstract TCryptRandom class which will call Get32 as its random source
+  TCryptRandom32 = class(TCryptRandom)
+  public
+    /// will call the Get32 virtual method to fill
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+  end;
+
   /// hashing/signing parent class, as returned by Hash/Sign() factories
   TCryptHash = class(TCryptInstance, ICryptHash)
   protected
@@ -6848,37 +6855,40 @@ begin
   result := SharedRandom.Next;
 end;
 
+{ TCryptRandom32 }
+
+procedure TCryptRandom32.Get(dst: pointer; dstlen: PtrInt);
+var
+  c: cardinal;
+begin
+  repeat
+    if dstlen < 4 then
+      break;
+    PCardinal(dst)^ := PCardinal(dst)^ xor Get32; // e.g. Get32 = RdRand32
+    inc(PCardinal(dst));
+    dec(dstlen, 4);
+  until false;
+  if dstlen <= 0 then
+    exit;
+  c := Get32;
+  repeat
+    PByte(dst)^ := PByte(dst)^ xor c;
+    inc(PByte(dst));
+    c := c shr 8;
+    dec(dstlen);
+  until dstlen = 0;
+  system.Random();
+end;
+
 {$ifdef CPUINTEL}
 
 { TCryptRandomRdRand }
 
 type
-  TCryptRandomRdRand = class(TCryptRandom) // 'rnd-rdrand'
+  TCryptRandomRdRand = class(TCryptRandom32) // 'rnd-rdrand'
   public
-    procedure Get(dst: pointer; dstlen: PtrInt); override;
     function Get32: cardinal; override;
   end;
-
-procedure TCryptRandomRdRand.Get(dst: pointer; dstlen: PtrInt);
-var
-  c: cardinal;
-begin
-  c := dstlen shr 2;
-  RdRand32(dst, c);
-  dstlen := dstlen and 3;
-  if dstlen = 0 then
-    exit;
-  inc(PCardinal(dst), c);
-  c := RdRand32; // last 1..3 bytes
-  repeat
-    PByte(dst)^ := PByte(dst)^ xor c;
-    dec(dstlen);
-    if dstlen = 0 then
-      exit;
-    c := c shr 8;
-    inc(PByte(dst));
-  until false;
-end;
 
 function TCryptRandomRdRand.Get32: cardinal;
 begin
