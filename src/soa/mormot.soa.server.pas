@@ -100,10 +100,9 @@ type
   TServiceFactoryServerInstance = record
     /// the internal Instance ID, as remotely sent in "id":1
     InstanceID: TID;
-    /// GetTickCount64() shr 10 timestamp corresponding to the last access of
-    // this instance
-    LastAccess: cardinal;
-    /// the associated client session
+    /// Ctxt.TickCount64 shr 10 set during the last access of this instance
+    LastAccessTix10: cardinal;
+    /// the associated client session ID
     Session: cardinal;
     /// the implementation instance itself
     Instance: TInterfacedObject;
@@ -147,7 +146,7 @@ type
     fInstanceCurrentID: TID;
     fInstanceCounter: cardinal;
     fInstanceTimeOut: cardinal;
-    fInstanceDeprecatedTix32, fInstanceGCDeprecatedTix32: cardinal;
+    fInstanceDeprecatedTix10, fInstanceGCDeprecatedTix10: cardinal;
     fInstanceGC: TSynObjectListLocked; // release refcnt>1 in separated lock
     fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
@@ -172,7 +171,7 @@ type
     function GetInstanceGCCount: integer;
     procedure InstanceFree(Obj: TInterfacedObject);
     procedure InstanceFreeOrGC(Obj: TInterfacedObject);
-    function DoInstanceGC(Force: boolean): PtrInt;
+    function DoInstanceGC(Tix10: cardinal; Final: boolean = false): PtrInt;
     function DoInstanceGCSession(aSessionID: cardinal): integer;
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
     procedure OnLogRestExecuteMethod(Sender: TInterfaceMethodExecuteRaw;
@@ -418,8 +417,7 @@ type
     procedure RemoveFakeCallback(FakeObj: TObject; {TInterfacedObjectFakeServer}
       Ctxt: TRestServerUriContext);
     /// purge all fake callbacks on a given connection
-    procedure RemoveFakeCallbackOnConnectionClose(aConnectionID: TRestConnectionID;
-      aConnectionOpaque: PRestServerConnectionOpaque);
+    procedure RemoveFakeCallbackOnConnectionClose(aConnectionID: TRestConnectionID);
     /// class method able to check if a given server-side callback event fake
     // instance has been released on the client side
     // - may be used to automatically purge a list of subscribed callbacks,
@@ -752,7 +750,7 @@ begin
   // clean up any pending implementation instances
   endtix := GetTickSec + 5; // paranoid wait for refcnt=1 from services
   repeat
-    DoInstanceGC({force=}false);
+    DoInstanceGC(0);
     if fInstanceGC.Count = 0 then
       break;
     SleepHiRes(1);
@@ -761,7 +759,7 @@ begin
       fRestServer.InternalLog('%.Destroy: I% InstanceGC.Count=% timeout  - ' +
         'you should fix your implementation to release its dependencies',
         [ClassType, InterfaceUri, fInstanceGC.Count], sllWarning);
-      DoInstanceGC({force=}true); // may GPF but at least won't leak memory
+      DoInstanceGC(0, {final=}true); // may GPF but at least won't leak memory
       break;
     end;
   until false;
@@ -781,24 +779,28 @@ begin
   fExecuteLock.Done;
 end;
 
-function TServiceFactoryServer.DoInstanceGC(Force: boolean): PtrInt;
+function TServiceFactoryServer.DoInstanceGC(Tix10: cardinal; Final: boolean): PtrInt;
 var
   obj: TInterfacedObject;
   pending: TPointerDynArray;
   pendingcount: integer; // PtrArrayAdd() expects integer, not PtrInt
   i: PtrInt;
 begin
-  // delete when RefCount = 1 (for optFreeInMainThread/PerInterfaceThread)
   result := 0;
   if fInstanceGC.Count = 0 then
     exit;
-  pendingcount := 0;
+  // delete when RefCount = 1 (for optFreeInMainThread/PerInterfaceThread)
   fInstanceGC.Safe.WriteLock;
   try
+    if (Tix10 <> 0) and // 0 from Destroy
+       (fInstanceGCDeprecatedTix10 = Tix10) then
+      exit;
+    fInstanceGCDeprecatedTix10 := Tix10;
+    pendingcount := 0;
     for i := fInstanceGC.Count - 1 downto 0 do // downto for proper Delete(i)
     begin
       obj := fInstanceGC.List[i];
-      if Force or
+      if Final or
          (obj.RefCount = 1) then
       begin
         PtrArrayAdd(pending, obj, pendingcount); // free outside GC lock
@@ -808,10 +810,10 @@ begin
   finally
     fInstanceGC.Safe.WriteUnLock;
   end;
-  result := pendingcount;
-  if result = 0 then
+  if pendingcount = 0 then
     exit;
   // the instances are actually released outside of fInstanceGC.Safe lock
+  result := pendingcount;
   for i := 0 to result - 1 do
     InstanceFree(pending[i]); // may run in a background thread - intercept except
   fRestServer.InternalLog('%.DoInstanceGC=% for I% %',
@@ -906,8 +908,7 @@ begin
   finally
     fInstances.Safe.WriteUnLock;
   end;
-  if result <> 0 then
-    DoInstanceGC({force=}false); // release now outside of the lock
+  // eventually released on next fInstanceGCDeprecatedTix32 round
 end;
 
 function TServiceFactoryServer.Get(out Obj): boolean;
@@ -960,7 +961,7 @@ end;
 
 function TServiceFactoryServer.RenewSession(Ctxt: TRestServerUriContext): integer;
 var
-  tix, sess: cardinal;
+  tix10, id: cardinal;
   i: integer;
   P: PServiceFactoryServerInstance;
 begin
@@ -971,16 +972,16 @@ begin
      (Ctxt.Session <= CONST_AUTHENTICATION_NOT_USED) or
      not (fInstanceCreation in [sicClientDriven, sicPerSession]) then
     exit;
-  tix := Ctxt.TickCount64 shr 10;
+  tix10 := Ctxt.TickCount64 shr 10;
   fInstances.Safe.ReadLock;
   try
     P := pointer(fInstance);
-    sess := Ctxt.Session;
+    id := Ctxt.Session;
     for i := 1 to fInstances.Count do
     begin
-      if P^.Session = sess then
+      if P^.Session = id then
       begin
-        P^.LastAccess := tix;
+        P^.LastAccessTix10 := tix10;
         inc(result);
       end;
       inc(P);
@@ -995,15 +996,18 @@ var
   inst: TServiceFactoryServerInstance;
 begin
   result := 0;
-  if fInstances.Count > 0 then
+  if (self <> nil) and
+     (fInstances.Count > 0) then
     case InstanceCreation of
       sicPerSession:
         begin
-          inst.InstanceID := aSessionID;
-          RetrieveInstance(nil, inst, ord(imFree), aSessionID); // O(log(n))
+          // remove the instance associated with this session
+          inst.InstanceID := aSessionID; // O(log(n)) search
+          if RetrieveInstance(nil, inst, ord(imFree), aSessionID) >= 0 then
+            inc(result);
         end;
       sicClientDriven:
-        // release ASAP if was not notified by client
+        // should be eventually released if not properly notified by the client
         result := DoInstanceGCSession(aSessionID);
     end;
 end;
@@ -1063,7 +1067,7 @@ function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
         fRestServer.InternalLog('%.RetrieveInstance: I% instance added in ' +
           'background', [ClassType, fInterfaceUri], sllWarning);
         InstanceFree(Inst.Instance); // revert CreateInstance() above
-        P^.LastAccess := Inst.LastAccess;
+        P^.LastAccessTix10 := Inst.LastAccessTix10;
         Inst.Instance := P^.Instance;
       end;
     finally
@@ -1079,20 +1083,20 @@ function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
   procedure DeleteDeprecated;
   var
     i: PtrInt;
-    tix: cardinal;
+    tix10: cardinal;
     P: PServiceFactoryServerInstance;
   begin
     fInstances.Safe.WriteLock;
     try
-      if fInstanceDeprecatedTix32 = Inst.LastAccess then
+      if fInstanceDeprecatedTix10 = Inst.LastAccessTix10 then
         exit;
-      fInstanceDeprecatedTix32 := Inst.LastAccess;
-      tix := Inst.LastAccess - fInstanceTimeout;
-      if integer(tix) > 0 then // tix<0 when booted sooner than the timeout
+      fInstanceDeprecatedTix10 := Inst.LastAccessTix10;
+      tix10 := Inst.LastAccessTix10 - fInstanceTimeout;
+      if integer(tix10) > 0 then // tix<0 when booted sooner than the timeout
         for i := fInstances.Count - 1 downto 0 do // downto for proper Delete(i)
         begin
           P := @fInstance[i]; // fInstance[i] due to Delete(i) below
-          if tix <= P^.LastAccess then
+          if P^.LastAccessTix10 >= tix10 then
             continue;
           if sllInfo in fRestServer.LogLevel then
             fRestServer.LogFamily.Add.Log(sllInfo, 'RetrieveInstance: ' +
@@ -1112,18 +1116,15 @@ var
   P: PServiceFactoryServerInstance;
 begin
   result := -1;
-  Inst.LastAccess := Ctxt.TickCount64 shr 10; // 1 second resolution
+  Inst.LastAccessTix10 := Ctxt.TickCount64 shr 10; // 1 second resolution
   // every second, check and release any deprecated instance(s)
   if (fInstanceTimeout <> 0) and
      (fInstances.Count > 0) and
-     (fInstanceDeprecatedTix32 <> Inst.LastAccess) then
+     (fInstanceDeprecatedTix10 <> Inst.LastAccessTix10) then
     DeleteDeprecated;
   if (fInstanceGC.Count > 0) and
-     (Inst.LastAccess <> fInstanceGCDeprecatedTix32) then
-  begin
-    fInstanceGCDeprecatedTix32 := Inst.LastAccess;
-    DoInstanceGC({force=}false); // try every second if refcount=1 now
-  end;
+     (Inst.LastAccessTix10 <> fInstanceGCDeprecatedTix10) then
+    DoInstanceGC(Inst.LastAccessTix10); // try every second if refcount=1 now
   // imFree has a specific behavior
   if aMethodIndex = ord(imFree) then
   begin
@@ -1167,7 +1168,7 @@ begin
       if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, ndx) then
       begin
         P := @fInstance[ndx];
-        P^.LastAccess := Inst.LastAccess;
+        P^.LastAccessTix10 := Inst.LastAccessTix10;
         Inst.Instance := P^.Instance;
         result := aMethodIndex; // notify caller
         exit;
@@ -1998,7 +1999,7 @@ begin
 end;
 
 procedure TServiceContainerServer.RemoveFakeCallbackOnConnectionClose(
-  aConnectionID: TRestConnectionID; aConnectionOpaque: PRestServerConnectionOpaque);
+  aConnectionID: TRestConnectionID);
 var
   call: TRestUriParams;
   ctxt: TRestServerUriContext;
