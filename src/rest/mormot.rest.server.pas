@@ -1586,8 +1586,9 @@ type
   // ?authenticationbearer=... URI parameter value alternatively to the HTTP
   // header unless rsoAuthenticationUriDisable is set (for security reasons)
   // - you can switch off root/timestamp/info URI via rsoTimestampInfoUriDisable
-  // - Uri() header output will be sanitized for any EOL injection, unless
-  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles)
+  // - Uri() header output will be sanitized for any EOL injection at REST level,
+  // unless rsoHttpHeaderCheckDisable is defined - to gain a few cycles since
+  // the cleaning process is done eventually in THttpServerRequest.SetupResponse
   // - by default, TAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
   // - rsoNoInternalState could be state to avoid transmitting the
@@ -7806,7 +7807,7 @@ begin
     // set any outgoing cookie
     if ctxt.OutSetCookie <> '' then
       ctxt.OutHeadFromCookie;
-    // paranoid check of the supplied output headers
+    // paranoid check of the supplied output headers (is done at HTTP level)
     if (Call.OutHead <> '') and
        not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
