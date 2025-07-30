@@ -217,9 +217,6 @@ var
   // - AesNiHashAntiFuzzTable <> nil if AES-NI and SSE 3 are available on this CPU
   AesNiHashAntiFuzzTable: PHash512;
 
-  /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
-  HasOpenSsl: boolean;
-
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 
@@ -1715,18 +1712,23 @@ type
   /// meta-class for our CSPRNG implementations
   TAesPrngClass = class of TAesPrngAbstract;
 
-  /// which sources uses TAesPrng.GetEntropy() to gather its entropy
-  // - gesSystemAndUser uses OS and mORMot random sources
-  // - gesSystemOnly and gesSystemOnlyMayBlock use OS random sources, the later
-  // may block on some systems (so should be used only for small output)
-  // - gesUserOnly uses mORMot random sources, and 512-bit of OS source once
+  /// sources used by TAesPrng.GetEntropy() to gather its entropy
+  // - gesSystemOnly and gesSystemOnlyMayBlock "system" entropy comes directly
+  // from FIPS CryptGenRandom API on Windows, and /dev/urandom or /dev/random on
+  // Linux/POSIX (maybe blocking for gesSystemOnlyMayBlock)
+  // - gesSystemAndUser and gesUserOnly "userland" entropy comes from the output
+  // of a cryptographic SHA-3 SHAKE-256 generator in XOF mode, from several
+  // sources: timestamps, thread, detailed hardware and system information,
+  // mormot.core.base XorEntropy and gsl_rng_taus2 generator, OpenSSL CSPRNG
+  // (if loaded) and the system CSPRNG (only once for gesUserOnly)
+  // - TAesPrng defaults to gesUserOnly which seems the safest for its needs
   TAesPrngGetEntropySource = (
     gesSystemAndUser,
     gesSystemOnly,
     gesSystemOnlyMayBlock,
     gesUserOnly);
 
-  /// cryptographic pseudorandom number generator (CSPRNG) based on AES-256
+  /// cryptographic secure pseudorandom number generator (CSPRNG) based on AES-256
   // - use as a shared instance via TAesPrng.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
   // values of a counter with AES-256-CTR and a secret key
@@ -1780,22 +1782,16 @@ type
     // - is just a wrapper around FillSystemRandom()
     procedure FillRandom(Buffer: pointer; Len: PtrInt); override;
     /// would force the internal generator to re-seed its private key
-    // - avoid potential attacks on backward or forward security
-    // - would be called by FillRandom() methods, according to SeedAfterBytes
+    // - as called by FillRandom() methods once SeedAfterBytes limit is reached
+    // - (re)initialize the internal AES-CTR engine from PBKDF2-SHA-256 of
+    // GetEntropy() to avoid potential attacks on backward or forward security
     // - this method is thread-safe
     procedure Seed; override;
-    /// retrieve some entropy bytes from the Operating System
-    // - system entropy comes from CryptGenRandom API on Windows (which may be
-    // very slow), and /dev/urandom or /dev/random on Linux/POSIX (which may
-    // block waiting from OS entropy if gesSystemOnlyMayBlock is set)
-    // - user entropy comes from the output of a SHA-3 cryptographic SHAKE-256
-    // generator in XOF mode, from several sources (timestamp, thread, hardware
-    // and system information, mormot.core.base XorEntropy)
-    // - Source will mix one or both of those entropy sources - note that
-    // gesSystemAndUser is the default, but gesUserOnly is the fastest, and
-    // also derivated from 512-bit of OS entropy retrieved once at startup
+    /// retrieve some entropy bytes from the Operating System and process state
+    // - you can specify the expected Source of entropy - TAesPrng will default
+    // to gesUserOnly but this method proposes gesSystemAndUser
     // - to gather randomness, use TAesPrng.Main.FillRandom() or TAesPrng.Fill()
-    // methods, NOT this class function (which will be much slower, BTW)
+    // methods, but NOT this class method - which will be much slower
     class function GetEntropy(Len: integer;
       Source: TAesPrngGetEntropySource = gesSystemAndUser): RawByteString; virtual;
     /// returns a shared instance of a TAesPrng instance
@@ -1813,7 +1809,7 @@ type
     // since GetEntropy output comes from a SHAKE-256 generator in XOF mode
     property SeedPbkdf2Round: cardinal
       read fSeedPbkdf2Round;
-    /// the source of entropy used during seeding - faster gesUserOnly by default
+    /// the source of entropy used during seeding - safest gesUserOnly by default
     property SeedEntropySource: TAesPrngGetEntropySource
       read fSeedEntropySource;
     /// how many bits (128 or 256 - which is the default) are used for the AES
@@ -1828,7 +1824,7 @@ type
   // - warning: may block on some BSD flavors, depending on /dev/urandom
   // - from the cryptographic point of view, our TAesPrng class doesn't suffer
   // from the "black-box" approach of Windows, give consistent randomness
-  // over all supported cross-platform, and is indubitably faster
+  // over all supported cross-platform, and seems indubitably faster and safer
   TSystemPrng = class(TAesPrngAbstract)
   public
     /// fill a binary buffer with some pseudorandom data
@@ -1859,6 +1855,9 @@ var
   /// low-level RAND_bytes() OpenSSL API function set by mormot.crypt.openssl
   // - used by TAesPrng.GetEntropy if available to add some audited entropy
   OpenSslRandBytes: function(buf: PByte; num: integer): integer; cdecl;
+
+  /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
+  HasOpenSsl: boolean;
 
 /// low-level anti-forensic diffusion of a memory buffer using SHA-256
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
@@ -7558,7 +7557,7 @@ end;
 
 constructor TAesPrng.Create;
 begin
-  fSeedEntropySource := gesUserOnly; // fastest and safe (seeded once from OS)
+  fSeedEntropySource := gesUserOnly; // safest and seeded once from OS
   Create({pbkdf2rounds=}16);
 end;
 
@@ -7596,16 +7595,16 @@ begin
     result := ''
   else
   try
-    // retrieve some initial entropy from OS (but for gesUserOnly)
+    // retrieve some official "system" entropy (not for gesUserOnly)
     pointer(fromos) := FastNewString(Len);
     if Source <> gesUserOnly then
       FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
     if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
     begin
-      result := fromos;
+      result := fromos; // likely to be faster and standard, but weaker
       exit;
     end;
-    // XOR with some userland entropy - it won't hurt
+    // XOR with some "userland" entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
     sha3.Update(@StartupEntropy, SizeOf(StartupEntropy)); // 128-bit
@@ -7614,7 +7613,7 @@ begin
     sha3.Update(Executable.ProgramFullSpec);
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    // 512-bit from gsl_rng_taus2 retrieved at startup for AesNiHash128()
+    // 512-bit from gsl_rng_taus2 as retrieved at startup for AesNiHash128()
     if AesNiHashAntiFuzzTable <> nil then
       sha3.Update(AesNiHashAntiFuzzTable, SizeOf(AesNiHashAntiFuzzTable^));
     // 512-bit randomness and entropy from gsl_rng_taus2 current state
@@ -7632,7 +7631,7 @@ begin
     // 512-bit from /dev/urandom or CryptGenRandom operating system PRNG
     with _OSEntropySeed do
     begin
-      safe.Lock;
+      safe.Lock; // thread-safe forward aggregation of OS randomness/entropy
       if bits.d0 = 0 then
       begin
         // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
@@ -7681,8 +7680,8 @@ begin
     // initialize the new thread-safe state as its AES-CTR key
     fSafe.Lock;
     try
-      fAes.Done;                          // anti-forensic + set IV = 0
-      fAes.EncryptInit(key, fAesKeySize); // from PBKDF2-SHA-256 output
+      fAes.Done;                                  // anti-forensic + set IV = 0
+      fAes.EncryptInit(key, fAesKeySize);         // from PBKDF2-SHA-256 output
       TAesContext(fAes).iv.L := PQWord(entropy)^; // keep CTR = zero
       fSeeding := false;
     finally
