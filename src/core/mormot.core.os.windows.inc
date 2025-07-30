@@ -109,7 +109,7 @@ begin
   if dst <> nil then
     repeat
       dec(l);
-      dst[l] := s[l]; // fast direct conversion using 7-bit WideChar -> AnsiChar
+      dst[l] := cardinal(s[l]); // fast direct 7-bit conversion
     until l = 0;
 end;
 
@@ -144,7 +144,7 @@ begin
      IsAnsiCompatible(pointer(FileName), len) then
     // most common cases do not need any Unicode conversion
     for i := 0 to len do // includes #0 terminator
-      PWordArray(@Temp)[i] := PByteArray(FileName)[i]
+      PWordArray(@Temp)[i] := cardinal(PByteArray(FileName)[i])
   else
     // use a temporary SynUnicode variable for complex UTF-16 conversion
     // or if MAX_PATH is reached and \\?\ prefix is needed for extended-length
