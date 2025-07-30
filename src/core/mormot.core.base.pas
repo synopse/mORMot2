@@ -820,6 +820,7 @@ function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
 function NextGrow(capacity: integer): integer;
 
 /// compute the next power-of-two of a 32-bit number
+// - e.g. NextPowerOfTwo(3) = NextPowerOfTwo(4) = 4
 function NextPowerOfTwo(number: cardinal): cardinal;
 
 /// equivalence to SetString(s,pansichar,len) function but from a raw pointer

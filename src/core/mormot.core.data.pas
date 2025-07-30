@@ -9576,7 +9576,7 @@ begin
   for i := 0 to high(_PRIMES) do
   begin
     result := P^[i];
-    if result > v then
+    if result > v then // no need of O(log(n)) binary search algorithm
       exit;
   end;
 end;
@@ -10083,12 +10083,10 @@ begin
   // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
   cap := fDynArray^.Capacity * 2;
   {$ifdef DYNARRAYHASH_PO2}
-  if cap <= HASH_PO2 then
-  begin
-    siz := 256; // find nearest power of two for fast bitwise division
-    while siz < cap do
-      siz := siz shl 1;
-  end
+  if cap <= 256 then
+    siz := 256
+  else if cap <= HASH_PO2 then
+    siz := NextPowerOfTwo(cap) // for fast bitwise division
   else
   {$endif DYNARRAYHASH_PO2}
     siz := NextPrime(cap);
