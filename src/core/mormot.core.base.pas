@@ -9932,7 +9932,7 @@ begin
 end;
 
 var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random or Linux auxv
-  LecuyerEntropy: THash512Rec;
+  LecuyerEntropy: THash512Rec; // nothing on BSD/Mac but XorEntropy() is enough
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
@@ -10293,7 +10293,7 @@ begin
   // validate accuracy of most used HW opcodes against flags reported by CPUID
   if cfTSC in CpuFeatures then
     try
-      PInt64(@regs[3])^ := Rdtsc; // current number of cpu cycles
+      PInt64(@regs[3].eax)^ := Rdtsc; // current number of cpu cycles
     except // may trigger a GPF if CR4.TSD bit is set on hardened systems
       exclude(CpuFeatures, cfTSC);
     end;
@@ -10914,7 +10914,7 @@ begin
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
           XorMemory(LecuyerEntropy.r[3], PHash128Rec(p[1])^);
       end;
-      inc(e^, (p[0] shl 20) xor p[1]); // fill LecuyerEntropy with those values
+      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill LecuyerEntropy
       inc(e);
       if e = eend then
         dec(PByte(e), SizeOf(LecuyerEntropy));
