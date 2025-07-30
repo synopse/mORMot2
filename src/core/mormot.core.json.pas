@@ -3197,7 +3197,7 @@ prop:     if ExpectStandard then
             repeat
               inc(P);
             until not (jcJsonIdentifier in JsonSet[P^]);
-            // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+            // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
             while (P^ <= ' ') and
                   (P^ <> #0) do
               inc(P);
@@ -3392,7 +3392,7 @@ begin
     repeat
       inc(P);
     until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
     result := P^ = #0;
   end
   else
@@ -3921,7 +3921,7 @@ begin
     repeat
       inc(P);
     until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
     if P^ = #0 then
       exit;
     dec(Name);
@@ -4021,7 +4021,7 @@ ok: SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
     repeat
       inc(P);
     until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
     SetString(PropName, Name, P - Name);
     while (P^ <= ' ') and
           (P^ <> #0) do
@@ -12433,7 +12433,7 @@ begin
       include(JSON_CHARS[c], jcDigitFloatChar);
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
       include(JSON_CHARS[c], jcJsonIdentifierFirstChar);
-    if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']'] then
+    if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
       include(JSON_CHARS[c], jcJsonIdentifier);
     if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
       // exclude '0'..'9' as already in jtFirstDigit
