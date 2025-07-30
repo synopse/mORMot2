@@ -601,7 +601,7 @@ type
   PShortGuid = ^TShortGuid;
 
   /// cross-compiler type used for string length
-  // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit integer even on CPU64
+  // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit integer even on CPU64 (!)
   TStrLen = {$ifdef FPC} SizeInt {$else} integer {$endif};
   /// pointer to cross-compiler type used for string length
   PStrLen = ^TStrLen;
@@ -3322,7 +3322,7 @@ function Lecuyer: PLecuyer;
 {$endif PUREMORMOT2}
 
 /// internal function used e.g. by TLecuyer.FillShort/FillShort31
-procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
+procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
 
 /// cipher/uncipher some memory buffer using a 64-bit seed and Pierre L'Ecuyer's
 // algorithm, and its gsl_rng_taus2 generator
@@ -10041,7 +10041,7 @@ begin
   until bytes = 0;
 end;
 
-procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
+procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
 var
   len: PtrUInt;
 begin
@@ -10073,13 +10073,13 @@ begin
   else
     inc(size);
   Fill(@dest, size);
-  FillAnsiStringFromRandom(@dest, size);
+  AdjustShortStringFromRandom(@dest, size);
 end;
 
 procedure TLecuyer.FillShort31(var dest: TShort31);
 begin
   Fill(@dest, 32);
-  FillAnsiStringFromRandom(@dest, 32);
+  AdjustShortStringFromRandom(@dest, 32);
 end;
 
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);

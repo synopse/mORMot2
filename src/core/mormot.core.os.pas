@@ -10913,7 +10913,7 @@ end;
 procedure TLecuyerThreadSafe.FillShort31(var dest: TShort31);
 begin
   Fill(@dest, 32);
-  FillAnsiStringFromRandom(@dest, 32);
+  AdjustShortStringFromRandom(@dest, 32);
 end;
 
 procedure TLecuyerThreadSafe.Seed(entropy: pointer; entropylen: PtrInt);
