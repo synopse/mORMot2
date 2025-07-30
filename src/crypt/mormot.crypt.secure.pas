@@ -5340,7 +5340,7 @@ begin
     exit;
   fUsers.Safe.ReadLock;
   try
-    fUsers.Keys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}CopyTo(result);
+    PDynArray(@fUsers.Keys)^.CopyTo(result);
   finally
     fUsers.Safe.ReadUnLock;
   end;
@@ -6880,7 +6880,6 @@ begin
     c := c shr 8;
     dec(dstlen);
   until dstlen = 0;
-  system.Random();
 end;
 
 { TCryptRandomDelphi }
@@ -6906,7 +6905,7 @@ begin
 end;
 
 // note: the FPC RTL has a better Mersenne Twister algorithm, but its 32-bit
-// core is not published outside of the system unit, it consumes 2KB for a weak
+// core is not published outside of the system unit, it consumes 2KB from a weak
 // 32-bit seed from GetTickCount/fptime, and is not thread-safe either
 
 {$ifdef CPUINTEL}
@@ -6921,7 +6920,7 @@ type
 
 function TCryptRandomRdRand.Get32: cardinal;
 begin
-  result := RdRand32;
+  result := RdRand32; // class is only registered if cfRAND in CpuFeatures
 end;
 
 {$endif CPUINTEL}

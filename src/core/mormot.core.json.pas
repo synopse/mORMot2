@@ -7626,7 +7626,6 @@ end;
 procedure TJsonWriter.AddDynArrayJson(var DynArray: TDynArrayHashed;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  // needed if UNDIRECTDYNARRAY is defined (Delphi 2009+)
   AddDynArrayJson(PDynArray(@DynArray)^, WriteOptions);
 end;
 
@@ -9885,8 +9884,8 @@ begin
   try
     result := fKeys.FindHashedForAdding(aKey^, added);
     if added then
-    begin // fKey[result] := aKey;
-      with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+    begin
+      with PDynArray(@fKeys)^ do // fKey[result] := aKey;
         ItemCopy(aKey, PAnsiChar(Value^) + (result * Info.Cache.ItemSize));
       if fValues.Add(aValue^) <> result then
         ESynDictionary.RaiseUtf8('%.Add fValues.Add', [self]);
@@ -10118,8 +10117,7 @@ begin
   ndx := fKeys.FindHashedForAdding(aKey, added);
   if added then
   begin
-    fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
-      ItemCopyFrom(@aKey, ndx); // fKey[i] := aKey
+    PDynArray(@fKeys)^.ItemCopyFrom(@aKey, ndx); // fKey[i] := aKey
     fValues.Count := ndx + 1; // reserve new place for associated value
     if (tim <> 0) and
        (ndx >= length(fTimeOut)) then
@@ -10374,8 +10372,7 @@ begin
   try
     if fSafe.Padding[DIC_KEYCOUNT].VInteger > 0 then
     begin
-      fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
-        SaveToJson(k, EnumSetsAsText);
+      PDynArray(@fKeys)^.SaveToJson(k, EnumSetsAsText);
       fValues.SaveToJson(v, EnumSetsAsText);
     end;
   finally

@@ -9023,8 +9023,7 @@ end;
 
 procedure TSqlStatementCached.SortCacheByTotalTime(var aIndex: TIntegerDynArray);
 begin
-  Caches.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}
-    CreateOrderedIndex(aIndex, StatementCacheTotalTimeCompare);
+  PDynArray(@Caches)^.CreateOrderedIndex(aIndex, StatementCacheTotalTimeCompare);
 end;
 
 
