@@ -4860,8 +4860,7 @@ begin
     ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 > 4 bytes nonce ticks
   else
     RandomBytes(rnd.Lo); // Lecuyer as fallback (paranoid)
-  XorMemory(rnd.l, StartupEntropy); // always obfuscate
-  XorMemory(rnd.l, rnd.h);          // don't leak state
+  XorMemory(rnd.l, rnd.h); // don't leak full state, but use full result
   BinToHexLower(@rnd, SizeOf(rnd.l), fPrivateKey); // 128-bit is enough
   ComputeProtectedValues(aCtxt.TickCount64);
   // this session has been successfully created

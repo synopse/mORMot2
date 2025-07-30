@@ -630,11 +630,13 @@ type
     fMethodCache: array of TMvcRunCacheMethod; // follows fFactory.Methods[]
     fStaticCache: TSynDictionary;              // RawUtf8/TMvcRunCacheStatic
     fStaticCacheControlMaxAge: integer;
+    fOnIdlePurgeCacheTix32: cardinal; // GetTickSec
     fPublishOptions: TMvcPublishOptions;
     fAllowedMethods: TUriMethods;
     procedure ComputeMvcInfoCache;
     procedure ComputeStaticCache(var aCache: TMvcRunCacheStatic;
       const aUri, aContentType: RawUtf8);
+    procedure PurgeMethodCache(tix32: cardinal);
     // return cache.FileName or cache.Body+ContentHeader+Etag
     procedure ProcessStatic(const name: RawUtf8; var cached: TMvcRunCacheStatic);
   public
@@ -2050,6 +2052,36 @@ begin
   fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
 end;
 
+function CompByTag(const Item, Tix32): integer;
+begin // called as CompByTag(List[], tix32) to return 0 if List[].Tag >= tix32
+  result := ord(cardinal(TSynNameValueItem(Item).Tag) < cardinal(Tix32));
+end;
+
+procedure TMvcRunWithViews.PurgeMethodCache(tix32: cardinal);
+var
+  i: integer;
+  c: ^TMvcRunCacheMethod;
+begin // called at most once per second
+  fOnIdlePurgeCacheTix32 := tix32;
+  c := pointer(fMethodCache);
+  for i := 1 to length(fMethodCache) do
+  begin
+    c^.Safe.Lock;
+    try
+      if (c^.RootValue <> '') and
+         (tix32 >= c^.RootValueExpirationTime) then
+        c^.RootValue := '';
+      if (c^.ParamsValue.Count <> 0) and
+         (PDynArray(@c^.ParamsValue.DynArray)^.FindAndDeleteAll(
+            tix32, CompByTag, MaxInt) > 0) then
+        c^.ParamsValue.DynArray.ForceReHash; // after direct DynArray.Delete()
+    finally
+      c^.Safe.UnLock;
+    end;
+    inc(c);
+  end;
+end;
+
 procedure TMvcRunWithViews.ProcessStatic(const name: RawUtf8;
   var cached: TMvcRunCacheStatic);
 begin
@@ -2296,17 +2328,17 @@ procedure TMvcRendererReturningData.ExecuteCommand;
   begin
     v := params.FindItem(key);
     if (v <> nil) and
-       (v^.Value <> '') and
-       (fTix32 < cardinal(v^.Tag)) then
-    begin
-      ExecuteFromCache(v^.Value);
-      result := true;
-    end
-    else
-    begin
-      fCacheCurrentInputValueKey := key;
-      result := false;
-    end;
+       (v^.Value <> '') then
+      if fTix32 < cardinal(v^.Tag) then
+      begin
+        ExecuteFromCache(v^.Value);
+        result := true;
+        exit;
+      end
+      else
+        v^.Value := ''; // remove obsolete data from memory
+    fCacheCurrentInputValueKey := key;
+    result := false;
   end;
 
   function RetrievedSessionFrom(aSession: cardinal;
@@ -2339,6 +2371,12 @@ begin
   if (cardinal(fMethodIndex) < cardinal(Length(fRun.fMethodCache))) and
      not fCacheDisabled then
   begin
+    if fTix32 = 0 then
+      fTix32 := GetTickSec;
+    // first purge from any deprecated cached content (at most once per second)
+    if fRun.fOnIdlePurgeCacheTix32 <> fTix32 then
+      fRun.PurgeMethodCache(fTix32);
+    // retrieve the caching context for this method (if enabled)
     c := @fRun.fMethodCache[fMethodIndex];
     if c^.Policy = cacheNone then
       c := nil;
@@ -2346,19 +2384,19 @@ begin
   if c <> nil then
   begin
     FastAssignNew(fCacheCurrentInputValueKey);
-    if fTix32 = 0 then
-      fTix32 := GetTickSec;
     c^.Safe.Lock;
     try
       case c^.Policy of
         cacheRootIgnoringSession:
           if fInput = '' then
-doRoot:     if (c^.RootValue <> '') and
-               (fTix32 < c^.RootValueExpirationTime) then
-            begin
-              ExecuteFromCache(c^.RootValue);
-              exit;
-            end;
+doRoot:     if c^.RootValue <> '' then
+              if fTix32 < c^.RootValueExpirationTime then
+              begin
+                ExecuteFromCache(c^.RootValue);
+                exit;
+              end
+              else
+                c^.RootValue := ''; // free deprecated content from memory
         cacheRootIfSession:
           if (fInput = '') and
              fApplication.CurrentSession.Exists then
