@@ -5121,8 +5121,11 @@ begin
   len := len * 2; // from WideChar count to bytes
   GetMem(pointer(s), len + (_STRRECSIZE + 4));
   rec := pointer(s);
-  rec^.codePage := CP_UTF16;
-  rec^.elemSize := SizeOf(WideChar);
+  {$ifdef FPC}
+  rec^.codePageElemSize := CP_UTF16 + (SizeOf(WideChar) shl 16);
+  {$else}
+  PCardinal(@rec^.codePage)^ := CP_UTF16 + (SizeOf(WideChar) shl 16);
+  {$endif FPC}
   rec^.refCnt := 1;
   rec^.length := len shr 1; // length as WideChar count
   inc(rec);

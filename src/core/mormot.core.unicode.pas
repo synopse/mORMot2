@@ -5197,7 +5197,7 @@ var
 begin
   FastSynUnicode(result, nil, Length(Text));
   for i := 0 to Length(Text) - 1 do
-    PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7-bit Ansi
+    PWordArray(result)[i] := cardinal(PByteArray(Text)[i]); // 7-bit assign
 end;
 
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string;
@@ -5211,7 +5211,7 @@ var
 begin
   FastSynUnicode(result, nil, Len);
   for i := 0 to Len - 1 do
-    PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7-bit Ansi
+    PWordArray(result)[i] := cardinal(PByteArray(Text)[i]); // 7-bit assign
 end;
 
 function StringToAnsi7(const Text: string): RawByteString;
@@ -5220,7 +5220,7 @@ var
 begin
   FastSetString(RawUtf8(result), nil, Length(Text));
   for i := 0 to Length(Text) - 1 do
-    PByteArray(result)[i] := PWordArray(Text)[i]; // no conversion for 7-bit Ansi
+    PByteArray(result)[i] := PWordArray(Text)[i]; // no conversion for 7-bit
 end;
 
 function StringToWinAnsi(const Text: string): WinAnsiString;

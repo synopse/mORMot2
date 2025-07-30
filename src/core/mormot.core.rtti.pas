@@ -7082,7 +7082,7 @@ end;
 
 procedure _StringRandom(V: PPointer; RC: TRttiCustom);
 var
-  tmp: TShort31;
+  tmp: TShort31; // 7-bit ASCII pseudo-random text
 begin
   SharedRandom.FillShort31(tmp);
   FastSetStringCP(V^, @tmp[1], ord(tmp[0]), RC.Cache.CodePage);
@@ -7090,7 +7090,7 @@ end;
 
 procedure _WStringRandom(V: PWideString; RC: TRttiCustom);
 var
-  tmp: TShort31;
+  tmp: TShort31; // 7-bit ASCII pseudo-random text
   i: PtrInt;
   W: PWordArray;
 begin
@@ -7104,7 +7104,7 @@ end;
 {$ifdef HASVARUSTRING}
 procedure _UStringRandom(V: PUnicodeString; RC: TRttiCustom);
 var
-  tmp: TShort31;
+  tmp: TShort31; // 7-bit ASCII pseudo-random text
   i: PtrInt;
   W: PWordArray;
 begin
