@@ -6828,7 +6828,7 @@ end;
 
 type
   TOne = record
-    head: TLockedListOne;
+    head: TLockedListOne; // first field - as required by TLockedList
     data1, data2: integer;
   end;
   POne = ^TOne;

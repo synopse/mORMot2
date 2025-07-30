@@ -4276,17 +4276,19 @@ type
   {$else}
   TLockedList = object
   {$endif USERECORDWITHMETHODS}
-  private
-    fHead, fBin: pointer;
-    fSize: integer;
-    fSequence: PtrUInt;
-    fOnFree: TOnLockedListOne;
   public
     /// thread-safe access to the list
     Safe: TLightLock;
     /// how many TLockedListOne instances are currently stored in this list
     // - excluding the instances in the recycle bin
     Count: integer;
+    /// the size of one stored instance, including its TLockedListOne header
+    Size: integer;
+  private
+    fHead, fBin: pointer;
+    fSequence: PtrUInt;
+    fOnFree: TOnLockedListOne;
+  public
     /// initialize the storage for an inherited TLockedListOne size
     procedure Init(onesize: PtrUInt; const onefree: TOnLockedListOne = nil);
     /// release all stored memory
@@ -4305,9 +4307,6 @@ type
     /// raw access to the stored items as PLockedListOne dual-linked list
     property Head: pointer
       read fHead;
-    /// the size of one stored instance, including its TLockedListOne header
-    property Size: integer
-      read fSize;
   end;
   PLockedList = ^TLockedList;
 
@@ -10292,7 +10291,7 @@ end;
 procedure TLockedList.Init(onesize: PtrUInt; const onefree: TOnLockedListOne);
 begin
   FillCharFast(self, SizeOf(self), 0);
-  fSize := onesize;
+  Size := onesize;
   fOnFree := onefree;
   fSequence := (Random32 shr 2) + 65536; // 65535 < sequence < MaxInt
 end;
@@ -10351,7 +10350,7 @@ begin
     if result <> nil then
       fBin := PLockedListOne(result).next
     else
-      result := AllocMem(fSize);
+      result := AllocMem(Size);
     PLockedListOne(result).sequence := fSequence;
     inc(fSequence); // protected by Safe.Lock
     // insert at beginning of the main double-linked list
@@ -10385,7 +10384,7 @@ begin
     // release internals and add to the recycle bin
     if Assigned(fOnFree) then
       fOnFree(o);
-    FillCharFast(o^, fSize, 0); // garbage collect as void
+    FillCharFast(o^, Size, 0); // garbage collect as void
     o.next := fBin;
     fBin := o;
     dec(Count);

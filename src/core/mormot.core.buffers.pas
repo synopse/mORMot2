@@ -11402,7 +11402,7 @@ end;
 
 type
   TRawByteStringHeapOne = record
-    header: TLockedListOne;
+    header: TLockedListOne; // first field - as required by TLockedList
     strrec: TStrRec;
   end; // followed by the text content
   PRawByteStringHeapOne = ^TRawByteStringHeapOne;

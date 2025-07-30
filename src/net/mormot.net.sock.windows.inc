@@ -1442,7 +1442,7 @@ type
   // data structure returned by TWinIocp.Subscribe as PWinIocpSubscription
   PIocpSubscription = ^TIocpSubscription;
   TIocpSubscription = packed record
-    head: TLockedListOne; // should be the first for TLockedList to work
+    head: TLockedListOne; // first field - as required by TLockedList
     over: array[wieRecv .. wieConnect] of TOverlappedEvent;
     tag: TPollSocketTag;
     socket: TSocket;
