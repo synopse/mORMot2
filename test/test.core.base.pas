@@ -1226,7 +1226,7 @@ begin
     Check(Cities[i].Name = ''); // FindHashedForAdding left void content
     Cities[i] := City; // should fill Cities[i] content by hand
   end;
-  Check(ACities.Count = 3);
+  CheckEqual(ACities.Count, 3);
   Check(City.Name = 'Iasi');
   Check(ACities.FindHashed(City) >= 0);
   // add CITIES_MAX items
@@ -1235,8 +1235,8 @@ begin
     City.Name := IntToString(i);
     City.Latitude := i * 3.14;
     City.Longitude := i * 6.13;
-    Check(ACities.FindHashedAndUpdate(City, true) = i + 2, 'multiple ReHash');
-    Check(ACities.FindHashed(City) = i + 2);
+    CheckEqual(ACities.FindHashedAndUpdate(City, true), i + 2, 'multiple ReHash');
+    CheckEqual(ACities.FindHashed(City), i + 2);
   end;
   ACities.Capacity := CITIES_MAX + 30; // will trigger HASH_PO2
   for i := 2001 to CITIES_MAX do
@@ -1246,8 +1246,8 @@ begin
     City.Longitude := i * 6.13;
     if i = 8703 then
       City.Latitude := i * 3.14;
-    Check(ACities.FindHashedAndUpdate(City, true) = i + 2);
-    Check(ACities.FindHashed(City.Name) = i + 2);
+    CheckEqual(ACities.FindHashedAndUpdate(City, true), i + 2);
+    CheckEqual(ACities.FindHashed(City.Name), i + 2);
   end;
   for i := 1 to CITIES_MAX do
   begin
