@@ -9939,26 +9939,22 @@ var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random or Linux auxv
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
-  e: THash512Rec;
+  e: THash512Rec; // use a local copy on stack to avoid race condition
   h: THash128Rec;
   i: integer;
 begin
   e := LecuyerEntropy; // we only need 88-bit of entropy within these 512-bit
   if entropy <> nil then
     crc32c128(@e.h0, pointer(entropy), entropylen); // user-supplied entropy
-  repeat
-    XorEntropy(e); // xor 512-bit from _Fill256FromOs + RdRand32 + Rdtsc
-    DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
-    rs1 := rs1 xor h.c0;
-    rs2 := rs2 xor h.c1;
-    rs3 := rs3 xor h.c2;
-  until (rs1 > 1) and  // ensure not too weak for RawNext scramble
-        (rs2 > 7) and
-        (rs3 > 15);    // reducing the resolution by 8 bits from 2^96 to 2^88
+  XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
+  LecuyerEntropy := e; // forward security
+  DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
+  rs1 := MinPtrUInt(rs1 xor h.c0, 2);  // not too weak for RawNext scramble
+  rs2 := MinPtrUInt(rs2 xor h.c1, 8);
+  rs3 := MinPtrUInt(rs3 xor h.c2, 16); // reduce resolution from 2^96 to 2^88
   seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
   for i := 1 to h.i3 and 7 do
     RawNext; // warm up
-  LecuyerEntropy := e; // forward security
 end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: QWord);
@@ -9968,15 +9964,9 @@ end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: pointer; fixedseedbytes: integer);
 begin
-  rs1 := crc32c(0,   fixedseed, fixedseedbytes);
-  rs2 := crc32c(rs1, fixedseed, fixedseedbytes);
-  rs3 := crc32c(rs2, fixedseed, fixedseedbytes);
-  if rs1 < 2 then
-    rs1 := 2;
-  if rs2 < 8 then
-    rs2 := 8;
-  if rs3 < 16 then
-    rs3 := 16;
+  rs1 := MinPtrUInt(crc32c(0,   fixedseed, fixedseedbytes), 2);
+  rs2 := MinPtrUInt(crc32c(rs1, fixedseed, fixedseedbytes), 8);
+  rs3 := MinPtrUInt(crc32c(rs2, fixedseed, fixedseedbytes), 16);
   seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls
 end;
 
