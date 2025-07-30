@@ -1734,7 +1734,7 @@ type
     /// will fill the element with some random content
     // - this method is thread-safe using Rtti.DoLock/DoUnLock
     procedure ItemRandom(Item: pointer);
-    /// will copy one element content
+    /// will copy one element content raw memory using RTTI
     procedure ItemCopy(Source, Dest: pointer);
       {$ifdef HASINLINE}{$ifndef ISDELPHI2009}inline;{$endif}{$endif}
     /// will copy the first field value of an array element
@@ -1961,6 +1961,9 @@ type
        {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
+    /// low-level access to the associated TDynArrayinstance holding the data
+    property DynArray: PDynArray
+      read fDynArray;
     /// associated item comparison - may differ from DynArray^.Compare
     property Compare: TDynArraySortCompare
       read fCompare;
@@ -2042,6 +2045,7 @@ type
     fHash: TDynArrayHasher;
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
+    function GetDynArray: PDynArray; {$ifdef HASINLINE} inline; {$endif}
     procedure SetEventCompare(const cmp: TOnDynArraySortCompare);
     procedure SetEventHash(const hsh: TOnDynArrayHashOne);
   public
@@ -2204,6 +2208,11 @@ type
     // - you can call e.g. Hasher.Clear to invalidate the whole hash table
     property Hasher: TDynArrayHasher
       read fHash;
+    /// low-level access to the associated TDynArray instance holding the data
+    // - simply returns itself as PDynArray(@self)^, to avoid any
+    // ! {$ifdef UNDIRECTDYNARRAY} ... {$endif UNDIRECTDYNARRAY}
+    property DynArray: PDynArray
+      read GetDynArray;
   end;
 
 
