@@ -9300,23 +9300,16 @@ begin
   result := DynArray.FindHashedAndDelete(aName) >= 0;
 end;
 
+function CompByValue(const Item, aValue): integer;
+begin // called as CompByValue(List[], aValue) to return 0 if List[].Value=aValue
+  result := ord(TSynNameValueItem(Item).Value <> RawUtf8(aValue));
+end;
+
 function TSynNameValue.DeleteByValue(const aValue: RawUtf8; Limit: integer): integer;
-var
-  ndx: PtrInt;
 begin
-  result := 0;
-  if Limit < 1 then
-    exit;
-  for ndx := Count - 1 downto 0 do
-    if List[ndx].Value = aValue then
-    begin
-      DynArray.Delete(ndx);
-      inc(result);
-      if result >= Limit then
-        break;
-    end;
+  result := PDynArray(@DynArray)^.FindAndDeleteAll(aValue, CompByValue, Limit);
   if result > 0 then
-    DynArray.ForceReHash;
+    DynArray.ForceReHash; // required after direct DynArray.Delete()
 end;
 
 function TSynNameValue.Value(const aName: RawUtf8; const aDefaultValue: RawUtf8): RawUtf8;
@@ -9849,7 +9842,7 @@ begin
     begin
       if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
         fTimeout := nil;
-      fKeys.ForceReHash; // mandatory after manual fKeys.Delete(i)
+      fKeys.ForceReHash; // mandatory after direct fKeys.Delete(i)
     end;
   finally
     if result > 0 then
