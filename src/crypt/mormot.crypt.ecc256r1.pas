@@ -1337,8 +1337,18 @@ var
   priv: THash256Rec;
   product: TEccPoint;
   rnd: THash256Rec;
+  n: integer;
 begin
-  TAesPrng.Main.Fill(rnd.b); // no SHA-256 diffusion needed if ephemeral
+  result := false;
+  n := 10;
+  repeat
+    TAesPrng.Main.Fill(rnd.b); // no SHA-256 diffusion needed if ephemeral
+    dec(n);
+    if n = 0 then
+      exit; // never try forever if our CSPRNG is compromised
+  until not (_isZero(rnd) or
+             _equals(rnd, _1) or
+             _equals(rnd, _11));
   _bswap256(@priv, @PrivateKey);
   EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
   _bswap256(@Secret, @product.x);
