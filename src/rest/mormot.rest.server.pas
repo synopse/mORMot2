@@ -3189,7 +3189,7 @@ begin
   // Par is the callback ID transmitted from the client side
   fakeid := Ctxt.ParseInteger;
   if Ctxt.Json = nil then // allow e.g. '[12345]' (single interface parameter)
-    Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json := @NULCHAR;
+    Ctxt.Json := @NULCHAR;
   if (fakeid = 0) or
      (ParamInterfaceInfo.Info = TypeInfo(IInvokable)) then
   begin

@@ -8205,9 +8205,8 @@ begin
     exit; // invalid or {} or null
   i := 0; // for optimistic property name lookup
   repeat
-     name := GetJsonPropName(
-       Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, @namelen);
-     Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}GetJsonFieldOrObjectOrArray;
+     name := GetJsonPropName(Context.Get.Json, @namelen);
+     Context.Get.GetJsonFieldOrObjectOrArray;
      if (name = nil) or
         (Context.Json = nil) then
      begin

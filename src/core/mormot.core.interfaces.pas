@@ -3360,8 +3360,7 @@ begin
       repeat
         if resultAsJsonObject then
         begin
-          Val := GetJsonPropName(
-            c.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, @ValLen);
+          Val := GetJsonPropName(c.Get.Json, @ValLen);
           if Val = nil then
             // end of JSON object
             break;
@@ -3388,7 +3387,7 @@ begin
         end;
         if c.Json = nil then
           break;
-        c.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json := GotoNextNotSpace(c.Json);
+        c.Json := GotoNextNotSpace(c.Json);
         if resultAsJsonObject then
         begin
           if (c.Json^ = #0) or
@@ -7367,7 +7366,7 @@ begin
                 continue
             else
               // value to be retrieved from JSON object
-              ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json := ParObjValues[a]
+              ctxt.Json := ParObjValues[a]
           else if ctxt.Json = nil then
             break; // premature end of ..] (ParObjValuesUsed=false)
           if (arg^.ValueType = imvInterface) and

@@ -277,6 +277,8 @@ type
     procedure GetJsonFieldOrObjectOrArray(
       HandleValuesAsObjectOrArray: boolean = true; NormalizeBoolean: boolean = true);
   end;
+  /// convenient pointer to access e.g. from "inherited" TJsonParserContext.Get
+  PGetJsonField = ^TGetJsonField;
 
 {$ifndef PUREMORMOT2}
 /// decode a JSON field value in-place from an UTF-8 encoded text buffer
@@ -1782,6 +1784,8 @@ type
     property Valid: boolean  read GetValid write SetValid;
   {$else}
   TJsonParserContext = object(TGetJsonField)
+  public
+    function Get: PGetJsonField; {$ifdef HASINLINE} inline; {$endif}
   {$endif USERECORDWITHMETHODS}
   public
     /// customize parsing
@@ -7722,6 +7726,12 @@ procedure TJsonParserContext.SetValid(v: boolean);
 begin
   Get.Valid := v;
 end;
+
+{$else}
+function TJsonParserContext.Get: PGetJsonField;
+begin
+  result := @self;
+end;
 {$endif USERECORDWITHMETHODS}
 
 function TJsonParserContext.ParseNext: boolean;
@@ -7815,8 +7825,7 @@ begin
     if P^ = ']' then
     begin
       // void but valid array
-      P := mormot.core.json.ParseEndOfObject(
-        P + 1, {$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+      P := mormot.core.json.ParseEndOfObject(P + 1, Get.EndOfObject);
       Valid := P <> nil;
       Json := P;
     end
@@ -7844,8 +7853,7 @@ begin
     if P^ = '}' then
     begin
       // void but valid array
-      P := mormot.core.json.ParseEndOfObject(
-        P + 1, {$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+      P := mormot.core.json.ParseEndOfObject(P + 1, Get.EndOfObject);
       Valid := P <> nil;
       Json := P;
     end
@@ -7864,9 +7872,8 @@ function TJsonParserContext.ParseNewObject: TObject;
 begin
   if ObjectListItem = nil then
   begin
-    Info := JsonRetrieveObjectRttiCustom(
-      {$ifdef USERECORDWITHMETHODS}Get.{$endif}Json,
-      jpoObjectListClassNameGlobalFindClass in Options);
+    Info := JsonRetrieveObjectRttiCustom(Get.Json,
+              jpoObjectListClassNameGlobalFindClass in Options);
     if (Info <> nil) and
        (Json^ = ',') then
       Json^ := '{' // to parse other properties as a regular Json object
@@ -7895,7 +7902,7 @@ procedure TJsonParserContext.ValueEnumNotString(Data: PByte);
 var
   v, err: integer;
 begin // caller ensured Ctxt.WasString is false
-  v := GetInteger({$ifdef USERECORDWITHMETHODS}Get.{$endif}Value, err);
+  v := GetInteger(Get.Value, err);
   if (err = 0) and
      (cardinal(v) <= Info.Cache.EnumMax) then // assume EnumMin=0
     Data^ := v
@@ -7999,8 +8006,7 @@ end;
 
 procedure _JL_RawJson(Data: PRawJson; var Ctxt: TJsonParserContext);
 begin
-  GetJsonItemAsRawJson(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, Data^,
-    @Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+  GetJsonItemAsRawJson(Ctxt.Get.Json, Data^, @Ctxt.Get.EndOfObject);
   Ctxt.Valid := Ctxt.Json <> nil;
 end;
 
@@ -8138,8 +8144,8 @@ end;
 
 procedure _JL_Variant(Data: PVariant; var Ctxt: TJsonParserContext);
 begin
-  JsonToAnyVariant(Data^, Ctxt{$ifdef USERECORDWITHMETHODS}.Get{$endif},
-    Ctxt.CustomVariant, jpoAllowDouble in Ctxt.Options);
+  JsonToAnyVariant(Data^, PGetJsonField(@Ctxt)^, Ctxt.CustomVariant,
+                   jpoAllowDouble in Ctxt.Options);
   Ctxt.Valid := Ctxt.Json <> nil;
 end;
 
@@ -8243,8 +8249,7 @@ begin
     if Size <> 0  then
       if EnumCustomText = nil then
         v := GetSetNameValue(EnumList, EnumMin, EnumMax,
-          Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json,
-          Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject)
+                             Ctxt.Get.Json, Ctxt.Get.EndOfObject)
       else
         FindCustomSet(Ctxt, @v)
     else
@@ -8304,8 +8309,7 @@ no: Ctxt.Valid := false;
     prop := pointer(root.Props.List);
     for p := 1 to root.Props.Count do
     begin
-nxt:  propname := GetJsonPropName(
-        Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, @propnamelen);
+nxt:  propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
       if (Ctxt.Json = nil) or
          (propname = nil) then
         goto no;
@@ -8327,8 +8331,7 @@ nxt:  propname := GetJsonPropName(
               (propname[8] = 'e') then
       // woStoreClassName was used -> just ignore the class name
       begin
-        Ctxt.Json := GotoNextJsonItem(Ctxt.Json,
-          Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.Get.EndOfObject);
         if Ctxt.Json <> nil then
           goto nxt;
         goto no;
@@ -8344,8 +8347,7 @@ nxt:  propname := GetJsonPropName(
             if (rcfReadIgnoreUnknownFields in root.Flags) or
                (jpoIgnoreUnknownProperty in Ctxt.Options) then
             begin
-              Ctxt.Json := GotoNextJsonItem(Ctxt.Json,
-                Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+              Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.Get.EndOfObject);
               if Ctxt.Json = nil then
                 goto no;
             end
@@ -8355,8 +8357,7 @@ nxt:  propname := GetJsonPropName(
             goto no;
           if Ctxt.EndOfObject = '}' then
              break;
-any:      propname := GetJsonPropName(
-            Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, @propnamelen);
+any:      propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
           if (Ctxt.Json = nil) or
              (propname = nil) then
             goto no;
@@ -8529,11 +8530,11 @@ var
   item: PAnsiChar;
   prop: PRttiCustomProp;
   props: PRttiCustomPropDynArray;
+  p: PUtf8Char;
 begin
   // Not Expanded (more optimized) format as array of values
   // {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
-  result := IsNotExpandedBuffer(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json,
-    nil, fieldcount, rowcount);
+  result := IsNotExpandedBuffer(Ctxt.Get.Json, nil, fieldcount, rowcount);
   if not result then
     exit; // indicates not the expected format: caller will try Ctxt.ParseArray
   // 1. check rowcount and fieldcount
@@ -8593,8 +8594,7 @@ begin
       item := pointer(Data); // record (or object) are stored by value
     for f := 0 to fieldcount - 1 do
       if props[f] = nil then // skip jpoIgnoreUnknownProperty
-        Ctxt.Json := GotoNextJsonItem(Ctxt.Json,
-          Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject)
+        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.Get.EndOfObject)
       else if not JsonLoadProp(item, props[f], Ctxt) then
       begin
         Ctxt.Json := nil;
@@ -8609,15 +8609,17 @@ begin
     inc(PAnsiChar(Data), arrinfo.Cache.ItemSize);
   end;
   Ctxt.Valid := false;
-  if Ctxt.Json <> nil then
+  p := Ctxt.Json;
+  if p <> nil then
   begin
-    while not (Ctxt.Json^ in [#0, '}']) do
-      inc(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json);
-    if Ctxt.Json^ = '}' then
+    while not (p^ in [#0, '}']) do
+      inc(p);
+    if p^ = '}' then
     begin // reached final ..],"rowCount":20}
-      inc(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json);
+      inc(p);
       Ctxt.Valid := true;
     end;
+    Ctxt.Json := p;
   end;
   Ctxt.Info := arrinfo; // restore
 end;

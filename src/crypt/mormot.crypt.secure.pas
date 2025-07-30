@@ -10200,7 +10200,7 @@ begin
     if Ctxt.Value = nil then // null
       Data^ := ''
     else if not Ctxt.WasString or
-       not TextToSid(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Value, tmp) then
+            not TextToSid(Ctxt.Get.Value, tmp) then
       Ctxt.Valid := false
     else
       ToRawSid(@tmp, Data^);
@@ -10229,8 +10229,7 @@ begin
     if Ctxt.Value = nil then // null
       Data^ := ''
     else if not Ctxt.WasString or
-            (tmp.FromText(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}
-               Value) <> atpSuccess) then
+            (tmp.FromText(Ctxt.Get.Value) <> atpSuccess) then
       Ctxt.Valid := false
     else
       Data^ := tmp.ToBinary;
@@ -10254,7 +10253,7 @@ begin
       Data^ := []
     else
       Ctxt.Valid := Ctxt.WasString and
-        SddlNextMask(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Value, Data^);
+                    SddlNextMask(Ctxt.Get.Value, Data^);
 end;
 
 procedure _JS_Mask(Data: PSecAccessMask; const Ctxt: TJsonSaveContext);
