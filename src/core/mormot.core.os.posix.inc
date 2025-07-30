@@ -2957,7 +2957,7 @@ var
   info: PCardinalArray absolute mem.allocused;
 begin
   // some minimal OS entropy we could get on Darwin
-  tix1 := mach_absolute_time;                 // monotonic hi-res clock
+  tix1 := tix1 xor mach_absolute_time;        // monotonic hi-res clock
   getloadavg(avg, 3);                         // system stats
   DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // include values on stack
   GetMemoryInfo(mem, {withalloc=}false);      // also fill mem with zeros
@@ -3573,10 +3573,10 @@ var
 begin
   // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
-  e.d0 := mach_absolute_time;
-  e.d1 := mach_continuous_time;
+  e.d0 := mach_absolute_time   * 2654435761;
+  e.d1 := mach_continuous_time * 3266489917;
   crcblock(@e.l, @StartupEntropy);
-  inc(StartupEntropy.Lo, e.d1); // StartupEntropy is a bit weak at startup
+  inc(StartupEntropy.Lo, e.d1); // StartupEntropy is a bit weak on startup
   dec(StartupEntropy.Hi, e.d0);
   {$else}
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
