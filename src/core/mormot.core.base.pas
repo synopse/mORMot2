@@ -9949,9 +9949,9 @@ begin
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
   LecuyerEntropy := e; // forward security
   DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
-  rs1 := MinPtrUInt(rs1 xor h.c0, 2);  // not too weak for RawNext scramble
-  rs2 := MinPtrUInt(rs2 xor h.c1, 8);
-  rs3 := MinPtrUInt(rs3 xor h.c2, 16); // reduce resolution from 2^96 to 2^88
+  rs1 := MaxPtrUInt(rs1 xor h.c0, 2);  // not too weak for RawNext scramble
+  rs2 := MaxPtrUInt(rs2 xor h.c1, 8);
+  rs3 := MaxPtrUInt(rs3 xor h.c2, 16); // reduce resolution from 2^96 to 2^88
   seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
   for i := 1 to h.i3 and 7 do
     RawNext; // warm up
@@ -9964,9 +9964,11 @@ end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: pointer; fixedseedbytes: integer);
 begin
-  rs1 := MinPtrUInt(crc32c(0,   fixedseed, fixedseedbytes), 2);
-  rs2 := MinPtrUInt(crc32c(rs1, fixedseed, fixedseedbytes), 8);
-  rs3 := MinPtrUInt(crc32c(rs2, fixedseed, fixedseedbytes), 16);
+  rs1 := crc32c(0,   fixedseed, fixedseedbytes);
+  rs2 := crc32c(rs1, fixedseed, fixedseedbytes);
+  rs3 := MaxPtrUInt(crc32c(rs2, fixedseed, fixedseedbytes), 16);
+  rs1 := MaxPtrUInt(rs1, 2);
+  rs2 := MaxPtrUInt(rs2, 8);
   seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls
 end;
 
