@@ -1768,18 +1768,20 @@ type
   // - defined here for low-level use of TRttiJsonLoad functions
   // - inherit from TGetJsonField to include ParseNext/ParseNextAny unserialized
   // Value/ValueLen and flags, and Json as current position in the JSON input
+  // - due to record/object compiler inconsistency, please use the Get field or
+  // inlined method when you want to access the parent TGetJsonField structure
   {$ifdef USERECORDWITHMETHODS}
   TJsonParserContext = record
   public
     Get: TGetJsonField;
-    function GetJson: PUtf8Char;     {$ifdef HASINLINE} inline; {$endif}
-    procedure SetJson(P: PUtf8Char); {$ifdef HASINLINE} inline; {$endif}
-    function Value: PUtf8Char;       {$ifdef HASINLINE} inline; {$endif}
-    function ValueLen: PtrInt;       {$ifdef HASINLINE} inline; {$endif}
-    function WasString: boolean;     {$ifdef HASINLINE} inline; {$endif}
-    function EndOfObject: AnsiChar;  {$ifdef HASINLINE} inline; {$endif}
-    function GetValid: boolean;      {$ifdef HASINLINE} inline; {$endif}
-    procedure SetValid(v: boolean);  {$ifdef HASINLINE} inline; {$endif}
+    function  GetJson: PUtf8Char;     {$ifdef HASINLINE} inline; {$endif}
+    procedure SetJson(P: PUtf8Char);  {$ifdef HASINLINE} inline; {$endif}
+    function  Value: PUtf8Char;       {$ifdef HASINLINE} inline; {$endif}
+    function  ValueLen: PtrInt;       {$ifdef HASINLINE} inline; {$endif}
+    function  WasString: boolean;     {$ifdef HASINLINE} inline; {$endif}
+    function  EndOfObject: AnsiChar;  {$ifdef HASINLINE} inline; {$endif}
+    function  GetValid: boolean;      {$ifdef HASINLINE} inline; {$endif}
+    procedure SetValid(v: boolean);   {$ifdef HASINLINE} inline; {$endif}
     property Json: PUtf8Char read GetJson  write SetJson;
     property Valid: boolean  read GetValid write SetValid;
   {$else}
@@ -7778,8 +7780,7 @@ begin
   begin
     P := Json;
     if P^ <> #0 then
-      P := mormot.core.json.ParseEndOfObject(
-        P, {$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+      P := mormot.core.json.ParseEndOfObject(P, Get.EndOfObject);
     Json := P;
     Valid := P <> nil;
   end;
@@ -7797,8 +7798,7 @@ begin
       Json := P;
       if PCardinal(P)^ = NULL_LOW then
       begin
-        P := mormot.core.json.ParseEndOfObject(
-          P + 4, {$ifdef USERECORDWITHMETHODS}Get.{$endif}EndOfObject);
+        P := mormot.core.json.ParseEndOfObject(P + 4, Get.EndOfObject);
         if P <> nil then
         begin
           Json := P;
