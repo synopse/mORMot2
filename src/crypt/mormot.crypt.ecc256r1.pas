@@ -195,8 +195,8 @@ function Ecc256r1DoVerify(const pub: TEccPublicKey; unc: PEccPublicKeyUncompress
 
 /// pascal function to create a secp256r1 public/private key pair
 // - is not optimized for performance, but for secrecy: the private key is
-// generated with a very safe SHA-256 diffusion of 1024-bit of randomness from
-// the Operating System and our TAesPrng
+// generated with a very safe HMAC-SHA-256 diffusion of 256-bit entropy from the
+// Operating System and 256-bit from our TAesPrng with proper
 // - our idea was to minimize the chances that two consecutive key generations
 // have any similarity, even if performance is not the ultimate goal
 // - ephemeral keys (e.g. in ECDHE) could use faster OpenSSL instead
@@ -748,9 +748,7 @@ const
         QWord($FFFFFFFF00000000)));
 
   _1: THash256Rec = (q: (1, 0, 0, 0));
-
   _3: THash256Rec = (q: (3, 0, 0, 0));
-
   _11: THash256Rec = (q: (QWord($0101010101010101),
                           QWord($0101010101010101),
                           QWord($0101010101010101),
@@ -1206,6 +1204,9 @@ end;
 const
   MAX_TRIES = 16; // work almost always on the first trial with TAesPrng
 
+var
+  EccMakeEntropy: THash128Rec; // ensure perfect forward security
+
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 var
@@ -1221,10 +1222,11 @@ begin
     if tries = 0 then
       exit;
     // generate a 256-bit secret key with HMAC-SHA-256 over random sources
-    // - keys may be ephemeral so entropy sources should better be fast
-    kdf.Init(@StartupEntropy, SizeOf(StartupEntropy));
-    kdf.Update(@tries, SizeOf(tries)); // salt
+    // - keys may be ephemeral so entropy sources were chosen to be fast
+    kdf.Init(@EccMakeEntropy, SizeOf(EccMakeEntropy));
+    kdf.Update(@tries, SizeOf(tries));
     TAesPrng.Main.Fill(priv.b); // 256-bit from our AES-PRNG (max key size)
+    XorMemory(EccMakeEntropy, priv.l);
     kdf.Update(@priv, SizeOf(priv));
     _Fill256FromOs(priv);       // 256-bit padding from fast OS entropy sources
     kdf.Update(@priv, SizeOf(priv));
@@ -2093,6 +2095,8 @@ initialization
   @Ecc256r1Verify       := @ecdsa_verify_pas;
   @Ecc256r1Uncompress   := @ecc_uncompress_key_pas;
   @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_pas;
+  // setup ecc_make_key_pas() entropy source
+  EccMakeEntropy := StartupEntropy;
 
 end.
 
