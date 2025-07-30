@@ -1399,6 +1399,12 @@ type
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndDelete(const Item; aIndex: PIntegerDynArray = nil;
       aCompare: TDynArraySortCompare = nil): integer;
+    /// search for all element matching value and delete them
+    // - this method will use the Compare property function for the search,
+    // deleting all entries where aCompare(Value[], Item) = 0, up to Limit
+    // - returns the number of deleted entries (always <= Limit)
+    function FindAndDeleteAll(const Item; aCompare: TDynArraySortCompare;
+      Limit: integer = 1): integer;
     /// search for an element value, then update the item if match
     // - this method will use the Compare property function for the search,
     // or the supplied indexed lookup table and its associated compare function,
@@ -7899,6 +7905,41 @@ begin
     Delete(result);
 end;
 
+function TDynArray.FindAndDeleteAll(const Item; aCompare: TDynArraySortCompare;
+  Limit: integer): integer;
+var
+  ndx, siz: PtrUInt;
+  P: PAnsiChar;
+begin
+  result := 0;
+  ndx := GetCount;
+  if (ndx = 0) or
+     (Limit < 1) then
+    exit;
+  if not Assigned(aCompare) then
+    if Assigned(fCompare) then
+      aCompare := fCompare
+    else
+      exit;
+  P := fValue^;
+  siz := fInfo.Cache.ItemSize;
+  dec(ndx);
+  inc(P, ndx * siz); // search downwards for Delete(ndx)
+  repeat
+    if aCompare(P^, Item) = 0 then
+    begin
+      Delete(ndx);
+      inc(result);
+      if result >= Limit then
+        exit;
+    end;
+    if ndx = 0 then
+      break;
+    dec(P, siz);
+    dec(ndx);
+  until false;
+end;
+
 function TDynArray.FindAndUpdate(const Item; aIndex: PIntegerDynArray;
   aCompare: TDynArraySortCompare): integer;
 begin
@@ -10348,30 +10389,35 @@ begin
   begin
     hc := fHash.HashOne(@Item);
     result := fHash.FindOrNew(hc, @Item, nil);
-    if (result < 0) and
-       AddIfNotExisting then
-    begin
-      fHash.HashAdd(hc, result); // ReHash only if necessary
-      SetCount(result + 1); // add new item
-    end;
+    if result < 0 then
+      if AddIfNotExisting then
+      begin
+        fHash.HashAdd(hc, result); // ReHash only if necessary + set result
+        SetCount(result + 1);      // add new item at the end
+      end
+      else
+        exit;
+    ItemCopy(@Item, PAnsiChar(Value^) + result * Info.Cache.ItemSize);
   end
   else
     result := -1;
-  if result >= 0 then // update
-    ItemCopy(@Item, PAnsiChar(Value^) + result * Info.Cache.ItemSize);
 end;
 
 function TDynArrayHashed.FindHashedAndDelete(const Item; FillDeleted: pointer;
   noDeleteEntry: boolean): PtrInt;
 begin
   result := fHash.FindBeforeDelete(@Item);
-  if result >= 0 then
-  begin
-    if FillDeleted <> nil then
-      ItemCopyAt(result, FillDeleted);
-    if not noDeleteEntry then
-      Delete(result);
-  end;
+  if result < 0 then
+    exit;
+  if FillDeleted <> nil then
+    ItemCopyAt(result, FillDeleted);
+  if not noDeleteEntry then
+    Delete(result);
+end;
+
+function TDynArrayHashed.GetDynArray: PDynArray;
+begin
+  result := @self; // always starts with the TDynArray fields
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): cardinal;
