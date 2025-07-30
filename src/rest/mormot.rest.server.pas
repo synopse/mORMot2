@@ -6549,13 +6549,15 @@ begin
 end;
 
 function TRestServer.GetCurrentSessionUserID: TID;
+var
+  ctxt: TRestServerUriContext;
 begin
-  with PServiceRunningContext(PerThreadRunningContextAddress)^ do
-    if (Request <> nil) and
-       (Request.Session > CONST_AUTHENTICATION_NOT_USED) then
-      result := Request.SessionUser
-    else
-      result := 0;
+  ctxt := ServiceRunningRequest;
+  if (ctxt <> nil) and
+     (ctxt.Session > CONST_AUTHENTICATION_NOT_USED) then
+    result := ctxt.SessionUser
+  else
+    result := 0;
 end;
 
 function TRestServer.ServicesPublishedInterfaces: RawUtf8;
@@ -7609,6 +7611,7 @@ procedure TRestServer.OnBeginCurrentThread(Sender: TThread);
 var
   tc: integer;
   id: TThreadID;
+  thrd: PServiceRunningContext;
 begin
   tc := fStats.NotifyThreadCount(1);
   id := GetCurrentThreadId;
@@ -7620,14 +7623,14 @@ begin
     ERestException.RaiseUtf8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
       [self, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
-  with PServiceRunningContext(PerThreadRunningContextAddress)^ do
-    if RunningThread <> Sender then
-      // e.g. if length(TRestHttpServer.fRestServers)>1
-      if RunningThread <> nil then
-        ERestException.RaiseUtf8('%.BeginCurrentThread() twice', [self])
-      else
-        // set the current TThread info
-        RunningThread := Sender;
+  thrd := PerThreadRunningContextAddress;
+  if thrd^.RunningThread <> Sender then
+    // e.g. if length(TRestHttpServer.fRestServers)>1
+    if thrd^.RunningThread <> nil then
+      ERestException.RaiseUtf8('%.BeginCurrentThread() twice', [self])
+    else
+      // set the current TThread info
+      thrd^.RunningThread := Sender;
   // call TRestOrmServer.BeginCurrentThread
   inherited OnBeginCurrentThread(Sender);
 end;
@@ -7637,6 +7640,7 @@ var
   tc: integer;
   i: PtrInt;
   id: TThreadID;
+  thrd: PServiceRunningContext;
   inst: TServiceFactoryServerInstance;
 begin
   tc := fStats.NotifyThreadCount(-1);
@@ -7660,15 +7664,15 @@ begin
         if InstanceCreation = sicPerThread then
           RetrieveInstance(nil, inst, ord(imFree), 0);
   end;
-  with PServiceRunningContext(PerThreadRunningContextAddress)^ do
-    if RunningThread <> nil then
-      // e.g. if length(TRestHttpServer.fRestServers)>1
-      if RunningThread <> Sender then
-        ERestException.RaiseUtf8(
-          '%.EndCurrentThread(%) should match RunningThread=%',
-          [self, Sender, RunningThread])
-      else        // reset the TThread info
-        RunningThread := nil;
+  thrd := PerThreadRunningContextAddress;
+  if thrd^.RunningThread <> nil then
+    // e.g. if length(TRestHttpServer.fRestServers)>1
+    if thrd^.RunningThread <> Sender then
+      ERestException.RaiseUtf8(
+        '%.EndCurrentThread(%) should match RunningThread=%',
+        [self, Sender, thrd^.RunningThread])
+    else // reset the TThread info
+      thrd^.RunningThread := nil;
   // call TRestOrmServer.EndCurrentThread (and TSynLogFamily.OnThreadEnded)
   inherited OnEndCurrentThread(Sender);
 end;

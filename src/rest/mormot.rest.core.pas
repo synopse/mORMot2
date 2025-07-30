@@ -1298,10 +1298,10 @@ type
   TRestUriContext = class
   protected
     fCall: PRestUriParams;
-    fMethod: TUriMethod;
-    fClientKind: TRestClientKind;
-    fCommand: TRestServerUriContextCommand;
-    fInputCookiesParsed: (icpNotParsed, icpNone, icpAvailable);
+    fMethod: TUriMethod;                                          // 8-bit
+    fClientKind: TRestClientKind;                                 // 8-bit
+    fCommand: TRestServerUriContextCommand;                       // 8-bit
+    fInputCookiesParsed: (icpNotParsed, icpNone, icpAvailable);   // 8-bit
     fInputContentType: RawUtf8;
     fInHeaderLastName: RawUtf8;
     fInHeaderLastValue: RawUtf8;
