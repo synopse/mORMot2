@@ -2249,10 +2249,17 @@ var
     CheckEqual(hc.Value(2), 'value 2');
     CheckEqual(hc.Name(3), 'name3');
     CheckEqual(hc.Value(3), 'value3');
+    {$ifdef HASINLINE}
     CheckEqual(hc.Cookie['name'], 'value');
     CheckEqual(hc.Cookie['name 1'], 'value1');
     CheckEqual(hc.Cookie['name 2'], 'value 2');
     CheckEqual(hc.Cookie['name3'], 'value3');
+    {$else}
+    CheckEqual(hc.GetCookie('name'), 'value');
+    CheckEqual(hc.GetCookie('name 1'), 'value1');
+    CheckEqual(hc.GetCookie('name 2'), 'value 2');
+    CheckEqual(hc.GetCookie('name3'), 'value3');
+    {$endif HASINLINE}
   end;
 
 begin
@@ -2393,20 +2400,20 @@ begin
   CheckEqual(hc.Name(0), 'name');
   CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
-  CheckEqual(hc.Cookie['name'], 'value');
+  CheckEqual(hc.GetCookie('name'), 'value');
   CheckEqual(hc.Cookies[0].NameLen, 4);
   CheckEqual(hc.Cookies[0].ValueLen, 5);
-  Check(hc.Cookie['name2'] <> 'value');
+  Check(hc.GetCookie('name2') <> 'value');
   hc.Clear;
   CheckEqual(length(hc.Cookies), 0);
   hc.ParseServer(HDR2);
   CheckEqual(hc.Name(0), 'name');
   CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
-  CheckEqual(hc.Cookie['name'], 'value');
+  CheckEqual(hc.GetCookie('name'), 'value');
   CheckEqual(hc.Cookies[0].NameLen, 4);
   CheckEqual(hc.Cookies[0].ValueLen, 5);
-  Check(hc.Cookie['name2'] <> 'value');
+  Check(hc.GetCookie('name2') <> 'value');
   hc.ParseServer(HDR3);
   CheckEqual(length(hc.Cookies), 4);
   Check4;

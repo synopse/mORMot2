@@ -1029,7 +1029,7 @@ begin
       Minor := GetNextItemCardinal(P);
       Release := GetNextItemCardinal(P);
       Build := GetNextItemCardinal(P);
-      Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json := P;
+      Context.Json := P;
       Main := Context.ParseString;
       Detailed := Context.ParseString;
       Context.ParseEndOfObject;
