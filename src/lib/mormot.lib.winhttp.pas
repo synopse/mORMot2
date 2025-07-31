@@ -1187,6 +1187,8 @@ type
   public
     /// raise an EHttpApiServer if the http.sys API result code is an error
     class procedure RaiseOnError(api: THttpApiFunction; Error: integer);
+    /// raise an EHttpApiServer if the http.sys API is not in version >= 2
+    class procedure RaiseCheckApi2(api: THttpApiFunction);
     /// initialize a new EHttpApiServer instance
     constructor Create(api: THttpApiFunction; Error: integer); reintroduce;
   published
