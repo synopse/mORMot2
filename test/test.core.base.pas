@@ -7607,9 +7607,10 @@ begin
   end;
   // some cross-platform Windows/Linux/BSD error detection
   Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
-  Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb');
-  Check(WinErrorConstant(1450)^ = 'NO_SYSTEM_RESOURCES', 'wecB');
-  Check(WinErrorConstant(1907)^ = 'PASSWORD_MUST_CHANGE', 'wecB');
+  Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb1');
+  Check(WinErrorConstant(1150)^ = 'OLD_WIN_VERSION', 'wecb2');
+  Check(WinErrorConstant(1450)^ = 'NO_SYSTEM_RESOURCES', 'wecb3');
+  Check(WinErrorConstant(1907)^ = 'PASSWORD_MUST_CHANGE', 'wecb4');
   Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
   Check(WinErrorConstant(234)^ = 'MORE_DATA', 'wecd');
   Check(WinErrorConstant(5)^ = 'ACCESS_DENIED', 'wece');
@@ -10297,6 +10298,7 @@ begin
   // validate Windows API error code recognition
   CheckEqualShort(WinApiErrorShort(122), 'ERROR_INSUFFICIENT_BUFFER');
   CheckEqualShort(WinApiErrorShort(1246), 'ERROR__CONTINUE');
+  CheckEqual(WinApiErrorUtf8(122), 'ERROR_INSUFFICIENT_BUFFER');
   Check(WinApiErrorString(122) = 'ERROR_INSUFFICIENT_BUFFER');
   Check(WinApiErrorString(1246) = 'ERROR__CONTINUE');
   // validate DotNet exceptions error code recognition
