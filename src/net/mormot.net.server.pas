@@ -2088,6 +2088,9 @@ type
     function GetHttpQueueLength: cardinal; override;
     function GetConnectionsActive: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
+    function GetProperty(dest: pointer; qos: HTTP_QOS_SETTING_TYPE): boolean;
+    procedure SetProperty(value: pointer; qos: HTTP_QOS_SETTING_TYPE;
+      alsoForSession: boolean = false);
     function GetMaxBandwidth: cardinal;
     procedure SetMaxBandwidth(aValue: cardinal);
     function GetMaxConnections: cardinal;
@@ -3445,8 +3448,8 @@ begin
   if fHttpApiRequest = nil then
     result := ''
   else
-    // fHttpApiRequest^.CookedUrl.FullUrlLength is in bytes -> use ending #0
-    result := fHttpApiRequest^.CookedUrl.pFullUrl;
+    SetString(result, fHttpApiRequest^.CookedUrl.pFullUrl,
+      fHttpApiRequest^.CookedUrl.FullUrlLength shr 1); // length in bytes
 end;
 
 {$endif USEWININET}
@@ -8060,8 +8063,8 @@ begin
     binding.Flags := 1;
     binding.RequestQueueHandle := fReqQueue;
     EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerBindingProperty,
-        @binding, SizeOf(binding)));
+      Http.SetUrlGroupProperty(fUrlGroupID,
+        HttpServerBindingProperty, @binding, SizeOf(binding)));
   end
   else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
@@ -8618,33 +8621,29 @@ end;
 
 function THttpApiServer.GetHttpQueueLength: cardinal;
 var
-  len: ULONG;
+  api: THttpApiServer;
 begin
-  if (Http.Version.MajorVersion < 2) or
-     (self = nil) then
-    result := 0
-  else
-  begin
-    if fOwner <> nil then
-      self := fOwner;
-    if fReqQueue = 0 then
-      result := 0
-    else
-      EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
-        Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-          @result, SizeOf(result), 0, @len, nil));
-  end;
+  result := 0;
+  if (self = nil) or
+     not HasApi2 then
+    exit;
+  api := fOwner;
+  if api = nil then
+    api := self;
+  if api.fReqQueue <> 0 then
+    EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
+      Http.QueryRequestQueueProperty(api.fReqQueue, HttpServerQueueLengthProperty,
+        @result, SizeOf(result)));
 end;
 
 procedure THttpApiServer.SetHttpQueueLength(aValue: cardinal);
 begin
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);
+  EHttpApiServer.RaiseCheckApi2(hSetRequestQueueProperty);
   if (self <> nil) and
      (fReqQueue <> 0) then
     EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-        @aValue, SizeOf(aValue), 0, nil));
+        @aValue, SizeOf(aValue)));
 end;
 
 function THttpApiServer.GetConnectionsActive: cardinal;
@@ -8656,10 +8655,10 @@ function THttpApiServer.GetRegisteredUrl: SynUnicode;
 var
   i: PtrInt;
 begin
+  result := '';
   if fRegisteredUnicodeUrl = nil then
-    result := ''
-  else
-    result := fRegisteredUnicodeUrl[0];
+    exit;
+  result := fRegisteredUnicodeUrl[0];
   for i := 1 to high(fRegisteredUnicodeUrl) do
     result := result + ',' + fRegisteredUnicodeUrl[i];
 end;
@@ -8669,122 +8668,94 @@ begin
   result := (fOwner <> nil);
 end;
 
-procedure THttpApiServer.SetMaxBandwidth(aValue: cardinal);
+procedure THttpApiServer.SetProperty(value: pointer;
+  qos: HTTP_QOS_SETTING_TYPE; alsoForSession: boolean);
 var
-  qos: HTTP_QOS_SETTING_INFO;
-  limit: HTTP_BANDWIDTH_LIMIT_INFO;
+  api: THttpApiServer;
+  info: HTTP_QOS_SETTING_INFO;
 begin
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and
-     (fUrlGroupID <> 0) then
-  begin
-    if aValue = 0 then
-      limit.MaxBandwidth := HTTP_LIMIT_INFINITE
-    else if aValue < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE then
-      limit.MaxBandwidth := HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE
-    else
-      limit.MaxBandwidth := aValue;
-    limit.Flags := 1;
-    qos.QosType := HttpQosSettingTypeBandwidth;
-    qos.QosSetting := @limit;
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
+  api := fOwner;
+  if api = nil then
+    api := self;
+  if api.fUrlGroupID = 0 then
+    exit;
+  info.QosType := qos;
+  info.QosSetting := value;
+  if alsoForSession then
     EHttpApiServer.RaiseOnError(hSetServerSessionProperty,
       Http.SetServerSessionProperty(fServerSessionID, HttpServerQosProperty,
-        @qos, SizeOf(qos)));
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-        @qos, SizeOf(qos)));
-  end;
+        @info, SizeOf(info)));
+  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(api.fUrlGroupID,
+      HttpServerQosProperty, @info, SizeOf(info)));
+end;
+
+procedure THttpApiServer.SetMaxBandwidth(aValue: cardinal);
+var
+  limit: HTTP_BANDWIDTH_LIMIT_INFO;
+begin
+  if aValue = 0 then
+    limit.MaxBandwidth := HTTP_LIMIT_INFINITE
+  else if aValue < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE then
+    limit.MaxBandwidth := HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE
+  else
+    limit.MaxBandwidth := aValue;
+  limit.Flags := 1;
+  SetProperty(@limit, HttpQosSettingTypeBandwidth, {alsoSession=}true);
+end;
+
+function THttpApiServer.GetProperty(
+  dest: pointer; qos: HTTP_QOS_SETTING_TYPE): boolean;
+var
+  api: THttpApiServer;
+  info: HTTP_QOS_SETTING_INFO;
+begin
+  result := false;
+  if (self = nil) or
+     not HasApi2 then
+    exit;
+  api := fOwner;
+  if api = nil then
+    api := self;
+  if api.fUrlGroupID = 0 then
+    exit;
+  info.QosType := qos;
+  info.QosSetting := dest;
+  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
+    Http.QueryUrlGroupProperty(api.fUrlGroupID, HttpServerQosProperty,
+      @info, SizeOf(info)));
+  result := true;
 end;
 
 function THttpApiServer.GetMaxBandwidth: cardinal;
 var
-  info: record
-    qos: HTTP_QOS_SETTING_INFO;
-    limit: HTTP_BANDWIDTH_LIMIT_INFO;
-  end;
+  limit: HTTP_BANDWIDTH_LIMIT_INFO;
 begin
-  if (Http.Version.MajorVersion < 2) or
-     (self = nil) then
-  begin
-    result := 0;
-    exit;
-  end;
-  if fOwner <> nil then
-    self := fOwner;
-  if fUrlGroupID = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  info.qos.QosType := HttpQosSettingTypeBandwidth;
-  info.qos.QosSetting := @info.limit;
-  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
-    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-      @info, SizeOf(info)));
-  result := info.limit.MaxBandwidth;
+  result := 0;
+  if GetProperty(@limit, HttpQosSettingTypeBandwidth) then
+    result := limit.MaxBandwidth;
 end;
 
 function THttpApiServer.GetMaxConnections: cardinal;
 var
-  info: record
-    qos: HTTP_QOS_SETTING_INFO;
-    limit: HTTP_CONNECTION_LIMIT_INFO;
-  end;
-  len: ULONG;
+  limit: HTTP_CONNECTION_LIMIT_INFO;
 begin
-  if (Http.Version.MajorVersion < 2) or
-     (self = nil) then
-  begin
-    result := 0;
-    exit;
-  end;
-  if fOwner <> nil then
-    self := fOwner;
-  if fUrlGroupID = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  info.qos.QosType := HttpQosSettingTypeConnectionLimit;
-  info.qos.QosSetting := @info.limit;
-  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
-    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-      @info, SizeOf(info), @len));
-  result := info.limit.MaxConnections;
+  result := 0;
+  if GetProperty(@limit, HttpQosSettingTypeConnectionLimit) then
+    result := limit.MaxConnections;
 end;
 
 procedure THttpApiServer.SetMaxConnections(aValue: cardinal);
 var
-  qos: HTTP_QOS_SETTING_INFO;
   limit: HTTP_CONNECTION_LIMIT_INFO;
 begin
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and
-     (fUrlGroupID <> 0) then
-  begin
-    if aValue = 0 then
-      limit.MaxConnections := HTTP_LIMIT_INFINITE
-    else
-      limit.MaxConnections := aValue;
-    limit.Flags := 1;
-    qos.QosType := HttpQosSettingTypeConnectionLimit;
-    qos.QosSetting := @limit;
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-        @qos, SizeOf(qos)));
-  end;
-end;
-
-function THttpApiServer.HasApi2: boolean;
-begin
-  result := Http.Version.MajorVersion >= 2;
-end;
-
-function THttpApiServer.GetLogging: boolean;
-begin
-  result := (fLogData <> nil);
+  limit.Flags := 1;
+  if aValue = 0 then
+    limit.MaxConnections := HTTP_LIMIT_INFINITE
+  else
+    limit.MaxConnections := aValue;
+  SetProperty(@limit, HttpQosSettingTypeConnectionLimit);
 end;
 
 procedure THttpApiServer.LogStart(const aLogFolder: TFileName;
@@ -8798,6 +8769,7 @@ begin
   if (self = nil) or
      (fOwner <> nil) then
     exit;
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
   fLogData := nil; // disable any previous logging
@@ -8808,23 +8780,23 @@ begin
     raise EHttpApiServer.CreateFmt('LogStart(aLogFolder="")', []);
   if length(aLogFolder) > 212 then
     // http://msdn.microsoft.com/en-us/library/windows/desktop/aa364532
-    raise EHttpApiServer.CreateFmt('aLogFolder is too long for LogStart(%s)', [aLogFolder]);
-  folder := SynUnicode(aLogFolder);
+    raise EHttpApiServer.CreateFmt('LogStart(%s): too long path', [aLogFolder]);
+  folder   := SynUnicode(aLogFolder);
   software := SynUnicode(aSoftwareName);
-  log.SoftwareNameLength := length(software) * 2;
-  log.SoftwareName := pointer(software);
+  log.SoftwareNameLength  := length(software) * 2; // in bytes
+  log.SoftwareName        := pointer(software);
   log.DirectoryNameLength := length(folder) * 2;
-  log.DirectoryName := pointer(folder);
+  log.DirectoryName       := pointer(folder);      // in bytes
   log.Format := HTTP_LOGGING_TYPE(aType);
   if aType = hltNCSA then
-    aLogFields := [hlfDate..hlfSubStatus];
+    aLogFields := [hlfDate .. hlfSubStatus];
   log.Fields := integer(aLogFields);
   log.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
   if aRolloverType = hlrSize then
     log.RolloverSize := aRolloverSize;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
-      @log, SizeOf(log)));
+    Http.SetUrlGroupProperty(fUrlGroupID,
+      HttpServerLoggingProperty, @log, SizeOf(log)));
   // on success, update the actual log memory structure
   fLogData := pointer(fLogDataStorage);
 end;
@@ -8977,8 +8949,7 @@ begin
   if (self = nil) or
      (fOwner <> nil) then
     exit;
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
   fAuthenticationSchemes := schemes;
   FillcharFast(auth, SizeOf(auth), 0);
   auth.Flags := 1;
@@ -8986,19 +8957,19 @@ begin
   auth.ReceiveMutualAuth := true;
   if haBasic in schemes then
   begin
-    auth.BasicParams.RealmLength := Length(Realm);
-    auth.BasicParams.Realm := pointer(Realm);
+    auth.BasicParams.RealmLength := Length(Realm) * 2; // in bytes
+    auth.BasicParams.Realm       := pointer(Realm);
   end;
   if haDigest in schemes then
   begin
-    auth.DigestParams.DomainNameLength := Length(DomainName);
-    auth.DigestParams.DomainName := pointer(DomainName);
-    auth.DigestParams.RealmLength := Length(Realm);
-    auth.DigestParams.Realm := pointer(Realm);
+    auth.DigestParams.DomainNameLength := Length(DomainName) * 2; // in bytes
+    auth.DigestParams.DomainName       := pointer(DomainName);
+    auth.DigestParams.RealmLength      := Length(Realm) * 2;      // in bytes
+    auth.DigestParams.Realm            := pointer(Realm);
   end;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(
-      fUrlGroupID, HttpServerAuthenticationProperty, @auth, SizeOf(auth)));
+    Http.SetUrlGroupProperty(fUrlGroupID,
+      HttpServerAuthenticationProperty, @auth, SizeOf(auth)));
 end;
 
 procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
@@ -9009,19 +8980,18 @@ begin
   if (self = nil) or
      (fOwner <> nil) then
     exit;
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
   FillcharFast(timeout, SizeOf(timeout), 0);
   timeout.Flags := 1;
-  timeout.EntityBody := aEntityBody;
+  timeout.EntityBody      := aEntityBody;
   timeout.DrainEntityBody := aDrainEntityBody;
-  timeout.RequestQueue := aRequestQueue;
-  timeout.IdleConnection := aIdleConnection;
-  timeout.HeaderWait := aHeaderWait;
-  timeout.MinSendRate := aMinSendRate;
+  timeout.RequestQueue    := aRequestQueue;
+  timeout.IdleConnection  := aIdleConnection;
+  timeout.HeaderWait      := aHeaderWait;
+  timeout.MinSendRate     := aMinSendRate;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(
-      fUrlGroupID, HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
+    Http.SetUrlGroupProperty(fUrlGroupID,
+      HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
 end;
 
 procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
