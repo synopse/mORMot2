@@ -4227,7 +4227,7 @@ begin
   if Assigned(fOnProgress) then
     fOnProgress(self, 0, ContentLength); // initial notification
   if Assigned(fOnDownload) then
-    // download per-chunk using calback event
+    // download per-chunk using callback event
     repeat
       Bytes := InternalQueryDataAvailable;
       if Bytes = 0 then

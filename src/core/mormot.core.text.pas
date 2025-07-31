@@ -6391,7 +6391,7 @@ procedure TEchoWriter.EchoAddEndOfLine(aLevel: TSynLogLevel);
 var
   e: PtrInt;
 begin
-  fEchoStart := EchoFlush;
+  fEchoStart := EchoFlush; // fill fEchoBuf with current line
   if fEchoPendingExecuteBackground then
     EchoPendingToBackground(aLevel)
   else
@@ -6409,7 +6409,7 @@ begin
   PCardinal(fWriter.B + 1)^ := fWriteLineFeed; // fast append #13 or #13#10
   inc(fWriter.B, fWriteLineFeedLen);
   if fEchos <> nil then
-    EchoAddEndOfLine(aLevel); // redirection
+    EchoAddEndOfLine(aLevel); // redirection to fEchos[] callbacks
 end;
 
 procedure TEchoWriter.EchoPendingExecute;
@@ -6423,22 +6423,20 @@ begin
   MoveFast(fBack, todo, SizeOf(fBack)); // fast copy without refcount
   FillCharFast(fBack, SizeOf(fBack), 0);
   fBackSafe.UnLock;
-  for i := 0 to todo.Count - 1 do
-    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
-      try
+  for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
+    try
+      for i := 0 to todo.Count - 1 do
         fEchos[e](self, todo.Level[i], todo.Text[i]);
-      except // remove callback in case of exception during echoing in user code
-        MultiEventRemove(fEchos, e);
-        if fEchos = nil then
-          break;
-      end;
+    except // remove callback in case of exception during echoing in user code
+      MultiEventRemove(fEchos, e);
+    end;
 end;
 
 procedure TEchoWriter.FlushToStream(Text: PUtf8Char; Len: PtrInt);
 begin
   if fEchos = nil then
     exit;
-  EchoFlush;
+  EchoFlush; // fill fEchoBuf with current TTextWriter buffer content
   fEchoStart := 0;
 end;
 
@@ -6462,8 +6460,10 @@ var
   P: PUtf8Char;
 begin
   P := fWriter.fTempBuf;
-  result := fWriter.B - P + 1;
+  result := fWriter.B - P + 1; // returns the new fEchoStart position
   L := result - fEchoStart;
+  if L = 0 then
+    exit;
   inc(P, fEchoStart);
   while (L > 0) and
         (P[L - 1] in [#10, #13]) do // trim right CR/LF chars

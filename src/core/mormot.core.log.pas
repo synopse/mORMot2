@@ -1483,7 +1483,7 @@ var
 
 
 type
-  /// a mORMot-compatible calback definition
+  /// a mORMot-SOA compatible callback definition
   // - used to notify a remote mORMot server via interface-based serivces
   // for any incoming event, using e.g. TSynLogCallbacks.Subscribe
   ISynLogCallback = interface(IInvokable)
@@ -1495,9 +1495,11 @@ type
     procedure Log(Level: TSynLogLevel; const Text: RawUtf8);
   end;
 
-  /// store a subscribe to ISynLogCallback
+  /// store a subscription to ISynLogCallback
   TSynLogCallback = record
+    /// the log levels supplied to TSynLogCallbacks.Subscribe()
     Levels: TSynLogLevels;
+    /// the callback interface supplied to TSynLogCallbacks.Subscribe()
     Callback: ISynLogCallback;
   end;
 
@@ -6163,16 +6165,20 @@ begin
   end;
   // check for any PerformRotation - delayed in TSynLog.LogEnterFmt
   if not (pendingRotate in fPendingFlags) then
-    if (fFileRotationBytes > 0) and // size to rotate?
+    if (fFileRotationBytes > 0) and // reached size to rotate?
        (fWriter.WrittenBytes + PtrUInt(Len) > PtrUInt(fFileRotationBytes)) then
       include(fPendingFlags, pendingRotate)
-    else if fNextFileRotateDailyTix32 <> 0 then // time to rotate?
+    else
     begin
-      if tix32 = 0 then
-        tix32 := GetTickSec;
-      if tix32 >= fNextFileRotateDailyTix32 then
-        include(fPendingFlags, pendingRotate);
-        // PerformRotation will call ComputeFileName to recompute DailyTix32
+      flushsec := fNextFileRotateDailyTix32;
+      if flushsec <> 0 then // reached time to rotate?
+      begin
+        if tix32 = 0 then
+          tix32 := GetTickSec;
+        if tix32 >= flushsec then
+          include(fPendingFlags, pendingRotate);
+          // PerformRotation will call ComputeFileName to recompute DailyTix32
+      end;
     end;
 end;
 

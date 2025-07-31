@@ -1791,9 +1791,9 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// customize parsing
-    Options: TJsonParserOptions;
+    Options: TJsonParserOptions;          { 16-bit }
     /// TDocVariant initialization options
-    DVO: TDocVariantOptions;
+    DVO: TDocVariantOptions;              { 16-bit }
     /// how TDocVariant should be created
     CustomVariant: PDocVariantOptions;
     /// contains the current value RTTI
