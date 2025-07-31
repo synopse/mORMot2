@@ -3767,6 +3767,14 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   ExcludesDir: boolean = false; IncludeHiddenFiles: boolean = false;
   IncludeFolders: boolean = false): TRawUtf8DynArray;
 
+/// POSIX-only function to change the public name of the current process
+// - supplied Name should be pure ASCII-7 identifier - or fails returning false
+// - on Linux, will use prctl(PR_SET_NAME) syscall - truncating Name to 15 bytes
+// - on other POSIX (e.g. Darwin), will try to override the argv[0] value
+// directly in the process memory - which is somehow supported by some tools
+// - Windows does not allow to change the process name at all
+function PosixSetProcessName(const Name: RawUtf8): boolean;
+
 {$ifdef OSLINUXANDROID}
 /// read a File content into a string, without using FileSize()
 // - result will be filled using a buffer as required e.g. for POSIX char files

@@ -2688,6 +2688,30 @@ begin
     DynArrayFakeLength(result, n);
 end;
 
+var
+  argv0len: PtrInt;
+
+function PosixSetProcessName(const Name: RawUtf8): boolean;
+begin
+  result := false;
+  if (Name = '') or
+     not IsAnsiCompatible(Name) then
+    exit;
+  if argv0len = 0 then
+    argv0len := StrLen(argv[0]); // retrieve once to keep the max possible size
+  {$ifdef OSLINUX} // untested/unsafe on Android
+  if LinuxSetProcessName(Name) then // first try with the prctl syscall
+    result := true
+  else
+  {$endif OSLINUX}
+  try
+    MoveFast(pointer(Name)^, argv[0]^, MinPtrInt(argv0len, length(Name)) + 1);
+    result := true;
+  except
+    result := false; // catch any GPF
+  end;
+end;
+
 {$ifdef OSBSDDARWIN}
 
 procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
