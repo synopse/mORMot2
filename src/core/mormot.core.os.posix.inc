@@ -1986,13 +1986,15 @@ end;
 const
   PR_SET_NAME = 15; // see prctl.h
 
-function LinuxSetProcessName(const NewName: TShort15): boolean;
+function LinuxSetProcessName(const NewName: RawUtf8): boolean;
 var
-  {%H-}trunc: array[0..15] of AnsiChar; // trunc to 16 chars (including #0)
+  L: PtrInt;
+  {%H-}trunc: array[0..15] of AnsiChar; // truncate to 16 chars (including #0)
 begin
-  MoveFast(NewName[1], trunc[0], ord(NewName[0])); // NewName[0] in #0..#15
-  trunc[ord(NewName[0])] := #0; // ending #0
-  result := (KernelRevision > $020609) and // since Kernel 2.6.9
+  L := MinPtrInt(15, length(NewName));
+  MoveFast(NewName[1], trunc[0], L);
+  trunc[L] := #0; // ending #0
+  result := (KernelRevision >= $020609) and // since Kernel 2.6.9
             (do_syscall(syscall_nr_prctl, PR_SET_NAME, TSysParam(@trunc)) = 0);
 end;
 
@@ -2699,7 +2701,7 @@ begin
     exit;
   if argv0len = 0 then
     argv0len := StrLen(argv[0]); // retrieve once to keep the max possible size
-  {$ifdef OSLINUX} // untested/unsafe on Android
+  {$ifdef OSLINUX} // untested (probably unsafe?) on Android
   if LinuxSetProcessName(Name) then // first try with the prctl syscall
     result := true
   else

@@ -2258,7 +2258,7 @@ function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 
 /// a wrapper to the Linux prctl(PR_SET_NAME) syscall
 // - returns false if the kernel is unsupported (before 2.6.9) or on failure
-function LinuxSetProcessName(const NewName: TShort15): boolean;
+function LinuxSetProcessName(const NewName: RawUtf8): boolean;
 
 {$endif OSLINUX}
 
