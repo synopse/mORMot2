@@ -2186,9 +2186,11 @@ type
     // - as created by Clone() method
     property Clones: THttpApiServers
       read fClones;
-  public { HTTP API 2.0 methods and properties }
+  public
+    { HTTP API 2.0 methods and properties }
     /// can be used to check if the HTTP API 2.0 is available
-    function HasApi2: boolean;
+    class function HasApi2: boolean;
+      {$ifdef HASINLINE} inline; static; {$endif}
     /// enable HTTP API 2.0 advanced timeout settings
     // - all those settings are set for the current URL group
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
@@ -7895,6 +7897,11 @@ end;
 
 { THttpApiServer }
 
+class function THttpApiServer.HasApi2: boolean;
+begin
+  result := Http.Version.MajorVersion >= 2;
+end;
+
 function THttpApiServer.AddUrl(const aRoot, aPort: RawUtf8; Https: boolean;
   const aDomainName: RawUtf8; aRegisterUri: boolean; aContext: Int64): integer;
 var
@@ -7911,7 +7918,7 @@ begin
     exit; // invalid parameters
   if aRegisterUri then
     AddUrlAuthorize(aRoot, aPort, Https, aDomainName);
-  if Http.Version.MajorVersion > 1 then
+  if HasApi2 then
     result := Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext)
   else
     result := Http.AddUrl(fReqQueue, pointer(uri));
@@ -7940,7 +7947,7 @@ begin
   for i := 0 to n do
     if fRegisteredUnicodeUrl[i] = uri then
     begin
-      if Http.Version.MajorVersion > 1 then
+      if HasApi2 then
         result := Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0)
       else
         result := Http.RemoveUrl(fReqQueue, pointer(uri));
@@ -8040,7 +8047,7 @@ begin
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
     Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
-  if Http.Version.MajorVersion > 1 then
+  if HasApi2 then
   begin
     EHttpApiServer.RaiseOnError(hCreateServerSession,
       Http.CreateServerSession(Http.Version, fServerSessionID));
@@ -8098,7 +8105,7 @@ begin
   begin
     for i := 0 to length(fClones) - 1 do
       fClones[i].Terminate; // for CloseHandle() below to finish Execute
-    if Http.Version.MajorVersion > 1 then
+    if HasApi2 then
     begin
       if fUrlGroupID <> 0 then
       begin
@@ -8504,7 +8511,7 @@ begin
                 incontlenread := 0;
                 repeat
                   bytesread := 0;
-                  if Http.Version.MajorVersion > 1 then
+                  if HasApi2 then
                     // speed optimization for Vista+
                     flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
                   else
@@ -8531,8 +8538,7 @@ begin
                 until incontlenread = incontlen;
                 if err <> NO_ERROR then
                 begin
-                  StringToUtf8(WinApiErrorString(err, HTTPAPI_DLL), outmsg);
-                  SendError(HTTP_NOTACCEPTABLE, outmsg);
+                  SendError(HTTP_NOTACCEPTABLE, WinApiErrorUtf8(err, Http.Module));
                   continue;
                 end;
                 // optionally uncompress input body
