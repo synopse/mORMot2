@@ -6145,7 +6145,7 @@ begin
   // enable background writing in its own TAutoFlushThread
   if fFamily.AutoFlushTimeOut <> 0 then
   begin
-    fWriter.OnFlushToStream := OnFlushToStream;
+    fWriter.OnFlushToStream := OnFlushToStream; // note: overwrites fWriterEcho
     OnFlushToStream(nil, 0);
     fFamily.EnsureAutoFlushThreadRunning;
   end;
@@ -6180,6 +6180,8 @@ begin
           // PerformRotation will call ComputeFileName to recompute DailyTix32
       end;
     end;
+  // chain to the fWriterEcho process (otherwise Text/Len buffer is lost)
+  fWriterEcho.FlushToStream(Text, Len);
 end;
 
 function TSynLog.GetFileSize: Int64;
