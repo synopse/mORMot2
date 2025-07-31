@@ -62,7 +62,7 @@ uses
 function TCustomServiceObject.GetSessionUserDirName(out pmoDirName: TFileName): Boolean;
 begin
   Result := False;
-  var authUser: TFileAuthUser := TFileAuthUser(Server.SessionGetUser(ServiceRunningContext.Request.Session));
+  var authUser: TFileAuthUser := TFileAuthUser(Server.SessionGetUser);
   if authUser <> Nil then
   try
     pmoDirName := MakePath([TFileRestServer(Server).DataFolder, Format('C%.5d', [authUser.CustomerNum])], True);

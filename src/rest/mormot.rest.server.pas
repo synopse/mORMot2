@@ -2083,12 +2083,13 @@ type
     /// returns a copy of the user associated to a session ID
     // - returns nil if the session does not exist (e.g. if authentication disabled)
     // - caller MUST release the TAuthUser instance returned (if not nil)
+    // - default aSessionID = 0 will search for GetCurrentSessionUserID
     // - this method IS thread-safe, calling internally Sessions.Safe.ReadOnlyLock
     // (the returned TAuthUser is a private copy from Sessions[].User instance,
     // in order to be really thread-safe)
     // - the returned TAuthUser instance will have ID, LogonName, DisplayName,
     // PasswordHashHexa and Data fields available and GroupRights as TID
-    function SessionGetUser(aSessionID: cardinal): TAuthUser;
+    function SessionGetUser(aSessionID: cardinal = 0): TAuthUser;
     /// persist all in-memory sessions into a compressed binary file
     // - you should not call this method it directly, but rather use Shutdown()
     // with a StateFileName parameter - to be used e.g. for a short maintenance
@@ -7280,6 +7281,8 @@ begin
   result := nil;
   if self = nil then
     exit;
+  if aSessionID = 0 then
+    aSessionID := GetCurrentSessionUserID;
   fSessions.Safe.ReadOnlyLock;
   try
     s := LockedSessionFind(aSessionID, ndx);
