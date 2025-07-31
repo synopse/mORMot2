@@ -4261,16 +4261,15 @@ function TAes.DecryptInitFrom(const Encryption: TAes;
 var
   ctx: TAesContext absolute Context;
 begin
-  ctx.Flags := [];
   if not (aesInitialized in TAesContext(Encryption).Flags) then
     // e.g. called from DecryptInit()
     EncryptInit(Key, KeySize)
   else
-    // direct copy from initialized encryption instance, including flags
-    self := Encryption;
+    // direct binary copy from initialized encryption instance, including flags
+    MoveFast(Encryption, self, SizeOf(TAes));
   result := aesInitialized in ctx.Flags;
   if not result then
-    exit;
+    exit; // e.g. invalid KeySize
   {$ifdef ASMX86}
   ctx.DoBlock := @aesdecrypt386;
   {$else}

@@ -2755,12 +2755,12 @@ end;
 
 function JSValue.GetRaw: JSValueRaw;
 begin
-  result := JSValueRaw(self);
+  result := JSValueRaw(self); // direct 64-bit binary copy
 end;
 
 procedure JSValue.SetRaw(const value: JSValueRaw);
 begin
-  self := JSValue(value);
+  self := JSValue(value); // direct 64-bit binary copy
 end;
 
 function JSValue.Duplicate: JSValue;

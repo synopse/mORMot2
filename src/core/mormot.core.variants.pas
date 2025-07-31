@@ -8507,7 +8507,7 @@ begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
   if not result then
     exit; // nothing changed
   ClearFast;
-  self := nested;
+  self := nested; // direct copy of TDocVariantData fields as result state
 end;
 
 function TDocVariantData.Delete(Index: PtrInt): boolean;

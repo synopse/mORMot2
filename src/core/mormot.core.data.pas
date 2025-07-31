@@ -8604,7 +8604,7 @@ end;
 
 procedure TDynArray.InitFrom(aAnother: PDynArray; var aValue);
 begin
-  self := aAnother^; // raw RTTI fields copy
+  self := aAnother^; // raw RTTI fields binary copy
   fValue := @aValue; // points to the new value
   fCountP := nil;
 end;

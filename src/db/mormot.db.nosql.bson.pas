@@ -2116,7 +2116,7 @@ begin
   if (b^.VType = BsonVariantType.VarType) and
      (b^.VKind = betObjectID) then
   begin
-    self := b^.VObjectID; // direct retrieval from 12-byte binary content
+    self := b^.VObjectID; // direct 12-byte binary content copy
     result := true;
   end
   else
