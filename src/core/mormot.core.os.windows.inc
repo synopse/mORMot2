@@ -586,20 +586,20 @@ begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
 end;
 
-function WinError(err: cardinal; src: pointer; ss: PShortString; s: PString): boolean;
+function WinError(err: cardinal; lib: HMODULE; ss: PShortString; s: PString): boolean;
 var
   errbak, flags, len: PtrUInt;
   tmp: array[0..511] of WideChar;
 begin
   errbak := GetLastError;
   flags := FORMAT_MESSAGE_FROM_SYSTEM;
-  if src <> nil then // Module specific error codes - no fallback to system
+  if lib <> 0 then
     flags := FORMAT_MESSAGE_FROM_HMODULE;
   // first try if there is an English message version of this error err
-  len := FormatMessageW(flags, src, err, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
+  len := FormatMessageW(flags, pointer(lib), err, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
   if len = 0 then
     // typically ERROR_RESOURCE_LANG_NOT_FOUND or ERROR_MUI_FILE_NOT_FOUND
-    len := FormatMessageW(flags, src, err, 0, @tmp, SizeOf(tmp), nil);
+    len := FormatMessageW(flags, pointer(lib), err, 0, @tmp, SizeOf(tmp), nil);
   SetLastError(errbak);
   while (len <> 0) and
         (ord(tmp[len - 1]) in [0..32, ord('.')]) do
@@ -607,37 +607,36 @@ begin
   if s <> nil then
     Win32PWideCharToString(@tmp, len, s^)
   else if len <> 0 then
-    ss^[0] := AnsiChar(UnicodeToUtf8(@ss^[1], 255, @tmp, len)); // RTL
+    ss^[0] := AnsiChar(UnicodeToUtf8(@ss^[1], 255, @tmp, len)); // use RTL
   result := len <> 0;
 end;
 
-function WinApiErrorString(Code: cardinal; ModuleName: PChar): string;
+function WinApiErrorString(Code: cardinal; Lib: HMODULE): string;
 var
   tmp: TShort47;
 begin
-  if ModuleName <> nil then // first try from the supplied library name
-    if WinError(Code, pointer(GetModuleHandle(ModuleName)), nil, @result) then
-      exit;
+  if Lib <> 0 then
+    if WinError(Code, Lib, nil, @result) then
+      exit; // retrieved directly from supplied library name
   tmp[0] := #0;
   if AppendWinErrorText(Code, tmp, #0) then // try known system constants
     SetStringFromAnsi7Buffer(result, @tmp[1], ord(tmp[0]))
   else
-    WinError(Code, nil, nil, @result); // fallback to FormatMessageW()
+    WinError(Code, 0, nil, @result); // fallback to FormatMessageW()
 end;
 
-function WinApiErrorShort(Code: cardinal; ModuleName: PChar): shortstring;
+function WinApiErrorShort(Code: cardinal; Lib: HMODULE): shortstring;
 begin
-  if ModuleName <> nil then // first try from the supplied library name
-    if WinError(Code, pointer(GetModuleHandle(ModuleName)), @result, nil) then
-      exit;
-  GetErrorShortVar(Code, result); // regular system information
+  if (Lib = 0) or
+     not WinError(Code, Lib, @result, nil) then // try from library name
+    GetErrorShortVar(Code, result); // regular system information
 end;
 
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
   dest[0] := #0;
   if not AppendWinErrorText(error, dest, #0) then // try known system constants
-    WinError(error, nil, @dest, nil); // fallback to FormatMessageW
+    WinError(error, 0, @dest, nil); // fallback to FormatMessageW
 end;
 
 procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
@@ -645,13 +644,14 @@ begin
   WinErrorShort(Code, Dest, NoInt);
 end;
 
-procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+procedure RaiseLastModuleError(const Context: ShortString; Lib: HMODULE;
+  ModuleException: ExceptClass);
 var
   code: integer;
 begin
   code := GetLastError;
   raise ModuleException.CreateFmt('%s error [%s] (0x%x)',
-    [ModuleName, WinApiErrorString(code, ModuleName), code]);
+    [Context, WinApiErrorString(code, Lib), code]);
 end;
 
 function WinLastError(const Context: ShortString; Code: integer): string;

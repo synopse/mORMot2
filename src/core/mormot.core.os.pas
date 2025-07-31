@@ -1934,7 +1934,7 @@ procedure CoInit;
 // - only made public for user convenience, e.g. when using custom COM objects
 procedure CoUninit;
 
-/// retrieves the current executable module handle, i.e.  its memory load address
+/// retrieves the current executable library handle, i.e. its memory load address
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 
@@ -2540,17 +2540,17 @@ procedure GetErrorShortVar(error: integer; var dest: ShortString);
 
 {$ifdef OSWINDOWS}
 
-/// return the error message - maybe of a given Module - as generic string
+/// return the error message - maybe of a given library - as generic string
 // - may be used e.g. in conjunction with Exception.CreateFmt()
-// - if ModuleName does not support this Code, will also try it as system error
+// - if optional HMODULE does not support this Code, will try as System error
 // - first try WinErrorConstant() for system error constants, then call
 // FormatMessage() ensuring the ENGLISH_LANGID flag is used first
 // - replace SysErrorMessagePerModule() and SysErrorMessage() from mORMot 1
-function WinApiErrorString(Code: cardinal; ModuleName: PChar = nil): string;
+function WinApiErrorString(Code: cardinal; Lib: HMODULE = 0): string;
 
-/// return the error message of a given Module as UTF-8 ShortString
+/// return the error message - maybe of a given library - as UTF-8 ShortString
 // - may be used e.g. in conjunction with Exception.CreateUtf8()
-function WinApiErrorShort(Code: cardinal; ModuleName: PChar = nil): shortstring;
+function WinApiErrorShort(Code: cardinal; Lib: HMODULE = 0): shortstring;
 
 /// raise an EOSException from the last system error using WinApiErrorString()
 // - if Code is kept to its default 0, GetLastError is called
@@ -2566,8 +2566,9 @@ procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass = nil);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// raise an Exception from the last module error using WinApiErrorString()
-procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+/// raise an Exception from the last library error using WinApiErrorString()
+procedure RaiseLastModuleError(const Context: ShortString; Lib: HMODULE;
+  ModuleException: ExceptClass);
 
 {$else}
 /// set the current system time as UTC timestamp

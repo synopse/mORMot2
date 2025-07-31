@@ -2105,7 +2105,7 @@ begin
   fLastApiError := Error;
   fLastApi := api;
   inherited CreateUtf8('% failed: % (%)',
-    [HttpNames[api], WinApiErrorShort(Error, HTTPAPI_DLL), Error])
+    [HttpNames[api], WinApiErrorShort(Error, Http.Module), Error])
 end;
 
 
@@ -2261,6 +2261,9 @@ end;
 
 { ******************** WinINet API Additional Wrappers }
 
+var
+  WinINetLib: HMODULE;
+
 function SysErrorMessageWinInet(error: integer): RawUtf8;
 var
   dwError, extendedLen: DWord;
@@ -2275,7 +2278,9 @@ begin
     else
       InternetGetLastResponseInfoW(dwError, @tmp, extendedLen);
   end;
-  ShortStringToAnsi7String(WinApiErrorShort(error, 'wininet.dll'), result);
+  if WinINetLib = 0 then
+    WinINetLib := GetModuleHandle('wininet.dll'); // resolve once
+  result := WinApiErrorString(error, WinInetLib);
   if extendedLen <> 0 then
     Append(result, [' [', PWideChar(@tmp), ']']);
 end;
@@ -2408,7 +2413,7 @@ begin
       result := GetLastError;
   end;
   if result <> 0 then
-    ProxyInfo.ErrorMessage := WinApiErrorString(result, winhttpdll);
+    ProxyInfo.ErrorMessage := WinApiErrorString(result, WinHttpApi.LibraryHandle);
 end;
 
 procedure WinHttpApiInitialize(RaiseOnError: boolean);
@@ -2582,7 +2587,7 @@ begin
   fLastError := Error;
   fLastApi := api;
   inherited CreateUtf8('% failed: % (%)', [WebSocketNames[api],
-    WinApiErrorShort(Error, WEBSOCKET_DLL), Error])
+    WinApiErrorShort(Error, WebSocketApi.LibraryHandle), Error])
 end;
 
 const
