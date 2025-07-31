@@ -632,6 +632,16 @@ begin
     GetErrorShortVar(Code, result); // regular system information
 end;
 
+function WinApiErrorUtf8(Code: cardinal; Lib: HMODULE): RawUtf8;
+var
+  tmp: ShortString;
+begin
+  if (Lib = 0) or
+     not WinError(Code, Lib, @tmp, nil) then // try from library name
+    GetErrorShortVar(Code, tmp); // regular system information
+  ShortStringToAnsi7String(tmp, result);
+end;
+
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
   dest[0] := #0;

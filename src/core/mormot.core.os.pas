@@ -2552,6 +2552,9 @@ function WinApiErrorString(Code: cardinal; Lib: HMODULE = 0): string;
 // - may be used e.g. in conjunction with Exception.CreateUtf8()
 function WinApiErrorShort(Code: cardinal; Lib: HMODULE = 0): shortstring;
 
+/// return the error message - maybe of a given library - as UTF-8 string
+function WinApiErrorUtf8(Code: cardinal; Lib: HMODULE = 0): RawUtf8;
+
 /// raise an EOSException from the last system error using WinApiErrorString()
 // - if Code is kept to its default 0, GetLastError is called
 procedure RaiseLastError(const Context: ShortString;

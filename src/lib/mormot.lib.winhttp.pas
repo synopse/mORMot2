@@ -2280,7 +2280,7 @@ begin
   end;
   if WinINetLib = 0 then
     WinINetLib := GetModuleHandle('wininet.dll'); // resolve once
-  result := WinApiErrorString(error, WinInetLib);
+  result := WinApiErrorUtf8(error, WinInetLib);
   if extendedLen <> 0 then
     Append(result, [' [', PWideChar(@tmp), ']']);
 end;
