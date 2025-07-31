@@ -2272,6 +2272,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
+    // - consider FindCookie() if you don't really require a transient RawUtf8
     procedure RetrieveCookie(const CookieName: RawUtf8; out DestValue: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef HASINLINE} { Delphi 7 should use GetCookie() or RetrieveCookie() }

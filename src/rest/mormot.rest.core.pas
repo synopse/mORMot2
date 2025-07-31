@@ -1368,19 +1368,18 @@ type
       read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
+    // - consider faster InCookieSearch() if a transient RawUtf8 is not required
     property InCookie[const CookieName: RawUtf8]: RawUtf8
       read GetInCookie;
     /// retrieve a cookie name/value pair in the internal storage
+    // - cookie name are case-sensitive
     function InCookieSearch(const CookieName: RawUtf8): PHttpCookie;
     {$ifdef HASINLINE} inline; {$endif}
-    /// low-level method called by InCookie[] and InCookieExists()
-    // - will parse once for any coookie in the headers, if needed
-    /// define a new 'name=value' cookie to be returned to the client
+    /// low-level raw cookie value as set by OutCookie[] to be sent as response
     // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'
-    // header in Call^.OutHead
-    // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
-    // - if no Path=/.. is included, it will append
-    // $ '; Path=/'+Server.Model.Root+'; HttpOnly'
+    // header in Call^.OutHead to be stored on the HTTP client
+    // - overriden TRestServerUriContext will append "Path=/" or "Secure" members
+    // according to rsoCookieHttpOnlyFlagDisable and rsoCookieSecure options
     property OutSetCookie: RawUtf8
       read fOutSetCookie write SetOutSetCookie;
     /// define a new 'name=value' cookie to be returned to the client

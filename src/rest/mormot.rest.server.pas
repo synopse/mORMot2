@@ -2964,7 +2964,7 @@ begin
         else
           Call^.LowLevelConnectionOpaque^.ValueInternal := 0; // paranoid
     end;
-    // parse signature to retrieve the associated session
+    // parse URI signature (or cookie) to retrieve the associated session
     Server.fSessions.Safe.ReadOnlyLock; // allow concurrent authentication
     try
       a := pointer(Server.fSessionAuthentication);
@@ -2972,7 +2972,7 @@ begin
       begin
         n := PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF;
         repeat
-          s := a^.RetrieveSession(self); // retrieve from URI or cookie
+          s := a^.RetrieveSession(self); // from URI or cookie
           if s <> nil then
           begin
             if Assigned(fLog) and

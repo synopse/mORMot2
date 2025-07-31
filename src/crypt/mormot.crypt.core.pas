@@ -350,16 +350,18 @@ type
   TAes = object
   {$endif USERECORDWITHMETHODS}
   private
-    Context: packed array[1..AES_CONTEXT_SIZE] of byte;
+    Context: packed array[1 .. AES_CONTEXT_SIZE] of byte; // hidden state
   public
     /// Initialize AES contexts for cypher
     // - first method to call before using this object for encryption
     // - KeySize is in bits, i.e. 128, 192 or 256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// encrypt an AES data block into another data block
+    // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Encrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
       {$ifdef FPC}inline;{$endif}
     /// encrypt an AES data block
+    // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Encrypt(var B: TAesBlock); overload;
       {$ifdef FPC}inline;{$endif}
 
@@ -371,9 +373,11 @@ type
     function DecryptInitFrom(const Encryption: TAes;
       const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
+    // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Decrypt(var B: TAesBlock); overload;
       {$ifdef FPC}inline;{$endif}
     /// decrypt an AES data block into another data block
+    // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Decrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
       {$ifdef FPC}inline;{$endif}
 
