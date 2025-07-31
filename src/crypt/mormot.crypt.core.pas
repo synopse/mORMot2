@@ -513,6 +513,34 @@ type
       allowavx: boolean = true): boolean;
   end;
 
+  /// transient simple digital signature of a 32-bit number using AES-128
+  // - typical use is e.g. TRestServerAuthenticationHttpAbstract cookie process
+  {$ifdef USERECORDWITHMETHODS}
+  TAesSignature = record
+  {$else}
+  TAesSignature = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fEngine: TAes; // hidden internal AES-128 state (storing mask in iv)
+  public
+    /// create the transient random secret key needed for this process
+    // - the internal secret can't be persisted, and will remain in memory
+    procedure Init;
+    /// compute the 128-bit digital signature of given 32-bit value <> 0
+    procedure Generate(aValue: cardinal; aSignature: PHash128Rec);
+    /// compute an hexadecimal cookie of given 32-bit value
+    function GenerateCookie(aValue: cardinal): RawUtf8;
+    /// check and extract the 32-bit value from a 128-bit digital signature
+    // - return 0 if the signature is invalid, or the decoded 32-bit value
+    function Validate(aSignature: PHash128Rec): cardinal;
+    /// check and extract the 32-bit value from hexadecimal cookie
+    // - return 0 if the cookie is invalid, or the decoded 32-bit value
+    function ValidateCookie(aHex: PUtf8Char; aHexLen: PtrInt): cardinal; overload;
+    /// check and extract the 32-bit value from hexadecimal cookie
+    // - return 0 if the cookie is invalid, or the decoded 32-bit value
+    function ValidateCookie(const aCookie: RawUtf8): cardinal; overload;
+  end;
+
   /// the AES chaining modes implemented by this unit
   // - mEcb is unsafe and should not be used as such
   // - mC64 is a non standard AES-CTR mode with 64-bit CRC - use mCtr for NIST
@@ -5154,6 +5182,72 @@ begin
   Done;
 end;
 
+
+{ TAesSignature }
+
+procedure TAesSignature.Init;
+var
+  aes: TAesContext absolute fEngine;
+begin
+  RandomBytes(aes.iv.b); // transient AES-128 secret which cannot be persisted
+  fEngine.EncryptInit(aes.iv, 128);
+  RandomBytes(aes.iv.b); // 32-bit + 96-bit of fixed but random padding
+end;
+
+procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
+var
+  aes: TAesContext absolute fEngine;
+begin // 32-bit lower = session, 96-bit upper = digital signature
+  if aValue = 0 then
+    ESynCrypto.RaiseU('Unexpected TAesSignature.Generate(0)');
+  aValue := aValue xor aes.iv.c0;
+  aSignature^.c0 := aValue;
+  aSignature^.c1 := aes.iv.c1;
+  aSignature^.H  := aes.iv.H;
+  aes.DoBlock(aes, aSignature^, aSignature^); // fast and thread-safe
+  aSignature^.c0 := aValue;
+end;
+
+function TAesSignature.GenerateCookie(aValue: cardinal): RawUtf8;
+var
+  sign: THash128Rec;
+begin
+  Generate(aValue, @sign);
+  result := BinToHexDisplayLower(@sign, SizeOf(sign));
+end; // 32 hexadecimal chars is perfect for a cookie - no need of Base-64
+
+function TAesSignature.Validate(aSignature: PHash128Rec): cardinal;
+var
+  aes: TAesContext absolute fEngine;
+  sign: THash128Rec;
+begin
+  result := 0;
+  if aSignature = nil then
+    exit;
+  sign.c0 := aSignature^.c0;
+  sign.c1 := aes.iv.c1;
+  sign.H  := aes.iv.H;
+  aes.DoBlock(aes, sign, sign); // fast and thread-safe
+  if (sign.c1 = aSignature^.c1) and
+     (sign.H  = aSignature^.H) then
+    result := aSignature^.c0 xor aes.iv.c0;
+end;
+
+function TAesSignature.ValidateCookie(aHex: PUtf8Char; aHexLen: PtrInt): cardinal;
+var
+  sign: THash128Rec;
+begin
+  if (aHexLen = SizeOf(sign) * 2) and
+     HexDisplayToBin(pointer(aHex), @sign, SizeOf(sign)) then
+    result := Validate(@sign)
+  else
+    result := 0;
+end;
+
+function TAesSignature.ValidateCookie(const aCookie: RawUtf8): cardinal;
+begin
+  result := ValidateCookie(pointer(aCookie), length(aCookie));
+end;
 
 
 { TAesAbstract }
