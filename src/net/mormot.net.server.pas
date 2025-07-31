@@ -8218,14 +8218,15 @@ end;
 procedure THttpApiServer.DoExecute;
 var
   req: PHTTP_REQUEST;
+  resp: PHTTP_RESPONSE;
+  reqbuf, respbuf, logbuf: TBytes;
   reqid: HTTP_REQUEST_ID;
-  reqbuf, respbuf: RawByteString;
   i: PtrInt;
   bytesread, bytessent, flags: cardinal;
   compressset: THttpSocketCompressSet;
   comprec: PHttpSocketCompressRec;
   err: HRESULT;
-  incontlen: Qword;
+  incontlen, rangestart, rangelen: Qword;
   incontlenchunk, incontlenread: cardinal;
   incontenc, inaccept, host, range, referer: RawUtf8;
   outstat, outmsg: RawUtf8;
@@ -8234,15 +8235,41 @@ var
   urirouter: TUriRouter;
   ctxt: THttpServerRequest;
   filehandle: THandle;
-  resp: PHTTP_RESPONSE;
   bufread, V: PUtf8Char;
-  heads: HTTP_UNKNOWN_HEADERs;
-  rangestart, rangelen: ULONGLONG;
+  heads: HTTP_UNKNOWN_HEADERS;
   outcontlen: ULARGE_INTEGER;
   datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
-  logdata: PHTTP_LOG_FIELDS_DATA;
   started, elapsed: Int64;
+
+  procedure HttpSendResponse(flags: cardinal);
+  var
+    log: PHTTP_LOG_FIELDS_DATA;
+  begin
+    // update log information
+    ctxt.RespStatus := resp^.StatusCode; // for ReqToLog()
+    log := nil;
+    if fLogging then // after LogStart (and http.sys API v2)
+    begin
+      log := pointer(logbuf);
+      log^.ProtocolStatus    := resp^.StatusCode;
+      log^.ServerNameLength  := length(fServerName);
+      log^.ServerName        := pointer(fServerName);
+      log^.ServiceNameLength := length(fLoggingServiceName);
+      log^.ServiceName       := pointer(fLoggingServiceName);
+      ReqToLog(req, ctxt, pointer(logbuf));
+    end;
+    // send the resp^ HTTP response to the req^ HTTP request
+    resp^.Version := req^.Version;
+    with resp^.headers.KnownHeaders[respServer] do
+    begin
+      pRawValue      := pointer(fServerName);
+      RawValueLength := length(fServerName);
+    end;
+    Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
+      bytessent, nil, 0, nil, log);
+    FillcharFast(resp^, SizeOf(resp^), 0);
+  end;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
     E: Exception = nil);
@@ -8251,15 +8278,13 @@ var
   begin
     try
       resp^.SetStatus(StatusCode, outstat);
-      logdata^.ProtocolStatus := StatusCode;
       FormatUtf8('<!DOCTYPE html><html><body style="font-family:verdana;">' +
         '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], msg);
       if E <> nil then
         Append(msg, [E, ' Exception raised:<br>']);
       Append(msg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
       resp^.SetContent(datachunkmem, msg, HTML_CONTENT_TYPE);
-      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
-        bytessent, nil, 0, nil, fLogData);
+      HttpSendResponse(0);
     except
       on Exception do
         ; // ignore any HttpApi level errors here (client may have crashed)
@@ -8278,54 +8303,18 @@ var
     resp^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
-    // update log information
-    if Http.Version.MajorVersion >= 2 then
-      with req^, logdata^ do
-      begin
-        MethodNum := Verb;
-        UriStemLength := CookedUrl.AbsPathLength;
-        UriStem := CookedUrl.pAbsPath;
-        with headers.KnownHeaders[reqUserAgent] do
-        begin
-          UserAgentLength := RawValueLength;
-          UserAgent := pRawValue;
-        end;
-        with headers.KnownHeaders[reqHost] do
-        begin
-          HostLength := RawValueLength;
-          Host := pRawValue;
-        end;
-        with headers.KnownHeaders[reqReferrer] do
-        begin
-          ReferrerLength := RawValueLength;
-          Referrer := pRawValue;
-        end;
-        ProtocolStatus := resp^.StatusCode;
-        ClientIp := pointer(ctxt.fRemoteIP);
-        ClientIpLength := length(ctxt.fRemoteip);
-        Method := pointer(ctxt.fMethod);
-        MethodLength := length(ctxt.fMethod);
-        UserName := pointer(ctxt.fAuthenticatedUser);
-        UserNameLength := Length(ctxt.fAuthenticatedUser);
-      end;
-    // send response
-    resp^.Version := req^.Version;
+    // associate response headers
     resp^.SetHeaders(pointer(ctxt.OutCustomHeaders),
       heads, hsoNoXPoweredHeader in fOptions);
     if fCompressList.AcceptEncoding <> '' then
       resp^.AddCustomHeader(pointer(fCompressList.AcceptEncoding), heads, false);
-    with resp^.headers.KnownHeaders[respServer] do
-    begin
-      pRawValue := pointer(fServerName);
-      RawValueLength := length(fServerName);
-    end;
     if ctxt.OutContentType = STATICFILE_CONTENT_TYPE then
     begin
       // response is file -> OutContent is UTF-8 file name to be served
       filehandle := FileOpen(Utf8ToString(ctxt.OutContent), fmOpenReadShared);
       if not ValidHandle(filehandle)  then
       begin
-        SendError(HTTP_NOTFOUND, GetErrorText);
+        SendError(HTTP_NOTFOUND, GetErrorText); // text message from OS
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel
@@ -8375,8 +8364,7 @@ var
         end;
         resp^.EntityChunkCount := 1;
         resp^.pEntityChunks := @datachunkfile;
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
-          bytessent, nil, 0, nil, fLogData);
+        HttpSendResponse(flags);
       finally
         FileClose(filehandle);
       end;
@@ -8395,33 +8383,30 @@ var
               compressset, ctxt.OutContentType, ctxt.fOutContent);
             if comprec <> nil then
             begin
-              pRawValue := pointer(comprec^.Name);
+              pRawValue      := pointer(comprec^.Name);
               RawValueLength := length(comprec^.Name);
             end;
           end;
       resp^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
-      flags := GetSendResponseFlags(ctxt);
-      EHttpApiServer.RaiseOnError(hSendHttpResponse,
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
-          bytessent, nil, 0, nil, fLogData));
+      HttpSendResponse(GetSendResponseFlags(ctxt));
     end;
   end;
 
 begin
   if Terminated then
     exit;
-  ctxt := nil;
+  ctxt := THttpServerRequest.Create(self, 0, self, 0, [], nil);
   try
     // reserve working buffers
     SetLength(heads, 64);
-    SetLength(respbuf, SizeOf(HTTP_RESPONSE));
-    resp := pointer(respbuf);
     SetLength(reqbuf, 16384 + SizeOf(HTTP_REQUEST)); // req^ + 16 KB of headers
+    SetLength(respbuf, SizeOf(HTTP_RESPONSE));
+    if HasApi2 then
+      SetLength(logbuf, SizeOf(HTTP_LOG_FIELDS_DATA));
     req := pointer(reqbuf);
-    logdata := pointer(fLogDataStorage);
+    resp := pointer(respbuf);
     if global_verbs[hvOPTIONS] = '' then
       global_verbs := VERB_TEXT;
-    ctxt := THttpServerRequest.Create(self, 0, self, 0, [], nil);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
     ctxt.fServer := self;
@@ -8477,25 +8462,25 @@ begin
             if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
               // https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
               for i := 0 to req^.RequestInfoCount - 1 do
-                if req^.pRequestInfo^[i].InfoType = HttpRequestInfoTypeAuth then
-                  with PHTTP_REQUEST_AUTH_INFO(req^.pRequestInfo^[i].pInfo)^ do
-                    case AuthStatus of
-                      HttpAuthStatusSuccess:
-                        if AuthType > HttpRequestAuthTypeNone then
+                with req^.pRequestInfo^[i] do
+                if InfoType = HttpRequestInfoTypeAuth then
+                  case pInfo^.AuthStatus of
+                    HttpAuthStatusSuccess:
+                      if pInfo^.AuthType > HttpRequestAuthTypeNone then
+                      begin
+                        byte(ctxt.fAuthenticationStatus) := ord(pInfo^.AuthType) + 1;
+                        if pInfo^.AccessToken <> 0 then
                         begin
-                          byte(ctxt.fAuthenticationStatus) := ord(AuthType) + 1;
-                          if AccessToken <> 0 then
-                          begin
-                            ctxt.fAuthenticatedUser := LookupToken(AccessToken);
-                            // AccessToken lifecycle is application responsibility
-                            CloseHandle(AccessToken);
-                            ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
-                            include(ctxt.fConnectionFlags, hsrAuthorized);
-                          end;
+                          ctxt.fAuthenticatedUser := LookupToken(pInfo^.AccessToken);
+                          // AccessToken lifecycle is application responsibility
+                          CloseHandle(pInfo^.AccessToken);
+                          ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
+                          include(ctxt.fConnectionFlags, hsrAuthorized);
                         end;
-                      HttpAuthStatusFailure:
-                        ctxt.fAuthenticationStatus := hraFailed;
-                    end;
+                      end;
+                    HttpAuthStatusFailure:
+                      ctxt.fAuthenticationStatus := hraFailed;
+                  end;
             // abort request if > MaximumAllowedContentLength or OnBeforeBody
             with req^.headers.KnownHeaders[reqContentLength] do
             begin
@@ -8578,7 +8563,6 @@ begin
             QueryPerformanceMicroSeconds(started);
             try
               // compute response
-              FillcharFast(resp^, SizeOf(resp^), 0);
               respsent := false;
               outstatcode := 0;
               if fOwner = nil then
