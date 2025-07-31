@@ -452,7 +452,7 @@ type
     // The request headers.
     Headers: HTTP_REQUEST_HEADERS;
     // The total number of bytes received from network for this request
-    BytesReceived: ULONGLONG;
+    BytesReceived: QWord;
     EntityChunkCount: word;
     pEntityChunks: pointer;
     RawConnectionId: HTTP_RAW_CONNECTION_ID;
