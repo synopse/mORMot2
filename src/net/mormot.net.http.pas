@@ -746,18 +746,18 @@ type
   // the need to add mormot.net.server.pas dependency
   THttpServerRequestAbstract = class
   protected
-    fRemoteIP,
-    fUrl,
-    fMethod,
-    fInHeaders,
-    fInContentType,
-    fAuthenticatedUser,
-    fHost,
-    fAuthBearer,
-    fUserAgent,
-    fOutContentType,
+    fRemoteIP: RawUtf8;
+    fUrl: RawUtf8;
+    fMethod: RawUtf8;
+    fInHeaders: RawUtf8;
+    fInContentType: RawUtf8;
+    fAuthenticatedUser: RawUtf8;
+    fHost: RawUtf8;
+    fAuthBearer: RawUtf8;
+    fUserAgent: RawUtf8;
+    fOutContentType: RawUtf8;
     fOutCustomHeaders: RawUtf8;
-    fInContent,
+    fInContent: RawByteString;
     fOutContent: RawByteString;
     fConnectionID: THttpServerConnectionID;
     fConnectionFlags: THttpServerRequestFlags;
