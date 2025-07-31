@@ -224,7 +224,7 @@ type
     fStaticOrm: TRestOrm;
     fSessionUserName: RawUtf8;
     fCustomErrorMsg: RawUtf8;
-    fTemp: RawUtf8; // used e.g. for XML or Cookie process
+    fTemp: RawUtf8; // used e.g. for XML process
     fMicroSecondsStart: Int64;
     fMicroSecondsElapsed: QWord;
     fLog: TSynLog;
@@ -1194,14 +1194,13 @@ type
   // - do not use this abstract class, but e.g. TRestServerAuthenticationHttpBasic
   // - this class will transmit the session_signature as HTTP cookie, not at
   // URI level, so is expected to be used only from browsers or old clients
-  // - cookie is encrypted using AES-CTR-128, but real security level is as safe
+  // - cookie is encrypted using AES-128, but real security level is as safe
   // as the cookie secrecy on the client side - even if any replay is avoided
   // - note that such sessions can not be persisted on disk
   TRestServerAuthenticationHttpAbstract = class(TRestServerAuthentication)
   protected
-    fSafe: TLightLock; // RetrieveSession() could append within multi-write lock
     fAes: TAes;
-    fAesMask: cardinal;
+    fAesMask: THash128Rec;
     procedure DoAes(var iv: THash128Rec; c0: cardinal);
   public
     /// additional salt/realm parameter used for ComputeHashedPassword()
@@ -5454,44 +5453,40 @@ end;
 { TRestServerAuthenticationHttpAbstract }
 
 constructor TRestServerAuthenticationHttpAbstract.Create(aServer: TRestServer);
-var
-  rnd: THash128;
 begin
   inherited Create(aServer);
-  RandomBytes(rnd); // transient secret which cannot be persisted
-  fAes.EncryptInit(rnd, 128); // AES-128-CTR for safe 96-bit digital signature
-  fAesMask := Random32;
-  FillZero(rnd);
+  RandomBytes(fAesMask.b); // transient AES-128 secret which cannot be persisted
+  fAes.EncryptInit(fAesMask.b, 128); // for safe 96-bit digital signature
+  RandomBytes(fAesMask.b);
 end;
 
 procedure TRestServerAuthenticationHttpAbstract.DoAes(
   var iv: THash128Rec; c0: cardinal);
 begin
   iv.c0 := c0; // 32-bit session sequence is used as genuine IV for AES-CTR
-  iv.c1 := fAesMask; // with 96-bit of fixed but random padding
-  iv.H := fServer.fSessionCounterMin;
-  fSafe.Lock; // Auth() is locked, but RetrieveSession() is multi-read
-  fAes.Encrypt(iv.b, iv.b); // very fast on all platforms
-  fSafe.UnLock;
+  iv.c1 := fAesMask.c1; // with 96-bit of fixed but random padding
+  iv.H  := fAesMask.H;
+  fAes.Encrypt(iv.b, iv.b); // very fast on all platforms (and threadsafe)
 end;
 
 function TRestServerAuthenticationHttpAbstract.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
 var
   iv, v: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
+  c: PHttpCookie;
 begin
-  Ctxt.InputCookies^.RetrieveCookie(fServer.Model.Root, Ctxt.fTemp);
   result := nil;
-  if Ctxt.fTemp = '' then
+  c := Ctxt.InputCookies^.FindCookie(fServer.Model.Root);
+  if c = nil then
     exit; // no cookie
-  if (length(Ctxt.fTemp) = SizeOf(v) * 2) and
-     HexDisplayToBin(pointer(Ctxt.fTemp), @v, SizeOf(v)) then
+  if (c^.ValueLen = SizeOf(v) * 2) and
+     HexDisplayToBin(pointer(c.ValueStart), @v, SizeOf(v)) then
   begin
     DoAes(iv, v.c0);
     if (v.c1 = iv.c1) and
        (v.H  = iv.H) then
     begin // valid digital signature
-      Ctxt.fSession := v.c0 xor fAesMask;
+      Ctxt.fSession := v.c0 xor fAesMask.c0;
       result := fServer.LockedSessionAccess(Ctxt)
     end;
   end;
@@ -5504,7 +5499,7 @@ function TRestServerAuthenticationHttpAbstract.ComputeCookieValue(
 var
   iv: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
 begin
-  aSession := aSession xor fAesMask;
+  aSession := aSession xor fAesMask.c0;
   DoAes(iv, aSession);
   iv.c0 := aSession;
   result := BinToHexDisplayLower(@iv, SizeOf(iv));
