@@ -3417,6 +3417,9 @@ procedure MultiEventRemove(var EventList; const Event: TMethod); overload;
 // to identify the Event to be suppressed
 procedure MultiEventRemove(var EventList; Index: PtrInt); overload;
 
+/// wrap MultiEventAdd() or MultiEventRemove() according to Remove parameter
+procedure MultiEventSet(var EventList; const Event: TMethod; Remove: boolean);
+
 /// low-level wrapper to check if a callback is in a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
 // it as a dynamic array of events, you can use this wrapper to check if
@@ -10146,7 +10149,15 @@ begin
   if max = 0 then
     events := nil
   else
-    DynArrayFakeDelete(events, Index, max, SizeOf(TMethod));
+    DynArrayFakeDelete(events, Index, max, SizeOf(TMethod)); // no realloc
+end;
+
+procedure MultiEventSet(var EventList; const Event: TMethod; Remove: boolean);
+begin
+  if Remove then
+    MultiEventRemove(EventList, Event)
+  else
+    MultiEventAdd(EventList, Event);
 end;
 
 procedure MultiEventMerge(var DestList; const ToBeAddedList);

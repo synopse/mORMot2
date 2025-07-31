@@ -3639,10 +3639,7 @@ end;
 procedure TAsyncConnections.SetOnIdle(
   const aOnIdle: TOnPollSocketsIdle; Remove: boolean);
 begin
-  if Remove then
-    MultiEventRemove(fOnIdle, TMethod(aOnIdle))
-  else
-    MultiEventAdd(fOnIdle, TMethod(aOnIdle));
+  MultiEventSet(fOnIdle, TMethod(aOnIdle), Remove);
 end;
 
 {$ifdef USE_WINIOCP}
