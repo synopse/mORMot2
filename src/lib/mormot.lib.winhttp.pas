@@ -820,8 +820,8 @@ type
     Flags: HTTP_PROPERTY_FLAGS;
     LoggingFlags: ULONG;
     SoftwareName: PWideChar;
-    SoftwareNameLength: word;
-    DirectoryNameLength: word;
+    SoftwareNameLength: word;  // in bytes
+    DirectoryNameLength: word; // in bytes
     DirectoryName: PWideChar;
     Format: HTTP_LOGGING_TYPE;
     Fields: ULONG;
@@ -832,7 +832,6 @@ type
     RolloverSize: ULONG;
     pSecurityDescriptor: PSECURITY_DESCRIPTOR;
   end;
-
   PHTTP_LOGGING_INFO = ^HTTP_LOGGING_INFO;
 
   HTTP_LOG_DATA_TYPE = (
@@ -1153,6 +1152,7 @@ type
   end;
 
 var
+  /// access to the HTTP API server 1.0 or 2.0 after HttpApiInitialize call
   Http: THttpApi;
 
 type

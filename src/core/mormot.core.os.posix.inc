@@ -1086,10 +1086,9 @@ end;
 {$endif HAS_OSPTHREADS}
 
 
-procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
+procedure PosixSetThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
-  // truncated to 16 non space chars (including #0)
-  {%H-}trunc: array[0..15] of AnsiChar;
+  {%H-}trunc: array[0..15] of AnsiChar; // trunc to 16 non space chars (including #0)
   i, L, c4: integer;
 begin
   if Name = '' then
@@ -1135,7 +1134,7 @@ end;
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 begin
   if ThreadID <> MainThreadID then // don't change the main process name
-    SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+    PosixSetThreadName(ThreadID, Name); // call pthread_setname_np()
 end;
 
 function RawKillThread(Thread: TThread): boolean;
@@ -1982,6 +1981,19 @@ begin
     dlclose(systemd);
     systemd := nil;
   end;
+end;
+
+const
+  PR_SET_NAME = 15; // see prctl.h
+
+function LinuxSetProcessName(const NewName: TShort15): boolean;
+var
+  {%H-}trunc: array[0..15] of AnsiChar; // trunc to 16 chars (including #0)
+begin
+  MoveFast(NewName[1], trunc[0], ord(NewName[0])); // NewName[0] in #0..#15
+  trunc[ord(NewName[0])] := #0; // ending #0
+  result := (KernelRevision > $020609) and // since Kernel 2.6.9
+            (do_syscall(syscall_nr_prctl, PR_SET_NAME, TSysParam(@trunc)) = 0);
 end;
 
 {$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
