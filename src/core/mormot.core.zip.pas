@@ -376,7 +376,7 @@ type
   // - those 22 bytes end the file and are used to find the TFileHeader entries
   // - in practice, this is the minimal size of a valid but void .zip file
   TLastHeader = record
-    /// $06054b50 PK#5#6 = LASTHEADER_SIGNATURE_INC -
+    /// $06054b50 PK#5#6 = LASTHEADER_SIGNATURE_INC
     signature: cardinal;
     /// 0
     thisDisk: word;

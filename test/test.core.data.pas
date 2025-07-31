@@ -7737,11 +7737,6 @@ begin
   end;
 end;
 
-const
-  // a void .zip file is just a void last header (22 bytes)
-  MINIM_ZIP: TLastHeader = (
-    signature: $06054b50{%H-});
-
 procedure TTestCoreCompression.ZipFormat;
 var
   FN, FN2: TFileName;
@@ -7838,9 +7833,12 @@ var
   i, m: integer;
   mem: QWord;
   json, deleted: TStringDynArray;
+  minim: TLastHeader; // a void .zip file is just a void last header (22 bytes)
 begin
   FN := WorkDir + 'void.zip';
-  Check(FileFromBuffer(@MINIM_ZIP, SizeOf(MINIM_ZIP), fn));
+  FillCharFast(minim, SizeOf(minim), 0);
+  minim.signature := $06054b50; // = PK#5#6 .zip file header - all other = 0
+  Check(FileFromBuffer(@minim, SizeOf(minim), fn));
   try
     with TZipRead.Create(FN) do
       try
@@ -7854,7 +7852,7 @@ begin
   end;
   Check(DeleteFile(FN));
   TZipWrite.Create(FN).Free;
-  CheckEqual(FileSize(FN), SizeOf(MINIM_ZIP), 'TZipWrite void .zip');
+  CheckEqual(FileSize(FN), SizeOf(minim), 'TZipWrite void .zip');
   Check(DeleteFile(FN));
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
