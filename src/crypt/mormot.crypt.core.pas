@@ -2913,7 +2913,7 @@ const
   AES_ROUNDS = 14;
 
 type
-  TKeyArray = packed array[0..AES_ROUNDS] of TAesBlock;
+  TKeyArray = packed array[0 .. AES_ROUNDS] of TAesBlock;
 
   TAesContextDoBlock = procedure(const Ctxt, Source, Dest);
 
@@ -2956,18 +2956,7 @@ type
     Index: integer;
   end;
 
-// helper types for better code generation
-type
-  TWA4 = TBlock128;     // AES block as array of cardinal
-  TAWk = packed array[0..4 * (AES_ROUNDS + 1) - 1] of cardinal; // Key as array of cardinal
-  PWA4 = ^TWA4;
-  PAWk = ^TAWk;
-
 const
-  // used by AES
-  RCon: array[0..9] of cardinal = (
-    $01, $02, $04, $08, $10, $20, $40, $80, $1b, $36);
-
   // used by SHA-256
   K256: array[0..63] of cardinal = (
     $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1,
@@ -3924,7 +3913,7 @@ end;
 
 {$ifndef ASMINTEL}
 
-procedure aesencryptpas(const ctxt: TAesContext; bi, bo: PWA4);
+procedure aesencryptpas(const ctxt: TAesContext; bi, bo: PBlock128);
 { AES_PASCAL version (c) Wolfgang Ehrhardt under zlib license:
  Permission is granted to anyone to use this software for any purpose,
  including commercial applications, and to alter it and redistribute it
@@ -3942,7 +3931,7 @@ var
   sb: PByteArray;
   s0, s1, s2, s3: PtrUInt; // TAesBlock s# as separate variables
   t0, t1, t2: cardinal;    // TAesBlock t# as separate variables
-  pk: PWA4;
+  pk: PBlock128;
   i: integer;
 begin
   pk := @ctxt.RK;
@@ -3982,18 +3971,18 @@ end;
 
 {$ifndef ASMX86}
 
-procedure aesdecryptpas(const ctxt: TAesContext; bi, bo: PWA4);
+procedure aesdecryptpas(const ctxt: TAesContext; bi, bo: PBlock128);
 var
   s0, s1, s2, s3: PtrUInt; // TAesBlock s# as separate variables
   t0, t1, t2: cardinal;    // TAesBlock t# as separate variables
   i: integer;
-  pk: PWA4;
-  t: PCardinalArray; // faster on a PIC system
+  pk: PBlock128;
+  tab: PCardinalArray; // faster on a PIC/RISC system - Td# = tab[#*$100]
   ib: PByteArray;
 begin
-  t := @Td0;
+  tab := @Td0;
   // Setup key pointer
-  pk := PWA4(@ctxt.RK[ctxt.Rounds]);
+  pk := @ctxt.RK[ctxt.Rounds];
   // Initialize with input block
   s0 := bi[0] xor pk[0];
   s1 := bi[1] xor pk[1];
@@ -4002,22 +3991,22 @@ begin
   dec(pk);
   for i := 1 to ctxt.Rounds - 1 do
   begin
-    t0 := t[s0 and $ff] xor
-          t[$100 + s3 shr 8 and $ff] xor
-          t[$200 + s2 shr 16 and $ff] xor
-          t[$300 + s1 shr 24];
-    t1 := t[s1 and $ff] xor
-          t[$100 + s0 shr 8 and $ff] xor
-          t[$200 + s3 shr 16 and $ff] xor
-          t[$300 + s2 shr 24];
-    t2 := t[s2 and $ff] xor
-          t[$100 + s1 shr 8 and $ff] xor
-          t[$200 + s0 shr 16 and $ff] xor
-          t[$300 + s3 shr 24];
-    s3 := t[s3 and $ff] xor
-          t[$100 + s2 shr 8 and $ff] xor
-          t[$200 + s1 shr 16 and $ff] xor
-          t[$300 + s0 shr 24] xor pk[3];
+    t0 := tab[s0 and $ff] xor
+          tab[$100 + s3 shr 8 and $ff] xor
+          tab[$200 + s2 shr 16 and $ff] xor
+          tab[$300 + s1 shr 24];
+    t1 := tab[s1 and $ff] xor
+          tab[$100 + s0 shr 8 and $ff] xor
+          tab[$200 + s3 shr 16 and $ff] xor
+          tab[$300 + s2 shr 24];
+    t2 := tab[s2 and $ff] xor
+          tab[$100 + s1 shr 8 and $ff] xor
+          tab[$200 + s0 shr 16 and $ff] xor
+          tab[$300 + s3 shr 24];
+    s3 := tab[s3 and $ff] xor
+          tab[$100 + s2 shr 8 and $ff] xor
+          tab[$200 + s1 shr 16 and $ff] xor
+          tab[$300 + s0 shr 24] xor pk[3];
     s0 := t0 xor pk[0];
     s1 := t1 xor pk[1];
     s2 := t2 xor pk[2];
@@ -4048,7 +4037,12 @@ end;
 
 {$endif ASMX86}
 
-procedure ShiftPas(KeySize: cardinal; pk: PAWK);
+const
+  // used by AES
+  RCon: array[0..9] of cardinal = (
+    $01, $02, $04, $08, $10, $20, $40, $80, $1b, $36);
+
+procedure ShiftPas(KeySize: cardinal; pk: PCardinalArray);
 var
   i: PtrInt;
   temp: cardinal;
@@ -4138,37 +4132,37 @@ begin
 end;
 
 // compute AES decryption key from encryption key
-procedure MakeDecrKeyPas(rounds: integer; k: PAWk);
+procedure MakeDecrKeyPas(rounds: integer; k: PCardinalArray);
 var
   x: cardinal;
-  t: PCardinalArray; // faster on a PIC system
+  tab: PCardinalArray; // faster on a PIC system - Td# = tab[#*$100]
   sb: PByteArray;
 begin
-  t := @Td0;
+  tab := @Td0;
   sb := @SBox;
   repeat
     inc(PByte(k), 16);
     dec(rounds);
     x := k[0];
-    k[0] := t[$300 + sb[x shr 24]] xor
-            t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor
-            t[sb[x and $ff]];
+    k[0] := tab[$300 + sb[x shr 24]] xor
+            tab[$200 + sb[x shr 16 and $ff]] xor
+            tab[$100 + sb[x shr 8 and $ff]] xor
+            tab[sb[x and $ff]];
     x := k[1];
-    k[1] := t[$300 + sb[x shr 24]] xor
-            t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor
-            t[sb[x and $ff]];
+    k[1] := tab[$300 + sb[x shr 24]] xor
+            tab[$200 + sb[x shr 16 and $ff]] xor
+            tab[$100 + sb[x shr 8 and $ff]] xor
+            tab[sb[x and $ff]];
     x := k[2];
-    k[2] := t[$300 + sb[x shr 24]] xor
-            t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor
-            t[sb[x and $ff]];
+    k[2] := tab[$300 + sb[x shr 24]] xor
+            tab[$200 + sb[x shr 16 and $ff]] xor
+            tab[$100 + sb[x shr 8 and $ff]] xor
+            tab[sb[x and $ff]];
     x := k[3];
-    k[3] := t[$300 + sb[x shr 24]] xor
-            t[$200 + sb[x shr 16 and $ff]] xor
-            t[$100 + sb[x shr 8 and $ff]] xor
-            t[sb[x and $ff]];
+    k[3] := tab[$300 + sb[x shr 24]] xor
+            tab[$200 + sb[x shr 16 and $ff]] xor
+            tab[$100 + sb[x shr 8 and $ff]] xor
+            tab[sb[x and $ff]];
   until rounds = 1;
 end;
 
@@ -4545,7 +4539,7 @@ procedure mul_x(var a: THash128Rec; const b: THash128Rec);
 // {$ifdef HASINLINE}inline;{$endif} // inlining has no benefit here
 var
   t: cardinal;
-  y: TWA4 absolute b;
+  y: TBlock128 absolute b;
 const
   MASK_80 = cardinal($80808080);
   MASK_7F = cardinal($7f7f7f7f);
@@ -4662,7 +4656,7 @@ procedure TAesGcmEngine.gf_mul_h_pas(var a: TAesBlock);
 var
   i: PtrUInt;
   x0, x1, x2, x3, t: cardinal; // will use registers on x86_64/arm
-  p: PWA4;
+  p: PBlock128;
 begin
   with gf_t4k[a[15]] do
   begin
@@ -7931,10 +7925,9 @@ const
   _b64: TChar64 =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
-procedure RawBase64Uri(rp, sp: PAnsiChar; lendiv, lenmod: integer);
+procedure RawBase64Uri(rp, sp: PAnsiChar; lendiv, lenmod: cardinal);
 var
-  i: integer;
-  c: cardinal;
+  i, c: cardinal;
   b64: PAnsiChar;
 begin
   b64 := @_b64;
@@ -7965,9 +7958,9 @@ begin
   end;
 end;
 
-function Base64Uri(P: pointer; len: integer): RawUtf8;
+function Base64Uri(P: pointer; len: cardinal): RawUtf8;
 var
-  blen, bdiv, bmod: integer;
+  blen, bdiv, bmod: cardinal;
 begin
   bdiv := len div 3;
   bmod := len mod 3;

@@ -16,7 +16,7 @@
 
 {$ifdef ASMX64}
 
-procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PWA4);
+procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
 {$ifdef FPC} nostackframe; assembler; asm {$else}
 asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         .noframe

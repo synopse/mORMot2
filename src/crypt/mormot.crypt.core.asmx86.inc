@@ -20,7 +20,7 @@
 
 // those functions use global variables, so are not PIC-compatible
 
-procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PWA4);
+procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // rolled optimized encryption asm version by A. Bouchez
         push    ebx
@@ -195,7 +195,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         pop     ebx
 end;
 
-procedure aesdecrypt386(const ctxt: TAesContext; bi, bo: PWA4);
+procedure aesdecrypt386(const ctxt: TAesContext; bi, bo: PBlock128);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
