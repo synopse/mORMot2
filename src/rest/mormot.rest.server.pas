@@ -1199,9 +1199,7 @@ type
   // - note that such sessions can not be persisted on disk
   TRestServerAuthenticationHttpAbstract = class(TRestServerAuthentication)
   protected
-    fAes: TAes;
-    fAesMask: THash128Rec;
-    procedure DoAes(var iv: THash128Rec; c0: cardinal);
+    fSignature: TAesSignature;
   public
     /// additional salt/realm parameter used for ComputeHashedPassword()
     HashSalt: RawUtf8;
@@ -5455,54 +5453,29 @@ end;
 constructor TRestServerAuthenticationHttpAbstract.Create(aServer: TRestServer);
 begin
   inherited Create(aServer);
-  RandomBytes(fAesMask.b); // transient AES-128 secret which cannot be persisted
-  fAes.EncryptInit(fAesMask.b, 128); // for safe 96-bit digital signature
-  RandomBytes(fAesMask.b);
-end;
-
-procedure TRestServerAuthenticationHttpAbstract.DoAes(
-  var iv: THash128Rec; c0: cardinal);
-begin
-  iv.c0 := c0; // 32-bit session sequence is used as genuine IV for AES-CTR
-  iv.c1 := fAesMask.c1; // with 96-bit of fixed but random padding
-  iv.H  := fAesMask.H;
-  fAes.Encrypt(iv.b, iv.b); // very fast on all platforms (and threadsafe)
+  fSignature.Init; // for safe 96-bit digital signature
 end;
 
 function TRestServerAuthenticationHttpAbstract.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
 var
-  iv, v: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
   c: PHttpCookie;
 begin
   result := nil;
   c := Ctxt.InputCookies^.FindCookie(fServer.Model.Root);
   if c = nil then
     exit; // no cookie
-  if (c^.ValueLen = SizeOf(v) * 2) and
-     HexDisplayToBin(pointer(c.ValueStart), @v, SizeOf(v)) then
-  begin
-    DoAes(iv, v.c0);
-    if (v.c1 = iv.c1) and
-       (v.H  = iv.H) then
-    begin // valid digital signature
-      Ctxt.fSession := v.c0 xor fAesMask.c0;
-      result := fServer.LockedSessionAccess(Ctxt)
-    end;
-  end;
+  Ctxt.fSession := fSignature.ValidateCookie(c^.ValueStart, c^.ValueLen);
+  if Ctxt.fSession <> 0 then
+    result := fServer.LockedSessionAccess(Ctxt);
   if result = nil then // invalid cookie should be deleted on client side
     Ctxt.OutCookie[fServer.Model.Root] := COOKIE_EXPIRED;
 end;
 
 function TRestServerAuthenticationHttpAbstract.ComputeCookieValue(
   aSession: cardinal): RawUtf8;
-var
-  iv: THash128Rec; // 32-bit lower = session, 96-bit upper = digital signature
 begin
-  aSession := aSession xor fAesMask.c0;
-  DoAes(iv, aSession);
-  iv.c0 := aSession;
-  result := BinToHexDisplayLower(@iv, SizeOf(iv));
+  result := fSignature.GenerateCookie(aSession);
 end;
 
 
@@ -5583,7 +5556,7 @@ begin
   begin
     Join(['WWW-Authenticate: Basic realm="', fServer.Model.Root, '"'],
       Ctxt.fCall^.OutHead);
-    Ctxt.Error('', HTTP_UNAUTHORIZED); // 401 will popup for credentials in browser
+    Ctxt.Error('', HTTP_UNAUTHORIZED); // 401 = popup for credentials in browser
   end;
 end;
 
