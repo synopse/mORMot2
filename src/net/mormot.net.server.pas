@@ -2077,11 +2077,10 @@ type
     fRegisteredUnicodeUrl: TSynUnicodeDynArray;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
-    fLogData: pointer;
-    fLogDataStorage: TBytes;
     fLoggingServiceName: RawUtf8;
-    fAuthenticationSchemes: THttpApiRequestAuthentications;
     fReceiveBufferSize: cardinal;
+    fAuthenticationSchemes: THttpApiRequestAuthentications; // 8-bit
+    fLogging: boolean;                                      // 8-bit
     procedure SetReceiveBufferSize(Value: cardinal);
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
@@ -2097,8 +2096,6 @@ type
     procedure SetMaxConnections(aValue: cardinal);
     procedure SetOnTerminate(const Event: TOnNotifyThread); override;
     function GetApiVersion: RawUtf8; override;
-    function GetLogging: boolean;
-    procedure SetServerName(const aName: RawUtf8); override;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); override;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
@@ -2107,7 +2104,6 @@ type
     procedure SetMaximumAllowedContentLength(aMax: Int64); override;
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); override;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
-    procedure SetLoggingServiceName(const aName: RawUtf8);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
     /// server main loop - don't change directly
@@ -2263,13 +2259,11 @@ type
     /// read-only access to check if the HTTP API 2.0 logging is enabled
     // - use LogStart/LogStop methods to change this property value
     property Logging: boolean
-      read GetLogging;
+      read fLogging;
     /// the current HTTP API 2.0 logging Service name
     // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUtf8Conversion])
-    // - this value is dedicated to one instance, so the main instance won't
-    // propagate the change to all cloned instances
     property LoggingServiceName: RawUtf8
-      read fLoggingServiceName write SetLoggingServiceName;
+      read fLoggingServiceName write fLoggingServiceName;
     /// read-only access to the low-level HTTP API 2.0 Session ID
     property ServerSessionID: HTTP_SERVER_SESSION_ID
       read fServerSessionID;
@@ -8043,7 +8037,6 @@ constructor THttpApiServer.Create(QueueName: SynUnicode;
 var
   binding: HTTP_BINDING_INFO;
 begin
-  SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA)); // should be done 1st
   inherited Create(OnStart, OnStop, ProcessName,
     ProcessOptions + [hsoCreateSuspended], aLog);
   fOptions := ProcessOptions;
@@ -8076,7 +8069,6 @@ end;
 
 constructor THttpApiServer.CreateClone(From: THttpApiServer);
 begin
-  SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA));
   fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
@@ -8088,8 +8080,7 @@ begin
   fCallbackSendDelay := From.fCallbackSendDelay;
   fCompressList := From.fCompressList;
   fReceiveBufferSize := From.fReceiveBufferSize;
-  if From.fLogData <> nil then
-    fLogData := pointer(fLogDataStorage);
+  fLogging := From.fLogging;
   fOptions := From.fOptions; // needed by SetServerName() below
   fLogger := From.fLogger;   // share same THttpLogger instance
   SetServerName(From.fServerName); // setters are sometimes needed
@@ -8188,6 +8179,41 @@ const
 
 var
   global_verbs: TVerbText; // to avoid memory allocation on Delphi
+
+procedure ReqToLog(req: PHTTP_REQUEST; ctxt: THttpServerRequest;
+  log: PHTTP_LOG_FIELDS_DATA); // better code generation with a sub-function
+begin
+  log^.MethodNum     := req^.Verb;
+  log^.UriStemLength := req^.CookedUrl.AbsPathLength;
+  log^.UriStem       := req^.CookedUrl.pAbsPath;
+  with req^.headers.KnownHeaders[reqUserAgent] do
+  begin
+    log^.UserAgentLength := RawValueLength;
+    log^.UserAgent       := pRawValue;
+  end;
+  with req^.headers.KnownHeaders[reqHost] do
+  begin
+    log^.HostLength := RawValueLength;
+    log^.Host       := pRawValue;
+  end;
+  with req^.headers.KnownHeaders[reqReferrer] do
+  begin
+    log^.ReferrerLength := RawValueLength;
+    log^.Referrer       := pRawValue;
+  end;
+  with req^.headers.KnownHeaders[respServer] do
+  begin
+    log^.ServerNameLength := RawValueLength;
+    log^.ServerName       := pRawValue;
+  end;
+  log^.ClientIp       := pointer(ctxt.fRemoteIP);
+  log^.ClientIpLength := length(ctxt.fRemoteip);
+  log^.Method         := pointer(ctxt.fMethod);
+  log^.MethodLength   := length(ctxt.fMethod);
+  log^.UserName       := pointer(ctxt.fAuthenticatedUser);
+  log^.UserNameLength := Length(ctxt.fAuthenticatedUser);
+  // log^.ServerName
+end;
 
 procedure THttpApiServer.DoExecute;
 var
@@ -8763,6 +8789,7 @@ procedure THttpApiServer.LogStart(const aLogFolder: TFileName;
   aRolloverType: THttpApiLoggingRollOver; aRolloverSize: cardinal;
   aLogFields: THttpApiLogFields; aFlags: THttpApiLoggingFlags);
 var
+  i: PtrInt;
   log: HTTP_LOGGING_INFO;
   folder, software: SynUnicode;
 begin
@@ -8770,9 +8797,11 @@ begin
      (fOwner <> nil) then
     exit;
   EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  fLogData := nil; // disable any previous logging
+  // disable any previous logging
+  fLogging := false;
+  for i := 0 to length(fClones) - 1 do
+    fClones[i].fLogging := false;
+  // setup log parameters
   FillcharFast(log, SizeOf(log), 0);
   log.Flags := 1;
   log.LoggingFlags := byte(aFlags);
@@ -8798,7 +8827,9 @@ begin
     Http.SetUrlGroupProperty(fUrlGroupID,
       HttpServerLoggingProperty, @log, SizeOf(log)));
   // on success, update the actual log memory structure
-  fLogData := pointer(fLogDataStorage);
+  fLogging := true;
+  for i := 0 to length(fClones) - 1 do
+    fClones[i].fLogging := true;
 end;
 
 procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
@@ -8827,11 +8858,11 @@ var
 begin
   if (self = nil) or
      (fClones = nil) or
-     (fLogData = nil) then
+     not fLogging then
     exit;
-  fLogData := nil;
+  fLogging := false;
   for i := 0 to length(fClones) - 1 do
-    fClones[i].fLogData := nil;
+    fClones[i].fLogging := false;
 end;
 
 procedure THttpApiServer.SetReceiveBufferSize(Value: cardinal);
@@ -8841,20 +8872,6 @@ begin
   fReceiveBufferSize := Value;
   for i := 0 to length(fClones) - 1 do
     fClones[i].fReceiveBufferSize := Value;
-end;
-
-procedure THttpApiServer.SetServerName(const aName: RawUtf8);
-var
-  i: PtrInt;
-begin
-  inherited SetServerName(aName);
-  with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do
-  begin
-    ServerName := pointer(aName);
-    ServerNameLength := Length(aName);
-  end;
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetServerName(aName);
 end;
 
 procedure THttpApiServer.SetOnRequest(const aRequest: TOnHttpServerRequest);
@@ -8927,18 +8944,6 @@ begin
   inherited SetRemoteConnIDHeader(aHeader);
   for i := 0 to length(fClones) - 1 do
     fClones[i].SetRemoteConnIDHeader(aHeader);
-end;
-
-procedure THttpApiServer.SetLoggingServiceName(const aName: RawUtf8);
-begin
-  if self = nil then
-    exit;
-  fLoggingServiceName := aName;
-  with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do
-  begin
-    ServiceName := pointer(fLoggingServiceName);
-    ServiceNameLength := Length(fLoggingServiceName);
-  end;
 end;
 
 procedure THttpApiServer.SetAuthenticationSchemes(
