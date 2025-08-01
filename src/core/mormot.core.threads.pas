@@ -307,6 +307,9 @@ type
     procedure Clear;
     /// save the stored values as UTF-8 encoded JSON Object
     function ToJson(HumanReadable: boolean = false): RawUtf8;
+    /// low-level access to the internal TDocVariant instance and all its features
+    // - warning: the returned result is not thread-safe so you should call Lock
+    function Data: PDocVariantData;
     /// low-level access to the associated thread-safe mutex
     function Lock: TAutoLocker;
     /// the document fields would be safely accessed via this property
@@ -385,6 +388,8 @@ type
     /// save the stored value as UTF-8 encoded JSON Object
     // - implemented as just a wrapper around VariantSaveJson()
     function ToJson(HumanReadable: boolean = false): RawUtf8;
+    /// low-level access to the internal TDocVariant instance and all its features
+    function Data: PDocVariantData;
     /// low-level access to the associated thread-safe mutex
     function Lock: TAutoLocker;
     /// the document fields would be safely accessed via this property
@@ -2061,6 +2066,11 @@ begin
   finally
     fLock.Leave;
   end;
+end;
+
+function TLockedDocVariant.Data: PDocVariantData;
+begin
+  result := @fValue;
 end;
 
 function TLockedDocVariant.Copy: variant;
