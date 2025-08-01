@@ -1296,6 +1296,7 @@ var
   needed: TRawUtf8DynArray; // no long standing fSafe.Lock
   expired: TDateTime;
   res: TAcmeStatus;
+  tmpCert, tmpKey: TFileName;
   log: ISynLog;
 begin
   // this method is run from a transient TLoggedWorkThread
@@ -1356,37 +1357,42 @@ begin
         continue; // (unlikely) race condition
       end;
       c.fRenewing := true;
-      c.Safe.UnLock; // allow e.g. OnNetTlsAcceptChallenge() lookup
+      c.Safe.UnLock; // allow e.g. HttpServerChallenge() background lookup
       try
-        res := c.RegisterAndWait(nil, c.fSignedCert, c.fPrivKey,
-          fPrivateKeyPassword, fRenewWaitForSeconds, @fRenewTerminated);
-        if fRenewTerminated then
-          exit;
-        if res = asValid then
-          c.ClearCtx;
+        tmpCert := c.fSignedCert + '.tmp'; // apply challenge on transient files
+        tmpKey  := c.fPrivKey    + '.tmp';
+        res := c.RegisterAndWait(nil, tmpCert, tmpKey, fPrivateKeyPassword,
+                 fRenewWaitForSeconds, @fShutdown);
+        if (res = asValid) and
+           not fShutdown then
+        begin
+          // validate these new certificate and private key
+          res := asInvalid;
+          ctx := c.NewServerContext(tmpCert, tmpKey);
+          if ctx <> nil then
+            // we can safely replace the main files
+            if DeleteFile(c.fSignedCert) and
+               DeleteFile(c.fPrivKey) and
+               RenameFile(tmpCert, c.fSignedCert) and
+               RenameFile(tmpKey, c.fPrivKey) then
+            begin
+              // GetServerContext should now use this new context
+              c.ReplaceContext(ctx);
+              res := asValid;
+            end
+            else
+            begin
+              if Assigned(log) then
+                log.Log(sllLastError,
+                  'CheckCertificates(%): impossible to replace % and %',
+                  [needed[i], c.fSignedCert, c.fPrivKey], self);
+              ctx.Free;
+            end;
+        end;
       except
         res := asInvalid;
       end;
       c.fRenewing := false;
-      if res = asValid then
-      begin
-        // validate and pre-load this new certificate
-        ctx := nil;  // make Delphi compiler happy
-        c.Safe.Lock; // as expected by c.GetServerContext
-        try
-          ctx := c.fCtx; // old context backup
-          c.fCtx := nil; // force re-creation
-          if c.GetServerContext = nil then
-            res := asInvalid;
-        except
-          res := asInvalid;
-        end;
-        if res = asValid then
-          ctx.Free // replaced with the new certificate: dispose the old one
-        else
-          c.fCtx := ctx; // restore the old context (which still works)
-        c.Safe.UnLock; // no need to restart the server :)
-      end;
       if Assigned(log) then
         log.Log(sllTrace, 'CheckCertificates: % = %',
           [needed[i], ToText(res)^], self);
