@@ -149,6 +149,7 @@ type
     fNewAccount: RawUtf8;
     fNewOrder: RawUtf8;
     // URI filled by CreateOrder
+    fOrder: RawUtf8;
     fFinalize: RawUtf8;
     procedure ReadDirectory;
     procedure CreateAccount;
@@ -179,12 +180,16 @@ type
     procedure StartDomainRegistration;
     /// check if challenge for a domain is completed
     function CheckChallengesStatus: TAcmeStatus;
-    /// finalize the order and download the signed certificate
-    // - aCert contain the final PEM certificate as signed by the ACME server
+    /// finalize the order
     // - aPrivateKey contains the PEM private key generated locally, and
     // optionally encrypted via aPrivateKeyPassword
-    function CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
+    function FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
       const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
+    /// download the signed certificate
+    // - aCert contain the final PEM certificate as signed by the ACME server
+    function CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
+    /// call OnChallenges to clear temp files, if needed
+    procedure ClearDomainRegistration;
     /// will run StartDomainRegistration and wait until it is completed
     // - low-level wrapper using any TOnAcmeChallenge callback
     // - won't execute function CompleteDomainRegistration() if OutSignedCert
@@ -512,6 +517,8 @@ begin
     result := asValid
   else if IdemPChar(p, 'PENDING') then
     result := asPending
+  else if IdemPChar(p, 'PROCESSING') then
+    result := asPending
   else
     result := asInvalid;
 end;
@@ -658,6 +665,8 @@ begin
   // The client begins the certificate issuance process by sending a POST
   // request to the server's newOrder resource
   r1 := fHttpClient.Post(fNewOrder, ['identifiers', GetIdentifiersArr(fSubject)]);
+  if not fHttpClient.Header('Location', fOrder) then
+    EAcmeClient.RaiseUtf8('Location not found for new order', []);
   JsonDecode(pointer(r1), [
     'status',
     'finalize',
@@ -811,13 +820,12 @@ begin
     [ToText(result)^, pending, valid, length(fChallenges)], self);
 end;
 
-function TAcmeClient.CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
+function TAcmeClient.FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
   const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
 var
   csr: RawByteString;
   pk, resp: RawUtf8;
-  i: PtrInt;
-  v: array [0..1] of TValuePUtf8Char;
+  status: RawUtf8;
 begin
   try
     // Generate a new PKCS#10 Certificate Signing Request
@@ -831,6 +839,29 @@ begin
     // order by submitting a Certificate Signing Request (CSR)
     resp := fHttpClient.Post(fFinalize, [
       'csr', BinToBase64uri(csr)]);
+    status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
+    result := AcmeTextToStatus(pointer(status));
+    if result in [asValid, asPending] then
+      // only keep the generated private key on success
+      aPrivateKey := pk
+  finally
+    FillZero(pk);
+  end;
+end;
+
+function TAcmeClient.CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
+var
+  resp: RawUtf8;
+  v: array [0..1] of TValuePUtf8Char;
+begin
+  try
+    // Before sending a POST request to the server, an ACME client needs to
+    // have a fresh anti-replay nonce to put in the "nonce" header of the JWS
+    fHttpClient.Head(fNewNonce);
+    // If a request to finalize an order is successful, the server will
+    // return a 200 (OK) with an updated order object. The status of the
+    // order will indicate what action the client should take
+    resp := fHttpClient.Post(fOrder, '');
     JsonDecode(pointer(resp), [
       'status',
       'certificate'], @v, {handlejsonobjarr=} true);
@@ -842,24 +873,28 @@ begin
       // Download the certificate
       aCert := fHttpClient.Post(v[1].ToUtf8, '');
       if IsPem(aCert) then
-        fLog.Add.Log(sllDebug, 'CompleteDomainRegistration finalize=%',
+        fLog.Add.Log(sllDebug, 'CompleteDomainRegistration cert=%',
           [aCert], self)
       else
         result := asInvalid;
     end;
-    if result = asValid then
-      // only keep the generated private key on success
-      aPrivateKey := pk
   finally
-    FillZero(pk);
     FillZero(resp);
-    if Assigned(fOnChallenges) then
-      // call with key = '' to notify final state
-      for i := 0 to length(fChallenges) - 1 do
-        if fChallenges[i].Key <> '' then
-          fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
-    fChallenges := nil;
   end;
+end;
+
+procedure TAcmeClient.ClearDomainRegistration;
+var
+  i: PtrInt;
+begin
+  if Assigned(fOnChallenges) then
+    // call with key = '' to notify final state
+    for i := 0 to length(fChallenges) - 1 do
+      if fChallenges[i].Key <> '' then
+        fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
+  fChallenges := nil;
+  fOrder := '';
+  fFinalize := '';
 end;
 
 function TAcmeClient.RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
@@ -873,33 +908,54 @@ var
 begin
   fLog.EnterLocal(log, self, 'RegisterAndWait');
   fOnChallenges := OnChallenge;
-  StartDomainRegistration;
-  endtix := GetTickCount64 + WaitForSec * 1000;
-  repeat
-    result := asInvalid;
-    if Terminated = nil then
-      SleepHiRes(1000)
-    else if SleepHiRes(1000, Terminated^) then
+  try
+    StartDomainRegistration;
+    // First loop: wait for domain validation
+    endtix := GetTickCount64 + WaitForSec * 1000;
+    repeat
+      result := asInvalid;
+      if Terminated = nil then
+        SleepHiRes(1000)
+      else if SleepHiRes(1000, Terminated^) then
+        exit;
+      result := CheckChallengesStatus;
+      if result <> asPending then
+        break;
+    until GetTickCount64 > endtix;
+    if (result <> asValid) or
+       (OutSignedCert = '') or
+       (OutPrivateKey = '') then
       exit;
-    result := CheckChallengesStatus;
-    if result <> asPending then
-      break;
-  until GetTickCount64 > endtix;
-  if (result <> asValid) or
-     (OutSignedCert = '') or
-     (OutPrivateKey = '') then
-    exit;
-  result := CompleteDomainRegistration(cert, pk, aPrivateKeyPassword);
-  if Assigned(log) then
-    log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
-  if result = asValid then
-    try
-      FileFromString(cert, OutSignedCert);
-      FileFromString(pk, OutPrivateKey);
-    finally
-      FillZero(cert);
-      FillZero(pk);
-    end;
+    // Send CSR
+    result := FinalizeDomainRegistration(pk, aPrivateKeyPassword);
+    if Assigned(log) then
+      log.Log(sllDebug, 'FinalizeDomainRegistration=%', [ToText(result)^], self);
+    if result = asInvalid then
+      exit;
+    // Second loop: wait for certificate
+    repeat
+      result := asInvalid;
+      if Terminated = nil then
+        SleepHiRes(1000)
+      else if SleepHiRes(1000, Terminated^) then
+        exit;
+      result := CompleteDomainRegistration(cert);
+      if result <> asPending then
+        break;
+    until GetTickCount64 > endtix;
+    if Assigned(log) then
+      log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
+    if result = asValid then
+      try
+        FileFromString(cert, OutSignedCert);
+        FileFromString(pk, OutPrivateKey);
+      finally
+        FillZero(cert);
+        FillZero(pk);
+      end;
+  finally
+    ClearDomainRegistration;
+  end;
 end;
 
 function TAcmeClient.RegisterAndWaitFolder(
