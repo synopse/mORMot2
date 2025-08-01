@@ -954,8 +954,9 @@ type
   /// allow parallel execution of an index-based process in a thread pool
   // - will create its own thread pool, then execute any method by spliting the
   // work over each thread, so Method execution time is expected to be fair
-  TSynParallelProcess = class(TSynLocked)
+  TSynParallelProcess = class(TSynPersistent)
   protected
+    fSafe: TOSLightLock; // only used to serialize ParallelRunAndWait()
     fThreadName: RawUtf8;
     fPool: array of TSynParallelProcessThread;
     fThreadPoolCount: integer;
@@ -3060,7 +3061,7 @@ constructor TSynParallelProcess.Create(ThreadPoolCount: integer;
 var
   i: PtrInt;
 begin
-  inherited Create; // initialize fSafe
+  fSafe.Init;
   if ThreadPoolCount < 0 then
     ESynThread.RaiseUtf8('%.Create(%,%)',
       [Self, ThreadPoolCount, ThreadName]);
@@ -3078,7 +3079,8 @@ end;
 destructor TSynParallelProcess.Destroy;
 begin
   ObjArrayClear(fPool);
-  inherited;
+  inherited Destroy;
+  fSafe.Done;
 end;
 
 procedure TSynParallelProcess.ParallelRunAndWait(const Method: TOnSynParallelProcess;
@@ -3105,6 +3107,7 @@ begin
     inc(t); // include current thread
   if use > t then
     use := t;
+  fSafe.Lock; // paranoid: serialize ParallelRunAndWait() calls
   try
     // start secondary threads
     perthread := cardinal(MethodCount) div cardinal(use);
@@ -3154,6 +3157,7 @@ begin
         error := FormatUtf8('% % on thread % [%]',
           [{%H-}error, E, fPool[t].fThreadName, E.Message]);
     end;
+    fSafe.UnLock;
     if error <> '' then
       ESynThread.RaiseUtf8('%.ParallelRunAndWait: %', [self, error]);
   end;
