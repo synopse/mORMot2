@@ -4631,6 +4631,7 @@ type
   // - publishes a TSynLocker instance, and its OS lock and padding fields
   // - consider a TLightLock field as lighter options, or a R/W lock with
   // TObjectRWLock and TObjectRWLightLock classes, or even a TObjectOSLightLock
+  // or a TObjectOSLock if you don't need additional TSynLocker fields/features
   // - TSynLockedWithRttiMethods would add paranoid JSON persistence lock
   TSynLocked = class(TSynPersistent)
   protected
@@ -4642,6 +4643,29 @@ type
     destructor Destroy; override;
     /// access to the associated instance critical section
     property Safe: PSynLocker
+      read fSafe;
+    /// could be used as a short-cut to Safe^.Lock
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe^.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes one Operating System standard lock without the TSynLocker overhead
+  // - on high contention, for proper padding over the 64-bytes CPU cache line,
+  // you should add at least 36 bytes on CPU32 (i.e. 9 integer/pointer fields)
+  TObjectOSLock = class(TSynPersistent)
+  protected
+    fSafe: TOSLock; // TRTLCriticalSection with no padding (24 bytes on CPU32)
+  public
+    /// initialize the instance, and its associated OS lock
+    constructor Create; override;
+    /// finalize the instance, and its associated OS lock
+    destructor Destroy; override;
+    /// access to the associated non-reentrant Operating System lock instance
+    property Safe: TOSLock
       read fSafe;
     /// could be used as a short-cut to Safe^.Lock
     procedure Lock;
@@ -10825,6 +10849,31 @@ procedure TSynLocked.Unlock;
 begin
   if self <> nil then
     fSafe^.UnLock;
+end;
+
+
+{ TObjectOSLock }
+
+constructor TObjectOSLock.Create;
+begin
+  fSafe.Init;
+end;
+
+destructor TObjectOSLock.Destroy;
+begin
+  fSafe.Done;
+end;
+
+procedure TObjectOSLock.Lock;
+begin
+  if self <> nil then
+    fSafe.Lock;
+end;
+
+procedure TObjectOSLock.Unlock;
+begin
+  if self <> nil then
+    fSafe.UnLock;
 end;
 
 
