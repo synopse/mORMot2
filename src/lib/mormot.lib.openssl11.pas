@@ -1240,8 +1240,10 @@ type
   /// convenient wrapper to a PSSL_CTX instance
   SSL_CTX = object
   public
-    function SetCertificateFiles(const Cert, Key: TFileName;
-      const KeyPassword: SpiUtf8): boolean;
+    /// cut-down version of TOpenSslNetTls.SetupCtx, used e.g. with SNI
+    // - warning: CertFile and KeyFile are UTF-8 encoded, not regular TFileName
+    procedure SetCertificateFiles(const CertFile, KeyFile: RawUtf8;
+      const KeyPassword: SpiUtf8);
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -7503,14 +7505,19 @@ end;
 
 { SSL_CTX }
 
-function SSL_CTX.SetCertificateFiles(const Cert, Key: TFileName;
-  const KeyPassword: SpiUtf8): boolean;
+procedure SSL_CTX.SetCertificateFiles(const CertFile, KeyFile: RawUtf8;
+  const KeyPassword: SpiUtf8);
 begin
-  SSL_CTX_use_certificate_file(@self, pointer(Cert), SSL_FILETYPE_PEM);
+  EOpenSslNetTls.Check(
+    SSL_CTX_use_certificate_chain_file(@self, pointer(CertFile)),
+    'SetCertificateFiles chain_file'); // note: @self <> PSSL so keep ssl=nil
   if KeyPassword <> '' then
     SSL_CTX_set_default_passwd_cb_userdata(@self, pointer(KeyPassword));
-  SSL_CTX_use_PrivateKey_file(@self, pointer(Key), SSL_FILETYPE_PEM);
-  result := SSL_CTX_check_private_key(@self) = OPENSSLSUCCESS;
+  EOpenSslNetTls.Check(
+    SSL_CTX_use_PrivateKey_file(@self, pointer(KeyFile), SSL_FILETYPE_PEM),
+    'SetCertificateFiles key_file');
+  EOpenSslNetTls.Check(SSL_CTX_check_private_key(@self),
+    'SetCertificateFiles check');
 end;
 
 procedure SSL_CTX.Free;
