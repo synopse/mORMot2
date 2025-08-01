@@ -282,13 +282,15 @@ type
   protected
     fDomainJson, fReferenceCert, fSignedCert, fPrivKey: TFileName;
     fOwner: TAcmeLetsEncrypt;
-    fCtx: PSSL_CTX;
+    fSslCtx: PSSL_CTX; // shared for all server connections
     fRedirectHttps: RawUtf8;
     fRenewing: boolean;
+    fServerContextTix32: cardinal;
     fSignedCertTime, fPrivKeyTime: TUnixTime;
-    procedure ClearCtx;
     // internal method called by TAcmeLetsEncrypt.OnNetTlsAcceptServerName
     function GetServerContext: PSSL_CTX;
+    function NewServerContext(const Cert, Key: TFileName): PSSL_CTX;
+    procedure ReplaceContext(New: PSSL_CTX);
   public
     /// initialize certificate management with Let's Encrypt of one domain
     // - aDomainFile is the ##.json of this domain to be read from disk
@@ -1111,50 +1113,83 @@ end;
 
 destructor TAcmeLetsEncryptClient.Destroy;
 begin
-  ClearCtx;
+  ReplaceContext({new=}nil);
   inherited Destroy;
 end;
 
-procedure TAcmeLetsEncryptClient.ClearCtx;
+function TAcmeLetsEncryptClient.NewServerContext(const Cert, Key: TFileName): PSSL_CTX;
 begin
-  if fCtx <> nil then
-    fCtx.Free;
-  fCtx := nil;
+  result := SSL_CTX_new(TLS_server_method);
+  try
+    result.SetCertificateFiles(
+      StringToUtf8(Cert), StringToUtf8(Key), fOwner.fPrivateKeyPassword);
+  except
+    result.Free; // release this invalid context on any EOpenSslNetTls
+    result := nil;
+  end;
+  fLog.Add.Log(sllTrace, 'NewServerContext=% for % and %',
+    [BOOL_STR[result <> nil], Cert, Key], self);
 end;
 
 function TAcmeLetsEncryptClient.GetServerContext: PSSL_CTX;
 var
   sc, pk: TUnixTime;
+  tix32: cardinal;
 begin
-  // client made fSafe.Lock
-  result := fCtx;
-  if result <> nil then // most of time, immediate return from cache
+  // client made fSafe.Lock and will eventually make fSafe.UnLock
+  sc := 0;
+  pk := 0;
+  tix32 := GetTickSec;
+  // result <> nil will be attached to a TLS connection via SSL_set_SSL_CTX()
+  result := fSslCtx;
+  // immediate return from cache on a very active server or during renewal
+  if fRenewing or
+     (fServerContextTix32 = tix32) then
     exit;
-  // check missing or unmodified key files
-  sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
-  if sc <= 0 then
-    exit;
-  pk := FileAgeToUnixTimeUtc(fPrivKey);    // ####.key.pem
-  if (pk <= 0) or
-     ((fSignedCertTime = sc) and
-      (fPrivKeyTime = pk)) then
-    exit;
-  // only retry SSL_CTX_new().SetCertificateFiles() if actually changed
-  fSignedCertTime := sc;
-  fPrivKeyTime := pk;
-  // will be assigned by SSL_set_SSL_CTX() which requires only a certificate
-  result := SSL_CTX_new(TLS_server_method);
-  // cut-down version of TOpenSslNetTls.SetupCtx
-  if result.SetCertificateFiles(
-       fSignedCert, fPrivKey, fOwner.fPrivateKeyPassword) then
-    fCtx := result // owned and cached
-  else
+  fServerContextTix32 := tix32; // accessing files once per second is enough
+  if result <> nil then // we already have a PSSL_CTX: check it is still valid
   begin
-    result.Free;
-    result := nil; // silently fallback to main certificate
+    // missing key files could still return the cached PSSL_CTX
+    sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
+    pk := FileAgeToUnixTimeUtc(fPrivKey);    // ####.key.pem
+    if (sc <= 0) or
+       (pk <= 0) then
+      exit;
+    // unmodified key files will also return the cached PSSL_CTX (most often)
+    if (fSignedCertTime = sc) and
+       (fPrivKeyTime = pk) then
+      exit;
   end;
+  // if we reached here, we have deprecated (or no) PSSL_CTX -> create one
+  result := NewServerContext(fSignedCert, fPrivKey);
+  if result <> nil then
+  begin
+    fSslCtx := result; // owned and cached
+    if sc = 0 then
+      sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
+    if pk = 0 then
+      pk := FileAgeToUnixTimeUtc(fPrivKey);   //  ####.key.pem
+    fSignedCertTime := sc;
+    fPrivKeyTime := pk;
+  end
+  else
+    result := fSslCtx; // silently fallback to previous (maybe nil) PSSL_CTX
 end;
 
+procedure TAcmeLetsEncryptClient.ReplaceContext(New: PSSL_CTX);
+var
+  old: PSSL_CTX;
+begin
+  fSafe.Lock;
+  try
+    old := fSslCtx;
+    fSslCtx := New;
+  finally
+    fSafe.UnLock;
+  end;
+  if old <> nil then
+    old.Free;
+end;
 
 
 { TAcmeLetsEncrypt }
