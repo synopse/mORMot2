@@ -144,8 +144,8 @@ TCP/UDP Port Forwarding and Tunnelling
 Automatic Certificate Management Environment (ACME v2) Client
 - JWS HTTP-client implementation
 - ACME client implementation
-- Let's Encrypt TLS / HTTPS Encryption Certificates Support
-- HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
+- Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support
+- HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80
 
 ### mormot.net.ldap
 

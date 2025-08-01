@@ -1,4 +1,4 @@
-/// Network ACME / Let's Encrypt Support
+/// Network ACME / Let's Encrypt - ZeroSSL Support
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.net.acme;
@@ -9,7 +9,7 @@ unit mormot.net.acme;
    Automatic Certificate Management Environment (ACME v2) Client
     - JWS HTTP-client implementation
     - ACME client implementation
-    - Let's Encrypt TLS / HTTPS Encryption Certificates Support
+    - Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support
     - HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
     - HTTP/HTTPS Fully Featured Multi-Host Web Server
 
@@ -132,7 +132,7 @@ type
 
   /// ACME client processing class
   // - implements the ACME V2 client (specified in RFC8555) to download
-  // free domain validated certificates, mainly from Let's Encrypt
+  // free domain validated certificates, mainly from Let's Encrypt or ZeroSSL
   // - see https://letsencrypt.org/how-it-works for a high-level description
   TAcmeClient = class(TSynLocked)
   protected
@@ -165,8 +165,8 @@ type
   public
     /// create an ACME client instance
     // - aDirectoryUrl is the main URL of a directory object, typically
-    // ACME_LETSENCRYPT_URL (for production) or ACME_LETSENCRYPT_DEBUG_URL
-    // (for testing)
+    // ACME_LETSENCRYPT_URL / ACME_ZEROSSL_URL (for production) or
+    // ACME_LETSENCRYPT_DEBUG_URL / ACME_ZEROSSL_DEBUG_URL (for testing)
     // - aCert is a local private certificate used to identify the client
     // account for the JWK requests - so is not involved in the TLS chain
     constructor Create(aLog: TSynLogClass; const aCert: ICryptCert;
@@ -185,9 +185,11 @@ type
     procedure StartDomainRegistration;
     /// check if challenge for a domain is completed
     function CheckChallengesStatus: TAcmeStatus;
-    /// finalize the order
-    // - aPrivateKey contains the PEM private key generated locally, and
-    // optionally encrypted via aPrivateKeyPassword
+    /// finalize the order by submitting a Certificate Signing Request (CSR)
+    // - RegisterAndWait will eventually wait and call CompleteDomainRegistration()
+    // to actually download the signed certificate
+    // - aPrivateKey contains the PEM private key generated locally,
+    // optionally encrypted via aPrivateKeyPassword, corresponding to the CSR
     function FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
       const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
     /// download the signed certificate
@@ -224,7 +226,7 @@ type
     property Subject: TRawUtf8DynArray
       read fSubject write fSubject;
     /// EAB MAC algoritm
-    // External Account Binding can be used to associate an ACME account
+    // - "External Account Binding" can be used to associate an ACME account
     // with an existing account in non-ACME system
     // - typically saSha256
     property EabAlgo: TSignAlgo
@@ -253,13 +255,18 @@ type
 function ToText(status: TAcmeStatus): PShortString; overload;
 
 
-{ **************** Let's Encrypt TLS / HTTPS Encryption Certificates Support }
+{ ********** Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support }
 
 const
   ACME_LETSENCRYPT_URL =
     'https://acme-v02.api.letsencrypt.org/directory';
   ACME_LETSENCRYPT_DEBUG_URL =
     'https://acme-staging-v02.api.letsencrypt.org/directory';
+
+  ACME_ZEROSSL_URL =
+    'https://acme.zerossl.com/v2/DV90';
+  ACME_ZEROSSL_DEBUG_URL =
+    'https://acme.zerossl.com/v2/DV90/staging';
 
   ACME_CHALLENGE_PATH =
     '/.well-known/acme-challenge/';
@@ -272,7 +279,7 @@ type
 
   TAcmeLetsEncrypt = class;
 
-  /// used to generate or renew one Let's Encrypt domain certificate
+  /// used to generate or renew one Let's Encrypt - ZeroSSL domain certificate
   TAcmeLetsEncryptClient = class(TAcmeClient)
   protected
     fDomainJson, fReferenceCert, fSignedCert, fPrivKey: TFileName;
@@ -294,7 +301,7 @@ type
   end;
   TAcmeLetsEncryptClientObjArray = array of TAcmeLetsEncryptClient;
 
-  /// handle one or several Let's Encrypt domains certificates
+  /// handle one or several Let's Encrypt - ZeroSSL domains certificates
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
@@ -314,9 +321,9 @@ type
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); virtual; abstract;
   public
-    /// initialize certificates management with Let's Encrypt
+    /// initialize certificates management with Let's Encrypt - ZeroSSL
     // - if aDirectoryUrl is not '', will use the "staging" environment - you
-    // should specify ACME_LETSENCRYPT_URL on production
+    // should specify ACME_LETSENCRYPT_URL / ACME_ZEROSSL_URL on production
     // - if aAlgo is '', will use 'x509-es256' as default
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
     constructor Create(aLog: TSynLogClass; const aKeyStoreFolder: TFileName;
@@ -340,7 +347,7 @@ type
       ServerName: PUtf8Char): pointer;
     /// TOnNetTlsAcceptChallenge event, set to OnNetTlsAcceptChallenge
     // global variable of mormot.net.sock
-    // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
+    // - ACME typical uri is '/.well-known/acme-challenge/<TOKEN>'
     function OnNetTlsAcceptChallenge(const domain, uri: RawUtf8;
       var content: RawUtf8): boolean;
     /// raw access to the internal Client list
@@ -367,16 +374,16 @@ type
     property RenewBeforeEndDays: integer
       read fRenewBeforeEndDays write fRenewBeforeEndDays;
     /// how many seconds CheckCertificates() should wait for getting a certificate
-    // - default is 30 seconds
+    // - default is 30 seconds, which seems fair enough
     property RenewWaitForSeconds: integer
       read fRenewWaitForSeconds write fRenewWaitForSeconds;
   end;
 
 
-{ **************** HTTP-01 Let's Encrypt Challenges HTTP Server on port 80 }
+{ *********** HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80 }
 
 type
-  /// handle one or several Let's Encrypt domains certificates with an
+  /// handle one or several Let's Encrypt - ZeroSSL domains certificates with an
   // associated HTTP server running on port 80
   // - will support HTTP-01 challenge answers when renewing is active
   // - will redirect any plain HTTP port 80 request to HTTPS port 443
@@ -388,7 +395,7 @@ type
     fHttpServer: THttpServer; // a single threaded HTTP server is enough
     fHttpsServer: THttpServerGeneric;
     fNextCheckTix: Int64;
-    fRedirectHttps: integer;
+    fRedirectHttps: integer; // how many active TAcmeLetsEncryptServer.Redirect()
     // (un)assign the TNetTlsContext.OnAcceptServerName callback to this instance
     procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); override;
     // main entry point for all HTTP requests on port 80
@@ -397,8 +404,9 @@ type
     procedure OnAcceptIdle(Sender: TObject; Tix64: Int64);
   public
     /// initialize certificates management and HTTP server with Let's Encrypt
-    // - if aDirectoryUrl is not '', will use the "staging" environment - you
-    // should specify ACME_LETSENCRYPT_URL on production
+    // - if aDirectoryUrl is not '', will use the ACME_LETSENCRYPT_DEBUG_URL
+    // "staging" environment - you should specify ACME_LETSENCRYPT_URL /
+    // ACME_ZEROSSL_URL on production
     // - if aAlgo is '', will use 'x509-es256' as default
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
     // - you can specify the associated main HTTPS server into aHttpsServer so
@@ -423,6 +431,7 @@ type
     property HttpsServer: THttpServerGeneric
       read fHttpsServer write fHttpsServer;
     /// the limited HTTP server launched by this class, running on port 80
+    // - a single-threaded OnHeaderParsed() process scales well enough
     property HttpServer: THttpServer
       read fHttpServer;
   end;
@@ -611,23 +620,22 @@ end;
 function TAcmeClient.GetChallenge(aUri: PUtf8Char; aUriLen: PtrInt;
   var Content: RawUtf8): boolean;
 var
-  i: PtrInt;
+  i: integer;
   c: ^TAcmeChallenge;
 begin
   c := pointer(fChallenges);
   if aUriLen > 0 then
     for i := 1 to length(fChallenges) do
-    begin
       if CompareBuf(c^.Token, aUri, aUriLen) = 0 then
       begin
         if Assigned(fLog) then
-          fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.Token], self);
+          fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.SubjectValue], self);
         result := true;
         Content := c^.Key;
         exit;
-      end;
-      inc(c);
-    end;
+      end
+      else
+        inc(c);
   result := false;
 end;
 
@@ -665,7 +673,8 @@ var
   hash: THash512Rec;
   signature: RawUtf8;
 begin
-  if (fEabKid <> '') and (fEabMacKey <> '') then
+  if (fEabKid <> '') and
+     (fEabMacKey <> '') then
   begin
     prot := FormatJson('{"alg":?,"kid":?,"url":?',
       [], [JWT_TEXT[fEabAlgo], fEabKid, fNewAccount]);
@@ -691,8 +700,8 @@ var
   resp: RawJson;
   status: RawUtf8;
 begin
-  // External Account Binding
-  eab := ComputeEab();
+  // Optional External Account Binding member
+  eab := ComputeEab;
   // A client creates a new account with the server by sending a POST
   // request to the server's newAccount URL
   req := FormatJson('{"termsOfServiceAgreed":true,"contact":[?]%}',
@@ -719,7 +728,7 @@ begin
   // request to the server's newOrder resource
   r1 := fHttpClient.Post(fNewOrder, ['identifiers', GetIdentifiersArr(fSubject)]);
   if not fHttpClient.Header('Location', fOrder) then
-    EAcmeClient.RaiseUtf8('Location not found for new order', []);
+    EAcmeClient.RaiseU('Location not found for new order');
   JsonDecode(pointer(r1), [
     'status',
     'finalize',
@@ -783,23 +792,26 @@ end;
 
 function TAcmeClient.RequestAuth(const aJson: RawJson): integer;
 var
-  i: PtrInt;
+  i: integer;
   resp: RawJson;
   status: RawUtf8;
+  c: ^TAcmeChallenge;
 begin
+  result := 0; // return how many pending
   // The client indicates to the server that it is ready for the challenge
   // validation by sending an empty body aJson = '{}'.
   // If aJson = '' then client requests validation state
-  result := 0; // return how many pending
-  for i := 0 to length(fChallenges) - 1 do
+  c := pointer(fChallenges);
+  for i := 1 to length(fChallenges) do
   begin
-    if fChallenges[i].Status = asPending then
+    if c^.Status = asPending then
     begin
-      resp := fHttpClient.Post(fChallenges[i].Url, aJson);
+      resp := fHttpClient.Post(c^.Url, aJson);
       status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
-      fChallenges[i].Status := AcmeTextToStatus(pointer(status));
-      inc(result, ord(fChallenges[i].Status = asPending));
+      c^.Status := AcmeTextToStatus(pointer(status));
+      inc(result, ord(c^.Status = asPending));
     end;
+    inc(c);
   end;
 end;
 
@@ -836,8 +848,9 @@ begin
     // Notify top-level application
     if Assigned(fOnChallenges) then
       for i := 0 to length(fChallenges) - 1 do
-        if fChallenges[i].Key <> '' then
-          fOnChallenges(self, fSubjects, fChallenges[i].Key, fChallenges[i].Token);
+        with fChallenges[i] do
+          if Key <> '' then
+            fOnChallenges(self, fSubjects, Key, Token);
     // Queue challenge testing by sending {} to initiate the server process
     n := RequestAuth('{}');
     fLog.Add.Log(sllTrace, 'StartDomainRegistration pending=%', [n], self);
@@ -846,7 +859,8 @@ end;
 
 function TAcmeClient.CheckChallengesStatus: TAcmeStatus;
 var
-  i, pending, valid: PtrInt;
+  i, pending, valid: integer;
+  c: ^TAcmeChallenge;
 begin
   // Before sending a POST request to the server, an ACME client needs to
   // have a fresh anti-replay nonce to put in the "nonce" header of the JWS
@@ -859,13 +873,17 @@ begin
   // else pending
   result := asPending;
   valid := 0;
-  for i := 0 to length(fChallenges) - 1 do
-    case fChallenges[i].Status of
+  c := pointer(fChallenges);
+  for i := 1 to length(fChallenges) do
+  begin
+    case c^.Status of
       asInvalid:
         result := asInvalid;
       asValid:
         inc(valid);
     end;
+    inc(c);
+  end;
   if (result = asPending) and
      (valid = length(fChallenges)) then
     result := asValid;
@@ -881,7 +899,7 @@ var
   status: RawUtf8;
 begin
   try
-    // Generate a new PKCS#10 Certificate Signing Request
+    // Generate a new private key and its PKCS#10 Certificate Signing Request
     csr := PemToDer(fHttpClient.fCert.CertAlgo.CreateSelfSignedCsr(
       fSubjects, aPrivateKeyPassword, pk));
     // Before sending a POST request to the server, an ACME client needs to
@@ -889,7 +907,7 @@ begin
     fHttpClient.Head(fNewNonce);
     // Once the validation process is complete and the server is satisfied
     // that the client has met its requirements, the client finalizes the
-    // order by submitting a Certificate Signing Request (CSR)
+    // order by submitting the Certificate Signing Request (CSR)
     resp := fHttpClient.Post(fFinalize, [
       'csr', BinToBase64uri(csr)]);
     status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
@@ -943,8 +961,9 @@ begin
   if Assigned(fOnChallenges) then
     // call with key = '' to notify final state
     for i := 0 to length(fChallenges) - 1 do
-      if fChallenges[i].Key <> '' then
-        fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
+      with fChallenges[i] do
+        if Key <> '' then
+          fOnChallenges(nil, fSubjects, {key=}'', Token);
   fChallenges := nil;
   fOrder := '';
   fFinalize := '';
@@ -955,7 +974,7 @@ function TAcmeClient.RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
   const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
   Terminated: PBoolean): TAcmeStatus;
 var
-  endtix: Int64;
+  endtix: cardinal;
   cert, pk: RawUtf8;
   log: ISynLog;
 begin
@@ -964,17 +983,17 @@ begin
   try
     StartDomainRegistration;
     // First loop: wait for domain validation
-    endtix := GetTickCount64 + WaitForSec * 1000;
+    endtix := GetTickSec + WaitForSec; // e.g. RenewWaitForSeconds = 30 secs
     repeat
       result := asInvalid;
       if Terminated = nil then
-        SleepHiRes(1000)
-      else if SleepHiRes(1000, Terminated^) then
+        SleepHiRes(500)
+      else if SleepHiRes(500, Terminated^) then
         exit;
-      result := CheckChallengesStatus;
+      result := CheckChallengesStatus; // checking twice per second seems fair
       if result <> asPending then
         break;
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     if (result <> asValid) or
        (OutSignedCert = '') or
        (OutPrivateKey = '') then
@@ -989,13 +1008,13 @@ begin
     repeat
       result := asInvalid;
       if Terminated = nil then
-        SleepHiRes(1000)
-      else if SleepHiRes(1000, Terminated^) then
+        SleepHiRes(500)
+      else if SleepHiRes(500, Terminated^) then
         exit;
-      result := CompleteDomainRegistration(cert);
+      result := CompleteDomainRegistration(cert); // retry twice per second
       if result <> asPending then
         break;
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     if Assigned(log) then
       log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
     if result = asValid then
@@ -1032,7 +1051,7 @@ begin
 end;
 
 
-{ **************** Let's Encrypt TLS / HTTPS Encryption Certificates Support }
+{ ********** Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support }
 
 { TAcmeLetsEncryptClient }
 
@@ -1157,15 +1176,15 @@ end;
 
 destructor TAcmeLetsEncrypt.Destroy;
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin
   fRenewTerminated := true; // set flag to abort any background task
   if fRenewing then
   begin
-    endtix := GetTickCount64 + 1000; // wait for background task to abort
+    endtix := GetTickSec + 5; // wait for background task to abort
     repeat
-      SleepHiRes(10);
-    until (GetTickCount64 > endtix) or
+      SleepHiRes(50);
+    until (GetTickSec > endtix) or
           not fRenewing;
   end;
   FillZero(fPrivateKeyPassword);
@@ -1328,13 +1347,12 @@ var
 begin
   p := pointer(fClient);
   for i := 1 to length(fClient) do
-    if p^.Match(ServerName) then
-    begin
-      result := p^;
+  begin
+    result := p^;
+    if result.Match(ServerName) then
       exit;
-    end
-    else
-      inc(p);
+    inc(p);
+  end;
   result := nil; // not found
 end;
 
@@ -1345,7 +1363,7 @@ begin
   try
     result := GetClient(ServerName); // case-insensitive search
     if result <> nil then
-      result.Safe.Lock;
+      result.Safe.Lock; // caller should eventually call result.Safe.UnLock
   finally
     fSafe.UnLock;
   end;
@@ -1384,12 +1402,14 @@ begin
   result := false;
   if not fRenewing then
     exit; // no challenge currently happening
+  // parse the /.well-known/acme-challenge/<token> URI
   P := pointer(uri);
   len := length(uri) - ACME_CHALLENGE_PATH_LEN;
   if (fClient = nil) or
      (len <= 0) or
      not CompareMem(P, _ACME_CHALLENGE_PATH, ACME_CHALLENGE_PATH_LEN) then
     exit;
+  // recognize the <token> and return its matching TAcmeChallenge.Key
   client := GetClientLocked(domain);
   if client <> nil then
     try
@@ -1400,7 +1420,7 @@ begin
 end;
 
 
-{ **************** HTTP-01 Let's Encrypt Challenges HTTP Server on port 80 }
+{ *********** HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80 }
 
 { TAcmeLetsEncryptServer }
 
@@ -1498,11 +1518,12 @@ var
   client: TAcmeLetsEncryptClient;
   body, redirect: RawUtf8;
 begin
-  // quick process of HTTP requests on port 80 into HTTP/1.0 responses
+  // (very) quick process of HTTP requests on port 80 into HTTP/1.0 responses
+  // - a single thread is able to serve and scale a lot of incoming connections
   if (Request.Http.CommandUri <> '') and
      (PCardinal(Request.Http.CommandUri)^ =
             ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
-    // handle Let's Encrypt challenges on /.well-known/* URI
+    // handle Let's Encrypt - ZeroSSL challenges on /.well-known/* URI
     if fRenewing and
        OnNetTlsAcceptChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
       // return HTTP-01 challenge content
