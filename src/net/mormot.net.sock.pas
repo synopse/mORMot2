@@ -874,7 +874,7 @@ type
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     CertificateFile: RawUtf8;
     /// input: PEM/PFX content of a certificate to be loaded
-    // - on OpenSSL client or server, calls SSL_CTX_use_certificat() API
+    // - on OpenSSL client or server, calls SSL_CTX_use_certificate() API
     // - not used on SChannel client
     // - on SChannel server, expects a .pfx / PKCS#12 binary content
     CertificateBin: RawByteString;
@@ -956,23 +956,23 @@ type
     // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
     /// called by INetTls.AfterConnection to fully customize peer validation
-    // - not used on SChannel
+    // - not implemented on SChannel
     OnPeerValidate: TOnNetTlsPeerValidate;
     /// called by INetTls.AfterConnection for each peer validation
     // - allow e.g. to verify CN or DNSName fields of each peer certificate
     // - see also ClientCertificateAuthentication and ClientVerifyOnce options
-    // - not used on SChannel
+    // - not implemented on SChannel
     OnEachPeerVerify: TOnNetTlsEachPeerVerify;
     /// called by INetTls.AfterConnection after standard peer validation
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
-    // - not used on SChannel
+    // - not implemented on SChannel
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
     /// called by INetTls.AfterConnection to retrieve a private password
-    // - not used on SChannel
+    // - not implemented on SChannel
     OnPrivatePassword: TOnNetTlsGetPassword;
     /// called by INetTls.AfterAccept to set a server/host-specific certificate
     // - used e.g. by TAcmeLetsEncryptServer to allow SNI per-host certificate
-    // - not used on SChannel
+    // - not implemented on SChannel
     OnAcceptServerName: TOnNetTlsAcceptServerName;
     /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
     // bound server certificate context into each accepted connection
