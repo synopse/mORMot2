@@ -1343,6 +1343,7 @@ type
     procedure FreeX509;
     procedure FreeX509_CRL;
     procedure FreeX509_EXTENSION;
+    /// weak access to stored Items[0..Count] - note: Delphi 7 fails as "default"
     property Items[index: integer]: pointer
       read GetItem; default;
   end;
@@ -10890,12 +10891,14 @@ end;
 
 procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
-  v, mode: integer;
+  v, mode, i: integer;
   cert: RawByteString;
   x: PX509;
+  xa: PX509DynArray;
   pk: PEVP_PKEY;
+  ca: Pstack_st_X509;
 begin
-  _PeerVerify := self; // safe and simple context for the callbacks
+  // setup the peer verification patterns
   if Context.IgnoreCertificateErrors then
     SSL_CTX_set_verify(fCtx, SSL_VERIFY_NONE, nil)
   else
@@ -10928,6 +10931,7 @@ begin
         SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
     end;
   end;
+  // load any certificate (and private key)
   pk := nil;
   cert := Context.CertificateBin;
   if (cert = '') and
@@ -10935,32 +10939,43 @@ begin
     cert := StringFromFile(TFileName(Context.CertificateFile));
   if cert <> '' then
   begin
-    x := LoadCertificate(cert); // PEM or DER
-    if x <> nil then
+    ca := nil;
+    xa := LoadCertificates(cert); // PEM
+    if xa <> nil then
     try
-      EOpenSslNetTls.Check(self, 'SetupCtx Certificate',
-        SSL_CTX_use_certificate(fCtx, x));
+      Check('SetupCtx Certificate0',
+        SSL_CTX_use_certificate(fCtx, xa[0]));
+      xa[0] := nil; // will be owned by fCtx
+      for i := 1 to high(xa) do
+        Check('SetupCtx Chain',
+          SSL_CTX_add_extra_chain_cert(fCtx, xa[i]));
     finally
-      x^.Free;
+      PX509DynArrayFree(xa);
     end
-    else if (Context.PrivateKeyRaw = nil) and
+     else if (Context.PrivateKeyRaw = nil) and
             (Context.PrivateKeyFile = '') and
-            ParsePkcs12(cert, Context.PrivatePassword, x, pk) then
+            ParsePkcs12(cert, Context.PrivatePassword, x, pk, @ca) then
       try // was .pfx/pkcs#12 format as with SChannel
-        SSL_CTX_use_certificate(fCtx, x);
-        SSL_CTX_use_PrivateKey(fCtx, pk);
-        EOpenSslNetTls.Check(self, 'SetupCtx pfx',
-          SSL_CTX_check_private_key(fCtx), @Context.LastError);
+        Check('SetupCtx Certificate',
+          SSL_CTX_use_certificate(fCtx, x));
+        if ca <> nil then
+          for i := 0 to ca^.Count - 1 do
+            SSL_CTX_add_extra_chain_cert(fCtx, ca^.Items[i]);
+        Check('SetupCtx PrivateKey',
+          SSL_CTX_use_PrivateKey(fCtx, pk));
+        Check('SetupCtx pfx',
+          SSL_CTX_check_private_key(fCtx));
       finally
         x^.Free;
         pk^.Free;
+        ca^.FreeX509;
       end
     else
       EOpenSslNetTls.CheckFailed(self, 'SetupCtx: unsupported Certificate',
         nil, nil, 0, fServerAddress);
   end
   else if Context.CertificateRaw <> nil then
-    EOpenSslNetTls.Check(self, 'SetupCtx CertificateRaw',
+    Check('SetupCtx CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: Certificate required');
@@ -10973,22 +10988,21 @@ begin
         fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-    EOpenSslNetTls.Check(self, 'SetupCtx check_private_key file',
-      SSL_CTX_check_private_key(fCtx), @Context.LastError);
+    Check('SetupCtx check_private_key file',
+      SSL_CTX_check_private_key(fCtx));
   end
   else if Context.PrivateKeyRaw <> nil then
   begin
     SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw);
-    EOpenSslNetTls.Check(self, 'SetupCtx check_private_key raw',
-      SSL_CTX_check_private_key(fCtx), @Context.LastError);
+    Check('SetupCtx check_private_key raw',
+      SSL_CTX_check_private_key(fCtx));
   end
   else if Bind and (pk = nil) then
     raise EOpenSslNetTls.Create('AfterBind: PrivateKey required');
   if Context.CipherList = '' then
     Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
-  EOpenSslNetTls.Check(self, 'SetupCtx set_cipher_list',
-    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
-    @Context.LastError);
+  Check('SetupCtx set_cipher_list',
+    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL
@@ -11043,8 +11057,6 @@ begin
     peer^ := nil;
   end;
 end;
-
-//TODO: SSL_CTX_use_certificate_chain_file() with the CA?
 
 procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
