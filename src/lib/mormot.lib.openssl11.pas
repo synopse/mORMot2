@@ -101,17 +101,19 @@ type
   protected
     fLastError: integer;
     class function GetOpenSsl: string;
-    /// wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
+    // wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
     class procedure CheckFailed(caller: TObject; const method: ShortString;
       errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0;
       const context: RawUtf8 = '');
     class procedure TryNotAvailable(caller: TClass; const method: ShortString);
   public
     /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
+    // - warning: optional ssl parameter is expected to be a PSSL, not a PSSL_CTX
     class procedure Check(caller: TObject; const method: ShortString;
       res: integer; errormsg: PRawUtf8 = nil; ssl: pointer = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
-      /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
+    /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
+    // - warning: optional ssl parameter is expected to be a PSSL, not a PSSL_CTX
     class procedure Check(res: integer; const method: ShortString = '';
       ssl: pointer = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2545,12 +2547,15 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 { ******************** OpenSSL Helpers }
 
 procedure OpenSSL_Free(ptr: pointer);
-function OpenSSL_error(error: integer): RawUtf8; overload;
-procedure OpenSSL_error(error: integer; var result: RawUtf8); overload;
+
 function OpenSSL_error_short(error: integer): ShortString;
+procedure OpenSSL_error(error: integer; var result: RawUtf8); overload;
+function OpenSSL_error(error: integer): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 function SSL_is_fatal_error(get_error: integer): boolean;
 procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
+procedure SSL_get_error_short(get_error: integer; var dest: shortstring);
 function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
   dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
 
@@ -2803,7 +2808,7 @@ begin
   end
   else
   begin
-    // specific error within the context of ssl_*() methods
+    // specific error within the context of ssl_*() methods during TLS process
     res := SSL_get_error(ssl, sslretcode);
     SSL_get_error_text(res, msg); // recognize SSL_ERROR_* constant and more
     PSSL(ssl).IsVerified(@msg); // append cert verif error text to msg if needed
@@ -10107,7 +10112,7 @@ end;
 
 const
   // documented errors constants names after SSL_*() functions failure
-  SSL_ERROR_TEXT: array[SSL_ERROR_NONE .. SSL_ERROR_WANT_CLIENT_HELLO_CB] of RawUtf8 = (
+  SSL_ERROR_TEXT: array[SSL_ERROR_NONE .. SSL_ERROR_WANT_CLIENT_HELLO_CB] of TShort23 = (
     'NONE',
     'SSL',
     'WANT_READ',
@@ -10121,29 +10126,43 @@ const
     'WANT_ASYNC_JOB',
     'WANT_CLIENT_HELLO_CB');
 
-procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
+procedure SSL_get_error_short(get_error: integer; var dest: shortstring);
 begin
+  dest := 'SSL_ERROR_';
   if get_error in [low(SSL_ERROR_TEXT) .. high(SSL_ERROR_TEXT)] then
   begin
-    result := SSL_ERROR_TEXT[get_error];
+    AppendShort(SSL_ERROR_TEXT[get_error], dest);
     case get_error of
       SSL_ERROR_SSL:
         // non-recoverable protocol error
-        result := RawUtf8(format('%s (%s)',
-          [result, OpenSSL_error_short(ERR_get_error)]));
+        begin
+          get_error := ERR_get_error;
+          if get_error <> 0 then
+          begin
+            AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
+            AppendShort(OpenSSL_error_short(get_error), dest);
+            AppendShortChar(')', @dest)
+          end;
+        end;
       SSL_ERROR_SYSCALL:
         begin
           // non-recoverable I/O error
           get_error := RawSocketErrNo; // try to get additional info from OS
           if get_error <> NO_ERROR then
-            result := RawUtf8(format('%s (%d %s)',
-                        [result, get_error, GetErrorShort(get_error)]));
+            OsErrorAppend(get_error, dest, ' ');
         end;
     end; // non-fatal SSL_ERROR_WANT_* codes are unexpected here
   end
   else
-    str(get_error, AnsiString(result)); // paranoid / undocumented
-  result := Join(['SSL_ERROR_', result]);
+    AppendShortCardinal(get_error, dest); // paranoid / undocumented
+end;
+
+procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
+var
+  tmp: ShortString;
+begin
+  SSL_get_error_short(get_error, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
 function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
