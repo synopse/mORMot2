@@ -38,7 +38,8 @@ type
   // name server, or drrCNAME for the alias canonical name
   // - this enumerate has no RTTI because it is mapped to the integer values
   TDnsResourceRecord = (
-    drrA = 1,
+    drrEmpty,
+    drrA,
     drrNS,
     drrMD,
     drrMF,
