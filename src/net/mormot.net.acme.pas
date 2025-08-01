@@ -1054,48 +1054,59 @@ end;
 constructor TAcmeLetsEncryptClient.Create(
   aOwner: TAcmeLetsEncrypt; const aDomainFile: TFileName);
 var
-  cc: ICryptCert;
+  local: ICryptCert;
   dom: TDocVariantData;
-  json, c: RawUtf8;
-  s: TRawUtf8DynArray;
+  json, cont: RawUtf8;
+  sub: TRawUtf8DynArray;
   eab: PDocVariantData;
-  eab_algo: RawUtf8;
+  algo: RawUtf8;
 begin
   fOwner := aOwner;
   fDomainJson    := aDomainFile + '.json';
   fReferenceCert := aDomainFile + '.acme.pem';
   fSignedCert    := aDomainFile + '.crt.pem';
   fPrivKey       := aDomainFile + '.key.pem';
+  // load the main domain.json global parameters
   json := StringFromFile(fDomainJson);
   fOwner.fLog.Add.Log(sllTrace, 'Create(%) %', [aDomainFile, json], self);
   dom.InitJsonInPlace(pointer(json), []);
-  c := dom.U['contact'];
-  dom.A['subjects'].ToRawUtf8DynArray(s);
-  cc := Cert(fOwner.fAlgo);
-  if cc = nil then
+  dom.A['subjects'].ToRawUtf8DynArray(sub);
+  if sub = nil then
+    EAcmeLetsEncrypt.RaiseUtf8(
+      '%.Create: void "subjects":[] in %', [self, fDomainJson]);
+  cont := dom.U['contact'];
+  if cont = '' then
+    EAcmeLetsEncrypt.RaiseUtf8(
+      '%.Create: missing "contact":"mailto:xx@yy.zz" in %',
+      [self, fDomainJson]);
+  if dom.GetAsDocVariant('eab', eab) then
+  begin
+    algo := eab^.U['algo'];
+    if not TextToSignAlgo(algo, fEabAlgo) then
+      EAcmeLetsEncrypt.RaiseUtf8(
+       '%.Create: unsupported "eab.algo":"%"', [self, algo]);
+    fEabKid    := eab^.U['kid'];
+    fEabMacKey := eab^.U['mac_key'];
+  end;
+  // load acme.pem local key (used to sign the JWK queries, not for TLS itself)
+  local := Cert(fOwner.fAlgo);
+  if local = nil then
     EAcmeLetsEncrypt.RaiseUtf8('%.Create: unsupported %', [self, fOwner.fAlgo]);
   if not FileExists(fSignedCert) or
      not FileExists(fPrivKey) or
-     not cc.LoadFromFile(fReferenceCert, cccCertWithPrivateKey) then
+     not local.LoadFromFile(fReferenceCert, cccCertWithPrivateKey) then
   begin
-    fOwner.fLog.Add.Log(sllDebug, 'Create(%): invalid certs -> recreate',
-      [aDomainFile], self);
+    fOwner.fLog.Add.Log(sllDebug, 'Create(%): invalid % -> recreate all',
+      [aDomainFile, fReferenceCert], self);
     DeleteFile(fReferenceCert);
     DeleteFile(fSignedCert);
     DeleteFile(fPrivKey);
-    // create a new certificate to sign the JWK queries (not used for TLS)
-    cc.Generate([cuDigitalSignature], s[0], nil, 3650);
-    cc.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
+    local.Generate([cuDigitalSignature], sub[0], nil, 3650);
+    local.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
   end;
-  inherited Create(fOwner.fLog, cc, fOwner.fDirectoryUrl, c, RawUtf8ArrayToCsv(s));
-  if dom.GetAsDocVariant('eab', eab) then
-  begin
-    eab_algo := eab^.U['algo'];
-    if not TextToSignAlgo(eab_algo, fEabAlgo) then
-      EAcmeLetsEncrypt.RaiseUtf8('%.Create: unsupported eab.algo %', [self, eab_algo]);
-    fEabKid := eab^.U['kid'];
-    fEabMacKey := eab^.U['mac_key'];
-  end;
+  // initialize the process
+  inherited Create(fOwner.fLog, local, fOwner.fDirectoryUrl,
+    cont, RawUtf8ArrayToCsv(sub));
 end;
 
 destructor TAcmeLetsEncryptClient.Destroy;
