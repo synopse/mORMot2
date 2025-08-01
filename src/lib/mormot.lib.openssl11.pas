@@ -10643,7 +10643,7 @@ type
   TOpenSslNetTls = class(TInterfacedObject, INetTls)
   private
     fSocket: TNetSocket;
-    fContext: PNetTlsContext;
+    fContext: PNetTlsContext; // the client-side TCrtSocket context
     fLastError: PRawUtf8;
     fCtx: PSSL_CTX;
     fSsl: PSSL;
@@ -10769,6 +10769,7 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
+  peer: PPointer;
   //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt;
 begin
@@ -10778,106 +10779,112 @@ begin
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
+  peer := @_PeerVerify;
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
-  SetupCtx(Context, {bind=}false);
-  fSsl := SSL_new(fCtx);
-  SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
-  if not Context.IgnoreCertificateErrors then
-  begin
-    P := pointer(Context.HostNamesCsv);
-    if GetNextCsv(P, h) then
+  try
+    peer^ := self;
+    SetupCtx(Context, {bind=}false);
+    fSsl := SSL_new(fCtx);
+    SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
+    if not Context.IgnoreCertificateErrors then
     begin
-      SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-      Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
-      while GetNextCsv(P, h) do
-        Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
-    end;
-  end;
-  Check('AfterConnection set_fd', SSL_set_fd(fSsl, Socket.Socket));
-  // client TLS negotiation with server
-  Check('AfterConnection connect', SSL_connect(fSsl));
-  fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
-  Context.CipherName := GetCipherName;
-  // writeln(Context.CipherName);
-  // peer validation
-  if Assigned(Context.OnPeerValidate) then
-    // via a global custom callback
-    Context.OnPeerValidate(Socket, fContext, fSsl)
-  else
-  begin
-    // get OpenSSL peer certificate information
-    fPeer := fSsl.PeerCertificate;
-    // writeln(fSsl.PeerCertificatesAsPEM);
-    // writeln(fSsl.PeerCertificatesAsText);
-    //x := LoadCertificates(fSsl.PeerCertificatesAsPEM);
-    //writeln(PX509DynArrayToPem(x));
-    //PX509DynArrayFree(x);
-    if (fPeer = nil) and
-       not Context.IgnoreCertificateErrors then
-      Check('AfterConnection get_peer_certificate', 0);
-    try
-      if fPeer <> nil then
+      P := pointer(Context.HostNamesCsv);
+      if GetNextCsv(P, h) then
       begin
-        // writeln(fPeer.SetExtension(NID_netscape_comment, 'toto est le plus bo'));
-        // writeln(fPeer.SetUsage([kuCodeSign, kuDigitalSignature, kuTlsServer, kuTlsClient]));
-        Context.PeerIssuer := fPeer.IssuerName;
-        Context.PeerSubject := fPeer.SubjectName;
-        Context.PeerCert := fPeer;
-        if Context.WithPeerInfo or
-           (not Context.IgnoreCertificateErrors and
-            not fSsl.IsVerified(@Context.LastError)) then
-          // include full peer info on certificate verification failure
-          Context.PeerInfo := fPeer.PeerInfo;
-        {
-        writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
-        writeln('SerialNumber=',fPeer.SerialNumber);
-        writeln(fPeer.GetSerial.ToDecimal);
-        writeln(fPeer.GetSignatureAlgo);
-        writeln(fPeer.GetSignatureHash);
-        writeln(fPeer.GetIssuerName.ToDigest);
-        exts := fPeer.SubjectAlternativeNames;
-        for len := 0 to high(exts) do
-          writeln('dns=',exts[len]);
-        ext := fPeer.GetExtensions;
-        writeln(length(ext));
-        for len := 0 to high(ext) do
-          writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
-        writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
-        writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
-        writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
-        writeln('AuthorityKeyIdentifier=',fPeer.AuthorityKeyIdentifier);
-        writeln('Usage=',word(fPeer.GetUsage));
-        writeln('kuDigitalSignature=',fPeer.HasUsage(kuDigitalSignature));
-        writeln('kuCodeSign=',fPeer.HasUsage(kuCodeSign));
-        writeln('kuTlsClient=',fPeer.HasUsage(kuTlsClient));
-        writeln('KeyUsage=',fPeer.KeyUsage);
-        writeln('ExtendedKeyUsage=',fPeer.ExtendedKeyUsage);
-        writeln('FingerPrint=',fPeer.FingerPrint);
-        writeln('IssuerName=',fPeer.IssuerName);
-        writeln('SubjectName=',fPeer.SubjectName);
-        writeln(fPeer.ExtensionText(NID_basic_constraints));
-        writeln(length(fPeer.ToBinary));
-        writeln(fPeer.SubjectName);
-        writeln(fPeer.GetSubject('O'));
-        fPeer.GetSubjectName.SetEntry('O', 'Synopse');
-        writeln(fPeer.SubjectName);
-        writeln(fPeer.GetSubject('O'));
-        fPeer.GetSubjectName.SetEntry('O', 'Synopse2');
-        writeln(fPeer.SubjectName);
-        fPeer.GetSubjectName.SetEntry('O', 'Synopse2');
-        writeln(fPeer.SubjectName);
-        }
+        SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
+        while GetNextCsv(P, h) do
+          Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
       end;
-      if Context.IgnoreCertificateErrors then
-        Context.LastError := 'not verified';
-      if Assigned(Context.OnAfterPeerValidate) then
-        // allow e.g. to verify CN or DNSName fields
-        Context.OnAfterPeerValidate(Socket, fContext, fSsl, fPeer);
-    finally
-      fPeer.Free;
-      fPeer := nil;
     end;
+    Check('AfterConnection set_fd', SSL_set_fd(fSsl, Socket.Socket));
+    // client TLS negotiation with server
+    Check('AfterConnection connect', SSL_connect(fSsl));
+    fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+    Context.CipherName := GetCipherName;
+    // writeln(Context.CipherName);
+    // peer validation
+    if Assigned(Context.OnPeerValidate) then
+      // via a global custom callback
+      Context.OnPeerValidate(Socket, fContext, fSsl)
+    else
+    begin
+      // get OpenSSL peer certificate information
+      fPeer := fSsl.PeerCertificate;
+      // writeln(fSsl.PeerCertificatesAsPEM);
+      // writeln(fSsl.PeerCertificatesAsText);
+      //x := LoadCertificates(fSsl.PeerCertificatesAsPEM);
+      //writeln(PX509DynArrayToPem(x));
+      //PX509DynArrayFree(x);
+      if (fPeer = nil) and
+         not Context.IgnoreCertificateErrors then
+        Check('AfterConnection get_peer_certificate', 0);
+      try
+        if fPeer <> nil then
+        begin
+          // writeln(fPeer.SetExtension(NID_netscape_comment, 'toto est le plus bo'));
+          // writeln(fPeer.SetUsage([kuCodeSign, kuDigitalSignature, kuTlsServer, kuTlsClient]));
+          Context.PeerIssuer := fPeer.IssuerName;
+          Context.PeerSubject := fPeer.SubjectName;
+          Context.PeerCert := fPeer;
+          if Context.WithPeerInfo or
+             (not Context.IgnoreCertificateErrors and
+              not fSsl.IsVerified(@Context.LastError)) then
+            // include full peer info on certificate verification failure
+            Context.PeerInfo := fPeer.PeerInfo;
+          {
+          writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
+          writeln('SerialNumber=',fPeer.SerialNumber);
+          writeln(fPeer.GetSerial.ToDecimal);
+          writeln(fPeer.GetSignatureAlgo);
+          writeln(fPeer.GetSignatureHash);
+          writeln(fPeer.GetIssuerName.ToDigest);
+          exts := fPeer.SubjectAlternativeNames;
+          for len := 0 to high(exts) do
+            writeln('dns=',exts[len]);
+          ext := fPeer.GetExtensions;
+          writeln(length(ext));
+          for len := 0 to high(ext) do
+            writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
+          writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
+          writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
+          writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
+          writeln('AuthorityKeyIdentifier=',fPeer.AuthorityKeyIdentifier);
+          writeln('Usage=',word(fPeer.GetUsage));
+          writeln('kuDigitalSignature=',fPeer.HasUsage(kuDigitalSignature));
+          writeln('kuCodeSign=',fPeer.HasUsage(kuCodeSign));
+          writeln('kuTlsClient=',fPeer.HasUsage(kuTlsClient));
+          writeln('KeyUsage=',fPeer.KeyUsage);
+          writeln('ExtendedKeyUsage=',fPeer.ExtendedKeyUsage);
+          writeln('FingerPrint=',fPeer.FingerPrint);
+          writeln('IssuerName=',fPeer.IssuerName);
+          writeln('SubjectName=',fPeer.SubjectName);
+          writeln(fPeer.ExtensionText(NID_basic_constraints));
+          writeln(length(fPeer.ToBinary));
+          writeln(fPeer.SubjectName);
+          writeln(fPeer.GetSubject('O'));
+          fPeer.GetSubjectName.SetEntry('O', 'Synopse');
+          writeln(fPeer.SubjectName);
+          writeln(fPeer.GetSubject('O'));
+          fPeer.GetSubjectName.SetEntry('O', 'Synopse2');
+          writeln(fPeer.SubjectName);
+          fPeer.GetSubjectName.SetEntry('O', 'Synopse2');
+          writeln(fPeer.SubjectName);
+          }
+        end;
+        if Context.IgnoreCertificateErrors then
+          Context.LastError := 'not verified';
+        if Assigned(Context.OnAfterPeerValidate) then
+          // allow e.g. to verify CN or DNSName fields
+          Context.OnAfterPeerValidate(Socket, fContext, fSsl, fPeer);
+      finally
+        fPeer.Free;
+        fPeer := nil;
+      end;
+    end;
+  finally
+    peer^ := nil; // but keep fLastError since fContext remains
   end;
 end;
 
@@ -10991,64 +10998,80 @@ end;
 function AfterAcceptSNI(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
 var
   servername: PUtf8Char;
-  ctx: PNetTlsContext absolute arg;
-  new: PSSL_CTX;
+  nettlscontext: PNetTlsContext absolute arg;
+  sslctx: PSSL_CTX;
 begin
   result := SSL_TLSEXT_ERR_OK; // requested servername has been accepted
-  if not Assigned(ctx) or
-     not Assigned(ctx^.OnAcceptServerName) then
+  if not Assigned(nettlscontext) or
+     not Assigned(nettlscontext^.OnAcceptServerName) then
     exit; // use default context/certificate
   servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
   if servername = nil then
     exit;
-  new := ctx^.OnAcceptServerName(ctx, s, servername);
-  if new <> nil then
+  sslctx := nettlscontext^.OnAcceptServerName(nettlscontext, s, servername);
+  if sslctx <> nil then
     // switching server context
-    if SSL_set_SSL_CTX(s, new) = nil then // note: only change certificates
+    if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
       result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
 end;
 
 procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+var
+  peer: PPointer;
 begin
-  // we don't store fSocket/fContext bound socket
+  // we don't keep any fSocket/fContext bound socket on server side
   Context.LastError := '';
+  fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
+  peer := @_PeerVerify;
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new(TLS_server_method);
-  SetupCtx(Context, {bind=}true);
-  // allow SNI per-server certificate via OnAcceptServerName callback
-  if EnableOnNetTlsAcceptServerName then
-  begin
-    SSL_CTX_set_tlsext_servername_callback(fCtx, AfterAcceptSNI);
-    SSL_CTX_set_tlsext_servername_arg(fCtx, @Context);
+  try
+    peer^ := self;
+    SetupCtx(Context, {bind=}true);
+    // allow SNI per-server certificate via OnAcceptServerName callback
+    if EnableOnNetTlsAcceptServerName then
+    begin
+      SSL_CTX_set_tlsext_servername_callback(fCtx, AfterAcceptSNI);
+      SSL_CTX_set_tlsext_servername_arg(fCtx, @Context);
+    end;
+    // this global context fCtx will be reused by AfterAccept()
+    Context.AcceptCert := fCtx;
+  finally
+    fLastError := nil; // as expected on server side
+    peer^ := nil;
   end;
-  // this global context fCtx will be reused by AfterAccept()
-  Context.AcceptCert := fCtx;
 end;
 
 //TODO: SSL_CTX_use_certificate_chain_file() with the CA?
 
 procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
+var
+  peer: PPointer;
 begin
-  // we don't handle any fContext here on server-side connections
   fSocket := Socket;
-  fContext := @BoundContext; // may be shared e.g. for TAsyncServer
+  fContext := @BoundContext; // main context may be shared e.g. for TAsyncServer
   // reset output information
   fLastError := LastError;
-  // safe and naive (but working) context for the callbacks
-  _PeerVerify := self;
-  // prepare TLS connection properties from AfterBind() global context
-  if BoundContext.AcceptCert = nil then
-    raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
-  fSsl := SSL_new(BoundContext.AcceptCert);
-  Check('AfterAccept set_fd', SSL_set_fd(fSsl, Socket.Socket));
-  // server TLS negotiation with server
-  Check('AfterAccept accept', SSL_accept(fSsl));
-  fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
-  if CipherName <> nil then
-    CipherName^ := GetCipherName;
+  peer := @_PeerVerify;
+  try
+    peer^ := self;
+    // prepare TLS connection properties from AfterBind() global context
+    if BoundContext.AcceptCert = nil then
+      raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
+    fSsl := SSL_new(BoundContext.AcceptCert);
+    Check('AfterAccept set_fd', SSL_set_fd(fSsl, Socket.Socket));
+    // server TLS negotiation with server
+    Check('AfterAccept accept', SSL_accept(fSsl));
+    fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+    if CipherName <> nil then
+      CipherName^ := GetCipherName;
+  finally
+    fLastError := nil; // main fContext is shared, but not as error state
+    peer^ := nil;
+  end;
 end;
 
 function TOpenSslNetTls.GetCipherName: RawUtf8;
