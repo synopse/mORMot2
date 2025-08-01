@@ -134,7 +134,7 @@ type
   // - implements the ACME V2 client (specified in RFC8555) to download
   // free domain validated certificates, mainly from Let's Encrypt or ZeroSSL
   // - see https://letsencrypt.org/how-it-works for a high-level description
-  TAcmeClient = class(TSynLocked)
+  TAcmeClient = class(TObjectOSLightLock)
   protected
     fDirectoryUrl: RawUtf8;
     fContact: RawUtf8;
@@ -305,8 +305,9 @@ type
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynLocked)
+  TAcmeLetsEncrypt = class(TSynPersistent)
   protected
+    fSafe: TRWLightLock;
     fClient: TAcmeLetsEncryptClientObjArray;
     fKeyStoreFolder: TFileName;
     fPrivateKeyPassword: SpiUtf8;
@@ -314,11 +315,12 @@ type
     fLog: TSynLogClass;
     fRenewBeforeEndDays: integer;
     fRenewWaitForSeconds: integer;
+    fClientsRenewing: boolean;
     fRenewTerminated: boolean;
-    fRenewing: boolean;
     fOnChallenge: TOnAcmeChallenge;
     function GetClient(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
+    procedure WaitUntilNotRenewing(const Context: ShortString);
     procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); virtual; abstract;
   public
     /// initialize certificates management with Let's Encrypt - ZeroSSL
@@ -365,6 +367,8 @@ type
     property KeyStoreFolder: TFileName
       read fKeyStoreFolder;
     /// the URI root folder used for ACME authentication
+    // - typically ACME_LETSENCRYPT_URL / ACME_ZEROSSL_URL (for production) or
+    // ACME_LETSENCRYPT_DEBUG_URL / ACME_ZEROSSL_DEBUG_URL (for testing)
     property DirectoryUrl: RawUtf8
       read fDirectoryUrl;
     /// how many days before expiration CheckCertificates() should renew a
@@ -395,7 +399,7 @@ type
     fHttpServer: THttpServer; // a single threaded HTTP server is enough
     fHttpsServer: THttpServerGeneric;
     fNextCheckTix: Int64;
-    fRedirectHttps: integer; // how many active TAcmeLetsEncryptServer.Redirect()
+    fRedirectHttpsCount: integer; // how many active custom Redirect()
     // (un)assign the TNetTlsContext.OnAcceptServerName callback to this instance
     procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); override;
     // main entry point for all HTTP requests on port 80
@@ -1174,19 +1178,23 @@ begin
   fRenewBeforeEndDays := 30;
 end;
 
-destructor TAcmeLetsEncrypt.Destroy;
+procedure TAcmeLetsEncrypt.WaitUntilNotRenewing(const Context: ShortString);
 var
   endtix: cardinal;
 begin
-  fRenewTerminated := true; // set flag to abort any background task
-  if fRenewing then
-  begin
-    endtix := GetTickSec + 5; // wait for background task to abort
+  endtix := GetTickSec + 30; // never wait forever
+  with fLog.Enter('%: WaitUntilNotRenewing', [Context], self) do
     repeat
-      SleepHiRes(50);
+      SleepHiRes(50); // wait for background task to abort
     until (GetTickSec > endtix) or
-          not fRenewing;
-  end;
+          not fClientsRenewing;
+end;
+
+destructor TAcmeLetsEncrypt.Destroy;
+begin
+  fRenewTerminated := true; // set flag to abort any background task
+  if fClientsRenewing then
+    WaitUntilNotRenewing('Destroy');
   FillZero(fPrivateKeyPassword);
   ObjArrayClear(fClient);
   inherited Destroy;
@@ -1199,8 +1207,10 @@ var
   log: ISynLog;
 begin
   fLog.EnterLocal(log, self, 'LoadFromKeyStoreFolder');
+  if fClientsRenewing then
+    WaitUntilNotRenewing('LoadFromKeyStoreFolder'); // paranoid
   SetCallbackForLoadFromKeyStoreFolder({enabled=}false);
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     ObjArrayClear(fClient);
     if FindFirst(fKeyStoreFolder + '*.json', faAnyFile, f) = 0 then
@@ -1225,7 +1235,7 @@ begin
       FindClose(f);
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
   if fClient <> nil then
     SetCallbackForLoadFromKeyStoreFolder({enabled=}true);
@@ -1250,14 +1260,15 @@ begin
   fLog.EnterLocal(log, self, 'CheckCertificates');
   if (self = nil) or
      (fClient = nil) or
-     (fRenewBeforeEndDays <= 0) then
+     (fRenewBeforeEndDays <= 0) or
+     fClientsRenewing then
     exit;
   // quickly retrieve all certificates which need generation/renewal
   cc := Cert(fAlgo);
   if cc = nil then
     exit;
   expired := NowUtc + fRenewBeforeEndDays;
-  fSafe.Lock;
+  fSafe.ReadLock;
   try
     for i := 0 to length(fClient) - 1 do
     begin
@@ -1271,7 +1282,7 @@ begin
           AddRawUtf8(needed, sub);
     end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadUnLock;
   end;
   // renew the needed certificates
   if Assigned(log) then
@@ -1279,7 +1290,14 @@ begin
       [Plural('certificate', length(needed))], self);
   if needed = nil then
     exit;
-  fRenewing := true;
+  fSafe.WriteLock;
+  try
+    if fClientsRenewing then
+      exit; // (unlikely) race condition
+    fClientsRenewing := true;
+  finally
+    fSafe.WriteUnLock;
+  end;
   try
     for i := 0 to length(needed) - 1 do
     begin
@@ -1330,7 +1348,7 @@ begin
           [needed[i], ToText(res)^], self);
     end;
   finally
-    fRenewing := false;
+    fClientsRenewing := false;
   end;
 end;
 
@@ -1359,13 +1377,13 @@ end;
 function TAcmeLetsEncrypt.GetClientLocked(
   const ServerName: RawUtf8): TAcmeLetsEncryptClient;
 begin
-  fSafe.Lock;
+  fSafe.ReadLock;
   try
     result := GetClient(ServerName); // case-insensitive search
     if result <> nil then
       result.Safe.Lock; // caller should eventually call result.Safe.UnLock
   finally
-    fSafe.UnLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -1400,7 +1418,7 @@ var
   len: PtrInt;
 begin
   result := false;
-  if not fRenewing then
+  if not fClientsRenewing then
     exit; // no challenge currently happening
   // parse the /.well-known/acme-challenge/<token> URI
   P := pointer(uri);
@@ -1502,9 +1520,9 @@ begin
     try
       if (Redirection <> '') <> (client.fRedirectHttps <> '') then
         if Redirection = '' then
-          LockedDec32(@fRedirectHttps)
+          LockedDec32(@fRedirectHttpsCount)
         else
-          LockedInc32(@fRedirectHttps);
+          LockedInc32(@fRedirectHttpsCount);
       client.fRedirectHttps := Redirection;
       result := true;
     finally
@@ -1524,7 +1542,7 @@ begin
      (PCardinal(Request.Http.CommandUri)^ =
             ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
     // handle Let's Encrypt - ZeroSSL challenges on /.well-known/* URI
-    if fRenewing and
+    if fClientsRenewing and
        OnNetTlsAcceptChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
       // return HTTP-01 challenge content
       Request.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
@@ -1538,18 +1556,16 @@ begin
       Request.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       Request.SockSend('HTTP/1.0 308 Permanent Redirect');
-    if fRedirectHttps = 0 then
-      client := nil // no Redirect() currently active
-    else
-      client := GetClientLocked(Request.Http.Host);
-    if client <> nil then
+    if fRedirectHttpsCount <> 0 then // same active custom Redirect()
     begin
-      redirect := client.fRedirectHttps; // <> '' if customized
-      client.Safe.UnLock;
-      if redirect = '' then
-        client := nil;
+      client := GetClientLocked(Request.Http.Host);
+      if client <> nil then
+      begin
+        redirect := client.fRedirectHttps; // <> '' if customized
+        client.Safe.UnLock;
+      end;
     end;
-    if client <> nil then
+    if redirect <> '' then
       // redirect to the customized URI for this host
       Request.SockSendLine([
         'Location: ', redirect])
@@ -1557,7 +1573,7 @@ begin
       // redirect to the same URI but on HTTPS host
       Request.SockSendLine([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
-    // 301 and 308 responses expects no response body
+    // 301 and 308 responses expect no body
   end;
   // finalize the headers and send the response body
   Request.SockSend([
@@ -1573,7 +1589,7 @@ end;
 
 procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject; Tix64: Int64);
 begin
-  if fRenewing or
+  if fClientsRenewing or
      fRenewTerminated or
      (fClient = nil) or
      (fRenewBeforeEndDays <= 0) or
