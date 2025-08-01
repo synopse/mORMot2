@@ -318,7 +318,7 @@ type
     fRenewBeforeEndDays: integer;
     fRenewWaitForSeconds: integer;
     fClientsRenewing: boolean;
-    fRenewTerminated: boolean;
+    fShutdown: boolean;
     fOnChallenge: TOnAcmeChallenge;
     function GetClient(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
@@ -1184,7 +1184,7 @@ end;
 
 destructor TAcmeLetsEncrypt.Destroy;
 begin
-  fRenewTerminated := true; // set flag to abort any background task
+  fShutdown := true; // set flag to abort any background task
   if fClientsRenewing then
     WaitUntilNotRenewing('Destroy');
   FillZero(fPrivateKeyPassword);
@@ -1199,8 +1199,12 @@ var
   log: ISynLog;
 begin
   fLog.EnterLocal(log, self, 'LoadFromKeyStoreFolder');
+  if fShutdown then
+    exit;
   if fClientsRenewing then
     WaitUntilNotRenewing('LoadFromKeyStoreFolder'); // paranoid
+  if fShutdown then
+    exit;
   SetCallbackForLoadFromKeyStoreFolder({enabled=}false);
   fSafe.WriteLock;
   try
@@ -1252,6 +1256,7 @@ begin
   fLog.EnterLocal(log, self, 'CheckCertificates');
   if (self = nil) or
      (fClient = nil) or
+     fShutdown or
      (fRenewBeforeEndDays <= 0) or
      fClientsRenewing then
     exit;
@@ -1294,7 +1299,7 @@ begin
   try
     for i := 0 to length(needed) - 1 do
     begin
-      if fRenewTerminated then
+      if fShutdown then
         exit;
       c := GetClientLocked(needed[i]); // lookup by subject
       if c = nil then
@@ -1498,7 +1503,7 @@ end;
 
 destructor TAcmeLetsEncryptServer.Destroy;
 begin
-  fRenewTerminated := true; // abort any background task ASAP
+  fShutdown := true; // abort any background task ASAP
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
@@ -1532,14 +1537,17 @@ var
 begin
   // (very) quick process of HTTP requests on port 80 into HTTP/1.0 responses
   // - a single thread is able to serve and scale a lot of incoming connections
-  if (Request.Http.CommandUri <> '') and
-     (PCardinal(Request.Http.CommandUri)^ =
-            ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
+  if fShutdown then
+    Request.SockSend('HTTP/1.0 503 Service Unavailable')
+  else if (Request.Http.CommandUri <> '') and
+          (PCardinal(Request.Http.CommandUri)^ =
+             ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
     // handle Let's Encrypt - ZeroSSL challenges on /.well-known/* URI
     if fClientsRenewing and
-       OnNetTlsAcceptChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
-      // return HTTP-01 challenge content
-      Request.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
+       HttpServerChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
+      // return the HTTP-01 challenge content
+      Request.SockSend('HTTP/1.0 200 OK'#13#10 +
+                       BINARY_CONTENT_TYPE_HEADER)
     else
       // no redirection for inactive /.well-known/acme-challenge/<Token> URIs
       Request.SockSend('HTTP/1.0 404 Not Found')
@@ -1574,6 +1582,9 @@ begin
     'Server: ', fHttpServer.ServerName, #13#10 +
     'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
+  if (body <> '') and
+     HttpMethodWithNoBody(Request.Http.CommandMethod) then
+    body := ''; // if the ACME server tries a HEAD (unlikely)
   Request.SockSendFlush(body);
   // no regular OnRequest() event: we have sent the response
   result := grIntercepted;
@@ -1584,7 +1595,7 @@ end;
 procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject; Tix64: Int64);
 begin
   if fClientsRenewing or
-     fRenewTerminated or
+     fShutdown or
      (fClient = nil) or
      (fRenewBeforeEndDays <= 0) or
      (fHttpsServer = nil) or
