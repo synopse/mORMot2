@@ -80,11 +80,11 @@ type
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
-    function GetCount: integer;
     procedure InternalPop(aValue: pointer);
     procedure InternalGrow;
     function InternalDestroying(incPopCounter: integer): boolean;
-    function InternalWaitDone(starttix, endtix: Int64; const idle: TThreadMethod): boolean;
+    function InternalWaitDone(starttix, endtix: Int64; const OnIdle: TThreadMethod): boolean;
+    function ReadOnlyLockedCount: integer;
     /// low-level TObjectStore methods implementing the persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
@@ -153,7 +153,7 @@ type
     /// returns how many items are currently stored in this queue
     // - this method is not thread-safe, so the returned value should be
     // either indicative, or you should use explicit Safe lock/unlock
-    // - if you want to check that the queue is not void, call Pending
+    // - if you want to check that the queue is not void, just call Pending
     function Count: integer;
     /// returns how much slots is currently reserved in memory
     // - the queue has an optimized auto-sizing algorithm, you can use this
@@ -1411,7 +1411,7 @@ begin
   end;
 end;
 
-function TSynQueue.GetCount: integer;
+function TSynQueue.ReadOnlyLockedCount: integer;
 var
   f, l: integer;
 begin
@@ -1427,13 +1427,16 @@ end;
 
 function TSynQueue.Count: integer;
 begin
-  if self = nil then
-    result := 0
-  else
-    repeat
-      result := GetCount;
-      ReadBarrier;
-    until GetCount = result; // RCU algorithm to avoid aberations
+  result := 0;
+  if (self = nil) or
+     (fFirst < 0) then
+    exit;
+  fSafe.ReadOnlyLock;
+  try
+    result := ReadOnlyLockedCount;
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
 end;
 
 function TSynQueue.Capacity: integer;
@@ -1593,12 +1596,12 @@ begin
 end;
 
 function TSynQueue.InternalWaitDone(starttix, endtix: Int64;
-  const idle: TThreadMethod): boolean;
+  const OnIdle: TThreadMethod): boolean;
 begin
-  if Assigned(idle) then
+  if Assigned(OnIdle) then
   begin
     SleepHiRes(1); // SleepStep() may wait up to 250 ms which is not responsive
-    idle; // e.g. Application.ProcessMessages
+    OnIdle; // e.g. Application.ProcessMessages
   end
   else
     SleepStep(starttix);
@@ -1648,7 +1651,7 @@ begin
             result := fValues.ItemPtr(fFirst);
         finally
           if result = nil then
-            fSafe.ReadWriteUnLock; // caller should always Unlock once done
+            fSafe.ReadWriteUnLock;
         end;
       end;
     until (result <> nil) or
@@ -1686,7 +1689,7 @@ begin
   DA.Init(fValues.Info.Info, aDynArrayValues, @n);
   fSafe.ReadOnlyLock;
   try
-    DA.Capacity := Count; // pre-allocate whole array, and set its length
+    DA.Capacity := ReadOnlyLockedCount; // pre-allocate whole array
     if fFirst >= 0 then
       if fFirst <= fLast then
         DA.AddArray(fValueVar, fFirst, fLast - fFirst + 1)
@@ -1767,7 +1770,7 @@ begin
   fSafe.ReadOnlyLock;
   try
     inherited SaveToWriter(aWriter);
-    n := Count;
+    n := ReadOnlyLockedCount;
     aWriter.WriteVarUInt32(n);
     if n = 0 then
       exit;
