@@ -42,6 +42,7 @@ uses
   mormot.core.threads,
   mormot.core.search,
   mormot.crypt.core,
+  mormot.crypt.jwt,
   mormot.crypt.secure,
   mormot.lib.openssl11, // for per-domain-name PSSL_CTX certificates
   mormot.net.sock,
@@ -139,6 +140,9 @@ type
     fContact: RawUtf8;
     fSubjects: RawUtf8;
     fSubject: TRawUtf8DynArray;
+    fEabAlgo: TSignAlgo;
+    fEabKid: RawUtf8;
+    fEabMacKey: RawUtf8;
     fHttpClient: TJwsHttpClient;
     fChallenges: TAcmeChallengeDynArray;
     fOnChallenges: TOnAcmeChallenge;
@@ -149,8 +153,10 @@ type
     fNewAccount: RawUtf8;
     fNewOrder: RawUtf8;
     // URI filled by CreateOrder
+    fOrder: RawUtf8;
     fFinalize: RawUtf8;
     procedure ReadDirectory;
+    function ComputeEab: RawUtf8;
     procedure CreateAccount;
     function CreateOrder: TAcmeStatus;
     function RequestAuth(const aJson: RawJson): integer;
@@ -179,12 +185,16 @@ type
     procedure StartDomainRegistration;
     /// check if challenge for a domain is completed
     function CheckChallengesStatus: TAcmeStatus;
-    /// finalize the order and download the signed certificate
-    // - aCert contain the final PEM certificate as signed by the ACME server
+    /// finalize the order
     // - aPrivateKey contains the PEM private key generated locally, and
     // optionally encrypted via aPrivateKeyPassword
-    function CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
+    function FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
       const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
+    /// download the signed certificate
+    // - aCert contain the final PEM certificate as signed by the ACME server
+    function CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
+    /// call OnChallenges to clear temp files, if needed
+    procedure ClearDomainRegistration;
     /// will run StartDomainRegistration and wait until it is completed
     // - low-level wrapper using any TOnAcmeChallenge callback
     // - won't execute function CompleteDomainRegistration() if OutSignedCert
@@ -213,6 +223,20 @@ type
     // - match Subjects CSV field
     property Subject: TRawUtf8DynArray
       read fSubject write fSubject;
+    /// EAB MAC algoritm
+    // External Account Binding can be used to associate an ACME account
+    // with an existing account in non-ACME system
+    // - typically saSha256
+    property EabAlgo: TSignAlgo
+      read fEabAlgo write fEabAlgo;
+    /// EAB key identifier
+    // - provided by external system
+    property EabKid: RawUtf8
+      read fEabKid write fEabKid;
+    /// EAB MAC key
+    // - provided by external system
+    property EabMacKey: RawUtf8
+      read fEabMacKey write fEabMacKey;
     /// low-level direct access to the associated challenges
     // - may be used instead of OnChallenges callback
     property Challenges: TAcmeChallengeDynArray
@@ -512,6 +536,8 @@ begin
     result := asValid
   else if IdemPChar(p, 'PENDING') then
     result := asPending
+  else if IdemPChar(p, 'PROCESSING') then
+    result := asPending
   else
     result := asInvalid;
 end;
@@ -628,16 +654,50 @@ begin
     EAcmeClient.RaiseUtf8('Invalid directory %', [fDirectoryUrl]);
 end;
 
+function TAcmeClient.ComputeEab: RawUtf8;
+var
+  prot: RawUtf8;
+  prot_enc: RawUtf8;
+  payload: RawUtf8;
+  payload_enc: RawUtf8;
+  body_enc: RawUtf8;
+  signer: TSynSigner;
+  hash: THash512Rec;
+  signature: RawUtf8;
+begin
+  if (fEabKid <> '') and (fEabMacKey <> '') then
+  begin
+    prot := FormatJson('{"alg":?,"kid":?,"url":?',
+      [], [JWT_TEXT[fEabAlgo], fEabKid, fNewAccount]);
+    prot_enc := BinToBase64uri(prot);
+    payload := fHttpClient.fCert.JwkCompute;
+    payload_enc := BinToBase64uri(payload);
+    body_enc := prot_enc + '.' + payload_enc;
+    signer.Init(fEabAlgo, Base64uriToBin(fEabMacKey));
+    signer.Update(body_enc);
+    signer.Final(@hash);
+    signature := BinToBase64uri(@hash, signer.SignatureSize);
+    result := FormatJson(',"externalAccountBinding":{"protected":?,"payload":?,"signature":?}',
+      [], [prot_enc, payload_enc, signature]);
+  end
+  else
+    result := '';
+end;
+
 procedure TAcmeClient.CreateAccount;
 var
+  eab: RawUtf8;
+  req: RawJson;
   resp: RawJson;
   status: RawUtf8;
 begin
+  // External Account Binding
+  eab := ComputeEab();
   // A client creates a new account with the server by sending a POST
   // request to the server's newAccount URL
-  resp := fHttpClient.Post(fNewAccount,
-    ['termsOfServiceAgreed', true,
-     'contact',              _ArrFast([fContact])]);
+  req := FormatJson('{"termsOfServiceAgreed":true,"contact":[?]%}',
+      [eab], [fContact]);
+  resp := fHttpClient.Post(fNewAccount, req);
   status := JsonDecode(pointer(resp), 'status', nil, {handlejsonobjarr=} true);
   if AcmeTextToStatus(pointer(status)) <> asValid then
     EAcmeClient.RaiseUtf8('% returned status % (expected "valid")',
@@ -658,6 +718,8 @@ begin
   // The client begins the certificate issuance process by sending a POST
   // request to the server's newOrder resource
   r1 := fHttpClient.Post(fNewOrder, ['identifiers', GetIdentifiersArr(fSubject)]);
+  if not fHttpClient.Header('Location', fOrder) then
+    EAcmeClient.RaiseUtf8('Location not found for new order', []);
   JsonDecode(pointer(r1), [
     'status',
     'finalize',
@@ -811,13 +873,12 @@ begin
     [ToText(result)^, pending, valid, length(fChallenges)], self);
 end;
 
-function TAcmeClient.CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
+function TAcmeClient.FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
   const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
 var
   csr: RawByteString;
   pk, resp: RawUtf8;
-  i: PtrInt;
-  v: array [0..1] of TValuePUtf8Char;
+  status: RawUtf8;
 begin
   try
     // Generate a new PKCS#10 Certificate Signing Request
@@ -831,6 +892,29 @@ begin
     // order by submitting a Certificate Signing Request (CSR)
     resp := fHttpClient.Post(fFinalize, [
       'csr', BinToBase64uri(csr)]);
+    status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
+    result := AcmeTextToStatus(pointer(status));
+    if result in [asValid, asPending] then
+      // only keep the generated private key on success
+      aPrivateKey := pk
+  finally
+    FillZero(pk);
+  end;
+end;
+
+function TAcmeClient.CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
+var
+  resp: RawUtf8;
+  v: array [0..1] of TValuePUtf8Char;
+begin
+  try
+    // Before sending a POST request to the server, an ACME client needs to
+    // have a fresh anti-replay nonce to put in the "nonce" header of the JWS
+    fHttpClient.Head(fNewNonce);
+    // If a request to finalize an order is successful, the server will
+    // return a 200 (OK) with an updated order object. The status of the
+    // order will indicate what action the client should take
+    resp := fHttpClient.Post(fOrder, '');
     JsonDecode(pointer(resp), [
       'status',
       'certificate'], @v, {handlejsonobjarr=} true);
@@ -842,24 +926,28 @@ begin
       // Download the certificate
       aCert := fHttpClient.Post(v[1].ToUtf8, '');
       if IsPem(aCert) then
-        fLog.Add.Log(sllDebug, 'CompleteDomainRegistration finalize=%',
+        fLog.Add.Log(sllDebug, 'CompleteDomainRegistration cert=%',
           [aCert], self)
       else
         result := asInvalid;
     end;
-    if result = asValid then
-      // only keep the generated private key on success
-      aPrivateKey := pk
   finally
-    FillZero(pk);
     FillZero(resp);
-    if Assigned(fOnChallenges) then
-      // call with key = '' to notify final state
-      for i := 0 to length(fChallenges) - 1 do
-        if fChallenges[i].Key <> '' then
-          fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
-    fChallenges := nil;
   end;
+end;
+
+procedure TAcmeClient.ClearDomainRegistration;
+var
+  i: PtrInt;
+begin
+  if Assigned(fOnChallenges) then
+    // call with key = '' to notify final state
+    for i := 0 to length(fChallenges) - 1 do
+      if fChallenges[i].Key <> '' then
+        fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
+  fChallenges := nil;
+  fOrder := '';
+  fFinalize := '';
 end;
 
 function TAcmeClient.RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
@@ -873,33 +961,54 @@ var
 begin
   fLog.EnterLocal(log, self, 'RegisterAndWait');
   fOnChallenges := OnChallenge;
-  StartDomainRegistration;
-  endtix := GetTickCount64 + WaitForSec * 1000;
-  repeat
-    result := asInvalid;
-    if Terminated = nil then
-      SleepHiRes(1000)
-    else if SleepHiRes(1000, Terminated^) then
+  try
+    StartDomainRegistration;
+    // First loop: wait for domain validation
+    endtix := GetTickCount64 + WaitForSec * 1000;
+    repeat
+      result := asInvalid;
+      if Terminated = nil then
+        SleepHiRes(1000)
+      else if SleepHiRes(1000, Terminated^) then
+        exit;
+      result := CheckChallengesStatus;
+      if result <> asPending then
+        break;
+    until GetTickCount64 > endtix;
+    if (result <> asValid) or
+       (OutSignedCert = '') or
+       (OutPrivateKey = '') then
       exit;
-    result := CheckChallengesStatus;
-    if result <> asPending then
-      break;
-  until GetTickCount64 > endtix;
-  if (result <> asValid) or
-     (OutSignedCert = '') or
-     (OutPrivateKey = '') then
-    exit;
-  result := CompleteDomainRegistration(cert, pk, aPrivateKeyPassword);
-  if Assigned(log) then
-    log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
-  if result = asValid then
-    try
-      FileFromString(cert, OutSignedCert);
-      FileFromString(pk, OutPrivateKey);
-    finally
-      FillZero(cert);
-      FillZero(pk);
-    end;
+    // Send CSR
+    result := FinalizeDomainRegistration(pk, aPrivateKeyPassword);
+    if Assigned(log) then
+      log.Log(sllDebug, 'FinalizeDomainRegistration=%', [ToText(result)^], self);
+    if result = asInvalid then
+      exit;
+    // Second loop: wait for certificate
+    repeat
+      result := asInvalid;
+      if Terminated = nil then
+        SleepHiRes(1000)
+      else if SleepHiRes(1000, Terminated^) then
+        exit;
+      result := CompleteDomainRegistration(cert);
+      if result <> asPending then
+        break;
+    until GetTickCount64 > endtix;
+    if Assigned(log) then
+      log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
+    if result = asValid then
+      try
+        FileFromString(cert, OutSignedCert);
+        FileFromString(pk, OutPrivateKey);
+      finally
+        FillZero(cert);
+        FillZero(pk);
+      end;
+  finally
+    ClearDomainRegistration;
+  end;
 end;
 
 function TAcmeClient.RegisterAndWaitFolder(
@@ -934,6 +1043,8 @@ var
   dom: TDocVariantData;
   json, c: RawUtf8;
   s: TRawUtf8DynArray;
+  eab: PDocVariantData;
+  eab_algo: RawUtf8;
 begin
   fOwner := aOwner;
   fDomainJson    := aDomainFile + '.json';
@@ -962,6 +1073,14 @@ begin
     cc.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
   end;
   inherited Create(fOwner.fLog, cc, fOwner.fDirectoryUrl, c, RawUtf8ArrayToCsv(s));
+  if dom.GetAsDocVariant('eab', eab) then
+  begin
+    eab_algo := eab^.U['algo'];
+    if not TextToSignAlgo(eab_algo, fEabAlgo) then
+      EAcmeLetsEncrypt.RaiseUtf8('%.Create: unsupported eab.algo %', [self, eab_algo]);
+    fEabKid := eab^.U['kid'];
+    fEabMacKey := eab^.U['mac_key'];
+  end;
 end;
 
 destructor TAcmeLetsEncryptClient.Destroy;
