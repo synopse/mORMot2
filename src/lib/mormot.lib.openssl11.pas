@@ -2718,8 +2718,10 @@ function NewPkcs12(const Password: SpiUtf8; PrivKey: PEVP_PKEY; Cert: PX509;
 function LoadPkcs12(const Der: RawByteString): PPKCS12;
 
 /// unserialize a PKCS12/.PFX binary into its certificate and private key
+// - by default no additional CA certificates are returned - caller should
+// call CA^.FreeX509 if one is allocated
 function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
-  out Cert: PX509; out PrivateKey: PEVP_PKEY): boolean;
+  out Cert: PX509; out PrivateKey: PEVP_PKEY; CA: PPstack_st_X509 = nil): boolean;
 
 type
   /// a convenient PX509 array wrapper to leverage mormot.core.os.pas PEM cache
@@ -10579,12 +10581,14 @@ begin
 end;
 
 function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
-  out Cert: PX509; out PrivateKey: PEVP_PKEY): boolean;
+  out Cert: PX509; out PrivateKey: PEVP_PKEY; CA: PPstack_st_X509): boolean;
 var
   pkcs12: PPKCS12;
 begin
+  Cert := nil;
+  PrivateKey := nil;
   pkcs12 := LoadPkcs12(Saved);
-  result := pkcs12.Extract(Password, @PrivateKey, @Cert, nil); // ignore CA
+  result := pkcs12.Extract(Password, @PrivateKey, @Cert, CA);
   pkcs12.Free;
 end;
 
