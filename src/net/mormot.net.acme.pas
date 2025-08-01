@@ -42,6 +42,7 @@ uses
   mormot.core.threads,
   mormot.core.search,
   mormot.crypt.core,
+  mormot.crypt.jwt,
   mormot.crypt.secure,
   mormot.lib.openssl11, // for per-domain-name PSSL_CTX certificates
   mormot.net.sock,
@@ -139,6 +140,9 @@ type
     fContact: RawUtf8;
     fSubjects: RawUtf8;
     fSubject: TRawUtf8DynArray;
+    fEabAlgo: TSignAlgo;
+    fEabKid: RawUtf8;
+    fEabMacKey: RawUtf8;
     fHttpClient: TJwsHttpClient;
     fChallenges: TAcmeChallengeDynArray;
     fOnChallenges: TOnAcmeChallenge;
@@ -152,6 +156,7 @@ type
     fOrder: RawUtf8;
     fFinalize: RawUtf8;
     procedure ReadDirectory;
+    function ComputeEab: RawUtf8;
     procedure CreateAccount;
     function CreateOrder: TAcmeStatus;
     function RequestAuth(const aJson: RawJson): integer;
@@ -218,6 +223,20 @@ type
     // - match Subjects CSV field
     property Subject: TRawUtf8DynArray
       read fSubject write fSubject;
+    /// EAB MAC algoritm
+    // External Account Binding can be used to associate an ACME account
+    // with an existing account in non-ACME system
+    // - typically saSha256
+    property EabAlgo: TSignAlgo
+      read fEabAlgo write fEabAlgo;
+    /// EAB key identifier
+    // - provided by external system
+    property EabKid: RawUtf8
+      read fEabKid write fEabKid;
+    /// EAB MAC key
+    // - provided by external system
+    property EabMacKey: RawUtf8
+      read fEabMacKey write fEabMacKey;
     /// low-level direct access to the associated challenges
     // - may be used instead of OnChallenges callback
     property Challenges: TAcmeChallengeDynArray
@@ -635,16 +654,50 @@ begin
     EAcmeClient.RaiseUtf8('Invalid directory %', [fDirectoryUrl]);
 end;
 
+function TAcmeClient.ComputeEab: RawUtf8;
+var
+  prot: RawUtf8;
+  prot_enc: RawUtf8;
+  payload: RawUtf8;
+  payload_enc: RawUtf8;
+  body_enc: RawUtf8;
+  signer: TSynSigner;
+  hash: THash512Rec;
+  signature: RawUtf8;
+begin
+  if (fEabKid <> '') and (fEabMacKey <> '') then
+  begin
+    prot := FormatJson('{"alg":?,"kid":?,"url":?',
+      [], [JWT_TEXT[fEabAlgo], fEabKid, fNewAccount]);
+    prot_enc := BinToBase64uri(prot);
+    payload := fHttpClient.fCert.JwkCompute;
+    payload_enc := BinToBase64uri(payload);
+    body_enc := prot_enc + '.' + payload_enc;
+    signer.Init(fEabAlgo, Base64uriToBin(fEabMacKey));
+    signer.Update(body_enc);
+    signer.Final(@hash);
+    signature := BinToBase64uri(@hash, signer.SignatureSize);
+    result := FormatJson(',"externalAccountBinding":{"protected":?,"payload":?,"signature":?}',
+      [], [prot_enc, payload_enc, signature]);
+  end
+  else
+    result := '';
+end;
+
 procedure TAcmeClient.CreateAccount;
 var
+  eab: RawUtf8;
+  req: RawJson;
   resp: RawJson;
   status: RawUtf8;
 begin
+  // External Account Binding
+  eab := ComputeEab();
   // A client creates a new account with the server by sending a POST
   // request to the server's newAccount URL
-  resp := fHttpClient.Post(fNewAccount,
-    ['termsOfServiceAgreed', true,
-     'contact',              _ArrFast([fContact])]);
+  req := FormatJson('{"termsOfServiceAgreed":true,"contact":[?]%}',
+      [eab], [fContact]);
+  resp := fHttpClient.Post(fNewAccount, req);
   status := JsonDecode(pointer(resp), 'status', nil, {handlejsonobjarr=} true);
   if AcmeTextToStatus(pointer(status)) <> asValid then
     EAcmeClient.RaiseUtf8('% returned status % (expected "valid")',
@@ -990,6 +1043,8 @@ var
   dom: TDocVariantData;
   json, c: RawUtf8;
   s: TRawUtf8DynArray;
+  eab: PDocVariantData;
+  eab_algo: RawUtf8;
 begin
   fOwner := aOwner;
   fDomainJson    := aDomainFile + '.json';
@@ -1018,6 +1073,14 @@ begin
     cc.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
   end;
   inherited Create(fOwner.fLog, cc, fOwner.fDirectoryUrl, c, RawUtf8ArrayToCsv(s));
+  if dom.GetAsDocVariant('eab', eab) then
+  begin
+    eab_algo := eab^.U['algo'];
+    if not TextToSignAlgo(eab_algo, fEabAlgo) then
+      EAcmeLetsEncrypt.RaiseUtf8('%.Create: unsupported eab.algo %', [self, eab_algo]);
+    fEabKid := eab^.U['kid'];
+    fEabMacKey := eab^.U['mac_key'];
+  end;
 end;
 
 destructor TAcmeLetsEncryptClient.Destroy;
