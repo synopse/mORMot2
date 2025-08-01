@@ -3657,7 +3657,7 @@ begin
     AppendShortAnsi7String(Symbols[s].Name, result);
   if line > 0 then
   begin
-    AppendShortTwoChars(' (', @result);
+    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @result);
     AppendShortCardinal(line, result);
     AppendShortCharSafe(')', @result);
   end;

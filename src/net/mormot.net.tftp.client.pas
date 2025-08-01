@@ -371,9 +371,9 @@ begin
         AppendShortCardinal(seq, result);
         if seq <= ord(teLast) then
         begin
-          AppendShortTwoChars(' (', @result);
+          AppendShortTwoChars(ord(' ') + ord('(') shl 8, @result);
           AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, result);
-          AppendShortTwoChars(') ', @result);
+          AppendShortTwoChars(ord(')') + ord(' ') shl 8, @result);
           AppendShortBuffer(@frame.Header, StrLen(@frame.Header), @result)
         end;
       end;

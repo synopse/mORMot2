@@ -3954,8 +3954,8 @@ begin
     AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
   else if mask - samWithSddl <> [] then
   begin
-    AppendShortTwoChars('0x', @s);        // we don't have all needed tokens
-    AppendShortIntHex(cardinal(mask), s); // store as @x##### hexadecimal
+    AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);  // missing token
+    AppendShortIntHex(cardinal(mask), s); // stored as @x##### hexadecimal
   end
   else
     for a := low(a) to high(a) do
@@ -4107,7 +4107,7 @@ begin
     sctInt64:
       if v^.Int.Base <> scbDecimal then // scbOctal does fallback to hexa
       begin
-        AppendShortTwoChars('0x', @s);
+        AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);
         AppendShortIntHex(v^.Int.Value, s);
       end
       else if v^.Int.Sign = scsNegative then
@@ -4510,7 +4510,7 @@ begin
     AppendShort(SAT_SDDL[AceType], s)
   else
   begin
-    AppendShortTwoChars('0x', @s);
+    AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);
     AppendShortIntHex(RawType, s); // fallback to lower hex - paranoid
   end;
   AppendShortCharSafe(';', @s);
