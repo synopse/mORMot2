@@ -562,18 +562,21 @@ type
   PHTTP_QOS_SETTING_INFO = ^HTTP_QOS_SETTING_INFO;
 
   HTTP_CONNECTION_LIMIT_INFO = record
+    Info: HTTP_QOS_SETTING_INFO; // should be first
     Flags: HTTP_PROPERTY_FLAGS;
     MaxConnections: ULONG;
   end;
   PHTTP_CONNECTION_LIMIT_INFO = ^HTTP_CONNECTION_LIMIT_INFO;
 
   HTTP_BANDWIDTH_LIMIT_INFO = record
+    Info: HTTP_QOS_SETTING_INFO; // should be first
     Flags: HTTP_PROPERTY_FLAGS;
     MaxBandwidth: ULONG;
   end;
   PHTTP_BANDWIDTH_LIMIT_INFO = ^HTTP_BANDWIDTH_LIMIT_INFO;
 
   HTTP_FLOWRATE_INFO = record
+    Info: HTTP_QOS_SETTING_INFO; // should be first
     Flags: HTTP_PROPERTY_FLAGS;
     MaxBandwidth: ULONG;
     MaxPeakBandwidth: ULONG;
