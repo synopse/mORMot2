@@ -2087,7 +2087,8 @@ type
     function GetHttpQueueLength: cardinal; override;
     function GetConnectionsActive: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
-    function GetProperty(dest: pointer; qos: HTTP_QOS_SETTING_TYPE): boolean;
+    function GetProperty(dest: PHTTP_QOS_SETTING_INFO; destlen: cardinal;
+      qos: HTTP_QOS_SETTING_TYPE): boolean;
     procedure SetProperty(value: pointer; qos: HTTP_QOS_SETTING_TYPE;
       alsoForSession: boolean = false);
     function GetMaxBandwidth: cardinal;
@@ -8715,11 +8716,10 @@ begin
   SetProperty(@limit, HttpQosSettingTypeBandwidth, {alsoSession=}true);
 end;
 
-function THttpApiServer.GetProperty(
-  dest: pointer; qos: HTTP_QOS_SETTING_TYPE): boolean;
+function THttpApiServer.GetProperty(dest: PHTTP_QOS_SETTING_INFO;
+  destlen: cardinal; qos: HTTP_QOS_SETTING_TYPE): boolean;
 var
   api: THttpApiServer;
-  info: HTTP_QOS_SETTING_INFO;
 begin
   result := false;
   if (self = nil) or
@@ -8730,30 +8730,37 @@ begin
     api := self;
   if api.fUrlGroupID = 0 then
     exit;
-  info.QosType := qos;
-  info.QosSetting := dest;
+  dest.QosType := qos;
+  dest.QosSetting := PAnsiChar(dest) + SizeOf(dest^); // should be after header
+  FillCharFast(dest.QosSetting^, destlen - SizeOf(dest^), 0); // for safety
   EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
     Http.QueryUrlGroupProperty(api.fUrlGroupID, HttpServerQosProperty,
-      @info, SizeOf(info)));
+      dest, destlen));
   result := true;
 end;
 
 function THttpApiServer.GetMaxBandwidth: cardinal;
 var
-  limit: HTTP_BANDWIDTH_LIMIT_INFO;
+  req: record
+    qos: HTTP_QOS_SETTING_INFO;
+    limit: HTTP_BANDWIDTH_LIMIT_INFO;
+  end;
 begin
   result := 0;
-  if GetProperty(@limit, HttpQosSettingTypeBandwidth) then
-    result := limit.MaxBandwidth;
+  if GetProperty(@req, SizeOf(req), HttpQosSettingTypeBandwidth) then
+    result := req.limit.MaxBandwidth;
 end;
 
 function THttpApiServer.GetMaxConnections: cardinal;
 var
-  limit: HTTP_CONNECTION_LIMIT_INFO;
+  req: record
+    qos: HTTP_QOS_SETTING_INFO;
+    limit: HTTP_CONNECTION_LIMIT_INFO;
+  end;
 begin
   result := 0;
-  if GetProperty(@limit, HttpQosSettingTypeConnectionLimit) then
-    result := limit.MaxConnections;
+  if GetProperty(@req, SizeOf(req), HttpQosSettingTypeConnectionLimit) then
+    result := req.limit.MaxConnections;
 end;
 
 procedure THttpApiServer.SetMaxConnections(aValue: cardinal);
