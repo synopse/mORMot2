@@ -3397,9 +3397,9 @@ type
   TClonableClass = class of TClonable;
 
   /// used for backward compatibility only with existing code
-  TSynPersistentLock = class(TSynLocked);
+  TSynPersistentLock   = class(TSynLocked);
   TSynPersistentLocked = class(TSynLocked);
-  TObjectWithProps = class(TSynPersistent);
+  TObjectWithProps     = class(TSynPersistent);
 
 /// TDynArraySortCompare compatible function, sorting by TObjectWithID/TOrm.ID
 function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;

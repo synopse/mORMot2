@@ -172,7 +172,7 @@ type
 
   // mustache view status for one fFactory.Methods[]
   TMvcViewMustache = record
-    Safe: TOSLightLock;
+    Safe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
     Mustache: TSynMustache;
     Template: RawUtf8;
     MethodName: TFileName;
@@ -1251,7 +1251,7 @@ begin
   m := pointer(fFactory.Methods);
   n := fFactory.MethodsCount;
   repeat
-    v^.Safe.Init;
+    v^.Safe.Init; // mandatory for OS locks
     if MethodHasView(m^) then
     begin
       Utf8ToFileName(m^.Uri, v^.MethodName);
@@ -1347,7 +1347,7 @@ begin
   inherited;
   fViewPartials.Free;
   for i := 0 to length(fViews) - 1 do
-    fViews[i].Safe.Done;
+    fViews[i].Safe.Done; // mandatory for OS locks
 end;
 
 function TMvcViewsMustache.RegisterExpressionHelpers(

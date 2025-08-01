@@ -4577,8 +4577,7 @@ type
   // - see also NewSynLocker and TSynLocker.DoneAndFreemem functions
   PSynLocker = ^TSynLocker;
 
-  /// raw class used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
-  // - defined here for use by TAutoLocker in mormot.core.data.pas
+  /// raw class used by TSynLocker.ProtectMethod and TAutoLocker.ProtectMethod
   TAutoLock = class(TInterfacedObject)
   protected
     fLock: PSynLocker;
@@ -4629,7 +4628,7 @@ type
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
-  // - publishes a TSynLocker instance, and its managed critical section
+  // - publishes a TSynLocker instance, and its OS lock and padding fields
   // - consider a TLightLock field as lighter options, or a R/W lock with
   // TObjectRWLock and TObjectRWLightLock classes, or even a TObjectOSLightLock
   // - TSynLockedWithRttiMethods would add paranoid JSON persistence lock
@@ -4656,7 +4655,7 @@ type
   // - publishes the fastest available non-reentrant Operating System lock
   TObjectOSLightLock = class(TSynPersistent)
   protected
-    fSafe: TOSLightLock;
+    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
   public
     /// initialize the instance, and its associated OS lock
     constructor Create; override;

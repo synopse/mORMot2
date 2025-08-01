@@ -2942,7 +2942,7 @@ type
     fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
     fSqlTableName: RawUtf8;
     fLastFieldsSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fSafe: TOSLightLock;
+    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
     fHasNotSimpleFields: boolean;
     fDynArrayFieldsHasObjArray: boolean;
     fHasTypeFields: TOrmFieldTypes;

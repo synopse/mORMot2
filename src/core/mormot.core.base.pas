@@ -8020,7 +8020,7 @@ begin
      (Values[0] >= MinAllowedValue) then
     exit; // nothing to remove
   lastok := FastSearchInt64Sorted(pointer(Values), Count - 1, MinAllowedValue);
-  dec(Count, lastok);
+  dec(Count, lastok); // lastok always >= 0
   if Count = 0 then
     Finalize(Values)
   else

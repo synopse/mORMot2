@@ -1301,7 +1301,7 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
-    fMainConnectionLock: TOSLightLock;
+    fMainConnectionLock: TOSLightLock; // = SRW lock or direct pthread mutex
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDbms value or dDefault

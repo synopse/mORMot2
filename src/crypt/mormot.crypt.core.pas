@@ -515,6 +515,8 @@ type
 
   /// transient simple digital signature of a 32-bit number using AES-128
   // - typical use is e.g. TRestServerAuthenticationHttpAbstract cookie process
+  // when TBinaryCookieGenerator from mormot.crypt.secure is overkill since
+  // TRestServer maintains a list of active sessions with proper expiration
   {$ifdef USERECORDWITHMETHODS}
   TAesSignature = record
   {$else}
@@ -2913,8 +2915,10 @@ const
   AES_ROUNDS = 14;
 
 type
+  /// store an AES key in expanded layout, ready for encryption/decryption
   TKeyArray = packed array[0 .. AES_ROUNDS] of TAesBlock;
 
+  /// TAesContext.DoBlock prototype - NOT thread-safe on Win64 due to xmm7bak
   TAesContextDoBlock = procedure(const Ctxt, Source, Dest);
 
   /// low-level content of TAes.Context (AES_CONTEXT_SIZE bytes)
@@ -2930,7 +2934,7 @@ type
     // main AES function to process one 16-bytes block - set at runtime from HW
     DoBlock: TAesContextDoBlock;
     {$ifdef WIN64ABI}
-    xmm7bak: THash128; // used to preserve the xmm7 register in Win64 asm
+    xmm7bak: THash128; // preserve the xmm7 register within .noframe Win64 asm
     {$endif WIN64ABI}
     {$ifdef USEAESNI32}
     AesNi32: pointer; // xmm7 AES-NI encoding

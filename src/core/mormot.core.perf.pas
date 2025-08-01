@@ -375,7 +375,7 @@ type
   // non-reentrant Lock/UnLock to access its individual properties
   TSynMonitor = class(TObjectWithRttiMethods)
   protected
-    fSafe: TOSLightLock;
+    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
     fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;

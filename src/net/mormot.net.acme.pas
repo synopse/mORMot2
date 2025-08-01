@@ -1266,8 +1266,8 @@ begin
         continue; // paranoid
       sub := c.Subject[0];
       if GetClient(sub) = c then // avoid duplicated names confusion
-        if not cc.LoadFromFile(c.fSignedCert) or
-           (cc.GetNotAfter < expired) then
+        if not cc.LoadFromFile(c.fSignedCert) or // needs generation
+           (cc.GetNotAfter < expired) then       // needs renewal
           AddRawUtf8(needed, sub);
     end;
   finally

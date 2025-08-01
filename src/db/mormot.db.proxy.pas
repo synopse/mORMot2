@@ -504,7 +504,7 @@ type
   // TSqlDBServerSockets - this abstract class won't set any HTTP server
   TSqlDBServerAbstract = class
   protected
-    fSafe: TOSLightLock;
+    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
     fServer: THttpServerGeneric;
     fThreadPoolCount: integer;
     fPort, fDatabaseName: RawUtf8;

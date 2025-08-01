@@ -5330,7 +5330,7 @@ begin
     end;
     if fServer <> nil then
     begin
-      // allow THttpServer.OnHeaderParsed low-level callback
+      // allow very early THttpServer.OnHeaderParsed low-level callback
       if Assigned(fServer.fOnHeaderParsed) then
       begin
         result := fServer.fOnHeaderParsed(self);
