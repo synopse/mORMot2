@@ -639,7 +639,7 @@ type
 
   /// used to manage a thread-safe list of WebSockets frames
   // - TSynLocked because SendPendingOutgoingFrames() locks it and may take time
-  TWebSocketFrameList = class(TSynLocked)
+  TWebSocketFrameList = class(TObjectOSLock)
   protected
     fTimeoutSec: cardinal;
     fAnswerToIgnore: integer;

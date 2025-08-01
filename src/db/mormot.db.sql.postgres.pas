@@ -367,7 +367,7 @@ type
   // - allow to execute several statements within an PostgreSQL pipeline, and
   // return the results using asynchronous callbacks from a background thread
   // - inherits from TSynLocked so you can use Lock/UnLock
-  TSqlDBPostgresAsync = class(TSynLocked)
+  TSqlDBPostgresAsync = class(TObjectOSLock)
   protected
     fConnection: TSqlDBPostgresConnection;
     fStatements: array of TSqlDBPostgresAsyncStatement;

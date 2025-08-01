@@ -1996,7 +1996,7 @@ type
 
   /// can load and use a PKCS#11 library
   // - need to explicitly call Safe.Lock/UnLock in a multi-thread context
-  TPkcs11 = class(TSynLocked)
+  TPkcs11 = class(TObjectOSLock)
   protected
     fC: CK_FUNCTION_LIST_PTR;
     fHandle: TLibHandle;

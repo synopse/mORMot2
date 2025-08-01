@@ -746,8 +746,8 @@ type
   /// abstract class to track, compute and store TSynMonitor detailed statistics
   // - you should inherit from this class to implement proper data persistence,
   // e.g. using TSynMonitorUsageRest for ORM-based storage
-  // - SaveDB may take some time, so a TSynLocker OS lock is used, not TRWLock
-  TSynMonitorUsage = class(TSynLocked)
+  // - SaveDB may take some time, so a regular TObjectOSLock is used, not TRWLock
+  TSynMonitorUsage = class(TObjectOSLock)
   protected
     fLog: TSynLogFamily;
     fTracked: array of TSynMonitorUsageTrack;

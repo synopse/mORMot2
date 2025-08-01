@@ -274,7 +274,7 @@ type
 { ************ TRestRunThreads Multi-Threading Process of a REST instance }
 
   /// access to the Multi-Threading process of a TRest instance
-  TRestRunThreads = class(TSynLocked)
+  TRestRunThreads = class(TObjectOSLock)
   protected
     fOwner: TRest;
     fBackgroundTimer: TRestBackgroundTimer;

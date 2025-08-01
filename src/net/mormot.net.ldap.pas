@@ -1902,7 +1902,7 @@ type
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
   // - is not thread-safe, but you can call Lock/UnLock to share the connection
-  TLdapClient = class(TSynLocked)
+  TLdapClient = class(TObjectOSLock)
   protected
     fSettings: TLdapClientSettings;
     fSock: TCrtSocket;
