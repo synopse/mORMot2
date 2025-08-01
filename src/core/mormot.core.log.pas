@@ -749,8 +749,8 @@ type
     // TSynLogFamily: it will stay alive until this TSynLogFamily is destroyed,
     // or the EchoRemoteStop() method called
     // - aClientEvent should be able to send the log row to the remote server
-    procedure EchoRemoteStart(aClient: TObject; const aClientEvent: TOnTextWriterEcho;
-      aClientOwnedByFamily: boolean);
+    procedure EchoRemoteStart(aClient: TObject;
+      const aClientEvent: TOnTextWriterEcho; aClientOwnedByFamily: boolean);
     /// stop echo remote logging
     // - will free the aClient instance supplied to EchoRemoteStart
     procedure EchoRemoteStop;
@@ -1507,7 +1507,7 @@ type
   TSynLogCallbackDynArray = array of TSynLogCallback;
 
   /// can manage a list of ISynLogCallback registrations
-  TSynLogCallbacks = class(TSynLocked)
+  TSynLogCallbacks = class(TObjectOSLock)
   protected
     fCount: integer;
     fCurrentlyEchoing: boolean;
@@ -6632,6 +6632,7 @@ function TSynLogCallbacks.OnEcho(Sender: TEchoWriter; Level: TSynLogLevel;
   const Text: RawUtf8): boolean;
 var
   i: PtrInt;
+  cb: ^TSynLogCallback;
 begin
   result := false;
   if (Count = 0) or
@@ -6640,13 +6641,20 @@ begin
   fSafe.Lock; // not really concurrent, but faster
   try
     fCurrentlyEchoing := true; // avoid stack overflow if exception below
+    cb := pointer(Registration);
     for i := Count - 1 downto 0 do
-      if Level in Registration[i].Levels then
+      if Level in cb^.Levels then
       try
-        Registration[i].Callback.Log(Level, Text);
+        cb^.Callback.Log(Level, Text);
         result := true;
+        inc(cb);
       except
-        Registrations.Delete(i); // safer to unsubscribe ASAP
+        try
+          Registrations.Delete(i); // safer to unsubscribe ASAP
+        except
+          result := false;
+        end;
+        cb := @Registration[i];  // may have moved in memory
       end;
   finally
     fCurrentlyEchoing := false;
