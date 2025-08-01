@@ -1557,8 +1557,7 @@ begin
       // redirect to the same URI but on HTTPS host
       Request.SockSendLine([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
-    if IsGet(Request.Http.CommandMethod) then
-      body := 'Back to HTTPS';
+    // 301 and 308 responses expects no response body
   end;
   // finalize the headers and send the response body
   Request.SockSend([
