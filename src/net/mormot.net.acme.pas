@@ -156,7 +156,7 @@ type
     fOrder: RawUtf8;
     fFinalize: RawUtf8;
     procedure ReadDirectory;
-    function ComputeEab: RawUtf8;
+    procedure ComputeEab(out result: RawUtf8);
     procedure CreateAccount;
     function CreateOrder: TAcmeStatus;
     function RequestAuth(const aJson: RawJson): integer;
@@ -174,7 +174,7 @@ type
     /// finalize the instance
     destructor Destroy; override;
     /// check if a Server Name text is part of associated Subjects
-    function Match(const aServerName: RawUtf8): boolean;
+    function MatchAny(const aServerName: RawUtf8): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// search for a given Challenge token, and return the associated key
     function GetChallenge(aUri: PUtf8Char; aUriLen: PtrInt;
@@ -203,7 +203,7 @@ type
     // or OutPrivateKey are not set
     function RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
       const OutSignedCert, OutPrivateKey: TFileName;
-      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
+      const aPrivateKeyPassword: SpiUtf8; WaitForSec: cardinal;
       Terminated: PBoolean): TAcmeStatus;
     /// will run StartDomainRegistration and wait until it is completed
     // - ChallengeWwwFolder is a local folder where to store the temporary
@@ -270,8 +270,6 @@ const
 
   ACME_CHALLENGE_PATH =
     '/.well-known/acme-challenge/';
-  ACME_CHALLENGE_PATH_UPPER =
-    '/.WELL-KNOWN/ACME-CHALLENGE/';
   ACME_CHALLENGE_PATH_LEN = length(ACME_CHALLENGE_PATH);
 
 type
@@ -295,6 +293,10 @@ type
     /// initialize certificate management with Let's Encrypt of one domain
     // - aDomainFile is the ##.json of this domain to be read from disk
     // with its associated ##.acme.pem, ##.crt.me, and ##.key.pem files
+    // - typically aDomainFile is
+    // $ {"contact":"mailto:admin@synopse.info","subjects":["synopse.info","www.synopse.info"]}
+    // optionally with a "eab" member e.g. for ZeroSSL:
+    // $ { .. , "eab":{"algo":"Sha256","kid":"xxx","mac_key":"zzzzz'}}
     constructor Create(aOwner: TAcmeLetsEncrypt; const aDomainFile: TFileName); reintroduce;
     /// finalize the information of this domain certificate
     destructor Destroy; override;
@@ -343,14 +345,13 @@ type
     // - follow RenewWaitForSeconds timeout for each certificate
     // - this blocking process could take some time (several seconds per domain)
     procedure CheckCertificates(Sender: TObject);
-    /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
-    // global variable of mormot.net.sock
+    /// low-level TOnNetTlsAcceptServerName event for the HTTPS server SNI
+    // - as supplied to THttpServerGeneric.SetTlsServerNameCallback()
     function OnNetTlsAcceptServerName(Context: PNetTlsContext; TLS: pointer;
       ServerName: PUtf8Char): pointer;
-    /// TOnNetTlsAcceptChallenge event, set to OnNetTlsAcceptChallenge
-    // global variable of mormot.net.sock
+    /// compute the challenge to be returned by the HTTP server on port 80
     // - ACME typical uri is '/.well-known/acme-challenge/<TOKEN>'
-    function OnNetTlsAcceptChallenge(const domain, uri: RawUtf8;
+    function HttpServerChallenge(const domain, uri: RawUtf8;
       var content: RawUtf8): boolean;
     /// raw access to the internal Client list
     property Client: TAcmeLetsEncryptClientObjArray
@@ -543,13 +544,11 @@ end;
 
 function AcmeTextToStatus(p: PUtf8Char): TAcmeStatus;
 begin
-  if IdemPChar(p, 'VALID') then
+  if IdemPChar(p, 'VALID') or   // request has been successfully validated
+     IdemPChar(p, 'READY') then // request is ready for the next step
     result := asValid
-  else if IdemPChar(p, 'READY') then
-    result := asValid
-  else if IdemPChar(p, 'PENDING') then
-    result := asPending
-  else if IdemPChar(p, 'PROCESSING') then
+  else if IdemPChar(p, 'PENDING') or      // request is still being processed
+          IdemPChar(p, 'PROCESSING') then
     result := asPending
   else
     result := asInvalid;
@@ -615,7 +614,7 @@ begin
   inherited Destroy;
 end;
 
-function TAcmeClient.Match(const aServerName: RawUtf8): boolean;
+function TAcmeClient.MatchAny(const aServerName: RawUtf8): boolean;
 begin
   // very fast case insensitive O(n) search
   result := FindPropName(pointer(fSubject), aServerName, length(fSubject)) >= 0;
@@ -666,35 +665,26 @@ begin
     EAcmeClient.RaiseUtf8('Invalid directory %', [fDirectoryUrl]);
 end;
 
-function TAcmeClient.ComputeEab: RawUtf8;
+procedure TAcmeClient.ComputeEab(out result: RawUtf8);
 var
-  prot: RawUtf8;
-  prot_enc: RawUtf8;
+  protected: RawUtf8;
   payload: RawUtf8;
-  payload_enc: RawUtf8;
-  body_enc: RawUtf8;
+  signature: RawUtf8;
   signer: TSynSigner;
   hash: THash512Rec;
-  signature: RawUtf8;
 begin
-  if (fEabKid <> '') and
-     (fEabMacKey <> '') then
-  begin
-    prot := FormatJson('{"alg":?,"kid":?,"url":?',
-      [], [JWT_TEXT[fEabAlgo], fEabKid, fNewAccount]);
-    prot_enc := BinToBase64uri(prot);
-    payload := fHttpClient.fCert.JwkCompute;
-    payload_enc := BinToBase64uri(payload);
-    body_enc := prot_enc + '.' + payload_enc;
-    signer.Init(fEabAlgo, Base64uriToBin(fEabMacKey));
-    signer.Update(body_enc);
-    signer.Final(@hash);
-    signature := BinToBase64uri(@hash, signer.SignatureSize);
-    result := FormatJson(',"externalAccountBinding":{"protected":?,"payload":?,"signature":?}',
-      [], [prot_enc, payload_enc, signature]);
-  end
-  else
-    result := '';
+  protected := BinToBase64uri(FormatJson('{"alg":?,"kid":?,"url":?',
+    [], [JWT_TEXT[fEabAlgo], fEabKid, fNewAccount]));
+  payload := BinToBase64uri(fHttpClient.fCert.JwkCompute);
+  signer.Init(fEabAlgo, Base64uriToBin(fEabMacKey));
+  signer.Update(protected);
+  signer.Update('.');
+  signer.Update(payload);
+  signer.Final(@hash);
+  signature := BinToBase64uri(@hash, signer.SignatureSize);
+  result := FormatJson(
+    ',"externalAccountBinding":{"protected":?,"payload":?,"signature":?}',
+    [], [protected, payload, signature]);
 end;
 
 procedure TAcmeClient.CreateAccount;
@@ -705,7 +695,9 @@ var
   status: RawUtf8;
 begin
   // Optional External Account Binding member
-  eab := ComputeEab;
+  if (fEabKid <> '') and
+     (fEabMacKey <> '') then
+    ComputeEab(eab);
   // A client creates a new account with the server by sending a POST
   // request to the server's newAccount URL
   req := FormatJson('{"termsOfServiceAgreed":true,"contact":[?]%}',
@@ -975,7 +967,7 @@ end;
 
 function TAcmeClient.RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
   const OutSignedCert, OutPrivateKey: TFileName;
-  const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
+  const aPrivateKeyPassword: SpiUtf8; WaitForSec: cardinal;
   Terminated: PBoolean): TAcmeStatus;
 var
   endtix: cardinal;
@@ -1024,7 +1016,7 @@ begin
     if result = asValid then
       try
         FileFromString(cert, OutSignedCert);
-        FileFromString(pk, OutPrivateKey);
+        FileFromString(pk,   OutPrivateKey);
       finally
         FillZero(cert);
         FillZero(pk);
@@ -1284,12 +1276,12 @@ begin
   finally
     fSafe.ReadUnLock;
   end;
-  // renew the needed certificates
   if Assigned(log) then
     log.Log(sllDebug, 'CheckCertificates: renew %',
       [Plural('certificate', length(needed))], self);
   if needed = nil then
     exit;
+  // protect the fClient[] list and the c instance during the slow process below
   fSafe.WriteLock;
   try
     if fClientsRenewing then
@@ -1298,6 +1290,7 @@ begin
   finally
     fSafe.WriteUnLock;
   end;
+  // renew all needed certifiates
   try
     for i := 0 to length(needed) - 1 do
     begin
@@ -1367,7 +1360,7 @@ begin
   for i := 1 to length(fClient) do
   begin
     result := p^;
-    if result.Match(ServerName) then
+    if result.MatchAny(ServerName) then
       exit;
     inc(p);
   end;
@@ -1401,7 +1394,7 @@ begin
   client := GetClientLocked(name); // case-insensitive search
   if client <> nil then
     try
-      result := client.GetServerContext; // cached PSSL_CTX
+      result := client.GetServerContext; // returns the cached PSSL_CTX
     finally
       client.Safe.UnLock;
     end
@@ -1410,7 +1403,7 @@ end;
 const
   _ACME_CHALLENGE_PATH: PUtf8Char = ACME_CHALLENGE_PATH;
 
-function TAcmeLetsEncrypt.OnNetTlsAcceptChallenge(const domain, uri: RawUtf8;
+function TAcmeLetsEncrypt.HttpServerChallenge(const domain, uri: RawUtf8;
   var content: RawUtf8): boolean;
 var
   client: TAcmeLetsEncryptClient;
@@ -1418,13 +1411,14 @@ var
   len: PtrInt;
 begin
   result := false;
-  if not fClientsRenewing then
+  if fShutdown or
+     (fClient = nil) or
+     not fClientsRenewing then
     exit; // no challenge currently happening
-  // parse the /.well-known/acme-challenge/<token> URI
+  // quickly parse the /.well-known/acme-challenge/<token> case-insensitive URI
   P := pointer(uri);
   len := length(uri) - ACME_CHALLENGE_PATH_LEN;
-  if (fClient = nil) or
-     (len <= 0) or
+  if (len <= 0) or
      not CompareMem(P, _ACME_CHALLENGE_PATH, ACME_CHALLENGE_PATH_LEN) then
     exit;
   // recognize the <token> and return its matching TAcmeChallenge.Key
