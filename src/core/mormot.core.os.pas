@@ -4097,6 +4097,9 @@ type
     /// leave a non-reentrant non-upgradable exclusive write lock
     procedure WriteUnLock;
       {$ifdef HASINLINE} inline; {$endif}
+    /// check if the non-reentrant lock has been acquired as read or write
+    function IsLocked: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   PRWLightLock = ^TRWLightLock;
 
@@ -4194,6 +4197,9 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// a high-level wrapper over ReadOnlyUnLock/ReadWriteUnLock/WriteUnLock methods
     procedure UnLock(context: TRWLockContext {$ifndef PUREMORMOT2} = cWrite {$endif});
+      {$ifdef HASINLINE} inline; {$endif}
+    /// check if the reentrant lock has been acquired as read or write
+    function IsLocked: boolean;
       {$ifdef HASINLINE} inline; {$endif}
   end;
   PRWLock = ^TRWLock;
@@ -10121,6 +10127,11 @@ begin
   until TryWriteLock;
 end;
 
+function TRWLightLock.IsLocked: boolean;
+begin
+  result := (Flags <> 0);
+end;
+
 
 { TRWLock }
 
@@ -10294,6 +10305,11 @@ begin
     ReadWriteUnLock
   else
     WriteUnLock;
+end;
+
+function TRWLock.IsLocked: boolean;
+begin
+  result := (Flags <> 0);
 end;
 
 
