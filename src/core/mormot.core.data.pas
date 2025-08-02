@@ -330,15 +330,17 @@ type
     // !    fSharedAutoLocker.Leave;
     // !  end;
     // !end;
-    procedure Enter; virtual;
+    procedure Enter;
+      {$ifdef HASINLINE}inline;{$endif}
     /// leave the mutex
     // - as expected by IAutoLocker interface
-    procedure Leave; virtual;
+    procedure Leave;
+      {$ifdef HASINLINE}inline;{$endif}
     /// access to the locking methods of this instance
     // - as expected by IAutoLocker interface
     function Safe: PSynLocker;
     /// direct access to the locking methods of this instance
-    // - faster than IAutoLocker.Safe function
+    // - sligtly faster than IAutoLocker.Safe function if you have a TAutoLocker
     property Locker: TSynLocker
       read fSafe;
   end;
