@@ -139,7 +139,7 @@ procedure XorConst(p: PIntegerArray; Count: integer);
 procedure bswap160(s, d: PIntegerArray);
 
 // little endian fast conversion
-// - 256-bit = 8 integers
+// - 256-bit = 8 integers = 32 bytes
 // - use fast bswap asm in x86/x64 mode
 procedure bswap256(s, d: PIntegerArray);
 
@@ -260,7 +260,7 @@ procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
 function _cmp256(const Left, Right: THash256Rec): integer;
   {$ifdef CPU64}inline;{$endif}
 
-/// move and change endianness of a 256-bit value
+/// move and change endianness of a 256-bit value - not as 32-bit bswap256()
 // - warning: this code requires dest <> source
 procedure _bswap256(dest, source: PQWordArray);
 
@@ -8099,24 +8099,29 @@ end;
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PCardinalArray);
 var
-  i: PtrInt;
+  i, w2, w15: cardinal; // we have additional registers on x86_64/arm
 begin
-  bswap256(@Buf[0], @W[0]); // 32 bytes
-  bswap256(@Buf[8], @W[8]); // 32 bytes
+  bswap256(@Buf[0], @W[0]); // 32 bytes = 8 cardinals
+  bswap256(@Buf[8], @W[8]); // 32 bytes = 8 cardinals
   for i := 16 to 63 do
-  {$ifdef FPC} // uses faster built-in right rotate intrinsic - fast code
-    W[i] := (RorDWord(W[i - 2], 17) xor RorDWord(W[i - 2], 19) xor
-            (W[i - 2] shr 10)) + W[i - 7] +
-            (RorDWord(W[i - 15], 7) xor RorDWord(W[i - 15], 18) xor
-             (W[i - 15] shr 3)) + W[i - 16];
-  {$else}
-    W[i] := (((W[i - 2] shr 17) or (W[i - 2] shl 15)) xor
-             ((W[i - 2] shr 19) or (W[i - 2] shl 13)) xor
-            (W[i - 2] shr 10)) + W[i - 7] +
-            (((W[i - 15] shr 7) or (W[i - 15] shl 25)) xor
-             ((W[i - 15] shr 18) or (W[i - 15] shl 14)) xor
-             (W[i - 15] shr 3)) + W[i - 16];
-  {$endif FPC}
+  begin
+    w2  := W[16 - 2];
+    w15 := W[16 - 15];
+    {$ifdef FPC} // uses fast built-in right rotate intrinsic
+    W[16] := (RorDWord(w2, 17) xor RorDWord(w2, 19) xor
+            (w2 shr 10)) + W[16 - 7] +
+            (RorDWord(w15, 7) xor RorDWord(w15, 18) xor
+             (w15 shr 3)) + W[16 - 16];
+    {$else}
+    W[16] := (((w2 shr 17) or (w2 shl 15)) xor
+              ((w2 shr 19) or (w2 shl 13)) xor
+             (w2 shr 10)) + W[16 - 7] +
+             (((w15 shr 7) or (w15 shl 25)) xor
+              ((w15 shr 18) or (w15 shl 14)) xor
+              (w15 shr 3)) + W[16 - 16];
+    {$endif FPC}
+    W := @W[1];
+  end;
 end;
 
 {$endif CPUX86}
