@@ -8095,31 +8095,31 @@ end;
 
 { --------- SHA-2 Hashing }
 
-{$ifndef CPUINTEL}
+{$ifndef CPUX86}
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PCardinalArray);
 var
   i: PtrInt;
 begin
-  // bswap256() instead of "for i := 0 to 15 do W[i]:= bswap32(Buf[i]);"
-  bswap256(@Buf[0], @W[0]);
-  bswap256(@Buf[8], @W[8]);
+  bswap256(@Buf[0], @W[0]); // 32 bytes
+  bswap256(@Buf[8], @W[8]); // 32 bytes
   for i := 16 to 63 do
-  {$ifdef FPC} // uses faster built-in right rotate intrinsic
+  {$ifdef FPC} // uses faster built-in right rotate intrinsic - fast code
     W[i] := (RorDWord(W[i - 2], 17) xor RorDWord(W[i - 2], 19) xor
-            (W[i - 2] shr 10)) + W[i - 7] + (RorDWord(W[i - 15], 7) xor
-            RorDWord(W[i - 15], 18) xor (W[i - 15] shr 3)) + W[i - 16];
+            (W[i - 2] shr 10)) + W[i - 7] +
+            (RorDWord(W[i - 15], 7) xor RorDWord(W[i - 15], 18) xor
+             (W[i - 15] shr 3)) + W[i - 16];
   {$else}
     W[i] := (((W[i - 2] shr 17) or (W[i - 2] shl 15)) xor
-            ((W[i - 2] shr 19) or (W[i - 2] shl 13)) xor
+             ((W[i - 2] shr 19) or (W[i - 2] shl 13)) xor
             (W[i - 2] shr 10)) + W[i - 7] +
             (((W[i - 15] shr 7) or (W[i - 15] shl 25)) xor
-            ((W[i - 15] shr 18) or (W[i - 15] shl 14)) xor
-            (W[i - 15] shr 3)) + W[i - 16];
+             ((W[i - 15] shr 18) or (W[i - 15] shl 14)) xor
+             (W[i - 15] shr 3)) + W[i - 16];
   {$endif FPC}
 end;
 
-{$endif CPUINTEL}
+{$endif CPUX86}
 
 // under Win32, with a Core i7 CPU: pure pascal: 152ms - x86: 112ms
 // under Win64, with a Core i7 CPU: pure pascal: 202ms - SSE4: 78ms
