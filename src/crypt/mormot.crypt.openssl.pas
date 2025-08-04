@@ -277,6 +277,7 @@ type
   private
     fCtx: PEVP_MD_CTX;
     fXof: boolean;
+    procedure Init(MD: PEVP_MD; HashSize: cardinal);
   public
     /// initialize the internal hashing structure for a specific algorithm
     // - Algorithm is one of `openssl list -digest-algorithms`
@@ -284,7 +285,14 @@ type
     // - for XOF hash functions such as 'shake256', the hashSize option
     // can be used to specify the desired output length in bytes
     // - raise an EOpenSslHash exception on unknown/unsupported algorithm
-    constructor Create(const Algorithm: RawUtf8; HashSize: cardinal = 0);
+    constructor Create(const Algorithm: RawUtf8; HashSize: cardinal = 0); overload;
+    /// initialize the internal hashing structure for a specific algorithm
+    // - Algorithm is one of `openssl list -digest-algorithms`
+    // - if Algorithm is not specified, EVP_sha256 will be used
+    // - for XOF hash functions such as 'shake256', the hashSize option
+    // can be used to specify the desired output length in bytes
+    // - raise an EOpenSslHash exception on unknown/unsupported algorithm
+    constructor Create(Algorithm: THashAlgo; HashSize: cardinal = 0); overload;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Digest to retrieve the Hash
     procedure Update(Data: pointer; DataLength: integer); override;
@@ -295,7 +303,10 @@ type
     function Digest(Dest: pointer = nil): cardinal; override;
     /// compute the message authentication code using `Algorithm` as hash function
     class function Hash(const Algorithm: RawUtf8; const Data: RawByteString;
-      HashSize: cardinal = 0): RawUtf8;
+      HashSize: cardinal = 0): RawUtf8; overload;
+    /// compute the message authentication code using `Algorithm` as hash function
+    class function Hash(Algorithm: THashAlgo; const Data: RawByteString;
+      HashSize: cardinal = 0): RawUtf8; overload;
     /// release the digest context
     destructor Destroy; override;
   end;
@@ -1058,18 +1069,8 @@ end;
 
 { TOpenSslHash }
 
-constructor TOpenSslHash.Create(const Algorithm: RawUtf8; HashSize: cardinal);
-var
-  md: PEVP_MD;
+procedure TOpenSslHash.Init(MD: PEVP_MD; HashSize: cardinal);
 begin
-  EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
-  if Algorithm = '' then
-    md := EVP_sha256
-  else
-    md := EVP_get_digestbyname(pointer(Algorithm));
-  if md = nil then
-    raise EOpenSslHash.CreateFmt(
-      'TOpenSslHash.Create(''%s''): Unknown algorithm', [Algorithm]);
   fCtx := EVP_MD_CTX_new;
   EOpenSslHash.Check(self, 'Create',
     EVP_DigestInit_ex(fCtx, md, nil));
@@ -1078,11 +1079,20 @@ begin
   if (hashSize <> 0)  and
      (fDigestSize <> HashSize) then
     if fXof then
-      // custom size in XOF mode
-      fDigestSize := hashSize
+      fDigestSize := hashSize // custom size in XOF mode
     else
-      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect HashSize=' +
-        '%d to a non-XOF hash function ''%s''', [HashSize, Algorithm]);
+      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Unexpected HashSize=' +
+        '%d to a non-XOF hash function', [HashSize]);
+end;
+
+constructor TOpenSslHash.Create(const Algorithm: RawUtf8; HashSize: cardinal);
+begin
+  Init(OpenSslGetMdByName(Algorithm, 'TOpenSslHash.Create'), HashSize);
+end;
+
+constructor TOpenSslHash.Create(Algorithm: THashAlgo; HashSize: cardinal);
+begin
+  Init(OpenSslGetMd(Algorithm), HashSize);
 end;
 
 procedure TOpenSslHash.Update(Data: pointer; DataLength: integer);
@@ -1125,6 +1135,18 @@ begin
 end;
 
 class function TOpenSslHash.Hash(const Algorithm: RawUtf8;
+  const Data: RawByteString; HashSize: cardinal): RawUtf8;
+begin
+  with Create(Algorithm, HashSize) do
+    try
+      Update(Data);
+      result := DigestHex;
+    finally
+      Free;
+    end;
+end;
+
+class function TOpenSslHash.Hash(Algorithm: THashAlgo;
   const Data: RawByteString; HashSize: cardinal): RawUtf8;
 begin
   with Create(Algorithm, HashSize) do
