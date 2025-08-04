@@ -1154,6 +1154,8 @@ begin
       'TOpenSslHmac.Create(''%s''): Unknown algorithm', [Algorithm]);
   fDigestSize := EVP_MD_size(md);
   fCtx := HMAC_CTX_new;
+  if Key = nil then // Key=null for OpenSSL means "reuse previous"
+    Key := self;    // Key<>nul but keep KeyLength=0 so that it uses Key=''
   EOpenSslHash.Check(self, 'Create',
     HMAC_Init_ex(fCtx, Key, KeyLength, md, nil));
 end;
