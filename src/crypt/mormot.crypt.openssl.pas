@@ -280,19 +280,16 @@ type
     procedure Init(MD: PEVP_MD; HashSize: cardinal);
   public
     /// initialize the internal hashing structure for a specific algorithm
-    // - Algorithm is one of `openssl list -digest-algorithms`
-    // - if Algorithm is not specified, EVP_sha256 will be used
+    // - for XOF hash functions such as 'shake256', the hashSize option
+    // can be used to specify the desired output length in bytes
+    constructor Create(Algorithm: THashAlgo; HashSize: cardinal = 0); overload;
+    /// initialize the internal hashing structure for a specific algorithm
+    // - Algorithm is one of "openssl list -digest-algorithms"
+    // - if Algorithm is not specified, EVP_sha256 (aka 'sha256') will be used
     // - for XOF hash functions such as 'shake256', the hashSize option
     // can be used to specify the desired output length in bytes
     // - raise an EOpenSslHash exception on unknown/unsupported algorithm
     constructor Create(const Algorithm: RawUtf8; HashSize: cardinal = 0); overload;
-    /// initialize the internal hashing structure for a specific algorithm
-    // - Algorithm is one of `openssl list -digest-algorithms`
-    // - if Algorithm is not specified, EVP_sha256 will be used
-    // - for XOF hash functions such as 'shake256', the hashSize option
-    // can be used to specify the desired output length in bytes
-    // - raise an EOpenSslHash exception on unknown/unsupported algorithm
-    constructor Create(Algorithm: THashAlgo; HashSize: cardinal = 0); overload;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Digest to retrieve the Hash
     procedure Update(Data: pointer; DataLength: integer); override;
@@ -301,11 +298,11 @@ type
     // which is typically a THash256 or THash512 variable
     // - returns actual DigestValue/Dest buffer length, i.e. DigestSize
     function Digest(Dest: pointer = nil): cardinal; override;
-    /// compute the message authentication code using `Algorithm` as hash function
-    class function Hash(const Algorithm: RawUtf8; const Data: RawByteString;
-      HashSize: cardinal = 0): RawUtf8; overload;
-    /// compute the message authentication code using `Algorithm` as hash function
+    /// compute the message authentication code using the supplied hash function
     class function Hash(Algorithm: THashAlgo; const Data: RawByteString;
+      HashSize: cardinal = 0): RawUtf8; overload;
+    /// compute the message authentication code using "Algorithm" OpenSSL digest
+    class function Hash(const Algorithm: RawUtf8; const Data: RawByteString;
       HashSize: cardinal = 0): RawUtf8; overload;
     /// release the digest context
     destructor Destroy; override;
@@ -319,11 +316,10 @@ type
   public
     /// initialize the internal HMAC structure for a specific Algorithm and Key
     // - Key/KeyLen define the HMAC associated salt
-    // - raise an EOpenSslHash exception on unknown/unsupported algorithm
     constructor Create(Algorithm: THashAlgo; Key: pointer; KeyLength: cardinal); overload;
     /// initialize the internal HMAC structure for a specific Algorithm and Key
-    // - Algorithm is one of `openssl list -digest-algorithms`
-    // - if Algorithm is not specified, EVP_sha256 will be used
+    // - Algorithm is one of "openssl list -digest-algorithms"
+    // - if Algorithm is not specified, EVP_sha256 (aka 'sha256') will be used
     // - Key/KeyLen define the HMAC associated salt
     // - raise an EOpenSslHash exception on unknown/unsupported algorithm
     constructor Create(const Algorithm: RawUtf8;
@@ -339,16 +335,16 @@ type
     // which is typically a THash256 or THash512 variable
     // - returns actual DigestValue/Dest buffer length, i.e. DigestSize
     function Digest(Dest: pointer = nil): cardinal; override;
-    /// compute the HMAC using `algorithm` as hash function
+    /// compute the HMAC using "Algorithm" OpenSSL digest (e.g. 'sha256')
     class function Hmac(const Algorithm: RawUtf8; const Data: RawByteString;
       Key: pointer; KeyLength: cardinal): RawUtf8; overload;
-    /// compute the HMAC using `algorithm` as hash function
+    /// compute the HMAC using "Algorithm" OpenSSL digest (e.g. 'sha256')
     class function Hmac(const Algorithm: RawUtf8;
       const Data, Key: RawByteString): RawUtf8; overload;
-    /// compute the HMAC using `algorithm` as hash function
+    /// compute the HMAC using the supplied hash function
     class function Hmac(Algorithm: THashAlgo;
       const Data: RawByteString; Key: pointer; KeyLength: cardinal): RawUtf8; overload;
-    /// compute the HMAC using `algorithm` as hash function
+    /// compute the HMAC using the supplied hash function
     class function Hmac(Algorithm: THashAlgo;
       const Data, Key: RawByteString): RawUtf8; overload;
     /// release the digest context

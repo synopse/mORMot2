@@ -555,7 +555,7 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from previous successful call to ServerSspiAuth
 // - aUserName contains authenticated user name, as 'NETBIOSNAME\username' pattern,
-// following ServerDomainMapRegister() mapping, or 'REALM.TLD\username` if
+// following ServerDomainMapRegister() mapping, or 'REALM.TLD\username' if
 // global ServerDomainMapUseRealm was forced to true
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);

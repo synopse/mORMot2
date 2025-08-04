@@ -1718,7 +1718,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
         // We move this after params binding to prevent "ORA-00932: inconsistent
         // datatypes" during call to StmtExecute with OCI_DESCRIBE_ONLY.
         // Because if called here sometimes it breaks the Oracle shared pool and
-        // only `ALTER system flush shared_pool` seems to fix the DB state
+        // only "ALTER system flush shared_pool" seems to fix the DB state
         SetColumnsForPreparedStatement;
       // 3. execute prepared statement and dispatch data in row buffers
       if (fColumnCount = 0) and

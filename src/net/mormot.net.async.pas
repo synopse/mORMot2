@@ -745,7 +745,7 @@ type
     // - as supplied to the constructor, but may be overriden just after startup
     property ConnectionClass: TAsyncConnectionClass
       read fConnectionClass write fConnectionClass;
-    /// direct access to the internal AsyncConnectionsThread`s
+    /// direct access to the internal AsyncConnectionsThread's
     property Threads: TAsyncConnectionsThreads
       read fThreads;
   published
