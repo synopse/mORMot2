@@ -807,7 +807,7 @@ begin
   if PropNameEquals(HostName, 'localhost') or
      (HostName = c6Localhost) then
     Ip := IP4local
-  else if NetIsIP4(pointer(HostName)) then
+  else if NetIsIP4(pointer(HostName)) then // '1.2.3.4'
     Ip := HostName
   else
     result := false; // and Ip has been set to ''
@@ -818,7 +818,7 @@ var
   res: TDnsResult;
   i: PtrInt;
 begin
-  if not DnsLookupKnown(HostName, result) then
+  if not DnsLookupKnown(HostName, result) then // e.g. 'localhost' or '1.2.3.4'
     if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
@@ -835,7 +835,7 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if DnsLookupKnown(HostName, known) then
+  if DnsLookupKnown(HostName, known) then // e.g. 'localhost' or '1.2.3.4'
     AddRawUtf8(result, known)
   else if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do

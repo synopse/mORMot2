@@ -966,6 +966,7 @@ begin
   CheckEqual(DnsLookup('LocalHost'), '127.0.0.1');
   CheckEqual(DnsLookup('::1'), '127.0.0.1');
   CheckEqual(DnsLookup('1.2.3.4'), '1.2.3.4');
+  CheckEqual(NetAddrResolve('1.2.3.4'), '1.2.3.4');
   if hasinternet then
   begin
     endtix := GetTickSec + 5; // never wait forever
@@ -976,6 +977,7 @@ begin
         break;
       Sleep(100); // some DNS servers may fail at first: wait a little
     until GetTickSec > endtix;
+    CheckEqual(NetAddrResolve('synopse.info'), ip, 'NetAddrResolve');
     rev := '62.210.254.173';
     CheckEqual(ip, rev, 'dns1');
     repeat
