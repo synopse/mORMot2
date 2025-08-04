@@ -52,6 +52,8 @@ type
       const exp, msg: RawUtf8);
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
       const lab: RawUtf8 = 'kerberos'; const ctx: RawUtf8 = '');
+    procedure OpenSslTest(Algo: THashAlgo; const msg, exp: RawUtf8); overload;
+    procedure OpenSslTest(Algo: THashAlgo; const msg, key, exp: RawUtf8); overload;
   published
     /// 32-bit to 128-bit hashing functions: crc32c, AesNiHash, MD5, MD4...
     procedure Hashes;
@@ -157,6 +159,22 @@ begin
   CheckEqualHex(res, exp, msg);
 end;
 
+procedure TTestCoreCrypto.OpenSslTest(Algo: THashAlgo; const msg, exp: RawUtf8);
+begin
+  {$ifdef USE_OPENSSL}
+  if TOpenSslHash.IsAvailable then
+    CheckEqual(TOpenSslHash.Hash(Algo, msg), LowerCase(exp));
+  {$endif USE_OPENSSL}
+end;
+
+procedure TTestCoreCrypto.OpenSslTest(Algo: THashAlgo; const msg, key, exp: RawUtf8);
+begin
+  {$ifdef USE_OPENSSL}
+  if TOpenSslHmac.IsAvailable then
+    CheckEqual(TOpenSslHmac.Hmac(Algo, msg, key), LowerCase(exp));
+  {$endif USE_OPENSSL}
+end;
+
 procedure TTestCoreCrypto._SHA1;
 
   procedure DoTest;
@@ -213,6 +231,12 @@ begin
     4096, 25, '3d2eec4fe41c849b80c8d83662c0e44a8b291a964cf2f07038', 'bigger');
   Rfc(saSha1, 'pass'#0'word', 'sa'#0'lt', 4096, 16,
       '56fa6aa75548099dcc37d7f03425e0c3', 'truncated');
+  // do nothing if OpenSSL is not available
+  OpenSslTest(hfSHA1, 'Wikipedia, l''encyclopedie libre et gratuite',
+    'c18cc65028bbdc147288a2d136313287782b9c73');
+  OpenSslTest(hfSHA1, '', '', 'fbdb1d1b18aa6c08324b7d64b71fb76370690e1d');
+  OpenSslTest(hfSHA1, 'The quick brown fox jumps over the lazy dog', 'key',
+    'de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9');
 end;
 
 procedure TTestCoreCrypto._SHA256;
@@ -232,13 +256,7 @@ procedure TTestCoreCrypto._SHA256;
       SHA.Update(@s[i], 1);
     SHA.Final(Digest);
     Check(IsEqual(Digest, TDig));
-    {$ifdef USE_OPENSSL}
-    if TOpenSslHash.IsAvailable then
-    begin
-      CheckEqual(TOpenSslHash.Hash('sha256', s), Sha256DigestToString(TDig));
-      CheckEqual(TOpenSslHash.Hash('', s), Sha256DigestToString(TDig));
-    end;
-    {$endif USE_OPENSSL}
+    OpenSslTest(hfSHA256, s, Sha256DigestToString(TDig));
   end;
 
   procedure DoTest;
@@ -261,6 +279,7 @@ procedure TTestCoreCrypto._SHA256;
     Digest: THash512Rec;
     Digests: THash256DynArray;
     sign: TSynSigner;
+    s: RawUtf8;
     c: AnsiChar;
     i: PtrInt;
     sha: TSha256;
@@ -269,11 +288,6 @@ procedure TTestCoreCrypto._SHA256;
     SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
     {%H-}Sha256Weak('lagrangehommage', Digest.Lo); // test with len=256>64
     Check(IsEqual(Digest.Lo, D3));
-    {$ifdef USE_OPENSSL}
-    if TOpenSslHmac.IsAvailable then
-      CheckEqual(TOpenSslHmac.Hmac('', 'what do ya want for nothing?', 'Jefe'),
-        '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
-    {$endif USE_OPENSSL}
     Pbkdf2HmacSha256('password', 'salt', 1, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) =
       '120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b');
@@ -297,12 +311,15 @@ procedure TTestCoreCrypto._SHA256;
       'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0');
     CheckEqual(Sha224(''),
       'd14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f');
-    CheckEqual(Sha256(''),
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
-    CheckEqual(Sha224('The quick brown fox jumps over the lazy dog'),
-      '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
-    CheckEqual(Sha224('The quick brown fox jumps over the lazy dog.'),
-      '619cba8e8e05826e9b8c519c0a5c68f4fb653e8a3d8aa04bb2c8cd4c');
+    s := Sha256('');
+    CheckEqual(s, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    OpenSslTest(hfSha256, '', s);
+    s := Sha224('The quick brown fox jumps over the lazy dog');
+    CheckEqual(s, '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
+    OpenSslTest(hfSha224, 'The quick brown fox jumps over the lazy dog', s);
+    s := Sha224('The quick brown fox jumps over the lazy dog.');
+    CheckEqual(s, '619cba8e8e05826e9b8c519c0a5c68f4fb653e8a3d8aa04bb2c8cd4c');
+    OpenSslTest(hfSha224, 'The quick brown fox jumps over the lazy dog.', s);
   end;
 
 begin
@@ -415,12 +432,8 @@ procedure TTestCoreCrypto._SHA512;
       sign.Init(saSha512, password);
       sign.Update(secret);
       Check(sign.final = expected);
-      {$ifdef USE_OPENSSL}
-      if TOpenSslHmac.IsAvailable and
-         (password <> '') then
-        CheckEqual(TOpenSslHmac.Hmac(
-          'sha512', secret, pointer(password), length(password)), expected);
-      {$endif USE_OPENSSL}
+      if password <> '' then
+        OpenSslTest(hfSHA512, secret, password, expected);
     end
     else
     begin
@@ -474,17 +487,11 @@ procedure TTestCoreCrypto._SHA512;
     sha.Final(dig.b);
     Check(Sha512DigestToString(dig.b) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c' +
       '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
-    {$ifdef USE_OPENSSL}
-    if TOpenSslHash.IsAvailable then
-    begin
-      CheckEqual(TOpenSslHash.Hash('sha512', ''),
-        'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
-        '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
-      CheckEqual(TOpenSslHash.Hash('sha512', FOX),
-        '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
-        '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
-    end;
-    {$endif USE_OPENSSL}
+    OpenSslTest(hfSHA512, '', 'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
+      '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
+    OpenSslTest(hfSHA512, FOX,
+      '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
+      '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
     c := 'a';
     sha.Init;
     for i := 1 to 1000 do
@@ -595,7 +602,7 @@ procedure TTestCoreCrypto._SHA3;
             '801a8290e8d97fe14cdfd3cfdbcd0fe766d3e6e4636bd0a17d710a61678db363';
   var
     instance: TSha3;
-    secret, data, encrypted: RawByteString;
+    secret, data, encrypted, h: RawByteString;
     dig: THash256;
     h512: THash512Rec;
     s, i: PtrInt;
@@ -694,10 +701,14 @@ procedure TTestCoreCrypto._SHA3;
     sign.Pbkdf2('{algo:"sha-3/512",secret:"pass",salt:"salt",rounds:100}', h512);
     check(Sha512DigestToString(h512.b) <> DK);
     // taken from https://en.wikipedia.org/wiki/SHA-3
-    CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dog'),
-      'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');
-    CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dof'),
-      '853F4538BE0DB9621A6CEA659A06C1107B1F83F02B13D18297BD39D7411CF10C');
+    h := 'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E';
+    CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dog'), h);
+    SetLength(h, length(h) div 2);
+    OpenSslTest(hfShake128, 'The quick brown fox jumps over the lazy dog', h);
+    h := '853F4538BE0DB9621A6CEA659A06C1107B1F83F02B13D18297BD39D7411CF10C';
+    CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dof'), h);
+    SetLength(h, length(h) div 2);
+    OpenSslTest(hfShake128, 'The quick brown fox jumps over the lazy dof', h);
   end;
 
 begin
