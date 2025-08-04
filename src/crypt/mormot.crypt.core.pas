@@ -2937,7 +2937,7 @@ type
     xmm7bak: THash128; // preserve the xmm7 register within .noframe Win64 asm
     {$endif WIN64ABI}
     {$ifdef USEAESNI32}
-    AesNi32: pointer; // xmm7 AES-NI encoding
+    AesNi32: pointer; // xmm7 AES-NI raw encoding function for i386
     {$endif USEAESNI32}
     Flags: set of (aesInitialized, aesNi, aesNiSse41);
     Rounds: byte;    // Number of rounds

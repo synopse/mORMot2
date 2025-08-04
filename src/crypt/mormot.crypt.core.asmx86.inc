@@ -1689,13 +1689,13 @@ end;
 procedure AesNiEncryptXmm7_128;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
-        movups  xmm0, [eax + 16 * 0]
-        movups  xmm1, [eax + 16 * 1]
-        movups  xmm2, [eax + 16 * 2]
-        movups  xmm3, [eax + 16 * 3]
-        movups  xmm4, [eax + 16 * 4]
-        movups  xmm5, [eax + 16 * 5]
-        movups  xmm6, [eax + 16 * 6]
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
         pxor    xmm7, xmm0
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm1
@@ -1712,10 +1712,10 @@ asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
         {$endif HASAESNI}
-        movups  xmm0, [eax + 16 * 7]
-        movups  xmm1, [eax + 16 * 8]
-        movups  xmm2, [eax + 16 * 9]
-        movups  xmm3, [eax + 16 * 10]
+        movups  xmm0, [eax + $70]
+        movups  xmm1, [eax + $80]
+        movups  xmm2, [eax + $90]
+        movups  xmm3, [eax + $a0]
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm0
         aesenc  xmm7, xmm1
@@ -1733,21 +1733,46 @@ procedure AesNiEncrypt128(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
+        {$ifdef HASAESNI}
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
+        lea     eax,  [eax + $70] // for smaller codegen below
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        aesenc  xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenclast xmm7, xmm3
+        {$else}
         call    AesNiEncryptXmm7_128
+        {$endif HASAESNI}
         movups  [ecx], xmm7
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiEncryptXmm7_192;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
-        movups  xmm0, [eax + 16 * 0]
-        movups  xmm1, [eax + 16 * 1]
-        movups  xmm2, [eax + 16 * 2]
-        movups  xmm3, [eax + 16 * 3]
-        movups  xmm4, [eax + 16 * 4]
-        movups  xmm5, [eax + 16 * 5]
-        movups  xmm6, [eax + 16 * 6]
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
         pxor    xmm7, xmm0
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm1
@@ -1764,12 +1789,12 @@ asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
         {$endif HASAESNI}
-        movups  xmm0, [eax + 16 * 7]
-        movups  xmm1, [eax + 16 * 8]
-        movups  xmm2, [eax + 16 * 9]
-        movups  xmm3, [eax + 16 * 10]
-        movups  xmm4, [eax + 16 * 11]
-        movups  xmm5, [eax + 16 * 12]
+        movups  xmm0, [eax + $70]
+        movups  xmm1, [eax + $80]
+        movups  xmm2, [eax + $90]
+        movups  xmm3, [eax + $a0]
+        movups  xmm4, [eax + $b0]
+        movups  xmm5, [eax + $c0]
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm0
         aesenc  xmm7, xmm1
@@ -1793,19 +1818,18 @@ asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
         call    AesNiEncryptXmm7_192
         movups  [ecx], xmm7
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiEncryptXmm7_256;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
-        movups  xmm0, [eax + 16 * 0]
-        movups  xmm1, [eax + 16 * 1]
-        movups  xmm2, [eax + 16 * 2]
-        movups  xmm3, [eax + 16 * 3]
-        movups  xmm4, [eax + 16 * 4]
-        movups  xmm5, [eax + 16 * 5]
-        movups  xmm6, [eax + 16 * 6]
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
         pxor    xmm7, xmm0
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm1
@@ -1822,17 +1846,17 @@ asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
         {$endif HASAESNI}
-        movups  xmm0, [eax + 16 * 7]
-        movups  xmm1, [eax + 16 * 8]
-        movups  xmm2, [eax + 16 * 9]
-        movups  xmm3, [eax + 16 * 10]
-        movups  xmm4, [eax + 16 * 11]
-        movups  xmm5, [eax + 16 * 12]
-        movups  xmm6, [eax + 16 * 13]
+        movups  xmm0, [eax + $70]
+        movups  xmm1, [eax + $80]
+        movups  xmm2, [eax + $90]
+        movups  xmm3, [eax + $a0]
+        movups  xmm4, [eax + $b0]
+        movups  xmm5, [eax + $c0]
+        movups  xmm6, [eax + $d0]
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm0
         aesenc  xmm7, xmm1
-        movups  xmm1, [eax + 16 * 14]
+        movups  xmm1, [eax + $e0]
         aesenc  xmm7, xmm2
         aesenc  xmm7, xmm3
         aesenc  xmm7, xmm4
@@ -1842,7 +1866,7 @@ asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         {$else}
         db      $66, $0F, $38, $DC, $F8
         db      $66, $0F, $38, $DC, $F9
-        movups  xmm1, [eax + 16 * 14]
+        movups  xmm1, [eax + $e0]
         db      $66, $0F, $38, $DC, $FA
         db      $66, $0F, $38, $DC, $FB
         db      $66, $0F, $38, $DC, $FC
@@ -1856,22 +1880,55 @@ procedure AesNiEncrypt256(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
+        {$ifdef HASAESNI}
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
+        lea     eax,  [eax + $70] // for smaller codegen below
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        movups  xmm0, [eax + $00]
+        movups  xmm1, [eax + $10]
+        movups  xmm2, [eax + $20]
+        movups  xmm3, [eax + $30]
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
+        aesenc  xmm7, xmm0
+        aesenc  xmm7, xmm1
+        movups  xmm1, [eax + $70]
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenclast xmm7, xmm1
+        {$else}
         call    AesNiEncryptXmm7_256
+        {$endif HASAESNI}
         movups  [ecx], xmm7
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiDecrypt128(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
-        movups  xmm0, [eax + 16 * 10]
-        movups  xmm1, [eax + 16 * 9]
-        movups  xmm2, [eax + 16 * 8]
-        movups  xmm3, [eax + 16 * 7]
-        movups  xmm4, [eax + 16 * 6]
-        movups  xmm5, [eax + 16 * 5]
-        movups  xmm6, [eax + 16 * 4]
+        movups  xmm0, [eax + $a0]
+        movups  xmm1, [eax + $90]
+        movups  xmm2, [eax + $80]
+        movups  xmm3, [eax + $70]
+        movups  xmm4, [eax + $60]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $40]
         pxor    xmm7, xmm0
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm1
@@ -1884,10 +1941,10 @@ asm
         db      $66, $0F, $38, $DE, $FB
         db      $66, $0F, $38, $DE, $FC
         {$endif HASAESNI}
-        movups  xmm0, [eax + 16 * 3]
-        movups  xmm1, [eax + 16 * 2]
-        movups  xmm2, [eax + 16 * 1]
-        movups  xmm3, [eax + 16 * 0]
+        movups  xmm0, [eax + $30]
+        movups  xmm1, [eax + $20]
+        movups  xmm2, [eax + $10]
+        movups  xmm3, [eax + $00]
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm5
         aesdec  xmm7, xmm6
@@ -1911,13 +1968,13 @@ procedure AesNiDecrypt192(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
-        movups  xmm0, [eax + 16 * 12]
-        movups  xmm1, [eax + 16 * 11]
-        movups  xmm2, [eax + 16 * 10]
-        movups  xmm3, [eax + 16 * 9]
-        movups  xmm4, [eax + 16 * 8]
-        movups  xmm5, [eax + 16 * 7]
-        movups  xmm6, [eax + 16 * 6]
+        movups  xmm0, [eax + $c0]
+        movups  xmm1, [eax + $b0]
+        movups  xmm2, [eax + $a0]
+        movups  xmm3, [eax + $90]
+        movups  xmm4, [eax + $80]
+        movups  xmm5, [eax + $70]
+        movups  xmm6, [eax + $60]
         pxor    xmm7, xmm0
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm1
@@ -1934,12 +1991,12 @@ asm
         db      $66, $0F, $38, $DE, $FD
         db      $66, $0F, $38, $DE, $FE
         {$endif HASAESNI}
-        movups  xmm0, [eax + 16 * 5]
-        movups  xmm1, [eax + 16 * 4]
-        movups  xmm2, [eax + 16 * 3]
-        movups  xmm3, [eax + 16 * 2]
-        movups  xmm4, [eax + 16 * 1]
-        movups  xmm5, [eax + 16 * 0]
+        movups  xmm0, [eax + $50]
+        movups  xmm1, [eax + $40]
+        movups  xmm2, [eax + $30]
+        movups  xmm3, [eax + $20]
+        movups  xmm4, [eax + $10]
+        movups  xmm5, [eax + $00]
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm0
         aesdec  xmm7, xmm1
@@ -1963,13 +2020,13 @@ procedure AesNiDecrypt256(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
-        movups  xmm0, [eax + 16 * 14]
-        movups  xmm1, [eax + 16 * 13]
-        movups  xmm2, [eax + 16 * 12]
-        movups  xmm3, [eax + 16 * 11]
-        movups  xmm4, [eax + 16 * 10]
-        movups  xmm5, [eax + 16 * 9]
-        movups  xmm6, [eax + 16 * 8]
+        movups  xmm0, [eax + $e0]
+        movups  xmm1, [eax + $d0]
+        movups  xmm2, [eax + $c0]
+        movups  xmm3, [eax + $b0]
+        movups  xmm4, [eax + $a0]
+        movups  xmm5, [eax + $90]
+        movups  xmm6, [eax + $80]
         pxor    xmm7, xmm0
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm1
@@ -1986,16 +2043,16 @@ asm
         db      $66, $0F, $38, $DE, $FD
         db      $66, $0F, $38, $DE, $FE
         {$endif HASAESNI}
-        movups  xmm0, [eax + 16 * 7]
-        movups  xmm1, [eax + 16 * 6]
-        movups  xmm2, [eax + 16 * 5]
-        movups  xmm3, [eax + 16 * 4]
-        movups  xmm4, [eax + 16 * 3]
-        movups  xmm5, [eax + 16 * 2]
-        movups  xmm6, [eax + 16 * 1]
+        movups  xmm0, [eax + $70]
+        movups  xmm1, [eax + $60]
+        movups  xmm2, [eax + $50]
+        movups  xmm3, [eax + $40]
+        movups  xmm4, [eax + $30]
+        movups  xmm5, [eax + $20]
+        movups  xmm6, [eax + $10]
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm0
-        movups  xmm0, [eax + 16 * 0]
+        movups  xmm0, [eax]
         aesdec  xmm7, xmm1
         aesdec  xmm7, xmm2
         aesdec  xmm7, xmm3
@@ -2005,7 +2062,7 @@ asm
         aesdeclast xmm7, xmm0
         {$else}
         db      $66, $0F, $38, $DE, $F8
-        movups  xmm0, [eax + 16 * 0]
+        movups  xmm0, [eax]
         db      $66, $0F, $38, $DE, $F9
         db      $66, $0F, $38, $DE, $FA
         db      $66, $0F, $38, $DE, $FB
@@ -2079,7 +2136,6 @@ asm
         call    AesNiTrailer
 @0:     pop     edi
         pop     esi
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiCfbCrcDecrypt(self, BufIn, BufOut: pointer; Count: cardinal);
@@ -2145,7 +2201,6 @@ asm
         pop     edi
         pop     esi
         pop     ebx
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiOfbCrcEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
@@ -2177,7 +2232,6 @@ asm
         pop     edi
         pop     esi
         pop     ebx
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiCtrCrcEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
@@ -2216,7 +2270,6 @@ asm
         pop     edi
         pop     esi
         pop     ebx
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiOfbEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
@@ -2247,7 +2300,6 @@ asm
         call    AesNiTrailer
 @0:     pop     edi
         pop     esi
-        pxor    xmm7, xmm7 // for safety
 end;
 
 procedure AesNiCtrAnyEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
@@ -2289,7 +2341,6 @@ asm
 @0:     pop     edi
         pop     esi
         pop     ebx
-        pxor    xmm7, xmm7 // for safety
 end;
 
 
