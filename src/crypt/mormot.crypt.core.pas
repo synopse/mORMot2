@@ -316,7 +316,6 @@ const
 const
   /// hide all AES Context complex code
   AES_CONTEXT_SIZE = 276 + SizeOf(pointer)
-     {$ifdef WIN64ABI}   + SizeOf(THash128) {$endif}
      {$ifdef USEAESNI32} + SizeOf(pointer)  {$endif};
 
   /// power of two for a standard AES block size during cypher/uncypher
@@ -2918,7 +2917,7 @@ type
   /// store an AES key in expanded layout, ready for encryption/decryption
   TKeyArray = packed array[0 .. AES_ROUNDS] of TAesBlock;
 
-  /// TAesContext.DoBlock prototype - NOT thread-safe on Win64 due to xmm7bak
+  /// TAesContext.DoBlock prototype - thread-safe on all platforms
   TAesContextDoBlock = procedure(const Ctxt, Source, Dest);
 
   /// low-level content of TAes.Context (AES_CONTEXT_SIZE bytes)
@@ -2931,11 +2930,8 @@ type
     iv: THash128Rec;
     // work buffer used e.g. by CTR/GCM or AesNiTrailer()
     buf: TAesBlock;
-    // main AES function to process one 16-bytes block - set at runtime from HW
+    // main thread-safe AES function for one TAesBlock - set at runtime from HW
     DoBlock: TAesContextDoBlock;
-    {$ifdef WIN64ABI}
-    xmm7bak: THash128; // preserve the xmm7 register within .noframe Win64 asm
-    {$endif WIN64ABI}
     {$ifdef USEAESNI32}
     AesNi32: pointer; // xmm7 AES-NI raw encoding function for i386
     {$endif USEAESNI32}
