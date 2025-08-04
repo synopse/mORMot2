@@ -8429,25 +8429,37 @@ const
     QWord($431d67c49c100d4c), QWord($4cc5d4becb3e42b6), QWord($597f299cfc657e2a),
     QWord($5fcb6fab3ad6faec), QWord($6c44198c4a475817));
 
+procedure sha512ExpandMessageBlocks(W: PQWordArray; n : cardinal);
+var
+  w2, w15: QWord; // leverage additional registers on CPU64
+begin
+  repeat
+    w15 := W[16 - 15];
+    w2  := W[16 - 2];
+    {$ifdef FPC} // uses explicit built-in right rotate intrinsic
+    W[16] := (RorQWord(w2, 19) xor RorQWord(w2, 61) xor
+             (w2 shr 6)) + W[16 - 7] + (RorQWord(w15, 1) xor
+             RorQWord(w15, 8) xor (w15 shr 7)) + W[16 - 16];
+    {$else}
+    W[16] := (((w2 shr 19) or (w2 shl 45)) xor
+              ((w2 shr 61) or (w2 shl 3)) xor (w2 shr 6)) +
+             W[16 - 7] + (((w15 shr 1) or (w15 shl 63)) xor
+             ((w15 shr 8) or (w15 shl 56)) xor (w15 shr 7)) +
+             W[16 - 16];
+    {$endif FPC}
+    W := @W[1];
+    dec(n);
+  until n = 0;
+end;
+
 procedure sha512_compresspas(var Hash: TSha512Hash; Data: PQWordArray);
 var
-  a, b, c, d, e, f, g, h, temp1, temp2: QWord; // to use registers on CPU64
+  a, b, c, d, e, f, g, h, t1, t2: QWord; // use registers on CPU64
   w: array[0..79] of QWord;
   i: PtrInt;
 begin
   bswap64array(Data, @w, 16);
-  for i := 16 to 79 do
-  {$ifdef FPC} // uses faster built-in right rotate intrinsic
-    w[i] := (RorQWord(w[i - 2], 19) xor RorQWord(w[i - 2], 61) xor
-      (w[i - 2] shr 6)) + w[i - 7] + (RorQWord(w[i - 15], 1) xor
-      RorQWord(w[i - 15], 8) xor (w[i - 15] shr 7)) + w[i - 16];
-  {$else}
-    w[i] := (((w[i - 2] shr 19) or (w[i - 2] shl 45)) xor
-      ((w[i - 2] shr 61) or (w[i - 2] shl 3)) xor (w[i - 2] shr 6)) +
-      w[i - 7] + (((w[i - 15] shr 1) or (w[i - 15] shl 63)) xor
-      ((w[i - 15] shr 8) or (w[i - 15] shl 56)) xor (w[i - 15] shr 7)) +
-      w[i - 16];
-  {$endif FPC}
+  sha512ExpandMessageBlocks(@w, 80 - 16);
   a := Hash.a;
   b := Hash.b;
   c := Hash.c;
@@ -8459,25 +8471,36 @@ begin
   for i := 0 to 79 do
   begin
     {$ifdef FPC}
-    temp1 := h + (RorQWord(e, 14) xor RorQWord(e, 18) xor RorQWord(e, 41)) +
-      ((e and f) xor (not e and g)) + SHA512K[i] + w[i];
-    temp2 := (RorQWord(a, 28) xor RorQWord(a, 34) xor RorQWord(a, 39)) +
-      ((a and b) xor (a and c) xor (b and c));
+    t1 := h +
+          (RorQWord(e, 14) xor
+           RorQWord(e, 18) xor
+           RorQWord(e, 41)) +
+          ((e and f) xor (not e and g)) +
+          SHA512K[i] + w[i];
+    t2 := (RorQWord(a, 28) xor
+           RorQWord(a, 34) xor
+           RorQWord(a, 39)) +
+          ((a and b) xor (a and c) xor (b and c));
     {$else}
-    temp1 := h + (((e shr 14) or (e shl 50)) xor ((e shr 18) or (e shl 46)) xor
-      ((e shr 41) or (e shl 23))) + ((e and f) xor (not e and g)) +
-      SHA512K[i] + w[i];
-    temp2 := (((a shr 28) or (a shl 36)) xor ((a shr 34) or (a shl 30)) xor
-      ((a shr 39) or (a shl 25))) + ((a and b) xor (a and c) xor (b and c));
+    t1 := h +
+          (((e shr 14) or (e shl 50)) xor
+           ((e shr 18) or (e shl 46)) xor
+           ((e shr 41) or (e shl 23))) +
+          ((e and f) xor (not e and g)) +
+          SHA512K[i] + w[i];
+    t2 := (((a shr 28) or (a shl 36)) xor
+           ((a shr 34) or (a shl 30)) xor
+           ((a shr 39) or (a shl 25))) +
+          ((a and b) xor (a and c) xor (b and c));
     {$endif FPC}
     h := g;
     g := f;
     f := e;
-    e := d + temp1;
+    e := d + t1;
     d := c;
     c := b;
     b := a;
-    a := temp1 + temp2;
+    a := t1 + t2;
   end;
   inc(Hash.a, a);
   inc(Hash.b, b);
