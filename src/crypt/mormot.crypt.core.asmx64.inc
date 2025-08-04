@@ -4073,50 +4073,13 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         pxor    xmm1, xmm4
         pxor    xmm1, xmm2
         movups  dqword ptr [pk], xmm1
-        jmp     @e
+@e:     ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @mask:  dd      $ffffffff
         dd      $03020100
         dd      $07060504
         dd      $0b0a0908
-@exp256:pshufd  xmm2, xmm2, $ff
-        movups  xmm4, xmm1
-        pshufb  xmm4, xmm5
-        pxor    xmm1, xmm4
-        pshufb  xmm4, xmm5
-        pxor    xmm1, xmm4
-        pshufb  xmm4, xmm5
-        pxor    xmm1, xmm4
-        pxor    xmm1, xmm2
-        movups  dqword ptr [pk], xmm1
-        add     pk, $10
-        aeskeygenassist xmm4, xmm1, 0
-        pshufd  xmm2, xmm4, $AA
-        movups  xmm4, xmm3
-        pshufb  xmm4, xmm5
-        pxor    xmm3, xmm4
-        pshufb  xmm4, xmm5
-        pxor    xmm3, xmm4
-        pshufb  xmm4, xmm5
-        pxor    xmm3, xmm4
-        pxor    xmm3, xmm2
-        movups  dqword ptr [pk], xmm3
-        add     pk, $10
-@e:     ret
-@exp128:pshufd  xmm2, xmm2, $FF
-        movups  xmm3, xmm1
-        pshufb  xmm3, xmm5
-        pxor    xmm1, xmm3
-        pshufb  xmm3, xmm5
-        pxor    xmm1, xmm3
-        pshufb  xmm3, xmm5
-        pxor    xmm1, xmm3
-        pxor    xmm1, xmm2
-        movups  dqword ptr [pk], xmm1
-        add     pk, $10
-        ret
-@128:   add     pk, 16
-        aeskeygenassist xmm2, xmm1, 1
+@128:   aeskeygenassist xmm2, xmm1, 1
         call    @exp128
         aeskeygenassist xmm2, xmm1, 2
         call    @exp128
@@ -4135,7 +4098,43 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         aeskeygenassist xmm2, xmm1, $1b
         call    @exp128
         aeskeygenassist xmm2, xmm1, $36
-        call    @exp128
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@exp128:lea     pk, [pk + 16]
+        pshufd  xmm2, xmm2, $FF
+        movups  xmm3, xmm1
+        pshufb  xmm3, xmm5
+        pxor    xmm1, xmm3
+        pshufb  xmm3, xmm5
+        pxor    xmm1, xmm3
+        pshufb  xmm3, xmm5
+        pxor    xmm1, xmm3
+        pxor    xmm1, xmm2
+        movups  dqword ptr [pk], xmm1
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@exp256:pshufd  xmm2, xmm2, $ff
+        movups  xmm4, xmm1
+        pshufb  xmm4, xmm5
+        pxor    xmm1, xmm4
+        pshufb  xmm4, xmm5
+        pxor    xmm1, xmm4
+        pshufb  xmm4, xmm5
+        pxor    xmm1, xmm4
+        pxor    xmm1, xmm2
+        movups  dqword ptr [pk], xmm1
+        add     pk, 16
+        aeskeygenassist xmm4, xmm1, 0
+        pshufd  xmm2, xmm4, $AA
+        movups  xmm4, xmm3
+        pshufb  xmm4, xmm5
+        pxor    xmm3, xmm4
+        pshufb  xmm4, xmm5
+        pxor    xmm3, xmm4
+        pshufb  xmm4, xmm5
+        pxor    xmm3, xmm4
+        pxor    xmm3, xmm2
+        movups  dqword ptr [pk], xmm3
+        add     pk, 16
 end;
 
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: pointer);
