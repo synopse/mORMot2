@@ -186,7 +186,6 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         pop     r15
 end;
 
-
 // optimized unrolled version from Intel's Sha256Sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
@@ -3661,6 +3660,39 @@ procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
         pop     rdi
         pop     rsi
         pop     rbx
+end;
+
+procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
+//    semi-unrolled optimized asm version by A. Bouchez
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+      // rcx=W rdx=n (Linux: rdi=W rsi=n)
+@s:   mov     eax,  dword ptr [W]
+      mov     r8d,  dword ptr [W + 4]
+      mov     r9d,  dword ptr [W + 8]
+      mov     r10d, dword ptr [W + 12]
+      xor     eax,  r9d
+      xor     r8d,  r10d
+      xor     r9d,  dword ptr [W + $10]
+      xor     r10d, dword ptr [W + $14]
+      xor     eax,  dword ptr [W + $20]
+      xor     r8d,  dword ptr [W + $20 + 4]
+      xor     r9d,  dword ptr [W + $20 + 8]
+      xor     r10d, dword ptr [W + $20 + 12]
+      xor     eax,  dword ptr [W + $34]
+      xor     r8d,  dword ptr [W + $34 + 4]
+      xor     r9d,  dword ptr [W + $34 + 8]
+      rol     eax, 1
+      rol     r8d, 1
+      rol     r9d, 1
+      xor     r10d, eax
+      mov     dword ptr [W + $40], eax
+      mov     dword ptr [W + $40 + 4], r8d
+      mov     dword ptr [W + $40 + 8], r9d
+      rol     r10d, 1
+      sub     n, 4
+      mov     dword ptr [W + $40 + 12], r10d
+      lea     W, [W + 16]
+      jnz     @s
 end;
 
 {$ifdef USEAESNI}

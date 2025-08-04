@@ -781,6 +781,7 @@ end;
 
 {$endif ASMX86}
 
+// those functions do not use global variables, so are PIC-compatible
 
 procedure bswap256(s, d: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -1388,6 +1389,48 @@ asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
         pop    edi
         pop    esi
         pop    ebx
+end;
+
+procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
+// semi-unrolled optimized asm version by A. Bouchez
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+      push    ebp
+      push    ebx
+      push    esi
+      mov     esi, n
+      mov     ebp, W
+      {$ifdef FPC} align 16 {$endif}
+@s:   mov     eax, dword ptr [ebp]
+      mov     ebx, dword ptr [ebp + 4]
+      mov     ecx, dword ptr [ebp + 8]
+      mov     edx, dword ptr [ebp + 12]
+      xor     eax, ecx
+      xor     ebx, edx
+      xor     ecx, dword ptr [ebp + $10]
+      xor     edx, dword ptr [ebp + $14]
+      xor     eax, dword ptr [ebp + $20]
+      xor     ebx, dword ptr [ebp + $20 + 4]
+      xor     ecx, dword ptr [ebp + $20 + 8]
+      xor     edx, dword ptr [ebp + $20 + 12]
+      xor     eax, dword ptr [ebp + $34]
+      xor     ebx, dword ptr [ebp + $34 + 4]
+      xor     ecx, dword ptr [ebp + $34 + 8]
+      rol     eax, 1
+      rol     ebx, 1
+      rol     ecx, 1
+      xor     edx, eax
+      mov     dword ptr [ebp + $40], eax
+      mov     dword ptr [ebp + $40 + 4], ebx
+      mov     dword ptr [ebp + $40 + 8], ecx
+      rol     edx, 1
+      mov     dword ptr [ebp + $40 + 12], edx
+      lea     ebp, [ebp + 16]
+      sub     esi, 4
+      jnz     @s
+      pop     esi
+      pop     ebx
+      pop     ebp
 end;
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
