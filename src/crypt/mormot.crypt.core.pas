@@ -9982,6 +9982,8 @@ end;
 
 { TSha1 }
 
+{$ifndef CPUINTEL}
+
 procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
 var
   x: cardinal;
@@ -9995,6 +9997,8 @@ begin
     dec(n, 2);
   until n = 0;
 end;
+
+{$endif CPUINTEL}
 
 procedure Sha1CompressPas(var Hash: TShaHash; Data: PByteArray);
 var
