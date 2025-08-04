@@ -8134,8 +8134,8 @@ var
   w2, w15: cardinal; // we have additional registers on x86_64/arm
 begin
   repeat
-    w2  := W[16 - 2];
     w15 := W[16 - 15];
+    w2  := W[16 - 2];
     {$ifdef FPC} // uses fast built-in right rotate intrinsic
     W[16] := (RorDWord(w2, 17) xor RorDWord(w2,  19) xor (w2 shr 10)) +
              W[16 - 7] +
@@ -8252,7 +8252,7 @@ procedure TSha256.Init;
 var
   Data: TShaContext absolute Context;
 begin
-  Data.Hash := TShaHash(SHA256_INIT);
+  MoveFast(SHA256_INIT, Data.Hash, SizeOf(Data.Hash));
   FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
@@ -8260,7 +8260,7 @@ procedure TSha256.Init224;
 var
   Data: TShaContext absolute Context;
 begin
-  Data.Hash := TShaHash(SHA224_INIT);
+  MoveFast(SHA224_INIT, Data.Hash, SizeOf(Data.Hash));
   FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
