@@ -315,7 +315,12 @@ type
   TOpenSslHmac = class(TOpenSslDigestAbstract)
   private
     fCtx: PHMAC_CTX;
+    procedure Init(md: PEVP_MD; Key: pointer; KeyLength: cardinal);
   public
+    /// initialize the internal HMAC structure for a specific Algorithm and Key
+    // - Key/KeyLen define the HMAC associated salt
+    // - raise an EOpenSslHash exception on unknown/unsupported algorithm
+    constructor Create(Algorithm: THashAlgo; Key: pointer; KeyLength: cardinal); overload;
     /// initialize the internal HMAC structure for a specific Algorithm and Key
     // - Algorithm is one of `openssl list -digest-algorithms`
     // - if Algorithm is not specified, EVP_sha256 will be used
@@ -339,6 +344,12 @@ type
       Key: pointer; KeyLength: cardinal): RawUtf8; overload;
     /// compute the HMAC using `algorithm` as hash function
     class function Hmac(const Algorithm: RawUtf8;
+      const Data, Key: RawByteString): RawUtf8; overload;
+    /// compute the HMAC using `algorithm` as hash function
+    class function Hmac(Algorithm: THashAlgo;
+      const Data: RawByteString; Key: pointer; KeyLength: cardinal): RawUtf8; overload;
+    /// compute the HMAC using `algorithm` as hash function
+    class function Hmac(Algorithm: THashAlgo;
       const Data, Key: RawByteString): RawUtf8; overload;
     /// release the digest context
     destructor Destroy; override;
@@ -1161,25 +1172,29 @@ end;
 
 { TOpenSslHmac }
 
-constructor TOpenSslHmac.Create(const Algorithm: RawUtf8;
-  Key: pointer; KeyLength: cardinal);
-var
-  md: PEVP_MD;
+procedure TOpenSslHmac.Init(md: PEVP_MD; Key: pointer; KeyLength: cardinal);
 begin
   EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
-   if Algorithm = '' then
-     md := EVP_sha256
-   else
-     md := EVP_get_digestbyname(pointer(Algorithm));
   if md = nil then
-    raise EOpenSslHash.CreateFmt(
-      'TOpenSslHmac.Create(''%s''): Unknown algorithm', [Algorithm]);
+    raise EOpenSslHash.Create('TOpenSslHmac.Create: Unknown algorithm');
   fDigestSize := EVP_MD_size(md);
   fCtx := HMAC_CTX_new;
   if Key = nil then // Key=null for OpenSSL means "reuse previous"
     Key := self;    // Key<>nul but keep KeyLength=0 so that it uses Key=''
   EOpenSslHash.Check(self, 'Create',
     HMAC_Init_ex(fCtx, Key, KeyLength, md, nil));
+end;
+
+constructor TOpenSslHmac.Create(Algorithm: THashAlgo;
+  Key: pointer; KeyLength: cardinal);
+begin
+  Init(OpenSslGetMd(Algorithm), Key, KeyLength);
+end;
+
+constructor TOpenSslHmac.Create(const Algorithm: RawUtf8;
+  Key: pointer; KeyLength: cardinal);
+begin
+  Init(OpenSslGetMdByName(Algorithm, 'TOpenSslHmac.Create'), Key, KeyLength);
 end;
 
 constructor TOpenSslHmac.Create(const Algorithm: RawUtf8;
@@ -1216,6 +1231,24 @@ begin
 end;
 
 class function TOpenSslHmac.Hmac(const Algorithm: RawUtf8;
+  const Data, Key: RawByteString): RawUtf8;
+begin
+  result := HMac(Algorithm, Data, pointer(Key), length(Key));
+end;
+
+class function TOpenSslHmac.Hmac(Algorithm: THashAlgo;
+  const Data: RawByteString; Key: pointer; KeyLength: cardinal): RawUtf8;
+begin
+  with Create(Algorithm, Key, KeyLength) do
+    try
+      Update(Data);
+      result := DigestHex;
+    finally
+      Free;
+    end;
+end;
+
+class function TOpenSslHmac.Hmac(Algorithm: THashAlgo;
   const Data, Key: RawByteString): RawUtf8;
 begin
   result := HMac(Algorithm, Data, pointer(Key), length(Key));
