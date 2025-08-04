@@ -417,6 +417,10 @@ function NewRawSockets(family: TNetFamily; layer: TNetLayer;
 /// delete a hostname from TNetAddr.SetFrom internal short-living cache
 procedure NetAddrFlush(const hostname: RawUtf8);
 
+/// return the IP (v4 or v6) address of a given hostname
+// - just a wrapper around TNetAddr.SetFrom and TNetAddr.IP
+function NetAddrResolve(const hostname: RawUtf8): RawUtf8;
+
 /// resolve the TNetAddr of the address:port layer - maybe from NewSocketAddressCache
 function GetSocketAddressFromCache(const address, port: RawUtf8;
   layer: TNetLayer; out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
@@ -2558,6 +2562,15 @@ var
 procedure NetAddrFlush(const hostname: RawUtf8);
 begin
   NetAddrCache.SafeFlush(hostname);
+end;
+
+function NetAddrResolve(const hostname: RawUtf8): RawUtf8;
+var
+  addr: TNetAddr;
+begin
+  result := '';
+  if addr.SetFrom(hostname, '80', nlTcp) = nrOK then
+    addr.IP(result);
 end;
 
 function TNetAddr.SetFromIP4(const address: RawUtf8;
