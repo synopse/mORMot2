@@ -1440,7 +1440,7 @@ asm // W=eax Buf=edx
         push    edi
         push    ebx
         mov     esi, eax
-        // part 1: W[i]:= RB(TW32Buf(Buf)[i])
+        // part 1: W[i]:= bswap32(TW32Buf(Buf)[i])
         mov     eax, [edx]
         mov     ebx, [edx + 4]
         bswap   eax

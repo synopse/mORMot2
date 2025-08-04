@@ -8095,54 +8095,20 @@ end;
 
 { --------- SHA-2 Hashing }
 
-{$ifndef CPUX86}
-
-procedure Sha256ExpandMessageBlocks(W, Buf: PCardinalArray);
-var
-  i, w2, w15: cardinal; // we have additional registers on x86_64/arm
-begin
-  bswap256(@Buf[0], @W[0]); // 32 bytes = 8 cardinals
-  bswap256(@Buf[8], @W[8]); // 32 bytes = 8 cardinals
-  for i := 16 to 63 do
-  begin
-    w2  := W[16 - 2];
-    w15 := W[16 - 15];
-    {$ifdef FPC} // uses fast built-in right rotate intrinsic
-    W[16] := (RorDWord(w2, 17) xor RorDWord(w2, 19) xor
-            (w2 shr 10)) + W[16 - 7] +
-            (RorDWord(w15, 7) xor RorDWord(w15, 18) xor
-             (w15 shr 3)) + W[16 - 16];
-    {$else}
-    W[16] := (((w2 shr 17) or (w2 shl 15)) xor
-              ((w2 shr 19) or (w2 shl 13)) xor
-             (w2 shr 10)) + W[16 - 7] +
-             (((w15 shr 7) or (w15 shl 25)) xor
-              ((w15 shr 18) or (w15 shl 14)) xor
-              (w15 shr 3)) + W[16 - 16];
-    {$endif FPC}
-    W := @W[1];
-  end;
-end;
-
-{$endif CPUX86}
-
 // under Win32, with a Core i7 CPU: pure pascal: 152ms - x86: 112ms
 // under Win64, with a Core i7 CPU: pure pascal: 202ms - SSE4: 78ms
 
+{$ifdef CPUX86}
+
 procedure Sha256CompressPas(var Hash: TShaHash; Data: pointer);
-// Actual hashing function
 var
   HW: packed record
     H: TShaHash;
     W: array[0..63] of cardinal;
   end;
-  {$ifndef ASMX86}
-  i: PtrInt;
-  t1, t2: cardinal;
-  {$endif ASMX86}
 begin
   // calculate "expanded message blocks"
-  Sha256ExpandMessageBlocks(@HW.W, Data);
+  Sha256ExpandMessageBlocks(@HW.W, Data); // fast x86 asm
   // assign old working hash to local variables A..H
   HW.H.A := Hash.A;
   HW.H.B := Hash.B;
@@ -8152,39 +8118,8 @@ begin
   HW.H.F := Hash.F;
   HW.H.G := Hash.G;
   HW.H.H := Hash.H;
-  {$ifdef ASMX86}
   // SHA-256 compression function - optimized by A.B. for pipelined CPU
-  Sha256Compressx86(@HW);  // fast but PIC-incompatible code
-  {$else}
-  // SHA-256 compression function
-  for i := 0 to high(HW.W) do
-  begin
-    {$ifdef FPC} // uses built-in right rotate intrinsic
-    t1 := HW.H.H +
-      (RorDWord(HW.H.E, 6) xor RorDWord(HW.H.E, 11) xor RorDWord(HW.H.E, 25)) +
-      ((HW.H.E and HW.H.F) xor (not HW.H.E and HW.H.G)) + K256[i] + HW.W[i];
-    t2 := (RorDWord(HW.H.A, 2) xor RorDWord(HW.H.A, 13) xor RorDWord(HW.H.A, 22)) +
-          ((HW.H.A and HW.H.B) xor (HW.H.A and HW.H.C) xor (HW.H.B and HW.H.C));
-    {$else}
-    t1 := HW.H.H + (((HW.H.E shr 6) or (HW.H.E shl 26)) xor
-      ((HW.H.E shr 11) or (HW.H.E shl 21)) xor
-      ((HW.H.E shr 25) or (HW.H.E shl 7))) +
-      ((HW.H.E and HW.H.F) xor (not HW.H.E and HW.H.G)) + K256[i] + HW.W[i];
-    t2 := (((HW.H.A shr 2) or (HW.H.A shl 30)) xor
-      ((HW.H.A shr 13) or (HW.H.A shl 19)) xor
-      ((HW.H.A shr 22) xor (HW.H.A shl 10))) +
-      ((HW.H.A and HW.H.B) xor (HW.H.A and HW.H.C) xor (HW.H.B and HW.H.C));
-    {$endif FPC}
-    HW.H.H := HW.H.G;
-    HW.H.G := HW.H.F;
-    HW.H.F := HW.H.E;
-    HW.H.E := HW.H.D + t1;
-    HW.H.D := HW.H.C;
-    HW.H.C := HW.H.B;
-    HW.H.B := HW.H.A;
-    HW.H.A := t1 + t2;
-  end;
-  {$endif ASMX86}
+  Sha256Compressx86(@HW);  // fast but PIC-incompatible x86 asm
   // calculate new working hash
   inc(Hash.A, HW.H.A);
   inc(Hash.B, HW.H.B);
@@ -8195,6 +8130,100 @@ begin
   inc(Hash.G, HW.H.G);
   inc(Hash.H, HW.H.H);
 end;
+
+{$else}
+
+procedure Sha256ExpandMessageBlocks(W: PCardinalArray; n : cardinal);
+var
+  w2, w15: cardinal; // we have additional registers on x86_64/arm
+begin
+  repeat
+    w2  := W[16 - 2];
+    w15 := W[16 - 15];
+    {$ifdef FPC} // uses fast built-in right rotate intrinsic
+    W[16] := (RorDWord(w2, 17) xor RorDWord(w2,  19) xor (w2 shr 10)) +
+             W[16 - 7] +
+             (RorDWord(w15, 7) xor RorDWord(w15, 18) xor (w15 shr 3)) +
+             W[16 - 16];
+    {$else}
+    W[16] := (((w2 shr 17) or (w2 shl 15)) xor
+              ((w2 shr 19) or (w2 shl 13)) xor
+              (w2 shr 10)) + W[16 - 7] +
+             (((w15 shr 7) or (w15 shl 25)) xor
+              ((w15 shr 18) or (w15 shl 14)) xor
+              (w15 shr 3)) + W[16 - 16];
+    {$endif FPC}
+    W := @W[1];
+    dec(n);
+  until n = 0;
+end;
+
+procedure Sha256ProcessBlock(W: PCardinalArray; var Hash: TShaHash);
+var
+  i: PtrInt;
+  t1, t2, a, b, c, d, e, f, g, h: cardinal; // x86_64/arm additional registers
+begin
+  // assign old working hash to local variables A..H
+  a := Hash.A;
+  b := Hash.B;
+  c := Hash.C;
+  d := Hash.D;
+  e := Hash.E;
+  f := Hash.F;
+  g := Hash.G;
+  h := Hash.H;
+  // SHA-256 main compression function
+  for i := 0 to 63 do
+  begin
+    {$ifdef FPC} // uses built-in right rotate intrinsic
+    t1 := h +
+      (RorDWord(e, 6) xor RorDWord(e, 11) xor RorDWord(e, 25)) +
+      ((e and f) xor (not e and g)) + K256[i] + W[i];
+    t2 := (RorDWord(a, 2) xor RorDWord(a, 13) xor RorDWord(a, 22)) +
+          ((a and b) xor (a and c) xor (b and c));
+    {$else}
+    t1 := H + (((e shr 6) or (e shl 26)) xor
+      ((e shr 11) or (e shl 21)) xor
+      ((e shr 25) or (e shl 7))) +
+      ((e and f) xor (not e and g)) + K256[i] + W[i];
+    t2 := (((a shr 2) or (a shl 30)) xor
+      ((a shr 13) or (a shl 19)) xor
+      ((a shr 22) xor (a shl 10))) +
+      ((a and b) xor (a and c) xor (b and c));
+    {$endif FPC}
+    h := g;
+    g := f;
+    f := e;
+    e := d + t1;
+    d := c;
+    c := b;
+    b := a;
+    a := t1 + t2;
+  end;
+  // calculate new working hash
+  inc(Hash.A, a);
+  inc(Hash.E, e);
+  inc(Hash.B, b);
+  inc(Hash.C, c);
+  inc(Hash.D, d);
+  inc(Hash.F, f);
+  inc(Hash.G, g);
+  inc(Hash.H, h);
+end;
+
+procedure Sha256CompressPas(var Hash: TShaHash; Data: PCardinalArray);
+var
+  W: array[0..63] of cardinal; // expanded buffer
+begin
+  // calculate "expanded message blocks"
+  bswap256(@Data[0], @W[0]); // 256-bit = 8 cardinals
+  bswap256(@Data[8], @W[8]); // 256-bit = 8 cardinals
+  Sha256ExpandMessageBlocks(@W, 64 - 16);
+  // hash this expanded block
+  Sha256ProcessBlock(@W, Hash);
+end;
+
+{$endif CPUX86}
 
 procedure RawSha256Compress(var Hash; Data: pointer);
 begin
@@ -8271,7 +8300,7 @@ begin
           bytes := Len and (not 63); // all whole blocks have been added
         end
         else
-          Sha256CompressPas(Data.Hash, Buffer); // process one block
+          Sha256CompressPas(Data.Hash, Buffer); // process one block on old CPU
         {$else}
         RawSha256Compress(Data.Hash, Buffer); // may be AARCH64 version
         {$endif ASMX64}

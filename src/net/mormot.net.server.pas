@@ -8702,8 +8702,8 @@ begin
   result := true;
 end;
 
-procedure THttpApiServer.SetProperty(value: PHTTP_QOS_SETTING_INFO; valuelen: cardinal;
-  qos: HTTP_QOS_SETTING_TYPE; alsoForSession: boolean);
+procedure THttpApiServer.SetProperty(value: PHTTP_QOS_SETTING_INFO;
+  valuelen: cardinal; qos: HTTP_QOS_SETTING_TYPE; alsoForSession: boolean);
 var
   api: THttpApiServer;
 begin
