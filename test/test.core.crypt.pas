@@ -1288,31 +1288,35 @@ type
     bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
     bSHA384, bHMACSHA384, bSHA512, bSHA512_256, bHMACSHA512,
     bSHA3_256, bSHA3_512,
+    {$ifdef USE_OPENSSL}
+    bSHA1O, bHMACSHA1O, bSHA256O, bHMACSHA256O,
+    bSHA384O, bHMACSHA384O, bSHA512O, bSHA512_256O, bHMACSHA512O,
+    bSHA3_256O, bSHA3_512O,
+    {$endif USE_OPENSSL}
     // encryption
     bRC4,
     bAES128CFB, bAES128OFB, bAES128C64, bAES128CTR,
     bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
     bAES256CFB, bAES256OFB, bAES256C64, bAES256CTR,
     bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM,
-  {$ifdef USE_OPENSSL}
+    {$ifdef USE_OPENSSL}
     bAES128CFBO, bAES128OFBO, bAES128CTRO, bAES128GCMO,
     bAES256CFBO, bAES256OFBO, bAES256CTRO, bAES256GCMO,
-  {$endif USE_OPENSSL}
+    {$endif USE_OPENSSL}
     bSHAKE128, bSHAKE256);
 
 procedure TTestCoreCrypto.Benchmark;
 const
   bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMO {$else} bAES256GCM {$endif};
-
-  bAESOPENSSL = [ {$ifdef USE_OPENSSL} bAES128CFBO .. bAES256GCMO {$endif} ];
-
+  bOPENSSL = [ {$ifdef USE_OPENSSL}
+               bSHA1O .. bSHA3_512O, bAES128CFBO .. bAES256GCMO
+               {$endif USE_OPENSSL} ];
   SIZ: array[0..4] of integer = (
     8,
     50,
     100,
     1000,
     10000);
-
   COUNT = 500;
 
   AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
@@ -1327,8 +1331,11 @@ const
     128, 128, 128, 128, 128, 128, 128, 128,
     256, 256, 256, 256, 256, 256, 256, 256
   {$ifdef USE_OPENSSL} ,
-    128, 128, 128, 128, 256, 256, 256, 256
-  {$endif USE_OPENSSL});
+    128, 128, 128, 128, 256, 256, 256, 256);
+  OPENSSL_HASH: array[bSHA1O .. bSHA3_512O] of THashAlgo = (
+    hfSHA1, hfSHA1, hfSHA256, hfSHA256, hfSHA384, hfSHA384, hfSHA512, hfSHA384,
+    hfSHA512, hfSHA3_256, hfSHA3_512);
+  {$endif USE_OPENSSL}
 var
   b: TBenchmark;
   s, i, size, n: integer;
@@ -1353,15 +1360,20 @@ begin
     begin
       AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b]);
       ShortStringToAnsi7String(AES[b].AlgoName, TXT[b]);
-      {$ifdef USE_OPENSSL}
-      if b in bAESOPENSSL then
-        TXT[b] := 'openssl ' + TXT[b]
-      else
-      {$endif USE_OPENSSL}
-        TXT[b] := 'mormot ' + TXT[b]
     end
     else
       AES[b] := nil;
+  {$ifdef USE_OPENSSL}
+  for b := low(b) to high(b) do
+    if b in bOPENSSL then
+    begin
+      if b < low(AES) then
+        SetLength(TXT[b], length(TXT[b]) - 1);
+      TXT[b] := 'openssl ' + TXT[b];
+    end
+    else
+      TXT[b] := 'mormot ' + TXT[b];
+  {$endif USE_OPENSSL}
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
   RC4.InitSha3(dig, SizeOf(dig));
@@ -1425,6 +1437,21 @@ begin
             SHA3.Full(pointer(data), SIZ[s], dig.Lo);
           bSHA3_512:
             SHA3.Full(pointer(data), SIZ[s], dig.b);
+          {$ifdef USE_OPENSSL}
+          bSHA1O,
+          bSHA256O,
+          bSHA384O,
+          bSHA512O,
+          bSHA512_256O,
+          bHMACSHA512O,
+          bSHA3_256O,
+          bSHA3_512O:
+            TOpenSslHash.Hash(OPENSSL_HASH[b], data);
+          bHMACSHA1O,
+          bHMACSHA256O,
+          bHMACSHA384O:
+            TOpenSslHmac.Hmac(OPENSSL_HASH[b], data, 'secret');
+          {$endif USE_OPENSSL}
           bRC4:
             RC4.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
           {$ifdef USE_OPENSSL}
@@ -1465,6 +1492,7 @@ begin
           ESynCrypto.RaiseUtf8('Unexpected %', [TXT[b]]);
         end;
         Check((b >= bRC4) or
+              (b in bOPENSSL) or
               (dig.d0 <> 0) or
               (dig.d1 <> 0));
       end;
