@@ -9953,20 +9953,29 @@ end;
 
 { TSha1 }
 
+procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
+var
+  x: cardinal;
+begin
+  repeat
+    x := W[16 - 16] xor W[16 - 14] xor W[16 - 8] xor W[16 - 3];
+    W[16] := (x shl 1) or (x shr 31);
+    x := W[16 - 16 + 1] xor W[16 - 14 + 1] xor W[16 - 8 + 1] xor W[16 - 3 + 1];
+    W[16 + 1] := (x shl 1) or (x shr 31);
+    W := @W[2];
+    dec(n, 2);
+  until n = 0;
+end;
+
 procedure Sha1CompressPas(var Hash: TShaHash; Data: PByteArray);
 var
-  A, B, C, D, E, X: cardinal;
+  A, B, C, D, E: cardinal; // will efficiently use registers on x86_64/arm
   W: array[0..79] of cardinal;
-  i: PtrInt;
 begin
   // init W[] + A..E
-  bswap256(@Data[0], @W[0]);
+  bswap256(@Data[0],  @W[0]);
   bswap256(@Data[32], @W[8]);
-  for i := 16 to 79 do
-  begin
-    X := W[i - 3] xor W[i - 8] xor W[i - 14] xor W[i - 16];
-    W[i] := (X shl 1) or (X shr 31);
-  end;
+  Sha1ExpandMessageBlocks(@W, 80 - 16);
   A := Hash.A;
   B := Hash.B;
   C := Hash.C;
