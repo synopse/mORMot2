@@ -390,20 +390,28 @@ type
       read GetCookieName write SetCookieName;
   end;
 
-  /// implement a ViewModel/Controller sessions using TMvcRendererReturningData
-  // - will use threadvar to access TMvcRendererReturningData.Headers
-  TMvcSessionWithRenderer = class(TMvcSessionWithCookies)
-  protected
-    function GetCookie(out Value: PUtf8Char): integer; override;
-    procedure SetCookie(const Value: RawUtf8); override;
-  end;
-
   /// implement a single ViewModel/Controller in-memory session
   // - this kind of session could be used in-process, e.g. for a VCL/FMX GUI
   // - do NOT use it with multiple clients, e.g. from HTTP remote access
   TMvcSessionSingle = class(TMvcSessionWithCookies)
   protected
     fSingleCookie: RawUtf8;
+    function GetCookie(out Value: PUtf8Char): integer; override;
+    procedure SetCookie(const Value: RawUtf8); override;
+  end;
+
+  /// implement ViewModel/Controller sessions over TRestServer cookies
+  TMvcSessionWithRestServer = class(TMvcSessionWithCookies)
+  protected
+    function GetCookie(out Value: PUtf8Char): integer; override;
+    procedure SetCookie(const Value: RawUtf8); override;
+  end;
+
+  /// implement ViewModel/Controller sessions over the MVC renderer context
+  // - e.g. when the MVC is implemented directly over a HTTP/HTTPS server
+  // - will use a threadvar to access TMvcRendererReturningData.Headers
+  TMvcSessionWithRenderer = class(TMvcSessionWithCookies)
+  protected
     function GetCookie(out Value: PUtf8Char): integer; override;
     procedure SetCookie(const Value: RawUtf8); override;
   end;
@@ -512,9 +520,9 @@ type
     fCacheCurrentInputValueKey: RawUtf8;
     fOutputCookieName, fOutputCookieValue: RawUtf8;
     function Redirects(const action: TMvcAction): boolean; override;
-    function GetCookie(const CookieName: RawUtf8;
+    function GetCookieFromHeaders(const CookieName: RawUtf8;
       out Value: PUtf8Char): integer; virtual;
-    procedure SetCookie(const CookieName, CookieValue: RawUtf8); virtual;
+    procedure SetCookieToHeaders(const CookieName, CookieValue: RawUtf8); virtual;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMvcViewsMustache instance
@@ -537,7 +545,6 @@ type
     property InputContext: PVariant
       read fInputContext;
   end;
-
   TMvcRendererReturningDataClass = class of TMvcRendererReturningData;
 
   /// MVC rendering execution context, returning some rendered View content
@@ -701,7 +708,7 @@ type
     // - if aApplication has no Views instance associated, this constructor will
     // initialize a Mustache renderer in its default folder, with '.html' void
     // template generation
-    // - will also create a TMvcSessionWithRenderer for simple cookie sessions
+    // - will also create a TMvcSessionWithRestServer for simple cookie sessions
     // - aPublishOptions could be used to specify integration with the server
     // - aAllowedMethods will render standard GET/POST by default
     constructor Create(aApplication: TMvcApplication;
@@ -1682,28 +1689,6 @@ begin
 end;
 
 
-{ TMvcSessionWithRenderer }
-
-threadvar
-  _CurrentRenderer: TMvcRendererAbstract;
-
-function CurrentRenderer: TMvcRendererReturningData;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  result := _CurrentRenderer as TMvcRendererReturningData;
-end;
-
-function TMvcSessionWithRenderer.GetCookie(out Value: PUtf8Char): integer;
-begin
-  result := CurrentRenderer.GetCookie(fContext.CookieName, Value);
-end;
-
-procedure TMvcSessionWithRenderer.SetCookie(const Value: RawUtf8);
-begin
-  CurrentRenderer.SetCookie(fContext.CookieName, Value);
-end;
-
-
 { TMvcSessionSingle }
 
 function TMvcSessionSingle.GetCookie(out Value: PUtf8Char): integer;
@@ -1717,6 +1702,55 @@ begin
   fSingleCookie := Value;
 end;
 
+
+{ TMvcSessionWithRestServer }
+
+function TMvcSessionWithRestServer.GetCookie(out Value: PUtf8Char): integer;
+var
+  ctxt: TRestServerUriContext;
+  cookie: PHttpCookie;
+begin
+  result := 0;
+  ctxt := ServiceRunningContext.Request;
+  if ctxt = nil then
+    exit;
+  cookie := ctxt.InCookieSearch(fContext.CookieName);
+  if cookie = nil then
+    exit;
+  result := cookie^.ValueLen;
+  Value := cookie^.ValueStart;
+end;
+
+procedure TMvcSessionWithRestServer.SetCookie(const Value: RawUtf8);
+var
+  ctxt: TRestServerUriContext;
+begin
+  ctxt := ServiceRunningContext.Request;
+  if ctxt <> nil then
+    ctxt.OutCookie[fContext.CookieName] := Value;
+end;
+
+
+{ TMvcSessionWithRenderer }
+
+threadvar
+  _CurrentRenderer: TMvcRendererAbstract; // per-thread context for http server
+
+function CurrentRenderer: TMvcRendererReturningData;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := _CurrentRenderer as TMvcRendererReturningData;
+end;
+
+function TMvcSessionWithRenderer.GetCookie(out Value: PUtf8Char): integer;
+begin
+  result := CurrentRenderer.GetCookieFromHeaders(fContext.CookieName, Value);
+end;
+
+procedure TMvcSessionWithRenderer.SetCookie(const Value: RawUtf8);
+begin
+  CurrentRenderer.SetCookieToHeaders(fContext.CookieName, Value);
+end;
 
 
 { ************ Web Renderer Returning Mustache Views or Json }
@@ -2157,7 +2191,7 @@ begin
   if (registerOrmTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMvcViewsMustache) then
     TMvcViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
-  fApplication.SetSession(TMvcSessionWithRenderer.Create(aApplication));
+  fApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
   // no remote ORM access via REST, and route method_name as method/name too
   fRestServer.Options := fRestServer.Options +
     [rsoNoTableURI, rsoNoInternalState, rsoMethodUnderscoreAsSlashUri];
@@ -2230,6 +2264,7 @@ begin
   else
     r := TMvcRendererFromViews.Create;
   try
+    // _CurrentRenderer := r;
     r.Prepare(self, Ctxt.Call^.LowLevelRemoteIP, Ctxt.Call^.LowLevelUserAgent,
       Ctxt.TickCount64 div MilliSecsPerSec, @inputContext,
       pointer(Ctxt.Call^.InHead), meth);
@@ -2289,10 +2324,9 @@ begin
   if fMethod <> nil then
     fMethodIndex := aMethod^.ExecutionMethodIndex;
   dec(fMethodIndex, RESERVED_VTABLE_SLOTS);
-  _CurrentRenderer := self;
 end;
 
-function TMvcRendererReturningData.GetCookie(const CookieName: RawUtf8;
+function TMvcRendererReturningData.GetCookieFromHeaders(const CookieName: RawUtf8;
   out Value: PUtf8Char): integer;
 begin
   if fInputCookieStart = nil then
@@ -2306,7 +2340,8 @@ begin
   result := fInputCookieLen;
 end;
 
-procedure TMvcRendererReturningData.SetCookie(const CookieName, CookieValue: RawUtf8);
+procedure TMvcRendererReturningData.SetCookieToHeaders(
+  const CookieName, CookieValue: RawUtf8);
 begin
   fOutputCookieName  := CookieName;
   fOutputCookieValue := CookieValue;
