@@ -330,6 +330,9 @@ type
     /// override this method if default VariantCompAsText() call is not optimal
     function IntCompare(const Instance, Another: TVarData;
       CaseInsensitive: boolean): integer; virtual;
+    /// override this method if default VariantHash() call is not optimal
+    function IntHash(Seed: cardinal; const V: TVarData; var Max: integer;
+      CaseInsensitive: boolean; Hasher: THasher): cardinal; virtual;
     /// identify how this custom type behave
     // - as set by the class constructor, to avoid calling any virtual method
     property Options: TSynInvokeableVariantTypeOptions
@@ -4613,6 +4616,24 @@ function TSynInvokeableVariantType.IntCompare(
   const Instance, Another: TVarData; CaseInsensitive: boolean): integer;
 begin
   result := VariantCompAsText(@Instance, @Another, CaseInsensitive);
+end;
+
+function TSynInvokeableVariantType.IntHash(Seed: cardinal; const V: TVarData;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+begin // use JSON by default
+  result := VariantHashAsText(Seed, variant(V), Max, CaseInsensitive, Hasher);
+end;
+
+function __VariantCustomHash(Seed: cardinal; const value: variant;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+var
+  t: TSynInvokeableVariantType;
+begin
+  t := DocVariantType.FindSynVariantType(TVarData(value).VType);
+  if t = nil then // fallback to JSON serialization
+    result := VariantHashAsText(Seed, value, Max, CaseInsensitive, Hasher)
+  else
+    result := t.IntHash(Seed, TVarData(value), Max, CaseInsensitive, Hasher);
 end;
 
 const
@@ -12704,9 +12725,10 @@ begin
   JSON_NAMEVALUEINTERN := PDocVariantOptionsBool(@JSON_[mNameValueIntern])^;
   JSON_OPTIONS := PDocVariantOptionsBool(@JSON_[mDefault])^;
   // redirect to the feature complete variant wrapper functions
-  VariantClearSeveral := _VariantClearSeveral;
-  _VariantSaveJson := @__VariantSaveJson;
-  _VariantLoadJson := @__VariantLoadJson;
+  VariantClearSeveral     := @_VariantClearSeveral;
+  _VariantSaveJson        := @__VariantSaveJson;
+  _VariantLoadJson        := @__VariantLoadJson;
+  _VariantCustomHash      := @__VariantCustomHash;
   SortDynArrayVariantComp := pointer(@FastVarDataComp);
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do

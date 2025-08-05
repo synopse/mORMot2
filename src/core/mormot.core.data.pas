@@ -1069,11 +1069,6 @@ function VariantHash(Seed: cardinal; const Value: variant; var Max: integer;
 function VariantHashAsText(Seed: cardinal; const value: variant;
   var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
 
-var
-  // custom types support for VariantComplexHash() - set by mormot.core.variant
-  _VariantCustomHash: function(Seed: cardinal; const value: variant;
-    var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
-
 
 { ************ TDynArray and TDynArrayHashed Wrappers }
 
@@ -9377,7 +9372,10 @@ begin
     {$endif HASVARUSTRING}
     else // complex types
     begin
-      result := VariantHashAsText(Seed, value, Max, CaseInsensitive, Hasher);
+      if Assigned(_VariantCustomHash) then // TDocVariant/TBsonVariant.IntHash
+        result := _VariantCustomHash(Seed, value, Max, CaseInsensitive, Hasher)
+      else // regular JSON serialization
+        result := VariantHashAsText(Seed, value, Max, CaseInsensitive, Hasher);
       exit;
     end;
   end;
