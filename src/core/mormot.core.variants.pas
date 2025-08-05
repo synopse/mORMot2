@@ -4392,7 +4392,7 @@ const
     SortDynArrayRawByteString,
     {$endif CPUINTEL}
     SortDynArrayAnsiStringI,     // 16
-    SortDynArrayUnicodeString,   // 17
+    SortDynArrayUnicodeString,   // 17 about hashing: UTF-16 equal = UTF-8 equal
     SortDynArrayUnicodeStringI); // 18
 var
   // FastVarDataComp() efficient lookup for per-VType comparison function

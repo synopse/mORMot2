@@ -9362,15 +9362,15 @@ begin
         utf8 := CaseInsensitive;
       end;
     varOleStr:
-      begin
-        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp), // convert to UTF-8 in tmp[]
+      begin // convert to UTF-8 so that WideString('toto') match RawUtf8('toto')
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp),
           vd.VAny, length(WideString(vd.VAny)), [ccfNoTrailingZero]);
         utf8 := CaseInsensitive;
-      end;
+      end; // SortDynArrayUnicodeString()=0 for the same text in UTF-8 or UTF-16
     {$ifdef HASVARUSTRING}
     varUString:
-      begin
-        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp), // convert to UTF-8
+      begin // convert to UTF-8 so that string('toto') match RawUtf8('toto')
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp),
           vd.VAny, length(UnicodeString(vd.VAny)), [ccfNoTrailingZero]);
         utf8 := CaseInsensitive;
       end;
