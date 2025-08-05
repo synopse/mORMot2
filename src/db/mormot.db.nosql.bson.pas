@@ -501,6 +501,8 @@ type
     function IntCompare(const Instance, Another: TVarData;
       CaseInsensitive: boolean): integer; override;
     /// overriden method allowing direct TBsonVariant content hashing
+    function IntHash(Seed: cardinal; const V: TVarData; var Max: integer;
+      CaseInsensitive: boolean; Hasher: THasher): cardinal; override;
     /// convert a TBsonDocument binary content into a TBsonVariant of kind betDoc
     // - is the default property, so that you can write:
     // ! BsonVariantType[Bson(['BSON',_Arr(['awesome',5.05, 1986])])]
@@ -2213,6 +2215,30 @@ begin
       result := SortDynArrayAnsiString(a.VBlob, b.VBlob) // no CaseInsensitive
   else // inlined inherited
     result := VariantCompAsText(@Instance, @Another, CaseInsensitive);
+end;
+
+function TBsonVariant.IntHash(Seed: cardinal; const V: TVarData;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+var
+  d: TBsonVariantData absolute V;
+  p: pointer;
+  l: PtrInt;
+begin
+  if d.VKind = betObjectID then
+  begin
+    p := @d.VObjectID;
+    l := SizeOf(d.VObjectID);
+  end
+  else
+  begin
+    p := d.VBlob;
+    l := length(RawByteString(d.VBlob));
+    if (l > Max) and
+       (Max > 0) then // don't hash more than needed
+      l := Max;
+  end;
+  dec(Max, l);
+  result := Hasher(Seed, p, l); // no CaseInsensitive
 end;
 
 function TBsonVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;
