@@ -2348,10 +2348,10 @@ var
 begin
   // {{#Equals .,12}}
   if _SafeArray(Value, 2, dv) and
-       (FastVarDataComp(@dv^.Values[0], @dv^.Values[1], false) = 0) then
-      Result := VarTrue
-    else
-      SetVariantNull(Result{%H-});
+     (FastVarDataComp(@dv^.Values[0], @dv^.Values[1], false) = 0) then
+    Result := VarTrue
+  else
+    SetVariantNull(Result{%H-});
 end;
 
 class procedure TSynMustache.If_(const Value: variant; out Result: variant);

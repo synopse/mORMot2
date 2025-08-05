@@ -7144,14 +7144,14 @@ begin // hash all [names and] values in-place with no memory allocation
   if IsObject then
   begin
     propname := pointer(VName);
-    prophasher := DynArrayHashOne(ptRawUtf8, CaseInsensitive); // as Compare()
+    prophasher := DynArrayHashOne(ptRawUtf8, not IsCaseSensitive); // =Compare()
   end;
   v := pointer(VValue);
   repeat
     if propname <> nil then // IsObject
     begin
       dec(Max, PStrLen(propname^ - _STRLEN)^);
-      if Max < 0 then
+      if Max <= 0 then
         exit; // no need to go any further
       result := result xor prophasher(propname^, Hasher);
       inc(propname);
