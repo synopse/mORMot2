@@ -820,6 +820,9 @@ type
     /// overriden method redirecting to TDocVariantData.Compare()
     function IntCompare(const Instance, Another: TVarData;
       CaseInsensitive: boolean): integer; override;
+    /// overriden method redirecting to TDocVariantData.Hash()
+    function IntHash(Seed: cardinal; const V: TVarData; var Max: integer;
+      CaseInsensitive: boolean; Hasher: THasher): cardinal; override;
   end;
 
   /// method used by TDocVariantData.ReduceAsArray to filter each object
@@ -5153,6 +5156,12 @@ begin
     result := l^.Compare(r^, CaseInsensitive)
   else // inlined inherited
     result := VariantCompAsText(@Instance, @Another, CaseInsensitive);
+end;
+
+function TDocVariant.IntHash(Seed: cardinal; const V: TVarData;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+begin
+  result := TDocVariantData(V).Hash(Seed, Max, CaseInsensitive, Hasher);
 end;
 
 function TDocVariant.IterateCount(const V: TVarData;
