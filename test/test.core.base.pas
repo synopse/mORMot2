@@ -9661,11 +9661,12 @@ var
   end;
 
 var
-  v: tvalue;
+  v, kv: tvalue;
   s, k, key, val, u, json: RawUtf8;
   i, n: integer;
   i64: Int64;
   exists: boolean;
+  b: byte;
   sdk: TSDKey;
 begin
   SetDict;
@@ -9858,6 +9859,49 @@ begin
     Check(dict.FindAndCopy(sdk, v), 'ptInteger=search i only');
     Check(v = 10);
   finally
+    dict.Free;
+  end;
+  // validate variant as keys, with proper hashing of simple or complex types
+  dict := TSynDictionary.Create(TypeInfo(TVariantDynArray), TypeInfo(TByteDynArray));
+  try
+    kv := byte(1);
+    CheckEqual(TVarData(kv).VType, varByte);
+    b := 0;
+    Check(not dict.FindAndCopy(kv, b));
+    b := 255;
+    CheckEqual(dict.Add(kv, b), 0);
+    b := 0;
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 255);
+    kv := integer(1);
+    CheckEqual(TVarData(kv).VType, varInteger);
+    b := 0;
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 255);
+    RawUtf8ToVariant('toto', kv);
+    b := 0;
+    Check(not dict.FindAndCopy(kv, b));
+    b := 254;
+    CheckEqual(dict.Add(kv, b), 1);
+    b := 0;
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 254);
+    kv := word(1);
+    CheckEqual(TVarData(kv).VType, varWord);
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 255);
+    kv := _JsonFast('[1,2,{a:3}]');
+    b := 0;
+    Check(not dict.FindAndCopy(kv, b));
+    b := 253;
+    CheckEqual(dict.Add(kv, b), 2);
+    kv := WideString('toto');
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 254);
+    kv := _JsonFast('[ 1, 2, {"a":3} ]');
+    Check(dict.FindAndCopy(kv, b), 'json should not matter');
+    CheckEqual(b, 253);
+finally
     dict.Free;
   end;
 end;
