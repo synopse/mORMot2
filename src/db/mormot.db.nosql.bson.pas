@@ -497,6 +497,10 @@ type
     // - otherwise, return false
     function GetItem(const V: variant; const Name: RawUtf8;
       out Value: variant; ValueAs: TBsonDocArrayConversion = asBsonVariant): boolean;
+    /// overriden method allowing direct TBsonVariant comparison
+    function IntCompare(const Instance, Another: TVarData;
+      CaseInsensitive: boolean): integer; override;
+    /// overriden method allowing direct TBsonVariant content hashing
     /// convert a TBsonDocument binary content into a TBsonVariant of kind betDoc
     // - is the default property, so that you can write:
     // ! BsonVariantType[Bson(['BSON',_Arr(['awesome',5.05, 1986])])]
@@ -2192,6 +2196,23 @@ var
 begin
   result := (b.VKind in [betDoc, betArray]) and
             (length(RawByteString(b.VBlob)) <= 5);
+end;
+
+function TBsonVariant.IntCompare(const Instance, Another: TVarData;
+  CaseInsensitive: boolean): integer;
+var
+  a: TBsonVariantData absolute Instance;
+  b: TBsonVariantData absolute Another;
+begin
+  if (Instance.VType = VarType) and
+     (Another.VType = VarType) and
+     (a.VKind = b.VKind) then // same exact type
+    if a.VKind = betObjectID then
+      result := MemCmp(@a.VObjectID, @b.VObjectID, SizeOf(a.VObjectID))
+    else
+      result := SortDynArrayAnsiString(a.VBlob, b.VBlob) // no CaseInsensitive
+  else // inlined inherited
+    result := VariantCompAsText(@Instance, @Another, CaseInsensitive);
 end;
 
 function TBsonVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;
