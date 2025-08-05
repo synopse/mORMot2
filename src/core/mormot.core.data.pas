@@ -1069,6 +1069,11 @@ function VariantHash(Seed: cardinal; const Value: variant; var Max: integer;
 function VariantHashAsText(Seed: cardinal; const value: variant;
   var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
 
+var
+  // for TSynInvokeableVariantType.IntHash() support by mormot.core.variants
+  _VariantCustomHash: function(Seed: cardinal; const value: variant;
+    var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+
 
 { ************ TDynArray and TDynArrayHashed Wrappers }
 
@@ -9358,7 +9363,7 @@ begin
       end;
     varOleStr:
       begin
-        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp), // convert to UTF-8
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp), // convert to UTF-8 in tmp[]
           vd.VAny, length(WideString(vd.VAny)), [ccfNoTrailingZero]);
         utf8 := CaseInsensitive;
       end;
