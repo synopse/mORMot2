@@ -5946,18 +5946,22 @@ begin
   result := SizeOf(pointer);
 end;
 
-function DelphiType(Info: PRttiInfo): integer;
-  {$ifdef HASINLINE} inline; {$endif}
+function DelphiType(Info: PRttiInfo): integer; {$ifdef HASINLINE} inline; {$endif}
 begin
   // compatible with legacy TDynArray.SaveTo() format
   if Info = nil then
-    result := 0
+    result := 0 // = rkUnknown
   else
     {$ifdef FPC}
     result := ord(FPCTODELPHI[Info^.Kind]);
     {$else}
     result := ord(Info^.Kind);
     {$endif FPC}
+end;
+
+function DelphiText(dt: integer): PShortString; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := GetEnumName(TypeInfo({$ifdef FPC}TDelphiType{$else}TRttiKind{$endif}), dt);
 end;
 
 procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
@@ -6023,10 +6027,15 @@ end;
 
 function DynArrayLoadHeader(var Source: TFastReader;
   ArrayInfo, ItemInfo: PRttiInfo): integer;
+var
+  typ1, typ2: integer;
 begin
   Source.VarNextInt; // ignore stored itemsize (0 stored now)
-  if Source.NextByte <> DelphiType(ItemInfo) then
-    Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.RawName]);
+  typ1 := Source.NextByte;
+  typ2 := DelphiType(ItemInfo);
+  if typ1 <> typ2 then
+    Source.ErrorData('DynArrayLoadHeader(%) failed for %: got %, expected %',
+      [ArrayInfo.RawName, ItemInfo.Name, DelphiText(typ1)^, DelphiText(typ2)^]);
   result := Source.VarUInt32;
   if result <> 0 then
     Source.Next4; // ignore deprecated Hash32 checksum (0 stored now)
