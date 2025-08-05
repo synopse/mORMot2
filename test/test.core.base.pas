@@ -9676,7 +9676,7 @@ begin
   finally
     dict.Free;
   end;
-  SetDict;
+  dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
   try
     CheckEqual(dict.Count, 0);
     CheckEqual(dict.Capacity, 0);
@@ -9862,7 +9862,11 @@ begin
     dict.Free;
   end;
   // validate variant as keys, with proper hashing of simple or complex types
+  {$ifdef HASGENERICS}
+  dict := TSynDictionary.New<variant, byte>;
+  {$else}
   dict := TSynDictionary.Create(TypeInfo(TVariantDynArray), TypeInfo(TByteDynArray));
+  {$endif HASGENERICS}
   try
     kv := byte(1);
     CheckEqual(TVarData(kv).VType, varByte);
@@ -9896,6 +9900,7 @@ begin
     b := 253;
     CheckEqual(dict.Add(kv, b), 2);
     kv := WideString('toto');
+    CheckEqual(TVarData(kv).VType, varOleStr);
     Check(dict.FindAndCopy(kv, b));
     CheckEqual(b, 254);
     kv := _JsonFast('[ 1, 2, {"a":3} ]');
