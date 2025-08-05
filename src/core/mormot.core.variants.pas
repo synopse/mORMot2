@@ -1415,6 +1415,10 @@ type
     // - will return the same result than JSON comparison, but more efficiently
     function Compare(const Another: TDocVariantData;
       CaseInsensitive: boolean = false): integer; overload;
+    /// efficient hashing of two TDocVariantData content
+    // - called e.g. by VariantHash() via TSynInvokeableVariantType.IntHash()
+    function Hash(Seed: cardinal; var Max: integer; CaseInsensitive: boolean;
+      Hasher: THasher): cardinal;
     /// efficient comparison of two TDocVariantData objects
     // - will always ensure that both this instance and Another are Objects
     // - will compare all supplied Fields values in their specified order
@@ -7090,6 +7094,43 @@ end;
 procedure TDocVariantData.SetCount(aCount: integer);
 begin
   VCount := aCount;
+end;
+
+function TDocVariantData.Hash(Seed: cardinal; var Max: integer;
+  CaseInsensitive: boolean; Hasher: THasher): cardinal;
+var
+  c: integer;
+  v: PVarData;
+  propname: PPAnsiChar;
+  prophasher: TDynArrayHashOne;
+begin // hash all [names and] values in-place with no memory allocation
+  result := Seed;
+  c := VCount;
+  if (c = 0) or
+     (Max <= 0) then
+    exit;
+  propname := nil;
+  prophasher := nil;
+  if IsObject then
+  begin
+    propname := pointer(VName);
+    prophasher := DynArrayHashOne(ptRawUtf8, CaseInsensitive); // as Compare()
+  end;
+  v := pointer(VValue);
+  repeat
+    if propname <> nil then // IsObject
+    begin
+      dec(Max, PStrLen(propname^ - _STRLEN)^);
+      if Max < 0 then
+        exit; // no need to go any further
+      result := result xor prophasher(propname^, Hasher);
+      inc(propname);
+    end;
+    result := VariantHash(result, PVariant(v)^, Max, CaseInsensitive, Hasher);
+    inc(v);
+    dec(c);
+  until (c = 0) or
+        (Max <= 0); // leave as soon as we have enough data (start from Max=255)
 end;
 
 function TDocVariantData.Compare(const Another: TDocVariantData;
