@@ -1058,12 +1058,21 @@ function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec; TypeInfo: PRt
   UriCompatible: boolean = false; TryCustomVariants: PDocVariantOptions = nil): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// crc32c-based hash of a variant value
-// - complex string types will make up to 255 uppercase characters conversion
-// if CaseInsensitive is true
-// - you can specify your own hashing function if crc32c is not what you expect
-function VariantHash(const value: variant; CaseInsensitive: boolean;
-  Hasher: THasher = nil): cardinal;
+/// raw variant hashing function - compatible with SortDynArrayVariantComp()
+// - would stop until Max bytes have been hashed (typically 255 for ptVariant)
+// - will normalize numbers to Int64/double and handle string types as UTF-8,
+// and complex types with redirection e.g. to TDocVariantData.Hash()
+function VariantHash(Seed: cardinal; const Value: variant; var Max: integer;
+  CaseInsensitive: boolean; Hasher: THasher = nil): cardinal;
+
+/// internal function used by VariantHash() to hash after JSON serialization
+function VariantHashAsText(Seed: cardinal; const value: variant;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+
+var
+  // custom types support for VariantComplexHash() - set by mormot.core.variant
+  _VariantCustomHash: function(Seed: cardinal; const value: variant;
+    var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
 
 
 { ************ TDynArray and TDynArrayHashed Wrappers }
@@ -2244,7 +2253,7 @@ function DynArray(aTypeInfo: PRttiInfo; var aValue;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the hash function corresponding to a given standard array type
-// - as used internally by TDynArrayHasher.Init and exported here for testing
+// - as used internally by TDynArrayHasher.Init and exported e.g. for testing
 function DynArrayHashOne(Kind: TRttiParserType;
   CaseInsensitive: boolean = false): TDynArrayHashOne;
 
@@ -9282,84 +9291,122 @@ begin
   result := Hasher(HashSeed, Item, SizeOf(THash512));
 end;
 
-function VariantHash(const value: variant; CaseInsensitive: boolean;
-  Hasher: THasher): cardinal;
+function VariantHashAsText(Seed: cardinal; const value: variant;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid heap allocation
-  vt: cardinal;
+  tmp: TBuffer4K; // avoid heap allocation - usually always < 4KB of JSON
   S: TStream;
   W: TTextWriter;
-  P: pointer;
   len: integer;
+begin
+  S := TFakeWriterStream.Create; // fill and re-fill tmp[] with no real stream
+  W := DefaultJsonWriter.Create(S, @tmp, SizeOf(tmp));
+  try
+    W.AddVariant(value, twJsonEscape); // serialize as JSON into tmp buffer
+    len := W.PendingBytes;
+  finally
+    W.Free;
+    S.Free;
+  end;
+  if (len > Max) and
+     (Max > 0) then
+    len := Max;  // don't hash more than needed
+  dec(Max, len);
+  if CaseInsensitive then
+    len := UpperCopy255Buf(tmp, @tmp, len) - tmp; // in-place uppercase
+  result := Hasher(Seed, @tmp, len);
+end; // note: TDocVariantData have its own dedicated Hash() method
+
+function VariantHash(Seed: cardinal; const value: variant; var Max: integer;
+  CaseInsensitive: boolean; Hasher: THasher): cardinal;
+var
+  vd: PVarData;
+  vt: cardinal;
+  len: integer;
+  P: pointer;
+  utf8: boolean;
+  tmp: TByteToAnsiChar; // 256 bytes on-stack buffer, to avoid heap allocation
 begin
   if not Assigned(Hasher) then
     Hasher := DefaultHasher;
-  with TVarData(value) do
+  utf8 := false;
+  P := @tmp;
+  len := 8; // most common case is normalized to Int64 or double
+  vd := @value;
+  vt := vd^.VType;
+  if vt = varVariantByRef then
   begin
-    vt := VType;
-    P := @VByte; // same address than VWord/VInteger/VInt64...
-    case vt of
-      varNull, varEmpty:
-        len := 0; // good enough for void values
-      varShortInt, varByte:
-        len := 1;
-      varSmallint, varWord, varboolean:
-        len := 2;
-      varLongWord, varInteger, varSingle:
-        len := 4;
-      varInt64, varDouble, varDate, varCurrency, varWord64:
-        len := 8;
-      varString:
-        begin
-          len := length(RawUtf8(VAny));
-          P := VAny;
-        end;
-      varOleStr:
-        begin
-          len := length(WideString(VAny));
-          P := VAny;
-        end;
-      {$ifdef HASVARUSTRING}
-      varUString:
-        begin
-          len := length(UnicodeString(VAny));
-          P := VAny;
-        end;
-      {$endif HASVARUSTRING}
-      else
-      begin
-        S := TFakeWriterStream.Create;
-        W := DefaultJsonWriter.Create(S, @tmp, SizeOf(tmp));
-        try
-          W.AddVariant(value, twJsonEscape);
-          len := W.WrittenBytes;
-          if len > 255 then
-            len := 255;
-          P := @tmp; // big JSON won't be hasheable anyway -> use only buffer
-        finally
-          W.Free;
-          S.Free;
-        end;
-      end;
-    end;
-    if CaseInsensitive and
-       (P <> @VByte) then
-    begin
-      len := UpperCopy255Buf(tmp, P, len) - tmp;
-      P := @tmp;
-    end;
-    result := Hasher(vt xor HashSeed, P, len)
+    vd := vd^.VPointer;
+    vt := vd^.VType;
   end;
+  if vt and varByRef <> 0 then
+  begin
+    vd := vd^.VAny;
+    vt := vd^.VType;
+  end;
+  case vt of // normalize to Int64/Double/Utf8 as expected by FastVarDataComp()
+    varNull, varEmpty:
+      len := 0; // good enough for void values
+    varBoolean, varByte, varShortInt, varSmallint, varWord, varLongWord, varOleUInt:
+      VariantToInt64(value, PInt64(@tmp)^);   // Int64 normalization
+    varInteger, varOleInt:
+      PInt64(@tmp)^ := vd^.VInteger;          // expand signed 32-bit (common)
+    varInt64, varWord64, varDouble, varDate:
+      P := @vd^.VInt64;                       // direct Int64/double hash
+    varSingle, varCurrency:
+      VariantToDouble(value, PDouble(@tmp)^); // double normalization
+    varString:
+      begin
+        P := vd^.VAny;
+        len := Utf8TruncatedLength(RawUtf8(vd.VAny), 255); // don't hash all
+        utf8 := CaseInsensitive;
+      end;
+    varOleStr:
+      begin
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp), // convert to UTF-8
+          vd.VAny, length(WideString(vd.VAny)), [ccfNoTrailingZero]);
+        utf8 := CaseInsensitive;
+      end;
+    {$ifdef HASVARUSTRING}
+    varUString:
+      begin
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp), // convert to UTF-8
+          vd.VAny, length(UnicodeString(vd.VAny)), [ccfNoTrailingZero]);
+        utf8 := CaseInsensitive;
+      end;
+    {$endif HASVARUSTRING}
+    else // complex types
+    begin
+      result := VariantHashAsText(Seed, value, Max, CaseInsensitive, Hasher);
+      exit;
+    end;
+  end;
+  if utf8 then
+  begin
+    len := UpperCopy255Buf(tmp, P, len) - tmp; // (maybe in-place) uppercase
+    P := @tmp; // P=vd^.VAny for varString
+  end;
+  if (len > Max) and
+     (Max > 0) then
+    len := Max;  // don't hash more than needed
+  dec(Max, len); // leave as soon as we have enough data (start from Max=255)
+  result := Hasher(Seed, P, len); // cascaded hash
 end;
 
 function HashVariant(Item: PVariant; Hasher: THasher): cardinal;
+var
+  max: integer;
 begin
-  result := VariantHash(Item^, false, Hasher);
+  max := 255; // see e.g. HashAnsiString() - hashing 255 bytes seems enough
+  result := VariantHash(HashSeed, Item^, max, false, Hasher);
 end;
 
 function HashVariantI(Item: PVariant; Hasher: THasher): cardinal;
+var
+  max: integer;
 begin
-  result := VariantHash(Item^, true, Hasher);
+  max := 255;
+  result := VariantHash(HashSeed, Item^, max, true, Hasher);
 end;
 
 const

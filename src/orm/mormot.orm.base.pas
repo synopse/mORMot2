@@ -6663,9 +6663,11 @@ function TOrmPropInfoRttiVariant.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   value: Variant;
+  max: integer;
 begin
   fPropInfo.GetVariantProp(Instance, value, {byref=}true);
-  result := VariantHash(value, CaseInsensitive);
+  max := 255; // inlined HashVariant/HashVariantI
+  result := VariantHash(OrmHashSeed, value, max, CaseInsensitive, nil);
 end;
 
 procedure TOrmPropInfoRttiVariant.GetJsonValues(Instance: TObject; W: TJsonWriter);
