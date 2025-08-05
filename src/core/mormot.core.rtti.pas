@@ -140,6 +140,7 @@ const
 type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
   // - dkUString and following appear only since Delphi 2009
+  // - defined for FPC only, to share some minimal raw RTTI context with Delphi
   TDelphiType = (
     dkUnknown,
     dkInteger,
