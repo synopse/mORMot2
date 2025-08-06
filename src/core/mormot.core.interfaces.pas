@@ -2578,7 +2578,7 @@ const
   SWI64 = '{"type":"integer","format":"int64"}';
   SWD32 = '{"type":"number","format":"float"}';
   SWD64 = '{"type":"number","format":"double"}';
-
+  // per-language type names
   TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUtf8 = (
     // lngDelphi
     ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
@@ -8039,7 +8039,8 @@ begin
     if rtti = nil then
       EWrapperContext.RaiseUtf8(
         '%.ContextFromRtti: No RTTI nor typ for [%]', [self, typName]);
-    typ := CustomType(rtti);
+    if self <> nil then
+      typ := CustomType(rtti); // may be overriden in TWrapperContextRest
     if typ = wUnknown then
     begin
       typ := TYPES_SIMPLE[rtti.Parser];
@@ -8056,12 +8057,18 @@ begin
         end;
     end;
   end;
-  if (typ = wRecord) and
-     PropNameEquals(typName, 'TGUID') then
-    typ := wGuid
-  else if (typ = wRecord) and
-          PropNameEquals(typName, 'TServiceCustomAnswer') then
-    typ := wCustomAnswer;
+  // recognize some specific types
+  case typ of
+    wRecord:
+      if PropNameEquals(typName, 'TGUID') then
+        typ := wGuid
+      else if PropNameEquals(typName, 'TServiceCustomAnswer') then
+        typ := wCustomAnswer;
+    wObject:
+      if (rtti <> nil) and
+         (rtti.Kind = rkClass) then
+        typ := ClassToWrapperType(rtti.ValueClass); // recognize e.g. wOrm
+  end;
   // set typName/typAsName
   if typName = '' then
     if rtti <> nil then
