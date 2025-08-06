@@ -964,9 +964,15 @@ function UnicodeBufferToString(source: PWideChar): string;
 function UnicodeBufferToUtf8(source: PWideChar): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// convert an Unicode buffer into a UTF-8 string, trimmed with all spaces
+function UnicodeBufferTrimmedToUtf8(source: PWideChar): RawUtf8;
+
 /// convert an Unicode buffer into a variant storing a UTF-8 string
 // - could be used e.g. as TDocVariantData.AddValue() parameter
 function UnicodeBufferToVariant(source: PWideChar): variant;
+
+/// convert an Unicode buffer into a variant storing a UTF-8 trimmed string
+function UnicodeBufferTrimmedToVariant(source: PWideChar): variant;
 
 /// convert any RTL string into a variant storing a UTF-8 string
 // - could be used e.g. as TDocVariantData.AddValue() parameter
@@ -5115,11 +5121,29 @@ begin
   RawUnicodeToUtf8(source, StrLenW(source), result);
 end;
 
+function UnicodeBufferTrimmedToUtf8(source: PWideChar): RawUtf8;
+var
+  l: PtrInt;
+begin
+  l := StrLenW(source);
+  while (l <> 0) and
+        (source[l - 1] > ' ') do
+    dec(l);
+  RawUnicodeToUtf8(source, l, result);
+end;
+
 function UnicodeBufferToVariant(source: PWideChar): variant;
 begin
   ClearVariantForString(result);
-  if Source <> nil then
+  if source <> nil then
     RawUnicodeToUtf8(source, StrLenW(source), RawUtf8(TVarData(result).VAny));
+end;
+
+function UnicodeBufferTrimmedToVariant(source: PWideChar): variant;
+begin
+  ClearVariantForString(result);
+  if source <> nil then
+    RawUtf8(TVarData(result).VAny) := UnicodeBufferTrimmedToUtf8(source);
 end;
 
 function StringToVariant(const Txt: string): variant;
