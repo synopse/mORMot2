@@ -1108,13 +1108,15 @@ type
     /// retrieve the NameSpace value as a shortstring (used e.g. for RaiseESockIO)
     function NameSpaceShort: ShortString;
       {$ifdef HASINLINE} inline; {$endif}
-    /// quickly check if the Data content does match (mainly used for testing)
-    function DataIs(const Content: RawUtf8): boolean;
     /// decode the Data content JSON payload into a TDocVariant
     // - can optionally override the default JSON_SOCKETIO options
     // - warning: the Data/DataLen buffer will be decoded in-place, so modified
     function DataGet(out Dest: TDocVariantData;
-      Options: PDocVariantOptions = nil): boolean;
+      Options: PDocVariantOptions = nil): boolean; overload;
+    /// return the Data content payload raw buffer without any decoding
+    function DataGet(CodePage: cardinal = CP_UTF8): RawByteString; overload;
+    /// quickly check if the Data content does match (mainly used for testing)
+    function DataIs(const Content: RawUtf8): boolean;
     /// raise a ESockIO exception with the specified text context
     procedure RaiseESockIO(const ctx: RawUtf8);
     /// low-level kind of Socket.IO packet of this message
@@ -3863,6 +3865,11 @@ begin
   if Options = nil then
     Options := @JSON_SOCKETIO;
   result := Dest.InitJsonInPlace(fData, Options^) <> nil;
+end;
+
+function TSocketIOMessage.DataGet(CodePage: cardinal): RawByteString;
+begin
+  FastSetStringCP(result, fData, fDataLen, CodePage);
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
