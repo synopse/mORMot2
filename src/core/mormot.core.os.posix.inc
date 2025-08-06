@@ -101,6 +101,13 @@ end;
 
 { ****************** Unicode, Time, File process }
 
+var // two flag sets of 8 items = 8-bit byte efficient storage and access
+  _F0: set of (fIsDebuggerTested, fIsDebuggerPresent, fStdOutIsTTY,
+    fNoURandom, fNoRandom, fProcFileSystemsTested,
+    fLinuxEventFdFailed, fLinuxGetRandomFailed);
+  _F1: set of (fMachTimeNanoSec, fNoTryProcExe, fStubMemoryExecXorWrite,
+    fSynDaemonIntercepted, fSigPipeDisabled);
+
 function SortDynArrayFileName(const A, B): integer;
 begin // file extension, then file name case-sensitive comparison on POSIX
   result := 0;
@@ -717,14 +724,13 @@ function mach_host_self: cint;
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
-  mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
 
 const
   PROCESSOR_CPU_LOAD_INFO = 2;
 
 procedure machtimetonanosec(var Value: Int64); inline;
 begin
-  if not mach_timenanosecond then
+  if not (fMachTimeNanoSec in _F1) then // very likely to be set in practice
     if mach_timeinfo.Denom = 1 then
       // integer resolution is enough
       Value := Value * mach_timeinfo.Numer
@@ -1862,7 +1868,6 @@ end;
 
 var
   _ProcFileSystems: TRawUtf8DynArray; // from /proc/filesystems without "nodev"
-  __ProcFileSystemsTested: boolean;
 
 function IsProcFileSystem(const typ: RawUtf8): boolean; inline;
 begin
@@ -1875,7 +1880,7 @@ var
   fs, s: RawUtf8;
   p: PUtf8Char;
 begin
-  __ProcFileSystemsTested := true;
+  include(_F0, fProcFileSystemsTested);
   result := false;
   fs := StringFromFileNoSize('/proc/filesystems');
   p := pointer(fs);
@@ -1999,17 +2004,14 @@ begin
 end;
 
 {$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
-var
-  __LinuxGetRandomFailed: boolean;
-
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
-  if not __LinuxGetRandomFailed then // KernelRevision was checked at startup
+  if not (fLinuxGetRandomFailed in _F0) then // KernelRevision checked at startup
     if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
       result := true // "man getrandom" states to read up to 256 bytes per call
     else
-      __LinuxGetRandomFailed := true; // won't retry on syscall failure
+      include(_F0, fLinuxGetRandomFailed); // won't retry on syscall failure
 end;
 {$else}
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
@@ -2019,8 +2021,6 @@ end;
 {$endif HASGETRANDOM}
 
 {$ifdef HASEVENTFD} // validated on Linux i386, x86_64 and aarch64
-var
-  __LinuxEventFdFailed: boolean;
 const
   EFD_SEMAPHORE = $00000001;
   EFD_NONBLOCK  = O_NONBLOCK;
@@ -2028,19 +2028,19 @@ const
 
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 var
-  flags: cardinal;
+  f: cardinal;
 begin
-  if not __LinuxEventFdFailed then // KernelRevision was checked at startup
+  if not (fLinuxEventFdFailed in _F0) then // KernelRevision checked at startup
   begin
-    flags := 0;
+    f := 0;
     if nonblocking then
-      flags := EFD_NONBLOCK;
+      f := EFD_NONBLOCK;
     if semaphore then
-      flags := flags or EFD_SEMAPHORE;
-    result := do_syscall(syscall_nr_eventfd2, 0, flags);
+      f := f or EFD_SEMAPHORE;
+    result := do_syscall(syscall_nr_eventfd2, 0, f);
     if ValidHandle(result) then
       exit;
-    __LinuxEventFdFailed := true; // don't retry next time
+    include(_F0, fLinuxEventFdFailed); // don't retry next time
   end;
   result := 0;
 end;
@@ -2102,16 +2102,14 @@ end;
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup
-  __IsDebuggerTested, __IsDebuggerPresent, __StdOutIsTTY,
-  __NoURandom, __NoRandom: boolean;
 
 procedure TestOnceDebuggerTty; forward;
 
 function StdOutIsTTY: boolean;
 begin
-  if not __IsDebuggerTested then
+  if not (fIsDebuggerTested in _F0) then
     TestOnceDebuggerTty;
-  result :=  __StdOutIsTTY;
+  result :=  (fStdOutIsTTY in _F0);
 end;
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort7);
@@ -3274,9 +3272,6 @@ begin
     DynArrayFakeLength(result, n);
 end;
 
-var
-  tryprocexe: boolean = true;
-
 function EnumProcessName(PID: cardinal): RawUtf8;
 var
   fn: ShortString;
@@ -3289,7 +3284,7 @@ begin
   fn := '/proc/';
   AppendShortCardinal(PID, fn);
   n := fn[0];
-  if tryprocexe then
+  if not (fNoTryProcExe in _F1) then
   begin
     // may need to be root to follow /fn/[pid]/exe
     AppendShort('/exe'#0, fn);
@@ -3303,7 +3298,7 @@ begin
   // set of strings separated by null bytes -> exe is the first argument
   FastSetString(result, pointer(@tmp), StrLen(pointer(@tmp)));
   if result <> '' then
-    tryprocexe := false; // no need to try again next time
+    include(_F1, fNoTryProcExe); // no need to try again next time
 end;
 
 function IsNotCurrentExeDaemonized(PID: cardinal): boolean;
@@ -3485,19 +3480,21 @@ procedure TestOnceDebuggerTty;
 var
   term: RawUtf8;
 begin
-  __IsDebuggerTested := true;
-  __IsDebuggerPresent := _IsDebuggerPresent; // syscall
-  __StdOutIsTTY := (not __IsDebuggerPresent) and
-                   (IsATTY(StdOut) = 1) and
-                   GetEnv('TERM', term) and
-       IdemPChars(term, ['XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
+  include(_F0, fIsDebuggerTested);
+  if _IsDebuggerPresent then // actual syscall
+    include(_F0, fIsDebuggerPresent);
+  if (not (fIsDebuggerPresent in _F0)) and
+     (IsATTY(StdOut) = 1) and
+     GetEnv('TERM', term) and
+     IdemPChars(term, ['XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']) then
+    include(_F0, fStdOutIsTTY);
 end;
 
 function IsDebuggerPresent: boolean;
 begin
-  if not __IsDebuggerTested then
+  if not (fIsDebuggerTested in _F0) then
     TestOnceDebuggerTty;
-  result := __IsDebuggerPresent;
+  result := fIsDebuggerPresent in _F0;
 end;
 
 {$ifdef OSDARWIN}
@@ -3654,20 +3651,20 @@ begin
   {$endif OSLINUX}
   begin
     dev := 0;
-    if not __NoURandom then
+    if not (fNoURandom in _F0) then
       // /dev/urandom non blocking on Linux, but may block at boot time on BSD
       dev := FileOpenSequentialRead('/dev/urandom');
     if dev <= 0 then
     begin
-      __NoURandom := true; // don't try any more (may be a chroot system)
+      include(_F0, fNoURandom); // don't try any more (may be a chroot system)
       if AllowBlocking and // paranoid: any decent POSIX system has /dev/urandom
-         not __NoRandom then
+         not (fNoRandom in _F0) then
       begin
         if rd > 16 then
           rd := 16; // better to get only 128-bit from raw blocking /dev/random
         dev := fpOpen('/dev/random', O_RDONLY);
         if dev <= 0 then
-          __NoRandom := true; // not worth trying any more
+          include(_F0, fNoRandom); // not worth trying any more
       end;
     end;
     if dev > 0 then // we can read some bytes from /dev/urandom or /dev/random
@@ -3817,7 +3814,7 @@ begin
   if p = nil then // e.g. Darwin has no /etc/mtab :(
     exit;
   {$ifdef OSLINUXANDROID}
-  if not __ProcFileSystemsTested then
+  if not (fProcFileSystemsTested in _F0) then
     LoadProcFileSystems; // read once from /proc/filesystems
   {$endif OSLINUXANDROID}
   n := 0;
@@ -3985,20 +3982,17 @@ end;
 
 {$endif CPUARM}
 
-var
-  StubMemoryExecXorWrite: boolean = false; // W and X are exclusive on some OS
-
 function StubMemoryAlloc: pointer;
 begin
   result := MAP_FAILED;
-  if not StubMemoryExecXorWrite then
+  if not (fStubMemoryExecXorWrite in _F1) then // W and X are exclusive on some OS
     result := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
   if result = MAP_FAILED then
   begin
     // i.e. on OpenBSD or OSX aarch64, we can not have W and X protection
     result := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
     if result <> MAP_FAILED then
-      StubMemoryExecXorWrite := true;
+      include(_F1, fStubMemoryExecXorWrite);
   end;
   if result = MAP_FAILED then
     result := nil;
@@ -4014,7 +4008,7 @@ var
   aligned, pagesize: PtrUInt;
   flags: cardinal;
 begin
-  if not StubMemoryExecXorWrite then
+  if not (fStubMemoryExecXorWrite in _F1) then
     // nothing to be done on this platform
     exit;
   // toggle execution permission of memory to be able to write into memory
@@ -4034,7 +4028,6 @@ end;
 // Linux/POSIX signal interception
 
 var
-  SynDaemonIntercepted: boolean;
   SynDaemonInterceptLog: TSynLogProc;
 
 procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
@@ -4079,11 +4072,11 @@ var
   sa: SigactionRec;
 begin
   // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
-  if SynDaemonIntercepted then
+  if fSynDaemonIntercepted in _F1 then
     exit;
   GlobalLock;
   try
-    if SynDaemonIntercepted then
+    if fSynDaemonIntercepted in _F1 then
       exit;
     SynDaemonInterceptLog := onlog;
     FillCharFast(sa, SizeOf(sa), 0);
@@ -4093,14 +4086,11 @@ begin
     fpSigaction(SIGTERM, @sa, nil);
     fpSigaction(SIGINT,  @sa, nil);
     fpSigaction(SIGABRT, @sa, nil);
-    SynDaemonIntercepted := true; // flag set AFTER interception
+    include(_F1, fSynDaemonIntercepted); // set AFTER interception
   finally
     GlobalUnLock;
   end;
 end;
-
-var
-  SigPipeDisabled: boolean; // process-wide thread-safe flag
 
 // TO INVESTIGATE: we may use per-thread signal masking instead
 // http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
@@ -4113,16 +4103,16 @@ procedure SigPipeIntercept;
 var
   sa: SigactionRec;
 begin
-  if SigPipeDisabled then
+  if fSigPipeDisabled in _F1 then
     exit; // quickly return if already done
   GlobalLock;
   try
-    if SigPipeDisabled then
+    if fSigPipeDisabled in _F1 then
       exit;
     FillCharFast(sa, SizeOf(sa), 0);
     sa.sa_handler := @DoNothing;
     fpSigaction(SIGPIPE, @sa, nil);
-    SigPipeDisabled := true; // flag set AFTER disabling it
+    include(_F1, fSigPipeDisabled); // set AFTER disabling it
   finally
     GlobalUnLock;
   end;
@@ -5098,10 +5088,12 @@ begin
   TimeZoneLocalBias := -GetLocalTimeOffset;
   _Fill256FromOs    := @__Fill256FromOs;
   {$ifdef HASGETRANDOM}
-  __LinuxGetRandomFailed := KernelRevision < $031100; // since Kernel 3.17
+  if KernelRevision < $031100 then // since Kernel 3.17
+    include(_F0, fLinuxGetRandomFailed);
   {$endif HASGETRANDOM}
   {$ifdef HASEVENTFD}
-  __LinuxEventFdFailed := KernelRevision < $02061b; // since Kernel 2.6.27
+  if KernelRevision < $02061b then // since Kernel 2.6.27
+    include(_F0, fLinuxEventFdFailed);
   {$endif HASEVENTFD}
   // for inlined RTL calls (avoid one level of redirection)
   {$ifndef NODIRECTTHREADMANAGER}
@@ -5115,8 +5107,9 @@ begin
   OSVersionText := Join([ToTextU(OSVersion32), ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
-  mach_timenanosecond := (mach_timeinfo.Numer = 1) and
-                         (mach_timeinfo.Denom = 1);
+  if (mach_timeinfo.Numer = 1) and
+     (mach_timeinfo.Denom = 1) then
+    include(_F1, fMachTimeNanoSec);
   PInt64Array(@uts)[0] := mach_absolute_time;
   PInt64Array(@uts)[1] := PInt64(@mach_timecoeff)^;
   crcblock(@StartupEntropy, @uts); // nanoseconds timestamp + coeff
