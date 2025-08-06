@@ -192,7 +192,7 @@ type
     // - you should not use this, but rather call OrmMapExternal()
     // - OrmProps.ExternalDatabase will map the associated TSqlDBConnectionProperties
     // - OrmProps.ExternalTableName will retrieve the real full table name,
-    // e.g. including any databas<e schema prefix
+    // e.g. including any database schema prefix
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); override;
     /// delete a row, calling the external engine with SQL
     // - made public since a TRestStorage instance may be created

@@ -10896,8 +10896,8 @@ var
   x: PX509;
   xa: PX509DynArray;
   pk: PEVP_PKEY;
-  ca: Pstack_st_X509;
   c: PX509;
+  ca: Pstack_st_X509;
 begin
   // setup the peer verification patterns
   if Context.IgnoreCertificateErrors then
@@ -10946,15 +10946,11 @@ begin
     try
       Check('SetupCtx Certificate0',
         SSL_CTX_use_certificate(fCtx, xa[0]));
-      // SSL_CTX_use_certificate:
-      // On success the reference counter of the x is incremented
       for i := 1 to high(xa) do
       begin
         Check('SetupCtx Chain',
           SSL_CTX_add_extra_chain_cert(fCtx, xa[i]));
-        // SSL_CTX_add_extra_chain_cert:
-        // An application should not free the x509 object
-        xa[i] := nil;
+        xa[i] := nil; // fCtx owns it now - no inc(refcnt)
       end;
     finally
       PX509DynArrayFree(xa);
@@ -10969,7 +10965,7 @@ begin
           for i := 0 to ca^.Count - 1 do
           begin
             c := ca^.Items[i];
-            X509_up_ref(c);
+            X509_up_ref(c); // no inc(refcnt) in fCtx
             SSL_CTX_add_extra_chain_cert(fCtx, c);
           end;
         Check('SetupCtx PrivateKey',
