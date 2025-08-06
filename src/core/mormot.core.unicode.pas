@@ -2225,6 +2225,9 @@ function CamelCase(const text: RawUtf8): RawUtf8; overload;
 // - just like CamelCase() but with the first letter forced in lowercase
 function LowerCamelCase(const text: RawUtf8): RawUtf8; overload;
 
+/// convert a string with the first letter forced in lowercase
+function UriCase(const text: RawUtf8): RawUtf8;
+
 type
   /// character categories e.g. for ASCII-7 identifier parsing
   TCharKind = (
@@ -9250,6 +9253,13 @@ begin
       LowerCaseSelf(result)
     else
       PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
+end;
+
+function UriCase(const text: RawUtf8): RawUtf8;
+begin
+  FastSetString(result, pointer(text), length(text));
+  if result <> '' then
+    PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
 end;
 
 type // SnakeCase() state machine
