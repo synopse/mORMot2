@@ -4633,7 +4633,7 @@ var
   t: TSynInvokeableVariantType;
 begin
   t := DocVariantType.FindSynVariantType(TVarData(value).VType);
-  if t = nil then // fallback to JSON serialization
+  if t = nil then // fallback to JSON serialization (seldom called)
     result := VariantHashAsText(Seed, value, Max, CaseInsensitive, Hasher)
   else
     result := t.IntHash(Seed, TVarData(value), Max, CaseInsensitive, Hasher);

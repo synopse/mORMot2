@@ -255,6 +255,8 @@ Implements SOLID Process via Interface types
 - `TInterfacedObjectFake` with JITted Methods Execution
 - `TInterfaceMethodExecute` for Method Execution from JSON
 - `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
+- Code/Documentation Generation Logic Extraction from RTTI
+- Documentation Extraction from Source Code Comments
 
 ### mormot.core.test
 

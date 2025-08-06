@@ -14,6 +14,8 @@ unit mormot.core.interfaces;
     - TInterfacedObjectFake with JITted Methods Execution
     - TInterfaceMethodExecute for Method Execution from JSON
     - SetWeak and SetWeakZero Weak Interface Reference
+    - Code/Documentation Generation Logic Extraction from RTTI
+    - Documentation Extraction from Source Code Comments
 
   *****************************************************************************
 }
@@ -34,6 +36,7 @@ uses
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.variants,
   mormot.core.data,
   mormot.core.json,
@@ -2493,6 +2496,200 @@ procedure SetWeak(aInterfaceField: PInterface; const aValue: IInterface);
 // - thread-safe implementation, using per-class locked lists
 procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PInterface;
   const aValue: IInterface);
+
+
+{ ************ Code/Documentation Generation Logic Extraction from RTTI }
+
+type
+  /// types recognized and handled for code/documentation generation
+  TWrapperType = (
+    wUnknown,
+    wBoolean,
+    wEnum,
+    wSet,
+    wByte,
+    wWord,
+    wInteger,
+    wCardinal,
+    wInt64,
+    wQWord,
+    wID,
+    wReference,
+    wTimeLog,
+    wModTime,
+    wCreateTime,
+    wCurrency,
+    wSingle,
+    wDouble,
+    wDateTime,
+    wRawUtf8,
+    wString,
+    wRawJson,
+    wBlob,
+    wGuid,
+    wCustomAnswer,
+    wRecord,
+    wArray,
+    wVariant,
+    wObject,
+    wORM, // was wSQLRecord
+    wInterface,
+    wRecordVersion);
+
+  /// supported languages typesets
+  TWrapperLanguage = (
+    lngDelphi,
+    lngPascal,
+    lngCS,
+    lngJava,
+    lngTypeScript,
+    lngSwagger);
+
+  EWrapperContext = class(ESynException);
+
+  // used internally to extract info from RTTI - inherited in mormot.soa.codegen
+  TWrapperContext = class
+  protected
+    fORM, fSOA, fRecords, fEnumerates, fSets, fArrays: TDocVariantData;
+    fUnits, fDescriptions: TDocVariantData;
+    fSourcePath: TFileNameDynArray;
+    fNestedId: integer;     // for unique nested type names if no RTTI
+    function CustomType(rtti: TRttiCustom): TWrapperType; virtual;
+    function ContextFromRtti(typ: TWrapperType; rtti: TRttiCustom = nil;
+      typName: RawUtf8 = ''; const parentName: RawUtf8 = ''): variant;
+    function ContextNestedProperties(rtti: TRttiCustom;
+      const parentName: RawUtf8): variant;
+    function ContextOneProperty(const prop: TRttiCustomProp;
+      const parentName: RawUtf8): variant;
+    function ContextFromMethods(int: TInterfaceFactory): variant;
+    function ContextFromMethod(const meth: TInterfaceMethod): variant;
+    function ContextArgsFromMethod(const meth: TInterfaceMethod): variant;
+    procedure AddUnit(const aUnitName: ShortString; addAsProperty: PVariant);
+  public
+    constructor Create(const aSourcePath, aDescriptions: TFileName);
+    constructor CreateFromUsedInterfaces(
+      const aSourcePath, aDescriptions: TFileName);
+    function Context: variant; virtual;
+  end;
+
+const
+  // Swagger numerical types
+  SWI32 = '{"type":"integer"}';
+  SWI64 = '{"type":"integer","format":"int64"}';
+  SWD32 = '{"type":"number","format":"float"}';
+  SWD64 = '{"type":"number","format":"double"}';
+
+  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUtf8 = (
+    // lngDelphi
+    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
+    'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'Currency', 'Single', 'Double', 'TDateTime', 'RawUtf8', 'String', 'RawJson',
+    'RawBlob', 'TGuid', 'TServiceCustomAnswer', '', '', 'Variant', '', '', '',
+    'TRecordVersion'),
+   // lngPascal
+    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
+    'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'Currency', 'Single', 'Double', 'TDateTime', 'String', 'String', 'Variant',
+    'RawBlob', 'TGuid', 'THttpBody', '', '', 'Variant', '', 'TID', '', 'TRecordVersion'),
+   // lngCS
+    ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint', 'long', 'ulong',
+    'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'decimal',
+    'single', 'double', 'double', 'string', 'string', 'dynamic', 'byte[]',
+    'Guid', 'byte[]', '', '', 'dynamic', '', 'TID', '', 'TRecordVersion'),
+   // lngJava
+    ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'long', 'TID',
+    'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
+    'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
+    'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'),
+   // lngTypeScript
+    ('', 'boolean', '', '', 'number', 'number', 'number', 'number', 'number',
+    'number', 'mORMot.TID', 'mORMot.TRecordReference', 'mORMot.TTimeLog',
+    'mORMot.TModTime', 'mORMot.TCreateTime', 'number', 'number', 'number',
+    'mORMot.TDateTime', 'string', 'string', 'any', 'mORMot.RawBlob',
+    'mORMot.TGuid', 'mORMot.THttpBody', '', '', 'any', '', '', '',
+    'mORMot.TRecordVersion'),
+   // lngSwagger
+    ('', '{"type":"boolean"}', '', '', SWI32, SWI32, SWI32, SWI32, SWI64, SWI64,
+    SWI64, SWI64, SWI64, SWI64, SWI64, SWD64, SWD32, SWD64,
+    '{"type":"string","format":"date-time"}', // wDateTime
+    '{"type":"string"}', '{"type":"string"}', '{"type":"object"}', //FIXME! //wRawJson
+    '{"type":"string","format":"binary"}', '{"type":"string"}', //wBlob,wGuid
+    '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
+    '', SWI64, '', '' //wObject, wORM, wInterface, wRecordVersion
+    ));
+
+  TYPES_SOA: array[TInterfaceMethodValueType] of TWrapperType = (
+    wUnknown,  // imvNone
+    wUnknown,  // imvSelf
+    wBoolean,  // imvBoolean
+    wEnum,     // imvEnum
+    wSet,      // imvSet
+    wUnknown,  // imvInteger
+    wUnknown,  // imvCardinal
+    wUnknown,  // imvInt64
+    wDouble,   // imvDouble
+    wDateTime, // imvDateTime
+    wCurrency, // imvCurrency
+    wRawUtf8,  // imvRawUtf8
+    wString,   // imvString
+    wRawUtf8,  // imvRawByteString
+    wRawUtf8,  // imvWideString
+    wRecord,   // imvRecord
+    wVariant,  // imvVariant
+    wObject,   // imvObject
+    wRawJson,  // imvRawJson
+    wArray,    // imvDynArray
+    wUnknown); // imvInterface
+    // integers are wUnknown to force best type recognition
+
+/// compute the SOA information, ready to be exported as JSON
+// - will publish the ORM and SOA properties
+// - to be used e.g. for client code generation via Mustache templates
+function ContextFromUsedInterfaces(const aSourcePath: TFileName = '';
+  const aDescriptions: TFileName = ''): variant;
+
+/// compute the information of an interface method, ready to be exported as JSON
+// - to be used e.g. for the implementation of the MVC controller via interfaces
+// - no description text will be included - use ContextFromModel() if needed
+function ContextFromMethod(const method: TInterfaceMethod): variant;
+
+/// compute the information of an interface, ready to be exported as JSON
+// - to be used e.g. for the implementation of the MVC controller via interfaces
+// - no description text will be included - use ContextFromModel() if needed
+function ContextFromMethods(int: TInterfaceFactory): variant;
+
+
+{ ************ Documentation Extraction from Source Code Comments }
+
+/// rough parsing of the supplied .pas unit, adding the /// commentaries
+// into a TDocVariant content
+procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
+  const SourceFileName: TFileName);
+
+/// rough parsing of the supplied .pas unit, adding the /// commentaries
+// into a compressed binary resource
+// - could be then compiled into a WRAPPER_RESOURCENAME resource, e.g. via the
+// following .rc source file, assuming ResourceDestFileName='wrapper.desc':
+// $ WrappersDescription 10 "wrapper.desc"
+// - you may specify a .json file name, for debugging/validation purposes
+// - calls internally FillDescriptionFromSource
+// - returns the TDocVariant JSON object corresponding to all decriptions
+function ResourceDescriptionFromSource(const ResourceDestFileName: TFileName;
+  const SourceFileNames: array of TFileName;
+  const JsonDestFileName: TFileName = ''): variant;
+
+var
+  /// how FillDescriptionFromSource() handles trailing '-' in parsed comments
+  // - default is [*], as expected by buggy AsciiDoc format
+  DESCRIPTION_ITEM_PREFIX: RawUtf8 = ' [*]';
+
+const
+  /// internal Resource name used for bounded description
+  // - as generated by FillDescriptionFromSource/ResourceDescriptionFromSource
+  // - would be used e.g. by TWrapperContext.Create to inject the available
+  // text description from any matching resource
+  WRAPPER_RESOURCENAME = 'WrappersDescription';
+
 
 
 implementation
@@ -7618,6 +7815,799 @@ begin
     v.AddInArrayForced(c, aObjectInterfaceField);
   end;
   PPointer(aObjectInterfaceField)^ := pointer(aValue);
+end;
+
+
+{ ************ Code/Documentation Generation Logic Extraction from RTTI }
+
+const
+  SIZETODELPHI: array[0..8] of string[7] = (
+    'integer', 'byte', 'word', 'integer',
+    'integer', 'int64', 'int64', 'int64', 'int64');
+
+  TYPES_SIZE: array[0..8] of TWrapperType = (
+    wInteger, wByte, wWord, wInteger,
+    wInteger, wInt64, wInt64, wInt64, wInt64);
+
+  TYPES_SIMPLE: array[TRttiParserType] of TWrapperType = (
+    wUnknown,  //  ptNone
+    wArray,    //  ptArray
+    wBoolean,  //  ptBoolean
+    wByte,     //  ptByte
+    wCardinal, //  ptCardinal
+    wCurrency, //  ptCurrency
+    wDouble,   //  ptDouble
+    wDouble,   //  ptExtended
+    wInt64,    //  ptInt64
+    wInteger,  //  ptInteger
+    wQWord,    //  ptQWord
+    wBlob,     //  ptRawByteString
+    wRawJson,  //  ptRawJson
+    wRawUtf8,  //  ptRawUtf8
+    wRecord,   //  ptRecord
+    wSingle,   //  ptSingle
+    wString,   //  ptString
+    wRawUtf8,  //  ptSynUnicode
+    wDateTime, //  ptDateTime
+    wDateTime, //  ptDateTimeMS
+    wGuid,     //  ptGuid
+    wBlob,     //  ptHash128
+    wBlob,     //  ptHash256
+    wBlob,     //  ptHash512
+    wID,       //  ptOrm
+    wTimeLog,  //  ptTimeLog
+    wRawUtf8,  //  ptUnicodeString
+    wInt64,    //  ptUnixTime
+    wInt64,    //  ptUnixMSTime
+    wVariant,  //  ptVariant
+    wRawUtf8,  //  ptWideString
+    wRawUtf8,  //  ptWinAnsi
+    wWord,     //  ptWord
+    wEnum,     //  ptEnumeration
+    wSet,      //  ptSet
+    wUnknown,  //  ptClass
+    wArray,    //  ptDynArray - with specific code below
+    wUnknown,  //  ptInterface
+    wRawUtf8,  //  ptPUtf8Char
+    wUnknown); //  ptCustom
+
+{ TWrapperContext }
+
+constructor TWrapperContext.Create(const aSourcePath, aDescriptions: TFileName);
+var
+  desc: RawByteString;
+  source: TFileName;
+  src: PChar;
+  n: PtrInt;
+begin
+  TDocVariant.NewFast([
+    @fORM,
+    @fRecords,
+    @fEnumerates,
+    @fSets,
+    @fArrays,
+    @fUnits,
+    @fDescriptions]);
+  if aDescriptions <> '' then
+    desc := StringFromFile(aDescriptions);
+  if {%H-}desc = '' then
+    ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
+  if desc <> '' then
+    fDescriptions.InitJsonInPlace(pointer(desc), JSON_FAST);
+  if aSourcePath <> '' then
+  begin
+    src := pointer(aSourcePath);
+    n := 0;
+    repeat
+      source := GetNextItemString(src, ';');
+      if (source <> '') and
+         DirectoryExists(source) then
+      begin
+        SetLength(fSourcePath, n + 1);
+        fSourcePath[n] := IncludeTrailingPathDelimiter(source);
+        inc(n);
+      end;
+    until src = nil;
+  end;
+end;
+
+function TWrapperContext.CustomType(rtti: TRttiCustom): TWrapperType;
+begin
+  result := wUnknown;
+end;
+
+function TWrapperContext.ContextNestedProperties(rtti: TRttiCustom;
+  const parentName: RawUtf8): variant;
+var
+  i: PtrInt;
+begin
+  SetVariantNull(result);
+  case rtti.Parser of
+    ptRecord,
+    ptClass:
+      ; // use rtti.Props
+    ptArray,
+    ptDynArray:  // use array item (may be nil for static unmanaged)
+      rtti := rtti.ArrayRtti;
+  else
+    exit; // no nested properties
+  end;
+  TDocVariant.NewFast(result);
+  if rtti <> nil then
+    for i := 0 to rtti.Props.Count - 1 do
+      TDocVariantData(result).AddItem(
+        ContextOneProperty(rtti.Props.List[i], parentName));
+end;
+
+function ClassToWrapperType(c: TClass): TWrapperType;
+begin
+  if ClassInheritsFromName(c, 'TOrm') then
+    result := wORM
+  else
+    result := wObject;
+end;
+
+function TWrapperContext.ContextFromRtti(typ: TWrapperType; rtti: TRttiCustom;
+  typName: RawUtf8; const parentName: RawUtf8): variant;
+var
+  typAsName: PShortString;
+
+  function VarName(lng: TWrapperLanguage): variant;
+  begin
+    { TODO: refactor TID and Int64 for JavaScript? (integers truncated to 53-bit) }
+    if TYPES_LANG[lng, typ] <> '' then
+      RawUtf8ToVariant(TYPES_LANG[lng, typ], result)
+    else if typName = '' then
+      SetVariantNull(result)
+    else
+      RawUtf8ToVariant(typName, result);
+  end;
+
+  function VarSwagger: variant;
+  begin
+    if TYPES_LANG[lngSwagger, typ] <> '' then
+      result := _JsonFast(TYPES_LANG[lngSwagger, typ])
+    else if typName = '' then
+      SetVariantNull(result)
+    else
+      RawUtf8ToVariant(typName, result);
+  end;
+
+  procedure RegisterType(var list: TDocVariantData);
+  var
+    info: variant;
+  begin
+    if list.SearchItemByProp('name', typName, false) >= 0 then
+      // already registered
+      exit;
+    if rtti = nil then
+      EWrapperContext.RaiseUtf8('%.RegisterType(%): no RTTI', [typAsName^, typName]);
+    case typ of
+      wEnum,
+      wSet:
+        // include (untrimed) identifier: values[] may be trimmed at mustache level
+        info := _JsonFastFmt('{name:?,values:%}',
+          [rtti.Cache.EnumInfo^.GetEnumNameAllAsJsonArray(false)], [typName]);
+      wRecord:
+        if rtti.Props.Count <> 0 then
+          info := _ObjFast([
+            'name',      typName,
+            'camelName', LowerCamelCase(typName),
+            'snakeName', SnakeCase(typName),
+            'fields',    ContextNestedProperties(rtti, parentName)]);
+      wArray:
+        begin
+          if rtti.ObjArrayClass <> nil then
+          begin
+            info := ContextFromRtti(
+              ClassToWrapperType(rtti.ObjArrayClass), rtti.ArrayRtti);
+            _Safe(info)^.AddValue('isObjArray', true);
+          end
+          else
+          begin
+            if rtti.ArrayRtti = nil then
+              if rtti.Cache.ItemSize > high(TYPES_SIZE) then
+                // to avoid buffer overflow
+                info := ContextFromRtti(wRawUtf8)
+              else
+                info := ContextFromRtti(TYPES_SIZE[rtti.Cache.ItemSize])
+            else if rcfBinary in rtti.ArrayRtti.Flags then
+              info := ContextFromRtti(wRawUtf8)
+            else
+              info := ContextFromRtti(wUnknown, rtti.ArrayRtti);
+          end;
+          // can be used to create static array (dynamic arrays have ItemCount=0)
+          //  array{{#staticMaxIndex}}[0..{{staticMaxIndex}}]{{/staticMaxIndex}} of
+          _ObjAddProps([
+            'name',      typName,
+            'camelName', LowerCamelCase(typName),
+            'snakeName', SnakeCase(typName)], info);
+          if rtti.Cache.ItemCount > 0 then
+            _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount-1);
+        end;
+    end;
+    if not VarIsEmptyOrNull(info) then
+      // null e.g. for a record without custom text definition
+      list.AddItem(info);
+  end;
+
+begin
+  // retrieve typ from RTTI if needed
+  if typ = wUnknown then
+  begin
+    if rtti = nil then
+      EWrapperContext.RaiseUtf8(
+        '%.ContextFromRtti: No RTTI nor typ for [%]', [self, typName]);
+    typ := CustomType(rtti);
+    if typ = wUnknown then
+    begin
+      typ := TYPES_SIMPLE[rtti.Parser];
+      if typ = wUnknown then
+        case rtti.Kind of
+          {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
+          rkRecord:
+            typ := wRecord;
+          rkInterface:
+            typ := wInterface;
+        else
+          EWrapperContext.RaiseUtf8(
+            '%.ContextFromRtti: Not enough RTTI for [%]', [self, rtti.Name]);
+        end;
+    end;
+  end;
+  if (typ = wRecord) and
+     PropNameEquals(typName, 'TGUID') then
+    typ := wGuid
+  else if (typ = wRecord) and
+          PropNameEquals(typName, 'TServiceCustomAnswer') then
+    typ := wCustomAnswer;
+  // set typName/typAsName
+  if typName = '' then
+    if rtti <> nil then
+      if rcfWithoutRtti in rtti.Flags then // undefined nested fields
+        Make(['T', parentName, InterlockedIncrement(fNestedId)], typName)
+      else
+        typName := rtti.Name
+    else
+      typName := TYPES_LANG[lngDelphi, typ];
+  typAsName := GetEnumName(TypeInfo(TWrapperType), ord(typ));
+  // generate basic context as TDocVariant fields
+  result := _ObjFast([
+    'typeWrapper', typAsName^,
+    'typeSource',  typName,
+    'typeDelphi',  VarName(lngDelphi),
+    'typePascal',  VarName(lngPascal),
+    'typeCS',      VarName(lngCS),
+    'typeJava',    VarName(lngJava),
+    'typeTS',      VarName(lngTypeScript),
+    'typeSwagger', VarSwagger]);
+  if self = nil then
+    // no need to have full info if called e.g. from MVC
+    exit;
+  // add special marshalling information
+  if rtti <> nil then
+    case rtti.Kind of
+      rkClass:
+        AddUnit(rtti.Info^.RttiClass^.UnitName^, @result);
+    end;
+  case typ of
+    wBoolean,
+    wByte,
+    wWord,
+    wInteger,
+    wCardinal,
+    wInt64,
+    wQWord,
+    wID,
+    wReference,
+    wTimeLog,
+    wModTime,
+    wCreateTime,
+    wSingle,
+    wDouble,
+    wRawUtf8,
+    wString:
+      ; // simple types have no special marshalling
+    wDateTime:
+      _ObjAddProps(['isDateTime',  true,
+                    'toVariant',   'DateTimeToIso8601',
+                    'fromVariant', 'Iso8601ToDateTime'], result);
+    wRecordVersion:
+      _ObjAddProp('isRecordVersion', true, result);
+    wCurrency:
+      _ObjAddProp('isCurrency', true, result);
+    wVariant:
+      _ObjAddProp('isVariant', true, result);
+    wRawJson:
+      _ObjAddProp('isJson', true, result);
+    wEnum:
+      begin
+        _ObjAddProps(['isEnum',      true,
+                      'toVariant',   'ord',
+                      'fromVariant', 'Variant2' + typName], result);
+        if self <> nil then
+          RegisterType(fEnumerates);
+      end;
+    wSet:
+      begin
+        _ObjAddProps(['isSet',      true,
+                      'toVariant',
+                        SIZETODELPHI[rtti.Cache.EnumInfo.SizeInStorageAsSet],
+                      'fromVariant', typName], result);
+        if self <> nil then
+          RegisterType(fSets);
+      end;
+    wGuid:
+      _ObjAddProps(['toVariant',   'GuidToVariant',
+                    'fromVariant', 'VariantToGuid'], result);
+    wCustomAnswer:
+      _ObjAddProps(['toVariant',   'HttpBodyToVariant',
+                    'fromVariant', 'VariantToHttpBody'], result);
+    wRecord:
+      begin
+        _ObjAddProp('isRecord', true, result);
+        if rtti <> nil then
+        begin
+          _ObjAddProps(['toVariant',   typName + '2Variant',
+                        'fromVariant', 'Variant2' + typName], result);
+          if self <> nil then
+            RegisterType(fRecords);
+        end;
+      end;
+    wOrm:
+      _ObjAddProps(['isSQLRecord',  true,
+                    'isOrm', true], result);
+    wObject:
+      begin
+        _ObjAddProp('isObject', true, result);
+        if rtti <> nil then
+          _ObjAddProps(['toVariant',   'ObjectToVariant',
+                        'fromVariant', typName + '.CreateFromVariant'], result);
+      end;
+    wArray:
+      begin
+        _ObjAddProp('isArray', true, result);
+        if rtti <> nil then
+        begin
+          _ObjAddProps(['toVariant',   typName + '2Variant',
+                        'fromVariant', 'Variant2' + typName], result);
+          if self <> nil then
+            RegisterType(fArrays);
+        end;
+      end;
+    wBlob:
+      _ObjAddProps(['isBlob',      true,
+                    'toVariant',   'BlobToVariant',
+                    'fromVariant', 'VariantToBlob'], result);
+    wInterface:
+      _ObjAddProp('isInterface', true, result);
+  else
+    EWrapperContext.RaiseUtf8(
+      'Unexpected type % (%) for [%]', [typAsName^, ord(typ), typName]);
+  end;
+end;
+
+constructor TWrapperContext.CreateFromUsedInterfaces(
+  const aSourcePath, aDescriptions: TFileName);
+var
+  interfaces: TSynObjectListLightLocked;
+  services: TDocVariantData;
+  i: PtrInt;
+begin
+  Create(aSourcePath, aDescriptions);
+  interfaces := TInterfaceFactory.GetUsedInterfaces;
+  if interfaces = nil then
+    exit;
+  {%H-}services.InitFast;
+  interfaces.Safe.ReadLock;
+  try
+    for i := 0 to interfaces.Count - 1 do
+      services.AddItem(_ObjFast([
+        'interfaceName',
+          TInterfaceFactory(interfaces.List[i]).InterfaceRtti.Name,
+        'methods', ContextFromMethods(interfaces.List[i])]));
+  finally
+    interfaces.Safe.ReadUnLock;
+  end;
+  fSOA.InitObject(['enabled',  true,
+                   'services', variant(services)], JSON_FAST);
+end;
+
+function TWrapperContext.ContextArgsFromMethod(
+  const meth: TInterfaceMethod): variant;
+const
+  DIRTODELPHI: array[TInterfaceMethodValueDirection] of string[7] = (
+    'const', 'var', 'out', 'result');
+  DIRTOSMS: array[TInterfaceMethodValueDirection] of string[7] = (
+    // no OUT in DWS/SMS -> VAR instead
+    'const', 'var', 'var', 'result');
+var
+  a, r: PtrInt;
+  ma: PInterfaceMethodArgument;
+  arg: variant;
+  n: RawUtf8;
+begin
+  TDocVariant.NewFast(result);
+  r := 0;
+  ma := pointer(meth.Args);
+  for a := 1 to high(meth.Args) do
+  begin
+    inc(ma);
+    arg := ContextFromRtti(TYPES_SOA[ma^.ValueType], ma^.ArgRtti);
+    n := meth.ArgsName[a];
+    _ObjAddProps([
+      'argName',   n,
+      'lowerName', LowerCase(n),
+      'camelName', LowerCamelCase(n),
+      'snakeName', SnakeCase(n),
+      'argType',   ma^.ArgTypeName^,
+      'dir',       ord(ma^.ValueDirection),
+      'dirName',   DIRTODELPHI[ma^.ValueDirection],
+      'dirNoOut',  DIRTOSMS[ma^.ValueDirection]], arg);
+    if ma^.ValueDirection in [imdConst, imdVar] then
+      _ObjAddProp('dirInput', true, arg);
+    if ma^.ValueDirection <> imdConst then
+      _ObjAddProp('dirOutput', true, arg);
+    if ma^.ValueDirection = imdResult then
+      _ObjAddProp('dirResult', true, arg);
+    if a < meth.ArgsNotResultLast then
+      _ObjAddPropU('commaArg', '; ', arg);
+    if a = high(meth.Args) then
+      _ObjAddProp('isArgLast', true, arg);
+    if (ma^.ValueDirection in [imdConst, imdVar]) and
+       (a < meth.ArgsInLast) then
+      _ObjAddPropU('commaInSingle', ',', arg);
+    if (ma^.ValueDirection in [imdVar, imdOut]) and
+       (a < meth.ArgsOutNotResultLast) then
+      _ObjAddPropU('commaOut', '; ', arg);
+    if ma^.ValueDirection <> imdConst then
+    begin
+      _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
+      inc(r);
+      if a < meth.ArgsOutLast then
+        _ObjAddPropU('commaOutResult', '; ', arg);
+    end;
+    TDocVariantData(result).AddItem(arg);
+  end;
+end;
+
+function TWrapperContext.ContextFromMethod(
+  const meth: TInterfaceMethod): variant;
+const
+  VERB_DELPHI: array[boolean] of string[9] = (
+    'procedure', 'function');
+var
+  d: variant;
+begin
+  result := _ObjFast([
+    'methodName',      meth.Uri,
+    'camelName',       LowerCamelCase(meth.Uri),
+    'snakeName',       SnakeCase(meth.Uri),
+    'methodIndex',     meth.ExecutionMethodIndex,
+    'verb',            VERB_DELPHI[meth.ArgsResultIndex >= 0],
+    'args',            ContextArgsFromMethod(meth),
+    'argsOutputCount', meth.ArgsOutputValuesCount]);
+  if self <> nil then
+  begin
+    // can be called as TWraperContext(nil).ContextFromMethod
+    d := fDescriptions.GetValueOrNull(meth.InterfaceDotMethodName);
+    if VarIsEmptyOrNull(d) then
+      RawUtf8ToVariant(meth.InterfaceDotMethodName, d);
+    _ObjAddProp('methodDescription', d, result);
+  end;
+  if meth.ArgsInFirst >= 0 then
+    _ObjAddProp('hasInParams', true, result);
+  if meth.ArgsOutFirst >= 0 then
+  begin
+    _ObjAddProp('hasOutParams', true, result);
+    if meth.ArgsOutNotResultLast > 0 then
+      _ObjAddProp('hasOutNotResultParams', true, result);
+  end;
+  if imfResultIsServiceCustomAnswer in meth.Flags then
+    _ObjAddProp('resultIsServiceCustomAnswer', true, result);
+  if imfIsInherited in meth.Flags then
+    _ObjAddProp('isInherited', true, result);
+end;
+
+procedure TWrapperContext.AddUnit(
+  const aUnitName: ShortString; addAsProperty: PVariant);
+var
+  unitName: variant;
+  i: PtrInt;
+begin
+  if (aUnitName = '') or
+     IdemPropName(aUnitName, 'mORMot') then
+    exit;
+  RawUtf8ToVariant(@aUnitName[1], ord(aUnitName[0]), unitName);
+  if addAsProperty <> nil then
+    _ObjAddProp('unitName', unitName, addAsProperty^);
+  if (self = nil) or
+     (fUnits.SearchItemByValue(unitName) >= 0) then
+    // already registered
+    exit;
+  fUnits.AddItem(unitName);
+  if fSourcePath = nil then
+    exit;
+  for i := 0 to high(fSourcePath) do
+    FillDescriptionFromSource(fDescriptions,
+      FormatString('%%.pas', [fSourcePath[i], aUnitName]));
+end;
+
+function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
+var
+  m: PtrInt;
+  methods: TDocVariantData; // circumvent FPC -O2 memory leak
+begin
+  AddUnit(int.InterfaceRtti.Info^.InterfaceUnitName^, nil);
+  {%H-}methods.InitFast;
+  for m := 0 to int.MethodsCount - 1 do
+    methods.AddItem(ContextFromMethod(int.Methods[m]));
+  result := variant(methods);
+end;
+
+function TWrapperContext.ContextOneProperty(const prop: TRttiCustomProp;
+  const parentName: RawUtf8): variant;
+var
+  l, level: PtrInt;
+  fullName: RawUtf8;
+  isSimple: variant;
+begin
+  level := 0;
+  if parentName = '' then
+    fullName := prop.Name
+  else
+  begin
+    Join([parentName, '.', prop.Name], fullName);
+    for l := 1 to length(fullName) do
+      if fullName[l] = '.' then
+        inc(level);
+  end;
+  result := ContextFromRtti(wUnknown, prop.Value, '', fullName);
+  _ObjAddProps([
+    'propName',     prop.Name,
+    'camelName',    LowerCamelCase(prop.Name),
+    'snakeName',    SnakeCase(prop.Name),
+    'fullPropName', fullName], result);
+  if level > 0 then
+    _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
+  SetVariantNull(isSimple);
+  if rcfWithoutRtti in prop.Value.Flags then
+    case prop.Value.Parser of
+      ptRecord:
+        _ObjAddProps([
+          'nestedRecord', _ObjFast([
+            'nestedRecord', null,
+            'fields',  ContextNestedProperties(prop.Value, fullName)])], result);
+      ptArray,
+      ptDynArray:
+        _ObjAddProps([
+          'nestedRecordArray', _ObjFast([
+            'nestedRecordArray', null,
+            'fields', ContextNestedProperties(prop.Value, fullName)])], result);
+    else
+      if not TDocVariantData(result).Exists('toVariant') then
+        isSimple := true;
+    end
+  else if not TDocVariantData(result).Exists('toVariant') then
+    isSimple := true;
+  _ObjAddProp('isSimple', isSimple, result);
+end;
+
+function TWrapperContext.Context: variant;
+
+  procedure AddDescription(var list: TDocVariantData;
+    const propName, descriptionName: RawUtf8);
+  var
+    i: PtrInt;
+    propValue: RawUtf8;
+  begin
+    if (list.Kind <> dvArray) or
+       (fDescriptions.Count = 0) then
+      exit;
+    for i := 0 to list.Count - 1 do
+      with _Safe(list.Values[i])^ do
+        if GetAsRawUtf8(propName, propValue) then
+          AddValue(descriptionName, fDescriptions.GetValueOrNull(propValue));
+  end;
+
+begin
+  // compute the Model information as JSON
+  result := _ObjFast([
+    'time',          NowToString,
+    'year',          CurrentYear,
+    'mORMotVersion', SYNOPSE_FRAMEWORK_VERSION,
+    'Executable',    VarStringOrNull(StringToUtf8(Executable.Version.DetailedOrVoid)),
+    'exeInfo',       Executable.Version.VersionInfo,
+    'exeName',       Executable.ProgramName]);
+  if fORM.Count > 0 then
+    _ObjAddProps([
+      'hasorm', true,
+      'orm',  variant(fORM)], result);
+  if fSOA.Count > 0 then
+    _ObjAddProp('soa', variant(fSOA), result);
+  if fRecords.Count > 0 then
+  begin
+    AddDescription(fRecords, 'name', 'recordDescription');
+    _ObjAddProps(['records',     variant(fRecords),
+                  'withRecords', true,
+                  'withHelpers', true], result);
+  end;
+  if fEnumerates.Count > 0 then
+  begin
+    AddDescription(fEnumerates, 'name', 'enumDescription');
+    _ObjAddProps(['enumerates',     variant(fEnumerates),
+                  'withEnumerates', true,
+                  'withHelpers',    true], result);
+  end;
+  if fSets.Count > 0 then
+  begin
+    AddDescription(fSets, 'name', 'setDescription');
+    _ObjAddProps(['sets',        variant(fSets),
+                  'withsets',    true,
+                  'withHelpers', true], result);
+  end;
+  if fArrays.Count > 0 then
+  begin
+    _ObjAddProps(['arrays',      variant(fArrays),
+                  'withArrays',  true,
+                  'withHelpers', true], result);
+  end;
+  if fUnits.Count > 0 then
+    _ObjAddProp('units', fUnits, result);
+end;
+
+
+function ContextFromUsedInterfaces(
+  const aSourcePath, aDescriptions: TFileName): variant;
+begin
+  with TWrapperContext.CreateFromUsedInterfaces(aSourcePath, aDescriptions) do
+  try
+    result := Context;
+  finally
+    Free;
+  end;
+end;
+
+function ContextFromMethod(const method: TInterfaceMethod): variant;
+begin
+  result := TWrapperContext(nil).ContextFromMethod(method);
+end;
+
+function ContextFromMethods(int: TInterfaceFactory): variant;
+begin
+  result := TWrapperContext(nil).ContextFromMethods(int);
+end;
+
+
+{ ************ Documentation Extraction from Source Code Comments }
+
+function ResourceDescriptionFromSource(const ResourceDestFileName: TFileName;
+  const SourceFileNames: array of TFileName;
+  const JsonDestFileName: TFileName): variant;
+var
+  desc: TDocVariantData absolute result;
+  i: PtrInt;
+  json: RawUtf8;
+begin
+  VarClear(result);
+  desc.InitFast;
+  for i := 0 to high(SourceFileNames) do
+    FillDescriptionFromSource(desc, SourceFileNames[i]);
+  json := desc.ToJson;
+  if JsonDestFileName <> '' then
+    JsonReformatToFile(json, JsonDestFileName);
+  FileFromString(AlgoSynLZ.Compress(json), ResourceDestFileName);
+end;
+
+procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
+  const SourceFileName: TFileName);
+var
+  desc, typeName, interfaceName: RawUtf8;
+  P: PUtf8Char;
+  withinCode: boolean;
+
+  procedure IgnoreIfDef;
+  begin
+    // ignore any $ifdef ... $endif lines (should be at the line begining)
+    repeat
+      P := GotoNextLine(P);
+      if P = nil then
+        exit;
+    until IdemPChar(GotoNextNotSpace(P), '{$ENDIF');
+    P := GotoNextLine(P);
+  end;
+
+begin
+  P := pointer(StringFromFile(SourceFileName));
+  if P = nil then
+    exit;
+  withinCode := false;
+  repeat
+    // rough parsing of the .pas unit file to extract /// description
+    P := GotoNextNotSpace(P);
+    if IdemPChar(P, 'IMPLEMENTATION') then
+      break; // only the "interface" section is parsed
+    if IdemPChar(P, '{$IFDEF ') then
+    begin
+      IgnoreIfDef;
+      P := GotoNextNotSpace(P);
+    end;
+    if (P[0] = '/') and
+       (P[1] = '/') and
+       (P[2] = '/') then
+    begin
+      desc := GetNextLine(GotoNextNotSpace(P + 3), P);
+      if desc = '' then
+        break;
+      desc[1] := UpCase(desc[1]);
+      repeat
+        if P = nil then
+          exit;
+        P := GotoNextNotSpace(P);
+        if IdemPChar(P, '{$IFDEF ') then
+          IgnoreIfDef
+        else if (P[0] = '/') and
+                (P[1] = '/') then
+        begin
+          if P[2] = '/' then
+            inc(P, 3)
+          else
+            inc(P, 2);
+          P := GotoNextNotSpace(P);
+          if P^ in ['$', '!'] then
+          begin
+            if not withinCode then
+            begin
+              withinCode := true;
+              desc := desc + #13#10#13#10'----'; // AsciiDoc source code block
+            end;
+            desc := desc + #13#10;
+            inc(P);
+          end
+          else if P^ = '-' then
+          begin
+            desc := desc + #13#10#13#10'-' + DESCRIPTION_ITEM_PREFIX;
+            inc(P);
+          end
+          else
+            desc := desc + ' ';
+          desc := desc + GetNextLine(P, P);
+        end
+        else
+          break;
+      until false;
+      if withinCode then
+      begin
+        // code block should end the description
+        desc := desc + #13#10'----';
+        withinCode := false;
+      end;
+      GetNextItem(P, ' ', typeName);
+      if P = nil then
+        exit;
+      if typeName <> '' then
+        if P^ = '=' then
+        begin
+          // simple type (record, array, enumeration, set)
+          if Descriptions.GetValueIndex(typeName) < 0 then
+          begin
+            Descriptions.AddValue(typeName, RawUtf8ToVariant(desc));
+            if typeName[1] = 'I' then
+              interfaceName := Copy(typeName, 2, 128)
+            else
+              interfaceName := '';
+          end;
+        end
+        else if {%H-}interfaceName <> '' then
+          if PropNameEquals(typeName, 'function') or
+             PropNameEquals(typeName, 'procedure') then
+            if GetNextFieldProp(P, typeName) then
+              Descriptions.AddValue(interfaceName + '.' + typeName,
+                RawUtf8ToVariant(desc));
+    end
+    else
+      P := GotoNextLine(P);
+  until (P = nil);
 end;
 
 
