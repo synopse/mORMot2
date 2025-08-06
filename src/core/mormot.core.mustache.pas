@@ -604,7 +604,7 @@ type
 
 const
   /// Mustache-friendly JSON Serialization Options
-  // - as used e.g. from mormot.rest.mvc Data Context from Cookies
+  // - as used e.g. from mormot.core.mvc Data Context from Cookies
   TEXTWRITEROPTIONS_MUSTACHE =
      [twoForceJsonExtended,
       twoEnumSetsAsBooleanInRecord,

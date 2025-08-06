@@ -29,6 +29,7 @@ uses
   mormot.core.test,
   mormot.core.threads,
   mormot.core.interfaces,
+  mormot.core.mvc,
   mormot.crypt.jwt,
   mormot.net.client,
   mormot.net.server,

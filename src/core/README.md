@@ -258,6 +258,16 @@ Implements SOLID Process via Interface types
 - Code/Documentation Generation Logic Extraction from RTTI
 - Documentation Extraction from Source Code Comments
 
+### mormot.core.mvc
+
+Model-View-Controller (MVC) pattern and Mustache
+- Web Views Implementation using Mustache
+- ViewModel/Controller Sessions using Cookies
+- Web Renderer Returning Mustache Views or Json
+- Application ViewModel/Controller using Interfaces
+
+Abstract MVC logic over Mustache, as used by `mormot.rest.mvc.pas` and `mormot.net.mvc.pas`.
+
 ### mormot.core.test
 
 Testing functions shared by all framework units

@@ -2655,6 +2655,7 @@ function ContextFromMethod(const method: TInterfaceMethod): variant;
 
 /// compute the information of an interface, ready to be exported as JSON
 // - to be used e.g. for the implementation of the MVC controller via interfaces
+// by TMvcApplication.GetMvcInfo from mormot.core.mvc
 // - no description text will be included - use ContextFromModel() if needed
 function ContextFromMethods(int: TInterfaceFactory): variant;
 
