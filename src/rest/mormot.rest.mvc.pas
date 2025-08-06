@@ -556,9 +556,5 @@ begin
 end;
 
 
-initialization
-  assert(SizeOf(TMvcAction) = SizeOf(TServiceCustomAnswer));
-  TSynLog.Family.ExceptionIgnore.Add(EMvcApplication); // redirection, not error
-
 end.
 
