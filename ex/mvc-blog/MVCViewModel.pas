@@ -28,6 +28,7 @@ uses
   mormot.core.test,
   mormot.core.rtti,
   mormot.core.threads,
+  mormot.core.mvc,
   mormot.db.core,
   mormot.rest.core,
   mormot.rest.server,
@@ -89,7 +90,7 @@ type
   end;
 
   /// implements the ViewModel/Controller of this BLOG web site
-  TBlogApplication = class(TMvcApplication, IBlogApplication)
+  TBlogApplication = class(TMvcApplicationRest, IBlogApplication)
   protected
     fBlogMainInfo: variant;
     fTagsLookup: TOrmTags;
