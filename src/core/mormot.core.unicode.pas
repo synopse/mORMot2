@@ -5127,7 +5127,7 @@ var
 begin
   l := StrLenW(source);
   while (l <> 0) and
-        (source[l - 1] > ' ') do
+        (source[l - 1] <= ' ') do
     dec(l);
   RawUnicodeToUtf8(source, l, result);
 end;
