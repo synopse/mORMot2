@@ -1371,9 +1371,9 @@ begin
           ctx := c.NewServerContext(tmpCert, tmpKey);
           if ctx <> nil then
             // we can safely replace the main files
-            if DeleteFile(c.fSignedCert) and
-               DeleteFile(c.fPrivKey) and
-               RenameFile(tmpCert, c.fSignedCert) and
+            DeleteFile(c.fSignedCert);
+            DeleteFile(c.fPrivKey);
+            if RenameFile(tmpCert, c.fSignedCert) and
                RenameFile(tmpKey, c.fPrivKey) then
             begin
               // GetServerContext should now use this new context
@@ -1682,3 +1682,4 @@ implementation
 
 
 end.
+
