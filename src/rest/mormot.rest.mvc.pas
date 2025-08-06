@@ -97,7 +97,7 @@ type
     constructor Create(aApplication: TMvcApplicationRest;
       const aTemplatesFolder: TFileName = ''; aRestServer: TRestServer = nil;
       const aSubURI: RawUtf8 = ''; aViews: TMvcViewsAbstract = nil;
-      aPublishOptions: TMvcPublishOptions=
+      aPublishOptions: TMvcPublishOptions =
         [low(TMvcPublishOption) .. high(TMvcPublishOption)];
       aAllowedMethods: TUriMethods = [mGET, mPOST]); reintroduce;
   end;
@@ -118,7 +118,7 @@ var
 // ! {{#TMyOrm MyRecordID}} ... {{/TMyOrm MyRecordID}}
 // - use Bootstap CSS by default, but you can supply your aHtmlTableStyle
 // - returns self so that may be called in a fluent interface
-procedure RegisterExpressionHelpersForTables(aMustache: TMvcViewsMustache;
+procedure RegisterExpressionHelpersForTables(aViews: TMvcViewsAbstract;
   aRest: TRest; const aTables: array of TOrmClass;
   aHtmlTableStyle: TExpressionHtmlTableStyleClass = nil); overload;
 
@@ -129,7 +129,7 @@ procedure RegisterExpressionHelpersForTables(aMustache: TMvcViewsMustache;
 // then use the following Mustache tag
 // ! {{#TMyOrm MyRecordID}} ... {{/TMyOrm MyRecordID}}
 // - returns self so that may be called in a fluent interface
-procedure RegisterExpressionHelpersForTables(aMustache: TMvcViewsMustache;
+procedure RegisterExpressionHelpersForTables(aViews: TMvcViewsAbstract;
   aRest: TRest; aHtmlTableStyle: TExpressionHtmlTableStyleClass = nil); overload;
 
 
@@ -191,9 +191,8 @@ begin
       fRestServer.ServiceMethodRegister(
         STATIC_URI, RunOnRestServerRoot, bypass, fAllowedMethods);
   end;
-  if (registerOrmTableAsExpressions in fPublishOptions) and
-     aViews.InheritsFrom(TMvcViewsMustache) then
-    RegisterExpressionHelpersForTables(TMvcViewsMustache(aViews), fRestServer);
+  if registerOrmTableAsExpressions in fPublishOptions then
+    RegisterExpressionHelpersForTables(aViews, fRestServer);
   aApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
   // no remote ORM access via REST, and route method_name as method/name too
   fRestServer.Options := fRestServer.Options +
@@ -531,28 +530,32 @@ end;
 type
   _TMvcViewsMustache = class(TMvcViewsMustache); // to access fViewHelpers var
 
-procedure RegisterExpressionHelpersForTables(aMustache: TMvcViewsMustache;
+procedure RegisterExpressionHelpersForTables(aViews: TMvcViewsAbstract;
   aRest: TRest; const aTables: array of TOrmClass;
   aHtmlTableStyle: TExpressionHtmlTableStyleClass);
 var
   t: PtrInt;
 begin
-  if aRest <> nil then
+  if (aRest <> nil) and
+     (aViews <> nil) and
+     aViews.InheritsFrom(TMvcViewsMustache) then
     for t := 0 to high(aTables) do
       if aRest.Model.GetTableIndex(aTables[t]) >= 0 then
         TExpressionHelperForTable.Create(aRest, aTables[t],
-          _TMvcViewsMustache(aMustache).fViewHelpers, aHtmlTableStyle);
+          _TMvcViewsMustache(aViews).fViewHelpers, aHtmlTableStyle);
 end;
 
-procedure RegisterExpressionHelpersForTables(aMustache: TMvcViewsMustache;
+procedure RegisterExpressionHelpersForTables(aViews: TMvcViewsAbstract;
   aRest: TRest; aHtmlTableStyle: TExpressionHtmlTableStyleClass);
 var
   t: PtrInt;
 begin
-  if aRest <> nil then
+  if (aRest <> nil) and
+     (aViews <> nil) and
+     aViews.InheritsFrom(TMvcViewsMustache) then
     for t := 0 to aRest.Model.TablesMax do
       TExpressionHelperForTable.Create(aRest, aRest.Model.Tables[t],
-        _TMvcViewsMustache(aMustache).fViewHelpers, aHtmlTableStyle);
+        _TMvcViewsMustache(aViews).fViewHelpers, aHtmlTableStyle);
 end;
 
 
