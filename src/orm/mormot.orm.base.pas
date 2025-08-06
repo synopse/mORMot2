@@ -4789,6 +4789,8 @@ begin
   IntValue := GetInteger(pointer(Value));
   if Value = '' then
     result := ''
+  else if fOrmFieldType = oftBoolean then // FPC has weird text RTTI for booleans
+    result := Ansi7ToString(BOOL_UTF8[IntValue <> 0])
   else
     result := EnumType^.GetCaption(IntValue);
 end;
