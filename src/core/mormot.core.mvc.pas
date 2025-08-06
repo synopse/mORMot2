@@ -59,9 +59,9 @@ type
   // - those error are internal fatal errors of the server side process
   EMvcException = class(ESynException);
 
-  /// record type to define commands e.g. to redirect to another URI
+  /// record type to define MVC commands e.g. to redirect to another URI
   // - do NOT access those record property directly, but rather use
-  // TMvcApplication.GotoView/GotoError/GotoDefault methods, e.g.
+  // TMvcApplication.GotoView/GotoError/GotoDefault class methods, e.g.
   // !  function TBlogApplication.Logout: TMvcAction;
   // !  begin
   // !    CurrentSession.Finalize;
@@ -70,17 +70,19 @@ type
   // - this record type should match exactly TServiceCustomAnswer layout,
   // so that TServiceMethod.InternalExecute() would handle it directly
   TMvcAction = record
-    /// the method name to be executed
+    /// the method name to be executed - match TServiceCustomAnswer.Header field
     RedirectToMethodName: RawUtf8;
     /// may contain a JSON object which will be used to specify parameters
-    // to the specified method
+    // to the specified method - match TServiceCustomAnswer.Content field
     RedirectToMethodParameters: RawUtf8;
-    /// which HTTP Status code should be returned
+    /// HTTP Status code to be returned - match TServiceCustomAnswer.Status field
     // - if RedirectMethodName is set, will return 307 HTTP_TEMPORARYREDIRECT
     // by default, but you can set here the expected HTTP Status code, e.g.
     // 201 HTTP_CREATED or 404 HTTP_NOTFOUND
     ReturnedStatus: cardinal;
   end;
+  /// the MVC-redirection way of accessing a PServiceCustomAnswer record pointer
+  PMvcAction = ^TMvcAction;
 
   /// TMvcView.Flags rendering context
   // - viewHasGenerationTimeTag is set if TMvcViewsAbstract.ViewGenerationTimeTag
@@ -438,6 +440,7 @@ type
     procedure CommandError(const ErrorName: RawUtf8; const ErrorValue: variant;
       ErrorCode: integer); virtual;
     function StatusCodeToErrorText(Code: integer): RawUtf8; virtual;
+    function ExecuteJsonOverride(var Action: TMvcAction): boolean; virtual;
   public
     /// main execution method of the rendering process
     // - Input should have been set with the incoming execution context
@@ -490,7 +493,7 @@ type
     fOutput: TServiceCustomAnswer;
     fInputCookieStart: PUtf8Char;
     fOutputFlags: TMvcViewFlags;
-    fCacheDisabled: boolean;
+    fCacheDisabled, fExecuteJsonOverride: boolean;
     fInputCookieLen: integer;
     fInputHeaders: PUtf8Char;
     fInputContext: PVariant;
@@ -500,6 +503,7 @@ type
     function GetCookieFromHeaders(const CookieName: RawUtf8;
       out Value: PUtf8Char): integer; virtual;
     procedure SetCookieToHeaders(const CookieName, CookieValue: RawUtf8); virtual;
+    function ExecuteJsonOverride(var Action: TMvcAction): boolean; override;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMvcViewsMustache instance
@@ -677,7 +681,26 @@ type
 
   /// Exception class triggerred by mORMot MVC/MVVM applications externally
   // - those error are external errors which should be notified to the client
-  // - can be used to change the default view, e.g. on application error
+  // - can be used to change the default view, e.g. on application error:
+  // ! procedure TMyMvcApplication.Default(var Scope: variant);
+  // ! var data: variant;
+  // ! begin
+  // !   if not GetDataFromScope(Scope, data) then
+  // !     EMvcApplication.GotoError(HTTP_NOTFOUND);
+  // !   RenderData(Scope, data); // is never executed after GotoError()
+  // ! end;
+  // - since exceptions have a performance overhead, this method should be
+  // exceptional and you shouild rather use TMvcApplication.Redirect*() methods:
+  // ! procedure TMyMvcApplication.Default(var Scope: variant);
+  // ! var data: variant;
+  // ! begin
+  // !   if not GetDataFromScope(Scope, data) then
+  // !   begin
+  // !     RedirectError(HTTP_NOTFOUND);
+  // !     exit; // mandatory to avoid RenderData() execution
+  // !   end;
+  // !   RenderData(Scope, data);
+  // ! end;
   EMvcApplication = class(ESynException)
   protected
     fAction: TMvcAction;
@@ -696,15 +719,19 @@ type
     // - HTTP_TEMPORARYREDIRECT will change the URI, but HTTP_SUCCESS won't
     constructor CreateDefault(aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
     /// just a wrapper around raise CreateGotoView()
+    // - consider instead the faster TMvcApplication.RedirectView() method
     class procedure GotoView(const aMethod: RawUtf8;
       const aParametersNameValuePairs: array of const;
       aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
     /// just a wrapper around raise CreateGotoError()
+    // - consider instead the faster TMvcApplication.RedirectError() method
     class procedure GotoError(const aErrorMessage: string;
       aErrorCode: integer = HTTP_BADREQUEST); overload;
     /// just a wrapper around raise CreateGotoError()
+    // - consider instead the faster TMvcApplication.RedirectError() method
     class procedure GotoError(aHtmlErrorCode: integer); overload;
     /// just a wrapper around raise CreateDefault()
+    // - consider instead the faster TMvcApplication.RedirectDefault() method
     class procedure Default(aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
   end;
 
@@ -754,31 +781,68 @@ type
     fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure SetInterface(aInterface: PRttiInfo);
     procedure SetSession(Value: TMvcSessionAbstract);
-    /// to be called when the data model did change to force content re-creation
-    // - this default implementation will call fMainRunner.NotifyContentChanged
-    procedure FlushAnyCache; virtual;
+    procedure DoRedirect(var action: TMvcAction); virtual;
     /// generic IMvcApplication.Error method implementation
     procedure Error(var Msg: RawUtf8; var Scope: variant); virtual;
     /// every view will have this data context transmitted as "main":...
     procedure GetViewInfo(MethodIndex: integer; out info: variant); virtual;
     /// compute the data context e.g. for the /mvc-info URI
     procedure GetMvcInfo(out info: variant); virtual;
-    /// wrappers to redirect to IMvcApplication standard methods
+  public
+    /// finalize the application
+    // - and release any associated CurrentSession, Views, and fMainRunner
+    destructor Destroy; override;
+
+    /// to be called when the data model did change to force content re-creation
+    // - this default implementation will call fMainRunner.NotifyContentChanged
+    procedure FlushAnyCache; virtual;
+    /// wrapper to redirect a TMvcAction method result into another view
     // - if status is HTTP_TEMPORARYREDIRECT, it will change the URI
     // whereas HTTP_SUCCESS would just render the view for the current URI
     class procedure GotoView(var Action: TMvcAction; const MethodName: RawUtf8;
       const ParametersNameValuePairs: array of const;
       Status: cardinal = HTTP_TEMPORARYREDIRECT);
+    /// wrapper to redirect a TMvcAction method result into the 'Error' view
     class procedure GotoError(var Action: TMvcAction; const Msg: string;
       ErrorCode: integer = HTTP_BADREQUEST); overload;
+    /// wrapper to redirect a TMvcAction method result into the 'Error' view
     class procedure GotoError(var Action: TMvcAction;
       ErrorCode: integer); overload;
+    /// wrapper to redirect a TMvcAction method result into the 'Default' view
     class procedure GotoDefault(var Action: TMvcAction;
       Status: cardinal = HTTP_TEMPORARYREDIRECT);
-  public
-    /// finalize the application
-    // - and release any associated CurrentSession, Views, and fMainRunner
-    destructor Destroy; override;
+    /// wrapper to redirect to the 'Error' view with a HTTP status code
+    // - is simimlar to EMvcApplication.GotoError() with less overhead, but
+    // needing an explicit "exit" to stop the execution flow of the method
+    // ! procedure TMyMvcApplication.Default(var Scope: variant);
+    // ! var data: variant;
+    // ! begin
+    // !   if not GetDataFromScope(Scope, data) then
+    // !   begin
+    // !     RedirectError(HTTP_NOTFOUND);
+    // !     exit; // mandatory to avoid RenderData() execution
+    // !   end;
+    // !   RenderData(Scope, data);
+    // ! end;
+    procedure RedirectError(ErrorCode: integer); overload;
+    /// wrapper to redirect to the 'Error' view with an error message
+    // - is simimlar to EMvcApplication.GotoError() with less overhead, but
+    // needing an explicit "exit" to stop the execution flow of the method
+    procedure RedirectError(const Msg: string;
+      ErrorCode: integer = HTTP_BADREQUEST); overload;
+    /// wrapper to redirect to the 'Default' view
+    // - is simimlar to EMvcApplication.Default() with less overhead, but
+    // needing an explicit "exit" to stop the execution flow of the method
+    procedure RedirectDefault(Status: cardinal = HTTP_TEMPORARYREDIRECT);
+    /// wrapper to override the current view into another
+    // - is simimlar to EMvcApplication.GotoView() with less overhead, but
+    // needing an explicit "exit" to stop the execution flow of the method
+    // - as called by other RedirectError/RedirectDefault methods
+    // - if status is HTTP_TEMPORARYREDIRECT, it will change the URI
+    // whereas HTTP_SUCCESS would just render the view for the current URI
+    procedure RedirectView(const MethodName: RawUtf8;
+      const ParametersNameValuePairs: array of const;
+      Status: cardinal = HTTP_TEMPORARYREDIRECT);
 
     /// read-only access to the associated factory for IMvcApplication interface
     property Factory: TInterfaceFactory
@@ -1447,22 +1511,26 @@ end;
 { TMvcSessionWithRenderer }
 
 threadvar
-  _CurrentRenderer: TMvcRendererAbstract; // per-thread context for http server
-
-function CurrentRenderer: TMvcRendererReturningData;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  result := _CurrentRenderer as TMvcRendererReturningData;
-end;
+  _CurrentRenderer: TMvcRendererReturningData; // per-thread context
 
 function TMvcSessionWithRenderer.GetCookie(out Value: PUtf8Char): integer;
+var
+  ctxt: TMvcRendererReturningData;
 begin
-  result := CurrentRenderer.GetCookieFromHeaders(fContext.CookieName, Value);
+  ctxt := _CurrentRenderer;
+  if ctxt = nil then
+    result := 0 // avoid GPF on virtual method execution
+  else
+    result := ctxt.GetCookieFromHeaders(fContext.CookieName, Value);
 end;
 
 procedure TMvcSessionWithRenderer.SetCookie(const Value: RawUtf8);
+var
+  ctxt: TMvcRendererReturningData;
 begin
-  CurrentRenderer.SetCookieToHeaders(fContext.CookieName, Value);
+  ctxt := _CurrentRenderer;
+  if ctxt <> nil then // avoid GPF on virtual method execution
+    ctxt.SetCookieToHeaders(fContext.CookieName, Value);
 end;
 
 
@@ -1506,6 +1574,11 @@ begin
   _ObjAddPropU('originalErrorContext', details, context);
 end;
 
+function TMvcRendererAbstract.ExecuteJsonOverride(var Action: TMvcAction): boolean;
+begin
+  result := false; // do nothing by default
+end;
+
 procedure TMvcRendererAbstract.ExecuteCommand;
 var
   exec: TInterfaceMethodExecuteCached;
@@ -1536,11 +1609,14 @@ begin
             EMvcException.RaiseUtf8('%.CommandRunMethod(I%): %',
               [self, fMethod^.InterfaceDotMethodName, err])
           end;
-          if isAction then
+          if ExecuteJsonOverride(action) then
+            // TMvcRendererReturningData override via _CurrentRenderer
+            isAction := true
+          else if isAction then
           begin
             // was a TMvcAction mapped in a TServiceCustomAnswer record
             action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
-            action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
+            action.ReturnedStatus       := exec.ServiceCustomAnswerStatus;
             exec.WR.SetText(action.RedirectToMethodParameters);
           end
           else
@@ -1904,13 +1980,25 @@ begin
   fOutputCookieValue := CookieValue;
 end;
 
+function TMvcRendererReturningData.ExecuteJsonOverride(var Action: TMvcAction): boolean;
+begin
+  result := fExecuteJsonOverride; // as set by TMvcApplication.DoRedirect()
+  if not result then
+    exit;
+  Action := PMvcAction(@fOutput)^; // same fields
+  fExecuteJsonOverride := false;   // override once
+end;
+
 procedure TMvcRendererReturningData.ExecuteCommand;
+var
+  ctxt: PPointer; // _CurrentRenderer threadvar resolved once
 
   procedure ExecuteFromCache(const value: RawUtf8);
   begin
     fOutput.Status := HTTP_SUCCESS;
     Split(value, #0, fOutput.Header, RawUtf8(fOutput.Content));
     fOutputFlags := fRun.fViews.RenderFlags(fMethodIndex);
+    ctxt^ := nil;
   end;
 
   function RetrievedFrom(const key: RawUtf8;
@@ -1958,6 +2046,9 @@ begin
     // compute JSON data context as expected by inherited ExecuteCommand
     DocVariantType.ToJson(PVarData(dv), fInput);
   end;
+  // setup the associated threadvar reference - needed for CurrentSession.Exists
+  ctxt := @_CurrentRenderer;
+  ctxt^ := self;
   // return any cached content
   c := nil;
   if (cardinal(fMethodIndex) < cardinal(Length(fRun.fMethodCache))) and
@@ -2024,6 +2115,7 @@ doInput:  if fInput = '' then
   end;
   // compute the context and render the page using the corresponding View
   inherited ExecuteCommand;
+  ctxt^ := nil;
   // update cache for this method
   if c = nil then
     exit;
@@ -2177,8 +2269,8 @@ begin
   // do nothing: just pass input error Msg and data Scope to the view
 end;
 
-class procedure TMvcApplication.GotoView(var Action: TMvcAction; const
-  MethodName: RawUtf8; const ParametersNameValuePairs: array of const;
+class procedure TMvcApplication.GotoView(var Action: TMvcAction;
+  const MethodName: RawUtf8; const ParametersNameValuePairs: array of const;
   status: cardinal);
 begin
   Action.ReturnedStatus := status;
@@ -2209,6 +2301,57 @@ begin
   Action.ReturnedStatus := Status;
   Action.RedirectToMethodName := 'Default';
   Action.RedirectToMethodParameters := '';
+end;
+
+procedure TMvcApplication.RedirectError(ErrorCode: integer);
+var
+  action: TMvcAction;
+begin
+  GotoError(action, ErrorCode);
+  DoRedirect(action);
+end;
+
+procedure TMvcApplication.RedirectError(const Msg: string; ErrorCode: integer);
+var
+  action: TMvcAction;
+begin
+  GotoError(action, Msg, ErrorCode);
+  DoRedirect(action);
+end;
+
+procedure TMvcApplication.RedirectDefault(Status: cardinal);
+var
+  action: TMvcAction;
+begin
+  GotoDefault(action, Status);
+  DoRedirect(action);
+end;
+
+procedure TMvcApplication.RedirectView(const MethodName: RawUtf8;
+  const ParametersNameValuePairs: array of const; Status: cardinal);
+var
+  action: TMvcAction;
+begin
+  GotoView(action, MethodName, ParametersNameValuePairs, Status);
+  DoRedirect(action);
+end;
+
+procedure TMvcApplication.DoRedirect(var action: TMvcAction);
+var
+  ctxt: TMvcRendererReturningData;
+begin
+  // retrieve TMvcRendererReturningData.ExecuteCommand context
+  ctxt := _CurrentRenderer;
+  if ctxt = nil then
+    EMvcException.RaiseUtf8('Unexpected %.Redirect(%) outside a method',
+      [self, action.RedirectToMethodName]);
+  if ctxt.fExecuteJsonOverride then
+    EMvcException.RaiseUtf8('Unexpected %.Redirect(%) twice (existing=%)',
+      [self, action.RedirectToMethodName,
+       PMvcAction(@ctxt.fOutput)^.RedirectToMethodName]);
+  // set context as expected by TMvcRendererReturningData.ExecuteJsonOverride
+  ctxt.fExecuteJsonOverride := true;
+  ctxt.fOutput := PServiceCustomAnswer(@action)^;
 end;
 
 procedure TMvcApplication.SetSession(Value: TMvcSessionAbstract);
