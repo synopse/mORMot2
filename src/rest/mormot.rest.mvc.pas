@@ -148,25 +148,20 @@ var
   m: PtrInt;
   bypass: boolean;
 begin
-  if aApplication = nil then
-    EMvcException.RaiseUtf8('%.Create(aApplication=nil)', [self]);
-  if defaultErrorContext in aPublishOptions then
-    include(aApplication.fRenderOptions, roDefaultErrorContext);
+  // initialize the TMvcRunWithViews parent context
+  inherited Create(aApplication, aTemplatesFolder, aViews,
+    aPublishOptions, aAllowedMethods);
+  // setup the associated TRestServer
   if aRestServer = nil then
     fRestServer := aApplication.RestModel as TRestServer
   else
     fRestServer := aRestServer;
-  if aViews = nil then
-    aViews := TMvcViewsMustache.Create(aApplication.fFactory.InterfaceRtti.Info,
-      aTemplatesFolder, fRestServer.LogClass, '.html')
-  else
-    aViews.LogClass := fRestServer.LogClass;
-  inherited Create(aApplication, aViews);
-  fPublishOptions := aPublishOptions; // all options by default
-  fAllowedMethods := aAllowedMethods; // [mGET, mPOST] by default
-  if mGET in fAllowedMethods then
-    // mHEAD added for proper browsers pre-requests
-    fAllowedMethods := fAllowedMethods + [mHEAD];
+  if registerOrmTableAsExpressions in fPublishOptions then
+    RegisterExpressionHelpersForTables(fViews, fRestServer);
+  // no remote ORM access via REST, and route method_name as method/name too
+  fRestServer.Options := fRestServer.Options +
+    [rsoNoTableURI, rsoNoInternalState, rsoMethodUnderscoreAsSlashUri];
+  // register the URI routes for this TRestServer
   bypass := bypassAuthentication in fPublishOptions;
   if aSubURI <> '' then
     fRestServer.ServiceMethodRegister(
@@ -183,12 +178,8 @@ begin
       fRestServer.ServiceMethodRegister(
         STATIC_URI, RunOnRestServerRoot, bypass, fAllowedMethods);
   end;
-  if registerOrmTableAsExpressions in fPublishOptions then
-    RegisterExpressionHelpersForTables(aViews, fRestServer);
+  // setup the process session via TRestServer cookies
   aApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
-  // no remote ORM access via REST, and route method_name as method/name too
-  fRestServer.Options := fRestServer.Options +
-    [rsoNoTableURI, rsoNoInternalState, rsoMethodUnderscoreAsSlashUri];
 end;
 
 procedure TMvcRunOnRestServer.InternalRunOnRestServer(
@@ -333,6 +324,7 @@ end;
 
 procedure TMvcApplicationRest.Start(aRestModel: TRest; aInterface: PRttiInfo);
 begin
+  fLogClass := aRestModel.LogClass;
   SetInterface(aInterface);
   fRestModel := aRestModel;
 end;

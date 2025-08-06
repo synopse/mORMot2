@@ -591,7 +591,7 @@ type
   // TRestServerUriContext.ReturnFile is called to avoid buffering, which may
   // be a better solution on http.sys or if NGINX's X-Accel-Redirect header is set
   // - registerOrmTableAsExpressions will register Mustache Expression Helpers
-  // for every TOrm table of the Server data model
+  // for every TOrm table of the Server data model (only for TMvcRunOnRestServer)
   // - by default, TRestServer authentication would be by-passed for all
   // MVC routes, unless bypassAuthentication option is undefined
   // - allowJsonFormat will recognize ####/json URIs and return the Mustache
@@ -632,7 +632,8 @@ type
   public
     /// link this runner class to a specified MVC application
     constructor Create(aApplication: TMvcApplication;
-      aViews: TMvcViewsAbstract = nil); reintroduce;
+      const aTemplatesFolder: TFileName; aViews: TMvcViewsAbstract;
+      aPublishOptions: TMvcPublishOptions; aAllowedMethods: TUriMethods); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
     /// method called to flush the caching mechanism for all MVC commands
@@ -1666,6 +1667,8 @@ end;
 
 constructor TMvcRun.Create(aApplication: TMvcApplication);
 begin
+  if aApplication = nil then
+    EMvcException.RaiseUtf8('%.Create(aApplication=nil)', [self]);
   fApplication := aApplication;
   fApplication.SetSession(nil);
 end;
@@ -1693,11 +1696,25 @@ end;
 { TMvcRunWithViews }
 
 constructor TMvcRunWithViews.Create(aApplication: TMvcApplication;
-  aViews: TMvcViewsAbstract);
+  const aTemplatesFolder: TFileName; aViews: TMvcViewsAbstract;
+  aPublishOptions: TMvcPublishOptions; aAllowedMethods: TUriMethods);
 begin
   inherited Create(aApplication);
+  fPublishOptions := aPublishOptions; // all options by default
+  if defaultErrorContext in aPublishOptions then
+    include(aApplication.fRenderOptions, roDefaultErrorContext);
+  fAllowedMethods := aAllowedMethods; // [mGET, mPOST] by default
+  if mGET in fAllowedMethods then
+    // mHEAD added for proper browsers pre-requests
+    fAllowedMethods := fAllowedMethods + [mHEAD];
+  // setup the associated mustache views
+  if aViews = nil then
+    aViews := TMvcViewsMustache.Create(fApplication.fFactory.InterfaceRtti.Info,
+      aTemplatesFolder, fApplication.LogClass, '.html');
   fViews := aViews;
+  // setup the per-method processing
   SetLength(fMethodCache, fApplication.fFactory.MethodsCount);
+  // setup the in-memory static cache
   fStaticCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TMvcRunCacheStatics), {caseinsens=}false);
 end;
