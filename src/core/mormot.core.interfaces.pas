@@ -8248,6 +8248,7 @@ begin
       'lowerName', LowerCase(n),
       'camelName', LowerCamelCase(n),
       'snakeName', SnakeCase(n),
+      'uriName',   UriCase(n),
       'argType',   ma^.ArgTypeName^,
       'dir',       ord(ma^.ValueDirection),
       'dirName',   DIRTODELPHI[ma^.ValueDirection],
@@ -8291,6 +8292,7 @@ begin
     'methodName',      meth.Uri,
     'camelName',       LowerCamelCase(meth.Uri),
     'snakeName',       SnakeCase(meth.Uri),
+    'uriName',         UriCase(meth.Uri),
     'methodIndex',     meth.ExecutionMethodIndex,
     'verb',            VERB_DELPHI[meth.ArgsResultIndex >= 0],
     'args',            ContextArgsFromMethod(meth),
@@ -8375,6 +8377,7 @@ begin
     'propName',     prop.Name,
     'camelName',    LowerCamelCase(prop.Name),
     'snakeName',    SnakeCase(prop.Name),
+    'uriName',      UriCase(prop.Name),
     'fullPropName', fullName], result);
   if level > 0 then
     _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
