@@ -742,6 +742,8 @@ type
     fFactoryErrorIndex: integer;
     fRenderOptions: set of (roDefaultErrorContext);
     fSession: TMvcSessionAbstract;
+    fMethodUri: TRawUtf8DynArray;
+    fLogClass: TSynLogClass;
     fLocker: IAutoLocker;
     // if any TMvcRun instance is store here, will be freed by Destroy
     // but note that a single TMvcApplication logic may handle several TMvcRun
@@ -780,10 +782,13 @@ type
     /// read-only access to the associated factory for IMvcApplication interface
     property Factory: TInterfaceFactory
       read fFactory;
+    /// the URI of each Factory.Methods[]
+    // - e.g. 'start' for IService._Start()
+    property MethodUri: TRawUtf8DynArray
+      read fMethodUri;
     /// read-write access to the associated Session instance
     property CurrentSession: TMvcSessionAbstract
       read fSession write SetSession;
-
     /// this event is called before a page is rendered
     // - you can override the supplied Sender.InputContext^ if needed
     // - note that Sender.Input JSON is not yet computed
@@ -801,6 +806,9 @@ type
     property OnSessionFinalized: TOnMvcSession
       read fOnSessionFinalized write fOnSessionFinalized;
 
+    /// the associated TSynLog class
+    property LogClass: TSynLogClass
+      read fLogClass write fLogClass;
     /// global mutex which may be used to protect ViewModel/Controller code
     // - you may call Locker.ProtectMethod in any implementation method to
     // ensure that no other thread would access the same data
@@ -2091,14 +2099,16 @@ end;
 
 procedure TMvcApplication.SetInterface(aInterface: PRttiInfo);
 var
-  m: PtrInt;
+  n: integer;
   met: PInterfaceMethod;
   entry: PInterfaceEntry;
+  uri: PRawUtf8;
 begin
+  fLocker := TAutoLocker.Create;
+  // setup this interface and its methods
   if fFactory <> nil then
     EMvcException.RaiseUtf8('%.SetInterface(%) twice after %',
       [aInterface.RawName, fFactory.InterfaceName]);
-  fLocker := TAutoLocker.Create;
   fFactory := TInterfaceFactory.Get(aInterface);
   fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
   if fFactoryErrorIndex < 0 then
@@ -2109,9 +2119,11 @@ begin
     EMvcException.RaiseUtf8('%.Start: this class should implement %',
       [self, aInterface.RawName]);
   fFactoryEntry := PAnsiChar(self) + entry^.IOffset;
+  n := fFactory.MethodsCount;
+  SetLength(fMethodUri, n);
   met := pointer(fFactory.Methods);
-  for m := 1 to fFactory.MethodsCount do
-  begin
+  uri := pointer(fMethodUri);
+  repeat
     if not MethodHasView(met^) then
       if met^.ArgsOutFirst <> met^.ArgsResultIndex then
         EMvcException.RaiseUtf8(
@@ -2120,8 +2132,15 @@ begin
       else
         // maps TMvcAction in TMvcApplication.RunOnRestServer
         include(met^.Flags, imfResultIsServiceCustomAnswer);
+    uri^ := met^.Uri;
+    if (uri^[1] = '_') and
+       (uri^[2] <> '_') then
+      // e.g. IService._Start() -> /service/start
+      delete(uri^, 1, 1);
+    inc(uri);
     inc(met);
-  end;
+    dec(n);
+  until n = 0;
   FlushAnyCache;
   // (re)prepare some reusable execution context (avoid most memory allocations)
   ObjArrayClear(fExecuteCached);

@@ -147,7 +147,6 @@ constructor TMvcRunOnRestServer.Create(aApplication: TMvcApplicationRest;
 var
   m: PtrInt;
   bypass: boolean;
-  method: RawUtf8;
 begin
   if aApplication = nil then
     EMvcException.RaiseUtf8('%.Create(aApplication=nil)', [self]);
@@ -174,16 +173,9 @@ begin
       aSubURI, RunOnRestServerSub, bypass, fAllowedMethods)
   else
   begin
-    for m := 0 to fApplication.Factory.MethodsCount - 1 do
-    begin
-      method := fApplication.Factory.Methods[m].Uri;
-      if (method[1] = '_') and
-         (method[2] <> '_') then
-        // e.g. IService._Start() -> /service/start
-        delete(method, 1, 1);
+    for m := 0 to high(fApplication.MethodUri) do
       fRestServer.ServiceMethodRegister(
-        method, RunOnRestServerRoot, bypass, fAllowedMethods);
-    end;
+        fApplication.MethodUri[m], RunOnRestServerRoot, bypass, fAllowedMethods);
     if publishMvcInfo in fPublishOptions then
       fRestServer.ServiceMethodRegister(
         MVCINFO_URI, RunOnRestServerRoot, bypass, fAllowedMethods);
