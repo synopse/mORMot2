@@ -3347,9 +3347,11 @@ type
     function DoMap(aCustomOffset: Int64): boolean;
     procedure DoUnMap;
   public
-    /// map the corresponding file handle
+    /// map the corresponding file handle into memory
     // - if aCustomSize and aCustomOffset are specified, the corresponding
-    // map view if created (by default, will map whole file)
+    // map view is created (by default, will map whole file, but it could
+    // be handy to only map a portion of it, e.g. its start for TSynPELoader,
+    // or to keep the pointers in a workable range on CPU32 systems)
     function Map(aFile: THandle; aCustomSize: PtrUInt = 0;
       aCustomOffset: Int64 = 0; aFileOwned: boolean = false;
       aFileSize: Int64 = -1): boolean; overload;
@@ -3359,12 +3361,12 @@ type
     /// set a fixed buffer for the content
     // - emulates memory-mapping over an existing buffer
     procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
-    /// unmap the file
+    /// unmap the file - to be called eventually after any successfull Map()
     procedure UnMap;
     /// retrieve the memory buffer mapped to the file content
     property Buffer: PAnsiChar
       read fBuf;
-    /// retrieve the buffer size
+    /// retrieve the memory mapped buffer size (may be < FileSize)
     property Size: PtrUInt
       read fBufSize;
     /// retrieve the mapped file size
@@ -7920,8 +7922,8 @@ end;
 
 { TMemoryMap }
 
-function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt;
-  aCustomOffset: Int64; aFileOwned: boolean; aFileSize: Int64): boolean;
+function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt; aCustomOffset: Int64;
+  aFileOwned: boolean; aFileSize: Int64; aForceMap: boolean): boolean;
 var
   available: Int64;
 begin
@@ -7937,14 +7939,10 @@ begin
   fFileSize := aFileSize;
   if aFileSize = 0 then
   begin
-    result := true; // handle 0 byte file without error (but no memory map)
+    result := true; // no error on inexistant / void file (but no memory map)
     exit;
   end;
   result := false;
-  if (fFileSize <= 0)
-     {$ifdef CPU32} or (fFileSize > maxInt){$endif} then
-    // maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors on CPU32)
-    exit;
   if aCustomSize = 0 then
     fBufSize := fFileSize
   else
@@ -7952,11 +7950,16 @@ begin
     available := fFileSize - aCustomOffset;
     if available < 0 then
       exit;
-    if aCustomSize > available then
-      fBufSize := available;
-    fBufSize := aCustomSize;
+    if aCustomSize < available then
+      available := aCustomSize; // truncate to what is needed
+    fBufSize := available;
   end;
-  fLoadedNotMapped := fBufSize < 1 shl 20;
+  {$ifdef CPU32}
+  if fBufSize > Int64(MaxInt) then
+    // maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors on CPU32)
+    exit; // use aCustomSize instead
+  {$endif CPU32}
+  fLoadedNotMapped := (fBufSize < 1 shl 20) and not aForceMap;
   if fLoadedNotMapped then
   begin
     // mapping is not worth it for size < 1MB which can be just read at once
