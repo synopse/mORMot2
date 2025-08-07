@@ -1022,7 +1022,10 @@ begin
   // Unloading the previous PE
   UnLoad;
   // map the executable in memory, and parse its header
-  if fMap.Map(FileName) then
+  if fMap.Map(FileName, {forcemap=}true, {maxsize=}500 shl 20) then
+  // search the resource info in the first 500MB: an installer may be larger
+  // so could not be mapped on CPU32 even if its real executable part is
+  // actually in the first initial few KB/MB)
   try
     DOSHeader := pointer(fMap.Buffer);
     if (fMap.Size > SizeOf(DOSHeader^)) and
