@@ -1899,6 +1899,12 @@ type
     // - if Update=TRUE, will set the property, even if it is existing
     function AddValueFromText(const aName, aValue: RawUtf8;
       DoUpdate: boolean = false): integer;
+    /// add a value in this document, directly as string value
+    // - this function expects a UTF-8 text for the value, and won't make any
+    // conversion to number or true/false/null, but store aValue as string
+    // - if Update=TRUE, will set the property, even if it is existing
+    function AddValueText(const aName, aValue: RawUtf8;
+      DoUpdate: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
@@ -7525,26 +7531,45 @@ begin
   SetVariantByValue(aValue, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
 end;
 
+function _AddValueText(var DV: TDocVariantData; const aName: RawUtf8;
+  DoUpdate: boolean; out v: PVariant): integer;
+begin
+  result := -1;
+  v := nil;
+  if aName = '' then
+    exit;
+  result := DV.GetValueIndex(aName);
+  if not DoUpdate and
+     (DV.Has(dvoCheckForDuplicatedNames)) and
+     (result >= 0) then
+    EDocVariant.RaiseUtf8('AddValueText: Duplicated [%] name', [aName]);
+  if result < 0 then
+    result := DV.InternalAdd(aName);
+  v := @DV.VValue[result];
+  VarClear(v^);
+end;
+
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
   DoUpdate: boolean): integer;
 var
   v: PVariant;
 begin
-  if aName = '' then
-  begin
-    result := -1;
-    exit;
-  end;
-  result := GetValueIndex(aName);
-  if not DoUpdate and
-     (Has(dvoCheckForDuplicatedNames)) and
-     (result >= 0) then
-    EDocVariant.RaiseUtf8('AddValueFromText: Duplicated [%] name', [aName]);
-  if result < 0 then
-    result := InternalAdd(aName);
-  v := @VValue[result];
-  VarClear(v^);
-  _FromText(VOptions, v, aValue); // recognize numbers
+  result := _AddValueText(self, aNAme, DoUpdate, v);
+  if v <> nil then
+    _FromText(VOptions, v, aValue); // recognize numbers
+end;
+
+function TDocVariantData.AddValueText(const aName, aValue: RawUtf8;
+  DoUpdate: boolean): integer;
+var
+  v: PVariant;
+begin
+  result := _AddValueText(self, aNAme, DoUpdate, v);
+  if v <> nil then
+    if dvoInternValues in VOptions then
+      DocVariantType.InternValues.UniqueVariant(v^, aValue)
+    else
+      RawUtf8ToVariant(aValue, v^);
 end;
 
 procedure TDocVariantData.AddByPath(const aSource: TDocVariantData;
