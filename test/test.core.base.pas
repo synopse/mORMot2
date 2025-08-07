@@ -5262,7 +5262,7 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
   end;
 
 var
-  i, j, k, len, len120, lenup100, CP, L: integer;
+  i, j, k, len, len120, lenup100, CP, L, lcid: integer;
   bak, bakj: AnsiChar;
   W: WinAnsiString;
   WS: WideString;
@@ -5277,6 +5277,7 @@ var
   q: RawUtf8;
   Unic: RawByteString;
   WA, HasValidUtf8Avx2: Boolean;
+  lng: TLanguage;
   rb1, rb2, rb3: RawByteString;
   eng: TSynAnsiConvert;
 const
@@ -6242,10 +6243,53 @@ begin
     U2 := eng.AnsiToUtf8(RB1);
     CheckEqual(U2, U, 'AnsiToUtf8');
   end;
-  Check(CodePageToText(CP_UTF8) = 'utf8');
-  Check(CodePageToText(CP_UTF16) = 'utf16le');
-  Check(CodePageToText(CP_WINANSI) = 'ms1252');
-  Check(CodePageToText(54936) = 'gb18030');
+  CheckEqual(CodePageToText(CP_UTF8), 'utf8');
+  CheckEqual(CodePageToText(CP_UTF16), 'utf16le');
+  CheckEqual(CodePageToText(CP_WINANSI), 'ms1252');
+  CheckEqual(CodePageToText(54936), 'gb18030');
+  Check(LcidToLanguage(0) = lngUndefined);
+  CheckEqual(LANG_LCID[lngUndefined], LANG_ENGLISH_US);
+  CheckEqual(LANG_ISO[lngUndefined], '');
+  CheckEqual(LANG_TXT[lngUndefined], 'Undefined');
+  Check(LcidToLanguage(LANG_ENGLISH_US) = lngEnglish);
+  CheckEqual(LANG_LCID[lngEnglish], LANG_ENGLISH_US);
+  CheckEqual(LANG_TXT[lngEnglish], 'English');
+  Check(LcidToLanguage(LANG_CHINESE_SIMPLIFIED) = lngChinese);
+  CheckEqual(LANG_LCID[lngChinese], LANG_CHINESE_SIMPLIFIED);
+  CheckEqual(LANG_TXT[lngChinese], 'Chinese');
+  Check(LcidToLanguage(LANG_BOSNIAN_CYRILLIC) = lngBosnian);
+  CheckEqual(LANG_LCID[lngBosnian], LANG_BOSNIAN_CYRILLIC);
+  Check(LcidToLanguage(LANG_SERBIAN_NEUTRAL) = lngSerbian);
+  CheckEqual(LANG_LCID[lngSerbian], LANG_SERBIAN_NEUTRAL);
+  Check(LcidToLanguage(LANG_CROATIAN_NEUTRAL) = lngCroatian);
+  CheckEqual(LANG_LCID[lngCroatian], LANG_CROATIAN_NEUTRAL);
+  Check(IsoTextToLanguage('') = lngUndefined);
+  Check(IsoTextToLanguage('f') = lngUndefined);
+  Check(IsoTextToLanguage('fr') = lngFrench);
+  Check(IsoTextToLanguage('fre') = lngUndefined);
+  Check(IsoTextToLanguage(' fr') = lngUndefined);
+  for lng := succ(low(lng)) to high(lng) do
+  begin
+    lcid := LANG_LCID[lng];
+    Check(lcid <> 0);
+    CheckEqual(ord(LcidToLanguage(lcid)), ord(lng), 'lcid');
+    CheckEqual(ord(LcidToLanguage(lcid)), ord(lng), 'lcidcache');
+    if not (lng in lngBCS) then
+      CheckEqual(ord(LcidToLanguage(LANG_PRI[lng])), ord(lng), 'LANG_PRI');
+    U := LcidToText(lcid);
+    CheckUtf8(length(U) >= 3, U);
+    CheckEqual(U, LANG_TXT[lng]);
+    if lng <> high(lng) then
+      CheckUtf8(SortDynArrayAnsiString(U, LANG_TXT[succ(lng)]) < 0, U);
+    U := LANG_ISO[lng];
+    Check(U <> '');
+    Check(IdemPropNameU(U, @LANG_ISO_SHORT[lng], 2));
+    CheckEqual(ord(IsoTextToLanguage(U)), ord(lng), 'iso');
+    CheckEqual(ord(IsoTextToLanguage(U)), ord(lng), 'isocache');
+    UpperCaseSelf(U);
+    Check(IdemPropNameU(U, @LANG_ISO_SHORT[lng], 2));
+    CheckEqual(ord(IsoTextToLanguage(U)), ord(lng), 'isocache2');
+  end;
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
