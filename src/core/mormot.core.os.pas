@@ -3354,10 +3354,11 @@ type
     // or to keep the pointers in a workable range on CPU32 systems)
     function Map(aFile: THandle; aCustomSize: PtrUInt = 0;
       aCustomOffset: Int64 = 0; aFileOwned: boolean = false;
-      aFileSize: Int64 = -1): boolean; overload;
-    /// map the file specified by its name
-    // - file will be closed when UnMap will be called
-    function Map(const aFileName: TFileName): boolean; overload;
+      aFileSize: Int64 = -1; aForceMap: boolean = false): boolean; overload;
+    /// map the file specified by its name into memory for reading
+    // - file will be closed when UnMap is called
+    function Map(const aFileName: TFileName; aForceMap: boolean = false;
+      aCustomSize: Int64 = 0; aCustomOffset: Int64 = 0): boolean; overload;
     /// set a fixed buffer for the content
     // - emulates memory-mapping over an existing buffer
     procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
@@ -7991,17 +7992,22 @@ begin
   fFileLocal := false;
 end;
 
-function TMemoryMap.Map(const aFileName: TFileName): boolean;
+function TMemoryMap.Map(const aFileName: TFileName; aForceMap: boolean;
+  aCustomSize, aCustomOffset: Int64): boolean;
 var
   h: THandle;
 begin
   result := false;
+  {$ifdef OSWINDOWS}
   // Memory-mapped file access does not go through the cache manager so
-  // using FileOpenSequentialRead() is pointless here
+  // using FileOpenSequentialRead() is pointless on Windows
   h := FileOpen(aFileName, fmOpenReadShared);
+  {$else}
+  h := FileOpenSequentialRead(aFileName); // but no lock needed on POSIX
+  {$endif OSWINDOWS}
   if not ValidHandle(h) then
     exit;
-  result := Map(h);
+  result := Map(h, aCustomSize, aCustomOffset, {owned=}false, -1, aForceMap);
   if not result then
     FileClose(h);
   fFileLocal := result;
