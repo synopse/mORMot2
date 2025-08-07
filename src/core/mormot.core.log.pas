@@ -2146,7 +2146,7 @@ type
     filesdir: TIntegerDynArray;
     isdwarf64, debugtoconsole: boolean;
     debug: TDebugFile;
-    map: TMemoryMap;
+    Map: TMemoryMap;
     function FindSections(const filename: ShortString): boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;

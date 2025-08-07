@@ -1252,7 +1252,7 @@ type
     procedure InitObjectFromVariants(const aNames: TRawUtf8DynArray;
        const aValues: TVariantDynArray; aOptions: TDocVariantOptions = []);
     /// initialize a variant instance to store a document-based object from
-    // name/value arrays of RawUtf8
+    // name/value pairs of RawUtf8, recognizing booleans or numbers
     // - each aItems[] is expected to be of two items, as name/value pair
     // - as returned e.g. by MsiExecuteQuery() from mormot.lib.sspi.pas
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
@@ -1892,7 +1892,7 @@ type
     /// add a value in this document, creating a dvArray if aName already exists
     // - returns the index of the corresponding value, which may be just added
     procedure AddValueArray(const aName: RawUtf8; const aValue: variant);
-    /// add a value in this document, from its text representation
+    /// add a value in this document, recognizing text representation of numbers
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
     // and/or as varDouble is dvoAllowDoubleValue option is set)
@@ -6301,7 +6301,8 @@ end;
 
 procedure _FromText(opt: TDocVariantOptions; v: PVariant; const t: RawUtf8);
 begin
-  if not GetVariantFromNotStringJson(
+  if (t = '') or
+     not GetVariantFromNotStringJson(
            pointer(t), PVarData(v)^, dvoAllowDoubleValue in opt) then
     if dvoInternValues in opt then
       DocVariantType.InternValues.UniqueVariant(v^, t)
@@ -6659,7 +6660,7 @@ begin
   one := pointer(aItems);
   repeat
     if length(one^) = 2 then
-      AddValueFromText(one^[0], one^[1]);
+      AddValueFromText(one^[0], one^[1]); // would recognize booleans or numbers
     inc(one);
     dec(n);
   until n = 0;
