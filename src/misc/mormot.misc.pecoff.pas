@@ -38,21 +38,19 @@ const
   // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-data-directories-image-only
 
   /// index of Export Directory
-  IMAGE_DIRECTORY_ENTRY_EXPORT    = 0;
+  IMAGE_DIRECTORY_ENTRY_EXPORT         = 0;
   /// index of Import Directory
-  IMAGE_DIRECTORY_ENTRY_IMPORT    = 1;
+  IMAGE_DIRECTORY_ENTRY_IMPORT         = 1;
   /// index of Resource Directory
-  IMAGE_DIRECTORY_ENTRY_RESOURCE  = 2;
+  IMAGE_DIRECTORY_ENTRY_RESOURCE       = 2;
   /// index of Exception Directory
-  IMAGE_DIRECTORY_ENTRY_EXCEPTION = 3;
+  IMAGE_DIRECTORY_ENTRY_EXCEPTION      = 3;
   /// index of Security Directory
-  IMAGE_DIRECTORY_ENTRY_SECURITY  = 4;
+  IMAGE_DIRECTORY_ENTRY_SECURITY       = 4;
   /// index of Base Relocation Table
-  IMAGE_DIRECTORY_ENTRY_BASERELOC = 5;
+  IMAGE_DIRECTORY_ENTRY_BASERELOC      = 5;
   /// index of Debug Directory
-  IMAGE_DIRECTORY_ENTRY_DEBUG     = 6;
-  /// index of X86 usage
-  IMAGE_DIRECTORY_ENTRY_COPYRIGHT      = 7;
+  IMAGE_DIRECTORY_ENTRY_DEBUG          = 6;
   /// index of Architecture Specific Data
   IMAGE_DIRECTORY_ENTRY_ARCHITECTURE   = 7;
   /// index of RVA of GP
@@ -70,6 +68,7 @@ const
   /// index of COM Runtime descriptor
   IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR = 14;
 
+  /// official reserved number of directory entries
   IMAGE_NUMBEROF_DIRECTORY_ENTRIES = 16;
 
   /// Predefined Resource Types
@@ -133,11 +132,7 @@ type
     e_oemid: word;
     e_oeminfo: word;
     e_res2: array[0..9] of word;
-    case boolean of
-      true:
-        (e_lfanew: integer);
-      false:
-        (_lfanew: integer); // delphi naming
+    e_lfanew: integer;
   end;
   TImageDOSHeader = _IMAGE_DOS_HEADER;
   PImageDOSHeader = ^_IMAGE_DOS_HEADER;
@@ -294,10 +289,16 @@ type
     NumberOfRelocations: word;
     NumberOfLinenumbers: word;
     Characteristics: cardinal;
+    function NameLen: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     function Name: RawUtf8;
+    function OffsetFrom(RVA: cardinal): cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   TImageSectionHeader = _IMAGE_SECTION_HEADER;
   PImageSectionHeader = ^_IMAGE_SECTION_HEADER;
+  TImageSectionHeaders = array[byte] of TImageSectionHeader;
+  PImageSectionHeaders = ^TImageSectionHeaders;
 
   /// .reloc Section header
   // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-relocations-object-only
@@ -359,61 +360,25 @@ type
   TImageTSLDirectory = _IMAGE_TLS_DIRECTORY32;
   PImageTSLDirectory = ^_IMAGE_TLS_DIRECTORY32;
 
-  /// .rsrc Section header
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-table
   PImageResourceDirectoryEntry = ^_IMAGE_RESOURCE_DIRECTORY_ENTRY;
+
+  /// Resource directory entries
+  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-entries
   _IMAGE_RESOURCE_DIRECTORY = object
-  private
-    function GetEntry(Index: integer): PImageResourceDirectoryEntry;
-  public
     Characteristics: cardinal;
     TimeDateStamp: cardinal;
     MajorVersion: word;
     MinorVersion: word;
     NumberOfNamedEntries: word;
     NumberOfIdEntries: word;
-    /// Get the total number of entries
-    // - Sum of Named entries and id entries
-    // - High boundary of Entries indexes
-    function NumberOfEntries: cardinal;
+    /// start with NumberOfNamedEntries, then NumberOfIdEntries
+    function FirstEntry: PImageResourceDirectoryEntry;
       {$ifdef HASINLINE} inline; {$endif}
-    /// Get the entry at the given index
-    // - Return nil if out of bounds
-    property Entries[Index: integer]: PImageResourceDirectoryEntry
-      read GetEntry;
+    /// search for a given ID
+    function FindByID(ID: cardinal): PImageResourceDirectoryEntry;
   end;
   TImageResourceDirectory = _IMAGE_RESOURCE_DIRECTORY;
   PImageResourceDirectory = ^_IMAGE_RESOURCE_DIRECTORY;
-
-  /// Resource directory entries
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-entries
-  PImageResourceDataEntry = ^_IMAGE_RESOURCE_DATA_ENTRY;
-  _IMAGE_RESOURCE_DIRECTORY_ENTRY = object
-  public
-    // Nested record to use a variable part not at the end of the record
-    Identifier: record
-      case integer of
-        0: (NameOffset: cardinal);
-        1: (Id: cardinal);
-    end;
-    OffsetToData: cardinal;
-    /// Check if the entry is a directory entry or a data entry
-    // - An entry is a directory entry if the high bit of OffsetToData is set
-    function IsDirectory: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// Get the offset to the directory
-    function OffsetToDirectory: cardinal;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// Get the subdirectory
-    // - StartAddress is the resource directory table address
-    // - Return nil if the entry is not a directory entry
-    function Directory(StartAddress: pointer): PImageResourceDirectory;
-    /// Get the entry data
-    // - StartAddress is the resource directory table address
-    // - Return nil if the entry is not a data entry
-    function Data(StartAddress: pointer): PImageResourceDataEntry;
-  end;
-  TImageResourceDirectoryEntry = _IMAGE_RESOURCE_DIRECTORY_ENTRY;
 
   /// Resource data entry
   // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-data-entry
@@ -424,6 +389,33 @@ type
     Reserved: cardinal;
   end;
   TImageResourceDataEntry = _IMAGE_RESOURCE_DATA_ENTRY;
+  PImageResourceDataEntry = ^_IMAGE_RESOURCE_DATA_ENTRY;
+
+  /// .rsrc Section header
+  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-table
+  _IMAGE_RESOURCE_DIRECTORY_ENTRY = object
+  public
+    /// UTF-16 string offset for NumberOfNamedEntries, or ID for NumberOfIdEntries
+    NameOffsetOrID: cardinal;
+    /// position in file, relative to IMAGE_DIRECTORY_ENTRY_RESOURCE
+    Offset: cardinal;
+    /// Check if the entry is a directory entry or a data entry
+    // - An entry is a directory entry if the high bit of Offset is set
+    function IsDirectory: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// Get the offset to the directory - i.e. Offset without its high bit
+    function OffsetToDirectory: cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// Get the subdirectory from the stored Offset
+    // - StartAddress is the resource directory table address
+    // - Return nil if the entry is not a directory entry
+    function AsDirectory(StartAddress: pointer): PImageResourceDirectory;
+    /// Get the entry data
+    // - StartAddress is the resource directory table address
+    // - Return nil if the entry is not a data entry
+    function AsData(StartAddress: pointer): PImageResourceDataEntry;
+  end;
+  TImageResourceDirectoryEntry = _IMAGE_RESOURCE_DIRECTORY_ENTRY;
 
   /// Version information
   // - https://learn.microsoft.com/en-us/windows/win32/menurc/vs-versioninfo
@@ -464,9 +456,8 @@ type
     /// Get the file build version number
     function FileBuildVersion: cardinal;
       {$ifdef HASINLINE} inline; {$endif}
-    /// Get the file version as a text
-    // - Format is '[major].[minor].[patch].[build]'
-    function FileVersionStr: RawUtf8;
+    /// Get the file version as '[major].[minor].[patch].[build]' text
+    function AsText: RawUtf8;
   end;
   TVSFixedFileInfo = _VS_FIXEDFILEINFO;
   PVSFixedFileInfo = ^_VS_FIXEDFILEINFO;
@@ -494,11 +485,10 @@ type
   {$A+} // back to regular field alignment
 
 
-/// Align an offset with a base address
+/// Align an offset (from ordinal and PWideChar + ending #0) with a base address
 // - Resulting offset is the first aligned offset starting from the input offset.
 // - An offset is aligned if Base - Offset is a cardinal size (4 bytes) multiple
-function DWordAlign(Offset: cardinal; Base: cardinal = 0): cardinal;
-  {$ifdef HASINLINE} inline; {$endif}
+function AlignPos(Offset: cardinal; PW: pointer; Base: cardinal): cardinal;
 
 
 { ************ High-Level PE (.exe, .dll...) File Reader }
@@ -516,23 +506,17 @@ type
   // - see GetPEFileVersion() as a wrapper to this class
   TSynPELoader = class
   private
-    // Saved pointers
-    // - Headers
     fPEHeader: TImageNtHeaders;
     fCoffHeader: PImageFileHeader;
-    fSectionHeadersStart: PImageSectionHeader;
-    // - Resource Section pointers
+    fSectionHeaders: PImageSectionHeaders;
     fNumberOfSections: cardinal;
     fVersionInfo: PVsVersionInfo;
     fFixedFileInfo: PVSFixedFileInfo;
     fStringFileInfo: PStringFileInfo;
     fFirstStringTable: PStringTable;
     fVarFileInfo: PVarFileInfo;
-    // Cached data
-    // - Resource Section data
     fStringFileInfoEntries: TDocVariantData;
-    // raw PE File as mapped in memory
-    fMap: TMemoryMap;
+    fMap: TMemoryMap; // raw PE File as mapped in memory
     function GetImageDataDirectory(DirectoryId: cardinal): PImageDataDirectory;
     function GetSectionHeader(SectionId: cardinal): PImageSectionHeader;
     /// parse a StringFileInfo or VarFileInfo struct.
@@ -540,9 +524,9 @@ type
     // - set fStringFileInfo or fVarFileInfo depending on the struct at the given address
     // - returns the end address of the file info
     // - called by ParseResources
-    function ParseFileInfo(Address: pointer): pointer;
+    function ParseFileInfo(P: PAnsiChar): PAnsiChar;
   public
-    /// constructor which initializes all saved pointers to nil
+    /// constructor which initializes the internal storage
     constructor Create;
     /// destructor which unloads the current file
     destructor Destroy; override;
@@ -554,28 +538,20 @@ type
     procedure Unload;
 
     /// search the section containing the given RVA
-    // - return the section index (see SectionHeaders property)
-    // - if no section is found, return -1
-    function GetSectionIndexByRVA(RVA: cardinal): integer;
+    // - if no section is found, return nil
+    function GetSectionByRVA(RVA: cardinal): PImageSectionHeader;
     /// search the section named AName
-    // - return the section index (see SectionHeaders property)
-    // - if no section is found, return -1
-    function GetSectionIndexByName(const AName: RawUtf8): integer;
+    // - if no section is found, return nil
+    function GetSectionByName(const AName: RawUtf8): PImageSectionHeader;
     /// search the section associated to the given directory
     // - accepts IMAGE_DIRECTORY_ENTRY_EXPORT ... constants
-    // - return the section index (see SectionHeaders property)
-    // - if no section is found, return -1
-    function GetSectionIndexFromDirectory(DirectoryId: cardinal): integer;
+    // - if no section is found, return nil
+    function GetSectionFromDirectory(DirectoryId: cardinal): PImageSectionHeader;
 
-    /// translate RVA to physical address
-    // - ASectionId is the section containing the RVA
-    // - doesn't verify section id, an invalid section id will lead to access violation
-    // - return the physical address, ie the offset from the file first byte
-    function GetPhAddByRVA(RVA: cardinal; ASectionId: cardinal): cardinal; overload;
     /// translate RVA to physical address
     // - return the physical address, ie the offset from the file first byte
     // - if the RVA is not contained by any section, 0 is returned
-    function GetPhAddByRVA(RVA: cardinal): cardinal; overload;
+    function OffsetFrom(RVA: cardinal): cardinal; overload;
 
     /// parse the Resource directory associated section
     // - see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-rsrc-section
@@ -596,7 +572,7 @@ type
     function Is64: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// number of sections in this PE file
-    // - it is the high boundary of the SectionHeaders property
+    // - it is the high boundary of the SectionHeaders[] property
     property NumberOfSections: cardinal
       read fNumberOfSections;
 
@@ -614,15 +590,15 @@ type
     property CoffHeader: PImageFileHeader
       read fCoffHeader;
     /// first image section header (end of PE Header)
-    property SectionHeadersStart: PImageSectionHeader
-      read fSectionHeadersStart;
+    property SectionHeadersRaw: PImageSectionHeaders
+      read fSectionHeaders;
     /// get the image data directory struct at the given id
     // - see IMAGE_DIRECTORY_ENTRY_* consts
     // - return -1 if the DirectoryId is out of bounds
     property ImageDataDirectory[DirectoryId: cardinal]: PImageDataDirectory
      read GetImageDataDirectory;
     /// get the section header at the given section id
-    // - return nil if the id is out of bounds
+    // - raise an EPeCoffLoader exception if the SecionID is out of bounds
     property SectionHeaders[SectionId: cardinal]: PImageSectionHeader
       read GetSectionHeader;
 
@@ -639,11 +615,13 @@ type
     property FirstStringTable: PStringTable
       read fFirstStringTable;
     /// VarFileInfo Resource pointer, as set by ParseResources
+    // - contains some "Translation" entries - not parsed yet
     property VarFileInfo: PVarFileInfo
       read fVarFileInfo;
     /// get the file version as a string
     // - format is '[major].[minor].[patch].[build]'
     // - is a wrapper around FixedFileInfo.FileVersionStr
+    // - warning: this "FileVersionNum" field may not match "FileVersion"
     function FileVersionStr: RawUtf8;
     /// StringFileInfo entries, parsed as a TDocVariant object document
     // - populated by ParseStringFileInfo
@@ -654,10 +632,11 @@ type
 
 /// return all version information from a Portable Executable (Win32/Win64) file
 // as a TDocVariant object document
-// - returns an obhect with all parsed string versions, and "FileVersionNum"
+// - returns an object with all parsed string versions, and "FileVersionNum"
 // as TSynPELoader.FileVersionStr from _VS_FIXEDFILEINFO resource, "IsWin64"
-// as boolean TSynPELoader.Is64 value, and "FullFileName" as aFileName value
-// - returns a void document if the file does not exist, or has no info resource
+// as boolean TSynPELoader.Is64 value, "FullFileName" as aFileName value, and
+// "CodePage" and "Language" (if any) from the parsed string table
+// - returns null if the file does not exist, or has no VersionInfo resource
 function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
 
 
@@ -718,29 +697,42 @@ begin
   result := FileVersionLS and $ffff;
 end;
 
-function _VS_FIXEDFILEINFO.FileVersionStr: RawUtf8;
+function _VS_FIXEDFILEINFO.AsText: RawUtf8;
 begin
-  if @self = nil then
+  if (@self = nil) or
+     ((FileVersionMS = 0) and
+      (FileVersionLS = 0)) then // '0.0.0.0' is meaningless
     result := ''
   else
     FormatUtf8('%.%.%.%', [FileMajorVersion, FileMinorVersion,
-      FilePatchVersion, FileBuildVersion], result);
+                           FilePatchVersion, FileBuildVersion], result);
 end;
 
 
 { _IMAGE_RESOURCE_DIRECTORY }
 
-function _IMAGE_RESOURCE_DIRECTORY.NumberOfEntries: cardinal;
+function _IMAGE_RESOURCE_DIRECTORY.FirstEntry: PImageResourceDirectoryEntry;
 begin
-  result := NumberOfIdEntries + NumberOfNamedEntries;
+  result := @self;
+  if result <> nil then
+    inc(PImageResourceDirectory(result)); // entries start after header
 end;
 
-function _IMAGE_RESOURCE_DIRECTORY.GetEntry(Index: integer): PImageResourceDirectoryEntry;
+function _IMAGE_RESOURCE_DIRECTORY.FindByID(ID: cardinal): PImageResourceDirectoryEntry;
+var
+  n: integer;
 begin
-  if cardinal(Index) >= NumberOfEntries then
-    EPeCoffLoader.RaiseU('_IMAGE_RESOURCE_DIRECTORY');
-  result := @PByteArray(@self)[
-    SizeOf(self) + Index * SizeOf(TImageResourceDirectoryEntry)];
+  result := @self;
+  if result = nil then
+    exit;
+  inc(PImageResourceDirectory(result)); // inlined FirstEntry
+  inc(result, NumberOfNamedEntries); // named entries precede all ID entries
+  for n := 1 to NumberOfIdEntries do
+    if result^.NameOffsetOrID = ID then
+      exit
+    else
+      inc(result);
+  result := nil;
 end;
 
 
@@ -748,44 +740,66 @@ end;
 
 function _IMAGE_RESOURCE_DIRECTORY_ENTRY.IsDirectory: boolean;
 begin
-  result := ((OffsetToData and $80000000) shr 31) = 1;
+  result := (Offset and $80000000) <> 0;
 end;
 
 function _IMAGE_RESOURCE_DIRECTORY_ENTRY.OffsetToDirectory: cardinal;
 begin
-  result := OffsetToData and $7fffffff;
+  result := Offset and $7fffffff;
 end;
 
-function _IMAGE_RESOURCE_DIRECTORY_ENTRY.Directory(
+function _IMAGE_RESOURCE_DIRECTORY_ENTRY.AsDirectory(
   StartAddress: pointer): PImageResourceDirectory;
 begin
+  result := @self;
+  if result = nil then
+    exit;
   if not IsDirectory then
     EPeCoffLoader.RaiseU('_IMAGE_RESOURCE_DIRECTORY_ENTRY.Directory?');
   result := @PByteArray(StartAddress)[OffsetToDirectory];
 end;
 
-function _IMAGE_RESOURCE_DIRECTORY_ENTRY.Data(
+function _IMAGE_RESOURCE_DIRECTORY_ENTRY.AsData(
   StartAddress: pointer): PImageResourceDataEntry;
 begin
+  result := @self;
+  if result = nil then
+    exit;
   if IsDirectory then
     EPeCoffLoader.RaiseU('_IMAGE_RESOURCE_DIRECTORY_ENTRY.Data?');
-  result := @PByteArray(StartAddress)[OffsetToData];
+  result := @PByteArray(StartAddress)[Offset];
 end;
 
 
 { _IMAGE_SECTION_HEADER }
 
-function _IMAGE_SECTION_HEADER.Name: RawUtf8;
+function _IMAGE_SECTION_HEADER.NameLen: integer;
 begin
-  if Name8[7] <> #0 then
-    FastSetString(result, @Name8, 8)
+  if Name8[7] = #0 then
+    result := 8 // max size
   else
-    FastSetString(result, @Name8, StrLen(@Name8));
+    result := StrLen(@Name8);
 end;
 
-function DWordAlign(Offset, Base: cardinal): cardinal;
+function _IMAGE_SECTION_HEADER.Name: RawUtf8;
 begin
-  result := ((Offset + Base + 3) and $fffffffc) - (Base and $fffffffc);
+  FastSetString(result, @Name8, NameLen);
+end;
+
+function _IMAGE_SECTION_HEADER.OffsetFrom(RVA: cardinal): cardinal;
+begin
+  result := PtrUInt(@self);
+  if result <> 0 then
+    result := RVA - VirtualAddress + PointerToRawData;
+end;
+
+
+function AlignPos(Offset: cardinal; PW: pointer; Base: cardinal): cardinal;
+begin
+  if PW <> nil then
+    inc(Offset, (StrLenW(PW) + 1) * SizeOf(WideChar));
+  result := ((Offset + Base + 3) and $fffffffc) -
+            (Base and $fffffffc);
 end;
 
 
@@ -806,11 +820,10 @@ end;
 
 function TSynPELoader.GetSectionHeader(SectionId: cardinal): PImageSectionHeader;
 begin
-  if (fSectionHeadersStart = nil) or
-     (SectionId >= NumberOfSections) then
+  if (fSectionHeaders = nil) or
+     (SectionId >= fNumberOfSections) then
     EPeCoffLoader.RaiseU('_IMAGE_RESOURCE_DIRECTORY_ENTRY.Data?');
-  result := pointer(PAnsiChar(fSectionHeadersStart) +
-                      SizeOf(TImageSectionHeader) * SectionId);
+  result := @fSectionHeaders[SectionId];
 end;
 
 constructor TSynPELoader.Create;
@@ -820,7 +833,7 @@ end;
 
 destructor TSynPELoader.Destroy;
 begin
-  Unload;
+  fMap.UnMap;
   inherited Destroy;
 end;
 
@@ -829,7 +842,7 @@ begin
   fMap.UnMap;
   fVersionInfo := nil;
   fCoffHeader := nil;
-  fSectionHeadersStart := nil;
+  fSectionHeaders := nil;
   fFixedFileInfo := nil;
   fStringFileInfo := nil;
   fFirstStringTable := nil;
@@ -838,49 +851,43 @@ begin
   fStringFileInfoEntries.Reset;
 end;
 
-function TSynPELoader.GetSectionIndexByRVA(RVA: cardinal): integer;
+function TSynPELoader.GetSectionByRVA(RVA: cardinal): PImageSectionHeader;
+var
+  n: integer;
 begin
-  if IsLoaded then
-    for result := 0 to NumberOfSections - 1 do
-      with SectionHeaders[result]^ do
-        if (RVA >= VirtualAddress) and
-           (RVA < VirtualAddress + VirtualSize) then
-          exit;
-  result := -1;
+  result := pointer(fSectionHeaders);
+  for n := 1 to fNumberOfSections do
+    if RVA - result^.VirtualSize < result^.VirtualAddress then
+      exit
+    else
+      inc(result);
+  result := nil;
 end;
 
-function TSynPELoader.GetSectionIndexByName(const AName: RawUtf8): integer;
+function TSynPELoader.GetSectionByName(const AName: RawUtf8): PImageSectionHeader;
+var
+  n: integer;
 begin
-  if IsLoaded then
-    for result := 0 to NumberOfSections - 1 do
-      if PropNameEquals(SectionHeaders[result]^.Name, AName) then
-        exit;
-  result := -1;
+  result := pointer(fSectionHeaders);
+  for n := 1 to fNumberOfSections do
+    if PropNameEquals(AName, @result^.Name8, result^.NameLen) then
+      exit
+    else
+      inc(result);
+  result := nil;
 end;
 
-function TSynPELoader.GetSectionIndexFromDirectory(DirectoryId: cardinal): integer;
+function TSynPELoader.GetSectionFromDirectory(DirectoryId: cardinal): PImageSectionHeader;
 begin
   if DirectoryId >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES then
-    result := -1
+    result := nil
   else
-    result := GetSectionIndexByRVA(ImageDataDirectory[DirectoryId]^.VirtualAddress);
+    result := GetSectionByRVA(ImageDataDirectory[DirectoryId]^.VirtualAddress);
 end;
 
-function TSynPELoader.GetPhAddByRVA(RVA: cardinal; ASectionId: cardinal): cardinal;
+function TSynPELoader.OffsetFrom(RVA: cardinal): cardinal;
 begin
-  result := RVA - SectionHeaders[ASectionId]^.VirtualAddress +
-                  SectionHeaders[ASectionId]^.PointerToRawData;
-end;
-
-function TSynPELoader.GetPhAddByRVA(RVA: cardinal): cardinal;
-var
-  SectionID: integer;
-begin
-  SectionID := GetSectionIndexByRVA(RVA);
-  if SectionID >= 0 then
-    result := GetPhAddByRVA(RVA, SectionID)
-  else
-    result := 0;
+  result := GetSectionByRVA(RVA).OffsetFrom(RVA);
 end;
 
 function TSynPELoader.GetImageDataDirectory(DirectoryId: cardinal): PImageDataDirectory;
@@ -895,128 +902,145 @@ end;
 
 function TSynPELoader.ParseResources: boolean;
 var
-  Directory, VersionEntriesDir: PImageResourceDirectory;
-  EntryId, i: integer;
-  Entry: PImageResourceDirectoryEntry;
-  VersionData: PImageResourceDataEntry;
-  VersionInfoStr: PWideChar;
-  ResourceSct: PImageSectionHeader;
-  NextAddress: pointer;
+  main, version: PImageResourceDirectory;
+  n: integer;
+  ent: PImageResourceDirectoryEntry;
+  data: PImageResourceDataEntry;
+  hdr: PImageSectionHeader;
+  P: PAnsiChar;
+  PW: PWideChar;
 begin
   result := false;
   try
-    ResourceSct := SectionHeaders[GetSectionIndexFromDirectory(IMAGE_DIRECTORY_ENTRY_RESOURCE)];
-    if not Assigned(ResourceSct) then
+    hdr := GetSectionFromDirectory(IMAGE_DIRECTORY_ENTRY_RESOURCE);
+    if hdr = nil then
       exit;
-    Directory := pointer(fMap.Buffer + ResourceSct^.PointerToRawData);
-    result := true;
-    for EntryId := 0 to Directory^.NumberOfEntries - 1 do
+    main := pointer(fMap.Buffer + hdr^.PointerToRawData);
+    version := main^.FindByID(RT_VERSION)^.AsDirectory(main)^.
+                     FirstEntry^.AsDirectory(main);
+    if version <> nil then
     begin
-      Entry := Directory^.Entries[EntryId];
-      // Version Resource
-      if Entry^.Identifier.Id = RT_VERSION then
+      ent := version^.FirstEntry;
+      for n := 1 to version^.NumberOfIdEntries + version^.NumberOfNamedEntries do
       begin
-        VersionEntriesDir := Entry^.Directory(Directory)^.Entries[0]^.Directory(Directory);
-        for i := 0 to VersionEntriesDir^.NumberOfEntries - 1 do
+        data := ent^.AsData(main);
+        P := fMap.Buffer + OffsetFrom(data^.DataRVA);
+        PW := pointer(P + SizeOf(fVersionInfo^));
+        if StrCompW(PW, 'VS_VERSION_INFO') = 0 then
         begin
-          VersionData := VersionEntriesDir^.Entries[i]^.Data(Directory);
-          fVersionInfo := pointer(fMap.Buffer + GetPhAddByRVA(VersionData^.DataRVA));
-          // 'VS_VERSION_INFO', Strings are UTF-16 encoded which explains the
-          // 2 * StrLenW (2 bytes per WideChar) in later offset
-          VersionInfoStr := pointer(PAnsiChar(VersionInfo) + SizeOf(VersionInfo^));
-          // Invalid Entry
-          if StrCompW(VersionInfoStr, 'VS_VERSION_INFO') <> 0 then
-            break;
-          // Fixed File Info
-          fFixedFileInfo := pointer(PAnsiChar(VersionInfo) +
-            DWordAlign(SizeOf(VersionInfo^) + 2 * (StrLenW(VersionInfoStr) + 1),
-              VersionData^.DataRVA));
-          // string File Info / Var File Info
-          NextAddress := pointer(PAnsiChar(fFixedFileInfo) + SizeOf(fFixedFileInfo^));
-          while NextAddress <> nil do
-            NextAddress := ParseFileInfo(NextAddress);
+          fVersionInfo := pointer(P);
+          inc(P, AlignPos(SizeOf(fVersionInfo^), PW, data^.DataRVA));
+          fFixedFileInfo := pointer(P);
+          inc(PVSFixedFileInfo(P));
+          while P <> nil do
+            P := ParseFileInfo(P);
+          break; // GetFileVersionInfo() API stops at first entry
         end;
+        inc(ent);
       end;
     end;
+    result := true;
   except
-    result := false; // on malformatted input: intercept the GPF/EPeCoffLoader
+    result := false; // on malformatted input: intercept the EPeCoffLoader
   end;
 end;
 
 function TSynPELoader.ParseStringFileInfoEntries: boolean;
 var
-  StringTable, StringTableEnd: PStringTable;
-  LangID, Key, Value: PWideChar;
-  Offset: integer;
-  StrEntry, StrEntryEnd: PStringTableEntry;
+  tab, tabEnd, ent, entEnd, P: PAnsiChar;
+  lang, key, value: pointer;
+  offset, i: integer;
+  lnghex: array[0..7] of AnsiChar;
+  lngint: LongRec;
+  lng: TLanguage;
 begin
   result := false;
   try
-    if StringFileInfo = nil then
+    if fStringFileInfo = nil then
       ParseResources;
-    if (StringFileInfo = nil) or
-       (FirstStringTable = nil) then
+    if (fStringFileInfo = nil) or
+       (fFirstStringTable = nil) then
       exit;
-    result := true;
-    Offset := PAnsiChar(StringFileInfo) - pointer(VersionInfo);
-    StringTable := FirstStringTable;
-    StringTableEnd := pointer(PAnsiChar(StringFileInfo) + StringFileInfo^.Length);
+    // parse all string tables (unsually only one)
+    P := PAnsiChar(fStringFileInfo);
+    offset := P - pointer(fVersionInfo);
+    tab := pointer(fFirstStringTable);
+    tabEnd := pointer(P + fStringFileInfo^.Length);
     repeat
-      LangID := pointer(PAnsiChar(StringTable) + SizeOf(StringTable^));
-      StrEntry := pointer(PAnsiChar(StringTable) +
-        DWordAlign(SizeOf(StringTable^) + 2 * (StrLenW(LangID) + 1), Offset));
-      StrEntryEnd := pointer(PAnsiChar(StringTable) + StringTable^.Length);
-      while PtrUInt(StrEntry) < PtrUInt(StrEntryEnd) do
+      // parse the "language" hexadecimal, typically '000004b0' or '040904b0'
+      lang := tab + SizeOf(TStringTable);
+      if StrLenW(lang) = 8 then
       begin
-        Key := pointer(PAnsiChar(StrEntry) + SizeOf(StrEntry^));
-        Value := pointer(PAnsiChar(StrEntry) +
-          DWordAlign(SizeOf(StrEntry^) + 2 * (StrLenW(Key) + 1), Offset));
-        fStringFileInfoEntries.AddValueText(
-          UnicodeBufferTrimmedToUtf8(Key), UnicodeBufferTrimmedToUtf8(Value));
-        if StrEntry^.Length = 0 then
-          StrEntry := StrEntryEnd // end
-        else
-          StrEntry := pointer(PAnsiChar(StrEntry) +
-            DWordAlign(StrEntry^.Length, Offset));
+        for i := 0 to 7 do
+          lnghex[i] := AnsiChar(PWordArray(lang)[i]);
+        if mormot.core.text.HexDisplayToBin(@lnghex, @lngint, 4) then
+        begin
+          if lngint.Lo <> 0 then // codepage
+            fStringFileInfoEntries.AddValue(
+              'CodePage', lngint.Lo);
+          if lngint.Hi <> 0 then
+          begin
+            fStringFileInfoEntries.AddValue(
+              'Language', lngint.Hi);
+            lng := LcidToLanguage(lngint.Hi);
+            if lng <> lngUndefined then
+              fStringFileInfoEntries.AddValueText(
+               'LanguageName', LANG_TXT[lng]);
+          end;
+        end;
       end;
-      if StringTable^.Length = 0 then
+      // parse all string entries
+      ent    := tab + AlignPos(SizeOf(TStringTable), lang, offset);
+      entEnd := tab + PStringTable(tab)^.Length;
+      while ent < entEnd do
+      begin
+        key := ent + SizeOf(TStringTableEntry);
+        value := nil;
+        if PStringTableEntry(ent)^.ValueLength <> 0 then
+          value := ent + AlignPos(SizeOf(TStringTableEntry), key, 0);
+        fStringFileInfoEntries.AddValueText(
+          UnicodeBufferTrimmedToUtf8(key), UnicodeBufferTrimmedToUtf8(value));
+        if PStringTableEntry(ent)^.Length = 0 then
+          break;
+        inc(ent, AlignPos(PStringTableEntry(ent)^.Length, nil, offset));
+      end;
+      if PStringTable(tab)^.Length = 0 then
         break;
-      inc(PByte(StringTable), DWordAlign(StringTable^.Length, Offset));
-    until PtrUInt(StringTable) >= PtrUInt(StringTableEnd);
+      inc(tab, AlignPos(PStringTable(tab)^.Length, nil, offset));
+    until tab >= tabEnd;
+    result := true;
   except
     result := false; // on malformatted input: intercept the GPF/EPeCoffLoader
   end;
 end;
 
-function TSynPELoader.ParseFileInfo(Address: pointer): pointer;
+function TSynPELoader.ParseFileInfo(P: PAnsiChar): PAnsiChar;
 var
-  FileInfoStruct: PVsVersionInfo;
-  FileInfoStr: PWideChar;
-  Offset: cardinal;
+  nfo: PVsVersionInfo;
+  offset: cardinal;
+  PW: PWideChar;
 begin
-  // string File Info / Var File Info
-  Offset := PAnsiChar(VersionInfo) - Address;
-  FileInfoStruct := Address;
-  FileInfoStr := pointer(PAnsiChar(FileInfoStruct) + SizeOf(StringFileInfo^));
-  if StrCompW(FileInfoStr, 'StringFileInfo') = 0 then
+  offset := PAnsiChar(fVersionInfo) - P;
+  nfo := pointer(P);
+  PW := pointer(P + SizeOf(nfo^));
+  if StrCompW(PW, 'StringFileInfo') = 0 then
   begin
-    fStringFileInfo := pointer(FileInfoStruct);
-    fFirstStringTable := pointer(PAnsiChar(StringFileInfo) +
-      DWordAlign(SizeOf(StringFileInfo^) + 2 * (StrLenW(FileInfoStr) + 1), Offset));
+    fStringFileInfo := pointer(nfo);
+    fFirstStringTable := pointer(P + AlignPos(SizeOf(nfo^), PW, offset));
   end
-  else if StrCompW(FileInfoStr, 'VarFileInfo') = 0 then
-    fVarFileInfo := pointer(FileInfoStruct); // never found (bug?) but not needed
-  if (FileInfoStruct^.Length = 0) or
-     (PAnsiChar(Address) + FileInfoStruct^.Length >=
-      PAnsiChar(VersionInfo) + VersionInfo^.Length) then
+  else if StrCompW(PW, 'VarFileInfo') = 0 then
+    fVarFileInfo := pointer(nfo);
+  inc(P, AlignPos(nfo^.Length, nil, offset));
+  if (nfo^.Length = 0) or
+     (P >= PAnsiChar(fVersionInfo) + fVersionInfo^.Length) then
     result := nil
   else
-    result := PAnsiChar(Address) + FileInfoStruct^.Length;
+    result := P;
 end;
 
 function TSynPELoader.LoadFromFile(const Filename: TFileName): boolean;
 var
-  DOSHeader: PImageDOSHeader;
+  head: PImageDOSHeader;
 begin
   result := false;
   // Unloading the previous PE
@@ -1027,25 +1051,24 @@ begin
   // so could not be mapped on CPU32 even if its real executable part is
   // actually in the first initial few KB/MB)
   try
-    DOSHeader := pointer(fMap.Buffer);
-    if (fMap.Size > SizeOf(DOSHeader^)) and
-       (DOSHeader^.e_magic = DOS_HEADER_MAGIC) then
+    head := pointer(fMap.Buffer);
+    if (fMap.Size > SizeOf(head^)) and
+       (head^.e_magic = DOS_HEADER_MAGIC) then
     try
       // e_lfanew is pointer to PE Header (0x3c after start of file)
       // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#signature-image-only
-      fPEHeader.PHeaders := pointer(fMap.Buffer + DOSHeader^.e_lfanew);
+      fPEHeader.PHeaders := pointer(fMap.Buffer + head^.e_lfanew);
       fCoffHeader := @PEHeader32^.FileHeader; // doesn't change in 32/64bit
       fNumberOfSections := fCoffHeader^.NumberOfSections;
-      fSectionHeadersStart := pointer(PAnsiChar(fPEHeader.PHeaders) +
-        SizeOf(CoffHeader^) + CoffHeader^.SizeOfOptionalHeader);
-      // Invalid PE Header Magic number
-      // Or Invalid Optional header magic number (must be 0x10b in 32bit, 0x20b in 64bit)
-      result := (CoffHeader^.Signature = PE_HEADER_MAGIC) and
-                (CoffHeader^.SizeOfOptionalHeader <> 0) and
+      fSectionHeaders := pointer(PAnsiChar(fPEHeader.PHeaders) +
+        SizeOf(fCoffHeader^) + fCoffHeader^.SizeOfOptionalHeader);
+      // check PE Header and Optional header Magic numbers
+      result := (fCoffHeader^.Signature = PE_HEADER_MAGIC) and
+                (fCoffHeader^.SizeOfOptionalHeader <> 0) and
                 ((PEHeader32^.OptionalHeader.Magic = PE_32_MAGIC) or
                  (PEHeader32^.OptionalHeader.Magic = PE_64_MAGIC));
     except
-      result := false; // on malformatted input: intercept the GPF
+      result := false; // on malformatted input / mapping issue: intercept GPF
     end;
   finally
     if not result then
@@ -1055,7 +1078,7 @@ end;
 
 function TSynPELoader.FileVersionStr: RawUtf8;
 begin
-  result := fFixedFileInfo.FileVersionStr;
+  result := fFixedFileInfo.AsText;
 end;
 
 
@@ -1063,6 +1086,7 @@ function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
 var
   pe: TSynPELoader;
 begin
+  result.Clear;
   result.InitFast;
   pe := TSynPELoader.Create;
   try
@@ -1071,6 +1095,7 @@ begin
     begin
       result.AddNameValuesToObject([
         'FullFileName',   aFileName,
+        'FileSize',       pe.fMap.FileSize,
         'FileVersionNum', pe.FileVersionStr,
         'IsWin64',        pe.Is64]);
       result.AddFrom(variant(pe.StringFileInfoEntries));
