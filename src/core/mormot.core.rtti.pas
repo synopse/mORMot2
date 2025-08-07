@@ -10971,8 +10971,9 @@ begin
   // prepare global thread-safe TRttiCustomList
   Rtti := RegisterGlobalShutdownRelease(TRttiCustomList.Create);
   // replace mormot.core.base/mormot.core.os limited implementation
-  ClassUnit := @_ClassUnit;
+  ClassUnit       := @_ClassUnit;
   GetEnumNameRtti := @GetEnumName;
+  GetEnumTrimmedNames(TypeInfo(TLanguage), @LANG_TXT);
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
   RedirectRtl;

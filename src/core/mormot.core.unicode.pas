@@ -351,7 +351,184 @@ function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 /// return a code page number into human-friendly text
 // - e.g. 'shift_jis' for aCodePage = 932, or 'ms1252' for 1252
 // - returns the lowercased Unicode_CodePageName(aCodePage) value
-function CodePageToText(aCodePage: cardinal): TShort16;
+function CodePageToText(aCodePage: cardinal): RawUtf8;
+
+type
+  /// a list of common human languages, in identifier alphabetic order
+  TLanguage = (lngUndefined,
+    lngAfrikaans,  lngAlbanian, lngAlsatian,   lngArabic,     lngArmenian,
+    lngAssamese,   lngAzeri,    lngBashkir,    lngBasque,     lngBelarusian,
+    lngBengali,    lngBosnian,  lngBreton,     lngBulgarian,  lngCatalan,
+    lngChinese,    lngCorsican, lngCroatian,   lngCzech,      lngDanish,
+    lngDari,       lngDivehi,   lngDutch,      lngEnglish,    lngEstonian,
+    lngFaeroese,   lngFarsi,    lngFinnish,    lngFrench,     lngFrisian,
+    lngGalician,   lngGeorgian, lngGerman,     lngGreek,      lngGreenlandic,
+    lngGujarati,   lngHebrew,   lngHindi,      lngHungarian,  lngIcelandic,
+    lngIndonesian, lngIrish,    lngItalian,    lngJapanese,   lngKannada,
+    lngKashmiri,   lngKazak,    lngKonkani,    lngKorean,     lngKyrgyz,
+    lngLao,        lngLatvian,  lngLithuanian, lngMacedonian, lngMalay,
+    lngMalayalam,  lngManipuri, lngMarathi,    lngMongolian,  lngNepali,
+    lngNorwegian,  lngOccitan,  lngOriya,      lngPashto,     lngPolish,
+    lngPortuguese, lngPunjabi,  lngRomanian,   lngRussian,    lngSanskrit,
+    lngSerbian,    lngSindhi,   lngSlovak,     lngSlovenian,  lngSpanish,
+    lngSwahili,    lngSwedish,  lngSyriac,     lngTamil,      lngTatar,
+    lngTelugu,     lngThai,     lngTurkish,    lngUkrainian,  lngUrdu,
+    lngUzbek,      lngVietnamese);
+
+const
+  // see https://slaviccenters.duke.edu/webliogra/bosnian-croatian-serbian
+  lngBCS = [lngBosnian, lngCroatian, lngSerbian];
+
+  // see https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid
+  LANG_NEUTRAL     = $00;
+  LANG_AFRIKAANS   = $36;
+  LANG_ALBANIAN    = $1c;
+  LANG_ALSATIAN    = $84;
+  LANG_ARABIC      = $01;
+  LANG_ARMENIAN    = $2b;
+  LANG_ASSAMESE    = $4d;
+  LANG_AZERI       = $2c;
+  LANG_BASHKIR     = $6d;
+  LANG_BASQUE      = $2d;
+  LANG_BELARUSIAN  = $23;
+  LANG_BENGALI     = $45;
+  LANG_BOSNIAN     = $1a;
+  LANG_BRETON      = $7e;
+  LANG_BULGARIAN   = $02;
+  LANG_CATALAN     = $03;
+  LANG_CHINESE     = $04;
+  LANG_CORSICAN    = $83;
+  LANG_CROATIAN    = $1a;
+  LANG_CZECH       = $05;
+  LANG_DANISH      = $06;
+  LANG_DARI        = $8c;
+  LANG_DIVEHI      = $65;
+  LANG_DUTCH       = $13;
+  LANG_ENGLISH     = $09;
+  LANG_ESTONIAN    = $25;
+  LANG_FAEROESE    = $38;
+  LANG_FARSI       = $29;
+  LANG_FINNISH     = $0b;
+  LANG_FRENCH      = $0c;
+  LANG_FRISIAN     = $62;
+  LANG_GALICIAN    = $56;
+  LANG_GEORGIAN    = $37;
+  LANG_GERMAN      = $07;
+  LANG_GREEK       = $08;
+  LANG_GREENLANDIC = $6f;
+  LANG_GUJARATI    = $47;
+  LANG_HEBREW      = $0d;
+  LANG_HINDI       = $39;
+  LANG_HUNGARIAN   = $0e;
+  LANG_ICELANDIC   = $0f;
+  LANG_INDONESIAN  = $21;
+  LANG_IRISH       = $3c;
+  LANG_ITALIAN     = $10;
+  LANG_JAPANESE    = $11;
+  LANG_KANNADA     = $4b;
+  LANG_KASHMIRI    = $60;
+  LANG_KAZAK       = $3f;
+  LANG_KONKANI     = $57;
+  LANG_KOREAN      = $12;
+  LANG_KYRGYZ      = $40;
+  LANG_LAO         = $54;
+  LANG_LATVIAN     = $26;
+  LANG_LITHUANIAN  = $27;
+  LANG_MACEDONIAN  = $2f;
+  LANG_MALAY       = $3e;
+  LANG_MALAYALAM   = $4c;
+  LANG_MANIPURI    = $58;
+  LANG_MARATHI     = $4e;
+  LANG_MONGOLIAN   = $50;
+  LANG_NEPALI      = $61;
+  LANG_NORWEGIAN   = $14;
+  LANG_OCCITAN     = $82;
+  LANG_ORIYA       = $48;
+  LANG_PASHTO      = $63;
+  LANG_POLISH      = $15;
+  LANG_PORTUGUESE  = $16;
+  LANG_PUNJABI     = $46;
+  LANG_ROMANIAN    = $18;
+  LANG_RUSSIAN     = $19;
+  LANG_SANSKRIT    = $4f;
+  LANG_SERBIAN     = $1a;
+  LANG_SINDHI      = $59;
+  LANG_SLOVAK      = $1b;
+  LANG_SLOVENIAN   = $24;
+  LANG_SPANISH     = $0a;
+  LANG_SWAHILI     = $41;
+  LANG_SWEDISH     = $1d;
+  LANG_SYRIAC      = $5a;
+  LANG_TAMIL       = $49;
+  LANG_TATAR       = $44;
+  LANG_TELUGU      = $4a;
+  LANG_THAI        = $1e;
+  LANG_TURKISH     = $1f;
+  LANG_UKRAINIAN   = $22;
+  LANG_URDU        = $20;
+  LANG_UZBEK       = $43;
+  LANG_VALENCIAN   = $03;
+  LANG_VIETNAMESE  = $2a;
+
+  LANG_USER_DEFAULT       = $0400;
+  LANG_SYSTEM_DEFAULT     = $0800;
+  LANG_ENGLISH_US         = LANG_ENGLISH  or LANG_USER_DEFAULT;
+  LANG_CHINESE_SIMPLIFIED = LANG_CHINESE  or LANG_SYSTEM_DEFAULT;
+  LANG_CROATIAN_NEUTRAL   = LANG_CROATIAN or LANG_USER_DEFAULT;
+  LANG_BOSNIAN_CYRILLIC   = LANG_BOSNIAN  or $2000;
+  LANG_SERBIAN_NEUTRAL    = LANG_SERBIAN  or $7c00;
+
+  LANG_PRI: array[TLanguage] of byte = (LANG_NEUTRAL,
+    LANG_AFRIKAANS,  LANG_ALBANIAN, LANG_ALSATIAN,   LANG_ARABIC,     LANG_ARMENIAN,
+    LANG_ASSAMESE,   LANG_AZERI,    LANG_BASHKIR,    LANG_BASQUE,     LANG_BELARUSIAN,
+    LANG_BENGALI,    LANG_BOSNIAN,  LANG_BRETON,     LANG_BULGARIAN,  LANG_CATALAN,
+    LANG_CHINESE,    LANG_CORSICAN, LANG_CROATIAN,   LANG_CZECH,      LANG_DANISH,
+    LANG_DARI,       LANG_DIVEHI,   LANG_DUTCH,      LANG_ENGLISH,    LANG_ESTONIAN,
+    LANG_FAEROESE,   LANG_FARSI,    LANG_FINNISH,    LANG_FRENCH,     LANG_FRISIAN,
+    LANG_GALICIAN,   LANG_GEORGIAN, LANG_GERMAN,     LANG_GREEK,      LANG_GREENLANDIC,
+    LANG_GUJARATI,   LANG_HEBREW,   LANG_HINDI,      LANG_HUNGARIAN,  LANG_ICELANDIC,
+    LANG_INDONESIAN, LANG_IRISH,    LANG_ITALIAN,    LANG_JAPANESE,   LANG_KANNADA,
+    LANG_KASHMIRI,   LANG_KAZAK,    LANG_KONKANI,    LANG_KOREAN,     LANG_KYRGYZ,
+    LANG_LAO,        LANG_LATVIAN,  LANG_LITHUANIAN, LANG_MACEDONIAN, LANG_MALAY,
+    LANG_MALAYALAM,  LANG_MANIPURI, LANG_MARATHI,    LANG_MONGOLIAN,  LANG_NEPALI,
+    LANG_NORWEGIAN,  LANG_OCCITAN,  LANG_ORIYA,      LANG_PASHTO,     LANG_POLISH,
+    LANG_PORTUGUESE, LANG_PUNJABI,  LANG_ROMANIAN,   LANG_RUSSIAN,    LANG_SANSKRIT,
+    LANG_SERBIAN,    LANG_SINDHI,   LANG_SLOVAK,     LANG_SLOVENIAN,  LANG_SPANISH,
+    LANG_SWAHILI,    LANG_SWEDISH,  LANG_SYRIAC,     LANG_TAMIL,      LANG_TATAR,
+    LANG_TELUGU,     LANG_THAI,     LANG_TURKISH,    LANG_UKRAINIAN,  LANG_URDU,
+    LANG_UZBEK,      LANG_VIETNAMESE);
+
+ /// ISO 639-1 compatible language abbreviations (not to be translated)
+ LANG_ISO_SHORT: array[TLanguage] of array[0..1] of AnsiChar = ('',
+   'af', 'sq', 'al', 'ar', 'hy',   'as', 'az', 'ba', 'eu', 'be',
+   'bn', 'bs', 'br', 'bg', 'ca',   'zh', 'co', 'hr', 'cz', 'da',
+   'ad', 'dv', 'nl', 'en', 'et',   'fo', 'fa', 'fi', 'fr', 'fy',
+   'gl', 'ka', 'de', 'el', 'kl',   'gu', 'he', 'hi', 'hu', 'is',
+   'id', 'ga', 'it', 'ja', 'kn',   'km', 'ki', 'kk', 'ko', 'ky',
+   'lo', 'lv', 'lt', 'mk', 'ms',   'ml', 'mp', 'mr', 'mn', 'ne',
+   'no', 'oc', 'or', 'ps', 'pl',   'pt', 'pa', 'ro', 'ru', 'sa',
+   'sr', 'sd', 'sk', 'sl', 'es',   'sw', 'sv', 'sy', 'ta', 'tt',
+   'te', 'th', 'tr', 'uk', 'ur',   'uz', 'vi');
+
+var
+  /// the 16-bit Windows Language Code Identifiers of each language enumerate
+  // - e.g. LANG_LCID[lngEnglish] = 1033
+  LANG_LCID: array[TLanguage] of word;
+  /// ISO 639-1 compatible language abbreviations e.g. lngEnglish as 'en'
+  LANG_ISO: array[TLanguage] of RawUtf8;
+  /// internal lookup table filled by mormot.core.rtti as e.g. 'English'
+  // - stored in alphabetical order
+  LANG_TXT: array[TLanguage] of RawUtf8;
+
+/// search a 16-bit Windows Language Code Identifier as TLanguage enumerate
+function LcidToLanguage(lcid: cardinal): TLanguage;
+
+/// return a 16-bit Windows Language Code Identifier into human-friendly text
+// - e.g. 'English' for LCID = 1033
+function LcidToText(lcid: cardinal): RawUtf8;
+
+/// search a ISO 639-1 compatible language abbreviation
+function IsoTextToLanguage(const Text: RawUtf8): TLanguage;
 
 
 { **************** UTF-8 / UTF-16 / Ansi Conversion Classes }
@@ -970,9 +1147,6 @@ function UnicodeBufferTrimmedToUtf8(source: PWideChar): RawUtf8;
 /// convert an Unicode buffer into a variant storing a UTF-8 string
 // - could be used e.g. as TDocVariantData.AddValue() parameter
 function UnicodeBufferToVariant(source: PWideChar): variant;
-
-/// convert an Unicode buffer into a variant storing a UTF-8 trimmed string
-function UnicodeBufferTrimmedToVariant(source: PWideChar): variant;
 
 /// convert any RTL string into a variant storing a UTF-8 string
 // - could be used e.g. as TDocVariantData.AddValue() parameter
@@ -3618,10 +3792,76 @@ begin
             (aCodePage >= CP_RAWBLOB);
 end;
 
-function CodePageToText(aCodePage: cardinal): TShort16;
+function CodePageToText(aCodePage: cardinal): RawUtf8;
+var
+  tmp: TShort16;
 begin
-  Unicode_CodePageName(aCodePage, result);
-  LowerCaseShort(result); // more convenient
+  Unicode_CodePageName(aCodePage, tmp);
+  LowerCaseCopy(@tmp[1], ord(tmp[0]), result); // more convenient
+end;
+
+var
+  _LcidToLanguage, _IsoTextToLanguage: cardinal; // naive but efficient cache
+
+function LcidToLanguage(lcid: cardinal): TLanguage;
+var
+  i: PtrInt;
+  last: cardinal;
+begin
+  last := _LcidToLanguage; // cache (accessing a 32-bit value is atomic)
+  if last shr 8 = lcid then
+  begin
+    result := TLanguage(ToByte(last));
+    exit;
+  end;
+  result := lngUndefined;
+  i := ByteScanIndex(@LANG_PRI, length(LANG_PRI), lcid and 255);
+  if i <= 0 then
+    exit;
+  result := TLanguage(i);
+  if result = lngBosnian then
+    case lcid shr 8 of
+      $00, $04, $10:
+        result := lngCroatian;
+      $14, $20:
+        result := lngBosnian;
+    else
+      result := lngSerbian;
+    end;
+  _LcidToLanguage := (lcid shl 8) + byte(result); // cache
+end;
+
+function LcidToText(lcid: cardinal): RawUtf8;
+var
+  lng: TLanguage;
+begin
+  lng := LcidToLanguage(lcid);
+  if lng = lngUndefined then
+    result := ''
+  else
+    result := LANG_TXT[lng]; // as set by mormot.core.rtti
+end;
+
+function IsoTextToLanguage(const Text: RawUtf8): TLanguage;
+var
+  last, lower: cardinal;
+  i: PtrInt;
+begin
+  result := lngUndefined;
+  if length(Text) <> 2 then
+    exit;
+  last := _IsoTextToLanguage; // atomic cache
+  lower := PWord(Text)^ or $2020;
+  if last shr 8 = lower then
+  begin
+    result := TLanguage(ToByte(last));
+    exit;
+  end;
+  i := WordScanIndex(@LANG_ISO_SHORT[succ(low(result))], ord(high(result)), lower);
+  if i < 0 then
+    exit;
+  result := TLanguage(i + 1);
+  _IsoTextToLanguage := (lower shl 8) + byte(result); // cache
 end;
 
 
@@ -5137,13 +5377,6 @@ begin
   ClearVariantForString(result);
   if source <> nil then
     RawUnicodeToUtf8(source, StrLenW(source), RawUtf8(TVarData(result).VAny));
-end;
-
-function UnicodeBufferTrimmedToVariant(source: PWideChar): variant;
-begin
-  ClearVariantForString(result);
-  if source <> nil then
-    RawUtf8(TVarData(result).VAny) := UnicodeBufferTrimmedToUtf8(source);
 end;
 
 function StringToVariant(const Txt: string): variant;
@@ -11196,6 +11429,7 @@ var
   c: AnsiChar;
   ck: TCharKind;
   sc: TSnakeCase;
+  lng: TLanguage;
 begin
   // decompress 1KB static in the exe into 20KB UU[] array for Unicode Uppercase
   {$ifdef UU_COMPRESSED}
@@ -11268,6 +11502,15 @@ begin
     end;
     SNAKE_CHARS[c] := sc;
   end;
+  for lng := succ(low(lng)) to high(lng) do
+  begin
+    FastSetString(LANG_ISO[lng], @LANG_ISO_SHORT[lng], 2);
+    LANG_LCID[lng] := LANG_PRI[lng] or LANG_USER_DEFAULT;
+  end;
+  LANG_LCID[lngUndefined] := LANG_ENGLISH_US;
+  LANG_LCID[lngChinese]   := LANG_CHINESE_SIMPLIFIED;
+  LANG_LCID[lngBosnian]   := LANG_BOSNIAN_CYRILLIC;
+  LANG_LCID[lngSerbian]   := LANG_SERBIAN_NEUTRAL;
   // setup sorting functions redirection
   StrCompByCase[false] := @StrComp;
   StrCompByCase[true]  := @StrIComp;
