@@ -1374,7 +1374,7 @@ type
     /// retrieve a cookie name/value pair in the internal storage
     // - cookie name are case-sensitive
     function InCookieSearch(const CookieName: RawUtf8): PHttpCookie;
-    {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// low-level raw cookie value as set by OutCookie[] to be sent as response
     // - if not void, TRestServer.Uri() will define a new 'set-cookie: ...'
     // header in Call^.OutHead to be stored on the HTTP client

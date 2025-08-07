@@ -298,11 +298,25 @@ function TMvcSessionWithRestServer.GetCookie(out Value: PUtf8Char): integer;
 var
   ctxt: TRestServerUriContext;
   cookie: PHttpCookie;
+  valueend: PUtf8Char;
 begin
   result := 0;
   ctxt := ServiceRunningContext.Request;
   if ctxt = nil then
     exit;
+  if ctxt.OutSetCookie <> '' then // 'name=value; path=...'
+  begin
+    Value := PosChar(pointer(ctxt.OutSetCookie), '='); // assume name=CookieName
+    if Value <> nil then
+    begin
+      valueend := PosChar(Value, ';');
+      if valueend <> nil then
+        result := valueend - Value
+      else
+        result := StrLen(Value);
+      exit;
+    end;
+  end;
   cookie := ctxt.InCookieSearch(fContext.CookieName);
   if cookie = nil then
     exit;
