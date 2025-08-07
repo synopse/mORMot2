@@ -309,6 +309,7 @@ begin
     Value := PosChar(pointer(ctxt.OutSetCookie), '='); // assume name=CookieName
     if Value <> nil then
     begin
+      inc(Value);
       valueend := PosChar(Value, ';');
       if valueend <> nil then
         result := valueend - Value
