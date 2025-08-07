@@ -2364,7 +2364,7 @@ procedure TMvcApplication.GetViewInfo(MethodIndex: integer; out info: variant);
 begin
   TDocVariantData(info).InitFast(8, dvObject);
   if MethodIndex >= 0 then
-    TDocVariantData(info).AddValueFromText(
+    TDocVariantData(info).AddValueText(
       'pageName', fFactory.Methods[MethodIndex].Uri);
 end;
 

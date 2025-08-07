@@ -961,19 +961,19 @@ begin
     if Issuer = '' then
       RaiseMissing(jrcIssuer)
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcIssuer], Issuer, true);
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcIssuer], Issuer, true);
   if jrcSubject in fClaims then
     if Subject = '' then
       RaiseMissing(jrcSubject)
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcSubject], Subject, true);
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcSubject], Subject, true);
   if jrcAudience in fClaims then
     if Audience = '' then
       RaiseMissing(jrcAudience)
     else if Audience[1] = '[' then
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcAudience], _JsonFast(Audience))
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcAudience], Audience, true);
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcAudience], Audience, true);
   if jrcNotBefore in fClaims then
     if NotBefore <= 0 then
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore], UnixTimeUtc)

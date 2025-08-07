@@ -8043,11 +8043,11 @@ begin
   // cut-down version of TJwtAbstract.PayloadToJson
   payload.InitObject(DataNameValue, JSON_FAST);
   if Issuer <> '' then
-    payload.AddValueFromText('iss', Issuer);
+    payload.AddValueText('iss', Issuer);
   if Subject <> '' then
-    payload.AddValueFromText('sub', Subject);
+    payload.AddValueText('sub', Subject);
   if Audience <> '' then
-    payload.AddValueFromText('aud', Audience);
+    payload.AddValueText('aud', Audience);
   if NotBefore > 0 then
     payload.AddValue('nbf', DateTimeToUnixTime(NotBefore));
   if ExpirationMinutes > 0 then

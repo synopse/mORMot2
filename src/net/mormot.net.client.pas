@@ -3957,7 +3957,7 @@ begin
     'pf', TLS.PrivateKeyFile], JSON_FAST, {dontAddDefault=}true);
   if (TLS.PrivateKeyFile <> '') and
      (TLS.PrivatePassword <> '') then
-    TDocVariantData(result).AddValueFromText('pp',
+    TDocVariantData(result).AddValueText('pp',
       BinToBase64uri(CryptDataWithSecret(TLS.PrivatePassword,
         [TLS.PrivateKeyFile, TLS.CertificateFile, Secret], TLS_ROUNDS, TLS_SALT)));
 end;

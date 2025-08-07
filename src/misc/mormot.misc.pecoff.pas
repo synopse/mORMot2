@@ -971,8 +971,8 @@ begin
         Key := pointer(PAnsiChar(StrEntry) + SizeOf(StrEntry^));
         Value := pointer(PAnsiChar(StrEntry) +
           DWordAlign(SizeOf(StrEntry^) + 2 * (StrLenW(Key) + 1), Offset));
-        fStringFileInfoEntries.AddValue(
-          UnicodeBufferTrimmedToUtf8(Key), UnicodeBufferTrimmedToVariant(Value));
+        fStringFileInfoEntries.AddValueText(
+          UnicodeBufferTrimmedToUtf8(Key), UnicodeBufferTrimmedToUtf8(Value));
         if StrEntry^.Length = 0 then
           StrEntry := StrEntryEnd // end
         else

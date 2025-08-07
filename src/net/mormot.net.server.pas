@@ -3430,10 +3430,10 @@ begin
     Dest.InitJson(fInContent, JSON_FAST) // try decoding from JSON body
   else
     Dest.InitFromUrl(p + 1, JSON_FAST);  // parameters from /uri?n1=v1&n2=v2
-  Dest.AddValueFromText('url', Split(fUrl, '?'));
-  Dest.AddValueFromText('method', fMethod);
+  Dest.AddValueText('url', Split(fUrl, '?'));
+  Dest.AddValueText('method', fMethod);
   if fInContent <> '' then
-    Dest.AddValueFromText('content', fInContent);
+    Dest.AddValueText('content', fInContent);
 end;
 
 {$ifdef USEWININET}
