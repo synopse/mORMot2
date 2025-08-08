@@ -1992,7 +1992,11 @@ type
     /// merge (i.e. add or update) several values from another object
     // - current document should be an object
     procedure AddOrUpdateFrom(const aDocVariant: Variant;
-      aOnlyAddMissing: boolean = false);
+      aOnlyAddMissing: boolean = false); overload;
+    /// merge (i.e. add or update) several values from another object
+    // - current document should be an object
+    procedure AddOrUpdateFrom(const Another: TDocVariantData;
+      aOnlyAddMissing: boolean = false); overload;
     /// add one or several properties, specified by path, from another object
     // - path are defined as open array, e.g. ['doc','glossary','title'], but
     // could also contained nested paths, e.g. ['doc.glossary', title'] or
@@ -7664,25 +7668,29 @@ end;
 
 procedure TDocVariantData.AddOrUpdateFrom(const aDocVariant: Variant;
   aOnlyAddMissing: boolean);
+begin
+  AddOrUpdateFrom(_Safe(aDocVariant, dvObject)^);
+end;
+
+procedure TDocVariantData.AddOrUpdateFrom(const Another: TDocVariantData;
+  aOnlyAddMissing: boolean);
 var
-  src: PDocVariantData;
   n: integer;
   k: PRawUtf8;
   v: PVariant;
 begin
-  src := _Safe(aDocVariant, dvObject);
-  n := src^.Count;
+  n := Another.Count;
   if n = 0 then
     exit; // nothing to add
-  if Count = 0 then
+  if VCount = 0 then
   begin
     VCount := n;
-    VValue := src^.VValue; // no need to lookup names: just assign by reference
-    VName  := src^.VName;
+    VValue := Another.VValue; // no need to lookup names: just assign by reference
+    VName  := Another.VName;
     exit;
   end;
-  k := pointer(src^.VName); // need to merge values by property name
-  v := pointer(src^.VValue);
+  k := pointer(Another.VName); // need to merge values by property name
+  v := pointer(Another.VValue);
   repeat
     AddOrUpdateValue(k^, v^, nil, aOnlyAddMissing);
     inc(k);
@@ -12574,7 +12582,7 @@ end;
 procedure TDocDict.Update(const source: IDocDict; addonlymissing: boolean);
 begin
   if source <> nil then
-    fValue^.AddOrUpdateFrom(PVariant(source.Value)^, addonlymissing);
+    fValue^.AddOrUpdateFrom(source.Value^, addonlymissing);
 end;
 
 procedure TDocDict.Merge(const key: RawUtf8; const value: variant);

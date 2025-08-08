@@ -5372,7 +5372,7 @@ begin
       inc(attr);
     end;
     if ObjectAttributeField = '*' then
-      v^.AddOrUpdateFrom(variant(a), {onlymissing=}true)
+      v^.AddOrUpdateFrom(a, {onlymissing=}true)
     else
       v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
     a.Clear; // mandatory to prepare the next a.Init in this loop
