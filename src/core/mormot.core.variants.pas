@@ -688,6 +688,7 @@ type
     // will increase the process speed a lot
     // - in practice, you should better use the function _Obj() which is a
     // wrapper around this class method
+    // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     class function NewObject(const NameValuePairs: array of const;
       Options: TDocVariantOptions = []; DontAddDefault: boolean = false): variant;
     /// initialize a variant instance to store some document-based array content
@@ -1074,11 +1075,13 @@ type
     // !  Doc.AddValue('name','John');
     // !  Doc.AddValue('year',1972);
     // - this method is called e.g. by _Obj() and _ObjFast() global functions
+    // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
     // e.g. never call _Safe(...)^.InitObject() because it could leak memory
     procedure InitObject(const NameValuePairs: array of const;
       aOptions: TDocVariantOptions = []; DontAddDefault: boolean = false); overload;
     /// initialize a TDocVariantData to store document-based object content
+    // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
     // e.g. never call _Safe(...)^.InitObject() because it could leak memory
     procedure InitObject(const NameValuePairs: array of const;
@@ -1910,7 +1913,7 @@ type
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be duplicated - use Update() if you want to
     // replace any existing value
-    // - DontAddDefault=true would check
+    // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     procedure AddNameValuesToObject(const NameValuePairs: array of const;
       DontAddDefault: boolean = false);
     /// merge some properties to a TDocVariantData dvObject
@@ -1970,6 +1973,7 @@ type
     // - if the document is an array, keep aName=''
     // - if the document is an object, set the new object property as aName
     // - new object will keep the same options as this document
+    // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     // - slightly faster than AddItem(_Obj(...)) or AddValue(aName, _Obj(...))
     procedure AddObject(const aNameValuePairs: array of const;
       const aName: RawUtf8 = ''; DontAddDefault: boolean = false);
@@ -2531,6 +2535,7 @@ function _DV(const DocVariant: variant;
 // or even with nested objects:
 // ! aVariant := _Obj(['name','John','doc',_Obj(['one',1,'two',2.0])]);
 // - this global function is an alias to TDocVariant.NewObject()
+// - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 // - by default, every internal value will be copied, so access of nested
 // properties can be slow - if you expect the data to be read-only or not
 // propagated into another place, set Options=[dvoValueCopiedByReference]
@@ -2560,6 +2565,7 @@ procedure _ObjAddPropU(const Name: RawUtf8; const Value: RawUtf8;
 // - if Obj is a TDocVariant object, will add the Name/Value pairs
 // - if Obj is not a TDocVariant, will create a new fast document,
 // initialized with supplied the Name/Value pairs
+// - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
 procedure _ObjAddProps(const NameValuePairs: array of const;
@@ -2666,6 +2672,7 @@ function _Json(const Json: RawUtf8; var Value: variant;
 // ! Obj(NameValuePairs, JSON_FAST);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
+// - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 function _ObjFast(const NameValuePairs: array of const;
   DontAddDefault: boolean = false): variant; overload;
 
@@ -3679,6 +3686,7 @@ function DocDictDynArray(const json: RawUtf8;
   jsonfromresults: boolean = false): IDocDicts;
 
 /// create a self-owned IDocDict from a set of key,value pairs
+// - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 function DocDict(const keyvalues: array of const;
   model: TDocVariantModel = mFastFloat;
   dontAddDefault: boolean = false): IDocDict; overload;
