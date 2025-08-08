@@ -599,13 +599,13 @@ type
     function GetTextAsBuffer: PUtf8Char;
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
-    /// write pending data to the Stream, with automatic buffer resizal
+    /// write pending data to the Stream, with automatic buffer resize
     // - you should not have to call FlushToStream in most cases, but FlushFinal
     // at the end of the process, just before using the resulting Stream
     // - FlushToStream may be used to force immediate writing of the internal
     // memory buffer to the destination Stream
     // - you can set FlushToStreamNoAutoResize=true or call FlushFinal if you
-    // do not want the automatic memory buffer resizal to take place
+    // do not want the automatic memory buffer resize to take place
     procedure FlushToStream; virtual;
     /// write pending data to the Stream, without automatic buffer resizal
     // - will append the internal memory buffer to the Stream
@@ -617,22 +617,22 @@ type
     procedure FlushFinal;
       {$ifdef HASINLINE}inline;{$endif}
 
-    /// append one ASCII char to the buffer
+    /// append one ASCII char
     procedure Add(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append one ASCII char to the buffer with no buffer check
+    /// append one ASCII char with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append two ASCII chars to the buffer with no buffer check
+    /// append two ASCII chars with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append three ASCII chars to the buffer with no buffer check
+    /// append three ASCII chars with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c1, c2, c3: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append four ASCII chars to the buffer with no buffer check
+    /// append four ASCII chars with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddDirect(const c1, c2, c3, c4: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -644,10 +644,10 @@ type
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddComma;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append one ASCII char to the buffer, if not already there as LastChar
+    /// append one ASCII char, if not already there as LastChar
     procedure AddOnce(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append two chars to the buffer
+    /// append two chars
     procedure Add(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifdef CPU32}
@@ -734,24 +734,24 @@ type
     procedure AddCsvInteger(const Integers: array of integer);
     /// append an array of doubles as CSV
     procedure AddCsvDouble(const Doubles: array of double);
-    /// append some UTF-8 chars to the buffer
+    /// append some #0-ended UTF-8 buffer
     // - input length is calculated from zero-ended char
     // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscape(P: pointer); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 chars to the buffer
+    /// append an UTF-8 buffer of any size
     // - does not escape chars according to the JSON RFC
     // - called by inlined AddNoJsonEscape() if Len >= AvailableBytes
     procedure AddNoJsonEscapeBig(P: pointer; Len: PtrInt);
-    /// append some UTF-8 chars to the buffer - inlined for small content
+    /// append some UTF-8 buffer with its length - inlined for small content
     // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscape(P: pointer; Len: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 encoded chars to the buffer, from a RTL string type
+    /// append a RTL string as UTF-8
     // - does not escape chars according to the JSON RFC
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
     procedure AddNoJsonEscapeString(const s: string);
-    /// append some unicode chars to the buffer
+    /// append a UTF-16 encoded buffer as UTF-8
     // - WideCharCount is the UTF-16 chars count, not the byte size; if it is
     // 0, then it will convert until an ending #0 (fastest way)
     // - does not escape chars according to the JSON RFC
@@ -760,14 +760,13 @@ type
     /// append some Ansi text of a specific CodePage as UTF-8 chars to the buffer
     // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscapeCP(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
-    /// append some UTF-8 content to the buffer, with no JSON escape
+    /// append some raw UTF-8 buffer, with no JSON escape
     // - if supplied json is '', will write 'null' so that valid JSON is written
     // - redirect to AddNoJsonEscape() otherwise
     procedure AddRawJson(const json: RawJson);
     /// append a line of text with CR+LF at the end
     procedure AddLine(const Text: ShortString);
-    /// append some chars to the buffer in one line
-    // - P should be ended with a #0
+    /// append a #0-ended UTF-8 buffer in one line
     // - will write #1..#31 chars as spaces (so content will stay on the same line)
     // - this method is slightly faster than its overload with explicit Len param
     procedure AddOnSameLine(P: PUtf8Char); overload;
@@ -949,34 +948,34 @@ type
     /// append strings or integers with a specified format
     // - this class implementation will raise an exception for twJsonEscape,
     // and simply call FormatUtf8() over a temp RawUtf8 for twNone/twOnSameLine
-    // - use faster and more complete overriden TJsonWriter.Add instead!
+    // - raise an ESynException for twJsonEscape: use inherited TJsonWriter instead
     procedure Add(const Format: RawUtf8; const Values: array of const;
       Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
     /// this class implementation will raise an exception
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
       EndOfObject: PUtf8Char): PUtf8Char; virtual;
     /// this class implementation will raise an exception
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
     /// append a variant content as UTF-8 text
     // - with optional HTML escape (via a TTempUtf8) but no JSON serialization
     procedure AddVarData(Value: PVarData; HtmlEscape: boolean);
     /// this class implementation will raise an exception
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
     function AddTypedJson(Value: pointer; TypeInfo: pointer;
       WriteOptions: TTextWriterWriteObjectOptions = []): pointer; virtual;
     /// write some #0 ended UTF-8 text, according to the specified format
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload; virtual;
     /// write some #0 ended UTF-8 text, according to the specified format
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
-    /// append an open array constant value to the buffer
-    // - use overriden TJsonWriter version instead!
+    /// append an open array constant value as UTF-8
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
     /// prepare direct access to the internal output buffer
@@ -985,10 +984,10 @@ type
     // - but WON'T increase the instance position: caller should do inc(B, ...)
     function AddPrepare(Len: PtrInt): pointer;
     /// write some data Base64 encoded
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); virtual;
     /// serialize as JSON the given object
-    // - use overriden TJsonWriter version instead!
+    // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure WriteObject(Value: TObject;
       WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
     /// append a T*ObjArray dynamic array as a JSON array
@@ -1260,7 +1259,7 @@ type
     /// end the echoing process
     destructor Destroy; override;
     /// should be called from TTextWriter.FlushToStream
-    // - write pending data to the Stream, with automatic buffer resizal and echoing
+    // - write pending data to the Stream, with automatic buffer resize and echoing
     // - this overriden method will handle proper echoing
     procedure FlushToStream(Text: PUtf8Char; Len: PtrInt);
     /// mark an end of line, ready to be "echoed" to registered listeners
@@ -1798,7 +1797,7 @@ function VarRecAsChar(V: PVarRec): integer;
 function VarRecAs(V: PVarRec; aClass: TClass): pointer;
 
 /// check if a supplied "array of const" argument is a default value
-// - e.g. '', 0, nil or false
+// - e.g. '', 0, nil or false values would return true
 function VarRecIsDefault(V: PVarRec): boolean;
 
 /// check if a supplied "array of const" argument is a void value
@@ -8656,7 +8655,7 @@ begin
     vtObject,
     vtClass,
     vtInterface:
-      result := V^.VPointer = nil; // void pointer value
+      result := V^.VPointer = nil; // void pointer/string value
     vtChar:
       result := V^.VChar = #0;
     vtWideChar:
@@ -9613,7 +9612,7 @@ begin
     r := res^;
     inc(t, r);
     {$ifdef HASCODEPAGE}
-    PStrRec(r - _STRRECSIZE)^.CodePage := cp;
+    PStrRec(r - _STRRECSIZE)^.CodePage := cp; // force the code page (for FPC)
     {$endif HASCODEPAGE}
   end;
   MoveFast(add^, pointer(t)^, len);

@@ -96,7 +96,7 @@ const
   JSON_ESCAPE_NONE = 0;
   /// JSON_ESCAPE[] lookup value: indicates #0 (end of string)
   JSON_ESCAPE_ENDINGZERO = 1;
-  /// JSON_ESCAPE[] lookup value: should be escaped as \u00xx
+  /// JSON_ESCAPE[] lookup value: should be escaped as \u00xx (see JSON_UHEXC)
   JSON_ESCAPE_UNICODEHEX = 2;
 
   /// JSON_UNESCAPE[] lookup value: indicates #0 or unexpected control char
@@ -116,7 +116,7 @@ var
   /// 256-byte lookup table for fast branchless JSON text escaping
   // - 0 = JSON_ESCAPE_NONE indicates no escape needed
   // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
-  // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
+  // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx (with JSON_UHEXC)
   // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
   JSON_ESCAPE: TByteToByte;
 
@@ -726,40 +726,37 @@ type
     /// append CR+LF (#13#10) chars and #9 indentation
     // - will also flush any fBlockComment
     procedure AddCRAndIndent; override;
-    /// write some #0 ended UTF-8 text, according to the specified format
+    /// write some #0 ended UTF-8 buffer, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
     procedure Add(P: PUtf8Char; Escape: TTextWriterKind); override;
-    /// write some #0 ended UTF-8 text, according to the specified format
+    /// write some #0 ended UTF-8 buffer, according to the specified format
+    // - this overloaded method expects the length to be supplied in bytes
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); override;
-    /// write some #0 ended Unicode text as UTF-8, according to the specified format
+    /// write some UTF-16 buffer as UTF-8, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscapeW,
     // AddJsonEscapeW or AddOnSameLineW methods
     procedure AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
-    // - use the current system code page for AnsiString parameter
+    /// append some AnsiString variable as UTF-8, from its associated CodePage
+    // - use the current system code page on Delphi 7/2007 (no TStrRec.CodePage)
     procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 encoded chars to the buffer, from any AnsiString value
-    // - if CodePage is left to its default value of -1, it will assume
-    // CurrentAnsiConvert.CodePage prior to Delphi 2009, but newer UNICODE
-    // versions of Delphi will retrieve the code page from string
+    /// append some AnsiString variable as UTF-8, from a supplied CodePage
+    // - in respect to AddAnsiString(), will recognize JSON_BASE64_MAGIC
     // - if CodePage is defined to a >= 0 value, the encoding will take place
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
       CodePage: integer = -1);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 encoded chars to the buffer, from any Ansi buffer
-    // - the codepage should be specified, e.g. CP_UTF8, CP_RAWBYTESTRING,
-    // CP_WINANSI, or any version supported by the Operating System
+    /// append some ANSI buffer as UTF-8, using a supplied CodePage
     // - if codepage is 0, the current CurrentAnsiConvert.CodePage would be used
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
       Escape: TTextWriterKind; CodePage: integer);
     /// append some binary buffer as ASCCI text or $xx hexadecimal codes
-    // - wrap EscapeBuffer() into the buffer output, up to MaxLen source bytes
+    // - wrap EscapeBuffer() into the output buffer, up to MaxLen source bytes
     procedure AddEscapeBuffer(P: pointer; Len, MaxLen: PtrInt);
     /// write some data Base64 encoded
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
@@ -870,8 +867,7 @@ type
     // - P should be a #0 terminated PWideChar buffer
     // - will properly handle JSON escape between two " double quotes
     procedure AddTextW(P: PWord; Escape: TTextWriterKind = twJsonEscape);
-    /// append some UTF-8 encoded chars to the buffer
-    // - escapes chars according to the JSON RFC
+    /// append some UTF-8 buffer, with proper JSON escaping
     // - if Len is 0, writing will stop at #0 (default Len = 0 is slightly faster
     // than specifying Len>0 if you are sure P is zero-ended - e.g. from RawUtf8)
     procedure AddJsonEscape(P: pointer; Len: PtrInt = 0); overload;
@@ -884,16 +880,14 @@ type
     // - escapes chars according to the JSON RFC
     procedure AddJsonEscapeString(const s: string);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
-    // - escapes chars according to the JSON RFC
-    // - on FPC and Delphi Unicode, uses the codepage to do any needed conversion
+    /// append some AnsiString variable as UTF-8, with proper JSON escaping
+    // - on FPC and Delphi Unicode, uses TStrRec.CodePage with proper conversion
     procedure AddJsonEscapeAnsiString(const s: AnsiString);
-    /// append an open array constant value to the buffer
-    // - "" will be added if necessary
-    // - escapes chars according to the JSON RFC
+    /// append an open array constant value as UTF-8, with proper JSON escaping
+    // - "" will be added as expected with JSON strings
     // - very fast (avoid most temporary storage)
     procedure AddJsonEscapeVarRec(V: PVarRec);
-    /// append a UTF-8 JSON string, JSON escaped between double quotes
+    /// append some RawUtf8 variable, with proper JSON double quotes escaping
     // - "" will always be added, before calling AddJsonEscape()
     procedure AddJsonString(const Text: RawUtf8);
     /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
@@ -914,20 +908,20 @@ type
     // - i.e. \u#### patterns will be converted into pure UTF-8 output
     // - as used for jsonNoEscapeUnicode transformation
     procedure AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
-    /// append an open array constant value to the buffer
-    // - "" won't be added for string values
-    // - string values may be escaped, depending on the supplied parameter
+    /// append an open array constant value as UTF-8
+    // - "" won't be added for string values, but they may be escaped, depending
+    // on the supplied Escape parameter
     // - very fast (avoid most temporary storage)
     procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
     /// encode the supplied data as an UTF-8 valid JSON object content
     // - data must be supplied two by two, as Name,Value pairs, e.g.
     // ! aWriter.AddJsonEscape(['name','John','year',1972]);
-    // will append to the buffer:
+    // will append the following content:
     // ! '{"name":"John","year":1972}'
     // - or you can specify nested arrays or objects with '['..']' or '{'..'}':
     // ! aWriter.AddJsonEscape(['doc','{','name','John','ab','[','a','b']','}','id',123]);
-    // will append to the buffer:
+    // will append the following content:
     // ! '{"doc":{"name":"John","abc":["a","b"]},"id":123}'
     // - note that, due to a Delphi compiler limitation, cardinal values should be
     // type-casted to Int64() (otherwise the integer mapped value will be converted)
@@ -5338,7 +5332,7 @@ end;
 procedure _JS_Unicode(Data: PPWord; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
-  Ctxt.W.AddJsonEscapeW(Data^);
+  Ctxt.W.AddJsonEscapeW(Data^); // faster with plain PWideChar ending at #0
   Ctxt.W.AddDirect('"');
 end;
 
@@ -5818,7 +5812,7 @@ begin
     varString:
       {$ifdef HASCODEPAGE}
       _JS_Ansi(@Data^.VAny, Ctxt);
-      {$else} // old Delphi can't use Ctxt.Info.Cache.CodePage 
+      {$else} // old Delphi can't use Ctxt.Info.Cache.CodePage: assume CP_UTF8
       Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
       {$endif HASCODEPAGE}
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
@@ -6241,7 +6235,7 @@ end;
 procedure TJsonWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
 begin
   if P <> nil then
-    case Escape of
+    case Escape of // use faster dedicated methods with Len = 0
       twNone:
         AddNoJsonEscape(P, StrLen(P));
       twJsonEscape:
@@ -6279,7 +6273,7 @@ end;
 
 procedure TJsonWriter.AddAnsiString(const s: AnsiString; Escape: TTextWriterKind);
 begin
-  AddAnyAnsiBuffer(pointer(s), length(s), Escape, 0);
+  AddAnyAnsiBuffer(pointer(s), length(s), Escape, {codepage=}0);
 end;
 
 procedure TJsonWriter.AddAnyAnsiString(const s: RawByteString;
@@ -6342,7 +6336,7 @@ begin // a dedicated method using a TSynAnsiFixedWidth lookup table
         end;
       JSON_ESCAPE_ENDINGZERO: // #0
         exit;
-      JSON_ESCAPE_UNICODEHEX: // characters below ' ', #7 e.g. -> \u0007
+      JSON_ESCAPE_UNICODEHEX: // e.g. #7 -> \u0007
         begin
           PCardinal(W.B + 1)^ := JSON_UHEXC;
           PCardinal(W.B + 5)^ := TwoDigitsHex[P^];
@@ -7131,7 +7125,7 @@ noesc:
         goto noesc;
       JSON_ESCAPE_ENDINGZERO: // #0
         exit;
-      JSON_ESCAPE_UNICODEHEX: // characters below ' ', #7 e.g. -> // 'u0007'
+      JSON_ESCAPE_UNICODEHEX: // e.g. #7 -> \u0007
         begin
           PCardinal(B + 1)^ := JSON_UHEXC;
           inc(B, 4);
