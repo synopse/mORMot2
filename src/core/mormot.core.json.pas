@@ -871,13 +871,13 @@ type
     // - if Len is 0, writing will stop at #0 (default Len = 0 is slightly faster
     // than specifying Len>0 if you are sure P is zero-ended - e.g. from RawUtf8)
     procedure AddJsonEscape(P: pointer; Len: PtrInt = 0); overload;
-    /// append some Unicode encoded chars to the buffer
-    // - if Len is 0, Len is calculated from zero-ended widechar
-    // - escapes chars according to the JSON RFC
-    procedure AddJsonEscapeW(P: PWord; Len: PtrInt = 0);
-    /// append some UTF-8 encoded chars to the buffer, from a RTL string type
+    /// append some UTF-16 buffer, with proper JSON escaping
+    procedure AddJsonEscapeW(P: PWord; Len: PtrInt); overload;
+    /// append some #0-ended UTF-16 buffer, with proper JSON escaping
+    // - slightly faster then the overload with a Len
+    procedure AddJsonEscapeW(P: PWord); overload;
+    /// append some main string variable as UTF-8, with proper JSON escaping
     // - faster than AddJsonEscape(pointer(StringToUtf8(string))
-    // - escapes chars according to the JSON RFC
     procedure AddJsonEscapeString(const s: string);
       {$ifdef HASINLINE}inline;{$endif}
     /// append some AnsiString variable as UTF-8, with proper JSON escaping
@@ -7145,7 +7145,7 @@ procedure TJsonWriter.AddJsonEscapeString(const s: string);
 begin
   if s <> '' then
     {$ifdef UNICODE}
-    AddJsonEscapeW(pointer(s), Length(s));
+    AddJsonEscapeW(pointer(s)); // faster with PWideChar and no length
     {$else}
     AddAnyAnsiString(s, twJsonEscape, 0);
     {$endif UNICODE}
@@ -7159,18 +7159,15 @@ end;
 procedure TJsonWriter.AddJsonEscapeW(P: PWord; Len: PtrInt);
 var
   i, c, s: PtrInt;
-  esc: byte;
   tab: PByteArray;
-begin
+begin // called with Len=1 for WideChar, or from some DB raw UTF-16 buffers
   if P = nil then
     exit;
-  if Len = 0 then
-    Len := MaxInt;
   i := 0;
   while i < Len do
   begin
     s := i;
-    tab := @JSON_ESCAPE;
+    tab := @JSON_ESCAPE; // better code generation on FPC within the loop
     repeat
       c := PWordArray(P)[i];
       if (c <= 127) and
@@ -7187,19 +7184,76 @@ begin
     c := PWordArray(P)[i];
     if c = 0 then
       exit;
-    esc := tab[c];
-    if esc = JSON_ESCAPE_ENDINGZERO then // #0
-      exit
-    else if esc = JSON_ESCAPE_UNICODEHEX then
+    inc(i);
+    if tab[c] = JSON_ESCAPE_UNICODEHEX then // e.g. #7 -> \u0007
     begin
-      // characters below ' ', #7 e.g. -> \u0007
-      AddDirect('\', 'u', '0', '0');
-      AddByteToHex(c);
+      PCardinal(B + 1)^ := JSON_UHEXC;
+      PCardinal(B + 5)^ := TwoDigitsHex[c];
+      inc(B, 6);
     end
     else
-      AddDirect('\', AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
-    inc(i);
+    begin // escaped as \ + b,t,n,f,r,\,"
+      PCardinal(B + 1)^ := (cardinal(tab[c]) shl 8) or byte('\');
+      inc(B, 2);
+    end;
   end;
+end;
+
+procedure TJsonWriter.AddJsonEscapeW(P: PWord);
+var
+  src: PWord;
+  dst: PUtf8Char;
+  tab: PByteArray;
+  c: PtrInt;
+begin
+  src := P;
+  if src = nil then
+    exit;
+  tab := @JSON_ESCAPE;
+  dst := B + 1;
+  if dst > BEnd then
+    dst := FlushToStreamUsing(dst);
+  repeat
+    repeat
+      c := src^;
+      if c <= 127 then
+      begin
+        if tab[c] <> JSON_ESCAPE_NONE then
+          break; // also stop at JSON_ESCAPE_ENDINGZERO
+        dst^ := AnsiChar(c); // direct store 7-bit ASCII
+        inc(dst);
+        inc(src);
+        if dst <= BEnd then
+          continue;
+      end
+      else
+      begin
+        P := src;
+        inc(dst, Utf16CharToUtf8(dst, P)); // convert UTF-16 to UTF-8
+        src := P;
+        if dst <= BEnd then
+          continue;
+      end;
+      dst := FlushToStreamUsing(dst);
+    until false;
+    if c = 0 then
+      break;
+    if tab[c] = JSON_ESCAPE_UNICODEHEX then // e.g. #7 -> \u0007
+    begin
+      PCardinal(dst)^     := JSON_UHEXC;
+      PCardinal(dst + 4)^ := TwoDigitsHex[c];
+      inc(dst, 6);
+    end
+    else
+    begin // escaped as \ + b,t,n,f,r,\,"
+      PCardinal(dst)^ := (cardinal(tab[c]) shl 8) or byte('\');
+      inc(dst, 2);
+    end;
+    inc(src);
+    if dst > BEnd then
+      dst := FlushToStreamUsing(dst);
+  until false;
+  B := dst - 1;
 end;
 
 procedure TJsonWriter.AddJsonEscapeVarRec(V: PVarRec);
@@ -7224,15 +7278,6 @@ begin
         AddJsonEscape(V^.VAnsiString);
         AddDirect('"');
       end;
-    {$ifdef HASVARUSTRING}
-    vtUnicodeString:
-      begin
-        Add('"');
-        AddJsonEscapeW(pointer(UnicodeString(V^.VUnicodeString)),
-                        length(UnicodeString(V^.VUnicodeString)));
-        AddDirect('"');
-      end;
-    {$endif HASVARUSTRING}
     vtPChar:
       begin
         Add('"');
@@ -7251,10 +7296,15 @@ begin
         AddJsonEscapeW(@V^.VWideChar, 1);
         AddDirect('"');
       end;
+    vtPWideChar,
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString,
+    {$endif HASVARUSTRING}
     vtWideString:
       begin
         Add('"');
-        AddJsonEscapeW(V^.VWideString);
+        if V^.VWideString <> nil then
+          AddJsonEscapeW(V^.VWideString);
         AddDirect('"');
       end;
     vtClass:
@@ -11192,7 +11242,7 @@ begin
       if HtmlEscape then
         W.AddHtmlEscapeW(PPWideChar(Data)^)
       else
-        W.AddNoJsonEscapeW(PPWord(Data)^, 0);
+        W.AddNoJsonEscapeW(PPWord(Data)^);
     // unescaped (and unquoted) numbers, date/time, guid or hash
     ptByte:
       W.AddB(PByte(Data)^);
