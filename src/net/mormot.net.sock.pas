@@ -6430,10 +6430,9 @@ procedure TCrtSocket.SockSend(const Values: array of const);
 var
   v: PVarRec;
   i: PtrInt;
-  {$ifdef HASVARUSTRING}
   j, l: PtrInt;
+  w: PWordArray;
   p: PByteArray;
-  {$endif HASVARUSTRING}
   t: PAnsiChar;
   tmp: TTemp24;
 begin
@@ -6444,22 +6443,34 @@ begin
       vtString:
         SockSend(@v^.VString^[1], PByte(v^.VString)^);
       vtAnsiString:
-        SockSend(v^.VAnsiString, Length(RawByteString(v^.VAnsiString)));
+        if v^.VAnsiString <> nil then
+          SockSend(v^.VAnsiString, PStrLen(v^.VPChar - _STRLEN)^);
+      vtPWideChar,
       {$ifdef HASVARUSTRING}
-      vtUnicodeString:
-        begin // constant text is expected to be pure ASCII-7
-          l := length(UnicodeString(v^.VUnicodeString));
-          p := EnsureSockSend(l);
-          for j := 0 to l - 1 do
-            p[j] := PWordArray(v^.VUnicodeString)[j];
-        end;
+      vtUnicodeString,
       {$endif HASVARUSTRING}
+      vtWideString:
+        begin // constant text is expected to be pure ASCII-7
+          w := v^.VWideString;
+          if w <> nil then
+          begin
+            {$ifdef HASVARUSTRING}
+            if v^.VType = vtUnicodeString then
+              l := PStrLen(v^.VPChar - _STRLEN)^
+            else
+            {$endif HASVARUSTRING}
+              l := StrLenW(pointer(w));
+            p := EnsureSockSend(l);
+            for j := 0 to l - 1 do
+              p[j] := w[j];
+          end;
+        end;
       vtPChar:
         SockSend(v^.VPChar, StrLen(v^.VPChar));
       vtChar:
         SockSend(@v^.VChar, 1);
       vtWideChar:
-        SockSend(@v^.VWideChar, 1); // only ansi part of the character
+        SockSend(@v^.VWideChar, 1); // expects a 7-bit ASCII character
       vtInteger:
         begin
           t := StrInt32(@tmp[23], v^.VInteger);
