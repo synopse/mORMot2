@@ -1851,75 +1851,74 @@ procedure VariantToSqlVar(const Input: variant; var temp: RawByteString;
   var Output: TSqlVar);
 var
   wasString: boolean;
+  inp: TVarData absolute Input;
 begin
   Output.Options := [];
-  with TVarData(Input) do
-    if VType = varVariantByRef then
-      VariantToSqlVar(PVariant(VPointer)^, temp, Output)
-    else
-      case VType of
-        varEmpty,
-        varNull:
-          Output.VType := ftNull;
-        varByte:
-          begin
-            Output.VType := ftInt64;
-            Output.VInt64 := VByte;
-          end;
-        varInteger:
-          begin
-            Output.VType := ftInt64;
-            Output.VInt64 := VInteger;
-          end;
-        varLongWord:
-          begin
-            Output.VType := ftInt64;
-            Output.VInt64 := VLongWord;
-          end;
-        varWord64,
-        varInt64:
-          begin
-            Output.VType := ftInt64;
-            Output.VInt64 := VInt64;
-          end;
-        varSingle:
-          begin
-            Output.VType := ftDouble;
-            Output.VDouble := VSingle;
-          end;
-        varDouble:
-          begin
-            // varDate would be converted into ISO-8601 by VariantToUtf8()
-            Output.VType := ftDouble;
-            Output.VDouble := VDouble;
-          end;
-        varCurrency:
-          begin
-            Output.VType := ftCurrency;
-            Output.VInt64 := VInt64;
-          end;
-        varString:
-          begin
-            // assume RawUtf8
-            Output.VType := ftUtf8;
-            Output.VText := VPointer;
-          end;
-      else
-        // handle less current cases
-        if VariantToInt64(Input, Output.VInt64) then
-          Output.VType := ftInt64
-        else
-        begin
-          VariantToUtf8(Input, RawUtf8(temp), wasString);
-          if wasString then
-          begin
-            Output.VType := ftUtf8;
-            Output.VText := pointer(temp);
-          end
-          else
-            Output.VType := ftNull;
-        end;
+  case cardinal(inp.VType) of
+    varEmpty,
+    varNull:
+      Output.VType := ftNull;
+    varByte:
+      begin
+        Output.VType := ftInt64;
+        Output.VInt64 := inp.VByte;
       end;
+    varInteger:
+      begin
+        Output.VType := ftInt64;
+        Output.VInt64 := inp.VInteger;
+      end;
+    varLongWord:
+      begin
+        Output.VType := ftInt64;
+        Output.VInt64 := inp.VLongWord;
+      end;
+    varWord64,
+    varInt64:
+      begin
+        Output.VType := ftInt64;
+        Output.VInt64 := inp.VInt64;
+      end;
+    varSingle:
+      begin
+        Output.VType := ftDouble;
+        Output.VDouble := inp.VSingle;
+      end;
+    varDouble:
+      begin
+        // varDate would be converted into ISO-8601 by VariantToUtf8()
+        Output.VType := ftDouble;
+        Output.VDouble := inp.VDouble;
+      end;
+    varCurrency:
+      begin
+        Output.VType := ftCurrency;
+        Output.VInt64 := inp.VInt64;
+      end;
+    varString:
+      begin
+        // assume RawUtf8
+        Output.VType := ftUtf8;
+        Output.VText := inp.VPointer;
+      end;
+  else
+    // handle less current cases
+    if cardinal(inp.VType) = varVariantByRef then
+      VariantToSqlVar(PVariant(inp.VPointer)^, temp, Output)
+    else if VariantToInt64(Input, Output.VInt64) then
+      Output.VType := ftInt64
+    else
+    begin
+      VariantToUtf8(Input, RawUtf8(temp), wasString);
+      if wasString then
+      begin
+        Output.VType := ftUtf8;
+        Output.VText := pointer(temp);
+      end
+      else
+        Output.VType := ftNull;
+    end;
+  end;
 end;
 
 procedure VariantToInlineValue(const V: Variant; var result: RawUtf8);
