@@ -738,7 +738,7 @@ type
     /// write some UTF-16 buffer as UTF-8, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscapeW,
     // AddJsonEscapeW or AddOnSameLineW methods
-    procedure AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
+    procedure AddW(P: PWord; Escape: TTextWriterKind);
       {$ifdef HASINLINE}inline;{$endif}
     /// append some AnsiString variable as UTF-8, from its associated CodePage
     // - use the current system code page on Delphi 7/2007 (no TStrRec.CodePage)
@@ -6258,16 +6258,16 @@ begin
     end;
 end;
 
-procedure TJsonWriter.AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
+procedure TJsonWriter.AddW(P: PWord; Escape: TTextWriterKind);
 begin
   if P <> nil then
-    case Escape of
+    case Escape of // use faster dedicated methods with Len = 0
       twNone:
-        AddNoJsonEscapeW(P, Len);
+        AddNoJsonEscapeW(P);
       twJsonEscape:
-        AddJsonEscapeW(P, Len);
+        AddJsonEscapeW(P);
       twOnSameLine:
-        AddOnSameLineW(P, Len);
+        AddOnSameLineW(P);
     end;
 end;
 
@@ -6357,7 +6357,7 @@ var
   tmp: TSynTempBuffer;
 begin // explicit conversion using a temporary UTF-16 buffer (on stack)
   Engine.AnsiBufferToUnicode(tmp.Init(Len * 3), P, Len); // includes ending #0
-  W.AddW(tmp.buf, 0, Escape);
+  W.AddW(tmp.buf, Escape);
   tmp.Done;
 end;
 
@@ -6393,7 +6393,7 @@ b64:    AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
         WrBase64(P, Len, {withMagicQuote=}false);
       end;
     CP_UTF16:   // direct write of UTF-16 content
-      AddW(PWord(P), 0, Escape);
+      AddW(PWord(P), Escape);
     CP_RAWBLOB: // RawBlob are always written with Base64 encoding
       goto b64;
   else if IsAnsiCompatible(P, Len) then
@@ -6795,7 +6795,7 @@ procedure TJsonWriter.AddTextW(P: PWord; Escape: TTextWriterKind);
 begin
   if Escape = twJsonEscape then
     Add('"');
-  AddW(P, 0, Escape);
+  AddW(P, Escape);
   if Escape = twJsonEscape then
     AddDirect('"');
 end;
@@ -7456,6 +7456,8 @@ end;
 
 procedure TJsonWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
+var
+  tmp: cardinal;
 begin
   case V^.VType of // use efficient jmp table
     vtInteger:
@@ -7467,6 +7469,11 @@ begin
         Add('0');
     vtChar:
       Add(@V^.VChar, 1, Escape);
+    vtWideChar:
+      begin
+        tmp := ord(V^.VWideChar); // ensure has one ending #0
+        AddW(@tmp, Escape);
+      end;
     vtExtended:
       AddDouble(V^.VExtended^);
     vtCurrency:
@@ -7495,28 +7502,23 @@ begin
       WriteObject(V^.VObject, WriteObjectOptions);
     vtClass:
       AddClassName(V^.VClass);
-    vtWideChar:
-      AddW(@V^.VWideChar, 1, Escape);
-    vtPWideChar:
-      AddW(pointer(V^.VPWideChar), StrLenW(V^.VPWideChar), Escape);
     vtAnsiString:
       if V^.VAnsiString <> nil then // expect RawUtf8
         case Escape of
           twNone:
-            AddNoJsonEscape(V^.VAnsiString, PStrLen(PAnsiChar(V^.VAnsiString) - _STRLEN)^);
+            AddNoJsonEscape(V^.VAnsiString, PStrLen(V^.VPChar - _STRLEN)^);
           twJsonEscape:
             AddJsonEscape(V^.VAnsiString, 0); // faster with no len
           twOnSameLine:
             AddOnSameLine(V^.VAnsiString); // faster with no len
         end;
+    vtPWideChar,
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString,
+    {$endif HASVARUSTRING}
     vtWideString:
       if V^.VWideString <> nil then
-        AddW(V^.VWideString, length(WideString(V^.VWideString)), Escape);
-    {$ifdef HASVARUSTRING}
-    vtUnicodeString:
-      if V^.VUnicodeString <> nil then // convert to UTF-8
-        AddW(V^.VUnicodeString, length(UnicodeString(V^.VUnicodeString)), Escape);
-    {$endif HASVARUSTRING}
+        AddW(V^.VWideString, Escape);
   end;
 end;
 
