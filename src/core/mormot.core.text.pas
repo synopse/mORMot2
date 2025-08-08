@@ -607,7 +607,10 @@ type
     // - you can set FlushToStreamNoAutoResize=true or call FlushFinal if you
     // do not want the automatic memory buffer resize to take place
     procedure FlushToStream; virtual;
-    /// write pending data to the Stream, without automatic buffer resizal
+    /// to be called as P := FlushToStream(P) when P is the current B + 1
+    function FlushToStreamUsing(P: PUtf8Char): PUtf8Char;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// write pending data to the Stream, without automatic buffer resize
     // - will append the internal memory buffer to the Stream
     // - in short, FlushToStream may be called during the adding process, and
     // FlushFinal at the end of the process, just before using the resulting Stream
@@ -4472,6 +4475,13 @@ begin
   GetMem(fTempBuf, fTempBufSize);
   BEnd := fTempBuf + (fTempBufSize - 16); // as in SetBuffer()
   B := fTempBuf - 1;
+end;
+
+function TTextWriter.FlushToStreamUsing(P: PUtf8Char): PUtf8Char;
+begin
+  B := P - 1;
+  FlushToStream;
+  result := fTempBuf;
 end;
 
 procedure TTextWriter.ForceContent(const text: RawUtf8);
