@@ -5867,12 +5867,13 @@ begin
 end;
 
 function VariantIsBlob(const V: variant): boolean;
+var
+  vd: TVarData absolute V;
 begin
-  with TVarData(V) do
-    result := (VType = varNull) or
-              ((VType = varString) and
-               (VString <> nil) and
-               (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC_C));
+  result := (cardinal(vd.VType) = varNull) or
+            ((cardinal(vd.VType) = varString) and
+             (vd.VString <> nil) and
+             (PCardinal(vd.VString)^ and $ffffff = JSON_BASE64_MAGIC_C));
 end;
 
 procedure TSqlDBStatement.Bind(const Params: array of const;
@@ -5948,77 +5949,77 @@ procedure TSqlDBStatement.BindVariant(Param: integer; const Data: Variant;
   DataIsBlob: boolean; IO: TSqlDBParamInOutType);
 var
   I64: Int64Rec;
+  vd: TVarData absolute Data;
 begin
-  with TVarData(Data) do
-    case VType of
-      varEmpty,
-      varNull:
-        BindNull(Param, IO);
-      varBoolean:
-        if VBoolean then
-          Bind(Param, 1, IO)
-        else
-          Bind(Param, 0, IO);
-      varByte:
-        Bind(Param, VInteger, IO);
-      varSmallint:
-        Bind(Param, VSmallInt, IO);
-      varShortInt:
-        Bind(Param, VShortInt, IO);
-      varWord:
-        Bind(Param, VWord, IO);
-      varLongWord:
-        begin
-          I64.Lo := VLongWord;
-          I64.Hi := 0;
-          Bind(Param, Int64(I64), IO);
-        end;
-      varInteger:
-        Bind(Param, VInteger, IO);
-      varInt64,
-      varWord64:
-        Bind(Param, VInt64, IO);
-      varSingle:
-        Bind(Param, VSingle, IO);
-      varDouble:
-        Bind(Param, VDouble, IO);
-      varDate:
-        BindDateTime(Param, VDate, IO);
-      varCurrency:
-        BindCurrency(Param, VCurrency, IO);
-      varOleStr:
-        // handle special case if was bound explicitly as WideString
-        BindTextW(Param, WideString(VAny), IO);
-      {$ifdef HASVARUSTRING}
-      varUString:
-        if DataIsBlob then
-          ESqlDBException.RaiseUtf8(
-            '%.BindVariant: BLOB should not be UnicodeString', [self])
-        else
-          BindTextU(Param, UnicodeStringToUtf8(UnicodeString(VAny)), IO);
-      {$endif HASVARUSTRING}
-      varString:
-        if DataIsBlob then
-          if (VAny <> nil) and
-             (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
-            // recognized as Base64 encoded text
-            BindBlob(Param, Base64ToBin(PAnsiChar(VAny) + 3,
-              length(RawByteString(VAny)) - 3))
-          else
-            // no conversion if was set via TQuery.AsBlob property e.g.
-            BindBlob(Param, RawByteString(VAny), IO)
-        else
-          // direct bind of AnsiString as UTF-8 value
-          BindTextU(Param, AnyAnsiToUtf8(RawByteString(VAny)), IO);
-    else
-      if VType = varVariantByRef then
-        BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
-      else if VType = varOleStrByRef then
-        BindTextW(Param, PWideString(VAny)^, IO)
+  case cardinal(vd.VType) of
+    varEmpty,
+    varNull:
+      BindNull(Param, IO);
+    varBoolean:
+      if vd.VBoolean then
+        Bind(Param, 1, IO)
       else
-        // also use TEXT for any non native VType parameter
-        BindTextU(Param, VariantToUtf8(Data), IO);
-    end;
+        Bind(Param, 0, IO);
+    varByte:
+      Bind(Param, vd.VInteger, IO);
+    varSmallint:
+      Bind(Param, vd.VSmallInt, IO);
+    varShortInt:
+      Bind(Param, vd.VShortInt, IO);
+    varWord:
+      Bind(Param, vd.VWord, IO);
+    varLongWord:
+      begin
+        I64.Lo := vd.VLongWord;
+        I64.Hi := 0;
+        Bind(Param, Int64(I64), IO);
+      end;
+    varInteger:
+      Bind(Param, vd.VInteger, IO);
+    varInt64,
+    varWord64:
+      Bind(Param, vd.VInt64, IO);
+    varSingle:
+      Bind(Param, vd.VSingle, IO);
+    varDouble:
+      Bind(Param, vd.VDouble, IO);
+    varDate:
+      BindDateTime(Param, vd.VDate, IO);
+    varCurrency:
+      BindCurrency(Param, vd.VCurrency, IO);
+    varOleStr:
+      // handle special case if was bound explicitly as WideString
+      BindTextW(Param, WideString(vd.VAny), IO);
+    {$ifdef HASVARUSTRING}
+    varUString:
+      if DataIsBlob then
+        ESqlDBException.RaiseUtf8(
+          '%.BindVariant: BLOB should not be UnicodeString', [self])
+      else
+        BindTextU(Param, UnicodeStringToUtf8(UnicodeString(vd.VAny)), IO);
+    {$endif HASVARUSTRING}
+    varString:
+      if DataIsBlob then
+        if (vd.VAny <> nil) and
+           (PInteger(vd.VAny)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
+          // recognized as Base64 encoded text
+          BindBlob(Param, Base64ToBin(PAnsiChar(vd.VAny) + 3,
+                                      PStrLen(PtrUInt(vd.VAny) - _STRLEN)^ - 3))
+        else
+          // no conversion if was set via TQuery.AsBlob property e.g.
+          BindBlob(Param, RawByteString(vd.VAny), IO)
+      else
+        // direct bind of AnsiString as UTF-8 value
+        BindTextU(Param, AnyAnsiToUtf8(RawByteString(vd.VAny)), IO);
+  else
+    if cardinal(vd.VType) = varVariantByRef then
+      BindVariant(Param, PVariant(vd.VPointer)^, DataIsBlob, IO)
+    else if cardinal(vd.VType) = varOleStrByRef then
+      BindTextW(Param, PWideString(vd.VAny)^, IO)
+    else
+      // also use TEXT for any non native VType parameter
+      BindTextU(Param, VariantToUtf8(Data), IO);
+  end;
 end;
 
 procedure TSqlDBStatement.BindArray(Param: integer; ParamType: TSqlDBFieldType;
@@ -7100,32 +7101,32 @@ procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TJsonWriter;
   MaxCharCount: integer);
 var
   v: variant;
+  vd: TVarData absolute v;
   ft: TSqlDBFieldType;
 begin
   ft := ParamToVariant(Param, v, false);
-  with TVarData(v) do
-    case cardinal(VType) of
-      varString:
-        if ft = ftBlob then
-          Dest.AddU(length(RawByteString(VString)))
-        else
-          Dest.AddQuotedStr(
-            VString, length(RawByteString(VString)), '''', MaxCharCount);
-      varOleStr:
-        Dest.AddQuotedStrW(
-          VString, length(WideString(VString)), '''', MaxCharCount);
-      {$ifdef HASVARUSTRING}
-      varUString:
-        Dest.AddQuotedStrW(
-          VString, length(UnicodeString(VString)), '''', MaxCharCount);
-      {$endif HASVARUSTRING}
-    else
-      if (ft = ftDate) and
-         (cardinal(VType) in [varDouble, varDate]) then
-        Dest.AddDateTime(vdate)
+  case cardinal(vd.VType) of
+    varString:
+      if ft = ftBlob then
+        Dest.AddU(length(RawByteString(vd.VPointer))) // only add binary length
       else
-        Dest.AddVariant(v);
-    end;
+        Dest.AddQuotedStr(
+          vd.VString, length(RawByteString(vd.VPointer)), '''', MaxCharCount);
+    varOleStr:
+      Dest.AddQuotedStrW(
+        vd.VString, length(WideString(vd.VPointer)), '''', MaxCharCount);
+    {$ifdef HASVARUSTRING}
+    varUString:
+      Dest.AddQuotedStrW(
+        vd.VString, length(UnicodeString(vd.VPointer)), '''', MaxCharCount);
+    {$endif HASVARUSTRING}
+  else
+    if (ft = ftDate) and
+       (cardinal(vd.VType) in [varDouble, varDate]) then
+      Dest.AddDateTime(vd.VDate)
+    else
+      Dest.AddVariant(v);
+  end;
 end;
 
 var
@@ -7136,11 +7137,8 @@ begin
   if SqlDBRowVariantType = nil then
     SqlDBRowVariantType := SynRegisterCustomVariantType(TSqlDBRowVariantType);
   VarClear(result);
-  with TVarData(result) do
-  begin
-    VType := SqlDBRowVariantType.VarType;
-    VPointer := self;
-  end;
+  TSynVarData(result).VType := SqlDBRowVariantType.VarType;
+  TSynVarData(result).VAny  := self;
 end;
 
 procedure TSqlDBStatement.RowDocVariant(out aDocument: variant;

@@ -2659,7 +2659,7 @@ function TMongoReplyCursor.AppendAllToDocVariant(var Dest: TDocVariantData): int
 var
   item: variant;
 begin
-  if Dest.VarType <> DocVariantType.VarType then
+  if cardinal(Dest.VarType) <> DocVariantVType then
     // may be called from getMore
     TDocVariant.NewFast(Variant(Dest), dvArray);
   result := Dest.Count;

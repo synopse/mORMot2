@@ -675,7 +675,7 @@ begin
     VariantLoadJson(result, ValueName, @JSON_[mFast])
   else if fGetVarDataFromContextNeedsFree then
   begin
-    if TVarData(result).VType <> varEmpty then
+    if TSynVarData(result).VType <> varEmpty then
       VarClearProc(TVarData(result));
     GetVarDataFromContext(-1, ValueName, TVarData(result)); // set directly
   end
@@ -945,9 +945,12 @@ end;
 
 function IsFalseySimpleVariant(VType: cardinal; const Value: TVarData): boolean;
   {$ifdef HASINLINE} inline; {$endif}
+var
+  vt: cardinal;
 begin
-  result := (VType <= varNull) or
-            ((VType = varBoolean) and
+  vt := VType;
+  result := (vt <= varNull) or
+            ((vt = varBoolean) and
              (not Value.VBoolean)); // empty/null or false are falsey values
   // note: '' or 0 are NOT falsey - https://github.com/mustache/spec/issues/28
   // TL&WR: "official" solution is to use an explicit boolean value in the data

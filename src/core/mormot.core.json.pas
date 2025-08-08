@@ -11156,7 +11156,7 @@ begin
         begin
           TSynVarData(v).VType := varEmpty; // IntGet() would clear it
           vt.IntGet(v, PVarData(Data)^, @n[1], ord(n[0]), {noexc=}true);
-          if v.VType = varEmpty then
+          if cardinal(v.VType) = varEmpty then
             break;
           Temp := v;
           Data := @Temp;

@@ -4092,7 +4092,7 @@ var
   wasString: boolean;
   tmp: RawUtf8;
 begin
-  case vd.VType of
+  case cardinal(vd.VType) of
     varEmpty,
     varNull:
       result := ''; // default VariantToUtf8(null)='null'
@@ -4127,7 +4127,7 @@ end;
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
 begin
   result.VType := vtVariant;
-  if TVarData(V).VType = varVariantByRef then
+  if cardinal(TVarData(V).VType) = varVariantByRef then
     result.VVariant := TVarData(V).VPointer
   else
     result.VVariant := @V;
@@ -5423,7 +5423,7 @@ begin
   end
   else
   begin
-    if Source.VType <> VarType then
+    if cardinal(Source.VType) <> cardinal(VarType) then
       RaiseCastError;
     DocVariantType.ToJson(@Source, json);
     RawUtf8ToVariant(json, Dest, AVarType); // convert to JSON text
@@ -7729,7 +7729,7 @@ begin
   obj := @VValue[added];
   if PInteger(obj)^ = 0 then // most common case is adding a new value
     obj^.InitClone(self)     // same options than owner document
-  else if (obj^.VType <> VType) or
+  else if (cardinal(obj^.VType) <> cardinal(VType)) or
           not obj^.IsObject then
     EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
   obj^.AddNameValuesToObject(aNameValuePairs, DontAddDefault);
@@ -9135,7 +9135,7 @@ begin
      (VCount = 0) then
     exit;
   DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
-  if Dest.VType = varEmpty then
+  if cardinal(Dest.VType) = varEmpty then
     exit;
   aValue := variant(Dest); // copy
   result := true;
@@ -9443,7 +9443,7 @@ begin
   else
   begin
     Source := @VValue[Index];
-    while PVarData(Source)^.VType = varVariantByRef do
+    while cardinal(PVarData(Source)^.VType) = varVariantByRef do
       Source := PVarData(Source)^.VPointer;
     Dest := Source^;
   end;
@@ -11682,7 +11682,7 @@ var
 begin
   v := ValueAt(position);
   SetVariantByValue(value, v^, fValue^.Has(dvoValueDoNotNormalizeAsRawUtf8));
-  if (PVarData(v)^.VType = varString) and
+  if (cardinal(PVarData(v)^.VType) = varString) and
      fValue^.Has(dvoInternValues) then
     InternalUniqueValue(v);
 end;
@@ -12697,7 +12697,7 @@ direct:         if Dest <> nil then
       if Dest <> nil then
       begin
         if (ct <> nil) and
-           (v.VType = ct.VarType) then // don't search twice if we got it
+           (cardinal(v.VType) = cardinal(ct.VarType)) then // don't search twice
           ct.Copy(Dest^, v, {indirect=}false)
         else
           VarCopyProc(Dest^, v);

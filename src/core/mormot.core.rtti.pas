@@ -7426,7 +7426,7 @@ begin
       FillZero(UnicodeString(Value));
     {$endif HASVARUSTRING}
     rkVariant:
-      if TVarData(Value).VType = varString then
+      if cardinal(TVarData(Value).VType) = varString then
         FillZero(RawByteString(TVarData(Value).VAny));
     rkClass:
       if TObject(Value) <> nil then
@@ -7934,9 +7934,9 @@ begin
   if (Prop = nil) or
      (OffsetGet >= 0) then
     Value.ValueToVariant(PAnsiChar(Data) + OffsetGet, Dest, Options)
-  else if Value.Cache.RttiVarDataVType <> varAny then
+  else if cardinal(Value.Cache.RttiVarDataVType) <> varAny then
     GetRttiVarDataGetter(Data, @Dest) // not TRttiVarData specific
-  else if Value.Cache.VarDataVType = varInt64 then // rkEnumeration, rkSet
+  else if cardinal(Value.Cache.VarDataVType) = varInt64 then // rkEnumeration,rkSet
   begin
     Dest.VType := varInt64;
     Dest.VInt64 := Prop^.GetInt64Value(Data);
@@ -7968,7 +7968,7 @@ procedure TRttiCustomProp.SetValueVariant(Data: pointer; var Source: TVarData);
 var
   u: pointer;
 begin
-  if Source.VType = varAny then // paranoid
+  if cardinal(Source.VType) = varAny then // paranoid
     exit;
   if Prop <> nil then
     Prop.SetValue(TObject(Data), variant(Source)) // for class properties
@@ -8253,11 +8253,11 @@ begin
   begin
     GetRttiVarData(Data, v1);
     OtherRtti.GetRttiVarData(Other, v2);
-    if (v1.Data.VType <> varAny) and
-       (v2.Data.VType <> varAny) then
+    if (cardinal(v1.Data.VType) <> varAny) and
+       (cardinal(v2.Data.VType) <> varAny) then
       // standard variant comparison function (from mormot.core.variants)
       result := SortDynArrayVariantComp(v1.Data, v2.Data, CaseInsensitive)
-    else if (v1.Data.VType = v2.Data.VType) and
+    else if (cardinal(v1.Data.VType) = cardinal(v2.Data.VType)) and
             (OtherRtti.Value = Value) then
       // v1 and v2 are both varAny, with the very same RTTI type -> use
       // mormot.core.json efficient comparison (also handle rkClass/TObject)

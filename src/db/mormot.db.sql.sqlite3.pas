@@ -706,7 +706,7 @@ begin
      (cardinal(Param) < cardinal(length(fLogSQLValues))) then
   begin
     v := @fLogSQLValues[Param];
-    if v^.vtype = varString then
+    if cardinal(v^.VType) = varString then
       Dest.AddQuotedStr(v^.VAny, length(RawUtf8(v^.VAny)), '''', MaxCharCount)
     else
       Dest.AddVariant(PVariant(v)^);

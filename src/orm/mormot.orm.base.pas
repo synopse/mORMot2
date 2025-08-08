@@ -10487,7 +10487,7 @@ begin
   end
   else
   begin
-    if Source.VType <> VarType then
+    if cardinal(Source.VType) <> cardinal(VarType) then
       RaiseCastError;
     r := TOrmTableRowVariantData(Source).VRow;
     if r < 0 then

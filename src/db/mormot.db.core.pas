@@ -1936,7 +1936,7 @@ end;
 
 function VariantVTypeToSqlDBFieldType(VType: cardinal): TSqlDBFieldType;
 begin
-  case VType of
+  case cardinal(VType) of
     varNull:
       result := ftNull;
     varShortInt,
@@ -1971,7 +1971,7 @@ begin
   result := VariantVTypeToSqlDBFieldType(VD.VType);
   case result of
     ftUnknown:
-      if VD.VType = varEmpty then
+      if cardinal(VD.VType) = varEmpty then
         result := ftUnknown
       else if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
         result := VariantTypeToSqlDBFieldType(variant(tmp))

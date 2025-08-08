@@ -2028,7 +2028,7 @@ begin
      not VarIsEmptyOrNull(def^) then
   begin
     // explicit default value
-    if PVarData(def)^.VType = varBoolean then
+    if cardinal(PVarData(def)^.VType) = varBoolean then
       result := BOOL_UTF8[PVarData(def)^.VBoolean] // normalize
     else if VariantToUtf8(def^, result) then
       result := QuotedStr(result); // single quoted pascal string

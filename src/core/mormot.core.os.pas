@@ -10732,7 +10732,7 @@ begin
   {$endif HASFASTTRYFINALLY}
     RWLock(cReadOnly);
     with Padding[Index].Data do
-      if VType = varAny then
+      if cardinal(VType) = varAny then
         result := VAny;
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -10837,7 +10837,7 @@ begin
       with Padding[Index] do
       begin
         if Index < fPaddingUsedCount then
-          if VType = varAny then
+          if cardinal(VType) = varAny then
             result := VAny
           else
             VarClearProc(Data)
