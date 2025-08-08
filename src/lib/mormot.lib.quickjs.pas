@@ -3505,15 +3505,16 @@ begin
       result.FromNum(val.VExtended^);
     // warning: use varStringByRef makes GPF -> safe and fast refcount
     vtAnsiString:
-      result := From(RawUtf8(val.VAnsiString));
+      result := From(RawUtf8(val.VPointer));
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      result := FromW(val.VUnicodeString, length(UnicodeString(val.VUnicodeString)));
+      result := FromW(val.VPointer, length(UnicodeString(val.VPointer)));
     {$endif HASVARUSTRING}
     vtWideString:
-      result := FromW(val.VWideString, length(WideString(val.VWideString)));
+      result := FromW(val.VPointer, length(WideString(val.VPointer)));
     vtString,
     vtPChar,
+    vtPWideChar,
     vtChar,
     vtWideChar,
     vtClass:
