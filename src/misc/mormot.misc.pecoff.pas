@@ -137,9 +137,12 @@ type
   TImageDOSHeader = _IMAGE_DOS_HEADER;
   PImageDOSHeader = ^_IMAGE_DOS_HEADER;
 
-  /// COFF Header
-  // - see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-file-header-object-and-image
-  _IMAGE_FILE_HEADER = record
+  /// decoded COFF header TImageFileHeader.Machine main architectures
+  TCoffArch = (
+    caUnknown, caI386, caAmd64, caArm, caArm64, caIA64, caLoongArch, caRiscV, caMips);
+
+  /// main COFF Header
+  _IMAGE_FILE_HEADER = object
     Signature: cardinal; // 0x50450000 ('P', 'E', 0, 0) (Not in fpc)
     Machine: word;
     NumberOfSections: word;
@@ -148,6 +151,7 @@ type
     NumberOfSymbols: cardinal;
     SizeOfOptionalHeader: word;
     Characteristics: word;
+    function Arch: TCoffArch;
   end;
   TImageFileHeader = _IMAGE_FILE_HEADER;
   PImageFileHeader = ^_IMAGE_FILE_HEADER;
@@ -488,6 +492,7 @@ type
     fPEHeader: TImageNtHeaders;
     fSectionHeaders: PImageSectionHeaders;
     fNumberOfSections: cardinal;
+    fArchitecture: TCoffArch;
     fVersionInfo: PVsVersionInfo;
     fFixedFileInfo: PVSFixedFileInfo;
     fStringFileInfo: PStringFileInfo;
@@ -552,6 +557,11 @@ type
     // - it is the high boundary of the SectionHeaders[] property
     property NumberOfSections: cardinal
       read fNumberOfSections;
+    /// the known Hardware Machine type, as decoded from the COFF header
+    property Architecture: TCoffArch
+      read fArchitecture;
+    /// the Hardware Machine type text, as stored in the COFF header
+    function ArchitectureName: RawUtf8;
 
     /// COFF Header pointer
     property CoffHeader: PImageFileHeader
@@ -608,8 +618,8 @@ type
 /// return all version information from a Portable Executable (Win32/Win64) file
 // as a TDocVariant object document
 // - returns an object with all parsed string versions, and "FileVersionNum"
-// as TSynPELoader.FileVersionStr from _VS_FIXEDFILEINFO resource, "IsWin64"
-// as boolean TSynPELoader.Is64 value, "FullFileName" as aFileName value, and
+// as TSynPELoader.FileVersionStr from _VS_FIXEDFILEINFO resource, "Arch" from
+// COFF machine type, "FullFileName" as aFileName value, and
 // "CodePage" and "Language" (if any) from the parsed string table
 // - returns null if the file does not exist, or has no VersionInfo resource
 function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
@@ -743,6 +753,23 @@ begin
   if IsDirectory then
     EPeCoffLoader.RaiseU('_IMAGE_RESOURCE_DIRECTORY_ENTRY.Data?');
   result := @PByteArray(StartAddress)[Offset];
+end;
+
+
+{ _IMAGE_FILE_HEADER }
+
+const
+  COFF_ARCHW: array[0 .. 20] of word = (
+    $8664, $01c0, $aa64, $a641, $a64e, $01c4, $014c, $0200, $6232, $6264,
+    $5032, $5064, $5128, $0169, $0266, $0366, $0466, $0160, $0162, $0166, $0168);
+  COFF_ARCH: array[-1 .. high(COFF_ARCHW)] of TCoffArch = (
+    caUnknown, caAmd64, caArm, caArm64, caArm64, caArm64, caArm, caI386, caIA64,
+    caLoongArch, caLoongArch, caRiscV, caRiscV, caRiscV, caMips, caMips, caMips,
+    caMips, caMips, caMips, caMips, caMips);
+
+function _IMAGE_FILE_HEADER.Arch: TCoffArch;
+begin
+  result := COFF_ARCH[WordScanIndex(@COFF_ARCHW, length(COFF_ARCHW), Machine)];
 end;
 
 
@@ -1057,6 +1084,13 @@ begin
   result := fFixedFileInfo.AsText;
 end;
 
+function TSynPELoader.ArchitectureName: RawUtf8;
+begin
+  result := GetEnumNameTrimed(TypeInfo(TCoffArch), ord(fArchitecture));
+  LowerCaseSelf(result);
+end;
+
+
 
 function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
 var
@@ -1073,7 +1107,8 @@ begin
         'FullFileName',   aFileName,
         'FileSize',       pe.fMap.FileSize,
         'FileVersionNum', pe.FileVersionStr,
-        'IsWin64',        pe.Is64]);
+        'IsWin64',        (pe.Architecture = caAmd64),
+        'Arch',           pe.ArchitectureName]);
       result.AddFrom(pe.StringFileInfoEntries);
     end;
   finally
