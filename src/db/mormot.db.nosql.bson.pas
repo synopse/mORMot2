@@ -3617,10 +3617,13 @@ begin
 end;
 
 procedure TBsonWriter.BsonDocumentBegin;
+var
+  ndx: PtrInt;
 begin
-  if fDocumentStack >= Length(fDocumentStackOffset) then
-    SetLength(fDocumentStackOffset, NextGrow(fDocumentStack));
-  fDocumentStackOffset[fDocumentStack] := TotalWritten;
+  ndx := fDocumentStack;
+  if ndx >= Length(fDocumentStackOffset) then
+    SetLength(fDocumentStackOffset, NextGrow(ndx));
+  fDocumentStackOffset[ndx] := TotalWritten;
   inc(fDocumentStack);
   Write4(0); // will be overwritten by BsonDocumentEnd
 end;
@@ -3644,21 +3647,27 @@ end;
 
 procedure TBsonWriter.BsonDocumentEnd(
   CloseNumber: integer; WriteEndingZero: boolean);
+var
+  c, o: PtrInt;
 begin
   while CloseNumber > 0 do
   begin
     if (CloseNumber > 1) or
        WriteEndingZero then
       Write1(0);
-    if fDocumentStack = 0 then
+    o := fDocumentStack;
+    if o = 0 then
       EBsonException.RaiseUtf8('Unexpected %.BsonDocumentEnd', [self]);
-    dec(fDocumentStack);
-    if fDocumentCount >= Length(fDocument) then
-      SetLength(fDocument, NextGrow(fDocumentCount));
-    with fDocument[fDocumentCount] do
+    dec(o);
+    fDocumentStack := o;
+    o := fDocumentStackOffset[o];
+    c := fDocumentCount;
+    if c >= Length(fDocument) then
+      SetLength(fDocument, NextGrow(c));
+    with fDocument[c] do
     begin
-      Offset := fDocumentStackOffset[fDocumentStack];
-      Length := TotalWritten - Offset;
+      Offset := o;
+      Length := TotalWritten - o;
     end;
     inc(fDocumentCount);
     dec(CloseNumber);
