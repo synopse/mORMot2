@@ -6344,7 +6344,7 @@ begin // a dedicated method using a TSynAnsiFixedWidth lookup table
         end;
     else // escaped as \ + b,t,n,f,r,\,"
       begin
-        PCardinal(W.B + 1)^ := (integer(JSON_ESCAPE[P^]) shl 8) or ord('\');
+        PCardinal(W.B + 1)^ := (cardinal(JSON_ESCAPE[P^]) shl 8) or byte('\');
         inc(W.B, 2);
       end;
     end;
@@ -7128,15 +7128,16 @@ noesc:
       JSON_ESCAPE_UNICODEHEX: // e.g. #7 -> \u0007
         begin
           PCardinal(B + 1)^ := JSON_UHEXC;
-          inc(B, 4);
-          PCardinal(B + 1)^ := TwoDigitsHex[c^];
+          PCardinal(B + 5)^ := TwoDigitsHex[c^];
+          inc(B, 6);
         end;
     else
-      // escaped as \ + b,t,n,f,r,\,"
-      PCardinal(B + 1)^ := (integer(tab[c^]) shl 8) or ord('\');
+      begin // escaped as \ + b,t,n,f,r,\,"
+        PCardinal(B + 1)^ := (cardinal(tab[c^]) shl 8) or byte('\');
+        inc(B, 2);
+      end;
     end;
     inc(c);
-    inc(B, 2);
   until (Len <> 0) and
         (PtrUInt(c) >= PtrUInt(Len));
 end;

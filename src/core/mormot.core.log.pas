@@ -5759,7 +5759,7 @@ begin
         if (L > 0) and
            (P^ <> '=') then
         begin
-          w.AddNoJsonEscapeW(PWord(P), 0);
+          w.AddNoJsonEscapeW(pointer(P));
           w.AddDirect(#9);
         end;
         inc(P, L + 1);
