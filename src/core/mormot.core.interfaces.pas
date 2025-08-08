@@ -5967,9 +5967,10 @@ end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
 var
-  a, ndx: integer;
+  a: integer;
   W: TJsonWriter;
   arg: PInterfaceMethodArgument;
+  o: PVarData;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   fResult := '';
@@ -5978,23 +5979,22 @@ begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
-    ndx := 0;
+    o := pointer(fOutput);
+    arg := @fMethod^.Args[fMethod^.ArgsOutFirst];
     for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
     begin
-      arg := @fMethod^.Args[a];
       if arg^.ValueDirection <> imdConst then
       begin
-        if TVarData(fOutput[ndx]).VType = varEmpty then
+        if cardinal(o^.VType) = varEmpty then
           arg^.AddDefaultJson(W)
         else
         begin
-          W.AddVariant(fOutput[ndx], twJsonEscape);
+          W.AddVariant(PVariant(o)^, twJsonEscape);
           W.AddComma;
         end;
-        inc(ndx);
-        if cardinal(ndx) >= cardinal(fMethod^.ArgsOutputValuesCount) then
-          break;
+        inc(o);
       end;
+      inc(arg);
     end;
     W.CancelLastComma(']');
     W.SetText(fResult);
