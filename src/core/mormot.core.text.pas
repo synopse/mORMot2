@@ -775,14 +775,14 @@ type
     // - will write #1..#31 chars as spaces (so content will stay on the same line)
     // - this method is slightly faster than its overload with explicit Len param
     procedure AddOnSameLine(P: PUtf8Char); overload;
-    /// append some chars to the buffer in one line
+    /// append a UTF-8 buffer in one line up to the supplied Len bytes
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
     procedure AddOnSameLine(P: PUtf8Char; Len: PtrInt); overload;
-    /// append some wide chars to the buffer in one line
-    // - will write #0..#31 chars as spaces (so content will stay on the same line)
-    procedure AddOnSameLineW(P: PWord; Len: PtrInt);
-    /// append some RTL string to the buffer in one line
-    // - will write #0..#31 chars as spaces (so content will stay on the same line)
+    /// append a #0-ended UTF-16 buffer as UTF-8, in one line
+    // - will write #1..#31 chars as spaces
+    procedure AddOnSameLineW(P: PWord);
+    /// append some RTL string as UTF-8, in one line
+    // - will write #0..#31 chars as spaces
     procedure AddOnSameLineString(const Text: string);
       {$ifdef HASINLINE}inline;{$endif}
     /// append an UTF-8 String, with no JSON escaping
@@ -5465,52 +5465,45 @@ begin // mostly used for TSynLog shortstring append
     until i = Len;
 end;
 
-procedure TTextWriter.AddOnSameLineW(P: PWord; Len: PtrInt);
+procedure TTextWriter.AddOnSameLineW(P: PWord);
 var
-  PEnd: PtrUInt;
+  src: PWord;
+  dst: PUtf8Char;
   c: cardinal;
 begin
-  if P = nil then
+  src := P;
+  if src = nil then
     exit;
-  if Len = 0 then
-    PEnd := 0
-  else
-    PEnd := PtrUInt(P) + PtrUInt(Len) * SizeOf(WideChar);
-  while (Len = 0) or
-        (PtrUInt(P) < PEnd) do
-  begin // AddNoJsonEscapeW() is actually not faster than this loop
-    if B >= BEnd then
-      FlushToStream;
-    // escape chars, so that all content will stay on the same text line
-    c := P^;
-    case c of
-      0:
-        break;
-      1..32:
-        begin
-          B[1] := ' ';
-          inc(B);
-          inc(P);
-        end;
-      33..127:
-        begin
-          B[1] := AnsiChar(c); // direct store 7-bit ASCII
-          inc(B);
-          inc(P);
-        end;
-    else // characters higher than #127 -> UTF-8 encode
-      inc(B, Utf16CharToUtf8(B + 1, P));
+  dst := B + 1;
+  repeat
+    if dst > BEnd then
+      dst := FlushToStreamUsing(dst);
+    c := src^;
+    if c <= 127 then
+    begin
+      if c < 32 then
+        if c = 0 then
+          break
+        else
+          dst^ := ' ' // ensure stay on the same line
+      else
+        dst^ := AnsiChar(c); // direct store 7-bit ASCII
+      inc(dst);
+      inc(src);
+    end
+    else
+    begin
+      P := src;
+      inc(dst, Utf16CharToUtf8(dst, P)); // convert UTF-16 to UTF-8
+      src := P;
     end;
-  end;
+  until false;
+  B := dst - 1;
 end;
 
 procedure TTextWriter.AddOnSameLineString(const Text: string);
 begin
-  {$ifdef UNICODE}
-  AddOnSameLineW(pointer(Text), length(Text));
-  {$else}
-  AddOnSameLine(pointer(Text)); // faster with no Len
-  {$endif UNICODE}
+  {$ifdef UNICODE}AddOnSameLineW{$else}AddOnSameLine{$endif}(pointer(Text));
 end;
 
 procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
