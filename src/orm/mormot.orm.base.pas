@@ -6173,7 +6173,7 @@ begin
   W.Add('"');
   fPropInfo.GetWideStrProp(Instance, Value);
   if pointer(Value) <> nil then
-    W.AddJsonEscapeW(pointer(Value), 0);
+    W.AddJsonEscapeW(pointer(Value));
   W.AddDirect('"');
 end;
 
@@ -6289,7 +6289,7 @@ begin
   W.Add('"');
   fPropInfo.GetUnicodeStrProp(Instance, tmp);
   if tmp <> '' then
-    W.AddJsonEscapeW(pointer(tmp), 0);
+    W.AddJsonEscapeW(pointer(tmp));
   W.AddDirect('"');
 end;
 
