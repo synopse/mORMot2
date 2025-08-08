@@ -758,9 +758,11 @@ type
     // - WideCharCount is the UTF-16 chars count, not the byte size; if it is
     // 0, then it will convert until an ending #0 (fastest way)
     // - does not escape chars according to the JSON RFC
-    // - will convert the Unicode chars into UTF-8
-    procedure AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
-    /// append some Ansi text of a specific CodePage as UTF-8 chars to the buffer
+    procedure AddNoJsonEscapeW(PW: PWord; WideCharCount: integer); overload;
+    /// append a #0-ended UTF-16 encoded buffer as UTF-8
+    // - does not escape chars according to the JSON RFC
+    procedure AddNoJsonEscapeW(PW: PWord); overload;
+    /// append Ansi encoded buffer as UTF-8, with a specific CodePage
     // - does not escape chars according to the JSON RFC
     procedure AddNoJsonEscapeCP(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
     /// append some raw UTF-8 buffer, with no JSON escape
@@ -5139,7 +5141,7 @@ begin
     CP_UTF8, CP_RAWBYTESTRING, CP_RAWBLOB:
       AddNoJsonEscape(P, Len);
     CP_UTF16:
-      AddNoJsonEscapeW(PWord(P), 0);
+      AddNoJsonEscapeW(PWord(P));
   else
     begin
       engine := TSynAnsiConvert.Engine(CodePage);
@@ -5173,62 +5175,77 @@ procedure TTextWriter.AddNoJsonEscapeString(const s: string);
 begin
   if pointer(s) <> nil then
     {$ifdef UNICODE}
-    AddNoJsonEscapeW(pointer(s), 0);
+    AddNoJsonEscapeW(pointer(s));
     {$else}
     AddNoJsonEscapeCP(pointer(s), PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^,
       Unicode_CodePage);
     {$endif UNICODE}
 end;
 
-procedure TTextWriter.AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
+procedure TTextWriter.AddNoJsonEscapeW(PW: PWord; WideCharCount: integer);
 var
   PEnd: PtrUInt;
   c: cardinal;
 begin
-  if WideChar = nil then
+  if (PW = nil) or
+     (WideCharCount <= 0) then
     exit;
-  if WideCharCount = 0 then
-    repeat
-      if B >= BEnd then
-        FlushToStream;
-      c := WideChar^;
+  PEnd := PtrUInt(PW) + PtrUInt(WideCharCount) * SizeOf(PW^);
+  repeat
+    if B >= BEnd then
+      FlushToStream;
+    c := PW^;
+    if c <= 127 then
+    begin
       if c = 0 then
-        break
-      else if c <= 127 then
-      begin
-        B[1] := AnsiChar(c);
-        inc(WideChar);
-        inc(B);
-      end
-      else
-        inc(B, Utf16CharToUtf8(B + 1, WideChar));
-    until false
-  else
-  begin
-    PEnd := PtrUInt(WideChar) + PtrUInt(WideCharCount) * SizeOf(WideChar^);
-    repeat
-      if B >= BEnd then
-        FlushToStream;
-      c := WideChar^;
-      if c = 0 then
-        break
-      else if c <= 127 then
-      begin
-        B[1] := AnsiChar(c);
-        inc(WideChar);
-        inc(B);
-        if PtrUInt(WideChar) < PEnd then
-          continue
-        else
-          break;
-      end;
-      inc(B, Utf16CharToUtf8(B + 1, WideChar)); // handle UTF-16 surrogates
-      if PtrUInt(WideChar) < PEnd then
+        exit;
+      B[1] := AnsiChar(c);
+      inc(PW);
+      inc(B);
+      if PtrUInt(PW) < PEnd then
         continue
       else
         break;
-    until false;
-  end;
+    end;
+    inc(B, Utf16CharToUtf8(B + 1, PW)); // handle UTF-16 surrogates
+    if PtrUInt(PW) < PEnd then
+      continue
+    else
+      break;
+  until false;
+end;
+
+procedure TTextWriter.AddNoJsonEscapeW(PW: PWord);
+var
+  dst: PUtf8Char;
+  c: cardinal;
+begin
+  if PW = nil then
+    exit;
+  dst := B + 1;
+  if dst > BEnd then
+    dst := FlushToStreamUsing(dst);
+  repeat
+    c := PW^;
+    if c <= 127 then
+    begin
+      if c = 0 then
+        break;
+      dst^ := AnsiChar(c);
+      inc(dst);
+      inc(PW);
+      if dst <= BEnd then
+        continue;
+    end
+    else
+    begin
+      inc(dst, Utf16CharToUtf8(dst, PW));
+      if dst <= BEnd then
+        continue;
+    end;
+    dst := FlushToStreamUsing(dst);
+  until false;
+  B := dst - 1;
 end;
 
 procedure TTextWriter.AddProp(PropName: PUtf8Char);
