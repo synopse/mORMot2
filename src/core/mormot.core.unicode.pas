@@ -144,7 +144,7 @@ function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - Source will contain the next UTF-16 character
 // - this method DOES properly handle UTF-16 surrogate pairs
-function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
+function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): PtrInt;
 
 /// UTF-8 encode one UCS-4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
@@ -2851,15 +2851,13 @@ begin
   end
   else if ucs4 <= $7ff then
   begin
-    Dest[0] := AnsiChar($c0 or (ucs4 shr 6));
-    Dest[1] := AnsiChar($80 or (ucs4 and $3f));
+    PWord(Dest)^ := (ucs4 shr 6) or ((ucs4 and $3f) shl 8) or $80c0;
     result := 2;
   end
   else if ucs4 <= $ffff then
   begin
-    Dest[0] := AnsiChar($e0 or (ucs4 shr 12));
-    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3f));
-    Dest[2] := AnsiChar($80 or (ucs4 and $3f));
+    PCardinal(Dest)^ := (ucs4 shr 12) or (((ucs4 shr 6) and $3f) shl 8) or
+                        ((ucs4 and $3f) shl 16) or $8080e0;
     result := 3;
   end
   else
@@ -2881,7 +2879,7 @@ begin
   end;
 end;
 
-function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
+function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): PtrInt;
 var
   c: cardinal;
 begin
@@ -2897,7 +2895,7 @@ begin
     UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
       begin
         c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
-              (Source^ xor UTF16_LOSURROGATE_MIN);
+              (cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
     UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
