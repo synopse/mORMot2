@@ -5895,13 +5895,13 @@ var
           c := PInteger(p^.VAnsiString)^ and $00ffffff;
           if c = JSON_BASE64_MAGIC_C then
           begin
-            Base64ToBin(p^.VPChar + 3, length(RawUtf8(p^.VAnsiString)) - 3,
+            Base64ToBin(p^.VPChar + 3, PStrLen(p^.VPChar - _STRLEN)^ - 3,
               RawByteString(tmp));
             BindBlob(arg, tmp, IO);
           end
           else if c = JSON_SQLDATE_MAGIC_C then
             BindDateTime(arg, Iso8601ToDateTimePUtf8Char(
-              PUtf8Char(p^.VAnsiString) + 3, length(RawUtf8(p^.VAnsiString)) - 3))
+              PUtf8Char(p^.VAnsiString) + 3, PStrLen(p^.VPChar - _STRLEN)^ - 3))
           else
           begin
             AnyAnsiToUtf8Var(RawByteString(p^.VAnsiString), tmp);
