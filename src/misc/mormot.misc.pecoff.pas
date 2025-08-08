@@ -916,7 +916,8 @@ begin
   result := false;
   try
     hdr := GetSectionFromDirectory(IMAGE_DIRECTORY_ENTRY_RESOURCE);
-    if hdr = nil then
+    if (hdr = nil) or
+       (hdr^.PointerToRawData > fMap.Size) then
       exit;
     main := pointer(fMap.Buffer + hdr^.PointerToRawData);
     version := main^.FindByID(RT_VERSION)^.AsDirectory(main)^.
@@ -1043,33 +1044,36 @@ end;
 
 function TSynPELoader.LoadFromFile(const Filename: TFileName): boolean;
 var
-  head: PImageDOSHeader;
+  msdos: PImageDOSHeader;
+  pe: PImageFileHeader;
 begin
   result := false;
   // Unloading the previous PE
   UnLoad;
   // map the executable in memory, and parse its header
-  if fMap.Map(FileName, {forcemap=}true, {maxsize=}500 shl 20) then
-  // search the resource info in the first 500MB: an installer may be larger
-  // so could not be mapped on CPU32 even if its real executable part is
-  // actually in the first initial few KB/MB)
+  if fMap.Map(FileName, {forcemap=}true
+    // search the resource info in the first 500MB: an installer may be larger
+    // so could not be mapped on CPU32 even if its real executable part is
+    // actually in the first initial few KB/MB - PE32+ is limited to 2GB anyway
+    {$ifdef CPU32}, {maxsize=}500 shl 20{$endif}) then
   try
-    head := pointer(fMap.Buffer);
-    if (fMap.Size > SizeOf(head^)) and
-       (head^.e_magic = DOS_HEADER_MAGIC) then
+    // https://0xrick.github.io/win-internals/pe3
+    msdos := pointer(fMap.Buffer);
+    if (fMap.Size > SizeOf(msdos^)) and
+       (msdos^.e_magic = DOS_HEADER_MAGIC) and
+       // e_lfanew locates the actual PE32/PE32+ Header
+       (PtrUInt(msdos^.e_lfanew) < fMap.Size) then // typical e_lfanew = 256
     try
-      // e_lfanew is pointer to PE Header (0x3c after start of file)
-      // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#signature-image-only
-      fPEHeader.PHeaders := pointer(fMap.Buffer + head^.e_lfanew);
-      fCoffHeader := @PEHeader32^.FileHeader; // doesn't change in 32/64bit
-      fNumberOfSections := fCoffHeader^.NumberOfSections;
-      fSectionHeaders := pointer(PAnsiChar(fPEHeader.PHeaders) +
-        SizeOf(fCoffHeader^) + fCoffHeader^.SizeOfOptionalHeader);
-      // check PE Header and Optional header Magic numbers
-      result := (fCoffHeader^.Signature = PE_HEADER_MAGIC) and
-                (fCoffHeader^.SizeOfOptionalHeader <> 0) and
-                ((PEHeader32^.OptionalHeader.Magic = PE_32_MAGIC) or
-                 (PEHeader32^.OptionalHeader.Magic = PE_64_MAGIC));
+      pe := pointer(fMap.Buffer + msdos^.e_lfanew);
+      // https://0xrick.github.io/win-internals/pe4
+      if (pe^.Signature <> PE_HEADER_MAGIC) or
+         (pe^.SizeOfOptionalHeader = 0) then
+        exit;
+      fPEHeader.Coff := pointer(pe);
+      fNumberOfSections := pe^.NumberOfSections;
+      fArchitecture := pe^.Arch;
+      fSectionHeaders := @PByteArray(pe)[SizeOf(pe^) + pe^.SizeOfOptionalHeader];
+      result := true;
     except
       result := false; // on malformatted input / mapping issue: intercept GPF
     end;
