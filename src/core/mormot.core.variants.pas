@@ -3947,7 +3947,8 @@ begin
     varString:
       begin
         d.VType := varString;
-        RawByteString(d.VAny) := RawByteString(s^.VAny); // assign
+        if s^.VAny <> nil then
+          RawByteString(d.VAny) := RawByteString(s^.VAny); // assign
       end;
     varStringByRef:
       begin
@@ -3956,7 +3957,9 @@ begin
       end;
     {$ifdef HASVARUSTRING}
     varUString:
-      if NoForceRawUtf8 then
+      if s^.VAny = nil then
+        d.VType := varString
+      else if NoForceRawUtf8 then
       begin
         d.VType := varUString;
         UnicodeString(d.VAny) := UnicodeString(s^.VAny); // assign
@@ -3979,7 +3982,9 @@ begin
       end;
     {$endif HASVARUSTRING}
     varOleStr:
-      if NoForceRawUtf8 then
+      if s^.VAny = nil then
+        d.VType := varString
+      else if NoForceRawUtf8 then
       begin
         d.VType := varSynUnicode; // store as UnicodeString if possible
         FastSynUnicode(SynUnicode(d.VAny), s^.VAny, length(WideString(s^.VAny)));
@@ -4228,7 +4233,8 @@ begin
       begin
         r.VType := varString; // varStringByRef triggers GPF -> refcnt assign
         r.VAny := nil;
-        RawByteString(r.VAny) := RawByteString(V^.VAnsiString);
+        if V^.VAnsiString <> nil then
+          RawByteString(r.VAny) := RawByteString(V^.VAnsiString);
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString,
@@ -4236,6 +4242,7 @@ begin
     vtWideString,
     vtString,
     vtPChar,
+    vtPWideChar,
     vtChar,
     vtWideChar,
     vtClass:
