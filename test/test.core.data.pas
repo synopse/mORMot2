@@ -5144,7 +5144,8 @@ begin
   u := oid.ToText;
   CheckEqual(u, BSONID);
   o := ObjectID('507f191e810c19729de860ea');
-  Check(TVarData(o).VType = BsonVariantType.VarType);
+  CheckEqual(TVarData(o).VType, BsonVariantVType);
+  CheckEqual(BsonVariantVType, BsonVariantType.VarType);
   u := ToUtf8(string(o));
   Check(u = BSONID, 'variant bsonid to string');
   d2 := Iso8601ToDateTime('2012-10-17T20:46:22');
