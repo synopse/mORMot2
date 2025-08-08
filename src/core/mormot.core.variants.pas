@@ -1982,7 +1982,13 @@ type
     // otherwise nothing is added
     // - for an object, dvoCheckForDuplicatedNames flag is used: use
     // AddOrUpdateFrom() to force objects merging
-    procedure AddFrom(const aDocVariant: Variant);
+    procedure AddFrom(const aDocVariant: Variant); overload;
+    /// add one or several values from another document
+    // - supplied document should be of the same kind than the current one,
+    // otherwise nothing is added
+    // - for an object, dvoCheckForDuplicatedNames flag is used: use
+    // AddOrUpdateFrom() to force objects merging
+    procedure AddFrom(const Another: TDocVariantData); overload;
     /// merge (i.e. add or update) several values from another object
     // - current document should be an object
     procedure AddOrUpdateFrom(const aDocVariant: Variant;
@@ -7603,44 +7609,53 @@ begin
 end;
 
 procedure TDocVariantData.AddFrom(const aDocVariant: Variant);
+begin
+  AddFrom(_Safe(ADocVariant)^);
+end;
+
+procedure TDocVariantData.AddFrom(const Another: TDocVariantData);
 var
-  src: PDocVariantData;
   n: integer;
   v: PVariant;
   k: PRawUtf8;
 begin
-  src := _Safe(aDocVariant);
-  n := src^.Count;
+  n := Another.Count;
   if n = 0 then
     exit; // nothing to add
-  v := pointer(src^.VValue);
-  k := pointer(src^.VName);
+  v := pointer(Another.VValue);
+  k := pointer(Another.VName);
   if k = nil then // source aDocVariant is a dvArray
-    // add array items
     if IsObject then
-      // types should match
-      exit
+      exit // types should match
+    else if VCount = 0 then
+    begin
+      VCount := n;
+      VValue := Another.VValue; // assign by reference
+    end
     else
       repeat
-        AddItem(v^);
+        AddItem(v^); // append new items
         inc(v);
         dec(n)
       until n = 0
-  else
-    // add object items
-    if IsArray then
-      // types should match
-      exit
+  else if IsArray then
+      exit // types should match
+    else if VCount = 0 then
+    begin
+      VCount := n;
+      VValue := Another.VValue; // no need to lookup names: assign by reference
+      VName  := Another.VName;
+    end
     else if Has(dvoCheckForDuplicatedNames) then
       repeat
-        AddOrUpdateValue(k^, v^);
+        AddOrUpdateValue(k^, v^); // append new properties once
         inc(k);
         inc(v);
         dec(n)
       until n = 0
     else
       repeat
-        AddValue(k^, v^);
+        AddValue(k^, v^); // append new properties
         inc(k);
         inc(v);
         dec(n)
@@ -11882,7 +11897,7 @@ end;
 procedure TDocList.Extend(const value: IDocList);
 begin
   if value <> nil then
-    fValue^.AddFrom(variant(value.Value^));
+    fValue^.AddFrom(value.Value^);
 end;
 
 procedure TDocList.Extend(const value: array of const);

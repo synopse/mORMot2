@@ -1098,7 +1098,7 @@ begin
         'FileSize',       pe.fMap.FileSize,
         'FileVersionNum', pe.FileVersionStr,
         'IsWin64',        pe.Is64]);
-      result.AddFrom(variant(pe.StringFileInfoEntries));
+      result.AddFrom(pe.StringFileInfoEntries);
     end;
   finally
     pe.Free;
