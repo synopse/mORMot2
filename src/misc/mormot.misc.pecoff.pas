@@ -102,10 +102,10 @@ const
   /// PE Magic number
   PE_HEADER_MAGIC = $4550;
 
-  PE_32_MAGIC = $10b;
-  PE_64_MAGIC = $20b;
-
-  // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-image-only
+  /// PE32 Magic number
+  PE_32_MAGIC     = $10b;
+  /// PE32+ Magic number (64-bit address space, but image still limited to 2GB)
+  PE_32PLUS_MAGIC = $20b;
 
 
 type
@@ -161,10 +161,8 @@ type
   TImageDataDirectory = _IMAGE_DATA_DIRECTORY;
   PImageDataDirectory = ^_IMAGE_DATA_DIRECTORY;
 
-  /// Optional Header 32bit
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-standard-fields-image-only
-  _IMAGE_OPTIONAL_HEADER = record
-    // Standard COFF fields
+  /// Optional COFF Header
+  _IMAGE_COFF_HEADER = record
     Magic: word;
     MajorLinkerVersion: byte;
     MinorLinkerVersion: byte;
@@ -173,6 +171,12 @@ type
     SizeOfUninitializedData: cardinal;
     AddressOfEntryPoint: cardinal;
     BaseOfCode: cardinal;
+  end;
+
+  /// Optional PE32 Header with 32-bit fields
+  _IMAGE_OPTIONAL_HEADER = record
+    // Standard COFF fields
+    Coff: _IMAGE_COFF_HEADER;
     BaseOfData: cardinal;
     // Windows Specific fields
     ImageBase: cardinal;
@@ -201,18 +205,10 @@ type
   TImageOptionalHeader32 = _IMAGE_OPTIONAL_HEADER;
   PImageOptionalHeader32 = ^_IMAGE_OPTIONAL_HEADER;
 
-  /// Optional Header 64bit
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-standard-fields-image-only
+  /// Optional PE32+ Header with 64-bit fields
   _IMAGE_OPTIONAL_HEADER64 = record
     // Standard COFF fields
-    Magic: word;
-    MajorLinkerVersion: byte;
-    MinorLinkerVersion: byte;
-    SizeOfCode: cardinal;
-    SizeOfInitializedData: cardinal;
-    SizeOfUninitializedData: cardinal;
-    AddressOfEntryPoint: cardinal;
-    BaseOfCode: cardinal;
+    Coff: _IMAGE_COFF_HEADER;
     // Windows Specific fields
     ImageBase: Int64;
     SectionAlignment: cardinal;
@@ -240,15 +236,7 @@ type
   TImageOptionalHeader64 = _IMAGE_OPTIONAL_HEADER64;
   PImageOptionalHeader64 = ^_IMAGE_OPTIONAL_HEADER64;
 
-  /// Common OptionalHeader (union for 32/64 bit)
-  TImageOptionalHeader = record
-    case integer of
-      0: (PHeader32: PImageOptionalHeader32);
-      1: (PHeader64: PImageOptionalHeader64);
-  end;
-  PImageOptionalHeader = ^TImageOptionalHeader;
-
-  /// Complete PE Header - 32bit version
+  /// Complete PE32 Header - with 32-bit fields
   // - COFF Header + Optional Header
   _IMAGE_NT_HEADERS = record
     FileHeader: TImageFileHeader;
@@ -257,7 +245,7 @@ type
   TImageNtHeaders32 = _IMAGE_NT_HEADERS;
   PImageNtHeaders32 = ^_IMAGE_NT_HEADERS;
 
-  /// Complete PE Header - 64bit version
+  /// Complete PE32+ Header - with 64-bit fields
   // - COFF Header + Optional Header
   _IMAGE_NT_HEADERS64 = record
     FileHeader: TImageFileHeader;
@@ -266,12 +254,12 @@ type
   TImageNtHeaders64 = _IMAGE_NT_HEADERS64;
   PImageNtHeaders64 = ^_IMAGE_NT_HEADERS64;
 
-  /// Common NtHeaders (union for 32/64 bit)
+  /// Common NtHeaders (union for COFF/PE32/PE32+)
   TImageNtHeaders = record
     case integer of
-      0: (PHeaders32: PImageNtHeaders32);
-      1: (PHeaders64: PImageNtHeaders64);
-      2: (PHeaders: pointer);
+      0: (Coff: PImageFileHeader);
+      1: (PE32: PImageNtHeaders32);
+      2: (PE64: PImageNtHeaders64);
   end;
   PImageNtHeaders = ^TImageNtHeaders;
 
@@ -507,7 +495,6 @@ type
   TSynPELoader = class
   private
     fPEHeader: TImageNtHeaders;
-    fCoffHeader: PImageFileHeader;
     fSectionHeaders: PImageSectionHeaders;
     fNumberOfSections: cardinal;
     fVersionInfo: PVsVersionInfo;
@@ -568,27 +555,25 @@ type
     /// check whether there is a valid PE file loaded
     function IsLoaded: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// check whether the PE file is an x64 arch
-    function Is64: boolean;
+    /// check whether the PE file is using PE32+ headers with 64-bit fields
+    function IsPE64: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// number of sections in this PE file
     // - it is the high boundary of the SectionHeaders[] property
     property NumberOfSections: cardinal
       read fNumberOfSections;
 
-    /// PE Header pointer for 32bit arch
-    // - see Is64 to check arch
-    // - regroup the COFF Header and the Optional Header
-    property PEHeader32: PImageNtHeaders32
-      read fPEHeader.PHeaders32;
-    /// PE Header pointer for 64bit arch
-    // - see Is64 to check arch
-    // - regroup the COFF Header and the Optional Header
-    property PEHeader64: PImageNtHeaders64
-      read fPEHeader.PHeaders64;
-    /// COFF Header (start of PE Header)
+    /// COFF Header pointer
     property CoffHeader: PImageFileHeader
-      read fCoffHeader;
+      read fPEHeader.Coff;
+    /// PE32 Header pointer - to be used with IsPE64 = false
+    // - regroup the COFF Header and the Optional Header with 32-bit values
+    property PE32: PImageNtHeaders32
+      read fPEHeader.PE32;
+    /// PE32+ Header pointer - to be used with IsPE64 = true
+    // - regroup the COFF Header and the Optional Header with 64-bit values
+    property PE64: PImageNtHeaders64
+      read fPEHeader.PE64;
     /// first image section header (end of PE Header)
     property SectionHeadersRaw: PImageSectionHeaders
       read fSectionHeaders;
@@ -813,9 +798,9 @@ begin
   result := fMap.Buffer <> nil;
 end;
 
-function TSynPELoader.Is64: boolean;
+function TSynPELoader.IsPE64: boolean;
 begin
-  result := PEHeader32^.OptionalHeader.Magic = PE_64_MAGIC;
+  result := PE32^.OptionalHeader.Coff.Magic = PE_32PLUS_MAGIC;
 end;
 
 function TSynPELoader.GetSectionHeader(SectionId: cardinal): PImageSectionHeader;
@@ -841,7 +826,6 @@ procedure TSynPELoader.Unload;
 begin
   fMap.UnMap;
   fVersionInfo := nil;
-  fCoffHeader := nil;
   fSectionHeaders := nil;
   fFixedFileInfo := nil;
   fStringFileInfo := nil;
@@ -894,10 +878,10 @@ function TSynPELoader.GetImageDataDirectory(DirectoryId: cardinal): PImageDataDi
 begin
   if DirectoryId >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES then
     EPeCoffLoader.RaiseUtf8('%.ImageDataDirectory[%]', [self, DirectoryID]);
-  if Is64 then
-    result := @PEHeader64^.OptionalHeader.DataDirectory[DirectoryId]
+  if IsPE64 then
+    result := @PE64^.OptionalHeader.DataDirectory[DirectoryId]
   else
-    result := @PEHeader32^.OptionalHeader.DataDirectory[DirectoryId];
+    result := @PE32^.OptionalHeader.DataDirectory[DirectoryId];
 end;
 
 function TSynPELoader.ParseResources: boolean;
