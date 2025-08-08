@@ -25,17 +25,20 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.rtti,
   mormot.core.variants;
 
 
 { ************ Low-Level DOS/PE/COFF Encoding Structures }
+
+// see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
+// and https://0xrick.github.io/win-internals/pe2
 
 type
   /// exception raised by this unit during parsing
   EPeCoffLoader = class(ESynException);
 
 const
-  // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-data-directories-image-only
 
   /// index of Export Directory
   IMAGE_DIRECTORY_ENTRY_EXPORT         = 0;
@@ -95,8 +98,6 @@ const
   RT_HTML         = 23;
   RT_MANIFEST     = 24;
 
-  // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#signature-image-only
-
   /// DOS Magic number
   DOS_HEADER_MAGIC = $5A4D;
   /// PE Magic number
@@ -112,7 +113,6 @@ type
   {$A-} // every record (or object) is packed from now on
 
   /// DOS HEADER
-  // - see https://referencesource.microsoft.com/#System.Deployment/System/Deployment/Application/PEStream.cs,74a6abbcc7f5a6da
   _IMAGE_DOS_HEADER = record
     e_magic: word;
     e_cblp: word;
@@ -153,7 +153,6 @@ type
   PImageFileHeader = ^_IMAGE_FILE_HEADER;
 
   /// Data directory.
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-data-directories-image-only
   _IMAGE_DATA_DIRECTORY = record
     VirtualAddress: cardinal;
     Size: cardinal;
@@ -264,7 +263,6 @@ type
   PImageNtHeaders = ^TImageNtHeaders;
 
   /// Section Table
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers
   _IMAGE_SECTION_HEADER = object
   public
     Name8: array[0..7] of AnsiChar;
@@ -289,7 +287,6 @@ type
   PImageSectionHeaders = ^TImageSectionHeaders;
 
   /// .reloc Section header
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-relocations-object-only
   TImageBaseRelocation = record
     VirtualAddress: cardinal;
     SymbolTableIndex: cardinal;
@@ -297,7 +294,6 @@ type
   end;
 
   /// .edata Section header
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#export-directory-table
   _IMAGE_EXPORT_DIRECTORY = record
     Characteristics: cardinal;
     TimeDateStamp: cardinal;
@@ -316,7 +312,6 @@ type
   PImageExportDirectory = ^_IMAGE_EXPORT_DIRECTORY;
 
   /// .idata Section Header
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-directory-table
   _IMAGE_IMPORT_DESCRIPTOR = record
     case integer of
       0:
@@ -336,7 +331,6 @@ type
   PImageImportDescriptor = ^_IMAGE_IMPORT_DESCRIPTOR;
 
   /// .tls Section Header
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-tls-directory
   _IMAGE_TLS_DIRECTORY32 = record
     StartAddressOfRawData: cardinal;
     EndAddressOfRawData: cardinal;
@@ -351,7 +345,6 @@ type
   PImageResourceDirectoryEntry = ^_IMAGE_RESOURCE_DIRECTORY_ENTRY;
 
   /// Resource directory entries
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-entries
   _IMAGE_RESOURCE_DIRECTORY = object
     Characteristics: cardinal;
     TimeDateStamp: cardinal;
@@ -362,14 +355,13 @@ type
     /// start with NumberOfNamedEntries, then NumberOfIdEntries
     function FirstEntry: PImageResourceDirectoryEntry;
       {$ifdef HASINLINE} inline; {$endif}
-    /// search for a given ID
+    /// search for a section with given ID, e.g. RT_VERSION
     function FindByID(ID: cardinal): PImageResourceDirectoryEntry;
   end;
   TImageResourceDirectory = _IMAGE_RESOURCE_DIRECTORY;
   PImageResourceDirectory = ^_IMAGE_RESOURCE_DIRECTORY;
 
   /// Resource data entry
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-data-entry
   _IMAGE_RESOURCE_DATA_ENTRY = record
     DataRVA: cardinal;
     Size: cardinal;
@@ -380,7 +372,6 @@ type
   PImageResourceDataEntry = ^_IMAGE_RESOURCE_DATA_ENTRY;
 
   /// .rsrc Section header
-  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-table
   _IMAGE_RESOURCE_DIRECTORY_ENTRY = object
   public
     /// UTF-16 string offset for NumberOfNamedEntries, or ID for NumberOfIdEntries
@@ -541,15 +532,14 @@ type
     function OffsetFrom(RVA: cardinal): cardinal; overload;
 
     /// parse the Resource directory associated section
-    // - see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-rsrc-section
     // - return false if there is no resource section
     // - set VersionInfo, FixedFileInfo, StringFileInfo, FirstStringTable and
     // VarFileInfo pointers if found
     function ParseResources: boolean;
     /// parse the StringFileInfo entries
-    // - this is the main method to be called after Create
+    // - this is the main method to be called after Create and LoadFromFile()
     // - call ParseResources if needed
-    // - parsed entries are accessible using the StringFileInfoEntries property
+    // - parsed entries are accessible using StringFileInfoEntries document
     function ParseStringFileInfoEntries: boolean;
 
     /// check whether there is a valid PE file loaded
@@ -834,6 +824,8 @@ begin
   fNumberOfSections := 0;
   fStringFileInfoEntries.Reset;
 end;
+
+// see https://0xrick.github.io/win-internals/pe5 about Directories and Sections
 
 function TSynPELoader.GetSectionByRVA(RVA: cardinal): PImageSectionHeader;
 var
