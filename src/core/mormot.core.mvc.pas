@@ -1517,11 +1517,17 @@ function TMvcSessionWithRenderer.GetCookie(out Value: PUtf8Char): integer;
 var
   ctxt: TMvcRendererReturningData;
 begin
+  result := 0; // avoid GPF on virtual method execution
   ctxt := _CurrentRenderer;
   if ctxt = nil then
-    result := 0 // avoid GPF on virtual method execution
-  else
-    result := ctxt.GetCookieFromHeaders(fContext.CookieName, Value);
+    exit;
+  result := ctxt.GetCookieFromHeaders(fContext.CookieName, Value);
+  if result <> 0 then
+    exit;
+  Value := pointer(ctxt.fOutputCookieValue);
+  if (Value <> nil) and
+     (ctxt.fOutputCookieName = fContext.CookieName) then
+    result := PStrLen(Value - _STRLEN)^; // return value from SetCookie()
 end;
 
 procedure TMvcSessionWithRenderer.SetCookie(const Value: RawUtf8);
@@ -1530,7 +1536,7 @@ var
 begin
   ctxt := _CurrentRenderer;
   if ctxt <> nil then // avoid GPF on virtual method execution
-    ctxt.SetCookieToHeaders(fContext.CookieName, Value);
+    ctxt.SetCookieToHeaders(fContext.CookieName, Value); // fOutputCookieName/Value
 end;
 
 

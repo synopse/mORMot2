@@ -8003,7 +8003,7 @@ begin
   // using FileOpenSequentialRead() is pointless on Windows
   h := FileOpen(aFileName, fmOpenReadShared);
   {$else}
-  h := FileOpenSequentialRead(aFileName); // but no lock needed on POSIX
+  h := FileOpenSequentialRead(aFileName); // but no lock is a good idea on POSIX
   {$endif OSWINDOWS}
   if not ValidHandle(h) then
     exit;
