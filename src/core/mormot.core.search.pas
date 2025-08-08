@@ -342,9 +342,12 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     Init: TLightLock;
-    Names, Paths: TMatchDynArray;
-    procedure DoInit(csv: PUtf8Char; caseinsensitive: boolean);
   public
+    Names, Paths: TMatchDynArray;
+    /// low-level method, to be called once to initialize the search
+    // - see proper Check() usage as:
+    // ! if Init.TryLock then DoInit(...);
+    procedure DoInit(csv: PUtf8Char; caseinsensitive: boolean);
     /// main entry point of the GLOB resource/path URI pattern matching
     // - will thread-safe initialize the internal TMatch instances if necessary
     function Check(const csv: RawUtf8; const uri: TUriMatchName;
