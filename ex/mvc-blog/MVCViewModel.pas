@@ -98,7 +98,6 @@ type
     fDefaultLastID: TID;
     fHasFTS: boolean;
     procedure ComputeMinimalData; virtual;
-    procedure FlushAnyCache; override;
     procedure GetViewInfo(MethodIndex: integer; out info: variant); override;
     function GetLoggedAuthorID(Right: TOrmAuthorRight;
       ContentToFillAuthor: TOrmContent): TID;
@@ -106,6 +105,7 @@ type
     procedure TagToText(const Value: variant; out result: variant);
   public
     procedure Start(aServer: TRest; const aTemplatesFolder: TFileName); reintroduce;
+    procedure FlushAnyCache; override;
     property HasFts: boolean
       read fHasFts write fHasFts;
   public
@@ -169,7 +169,7 @@ begin
   run.SetCache('Default',     cacheRootIfNoSession, 15);
   run.SetCache('ArticleView', cacheWithParametersIfNoSession, 60);
   run.SetCache('AuthorView',  cacheWithParametersIgnoringSession, 60);
-  run.PublishOptions := run.PublishOptions - [cacheStatic];
+  //run.PublishOptions := run.PublishOptions - [cacheStatic];
   run.StaticCacheControlMaxAge := 60 * 30; // 30 minutes
   (run.Views as TMvcViewsMustache).
     RegisterExpressionHelpers(['MonthToText'], [MonthToText]).
@@ -475,7 +475,7 @@ begin
     end;
   end
   else
-    EMvcApplication.GotoError(HTTP_NOTFOUND);
+    RedirectError(HTTP_NOTFOUND); // faster than EMvcApplication.GotoError()
 end;
 
 procedure TBlogApplication.AuthorView(var ID: TID; var Author: TOrmAuthor;
@@ -487,7 +487,7 @@ begin
     Articles := RestModel.Orm.RetrieveDocVariantArray(TOrmArticle, '',
       'Author=? order by RowId desc limit 50', [ID], ARTICLE_FIELDS)
   else
-    EMvcApplication.GotoError(HTTP_NOTFOUND);
+    RedirectError(HTTP_NOTFOUND);
 end;
 
 function TBlogApplication.Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
@@ -556,8 +556,9 @@ begin
       GotoView(result, 'ArticleView',
         ['ID', ID,
          'withComments', true,
-         'Scope', _ObjFast(['CommentError', error, 'CommentTitle', comm.Title,
-          'CommentContent', comm.Content])], HTTP_BADREQUEST);
+         'Scope', _ObjFast(['CommentError',   error,
+                            'CommentTitle',   comm.Title,
+                            'CommentContent', comm.Content])], HTTP_BADREQUEST);
   end;
 end;
 
@@ -576,12 +577,21 @@ var
 begin
   AuthorID := GetLoggedAuthorID(canPost, Article);
   if AuthorID = 0 then
-    EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
+  begin
+    RedirectError(sErrorNeedValidAuthorSession);
+    exit;
+  end;
   if ID <> 0 then
     if not RestModel.Orm.Retrieve(ID, Article) then
-      EMvcApplication.GotoError(HTTP_UNAVAILABLE)
+    begin
+      RedirectError(HTTP_UNAVAILABLE);
+      exit;
+    end
     else if Article.Author <> CastID(AuthorID) then
-      EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
+    begin
+      RedirectError(sErrorNeedValidAuthorSession);
+      exit;
+    end;
   if Title <> '' then
     Article.Title := Title;
   if Content <> '' then
