@@ -73,6 +73,7 @@ uses
   mormot.core.rtti,
   mormot.core.log,
   mormot.core.buffers,
+  mormot.core.variants,
   mormot.db.core,
   mormot.db.sql;
 
@@ -452,18 +453,6 @@ begin
   SQLLogEnd;
 end;
 
-function DynRawUtf8ArrayToConst(const aValue: TRawUtf8DynArray): TTVarRecDynArray;
-var
-  ndx: PtrInt;
-begin
-  SetLength(result, Length(aValue));
-  for ndx := 0 to Length(aValue) - 1 do
-  begin
-    result[ndx].VType := vtAnsiString;
-    result[ndx].VAnsiString := pointer(aValue[ndx]);
-  end;
-end;
-
 function Param2Type(const aParam: ISQLParam): RawUtf8;
 begin
   case aParam.GetSQLType of
@@ -729,7 +718,7 @@ var
               FormatUtf8(':p%', [iCnt], aPar[iP]);
               Inc(iCnt);
             end;
-            W.Add(oldSQL, DynRawUtf8ArrayToConst(aPar));
+            W.Add(oldSQL, RawUtf8DynArrayToArrayOfConst(aPar));
             W.AddDirect(';', #10);
           end;
           W.AddDirect('e', 'n', 'd');
