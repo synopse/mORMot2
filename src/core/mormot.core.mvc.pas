@@ -755,12 +755,9 @@ type
   TOnMvcSession = procedure(Sender: TMvcSessionAbstract; SessionID: integer;
     const Info: variant) of object;
 
-  /// parent class to implement a MVC/MVVM application
-  // - you should inherit from this class, then implement an interface inheriting
-  // from IMvcApplication to define the various commands of the application
-  // - here the Model would be a TRest instance, Views will be defined by
-  // TMvcViewsAbstract (e.g. TMvcViewsMustache), and the ViewModel/Controller
-  // will be implemented with IMvcApplication methods of the inherited class
+  /// abstract parent class to implement a MVC/MVVM application
+  // - you should not inherit directly from this class, but e.g. mormot.rest.mvc
+  // TMvcApplicationRest and associate a TMvcRunOnRestServer
   // - inherits from TInjectableObject, so that you could resolve dependencies
   // via services or stubs, following the IoC pattern
   TMvcApplication = class(TInjectableObject)

@@ -44,6 +44,11 @@ uses
 
 type
   /// parent class to implement a MVC/MVVM application over a TRestServer
+  // - your inherited class should also implement an interface inheriting from
+  // IMvcApplication to define the various commands/uri of the application
+  // - here the Model would be a TRest instance, Views will be defined by
+  // TMvcViewsAbstract (e.g. TMvcViewsMustache), and the ViewModel/Controller
+  // will be implemented with IMvcApplication methods of the inherited class
   TMvcApplicationRest = class(TMvcApplication)
   protected
     fRestModel: TRest;
@@ -59,6 +64,7 @@ type
     procedure Start(aRestModel: TRest; aInterface: PRttiInfo); virtual;
     /// read-only access to the associated mORMot REST instance implementing the
     // MVC data Model of the application
+    // - you could use RestModel.Orm to access the associated database
     // - is a TRestServer instance e.g. for TMvcRunOnRestServer
     property RestModel: TRest
       read fRestModel;
