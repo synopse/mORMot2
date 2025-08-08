@@ -3715,12 +3715,14 @@ begin
     {$ifdef FPC} vtQWord, {$endif}
     vtInt64:
       BsonWrite(name, value.VInt64^);
+    vtAnsiString:
+      BsonWriteUtf8(name, RawUtf8(value.VAnsiString));
     vtString,
-    vtAnsiString,
     {$ifdef HASVARUSTRING} vtUnicodeString, {$endif}
     vtPChar,
     vtChar,
     vtWideChar,
+    vtPWideChar,
     vtWideString:
       begin
         VarRecToTempUtf8(@value, tmp);
@@ -3736,39 +3738,12 @@ end;
 procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant);
 var
   v: TVarData absolute value;
-
-  procedure WriteComplex; // use a local temp: RawUtf8
-  var
-    temp: RawUtf8;
-    json: PUtf8Char;
-  begin
-    case v.VType of
-    {$ifdef HASVARUSTRING}
-      varUString:
-        begin
-          RawUnicodeToUtf8(v.VAny, length(UnicodeString(v.VAny)), temp);
-          BsonWriteText(name, pointer(temp), length(temp));
-        end;
-    {$endif HASVARUSTRING}
-      varOleStr:
-        begin
-          RawUnicodeToUtf8(v.VAny, length(WideString(v.VAny)), temp);
-          BsonWriteText(name, pointer(temp), length(temp));
-        end;
-    else
-      begin
-        _VariantSaveJson(value, twJsonEscape, temp);
-        json := pointer(temp);
-        BsonWriteFromJson(name, json, nil);
-        if json = nil then
-          EBsonException.RaiseUtf8(
-            '%.BsonWriteVariant(VType=%)', [self, v.VType]);
-      end;
-    end;
-  end;
-
+  vt: cardinal;
+  tmp: pointer; // fake RawUtf8
+  json: PUtf8Char;
 begin
-  case v.VType of
+  vt := v.VType;
+  case vt of
     varEmpty,
     varNull:
       BsonWrite(name, betNull);
@@ -3801,14 +3776,39 @@ begin
       // will recognize TJsonWriter.AddDateTime/WrBase64 patterns
       BsonWriteUtf8OrDecode(name, v.VAny, length(RawUtf8(v.VAny)));
   else
-    if v.VType = varVariantByRef then
+    if vt = varVariantByRef then
       BsonWriteVariant(name, PVariant(v.VPointer)^)
-    else if v.VType = BsonVariantType.VarType then
+    else if vt = BsonVariantVType then
       BsonWrite(name, TBsonVariantData(v))
-    else if v.VType = DocVariantType.VarType then
+    else if vt = DocVariantVType then
       BsonWrite(name, TDocVariantData(v))
     else
-      WriteComplex;
+    begin
+      tmp := nil;
+      try
+        case vt of
+        {$ifdef HASVARUSTRING}
+          varUString:
+            RawUnicodeToUtf8(v.VAny, length(UnicodeString(v.VAny)), RawUtf8(tmp));
+        {$endif HASVARUSTRING}
+          varOleStr:
+            RawUnicodeToUtf8(v.VAny, length(WideString(v.VAny)), RawUtf8(tmp));
+        else
+          begin
+            _VariantSaveJson(value, twJsonEscape, RawUtf8(tmp));
+            json := tmp;
+            BsonWriteFromJson(name, json, nil);
+            if json = nil then
+              EBsonException.RaiseUtf8(
+                '%.BsonWriteVariant(VType=%)', [self, vt]);
+            exit;
+          end;
+        end;
+        BsonWriteText(name, tmp, PStrLen(PtrUInt(tmp) - _STRLEN)^);
+      finally
+        FastAssignNew(tmp);
+      end;
+    end;
   end;
 end;
 
