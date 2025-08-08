@@ -5963,20 +5963,19 @@ begin
   until false;
 end;
 
-procedure TTextWriter.AddHtmlEscapeW(Text: PWideChar;
-  Fmt: TTextWriterHtmlFormat);
+procedure TTextWriter.AddHtmlEscapeW(Text: PWideChar; Fmt: TTextWriterHtmlFormat);
 var
   tmp: TSynTempBuffer;
 begin
-  if (Text = nil) or
-     (Fmt = hfNone) then
-  begin
-    AddNoJsonEscapeW(pointer(Text), 0);
-    exit;
-  end;
-  RawUnicodeToUtf8(Text, StrLenW(Text), tmp, [ccfNoTrailingZero]);
-  AddHtmlEscape(tmp.buf, tmp.Len, Fmt);
-  tmp.Done;
+  if Text <> nil then
+    if Fmt = hfNone then
+      AddNoJsonEscapeW(pointer(Text))
+    else
+    begin
+      RawUnicodeToUtf8(Text, StrLenW(Text), tmp, [ccfNoTrailingZero]);
+      AddHtmlEscape(tmp.buf, tmp.Len, Fmt);
+      tmp.Done;
+    end;
 end;
 
 procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
@@ -8995,15 +8994,15 @@ begin
       end;
     vtAnsiString: // expect UTF-8 content
       begin
-        Res.Text := pointer(V^.VAnsiString);
-        Res.Len := length(RawUtf8(V^.VAnsiString));
+        Res.Text := V^.VPointer;
+        Res.Len := length(RawUtf8(V^.VPointer));
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      WideToTempUtf8(V^.VPWideChar, length(UnicodeString(V^.VUnicodeString)), Res);
+      WideToTempUtf8(V^.VPointer, length(UnicodeString(V^.VPointer)), Res);
     {$endif HASVARUSTRING}
     vtWideString:
-      WideToTempUtf8(V^.VPWideChar, length(WideString(V^.VWideString)), Res);
+      WideToTempUtf8(V^.VPointer, length(WideString(V^.VPointer)), Res);
     vtPChar: // expect UTF-8 content
       begin
         Res.Text := V^.VPointer;
@@ -9102,20 +9101,19 @@ begin
     vtAnsiString:
       begin
         isString := true;
-        AnyAnsiToUtf8Var(RawByteString(V^.VAnsiString), result); // use codepage
+        AnyAnsiToUtf8Var(RawByteString(V^.VPointer), result); // use codepage
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
       begin
         isString := true;
-        RawUnicodeToUtf8(V^.VUnicodeString,
-          length(UnicodeString(V^.VUnicodeString)), result);
+        RawUnicodeToUtf8(V^.VPointer, length(UnicodeString(V^.VPointer)), result);
       end;
     {$endif HASVARUSTRING}
     vtWideString:
       begin
         isString := true;
-        RawUnicodeToUtf8(V^.VWideString, length(WideString(V^.VWideString)), result);
+        RawUnicodeToUtf8(V^.VPointer, length(WideString(V^.VPointer)), result);
       end;
     vtPChar:
       begin
@@ -9155,7 +9153,7 @@ begin
     vtExtended:
       DoubleToStr(V^.VExtended^,result);
     vtPointer:
-      Int32ToUtf8(PtrInt(V^.VPointer), result);
+      UInt32ToUtf8(PtrUInt(V^.VPointer), result);
     vtClass:
       begin
         isString := true;
