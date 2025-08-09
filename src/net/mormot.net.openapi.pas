@@ -2609,8 +2609,11 @@ begin
   if def = nil then
     if not (aSchema^.IsObject or
             aSchema^.HasProperties) then
-      EOpenApi.RaiseUtf8('%.ParseRecordDefinition: % is %, not object',
-        [self, aDefinitionName, aSchema^._Type])
+    begin
+      // this is no true record, but e.g. a regular value in object disguise
+      result.fIsVoidVariant := true;
+      result.fPascalName := 'variant';
+    end
     else
     begin
       SetLength(def, 1);
