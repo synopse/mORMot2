@@ -217,13 +217,14 @@ const
 const
   // some reference OpenAPI/Swagger definitions
   // - downloaded as openapi-ref.zip since some of those endpoints are unstable
-  OpenApiName: array[0 .. 5] of RawUtf8 = (
+  OpenApiName: array[0 .. 6] of RawUtf8 = (
     'FinTrack',
     'Nakama',  // https://github.com/heroiclabs/nakama
     'Pets2',   // https://petstore.swagger.io/v2/swagger.json
     'Pets3',   // https://petstore3.swagger.io/api/v3/openapi.json
     'Qdrant',  // https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json
-    'VAS');    // https://platform-api-staging.vas.com/api/v1/swagger.json
+    'VAS',     // https://platform-api-staging.vas.com/api/v1/swagger.json
+    'JTL');    // https://developer.jtl-software.com/_spec/products/erpapi/@1.1-onprem/openapi.json?download
 
 procedure TNetworkProtocols.OpenAPI;
 var
