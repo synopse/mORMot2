@@ -4542,7 +4542,7 @@ type
     // - by default, won't write more than 512MB of JSON, to avoid OutOfMemory
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; Json: TStream;
-      Expand: boolean = false; MaxMemory: PtrUInt = 512 shl 20;
+      Expand: boolean = false; MaxMemory: PtrInt = 512 shl 20;
       Options: TTextWriterOptions = []): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - use internally Execute() above with a TRawByteStringStream, and return
@@ -4555,7 +4555,7 @@ type
     // - if any error occurs, ESqlite3Exception is catched and '' is returned
     function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
       Expand: boolean = false; aResultCount: PPtrInt = nil;
-      MaxMemory: PtrUInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
+      MaxMemory: PtrInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
     /// Execute one SQL statement step into a JSON object
     // - has less overhead than ExecuteJson() for a single row of data
     function ExecuteStepJson(aDB: TSqlite3DB; W: TJsonWriter): boolean;
@@ -8197,7 +8197,7 @@ begin
 end;
 
 function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
-  Json: TStream; Expand: boolean; MaxMemory: PtrUInt;
+  Json: TStream; Expand: boolean; MaxMemory: PtrInt;
   Options: TTextWriterOptions): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
@@ -8295,7 +8295,7 @@ end;
 {$I+}
 
 function TSqlRequest.ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
-  Expand: boolean; aResultCount: PPtrInt; MaxMemory: PtrUInt;
+  Expand: boolean; aResultCount: PPtrInt; MaxMemory: PtrInt;
   Options: TTextWriterOptions): RawUtf8;
 var
   Stream: TRawByteStringStream;

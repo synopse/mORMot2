@@ -1080,9 +1080,9 @@ type
     fThreadNameLogged: TIntegerDynArray; // bits for ptIdentifiedInOneFile
     fWriterStream: TStream;
     fFileName: TFileName;
-    fFileRotationBytes: cardinal; // see OnFlushToStream
+    fFileRotationBytes: integer; // see OnFlushToStream
     fNextFlushTix32, fNextFileRotateDailyTix32: cardinal; // see OnFlushToStream
-    fStreamPositionAfterHeader: cardinal;
+    fStreamPositionAfterHeader: integer;
     fStartTimestampDateTime: TDateTime;
     fWriterClass: TJsonWriterClass;
     class function FamilyCreate: TSynLogFamily;
@@ -6166,7 +6166,7 @@ begin
   // check for any PerformRotation - delayed in TSynLog.LogEnterFmt
   if not (pendingRotate in fPendingFlags) then
     if (fFileRotationBytes > 0) and // reached size to rotate?
-       (fWriter.WrittenBytes + PtrUInt(Len) > PtrUInt(fFileRotationBytes)) then
+       (fWriter.WrittenBytes + Len > fFileRotationBytes) then
       include(fPendingFlags, pendingRotate)
     else
     begin

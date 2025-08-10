@@ -7337,7 +7337,7 @@ end;
 
 procedure TJsonWriter.AddJsonEscape(Source: TJsonWriter);
 begin
-  if Source.fTotalFileSize = 0 then
+  if Source.WrittenBytes = 0 then // nothing written in Source.Stream yet
     AddJsonEscape(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
   else
     AddJsonEscape(pointer(Source.Text));
@@ -7345,7 +7345,7 @@ end;
 
 procedure TJsonWriter.AddNoJsonEscape(Source: TJsonWriter);
 begin
-  if Source.fTotalFileSize = 0 then
+  if Source.WrittenBytes = 0 then
     AddNoJsonEscapeBig(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
   else
     AddString(Source.Text);

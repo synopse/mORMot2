@@ -1287,7 +1287,7 @@ type
     fVariantWideString: boolean;
     {$endif UNICODE}
     fDateTimeFirstChar: AnsiChar;
-    fStatementMaxMemory: Int64;
+    fStatementMaxMemory: PtrInt;
     fSqlGetServerTimestamp: RawUtf8;
     fEngineName: RawUtf8;
     fOnProcess: TOnSqlDBProcess;
@@ -1876,7 +1876,7 @@ type
     // - if a result set exceeds this limit, an ESQLDBException is raised
     // - default is 512 shl 20, i.e. 512MB which is very high
     // - avoid unexpected OutOfMemory errors when incorrect statement is run
-    property StatementMaxMemory: Int64
+    property StatementMaxMemory: PtrInt
       read fStatementMaxMemory write fStatementMaxMemory;
     /// if UseCache is true, how many statement replicates can be generated
     // if the cached ISqlDBStatement is already used
@@ -6431,7 +6431,7 @@ function TSqlDBStatement.FetchAllToJson(Json: TStream; Expanded: boolean): PtrIn
 var
   W: TResultsWriter;
   col: integer;
-  maxmem: PtrUInt;
+  maxmem: PtrInt;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := 0;
@@ -6490,7 +6490,7 @@ const
     '"blob"', 'blob');
 var
   F, FMax: integer;
-  maxmem: PtrUInt;
+  maxmem: PtrInt;
   W: TJsonWriter;
   tmp: RawByteString;
   V: TSqlVar;
@@ -6657,7 +6657,7 @@ function TSqlDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
 var
   f, fmax, fieldsize, nullrowlast: integer;
   startpos: Int64;
-  maxmem: PtrUInt;
+  maxmem: PtrInt;
   W: TBufferWriter;
   ft: TSqlDBFieldType;
   coltypes: TSqlDBFieldTypeDynArray;

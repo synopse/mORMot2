@@ -521,15 +521,15 @@ type
   TTextWriter = class
   protected
     fStream: TStream;
-    fInitialStreamPosition: PtrUInt;
-    fTotalFileSize: PtrUInt;
+    fWrittenBytes: Int64;
+    fInitialStreamPosition: Int64;
     fHumanReadableLevel: integer;
     fTempBufSize: integer; // internal temporary buffer
     fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
     fCustomOptions: TTextWriterOptions;
     fFlags: TTextWriterFlags;
-    function GetTextLength: PtrUInt;
+    function GetTextLength: Int64;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
@@ -541,10 +541,12 @@ type
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
+    // - B^ points in fact to the last written character to allow CancelLastChar,
+    // i.e. the next output position is B[1]
     B: PUtf8Char;
     /// direct access to the low-level last position in the buffer
     // - you should not use this field directly
-    // - points in fact 16 bytes before the actual buffer ending
+    // - points in fact 16 bytes before the actual buffer ending for AddDirect()
     BEnd: PUtf8Char;
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -1013,8 +1015,8 @@ type
     /// how many bytes were currently written on disk/stream
     // - excluding the bytes in the internal buffer (see PendingBytes)
     // - see TextLength for the total number of bytes, on both stream and memory
-    property WrittenBytes: PtrUInt
-      read fTotalFileSize;
+    property WrittenBytes: Int64
+      read fWrittenBytes;
     /// low-level access to the current indentation level
     property HumanReadableLevel: integer
       read fHumanReadableLevel write fHumanReadableLevel;
@@ -1053,7 +1055,7 @@ type
     /// count of added bytes to the stream
     // - see PendingBytes for the number of bytes currently in the memory buffer
     // or WrittenBytes for the number of bytes already written to disk/stream
-    property TextLength: PtrUInt
+    property TextLength: Int64
       read GetTextLength;
     /// the internal TStream used for storage
     // - you should call the FlushFinal (or FlushToStream) methods before using
@@ -4374,7 +4376,7 @@ end;
 
 procedure TTextWriter.WriteToStream(data: pointer; len: PtrUInt);
 var
-  written: PtrUInt;
+  written: PtrInt;
 begin
   if Assigned(fOnFlushToStream) then
     fOnFlushToStream(data, len);
@@ -4382,12 +4384,12 @@ begin
      Assigned(fStream) then
     repeat
       written := fStream.Write(data^, len);
-      if PtrInt(written) <= 0 then
+      if written <= 0 then
         if twfNoWriteToStreamException in fFlags then
           break // silent failure
         else
           ESynException.RaiseUtf8('%.WriteToStream failed on %', [self, fStream]);
-      inc(fTotalFileSize, written);
+      inc(fWrittenBytes, written);
       dec(len, written);
       if len = 0 then
         break;
@@ -4395,11 +4397,11 @@ begin
     until false;
 end;
 
-function TTextWriter.GetTextLength: PtrUInt;
+function TTextWriter.GetTextLength: Int64;
 begin
   result := PtrUInt(self);
   if self <> nil then
-    result := PtrUInt(B - fTempBuf + 1) + fTotalFileSize - fInitialStreamPosition;
+    result := PtrInt(B - fTempBuf + 1) + fWrittenBytes - fInitialStreamPosition;
 end;
 
 procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -4433,7 +4435,7 @@ begin
     exit;
   fStream := aStream;
   fInitialStreamPosition := fStream.Position;
-  fTotalFileSize := fInitialStreamPosition;
+  fWrittenBytes := fInitialStreamPosition;
   if aStream.InheritsFrom(TRawByteStringStream) then
     include(fFlags, twfStreamIsRawByteString);
 end;
@@ -4454,20 +4456,20 @@ end;
 
 procedure TTextWriter.FlushToStream;
 var
-  tmp, written: PtrUInt;
+  tmp, written: Int64;
 begin
   FlushFinal;
   if twfFlushToStreamNoAutoResize in fFlags then
     exit;
-  written := fTotalFileSize - fInitialStreamPosition;
+  written := fWrittenBytes - fInitialStreamPosition;
   tmp := fTempBufSize;
   if (tmp < 49152) and
-     (written > PtrUInt(tmp) * 4) then
+     (written > tmp * 4) then
     // tune small (stack-allocated?) buffer to grow by twice its size
     fTempBufSize := fTempBufSize * 2
   else if (written > 40 shl 20) and
           (tmp < 1 shl 20) then
-    fTempBufSize := 1 shl 20 // total > 40MB -> grow internal buffer to 1MB
+    fTempBufSize := 1 shl 20 // total > 40MB -> grow internal buffer once to 1MB
   else
     exit; // nothing to change about internal buffer size
   if twfBufferIsOnStack in fFlags then
@@ -4494,16 +4496,16 @@ begin
     TRawByteStringStream(fStream).DataString := text
   else
     fStream.WriteBuffer(pointer(text)^, length(text));
-  fTotalFileSize := fInitialStreamPosition + PtrUInt(length(text));
+  fWrittenBytes := fInitialStreamPosition + length(text);
 end;
 
 procedure TTextWriter.SetText(var result: RawUtf8; reformat: TTextWriterJsonFormat);
 var
-  Len: PtrUInt;
+  Len: PtrInt;
   temp: TTextWriter;
 begin
   FlushFinal;
-  Len := fTotalFileSize - fInitialStreamPosition;
+  Len := fWrittenBytes - fInitialStreamPosition;
   if Len = 0 then
   begin
     result := '';
@@ -4536,7 +4538,7 @@ end;
 
 function TTextWriter.GetTextAsBuffer: PUtf8Char;
 begin
-  if fTotalFileSize = 0 then // just return the internal buffer
+  if fWrittenBytes = 0 then // just return the internal buffer
   begin
     B[1] := #0; // include an ending #0 for proper PUtf8Char support
     result := fTempBuf;
@@ -4566,8 +4568,8 @@ procedure TTextWriter.CancelAll;
 begin
   if self = nil then
     exit; // avoid GPF
-  if fTotalFileSize <> 0 then
-    fTotalFileSize := fStream.Seek(fInitialStreamPosition, soBeginning);
+  if fWrittenBytes <> 0 then
+    fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
   B := fTempBuf - 1;
 end;
 
@@ -4579,8 +4581,8 @@ end;
 
 procedure TTextWriter.CancelAllWith(var temp: TTextWriterStackBuffer);
 begin
-  if fTotalFileSize <> 0 then
-    fTotalFileSize := fStream.Seek(fInitialStreamPosition, soBeginning);
+  if fWrittenBytes <> 0 then
+    fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
   if twfBufferIsOnStack in fFlags then
     InternalSetBuffer(@temp, SizeOf(temp))
   else

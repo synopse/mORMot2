@@ -5109,7 +5109,7 @@ procedure THttpLoggerWriter.TryRotate(Tix32: cardinal);
 begin
   if (fStream <> nil) and
      (fRotate.Trigger > hrtDisabled) then
-    fRotate.TryRotate(Tix32, fTotalFileSize + PendingBytes);
+    fRotate.TryRotate(Tix32, WrittenBytes + PendingBytes);
 end;
 
 procedure THttpLoggerWriter.WriteToStream(data: pointer; len: PtrUInt);
