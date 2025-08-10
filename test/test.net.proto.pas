@@ -231,7 +231,7 @@ var
   i: PtrInt;
   fn: TFileName;
   key, prev, dto, client: RawUtf8;
-  ref: RawByteString;
+  refzip: RawByteString;
   api: TRawUtf8DynArray;
   oa: TOpenApiParser;
   timer: TPrecisionTimer;
@@ -263,8 +263,12 @@ begin
       api[i] := StringFromFile(fn);
       if api[i] <> '' then
         continue; // already downloaded
-      ref := DownloadFile('https://synopse.info/files/openapi-ref.zip');
-      if UnZipMemAll(ref, WorkDir) then // one url to rule them all
+      if refzip <> '' then
+        continue; // download .zip once
+      refzip := DownloadFile('https://synopse.info/files/openapi-refzip.zip');
+      if refzip = '' then
+        refzip := 'none'; // try one
+      if UnZipMemAll(refzip, WorkDir) then // one url to rule them all
         api[i] := StringFromFile(fn);  // try now
     end;
   for i := 0 to high(api) do
