@@ -267,9 +267,9 @@ begin
         continue; // download .zip once
       refzip := DownloadFile('https://synopse.info/files/openapi-refzip.zip');
       if refzip = '' then
-        refzip := 'none'; // try one
-      if UnZipMemAll(refzip, WorkDir) then // one url to rule them all
-        api[i] := StringFromFile(fn);  // try now
+        refzip := 'none'
+      else if UnZipMemAll(refzip, WorkDir) then // one url to rule them all
+        api[i] := StringFromFile(fn); // try once
     end;
   for i := 0 to high(api) do
     if api[i] <> '' then
