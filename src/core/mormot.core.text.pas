@@ -6154,61 +6154,65 @@ begin
   result := false;
 end;
 
-const
-  HTML_UNESCAPE: array[1 .. 104] of string[6] = (
-    'amp', 'lt', 'gt', 'quot', 'rsquo', {6=}'ndash', {7=}'trade', {8=}'hellip',
-    'nbsp', 'iexcl', 'cent', 'pound', 'curren', 'yen', 'brvbar', 'sect', 'uml',
-    'copy', 'ordf', 'laquo', 'not', 'shy', 'reg', 'macr', 'deg', 'plusmn',
-    'sup2', 'sup3', 'acute', 'micro', 'para', 'middot', 'cedil', 'sup1', 'ordm',
-    'raquo', 'frac14', 'frac12', 'frac34', 'iquest', 'Agrave', 'Aacute', 'Acirc',
-    'Atilde', 'Auml', 'Aring', 'AElig', 'Ccedil', 'Egrave', 'Eacute', 'Ecirc',
-    'Euml', 'Igrave', 'Iacute', 'Icirc', 'Iuml', 'ETH', 'Ntilde', 'Ograve',
-    'Oacute', 'Ocirc', 'Otilde', 'Ouml', 'times', 'Oslash', 'Ugrave', 'Uacute',
-    'Ucirc', 'Uuml', 'Yacute', 'THORN', 'szlig', 'agrave', 'aacute', 'acirc',
-    'atilde', 'auml', 'aring', 'aelig', 'ccedil', 'egrave', 'eacute', 'ecirc',
-    'euml', 'igrave', 'iacute', 'icirc', 'iuml', 'eth', 'ntilde', 'ograve',
-    'oacute', 'ocirc', 'otilde', 'ouml', 'divide', 'oslash', 'ugrave',
-    'uacute', 'ucirc', 'uuml', 'yacute', 'thorn', 'yuml');
+const // rough but efficient storage of all &xxx; entities for fast SSE2 search
+  HTML_UNESCAPE: array[1 .. 102] of array[0 .. 3] of AnsiChar = (
+    'amp',  'lt',   'gt',   'quot', 'rsqu', {6=}'ndas', {7=}'trad', {8=}'hell',
+    'nbsp', 'iexc', 'cent', 'poun', 'curr', 'yen',  'brvb', 'sect', 'uml',
+    'copy', 'ordf', 'laqu', 'not',  'shy',  'reg',  'macr', 'deg',  'plus',
+    'sup2', 'sup3', 'acut', 'micr', 'para', 'midd', 'cedi', 'sup1', 'ordm',
+    'raqu',  {37=}'frac',   'ique', 'Agra', 'Aacu', 'Acir', 'Atil',
+    'Auml', 'Arin', 'AEli', 'Cced', 'Egra', 'Eacu', 'Ecir', 'Euml', 'Igra',
+    'Iacu', 'Icir', 'Iuml', 'ETH',  'Ntil', 'Ogra', 'Oacu', 'Ocir', 'Otil',
+    'Ouml', 'time', 'Osla', 'Ugra', 'Uacu', 'Ucir', 'Uuml', 'Yacu', 'THOR',
+    'szli', 'agra', 'aacu', 'acir', 'atil', 'auml', 'arin', 'aeli', 'cced',
+    'egra', 'eacu', 'ecir', 'euml', 'igra', 'iacu', 'icir', 'iuml', 'eth',
+    'ntil', 'ogra', 'oacu', 'ocir', 'otil', 'ouml', 'divi', 'osla', 'ugra',
+    'uacu', 'ucir', 'uuml', 'yacu', 'thor', 'yuml');
   HTML_UNESCAPED: array[1 .. 8] of word = (
     ord('&'), ord('<'), ord('>'), ord('"'), ord(''''), ord('-'), 153, $2026);
 
-function EntityToIndex(entity: PUtf8Char; len: byte): cardinal;
-var
-  p: PUtf8Char;
-begin
-  p := @HTML_UNESCAPE;
-  if len in [2 .. 6] then
-    for result := low(HTML_UNESCAPE) to high(HTML_UNESCAPE) do
-      if (p[0] = AnsiChar(len)) and
-         CompareMemSmall(p + 1, entity, len) then
-        exit
-      else
-        inc(p, 7);
-  result := 0;
-end;
-
 function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
+var
+  by4: cardinal;
 begin
-  result := EntityToIndex(entity, len);
-  if result = 0 then
+  result := 0;
+  if (len < 2) or (len > 6) then
     exit;
-  if result <= high(HTML_UNESCAPED) then
-    result := ord(HTML_UNESCAPED[result])
-   else
-     inc(result, $00a0 - 9); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
+  by4 := 0;
+  MoveByOne(entity, @by4, MinPtrUInt(len, 4));
+  result := IntegerScanIndex(@HTML_UNESCAPE, length(HTML_UNESCAPE), by4) + 1;
+  if result >= 37 then // adjust 'frac' as frac14', 'frac12' or 'frac34'
+    if result > 37 then
+      inc(result, 2)
+    else
+      case cardinal(PWord(entity + 4)^) of
+        ord('1') + ord('4') shl 8:
+          ;
+        ord('1') + ord('2') shl 8:
+          inc(result);
+        ord('3') + ord('4') shl 8:
+          inc(result, 2);
+      else
+        result := 0;
+      end;
+  if result <> 0 then
+    if result <= high(HTML_UNESCAPED) then
+      result := ord(HTML_UNESCAPED[result]) // non linear entities
+     else
+       inc(result, $00a0 - 9); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
 end;
 
 function HtmlUnescape(const text: RawUtf8): RawUtf8;
 var
-  temp: TTextWriterStackBuffer;
   W: TTextWriter;
   p, amp: PUtf8Char;
   l: PtrUInt;
   c: Ucs4CodePoint;
+  temp: TTextWriterStackBuffer;
 begin
   l := PosExChar('&', text);
   if (l = 0) or
-     (text[l + 1] = #0) then
+     (PByteArray(text)[l] = 0) then
   begin
     result := text;
     exit;
