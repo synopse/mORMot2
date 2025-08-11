@@ -217,10 +217,6 @@ function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean = false): PtrInt; overload;
 
-/// direct conversion of a UTF-8 encoded buffer into a WinAnsi ShortString buffer
-// - non WinAnsi chars are replaced by '?' placeholders
-procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
-
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
 // - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
 // - faster than System.Utf8ToUnicode with dest=nil
@@ -3082,67 +3078,6 @@ begin
   RawUnicodeToUtf8(P, Len, res); // our function is likely to be faster
 end;
 {$endif OSWINDOWS}
-
-procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
-var
-  c: cardinal;
-  len, extra, i: integer;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
-  {$else}
-  utf8: PUtf8Table;
-  {$endif CPUX86NOTPIC}
-begin
-  {$ifndef CPUX86NOTPIC}
-  utf8 := @UTF8_TABLE;
-  {$endif CPUX86NOTPIC}
-  len := 0;
-  if source <> nil then
-    repeat
-      c := byte(source^);
-      inc(source);
-      if c = 0 then
-        break
-      else if c <= 127 then
-      begin
-        inc(len);
-        dest[len] := AnsiChar(c);
-        if len < 253 then
-          continue
-        else
-          break;
-      end
-      else
-      begin
-        extra := utf8.Lookup[c];
-        if extra = UTF8_INVALID then
-          break; // invalid leading byte (allow full UTF-8/UCS-4 range)
-        i := extra;
-        repeat
-          if byte(source^) and $c0 <> $80 then
-          begin
-            dest[0] := AnsiChar(len);
-            exit; // invalid UTF-8 content
-          end;
-          c := (c shl 6) + byte(source^);
-          inc(source);
-          dec(i);
-        until i = 0;
-        dec(c, utf8.Extra[extra].offset);
-        // #256.. -> slower but accurate conversion
-        inc(len);
-        if c > $ffff then
-          dest[len] := '?'
-        else
-          dest[len] := AnsiChar(WinAnsiConvert.fWideToAnsi[c]);
-        if len < 253 then
-          continue
-        else
-          break;
-      end;
-    until false;
-  dest[0] := AnsiChar(len);
-end;
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean): PtrInt;
