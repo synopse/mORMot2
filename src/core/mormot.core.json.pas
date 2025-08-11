@@ -3442,7 +3442,7 @@ end;
 procedure TGetJsonField.GetJsonField;
 var
   P, D: PUtf8Char;
-  c4, surrogate, extra: PtrUInt;
+  c1, c2: PtrUInt;
   c: AnsiChar;
   {$ifdef CPUX86NOTPIC}
   tab: TJsonCharSet absolute JSON_CHARS; // not enough registers
@@ -3531,77 +3531,61 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
             exit; // avoid \#0 potential buffer overflow issue or control char
           // JSON_UNESCAPE_UTF16: decode '\u0123' UTF-16 into UTF-8
           // (inlined JsonUnicodeEscapeToUtf8() to optimize GetJsonField)
-          c4 := (ConvertHexToBin[P[1]] shl 12) or
+          c1 := (ConvertHexToBin[P[1]] shl 12) or
                 (ConvertHexToBin[P[2]] shl 8) or
                 (ConvertHexToBin[P[3]] shl 4) or
                  ConvertHexToBin[P[4]]; // optimistic conversion (no check)
           inc(P, 5);
-          case c4 of
-            0: // \u0000 is an invalid value (at least in our framework)
-              begin
-                D^ := '?';
-                inc(D);
-              end;
-            1..$7f:
-              begin
-                D^ := AnsiChar(c4);
-                inc(D);
-              end;
-            $80..$7ff:
-              begin
-                D[0] := AnsiChar($C0 or (c4 shr 6));
-                D[1] := AnsiChar($80 or (c4 and $3F));
-                inc(D, 2);
-              end;
-            UTF16_HISURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-              if PWord(P)^ = ord('\') + ord('u') shl 8 then
-              begin
-                inc(P);
-                surrogate := (ConvertHexToBin[P[1]] shl 12) or
-                             (ConvertHexToBin[P[2]] shl 8) or
-                             (ConvertHexToBin[P[3]] shl 4) or
-                              ConvertHexToBin[P[4]];
-                case c4 of // inlined Utf16CharToUtf8()
-                  UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-                    c4 := ((c4 - UTF16_SURROGATE_OFFSET) shl 10) or
-                          (surrogate xor UTF16_LOSURROGATE_MIN);
-                  UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                    c4 := ((surrogate - UTF16_SURROGATE_OFFSET) shl 10) or
-                          (c4 xor UTF16_LOSURROGATE_MIN);
-                end;
-                if c4 <= $7ff then
-                  c := #2
-                else if c4 <= $ffff then
-                  c := #3
-                else if c4 <= $1fffff then
-                  c := #4
-                else if c4 <= $3ffffff then
-                  c := #5
-                else
-                  c := #6;
-                extra := ord(c) - 1;
-                repeat
-                  D[extra] := AnsiChar((c4 and $3f) or $80);
-                  c4 := c4 shr 6;
-                  dec(extra);
-                until extra = 0;
-                D^ := AnsiChar(byte(c4) or UTF8_TABLE.FirstByte[ord(c)]);
-                inc(D, ord(c));
-                inc(P, 5);
-              end
-              else
-              begin
-                // unexpected surrogate without its pair
-                D^ := '?';
-                inc(D);
-              end;
-          else
+          if c1 <= $7f then
+            if c1 <> 0 then
             begin
-              D[0] := AnsiChar($e0 or (c4 shr 12));
-              D[1] := AnsiChar($80 or ((c4 shr 6) and $3f));
-              D[2] := AnsiChar($80 or (c4 and $3f));
-              inc(D, 3);
+              D^ := AnsiChar(c1);
+              inc(D);
+            end
+            else
+            begin
+              D^ := '?'; // \u0000 is an invalid value (at least in our framework)
+              inc(D);
+            end
+          else if c1 <= $7ff then
+          begin
+            PWord(D)^ := (c1 shr 6) or ((c1 and $3f) shl 8) or UTF8_7FF;
+            inc(D, 2);
+          end
+          else if (c1 < UTF16_HISURROGATE_MIN) or
+                  (c1 > UTF16_LOSURROGATE_MAX) then
+          begin // $800..$ffff but excluding $d800..$dfff UTF-16 surrogates
+            PCardinal(D)^ := (c1 shr 12) or (((c1 shr 6) and $3f) shl 8) or
+                             ((c1 and $3f) shl 16) or UTF8_FFFF;
+            inc(D, 3);
+          end
+          else
+          begin
+            if PWord(P)^ = ord('\') + ord('u') shl 8 then
+            begin
+              c2 := (ConvertHexToBin[P[2]] shl 12) or // 2nd UTF-16 surrogate
+                    (ConvertHexToBin[P[3]] shl 8) or
+                    (ConvertHexToBin[P[4]] shl 4) or
+                     ConvertHexToBin[P[5]];
+              if c1 <= UTF16_HISURROGATE_MAX then // inlined Utf16SurrogateToUtf8()
+                c1 := ((c1 - UTF16_SURROGATE_OFFSET) shl 10) or
+                      (c2 xor UTF16_LOSURROGATE_MIN)
+              else
+                c1 := ((c2 - UTF16_SURROGATE_OFFSET) shl 10) or
+                      (c1 xor UTF16_LOSURROGATE_MIN);
+              if (c1 >= UTF16_SURROGATE_MIN) and
+                 (c1 <= UTF16_SURROGATE_MAX) then // in U+10000 to U+10FFFF range
+              begin
+                PCardinal(D)^ := (c1 shr 18) or (((c1 shr 12) and $3f) shl 8) or
+                  (((c1 shr 6) and $3f) shl 16) or ((c1 and $3f) shl 24) or UTF8_10FF;
+                inc(D, 4);
+                inc(P, 6);
+                continue;
+              end;
             end;
+            inc(P);
+            D^ := '?'; // unexpected surrogate without its pair or invalid range
+            inc(D);
           end;
         until false;
         // here P^='"'
