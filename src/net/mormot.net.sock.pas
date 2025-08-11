@@ -5669,15 +5669,15 @@ begin
     Join(['http://unix:', Server, ':/'], result); // our own layout
     exit;
   end;
-  if UriScheme = usUndefined then // fields directly set, not From()
-    if Https then
-      UriScheme := usHttps
-    else if Layer = nlUdp then
+  if UriScheme = usUndefined then // fields directly set, without any From()
+    if Layer = nlUdp then
       UriScheme := usUdp
     else if Server = '' then
-      exit
+      exit // void e.g. just after Clear - http/https requires a server anyway
+    else if Https then
+      UriScheme := usHttps
     else
-      UriScheme := usHttp; // default
+      UriScheme := usHttp;
   if UriScheme = usCustom then
     result := Scheme // as specified
   else
