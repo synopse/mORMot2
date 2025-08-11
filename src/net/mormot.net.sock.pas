@@ -1567,14 +1567,15 @@ type
 
 type
   /// the main URI schemes recognized by TUri.UriScheme
-  TUriScheme = (
-    usUnknown, usHttp, usWs, usHttps, usWss, usUdp, usFile, usFtp, usFtps);
+  TUriScheme = (usUndefined, usCustom,
+    usHttp, usWs, usHttps, usWss, usUdp, usFile, usFtp, usFtps);
 
   /// structure used to parse an URI into its components
   // - ready to be supplied e.g. to a THttpRequest sub-class
   // - used e.g. by class function THttpRequest.Get()
   // - will decode standard HTTP/HTTPS urls or our custom Unix sockets URI like
   // 'http://unix:/path/to/socket.sock:/url/path'
+  // - could also be used to generate an URI e.g. from Server/Address info
   {$ifdef USERECORDWITHMETHODS}
   TUri = record
   {$else}
@@ -5538,15 +5539,15 @@ procedure TUri.Clear;
 begin
   Https := false;
   Layer := nlTcp;
-  UriScheme := usUnknown;
+  UriScheme := usUndefined;
   Finalize(self); // reset all RawUtf8 fields
 end;
 
 const
-  _US: array[succ(low(TUriScheme)) .. high(TUriScheme)] of RawUtf8 = (
+  _US: array[usHttp .. high(TUriScheme)] of RawUtf8 = (
     'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps');
   _US_PORT: array[TUriScheme] of RawUtf8 = (
-    '', '80', '80', '443', '443', '', '', '20', '989');
+    '', '', '80', '80', '443', '443', '', '', '20', '989');
 
 function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var
@@ -5567,7 +5568,7 @@ begin
   if PInteger(s)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
   begin
     FastSetString(Scheme, p, s - p);
-    UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + 1);
+    UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));
     case UriScheme of
       usHttps,
       usWss:  // wss:// is just an upgraded https:
@@ -5662,12 +5663,22 @@ end;
 
 function TUri.ServerPort: RawUtf8;
 begin
+  result := '';
   if layer = nlUnix then
   begin
     Join(['http://unix:', Server, ':/'], result); // our own layout
     exit;
   end;
-  if UriScheme = usUnknown then
+  if UriScheme = usUndefined then // fields directly set, not From()
+    if Https then
+      UriScheme := usHttps
+    else if Layer = nlUdp then
+      UriScheme := usUdp
+    else if Server = '' then
+      exit
+    else
+      UriScheme := usHttp; // default
+  if UriScheme = usCustom then
     result := Scheme // as specified
   else
     result := _US[UriScheme]; // normalized or default 'http://'
