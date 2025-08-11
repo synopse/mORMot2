@@ -10350,6 +10350,12 @@ end;
 {$define UU_COMPRESSED}
 // 1KB compressed static table in the exe renders into our 20KB UU[] array :)
 
+const
+  UU_BLOCK_HI = 7;
+  UU_BLOCK_LO = 127;
+  UU_INDEX_HI = 5;
+  UU_INDEX_LO = 31;
+
 type
   // 20,016 bytes for full Unicode 10.0 case folding branchless conversion
   {$ifdef USERECORDWITHMETHODS}
@@ -10361,21 +10367,14 @@ type
     Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
-    // branchless Unicode 10.0 uppercase folding using our internal tables
-    // caller should have checked that c <= UU_MAX
-    function Ucs4Upper(c: PtrUInt): PtrUInt;
+    // branchless Unicode 10.0 uppercase folding using our internal tables,
+    // expecting c <= UNICODE_MAX, as requested from any standard UTF-8/UTF-16
+    function UnicodeUpper(c: PtrUInt): PtrUInt;
       {$ifdef HASINLINE} inline; {$endif}
   end;
   {$ifndef CPUX86NOTPIC}
   PUnicodeUpperTable = ^TUnicodeUpperTable;
   {$endif CPUX86NOTPIC}
-
-const
-  UU_BLOCK_HI = 7;
-  UU_BLOCK_LO = 127;
-  UU_INDEX_HI = 5;
-  UU_INDEX_LO = 31;
-  UU_MAX = $10ffff;
 
 var
   {$ifdef UU_COMPRESSED}
@@ -10659,7 +10658,7 @@ var
   );
   {$endif UU_COMPRESSED}
 
-function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrUInt;
+function TUnicodeUpperTable.UnicodeUpper(c: PtrUInt): PtrUInt;
 var
   i: PtrUInt;
 begin
@@ -10710,9 +10709,7 @@ begin
         if c = 0 then
           c := UNICODE_REPLACEMENT_CHARACTER; // =$fffd for invalid input
       end;
-      if c <= UU_MAX then
-        c := tab.Ucs4Upper(c);
-      inc(D, Ucs4ToUtf8(c, D));
+      inc(D, Rfc3629ToUtf8(tab.UnicodeUpper(c), D)); // assume <= UNICODE_MAX
     until false;
   D^ := #0;
   result := D;
@@ -10800,9 +10797,7 @@ by1:    c := byte(S^);
             if c < minimum then
               break; // invalid input content
           end;
-          if c <= UU_MAX then
-            c := tab.Ucs4Upper(c);
-          inc(D, Ucs4ToUtf8(c, D));
+          inc(D, Rfc3629ToUtf8(tab.UnicodeUpper(c), D)); // assume <= UNICODE_MAX
           if S < PUtf8Char(SLen) then
             continue
           else
@@ -10914,9 +10909,7 @@ begin
     c := NextUtf8Ucs4(p);
     if c = 0 then
       break;
-    if c <= UU_MAX then
-      c := UU.Ucs4Upper(c);
-    result[n] := c;
+    result[n] := UU.UnicodeUpper(c);
     inc(n);
   until false;
   if n = 0 then
@@ -10982,8 +10975,7 @@ c2low:          if c2 = 0 then
             end
             else
               result := UTF8_TABLE.GetHighUtf8Ucs4(u1);
-            if PtrUInt(result) <= UU_MAX then
-              result := tab.Ucs4Upper(result);
+            result := tab.UnicodeUpper(result);
           end;
           if c2 <= $7f then
             goto c2low
@@ -10994,8 +10986,7 @@ c2low:          if c2 = 0 then
           end
           else
             c2 := UTF8_TABLE.GetHighUtf8Ucs4(u2);
-          if PtrUInt(c2) <= UU_MAX then
-            c2 := tab.Ucs4Upper(c2);
+          c2 := tab.UnicodeUpper(c2);
           dec(result, c2);
           if result <> 0 then
             exit;
@@ -11080,9 +11071,7 @@ begin
               inc(i);
             until i = extra;
             inc(u1, extra);
-            dec(result, utf8.Extra[extra].offset);
-            if PtrUInt(result) <= UU_MAX then
-              result := tab.Ucs4Upper(result);
+            result := tab.UnicodeUpper(result - utf8.Extra[extra].offset);
           end;
           // here result=NormToUpper[u1^]
           inc(u2);
@@ -11110,9 +11099,7 @@ begin
               inc(i);
             until i = extra;
             inc(u2, extra);
-            dec(c2, utf8.Extra[extra].offset);
-            if c2 <= UU_MAX then
-              c2 := tab.Ucs4Upper(c2);
+            c2 := tab.UnicodeUpper(c2 - utf8.Extra[extra].offset);
             dec(result, PtrInt(c2));
             if result <> 0 then
               // found unmatching codepoint
@@ -11191,9 +11178,7 @@ nxt:u0 := U;
         inc(i);
       until i = extra;
       inc(U, extra);
-      dec(c, utf8.Extra[extra].offset);
-      if c <= UU_MAX then
-        c := tab.Ucs4Upper(c);
+      c := tab.UnicodeUpper(c - utf8.Extra[extra].offset);
       if c <> Up[0] then
         continue;
     end;
@@ -11229,9 +11214,7 @@ nxt:u0 := U;
           inc(i);
         until i = extra;
         inc(u2, extra);
-        dec(c, utf8.Extra[extra].offset);
-        if c <= UU_MAX then
-          c := tab.Ucs4Upper(c);
+        c := tab.UnicodeUpper(c - utf8.Extra[extra].offset);
         if c <> up2^ then
           goto nxt;
         inc(up2);
