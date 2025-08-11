@@ -756,6 +756,11 @@ type
     // - does not escape chars according to the JSON RFC
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
     procedure AddNoJsonEscapeString(const s: string);
+    /// append one UTF-16 encoded UCS-4 CodePoint as UTF-8
+    // - will increase PW after the CodePoint, properly handling UTF-16 surrogates
+    procedure AddWideChar(var PW: PWord);
+    /// append one UCS-4 CodePoint as UTF-8 - up to U+7FFFFFFF (2^32-1)
+    procedure AddUcs4(ucs4: Ucs4CodePoint);
     /// append a UTF-16 encoded buffer as UTF-8
     // - WideCharCount is the UTF-16 chars count, not the byte size; if it is
     // 0, then it will convert until an ending #0 (fastest way)
@@ -1796,7 +1801,7 @@ function VarRecToDouble(V: PVarRec; out value: double): boolean;
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUtf8);
 
 /// get an open array (const Args: array of const) character argument
-// - only handle varChar and varWideChar kind of arguments
+// - only handle vtChar and vtWideChar kind of arguments
 function VarRecAsChar(V: PVarRec): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -5182,6 +5187,27 @@ begin
     AddNoJsonEscapeCP(pointer(s), PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^,
       Unicode_CodePage);
     {$endif UNICODE}
+end;
+
+procedure TTextWriter.AddWideChar(var PW: PWord);
+var
+  c: cardinal;
+begin
+  if B >= BEnd then
+    FlushToStream;
+  c := PW^;
+  inc(PW);
+  if c <= $7f then
+    AddDirect(AnsiChar(c)) // most obvious case
+  else
+    inc(B, Utf16HiCharToUtf8(B + 1, c, PW)); // handle UTF-16 surrogates
+end;
+
+procedure TTextWriter.AddUcs4(ucs4: Ucs4CodePoint);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  inc(B, Ucs4ToUtf8(ucs4, B + 1)); // ucs4 is the UTF-32/UCS-4 code point
 end;
 
 procedure TTextWriter.AddNoJsonEscapeW(PW: PWord; WideCharCount: integer);
