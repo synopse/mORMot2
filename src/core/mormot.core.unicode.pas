@@ -110,12 +110,19 @@ const
 
   UTF8_NEED_UTF16_SURROGATES = 3; // 4 UTF-8 bytes trigger surrogates in UTF-16
   UTF8_EXTRA1_OFFSET = $00003080; // = UTF8_TABLE.Extra[1].offset for $0..$7ff
+  UTF8_7FF  = $80c0;              // 16-bit UTF8 constant for $80..$7ff
+  UTF8_FFFF = $008080e0;          // 24-bit UTF8 constant for $800..$ffff
+  UTF8_10FF = $808080f0;          // 32-bit UTF8 constant for $10000..$10ffff
+  UTF8_UNICODE_REPLACEMENT_CHARACTER = $bdbfef; // U+fffd encoded as UTF-8
 
   UTF16_HISURROGATE_MIN  = $d800;
   UTF16_HISURROGATE_MAX  = $dbff;
   UTF16_LOSURROGATE_MIN  = $dc00;
   UTF16_LOSURROGATE_MAX  = $dfff;
   UTF16_SURROGATE_OFFSET = $d7c0;
+  UTF16_SURROGATE_MIN    = $010000;
+  UTF16_SURROGATE_MAX    = UNICODE_MAX;
+  UTF16_SURROGATE_FLAGS  = UTF16_HISURROGATE_MIN or (UTF16_LOSURROGATE_MIN shl 16);
 
   /// replace any incoming UCS-4 which is unrepresentable as a single WideChar
   // - i.e. which would need a UTF-16 surrogates pair for proper encoding
@@ -184,9 +191,10 @@ function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 // - append a #0 terminator to the ending PUtf8Char, unless ccfNoTrailingZero is set
 // - if ccfReplacementCharacterForUnmatchedSurrogate is set, this function will identify
 // unmatched surrogate pairs and replace them with UNICODE_REPLACEMENT_CHARACTER -
-// see https://en.wikipedia.org/wiki/Specials_(Unicode_block)
-function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrInt;
-  Source: PWideChar; SourceLen: PtrInt; Flags: TCharConversionFlags): PtrInt; overload;
+// see https://en.wikipedia.org/wiki/Specials_(Unicode_block) - otherwise, it
+// will stop the conversion at the faulty UTF-16 input
+function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrUInt;
+  Source: PWideChar; SourceLen: PtrUInt; Flags: TCharConversionFlags): PtrUInt; overload;
 
 /// convert a UTF-16 PWideChar buffer into a UTF-8 string
 // - this version doesn't resize the resulting RawUtf8 string, but return
@@ -2908,19 +2916,16 @@ begin
   result := Ucs4ToUtf8(c, Dest);
 end;
 
-function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrInt; Source: PWideChar;
-  SourceLen: PtrInt; Flags: TCharConversionFlags): PtrInt;
+function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrUInt; Source: PWideChar;
+  SourceLen: PtrUInt; Flags: TCharConversionFlags): PtrUInt;
 var
   c: cardinal;
   tail: PWideChar;
-  i, j: integer;
-label
-  unmatch;
 begin
-  result := PtrInt(Dest);
-  inc(DestLen, PtrInt(Dest));
+  result := PtrUInt(Dest);
+  inc(DestLen, PtrUInt(Dest)); // PUtf8Char(DestLen) = end of Dest
   if (Source <> nil) and
-     (SourceLen > 0) and
+     (PtrInt(SourceLen) > 0) and
      (Dest <> nil) then
   begin
     // ignore any trailing BOM (do exist on Windows files)
@@ -2930,9 +2935,9 @@ begin
       dec(SourceLen);
     end;
     // first handle 7-bit ASCII WideChars, by pairs (Sha optimization)
-    SourceLen := SourceLen * 2 + PtrInt(PtrUInt(Source));
+    SourceLen := SourceLen * 2 + PtrUInt(Source);
     tail := PWideChar(SourceLen) - 2;
-    if (PtrInt(PtrUInt(Dest)) < DestLen) and
+    if (Dest < PUtf8Char(DestLen)) and
        (Source <= tail) then
       repeat
         c := PCardinal(Source)^;
@@ -2943,90 +2948,69 @@ begin
         PWord(Dest)^ := c;
         inc(Dest, 2);
       until (Source > tail) or
-            (PtrInt(PtrUInt(Dest)) >= DestLen);
+            (Dest >= PUtf8Char(DestLen));
     // generic loop, handling one UCS-4 CodePoint per iteration
-    if (PtrInt(PtrUInt(Dest)) < DestLen) and
-       (PtrInt(PtrUInt(Source)) < SourceLen) then
-      repeat
-      // inlined Utf16CharToUtf8() with bufferoverlow check and $fffd on unmatch
-        c := cardinal(Source^);
+    repeat
+      // inlined Utf16HiCharToUtf8() with buffer overlow check and $fffd unmatch
+      if PtrUInt(Source) >= SourceLen then
+        break;
+      c := cardinal(Source^);
+      inc(Source);
+      if c <= $7f then
+      begin
+        if Dest >= PUtf8Char(DestLen) then
+          break;
+        Dest^ := AnsiChar(c);
+        inc(Dest);
+      end
+      else if c <= $7ff then
+      begin
+        if @Dest[1] >= PUtf8Char(DestLen) then
+          break;
+        PWord(Dest)^ := (c shr 6) or ((c and $3f) shl 8) or UTF8_7FF;
+        inc(Dest, 2);
+      end
+      else if (c < UTF16_HISURROGATE_MIN) or
+              (c > UTF16_LOSURROGATE_MAX) then
+      begin // $0800..$ffff but excluding $d800..$dfff UTF-16 surrogates
+        if @Dest[2] >= PUtf8Char(DestLen) then
+          break;
+        PCardinal(Dest)^ := (c shr 12) or (((c shr 6) and $3f) shl 8) or
+                            ((c and $3f) shl 16) or UTF8_FFFF;
+        inc(Dest, 3);
+      end
+      else
+      begin
+        if (PtrUInt(Source) >= SourceLen) or
+           (@Dest[3] >= PUtf8Char(DestLen)) then
+          break;
+        if c <= UTF16_HISURROGATE_MAX then // inlined Utf16SurrogateToUtf8()
+          c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
+               (cardinal(Source^) xor UTF16_LOSURROGATE_MIN)
+        else
+          c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
+               (c xor UTF16_LOSURROGATE_MIN);
         inc(Source);
-        case c of
-          0 .. $7f:
-            begin
-              Dest^ := AnsiChar(c);
-              inc(Dest);
-              if (PtrInt(PtrUInt(Dest)) < DestLen) and
-                 (PtrInt(PtrUInt(Source)) < SourceLen) then
-                continue
-              else
-                break;
-            end;
-          UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
-            if (PtrInt(PtrUInt(Source)) >= SourceLen) or
-               ((cardinal(Source^) < UTF16_LOSURROGATE_MIN) or // 2nd surrogate
-                (cardinal(Source^) > UTF16_LOSURROGATE_MAX)) then
-            begin
-unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
-                 not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
-                break;
-              PWord(Dest)^ := $bfef; // UTF-8 UNICODE_REPLACEMENT_CHARACTER
-              Dest[2] := AnsiChar($bd);
-              inc(Dest, 3);
-              if (PtrInt(PtrUInt(Dest)) < DestLen) and
-                 (PtrInt(PtrUInt(Source)) < SourceLen) then
-                continue
-              else
-                break;
-            end
-            else
-            begin
-              c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
-                   (cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
-              inc(Source);
-            end;
-          UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
-            if (PtrInt(PtrUInt(Source)) >= SourceLen) or
-               ((cardinal(Source^) < UTF16_HISURROGATE_MIN) or
-                (cardinal(Source^) > UTF16_HISURROGATE_MAX)) then
-              goto unmatch
-            else
-            begin
-              c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
-                   (c xor UTF16_LOSURROGATE_MIN);
-              inc(Source);
-            end;
-        end; // now c is the UTF-32/UCS-4 code point
-        if c <= $7ff then
-          i := 2
-        else if c <= $ffff then
-          i := 3
-        else if c <= $1fffff then
-          i := 4
-        else if c <= $3ffffff then
-          i := 5
-        else
-          i := 6;
-        if PtrInt(PtrUInt(Dest)) + i > DestLen then
-          break;
-        j := i - 1;
-        repeat
-          Dest[j] := AnsiChar((c and $3f) or $80);
-          c := c shr 6;
-          dec(j);
-        until j = 0;
-        Dest^ := AnsiChar(byte(c) or UTF8_TABLE.FirstByte[i]);
-        inc(Dest, i);
-        if (PtrInt(PtrUInt(Dest)) < DestLen) and
-           (PtrInt(PtrUInt(Source)) < SourceLen) then
-          continue
-        else
-          break;
-      until false;
+        if (c >= UTF16_SURROGATE_MIN) and
+           (c <= UTF16_SURROGATE_MAX) then // in U+10000 to U+10FFFF range
+        begin
+          PCardinal(Dest)^ := (c shr 18) or (((c shr 12) and $3f) shl 8) or
+            (((c shr 6) and $3f) shl 16) or ((c and $3f) shl 24) or UTF8_10FF;
+          inc(Dest, 4);
+        end
+        else // invalid UTF-16 surrogate pairs
+        begin
+          if not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
+            break; // abort
+          PCardinal(Dest)^ := UTF8_UNICODE_REPLACEMENT_CHARACTER; // U+fffd
+          inc(Dest, 3);
+        end;
+      end;
+    until false;
     if not (ccfNoTrailingZero in Flags) then
       Dest^ := #0;
   end;
-  result := PtrInt(PtrUInt(Dest)) - result;
+  result := Dest - PUtf8Char(result);
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
