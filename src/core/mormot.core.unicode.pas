@@ -33,11 +33,16 @@ uses
 
 { *************** UTF-8 Efficient Encoding / Decoding }
 
-// some constants used for UTF-8 conversion, including surrogates
+// some constants used for UTF-8 conversion, including UTF-16 surrogates
+const
+  /// the Unicode consortion (and RFC 3629) requires U+0000..U+10FFFF range
+  // - as most UTF-16 softwares or languages (e.g. Windows, Java, C#, JavaScript)
+  UNICODE_MAX = $10ffff;
+
 type
   /// define a lookup table for efficient UTF-8 processing
-  // - supports the full original UTF-8 range, even if only the U+0000..U+10FFFF
-  // range (the UTF-16 accessible range) is defined since RFC 3629 (Nov 2003)
+  // - supporting the full original UTF-8 U+0000..U+7FFFFFFF range, even if
+  // only the U+0000..U+10FFFF range (<=UNICODE_MAX) is considered valid today
   // - see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
   {$ifdef USERECORDWITHMETHODS}
   TUtf8Table = record
@@ -53,25 +58,25 @@ type
     FirstByte: array[2..6] of byte;
     /// the number of extra bytes in addition to the first UTF-8 byte
     // - since RFC 3629, only values within the 0..3 range should appear, i.e.
-    // up to UTF8_MAXUTF16 within the UTF-16 surrogates range
+    // up to UTF8_MAX within the U+0000..U+10FFFF official Unicode range
     Lookup: TByteToByte;
     /// retrieve a >127 UCS-4 CodePoint from an UTF-8 sequence
+    // - decode original UTF-8 values up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
     function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
   end;
   PUtf8Table = ^TUtf8Table;
 
 const
   /// TUtf8Table.Lookup[] value for a 7-bit ASCII character
-  UTF8_ASCII    = 0;
-  /// maximum TUtf8Table.Lookup[] value within UTF-16 accessible range
-  // - this unit support the full original UTF-8 range, but this constant could
-  // be used to ensure RFC 3629 expectations, as used e.g. by IsValidUtf8() and
-  // most UTF-16 software or language (e.g. Windows, Java, JavaScript...)
-  UTF8_MAXUTF16 = 3;
+  UTF8_ASCII   = 0;
+  /// maximum TUtf8Table.Lookup[] value within UTF-16 / Unicode accessible range
+  // - this unit supports the full original UTF-8 range, but this constant could
+  // be used to ensure RFC 3629 / Unicode expectations, as for IsValidUtf8()
+  UTF8_MAX     = 3;
   /// impossible TUtf8Table.Lookup[] value
-  UTF8_INVALID  = 6;
+  UTF8_INVALID = 6;
   /// special encoding of ending #0 in TUtf8Table.Lookup[]
-  UTF8_ZERO     = 7;
+  UTF8_ZERO    = 7;
 
   /// constant lookup table for efficient UTF-8 processing
   UTF8_TABLE: TUtf8Table = (
@@ -123,6 +128,7 @@ const
 /// internal function, used to retrieve a >127 US4 CodePoint from UTF-8
 // - not to be called directly, but from inlined higher-level functions
 // - here U^ shall be always >= #80
+// - decode original UTF-8 values up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
 // - typical use is as such:
 // !  ch := ord(P^);
 // !  if ch and $80=0 then
@@ -137,6 +143,7 @@ function GetUtf8WideChar(P: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the UCS-4 CodePoint stored in P^ (decode UTF-8 if necessary)
+// - decode original UTF-8 values up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
 function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -147,10 +154,10 @@ function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
 function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): PtrInt;
 
 /// UTF-8 encode one UCS-4 CodePoint into Dest
+// - support the whole original UTF-8 range even over the maximum UTF-16/Unicode
+// encoding or RFC 3629 range, i.e. up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
-// - this method DOES properly handle UTF-16 surrogate pairs
 function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
 
 type
   /// option set for RawUnicodeToUtf8() conversion
@@ -222,8 +229,8 @@ function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
 // - warning: AVX2 version won't refuse #0 characters within the buffer
-// - follows RFC 3629 requirements, i.e. up to 4-bytes UTF-8 sequences, to
-// stay within U+0000..U+10FFFF UTF-16 accessible range with surrogates
+// - follows RFC 3629 / Unicode requirements, i.e. up to 4-bytes UTF-8 sequences,
+// to stay within U+0000..U+10FFFF (as accessible with surrogates in UTF-16)
 var
   IsValidUtf8Buffer: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
 
@@ -1728,9 +1735,9 @@ function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
 /// retrieve the next UCS-4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[],
 // and will remove WinAnsi (Code Page 1252) accents during its conversion
-// - will return '?' if the UCS-4 CodePoint is higher than #255: so use this function
-// only if you need to deal with ASCII characters (e.g. it's used for Soundex
-// and for ContainsUtf8 function)
+// - will return '?' if the UCS-4 CodePoint is higher than 255: use this
+// function only if you need to deal with ASCII characters (e.g. as used for
+// Soundex or ContainsUtf8 process)
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1830,7 +1837,6 @@ function Utf8ILComp(u1, u2: PUtf8Char; L1, L2: cardinal): PtrInt;
 
 /// copy UTF-8 buffer into dest^ handling WinAnsi CP-1252 NormToUpper[] folding
 // - returns the final dest pointer
-// - current implementation handles UTF-16 surrogates
 function Utf8UpperCopy(Dest, Source: PUtf8Char; SourceChars: cardinal): PUtf8Char;
 
 /// copy UTF-8 buffer into dest^ handling WinAnsi CP-1252 NormToUpper[] folding
@@ -1872,7 +1878,6 @@ var
 // - fast version using NormToUpper[] array for all WinAnsi characters
 // - this version will decode each UTF-8 glyph before using NormToUpper[],
 // so will remove WinAnsi (Code Page 1252) accents during its comparison
-// - current implementation handles UTF-16 surrogates as Utf8IComp()
 function SameTextU(const S1, S2: RawUtf8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2731,7 +2736,7 @@ function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 function Ucs4Compare(const a, b: RawUcs4): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compare two UCS-4 buffers
+/// compare two UCS-4 buffers using 32-bit CompareCardinal() function
 function Ucs4Comp(a, b: PUcs4CodePoint): integer;
 
 /// convert some UTF-8 buffer content into UCS-4
@@ -2823,17 +2828,15 @@ begin
   if P <> nil then
   begin
     result := byte(P[0]);
-    if result <= 127 then
+    if result <= $7f then
       inc(P)
     else
-      if result and $20 = 0 then
+      if result and $20 = 0 then // $80..$7ff
       begin
-        // fast $0..$7ff process
         result := (result shl 6) + byte(P[1]) - UTF8_EXTRA1_OFFSET;
         inc(P, 2);
       end
       else
-        // complex but efficient wrapper handling even UTF-16 surrogates
         result := UTF8_TABLE.GetHighUtf8Ucs4(P);
   end
   else
