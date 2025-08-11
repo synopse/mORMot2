@@ -2759,9 +2759,8 @@ end;
 function JsonUnicodeEscapeToUtf8(var D: PUtf8Char;  P: PUtf8Char): PUtf8Char;
 var
   c, s: cardinal;
-begin
-  // P^ points at 'u1234' just after \u0123
-  c := HexToWideChar(P + 1);
+begin // inlined version of Utf16HiCharToUtf8() with proper \uxxxx hexa decoding
+  c := HexToWideChar(P + 1); // P^ points at 'u1234' just after \u0123
   if c <= $7f then
     if c >= 32 then
       D^ := AnsiChar(c)
@@ -2774,41 +2773,30 @@ begin
     end
   else if c < $7ff then
   begin
-    D[0] := AnsiChar($C0 or (c shr 6));
-    D[1] := AnsiChar($80 or (c and $3F));
+    PWord(D)^ := (c shr 6) or ((c and $3f) shl 8) or UTF8_7FF;
     inc(D);
   end
-  else if (c >= UTF16_HISURROGATE_MIN) and  // decode from two UTF-16 surrogates
-          (c <= UTF16_LOSURROGATE_MAX) then
-    if PWord(P + 5)^ = ord('\') + ord('u') shl 8 then
-    begin
-      s := HexToWideChar(P + 7);
-      if s = 0 then
-        D^ := '?' // invalid surrogate
-      else
-      begin
-        case c of // inlined Utf16CharToUtf8()
-          UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-            c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
-                 (s xor UTF16_LOSURROGATE_MIN);
-          UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-            c := ((s - UTF16_SURROGATE_OFFSET) shl 10) or
-                 (c xor UTF16_LOSURROGATE_MIN);
-        end;
-        inc(D, Ucs4ToUtf8(c, D));
-        result := P + 11;
-        exit;
-      end;
-    end
-    else
-      D^ := '?' // the first \u#### expects a following \u#### surrogate
-  else
+  else if (c < UTF16_HISURROGATE_MIN) or
+          (c > UTF16_LOSURROGATE_MAX) then
+  begin // $800..xxx but excluding $d800..$dfff UTF-16 surrogates
+    PCardinal(D)^ := (c shr 12) or (((c shr 6) and $3f) shl 8) or
+                     ((c and $3f) shl 16) or UTF8_FFFF;
+    inc(D, 2);
+  end
+  else if PWord(P + 5)^ = ord('\') + ord('u') shl 8 then // 2nd UTF-16 surrogate
   begin
-    D[0] := AnsiChar($e0 or (c shr 12));
-    D[1] := AnsiChar($80 or ((c shr 6) and $3f));
-    D[2] := AnsiChar($80 or (c and $3f));
-    inc(D,2);
-  end;
+    s := HexToWideChar(P + 7);
+    if s = 0 then
+      D^ := '?' // invalid surrogate
+    else
+    begin
+      inc(D, Utf16SurrogateToUtf8(D, c, s));
+      result := P + 11;
+      exit;
+    end;
+  end
+  else
+    D^ := '?'; // the first \u#### expects a following \u#### surrogate
   inc(D);
   result := P + 5;
 end;
