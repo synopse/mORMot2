@@ -4023,8 +4023,59 @@ begin
   {$endif JSONBENCHMARK_FPJSON}
 end;
 
+const
+  HTML_UNESCAPE: array[1 .. 104] of string[6] = (
+    'amp', 'lt', 'gt', 'quot', 'rsquo', {6=}'ndash', {7=}'trade', {8=}'hellip',
+    'nbsp', 'iexcl', 'cent', 'pound', 'curren', 'yen', 'brvbar', 'sect', 'uml',
+    'copy', 'ordf', 'laquo', 'not', 'shy', 'reg', 'macr', 'deg', 'plusmn',
+    'sup2', 'sup3', 'acute', 'micro', 'para', 'middot', 'cedil', 'sup1', 'ordm',
+    'raquo', 'frac14', 'frac12', 'frac34', 'iquest', 'Agrave', 'Aacute', 'Acirc',
+    'Atilde', 'Auml', 'Aring', 'AElig', 'Ccedil', 'Egrave', 'Eacute', 'Ecirc',
+    'Euml', 'Igrave', 'Iacute', 'Icirc', 'Iuml', 'ETH', 'Ntilde', 'Ograve',
+    'Oacute', 'Ocirc', 'Otilde', 'Ouml', 'times', 'Oslash', 'Ugrave', 'Uacute',
+    'Ucirc', 'Uuml', 'Yacute', 'THORN', 'szlig', 'agrave', 'aacute', 'acirc',
+    'atilde', 'auml', 'aring', 'aelig', 'ccedil', 'egrave', 'eacute', 'ecirc',
+    'euml', 'igrave', 'iacute', 'icirc', 'iuml', 'eth', 'ntilde', 'ograve',
+    'oacute', 'ocirc', 'otilde', 'ouml', 'divide', 'oslash', 'ugrave',
+    'uacute', 'ucirc', 'uuml', 'yacute', 'thorn', 'yuml');
+  HTML_UNESCAPED: array[1 .. 6] of RawUtf8 = (
+    '&', '<', '>', '"', '''', '-');
+
 procedure TTestCoreProcess.WikiMarkdownToHtml;
+var
+  i: PtrInt;
+  c: cardinal;
+  s, exp: RawUtf8;
 begin
+  // html escape and parsing
+  CheckEqual(HtmlUnescape(''), '');
+  CheckEqual(HtmlUnescape('test'), 'test');
+  CheckEqual(HtmlUnescape('test&'), 'test&');
+  CheckEqual(HtmlUnescape('&test'), '&test');
+  CheckEqual(HtmlUnescape('te&st'), 'te&st');
+  for i := 1 to high(HTML_UNESCAPE) do
+  begin
+    if i <= 6 then
+      exp := HTML_UNESCAPED[i]
+    else if i = 8 then
+      exp := '...'
+    else
+    begin
+      if i = 7 then
+        c := 153
+      else if i = 9 then
+        c := 32
+      else
+        c := i + ($00a0 - 9);
+      RawUcs4ToUtf8(@c, 1, exp);
+    end;
+    Make(['&', HTML_UNESCAPE[i], ';'], s);
+    CheckEqual(HtmlUnescape(s), exp);
+    CheckEqual(HtmlUnescape(Join(['abc', s])),      Join(['abc', exp]));
+    CheckEqual(HtmlUnescape(Join([s, 'abc'])),      Join([exp, 'abc']));
+    CheckEqual(HtmlUnescape(Join(['a&bc', s])),     Join(['a&bc', exp]));
+    CheckEqual(HtmlUnescape(Join(['ab&amp;c', s])), Join(['ab&c', exp]));
+  end;
   // wiki
   CheckEqual(HtmlEscapeWiki('test'), '<p>test</p>');
   CheckEqual(HtmlEscapeWiki('te<b>st'), '<p>te&lt;b&gt;st</p>');
