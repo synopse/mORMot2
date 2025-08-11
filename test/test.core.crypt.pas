@@ -736,7 +736,7 @@ begin
   {$ifdef USE_OPENSSL}
   Prng(TAesPrngOsl, 'OpenSSL');
   {$endif USE_OPENSSL}
-  // same benchmarks as in Prng()
+  // include Lecuyer for comparison, with same benchmarks as in Prng()
   timer.Start;
   CheckEqual(Random32(0), 0);
   CheckEqual(Random32(1), 0);
@@ -760,7 +760,7 @@ var
   c: cardinal;
   d: double;
   e: TSynExtended;
-  i, stripes: PtrInt;
+  i, j, stripes: PtrInt;
   clo, chi, dlo, dhi, elo, ehi: integer;
   timer: TPrecisionTimer;
 begin
@@ -813,9 +813,14 @@ begin
       // compress the output to validate (somehow) its randomness
       check(length(AlgoSynLZ.Compress(s1)) > i, 'random1 should not compress');
       check(length(AlgoSynLZ.Compress(s2)) > i, 'random2 should not compress');
+      // validate other string generation methods
       s1 := a1.FillRandomHex(i);
       CheckEqual(length(s1), i * 2);
       check(mormot.core.text.HexToBin(pointer(s1), nil, i));
+      s1 := a1.RandomPassword(i);
+      CheckEqual(length(s1), i);
+      for j := 1 to i do
+        check(s1[j] in [#33 .. #126]);
       // verify Random32 / RandomDouble / RandomDouble distribution
       c := a1.Random32;
       check(c <> a2.Random32, 'Random32 collision');
