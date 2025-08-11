@@ -3804,7 +3804,7 @@ begin
             exit;
           end;
         end;
-        BsonWriteText(name, tmp, PStrLen(PtrUInt(tmp) - _STRLEN)^);
+        BsonWriteText(name, tmp, PStrLen(PAnsiChar(tmp) - _STRLEN)^);
       finally
         FastAssignNew(tmp);
       end;

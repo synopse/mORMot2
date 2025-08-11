@@ -1408,7 +1408,7 @@ begin
   if not IsZero then
   begin
     result := true;
-    if IsEven then // same as IntMod(2) = 0
+    if IsEven then // same as IntMod(BIGINT_PRIMES[0]) = 0
       exit;
     for i := 1 to BIGINT_PRIMES_LAST[Extend] do
       if IntMod(BIGINT_PRIMES[i]) = 0 then // 3, 5, 7, 11, ...

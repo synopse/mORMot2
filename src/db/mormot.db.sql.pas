@@ -6004,7 +6004,7 @@ begin
            (PInteger(vd.VAny)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
           // recognized as Base64 encoded text
           BindBlob(Param, Base64ToBin(PAnsiChar(vd.VAny) + 3,
-                                      PStrLen(PtrUInt(vd.VAny) - _STRLEN)^ - 3))
+                                      PStrLen(PAnsiChar(vd.VAny) - _STRLEN)^ - 3))
         else
           // no conversion if was set via TQuery.AsBlob property e.g.
           BindBlob(Param, RawByteString(vd.VAny), IO)

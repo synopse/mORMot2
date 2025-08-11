@@ -1798,7 +1798,7 @@ end;
 function IsRowID(FieldName: PUtf8Char; FieldLen: integer): boolean;
 begin
   if FieldLen = 2 then
-    result := PWord(FieldName)^ and $dfdf = ord('I') + ord('D') shl 8
+    result := PInteger(FieldName)^ and $dfdf = ord('I') + ord('D') shl 8
   else if FieldLen = 5 then
     result := (PInteger(FieldName)^ and $dfdfdfdf =
                ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
