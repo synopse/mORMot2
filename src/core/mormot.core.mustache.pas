@@ -150,6 +150,7 @@ type
     fPartials: TSynMustachePartials;
     fTempProcessHelper: TVariantDynArray;
     fOnStringTranslate: TOnStringTranslate;
+    fOnUtf8Translate: TOnUtf8Translate;
     fOwner: TSynMustache;
     // some variant support is needed for the helpers
     function ProcessHelper(const ValueName: RawUtf8; space, helper: PtrInt;
@@ -184,9 +185,12 @@ type
     /// access to the custom Partials associated with this execution context
     property Partials: TSynMustachePartials
       read fPartials write fPartials;
-    /// access to the {{"English text}} translation callback
+    /// access to the {{"English text}} translation string callback
     property OnStringTranslate: TOnStringTranslate
       read fOnStringTranslate write fOnStringTranslate;
+    /// access to the {{"English text}} translation RawUtf8 callback
+    property OnUtf8Translate: TOnUtf8Translate
+      read fOnUtf8Translate write fOnUtf8Translate;
     /// read-only access to the associated text writer instance
     property Writer: TJsonWriter
       read fWriter;
@@ -651,15 +655,25 @@ end;
 procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: integer);
 var
   s: string;
+  u: RawUtf8;
 begin
-  if Assigned(OnStringTranslate) then
+  if Assigned(OnUtf8Translate) then
+  begin
+    OnUtf8Translate(Text, TextLen, u);
+    if u <> '' then
+    begin
+      fWriter.AddString(u);
+      exit;
+    end;
+  end
+  else if Assigned(OnStringTranslate) then
   begin
     Utf8DecodeToString(Text, TextLen, s);
     OnStringTranslate(s);
     fWriter.AddNoJsonEscapeString(s);
-  end
-  else
-    fWriter.AddNoJsonEscape(Text, TextLen);
+    exit;
+  end;
+  fWriter.AddNoJsonEscape(Text, TextLen);
 end;
 
 function TSynMustacheContext.GetVariantFromContext(

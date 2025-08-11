@@ -2044,6 +2044,12 @@ type
   // as defined in mORMoti18n.pas
   // - can be used e.g. for TSynMustache's {{"English text}} callback
   TOnStringTranslate = procedure(var English: string) of object;
+  /// a generic callback, which can be used to translate some text on the fly
+  // - if UTF-8 is enough you don't need the whole "string" type
+  // - would render to any assigned Translated value, or fallback to English if ''
+  // - can be used e.g. for TSynMustache's {{"English text}} callback
+  TOnUtf8Translate = procedure(English: PUtf8Char; EnglishLen: integer;
+    var Translated: RawUtf8) of object;
 
 
 /// check case-sensitive matching starting of text in start
