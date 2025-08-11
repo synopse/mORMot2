@@ -6274,51 +6274,46 @@ end;
 procedure _JsonFixed(W: TJsonWriter; P: PByte; AnsiToWide: PWordArray);
 var
   c: cardinal;
-  d: PByteArray;
 begin // a dedicated method using a TSynAnsiFixedWidth lookup table
   dec(P);
   repeat
     inc(P);
     if W.B >= W.BEnd then
       W.FlushToStream;
-    case JSON_ESCAPE[P^] of // better codegen with no temp var
-      JSON_ESCAPE_NONE: // no escape needed (most common case)
-        begin
-          inc(W.B);
-          d := pointer(W.B);
-          if P^ <= $7f then
-            d[0] := P^
-          else
-          begin
-            c := AnsiToWide[P^]; // convert FixedAnsi char into Unicode char
-            if c > $7ff then
-            begin
-              d[0] := $e0 or (c shr 12);
-              d[1] := $80 or ((c shr 6) and $3f);
-              d[2] := $80 or (c and $3f);
-              inc(W.B, 2);
-            end
-            else
-            begin
-              d[0] := $c0 or (c shr 6);
-              d[1] := $80 or (c and $3f);
-              inc(W.B);
-            end;
-          end;
-        end;
-      JSON_ESCAPE_ENDINGZERO: // #0
-        exit;
-      JSON_ESCAPE_UNICODEHEX: // e.g. #7 -> \u0007
-        begin
-          PCardinal(W.B + 1)^ := JSON_UHEXC;
-          PCardinal(W.B + 5)^ := TwoDigitsHex[P^];
-          inc(W.B, 6);
-        end;
-    else // escaped as \ + b,t,n,f,r,\,"
+    c := JSON_ESCAPE[P^];
+    if c = JSON_ESCAPE_NONE then // no escape needed (most common case)
+    begin
+      inc(W.B);
+      if P^ <= $7f then // cut-down dedicated version of Utf16HiCharToUtf8()
+        W.B^ := AnsiChar(P^)
+      else
       begin
-        PCardinal(W.B + 1)^ := (cardinal(JSON_ESCAPE[P^]) shl 8) or byte('\');
-        inc(W.B, 2);
+        c := AnsiToWide[P^]; // convert FixedAnsi char into Unicode char
+        if c <= $7ff then
+        begin
+          PWord(W.B)^ := (c shr 6) or ((c and $3f) shl 8) or UTF8_7FF;
+          inc(W.B);
+        end
+        else
+        begin
+          PCardinal(W.B)^ := (c shr 12) or (((c shr 6) and $3f) shl 8) or
+                             ((c and $3f) shl 16) or UTF8_FFFF;
+          inc(W.B, 2);
+        end;
       end;
+    end
+    else if c = JSON_ESCAPE_ENDINGZERO then // #0
+        exit
+    else if c = JSON_ESCAPE_UNICODEHEX then // e.g. #7 -> \u0007
+      begin
+        PCardinal(W.B + 1)^ := JSON_UHEXC;
+        PCardinal(W.B + 5)^ := TwoDigitsHex[P^];
+        inc(W.B, 6);
+      end
+    else // escaped as \ + b,t,n,f,r,\,"
+    begin
+      PCardinal(W.B + 1)^ := (c shl 8) or byte('\');
+      inc(W.B, 2);
     end;
   until false;
 end;
@@ -7129,7 +7124,7 @@ begin
   AddAnyAnsiString(s, twJsonEscape, 0);
 end;
 
-procedure TJsonWriter.AddJsonEscapeW(P: PWord; Len: PtrInt);
+procedure TJsonWriter.AddJsonEscapeW(P: PWord; Len: PtrUInt);
 var
   c, t: cardinal;
   tab: PByteArray;
