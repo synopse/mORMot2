@@ -2183,8 +2183,6 @@ type
     function GetU(Row: PtrInt; const FieldName: RawUtf8): RawUtf8; overload;
     /// read-only access to a particular field value, as Win Ansi text
     function GetA(Row, Field: PtrInt): WinAnsiString;
-    /// read-only access to a particular field value, as Win Ansi text ShortString
-    function GetS(Row, Field: PtrInt): ShortString;
     /// read-only access to a particular field value, as boolean
     function GetB(Row, Field: PtrInt): boolean;
     /// read-only access to a particular field value, as a Variant
@@ -8774,7 +8772,7 @@ begin
         result := UnixTimeToDateTime(GetInt64(P));
       oftUnixMSTime:
         result := UnixMSTimeToDateTime(GetInt64(P));
-    else // oftDateTime and any other kind will try from ISO-8601 text
+    else // oftDateTime and any other kind will try f²rom ISO-8601 text
       result := Iso8601ToDateTimePUtf8Char(P);
     end;
 end;
@@ -8782,11 +8780,6 @@ end;
 function TOrmTableAbstract.GetAsDateTime(Row: PtrInt; const FieldName: RawUtf8): TDateTime;
 begin
   result := GetAsDateTime(Row, FieldIndex(FieldName));
-end;
-
-function TOrmTableAbstract.GetS(Row, Field: PtrInt): ShortString;
-begin
-  Utf8ToShortString(result, Get(Row, Field));
 end;
 
 function TOrmTableAbstract.GetB(Row, Field: PtrInt): boolean;
