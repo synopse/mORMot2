@@ -5214,7 +5214,7 @@ procedure TTextWriter.AddNoJsonEscapeW(PW: PWord; WideCharCount: integer);
 var
   PEnd: PtrUInt;
   c: cardinal;
-begin
+begin // only called from AddQuotedStrW()
   if (PW = nil) or
      (WideCharCount <= 0) then
     exit;
@@ -5223,24 +5223,17 @@ begin
     if B >= BEnd then
       FlushToStream;
     c := PW^;
-    if c <= 127 then
+    inc(PW);
+    if c <= $7f then
     begin
       if c = 0 then
         exit;
       B[1] := AnsiChar(c);
-      inc(PW);
       inc(B);
-      if PtrUInt(PW) < PEnd then
-        continue
-      else
-        break;
-    end;
-    inc(B, Utf16CharToUtf8(B + 1, PW)); // handle UTF-16 surrogates
-    if PtrUInt(PW) < PEnd then
-      continue
+    end
     else
-      break;
-  until false;
+      inc(B, Utf16HiCharToUtf8(B + 1, c, PW)); // handle UTF-16 surrogates
+  until PtrUInt(PW) >= PEnd;
 end;
 
 procedure TTextWriter.AddNoJsonEscapeW(PW: PWord);
@@ -5255,19 +5248,19 @@ begin
     dst := FlushToStreamUsing(dst);
   repeat
     c := PW^;
-    if c <= 127 then
+    inc(PW);
+    if c <= $7f then
     begin
       if c = 0 then
         break;
       dst^ := AnsiChar(c);
       inc(dst);
-      inc(PW);
       if dst <= BEnd then
         continue;
     end
     else
     begin
-      inc(dst, Utf16CharToUtf8(dst, PW));
+      inc(dst, Utf16HiCharToUtf8(dst, c, PW));
       if dst <= BEnd then
         continue;
     end;
@@ -5507,7 +5500,8 @@ begin
     if dst > BEnd then
       dst := FlushToStreamUsing(dst);
     c := src^;
-    if c <= 127 then
+    inc(src);
+    if c <= $7f then
     begin
       if c < 32 then
         if c = 0 then
@@ -5517,12 +5511,11 @@ begin
       else
         dst^ := AnsiChar(c); // direct store 7-bit ASCII
       inc(dst);
-      inc(src);
     end
     else
     begin
-      P := src;
-      inc(dst, Utf16CharToUtf8(dst, P)); // convert UTF-16 to UTF-8
+      P := src; // need a local pointer to handle surrogates
+      inc(dst, Utf16HiCharToUtf8(dst, c, P)); // convert UTF-16 to UTF-8
       src := P;
     end;
   until false;
