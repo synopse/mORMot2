@@ -34,15 +34,16 @@ uses
 { *************** UTF-8 Efficient Encoding / Decoding }
 
 // some constants used for UTF-8 conversion, including UTF-16 surrogates
+
 const
-  /// the Unicode consortion (and RFC 3629) requires U+0000..U+10FFFF range
+  /// the Unicode consortium (and RFC 3629) limit to the U+0000..U+10FFFF range
   // - as most UTF-16 softwares or languages (e.g. Windows, Java, C#, JavaScript)
   UNICODE_MAX = $10ffff;
 
 type
   /// define a lookup table for efficient UTF-8 processing
   // - supporting the full original UTF-8 U+0000..U+7FFFFFFF range, even if
-  // only the U+0000..U+10FFFF range (<=UNICODE_MAX) is considered valid today
+  // only U+0000..U+10FFFF (<=UNICODE_MAX) is considered valid today
   // - see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
   {$ifdef USERECORDWITHMETHODS}
   TUtf8Table = record
@@ -54,7 +55,7 @@ type
     Extra: array[0..5] of record
       offset, minimum: cardinal;
     end;
-    /// the first UTF-8 byte depending on its target length (extra + 1)
+    /// the first UTF-8 byte depending on its target length when > UNICODE_MAX
     FirstByte: array[5..6] of byte;
     /// the number of extra bytes in addition to the first UTF-8 byte
     // - since RFC 3629, only values within the 0..3 range should appear, i.e.
@@ -88,7 +89,7 @@ const
       (offset: $fa082080;  minimum: $00200000),  // 4: outside UTF-16 range
       (offset: $82082080;  minimum: $04000000)); // 5: outside UTF-16 range
     FirstByte: (
-      $f8, $fc); // used by Ucs4ToUtf8() outside UTF-16 range
+      $f8, $fc); // used by Ucs4ToUtf8() when > UNICODE_MAX
     Lookup: (
       7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
