@@ -55,7 +55,7 @@ type
       offset, minimum: cardinal;
     end;
     /// the first UTF-8 byte depending on its target length (extra + 1)
-    FirstByte: array[2..6] of byte;
+    FirstByte: array[5..6] of byte;
     /// the number of extra bytes in addition to the first UTF-8 byte
     // - since RFC 3629, only values within the 0..3 range should appear, i.e.
     // up to UTF8_MAX within the U+0000..U+10FFFF official Unicode range
@@ -88,7 +88,7 @@ const
       (offset: $fa082080;  minimum: $00200000),  // 4: outside UTF-16 range
       (offset: $82082080;  minimum: $04000000)); // 5: outside UTF-16 range
     FirstByte: (
-      $c0, $e0, $f0, $f8, $fc);
+      $f8, $fc); // used by Ucs4ToUtf8() outside UTF-16 range
     Lookup: (
       7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -2847,41 +2847,48 @@ begin
     result := 0;
 end;
 
-function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
-var
-  j: PtrInt;
+function Rfc3629ToUtf8(c: cardinal; Dest: PUtf8Char): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  if ucs4 <= $7f then
+  if c <= $7f then
   begin
-    Dest^ := AnsiChar(ucs4);
+    Dest^ := AnsiChar(c);
     result := 1;
   end
-  else if ucs4 <= $7ff then
+  else if c <= $7ff then
   begin
-    PWord(Dest)^ := (ucs4 shr 6) or ((ucs4 and $3f) shl 8) or $80c0;
+    PWord(Dest)^ := (c shr 6) or ((c and $3f) shl 8) or UTF8_7FF;
     result := 2;
   end
-  else if ucs4 <= $ffff then
+  else if c <= $ffff then
   begin
-    PCardinal(Dest)^ := (ucs4 shr 12) or (((ucs4 shr 6) and $3f) shl 8) or
-                        ((ucs4 and $3f) shl 16) or $8080e0;
+    PCardinal(Dest)^ := (c shr 12) or (((c shr 6) and $3f) shl 8) or
+                        ((c and $3f) shl 16) or UTF8_FFFF;
     result := 3;
   end
   else
-  begin
-    // here ucs4 > $ffff (very unlikely)
-    if ucs4 <= $1fffff then
-      result := 4
-    else if ucs4 <= $3ffffff then
-      result := 5
-    else
-      result := 6;
-    j := result - 1;
+  begin // c <= $1fffff = UNICODE_MAX
+    PCardinal(Dest)^ := (c shr 18) or (((c shr 12) and $3f) shl 8) or
+      (((c shr 6) and $3f) shl 16) or ((c and $3f) shl 24) or UTF8_10FF;
+    result := 4;
+  end;
+end;
+
+function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
+var
+  i: PtrInt;
+begin
+  if ucs4 <= UNICODE_MAX then
+    result := Rfc3629ToUtf8(ucs4, Dest)
+  else
+  begin // very unlikely but supported by original UTF-8 - not by RFC 3629
+    result := 5 + ord(ucs4 > $3ffffff); // up to U+7FFFFFFF (2^32-1)
+    i := result - 1;
     repeat
-      Dest[j] := AnsiChar((ucs4 and $3f) or $80);
+      Dest[i] := AnsiChar((ucs4 and $3f) or $80);
       ucs4 := ucs4 shr 6;
-      dec(j);
-    until j = 0;
+      dec(i);
+    until i = 0;
     Dest^ := AnsiChar(byte(ucs4) or UTF8_TABLE.FirstByte[result]);
   end;
 end;
