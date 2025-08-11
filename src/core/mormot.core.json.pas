@@ -872,7 +872,7 @@ type
     // than specifying Len>0 if you are sure P is zero-ended - e.g. from RawUtf8)
     procedure AddJsonEscape(P: pointer; Len: PtrInt = 0); overload;
     /// append some UTF-16 buffer, with proper JSON escaping
-    procedure AddJsonEscapeW(P: PWord; Len: PtrInt); overload;
+    procedure AddJsonEscapeW(P: PWord; Len: PtrUInt); overload;
     /// append some #0-ended UTF-16 buffer, with proper JSON escaping
     // - slightly faster then the overload with a Len
     procedure AddJsonEscapeW(P: PWord); overload;
@@ -7159,45 +7159,49 @@ end;
 
 procedure TJsonWriter.AddJsonEscapeW(P: PWord; Len: PtrInt);
 var
-  i, c, s: PtrInt;
+  c, t: cardinal;
   tab: PByteArray;
 begin // called with Len=1 for WideChar, or from some DB raw UTF-16 buffers
-  if P = nil then
+  if (P = nil) or
+     (PtrInt(Len) <= 0) then
     exit;
-  i := 0;
-  while i < Len do
-  begin
-    s := i;
-    tab := @JSON_ESCAPE; // better code generation on FPC within the loop
-    repeat
-      c := PWordArray(P)[i];
-      if (c <= 127) and
-         (tab[c] <> JSON_ESCAPE_NONE) then
-        break;
-      inc(i);
-    until i >= Len;
-    if i <> s then
-      AddNoJsonEscapeW(@PWordArray(P)[s], i - s)
-    else if B >= BEnd then
-      FlushToStream; // for safe AddDirect() below
-    if i >= Len then
-      exit;
-    c := PWordArray(P)[i];
-    if c = 0 then
-      exit;
-    inc(i);
-    if tab[c] = JSON_ESCAPE_UNICODEHEX then // e.g. #7 -> \u0007
+  tab := @JSON_ESCAPE;
+  inc(Len, PtrUInt(P) * SizeOf(P^));
+  repeat
+    if B > BEnd then // no better codegen with a local "dst: PUtf8Char" variable
+      FlushToStream;
+    c := P^;
+    inc(P);
+    if c <= $7f then
     begin
-      PCardinal(B + 1)^ := JSON_UHEXC;
-      PCardinal(B + 5)^ := TwoDigitsHex[c];
-      inc(B, 6);
+      t := tab[c];
+      if t = JSON_ESCAPE_NONE then // optimized for the most common case
+      begin
+        inc(B);
+        B^ := AnsiChar(c);
+        if P >= PWord(Len) then
+          break;
+        continue;
+      end
+      else if t = JSON_ESCAPE_ENDINGZERO then // final #0
+        break
+      else if t = JSON_ESCAPE_UNICODEHEX then // e.g. #7 -> \u0007
+      begin
+        PCardinal(B + 1)^     := JSON_UHEXC;
+        PCardinal(B + 5)^ := TwoDigitsHex[c];
+        inc(B, 6);
+      end
+      else
+      begin // escaped as \ + b,t,n,f,r,\,"
+        PCardinal(B + 1)^ := (t shl 8) or byte('\');
+        inc(B, 2);
+      end
     end
     else
-    begin // escaped as \ + b,t,n,f,r,\,"
-      PCardinal(B + 1)^ := (cardinal(tab[c]) shl 8) or byte('\');
-      inc(B, 2);
-    end;
-  end;
+      inc(B, Utf16HiCharToUtf8(B + 1, c, P)); // handle UTF-16 surrogates
+    if P >= PWord(Len) then
+      break;
+  until false;
 end;
 
 procedure TJsonWriter.AddJsonEscapeW(P: PWord);
@@ -7206,7 +7210,7 @@ var
   dst: PUtf8Char;
   tab: PByteArray;
   c: PtrInt;
-begin
+begin // faster version than the previous overload with Len
   src := P;
   if src = nil then
     exit;
@@ -7217,22 +7221,22 @@ begin
   repeat
     repeat
       c := src^;
-      if c <= 127 then
+      inc(src);
+      if c <= $7f then
       begin
         if tab[c] <> JSON_ESCAPE_NONE then
           break; // also stop at JSON_ESCAPE_ENDINGZERO
         dst^ := AnsiChar(c); // direct store 7-bit ASCII
         inc(dst);
-        inc(src);
-        if dst <= BEnd then
+        if dst < BEnd then
           continue;
       end
       else
       begin
-        P := src;
-        inc(dst, Utf16CharToUtf8(dst, P)); // convert UTF-16 to UTF-8
+        P := src; // use a pointer variable for surrogates
+        inc(dst, Utf16HiCharToUtf8(dst, c, P)); // convert UTF-16 to UTF-8
         src := P;
-        if dst <= BEnd then
+        if dst < BEnd then
           continue;
       end;
       dst := FlushToStreamUsing(dst);
@@ -7250,8 +7254,7 @@ begin
       PCardinal(dst)^ := (cardinal(tab[c]) shl 8) or byte('\');
       inc(dst, 2);
     end;
-    inc(src);
-    if dst > BEnd then
+    if dst >= BEnd then
       dst := FlushToStreamUsing(dst);
   until false;
   B := dst - 1;
