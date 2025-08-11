@@ -17,9 +17,9 @@ function PosExtString(Str: PChar): PChar; forward;
 procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
 var
   tmp: TSynTempBuffer;
-begin
+begin // FPC RTL is fine, and recent Delphi just calls WideCharToMultiByte() API
   tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3 + 16, P, Len); // use RTL if complex
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3 + 16, P, Len);
   if Len > 0 then
     dec(Len); // UnicodeToUtf8() result includes the null terminator
   FastSetString(res, tmp.buf, Len);
@@ -192,7 +192,6 @@ begin
   Win32PWideCharToString(P, StrLenW(P), string(fn));
 end;
 
-// local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
 var
   i: PtrInt;
@@ -203,7 +202,7 @@ begin
     begin
       R := FastSetString(res, Len);
       for i := 0 to Len - 1 do
-        R[i] := PWordArray(P)[i]; // fast direct conversion
+        R[i] := PWordArray(P)[i]; // fast direct ASCII 7-bit conversion
     end
     else
       DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode

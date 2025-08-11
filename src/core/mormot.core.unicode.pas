@@ -3076,12 +3076,12 @@ begin
     result := '';
 end;
 
-{$ifndef FPC_OR_UNICODE} // Delphi 7/2007 RTL don't handle surrogates
+{$ifdef OSWINDOWS}
 procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
 begin
-  RawUnicodeToUtf8(P, Len, res);
+  RawUnicodeToUtf8(P, Len, res); // our function is likely to be faster
 end;
-{$endif FPC_OR_UNICODE}
+{$endif OSWINDOWS}
 
 procedure Utf8ToShortString(var dest: ShortString; source: PUtf8Char);
 var
@@ -11512,7 +11512,7 @@ begin
   LANG_LCID[lngChinese]   := LANG_CHINESE_SIMPLIFIED;
   LANG_LCID[lngBosnian]   := LANG_BOSNIAN_CYRILLIC;
   LANG_LCID[lngSerbian]   := LANG_SERBIAN_NEUTRAL;
-  // setup sorting functions redirection
+  // setup proper functions redirection
   StrCompByCase[false] := @StrComp;
   StrCompByCase[true]  := @StrIComp;
   {$ifdef CPUINTEL}
@@ -11521,16 +11521,16 @@ begin
   SortDynArrayAnsiStringByCase[false] := @SortDynArrayRawByteString;
   {$endif CPUINTEL}
   SortDynArrayAnsiStringByCase[true]  := @SortDynArrayAnsiStringI;
-  IdemPropNameUSameLen[false] := @IdemPropNameUSameLenNotNull;
-  IdemPropNameUSameLen[true]  := @mormot.core.base.CompareMem;
+  IdemPropNameUSameLen[false]         := @IdemPropNameUSameLenNotNull;
+  IdemPropNameUSameLen[true]          := @mormot.core.base.CompareMem;
+  {$ifdef OSWINDOWS}
+  DoWin32PWideCharToUtf8              := _DoWin32PWideCharToUtf8;
+  {$endif OSWINDOWS}
   // setup basic/global Unicode conversion engines
-  WinAnsiConvert       := TSynAnsiFixedWidth.Create(CP_WINANSI);
-  Utf8AnsiConvert      := TSynAnsiUtf8.Create(CP_UTF8);
-  RawByteStringConvert := TSynAnsiFixedWidth.Create(CP_RAWBYTESTRING);
-  CurrentAnsiConvert   := TSynAnsiConvert.Engine(Unicode_CodePage);
-  {$ifndef FPC_OR_UNICODE}
-  DoWin32PWideCharToUtf8 := _DoWin32PWideCharToUtf8; // Delphi 7/2007 weak RTL
-  {$endif FPC_OR_UNICODE}
+  WinAnsiConvert         := TSynAnsiFixedWidth.Create(CP_WINANSI);
+  Utf8AnsiConvert        := TSynAnsiUtf8.Create(CP_UTF8);
+  RawByteStringConvert   := TSynAnsiFixedWidth.Create(CP_RAWBYTESTRING);
+  CurrentAnsiConvert     := TSynAnsiConvert.Engine(Unicode_CodePage);
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
   {$ifdef ASMX64AVXNOCONST}
