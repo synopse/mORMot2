@@ -6859,7 +6859,7 @@ begin
   result := ord(U^);
   if result = 0 then
     exit;
-  if result <= 127 then
+  if result <= $7f then
   begin
     inc(U);
     result := NormToUpperByte[result];
@@ -7008,7 +7008,7 @@ begin
     inc(P);
     if c = 0 then
       break;
-    if c <= 127 then
+    if c <= $7f then
     begin
       D[result] := AnsiChar(Table[c]);
       inc(result);
@@ -7032,7 +7032,7 @@ begin
           exit; // invalid input content
       end;
       if (c <= 255) and
-         (Table[c] <= 127) then
+         (Table[c] <= $7f) then
       begin
         D[result] := AnsiChar(Table[c]);
         inc(result);
@@ -7089,12 +7089,12 @@ begin
         repeat
           result := ord(u1^);
           c2 := ord(u2^);
-          if result <= 127 then
+          if result <= $7f then
             if result <> 0 then
             begin
               inc(u1);
               result := table[result];
-              if c2 <= 127 then
+              if c2 <= $7f then
               begin
 c2low:          if c2 = 0 then
                   exit; // u1>u2 -> return u1^
@@ -7124,7 +7124,7 @@ c2low:          if c2 = 0 then
             if result <= 255 then
               result := table[result]; // 8-bit to upper, 32-bit as is
           end;
-          if c2 <= 127 then
+          if c2 <= $7f then
             goto c2low
           else if c2 and $20 = 0 then // fast $0..$7ff process
           begin
@@ -7176,10 +7176,10 @@ begin
           c2 := ord(u2^);
           inc(u1);
           dec(L1);
-          if result <= 127 then
+          if result <= $7f then
           begin
             result := table[result];
-            if c2 <= 127 then
+            if c2 <= $7f then
             begin
               // 'a'..'z' / 'A'..'Z' case insensitive comparison
               dec(result, table[c2]);
@@ -7228,7 +7228,7 @@ begin
           // here result=NormToUpper[u1^]
           inc(u2);
           dec(L2);
-          if c2 <= 127 then
+          if c2 <= $7f then
           begin
             dec(result, table[c2]);
             if result <> 0 then
@@ -7417,7 +7417,7 @@ begin
       inc(U);
       if c = 0 then
         exit;
-      if c <= 127 then
+      if c <= $7f then
       begin
         if tcWord in TEXT_BYTES[c] then
           if PAnsiChar(@NormToUpper)[c] <> first then
@@ -7462,7 +7462,7 @@ begin
       inc(U); // next chars
       if c = 0 then
         exit
-      else if c <= 127 then
+      else if c <= $7f then
       begin
         if PAnsiChar(@NormToUpper)[c] <> UpperValue^ then
           break;
@@ -7583,8 +7583,7 @@ begin
     srcEnd := Source + SourceChars;
     srcEndBy4 := srcEnd - 4;
     up := @NormToUpper;
-    if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-       (Source <= srcEndBy4) then
+    if Source <= srcEndBy4 then
       repeat
         c := PCardinal(Source)^;
         if c and $80808080 <> 0 then
@@ -7601,12 +7600,11 @@ by4:    inc(Source, 4);
       repeat
 by1:    c := byte(Source^);
         inc(Source);
-        if c <= 127 then
+        if c <= $7f then
         begin
           Dest^ := up[c];
 set1:     inc(Dest);
-          if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-             (Source <= srcEndBy4) then
+          if Source <= srcEndBy4 then
           begin
             c := PCardinal(Source)^;
             if c and $80808080 = 0 then
@@ -10665,7 +10663,7 @@ function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrUInt;
 var
   i: PtrUInt;
 begin
-  // branchless conversion of 0..UU_MAX = $10ffff Unicode codepoints
+  // branchless conversion in range [0 .. UNICODE_MAX = $10ffff]
   i := c shr UU_BLOCK_HI;
   result := PtrInt(c) +
             Block[IndexLo[IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO],
@@ -10688,7 +10686,7 @@ begin
   if S <> nil then
     repeat
       c := ord(S^);
-      if c <= 127 then
+      if c <= $7f then
         if c = 0 then
           break
         else
@@ -10745,8 +10743,7 @@ begin
     // first handle trailing 7-bit ASCII chars, by quad
     inc(SLen, PtrUInt(S));
     endSBy4 := PUtf8Char(SLen) - 4;
-    if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and {$endif}
-       (S <= endSBy4) then
+    if S <= endSBy4 then
       repeat
         if PCardinal(S)^ and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
@@ -10770,13 +10767,12 @@ by4:    i := byte(S[0]);
       repeat
 by1:    c := byte(S^);
         inc(S);
-        if c <= 127 then
+        if c <= $7f then
         begin
           inc(c, tab.Block[0, c]); // branchless a..z -> A..Z
           D^ := AnsiChar(c);
           inc(D);
-          if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and{$endif}
-             (S <= endSBy4) then
+          if S <= endSBy4 then
             if PCardinal(S)^ and $80808080 = 0 then
               goto By4
             else
@@ -10891,7 +10887,7 @@ begin
     exit;
   p := FastSetString(u, L * 6); // prepare for the worse (paranoid)
   repeat
-    inc(p, Ucs4ToUtf8(u4^, p));
+    inc(p, Ucs4ToUtf8(u4^, p)); // here u4^ is a UTF-32/UCS-4 code point
     inc(u4);
     dec(L);
   until L = 0;
@@ -10952,12 +10948,12 @@ begin
         repeat
           result := ord(u1^);
           c2 := ord(u2^);
-          if result <= 127 then
+          if result <= $7f then
             if result <> 0 then
             begin
               inc(u1);
               inc(result, tab.Block[0, result]); // branchless a..z -> A..Z
-              if c2 <= 127 then
+              if c2 <= $7f then
               begin
 c2low:          if c2 = 0 then
                   exit; // u1>u2 -> return u1^
@@ -10989,7 +10985,7 @@ c2low:          if c2 = 0 then
             if PtrUInt(result) <= UU_MAX then
               result := tab.Ucs4Upper(result);
           end;
-          if c2 <= 127 then
+          if c2 <= $7f then
             goto c2low
           else if c2 and $20 = 0 then // $0..$7ff common case
           begin
@@ -11040,10 +11036,10 @@ begin
           c2 := ord(u2^);
           inc(u1);
           dec(L1);
-          if result <= 127 then
+          if result <= $7f then
           begin
             inc(result, tab.Block[0, result]); // branchless a..z -> A..Z
-            if c2 <= 127 then
+            if c2 <= $7f then
             begin
               inc(c2, tab.Block[0, c2]);
               dec(L2);
@@ -11091,7 +11087,7 @@ begin
           // here result=NormToUpper[u1^]
           inc(u2);
           dec(L2);
-          if c2 <= 127 then
+          if c2 <= $7f then
           begin
             inc(c2, tab.Block[0, c2]);
             dec(result, c2);
@@ -11175,7 +11171,7 @@ begin
 nxt:u0 := U;
     c := byte(U^);
     inc(U);
-    if c <= 127 then
+    if c <= $7f then
     begin
       if c = 0 then
         exit; // not found -> return nil
@@ -11212,7 +11208,7 @@ nxt:u0 := U;
       end;
       c := byte(u2^);
       inc(u2);
-      if c <= 127 then
+      if c <= $7f then
       begin
         if c = 0 then
           exit; // not found -> return nil
