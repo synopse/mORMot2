@@ -154,11 +154,17 @@ function GetUtf8WideChar(P: PUtf8Char): cardinal;
 function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// internal function converting a UTF-16 surrogates pair into UTF-8
+// - return the number of bytes written into Dest (usually 4 or 3 for U+fffd)
+// - as called by Utf16HiCharToUtf8()
+function Utf16SurrogateToUtf8(Dest: PUtf8Char; c1, c2: cardinal): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// UTF-8 encode one UTF-16 encoded UCS-4 CodePoint into Dest
-// - return the number of bytes written into Dest (i.e. from 1 up to 6)
-// - Source will contain the next UTF-16 character
-// - this method DOES properly handle UTF-16 surrogate pairs
-function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): PtrInt;
+// - c = Source[-1] is expected to be > $7f, and Source could be increased after
+// the following UTF-16 surrogate pair (maybe written as U+fffd)
+// - return the number of bytes written into Dest (i.e. from 1 up to 4)
+function Utf16HiCharToUtf8(Dest: PUtf8Char; c: cardinal; var Source: PWord): PtrInt;
 
 /// UTF-8 encode one UCS-4 CodePoint into Dest
 // - support the whole original UTF-8 range even over the maximum UTF-16/Unicode
@@ -2893,34 +2899,47 @@ begin
   end;
 end;
 
-function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): PtrInt;
-var
-  c: cardinal;
+function Utf16SurrogateToUtf8(Dest: PUtf8Char; c1, c2: cardinal): PtrInt;
 begin
-  c := Source^;
-  inc(Source);
-  case c of
-    0 .. $7f:
-      begin
-        Dest^ := AnsiChar(c); // most obvious case
-        result := 1;
-        exit;
-      end;
-    UTF16_HISURROGATE_MIN .. UTF16_HISURROGATE_MAX:
-      begin
-        c := ((c - UTF16_SURROGATE_OFFSET) shl 10) or
-              (cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
-        inc(Source);
-      end;
-    UTF16_LOSURROGATE_MIN .. UTF16_LOSURROGATE_MAX:
-      begin
-        c := ((cardinal(Source^) - UTF16_SURROGATE_OFFSET) shl 10) or
-              (c xor UTF16_LOSURROGATE_MIN);
-        inc(Source);
-      end;
+  if c1 <= UTF16_HISURROGATE_MAX then
+    c1 := ((c1 - UTF16_SURROGATE_OFFSET) shl 10) or
+          (c2 xor UTF16_LOSURROGATE_MIN)
+  else
+    c1 := ((c2 - UTF16_SURROGATE_OFFSET) shl 10) or
+          (c1 xor UTF16_LOSURROGATE_MIN);
+  if (c1 >= UTF16_SURROGATE_MIN) and
+     (c1 <= UTF16_SURROGATE_MAX) then // should be in U+10000 to U+10FFFF range
+  begin
+    PCardinal(Dest)^ := (c1 shr 18) or (((c1 shr 12) and $3f) shl 8) or
+      (((c1 shr 6) and $3f) shl 16) or ((c1 and $3f) shl 24) or UTF8_10FF;
+    result := 4;
+  end
+  else
+  begin
+    PCardinal(Dest)^ := UTF8_UNICODE_REPLACEMENT_CHARACTER; // U+fffd
+    result := 3;
   end;
-  // now c is the UTF-32/UCS-4 code point
-  result := Ucs4ToUtf8(c, Dest);
+end;
+
+function Utf16HiCharToUtf8(Dest: PUtf8Char; c: cardinal; var Source: PWord): PtrInt;
+begin
+  if c <= $7ff then // caller did process c <= $7f
+  begin
+    PWord(Dest)^ := (c shr 6) or ((c and $3f) shl 8) or UTF8_7FF;
+    result := 2;
+  end
+  else if (c < UTF16_HISURROGATE_MIN) or
+          (c > UTF16_LOSURROGATE_MAX) then
+  begin // $800..$ffff but excluding $d800..$dfff UTF-16 surrogates
+    PCardinal(Dest)^ := (c shr 12) or (((c shr 6) and $3f) shl 8) or
+                        ((c and $3f) shl 16) or UTF8_FFFF;
+    result := 3;
+  end
+  else // valid UTF-16 surrogates pair is always in range U+10000 to U+10FFFF
+  begin
+    result := Utf16SurrogateToUtf8(Dest, c, Source^);
+    inc(Source);
+  end;
 end;
 
 function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrUInt; Source: PWideChar;
@@ -3072,113 +3091,15 @@ end;
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean): PtrInt;
-// faster than System.Utf8ToUnicode()
 var
   c: cardinal;
   begd: PWideChar;
   endSource: PUtf8Char;
   endDest: PWord;
-  i, extra: integer;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
-  {$else}
-  utf8: PUtf8Table;
-  {$endif CPUX86NOTPIC}
+  i, extra: PtrUInt;
 label
-  Quit, NoSource;
-begin
-  result := 0;
-  if dest = nil then
-    exit;
-  if source = nil then
-    goto NoSource;
-  if sourceBytes = 0 then
-  begin
-    if source^ = #0 then
-      goto NoSource;
-    sourceBytes := StrLen(source);
-  end;
-  {$ifndef CPUX86NOTPIC}
-  utf8 := @UTF8_TABLE;
-  {$endif CPUX86NOTPIC}
-  endSource := source + sourceBytes;
-  endDest := @dest[MaxDestChars];
-  begd := dest;
-  repeat
-    c := byte(source^);
-    inc(source);
-    if c <= 127 then
-    begin
-      if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
-        break; // avoid buffer overflow before writing
-      PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
-      inc(dest);
-      if source < endSource then
-        continue
-      else
-        break;
-    end;
-    extra := utf8.Lookup[c];
-    if (extra > UTF8_MAXUTF16) or // could not be encoded as UTF-16 surrogates
-       (source + extra > endSource) then
-      break;
-    i := 0;
-    repeat
-      if byte(source^) and $c0 <> $80 then
-        goto Quit; // invalid input content
-      c := (c shl 6) + byte(source[i]);
-      inc(i);
-    until i = extra;
-    inc(source, extra);
-    with utf8.Extra[extra] do
-    begin
-      dec(c, offset);
-      if c < minimum then
-        break; // invalid input content
-    end;
-    if c <= $ffff then
-    begin
-      if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
-        break;
-      PWord(dest)^ := c;
-      inc(dest);
-      if source < endSource then
-        continue
-      else
-        break;
-    end;
-    dec(c, $10000); // store as UTF-16 surrogates
-    if PtrUInt(@dest[2]) >= PtrUInt(endDest) then
-      break;
-    PWordArray(dest)[0] := (c shr 10)   or UTF16_HISURROGATE_MIN;
-    PWordArray(dest)[1] := (c and $3ff) or UTF16_LOSURROGATE_MIN;
-    inc(dest, 2);
-    if source >= endSource then
-      break;
-  until false;
-Quit:
-  result := PtrUInt(dest) - PtrUInt(begd); // dest-begd return byte length
-NoSource:
-  if not NoTrailingZero then
-    dest^ := #0; // append a WideChar(0) to the end of the buffer
-end;
-
-function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt;
-  NoTrailingZero: boolean): PtrInt;
-// faster than System.UTF8Decode()
-var
-  c: cardinal;
-  begd: PWideChar;
-  endSource, endSourceBy4: PUtf8Char;
-  i, extra: PtrInt;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
-  {$else}
-  utf8: PUtf8Table;
-  {$endif CPUX86NOTPIC}
-label
-  quit, nosource, by1, by4;
-begin
+  quit, nosource, by2;
+begin // slightly slower overload with explicit destlen
   result := 0;
   if dest = nil then
     exit;
@@ -3190,21 +3111,109 @@ begin
       goto nosource;
     sourceBytes := StrLen(source);
   end;
-  {$ifndef CPUX86NOTPIC}
-  utf8 := @UTF8_TABLE;
-  {$endif CPUX86NOTPIC}
+  endSource := source + sourceBytes;
+  endDest := @dest[MaxDestChars];
+  begd := dest;
+  repeat
+    c := byte(source^);
+    inc(source);
+    if c <= $7f then
+    begin
+      if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
+        break; // avoid buffer overflow before writing
+      PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
+      inc(dest);
+      if source < endSource then
+        continue
+      else
+        break;
+    end;
+    extra := UTF8_TABLE.Lookup[c]; // a local variable won't help even on CPU64
+    if source + extra > endSource then
+      break
+    else if extra = 1 then // optimized for U+80..U+7FF common range
+    begin
+      if byte(source^) and $c0 <> $80 then
+        break;
+      c := (c shl 6) + cardinal(source^) - UTF8_EXTRA1_OFFSET; // c <= $ffff
+      inc(source);
+by2:  if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
+        break;
+      PWord(dest)^ := c; // most simple encoding as a single WideChar
+      inc(dest);
+      if source < endSource then
+        continue
+      else
+        break;
+    end
+    else if extra > UTF8_MAX then // over RFC 3629 / Unicode range
+      break;
+    i := 0; // handle extra in 2..3 range
+    repeat
+      if byte(source[i]) and $c0 <> $80 then
+        goto quit; // invalid input content
+      c := (c shl 6) + cardinal(source[i]);
+      inc(i);
+    until i = extra;
+    inc(source, extra);
+    with UTF8_TABLE.Extra[extra] do
+    begin
+      dec(c, offset);
+      if c < minimum then
+        break; // invalid input content
+    end;
+    if c < UTF16_HISURROGATE_MIN then
+      goto by2 // U+800 .. U+D800: no surrogates needed
+    else if c <= $ffff then
+      if c > UTF16_LOSURROGATE_MAX then
+        goto by2 // U+E000 .. U+FFFF: no surrogates needed
+      else
+        break; // c is a surrogate code! reject this malformed UTF-8 input
+    dec(c, UTF16_SURROGATE_MIN); // store as UTF-16 surrogates
+    if PtrUInt(@dest[2]) >= PtrUInt(endDest) then
+      break;
+    PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or UTF16_SURROGATE_FLAGS;
+    inc(dest, 2);
+    if source >= endSource then
+      break;
+  until false;
+quit:
+  result := PtrUInt(dest) - PtrUInt(begd); // dest-begd return byte length
+nosource:
+  if not NoTrailingZero then
+    dest^ := #0; // append a WideChar(0) to the end of the buffer
+end;
+
+function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt;
+  NoTrailingZero: boolean): PtrInt;
+var
+  c: cardinal;
+  begd: PWideChar;
+  endSource, endSourceBy4: PUtf8Char;
+  i, extra: PtrInt;
+label
+  quit, nosource, by1, by4, next;
+begin // expects dest to have source*3 bytes: more used than overload destlen
+  result := 0;
+  if dest = nil then
+    exit;
+  if source = nil then
+    goto nosource;
+  if sourceBytes = 0 then
+  begin
+    if source^ = #0 then
+      goto nosource;
+    sourceBytes := StrLen(source);
+  end;
   begd := dest;
   endSource := source + sourceBytes;
   endSourceBy4 := endSource - 4;
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  if (PtrUInt(source) and 3 = 0) and
-  {$else}
   {$ifdef OSWINDOWS}
   if (source <= endSourceBy4) and
      (PCardinal(source)^ and $00ffffff = BOM_UTF8) then
     inc(source, 3); // ignore any UTF-8 BOM (may appear on Windows)
   {$endif OSWINDOWS}
-  if {$endif} (source <= endSourceBy4) then
+  if source <= endSourceBy4 then
     repeat // handle 7-bit ASCII chars, by quad
       c := PCardinal(source)^;
       if c and $80808080 <> 0 then
@@ -3219,73 +3228,63 @@ by4:  inc(source, 4);
     repeat
 by1:  c := byte(source^);
       inc(source);
-      if c <= 127 then
+      if c <= $7f then // occurs for the last 1..3 remaining chars
       begin
         PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
         inc(dest);
-        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
-           (source <= endSourceBy4) then
+next:   if source >= endSource then
+          break
+        else if source <= endSourceBy4 then
         begin
           c := PCardinal(source)^;
           if c and $80808080 = 0 then
-            goto by4
-          else
-            continue;
+            goto by4;
         end;
-        if source < endSource then
-          continue
-        else
-          break;
+        continue;
       end;
-      extra := utf8.Lookup[c];
-      if (extra > UTF8_MAXUTF16) or // over UTF-16 accessible range
-         (source + extra > endSource) then
-        break;
-      i := 0;
-      repeat
+      extra := UTF8_TABLE.Lookup[c]; // a local variable won't help even on CPU64
+      if source + extra > endSource then
+        break
+      else if extra = 1 then // optimized for U+80..U+7FF common range
+      begin
         if byte(source^) and $c0 <> $80 then
+          break;
+        c := (c shl 6) + cardinal(source^) - UTF8_EXTRA1_OFFSET; // c <= $ffff
+        inc(source);
+        PWord(dest)^ := c;  // most simple encoding as a single WideChar
+        inc(dest);
+        goto next;
+      end
+      else if extra > UTF8_MAX then // over RFC 3629 / Unicode range
+        break;
+      i := 0; // handle extra in 2..3 range
+      repeat
+        if byte(source[i]) and $c0 <> $80 then
           goto quit; // invalid input content
-        c := (c shl 6) + byte(source[i]);
+        c := (c shl 6) + cardinal(source[i]);
         inc(i);
       until i = extra;
       inc(source, extra);
-      with utf8.Extra[extra] do
+      with UTF8_TABLE.Extra[extra] do
       begin
         dec(c, offset);
         if c < minimum then
           break; // invalid input content
       end;
-      if c <= $ffff then // no surrogates needed
-      begin
-        PWord(dest)^ := c;
-        inc(dest);
-        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
-           (source <= endSourceBy4) then
+      if c <= $ffff then // check for surrogates code range
+        if (c < UTF16_HISURROGATE_MIN) or    // U+800 .. U+D800
+           (c > UTF16_LOSURROGATE_MAX) then  // U+E000 .. U+FFFF
         begin
-          c := PCardinal(source)^;
-          if c and $80808080 = 0 then
-            goto by4;
-          continue;
-        end;
-        if source < endSource then
-          continue
+          PWord(dest)^ := c;  // simple encoding as a single WideChar
+          inc(dest);
+          goto next;
+        end
         else
-          break;
-      end;
-      dec(c, $10000); // store as UTF-16 surrogates
-      PWordArray(dest)[0] := (c shr 10)   or UTF16_HISURROGATE_MIN;
-      PWordArray(dest)[1] := (c and $3ff) or UTF16_LOSURROGATE_MIN;
+          break; // c is a surrogate code! reject this malformed UTF-8 input
+      dec(c, UTF16_SURROGATE_MIN); // store as UTF-16 surrogates
+      PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or UTF16_SURROGATE_FLAGS;
       inc(dest, 2);
-      if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
-         (source <= endSourceBy4) then
-      begin
-        c := PCardinal(source)^;
-        if c and $80808080 = 0 then
-          goto by4;
-        continue;
-      end;
-      if source >= endSource then
-        break;
+      goto next;
     until false;
 quit:
   result := PtrUInt(dest) - PtrUInt(begd); // dest-begd returns bytes length
@@ -3329,7 +3328,7 @@ begin
     inc(source);
     if c = UTF8_ASCII then
       continue // last 1..3 chars
-    else if c > UTF8_MAXUTF16 then // RFC 3629 requirements as IsValidUtf8Avx2()
+    else if c > UTF8_MAX then // RFC 3629 requirements as IsValidUtf8Avx2()
       if c = UTF8_ZERO then
         break // end of input - may be unexpected if not at source[len]
       else
@@ -3423,7 +3422,7 @@ begin
         else
          continue;
       c := utf8.Lookup[c];
-      if c > UTF8_MAXUTF16 then // follow RFC 3629 expectations
+      if c > UTF8_MAX then // follow RFC 3629 expectations
         exit;
       // check valid UTF-8 content
       repeat
@@ -3461,7 +3460,7 @@ begin
     else if c > $7f then
     begin
       c := utf8.Lookup[c];
-      if c > UTF8_MAXUTF16 then // follow RFC 3629 expectations
+      if c > UTF8_MAX then // follow RFC 3629 expectations
         exit;
       // check valid UTF-8 content
       repeat
@@ -3502,8 +3501,8 @@ begin
       inc(source);
       if c = UTF8_ASCII then
         inc(result)
-      else if c > UTF8_MAXUTF16 then
-        exit // UTF8_ZERO or outside of UTF-16 accessible range
+      else if c > UTF8_MAX then
+        exit // UTF8_ZERO or outside of RFC 3629 / Unicode range
       else
       begin
         inc(result, 1 + ord(c = UTF8_NEED_UTF16_SURROGATES));
@@ -3548,8 +3547,8 @@ trunc:  SetLength(text, source - pointer(text));
         result := true;
         exit;
       end
-      else if c > UTF8_MAXUTF16 then
-        break // UTF8_ZERO or outside of UTF-16 accessible range
+      else if c > UTF8_MAX then
+        break // UTF8_ZERO or outside of RFC 3629 / Unicode range
       else
       begin
         dec(maxUtf16, 1 + ord(c = UTF8_NEED_UTF16_SURROGATES));
@@ -3636,7 +3635,7 @@ begin
       else
       begin
         c := utf8.Lookup[c];
-        if c > UTF8_MAXUTF16 then
+        if c > UTF8_MAX then
           exit; // invalid leading byte for conversion to UTF-16
         inc(result, 1 + ord(c = UTF8_NEED_UTF16_SURROGATES));
         inc(source, c); // a bit less safe, but faster
@@ -4502,7 +4501,7 @@ begin
       inc(Utf8Text);
       if extra = UTF8_ASCII then
         continue
-      else if extra > UTF8_MAXUTF16 then
+      else if extra > UTF8_MAX then
         if extra = UTF8_ZERO then
           break // end of input
         else
@@ -4679,7 +4678,7 @@ by1:  c := byte(Source^);
       else
       begin
         extra := utf8.Lookup[c];
-        if (extra > UTF8_MAXUTF16) or
+        if (extra > UTF8_MAX) or
            (Source + extra > srcEnd) then
           break;
         i := extra;
