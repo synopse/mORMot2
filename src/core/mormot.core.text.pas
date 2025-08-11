@@ -1156,6 +1156,9 @@ function HtmlEscapeString(const text: string;
 procedure HtmlEscapeString(const text: string; var result: RawUtf8;
   fmt: TTextWriterHtmlFormat); overload;
 
+/// convert all &lt; &gt; &amp; &quot; HTML entities into their UTF-8 equivalency
+function HtmlUnescape(const text: RawUtf8): RawUtf8;
+
 /// check if some UTF-8 text would need XML escaping
 function NeedsXmlEscape(text: PUtf8Char): boolean;
 
@@ -5921,7 +5924,8 @@ end;
 
 var
   HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
-  HTML_ESCAPED: array[1..4] of string[7] = (
+const
+  HTML_ESCAPED: array[1 .. 4] of string[7] = (
     '&lt;', '&gt;', '&amp;', '&quot;');
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
@@ -6148,6 +6152,101 @@ begin
         exit;     // needs XML escape
   end;
   result := false;
+end;
+
+const
+  HTML_UNESCAPE: array[1 .. 104] of string[6] = (
+    'amp', 'lt', 'gt', 'quot', 'rsquo', {6=}'ndash', {7=}'trade', {8=}'hellip',
+    'nbsp', 'iexcl', 'cent', 'pound', 'curren', 'yen', 'brvbar', 'sect', 'uml',
+    'copy', 'ordf', 'laquo', 'not', 'shy', 'reg', 'macr', 'deg', 'plusmn',
+    'sup2', 'sup3', 'acute', 'micro', 'para', 'middot', 'cedil', 'sup1', 'ordm',
+    'raquo', 'frac14', 'frac12', 'frac34', 'iquest', 'Agrave', 'Aacute', 'Acirc',
+    'Atilde', 'Auml', 'Aring', 'AElig', 'Ccedil', 'Egrave', 'Eacute', 'Ecirc',
+    'Euml', 'Igrave', 'Iacute', 'Icirc', 'Iuml', 'ETH', 'Ntilde', 'Ograve',
+    'Oacute', 'Ocirc', 'Otilde', 'Ouml', 'times', 'Oslash', 'Ugrave', 'Uacute',
+    'Ucirc', 'Uuml', 'Yacute', 'THORN', 'szlig', 'agrave', 'aacute', 'acirc',
+    'atilde', 'auml', 'aring', 'aelig', 'ccedil', 'egrave', 'eacute', 'ecirc',
+    'euml', 'igrave', 'iacute', 'icirc', 'iuml', 'eth', 'ntilde', 'ograve',
+    'oacute', 'ocirc', 'otilde', 'ouml', 'divide', 'oslash', 'ugrave',
+    'uacute', 'ucirc', 'uuml', 'yacute', 'thorn', 'yuml');
+  HTML_UNESCAPED: array[1 .. 8] of word = (
+    ord('&'), ord('<'), ord('>'), ord('"'), ord(''''), ord('-'), 153, $2026);
+
+function EntityToIndex(entity: PUtf8Char; len: byte): cardinal;
+var
+  p: PUtf8Char;
+begin
+  p := @HTML_UNESCAPE;
+  if len in [2 .. 6] then
+    for result := low(HTML_UNESCAPE) to high(HTML_UNESCAPE) do
+      if (p[0] = AnsiChar(len)) and
+         CompareMemSmall(p + 1, entity, len) then
+        exit
+      else
+        inc(p, 7);
+  result := 0;
+end;
+
+function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
+begin
+  result := EntityToIndex(entity, len);
+  if result = 0 then
+    exit;
+  if result <= high(HTML_UNESCAPED) then
+    result := ord(HTML_UNESCAPED[result])
+   else
+     inc(result, $00a0 - 9); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
+end;
+
+function HtmlUnescape(const text: RawUtf8): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  W: TTextWriter;
+  p, amp: PUtf8Char;
+  l: PtrUInt;
+  c: Ucs4CodePoint;
+begin
+  l := PosExChar('&', text);
+  if (l = 0) or
+     (text[l + 1] = #0) then
+  begin
+    result := text;
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    p := pointer(text);
+    amp := p + l - 1;
+    repeat
+      W.AddNoJsonEscape(p, amp - p);
+      p := amp + 1;
+      l := 0;
+      while p[l] in ['a'..'z', 'A'..'Z', '1'..'4'] do
+        inc(l);
+      if p[l] = ';' then
+      begin
+        c := EntityToUcs4(p, l); // &lt; -> ord('<')
+        if c <> 0 then
+        begin
+          if c = $00a0 then // &nbsp;
+            w.Add(' ')
+          else if c = $2026 then
+            W.AddShorter('...') // &hellip;
+          else
+            W.AddUcs4(c);
+          inc(p, l + 1);
+          amp := PosChar(p, '&');
+          continue;
+        end;
+      end;
+      W.Add('&');
+      amp := PosChar(p, '&');
+    until amp = nil;
+    W.AddNoJsonEscape(p);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 function XmlEscape(const text: RawUtf8): RawUtf8;
