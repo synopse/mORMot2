@@ -3102,8 +3102,7 @@ var
   c: cardinal;
   begd: PWideChar;
   endSource: PUtf8Char;
-  endDest: PWord;
-  i, extra: PtrUInt;
+  endDest, i, extra: PtrUInt;
 label
   quit, nosource, by2;
 begin // slightly slower overload with explicit destlen
@@ -3119,14 +3118,14 @@ begin // slightly slower overload with explicit destlen
     sourceBytes := StrLen(source);
   end;
   endSource := source + sourceBytes;
-  endDest := @dest[MaxDestChars];
+  endDest := PtrUInt(@dest[MaxDestChars]);
   begd := dest;
   repeat
     c := byte(source^);
     inc(source);
     if c <= $7f then
     begin
-      if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
+      if PtrUInt(@dest[1]) >= endDest then
         break; // avoid buffer overflow before writing
       PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
       inc(dest);
@@ -3144,7 +3143,7 @@ begin // slightly slower overload with explicit destlen
         break;
       c := (c shl 6) + cardinal(source^) - UTF8_EXTRA1_OFFSET; // c <= $ffff
       inc(source);
-by2:  if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
+by2:  if PtrUInt(@dest[1]) >= endDest then
         break;
       PWord(dest)^ := c; // most simple encoding as a single WideChar
       inc(dest);
@@ -3177,9 +3176,10 @@ by2:  if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
       else
         break; // c is a surrogate code! reject this malformed UTF-8 input
     dec(c, UTF16_SURROGATE_MIN); // store as UTF-16 surrogates
-    if PtrUInt(@dest[2]) >= PtrUInt(endDest) then
+    if PtrUInt(@dest[2]) >= endDest then
       break;
-    PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or UTF16_SURROGATE_FLAGS;
+    PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or
+                        cardinal(UTF16_SURROGATE_FLAGS);
     inc(dest, 2);
     if source >= endSource then
       break;
@@ -3289,7 +3289,8 @@ next:   if source >= endSource then
         else
           break; // c is a surrogate code! reject this malformed UTF-8 input
       dec(c, UTF16_SURROGATE_MIN); // store as UTF-16 surrogates
-      PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or UTF16_SURROGATE_FLAGS;
+      PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or
+                          cardinal(UTF16_SURROGATE_FLAGS);
       inc(dest, 2);
       goto next;
     until false;
@@ -11078,7 +11079,7 @@ begin
               inc(i);
             until i = extra;
             inc(u1, extra);
-            result := tab.UnicodeUpper(result - utf8.Extra[extra].offset);
+            result := tab.UnicodeUpper(PtrUInt(result) - utf8.Extra[extra].offset);
           end;
           // here result=NormToUpper[u1^]
           inc(u2);

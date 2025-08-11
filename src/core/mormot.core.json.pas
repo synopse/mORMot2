@@ -7146,7 +7146,7 @@ begin // called with Len=1 for WideChar, or from some DB raw UTF-16 buffers
       begin
         inc(B);
         B^ := AnsiChar(c);
-        if P >= PWord(Len) then
+        if PtrUInt(P) >= Len then
           break;
         continue;
       end
@@ -7166,7 +7166,7 @@ begin // called with Len=1 for WideChar, or from some DB raw UTF-16 buffers
     end
     else
       inc(B, Utf16HiCharToUtf8(B + 1, c, P)); // handle UTF-16 surrogates
-    if P >= PWord(Len) then
+    if PtrUInt(P) >= Len then
       break;
   until false;
 end;
