@@ -3305,7 +3305,7 @@ begin
     goto done;
   utf8 := @UTF8_TABLE.Lookup;
   repeat
-    if PtrUInt(source) <= PtrUInt(len) then
+    if source <= PUtf8Char(len) then
     begin
       if utf8[source[0]] = UTF8_ASCII then
         if utf8[source[1]] = UTF8_ASCII then
@@ -3322,7 +3322,7 @@ begin
         else
           inc(source);
     end
-    else if PtrUInt(source) >= PtrUInt(len) + 4 then
+    else if source >= PUtf8Char(len) + 4 then
       break;
     c := utf8[source^]; // number of expected extra bytes (1..6)
     inc(source);
@@ -4266,8 +4266,7 @@ begin
     // handle 7-bit ASCII WideChars, by quads
     srcEnd := Source + SourceChars;
     srcEndBy4 := srcEnd - 4;
-    if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-       (Source <= srcEndBy4) then
+    if Source <= srcEndBy4 then
       repeat
         c := PCardinal(Source)^;
         if c and $80808080 <> 0 then
@@ -4285,8 +4284,7 @@ by1:    c := byte(Source^);
         begin
           Dest^ := AnsiChar(c); // 0..127 don't need any translation
           Inc(Dest);
-          if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-             (Source <= srcEndBy4) then
+          if Source <= srcEndBy4 then
          begin
            c := PCardinal(Source)^;
            if c and $80808080 = 0 then
@@ -4299,17 +4297,14 @@ by1:    c := byte(Source^);
             break;
         end
         else
-        begin
-          // no surrogate is expected in TSynAnsiFixedWidth charsets
+        begin // cut-down version of Ucs4ToUtf8() with no surrogate expected
           c := fAnsiToWide[c]; // convert FixedAnsi char into Unicode char
           if c > $7ff then
           begin
-            Dest[0] := AnsiChar($e0 or (c shr 12));
-            Dest[1] := AnsiChar($80 or ((c shr 6) and $3f));
-            Dest[2] := AnsiChar($80 or (c and $3f));
+            PCardinal(Dest)^ := (c shr 12) or (((c shr 6) and $3f) shl 8) or
+                                ((c and $3f) shl 16) or UTF8_FFFF;
             Inc(Dest, 3);
-            if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-               (Source <= srcEndBy4) then
+            if Source <= srcEndBy4 then
             begin
               c := PCardinal(Source)^;
               if c and $80808080 = 0 then
@@ -4323,11 +4318,9 @@ by1:    c := byte(Source^);
           end
           else
           begin
-            Dest[0] := AnsiChar($c0 or (c shr 6));
-            Dest[1] := AnsiChar($80 or (c and $3f));
+            PWord(Dest)^ := (c shr 6) or ((c and $3f) shl 8) or UTF8_7FF;
             Inc(Dest, 2);
-            if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-               (Source < srcEndBy4) then
+            if Source < srcEndBy4 then
             begin
               c := PCardinal(Source)^;
               if c and $80808080 = 0 then
@@ -4635,15 +4628,12 @@ begin
   // first handle trailing 7-bit ASCII chars, by quad (Sha optimization)
   srcEnd := Source + SourceChars;
   srcEndBy4 := srcEnd - 4;
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  if (PtrUInt(Source) and 3 = 0) and
-  {$else}
   {$ifdef OSWINDOWS}
   if (Source <= srcEndBy4) and
      (PCardinal(Source)^ and $00ffffff = BOM_UTF8) then
     inc(Source, 3); // ignore any UTF-8 BOM (may appear on Windows)
   {$endif OSWINDOWS}
-  if {$endif} (Source <= srcEndBy4) then
+  if Source <= srcEndBy4 then
     repeat
       c := PCardinal(Source)^;
       if c and $80808080 <> 0 then
@@ -4658,12 +4648,11 @@ by4:  PCardinal(Dest)^ := c;
     repeat
 by1:  c := byte(Source^);
       inc(Source);
-      if ord(c) <= 127 then
+      if ord(c) <= $7f then
       begin
         Dest^ := AnsiChar(c);
         inc(Dest);
-        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-           (Source <= srcEndBy4) then
+        if Source <= srcEndBy4 then
         begin
           c := PCardinal(Source)^;
           if c and $80808080 = 0 then
@@ -4695,8 +4684,7 @@ by1:  c := byte(Source^);
         else
           Dest^ := AnsiChar(fWideToAnsi[c]);
         inc(Dest);
-        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-           (Source <= srcEndBy4) then
+        if Source <= srcEndBy4 then
         begin
           c := PCardinal(Source)^;
           if c and $80808080 = 0 then
