@@ -7133,7 +7133,7 @@ begin // called with Len=1 for WideChar, or from some DB raw UTF-16 buffers
      (PtrInt(Len) <= 0) then
     exit;
   tab := @JSON_ESCAPE;
-  inc(Len, PtrUInt(P) * SizeOf(P^));
+  Len := PtrUInt(P) + Len * 2;
   repeat
     if B > BEnd then // no better codegen with a local "dst: PUtf8Char" variable
       FlushToStream;
