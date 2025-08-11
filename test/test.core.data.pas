@@ -4071,10 +4071,11 @@ begin
     end;
     Make(['&', HTML_UNESCAPE[i], ';'], s);
     CheckEqual(HtmlUnescape(s), exp);
-    CheckEqual(HtmlUnescape(Join(['abc', s])),      Join(['abc', exp]));
-    CheckEqual(HtmlUnescape(Join([s, 'abc'])),      Join([exp, 'abc']));
-    CheckEqual(HtmlUnescape(Join(['a&bc', s])),     Join(['a&bc', exp]));
-    CheckEqual(HtmlUnescape(Join(['ab&amp;c', s])), Join(['ab&c', exp]));
+    CheckEqual(HtmlUnescape(Join(['abc', s])),       Join(['abc', exp]));
+    CheckEqual(HtmlUnescape(Join([s, 'abc'])),       Join([exp, 'abc']));
+    CheckEqual(HtmlUnescape(Join(['a&bc', s])),      Join(['a&bc', exp]));
+    CheckEqual(HtmlUnescape(Join(['ab&amp;c', s])),  Join(['ab&c', exp]));
+    CheckEqual(HtmlUnescape(Join(['ab&none;c', s])), Join(['ab&none;c', exp]));
   end;
   // wiki
   CheckEqual(HtmlEscapeWiki('test'), '<p>test</p>');

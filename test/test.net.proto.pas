@@ -2414,6 +2414,8 @@ begin
   CheckEqual(U.Port, '');
   U.Port := '443';
   CheckEqual(U.Uri, 'https://127.0.0.1/endpoint');
+  U.Port := '444';
+  CheckEqual(U.Uri, 'https://127.0.0.1:444/endpoint');
   // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
