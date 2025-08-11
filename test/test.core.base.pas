@@ -5267,6 +5267,7 @@ var
   W: WinAnsiString;
   WS: WideString;
   SU, SU2: SynUnicode;
+  WU: array[0..3] of WideChar;
   str: string;
   ss: ShortString;
   up4: RawUcs4;
@@ -6177,6 +6178,9 @@ begin
     Check(PCardinal(SU)^ = $DCD2D863);
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
   Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
+  PCardinal(@WU)^ := 0;
+  if CheckEqual(Utf8ToWideChar(WU, pointer(U), SizeOf(WU), length(U), false), 4) then
+    Check(PCardinal(@WU)^ = $DCD2D863);
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
