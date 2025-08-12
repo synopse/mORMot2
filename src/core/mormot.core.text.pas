@@ -1839,7 +1839,11 @@ function FormatUtf8(const Format: RawUtf8; const Args: array of const): RawUtf8;
 /// fast Format() function replacement, optimized for RawUtf8
 // - overloaded function, which avoid a temporary RawUtf8 instance on stack
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
-  out result: RawUtf8); overload;
+  out Result: RawUtf8); overload;
+
+/// raw FormatUtf8() function process, using an existing TTextWriterStackBuffer
+procedure FormatUtf8Raw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
+  var Result: RawUtf8; var Temp: TTextWriterStackBuffer);
 
 /// fast Format() function replacement, tuned for direct memory buffer write
 // - use the same single token % (and implementation) than FormatUtf8()
@@ -9662,21 +9666,33 @@ begin
 end;
 
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
-  out result: RawUtf8);
+  out Result: RawUtf8);
 var
   f: TFormatUtf8;
 begin
   if (Format = '') or
      (high(Args) < 0) then // no formatting needed
-    result := Format
+    Result := Format
   else if PWord(Format)^ = ord('%') then // optimize raw conversion
-    VarRecToUtf8(@Args[0], result)
+    VarRecToUtf8(@Args[0], Result)
   else
   begin
     f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
     if f.L <> 0 then
-      f.WriteAll(FastSetString(result, f.L), @f.blocks);
+      f.WriteAll(FastSetString(Result, f.L), @f.blocks);
   end;
+end;
+
+procedure FormatUtf8Raw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
+  var Result: RawUtf8; var Temp: TTextWriterStackBuffer);
+var
+  f: TFormatUtf8 absolute Temp;
+begin
+  f.Parse(Format, Args, ArgsCount); // handle all supplied Args[]
+  if f.L <> 0 then
+    f.WriteAll(FastSetString(Result, f.L), @f.blocks)
+  else
+    FastAssignNew(Result);
 end;
 
 procedure FormatShort(const Format: RawUtf8; const Args: array of const;
