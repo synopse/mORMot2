@@ -6477,7 +6477,11 @@ begin
     inc(Format);
     if ValuesCount <= 0 then
       continue; // missing value will display nothing
-    AddVarRec(Values, Escape, WriteObjectOptions);
+    if (Escape = twNone) or
+       (byte(Values^.VType) in vtNotString) then
+      AddVarRec(Values)
+    else
+      AddVarRec(Values, Escape, WriteObjectOptions);
     if Format^ = #0 then
       exit;
     inc(Values);
@@ -6544,11 +6548,18 @@ begin
   if n = 0 then
     exit;
   a := @Values[0];
-  repeat
-    AddVarRec(a);
-    inc(a);
-    dec(n);
-  until n = 0;
+  if Escape = twNone then
+    repeat
+      AddVarRec(a);
+      inc(a);
+      dec(n);
+    until n = 0
+  else
+    repeat
+      AddVarRec(a, Escape);
+      inc(a);
+      dec(n);
+    until n = 0;
 end;
 
 procedure TJsonWriter.AddQuotedStringAsJson(const QuotedString: RawUtf8);
@@ -7213,11 +7224,8 @@ end;
 procedure TJsonWriter.AddJsonEscapeVarRec(V: PVarRec);
 begin
   case V^.VType of
-    vtPointer: // see VarRecToVariant()
-      if V^.VPointer = nil then
-        AddShort(NULL_LOW, 4)
-      else // raw pointer <> nil will be serialized as PtrInt
-        Add(PtrInt(V^.VPointer));
+    vtBoolean:
+      Add(V^.VBoolean); // 'true'/'false' - AddVarRec() would store 1/0
     vtString:
       begin
         Add('"');
@@ -7266,24 +7274,12 @@ begin
         AddClassName(V^.VClass);
         AddDirect('"');
       end;
-    vtBoolean:
-      Add(V^.VBoolean); // 'true'/'false'
-    vtInteger:
-      Add(V^.VInteger);
-    vtInt64:
-      Add(V^.VInt64^);
-    {$ifdef FPC}
-    vtQWord:
-      AddQ(V^.VQWord^);
-    {$endif FPC}
-    vtExtended:
-      AddDouble(V^.VExtended^);
-    vtCurrency:
-      AddCurr64(V^.VInt64);
     vtObject:
       WriteObject(V^.VObject);
     vtVariant:
       AddVariant(V^.VVariant^, twJsonEscape);
+  else
+    AddVarRec(V); // numbers need no JSON escape
   end;
 end;
 
@@ -7414,13 +7410,6 @@ var
   ps: PByteArray;
 begin // note: no quotes for strings, since "%" should be used in the Format
   case V^.VType of // use efficient jmp table
-    vtInteger:
-      Add(V^.VInteger);
-    vtBoolean:
-      if V^.VBoolean then // normalize
-        Add('1')
-      else
-        Add('0');
     vtChar:
       Add(@V^.VChar, 1, Escape);
     vtWideChar:
@@ -7428,16 +7417,6 @@ begin // note: no quotes for strings, since "%" should be used in the Format
         tmp := ord(V^.VWideChar); // ensure has one ending #0
         AddW(@tmp, Escape);
       end;
-    vtExtended:
-      AddDouble(V^.VExtended^);
-    vtCurrency:
-      AddCurr64(V^.VInt64);
-    vtInt64:
-      Add(V^.VInt64^);
-    {$ifdef FPC}
-    vtQWord:
-      AddQ(V^.VQWord^);
-    {$endif FPC}
     vtVariant:
       AddVariant(V^.VVariant^, Escape);
     vtString:
@@ -7446,18 +7425,10 @@ begin // note: no quotes for strings, since "%" should be used in the Format
         if ps[0] <> 0 then
           Add(@ps[1], ord(ps[0]), Escape);
       end;
-    vtPointer,
-    vtInterface:
-      if V^.VPointer = nil then
-        AddShort(NULL_LOW, 4)
-      else
-        Add(PtrInt(V^.VPointer)); // as VarRecToVariant()
     vtPChar:
       Add(PUtf8Char(V^.VPChar), Escape);
     vtObject:
       WriteObject(V^.VObject, WriteObjectOptions);
-    vtClass:
-      AddClassName(V^.VClass);
     vtAnsiString:
       if V^.VAnsiString <> nil then // expect RawUtf8
         case Escape of
@@ -7475,6 +7446,8 @@ begin // note: no quotes for strings, since "%" should be used in the Format
     vtWideString:
       if V^.VWideString <> nil then
         AddW(V^.VWideString, Escape);
+  else
+    AddVarRec(V); // numbers need no Escape
   end;
 end;
 
