@@ -7238,8 +7238,7 @@ begin
     vtString:
       begin
         Add('"');
-        if (V^.VString <> nil) and
-           (V^.VString^[0] <> #0) then
+        if V^.VString^[0] <> #0 then
           AddJsonEscape(@V^.VString^[1], ord(V^.VString^[0]));
         AddDirect('"');
       end;
@@ -7429,7 +7428,8 @@ procedure TJsonWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 var
   tmp: cardinal;
-begin
+  ps: PByteArray;
+begin // note: no quotes for strings, since "%" should be used in the Format
   case V^.VType of // use efficient jmp table
     vtInteger:
       Add(V^.VInteger);
@@ -7458,9 +7458,11 @@ begin
     vtVariant:
       AddVariant(V^.VVariant^, Escape);
     vtString:
-      if (V^.VString <> nil) and
-         (V^.VString^[0] <> #0) then
-        Add(@V^.VString^[1], ord(V^.VString^[0]), Escape);
+      begin
+        ps := v^.VPointer;
+        if ps[0] <> 0 then
+          Add(@ps[1], ord(ps[0]), Escape);
+      end;
     vtPointer,
     vtInterface:
       if V^.VPointer = nil then
@@ -7481,7 +7483,7 @@ begin
           twJsonEscape:
             AddJsonEscape(V^.VAnsiString, 0); // faster with no len
           twOnSameLine:
-            AddOnSameLine(V^.VAnsiString); // faster with no len
+            AddOnSameLine(V^.VAnsiString);    // faster with no len
         end;
     vtPWideChar,
     {$ifdef HASVARUSTRING}

@@ -2424,7 +2424,7 @@ function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char; HexToBin: PByteArray): boolea
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from two hexa bytes into a 16-bit UTF-16 WideChar
-// - as used by JsonUnicodeEscapeToUtf8() for \u#### chars unescape
+// - as used e.g. for \u#### JSON content unescape
 // - similar to HexDisplayToBin(Hex,@wordvar,2)
 // - returns 0 on malformated input
 function HexToWideChar(Hex: PUtf8Char): cardinal;
@@ -9181,9 +9181,6 @@ begin
   Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
   case V^.VType of
     vtString:
-      if V^.VString = nil then
-        Res.Len := 0
-      else
       begin
         Res.Text := @V^.VString^[1];
         Res.Len := ord(V^.VString^[0]);
@@ -9290,8 +9287,6 @@ begin
     vtString: // assume UTF-8
       begin
         isString := true;
-        if V^.VString = nil then
-          goto none;
         FastSetString(result, @V^.VString^[1], ord(V^.VString^[0]));
       end;
     vtAnsiString:
