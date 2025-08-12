@@ -990,10 +990,9 @@ type
     /// write some #0 ended UTF-8 text, according to the specified format
     // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
-    /// append an open array constant value as UTF-8
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
-    procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind = twNone;
-      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
+    /// append an open array constant value as UTF-8 text
+    // - this method may raise an ESynException e.g. on vtVariant: use TJsonWriter
+    procedure AddVarRec(V: PVarRec); overload;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
     // - return the position to write text
@@ -4323,10 +4322,56 @@ begin
   RaiseUnimplemented('Add(Escape)');
 end;
 
-procedure TTextWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
-  WriteObjectOptions: TTextWriterWriteObjectOptions);
+procedure TTextWriter.AddVarRec(V: PVarRec);
 begin
-  RaiseUnimplemented('AddVarRec');
+  case V^.VType of // use efficient jmp table
+    vtInteger:
+      Add(V^.VInteger);
+    vtBoolean:
+      AddU(V^.VBoolean); // normalize as 0 or 1
+    vtChar:
+      Add(V^.VChar);
+    vtWideChar:
+      AddWideChar(V^.VWideChar);
+    vtExtended:
+      AddDouble(V^.VExtended^);
+    vtCurrency:
+      AddCurr64(V^.VInt64);
+    vtInt64:
+      Add(V^.VInt64^);
+    {$ifdef FPC}
+    vtQWord:
+      AddQ(V^.VQWord^);
+    {$endif FPC}
+    vtVariant:
+      AddVariant(V^.VVariant^, twNone); // implemented in TJsonWriter
+    vtString:
+      if V^.VString^[0] <> #0 then
+        AddShort(V^.VString^);
+    vtPointer,
+    vtInterface:
+      if V^.VPointer = nil then
+        AddShort(NULL_LOW, 4)
+      else
+        Add(PtrInt(V^.VPointer)); // as VarRecToVariant()
+    vtPChar:
+      AddNoJsonEscape(V^.VPChar, mormot.core.base.StrLen(V^.VPChar));
+    vtObject:
+      if V^.VObject <> nil then
+        AddClassName(PClass(V^.VObject)^); // no WriteObject() here
+    vtClass:
+      AddClassName(V^.VClass);
+    vtAnsiString:
+      if V^.VAnsiString <> nil then // expect RawUtf8
+        AddNoJsonEscape(V^.VAnsiString, PStrLen(V^.VPChar - _STRLEN)^);
+    vtPWideChar,
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString,
+    {$endif HASVARUSTRING}
+    vtWideString:
+      if V^.VWideString <> nil then
+        AddNoJsonEscapeW(V^.VWideString);
+  end;
 end;
 
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
