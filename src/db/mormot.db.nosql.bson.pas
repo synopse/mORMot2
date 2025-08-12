@@ -4716,7 +4716,7 @@ begin
       exit;
     end;
   end;
-  FormatParams(Format, Args, Params, {json=}true, json);
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}true, json);
   UniqueRawUtf8(json); // ensure Format is untouched if Args=[]
   k := JsonBufferToBsonDocument(pointer(json), result);
   if kind <> nil then

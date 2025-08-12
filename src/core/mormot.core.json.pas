@@ -152,7 +152,6 @@ function NeedsJsonEscape(P: PUtf8Char; PLen: integer): boolean; overload;
 // - P^ should point at 'u1234' just after \u1234
 // - return ending P position, maybe after another \u#### UTF-16 surrogate char
 function JsonUnicodeEscapeToUtf8(var D: PUtf8Char; P: PUtf8Char): PUtf8Char;
-//  {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure all UTF-8 Unicode glyphs are escaped as \u#### UTF-16 JSON
 // - this will work at raw UTF-8 text level: if your input is true JSON,
@@ -637,12 +636,12 @@ function GotoFieldCountExpanded(P: PUtf8Char): PUtf8Char;
 /// low-level parsing of the first expanded JSON object to guess fields count
 function GetFieldCountExpanded(P: PUtf8Char): integer;
 
-/// fast Format() function replacement, handling % and ? parameters
+/// raw Format() function replacement, handling % and ? parameters
 // - call rather FormatSql() and FormatJson() wrappers instead
 // - resulting string has no length limit and uses fast concatenation
 // - any supplied TObject instance will be written as their class name
-procedure FormatParams(const Format: RawUtf8; const Args, Params: array of const;
-  JsonFormat: boolean; var Result: RawUtf8);
+procedure FormatParams(const Format: RawUtf8; Args, Params: PVarRecArray;
+  ArgsHigh, ParamsHigh: PtrInt; JsonFormat: boolean; var Result: RawUtf8);
 
 /// fast Format() function replacement, handling % but also ? inlined parameters
 // - will include Args[] for every % in Format
@@ -4986,113 +4985,91 @@ begin
   until false;
 end;
 
-procedure FormatParams(const Format: RawUtf8; const Args, Params: array of const;
-  JsonFormat: boolean; var Result: RawUtf8);
+procedure FormatWithParams(W: TJsonWriter; F: PUtf8Char;
+  pa, ea, pp, ep: PVarRec; JsonFormat: boolean);
 var
-  A, P: PtrInt;
-  F, FDeb: PUtf8Char;
-  isParam: AnsiChar;
-  tmp: TTempUtf8;
-  wasString: boolean;
-  pa: PVarRec;
+  l: PtrInt;
+begin
+  repeat
+    l := 0;
+    while not (F[l] in [#0, '%', '?']) do
+      inc(l);
+    W.AddNoJsonEscape(F, l); // plain text between % ? markers
+    inc(F, l);
+    if F^ = #0 then
+      exit
+    else if F^ = '%' then
+    begin
+      if PtrUInt(pa) > PtrUInt(ea) then
+        break; // can't handle % substitution
+      W.AddVarRec(pa);
+      inc(pa);
+    end
+    else // F^ = '?'
+    begin
+      if PtrUInt(pp) > PtrUInt(ep) then
+        break; // can't handle ? substitution as JSON or SQL
+      if JsonFormat then
+        W.AddJsonEscapeVarRec(pp) // proper JSON including "quotes"
+      else
+        W.AddSqlInlinedVarRec(pp);
+      inc(pp);
+    end;
+    inc(F);
+    if F^ = #0 then
+      exit;
+  until false;
+  // no more available Args or Params -> add all remaining text
+  W.AddNoJsonEscape(F + 1);
+end;
+
+procedure FormatParams(const Format: RawUtf8; Args, Params: PVarRecArray;
+  ArgsHigh, ParamsHigh: PtrInt; JsonFormat: boolean; var Result: RawUtf8);
+var
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (Format = '') or
-     ((high(Args) < 0) and
-      (high(Params) < 0)) then
+     ((ArgsHigh < 0) and
+      (ParamsHigh < 0)) then
     // no formatting to process, but may be a const
     // -> make unique since e.g. _JsonFmt() will parse it in-place
     FastSetString(Result, pointer(Format), length(Format))
-  else if high(Params) < 0 then
-    // faster function with no ?
-    FormatUtf8(Format, Args, Result)
   else if Format = '%' then
-    // optimize raw conversion
-    VarRecToUtf8(@Args[0], Result)
+    VarRecToUtf8(pointer(Args), Result) // optimize raw conversion
+  else if ParamsHigh < 0 then
+    FormatUtf8Raw(Format, pointer(Args), ArgsHigh + 1, Result, temp) // = FormatUtf8()
   else
+  begin
     // handle any number of parameters with minimal memory allocations
-    with TJsonWriter.CreateOwnedStream(temp) do
+    W := TJsonWriter.CreateOwnedStream(temp);
     try
-      A := 0;
-      P := 0;
-      F := pointer(Format);
-      while F^ <> #0 do
-      begin
-        if (F^ <> '%') and
-           (F^ <> '?') then
-        begin
-          // handle plain text between % ? markers
-          FDeb := F;
-          repeat
-            inc(F);
-          until F^ in [#0, '%', '?'];
-          AddNoJsonEscape(FDeb, F - FDeb);
-          if F^ = #0 then
-            break;
-        end;
-        isParam := F^;
-        inc(F); // jump '%' or '?'
-        if (isParam = '%') and
-           (A <= high(Args)) then
-        begin
-          // handle % substitution
-          pa := @Args[A];
-          if pa^.VType = vtObject then
-            AddShort(ClassNameShort(pa^.VObject)^)
-          else
-            AddVarRec(pa);
-          inc(A);
-        end
-        else if (isParam = '?') and
-                (P <= high(Params)) then
-        begin
-          // handle ? substitution as JSON or SQL
-          pa := @Params[P];
-          if JsonFormat then
-            AddJsonEscapeVarRec(pa) // proper JSON including "quotes"
-          else
-          begin
-            AddDirect(':', '('); // markup for SQL parameter binding
-            VarRecToTempUtf8(pa, tmp, @wasString);
-            if wasString then
-              AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
-            else
-              AddShort(tmp.Text, tmp.Len); // numbers
-            TempUtf8Done(tmp);
-            AddDirect(')', ':');
-          end;
-          inc(P);
-        end
-        else
-        begin
-          // no more available Args or Params -> add all remaining text
-          AddNoJsonEscape(F, length(Format) - (F - pointer(Format)));
-          break;
-        end;
-      end;
-      SetText(Result);
+      FormatWithParams(W, pointer(Format), pointer(Args), @Args[ArgsHigh],
+        pointer(Params), @Params[ParamsHigh], JsonFormat);
+      W.SetText(Result);
     finally
-      Free;
+      W.Free;
     end;
+  end;
 end;
 
 function FormatSql(const Format: RawUtf8;
   const Args, Params: array of const): RawUtf8;
 begin
-  FormatParams(Format, Args, Params, {json=}false, result);
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, result);
 end;
 
 function FormatJson(const Format: RawUtf8;
   const Args, Params: array of const): RawUtf8;
 begin
-  FormatParams(Format, Args, Params, {json=}true, result);
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}true, result);
 end;
 
 {$ifndef PUREMORMOT2}
 function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
   JsonFormat: boolean): RawUtf8;
 begin
-  FormatParams(Format, Args, Params, JsonFormat, result);
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), JsonFormat, result);
 end;
 {$endif PUREMORMOT2}
 

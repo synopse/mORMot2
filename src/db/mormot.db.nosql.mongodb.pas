@@ -4284,7 +4284,7 @@ var
   cmd, query: RawUtf8;
   res: variant;
 begin
-  FormatParams(Criteria, Args, Params, {json=}true, query);
+  FormatParams(Criteria, @Args[0], @Params[0], high(Args), high(Params), {json=}true, query);
   FormatUtf8('{count:"%",query:%', [fName, query], cmd);
   if MaxNumberToReturn > 0 then
     cmd := FormatUtf8('%,limit:%', [cmd, MaxNumberToReturn]);
