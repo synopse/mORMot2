@@ -265,7 +265,7 @@ begin
         continue; // already downloaded
       if refzip <> '' then
         continue; // download .zip once
-      refzip := DownloadFile('https://synopse.info/files/openapi-refzip.zip');
+      refzip := DownloadFile('https://synopse.info/files/openapi-ref.zip');
       if refzip = '' then
         refzip := 'none'
       else if UnZipMemAll(refzip, WorkDir) then // one url to rule them all
