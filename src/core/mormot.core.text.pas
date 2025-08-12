@@ -1732,7 +1732,7 @@ const
   /// which TVarRec.VType are numbers, e.g. don't need to be quoted as JSON
   // - vtVariant may be a string or a complex type
   vtNotString = [vtBoolean, vtInteger, vtInt64, {$ifdef FPC} vtQWord, {$endif}
-                 vtCurrency, vtExtended];
+                 vtCurrency, vtExtended, vtPointer, vtInterface];
 
 type
   /// a memory structure which avoids smallest temporary RawUtf8 allocations

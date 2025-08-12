@@ -8077,8 +8077,8 @@ begin
   if (Text = nil) or
      (W = nil) then
     exit;
-  TextLen := TextLen * 3; // worse case
-  if TextLen > W.BEnd - W.B then // need to compute exact length (very unlikely)
+  TextLen := TextLen * 3; // worse case would fit most of the time
+  if TextLen > W.BEnd - W.B then // need to compute exact length (seldom needed)
     TextLen := _UrlEncode_ComputeLen(Text, @TEXT_BYTES, space2plus);
   inc(W.B, _UrlEncode_Write(Text, W.AddPrepare(TextLen), @TEXT_BYTES, space2plus));
 end;
@@ -8229,9 +8229,9 @@ begin
         w.AddString(name);
         w.AddDirect('=');
         if valueDirect in flags then
-          w.AddVarRec(p) // requires TJsonWriter
+          w.AddVarRec(p) // direct vtNotString numbers writing
         else
-          _UrlEncodeW(w, pointer(value), length(value), 32); // = UrlEncode(W)
+          _UrlEncodeW(w, pointer(value), length(value), 32); // need UrlEncode()
       end;
     w.SetText(result);
   finally
