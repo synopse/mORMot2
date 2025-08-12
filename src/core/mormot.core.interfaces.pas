@@ -5002,17 +5002,16 @@ end;
 
 procedure TInterfaceFactoryGenerated.AddMethod(const aName: RawUtf8;
   const aParams: array of const);
-const
-  ARGPERARG = 3; // aParams = [ 0,'n1',TypeInfo(integer), ... ]
 var
   meth: PInterfaceMethod;
   arg: PInterfaceMethodArgument;
+  par: PVarRecArray; // aParams = [ ord(Direction),'n1',TypeInfo(integer), ... ]
   na, ns, a: PtrInt;
   u: RawUtf8;
 begin
-  if Length(aParams) mod ARGPERARG <> 0 then
-    EInterfaceFactory.RaiseUtf8('%: invalid aParams count for %.AddMethod("%")',
-      [fInterfaceName, self, aName]);
+  if Length(aParams) mod 3 <> 0 then
+    EInterfaceFactory.RaiseUtf8('%: invalid aParams count=% for %.AddMethod("%")',
+      [fInterfaceName, Length(aParams), self, aName]);
   if FindMethodIndexExact(aName) >= 0 then
     EInterfaceFactory.RaiseUtf8('%.AddMethod: duplicated generated name %.%',
       [self, fInterfaceName, aName]);
@@ -5022,37 +5021,35 @@ begin
   meth := @fMethods[fMethodsCount];
   inc(fMethodsCount);
   meth^.Uri := aName;
-  na := length(aParams) div ARGPERARG;
+  na := length(aParams) div 3;
   SetLength(meth^.Args, na + 1); // always include Args[0]=self
-  arg := @meth^.Args[0];
+  arg := pointer(meth^.Args);
   arg^.ParamName := @PSEUDO_SELF_NAME;
   arg^.ArgRtti := fInterfaceRtti;
   arg^.ArgTypeName := @fInterfaceRtti.Info^.RawName;
   ns := length(fTempStrings);
   SetLength(fTempStrings, ns + na);
+  par := @aParams[0];
   for a := 0 to na - 1 do
   begin
-    arg := @meth^.Args[a + 1];
-    if aParams[a * ARGPERARG].VType <> vtInteger then
-      EInterfaceFactory.RaiseUtf8(
-        '%: invalid param type #% for %.AddMethod("%")',
+    inc(arg);
+    if par[0].VType <> vtInteger then
+      EInterfaceFactory.RaiseUtf8('%: invalid param type #% for %.AddMethod("%")',
         [fInterfaceName, a, self, aName]);
-    arg^.ValueDirection :=
-      TInterfaceMethodValueDirection(aParams[a * ARGPERARG].VInteger);
-    VarRecToUtf8(@aParams[a * ARGPERARG + 1], u);
+    arg^.ValueDirection := TInterfaceMethodValueDirection(par[0].VInteger);
+    VarRecToUtf8(@par[1], u);
     if u = '' then
-      EInterfaceFactory.RaiseUtf8(
-        '%: invalid param name #% for %.AddMethod("%")',
+      EInterfaceFactory.RaiseUtf8('%: invalid param name #% for %.AddMethod("%")',
         [fInterfaceName, a, self, aName]);
     insert(AnsiChar(Length(u)), u, 1); // create fake PShortString
     arg^.ParamName := pointer(u);
     fTempStrings[ns + a] := u;
-    if aParams[a * ARGPERARG + 2].VType <> vtPointer then
-      EInterfaceFactory.RaiseUtf8(
-        '%: expect TypeInfo() at #% for %.AddMethod("%")',
+    if par[2].VType <> vtPointer then
+      EInterfaceFactory.RaiseUtf8('%: expect TypeInfo() at #% for %.AddMethod("%")',
         [fInterfaceName, a, self, aName]);
-    arg^.ArgRtti := Rtti.RegisterType(aParams[a * ARGPERARG + 2].VPointer) as TRttiJson;
+    arg^.ArgRtti := Rtti.RegisterType(par[2].VPointer) as TRttiJson;
     arg^.ArgTypeName := arg^.ArgRtti.Info^.Name;
+    par := @par[3]; // next argument tripple
   end;
 end;
 
