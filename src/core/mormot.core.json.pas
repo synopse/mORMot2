@@ -960,6 +960,8 @@ type
     // - is the reverse of the JsonObjectAsJsonArrays() function
     // - used e.g. by TSynDictionary.SaveToJson
     procedure AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
+    /// append an open array constant value as UTF-8, with SQL :(...): inlining
+    procedure AddSqlInlinedVarRec(V: PVarRec);
   end;
   /// meta-class of TJsonWriter
   TJsonWriterClass = class of TJsonWriter;
@@ -7646,6 +7648,21 @@ begin
   temp.InitRtti(Info, Value^);
   AddDynArrayJson(temp, WriteOptions);
   result := temp.Info.Cache.ItemSize;
+end;
+
+procedure TJsonWriter.AddSqlInlinedVarRec(V: PVarRec);
+var
+  wasString: boolean;
+  tmp: TTempUtf8;
+begin
+  Add(':', '('); // markup for SQL parameter binding
+  VarRecToTempUtf8(V, tmp, @wasString);
+  if wasString then
+    AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
+  else
+    AddShort(tmp.Text, tmp.Len); // numbers
+  TempUtf8Done(tmp);
+  AddDirect(')', ':');
 end;
 
 
