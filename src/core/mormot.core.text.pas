@@ -663,9 +663,11 @@ type
     /// append a PtrInt signed integer Value as text
     procedure Add(Value: PtrInt); overload;
       {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
-    /// append a boolean Value as text
-    // - write either 'true' or 'false'
+    /// append a boolean Value as 'true' or 'false' text
     procedure Add(Value: boolean); overload;
+    /// append a boolean Value as 1 or 0 number
+    procedure AddU(Value: boolean); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a Currency from its Int64 in-memory representation
     // - expects a PInt64 to avoid ambiguity with the AddCurr() method
     procedure AddCurr64(Value: PInt64);
@@ -674,7 +676,7 @@ type
     procedure AddCurr(const Value: currency); 
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
-    procedure AddU(Value: PtrUInt);
+    procedure AddU(Value: PtrUInt); overload;
       {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append an Unsigned integer <= 255 < 999 Value as a String
     procedure AddB(Value: PtrUInt);
@@ -4860,11 +4862,23 @@ procedure TTextWriter.Add(Value: boolean);
 var
   PS: PShortString;
 begin
+  PS := @BOOL_STR[false];
   if Value then // normalize: boolean may not be in the expected [0,1] range
-    PS := @BOOL_STR[true]
-  else
-    PS := @BOOL_STR[false];
+    inc(PByte(PS), SizeOf(BOOL_STR[false])); // string[7]
   AddShorter(PS^);
+end;
+
+procedure TTextWriter.AddU(Value: boolean);
+var
+  c: AnsiChar;
+begin
+  if B >= BEnd then
+    FlushToStream; // may rewind B -> not worth any local PUtf8Char variable
+  inc(B);
+  c := '0';
+  if Value then
+    inc(c);
+  B^ := c;
 end;
 
 procedure TTextWriter.AddFloatStr(P: PUtf8Char);
