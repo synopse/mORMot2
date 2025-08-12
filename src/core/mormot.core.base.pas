@@ -2485,7 +2485,7 @@ procedure FillZero(out dig: THash128); overload;
   {$ifdef CPU64}inline;{$endif}
 
 /// fast O(n) search of a 128-bit item in an array of such values
-function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+function Hash128Index(P: PHash128Rec; Count: PtrInt; h: PHash128Rec): PtrInt;
 
 /// add a 128-bit item in an array of such values
 function AddHash128(var Arr: THash128DynArray;
@@ -2538,7 +2538,7 @@ function IsEqual(const A, B: THash256): boolean; overload;
   {$ifdef CPU64}inline;{$endif}
 
 /// fast O(n) search of a 256-bit item in an array of such values
-function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
+function Hash256Index(P: PHash256Rec; Count: PtrInt; h: PHash256Rec): PtrInt;
 
 /// fill all 32 bytes of this 256-bit buffer with zero
 // - may be used to cleanup stack-allocated content
@@ -8795,47 +8795,63 @@ end;
 
 {$ifdef CPU64}
 
-function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+function Hash128Index(P: PHash128Rec; Count: PtrInt; h: PHash128Rec): PtrInt;
 var
   _0, _1: PtrInt; // is likely to use CPU registers
+label
+  next;
 begin
   if P <> nil then
   begin
     _0 := h^.Lo;
     _1 := h^.Hi;
-    for result := 0 to Count - 1 do
-      if (P^.Lo = _0) and
-         (P^.Hi = _1) then
-        exit
-      else
-        inc(P);
+    result := 0;
+    repeat
+      if result = Count then
+        break;
+      if (P^.Lo <> _0) then
+      begin
+next:   inc(P); // most common case
+        inc(result);
+        continue;
+      end;
+      if P^.Hi = _1 then
+        exit; // found
+      goto next;
+    until false;
   end;
   result := -1; // not found
 end;
 
-function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
+function Hash256Index(P: PHash256Rec; Count: PtrInt; h: PHash256Rec): PtrInt;
 var
-  _0, _1: PtrInt;
+  _0, _1, _2: PtrInt;
 begin
   if P <> nil then
   begin
     _0 := h^.d0;
     _1 := h^.d1;
-    for result := 0 to Count - 1 do
+    _2 := h^.d2;
+    h := pointer(h^.d3); // to reuse this register
+    result := 0;
+    repeat
+      if result = Count then
+        break;
       if (P^.d0 = _0) and
          (P^.d1 = _1) and
-         (P^.d2 = h^.d2) and
-         (P^.d3 = h^.d3) then
-        exit
-      else
-        inc(P);
+         (P^.d2 = _2) and
+         (pointer(P^.d3) = h) then
+         exit;
+      inc(P);
+      inc(result);
+    until false;
   end;
   result := -1; // not found
 end;
 
 {$else}
 
-function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+function Hash128Index(P: PHash128Rec; Count: PtrInt; h: PHash128Rec): PtrInt;
 begin
   if P <> nil then
     for result := 0 to Count - 1 do
@@ -8849,7 +8865,7 @@ begin
   result := -1; // not found
 end;
 
-function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
+function Hash256Index(P: PHash256Rec; Count: PtrInt; h: PHash256Rec): PtrInt;
 begin
   if P <> nil then
     for result := 0 to Count - 1 do
