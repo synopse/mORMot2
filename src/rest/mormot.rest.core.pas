@@ -4152,32 +4152,32 @@ end;
 procedure TRestUriContext.Results(const Values: array of const;
   Status: integer; Handle304NotModified: boolean; CacheControlMaxAgeSec: integer);
 var
-  i, h: PtrInt;
+  n: PtrInt;
   json: RawUtf8;
+  v: PVarRec;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
-  h := high(Values);
-  if h < 0 then
+  n := length(Values);
+  if n = 0 then
     json := '{"result":null}'
   else
     with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddShort('{"result":');
-      if h = 0 then
+      v := @Values[0];
+      if n = 1 then
         // result is one value
-        AddJsonEscapeVarRec(@Values[0])
+        AddJsonEscapeVarRec(v)
       else
       begin
         // result is one array of values
         AddDirect('[');
-        i := 0;
         repeat
-          AddJsonEscapeVarRec(@Values[i]);
-          if i = h then
-            break;
+          AddJsonEscapeVarRec(v);
           AddComma;
-          inc(i);
-        until false;
+          inc(v);
+          dec(n);
+        until n = 0;
         AddDirect(']');
       end;
       AddDirect('}');
