@@ -760,7 +760,7 @@ type
     procedure AddNoJsonEscapeString(const s: string);
     /// append one UTF-16 encoded UCS-4 CodePoint as UTF-8
     // - will increase PW after the CodePoint, properly handling UTF-16 surrogates
-    procedure AddWideChar(var PW: PWord);
+    procedure AddWideCharNext(var PW: PWord);
     /// append one UCS-4 CodePoint as UTF-8 - up to U+7FFFFFFF (2^32-1)
     procedure AddUcs4(ucs4: Ucs4CodePoint);
     /// append a UTF-16 encoded buffer as UTF-8
@@ -5206,7 +5206,7 @@ begin
     {$endif UNICODE}
 end;
 
-procedure TTextWriter.AddWideChar(var PW: PWord);
+procedure TTextWriter.AddWideCharNext(var PW: PWord);
 var
   c: cardinal;
 begin
