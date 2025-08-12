@@ -784,13 +784,14 @@ type
       rkClass: (
         NewInstance: pointer; // TRttiCustomNewInstance - set by mormot.core.json
         ValueClass: TClass; // = Info.RttiClass.RttiClass
-        ValueRtlClass: TRttiValueClass;
         SerializableInterface: pointer; // = TRttiCustom of the rkInterface
+        ValueRtlClass: TRttiValueClass;
       );
       rkInterface: (
         NewInterface: pointer; // same offset than rkClass NewInstance
         InterfaceGuid: PGuid;
-        SerializableClass: TClass; // = TInterfacedSerializable
+        InterfaceFactory: pointer; // = TInterfaceFactory for ExecuteCallback
+        SerializableClass: TClass; // = TInterfacedSerializableClass
         SerializableInterfaceEntryOffset: integer; // resolve once
       );
   end;
