@@ -280,9 +280,10 @@ type
 
   /// store one 32-bit UCS-4 CodePoint (with a better naming than UCS-4 "Char")
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
-  // - the Unicode Consortium assume U+0000..U+10FFFF range restriction in its
-  // ISO/IEC 10646 standard, but mormot.core.unicode supports UTF-8 encoding and
-  // decoding up to U+7FFFFFFF (2^31-1) when this Ucs4CodePoint type is used
+  // - the Unicode Consortium defined the Universal Character Set (UCS) in its
+  // ISO/IEC 10646 standard, assuming U+0000..U+10FFFF range restriction
+  // - mormot.core.unicode supports the original UTF-8 encoding and decoding up
+  // to U+7FFFFFFF (2^31-1) when this Ucs4CodePoint type is used
   Ucs4CodePoint = cardinal;
   /// pointer to one 32-bit UCS-4 CodePoint
   PUcs4CodePoint = ^Ucs4CodePoint;

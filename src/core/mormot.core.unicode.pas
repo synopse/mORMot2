@@ -41,6 +41,10 @@ const
   UNICODE_MAX = $10ffff;
 
 type
+  TUtf8TableExtra = record
+    offset, minimum: cardinal;
+  end;
+
   /// define a lookup table for efficient UTF-8 processing
   // - supporting the full original UTF-8 U+0000..U+7FFFFFFF range, even if
   // only U+0000..U+10FFFF (<=UNICODE_MAX) is considered valid today
@@ -52,11 +56,7 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// allow GetHighUtf8Ucs4() to validate and decode an UTF-8 sequence
-    Extra: array[0..5] of record
-      offset, minimum: cardinal;
-    end;
-    /// the first UTF-8 byte depending on its target length when > UNICODE_MAX
-    FirstByte: array[5..6] of byte;
+    Extra: array[0..5] of TUtf8TableExtra;
     /// the number of extra bytes in addition to the first UTF-8 byte
     // - since RFC 3629, only values within the 0..3 range should appear, i.e.
     // up to UTF8_MAX within the U+0000..U+10FFFF official Unicode range
@@ -85,11 +85,9 @@ const
       (offset: $00000000;  minimum: $00010000),  // 0: 0000 0000 - 0000 007F
       (offset: $00003080;  minimum: $00000080),  // 1: 0000 0080 - 0000 07FF
       (offset: $000e2080;  minimum: $00000800),  // 2: 0000 0800 - 0000 FFFF
-      (offset: $03c82080;  minimum: $00010000),  // 3: 0001 0000 - 0010 FFFF
+      (offset: $03c82080;  minimum: $00010000),  // 3: 0001 0000 - 001F FFFF
       (offset: $fa082080;  minimum: $00200000),  // 4: outside UTF-16 range
       (offset: $82082080;  minimum: $04000000)); // 5: outside UTF-16 range
-    FirstByte: (
-      $f8, $fc); // used by Ucs4ToUtf8() when > UNICODE_MAX
     Lookup: (
       7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -156,8 +154,9 @@ function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// internal function converting a UTF-16 surrogates pair into UTF-8
-// - return the number of bytes written into Dest (usually 4 or 3 for U+fffd)
-// - as called by Utf16HiCharToUtf8()
+// - return the number of bytes written into Dest (usually 4 or 3 for U+fffd
+// UTF8_UNICODE_REPLACEMENT_CHARACTER when malformatted surrogates are detected)
+// - as called e.g. by Utf16HiCharToUtf8() or JsonUnicodeEscapeToUtf8()
 function Utf16SurrogateToUtf8(Dest: PUtf8Char; c1, c2: cardinal): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2880,7 +2879,7 @@ begin
     result := 3;
   end
   else
-  begin // c <= $1fffff = UNICODE_MAX
+  begin // c <= $1fffff (c <= UNICODE_MAX=$10ffff within ISO/IEC 10646)
     PCardinal(Dest)^ := (c shr 18) or (((c shr 12) and $3f) shl 8) or
       (((c shr 6) and $3f) shl 16) or ((c and $3f) shl 24) or UTF8_10FF;
     result := 4;
@@ -2888,21 +2887,22 @@ begin
 end;
 
 function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
-var
-  i: PtrInt;
 begin
-  if ucs4 <= UNICODE_MAX then
+  if ucs4 <= $1fffff then // RFC 2279 original range (bigger than UNICODE_MAX)
     result := Rfc3629ToUtf8(ucs4, Dest)
-  else
-  begin // very unlikely but supported by original UTF-8 - not by RFC 3629
-    result := 5 + ord(ucs4 > $3ffffff); // up to U+7FFFFFFF (2^32-1)
-    i := result - 1;
-    repeat
-      Dest[i] := AnsiChar((ucs4 and $3f) or $80);
-      ucs4 := ucs4 shr 6;
-      dec(i);
-    until i = 0;
-    Dest^ := AnsiChar(byte(ucs4) or UTF8_TABLE.FirstByte[result]);
+  else if ucs4 <= $3ffffff then // supported by original UTF-8 - not by RFC 3629
+  begin
+    Dest^ := AnsiChar((ucs4 shr 24) or $f8);
+    PCardinal(Dest + 1)^ := ((ucs4 shr 18) and $3f) or (((ucs4 shr 12) and $3f) shl 8) or
+      (((ucs4 shr 6) and $3f) shl 16) or ((ucs4 and $3f) shl 24) or $80808080;
+    result := 5;
+  end
+  else // up to U+7FFFFFFF (2^32-1)
+  begin
+    PCardinal(Dest)^ := (ucs4 shr 30) or (((ucs4 shr 24) and $3f) shl 8) or $80fc;
+    PCardinal(Dest + 2)^ := ((ucs4 shr 18) and $3f) or (((ucs4 shr 12) and $3f) shl 8) or
+      (((ucs4 shr 6) and $3f) shl 16) or ((ucs4 and $3f) shl 24) or $80808080;
+    result := 6;
   end;
 end;
 
