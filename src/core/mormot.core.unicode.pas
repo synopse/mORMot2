@@ -2952,7 +2952,6 @@ function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrUInt; Source: PWideChar;
   SourceLen: PtrUInt; Flags: TCharConversionFlags): PtrUInt;
 var
   c: cardinal;
-  tail: PWideChar;
 begin
   result := PtrUInt(Dest);
   inc(DestLen, PtrUInt(Dest)); // PUtf8Char(DestLen) = end of Dest
@@ -2967,10 +2966,9 @@ begin
       dec(SourceLen);
     end;
     // first handle 7-bit ASCII WideChars, by pairs (Sha optimization)
-    SourceLen := SourceLen * 2 + PtrUInt(Source);
-    tail := PWideChar(SourceLen) - 2;
+    SourceLen := PtrUInt(@Source[SourceLen - 2]);
     if (Dest < PUtf8Char(DestLen)) and
-       (Source <= tail) then
+       (PtrUInt(Source) <= SourceLen) then
       repeat
         c := PCardinal(Source)^;
         if c and $ff80ff80 <> 0 then
@@ -2979,8 +2977,9 @@ begin
         c := c shr 8 or c;
         PWord(Dest)^ := c;
         inc(Dest, 2);
-      until (Source > tail) or
+      until (PtrUInt(Source) > SourceLen) or
             (Dest >= PUtf8Char(DestLen));
+    inc(SourceLen, 4);
     // generic loop, handling one UCS-4 CodePoint per iteration
     repeat
       // inlined Utf16HiCharToUtf8() with buffer overlow check and $fffd unmatch
@@ -2988,7 +2987,7 @@ begin
         break;
       c := cardinal(Source^);
       inc(Source);
-      if c <= $7f then
+      if c <= $7f then // happens for the last odd byte
       begin
         if Dest >= PUtf8Char(DestLen) then
           break;
