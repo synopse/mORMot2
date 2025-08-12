@@ -64,6 +64,7 @@ type
     /// retrieve a >127 UCS-4 CodePoint from an UTF-8 sequence
     // - decode original UTF-8 values up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
     function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
   PUtf8Table = ^TUtf8Table;
 
@@ -141,7 +142,6 @@ const
 // !    inc(P) else
 // !    ch := GetHighUtf8Ucs4(P);
 function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// decode UTF-16 WideChar from UTF-8 input buffer
 // - any surrogate (Ucs4>$ffff) is returned as UNICODE_REPLACEMENT_CHARACTER=$fffd
@@ -2789,32 +2789,30 @@ implementation
 
 function TUtf8Table.GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
 var
-  x, i: PtrInt;
-  v: byte;
-  c: PtrUInt;
+  p: PByte;
+  x: ^TUtf8TableExtra;
+  n, c: PtrUInt;
 begin
   result := 0;
-  c := byte(U^); // here c=U^>=#80
-  inc(U);
-  x := Lookup[c];
-  if x = UTF8_INVALID then
+  p := pointer(U);
+  inc(U); // move the U pointer to avoid infinite loop on exit / invalid input
+  c := p^; // here c=U^>=#80
+  n := Lookup[c];
+  if n = UTF8_INVALID then
     exit; // returns 0 as invalid leading byte (allow full UTF-8/UCS-4 range)
-  i := 0;
+  x := @Extra[n];
+  inc(p);
   repeat
-    v := byte(U[i]);
-    if v and $c0 <> $80 then
+    if p^ and $c0 <> $80 then
       exit; // invalid input content
-    c := (c shl 6) + v;
-    inc(i);
-  until i = x;
-  inc(U, x);
-  with Extra[x] do
-  begin
-    dec(c, offset);
-    if c < minimum then
-      exit; // invalid input content
-  end;
-  result := c;
+    c := (c shl 6) + p^;
+    inc(p);
+    dec(n);
+  until n = 0;
+  U := pointer(p);
+  dec(c, x^.offset);
+  if c >= x^.minimum then
+    result := c; // valid range
 end;
 
 function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
