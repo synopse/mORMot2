@@ -401,7 +401,7 @@ type
       const aContractExpected: RawUtf8): TServiceFactoryServer;
     /// initialize and register a server-side interface callback instance
     procedure GetFakeCallback(Ctxt: TRestServerUriContext;
-      ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
+      ParamInterfaceRtti: TRttiCustom; FakeID: PtrInt; out Obj);
     /// low-level method called from client root/cacheflush/_ping_ URI
     // - returns the number of renewed instances
     function ClientSessionRenew(Ctxt: TRestServerUriContext): integer;
@@ -2116,12 +2116,15 @@ begin
 end;
 
 procedure TServiceContainerServer.GetFakeCallback(Ctxt: TRestServerUriContext;
-  ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
+  ParamInterfaceRtti: TRttiCustom; FakeID: PtrInt; out Obj);
 var
   factory: TInterfaceFactory;
   instance: TInterfacedObjectFakeServer;
 begin
-  factory := TInterfaceFactory.Get(ParamInterfaceInfo);
+  factory := ParamInterfaceRtti.Cache.InterfaceFactory;
+  if factory = nil then // should already be set
+    EInterfaceFactory.RaiseUtf8('Unexpected %.GetFakeCallback(%)',
+      [self, ParamInterfaceRtti.Name]);
   instance := TInterfacedObjectFakeServer.Create(Ctxt, factory, FakeID);
   pointer(Obj) := instance.fFakeInterface;
   FakeCallbackAdd(instance);

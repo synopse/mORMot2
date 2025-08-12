@@ -3937,6 +3937,7 @@ begin
   fDocVariantOptions := JSON_FAST_FLOAT;
   fJsonParserOptions := JSONPARSER_SERVICE;
   fInterfaceRtti := Rtti.RegisterType(aInterface) as TRttiJson;
+  PRttiCache(@fInterfaceRtti.Cache)^.InterfaceFactory := self; // fast lookup
   fInterfaceName := fInterfaceRtti.Name;
   fInterfaceUri := fInterfaceName;
   if fInterfaceUri[1] in ['i','I'] then

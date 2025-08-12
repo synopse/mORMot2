@@ -3196,7 +3196,7 @@ begin
   end;
   // let TServiceContainerServer resolve this
   (Server.Services as TServiceContainerServer).GetFakeCallback(
-    self, ParamInterfaceInfo.Info, fakeid, Obj);
+    self, ParamInterfaceInfo, fakeid, Obj);
 end;
 
 procedure TRestServerUriContext.ComputeStatsAfterCommand;
