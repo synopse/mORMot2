@@ -761,6 +761,8 @@ type
     /// append one UTF-16 encoded UCS-4 CodePoint as UTF-8
     // - will increase PW after the CodePoint, properly handling UTF-16 surrogates
     procedure AddWideCharNext(var PW: PWord);
+    /// append one UTF-16 WideChar as UTF-8 - won't handle UTF-16 surrogates
+    procedure AddWideChar(W: WideChar);
     /// append one UCS-4 CodePoint as UTF-8 - up to U+7FFFFFFF (2^32-1)
     procedure AddUcs4(ucs4: Ucs4CodePoint);
     /// append a UTF-16 encoded buffer as UTF-8
@@ -5220,6 +5222,13 @@ begin
     inc(B, Utf16HiCharToUtf8(B + 1, c, PW)); // handle UTF-16 surrogates
 end;
 
+procedure TTextWriter.AddWideChar(W: WideChar);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  inc(B, IsoUcsToUtf8(ord(W), B + 1));
+end;
+
 procedure TTextWriter.AddUcs4(ucs4: Ucs4CodePoint);
 begin
   if B >= BEnd then
@@ -6251,7 +6260,7 @@ begin
           else if c = $2026 then
             W.AddShorter('...') // &hellip;
           else
-            W.AddUcs4(c);
+            W.AddWideChar(WideChar(c));
           inc(p, l + 1);
           amp := PosChar(p, '&');
           continue;
