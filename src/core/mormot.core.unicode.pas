@@ -219,7 +219,7 @@ function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 // - a WideChar(#0) is added at the end (if something is written) unless
 // NoTrailingZero is TRUE
 // - returns the BYTE count written in dest, excluding the ending WideChar(#0)
-function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt = 0;
+function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrUInt = 0;
   NoTrailingZero: boolean = false): PtrInt; overload;
 
 /// convert an UTF-8 encoded text into a WideChar (UTF-16) buffer
@@ -232,7 +232,7 @@ function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt 
 // - returns the BYTE COUNT (not WideChar count) written in dest, excluding the
 // ending WideChar(#0)
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
-  MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean = false): PtrInt; overload;
+  MaxDestChars, sourceBytes: PtrUInt; NoTrailingZero: boolean = false): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
 // - count may not match the UCS-4 CodePoint, in case of UTF-16 surrogates
@@ -3096,12 +3096,11 @@ end;
 {$endif OSWINDOWS}
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
-  MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean): PtrInt;
+  MaxDestChars, sourceBytes: PtrUInt; NoTrailingZero: boolean): PtrInt;
 var
   c: cardinal;
   begd: PWideChar;
-  endSource: PUtf8Char;
-  endDest, i, extra: PtrUInt;
+  i, extra: PtrUInt;
 label
   quit, nosource, by2;
 begin // slightly slower overload with explicit destlen
@@ -3114,27 +3113,33 @@ begin // slightly slower overload with explicit destlen
   begin
     if source^ = #0 then
       goto nosource;
+    {$ifdef CPUX86}
     sourceBytes := StrLen(source);
+    {$else} // better code generation without StrLen() call (almost never used)
+    repeat
+      inc(sourcebytes);
+    until source[sourcebytes] = #0;
+    {$endif CPUX86}
   end;
-  endSource := source + sourceBytes;
-  endDest := PtrUInt(@dest[MaxDestChars]);
+  inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes)  = endSource
+  inc(MaxDestChars, PtrUInt(dest));  // PUtf8Char(MaxDestChars) = endDest
   begd := dest;
   repeat
     c := byte(source^);
     inc(source);
     if c <= $7f then
     begin
-      if PtrUInt(@dest[1]) >= endDest then
+      if PtrUInt(dest) >= MaxDestChars then
         break; // avoid buffer overflow before writing
       PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
       inc(dest);
-      if source < endSource then
+      if PtrUInt(source) < sourceBytes then
         continue
       else
         break;
     end;
     extra := UTF8_TABLE.Lookup[c]; // a local variable won't help even on CPU64
-    if source + extra > endSource then
+    if PtrUInt(@source[extra]) > sourceBytes then
       break
     else if extra = 1 then // optimized for U+80..U+7FF common range
     begin
@@ -3142,11 +3147,11 @@ begin // slightly slower overload with explicit destlen
         break;
       c := (c shl 6) + cardinal(source^) - UTF8_EXTRA1_OFFSET; // c <= $ffff
       inc(source);
-by2:  if PtrUInt(@dest[1]) >= endDest then
+by2:  if PtrUInt(dest) >= MaxDestChars then
         break;
       PWord(dest)^ := c; // most simple encoding as a single WideChar
       inc(dest);
-      if source < endSource then
+      if PtrUInt(source) < sourceBytes then
         continue
       else
         break;
@@ -3165,7 +3170,7 @@ by2:  if PtrUInt(@dest[1]) >= endDest then
     begin
       dec(c, offset);
       if c < minimum then
-        break; // invalid input content
+        break; // stop at invalid input content
     end;
     if c < UTF16_HISURROGATE_MIN then
       goto by2 // U+800 .. U+D800: no surrogates needed
@@ -3175,12 +3180,12 @@ by2:  if PtrUInt(@dest[1]) >= endDest then
       else
         break; // c is a surrogate code! reject this malformed UTF-8 input
     dec(c, UTF16_SURROGATE_MIN); // store as UTF-16 surrogates
-    if PtrUInt(@dest[2]) >= endDest then
+    if PtrUInt(@dest[1]) >= MaxDestChars then
       break;
     PCardinal(dest)^ := (c shr 10) or ((c and $3ff) shl 16) or
                         cardinal(UTF16_SURROGATE_FLAGS);
     inc(dest, 2);
-    if source >= endSource then
+    if PtrUInt(source) >= sourceBytes then
       break;
   until false;
 quit:
@@ -3190,12 +3195,12 @@ nosource:
     dest^ := #0; // append a WideChar(0) to the end of the buffer
 end;
 
-function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrInt;
+function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char; sourceBytes: PtrUInt;
   NoTrailingZero: boolean): PtrInt;
 var
   c: cardinal;
   begd: PWideChar;
-  endSource, endSourceBy4: PUtf8Char;
+  endSourceBy4: PUtf8Char;
   i, extra: PtrInt;
 label
   quit, nosource, by1, by4, next;
@@ -3209,11 +3214,17 @@ begin // expects dest to have source*3 bytes: more used than overload destlen
   begin
     if source^ = #0 then
       goto nosource;
+    {$ifdef CPUX86}
     sourceBytes := StrLen(source);
+    {$else} // better code generation without StrLen() call (almost never used)
+    repeat
+      inc(sourcebytes);
+    until source[sourcebytes] = #0;
+    {$endif CPUX86}
   end;
   begd := dest;
-  endSource := source + sourceBytes;
-  endSourceBy4 := endSource - 4;
+  endSourceBy4 := @source[sourceBytes - 4];
+  inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes) = endSource
   {$ifdef OSWINDOWS}
   if (source <= endSourceBy4) and
      (PCardinal(source)^ and $00ffffff = BOM_UTF8) then
@@ -3230,7 +3241,7 @@ by4:  inc(source, 4);
       PCardinal(dest + 2)^ := (c shl 8 or c) and $00ff00ff;
       inc(dest, 4);
     until source > endSourceBy4;
-  if source < endSource then
+  if PtrUInt(source) < sourceBytes then
     repeat
 by1:  c := byte(source^);
       inc(source);
@@ -3238,7 +3249,7 @@ by1:  c := byte(source^);
       begin
         PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
         inc(dest);
-next:   if source >= endSource then
+next:   if PtrUInt(source) >= sourceBytes then
           break
         else if source <= endSourceBy4 then
         begin
@@ -3249,7 +3260,7 @@ next:   if source >= endSource then
         continue;
       end;
       extra := UTF8_TABLE.Lookup[c]; // a local variable won't help even on CPU64
-      if source + extra > endSource then
+      if PtrUInt(source + extra) > sourceBytes then
         break
       else if extra = 1 then // optimized for U+80..U+7FF common range
       begin
