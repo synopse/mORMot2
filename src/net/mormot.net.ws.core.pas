@@ -2033,7 +2033,7 @@ procedure TWebSocketProtocolJson.FrameCompress(const Head: RawUtf8;
 var
   WR: TJsonWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
-  i: PtrInt;
+  v, ve: PVarRec;
 begin
   frame.opcode := focText;
   frame.content := [];
@@ -2043,10 +2043,13 @@ begin
     WR.AddDirect('{');
     WR.AddFieldName(Head);
     WR.AddDirect('[');
-    for i := 0 to High(Values) do
+    v := @Values[0];
+    ve := @Values[High(Values)];
+    while PtrUInt(v) <= PtrUInt(ve) do
     begin
-      WR.AddJsonEscapeVarRec(@Values[i]);
+      WR.AddJsonEscapeVarRec(v);
       WR.AddComma;
+      inc(v);
     end;
     WR.AddDirect('"');
     WR.AddString(ContentType);
