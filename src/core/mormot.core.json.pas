@@ -749,7 +749,7 @@ type
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
       CodePage: integer = -1);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some ANSI buffer as UTF-8, using a supplied CodePage
+    /// append some ANSI buffer as UTF-8, using a supplied CodePage and format
     // - if codepage is 0, the current CurrentAnsiConvert.CodePage would be used
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
@@ -768,7 +768,7 @@ type
     /// append some values at once
     // - text values (e.g. RawUtf8) will be escaped as JSON by default
     procedure Add(const Values: array of const); overload;
-    /// append some values at once with custom escaping
+    /// append some values at once, according to the specified format
     procedure Add(const Values: array of const; Escape: TTextWriterKind); overload;
     /// append an array of RawUtf8 as CSV of JSON strings
     procedure AddCsvUtf8(const Values: array of RawUtf8);
@@ -785,6 +785,9 @@ type
     // - this overriden version will properly handle JSON escape
     // - % = #37 marks a string, integer, floating-point, or class parameter
     // to be appended as text (e.g. class name)
+    // - "" won't be added for string values, but they may be escaped, depending
+    // on the supplied Escape parameter - so if you use twJsonEscape the Format
+    // string is likely to include the quotes like '"%"'
     // - note that due to a limitation of the "array of const" format, cardinal
     // values should be type-casted to Int64() - otherwise the integer mapped
     // value will be transmitted, therefore wrongly
@@ -907,12 +910,13 @@ type
     // - i.e. \u#### patterns will be converted into pure UTF-8 output
     // - as used for jsonNoEscapeUnicode transformation
     procedure AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
-    /// append an open array constant value as UTF-8
+    /// append an open array constant value as UTF-8, according to the specified format
     // - "" won't be added for string values, but they may be escaped, depending
-    // on the supplied Escape parameter
+    // on the supplied Escape parameter - so if you use twJsonEscape the Format
+    // string is likely to include the quotes like '"%"'
     // - very fast (avoid most temporary storage)
-    procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind = twNone;
-      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
+    procedure AddVarRec(V: PVarRec; Escape: TTextWriterKind;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload;
     /// encode the supplied data as an UTF-8 valid JSON object content
     // - data must be supplied two by two, as Name,Value pairs, e.g.
     // ! aWriter.AddJsonEscape(['name','John','year',1972]);
@@ -2759,7 +2763,7 @@ function JsonUnicodeEscapeToUtf8(var D: PUtf8Char;  P: PUtf8Char): PUtf8Char;
 var
   c, s: cardinal;
 begin // inlined version of Utf16HiCharToUtf8() with proper \uxxxx hexa decoding
-  c := HexToWideChar(P + 1); // P^ points at 'u1234' just after \u0123
+  c := HexToWideChar(P + 1); // P^ points at 'u1234' just after \u1234
   if c <= $7f then
     if c >= 32 then
       D^ := AnsiChar(c)
@@ -2767,7 +2771,7 @@ begin // inlined version of Utf16HiCharToUtf8() with proper \uxxxx hexa decoding
       D^ := '?' // \u0000 is an invalid value (at least in our framework)
     else
     begin
-      PInt64(D)^ := PInt64(P - 1)^; // control chars should always be escaped
+      PInt64(D)^ := PInt64(P - 1)^; // #1..#31 control chars should be escaped
       inc(D, 5);
     end
   else if c < $7ff then
@@ -3538,7 +3542,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
           if c1 <= $7f then
             if c1 <> 0 then
             begin
-              D^ := AnsiChar(c1);
+              D^ := AnsiChar(c1); // e.g. \u0007
               inc(D);
             end
             else
@@ -5296,7 +5300,7 @@ end;
 procedure _JS_WideChar(Data: PWord; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
-  if Data^ <> 0 then
+  if Data^ <> 0 then // #0 will be serialized as ""
     Ctxt.W.AddJsonEscapeW(Data, 1);
   Ctxt.W.AddDirect('"');
 end;
@@ -7154,7 +7158,7 @@ var
   dst: PUtf8Char;
   tab: PByteArray;
   c: PtrInt;
-begin // faster version than the previous overload with Len
+begin // most used overload, slightly faster than the previous with Len
   src := P;
   if src = nil then
     exit;
@@ -7177,7 +7181,7 @@ begin // faster version than the previous overload with Len
       end
       else
       begin
-        P := src; // use a pointer variable for surrogates
+        P := src; // need a pointer variable for surrogates
         inc(dst, Utf16HiCharToUtf8(dst, c, P)); // convert UTF-16 to UTF-8
         src := P;
         if dst < BEnd then
