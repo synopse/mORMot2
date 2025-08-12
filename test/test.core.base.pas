@@ -5277,6 +5277,7 @@ var
   PB: PByte;
   q: RawUtf8;
   Unic: RawByteString;
+  Ucs4: RawUcs4;
   WA, HasValidUtf8Avx2: Boolean;
   lng: TLanguage;
   rb1, rb2, rb3: RawByteString;
@@ -5291,6 +5292,8 @@ const
     'TEST', 'TEST', 'TES', 'TEST', 'TESTE', 't', 'U', '2', 'TESTe');
   CHINESE_TEXT: array[0..8] of byte = (
     $e4, $b8, $ad, $e6, $96, $87, $61, $62, $63);
+  UTF8_UCS4: array[0..11] of cardinal = ($01, $81, $801, $fff, $ffff, $10000,
+    UNICODE_MAX, UNICODE_MAX + 1, $1000000, $2000000, $10000000, $7f000000);
 begin
   // Trim*() functions
   CheckEqual(TrimU(''), '');
@@ -6199,6 +6202,14 @@ begin
   PB := pointer(res);
   FromVarString(PB, U2);
   check(U2 = U);
+  for i := 0 to high(UTF8_UCS4) do
+  begin
+    RawUcs4ToUtf8(@UTF8_UCS4[i], 1, U);
+    Check(U <> '');
+    Ucs4 := Utf8ToRawUcs4(U);
+    CheckEqual(length(Ucs4), 1);
+    CheckEqual(Ucs4[0], UTF8_UCS4[i]);
+  end;
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
