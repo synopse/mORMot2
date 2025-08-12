@@ -146,12 +146,10 @@ function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
 /// decode UTF-16 WideChar from UTF-8 input buffer
 // - any surrogate (Ucs4>$ffff) is returned as UNICODE_REPLACEMENT_CHARACTER=$fffd
 function GetUtf8WideChar(P: PUtf8Char): cardinal;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// get the UCS-4 CodePoint stored in P^ (decode UTF-8 if necessary)
 // - decode original UTF-8 values up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
 function NextUtf8Ucs4(var P: PUtf8Char): Ucs4CodePoint;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// internal function converting a UTF-16 surrogates pair into UTF-8
 // - return the number of bytes written into Dest (usually 4 or 3 for U+fffd
@@ -166,7 +164,12 @@ function Utf16SurrogateToUtf8(Dest: PUtf8Char; c1, c2: cardinal): PtrInt;
 // - return the number of bytes written into Dest (i.e. from 1 up to 4)
 function Utf16HiCharToUtf8(Dest: PUtf8Char; c: cardinal; var Source: PWord): PtrInt;
 
-/// UTF-8 encode one UCS-4 CodePoint into Dest
+/// UTF-8 encode one standard Unicode CodePoint <= UNICODE_MAX = U+10FFFF into Dest
+// - return the number of bytes written into Dest (i.e. from 1 up to 6)
+function IsoUcsToUtf8(c: cardinal; Dest: PUtf8Char): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// UTF-8 encode one full range UCS-4 CodePoint into Dest
 // - support the whole original UTF-8 range even over the maximum UTF-16/Unicode
 // encoding or RFC 3629 range, i.e. up to U+7FFFFFFF > UNICODE_MAX = U+10FFFF
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
@@ -1749,7 +1752,6 @@ function Utf8CompareIOS(P1, P2: PUtf8Char): PtrInt;
 // function only if you need to deal with ASCII characters (e.g. as used for
 // Soundex or ContainsUtf8 process)
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// points to the beginning of the next word stored in U
 // - returns nil if reached the end of U (i.e. #0 char)
@@ -2857,8 +2859,7 @@ begin
     result := 0;
 end;
 
-function Rfc3629ToUtf8(c: cardinal; Dest: PUtf8Char): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+function IsoUcsToUtf8(c: cardinal; Dest: PUtf8Char): PtrInt;
 begin
   if c <= $7f then
   begin
@@ -2887,7 +2888,7 @@ end;
 function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
 begin
   if ucs4 <= $1fffff then // RFC 2279 original range (bigger than UNICODE_MAX)
-    result := Rfc3629ToUtf8(ucs4, Dest)
+    result := IsoUcsToUtf8(ucs4, Dest)
   else if ucs4 <= $3ffffff then // supported by original UTF-8 - not by RFC 3629
   begin
     Dest^ := AnsiChar((ucs4 shr 24) or $f8);
@@ -10715,7 +10716,7 @@ begin
         if c = 0 then
           c := UNICODE_REPLACEMENT_CHARACTER; // =$fffd for invalid input
       end;
-      inc(D, Rfc3629ToUtf8(tab.UnicodeUpper(c), D)); // assume <= UNICODE_MAX
+      inc(D, IsoUcsToUtf8(tab.UnicodeUpper(c), D)); // assume <= UNICODE_MAX
     until false;
   D^ := #0;
   result := D;
@@ -10803,7 +10804,7 @@ by1:    c := byte(S^);
             if c < minimum then
               break; // invalid input content
           end;
-          inc(D, Rfc3629ToUtf8(tab.UnicodeUpper(c), D)); // assume <= UNICODE_MAX
+          inc(D, IsoUcsToUtf8(tab.UnicodeUpper(c), D)); // assume <= UNICODE_MAX
           if S < PUtf8Char(SLen) then
             continue
           else
