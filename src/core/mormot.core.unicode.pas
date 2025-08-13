@@ -9038,38 +9038,20 @@ function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
 var
   c: byte;
 begin
-  {$ifdef CPUX64}
   if PEnd <> nil then
   begin
     result := BufferLineLength(P, PEnd); // use branchless SSE2 on x86_64
     exit;
   end;
   result := PtrUInt(P) - 1;
-  {$else}
-  result := PtrUInt(P) - 1;
-  if PEnd <> nil then
-    repeat // inlined BufferLineLength()
-      inc(result);
-      if PtrUInt(result) < PtrUInt(PEnd) then
-      begin
-        c := PByte(result)^;
-        if (c > 13) or
-           ((c <> 10) and
-            (c <> 13)) then
-          continue;
-      end;
-      break;
-    until false
-  else
-  {$endif CPUX64}
-    repeat // inlined BufferLineLength() ending at #0 for PEnd=nil
-      inc(result);
-      c := PByte(result)^;
-      if (c > 13) or
-         ((c <> 0) and (c <> 10) and (c <> 13)) then
-        continue;
-      break;
-    until false;
+  repeat // inlined BufferLineLength() ending at #0 for PEnd=nil
+    inc(result);
+    c := PByte(result)^;
+    if (c > 13) or
+       ((c <> 0) and (c <> 10) and (c <> 13)) then
+      continue;
+    break;
+  until false;
   dec(result, PtrUInt(P)); // returns length
 end;
 
