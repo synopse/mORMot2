@@ -3345,10 +3345,10 @@ begin
   // append (and sanitize CRLF) custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
-    Context.HeadAddCustom(P, P + length(OutCustomHeaders));
+    Context.HeadAddCustom(P, P + PStrLen(P - _STRLEN)^);
   P := pointer(Context.ResponseHeaders);
   if P <> nil then // e.g. 'WWW-Authenticate: #####'#13#10
-    Context.HeadAddCustom(P, P + length(Context.ResponseHeaders));
+    Context.HeadAddCustom(P, P + PStrLen(P - _STRLEN)^);
   // generic headers
   if not (hhServer in Context.HeadCustom) then
     h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
