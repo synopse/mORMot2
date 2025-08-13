@@ -7282,6 +7282,7 @@ end;
 
 function Utf8ToFloatNan(s: PUtf8Char; len: PtrInt): TFloatNan;
 begin
+  result := fnNumber;
   case len of
     3:
       case PInteger(s)^ and $dfdfdf of
@@ -7289,8 +7290,6 @@ begin
           result := fnNan;
         ord('I') + ord('N') shl 8 + ord('F') shl 16:
           result := fnInf;
-      else
-        result := fnNumber;
       end;
     4:
       case PInteger(s)^ and $dfdfdfff of
@@ -7298,11 +7297,7 @@ begin
           result := fnInf;
         ord('-') + ord('I') shl 8 + ord('N') shl 16 + ord('F') shl 24:
           result := fnNegInf;
-      else
-        result := fnNumber;
       end;
-  else
-    result := fnNumber;
   end;
 end;
 
