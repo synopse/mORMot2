@@ -155,10 +155,10 @@ function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
   upIgnore: PPAnsiChar = nil): RawUtf8;
 
-/// search, copy and remove a given HTTP header
+/// search, copy and remove a given HTTP header as text or Int64
 // - FindNameValue() makes search + copy, but this function also REMOVES the header
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
-  out res: RawUtf8);
+  extractText: PRawUtf8; extractInt: PInt64 = nil);
 
 /// retrieve a HTTP header text value from its case-insensitive name
 function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean; overload;
@@ -2733,10 +2733,14 @@ begin
 end;
 
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
-  out res: RawUtf8);
+  extractText: PRawUtf8; extractInt: PInt64);
 var
   i, j, k: PtrInt;
 begin
+  if extractText <> nil then
+    FastAssignNew(extractText^);
+  if extractInt <> nil then
+    extractInt^ := 0;
   if (headers = '') or
       (upname = '') then
     exit;
@@ -2755,7 +2759,10 @@ begin
     begin
       j := i;
       inc(i, length(upname));
-      TrimCopy(headers, i, k - i, res);
+      if extractText <> nil then
+        TrimCopy(headers, i, k - i, extractText^);
+      if extractInt <> nil then
+        SetInt64(@PByteArray(headers)[i - 1], extractInt^);
       while headers[k] in [#1 .. #31] do // delete also ending #13#10
         inc(k);
       delete(headers, j, k - j); // and remove
@@ -4536,7 +4543,7 @@ end;
 
 procedure THttpServerRequestAbstract.ExtractOutContentType;
 begin
-  ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
+  ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', @fOutContentType);
 end;
 
 function THttpServerRequestAbstract.GetRouteValuePosLen(const Name: RawUtf8;

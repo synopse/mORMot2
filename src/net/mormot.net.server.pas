@@ -3255,14 +3255,12 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   procedure ProcessStaticFile;
   var
     fn: TFileName;
-    progsizeHeader: RawUtf8; // for rfProgressiveStatic mode
     fsiz: Int64;
   begin
     ExtractOutContentType;
     fn := Utf8ToString(OutContent); // safer than Utf8ToFileName() here
     OutContent := '';
-    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
-    SetInt64(pointer(progsizeHeader), Context.ContentLength); // expected size
+    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, nil, @Context.ContentLength);
     if Context.ContentLength <> 0 then
       // STATICFILE_PROGSIZE: file is not fully available: wait for sending
       if ((not (rfWantRange in Context.ResponseFlags)) or
