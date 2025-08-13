@@ -272,7 +272,6 @@ function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean; overload;
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding and no #0 within
 // - will also refuse #0 characters within the buffer even on AVX2
 function IsValidUtf8NotVoid(const source: RawByteString): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will stop when the buffer contains #0
@@ -3381,12 +3380,6 @@ begin
     IsValidUtf8Buffer(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
 end;
 
-function IsValidUtf8NotVoid(const source: RawByteString): boolean;
-begin
-  result := (source = '') or
-    IsValidUtf8NotVoid(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
-end;
-
 {$ifdef ASMX64AVXNOCONST}
 function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean;
 begin
@@ -3403,6 +3396,12 @@ begin
   result := IsValidUtf8Pas(source, len);
 end;
 {$endif ASMX64AVXNOCONST}
+
+function IsValidUtf8NotVoid(const source: RawByteString): boolean;
+begin
+  result := (source = '') or
+    IsValidUtf8NotVoid(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
+end;
 
 procedure DetectRawUtf8(var source: RawByteString);
 begin
