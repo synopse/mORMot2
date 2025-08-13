@@ -620,17 +620,17 @@ const
 
   /// HTTP Challenge name
   // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
-  SECPKGNAMEHTTP: RawUtf8 = 'Negotiate';
+  SECPKGNAMEHTTP = 'Negotiate';
 
   /// HTTP Challenge name, converted into uppercase for IdemPChar() pattern
-  SECPKGNAMEHTTP_UPPER: RawUtf8 = 'NEGOTIATE';
+  SECPKGNAMEHTTP_UPPER = 'NEGOTIATE';
 
   /// HTTP header to be set for authentication
   // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
-  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUtf8 = 'WWW-Authenticate: Negotiate';
+  SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate ';
 
   /// HTTP header pattern received for authentication
-  SECPKGNAMEHTTPAUTHORIZATION: RawUtf8 = 'AUTHORIZATION: NEGOTIATE ';
+  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '@';
@@ -1468,7 +1468,7 @@ begin
   result := '';
   if AuthUser <> nil then
     AuthUser^ := '';
-  auth := FindNameValue(pointer(InputHeaders), 'AUTHORIZATION: NEGOTIATE ');
+  auth := FindNameValue(pointer(InputHeaders), SECPKGNAMEHTTPAUTHORIZATION);
   if (auth = nil) or
      not InitializeDomainAuth then // late initialization of the GSS library
     exit;
@@ -1489,7 +1489,7 @@ begin
       exit;
     if AuthUser <> nil then
       ServerSspiAuthUser(ctx, AuthUser^);
-    result := BinToBase64(bout, 'WWW-Authenticate: Negotiate ', '', false);
+    result := BinToBase64(bout, SECPKGNAMEHTTPWWWAUTHENTICATE, '', false);
   finally
     FreeSecContext(ctx);
   end;

@@ -5697,7 +5697,7 @@ begin
         with session.user do
           if browserauth then
             SessionCreateReturns(Ctxt, session, session.fPrivateSalt, '',
-              (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata))
+              SECPKGNAMEHTTPWWWAUTHENTICATE + outdata)
           else
             SessionCreateReturns(Ctxt, session,
               BinToBase64(SecEncrypt(fSspiAuthContext[ndx], session.fPrivateSalt)),

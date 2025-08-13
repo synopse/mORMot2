@@ -3679,7 +3679,7 @@ var
   channelbindingtemp: THash512Rec;
 begin
   if (Sender = nil) or
-     not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
+     not IdemPChar(pointer(Authenticate), SECPKGNAMEHTTP_UPPER) then
     exit;
   unauthstatus := Context.status; // either 401 (http auth) or 407 (proxy auth)
   bak := Context.header;

@@ -825,33 +825,25 @@ function InitializeDomainAuth: boolean;
 
 
 const
-  /// the API available on this system to implement Kerberos/NTLM
+  /// the API available on this system to implement Kerberos
   SECPKGNAMEAPI = 'SSPI';
 
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '\';
 
-var
-  /// HTTP Challenge name for SSPI authentication, typically 'Negotiate'
-  // - as computed by InitializeDomainAuth
-  // - set SspiForceNtlmClient to specialize this value to 'NTLM' or 'Negotiate'
-  SECPKGNAMEHTTP: RawUtf8;
+  /// HTTP Challenge name
+  // - GSS API only supports Negotiate/Kerberos and NTLM is unsafe and deprecated
+  SECPKGNAMEHTTP = 'Negotiate';
 
   /// HTTP Challenge name, converted into uppercase for IdemPChar() pattern
-  // - as computed by InitializeDomainAuth
-  SECPKGNAMEHTTP_UPPER: RawUtf8;
+  SECPKGNAMEHTTP_UPPER = 'NEGOTIATE';
 
-  /// HTTP header to be set for SSPI authentication
-  // - as computed by InitializeDomainAuth
-  // - set SspiForceNtlmClient to specialize this value to either
-  // 'WWW-Authenticate: NTLM' or 'WWW-Authenticate: Negotiate';
-  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUtf8;
+  /// HTTP header to be set for authentication
+  // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
+  SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate ';
 
-  /// HTTP header pattern received for SSPI authentication
-  // - as computed by InitializeDomainAuth
-  // - set SspiForceNtlmClient to specialize this value to either
-  // 'AUTHORIZATION: NTLM ' or 'AUTHORIZATION: NEGOTIATE '
-  SECPKGNAMEHTTPAUTHORIZATION: RawUtf8;
+  /// HTTP header pattern received for authentication
+  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
 
 

@@ -4587,7 +4587,7 @@ begin
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
     hraNegotiate:
-      result := 'WWW-Authenticate: Negotiate'#13#10; // with no NTLM support
+      result := SECPKGNAMEHTTPWWWAUTHENTICATE + #13#10; // with no NTLM support
   end;
 end;
 
@@ -4684,7 +4684,7 @@ begin
             begin
               ServerSspiAuthUser(ctx, user);
               Http.ResponseHeaders := BinToBase64(bout,
-                'WWW-Authenticate: Negotiate ', #13#10, {magic=}false);
+                SECPKGNAMEHTTPWWWAUTHENTICATE, #13#10, {magic=}false);
               result := asrMatch;
             end;
           finally
