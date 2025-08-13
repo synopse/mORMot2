@@ -2897,7 +2897,7 @@ type
     function Contains(const aText: RawUtf8; aFirstIndex: integer = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    function GetText(const Delimiter: RawUtf8 = #13#10): RawUtf8;
+    function GetText(const Delimiter: RawUtf8 = EOL): RawUtf8;
     /// the OnChange event will be raised only when EndUpdate will be called
     // - this method will also call Safe.Lock for thread-safety
     procedure BeginUpdate;
@@ -2908,17 +2908,17 @@ type
     procedure SetFrom(const aText: TRawUtf8DynArray; const aObject: TObjectDynArray);
     /// set all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    procedure SetText(const aText: RawUtf8; const Delimiter: RawUtf8 = #13#10);
+    procedure SetText(const aText: RawUtf8; const Delimiter: RawUtf8 = EOL);
     /// set all lines from a text file
     // - will assume text file with no BOM is already UTF-8 encoded
     // - this method is thread-safe
     procedure LoadFromFile(const FileName: TFileName);
     /// write all lines into the supplied stream
     // - this method is thread-safe
-    procedure SaveToStream(Dest: TStream; const Delimiter: RawUtf8 = #13#10);
+    procedure SaveToStream(Dest: TStream; const Delimiter: RawUtf8 = EOL);
     /// write all lines into a new UTF-8 file
     // - this method is thread-safe
-    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = #13#10);
+    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = EOL);
     /// return the count of stored RawUtf8
     // - reading this property is not thread-safe, since size may change
     property Count: PtrInt
