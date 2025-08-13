@@ -1659,6 +1659,10 @@ type
     /// set Http.Options^.Auth.Token/Scheme with a given wraBearer token
     // - will disable authentication if Token = ''
     procedure SetBearer(const Token: SpiUtf8);
+    /// can specify an additional default header to the HTTP request
+    // - could be used e.g. as
+    // ! Client.AddDefaultHeader('Authorization', 'Wawi '+ GetApiKey);
+    procedure AddDefaultHeader(const Name, Value: RawUtf8);
     /// Request execution, with no JSON parsing using RTTI
     procedure Request(const Method, Action: RawUtf8;
       const CustomError: TOnJsonClientError = nil); overload;
@@ -1756,6 +1760,7 @@ type
     procedure SetDefaultHeaders(const Value: RawUtf8); virtual; abstract;
     function Http: IHttpClient; virtual; abstract;
     procedure SetBearer(const Token: SpiUtf8); virtual;
+    procedure AddDefaultHeader(const Name, Value: RawUtf8); virtual; abstract;
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
@@ -1826,6 +1831,7 @@ type
     procedure SetCookies(const Value: RawUtf8); override;
     function GetDefaultHeaders: RawUtf8; override;
     procedure SetDefaultHeaders(const Value: RawUtf8); override;
+    procedure AddDefaultHeader(const Name, Value: RawUtf8); override;
     function Http: IHttpClient; override;
     function Connected: string; override;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
@@ -5549,6 +5555,12 @@ end;
 function TJsonClient.GetDefaultHeaders: RawUtf8;
 begin
   result := fDefaultHeaders;
+end;
+
+procedure TJsonClient.AddDefaultHeader(const Name, Value: RawUtf8);
+begin
+  AppendLine(fDefaultHeaders, [Name, ': ', Value]);
+  SetInHeaders;
 end;
 
 function TJsonClient.HttpOptions: PHttpRequestExtendedOptions;
