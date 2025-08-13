@@ -4672,7 +4672,7 @@ begin
           b64end := PosChar(b64, #13);
           if (b64end = nil) or
              not Base64ToBin(PAnsiChar(b64), b64end - auth, bin) or
-             IdemPChar(pointer(bin), 'NTLM') then // two-way Kerberos only
+             ServerSspiDataNtlm(bin) then // two-way Kerberos only
             exit;
           {$ifdef OSPOSIX}
           if Assigned(fSspiKeyTab) then

@@ -785,6 +785,9 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
+/// check if a binary request packet from a client is using NTLM
+function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
+
 /// server-side authentication procedure
 // - aSecContext holds information between function calls
 // - aInData contains data received from client
@@ -1880,6 +1883,13 @@ begin
   //FillCharFast(pointer(Password)^, length(Password) * 2, 0); // anti-forensic
 end;
 
+function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
+begin
+  result := (aInData <> '') and
+            (PCardinal(aInData)^ or $20202020 =
+               ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24);
+end;
+
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
@@ -1896,9 +1906,7 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    if (aInData <> '') and
-       (PCardinal(aInData)^ or $20202020 =
-        ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24) then
+    if ServerSspiDataNtlm(aInData) then
       PkgName := pointer(NtlmName) // backward compatible but unsafe/legacy
     else
       PkgName := pointer(NegotiateName);
