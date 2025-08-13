@@ -853,13 +853,6 @@ var
   // 'AUTHORIZATION: NTLM ' or 'AUTHORIZATION: NEGOTIATE '
   SECPKGNAMEHTTPAUTHORIZATION: RawUtf8;
 
-  /// by default, this unit will use Negotiate/Kerberos for client authentication
-  // - set this flag should be set BEFORE calling InitializeDomainAuth
-  // - can be set to TRUE to use the deprecated and unsafe NTLM protocol instead
-  // - use case: SPNs not configured properly in domain
-  // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
-  // - note that mormot.lib.gssapi does not support NTLM
-  SspiForceNtlmClient: boolean = false;
 
 
 { ****************** Lan Manager Access Functions }
@@ -1965,50 +1958,31 @@ begin
   ForceSecKerberosSpn := SynUnicode(aSecKerberosSpn);
 end;
 
-var
-  DomainAuthMode: (damUndefined, damNtlm, damNegotiate);
-
-procedure SetDomainAuthMode;
+procedure GetPackageNames;
 var
   SecPkgInfo: PSecPkgInfoW;
 begin
-  // set the global variables to the requested authentication mode
-  if SspiForceNtlmClient then
+  if QuerySecurityPackageInfoW('NTLM', SecPkgInfo) = 0 then
   begin
-    SECPKGNAMEHTTP := 'NTLM';
-    SECPKGNAMEHTTP_UPPER := 'NTLM';
-    DomainAuthMode := damNtlm;
+    NtlmName := SecPkgInfo^.Name; // typically 'NTLM'
+    FreeContextBuffer(SecPkgInfo);
   end
   else
+    NtlmName := 'NTLM';
+  if QuerySecurityPackageInfoW('Negotiate', SecPkgInfo) = 0 then
   begin
-    SECPKGNAMEHTTP := 'Negotiate';
-    SECPKGNAMEHTTP_UPPER := 'NEGOTIATE';
-    DomainAuthMode := damNegotiate;
-  end;
-  SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: ' + SECPKGNAMEHTTP;
-  SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: ' + SECPKGNAMEHTTP_UPPER + ' ';
-  // resolve security package names once at startup
-  if NtlmName = '' then
-  begin
-    if QuerySecurityPackageInfoW('NTLM', SecPkgInfo) = 0 then
-    begin
-      NtlmName := SecPkgInfo^.Name;
-      FreeContextBuffer(SecPkgInfo);
-    end;
-    if QuerySecurityPackageInfoW('Negotiate', SecPkgInfo) = 0 then
-    begin
-      NegotiateName := SecPkgInfo^.Name;
-      FreeContextBuffer(SecPkgInfo);
-    end;
-  end;
+    NegotiateName := SecPkgInfo^.Name;
+    FreeContextBuffer(SecPkgInfo); // typically 'Negotiate'
+  end
+  else
+    NegotiateName := 'Negotiate';
 end;
 
 function InitializeDomainAuth: boolean;
 begin
-  // setup the security package to be used
-  if (DomainAuthMode = damUndefined) or
-     (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
-    SetDomainAuthMode;
+  // resolve security package names once at startup 
+  if NegotiateName = '' then
+    GetPackageNames;
   // SSPI is linked from standard secur32.dll so is always available
   result := true;
 end;
