@@ -166,6 +166,9 @@ function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean; o
 /// retrieve a HTTP header 64-bit integer value from its case-insensitive name
 function GetHeader(const Headers, Name: RawUtf8; out Value: Int64): boolean; overload;
 
+/// remove an HTTP header entry as specified by its name (e.g. 'Authorization')
+function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
+
 /// 'HEAD' and 'OPTIONS' methods would be detected and return true
 // - will check only the first four chars for efficiency
 function HttpMethodWithNoBody(const method: RawUtf8): boolean;
@@ -2790,6 +2793,23 @@ begin
     exit;
   Value := GetInt64(pointer(v), err);
   result := err = 0;
+end;
+
+function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
+var
+  up: TByteToAnsiChar;
+  u: array[0..1] of PAnsiChar; // IdemPPChar() format
+begin
+  if (Headers = '') or
+     (length(Name) < 2) then
+  begin
+    result := Headers;
+    exit;
+  end;
+  PWord(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ := ord(':');
+  u[0] := @up;
+  u[1] := nil;
+  result := PurgeHeaders(Headers, false, @u);
 end;
 
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
