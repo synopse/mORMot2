@@ -2512,8 +2512,8 @@ function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt
 // - expect UpperName as 'UPPERNAME=', otherwise returns false
 // - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
 // - a typical use may be:
-// ! UpdateIniNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
-function UpdateIniNameValue(var Content: RawUtf8;
+// ! UpdateNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
+function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
 /// fill a class Instance properties from an .ini content
@@ -4183,12 +4183,12 @@ begin
     result := FindIniEntry(Content, Section, Name, DefaultValue);
 end;
 
-function UpdateIniNameValueInternal(var Content: RawUtf8;
+function UpdateNameValueInternal(var Content: RawUtf8;
   const NewValue, NewValueCRLF: RawUtf8;
   var P: PUtf8Char; UpperName: PAnsiChar; UpperNameLength: integer): boolean;
 var
-  PBeg: PUtf8Char;
-  i: integer;
+  next: PUtf8Char;
+  i: PtrInt;
 begin
   if UpperName <> nil then
     while (P <> nil) and
@@ -4196,46 +4196,43 @@ begin
     begin
       while P^ = ' ' do
         inc(P);   // trim left ' '
-      PBeg := P;
-      P := GotoNextLine(P);
-      if IdemPChar2(@NormToUpperAnsi7, PBeg, UpperName) then
-      begin
-       // update Name=Value entry
+      next := GotoNextLine(P);
+      if IdemPChar2(@NormToUpperAnsi7, P, UpperName) then
+      begin // update Name=Value entry
         result := true;
-        inc(PBeg, UpperNameLength);
-        i := (PBeg - pointer(Content)) + 1;
+        inc(P, UpperNameLength);
+        i := (P - pointer(Content)) + 1;
         if (i = length(NewValue)) and
-           mormot.core.base.CompareMem(PBeg, pointer(NewValue), i) then
+           mormot.core.base.CompareMem(P, pointer(NewValue), i) then
           exit; // new Value is identical to the old one -> no change
-        if P = nil then // avoid last line (P-PBeg) calculation error
+        if next = nil then // avoid last line (P-PBeg) calculation error
           SetLength(Content, i - 1)
         else
-          delete(Content, i, P - PBeg); // delete old Value
+          delete(Content, i, next - P); // delete old Value
         insert(NewValueCRLF, Content, i); // set new value
         exit;
       end;
+      P := next;
     end;
   result := false;
 end;
 
-function UpdateIniNameValue(var Content: RawUtf8;
+function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 var
   P: PUtf8Char;
 begin
+  result := false;
   if UpperName = '' then
-    result := false
-  else
-  begin
-    P := pointer(Content);
-    result := UpdateIniNameValueInternal(Content, NewValue, NewValue + #13#10,
-      P, pointer(UpperName), length(UpperName));
-    if result or
-       (Name = '') then
-      exit;
-    AppendLine(Content, [Name, NewValue]);
-    result := true;
-  end;
+    exit;
+  P := pointer(Content);
+  result := UpdateNameValueInternal(Content, NewValue, NewValue + #13#10,
+    P, pointer(UpperName), length(UpperName));
+  if result or
+     (Name = '') then
+    exit;
+  AppendLine(Content, [Name, NewValue]);
+  result := true;
 end;
 
 procedure UpdateIniEntry(var Content: RawUtf8;
