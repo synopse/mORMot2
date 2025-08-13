@@ -375,7 +375,7 @@ type
   // non-reentrant Lock/UnLock to access its individual properties
   TSynMonitor = class(TObjectWithRttiMethods)
   protected
-    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
+    fSafe: TLightLock; // our fast non-reentrant lock
     fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
@@ -462,11 +462,11 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - this method is to be used with an external timer for thread-safety
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
-    /// non-reentrant exclusive lock acquisition - wrap fSafe.Lock
+    /// non-reentrant exclusive lock acquisition - calls TLightLock.Lock
     // - warning: this non-reentrant method would deadlock if called twice
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// release the non-reentrant exclusive lock - wrap fSafe.UnLock
+    /// release the non-reentrant exclusive lock - calls TLightLock.UnLock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// customize JSON Serialization to set woEnumSetsAsText for readibility
@@ -2633,7 +2633,6 @@ constructor TSynMonitor.Create(const aName: RawUtf8);
 begin
   Create;
   fName := aName;
-  fSafe.Init; // mandatory for TOSLightLock
 end;
 
 destructor TSynMonitor.Destroy;
@@ -2644,7 +2643,6 @@ begin
   fLastTime.Free;
   fTotalTime.Free;
   inherited Destroy;
-  fSafe.Done; // mandatory for TOSLightLock
 end;
 
 function TSynMonitor.RttiBeforeWriteObject(W: TTextWriter;
