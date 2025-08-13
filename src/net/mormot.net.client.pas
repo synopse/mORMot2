@@ -2896,9 +2896,9 @@ begin
           not IsHead(ctxt.Method)) then
         CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
       if ctxt.Header <> '' then
-        SockSendHeaders(pointer(ctxt.Header)); // normalizing CRLF
+        SockSendHeaders(ctxt.Header); // normalizing CRLF
       if Http.CompressList <> nil then
-        SockSendHeaders(pointer(Http.CompressList^.AcceptEncoding));
+        SockSendHeaders(Http.CompressList^.AcceptEncoding);
       SockSendCRLF;
       // flush headers and Data/InStream body
       SockSendFlush(dat);
@@ -5896,8 +5896,8 @@ begin
         'Content-Type: text/plain;charset=', TextCharSet, #13#10 +
         'Content-Transfer-Encoding: 8bit']);
     if head <> '' then
-      sock.SockSendHeaders(pointer(head)); // normalizing CRLF
-    sock.SockSendCRLF;                     // end of headers
+      sock.SockSendHeaders(head); // normalizing CRLF
+    sock.SockSendCRLF;            // end of headers
     sock.SockSend(Text);
     Exec('.', '25');
     Exec('QUIT', '22');

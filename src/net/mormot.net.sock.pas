@@ -1982,7 +1982,7 @@ type
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
     /// append headers content, normalizing #13#10 in the content and at ending
-    procedure SockSendHeaders(P: PUtf8Char);
+    procedure SockSendHeaders(const headers: RawUtf8);
     /// append #13#10 characters on all platforms, never #10 even on POSIX
     procedure SockSendCRLF;
     /// flush all pending data to be sent, optionally with some body content
@@ -6532,26 +6532,27 @@ begin
     PWord(p + len)^ := EOLW;
 end;
 
-procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);
+procedure TCrtSocket.SockSendHeaders(const headers: RawUtf8);
 var
-  s, d: PUtf8Char;
+  p, pend, d: PUtf8Char;
   len: PtrInt;
 begin
-  if P <> nil then
-    repeat
-      s := P;
-      while P^ >= ' ' do  // quickly go to end of header line
-        inc(P);
-      len := P - s;
-      d := EnsureSockSend(len + 2); // reserve enough space at once
-      MoveFast(s^, d^, len);        // append line content
-      PWord(d + len)^ := CRLFW;     // normalize line end
-      while P^ < ' ' do
-        if P^ = #0 then
-          exit    // end of input
-        else
-          inc(P); // ignore any control char, e.g. #10 or #13
-    until false;
+  p := pointer(headers);
+  if p = nil then
+    exit;
+  pend := p + PStrLen(p - _STRLEN)^;
+  repeat
+    while p^ <= ' ' do
+      if p^ <> #0 then
+        inc(p) // trim spaces, and ignore any kind of line feed or void line
+      else
+        exit;  // end of input
+    len := BufferLineLength(p, pend); // use SSE2 on x86-64 - we know len <> 0
+    d := EnsureSockSend(len + 2);     // reserve enough space at once
+    MoveFast(p^, d^, len);            // append line content
+    PWord(d + len)^ := EOLW;          // normalize line end
+    inc(p, len);
+  until false;
 end;
 
 function TCrtSocket.SockSendRemainingSize: integer;

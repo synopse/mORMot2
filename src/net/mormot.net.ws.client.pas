@@ -717,7 +717,7 @@ begin
          (extout <> '') then // e.g. for TEcdheProtocol
         SockSendLine(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
-        SockSendHeaders(pointer(aCustomHeaders)); // normalizing CRLF
+        SockSendHeaders(aCustomHeaders); // normalizing CRLF
       SockSendCRLF;
       SockSendFlush('');
       // validate the response as WebSockets upgrade
