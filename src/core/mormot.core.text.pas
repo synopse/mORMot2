@@ -1462,7 +1462,6 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
 function FloatToJsonNan(s: PShortString): PShortString;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its JSON text equivalency
 // - depending on the platform, it may either call str() or FloatToText()
@@ -7327,18 +7326,22 @@ begin
 end;
 
 function FloatToJsonNan(s: PShortString): PShortString;
+var
+  fn: TFloatNan;
 begin
-  case PInteger(s)^ and $ffdfdfdf of
+  result := s;
+  case PInteger(s)^ and $dfdfdfff of
     3 + ord('N') shl 8 + ord('A') shl 16 + ord('N') shl 24:
-      result := @JSON_NAN[fnNan];
+      fn := fnNan;
     3 + ord('I') shl 8 + ord('N') shl 16 + ord('F') shl 24,
-    4 + ord('+') shl 8 + ord('I') shl 16 + ord('N') shl 24:
-      result := @JSON_NAN[fnInf];
-    4 + ord('-') shl 8 + ord('I') shl 16 + ord('N') shl 24:
-      result := @JSON_NAN[fnNegInf];
+    4 + (ord('+') and $df) shl 8 + ord('I') shl 16 + ord('N') shl 24:
+      fn := fnInf;
+    4 + (ord('-') and $df) shl 8 + ord('I') shl 16 + ord('N') shl 24:
+      fn := fnNegInf;
   else
-    result := s;
+    exit;
   end;
+  result := @JSON_NAN[fn];
 end;
 
 function ExtendedToJson(tmp: PShortString; Value: TSynExtended;
