@@ -1318,30 +1318,31 @@ begin
   InvalidateSecContext(aSecContext);
 end;
 
+
 function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;
 var
-  Sizes: TSecPkgContext_Sizes;
-  EncLen: cardinal;
-  Token: array [0..127] of byte; // Usually 60 bytes
-  Padding: array [0..63] of byte; // Usually 1 byte
-  InDesc: TSecBufferDesc;
-  EncBuffer: RawByteString;
-  Status: integer;
-  BufPtr: PByte;
+  sizes: TSecPkgContext_Sizes;
+  len: cardinal;
+  token:   array [0..127] of byte; // Usually 60 bytes
+  padding: array [0..63]  of byte; // Usually 1 byte
+  inDesc: TSecBufferDesc;
+  buffer: RawByteString;
+  status: integer;
+  res: PByte;
 begin
   result := '';
-  // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
+  // sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
   if QueryContextAttributesW(
-       @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
+       @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @sizes) <> 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  if (Sizes.cbSecurityTrailer > SizeOf(Token)) or
-     (Sizes.cbBlockSize > SizeOf(Padding)) then
-    raise ESynSspi.Create('SecEncrypt: invalid ATTR_SIZES');
-  FillCharFast(Token, Sizes.cbSecurityTrailer, 0);
-  FillCharFast(Padding, Sizes.cbBlockSize, 0);
-  // Encoding done in-place, so we copy the data into local EncBuffer
-  FastSetRawByteString(EncBuffer, pointer(aPlain), Length(aPlain));
+  if (sizes.cbSecurityTrailer > SizeOf(token)) or
+     (sizes.cbBlockSize > SizeOf(padding)) then
+    raise ESynSspi.Create('SecEncrypt: unexpected ATTR_SIZES');
+  FillCharFast(token, sizes.cbSecurityTrailer, 0);
+  FillCharFast(padding, sizes.cbBlockSize, 0);
+  // Encoding done in-place, so we copy the data into the local buffer
+  FastSetRawByteString(buffer, pointer(aPlain), Length(aPlain));
   // Encrypted data buffer structure:
   //
   // SSPI/Kerberos Interoperability with GSSAPI
@@ -1354,37 +1355,37 @@ begin
   //   cbSecurityTrailer bytes   SrcLen bytes     cbBlockSize bytes or less
   //   (60 bytes)                                 (0 bytes, not used)
   // +-------------------------+----------------+--------------------------+
-  // | Trailer                 | Data           | Padding                  |
+  // | Trailer                 | Data           | padding                  |
   // +-------------------------+----------------+--------------------------+
-  {%H-}InDesc.Init;
-  InDesc.Add(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
-  InDesc.Add(SECBUFFER_DATA, EncBuffer);
-  InDesc.Add(SECBUFFER_PADDING, @Padding, Sizes.cbBlockSize);
-  Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
-  if Status < 0 then
+  {%H-}inDesc.Init;
+  inDesc.Add(SECBUFFER_TOKEN, @token[0], sizes.cbSecurityTrailer);
+  inDesc.Add(SECBUFFER_DATA, buffer);
+  inDesc.Add(SECBUFFER_PADDING, @padding, sizes.cbBlockSize);
+  status := EncryptMessage(@aSecContext.CtxHandle, 0, @inDesc, 0);
+  if status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  EncLen := InDesc.Data[0].cbBuffer + InDesc.Data[1].cbBuffer + InDesc.Data[2].cbBuffer;
-  SetLength(result, EncLen);
-  BufPtr := pointer(result);
-  MoveFast(InDesc.Data[0].pvBuffer^, BufPtr^, InDesc.Data[0].cbBuffer);
-  inc(BufPtr, InDesc.Data[0].cbBuffer);
-  MoveFast(InDesc.Data[1].pvBuffer^, BufPtr^, InDesc.Data[1].cbBuffer);
-  inc(BufPtr, InDesc.Data[1].cbBuffer);
-  MoveFast(InDesc.Data[2].pvBuffer^, BufPtr^, InDesc.Data[2].cbBuffer);
+  len := inDesc.Data[0].cbBuffer + inDesc.Data[1].cbBuffer + inDesc.Data[2].cbBuffer;
+  SetLength(result, len);
+  res := pointer(result);
+  MoveFast(inDesc.Data[0].pvBuffer^, res^, inDesc.Data[0].cbBuffer);
+  inc(res, inDesc.Data[0].cbBuffer);
+  MoveFast(inDesc.Data[1].pvBuffer^, res^, inDesc.Data[1].cbBuffer);
+  inc(res, inDesc.Data[1].cbBuffer);
+  MoveFast(inDesc.Data[2].pvBuffer^, res^, inDesc.Data[2].cbBuffer);
 end;
 
 function SecDecrypt(var aSecContext: TSecContext;
   var aEncrypted: RawByteString): RawByteString;
 var
-  EncLen, SigLen: cardinal;
-  BufPtr: PByte;
-  InDesc: TSecBufferDesc;
-  Status: integer;
-  QOP: cardinal;
+  enclen, siglen: cardinal;
+  buf: PByte;
+  inDesc: TSecBufferDesc;
+  status: integer;
+  qop: cardinal;
 begin
-  EncLen := Length(aEncrypted);
-  BufPtr := PByte(aEncrypted);
-  if EncLen < SizeOf(cardinal) then
+  enclen := Length(aEncrypted);
+  buf := PByte(aEncrypted);
+  if enclen < SizeOf(cardinal) then
   begin
     SetLastError(ERROR_INVALID_PARAMETER);
     ESynSspi.RaiseLastOSError(aSecContext);
@@ -1393,21 +1394,22 @@ begin
   // Should be removed in future.
   // Old version buffer format - first 4 bytes is Trailer length, skip it.
   // 16 bytes for NTLM and 60 bytes for Kerberos
-  SigLen := PCardinal(BufPtr)^;
-  if (SigLen = 16) or
-     (SigLen = 60) then
+  siglen := PCardinal(buf)^;
+  if (siglen = 16) or
+     (siglen = 60) then
   begin
-    inc(BufPtr, SizeOf(cardinal));
-    dec(EncLen, SizeOf(cardinal));
+    inc(buf, SizeOf(cardinal));
+    dec(enclen, SizeOf(cardinal));
   end;
-  {%H-}InDesc.Init;
-  InDesc.Add(SECBUFFER_STREAM, BufPtr, EncLen);
-  InDesc.Add(SECBUFFER_DATA);
-  Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
-  if Status < 0 then
+  {%H-}inDesc.Init;
+  inDesc.Add(SECBUFFER_STREAM, buf, enclen);
+  inDesc.Add(SECBUFFER_DATA);
+  status := DecryptMessage(@aSecContext.CtxHandle, @inDesc, 0, qop);
+  if status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(result, InDesc.Data[1].pvBuffer, InDesc.Data[1].cbBuffer);
+  FastSetRawByteString(result, inDesc.Data[1].pvBuffer, inDesc.Data[1].cbBuffer);
 end;
+
 
 function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
 var
@@ -1777,61 +1779,61 @@ function ClientSspiAuthWorker(var aSecContext: TSecContext;
   pAuthData: PSecWinntAuthIdentityW;
   out aOutData: RawByteString): boolean;
 var
-  InDesc, OutDesc: TSecBufferDesc;
-  LInCtxPtr: PSecHandle;
-  CtxReqAttr, CtxAttr: cardinal;
-  Status: integer;
-  Bind: TGssBind;
+  inDesc, outDesc: TSecBufferDesc;
+  ctx: PSecHandle;
+  isc, attr: cardinal;
+  status: integer;
+  bind: TGssBind;
 begin
-  {%H-}InDesc.Init;
-  {%H-}OutDesc.Init;
+  {%H-}inDesc.Init;
+  {%H-}outDesc.Init;
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
     if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
         nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-    LInCtxPtr := nil;
+    ctx := nil;
   end
   else
   begin
-    InDesc.Add(SECBUFFER_TOKEN, aInData);
-    LInCtxPtr := @aSecContext.CtxHandle;
+    inDesc.Add(SECBUFFER_TOKEN, aInData);
+    ctx := @aSecContext.CtxHandle;
   end;
   if aSecContext.ChannelBindingsHash <> nil then
-    SetBind(aSecContext, InDesc, Bind);
-  OutDesc.Add(SECBUFFER_TOKEN);
-  CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or
-                ISC_REQ_CONFIDENTIALITY or
-                ISC_REQ_INTEGRITY;
+    SetBind(aSecContext, inDesc, bind);
+  outDesc.Add(SECBUFFER_TOKEN);
+  isc := ISC_REQ_ALLOCATE_MEMORY or
+         ISC_REQ_CONFIDENTIALITY or
+         ISC_REQ_INTEGRITY;
   if pszTargetName <> nil then
-    CtxReqAttr := CtxReqAttr or ISC_REQ_MUTUAL_AUTH;
-  Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
-    pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, @InDesc, 0,
-    @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
-  result := (Status = SEC_I_CONTINUE_NEEDED) or
-            (Status = SEC_I_COMPLETE_AND_CONTINUE);
-  if (Status = SEC_I_COMPLETE_NEEDED) or
-     (Status = SEC_I_COMPLETE_AND_CONTINUE) then
-    Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
-  if Status < 0 then
+    isc := isc or ISC_REQ_MUTUAL_AUTH;
+  status := InitializeSecurityContextW(@aSecContext.CredHandle, ctx,
+    pszTargetName, isc, 0, SECURITY_NATIVE_DREP, @inDesc, 0,
+    @aSecContext.CtxHandle, @outDesc, attr, nil);
+  result := (status = SEC_I_CONTINUE_NEEDED) or
+            (status = SEC_I_COMPLETE_AND_CONTINUE);
+  if (status = SEC_I_COMPLETE_NEEDED) or
+     (status = SEC_I_COMPLETE_AND_CONTINUE) then
+    status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
+  if status < 0 then
     ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(aOutData, OutDesc.Data[0].pvBuffer, OutDesc.Data[0].cbBuffer);
-  FreeContextBuffer(OutDesc.Data[0].pvBuffer);
+  FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
+  FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
-  TargetName: PWideChar;
+  name: PWideChar;
 begin
   if aSecKerberosSpn <> '' then
-    TargetName := pointer(SynUnicode(aSecKerberosSpn))
+    name := pointer(SynUnicode(aSecKerberosSpn))
   else
-    TargetName := pointer(ForceSecKerberosSpn);
+    name := pointer(ForceSecKerberosSpn);
   result :=  ClientSspiAuthWorker(
-    aSecContext, aInData, TargetName, nil, aOutData);
+    aSecContext, aInData, name, nil, aOutData);
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
@@ -1839,48 +1841,47 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
-  UserPos, TargetPos: integer;
-  Domain, User, Password: SynUnicode;
-  AuthIdentity: TSecWinntAuthIdentityW;
-  TargetName: PWideChar;
-  TargetUtf8: RawUtf8;
+  i, j: PtrInt;
+  domain, user, password: SynUnicode;
+  ident: TSecWinntAuthIdentityW;
+  spn: PWideChar;
+  u: RawUtf8;
 begin
   if aSecKerberosSpn <> '' then
-    TargetName := pointer(SynUnicode(aSecKerberosSpn))
+    spn := pointer(SynUnicode(aSecKerberosSpn))
   else
-    TargetName := pointer(ForceSecKerberosSpn);
-  UserPos := PosExChar('\', aUserName);
-  if UserPos = 0 then
+    spn := pointer(ForceSecKerberosSpn);
+  i := PosExChar('\', aUserName);
+  if i = 0 then
   begin
-    if TargetName <> nil then
+    if spn <> nil then
     begin
       // extract from 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-      TargetUtf8 := RawUtf8(TargetName);
-      TargetPos := PosExChar('@', TargetUtf8);
-      if TargetPos <> 0 then
-        Domain := SynUnicode(copy(TargetUtf8, TargetPos + 1, 100));
-      // Domain is required, otherwise deprecated NTLM is used
+      u := RawUtf8(spn);
+      j := PosExChar('@', u);
+      if j <> 0 then
+        domain := SynUnicode(copy(u, j + 1, 100));
+      // domain is required, otherwise deprecated NTLM is used
     end;
-    User := SynUnicode(aUserName);
+    user := SynUnicode(aUserName);
   end
   else
   begin
     // extract from 'domain\user'
-    Domain := SynUnicode(Copy(aUserName, 1, UserPos - 1));
-    User := SynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
+    domain := SynUnicode(Copy(aUserName, 1, i - 1));
+    user   := SynUnicode(Copy(aUserName, i + 1, MaxInt));
   end;
-  PassWord := SynUnicode(aPassword);
-  FillCharFast(AuthIdentity, SizeOf(AuthIdentity), 0);
-  AuthIdentity.Domain := pointer(Domain);
-  AuthIdentity.DomainLength := Length(Domain);
-  AuthIdentity.User := pointer(User);
-  AuthIdentity.UserLength := Length(User);
-  AuthIdentity.Password := pointer(Password);
-  AuthIdentity.PasswordLength := Length(Password);
-  AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
-  result := ClientSspiAuthWorker(
-    aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
-  //FillCharFast(pointer(Password)^, length(Password) * 2, 0); // anti-forensic
+  password := SynUnicode(aPassword);
+  FillCharFast(ident, SizeOf(ident), 0);
+  ident.Domain         := pointer(domain);
+  ident.DomainLength   := Length(domain);
+  ident.User           := pointer(user);
+  ident.UserLength     := Length(user);
+  ident.Password       := pointer(password);
+  ident.PasswordLength := Length(password);
+  ident.Flags          := SEC_WINNT_AUTH_IDENTITY_UNICODE;
+  result := ClientSspiAuthWorker(aSecContext, aInData, spn, @ident, aOutData);
+  //FillCharFast(pointer(password)^, length(password) * 2, 0); // anti-forensic
 end;
 
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
@@ -1893,45 +1894,45 @@ end;
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
-  InDesc, OutDesc: TSecBufferDesc;
-  PkgName: PWideChar;
-  LInCtxPtr: PSecHandle;
-  CtxAttr: cardinal;
-  Status: integer;
-  Bind: TGssBind;
+  inDesc, outDesc: TSecBufferDesc;
+  pkg: PWideChar;
+  ctx: PSecHandle;
+  attr: cardinal;
+  status: integer;
+  bind: TGssBind;
 begin
-  {%H-}InDesc.Init;
-  {%H-}OutDesc.Init;
-  InDesc.Add(SECBUFFER_TOKEN, aInData);
+  {%H-}inDesc.Init;
+  {%H-}outDesc.Init;
+  inDesc.Add(SECBUFFER_TOKEN, aInData);
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
     if ServerSspiDataNtlm(aInData) then
-      PkgName := pointer(NtlmName) // backward compatible but unsafe/legacy
+      pkg := pointer(NtlmName) // backward compatible but unsafe/legacy
     else
-      PkgName := pointer(NegotiateName);
-    if AcquireCredentialsHandleW(nil, PkgName, SECPKG_CRED_INBOUND,
+      pkg := pointer(NegotiateName);
+    if AcquireCredentialsHandleW(nil, pkg, SECPKG_CRED_INBOUND,
         nil, nil, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-    LInCtxPtr := nil;
+    ctx := nil;
   end
   else
-    LInCtxPtr := @aSecContext.CtxHandle;
+    ctx := @aSecContext.CtxHandle;
   if aSecContext.ChannelBindingsHash <> nil then
-    SetBind(aSecContext, InDesc, Bind);
-  OutDesc.Add(SECBUFFER_TOKEN);
-  Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
+    SetBind(aSecContext, inDesc, bind);
+  outDesc.Add(SECBUFFER_TOKEN);
+  status := AcceptSecurityContext(@aSecContext.CredHandle, ctx, @inDesc,
     ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
-    SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
-  result := (Status = SEC_I_CONTINUE_NEEDED) or
-            (Status = SEC_I_COMPLETE_AND_CONTINUE);
-  if (Status = SEC_I_COMPLETE_NEEDED) or
-     (Status = SEC_I_COMPLETE_AND_CONTINUE) then
-    Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
-  if Status < 0 then
+    SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @outDesc, attr, nil);
+  result := (status = SEC_I_CONTINUE_NEEDED) or
+            (status = SEC_I_COMPLETE_AND_CONTINUE);
+  if (status = SEC_I_COMPLETE_NEEDED) or
+     (status = SEC_I_COMPLETE_AND_CONTINUE) then
+    status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
+  if status < 0 then
       ESynSspi.RaiseLastOSError(aSecContext);
-  FastSetRawByteString(aOutData, OutDesc.Data[0].pvBuffer, OutDesc.Data[0].cbBuffer);
-  FreeContextBuffer(OutDesc.Data[0].pvBuffer);
+  FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
+  FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
 
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
