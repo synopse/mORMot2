@@ -2361,9 +2361,9 @@ function StatusCodeToErrorMsg(Code: integer): RawUtf8;
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// check the supplied HTTP header to not contain more than one EOL
+/// check the supplied HTTP header to contain only #13#10 EOL
 // - to avoid unexpected HTTP body injection, e.g. from unsafe business code
-function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
+function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrUInt): boolean;
 
 
 { **************** Hexadecimal Text And Binary Conversion }
@@ -10664,19 +10664,26 @@ begin
             (Code < HTTP_BADREQUEST); // 200..399
 end;
 
-function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
+function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrUInt): boolean;
 var
-  i: PtrInt;
-  c: cardinal;
+  l: PtrInt;
 begin
-  result := true;
-  for i := 0 to headlen - 3 do
+  if head <> nil then
   begin
-    c := PCardinal(head + i)^;
-    if (c = $0a0d0a0d) or
-       (Word(c) = $0d0d) or
-       (Word(c) = $0a0a) then
-      exit;
+    inc(headlen, PtrUInt(head)); // PUtf8Char(headlen) = PEnd
+    result := true;
+    repeat
+      l := BufferLineLength(head, PUtf8Char(headlen)); // use SSE2 on x86_64
+      if l = 0 then
+        exit;
+      inc(head, l);
+      if PWord(head)^ <> EOLW then
+        if head^ = #0 then
+          break // allow ending without any CRLF
+        else
+          exit;
+      inc(head, 2);
+    until head^ = #0;
   end;
   result := false;
 end;
