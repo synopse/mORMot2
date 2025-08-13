@@ -2963,7 +2963,7 @@ begin
             if Assigned(fLog) and
                (sllUserAuth in Server.fLogLevel) and
                (s.RemoteIP <> '') and
-               not IsLocalHost(pointer(s.RemoteIP)) then
+               (PCardinal(s.RemoteIP)^ <> HOST_127) then
               fLog.Log(sllUserAuth, '%/% %',
                 [s.User.LogonName, s.ID, s.RemoteIP], self);
             exit;
@@ -4476,7 +4476,8 @@ begin
   if result and
      (Server <> nil) and
      (Server.fIPWhiteJwt <> nil) and
-     (fCall^.RemoteIPNotLocal <> nil) and
+     (fCall.LowLevelRemoteIP <> '') and
+     (PCardinal(fCall.LowLevelRemoteIP)^ <> HOST_127) and
      not Server.fIPWhiteJwt.Exists(fCall^.LowLevelRemoteIP) then
   begin
     Error('Invalid IP [%]', [fCall^.LowLevelRemoteIP], HTTP_FORBIDDEN);
