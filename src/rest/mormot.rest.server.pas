@@ -7789,10 +7789,10 @@ begin
     // set any outgoing cookie
     if ctxt.OutSetCookie <> '' then
       ctxt.OutHeadFromCookie;
-    // paranoid check of the supplied output headers (is done at HTTP level)
+    // paranoid check of the supplied output headers (done anyway at HTTP level)
     if (Call.OutHead <> '') and
        not (rsoHttpHeaderCheckDisable in fOptions) and
-       IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
+       IsInvalidHttpHeader(Call.OutHead) then
       ctxt.Error('Unsafe HTTP header rejected [%]',
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally

@@ -2363,7 +2363,7 @@ function StatusCodeIsSuccess(Code: integer): boolean;
 
 /// check the supplied HTTP header to contain only #13#10 EOL
 // - to avoid unexpected HTTP body injection, e.g. from unsafe business code
-function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrUInt): boolean;
+function IsInvalidHttpHeader(const Headers: RawUtf8): boolean;
 
 
 { **************** Hexadecimal Text And Binary Conversion }
@@ -10664,28 +10664,31 @@ begin
             (Code < HTTP_BADREQUEST); // 200..399
 end;
 
-function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrUInt): boolean;
+function IsInvalidHttpHeader(const Headers: RawUtf8): boolean;
 var
+  p, pend: PUtf8Char;
   l: PtrInt;
 begin
-  if head <> nil then
-  begin
-    inc(headlen, PtrUInt(head)); // PUtf8Char(headlen) = PEnd
-    result := true;
-    repeat
-      l := BufferLineLength(head, PUtf8Char(headlen)); // use SSE2 on x86_64
-      if l = 0 then
-        exit;
-      inc(head, l);
-      if PWord(head)^ <> EOLW then
-        if head^ = #0 then
-          break // allow ending without any CRLF
-        else
-          exit;
-      inc(head, 2);
-    until head^ = #0;
-  end;
   result := false;
+  p := pointer(Headers);
+  if p = nil then
+    exit;
+  pend := p + PStrLen(p - _STRLEN)^;
+  repeat
+    if p^ = #0 then
+      exit; // clean ending
+    l := BufferLineLength(p, pend); // use SSE2 on x86_64
+    if l = 0 then
+      break; // void line is only for the end of headers
+    inc(p, l);
+    if PWord(p)^ = EOLW then
+      inc(p, 2)
+    else if p^ = #0 then
+      exit // allow ending without any CRLF
+    else
+      break;
+  until false;
+  result := true;
 end;
 
 
