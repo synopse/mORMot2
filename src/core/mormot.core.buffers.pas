@@ -6617,7 +6617,7 @@ begin
   begin
     Base64EncodeLoop(p, sp, PERLINE, @b64enc); // better inlining than AVX2 here
     inc(sp, PERLINE);
-    PWord(p + 64)^ := CRLFW; // CR + LF on all systems for safety
+    PWord(p + 64)^ := EOLW; // CR + LF on all systems for safety
     inc(p, 66);
     dec(len, PERLINE);
   end;
@@ -6635,7 +6635,7 @@ begin
       Base64EncodeTrailing(p, sp, len); // 1/2 bytes as 4 chars with trailing =
       inc(p, 4);
     end;
-    PWord(p)^ := CRLFW;
+    PWord(p)^ := EOLW;
     inc(p, 2);
   end;
   if Suffix <> '' then
@@ -10631,7 +10631,7 @@ begin
   if tweItalic in st then
     Toggle(tweItalic);
   if P <> nil then
-    if PWord(P)^ = CRLFW then
+    if PWord(P)^ = EOLW then
       inc(P, 2)
     else
       inc(P);
@@ -10731,7 +10731,7 @@ begin
 none:     if lst = twlParagraph then
           begin
             c := PWord(P)^; // detect blank line to separate paragraphs
-            if c = CRLFW then
+            if c = EOLW then
               inc(P, 2)
             else if c and $ff = $0a then
               inc(P)
@@ -10815,7 +10815,7 @@ begin
         break
       else
       begin
-        if PWord(P)^ = CRLFW then
+        if PWord(P)^ = EOLW then
           inc(P, 2)
         else
           inc(P);

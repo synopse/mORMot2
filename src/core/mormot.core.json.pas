@@ -1085,7 +1085,7 @@ type
       out aEnum; aEnumDefault: PtrUInt = 0): boolean; overload;
     /// returns all values, as CSV or INI content
     function AsCsv(const KeySeparator: RawUtf8 = '=';
-      const ValueSeparator: RawUtf8 = #13#10; const IgnoreKey: RawUtf8 = ''): RawUtf8;
+      const ValueSeparator: RawUtf8 = EOL; const IgnoreKey: RawUtf8 = ''): RawUtf8;
     /// returns all values as a JSON object of string fields
     function AsJson: RawUtf8;
     /// fill the supplied two arrays of RawUtf8 with the stored values

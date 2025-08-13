@@ -52,7 +52,7 @@ type
 
 const
   {$ifdef OSWINDOWS}
-  /// operating-system dependent Line Feed characters (#13#10 or #10)
+  /// operating-system dependent Line Feed characters (#13#10 on Windows)
   CRLF = #13#10;
   /// operating-system dependent wildchar to match all files in a folder
   FILES_ALL = '*.*';
@@ -61,7 +61,7 @@ const
   /// operating-system dependent boolean if paths are case-insensitive
   PathCaseInsensitive = true;
   {$else}
-  /// operating-system dependent Line Feed characters
+  /// operating-system dependent Line Feed characters (#10 on POSIX)
   CRLF = #10;
   /// operating-system dependent wildchar to match all files in a folder
   FILES_ALL = '*';
@@ -70,8 +70,10 @@ const
   /// operating-system dependent boolean if paths are case-insensitive
   PathCaseInsensitive = false;
   {$endif OSWINDOWS}
+  /// system-independent CR+LF two chars, as used on Windows or HTTP headers
+  EOL = #13#10;
   /// system-independent CR+LF two chars, as 16-bit constant
-  CRLFW = $0a0d;
+  EOLW = $0a0d;
   /// convert a TLineFeed value into its UTF-8 text representation
   LINE_FEED: array[TLineFeed] of TShort3 = (CRLF, #10, #13#10);
 
@@ -11444,7 +11446,7 @@ begin
       '^':
         if not posix and
            (state * [sInSQ, sInDQ, sBslash] = []) then
-          if PWord(p)^ = CRLFW then
+          if PWord(p)^ = EOLW then
           begin
             inc(p, 2);
             continue;

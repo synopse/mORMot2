@@ -2063,7 +2063,7 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         pop     rdi
         pop     rsi
         {$endif WIN64ABI}
-        ret
+        ret                        // branchless for small lines
 @main:  add     rdi, 16
         sub     rdi, rsi
         jae     @fail

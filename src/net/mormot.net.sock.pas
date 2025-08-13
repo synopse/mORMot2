@@ -6434,7 +6434,7 @@ end;
 
 procedure TCrtSocket.SockSendCRLF;
 begin
-  PWord(EnsureSockSend(2))^ := CRLFW;
+  PWord(EnsureSockSend(2))^ := EOLW;
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -6507,7 +6507,7 @@ var
   i, len: PtrInt;
   p: PUtf8Char;
 begin
-  len := 2; // for trailing CRLFW
+  len := 2; // for trailing CRLF
   for i := 0 to high(Values) do
     inc(len, length(Values[i]));
   p := EnsureSockSend(len); // reserve all needed memory at once
@@ -6517,7 +6517,7 @@ begin
     MoveFast(pointer(Values[i])^, p^, len);
     inc(p, len);
   end;
-  PWord(p)^ := CRLFW;
+  PWord(p)^ := EOLW;
 end;
 
 procedure TCrtSocket.SockSend(const Line: RawByteString; NoCrLf: boolean);
@@ -6529,7 +6529,7 @@ begin
   p := EnsureSockSend(len + 2);
   MoveFast(pointer(Line)^, p^, len);
   if not NoCrLf then
-    PWord(p + len)^ := CRLFW;
+    PWord(p + len)^ := EOLW;
 end;
 
 procedure TCrtSocket.SockSendHeaders(P: PUtf8Char);

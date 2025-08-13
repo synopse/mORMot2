@@ -113,7 +113,7 @@ procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString;
 // - if any Values[] item is '', no line is added
 // - otherwise, appends 'Caption: Value', with Caption taken from CSV
 procedure AppendCsvValues(const Csv: string; const Values: array of string;
-  var result: string; const AppendBefore: string = #13#10);
+  var result: string; const AppendBefore: string = EOL);
 
 /// return a CSV list of the iterated same value
 // - e.g. CsvOfValue('?',3)='?,?,?'
@@ -1940,7 +1940,7 @@ procedure Prepend(var Text: RawByteString; const Args: array of const); overload
 /// append some text to a RawUtf8, ensuring previous text is separated with CRLF
 // - could be used e.g. to update HTTP headers
 procedure AppendLine(var Text: RawUtf8; const Args: array of const;
-  const Separator: RawUtf8 = #13#10);
+  const Separator: RawUtf8 = EOL);
 
 /// append some path parts into a single file name with proper path delimiters
 // - set EndWithDelim=true if you want to create e.g. a full folder name
@@ -2940,7 +2940,7 @@ begin // caller should ensure that (P <> nil) and (Sep > ' ')
     dec(E); // trim right
   Item := P;
   Len := E - P;
-  if (PWord(S)^ = CRLFW) or
+  if (PWord(S)^ = EOLW) or
      (S^ = Sep) then
     P := S + 1
   else if S^ = #10 then
@@ -4222,7 +4222,7 @@ begin
   B[1] := #10;
   inc(B);
   {$else}          // mimics CRLF = #13#10 on Windows
-  PWord(B + 1)^ := $0a0d;
+  PWord(B + 1)^ := EOLW;
   inc(B, 2);
   {$endif OSPOSIX}
 end;
@@ -6558,7 +6558,7 @@ begin
   fWriter.OnFlushToStream := FlushToStream; // register
   if twoEndOfLineCRLF in fWriter.CustomOptions then
   begin
-    fWriteLineFeed := $0a0d; // #13#10 - typical on Windows
+    fWriteLineFeed := EOLW; // #13#10 - typical on Windows
     fWriteLineFeedLen := 2;
   end
   else

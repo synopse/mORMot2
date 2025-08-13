@@ -1243,7 +1243,7 @@ type
     // - properly implemented in TDigestAuthServer: THttpAuthServer raise EDigest
     function DigestInit(Opaque, Tix64: Int64;
       const Prefix: RawUtf8 = 'WWW-Authenticate: Digest ';
-      const Suffix: RawUtf8 = #13#10): RawUtf8;
+      const Suffix: RawUtf8 = EOL): RawUtf8;
     /// validate a Digest client authentication response
     // - used for the DIGEST authentication scheme in THttpServerSocketGeneric
     // - FromClient typically follow 'Authorization: Digest ' header text

@@ -1580,13 +1580,13 @@ type
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
     procedure ToTextPairsVar(out result: RawUtf8;
-      const NameValueSep: RawUtf8 = '='; const ItemSep: RawUtf8 = #13#10;
+      const NameValueSep: RawUtf8 = '='; const ItemSep: RawUtf8 = EOL;
       Escape: TTextWriterKind = twJsonEscape);
     /// save a document as UTF-8 encoded Name=Value pairs
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
     function ToTextPairs(const NameValueSep: RawUtf8 = '=';
-      const ItemSep: RawUtf8 = #13#10;
+      const ItemSep: RawUtf8 = EOL;
       Escape: TTextWriterKind = twJsonEscape): RawUtf8;
        {$ifdef HASINLINE}inline;{$endif}
     /// save an array document as an array of TVarRec, i.e. an array of const

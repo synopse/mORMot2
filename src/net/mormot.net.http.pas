@@ -2472,11 +2472,11 @@ begin
 {$endif CPUINTEL}
   result := hhUnknown;
   // standard headers are expected to be pure A-Z chars: fast lowercase search
-  // - or $20 makes conversion to a-z lowercase, and won't affect - / : chars
+  // - "or $20" makes conversion to a-z lowercase, and won't affect - / : chars
   // - the worse case may be some false positive, which won't hurt unless
   // your network architecture suffers from HTTP request smuggling
   // - much less readable than cascaded IdemPPChar(), but O(1) efficiency for
-  // this very sensitive parsing function
+  // this very performance sensitive process
   case PCardinal(P)^ or mask_lower of
     // 'CONTENT-'
     ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
