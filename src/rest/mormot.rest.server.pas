@@ -1808,6 +1808,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetAuthenticationSchemesCount: integer;
     function StatusCodeToText(Code: cardinal): PRawUtf8; virtual;
+    procedure HandleUriError(Ctxt: TRestServerUriContext; E: Exception);
     /// ensure the thread will be taken into account during process
     procedure OnBeginCurrentThread(Sender: TThread); override;
     procedure OnEndCurrentThread(Sender: TThread); override;
@@ -7653,6 +7654,16 @@ begin
   inherited OnEndCurrentThread(Sender);
 end;
 
+procedure TRestServer.HandleUriError(Ctxt: TRestServerUriContext; E: Exception);
+begin
+  if (not Assigned(OnErrorUri)) or
+     OnErrorUri(ctxt, E) then
+    if PClass(E)^ = EInterfaceFactory then
+      Ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)
+    else
+      Ctxt.Error(E, '', [], HTTP_SERVERERROR);
+end;
+
 procedure TRestServer.Uri(var Call: TRestUriParams);
 // this is the main server-side REST processing method
 var
@@ -7668,10 +7679,12 @@ begin
     exit;
   end;
   if (fIPBan <> nil) and
-     (Call.RemoteIPNotLocal <> nil) and
+     (Call.LowLevelRemoteIP <> '') and
+     (PCardinal(Call.LowLevelRemoteIP)^ <> HOST_127) and
      fIPBan.Exists(Call.LowLevelRemoteIP) then
   begin
-    fLogClass.Add.Log(sllServer, 'Uri: banned %', [Call.LowLevelRemoteIP], self);
+    if sllServer in fLogLevel then
+      InternalLog('Uri: banned %', [Call.LowLevelRemoteIP], sllServer);
     Call.OutStatus := HTTP_TEAPOT; // I'm a teapot!
     exit;
   end;
@@ -7681,8 +7694,9 @@ begin
     Call.OutStatus := OnStartUri(Call);
     if Call.OutStatus <> HTTP_SUCCESS then
     begin
-      fLogClass.Add.Log(sllServer, 'Uri: rejected by OnStartUri(% %)=%',
-          [Call.Method, Call.Url, Call.OutStatus], self);
+      if sllServer in fLogLevel then
+        InternalLog('Uri: rejected by OnStartUri(% %)=%',
+          [Call.Method, Call.Url, Call.OutStatus], sllServer);
       exit;
     end;
   end;
@@ -7747,12 +7761,7 @@ begin
         ctxt.ExecuteCommand;
     except
       on E: Exception do
-        if (not Assigned(OnErrorUri)) or
-           OnErrorUri(ctxt, E) then
-          if PClass(E)^ = EInterfaceFactory then
-            ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)
-          else
-            ctxt.Error(E, '', [], HTTP_SERVERERROR);
+        HandleUriError(Ctxt, E);
     end;
     // 8. return expected result to the client
     if StatusCodeIsSuccess(Call.OutStatus) then
@@ -7799,13 +7808,12 @@ begin
     if (Call.OutHead <> '') and
        not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(Call.OutHead) then
-      ctxt.Error('Unsafe HTTP header rejected [%]',
-        [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
+      ctxt.Error('Unsafe HTTP header rejected', HTTP_SERVERERROR);
   finally
     // 10. gather statistics and log execution
     if StatLevels <> [] then
       ctxt.ComputeStatsAfterCommand;
-    if (ctxt.fLog <> nil) and
+    if (ctxt.Log <> nil) and
        (fLogLevel * [sllServer, sllServiceReturn] <> []) then
       ctxt.LogFromContext;
     // 11. finalize execution context
