@@ -189,7 +189,7 @@ type
     procedure AuthorizeBasic(const UserName: RawUtf8; const Password: SpiUtf8);
     /// setup web authentication using the Digest access algorithm
     procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8);
-    /// setup web authentication using Kerberos/NTLM via SSPI/GSSAPI and credentials
+    /// setup web authentication using Kerberos via SSPI/GSSAPI and credentials
     // - if you want to authenticate with the current logged user, just set
     // ! Auth.Scheme := wraNegotiate;
     procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8);
@@ -705,7 +705,7 @@ type
     procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8;
       Algo: TDigestAlgo = daMD5_Sess);
     {$ifdef DOMAINRESTAUTH}
-    /// setup web authentication using Kerberos/NTLM via SSPI/GSSAPI for this instance
+    /// setup web authentication using Kerberos via SSPI/GSSAPI for this instance
     // - will store the user/paswword credentials, and set OnAuthorizeSspi callback
     // - if Password is '', will search for an existing Kerberos token on UserName
     // - an in-memory token will be used to authenticate the connection
@@ -714,14 +714,14 @@ type
     // may prefer to load a proper libgssapi_krb5.dylib instead
     procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8;
       const KerberosSpn: RawUtf8 = '');
-    /// web authentication callback of the current logged user using Kerberos/NTLM
+    /// web authentication callback of the current logged user using Kerberos
     // - calling the Security Support Provider Interface (SSPI) API on Windows,
     // or GSSAPI on Linux (only Kerboros)
     // - match the OnAuthorize: TOnHttpClientSocketAuthorize callback signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class function OnAuthorizeSspi(Sender: THttpClientSocket;
       var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
-    /// proxy authentication callback of the current logged user using Kerberos/NTLM
+    /// proxy authentication callback of the current logged user using Kerberos
     // - calling the Security Support Provider Interface (SSPI) API on Windows,
     // or GSSAPI on Linux (only Kerboros)
     // - match the OnProxyAuthorize: TOnHttpClientSocketAuthorize signature
