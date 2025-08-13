@@ -1250,33 +1250,19 @@ type
   /// authentication of the current logged user using Windows Security Support
   // Provider Interface (SSPI) or the GSSAPI library on Linux
   // - is able to authenticate the currently logged user on the client side,
-  // using either NTLM (Windows only) or Kerberos - it will allow to safely
-  // authenticate on a mORMot server without prompting the user to enter its
-  // password
-  // - if ClientSetUser() receives aUserName as '', aPassword should be either
-  // '' if you expect NTLM authentication to take place, or contain the SPN
-  // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
-  // authentication
+  // using Kerberos - it will allow to safelyauthenticate on a mORMot server
+  // without prompting the user to enter its password
+  // - if ClientSetUser() receives aUserName as '', aPassword should contain
+  // the Kerber SPN e.g. 'mymormotservice/myserver.mydomain.tld'
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
   // - this class is not available on some targets (e.g. Android)
   TRestServerAuthenticationSspi = class(TRestServerAuthenticationSignedUri)
-  protected
-    /// Windows built-in authentication
-    // - holds information between calls to ServerSspiAuth() for NTLM
-    // - such an array seems not needed with Kerberos two-way handshake
-    // - this array is thread-safe because Auth() is called within lock
-    fSspiAuthContext: TSecContextDynArray;
-    fSspiAuthContexts: TDynArray;
-    fSspiAuthContextCount: integer;
   public
     /// initialize this SSPI/GSSAPI authentication scheme
     constructor Create(aServer: TRestServer); override;
-    /// finalize internal sspi/gssapi allocated structures
-    destructor Destroy; override;
     /// will try to handle the RESTful authentication via SSPI/GSSAPI
-    // - to be called in a two pass algorithm, used to cypher the password
     // - the client-side logged user will be identified as valid, according
     // to a Windows SSPI API secure challenge
     function Auth(Ctxt: TRestServerUriContext;
@@ -5572,11 +5558,6 @@ end;
 {$ifdef DOMAINRESTAUTH}
 { will use mormot.lib.sspi/gssapi units depending on the OS }
 
-const
-  /// maximum number of Windows Authentication context to be handled at once
-  // - 64 should be big enough
-  MAXSSPIAUTHCONTEXTS = 64;
-
 
 { TRestServerAuthenticationSspi }
 
@@ -5587,136 +5568,106 @@ begin
     ESecurityException.RaiseUtf8('%.Create with no %', [self, SECPKGNAMEAPI]);
   // initialize this authentication scheme
   inherited Create(aServer);
-  // TDynArray access to fSspiAuthContext[] by TRestConnectionID (ptInt64)
-  fSspiAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
-    fSspiAuthContext, ptInt64, @fSspiAuthContextCount);
-end;
-
-destructor TRestServerAuthenticationSspi.Destroy;
-var
-  i: PtrInt;
-begin
-  for i := 0 to fSspiAuthContextCount - 1 do
-    FreeSecContext(fSspiAuthContext[i]); // abort NTLM pending auths (unlikely)
-  inherited Destroy;
 end;
 
 // about Browser support and SPNEGO handshake via HTTP headers, see e.g.
 // https://learn.microsoft.com/en-us/previous-versions/ms995330(v=msdn.10)
 
-// note that Negotiate/Kerberos is two-way, and NTLM three-way so we need to
-// maintain a list of pending contexts in fSspiAuthContext[] for NTLM only
-// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-sip/96a33a84-36cb-41dc-a630-f0c42820ec16
+// note that Negotiate/Kerberos is two-way so a single call is enough
+// (NTLM three-way is deprecated since Windows 11 version 24H2 and Server 2025
+// so was removed from mORMot in August 2025)
 
 function TRestServerAuthenticationSspi.Auth(Ctxt: TRestServerUriContext;
   const aUserName: RawUtf8): boolean;
 var
-  i, ndx: PtrInt;
-  usr, indataenc: RawUtf8;
-  tix: Int64;
-  connectionID: TRestConnectionID;
-  browserauth: boolean;
+  usr, data: RawUtf8;
   outdata: RawByteString;
+  sec: TSecContext;
+  browserauth: boolean;
   user: TAuthUser;
   session: TAuthSession;
 begin
-  // GET ModelRoot/auth?username=...&data=... -> SSPI/GSSAPI auth
+  // auth?UserName=...&Session=... from TRestClientUri.SessionClose
   result := AuthSessionRelease(Ctxt, aUserName);
-  if result or
-     (aUserName = '') or
-     not Ctxt.InputExists['Data'] then
+  if result then
     exit;
-  // use connectionID to find authentication session
+  // GET ModelRoot/auth?username=&data=... -> SSPI/GSSAPI handshaking
+  // (username= is not needed with Kerberos so either void or missing)
   browserauth := false;
-  connectionID := Ctxt.Call^.LowLevelConnectionID;
-  indataenc := Ctxt.InputUtf8['Data'];
-  if indataenc = '' then
-  begin
-    // client is browser and used HTTP headers to send auth data
-    FindNameValue(Ctxt.Call.InHead, pointer(SECPKGNAMEHTTPAUTHORIZATION), indataenc);
-    if indataenc = '' then
-    begin
-      // no auth data sent, reply with supported auth method(s)
-      Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
-      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      Ctxt.Call.OutBody := Ctxt.StatusCodeToText(HTTP_UNAUTHORIZED)^;
-      exit;
-    end;
-    browserauth := true;
-  end;
-  // SSPI authentication
-  // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
-  tix := Ctxt.TickCount64 - 30000; // tokens last for 30 seconds
-  for i := fSspiAuthContextCount - 1  downto 0 do // downwards for Delete()
-    if tix > fSspiAuthContext[i].CreatedTick64 then
-    begin
-      FreeSecContext(fSspiAuthContext[i]);
-      fSspiAuthContexts.Delete(i);
-    end;
-  // if no auth context specified, create a new one
-  result := true;
-  ndx := fSspiAuthContexts.Find(connectionID);
-  if ndx < 0 then
-  begin
-    // 1st call: create SecCtxId
-    if fSspiAuthContextCount >= MAXSSPIAUTHCONTEXTS then
-    begin
-      fServer.InternalLog('Too many Windows Authenticated session in pending' +
-        ' state: MAXSSPIAUTHCONTEXTS=%', [MAXSSPIAUTHCONTEXTS], sllUserAuth);
-      exit;
-    end;
-    ndx := fSspiAuthContexts.New; // add a new entry to fSspiAuthContext[]
-    InvalidateSecContext(fSspiAuthContext[ndx], connectionID, Ctxt.TickCount64);
-  end;
-  // call SSPI provider
-  if ServerSspiAuth(fSspiAuthContext[ndx], Base64ToBin(indataenc), outdata) then
-  begin
-    // 1st call: send back outdata to the client
-    if browserauth then
-    begin
-      Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') +
-                             BinToBase64(outdata);
-      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      Ctxt.Call.OutBody := Ctxt.StatusCodeToText(HTTP_UNAUTHORIZED)^;
-    end
+  // validate base-64 encoded input data in URI (REST) or HTTP header (browser)
+  data := Ctxt.InputUtf8['Data'];
+  if data = '' then
+    if aUserName <> '' then
+      exit // may be another REST auth - keep result=false
     else
-      Ctxt.Returns(['result', '',
-                    'data', BinToBase64(outdata)]);
+    begin
+      // client is browser and should use HTTP headers to send auth data
+      FindNameValue(Ctxt.Call.InHead, SECPKGNAMEHTTPAUTHORIZATION, data);
+      if data = '' then
+      begin
+        // no auth data sent, reply with supported auth method(s)
+        Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
+        Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
+        Ctxt.Call.OutBody := Ctxt.StatusCodeToText(HTTP_UNAUTHORIZED)^;
+        result := true; // do not try another auth
+        exit;
+      end;
+      browserauth := true;
+    end;
+  result := true;
+  if not InitializeDomainAuth then
+  begin
+    Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed);
     exit;
   end;
-  // 2nd call: user was authenticated -> release used context
-  ServerSspiAuthUser(fSspiAuthContext[ndx], usr);
-  if sllUserAuth in fServer.fLogLevel then
-    fServer.InternalLog('% Authentication success for %',
-      [SecPackageName(fSspiAuthContext[ndx]), usr], sllUserAuth);
-  // now client is authenticated -> create a session for aUserName
-  // and send back outdata
+  data := Base64ToBin(data);
+  if (data = '') or                // should be valid Base64
+     ServerSspiDataNtlm(data) then // two-way Kerberos only
+  begin
+    Ctxt.AuthenticationFailed(afInvalidPassword);
+    exit;
+  end;
+  // make the actual SSPI/GSSAPI handshake
+  InvalidateSecContext(sec);
   try
-    if usr = '' then
-      exit;
-    user := GetUser(Ctxt, usr);
-    if user <> nil then
     try
-      user.PasswordHashHexa := ''; // override with context
-      fServer.SessionCreate(user, Ctxt, session);
-      // SessionCreate would call Ctxt.AuthenticationFailed on error
-      if session <> nil then
-        with session.user do
+      // should be in a single call
+      if not ServerSspiAuth(sec, data, outdata) then
+      begin
+        Ctxt.AuthenticationFailed(afSessionCreationAborted);
+        exit;
+      end;
+      outdata := BinToBase64(outdata);
+      // now client is authenticated: identify the user
+      ServerSspiAuthUser(sec, usr);
+      if sllUserAuth in fServer.fLogLevel then
+        fServer.InternalLog('% success for %', [self, usr], sllUserAuth);
+      user := nil;
+      if usr <> '' then
+        user := GetUser(Ctxt, usr);
+      if user <> nil then
+      try
+        // create a session for this user and send back outdata
+        user.PasswordHashHexa := ''; // override with context
+        fServer.SessionCreate(user, Ctxt, session);
+        // SessionCreate would call Ctxt.AuthenticationFailed on error
+        if session <> nil then
           if browserauth then
             SessionCreateReturns(Ctxt, session, session.fPrivateSalt, '',
               SECPKGNAMEHTTPWWWAUTHENTICATE + outdata)
           else
             SessionCreateReturns(Ctxt, session,
-              BinToBase64(SecEncrypt(fSspiAuthContext[ndx], session.fPrivateSalt)),
-              BinToBase64(outdata),'');
-    finally
-      user.Free;
-    end
-    else
-      Ctxt.AuthenticationFailed(afUnknownUser);
+              BinToBase64(SecEncrypt(sec, session.fPrivateSalt)), outdata,'');
+      finally
+        user.Free;
+      end
+      else
+        Ctxt.AuthenticationFailed(afUnknownUser);
+    except
+      Ctxt.AuthenticationFailed(afSessionCreationAborted); // on ESynSspi
+    end;
   finally
-    FreeSecContext(fSspiAuthContext[ndx]);
-    fSspiAuthContexts.Delete(ndx);
+    FreeSecContext(sec);
   end;
 end;
 
