@@ -1369,15 +1369,16 @@ begin
     else
       AES[b] := nil;
   {$ifdef USE_OPENSSL}
-  for b := low(b) to high(b) do
-    if b in bOPENSSL then
-    begin
-      if b < low(AES) then
-        SetLength(TXT[b], length(TXT[b]) - 1);
-      TXT[b] := 'openssl ' + TXT[b];
-    end
-    else
-      TXT[b] := 'mormot ' + TXT[b];
+  if OpenSslIsAvailable then 
+    for b := low(b) to high(b) do
+      if b in bOPENSSL then
+      begin
+        if b < low(AES) then
+          SetLength(TXT[b], length(TXT[b]) - 1);
+        TXT[b] := 'openssl ' + TXT[b];
+      end
+      else
+        TXT[b] := 'mormot ' + TXT[b];
   {$endif USE_OPENSSL}
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
@@ -1397,6 +1398,9 @@ begin
     begin
       if (b = bAesniHash) and
          not Assigned(AesNiHash32) then
+        continue;
+      if (b in bOPENSSL) and
+         not OpenSslIsAvailable then
         continue;
       timer.Start;
       for i := 1 to COUNT do
@@ -1442,6 +1446,8 @@ begin
             SHA3.Full(pointer(data), SIZ[s], dig.Lo);
           bSHA3_512:
             SHA3.Full(pointer(data), SIZ[s], dig.b);
+          bRC4:
+            RC4.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
           {$ifdef USE_OPENSSL}
           bSHA1O,
           bSHA256O,
@@ -1456,10 +1462,6 @@ begin
           bHMACSHA256O,
           bHMACSHA384O:
             TOpenSslHmac.Hmac(OPENSSL_HASH[b], data, 'secret');
-          {$endif USE_OPENSSL}
-          bRC4:
-            RC4.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
-          {$ifdef USE_OPENSSL}
           bAES128CFBO,
           bAES128OFBO,
           bAES128CTRO,
