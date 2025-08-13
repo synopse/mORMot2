@@ -4621,6 +4621,7 @@ begin
   DoubleToShort(@a, d);
   Check(IdemPropName(a, 'Nan'));
   Check(ShortToFloatNan(a) = fnNan);
+  Check(FloatToJsonNan(@a)^ = JSON_NAN[fnNan]);
   s := 'INF';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0, s);
@@ -4628,6 +4629,7 @@ begin
   DoubleToShort(@a, d);
   Check((a = '+Inf') or (a = 'INF'));
   Check(ShortToFloatNan(a) = fnInf);
+  Check(FloatToJsonNan(@a)^ = JSON_NAN[fnInf]);
   s := '-INfinity';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0, s);
@@ -4635,6 +4637,7 @@ begin
   DoubleToShort(@a, d);
   Check(IdemPropName(a, '-Inf'));
   Check(ShortToFloatNan(a) = fnNegInf);
+  Check(FloatToJsonNan(@a)^ = JSON_NAN[fnNegInf]);
   Check(IsAnsiCompatible('t'));
   Check(IsAnsiCompatible('te'));
   Check(IsAnsiCompatible('tes'));
