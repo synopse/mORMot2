@@ -300,18 +300,12 @@ type
   {$ifdef DOMAINRESTAUTH}
   { will use mormot.lib.sspi/gssapi units depending on the OS }
 
-  /// authentication of the current logged user using Kerberos or NTLM
+  /// safe authentication of the current logged user using Kerberos
   // - calling the Security Support Provider Interface (SSPI) API on Windows,
   // or GSSAPI on Linux
-  // - is able to authenticate the currently logged user on the client side,
-  // using either NTLM (Windows only) or Kerberos - it will allow to safely
-  // authenticate on a mORMot server without prompting the user to enter its
-  // password
   // - match TRestServerAuthenticationSspi class on server side
-  // - if ClientSetUser() receives aUserName as '', aPassword should be either
-  // '' if you expect NTLM authentication to take place, or contain the SPN
-  // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
-  // authentication
+  // - if ClientSetUser() receives aUserName as '', aPassword should contain the
+  // Kerberos SPN e.g. 'mymormotservice/myserver.mydomain.tld'
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
@@ -899,9 +893,8 @@ type
     // - if SSPIAUTH conditional is defined, and aUserName='', a Windows
     // authentication will be performed via TRestClientAuthenticationSspi -
     // in this case, aPassword will contain the SPN domain for Kerberos
-    // (otherwise NTLM will be used), and table TAuthUser shall contain
-    // an entry for the logged Windows user, with the LoginName in form
-    // 'DomainName\UserName'
+    // and table TAuthUser shall contain an entry for the logged Windows user,
+    // with the LoginName in form 'DomainName\UserName'
     // - you can directly create the class method ClientSetUser() of a given
     // TRestClientAuthentication inherited class, if neither
     // TRestClientAuthenticationDefault nor TRestClientAuthenticationSspi
@@ -1261,8 +1254,8 @@ begin
     Base64ToBin(PAnsiChar(values[1].Text), values[1].Len, Sender.fSession.Data);
     values[2].ToUtf8(Sender.fSession.Server);
     values[3].ToUtf8(Sender.fSession.Version);
-    User.IDValue := values[4].ToInt64;
-    User.LogonName := values[5].ToUtf8; // set/fix using values from server
+    User.IDValue     := values[4].ToInt64;
+    User.LogonName   := values[5].ToUtf8; // set/fix using values from server
     User.DisplayName := values[6].ToUtf8;
     User.GroupRights := pointer(values[7].ToInteger);
     Sender.fSession.ServerTimeout := values[8].ToInteger;
@@ -1630,39 +1623,37 @@ end;
 class function TRestClientAuthenticationSspi.ClientComputeSessionKey(
   Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
-  SecCtx: TSecContext;
-  OutData: RawByteString;
+  sec: TSecContext;
+  bin: RawByteString;
 begin
   result := '';
   if not InitializeDomainAuth then
     exit;
   Sender.fSession.Data := '';
-  InvalidateSecContext(SecCtx);
+  InvalidateSecContext(sec);
   try
     repeat
       if User.LogonName <> '' then // will use ClientForceSpn() value
-        ClientSspiAuthWithPassword(SecCtx, Sender.fSession.Data,
-          User.LogonName, User.PasswordHashHexa, {spn=}'', OutData)
+        ClientSspiAuthWithPassword(sec, Sender.fSession.Data,
+          User.LogonName, User.PasswordHashHexa, {spn=}'', bin)
       else
-        ClientSspiAuth(SecCtx, Sender.fSession.Data,
-          {passKerberosSpn=} User.PasswordHashHexa, OutData);
-      if OutData = '' then
+        ClientSspiAuth(sec, Sender.fSession.Data,
+          {passKerberosSpn=} User.PasswordHashHexa, bin);
+      if (bin = '') or
+         (result <> '') then
         break;
-      if result <> '' then
-        break; // 2nd pass
-      // 1st call will return data, 2nd call SessionKey
-      result := ClientGetSessionKey(Sender, User,
+      result := ClientGetSessionKey(Sender, User, // single call with Kerberos
         ['username', '',
-         'data', BinToBase64(OutData)]);
+         'data', BinToBase64(bin)]);
     until Sender.fSession.Data = '';
     if result <> '' then
     begin
       // TRestServerAuthenticationSspi.Auth encrypted session.fPrivateSalt
-      OutData := Base64ToBin(result); // need a local copy on Windows / SSPI
-      result := SecDecrypt(SecCtx, OutData);
+      bin := Base64ToBin(result); // need a local copy on Windows / SSPI
+      result := SecDecrypt(sec, bin); // SecEncrypt(PrivateSalt)
     end;
   finally
-    FreeSecContext(SecCtx);
+    FreeSecContext(sec);
   end;
   // authenticated by Windows on the server side: use the returned
   // SessionKey + PasswordHashHexa to sign the URI, as usual
