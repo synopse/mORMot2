@@ -1001,7 +1001,7 @@ type
     fServer: TRestServer;
     fOptions: TRestServerAuthenticationOptions;
     fAlgoName: RawUtf8;
-    // GET ModelRoot/auth?UserName=...&Session=... -> release session
+    // GET ModelRoot/auth?UserName=...&Session=... from TRestClientUri.SessionClose
     function AuthSessionRelease(Ctxt: TRestServerUriContext;
       const aUserName: RawUtf8): boolean;
     /// retrieve an User instance from its logon name
@@ -5347,12 +5347,15 @@ var
   end;
 
 begin
+  // our default schemes require an user name
   result := aUserName <> '';
-  if not result then // let's try another TRestServerAuthentication class
-    exit;
+  if not result then
+    exit; // let's try another TRestServerAuthentication class
+  // try auth?UserName=...&Session=... from TRestClientUri.SessionClose
   result := true;
   if AuthSessionRelease(Ctxt, aUserName) then
     exit;
+  // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
   nonce := Ctxt.GetInputValue('ClientNonce');
   if (nonce <> nil) and
      (length(nonce^) > 32) then
@@ -5434,12 +5437,15 @@ function TRestServerAuthenticationNone.Auth(Ctxt: TRestServerUriContext;
 var
   usr: TAuthUser;
 begin
+  // our default schemes require an user name
   result := aUserName <> '';
-  if not result then // let's try another TRestServerAuthentication class
+  if not result then
+    exit; // let's try another TRestServerAuthentication class
+  // try auth?UserName=...&Session=... from TRestClientUri.SessionClose
+  if AuthSessionRelease(Ctxt, aUserName) then // auth?UserName=...&Session=...
     exit;
-  // keep result = true: this kind of weak authentication avoid stronger ones
-  if AuthSessionRelease(Ctxt, aUserName) then
-    exit;
+  // GET ModelRoot/auth?UserName=... is enough to create a new session
+  // (this kind of weak authentication avoid stronger ones: keep result = true)
   usr := GetUser(Ctxt, aUserName);
   if usr = nil then
     Ctxt.AuthenticationFailed(afUnknownUser)
@@ -7870,8 +7876,7 @@ begin
     n := PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF;
     repeat
       if a^.Auth(Ctxt, usr^) then
-        // found an authentication, which may be successful or not
-        break;
+        break; // found an authentication, which may be successful or not
       inc(a);
       dec(n);
     until n = 0;
