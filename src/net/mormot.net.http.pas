@@ -150,6 +150,7 @@ function KnownHttpHeader(P: PUtf8Char): THttpHeader;
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 
 /// will remove most usual HTTP headers which are to be recomputed on sending
+// - trim=true would remove any space or CR/LF at the end of the result
 // - as used e.g. during TPublicRelay process from mormot.net.relay
 function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
   upIgnore: PPAnsiChar = nil): RawUtf8;
@@ -2633,58 +2634,64 @@ const
 
 function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PPAnsiChar): RawUtf8;
 var
-  pos, len: array[byte] of word;
+  pos, len: array[byte] of word; // delete up to 255 entries
   n, purged, i, l, tot: PtrInt;
-  P, next: PUtf8Char;
+  P, next, last: PUtf8Char;
+  h: PUtf8Char absolute headers;
 begin
   n := 0;
   tot := 0;
   purged := 0;
-  if upIgnore = nil then
-    upIgnore := @TOBEPURGED;
   // put all allowed headers in pos[]/len[]
-  P := pointer(headers);
-  if length(headers) shr 16 = 0 then // defined as word
-    while P <> nil do
-    begin
-      if P^ = #0 then
-        break;
-      next := GotoNextLine(P);
-      if IdemPPChar(P, upIgnore) < 0 then
-      begin
-        if n = high(len) then
-          break;
-        pos[n] := P - pointer(headers);
-        l := next - P;
-        if next = nil then
-          if (purged = 0) and
-             not trim then
-            break
-          else
-            l := StrLen(P);
-        inc(tot, l);
-        len[n] := l;
-        inc(n);
-      end
-      else
-        inc(purged);
-      P := next;
-    end;
-  // recreate an expurgated headers set
-  if (purged = 0) and
-     not trim then
-    // nothing to purge
-    result := headers
-  else if tot = 0 then
-    // genocide
-    result := ''
-  else
+  P := h;
+  if P <> nil then
   begin
-    // allocate at once and append all non-purged headers
+    last := nil;
+    if upIgnore = nil then
+      upIgnore := @TOBEPURGED;
+    if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
+      while (P <> nil) and
+            (P^ <> #0) do
+      begin
+        next := GotoNextLine(P);
+        if IdemPPChar(P, upIgnore) < 0 then // append this entry
+        begin
+          l := next - P;
+          if next = nil then
+            l := (h + PStrLen(h - _STRLEN)^) - P;
+          inc(tot, l);
+          if P = last then
+            inc(len[n - 1], l) // merge with previous block
+          else
+          begin
+            if n = high(len) then
+              break;
+            pos[n] := P - h;
+            len[n] := l;
+            inc(n);
+          end;
+          last := next;
+        end
+        else
+          inc(purged);
+        P := next;
+      end;
+  end;
+  // recreate an expurgated headers set
+  if tot = 0 then // genocide
+    result := ''
+  else if purged = 0 then
+    if (not trim) or
+       (headers[PStrLen(h - _STRLEN)^] > ' ') then
+      result := headers // nothing to purge
+    else
+      result := TrimRight(headers)
+  else
+  begin // allocate at once and append all non-purged headers
     dec(n);
     if trim then
     begin
-      P := PUtf8Char(pointer(headers)) + {%H-}pos[n];
+      P := h + {%H-}pos[n];
       l := {%H-}len[n];
       dec(tot, l);
       while (l > 0) and
@@ -2696,7 +2703,7 @@ begin
     P := FastSetString(result, tot);
     for i := 0 to n do
     begin
-      MoveFast(PByteArray(headers)[pos[i]], P^, len[i]);
+      MoveFast(h[pos[i]], P^, len[i]);
       inc(P, len[i]);
     end;
     assert(P - pointer(result) = tot);
