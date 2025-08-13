@@ -4235,40 +4235,35 @@ begin
   result := true;
 end;
 
-procedure UpdateIniEntry(var Content: RawUtf8;
-  const Section, Name, Value: RawUtf8);
-const
-  CRLF = #13#10;
+procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
 var
   P: PUtf8Char;
   SectionFound: boolean;
-  i, UpperNameLength: PtrInt;
+  i, len: PtrInt;
   V: RawUtf8;
-  UpperSection, UpperName: TByteToAnsiChar;
+  up: TByteToAnsiChar;
 begin
-  UpperNameLength := length(Name);
-  PWord(UpperCopy255Buf(
-    UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
-  inc(UpperNameLength);
-  Join([Value, CRLF], V);
+  Join([Value, EOL], V);
   P := pointer(Content);
   // 1. find Section, and try update within it
   if Section = '' then
     SectionFound := true // find the Name= entry before any [Section]
   else
   begin
-    PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
-    SectionFound := FindSectionFirstLine(P, UpperSection);
+    PWord(UpperCopy255(up{%H-}, Section))^ := ord(']');
+    SectionFound := FindSectionFirstLine(P, up);
   end;
+  len := length(Name);
+  PWord(UpperCopy255Buf(up{%H-}, pointer(Name), len))^ := ord('=');
+  inc(len);
   if SectionFound and
-     UpdateIniNameValueInternal(
-       Content, Value, V, P, @UpperName, UpperNameLength) then
+     UpdateNameValueInternal(Content, Value, V, P, @up, len) then
       exit;
   // 2. section or Name= entry not found: add Name=Value
   V := Join([Name, '=', V]);
   if not SectionFound then
     // create not existing [Section]
-    V := Join(['[', Section, (']' + CRLF), V]);
+    V := Join(['[', Section, (']' + EOL), V]);
   // insert Name=Value at P^ (end of file or end of [Section])
   if P = nil then
     // insert at end of file
@@ -4281,8 +4276,7 @@ begin
   end;
 end;
 
-procedure UpdateIniEntryFile(const FileName: TFileName;
-  const Section, Name, Value: RawUtf8);
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
 var
   Content: RawUtf8;
 begin
