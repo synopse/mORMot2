@@ -8919,7 +8919,34 @@ begin
     'Feedfetcher-Google; (+http://www.google.com/feedfetcher.html; 1 subscribers; feed-id=728742641706423)'));
   Check(IsHttpUserAgentBot(
     'Python-urllib/3.4'));
-  // some HTTP methods
+  // some HTTP headers processing methods
+  Check(not IsInvalidHttpHeader(nil, 0));
+  s := 'a'#13#10;
+  Check(not IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#13#10;
+  Check(not IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#13#10;
+  Check(not IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#10'b'#13#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10#13#10'b'#13#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#13#10#13#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10#13'b'#13#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#13'b'#13#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#13#13;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#13;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'a'#13#10'b'#10;
+  Check(IsInvalidHttpHeader(pointer(s), length(s)));
+  s := 'toto'#13#10;
+  Check(not IsInvalidHttpHeader(pointer(s), length(s)));
   CheckEqual(PurgeHeaders(''), '');
   CheckEqual(PurgeHeaders('toto'), 'toto');
   CheckEqual(PurgeHeaders(#13#10), #13#10);
@@ -8930,7 +8957,6 @@ begin
   CheckEqual(PurgeHeaders('toto', true), 'toto');
   CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10, true), 'toto');
   CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10, true), 'toto');
-  s := 'toto'#13#10;
   CheckEqual(PurgeHeaders(s), s);
   CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10), s);
   CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10), s);
@@ -8938,6 +8964,7 @@ begin
     'accept: all'#13#10'toto'#13#10'content-length: 10'#13#10), s);
   CheckEqual(PurgeHeaders(
     'accept: all'#13#10'content-length: 10'#13#10'toto'#13#10), s);
+  // some HTTP methods
   Check(HttpMethodWithNoBody('HEAD'));
   Check(HttpMethodWithNoBody('head'));
   Check(HttpMethodWithNoBody('HEADER'));
