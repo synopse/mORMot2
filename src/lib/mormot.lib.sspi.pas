@@ -67,20 +67,14 @@ type
   TCtxtHandle = type TSecHandle;
   PCtxtHandle = type PSecHandle;
 
-  /// SSPI context
+  /// SSPI high-level Auth context
   TSecContext = record
-    ID: Int64;
     CredHandle: TSecHandle;
     CtxHandle: TSecHandle;
-    CreatedTick64: Int64;
     ChannelBindingsHash: pointer;
     ChannelBindingsHashLen: cardinal;
   end;
   PSecContext = ^TSecContext;
-
-  /// dynamic array of SSPI contexts
-  // - used to hold information between calls to ServerSspiAuth
-  TSecContextDynArray = array of TSecContext;
 
   /// defines a SSPI buffer
   {$ifdef USERECORDWITHMETHODS}
@@ -591,9 +585,8 @@ type
   end;
 
 
-/// set aSecHandle fields to empty state for a given connection ID
-procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64 = 0; aTick64: Int64 = 0);
+/// set aSecHandle fields to empty state for a new handshake
+procedure InvalidateSecContext(var aSecContext: TSecContext);
 
 /// free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -1267,26 +1260,17 @@ end;
 { ESynSspi }
 
 class procedure ESynSspi.RaiseLastOSError(const aContext: TSecContext);
-var
-  text: string;
 begin
-  text := WinLastError('SSPI API');
-  if aContext.ID = 0 then
-    raise Create(text)
-  else
-    raise CreateFmt('%s for ConnectionID=%d', [text, aContext.ID]);
+  raise Create(WinLastError('SSPI API'));
 end;
 
 
-procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID, aTick64: Int64);
+procedure InvalidateSecContext(var aSecContext: TSecContext);
 begin
-  aSecContext.ID := aConnectionID;
   aSecContext.CredHandle.dwLower := -1;
   aSecContext.CredHandle.dwUpper := -1;
-  aSecContext.CtxHandle.dwLower := -1;
-  aSecContext.CtxHandle.dwUpper := -1;
-  aSecContext.CreatedTick64 := aTick64;
+  aSecContext.CtxHandle.dwLower  := -1;
+  aSecContext.CtxHandle.dwUpper  := -1;
   aSecContext.ChannelBindingsHash := nil;
   aSecContext.ChannelBindingsHashLen := 0;
 end;

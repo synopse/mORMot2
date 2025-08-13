@@ -452,26 +452,17 @@ function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 { ****************** Middle-Level GSSAPI Wrappers }
 
 type
-  /// GSSAPI Auth context
-  // - first field should be an Int64 ID - typically a THttpServerConnectionID
+  /// GSSAPI high-level  Auth context
   TSecContext = record
-    ID: Int64;
     CredHandle: pointer;
     CtxHandle: pointer;
-    CreatedTick64: Int64;
     ChannelBindingsHash: pointer;
     ChannelBindingsHashLen: cardinal;
   end;
   PSecContext = ^TSecContext;
 
-  /// dynamic array of Auth contexts
-  // - used to hold information between calls to ServerSspiAuth
-  TSecContextDynArray = array of TSecContext;
-
-
-/// Sets aSecHandle fields to empty state for a given connection ID
-procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID: Int64 = 0; aTick64: Int64 = 0);
+/// set aSecHandle fields to empty state for a new handshake
+procedure InvalidateSecContext(var aSecContext: TSecContext);
 
 /// Free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -864,15 +855,9 @@ end;
 
 { ****************** Middle-Level GSSAPI Wrappers }
 
-procedure InvalidateSecContext(var aSecContext: TSecContext;
-  aConnectionID, aTick64: Int64);
+procedure InvalidateSecContext(var aSecContext: TSecContext);
 begin
-  aSecContext.ID := aConnectionID;
-  aSecContext.CredHandle := nil;
-  aSecContext.CtxHandle := nil;
-  aSecContext.CreatedTick64 := aTick64;
-  aSecContext.ChannelBindingsHash := nil;
-  aSecContext.ChannelBindingsHashLen := 0;
+  FillCharFast(aSecContext, SizeOf(aSecContext), 0);
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
