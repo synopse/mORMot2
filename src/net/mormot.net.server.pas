@@ -7103,9 +7103,9 @@ begin
     begin
       // pcfBearerDirect* for pcoHttpDirect mode: /https/microsoft.com/...
       if (aRemoteIp <> '') and
-         not (IsLocalHost(pointer(aRemoteIP)) or
-              (aRemoteIP = fMac.IP)) then
-        include(err, eDirectIp);
+         (PCardinal(aRemoteIP)^ <> HOST_127) and
+         (aRemoteIP <> fMac.IP) then
+        include(err, eDirectIp); // only accepted from local
       if not Check(BearerDecode(aBearerToken, pcfRequest, msg),
                'OnBeforeBody Direct', msg) then
         include(err, eDirectDecode)

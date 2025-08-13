@@ -2820,14 +2820,15 @@ begin
   Protocol.fConnectionOpaque := ConnectionOpaque;
   Protocol.fRemoteIP := Http.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
   if Protocol.RemoteIP = '' then
-  begin
-    Protocol.RemoteIP := RemoteIP;
-    Protocol.RemoteLocalhost := (RemoteIP = '127.0.0.1') or
-                                 (RemoteIPLocalHostAsVoidInServers and
-                                  (RemoteIP = ''));
-  end
+    if RemoteIP = '' then
+      Protocol.RemoteLocalhost := RemoteIPLocalHostAsVoidInServers
+    else
+    begin
+      Protocol.RemoteIP := RemoteIP;
+      Protocol.RemoteLocalhost := PCardinal(RemoteIP)^ = HOST_127
+    end
   else
-    Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
+    Protocol.RemoteLocalhost := PCardinal(RemoteIP)^ = HOST_127;
   // call OnUpgraded callback for request custom validation (e.g. bearer)
   if Assigned(fOnUpgraded) then
   begin

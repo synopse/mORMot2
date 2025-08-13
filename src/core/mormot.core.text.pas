@@ -8795,8 +8795,9 @@ begin
   aValue := 0;
   result := false;
   if (aIP = nil) or
-     (IdemPChar(aIP, '127.0.0.1') and
-      (aIP[9] = #0)) then
+     ((PCardinalArray(aIP)[0] = HOST_127) and    // 127.
+      (PCardinalArray(aIP)[1] = HOST_127_4) and  // 0.0.
+      (PWordArray(aIP)[4] = ord('1'))) then      // 1
     exit;
   for i := 0 to 3 do
   begin
@@ -8807,11 +8808,10 @@ begin
       exit;
     b[i] := c;
   end;
-  if PCardinal(@b)^ <> $0100007f then // may be e.g. '127.000.000.001'
-  begin
-    aValue := PCardinal(@b)^;
-    result := true;
-  end;
+  if PCardinal(@b)^ = $0100007f then // may be e.g. '127.000.000.001'
+    exit;
+  aValue := PCardinal(@b)^;
+  result := true;
 end;
 
 function IPToCardinal(const aIP: RawUtf8; out aValue: cardinal): boolean;

@@ -781,6 +781,11 @@ const
   FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
   FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
   TRUE_LOW   = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
+  FALSE_HI   = ord('F') + ord('A') shl 8 + ord('L') shl 16 + ord('S') shl 24;
+  TRUE_HI    = ord('T') + ord('R') shl 8 + ord('U') shl 16 + ord('E') shl 24;
+  YES_HI     = ord('Y') + ord('E') shl 8 + ord('S') shl 16;
+  HOST_127   = ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24;
+  HOST_127_4 = ord('0') + ord('.') shl 8 + ord('0') shl 16 + ord('.') shl 24;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;
@@ -5946,8 +5951,7 @@ function GetBoolean(P: PUtf8Char): boolean;
 begin
   result := (P <> nil) and
             (PInteger(P)^ <> FALSE_LOW) and
-            ((PInteger(P)^ = TRUE_LOW) or
-             ((PInteger(P)^ and $ffff) <> ord('0')));
+            (PWord(P)^ <> ord('0'));
 end;
 
 function GetBoolean(const value: RawUtf8): boolean;
@@ -5966,8 +5970,8 @@ end;
 function GetTrue(P: PUtf8Char): integer;
 begin
   result := PInteger(P)^ and $dfdfdfdf;
-  if (result = ord('T') + ord('R') shl 8 + ord('U') shl 16 + ord('E') shl 24) or
-     (result = ord('Y') + ord('E') shl 8 + ord('S') shl 16) then
+  if (result = TRUE_HI) or
+     (result = YES_HI) then
     result := 1
   else
     result := 0;
@@ -5984,11 +5988,11 @@ begin
   if err = 0 then
     exit;
   c := PInteger(P)^ and $dfdfdfdf;
-  if (c = ord('F') + ord('A') shl 8 + ord('L') shl 16 + ord('S') shl 24) or
+  if (c = FALSE_HI) or
      (c and $ffffff = ord('N') + ord('O') shl 8) then
     V := 0
-  else if (c = ord('T') + ord('R') shl 8 + ord('U') shl 16 + ord('E') shl 24) or
-          (c = ord('Y') + ord('E') shl 8 + ord('S') shl 16) then
+  else if (c = TRUE_HI) or
+          (c = YES_HI) then
     V := 1
   else
     result := false;

@@ -5935,12 +5935,9 @@ begin
 end;
 
 function IsLocalHost(Host: PUtf8Char): boolean;
-var
-  c: cardinal;
 begin
-  c := PCardinal(Host)^;
-  result := (c = ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24) or
-            (c = ord(':') + ord(':') shl 8 + ord('1') shl 16); // c6Localhost
+  result := (PCardinal(Host)^ = HOST_127) or // also check for c6Localhost:
+            (PCardinal(Host)^ = ord(':') + ord(':') shl 8 + ord('1') shl 16);
 end;
 
 

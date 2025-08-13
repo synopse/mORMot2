@@ -2082,6 +2082,7 @@ type
     // THttpServerGeneric.RemoteIPHeader (e.g. 'X-Real-IP' for nginx)
     // - with SocketLayer = nlUdp, InputSock will put here the 'ip:port' of the
     // received packet during SocketIn^ process
+    // - equals '' for localhost/127.0.0.1
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
     /// the full requested URI, as specified to OpenUri() constructor
@@ -2866,7 +2867,8 @@ begin
           ({%H-}p > 65535) then
     result := nrNotFound // port should be valid
   else if (address = '') or
-          IsLocalHost(pointer(address)) or
+          (address = cLocalhost) or
+          (address = c6Localhost) or
           PropNameEquals(address, 'localhost') or
           (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
     result := addr.SetIP4Port(cLocalhost32, p)
