@@ -5596,14 +5596,14 @@ begin
   // (username= is not needed with Kerberos so either void or missing)
   browserauth := false;
   // validate base-64 encoded input data in URI (REST) or HTTP header (browser)
-  data := Ctxt.InputUtf8['Data'];
+  data := Ctxt.InputUtf8OrVoid['Data'];
   if data = '' then
     if aUserName <> '' then
       exit // may be another REST auth - keep result=false
     else
     begin
       // client is browser and should use HTTP headers to send auth data
-      FindNameValue(Ctxt.Call.InHead, SECPKGNAMEHTTPAUTHORIZATION, data);
+      FindNameValue(Ctxt.Call.InHead, 'AUTHORIZATION: ', data);
       if data = '' then
       begin
         // no auth data sent, reply with supported auth method(s)
@@ -5613,6 +5613,9 @@ begin
         result := true; // do not try another auth
         exit;
       end;
+      if not IdemPChar(pointer(data), 'NEGOTIATE ') then
+        exit; // may be e.g. 'Basic VXNlcjpzeW5vcHNl'
+      delete(data, 1, 10); // was 'Authorization: Negotiate <base64 encoding>'
       browserauth := true;
     end;
   result := true;
