@@ -82,6 +82,7 @@ type
   {$ifdef HASAESNI}          // compiler supports asm with aesenc/aesdec opcodes
     {$define USECLMUL}       // pclmulqdq opcodes
     {$define USEAESNIHASH}   // aesni+sse4.1 32-64-128 aeshash
+    {$define USEAESNICTR}    // 4x interleaved aesni
   {$endif HASAESNI}
   {$ifdef OSWINDOWS}
     {$define SHA512_X86}     // external sha512-x86.o for win32/lin32
@@ -4435,7 +4436,7 @@ begin // sub-procedure for better code generation
 end;
 
 {$ifdef USEAESNICTR}
-// AES-NI + SSE 4.1 asm with 8x (CPUX64) interleave factor
+// AES-NI + SSE 4.1 asm with 4x (CPUX86) or 8x (CPUX64) interleave factor
 
 procedure CtrNistCarry12(ctr: PAesBlock); // not worth inlining
 var
@@ -4487,7 +4488,7 @@ procedure TAes.DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
 begin
   {$ifdef USEAESNICTR}
   if aesNiSse41 in TAesContext(Context).Flags then
-    // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
+    // AES-NI + SSE 4.1 asm with 4x (CPUX86) or 8x (CPUX64) interleave factor
     AesNiEncryptCtrNist(src, dst, blockcount shl 4, @Context, pointer(iv))
   else
   {$endif USEAESNICTR}
@@ -5024,7 +5025,7 @@ begin
   else
   {$endif USEGCMAVX}
   if (ILen and AesBlockMod = 0) and
-     {$ifdef USEAESNICTR} // faster with 8x interleaved internal_crypt()
+     {$ifdef USEAESNICTR} // faster with 4x/8x interleaved internal_crypt()
      not (aesNiSse41 in TAesContext(aes).Flags) and
      {$endif USEAESNICTR}
      (state.blen = 0) then
@@ -5073,7 +5074,7 @@ begin
   {$endif USEGCMAVX}
   if (ILen <> 0) and
      (ILen and AesBlockMod = 0) and
-     {$ifdef USEAESNICTR} // faster with 8x interleaved internal_crypt()
+     {$ifdef USEAESNICTR} // faster with 4x/8x interleaved internal_crypt()
      not (aesNiSse41 in TAesContext(aes).Flags) and
      {$endif USEAESNICTR}
      (state.blen = 0) then
@@ -6605,7 +6606,7 @@ begin
   if Count <> 0 then
     if Count and AesBlockMod = 0 then
       {$ifdef USEAESNICTR}
-      // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
+      // AES-NI + SSE 4.1 asm with 4x (CPUX86) or 8x (CPUX64) interleave factor
       if aesNiSse41 in TAesContext(fAes).Flags then
         AesNiEncryptCtrNist(BufIn, BufOut, Count, @fAes, @fIV)
       else
@@ -7873,9 +7874,9 @@ begin
   if main <> 0 then
     {$ifdef USEAESNICTR}
     if (aesNiSse41 in ctx.Flags) and
-       (main > 8) then
+       (main >= {$ifdef CPU32} 4 {$else} 8 {$endif}) then
     begin
-      // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
+      // AES-NI + SSE 4.1 asm with 4x (CPUX86) or 8x (CPUX64) interleave factor
       main := main shl AesBlockShift;
       FillCharFast(dest^, main, 0); // dst := 0 xor ctx(iv) -> PRNG
       AesNiEncryptCtrNist(dest, dest, main, @ctx, @ctx.iv);

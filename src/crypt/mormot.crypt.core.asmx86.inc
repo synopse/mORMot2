@@ -2344,6 +2344,212 @@ asm
 end;
 
 
+{$ifdef USEAESNICTR}
+
+// use TAesContext.buf as state machine: c0=src c1=dst c2=iv c3=blocks
+
+// AES-CTR over a 32-bit counter - handle a few blocks until 4x alignment
+procedure AesNiEncryptCtrNist32By1(ctxt: PAesContext);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    esi
+        push    edi
+        mov     esi, [eax].TAesContext.buf.c0  // esi=src
+        mov     edi, [eax].TAesContext.buf.c1  // edi=dst
+        mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        mov     ecx, [edx].THash128Rec.c3      // ecx=ctr
+        {$ifdef FPC} align 8 {$endif}
+@by1:   movups  xmm7, [edx]
+        bswap   ecx
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(xmm7)
+        add     ecx, 1
+        movups  xmm0, [esi]
+        lea     esi, dword ptr [esi + 16]
+        pxor    xmm0, xmm7
+        bswap   ecx
+        movups  [edi], xmm0
+        lea     edi, dword ptr [edi + 16]
+        mov     [edx].THash128Rec.c3, ecx
+        dec     dword ptr [eax].TAesContext.buf.c3 // blocks
+        jnz     @by1
+        mov     [eax].TAesContext.buf.c0, esi
+        mov     [eax].TAesContext.buf.c1, edi
+@done:  pop     edi
+        pop     esi
+end;
+
+// AES-CTR with 4x AES-NI interleave factor and SSE 4.1 over a 32-bit counter
+procedure AesNiEncryptCtrNist32By4(ctxt: PAesContext);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    esi
+        push    edi
+        push    ebx
+        mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        // prepare ecx = 32-bit ctr
+        mov     ecx, [edx].THash128Rec.c3
+        bswap   ecx
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // prepare xmm0-xmm3 as iv0-iv3
+        movups  xmm0, [edx]
+        movaps  xmm1, xmm0
+        movaps  xmm2, xmm0
+        movaps  xmm3, xmm0
+        lea     ebx, [ecx + 1]
+        lea     esi, [ecx + 2]
+        lea     edi, [ecx + 3]
+        bswap   ecx
+        bswap   ebx
+        bswap   esi
+        bswap   edi
+        pinsrd  xmm0, ecx, 3  // SSE 4.1 instruction
+        pinsrd  xmm1, ebx, 3
+        pinsrd  xmm2, esi, 3
+        pinsrd  xmm3, edi, 3
+        bswap   ecx
+        lea     ecx, [ecx + 4]
+        // 4x interleaved AES process
+        mov     esi, [eax].TAesContext.buf.c0  // esi=src
+        mov     edi, [eax].TAesContext.buf.c1  // edi=dst
+        mov     bl, byte ptr [eax].TAesContext.Rounds
+        movups  xmm4, [eax + $00]
+        movups  xmm5, [eax + $10]
+        movups  xmm6, [eax + $20]
+        movups  xmm7, [eax + $30]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        movups  xmm4, [eax + $40]
+        movups  xmm5, [eax + $50]
+        movups  xmm6, [eax + $60]
+        movups  xmm7, [eax + $70]
+        lea     eax, dword ptr [eax + $70] // for smaller codegen
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        movups  xmm4, [eax + $10]
+        movups  xmm5, [eax + $20]
+        movups  xmm6, [eax + $30]
+        movups  xmm7, [eax + $40]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        cmp     bl, 10
+        ja      @192
+@last:  aesenclast xmm0, xmm6
+        aesenclast xmm1, xmm6
+        aesenclast xmm2, xmm6
+        aesenclast xmm3, xmm6
+@write: // dst := src xor AES(iv)
+        lea     eax, dword ptr [eax - $70]
+        movups  xmm4, [esi + $00]
+        movups  xmm5, [esi + $10]
+        movups  xmm6, [esi + $20]
+        movups  xmm7, [esi + $30]
+        lea     esi, dword ptr [esi + $40]
+        mov     [eax].TAesContext.buf.c0, esi
+        pxor    xmm4, xmm0
+        pxor    xmm5, xmm1
+        pxor    xmm6, xmm2
+        pxor    xmm7, xmm3
+        lea     esi, dword ptr [edi + $40]
+        mov     [eax].TAesContext.buf.c1, esi
+        movups  [edi + $00], xmm4
+        movups  [edi + $10], xmm5
+        movups  [edi + $20], xmm6
+        movups  [edi + $30], xmm7
+        dec     dword ptr [eax].TAesContext.buf.c3 // 4x blocks
+        jnz     @by4
+@done:  pop     ebx
+        pop     edi
+        pop     esi
+        ret
+@192:   movups  xmm4, [eax + $50]
+        movups  xmm5, [eax + $60]
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        cmp     bl, 12
+        ja      @256
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @write
+@256:   movups  xmm6, [eax + $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        jmp     @last
+end;
+
+// AES-NI + SSE 4.1 asm with 4x interleave factor
+procedure AesNiEncryptCtrNist32(
+  src, dst: pointer; blocks: PtrUInt; ctxt: PAesContext; iv: PHash128Rec); inline;
+var
+  state: PHash128Rec; // = TAesContext.buf
+begin
+  if blocks = 0 then
+    exit;
+  state := @ctxt^.buf;
+  state^.c0 := PtrUInt(src);
+  state^.c1 := PtrUInt(dst);
+  state^.c2 := PtrUInt(iv);
+  // handle 1..3 blocks for 4x process
+  state^.c3 := blocks and 3;
+  if state^.c3 <> 0 then
+    AesNiEncryptCtrNist32By1(ctxt);
+  blocks := blocks shr 2;
+  if blocks = 0 then
+    exit;
+  // 4x interleaved process
+  ctxt^.buf.c3 := blocks;
+  AesNiEncryptCtrNist32By4(ctxt);
+end;
+
+{$endif USEAESNICTR}
+
 {$ifdef HASAESNI} // oldest Delphi don't handle some opcode used below
 
 // compute a := a * b in GF(2^128) using pclmulqdq on WestMere CPUs
