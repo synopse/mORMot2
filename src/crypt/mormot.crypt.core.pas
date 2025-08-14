@@ -59,6 +59,7 @@ type
   {$ifdef HASAESNI}          // compiler supports asm with aesenc/aesdec opcodes
     {$define USEAESNI}
     {$define USEAESNI64}
+    {$define USEAESNICTR}    // 8x interleaved aesni
     {$ifdef CPUX64ASM}       // Delphi x86_64 SSE asm is buggy before XE7
       {$define USECLMUL}     // pclmulqdq opcodes
       {$define USEGCMAVX}    // 8x interleaved aesni + pclmulqdq asm for AES-GCM
@@ -4433,15 +4434,63 @@ begin // sub-procedure for better code generation
     until blockcount = 0;
 end;
 
+{$ifdef USEAESNICTR}
+// AES-NI + SSE 4.1 asm with 8x (CPUX64) interleave factor
+
+procedure CtrNistCarry12(ctr: PAesBlock); // not worth inlining
+var
+  n: PtrUInt;
+  carry: cardinal;
+begin
+  n := 12;
+  carry := 1;
+  repeat
+    dec(n);
+    inc(carry, ctr[n]);
+    ctr[n] := byte(carry);
+    carry := carry shr 8;
+  until (carry = 0) or
+        (n = 0);
+end;
+
+// AesNiEncryptCtrNist32() expects the CTR in lowest 32-bit to never overflow
+procedure AesNiEncryptCtrNist(src, dest: PByte; len: cardinal;
+  ctxt: pointer; iv: PHash128Rec);// inline;
+var
+  ctr, blocks: cardinal;
+begin
+  ctr := bswap32(iv.c3);
+  repeat
+    blocks := len shr AesBlockShift;
+    inc(ctr, blocks);
+    if ctr < blocks then
+    begin
+      // 32-bit counter overflow -> will loop until all processed
+      dec(blocks, ctr);
+      ctr := 0;
+    end;
+    AesNiEncryptCtrNist32(src, dest, blocks, ctxt, iv); // 32-bit CTR asm
+    iv.c3 := bswap32(ctr);
+    if ctr = 0 then
+      CtrNistCarry12(@iv.b); // propagate carry
+    blocks := blocks shl AesBlockShift;
+    inc(src, blocks);
+    inc(dest, blocks);
+    dec(len, blocks);
+  until len = 0; // caller ensured len and 15 = 0
+end;
+
+{$endif USEAESNICTR}
+
 procedure TAes.DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
   blockcount: PtrUInt);
 begin
-  {$ifdef USEAESNI64}
+  {$ifdef USEAESNICTR}
   if aesNiSse41 in TAesContext(Context).Flags then
     // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
     AesNiEncryptCtrNist(src, dst, blockcount shl 4, @Context, pointer(iv))
   else
-  {$endif USEAESNI64}
+  {$endif USEAESNICTR}
     DoBlocksCtrPas(iv, src, dst, blockcount, TAesContext(Context));
 end;
 
@@ -4703,7 +4752,7 @@ end;
 procedure TAesGcmEngine.internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
 var
   b_pos: PtrUInt;
-  {$ifdef USEAESNI64} ctr, {$endif USEAESNI64}
+  {$ifdef USEAESNICTR} ctr, {$endif USEAESNICTR}
   blocks: cardinal;
 begin
   if ILen = 0 then
@@ -4725,7 +4774,7 @@ begin
     end;
   blocks := ILen shr AesBlockShift;
   if blocks <> 0 then
-    {$ifdef USEAESNI64}
+    {$ifdef USEAESNICTR}
     if aesNiSse41 in TAesContext(aes).Flags then
     begin
       // AES-GCM has a 32-bit counter -> don't use 128-bit AesNiEncryptCtrNist()
@@ -4739,7 +4788,7 @@ begin
       ILen := Ilen and AesBlockMod;
     end
     else
-    {$endif USEAESNI64}
+    {$endif USEAESNICTR}
     repeat
       GCM_IncCtr(TAesContext(aes).iv.b);
       aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf.b); // maybe AES-NI
@@ -4975,9 +5024,9 @@ begin
   else
   {$endif USEGCMAVX}
   if (ILen and AesBlockMod = 0) and
-     {$ifdef USEAESNI64} // faster with 8x interleaved internal_crypt()
+     {$ifdef USEAESNICTR} // faster with 8x interleaved internal_crypt()
      not (aesNiSse41 in TAesContext(aes).Flags) and
-     {$endif USEAESNI64}
+     {$endif USEAESNICTR}
      (state.blen = 0) then
   begin
     inc(state.atx_cnt.V, ILen);
@@ -5024,9 +5073,9 @@ begin
   {$endif USEGCMAVX}
   if (ILen <> 0) and
      (ILen and AesBlockMod = 0) and
-     {$ifdef USEAESNI64} // faster with 8x interleaved internal_crypt()
+     {$ifdef USEAESNICTR} // faster with 8x interleaved internal_crypt()
      not (aesNiSse41 in TAesContext(aes).Flags) and
-     {$endif USEAESNI64}
+     {$endif USEAESNICTR}
      (state.blen = 0) then
   begin
     inc(state.atx_cnt.V, ILen);
@@ -6555,12 +6604,12 @@ procedure TAesCtr.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   if Count <> 0 then
     if Count and AesBlockMod = 0 then
-      {$ifdef USEAESNI64}
+      {$ifdef USEAESNICTR}
       // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
       if aesNiSse41 in TAesContext(fAes).Flags then
         AesNiEncryptCtrNist(BufIn, BufOut, Count, @fAes, @fIV)
       else
-      {$endif USEAESNI64}
+      {$endif USEAESNICTR}
         // dedicated pascal code for NIST CTR
         DoBlocksCtrPas(@fIV, BufIn, BufOut, Count shr AesBlockShift, TAesContext(fAes))
     else
@@ -7822,7 +7871,7 @@ end;
 procedure DoRnd(var ctx: TAesContext; dest: PByte; main, remain: PtrUInt);
 begin
   if main <> 0 then
-    {$ifdef USEAESNI64}
+    {$ifdef USEAESNICTR}
     if (aesNiSse41 in ctx.Flags) and
        (main > 8) then
     begin
@@ -7833,7 +7882,7 @@ begin
       inc(PByte(dest), main);
     end
     else
-    {$endif USEAESNI64}
+    {$endif USEAESNICTR}
     repeat
       DoRndBlock(ctx, dest^);
       inc(PAesBlock(dest));

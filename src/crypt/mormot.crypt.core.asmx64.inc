@@ -4839,49 +4839,6 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$endif WIN64ABI}
 end;
 
-procedure CtrNistCarry12(ctr: PAesBlock); // not worth inlining
-var
-  n: PtrUInt;
-  carry: cardinal;
-begin
-  n := 12;
-  carry := 1;
-  repeat
-    dec(n);
-    inc(carry, ctr[n]);
-    ctr[n] := byte(carry);
-    carry := carry shr 8;
-  until (carry = 0) or
-        (n = 0);
-end;
-
-// AesNiEncryptCtrNist32() expects the CTR in lowest 32-bit to never overflow
-procedure AesNiEncryptCtrNist(src, dest: PByte; len: cardinal;
-  ctxt, iv: PHash128Rec); inline;
-var
-  ctr, blocks: cardinal;
-begin
-  ctr := bswap32(iv.c3);
-  repeat
-    blocks := len shr AesBlockShift;
-    inc(ctr, blocks);
-    if ctr < blocks then
-    begin
-      // 32-bit counter overflow -> will loop until all processed
-      dec(blocks, ctr);
-      ctr := 0;
-    end;
-    AesNiEncryptCtrNist32(src, dest, blocks, ctxt, iv); // 32-bit CTR asm
-    iv.c3 := bswap32(ctr);
-    if ctr = 0 then
-      CtrNistCarry12(@iv.b); // propagate carry
-    blocks := blocks shl AesBlockShift;
-    inc(src, blocks);
-    inc(dest, blocks);
-    dec(len, blocks);
-  until len = 0; // caller ensured len and 15 = 0
-end;
-
 // AES-CTR and 256-bit crc32c with 8x AES-NI interleave over a 32-bit counter
 procedure AesNiEncryptCtrCrc32(
   src, dest: pointer; blocks: PtrUInt; ctxt: TAesCtc);
@@ -5501,6 +5458,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$endif WIN64ABI}
 end;
 
+procedure CtrNistCarry12(ctr: PAesBlock); forward; // not worth inlining
+
 // AesNiEncryptCtrCrc32() expects the CTR in lowest 32-bit to never overflow
 procedure AesNiEncryptCtrCrc(src, dest: PByte; len: cardinal;
   ctxt: TAesCtc); inline;
@@ -5574,7 +5533,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenclast xmm7, xmm11
         pxor    xmm15, xmm7
         movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
-        movups  xmm7, xmm15              // fIV := fOut
+        movups  xmm7, xmm15               // fIV := fOut
         add     src, 16
         add     dest, 16
         sub     blocks, 1
