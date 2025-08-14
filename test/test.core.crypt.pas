@@ -2498,7 +2498,7 @@ begin
               if i < 64 then
                 len := i
               else if i < 128 then
-                len := i * 15
+                len := (i * 5) shr 2
               else
                 len := i * 31; // encrypt buffers from 0 to 7936 bytes
               s2 := copy(orig, 1, len);
