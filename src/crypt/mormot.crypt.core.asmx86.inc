@@ -2303,7 +2303,7 @@ asm
 end;
 
 procedure AesNiCtrAnyEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
-asm
+asm     // called from TAesC64.Encrypt
         push    ebx
         push    esi
         push    edi
@@ -2559,7 +2559,11 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
 asm
         movups  xmm0, dqword ptr [a]
         movups  xmm1, dqword ptr [b]
+        {$ifdef FPC}
+        movaps  xmm2, dqword ptr [@swap]
+        {$else} // the Delphi asm has trouble aligning
         movups  xmm2, dqword ptr [@swap]
+        {$endif FPC}
         pshufb  xmm0, xmm2
         pshufb  xmm1, xmm2
         movdqa  xmm5, xmm0
@@ -2622,7 +2626,11 @@ asm
         psllq   xmm3, 57
         por     xmm4, xmm7
         psrlq   xmm0, 7
+        {$ifdef FPC}
+        movaps  xmm7, dqword ptr [@swap]
+        {$else} // the Delphi asm has trouble aligning
         movups  xmm7, dqword ptr [@swap]
+        {$endif FPC}
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
@@ -2635,6 +2643,7 @@ asm
         pshufb  xmm0, xmm7
         movups  dqword ptr [a], xmm0
         ret
+        {$ifdef FPC} align 16 {$endif}
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
 end;
 
