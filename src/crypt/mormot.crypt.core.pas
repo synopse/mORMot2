@@ -4428,7 +4428,7 @@ begin // sub-procedure for better code generation
       inc(iv^[15]);
       if iv^[15] = 0 then // manual big-endian increment
         CtrNistCarryBigEndian(iv^);
-      XorBlock16(src, dst, pointer(@ctxt.buf)); // dst := src xor buf
+      XorBlock16(src, dst, @ctxt.buf); // dst := src xor buf
       inc(PAesBlock(src));
       inc(PAesBlock(dst));
       dec(blockcount);
@@ -4437,6 +4437,179 @@ end;
 
 {$ifdef USEAESNICTR}
 // AES-NI + SSE 4.1 asm with 4x (CPUX86) or 8x (CPUX64) interleave factor
+
+{$ifdef CPUX64tobestabilized}
+
+// AES-CTR with 4x AES-NI interleave factor over a 32-bit counter
+procedure AesNiEncryptCtrNist32By4(
+  src, dst: pointer; blocks: PtrUInt; ctxt, iv: pointer);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rdi=src, rsi=dest, rdx=blocks, rcx=ctxt, r8=iv
+        {$ifdef WIN64ABI}
+        push    rdi
+        push    rsi
+        {$endif WIN64ABI}
+        // r10=src, r11=dst, r8=blocks, rax=ctxt, r9=iv
+        mov     rax, ctxt
+        mov     r9,  iv
+        mov     r10, src
+        mov     r11, dst
+        mov     r8, blocks
+        // prepare ecx = 32-bit ctr
+        mov     ecx, dword ptr [r9].THash128Rec.c3
+        bswap   ecx
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // prepare xmm0-xmm3 as iv0-iv3
+        movups  xmm0, [r9]
+        movaps  xmm1, xmm0
+        movaps  xmm2, xmm0
+        movaps  xmm3, xmm0
+        lea     rdx, [rcx + 1]
+        lea     rsi, [rcx + 2]
+        lea     rdi, [rcx + 3]
+        bswap   ecx
+        bswap   edx
+        bswap   esi
+        bswap   edi
+        pinsrd  xmm0, ecx, 3  // SSE 4.1 instruction
+        pinsrd  xmm1, edx, 3
+        pinsrd  xmm2, esi, 3
+        pinsrd  xmm3, edi, 3
+        bswap   ecx
+        lea     rcx, [rcx + 4]
+        // 4x interleaved AES process
+        mov     bl, byte ptr [rax].TAesContext.Rounds
+        movups  xmm4, [rax + $00]
+        movups  xmm5, [rax + $10]
+        movups  xmm6, [rax + $20]
+        movups  xmm7, [rax + $30]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        movups  xmm4, [rax + $40]
+        movups  xmm5, [rax + $50]
+        movups  xmm6, [rax + $60]
+        movups  xmm7, [rax + $70]
+        lea     rax, dword ptr [rax + $70] // for smaller codegen
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        movups  xmm4, [rax + $10]
+        movups  xmm5, [rax + $20]
+        movups  xmm6, [rax + $30]
+        movups  xmm7, [rax + $40]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        cmp     bl, 10
+        ja      @192
+@last:  aesenclast xmm0, xmm6
+        aesenclast xmm1, xmm6
+        aesenclast xmm2, xmm6
+        aesenclast xmm3, xmm6
+@write: // dst := src xor AES(iv)
+        lea     rax, dword ptr [rax - $70]
+        movups  xmm4, [r10 + $00]
+        movups  xmm5, [r10 + $10]
+        movups  xmm6, [r10 + $20]
+        movups  xmm7, [r10 + $30]
+        lea     r10, qword ptr [r10 + $40]
+        pxor    xmm4, xmm0
+        pxor    xmm5, xmm1
+        pxor    xmm6, xmm2
+        pxor    xmm7, xmm3
+        movups  [r11 + $00], xmm4
+        movups  [r11 + $10], xmm5
+        movups  [r11 + $20], xmm6
+        movups  [r11 + $30], xmm7
+        lea     r11, qword [r11 + $40]
+        sub     r8, 1 // 4x blocks per loop
+        jnz     @by4
+@done:  {$ifdef WIN64ABI}
+        pop     rsi
+        pop     rdi
+        {$endif WIN64ABI}
+        ret
+@192:   movups  xmm4, [rax + $50]
+        movups  xmm5, [rax + $60]
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        cmp     bl, 12
+        ja      @256
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @write
+@256:   movups  xmm6, [rax + $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        jmp     @last
+end;
+
+procedure AesNiEncryptCtrNist32(
+  src, dst: pointer; blocks: PtrUInt; ctxt: PAesContext; iv: PHash128Rec);
+begin
+  if blocks = 0 then
+    exit;
+  while blocks and 3 <> 0 do // max 3 iterations to align for x4 interleave
+  begin
+    ctxt^.DoBlock(ctxt^, iv^, ctxt^.buf); // buf=AES(cv)
+    iv^.c3 := bswap32(bswap32(iv^.c3) + 1);
+    XorBlock16(src, dst, @ctxt^.buf); // dst := src xor buf
+    inc(PAesBlock(src));
+    inc(PAesBlock(dst));
+    dec(blocks);
+  end;
+  blocks := blocks shr 2;
+  if blocks <> 0 then
+    AesNiEncryptCtrNist32By4(src, dst, blocks, ctxt, iv);
+end;
+
+{$endif CPUX64}
 
 procedure CtrNistCarry12(ctr: PAesBlock); // not worth inlining
 var
