@@ -2929,7 +2929,7 @@ type
     // IV or CTR used e.g. by GCM or TAesPrng
     iv: THash128Rec;
     // work buffer used e.g. by CTR/GCM or AesNiTrailer()
-    buf: TAesBlock;
+    buf: THash128Rec;
     // main thread-safe AES function for one TAesBlock - set at runtime from HW
     DoBlock: TAesContextDoBlock;
     {$ifdef USEAESNI32}
@@ -2939,6 +2939,7 @@ type
     Rounds: byte;    // Number of rounds
     KeyBits: word;   // Number of bits in key (128/192/256)
   end;
+  PAesContext = ^TAesContext;
 
   TShaHash = packed record
     // will use A..E with TSha1, A..H with TSha256
@@ -4716,7 +4717,7 @@ begin
     while (ILen > 0) and
           (b_pos < SizeOf(TAesBlock)) do
     begin
-      ctp^ := ptp^ xor TAesContext(aes).buf[b_pos];
+      ctp^ := ptp^ xor TAesContext(aes).buf.b[b_pos];
       inc(b_pos);
       inc(ptp);
       inc(ctp);
@@ -4741,7 +4742,7 @@ begin
     {$endif USEAESNI64}
     repeat
       GCM_IncCtr(TAesContext(aes).iv.b);
-      aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf); // maybe AES-NI
+      aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf.b); // maybe AES-NI
       XorBlock16(pointer(ptp), pointer(ctp), @TAesContext(aes).buf);
       inc(PAesBlock(ptp));
       inc(PAesBlock(ctp));
@@ -4752,10 +4753,10 @@ begin
     if b_pos = SizeOf(TAesBlock) then
     begin
       GCM_IncCtr(TAesContext(aes).iv.b);
-      aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf);
+      aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf.b);
       b_pos := 0;
     end;
-    ctp^ := TAesContext(aes).buf[b_pos] xor ptp^;
+    ctp^ := TAesContext(aes).buf.b[b_pos] xor ptp^;
     inc(b_pos);
     inc(ptp);
     inc(ctp);
@@ -5035,7 +5036,7 @@ begin
       gf_mul_h(self, state.txt_ghv); // maybe CLMUL
       XorBlock16(@state.txt_ghv, ctp);
       GCM_IncCtr(TAesContext(aes).iv.b);
-      aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf); // maybe AES-NI
+      aes.Encrypt(TAesContext(aes).iv.b, TAesContext(aes).buf.b); // maybe AES-NI
       XorBlock16(ctp, ptp, @TAesContext(aes).buf);
       inc(PAesBlock(ptp));
       inc(PAesBlock(ctp));
