@@ -1462,6 +1462,7 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
 function FloatToJsonNan(s: PShortString): PShortString;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its JSON text equivalency
 // - depending on the platform, it may either call str() or FloatToText()
