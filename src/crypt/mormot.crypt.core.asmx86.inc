@@ -2524,6 +2524,37 @@ asm
         jmp     @last
 end;
 
+{
+ 1) our simple 4x algorithm is much faster than OpenSSL for small content < 1KB
+ 2) for big content, OpenSSL is slightly faster
+ 3) weirdly enough, our very same 4x algorithm is slower on x86_64 than on i386
+
+ AesNiEncryptCtrNist32 Win32 on a Core i5 15400:
+ 500 mormot aes-128-ctr 8 in 18us i.e. 26.4M/s, aver. 36ns, 211.9 MB/s
+ 500 mormot aes-256-ctr 8 in 20us i.e. 23.8M/s, aver. 40ns, 190.7 MB/s
+ 500 mormot aes-128-ctr 50 in 21us i.e. 22.7M/s, aver. 42ns, 1.1 GB/s
+ 500 mormot aes-256-ctr 50 in 21us i.e. 22.7M/s, aver. 42ns, 1.1 GB/s
+ 500 mormot aes-128-ctr 100 in 37us i.e. 12.8M/s, aver. 74ns, 1.2 GB/s
+ 500 mormot aes-256-ctr 100 in 42us i.e. 11.3M/s, aver. 84ns, 1.1 GB/s
+ 500 mormot aes-128-ctr 1000 in 74us i.e. 6.4M/s, aver. 148ns, 6.2 GB/s
+ 500 mormot aes-256-ctr 1000 in 93us i.e. 5.1M/s, aver. 186ns, 5 GB/s
+ 500 mormot aes-128-ctr 10000 in 493us i.e. 0.9M/s, aver. 986ns, 9.4 GB/s
+ 500 mormot aes-256-ctr 10000 in 641us i.e. 761.7K/s, aver. 1.28us, 7.2 GB/s
+
+ OpenSSL 3.5.1 Win32:
+ 500 openssl aes-128-ctr 8 in 117us i.e. 4M/s, aver. 234ns, 32.6 MB/s
+ 500 openssl aes-256-ctr 8 in 113us i.e. 4.2M/s, aver. 226ns, 33.7 MB/s
+ 500 openssl aes-128-ctr 50 in 116us i.e. 4.1M/s, aver. 232ns, 205.5 MB/s
+ 500 openssl aes-256-ctr 50 in 116us i.e. 4.1M/s, aver. 232ns, 205.5 MB/s
+ 500 openssl aes-128-ctr 100 in 119us i.e. 4M/s, aver. 238ns, 400.7 MB/s
+ 500 openssl aes-256-ctr 100 in 121us i.e. 3.9M/s, aver. 242ns, 394 MB/s
+ 500 openssl aes-128-ctr 1000 in 154us i.e. 3.1M/s, aver. 308ns, 3 GB/s
+ 500 openssl aes-256-ctr 1000 in 165us i.e. 2.8M/s, aver. 330ns, 2.8 GB/s
+ 500 openssl aes-128-ctr 10000 in 477us i.e. 1M/s, aver. 954ns, 9.7 GB/s
+ 500 openssl aes-256-ctr 10000 in 621us i.e. 786.2K/s, aver. 1.24us, 7.5 GB/s
+
+}
+
 // AES-NI + SSE 4.1 asm with 4x interleave factor
 procedure AesNiEncryptCtrNist32(
   src, dst: pointer; blocks: PtrUInt; ctxt: PAesContext; iv: PHash128Rec); inline;
