@@ -4286,6 +4286,7 @@ function TAes.DecryptInitFrom(const Encryption: TAes;
 var
   ctx: TAesContext absolute Context;
 begin
+  ctx.Flags := [];
   if not (aesInitialized in TAesContext(Encryption).Flags) then
     // e.g. called from DecryptInit()
     EncryptInit(Key, KeySize)
@@ -11357,3 +11358,4 @@ finalization
   FinalizeUnit;
 
 end.
+
