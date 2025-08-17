@@ -3697,9 +3697,8 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure AesNiEncryptXmm0; // rax=TAesContext
+procedure AesNiEncryptXmm0; // rax=TAesContext+$70 xmm0=input/output
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-      lea     rax, [rax + $70] // for smaller code gen of [ctx + -$70..+$70]
       movups  xmm1,  dqword ptr [rax + $00 - $70]
       movups  xmm2,  dqword ptr [rax + $10 - $70]
       movups  xmm3,  dqword ptr [rax + $20 - $70]
@@ -3725,14 +3724,12 @@ procedure AesNiEncryptXmm0; // rax=TAesContext
       je      @192
       ja      @256
       aesenclast xmm0, xmm5
-      lea     rax, [rax - $70]
       ret
 @192: movups  xmm1,  dqword ptr [rax + $b0 - $70]
       movups  xmm2,  dqword ptr [rax + $c0 - $70]
       aesenc  xmm0,  xmm5
       aesenc  xmm0,  xmm1
       aesenclast xmm0, xmm2
-      lea     rax, [rax - $70]
       ret
 @256: movups  xmm1,  dqword ptr [rax + $b0 - $70]
       movups  xmm2,  dqword ptr [rax + $c0 - $70]
@@ -3743,7 +3740,6 @@ procedure AesNiEncryptXmm0; // rax=TAesContext
       aesenc  xmm0,  xmm2
       aesenc  xmm0,  xmm3
       aesenclast xmm0, xmm4
-      lea     rax, [rax - $70]
 end;
 
 procedure AesNiEncrypt128(const ctxt, source, dest);
