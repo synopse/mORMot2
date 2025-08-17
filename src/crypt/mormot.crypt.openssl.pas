@@ -3470,11 +3470,12 @@ begin
   begin
     TAesFast[mGcm] := TAesGcmOsl;
     {$ifdef HASAESNI}
-      // mormot.crypt.core x86_64 asm is faster than OpenSSL - but GCM
-      {$ifndef CPUX64}
-      // our AES-CTR x86_64 asm is faster than OpenSSL's
+    // mormot.crypt.core i386/x86_64 asm is faster than OpenSSL - but GCM
+    if (daAesNiSse41 in DisabledAsm) or
+       (not (cfAESNI in CpuFeatures)) or
+       (not (cfSSE41 in CpuFeatures)) then
+      // our AES-CTR x4 x8 asm is faster than OpenSSL's
       TAesFast[mCtr] := TAesCtrOsl;
-      {$endif CPUX64}
     {$else}
     // ARM/Aarch64 would rather use OpenSSL than our purepascal code
     TAesFast[mEcb] := TAesEcbOsl;
