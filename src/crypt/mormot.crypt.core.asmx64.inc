@@ -4393,6 +4393,100 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$endif WIN64ABI}
 end;
 
+
+{ AES-CTR alternative code }
+
+{$define USEAESNICTRORIGINAL} // our single procedure seems the fastest (yet)
+
+{ Some x86_64 numbers on a Core i5 15400, running on Debian 12:
+
+1) all our code is faster than OpenSSL- much faster in fact - we observed that
+   the OpenSSL asm is clearly circumvoluted and the benefit of using perl or
+   macros for the code is not obvious: more complex, and not worth it
+2) our naive/simple x4 approach - which did wonders on i386 - is a bit slower
+   on 86_64 for no obvious reason - perhaps newer CPUs may benefit from it
+3) we also tried an x8 unrolled version to leverage the additional xmm8-xmm15
+  registers available on the platform - but it was actually slower than our x4 code
+4) "simple" x4 and x8 code has been less tested than original AesNiEncryptCtrNist32
+-> we continue to use our original AesNiEncryptCtrNist32, and keep our naive/simple
+   x4 and x8 code as disabled reference, and may retry with future CPUs
+
+ AesNiEncryptCtrNist32By1 only
+ 500 mormot aes-128-ctr 8 in 22us i.e. 21.6M/s, aver. 44ns, 173.4 MB/s
+ 500 mormot aes-256-ctr 8 in 23us i.e. 20.7M/s, aver. 46ns, 165.8 MB/s
+ 500 mormot aes-128-ctr 50 in 24us i.e. 19.8M/s, aver. 48ns, 0.9 GB/s
+ 500 mormot aes-256-ctr 50 in 25us i.e. 19M/s, aver. 50ns, 0.9 GB/s
+ 500 mormot aes-128-ctr 100 in 25us i.e. 19M/s, aver. 50ns, 1.8 GB/s
+ 500 mormot aes-256-ctr 100 in 27us i.e. 17.6M/s, aver. 54ns, 1.7 GB/s
+ 500 mormot aes-128-ctr 1000 in 93us i.e. 5.1M/s, aver. 186ns, 5 GB/s
+ 500 mormot aes-256-ctr 1000 in 104us i.e. 4.5M/s, aver. 208ns, 4.4 GB/s
+ 500 mormot aes-128-ctr 10000 in 532us i.e. 0.9M/s, aver. 1.06us, 8.7 GB/s
+ 500 mormot aes-256-ctr 10000 in 716us i.e. 681.9K/s, aver. 1.43us, 6.5 GB/s
+
+ AesNiEncryptCtrNist32By4 only
+ 500 mormot aes-128-ctr 8 in 22us i.e. 21.6M/s, aver. 44ns, 173.4 MB/s
+ 500 mormot aes-256-ctr 8 in 23us i.e. 20.7M/s, aver. 46ns, 165.8 MB/s
+ 500 mormot aes-128-ctr 50 in 23us i.e. 20.7M/s, aver. 46ns, 1 GB/s
+ 500 mormot aes-256-ctr 50 in 24us i.e. 19.8M/s, aver. 48ns, 0.9 GB/s
+ 500 mormot aes-128-ctr 100 in 25us i.e. 19M/s, aver. 50ns, 1.8 GB/s
+ 500 mormot aes-256-ctr 100 in 26us i.e. 18.3M/s, aver. 52ns, 1.7 GB/s
+ 500 mormot aes-128-ctr 1000 in 78us i.e. 6.1M/s, aver. 156ns, 5.9 GB/s
+ 500 mormot aes-256-ctr 1000 in 93us i.e. 5.1M/s, aver. 186ns, 5 GB/s
+ 500 mormot aes-128-ctr 10000 in 453us i.e. 1M/s, aver. 906ns, 10.2 GB/s
+ 500 mormot aes-256-ctr 10000 in 604us i.e. 808.4K/s, aver. 1.20us, 7.7 GB/s
+
+ AesNiEncryptCtrNist32By8 only
+ 500 mormot aes-128-ctr 8 in 22us i.e. 21.6M/s, aver. 44ns, 173.4 MB/s
+ 500 mormot aes-256-ctr 8 in 23us i.e. 20.7M/s, aver. 46ns, 165.8 MB/s
+ 500 mormot aes-128-ctr 50 in 24us i.e. 19.8M/s, aver. 48ns, 0.9 GB/s
+ 500 mormot aes-256-ctr 50 in 25us i.e. 19M/s, aver. 50ns, 0.9 GB/s
+ 500 mormot aes-128-ctr 100 in 26us i.e. 18.3M/s, aver. 52ns, 1.7 GB/s
+ 500 mormot aes-256-ctr 100 in 28us i.e. 17M/s, aver. 56ns, 1.6 GB/s
+ 500 mormot aes-128-ctr 1000 in 84us i.e. 5.6M/s, aver. 168ns, 5.5 GB/s
+ 500 mormot aes-256-ctr 1000 in 107us i.e. 4.4M/s, aver. 214ns, 4.3 GB/s
+ 500 mormot aes-128-ctr 10000 in 512us i.e. 0.9M/s, aver. 1.02us, 9 GB/s
+ 500 mormot aes-256-ctr 10000 in 757us i.e. 645K/s, aver. 1.51us, 6.1 GB/s
+
+ AesNiEncryptCtrNist32By8 if blocks >= 64
+ 500 mormot aes-128-ctr 8 in 22us i.e. 21.6M/s, aver. 44ns, 173.4 MB/s
+ 500 mormot aes-256-ctr 8 in 23us i.e. 20.7M/s, aver. 46ns, 165.8 MB/s
+ 500 mormot aes-128-ctr 50 in 23us i.e. 20.7M/s, aver. 46ns, 1 GB/s
+ 500 mormot aes-256-ctr 50 in 25us i.e. 19M/s, aver. 50ns, 0.9 GB/s
+ 500 mormot aes-128-ctr 100 in 25us i.e. 19M/s, aver. 50ns, 1.8 GB/s
+ 500 mormot aes-256-ctr 100 in 26us i.e. 18.3M/s, aver. 52ns, 1.7 GB/s
+ 500 mormot aes-128-ctr 1000 in 78us i.e. 6.1M/s, aver. 156ns, 5.9 GB/s
+ 500 mormot aes-256-ctr 1000 in 93us i.e. 5.1M/s, aver. 186ns, 5 GB/s
+ 500 mormot aes-128-ctr 10000 in 510us i.e. 0.9M/s, aver. 1.02us, 9.1 GB/s
+ 500 mormot aes-256-ctr 10000 in 762us i.e. 640.7K/s, aver. 1.52us, 6.1 GB/s
+
+ Original AesNiEncryptCtrNist32()
+ 500 mormot aes-128-ctr 8 in 22us i.e. 21.6M/s, aver. 44ns, 173.4 MB/s
+ 500 mormot aes-256-ctr 8 in 23us i.e. 20.7M/s, aver. 46ns, 165.8 MB/s
+ 500 mormot aes-128-ctr 50 in 24us i.e. 19.8M/s, aver. 48ns, 0.9 GB/s
+ 500 mormot aes-256-ctr 50 in 24us i.e. 19.8M/s, aver. 48ns, 0.9 GB/s
+ 500 mormot aes-128-ctr 100 in 27us i.e. 17.6M/s, aver. 54ns, 1.7 GB/s
+ 500 mormot aes-256-ctr 100 in 28us i.e. 17M/s, aver. 56ns, 1.6 GB/s
+ 500 mormot aes-128-ctr 1000 in 76us i.e. 6.2M/s, aver. 152ns, 6.1 GB/s
+ 500 mormot aes-256-ctr 1000 in 88us i.e. 5.4M/s, aver. 176ns, 5.2 GB/s
+ 500 mormot aes-128-ctr 10000 in 438us i.e. 1M/s, aver. 876ns, 10.6 GB/s
+ 500 mormot aes-256-ctr 10000 in 557us i.e. 876.6K/s, aver. 1.11us, 8.3 GB/s
+
+ OpenSSL 3.0.16
+ 500 openssl aes-128-ctr 8 in 143us i.e. 3.3M/s, aver. 286ns, 26.6 MB/s
+ 500 openssl aes-256-ctr 8 in 140us i.e. 3.4M/s, aver. 280ns, 27.2 MB/s
+ 500 openssl aes-128-ctr 50 in 147us i.e. 3.2M/s, aver. 294ns, 162.1 MB/s
+ 500 openssl aes-256-ctr 50 in 147us i.e. 3.2M/s, aver. 294ns, 162.1 MB/s
+ 500 openssl aes-128-ctr 100 in 146us i.e. 3.2M/s, aver. 292ns, 326.6 MB/s
+ 500 openssl aes-256-ctr 100 in 147us i.e. 3.2M/s, aver. 294ns, 324.3 MB/s
+ 500 openssl aes-128-ctr 1000 in 189us i.e. 2.5M/s, aver. 378ns, 2.4 GB/s
+ 500 openssl aes-256-ctr 1000 in 199us i.e. 2.4M/s, aver. 398ns, 2.3 GB/s
+ 500 openssl aes-128-ctr 10000 in 526us i.e. 0.9M/s, aver. 1.05us, 8.8 GB/s
+ 500 openssl aes-256-ctr 10000 in 652us i.e. 748.9K/s, aver. 1.30us, 7.1 GB/s
+
+}
+
+{$ifdef USEAESNICTRORIGINAL}
+
 // AES-CTR with 8x AES-NI interleave factor over a 32-bit counter
 procedure AesNiEncryptCtrNist32(
   src, dest: pointer; blocks: PtrUInt; ctxt, iv: pointer);
@@ -4883,6 +4977,549 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pop    rsi
         {$endif WIN64ABI}
 end;
+
+{$else} // our naive/simple code following our i386 x4 pattern - extended to x8
+
+{$define USEAESNICTRBY4}      // x4 seems to give the best results among simple
+
+type
+  TAesNiCtr = record // shared stack structure to make Win64 code simpler
+    count: PtrUInt;
+    src, dst, ctxt, iv: pointer;
+    {$ifdef WIN64ABI} // WIN64 ABI should preserve rsi/rdi and XMM6-XMM15
+    bakrdi, bakrsi: pointer;
+    bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
+    {$endif WIN64ABI}
+  end;
+
+procedure AesNiEncryptCtrNist32Small;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rax=ctxt+$70 rcx=ctr r8=params r9=iv r10=src r11=dst edx=count
+        // inlined AesNiEncryptXmm0 - don't use XMM6-XMM15 so is WIN64 friendly
+        movups  xmm0, [r9]
+        bswap   ecx
+        pinsrd  xmm0, ecx, 3  // SSE 4.1 instruction
+        movups  xmm1,  dqword ptr [rax + $00 - $70]
+        movups  xmm2,  dqword ptr [rax + $10 - $70]
+        movups  xmm3,  dqword ptr [rax + $20 - $70]
+        movups  xmm4,  dqword ptr [rax + $30 - $70]
+        movups  xmm5,  dqword ptr [rax + $40 - $70]
+        pxor    xmm0,  xmm1
+        movups  xmm1,  dqword ptr [rax + $50 - $70]
+        aesenc  xmm0,  xmm2
+        aesenc  xmm0,  xmm3
+        aesenc  xmm0,  xmm4
+        aesenc  xmm0,  xmm5
+        aesenc  xmm0,  xmm1
+        movups  xmm1,  dqword ptr [rax + $60 - $70]
+        movups  xmm2,  dqword ptr [rax + $70 - $70]
+        movups  xmm3,  dqword ptr [rax + $80 - $70]
+        movups  xmm4,  dqword ptr [rax + $90 - $70]
+        movups  xmm5,  dqword ptr [rax + $a0 - $70]
+        aesenc  xmm0,  xmm1
+        aesenc  xmm0,  xmm2
+        aesenc  xmm0,  xmm3
+        aesenc  xmm0,  xmm4
+        cmp     byte ptr [rax - $70].TAesContext.Rounds, 12
+        je      @192
+        ja      @256
+        aesenclast xmm0, xmm5
+@write: movups  xmm1, [r10]
+        lea     r10, qword ptr [r10 + $10]
+        bswap   ecx
+        pxor    xmm0, xmm1
+        lea     rcx, qword ptr [rcx + 1]
+        movups  [r11], xmm0
+        lea     r11, qword ptr [r11 + $10]
+        dec     edx
+        jnz     AesNiEncryptCtrNist32Small
+        ret
+  @192: movups  xmm1,  dqword ptr [rax + $b0 - $70]
+        movups  xmm2,  dqword ptr [rax + $c0 - $70]
+        aesenc  xmm0,  xmm5
+        aesenc  xmm0,  xmm1
+        aesenclast xmm0, xmm2
+        jmp     @write
+  @256: movups  xmm1,  dqword ptr [rax + $b0 - $70]
+        movups  xmm2,  dqword ptr [rax + $c0 - $70]
+        movups  xmm3,  dqword ptr [rax + $d0 - $70]
+        movups  xmm4,  dqword ptr [rax + $e0 - $70]
+        aesenc  xmm0,  xmm5
+        aesenc  xmm0,  xmm1
+        aesenc  xmm0,  xmm2
+        aesenc  xmm0,  xmm3
+        aesenclast xmm0, xmm4
+        jmp     @write
+end;
+
+procedure AesNiEncryptCtrNist32By1(var ctx: TAesNiCtr);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=ctx
+        mov     rax, qword ptr [ctx].TAesNiCtr.ctxt
+        mov     edx, dword ptr [ctx].TAesNiCtr.count
+        mov     r8,  ctx
+        mov     r9,  qword ptr [ctx].TAesNiCtr.iv
+        mov     r10, qword ptr [ctx].TAesNiCtr.src
+        mov     r11, qword ptr [ctx].TAesNiCtr.dst
+        lea     rax, [rax + $70] // for smaller code gen of [ctx + -$70..+$70]
+        // prepare ecx = 32-bit little endian ctr
+        mov     ecx, dword ptr [r9].THash128Rec.c3
+        bswap   ecx
+        jmp     AesNiEncryptCtrNist32Small
+end;
+
+{$ifdef USEAESNICTRBY4}
+
+procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=ctx
+        mov     rax, [ctx].TAesNiCtr.ctxt
+        mov     r8,  ctx
+        mov     r9,  [ctx].TAesNiCtr.iv
+        mov     r10, [ctx].TAesNiCtr.src
+        mov     r11, [ctx].TAesNiCtr.dst
+        lea     rax, [rax + $70] // for smaller code gen of [ctx + -$70..+$70]
+        // prepare ecx = 32-bit little endian ctr
+        mov     ecx, dword ptr [r9].THash128Rec.c3
+        bswap   ecx
+        // handle 0..3 blocks alignment
+        mov     edx, dword ptr [r8].TAesNiCtr.count // caller ensured count <> 0
+        and     edx, 3
+        jz      @start
+        sub     dword ptr [r8].TAesNiCtr.count, edx
+        jz      AesNiEncryptCtrNist32Small
+        call    AesNiEncryptCtrNist32Small
+        {$ifdef WIN64ABI}
+        // Windows x64 calling convention expects to preserve rsi/rdi XMM6-XMM15
+@start: mov     qword  ptr [r8].TAesNiCtr.bakrdi, rdi
+        mov     qword  ptr [r8].TAesNiCtr.bakrsi, rsi
+        movups  dqword ptr [r8].TAesNiCtr.bak6, xmm6
+        movups  dqword ptr [r8].TAesNiCtr.bak7, xmm7
+        {$ifdef FPC} align 16 {$endif}
+        {$else}
+        {$ifdef FPC} align 16 {$endif}
+@start: {$endif WIN64ABI}
+@by4:   // prepare xmm0-xmm3 as iv0-iv3
+        movups  xmm0, [r9]
+        movaps  xmm1, xmm0
+        movaps  xmm2, xmm0
+        movaps  xmm3, xmm0
+        lea     rdx, [rcx + 1]
+        lea     rsi, [rcx + 2]
+        lea     rdi, [rcx + 3]
+        bswap   ecx
+        bswap   edx
+        bswap   esi
+        bswap   edi
+        pinsrd  xmm0, ecx, 3  // SSE 4.1 instruction
+        pinsrd  xmm1, edx, 3
+        pinsrd  xmm2, esi, 3
+        pinsrd  xmm3, edi, 3
+        bswap   ecx
+        lea     rcx, [rcx + 4]
+        // 4x interleaved AES process
+        mov     dl, byte ptr [rax - $70].TAesContext.Rounds
+        movups  xmm4, [rax + $00 - $70]
+        movups  xmm5, [rax + $10 - $70]
+        movups  xmm6, [rax + $20 - $70]
+        movups  xmm7, [rax + $30 - $70]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        movups  xmm4, [rax + $40 - $70]
+        movups  xmm5, [rax + $50 - $70]
+        movups  xmm6, [rax + $60 - $70]
+        movups  xmm7, [rax + $70 - $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        movups  xmm4, [rax + $80 - $70]
+        movups  xmm5, [rax + $90 - $70]
+        movups  xmm6, [rax + $a0 - $70]
+        movups  xmm7, [rax + $b0 - $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        cmp     dl, 10
+        ja      @192
+@last:  aesenclast xmm0, xmm6
+        aesenclast xmm1, xmm6
+        aesenclast xmm2, xmm6
+        aesenclast xmm3, xmm6
+@write: // dst := src xor AES(iv)
+        movups  xmm4, [r10 + $00]
+        movups  xmm5, [r10 + $10]
+        movups  xmm6, [r10 + $20]
+        movups  xmm7, [r10 + $30]
+        lea     r10, qword ptr [r10 + $40]
+        pxor    xmm4, xmm0
+        pxor    xmm5, xmm1
+        pxor    xmm6, xmm2
+        pxor    xmm7, xmm3
+        movups  [r11 + $00], xmm4
+        movups  [r11 + $10], xmm5
+        movups  [r11 + $20], xmm6
+        movups  [r11 + $30], xmm7
+        lea     r11, qword [r11 + $40]
+        sub     dword ptr [r8].TAesNiCtr.count, 4 // 4x blocks per loop
+        jnz     @by4
+        {$ifdef WIN64ABI}
+        mov     rdi,  qword  ptr [r8].TAesNiCtr.bakrdi
+        mov     rsi,  qword  ptr [r8].TAesNiCtr.bakrsi
+        movups  xmm6, dqword ptr [r8].TAesNiCtr.bak6
+        movups  xmm7, dqword ptr [r8].TAesNiCtr.bak7
+        {$endif WIN64ABI}
+        ret
+@192:   movups  xmm4, [rax + $c0 - $70]
+        movups  xmm5, [rax + $d0 - $70]
+        aesenc  xmm0, xmm6
+        aesenc  xmm1, xmm6
+        aesenc  xmm2, xmm6
+        aesenc  xmm3, xmm6
+        aesenc  xmm0, xmm7
+        aesenc  xmm1, xmm7
+        aesenc  xmm2, xmm7
+        aesenc  xmm3, xmm7
+        cmp     dl, 12
+        ja      @256
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @write
+@256:   movups  xmm6, [rax + $e0 - $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        aesenc  xmm0, xmm5
+        aesenc  xmm1, xmm5
+        aesenc  xmm2, xmm5
+        aesenc  xmm3, xmm5
+        jmp     @last
+end;
+
+{$else}
+
+// AES-CTR with 8x AES-NI interleave factor over a 32-bit counter - not faster
+procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=ctx
+        mov     rax, [ctx].TAesNiCtr.ctxt
+        mov     r8,  ctx
+        mov     r9,  [ctx].TAesNiCtr.iv
+        mov     r10, [ctx].TAesNiCtr.src
+        mov     r11, [ctx].TAesNiCtr.dst
+        lea     rax, [rax + $70] // for smaller code gen of [ctx + -$70..+$70]
+        // prepare ecx = 32-bit little endian ctr
+        mov     ecx, dword ptr [r9].THash128Rec.c3
+        bswap   ecx
+        // handle 0..7 blocks alignment
+        mov     edx, dword ptr [r8].TAesNiCtr.count // caller ensured count <> 0
+        and     edx, 7
+        jz      @start
+        sub     dword ptr [r8].TAesNiCtr.count, edx
+        jz      AesNiEncryptCtrNist32Small // no register save on Win64 for 1..7
+        call    AesNiEncryptCtrNist32Small
+        {$ifdef WIN64ABI}
+        // Windows x64 calling convention expects to preserve rsi/rdi XMM6-XMM15
+@start: mov     qword  ptr [r8].TAesNiCtr.bakrdi, rdi
+        mov     qword  ptr [r8].TAesNiCtr.bakrsi, rsi
+        movups  dqword ptr [r8].TAesNiCtr.bak6,  xmm6
+        movups  dqword ptr [r8].TAesNiCtr.bak7,  xmm7
+        movups  dqword ptr [r8].TAesNiCtr.bak8,  xmm8
+        movups  dqword ptr [r8].TAesNiCtr.bak9,  xmm9
+        movups  dqword ptr [r8].TAesNiCtr.bak10, xmm10
+        movups  dqword ptr [r8].TAesNiCtr.bak11, xmm11
+        movups  dqword ptr [r8].TAesNiCtr.bak12, xmm12
+        movups  dqword ptr [r8].TAesNiCtr.bak13, xmm13
+        movups  dqword ptr [r8].TAesNiCtr.bak14, xmm14
+        movups  dqword ptr [r8].TAesNiCtr.bak15, xmm15
+        {$ifdef FPC} align 16 {$endif}
+        {$else}
+        {$ifdef FPC} align 16 {$endif}
+@start: {$endif WIN64ABI}
+@by8:   // prepare xmm0-xmm7 as iv0-iv7
+        movups  xmm0, [r9]
+        movaps  xmm1, xmm0
+        movaps  xmm2, xmm0
+        movaps  xmm3, xmm0
+        movups  xmm4, xmm0
+        movaps  xmm5, xmm0
+        movaps  xmm6, xmm0
+        movaps  xmm7, xmm0
+        lea     rdx, [rcx + 1]
+        lea     rsi, [rcx + 2]
+        lea     rdi, [rcx + 3]
+        bswap   ecx
+        bswap   edx
+        bswap   esi
+        bswap   edi
+        pinsrd  xmm0, ecx, 3  // SSE 4.1 instruction
+        pinsrd  xmm1, edx, 3
+        pinsrd  xmm2, esi, 3
+        pinsrd  xmm3, edi, 3
+        bswap   ecx
+        lea     rdx, [rcx + 5]
+        lea     rsi, [rcx + 6]
+        lea     rdi, [rcx + 7]
+        lea     rcx, [rcx + 4]
+        bswap   ecx
+        bswap   edx
+        bswap   esi
+        bswap   edi
+        pinsrd  xmm4, ecx, 3
+        pinsrd  xmm5, edx, 3
+        pinsrd  xmm6, esi, 3
+        pinsrd  xmm7, edi, 3
+        bswap   ecx
+        lea     rcx, [rcx + 4]
+        // 8x interleaved AES process
+        mov     dl, byte ptr [rax - $70].TAesContext.Rounds
+        movups  xmm8,  [rax + $00 - $70]
+        movups  xmm9,  [rax + $10 - $70]
+        movups  xmm10, [rax + $20 - $70]
+        movups  xmm11, [rax + $30 - $70]
+        movups  xmm12, [rax + $40 - $70]
+        movups  xmm13, [rax + $50 - $70]
+        movups  xmm14, [rax + $60 - $70]
+        movups  xmm15, [rax + $70 - $70]
+        pxor    xmm0, xmm8
+        pxor    xmm1, xmm8
+        pxor    xmm2, xmm8
+        pxor    xmm3, xmm8
+        pxor    xmm4, xmm8
+        pxor    xmm5, xmm8
+        pxor    xmm6, xmm8
+        pxor    xmm7, xmm8
+        aesenc  xmm0, xmm9
+        aesenc  xmm1, xmm9
+        aesenc  xmm2, xmm9
+        aesenc  xmm3, xmm9
+        aesenc  xmm4, xmm9
+        aesenc  xmm5, xmm9
+        aesenc  xmm6, xmm9
+        aesenc  xmm7, xmm9
+        aesenc  xmm0, xmm10
+        aesenc  xmm1, xmm10
+        aesenc  xmm2, xmm10
+        aesenc  xmm3, xmm10
+        aesenc  xmm4, xmm10
+        aesenc  xmm5, xmm10
+        aesenc  xmm6, xmm10
+        aesenc  xmm7, xmm10
+        aesenc  xmm0, xmm11
+        aesenc  xmm1, xmm11
+        aesenc  xmm2, xmm11
+        aesenc  xmm3, xmm11
+        aesenc  xmm4, xmm11
+        aesenc  xmm5, xmm11
+        aesenc  xmm6, xmm11
+        aesenc  xmm7, xmm11
+        aesenc  xmm0, xmm12
+        aesenc  xmm1, xmm12
+        aesenc  xmm2, xmm12
+        aesenc  xmm3, xmm12
+        aesenc  xmm4, xmm12
+        aesenc  xmm5, xmm12
+        aesenc  xmm6, xmm12
+        aesenc  xmm7, xmm12
+        aesenc  xmm0, xmm13
+        aesenc  xmm1, xmm13
+        aesenc  xmm2, xmm13
+        aesenc  xmm3, xmm13
+        aesenc  xmm4, xmm13
+        aesenc  xmm5, xmm13
+        aesenc  xmm6, xmm13
+        aesenc  xmm7, xmm13
+        aesenc  xmm0, xmm14
+        aesenc  xmm1, xmm14
+        aesenc  xmm2, xmm14
+        aesenc  xmm3, xmm14
+        aesenc  xmm4, xmm14
+        aesenc  xmm5, xmm14
+        aesenc  xmm6, xmm14
+        aesenc  xmm7, xmm14
+        aesenc  xmm0, xmm15
+        aesenc  xmm1, xmm15
+        aesenc  xmm2, xmm15
+        aesenc  xmm3, xmm15
+        aesenc  xmm4, xmm15
+        aesenc  xmm5, xmm15
+        aesenc  xmm6, xmm15
+        aesenc  xmm7, xmm15
+        movups  xmm8,  [rax + $80 - $70]
+        movups  xmm9,  [rax + $90 - $70]
+        movups  xmm10, [rax + $a0 - $70]
+        movups  xmm11, [rax + $b0 - $70]
+        aesenc  xmm0, xmm8
+        aesenc  xmm1, xmm8
+        aesenc  xmm2, xmm8
+        aesenc  xmm3, xmm8
+        aesenc  xmm4, xmm8
+        aesenc  xmm5, xmm8
+        aesenc  xmm6, xmm8
+        aesenc  xmm7, xmm8
+        aesenc  xmm0, xmm9
+        aesenc  xmm1, xmm9
+        aesenc  xmm2, xmm9
+        aesenc  xmm3, xmm9
+        aesenc  xmm4, xmm9
+        aesenc  xmm5, xmm9
+        aesenc  xmm6, xmm9
+        aesenc  xmm7, xmm9
+        cmp     dl, 10
+        ja      @192
+@last:  aesenclast xmm0, xmm10
+        aesenclast xmm1, xmm10
+        aesenclast xmm2, xmm10
+        aesenclast xmm3, xmm10
+        aesenclast xmm4, xmm10
+        aesenclast xmm5, xmm10
+        aesenclast xmm6, xmm10
+        aesenclast xmm7, xmm10
+@write: // dst := src xor AES(iv)
+        movups  xmm8,  [r10 + $00]
+        movups  xmm9,  [r10 + $10]
+        movups  xmm10, [r10 + $20]
+        movups  xmm11, [r10 + $30]
+        movups  xmm12, [r10 + $40]
+        movups  xmm13, [r10 + $50]
+        movups  xmm14, [r10 + $60]
+        movups  xmm15, [r10 + $70]
+        lea     r10, qword ptr [r10 + $80]
+        pxor    xmm8,  xmm0
+        pxor    xmm9,  xmm1
+        pxor    xmm10, xmm2
+        pxor    xmm11, xmm3
+        pxor    xmm12, xmm4
+        pxor    xmm13, xmm5
+        pxor    xmm14, xmm6
+        pxor    xmm15, xmm7
+        movups  [r11 + $00], xmm8
+        movups  [r11 + $10], xmm9
+        movups  [r11 + $20], xmm10
+        movups  [r11 + $30], xmm11
+        movups  [r11 + $40], xmm12
+        movups  [r11 + $50], xmm13
+        movups  [r11 + $60], xmm14
+        movups  [r11 + $70], xmm15
+        lea     r11, qword [r11 + $80]
+        sub     dword ptr [r8].TAesNiCtr.count, 8 // 8x blocks per loop
+        jnz     @by8
+@done:  {$ifdef WIN64ABI}
+        mov     rdi,   qword  ptr [r8].TAesNiCtr.bakrdi
+        mov     rsi,   qword  ptr [r8].TAesNiCtr.bakrsi
+        movups  xmm6,  dqword ptr [r8].TAesNiCtr.bak6
+        movups  xmm7,  dqword ptr [r8].TAesNiCtr.bak7
+        movups  xmm8,  dqword ptr [r8].TAesNiCtr.bak8
+        movups  xmm9,  dqword ptr [r8].TAesNiCtr.bak9
+        movups  xmm10, dqword ptr [r8].TAesNiCtr.bak10
+        movups  xmm11, dqword ptr [r8].TAesNiCtr.bak11
+        movups  xmm12, dqword ptr [r8].TAesNiCtr.bak12
+        movups  xmm13, dqword ptr [r8].TAesNiCtr.bak13
+        movups  xmm14, dqword ptr [r8].TAesNiCtr.bak14
+        movups  xmm15, dqword ptr [r8].TAesNiCtr.bak15
+        {$endif WIN64ABI}
+        ret
+@192:   movups  xmm8, [rax + $c0 - $70]
+        movups  xmm9, [rax + $d0 - $70]
+        aesenc  xmm0, xmm10
+        aesenc  xmm1, xmm10
+        aesenc  xmm2, xmm10
+        aesenc  xmm3, xmm10
+        aesenc  xmm4, xmm10
+        aesenc  xmm5, xmm10
+        aesenc  xmm6, xmm10
+        aesenc  xmm7, xmm10
+        aesenc  xmm0, xmm11
+        aesenc  xmm1, xmm11
+        aesenc  xmm2, xmm11
+        aesenc  xmm3, xmm11
+        aesenc  xmm4, xmm11
+        aesenc  xmm5, xmm11
+        aesenc  xmm6, xmm11
+        aesenc  xmm7, xmm11
+        cmp     dl, 12
+        ja      @256
+        aesenclast xmm0, xmm8
+        aesenclast xmm1, xmm8
+        aesenclast xmm2, xmm8
+        aesenclast xmm3, xmm8
+        aesenclast xmm4, xmm8
+        aesenclast xmm5, xmm8
+        aesenclast xmm6, xmm8
+        aesenclast xmm7, xmm8
+        jmp     @write
+@256:   movups  xmm10, [rax + $e0 - $70]
+        aesenc  xmm0, xmm8
+        aesenc  xmm1, xmm8
+        aesenc  xmm2, xmm8
+        aesenc  xmm3, xmm8
+        aesenc  xmm4, xmm8
+        aesenc  xmm5, xmm8
+        aesenc  xmm6, xmm8
+        aesenc  xmm7, xmm8
+        aesenc  xmm0, xmm9
+        aesenc  xmm1, xmm9
+        aesenc  xmm2, xmm9
+        aesenc  xmm3, xmm9
+        aesenc  xmm4, xmm9
+        aesenc  xmm5, xmm9
+        aesenc  xmm6, xmm9
+        aesenc  xmm7, xmm9
+        jmp     @last
+end;
+
+{$endif USEAESNICTRBY4}
+
+procedure AesNiEncryptCtrNist32(src, dst: pointer; blocks: PtrUInt;
+  ctxt: PAesContext; iv: PHash128Rec); inline;
+var
+  params: TAesNiCtr;
+begin
+  if blocks = 0 then
+    exit;
+  params.src   := src;
+  params.dst   := dst;
+  params.ctxt  := ctxt;
+  params.iv    := iv;
+  params.count := blocks;
+  AesNiEncryptCtrNist32Fast(params); // x4 gives the best results on average
+end;
+
+{$endif USEAESNICTRORIGINAL}
 
 // AES-CTR and 256-bit crc32c with 8x AES-NI interleave over a 32-bit counter
 procedure AesNiEncryptCtrCrc32(
