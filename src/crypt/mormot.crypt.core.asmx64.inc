@@ -3697,6 +3697,55 @@ end;
 
 {$ifdef USEAESNI}
 
+procedure AesNiEncryptXmm0; // rax=TAesContext
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+      lea     rax, [rax + $70] // for smaller code gen of [ctx + -$70..+$70]
+      movups  xmm1,  dqword ptr [rax + $00 - $70]
+      movups  xmm2,  dqword ptr [rax + $10 - $70]
+      movups  xmm3,  dqword ptr [rax + $20 - $70]
+      movups  xmm4,  dqword ptr [rax + $30 - $70]
+      movups  xmm5,  dqword ptr [rax + $40 - $70]
+      pxor    xmm0,  xmm1
+      movups  xmm1,  dqword ptr [rax + $50 - $70]
+      aesenc  xmm0,  xmm2
+      aesenc  xmm0,  xmm3
+      aesenc  xmm0,  xmm4
+      aesenc  xmm0,  xmm5
+      aesenc  xmm0,  xmm1
+      movups  xmm1,  dqword ptr [rax + $60 - $70]
+      movups  xmm2,  dqword ptr [rax + $70 - $70]
+      movups  xmm3,  dqword ptr [rax + $80 - $70]
+      movups  xmm4,  dqword ptr [rax + $90 - $70]
+      movups  xmm5,  dqword ptr [rax + $a0 - $70]
+      aesenc  xmm0,  xmm1
+      aesenc  xmm0,  xmm2
+      aesenc  xmm0,  xmm3
+      aesenc  xmm0,  xmm4
+      cmp     byte ptr [rax - $70].TAesContext.Rounds, 12
+      je      @192
+      ja      @256
+      aesenclast xmm0, xmm5
+      lea     rax, [rax - $70]
+      ret
+@192: movups  xmm1,  dqword ptr [rax + $b0 - $70]
+      movups  xmm2,  dqword ptr [rax + $c0 - $70]
+      aesenc  xmm0,  xmm5
+      aesenc  xmm0,  xmm1
+      aesenclast xmm0, xmm2
+      lea     rax, [rax - $70]
+      ret
+@256: movups  xmm1,  dqword ptr [rax + $b0 - $70]
+      movups  xmm2,  dqword ptr [rax + $c0 - $70]
+      movups  xmm3,  dqword ptr [rax + $d0 - $70]
+      movups  xmm4,  dqword ptr [rax + $e0 - $70]
+      aesenc  xmm0,  xmm5
+      aesenc  xmm0,  xmm1
+      aesenc  xmm0,  xmm2
+      aesenc  xmm0,  xmm3
+      aesenclast xmm0, xmm4
+      lea     rax, [rax - $70]
+end;
+
 procedure AesNiEncrypt128(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
