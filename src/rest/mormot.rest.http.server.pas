@@ -32,11 +32,11 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.core.json,
   mormot.core.threads,
   mormot.core.perf,
   mormot.core.search, // for fAccessControlAllowOriginsMatch
-  mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.zip,
@@ -234,7 +234,6 @@ type
     fPublicAddress, fPublicPort: RawUtf8;
     fRestServers: array of TRestHttpOneServer;
     fRestServerNames: RawUtf8;
-    fSingleRestServer: PRestHttpOneServer;
     fSafe: TRWLightLock; // protect fRestServers[]
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
@@ -249,11 +248,11 @@ type
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;
       ReplicateAllowHeaders: boolean);
     procedure ComputeHostUrl(Ctxt: THttpServerRequestAbstract; var HostUrl: RawUtf8);
+    // implement the server response - must be thread-safe
+    function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
     procedure HttpThreadTerminate(Sender: TThread); virtual;
-    // implement the server response - must be thread-safe
-    function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     function GetRestServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetRestServer(Index: integer): TRestServer;
@@ -687,10 +686,6 @@ begin
           fRestServers[j] := fRestServers[j + 1];
         SetLength(fRestServers, n);
         dec(n);
-        if n = 1 then
-          fSingleRestServer := pointer(fRestServers)
-        else
-          fSingleRestServer := nil;
         aServer.OnNotifyCallback := nil;
         aServer.SetPublicUri('', '');
         result := true; // don't break here: may appear with another Security
@@ -1012,10 +1007,6 @@ begin
       else
         RestAccessRights := aRestAccessRights;
     end;
-  if length(fRestServers) = 1 then
-    fSingleRestServer := pointer(fRestServers)
-  else
-    fSingleRestServer := nil;
 end;
 
 procedure TRestHttpServer.RootRedirectToUri(const aRedirectedUri: RawUtf8;
@@ -1202,45 +1193,38 @@ begin
     result := HTTP_NOTFOUND; // page not found by default (e.g. wrong URL)
     match := rmNoMatch;
     matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
-    if fSingleRestServer <> nil then
-      // optimized for the most common case of a single DB server
-      with fSingleRestServer^ do
-      begin
-        if (Security in SEC_TLS) = tls then
-        begin
-          match := Server.Model.UriMatch(call.Url, matchcase);
-          if match = rmNoMatch then
-            if rsoAllowSingleServerNoRoot in fOptions then
-            begin
-              match := rmMatchExact; // forge proper 'modelroot/url'
-              call.Url := Server.Model.Root + '/' + call.Url;
-            end
-            else
-              exit;
-          call.RestAccessRights := RestAccessRights;
-          serv := Server;
-        end;
-      end
-    else
+    // thread-safe TLS + URI match from fRestServers[].Server.Model array
+    fSafe.ReadLock;
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$else}
     begin
-      // thread-safe use of dynamic fRestServers[] array
-      fSafe.ReadLock;
-      try
-        for i := 0 to length(fRestServers) - 1 do
-          with fRestServers[i] do
-            if (Security in SEC_TLS) = tls then
+    {$endif HASFASTTRYFINALLY}
+      one := pointer(fRestServers);
+      if one <> nil then
+      begin
+        n := PDALen(PAnsiChar(one) - _DALEN)^ + _DAOFF;
+        repeat
+          if (one^.Security in SEC_TLS) = tls then // should match http/https
+          begin
+            match := one^.Server.Model.UriMatch(call.Url, matchcase);
+            if match <> rmNoMatch then // found
             begin
-              // registered for http or https
-              match := Server.Model.UriMatch(call.Url, matchcase);
-              if match = rmNoMatch then
-                continue;
-              call.RestAccessRights := RestAccessRights;
-              serv := Server;
+              serv := one^.Server;
+              call.RestAccessRights := one^.RestAccessRights;
               break;
             end;
-      finally
-        fSafe.ReadUnLock;
+          end;
+          dec(n);
+          if n = 0 then
+            break;
+          inc(one);
+        until false;
       end;
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      fSafe.ReadUnLock;
     end;
     if (match = rmNoMatch) or
        (serv = nil) then
