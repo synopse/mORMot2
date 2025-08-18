@@ -875,6 +875,8 @@ type
       Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// low-level function removing all &lt; &gt; &amp; &quot; HTML entities
     procedure AddHtmlUnescape(p, amp: PUtf8Char; plen: PtrUInt);
+    /// low-level function removing all HTML <tag> and &entities;
+    procedure AddHtmlAsText(p, tag: PUtf8Char; plen: PtrUInt);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
