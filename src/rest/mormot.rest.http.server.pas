@@ -1460,19 +1460,12 @@ begin
     aWSAjax, aWSBinaryOptions, aOnWSUpgraded, aOnWSClosed);
 end;
 
-type
-  TWebSocketsSignerData = record
-    Server: TRestServer; // embed the encrypted TRestServer instance pointer
-  end;
-
 function TRestHttpServer.WebSocketsUrl(aServer: TRestServer): RawUtf8;
 begin
   result := Join([aServer.Model.Root, '?', WebSocketsBearer(aServer)]);
 end;
 
 function TRestHttpServer.WebSocketsBearer(aServer: TRestServer): RawUtf8;
-var
-  data: TWebSocketsSignerData;
 begin
   if (self = nil) or
      (aServer = nil) or
@@ -1481,8 +1474,7 @@ begin
      not Assigned(fWebSocketsSigner) or
      (RestServerFind(aServer) < 0) then
     EWebSockets.RaiseUtf8('Unexpected rsoWebSocketsUpgradeSigned in %', [self]);
-  data.Server := aServer;
-  fWebSocketsSigner.Generate(result, 0, @data, TypeInfo(TWebSocketsSignerData));
+  fWebSocketsSigner.Generate(result, {TimeoutMinutes=}1);
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;
