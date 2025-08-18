@@ -873,6 +873,8 @@ type
     /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeUtf8(const Text: RawUtf8;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere);
+    /// low-level function removing all &lt; &gt; &amp; &quot; HTML entities
+    procedure AddHtmlUnescape(p, amp: PUtf8Char; plen: PtrUInt);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
@@ -1013,6 +1015,7 @@ type
     // - returns #0 if no char has been written yet, or the buffer has been just
     // flushed: so this method is to be handled only in some particular usecases
     function LastChar: AnsiChar;
+      {$ifdef HASINLINE}inline;{$endif}
     /// how many bytes are currently in the internal buffer and not on disk/stream
     // - see TextLength for the total number of bytes, on both stream and memory
     function PendingBytes: PtrUInt;
@@ -1139,6 +1142,9 @@ procedure ConsoleObject(Value: TObject;
 
 /// check if some UTF-8 text would need HTML escaping
 function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
+
+/// low-level conversion of an &amp; HTML entity into 32-bit Unicode Code Point
+function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
 
 /// escape some UTF-8 text into HTML
 // - just a wrapper around TTextWriter.AddHtmlEscape() process,
@@ -6090,6 +6096,133 @@ begin
   AddHtmlEscape(pointer(Text), length(Text), Fmt);
 end;
 
+procedure TTextWriter.AddHtmlUnescape(p, amp: PUtf8Char; plen: PtrUInt);
+var
+  l: PtrUInt;
+  c: Ucs4CodePoint;
+begin
+  repeat
+    if amp = nil then
+    begin
+      amp := PosChar(p, plen, '&');
+      if amp = nil then
+      begin
+        AddNoJsonEscape(p, plen); // no more content to escape
+        exit;
+      end;
+    end;
+    l := amp - p;
+    if l <> 0 then
+    begin
+      AddNoJsonEscape(p, l);
+      dec(plen, l);
+      if plen = 0 then
+        exit;
+      p := amp;
+    end;
+    amp := nil; // call PosChar() on next iteration
+    inc(p); // ignore '&'
+    dec(plen);
+    l := 0;
+    while (l < plen) and
+          (p[l] in ['a'..'z', 'A'..'Z', '1'..'4']) do
+      inc(l);
+    if p[l] = ';' then
+    begin
+      c := EntityToUcs4(p, l); // &lt; -> ord('<')
+      if c <> 0 then
+      begin
+        if c = $00a0 then // &nbsp;
+          Add(' ')
+        else if c = $2026 then
+          AddShorter('...') // &hellip;
+        else
+          AddWideChar(WideChar(c));
+        inc(p, l + 1);
+        dec(plen, l + 1);
+        continue;
+      end;
+    end;
+    Add('&');
+  until plen = 0;
+end;
+
+function HtmlTagNeedsCRLF(tag: PUtf8Char): boolean;
+var
+  taglen: PtrUInt;
+begin
+  result := false;
+  if tag^ = '/' then
+    inc(tag); // identify </p> just like <p>
+  taglen := 0;
+  if tag[taglen] in ['a'..'z', 'A'..'Z'] then
+    repeat
+      inc(taglen);
+    until (taglen > 3) or
+          not (tag[taglen] in ['a'..'z', 'A'..'Z', '1'..'9']);
+  case taglen of
+    1:
+      result := tag^ in ['p', 'P'];
+    2:
+      case PWord(tag)^ and $dfdf of
+        ord('B') + ord('R') shl 8,
+        ord('L') + ord('I') shl 8,
+        ord('H') + (ord('1') and $df) shl 8,
+        ord('H') + (ord('2') and $df) shl 8,
+        ord('H') + (ord('3') and $df) shl 8,
+        ord('H') + (ord('4') and $df) shl 8,
+        ord('H') + (ord('5') and $df) shl 8,
+        ord('H') + (ord('6') and $df) shl 8:
+          result := true;
+      end;
+    3:
+      result := PCardinal(tag)^ and $00dfdfdf =
+                  ord('D') + ord('I') shl 8 + ord('V') shl 16;
+  end;
+
+end;
+
+procedure TTextWriter.AddHtmlAsText(p, tag: PUtf8Char; plen: PtrUInt);
+var
+  l: PtrInt;
+begin
+  repeat
+    if tag = nil then
+    begin
+      tag := PosChar(p, plen, '<');
+      if tag = nil then
+      begin
+        AddHtmlUnescape(p, nil, plen);
+        exit;
+      end;
+    end;
+    l := tag - p;
+    if l <> 0 then
+    begin
+      AddHtmlUnescape(p, nil, l);
+      dec(plen, l);
+      if plen = 0 then
+        exit;
+      p := tag;
+    end;
+    inc(p); // ignore '<'
+    dec(plen);
+    tag := PosChar(p, plen, '>');
+    if tag = nil then
+      Add('<') // not a real tag
+    else
+    begin
+      if HtmlTagNeedsCRLF(p) then
+        if LastChar >= ' ' then // <p> <h1> append once a line feed
+          AddDirect(#13, #10);
+      l := tag - p + 1;
+      inc(p, l);
+      dec(plen, l);
+    end;
+    tag := nil; // call PosChar() on next iteration
+  until plen = 0;
+end;
+
 var
   XML_ESC: TAnsiCharToByte;
 const
@@ -6277,48 +6410,18 @@ end;
 function HtmlUnescape(const text: RawUtf8): RawUtf8;
 var
   W: TTextWriter;
-  p, amp: PUtf8Char;
-  l: PtrUInt;
-  c: Ucs4CodePoint;
+  amp: PUtf8CHar;
   temp: TTextWriterStackBuffer;
 begin
-  l := PosExChar('&', text);
-  if (l = 0) or
-     (PByteArray(text)[l] = 0) then
+  amp := PosChar(pointer(text), length(text), '&');
+  if amp = nil then
   begin
-    result := text;
+    result := text; // nothing to change
     exit;
   end;
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    p := pointer(text);
-    amp := p + l - 1;
-    repeat
-      W.AddNoJsonEscape(p, amp - p);
-      p := amp + 1;
-      l := 0;
-      while p[l] in ['a'..'z', 'A'..'Z', '1'..'4'] do
-        inc(l);
-      if p[l] = ';' then
-      begin
-        c := EntityToUcs4(p, l); // &lt; -> ord('<')
-        if c <> 0 then
-        begin
-          if c = $00a0 then // &nbsp;
-            w.Add(' ')
-          else if c = $2026 then
-            W.AddShorter('...') // &hellip;
-          else
-            W.AddWideChar(WideChar(c));
-          inc(p, l + 1);
-          amp := PosChar(p, '&');
-          continue;
-        end;
-      end;
-      W.Add('&');
-      amp := PosChar(p, '&');
-    until amp = nil;
-    W.AddNoJsonEscape(p);
+    W.AddHtmlUnescape(pointer(text), amp, length(text));
     W.SetText(result);
   finally
     W.Free;
