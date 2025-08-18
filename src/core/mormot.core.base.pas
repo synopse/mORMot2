@@ -9414,16 +9414,12 @@ end;
 
 function PosChar(Str: PUtf8Char; StrLen: PtrInt; Chr: AnsiChar): PUtf8Char;
 begin
-  if StrLen <> 0 then
-  begin
-    StrLen := ByteScanIndex(pointer(Str), StrLen, byte(Chr));
-    if StrLen >= 0 then
-      result := Str + StrLen
-    else
-      result := nil;
-  end
-  else
-    result := nil;
+  result := nil;
+  if StrLen = 0 then
+    exit;
+  StrLen := ByteScanIndex(pointer(Str), StrLen, byte(Chr));
+  if StrLen >= 0 then
+    result := Str + StrLen;
 end;
 
 {$ifdef UNICODE}
