@@ -6318,7 +6318,7 @@ begin
 end;
 
 const
-  _WIDTH = 10;
+  _WIDTH = 10; // any value < TTextWriter internal buffer size would do
 
 procedure AppendFieldNames(w: TTextWriter);
 begin

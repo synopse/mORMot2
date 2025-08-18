@@ -4985,20 +4985,25 @@ end;
 
 procedure TTextWriter.AddCRAndIndent;
 var
-  ntabs: cardinal;
+  ntabs: PtrUInt;
+  p: PUtf8Char;
 begin
-  if (B >= fTempBuf) and
-     (B^ = #9) then
+  p := B;
+  if (p >= fTempBuf) and
+     (p^ = #9) then
     exit; // we just already added an indentation level - do it once
   ntabs := fHumanReadableLevel;
-  if ntabs >= cardinal(fTempBufSize) then
+  if ntabs >= PtrUInt(fTempBufSize) then
     ntabs := 0; // fHumanReadableLevel=-1 after the last level of a document
-  if BEnd - B <= PtrInt(ntabs) then // note: PtrInt(BEnd - B) could be < 0
+  if PtrInt(BEnd - p) <= PtrInt(ntabs) then // note: PtrInt(BEnd - B) could be < 0
+  begin
     FlushToStream;
-  PCardinal(B + 1)^ := 13 + 10 shl 8; // CR + LF
-  if ntabs > 0 then
-    FillCharFast(B[3], ntabs, 9); // #9=tab
-  inc(B, ntabs + 2);
+    p := B;
+  end;
+  PCardinal(p + 1)^ := $09090a0d; // CR + LF [ + #9 + #9 ]
+  if ntabs > 2 then
+    FillCharFast(p[3], ntabs, 9); // #9=tab
+  B := @p[ntabs + 2];
 end;
 
 procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
