@@ -4974,7 +4974,8 @@ var
   p: PAnsiChar;
 begin
   p := pointer(s);
-  if p <> nil then
+  if (p <> nil) and
+     (PStrRec(p - _STRRECSIZE)^.CodePage <> cp) then
     PStrRec(p - _STRRECSIZE)^.CodePage := cp;
 end;
 
@@ -4985,7 +4986,7 @@ end;
 
 procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
 begin
-  FakeCodePage(RawByteString(src), CP_UTF8);
+  FakeCodePage(src, CP_UTF8);
   FastAssignNew(dest, pointer(src));
   pointer(src) := nil; // was assigned with no ref-counting involved
 end;
