@@ -243,7 +243,9 @@ type
     fOptions: TRestHttpServerOptions;
     fRootRedirectToURI: array[boolean] of RawUtf8;
     fLog: TSynLogClass;
+    fWebSocketsSigner: TBinaryCookieGenerator;
     fOnCustomRequest: TOnRestHttpServerRequest;
+    fOnWSUpgraded: TOnWebSocketProtocolUpgraded;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;
       ReplicateAllowHeaders: boolean);
@@ -267,6 +269,7 @@ type
       const aInterfaceDotMethodName, aParams: RawUtf8;
       aConnectionID: THttpServerConnectionID;
       aFakeCallID: integer; aResult, aErrorMsg: PRawUtf8): boolean;
+    function OnWSUpgraded(Protocol: TWebSocketProtocol): integer; virtual;
     procedure OnWSClose(aConnectionID: TRestConnectionID;
       aConnectionOpaque: pointer);
     procedure OnWSSocketClose(Sender: TWebSocketServerSocket);
@@ -448,6 +451,21 @@ type
       const aOnWSUpgraded: TOnWebSocketProtocolUpgraded = nil;
       const aOnWSClosed: TOnWebSocketProtocolClosed = nil): PWebSocketProcessSettings;
         overload;
+    /// compute a safe URI for WebSockets upgrade for a given TRestServer
+    // - token would be supplied as URI parameter - e.g. '/root?token'
+    // - raise an exception if rsoWebSocketsUpgradeSigned option is not set
+    function WebSocketsUrl(aServer: TRestServer): RawUtf8;
+    /// compute a safe HTTP authorization bearer for WebSockets upgrade for a
+    // given TRestServer
+    // - token would be supplied as a regular HTTP bearer
+    // - raise an exception if rsoWebSocketsUpgradeSigned option is not set
+    function WebSocketsBearer(aServer: TRestServer): RawUtf8;
+    /// the TBinaryCookieGenerator created by rsoWebSocketsUpgradeSigned option
+    // - equals nil if this option was not set
+    // - WebSockets upgrade will be authenticated with an ephemeral secure token,
+    // as retrieved from WebSocketsUrl/WebSocketsBearer methods
+    property WebSocketsSigner: TBinaryCookieGenerator
+      read fWebSocketsSigner;
     /// the TCP/IP (address and) port on which this server is listening to
     // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
     // - see PublicAddress and PublicPort properties if you want to get the
@@ -939,6 +957,7 @@ begin
   FreeAndNilSafe(fHttpServer);
   inherited Destroy;
   fAccessControlAllowOriginsMatch.Free;
+  fWebSocketsSigner.Free; // is owned by this instance
 end;
 
 procedure TRestHttpServer.Shutdown(noRestServerShutdown: boolean);
@@ -1399,15 +1418,13 @@ begin
       [self, ToText(fUse)^]);
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
     aWSURI, aWSEncryptionKey, aWSAjax, aWSBinaryOptions);
+  // setup specific WebSockets upgrade or closing
   if fHttpServer is TWebSocketAsyncServer then
   begin
     wsa := TWebSocketAsyncServer(fHttpServer);
-    if Assigned(aOnWSUpgraded) or
-       Assigned(aOnWSClosed) then
-    begin
-      wsa.OnWebSocketUpgraded := aOnWSUpgraded;
-      wsa.OnWebSocketClose    := aOnWSClosed;
-    end;
+    wsa.OnWebSocketUpgraded := OnWSUpgraded; // may check fWebSocketsSigner
+    if Assigned(aOnWSClosed) then
+      wsa.OnWebSocketClose := aOnWSClosed;
     // ensure that TRestHttpServer.OnWSClose() is called regardless of whether
     // the client connection is disconnected normally or abnormally
     wsa.OnWebSocketDisconnect := OnWSAsyncClose;
@@ -1415,12 +1432,9 @@ begin
   else if fHttpServer is TWebSocketServer then
   begin
     wss := TWebSocketServer(fHttpServer);
-    if Assigned(aOnWSUpgraded) or
-       Assigned(aOnWSClosed) then
-    begin
-      wss.OnWebSocketUpgraded := aOnWSUpgraded;
-      wss.OnWebSocketClose    := aOnWSClosed;
-    end;
+    wss.OnWebSocketUpgraded := OnWSUpgraded; // may check fWebSocketsSigner
+    if Assigned(aOnWSClosed) then
+      wss.OnWebSocketClose := aOnWSClosed;
     // ensure that TRestHttpServer.OnWSClose() is called regardless of whether
     // the client connection is disconnected normally or abnormally
     wss.OnWebSocketDisconnect := OnWSSocketClose;
@@ -1428,6 +1442,9 @@ begin
   else
     EHttpServer.RaiseUtf8(
       'Unexpected %.WebSocketsEnable over %', [self, fHttpServer]);
+  if rsoWebSocketsUpgradeSigned in fOptions then
+    fWebSocketsSigner := TBinaryCookieGenerator.Create('', {timeoutmin=}1);
+  fOnWSUpgraded := aOnWSUpgraded;
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
@@ -1441,6 +1458,31 @@ begin
     EWebSockets.RaiseUtf8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWSEncryptionKey,
     aWSAjax, aWSBinaryOptions, aOnWSUpgraded, aOnWSClosed);
+end;
+
+type
+  TWebSocketsSignerData = record
+    Server: TRestServer; // embed the encrypted TRestServer instance pointer
+  end;
+
+function TRestHttpServer.WebSocketsUrl(aServer: TRestServer): RawUtf8;
+begin
+  result := Join([aServer.Model.Root, '?', WebSocketsBearer(aServer)]);
+end;
+
+function TRestHttpServer.WebSocketsBearer(aServer: TRestServer): RawUtf8;
+var
+  data: TWebSocketsSignerData;
+begin
+  if (self = nil) or
+     (aServer = nil) or
+     not Assigned(fOnWSUpgraded) or
+     not (rsoWebSocketsUpgradeSigned in fOptions) or
+     not Assigned(fWebSocketsSigner) or
+     (RestServerFind(aServer) < 0) then
+    EWebSockets.RaiseUtf8('Unexpected rsoWebSocketsUpgradeSigned in %', [self]);
+  data.Server := aServer;
+  fWebSocketsSigner.Generate(result, 0, @data, TypeInfo(TWebSocketsSignerData));
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;
@@ -1490,6 +1532,25 @@ begin
       if aErrorMsg <> nil then
         ObjectToJson(E, aErrorMsg^, TEXTWRITEROPTIONS_DEBUG);
   end;
+end;
+
+function TRestHttpServer.OnWSUpgraded(Protocol: TWebSocketProtocol): integer;
+var
+  tok: RawUtf8;
+begin
+  if Assigned(fWebSocketsSigner) then
+  begin
+    result := HTTP_FORBIDDEN;
+    tok := Protocol.UpgradeBearerToken;            // from WebSocketsBearer()
+    if tok = '' then
+      tok := SplitRight(Protocol.UpgradeUri, '?'); // from WebSocketsUrl()
+    if (tok = '') or
+       (fWebSocketsSigner.Validate(tok) = 0) then
+      exit;
+  end;
+  result := HTTP_SUCCESS;
+  if Assigned(fOnWSUpgraded) then
+    result := fOnWSUpgraded(Protocol);
 end;
 
 procedure TRestHttpServer.OnWSClose(aConnectionID: TRestConnectionID;
