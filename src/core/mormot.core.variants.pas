@@ -10902,7 +10902,7 @@ begin
         exit;
       end;
     2:
-      case PWord(B)^ of
+      case cardinal(PWord(B)^) of
         ord('=') + ord('=') shl 8: // c-style
           Match := coEqualTo;
         ord('!') + ord('=') shl 8, // c-style

@@ -2788,9 +2788,9 @@ begin // inlined version of Utf16HiCharToUtf8() with proper \uxxxx hexa decoding
                      ((c and $3f) shl 16) or UTF8_FFFF;
     inc(D, 2);
   end
-  else if PWord(P + 5)^ = ord('\') + ord('u') shl 8 then // 2nd UTF-16 surrogate
+  else if cardinal(PWord(P + 5)^) = ord('\') + ord('u') shl 8 then
   begin
-    s := HexToWideChar(P + 7);
+    s := HexToWideChar(P + 7); // 2nd UTF-16 surrogate
     if s = 0 then
       D^ := '?' // invalid surrogate
     else
@@ -3566,7 +3566,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
           end
           else
           begin
-            if PWord(P)^ = ord('\') + ord('u') shl 8 then
+            if cardinal(PWord(P)^) = ord('\') + ord('u') shl 8 then
             begin
               c2 := (ConvertHexToBin[P[2]] shl 12) or // 2nd UTF-16 surrogate
                     (ConvertHexToBin[P[3]] shl 8) or
@@ -4538,7 +4538,7 @@ begin
           if not (result^ in [#10, #13]) then
             result^ := ' '; // keep CRLF for line numbering (e.g. for error)
           inc(result);
-          if PWord(result)^ = ord('*') + ord('/') shl 8 then
+          if cardinal(PWord(result)^) = ord('*') + ord('/') shl 8 then
           begin
             PWord(result)^ := $2020;
             inc(result, 2);

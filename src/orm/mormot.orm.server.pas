@@ -2087,7 +2087,7 @@ begin
       fRunningRest := fRunStatic;
     include(fFlags, fNeedAcquireExecutionWrite); // default paranoid thread-safe
     // retrieve fCommandEncoding/fValueDirectFields
-    case PWord(fCommand)^ of // enough to check the first 2 chars
+    case cardinal(PWord(fCommand)^) of // enough to check the first 2 chars
       ord('P') + ord('O') shl 8:
         // {"Table":[...,"POST",{object},...]} [...,"POST@Table",{object},...]
         fCommandEncoding := encPost;

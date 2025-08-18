@@ -2952,7 +2952,7 @@ begin // caller should ensure that (P <> nil) and (Sep > ' ')
     dec(E); // trim right
   Item := P;
   Len := E - P;
-  if (PWord(S)^ = EOLW) or
+  if (cardinal(PWord(S)^) = EOLW) or
      (S^ = Sep) then
     P := S + 1
   else if S^ = #10 then
@@ -6170,7 +6170,7 @@ begin
     1:
       result := tag^ in ['p', 'P'];
     2:
-      case PWord(tag)^ and $dfdf of
+      case cardinal(PWord(tag)^) and $dfdf of
         ord('B') + ord('R') shl 8,
         ord('L') + ord('I') shl 8,
         ord('H') + (ord('1') and $df) shl 8,
@@ -9797,7 +9797,7 @@ begin
   if (Format = '') or
      (high(Args) < 0) then // no formatting needed
     Result := Format
-  else if PWord(Format)^ = ord('%') then // optimize raw conversion
+  else if cardinal(PWord(Format)^) = ord('%') then // optimize raw conversion
     VarRecToUtf8(@Args[0], Result)
   else
   begin
@@ -10810,7 +10810,7 @@ begin
     if l = 0 then
       break; // void line is only for the end of headers
     inc(p, l);
-    if PWord(p)^ = EOLW then
+    if cardinal(PWord(p)^) = EOLW then
       inc(p, 2)
     else if p^ = #0 then
       exit // allow ending without any CRLF

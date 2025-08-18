@@ -8768,7 +8768,7 @@ begin
         $ffd8ff:
           result := mtJpg;  // FF D8 FF DB/E0/E1/E2/E3/E8
       else
-        case PWord(Content)^ of
+        case cardinal(PWord(Content)^) of
           $4D42:
             result := mtBmp; // 42 4D
           else if Len > 12 then // [0]=boxlen [1]='ftyp'box [2]=brand
@@ -8818,7 +8818,7 @@ begin
       begin
         result := mtUnknown;
         if Len > 600 then
-          case PWordArray(Content)^[256] of // at offset 512
+          case cardinal(PWordArray(Content)^[256]) of // at offset 512
             $a5ec:
               result := mtDoc; // EC A5 C1 00
             $fffd: // FD FF FF

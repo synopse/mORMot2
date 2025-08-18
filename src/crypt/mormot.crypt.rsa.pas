@@ -3231,7 +3231,7 @@ type
 
 constructor TCryptAsymRsa.Create(const name: RawUtf8);
 begin
-  case PWord(name)^ of
+  case cardinal(PWord(name)^) of
     ord('R') + ord('S') shl 8:
       fRsaClass := TRsa;
     ord('P') + ord('S') shl 8:

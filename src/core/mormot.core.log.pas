@@ -3760,7 +3760,7 @@ begin
         result := aplInfo;
       ord('D') + ord('E') shl 8 + ord('B') shl 16 + ord('U') shl 24:
         result := aplDebug;
-    else if PWord(Text)^ in [ord('1') .. ord('5')] then
+    else if cardinal(PWord(Text)^) in [ord('1') .. ord('5')] then
       result := TAppLogLevel(PByte(Text)^ - ord('0'))
     else
       result := aplNone;

@@ -2387,7 +2387,7 @@ begin
      not wasString then
     exit;
   cmp := FastVarDataComp(@dv^.Values[0], @dv^.Values[2], false);
-  case PWord(oper)^ of
+  case cardinal(PWord(oper)^) of
     ord('='):
       if cmp = 0 then
         result := VarTrue;

@@ -912,7 +912,7 @@ begin
             else
               // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
               if m^.Name <> '' then
-                case PWord(m^.Name)^ of
+                case cardinal(PWord(m^.Name)^) of
                   ord('e') + ord('t') shl 8,  // 'ethX'
                   ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
                     m^.Kind := makEthernet;

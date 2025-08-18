@@ -4885,7 +4885,7 @@ begin
   result := bomNone;
   if (Buffer <> nil) and
      (BufferSize >= 2) then
-    case PWord(Buffer)^ of
+    case cardinal(PWord(Buffer)^) of
       ord(BOM_UTF16LE):
         begin
           inc(PByte(Buffer), 2);
@@ -6197,7 +6197,7 @@ begin
     {$ifndef CPUX86NOTPIC}
     tab := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
-    w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
+    w := PtrUInt(tab[ord(p[0])]) + PtrUInt(tab[ord(p[1])]) shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
       if (PWord(up^)^ = w) and
@@ -6227,7 +6227,7 @@ begin
     {$ifndef CPUX86NOTPIC}
     tab := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
-    w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
+    w := PtrUInt(tab[ord(p[0])]) + PtrUInt(tab[ord(p[1])]) shl 8;
     result := 0;
     repeat
       // quickly check the first 2 up^[result] chars

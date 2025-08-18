@@ -2477,7 +2477,7 @@ begin
   while item.FromNext(bson) do
     case item.NameLen of
       2:
-        if PWord(item.Name)^ = ord('i') + ord('d') shl 8 then
+        if cardinal(PWord(item.Name)^) = ord('i') + ord('d') shl 8 then
           // fCursorID<>0 if getMore is needed
           fCursorID := item.ToInteger;
       9:
