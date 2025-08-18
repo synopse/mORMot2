@@ -724,8 +724,9 @@ type
     /// append CR+LF (#13#10) chars and #9 indentation
     // - indentation depth is defined by the HumanReadableLevel value
     procedure AddCRAndIndent; virtual;
-    /// write the same character multiple times
+    /// write the same character multiple times (up to the internal buffer size)
     procedure AddChars(aChar: AnsiChar; aCount: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append an integer Value as fixed-length 2 digits text with comma
     procedure Add2(Value: PtrUInt);
     /// append an integer Value as fixed-length 3 digits text without any comma
@@ -5001,23 +5002,13 @@ begin
 end;
 
 procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
-var
-  n: PtrInt;
 begin
-  if aCount > 0 then
-    repeat
-      n := BEnd - B; // note: PtrInt(BEnd - B) could be < 0
-      if n <= aCount then
-      begin
-        FlushToStream;
-        n := BEnd - B;
-      end;
-      if aCount < n then
-        n := aCount;
-      FillCharFast(B[1], n, ord(aChar));
-      inc(B, n);
-      dec(aCount, n);
-    until aCount = 0;
+  if aCount <= 0 then
+    exit;
+  if PtrInt(BEnd - B) < aCount then // note: PtrInt(BEnd - B) could be < 0
+    FlushToStream;
+  FillCharFast(B[1], MinPtrInt(aCount, fTempBufSize), ord(aChar));
+  inc(B, aCount);
 end;
 
 procedure TTextWriter.Add2(Value: PtrUInt);
