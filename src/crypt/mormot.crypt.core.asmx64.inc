@@ -4396,7 +4396,10 @@ end;
 
 { AES-CTR alternative code }
 
-{$define USEAESNICTRORIGINAL} // our single procedure seems the fastest (yet)
+{ $define USEAESNICTRORIGINAL} // our single procedure seems the fastest (yet)
+{$ifdef USEAESNICTRNEW}
+  {$undef USEAESNICTRORIGINAL}
+{$endif USEAESNICTRNEW}
 
 { Some x86_64 numbers on a Core i5 15400, running on Debian 12:
 

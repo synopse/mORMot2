@@ -6474,7 +6474,7 @@ begin
     if TimeOutMinutes = 0 then // max 1 month expiration seems good enough
       TimeOutMinutes := 31 * 24 * 60;
     cc.head.expires := cc.head.issued + TimeOutMinutes * 60;
-    fSafe.Lock;
+    fSafe.Lock; // protect fAes instance and SessionSequence
     try
       inc(fContext.SessionSequence);
       inc(result, fContext.SessionSequence); // inc() to circumvent Delphi hint
@@ -6529,7 +6529,7 @@ begin
      (cc.head.expires <= Now32) then
     exit;
   dec(len, SizeOf(cc.head));
-  fSafe.Lock;
+  fSafe.Lock; // protect fAes instance
   try
     if not fAes.Reset(@cc.head.session, 12) or // unique sequence-based IV
        not fAes.Add_AAD(@cc.head.session, 3 * SizeOf(cardinal)) or

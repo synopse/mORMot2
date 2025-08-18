@@ -145,35 +145,41 @@ type
   end;
 
   /// OpenSSL AES cypher/uncypher without chaining (ECB)
-  // - this mode is known to be less secure than the others
+  // - this mode is known to be less secure than the others, and should not be
+  // needed in practice, but from some legacy / unsafe purposes
   TAesEcbOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher-block chaining (CBC)
+  // - on x86_64, our TAesCbc class is slower than OpenSSL 3.0:
+  // $  mormot aes-128-cbc in 4.48ms i.e. 544.9K/s or 1.1 GB/s
+  // $  mormot aes-256-cbc in 5.46ms i.e. 446.9K/s or 0.9 GB/s
+  // $  openssl aes-128-cbc in 3.23ms i.e. 755.6K/s or 1.6 GB/s
+  // $  openssl aes-256-cbc in 4.04ms i.e. 602.9K/s or 1.2 GB/s
   TAesCbcOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher feedback (CFB)
-  // - our TAesCfb class is faster than OpenSSL on x86_64:
-  // $  mormot aes-128-cfb in 6.95ms i.e. 359247/s or 764.5 MB/s
-  // $  mormot aes-256-cfb in 9.40ms i.e. 265816/s or 565.7 MB/s
-  // $  openssl aes-128-cfb in 10.53ms i.e. 237326/s or 505 MB/s
-  // $  openssl aes-256-cfb in 13.18ms i.e. 189652/s or 403.6 MB/s
+  // - on x86_64, our TAesCfb class is really faster than OpenSSL 3.0:
+  // $  mormot aes-128-cfb in 2.64ms i.e. 0.9M/s or 1.9 GB/s
+  // $  mormot aes-256-cfb in 3.48ms i.e. 700.7K/s or 1.4 GB/s
+  // $  openssl aes-128-cfb in 4.95ms i.e. 492.4K/s or 1 GB/s
+  // $  openssl aes-256-cfb in 5.80ms i.e. 420.6K/s or 0.9 GB/s
   TAesCfbOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Output feedback (OFB)
-  // - our TAesOfb class is faster than OpenSSL on x86_64:
-  // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
-  // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
-  // $  openssl aes-128-ofb in 7.82ms i.e. 319693/s or 680.3 MB/s
-  // $  openssl aes-256-ofb in 10.39ms i.e. 240523/s or 511.8 MB/s
+  // - on x86_64, our TAesOfb class is faster than OpenSSL 1.1:
+  // $  mormot aes-128-ofb in 2.62ms i.e. 0.9M/s or 1.9 GB/s
+  // $  mormot aes-256-ofb in 3.49ms i.e. 699.3K/s or 1.4 GB/s
+  // $  openssl aes-128-ofb in 3.49ms i.e. 698.7K/s or 1.4 GB/s
+  // $  openssl aes-256-ofb in 4.36ms i.e. 558.8K/s or 1.1 GB/s
   TAesOfbOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
@@ -182,10 +188,16 @@ type
   /// OpenSSL AES cypher/uncypher with 128-bit Counter mode (CTR)
   // - similar to TAesCtrNist, not our proprietary TAesCtrAny with a 64-bit CTR
   // - our TAesCtrNist class is faster than OpenSSL on x86_64:
-  // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
-  // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
-  // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
-  // $  openssl aes-256-ctr in 2.80ms i.e. 891901/s or 1.8 GB/s
+  // $  mormot aes-128-ctr in 596us i.e. 4M/s or 8.7 GB/s
+  // $  mormot aes-256-ctr in 716us i.e. 3.3M/s or 7.2 GB/s
+  // $  openssl aes-128-ctr in 1.13ms i.e. 2.1M/s or 4.5 GB/s
+  // $  openssl aes-256-ctr in 1.27ms i.e. 1.8M/s or 4 GB/s
+  // - on i386, numbers shows that our own 4x interleaved asm works great
+  // (here in comparison with OpenSSL 3.5 on Win32):
+  // $  mormot aes-128-ctr in 644us i.e. 3.7M/s or 8 GB/s
+  // $  mormot aes-256-ctr in 836us i.e. 2.8M/s or 6.2 GB/s
+  // $  openssl aes-128-ctr in 1.52ms i.e. 1.5M/s or 3.4 GB/s
+  // $  openssl aes-256-ctr in 1.68ms i.e. 1.4M/s or 3 GB/s
   TAesCtrOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
@@ -194,11 +206,23 @@ type
   /// OpenSSL AES-GCM cypher/uncypher
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
-  // - OpenSSL is faster than our TAesGcm class, but not so much:
-  // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
-  // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
-  // $  mormot aes-128-gcm in 3.45ms i.e. 722752/s or 1.5 GB/s
-  // $  mormot aes-256-gcm in 4.11ms i.e. 607385/s or 1.2 GB/s
+  // - our TAesGcm class is 8x interleaved for both GMAC and AES-CTR on x86_64,
+  // and noticeably faster than OpenSSL 3.0 (for small buffers):
+  // $  mormot aes-128-gcm in 1.03ms i.e. 2.3M/s or 5 GB/s
+  // $  mormot aes-256-gcm in 1.18ms i.e. 2M/s or 4.4 GB/s
+  // $  openssl aes-128-gcm in 2.50ms i.e. 0.9M/s or 2 GB/s
+  // $  openssl aes-256-gcm in 2.64ms i.e. 0.9M/s or 1.9 GB/s
+  // - on i386, mormot numbers are only slightly lower than OpenSSL after 2KB,
+  // but still much faster for small blocks:
+  // $  mormot aes-128-gcm in 5.18ms i.e. 470.8K/s or 1 GB/s
+  // $  mormot aes-256-gcm in 5.34ms i.e. 456.5K/s or 0.9 GB/s
+  // $  openssl aes-128-gcm in 3.83ms i.e. 635.9K/s or 1.3 GB/s
+  // $  openssl aes-256-gcm in 4.02ms i.e. 606.4K/s or 1.2 GB/s
+  // 50 bytes:
+  // $  mormot aes-128-gcm in 97us i.e. 4.9M/s, aver. 194ns, 245.7 MB/s
+  // $  mormot aes-256-gcm in 102us i.e. 4.6M/s, aver. 204ns, 233.7 MB/s
+  // $  openssl aes-128-gcm in 515us i.e. 0.9M/s, aver. 1.03us, 46.2 MB/s
+  // $  openssl aes-256-gcm in 541us i.e. 0.8M/s, aver. 1.08us, 44 MB/s
   // - WARNING: AEAD associated information is currently unsupported by
   // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
   // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm

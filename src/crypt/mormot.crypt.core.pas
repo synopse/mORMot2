@@ -855,7 +855,8 @@ type
   end;
 
   /// handle AES cypher/uncypher without chaining (ECB)
-  // - this mode is known to be less secure than the others
+  // - this mode is known to be less secure than the others, and should not be
+  // needed in practice, but from some legacy / unsafe purposes
   // - IV property should be set to a fixed value to encode the trailing bytes
   // of the buffer by a simple XOR - but you should better use the PKC7 pattern
   // - this class will use AES-NI hardware instructions, if available
@@ -871,6 +872,16 @@ type
   /// handle AES cypher/uncypher with Cipher-block chaining (CBC)
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
+  // - on x86_64, our TAesCbc class is slightly slower than OpenSSL 3.0:
+  // $  mormot aes-128-cbc in 4.48ms i.e. 544.9K/s or 1.1 GB/s
+  // $  mormot aes-256-cbc in 5.46ms i.e. 446.9K/s or 0.9 GB/s
+  // $  openssl aes-128-cbc in 3.23ms i.e. 755.6K/s or 1.6 GB/s
+  // $  openssl aes-256-cbc in 4.04ms i.e. 602.9K/s or 1.2 GB/s
+  // - also on i386:
+  // $  mormot aes-128-cbc in 4.59ms i.e. 530.8K/s or 1.1 GB/s
+  // $  mormot aes-256-cbc in 5.45ms i.e. 447.8K/s or 0.9 GB/s
+  // $  openssl aes-128-cbc in 3.50ms i.e. 697.1K/s or 1.4 GB/s
+  // $  openssl aes-256-cbc in 4.36ms i.e. 558.8K/s or 1.1 GB/s
   // - use TAesFast[mCbc] to retrieve the fastest implementation at runtime
   TAesCbc = class(TAesAbstractSyn)
   protected
@@ -926,8 +937,8 @@ type
   // $  mormot aes-256-cfb in 3.48ms i.e. 700.7K/s or 1.4 GB/s
   // $  openssl aes-128-cfb in 4.95ms i.e. 492.4K/s or 1 GB/s
   // $  openssl aes-256-cfb in 5.80ms i.e. 420.6K/s or 0.9 GB/s
-  // - on i386, numbers are similar:
-  // $  mormot aes-128-cfb in 2.60ms i.e. 0.9M/s or 1.9 GB/s
+  // - on i386, our code is almost twice faster:
+  // $  mormot aes-128-cfb in 2.57ms i.e. 0.9M/s or 2 GB/s
   // $  mormot aes-256-cfb in 3.45ms i.e. 706.2K/s or 1.5 GB/s
   // $  openssl aes-128-cfb in 5.56ms i.e. 438.5K/s or 0.9 GB/s
   // $  openssl aes-256-cfb in 6.41ms i.e. 380.8K/s or 830 MB/s
@@ -951,7 +962,7 @@ type
   // $  mormot aes-256-ofb in 3.49ms i.e. 699.3K/s or 1.4 GB/s
   // $  openssl aes-128-ofb in 3.49ms i.e. 698.7K/s or 1.4 GB/s
   // $  openssl aes-256-ofb in 4.36ms i.e. 558.8K/s or 1.1 GB/s
-  // - on i386, numbers are similar:
+  // - on i386, our code is faster in a similar way:
   // $  mormot aes-128-ofb in 2.57ms i.e. 0.9M/s or 2 GB/s
   // $  mormot aes-256-ofb in 3.45ms i.e. 707K/s or 1.5 GB/s
   // $  openssl aes-128-ofb in 3.97ms i.e. 614.8K/s or 1.3 GB/s
@@ -1008,11 +1019,22 @@ type
   // $  mormot aes-256-ctr in 716us i.e. 3.3M/s or 7.2 GB/s
   // $  openssl aes-128-ctr in 1.13ms i.e. 2.1M/s or 4.5 GB/s
   // $  openssl aes-256-ctr in 1.27ms i.e. 1.8M/s or 4 GB/s
-  // - on i386, numbers our 4x interleaved asm works great (for small blocks):
+  // - on i386, numbers shows that our own 4x interleaved asm works great
+  // (here in comparison with OpenSSL 3.5 on Win32):
   // $  mormot aes-128-ctr in 644us i.e. 3.7M/s or 8 GB/s
   // $  mormot aes-256-ctr in 836us i.e. 2.8M/s or 6.2 GB/s
   // $  openssl aes-128-ctr in 1.52ms i.e. 1.5M/s or 3.4 GB/s
   // $  openssl aes-256-ctr in 1.68ms i.e. 1.4M/s or 3 GB/s
+  // 100 bytes:
+  // $  mormot aes-128-ctr 100 in 37us i.e. 12.8M/s, aver. 74ns, 1.2 GB/s
+  // $  mormot aes-256-ctr 100 in 42us i.e. 11.3M/s, aver. 84ns, 1.1 GB/s
+  // $  openssl aes-128-ctr 100 in 119us i.e. 4M/s, aver. 238ns, 400.7 MB/s
+  // $  openssl aes-256-ctr 100 in 121us i.e. 3.9M/s, aver. 242ns, 394 MB/s
+  // 1000 bytes:
+  // $  mormot aes-128-ctr 1000 in 74us i.e. 6.4M/s, aver. 148ns, 6.2 GB/s
+  // $  mormot aes-256-ctr 1000 in 93us i.e. 5.1M/s, aver. 186ns, 5 GB/s
+  // $  openssl aes-128-ctr 1000 in 154us i.e. 3.1M/s, aver. 308ns, 3 GB/s
+  // $  openssl aes-256-ctr 1000 in 165us i.e. 2.8M/s, aver. 330ns, 2.8 GB/s
   // - use TAesFast[mCtr] to retrieve the fastest implementation at runtime
   TAesCtr = class(TAesC64)
   protected
@@ -1251,11 +1273,27 @@ type
   // $  mormot aes-256-gcm in 1.18ms i.e. 2M/s or 4.4 GB/s
   // $  openssl aes-128-gcm in 2.50ms i.e. 0.9M/s or 2 GB/s
   // $  openssl aes-256-gcm in 2.64ms i.e. 0.9M/s or 1.9 GB/s
-  // - on i386, mormot numbers are only slightly lower than OpenSSL
+  // - on i386, mormot numbers are only slightly lower than OpenSSL after 2KB,
+  // but still much faster for small blocks:
   // $  mormot aes-128-gcm in 5.18ms i.e. 470.8K/s or 1 GB/s
   // $  mormot aes-256-gcm in 5.34ms i.e. 456.5K/s or 0.9 GB/s
   // $  openssl aes-128-gcm in 3.83ms i.e. 635.9K/s or 1.3 GB/s
   // $  openssl aes-256-gcm in 4.02ms i.e. 606.4K/s or 1.2 GB/s
+  // 8 bytes:
+  // $  mormot aes-128-gcm in 56us i.e. 8.5M/s, aver. 112ns, 68.1 MB/s
+  // $  mormot aes-256-gcm in 60us i.e. 7.9M/s, aver. 120ns, 63.5 MB/s
+  // $  openssl aes-128-gcm in 457us i.e. 1M/s, aver. 914ns, 8.3 MB/s
+  // $  openssl aes-256-gcm in 467us i.e. 1M/s, aver. 934ns, 8.1 MB/s
+  // 50 bytes:
+  // $  mormot aes-128-gcm in 97us i.e. 4.9M/s, aver. 194ns, 245.7 MB/s
+  // $  mormot aes-256-gcm in 102us i.e. 4.6M/s, aver. 204ns, 233.7 MB/s
+  // $  openssl aes-128-gcm in 515us i.e. 0.9M/s, aver. 1.03us, 46.2 MB/s
+  // $  openssl aes-256-gcm in 541us i.e. 0.8M/s, aver. 1.08us, 44 MB/s
+  // 100 bytes:
+  // $  mormot aes-128-gcm in 110us i.e. 4.3M/s, aver. 220ns, 433.4 MB/s
+  // $  mormot aes-256-gcm in 117us i.e. 4M/s, aver. 234ns, 407.5 MB/s
+  // $  openssl aes-128-gcm in 525us i.e. 0.9M/s, aver. 1.05us, 90.8 MB/s
+  // $  openssl aes-256-gcm in 521us i.e. 0.9M/s, aver. 1.04us, 91.5 MB/s
   // - use TAesFast[mGcm] to retrieve the fastest implementation at runtime
   TAesGcm = class(TAesGcmAbstract)
   protected
