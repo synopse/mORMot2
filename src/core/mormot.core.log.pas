@@ -4572,7 +4572,7 @@ begin
   indent := fThreadInfo^.RecursionCount;
   if Level = sllEnter then
     dec(indent);
-  if indent > 0 then
+  if indent > 0 then // ident <= MAX_SYNLOGRECURSION = 53 clearly within 255 bytes
   begin
     FillCharFast(P^, indent, 9); // inlined AddChars(#9, indent)
     inc(P, indent);
@@ -4833,7 +4833,7 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   dec(nfo^.RecursionCount);
   if not (sllLeave in fFamily.Level) then
     exit;
-  // append e.g. 00000000001FFF23  %  -    02.096.658
+  // reached refcnt=0 -> append e.g. 00000000001FFF23  %  -    02.096.658
   QueryPerformanceMicroSeconds(ms);
   dec(ms, fStartTimestamp);
   FillInfo(nfo, @ms); // timestamp [+ threadnumber]
@@ -4845,10 +4845,10 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   begin // direct AddMicroSec() output should not trigger any exception
   {$endif HASFASTTRYFINALLY}
     LogHeaderNoRecursion(fWriter, sllLeave, @nfo^.CurrentTimeAndThread);
-    rec := nfo^.RecursionCount;
-    if rec <> 0 then // manual indentation
+    rec := nfo^.RecursionCount; // rec <= MAX_SYNLOGRECURSION = 53
+    if rec <> 0 then // inlined AddChars(#9, rec)
     begin
-      FillCharFast(fWriter.B[1], rec, 9);
+      FillCharFast(fWriter.B[1], rec, 9); // LogHeaderNoRecursion did AddShort()
       inc(fWriter.B, rec);
     end;
     fWriter.AddMicroSec(ms);
