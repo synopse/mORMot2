@@ -1300,21 +1300,22 @@ type
     {$endif USE_OPENSSL}
     // encryption
     bRC4,
-    bAES128CFB, bAES128OFB, bAES128C64, bAES128CTR,
+    bAES128CBC, bAES128CFB, bAES128OFB, bAES128C64, bAES128CTR,
     bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
-    bAES256CFB, bAES256OFB, bAES256C64, bAES256CTR,
+    bAES256CBC, bAES256CFB, bAES256OFB, bAES256C64, bAES256CTR,
     bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM,
     {$ifdef USE_OPENSSL}
-    bAES128CFBO, bAES128OFBO, bAES128CTRO, bAES128GCMO,
-    bAES256CFBO, bAES256OFBO, bAES256CTRO, bAES256GCMO,
+    bAES128CBCO, bAES128CFBO, bAES128OFBO, bAES128CTRO, bAES128GCMO,
+    bAES256CBCO, bAES256CFBO, bAES256OFBO, bAES256CTRO, bAES256GCMO,
     {$endif USE_OPENSSL}
     bSHAKE128, bSHAKE256);
 
 procedure TTestCoreCrypto.Benchmark;
 const
+  bAESFIRST = bAES128CBC;
   bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMO {$else} bAES256GCM {$endif};
   bOPENSSL = [ {$ifdef USE_OPENSSL}
-               bSHA1O .. bSHA3_512O, bAES128CFBO .. bAES256GCMO
+               bSHA1O .. bSHA3_512O, bAES128CBCO .. bAES256GCMO
                {$endif USE_OPENSSL} ];
   SIZ: array[0..4] of integer = (
     8,
@@ -1324,19 +1325,19 @@ const
     10000);
   COUNT = 500;
 
-  AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
-    TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm,
-    TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm
+  AESCLASS: array[bAESFIRST.. bAESLAST] of TAesAbstractClass = (
+    TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm,
+    TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm
   {$ifdef USE_OPENSSL} ,
-    TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl,
-    TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl
+    TAesCbcOsl, TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl,
+    TAesCbcOsl, TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl
   {$endif USE_OPENSSL});
 
-  AESBITS: array[bAES128CFB..bAESLAST] of integer = (
-    128, 128, 128, 128, 128, 128, 128, 128,
-    256, 256, 256, 256, 256, 256, 256, 256
+  AESBITS: array[bAESFIRST..bAESLAST] of integer = (
+    128, 128, 128, 128, 128, 128, 128, 128, 128,
+    256, 256, 256, 256, 256, 256, 256, 256, 256
   {$ifdef USE_OPENSSL} ,
-    128, 128, 128, 128, 256, 256, 256, 256);
+    128, 128, 128, 128, 128, 256, 256, 256, 256, 256);
   OPENSSL_HASH: array[bSHA1O .. bSHA3_512O] of THashAlgo = (
     hfSHA1, hfSHA1, hfSHA256, hfSHA256, hfSHA384, hfSHA384, hfSHA512, hfSHA384,
     hfSHA512, hfSHA3_256, hfSHA3_512);
@@ -1356,7 +1357,7 @@ var
   RC4: TRC4;
   timer: TPrecisionTimer;
   time: array[TBenchmark] of Int64;
-  AES: array[bAES128CFB..bAESLAST] of TAesAbstract;
+  AES: array[bAESFIRST..bAESLAST] of TAesAbstract;
   TXT: array[TBenchmark] of RawUtf8;
 begin
   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT, false, {lower=}true);
@@ -1462,17 +1463,21 @@ begin
           bHMACSHA256O,
           bHMACSHA384O:
             TOpenSslHmac.Hmac(OPENSSL_HASH[b], data, 'secret');
+          bAES128CBCO,
           bAES128CFBO,
           bAES128OFBO,
           bAES128CTRO,
+          bAES256CBCO,
           bAES256CFBO,
           bAES256OFBO,
           bAES256CTRO,
           {$endif USE_OPENSSL}
+          bAES128CBC,
           bAES128CFB,
           bAES128OFB,
           bAES128C64,
           bAES128CTR,
+          bAES256CBC,
           bAES256CFB,
           bAES256OFB,
           bAES256C64,
@@ -1504,7 +1509,7 @@ begin
               (dig.d1 <> 0));
       end;
       inc(time[b], NotifyTestSpeed('% %', [TXT[b], SIZ[s]], COUNT, SIZ[s] *
-        COUNT, @timer, {onlylog=}true));
+        COUNT, @timer, {onlylog=}true{(b in bOPENSSL) or (PosEx('gcm', TXT[b]) = 0)}));
       //if b in [bSHA3_512,high(b)] then AddConsole('');
     end;
     inc(size, SIZ[s] * COUNT);
