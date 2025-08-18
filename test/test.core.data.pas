@@ -4076,7 +4076,22 @@ begin
     CheckEqual(HtmlUnescape(Join(['a&bc', s])),      Join(['a&bc', exp]));
     CheckEqual(HtmlUnescape(Join(['ab&amp;c', s])),  Join(['ab&c', exp]));
     CheckEqual(HtmlUnescape(Join(['ab&none;c', s])), Join(['ab&none;c', exp]));
+    CheckEqual(HtmlToText(s), exp);
   end;
+  CheckEqual(HtmlToText('abc'), 'abc');
+  CheckEqual(HtmlToText('abc'#13#10'def'), 'abc'#13#10'def');
+  CheckEqual(HtmlToText('abc<p>def'), 'abc'#13#10'def');
+  CheckEqual(HtmlToText('abc<P>def'), 'abc'#13#10'def');
+  CheckEqual(HtmlToText('abc<P>def<br>gh'), 'abc'#13#10'def'#13#10'gh');
+  CheckEqual(HtmlToText('abc<h1>def</h1>title'), 'abc'#13#10'def'#13#10'title');
+  CheckEqual(HtmlToText('abc<H3>def</h4>title'), 'abc'#13#10'def'#13#10'title');
+  CheckEqual(HtmlToText('abc<H3>d&amp;f</h4>title'), 'abc'#13#10'd&f'#13#10'title');
+  CheckEqual(HtmlToText('&amp;bc<H3>d&amp;f</h4>titl&amp;'), '&bc'#13#10'd&f'#13#10'titl&');
+  s := '<div><h1>Welcome</h1><p>This is a <strong>sample</strong> paragraph.</p><ul>' +
+    '<li>Item 1</li><li>Item 2</li></ul><p>Another paragraph<br>with a line break.</p></div>';
+  s := HtmlToText(s);
+  CheckEqual(s, 'Welcome'#13#10'This is a sample paragraph.'#13#10'Item 1'#13#10 +
+    'Item 2'#13#10'Another paragraph'#13#10'with a line break.'#13#10);
   // wiki
   CheckEqual(HtmlEscapeWiki('test'), '<p>test</p>');
   CheckEqual(HtmlEscapeWiki('te<b>st'), '<p>te&lt;b&gt;st</p>');
