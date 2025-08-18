@@ -468,15 +468,18 @@ type
     property Use: TRestHttpServerUse
       read fUse;
     /// read-only access to all internal servers
+    // - such an index-based property is not thread-safe if AddServer() is called
     property RestServer[Index: integer]: TRestServer
       read GetRestServer;
     /// write-only access to all internal servers access right
     // - can be used to override the default HTTP_DEFAULT_ACCESS_RIGHTS setting
+    // - such an index-based property is not thread-safe if AddServer() is called
     property RestServerAccessRight[Index: integer]: POrmAccessRights
       write SetRestServerAccessRight;
     /// find the first instance of a registered REST server
     // - note that the same REST server may appear several times in this HTTP
     // server instance, e.g. with diverse security options
+    // - such an index-based property is not thread-safe if AddServer() is called
     function RestServerFind(aServer: TRestServer): integer;
     /// low-level interception of all incoming requests
     // - this callback is called BEFORE any registered TRestServer.Uri() methods
@@ -638,16 +641,28 @@ begin
 end;
 
 function TRestHttpServer.RestServerFind(aServer: TRestServer): integer;
+var
+  one: PRestHttpOneServer;
 begin
-  fSafe.ReadLock; // protect fRestServers[]
+  fSafe.ReadLock; // protect fRestServers[] - indexes are not thread-safe anyway
+  {$ifdef HASFASTTRYFINALLY}
   try
-    for result := 0 to Length(fRestServers) - 1 do
-      if fRestServers[result].Server = aServer then
-        exit;
-    result := -1;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    one := pointer(fRestServers);
+    if one <> nil then
+      for result := 0 to PDALen(PAnsiChar(one) - _DALEN)^ + (_DAOFF - 1) do
+        if one^.Server = aServer then
+          exit
+        else
+          inc(one);
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     fSafe.ReadUnLock;
   end;
+  result := -1;
 end;
 
 {$ifndef PUREMORMOT2}
@@ -683,7 +698,7 @@ begin
               [self, aServer.Model.Root], self);
         {$endif USEHTTPSYS}
         for j := i to n - 1 do
-          fRestServers[j] := fRestServers[j + 1];
+          fRestServers[j] := fRestServers[j + 1]; // array deletion
         SetLength(fRestServers, n);
         dec(n);
         aServer.OnNotifyCallback := nil;
@@ -955,15 +970,9 @@ end;
 function TRestHttpServer.GetRestServer(Index: integer): TRestServer;
 begin
   result := nil;
-  if self = nil then
-    exit;
-  fSafe.ReadLock; // protect fRestServers[]
-  try
-    if cardinal(Index) < cardinal(length(fRestServers)) then
-      result := fRestServers[Index].Server;
-  finally
-    fSafe.ReadUnLock;
-  end;
+  if (self <> nil) and
+     (cardinal(Index) < cardinal(length(fRestServers))) then
+    result := fRestServers[Index].Server; // Index is not thread-safe anyway
 end;
 
 function TRestHttpServer.GetRestServerCount: integer;
@@ -976,7 +985,7 @@ procedure TRestHttpServer.SetRestServerAccessRight(Index: integer;
 begin
   if self = nil then
     exit;
-  fSafe.WriteLock; // protect fRestServers[]
+  fSafe.WriteLock; // protect fRestServers[] - Index is not thread-safe anyway
   try
     if Value = nil then
       Value := HTTP_DEFAULT_ACCESS_RIGHTS;
@@ -1100,11 +1109,12 @@ end;
 
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  call: TRestUriParams;
+  call: TRestUriParams; // TRestServer.Uri() don't know anything bout Ctxt
   tls, matchcase: boolean;
   match: TRestModelMatch;
-  i: PtrInt;
+  n: integer;
   P: PUtf8Char;
+  one: PRestHttpOneServer;
   serv: TRestServer;
 begin
   // validate non-REST kind of requests
@@ -1479,6 +1489,7 @@ procedure TRestHttpServer.OnWSClose(aConnectionID: TRestConnectionID;
   aConnectionOpaque: pointer);
 var
   i: PtrInt;
+  one: PRestHttpOneServer;
   services: TServiceContainerServer;
 begin
   if aConnectionID = 0 then
@@ -1487,12 +1498,15 @@ begin
   // in practice redirect to any of them
   fSafe.ReadLock; // protect fRestServers[]
   try
-    for i := 0 to length(fRestServers) - 1 do
-    begin
-      services := TServiceContainerServer(fRestServers[i].Server.Services);
-      if services <> nil then
-        services.RemoveFakeCallbackOnConnectionClose(aConnectionID);
-    end;
+    one := pointer(fRestServers);
+    if one <> nil then
+      for i := 1 to PDALen(PAnsiChar(one) - _DALEN)^ + _DAOFF do
+      begin
+        services := pointer(one^.Server.Services);
+        if services <> nil then
+          services.RemoveFakeCallbackOnConnectionClose(aConnectionID);
+        inc(one);
+      end;
   finally
     fSafe.ReadLock;
   end;
