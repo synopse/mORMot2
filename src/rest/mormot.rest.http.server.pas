@@ -957,7 +957,7 @@ begin
   FreeAndNilSafe(fHttpServer);
   inherited Destroy;
   fAccessControlAllowOriginsMatch.Free;
-  fWebSocketsSigner.Free; // is owned by this instance
+  fWebSocketsSigner.Free; // owned by this instance if rsoWebSocketsUpgradeSigned
 end;
 
 procedure TRestHttpServer.Shutdown(noRestServerShutdown: boolean);
@@ -1474,7 +1474,7 @@ begin
      not Assigned(fWebSocketsSigner) or
      (RestServerFind(aServer) < 0) then
     EWebSockets.RaiseUtf8('Unexpected rsoWebSocketsUpgradeSigned in %', [self]);
-  fWebSocketsSigner.Generate(result, {TimeoutMinutes=}1);
+  fWebSocketsSigner.Generate(result);
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;
@@ -1538,7 +1538,7 @@ begin
       tok := SplitRight(Protocol.UpgradeUri, '?'); // from WebSocketsUrl()
     if (tok = '') or
        (fWebSocketsSigner.Validate(tok) = 0) then
-      exit;
+      exit; // no proper signature to allow the WebSockets upgrade
   end;
   result := HTTP_SUCCESS;
   if Assigned(fOnWSUpgraded) then
