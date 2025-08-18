@@ -524,7 +524,8 @@ type
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors,
   // and also properly support Unicode or unfinished/nested record type definitions
-  // - opoDescriptionUnAmp will detect and unescape HTML entities like &lt; &amp;
+  // - opoDescriptionHtmlUnescape will detect and unescape HTML entities
+  // like &lt; &amp; and remove HTML <tags>, converting e.g. <p> into line feeds
   // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
   TOpenApiParserOption = (
     opoNoEnum,
@@ -540,7 +541,7 @@ type
     opoGenerateSingleApiUnit,
     opoGenerateStringType,
     opoGenerateOldDelphiCompatible,
-    opoDescriptionUnAmp);
+    opoDescriptionHtmlUnescape);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
   /// the main OpenAPI parser and pascal code generator class
@@ -2513,8 +2514,8 @@ begin
   all := TrimU(Make(Args));
   if Desc <> '' then
     Append(all, ': ', Desc);
-  if opoDescriptionUnAmp in fOptions then
-    all := HtmlUnescape(all);
+  if opoDescriptionHtmlUnescape in fOptions then
+    all := HtmlToText(all);
   p := pointer(all);
   repeat
     line := GetNextLine(p, p, {trim=}true);
