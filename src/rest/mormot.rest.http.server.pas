@@ -1179,15 +1179,13 @@ begin
   call.LowLevelRemoteIP := Ctxt.RemoteIP;
   call.LowLevelBearerToken := Ctxt.AuthBearer;
   call.LowLevelUserAgent := Ctxt.UserAgent;
-  if fHosts.Count > 0 then
-    // handle any virtual host domain
+  if fHosts.Count > 0 then // handle any virtual host domain
     ComputeHostUrl(Ctxt, call.Url)
   else
-    // no AdjustHostUrl() below
-    Ctxt.Host := '';
+    Ctxt.Host := ''; // no AdjustHostUrl() below
   if (call.Url = '') and
      (Ctxt.Url <> '') then
-    if Ctxt.Url[1] = '/' then // trim any initial '/'
+    if Ctxt.Url[1] = '/' then // trim any initial '/' for TOrmModel.UriMatch()
       FastSetString(call.Url, @PByteArray(Ctxt.Url)[1], length(Ctxt.Url) - 1)
     else
       call.Url := Ctxt.Url;
@@ -1373,9 +1371,9 @@ begin
     if (Ctxt.Url <> '') and
        (PWord(Ctxt.Url)^ <> ord('/')) then
       if Ctxt.Url[1] = '/' then
-        HostUrl := HostUrl + Ctxt.Url
+        Append(HostUrl, Ctxt.Url)
       else
-        HostUrl := HostUrl + '/' + Ctxt.Url;
+        Append(HostUrl, '/', Ctxt.Url);
 end;
 
 function TRestHttpServer.WebSocketsEnable(const aWSURI, aWSEncryptionKey: RawUtf8;
