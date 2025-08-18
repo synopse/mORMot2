@@ -2386,6 +2386,7 @@ asm
         push    edi
         push    ebx
         mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        lea     eax, dword ptr [eax + $70] // for smaller codegen
         // prepare ecx = 32-bit ctr
         mov     ecx, [edx].THash128Rec.c3
         bswap   ecx
@@ -2409,13 +2410,13 @@ asm
         bswap   ecx
         lea     ecx, [ecx + 4]
         // 4x interleaved AES process
-        mov     esi, [eax].TAesContext.buf.c0  // esi=src
-        mov     edi, [eax].TAesContext.buf.c1  // edi=dst
-        mov     bl, byte ptr [eax].TAesContext.Rounds
-        movups  xmm4, [eax + $00]
-        movups  xmm5, [eax + $10]
-        movups  xmm6, [eax + $20]
-        movups  xmm7, [eax + $30]
+        mov     esi, [eax - $70].TAesContext.buf.c0  // esi=src
+        mov     edi, [eax - $70].TAesContext.buf.c1  // edi=dst
+        mov     bl, byte ptr [eax - $70].TAesContext.Rounds
+        movups  xmm4, [eax + $00 - $70]
+        movups  xmm5, [eax + $10 - $70]
+        movups  xmm6, [eax + $20 - $70]
+        movups  xmm7, [eax + $30 - $70]
         pxor    xmm0, xmm4
         pxor    xmm1, xmm4
         pxor    xmm2, xmm4
@@ -2432,11 +2433,10 @@ asm
         aesenc  xmm1, xmm7
         aesenc  xmm2, xmm7
         aesenc  xmm3, xmm7
-        movups  xmm4, [eax + $40]
-        movups  xmm5, [eax + $50]
-        movups  xmm6, [eax + $60]
-        movups  xmm7, [eax + $70]
-        lea     eax, dword ptr [eax + $70] // for smaller codegen
+        movups  xmm4, [eax + $40 - $70]
+        movups  xmm5, [eax + $50 - $70]
+        movups  xmm6, [eax + $60 - $70]
+        movups  xmm7, [eax + $70 - $70]
         aesenc  xmm0, xmm4
         aesenc  xmm1, xmm4
         aesenc  xmm2, xmm4
@@ -2453,10 +2453,10 @@ asm
         aesenc  xmm1, xmm7
         aesenc  xmm2, xmm7
         aesenc  xmm3, xmm7
-        movups  xmm4, [eax + $10]
-        movups  xmm5, [eax + $20]
-        movups  xmm6, [eax + $30]
-        movups  xmm7, [eax + $40]
+        movups  xmm4, [eax + $80 - $70]
+        movups  xmm5, [eax + $90 - $70]
+        movups  xmm6, [eax + $a0 - $70]
+        movups  xmm7, [eax + $b0 - $70]
         aesenc  xmm0, xmm4
         aesenc  xmm1, xmm4
         aesenc  xmm2, xmm4
@@ -2472,31 +2472,30 @@ asm
         aesenclast xmm2, xmm6
         aesenclast xmm3, xmm6
 @write: // dst := src xor AES(iv)
-        lea     eax, dword ptr [eax - $70]
         movups  xmm4, [esi + $00]
         movups  xmm5, [esi + $10]
         movups  xmm6, [esi + $20]
         movups  xmm7, [esi + $30]
         lea     esi, dword ptr [esi + $40]
-        mov     [eax].TAesContext.buf.c0, esi
+        mov     [eax - $70].TAesContext.buf.c0, esi
         pxor    xmm4, xmm0
         pxor    xmm5, xmm1
         pxor    xmm6, xmm2
         pxor    xmm7, xmm3
         lea     esi, dword ptr [edi + $40]
-        mov     [eax].TAesContext.buf.c1, esi
+        mov     [eax - $70].TAesContext.buf.c1, esi
         movups  [edi + $00], xmm4
         movups  [edi + $10], xmm5
         movups  [edi + $20], xmm6
         movups  [edi + $30], xmm7
-        dec     dword ptr [eax].TAesContext.buf.c3 // 4x blocks
+        dec     dword ptr [eax - $70].TAesContext.buf.c3 // 4x blocks
         jnz     @by4
 @done:  pop     ebx
         pop     edi
         pop     esi
         ret
-@192:   movups  xmm4, [eax + $50]
-        movups  xmm5, [eax + $60]
+@192:   movups  xmm4, [eax + $c0 - $70]
+        movups  xmm5, [eax + $d0 - $70]
         aesenc  xmm0, xmm6
         aesenc  xmm1, xmm6
         aesenc  xmm2, xmm6
@@ -2512,7 +2511,7 @@ asm
         aesenclast xmm2, xmm4
         aesenclast xmm3, xmm4
         jmp     @write
-@256:   movups  xmm6, [eax + $70]
+@256:   movups  xmm6, [eax + $e0 - $70]
         aesenc  xmm0, xmm4
         aesenc  xmm1, xmm4
         aesenc  xmm2, xmm4
