@@ -1234,9 +1234,18 @@ begin
     {$endif HASFASTTRYFINALLY}
       fSafe.ReadUnLock;
     end;
-    if (match = rmNoMatch) or
-       (serv = nil) then
-      exit;
+    if match = rmNoMatch then
+      if (rsoAllowSingleServerNoRoot in fOptions) and
+         (length(fRestServers) = 1) and
+         not matchcase then
+      begin
+        one := pointer(fRestServers); // no thread safety needed here
+        serv := one^.Server;
+        call.RestAccessRights := one^.RestAccessRights;
+        Prepend(call.Url, [serv.Model.Root, '/']); // as TRestServer.Uri expects
+      end
+      else
+        exit;
     if matchcase and
        (match = rmMatchWithCaseChange) then
     begin
