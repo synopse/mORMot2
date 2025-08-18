@@ -499,6 +499,9 @@ type
     // server instance, e.g. with diverse security options
     // - such an index-based property is not thread-safe if AddServer() is called
     function RestServerFind(aServer: TRestServer): integer;
+    /// search if a given REST server instance has been registered
+    function RestServerExists(aServer: TRestServer): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// low-level interception of all incoming requests
     // - this callback is called BEFORE any registered TRestServer.Uri() methods
     // so allow any kind of custom routing or process
@@ -681,6 +684,11 @@ begin
     fSafe.ReadUnLock;
   end;
   result := -1;
+end;
+
+function TRestHttpServer.RestServerExists(aServer: TRestServer): boolean;
+begin
+  result := RestServerFind(aServer) >= 0;
 end;
 
 {$ifndef PUREMORMOT2}
@@ -1454,7 +1462,7 @@ function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
   const aOnWSClosed: TOnWebSocketProtocolClosed): PWebSocketProcessSettings;
 begin
   if (aServer = nil) or
-     (RestServerFind(aServer) < 0) then
+     not RestServerExists(aServer) then
     EWebSockets.RaiseUtf8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWSEncryptionKey,
     aWSAjax, aWSBinaryOptions, aOnWSUpgraded, aOnWSClosed);
@@ -1472,7 +1480,7 @@ begin
      not Assigned(fOnWSUpgraded) or
      not (rsoWebSocketsUpgradeSigned in fOptions) or
      not Assigned(fWebSocketsSigner) or
-     (RestServerFind(aServer) < 0) then
+     not RestServerExists(aServer) then
     EWebSockets.RaiseUtf8('Unexpected rsoWebSocketsUpgradeSigned in %', [self]);
   fWebSocketsSigner.Generate(result);
 end;
