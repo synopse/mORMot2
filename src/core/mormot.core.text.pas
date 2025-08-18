@@ -1170,6 +1170,10 @@ procedure HtmlEscapeString(const text: string; var result: RawUtf8;
 /// convert all &lt; &gt; &amp; &quot; HTML entities into their UTF-8 equivalency
 function HtmlUnescape(const text: RawUtf8): RawUtf8;
 
+/// minimal HTML-to-text conversion function
+// - trim all HTML <tag></tag> and &entities; - with minimal CRLF formatting
+function HtmlToText(const text: RawUtf8): RawUtf8;
+
 /// check if some UTF-8 text would need XML escaping
 function NeedsXmlEscape(text: PUtf8Char): boolean;
 
@@ -6424,6 +6428,27 @@ begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddHtmlUnescape(pointer(text), amp, length(text));
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function HtmlToText(const text: RawUtf8): RawUtf8;
+var
+  W: TTextWriter;
+  tag: PUtf8CHar;
+  temp: TTextWriterStackBuffer;
+begin
+  tag := PosChar(pointer(text), length(text), '<');
+  if tag = nil then
+  begin
+    result := HtmlUnescape(text); // no tag, but there may be some &entity;
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.AddHtmlAsText(pointer(text), tag, length(text));
     W.SetText(result);
   finally
     W.Free;
