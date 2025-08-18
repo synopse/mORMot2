@@ -3163,7 +3163,7 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 
 /// optimized version of PosEx() with search text as one AnsiChar
 // - will use fast SSE2 asm on i386 and x86_64
-function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
+function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast retrieve the position of a given character in a #0 ended buffer
@@ -9404,12 +9404,11 @@ begin
       dec(result);  // Str1=''
 end;
 
-function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
+function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrUInt;
 begin
+  result := PtrUInt(Str);
   if Str <> '' then
-    result := ByteScanIndex(pointer(Str), PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
-  else
-    result := 0;
+    result := ByteScanIndex(pointer(Str), PStrLen(result - _STRLEN)^, byte(Chr)) + 1;
 end;
 
 function PosChar(Str: PUtf8Char; StrLen: PtrInt; Chr: AnsiChar): PUtf8Char;
