@@ -4709,6 +4709,9 @@ var
   LastOrmProps: TOrmProperties; // naive but efficient thread-safe cache
 {$endif NOPATCHVMT}
 
+/// low-level internal function called by TOrmModel.UriMatch
+function DoUriMatch(u, r: PUtf8Char; rlen: PtrInt; checkcase: boolean): TRestModelMatch;
+
 /// compute the SQL field names, used to create a SQLite3 virtual table
 function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
 
@@ -10058,24 +10061,25 @@ begin
   result := GetUriID(aTable, aID) + '/' + aMethodName;
 end;
 
-function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
-var
-  u: PUtf8Char;
+function DoUriMatch(u, r: PUtf8Char; rlen: PtrInt; checkcase: boolean): TRestModelMatch;
 begin
-  u := pointer(Uri);
-  result := rmNoMatch;
-  if (self <> nil) and
-     (fRoot <> '') and
-     (u <> nil) and
-     (PStrLen(u - _STRLEN)^ >= TStrLen(fRootLen)) and
-     (u[fRootLen] in [#0, '/', '?']) then
-    if CheckCase then
-    begin
-      if CompareMemFixed(u, pointer(fRoot), fRootLen) then
-        result := rmMatchExact;
-    end
-    else if IdemPropNameUSameLenNotNull(u, pointer(fRoot), fRootLen) then
-      result := rmMatchWithCaseChange;
+  if (u = nil) or
+     (r = nil) or
+     (PStrLen(u - _STRLEN)^ < rlen) or
+     not (u[rlen] in [#0, '/', '?']) then
+    result := rmNoMatch // expects 'root', 'root/service' or 'root?param=value'
+  else if CheckCase and
+          CompareMemSmall(u, r, rlen) then
+    result := rmMatchExact
+  else if IdemPropNameUSameLenNotNull(u, r, rlen) then // properly inlined
+    result := rmMatchWithCaseChange
+  else
+    result := rmNoMatch;
+end;
+
+function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
+begin // better code generation by using the DoUriMatch() internal function
+  result := DoUriMatch(pointer(Uri), pointer(fRoot), fRootLen, CheckCase);
 end;
 
 function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
