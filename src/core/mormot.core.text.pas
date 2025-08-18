@@ -728,7 +728,7 @@ type
     procedure AddChars(aChar: AnsiChar; aCount: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// append an integer Value as fixed-length 2 digits text with comma
-    procedure Add2(Value: PtrUInt);
+    procedure Add2(Value: cardinal);
     /// append an integer Value as fixed-length 3 digits text without any comma
     procedure Add3(Value: cardinal);
     /// append an integer Value as fixed-length 4 digits text with comma
@@ -5011,14 +5011,15 @@ begin
   inc(B, aCount);
 end;
 
-procedure TTextWriter.Add2(Value: PtrUInt);
+procedure TTextWriter.Add2(Value: cardinal);
 begin
   if B >= BEnd then
     FlushToStream;
   if Value > 99 then
-    PCardinal(B + 1)^ := $3030 + ord(',') shl 16
+    Value := $3030 + ord(',') shl 16
   else     // '00,' if overflow
-    PCardinal(B + 1)^ := TwoDigitLookupW[Value] + ord(',') shl 16;
+    Value := TwoDigitLookupW[Value] + ord(',') shl 16;
+  PCardinal(B + 1)^ := Value;
   inc(B, 3);
 end;
 
@@ -5029,12 +5030,13 @@ begin
   if B >= BEnd then
     FlushToStream;
   if Value > 999 then
-    PCardinal(B + 1)^ := $303030 // '000,' if overflow
+    Value := $303030 // '000,' if overflow
   else
   begin
     V := Value div 10;
-    PCardinal(B + 1)^ := TwoDigitLookupW[V] + (Value - V * 10 + 48) shl 16;
+    Value := TwoDigitLookupW[V] + (Value - V * 10 + 48) shl 16;
   end;
+  PCardinal(B + 1)^ := Value;
   inc(B, 4);
   B^ := ',';
 end;
@@ -5073,7 +5075,7 @@ begin // append in 00.000.000 TSynLog format
   MicroSec := Value3Digits(MicroSec, P + 7, W);
   if MicroSec = 0 then // most common case < 1ms
   begin
-    PCardinal(P)^ := ord('0') + ord('0') shl 8 + ord('.') shl 16;
+    PCardinal(P)^     := ord('0') + ord('0') shl 8 + ord('.') shl 16;
     PCardinal(P + 3)^ := ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('.') shl 24;
   end
   else
