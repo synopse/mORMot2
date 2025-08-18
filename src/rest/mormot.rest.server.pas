@@ -3692,8 +3692,6 @@ var
 begin
   // GET ModelRoot/TableName with 'select=..&where=' or YUI paging
   totalrowcount := 0;
-  // if no ?select= is specified, default is to return all IDs of this table
-  select := ROWID_TXT;
   if params <> nil then
   begin
     // extract '?select=...&where=...' or '?where=...' parameters
@@ -3720,6 +3718,8 @@ begin
         UrlDecodeValue(params, paging^.Where, where, @params);
       until params = nil;
     end;
+    if select = '' then
+      select := ROWID_TXT; // no ?select= returns all IDs of this table
     // let SQLite3 do the sort and the paging (will be ignored by Static)
     wherecount := where; // "select count(*)" won't expect any ORDER
     if (sort <> '') and
