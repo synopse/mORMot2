@@ -5709,7 +5709,7 @@ procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUtf8Char);
 var
   U: RawUtf8;
 begin
-  StringToUtf8(E.Message, U);
+  ExceptionUtf8(E, U);
   pzErr := sqlite3.malloc(length(U));
   MoveFast(pointer(U)^, pzErr^, length(U));
 end;

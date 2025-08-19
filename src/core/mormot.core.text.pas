@@ -2221,6 +2221,9 @@ type
   /// meta-class of the ESynException hierarchy
   ESynExceptionClass = class of ESynException;
 
+/// retrieve Exception.Message as UTF-8 - handling ESynException.MessageUtf8
+procedure ExceptionUtf8(E: Exception; var Message: RawUtf8);
+
 
 { **************** HTTP/REST Common Headers Parsing (e.g. cookies) }
 
@@ -10597,6 +10600,14 @@ begin
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}
+
+procedure ExceptionUtf8(E: Exception; var Message: RawUtf8);
+begin
+  if E.InheritsFrom(ESynException) then
+    Message := ESynException(E).MessageUtf8 // no conversion needed
+  else
+    StringToUtf8(E.Message, Message);
+end;
 
 
 { **************** HTTP/REST Common Headers Parsing (e.g. cookies) }

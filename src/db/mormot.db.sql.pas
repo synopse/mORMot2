@@ -7542,7 +7542,7 @@ var
         {$endif SYNDB_SILENCE}
         stmt.Free;
         result := nil;
-        StringToUtf8(E.Message, fErrorMessage);
+        ExceptionUtf8(E, fErrorMessage);
         fErrorException := PPointer(E)^;
         if doraise then
           raise;
