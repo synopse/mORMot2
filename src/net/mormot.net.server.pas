@@ -8001,7 +8001,8 @@ begin
   if fReqQueue <> 0 then
   begin
     for i := 0 to high(fThreads) do
-      fThreads[i].Terminate; // for CloseHandle() below to finish Execute
+      if fThreads[i] <> nil then
+        fThreads[i].Terminate; // for CloseHandle() below to finish Execute
     if HasApi2 then
     begin
       if fUrlGroupID <> 0 then
