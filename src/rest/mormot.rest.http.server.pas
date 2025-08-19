@@ -1470,7 +1470,7 @@ end;
 
 function TRestHttpServer.WebSocketsUrl(aServer: TRestServer): RawUtf8;
 begin
-  result := Join([aServer.Model.Root, '?', WebSocketsBearer(aServer)]);
+  result := Join(['/', aServer.Model.Root, '?', WebSocketsBearer(aServer)]);
 end;
 
 function TRestHttpServer.WebSocketsBearer(aServer: TRestServer): RawUtf8;
