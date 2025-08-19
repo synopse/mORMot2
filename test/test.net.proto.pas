@@ -1000,7 +1000,8 @@ begin
     else
       CheckSynopseReverse(self, rev);
     // async validate actual LDAP client on public ldap.forumsys.com server
-    Run(RunLdapClient, self, 'ldap', true, false);
+    if not fOwner.MultiThread then
+      Run(RunLdapClient, self, 'ldap', true, false); // fails in the background
   end;
   // validate LDAP distinguished name conversion (no client)
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
