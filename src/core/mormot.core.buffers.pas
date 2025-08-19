@@ -9689,7 +9689,7 @@ begin
       repeat
         W.AddByteToHexLower(Data^);
         inc(Data);
-        W.Add(SepChar);
+        W.AddDirect(SepChar);
         dec(Len);
         if Len = 0 then
           break;
