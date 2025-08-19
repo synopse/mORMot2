@@ -892,6 +892,9 @@ begin
       // actually launch the http.sys server
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
         HttpThreadTerminate, fRestServerNames, hso);
+      if not THttpApiServer(fHttpServer).WaitStarted then
+        EHttpApiServer.RaiseUtf8('%.WaitStarted timeout on %',
+          [self, fRestServerNames]);
       for i := 0 to high(aServers) do
         HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity, false, true);
       if aAdditionalUrl <> '' then
