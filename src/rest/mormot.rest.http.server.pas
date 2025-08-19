@@ -463,7 +463,7 @@ type
     /// the TBinaryCookieGenerator created by rsoWebSocketsUpgradeSigned option
     // - equals nil if this option was not set
     // - WebSockets upgrade will be authenticated with an ephemeral secure token,
-    // as retrieved from WebSocketsUrl/WebSocketsBearer methods
+    // as retrieved from WebSocketsUrl/WebSocketsBearer associated methods
     property WebSocketsSigner: TBinaryCookieGenerator
       read fWebSocketsSigner;
     /// the TCP/IP (address and) port on which this server is listening to
@@ -1477,7 +1477,6 @@ function TRestHttpServer.WebSocketsBearer(aServer: TRestServer): RawUtf8;
 begin
   if (self = nil) or
      (aServer = nil) or
-     not Assigned(fOnWSUpgraded) or
      not (rsoWebSocketsUpgradeSigned in fOptions) or
      not Assigned(fWebSocketsSigner) or
      not RestServerExists(aServer) then
@@ -1538,7 +1537,7 @@ function TRestHttpServer.OnWSUpgraded(Protocol: TWebSocketProtocol): integer;
 var
   tok: RawUtf8;
 begin
-  if Assigned(fWebSocketsSigner) then
+  if Assigned(fWebSocketsSigner) then // rsoWebSocketsUpgradeSigned option
   begin
     result := HTTP_FORBIDDEN;
     tok := Protocol.UpgradeBearerToken;            // from WebSocketsBearer()
