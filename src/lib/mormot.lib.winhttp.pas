@@ -1219,6 +1219,20 @@ procedure HttpApiInitialize;
 function RegURL(aRoot, aPort: RawUtf8; Https: boolean;
   aDomainName: RawUtf8): SynUnicode;
 
+/// will authorize a specified URL prefix to the http.sys sytem
+// - will allow to call Http.AddUrl() later for any user on the computer
+// - if aRoot is left '', it will authorize any root for this port
+// - must be called with Administrator rights: this class function is to be
+// used in a Setup program for instance, especially under Vista or Seven,
+// to reserve the Url for the server
+// - add a new record to the http.sys URL reservation store
+// - return '' on success, an error message otherwise
+// - will first delete any matching rule for this URL prefix
+// - if OnlyDelete is true, will delete but won't add the new authorization;
+// in this case, any error message at deletion will be returned
+function HttpApiAuthorize(const aRoot, aPort: RawUtf8; Https: boolean;
+  const aDomainName: RawUtf8; OnlyDelete: boolean = false): RawUtf8;
+
 /// low-level adjustement of the HTTP_REQUEST headers
 function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
@@ -2055,6 +2069,51 @@ begin
   end;
 end;
 
+const
+  /// will allow AddUrl() registration to everyone
+  // - 'GA' (GENERIC_ALL) to grant all access
+  // - 'S-1-1-0'	defines a group that includes all users
+  HTTPADDURLSECDESC: PWideChar = 'D:(A;;GA;;;S-1-1-0)';
+
+function HttpApiAuthorize(const aRoot, aPort: RawUtf8;
+  Https: boolean; const aDomainName: RawUtf8; OnlyDelete: boolean): RawUtf8;
+var
+  err: integer;
+  prefix: SynUnicode;
+  cfg: HTTP_SERVICE_CONFIG_URLACL_SET;
+begin
+  result := 'Invalid parameters';
+  prefix := RegURL(aRoot, aPort, Https, aDomainName);
+  if prefix = '' then
+    exit;
+  result := ''; // success
+  try
+    HttpApiInitialize;
+    if HttpApiSucceed(hInitialize, result,
+         Http.Initialize(Http.Version, HTTP_INITIALIZE_CONFIG)) then
+    try
+      FillcharFast(cfg, SizeOf(cfg), 0);
+      cfg.KeyDesc.pUrlPrefix := pointer(prefix);
+      // first delete any existing information
+      err := Http.DeleteServiceConfiguration(0, hscUrlAclInfo, @cfg, SizeOf(cfg));
+      if OnlyDelete then
+        HttpApiSucceed(hDeleteServiceConfiguration, result, err)
+      else
+      begin
+        // then add authorization rule
+        cfg.KeyDesc.pUrlPrefix := pointer(prefix);
+        cfg.ParamDesc.pStringSecurityDescriptor := HTTPADDURLSECDESC;
+        HttpApiSucceed(hSetServiceConfiguration, result,
+          Http.SetServiceConfiguration(0, hscUrlAclInfo, @cfg, SizeOf(cfg)));
+      end;
+    finally
+      Http.Terminate(HTTP_INITIALIZE_CONFIG);
+    end;
+  except
+    on E: ESynException do
+      ExceptionUtf8(E, result);
+  end;
+end;
 
 
 { EHttpApiServer }

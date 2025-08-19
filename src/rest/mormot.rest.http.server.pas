@@ -264,7 +264,7 @@ type
       aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
     function HttpApiAddUri(const aRoot, aDomainName: RawByteString;
       aSecurity: TRestHttpServerSecurity;
-      aRegisterUri, aRaiseExceptionOnError: boolean): RawUtf8;
+      aRegisterUri: boolean = false; aRaiseExceptionOnError: boolean = false): RawUtf8;
     function NotifyCallback(aSender: TRestServer;
       const aInterfaceDotMethodName, aParams: RawUtf8;
       aConnectionID: THttpServerConnectionID;
@@ -603,6 +603,11 @@ const
 
 
 implementation
+
+{$ifdef USEHTTPSYS}
+uses
+  mormot.lib.winhttp;
+{$endif USEHTTPSYS}
 
 
 { ************ TRestHttpServer RESTful Server }
