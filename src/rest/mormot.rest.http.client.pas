@@ -323,6 +323,7 @@ type
       BinaryOptions: TWebSocketProtocolBinaryOptions;
       Key: RawUtf8;
     end;
+    fWebSocketsUrl, fWebSocketsBearer: RawUtf8;
     function CallbackRequest(
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     procedure InternalOpen; override;
@@ -337,7 +338,7 @@ type
     /// - first check if connected to the server, or try to (re)connect
     function IsOpen: boolean; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
-    // - the Model.Root URI will be used for upgrade
+    // - the Model.Root URI will be used for upgrade, or WebSocketsUrl value
     // - if aWebSocketsAjax equals default FALSE, it will use 'synopsebinary'
     // i.e. TWebSocketProtocolBinaryprotocol, with AES-CFB 256 bits encryption
     // if the encryption key text is not '' and optional SynLZ compression
@@ -362,6 +363,20 @@ type
       aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
         [pboSynLzCompress]): RawUtf8;
+    /// optional safe URI for WebSockets upgrade
+    // - by default, WebSocketsUpgrade() uses Model.Root as URI
+    // - token could be supplied here as URI parameter - e.g. '/root?token', as
+    // retrieved from TRestHttpServer.WebSocketsUrl(), if rsoWebSocketsUpgradeSigned
+    // option was set on the server
+    property WebSocketsUrl: RawUtf8
+      read fWebSocketsUrl write fWebSocketsUrl;
+    /// optional safe HTTP authorization bearer for WebSockets upgrade for a given TRestServer
+    // - token could be supplied here as hidden HTTP header, retrieved from
+    // TRestHttpServer.WebSocketsBearer(), if rsoWebSocketsUpgradeSigned was
+    // set on the server
+    // - WebSocketsUpgrade() will still use Model.Root as URI
+    property WebSocketsBearer: RawUtf8
+      read fWebSocketsBearer write fWebSocketsBearer;
     /// internal HTTP/1.1 and WebSockets compatible client
     // - will call IsOpen to ensure the connection is actually established
     // - you could use its properties after upgrading the connection to WebSockets
@@ -382,7 +397,8 @@ type
     /// this event will be executed just before the HTTP client will try to
     // upgrade to the expected WebSockets protocol
     // - supplied Sender parameter will be this TRestHttpClientWebsockets instance
-    // - it may be the right time e.g. to set a JWT bearer
+    // - it may be the right time e.g. to set more context in the HTTP headers
+    // if WebSocketsBearer is not enough
     property OnWebSocketsUpgrade: TOnClientNotify
       read fOnWebSocketsUpgrade write fOnWebSocketsUpgrade;
     /// this event will be executed just after the HTTP client has been
@@ -997,6 +1013,7 @@ function TRestHttpClientWebsockets.WebSocketsUpgrade(
 var
   sockets: THttpClientWebSockets;
   prevconn: THttpServerConnectionID;
+  uri, bakhdr: RawUtf8;
   log: ISynLog;
 begin
   fLogClass.EnterLocal(log, self, 'WebSocketsUpgrade');
@@ -1013,9 +1030,21 @@ begin
       prevconn := 0;
     if Assigned(fOnWebSocketsUpgrade) then
       fOnWebSocketsUpgrade(self); // e.g. to set a JWT in fCustomHeader
-    result := sockets.WebSocketsUpgrade(
-      Model.Root, aWebSocketsEncryptionKey,
-      aWebSocketsAjax, aWebSocketsBinaryOptions, nil, fCustomHeader);
+    uri := fWebSocketsUrl;
+    if uri = '' then
+      uri := fModel.Root;
+    if fWebSocketsBearer <> '' then // supply the token just during the upgrade
+    begin
+      bakhdr := fCustomHeader;
+      AppendLine(fCustomHeader, [AuthorizationBearer(fWebSocketsBearer)]);
+    end;
+    try
+      result := sockets.WebSocketsUpgrade(uri, aWebSocketsEncryptionKey,
+        aWebSocketsAjax, aWebSocketsBinaryOptions, nil, fCustomHeader);
+    finally
+      if fWebSocketsBearer <> '' then
+        fCustomHeader := bakhdr; // restore
+    end;
     if result = '' then
     begin
       // no error message = success
