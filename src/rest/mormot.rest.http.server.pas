@@ -870,7 +870,7 @@ begin
   if aThreadPoolCount < integer(SystemInfo.dwNumberOfProcessors) * 5 then
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
-  if aUse in HTTP_API_MODES then
+  if aUse in HTTP_API_MODES then // Windows system's http.sys
     if PosEx('Wine', OSVersionInfoEx) > 0 then
     begin
       fLog.Add.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
@@ -879,15 +879,23 @@ begin
     end
     else
     try
-      // first try to use fastest http.sys
+      // first try to register the URIs - just ignore errors and continue
+      if fUse in HTTP_API_REGISTERING_MODES then
+        for i := 0 to high(aServers) do
+        begin
+          err := HttpApiAuthorize(aServers[i].Model.Root, fPublicPort,
+                   hsoEnableTls in hso, fDomainName);
+          if err <> '' then
+            fLog.Add.Log(sllDebug, 'Create: % for % - % may need admin rights',
+              [err, aServers[i].Model.Root, ToText(aUse)^], self);
+        end;
+      // actually launch the http.sys server
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
         HttpThreadTerminate, fRestServerNames, hso);
       for i := 0 to high(aServers) do
-        HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
-          fUse in HTTP_API_REGISTERING_MODES, true);
+        HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity, false, true);
       if aAdditionalUrl <> '' then
-        HttpApiAddUri(aAdditionalUrl, fDomainName, aSecurity,
-          fUse in HTTP_API_REGISTERING_MODES, true);
+        HttpApiAddUri(aAdditionalUrl, fDomainName, aSecurity, false, true);
     except
       on E: Exception do
       begin
