@@ -879,7 +879,7 @@ begin
     end
     else
     try
-      // first try to register the URIs - just ignore errors and continue
+      // first try to register the URIs - just ignore (and log) any error
       if fUse in HTTP_API_REGISTERING_MODES then
         for i := 0 to high(aServers) do
         begin

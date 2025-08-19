@@ -8006,9 +8006,9 @@ var
 begin
   endtix := GetTickSec + Seconds; // never wait forever
   repeat
-    result := fProcessing;
+    result := true; // fProcessing may be false if main thread did abort
     for i := 0 to high(fThreads) do
-      result := result and fThreads[i].fStarted;
+      result := result and ((fThreads[i] = nil) or fThreads[i].fStarted);
     if result then
       exit;
     SleepHiRes(1);
@@ -8048,7 +8048,8 @@ begin
     fReqQueue := 0;
     {$ifdef FPC}
     for i := 0 to high(fThreads) do
-      WaitForSingleObject(fThreads[i].Handle, 30000); // sometimes needed on FPC
+      if fThreads[i] <> nil then
+        WaitForSingleObject(fThreads[i].Handle, 30000); // maybe needed on FPC
     {$endif FPC}
     ObjArrayClear(fThreads, {continueOnException:}true);
     Http.Terminate(HTTP_INITIALIZE_SERVER);
