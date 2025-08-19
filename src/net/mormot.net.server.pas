@@ -7937,52 +7937,9 @@ begin
 end;
 
 class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawUtf8;
-  Https: boolean; const aDomainName: RawUtf8; OnlyDelete: boolean): string;
-const
-  /// will allow AddUrl() registration to everyone
-  // - 'GA' (GENERIC_ALL) to grant all access
-  // - 'S-1-1-0'	defines a group that includes all users
-  HTTPADDURLSECDESC: PWideChar = 'D:(A;;GA;;;S-1-1-0)';
-var
-  prefix: SynUnicode;
-  err: HRESULT;
-  cfg: HTTP_SERVICE_CONFIG_URLACL_SET;
-begin
-  try
-    HttpApiInitialize;
-    prefix := RegURL(aRoot, aPort, Https, aDomainName);
-    if prefix = '' then
-      result := 'Invalid parameters'
-    else
-    begin
-      EHttpApiServer.RaiseOnError(hInitialize,
-        Http.Initialize(Http.Version, HTTP_INITIALIZE_CONFIG));
-      try
-        FillcharFast(cfg, SizeOf(cfg), 0);
-        cfg.KeyDesc.pUrlPrefix := pointer(prefix);
-        // first delete any existing information
-        err := Http.DeleteServiceConfiguration(
-          0, hscUrlAclInfo, @cfg, SizeOf(cfg));
-        // then add authorization rule
-        if not OnlyDelete then
-        begin
-          cfg.KeyDesc.pUrlPrefix := pointer(prefix);
-          cfg.ParamDesc.pStringSecurityDescriptor := HTTPADDURLSECDESC;
-          err := Http.SetServiceConfiguration(
-            0, hscUrlAclInfo, @cfg, SizeOf(cfg));
-        end;
-        if (err <> NO_ERROR) and
-           (err <> ERROR_ALREADY_EXISTS) then
-          raise EHttpApiServer.Create(hSetServiceConfiguration, err);
-        result := ''; // success
-      finally
-        Http.Terminate(HTTP_INITIALIZE_CONFIG);
-      end;
-    end;
-  except
-    on E: Exception do
-      result := E.Message;
-  end;
+  Https: boolean; const aDomainName: RawUtf8; OnlyDelete: boolean): RawUtf8;
+begin // just redirect to our wrapper in mormot.lib.winhttp
+  result := HttpApiAuthorize(aRoot, aPort, Https, aDomainName, OnlyDelete);
 end;
 
 function THttpApiServer.GetApiVersion: RawUtf8;
