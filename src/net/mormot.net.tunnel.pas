@@ -40,7 +40,7 @@ uses
   mormot.net.sock,
   mormot.net.ws.core,
   mormot.net.ws.client,
-  mormot.net.ws.server;
+  mormot.net.ws.async;
 
 
 { ******************** Abstract Definitions for Port Forwarding }
@@ -282,7 +282,7 @@ type
   end;
   TTunnelRelayLinks = array of TTunnelRelayLink;
 
-  TTunnelRelayServer = class(TWebSocketServer)
+  TTunnelRelayServer = class(TWebSocketAsyncServer)
   protected
     fMainProtocol: TWebSocketProtocolUri;
     fLinks: TSynDictionary; // TTunnelRelayIDs/TTunnelRelayLinks
@@ -551,7 +551,7 @@ begin
   fSession := Sess;
   TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
   TransmitOptions := TransmitOptions + ComputeOptionsFromCert;
-  // bind to a local ephemeral port
+  // bind to a local (ephemeral) port
   ClosePort;
   result := uri.PortInt;
   if result = 0 then
@@ -723,6 +723,7 @@ type
   protected
     fReverse: TWebSocketProcess;
     fOptions: TTunnelOptions;
+    procedure SetupLink(Sender: TWebSocketProcess; var request: TWebSocketFrame);
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUtf8); override;
   end;
@@ -738,8 +739,8 @@ begin
   process.Outgoing.Push(frame, 0);
 end;
 
-procedure TTunnelRelayServerProtocol.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
+procedure TTunnelRelayServerProtocol.SetupLink(
+  Sender: TWebSocketProcess; var request: TWebSocketFrame);
 var
   added: boolean;
   link: ^TTunnelRelayLink;
@@ -748,55 +749,59 @@ var
   reversed: TTunnelRelayServerProtocol;
   head: PTunnelLocalHeader;
 begin
+  session := (Sender.Protocol as TTunnelRelayServerProtocol).Session;
+  head := pointer(request.payload);
+  if (length(request.payload) <> SizeOf(head^)) or
+     (head^.session <> session) then
+    ETunnel.RaiseUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
+      [self, length(request.payload), head^.session, session]);
+  fOptions := head^.options;
+  connections := (((Sender as TWebSocketAsyncProcess).
+                    Connection as TWebSocketAsyncConnection).
+                    Server as TTunnelRelayServer).fLinks;
+  connections.Safe.Lock;
+  try
+    link := connections.FindValueOrAdd(session, added);
+    if link^.ProcessA = nil then
+      // first end connected for this Session
+      link^.ProcessA := Sender
+    else
+    begin
+      // ensure only one link with matching options per URI/session
+      reversed := link^.ProcessA.Protocol as TTunnelRelayServerProtocol;
+      if (link^.ProcessB <> nil) or
+         (reversed.fOptions <> fOptions) then
+        ETunnel.RaiseUtf8('%.ProcessIncomingFrame: abusive', [self]);
+      // now both sides are properly connected
+      link^.ProcessB := Sender;
+      fReverse := link^.ProcessA;
+      reversed.fReverse := Sender;
+      // unblock both ends to begin normal relay
+      AsynchSend(fReverse, request.PayLoad);
+      AsynchSend(Sender, request.PayLoad);
+      // no connections.DeleteAt(ndx) to ensure any other link creation
+      connections.DeleteDeprecated;
+    end;
+  finally
+    connections.Safe.UnLock;
+  end;
+end;
+
+procedure TTunnelRelayServerProtocol.ProcessIncomingFrame(
+  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
+begin
   if (Sender <> nil) and
      (Sender.Protocol <> nil) and
      (PClass(Sender.Protocol)^ = TTunnelRelayServerProtocol) then
   case request.opcode of
     // focBinary or focContinuation/focConnectionClose
     focBinary:
-      if fReverse = nil then
-      begin
-        // initialization of this connection
-        session := TTunnelRelayServerProtocol(Sender.Protocol).Session;
-        head := pointer(request.payload);
-        if (length(request.payload) <> SizeOf(head^)) or
-           (head^.session <> session) then
-          ETunnel.RaiseUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
-            [self, length(request.payload), head^.session, session]);
-        fOptions := head^.options;
-        connections := (((Sender as TWebSocketProcessServer).
-                          Socket as TWebSocketServerSocket).
-                          Server as TTunnelRelayServer).fLinks;
-        connections.Safe.Lock;
-        try
-          link := connections.FindValueOrAdd(session, added);
-          if link^.ProcessA = nil then
-            // first end connected for this Session
-            link^.ProcessA := Sender
-          else
-          begin
-            // ensure only one link with matching options per URI/session
-            reversed := link^.ProcessA.Protocol as TTunnelRelayServerProtocol;
-            if (link^.ProcessB <> nil) or
-               (reversed.fOptions <> fOptions) then
-              ETunnel.RaiseUtf8('%.ProcessIncomingFrame: abusive', [self]);
-            // now both sides are properly connected
-            link^.ProcessB := Sender;
-            fReverse := link^.ProcessA;
-            reversed.fReverse := Sender;
-            // unblock both ends to begin normal relay
-            AsynchSend(fReverse, request.PayLoad);
-            AsynchSend(Sender, request.PayLoad);
-            // no connections.DeleteAt(ndx) to ensure any other link creation
-            connections.DeleteDeprecated;
-          end;
-        finally
-          connections.Safe.UnLock;
-        end;
-      end
-      else
+      if fReverse <> nil then
         // normal process: asynch relaying to the other side
-        AsynchSend(fReverse, request.payload);
+        AsynchSend(fReverse, request.payload)
+      else
+        // initialization of this connection
+        SetupLink(Sender, request);
     focConnectionClose:
        if fReverse <> nil then
          fReverse.Shutdown({waitforpong=}true);
