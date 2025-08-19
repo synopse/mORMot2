@@ -79,6 +79,9 @@ type
     /// delayed process of outgoing WebSockets framing protocol
     // - will notify TWebSocketAsyncConnections.ProcessIdleTix sending
     procedure SendFrameAsync(const Frame: TWebSocketFrame); override;
+    /// low level access to the associated async connection instance
+    property Connection: TWebSocketAsyncConnection
+      read fConnection;
   end;
 
   /// meta-class of non-blocking WebSockets process as used on server side
