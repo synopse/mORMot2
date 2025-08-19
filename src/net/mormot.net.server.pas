@@ -2160,7 +2160,7 @@ type
     // - if OnlyDelete is true, will delete but won't add the new authorization;
     // in this case, any error message at deletion will be returned
     class function AddUrlAuthorize(const aRoot, aPort: RawUtf8; Https: boolean = false;
-      const aDomainName: RawUtf8 = '*'; OnlyDelete: boolean = false): string;
+      const aDomainName: RawUtf8 = '*'; OnlyDelete: boolean = false): RawUtf8;
     /// access to the additional processing threads
     property Threads: THttpApiServerThreads
       read fThreads;
@@ -3425,8 +3425,8 @@ begin
   if hsoEnableLogging in fOptions then
   begin
     fLogger := THttpLogger.Create;
-    fLogger.Parse(LOGFORMAT_COMBINED); // default nginx-like format
-    fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
+    fLogger.Parse(LOGFORMAT_COMBINED);   // default nginx-like format
+    fOnAfterResponse := fLogger.Append;  // redirect requests to the logger
   end;
   if fOptions * [hsoTelemetryCsv, hsoTelemetryJson] <> [] then
   begin
@@ -8110,7 +8110,6 @@ begin
   log^.MethodLength   := length(ctxt.fMethod);
   log^.UserName       := pointer(ctxt.fAuthenticatedUser);
   log^.UserNameLength := Length(ctxt.fAuthenticatedUser);
-  // log^.ServerName
 end;
 
 procedure THttpApiServer.DoExecute;
@@ -8492,7 +8491,7 @@ begin
                 // handle any exception raised during process: show must go on!
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
-                    (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
+                     (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
                     SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
             end;
           finally

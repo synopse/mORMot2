@@ -626,8 +626,7 @@ end;
 { TRestHttpServer }
 
 function TRestHttpServer.AddServer(aServer: TRestServer;
-  aRestAccessRights: POrmAccessRights;
-  aSecurity: TRestHttpServerSecurity): boolean;
+  aRestAccessRights: POrmAccessRights; aSecurity: TRestHttpServerSecurity): boolean;
 var
   i, n: PtrInt;
   log: ISynLog;
@@ -723,8 +722,7 @@ begin
         {$ifdef USEHTTPSYS}
         if fHttpServer.InheritsFrom(THttpApiServer) then
           if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,
-             fPublicPort, fRestServers[i].Security in SEC_TLS,
-             fDomainName) <> NO_ERROR then
+             fPublicPort, fRestServers[i].Security in SEC_TLS, fDomainName) <> NO_ERROR then
             fLog.Add.Log(sllLastError, '%.RemoveUrl(%)',
               [self, aServer.Model.Root], self);
         {$endif USEHTTPSYS}
@@ -791,7 +789,7 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
 var
   i, j: PtrInt;
   hso: THttpServerOptions;
-  ErrMsg: RawUtf8;
+  err: RawUtf8;
   log: ISynLog;
 begin
   // prepare the running parameters
@@ -828,8 +826,8 @@ begin
     for i := 0 to high(aServers) do
       if (aServers[i] = nil) or
          (aServers[i].Model = nil) then
-        ErrMsg := 'Invalid TRestServer';
-    if {%H-}ErrMsg = '' then
+        err := 'Invalid TRestServer';
+    if {%H-}err = '' then
       for i := 0 to high(aServers) do
         with aServers[i].Model do
         begin
@@ -837,12 +835,12 @@ begin
           for j := i + 1 to high(aServers) do
             if aServers[j].Model.UriMatch(Root, false) <> rmNoMatch then
               FormatUtf8('Duplicated Root URI: % and %',
-                [Root, aServers[j].Model.Root], ErrMsg);
+                [Root, aServers[j].Model.Root], err);
         end;
     TrimSelf(fRestServerNames);
-    if ErrMsg <> '' then
+    if err <> '' then
       ERestHttpServer.RaiseUtf8(
-        '%.Create(% ): %', [self, fRestServerNames, ErrMsg]);
+        '%.Create(% ): %', [self, fRestServerNames, err]);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fRestServers, length(aServers));
     for i := 0 to high(aServers) do
@@ -1086,7 +1084,8 @@ begin
   if err = NO_ERROR then
     exit;
   result := FormatUtf8('http.sys URI registration error % for http%://%:%/%',
-    [WinErrorShort(err), TLS_TEXT[https], aDomainName, fPublicPort, aRoot]);
+    [WinApiErrorShort(err, Http.Module), TLS_TEXT[https],
+     aDomainName, fPublicPort, aRoot]);
   if err = ERROR_ACCESS_DENIED then
     if aRegisterUri then
       result := result +
