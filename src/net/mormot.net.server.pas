@@ -1157,8 +1157,7 @@ type
     // events, including callbacks, as supported by OpenSSL
     // - will raise EHttpServer if the server did not start properly, e.g.
     // could not bind the port within the supplied time
-    procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
-      overload;
+    procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil); overload;
     /// ensure the server thread is bound as self-signed HTTPS server
     // - wrap InitNetTlsContextSelfSignedServer() and WaitStarted() with
     // some temporary key files, which are deleted once started
@@ -2054,6 +2053,7 @@ type
   THttpApiServerThread = class(TLoggedThread)
   protected
     fOwner: THttpApiServer;
+    fStarted: boolean;
     // just redirect to fOwner.DoExecute
     procedure DoExecute; override;
   public
@@ -2121,6 +2121,10 @@ type
       const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;
       const ProcessName: RawUtf8 = ''; ProcessOptions: THttpServerOptions = [];
       aLog: TSynLogClass = nil; ServerThreadPoolCount: integer = 32); reintroduce;
+    /// ensure the HTTP server threads are actually started
+    // - note that http.sys requires global system-wide registration for its
+    // TLS/https settings
+    function WaitStarted(Seconds: cardinal = 30): boolean;
     /// release all associated memory and handles
     destructor Destroy; override;
     /// register the URLs to Listen On
@@ -4183,8 +4187,8 @@ begin
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (TLS <> nil) and(
-      (TLS^.CertificateFile <> '') or
+     (TLS <> nil) and
+     ((TLS^.CertificateFile <> '') or
       (TLS^.CertificateRaw <> nil) or
       (TLS^.CertificateBin <> '')) and
      ((fSock = nil) or
@@ -7857,14 +7861,15 @@ end;
 
 procedure THttpApiServerThread.DoExecute;
 begin
-  if fOwner <> nil then
-    fOwner.DoExecute; // this main method is re-entrant by design
+  if fOwner = nil then
+    exit;
+  fStarted := true;
+  fOwner.DoExecute; // this main method is re-entrant by design
 end;
 
 constructor THttpApiServerThread.Create(aOwner: THttpApiServer);
 begin
   fOwner := aOwner;
-  FreeOnTerminate := true;
   inherited Create({suspended=}false, aOwner.fOnThreadStart,
     aOwner.fOnThreadTerminate, aOwner.fLogClass,
     Make([aOwner.ProcessName, ' #', length(aOwner.fThreads) + 1]));
@@ -7994,6 +7999,22 @@ begin
     Suspended := false;
 end;
 
+function THttpApiServer.WaitStarted(Seconds: cardinal): boolean;
+var
+  endtix: cardinal;
+  i: PtrInt;
+begin
+  endtix := GetTickSec + Seconds; // never wait forever
+  repeat
+    result := fProcessing;
+    for i := 0 to high(fThreads) do
+      result := result and fThreads[i].fStarted;
+    if result then
+      exit;
+    SleepHiRes(1);
+  until GetTickSec > endtix;
+end;
+
 procedure THttpApiServer.DestroyMainThread;
 var
   i: PtrInt;
@@ -8029,7 +8050,7 @@ begin
     for i := 0 to high(fThreads) do
       WaitForSingleObject(fThreads[i].Handle, 30000); // sometimes needed on FPC
     {$endif FPC}
-    fThreads := nil;
+    ObjArrayClear(fThreads, {continueOnException:}true);
     Http.Terminate(HTTP_INITIALIZE_SERVER);
   end;
 end;
