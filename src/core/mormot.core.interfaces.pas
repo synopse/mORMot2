@@ -4055,12 +4055,14 @@ begin
         1:
           if m^.Args[1].ValueType = imvBoolean then
             if PropNameEquals(m^.URI, 'CurrentFrame') then
+              // procedure CurrentFrame(isLast: boolean);
               fMethodIndexCurrentFrameCallback := nm;
         2:
           if (m^.Args[1].ValueType = imvInterface) and
              (m^.Args[1].ArgRtti.Info = TypeInfo(IInvokable)) and
              (m^.Args[2].ValueType = imvRawUtf8) and
              PropNameEquals(m^.URI, 'CallbackReleased') then
+// procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUtf8);
             fMethodIndexCallbackReleased := nm;
       end;
     if m^.ArgsResultIndex >= 0 then

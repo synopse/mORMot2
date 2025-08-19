@@ -3112,7 +3112,7 @@ begin
     begin
       fRest.Services.CallBackUnRegister(IInvokable(obj));
       dec(fRefCount); // GetInterface() did increase the refcount
-      fRest := nil; // notify once
+      fRest := nil;   // notify once
     end;
 end;
 

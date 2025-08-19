@@ -834,10 +834,10 @@ begin
               FormatUtf8('Duplicated Root URI: % and %',
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
+    TrimSelf(fRestServerNames);
     if ErrMsg <> '' then
       ERestHttpServer.RaiseUtf8(
         '%.Create(% ): %', [self, fRestServerNames, ErrMsg]);
-    TrimSelf(fRestServerNames);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fRestServers, length(aServers));
     for i := 0 to high(aServers) do
@@ -878,7 +878,7 @@ begin
     try
       // first try to use fastest http.sys
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
-        HttpThreadTerminate, TrimU(fRestServerNames), hso);
+        HttpThreadTerminate, fRestServerNames, hso);
       for i := 0 to high(aServers) do
         HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
           fUse in HTTP_API_REGISTERING_MODES, true);
@@ -904,7 +904,7 @@ begin
     // (on Windows, may be used as fallback if http.sys was unsuccessful)
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
       fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(
-        fPort, HttpThreadStart, HttpThreadTerminate, TrimU(fRestServerNames),
+        fPort, HttpThreadStart, HttpThreadTerminate, fRestServerNames,
         aThreadPoolCount, 30000, hso, fLog)
     else
       ERestHttpServer.RaiseUtf8('%.Create(% ): unsupported %',
@@ -925,12 +925,6 @@ begin
     fHttpServer.RegisterCompress(CompressSynLZ);
   if rsoCompressGZip in fOptions then
     fHttpServer.RegisterCompress(CompressGZip);
-  {$ifdef USEHTTPSYS}
-  if fHttpServer.InheritsFrom(THttpApiServer) then
-    // allow fast multi-threaded requests
-    if aThreadPoolCount > 1 then
-      THttpApiServer(fHttpServer).Clone(aThreadPoolCount - 1);
-  {$endif USEHTTPSYS}
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fRestServers) do

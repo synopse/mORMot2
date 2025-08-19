@@ -1955,7 +1955,7 @@ var
   status: integer;
 begin
   inherited;
-  fServer := THttpApiServer.Create('', nil, nil, '', []);
+  fServer := THttpApiServer.Create('', nil, nil, '', [], nil, fThreadPoolCount);
   status := THttpApiServer(fServer).AddUrl(
     fDatabaseName, fPort, fHttps, '+', true);
   if status <> NO_ERROR then
@@ -1968,8 +1968,6 @@ begin
         '%.Create: error registering URI % on port %: is not another server ' +
         'instance running on this port?', [self, fDatabaseName, fPort]);
   fServer.OnRequest := Process;
-  if fThreadPoolCount > 1 then
-    THttpApiServer(fServer).Clone(fThreadPoolCount - 1);
 end;
 
 {$endif USEHTTPSYS}
