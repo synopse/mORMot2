@@ -1951,7 +1951,7 @@ procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
 procedure Prepend(var Text: RawByteString; const Args: array of const); overload;
 
 /// append some text to a RawUtf8, ensuring previous text is separated with CRLF
-// - could be used e.g. to update HTTP headers
+// - could be used e.g. to update HTTP headers since here EOL = #13#10
 procedure AppendLine(var Text: RawUtf8; const Args: array of const;
   const Separator: RawUtf8 = EOL);
 

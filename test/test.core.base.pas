@@ -9781,7 +9781,7 @@ begin
     CheckEqual(dict.Capacity, 0);
     key := 'Foobar';
     val := 'lol';
-    dict.AddOrUpdate(key, val);
+    Check(dict.AddOrUpdate(key, val) >= 0);
     CheckEqual(dict.Count, 1);
     json := dict.SaveToJson;
     CheckEqual(json, '{"Foobar":"lol"}');

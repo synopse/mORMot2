@@ -6470,7 +6470,7 @@ begin
     end;
     cc.head.issued := UnixTimeMinimalUtc;
     if TimeOutMinutes = 0 then
-      TimeOutMinutes := DefaultTimeOutMinutes;
+      TimeOutMinutes := fDefaultTimeOutMinutes;
     if TimeOutMinutes = 0 then // max 1 month expiration seems good enough
       TimeOutMinutes := 31 * 24 * 60;
     cc.head.expires := cc.head.issued + TimeOutMinutes * 60;

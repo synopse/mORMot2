@@ -2619,7 +2619,7 @@ begin
   if AuthToken = '' then
     result := ''
   else
-    result := 'Authorization: Bearer ' + AuthToken;
+    Join(['Authorization: Bearer ', AuthToken], result);
 end;
 
 const
