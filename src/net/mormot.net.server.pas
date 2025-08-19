@@ -8004,14 +8004,17 @@ var
   endtix: cardinal;
   i: PtrInt;
 begin
+  result := false;
+  if fReceiveBufferSize = 0 then
+    exit; // Create never reached actual activation
   endtix := GetTickSec + Seconds; // never wait forever
   repeat
+    SleepHiRes(1);
     result := true; // fProcessing may be false if main thread did abort
     for i := 0 to high(fThreads) do
       result := result and ((fThreads[i] = nil) or fThreads[i].fStarted);
     if result then
       exit;
-    SleepHiRes(1);
   until GetTickSec > endtix;
 end;
 
