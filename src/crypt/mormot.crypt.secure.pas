@@ -6468,7 +6468,7 @@ begin
         ECrypt.RaiseU('TBinaryCookieGenerator: Too Big Too Fat');
       MoveFast(tmp.buf^, cc.data, tmp.len);
     end;
-    cc.head.issued := UnixTimeMinimalUtc;
+    cc.head.issued := UnixTimeMinimalUtc; // valid until year 2152
     if TimeOutMinutes = 0 then
       TimeOutMinutes := fDefaultTimeOutMinutes;
     if TimeOutMinutes = 0 then // max 1 month expiration seems good enough

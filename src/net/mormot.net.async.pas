@@ -897,6 +897,10 @@ type
     fServer: THttpAsyncServer;
     function ReleaseReadMemoryOnIdle: PtrInt; override;
     procedure OnAfterWriteSubscribe; override;
+  public
+    /// low-level access to the associated HTTP async server instance
+    property Server: THttpAsyncServer
+      read fServer;
   end;
 
   /// define the TOnHttpClientAsync callback state machine steps
