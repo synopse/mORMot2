@@ -1203,6 +1203,9 @@ type
       read fLastApi;
   end;
 
+/// can be used instead of EHttpApiServer.RaiseOnError class procedure if
+// raising an exception is an overkill
+function HttpApiSucceed(Api: THttpApiFunction; var Message: RawUtf8; Error: integer): boolean;
 
 
 const
@@ -2074,7 +2077,17 @@ begin
   fLastApiError := Error;
   fLastApi := api;
   inherited CreateUtf8('%() failed: % (%)',
-    [HttpApiFunction[api], WinApiErrorShort(Error, Http.Module), Error])
+    [HttpApiFunction[api], WinApiErrorShort(Error, Http.Module), Error]);
+end;
+
+
+function HttpApiSucceed(Api: THttpApiFunction; var Message: RawUtf8;
+  Error: integer): boolean;
+begin
+  result := Error in [NO_ERROR, ERROR_ALREADY_EXISTS];
+  if not result then
+    FormatUtf8('%() failed: % (%)', [HttpApiFunction[api],
+      WinApiErrorShort(Error, Http.Module), Error], Message);
 end;
 
 
