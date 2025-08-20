@@ -875,6 +875,9 @@ function SqlBegin(P: PUtf8Char): PUtf8Char;
 /// add a condition to a SQL WHERE clause, with an ' and ' if where is not void
 procedure SqlAddWhereAnd(var where: RawUtf8; const condition: RawUtf8);
 
+/// returns PosI(' FROM ', SQL) + 6 if found
+function PosSelectTable(Sql: PUtf8Char): PUtf8Char;
+
 /// return true if the parameter is void or begin with a 'SELECT' SQL statement
 // - used to avoid code injection and to check if the cache must be flushed
 // - VACUUM, PRAGMA, or EXPLAIN statements also return true, since they won't
@@ -2394,6 +2397,34 @@ end;
 function InlineParameter(const value: RawUtf8): RawUtf8;
 begin
   QuotedStrJson(value, result, ':(', '):');
+end;
+
+function PosSelectTable(Sql: PUtf8Char): PUtf8Char;
+begin
+  if Sql <> nil then
+    repeat
+      case Sql^ of
+        #0:
+          break;
+        #9 .. ' ':
+          begin
+            repeat
+              inc(Sql);
+              if Sql^ = #0 then
+                break;
+            until Sql^ > ' ';
+            if (PCardinal(Sql)^ and $dfdfdfdf = ord('F') +
+                 ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
+               (Sql[4] <= ' ') then
+            begin
+              result := GotoNextNotSpace(Sql + 5);
+              exit;
+            end;
+          end;
+      end;
+      inc(Sql);
+    until false;
+  result := nil;
 end;
 
 function IsSelect(Sql: PUtf8Char; SelectFields: PRawUtf8): boolean;

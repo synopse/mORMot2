@@ -554,6 +554,11 @@ begin
     Check(not IsSqlReserved(s));
     Check(not IsSqliteReserved(s));
   end;
+  Check(PosSelectTable('select * from toto')^ = 't');
+  Check(PosSelectTable('select * from   toto')^ = 't');
+  Check(PosSelectTable('select * from'#9'toto')^ = 't');
+  Check(PosSelectTable('select * fromage toto') = nil);
+  Check(PosSelectTable('select * toto') = nil);
   Check(IsSelect('select * from toto'));
   Check(IsSelect(' select * from toto'));
   Check(IsSelect(' select * from toto', @s));
