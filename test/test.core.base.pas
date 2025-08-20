@@ -5560,6 +5560,7 @@ begin
   CheckEqual(IdemPCharSep('One','ONE|'), 0);
   CheckEqual(IdemPCharSep('OnE','ONE|'), 0);
   CheckEqual(IdemPCharSep('ONE','ONE|'), 0);
+  CheckEqual(IdemPCharSep('oN','ONE|ON|'), 1);
   CheckEqual(IdemPCharSep('ONE?','ONE|'), 0);
   CheckEqual(IdemPCharSep('0ne','ONE|'), -1);
   CheckEqual(IdemPCharSep('one','ZERO|ONE|'), 1);
