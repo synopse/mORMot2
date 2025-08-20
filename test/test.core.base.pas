@@ -5550,10 +5550,23 @@ begin
   check(mormot.core.base.StrLen(@res[1]) = i);
   res := 'one,two,three';
   Check(IdemPCharArrayBy2(nil, 'ONTWTH') < 0);
-  Check(IdemPCharArrayBy2(pointer(res), 'OFTWTH') < 0);
-  Check(IdemPCharArrayBy2(pointer(res), 'ONTWTH') = 0);
-  Check(IdemPCharArrayBy2(pointer(res), 'TWONTW') = 1);
-  Check(IdemPCharArrayBy2(pointer(res), 'TWTHON') = 2);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'OFTWTH'), -1);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'ONTWTH'), 0);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'TWONTW'), 1);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'TWTHON'), 2);
+  CheckEqual(IdemPCharSep('one','one|two|three'), -1);
+  CheckEqual(IdemPCharSep('one','ONE|TWO|THREE|'), 0);
+  CheckEqual(IdemPCharSep('one','ZERO|ONE|TWO|THREE|'), 1);
+  CheckEqual(IdemPCharSep('One','ONE|'), 0);
+  CheckEqual(IdemPCharSep('OnE','ONE|'), 0);
+  CheckEqual(IdemPCharSep('ONE','ONE|'), 0);
+  CheckEqual(IdemPCharSep('ONE?','ONE|'), 0);
+  CheckEqual(IdemPCharSep('0ne','ONE|'), -1);
+  CheckEqual(IdemPCharSep('one','ZERO|ONE|'), 1);
+  CheckEqual(IdemPCharSep('tWo','ZERO|ONE|TWO|THREE|'), 2);
+  CheckEqual(IdemPCharSep('threE','ZERO|ONE|TWO|THREE|'), 3);
+  CheckEqual(IdemPCharSep('threEf','ZERO|ONE|TWO|THREE|'), 3);
+  CheckEqual(IdemPCharSep('thre0','ZERO|ONE|TWO|THREE|'), -1);
   Check(StartWith('three', 'THREE'));
   for i := 1 to length(res) do
     Check(StartWith(res, UpperCase(copy(res, 1, i))));

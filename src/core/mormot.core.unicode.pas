@@ -1592,6 +1592,16 @@ function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): intege
 // (it will use a fast 16-bit comparison of initial 2 bytes)
 function IdemPPChar(p: PUtf8Char; up: PPAnsiChar): PtrInt;
 
+/// returns the index of a matching beginning of p^ in '|' separated up^ array
+// - returns -1 if no item matched
+// - ignore case - up^ must be already Upper, delimited AND ENDED with '|'
+// !  IdemPCharSep('tWo','ZERO|ONE|TWO|THREE|') = 2
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
+// - warning: this function expects up^ items to have AT LEAST TWO CHARS
+// (it will use a fast 16-bit comparison of initial 2 bytes)
+// - slightly faster than IdemPPChar() since has better CPU L1 cache locality
+function IdemPCharSep(p, up: PUtf8Char): PtrInt;
+
 /// returns the index of a matching beginning of p^ in upArray two characters
 // - returns -1 if no item matched
 // - ignore case - upArray^ must be already Upper
@@ -6253,6 +6263,54 @@ begin
       until false;
       inc(result);
     until false;
+  end;
+  result := -1;
+end;
+
+function IdemPCharSep(p, up: PUtf8Char): PtrInt;
+var
+  w: word;
+  p2: PtrUInt;
+  c: byte;
+  {$ifdef CPUX86NOTPIC}
+  tab: TNormTableByte absolute NormToUpperAnsi7;
+  {$else}
+  tab: PByteArray; // faster on PIC/ARM and x86_64
+  {$endif CPUX86NOTPIC}
+begin
+  if p <> nil then
+  begin
+    // uppercase the first two p^ chars
+    {$ifndef CPUX86NOTPIC}
+    tab := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
+    w := PtrUInt(tab[ord(p[0])]) + PtrUInt(tab[ord(p[1])]) shl 8;
+    result := 0;
+    repeat
+      // quickly check the first 2 up chars
+      if PWord(up)^ = w then
+      begin
+        // inlined if IdemPCharByte(tab, p + 2, up^ + 2) then exit
+        p2 := PtrUInt(p);
+        dec(p2, PtrUInt(up));
+        inc(up, 2);
+        repeat
+          c := PByte(up)^;
+          if c = ord('|') then
+            exit   // found IdemPChar(p^, up^[result])
+          else if tab[PtrUInt(up[p2])] <> c then
+            break; // at least one char doesn't match
+          inc(up);
+        until false;
+      end
+      else
+        inc(up);
+      repeat
+        inc(up);
+      until up^ = '|';
+      inc(result);
+      inc(up);
+    until up^ = #0;
   end;
   result := -1;
 end;
