@@ -570,6 +570,19 @@ begin
     'select x+1 from cnt where x<1000000) select x from cnt'));
   Check(not IsSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
+  Check(IsCacheableDML('select * from toto'));
+  Check(IsCacheableDML(' select * from toto'));
+  Check(IsCacheableDML('select'#13#10'* from toto'));
+  Check(not IsCacheableDML('select * from toto where data=1'));
+  Check(IsCacheableDML('select * from toto where data=?'));
+  Check(IsCacheableDML('select'#10'* from toto where data=?'));
+  Check(not IsCacheableDML('selecta * from toto where data=?'));
+  Check(not IsCacheableDML(''));
+  Check(not IsCacheableDML('   '));
+  Check(IsCacheableDML('INSERT INTO users (name, email, age) VALUES (?, ?, ?)'));
+  Check(not IsCacheableDML('INSERT INTO users (name, email, age) VALUES (''?'',''?'',10)'));
+  Check(IsCacheableDML('UPDATE products SET price = ? WHERE product_id = ?'));
+  Check(IsCacheableDML('DELETE FROM orders WHERE order_id = ? AND status = ?'));
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi', false), 'titi');
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi limit 10', false), 'titi');
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', false), 'titi');

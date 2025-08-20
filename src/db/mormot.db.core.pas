@@ -884,6 +884,12 @@ procedure SqlAddWhereAnd(var where: RawUtf8; const condition: RawUtf8);
 // contain the field names, from SELECT ...field names... FROM
 function IsSelect(Sql: PUtf8Char; SelectClause: PRawUtf8 = nil): boolean;
 
+/// check if the SQL is a cacheable Data Manipulation Language (DML) statement
+// - i.e. is SELECT, INSERT, UPDATE, DELETE with ? parameter(s), or a
+// SELECT without any WHERE clause
+// - is the default implementation of TSqlDBConnectionProperties.IsCacheable()
+function IsCacheableDML(Sql: PUtf8Char): boolean;
+
 /// compute the SQL corresponding to a WHERE clause
 // - returns directly the Where value if it starts with one the
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
@@ -2463,6 +2469,48 @@ begin
     end
   else
     result := true; // assume '' statement is SELECT command
+end;
+
+function IsCacheableDML(Sql: PUtf8Char): boolean;
+var
+  c: PtrInt;
+begin
+  // DML cacheable if with ? parameter or SELECT without WHERE clause
+  result := false;
+  if Sql = nil then
+    exit;
+  while Sql^ in [#1..' '] do
+    inc(Sql);
+  c := IdemPCharSep(Sql, 'SELECT|INSERT|UPDATE|DELETE|'); // DML statements
+  if (c < 0) or
+     not (Sql[6] in [#1 .. ' ']) then
+    exit; // CREATE,ALTER,GRANT... DDL/DCL statements should never be cached
+  result := c = 0;
+  repeat  // naive but efficient parsing
+    case Sql^ of
+      #0:
+        exit;
+      '''':
+        // ignore chars within quotes (? or 'where' may safely appear there)
+        repeat
+          inc(Sql);
+          if Sql^ = #0 then
+            exit; // missing end quote -> don't cache this invalid statement
+        until Sql^ = ''''; // double quotes will reuse this loop
+      #9 .. ' ':
+        if result and
+           (PCardinal(Sql + 1)^ and $dfdfdfdf =
+             ord('W') + ord('H') shl 8 + ord('E') shl 16 + ord('R') shl 24) and
+           (PCardinal(Sql + 5)^ and $ffdf = ord('E') + ord(' ') shl 8) then
+          result := false; // don't cache SELECT with WHERE and no ?
+      '?':
+        begin
+          result := true; // exit as cacheable if any ? parameter is found
+          exit;
+        end;
+    end;
+    inc(Sql);
+  until false;
 end;
 
 function SqlBegin(P: PUtf8Char): PUtf8Char;
