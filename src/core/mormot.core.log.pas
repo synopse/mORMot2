@@ -3710,9 +3710,9 @@ end;
 { ************** Logging via TSynLogFamily, TSynLog, ISynLog }
 
 var
-  _LogInfoText: array[TSynLogLevel] of RawUtf8;
+  _LogInfoText:    array[TSynLogLevel] of RawUtf8;
   _LogInfoCaption: array[TSynLogLevel] of string;
-  _LogAppText: array[TAppLogLevel] of RawUtf8;
+  _LogAppText:     array[TAppLogLevel] of RawUtf8;
 
 function ToText(event: TSynLogLevel): RawUtf8;
 begin
@@ -7510,7 +7510,7 @@ begin
       if (p^[0] = ord('S') + ord('e') shl 8 + ord('t') shl 16 + ord('T') shl 24) and
          (p^[1] = ord('h') + ord('r') shl 8 + ord('e') shl 16 + ord('a') shl 24) and
          (p^[2] = ord('d') + ord('N') shl 8 + ord('a') shl 16 + ord('m') shl 24) and
-         (PWord(@p[3])^ = ord('e') + ord(' ') shl 8) then
+         ((p^[3] and $ffff) = ord('e') + ord(' ') shl 8) then
         PtrArrayAdd(fThreadInfo[thread].SetThreadName, LineBeg); // from now on
     end;
   end
@@ -7849,9 +7849,8 @@ begin
   if (self = nil) or
      (aPattern = '') then
     exit;
-  if fLevels = nil then
+  if fLevels = nil then // plain text search
   begin
-    // plain text search
     // search from next item
     for result := aRow + aDelta to fCount - 1 do
       if LineContains(aPattern, result) then
@@ -8172,11 +8171,11 @@ begin
       // avoid buffer overflow
       exit;
     destbuffer := PrintUSAscii(destbuffer, Host);         // HOST
-    destbuffer := PrintUSAscii(destbuffer, ProgramName); // APP-NAME
+    destbuffer := PrintUSAscii(destbuffer, ProgramName);  // APP-NAME
   end;
-  destbuffer := PrintUSAscii(destbuffer, procid);      // PROCID
-  destbuffer := PrintUSAscii(destbuffer, msgid);      // MSGID
-  destbuffer := PrintUSAscii(destbuffer, '');        // no STRUCTURED-DATA
+  destbuffer := PrintUSAscii(destbuffer, procid);         // PROCID
+  destbuffer := PrintUSAscii(destbuffer, msgid);          // MSGID
+  destbuffer := PrintUSAscii(destbuffer, '');             // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
