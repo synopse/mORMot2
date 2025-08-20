@@ -9,7 +9,6 @@ unit mormot.net.tunnel;
    TCP/UDP Port Forwarding and Tunnelling
    - Abstract Definitions for Port Forwarding
    - Local NAT Client/Server to Tunnel TCP Streams
-   - WebSockets stand-alone Relay Server
 
   *****************************************************************************
 
@@ -268,35 +267,6 @@ type
     function ComputeOptionsFromCert: TTunnelOptions; override;
     procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
-  end;
-
-
-{ ******************** WebSockets stand-alone Relay Server }
-
-type
-  TTunnelRelayIDs = array of TBinaryCookieGeneratorSessionID;
-
-  TTunnelRelayLink = record
-    // order doesn't matter -> just a link between two clients
-    ProcessA, ProcessB: TWebSocketProcess;
-  end;
-  TTunnelRelayLinks = array of TTunnelRelayLink;
-
-  TTunnelRelayServer = class(TWebSocketAsyncServer)
-  protected
-    fMainProtocol: TWebSocketProtocolUri;
-    fLinks: TSynDictionary; // TTunnelRelayIDs/TTunnelRelayLinks
-  public
-    /// initialize the Relay Server
-    // - if publicUri is not set, '127.0.0.1:localPort' is used, but you can
-    // use a reverse proxy URI like 'publicdomain.com/websockgateway'
-    constructor Create(const localPort: RawUtf8; const publicUri: RawUtf8 = '';
-      expirationMinutes: integer = 1; aLog: TSynLogClass = nil); reintroduce;
-    /// finalize this Relay Server
-    destructor Destroy; override;
-    /// generate a new WebSockets connection URI and its associated session ID
-    // - will be valid for expirationMinutes time as specified to Create()
-    function NewUri(out SessionID: TTunnelSession): RawUtf8;
   end;
 
 
@@ -728,137 +698,6 @@ begin
   hmac.Update(@local.rnd, SizeOf(local.rnd));   // client random
   hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
 end;
-
-
-{ ******************** WebSockets stand-alone Relay Server }
-
-{ TTunnelRelayServerProtocol }
-
-type
-  TTunnelRelayServerProtocol = class(TWebSocketProtocolUri)
-  protected
-    fReverse: TWebSocketProcess;
-    fOptions: TTunnelOptions;
-    procedure SetupLink(Sender: TWebSocketProcess; var request: TWebSocketFrame);
-    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); override;
-  end;
-
-procedure AsynchSend(process: TWebSocketProcess; const msg: RawByteString);
-var
-  frame: TWebSocketFrame;
-begin
-  frame.opcode := focBinary;
-  frame.content := [fopAlreadyCompressed]; // it is probably encrypted
-  frame.tix := 0;
-  frame.payload := msg;
-  process.Outgoing.Push(frame, 0);
-end;
-
-procedure TTunnelRelayServerProtocol.SetupLink(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame);
-var
-  added: boolean;
-  link: ^TTunnelRelayLink;
-  connections: TSynDictionary;
-  session: TTunnelSession;
-  reversed: TTunnelRelayServerProtocol;
-  head: PTunnelLocalHeader;
-begin
-  session := (Sender.Protocol as TTunnelRelayServerProtocol).Session;
-  head := pointer(request.payload);
-  if (length(request.payload) <> SizeOf(head^)) or
-     (head^.session <> session) then
-    ETunnel.RaiseUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
-      [self, length(request.payload), head^.session, session]);
-  fOptions := head^.options;
-  connections := (((Sender as TWebSocketAsyncProcess).
-                    Connection as TWebSocketAsyncConnection).
-                    Server as TTunnelRelayServer).fLinks;
-  connections.Safe.Lock;
-  try
-    link := connections.FindValueOrAdd(session, added);
-    if link^.ProcessA = nil then
-      // first end connected for this Session
-      link^.ProcessA := Sender
-    else
-    begin
-      // ensure only one link with matching options per URI/session
-      reversed := link^.ProcessA.Protocol as TTunnelRelayServerProtocol;
-      if (link^.ProcessB <> nil) or
-         (reversed.fOptions <> fOptions) then
-        ETunnel.RaiseUtf8('%.ProcessIncomingFrame: abusive', [self]);
-      // now both sides are properly connected
-      link^.ProcessB := Sender;
-      fReverse := link^.ProcessA;
-      reversed.fReverse := Sender;
-      // unblock both ends to begin normal relay
-      AsynchSend(fReverse, request.PayLoad);
-      AsynchSend(Sender, request.PayLoad);
-      // no connections.DeleteAt(ndx) to ensure any other link creation
-      connections.DeleteDeprecated;
-    end;
-  finally
-    connections.Safe.UnLock;
-  end;
-end;
-
-procedure TTunnelRelayServerProtocol.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
-begin
-  if (Sender <> nil) and
-     (Sender.Protocol <> nil) and
-     (PClass(Sender.Protocol)^ = TTunnelRelayServerProtocol) then
-  case request.opcode of
-    // focBinary or focContinuation/focConnectionClose
-    focBinary:
-      if fReverse <> nil then
-        // normal process: asynch relaying to the other side
-        AsynchSend(fReverse, request.payload)
-      else
-        // initialization of this connection
-        SetupLink(Sender, request);
-    focConnectionClose:
-       if fReverse <> nil then
-         fReverse.Shutdown({waitforpong=}true);
-  end;
-end;
-
-
-{ TTunnelRelayServer }
-
-constructor TTunnelRelayServer.Create(const localPort, publicUri: RawUtf8;
-  expirationMinutes: integer; aLog: TSynLogClass);
-var
-  uri: RawUtf8;
-begin
-  fLinks := TSynDictionary.Create(TypeInfo(TTunnelRelayIDs),
-    TypeInfo(TTunnelRelayLinks), false, {timeout=} expirationMinutes * 60);
-  inherited Create(localPort, nil, nil, 'relaysrv',
-    {threadpool=}2, {keepalive=}30000, {options=}[], aLog);
-  if publicUri = '' then
-    uri := '127.0.0.1:' + localPort
-  else
-    uri := publicUri;
-  fMainProtocol := TTunnelRelayServerProtocol.Create(
-    'mrmtproxy', uri, expirationMinutes, nil);
-  fProtocols.Add(fMainProtocol); // will be cloned for each URI
-end;
-
-destructor TTunnelRelayServer.Destroy;
-begin
-  inherited Destroy;
-  fLinks.Free;
-end;
-
-function TTunnelRelayServer.NewUri(out SessionID: TTunnelSession): RawUtf8;
-var
-  session: TBinaryCookieGeneratorSessionID;
-begin
-  result := fMainProtocol.NewUri(session);
-  SessionID := session;
-end;
-
 
 
 

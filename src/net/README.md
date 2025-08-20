@@ -137,7 +137,6 @@ Current limitation: only RRQ requests are supported/tested yet.
 TCP/UDP Port Forwarding and Tunnelling
 - Abstract Definitions for Port Forwarding
 - Local NAT Client/Server to Tunnel TCP Streams
-- WebSockets stand-alone Relay Server
 
 ### mormot.net.acme
 
