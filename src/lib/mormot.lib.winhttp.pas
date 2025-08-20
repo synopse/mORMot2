@@ -1205,7 +1205,8 @@ type
 
 /// can be used instead of EHttpApiServer.RaiseOnError class procedure if
 // raising an exception is an overkill
-function HttpApiSucceed(Api: THttpApiFunction; var Message: RawUtf8; Error: integer): boolean;
+function HttpApiSucceed(Api: THttpApiFunction; var Message: RawUtf8;
+  Error: integer): boolean;
 
 
 const
@@ -2245,53 +2246,55 @@ const
     'WWW-AUTHENTICATE:',
     nil);
 var
-  UnknownName: PUtf8Char;
+  name: PUtf8Char;
+  known: PHTTP_KNOWN_HEADER;
+  unknown: PHTTP_UNKNOWN_HEADER;
   i: integer;
 begin
   if ForceCustomHeader then
     i := -1
   else
     i := IdemPPChar(P, @KNOWNHEADERS);
-  // WebSockets need CONNECTION as unknown header
   if (i >= 0) and
+     // WebSockets need reqConnection / CONNECTION: as unknown header
      (THttpApiHeader(i) <> reqConnection) then
-    with Headers.KnownHeaders[THttpApiHeader(i)] do
-    begin
-      while P^ <> ':' do
-        inc(P);
-      inc(P); // jump ':'
-      while P^ = ' ' do
-        inc(P);
-      pRawValue := pointer(P);
-      while P^ >= ' ' do
-        inc(P);
-      RawValueLength := P - pRawValue;
-    end
+  begin
+    while P^ <> ':' do
+      inc(P);
+    inc(P); // jump ':'
+    while P^ = ' ' do
+      inc(P);
+    known := @Headers.KnownHeaders[THttpApiHeader(i)];
+    known^.pRawValue := pointer(P);
+    while P^ >= ' ' do
+      inc(P);
+    known^.RawValueLength := P - known^.pRawValue;
+  end
   else
   begin
-    UnknownName := pointer(P);
+    name := pointer(P);
     while (P^ >= ' ') and
           (P^ <> ':') do
       inc(P);
     if P^ = ':' then
-      with UnknownHeaders[Headers.UnknownHeaderCount] do
+    begin
+      unknown := @UnknownHeaders[Headers.UnknownHeaderCount];
+      unknown^.pName := name;
+      unknown^.NameLength := P - name;
+      repeat
+        inc(P)
+      until P^ <> ' ';
+      unknown^.pRawValue := pointer(P);
+      while P^ >= ' ' do
+        inc(P);
+      unknown^.RawValueLength := P - unknown^.pRawValue;
+      if Headers.UnknownHeaderCount = high(UnknownHeaders) then
       begin
-        pName := UnknownName;
-        NameLength := P - pName;
-        repeat
-          inc(P)
-        until P^ <> ' ';
-        pRawValue := pointer(P);
-        while P^ >= ' ' do
-          inc(P);
-        RawValueLength := P - pRawValue;
-        if Headers.UnknownHeaderCount = high(UnknownHeaders) then
-        begin
-          SetLength(UnknownHeaders, Headers.UnknownHeaderCount + 32);
-          Headers.pUnknownHeaders := pointer(UnknownHeaders);
-        end;
-        inc(Headers.UnknownHeaderCount);
-      end
+        SetLength(UnknownHeaders, Headers.UnknownHeaderCount + 32);
+        Headers.pUnknownHeaders := pointer(UnknownHeaders);
+      end;
+      inc(Headers.UnknownHeaderCount);
+    end
     else
       while P^ >= ' ' do
         inc(P);
