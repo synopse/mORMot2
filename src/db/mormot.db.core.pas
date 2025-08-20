@@ -880,9 +880,9 @@ procedure SqlAddWhereAnd(var where: RawUtf8; const condition: RawUtf8);
 // - VACUUM, PRAGMA, or EXPLAIN statements also return true, since they won't
 // change the data content
 // - WITH recursive statement expect no INSERT/UPDATE/DELETE pattern in the SQL
-// - if P^ is a SELECT and SelectClause is set to a variable, it would
+// - if P^ is a SELECT and SelectFields is set to a variable, it would
 // contain the field names, from SELECT ...field names... FROM
-function IsSelect(Sql: PUtf8Char; SelectClause: PRawUtf8 = nil): boolean;
+function IsSelect(Sql: PUtf8Char; SelectFields: PRawUtf8 = nil): boolean;
 
 /// check if the SQL is a cacheable Data Manipulation Language (DML) statement
 // - i.e. is SELECT, INSERT, UPDATE, DELETE with ? parameter(s), or a
@@ -2396,9 +2396,10 @@ begin
   QuotedStrJson(value, result, ':(', '):');
 end;
 
-function IsSelect(Sql: PUtf8Char; SelectClause: PRawUtf8): boolean;
+function IsSelect(Sql: PUtf8Char; SelectFields: PRawUtf8): boolean;
 var
-  from: PUtf8Char;
+  beg: PUtf8Char;
+  len: PtrInt;
 begin
   result := false;
   Sql := SqlBegin(Sql);
@@ -2406,17 +2407,41 @@ begin
     case IdemPCharSep(Sql, 'SELECT|EXPLAIN|VACUUM|PRAGMA|WITH|EXECUTE|') of
       0:
         // SELECT SelectClause^ FROM ...
-        if Sql[6] in [#1 .. ' '] then
         begin
-          result := true;
-          if SelectClause = nil then
+          inc(Sql, 6);
+          if Sql^ > ' ' then
             exit;
-          Sql := GotoNextNotSpace(Sql + 7);
-          from := StrPosI(' FROM ', Sql);
-          if from = nil then
-            SelectClause^ := ''
-          else
-            FastSetString(SelectClause^, Sql, from - Sql);
+          result := true;
+          if SelectFields = nil then
+            exit;
+          FastAssignNew(SelectFields^);
+          repeat
+            inc(Sql);
+            if Sql^ = #0 then
+              exit;
+          until Sql^ > ' ';
+          beg := Sql;
+          repeat // efficiently search for the end of fields, i.e. FROM clause
+            case Sql^ of
+              #0:
+                exit;
+              #9 .. ' ':
+                begin
+                  len := Sql - beg;
+                  repeat
+                    inc(Sql);
+                    if Sql^ = #0 then
+                      exit;
+                  until Sql^ > ' ';
+                  if (PCardinal(Sql)^ and $dfdfdfdf = ord('F') +
+                       ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
+                     (Sql[4] <= ' ') then
+                    break;
+                end;
+            end;
+            inc(Sql);
+          until false;
+          FastSetString(SelectFields^, beg, len);
         end;
       1:
         // EXPLAIN ...
@@ -2440,7 +2465,7 @@ begin
                 repeat
                   inc(Sql);
                   if Sql^ = #0 then
-                    exit;
+                    exit; // missing end quote -> ignore this invalid statement
                 until Sql^ = ''''; // double quotes will reuse this loop
               #9 .. ' ':
                 begin
@@ -2499,8 +2524,8 @@ begin
         until Sql^ = ''''; // double quotes will reuse this loop
       #9 .. ' ':
         if result and
-           (PCardinal(Sql + 1)^ and $dfdfdfdf =
-             ord('W') + ord('H') shl 8 + ord('E') shl 16 + ord('R') shl 24) and
+           (PCardinal(Sql + 1)^ and $dfdfdfdf = ord('W') +
+              ord('H') shl 8 + ord('E') shl 16 + ord('R') shl 24) and
            (PCardinal(Sql + 5)^ and $ffdf = ord('E') + ord(' ') shl 8) then
           result := false; // don't cache SELECT with WHERE and no ?
       '?':

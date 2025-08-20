@@ -556,6 +556,10 @@ begin
   end;
   Check(IsSelect('select * from toto'));
   Check(IsSelect(' select * from toto'));
+  Check(IsSelect(' select * from toto', @s));
+  CheckEqual(s, '*');
+  Check(IsSelect(' select'#10'a, b, fromage, d from toto', @s));
+  CheckEqual(s, 'a, b, fromage, d');
   Check(IsSelect('vacuum'));
   Check(IsSelect(' vacuum'));
   Check(IsSelect('pragma'));
