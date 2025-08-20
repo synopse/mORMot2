@@ -77,7 +77,7 @@ type
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// should send Frame to the relay server
     // - no result so that the frames could be gathered e.g. over WebSockets
-    procedure Send(const Frame: RawByteString);
+    procedure Send(Session: TTunnelSession; const Frame: RawByteString);
   end;
 
   /// abstract tunneling service implementation
@@ -429,7 +429,7 @@ begin
                 tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false);
               if (fTransmit <> nil) and
                  not Terminated then
-                fTransmit.Send(tmp);
+                fTransmit.Send(fOwner.fSession, tmp);
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
@@ -486,11 +486,11 @@ begin
   fPort := 0;
 end;
 
-procedure TTunnelLocal.Send(const Frame: RawByteString);
+procedure TTunnelLocal.Send(Session: TTunnelSession; const Frame: RawByteString);
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
   if fHandshake <> nil then
-    fHandshake.Push(Frame)    // during the handshake phase
+    fHandshake.Push(Frame)     // during the handshake phase
   else if fThread <> nil then
     fThread.OnReceived(Frame); // regular tunelling process
 end;
@@ -549,8 +549,8 @@ begin
     ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   RemotePort := 0;
   fSession := Sess;
-  TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
-  TransmitOptions := TransmitOptions + ComputeOptionsFromCert;
+  TransmitOptions := (TransmitOptions - [toClientSigned, toServerSigned]) +
+                     ComputeOptionsFromCert;
   // bind to a local (ephemeral) port
   ClosePort;
   result := uri.PortInt;
@@ -587,7 +587,7 @@ begin
     header.port := result; // port is asymmetrical so not part of the crc
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
-    fTransmit.Send(frame);
+    fTransmit.Send(fSession, frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
@@ -616,7 +616,7 @@ begin
           if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
             ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
         PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
-        fTransmit.Send(frame);
+        fTransmit.Send(fSession, frame);
         if Assigned(log) then
           log.Log(sllTrace, 'Open: after Send2 len=', [length(frame)], self);
         if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
