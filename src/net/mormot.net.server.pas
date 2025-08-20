@@ -8171,7 +8171,7 @@ begin
     log^.ServerName       := pRawValue;
   end;
   log^.ClientIp       := pointer(ctxt.fRemoteIP);
-  log^.ClientIpLength := length(ctxt.fRemoteip);
+  log^.ClientIpLength := length(ctxt.fRemoteIP);
   log^.Method         := pointer(ctxt.fMethod);
   log^.MethodLength   := length(ctxt.fMethod);
   log^.UserName       := pointer(ctxt.fAuthenticatedUser);
@@ -8179,7 +8179,7 @@ begin
 end;
 
 procedure THttpApiServer.DoExecute;
-var
+var // lots of local variable so that this method is thread-safe
   req: PHTTP_REQUEST;
   resp: PHTTP_RESPONSE;
   reqbuf, respbuf, logbuf: TBytes;
@@ -8207,6 +8207,7 @@ var
   procedure HttpSendResponse(flags: cardinal);
   var
     log: PHTTP_LOG_FIELDS_DATA;
+    err: integer;
   begin
     // update log information
     ctxt.RespStatus := resp^.StatusCode; // for ReqToLog()
@@ -8219,7 +8220,7 @@ var
       log^.ServerName        := pointer(fServerName);
       log^.ServiceNameLength := length(fLoggingServiceName);
       log^.ServiceName       := pointer(fLoggingServiceName);
-      ReqToLog(req, ctxt, pointer(logbuf));
+      ReqToLog(req, ctxt, log);
     end;
     // send the resp^ HTTP response to the req^ HTTP request
     resp^.Version := req^.Version;
@@ -8237,17 +8238,15 @@ var
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
     E: Exception = nil);
-  var
-    msg: RawUtf8;
   begin
     try
       resp^.SetStatus(StatusCode, outstat);
       FormatUtf8('<!DOCTYPE html><html><body style="font-family:verdana;">' +
-        '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], msg);
+        '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], outmsg);
       if E <> nil then
-        Append(msg, [E, ' Exception raised:<br>']);
-      Append(msg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
-      resp^.SetContent(datachunkmem, msg, HTML_CONTENT_TYPE);
+        Append(outmsg, [E, ' Exception raised:<br>']);
+      Append(outmsg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
+      resp^.SetContent(datachunkmem, outmsg, HTML_CONTENT_TYPE);
       HttpSendResponse(0);
     except
       on Exception do
@@ -8315,8 +8314,8 @@ var
               end; // "bytes=1000-" -> start=1000, to eof
               FormatUtf8('Content-range: bytes %-%/%', [rangestart,
                 rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
-                outcontlen.QuadPart], outmsg);
-              resp^.AddCustomHeader(pointer(outmsg), heads, false);
+                outcontlen.QuadPart], range);
+              resp^.AddCustomHeader(pointer(range), heads, false);
               resp^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
