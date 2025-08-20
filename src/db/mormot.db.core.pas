@@ -935,11 +935,11 @@ function SelectInClause(const PropName: RawUtf8; const Values: array of TID;
   const Suffix: RawUtf8 = ''; ValuesInlinedMax: integer = 0): RawUtf8; overload;
 
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
-function GetTableNameFromSqlSelect(const SQL: RawUtf8;
+function GetTableNameFromSqlSelect(Sql: PUtf8Char;
   EnsureUniqueTableInFrom: boolean): RawUtf8;
 
 /// naive search of '... FROM Table1,Table2 ...' pattern in the supplied SQL
-function GetTableNamesFromSqlSelect(const SQL: RawUtf8): TRawUtf8DynArray;
+function GetTableNamesFromSqlSelect(Sql: PUtf8Char): TRawUtf8DynArray;
 
 
 { ************ TResultsWriter Specialized for Database Export }
@@ -2417,7 +2417,7 @@ begin
                  ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
                (Sql[4] <= ' ') then
             begin
-              result := GotoNextNotSpace(Sql + 5);
+              result := GotoNextNotSpace(Sql + 5); // found 'FROM table1,table2'
               exit;
             end;
           end;
@@ -2455,7 +2455,7 @@ begin
           repeat // efficiently search for the end of fields, i.e. FROM clause
             case Sql^ of
               #0:
-                exit;
+                exit; // premature ending
               #9 .. ' ':
                 begin
                   len := Sql - beg;
@@ -2761,68 +2761,50 @@ begin
     result := '';
 end;
 
-function GetTableNameFromSqlSelect(const SQL: RawUtf8;
+function GetTableNameFromSqlSelect(Sql: PUtf8Char;
   EnsureUniqueTableInFrom: boolean): RawUtf8;
 var
-  i, j, k: PtrInt;
+  beg: PUtf8Char;
 begin
-  i := PosI(' FROM ', SQL);
-  if i > 0 then
-  begin
-    inc(i, 6);
-    while SQL[i] in [#1..' '] do
-      inc(i);
-    j := 0;
-    while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
-      inc(j);
-    if cardinal(j - 1) < 64 then
-    begin
-      k := i + j;
-      while SQL[k] in [#1..' '] do
-        inc(k);
-      if not EnsureUniqueTableInFrom or
-         (SQL[k] <> ',') then
-      begin
-        FastSetString(result, PAnsiChar(PtrInt(SQL) + i - 1), j);
-        exit;
-      end;
-    end;
-  end;
-  result := '';
+  FastAssignNew(result);
+  Sql := PosSelectTable(Sql);
+  if Sql = nil then
+    exit;
+  beg := Sql;
+  while tcIdentifier in TEXT_CHARS[Sql^] do
+    inc(Sql);
+  if EnsureUniqueTableInFrom then
+    if GotoNextNotSpace(Sql)^ = ',' then
+      exit; // there is another table name
+  FastSetString(result, beg, Sql - beg);
 end;
 
-function GetTableNamesFromSqlSelect(const SQL: RawUtf8): TRawUtf8DynArray;
+function GetTableNamesFromSqlSelect(Sql: PUtf8Char): TRawUtf8DynArray;
 var
-  i, j, k, n: PtrInt;
+  beg: PUtf8Char;
+  l, n: PtrUInt;
 begin
   result := nil;
+  Sql := PosSelectTable(Sql);
+  if Sql = nil then
+    exit;
   n := 0;
-  i := PosI(' FROM ', SQL);
-  if i > 0 then
-  begin
-    inc(i, 6);
-    repeat
-      while SQL[i] in [#1..' '] do
-        inc(i);
-      j := 0;
-      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
-        inc(j);
-      if cardinal(j - 1) > 64 then
-      begin
-        result := nil;
-        exit; // seems too big
-      end;
-      k := i + j;
-      while SQL[k] in [#1..' '] do
-        inc(k);
-      SetLength(result, n + 1);
-      FastSetString(result[n], PAnsiChar(PtrInt(SQL) + i - 1), j);
-      inc(n);
-      if SQL[k] <> ',' then
-        break;
-      i := k + 1;
-    until false;
-  end;
+  repeat
+    beg := Sql;
+    while tcIdentifier in TEXT_CHARS[Sql^] do
+      inc(Sql);
+    l := Sql - beg;
+    if l = 0 then
+      break;
+    SetLength(result, n + 1);
+    FastSetString(result[n], beg, l);
+    Sql := GotoNextNotSpace(Sql);
+    if Sql^ <> ',' then
+      exit; // reached last table name
+    inc(n);
+    Sql := GotoNextNotSpace(Sql + 1);
+  until false;
+  result := nil;
 end;
 
 
