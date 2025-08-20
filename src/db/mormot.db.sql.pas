@@ -3816,25 +3816,9 @@ begin
 end;
 
 const
-  _CACHEABLE: array[0..15] of PAnsiChar = (
-    'SELECT ',
-    // following SQL commands are not cacheable (at least on Sqlite3/PostgreSQL)
-    'CREATE ',
-    'ALTER ',
-    'DROP ',
-    'TRUNCATE ',
-    'REINDEX ',
-    'ATTACH ',
-    'VACUUM ',
-    'ANALYZE ',
-    'COPY ',
-    'GRANT ',
-    'REVOKE ',
-    'LISTEN ',
-    'LOAD ',
-    'MOVE ',
-    nil);
-  _LASTCACHEABLE = 0; // following items in _CACHEABLE[] should not be cached
+  _LASTCACHEABLE = 0; // following items in _CACHEABLE should not be cached
+  _CACHEABLE = 'SELECT |CREATE |ALTER |DROP |TRUNCATE |REINDEX |ATTACH |' +
+    'VACUUM |ANALYZE |COPY |GRANT |REVOKE |LISTEN |LOAD |MOVE |';
 
 function TSqlDBConnectionProperties.IsCacheable(P: PUtf8Char): boolean;
 var
@@ -3847,7 +3831,7 @@ begin
   begin
     while P^ in [#1..' '] do
       inc(P);
-    c := IdemPPChar(P, @_CACHEABLE);
+    c := IdemPCharSep(P, _CACHEABLE);
     selectWithNoParamOrWhere := c = 0;
     if c <= _LASTCACHEABLE then // CREATE,ALTER,... and later are not cacheable
     begin
@@ -4776,66 +4760,17 @@ end;
 const
   COL_DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
   COL_NUMERIC = COL_DECIMAL + 1;
-  COL_NAMES: array[0..57] of PAnsiChar = (
-    'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
-    'TEXT',
-    'CHAR',
-    'NCHAR',
-    'VARCHAR',
-    'NVARCHAR',
-    'CLOB',
-    'NCLOB',
-    'DBCLOB',
-    'BIT',
-    'INT',
-    'BIGINT',
-    'DOUBLE',
-    'NUMBER',
-    'FLOAT',
-    'REAL',
-    'DECFLOAT',
-    'CURR',
-    'DECIMAL',  // warning: see COL_DECIMAL above in synch with this item
-    'NUMERIC',  // warning: see COL_NUMERIC above in synch with this item
-    'BLOB SUB_TYPE 1',
-    'BLOB',
-    'DATE',
-    'SMALLDATE',
-    'TIME',
-    'TINYINT',
-    'BOOL',
-    'SMALLINT',
-    'MEDIUMINT',
-    'SERIAL',
-    'YEAR',
-    'TINYTEXT',
-    'MEDIUMTEXT',
-    'LONGTEXT',
-    'NTEXT',
-    'XML',
-    'ENUM',
-    'SET',
-    'UNIQUEIDENTIFIER',
-    'MONEY',
-    'SMALLMONEY',
-    'NUM',
-    'VARRAW',
-    'RAW',
-    'LONG RAW',
-    'LONG VARRAW',
-    'TINYBLOB',
-    'MEDIUMBLOB',
-    'BYTEA',
-    'VARBIN',
-    'IMAGE',
-    'LONGBLOB',
-    'BINARY',
-    'VARBINARY',
-    'GRAPHIC',
-    'VARGRAPHIC',
-    'NULL',
-    nil);
-  COL_TYPES: array[-1 .. high(COL_NAMES) - 1] of TSqlDBFieldType = (
+  COL_NAMES =       // in efficient IdemPCharSep() format
+    'TEXT COLLATE ISO8601|' + // should be before plain 'TEXT'
+    'TEXT|CHAR|NCHAR|VARCHAR|NVARCHAR|CLOB|NCLOB|DBCLOB|BIT|INT|BIGINT|DOUBLE|' +
+    'NUMBER|FLOAT|REAL|DECFLOAT|CURR|DECIMAL|' +  // see COL_DECIMAL above
+    'NUMERIC|' +  // see COL_NUMERIC above
+    'BLOB SUB_TYPE 1|BLOB|DATE|SMALLDATE|TIME|TINYINT|BOOL|SMALLINT|MEDIUMINT|' +
+    'SERIAL|YEAR|TINYTEXT|MEDIUMTEXT|LONGTEXT|NTEXT|XML|ENUM|SET|' +
+    'UNIQUEIDENTIFIER|MONEY|SMALLMONEY|NUM|VARRAW|RAW|LONG RAW|LONG VARRAW|' +
+    'TINYBLOB|MEDIUMBLOB|BYTEA|VARBIN|IMAGE|LONGBLOB|BINARY|VARBINARY|GRAPHIC|' +
+    'VARGRAPHIC|NULL|';
+  COL_TYPES: array[-1 .. 56] of TSqlDBFieldType = (
     ftUnknown,
     ftDate,      // 'TEXT COLLATE ISO8601'
     ftUtf8,      // 'TEXT'
@@ -4903,7 +4838,7 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
     ndx: PtrInt;
   begin
     //assert(StrComp(COL_NAMES[COL_DECIMAL],'DECIMAL')=0);
-    ndx := IdemPPChar(pointer(aNativeType), @COL_NAMES);
+    ndx := IdemPCharSep(pointer(aNativeType), COL_NAMES);
     if (aScale = 0) and
        ((ndx = COL_DECIMAL) or
         (ndx = COL_NUMERIC)) then

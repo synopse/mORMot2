@@ -470,14 +470,6 @@ begin
   // caller should now set the FileStream field, and call ParseRequestOptions
 end;
 
-const
-  TFTP_OPTIONS: array[0.. ord(high(TTftpContextOption)) + 1] of PAnsiChar = (
-    'BLKSIZE',     // tcoBlksize
-    'TIMEOUT',     // tcoTimeout
-    'TSIZE',       // tcoTsize
-    'WINDOWSIZE',  // tcoWindowsize
-    nil);
-
 function TTftpContext.ParseRequestOptions: TTftpError;
 var
   i: integer;
@@ -490,7 +482,7 @@ begin
     HasExtendedOptions := true;
     FrameLen := SizeOf(Frame^.Opcode);
     repeat
-      i := IdemPPChar(pointer(Parsed), @TFTP_OPTIONS);
+      i := IdemPCharSep(pointer(Parsed), 'BLKSIZE|TIMEOUT|TSIZE|WINDOWSIZE|');
       if (cardinal(i) > cardinal(ord(high(TTftpContextOption)))) or
          not (TTftpContextOption(i) in Options) then
       begin
@@ -500,11 +492,11 @@ begin
       if OpCode <> toOck then
         AppendTextToFrame(Parsed); // include option name to OACK answer
       case TTftpContextOption(i) of
-        tcoTimeout:
-          if not GetNextCardinal(1, 255, TimeoutSec) then
-            exit;
         tcoBlksize:
           if not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
+            exit;
+        tcoTimeout:
+          if not GetNextCardinal(1, 255, TimeoutSec) then
             exit;
         tcoTsize:
           if not GetNextCardinal(0, TFTP_TSIZE_MAX, TransferSize) then

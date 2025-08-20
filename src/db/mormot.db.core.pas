@@ -2390,16 +2390,6 @@ begin
   QuotedStrJson(value, result, ':(', '):');
 end;
 
-const
-  SELECT_STMT: array[0..6] of PAnsiChar = (
-    'SELECT',
-    'EXPLAIN ',
-    'VACUUM',
-    'PRAGMA',
-    'WITH',
-    'EXECUTE',
-    nil);
-
 function IsSelect(P: PUtf8Char; SelectClause: PRawUtf8): boolean;
 var
   from: PUtf8Char;
@@ -2407,7 +2397,7 @@ begin
   P := SqlBegin(P);
   if P <> nil then
   begin
-    case IdemPPChar(P, @SELECT_STMT) of
+    case IdemPCharSep(P, 'SELECT|EXPLAIN |VACUUM|PRAGMA|WITH|EXECUTE|') of
       0:
         // SELECT SelectClause^ FROM ...
         if (P[6] <= ' ') and
@@ -2498,24 +2488,13 @@ begin
     Where := Where + ' and ' + Condition;
 end;
 
-const
-  _ENDCLAUSE: array[0..10] of PUtf8Char = (
-      'ORDER BY ',
-      'GROUP BY ',
-      'LIMIT ',
-      'OFFSET ',
-      'LEFT ',
-      'RIGHT ',
-      'INNER ',
-      'OUTER ',
-      'JOIN ',
-      'WHERE ', // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
-      nil);
 
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 begin
   result := (Where <> '') and
-            (IdemPPChar(GotoNextNotSpace(pointer(Where)), @_ENDCLAUSE) >= 0);
+            (IdemPCharSep(GotoNextNotSpace(pointer(Where)),
+    'ORDER BY |GROUP BY |LIMIT |OFFSET |LEFT |RIGHT |INNER |OUTER |JOIN |WHERE |'
+             ) >= 0); // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
 end;
 
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
@@ -3080,12 +3059,6 @@ end;
 
 const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
-  ENDCLAUSE: array[0..4] of PAnsiChar = (
-    'LIMIT',   // 0
-    'OFFSET',  // 1
-    'ORDER',   // 2
-    'GROUP',   // 3
-    nil);
 
 constructor TSelectStatement.Create(const SQL: RawUtf8;
   const GetFieldIndex: TOnGetFieldIndex;
@@ -3523,7 +3496,7 @@ lim:P := GotoNextNotSpace(P);
           not (P^ in [#0, ';']) do
     begin
       GetNextFieldProp(P, prop);
-lim2: case IdemPPChar(pointer(prop), @ENDCLAUSE) of
+lim2: case IdemPCharSep(pointer(prop), 'LIMIT|OFFSET|ORDER|GROUP|') of
         0:
           // LIMIT
           fLimit := GetNextItemCardinal(P, ' ');

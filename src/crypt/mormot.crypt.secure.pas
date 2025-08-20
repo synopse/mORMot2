@@ -4851,21 +4851,6 @@ begin
   HashLen := HASH_SIZE[Hash];
 end;
 
-const
-  DIGEST_KEYS: array[0..11] of PAnsiChar = (
-    'REALM=',     // 0
-    'QOP=',       // 1
-    'URI=',       // 2
-    'ALGORITHM=', // 3
-    'NONCE=',     // 4
-    'NC=',        // 5
-    'CNONCE=',    // 6
-    'RESPONSE=',  // 7
-    'OPAQUE=',    // 8
-    'USERNAME=',  // 9
-    'AUTHZID=',   // 10
-    nil);
-
 function TDigestProcess.Parse(var p: PUtf8Char): boolean;
 var
   n: PUtf8Char;
@@ -4879,7 +4864,8 @@ begin
   GetNextItem(p, ',', '"', RawUtf8(tmp));
   if tmp = '' then
     exit;
-  case IdemPPChar(n, @DIGEST_KEYS) of
+  case IdemPCharSep(n, 'REALM=|QOP=|URI=|ALGORITHM=|NONCE=|NC=|CNONCE=|' +
+                       'RESPONSE=|OPAQUE=|USERNAME=|AUTHZID=|') of
     0: // realm="http-auth@example.org"
       FastAssignUtf8(Realm, tmp);
     1: // qop=auth

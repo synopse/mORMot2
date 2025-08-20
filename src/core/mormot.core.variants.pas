@@ -5110,13 +5110,6 @@ begin
   fInternValues.Free;
 end;
 
-const
-  _GETMETHOD: array[0..3] of PAnsiChar = (
-    'COUNT', // 0
-    'KIND',  // 1
-    'JSON',  // 2
-    nil);
-
 function IntGetPseudoProp(ndx: PtrInt; const source: TDocVariantData;
   var Dest: variant): boolean;
 begin
@@ -5144,7 +5137,7 @@ begin
     result := false
   else if (NameLen > 4) and
           (Name[0] = '_') and
-      IntGetPseudoProp(IdemPPChar(@Name[1], @_GETMETHOD), dv, variant(Dest)) then
+      IntGetPseudoProp(IdemPCharSep(@Name[1], 'COUNT|KIND|JSON|'), dv, variant(Dest)) then
     result := true
   else
   begin

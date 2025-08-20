@@ -1158,21 +1158,10 @@ end;
 
 // TSynDaemon command line methods
 
-const
-  AGL_CMD: array[0..7] of PAnsiChar = (
-    'LIST',
-    'SETTINGS',
-    'NEW',
-    'RETRY', // Windows Services API only
-    'RESUME',
-    'DISABLE',
-    'ENABLE',
-    nil);
-
 function TSynAngelize.CustomParseCmd(P: PUtf8Char): boolean;
 begin
-  result := true; // the command has been identified and processed
-  case IdemPPChar(P, @AGL_CMD) of
+  result := true; // true = the command has been identified and processed
+  case IdemPCharSep(P, 'LIST|SETTINGS|NEW|RETRY|RESUME|DISABLE|ENABLE|') of
     0: // --list
       ListServices;
     1: // --settings
@@ -1200,7 +1189,7 @@ begin
     6: // --enable <servicename>
       ServiceChangeState({disable=}false);
   else
-    result := false; // display syntax
+    result := false; // command not identified: display syntax
   end;
 end;
 

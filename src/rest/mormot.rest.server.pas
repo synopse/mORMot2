@@ -3522,13 +3522,6 @@ begin
   end;
 end;
 
-const
-  SQL_METHOD_WRITE: array[0..3] of PUtf8Char = (
-   'INSERT', // 'INSERT ... FROM ...'    -> mPOST
-   'UPDATE', // 'UPDATE (....) FROM ...' -> mPUT
-   'DELETE', // 'DELETE FROM ...'        -> mDELETE
-   nil);
-
 procedure TRestServerUriContext.OrmGetNoTable(params: PUtf8Char);
 var
   sqlselect, sql: RawUtf8;
@@ -3612,8 +3605,8 @@ begin
   fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
   if not sqlisselect then
     // needed for fStats.NotifyOrm(Method) below
-    fMethod := TUriMethod(IdemPPChar(SqlBegin(pointer(sql)),
-      @SQL_METHOD_WRITE) + 2); // not found (-1) -> +2 -> mGET=1
+    fMethod := TUriMethod(IdemPCharSep( // not found (-1) -> +2 -> mGET=1
+      SqlBegin(pointer(sql)), 'INSERT|UPDATE|DELETE|') + 2);
 end;
 
 procedure TRestServerUriContext.OrmGetTableID;

@@ -2209,42 +2209,18 @@ begin
     until false;
 end;
 
+const
+  KNOWNHEADERS =
+    'CACHE-CONTROL:|CONNECTION:|DATE:|KEEP-ALIVE:|PRAGMA:|TRAILER:|' +
+    'TRANSFER-ENCODING:|UPGRADE:|VIA:|WARNING:|ALLOW:|CONTENT-LENGTH:|' +
+    'CONTENT-TYPE:|CONTENT-ENCODING:|CONTENT-LANGUAGE:|CONTENT-LOCATION:|' +
+    'CONTENT-MD5:|CONTENT-RANGE:|EXPIRES:|LAST-MODIFIED:|ACCEPT-RANGES:|AGE:|' +
+    'ETAG:|LOCATION:|PROXY-AUTHENTICATE:|RETRY-AFTER:|SERVER:|SET-COOKIE:|' +
+    'VARY:|WWW-AUTHENTICATE:|';
+
 function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
   ForceCustomHeader: boolean): PUtf8Char;
-const
-  KNOWNHEADERS: array[reqCacheControl..succ(respWwwAuthenticate)] of PAnsiChar = (
-    'CACHE-CONTROL:',
-    'CONNECTION:',
-    'DATE:',
-    'KEEP-ALIVE:',
-    'PRAGMA:',
-    'TRAILER:',
-    'TRANSFER-ENCODING:',
-    'UPGRADE:',
-    'VIA:',
-    'WARNING:',
-    'ALLOW:',
-    'CONTENT-LENGTH:',
-    'CONTENT-TYPE:',
-    'CONTENT-ENCODING:',
-    'CONTENT-LANGUAGE:',
-    'CONTENT-LOCATION:',
-    'CONTENT-MD5:',
-    'CONTENT-RANGE:',
-    'EXPIRES:',
-    'LAST-MODIFIED:',
-    'ACCEPT-RANGES:',
-    'AGE:',
-    'ETAG:',
-    'LOCATION:',
-    'PROXY-AUTHENTICATE:',
-    'RETRY-AFTER:',
-    'SERVER:',
-    'SET-COOKIE:',
-    'VARY:',
-    'WWW-AUTHENTICATE:',
-    nil);
 var
   name: PUtf8Char;
   known: PHTTP_KNOWN_HEADER;
@@ -2254,7 +2230,7 @@ begin
   if ForceCustomHeader then
     i := -1
   else
-    i := IdemPPChar(P, @KNOWNHEADERS);
+    i := IdemPCharSep(P, KNOWNHEADERS);
   if (i >= 0) and
      // WebSockets need reqConnection / CONNECTION: as unknown header
      (THttpApiHeader(i) <> reqConnection) then

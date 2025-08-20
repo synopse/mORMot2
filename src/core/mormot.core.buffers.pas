@@ -8857,15 +8857,11 @@ begin
 end;
 
 const // https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
-  MIME_EXT: array[0 .. 57] of PUtf8Char = ( // for IdemPPChar() start check
-    'PNG',  'GIF',  'TIF',  'JP',  'BMP',  'DOC',  'HTM',  'CSS',
-    'JSON', 'ICO',  'WOF',  'TXT', 'SVG',  'ATOM', 'RDF',  'RSS',
-    'WEBP', 'APPC', 'MANI', 'XML', 'JS',   'MJS',  'OGA',  'OGV',
-    'MP4',  'M2V',  'M2P',  'MP3', 'H264', 'TEXT', 'LOG',  'GZ',
-    'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2',  'WMA',  'WMV',  'AVI',
-    'PPT',  'XLS',  'PDF',  'DCM', 'DICOM', 'SQLIT', 'DB3', 'HEIC',
-    'H265', 'AVIF', 'AAC', 'CSV',  'MD',   'ICS', 'OGX',  'OGG', 'OPUS', nil);
-  MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
+  MIME_EXT = 'PNG|GIF|TIF|JP|BMP|DOC|HTM|CSS|JSON|ICO|WOF|TXT|SVG|ATOM|RDF|' +
+     'RSS|WEBP|APPC|MANI|XML|JS|MJS|OGA|OGV|MP4|M2V|M2P|MP3|H264|TEXT|LOG|' +
+     'GZ|WEBM|MKV|RAR|7Z|BZ2|WMA|WMV|AVI|PPT|XLS|PDF|DCM|DICOM|SQLIT|DB3|' +
+     'HEIC|H265|AVIF|AAC|CSV|MD|ICS|OGX|OGG|OPUS|';
+  MIME_EXT_TYPE: array[0 .. 56] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS, mtOga, mtOgv,
@@ -8881,14 +8877,14 @@ begin
   result := mtUnknown;
   case length(Ext) of
     0: ;
-    1: // IdemPPChar() requires 2 chars len minimum
+    1: // IdemPCharSep() requires 2 chars len minimum
       case ext[1] of
         'x', 'X':
           result := mtXcomp;
       end;
   else
     begin
-      i := IdemPPChar(pointer(Ext), @MIME_EXT); // quick search by first 2 chars
+      i := IdemPCharSep(pointer(Ext), MIME_EXT); // quick search by first 2 chars
       if i >= 0 then
         result := MIME_EXT_TYPE[i]
     end;

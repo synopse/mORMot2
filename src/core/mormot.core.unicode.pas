@@ -6287,11 +6287,9 @@ begin
     w := PtrUInt(tab[ord(p[0])]) + PtrUInt(tab[ord(p[1])]) shl 8;
     result := 0;
     repeat
-      // quickly check the first 2 up chars
-      if PWord(up)^ = w then
+      if PWord(up)^ = w then // quickly check the first 2 up chars
       begin
-        // inlined if IdemPCharByte(tab, p + 2, up^ + 2) then exit
-        p2 := PtrUInt(p);
+        p2 := PtrUInt(p); // = if IdemPCharByte(tab, p + 2, up^ + 2) then exit
         dec(p2, PtrUInt(up));
         inc(up, 2);
         repeat
