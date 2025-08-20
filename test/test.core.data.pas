@@ -3620,7 +3620,7 @@ begin
   NotifyTestSpeed('IsValidUtf8(RawUtf8)', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
-    Check(IsValidUtf8(PUtf8Char(pointer(people))));
+    Check(IsValidUtf8Ptr(pointer(people)));
   NotifyTestSpeed('IsValidUtf8(PUtf8Char)', 0, len, @timer, ONLYLOG);
   {$ifdef ASMX64AVXNOCONST}
   if cpuHaswell in X64CpuFeatures then

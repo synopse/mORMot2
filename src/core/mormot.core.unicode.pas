@@ -261,7 +261,7 @@ function IsValidUtf8Small(const source: RawByteString): boolean;
 // 21 GB/s parsing speed on a Core i5-13500
 // - warning: AVX2 version won't refuse #0 characters within the buffer - use
 // IsValidUtf8NotVoid() if you are not sure that your input is pure text
-function IsValidUtf8(const source: RawByteString): boolean; overload;
+function IsValidUtf8(const source: RawByteString): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding and no #0 within
@@ -273,13 +273,12 @@ function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean; overload;
 // - will also refuse #0 characters within the buffer even on AVX2
 function IsValidUtf8NotVoid(const source: RawByteString): boolean; overload;
 
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will stop when the buffer contains #0
+/// returns TRUE if the supplied #0-ending buffer has valid UTF-8 encoding
 // - just a wrapper around IsValidUtf8Buffer(source, StrLen(source)) so if you
 // know the source length, you would better call IsValidUtf8Buffer() directly
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM, reaching e.g.
 // 15 GB/s parsing speed on a Core i5-13500 - StrLen() itself runs at 37 GB/s
-function IsValidUtf8(source: PUtf8Char): boolean; overload;
+function IsValidUtf8Ptr(source: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// detect UTF-8 content and mark the variable with the CP_UTF8 codepage
@@ -3373,7 +3372,7 @@ done:
   result := PtrUInt(source) = PtrUInt(len) + 4;
 end;
 
-function IsValidUtf8(source: PUtf8Char): boolean;
+function IsValidUtf8Ptr(source: PUtf8Char): boolean;
 begin
   result := IsValidUtf8Buffer(source, StrLen(source));
 end;

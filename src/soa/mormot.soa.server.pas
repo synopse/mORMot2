@@ -1282,10 +1282,10 @@ begin
                 begin
                   // write up to 1KB of result (binary as Base64)
                   W.AddShort(',result:"');
-                  if IsValidUtf8(pointer(content)) then
-                    W.AddJsonEscape(pointer(content))
+                  if IsValidUtf8Buffer(pointer(Content), len) then
+                    W.AddJsonEscape(pointer(Content))
                   else
-                    W.WrBase64(pointer(content), len, false);
+                    W.WrBase64(pointer(Content), len, false);
                   W.AddDirect('"');
                 end;
               end

@@ -5962,9 +5962,9 @@ begin
     Check(length(W) = len);
     U := WinAnsiToUtf8(W);
     Check(length(U) >= len);
-    check(IsValidUtf8(U), 'IsValidUtf8U');
+    check(IsValidUtf8(U), 'IsValidUtf8');
     P := UniqueRawUtf8(U);
-    check(IsValidUtf8(P), 'IsValidUtf8');
+    check(IsValidUtf8Ptr(P), 'IsValidUtf8Ptr');
     check(PosChar(P, #10) = nil);
     if len > 0 then
     begin
