@@ -560,14 +560,14 @@ begin
   Check(IsSelect(' vacuum'));
   Check(IsSelect('pragma'));
   Check(IsSelect(' pragma'));
-  Check(IsSelect('with recursive cnt(x) as (values(1) union all ' +
-    'select x+1 from cnt where x<1000000) select x from cnt'));
   Check(not IsSelect('update toto'));
   Check(not IsSelect(' update toto'));
   Check(not IsSelect('insert into toto'));
   Check(not IsSelect(' insert into toto'));
   Check(not IsSelect('delete from toto'));
   Check(not IsSelect(' delete from toto'));
+  Check(IsSelect('with recursive cnt(x) as (values(1) union all ' +
+    'select x+1 from cnt where x<1000000) select x from cnt'));
   Check(not IsSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi', false), 'titi');

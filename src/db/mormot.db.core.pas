@@ -882,7 +882,7 @@ procedure SqlAddWhereAnd(var where: RawUtf8; const condition: RawUtf8);
 // - WITH recursive statement expect no INSERT/UPDATE/DELETE pattern in the SQL
 // - if P^ is a SELECT and SelectClause is set to a variable, it would
 // contain the field names, from SELECT ...field names... FROM
-function IsSelect(P: PUtf8Char; SelectClause: PRawUtf8 = nil): boolean;
+function IsSelect(Sql: PUtf8Char; SelectClause: PRawUtf8 = nil): boolean;
 
 /// compute the SQL corresponding to a WHERE clause
 // - returns directly the Where value if it starts with one the
@@ -2390,56 +2390,77 @@ begin
   QuotedStrJson(value, result, ':(', '):');
 end;
 
-function IsSelect(P: PUtf8Char; SelectClause: PRawUtf8): boolean;
+function IsSelect(Sql: PUtf8Char; SelectClause: PRawUtf8): boolean;
 var
   from: PUtf8Char;
 begin
-  P := SqlBegin(P);
-  if P <> nil then
-  begin
-    case IdemPCharSep(P, 'SELECT|EXPLAIN |VACUUM|PRAGMA|WITH|EXECUTE|') of
+  result := false;
+  Sql := SqlBegin(Sql);
+  if Sql <> nil then
+    case IdemPCharSep(Sql, 'SELECT|EXPLAIN|VACUUM|PRAGMA|WITH|EXECUTE|') of
       0:
         // SELECT SelectClause^ FROM ...
-        if (P[6] <= ' ') and
-           (P[6] <> #0) then
+        if Sql[6] in [#1 .. ' '] then
         begin
-          if SelectClause <> nil then
-          begin
-            inc(P, 7);
-            from := StrPosI(' FROM ', P);
-            if from = nil then
-              SelectClause^ := ''
-            else
-              FastSetString(SelectClause^, P, from - P);
-          end;
           result := true;
-        end
-        else
-          result := false;
+          if SelectClause = nil then
+            exit;
+          Sql := GotoNextNotSpace(Sql + 7);
+          from := StrPosI(' FROM ', Sql);
+          if from = nil then
+            SelectClause^ := ''
+          else
+            FastSetString(SelectClause^, Sql, from - Sql);
+        end;
       1:
         // EXPLAIN ...
-        result := true;
+        result := Sql[7] in [#1 .. ' '];
       2,
       3:
         // VACUUM or PRAGMA
-        result := P[6] in [#0..' ', ';'];
+        result := Sql[6] in [#0..' ', ';'];
       4:
         // WITH ... INSERT/UPDATE/DELETE
-        result := (P[4] <= ' ') and
-                  (StrPosI('INSERT', P + 5) = nil) and
-                  (StrPosI('UPDATE', P + 5) = nil) and
-                  (StrPosI('DELETE', P + 5) = nil);
+        begin
+          inc(Sql, 4);
+          if Sql^ > ' ' then
+            exit;
+          repeat // parse the Common Table Expressions (CTE)
+            case Sql^ of
+              #0:
+                break;
+              '''':
+                // ignore chars within quotes (? or 'where' may safely appear there)
+                repeat
+                  inc(Sql);
+                  if Sql^ = #0 then
+                    exit;
+                until Sql^ = ''''; // double quotes will reuse this loop
+              #9 .. ' ':
+                begin
+                  repeat
+                    inc(Sql);
+                  until not (Sql^ in [#1 .. ' ']);
+                  if (IdemPCharSep(Sql, 'INSERT|UPDATE|DELETE|') >= 0) and
+                     (Sql[6] in [#1 .. ' ']) then
+                    exit;
+                  repeat
+                    inc(Sql);
+                  until not (Sql^ in [#1 .. ' ']);
+                end;
+            end;
+            inc(Sql);
+          until false;
+          result := true;
+        end;
       5:
         // FireBird specific EXECUTE BLOCK RETURNS
         begin
-          P := GotoNextNotSpace(P + 7);
-          result := IdemPChar(P, 'BLOCK') and
-                    IdemPChar(GotoNextNotSpace(P + 5), 'RETURNS');
+          Sql := GotoNextNotSpace(Sql + 7);
+          result := IdemPChar(Sql, 'BLOCK') and
+                    IdemPChar(GotoNextNotSpace(Sql + 5), 'RETURNS');
         end;
-    else
-      result := false;
-    end;
-  end
+    end
   else
     result := true; // assume '' statement is SELECT command
 end;
