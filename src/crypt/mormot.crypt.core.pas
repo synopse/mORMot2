@@ -2540,7 +2540,9 @@ type
     // - content of this record is stateless, so you can prepare a HMAC for a
     // key using Init, then copy this THmacSha256 instance to a local variable,
     // and use this local thread-safe copy for actual HMAC computing
-    procedure Init(key: pointer; keylen: integer);
+    procedure Init(key: pointer; keylen: integer); overload;
+    /// prepare the SHA-256 HMAC authentication with the supplied key
+    procedure Init(const key: RawByteString); overload;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer); overload;
@@ -9397,6 +9399,11 @@ begin
   SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
   FillZero(k0.b);
   FillZero(k0xorIpad.b);
+end;
+
+procedure THmacSha256.Init(const key: RawByteString);
+begin
+  Init(pointer(key), length(key));
 end;
 
 procedure THmacSha256.Update(msg: pointer; msglen: integer);
