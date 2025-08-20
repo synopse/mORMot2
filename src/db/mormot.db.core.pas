@@ -2436,12 +2436,14 @@ begin
                   if (PCardinal(Sql)^ and $dfdfdfdf = ord('F') +
                        ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
                      (Sql[4] <= ' ') then
+                  begin
+                    FastSetString(SelectFields^, beg, len);
                     break;
+                  end;
                 end;
             end;
             inc(Sql);
           until false;
-          FastSetString(SelectFields^, beg, len);
         end;
       1:
         // EXPLAIN ...
