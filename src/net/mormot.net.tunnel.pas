@@ -536,9 +536,8 @@ var
   frame, remote: RawByteString;
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
-  secret: TEccSecretKey;
-  key, keyiv: THash256Rec;
-  hmac, hmaciv: THmacSha256;
+  key, iv: THash256Rec;
+  hmackey, hmaciv: THmacSha256;
   log: ISynLog;
 begin
   TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
@@ -600,60 +599,60 @@ begin
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
-      ETunnel.RaiseUtf8('Open handshake timeout on port %', [result]);
+      ETunnel.RaiseUtf8('Open: handshake timeout on port %', [result]);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
     // check the returned header, maybe using the certificate
     if length(remote) < SizeOf(loc) then // may have a signature trailer
-      ETunnel.RaiseUtf8('Open handshake size=% error on port %',
+      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %',
         [length(remote), result]);
     if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
-      ETunnel.RaiseUtf8('Open handshake signature failed on port %',
+      ETunnel.RaiseUtf8('Open: unexpected handshake on port %',
         [length(remote), result]);
     TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
     if not IsEqual(rem^.Info.crc, key.Lo) then
-      ETunnel.RaiseUtf8('Open handshake crc error on port %', [result]);
+      ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
     if not FrameVerify(remote, SizeOf(loc)) then
-      ETunnel.RaiseUtf8('Open handshake failed on port %', [result]);
+      ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
     RemotePort := rem^.Info.port;
-    // optional encryption
+    // optional ephemeral encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
     begin
       if AppSecret = '' then
-        hmac.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
+        hmackey.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
       else
-        hmac.Init(AppSecret);
-      hmac.Update(@loc.Info, KDF_SIZE); // no replay (session is increasing)
+        hmackey.Init(AppSecret);
+      hmackey.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
+      EcdheHashRandom(hmackey, loc.Ecdh, rem^.Ecdh); // rnd+pub in same order
       if toEcdhe in fOptions then
       begin
-        // optional ECDHE ephemeral encryption
-        if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, secret) then
+        if Assigned(log) then
+          log.Log(sllTrace, 'Open: ECDHE shared secret', self);
+        if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, key.b) then
           exit;
-        EcdheHashRandom(hmac, loc.Ecdh, rem^.Ecdh);
-        hmac.Update(@secret, SizeOf(secret)); // ephemeral secret
+        hmackey.Update(@key, SizeOf(key)); // prime256v1 shared secret
       end;
-      hmaciv := hmac; // separate HMAC calls with labels - see NIST SP 800-108
-      hmac.Update('AES key'#0);
-      hmac.Done(key.b);     // key.Lo = AES-128-CTR key
+      hmaciv := hmackey;     // two labeled hmacs - see NIST SP 800-108
+      hmackey.Update('AES key'#0);
+      hmackey.Done(key.b);   // AES-128-CTR key
       hmaciv.Update('IV'#1);
-      hmaciv.Done(keyiv.b); // keyiv.Hi = AES-128-CTR iv
+      hmaciv.Done(iv.b);     // AES-128-CTR iv
     end;
     // launch the background processing thread
     if Assigned(log) then
       log.Log(sllTrace, 'Open: % success', [ToText(fOptions)], self);
     FreeAndNil(fHandshake); // ends the handshaking phase
     fPort := result;
-    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, keyiv.Lo, sock);
+    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
     SleepHiRes(100, fThread.fStarted);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
   end;
   FreeAndNil(fHandshake);
-  FillZero(secret);
   FillZero(key.b);
-  FillZero(keyiv.b);
+  FillZero(iv.b);
 end;
 
 function TTunnelLocal.LocalPort: RawUtf8;
@@ -696,7 +695,7 @@ procedure TTunnelLocalServer.EcdheHashRandom(var hmac: THmacSha256;
   const local, remote: TTunnelEcdhFrame);
 begin
   hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // client random
-  hmac.Update(@local.rnd, SizeOf(local.rnd));   // server random
+  hmac.Update(@local. rnd, SizeOf(local.rnd));  // server random
 end;
 
 
@@ -714,7 +713,7 @@ end;
 procedure TTunnelLocalClient.EcdheHashRandom(var hmac: THmacSha256;
   const local, remote: TTunnelEcdhFrame);
 begin
-  hmac.Update(@local.rnd, SizeOf(local.rnd));   // client random
+  hmac.Update(@local. rnd, SizeOf(local.rnd));  // client random
   hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
 end;
 
