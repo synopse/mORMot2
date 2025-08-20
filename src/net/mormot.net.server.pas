@@ -4197,7 +4197,7 @@ begin
      ((fSock = nil) or
       not fSock.TLS.Enabled) then
   begin
-    fLog.Add.Log(sllTrace, 'WaitStarted TLS setup % %',
+    fLogClass.Add.Log(sllTrace, 'WaitStarted TLS setup % %',
       [TLS^.CertificateFile, TLS^.CACertificatesFile], self);
     while (fSock = nil) and
           (GetTickSec <= tix32) do
@@ -4210,7 +4210,7 @@ begin
       SleepHiRes(1); // let some warmup happen
     end;
   end;
-  fLog.Add.Log(sllTrace, 'WaitStarted done', self);
+  fLogClass.Add.Log(sllTrace, 'WaitStarted done', self);
 end;
 
 procedure THttpServerSocketGeneric.WaitStartedHttps(Seconds: integer;
