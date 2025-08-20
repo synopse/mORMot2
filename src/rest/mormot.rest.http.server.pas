@@ -1303,7 +1303,7 @@ begin
   if P <> nil then
     if P = pointer(JSON_CONTENT_TYPE_HEADER_VAR) then
       FastAssignNew(call.OutHead) // most common case (e.g. mormot.soa.server)
-    else if IdemPChar(P, 'CONTENT-TYPE: ') then
+    else if IdemPChar(P, HEADER_CONTENT_TYPE_UPPER) then
     begin
       // TRestServer.Uri is expected to customize the content-type
       // as FIRST header (e.g. when returning GET blob fields)

@@ -2497,7 +2497,7 @@ function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
 
 /// return TRUE if one of the Value of UpperName exists in P, till end of
 // current section
-// - expect UpperName e.g. as 'CONTENT-TYPE: '
+// - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
 // - expect UpperValues to be an array of upper values with left side matching,
 // and ending with nil - as expected by IdemPPChar(), i.e. with at least 2 chars
 function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;

@@ -7695,7 +7695,7 @@ begin
             IdemPCharAndGetNextItem(P, 'FILENAME="', part.FileName, '"');
           end;
         end
-        else if IdemPCharAndGetNextItem(P, 'CONTENT-TYPE: ', part.ContentType) then
+        else if IdemPCharAndGetNextItem(P, HEADER_CONTENT_TYPE_UPPER, part.ContentType) then
         begin
           if IdemPChar(pointer(part.ContentType), 'MULTIPART/MIXED') then
             if GetBoundary(part.ContentType) then
