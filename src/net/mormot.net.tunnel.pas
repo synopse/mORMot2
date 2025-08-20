@@ -204,7 +204,7 @@ type
     procedure ClosePort;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
-    procedure Send(Session: TTunnelSession; const Frame: RawByteString);
+    procedure Send(aSession: TTunnelSession; const aFrame: RawByteString);
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize tunnelling process
@@ -465,13 +465,17 @@ begin
   fPort := 0;
 end;
 
-procedure TTunnelLocal.Send(Session: TTunnelSession; const Frame: RawByteString);
+procedure TTunnelLocal.Send(aSession: TTunnelSession; const aFrame: RawByteString);
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
+  if (aSession = 0) or
+     ((aSession <> fSession) and
+      (fSession <> 0)) then // fSession may not be set yet by Open()s
+    ETunnel.RaiseUtf8('%.Send: invalid session', [self]);
   if fHandshake <> nil then
-    fHandshake.Push(Frame)     // during the handshake phase
+    fHandshake.Push(aFrame) // during the handshake phase - maybe before Open
   else if fThread <> nil then
-    fThread.OnReceived(Frame); // regular tunelling process
+    fThread.OnReceived(aFrame); // regular tunelling process
 end;
 
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
