@@ -4140,9 +4140,8 @@ begin
               exit; // invalid content
           until EndOfObject = '}';
       end;
-    'n',
-    'N':
-      if IdemPChar(Json + 1, 'ULL') then
+    'n':
+      if PCardinal(Json)^ = NULL_LOW then
       begin
         // append null as {}
         Kind := betDoc;

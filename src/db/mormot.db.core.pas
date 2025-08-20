@@ -2615,7 +2615,7 @@ begin
   if Where = '' then
     Where := Condition
   else
-    Where := Where + ' and ' + Condition;
+    Append(Where, ' and ', Condition);
 end;
 
 
@@ -2632,9 +2632,9 @@ begin
   if Where = '' then
     result := ''
   else if SqlWhereIsEndClause(Where) then
-    result := ' ' + Where
+    Join([' ', Where], result)
   else
-    result := ' WHERE ' + Where;
+    Join([' WHERE ', Where], result);
 end;
 
 function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): RawUtf8;
@@ -2644,7 +2644,7 @@ begin
     result := SimpleFields
   else
     result := Select;
-  result := 'SELECT ' + result + ' FROM ' + TableName + SqlFromWhere(Where);
+  result := Join(['SELECT ', result, ' FROM ', TableName, SqlFromWhere(Where)]);
 end;
 
 function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
@@ -2663,7 +2663,7 @@ begin
     if P = nil then
       P := PosChar(pointer(result), ';');
     if P <> nil then
-      SetLength(result, P - pointer(result)); // trim right
+      FakeLength(result, P - pointer(result)); // trim right
   end;
   if result = '' then // by default, a SQLite3 query is ordered by ID
     result := ROWID_TXT;
@@ -3249,9 +3249,9 @@ var
         exit;
       P := GotoNextNotSpace(P);
     end;
-    if IdemPChar(P, 'AS ') then
+    if PCardinal(P)^ and $ffdfdf = ord('A') + ord('S') shl 8 + ord(' ') shl 16 then
     begin
-      inc(P, 3);
+      inc(P, 3); // ignore 'AS '
       if not GetNextFieldProp(P, select.Alias) then
         exit;
     end;
@@ -3416,25 +3416,27 @@ var
           'S':
             begin
               P := GotoNextNotSpace(P + 2);
-              if IdemPChar(P, 'NULL') then
-              begin
-                Where.Value := NULL_STR_VAR;
-                Where.Operation := opIsNull;
-                Where.ValueSql := P;
-                Where.ValueSqlLen := 4;
-                TVarData(Where.ValueVariant).VType := varNull;
-                inc(P, 4);
-                result := true;
-              end
-              else if IdemPChar(P, 'NOT NULL') then
-              begin
-                Where.Value := 'not null';
-                Where.Operation := opIsNotNull;
-                Where.ValueSql := P;
-                Where.ValueSqlLen := 8;
-                TVarData(Where.ValueVariant).VType := varNull;
-                inc(P, 8);
-                result := true; // leave ValueVariant=unassigned
+              case IdemPCharSep(P, 'NULL|NOT NULL|') of
+                0:
+                  begin
+                    Where.Value := NULL_STR_VAR;
+                    Where.Operation := opIsNull;
+                    Where.ValueSql := P;
+                    Where.ValueSqlLen := 4;
+                    TVarData(Where.ValueVariant).VType := varNull;
+                    inc(P, 4);
+                    result := true;
+                  end;
+                1:
+                  begin
+                    Where.Value := 'not null';
+                    Where.Operation := opIsNotNull;
+                    Where.ValueSql := P;
+                    Where.ValueSqlLen := 8;
+                    TVarData(Where.ValueVariant).VType := varNull;
+                    inc(P, 8);
+                    result := true; // leave ValueVariant=unassigned
+                  end;
               end;
               exit;
             end;
@@ -3463,7 +3465,7 @@ var
         end; // 'i','I':
       'l',
       'L':
-        if IdemPChar(P + 1, 'IKE') then
+        if PCardinal(P + 1)^ and $dfdfdf = ord('I') + ord('K') shl 8 + ord('E') shl 16 then
         begin
           inc(P, 3);
           Where.Operation := opLike;
