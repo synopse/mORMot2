@@ -891,7 +891,7 @@ begin
         end;
       // actually launch the http.sys server
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
-        HttpThreadTerminate, fRestServerNames, hso);
+        HttpThreadTerminate, fRestServerNames, hso, fLog);
       if not THttpApiServer(fHttpServer).WaitStarted then
         EHttpApiServer.RaiseUtf8('%.WaitStarted timeout on %',
           [self, fRestServerNames]);
@@ -931,7 +931,7 @@ begin
   // setup the newly created HTTP server instance
   fHttpServer.OnRequest := Request; // main TRestServer(s) processing callback
   fHttpServer.SetFavIcon; // nice default icon for the browsers :)
-  {$ifndef PUREMORMOT2} // deprecated since unsafe
+  {$ifndef PUREMORMOT2} // deprecated since weak (optional by design)
   if aSecurity = secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
   {$endif PUREMORMOT2}
