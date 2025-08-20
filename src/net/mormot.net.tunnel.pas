@@ -88,10 +88,10 @@ type
     /// this is the main method to start tunneling to the Transmit interface
     // - Session, TransmitOptions and AppSecret should match on both sides
     // - if Address has a port, will connect a socket to this address:port
-    // - if Address has no port, will bound its address an an ephemeral port,
+    // - if Address has no port, will bound its address as an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       out RemotePort: TNetPort): TNetPort;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
@@ -146,7 +146,7 @@ type
     options: TTunnelOptions;
     /// a genuine integer ID
     session: TTunnelSession;
-    /// SHA3 checksum/padding of the previous fields with app specific salt
+    /// SHAKE128 checksum/padding of the previous fields with app specific salt
     crc: THash128;
     /// the local port used for communication - may be an ephemeral bound port
     port: word;
@@ -196,7 +196,7 @@ type
     procedure ClosePort;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
-    procedure Send(const Frame: RawByteString);
+    procedure Send(Session: TTunnelSession; const Frame: RawByteString);
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize tunnelling process
@@ -205,7 +205,7 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       out RemotePort: TNetPort): TNetPort;
     /// ITunnelLocal method: return the localport needed
     function LocalPort: RawUtf8;
@@ -526,14 +526,29 @@ begin
     fThread.fTransmit := Transmit; // could be refreshed during process
 end;
 
+procedure TunnelHeaderCrc(const header: TTunnelLocalHeader;
+  const appsecret: RawUtf8; out crc: THash128);
+var
+  sha3: TSha3;
+begin
+  sha3.Init(SHAKE_128);
+  if appsecret = '' then
+    sha3.Update('AB15C52F754F49CB9B23CF88735E39C8') // some default padding
+  else
+    sha3.Update(appsecret); // custom symmetric application-specific secret
+  sha3.Update(@header, SizeOf(header) - SizeOf(header.crc) - SizeOf(header.port));
+  sha3.Final(@crc, {bits=}SizeOf(crc) shl 3);
+end;
+
 function TTunnelLocal.Open(Sess: TTunnelSession;
-  TransmitOptions: TTunnelOptions; TimeOutMS: integer; AppSecret: RawByteString;
-  const Address: RawUtf8; out RemotePort: TNetPort): TNetPort;
+  TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+  const AppSecret, Address: RawUtf8; out RemotePort: TNetPort): TNetPort;
 var
   uri: TUri;
   sock: TNetSocket;
   addr: TNetAddr;
   frame, remote: RawByteString;
+  rem: PTunnelLocalHeader absolute remote;
   header: TTunnelLocalHeader;
   secret: TEccSecretKey;
   key: THash256Rec;
@@ -575,15 +590,10 @@ begin
   fOptions := TransmitOptions;
   try
     // initial handshake: same TTunnelOptions + TTunnelSession from both sides
-    if AppSecret = '' then
-      AppSecret := 'AB15C52F754F49CB9B23CF88735E39C8'; // some default random
     header.magic := tlmVersion1;
     header.options := fOptions;
     header.session := fSession;
-    sha3.Init(SHA3_224);
-    sha3.Update(AppSecret); // custom symmetric application-specific secret
-    sha3.Update(@header, SizeOf(header) - SizeOf(header.crc) - SizeOf(header.port));
-    sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
+    TunnelHeaderCrc(header, AppSecret, header.crc);
     header.port := result; // port is asymmetrical so not part of the crc
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
@@ -594,12 +604,18 @@ begin
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
       ETunnel.RaiseUtf8('Open handshake timeout on port %', [result]);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: after WaitPop1 len=', [length(remote)], self);
-    if not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
-       not mormot.core.base.CompareMem(pointer(remote), @header,
-             SizeOf(header) - SizeOf(header.port)) then
+      log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
+    // check the returned header, maybe using the certificate
+    if (length(remote) < SizeOf(header)) or // may have a signature trailer
+       not CompareMemSmall(rem, @header, SizeOf(header) - SizeOf(header.port)) then
+      ETunnel.RaiseUtf8('Open handshake size=% error on port %',
+        [length(remote), result]);
+    TunnelHeaderCrc(rem^, AppSecret, key.Lo);
+    if not IsEqual(rem^.crc, key.Lo) then
+      ETunnel.RaiseUtf8('Open handshake crc error on port %', [result]);
+    if not FrameVerify(remote, SizeOf(header)) then
       ETunnel.RaiseUtf8('Open handshake failed on port %', [result]);
-    RemotePort := PTunnelLocalHeader(remote)^.port;
+    RemotePort := rem^.port;
     // optional encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
