@@ -8431,7 +8431,7 @@ function TOrmTableAbstract.GetQueryTableNameFromSql: RawUtf8;
 begin
   if (fQueryTableNameFromSql = '') and
      (fQuerySql <> '') then
-    fQueryTableNameFromSql := GetTableNameFromSqlSelect(fQuerySql, true);
+    fQueryTableNameFromSql := GetTableNameFromSqlSelect(pointer(fQuerySql), true);
   result := fQueryTableNameFromSql;
 end;
 

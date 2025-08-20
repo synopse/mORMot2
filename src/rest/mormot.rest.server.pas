@@ -3524,7 +3524,7 @@ end;
 
 procedure TRestServerUriContext.OrmGetNoTable(params: PUtf8Char);
 var
-  sqlselect, sql: RawUtf8;
+  sqlfields, sql: RawUtf8;
   sqlisselect: boolean;
   tableindexes: TIntegerDynArray;
   opt: TOrmWriterOptions;
@@ -3544,12 +3544,12 @@ begin
         break;
   end
   else
-    // GET with a sql statement sent as UTF-8 body (not 100% HTTP compatible)
+    // GET with a sql statement sent as body (somewhat allowed in RFC 7231)
     sql := fCall^.InBody;
   if sql = '' then
     exit;
   // check permissions
-  sqlisselect := IsSelect(pointer(sql), @sqlselect);
+  sqlisselect := IsSelect(pointer(sql), @sqlfields);
   if not (sqlisselect or
           (reSql in fCall^.RestAccessRights^.AllowRemoteExecute)) then
     exit;
@@ -3594,13 +3594,13 @@ begin
   if fCall^.OutBody = '' then
     exit;
   // got JSON list '[{...}]' ?
-  if (sqlselect <> '') and
+  if (sqlfields <> '') and
      (length(tableindexes) = 1) then
   begin
     InternalSetTableFromTableIndex(tableindexes[0]);
     opt := ClientOrmOptions;
     if opt <> [] then
-      OrmGetConvertOutBodyAsPlainJson(sqlselect, opt);
+      OrmGetConvertOutBodyAsPlainJson(sqlfields, opt);
   end;
   fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
   if not sqlisselect then

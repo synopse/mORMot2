@@ -9847,7 +9847,7 @@ function TOrmModel.GetTableIndexFromSqlSelect(const SQL: RawUtf8;
 var
   TableName: RawUtf8;
 begin
-  TableName := GetTableNameFromSqlSelect(SQL, EnsureUniqueTableInFrom);
+  TableName := GetTableNameFromSqlSelect(pointer(SQL), EnsureUniqueTableInFrom);
   result := GetTableIndex(TableName);
 end;
 
