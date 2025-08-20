@@ -935,11 +935,11 @@ function SelectInClause(const PropName: RawUtf8; const Values: array of TID;
   const Suffix: RawUtf8 = ''; ValuesInlinedMax: integer = 0): RawUtf8; overload;
 
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
-function GetTableNameFromSqlSelect(Sql: PUtf8Char;
+function GetTableNameFromSqlSelect(const Sql: RawUtf8;
   EnsureUniqueTableInFrom: boolean): RawUtf8;
 
 /// naive search of '... FROM Table1,Table2 ...' pattern in the supplied SQL
-function GetTableNamesFromSqlSelect(Sql: PUtf8Char): TRawUtf8DynArray;
+function GetTableNamesFromSqlSelect(const Sql: RawUtf8): TRawUtf8DynArray;
 
 
 { ************ TResultsWriter Specialized for Database Export }
@@ -2415,9 +2415,9 @@ begin
             until Sql^ > ' ';
             if (PCardinal(Sql)^ and $dfdfdfdf = ord('F') +
                  ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
-               (Sql[4] <= ' ') then
+               (Sql[4] <= ' ') then // found 'FROM table1,table2'
             begin
-              result := GotoNextNotSpace(Sql + 5); // found 'FROM table1,table2'
+              result := GotoNextNotSpace(Sql + 5); // return 'table1,table2'
               exit;
             end;
           end;
@@ -2533,7 +2533,7 @@ function IsCacheableDML(Sql: PUtf8Char): boolean;
 var
   c: PtrInt;
 begin
-  // DML cacheable if with ? parameter or SELECT without WHERE clause
+  // DML considered cacheable if with ? parameter or SELECT without WHERE clause
   result := false;
   if Sql = nil then
     exit;
@@ -2761,48 +2761,48 @@ begin
     result := '';
 end;
 
-function GetTableNameFromSqlSelect(Sql: PUtf8Char;
+function GetTableNameFromSqlSelect(const Sql: RawUtf8;
   EnsureUniqueTableInFrom: boolean): RawUtf8;
 var
-  beg: PUtf8Char;
+  p, beg: PUtf8Char;
 begin
   FastAssignNew(result);
-  Sql := PosSelectTable(Sql);
-  if Sql = nil then
+  p := PosSelectTable(pointer(Sql));
+  if p = nil then
     exit;
-  beg := Sql;
-  while tcIdentifier in TEXT_CHARS[Sql^] do
-    inc(Sql);
+  beg := p;
+  while tcIdentifier in TEXT_CHARS[p^] do
+    inc(p);
   if EnsureUniqueTableInFrom then
-    if GotoNextNotSpace(Sql)^ = ',' then
+    if GotoNextNotSpace(p)^ = ',' then
       exit; // there is another table name
-  FastSetString(result, beg, Sql - beg);
+  FastSetString(result, beg, p - beg);
 end;
 
-function GetTableNamesFromSqlSelect(Sql: PUtf8Char): TRawUtf8DynArray;
+function GetTableNamesFromSqlSelect(const Sql: RawUtf8): TRawUtf8DynArray;
 var
-  beg: PUtf8Char;
+  p, beg: PUtf8Char;
   l, n: PtrUInt;
 begin
   result := nil;
-  Sql := PosSelectTable(Sql);
-  if Sql = nil then
+  p := PosSelectTable(pointer(Sql));
+  if p = nil then
     exit;
   n := 0;
   repeat
-    beg := Sql;
-    while tcIdentifier in TEXT_CHARS[Sql^] do
-      inc(Sql);
-    l := Sql - beg;
+    beg := p;
+    while tcIdentifier in TEXT_CHARS[p^] do
+      inc(p);
+    l := p - beg;
     if l = 0 then
       break;
     SetLength(result, n + 1);
     FastSetString(result[n], beg, l);
-    Sql := GotoNextNotSpace(Sql);
-    if Sql^ <> ',' then
+    p := GotoNextNotSpace(p);
+    if p^ <> ',' then
       exit; // reached last table name
     inc(n);
-    Sql := GotoNextNotSpace(Sql + 1);
+    p := GotoNextNotSpace(p + 1);
   until false;
   result := nil;
 end;
