@@ -4197,9 +4197,8 @@ begin
      ((fSock = nil) or
       not fSock.TLS.Enabled) then
   begin
-    if Assigned(fLog) then
-      fLog.Add.Log(sllTrace, 'WaitStarted TLS setup % %',
-        [TLS^.CertificateFile, TLS^.CACertificatesFile], self);
+    fLog.Add.Log(sllTrace, 'WaitStarted TLS setup % %',
+      [TLS^.CertificateFile, TLS^.CACertificatesFile], self);
     while (fSock = nil) and
           (GetTickSec <= tix32) do
       SleepHiRes(5); // paranoid on some servers which propagate the pointer
@@ -4211,8 +4210,6 @@ begin
       SleepHiRes(1); // let some warmup happen
     end;
   end;
-  if not Assigned(fLog) then
-    exit;
   fLog.Add.Log(sllTrace, 'WaitStarted done', self);
 end;
 
@@ -8052,8 +8049,7 @@ begin
       result := result and ((fThreads[i] = nil) or fThreads[i].fStarted);
   until result or
         (GetTickSec > tix32);
-  if Assigned(fLog) then
-    fLog.Add.Log(sllTrace, 'WaitStarted(%)=%', [Seconds, BOOL_STR[result]], self);
+  fLogClass.Add.Log(sllTrace, 'WaitStarted(%)=%', [Seconds, BOOL_STR[result]], self);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
@@ -8062,6 +8058,7 @@ var
 begin
   if fReqQueue <> 0 then
   begin
+    fLogClass.Add.Log(sllTrace, 'DestroyMainThread=%', [length(fThreads)], self);
     for i := 0 to high(fThreads) do
       if fThreads[i] <> nil then
         fThreads[i].Terminate; // for CloseHandle() below to finish Execute
