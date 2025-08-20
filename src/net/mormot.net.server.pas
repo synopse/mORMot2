@@ -7974,7 +7974,10 @@ begin
   inherited Create(OnStart, OnStop, ProcessName,
     ProcessOptions + [hsoCreateSuspended], aLog);
   fOptions := ProcessOptions;
+  // create the Request Queue
   HttpApiInitialize; // will raise an exception in case of failure
+  if Assigned(log) then
+    log.Log(sllHttp, 'Create: new % handle', [GetApiVersion], self);
   EHttpApiServer.RaiseOnError(hInitialize,
     Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
   if HasApi2 then
@@ -7996,11 +7999,13 @@ begin
   else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
+  // start the other processing threads
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
   if Assigned(log) then
     log.Log(sllTrace, 'Create: start threads', self);
   for i := 2 to ServerThreadPoolCount do
     ObjArrayAdd(fThreads, THttpApiServerThread.Create(self));
+  // eventually start the main thread
   Append(fProcessName, [' #', ServerThreadPoolCount]);
   if Suspended then
     Suspended := false;
@@ -8008,21 +8013,22 @@ end;
 
 function THttpApiServer.WaitStarted(Seconds: cardinal): boolean;
 var
-  endtix: cardinal;
+  tix32: cardinal;
   i: PtrInt;
 begin
   result := false;
   if fReceiveBufferSize = 0 then
     exit; // Create never reached actual activation
-  endtix := GetTickSec + Seconds; // never wait forever
+  tix32 := GetTickSec + Seconds; // never wait forever
   repeat
-    SleepHiRes(1);
+    SleepHiRes(1);  // warning: waits typically 1-15 ms on Windows
     result := true; // fProcessing may be false if main thread did abort
     for i := 0 to high(fThreads) do
       result := result and ((fThreads[i] = nil) or fThreads[i].fStarted);
-    if result then
-      exit;
-  until GetTickSec > endtix;
+  until result or
+        (GetTickSec > tix32);
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'WaitStarted(%)=%', [Seconds, BOOL_STR[result]], self);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
