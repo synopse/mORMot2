@@ -1746,7 +1746,9 @@ type
     function SqlLimitClause(
       AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
-    // - used by TSqlDBConnection.NewStatementPrepared() for handling cache
+    // - used by TSqlDBConnection.NewStatementPrepared() for handling its cache
+    // of prepared statements (here we don't speak about caching results)
+    // - this virtual method redirects to IsCacheableDML() by default
     function IsCacheable(P: PUtf8Char): boolean; virtual;
     /// check if a primary key has already an index
     // - can specify if it is ascending only, which is not the case for Firebird
@@ -3815,54 +3817,10 @@ begin
     Owner := fForcedSchemaName;
 end;
 
-const
-  _LASTCACHEABLE = 0; // following items in _CACHEABLE should not be cached
-  _CACHEABLE = 'SELECT |CREATE |ALTER |DROP |TRUNCATE |REINDEX |ATTACH |' +
-    'VACUUM |ANALYZE |COPY |GRANT |REVOKE |LISTEN |LOAD |MOVE |';
-
 function TSqlDBConnectionProperties.IsCacheable(P: PUtf8Char): boolean;
-var
-  c: PtrInt;
-  selectWithNoParamOrWhere: boolean;
 begin
-  // cacheable if with ? parameter or SELECT without WHERE clause
-  if (P <> nil) and
-     fUseCache then
-  begin
-    while P^ in [#1..' '] do
-      inc(P);
-    c := IdemPCharSep(P, _CACHEABLE);
-    selectWithNoParamOrWhere := c = 0;
-    if c <= _LASTCACHEABLE then // CREATE,ALTER,... and later are not cacheable
-    begin
-      result := true; // exit as cacheable if any ? parameter is found
-      while P^ <> #0 do
-      begin
-        case P^ of
-          '"':
-            begin
-              // ignore chars within quotes
-              repeat
-                inc(P)
-              until P^ in [#0, '"']; // double quotes will reuse this loop
-              if P^ = #0 then
-                break;
-            end;
-        ' ':
-          if selectWithNoParamOrWhere and
-             (P[1] in ['w', 'W']) and
-             IdemPChar(P + 2, 'HERE ') then
-            selectWithNoParamOrWhere := false; // SELECT with WHERE
-        '?':
-          exit; // we could cache statements with parameters for sure
-        end;
-        inc(P);
-      end;
-    end;
-    result := selectWithNoParamOrWhere;
-  end
-  else
-    result := false;
+  result := fUseCache and
+            IsCacheableDML(P);
 end;
 
 function TSqlDBConnectionProperties.IsPrimaryKeyIndexed(
