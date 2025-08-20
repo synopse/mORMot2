@@ -533,8 +533,8 @@ var
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
   secret: TEccSecretKey;
-  key: THash256Rec;
-  hmac: THmacSha256;
+  key, keyiv: THash256Rec;
+  hmac, hmaciv: THmacSha256;
   log: ISynLog;
 begin
   TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
@@ -629,14 +629,18 @@ begin
         EcdheHashRandom(hmac, loc.Ecdh, rem^.Ecdh);
         hmac.Update(@secret, SizeOf(secret)); // ephemeral secret
       end;
-      hmac.Done(key.b); // key.Lo/Hi = AES-128-CTR key/iv
+      hmaciv := hmac; // separate HMAC calls with labels - see NIST SP 800-108
+      hmac.Update('AES key'#0);
+      hmac.Done(key.b);     // key.Lo = AES-128-CTR key
+      hmaciv.Update('IV'#1);
+      hmaciv.Done(keyiv.b); // keyiv.Hi = AES-128-CTR iv
     end;
     // launch the background processing thread
     if Assigned(log) then
       log.Log(sllTrace, 'Open: % success', [ToText(fOptions)], self);
     FreeAndNil(fHandshake); // ends the handshaking phase
     fPort := result;
-    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, key.Hi, sock);
+    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, keyiv.Lo, sock);
     SleepHiRes(100, fThread.fStarted);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
@@ -645,6 +649,7 @@ begin
   FreeAndNil(fHandshake);
   FillZero(secret);
   FillZero(key.b);
+  FillZero(keyiv.b);
 end;
 
 function TTunnelLocal.LocalPort: RawUtf8;
