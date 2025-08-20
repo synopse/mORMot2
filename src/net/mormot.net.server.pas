@@ -4194,7 +4194,11 @@ begin
      ((fSock = nil) or
       not fSock.TLS.Enabled) then
   begin
-    if fSock = nil then
+    if Assigned(fLog) then
+      fLog.Add.Log(sllTrace, 'WaitStarted TLS setup % %',
+        [TLS^.CertificateFile, TLS^.CACertificatesFile], self);
+    while (fSock = nil) and
+          (GetTickSec <= tix32) do
       SleepHiRes(5); // paranoid on some servers which propagate the pointer
     if (fSock <> nil) and
        not fSock.TLS.Enabled then // call InitializeTlsAfterBind once
@@ -4204,6 +4208,9 @@ begin
       SleepHiRes(1); // let some warmup happen
     end;
   end;
+  if not Assigned(fLog) then
+    exit;
+  fLog.Add.Log(sllTrace, 'WaitStarted done', self);
 end;
 
 procedure THttpServerSocketGeneric.WaitStartedHttps(Seconds: integer;
