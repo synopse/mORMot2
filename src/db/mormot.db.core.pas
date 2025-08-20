@@ -2466,39 +2466,42 @@ begin
 end;
 
 function SqlBegin(P: PUtf8Char): PUtf8Char;
+var
+  c: cardinal;
 begin
-  if P <> nil then
+  result := P;
+  if result <> nil then
     repeat
-      if P^ <= ' ' then
+      if result^ <= ' ' then
         // ignore blanks
         repeat
-          if P^ = #0 then
+          if result^ = #0 then
             break
           else
-            inc(P)
-        until P^ > ' ';
-      if PWord(P)^ = ord('-') + ord('-') shl 8 then
+            inc(result)
+        until result^ > ' ';
+      c := PWord(result)^;
+      if c = ord('-') + ord('-') shl 8 then
         // SQL comments
         repeat
-          inc(P)
-        until P^ in [#0, #10]
-      else if PWord(P)^ = ord('/') + ord('*') shl 8 then
+          inc(result)
+        until result^ in [#0, #10]
+      else if c = ord('/') + ord('*') shl 8 then
       begin
         // C comments
-        inc(P);
+        inc(result);
         repeat
-          inc(P);
-          if PWord(P)^ = ord('*') + ord('/') shl 8 then
+          inc(result);
+          if cardinal(PWord(result)^) = ord('*') + ord('/') shl 8 then
           begin
-            inc(P, 2);
+            inc(result, 2);
             break;
           end;
-        until P^ = #0;
+        until result^ = #0;
       end
       else
         break;
     until false;
-  result := P;
 end;
 
 procedure SqlAddWhereAnd(var Where: RawUtf8; const Condition: RawUtf8);
