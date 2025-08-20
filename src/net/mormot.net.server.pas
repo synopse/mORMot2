@@ -2098,6 +2098,8 @@ type
     function GetMaxConnections: cardinal;
     procedure SetMaxConnections(aValue: cardinal);
     function GetApiVersion: RawUtf8; override;
+    function Check(Api: THttpApiFunction; Error: integer;
+      Level: TSynLogLevel = sllWarning): integer;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
     /// server main loop - don't change directly
@@ -7907,9 +7909,11 @@ begin
   if aRegisterUri then
     AddUrlAuthorize(aRoot, aPort, Https, aDomainName);
   if HasApi2 then
-    result := Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext)
+    result := Check(hAddUrlToUrlGroup,
+      Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext))
   else
-    result := Http.AddUrl(fReqQueue, pointer(uri));
+    result := Check(hAddUrl,
+      Http.AddUrl(fReqQueue, pointer(uri)));
   if result <> NO_ERROR then
     exit;
   n := length(fRegisteredUnicodeUrl);
@@ -7936,9 +7940,11 @@ begin
     if fRegisteredUnicodeUrl[i] = uri then
     begin
       if HasApi2 then
-        result := Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0)
+        result := Check(hRemoveUrlFromUrlGroup,
+          Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0))
       else
-        result := Http.RemoveUrl(fReqQueue, pointer(uri));
+        result := Check(hRemoveUrl,
+          Http.RemoveUrl(fReqQueue, pointer(uri)));
       if result <> NO_ERROR then
         exit; // shall be handled by caller
       for j := i to n - 1 do
@@ -7958,6 +7964,17 @@ function THttpApiServer.GetApiVersion: RawUtf8;
 begin
   FormatUtf8('http.sys %.%',
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
+end;
+
+function THttpApiServer.Check(Api: THttpApiFunction; Error: integer;
+  Level: TSynLogLevel): integer;
+var
+  msg: RawUtf8;
+begin
+  result := Error;
+  if Assigned(fLogClass) and
+     not HttpApiSucceed(Api, msg, Error) then
+    fLogClass.Add.Log(Level, msg, self);
 end;
 
 constructor THttpApiServer.Create(QueueName: SynUnicode;
@@ -8044,21 +8061,25 @@ begin
     begin
       if fUrlGroupID <> 0 then
       begin
-        Http.RemoveUrlFromUrlGroup(fUrlGroupID, nil, HTTP_URL_FLAG_REMOVE_ALL);
-        Http.CloseUrlGroup(fUrlGroupID);
+        Check(hRemoveUrlFromUrlGroup,
+          Http.RemoveUrlFromUrlGroup(fUrlGroupID, nil, HTTP_URL_FLAG_REMOVE_ALL));
+        Check(hCloseUrlGroup,
+          Http.CloseUrlGroup(fUrlGroupID));
         fUrlGroupID := 0;
       end;
       CloseHandle(fReqQueue);
       if fServerSessionID <> 0 then
       begin
-        Http.CloseServerSession(fServerSessionID);
+        Check(hCloseServerSession,
+          Http.CloseServerSession(fServerSessionID));
         fServerSessionID := 0;
       end;
     end
     else
     begin
       for i := 0 to high(fRegisteredUnicodeUrl) do
-        Http.RemoveUrl(fReqQueue, pointer(fRegisteredUnicodeUrl[i]));
+        Check(hRemoveUrl,
+          Http.RemoveUrl(fReqQueue, pointer(fRegisteredUnicodeUrl[i])));
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
@@ -8068,7 +8089,8 @@ begin
         WaitForSingleObject(fThreads[i].Handle, 30000); // maybe needed on FPC
     {$endif FPC}
     ObjArrayClear(fThreads, {continueOnException:}true);
-    Http.Terminate(HTTP_INITIALIZE_SERVER);
+    Check(hTerminate,
+      Http.Terminate(HTTP_INITIALIZE_SERVER));
   end;
 end;
 
@@ -8201,8 +8223,10 @@ var
       pRawValue      := pointer(fServerName);
       RawValueLength := length(fServerName);
     end;
-    Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
-      bytessent, nil, 0, nil, log);
+    err := Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
+        bytessent, nil, 0, nil, log);
+    if err <> NO_ERROR then
+      Check(hSendHttpResponse, err);
     FillcharFast(resp^, SizeOf(resp^), 0);
   end;
 
@@ -8482,7 +8506,10 @@ begin
                     break; // should loop until returns ERROR_HANDLE_EOF
                   end;
                   if err <> NO_ERROR then
+                  begin
+                    Check(hReceiveRequestEntityBody, err);
                     break;
+                  end;
                   inc(bufread, bytesread);
                 until incontlenread = incontlen;
                 if err <> NO_ERROR then
@@ -8540,19 +8567,25 @@ begin
         ERROR_MORE_DATA:
           begin
             // input buffer was too small to hold the request headers
-            // -> increase buffer size and call the API again
+            fLogClass.Add.Log(sllDebug,
+              'DoExecute: increase buffer size to %', [bytesread], self);
             reqid := req^.RequestId;
             SetLength(reqbuf, bytesread);
-            req := pointer(reqbuf);
+            req := pointer(reqbuf); // will try again
           end;
         ERROR_CONNECTION_INVALID:
-          if reqid = 0 then
-            break
-          else
+          begin
+            Check(hReceiveHttpRequest, err);
+            if reqid = 0 then
+              break;
             // TCP connection was corrupted by the peer -> ignore + next request
             reqid := 0;
+          end
       else
-        break; // unhandled err value
+        begin
+          Check(hReceiveHttpRequest, err);
+          break; // unhandled err value
+        end;
       end;
     until Terminated;
   finally
