@@ -816,7 +816,7 @@ type
     /// append up to 4 chars, encoded as 32-bit constant
     // - called e.g. as (JSON_BASE64_MAGIC_C, 3) / (JSON_BASE64_MAGIC_QUOTE_C, 4)
     // or (JSON_SQLDATE_MAGIC_C, 3) / (JSON_SQLDATE_MAGIC_QUOTE_C, 4)
-    procedure AddShort(Text4Chars: cardinal; const TextLen: PtrInt); overload;
+    procedure AddShort4(Text4Chars: cardinal; const TextLen: PtrInt = 4);
       {$ifdef HASINLINE}inline;{$endif}
     /// append 'null' as text
     procedure AddNull;
@@ -4257,6 +4257,22 @@ begin
   inc(B, 2); // with proper constant propagation above when inlined
 end;
 
+procedure TTextWriter.AddShorter(const Short8: TShort8);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  PInt64(B + 1)^ := PInt64(@Short8[1])^;
+  inc(B, ord(Short8[0]));
+end;
+
+procedure TTextWriter.AddShort4(Text4Chars: cardinal; const TextLen: PtrInt);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  PCardinal(B + 1)^ := Text4Chars;
+  inc(B, TextLen);
+end;
+
 class procedure TTextWriter.RaiseUnimplemented(const Method: ShortString);
 begin
   raise ESynException.CreateUtf8(
@@ -4371,7 +4387,7 @@ begin
     vtPointer,
     vtInterface:
       if V^.VPointer = nil then
-        AddShort(NULL_LOW, 4)
+        AddShort4(NULL_LOW)
       else
         Add(PtrInt(V^.VPointer)); // as VarRecToVariant()
     vtPChar:
@@ -4399,25 +4415,9 @@ begin
   RaiseUnimplemented('WrBase64');
 end;
 
-procedure TTextWriter.AddShorter(const Short8: TShort8);
-begin
-  if B >= BEnd then
-    FlushToStream;
-  PInt64(B + 1)^ := PInt64(@Short8[1])^;
-  inc(B, ord(Short8[0]));
-end;
-
-procedure TTextWriter.AddShort(Text4Chars: cardinal; const TextLen: PtrInt);
-begin
-  if B >= BEnd then
-    FlushToStream;
-  PCardinal(B + 1)^ := Text4Chars;
-  inc(B, TextLen);
-end;
-
 procedure TTextWriter.AddNull;
 begin
-  AddShort(NULL_LOW, 4);
+  AddShort4(NULL_LOW);
 end;
 
 function TTextWriter.AddPrepare(Len: PtrInt): pointer;
@@ -5254,7 +5254,7 @@ end;
 procedure TTextWriter.AddRawJson(const json: RawJson);
 begin
   if json = '' then
-    AddShort(NULL_LOW, 4)
+    AddShort4(NULL_LOW)
   else
     AddString(json);
 end;
@@ -6142,7 +6142,7 @@ begin
         if c = $00a0 then // &nbsp;
           Add(' ')
         else if c = $2026 then
-          AddShorter('...') // &hellip;
+          AddShort4(ord('.') + ord('.') shl 8 + ord('.') shl 16, 3) // &hellip;
         else
           AddWideChar(WideChar(c));
         inc(p, l + 1);

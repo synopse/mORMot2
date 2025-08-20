@@ -5154,10 +5154,10 @@ var
   d: double;
 begin
   if woDateTimeWithMagic in Options then
-    W.AddShort(JSON_SQLDATE_MAGIC_QUOTE_C, 4)
+    W.AddShort4(JSON_SQLDATE_MAGIC_QUOTE_C)
   else if PInt64(Value)^ = 0 then
   begin
-    W.AddShort(NULL_LOW, 4);
+    W.AddShort4(NULL_LOW);
     exit;
   end
   else
@@ -5183,7 +5183,7 @@ end;
 
 procedure _JS_Null(Data: PBoolean; const Ctxt: TJsonSaveContext);
 begin
-  Ctxt.W.AddShort(NULL_LOW, 4);
+  Ctxt.W.AddShort4(NULL_LOW);
 end;
 
 procedure _JS_Boolean(Data: PBoolean; const Ctxt: TJsonSaveContext);
@@ -5246,7 +5246,7 @@ begin
   if (Data^ = '') or
      ((rcfIsRawBlob in Ctxt.Info.Cache.Flags) and
       (Ctxt.Options * [woRawBlobAsBase64, woRawByteStringAsBase64Magic] = [])) then
-    Ctxt.W.AddShort(NULL_LOW, 4)
+    Ctxt.W.AddShort4(NULL_LOW)
   else
   begin
     Ctxt.W.Add('"'); // woRawBlobAsBase64 has no magic trailer as with mORMot 1
@@ -5811,7 +5811,7 @@ begin
       Data := PPointer(Data)^; // class instances are accessed by reference
     if Data = nil then
     begin
-      c.W.AddShort(NULL_LOW, 4); // append 'null' for nil class instance
+      c.W.AddShort4(NULL_LOW); // append 'null' for nil class instance
       exit;
     end;
     t := PClass(Data)^; // actual class of this instance
@@ -6339,7 +6339,7 @@ utf8: case Escape of // inlined Add(PUtf8Char(P), Len, Escape);
         goto utf8 // dectected pure UTF-8 content
       else
       begin
-b64:    AddShort(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
+b64:    AddShort4(JSON_BASE64_MAGIC_C, 3); // \uFFF0 without any double quote
         WrBase64(P, Len, {withMagicQuote=}false);
       end;
     CP_UTF16:   // direct write of UTF-16 content
@@ -6384,11 +6384,11 @@ begin
   if withMagic then
     if Len <= 0 then
     begin
-      AddShort(NULL_LOW, 4); // JSON null is better than "" for BLOBs
+      AddShort4(NULL_LOW); // JSON null is better than "" for BLOBs
       exit;
     end
     else
-      AddShort(JSON_BASE64_MAGIC_QUOTE_C, 4); // "\uFFF0
+      AddShort4(JSON_BASE64_MAGIC_QUOTE_C); // "\uFFF0
   if Len > 0 then
   begin
     n := Len div 3;
@@ -6695,7 +6695,7 @@ begin
       exit;
     end;
   end;
-  AddShort(NULL_LOW, 4);
+  AddShort4(NULL_LOW);
 end;
 
 procedure TJsonWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;

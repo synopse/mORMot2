@@ -1360,7 +1360,7 @@ begin
   P := PQ.GetValue(fRes, fCurrentRow, Col);
   if ((P = nil) or (PUtf8Char(P)^ = #0)) and
      (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
-    W.AddShort(NULL_LOW, 4)
+    W.AddShort4(NULL_LOW)
   else
   begin
     c := @fColumns[Col];
