@@ -2100,6 +2100,7 @@ type
     function GetApiVersion: RawUtf8; override;
     function Check(Api: THttpApiFunction; Error: integer;
       Level: TSynLogLevel = sllWarning): integer;
+    procedure Ensure(Api: THttpApiFunction; Error: integer);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
     /// server main loop - don't change directly
@@ -7977,6 +7978,13 @@ begin
     fLogClass.Add.Log(Level, msg, self);
 end;
 
+procedure THttpApiServer.Ensure(Api: THttpApiFunction; Error: integer);
+begin
+  if Assigned(fLogClass) then
+    fLogClass.Add.Log(sllTrace, '%=%', [HttpApiFunction[Api], Error], self);
+  EHttpApiServer.RaiseOnError(Api, Error);
+end;
+
 constructor THttpApiServer.Create(QueueName: SynUnicode;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ProcessOptions: THttpServerOptions; aLog: TSynLogClass;
@@ -7995,26 +8003,26 @@ begin
   HttpApiInitialize; // will raise an exception in case of failure
   if Assigned(log) then
     log.Log(sllHttp, 'Create: new % handle', [GetApiVersion], self);
-  EHttpApiServer.RaiseOnError(hInitialize,
+  Ensure(hInitialize,
     Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
   if HasApi2 then
   begin
-    EHttpApiServer.RaiseOnError(hCreateServerSession,
+    Ensure(hCreateServerSession,
       Http.CreateServerSession(Http.Version, fServerSessionID));
-    EHttpApiServer.RaiseOnError(hCreateUrlGroup,
+    Ensure(hCreateUrlGroup,
       Http.CreateUrlGroup(fServerSessionID, fUrlGroupID));
     if QueueName = '' then
       Utf8ToSynUnicode(Int64ToUtf8(fServerSessionID), QueueName);
-    EHttpApiServer.RaiseOnError(hCreateRequestQueue,
+    Ensure(hCreateRequestQueue,
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
     binding.Flags := 1;
     binding.RequestQueueHandle := fReqQueue;
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Ensure(hSetUrlGroupProperty,
       Http.SetUrlGroupProperty(fUrlGroupID,
         HttpServerBindingProperty, @binding, SizeOf(binding)));
   end
   else
-    EHttpApiServer.RaiseOnError(hCreateHttpHandle,
+    Ensure(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
   // start the other processing threads
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
@@ -8610,7 +8618,7 @@ begin
   EHttpApiServer.RaiseCheckApi2(hSetRequestQueueProperty);
   if (self <> nil) and
      (fReqQueue <> 0) then
-    EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
+    Ensure(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
         @aValue, SizeOf(aValue)));
 end;
@@ -8660,10 +8668,10 @@ begin
   value.QosType := qos;
   value.QosSetting := PAnsiChar(value) + SizeOf(value^); // just after header
   if alsoForSession then
-    EHttpApiServer.RaiseOnError(hSetServerSessionProperty,
+    Ensure(hSetServerSessionProperty,
       Http.SetServerSessionProperty(fServerSessionID, HttpServerQosProperty,
         value, valuelen));
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+  Ensure(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty, value, valuelen));
 end;
 
@@ -8751,7 +8759,7 @@ begin
   log.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
   if aRolloverType = hlrSize then
     log.RolloverSize := aRolloverSize;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+  Ensure(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID,
       HttpServerLoggingProperty, @log, SizeOf(log)));
   // on success, enable the use of these HTTP_LOGGING_INFO settings
@@ -8789,7 +8797,7 @@ begin
     auth.DigestParams.RealmLength      := Length(Realm) * 2;      // in bytes
     auth.DigestParams.Realm            := pointer(Realm);
   end;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+  Ensure(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID,
       HttpServerAuthenticationProperty, @auth, SizeOf(auth)));
 end;
@@ -8810,7 +8818,7 @@ begin
   timeout.IdleConnection  := aIdleConnection;
   timeout.HeaderWait      := aHeaderWait;
   timeout.MinSendRate     := aMinSendRate;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+  Ensure(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID,
       HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
 end;
