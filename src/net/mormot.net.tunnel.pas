@@ -135,9 +135,8 @@ type
     tlmNone,
     tlmVersion1);
 
-  /// define the inital frame exchanged between both TTunnelLocal ends
-  // - full frame content (therefore the execution context) should match
-  // - its content is signed if toClientSigned/toServerSigned are in options
+  /// the header of the inital frame exchanged between both TTunnelLocal ends
+  // - full header content (therefore the execution context) should match
   TTunnelLocalHeader = packed record
     /// protocol version
     magic: TTunnelLocalMagic;
@@ -150,16 +149,24 @@ type
     /// the local port used for communication - may be an ephemeral bound port
     port: word;
   end;
-  PTunnelLocalHeader = ^TTunnelLocalHeader;
 
   /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
   TTunnelEcdhFrame = packed record
-    /// the 128-bit client or server random
+    /// the 128-bit client or server random nonce
     rnd: TAesBlock;
     /// the public key of this side
     pub: TEccPublicKey;
   end;
-  PTunnelEcdhFrame = ^TTunnelEcdhFrame;
+
+  /// define the inital frame exchanged between both TTunnelLocal ends
+  // - its content is signed if toClientSigned/toServerSigned are in options
+  TTunnelLocalHandshake = packed record
+    /// a digitally signed header with shared information
+    Header: TTunnelLocalHeader;
+    /// optional ECDHE information - used if toEcdhe is in Header.Options
+    Ecdh: TTunnelEcdhFrame
+  end;
+  PTunnelLocalHandshake = ^TTunnelLocalHandshake;
 
   /// abstract tunneling service implementation
   // - is properly implemented by TTunnelLocalServer/TTunnelLocalClient classes
@@ -518,8 +525,8 @@ var
   sock: TNetSocket;
   addr: TNetAddr;
   frame, remote: RawByteString;
-  rem: PTunnelLocalHeader absolute remote;
-  header: TTunnelLocalHeader;
+  rem: PTunnelLocalHandshake absolute remote;
+  loc: TTunnelLocalHandshake;
   secret: TEccSecretKey;
   key: THash256Rec;
   hmac: THmacSha256;
@@ -560,32 +567,41 @@ begin
   fOptions := TransmitOptions;
   try
     // initial handshake: same TTunnelOptions + TTunnelSession from both sides
-    header.magic := tlmVersion1;
-    header.options := fOptions;
-    header.session := fSession;
-    TunnelHeaderCrc(header, AppSecret, header.crc);
-    header.port := result; // port is asymmetrical so not part of the crc
-    FastSetRawByteString(frame, @header, SizeOf(header));
+    loc.Header.magic := tlmVersion1;
+    loc.Header.options := fOptions;
+    loc.Header.session := fSession;
+    TunnelHeaderCrc(loc.Header, AppSecret, loc.Header.crc);
+    loc.Header.port := result; // port is asymmetrical so not within crc
+    SharedRandom.Fill(@loc.Ecdh, SizeOf(loc.Ecdh)); // rnd + pub
+    if toEcdhe in fOptions then // ECDHE in a single round trip
+    begin
+      if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
+        if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
+          ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
+      loc.Ecdh.pub := fEcdhe.pub;
+    end;
+    FastSetRawByteString(frame, @loc, SizeOf(loc));
     FrameSign(frame); // optional digital signature
     fTransmit.Send(fSession, frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
-      ETunnel.RaiseUtf8('Open handshake timeout on port %', [result]);
+      ETunnel.RaiseUtf8('Open loc timeout on port %', [result]);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
     // check the returned header, maybe using the certificate
-    if (length(remote) < SizeOf(header)) or // may have a signature trailer
-       not CompareMemSmall(rem, @header, SizeOf(header) - SizeOf(header.port)) then
-      ETunnel.RaiseUtf8('Open handshake size=% error on port %',
+    if (length(remote) < SizeOf(loc)) or // may have a signature trailer
+       not CompareMemSmall(rem, @loc.Header,
+         SizeOf(loc.Header) - SizeOf(loc.Header.port)) then
+      ETunnel.RaiseUtf8('Open loc size=% error on port %',
         [length(remote), result]);
-    TunnelHeaderCrc(rem^, AppSecret, key.Lo);
-    if not IsEqual(rem^.crc, key.Lo) then
-      ETunnel.RaiseUtf8('Open handshake crc error on port %', [result]);
-    if not FrameVerify(remote, SizeOf(header)) then
-      ETunnel.RaiseUtf8('Open handshake failed on port %', [result]);
-    RemotePort := rem^.port;
+    TunnelHeaderCrc(rem^.Header, AppSecret, key.Lo);
+    if not IsEqual(rem^.Header.crc, key.Lo) then
+      ETunnel.RaiseUtf8('Open loc crc error on port %', [result]);
+    if not FrameVerify(remote, SizeOf(loc)) then
+      ETunnel.RaiseUtf8('Open loc failed on port %', [result]);
+    RemotePort := rem^.Header.port;
     // optional encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
@@ -594,29 +610,14 @@ begin
         hmac.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
       else
         hmac.Init(AppSecret);
-      hmac.Update(@header, SizeOf(header) - SizeOf(header.port)); // no replay
+      hmac.Update(@loc.Header,
+        SizeOf(loc.Header) - SizeOf(loc.Header.port)); // no replay
       if toEcdhe in fOptions then
       begin
         // optional ECDHE ephemeral encryption
-        FastNewRawByteString(frame, SizeOf(TTunnelEcdhFrame));
-        with PTunnelEcdhFrame(frame)^ do
-          SharedRandom.Fill(@rnd, SizeOf(rnd)); // public and unique: use Lecuyer
-        if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
-          if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
-            ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
-        PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
-        fTransmit.Send(fSession, frame);
-        if Assigned(log) then
-          log.Log(sllTrace, 'Open: after Send2 len=', [length(frame)], self);
-        if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
+        if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, secret) then
           exit;
-        if Assigned(log) then
-          log.Log(sllTrace, 'Open: after WaitPop2 len=', [length(remote)], self);
-        if (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
-           not Ecc256r1SharedSecret(
-             PTunnelEcdhFrame(remote)^.pub, fEcdhe.priv, secret) then
-          exit;
-        EcdheHashRandom(hmac, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
+        EcdheHashRandom(hmac, loc.Ecdh, rem^.Ecdh);
         hmac.Update(@secret, SizeOf(secret)); // ephemeral secret
       end;
       hmac.Done(key.b); // key.Lo/Hi = AES-128-CTR key/iv
