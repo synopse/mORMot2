@@ -9868,40 +9868,29 @@ end;
 
 function TOrmModel.GetTableIndexesFromSqlSelect(const SQL: RawUtf8): TIntegerDynArray;
 var
-  i, j, k, n, ndx: PtrInt;
-begin
-  result := nil;
-  n := 0;
-  i := PosI(' FROM ', SQL);
-  if i > 0 then
-  begin // same parsing logic than GetTableNamesFromSqlSelect()
-    inc(i, 6);
+  p, beg: PUtf8Char;
+  n: PtrInt;
+begin // same logic than in GetTableNamesFromSqlSelect()
+  p := PosSelectTable(pointer(Sql));
+  if p <> nil then
     repeat
-      while SQL[i] in [#1..' '] do
-        inc(i);
-      j := 0;
-      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
-        inc(j);
-      if cardinal(j - 1) > 64 then
-      begin
-        result := nil;
-        exit; // seems too big
-      end;
-      k := i + j;
-      while SQL[k] in [#1..' '] do
-        inc(k);
-      ndx := GetTableIndexPtrLen(PUtf8Char(PtrInt(SQL) + i - 1), j);
-      if ndx >= 0 then
-      begin
-        SetLength(result, n + 1);
-        result[n] := ndx;
-        inc(n);
-      end;
-      if SQL[k] <> ',' then
+      p := GotoNextNotSpace(p);
+      beg := p;
+      while tcIdentifier in TEXT_CHARS[p^] do
+        inc(p);
+      n := p - beg;
+      if n = 0 then
         break;
-      i := k + 1;
+      n := GetTableIndexPtrLen(beg, n);
+      if n < 0 then
+        break; // unknown table
+      AddInteger(result, n);
+      p := GotoNextNotSpace(p);
+      if p^ <> ',' then
+        exit; // reached last table name
+      inc(p);
     until false;
-  end;
+  result := nil;
 end;
 
 function TOrmModel.GetTable(const SqlTableName: RawUtf8): TOrmClass;
