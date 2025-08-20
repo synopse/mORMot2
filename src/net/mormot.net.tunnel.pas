@@ -180,7 +180,7 @@ type
     fOpenBind: boolean;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
-    procedure EcdheHashRandom(var sha3: TSha3;
+    procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); virtual; abstract;
     // can optionally add a signature to the main handshake frame
     procedure FrameSign(var frame: RawByteString); virtual;
@@ -254,7 +254,7 @@ type
   TTunnelLocalServer = class(TTunnelLocal)
   protected
     function ComputeOptionsFromCert: TTunnelOptions; override;
-    procedure EcdheHashRandom(var sha3: TSha3;
+    procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
   end;
 
@@ -266,7 +266,7 @@ type
   TTunnelLocalClient = class(TTunnelLocal)
   protected
     function ComputeOptionsFromCert: TTunnelOptions; override;
-    procedure EcdheHashRandom(var sha3: TSha3;
+    procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
   end;
 
@@ -552,7 +552,7 @@ var
   header: TTunnelLocalHeader;
   secret: TEccSecretKey;
   key: THash256Rec;
-  sha3: TSha3;
+  hmac: THmacSha256;
   log: ISynLog;
 begin
   TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
@@ -620,8 +620,11 @@ begin
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
     begin
-      sha3.Init(SHA3_256);
-      sha3.Update(@header, SizeOf(header) - SizeOf(header.port)); // no replay
+      if AppSecret = '' then
+        hmac.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
+      else
+        hmac.Init(AppSecret);
+      hmac.Update(@header, SizeOf(header) - SizeOf(header.port)); // no replay
       if toEcdhe in fOptions then
       begin
         // optional ECDHE ephemeral encryption
@@ -643,13 +646,10 @@ begin
            not Ecc256r1SharedSecret(
              PTunnelEcdhFrame(remote)^.pub, fEcdhe.priv, secret) then
           exit;
-        EcdheHashRandom(sha3, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
-        sha3.Update(@secret, SizeOf(secret)); // ephemeral secret
-      end
-      else
-        // optional encryption using symmetric secret
-        sha3.Update(AppSecret);
-      sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR key/iv
+        EcdheHashRandom(hmac, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
+        hmac.Update(@secret, SizeOf(secret)); // ephemeral secret
+      end;
+      hmac.Done(key.b); // key.Lo/Hi = AES-128-CTR key/iv
     end;
     // launch the background processing thread
     if Assigned(log) then
@@ -703,11 +703,11 @@ begin
     include(result, toClientSigned);
 end;
 
-procedure TTunnelLocalServer.EcdheHashRandom(var sha3: TSha3;
+procedure TTunnelLocalServer.EcdheHashRandom(var hmac: THmacSha256;
   const local, remote: TTunnelEcdhFrame);
 begin
-  sha3.Update(@remote.rnd, SizeOf(remote.rnd)); // client random
-  sha3.Update(@local.rnd, SizeOf(local.rnd));   // server random
+  hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // client random
+  hmac.Update(@local.rnd, SizeOf(local.rnd));   // server random
 end;
 
 
@@ -722,11 +722,11 @@ begin
     include(result, toServerSigned);
 end;
 
-procedure TTunnelLocalClient.EcdheHashRandom(var sha3: TSha3;
+procedure TTunnelLocalClient.EcdheHashRandom(var hmac: THmacSha256;
   const local, remote: TTunnelEcdhFrame);
 begin
-  sha3.Update(@local.rnd, SizeOf(local.rnd));   // client random
-  sha3.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
+  hmac.Update(@local.rnd, SizeOf(local.rnd));   // client random
+  hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
 end;
 
 
