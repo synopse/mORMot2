@@ -4408,31 +4408,33 @@ end;
 procedure TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
   aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec; aPartNumber: integer);
 var
-  iter: TSynSigner;
-  temp: THash512Rec;
-  i: integer;
+  bak: TSynHasher;
+  tmp: THash512Rec;
 begin
-  Init(aAlgo, aSecret);
-  iter := self;
-  iter.Update(aSalt);
-  if not (Algo in SIGNER_SHA3) then // padding + XoF are part of SHA-3
+  Init(aAlgo, aSecret); // = PRF(secret)
+  dec(aSecretPbkdf2Round);
+  if aSecretPbkdf2Round <> 0 then
+    fHasher.CopyTo(bak); // save initial PRF(secret) state
+  Update(aSalt);
+  if not (Algo in SIGNER_SHA3) then // padding + XOF mode are part of SHA-3
     // U1 = PRF(secret, salt + INT_32_BE(part))
-    iter.UpdateBigEndian(aPartNumber);  // is a 1-based index
-  iter.Final(aDerivatedKey, true);
-  if aSecretPbkdf2Round < 2 then
-    exit;
-  // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
-  temp := aDerivatedKey^;
-  for i := 2 to aSecretPbkdf2Round do
+    UpdateBigEndian(aPartNumber);  // is a 1-based index
+  Final(aDerivatedKey, {noinit=}true);
+  if aSecretPbkdf2Round <> 0 then
   begin
-    iter := self;
-    iter.Update(@temp, fSignatureSize);
-    iter.Final(@temp, true);
-    XorMemory(pointer(aDerivatedKey), @temp, fSignatureSize);
+    // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
+    MoveFast(aDerivatedKey^, tmp, fSignatureSize);
+    repeat
+      MoveFast(bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
+      Update(@tmp, fSignatureSize);
+      Final(@tmp, {noinit=}true);
+      XorMemory(pointer(aDerivatedKey), @tmp, fSignatureSize);
+      dec(aSecretPbkdf2Round);
+    until aSecretPbkdf2Round = 0;
+    bak.Clear;
+    FillZero(tmp.b);
   end;
-  FillZero(temp.b);
-  FillCharFast(iter.fHasher.ctxt, SizeOf(iter.fHasher.ctxt), 0);
-  FillCharFast(fHasher.ctxt, SizeOf(fHasher.ctxt), 0);
+  Done;
 end;
 
 procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
