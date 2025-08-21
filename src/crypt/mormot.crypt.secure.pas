@@ -4497,7 +4497,7 @@ end;
 function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
   aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString;
 var
-  hlen, l, r, i: cardinal;
+  hlen, l, r, part: cardinal;
   p: PHash512Rec;
 begin
   // see https://www.rfc-editor.org/rfc/rfc2898#section-5.2
@@ -4513,12 +4513,16 @@ begin
   r := aDestLen - (l * hlen); // mod
   if r <> 0 then
     inc(l); // ceil()
-  // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, i)
+  if (Algo in SIGNER_SHA3) and
+     (l > 1) then
+    ESynCrypto.RaiseUtf8('TSynSigner.Pbkdf2(%) with DestLen=%: use SHAKE instead',
+      [ToText(algo)^, aDestLen]);
+  // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, part)
   p := FastNewString(l * hlen); // pre-allocate destination buffer
   pointer(result) := p;
-  for i := 1 to l do
+  for part := 1 to l do
   begin
-    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p, i);
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p, part);
     inc(PByte(p), hlen); // just concatenate each Ti
   end;
   if r <> 0 then
