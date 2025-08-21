@@ -4596,8 +4596,10 @@ end;
 
 procedure TSynSigner.Done;
 begin
-  FillCharFast(self, SizeOf(self), 0);
+  FillCharFast(fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo], 0);
+  FillCharFast(fStep7data, fBlockSize, 0);
 end;
+
 
 function ToText(algo: TSignAlgo): PShortString;
 begin
