@@ -670,11 +670,7 @@ var
   one: PRestHttpOneServer;
 begin
   fSafe.ReadLock; // protect fRestServers[] - indexes are not thread-safe anyway
-  {$ifdef HASFASTTRYFINALLY}
   try
-  {$else}
-  begin
-  {$endif HASFASTTRYFINALLY}
     one := pointer(fRestServers);
     if one <> nil then
       for result := 0 to PDALen(PAnsiChar(one) - _DALEN)^ + (_DAOFF - 1) do
@@ -682,9 +678,7 @@ begin
           exit
         else
           inc(one);
-  {$ifdef HASFASTTRYFINALLY}
   finally
-  {$endif HASFASTTRYFINALLY}
     fSafe.ReadUnLock;
   end;
   result := -1;
