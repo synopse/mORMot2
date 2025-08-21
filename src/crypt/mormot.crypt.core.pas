@@ -8788,14 +8788,13 @@ end;
  3. This notice may not be removed or altered from any source distribution. }
 
 const
-  cKeccakPermutationSize = 1600;
-  cKeccakPermutationSizeInByte = cKeccakPermutationSize div 8;
-  cKeccakPermutationSizeInQWord = cKeccakPermutationSize div 64;
-  cKeccakMaximumRate = 1536;
-  cKeccakMaximumRateInBytes = cKeccakMaximumRate div 8;
-  cKeccakNumberOfRounds = 24;
+  cKeccakNumberOfRounds   = 24;
+  cKeccakMaximumRateBits  = 1536;
+  cKeccakPermutationBits  = 1600;
+  cKeccakMaximumRateBytes = cKeccakMaximumRateBits div 8;
+  cKeccakPermutationQWord = cKeccakPermutationBits div 64;
 
-  cRoundConstants: array[0..cKeccakNumberOfRounds - 1] of QWord = (
+  cRoundConstants: array[0 .. cKeccakNumberOfRounds - 1] of QWord = (
     QWord($0000000000000001), QWord($0000000000008082), QWord($800000000000808A),
     QWord($8000000080008000), QWord($000000000000808B), QWord($0000000080000001),
     QWord($8000000080008081), QWord($8000000000008009), QWord($000000000000008A),
@@ -8998,8 +8997,8 @@ type
   TSha3Context = object
   {$endif USERECORDWITHMETHODS}
   public
-    State: packed array[0..cKeccakPermutationSizeInQWord - 1] of QWord;
-    DataQueue: packed array[0..cKeccakMaximumRateInBytes - 1] of byte;
+    State: packed array[0..cKeccakPermutationQWord - 1] of QWord;
+    DataQueue: packed array[0..cKeccakMaximumRateBytes - 1] of byte;
     Rate: integer;
     Capacity: integer;
     BitsInQueue: integer;
@@ -9030,7 +9029,7 @@ begin
   bits := SHA3_DEF_LEN[aAlgo];
   if aAlgo < SHAKE_128 then
     bits := bits shl 1;
-  Rate := cKeccakPermutationSize - bits;
+  Rate := cKeccakPermutationBits - bits;
   Capacity := bits;
   Algo := aAlgo;
 end;
