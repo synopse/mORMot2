@@ -578,7 +578,9 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     ctxt: array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all algorithms
-    fAlgo: THashAlgo;
+    fAlgo: THashAlgo; // ctxt is better aligned if put first
+    procedure CopyTo(out aHasher: TSynHasher); {$ifdef FPC} inline; {$endif}
+    procedure Clear;                           {$ifdef FPC} inline; {$endif}
   public
     /// initialize the internal hashing structure for a specific algorithm
     // - returns false on unknown/unsupported algorithm
@@ -3781,6 +3783,24 @@ begin
   else
     result := false;
   end;
+end;
+
+const
+  HASH_INSTANCE: array[THashAlgo] of word = (
+    SizeOf(TMd5),    SizeOf(TSha1),       SizeOf(TSha256), SizeOf(TSha384),
+    SizeOf(TSha512), SizeOf(TSha512_256), SizeOf(TSha3),   SizeOf(TSha3),
+    SizeOf(TSha256), SizeOf(TSha3),       SizeOf(TSha3),   SizeOf(TSha3),
+    SizeOf(TSha3));
+
+procedure TSynHasher.CopyTo(out aHasher: TSynHasher);
+begin
+  aHasher.fAlgo := fAlgo;
+  MoveFast(ctxt, aHasher.ctxt, HASH_INSTANCE[fAlgo]); // copy what is needed
+end;
+
+procedure TSynHasher.Clear;
+begin
+  FillCharFast(ctxt, HASH_INSTANCE[fAlgo], 0); // only clear what is needed
 end;
 
 procedure TSynHasher.Update(aBuffer: pointer; aLen: integer);
