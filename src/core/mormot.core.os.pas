@@ -3986,7 +3986,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// enter an exclusive non-reentrant lock
     procedure Lock;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// try to enter an exclusive non-reentrant lock
     // - if returned true, caller should eventually call UnLock()
     // - could also be used to thread-safely acquire a shared resource
@@ -3997,7 +3997,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an exclusive non-reentrant lock
     procedure UnLock;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
   end;
   PLightLock = ^TLightLock;
 
