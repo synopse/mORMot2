@@ -53,7 +53,7 @@ const
   // - this constant is used internally to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
   // - note that due to compiler restriction, 256 is the maximum value
-  // (this is the maximum number of items in a Delphi/FPC set)
+  // (this is the absolute highest number of items in a Delphi/FPC set)
   {$ifdef MAX_SQLFIELDS_128}
   MAX_SQLFIELDS = 128;
   {$else}

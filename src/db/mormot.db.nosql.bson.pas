@@ -1979,38 +1979,32 @@ const
 var
   GlobalBsonObjectID: record
     Safe: TLightLock;
-    DefaultValues: packed record
-      Counter: cardinal;   // 32-bit
-      MachineID: TBson24;  // 24-bit
-      ProcessID: word;     // 16-bit
-    end;
-    LastCreateTime: cardinal;
-    LastCounter: cardinal;
+    LastCreateTime:  cardinal;  // stored as 32-bit big endian
+    LastCounter:     cardinal;
+    InitialCounter:  cardinal;  // stored as 24-bit big endian
+    SharedMachineID: cardinal;  // stored as 24-bit
+    SharedProcessID: cardinal;  // stored as 16-bit
   end;
 
 procedure InitBsonObjectIDComputeNew;
 begin
-  with GlobalBsonObjectID.DefaultValues do
+  with GlobalBsonObjectID do
   begin
     repeat
-      Counter := SharedRandom.Generator.Next and COUNTER_MASK;         // 32-bit
-    until Counter <> 0;
+      InitialCounter := SharedRandom.Generator.Next and COUNTER_MASK;  // 24-bit
+    until InitialCounter <> 0;
     with Executable do
-      PCardinal(@MachineID)^ := crc32c(crc32c(
+      SharedMachineID := crc32c(crc32c(
         0, pointer(Host), length(Host)), pointer(User), length(User)); // 24-bit
-    ProcessID := crc32c(0, @MainThreadID, SizeOf(MainThreadID));       // 16-bit
+    SharedProcessID := crc32c(0, @MainThreadID, SizeOf(MainThreadID)); // 16-bit
   end;
 end;
 
 procedure TBsonObjectID.Init;
 begin
-  // 12 bytes fill zero
-  with PHash128Rec(@self)^ do
-  begin
-    i0 := 0;
-    i1 := 0;
-    i2 := 0;
-  end;
+  PCardinalArray(@self)^[0] := 0; // fill 96-bit / 12 bytes with zeroes
+  PCardinalArray(@self)^[1] := 0;
+  PCardinalArray(@self)^[2] := 0;
 end;
 
 procedure TBsonObjectID.ComputeNew;
@@ -2029,24 +2023,21 @@ begin
       if now > LastCreateTime then
       begin
         LastCreateTime := now;
-        count := DefaultValues.Counter; // reset
+        count := InitialCounter; // reset
       end
       else
       begin
-        count := LastCounter + 1;
-        if count and COUNTER_MASK = DefaultValues.Counter then
-        begin
-          count := DefaultValues.Counter;
+        count := (LastCounter + 1) and COUNTER_MASK;
+        if count = InitialCounter then
           inc(LastCreateTime); // collision -> cheat on timestamp
-        end;
       end;
-      Counter.b1 := count shr 16; // stored as bigendian
+      LastCounter := count;
+      UnixCreateTime := bswap32(LastCreateTime); // 32-bit big endian
+      PCardinal(@MachineID)^ := SharedMachineID; // 24-bit
+      ProcessID := SharedProcessID;              // 16-bit
+      Counter.b1 := count shr 16;                // 24-bit big endian
       Counter.b2 := count shr 8;
       Counter.b3 := count;
-      LastCounter := count;
-      UnixCreateTime := bswap32(LastCreateTime);
-      MachineID := DefaultValues.MachineID;
-      ProcessID := DefaultValues.ProcessID;
     {$ifdef HASFASTTRYFINALLY}
     finally
     {$endif HASFASTTRYFINALLY}
