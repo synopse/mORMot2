@@ -2127,7 +2127,7 @@ const
     'PYynVHoDmi6SK5qdbNUp5JNCbgI49PtmxVueuHSTBkI6JbFu9smQCMkp8sQEFBAs8F46W4qqNgMiE9QhJUtoAg',
     'PYynVHoDmi6SK5qdbNUp5NDiW4s3_P_KGDXarkzNgBrxUjjzTUzVJ29q9Uq75xI3eTczo57cI5ibqZ-BvbYRLw',
     'rUvWiPrboNKztxCcC6Cq5GWAlbLOk_UO-GddAmNnHCIpbBSz-q6xqXP0aw0REnW9usdCu2DZZ28B2GbaOfydrg'));
-  TEST_AES_TAG: array[0..2] of RawUtf8 = (
+  TEST_AES_GCM: array[0..2] of RawUtf8 = (
     '7C1DA6408329D2D2E393609DB188129E',  // 128-bit
     'EFF784967837F6BB0007276CA9C9F936',  // 192-bit
     '5F3411F163FF157C4A802DB5FF835823'); // 256-bit
@@ -2376,8 +2376,8 @@ begin
             RandomBytes(@tag1, SizeOf(tag1));
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
             //writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
-            CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
-              FormatUtf8('TEST_AES_TAG % %', [ks, one.AlgoName]));
+            CheckEqual(AesBlockToString(tag1), TEST_AES_GCM[k],
+              FormatUtf8('TEST_AES_GCM % %', [ks, one.AlgoName]));
           end;
           one.IV := iv.b;
           if aead then
