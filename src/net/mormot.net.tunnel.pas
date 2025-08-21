@@ -466,14 +466,13 @@ end;
 procedure TTunnelLocal.Send(aSession: TTunnelSession; const aFrame: RawByteString);
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
-  if (aSession = 0) or
-     ((aSession <> fSession) and
-      (fSession <> 0)) then // fSession may not be set yet by Open()s
-    ETunnel.RaiseUtf8('%.Send: invalid session', [self]);
   if fHandshake <> nil then
     fHandshake.Push(aFrame) // during the handshake phase - maybe before Open
   else if fThread <> nil then
-    fThread.OnReceived(aFrame); // regular tunelling process
+    if aSession <> fSession then
+      ETunnel.RaiseUtf8('%.Send: session mismatch', [self])
+    else
+      fThread.OnReceived(aFrame); // regular tunelling process
 end;
 
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
@@ -512,13 +511,13 @@ procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
 var
   sha3: TSha3;
 begin
-  sha3.Init(SHAKE_128);
+  sha3.Init(SHAKE_128); // 128-bit digital signature of Handshake.Ecdh+Info
   if appsecret = '' then
-    sha3.Update('AB15C52F754F49CB9B23CF88735E39C8') // some default padding
+    sha3.Update('AB15C52F754F49CB9B23CF88735E39C8') // some default secret
   else
     sha3.Update(appsecret); // custom symmetric application-specific secret
   sha3.Update(@Handshake, SizeOf(Handshake) - SizeOf(Handshake.Info.crc));
-  sha3.Final(@crc, {bits=}SizeOf(crc) shl 3);
+  sha3.Final(@crc, 128);
 end;
 
 function TTunnelLocal.Open(Sess: TTunnelSession;
@@ -576,7 +575,7 @@ begin
     loc.Info.options := fOptions;
     loc.Info.session := fSession; // is typically an increasing sequence number
     loc.Info.port    := result;
-    SharedRandom.Fill(@loc.Ecdh, SizeOf(loc.Ecdh)); // rnd + pub
+    Random128(@loc.Ecdh.rnd);   // unpredictable
     if toEcdhe in fOptions then // ECDHE in a single round trip
     begin
       if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
@@ -587,7 +586,9 @@ begin
           ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
       end;
       loc.Ecdh.pub := fEcdhe.pub;
-    end;
+    end
+    else
+      SharedRandom.Fill(@loc.Ecdh.pub, SizeOf(loc.Ecdh.pub)); // some padding
     TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
     FastSetRawByteString(frame, @loc, SizeOf(loc));
     FrameSign(frame); // optional digital signature
@@ -628,7 +629,7 @@ begin
           log.Log(sllTrace, 'Open: ECDHE shared secret', self);
         if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, key.b) then
           exit;
-        hmackey.Update(@key, SizeOf(key)); // prime256v1 shared secret
+        hmackey.Update(key.b); // prime256v1 shared secret
       end;
       hmaciv := hmackey;     // two labeled hmacs - see NIST SP 800-108
       hmackey.Update('AES key'#0);
