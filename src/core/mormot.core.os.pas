@@ -4811,13 +4811,12 @@ function RandomDouble: double;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
+// - this method is good enough e.g. for padding or generating test data
+// - consider cryptographic-level mormot.core.crypt TAesPrng.Main.FillRandom()
+// method or Random128() function to initialize a safe secret key, nonce or IV
 // - will actually XOR the Dest buffer with Lecuyer numbers
-// - consider also the cryptographic-level TAesPrng.Main.FillRandom() method
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
-procedure RandomBytes(Dest: pointer; Count: integer); overload;
-
-/// fill 128-bit buffer with random bytes from the gsl_rng_taus2 generator
-procedure RandomBytes(out Dest: THash128); overload;
+procedure RandomBytes(Dest: pointer; Count: integer);
 
 /// fill a RawByteString with random bytes from the gsl_rng_taus2 generator
 // - see also e.g. RandomAnsi7() or RandomIdentifier() in mormot.core.text.pas
@@ -11052,11 +11051,6 @@ procedure RandomBytes(Dest: pointer; Count: integer);
 begin
   if Count > 0 then
     SharedRandom.Fill(Dest, Count);
-end;
-
-procedure RandomBytes(out Dest: THash128);
-begin
-  SharedRandom.Fill(@Dest, SizeOf(dest));
 end;
 
 function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
