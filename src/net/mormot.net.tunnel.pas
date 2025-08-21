@@ -524,9 +524,6 @@ end;
 function TTunnelLocal.Open(Sess: TTunnelSession;
   TransmitOptions: TTunnelOptions; TimeOutMS: integer;
   const AppSecret, Address: RawUtf8; out RemotePort: TNetPort): TNetPort;
-const // port is asymmetrical so not included to the KDF - nor the crc
-  KDF_SIZE = SizeOf(TTunnelLocalInfo) -
-             (SizeOf(TTunnelLocalInfo.port) + SizeOf(TTunnelLocalInfo.crc));
 var
   uri: TUri;
   sock: TNetSocket;
@@ -537,6 +534,8 @@ var
   key, iv: THash256Rec;
   hmackey, hmaciv: THmacSha256;
   log: ISynLog;
+const // port is asymmetrical so not included to the KDF - nor the crc
+  KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
 begin
   TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
   // validate input parameters
