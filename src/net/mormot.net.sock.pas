@@ -7150,7 +7150,7 @@ var
   sock: TNetSocket;
   len: PtrInt;
   res: TNetResult;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
 begin
   result := false;
   if addr.SetFrom(aServer, aPort, nlUdp) <> nrOK then

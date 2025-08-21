@@ -3161,7 +3161,7 @@ begin
   FileClose(h);
 end;
 
-function LoadProcFile(fn: PAnsiChar; var dest: TSynTempBuffer): PtrInt;
+function LoadProcFile(fn: PAnsiChar; var dest: TBuffer4K): PtrInt;
 var
   h: THandle;
 begin
@@ -3173,7 +3173,7 @@ begin
     exit;
   result := FileRead(h, dest, SizeOf(dest) - 1); // read up to 4KB
   if result >= 0 then
-    PAnsiChar(@dest)[result] := #0
+    dest[result] := #0
   else
     result := 0; // don't return length = -1 on reading error
   FileClose(h);
@@ -3181,7 +3181,7 @@ end;
 
 procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8);
 var
-  buf: TSynTempBuffer; // reading up to 4KB of content is enough
+  buf: TBuffer4K; // reading up to 4KB of content is enough
   p: PAnsiChar;
   l: PtrInt;
 begin
@@ -3208,7 +3208,7 @@ end;
 
 procedure FindFileValue(fn: PAnsiChar; const up: ShortString; var res: RawUtf8);
 var
-  buf: TSynTempBuffer; // reading up to 4KB of content is enough
+  buf: TBuffer4K; // reading up to 4KB of content is enough
 begin
   LoadProcFile(fn, buf);
   FindNameValue(@buf, up, res);
@@ -3216,7 +3216,7 @@ end;
 
 function FindFileCardinal(fn: PAnsiChar; const up: ShortString): PtrUInt;
 var
-  buf: TSynTempBuffer; // reading up to 4KB of content is enough
+  buf: TBuffer4K; // reading up to 4KB of content is enough
 begin
   LoadProcFile(fn, buf);
   result := FindNameValueCardinal(@buf, up)
@@ -3275,7 +3275,7 @@ end;
 function EnumProcessName(PID: cardinal): RawUtf8;
 var
   fn: ShortString;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
   n: AnsiChar;
 begin
   result := '';
@@ -3341,7 +3341,7 @@ end;
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
   P: PUtf8Char;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
 begin
   result := false;
   // see http://www.linuxhowtos.org/System/procstat.htm
@@ -3358,7 +3358,7 @@ end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
-  tmp: TSynTempBuffer; // 4KB seems enough
+  tmp: TBuffer4K;
   P: PUtf8Char;
 begin
   result := false;
@@ -3396,7 +3396,7 @@ end;
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
   si: TSysInfo  absolute tmp; // Linuxism
   rt: TTimeSpec absolute tmp; // with nanoseconds resolution
 begin

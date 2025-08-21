@@ -606,7 +606,7 @@ var
   start, stop: Int64;
   tix16: cardinal;
   lenw: word;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
   hdr: PDnsHeader;
 begin
   result := false;

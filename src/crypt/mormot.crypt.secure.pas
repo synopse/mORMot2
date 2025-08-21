@@ -9175,7 +9175,7 @@ function NextPemToDer(var P: PUtf8Char; Kind: PPemKind): TCertDer;
 var
   len: PtrInt;
   pem: PUtf8Char;
-  base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
+  base64: TSynTempBuffer; // PEM are small, so a 4KB temp buffer is fine enough
 begin
   pem := ParsePem(P, kind, len, {excludemarkers=}true);
   if pem <> nil then

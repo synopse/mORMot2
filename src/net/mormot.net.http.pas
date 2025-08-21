@@ -6485,7 +6485,7 @@ var
   p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
   w: TTextDateWriter;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
 begin
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
@@ -6540,7 +6540,7 @@ var
   p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
   w: TTextDateWriter;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
 begin
   // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"i":x,"r":x,"w":x}
   existing := Dest.Seek(0, soEnd); // append to existing content

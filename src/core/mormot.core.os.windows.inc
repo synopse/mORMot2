@@ -4397,7 +4397,7 @@ var
   var
     new: RawByteString;
     pending, n: cardinal;
-    tmp: TSynTempBuffer;
+    tmp: TBuffer4K;
   begin
     repeat
       pending := 0;
