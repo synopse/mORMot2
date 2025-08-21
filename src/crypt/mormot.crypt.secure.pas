@@ -4285,14 +4285,13 @@ const
 
 procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
 var
-  i: PtrInt;
-  k0, k0xorIpad: TBlock1024;
+  k0: TBlock1024;
   a: THashAlgo;
 begin
   fAlgo := aAlgo;
   a := SIGN_HASH[Algo];
   fSignatureSize := SIGN_SIZE[Algo];
-  fBlockMax := BLOCK_SIZE[Algo];
+  fBlockMax := BLOCK_SIZE[Algo]; // typically 15 (256-bit) or 31 (512-bit)
   fBlockSize := (fBlockMax + 1) shl 2;
   if fBlockMax = 0 then
   begin // we estimate that the HMAC pattern is part of the SHA-3 sponge design
@@ -4305,14 +4304,11 @@ begin
     fHasher.Full(a, aSecret, aSecretLen, PHash512Rec(@k0)^)
   else
     MoveFast(aSecret^, k0, aSecretLen);
-  for i := 0 to fBlockMax do
-    k0xorIpad[i] := k0[i] xor $36363636;
-  for i := 0 to fBlockMax do
-    fStep7data[i] := k0[i] xor $5c5c5c5c;
+  XorBy128(@fStep7data, @k0, fBlockMax, $5c5c5c5c);
+  XorBy128(@k0, @k0, fBlockMax, $36363636);
   fHasher.Init(a);
-  fHasher.Update(@k0xorIpad, fBlockSize);
+  fHasher.Update(@k0, fBlockSize);
   FillCharFast(k0, fBlockSize, 0);
-  FillCharFast(k0xorIpad, fBlockSize, 0);
 end;
 
 procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUtf8);

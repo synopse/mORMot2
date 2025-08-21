@@ -4655,27 +4655,23 @@ end;
 procedure HmacCrc256c(key, msg: pointer; keylen, msglen: integer;
   out result: THash256);
 var
-  i: PtrInt;
   h1, h2: cardinal;
-  k0, k0xorIpad, step7data: THash512Rec;
+  k0, step7data: THash512Rec;
 begin
   FillCharFast(k0, SizeOf(k0), 0);
   if keylen > SizeOf(k0) then
     crc256c(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
-  for i := 0 to 15 do
-    k0xorIpad.c[i] := k0.c[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  h1 := crc32c(crc32c(0, @k0xorIpad, SizeOf(k0xorIpad)), msg, msglen);
-  h2 := crc32c(crc32c(h1, @k0xorIpad, SizeOf(k0xorIpad)), msg, msglen);
+  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
+  XorBy128(@k0, @k0, 15, $36363636);
+  h1 := crc32c(crc32c(0,  @k0, SizeOf(k0)), msg, msglen);
+  h2 := crc32c(crc32c(h1, @k0, SizeOf(k0)), msg, msglen);
   crc256cmix(h1, h2, @result);
-  h1 := crc32c(crc32c(0, @step7data, SizeOf(step7data)), @result, SizeOf(result));
+  h1 := crc32c(crc32c(0,  @step7data, SizeOf(step7data)), @result, SizeOf(result));
   h2 := crc32c(crc32c(h1, @step7data, SizeOf(step7data)), @result, SizeOf(result));
   crc256cmix(h1, h2, @result);
   FillCharFast(k0, SizeOf(k0), 0);
-  FillCharFast(k0xorIpad, SizeOf(k0), 0);
   FillCharFast(step7data, SizeOf(k0), 0);
 end;
 
@@ -4700,21 +4696,17 @@ end;
 
 procedure THmacCrc32c.Init(key: pointer; keylen: integer);
 var
-  i: PtrInt;
-  k0, k0xorIpad: THash512Rec;
+  k0: THash512Rec;
 begin
   FillCharFast(k0, SizeOf(k0), 0);
   if keylen > SizeOf(k0) then
     crc256c(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
-  for i := 0 to 15 do
-    k0xorIpad.c[i] := k0.c[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  seed := crc32c(0, @k0xorIpad, SizeOf(k0xorIpad));
+  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
+  XorBy128(@k0, @k0, 15, $36363636);
+  seed := crc32c(0, @k0, SizeOf(k0));
   FillCharFast(k0, SizeOf(k0), 0);
-  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
 end;
 
 procedure THmacCrc32c.Update(msg: pointer; msglen: integer);

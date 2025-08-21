@@ -9361,22 +9361,18 @@ end;
 
 procedure THmacSha256.Init(key: pointer; keylen: integer);
 var
-  i: PtrInt;
-  k0, k0xorIpad: THash512Rec;
+  k0: THash512Rec;
 begin
   FillZero(k0.b);
   if keylen > SizeOf(k0) then
     SHA.Full(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
-  for i := 0 to 15 do
-    k0xorIpad.c[i] := k0.c[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
+  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
+  XorBy128(@k0, @k0, 15, $36363636);
   SHA.Init;
-  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
+  SHA.Update(@k0, SizeOf(k0));
   FillZero(k0.b);
-  FillZero(k0xorIpad.b);
 end;
 
 procedure THmacSha256.Init(const key: RawByteString);
