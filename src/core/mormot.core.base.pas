@@ -3264,8 +3264,11 @@ function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
 type
   /// 32-bit oriented Pierre L'Ecuyer gsl_rng_taus2 Tausworthe/LFSR generator
-  // - cross-compiler and cross-platform efficient randomness generator, very
-  // fast with a much better distribution than Delphi system's Random() function
+  // - cross-compiler and cross-platform efficient randomness generator, with
+  // a much better distribution than Delphi system's Random() function: academic
+  // researchers use gsl_rng_taus2 in fields like computational physics,
+  // bioinformatics, or operations research for experiments requiring random
+  // sampling - but it is NOT a CSPRNG suitable for cryptographic applications -
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
   // - used by Random32/RandomBytes/Random* function from mormot.core.os
   // - consumes only 16 bytes per instance for a period of 2^88 rounds - in
@@ -3273,7 +3276,7 @@ type
   // few bits of seed, and is not thread-safe - the Delphi RTL is even worse
   // - should be initialized with zeros at startup - which is the case as a
   // global var or threadvar, or as a TObject field - or call explicit Seed
-  // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
+  // - SeedGenerator() makes it a sequence generator (or encryptor via Fill)
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy to initialize the internal state
   // - you can seed and use your own TLecuyer (threadvar) instance, if needed

@@ -1342,7 +1342,7 @@ begin
   result := false;
   n := 10;
   repeat
-    TAesPrng.Main.Fill(rnd.b); // Lecuyer is too predictable here
+    TAesPrng.Main.Fill(rnd.b); // TLecuyer is too predictable here
     dec(n);
     if n = 0 then
       exit; // never try forever if our PRNG is compromised
@@ -1440,7 +1440,7 @@ begin
   tries := 0;
   repeat
     inc(tries);
-    TAesPrng.Main.Fill(k.b); // Lecuyer is too predictable here
+    TAesPrng.Main.Fill(k.b); // TLecuyer is too predictable here
     if tries >= MAX_TRIES then
       exit; // the random generator seems broken
     if _isZero(k) or

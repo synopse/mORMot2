@@ -4814,7 +4814,7 @@ function RandomDouble: double;
 // - this method is good enough e.g. for padding or generating test data
 // - consider cryptographic-level mormot.core.crypt TAesPrng.Main.FillRandom()
 // method or Random128() function to initialize a safe secret key, nonce or IV
-// - will actually XOR the Dest buffer with Lecuyer numbers
+// - will actually XOR the Dest buffer with TLecuyer numbers
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 procedure RandomBytes(Dest: pointer; Count: integer);
 

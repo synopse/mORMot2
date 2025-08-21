@@ -3679,9 +3679,9 @@ begin
     if Len = 0 then
       exit;
     Buffer := @Buffer[rd];
-  end; // on OS API call failure (paranoid): fallback to Lecuyer (if allowed)
+  end; // on OS API call failure (paranoid): fallback to TLecuyer (if allowed)
   if Len > 0 then
-    // use Lecuyer's gsl_rng_taus2 for the remaining bytes > MAXFROMOS (unlikely)
+    // use TLecuyer gsl_rng_taus2 for the remaining bytes > MAXFROMOS (unlikely)
     // - but keep result=false if the Buffer^ was not really filled from OS
     SharedRandom.Fill(Buffer, Len);
 end;

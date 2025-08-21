@@ -2947,7 +2947,7 @@ begin
     plain := SaveToBinary;
     if plain <> '' then
       try
-        RandomByteString(PRIVKEY_SALTSIZE, salt); // public: Lecuyer is enough
+        RandomByteString(PRIVKEY_SALTSIZE, salt); // public: TLecuyer is enough
         Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
         a := Aes.Create(aeskey);
         try

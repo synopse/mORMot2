@@ -1685,11 +1685,11 @@ type
     // - call FillRandom then xor the supplied buffer content
     procedure XorRandom(Buffer: pointer; Len: PtrInt);
     /// returns a 32-bit unsigned random number
-    // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
+    // - is twice slower than TLecuyer Random32 of mormot.core.base unit, but
     // is cryptographic secure - probably pointless for a 32-bit value
     function Random32: cardinal; overload;
     /// returns a 32-bit unsigned random number, with a maximum value
-    // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
+    // - is twice slower than TLecuyer Random32 of mormot.core.base unit, but
     // is cryptographic secure - probably pointless for a 32-bit value
     // - returns a value in range 0 <= Random32(max) < max
     function Random32(max: cardinal): cardinal; overload;
@@ -1933,7 +1933,7 @@ procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 // - will use its own AES-CTR instance, feeded once from TAesPrng.Main
 // - ensure uniqueness, unpredictability, high entropy, large period and
 // resistance to cryptographic attacks with an efficient thread-safe process
-// - Lecuyer is predictable so is considered unsafe to generate IV or MAC
+// - TLecuyer is predictable so is considered unsafe to generate IV or MAC
 procedure Random128(iv: PAesBlock);
 
 var
@@ -5221,7 +5221,7 @@ begin // note: we can't use Random128() here to avoid endless recursion
   TAesPrng.Main.Fill(aes.iv.b);  // transient AES-128 secret (never persisted)
   fEngine.EncryptInit(aes.iv, 128);
   repeat
-    SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // Lecuyer is enough for padding
+    SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // TLecuyer is enough for padding
   until aes.iv.c0 <> 0;
 end;
 
@@ -5654,7 +5654,7 @@ begin
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
-    SharedRandom.Fill(@nonce, SizeOf(nonce)); // Lecuyer is enough with crc32c
+    SharedRandom.Fill(@nonce, SizeOf(nonce)); // TLecuyer is enough with crc32c
     if not MacSetNonce({encrypt=}true, nonce, Associated) then
       // leave ASAP if this class doesn't support AEAD process
       exit;
@@ -11345,11 +11345,11 @@ begin
   if (cfAesNi in CpuFeatures) and   // AES-NI
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
-    // 32-128-bit aeshash as implemented in Go runtime, using aesenc opcode
+    // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AesNiHashMem, nil, 16 * 4, AesNiHashKey, {align=}16);
     AesNiHashAntiFuzzTable := AesNiHashKey;
     XorMemory(PHash128Rec(AesNiHashKey)^, StartupEntropy); // 128-bit salt
-    SharedRandom.Fill(AesNiHashKey, 16 * 4); // 512-bit seed using Lecuyer's
+    SharedRandom.Fill(AesNiHashKey, 16 * 4); // 512-bit of TLecuyer seed
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;

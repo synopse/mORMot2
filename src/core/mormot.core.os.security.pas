@@ -6743,7 +6743,7 @@ begin
       CryptoApi.ReleaseContext(prov, 0);
     end;
   if not result then
-    // OS API call failed -> fallback to our Lecuyer's gsl_rng_taus2 generator
+    // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
     SharedRandom.Fill(pointer(Buffer), Len);
 end;
 

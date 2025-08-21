@@ -6402,7 +6402,7 @@ begin
     fContext.SessionSequence := Random32 shr 9;
   until fContext.SessionSequence <> 0;
   fContext.SessionSequenceStart := fContext.SessionSequence;
-  fContext.CrcSalt := Random32Not0; // from Lecuyer generator
+  fContext.CrcSalt := Random32Not0; // from TLecuyer gsl_rng_taus2 generator
   Random128(@fContext.CryptKey);    // unpredictable
   fAes.Init(fContext.CryptKey, 128, {avx=}false);
 end;
@@ -6832,7 +6832,7 @@ type
 
 procedure TCryptRandomLecuyerPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
-  SharedRandom.Fill(dst, dstlen); // global Lecuyer's gsl_rng_taus2 generator
+  SharedRandom.Fill(dst, dstlen); // global TLecuyer gsl_rng_taus2 generator
 end;
 
 function TCryptRandomLecuyerPrng.Get32: cardinal;

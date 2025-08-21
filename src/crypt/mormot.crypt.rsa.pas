@@ -1455,7 +1455,7 @@ begin
           repeat
             n := Random32(Size);
           until n > 1;
-          SharedRandom.Fill(@a^.Value[0], n * HALF_BYTES); // Lecuyer generator
+          SharedRandom.Fill(@a^.Value[0], n * HALF_BYTES); // TLecuyer generator
           a^.Value[0] := a^.Value[0] or 1; // odd
           a^.Size := n;
           a^.Trim;
@@ -2800,7 +2800,7 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    SharedRandom.Fill(@r[2], padding); // Lecuyer is enough for public padding
+    SharedRandom.Fill(@r[2], padding); // TLecuyer is enough for public padding
     inc(padding, 2);
     for i := 2 to padding - 1 do
       if r[i] = 0 then
@@ -3185,7 +3185,7 @@ begin
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
-  SharedRandom.Fill(@salt, hlen); // Lecuyer is good enough for public salt
+  SharedRandom.Fill(@salt, hlen); // TLecuyer is good enough for public salt
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
   if pslen < 0 then
