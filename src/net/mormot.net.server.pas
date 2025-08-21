@@ -7991,11 +7991,12 @@ var
   binding: HTTP_BINDING_INFO;
   i: PtrInt;
 begin
-  aLog.EnterLocal(log, 'Create queue=% processname=% threads=%',
+  aLog.EnterLocal(log, 'Create(%) processname=% threads=%',
     [QueueName, ProcessName, ServerThreadPoolCount], self);
+  // initialize this thread in suspended mode
   inherited Create(OnStart, OnStop, ProcessName,
-    ProcessOptions + [hsoCreateSuspended], aLog);
-  fOptions := ProcessOptions;
+    ProcessOptions + [hsoCreateSuspended] - [hsoThreadCpuAffinity,
+      hsoThreadSocketAffinity, hsoReusePort, hsoThreadSmooting], aLog);
   // create the Request Queue
   HttpApiInitialize; // will raise an exception in case of failure
   if Assigned(log) then
@@ -8029,8 +8030,11 @@ begin
     ObjArrayAdd(fThreads, THttpApiServerThread.Create(self));
   // eventually start the main thread
   Append(fProcessName, [' #', ServerThreadPoolCount]);
-  if Suspended then
+  if not (hsoCreateSuspended in ProcessOptions) then
+  begin
     Suspended := false;
+    exclude(fOptions, hsoCreateSuspended);
+  end;
 end;
 
 function THttpApiServer.WaitStarted(Seconds: cardinal): boolean;
