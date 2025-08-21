@@ -2184,7 +2184,7 @@ type
   end;
 
   /// points to SHA-512/256 hashing instance
-  PSha512_256= ^TSha512_256;
+  PSha512_256 = ^TSha512_256;
 
   /// implements SHA-512 hashing
   // - by design, this algorithm is expected to be much faster on 64-bit CPU,

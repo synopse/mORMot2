@@ -577,8 +577,8 @@ type
   TSynHasher = object
   {$endif USERECORDWITHMETHODS}
   private
-    fAlgo: THashAlgo;
     ctxt: array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all algorithms
+    fAlgo: THashAlgo;
   public
     /// initialize the internal hashing structure for a specific algorithm
     // - returns false on unknown/unsupported algorithm
