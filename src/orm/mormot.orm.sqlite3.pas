@@ -222,17 +222,17 @@ type
   TRestOrmServerDBBatch = record
     Encoding: TRestBatchEncoding;
     Options: TRestBatchOptions;
-    TableIndex: integer;
     ID: TIDDynArray;
     IDCount: integer;
+    TableIndex: integer;
     IDMax: TID;
     Values: TRawUtf8DynArray;
-    ValuesCount: integer;
     Simples: TPUtf8CharDynArray;
+    ValuesCount: integer;
     SimpleFieldsCount: integer;
+    UpdateFieldsCount: integer;
     SimpleFields: TFieldBits;
     UpdateSql: RawUtf8;
-    UpdateFieldsCount: integer;
     Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
     PostValues: array[0..MAX_SQLPARAMS - 1] of RawUtf8;
     Temp: TSynTempBuffer;
