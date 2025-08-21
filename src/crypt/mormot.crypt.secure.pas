@@ -6407,7 +6407,7 @@ begin
   until fContext.SessionSequence <> 0;
   fContext.SessionSequenceStart := fContext.SessionSequence;
   fContext.CrcSalt := Random32Not0; // from Lecuyer generator
-  TAesPrng.Main.FillRandom(fContext.CryptKey); // 128-bit strong crypto key
+  Random128(@fContext.CryptKey);    // unpredictable
   fAes.Init(fContext.CryptKey, 128, {avx=}false);
 end;
 
@@ -6772,7 +6772,7 @@ end;
 
 function TCryptRandomAesPrng.Get32: cardinal;
 begin
-  result := TAesPrng.Main.Random32;
+  result := TAesPrng.Main.Random32; // a CSPRNG is pointless for 32-bit anyway
 end;
 
 { TCryptRandomEntropy }

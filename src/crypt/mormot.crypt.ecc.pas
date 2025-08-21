@@ -423,7 +423,7 @@ type
     // - if Authority is nil, will generate a self-signed certificate
     // - the supplied Issuer name would be stored using AsciiToBaudot(),
     // truncated to the Issuer buffer size, i.e. 16 bytes - if Issuer is '',
-    // TAesPrng.Fill() will be used
+    // Random128() will be used
     // - you may specify some validity time range, if needed
     // - default ParanoidVerify=true will validate the certificate digital
     // signature via a call Ecc256r1Verify() to ensure its usefulness
@@ -2818,13 +2818,13 @@ begin
         ValidityStart := EccDate(StartDate);
       ValidityEnd := ValidityStart + ExpirationDays;
     end;
-    TAesPrng.Main.Fill(TAesBlock(Serial));
+    Random128(@Serial);
     fContent.SetUsage(word(Usage), MaxVers);
     if IssuerText = '' then
       if Subjects <> '' then
         fContent.SetSubject(Subjects, MaxVers)
       else
-        TAesPrng.Main.Fill(TAesBlock(Issuer))
+        Random128(@Issuer)
     else
       EccIssuer(IssuerText, Issuer);
     if not ecc_make_key_pas(PublicKey, fPrivateKey) then
@@ -5255,7 +5255,7 @@ begin
   FillCharFast(aClient, SizeOf(aClient), 0);
   aClient.algo := fAlgo;
   // client-side randomness for ephemeral keys and signatures
-  SharedRandom.Fill(@fRndA, SizeOf(fRndA)); // public and unique: use Lecuyer
+  Random128(@fRndA); // unpredictable
   aClient.RndA := fRndA;
   // generate the client ephemeral key
   if fAlgo.auth <> authClient then
@@ -5377,7 +5377,7 @@ begin
   FillCharFast(aServer, SizeOf(aServer), 0);
   aServer.algo := fAlgo;
   aServer.RndA := fRndA;
-  SharedRandom.Fill(@fRndB, SizeOf(fRndB)); // public and unique: use Lecuyer
+  Random128(@fRndB); // unpredictable
   aServer.RndB := fRndB;
   if fAlgo.auth <> authServer then
     if not Ecc256r1MakeKey(aServer.QF, dF) then

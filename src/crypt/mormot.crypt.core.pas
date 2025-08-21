@@ -5494,7 +5494,7 @@ begin
     exit;
   if IVAtBeginning then
   begin
-    SharedRandom.Fill(@fIV, SizeOf(fIV)); // IV should be unique: use Lecuyer
+    Random128(@fIV); // unpredictable
     PAesBlock(Output)^ := fIV;
     inc(PAesBlock(Output));
   end;
@@ -5706,7 +5706,7 @@ begin
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
-    SharedRandom.Fill(@nonce, SizeOf(nonce)); // should be unique: use Lecuyer
+    SharedRandom.Fill(@nonce, SizeOf(nonce)); // Lecuyer is enough with crc32c
     if not MacSetNonce({encrypt=}true, nonce, Associated) then
       // leave ASAP if this class doesn't support AEAD process
       exit;
@@ -6089,7 +6089,7 @@ begin
   p := pointer(result);
   if IVAtBeginning then
   begin
-    SharedRandom.Fill(@fIV, SizeOf(fIV)); // IV should be unique: use Lecuyer
+    Random128(@fIV); // unpredictable
     p^ := fIV;
     inc(p);
   end;
@@ -7069,7 +7069,7 @@ begin
   SetLength(fBuf, fBufAvailable + SizeOf(TAesBlock)); // space for padding
   if IV = nil then
   begin
-    RandomBytes(fAes.fIV); // Lecuyer is enough for a public IV
+    Random128(@fAes.fIV); // unpredictable
     fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // stream starts with IV
   end
   else

@@ -3010,7 +3010,7 @@ begin
      not HasPublicKey then
     exit;
   // generate the ephemeral secret key and IV within the corresponding header
-  SharedRandom.Fill(@head.iv, SizeOf(head.iv)); // public and unique: use Lecuyer
+  Random128(@head.iv); // unpredictable
   try
     TAesPrng.Main.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
