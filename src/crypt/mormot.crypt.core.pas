@@ -529,6 +529,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fEngine: TAes; // hidden internal AES-128 state (storing mask in iv)
+    procedure Random128(iv: PHash128Rec); // used internally by Random128()
   public
     /// create the transient random secret key needed for this process
     // - the internal secret can't be persisted, and will remain in memory
@@ -1579,7 +1580,6 @@ function AesAlgoNameDecode(AesAlgoName: PUtf8Char;
 function AesAlgoNameDecode(const AesAlgoName: RawUtf8;
   out KeyBits: integer): TAesAbstractClass; overload;
 
-
 // used for paranoid safety by test.core.crypto.pas
 function AesTablesTest: boolean;
 
@@ -1924,6 +1924,12 @@ var
 // - could also be used to expand some PRNG output into any size
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 
+/// get 128-bit of unpredictable random, suitable for Initialization Vectors
+// - will use its own AES-CTR instance, feeded once from TAesPrng.Main
+// - ensure uniqueness, unpredictability, high entropy, large period and
+// resistance to cryptographic attacks with an efficient thread-safe process
+// - Lecuyer is predictable so is considered unsafe to generate IV or MAC
+procedure Random128(iv: PAesBlock);
 
 var
   /// salt for CryptDataForCurrentUser function
@@ -5263,10 +5269,12 @@ end;
 procedure TAesSignature.Init;
 var
   aes: TAesContext absolute fEngine;
-begin
-  RandomBytes(aes.iv.b); // transient AES-128 secret which cannot be persisted
+begin // note: we can't use Random128() here to avoid endless recursion
+  TAesPrng.Main.Fill(aes.iv.b);  // transient AES-128 secret (not persisted)
   fEngine.EncryptInit(aes.iv, 128);
-  RandomBytes(aes.iv.b); // 32-bit + 96-bit of fixed but random padding
+  repeat
+    SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // Lecuyer is enough for padding
+  until aes.iv.c0 <> 0;
 end;
 
 procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
@@ -5296,7 +5304,7 @@ var
   aes: TAesContext absolute fEngine;
   sign: THash128Rec;
 begin
-  result := 0;
+  result := 0; // failure
   if aSignature = nil then
     exit;
   sign.c0 := aSignature^.c0;
@@ -5316,12 +5324,25 @@ begin
      HexDisplayToBin(pointer(aHex), @sign, SizeOf(sign)) then
     result := Validate(@sign)
   else
-    result := 0;
+    result := 0; // failure
 end;
 
 function TAesSignature.ValidateCookie(const aCookie: RawUtf8): cardinal;
 begin
   result := ValidateCookie(pointer(aCookie), length(aCookie));
+end;
+
+procedure TAesSignature.Random128(iv: PHash128Rec);
+var
+  aes: TAesContext absolute fEngine;
+begin
+  PLightLock(@aes.buf)^.Lock; // ensure thread safe with minimal contention
+  if PPtrUInt(@aes)^ = 0 then
+    Init; // initialize once at startup
+  iv^.b := aes.iv.b;
+  inc(aes.iv.Lo); // AES-CTR with 64-bit counter
+  aes.DoBlock(aes, iv^, iv^);
+  PLightLock(@aes.buf)^.UnLock;
 end;
 
 
@@ -7468,6 +7489,14 @@ begin
   sha.Update(buf, size);
   sha.Final(dig);
   MoveFast(dig, buf^, size);
+end;
+
+var
+  rnd128gen: TAesSignature; // dedicated thread-safe AES-CTR with 64-bit counter
+
+procedure Random128(iv: PAesBlock);
+begin
+  rnd128gen.Random128(pointer(iv));
 end;
 
 

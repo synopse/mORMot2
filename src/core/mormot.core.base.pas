@@ -3302,6 +3302,8 @@ type
     // - when used as sequence generator after SeedGenerator(), dest buffer
     // should be filled with zeros before the call if you want to use it as
     // generator, but could be applied on any memory buffer for encryption
+    // - consider cryptographic-level mormot.core.crypt TAesPrng.Main.FillRandom
+    // method or Random128() function to initialize a secret key, nonce or IV
     procedure Fill(dest: pointer; bytes: integer);
     /// fill some string[0..size] with 7-bit ASCII pseudo-random text
     procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
