@@ -10691,6 +10691,76 @@ end;
 
 {$ifndef PUREMORMOT2}
 
+procedure XorBlock(P: PIntegerArray; Count, Cod: integer);
+// very fast Xor() according to Cod - not Compression or Stream compatible
+var
+  i: integer;
+begin
+  for i := 1 to Count shr 4 do
+  begin
+    // proceed through 16 bytes blocs
+    Cod := (Cod shl 11) xor integer(Td0[Cod shr 21]); // shr 21 -> 8*[byte] of cardinal
+    P^[0] := P^[0] xor Cod;
+    P^[1] := P^[1] xor Cod;
+    P^[2] := P^[2] xor Cod;
+    P^[3] := P^[3] xor Cod;
+    inc(PByte(P), 16);
+  end;
+  Cod := (Cod shl 11) xor integer(Td0[Cod shr 21]);
+  for i := 1 to (Count and AesBlockMod) shr 2 do
+  begin
+    // last 4 bytes blocs
+    P^[0] := P^[0] xor Cod;
+    inc(PByte(P), 4);
+  end;
+  for i := 1 to Count and 3 do
+  begin
+    PByte(P)^ := PByte(P)^ xor byte(Cod);
+    inc(PByte(P));
+  end;
+end;
+
+procedure XorOffset(P: PByteArray; Index, Count: PtrInt);
+// XorOffset: fast and simple Cypher using Index (=Position in Dest Stream):
+// Compression not OK -> apply after compress (e.g. TBZCompressor.withXor=true)
+var
+  Len: PtrInt;
+  tab: PByteArray; // 2^13=$2000=8192 bytes of XOR tables ;)
+begin
+  tab := @Td0;
+  if Count > 0 then
+    repeat
+      Index := Index and $1FFF;
+      Len := $2000 - Index;
+      if Len > Count then
+        Len := Count;
+      XorMemory(P, @tab[Index], Len);
+      inc(P, Len);
+      inc(Index, Len);
+      dec(Count, Len);
+    until Count = 0;
+end;
+
+procedure XorConst(P: PIntegerArray; Count: integer);
+// XorConst: fast Cypher changing by Count value (weak cypher but compression OK)
+var
+  i: PtrInt;
+  Code: integer;
+begin
+  // 1 to 3 bytes may stay unencrypted: not relevant
+  Code := integer(Td0[Count and $3FF]);
+  for i := 1 to (Count shr 4) do
+  begin
+    P^[0] := P^[0] xor Code;
+    P^[1] := P^[1] xor Code;
+    P^[2] := P^[2] xor Code;
+    P^[3] := P^[3] xor Code;
+    inc(PByte(P), 16);
+  end;
+  for i := 0 to ((Count and AesBlockMod) shr 2) - 1 do // last 4 bytes blocs
+    P^[i] := P^[i] xor Code;
+end;
+
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: integer;
   Encrypt: boolean);
 begin
