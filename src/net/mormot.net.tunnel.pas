@@ -31,15 +31,10 @@ uses
   mormot.core.threads,
   mormot.core.rtti,
   mormot.core.log,
-  mormot.soa.core,
-  mormot.soa.server,
   mormot.crypt.core,
-  mormot.crypt.secure,
+  mormot.crypt.secure,   // for ICryptCert
   mormot.crypt.ecc256r1, // for ECDHE encryption
-  mormot.net.sock,
-  mormot.net.ws.core,
-  mormot.net.ws.client,
-  mormot.net.ws.async;
+  mormot.net.sock;
 
 
 { ******************** Abstract Definitions for Port Forwarding }
@@ -80,13 +75,16 @@ type
   end;
 
   /// abstract tunneling service implementation
-  ITunnelLocal = interface(IServiceWithCallbackReleased)
+  ITunnelLocal = interface(IInvokable)
     ['{201150B4-6E28-47A3-AAE5-1335C82B060A}']
+    /// match mormot.soa.core IServiceWithCallbackReleased definition
+    procedure CallbackReleased(const callback: IInvokable;
+      const interfaceName: RawUtf8);
     /// to be called before Open() for proper handshake process
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// this is the main method to start tunneling to the Transmit interface
     // - Session, TransmitOptions and AppSecret should match on both sides
-    // - if Address has a port, will connect a socket to this address:port
+    // - if Address has a port, will connect a client socket to this address:port
     // - if Address has no port, will bound its address as an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
