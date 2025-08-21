@@ -3263,14 +3263,14 @@ function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
 type
-  /// 32-bit oriented Pierre L'Ecuyer software (random) generator
+  /// 32-bit oriented Pierre L'Ecuyer gsl_rng_taus2 Tausworthe/LFSR generator
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
   // - used by Random32/RandomBytes/Random* function from mormot.core.os
   // - consumes only 16 bytes per instance for a period of 2^88 rounds - in
-  // comparison, the FPC RTL Mersenne Twister requires 2496 bytes for a very weak
-  // seed of a few bits and is not thread-safe - the Delphi RTL is even weaker
+  // comparison, the FPC RTL Mersenne Twister requires 2496 bytes from very weak
+  // few bits of seed, and is not thread-safe - the Delphi RTL is even worse
   // - should be initialized with zeros at startup - which is the case as a
   // global var or threadvar, or as a TObject field - or call explicit Seed
   // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
@@ -3282,9 +3282,10 @@ type
   {$else}
   TLecuyer = object
   {$endif USERECORDWITHMETHODS}
-  public
-    // 2^88 bits of internal state, seed after 2^32 RawNext calls (16 GB)
+  private
+    // 2^88 bits of internal LFSR state, seed after 2^32 RawNext calls (16 GB)
     rs1, rs2, rs3, seedcount: cardinal;
+  public
     /// compute the next 32-bit pseudo-random value
     // - will automatically reseed after around 2^32 generated values, which is
     // huge but conservative since this generator has a known period of 2^88
@@ -9901,15 +9902,23 @@ begin
   Dest.Hi := Dest.Hi xor Source.Hi;
 end;
 
-{$ifndef PUREMORMOT2}
-threadvar // do not publish for compilation within Delphi packages
-  _Lecuyer: TLecuyer; // uses only 16 bytes per thread
-
-function Lecuyer: PLecuyer;
+function bswap16(a: cardinal): cardinal; // inlining is good enough
 begin
-  result := @_Lecuyer;
+  result := ((a and 255) shl 8) or (a shr 8);
 end;
-{$endif PUREMORMOT2}
+
+procedure MoveSwap(dst, src: PByte; n: PtrInt);
+begin
+  if n <= 0 then
+    exit;
+  inc(dst, n);
+  repeat
+    dec(dst);
+    dst^ := src^;
+    inc(src);
+    dec(n);
+  until n = 0;
+end;
 
 {$ifdef OSWINDOWS} // not defined in the Delphi RTL but in its Windows unit :(
 function GetCurrentThreadId: PtrUInt; stdcall; external 'kernel32';
@@ -9940,25 +9949,41 @@ begin
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
 
-function bswap16(a: cardinal): cardinal; // inlining is good enough
+procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
+var
+  len: PtrUInt;
 begin
-  result := ((a and 255) shl 8) or (a shr 8);
+  dec(size);
+  len := dest[0]; // first random byte will make length
+  if size = 31 then
+    size := len and 31  // optimized for FillShort31()
+  else if size = 255 then
+    size := ToByte(len) // optimized for shortstring
+  else
+    size := len mod size;
+  dest[0] := size;
+  if size <> 0 then
+    repeat
+      dest[size] := (cardinal(dest[size]) and 63) + 32;
+      dec(size);
+    until size = 0;
 end;
 
-procedure MoveSwap(dst, src: PByte; n: PtrInt);
-begin
-  if n <= 0 then
-    exit;
-  inc(dst, n);
-  repeat
-    dec(dst);
-    dst^ := src^;
-    inc(src);
-    dec(n);
-  until n = 0;
-end;
 
-var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random or Linux auxv
+{ TLecuyer }
+
+function TLecuyer.RawNext: cardinal;
+begin // Linear Feedback Shift Register (LFSR) - not inlined for better codegen
+  result := rs1;
+  rs1 := ((result and -2) shl 12) xor (((result shl 13) xor result) shr 19);
+  result := rs2;
+  rs2 := ((result and -8) shl 4) xor (((result shl 2) xor result) shr 25);
+  result := rs3;
+  rs3 := ((result and -16) shl 17) xor (((result shl 3) xor result) shr 11);
+  result := rs1 xor rs2 xor result;
+end; // use masks of rs1:-2=31-bit rs2:-8=29-bit rs3:-16=28-bit -> 2^88 period
+
+var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random and/or Linux auxv
   LecuyerEntropy: THash512Rec; // nothing on BSD/Mac but XorEntropy() is enough
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
@@ -9973,9 +9998,9 @@ begin
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
   LecuyerEntropy := e; // forward security
   DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
-  rs1 := MaxPtrUInt(rs1 xor h.c0, 2);  // not too weak for RawNext scramble
-  rs2 := MaxPtrUInt(rs2 xor h.c1, 8);
-  rs3 := MaxPtrUInt(rs3 xor h.c2, 16); // reduce resolution from 2^96 to 2^88
+  rs1 := MaxPtrUInt(rs1 xor h.c0, 2);  // mask = -2 in RawNext
+  rs2 := MaxPtrUInt(rs2 xor h.c1, 8);  // mask = -8
+  rs3 := MaxPtrUInt(rs3 xor h.c2, 16); // mask = -16
   seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
   for i := 1 to h.i3 and 7 do
     RawNext; // warm up
@@ -9990,21 +10015,11 @@ procedure TLecuyer.SeedGenerator(fixedseed: pointer; fixedseedbytes: integer);
 begin
   rs1 := crc32c(0,   fixedseed, fixedseedbytes);
   rs2 := crc32c(rs1, fixedseed, fixedseedbytes);
-  rs3 := MaxPtrUInt(crc32c(rs2, fixedseed, fixedseedbytes), 16);
-  rs1 := MaxPtrUInt(rs1, 2);
-  rs2 := MaxPtrUInt(rs2, 8);
-  seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls
-end;
-
-function TLecuyer.RawNext: cardinal;
-begin // shuffle the internal state - not inlined for better code generation
-  result := rs1;
-  rs1 := ((result and -2) shl 12) xor (((result shl 13) xor result) shr 19);
-  result := rs2;
-  rs2 := ((result and -8) shl 4) xor (((result shl 2) xor result) shr 25);
-  result := rs3;
-  rs3 := ((result and -16) shl 17) xor (((result shl 3) xor result) shr 11);
-  result := rs1 xor rs2 xor result;
+  rs3 := crc32c(rs2, fixedseed, fixedseedbytes);
+  rs1 := MaxPtrUInt(rs1, 2);  // mask = -2 in RawNext
+  rs2 := MaxPtrUInt(rs2, 8);  // mask = -8
+  rs3 := MaxPtrUInt(rs3, 16); // mask = -16
+  seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls (< 2^88)
 end;
 
 function TLecuyer.Next: cardinal;
@@ -10063,26 +10078,6 @@ begin
   until bytes = 0;
 end;
 
-procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
-var
-  len: PtrUInt;
-begin
-  dec(size);
-  len := dest[0];  // first random byte will make length
-  if size = 31 then
-    size := len and 31 // optimized for FillShort31()
-  else if size = 255 then
-    size := ToByte(len)
-  else
-    size := len mod size;
-  dest[0] := size;
-  if size <> 0 then
-    repeat
-      dest[size] := (cardinal(dest[size]) and 63) + 32;
-      dec(size);
-    until size = 0;
-end;
-
 procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
 begin
   if size = 0 then
@@ -10104,6 +10099,7 @@ begin
   AdjustShortStringFromRandom(@dest, 32);
 end;
 
+
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 var
   gen: TLecuyer;
@@ -10117,6 +10113,16 @@ begin
   gen.Fill(@data[1], length(data));
   FillZero(THash128(gen)); // to avoid forensic leak
 end;
+
+{$ifndef PUREMORMOT2}
+threadvar // do not publish for compilation within Delphi packages
+  _Lecuyer: TLecuyer; // uses only 16 bytes per thread
+
+function Lecuyer: PLecuyer;
+begin
+  result := @_Lecuyer;
+end;
+{$endif PUREMORMOT2}
 
 
 { MultiEvent* functions }
