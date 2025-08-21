@@ -111,6 +111,11 @@ procedure XorBlock16(A, B: PPtrIntArray);
 procedure XorBlock16(A, B, C: PPtrIntArray);
  {$ifdef HASINLINE}inline;{$endif} overload;
 
+/// logical XOR memory buffers with a 32-bit mask, as done e.g. during HMAC
+// - fill all dst[] cardinals, by 128-bit chunks (e.g. last = 15 or 31):
+// ! dst[i] := src[i] xor mask;
+procedure XorBy128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
+
 {$ifndef PUREMORMOT2}
 /// simple XOR encryption according to Cod - not Compression or Stream compatible
 // - used in deprecated AESFull() for KeySize=32
@@ -2028,7 +2033,7 @@ type
   TSha256 = object
   {$endif USERECORDWITHMETHODS}
   private
-    Context: packed array[1..SHA_CONTEXT_SIZE] of byte;
+    Context: packed array[1..SHA_CONTEXT_SIZE] of byte; // 108 bytes
   public
     /// initialize SHA-256 context for hashing
     procedure Init;
@@ -3046,74 +3051,17 @@ begin
   {$endif CPU32}
 end;
 
-procedure XorBlock(P: PIntegerArray; Count, Cod: integer);
-// very fast Xor() according to Cod - not Compression or Stream compatible
-var
-  i: integer;
+procedure XorBy128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
 begin
-  for i := 1 to Count shr 4 do
-  begin
-    // proceed through 16 bytes blocs
-    Cod := (Cod shl 11) xor integer(Td0[Cod shr 21]); // shr 21 -> 8*[byte] of cardinal
-    P^[0] := P^[0] xor Cod;
-    P^[1] := P^[1] xor Cod;
-    P^[2] := P^[2] xor Cod;
-    P^[3] := P^[3] xor Cod;
-    inc(PByte(P), 16);
-  end;
-  Cod := (Cod shl 11) xor integer(Td0[Cod shr 21]);
-  for i := 1 to (Count and AesBlockMod) shr 2 do
-  begin
-    // last 4 bytes blocs
-    P^[0] := P^[0] xor Cod;
-    inc(PByte(P), 4);
-  end;
-  for i := 1 to Count and 3 do
-  begin
-    PByte(P)^ := PByte(P)^ xor byte(Cod);
-    inc(PByte(P));
-  end;
-end;
-
-procedure XorOffset(P: PByteArray; Index, Count: PtrInt);
-// XorOffset: fast and simple Cypher using Index (=Position in Dest Stream):
-// Compression not OK -> apply after compress (e.g. TBZCompressor.withXor=true)
-var
-  Len: PtrInt;
-  tab: PByteArray; // 2^13=$2000=8192 bytes of XOR tables ;)
-begin
-  tab := @Td0;
-  if Count > 0 then
-    repeat
-      Index := Index and $1FFF;
-      Len := $2000 - Index;
-      if Len > Count then
-        Len := Count;
-      XorMemory(P, @tab[Index], Len);
-      inc(P, Len);
-      inc(Index, Len);
-      dec(Count, Len);
-    until Count = 0;
-end;
-
-procedure XorConst(P: PIntegerArray; Count: integer);
-// XorConst: fast Cypher changing by Count value (weak cypher but compression OK)
-var
-  i: PtrInt;
-  Code: integer;
-begin
-  // 1 to 3 bytes may stay unencrypted: not relevant
-  Code := integer(Td0[Count and $3FF]);
-  for i := 1 to (Count shr 4) do
-  begin
-    P^[0] := P^[0] xor Code;
-    P^[1] := P^[1] xor Code;
-    P^[2] := P^[2] xor Code;
-    P^[3] := P^[3] xor Code;
-    inc(PByte(P), 16);
-  end;
-  for i := 0 to ((Count and AesBlockMod) shr 2) - 1 do // last 4 bytes blocs
-    P^[i] := P^[i] xor Code;
+  last := PtrUInt(@src[last]);
+  repeat
+    dst[0] := src[0] xor mask; // perform 128-bit per iteration
+    dst[1] := src[1] xor mask;
+    dst[2] := src[2] xor mask;
+    dst[3] := src[3] xor mask;
+    src := @src[4];
+    dst := @dst[4];
+  until PtrUInt(src) >= last;
 end;
 
 procedure XorMemoryPtrInt(dest, source: PPtrInt; count: integer);
@@ -5270,7 +5218,7 @@ procedure TAesSignature.Init;
 var
   aes: TAesContext absolute fEngine;
 begin // note: we can't use Random128() here to avoid endless recursion
-  TAesPrng.Main.Fill(aes.iv.b);  // transient AES-128 secret (not persisted)
+  TAesPrng.Main.Fill(aes.iv.b);  // transient AES-128 secret (never persisted)
   fEngine.EncryptInit(aes.iv, 128);
   repeat
     SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // Lecuyer is enough for padding
