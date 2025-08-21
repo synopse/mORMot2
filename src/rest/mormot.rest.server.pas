@@ -4838,11 +4838,10 @@ begin
         [fUser, fUser.IDValue], self);
   // compute the next Session ID and its associated private key
   fID := InterlockedIncrement(aCtxt.Server.fSessionCounter); // 20-bit number
-  if PInteger(@ServerProcessKdf)^ <> 0 then  // use our thread-safe CSPRNG
+  if PInteger(@ServerProcessKdf)^ <> 0 then  // use local thread-safe CSPRNG
     ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 > 4 bytes nonce ticks
   else
     Random128(@rnd); // safe (but paranoid) unpredictable fallback
-  XorMemory(rnd.l, rnd.h); // don't leak full state, but use full result
   BinToHexLower(@rnd, SizeOf(rnd.l), fPrivateKey); // 128-bit is enough
   ComputeProtectedValues(aCtxt.TickCount64);
   // this session has been successfully created
@@ -5202,7 +5201,7 @@ begin
   result := nil; // indicates invalid signature
 end;
 
-var // the HMAC-SHA-256 ServerProcessKdf() of the last two 4.3 minutes ticks
+var // cache HMAC-SHA-256 ServerProcessKdf() of the last two 4.3 minutes ticks
   ServerNonceCache: array[{previous=}boolean] of record
     safe: TLightLock;
     tix: cardinal;
