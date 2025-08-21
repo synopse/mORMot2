@@ -338,6 +338,10 @@ type
   /// 256-bit memory block for maximum AES key storage
   TAesKey = THash256;
 
+/// quickly check if the supplied number of bits is either 128, 192 or 256
+function ValidAesKeyBits(bits: cardinal): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 type
   /// internal low-level static engine to handle raw AES cypher/uncypher
   // - this is the default Electronic codebook (ECB) mode
@@ -3937,6 +3941,11 @@ begin
   end;
 end;
 
+function ValidAesKeyBits(bits: cardinal): boolean;
+begin
+  result := (bits = 128) or (bits = 192) or (bits = 256);
+end;
+
 {$ifndef ASMINTEL}
 
 procedure aesencryptpas(const ctxt: TAesContext; bi, bo: PBlock128);
@@ -4237,9 +4246,7 @@ var
   ctx: TAesContext absolute Context;
 begin
   result := true;
-  if (KeySize <> 128) and
-     (KeySize <> 192) and
-     (KeySize <> 256) then
+  if not ValidAesKeyBits(KeySize) then
   begin
     result := false;
     ctx.Flags := [];
@@ -5322,9 +5329,7 @@ end;
 
 constructor TAesAbstract.Create(const aKey; aKeySizeBits: cardinal);
 begin
-  if (aKeySizeBits <> 128) and
-     (aKeySizeBits <> 192) and
-     (aKeySizeBits <> 256) then
+  if not ValidAesKeyBits(aKeySizeBits) then
     ESynCrypto.RaiseUtf8('%.Create(KeySize=%): 128/192/256 required',
       [self, aKeySizeBits]);
   if @aKey = nil then
@@ -7313,21 +7318,17 @@ const
 procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
   out Result: TShort15);
 begin
-  case KeyBits of
-    128,
-    192,
-    256:
-      begin
-        Result[0] := #11;
-        PCardinal(@Result[1])^ :=
-          ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
-        PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
-        Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
-        PCardinal(@Result[9])^ := PCardinal(@AESMODE_TXT[Mode])^;
-      end
+  if ValidAesKeyBits(KeyBits) then
+  begin
+    Result[0] := #11;
+    PCardinal(@Result[1])^ :=
+      ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
+    PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
+    Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
+    PCardinal(@Result[9])^ := PCardinal(@AESMODE_TXT[Mode])^;
+  end
   else
     PCardinal(@Result)^ := 0;
-  end;
 end;
 
 function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8;

@@ -1617,7 +1617,7 @@ procedure TWebSocketProtocol.SetEncryptKeyAes(aCipher: TAesAbstractClass;
 begin
   fEncryption := nil;
   fConnectionFlags := [hsrWebsockets];
-  if aKeySize < 128 then
+  if not ValidAesKeyBits(aKeySize) then
     exit;
   fEncryption := TProtocolAes.Create(aCipher, aKey, aKeySize);
   include(fConnectionFlags, hsrSecured)
