@@ -2675,7 +2675,7 @@ begin
             not ConsoleHandleCtrlCPressed do
       begin
         if IsMultiThread then
-          CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif}
+          CheckSynchronize(100)
         else
           Windows.Sleep(100);
         while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do

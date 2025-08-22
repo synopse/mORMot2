@@ -3608,7 +3608,7 @@ begin
        (GetTickCount64 > endtix) then
       exit // result = false on timeout
     else if CallSynchronize then
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+      CheckSynchronize(1)
     else
       SleepHiRes(10);
   result := true; // success
