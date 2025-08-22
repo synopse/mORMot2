@@ -1836,6 +1836,10 @@ type
     fTimeOut: integer;
     fSndBufLen: integer; // updated by every SockSend() call
     fSndBuf: RawByteString;
+    procedure DoRaise(const msg: string; const args: array of const;
+      error: TNetResult = nrOK; errnumber: system.PInteger = nil;
+      exc: ENetSockClass = nil); overload;
+    procedure DoRaise(const msg: string); overload;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
@@ -5795,14 +5799,26 @@ begin
     aTLSContext^ := TLS; // copy back information to the caller TNetTlsContext
 end;
 
+procedure TCrtSocket.DoRaise(const msg: string; const args: array of const;
+  error: TNetResult; errnumber: system.PInteger; exc: ENetSockClass);
+begin
+  if exc = nil then
+    exc := ENetSock;
+  raise exc.Create(msg, self, args, error, errnumber);
+end;
+
+procedure TCrtSocket.DoRaise(const msg: string);
+begin
+  raise ENetSock.Create(msg, self, [], nrOk, nil);
+end;
+
 constructor TCrtSocket.OpenUri(const aUri: TUri; const aUriFull, aTunnel: RawUtf8;
   aTimeOut: cardinal; aTLSContext: PNetTlsContext);
 var
   t: TUri;
 begin
   if aUri.Server = '' then
-    raise ENetSock.Create('%s.OpenUri(%s): invalid URI',
-                          [ClassNameShort(self)^, aUriFull]);
+    DoRaise('OpenUri(%s): invalid URI', [aUriFull]);
   fOpenUriFull := aUriFull;
   t.From(aTunnel);
   Open(aUri.Server, aUri.Port, nlTcp, aTimeOut, aUri.Https, aTLSContext, @t);
@@ -5842,15 +5858,12 @@ begin
   begin
     {$ifdef OSLINUX} // try systemd activation
     if not sd.IsAvailable then
-      raise ENetSock.Create('%s.Bind('''') but Systemd is not available',
-        [ClassNameShort(self)^]);
+      DoRaise('Bind('''') but Systemd is not available');
     if sd.listen_fds(0) > 1 then
-      raise ENetSock.Create('%s.Bind(''''): Systemd activation failed - too ' +
-        'many file descriptors received', [ClassNameShort(self)^]);
+      DoRaise('Bind(''''): Systemd activation failed - too many file descriptors');
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
-    raise ENetSock.Create('%s.Bind(''''), i.e. Systemd activation, ' +
-      'is not allowed on this platform', [ClassNameShort(self)^]);
+    DoRaise('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
     {$endif OSLINUX}
   end
   else
@@ -5896,13 +5909,11 @@ begin
   if fSecure = nil then // ignore duplicated calls
   try
     if not Assigned(NewNetTls) then
-      raise ENetSock.Create('%s.DoTlsAfter: TLS support not compiled ' +
-        '- try including mormot.lib.openssl11 in your project',
-        [ClassNameShort(self)^]);
+      DoRaise('DoTlsAfter: TLS support not compiled ' +
+        '- try including mormot.lib.openssl11 in your project');
     fSecure := NewNetTls;
     if fSecure = nil then
-      raise ENetSock.Create('%s.DoTlsAfter: TLS is not available on this ' +
-        'system - try installing OpenSSL 1.1/3.x', [ClassNameShort(self)^]);
+      DoRaise('DoTlsAfter: TLS is not available - try installing OpenSSL');
     case caller of
       cstaConnect:
         fSecure.AfterConnection(fSock, TLS, fServer);
@@ -5920,8 +5931,7 @@ begin
     on E: Exception do
     begin
       fSecure := nil; // reset TLS context
-      raise ENetSock.CreateFmt('%s.DoTlsAfter: TLS failed [%s %s]',
-        [ClassNameShort(self)^, ClassNameShort(E)^, E.Message]);
+      DoRaise('DoTlsAfter: TLS failed [%s %s]', [ClassNameShort(E)^, E.Message]);
     end;
   end;
 end;
@@ -5931,8 +5941,7 @@ var
   u: TUri;
 begin
   if not u.From(aUri) then
-    raise ENetSock.Create('%s.ConnectUri(%s): invalid URI',
-            [ClassNameShort(self)^, aUri]);
+    DoRaise('ConnectUri(%s): invalid URI', [aUri]);
   OpenBind(u.Server, u.Port, {doBind=}false, u.Https);
   if aAddress <> nil then
     aAddress^ := u.Address;
@@ -5974,9 +5983,8 @@ begin
       fProxyUrl := Tunnel.URI;
       if Tunnel.Https and aTLS then
         // single TLS parameter for either the Tunnel or the destination
-        raise ENetSock.Create(
-          '%s.Open(%s:%s): %s proxy - unsupported dual TLS layers',
-          [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
+        DoRaise('Open(%s:%s): %s proxy - unsupported dual TLS layers',
+          [fServer, fPort, fProxyUrl]);
       try
         res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
           fTimeout, fTimeout, fTimeout, {retry=}2, fSock, @addr);
@@ -6002,12 +6010,12 @@ begin
         end;
       except
         on E: Exception do
-          raise ENetSock.Create('%s.Open(%s:%s): %s proxy error %s',
-            [ClassNameShort(self)^, fServer, fPort, fProxyUrl, E.Message]);
+          DoRaise('Open(%s:%s): %s proxy error %s',
+            [fServer, fPort, fProxyUrl, E.Message]);
       end;
       if res <> nrOk then
-        raise ENetSock.Create('%s.Open(%s:%s): %s proxy error',
-          [ClassNameShort(self)^, fServer, fPort, fProxyUrl], res);
+        DoRaise('Open(%s:%s): %s proxy error',
+          [fServer, fPort, fProxyUrl], res);
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy CONNECT %',
           [fServer, fPort, fProxyUrl], self);
@@ -6036,8 +6044,8 @@ begin
     //  OnLog(sllTrace, 'After NewSocket=%', [ToText(res)^], self);
     addr.IP(fRemoteIP, true);
     if res <> nrOK then
-      raise ENetSock.Create('%s %s.OpenBind(%s:%s) [remoteip=%s]',
-        [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort, fRemoteIP], res);
+      DoRaise('OpenBind(%s:%s): %s [remoteip=%s]',
+        [fServer, fPort, BINDMSG[doBind], fRemoteIP], res);
     fSocketFamily := addr.Family;
   end
   else
@@ -6218,8 +6226,7 @@ begin
   res := InputSock(r^);
   if res < 0 then
     with TextRecUserData(r^)^ do
-      raise ENetSock.Create('%s.%s', [ClassNameShort(Owner)^, ctx],
-        LastNetResult, @LastRawError);
+      Owner.DoRaise('%s', [ctx], LastNetResult, @LastRawError);
 end;
 
 const
@@ -6399,7 +6406,7 @@ begin
         #13:
           inc(line); // loop to handle the following #10
       else // p[line] should be either #10 or #13
-        raise ExceptionWithProps.Create('SockInReadln: BufferLineLength?')
+        DoRaise('SockInReadln: BufferLineLength?');
       end;
     end;
     line := SearchEndOfLine;
@@ -6462,9 +6469,9 @@ var
   backup: PtrInt;
 begin
   if SockIn = nil then
-    raise ENetSock.Create('%s.SockInPending(nil)', [ClassNameShort(self)^]);
+    DoRaise('SockInPending(nil)');
   if aTimeOutMS < 0 then
-    raise ENetSock.Create('%s.SockInPending(-1)', [ClassNameShort(self)^]);
+    DoRaise('SockInPending(-1)');
   // first try in SockIn^.Buffer
   with PTextRec(SockIn)^ do
     result := BufEnd - BufPos;
@@ -6582,8 +6589,7 @@ begin
           SockSend(t, @tmp[23] - t);
         end;
     else
-      raise ENetSock.CreateFmt('%s.SockSend: unsupported VType=%d',
-        [ClassNameShort(self)^, v^.VType]); // paranoid
+      DoRaise('SockSend: unsupported VType=%d', [v^.VType]); // paranoid
     end;
     inc(v);
   end;
@@ -6682,14 +6688,14 @@ begin
       if aNoRaise then
         exit
       else
-        raise ENetSock.Create('%s.SockSendFlush(%s) len=%d',
-          [ClassNameShort(self)^, fServer, buflen], result, @rawError);
+        DoRaise('SockSendFlush(%s) len=%d',
+          [fServer, buflen], result, @rawError);
   // direct sending of the remaining bodylen bytes (if needed)
   if bodylen > 0 then
     if not TrySndLow(pointer(aBody), bodylen, @result, @rawError) then
       if not aNoRaise then
-        raise ENetSock.Create('%s.SockSendFlush(%s) bodylen=%',
-          [ClassNameShort(self)^, fServer, bodylen], result, @rawError);
+        DoRaise('SockSendFlush(%s) bodylen=%',
+          [fServer, bodylen], result, @rawError);
 end;
 
 function TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer;
@@ -6718,9 +6724,9 @@ begin
       if aNoRaise then
         break
       else
-        raise ENetSock.Create('%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s',
-          [ClassNameShort(self)^, ClassNameShort(Stream)^, ChunkSize, rd, pos,
-           fServer, fPort], result, @rawError);
+        DoRaise('SockSendStream(%s,%d) rd=%d pos=%d to %s:%s',
+          [ClassNameShort(Stream)^, ChunkSize, rd, pos, fServer, fPort],
+          result, @rawError);
     inc(pos, rd);
   until false;
 end;
@@ -6733,8 +6739,8 @@ begin
   read := Length;
   if not TrySockRecv(Buffer, read, {StopBeforeLength=}false, @res, @rawError) or
      (Length <> read) then
-    raise ENetSock.Create('%s.SockRecv(%d) read=%d at %s:%s',
-      [ClassNameShort(self)^, Length, read, fServer, fPort], res, @rawError);
+    DoRaise('SockRecv(%d) read=%d at %s:%s',
+      [Length, read, fServer, fPort], res, @rawError);
 end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
@@ -6973,8 +6979,7 @@ var
 begin
   if (Len <> 0) and
      not TrySndLow(P, Len, @res, @rawError) then
-    raise ENetSock.Create('%s.SndLow(%s) len=%d',
-      [ClassNameShort(self)^, fServer, Len], res, @rawError);
+    DoRaise('SndLow(%s) len=%d', [fServer, Len], res, @rawError);
 end;
 
 procedure TCrtSocket.SndLow(const Data: RawByteString);
