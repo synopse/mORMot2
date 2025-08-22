@@ -10786,8 +10786,9 @@ begin
   // 1. Init
   n := Len shr AesBlockShift;
   if n < 0 then
-    exit
-  else if n > 0 then
+    exit;
+  Crypt.InitOnStack;
+  if n > 0 then
     if (KeySize > 4) and
        not Crypt.DoInit(Key, KeySize, Encrypt) then
       // if error in KeySize, use default fast XorOffset()
@@ -10841,6 +10842,7 @@ begin
   result := false;
   if buffer = nil then
     exit;
+  Crypt.InitOnStack;
   if (KeySize > 4) and
      not Crypt.DoInit(Key, KeySize, Encrypt) then
     // if error in KeySize, use default fast XorOffset()
@@ -10994,6 +10996,7 @@ begin
   result := 0; // makes FixInsight happy
   Tmp := nil;
   outStreamCreated := nil;
+  Crypt.InitOnStack;
   Head.SourceLen := inLen;
   nBlock := Head.SourceLen shr AesBlockShift;
   if Encrypt and
@@ -11217,6 +11220,7 @@ var
   Crypt: TAes;
   Head: TAesFullHeader;
 begin
+  Crypt.InitOnStack;
   if KeySize < 128 then
     result := true
   else if not Crypt.DecryptInit(Key, KeySize) then
