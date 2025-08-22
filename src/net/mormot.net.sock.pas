@@ -1803,17 +1803,15 @@ type
     fProxyHttp);
 
   {$M+}
-  /// Fast low-level Socket implementation
+  /// fast low-level Socket implementation with optional input/output bufferring
   // - direct access to the OS (Windows, Linux) network layer API
-  // - use Open/OpenUri constructor or Create + ConnectUri for a client socket
-  // - use Bind constructor to initialize a server
-  // - call CreateSockIn to use readln(SockIn^, ...) as with standard text files
-  // - even if you do not use read(SockIn^), you may call CreateSockIn then
-  // read the (binary) content via SockInRead/SockInPending methods, which would
-  // benefit of the SockIn^ input buffer to maximize reading speed
-  // - use SockSend() overloaded methods, followed by a SockFlush call
-  // - CreateSockOut for write/writeln are now deprecated because the RTL doesn't
-  // use its buffer to reduce syscalls, so explicit SockSend/SockFlush is better
+  // - use Open/OpenUri constructor or Create + ConnectUri for a client socket,
+  // or the Bind constructor to initialize a server
+  // - call CreateSockIn to instantiate an input buffer for faster process via
+  // SockInReadLn/SockInRead methods or even regular readln(SockIn^, ...)
+  // - use SockSend() overloaded methods, followed by an eventual SockFlush
+  // call, for buffered output (mORMot 1 CreateSockOut is now deprecated because
+  // the RTL doesn't properly use its buffer to reduce syscalls)
   // - since this class relies on its internal optimized SockSend/SockFlush
   // buffering system, TCP_NODELAY option is set to disable the Nagle algorithm
   // - can use TLS (using the SChannel API on Windows, or by including
@@ -2051,7 +2049,7 @@ type
       StopBeforeLength: boolean = false; NetResult: PNetResult = nil;
       RawError: system.PInteger = nil): boolean;
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
-    // - char are read one by one if needed
+    // - expects the line to be less than 16KB (which is the case e.g. with HTTP)
     // - use TimeOut milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
     // - will handle #10 or #13#10 as line delimiter (as normal text content)
@@ -6349,11 +6347,13 @@ end;
 function TCrtSocket.SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
 var
   len, line: PtrInt;
+  read, err: integer;
+  res: TNetResult;
   p: PUtf8Char;
   c: AnsiChar;
   r: PTextRec;
 
-  function SearchEndOfLine: PtrInt; {$ifdef FPC} inline; {$endif}
+  function NextSockInLineLength: PtrInt; {$ifdef FPC} inline; {$endif}
   begin
     repeat
       len := r^.BufEnd - r^.BufPos;
@@ -6365,15 +6365,30 @@ var
       end;
       DoInputSock(r, 'SockInReadLn');
     until fAborted in fFlags;
+    result := 0;
   end;
 
 begin
   result := 0;
   r := pointer(SockIn);
-  if r = nil then // no SockIn^ buffer -> slow multiple sockets API calls
+  if r = nil then // no SockIn^ buffer -> need multiple sockets API calls
   begin
     repeat
-      SockRecv(@c, 1); // may be very slow on Windows
+      read := 1; // one syscall per char: may be very slow on Windows
+      if not TrySockRecv(@c, read, {StopBeforeLength=}false, @res, @err) then
+        case res of
+          nrRetry:
+            begin
+              SleepHiRes(1); // this is a slow loop anyway
+              continue;
+            end;
+          nrClosed:
+            break; // like EOF(SockIn^)
+        else
+          DoRaise('SockInReadLn: TrySockRecv(c) failed', [], res, @err);
+        end
+      else if read <> 1 then
+        DoRaise('SockInReadLn: TrySockRecv(c) read=%', [read]);
       if c <> #13 then
         if c = #10 then
           break
@@ -6396,7 +6411,7 @@ begin
   begin
     // read the next line content from SockIn^ into Buffer^
     repeat
-      line := SearchEndOfLine;
+      line := NextSockInLineLength;
       if line >= Size then
       begin
         result := -1; // avoid buffer overflow
@@ -6435,7 +6450,7 @@ begin
         DoRaise('SockInReadln: BufferLineLength?');
       end;
     end;
-    line := SearchEndOfLine;
+    line := NextSockInLineLength;
     inc(r^.bufpos, line);
   until fAborted in fFlags;
 end;
@@ -6494,8 +6509,6 @@ function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
 var
   backup: PtrInt;
 begin
-  if SockIn = nil then
-    DoRaise('SockInPending(nil)');
   if aTimeOutMS < 0 then
     DoRaise('SockInPending(-1)');
   // first try in SockIn^.Buffer
