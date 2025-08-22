@@ -362,6 +362,10 @@ type
   private
     Context: packed array[1 .. AES_CONTEXT_SIZE] of byte; // hidden state
   public
+    /// to be called if this TAes was not filled with zeros, e.g. not used as
+    // TObject field or global variable, but simply declared on the local stack
+    procedure InitOnStack;
+      {$ifdef HASINLINE}inline;{$endif}
     /// Initialize AES contexts for cypher
     // - first method to call before using this object for encryption
     // - KeySize is in bits, i.e. 128, 192 or 256
@@ -378,10 +382,14 @@ type
     /// Initialize AES contexts for uncypher
     // - first method to call before using this object for decryption
     // - KeySize is in bits, i.e. 128, 192 or 256
+    // - note that any stack-allocated TAes instance requires a InitOnStack call
+    // before calling this method (nothing is expected if a zeroed TObject field)
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES contexts for uncypher, from another TAes.EncryptInit
-    function DecryptInitFrom(const Encryption: TAes;
-      const Key; KeySize: cardinal): boolean;
+    // - note that any stack-allocated TAes instance requires a InitOnStack call
+    // before calling this method (nothing is expected if a zeroed TObject field)
+    function DecryptInitFrom(const Encryption: TAes; const Key;
+      KeySize: cardinal): boolean;
     /// decrypt an AES data block
     // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Decrypt(var B: TAesBlock); overload;
@@ -4184,6 +4192,11 @@ procedure sha256_block_data_order(ctx, bi: pointer; count: PtrInt); external;
 
 {$endif USEARMCRYPTO}
 
+procedure TAes.InitOnStack;
+begin
+  TAesContext(Context).Flags := [];
+end;
+
 procedure TAes.Encrypt(var B: TAesBlock);
 begin
   TAesContext(Context).DoBlock(Context, B, B);
@@ -4199,14 +4212,11 @@ var
   Nk: integer;
   ctx: TAesContext absolute Context;
 begin
-  result := true;
+  result := false;
+  ctx.Flags := []; // = InitOnStack
   if not ValidAesKeyBits(KeySize) then
-  begin
-    result := false;
-    ctx.Flags := [];
     exit;
-  end;
-  ctx.Flags := [aesInitialized];
+  include(ctx.Flags, aesInitialized);
   Nk := KeySize div 32;
   MoveFast(Key, ctx.RK, 4 * Nk);
   {$ifdef ASMINTEL}
@@ -4263,19 +4273,20 @@ begin
   else
   {$endif USEAESNI}
     ShiftPas(KeySize, pointer(@ctx.RK));
+  result := true;
 end;
 
-function TAes.DecryptInitFrom(const Encryption: TAes;
-  const Key; KeySize: cardinal): boolean;
+function TAes.DecryptInitFrom(const Encryption: TAes; const Key;
+  KeySize: cardinal): boolean;
 var
   ctx: TAesContext absolute Context;
 begin
-  if not (aesInitialized in TAesContext(Encryption).Flags) then
+  if not (aesInitialized in TAesContext(Encryption.Context).Flags) then
     // e.g. called from DecryptInit()
     EncryptInit(Key, KeySize)
-  else
+  else if @Encryption <> @self then
     // direct binary copy from initialized encryption instance, including flags
-    MoveFast(Encryption, self, SizeOf(TAes));
+    MoveFast(Encryption.Context, ctx, SizeOf(ctx));
   result := aesInitialized in ctx.Flags;
   if not result then
     exit; // e.g. invalid KeySize
