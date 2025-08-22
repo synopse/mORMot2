@@ -507,6 +507,7 @@
   {$ifdef UNICODE}
     {$define HASVARUSTRING}
     {$define HASCODEPAGE}
+    {$define ISDELPHIUNICODE}       // FPC trunk has an UNICODE mode too
     {$define FPC_OR_UNICODE}
     {$define USERECORDWITHMETHODS}
     {$define HASGENERICSSYNTAX}     // Delphi 2009+ compiler has TArray<>
