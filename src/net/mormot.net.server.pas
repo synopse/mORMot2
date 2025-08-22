@@ -2588,8 +2588,8 @@ begin
     SleepHiRes(10);
     {$endif OSWINDOWS}
     // on binding error, raise exception before the thread is actually created
-    raise EUdpServer.Create('%s.Create binding error on %s:%s',
-      [ClassNameShort(self)^, BindAddress, BindPort], res);
+    raise EUdpServer.Create('Create binding error on %s:%s', self,
+      [BindAddress, BindPort], res);
   end;
   AfterBind;
 end;

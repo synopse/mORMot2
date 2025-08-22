@@ -6112,8 +6112,7 @@ begin
       end;
   end;
   // a non-recoverable socket error occured at sending the request
-  raise ENetSock.Create('%s.SendPacket(%s) failed',
-    [ClassNameShort(self)^, fSock.Server], res, @raw);
+  raise ENetSock.Create('SendPacket(%s) failed', self, [fSock.Server], res, @raw);
 end;
 
 procedure TLdapClient.ReceivePacketFillSockBuffer;

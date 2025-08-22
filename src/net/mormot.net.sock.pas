@@ -92,7 +92,7 @@ type
     fLastError: TNetResult;
   public
     /// reintroduced constructor with TNetResult information
-    constructor Create(msg: string; const args: array of const;
+    constructor Create(msg: string; obj: TObject; const args: array of const;
       error: TNetResult = nrOK; errnumber: system.PInteger = nil); reintroduce;
     /// reintroduced constructor with NetLastError call
     constructor CreateLastError(const msg: string; const args: array of const;
@@ -107,6 +107,8 @@ type
     property LastError: TNetResult
       read fLastError default nrOk;
   end;
+  /// meta-class of ENetSock type definition
+  ENetSockClass = class of ENetSock;
 
   /// one data state to be tracked on a given socket
   TNetEvent = (
@@ -2372,9 +2374,11 @@ end;
 
 { ENetSock }
 
-constructor ENetSock.Create(msg: string; const args: array of const;
-  error: TNetResult; errnumber: system.PInteger);
+constructor ENetSock.Create(msg: string; obj: TObject;
+  const args: array of const; error: TNetResult; errnumber: system.PInteger);
 begin
+  if obj <> nil then
+    msg := format('%s.%s', [ClassNameShort(obj)^, msg]);
   if error <> nrOK then
   begin
     fLastError := error;
@@ -2398,7 +2402,7 @@ begin
     error := NetLastError(NO_ERROR, @err)
   else
     err := NO_ERROR;
-  Create(msg, args, error, @err);
+  Create(msg, nil, args, error, @err);
 end;
 
 class procedure ENetSock.Check(res: TNetResult; const context: ShortString;
@@ -2406,7 +2410,7 @@ class procedure ENetSock.Check(res: TNetResult; const context: ShortString;
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
-    raise Create('%s failed', [context], res, errnumber);
+    raise Create('%s failed', nil, [context], res, errnumber);
 end;
 
 class procedure ENetSock.CheckLastError(const Context: ShortString;
@@ -3106,7 +3110,7 @@ procedure TNetSocketWrap.SetOpt(prot, name: integer;
   value: pointer; valuelen: integer);
 begin
   if @self = nil then
-    raise ENetSock.Create('SetOptions(%d,%d) with no socket', [prot, name]);
+    raise ENetSock.Create('SetOptions(%d,%d) with no socket', nil, [prot, name]);
   if setsockopt(TSocket(@self), prot, name, value, valuelen) <> NO_ERROR then
     raise ENetSock.CreateLastError('SetOptions(%d,%d)', [prot, name]);
 end;
@@ -3116,7 +3120,7 @@ var
   len: integer;
 begin
   if @self = nil then
-    raise ENetSock.Create('GetOptInt(%d,%d) with no socket', [prot, name]);
+    raise ENetSock.Create('GetOptInt(%d,%d) with no socket', nil, [prot, name]);
   result := 0;
   len := SizeOf(result);
   if getsockopt(TSocket(@self), prot, name, @result, @len) <> NO_ERROR then
