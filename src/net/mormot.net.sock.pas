@@ -1951,6 +1951,10 @@ type
     // in such case (assuming UseOnlySockin=false)
     function SockInRead(Content: PAnsiChar; Length: integer;
       UseOnlySockIn: boolean = false): integer; overload;
+    /// read the next line of text from SockIn (which is mandatory)
+    // - returns the line size in bytes, stored with an ending #0 in Buffer
+    // - returns -1 if Buffer's Size is too short, or raise an ENetSock on error
+    function SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
     /// read Length bytes from SockIn buffer + Sock if necessary into a string
     // - just allocate a result string and call SockInRead() to fill it
     function SockInRead(Length: integer;
@@ -6326,6 +6330,77 @@ begin
   Close;
   CloseSockIn;
   inherited Destroy;
+end;
+
+function TCrtSocket.SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
+var
+  len, line: PtrInt;
+  p: PUtf8Char;
+  r: PTextRec;
+
+  function SearchEndOfLine: PtrInt; {$ifdef FPC} inline; {$endif}
+  begin
+    repeat
+      len := r^.BufEnd - r^.BufPos;
+      if len > 0 then
+      begin
+        p := @r^.BufPtr[r^.BufPos];
+        result := BufferLineLength(p, p + len); // SSE2 asm on x86-64
+        exit;
+      end;
+      DoInputSock(r, 'SockInReadLn');
+    until false;
+  end;
+
+begin
+  result := 0;
+  r := pointer(SockIn);
+  if (Size <= 0) or
+     (r = nil) then
+    exit;
+  if Buffer <> nil then
+  begin
+    // read the next line content from SockIn^ into Buffer^
+    repeat
+      line := SearchEndOfLine;
+      if line >= Size then
+      begin
+        result := -1; // avoid buffer overflow, and notify Buffer is too short
+        exit;
+      end;
+      MoveFast(p^, Buffer^, line);
+      inc(r^.bufpos, line);
+      inc(Buffer, line);
+      inc(result, line);
+      if (line <= Size) and
+         (line < len) then
+        break; // we got a line
+      dec(Size, line);
+    until false;
+    Buffer[0] := #0;
+    // read the next line feed
+    inc(p, line);
+    dec(len, line);
+  end
+  else
+    len := 0; // called with Buffer = nil to go to end of line
+  line := 0;
+  repeat
+    while line < len do
+    begin
+      inc(r^.bufpos);
+      case p[line] of
+        #10:
+          exit;
+        #13:
+          inc(line); // loop to handle the following #10
+      else // p[line] should be either #10 or #13
+        raise ExceptionWithProps.Create('SockInReadln: BufferLineLength?')
+      end;
+    end;
+    line := SearchEndOfLine;
+    inc(r^.bufpos, line);
+  until false;
 end;
 
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
