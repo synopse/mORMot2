@@ -6512,14 +6512,17 @@ begin
   if aTimeOutMS < 0 then
     DoRaise('SockInPending(-1)');
   // first try in SockIn^.Buffer
-  with PTextRec(SockIn)^ do
-    result := BufEnd - BufPos;
+  result := 0;
+  if SockIn <> nil then
+    with PTextRec(SockIn)^ do
+      result := BufEnd - BufPos;
   if result <> 0 then
     exit;
   // no data in SockIn^.Buffer, so try if some pending at socket/TLS level
   case SockReceivePending(aTimeOutMS) of // check both TLS and socket levels
     cspDataAvailable,
     cspDataAvailableOnClosedSocket:
+      if SockIn <> nil then
       begin
         backup := fTimeOut;
         fTimeOut := 0; // not blocking call to fill SockIn buffer
@@ -6533,7 +6536,9 @@ begin
         finally
           fTimeOut := backup;
         end;
-      end;
+      end
+      else
+        result := Sock.HasData; // using FIONREAD
     cspSocketError:
       result := -1; // indicates broken socket
     cspSocketClosed:
