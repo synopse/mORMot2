@@ -5342,7 +5342,7 @@ var
   len: integer;
   R: PAnsiChar;
   crc: cardinal;
-  tmp: array[0..16383] of AnsiChar;  // big enough to resize result in-place
+  tmp: TBuffer16K;  // big enough to resize result in-place
 begin
   result := '';
   if (PlainLen = 0) or

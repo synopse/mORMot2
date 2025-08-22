@@ -3461,6 +3461,8 @@ type
   TBuffer4K = array[0..4095] of AnsiChar;
   /// define a buffer of 8KB of data
   TBuffer8K = array[0..8191] of AnsiChar;
+  /// define a buffer of 16KB of data
+  TBuffer16K = array[0..16383] of AnsiChar;
   /// define a buffer of 64KB of data
   TBuffer64K = array[word] of AnsiChar;
 
