@@ -328,7 +328,7 @@ type
     // - ms < 0 means an infinite timeout (blocking until events happen)
     function WaitFor(ms: integer; scope: TNetEvents;
       loerr: system.PInteger = nil): TNetEvents;
-    /// compute how many bytes are actually pending in the receiving queue
+    /// retrieve how many bytes are actually pending in the receiving queue
     function RecvPending(out pending: integer): TNetResult;
     /// return how many pending bytes are in the receiving queue
     // - returns 0 if no data is available, or if the connection is broken: call
@@ -1820,22 +1820,22 @@ type
   // mormot.lib.openssl11 unit to your project) or HTTP Proxy/Tunnel
   TCrtSocket = class
   protected
-    fSock: TNetSocket; // wrapper to raw socket, stored as a pointer
+    fSock: TNetSocket; // wrapper to a raw socket handle, stored as a pointer
+    fSecure: INetTls;
     fServer: RawUtf8;
     fPort: RawUtf8;
     fFlags: TCrtSocketFlags;
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
-    fProxyUrl: RawUtf8;
-    fRemoteIP: RawUtf8;    // set by OpenBind() or AcceptRequest() from TNetAddr
-    fOpenUriFull: RawUtf8; // set by OpenUri()
+    fTimeOut: integer;
     fSockIn: PTextFile;    // allocated by CreateSockIn with its own buffer
+    fSndBufLen: PtrInt;    // updated by every SockSend() call
+    fSndBuf: RawByteString;
+    fRemoteIP: RawUtf8;    // set by OpenBind() or AcceptRequest() from TNetAddr
+    fProxyUrl: RawUtf8;
+    fOpenUriFull: RawUtf8; // set by OpenUri()
     fBytesIn: Int64;
     fBytesOut: Int64;
-    fSecure: INetTls;
-    fTimeOut: integer;
-    fSndBufLen: integer; // updated by every SockSend() call
-    fSndBuf: RawByteString;
     procedure DoRaise(const msg: string; const args: array of const;
       error: TNetResult = nrOK; errnumber: system.PInteger = nil;
       exc: ENetSockClass = nil); overload;
@@ -1957,14 +1957,14 @@ type
     // in such case (assuming UseOnlySockin=false)
     function SockInRead(Content: PAnsiChar; Length: integer;
       UseOnlySockIn: boolean = false): integer; overload;
-    /// read the next line of text from SockIn^.Buffer or from the socket API
-    // - returns the line size in bytes, stored with an ending #0 in Buffer
-    // - returns -1 if Buffer's Size is too short, or raise an ENetSock on error
-    function SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
     /// read Length bytes from SockIn buffer + Sock if necessary into a string
     // - just allocate a result string and call SockInRead() to fill it
     function SockInRead(Length: integer;
       UseOnlySockIn: boolean = false): RawByteString; overload;
+    /// read the next line of text from SockIn^.Buffer or from the socket API
+    // - returns the line size in bytes, stored with an ending #0 in Buffer
+    // - returns -1 if Buffer's Size is too short, or raise an ENetSock on error
+    function SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
     /// returns the number of bytes in SockIn buffer or pending in Sock
     // - CreatesSockIn is mandatory
     // - it first check and quickly return any data pending in SockIn^.Buffer
@@ -2009,7 +2009,7 @@ type
     function SockSendStream(Stream: TStream; ChunkSize: integer = 1 shl 20;
       aNoRaise: boolean = false; aCheckRecv: boolean = false): TNetResult;
     /// how many bytes could be added by SockSend() in the internal buffer
-    function SockSendRemainingSize: integer;
+    function SockSendRemainingSize: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the Buffer with Length bytes
     // - wait TimeOut milliseconds until Length bytes are actually received
@@ -2055,7 +2055,6 @@ type
     // - will handle #10 or #13#10 as line delimiter (as normal text content)
     procedure SockRecvLn(out Line: RawUtf8); overload;
     /// call readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
-    // - char are read one by one
     // - use TimeOut milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
     // - line content is ignored
@@ -6280,7 +6279,7 @@ var // closesocket() or shutdown() are slow e.g. on Windows with wrong Linger
 begin
   // reset internal state
   fSndBufLen := 0; // always reset (e.g. in case of further Open after error)
-  ioresult; // reset readln/writeln value
+  ioresult;        // reset readln/writeln value
   rec := pointer(fSockIn);
   if rec <> nil then
   begin
