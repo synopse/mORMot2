@@ -11900,7 +11900,7 @@ begin
     MoveFast(Store.tmp, Store.buf^, Store.added);
   end
   else
-    ReAllocMem(Store.buf, Store.len + SYNTEMPTRAIL);
+    ReallocMem(Store.buf, Store.len + SYNTEMPTRAIL);
 end;
 
 function TSynTempAdder.Add(l: PtrInt): pointer;

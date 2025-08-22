@@ -762,7 +762,7 @@ begin
   if n > Capacity then
   begin
     Capacity := NextGrow(n); // reserve a bit more for faster size-up
-    ReAllocMem(Value, Capacity * HALF_BYTES);
+    ReallocMem(Value, Capacity * HALF_BYTES);
   end;
   if not nozero and
      (n > Size) then

@@ -1230,7 +1230,7 @@ begin
   GetMemoryManager(mm); // will work with mormot.core.fpcx64mm and any other MM
   RedirectCode(@fpc_rtl_getmem,  @mm.GetMem);    // RTL calls
   RedirectCode(@fpc_rtl_freemem, @mm.FreeMem);
-  RedirectCode(@ReAllocMem,      @mm.ReAllocMem);
+  RedirectCode(@ReallocMem,      @mm.ReallocMem);
   RedirectCode(@fpc_getmem,      @mm.GetMem);        // asm calls
   RedirectCode(@fpc_freemem,     @mm.FreeMem);
   {$endif NOPATCHRTL}

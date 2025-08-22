@@ -10068,7 +10068,7 @@ var
   t: PtrInt;
 begin
   t := length(Text);
-  SetLength(Text, t + 1); // is likely to avoid any reallocmem
+  SetLength(Text, t + 1); // is likely to avoid any ReallocMem
   MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], t);
   PByteArray(Text)[0] := ord(Added);
 end;

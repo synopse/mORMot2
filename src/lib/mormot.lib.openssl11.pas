@@ -59,7 +59,7 @@ unit mormot.lib.openssl11;
 //     sudo ln -s libssl.so.1.1 libssl.so
 
 {.$define OPENSSLUSERTLMM}
-// define this so that OpenSSL will use pascal RTL GetMem/FreeMem/reallocmem
+// define this so that OpenSSL will use pascal RTL GetMem/FreeMem/ReallocMem
 // - note that OpenSSL has no "finalize" API, and is likely to leak memory - so
 // you may try to define it if you don't check memory leaks (at you own risk)
 
@@ -5872,7 +5872,7 @@ begin
     else
       GetMem(result, siz)
   else
-    result := ReAllocMem(str, siz);
+    result := ReallocMem(str, siz);
 end;
 
 procedure rtl_free(str: pointer; fname: PUtf8Char; fline: integer); cdecl;

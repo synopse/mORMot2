@@ -5909,7 +5909,7 @@ end;
 
 function xRealloc1(ptr: pointer; size: integer): pointer; cdecl;
 begin
-  result := ReAllocMem(ptr, size);
+  result := ReallocMem(ptr, size);
 end;
 
 function xSize1(ptr: pointer): integer; cdecl;
