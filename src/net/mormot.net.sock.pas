@@ -6353,7 +6353,7 @@ var
   c: AnsiChar;
   r: PTextRec;
 
-  function NextSockInLineLength: PtrInt; {$ifdef FPC} inline; {$endif}
+  function GetSockInLineLength: PtrInt; {$ifdef FPC} inline; {$endif}
   begin
     repeat
       len := r^.BufEnd - r^.BufPos;
@@ -6388,7 +6388,7 @@ begin
           DoRaise('SockInReadLn: TrySockRecv(c) failed', [], res, @err);
         end
       else if read <> 1 then
-        DoRaise('SockInReadLn: TrySockRecv(c) read=%', [read]);
+        DoRaise('SockInReadLn: TrySockRecv(c) read=%d', [read]);
       if c <> #13 then
         if c = #10 then
           break
@@ -6411,7 +6411,7 @@ begin
   begin
     // read the next line content from SockIn^ into Buffer^
     repeat
-      line := NextSockInLineLength;
+      line := GetSockInLineLength;
       if line >= Size then
       begin
         result := -1; // avoid buffer overflow
@@ -6447,11 +6447,11 @@ begin
         #13:
           inc(line); // loop to handle the following #10
       else // p[line] should be either #10 or #13
-        DoRaise('SockInReadln: BufferLineLength?');
+        DoRaise('SockInReadln: BufferLineLength^=#%d', [ord(p[line])]);
       end;
     end;
-    line := NextSockInLineLength;
-    inc(r^.bufpos, line);
+    line := GetSockInLineLength;
+    inc(r^.bufpos, line); // just ignore any text up to the line feed
   until fAborted in fFlags;
 end;
 
@@ -6751,7 +6751,7 @@ begin
   if bodylen > 0 then
     if not TrySndLow(pointer(aBody), bodylen, @result, @rawError) then
       if not aNoRaise then
-        DoRaise('SockSendFlush(%s) bodylen=%',
+        DoRaise('SockSendFlush(%s) bodylen=%d',
           [fServer, bodylen], result, @rawError);
 end;
 
