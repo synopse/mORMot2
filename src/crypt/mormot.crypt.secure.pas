@@ -549,6 +549,8 @@ type
     hfSHA3_384,
     hfShake128,
     hfShake256);
+  /// a pointer to one of our hash algorithms
+  PHashAlgo = ^THashAlgo;
 
   /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgos = set of THashAlgo;

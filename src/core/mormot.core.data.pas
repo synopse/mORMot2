@@ -9610,7 +9610,7 @@ const
     {$ifndef DYNARRAYHASH_PO2}
     251, 499, 797, 1259, 2011, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
     {$endif DYNARRAYHASH_PO2}
-    // start after HASH_PO2=2^18=262144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
+    // start after HASH_PO2=2^18=262,144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
     13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
@@ -9641,7 +9641,7 @@ begin
   {$ifdef DYNARRAYHASH_PO2}
   // Delphi Win32 e.g. is not efficient with Lemire 64-bit multiplication
   if result <= HASH_PO2 then
-    // efficient AND for power of two division
+    // efficient AND for power of two division (up to 262,144 slots)
     result := aHashCode and (result - 1)
   else
   {$endif DYNARRAYHASH_PO2}

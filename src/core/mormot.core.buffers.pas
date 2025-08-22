@@ -6497,7 +6497,7 @@ begin // this loop is faster than mORMot 1 manual x86 asm, even on Delphi 7
     c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
     rp[0] := enc[(c shr 18) and $3f];
     rp[1] := enc[(c shr 12) and $3f];
-    rp[2] := enc[(c shr 6) and $3f];
+    rp[2] := enc[(c shr 6)  and $3f];
     rp[3] := enc[c and $3f];
     inc(rp, 4);
     inc(sp, 3);

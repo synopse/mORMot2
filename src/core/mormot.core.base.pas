@@ -828,7 +828,7 @@ function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
 // 265, 331, 413, 516, 645, 806, 1007, 1258, 1572, ...
 function NextGrow(capacity: integer): integer;
 
-/// compute the next power-of-two of a 32-bit number
+/// compute the next power-of-two of a 32-bit number (using branchless code)
 // - e.g. NextPowerOfTwo(3) = NextPowerOfTwo(4) = 4
 function NextPowerOfTwo(number: cardinal): cardinal;
 
