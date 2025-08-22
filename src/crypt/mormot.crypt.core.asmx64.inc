@@ -4221,39 +4221,51 @@ end;
 
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        mov     eax, Rounds
-        sub     eax, 9
-        movups  xmm0, dqword ptr [RK + $10]
-        movups  xmm1, dqword ptr [RK + $20]
-        movups  xmm2, dqword ptr [RK + $30]
-        movups  xmm3, dqword ptr [RK + $40]
-        movups  xmm4, dqword ptr [RK + $50]
-        movups  xmm5, dqword ptr [RK + $60]
+        lea     RK, [RK + $70]
+        movups  xmm0, dqword ptr [RK + $10 - $70]
+        movups  xmm1, dqword ptr [RK + $20 - $70]
+        movups  xmm2, dqword ptr [RK + $30 - $70]
+        movups  xmm3, dqword ptr [RK + $40 - $70]
+        movups  xmm4, dqword ptr [RK + $50 - $70]
+        movups  xmm5, dqword ptr [RK + $60 - $70]
         aesimc  xmm0, xmm0
         aesimc  xmm1, xmm1
         aesimc  xmm2, xmm2
         aesimc  xmm3, xmm3
         aesimc  xmm4, xmm4
         aesimc  xmm5, xmm5
-        movups  dqword ptr [RK + $10], xmm0
-        movups  dqword ptr [RK + $20], xmm1
-        movups  dqword ptr [RK + $30], xmm2
-        movups  dqword ptr [RK + $40], xmm3
-        movups  dqword ptr [RK + $50], xmm4
-        movups  dqword ptr [RK + $60], xmm5
-        movups  xmm0, dqword ptr [RK + $70]
-        movups  xmm1, dqword ptr [RK + $80]
+        movups  dqword ptr [RK + $10 - $70], xmm0
+        movups  dqword ptr [RK + $20 - $70], xmm1
+        movups  dqword ptr [RK + $30 - $70], xmm2
+        movups  dqword ptr [RK + $40 - $70], xmm3
+        movups  dqword ptr [RK + $50 - $70], xmm4
+        movups  dqword ptr [RK + $60 - $70], xmm5
+        movups  xmm0, dqword ptr [RK + $70 - $70]
+        movups  xmm1, dqword ptr [RK + $80 - $70]
+        movups  xmm2, dqword ptr [RK + $90 - $70]
         aesimc  xmm0, xmm0
         aesimc  xmm1, xmm1
-        movups  dqword ptr [RK + $70], xmm0
-        movups  dqword ptr [RK + $80], xmm1
-        lea     RK, [RK + $90]
-@loop:  movups  xmm0, dqword ptr [RK]
+        aesimc  xmm2, xmm2
+        movups  dqword ptr [RK + $70 - $70], xmm0
+        movups  dqword ptr [RK + $80 - $70], xmm1
+        movups  dqword ptr [RK + $90 - $70], xmm2
+        cmp     Rounds, 10
+        je      @done
+        movups  xmm0, dqword ptr [RK + $a0 - $70]
+        movups  xmm1, dqword ptr [RK + $b0 - $70]
         aesimc  xmm0, xmm0
-        movups  dqword ptr [RK], xmm0
-        add     RK, 16
-        sub     eax, 1
-        jnz     @loop
+        aesimc  xmm1, xmm1
+        movups  dqword ptr [RK + $a0 - $70], xmm0
+        movups  dqword ptr [RK + $b0 - $70], xmm1
+        cmp     Rounds, 12
+        je      @done
+        movups  xmm0, dqword ptr [RK + $c0 - $70]
+        movups  xmm1, dqword ptr [RK + $d0 - $70]
+        aesimc  xmm0, xmm0
+        aesimc  xmm1, xmm1
+        movups  dqword ptr [RK + $c0 - $70], xmm0
+        movups  dqword ptr [RK + $d0 - $70], xmm1
+@done:
 end;
 
 procedure AesNiEncryptOfb128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
