@@ -1951,7 +1951,7 @@ type
     // SockIn^.Buffer and returns the corresponding number of bytes
     // - can be used also without SockIn: it will call directly SockRecv()
     // in such case (assuming UseOnlySockin=false)
-    function SockInRead(Content: PAnsiChar; Length: integer;
+    function SockInRead(Content: PAnsiChar; Length: PtrInt;
       UseOnlySockIn: boolean = false): integer; overload;
     /// read Length bytes from SockIn^.Buffer and raw socket if necessary
     // - just allocate a result string and call SockInRead() to fill it
@@ -6370,7 +6370,7 @@ var
 
 begin
   result := 0;
-  r := pointer(SockIn);
+  r := pointer(fSockIn);
   if r = nil then // no SockIn^ buffer -> need multiple sockets API calls
   begin
     repeat
@@ -6455,10 +6455,10 @@ begin
   until fAborted in fFlags;
 end;
 
-function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
+function TCrtSocket.SockInRead(Content: PAnsiChar; Length: PtrInt;
   UseOnlySockIn: boolean): integer;
 var
-  len: integer;
+  len: PtrInt;
   r: PTextRec;
 // read Length bytes from SockIn^ buffer + Sock if necessary
 begin
@@ -6466,7 +6466,7 @@ begin
   result := 0;
   if Length <= 0 then
     exit;
-  r := pointer(SockIn);
+  r := pointer(fSockIn);
   if r <> nil then
     repeat
       len := r^.BufEnd - r^.BufPos;
@@ -6489,11 +6489,10 @@ begin
       // loop until Timeout
     until Timeout = 0;
   // direct receiving of the remaining bytes from socket
-  if Length > 0 then
-  begin
-    SockRecv(Content, Length); // raise ENetSock if failed to read Length
-    inc(result, Length);
-  end;
+  if Length <= 0 then
+    exit;
+  SockRecv(Content, Length); // raise ENetSock if failed to read Length
+  inc(result, Length);
 end;
 
 function TCrtSocket.SockInRead(Length: integer; UseOnlySockIn: boolean): RawByteString;
