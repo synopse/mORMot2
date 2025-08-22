@@ -2052,9 +2052,8 @@ type
     // - char are read one by one if needed
     // - use TimeOut milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
-    // - by default, will handle #10 or #13#10 as line delimiter (as normal text
-    // files), but you can delimit lines using #13 if CROnly is TRUE
-    procedure SockRecvLn(out Line: RawUtf8; CROnly: boolean = false); overload;
+    // - will handle #10 or #13#10 as line delimiter (as normal text content)
+    procedure SockRecvLn(out Line: RawUtf8); overload;
     /// call readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
     // - use TimeOut milliseconds wait for incoming data
@@ -6914,86 +6913,22 @@ begin
   result := (res = nrOK);
 end;
 
-procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
-
-  procedure RecvLn(eol: AnsiChar);
-  var
-    P: PAnsiChar;
-    LP, L: PtrInt;
-    tmp: TBuffer1K; // avoid ReallocMem() every char
-  begin
-    P := @tmp;
-    L := 0;
-    repeat
-      SockRecv(P, 1); // this is very slow under Windows -> use SockIn^ instead
-      if (eol = #13) or
-         (P^ <> #13) then // NCSA 1.3 does send a #10 only -> ignore #13
-        if (P^ = eol) or
-           (P^ = #0) then
-        begin
-          if Line = '' then // get line
-            FastSetString(Line, @tmp, P - tmp)
-          else
-          begin
-            // append to already read chars
-            LP := P - tmp;
-            Setlength(Line, L + LP);
-            MoveFast(tmp, PByteArray(Line)[L], LP);
-          end;
-          exit;
-        end
-        else if P = @tmp[high(tmp)] then
-        begin
-          // tmp[] buffer full? -> append to already read chars
-          Setlength(Line, L + SizeOf(tmp));
-          MoveFast(tmp, PByteArray(Line)[L], SizeOf(tmp));
-          inc(L, SizeOf(tmp));
-          P := @tmp;
-        end
-        else
-          inc(P);
-    until fAborted in fFlags;
-  end;
-
+procedure TCrtSocket.SockRecvLn(out Line: RawUtf8);
 var
-  err: integer;
+  tmp: TBuffer8K; // should be enough in our context (parsing HTTP headers)
+  len: PtrInt;
 begin
-  if CROnly then
-    RecvLn(#13)
-  else if SockIn <> nil then
-  begin
-    {$I-}
-    readln(SockIn^, Line); // use RTL over SockIn^ buffer
-    err := ioresult;
-    if err <> 0 then
-      raise ENetSock.Create('%s.SockRecvLn ioresult=%d after %d chars',
-        [ClassNameShort(self)^, err, Length(Line)]);
-    {$I+}
-  end
-  else
-    RecvLn(#10); // slow under Windows -> prefer SockIn^
+  len := SockInReadLn(@tmp, SizeOf(tmp)); // with or without SockIn^
+  if len = 0 then
+    exit;
+  if len < 0 then
+    DoRaise('SockRecvLn: line too long (>8KB)');
+  FastSetString(Line, @tmp, len);
 end;
 
 procedure TCrtSocket.SockRecvLn;
-var
-  c: AnsiChar;
-  err: integer;
 begin
-  if SockIn <> nil then
-  begin
-    {$I-}
-    readln(SockIn^);
-    err := ioresult;
-    if err <> 0 then
-      raise ENetSock.Create('%s.SockRecvLn ioresult=%d',
-        [ClassNameShort(self)^, err]);
-    {$I+}
-  end
-  else
-    repeat
-      SockRecv(@c, 1);
-    until (fAborted in fFlags) or
-          (c = #10);
+  SockInReadLn({Buffer=}nil, 0);
 end;
 
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
