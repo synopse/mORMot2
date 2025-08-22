@@ -3265,10 +3265,7 @@ begin
   while (P^ > #0) and
         (P^ <= ' ') do
     inc(P); // trim left
-  if L >= 0 then
-    dec(L, P - P2)
-  else
-    L := StrLen(P);
+  dec(L, P - P2);
   repeat
     if (L = 0) or
        (P[L - 1] > ' ') then
@@ -3513,8 +3510,6 @@ begin
       ContentLastModified := HttpDateToUnixTimeBuffer(P + 14);
   end;
   // store meaningful headers into WorkBuffer, if not already there
-  if PLen < 0 then
-    PLen := StrLen(P2);
   Head.Append(P2, PLen);
   Head.AppendCRLF;
 end;
@@ -4291,44 +4286,48 @@ begin
 end;
 
 function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
+
+  procedure DirectRead; // sub-function for the RawUtf8 stack frame
+  var
+    u: RawUtf8;
+  begin // never called in practice, unless forgot to call CreateSockIn
+    repeat
+      SockRecvLn(u);
+      if u = '' then
+        break; // end of input headers
+      Http.ParseHeader(pointer(u), length(u), HeadersUnFiltered);
+    until Http.State <> hrsNoStateMachine;
+  end;
+
 var
-  s: RawUtf8;
-  err: integer;
-  line: array[0..8191] of AnsiChar; // avoid most memory allocations
+  len: integer;
+  line: TBuffer8K; // avoid most memory allocations - 8KB should be enough
 begin
   // parse the headers
   result := false;
   HttpStateReset;
   if SockIn <> nil then
     repeat
-      {$I-}
-      readln(SockIn^, line);
-      err := ioresult;
-      if err <> 0 then
-        EHttpSocket.RaiseUtf8('%.GetHeader error=%', [self, err]);
-      {$I+}
-      if line[0] = #0 then
-        break; // HTTP headers end with a void line
-      Http.ParseHeader(@line, {linelen=}-1, HeadersUnFiltered);
-      if Http.State <> hrsNoStateMachine then
-        exit; // error
-    until false
-  else
-    repeat
-      SockRecvLn(s);
-      if s = '' then
+      len := SockInReadLn(line, SizeOf(line)); // very efficient readln()
+      if len <= 0 then // HTTP headers end with a void line
+      begin
+        if len < 0 then // -1 = buffer overflow
+          Http.State := hrsErrorPayloadTooLarge;
         break;
-      Http.ParseHeader(pointer(s), length(s), HeadersUnFiltered);
-      if Http.State <> hrsNoStateMachine then
-        exit; // error
-    until false;
-  // finalize the headers
-  result := true;
-  Http.ParseHeaderFinalize; // compute all meaningful headers
+      end;
+      Http.ParseHeader(@line, len, HeadersUnFiltered);
+    until Http.State <> hrsNoStateMachine
+  else
+    DirectRead;
+  if Http.State = hrsNoStateMachine then
+  begin
+    Http.ParseHeaderFinalize; // compute all meaningful headers
+    result := true;           // success
+  end;
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'GetHeader % % flags=% len=% %', [Http.CommandMethod,
-      Http.CommandUri, ToText(Http.HeaderFlags), Http.ContentLength,
-      Http.ContentType], self);
+    OnLog(sllTrace, 'GetHeader=% % % flags=% len=% %', [ToText(Http.State)^,
+      Http.CommandMethod, Http.CommandUri, ToText(Http.HeaderFlags),
+      Http.ContentLength, Http.ContentType], self);
 end;
 
 {$I-}
