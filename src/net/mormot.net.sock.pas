@@ -6203,6 +6203,17 @@ begin
 end;
 {$endif FPC}
 
+procedure DoInputSock(r: PTextRec; const ctx: ShortString);
+var
+  res: integer;
+begin
+  res := InputSock(r^);
+  if res < 0 then
+    with TextRecUserData(r^)^ do
+      raise ENetSock.Create('%s.%s', [ClassNameShort(Owner)^, ctx],
+        LastNetResult, @LastRawError);
+end;
+
 const
   SOCKMINBUFSIZE = 1024; // big enough for headers (body is read directly)
 
@@ -6320,7 +6331,7 @@ end;
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
   UseOnlySockIn: boolean): integer;
 var
-  len, res: integer;
+  len: integer;
   r: PTextRec;
 // read Length bytes from SockIn^ buffer + Sock if necessary
 begin
@@ -6347,11 +6358,7 @@ begin
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
-      res := InputSock(r^);
-      if res < 0 then
-        with TextRecUserData(r^)^ do
-          raise ENetSock.Create('%.SockInRead', [ClassNameShort(self)^],
-            LastNetResult, @LastRawError);
+      DoInputSock(r, 'SockInRead');
       // loop until Timeout
     until Timeout = 0;
   // direct receiving of the remaining bytes from socket
