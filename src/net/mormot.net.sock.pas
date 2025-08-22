@@ -1925,15 +1925,13 @@ type
     // - this function reflects the actual aTLS parameter supplied to OpenBind()
     function ServerTls: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// initialize SockIn for receiving with read[ln](SockIn^,...)
-    // - data is buffered, filled as the data is available
-    // - read(char) or readln() is indeed very fast
-    // - multithread applications would also use this SockIn pseudo-text file
-    // - default 1KB is big enough for headers (content will be read directly)
-    // - by default, expect CR+LF as line feed (i.e. the HTTP way)
+    /// initialize SockIn text file instance, and its internal SockIn^.Buffer
+    // - readln(SockIn^) and SockInReadLn/SockInRead methods benefit from this buffer
+    // - default 1KB seems big enough for headers (content will be read directly)
+    // - by default, expects CR+LF as line feed (i.e. the HTTP way)
     procedure CreateSockIn(LineBreak: TTextLineBreakStyle = tlbsCRLF;
       InputBufferSize: integer = 1024);
-    /// finalize SockIn receiving buffer
+    /// finalize the SockIn text file instance and its SockIn^.Buffer
     // - you may call this method when you are sure that you don't need the
     // input buffering feature on this connection any more (e.g. after having
     // parsed the HTTP header, then rely on direct socket comunication)
@@ -1941,21 +1939,21 @@ type
     /// close and shutdown the connection
     // - called from Destroy, but is reintrant so could be called earlier
     procedure Close; virtual;
-    /// close the opened socket, and corresponding SockIn^ text file (if any)
+    /// close the opened socket, and corresponding SockIn text file (if any)
     destructor Destroy; override;
     /// mark the internal Aborted flag to let any blocking loop abort ASAP
     // - will also close any associated socket at OS level
     procedure Abort; virtual;
-    /// read Length bytes from SockIn buffer + Sock if necessary
+    /// read Length bytes from SockIn^.Buffer and raw socket if necessary
     // - if SockIn is available, it first gets data from SockIn^.Buffer,
     // then directly receive data from socket if UseOnlySockIn = false
-    // - if UseOnlySockIn = true, it will return the data available in SockIn^,
-    // and returns the number of bytes
+    // - if UseOnlySockIn = true, it will return only the data available in
+    // SockIn^.Buffer and returns the corresponding number of bytes
     // - can be used also without SockIn: it will call directly SockRecv()
     // in such case (assuming UseOnlySockin=false)
     function SockInRead(Content: PAnsiChar; Length: integer;
       UseOnlySockIn: boolean = false): integer; overload;
-    /// read Length bytes from SockIn buffer + Sock if necessary into a string
+    /// read Length bytes from SockIn^.Buffer and raw socket if necessary
     // - just allocate a result string and call SockInRead() to fill it
     function SockInRead(Length: integer;
       UseOnlySockIn: boolean = false): RawByteString; overload;
@@ -1963,10 +1961,9 @@ type
     // - returns the line size in bytes, stored with an ending #0 in Buffer
     // - returns -1 if Buffer's Size is too short, or raise an ENetSock on error
     function SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
-    /// returns the number of bytes in SockIn buffer or pending in Sock
-    // - CreatesSockIn is mandatory
-    // - it first check and quickly return any data pending in SockIn^.Buffer
-    // - if the buffer is void, will call InputSock to fill it
+    /// returns the number of bytes in SockIn^.Buffer or pending in the OS stack
+    // - it first checks and quickly returns any length pending in SockIn^.Buffer
+    // - if buffer is void, will call InputSock to fill it or check the socket API
     // - returns -1/-2 in case of a socket error (e.g. broken/closed connection)
     // - returns the number of bytes available in input buffers (SockIn or TLS):
     // there may be more waiting at the socket level
@@ -2013,12 +2010,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the Buffer with Length bytes
     // - wait TimeOut milliseconds until Length bytes are actually received
-    // - bypass the SockIn^ buffers
+    // - bypass the SockIn^.Buffer
     // - raise ENetSock exception on socket error, or if Length was not reached
     procedure SockRecv(Buffer: pointer; Length: integer); overload;
     /// fill a RawByteString Buffer with Length bytes
     // - wait TimeOut milliseconds until Length bytes are actually received
-    // - bypass the SockIn^ buffers
+    // - bypass the SockIn^.Buffer
     // - raise ENetSock exception on socket error, or if Length was not reached
     function SockRecv(Length: integer): RawByteString; overload;
     /// check if there are some pending bytes in the input sockets API buffer
@@ -2038,7 +2035,7 @@ type
       RawError: system.PInteger = nil): RawByteString;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
-    // - bypass the SockIn^ buffers
+    // - bypass the SockIn^.Buffer
     // - return true on success, or false on any fatal socket error - NetResult^
     // (if not nil) would contain the actual socket error
     // - call Close if the socket is identified as shutdown from the other side
@@ -2048,16 +2045,17 @@ type
     function TrySockRecv(Buffer: pointer; var Length: integer;
       StopBeforeLength: boolean = false; NetResult: PNetResult = nil;
       RawError: system.PInteger = nil): boolean;
-    /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
-    // - expects the line to be less than 16KB (which is the case e.g. with HTTP)
+    /// faster readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
+    // - just wrap SockInReadLn() with a 16KB buffer (which is enough e.g. with HTTP)
     // - use TimeOut milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
     // - will handle #10 or #13#10 as line delimiter (as normal text content)
     procedure SockRecvLn(out Line: RawUtf8); overload;
-    /// call readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
+    /// faster readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
+    // - just wrap SockInReadLn(Buffer=nil)
     // - use TimeOut milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
-    // - line content is ignored
+    // - any remaining line content is just ignored - as with RTL readln()
     procedure SockRecvLn; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// direct send data through network
@@ -2144,7 +2142,9 @@ type
     // - may be using OpenSSL or the SChannel API
     property Secure: INetTls
       read fSecure;
-    /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
+    /// after CreateSockIn, use e.g. Readln(SockIn^,s) to read a line of text
+    // - consider the faster SockRecvLn/SockInReadLn methods which will still
+    // benefit from SockIn^.Buffer but with no ioresult overhead
     property SockIn: PTextFile
       read fSockIn;
     /// equals true when the Abort method has been called
@@ -6132,7 +6132,7 @@ end;
 function InputSock(var F: TTextRec): integer;
 // SockIn pseudo text file fill its internal buffer only with available data
 // -> no unwanted wait time is added
-// -> very optimized use for readln() in HTTP stream
+// -> very optimized for readln/SockRecvLn/SockInReadLn in HTTP headers
 var
   size: integer;
   addr: TNetAddr;
@@ -6196,7 +6196,7 @@ begin
   F.CloseFunc := @CloseSock;
   if F.Mode = fmInput then
   begin
-    // ReadLn - as used from SockIn^
+    // ReadLn - as used from SockIn^ text pseudo-file
     F.InOutFunc := @InputSock;
     F.FlushFunc := nil;
     result := NO_ERROR;
