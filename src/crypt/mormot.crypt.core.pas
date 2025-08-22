@@ -8058,7 +8058,7 @@ begin
     fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
       [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
     FastSetRawByteString(appsec, @k256[15], 17); // use remaining bytes as key
-    Sha256Weak(appsec, k256); // just a way to reduce to 256-bit
+    Sha256Weak(appsec, k256); // just a common simple way to reduce to 256-bit
     try
       // extract private user key from local hidden file
       key := StringFromFile(fn);
@@ -10727,8 +10727,8 @@ begin
 end;
 
 procedure XorOffset(P: PByteArray; Index, Count: PtrInt);
-// XorOffset: fast and simple Cypher using Index (=Position in Dest Stream):
-// Compression not OK -> apply after compress (e.g. TBZCompressor.withXor=true)
+// XorOffset: fast and simple Cypher using Index (= Position in Dest Stream):
+// Compression not OK -> apply after compress
 var
   Len: PtrInt;
   tab: PByteArray; // 2^13=$2000=8192 bytes of XOR tables ;)
@@ -10777,8 +10777,8 @@ procedure AES(const Key; KeySize: cardinal; bIn, bOut: pointer; Len: integer;
   Encrypt: boolean);
 var
   n: integer;
-  pIn, pOut: PAesBlock;
-  Crypt: TAes;
+  pi, po: PAesBlock;
+  aes: TAes;
 begin
   if (bIn = nil) or
      (bOut = nil) then
@@ -10787,10 +10787,10 @@ begin
   n := Len shr AesBlockShift;
   if n < 0 then
     exit;
-  Crypt.InitOnStack;
+  aes.InitOnStack;
   if n > 0 then
     if (KeySize > 4) and
-       not Crypt.DoInit(Key, KeySize, Encrypt) then
+       not aes.DoInit(Key, KeySize, Encrypt) then
       // if error in KeySize, use default fast XorOffset()
       KeySize := 4;
   if KeySize = 0 then
@@ -10807,13 +10807,13 @@ begin
     exit;
   end;
   // 2. All full blocks, with AES
-  Crypt.DoBlocks(bIn, bOut, pIn, pOut, n, Encrypt);
+  aes.DoBlocks(bIn, bOut, pi, po, n, Encrypt);
   // 3. Last block, just XORed from Key
   // assert(KeySize div 8 >= AesBlockSize);
   n := cardinal(Len) and AesBlockMod;
-  MoveFast(pIn^, pOut^, n); // pIn=pOut is tested in MoveFast()
-  XorOffset(pointer(pOut), Len - n, n);
-  Crypt.Done;
+  MoveFast(pi^, po^, n); // pi=po is tested in MoveFast()
+  XorOffset(pointer(po), Len - n, n);
+  aes.Done;
 end;
 
 const
@@ -10837,19 +10837,19 @@ function AES(const Key; KeySize: cardinal; buffer: pointer; Len: cardinal;
 var
   buf: pointer;
   last, b, n, i: cardinal;
-  Crypt: TAes;
+  aes: TAes;
 begin
   result := false;
   if buffer = nil then
     exit;
-  Crypt.InitOnStack;
+  aes.InitOnStack;
   if (KeySize > 4) and
-     not Crypt.DoInit(Key, KeySize, Encrypt) then
+     not aes.DoInit(Key, KeySize, Encrypt) then
     // if error in KeySize, use default fast XorOffset()
     KeySize := 4;
   if KeySize = 0 then
   begin
-    // no Crypt -> direct write to dest Stream
+    // no aes -> direct write to dest Stream
     Stream.WriteBuffer(buffer^, Len);
     result := true;
     exit;
@@ -10861,7 +10861,7 @@ begin
     i := 0;
     while n > 0 do
     begin
-      // crypt/uncrypt all AesBlocks
+      // aes/uncrypt all AesBlocks
       if n > TmpSize then
         b := TmpSize
       else
@@ -10874,7 +10874,7 @@ begin
         inc(i, b);
       end
       else
-        Crypt.DoBlocks(buffer, buf, b shr AesBlockShift, Encrypt);
+        aes.DoBlocks(buffer, buf, b shr AesBlockShift, Encrypt);
       Stream.WriteBuffer(buf^, b);
       inc(PByte(buffer), b);
       dec(n, b);
@@ -10882,7 +10882,7 @@ begin
     assert((KeySize > 4) or (i = Len - last));
     if last > 0 then
     begin
-      // crypt/uncrypt (Xor) last 0..15 bytes
+      // aes/uncrypt (Xor) last 0..15 bytes
       MoveFast(buffer^, buf^, last);
       XorOffset(pointer(buf), Len - last, last);
       Stream.WriteBuffer(buf^, last);
@@ -10919,30 +10919,30 @@ function TAesFull.EncodeDecode(const Key; KeySize, inLen: cardinal;
   Encrypt: boolean; inStream, outStream: TStream; bIn, bOut: pointer;
   OriginalLen: cardinal): integer;
 var
-  Tmp: ^TTmp;
-  pIn, pOut: PAesBlock;
-  Crypt: TAes;
-  nBlock, XorCod: cardinal;
+  tmp: ^TTmp;
+  pi, po: PAesBlock;
+  aes: TAes;
+  blocks, cod: cardinal;
 
-  procedure Read(Tmp: pointer; ByteCount: cardinal);
+  procedure Read(tmp: pointer; ByteCount: cardinal);
   begin
-    if pIn = nil then
-      inStream.ReadBuffer(Tmp^, ByteCount)
+    if pi = nil then
+      inStream.ReadBuffer(tmp^, ByteCount)
     else
     begin
-      MoveFast(pIn^, Tmp^, ByteCount);
-      inc(PByte(pIn), ByteCount);
+      MoveFast(pi^, tmp^, ByteCount);
+      inc(PByte(pi), ByteCount);
     end;
   end;
 
-  procedure Write(Tmp: pointer; ByteCount: cardinal);
+  procedure Write(tmp: pointer; ByteCount: cardinal);
   begin
-    if pOut = nil then
-      outStream.WriteBuffer(Tmp^, ByteCount)
+    if po = nil then
+      outStream.WriteBuffer(tmp^, ByteCount)
     else
     begin
-      MoveFast(Tmp^, pOut^, ByteCount);
-      inc(PByte(pOut), ByteCount);
+      MoveFast(tmp^, po^, ByteCount);
+      inc(PByte(po), ByteCount);
     end;
   end;
 
@@ -10954,13 +10954,12 @@ var
     if outStream <> nil then
     begin
       if outStream.InheritsFrom(TMemoryStream) then
-        with TMemoryStream(outStream) do
         begin
-          P := Seek(0, soCurrent);
-          size := P + Len; // auto-reserve space (no Realloc:)
-          Seek(P + Len, soBeginning);
-          bOut := PAnsiChar(Memory) + P;
-          pOut := bOut;
+          P := TMemoryStream(outStream).Seek(0, soCurrent);
+          TMemoryStream(outStream).Size := P + Len; // auto-reserve space
+          TMemoryStream(outStream).Seek(P + Len, soBeginning);
+          bOut := PAnsiChar(TMemoryStream(outStream).Memory) + P;
+          po := bOut;
           outStream := nil; //  OutStream is slower and use no thread
         end;
     end
@@ -10969,36 +10968,36 @@ var
       outStreamCreated := TMemoryStream.Create;
       outStreamCreated.Size := Len; // auto-reserve space (no Realloc:)
       bOut := outStreamCreated.Memory;
-      pOut := bOut; // OutStream is slower and use no thread
+      po := bOut; // OutStream is slower and use no thread
     end;
     if KeySize = 0 then
-      exit; // no Tmp to be allocated on direct copy
+      exit; // no tmp to be allocated on direct copy
     if (KeySize = 32) or
        (inStream <> nil) or
        (outStream <> nil) then
-      New(Tmp);
+      New(tmp);
   end;
 
   procedure DoBlock(BlockCount: integer);
   begin
     if BlockCount = 0 then
       exit;
-    read(Tmp, BlockCount shl AesBlockShift);
-    Crypt.DoBlocks(PAesBLock(Tmp), PAesBLock(Tmp), BlockCount, Encrypt);
-    Write(Tmp, BlockCount shl AesBlockShift);
+    read(tmp, BlockCount shl AesBlockShift);
+    aes.DoBlocks(PAesBLock(tmp), PAesBLock(tmp), BlockCount, Encrypt);
+    Write(tmp, BlockCount shl AesBlockShift);
   end;
 
 var
   n, LastLen: cardinal;
   i: integer;
-  Last: TAesBlock;
+  last: TAesBlock;
 begin
   result := 0; // makes FixInsight happy
-  Tmp := nil;
+  tmp := nil;
   outStreamCreated := nil;
-  Crypt.InitOnStack;
+  aes.InitOnStack;
   Head.SourceLen := inLen;
-  nBlock := Head.SourceLen shr AesBlockShift;
+  blocks := Head.SourceLen shr AesBlockShift;
   if Encrypt and
      (OriginalLen <> 0) then
     Head.OriginalLen := OriginalLen
@@ -11009,20 +11008,20 @@ begin
     KeySize := 0
   else  // valid KeySize: 0=nothing, 32=xor, 128,192,256=AES
     KeySize := KeySize * 8;
-  XorCod := inLen;
+  cod := inLen;
   if (inStream <> nil) and
-     inStream.InheritsFrom(TMemoryStream) then
+     inStream.InheritsFrom(TCustomMemoryStream) then
   begin
-    bIn := TMemoryStream(inStream).Memory;
+    bIn := TCustomMemoryStream(inStream).Memory;
     inStream := nil;
   end;
-  pIn := bIn;
-  pOut := bOut;
+  pi := bIn;
+  po := bOut;
   if (KeySize >= 128) and
-     not Crypt.DoInit(Key, KeySize, Encrypt) then
+     not aes.DoInit(Key, KeySize, Encrypt) then
     KeySize := 32;
   if KeySize = 32 then
-    XorCod := KeyFrom(Key, KeySize) xor XorCod
+    cod := KeyFrom(Key, KeySize) xor cod
   else if (KeySize = 0) and
           (inStream = nil) then
   begin
@@ -11035,7 +11034,7 @@ begin
     if KeySize < 128 then
     begin
       SetOutLen(inLen);
-      assert(Tmp <> nil);
+      assert(tmp <> nil);
       LastLen := inLen;
       while LastLen <> 0 do
       begin
@@ -11043,10 +11042,10 @@ begin
           n := TmpSize
         else
           n := LastLen;
-        read(Tmp, n);
+        read(tmp, n);
         if KeySize > 0 then
-          XorBlock(pointer(Tmp), n, XorCod);
-        Write(Tmp, n);
+          XorBlock(pointer(tmp), n, cod);
+        Write(tmp, n);
         dec(LastLen, n);
       end;
     end
@@ -11057,10 +11056,10 @@ begin
       if Encrypt then
       begin
         // encrypt data
-        if (pIn = pOut) and
-           (pIn <> nil) then
+        if (pi = po) and
+           (pi <> nil) then
         begin
-          assert(false); // Head in pOut^ will overflow data in pIn^
+          assert(false); // Head in po^ will overflow data in pi^
           result := 0;
           exit;
         end;
@@ -11068,18 +11067,18 @@ begin
         if LastLen = 0 then
           SetOutLen(inLen + SizeOf(TAesBlock))
         else
-          SetOutLen((nBlock + 2) shl AesBlockShift);
+          SetOutLen((blocks + 2) shl AesBlockShift);
         Head.SomeSalt := Random32Not0;
         Head.HeaderCheck := Head.Calc(Key, KeySize);
-        Crypt.Encrypt(TAesBlock(Head));
+        aes.Encrypt(TAesBlock(Head));
         Write(@Head, SizeOf(Head));
       end
       else
       begin
         // uncrypt data
-        dec(nBlock); // Header is already done
+        dec(blocks); // Header is already done
         read(@Head, SizeOf(Head));
-        Crypt.Decrypt(TAesBlock(Head));
+        aes.Decrypt(TAesBlock(Head));
         with Head do
         begin
           if HeaderCheck <> Head.Calc(Key, KeySize) then
@@ -11091,37 +11090,37 @@ begin
           LastLen := SourceLen and AesBlockMod;
         end;
         if LastLen <> 0 then
-          dec(nBlock); // the very last block is for the very last bytes
+          dec(blocks); // the very last block is for the very last bytes
       end;
       // 2. All full blocks, with AES
-      if Tmp = nil then
-        Crypt.DoBlocks(pIn, pOut, pIn, pOut, nBlock, Encrypt)
+      if tmp = nil then
+        aes.DoBlocks(pi, po, pi, po, blocks, Encrypt)
       else
       begin
-        for i := 1 to nBlock div TmpSizeBlock do
+        for i := 1 to blocks div TmpSizeBlock do
           DoBlock(TmpSizeBlock);
-        DoBlock(nBlock mod TmpSizeBlock);
+        DoBlock(blocks mod TmpSizeBlock);
       end;
-      // 3. Last block
+      // 3. last block
       if LastLen <> 0 then
         if Encrypt then
         begin
-          FillcharFast(Last, SizeOf(TAesBlock), 0);
-          read(@Last, LastLen);
-          Crypt.Encrypt(Last);
-          Write(@Last, SizeOf(TAesBlock));
+          FillcharFast(last, SizeOf(TAesBlock), 0);
+          read(@last, LastLen);
+          aes.Encrypt(last);
+          Write(@last, SizeOf(TAesBlock));
         end
         else
         begin
-          read(@Last, SizeOf(TAesBlock));
-          Crypt.Decrypt(Last);
-          Write(@Last, LastLen);
+          read(@last, SizeOf(TAesBlock));
+          aes.Decrypt(last);
+          Write(@last, LastLen);
         end;
-      Crypt.Done;
+      aes.Done;
     end;
   finally
-    if Tmp <> nil then
-      Freemem(Tmp);
+    if tmp <> nil then
+      Freemem(tmp);
   end;
 end;
 
@@ -11176,7 +11175,7 @@ function TAesWriteStream.Write(const Buffer; Count: integer): Longint;
 // will crypt 'const Buffer' memory in place -> use AFTER T*Compressor
 var
   B: TByteArray absolute Buffer;
-  Len: integer;
+  len: integer;
 begin
   result := Count;
   Adler := Adler32Asm(Adler, @Buffer, Count);
@@ -11187,22 +11186,22 @@ begin
       XorOffset(@B, DestSize, Count)
     else
     begin
-      Len := 0;
+      len := 0;
       if fBufCount > 0 then // append to data pending in fBuf[fBufCount]
       begin
-        Len := SizeOf(fBuf) - fBufCount;
-        if Len > Count then
-          Len := Count;
-        MoveFast(Buffer, fBuf[fBufCount], Len);
-        inc(fBufCount, Len);
+        len := SizeOf(fBuf) - fBufCount;
+        if len > Count then
+          len := Count;
+        MoveFast(Buffer, fBuf[fBufCount], len);
+        inc(fBufCount, len);
         if fBufCount < SizeOf(fBuf) then
           exit;
         fAes.Encrypt(fBuf);
         fDest.WriteBuffer(fBuf, SizeOf(fBuf));
         inc(DestSize, SizeOf(fBuf));
-        dec(Count, Len);
+        dec(Count, len);
       end;
-      fAes.DoBlocks(@B[Len], @B[Len], Count shr AesBlockShift, true);
+      fAes.DoBlocks(@B[len], @B[len], Count shr AesBlockShift, true);
       fBufCount := Count and AesBlockMod;
       if fBufCount <> 0 then
       begin
@@ -11217,19 +11216,19 @@ end;
 
 function AESFullKeyOK(const Key; KeySize: cardinal; buff: pointer): boolean;
 var
-  Crypt: TAes;
-  Head: TAesFullHeader;
+  aes: TAes;
+  head: TAesFullHeader;
 begin
-  Crypt.InitOnStack;
+  aes.InitOnStack;
   if KeySize < 128 then
     result := true
-  else if not Crypt.DecryptInit(Key, KeySize) then
+  else if not aes.DecryptInit(Key, KeySize) then
     result := false
   else
   begin
-    Crypt.Decrypt(PAesBlock(buff)^, PAesBlock({%H-}@Head)^);
-    result := Head.Calc(Key, KeySize) = Head.HeaderCheck;
-    Crypt.Done;
+    aes.Decrypt(PAesBlock(buff)^, PAesBlock({%H-}@head)^);
+    result := head.Calc(Key, KeySize) = head.HeaderCheck;
+    aes.Done;
   end;
 end;
 
@@ -11254,11 +11253,11 @@ end;
 procedure AESSHA256(bIn, bOut: pointer; Len: integer;
   const Password: RawByteString; Encrypt: boolean);
 var
-  Digest: TSha256Digest;
+  dig: TSha256Digest;
 begin
-  Sha256Weak(Password, Digest);
-  AES(Digest, SizeOf(Digest) * 8, bIn, bOut, Len, Encrypt);
-  FillZero(Digest);
+  Sha256Weak(Password, dig);
+  AES(dig, SizeOf(dig) * 8, bIn, bOut, Len, Encrypt);
+  FillZero(dig);
 end;
 
 function AESSHA256(const s, Password: RawByteString;
@@ -11277,10 +11276,10 @@ end;
 procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
   const Password: RawByteString; Encrypt: boolean);
 var
-  Digest: TSha256Digest;
+  dig: TSha256Digest;
 begin
-  Sha256Weak(Password, Digest);
-  AESFull(Digest, SizeOf(Digest) * 8, bIn, Len, outStream, Encrypt);
+  Sha256Weak(Password, dig);
+  AESFull(dig, SizeOf(dig) shl 3, bIn, Len, outStream, Encrypt);
 end;
 
 {$endif PUREMORMOT2}
@@ -11288,22 +11287,22 @@ end;
 // required by read_h -> deprecated even if available with PUREMORMOT2
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 var
-  L: integer;
-  SHA: TSha256;
-  p: PAnsiChar;
+  l: integer;
+  P: PAnsiChar;
+  sha: TSha256;
   tmp: TByteToByte;
 begin
-  L := length(s);
-  p := pointer(s);
-  if L < SizeOf(tmp) then
+  l := length(s);
+  P := pointer(s);
+  if l < SizeOf(tmp) then // add some salt to unweak password < 256 bytes
   begin
-    FillcharFast(tmp, SizeOf(tmp), L); // add some salt to unweak password
-    if L > 0 then
-      MoveFast(p^, tmp, L);
-    SHA.Full(@tmp, SizeOf(tmp), Digest);
+    FillcharFast(tmp, SizeOf(tmp), l);
+    if l > 0 then
+      MoveFast(P^, tmp, l);
+    sha.Full(@tmp, SizeOf(tmp), Digest);
   end
   else
-    SHA.Full(p, L, Digest);
+    sha.Full(P, l, Digest);
 end;
 
 
