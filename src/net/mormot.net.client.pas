@@ -3047,7 +3047,7 @@ var
 begin
   if not SockIsDefined then
     exit;
-  if SockIn = nil then // done once
+  if SockIn = nil then
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   fSndBufLen := 0;
   if (url = '') or
@@ -5823,8 +5823,6 @@ begin
     TLS or (Server.Port = '465') or (Server.Port = '587'), TLSIgnoreCertError);
 end;
 
-{$I-}
-
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
   TLS, TLSIgnoreCertError: boolean): boolean;
@@ -5836,9 +5834,7 @@ var
     res: RawUtf8;
   begin
     repeat
-      readln(sock.SockIn^, res);
-      if ioresult <> 0 then
-        ESendEmail.RaiseUtf8('read error for %', [res]);
+      sock.SockRecvLn(res);
     until (Length(res) < 4) or
           (res[4] <> '-'); // - indicates there are other headers following
     if IdemPChar(pointer(res), pointer(answer)) then
@@ -5853,8 +5849,6 @@ var
   begin
     sock.SockSend(Command);
     sock.SockSendFlush;
-    if ioresult <> 0 then
-      ESendEmail.RaiseUtf8('Write error for %', [Command]);
     Expect(answer)
   end;
 
@@ -5869,7 +5863,7 @@ begin
   sock := SocketOpen(Server, Port, TLS, nil, nil, TLSIgnoreCertError);
   if sock <> nil then
   try
-    sock.CreateSockIn; // we use SockIn for readln in Expect()
+    sock.CreateSockIn; // we use SockIn for buffered SockRecvLn() in Expect()
     Expect('220');
     if (User <> '') and
        (Pass <> '') then
@@ -5913,13 +5907,11 @@ begin
     sock.SockSend(Text);
     Exec('.', '25');
     Exec('QUIT', '22');
-    result := ioresult = 0;
+    result := true;
   finally
     sock.Free;
   end;
 end;
-
-{$I+}
 
 function SendEmailSubject(const Text: string): RawUtf8;
 begin
