@@ -5603,7 +5603,7 @@ begin
     [VariantTypeName(PVarData(result))^]);
 end;
 
-{$ifdef FPC_OR_UNICODE} // Delphi has problems inlining this :(
+{$ifdef FPC_OR_UNICODE} // old Delphi have problems inlining this :(
 function _Safe(const DocVariant: variant): PDocVariantData;
 var
   docv, vt: cardinal;

@@ -1845,8 +1845,8 @@ type
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
-    function EnsureSockSend(Len: PtrInt): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function EnsureSockSend(Len: PtrInt): PUtf8Char;
+      {$ifdef FPC}inline;{$endif}
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     function GetAborted: boolean;
@@ -2060,6 +2060,7 @@ type
     // - raise ENetSock exception on socket error
     // - line content is ignored
     procedure SockRecvLn; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct send data through network
     // - raise a ENetSock exception on any error
     // - bypass the SockSend() buffers
@@ -5863,6 +5864,7 @@ begin
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
     DoRaise('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
+    aSock := 0; // make compiler happy
     {$endif OSLINUX}
   end
   else
@@ -5984,6 +5986,7 @@ begin
         // single TLS parameter for either the Tunnel or the destination
         DoRaise('Open(%s:%s): %s proxy - unsupported dual TLS layers',
           [fServer, fPort, fProxyUrl]);
+      res := nrOk;
       try
         res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
           fTimeout, fTimeout, fTimeout, {retry=}2, fSock, @addr);
@@ -6532,14 +6535,23 @@ begin
             (fSock.GetPeer(addr) = nrOK); // OS may return ENOTCONN/WSAENOTCONN
 end;
 
-function TCrtSocket.EnsureSockSend(Len: PtrInt): pointer;
+function EnsureSockSendResize(var buf: RawByteString; Len: PtrInt): pointer;
+  {$ifdef HASINLINEDELPHI} inline; {$endif}
 var
   cap: PtrInt;
 begin
-  cap := Length(fSndBuf);
-  if Len + fSndBufLen > cap then
-    SetLength(fSndBuf, cap + cap shr 3 + Len + 2048); // generous 2KB provision
-  result := PAnsiChar(pointer(fSndBuf)) + fSndBufLen;
+  cap := Length(buf);
+  SetLength(buf, Len + cap + cap shr 3 + 2048); // generous 2KB provision
+  result := pointer(buf);
+end;
+
+function TCrtSocket.EnsureSockSend(Len: PtrInt): PUtf8Char;
+begin
+  result := pointer(fSndBuf);
+  if (result = nil) or
+     (Len + fSndBufLen > PStrLen(result - _STRLEN)^) then
+    result := EnsureSockSendResize(fSndBuf, Len);
+  inc(result, fSndBufLen);
   inc(fSndBufLen, Len);
 end;
 
