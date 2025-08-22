@@ -4313,14 +4313,12 @@ begin
       Http.ContentLength, Http.ContentType], self);
 end;
 
-{$I-}
 procedure THttpSocket.GetBody(DestStream: TStream);
 var
-  line: RawUtf8;
-  chunkline: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
-  chunk: RawByteString;
-  len32, err: integer;
-  len64: Int64;
+  chunk: RawUtf8;
+  len: PtrInt;
+  remain: Int64;
+  chunksize: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
 begin
   include(fFlags, fBodyRetrieved);
   Http.Content := '';
@@ -4334,62 +4332,50 @@ begin
     // Content-Length header should be ignored when chunked (RFC2616 #4.4.3)
     Http.ContentLength := 0;
     repeat // chunks decoding loop
-      if SockIn <> nil then
-      begin
-        readln(SockIn^, chunkline); // use of a static PChar is convenient
-        err := ioresult;
-        if err <> 0 then
-          EHttpSocket.RaiseUtf8('%.GetBody chunked ioresult=%', [self, err]);
-        len32 := ParseHex0x(chunkline, {noOx=}true); // hexa chunk length
-      end
-      else
-      begin
-        SockRecvLn(line);
-        len32 := ParseHex0x(pointer(line), {noOx=}true); // hexa chunk length
-      end;
-      if len32 = 0 then
+      if SockInReadLn(@chunksize, SizeOf(chunksize)) < 0 then
+        EHttpSocket.RaiseUtf8('%.GetBody: invalid chunk size line', [self]);
+      len := ParseHex0x(chunksize, {noOx=}true); // hexa chunk length
+      if len = 0 then
       begin
         SockRecvLn; // ignore next line (normally void)
-        break; // reached the end of input stream
+        break;      // reached the end of input stream
       end;
       if DestStream <> nil then
       begin
-        if length({%H-}chunk) < len32 then
-          SetString(chunk, nil, len32 + len32 shr 3); // +shr 3 to avoid realloc
-        SockInRead(pointer(chunk), len32);
-        DestStream.WriteBuffer(pointer(chunk)^, len32);
+        if length({%H-}chunk) < len then
+          SetString(chunk, nil, len + len shr 3); // +shr 3 to avoid realloc
+        SockInRead(pointer(chunk), len);
+        DestStream.WriteBuffer(pointer(chunk)^, len);
       end
       else
       begin
-        SetLength(Http.Content, Http.ContentLength + len32); // reserve space for this chunk
-        SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len32); // append data
+        SetLength(Http.Content, Http.ContentLength + len); // space for this chunk
+        SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;
-      inc(Http.ContentLength, len32);
+      inc(Http.ContentLength, len);
       SockRecvLn; // ignore next #13#10
     until false;
   end
   else if Http.ContentLength > 0 then
-    // read Content-Length: header bytes
+    // read Content-Length: header bytes into DestStream or Http.Content
     if DestStream <> nil then
     begin
-      len32 := 256 shl 10; // not chunked: use a 256 KB temp buffer
-      if Http.ContentLength < len32 then
-        len32 := Http.ContentLength;
-      SetLength(chunk, len32);
-      len64 := Http.ContentLength;
+      len := 256 shl 10; // not chunked: use a 256 KB temp buffer
+      remain := Http.ContentLength;
+      if remain < len then
+        len := remain;
+      SetLength(chunk, len);
       repeat
-        if len32 > len64 then
-          len32 := len64;
-        SockInRead(pointer(chunk), len32);
-        DestStream.WriteBuffer(pointer(chunk)^, len32);
-        dec(len64, len32);
-      until len64 = 0;
+        if len > remain then
+          len := remain;
+        SockInRead(pointer(chunk), len);
+        DestStream.WriteBuffer(pointer(chunk)^, len);
+        dec(remain, len);
+      until remain = 0;
     end
     else
-    begin
-      SetLength(Http.Content, Http.ContentLength); // not chuncked: direct read
-      SockInRead(pointer(Http.Content), Http.ContentLength);
-    end
+      SockInRead(FastSetString(RawUtf8(Http.Content), Http.ContentLength),
+                 Http.ContentLength) // not chuncked: direct Http.Content read
   else if (Http.ContentLength < 0) and // -1 means no Content-Length header
           (hfConnectionClose in Http.HeaderFlags) then
   begin
@@ -4397,15 +4383,11 @@ begin
     // mainly for HTTP/1.0: https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
-    if SockIn <> nil then // client loop for compatibility with oldest servers
-    begin
-      while not eof(SockIn^) do
-      begin
-        readln(SockIn^, line);
-        AppendLine(RawUtf8(Http.Content), [line]);
-      end;
-      CloseSockIn; // we have hfConnectionClose anyway
-    end;
+    repeat
+      chunk := SockReceiveString; // rough process
+      Append(RawUtf8(Http.Content), chunk);
+    until chunk = '';
+    CloseSockIn; // we have hfConnectionClose anyway
     Http.ContentLength := length(Http.Content); // update Content-Length
     if DestStream <> nil then
     begin
@@ -4418,14 +4400,7 @@ begin
     Http.UncompressData;
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
-  if SockIn <> nil then
-  begin
-    err := ioresult;
-    if err <> 0 then
-      EHttpSocket.RaiseUtf8('%.GetBody ioresult2=%', [self, err]);
-  end;
 end;
-{$I+}
 
 procedure THttpSocket.HeaderAdd(const aValue: RawUtf8);
 begin
