@@ -1845,7 +1845,7 @@ type
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
-    function EnsureSockSend(Len: integer): pointer;
+    function EnsureSockSend(Len: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetRawSocket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -6510,14 +6510,14 @@ begin
             (fSock.GetPeer(addr) = nrOK); // OS may return ENOTCONN/WSAENOTCONN
 end;
 
-function TCrtSocket.EnsureSockSend(Len: integer): pointer;
+function TCrtSocket.EnsureSockSend(Len: PtrInt): pointer;
 var
-  cap: integer;
+  cap: PtrInt;
 begin
   cap := Length(fSndBuf);
-  if fSndBufLen + Len > cap then
-    SetLength(fSndBuf, Len + cap + cap shr 3 + 2048); // generous 2KB provision
-  result := @PByteArray(fSndBuf)[fSndBufLen];
+  if Len + fSndBufLen > cap then
+    SetLength(fSndBuf, cap + cap shr 3 + Len + 2048); // generous 2KB provision
+  result := PAnsiChar(pointer(fSndBuf)) + fSndBufLen;
   inc(fSndBufLen, Len);
 end;
 
@@ -6657,7 +6657,8 @@ end;
 function TCrtSocket.SockSendFlush(const aBody: RawByteString;
   aNoRaise: boolean): TNetResult;
 var
-  bodylen, buflen, rawError: integer;
+  bodylen, buflen: PtrInt;
+  rawError: integer;
 begin
   buflen := fSndBufLen;
   fSndBufLen := 0; // always reset the output buffer position
