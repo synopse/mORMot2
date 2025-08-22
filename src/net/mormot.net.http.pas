@@ -4286,39 +4286,22 @@ begin
 end;
 
 function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
-
-  procedure DirectRead; // sub-function for the RawUtf8 stack frame
-  var
-    u: RawUtf8;
-  begin // never called in practice, unless forgot to call CreateSockIn
-    repeat
-      SockRecvLn(u);
-      if u = '' then
-        break; // end of input headers
-      Http.ParseHeader(pointer(u), length(u), HeadersUnFiltered);
-    until Http.State <> hrsNoStateMachine;
-  end;
-
 var
   len: integer;
   line: TBuffer8K; // avoid most memory allocations - 8KB should be enough
 begin
-  // parse the headers
   result := false;
   HttpStateReset;
-  if SockIn <> nil then
-    repeat
-      len := SockInReadLn(line, SizeOf(line)); // very efficient readln()
-      if len <= 0 then // HTTP headers end with a void line
-      begin
-        if len < 0 then // -1 = buffer overflow
-          Http.State := hrsErrorPayloadTooLarge;
-        break;
-      end;
-      Http.ParseHeader(@line, len, HeadersUnFiltered);
-    until Http.State <> hrsNoStateMachine
-  else
-    DirectRead;
+  repeat
+    len := SockInReadLn(line, SizeOf(line)); // very efficient readln()
+    if len <= 0 then // HTTP headers end with a void line
+    begin
+      if len < 0 then // -1 = buffer overflow
+        Http.State := hrsErrorPayloadTooLarge;
+      break;
+    end;
+    Http.ParseHeader(@line, len, HeadersUnFiltered);
+  until Http.State <> hrsNoStateMachine;
   if Http.State = hrsNoStateMachine then
   begin
     Http.ParseHeaderFinalize; // compute all meaningful headers
