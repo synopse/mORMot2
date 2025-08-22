@@ -10087,7 +10087,7 @@ end;
 
 procedure OpenSSL_error(error: integer; var result: RawUtf8);
 var
-  tmp: array[0..1023] of AnsiChar;
+  tmp: TBuffer1K;
 begin
   result := '';
   if error = 0 then // no error in the queue

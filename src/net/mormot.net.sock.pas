@@ -6804,7 +6804,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
   var
     P: PAnsiChar;
     LP, L: PtrInt;
-    tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
+    tmp: TBuffer1K; // avoid ReallocMem() every char
   begin
     P := @tmp;
     L := 0;
