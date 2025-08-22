@@ -1957,7 +1957,7 @@ type
     // in such case (assuming UseOnlySockin=false)
     function SockInRead(Content: PAnsiChar; Length: integer;
       UseOnlySockIn: boolean = false): integer; overload;
-    /// read the next line of text from SockIn (which is mandatory)
+    /// read the next line of text from SockIn^.Buffer or from the socket API
     // - returns the line size in bytes, stored with an ending #0 in Buffer
     // - returns -1 if Buffer's Size is too short, or raise an ENetSock on error
     function SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
@@ -6347,6 +6347,7 @@ function TCrtSocket.SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
 var
   len, line: PtrInt;
   p: PUtf8Char;
+  c: AnsiChar;
   r: PTextRec;
 
   function SearchEndOfLine: PtrInt; {$ifdef FPC} inline; {$endif}
@@ -6360,15 +6361,34 @@ var
         exit;
       end;
       DoInputSock(r, 'SockInReadLn');
-    until false;
+    until fAborted in fFlags;
   end;
 
 begin
   result := 0;
   r := pointer(SockIn);
-  if (Size <= 0) or
-     (r = nil) then
+  if r = nil then // no SockIn^ buffer -> slow multiple sockets API calls
+  begin
+    repeat
+      SockRecv(@c, 1); // may be very slow on Windows
+      if c <> #13 then
+        if c = #10 then
+          break
+        else if Buffer <> nil then // Buffer=nil to go to end of line
+        begin
+          Buffer[result] := c;
+          inc(result);
+          if result = Size then
+          begin
+            result := -1; // avoid buffer overflow: notify Buffer is too short
+            exit;
+          end;
+        end;
+    until fAborted in fFlags;
+    if Buffer <> nil then
+      Buffer[result] := #0;
     exit;
+  end;
   if Buffer <> nil then
   begin
     // read the next line content from SockIn^ into Buffer^
@@ -6376,7 +6396,7 @@ begin
       line := SearchEndOfLine;
       if line >= Size then
       begin
-        result := -1; // avoid buffer overflow, and notify Buffer is too short
+        result := -1; // avoid buffer overflow
         exit;
       end;
       MoveFast(p^, Buffer^, line);
@@ -6387,15 +6407,18 @@ begin
          (line < len) then
         break; // we got a line
       dec(Size, line);
-    until false;
+    until fAborted in fFlags;
     Buffer[0] := #0;
-    // read the next line feed
     inc(p, line);
     dec(len, line);
+    line := 0;
   end
   else
+  begin
     len := 0; // called with Buffer = nil to go to end of line
-  line := 0;
+    line := 0;
+  end;
+  // read the next line feed
   repeat
     while line < len do
     begin
@@ -6411,7 +6434,7 @@ begin
     end;
     line := SearchEndOfLine;
     inc(r^.bufpos, line);
-  until false;
+  until fAborted in fFlags;
 end;
 
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
@@ -6459,8 +6482,8 @@ function TCrtSocket.SockInRead(Length: integer; UseOnlySockIn: boolean): RawByte
 begin
   if (self = nil) or
      (Length <= 0) or
-     (SockInRead(FastSetString(
-       RawUtf8(result), Length), Length, UseOnlySockIn) <> Length) then
+     (SockInRead(FastSetString(RawUtf8(result), Length),
+                 Length, UseOnlySockIn) <> Length) then
     result := '';
 end;
 
