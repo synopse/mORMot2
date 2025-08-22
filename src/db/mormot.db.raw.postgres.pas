@@ -186,7 +186,7 @@ type
     SetNoticeProcessor: function(conn: PPGconn; proc: PQnoticeProcessor;
       arg: pointer): PQnoticeProcessor; cdecl;
     Clear: procedure(res: PPGresult); cdecl;
-    Freemem: procedure(ptr: pointer); cdecl;
+    FreeMem: procedure(ptr: pointer); cdecl;
     Exec: function(conn: PPGconn; query: PUtf8Char): PPGresult; cdecl;
     Prepare: function(conn: PPGconn; stmtName, query: PUtf8Char; nParams: integer;
       paramTypes: PCardinal): PPGresult; cdecl;
@@ -347,7 +347,7 @@ const
     'errorMessage',
     'setNoticeProcessor',
     'clear',
-    'freemem',
+    'FreeMem',
     'exec',
     'prepare',
     'describePrepared',

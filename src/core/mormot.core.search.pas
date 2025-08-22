@@ -915,7 +915,7 @@ function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
 /// compute difference of two binary buffers
 // - returns '=' for equal buffers, or an optimized binary delta
 // - DeltaExtract() could be used later on to compute New from Old + Delta
-// - caller should call Freemem(Delta) once finished with the output buffer
+// - caller should call FreeMem(Delta) once finished with the output buffer
 function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
   out Delta: PAnsiChar; Level: integer = DELTA_LEVEL_FAST;
   BufSize: integer = DELTA_BUF_DEFAULT): integer; overload;
@@ -5348,7 +5348,7 @@ var
 
   procedure CreateCopied;
   begin
-    Getmem(Delta, NewSizeSave + 17);  // 17 = 4*integer + 1*byte
+    GetMem(Delta, NewSizeSave + 17);  // 17 = 4*integer + 1*byte
     d := Delta;
     db := ToVarUInt32(0, ToVarUInt32(NewSizeSave, db));
     WriteByte(d, FLAG_COPIED); // block copied flag
@@ -5364,7 +5364,7 @@ begin
   if (NewSize = OldSize) and
      mormot.core.base.CompareMem(Old, New, NewSize) then
   begin
-    Getmem(Delta, 1);
+    GetMem(Delta, 1);
     Delta^ := '=';
     result := 1;
     exit;
@@ -5383,10 +5383,10 @@ begin
   if BufSize > HListMask then
     BufSize := HListMask; // we store offsets with 2..3 bytes -> max 16MB chunk
   Trailing := 0;
-  Getmem(workbuf, BufSize); // compression temporary buffers
-  Getmem(HList, BufSize * SizeOf({%H-}HList[0]));
-  Getmem(HTab, SizeOf({%H-}HTab^));
-  Getmem(Delta, MaxPtrInt(NewSize, OldSize) + 4096); // Delta size max evalulation
+  GetMem(workbuf, BufSize); // compression temporary buffers
+  GetMem(HList, BufSize * SizeOf({%H-}HList[0]));
+  GetMem(HTab, SizeOf({%H-}HTab^));
+  GetMem(Delta, MaxPtrInt(NewSize, OldSize) + 4096); // Delta size max evalulation
   try
     d := Delta;
     db := ToVarUInt32(NewSize, db); // Destination Size
@@ -5459,14 +5459,14 @@ begin
   // 5. release temp memory
   finally
     result := d - Delta;
-    Freemem(HTab);
-    Freemem(HList);
-    Freemem(workbuf);
+    FreeMem(HTab);
+    FreeMem(HList);
+    FreeMem(workbuf);
   end;
   if result >= NewSizeSave + 17 then
   begin
     // Delta didn't compress well -> store it (with up to 17 bytes overhead)
-    Freemem(Delta);
+    FreeMem(Delta);
     CreateCopied;
   end;
 end;
@@ -5486,7 +5486,7 @@ var
 begin
   DeltaLen := DeltaCompress(New, Old, NewSize, OldSize, Delta, Level, BufSize);
   FastSetRawByteString(result, Delta, DeltaLen);
-  Freemem(Delta);
+  FreeMem(Delta);
 end;
 
 function DeltaExtract(Delta, Old, New: PAnsiChar): TDeltaError;

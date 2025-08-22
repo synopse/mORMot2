@@ -7137,7 +7137,7 @@ begin
   dec(PStrRec(str));
   if (PStrRec(str)^.refCnt >= 0) and
      StrCntDecFree(PStrRec(str)^.refCnt) then
-    Freemem(str); // works for both rkLString + rkUString
+    FreeMem(str); // works for both rkLString + rkUString
 end;
 
 function ByteScanIndexPas(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;

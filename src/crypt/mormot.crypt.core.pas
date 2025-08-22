@@ -10854,7 +10854,7 @@ begin
     result := true;
     exit;
   end;
-  getmem(buf, TmpSize);
+  GetMem(buf, TmpSize);
   try
     last := Len and AesBlockMod;
     n := Len - last;
@@ -10889,7 +10889,7 @@ begin
     end;
     result := true;
   finally
-    freemem(buf);
+    FreeMem(buf);
   end;
 end;
 
@@ -11120,7 +11120,7 @@ begin
     end;
   finally
     if tmp <> nil then
-      Freemem(tmp);
+      FreeMem(tmp);
   end;
 end;
 

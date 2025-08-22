@@ -4288,7 +4288,7 @@ end;
 function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
 var
   len: integer;
-  line: TBuffer8K; // avoid most memory allocations - 8KB should be enough
+  line: TBuffer8K; // avoid most memory allocations - 8KB seems enough
 begin
   result := false;
   HttpStateReset;

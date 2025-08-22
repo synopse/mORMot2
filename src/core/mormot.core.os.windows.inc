@@ -2794,7 +2794,7 @@ begin
         result := true;
       end;
     finally
-      Freemem(pt);
+      FreeMem(pt);
     end;
   end;
 end;
@@ -4850,7 +4850,7 @@ begin
   if (PtrUInt(P) > MIN_PTR_VALUE) and
      (PtrUInt(SystemInfo.lpMinimumApplicationAddress) <= MIN_PTR_VALUE) then
     PtrUInt(SystemInfo.lpMinimumApplicationAddress) := MIN_PTR_VALUE;
-  Freemem(P);
+  FreeMem(P);
   FillCharFast(mem, SizeOf(mem), 0);
   mem.dwLength := SizeOf(mem);
   if GlobalMemoryStatusEx(mem) then

@@ -5250,7 +5250,8 @@ var
 begin
   try
     // use SockIn with 1KB buffer if not already initialized: 2x faster
-    CreateSockIn;
+    if SockIn = nil then
+      CreateSockIn;
     // abort now with no exception if socket is obviously broken
     result := grClosed;
     if fServer <> nil then

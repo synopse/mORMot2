@@ -7967,7 +7967,7 @@ begin
       result := true
     else
     begin
-      Freemem(fBuf);
+      FreeMem(fBuf);
       fBuf := nil;
       fLoadedNotMapped := false;
     end;
@@ -8014,7 +8014,7 @@ procedure TMemoryMap.UnMap;
 begin
   if fLoadedNotMapped then
     // mapping was not worth it
-    Freemem(fBuf)
+    FreeMem(fBuf)
   else
     // call actual Windows/POSIX map API
     DoUnMap;

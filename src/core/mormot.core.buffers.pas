@@ -9191,7 +9191,7 @@ end; // invalid file or unable to memory map its content -> Count := 0
 
 destructor TMemoryMapText.Destroy;
 begin
-  Freemem(fLines);
+  FreeMem(fLines);
   fMap.UnMap;
   inherited;
 end;

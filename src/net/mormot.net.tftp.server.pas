@@ -219,7 +219,7 @@ begin
   if Assigned(fOwner.fConnection) then // may be nil from fOwner.Destroy
     fOwner.fConnection.Remove(self); // ownobject=false: just decrease Count
   inherited Destroy;
-  Freemem(fLastSent);
+  FreeMem(fLastSent);
   FreeMem(fContext.Frame);
 end;
 

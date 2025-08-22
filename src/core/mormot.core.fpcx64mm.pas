@@ -22,9 +22,9 @@ unit mormot.core.fpcx64mm;
     - C memory managers (glibc, Intel TBB, jemalloc) have a very high RAM
       consumption (especially Intel TBB) and do panic/SIG_KILL on any GPF - but
       they were reported to scale better on heavy load with cpu core count > 16
-      even if getmem() is almost twice faster on single thread with fpcx64mm
+      even if GetMem() is almost twice faster on single thread with fpcx64mm
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
-    - Our lockess round-robin of tiny blocks and freemem bin list are unique
+    - Our lockess round-robin of tiny blocks and FreeMem bin list are unique
       algorithms among Memory Managers, and match modern CPUs and workloads
     - It was so fun diving into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
@@ -100,7 +100,7 @@ unit mormot.core.fpcx64mm;
 // - mono-threaded (console/LCL) apps are faster without this conditional
 {.$define FPCMM_ASSUMEMULTITHREAD}
 
-// won't use mremap but a regular getmem/move/freemem pattern for large blocks
+// won't use mremap but a regular GetMem/move/FreeMem pattern for large blocks
 // - depending on the actual system (e.g. on a VM), mremap may be slower
 // - will disable Linux mremap() or Windows following block VirtualQuery/Alloc
 {.$define FPCMM_NOMREMAP}
@@ -236,9 +236,9 @@ type
     /// how many times the Operating System Sleep/NanoSleep API was called
     // - should be as small as possible - 0 is perfect
     SleepCount: PtrUInt;
-    /// how many times Getmem() did block and wait for a tiny/small block
+    /// how many times GetMem() did block and wait for a tiny/small block
     // - see also GetSmallBlockContention() for more detailed information
-    // - by design, our Freemem() can't block thanks to its lock-less free list
+    // - by design, our FreeMem() can't block thanks to its lock-less free list
     SmallGetmemSleepCount: PtrUInt;
   end;
   PMMStatus = ^TMMStatus;
@@ -298,9 +298,9 @@ procedure FreeAllMemory;
 type
   /// one GetSmallBlockContention info about unexpected multi-thread waiting
   TSmallBlockContention = packed record
-    /// how many times a small block Getmem() has been waiting for unlock
+    /// how many times a small block GetMem() has been waiting for unlock
     GetmemSleepCount: PtrUInt;
-    /// the small block size on which Getmem() has been blocked
+    /// the small block size on which GetMem() has been blocked
     GetmemBlockSize: PtrUInt;
     /// not used in GetSmallBlockContention() context - reserved for future use
     Reserved: PtrUInt;
@@ -411,7 +411,7 @@ implementation
   - New round-robin thread-friendly arenas of tiny blocks;
   - Those arenas can be configured by size, and assigned by thread ID;
   - Tiny and small blocks can fed from their own pool(s), not the medium pool;
-  - Lock-less free lists to reduce tiny/small/medium Freemem thread contention;
+  - Lock-less free lists to reduce tiny/small/medium FreeMem thread contention;
   - Large blocks logic has been rewritten, especially realloc;
   - OsAllocMedium() and OsAllocLarge() use MAP_POPULATE to reduce page faults;
   - On Linux, mremap is used for efficient realloc of large blocks;
@@ -420,8 +420,8 @@ implementation
   About locking:
   - Tiny and Small blocks have their own per-size lock;
   - Tiny and Small blocks have per-pool lock when feeding;
-  - Lock-less free lists reduce tiny/small Getmem/Freemem thread contention;
-  - Lock-less free lists reduce medium Freemem thread contention;
+  - Lock-less free lists reduce tiny/small GetMem/FreeMem thread contention;
+  - Lock-less free lists reduce medium FreeMem thread contention;
   - Medium and Large blocks have one giant lock over their own pool;
   - Medium blocks have an unlocked prefetched memory chunk to reduce contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
@@ -3142,7 +3142,7 @@ begin
     end;
     if SmallGetmemSleepCount <> 0 then
     begin
-      K(' Small Getmem Sleep: count=', SmallGetmemSleepCount);
+      K(' Small GetMem Sleep: count=', SmallGetmemSleepCount);
       LF;
     end;
   end;
@@ -3628,7 +3628,7 @@ begin
       StartReport;
       inc(leaks, leak);
       writeln(' small block leak x', leak, ' of size=', p^.BlockSize,
-        '  (getmem=', p^.GetmemCount, ' freemem=', p^.FreememCount, ')');
+        '  (GetMem=', p^.GetmemCount, ' FreeMem=', p^.FreememCount, ')');
     end;
     {$endif FPCMM_REPORTMEMORYLEAKS}
     inc(p);

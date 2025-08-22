@@ -6262,7 +6262,7 @@ begin
   if (self = nil) or
      (fSockIn = nil) then
     exit;
-  Freemem(fSockIn);
+  FreeMem(fSockIn);
   fSockIn := nil;
 end;
 

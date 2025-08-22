@@ -641,7 +641,7 @@ end;
 function zcalloc(AppData: pointer; Items, Size: cardinal): pointer; cdecl;
 begin
   // direct use of the (FastMM4) delphi heap for all zip memory allocation
-  Getmem(result, Items * Size);
+  GetMem(result, Items * Size);
 end;
 
 procedure zcfree(AppData, Block: pointer); cdecl;
@@ -760,7 +760,7 @@ end;
 
 function zlibAllocMem(AppData: pointer; Items, Size: cardinal): pointer; cdecl;
 begin
-  Getmem(result, Items * Size);
+  GetMem(result, Items * Size);
 end;
 
 procedure zlibFreeMem(AppData, Block: pointer); cdecl;

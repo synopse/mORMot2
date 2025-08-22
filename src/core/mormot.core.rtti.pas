@@ -6686,7 +6686,7 @@ begin
       dec(p);
       if (p^.refCnt >= 0) and
          StrCntDecFree(p^.refCnt) then
-        Freemem(p); // works for both rkLString + rkUString
+        FreeMem(p); // works for both rkLString + rkUString
     end;
     inc(v);
     dec(n);
@@ -6745,7 +6745,7 @@ begin
   begin
     if ElemInfo <> nil then
       FastFinalizeArray(Value^, ElemInfo, p^.length);
-    Freemem(p);
+    FreeMem(p);
   end;
   Value^ := nil;
 end;
@@ -6975,7 +6975,7 @@ begin
     dec(p);
     if (p^.refCnt >= 0) and
        StrCntDecFree(p^.refCnt) then
-      Freemem(p);
+      FreeMem(p);
   end;
   result := SizeOf(V^);
 end;
@@ -7022,7 +7022,7 @@ begin
       Info := Info^.DynArrayItemType;
       if Info <> nil then
         FastFinalizeArray(V^, Info, p^.length);
-      Freemem(p);
+      FreeMem(p);
     end;
     V^ := nil;
   end;
@@ -7451,7 +7451,7 @@ begin
               end
             else
               FillCharFast(v^, da^.length * siz, 0); // e.g. for TBytes
-            Freemem(da);
+            FreeMem(da);
           end;
           PPointer(Value)^ := nil;
         end;

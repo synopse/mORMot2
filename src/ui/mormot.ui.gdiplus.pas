@@ -765,13 +765,13 @@ begin
   if result <> stOk then
     exit;
   len := IStreamSize(s);
-  Getmem(tmp, len);
+  GetMem(tmp, len);
   try
     s.Read(tmp, len, nil);
     s := nil; // release ASAP
     Stream.WriteBuffer(tmp^, len);
   finally
-    Freemem(tmp);
+    FreeMem(tmp);
   end;
 end;
 

@@ -1532,7 +1532,7 @@ begin
   if not OpenPrinter(Device, PrintHandle, nil) then
     exit;
   try
-    Getmem(DriverInfo2, 1024);
+    GetMem(DriverInfo2, 1024);
     try
       if GetPrinterDriver(
         PrintHandle, nil, 2, DriverInfo2, 1024, cnt) then
@@ -1542,7 +1542,7 @@ begin
         result := true;
       end;
     finally
-      Freemem(DriverInfo2);
+      FreeMem(DriverInfo2);
     end;
   finally
     ClosePrinter(PrintHandle);

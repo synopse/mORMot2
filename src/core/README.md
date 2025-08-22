@@ -286,6 +286,6 @@ An (optional) Multi-thread Friendly Memory Manager for FPC written in x86_64 ass
 - mremap() makes large block ReallocMem a breeze on Linux :)
 - inlined SSE2 movaps loop is more efficient that subfunction(s)
 - lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
-- optional lockless bin list to avoid freemem() thread contention
+- optional lockless bin list to avoid FreeMem() thread contention
 - three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
 

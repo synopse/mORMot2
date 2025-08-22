@@ -1201,38 +1201,38 @@ var
 {$endif NOPATCHRTL}
 begin
   {$ifndef NOPATCHRTL}
-  RedirectCode(@system.Move, @MoveFast);
-  RedirectCode(@system.FillChar, @FillCharFast);
-  PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17);      // fpclen=$2f
-  PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27);       // fpclen=$3f
-  PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);           // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $7f);        // fpclen=$12f
+  RedirectCode(@system.Move,            @MoveFast);
+  RedirectCode(@system.FillChar,        @FillCharFast);
+  PatchCode(@fpc_ansistr_incr_ref,      @_ansistr_incr_ref, $17);     // fpclen=$2f
+  PatchJmp(@fpc_ansistr_decr_ref,       @_ansistr_decr_ref, $27);     // fpclen=$3f
+  PatchJmp(@fpc_ansistr_assign,         @_ansistr_assign, $3f);       // fpclen=$3f
+  PatchCode(@fpc_ansistr_compare,       @_ansistr_compare, $7f);      // fpclen=$12f
   PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
-  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);       // fpc=$2f
-  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);        // fpc=$3f
-  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);            // fpc=$3f
-  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);        // fpc=$2f
-  PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
+  PatchCode(@fpc_unicodestr_incr_ref,   @_ansistr_incr_ref, $17);     // fpc=$2f
+  PatchJmp(@fpc_unicodestr_decr_ref,    @_ansistr_decr_ref, $27);     // fpc=$3f
+  PatchJmp(@fpc_unicodestr_assign,      @_ansistr_assign, $3f);       // fpc=$3f
+  PatchCode(@fpc_dynarray_incr_ref,     @_dynarray_incr_ref, $17);    // fpc=$2f
+  PatchJmp(@fpc_dynarray_clear,         @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
-  RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
-  PatchCode(@fpc_variant_init, @_variant_init, $0f); // fpclen=$1f
+  RedirectCode(@fpc_dynarray_decr_ref,  @fpc_dynarray_clear);
+  PatchCode(@fpc_variant_init,          @_variant_init, $0f);      // fpclen=$1f
   {$ifdef FPC_HAS_CPSTRING}
-  RedirectCode(@fpc_setstring_ansistr, @_setstring_ansistr_pansichar);
+  RedirectCode(@fpc_setstring_ansistr,  @_setstring_ansistr_pansichar);
   // Delphi/Windows is never natively UTF-8, but FPC+Lazarus is very likely :)
   if Unicode_CodePage = CP_UTF8 then
   begin
     // dedicated UTF-8 concatenation RTL function replacements
-    RedirectCode(@fpc_ansistr_concat, @_ansistr_concat_utf8);
+    RedirectCode(@fpc_ansistr_concat,       @_ansistr_concat_utf8);
     RedirectCode(@fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
   end;
   //RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength); buggy
   {$endif FPC_HAS_CPSTRING}
   GetMemoryManager(mm); // will work with mormot.core.fpcx64mm and any other MM
-  RedirectCode(@fpc_rtl_getmem, @mm.Getmem);    // RTL calls
-  RedirectCode(@fpc_rtl_freemem, @mm.Freemem);
-  RedirectCode(@ReAllocMem, @mm.ReAllocMem);
-  RedirectCode(@fpc_getmem, @mm.Getmem);        // asm calls
-  RedirectCode(@fpc_freemem, @mm.Freemem);
+  RedirectCode(@fpc_rtl_getmem,  @mm.GetMem);    // RTL calls
+  RedirectCode(@fpc_rtl_freemem, @mm.FreeMem);
+  RedirectCode(@ReAllocMem,      @mm.ReAllocMem);
+  RedirectCode(@fpc_getmem,      @mm.GetMem);        // asm calls
+  RedirectCode(@fpc_freemem,     @mm.FreeMem);
   {$endif NOPATCHRTL}
 end;
 

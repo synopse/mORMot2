@@ -1302,7 +1302,7 @@ const
 
 type
   /// type for a custom destructor for the text or BLOB content
-  // - set to @sqlite3InternalFree if a Value must be released via Freemem()
+  // - set to @sqlite3InternalFree if a Value must be released via FreeMem()
   // - set to @sqlite3InternalFreeObject if a Value must be released via
   // TObject(p).Free
   TSqlDestroyPtr = procedure(p: pointer); cdecl;
@@ -3163,7 +3163,7 @@ type
     // - Future enhancements may make use of negative N values to define new kinds of function
     // caching behavior.
     // - These routines must be called from the same thread in which the SQL function is running.
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     set_auxdata: procedure(Context: TSqlite3FunctionContext; N: integer;
       Value: pointer; DestroyPtr: TSqlDestroyPtr); cdecl;
@@ -3182,7 +3182,7 @@ type
     // - Typ parameter should be a static string, preferably a string literal
     // - DestroyPtr is either a nil pointer or a pointer to a destructor function for Value.
     // - SQLite will invoke the destructor DestroyPtr with a single argument of Value when it is finished using Value.
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_pointer: procedure(Context: TSqlite3FunctionContext;
       Value: pointer; Typ: PUtf8Char; DestroyPtr: TSqlDestroyPtr); cdecl;
@@ -3203,7 +3203,7 @@ type
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_blob: procedure(Context: TSqlite3FunctionContext;
       Value: pointer; Value_bytes: integer = 0;
@@ -3223,7 +3223,7 @@ type
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_text: procedure(Context: TSqlite3FunctionContext;
       Value: PUtf8Char; Value_bytes: integer = -1;
@@ -3305,7 +3305,7 @@ type
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // - note that the official SQLite3 documentation could lead into misunderstanding:
     // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
     // all column values
@@ -3322,7 +3322,7 @@ type
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     bind_blob: function(S: TSqlite3Statement;
       Param: integer; Buf: pointer; Buf_bytes: integer;
       DestroyPtr: TSqlDestroyPtr = SQLITE_TRANSIENT): integer; cdecl;
@@ -3374,7 +3374,7 @@ type
     // - Typ parameter should be a static string, preferably a string literal
     // - DestroyPtr is either a nil pointer or a pointer to a destructor function for Value.
     // - SQLite will invoke the destructor DestroyPtr with a single argument of Value when it is finished using Value.
-    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     bind_pointer: function(S: TSqlite3Statement;
       Param: integer; Value: pointer; Typ: PUtf8Char;
@@ -3454,7 +3454,7 @@ type
     // or in SELECT * FROM t1 ORDER BY c COLLATE CollationName;
     // - StringEncoding is either SQLITE_UTF8 either SQLITE_UTF16
     // - TSqlDataBase.Create add WIN32CASE, WIN32NOCASE and ISO8601 collations
-    // - set DestroyPtr to @sqlite3InternalFree if CollateParam must be released via Freemem()
+    // - set DestroyPtr to @sqlite3InternalFree if CollateParam must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if CollateParam must be released via a Free method
     // - The DestroyPtr callback is NOT called if the sqlite3.create_collation_v2() function
     // fails. Applications that invoke sqlite3.create_collation_v2() with a non-nil DestroyPtr
@@ -4123,8 +4123,8 @@ type
   end;
 
 
-/// an internal function which calls Freemem(p)
-// - can be used to free some PUtf8Char pointer allocated by the RTL Getmem()
+/// an internal function which calls FreeMem(p)
+// - can be used to free some PUtf8Char pointer allocated by the RTL GetMem()
 procedure sqlite3InternalFree(p: pointer); cdecl;
 
 /// an internal function which calls TObject(p).Free
@@ -5667,7 +5667,7 @@ end;
 
 procedure sqlite3InternalFree(p: pointer); cdecl;
 begin
-  Freemem(p);
+  FreeMem(p);
 end;
 
 procedure sqlite3InternalFreeObject(p: pointer); cdecl;
@@ -5986,8 +5986,8 @@ begin
     // we can use directly the FPC MM which supports MemSize()
     {$ifdef FPC_SINGLEABI} // SQLite3 prototypes match FPC RTL ABI on non-i386
     GetMemoryManager(mm);
-    mem.xMalloc := @mm.Getmem;
-    mem.xFree := @mm.Freemem;
+    mem.xMalloc := @mm.GetMem;
+    mem.xFree := @mm.FreeMem;
     mem.xSize := @mm.MemSize;
     {$else}
     mem.xMalloc := @xMalloc1;
@@ -6511,7 +6511,7 @@ end;
 procedure InternalConcatFinal(Context: TSqlite3FunctionContext); cdecl;
 begin
   with PConcatRec(sqlite3.aggregate_context(Context, SizeOf(TConcatRec)))^ do
-    // sqlite3InternalFree will call Freemem(PConcatRec()^.result)
+    // sqlite3InternalFree will call FreeMem(PConcatRec()^.result)
     sqlite3.result_text(Context, result, resultlen + 1, sqlite3InternalFree);
 end;
 
