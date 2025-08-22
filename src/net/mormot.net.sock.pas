@@ -1987,10 +1987,12 @@ type
     // - slightly faster than SockSend([]) if all appended items are RawUtf8
     procedure SockSendLine(const Values: array of RawUtf8);
     /// simulate writeln() with a single line - includes trailing #13#10
-    procedure SockSend(const Line: RawByteString; NoCrLf: boolean = false); overload;
+    procedure SockSend(const Line: RawByteString); overload;
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
     // - call SockSendFlush to send it through the network via SndLow()
-    procedure SockSend(P: pointer; Len: integer); overload;
+    procedure SockSend(P: pointer; Len: PtrInt); overload;
+    /// append PWideChar as UTF-8 (used by SockSend(), e.g.) - no trailing #13#10
+    procedure SockSendW(w: PWideChar; l: PtrInt);
     /// append headers content, normalizing #13#10 in the content and at ending
     procedure SockSendHeaders(const headers: RawUtf8);
     /// append #13#10 characters on all platforms, never #10 even on POSIX
@@ -6554,7 +6556,7 @@ begin
   inc(fSndBufLen, Len);
 end;
 
-procedure TCrtSocket.SockSend(P: pointer; Len: integer);
+procedure TCrtSocket.SockSend(P: pointer; Len: PtrInt);
 begin
   if Len > 0 then
     MoveFast(P^, EnsureSockSend(Len)^, Len);
@@ -6565,13 +6567,28 @@ begin
   PWord(EnsureSockSend(2))^ := EOLW;
 end;
 
+procedure TCrtSocket.SockSendW(w: PWideChar; l: PtrInt);
+var
+  p: PAnsiChar;
+  tmp: TBuffer8K;
+begin
+  if w <> nil then
+    if IsAnsiCompatibleW(w, l) then
+    begin
+      p := EnsureSockSend(l);
+      repeat
+        dec(l);
+        p[l] := AnsiChar(w[l]);
+      until l = 0;
+    end
+    else
+      SockSend(@tmp, Unicode_WideToAnsi(w, @tmp, l, SizeOf(tmp), CP_UTF8));
+end;
+
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
   v: PVarRec;
   i: PtrInt;
-  j, l: PtrInt;
-  w: PWordArray;
-  p: PByteArray;
   t: PAnsiChar;
   tmp: TTemp24;
 begin
@@ -6585,25 +6602,14 @@ begin
         if v^.VAnsiString <> nil then
           SockSend(v^.VAnsiString, PStrLen(v^.VPChar - _STRLEN)^);
       vtPWideChar,
-      {$ifdef HASVARUSTRING}
-      vtUnicodeString,
-      {$endif HASVARUSTRING}
       vtWideString:
-        begin // constant text is expected to be pure ASCII-7
-          w := v^.VWideString;
-          if w <> nil then
-          begin
-            {$ifdef HASVARUSTRING}
-            if v^.VType = vtUnicodeString then
-              l := PStrLen(v^.VPChar - _STRLEN)^
-            else
-            {$endif HASVARUSTRING}
-              l := StrLenW(pointer(w));
-            p := EnsureSockSend(l);
-            for j := 0 to l - 1 do
-              p[j] := w[j];
-          end;
-        end;
+        if v^.VWideString <> nil then
+          SockSendW(v^.VWideString, StrLenW(v^.VWideString));
+      {$ifdef HASVARUSTRING}
+      vtUnicodeString:
+        if v^.VUnicodeString <> nil then
+          SockSendW(v^.VUnicodeString, PStrLen(v^.VPChar - _STRLEN)^);
+      {$endif HASVARUSTRING}
       vtPChar:
         SockSend(v^.VPChar, StrLen(v^.VPChar));
       vtChar:
@@ -6647,7 +6653,7 @@ begin
   PWord(p)^ := EOLW;
 end;
 
-procedure TCrtSocket.SockSend(const Line: RawByteString; NoCrLf: boolean);
+procedure TCrtSocket.SockSend(const Line: RawByteString);
 var
   len: PtrInt;
   p: PUtf8Char;
@@ -6655,8 +6661,7 @@ begin
   len := length(Line);
   p := EnsureSockSend(len + 2);
   MoveFast(pointer(Line)^, p^, len);
-  if not NoCrLf then
-    PWord(p + len)^ := EOLW;
+  PWord(p + len)^ := EOLW;
 end;
 
 procedure TCrtSocket.SockSendHeaders(const headers: RawUtf8);
@@ -6682,7 +6687,7 @@ begin
   until false;
 end;
 
-function TCrtSocket.SockSendRemainingSize: integer;
+function TCrtSocket.SockSendRemainingSize: PtrInt;
 begin
   result := Length(fSndBuf) - fSndBufLen;
 end;
