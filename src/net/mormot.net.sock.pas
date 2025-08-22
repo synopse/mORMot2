@@ -6949,14 +6949,14 @@ end;
 
 procedure TCrtSocket.SockRecvLn(out Line: RawUtf8);
 var
-  tmp: TBuffer8K; // should be enough in our context (parsing HTTP headers)
+  tmp: TBuffer16K; // should be enough in our context (parsing HTTP headers)
   len: PtrInt;
 begin
   len := SockInReadLn(@tmp, SizeOf(tmp)); // with or without SockIn^
   if len = 0 then
     exit;
   if len < 0 then
-    DoRaise('SockRecvLn: line too long (>8KB)');
+    DoRaise('SockRecvLn: line too long (>16KB)');
   FastSetString(Line, @tmp, len);
 end;
 
