@@ -1943,6 +1943,7 @@ procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 // resistance to cryptographic attacks with an efficient thread-safe process
 // - TLecuyer is predictable so is considered unsafe to generate IV or MAC
 procedure Random128(iv: PAesBlock);
+  {$ifdef FPC} inline; {$endif}
 
 var
   /// salt for CryptDataForCurrentUser function
@@ -3839,6 +3840,14 @@ end;
 
 
 { ********************* AES Encoding/Decoding }
+
+var
+  rnd128gen: TAesSignature; // dedicated thread-safe AES-CTR with 64-bit counter
+
+procedure Random128(iv: PAesBlock);
+begin
+  rnd128gen.Random128(pointer(iv));
+end;
 
 procedure ComputeAesStaticTables;
 var
@@ -7448,14 +7457,6 @@ begin
   sha.Update(buf, size);
   sha.Final(dig);
   MoveFast(dig, buf^, size);
-end;
-
-var
-  rnd128gen: TAesSignature; // dedicated thread-safe AES-CTR with 64-bit counter
-
-procedure Random128(iv: PAesBlock);
-begin
-  rnd128gen.Random128(pointer(iv));
 end;
 
 
