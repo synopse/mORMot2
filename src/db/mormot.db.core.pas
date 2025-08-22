@@ -1338,20 +1338,19 @@ type
   TJsonObjectDecoder = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// contains the decoded field names text
-    FieldNames: array[0..MAX_SQLFIELDS - 1] of PUtf8Char;
-    /// contains the decoded field names length
-    FieldNamesL: array[0..MAX_SQLFIELDS - 1] of byte;
-    /// contains the decoded field values
-    FieldValues: array[0..MAX_SQLFIELDS - 1] of RawUtf8;
-    /// Decode() will set each field type approximation
-    // - will recognize also JSON_BASE64_MAGIC_C/JSON_SQLDATE_MAGIC_C prefix
-    FieldTypeApproximation:
-      array[0..MAX_SQLFIELDS - 1] of TJsonObjectDecoderFieldType;
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
     /// define if and how the parameters are to be :(...): inlined
     InlinedParams: TJsonObjectDecoderParams;
+    /// contains the decoded field names length
+    FieldNamesL: array[0..MAX_SQLFIELDS - 1] of byte;
+    /// contains the decoded field names text
+    FieldNames: array[0..MAX_SQLFIELDS - 1] of PUtf8Char;
+    /// contains the decoded field values
+    FieldValues: array[0..MAX_SQLFIELDS - 1] of RawUtf8;
+    /// Decode() will set each field type approximation
+    // - will recognize also JSON_BASE64_MAGIC_C/JSON_SQLDATE_MAGIC_C prefix
+    FieldTypeApproximation: array[0..MAX_SQLFIELDS - 1] of TJsonObjectDecoderFieldType;
     /// internal pointer over field names to be used after Decode() call
     // - either FieldNames[], either Fields[] array as defined in Decode(), or
     // external names as set by TRestStorageExternal.JsonDecodedPrepareToSql
@@ -3932,7 +3931,7 @@ begin
     begin
       // insert explicit RowID as first parameter
       id := @ID_SHORT[not ReplaceRowIDWithID];
-      FieldNames[0] := @id^[1];
+      FieldNames[0]  := @id^[1];
       FieldNamesL[0] := ord(id^[0]);
       Int64ToUtf8(RowID, FieldValues[0]);
       FieldTypeApproximation[0] := ftaNumber;
@@ -4158,7 +4157,7 @@ begin
     EJsonObjectDecoder.RaiseUtf8(
       'Too many fields for TJsonObjectDecoder.AddField(%) max=%',
       [FieldName, MAX_SQLFIELDS]);
-  FieldNames[FieldCount] := pointer(FieldName); // so FieldName should remain available
+  FieldNames[FieldCount] := pointer(FieldName); // FieldName should remain available
   FieldNamesL[FieldCount] := length(FieldName);
   FieldValues[FieldCount] := FieldValue;
   FieldTypeApproximation[FieldCount] := FieldType;
