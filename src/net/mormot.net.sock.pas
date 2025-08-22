@@ -6587,7 +6587,7 @@ end;
 
 procedure TCrtSocket.SockSendW(w: PWideChar; l: PtrInt);
 var
-  p: PAnsiChar;
+  p: PUtf8Char;
   tmp: TBuffer8K;
 begin
   if w <> nil then
