@@ -618,14 +618,15 @@ type
     /// fill a buffer with the MGF1 seed deriviation, following RFC 2437
     // - a Mask Generation Function expands aSeed/aSeedLen into aDestLen buffer
     function Mgf1(aAlgo: THashAlgo; aSeed: pointer; aSeedLen, aDestLen: PtrUInt): RawByteString;
-    /// compute the Unix crypt hash of a given password
-    // - currently implement SHA-256/SHA-512 as defined in
+    /// compute the Unix crypt hash of a given password as '$algo$salt$checksum'
+    // - currently implements SHA-256-CRYPT and SHA-512-CRYPT as defined in
     // https://www.akkadia.org/drepper/SHA-crypt.txt
+    // - deprecated MD5-CRYPT can also be generated (and verified)
     function UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
       aRounds: cardinal = 535000; aSaltSize: cardinal = 8;
       aSalt: RawUtf8 = ''; aHash: PPUtf8Char = nil): RawUtf8;
     /// check the Unix crypt hash of a given password
-    // - as previously encoded by UnixCryptHash() method
+    // - as encoded by UnixCryptHash() method for hfSha256//hfSha512/hfMD5
     // - can return the algorithm decoded from '$algo$salt$checksum' format
     function UnixCryptVerify(const aPassword, aHash: RawUtf8;
       aAlgo: PHashAlgo = nil): boolean;
@@ -3967,8 +3968,9 @@ begin
   FakeLength(result, aDestLen);
 end;
 
-const // see reference code at https://github.com/besser82/libxcrypt
-  HASH64_CHARS: PAnsiChar =
+const
+  // https://github.com/besser82/libxcrypt https://www.akkadia.org/drepper/SHA-crypt.txt
+  HASH64_CHARS: PUtf8Char =
    './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 procedure b64by3(var p: PUtf8Char; b2, b1, b0: PtrUInt; n: cardinal = 4);
@@ -4079,6 +4081,7 @@ begin
       begin
         aRounds := 1000; // fixed
         aSaltSize := MinPtrUInt(aSaltSize, 8);
+        hlen := 22;
         result := '$1$';
       end;
     hfSha256,
@@ -4086,6 +4089,10 @@ begin
       begin
         aRounds   := MaxPtrUInt(aRounds, 1000); // >= 1000
         aSaltSize := MinPtrUInt(aSaltSize, 16);
+        if aAlgo = hfSha256 then
+          hlen := 43
+        else
+          hlen := 86;
         Make(['$', 5 + ord(aAlgo = hfSha512), '$rounds=', aRounds, '$'], result);
       end
   else
@@ -4175,14 +4182,6 @@ begin
       Final(alt);
     end;
   end;
-  case aAlgo of
-    hfMD5:
-      hlen := 22;
-    hfSha256:
-      hlen := 43;
-    hfSha512:
-      hlen := 86;
-  end;
   n := length(result);
   SetLength(result, n + hlen);
   p := pointer(result);
@@ -4195,57 +4194,57 @@ begin
   FillZero(ds.b);
 end;
 
-function UnixCryptParse(p: PUtf8Char; var a: THashAlgo;
-  var r: cardinal; var s: RawUtf8): PUtf8Char;
-begin // e.g. $1${salt}${checksum} or $5$rounds={rounds}${salt}${checksum}
+function UnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
+  var rounds: cardinal; var salt: RawUtf8): PUtf8Char;
+begin
   result := nil;
-  if (p = nil) or
-     (p^ <> '$') then
+  if (P = nil) or
+     (P^ <> '$') then
     exit;
-  inc(p);
-  case GetNextItemCardinal(p, '$') of
+  inc(P);
+  case GetNextItemCardinal(P, '$') of
     1:
-      a := hfMD5;
+      algo := hfMD5;     // '$1${salt}${checksum}'
     5:
-      a := hfSHA256;
+      algo := hfSHA256;  // '$5$rounds={rounds}${salt}${checksum}'
     6:
-      a := hfSHA512;
+      algo := hfSHA512;
   else
     exit;
   end;
-  if a = hfMD5 then
-    r := 1000 // fixed
-  else if IdemPChar(p, 'ROUNDS=') then
+  if algo = hfMD5 then
+    rounds := 1000 // fixed
+  else if IdemPChar(P, 'ROUNDS=') then
   begin
-    inc(p, 7);
-    r := GetNextItemCardinal(p, '$');
+    inc(P, 7);
+    rounds := GetNextItemCardinal(P, '$');
   end
   else
-    r := 5000; // default
-  GetNextItem(p, '$', s);
-  if b64valid(pointer(s)) and
-     b64valid(p) then
-    result := p;
+    rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
+  GetNextItem(P, '$', salt);
+  if b64valid(pointer(salt)) and
+     b64valid(P) then
+    result := P;
 end;
 
 function TSynHasher.UnixCryptVerify(const aPassword, aHash: RawUtf8;
   aAlgo: PHashAlgo): boolean;
 var
-  s: RawUtf8;
-  p, h: PUtf8Char;
-  a: THashAlgo;
-  r: cardinal;
+  salt: RawUtf8;
+  parsed, computed: PUtf8Char;
+  algo: THashAlgo;
+  rounds: cardinal;
 begin
   result := false;
-  p := UnixCryptParse(pointer(aHash), a, r, s);
-  if p = nil then
+  parsed := UnixCryptParse(pointer(aHash), algo, rounds, salt);
+  if parsed = nil then
     exit;
   if aAlgo <> nil then
-    aAlgo^ := a;
-  h := nil;
-  UnixCryptHash(a, aPassword, r, 0, s, @h);
-  result := (h <> nil) and
-            (mormot.core.base.StrComp(p, h) = 0);
+    aAlgo^ := algo;
+  computed := nil;
+  UnixCryptHash(algo, aPassword, rounds, 0, salt, @computed);
+  result := (computed <> nil) and
+            (mormot.core.base.StrComp(parsed, computed) = 0);
 end;
 
 
