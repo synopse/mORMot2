@@ -623,7 +623,7 @@ type
     // https://www.akkadia.org/drepper/SHA-crypt.txt
     function UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
       aRounds: cardinal = 535000; aSaltSize: cardinal = 8;
-      aSalt: RawUtf8 = ''): RawUtf8;
+      aSalt: RawUtf8 = ''; aHash: PPUtf8Char = nil): RawUtf8;
     /// check the Unix crypt hash of a given password
     // - as previously encoded by UnixCryptHash() method
     // - can return the algorithm decoded from '$algo$salt$checksum' format
@@ -3822,23 +3822,24 @@ end;
 
 procedure TSynHasher.Update(aBuffer: pointer; aLen: integer);
 begin
-  case fAlgo of
-    hfMD5:
-      PMd5(@ctxt)^.Update(aBuffer^, aLen);
-    hfSHA1:
-      PSha1(@ctxt)^.Update(aBuffer, aLen);
-    hfSHA224,
-    hfSHA256:
-      PSha256(@ctxt)^.Update(aBuffer, aLen);
-    hfSHA384:
-      PSha384(@ctxt)^.Update(aBuffer, aLen);
-    hfSHA512:
-      PSha512(@ctxt)^.Update(aBuffer, aLen);
-    hfSHA512_256:
-      PSha512_256(@ctxt)^.Update(aBuffer, aLen);
-  else
-    PSha3(@ctxt)^.Update(aBuffer, aLen);
-  end;
+  if aLen > 0 then
+    case fAlgo of
+      hfMD5:
+        PMd5(@ctxt)^.Update(aBuffer^, aLen);
+      hfSHA1:
+        PSha1(@ctxt)^.Update(aBuffer, aLen);
+      hfSHA224,
+      hfSHA256:
+        PSha256(@ctxt)^.Update(aBuffer, aLen);
+      hfSHA384:
+        PSha384(@ctxt)^.Update(aBuffer, aLen);
+      hfSHA512:
+        PSha512(@ctxt)^.Update(aBuffer, aLen);
+      hfSHA512_256:
+        PSha512_256(@ctxt)^.Update(aBuffer, aLen);
+    else
+      PSha3(@ctxt)^.Update(aBuffer, aLen);
+    end;
 end;
 
 procedure TSynHasher.Update(const aBuffer: RawByteString);
@@ -3966,57 +3967,131 @@ begin
   FakeLength(result, aDestLen);
 end;
 
-const
+const // see reference code at https://github.com/besser82/libxcrypt
   HASH64_CHARS: PAnsiChar =
    './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
-function b64to24(p: PUtf8Char; b2, b1, b0: PtrUInt; n: cardinal = 4): PUtf8Char;
+procedure b64by3(var p: PUtf8Char; b2, b1, b0: PtrUInt; n: cardinal = 4);
+var
+  enc: PUtf8Char;
 begin
   inc(b0, (b2 shl 16) + (b1 shl 8));
-  result := p;
-  p := @HASH64_CHARS;
+  enc := HASH64_CHARS;
   repeat
-    result^ := p[b0 and $3f];
-    inc(result);
+    p^ := enc[b0 and $3f];
+    inc(p);
     b0 := b0 shr 6;
     dec(n)
   until n = 0;
 end;
 
+procedure b64conv(a: THashAlgo; p: PUtf8Char; b: PByteArray);
+begin
+  case a of
+    hfMD5:
+      begin
+        b64by3(p, b[0],  b[6],  b[12]);
+        b64by3(p, b[1],  b[7],  b[13]);
+        b64by3(p, b[2],  b[8],  b[14]);
+        b64by3(p, b[3],  b[9],  b[15]);
+        b64by3(p, b[4],  b[10], b[5]);
+        b64by3(p, 0,     0,     b[11], 2);
+      end;
+    hfSHA256:
+      begin
+        b64by3(p, b[0],  b[10], b[20]);
+        b64by3(p, b[21], b[1],  b[11]);
+        b64by3(p, b[12], b[22], b[2]);
+        b64by3(p, b[3],  b[13], b[23]);
+        b64by3(p, b[24], b[4],  b[14]);
+        b64by3(p, b[15], b[25], b[5]);
+        b64by3(p, b[6],  b[16], b[26]);
+        b64by3(p, b[27], b[7],  b[17]);
+        b64by3(p, b[18], b[28], b[8]);
+        b64by3(p, b[9],  b[19], b[29]);
+        b64by3(p, 0,     b[31], b[30], 3);
+      end;
+    hfSHA512:
+      begin
+        b64by3(p, b[0] , b[21], b[42]);
+        b64by3(p, b[22], b[43], b[1]);
+        b64by3(p, b[44], b[2],  b[23]);
+        b64by3(p, b[3],  b[24], b[45]);
+        b64by3(p, b[25], b[46], b[4]);
+        b64by3(p, b[47], b[5],  b[26]);
+        b64by3(p, b[6],  b[27], b[48]);
+        b64by3(p, b[28], b[49], b[7]);
+        b64by3(p, b[50], b[8],  b[29]);
+        b64by3(p, b[9],  b[30], b[51]);
+        b64by3(p, b[31], b[52], b[10]);
+        b64by3(p, b[53], b[11], b[32]);
+        b64by3(p, b[12], b[33], b[54]);
+        b64by3(p, b[34], b[55], b[13]);
+        b64by3(p, b[56], b[14], b[35]);
+        b64by3(p, b[15], b[36], b[57]);
+        b64by3(p, b[37], b[58], b[16]);
+        b64by3(p, b[59], b[17], b[38]);
+        b64by3(p, b[18], b[39], b[60]);
+        b64by3(p, b[40], b[61], b[19]);
+        b64by3(p, b[62], b[20], b[41]);
+        b64by3(p, 0,     0,     b[63], 2);
+      end;
+  end;
+end;
+
+function b64valid(p: PUtf8Char): boolean;
+begin
+  result := false;
+  while true do
+    case p^ of
+      #0:
+        break;
+      '.', '/', '0'..'9', 'A'..'Z', 'a'..'z':
+        inc(p); // valid chars
+    else
+      exit;
+    end;
+  result := true;
+end;
+
+procedure AddDigest(var hasher: TSynHasher; dig: pointer; n, siz: cardinal);
+begin
+  while n >= siz do
+  begin
+    hasher.Update(dig, siz);
+    dec(n, siz);
+  end;
+  hasher.Update(dig, n);
+end;
+
 function TSynHasher.UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
-  aRounds, aSaltSize: cardinal; aSalt: RawUtf8): RawUtf8;
+  aRounds, aSaltSize: cardinal; aSalt: RawUtf8; aHash: PPUtf8Char): RawUtf8;
 var
   alt, dp, ds: THash512Rec;
   p: PUtf8Char;
   i: PtrInt;
-  siz, n: cardinal;
-
-  procedure AddDigest(dig: THash512Rec; n: cardinal);
-  begin
-    while n >= siz do
-    begin
-      Update(@dig, siz);
-      dec(n, siz);
-    end;
-    Update(@dig, n);
-  end;
-
+  c: AnsiChar;
+  siz, n, aPasswordSize, hlen: cardinal;
 begin
   result := '';
-  if aRounds = 0 then
-    exit;
   case aAlgo of
+    hfMD5:
+      begin
+        aRounds := 1000; // fixed
+        aSaltSize := MinPtrUInt(aSaltSize, 8);
+        result := '$1$';
+      end;
     hfSha256,
     hfSha512:
       begin
+        aRounds   := MaxPtrUInt(aRounds, 1000); // >= 1000
         aSaltSize := MinPtrUInt(aSaltSize, 16);
         Make(['$', 5 + ord(aAlgo = hfSha512), '$rounds=', aRounds, '$'], result);
       end
-    {hfMD5: // yet to be done (not the same exact algorithm)
-      aSaltSize := MinPtrUInt(aSaltSize, 8); }
   else
     exit;
   end;
+  aPasswordSize := length(aPassword);
   if aSalt = '' then
   begin
     if aSaltSize = 0 then
@@ -4025,113 +4100,106 @@ begin
     SharedRandom.Fill(p, aSaltSize);
     for i := 0 to aSaltSize - 1 do
       p[i] := HASH64_CHARS[ord(p[i]) and 63];
-  end;
+  end
+  else
+    aSaltSize := length(aSalt);
   Append(result, aSalt, '$');
   siz := Full(aAlgo, [aPassword, aSalt, aPassword], alt);
   Init(aAlgo);
-  Update(aPassword);
-  Update(aSalt);
-  n := length(aPassword); // add one byte of alt for any password char
-  while n > siz do
+  Update(pointer(aPassword), aPasswordSize);
+  if aAlgo = hfMD5 then
+    Update('$1$');
+  Update(pointer(aSalt), aSaltSize);
+  AddDigest(self, @alt, aPasswordSize, siz);
+  n := aPasswordSize;
+  if aAlgo = hfMD5 then
   begin
-    Update(@alt, siz);
-    dec(n, siz);
-  end;
-  Update(@alt, siz);
-  n := length(aPassword); // for every bit 1 add alt, for every 0 the key
-  while n > 0 do
-  begin
-    if (n and 1) <> 0 then
-      Update(@alt, siz)
-    else
-      Update(aPassword);
-    n := n shr 1;
-  end;
-  Final(alt);
-  for i := 1 to length(aPassword) do // compute digest DP
-    Update(aPassword);
-  Final(dp);
-  for i := 1 to 16 + alt.b[0] do     // compute digest DS
-    Update(aSalt);
-  Final(ds);
-  for n := 0 to MaxPtrUInt(aRounds, 1) - 1 do
-  begin
-    if (n and 1) <> 0 then // add key or last result
-      AddDigest(dp, length(aPassword))
-    else
-      Update(@alt, siz);
-    if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
-      AddDigest(ds, length(aSalt));
-    if (n mod 7) <> 0 then // add key for numbers not divisible by
-      AddDigest(dp, length(aPassword));
-    if (n and 1) = 0 then // add key or last result
-      AddDigest(dp, length(aPassword))
-    else
-      Update(@alt, siz);
+    while n > 0 do
+    begin
+      if (n and 1) <> 0 then
+        c := #0
+      else
+        c := aPassword[1];
+      Update(@c, 1); // weird
+      n := n shr 1;
+    end;
     Final(alt);
+    for n := 0 to aRounds - 1 do
+    begin
+      if (n and 1) <> 0 then // add key or last result
+        Update(pointer(aPassword), aPasswordSize)
+      else
+        Update(@alt, siz);
+      if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
+        Update(pointer(aSalt), aSaltSize);
+      if (n mod 7) <> 0 then // add key for numbers not divisible by
+        Update(pointer(aPassword), aPasswordSize);
+      if (n and 1) = 0 then // add key or last result
+        Update(pointer(aPassword), aPasswordSize)
+      else
+        Update(@alt, siz);
+      Final(alt);
+    end;
+  end
+  else // hfSha256, hfSha512:
+  begin
+    while n > 0 do
+    begin
+      if (n and 1) <> 0 then
+        Update(@alt, siz)
+      else
+        Update(pointer(aPassword), aPasswordSize);
+      n := n shr 1;
+    end;
+    Final(alt);
+    for i := 1 to aPasswordSize do // compute digest DP
+      Update(pointer(aPassword), aPasswordSize);
+    Final(dp);
+    for i := 1 to 16 + alt.b[0] do // compute digest DS
+      Update(pointer(aSalt), aSaltSize);
+    Final(ds);
+    for n := 0 to aRounds - 1 do
+    begin
+      if (n and 1) <> 0 then // add key or last result
+        AddDigest(self, @dp, aPasswordSize, siz)
+      else
+        Update(@alt, siz);
+      if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
+        AddDigest(self, @ds, aSaltSize, siz);
+      if (n mod 7) <> 0 then // add key for numbers not divisible by
+        AddDigest(self, @dp, aPasswordSize, siz);
+      if (n and 1) = 0 then // add key or last result
+        AddDigest(self, @dp, aPasswordSize, siz)
+      else
+        Update(@alt, siz);
+      Final(alt);
+    end;
   end;
   case aAlgo of
-    hfSHA256:
-      begin
-        SetLength(result, length(result) + 43);
-        p := pointer(result);
-        p := b64to24(p, alt.b[0],  alt.b[10], alt.b[20]);
-        p := b64to24(p, alt.b[21], alt.b[1],  alt.b[11]);
-        p := b64to24(p, alt.b[12], alt.b[22], alt.b[2]);
-        p := b64to24(p, alt.b[3],  alt.b[13], alt.b[23]);
-        p := b64to24(p, alt.b[24], alt.b[4],  alt.b[14]);
-        p := b64to24(p, alt.b[15], alt.b[25], alt.b[5]);
-        p := b64to24(p, alt.b[6],  alt.b[16], alt.b[26]);
-        p := b64to24(p, alt.b[27], alt.b[7],  alt.b[17]);
-        p := b64to24(p, alt.b[18], alt.b[28], alt.b[8]);
-        p := b64to24(p, alt.b[9],  alt.b[19], alt.b[29]);
-             b64to24(p, 0,         alt.b[31], alt.b[30], 3);
-      end;
-    hfSHA512:
-      begin
-        SetLength(result, length(result) + 86);
-        p := pointer(result);
-        p := b64to24(p, alt.b[0] , alt.b[21], alt.b[42]);
-        p := b64to24(p, alt.b[22], alt.b[43], alt.b[1]);
-        p := b64to24(p, alt.b[44], alt.b[2],  alt.b[23]);
-        p := b64to24(p, alt.b[3],  alt.b[24], alt.b[45]);
-        p := b64to24(p, alt.b[25], alt.b[46], alt.b[4]);
-        p := b64to24(p, alt.b[47], alt.b[5],  alt.b[26]);
-        p := b64to24(p, alt.b[6],  alt.b[27], alt.b[48]);
-        p := b64to24(p, alt.b[28], alt.b[49], alt.b[7]);
-        p := b64to24(p, alt.b[50], alt.b[8],  alt.b[29]);
-        p := b64to24(p, alt.b[9],  alt.b[30], alt.b[51]);
-        p := b64to24(p, alt.b[31], alt.b[52], alt.b[10]);
-        p := b64to24(p, alt.b[53], alt.b[11], alt.b[32]);
-        p := b64to24(p, alt.b[12], alt.b[33], alt.b[54]);
-        p := b64to24(p, alt.b[34], alt.b[55], alt.b[13]);
-        p := b64to24(p, alt.b[56], alt.b[14], alt.b[35]);
-        p := b64to24(p, alt.b[15], alt.b[36], alt.b[57]);
-        p := b64to24(p, alt.b[37], alt.b[58], alt.b[16]);
-        p := b64to24(p, alt.b[59], alt.b[17], alt.b[38]);
-        p := b64to24(p, alt.b[18], alt.b[39], alt.b[60]);
-        p := b64to24(p, alt.b[40], alt.b[61], alt.b[19]);
-        p := b64to24(p, alt.b[62], alt.b[20], alt.b[41]);
-             b64to24(p, 0,         0,         alt.b[63], 2);
-      end;
+    hfMD5:
+      hlen := 22;
+    hfSha256:
+      hlen := 43;
+    hfSha512:
+      hlen := 86;
   end;
+  n := length(result);
+  SetLength(result, n + hlen);
+  p := pointer(result);
+  inc(p, n);
+  if aHash <> nil then
+    aHash^ := p;
+  b64conv(aAlgo, p, @alt.b);
   FillZero(alt.b);
   FillZero(dp.b);
   FillZero(ds.b);
 end;
 
-function TSynHasher.UnixCryptVerify(const aPassword, aHash: RawUtf8;
-  aAlgo: PHashAlgo): boolean;
-var
-  s, h: RawUtf8;
-  p: PUtf8Char;
-  a: THashAlgo;
-  r: cardinal;
-begin
-  // parse e.g. $1${salt}${checksum} or $5$rounds={rounds}${salt}${checksum}
-  result := false;
-  p := pointer(aPassword);
-  if (length(aPassword) < 10) or
+function UnixCryptParse(p: PUtf8Char; var a: THashAlgo;
+  var r: cardinal; var s: RawUtf8): PUtf8Char;
+begin // e.g. $1${salt}${checksum} or $5$rounds={rounds}${salt}${checksum}
+  result := nil;
+  if (p = nil) or
      (p^ <> '$') then
     exit;
   inc(p);
@@ -4145,20 +4213,39 @@ begin
   else
     exit;
   end;
-  if aAlgo <> nil then
-    aAlgo^ := a;
-  r := 5000; // default rounds number
-  if (a <> hfMD5) and
-     IdemPChar(p, 'ROUNDS=') then
+  if a = hfMD5 then
+    r := 1000 // fixed
+  else if IdemPChar(p, 'ROUNDS=') then
   begin
     inc(p, 7);
     r := GetNextItemCardinal(p, '$');
-    if r < 1000 then
-      exit; // not enough rounds
-  end;
+  end
+  else
+    r := 5000; // default
   GetNextItem(p, '$', s);
-  h := UnixCryptHash(a, aPassword, r, 0, s);
-  result := h = aHash;
+  if b64valid(pointer(s)) and
+     b64valid(p) then
+    result := p;
+end;
+
+function TSynHasher.UnixCryptVerify(const aPassword, aHash: RawUtf8;
+  aAlgo: PHashAlgo): boolean;
+var
+  s: RawUtf8;
+  p, h: PUtf8Char;
+  a: THashAlgo;
+  r: cardinal;
+begin
+  result := false;
+  p := UnixCryptParse(pointer(aHash), a, r, s);
+  if p = nil then
+    exit;
+  if aAlgo <> nil then
+    aAlgo^ := a;
+  h := nil;
+  UnixCryptHash(a, aPassword, r, 0, s, @h);
+  result := (h <> nil) and
+            (mormot.core.base.StrComp(p, h) = 0);
 end;
 
 
