@@ -1840,11 +1840,13 @@ begin
         u := hasher.UnixCryptHash(h, pw, {rounds=}1000 + n, {saltsize=}n);
         Check(u <> '');
         if h <> hfMD5 then
-          CheckEqual(PosEx('$rounds=10', u), 3);
+          CheckEqual(PosEx(Make(['$rounds=', 1000 + n, '$']), u), 3);
         h2 := succ(h);
         Check(h2 <> h);
         Check(hasher.UnixCryptVerify(pw, u, @h2));
         Check(h2 = h);
+        dec(PByteArray(u)[length(u) - 5]);
+        Check(not hasher.UnixCryptVerify(pw, u, @h2));
       end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
