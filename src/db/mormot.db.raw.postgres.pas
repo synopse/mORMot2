@@ -347,7 +347,7 @@ const
     'errorMessage',
     'setNoticeProcessor',
     'clear',
-    'FreeMem',
+    'freemem',
     'exec',
     'prepare',
     'describePrepared',
