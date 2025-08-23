@@ -626,7 +626,7 @@ type
     // - deprecated MD5-CRYPT can also be generated (and verified)
     function UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
       aRounds: cardinal = 535000; aSaltSize: cardinal = 8;
-      aSalt: RawUtf8 = ''; aHash: PPUtf8Char = nil): RawUtf8;
+      aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
     /// check the Unix crypt hash of a given password
     // - as encoded by UnixCryptHash() method for hfSha256//hfSha512/hfMD5
     // - can return the algorithm decoded from '$algo$salt$checksum' format
@@ -4057,7 +4057,7 @@ begin
 end;
 
 function TSynHasher.UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
-  aRounds, aSaltSize: cardinal; aSalt: RawUtf8; aHash: PPUtf8Char): RawUtf8;
+  aRounds, aSaltSize: cardinal; aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
 var
   p: PUtf8Char;
   c: AnsiChar;
@@ -4087,8 +4087,7 @@ begin
   begin
     if aSaltSize = 0 then
       aSaltSize := 8;
-    p := FastSetString(aSalt, aSaltSize);
-    SharedRandom.Fill(p, aSaltSize);
+    p := RandomByteString(aSaltSize, aSalt, CP_UTF8);
     for n := 0 to aSaltSize - 1 do
       p[n] := HASH64_CHARS[ord(p[n]) and 63];
   end
@@ -4108,10 +4107,10 @@ begin
     dec(n, siz);
   end;
   Update(@alt, n);
-  n := aPasswordSize;
   case aAlgo of
     hfMD5:
       begin
+        n := aPasswordSize;
         while n > 0 do
         begin
           if (n and 1) <> 0 then
@@ -4122,12 +4121,13 @@ begin
           n := n shr 1;
         end;
         Final(alt);
-        dp := aPassword; // hash raw values
+        dp := aPassword; // hash raw key/salt
         ds := aSalt;
       end;
     hfSha256,
     hfSha512:
       begin
+        n := aPasswordSize;
         while n > 0 do
         begin
           if (n and 1) <> 0 then
@@ -4137,7 +4137,7 @@ begin
           n := n shr 1;
         end;
         Final(alt);
-        for n := 1 to aPasswordSize do // hash digest of values
+        for n := 1 to aPasswordSize do // hash digest of key/salt
           Update(pointer(aPassword), aPasswordSize);
         FinalBin(dp, aPasswordSize);
         for n := 1 to 16 + alt.b[0] do
@@ -4165,8 +4165,8 @@ begin
   SetLength(result, n + BinToBase64uriLength(siz));
   p := pointer(result);
   inc(p, n);
-  if aHash <> nil then
-    aHash^ := p;
+  if aHashPos <> nil then
+    aHashPos^ := n + 1;
   case siz of
     SizeOf(HASH64_128):
       b64enclast(b64enc(p, @alt, @HASH64_128, 5), 0, alt.b[11], 2);
@@ -4216,9 +4216,9 @@ end;
 function TSynHasher.UnixCryptVerify(const aPassword, aHash: RawUtf8;
   aAlgo: PHashAlgo): boolean;
 var
-  salt: RawUtf8;
-  parsed, computed: PUtf8Char;
-  rounds: cardinal;
+  salt, hash: RawUtf8;
+  parsed: PUtf8Char;
+  rounds, pos: cardinal;
   a: THashAlgo;
 begin
   result := false;
@@ -4227,10 +4227,10 @@ begin
     exit;
   if aAlgo <> nil then
     aAlgo^ := a;
-  computed := nil;
-  UnixCryptHash(a, aPassword, rounds, 0, salt, @computed);
-  result := (computed <> nil) and
-            (mormot.core.base.StrComp(parsed, computed) = 0);
+  pos := 0;
+  hash := UnixCryptHash(a, aPassword, rounds, 0, salt, @pos);
+  result := (pos <> 0) and
+            (mormot.core.base.StrComp(parsed, @hash[pos]) = 0);
 end;
 
 
