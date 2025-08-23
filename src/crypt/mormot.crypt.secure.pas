@@ -4214,17 +4214,17 @@ function TSynHasher.UnixCryptVerify(const aPassword, aHash: RawUtf8;
 var
   salt: RawUtf8;
   parsed, computed: PUtf8Char;
-  algo: THashAlgo;
   rounds: cardinal;
+  a: THashAlgo;
 begin
   result := false;
-  parsed := UnixCryptParse(pointer(aHash), algo, rounds, salt);
+  parsed := UnixCryptParse(pointer(aHash), a, rounds, salt);
   if parsed = nil then
     exit;
   if aAlgo <> nil then
-    aAlgo^ := algo;
+    aAlgo^ := a;
   computed := nil;
-  UnixCryptHash(algo, aPassword, rounds, 0, salt, @computed);
+  UnixCryptHash(a, aPassword, rounds, 0, salt, @computed);
   result := (computed <> nil) and
             (mormot.core.base.StrComp(parsed, computed) = 0);
 end;
