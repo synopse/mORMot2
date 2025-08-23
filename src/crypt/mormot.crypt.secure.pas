@@ -600,6 +600,8 @@ type
     procedure Final(var aResult: RawUtf8); overload;
     /// set the resulting hash into a binary buffer, and the size as result
     function Final(out aDigest: THash512Rec; aNoInit: boolean = false): integer; overload;
+    /// returns the resulting hash as raw binary string, with optional replication
+    procedure FinalBin(var aResult: RawByteString; aLen: PtrInt = 0);
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
@@ -3900,6 +3902,26 @@ begin
     PSha3(@ctxt)^.Final(@aDigest, 0, aNoInit);
   end;
   result := HASH_SIZE[fAlgo];
+end;
+
+procedure TSynHasher.FinalBin(var aResult: RawByteString; aLen: PtrInt);
+var
+  siz: PtrInt;
+  p: PAnsiChar;
+  dig: THash512Rec;
+begin
+  Final(dig);
+  siz := HASH_SIZE[fAlgo];
+  if aLen <= 0 then
+    aLen := siz;
+  p := FastNewRawByteString(aResult, aLen);
+  while aLen > siz do
+  begin
+    MoveFast(dig, p^, siz); // duplicate hash until aLen is reached
+    inc(p, siz);
+    dec(aLen, siz);
+  end;
+  MoveFast(dig, p^, aLen);
 end;
 
 function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8;
