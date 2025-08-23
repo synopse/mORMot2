@@ -1720,9 +1720,10 @@ const
 
 var
   buf: RawByteString;
-  u: RawUtf8;
+  u, pw: RawUtf8;
   P: PAnsiChar;
   unalign: PtrInt;
+  n: integer;
   exp321, exp322, exp323, exp324, exp325: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
@@ -1810,6 +1811,41 @@ begin
     if Assigned(AesNiHash128) then
       Hash128Test(P, @AesNiHash128);
   end;
+  // verify TSynHasher.UnixCryptHash()
+  h := hfMD5;
+  u := '$5$rounds=12345$q3hvJE5mn5jKRsW.$BbbYTFiaImz9rTy03GGi.Jf9YY5bmxN0LU3p3uI1iUB';
+  Check(hasher.UnixCryptVerify('password', u, @h));
+  Check(h = hfSha256);
+  Check(not hasher.UnixCryptVerify('p4ssword', u, @h));
+  u := '$1$3azHgidD$SrJPt7B.9rekpmwJwtON31';
+  Check(hasher.UnixCryptVerify('password', u, @h));
+  Check(h = hfMD5);
+  Check(hasher.UnixCryptVerify('the minimum number is still observed',
+    '$5$rounds=10$roundstoolow$yfvwcWrQ8l/K0DAWyuPMDNHpIVlTQebY9l/gL972bIC', @h));
+  Check(h = hfSha256);
+  Check(not hasher.UnixCryptVerify('secret', u, @h));
+  Check(h = hfMD5);
+  u := '$6$rounds=1400$anotherlongsalts$POfYwTEok97VWcjxIiSOjiykti.o/pQs.wP' +
+       'vMxQ6Fm7I6IoYN3CmLs66x9t0oSwbtEW7o7UmJEiDwGqd8p4ur1';
+  Check(hasher.UnixCryptVerify('a very much longer text to encrypt.  ' +
+  'This one even stretches over morethan one line.', u, @h));
+  Check(h = hfSHA512);
+  Check(not hasher.UnixCryptVerify('a very much longer text to encrypt.  ' +
+  'This one even stretches over more than one line.', u, @h));
+  for h := hfMD5 to hfSHA512 do
+    if h in [hfMD5, hfSHA256, hfSHA512] then
+      for n := 1 to 10 do
+      begin
+        pw := RandomIdentifier(n * 7);
+        u := hasher.UnixCryptHash(h, pw, {rounds=}1000 + n, {saltsize=}n);
+        Check(u <> '');
+        if h <> hfMD5 then
+          CheckEqual(PosEx('$rounds=10', u), 3);
+        h2 := succ(h);
+        Check(h2 <> h);
+        Check(hasher.UnixCryptVerify(pw, u, @h2));
+        Check(h2 = h);
+      end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
   CheckEqualHex(hasher.Mgf1(hfSHA1, pointer(buf), length(buf), 3), '1ac907');
