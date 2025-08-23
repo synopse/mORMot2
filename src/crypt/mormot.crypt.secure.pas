@@ -901,6 +901,40 @@ type
 
 
 const
+  /// map the size in bytes (16..64) of any THashAlgo digest
+  // - note that SHA-3 or SHA512-256 share the same size with other algos
+  HASH_SIZE: array[THashAlgo] of byte = (
+    SizeOf(TMd5Digest),    // 16 bytes for hfMD5
+    SizeOf(TSHA1Digest),   // 20 bytes for hfSHA1
+    SizeOf(TSHA256Digest), // 32 bytes for hfSHA256
+    SizeOf(TSHA384Digest), // 48 bytes for hfSHA384
+    SizeOf(TSHA512Digest), // 64 bytes for hfSHA512
+    SizeOf(THash256),      // 32 bytes for hfSHA512_256
+    SizeOf(THash256),      // 32 bytes for hfSHA3_256
+    SizeOf(THash512),      // 64 bytes for hfSHA3_512
+    SizeOf(THash224),      // 28 bytes for hfSHA224
+    SizeOf(THash224),      // 28 bytes for hfSHA3_224
+    SizeOf(THash384),      // 48 bytes for hfSHA3_384
+    SizeOf(THash128),      // 16 bytes for hfShake128
+    SizeOf(THash256));     // 32 bytes for hfShake256
+
+  /// map the file extension text of any THashAlgo digest
+  // - TextToHashAlgo() is able to recognize those values
+  HASH_EXT: array[THashAlgo] of RawUtf8 = (
+    '.md5',        // hfMD5
+    '.sha1',       // hfSHA1
+    '.sha256',     // hfSHA256
+    '.sha384',     // hfSHA384
+    '.sha512',     // hfSHA512
+    '.sha512-256', // hfSHA512_256
+    '.sha3-256',   // hfSHA3_256
+    '.sha3-512',   // hfSHA3_512
+    '.sha224',     // hfSHA224
+    '.sha3-224',   // hfSHA3_224
+    '.sha3-384',   // hfSHA3_384
+    '.shake128',   // hfShake128
+    '.shake256');  // hfShake256
+
   /// convert a TSignAlgo / TSynSigner algorithm into a THashAlgo / TSynHasher
   SIGN_HASH: array[TSignAlgo] of THashAlgo = (
     hfSha1,     // saSha1
@@ -1015,40 +1049,10 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
-const
-  /// map the size in bytes (16..64) of any THashAlgo digest
-  // - note that SHA-3 or SHA512-256 share the same size with other algos
-  HASH_SIZE: array[THashAlgo] of byte = (
-    SizeOf(TMd5Digest),    // 16 bytes for hfMD5
-    SizeOf(TSHA1Digest),   // 20 bytes for hfSHA1
-    SizeOf(TSHA256Digest), // 32 bytes for hfSHA256
-    SizeOf(TSHA384Digest), // 48 bytes for hfSHA384
-    SizeOf(TSHA512Digest), // 64 bytes for hfSHA512
-    SizeOf(THash256),      // 32 bytes for hfSHA512_256
-    SizeOf(THash256),      // 32 bytes for hfSHA3_256
-    SizeOf(THash512),      // 64 bytes for hfSHA3_512
-    SizeOf(THash224),      // 28 bytes for hfSHA224
-    SizeOf(THash224),      // 28 bytes for hfSHA3_224
-    SizeOf(THash384),      // 48 bytes for hfSHA3_384
-    SizeOf(THash128),      // 16 bytes for hfShake128
-    SizeOf(THash256));     // 32 bytes for hfShake256
+/// low-level parsing function used by TSynHasher.UnixCryptVerify()
+function HashUnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
+  var rounds: cardinal; var salt: RawUtf8): PUtf8Char;
 
-  /// map the file extension text of any THashAlgo digest
-  // - TextToHashAlgo() is able to recognize those values
-  HASH_EXT: array[THashAlgo] of RawUtf8 = (
-    '.md5',        // hfMD5
-    '.sha1',       // hfSHA1
-    '.sha256',     // hfSHA256
-    '.sha384',     // hfSHA384
-    '.sha512',     // hfSHA512
-    '.sha512-256', // hfSHA512_256
-    '.sha3-256',   // hfSHA3_256
-    '.sha3-512',   // hfSHA3_512
-    '.sha224',     // hfSHA224
-    '.sha3-224',   // hfSHA3_224
-    '.sha3-384',   // hfSHA3_384
-    '.shake128',   // hfShake128
-    '.shake256');  // hfShake256
 
 { some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
 
@@ -4176,7 +4180,7 @@ begin
   FillZero(ds);
 end;
 
-function UnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
+function HashUnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
   var rounds: cardinal; var salt: RawUtf8): PUtf8Char;
 begin
   result := nil;
@@ -4218,7 +4222,7 @@ var
   a: THashAlgo;
 begin
   result := false;
-  parsed := UnixCryptParse(pointer(aHash), a, rounds, salt);
+  parsed := HashUnixCryptParse(pointer(aHash), a, rounds, salt);
   if parsed = nil then
     exit;
   if aAlgo <> nil then
