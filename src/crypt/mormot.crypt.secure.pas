@@ -4052,45 +4052,29 @@ begin
   result := true;
 end;
 
-procedure AddDigest(var hasher: TSynHasher; dig: pointer; n, siz: cardinal);
-begin
-  while n >= siz do
-  begin
-    hasher.Update(dig, siz);
-    dec(n, siz);
-  end;
-  hasher.Update(dig, n);
-end;
-
 function TSynHasher.UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
   aRounds, aSaltSize: cardinal; aSalt: RawUtf8; aHash: PPUtf8Char): RawUtf8;
 var
-  alt, dp, ds: THash512Rec;
   p: PUtf8Char;
-  i: PtrInt;
   c: AnsiChar;
-  siz, n, aPasswordSize, hlen: cardinal;
+  siz, n, aPasswordSize: PtrUInt;
+  dp, ds: RawByteString;
+  alt: THash512Rec;
 begin
   result := '';
+  aRounds := MaxPtrUInt(aRounds, 1000); // >= 1000
+  aSaltSize := MinPtrUInt(aSaltSize, 16);
   case aAlgo of
     hfMD5:
       begin
         aRounds := 1000; // fixed
         aSaltSize := MinPtrUInt(aSaltSize, 8);
-        hlen := 22;
         result := '$1$';
       end;
-    hfSha256,
+    hfSha256:
+      Make(['$5$rounds=', aRounds, '$'], result);
     hfSha512:
-      begin
-        aRounds   := MaxPtrUInt(aRounds, 1000); // >= 1000
-        aSaltSize := MinPtrUInt(aSaltSize, 16);
-        if aAlgo = hfSha256 then
-          hlen := 43
-        else
-          hlen := 86;
-        Make(['$', 5 + ord(aAlgo = hfSha512), '$rounds=', aRounds, '$'], result);
-      end
+      Make(['$6$rounds=', aRounds, '$'], result);
   else
     exit;
   end;
@@ -4101,8 +4085,8 @@ begin
       aSaltSize := 8;
     p := FastSetString(aSalt, aSaltSize);
     SharedRandom.Fill(p, aSaltSize);
-    for i := 0 to aSaltSize - 1 do
-      p[i] := HASH64_CHARS[ord(p[i]) and 63];
+    for n := 0 to aSaltSize - 1 do
+      p[n] := HASH64_CHARS[ord(p[n]) and 63];
   end
   else
     aSaltSize := length(aSalt);
@@ -4113,73 +4097,68 @@ begin
   if aAlgo = hfMD5 then
     Update('$1$');
   Update(pointer(aSalt), aSaltSize);
-  AddDigest(self, @alt, aPasswordSize, siz);
   n := aPasswordSize;
-  if aAlgo = hfMD5 then
+  while n >= siz do
   begin
-    while n > 0 do
-    begin
-      if (n and 1) <> 0 then
-        c := #0
-      else
-        c := aPassword[1];
-      Update(@c, 1); // weird
-      n := n shr 1;
-    end;
-    Final(alt);
-    for n := 0 to aRounds - 1 do
-    begin
-      if (n and 1) <> 0 then // add key or last result
-        Update(pointer(aPassword), aPasswordSize)
-      else
-        Update(@alt, siz);
-      if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
-        Update(pointer(aSalt), aSaltSize);
-      if (n mod 7) <> 0 then // add key for numbers not divisible by
-        Update(pointer(aPassword), aPasswordSize);
-      if (n and 1) = 0 then // add key or last result
-        Update(pointer(aPassword), aPasswordSize)
-      else
-        Update(@alt, siz);
-      Final(alt);
-    end;
-  end
-  else // hfSha256, hfSha512:
+    Update(@alt, siz);
+    dec(n, siz);
+  end;
+  Update(@alt, n);
+  n := aPasswordSize;
+  case aAlgo of
+    hfMD5:
+      begin
+        while n > 0 do
+        begin
+          if (n and 1) <> 0 then
+            c := #0
+          else
+            c := aPassword[1];
+          Update(@c, 1); // weird
+          n := n shr 1;
+        end;
+        Final(alt);
+        dp := aPassword; // hash raw values
+        ds := aSalt;
+      end;
+    hfSha256,
+    hfSha512:
+      begin
+        while n > 0 do
+        begin
+          if (n and 1) <> 0 then
+            Update(@alt, siz)
+          else
+            Update(pointer(aPassword), aPasswordSize);
+          n := n shr 1;
+        end;
+        Final(alt);
+        for n := 1 to aPasswordSize do // hash digest of values
+          Update(pointer(aPassword), aPasswordSize);
+        FinalBin(dp, aPasswordSize);
+        for n := 1 to 16 + alt.b[0] do
+          Update(pointer(aSalt), aSaltSize);
+        FinalBin(ds, aSaltSize);
+      end;
+  end;
+  for n := 0 to aRounds - 1 do
   begin
-    while n > 0 do
-    begin
-      if (n and 1) <> 0 then
-        Update(@alt, siz)
-      else
-        Update(pointer(aPassword), aPasswordSize);
-      n := n shr 1;
-    end;
+    if (n and 1) <> 0 then // add key or last result
+      Update(pointer(dp), aPasswordSize)
+    else
+      Update(@alt, siz);
+    if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
+      Update(pointer(ds), aSaltSize);
+    if (n mod 7) <> 0 then // add key for numbers not divisible by 7
+      Update(pointer(dp), aPasswordSize);
+    if (n and 1) = 0 then  // add key or last result
+      Update(pointer(dp), aPasswordSize)
+    else
+      Update(@alt, siz);
     Final(alt);
-    for i := 1 to aPasswordSize do // compute digest DP
-      Update(pointer(aPassword), aPasswordSize);
-    Final(dp);
-    for i := 1 to 16 + alt.b[0] do // compute digest DS
-      Update(pointer(aSalt), aSaltSize);
-    Final(ds);
-    for n := 0 to aRounds - 1 do
-    begin
-      if (n and 1) <> 0 then // add key or last result
-        AddDigest(self, @dp, aPasswordSize, siz)
-      else
-        Update(@alt, siz);
-      if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
-        AddDigest(self, @ds, aSaltSize, siz);
-      if (n mod 7) <> 0 then // add key for numbers not divisible by
-        AddDigest(self, @dp, aPasswordSize, siz);
-      if (n and 1) = 0 then // add key or last result
-        AddDigest(self, @dp, aPasswordSize, siz)
-      else
-        Update(@alt, siz);
-      Final(alt);
-    end;
   end;
   n := length(result);
-  SetLength(result, n + hlen);
+  SetLength(result, n + BinToBase64uriLength(siz));
   p := pointer(result);
   inc(p, n);
   if aHash <> nil then
@@ -4193,8 +4172,8 @@ begin
       b64enclast(b64enc(p, @alt, @HASH64_512, 21), 0, alt.b[63], 2);
   end;
   FillZero(alt.b);
-  FillZero(dp.b);
-  FillZero(ds.b);
+  FillZero(dp);
+  FillZero(ds);
 end;
 
 function UnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
