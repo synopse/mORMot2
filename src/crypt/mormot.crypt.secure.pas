@@ -3991,76 +3991,50 @@ begin
 end;
 
 const
-  // https://github.com/besser82/libxcrypt https://www.akkadia.org/drepper/SHA-crypt.txt
+  // https://github.com/besser82/libxcrypt
   HASH64_CHARS: PUtf8Char =
    './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  HASH64_128: THash128 = (
+    12, 6, 0, 13, 7, 1, 14, 8, 2, 15, 9, 3, 5, 10, 4, 11);
+  // https://www.akkadia.org/drepper/SHA-crypt.txt
+  HASH64_256: THash256 = (
+    20, 10, 0, 11, 1, 21, 2, 22, 12, 23, 13, 3, 14, 4, 24,
+    5, 25, 15, 26, 16, 6, 17, 7, 27, 8, 28, 18, 29, 19, 9, 30, 31);
+  HASH64_512: THash512 = (
+    42, 21, 0, 1, 43, 22, 23, 2, 44, 45, 24, 3, 4, 46, 25, 26, 5, 47,
+    48, 27, 6, 7, 49, 28, 29, 8, 50, 51, 30, 9, 10, 52, 31, 32, 11, 53,
+    54, 33, 12, 13, 55, 34, 35, 14, 56, 57, 36, 15, 16, 58, 37,
+    38, 17, 59, 60, 39, 18, 19, 61, 40, 41, 20, 62, 63);
 
-procedure b64by3(var p: PUtf8Char; b2, b1, b0: PtrUInt; n: cardinal = 4);
+function b64enc(p: PUtf8Char; b, mask: PByteArray; n: cardinal): PUtf8Char;
+var
+  enc: PUtf8Char;
+  c: PtrUInt;
+begin
+  enc := HASH64_CHARS;
+  repeat
+    c := b[mask[0]] or (PtrUInt(b[mask[1]]) shl 8) or (PtrUInt(b[mask[2]]) shl 16);
+    p[0] := enc[c and $3f];
+    p[1] := enc[(c shr 6) and $3f];
+    p[2] := enc[(c shr 12) and $3f];
+    p[3] := enc[c shr 18];
+    p := @p[4];
+    mask := @mask[3];
+    dec(n);
+  until n = 0;
+  result := p;
+end;
+
+procedure b64enclast(p: PUtf8Char; b1, b0: PtrUInt; n: cardinal);
 var
   enc: PUtf8Char;
 begin
-  inc(b0, (b2 shl 16) + (b1 shl 8));
+  inc(b0, b1 shl 8);
   enc := HASH64_CHARS;
-  repeat
-    p^ := enc[b0 and $3f];
-    inc(p);
-    b0 := b0 shr 6;
-    dec(n)
-  until n = 0;
-end;
-
-procedure b64conv(a: THashAlgo; p: PUtf8Char; b: PByteArray);
-begin
-  case a of
-    hfMD5:
-      begin
-        b64by3(p, b[0],  b[6],  b[12]);
-        b64by3(p, b[1],  b[7],  b[13]);
-        b64by3(p, b[2],  b[8],  b[14]);
-        b64by3(p, b[3],  b[9],  b[15]);
-        b64by3(p, b[4],  b[10], b[5]);
-        b64by3(p, 0,     0,     b[11], 2);
-      end;
-    hfSHA256:
-      begin
-        b64by3(p, b[0],  b[10], b[20]);
-        b64by3(p, b[21], b[1],  b[11]);
-        b64by3(p, b[12], b[22], b[2]);
-        b64by3(p, b[3],  b[13], b[23]);
-        b64by3(p, b[24], b[4],  b[14]);
-        b64by3(p, b[15], b[25], b[5]);
-        b64by3(p, b[6],  b[16], b[26]);
-        b64by3(p, b[27], b[7],  b[17]);
-        b64by3(p, b[18], b[28], b[8]);
-        b64by3(p, b[9],  b[19], b[29]);
-        b64by3(p, 0,     b[31], b[30], 3);
-      end;
-    hfSHA512:
-      begin
-        b64by3(p, b[0] , b[21], b[42]);
-        b64by3(p, b[22], b[43], b[1]);
-        b64by3(p, b[44], b[2],  b[23]);
-        b64by3(p, b[3],  b[24], b[45]);
-        b64by3(p, b[25], b[46], b[4]);
-        b64by3(p, b[47], b[5],  b[26]);
-        b64by3(p, b[6],  b[27], b[48]);
-        b64by3(p, b[28], b[49], b[7]);
-        b64by3(p, b[50], b[8],  b[29]);
-        b64by3(p, b[9],  b[30], b[51]);
-        b64by3(p, b[31], b[52], b[10]);
-        b64by3(p, b[53], b[11], b[32]);
-        b64by3(p, b[12], b[33], b[54]);
-        b64by3(p, b[34], b[55], b[13]);
-        b64by3(p, b[56], b[14], b[35]);
-        b64by3(p, b[15], b[36], b[57]);
-        b64by3(p, b[37], b[58], b[16]);
-        b64by3(p, b[59], b[17], b[38]);
-        b64by3(p, b[18], b[39], b[60]);
-        b64by3(p, b[40], b[61], b[19]);
-        b64by3(p, b[62], b[20], b[41]);
-        b64by3(p, 0,     0,     b[63], 2);
-      end;
-  end;
+  p[0] := enc[b0 and $3f];
+  p[1] := enc[(b0 shr 6) and $3f];
+  if n = 3 then
+    p[2] := enc[(b0 shr 12) and $3f]; // n=2 or n=3
 end;
 
 function b64valid(p: PUtf8Char): boolean;
@@ -4210,7 +4184,14 @@ begin
   inc(p, n);
   if aHash <> nil then
     aHash^ := p;
-  b64conv(aAlgo, p, @alt.b);
+  case siz of
+    SizeOf(HASH64_128):
+      b64enclast(b64enc(p, @alt, @HASH64_128, 5), 0, alt.b[11], 2);
+    SizeOf(HASH64_256):
+      b64enclast(b64enc(p, @alt, @HASH64_256, 10), alt.b[31], alt.b[30], 3);
+    SizeOf(HASH64_512):
+      b64enclast(b64enc(p, @alt, @HASH64_512, 21), 0, alt.b[63], 2);
+  end;
   FillZero(alt.b);
   FillZero(dp.b);
   FillZero(ds.b);
