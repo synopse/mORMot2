@@ -1724,7 +1724,7 @@ var
   P: PAnsiChar;
   unalign: PtrInt;
   n, rounds: integer;
-  exp321, exp322, exp323, exp324, exp325: cardinal;
+  exp321, exp322, exp323, exp324, exp325, exp326: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
   h, h2: THashAlgo;
@@ -1786,13 +1786,13 @@ begin
   Check(not TextToSignAlgo('SHA5122', s));
   Check(not TextToSignAlgo('SHA512256', s));
   // validate our 32-bit, 64-bit and 128-bit hash functions
-  Check(Adler32SelfTest);
   SetLength(buf, HASHESMAX + HASHALIGN);
   exp321 := 0;
   exp322 := 0;
   exp323 := 0;
   exp324 := 0;
   exp325 := 0;
+  exp326 := 0;
   exp641 := 0;
   exp642 := 0;
   for unalign := 0 to HASHALIGN - 1 do // ensure alignment doesn't change result
@@ -1806,6 +1806,7 @@ begin
     if Assigned(AesNiHash32) then
       Hash32Test(P, @AesNiHash32, exp324);
     Hash32Test(P, @crc32fast,     exp325);
+    Hash32Test(P, @adler32,       exp326);
     Hash64Test(P, @crc32cTwice, exp641);
     if Assigned(AesNiHash64) then
       Hash64Test(P, @AesNiHash64, exp642);
@@ -1813,6 +1814,13 @@ begin
     if Assigned(AesNiHash128) then
       Hash128Test(P, @AesNiHash128);
   end;
+  CheckEqual(exp321, 4022360595);
+  CheckEqual(exp321, exp322);
+  CheckEqual(exp323, 1465265692);
+  CheckEqual(exp325, 3408302637);
+  CheckEqual(exp326, 4027950528);
+  CheckEqual(adler32fast(0, P, HASHESMAX), exp326);
+  CheckEqual(exp641, -1170836861443089901);
   // verify "Modular Crypt" hashing functions
   u := '$5$rounds=12345$q3hvJE5mn5jKRsW.$BbbYTFiaImz9rTy03GGi.Jf9YY5bmxN0LU3p3uI1iUB';
   Check(ModularCryptIdentify(u) = mcfSha256Crypt);
