@@ -893,9 +893,10 @@ type
     // key is unbounded and could be bigger than the TSignAlgo digest size
     function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString; overload;
-    /// compute the Modular Crypt PBKDF2 of a given password as returned by
-    // passlib - i.e. in '$pbkdf2-{digest}${rounds}${salt}${checksum}' format
+    /// compute the Modular Crypt hash of a given password as computed by passlib
+    // pbkdf2.py - i.e. in '$pbkdf2-{digest}${rounds}${salt}${checksum}' format
     // - see ModularCryptVerify() for the associated verification function
+    // - in addition to official passlib format, will include our '$pbkdf2-sha3$'
     function Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat; const aPassword: RawUtf8;
       aRounds: cardinal = 0; aSaltSize: cardinal = 16;
       aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
@@ -1087,6 +1088,7 @@ function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
 /// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
 // mcfSha256Crypt for '$5$rounds={rounds}${salt}${checksum}'
+// - just check the '${ident}$' prefix, without actually checking the content
 function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
 
 /// decode and check a password against a hash in "Modular Crypt" format
@@ -4654,12 +4656,12 @@ end; // on success, P points to the {checksum} part
 
 function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
 var
-  rounds: cardinal;
-  salt: RawUtf8;
+  dummyrounds: cardinal;
+  dummysalt: RawUtf8;
   P: PUtf8Char;
 begin
   P := pointer(hash);
-  result := ModularCryptParse(P, rounds, salt);
+  result := ModularCryptParse(P, dummyrounds, dummysalt);
 end;
 
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
