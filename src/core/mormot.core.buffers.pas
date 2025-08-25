@@ -1501,7 +1501,7 @@ function AsciiToBaudot(const Text: RawUtf8): RawByteString; overload;
 // - any uppercase character would be decoded as lowercase - and some characters
 // may have disapeared outside of a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; range
 // - the "baud" symbol rate measurement comes from Emile's name ;)
-function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUtf8; overload;
+function BaudotToAscii(Baudot: PByte; len: PtrInt): RawUtf8; overload;
 
 /// convert some Baudot code binary, into ASCII-7 text
 // - reverse of the AsciiToBaudot() function
@@ -1510,6 +1510,11 @@ function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUtf8; overload;
 // - the "baud" symbol rate measurement comes from Emile's name ;)
 function BaudotToAscii(const Baudot: RawByteString): RawUtf8; overload;
 
+/// internal low-level Baudot encoding function over #0 terminated buffers
+function BaudotEncode(src: PAnsiChar; dest: PByte; len: cardinal): pointer;
+
+/// internal low-level Baudot decoding function over #0 terminated buffers
+function BaudotDecode(src: PByte; dest: PAnsiChar; len: cardinal): pointer;
 
 
 { ***************** URI-Encoded Text Buffer Process }
@@ -7894,17 +7899,11 @@ end;
 { --------- Baudot encoding/decoding }
 
 const
-  // see https://en.wikipedia.org/wiki/Baudot_code
-  Baudot2Char: TChar64 =
+  Baudot2Char: TChar64 = // see https://en.wikipedia.org/wiki/Baudot_code
    #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
    #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
 var
   Char2Baudot: array[AnsiChar] of byte;
-
-function AsciiToBaudot(const Text: RawUtf8): RawByteString;
-begin
-  result := AsciiToBaudot(pointer(Text), length(Text));
-end;
 
 procedure FillBaudotDecode(s, d: PByteArray);
 var
@@ -7917,27 +7916,16 @@ begin
     d[i - 32] := d[i]; // a-z -> A-Z
 end;
 
-function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString;
+function BaudotEncode(src: PAnsiChar; dest: PByte; len: cardinal): pointer;
 var
-  i: PtrInt;
-  c, d, bits: integer;
+  c, d, bits: PtrUInt;
   shift: boolean;
-  dest: PByte;
-  tmp: TSynTempBuffer;
 begin
-  result := '';
-  if (P = nil) or
-     (len = 0) then
-    exit;
-  if Char2Baudot['z'] = 0 then // delayed thread-safe initialization
-    FillBaudotDecode(@Baudot2Char, @Char2Baudot);
-  shift := false;
-  dest := tmp.Init((len * 10) shr 3);
   d := 0;
   bits := 0;
-  for i := 0 to len - 1 do
-  begin
-    c := Char2Baudot[P[i]];
+  shift := false;
+  repeat
+    c := Char2Baudot[src^];
     if c > 32 then
     begin
       if not shift then
@@ -7952,7 +7940,7 @@ begin
     else if c > 0 then
     begin
       if shift and
-         (P[i] >= ' ') then
+         (src^ >= ' ') then
       begin
         d := (d shl 5) or 31;
         inc(bits, 5);
@@ -7967,14 +7955,78 @@ begin
       dest^ := d shr bits;
       inc(dest);
     end;
-  end;
+    inc(src);
+    dec(len);
+  until len = 0;
   if bits > 0 then
   begin
     dest^ := d shl (8 - bits);
     inc(dest);
   end;
-  FastSetRawByteString(result, tmp.buf, PAnsiChar(dest) - PAnsiChar(tmp.buf));
-  tmp.Done;
+  result := dest;
+end;
+
+function BaudotDecode(src: PByte; dest: PAnsiChar; len: cardinal): pointer;
+var
+  c, b, bits, shift: PtrUInt;
+begin
+  result := dest; // exit below on invalid input -> generates ''
+  shift := 0;
+  b := 0;
+  bits := 0;
+  repeat
+    b := (b shl 8) or src^;
+    inc(src);
+    inc(bits, 8);
+    while bits >= 5 do
+    begin
+      dec(bits, 5);
+      c := (b shr bits) and 31;
+      case c of
+        27:
+          if shift <> 0 then
+            exit
+          else
+            shift := 32;
+        31:
+          if shift <> 0 then
+            shift := 0
+          else
+            exit;
+      else
+        begin
+          c := ord(Baudot2Char[c + shift]);
+          if c = 0 then
+            if src^ = 0 then // allow triming of last 5 bits
+              break
+            else
+              exit;
+          dest^ := AnsiChar(c);
+          inc(dest);
+        end;
+      end;
+    end;
+    dec(len);
+  until len = 0;
+  result := dest;
+end;
+
+function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  if (P = nil) or
+     (len = 0) then
+    exit;
+  if Char2Baudot['z'] = 0 then // delayed thread-safe initialization
+    FillBaudotDecode(@Baudot2Char, @Char2Baudot);
+  tmp.Done(BaudotEncode(P, tmp.Init((len * 10) shr 3), len), RawUtf8(result));
+end;
+
+function AsciiToBaudot(const Text: RawUtf8): RawByteString;
+begin
+  result := AsciiToBaudot(pointer(Text), length(Text));
 end;
 
 function BaudotToAscii(const Baudot: RawByteString): RawUtf8;
@@ -7982,58 +8034,15 @@ begin
   result := BaudotToAscii(pointer(Baudot), length(Baudot));
 end;
 
-function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUtf8;
+function BaudotToAscii(Baudot: PByte; len: PtrInt): RawUtf8;
 var
-  i: PtrInt;
-  c, b, bits, shift: integer;
   tmp: TSynTempBuffer;
-  dest: PAnsiChar;
 begin
-  result := '';
   if (Baudot = nil) or
      (len <= 0) then
-    exit;
-  dest := tmp.Init((len shl 3) div 5);
-  try
-    shift := 0;
-    b := 0;
-    bits := 0;
-    for i := 0 to len - 1 do
-    begin
-      b := (b shl 8) or Baudot[i];
-      inc(bits, 8);
-      while bits >= 5 do
-      begin
-        dec(bits, 5);
-        c := (b shr bits) and 31;
-        case c of
-          27:
-            if shift <> 0 then
-              exit
-            else
-              shift := 32;
-          31:
-            if shift <> 0 then
-              shift := 0
-            else
-              exit;
-        else
-          begin
-            c := ord(Baudot2Char[c + shift]);
-            if c = 0 then
-              if Baudot[i + 1] = 0 then // allow triming of last 5 bits
-                break
-              else
-                exit;
-            dest^ := AnsiChar(c);
-            inc(dest);
-          end;
-        end;
-      end;
-    end;
-  finally
-    tmp.Done(dest, result);
-  end;
+    result := ''
+  else
+    tmp.Done(BaudotDecode(Baudot, tmp.Init((len shl 3) div 5), len) , result);
 end;
 
 
