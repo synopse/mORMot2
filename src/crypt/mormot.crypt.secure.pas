@@ -4088,16 +4088,15 @@ begin
     p[2] := enc[(b0 shr 12) and $3f]; // 3 trailing chars for SHA-256
 end;
 
-function b64append(var hash: RawUtf8; n: cardinal; pos: PInteger): PUtf8Char;
+function b64append(var hash: RawUtf8; n: cardinal; pos: PInteger): pointer;
 var
   i: PtrUInt;
 begin
   i := length(hash);
   SetLength(hash, i + BinToBase64uriLength(n));
-  result := pointer(hash);
-  inc(result, i);
   if pos <> nil then
     pos^ := i + 1;
+  result := PAnsiChar(pointer(hash)) + i;
 end;
 
 function b64valid(p: PUtf8Char): boolean;
@@ -4955,7 +4954,6 @@ function TSynSigner.Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat;
   const aPassword: RawUtf8; aRounds, aSaltSize: cardinal;
   aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
 var
-  p: PAnsiChar;
   siz: PtrUInt;
   binsalt: RawByteString;
   dig: THash512;
@@ -4985,8 +4983,7 @@ begin
     binsalt := aSalt; // be tolerant about non-standard salt format
   Make(['$', MCF_IDENT[aAlgo], '$', aRounds, '$', aSalt, '$'], result);
   siz := Pbkdf2(MCF_SIGN[aAlgo], aPassword, binsalt, aRounds, @dig);
-  p := b64append(result, siz, aHashPos);
-  Base64uriEncode(p, @dig, siz, @HASH64_ENC);
+  Base64uriEncode(b64append(result, siz, aHashPos), @dig, siz, @HASH64_ENC);
 end;
 
 function TSynSigner.KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
