@@ -1812,7 +1812,7 @@ begin
     if Assigned(AesNiHash128) then
       Hash128Test(P, @AesNiHash128);
   end;
-  // verify TSynHasher.UnixCryptHash()
+  // verify "Modular Crypt" hashing functions
   u := '$5$rounds=12345$q3hvJE5mn5jKRsW.$BbbYTFiaImz9rTy03GGi.Jf9YY5bmxN0LU3p3uI1iUB';
   Check(ModularCryptIdentify(u) = mcfSha256Crypt);
   Check(ModularCryptVerify('password', u) = mcfSha256Crypt);
@@ -1839,21 +1839,37 @@ begin
   Check(ModularCryptIdentify(u) = mcfSha512Crypt);
   delete(u, 5, 1);
   Check(ModularCryptIdentify(u) = mcfInvalid);
-  for mcf := mcfMd5Crypt to mcfSha512Crypt do
+  // official test vectors from test_handlers_pbkdf2.py
+  u := '$pbkdf2$1212$OB.dtnSEXZK8U5cgxU/GYQ$y5LKPOplRmok7CZp/aqVDVg8zGI';
+  Check(ModularCryptIdentify(u) = mcfPbkdf2Sha1);
+  Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha1);
+  Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  u := '$pbkdf2-sha256$1212$4vjV83LKPjQzk31VI4E0Vw$hsYF68OiOUPdDZ1Fg.fJPeq1h/gXXY7acBp9/6c.tmQ';
+  Check(ModularCryptIdentify(u) = mcfPbkdf2Sha256);
+  Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha256);
+  Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  u := '$pbkdf2-sha256$6400$.6UI/S.nXIk8jcbdHx3Fhg$98jZicV16ODfEsEZeYPGHU3kbrUrvUEXOPimVSQDD44';
+  Check(ModularCryptIdentify(u) = mcfPbkdf2Sha256);
+  Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha256);
+  Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  u := '$pbkdf2-sha512$1212$RHY0Fr3IDMSVO/RSZyb5ow$eNLfBK.eVozomMr.1gYa1' +
+       '7k9B7KIK25NOEshvhrSX.esqY3s.FvWZViXz4KoLlQI.BzY/YTNJOiKc5gBYFYGww';
+  Check(ModularCryptIdentify(u) = mcfPbkdf2Sha512);
+  Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha512);
+  Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  for mcf := mcfMd5Crypt to high(mcf) do
   begin
     for n := 1 to 10 do
     begin
       RandomByteString(n * 7, pw);
-      if mcf in [mcfMd5Crypt .. mcfSha512Crypt] then
-      begin
-        h := MCF_ALGO[mcf];
-        u := hasher.UnixCryptHash(h, pw, {rounds=}1000 + n, {saltsize=}n);
-        Check(u <> '');
-        if h <> hfMD5 then
-          CheckEqual(PosEx(Make(['$rounds=', 1000 + n, '$']), u), 3);
-      end;
+      u := ModularCryptHash(mcf, pw, {rounds=}1000 + n, {saltsize=}n);
+      Check(u <> '');
+      if mcf in [mcfSha256Crypt .. mcfSha512Crypt] then
+        CheckEqual(PosEx(Make(['$rounds=', 1000 + n, '$']), u), 3);
       Check(ModularCryptIdentify(u) = mcf);
       Check(ModularCryptVerify(pw, u) = mcf);
+      if u = '' then
+        continue; // avoid GPF
       dec(PByteArray(u)[length(u) - 5]);
       Check(ModularCryptVerify(pw, u) = mcfInvalid);
     end;
