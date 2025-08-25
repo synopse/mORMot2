@@ -328,7 +328,7 @@ type
     /// to be called if this TAes was not filled with zeros, e.g. not used as
     // TObject field or global variable, but simply declared on the local stack
     procedure InitOnStack;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// Initialize AES contexts for cypher
     // - first method to call before using this object for encryption
     // - KeySize is in bits, i.e. 128, 192 or 256
