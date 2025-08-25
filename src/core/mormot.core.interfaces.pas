@@ -1885,7 +1885,7 @@ const
   PARAMREG_RESULT = REGR1;
   // 64-bit floating-point (double) registers
   {$define HAS_FPREG} // D0..D7
-  {$ifdef CPUARMHF}
+  // assume CPUARMHF target
   REGD0 = 1;
   REGD1 = 2;
   REGD2 = 3;
@@ -1896,7 +1896,6 @@ const
   REGD7 = 8;
   FPREG_FIRST = REGD0;
   FPREG_LAST  = REGD7;
-  {$endif CPUARMHF}
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
