@@ -4574,8 +4574,12 @@ begin
   result := '';
 end;
 
-const
-  getpagesize = 4096;
+{$ifdef CPUARM}
+const getpagesize = 4096; // ARM32 does not seem to have getpagesize in clib :(
+{$else}
+// we used to hardcode this to 4096 on Android, but Android 15 uses 16KB
+function getpagesize: integer; cdecl external clib name 'getpagesize';
+{$endif CPUARM}
 
 {$else}
 function getpagesize: integer;
