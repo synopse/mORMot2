@@ -1074,7 +1074,11 @@ const
   /// which ModularCryptIdentify/ModularCryptVerify() results are correct
   mcfValid = [succ(mcfInvalid) .. high(TModularCryptFormat)];
 
-/// identify if a given hash matches any “Modular Crypt" format
+/// compute the "Modular Crypt" hash of a given password
+function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
+  rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
+
+/// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and algo=hfMD5 for '$1${salt}${checksum}' or
 // algo=hfSHA256 for '$5$rounds={rounds}${salt}${checksum}'
 function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
@@ -4304,6 +4308,22 @@ var
 begin
   P := pointer(hash);
   result := ModularCryptParse(P, rounds, salt);
+end;
+
+function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
+  rounds, saltsize: cardinal; const salt: RawUtf8): RawUtf8;
+var
+  signer: TSynSigner;
+  hasher: TSynHasher absolute signer;
+begin
+  case format of
+    mcfMd5Crypt .. mcfSha512Crypt:
+      result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
+    mcfPbkdf2Sha1 .. mcfPbkdf2Sha512:
+      result := signer.Pbkdf2ModularCrypt(format, password, rounds, saltsize, salt);
+  else
+    result := '';
+  end;
 end;
 
 function ModularCryptVerify(const password, hash: RawUtf8;
