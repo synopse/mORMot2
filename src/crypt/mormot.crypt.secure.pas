@@ -621,17 +621,14 @@ type
     // - a Mask Generation Function expands aSeed/aSeedLen into aDestLen buffer
     function Mgf1(aAlgo: THashAlgo; aSeed: pointer; aSeedLen, aDestLen: PtrUInt): RawByteString;
     /// compute the Unix crypt hash of a given password as '$algo$salt$checksum'
-    // - currently implements SHA-256-CRYPT and SHA-512-CRYPT as defined in
-    // https://www.akkadia.org/drepper/SHA-crypt.txt
-    // - deprecated MD5-CRYPT can also be generated (and verified)
+    // - currently implements safe SHA-256-CRYPT and SHA-512-CRYPT with hfSHA256
+    // and hfSHA512, as defined in https://www.akkadia.org/drepper/SHA-crypt.txt
+    // - deprecated MD5-CRYPT can also be generated (and verified) with hfMD5
+    // - any other algorithm is unsupported, and will fail and return ''
+    // - see ModularCryptVerify() for the associated verification function
     function UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
       aRounds: cardinal = 535000; aSaltSize: cardinal = 8;
       aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
-    /// check the Unix crypt hash of a given password
-    // - as encoded by UnixCryptHash() method for hfSha256//hfSha512/hfMD5
-    // - can return the algorithm decoded from '$algo$salt$checksum' format
-    function UnixCryptVerify(const aPassword, aHash: RawUtf8;
-      aAlgo: PHashAlgo = nil): boolean;
     /// returns the number of bytes of the hash of the current Algo
     function HashSize: integer;
     /// the hash algorithm used by this instance
@@ -1049,9 +1046,36 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
-/// low-level parsing function used by TSynHasher.UnixCryptVerify()
-function HashUnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
-  var rounds: cardinal; var salt: RawUtf8): PUtf8Char;
+type
+  /// the algorithms known by ModularCryptIdentify/ModularCryptVerify
+  // - mcfMd5Crypt, mcfSha256Crypt and mcfSha512Crypt are handled by
+  // TSynHasher.UnixCryptVerify() and match $1$ $5$ $6$ common Unix Hashes
+  TModularCryptFormat = (
+    mcfInvalid,
+    mcfUnknown,
+    mcfMd5Crypt,
+    mcfSha256Crypt,
+    mcfSha512Crypt);
+  /// allow to specify several ModularCryptIdentify/ModularCryptVerify algorithms
+  TModularCryptFormats = set of TModularCryptFormat;
+
+const
+  MCF_ALGO: array[TModularCryptFormat] of THashAlgo = (hfShake128, hfShake128,
+    hfMD5, hfSHA256, hfSHA512);
+  MCF_SIGN: array[TModularCryptFormat] of TSignAlgo = (saSha3S128, saSha3S128,
+    saSha3S128, saSHA256, saSHA512);
+  /// which ModularCryptIdentify/ModularCryptVerify() results are correct
+  mcfValid = [succ(mcfInvalid) .. high(TModularCryptFormat)];
+
+/// identify if a given hash matches any “Modular Crypt" format
+// - e.g. returns true and algo=hfMD5 for '$1${salt}${checksum}' or
+// algo=hfSHA256 for '$5$rounds={rounds}${salt}${checksum}'
+function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
+
+/// decode and check a password against a hash in “Modular Crypt" format
+// - if allowed is not default [], it would return mcfUnknown if not in the set
+function ModularCryptVerify(const password, hash: RawUtf8;
+  allowed: TModularCryptFormats = []): TModularCryptFormat;
 
 /// compute a random salt from PRNG with the "Modular Crypt" charset
 function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
@@ -4181,6 +4205,7 @@ begin
   FillZero(ds);
 end;
 
+
 function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
 var
   p: PUtf8Char;
@@ -4192,57 +4217,83 @@ begin
     p[i] := HASH64_CHARS[ord(p[i]) and 63];
 end;
 
-function HashUnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
-  var rounds: cardinal; var salt: RawUtf8): PUtf8Char;
+const
+  MCF_IDENT: array[mcfMd5Crypt.. high(TModularCryptFormat)] of RawUtf8 = (
+    '1', '5', '6');
+
+function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
+  var salt: RawUtf8): TModularCryptFormat;
 begin
-  result := nil;
+  result := mcfInvalid;
   if (P = nil) or
      (P^ <> '$') then
     exit;
   inc(P);
-  case GetNextItemCardinal(P, '$') of
-    1:
-      algo := hfMD5;     // '$1${salt}${checksum}'
-    5:
-      algo := hfSHA256;  // '$5$rounds={rounds}${salt}${checksum}'
-    6:
-      algo := hfSHA512;
-  else
-    exit;
-  end;
-  if algo = hfMD5 then
-    rounds := 1000 // fixed
-  else if IdemPChar(P, 'ROUNDS=') then
-  begin
-    inc(P, 7);
-    rounds := GetNextItemCardinal(P, '$');
-  end
-  else
-    rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
   GetNextItem(P, '$', salt);
-  if b64valid(pointer(salt)) and
-     b64valid(P) then
-    result := P;
+  if salt = '' then
+    exit;
+  result := TModularCryptFormat(FindNonVoidRawUtf8(@MCF_IDENT,
+    pointer(salt), length(salt), length(MCF_IDENT)) + ord(low(MCF_IDENT)));
+  case result of
+    mcfMd5Crypt:      // '$1${salt}${checksum}'
+      rounds := 1000; // fixed
+    mcfSha256Crypt,
+    mcfSha512Crypt:   // '$5$rounds={rounds}${salt}${checksum}'
+      begin
+        if IdemPChar(P, 'ROUNDS=') then
+          begin
+            inc(P, 7);
+            rounds := GetNextItemCardinal(P, '$');
+          end
+          else
+            rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
+      end;
+  else
+    begin
+      result := mcfUnknown;
+      exit;
+    end;
+  end;
+  GetNextItem(P, '$', salt);
+  if not b64valid(pointer(salt)) or
+     not b64valid(P) then
+    result := mcfInvalid;
+end; // on success, P points to the {checksum} part
+
+function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
+var
+  rounds: cardinal;
+  salt: RawUtf8;
+  P: PUtf8Char;
+begin
+  P := pointer(hash);
+  result := ModularCryptParse(P, rounds, salt);
 end;
 
-function TSynHasher.UnixCryptVerify(const aPassword, aHash: RawUtf8;
-  aAlgo: PHashAlgo): boolean;
+function ModularCryptVerify(const password, hash: RawUtf8;
+  allowed: TModularCryptFormats): TModularCryptFormat;
 var
-  salt, hash: RawUtf8;
-  parsed: PUtf8Char;
   rounds, pos: cardinal;
-  a: THashAlgo;
+  salt, h: RawUtf8;
+  P: PUtf8Char;
+  signer: TSynSigner;
+  hasher: TSynHasher absolute signer;
 begin
-  result := false;
-  parsed := HashUnixCryptParse(pointer(aHash), a, rounds, salt);
-  if parsed = nil then
+  P := pointer(hash);
+  result := ModularCryptParse(P, rounds, salt);
+  if not (result in mcfValid) then
     exit;
-  if aAlgo <> nil then
-    aAlgo^ := a;
+  if (allowed <> []) and
+     not (result in allowed) then
+    result := mcfUnknown;
   pos := 0;
-  hash := UnixCryptHash(a, aPassword, rounds, 0, salt, @pos);
-  result := (pos <> 0) and
-            (mormot.core.base.StrComp(parsed, @hash[pos]) = 0);
+  case result of
+    mcfMd5Crypt .. mcfSha512Crypt:
+      h := hasher.UnixCryptHash(MCF_ALGO[result], password, rounds, 0, salt, @pos);
+  end;
+  if (pos = 0) or
+     (mormot.core.base.StrComp(P, @h[pos]) <> 0) then
+    result := mcfInvalid;
 end;
 
 
