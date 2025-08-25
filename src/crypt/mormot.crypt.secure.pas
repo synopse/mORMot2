@@ -4044,19 +4044,24 @@ var
 begin
   enc := HASH64_CHARS;
   repeat
-    c := b[mask[0]] or (PtrUInt(b[mask[1]]) shl 8) or (PtrUInt(b[mask[2]]) shl 16);
+    if mask = nil then
+      c := b[0] or (PtrUInt(b[1]) shl 8) or (PtrUInt(b[2]) shl 16)
+    else
+    begin
+      c := b[mask[0]] or (PtrUInt(b[mask[1]]) shl 8) or (PtrUInt(b[mask[2]]) shl 16);
+      mask := @mask[3];
+    end;
     p[0] := enc[c and $3f];
     p[1] := enc[(c shr 6) and $3f];
     p[2] := enc[(c shr 12) and $3f];
     p[3] := enc[c shr 18];
     p := @p[4];
-    mask := @mask[3];
     dec(n);
   until n = 0;
   result := p;
 end;
 
-procedure b64enclast(p: PUtf8Char; b1, b0: PtrUInt; n: cardinal);
+procedure b64enclast(p: PUtf8Char; b1, b0, n: PtrUInt);
 var
   enc: PUtf8Char;
 begin
@@ -4064,8 +4069,20 @@ begin
   enc := HASH64_CHARS;
   p[0] := enc[b0 and $3f];
   p[1] := enc[(b0 shr 6) and $3f];
-  if n = 3 then
-    p[2] := enc[(b0 shr 12) and $3f]; // n=2 or n=3
+  if n = SizeOf(THash256) then
+    p[2] := enc[(b0 shr 12) and $3f]; // 3 trailing chars for SHA-256
+end;
+
+function b64append(var hash: RawUtf8; n: cardinal; pos: PInteger): PUtf8Char;
+var
+  i: PtrUInt;
+begin
+  i := length(hash);
+  SetLength(hash, i + BinToBase64uriLength(n));
+  result := pointer(hash);
+  inc(result, i);
+  if pos <> nil then
+    pos^ := i + 1;
 end;
 
 function b64valid(p: PUtf8Char): boolean;
@@ -4186,19 +4203,14 @@ begin
       Update(@alt, siz);
     Final(alt);
   end;
-  n := length(result);
-  SetLength(result, n + BinToBase64uriLength(siz));
-  p := pointer(result);
-  inc(p, n);
-  if aHashPos <> nil then
-    aHashPos^ := n + 1;
+  p := b64append(result, siz, aHashPos);
   case siz of
     SizeOf(HASH64_128):
-      b64enclast(b64enc(p, @alt, @HASH64_128, 5), 0, alt.b[11], 2);
+      b64enclast(b64enc(p, @alt.b, @HASH64_128, 5), 0, alt.b[11], siz);
     SizeOf(HASH64_256):
-      b64enclast(b64enc(p, @alt, @HASH64_256, 10), alt.b[31], alt.b[30], 3);
+      b64enclast(b64enc(p, @alt.b, @HASH64_256, 10), alt.b[31], alt.b[30], siz);
     SizeOf(HASH64_512):
-      b64enclast(b64enc(p, @alt, @HASH64_512, 21), 0, alt.b[63], 2);
+      b64enclast(b64enc(p, @alt.b, @HASH64_512, 21), 0, alt.b[63], siz);
   end;
   FillZero(alt.b);
   FillZero(dp);
