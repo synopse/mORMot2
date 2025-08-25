@@ -4272,6 +4272,17 @@ begin
           else
             rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
       end;
+    mcfPbkdf2Sha1,
+    mcfPbkdf2Sha256,
+    mcfPbkdf2Sha512: // '$pbkdf2{-digest}${rounds}${salt}${checksum}'
+      begin
+        rounds := GetNextItemCardinal(P, '$');
+        if rounds = 0 then
+        begin
+          result := mcfInvalid;
+          exit;
+        end;
+      end
   else
     begin
       result := mcfUnknown;
@@ -4314,9 +4325,11 @@ begin
   case result of
     mcfMd5Crypt .. mcfSha512Crypt:
       h := hasher.UnixCryptHash(MCF_ALGO[result], password, rounds, 0, salt, @pos);
+    mcfPbkdf2Sha1 .. mcfPbkdf2Sha512:
+      h := signer.Pbkdf2ModularCrypt(result, password, rounds, 0, salt, @pos);
   end;
   if (pos = 0) or
-     (mormot.core.base.StrComp(P, @h[pos]) <> 0) then
+     (mormot.core.base.StrComp(P, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
     result := mcfInvalid;
 end;
 
