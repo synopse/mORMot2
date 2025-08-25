@@ -1236,7 +1236,7 @@ procedure Base64ToUri(var base64: RawUtf8);
 
 /// low-level conversion from a binary buffer into Base64-like URI-compatible encoded text
 // - you should rather use the overloaded BinToBase64uri() functions
-procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
+procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal; enc: PAnsiChar = nil);
 
 /// retrieve the expected encoded length after Base64-URI process
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -1260,7 +1260,7 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 function Base64uriToBin(sp: PAnsiChar; len: PtrInt;
-  var bin: RawByteString): boolean; overload;
+  var bin: RawByteString; enc: pointer = nil): boolean; overload;
 
 /// fast conversion from Base64-URI encoded text into binary data
 // - caller should always execute temp.Done when finished with the data
@@ -1371,6 +1371,10 @@ function Base32ToBin(B32: PAnsiChar; B32Len: integer): RawByteString; overload;
 // - returns '' if input was not valid Base32 encoded
 function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// internal raw function used to initialize Base32/58/64/64uri decoding lookup
+procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharToByte; i: PtrUInt);
+
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -6392,13 +6396,13 @@ const
 
 type
   // generic lookup table type used for efficient Base64 Base58 Base32 decoding
-  TAnsiCharDec = array[AnsiChar] of shortint; // store -1 for incorrect chars
+  TAnsiCharDec = array[AnsiChar] of shortint; // -1 (255) for incorrect chars
   PAnsiCharDec = ^TAnsiCharDec;
 
 var
   /// a conversion table from Base64 text into binary data
   // - used by Base64ToBin/IsBase64 functions
-  // - has -1 (255) for invalid char, -2 (254) for '=', 0..63 for valid char
+  // - store -1 (255) for invalid char, -2 (254) for '=', 0..63 for valid char
   ConvertBase64ToBin, ConvertBase64UriToBin: TAnsiCharDec;
 
 
@@ -6877,12 +6881,12 @@ end;
 
 { --------- Base64 URI encoding/decoding }
 
-procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
+procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal; enc: PAnsiChar);
 var
   main, c: cardinal;
-  enc: PAnsiChar; // faster especially on x86_64 and PIC
 begin
-  enc := @b64Urienc;
+  if enc = nil then
+    enc := @b64Urienc; // faster especially on x86_64 and PIC
   main := len div 3;
   if main <> 0 then
   begin
@@ -6990,15 +6994,20 @@ begin
   Base64uriToBin(pointer(s), length(s), result{%H-});
 end;
 
-function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var bin: RawByteString): boolean;
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var bin: RawByteString;
+  enc: pointer): boolean;
 var
   resultLen: PtrInt;
 begin
   result := false;
   resultLen := Base64uriToBinLength(len);
   if resultLen <> 0 then
-    result := Base64AnyDecode(@ConvertBase64UriToBin, sp,
+  begin
+    if enc = nil then
+      enc := @ConvertBase64UriToBin;
+    result := Base64AnyDecode(enc, sp,
       FastNewRawByteString(bin, resultLen), len);
+  end;
   if not result then
     bin := '';
 end;
@@ -11666,9 +11675,9 @@ begin
 end; // keep fLen since may be not final - see e.g. TPostConnection.OnRead
 
 
-procedure SetBaseDecoder(s: PAnsiChar; var d: TAnsiCharDec; i: PtrUInt);
+procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharToByte; i: PtrUInt);
 begin
-  FillcharFast(d, SizeOf(d), 255); // fill with -1 = invalid by default
+  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
   repeat
     d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
     dec(i);
@@ -11682,10 +11691,10 @@ var
   e: TEmoji;
 begin
   // initialize Base64/Base64Uri/Base58/Base32/Baudot encoding/decoding tables
-  SetBaseDecoder(@b64enc,    ConvertBase64ToBin,    high(b64enc));
-  SetBaseDecoder(@b64urienc, ConvertBase64uriToBin, high(b64urienc));
-  SetBaseDecoder(@b58enc,    ConvertBase58ToBin,    high(b58enc));
-  SetBaseDecoder(@b32enc,    ConvertBase32ToBin,    high(b32enc));
+  FillBaseDecoder(@b64enc,    @ConvertBase64ToBin,    high(b64enc));
+  FillBaseDecoder(@b64urienc, @ConvertBase64uriToBin, high(b64urienc));
+  FillBaseDecoder(@b58enc,    @ConvertBase58ToBin,    high(b58enc));
+  FillBaseDecoder(@b32enc,    @ConvertBase32ToBin,    high(b32enc));
   ConvertBase64ToBin['='] := -2; // special value for ending '='
   for i := high(Baudot2Char) downto 0 do
     if Baudot2Char[i] < #128 then
