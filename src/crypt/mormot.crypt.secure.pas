@@ -1053,6 +1053,9 @@ function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 function HashUnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
   var rounds: cardinal; var salt: RawUtf8): PUtf8Char;
 
+/// compute a random salt from PRNG with the "Modular Crypt" charset
+function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
+
 
 { some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
 
@@ -4087,9 +4090,7 @@ begin
   begin
     if aSaltSize = 0 then
       aSaltSize := 8;
-    p := RandomByteString(aSaltSize, aSalt, CP_UTF8);
-    for n := 0 to aSaltSize - 1 do
-      p[n] := HASH64_CHARS[ord(p[n]) and 63];
+    aSalt := ModularCryptSalt(aSaltSize);
   end
   else
     aSaltSize := length(aSalt);
@@ -4178,6 +4179,17 @@ begin
   FillZero(alt.b);
   FillZero(dp);
   FillZero(ds);
+end;
+
+function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
+var
+  p: PUtf8Char;
+  i: PtrInt;
+begin
+  p := FastSetString(result, aSaltSize);
+  TAesPrng.Fill(p, aSaltSize); // standards recommend a CSPRNG
+  for i := 0 to aSaltSize - 1 do
+    p[i] := HASH64_CHARS[ord(p[i]) and 63];
 end;
 
 function HashUnixCryptParse(P: PUtf8Char; var algo: THashAlgo;
