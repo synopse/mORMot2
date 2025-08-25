@@ -849,9 +849,9 @@ type
     function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+    function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec;
-      aPartNumber: integer = 1); overload;
+      aPartNumber: integer = 1): PtrInt; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure Pbkdf2(const aParams: TSynSignerParams;
       out aDerivatedKey: THash512Rec); overload;
@@ -4777,8 +4777,8 @@ begin
   result := Final;
 end;
 
-procedure TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec; aPartNumber: integer);
+function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec; aPartNumber: integer): PtrInt;
 var
   bak: TSynHasher;
   tmp: THash512Rec;
@@ -4807,6 +4807,7 @@ begin
     FillZero(tmp.b);
   end;
   Done;
+  result := fSignatureSize;
 end;
 
 procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
