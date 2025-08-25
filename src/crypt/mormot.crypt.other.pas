@@ -31,10 +31,10 @@ uses
 /// initialize a TMd5 instance to work with the legacy MD4 algorithm
 // - will reuse the whole MD5 context but setup the MD4 transform function
 // - MD4 is clearly deprecated, but available here for compatibility usage
-procedure InitMd4(var Engine: TMd5);
+procedure Md4Init(var Engine: TMd5);
 
 /// direct MD4 hash calculation of some data
-function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
+procedure Md4Buf(const Buffer; Len: cardinal; var Dig: TMd5Digest);
 
 /// direct MD4 hash calculation of some data (string-encoded)
 // - result is returned in lowercase hexadecimal format
@@ -96,6 +96,14 @@ implementation
 
 
 { **************** Deprecated MD4 and RC4 Support }
+
+{$ifndef FPC} // this operation is an intrinsic with the FPC compiler
+function RolDWord(value: cardinal; count: integer): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := (value shl count) or (value shr (32 - count));
+end;
+{$endif FPC}
 
 procedure MD4Transform(var buf: TBlock128; const in_: TMd5In);
 var
@@ -161,25 +169,25 @@ begin // fast enough unrolled code - especially with FPC RolDWord() intrinsic
   inc(buf[3], d);
 end;
 
-procedure InitMd4(var Engine: TMd5);
+procedure Md4Init(var Engine: TMd5);
 begin
   Engine.Init(@MD4Transform);
 end;
 
-function Md4Buf(const Buffer; Len: cardinal): THash128;
+procedure Md4Buf(const Buffer; Len: cardinal; var Dig: TMd5Digest);
 var
   md: TMd5;
 begin
-  InitMd4(md);
+  Md4Init(md);
   md.Update(Buffer, Len);
-  md.Final(result);
+  md.Final(Dig);
 end;
 
 function Md4(const s: RawByteString): RawUtf8;
 var
   dig: TMd5Digest;
 begin
-  dig := Md4Buf(pointer(s), Length(s));
+  Md4Buf(pointer(s)^, Length(s), dig);
   BinToHexLower(@dig, SizeOf(dig), result);
   FillZero(dig);
 end;

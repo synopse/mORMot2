@@ -2399,9 +2399,9 @@ type
   private
     in_: TMd5In;
     bytes: array[0..1] of cardinal;
+    buf: TMd5Buf;
     transform: procedure(var mdbuf: TMd5Buf; const mdin: TMd5In);
   public
-    buf: TMd5Buf;
     /// initialize MD5 context for hashing
     // - can use this instance with MD4 by using mormot.crypt.other.pas functions
     procedure Init(process: pointer = nil);
@@ -9727,9 +9727,8 @@ begin
   bytes[0] := 0;
   bytes[1] := 0;
   if process = nil then
-    transform := @MD5Transform
-  else
-    transform := process;
+    process := @MD5Transform;
+  transform := process;
 end;
 
 function TMd5.Final: TMd5Digest;
