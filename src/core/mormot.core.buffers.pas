@@ -7256,6 +7256,8 @@ begin
     result := zeros;
     exit;
   end;
+  if ConvertBase58ToBin[#255] = 0 then // delayed thread-safe initialization
+    FillBaseDecoder(@b58enc, @ConvertBase58ToBin, high(b58enc));
   repeat
     // this loop is O(n2) by definition so B58Len should remain small
     carry := ConvertBase58ToBin[B58^];
@@ -7477,6 +7479,8 @@ begin
   if (B32Len > 0) and
      ((B32Len and 7) = 0) then
   begin
+    if ConvertBase32ToBin[#255] = 0 then // delayed thread-safe initialization
+      FillBaseDecoder(@b32enc, @ConvertBase32ToBin, high(b32enc));
     p := Base32Decode(@ConvertBase32ToBin, B32,
       FastNewRawByteString(result, (B32Len shr 3) * 5), B32Len);
     if p <> nil then
@@ -7491,6 +7495,16 @@ end;
 function Base32ToBin(const base32: RawUtf8): RawByteString;
 begin
   result := Base32ToBin(pointer(base32), length(base32));
+end;
+
+procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharToByte; i: PtrUInt);
+begin
+  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
+  repeat
+    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
+    dec(i);
+  until i = 0;
+  d[s[0]] := 0;
 end;
 
 function BlobToRawBlob(P: PUtf8Char; Len: integer): RawBlob;
@@ -7904,6 +7918,14 @@ begin
   if (P = nil) or
      (len = 0) then
     exit;
+  if Char2Baudot['z'] = 0 then // delayed thread-safe initialization
+  begin
+    for i := high(Baudot2Char) downto 0 do
+      if Baudot2Char[i] < #128 then
+        Char2Baudot[Baudot2Char[i]] := i;
+    for i := ord('a') to ord('z') do
+      Char2Baudot[AnsiChar(i - 32)] := Char2Baudot[AnsiChar(i)]; // a-z -> A-Z
+  end;
   shift := false;
   dest := tmp.Init((len * 10) shr 3);
   d := 0;
@@ -11675,32 +11697,14 @@ begin
 end; // keep fLen since may be not final - see e.g. TPostConnection.OnRead
 
 
-procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharToByte; i: PtrUInt);
-begin
-  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
-  repeat
-    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
-    dec(i);
-  until i = 0;
-  d[s[0]] := 0;
-end;
-
 procedure InitializeUnit;
 var
-  i: PtrInt;
   e: TEmoji;
 begin
-  // initialize Base64/Base64Uri/Base58/Base32/Baudot encoding/decoding tables
+  // initialize Base64/Base64Uri encoding/decoding tables
   FillBaseDecoder(@b64enc,    @ConvertBase64ToBin,    high(b64enc));
   FillBaseDecoder(@b64urienc, @ConvertBase64uriToBin, high(b64urienc));
-  FillBaseDecoder(@b58enc,    @ConvertBase58ToBin,    high(b58enc));
-  FillBaseDecoder(@b32enc,    @ConvertBase32ToBin,    high(b32enc));
   ConvertBase64ToBin['='] := -2; // special value for ending '='
-  for i := high(Baudot2Char) downto 0 do
-    if Baudot2Char[i] < #128 then
-      Char2Baudot[Baudot2Char[i]] := i;
-  for i := ord('a') to ord('z') do
-    Char2Baudot[AnsiChar(i - 32)] := Char2Baudot[AnsiChar(i)]; // A-Z -> a-z
   Base64EncodeMain     := @Base64EncodeMainPas;
   Base64DecodeMain     := @Base64DecodeMainPas;
   Base64MagicRawDecode := @_Base64MagicRawDecode;
