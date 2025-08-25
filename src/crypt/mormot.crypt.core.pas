@@ -3975,7 +3975,7 @@ end;
 
 {$endif ASMINTEL}
 
-{$ifndef ASMX86}
+{$ifndef ASMX86} // fallback for the PIC-incompatible i386 asm
 
 procedure aesdecryptpas(const ctxt: TAesContext; bi, bo: PBlock128);
 var
@@ -4299,7 +4299,7 @@ begin
   result := aesInitialized in ctx.Flags;
   if not result then
     exit; // e.g. invalid KeySize
-  {$ifdef ASMX86}
+  {$ifdef ASMX86} // PIC-incompatible i386 asm
   ctx.DoBlock := @aesdecrypt386;
   {$else}
   ctx.DoBlock := @aesdecryptpas;
@@ -8158,7 +8158,7 @@ end;
 // under Win32, with a Core i7 CPU: pure pascal: 152ms - x86: 112ms
 // under Win64, with a Core i7 CPU: pure pascal: 202ms - SSE4: 78ms
 
-{$ifdef CPUX86}
+{$ifdef ASMX86} // PIC-incompatible i386 asm
 
 procedure Sha256CompressPas(var Hash: TShaHash; Data: pointer);
 var

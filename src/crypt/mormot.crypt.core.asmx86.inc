@@ -364,6 +364,95 @@ asm
         pop     ebx
 end;
 
+// don't use PIC itself, but called by PIC-incompatible Sha256Compressx86()
+procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm // W=eax Buf=edx
+        push    esi
+        push    edi
+        push    ebx
+        mov     esi, eax
+        // part 1: W[i]:= bswap32(TW32Buf(Buf)[i])
+        mov     eax, [edx]
+        mov     ebx, [edx + 4]
+        bswap   eax
+        bswap   ebx
+        mov     [esi], eax
+        mov     [esi + 4], ebx
+        mov     eax, [edx + 8]
+        mov     ebx, [edx + 12]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 8], eax
+        mov     [esi + 12], ebx
+        mov     eax, [edx + 16]
+        mov     ebx, [edx + 20]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 16], eax
+        mov     [esi + 20], ebx
+        mov     eax, [edx + 24]
+        mov     ebx, [edx + 28]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 24], eax
+        mov     [esi + 28], ebx
+        mov     eax, [edx + 32]
+        mov     ebx, [edx + 36]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 32], eax
+        mov     [esi + 36], ebx
+        mov     eax, [edx + 40]
+        mov     ebx, [edx + 44]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 40], eax
+        mov     [esi + 44], ebx
+        mov     eax, [edx + 48]
+        mov     ebx, [edx + 52]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 48], eax
+        mov     [esi + 52], ebx
+        mov     eax, [edx + 56]
+        mov     ebx, [edx + 60]
+        bswap   eax
+        bswap   ebx
+        mov     [esi + 56], eax
+        mov     [esi + 60], ebx
+        lea     esi, [esi + 64]
+        // part2: w[i]:= lrot_1(w[i-3] xor w[i-8] xor w[i-14] xor w[i-16])
+        mov     ecx, 48
+@@2:    mov     eax, [esi - 2 * 4]    // w[i-2]
+        mov     edi, [esi - 7 * 4]    // w[i-7]
+        mov     edx, eax
+        mov     ebx, eax              // sig1: rr17 xor rr19 xor srx,10
+        ror     eax, 17
+        ror     edx, 19
+        shr     ebx, 10
+        xor     eax, edx
+        xor     eax, ebx
+        add     edi, eax
+        mov     eax, [esi - 15 * 4]   // w[i-15]
+        mov     ebx, eax              // sig0: rr7 xor rr18 xor sr3
+        mov     edx, eax
+        ror     eax, 7
+        ror     edx, 18
+        shr     ebx, 3
+        xor     eax, edx
+        xor     eax, ebx
+        add     eax, edi
+        add     eax, [esi - 16 * 4]   // w[i-16]
+        mov     [esi], eax
+        add     esi, 4
+        dec     ecx
+        jnz     @@2
+        pop     ebx
+        pop     edi
+        pop     esi
+end;
+
 procedure Sha256Compressx86(HW: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -1431,94 +1520,6 @@ asm
       pop     esi
       pop     ebx
       pop     ebp
-end;
-
-procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
-  {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // W=eax Buf=edx
-        push    esi
-        push    edi
-        push    ebx
-        mov     esi, eax
-        // part 1: W[i]:= bswap32(TW32Buf(Buf)[i])
-        mov     eax, [edx]
-        mov     ebx, [edx + 4]
-        bswap   eax
-        bswap   ebx
-        mov     [esi], eax
-        mov     [esi + 4], ebx
-        mov     eax, [edx + 8]
-        mov     ebx, [edx + 12]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 8], eax
-        mov     [esi + 12], ebx
-        mov     eax, [edx + 16]
-        mov     ebx, [edx + 20]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 16], eax
-        mov     [esi + 20], ebx
-        mov     eax, [edx + 24]
-        mov     ebx, [edx + 28]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 24], eax
-        mov     [esi + 28], ebx
-        mov     eax, [edx + 32]
-        mov     ebx, [edx + 36]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 32], eax
-        mov     [esi + 36], ebx
-        mov     eax, [edx + 40]
-        mov     ebx, [edx + 44]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 40], eax
-        mov     [esi + 44], ebx
-        mov     eax, [edx + 48]
-        mov     ebx, [edx + 52]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 48], eax
-        mov     [esi + 52], ebx
-        mov     eax, [edx + 56]
-        mov     ebx, [edx + 60]
-        bswap   eax
-        bswap   ebx
-        mov     [esi + 56], eax
-        mov     [esi + 60], ebx
-        lea     esi, [esi + 64]
-        // part2: w[i]:= lrot_1(w[i-3] xor w[i-8] xor w[i-14] xor w[i-16])
-        mov     ecx, 48
-@@2:    mov     eax, [esi - 2 * 4]    // w[i-2]
-        mov     edi, [esi - 7 * 4]    // w[i-7]
-        mov     edx, eax
-        mov     ebx, eax              // sig1: rr17 xor rr19 xor srx,10
-        ror     eax, 17
-        ror     edx, 19
-        shr     ebx, 10
-        xor     eax, edx
-        xor     eax, ebx
-        add     edi, eax
-        mov     eax, [esi - 15 * 4]   // w[i-15]
-        mov     ebx, eax              // sig0: rr7 xor rr18 xor sr3
-        mov     edx, eax
-        ror     eax, 7
-        ror     edx, 18
-        shr     ebx, 3
-        xor     eax, edx
-        xor     eax, ebx
-        add     eax, edi
-        add     eax, [esi - 16 * 4]   // w[i-16]
-        mov     [esi], eax
-        add     esi, 4
-        dec     ecx
-        jnz     @@2
-        pop     ebx
-        pop     edi
-        pop     esi
 end;
 
 
