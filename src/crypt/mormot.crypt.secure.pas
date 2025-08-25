@@ -891,7 +891,8 @@ type
     // key is unbounded and could be bigger than the TSignAlgo digest size
     function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString; overload;
-    /// compute the Modular Crypt PBKDF2 of a given password as '$pbkdf2-algo$salt$checksum'
+    /// compute the Modular Crypt PBKDF2 of a given password as returned by
+    // passlib - i.e. in '$pbkdf2-{digest}${rounds}${salt}${checksum}' format
     // - see ModularCryptVerify() for the associated verification function
     function Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat; const aPassword: RawUtf8;
       aRounds: cardinal = 0; aSaltSize: cardinal = 16;
@@ -1075,20 +1076,23 @@ const
   mcfValid = [succ(mcfInvalid) .. high(TModularCryptFormat)];
 
 /// compute the "Modular Crypt" hash of a given password
+// - as returned by the python passlib library
+// - see associated ModularCryptIdentify/ModularCryptVerify() functions
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
 
 /// identify if a given hash matches any "Modular Crypt" format
-// - e.g. returns true and algo=hfMD5 for '$1${salt}${checksum}' or
-// algo=hfSHA256 for '$5$rounds={rounds}${salt}${checksum}'
+// - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
+// mcfSha256Crypt for '$5$rounds={rounds}${salt}${checksum}'
 function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
 
 /// decode and check a password against a hash in "Modular Crypt" format
-// - if allowed is not default [], it would return mcfUnknown if not in the set
+// - if allowed is not default [], it would return mcfUnknown if not in this set
 function ModularCryptVerify(const password, hash: RawUtf8;
   allowed: TModularCryptFormats = []): TModularCryptFormat;
 
-/// compute a random salt from PRNG with the "Modular Crypt" charset
+/// compute a base-64 random salt from PRNG with the "Modular Crypt" charset
+// - aSaltSize is the raw random bytes number, not the encoded result chars length
 function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
 
 /// low-level parsing function used by TSynHasher.UnixCryptVerify() and
@@ -4147,6 +4151,7 @@ begin
     else if aSaltSize > 16 then
       aSaltSize := 16; // for hfSha256/hfSha512
     aSalt := ModularCryptSalt(aSaltSize);
+    FakeLength(aSalt, aSaltSize); // here aSaltSize are chars, not bytes
   end
   else
     aSaltSize := length(aSalt);
@@ -4230,128 +4235,6 @@ begin
   FillZero(alt.b);
   FillZero(dp);
   FillZero(ds);
-end;
-
-
-function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
-var
-  p: PUtf8Char;
-  i: PtrInt;
-begin
-  if Base64uriToBinLength(aSaltSize) = 0 then
-    inc(aSaltSize); // ensure will generate a valid base64-encoded output
-  p := FastSetString(result, aSaltSize);
-  TAesPrng.Fill(p, aSaltSize); // standards recommend a CSPRNG
-  for i := 0 to aSaltSize - 1 do
-    p[i] := HASH64_CHARS[ord(p[i]) and 63];
-end;
-
-const
-  MCF_IDENT: array[mcfMd5Crypt.. high(TModularCryptFormat)] of RawUtf8 = (
-    '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512');
-
-function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
-  var salt: RawUtf8): TModularCryptFormat;
-begin
-  result := mcfInvalid;
-  if (P = nil) or
-     (P^ <> '$') then
-    exit;
-  inc(P);
-  GetNextItem(P, '$', salt);
-  if salt = '' then
-    exit;
-  result := TModularCryptFormat(FindNonVoidRawUtf8(@MCF_IDENT,
-    pointer(salt), length(salt), length(MCF_IDENT)) + ord(low(MCF_IDENT)));
-  case result of
-    mcfMd5Crypt:      // '$1${salt}${checksum}'
-      rounds := 1000; // fixed
-    mcfSha256Crypt,
-    mcfSha512Crypt:   // '$5$rounds={rounds}${salt}${checksum}'
-      begin
-        if IdemPChar(P, 'ROUNDS=') then
-          begin
-            inc(P, 7);
-            rounds := GetNextItemCardinal(P, '$');
-          end
-          else
-            rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
-      end;
-    mcfPbkdf2Sha1,
-    mcfPbkdf2Sha256,
-    mcfPbkdf2Sha512: // '$pbkdf2{-digest}${rounds}${salt}${checksum}'
-      begin
-        rounds := GetNextItemCardinal(P, '$');
-        if rounds = 0 then
-        begin
-          result := mcfInvalid;
-          exit;
-        end;
-      end
-  else
-    begin
-      result := mcfUnknown;
-      exit;
-    end;
-  end;
-  GetNextItem(P, '$', salt);
-  if not b64valid(pointer(salt)) or
-     not b64valid(P) then
-    result := mcfInvalid;
-end; // on success, P points to the {checksum} part
-
-function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
-var
-  rounds: cardinal;
-  salt: RawUtf8;
-  P: PUtf8Char;
-begin
-  P := pointer(hash);
-  result := ModularCryptParse(P, rounds, salt);
-end;
-
-function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
-  rounds, saltsize: cardinal; const salt: RawUtf8): RawUtf8;
-var
-  signer: TSynSigner;
-  hasher: TSynHasher absolute signer;
-begin
-  case format of
-    mcfMd5Crypt .. mcfSha512Crypt:
-      result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
-    mcfPbkdf2Sha1 .. mcfPbkdf2Sha512:
-      result := signer.Pbkdf2ModularCrypt(format, password, rounds, saltsize, salt);
-  else
-    result := '';
-  end;
-end;
-
-function ModularCryptVerify(const password, hash: RawUtf8;
-  allowed: TModularCryptFormats): TModularCryptFormat;
-var
-  rounds, pos: cardinal;
-  salt, h: RawUtf8;
-  P: PUtf8Char;
-  signer: TSynSigner;
-  hasher: TSynHasher absolute signer;
-begin
-  P := pointer(hash);
-  result := ModularCryptParse(P, rounds, salt);
-  if not (result in mcfValid) then
-    exit;
-  if (allowed <> []) and
-     not (result in allowed) then
-    result := mcfUnknown;
-  pos := 0;
-  case result of
-    mcfMd5Crypt .. mcfSha512Crypt:
-      h := hasher.UnixCryptHash(MCF_ALGO[result], password, rounds, 0, salt, @pos);
-    mcfPbkdf2Sha1 .. mcfPbkdf2Sha512:
-      h := signer.Pbkdf2ModularCrypt(result, password, rounds, 0, salt, @pos);
-  end;
-  if (pos = 0) or
-     (mormot.core.base.StrComp(P, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
-    result := mcfInvalid;
 end;
 
 
@@ -4707,6 +4590,131 @@ begin
   result := HashFile(FileName, hfSHA3_512);
 end;
 
+const
+  MCF_SIGN: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha512] of TSignAlgo = (
+    saSHA1, saSHA256, saSHA512);
+  HASH64_ENC: TChar64 = // the current custom encoding used by passlib
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./';
+var
+  HASH64_DEC: TAnsiCharToByte;
+
+function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
+var
+  bin: RawByteString;
+begin
+  bin := TAesPrng.Fill(aSaltSize); // need a CSPRNG
+  Base64uriEncode(FastSetString(result, BinToBase64uriLength(aSaltSize)),
+    pointer(bin), aSaltSize, @HASH64_ENC);
+end;
+
+const
+  MCF_IDENT: array[mcfMd5Crypt.. high(TModularCryptFormat)] of RawUtf8 = (
+    '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512');
+
+function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
+  var salt: RawUtf8): TModularCryptFormat;
+begin
+  result := mcfInvalid;
+  if (P = nil) or
+     (P^ <> '$') then
+    exit;
+  inc(P);
+  GetNextItem(P, '$', salt);
+  if salt = '' then
+    exit;
+  result := TModularCryptFormat(FindNonVoidRawUtf8(@MCF_IDENT,
+    pointer(salt), length(salt), length(MCF_IDENT)) + ord(low(MCF_IDENT)));
+  case result of
+    mcfMd5Crypt:      // '$1${salt}${checksum}'
+      rounds := 1000; // fixed
+    mcfSha256Crypt,
+    mcfSha512Crypt:   // '$5$rounds={rounds}${salt}${checksum}'
+      begin
+        if IdemPChar(P, 'ROUNDS=') then
+          begin
+            inc(P, 7);
+            rounds := GetNextItemCardinal(P, '$');
+          end
+          else
+            rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
+      end;
+    mcfPbkdf2Sha1,
+    mcfPbkdf2Sha256,
+    mcfPbkdf2Sha512: // '$pbkdf2{-digest}${rounds}${salt}${checksum}'
+      begin
+        rounds := GetNextItemCardinal(P, '$');
+        if rounds = 0 then
+        begin
+          result := mcfInvalid;
+          exit;
+        end;
+      end
+  else
+    begin
+      result := mcfUnknown;
+      exit;
+    end;
+  end;
+  GetNextItem(P, '$', salt);
+  if not b64valid(pointer(salt)) or
+     not b64valid(P) then
+    result := mcfInvalid;
+end; // on success, P points to the {checksum} part
+
+function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
+var
+  rounds: cardinal;
+  salt: RawUtf8;
+  P: PUtf8Char;
+begin
+  P := pointer(hash);
+  result := ModularCryptParse(P, rounds, salt);
+end;
+
+function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
+  rounds, saltsize: cardinal; const salt: RawUtf8): RawUtf8;
+var
+  signer: TSynSigner;
+  hasher: TSynHasher absolute signer;
+begin
+  case format of
+    mcfMd5Crypt .. mcfSha512Crypt:
+      result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
+    mcfPbkdf2Sha1 .. mcfPbkdf2Sha512:
+      result := signer.Pbkdf2ModularCrypt(format, password, rounds, saltsize, salt);
+  else
+    result := '';
+  end;
+end;
+
+function ModularCryptVerify(const password, hash: RawUtf8;
+  allowed: TModularCryptFormats): TModularCryptFormat;
+var
+  rounds, pos: cardinal;
+  salt, h: RawUtf8;
+  P: PUtf8Char;
+  signer: TSynSigner;
+  hasher: TSynHasher absolute signer;
+begin
+  P := pointer(hash);
+  result := ModularCryptParse(P, rounds, salt);
+  if not (result in mcfValid) then
+    exit;
+  if (allowed <> []) and
+     not (result in allowed) then
+    result := mcfUnknown;
+  pos := 0;
+  case result of
+    mcfMd5Crypt .. mcfSha512Crypt:
+      h := hasher.UnixCryptHash(MCF_ALGO[result], password, rounds, 0, salt, @pos);
+    mcfPbkdf2Sha1 .. mcfPbkdf2Sha512:
+      h := signer.Pbkdf2ModularCrypt(result, password, rounds, 0, salt, @pos);
+  end;
+  if (pos = 0) or
+     (mormot.core.base.StrComp(P, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
+    result := mcfInvalid;
+end;
+
 
 { TSynSigner }
 
@@ -4942,14 +4950,6 @@ begin
   if r <> 0 then
     FakeLength(result, aDestLen); // truncate to the expected destination size
 end;
-
-const
-  MCF_SIGN: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha512] of TSignAlgo = (
-    saSHA1, saSHA256, saSHA512);
-  HASH64_ENC: TChar64 = // the current custom encoding used by passlib
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./';
-var
-  HASH64_DEC: TAnsiCharToByte;
 
 function TSynSigner.Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat;
   const aPassword: RawUtf8; aRounds, aSaltSize: cardinal;
