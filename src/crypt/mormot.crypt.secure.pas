@@ -627,7 +627,7 @@ type
     // - any other algorithm is unsupported, and will fail and return ''
     // - see ModularCryptVerify() for the associated verification function
     function UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
-      aRounds: cardinal = 535000; aSaltSize: cardinal = 8;
+      aRounds: cardinal = 0; aSaltSize: cardinal = 8;
       aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
     /// returns the number of bytes of the hash of the current Algo
     function HashSize: integer;
@@ -1079,7 +1079,7 @@ const
 // algo=hfSHA256 for '$5$rounds={rounds}${salt}${checksum}'
 function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
 
-/// decode and check a password against a hash in “Modular Crypt" format
+/// decode and check a password against a hash in "Modular Crypt" format
 // - if allowed is not default [], it would return mcfUnknown if not in the set
 function ModularCryptVerify(const password, hash: RawUtf8;
   allowed: TModularCryptFormats = []): TModularCryptFormat;
@@ -4035,7 +4035,7 @@ end;
 
 const
   // https://github.com/besser82/libxcrypt
-  HASH64_CHARS: PUtf8Char =
+  HASH64_CHARS: TChar64 =
    './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   HASH64_128: THash128 = (
     12, 6, 0, 13, 7, 1, 14, 8, 2, 15, 9, 3, 5, 10, 4, 11);
@@ -4054,15 +4054,10 @@ var
   enc: PUtf8Char;
   c: PtrUInt;
 begin
-  enc := HASH64_CHARS;
+  enc := @HASH64_CHARS; // custom Base64uriEncode() with shuffled bytes
   repeat
-    if mask = nil then
-      c := b[0] or (PtrUInt(b[1]) shl 8) or (PtrUInt(b[2]) shl 16)
-    else
-    begin
-      c := b[mask[0]] or (PtrUInt(b[mask[1]]) shl 8) or (PtrUInt(b[mask[2]]) shl 16);
-      mask := @mask[3];
-    end;
+    c := b[mask[0]] or (PtrUInt(b[mask[1]]) shl 8) or (PtrUInt(b[mask[2]]) shl 16);
+    mask := @mask[3];
     p[0] := enc[c and $3f];
     p[1] := enc[(c shr 6) and $3f];
     p[2] := enc[(c shr 12) and $3f];
@@ -4122,13 +4117,15 @@ var
   alt: THash512Rec;
 begin
   result := '';
-  aRounds := MaxPtrUInt(aRounds, 1000); // >= 1000
-  aSaltSize := MinPtrUInt(aSaltSize, 16);
+  if aRounds = 0 then
+    aRounds := 535000 // default for hfSha256/hfSha512
+  else
+    aRounds := MaxPtrUInt(aRounds, 1000); // >= 1000
   case aAlgo of
     hfMD5:
       begin
         aRounds := 1000; // fixed
-        aSaltSize := MinPtrUInt(aSaltSize, 8);
+        aSaltSize := MinPtrUInt(aSaltSize, 8); // lower range
         result := '$1$';
       end;
     hfSha256:
@@ -4142,7 +4139,9 @@ begin
   if aSalt = '' then
   begin
     if aSaltSize = 0 then
-      aSaltSize := 8;
+      aSaltSize := 8
+    else if aSaltSize > 16 then
+      aSaltSize := 16; // for hfSha256/hfSha512
     aSalt := ModularCryptSalt(aSaltSize);
   end
   else
@@ -4216,7 +4215,7 @@ begin
     Final(alt);
   end;
   p := b64append(result, siz, aHashPos);
-  case siz of
+  case siz of // shuffled Base64uriEncode()
     SizeOf(HASH64_128):
       b64enclast(b64enc(p, @alt.b, @HASH64_128, 5), 0, alt.b[11], siz);
     SizeOf(HASH64_256):
