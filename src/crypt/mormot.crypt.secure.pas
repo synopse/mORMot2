@@ -1080,6 +1080,11 @@ function ModularCryptVerify(const password, hash: RawUtf8;
 /// compute a random salt from PRNG with the "Modular Crypt" charset
 function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
 
+/// low-level parsing function used by TSynHasher.UnixCryptVerify() and
+// ModularCryptIdentify/ModularCryptVerify
+function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
+  var salt: RawUtf8): TModularCryptFormat;
+
 
 { some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
 
