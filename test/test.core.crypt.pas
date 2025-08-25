@@ -1340,8 +1340,8 @@ const
     128, 128, 128, 128, 128, 256, 256, 256, 256, 256);
   OPENSSL_HASH: array[bSHA1O .. bSHA3_512O] of THashAlgo = (
     hfSHA1, hfSHA1, hfSHA256, hfSHA256, hfSHA384, hfSHA384, hfSHA512, hfSHA384,
-    hfSHA512, hfSHA3_256, hfSHA3_512);
-  {$endif USE_OPENSSL}
+    hfSHA512, hfSHA3_256, hfSHA3_512
+  {$endif USE_OPENSSL});
 var
   b: TBenchmark;
   s, i, size, n: integer;
