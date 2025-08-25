@@ -19,6 +19,7 @@ uses
   mormot.core.datetime,
   mormot.core.log,
   mormot.crypt.core,
+  mormot.crypt.other,
   mormot.crypt.openssl,
   mormot.crypt.secure,
   mormot.core.perf,
@@ -1422,7 +1423,7 @@ begin
           bCRC32:
             dig.d0 := crc32(0, pointer(data), SIZ[s]);
           bMD4:
-            MD.Full(pointer(data), SIZ[s], dig.h0, {forcemd4=}true);
+            MD4Buf(pointer(data), SIZ[s], dig.h0);
           bMD5:
             MD.Full(pointer(data), SIZ[s], dig.h0);
           bSHA1:
@@ -1868,7 +1869,7 @@ begin
   Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
   u := '$pbkdf2-sha3$1000$G85lPNdJLXoDVzhbCmsBCA$T6UjUUihUTmnYpwiRbhH8yi' +
        'BjOLTRzARcwK5gr7OEX.fRj9HD/ME7NivCFzgQ5W7BbBaAyoHKeirdX7cDPF59A';
-  u := ModularCryptHash(mcfPbkdf2Sha3, 'password', 1000);
+  u := ModularCryptHash(mcfPbkdf2Sha3, 'password', 1000); // our own format
   Check(ModularCryptIdentify(u) = mcfPbkdf2Sha3);
   Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha3);
   Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
@@ -3074,14 +3075,19 @@ begin
   for ismd4 := false to true do
     for n := 256 - 80 to 256 do
     begin
+      // char-by-char update validation
       if ismd4 then
-        md.InitMD4
+        Md4Init(md)
       else
         md.Init;
       for i := 0 to n - 1 do
         md.Update(bytes[i], 1);
       md.Final(dig);
-      md.Full(@bytes, n, dig2, ismd4);
+      // full buffer single call validation
+      if ismd4 then
+        Md4Buf(bytes, n, dig2)
+      else
+        md.Full(@bytes, n, dig2);
       check(IsEqual(dig, dig2), 'MDrefA');
       check(CompareMem(@dig, @dig2, SizeOf(dig)), 'MDrefB');
     end;
