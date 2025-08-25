@@ -1729,6 +1729,7 @@ var
   hasher: TSynHasher;
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
+  mcf: TModularCryptFormat;
 begin
   // validate THashAlgo and TSignAlgo recognition
   for h := low(h) to high(h) do
@@ -1812,42 +1813,51 @@ begin
       Hash128Test(P, @AesNiHash128);
   end;
   // verify TSynHasher.UnixCryptHash()
-  h := hfMD5;
   u := '$5$rounds=12345$q3hvJE5mn5jKRsW.$BbbYTFiaImz9rTy03GGi.Jf9YY5bmxN0LU3p3uI1iUB';
-  Check(hasher.UnixCryptVerify('password', u, @h));
-  Check(h = hfSha256);
-  Check(not hasher.UnixCryptVerify('p4ssword', u, @h));
+  Check(ModularCryptIdentify(u) = mcfSha256Crypt);
+  Check(ModularCryptVerify('password', u) = mcfSha256Crypt);
+  Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  Check(ModularCryptVerify('password', u) = mcfSha256Crypt);
+  delete(u, 5, 1);
+  Check(ModularCryptIdentify(u) = mcfInvalid);
+  Check(ModularCryptVerify('password', u) = mcfInvalid);
+  delete(u, 2, 1);
+  Check(ModularCryptIdentify(u) = mcfInvalid);
   u := '$1$3azHgidD$SrJPt7B.9rekpmwJwtON31';
-  Check(hasher.UnixCryptVerify('password', u, @h));
-  Check(h = hfMD5);
-  Check(hasher.UnixCryptVerify('the minimum number is still observed',
-    '$5$rounds=10$roundstoolow$yfvwcWrQ8l/K0DAWyuPMDNHpIVlTQebY9l/gL972bIC', @h));
-  Check(h = hfSha256);
-  Check(not hasher.UnixCryptVerify('secret', u, @h));
-  Check(h = hfMD5);
+  Check(ModularCryptIdentify(u) = mcfMd5Crypt);
+  Check(ModularCryptVerify('password', u) = mcfMd5Crypt);
+  Check(ModularCryptVerify('secret', u) = mcfInvalid);
+  Check(ModularCryptVerify('the minimum number is still observed',
+    '$5$rounds=10$roundstoolow$yfvwcWrQ8l/K0DAWyuPMDNHpIVlTQebY9l/gL972bIC') =
+     mcfSha256Crypt);
   u := '$6$rounds=1400$anotherlongsalts$POfYwTEok97VWcjxIiSOjiykti.o/pQs.wP' +
        'vMxQ6Fm7I6IoYN3CmLs66x9t0oSwbtEW7o7UmJEiDwGqd8p4ur1';
-  Check(hasher.UnixCryptVerify('a very much longer text to encrypt.  ' +
-  'This one even stretches over morethan one line.', u, @h));
-  Check(h = hfSHA512);
-  Check(not hasher.UnixCryptVerify('a very much longer text to encrypt.  ' +
-  'This one even stretches over more than one line.', u, @h));
-  for h := hfMD5 to hfSHA512 do
-    if h in [hfMD5, hfSHA256, hfSHA512] then
-      for n := 1 to 10 do
+  Check(ModularCryptVerify('a very much longer text to encrypt.  ' +
+    'This one even stretches over morethan one line.', u) = mcfSha512Crypt);
+  Check(ModularCryptVerify('a very much longer text to encrypt.  ' +
+    'This one even stretches over more than one line.', u) = mcfInvalid);
+  Check(ModularCryptIdentify(u) = mcfSha512Crypt);
+  delete(u, 5, 1);
+  Check(ModularCryptIdentify(u) = mcfInvalid);
+  for mcf := mcfMd5Crypt to mcfSha512Crypt do
+  begin
+    for n := 1 to 10 do
+    begin
+      RandomByteString(n * 7, pw);
+      if mcf in [mcfMd5Crypt .. mcfSha512Crypt] then
       begin
-        pw := RandomIdentifier(n * 7);
+        h := MCF_ALGO[mcf];
         u := hasher.UnixCryptHash(h, pw, {rounds=}1000 + n, {saltsize=}n);
         Check(u <> '');
         if h <> hfMD5 then
           CheckEqual(PosEx(Make(['$rounds=', 1000 + n, '$']), u), 3);
-        h2 := succ(h);
-        Check(h2 <> h);
-        Check(hasher.UnixCryptVerify(pw, u, @h2));
-        Check(h2 = h);
-        dec(PByteArray(u)[length(u) - 5]);
-        Check(not hasher.UnixCryptVerify(pw, u, @h2));
       end;
+      Check(ModularCryptIdentify(u) = mcf);
+      Check(ModularCryptVerify(pw, u) = mcf);
+      dec(PByteArray(u)[length(u) - 5]);
+      Check(ModularCryptVerify(pw, u) = mcfInvalid);
+    end;
+  end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
   CheckEqualHex(hasher.Mgf1(hfSHA1, pointer(buf), length(buf), 3), '1ac907');
