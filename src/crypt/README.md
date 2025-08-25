@@ -28,8 +28,7 @@ High-Performance Cryptographic features shared by all framework units
 - HMAC Authentication over SHA-256
 - PBKDF2 Safe Key Derivation over SHA-2 and SHA-3
 - Digest/Hash to Hexadecimal Text Conversion
-- Deprecated MD5 RC4 SHA-1 Algorithms
-- Deprecated Weak AES/SHA Process
+- Deprecated MD5 SHA-1 Algorithms
 
 This unit is validated against OpenSSL for correctness.
 Optimized assembly is located in separated `mormot.crypt.core.asmx64.inc` and `mormot.crypt.core.asmx86.inc` files.
@@ -114,3 +113,6 @@ Access Hardware Security Modules (HSM) via PKCS#11
 
 Deprecated or Seldom Used Cryptographic Features
 - Deprecated MD4 and RC4 Support
+- Deprecated Low-Level Memory Buffers Helper Functions
+- Deprecated Weak AES/SHA Process
+
