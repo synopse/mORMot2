@@ -1866,13 +1866,19 @@ begin
   Check(ModularCryptIdentify(u) = mcfPbkdf2Sha512);
   Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha512);
   Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  u := '$pbkdf2-sha3$1000$G85lPNdJLXoDVzhbCmsBCA$T6UjUUihUTmnYpwiRbhH8yi' +
+       'BjOLTRzARcwK5gr7OEX.fRj9HD/ME7NivCFzgQ5W7BbBaAyoHKeirdX7cDPF59A';
+  u := ModularCryptHash(mcfPbkdf2Sha3, 'password', 1000);
+  Check(ModularCryptIdentify(u) = mcfPbkdf2Sha3);
+  Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha3);
+  Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
     timer.Start;
     rounds := 0;
     for n := 1 to 10 do
     begin
-      RandomByteString(n * 7, pw);
+      RandomByteString(n * 7, pw); // should reach at least 64 bytes = 512-bit
       if mcf = mcfMd5Crypt then
         inc(rounds, 3 * 1000) // fixed number
       else
