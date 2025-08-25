@@ -4234,6 +4234,8 @@ var
   p: PUtf8Char;
   i: PtrInt;
 begin
+  if Base64uriToBinLength(aSaltSize) = 0 then
+    inc(aSaltSize); // ensure will generate a valid base64-encoded output
   p := FastSetString(result, aSaltSize);
   TAesPrng.Fill(p, aSaltSize); // standards recommend a CSPRNG
   for i := 0 to aSaltSize - 1 do
@@ -4960,7 +4962,7 @@ begin
   if HASH64_DEC[#255] = 0 then // thread-safe initialization
     FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
   if not Base64uriToBin(pointer(aSalt), length(aSalt), binsalt, @HASH64_DEC) then
-    exit; // wrong salt format
+    binsalt := aSalt; // be tolerant about non-standard salt format
   Make(['$', MCF_IDENT[aAlgo], '$', aRounds, '$', aSalt, '$'], result);
   siz := Pbkdf2(MCF_SIGN[aAlgo], aPassword, binsalt, aRounds, @dig);
   p := b64append(result, siz, aHashPos);
