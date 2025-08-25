@@ -3734,6 +3734,9 @@ procedure crcblockfast(crc128, data128: PBlock128);
 // - combine crcblocks() with 4 parallel crc32c() for 1..15 trailing bytes
 procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
+/// compute ADLER32 checksum on the supplied buffer - use adler32() instead
+function adler32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
 var
   /// compute CRC32C (Castagnoli/iSCSI) checksum on the supplied buffer
   // - result is not compatible with zlib/IEEE-802 crc32() - Intel/SCSI crc32c()
@@ -3772,8 +3775,8 @@ var
   crc32: THasher = crc32fast;
 
   /// compute ADLER32 checksum on the supplied buffer
-  // - is only available if mormot.lib.z.pas unit is included in the project
-  adler32: THasher;
+  // - mormot.lib.z.pas unit may include the much faster version from libdeflate
+  adler32: THasher = adler32fast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
 // - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021)
@@ -9387,6 +9390,31 @@ end;
 function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt;
 begin
   result := PosExPas(pointer(SubStr), pointer(S), Offset); // inlined call
+end;
+
+function adler32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+var
+  s1, s2, n, c: cardinal;
+begin
+  s1 := crc and $ffff;
+  s2 := crc shr 16;
+  if len > 0 then
+    repeat
+      n := 5552;
+      if len < n then
+        n := len;
+      c := n;
+      repeat
+        inc(s1, ord(buf^));
+        inc(buf);
+        inc(s2, s1);
+        dec(c);
+      until c = 0;
+      s1 := s1 mod 65521;
+      s2 := s2 mod 65521;
+      dec(len, n);
+    until len = 0;
+  result := (s1 and $ffff) + (s2 and $ffff) shl 16;
 end;
 
 {$endif CPUX86}

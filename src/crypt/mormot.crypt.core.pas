@@ -167,18 +167,6 @@ function Hash128ToDouble(P: PHash128Rec): double;
 function Hash128ToSingle(P: PHash128Rec): single;
  {$ifdef FPC} inline; {$endif}
 
-/// simple Adler32 implementation
-// - a bit slower than Adler32Asm() version below, but shorter code size
-function Adler32Pas(Adler: cardinal; p: pointer; Count: integer): cardinal;
-
-/// fast Adler32 implementation
-// - 16-bytes-chunck unrolled asm version on i386
-// - note: the adler32() included in libdeflate is much faster than this
-function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
- {$ifndef CPUX86} inline; {$endif}
-
-function Adler32SelfTest: boolean;
-
 /// entry point of the raw MD5 transform function - for low-level use
 procedure RawMd5Compress(var Hash; Data: pointer);
 
@@ -3110,50 +3098,6 @@ begin
   // no need to XOR with P.Hi since P input is from an AES permutation algorithm
   result := (P.Lo and $7fffffffffffffff) * COEFF64;
   P.Lo := 0;
-end;
-
-function Adler32Pas(Adler: cardinal; p: pointer; Count: integer): cardinal;
-// simple Adler32 implementation (twice slower than Asm, but shorter code size)
-var
-  s1, s2: cardinal;
-  i, n: integer;
-begin
-  s1 := LongRec(Adler).Lo;
-  s2 := LongRec(Adler).Hi;
-  while Count > 0 do
-  begin
-    if Count < 5552 then
-      n := Count
-    else
-      n := 5552;
-    for i := 1 to n do
-    begin
-      inc(s1, PByte(p)^);
-      inc(PByte(p));
-      inc(s2, s1);
-    end;
-    s1 := s1 mod 65521;
-    s2 := s2 mod 65521;
-    dec(Count, n);
-  end;
-  result := (s1 and $ffff) + (s2 and $ffff) shl 16;
-end;
-
-{$ifndef CPUX86}
-
-function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
-begin
-  result := Adler32Pas(Adler, p, Count);
-end;
-
-{$endif CPUX86}
-
-function Adler32SelfTest: boolean;
-begin
-  result := (Adler32Asm(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
-            (Adler32Asm(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE) and
-            (Adler32Pas(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
-            (Adler32Pas(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE);
 end;
 
 
@@ -10910,10 +10854,10 @@ end;
 
 function TAesFullHeader.Calc(const Key; KeySize: cardinal): cardinal;
 begin
-  result := Adler32Asm(KeySize, @Key, KeySize shr 3) xor
-              Te0[OriginalLen and $FF] xor
-              Te1[SourceLen and $FF] xor
-              Td0[SomeSalt and $7FF];
+  result := adler32(KeySize, @Key, KeySize shr 3) xor
+                    Te0[OriginalLen and $FF] xor
+                    Te1[SourceLen and $FF] xor
+                    Td0[SomeSalt and $7FF];
 end;
 
 function TAesFull.EncodeDecode(const Key; KeySize, inLen: cardinal;
@@ -11179,7 +11123,7 @@ var
   len: integer;
 begin
   result := Count;
-  Adler := Adler32Asm(Adler, @Buffer, Count);
+  Adler := adler32(Adler, @Buffer, Count);
   if not fNoCrypt then
     // KeySize=0 -> save as-is
     if not fAes.Initialized then
