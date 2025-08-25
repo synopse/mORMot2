@@ -999,6 +999,7 @@ function ToText(algo: THashAlgo): PShortString; overload;
 function ToUtf8(algo: THashAlgo): RawUtf8; overload; {$ifdef HASINLINE} inline; {$endif}
 function ToText(algo: TCrc32Algo): PShortString; overload;
 function ToText(const Digest: THashDigest): RawUtf8; overload; // 'hexhash' w/o algo
+function ToText(fmt: TModularCryptFormat): PShortString; overload;
 
 /// recognize a TSignAlgo from a text, e.g. 'SHAKE-128', 'saSha256' or 'SHA-3/256'
 function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean; overload;
@@ -5095,6 +5096,11 @@ begin
     BinToHexLower(PAnsiChar(@Digest.Bin), HASH_SIZE[Digest.Algo], result)
   else
     FastAssignNew(result);
+end;
+
+function ToText(fmt: TModularCryptFormat): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TModularCryptFormat), ord(fmt));
 end;
 
 function SanitizeAlgoName(P: PUtf8Char; L: PtrInt; var tmp: TShort15;

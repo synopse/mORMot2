@@ -1723,13 +1723,14 @@ var
   u, pw: RawUtf8;
   P: PAnsiChar;
   unalign: PtrInt;
-  n: integer;
+  n, rounds: integer;
   exp321, exp322, exp323, exp324, exp325: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
   mcf: TModularCryptFormat;
+  timer: TPrecisionTimer;
 begin
   // validate THashAlgo and TSignAlgo recognition
   for h := low(h) to high(h) do
@@ -1859,9 +1860,15 @@ begin
   Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
+    timer.Start;
+    rounds := 0;
     for n := 1 to 10 do
     begin
       RandomByteString(n * 7, pw);
+      if mcf = mcfMd5Crypt then
+        inc(rounds, 3 * 1000) // fixed number
+      else
+        inc(rounds, 3 * (1000 + n));
       u := ModularCryptHash(mcf, pw, {rounds=}1000 + n, {saltsize=}n);
       Check(u <> '');
       if mcf in [mcfSha256Crypt .. mcfSha512Crypt] then
@@ -1873,6 +1880,8 @@ begin
       dec(PByteArray(u)[length(u) - 5]);
       Check(ModularCryptVerify(pw, u) = mcfInvalid);
     end;
+    if not fOwner.MultiThread then
+      NotifyTestSpeed('% rounds', [ToText(mcf)^], rounds, 0, @timer);
   end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
