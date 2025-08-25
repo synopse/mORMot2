@@ -15,7 +15,7 @@ unit mormot.crypt.core;
     - HMAC Authentication over SHA-256
     - PBKDF2 Key Derivation over SHA-256 and SHA-3
     - Digest/Hash to Hexadecimal Text Conversion
-    - Deprecated MD5 RC4 SHA-1 Algorithms
+    - Deprecated MD5 SHA-1 Algorithms
     - Deprecated Weak AES/SHA Process
 
    Validated against OpenSSL. Faster than OpenSSL on x86_64 (but AES-GCM).
@@ -2367,7 +2367,7 @@ function ToText(algo: TSha3Algo): PShortString; overload;
 
 
 
-{ ****************** Deprecated MD5 RC4 SHA-1 Algorithms }
+{ ****************** Deprecated MD5 SHA-1 Algorithms }
 
 type
   /// 128-bit memory block for MD5 hash digest storage
@@ -2424,55 +2424,6 @@ type
     procedure Full(Buffer: pointer; Len: integer; out Digest: TMd5Digest);
   end;
   PMd5 = ^TMd5;
-
-  /// implements RC4 encryption/decryption
-  // - this algorithm has known weaknesses, so should not be considered as
-  // cryptographic secure, but is available for other purposes
-  // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance
-  // - you can also restore and backup any previous state of the RC4 encryption
-  // by copying the whole TRC4 variable into another (stack-allocated) variable
-  {$ifdef USERECORDWITHMETHODS}
-  TRC4 = record
-  {$else}
-  TRC4 = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    {$ifdef CPUINTEL}
-    state: array[byte] of PtrInt; // PtrInt=270MB/s  byte=240MB/s on x86
-    {$else}
-    state: TByteToByte; // on ARM, keep the CPU cache usage low
-    {$endif CPUINTEL}
-    currI, currJ: PtrInt;
-  public
-    /// initialize the RC4 encryption/decryption
-    // - KeyLen is in bytes, and should be within 1..255 range
-    // - warning: aKey is an untyped constant, i.e. expects a raw set of memory
-    // bytes: do NOT use assign it with a string or a TBytes instance: you would
-    // use the pointer to the data as key
-    procedure Init(const aKey; aKeyLen: integer);
-    /// initialize RC4-drop[3072] encryption/decryption after SHA-3 hashing
-    // - will use SHAKE-128 generator in XOF mode to generate a 256 bytes key,
-    // then drop the first 3072 bytes from the RC4 stream
-    // - this initializer is much safer than plain Init, so should be considered
-    // for any use on RC4 for new projects - even if AES-NI is 2 times faster,
-    // and safer SHAKE-128 operates in XOF mode at a similar speed range
-    procedure InitSha3(const aKey; aKeyLen: integer);
-    /// drop the next Count bytes from the RC4 cypher state
-    // - may be used in Stream mode, or to initialize in RC4-drop[n] mode
-    procedure Drop(Count: cardinal);
-    /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceded with an Init() call
-    // - RC4 is a symmetrical algorithm: use this Encrypt() method
-    // for both encryption and decryption of any buffer
-    procedure Encrypt(const BufIn; var BufOut; Count: cardinal);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceded with an Init() call
-    // - RC4 is a symmetrical algorithm: use this EncryptBuffer() method
-    // for both encryption and decryption of any buffer
-    procedure EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
-  end;
 
   /// implements SHA-1 hashing
   // - this algorithm has known weaknesses, so should not be considered as
@@ -10229,131 +10180,6 @@ begin
   {$endif ASMX64}
     Sha1CompressPas(TShaHash(Hash), Data); // regular code
 end;
-
-
-{ TRC4 }
-
-procedure TRC4.Init(const aKey; aKeyLen: integer);
-var
-  i, k: integer;
-  j, tmp: PtrInt;
-begin
-  if aKeyLen <= 0 then
-    ESynCrypto.RaiseUtf8('TRC4.Init(invalid aKeyLen=%)', [aKeyLen]);
-  dec(aKeyLen);
-  for i := 0 to high(state) do
-    state[i] := i;
-  j := 0;
-  k := 0;
-  for i := 0 to high(state) do
-  begin
-    j := (j + state[i] + TByteArray(aKey)[k]) and $ff;
-    tmp := state[i];
-    state[i] := state[j];
-    state[j] := tmp;
-    if k >= aKeyLen then // avoid slow mod operation within loop
-      k := 0
-    else
-      inc(k);
-  end;
-  currI := 0;
-  currJ := 0;
-end;
-
-procedure TRC4.InitSha3(const aKey; aKeyLen: integer);
-var
-  sha: TSha3;
-  dig: TByteToByte; // max RC4 state size is 256 bytes
-begin
-  sha.Full(SHAKE_128, @aKey, aKeyLen, @dig, SizeOf(dig) shl 3); // XOF mode
-  Init(dig, SizeOf(dig));
-  FillCharFast(dig, SizeOf(dig), 0);
-  Drop(3072); // 3KB warmup
-end;
-
-procedure TRC4.EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
-var
-  i, j, ki, kj: PtrInt;
-  by4: array[0..3] of byte;
-begin
-  i := currI;
-  j := currJ;
-  while Count > 3 do
-  begin
-    dec(Count, 4);
-    i := (i + 1) and $ff;
-    ki := State[i];
-    j := (j + ki) and $ff;
-    kj := (ki + State[j]) and $ff;
-    State[i] := State[j];
-    i := (i + 1) and $ff;
-    State[j] := ki;
-    ki := State[i];
-    by4[0] := State[kj];
-    j := (j + ki) and $ff;
-    kj := (ki + State[j]) and $ff;
-    State[i] := State[j];
-    i := (i + 1) and $ff;
-    State[j] := ki;
-    by4[1] := State[kj];
-    ki := State[i];
-    j := (j + ki) and $ff;
-    kj := (ki + State[j]) and $ff;
-    State[i] := State[j];
-    i := (i + 1) and $ff;
-    State[j] := ki;
-    by4[2] := State[kj];
-    ki := State[i];
-    j := (j + ki) and $ff;
-    kj := (ki + State[j]) and $ff;
-    State[i] := State[j];
-    State[j] := ki;
-    by4[3] := State[kj];
-    PCardinal(BufOut)^ := PCardinal(BufIn)^ xor cardinal(by4);
-    inc(BufIn, 4);
-    inc(BufOut, 4);
-  end;
-  while Count > 0 do
-  begin
-    dec(Count);
-    i := (i + 1) and $ff;
-    ki := State[i];
-    j := (j + ki) and $ff;
-    kj := (ki + State[j]) and $ff;
-    State[i] := State[j];
-    State[j] := ki;
-    BufOut^ := BufIn^ xor State[kj];
-    inc(BufIn);
-    inc(BufOut);
-  end;
-  currI := i;
-  currJ := j;
-end;
-
-procedure TRC4.Encrypt(const BufIn; var BufOut; Count: cardinal);
-begin
-  EncryptBuffer(@BufIn, @BufOut, Count);
-end;
-
-procedure TRC4.Drop(Count: cardinal);
-var
-  i, j, ki: PtrInt;
-begin
-  i := currI;
-  j := currJ;
-  while Count > 0 do
-  begin
-    dec(Count);
-    i := (i + 1) and $ff;
-    ki := state[i];
-    j := (j + ki) and $ff;
-    state[i] := state[j];
-    state[j] := ki;
-  end;
-  currI := i;
-  currJ := j;
-end;
-
 
 procedure RawMd5Compress(var Hash; Data: pointer);
 begin

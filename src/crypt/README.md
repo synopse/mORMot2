@@ -109,3 +109,8 @@ For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are 
 Access Hardware Security Modules (HSM) via PKCS#11
 - High-Level *PKCS#11* Integration with the Framework Types
 - Registration of the *PKCS#11* Engine to the `TCryptAsym`/`TCryptCert` Factories
+
+### mormot.crypt.other
+
+Deprecated or Seldom Used Cryptographic Features
+- Deprecated MD4 and RC4 Support
