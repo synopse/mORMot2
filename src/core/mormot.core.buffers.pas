@@ -4375,7 +4375,7 @@ begin
           inc(chunk, len);
         end
         else if PI^<>'' then
-          PI^ := '';
+          FastAssignNew(PI^);
         dec(count);
         inc(PI);
       end
@@ -6587,17 +6587,18 @@ function BinToBase64(const s: RawByteString): RawUtf8;
 var
   len: integer;
 begin
-  result := '';
   len := length(s);
   if len <> 0 then
-    Base64Encode(FastSetString(result, BinToBase64Length(len)), pointer(s), len);
+    Base64Encode(FastSetString(result, BinToBase64Length(len)), pointer(s), len)
+  else
+    FastAssignNew(result);
 end;
 
 function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): ShortString;
 var
   destlen: integer;
 begin
-  result := '';
+  result[0] := #0;
   if BinBytes = 0 then
     exit;
   destlen := BinToBase64Length(BinBytes);
@@ -6662,9 +6663,10 @@ end;
 
 function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
 begin
-  result := '';
   if BinBytes <> 0 then
-    Base64Encode(FastSetString(result, BinToBase64Length(BinBytes)), Bin, BinBytes);
+    Base64Encode(FastSetString(result, BinToBase64Length(BinBytes)), Bin, BinBytes)
+  else
+    FastAssignNew(result);
 end;
 
 function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUtf8;
@@ -6672,7 +6674,7 @@ var
   lendata, lenprefix, lensuffix, len: integer;
   res: PByteArray;
 begin
-  result := '';
+  FastAssignNew(result);
   lendata := length(data);
   lenprefix := length(Prefix);
   lensuffix := length(Suffix);
@@ -6707,7 +6709,7 @@ end;
 procedure BinToBase64WithMagic(Data: pointer; DataLen: integer;
   var Result: RawUtf8);
 begin
-  Result := '';
+  FastAssignNew(result);
   if DataLen <= 0 then
     exit;
   PInteger(FastSetString(Result, ((DataLen + 2) div 3) * 4 + 3))^ := JSON_BASE64_MAGIC_C;
@@ -6939,24 +6941,26 @@ function BinToBase64uri(const s: RawByteString): RawUtf8;
 var
   len: integer;
 begin
-  result := '';
   len := length(s);
   if len <> 0 then
-    Base64uriEncode(FastSetString(result, BinToBase64uriLength(len)), pointer(s), len);
+    Base64uriEncode(FastSetString(result, BinToBase64uriLength(len)), pointer(s), len)
+  else
+    FastAssignNew(result);
 end;
 
 function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
 begin
-  result := '';
   if BinBytes > 0 then
-    Base64uriEncode(FastSetString(result, BinToBase64uriLength(BinBytes)), Bin, BinBytes);
+    Base64uriEncode(FastSetString(result, BinToBase64uriLength(BinBytes)), Bin, BinBytes)
+  else
+    FastAssignNew(result);
 end;
 
 function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): ShortString;
 var
   len: integer;
 begin
-  result := '';
+  result[0] := #0;
   if BinBytes <= 0 then
     exit;
   len := BinToBase64uriLength(BinBytes);
@@ -7070,7 +7074,7 @@ begin
   tmp := ParamValue;
   if not Base64ToBinSafe(PAnsiChar(pointer(tmp)) + 3, length(tmp) - 3,
           RawByteString(ParamValue)) then
-    ParamValue := '';
+    FastAssignNew(ParamValue);
 end;
 
 function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: RawByteString): boolean;
@@ -7619,7 +7623,7 @@ function RawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUtf8;
 var
   P: PAnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   if RawBlobLength <> 0 then
   begin
     pointer(result) := FastNewString(RawBlobLength * 2 + 3, CP_UTF8);
@@ -8029,22 +8033,21 @@ begin
   result := AsciiToBaudot(pointer(Text), length(Text));
 end;
 
-function BaudotToAscii(const Baudot: RawByteString): RawUtf8;
-begin
-  result := BaudotToAscii(pointer(Baudot), length(Baudot));
-end;
-
 function BaudotToAscii(Baudot: PByte; len: PtrInt): RawUtf8;
 var
   tmp: TSynTempBuffer;
 begin
   if (Baudot = nil) or
      (len <= 0) then
-    result := ''
+    FastAssignNew(result)
   else
     tmp.Done(BaudotDecode(Baudot, tmp.Init((len shl 3) div 5), len) , result);
 end;
 
+function BaudotToAscii(const Baudot: RawByteString): RawUtf8;
+begin
+  result := BaudotToAscii(pointer(Baudot), length(Baudot));
+end;
 
 
 { ***************** URI-Encoded Text Buffer Process }
@@ -9850,7 +9853,7 @@ begin
     if CurrentSize < ExpectedSize then
     begin
       // we can state the current progression ratio
-      remain := '';
+      remain[0] := #0;
       if Remaining > 0 then
         FormatShort(' remaining:%', [MilliSecToString(Remaining)], remain);
       FormatUtf8('% %% %/%%%',
@@ -10010,12 +10013,12 @@ end;
 
 function TStreamRedirect.GetHash: RawUtf8;
 begin
-  result := ''; // no associated hasher on this parent class
+  FastAssignNew(result); // no associated hasher on this parent class
 end;
 
 class function TStreamRedirect.GetHashFileExt: RawUtf8;
 begin
-  result := ''; // no associated hasher on this parent class
+  FastAssignNew(result); // no associated hasher on this parent class
 end;
 
 class function TStreamRedirect.GetHashName: RawUtf8;
@@ -10029,7 +10032,7 @@ var
   hasher: TStreamRedirect;
   f: THandle;
 begin
-  result := '';
+  FastAssignNew(result);
   if GetHashFileExt = '' then
     exit; // no hash function defined
   f := FileOpenSequentialRead(FileName);
@@ -11174,7 +11177,7 @@ begin
   begin
     dec(Count);
     dec(Position, Length(Values[Count].Value));
-    Values[Count].Value := ''; // release memory
+    FastAssignNew(Values[Count].Value); // release memory
     LastFind := Count - 1;
   end;
 end;
@@ -11733,7 +11736,7 @@ begin
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
   GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, false, {lower=}true);
-  EMOJI_TEXT[eNone] := '';
+  FastAssignNew(EMOJI_TEXT[eNone]);
   for e := succ(low(e)) to high(e) do
   begin
     Join([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
