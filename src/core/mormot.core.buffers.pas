@@ -7906,6 +7906,17 @@ begin
   result := AsciiToBaudot(pointer(Text), length(Text));
 end;
 
+procedure FillBaudotDecode(s, d: PByteArray);
+var
+  i: PtrInt;
+begin
+  for i := high(Baudot2Char) downto 0 do
+    if s[i] < 128 then
+      d[s[i]] := i;
+  for i := ord('a') to ord('z') do
+    d[i - 32] := d[i]; // a-z -> A-Z
+end;
+
 function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString;
 var
   i: PtrInt;
@@ -7919,13 +7930,7 @@ begin
      (len = 0) then
     exit;
   if Char2Baudot['z'] = 0 then // delayed thread-safe initialization
-  begin
-    for i := high(Baudot2Char) downto 0 do
-      if Baudot2Char[i] < #128 then
-        Char2Baudot[Baudot2Char[i]] := i;
-    for i := ord('a') to ord('z') do
-      Char2Baudot[AnsiChar(i - 32)] := Char2Baudot[AnsiChar(i)]; // a-z -> A-Z
-  end;
+    FillBaudotDecode(@Baudot2Char, @Char2Baudot);
   shift := false;
   dest := tmp.Init((len * 10) shr 3);
   d := 0;
