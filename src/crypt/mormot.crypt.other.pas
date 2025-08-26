@@ -1364,6 +1364,49 @@ const
       $d6ebe1f9, $90d4f869, $a65cdea0, $3f09252d, $c208e69f, $b74e6132, $ce77e25b,
       $578fdfe3, $3ac372e6));
 
+{$ifdef OSLINUXX64} // this asm is only marginally faster than pure pascal code
+
+// result := (((s[(x shr 24)] + s[$100 + ToByte(x shr 16)]) xor
+//           s[$200 + ToByte(x shr 8)]) + s[$300 + ToByte(x)]);
+
+function BlowFishStep(x: cardinal; s: PCardinalArray): cardinal;
+{$ifdef FPC}nostackframe; assembler;
+asm {$else} asm .noframe {$endif}
+        // edi=x rsi=s
+        mov     ecx, edi
+        mov     edx, edi
+        shr     edi, 24
+        shr     ecx, 16
+        mov     eax, dword ptr [rsi + rdi * 4].TBlowFishState.SBox
+        movzx   ecx, cl
+        add     eax, dword ptr [rsi + rcx * 4 + $400].TBlowFishState.SBox
+        movzx   ecx, dh
+        xor     eax, dword ptr [rsi + rcx * 4 + $800].TBlowFishState.SBox
+        movzx   ecx, dl
+        add     eax, dword ptr [rsi + rcx * 4 + $c00].TBlowFishState.SBox
+end;
+
+procedure BlowFishEncrypt64(const s: TBlowFishState; block: PQWordRec); inline;
+var
+  L, R: cardinal;
+  i: PtrUInt;
+begin
+  L := block.L;
+  R := block.H;
+  i := 0;
+  repeat
+    L := L xor s.PBox[i];
+    R := R xor BlowFishStep(L, @s);
+    R := R xor s.PBox[i + 1];
+    L := L xor BlowFishStep(R, @s);
+    inc(i, 2);
+  until i = 16;
+  block.L := R xor s.PBox[17];
+  block.H := L xor s.PBox[16];
+end;
+
+{$else}
+
 procedure BlowFishEncrypt64(const s: TBlowFishState; block: PQWordRec);
 var
   L, R: cardinal;
@@ -1405,6 +1448,8 @@ begin
   block.L := R xor s.PBox[17];
   block.H := L;
 end;
+
+{$endif OSLINUXX64}
 
 // XOR all PBox[] with the encryption key - supplied as multiple of 64-bit
 procedure ExpandKey(pbox: PQwordArray; key: PQwordArray; keyblocks: PtrUInt);
