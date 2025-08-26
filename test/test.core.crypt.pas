@@ -1391,7 +1391,7 @@ begin
   for s := 0 to high(SIZ) do
   begin
     data := RandomWinAnsi(SIZ[s]);
-    Check(length(data) = SIZ[s]);
+    CheckEqual(length(data), SIZ[s]);
     SetLength(encrypted, SIZ[s]);
     for b := low(b) to high(b) do
     if (b < low(AES)) or
@@ -1423,7 +1423,7 @@ begin
           bCRC32:
             dig.d0 := crc32(0, pointer(data), SIZ[s]);
           bMD4:
-            MD4Buf(pointer(data), SIZ[s], dig.h0);
+            MD4Buf(pointer(data)^, SIZ[s], dig.h0);
           bMD5:
             MD.Full(pointer(data), SIZ[s], dig.h0);
           bSHA1:
