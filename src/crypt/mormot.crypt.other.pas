@@ -1370,38 +1370,38 @@ var
 begin
   L := block.L xor s.PBox[0];
   R := block.H;
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[ 1];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[ 2];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[ 3];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[ 4];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[ 5];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[ 6];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[ 7];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[ 8];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[ 9];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[10];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[11];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[12];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[13];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[14];
-  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
-       s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[15];
-  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
-       s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[16];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[ 1];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[ 2];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[ 3];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[ 4];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[ 5];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[ 6];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[ 7];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[ 8];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[ 9];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[10];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[11];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[12];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[13];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[14];
+  R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + ToByte(L shr 16)]) xor
+       s.SBox[$200 + ToByte(L shr 8)]) + s.SBox[$300 + ToByte(L)]) xor s.PBox[15];
+  L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + ToByte(R shr 16)]) xor
+       s.SBox[$200 + ToByte(R shr 8)]) + s.SBox[$300 + ToByte(R)]) xor s.PBox[16];
   block.L := R xor s.PBox[17];
   block.H := L;
 end;
