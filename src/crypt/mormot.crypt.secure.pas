@@ -1090,7 +1090,7 @@ function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
 
 /// compute a BCrypt hash of a given password - needs mormot.crypt.other.pas
-// - as used by ModularCryptHash(mcfBCrypt)
+// - as used by ModularCryptHash() for mcfBCrypt
 function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal = 12;
   aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
 
@@ -1102,8 +1102,10 @@ function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
 
 /// decode and check a password against a hash in "Modular Crypt" format
 // - if allowed is not default [], it would return mcfUnknown if not in this set
+// - you can also specify maxrounds, if you want to avoid any potential DoS
+// from forged hash values with artificially high number of rounds
 function ModularCryptVerify(const password, hash: RawUtf8;
-  allowed: TModularCryptFormats = []): TModularCryptFormat;
+  allowed: TModularCryptFormats = []; maxrounds: cardinal = 0): TModularCryptFormat;
 
 /// compute a base-64 random salt from PRNG with the "Modular Crypt" charset
 // - aSaltSize is the raw random bytes number, not the encoded result chars length
@@ -4726,7 +4728,7 @@ begin
 end;
 
 function ModularCryptVerify(const password, hash: RawUtf8;
-  allowed: TModularCryptFormats): TModularCryptFormat;
+  allowed: TModularCryptFormats; maxrounds: cardinal): TModularCryptFormat;
 var
   rounds, pos: cardinal;
   salt, h: RawUtf8;
@@ -4740,7 +4742,16 @@ begin
     exit;
   if (allowed <> []) and
      not (result in allowed) then
+  begin
     result := mcfUnknown;
+    exit;
+  end;
+  if (maxrounds <> 0) and
+     (rounds > maxrounds) then
+  begin
+    result := mcfInvalid;
+    exit;
+  end;
   pos := 0;
   case result of
     mcfMd5Crypt .. mcfSha512Crypt:
