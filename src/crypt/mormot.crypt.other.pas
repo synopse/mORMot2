@@ -748,9 +748,9 @@ var
 begin
   tab := AesTables;
   result := adler32(KeySize, @Key, KeySize shr 3) xor
-            tab[$400 + OriginalLen and $FF] xor // = TE0[]
-            tab[$500 + SourceLen and $FF] xor   // = TE1[]
-            tab[SomeSalt and $7FF];             // = TD0[]
+            tab[$400 + OriginalLen and $ff] xor // = TE0[]
+            tab[$500 + SourceLen and $ff] xor   // = TE1[]
+            tab[SomeSalt and $7ff];             // = TD0[]
 end;
 
 function TAesFull.EncodeDecode(const Key; KeySize, inLen: cardinal;

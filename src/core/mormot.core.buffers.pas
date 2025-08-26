@@ -6197,14 +6197,13 @@ end;
 
 procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
 var
-  L: integer;
+  L: PtrInt;
 begin
   L := Length(buf);
-  if L <> 0 then
-  begin
-    SetLength(bytes, L);
-    MoveFast(pointer(buf)^, pointer(bytes)^, L);
-  end;
+  if L = 0 then
+    exit;
+  SetLength(bytes, L);
+  MoveFast(pointer(buf)^, pointer(bytes)^, L);
 end;
 
 procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);

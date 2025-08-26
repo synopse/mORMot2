@@ -1711,7 +1711,7 @@ function UInt3DigitsToShort(Value: cardinal): TShort3;
 function UInt2DigitsToShort(Value: byte): TShort3;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// creates a 2 digits short string from a 0..99 value
+/// creates a 2 digits short string from a 00..99 value
 // - won't test Value>99 as UInt2DigitsToShort()
 function UInt2DigitsToShortFast(Value: byte): TShort3;
   {$ifdef HASINLINE}inline;{$endif}
