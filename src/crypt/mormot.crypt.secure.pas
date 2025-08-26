@@ -794,6 +794,8 @@ type
   // - mcfPbkdf2Sha3 is our own SHA3-512 hash algorithm (with no HMAC) extension
   // - mcfBCrypt is the BCrypt hashing algorithm, as developed for BSD systems -
   // please include the mormot.crypt.other.pas unit to your project to enable it
+  // - mcfBCryptSha256 will first hash the password with HMAC-SHA-256 for any
+  // password of more than 72 bytes (following passlib.hash.bcrypt_sha256)
   TModularCryptFormat = (
     mcfInvalid,
     mcfUnknown,
@@ -804,7 +806,8 @@ type
     mcfPbkdf2Sha256,
     mcfPbkdf2Sha512,
     mcfPbkdf2Sha3,
-    mcfBCrypt);
+    mcfBCrypt,
+    mcfBCryptSha256);
   /// allow to specify several ModularCryptIdentify/ModularCryptVerify algorithms
   TModularCryptFormats = set of TModularCryptFormat;
 
@@ -1078,7 +1081,8 @@ function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 const
   MCF_ALGO: array[TModularCryptFormat] of THashAlgo = (hfShake128, hfShake128,
-    hfMD5, hfSHA256, hfSHA512, hfSHA1, hfSHA256, hfSHA512, hfSHA3_512, hfShake128);
+    hfMD5, hfSHA256, hfSHA512, hfSHA1, hfSHA256, hfSHA512, hfSHA3_512,
+    hfShake128, hfSHA256);
   /// which ModularCryptIdentify/ModularCryptVerify() results are correct
   mcfValid = [succ(mcfInvalid) .. high(TModularCryptFormat)];
 
@@ -1090,9 +1094,10 @@ function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
 
 /// compute a BCrypt hash of a given password - needs mormot.crypt.other.pas
-// - as used by ModularCryptHash() for mcfBCrypt
+// - as used by ModularCryptHash() for mcfBCrypt / mcfBCryptSha256
 function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal = 12;
-  aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
+  aSalt: RawUtf8 = ''; aHashPos: PInteger = nil;
+  aFormat: TModularCryptFormat = mcfBCrypt): RawUtf8;
 
 /// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
@@ -4618,7 +4623,8 @@ end;
 
 const
   MCF_IDENT: array[mcfMd5Crypt.. high(TModularCryptFormat)] of RawUtf8 = (
-    '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512', 'pbkdf2-sha3', '2b');
+    '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512', 'pbkdf2-sha3',
+    '2b', 'bcrypt-sha256');
 
 function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
   var salt: RawUtf8): TModularCryptFormat;
@@ -4666,6 +4672,25 @@ begin
           exit;
         end;
       end; // for mcfBCrypt: '$2a$rounds$saltchecksum' - here = cost (4..31)
+    mcfBCryptSha256:
+      begin // $bcrypt-sha256$v=2,t=2b,r=12$n79VH.0Q2TMWmt3Oqt9uk...'
+        result := mcfInvalid;
+        if not IdemPChar(P, 'V=2,T=2') then // version 1 without HMAC was unsafe
+          exit;
+        inc(P, 7);
+        if P^ <> ',' then
+          if P^ in ['a'..'z'] then
+            inc(P)
+          else
+            exit;
+        if not IdemPChar(P, ',R=') then
+          exit;
+        inc(P, 3);
+        rounds := GetNextItemCardinal(P, '$');
+        if not (rounds in [4 .. 31]) then
+          exit;
+        result := mcfBCryptSha256;
+      end;
   else
     begin
       result := mcfUnknown;
@@ -4697,16 +4722,34 @@ begin
 end;
 
 function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal;
-  aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
+  aSalt: RawUtf8; aHashPos: PInteger; aFormat: TModularCryptFormat): RawUtf8;
+var
+  pwd, header: RawUtf8;
+  dig: TSha256Digest;
 begin
   result := '';
   if not Assigned(BCrypt) then
     exit; // please add mormot.crypt.other.pas to your project
   if aSalt = '' then
     aSalt := ModularCryptSalt(16); // BCrypt expects BCRYPT_SALTLEN = 16 bytes
-  result := BCrypt(aPassword, aSalt, aCost);
-  if aHashPos <> nil then
-    aHashPos^ := 30; // returns always '$2b$12$' + 22 chars salt + 31 chars hash
+  if aFormat = mcfBCryptSha256 then
+  begin
+    HmacSha256(aSalt, aPassword, dig);
+    pwd := BinToBase64(@dig, SizeOf(dig));
+    result := BCrypt(pwd, aSalt, aCost);
+    FillZero(pwd);
+    delete(result, 1, 29); // '$2b$12${salt}{checksum}' -> '{checksum}'
+    Make(['$', MCF_IDENT[aFormat], '$v=2,t=2b,r=', aCost, '$', aSalt, '$'], header);
+    if aHashPos <> nil then
+      aHashPos^ := length(header) + 1;
+    Prepend(result, [header]);
+  end
+  else
+  begin
+    result := BCrypt(aPassword, aSalt, aCost);
+    if aHashPos <> nil then
+      aHashPos^ := 30; // fixed position in $2b$ format
+  end;
 end;
 
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
@@ -4714,14 +4757,15 @@ function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
 var
   signer: TSynSigner;
   hasher: TSynHasher absolute signer;
+  dig: THash256 absolute signer;
 begin
   case format of
     mcfMd5Crypt .. mcfSha512Crypt:
       result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
     mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
       result := signer.Pbkdf2ModularCrypt(format, password, rounds, saltsize, salt);
-    mcfBCrypt:
-      result := ModularBCrypt(password, rounds, salt);
+    mcfBCrypt, mcfBCryptSha256:
+      result := ModularBCrypt(password, rounds, salt, nil, format);
   else
     result := '';
   end;
@@ -4758,10 +4802,10 @@ begin
       h := hasher.UnixCryptHash(MCF_ALGO[result], password, rounds, 0, salt, @pos);
     mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
       h := signer.Pbkdf2ModularCrypt(result, password, rounds, 0, salt, @pos);
-    mcfBCrypt:
+    mcfBCrypt .. mcfBCryptSha256:
       if (rounds in [4 .. 31]) and
          (length(salt) = 22) then
-        h := ModularBCrypt(password, rounds, salt, @pos)
+        h := ModularBCrypt(password, rounds, salt, @pos, result)
       else
         result := mcfInvalid;
   end;
