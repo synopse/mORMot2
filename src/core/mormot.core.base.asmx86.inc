@@ -1296,6 +1296,17 @@ asm
         bswap eax
 end;
 
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm     // eax=a, edx=n
+@1:     mov     ecx, dword ptr [eax]
+        bswap   ecx
+        mov     dword ptr [eax], ecx
+        add     eax, 4
+        dec     edx
+        jnz     @1
+end;
+
 function bswap64({$ifdef FPC}constref{$else}const{$endif} a: QWord): QWord;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

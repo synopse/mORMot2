@@ -1912,6 +1912,16 @@ function bswap32(a: cardinal): cardinal;
         bswap   eax
 end;
 
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+@1:     mov     eax, dword ptr [a]
+        bswap   eax
+        mov     dword ptr [a], eax
+        add     a, 4
+        sub     n, 1
+        jnz     @1
+end;
+
 function bswap64(const a: QWord): QWord;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, a

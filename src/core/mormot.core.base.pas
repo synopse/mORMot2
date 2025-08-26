@@ -3362,24 +3362,28 @@ var
   // - consider rather XorEntropy() XorOSEntropy() or TAesPrng.GetEntropy()
   _Fill256FromOs: procedure(out e: THash256Rec);
 
-/// convert the endianness of a given unsigned 16-bit integer into BigEndian
+/// convert the endianness of a given unsigned 16-bit integer
 function bswap16(a: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert the endianness of a given unsigned 32-bit integer into BigEndian
+/// convert the endianness of a given unsigned 32-bit integer
 function bswap32(a: cardinal): cardinal;
   {$ifndef CPUINTEL}inline;{$endif}
 
-/// convert the endianness of a given unsigned 64-bit integer into BigEndian
+/// in-place convert the endianness of several unsigned 32-bit integers
+// - n is required to be > 0
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+
+/// convert the endianness of a given unsigned 64-bit integer
 function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
   {$ifndef CPUINTEL}inline;{$endif}
 
-/// convert the endianness of an array of unsigned 64-bit integer into BigEndian
+/// convert the endianness of an array of unsigned 64-bit integer
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
 procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 
-/// copy one memory buffer to another, swapping the bytes order
+/// copy one memory buffer to another, swapping their bytes order
 // - used e.g. by TBigInt.Load/Save to follow DER big-endian encoding
 // - warning: src and dst should not overlap
 procedure MoveSwap(dst, src: PByte; n: PtrInt);
@@ -10874,6 +10878,14 @@ end;
 function bswap32(a: cardinal): cardinal;
 begin
   result := SwapEndian(a); // use fast platform-specific function
+end;
+
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+begin
+  repeat // assume n > 0 like the asm
+    dec(n);
+    a[n] := SwapEndian(a[n]);
+  until n = 0;
 end;
 
 function bswap64(const a: QWord): QWord;
