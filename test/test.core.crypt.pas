@@ -1309,7 +1309,7 @@ type
     bAES128CBCO, bAES128CFBO, bAES128OFBO, bAES128CTRO, bAES128GCMO,
     bAES256CBCO, bAES256CFBO, bAES256OFBO, bAES256CTRO, bAES256GCMO,
     {$endif USE_OPENSSL}
-    bSHAKE128, bSHAKE256);
+    bSHAKE128, bSHAKE256, bBlowFish);
 
 procedure TTestCoreCrypto.Benchmark;
 const
@@ -1346,7 +1346,7 @@ const
 var
   b: TBenchmark;
   s, i, size, n: integer;
-  data, encrypted: RawByteString;
+  data, encrypted, s1, s2: RawByteString;
   dig: THash512Rec;
   MD: TMd5;
   SHA1: TSha1;
@@ -1355,6 +1355,7 @@ var
   SHA512: TSha512;
   SHA512_256: TSha512_256;
   SHA3, SHAKE128, SHAKE256: TSha3;
+  bf: TBlowFishCtr;
   RC4: TRC4;
   timer: TPrecisionTimer;
   time: array[TBenchmark] of Int64;
@@ -1384,6 +1385,7 @@ begin
   {$endif USE_OPENSSL}
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
+  bf := TBlowFishCtr.Create('secret');
   RC4.InitSha3(dig, SizeOf(dig));
   FillCharFast(time, SizeOf(time), 0);
   size := 0;
@@ -1501,6 +1503,8 @@ begin
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
           bSHAKE256:
             SHAKE256.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
+          bBlowFish:
+            bf.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
         else
           ESynCrypto.RaiseUtf8('Unexpected %', [TXT[b]]);
         end;
@@ -1515,6 +1519,16 @@ begin
     end;
     inc(size, SIZ[s] * COUNT);
     inc(n, COUNT);
+    case b of // we may add some small additionnal tests here (outside timers)
+      bBlowFish:
+        begin
+          s1 := bf.Encrypt(data, {ivatbeg=}true);
+          CheckEqual(length(s1), SIZ[s] + 8);
+          s2 := bf.Decrypt(s1, {ivatbeg=}true);
+          CheckEqual(length(s2), SIZ[s]);
+          CheckEqual(s2, data);
+        end;
+    end;
   end;
   for b := low(b) to high(b) do
     if time[b] <> 0 then
@@ -1523,6 +1537,7 @@ begin
         KB((Int64(size) * 1000000) div time[b])]));
   for b := low(AES) to high(AES) do
     AES[b].Free;
+  bf.Free;
 end;
 
 {
@@ -1721,10 +1736,12 @@ const
 
 var
   buf: RawByteString;
-  u, pw: RawUtf8;
+  u, pw, exp: RawUtf8;
+  iv: Int64;
   P: PAnsiChar;
   unalign: PtrInt;
-  n, rounds: integer;
+  n, rounds, rnd: integer;
+  i64: Int64;
   exp321, exp322, exp323, exp324, exp325, exp326: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
