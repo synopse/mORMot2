@@ -792,6 +792,8 @@ type
   // - mcfPbkdf2Sha1, mcfPbkdf2Sha256 and mcfPbkdf2Sha512 match Python's PassLib
   // specific-but-useful '$pbkdf2-{digest}${rounds}${salt}${checksum}' format
   // - mcfPbkdf2Sha3 is our own SHA3-512 hash algorithm (with no HMAC) extension
+  // - mcfBCrypt is the BCrypt hashing algorithm, as developed for BSD systems -
+  // please include the mormot.crypt.other.pas unit to your project to enable it
   TModularCryptFormat = (
     mcfInvalid,
     mcfUnknown,
@@ -801,7 +803,8 @@ type
     mcfPbkdf2Sha1,
     mcfPbkdf2Sha256,
     mcfPbkdf2Sha512,
-    mcfPbkdf2Sha3);
+    mcfPbkdf2Sha3,
+    mcfBCrypt);
   /// allow to specify several ModularCryptIdentify/ModularCryptVerify algorithms
   TModularCryptFormats = set of TModularCryptFormat;
 
@@ -1075,15 +1078,21 @@ function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 const
   MCF_ALGO: array[TModularCryptFormat] of THashAlgo = (hfShake128, hfShake128,
-    hfMD5, hfSHA256, hfSHA512, hfSHA1, hfSHA256, hfSHA512, hfSHA3_512);
+    hfMD5, hfSHA256, hfSHA512, hfSHA1, hfSHA256, hfSHA512, hfSHA3_512, hfShake128);
   /// which ModularCryptIdentify/ModularCryptVerify() results are correct
   mcfValid = [succ(mcfInvalid) .. high(TModularCryptFormat)];
 
 /// compute the "Modular Crypt" hash of a given password
 // - as returned by the python passlib library
 // - see associated ModularCryptIdentify/ModularCryptVerify() functions
+// - for mcfBCrypt, rounds is the 2^Cost value, so should be in 4..31 range
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
+
+/// compute a BCrypt hash of a given password - needs mormot.crypt.other.pas
+// - as used by ModularCryptHash(mcfBCrypt)
+function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal = 12;
+  aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
 
 /// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
@@ -4107,6 +4116,8 @@ end;
 function b64valid(p: PUtf8Char): boolean;
 begin
   result := false;
+  if p = nil then
+    exit;
   while true do
     case p^ of
       #0:
@@ -4605,7 +4616,7 @@ end;
 
 const
   MCF_IDENT: array[mcfMd5Crypt.. high(TModularCryptFormat)] of RawUtf8 = (
-    '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512', 'pbkdf2-sha3');
+    '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512', 'pbkdf2-sha3', '2b');
 
 function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
   var salt: RawUtf8): TModularCryptFormat;
@@ -4618,8 +4629,19 @@ begin
   GetNextItem(P, '$', salt);
   if salt = '' then
     exit;
-  result := TModularCryptFormat(FindNonVoidRawUtf8(@MCF_IDENT,
-    pointer(salt), length(salt), length(MCF_IDENT)) + ord(low(MCF_IDENT)));
+  case GetCardinal(pointer(salt)) of
+    1:
+      result := mcfMd5Crypt;
+    2: // $2a$ $2b$ $2x$ $2y$ $2z$ ...
+      result := mcfBCrypt;
+    5:
+      result := mcfSha256Crypt;
+    6:
+      result := mcfSha512Crypt;
+  else
+    result := TModularCryptFormat(FindNonVoidRawUtf8(@MCF_IDENT,
+      pointer(salt), length(salt), length(MCF_IDENT)) + ord(low(MCF_IDENT)));
+  end;
   case result of
     mcfMd5Crypt:      // '$1${salt}${checksum}'
       rounds := 1000; // fixed
@@ -4633,7 +4655,7 @@ begin
           else
             rounds := 5000; // default for SHA-256 Crypt and SHA-512 Crypt
       end;
-    mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
+    mcfPbkdf2Sha1 .. mcfBCrypt:
       begin // '$pbkdf2{-digest}${rounds}${salt}${checksum}'
         rounds := GetNextItemCardinal(P, '$');
         if rounds = 0 then
@@ -4641,14 +4663,22 @@ begin
           result := mcfInvalid;
           exit;
         end;
-      end
+      end; // for mcfBCrypt: '$2a$rounds$saltchecksum' - here = cost (4..31)
   else
     begin
       result := mcfUnknown;
       exit;
     end;
   end;
-  GetNextItem(P, '$', salt);
+  if result = mcfBCrypt then
+  begin
+    FastSetString(salt, P, 22); // fixed 22 chars salt
+    inc(P, 22);
+    if StrLen(P) <> 31 then     // fixed 31 chars checksum
+      P := nil;
+  end
+  else
+    GetNextItem(P, '$', salt);
   if not b64valid(pointer(salt)) or
      not b64valid(P) then
     result := mcfInvalid;
@@ -4664,6 +4694,19 @@ begin
   result := ModularCryptParse(P, dummyrounds, dummysalt);
 end;
 
+function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal;
+  aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
+begin
+  result := '';
+  if not Assigned(BCrypt) then
+    exit; // please add mormot.crypt.other.pas to your project
+  if aSalt = '' then
+    aSalt := ModularCryptSalt(16); // BCrypt expects BCRYPT_SALTLEN = 16 bytes
+  result := BCrypt(aPassword, aSalt, aCost);
+  if aHashPos <> nil then
+    aHashPos^ := 30; // returns always '$2b$12$' + 22 chars salt + 31 chars hash
+end;
+
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds, saltsize: cardinal; const salt: RawUtf8): RawUtf8;
 var
@@ -4675,6 +4718,8 @@ begin
       result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
     mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
       result := signer.Pbkdf2ModularCrypt(format, password, rounds, saltsize, salt);
+    mcfBCrypt:
+      result := ModularBCrypt(password, rounds, salt);
   else
     result := '';
   end;
@@ -4702,6 +4747,12 @@ begin
       h := hasher.UnixCryptHash(MCF_ALGO[result], password, rounds, 0, salt, @pos);
     mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
       h := signer.Pbkdf2ModularCrypt(result, password, rounds, 0, salt, @pos);
+    mcfBCrypt:
+      if (rounds in [4 .. 31]) and
+         (length(salt) = 22) then
+        h := ModularBCrypt(password, rounds, salt, @pos)
+      else
+        result := mcfInvalid;
   end;
   if (pos = 0) or
      (mormot.core.base.StrComp(P, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
