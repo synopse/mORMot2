@@ -1519,16 +1519,13 @@ begin
     end;
     inc(size, SIZ[s] * COUNT);
     inc(n, COUNT);
-    case b of // we may add some small additionnal tests here (outside timers)
-      bBlowFish:
-        begin
-          s1 := bf.Encrypt(data, {ivatbeg=}true);
-          CheckEqual(length(s1), SIZ[s] + 8);
-          s2 := bf.Decrypt(s1, {ivatbeg=}true);
-          CheckEqual(length(s2), SIZ[s]);
-          CheckEqual(s2, data);
-        end;
-    end;
+    // we may add some small additionnal tests here (outside timers)
+    CheckEqual(StrLen(pointer(data)), SIZ[s], 'datastrlen');
+    s1 := bf.Encrypt(data, {ivatbeg=}true);
+    CheckEqual(length(s1), SIZ[s] + 8);
+    s2 := bf.Decrypt(s1, {ivatbeg=}true);
+    CheckEqual(length(s2), SIZ[s]);
+    CheckEqual(s2, data);
   end;
   for b := low(b) to high(b) do
     if time[b] <> 0 then
