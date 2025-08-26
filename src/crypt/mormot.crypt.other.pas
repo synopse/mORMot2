@@ -1543,7 +1543,8 @@ end;
 {$ifdef CPUINTEL}
 {$ifdef CPUX86}
 procedure BlowFishCtrInc(iv: PQWord);
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
 @1:     mov     ecx, dword ptr [eax]
         mov     edx, dword ptr [eax + 4]
         bswap   ecx
@@ -1697,5 +1698,5 @@ end;
 
 initialization
   InitializeUnit;
-  
+
 end.
