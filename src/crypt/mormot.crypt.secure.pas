@@ -794,8 +794,8 @@ type
   // - mcfPbkdf2Sha3 is our own SHA3-512 hash algorithm (with no HMAC) extension
   // - mcfBCrypt is the BCrypt hashing algorithm, as developed for BSD systems -
   // please include the mormot.crypt.other.pas unit to your project to enable it
-  // - mcfBCryptSha256 will first hash the password with HMAC-SHA-256 for any
-  // password of more than 72 bytes (following passlib.hash.bcrypt_sha256)
+  // - mcfBCryptSha256 will first hash the password with HMAC-SHA-256 to support
+  // any password, e.g. > than 72 bytes (following passlib.hash.bcrypt_sha256)
   TModularCryptFormat = (
     mcfInvalid,
     mcfUnknown,

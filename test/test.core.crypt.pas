@@ -1969,6 +1969,9 @@ begin
   Check(ModularCryptVerify(u, exp) = mcfBCrypt);
   u[10] := 'b';
   Check(ModularCryptVerify(u, exp) = mcfInvalid);
+  exp := '$bcrypt-sha256$v=2,t=2b,r=12$n79VH.0Q2TMWmt3Oqt9uku$Kq4Noyk3094Y2QlB8NdRT8SvGiI4ft2';
+  Check(ModularCryptVerify('password', exp) = mcfBCryptSha256);
+  Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
     timer.Start;
@@ -1982,7 +1985,7 @@ begin
             rnd := 1000; // fixed number
             inc(rounds, 3000);
           end;
-        mcfBCrypt:
+        mcfBCrypt, mcfBCryptSha256:
           begin
             rnd := 4 + n shr 2; // cost = 4..5 is enough here
             inc(rounds, 3 * (1 shl rnd));
