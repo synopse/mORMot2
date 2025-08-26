@@ -1873,6 +1873,88 @@ begin
   Check(ModularCryptIdentify(u) = mcfPbkdf2Sha3);
   Check(ModularCryptVerify('password', u) = mcfPbkdf2Sha3);
   Check(ModularCryptVerify('p4ssword', u) = mcfInvalid);
+  // BCrypt reference material
+  for n := -100 to 100 do
+  begin
+    i64 := n;
+    iv := BSwap64(i64);
+    BlowFishCtrInc(@iv);
+    CheckEqual(iv, BSwap64(i64 + 1), 'bfctr0');
+    inc(i64, Int64(1) shl 32);
+    iv := BSwap64(i64);
+    BlowFishCtrInc(@iv);
+    CheckEqual(iv, BSwap64(i64 + 1), 'bfctr1');
+  end;
+  i64 := cardinal(-1);
+  iv := BSwap64(i64);
+  BlowFishCtrInc(@iv);
+  CheckEqual(iv, BSwap64(i64 + 1), 'bfctr2');
+  Check(ModularCryptVerify('',
+    '$2b$06$DCq7YPn5Rq63x1Lad4cll.TV4S6ytwfsfvkgY8jIucDrjc8deX1s.') = mcfBCrypt);
+  Check(ModularCryptVerify('a',
+    '$2a$06$m0CrhHm10qJ3lXRY.5zDGO3rS2KdeeWLuGmsfGlMfOxih58VYVfxe') = mcfBCrypt);
+  Check(ModularCryptVerify('a',
+    '$2y$06$m0CrhHm10qJ3lXRY.5zDGO3rS2KdeeWLuGmsfGlMfOxih58VYVfxe') = mcfBCrypt);
+  Check(ModularCryptVerify('<.S.2K(Zq''',
+    '$2b$04$VYAclAMpaXY/oqAo9yUpkuWmoYywaPzyhu56HxXpVltnBIfmO9tgu') = mcfBCrypt);
+  Check(ModularCryptVerify('5.rApO%5jA',
+    '$2a$05$kVNDrnYKvbNr5AIcxNzeIuRcyIF5cZk6UrwHGxENbxP5dVv.WQM/G') = mcfBCrypt);
+  Check(ModularCryptVerify('oW++kSrQW^',
+    '$2b$06$QLKkRMH9Am6irtPeSKN5sObJGr3j47cO6Pdf5JZ0AsJXuze0IbsNm') = mcfBCrypt);
+  Check(ModularCryptVerify('ggJ\KbTnDG',
+    '$2b$07$4H896R09bzjhapgCPS/LYuMzAQluVgR5iu/ALF8L8Aln6lzzYXwbq') = mcfBCrypt);
+  Check(ModularCryptVerify('49b0:;VkH/',
+    '$2b$08$hfvO2retKrSrx5f2RXikWeFWdtSesPlbj08t/uXxCeZoHRWDz/xFe') = mcfBCrypt);
+  Check(ModularCryptVerify('>9N^5jc##''',
+    '$2b$09$XZLvl7rMB3EvM0c1.JHivuIDPJWeNJPTVrpjZIEVRYYB/mF6cYgJK') = mcfBCrypt);
+  Check(ModularCryptVerify('\$ch)s4WXp',
+    '$2b$10$aIjpMOLK5qiS9zjhcHR5TOU7v2NFDmcsBmSFDt5EHOgp/jeTF3O/q') = mcfBCrypt);
+  Check(ModularCryptVerify('RYoj\_>2P7',
+    '$2b$12$esIAHiQAJNNBrsr5V13l7.RFWWJI2BZFtQlkFyiWXjou05GyuREZa') = mcfBCrypt);
+  Check(ModularCryptVerify('password',
+    '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m') = mcfBCrypt);
+  Check(ModularCryptVerify('a',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.l4WvgHIVg17ZawDIrDM2IjlE64GDNQS') = mcfBCrypt);
+  Check(ModularCryptVerify('aa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.AyUxBk.ThHlsLvRTH7IqcG7yVHJ3SXq') = mcfBCrypt);
+  Check(ModularCryptVerify('aaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.BxOVac5xPB6XFdRc/ZrzM9FgZkqmvbW') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.Qbr209bpCtfl5hN7UQlG/L4xiD3AKau') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.oWszihPjDZI0ypReKsaDOW1jBl7oOii') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ./k.Xxn9YiqtV/sxh3EHbnOHd0Qsq27K') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.PYJqRFQbgRbIjMd5VNKmdKS4sBVOyDe') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ..VMYfzaw1wP/SGxowpLeGf13fxCCt.q') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.5B0p054nO5WgAD1n04XslDY/bqY9RJi') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.INBTgqm7sdlBJDg.J5mLMSRK25ri04y') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.s3y7CdFD0OR5p6rsZw/eZ.Dla40KLfm') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.Jx742Djra6Q7PqJWnTAS.85c28g.Siq') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.oKMXW3EZcPHcUV0ib5vDBnh9HojXnLu') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.w6nIjWpDPNSH5pZUvLjC1q25ONEQpeS') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.k1b2/r9A/hxdwKEKurg6OCn4MwMdiGq') = mcfBCrypt);
+  Check(ModularCryptVerify('aaaaaaaaaaaaaaaa',
+    '$2b$04$5DCebwootqWMCp59ISrMJ.3prCNHVX1Ws.7Hm2bJxFUnQOX9f7DFa') = mcfBCrypt);
+  u := RawUtf8OfChar('a', 260);
+  exp := '$2b$04$QqpSfI8JYX8HSxNwW5yx8Ohp12sNboonE6e5jfnGZ0fD4ZZwQkOOK';
+  Check(ModularCryptVerify(u, exp) = mcfBCrypt);
+  Check(ModularCryptVerify(u, exp, [mcfMd5Crypt, mcfBCrypt]) = mcfBCrypt);
+  Check(ModularCryptVerify(u, exp, [mcfMd5Crypt, mcfSha512Crypt]) = mcfUnknown);
+  Check(ModularCryptVerify(u, exp, [], {maxrounds=}3) = mcfInvalid);
+  u[200] := 'b'; // BCrypt truncates the password at 72 bytes long
+  Check(ModularCryptVerify(u, exp) = mcfBCrypt);
+  u[10] := 'b';
+  Check(ModularCryptVerify(u, exp) = mcfInvalid);
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
     timer.Start;
@@ -1880,14 +1962,31 @@ begin
     for n := 1 to 10 do
     begin
       RandomByteString(n * 7, pw); // should reach at least 64 bytes = 512-bit
-      if mcf = mcfMd5Crypt then
-        inc(rounds, 3 * 1000) // fixed number
+      case mcf of
+        mcfMd5Crypt:
+          begin
+            rnd := 1000; // fixed number
+            inc(rounds, 3000);
+          end;
+        mcfBCrypt:
+          begin
+            rnd := 4 + n shr 2; // cost = 4..5 is enough here
+            inc(rounds, 3 * (1 shl rnd));
+          end;
       else
-        inc(rounds, 3 * (1000 + n));
-      u := ModularCryptHash(mcf, pw, {rounds=}1000 + n, {saltsize=}n);
+        begin
+          rnd := 1000 + n;
+          inc(rounds, 3 * rnd);
+        end;
+      end;
+      u := ModularCryptHash(mcf, pw, rnd, {saltsize=}n);
       Check(u <> '');
-      if mcf in [mcfSha256Crypt .. mcfSha512Crypt] then
-        CheckEqual(PosEx(Make(['$rounds=', 1000 + n, '$']), u), 3);
+      case mcf of
+        mcfSha256Crypt .. mcfSha512Crypt:
+          CheckEqual(PosEx(Make(['$rounds=', rnd, '$']), u), 3);
+        mcfBCrypt:
+          CheckEqual(PosEx(Make(['$', UInt2DigitsToShort(rnd), '$']), u), 4);
+      end;
       Check(ModularCryptIdentify(u) = mcf);
       Check(ModularCryptVerify(pw, u) = mcf);
       if u = '' then
