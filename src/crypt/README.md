@@ -115,4 +115,6 @@ Deprecated or Seldom Used Cryptographic Features
 - Deprecated MD4 and RC4 Support
 - Deprecated Low-Level Memory Buffers Helper Functions
 - Deprecated Weak AES/SHA Process
+- BlowFish Encryption
+- BCrypt Password-Hashing Function
 

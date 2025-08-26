@@ -10,6 +10,7 @@ unit mormot.crypt.other;
     - Deprecated MD4 and RC4 Support
     - Deprecated Low-Level Memory Buffers Helper Functions
     - Deprecated Weak AES/SHA Process
+    - BlowFish Encryption
     - BCrypt Password-Hashing Function
 
   *****************************************************************************
@@ -98,6 +99,7 @@ type
 { ****************** Deprecated Low-Level Memory Buffers Helper Functions }
 
 {$ifndef PUREMORMOT2}
+
 /// simple XOR encryption according to Cod - not Compression or Stream compatible
 // - used in deprecated AESFull() for KeySize=32
 // - Cod is used to derivate some pseudo-random content from internal constant
@@ -119,6 +121,7 @@ procedure XorOffset(P: PByteArray; Index, Count: PtrInt);
 // - this encryption is very weak, so should be used only for basic
 // obfuscation, not data protection
 procedure XorConst(p: PIntegerArray; Count: integer);
+
 {$endif PUREMORMOT2}
 
 
@@ -296,16 +299,69 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 {$endif PUREMORMOT2}
 
 
-{ **************** BCrypt Password-Hashing Function }
+{ **************** BlowFish Encryption }
 
-{ not worth including in mormot.crypt.core: seldom used and with lots of constants }
+type
+  /// BlowFish Subkeys
+  // - is 72 bytes, i.e. BCRYPT_MAXKEYLEN
+  TPBox = array[0..17] of cardinal;
+  /// BlowFish Subtitution Boxes
+  TSBox = array[0..1023] of cardinal;
+
+  /// the current BlowFish state
+  // - stored as PBox[] / SBox[] so that all blocks could be encrypted in order
+  TBlowFishState = record
+    /// BlowFish Subkeys
+    PBox: TPBox;
+    /// BlowFish Subtitution Boxes
+    SBox: TSBox;
+  end;
 
 const
-  BCRYPT_MAXKEYLEN = 72;
-  BCRYPT_SALTLEN   = 16;
+  BLOWFISH_SALTLEN   = 16;
+  BLOWFISH_MAXKEYLEN = SizeOf(TPBox);
 
-/// raw BCrypt hashing function
+/// raw in-place encryption of one BlowFish 64-bit block
+procedure BlowFishEncrypt64(const s: TBlowFishState; block: PQWordRec);
+
+/// regular BlowFish key setup with a given salt and UTF-8 password
+// - salt is expected to be 16 bytes = 128-bit
+// - Password will be passed to BlowFishPrepareKey() - so trimmed to 72 bytes -
+// before calling the overloaded BlowFishKeySetup() binary function
+procedure BlowFishKeySetup(var State: TBlowFishState;
+  Salt: PHash128Rec; const Password: RawUtf8); overload;
+
+/// prepare a password into a binary key usable for BlowFishKeySetup()
+// - Salt and Key will also be converted to big-endian
+// - caller should call FillZero(key) once done with this sensitive buffer
+// - return the number of 64-bit blocks of the padded key
+function BlowFishPrepareKey(const Password: RawUtf8; Salt: PHash128Rec;
+  out Key: RawByteString): PtrInt;
+
+/// raw BlowFish key setup with binary input parameters
+// - salt is expected to be 16 bytes = 128-bit
+// - key is expected to be already prepared with ending #0 and in 64-bit chunks
+// - consider BCryptExpensiveKeySetup() for a safer (and slower) initialization
+procedure BlowFishKeySetup(var State: TBlowFishState;
+  Salt, Key: PQwordArray; KeyBlocks: PtrUInt); overload;
+
+
+{ **************** BCrypt Password-Hashing Function }
+
+const
+  BCRYPT_MAXKEYLEN = BLOWFISH_MAXKEYLEN;
+  BCRYPT_SALTLEN   = BLOWFISH_SALTLEN;
+
+/// BCrypt hashing function using Base-64 encoded Salt and UTF-8 Result
+// - Cost should be in range 4..31 and Salt exactly 22 characters (128-bit)
 function BCryptRaw(const Password, Salt: RawUtf8; Cost: byte): RawUtf8;
+
+/// prepare a BlockFish encryption with a given Salt, UTF-8 Passwod and Cost
+// - Password is process using the BCrypt "Expensive Key Setup" algorithm
+// - Cost should be in range 4..31 and Salt exactly 16 bytes (128-bit)
+procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
+  Cost: byte; Salt: PHash128Rec; const Password: RawUtf8);
+
 
 
 implementation
@@ -1137,36 +1193,21 @@ end;
 {$endif PUREMORMOT2}
 
 
-{ **************** BCrypt Password-Hashing Function }
+{ **************** BlowFish Encryption }
 
 {
   In respect to existing pascal - or c - code around, our version:
-  - use 64-bit process whenever possible - since Blowfish has 64-bit blocks
-  - prepare the password to be a multiple of 64-bit chunks
-  - force PBox/SBox order to be encrypted as one continuous chunk
-  - reduce the number of needed big-endian conversions
-  - resulting in much cleaner and shorter code
-  - profiling shows that most of the time is stil spent in BlowfishEncryptEcb()
+  - use 64-bit process whenever possible - since BlowFish has 64-bit blocks
+  - prepare the password to be a multiple of 64-bit chunks for consistency
+  - allow PBox/SBox to be encrypted as one continuous chunk (in this order)
+  - reduce the number of needed big-endian conversions as much as possible
+  - resulting in much cleaner and shorter code, especially for the bcrypt part
+  - profiling shows that most of the time is stil spent in BlowFishEncrypt64()
+  - not included in mormot.crypt.core: less common and with lots of constants
 }
 
-type
-  /// Blowfish Subkeys
-  // - is 72 bytes, i.e. BCRYPT_MAXKEYLEN
-  TPBox = array[0..17] of cardinal;
-  /// Blowfish Subtitution Boxes
-  TSBox = array[0..1023] of cardinal;
-
-  /// the current Blowfish state
-  // - stored as PBox[] / SBox[] so that all blocks could be encrypted in order
-  TBlowFishState = record
-    /// Blowfish Subkeys
-    PBox: TPBox;
-    /// Blowfish Subtitution Boxes
-    SBox: TSBox;
-  end;
-
 const
-  /// default Blowfish state
+  /// default BlowFish state
   // - this 4KB constant array can't be easily computed at runtime, since it
   // contains the PI digits in binary format
   BLOWFISH_INIT: TBlowFishState = (
@@ -1323,12 +1364,12 @@ const
       $d6ebe1f9, $90d4f869, $a65cdea0, $3f09252d, $c208e69f, $b74e6132, $ce77e25b,
       $578fdfe3, $3ac372e6));
 
-procedure BlowfishEncryptEcb(const s: TBlowFishState; d: PCardinalArray);
+procedure BlowFishEncrypt64(const s: TBlowFishState; block: PQWordRec);
 var
   L, R: cardinal;
 begin
-  L := d[0] xor s.PBox[0];
-  R := d[1];
+  L := block.L xor s.PBox[0];
+  R := block.H;
   R := R xor (((s.SBox[(L shr 24)] + s.SBox[$100 + Byte(L shr 16)]) xor
        s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[ 1];
   L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
@@ -1361,8 +1402,8 @@ begin
        s.SBox[$200 + Byte(L shr 8)]) + s.SBox[$300 + Byte(L)]) xor s.PBox[15];
   L := L xor (((s.SBox[(R shr 24)] + s.SBox[$100 + Byte(R shr 16)]) xor
        s.SBox[$200 + Byte(R shr 8)]) + s.SBox[$300 + Byte(R)]) xor s.PBox[16];
-  d[0] := R xor s.PBox[17];
-  d[1] := L;
+  block.L := R xor s.PBox[17];
+  block.H := L;
 end;
 
 // XOR all PBox[] with the encryption key - supplied as multiple of 64-bit
@@ -1381,24 +1422,72 @@ begin
   end;
 end;
 
-// regular BlowFish key setup with 16 bytes = 128-bit salt
-procedure BlowFishKeySetup(var state: TBlowFishState;
-  salt, key: PQwordArray; keyblocks: PtrUInt);
+procedure BlowFishKeySetup(var State: TBlowFishState;
+  Salt, Key: PQwordArray; KeyBlocks: PtrUInt);
 var
   i, ndx: PtrUInt;
   iv: QWord;
 begin
-  ExpandKey(@state.PBox, key, keyblocks);
+  // fill PBox (Subkeys) and SBox (Subtitution Boxes) with the hex digits of pi
+  MoveFast(BLOWFISH_INIT, State, SizeOf(State));
+  // expand the Key to PBox
+  ExpandKey(@State.PBox, Key, KeyBlocks);
+  // expand the Salt to PBox + SBox (all at once)
   ndx := 0;
-  iv := salt[0];
-  for i := 0 to 8 + 512 do // encrypt all PBox[] then all contiguous SBox[]
+  iv := Salt[0];
+  for i := 0 to 8 + 512 do
   begin
-    BlowfishEncryptEcb(state, @iv);
-    PQWordArray(@state.PBox)[i] := iv;
-    ndx := ndx xor 1; // toggle between 0/1/0/1 of the 2*64-bit salt
-    iv := iv xor salt[ndx];
+    BlowFishEncrypt64(State, @iv);
+    PQWordArray(@State.PBox)[i] := iv;
+    ndx := ndx xor 1; // toggle between 0/1/0/1 of the 2*64-bit Salt
+    iv := iv xor Salt[ndx];
   end;
 end;
+
+function BlowFishPrepareKey(const Password: RawUtf8; Salt: PHash128Rec;
+  out Key: RawByteString): PtrInt;
+var
+  p: PUtf8Char;
+  plen, n: PtrInt;
+begin
+  // repeat password+#0 until it fits exactly in 64-bit chunks
+  plen := length(Password);
+  result := plen + 1;
+  n := 1;
+  while (result and 7 <> 0) and
+        (result < BLOWFISH_MAXKEYLEN) do
+  begin
+    inc(n);
+    inc(result, plen + 1);
+  end;
+  p := FastNewRawByteString(Key, result);
+  repeat
+    MoveFast(pointer(Password)^, p^, plen);
+    p[plen] := #0;
+    inc(p, plen + 1);
+    dec(n);
+  until n = 0;
+  if result > BLOWFISH_MAXKEYLEN then
+    result := BLOWFISH_MAXKEYLEN; // in-place truncate to 72 bytes = SizeOf(TPBox)
+  // prepare Salt and Key to be in Big-Endian format
+  bswap32array(pointer(Key), result shr 2);
+  bswap32array(pointer(Salt), BLOWFISH_SALTLEN shr 2);
+  result := result shr 3; // return the number of 64-bit blocks
+end;
+
+procedure BlowFishKeySetup(var State: TBlowFishState;
+  Salt: PHash128Rec; const Password: RawUtf8);
+var
+  key: RawByteString;
+  blocks: PtrInt;
+begin
+  blocks := BlowFishPrepareKey(Password, Salt, key);
+  BlowFishKeySetup(State, pointer(Salt), pointer(key), blocks);
+  FillZero(key); // anti-forensic
+end;
+
+
+{ **************** BCrypt Password-Hashing Function }
 
 // inlined BlowFishKeySetup() with zeros salt as used during bcrypt rounds
 procedure ExpensiveRound(var state: TBlowFishState;
@@ -1411,58 +1500,32 @@ begin
   iv := 0;
   for i := 0 to 8 + 512 do
   begin
-    BlowfishEncryptEcb(state, @iv);
+    BlowFishEncrypt64(state, @iv);
     PQWordArray(@state.PBox)[i] := iv;
   end;
 end;
 
-procedure ExpansiveKeySetup(Cost: byte; Salt, Key: pointer; KeyLen: PtrInt;
-  var State: TBlowFishState);
+procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
+  Cost: byte; Salt: PHash128Rec; const Password: RawUtf8);
 var
-  i: cardinal;
+  i, blocks: PtrUInt;
+  key: RawByteString;
 begin
-  if (KeyLen = 0) or
-     (KeyLen > BCRYPT_MAXKEYLEN) then
-    ESynCrypto.RaiseUtf8('BCrypt: invalid key length (0<%<=72)', [KeyLen]);
-  // fill PBox (Subkeys) and SBox (Subtitution Boxes) with the hex digits of pi
-  MoveFast(BLOWFISH_INIT, State, SizeOf(State));
-  // prepare Salt and Key to be in Big-Endian format
-  bswap32array(Key, KeyLen shr 2);
-  bswap32array(Salt, BCRYPT_SALTLEN shr 2);
-  // permute PBox and SBox based on the password and salt - the Blowfish setup
-  KeyLen := KeyLen shr 3;
-  BlowFishKeySetup(State, Salt, Key, KeyLen);
+  if (Cost < 4) or
+     (Cost > 31) then
+     ESynCrypto.RaiseUtf8('BCrypt: invalid Cost (4<=%<=31)', [Cost]);
+  // prepare the 64-bit padded binary key from the supplied Password
+  blocks := BlowFishPrepareKey(Password, Salt, key);
+  // permute PBox and SBox based on the password and salt - the BlowFish setup
+  BlowFishKeySetup(State, pointer(Salt), pointer(key), blocks);
   // this is the "Expensive" part of the "Expensive Key Setup"
   for i := 1 to (1 shl Cost) do
   begin
-    ExpensiveRound(State, Key, KeyLen);
-    ExpensiveRound(State, Salt, BCRYPT_SALTLEN shr 3);
+    ExpensiveRound(State, pointer(key), blocks);
+    ExpensiveRound(State, pointer(Salt), BCRYPT_SALTLEN shr 3);
   end;
-end;
-
-function PrepareKey(const Password: RawUtf8; out key: RawByteString): PtrInt;
-var
-  p: PUtf8Char;
-  plen, n: PtrInt;
-begin
-  plen := length(Password);
-  result := plen + 1;
-  n := 1;
-  while (result and 7 <> 0) and
-        (result < BCRYPT_MAXKEYLEN) do
-  begin
-    inc(n); // repeat password+#0 until it fits exactly in 64-bit chunks
-    inc(result, plen + 1);
-  end;
-  p := FastNewRawByteString(key, result);
-  repeat
-    MoveFast(pointer(Password)^, p^, plen);
-    p[plen] := #0;
-    inc(p, plen + 1);
-    dec(n);
-  until n = 0;
-  if result > BCRYPT_MAXKEYLEN then
-    result := BCRYPT_MAXKEYLEN; // in-place truncate to 72 bytes = SizeOf(TPBox)
+  // anti-forensic measure
+  FillZero(key);
 end;
 
 const
@@ -1480,40 +1543,31 @@ function BCryptRaw(const Password, Salt: RawUtf8; Cost: byte): RawUtf8;
 var
   state: TBlowFishState;
   hash: array[0..2] of QWord;
-  len, n: PtrInt;
-  key, s: RawByteString;
+  n: cardinal;
+  s: RawByteString;
 begin
   FastAssignNew(result);
-  if (Cost >= 4) and
-     (Cost <= 31) then
-  try
-    // prepare the Password to be in the expected layout
-    len := PrepareKey(Password, key);
-    // decode the supplied salt into exactly 16 bytes
-    if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
-      FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
-    if not Base64uriToBin(pointer(Salt), length(Salt), s, @HASH64_DEC) then
-      s := Salt; // undocumented usage of a non base-64 valid salt
-    if length(s) <> BCRYPT_SALTLEN then // bcrypt requires a 16 bytes salt
-      exit;
-    // initialize Blowfish state with Expensive Key Setup algorithm
-    ExpansiveKeySetup(Cost, pointer(s), pointer(key), len, state);
-    // encrypt the 'O..B..S..D..' magic text 64 times
-    MoveFast(OBSD_MAGIC, hash, SizeOf(hash));
-    for n := 1 to 64 do
-    begin
-      BlowfishEncryptEcb(state, @hash[0]);
-      BlowfishEncryptEcb(state, @hash[1]);
-      BlowfishEncryptEcb(state, @hash[2]);
-    end;
-    bswap32array(@hash, SizeOf(hash) shr 2);
-    // truncated to 23 bytes = 31 chars for compatibility with original OpenBSD
-    Base64uriEncode(FastSetString(result, 31), @hash, 23, @HASH64_ENC);
-    Prepend(result, ['$2a$', UInt2DigitsToShort(Cost), '$', Salt]);
-  finally
-    FillZero(key);
-    FillZero(s);
+  // decode the supplied salt into exactly 16 bytes
+  if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
+    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
+  if not Base64uriToBin(pointer(Salt), length(Salt), s, @HASH64_DEC) then
+    s := Salt; // undocumented usage of a non base-64 valid salt
+  if length(s) <> BCRYPT_SALTLEN then
+    exit;
+  // initialize BlowFish state with the "Expensive Key Setup" algorithm
+  BCryptExpensiveKeySetup(state, Cost, pointer(s), Password);
+  // encrypt the 'O..B..S..D..' magic text 64 times
+  MoveFast(OBSD_MAGIC, hash, SizeOf(hash));
+  for n := 1 to 64 do
+  begin
+    BlowFishEncrypt64(state, @hash[0]);
+    BlowFishEncrypt64(state, @hash[1]);
+    BlowFishEncrypt64(state, @hash[2]);
   end;
+  bswap32array(@hash, SizeOf(hash) shr 2);
+  // truncated to 23 bytes = 31 chars for compatibility with original OpenBSD
+  Base64uriEncode(FastSetString(result, 31), @hash, 23, @HASH64_ENC);
+  Prepend(result, ['$2a$', UInt2DigitsToShort(Cost), '$', Salt]);
 end;
 
 
