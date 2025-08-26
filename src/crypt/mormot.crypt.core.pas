@@ -187,6 +187,11 @@ var
   // - AesNiHashAntiFuzzTable <> nil if AES-NI and SSE 3 are available on this CPU
   AesNiHashAntiFuzzTable: PHash512;
 
+  /// mcfBCrypt implementation function - injected by mormot.crypt.other.pas
+  // - Cost should be in range 4..31 and Salt exactly 22 characters (128-bit)
+  // - returns e.g. '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m'
+  BCrypt: function(const Password, Salt: RawUtf8; Cost: byte): RawUtf8;
+
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 

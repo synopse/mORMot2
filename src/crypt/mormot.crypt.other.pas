@@ -362,6 +362,8 @@ const
 
 /// BCrypt hashing function using Base-64 encoded Salt and UTF-8 Result
 // - Cost should be in range 4..31 and Salt exactly 22 characters (128-bit)
+// - is assigned to mormot.crypt.core.pas BCrypt() global variable by this unit
+// - returns e.g. '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m'
 function BCryptRaw(const Password, Salt: RawUtf8; Cost: byte): RawUtf8;
 
 /// prepare a BlockFish encryption with a given Salt, UTF-8 Passwod and Cost
@@ -1674,6 +1676,7 @@ begin
     exit;
   // initialize BlowFish state with the "Expensive Key Setup" algorithm
   BCryptExpensiveKeySetup(state, Cost, pointer(s), Password);
+  FillZero(s);
   // encrypt the 'O..B..S..D..' magic text 64 times
   MoveFast(OBSD_MAGIC, hash, SizeOf(hash));
   for n := 1 to 64 do
@@ -1685,7 +1688,7 @@ begin
   bswap32array(@hash, SizeOf(hash) shr 2);
   // truncated to 23 bytes = 31 chars for compatibility with original OpenBSD
   Base64uriEncode(FastSetString(result, 31), @hash, 23, @HASH64_ENC);
-  Prepend(result, ['$2a$', UInt2DigitsToShort(Cost), '$', Salt]);
+  Prepend(result, ['$2b$', UInt2DigitsToShort(Cost), '$', Salt]);
 end;
 
 
@@ -1694,6 +1697,7 @@ begin
   {$ifndef PUREMORMOT2}
   assert(SizeOf(TAesFullHeader) = SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
+  BCrypt := @BCryptRaw; // to implement mcfBCrypt in mormot.crypt.secure
 end;
 
 initialization
