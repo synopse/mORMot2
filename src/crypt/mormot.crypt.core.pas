@@ -4116,11 +4116,11 @@ procedure DoBlocksCtrPas(iv: PAesBlock; src, dst: pointer;
 begin // sub-procedure for better code generation
   if blockcount > 0 then
     repeat
-      ctxt.DoBlock(ctxt, iv^, ctxt.buf); // tmp=AES(cv)
-      inc(iv^[15]);
+      ctxt.DoBlock(ctxt, iv^, ctxt.buf); // tmp=AES(iv)
+      inc(iv^[15]);                      // inc(iv)
       if iv^[15] = 0 then // manual big-endian increment
         CtrNistCarryBigEndian(iv^);
-      XorBlock16(src, dst, @ctxt.buf); // dst := src xor buf
+      XorBlock16(src, dst, @ctxt.buf);  // dst := src xor buf
       inc(PAesBlock(src));
       inc(PAesBlock(dst));
       dec(blockcount);

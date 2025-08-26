@@ -324,6 +324,14 @@ const
 /// raw in-place encryption of one BlowFish 64-bit block
 procedure BlowFishEncrypt64(const s: TBlowFishState; block: PQWordRec);
 
+/// BlowFish encryption using CTR block chain over the supplied IV
+// - last len 1..7 bytes would be XORed from IV as per the CTR standard
+procedure BlowFishEncryptCtr(src, dest: PQWord; len: PtrUInt;
+  const state: TBlowFishState; iv: PQWord);
+
+// published for testing purposes
+procedure BlowFishCtrInc(iv: PQWord); {$ifndef CPUINTEL} inline; {$endif}
+
 /// regular BlowFish key setup with a given salt and UTF-8 password
 // - salt is expected to be 16 bytes = 128-bit
 // - Password will be passed to BlowFishPrepareKey() - so trimmed to 72 bytes -
@@ -1396,10 +1404,11 @@ begin
   i := 0;
   repeat
     L := L xor s.PBox[i];
+    inc(i);
     R := R xor BlowFishStep(L, @s);
-    R := R xor s.PBox[i + 1];
+    R := R xor s.PBox[i];
+    inc(i);
     L := L xor BlowFishStep(R, @s);
-    inc(i, 2);
   until i = 16;
   block.L := R xor s.PBox[17];
   block.H := L xor s.PBox[16];
@@ -1529,6 +1538,69 @@ begin
   blocks := BlowFishPrepareKey(Password, Salt, key);
   BlowFishKeySetup(State, pointer(Salt), pointer(key), blocks);
   FillZero(key); // anti-forensic
+end;
+
+{$ifdef CPUINTEL}
+{$ifdef CPUX86}
+procedure BlowFishCtrInc(iv: PQWord);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+@1:     mov     ecx, dword ptr [eax]
+        mov     edx, dword ptr [eax + 4]
+        bswap   ecx
+        bswap   edx
+        add     edx, 1
+        adc     ecx, 0
+        bswap   ecx
+        bswap   edx
+        mov     dword ptr [eax], ecx
+        mov     dword ptr [eax + 4], edx
+end;
+{$else}
+procedure BlowFishCtrInc(iv: PQWord);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rax, qword ptr [iv]
+        bswap   rax
+        add     rax, 1
+        bswap   rax
+        mov     qword ptr [iv], rax
+end;
+{$endif CPUX86}
+{$else}
+procedure BlowFishCtrInc(iv: PQWord);
+begin
+  iv^ := bswap64(bswap64(iv^) + 1);
+end;
+{$endif CPUINTEL}
+
+procedure BlowFishEncryptCtr(src, dest: PQWord; len: PtrUInt;
+  const state: TBlowFishState; iv: PQWord);
+var
+  n: PtrUInt;
+  tmp: TQWordRec;
+begin
+  if PtrInt(len) <= 0 then
+    exit;
+  n := len shr 3;
+  repeat
+    tmp.V := iv^;
+    BlowFishEncrypt64(state, @tmp);
+    BlowFishCtrInc(iv);
+    if n = 0 then
+    begin
+      n := len and 7;
+      if n <> 0 then
+        repeat // trailing 1..7 bytes
+          dec(n);
+          PByteArray(dest)[n] := PByteArray(src)[n] xor tmp.B[n];
+        until n = 0;
+      tmp.V := 0;
+      exit;
+    end;
+    dest^ := src^ xor tmp.V;
+    inc(src);
+    inc(dest);
+    dec(n);
+  until false;
 end;
 
 
