@@ -384,6 +384,7 @@ type
     // - CTR is a reverse algorithm: apply once to cipher, and again to decipher
     // - Count may not be an exact multiple of 64-bit - will trim the IV bytes
     // - will update the internal IV - so you can call this method several times
+    // but this method won't be thread-safe
     procedure EncryptBuffer(BufIn, BufOut: pointer; Count: cardinal);
     /// perform the actual encoding on a RawByteString with proper CTR padding
     // - if IVAtBeginning is TRUE, a random 64-bit Initialization Vector will be
@@ -416,14 +417,15 @@ const
   BCRYPT_MAXKEYLEN = BLOWFISH_MAXKEYLEN;
   BCRYPT_SALTLEN   = BLOWFISH_SALTLEN;
 
-/// BCrypt hashing function as used on BSD systems
+/// BCrypt password hashing function as used on BSD systems
 // - this adaptative algorithm has no known weaknesses, and there are reports
 // that the more recent Argon2 is weaker (and less proven) for practical timing
 // - Cost should be in range 4..31 for 2^Cost rounds (default value is 12)
 // - Salt='' would generate one - or should be exactly 22 characters (16 bytes)
 // - PreSha256 would HMAC-SHA-256 the password (returning $bcrypt-sha256$)
-// - is assigned to mormot.crypt.core.pas BCrypt() global variable by this unit
-// - returns e.g. '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m'
+// - assigned to mormot.crypt.core.pas BCrypt() redirection by this unit
+// - returns e.g. '$2b$<cost>$<salt><checksum>' or
+// '$bcrypt-sha256$v=2,t=2b,r=<cost>$<salt'$
 function BCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
  Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
 
@@ -1586,7 +1588,7 @@ begin
     dec(n);
   until n = 0;
   if result > BLOWFISH_MAXKEYLEN then
-    result := BLOWFISH_MAXKEYLEN; // in-place truncate to 72 bytes = SizeOf(TPBox)
+    result := BLOWFISH_MAXKEYLEN; // in-place truncation to 72 bytes
   // prepare Salt and Key to be in Big-Endian format
   bswap32array(pointer(Key), result shr 2);
   bswap32array(pointer(Salt), BLOWFISH_SALTLEN shr 2);
@@ -1720,7 +1722,7 @@ begin
   len := length(Input);
   if len = 0 then
     exit;
-  d := FastNewRawByteString(result, len + PtrInt(IVAtBeginning) shl 3);
+  d := FastNewRawByteString(result, len + PtrInt(ord(IVAtBeginning)) shl 3);
   piv := @fIV; // update the main IV by default
   if IVAtBeginning then
   begin
@@ -1814,7 +1816,7 @@ const
   HASH64_ENC: TChar64 =
     './ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 var
-  HASH64_DEC: TAnsiCharToByte;
+  HASH64_DEC: TAnsiCharDec;
 
 function BCryptHash(const Password, Salt: RawUtf8; Cost: byte;
   HashPos: PInteger; PreSha256: boolean): RawUtf8;
@@ -1822,42 +1824,39 @@ var
   state: TBlowFishState;
   dig: THash256Rec;
   n: cardinal;
-  sbin, sb64: RawByteString;
+  saltbin, saltb64: RawByteString;
   hash, pwd: RawUtf8;
 begin
   FastAssignNew(result);
   // decode the supplied salt or generate a new one
   if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
     FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
-  if Salt = '' then
-  begin
-    TAesPrng.Fill(PHash128(FastNewRawByteString(sbin, 16))^); // need a CSPRNG
-    Base64uriEncode(FastNewRawByteString(sb64, 22), pointer(sbin), 16, @HASH64_ENC);
-  end
-  else if Base64uriToBin(pointer(Salt), length(Salt), sbin, @HASH64_DEC) then
-    sb64 := Salt;
-  if length(sbin) <> BCRYPT_SALTLEN then // should be 16 bytes
+  if not TAesPrng.Main.RandomSalt(
+           saltbin, saltb64, BCRYPT_SALTLEN, Salt, @HASH64_ENC, @HASH64_DEC) or
+         (length(saltbin) <> BCRYPT_SALTLEN) then // always 16 bytes
     exit;
   // initialize BlowFish state from Password using BCrypt "Expensive Key Setup"
   if PreSha256 then
   begin
     // https://passlib.readthedocs.io/en/stable/lib/passlib.hash.bcrypt_sha256.html
-    HmacSha256(sb64, Password, dig.b);
+    HmacSha256(saltb64, Password, dig.b);
     pwd := BinToBase64(@dig, SizeOf(dig)); // standard Base-64 encoding
-    BCryptExpensiveKeySetup(state, Cost, pointer(sbin), pwd);
+    BCryptExpensiveKeySetup(state, Cost, pointer(saltbin), pwd);
     FillZero(pwd);
-    Make(['$bcrypt-sha256$v=2,t=2b,r=', Cost, '$', sb64, '$'], result);
+    Make(['$bcrypt-sha256$v=2,t=2b,r=', Cost, '$', saltb64, '$'], result);
+    // note: PHP and Node.js use the regular $2b$/$2y$ format with pre-hashing
+    // which does not fulfill the explicitness of the "Modular Crypt" format
   end
   else
   begin
-    // regular BCrypt with password truncation to 72 bytes (71 chars)
-    BCryptExpensiveKeySetup(state, Cost, pointer(sbin), Password);
-    Make(['$2b$', UInt2DigitsToShort(Cost), '$', sb64], result);
+    // regular BCrypt with password truncation to 72 bytes
+    BCryptExpensiveKeySetup(state, Cost, pointer(saltbin), Password);
+    Make(['$2b$', UInt2DigitsToShort(Cost), '$', saltb64], result);
   end;
   if HashPos <> nil then
     HashPos^ := length(result) + 1; // there is no '$' before the $2b$ {checksum}
-  FillZero(sbin);
-  FillZero(sb64);
+  FillZero(saltbin);
+  FillZero(saltb64);
   // encrypt the 'O..B..S..D..' magic text 64 times
   MoveFast(OBSD_MAGIC, dig.q, SizeOf(OBSD_MAGIC));
   for n := 1 to 64 do
