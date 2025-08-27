@@ -628,7 +628,7 @@ type
     // - see ModularCryptVerify() for the associated verification function
     function UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
       aRounds: cardinal = 0; aSaltSize: cardinal = 8;
-      aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
+      const aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
     /// returns the number of bytes of the hash of the current Algo
     function HashSize: integer;
     /// the hash algorithm used by this instance
@@ -905,7 +905,7 @@ type
     // - in addition to official passlib format, will include our '$pbkdf2-sha3$'
     function Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat; const aPassword: RawUtf8;
       aRounds: cardinal = 0; aSaltSize: cardinal = 16;
-      aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
+      const aSalt: RawUtf8 = ''; aHashPos: PInteger = nil): RawUtf8;
     /// compute NIST SP800-108 KDF in counter mode (section 5.1)
     // - as used e.g. by RFC 8009 for Kerberos AES-CTS HMAC-SHA2 modes
     function KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
@@ -1105,10 +1105,6 @@ function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
 // from forged hash values with artificially high number of rounds
 function ModularCryptVerify(const password, hash: RawUtf8;
   allowed: TModularCryptFormats = []; maxrounds: cardinal = 0): TModularCryptFormat;
-
-/// compute a base-64 random salt from PRNG with the "Modular Crypt" charset
-// - aSaltSize is the raw random bytes number, not the encoded result chars length
-function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
 
 /// low-level parsing function used by TSynHasher.UnixCryptVerify() and
 // ModularCryptIdentify/ModularCryptVerify
@@ -4132,12 +4128,12 @@ begin
 end;
 
 function TSynHasher.UnixCryptHash(aAlgo: THashAlgo; const aPassword: RawUtf8;
-  aRounds, aSaltSize: cardinal; aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
+  aRounds, aSaltSize: cardinal; const aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
 var
   p: PUtf8Char;
   c: AnsiChar;
   siz, n, aPasswordSize: PtrUInt;
-  dp, ds: RawByteString;
+  sbin, sb64, dp, ds: RawByteString;
   alt: THash512Rec;
 begin
   result := '';
@@ -4166,18 +4162,20 @@ begin
       aSaltSize := 8
     else if aSaltSize > 16 then
       aSaltSize := 16; // for hfSha256/hfSha512
-    aSalt := ModularCryptSalt(aSaltSize);
-    FakeLength(aSalt, aSaltSize); // here aSaltSize are chars, not bytes
+    TAesPrng.Main.RandomSalt(sbin, sb64, aSaltSize, '', @HASH64_CHARS, nil);
+    FakeLength(sb64, aSaltSize); // aSaltSize is in base-64 chars, not bytes
+    FillZero(sbin);
   end
   else
-    aSaltSize := length(aSalt);
-  Append(result, aSalt, '$');
-  siz := Full(aAlgo, [aPassword, aSalt, aPassword], alt);
+    sb64 := aSalt;
+  aSaltSize := length(sb64);
+  Append(result, sb64, '$');
+  siz := Full(aAlgo, [aPassword, sb64, aPassword], alt);
   Init(aAlgo);
   Update(pointer(aPassword), aPasswordSize);
   if aAlgo = hfMD5 then
     Update('$1$');
-  Update(pointer(aSalt), aSaltSize);
+  Update(pointer(sb64), aSaltSize);
   n := aPasswordSize;
   while n >= siz do
   begin
@@ -4200,7 +4198,7 @@ begin
         end;
         Final(alt);
         dp := aPassword; // hash raw key/salt
-        ds := aSalt;
+        ds := sb64;
       end;
     hfSha256,
     hfSha512:
@@ -4219,7 +4217,7 @@ begin
           Update(pointer(aPassword), aPasswordSize);
         FinalBin(dp, aPasswordSize);
         for n := 1 to 16 + alt.b[0] do
-          Update(pointer(aSalt), aSaltSize);
+          Update(pointer(sb64), aSaltSize);
         FinalBin(ds, aSaltSize);
       end;
   end;
@@ -4604,15 +4602,6 @@ end;
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 begin
   result := HashFile(FileName, hfSHA3_512);
-end;
-
-function ModularCryptSalt(aSaltSize: PtrInt): RawUtf8;
-var
-  bin: RawByteString;
-begin
-  bin := TAesPrng.Fill(aSaltSize); // need a CSPRNG
-  Base64uriEncode(FastSetString(result, BinToBase64uriLength(aSaltSize)),
-    pointer(bin), aSaltSize, @HASH64_CHARS);
 end;
 
 const
@@ -5022,14 +5011,14 @@ const
   HASH64_ENC: TChar64 = // the current encoding used by "$pbkdf2" passlib
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./';
 var
-  HASH64_DEC: TAnsiCharToByte;
+  HASH64_DEC: TAnsiCharDec;
 
 function TSynSigner.Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat;
   const aPassword: RawUtf8; aRounds, aSaltSize: cardinal;
-  aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
+  const aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
 var
   siz: PtrUInt;
-  binsalt: RawByteString;
+  bin, b64: RawByteString;
   dig: THash512;
 begin
   result := '';
@@ -5038,19 +5027,17 @@ begin
     exit;
   if aRounds = 0 then
     aRounds := MCF_ROUNDS[aAlgo]; // use default of each algorithm
-  if aSalt = '' then
-  begin
-    if aSaltSize = 0 then
-      aSaltSize := 16;
-    aSalt := ModularCryptSalt(aSaltSize);
-  end;
+  if aSaltSize = 0 then
+    aSaltSize := 16;
   if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
     FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
-  if not Base64uriToBin(pointer(aSalt), length(aSalt), binsalt, @HASH64_DEC) then
-    binsalt := aSalt; // be tolerant about non-standard salt format
-  Make(['$', MCF_IDENT[aAlgo], '$', aRounds, '$', aSalt, '$'], result);
-  siz := Pbkdf2(MCF_SIGN[aAlgo], aPassword, binsalt, aRounds, @dig);
+  if not TAesPrng.Main.RandomSalt(bin, b64, aSaltSize, aSalt, @HASH64_ENC, @HASH64_DEC) then
+    exit;
+  Make(['$', MCF_IDENT[aAlgo], '$', aRounds, '$', b64, '$'], result);
+  siz := Pbkdf2(MCF_SIGN[aAlgo], aPassword, bin, aRounds, @dig);
   Base64uriEncode(b64append(result, siz, aHashPos), @dig, siz, @HASH64_ENC);
+  FillZero(bin);
+  FillZero(b64);
 end;
 
 function TSynSigner.KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
