@@ -303,6 +303,10 @@ procedure TTestCoreCrypto._SHA256;
     FillZero(Digest.b);
     sign.Pbkdf2(saSha256, 'password', 'salt', 4096, @Digest);
     check(Sha256DigestToString(Digest.Lo) = DIG4096);
+    s := BinToHexLower(sign.Pbkdf2(saSha256, 'password', 'salt', 1, 20));
+    CheckEqual(s, '120fb6cffcf8b32c43e7225256c4f837a86548c9');
+    s := BinToHexLower(Pbkdf2HmacSha256('password', 'salt', 1, 20));
+    CheckEqual(s, '120fb6cffcf8b32c43e7225256c4f837a86548c9');
     c := 'a';
     sha.Init;
     for i := 1 to 1000000 do // one million 'a' chars, read one-by-one
@@ -1319,13 +1323,13 @@ const
   bOPENSSL = [ {$ifdef USE_OPENSSL}
                bSHA1O .. bSHA3_512O, bAES128CBCO .. bAES256GCMO
                {$endif USE_OPENSSL} ];
+  COUNT = 500;
   SIZ: array[0..4] of integer = (
     8,
     50,
     100,
     1000,
     10000);
-  COUNT = 500;
 
   AESCLASS: array[bAESFIRST.. bAESLAST] of TAesAbstractClass = (
     TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm,
@@ -1340,6 +1344,7 @@ const
     256, 256, 256, 256, 256, 256, 256, 256, 256
   {$ifdef USE_OPENSSL} ,
     128, 128, 128, 128, 128, 256, 256, 256, 256, 256);
+
   OPENSSL_HASH: array[bSHA1O .. bSHA3_512O] of THashAlgo = (
     hfSHA1, hfSHA1, hfSHA256, hfSHA256, hfSHA384, hfSHA384, hfSHA512, hfSHA384,
     hfSHA512, hfSHA3_256, hfSHA3_512
@@ -1522,11 +1527,14 @@ begin
     inc(n, COUNT);
     // we may add some small additionnal tests here (outside timers)
     CheckEqual(StrLen(pointer(data)), SIZ[s], 'datastrlen');
+    bf.IV := 0;
     s1 := bf.Encrypt(data, {ivatbeg=}true);
     CheckEqual(length(s1), SIZ[s] + 8);
+    CheckEqual(bf.IV, 0);
     s2 := bf.Decrypt(s1, {ivatbeg=}true);
     CheckEqual(length(s2), SIZ[s]);
     CheckEqual(s2, data);
+    CheckEqual(bf.IV, 0);
   end;
   for b := low(b) to high(b) do
     if time[b] <> 0 then
