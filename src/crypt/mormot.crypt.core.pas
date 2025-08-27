@@ -47,7 +47,8 @@ uses
   mormot.core.os.security, // low-level Windows Security API
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.rtti;
+  mormot.core.rtti,
+  mormot.core.buffers;
 
 
 type
@@ -1685,6 +1686,10 @@ type
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
     function RandomPassword(Len: integer): SpiUtf8;
+    /// validate or generate a random Salt with custom Base64-URI encoding
+    // - as used e.g. by the "Modular Crypt" process
+    function RandomSalt(var bin, b64: RawByteString; defsiz: integer;
+      const salt: RawUtf8 = ''; enc: PChar64 = nil; dec: PAnsiCharDec = nil): boolean;
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward security
     // - would be called by FillRandom() methods, according to SeedAfterBytes
@@ -1786,7 +1791,7 @@ type
   // - use fast hardware AES-NI, and our 8X interleaved asm on x86_64 asm:
   // $  mORMot FillRandom in 1.22ms, 7.6 GB/s
   // $  OpenSSL FillRandom in 1.22ms, 7.6 GB/s
-  // - for small blocks, the OpenSSL overhead seems huge (40x times):
+  // - for small blocks, the OpenSSL overhead seems huge (40x slower):
   // $  mORMot Random32 in 1.32ms i.e. 72M/s, aver. 13ns, 288.3 MB/s
   // $  OpenSSL Random32 in 49.61ms i.e. 1.9M/s, aver. 496ns, 7.6 MB/s
   // - on i386, numbers are quite similar, thanks to our 4X interleaved asm:
@@ -7305,6 +7310,22 @@ begin
   until (Len <= 4) or
         (haspunct and
          (LowerCase(result) <> result));
+end;
+
+function TAesPrngAbstract.RandomSalt(var bin, b64: RawByteString;
+  defsiz: integer; const salt: RawUtf8; enc: PChar64; dec: PAnsiCharDec): boolean;
+begin
+  result := true;
+  if salt = '' then
+  begin
+    TAesPrng.Fill(FastNewRawByteString(bin, defsiz), defsiz); // CSPRNG
+    b64 := BinToBase64uri(bin, enc);
+  end
+  else if (dec <> nil) and
+          Base64uriToBin(pointer(salt), length(salt), bin, dec) then
+    b64 := salt
+  else
+    result := false;
 end;
 
 procedure TAesPrngAbstract.Seed;
