@@ -416,11 +416,16 @@ const
   BCRYPT_MAXKEYLEN = BLOWFISH_MAXKEYLEN;
   BCRYPT_SALTLEN   = BLOWFISH_SALTLEN;
 
-/// BCrypt hashing function using Base-64 encoded Salt and UTF-8 Result
-// - Cost should be in range 4..31 and Salt exactly 22 characters (128-bit)
+/// BCrypt hashing function as used on BSD systems
+// - this adaptative algorithm has no known weaknesses, and there are reports
+// that the more recent Argon2 is weaker (and less proven) for practical timing
+// - Cost should be in range 4..31 for 2^Cost rounds (default value is 12)
+// - Salt='' would generate one - or should be exactly 22 characters (16 bytes)
+// - PreSha256 would HMAC-SHA-256 the password (returning $bcrypt-sha256$)
 // - is assigned to mormot.crypt.core.pas BCrypt() global variable by this unit
 // - returns e.g. '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m'
-function BCryptRaw(const Password, Salt: RawUtf8; Cost: byte): RawUtf8;
+function BCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
+ Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
 
 /// prepare a BlockFish encryption with a given Salt, UTF-8 Passwod and Cost
 // - Password is process using the BCrypt "Expensive Key Setup" algorithm
@@ -1759,8 +1764,8 @@ end;
 
 { **************** BCrypt Password-Hashing Function }
 
-// inlined BlowFishKeySetup() with zeros salt as used during bcrypt rounds
-procedure ExpensiveRound(var state: TBlowFishState;
+// dedicated BlowFishKeySetup() with zeros salt as used during bcrypt rounds
+procedure BCryptExpensiveRound(var state: TBlowFishState;
   key: PQwordArray; keyblocks: PtrUInt);
 var
   iv: QWord;
@@ -1793,8 +1798,8 @@ begin
   // this is the "Expensive" part of the "Expensive Key Setup"
   for i := 1 to (1 shl Cost) do
   begin
-    ExpensiveRound(State, pointer(key), blocks);
-    ExpensiveRound(State, pointer(Salt), BCRYPT_SALTLEN shr 3);
+    BCryptExpensiveRound(State, pointer(key), blocks);
+    BCryptExpensiveRound(State, pointer(Salt), BCRYPT_SALTLEN shr 3);
   end;
   // anti-forensic measure
   FillZero(key);
@@ -1811,36 +1816,63 @@ const
 var
   HASH64_DEC: TAnsiCharToByte;
 
-function BCryptRaw(const Password, Salt: RawUtf8; Cost: byte): RawUtf8;
+function BCryptHash(const Password, Salt: RawUtf8; Cost: byte;
+  HashPos: PInteger; PreSha256: boolean): RawUtf8;
 var
   state: TBlowFishState;
-  hash: array[0..2] of QWord;
+  dig: THash256Rec;
   n: cardinal;
-  s: RawByteString;
+  sbin, sb64: RawByteString;
+  hash, pwd: RawUtf8;
 begin
   FastAssignNew(result);
-  // decode the supplied salt into exactly 16 bytes
+  // decode the supplied salt or generate a new one
   if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
     FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
-  if not Base64uriToBin(pointer(Salt), length(Salt), s, @HASH64_DEC) then
-    s := Salt; // undocumented usage of a non base-64 valid salt
-  if length(s) <> BCRYPT_SALTLEN then
+  if Salt = '' then
+  begin
+    TAesPrng.Fill(PHash128(FastNewRawByteString(sbin, 16))^); // need a CSPRNG
+    Base64uriEncode(FastNewRawByteString(sb64, 22), pointer(sbin), 16, @HASH64_ENC);
+  end
+  else if Base64uriToBin(pointer(Salt), length(Salt), sbin, @HASH64_DEC) then
+    sb64 := Salt;
+  if length(sbin) <> BCRYPT_SALTLEN then // should be 16 bytes
     exit;
-  // initialize BlowFish state with the "Expensive Key Setup" algorithm
-  BCryptExpensiveKeySetup(state, Cost, pointer(s), Password);
-  FillZero(s);
+  // initialize BlowFish state from Password using BCrypt "Expensive Key Setup"
+  if PreSha256 then
+  begin
+    // https://passlib.readthedocs.io/en/stable/lib/passlib.hash.bcrypt_sha256.html
+    HmacSha256(sb64, Password, dig.b);
+    pwd := BinToBase64(@dig, SizeOf(dig)); // standard Base-64 encoding
+    BCryptExpensiveKeySetup(state, Cost, pointer(sbin), pwd);
+    FillZero(pwd);
+    Make(['$bcrypt-sha256$v=2,t=2b,r=', Cost, '$', sb64, '$'], result);
+  end
+  else
+  begin
+    // regular BCrypt with password truncation to 72 bytes (71 chars)
+    BCryptExpensiveKeySetup(state, Cost, pointer(sbin), Password);
+    Make(['$2b$', UInt2DigitsToShort(Cost), '$', sb64], result);
+  end;
+  if HashPos <> nil then
+    HashPos^ := length(result) + 1; // there is no '$' before the $2b$ {checksum}
+  FillZero(sbin);
+  FillZero(sb64);
   // encrypt the 'O..B..S..D..' magic text 64 times
-  MoveFast(OBSD_MAGIC, hash, SizeOf(hash));
+  MoveFast(OBSD_MAGIC, dig.q, SizeOf(OBSD_MAGIC));
   for n := 1 to 64 do
   begin
-    BlowFishEncrypt64(state, @hash[0]);
-    BlowFishEncrypt64(state, @hash[1]);
-    BlowFishEncrypt64(state, @hash[2]);
+    BlowFishEncrypt64(state, @dig.q[0]);
+    BlowFishEncrypt64(state, @dig.q[1]);
+    BlowFishEncrypt64(state, @dig.q[2]);
   end;
-  bswap32array(@hash, SizeOf(hash) shr 2);
+  BlowFishKeyClear(state); // paranoid
+  bswap32array(@dig, SizeOf(OBSD_MAGIC) shr 2);
   // truncated to 23 bytes = 31 chars for compatibility with original OpenBSD
-  Base64uriEncode(FastSetString(result, 31), @hash, 23, @HASH64_ENC);
-  Prepend(result, ['$2b$', UInt2DigitsToShort(Cost), '$', Salt]);
+  Base64uriEncode(FastSetString(hash, 31), @dig, 23, @HASH64_ENC);
+  Append(result, hash);
+  FillZero(dig.b);
+  FillZero(hash);
 end;
 
 
@@ -1849,7 +1881,7 @@ begin
   {$ifndef PUREMORMOT2}
   assert(SizeOf(TAesFullHeader) = SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
-  BCrypt := @BCryptRaw; // to implement mcfBCrypt in mormot.crypt.secure
+  BCrypt := @BCryptHash; // to implement mcfBCrypt in mormot.crypt.secure
 end;
 
 initialization

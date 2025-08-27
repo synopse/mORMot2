@@ -1093,12 +1093,6 @@ const
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
 
-/// compute a BCrypt hash of a given password - needs mormot.crypt.other.pas
-// - as used by ModularCryptHash() for mcfBCrypt / mcfBCryptSha256
-function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal = 12;
-  aSalt: RawUtf8 = ''; aHashPos: PInteger = nil;
-  aFormat: TModularCryptFormat = mcfBCrypt): RawUtf8;
-
 /// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
 // mcfSha256Crypt for '$5$rounds={rounds}${salt}${checksum}'
@@ -4721,37 +4715,6 @@ begin
   result := ModularCryptParse(P, dummyrounds, dummysalt);
 end;
 
-function ModularBCrypt(const aPassword: RawUtf8; aCost: cardinal;
-  aSalt: RawUtf8; aHashPos: PInteger; aFormat: TModularCryptFormat): RawUtf8;
-var
-  pwd, header: RawUtf8;
-  dig: TSha256Digest;
-begin
-  result := '';
-  if not Assigned(BCrypt) then
-    exit; // please add mormot.crypt.other.pas to your project
-  if aSalt = '' then
-    aSalt := ModularCryptSalt(16); // BCrypt expects BCRYPT_SALTLEN = 16 bytes
-  if aFormat = mcfBCryptSha256 then
-  begin
-    HmacSha256(aSalt, aPassword, dig);
-    pwd := BinToBase64(@dig, SizeOf(dig));
-    result := BCrypt(pwd, aSalt, aCost);
-    FillZero(pwd);
-    delete(result, 1, 29); // '$2b$12${salt}{checksum}' -> '{checksum}'
-    Make(['$', MCF_IDENT[aFormat], '$v=2,t=2b,r=', aCost, '$', aSalt, '$'], header);
-    if aHashPos <> nil then
-      aHashPos^ := length(header) + 1;
-    Prepend(result, [header]);
-  end
-  else
-  begin
-    result := BCrypt(aPassword, aSalt, aCost);
-    if aHashPos <> nil then
-      aHashPos^ := 30; // fixed position in $2b$ format
-  end;
-end;
-
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds, saltsize: cardinal; const salt: RawUtf8): RawUtf8;
 var
@@ -4765,7 +4728,8 @@ begin
     mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
       result := signer.Pbkdf2ModularCrypt(format, password, rounds, saltsize, salt);
     mcfBCrypt, mcfBCryptSha256:
-      result := ModularBCrypt(password, rounds, salt, nil, format);
+      if Assigned(BCrypt) then
+        result := BCrypt(password, salt, rounds, nil, format = mcfBCryptSha256);
   else
     result := '';
   end;
@@ -4805,7 +4769,7 @@ begin
     mcfBCrypt .. mcfBCryptSha256:
       if (rounds in [4 .. 31]) and
          (length(salt) = 22) then
-        h := ModularBCrypt(password, rounds, salt, @pos, result)
+        h := BCrypt(password, salt, rounds, @pos, result = mcfBCryptSha256)
       else
         result := mcfInvalid;
   end;
