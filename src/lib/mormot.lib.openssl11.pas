@@ -490,6 +490,9 @@ const
   SN_delta_crl = 'deltaCRL';
   LN_delta_crl = 'X509v3 Delta CRL Indicator';
   NID_delta_crl = 140;
+  SN_id_scrypt = 'id-scrypt';
+  LN_id_scrypt = 'scrypt';
+  NID_id_scrypt = 973;
 
   EVP_PKEY_RSA = NID_rsaEncryption;
   EVP_PKEY_DSA = NID_dsa;
@@ -498,6 +501,7 @@ const
   EVP_PKEY_EC = NID_X9_62_id_ecPublicKey;
   EVP_PKEY_ED25519 = NID_ED25519;
   EVP_PKEY_POLY1305 = NID_poly1305;
+  EVP_PKEY_SCRYPT = NID_id_scrypt;
   EVP_PKEY_OP_PARAMGEN = 1 shl 1;
   EVP_PKEY_OP_KEYGEN = 1 shl 2;
   EVP_PKEY_ALG_CTRL = $1000;
@@ -2512,6 +2516,13 @@ function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
 function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
+  pass: PAnsiChar; passlen: integer): integer; cdecl;
+function EVP_PKEY_CTX_set1_scrypt_salt(ctx: PEVP_PKEY_CTX;
+  salt: PByte; saltlen: integer): integer; cdecl;
+function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
+function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
+function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
 procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
 function EVP_PKEY_derive_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
@@ -3632,6 +3643,11 @@ type
     EVP_PKEY_keygen_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
     EVP_PKEY_keygen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
     EVP_PKEY_CTX_ctrl: function(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+    EVP_PKEY_CTX_set1_pbe_pass: function(ctx: PEVP_PKEY_CTX; pass: PAnsiChar; passlen: integer): integer; cdecl;
+    EVP_PKEY_CTX_set1_scrypt_salt: function(ctx: PEVP_PKEY_CTX; salt: PByte; saltlen: integer): integer; cdecl;
+    EVP_PKEY_CTX_set_scrypt_N: function(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
+    EVP_PKEY_CTX_set_scrypt_r: function(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
+    EVP_PKEY_CTX_set_scrypt_p: function(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
     EVP_PKEY_CTX_new: function(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
     EVP_PKEY_CTX_free: procedure(ctx: PEVP_PKEY_CTX); cdecl;
     EVP_PKEY_derive_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
@@ -3655,7 +3671,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..343] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..348] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3980,6 +3996,11 @@ const
     'EVP_PKEY_keygen_init',
     'EVP_PKEY_keygen',
     'EVP_PKEY_CTX_ctrl',
+    '?EVP_PKEY_CTX_set1_pbe_pass', // macros, not real functions on OpenSSL 1.1
+    '?EVP_PKEY_CTX_set1_scrypt_salt',
+    '?EVP_PKEY_CTX_set_scrypt_N',
+    '?EVP_PKEY_CTX_set_scrypt_r',
+    '?EVP_PKEY_CTX_set_scrypt_p',
     'EVP_PKEY_CTX_new',
     'EVP_PKEY_CTX_free',
     'EVP_PKEY_derive_init',
@@ -5720,6 +5741,49 @@ begin
   result := libcrypto.EVP_PKEY_CTX_ctrl(ctx, keytype, optype, cmd, p1, p2);
 end;
 
+function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
+  pass: PAnsiChar; passlen: integer): integer;
+begin
+  if Assigned(libcrypto.EVP_PKEY_CTX_set1_pbe_pass) then
+    result := libcrypto.EVP_PKEY_CTX_set1_pbe_pass(ctx, pass, passlen)
+  else
+    result := 0; // defined as macro in deprecated openssl 1.1
+end;
+
+function EVP_PKEY_CTX_set1_scrypt_salt(ctx: PEVP_PKEY_CTX;
+  salt: PByte; saltlen: integer): integer;
+begin
+  if Assigned(libcrypto.EVP_PKEY_CTX_set1_scrypt_salt) then
+    result := libcrypto.EVP_PKEY_CTX_set1_scrypt_salt(ctx, salt, saltlen)
+  else
+    result := 0; // defined as macro in deprecated openssl 1.1
+end;
+
+
+function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
+begin
+  if Assigned(libcrypto.EVP_PKEY_CTX_set_scrypt_N) then
+    result := libcrypto.EVP_PKEY_CTX_set_scrypt_N(ctx, n)
+  else
+    result := 0; // defined as macro in deprecated openssl 1.1
+end;
+
+function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
+begin
+  if Assigned(libcrypto.EVP_PKEY_CTX_set_scrypt_r) then
+    result := libcrypto.EVP_PKEY_CTX_set_scrypt_r(ctx, r)
+  else
+    result := 0; // defined as macro in deprecated openssl 1.1
+end;
+
+function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
+begin
+  if Assigned(libcrypto.EVP_PKEY_CTX_set_scrypt_p) then
+    result := libcrypto.EVP_PKEY_CTX_set_scrypt_p(ctx, p)
+  else
+    result := 0; // defined as macro in deprecated openssl 1.1
+end;
+
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX;
 begin
   result := libcrypto.EVP_PKEY_CTX_new(pkey, e);
@@ -7240,6 +7304,23 @@ function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
 function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
+
+function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
+  pass: PAnsiChar; passlen: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set1_pbe_pass';
+
+function EVP_PKEY_CTX_set1_scrypt_salt(ctx: PEVP_PKEY_CTX;
+  salt: PByte; saltlen: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set1_scrypt_salt';
+
+function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_N';
+
+function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_r';
+
+function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_p';
 
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';

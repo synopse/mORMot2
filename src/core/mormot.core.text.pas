@@ -138,8 +138,9 @@ function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte; BinBytes: PtrI
 
 type
   /// some stack-allocated zero-terminated character buffer
-  // - as used by GetNextTChar64
+  // - as used by GetNextTChar64 or ConvertToBase64 lookup tables
   TChar64 = array[0..63] of AnsiChar;
+  PChar64 = ^TChar64;
 
 /// return next CSV string from P as a #0-ended buffer, false if no more
 // - if Sep is #0, will copy all characters until next whitespace char

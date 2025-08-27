@@ -3766,7 +3766,6 @@ const
   EVP_PKEY_SM2 = NID_sm2;
   EVP_PKEY_HMAC = NID_hmac;
   EVP_PKEY_CMAC = NID_cmac;
-  EVP_PKEY_SCRYPT = NID_id_scrypt;
   EVP_PKEY_TLS1_PRF = NID_tls1_prf;
   EVP_PKEY_HKDF = NID_hkdf;
   EVP_PKEY_SIPHASH = NID_siphash;
