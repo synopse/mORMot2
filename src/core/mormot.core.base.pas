@@ -832,6 +832,10 @@ function NextGrow(capacity: integer): integer;
 // - e.g. NextPowerOfTwo(3) = NextPowerOfTwo(4) = 4
 function NextPowerOfTwo(number: cardinal): cardinal;
 
+/// quickly check if the number is a power-of-two
+function IsPowerOfTwo(number: PtrUInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// equivalence to SetString(s,pansichar,len) function but from a raw pointer
 // - so works with both PAnsiChar and PUtf8Char input buffer (or even PByteArray)
 // - faster especially under FPC
@@ -4914,6 +4918,11 @@ begin // O(1) branchless algorithm for 32-bit values
   result := result or (result shr 4);
   result := result or (result shr 8);
   result := (result or (result shr 16)) + 1;
+end;
+
+function IsPowerOfTwo(number: PtrUInt): boolean;
+begin
+  result := (number and (number - 1) = 0);
 end;
 
 {$ifndef FPC_CPUX64} // dedicated asm on x86_64 only
