@@ -2024,12 +2024,13 @@ begin
   exp := '$bcrypt-sha256$v=2,t=2b,r=12$n79VH.0Q2TMWmt3Oqt9uku$Kq4Noyk3094Y2QlB8NdRT8SvGiI4ft2';
   Check(ModularCryptVerify('password', exp) = mcfBCryptSha256);
   Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
-  // OpenSSL SCrypt implementation
+  // pure pascal and OpenSSL SCrypt implementation
   {$ifdef USE_OPENSSL}
   if OpenSslIsAvailable then
     if OpenSslVersion >= OPENSSL3_VERNUM then
       TestSCript(@OpenSslSCrypt, 'OpenSslSCrypt');
   {$endif USE_OPENSSL}
+  TestSCript(@SCryptPascal, 'SCryptPascal');
   // validate "Modular Crypt" formats
   for mcf := mcfMd5Crypt to high(mcf) do
   begin

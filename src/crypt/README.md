@@ -117,4 +117,5 @@ Deprecated or Seldom Used Cryptographic Features
 - Deprecated Weak AES/SHA Process
 - BlowFish Encryption
 - BCrypt Password-Hashing Function
+- SCrypt Password-Hashing Function
 

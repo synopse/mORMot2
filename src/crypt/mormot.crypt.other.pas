@@ -12,6 +12,7 @@ unit mormot.crypt.other;
     - Deprecated Weak AES/SHA Process
     - BlowFish Encryption
     - BCrypt Password-Hashing Function
+    - SCrypt Password-Hashing Function
 
   *****************************************************************************
 }
@@ -436,6 +437,24 @@ function BCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
 procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
   Cost: byte; Salt: PHash128Rec; const Password: RawUtf8);
 
+
+{ **************** SCrypt Password-Hashing Function }
+
+
+/// low-level SCrypt hash computation using our pure pascal code
+// - slightly slower than OpenSslSCrypt() from the mormot.lib.openssl11 unit:
+// - on i386:   N=65536: 136ms / N=16384: 33ms (OpenSSL: 114ms / 27ms)
+// - on x86_64: N=65536: 139ms / N=16384: 33ms (OpenSSL: 103ms / 24ms)
+// - assigned to mormot.crypt.core.pas SCrypt() redirection by this unit,
+// if mormot.crypt.openssl did not alreayd inject its own faster version
+function SCryptPascal(const Password: RawUtf8; const Salt: RawByteString;
+  N, R, P, DestLen: PtrUInt): RawByteString;
+
+/// compute how memory memory the SCrypt() function will allocate
+// - could be used to tune the parameters (N, R, P) somewhat obfuscated meaning
+// - return e.g. 16MB for SCrypt(16384, 8, 1) and 64MB for SCrypt(65536, 8, 1),
+// i.e. equals roughtly N * R * 128 with some more bytes depending on P
+function SCryptMemoryUse(N, R, P: QWord): QWord;
 
 
 implementation
@@ -1875,12 +1894,154 @@ begin
 end;
 
 
+{ **************** SCrypt Password-Hashing Function }
+
+type
+  TSalsaBlock = array[0..15] of cardinal; // 512-bits
+
+procedure SalsaXor(var Tmp: TSalsaBlock; Input, Output: PCardinalArray);
+var
+  w, x: TSalsaBlock;
+  i: PtrUInt;
+begin // Tmp[] as parameter keep the stack small and all offsets in [rsp+0..$7f]
+  for i := 0 to 15 do
+  begin
+    w[i] := Tmp[i] xor Input[i];
+    x[i] := w[i];
+  end;
+  for i := 1 to 4 do
+  begin
+    x[4]  := x[4]  xor RolDWord(x[0]  + x[12], 7);
+    x[8]  := x[8]  xor RolDWord(x[4]  + x[0],  9);
+    x[12] := x[12] xor RolDWord(x[8]  + x[4],  13);
+    x[0]  := x[0]  xor RolDWord(x[12] + x[8],  18);
+    x[9]  := x[9]  xor RolDWord(x[5]  + x[1],  7);
+    x[13] := x[13] xor RolDWord(x[9]  + x[5],  9);
+    x[1]  := x[1]  xor RolDWord(x[13] + x[9],  13);
+    x[5]  := x[5]  xor RolDWord(x[1]  + x[13], 18);
+    x[14] := x[14] xor RolDWord(x[10] + x[6],  7);
+    x[2]  := x[2]  xor RolDWord(x[14] + x[10], 9);
+    x[6]  := x[6]  xor RolDWord(x[2]  + x[14], 13);
+    x[10] := x[10] xor RolDWord(x[6]  + x[2],  18);
+    x[3]  := x[3]  xor RolDWord(x[15] + x[11], 7);
+    x[7]  := x[7]  xor RolDWord(x[3]  + x[15], 9);
+    x[11] := x[11] xor RolDWord(x[7]  + x[3],  13);
+    x[15] := x[15] xor RolDWord(x[11] + x[7],  18);
+    x[1]  := x[1]  xor RolDWord(x[0]  + x[3],  7);
+    x[2]  := x[2]  xor RolDWord(x[1]  + x[0],  9);
+    x[3]  := x[3]  xor RolDWord(x[2]  + x[1],  13);
+    x[0]  := x[0]  xor RolDWord(x[3]  + x[2],  18);
+    x[6]  := x[6]  xor RolDWord(x[5]  + x[4],  7);
+    x[7]  := x[7]  xor RolDWord(x[6]  + x[5],  9);
+    x[4]  := x[4]  xor RolDWord(x[7]  + x[6],  13);
+    x[5]  := x[5]  xor RolDWord(x[4]  + x[7],  18);
+    x[11] := x[11] xor RolDWord(x[10] + x[9],  7);
+    x[8]  := x[8]  xor RolDWord(x[11] + x[10], 9);
+    x[9]  := x[9]  xor RolDWord(x[8]  + x[11], 13);
+    x[10] := x[10] xor RolDWord(x[9]  + x[8],  18);
+    x[12] := x[12] xor RolDWord(x[15] + x[14], 7);
+    x[13] := x[13] xor RolDWord(x[12] + x[15], 9);
+    x[14] := x[14] xor RolDWord(x[13] + x[12], 13);
+    x[15] := x[15] xor RolDWord(x[14] + x[13], 18);
+  end;
+  for i := 0 to 15 do
+  begin
+    Tmp[i] := x[i] + w[i];
+    Output[i] := Tmp[i];
+  end;
+end;
+
+procedure BlockMix(Input, Output: PCardinalArray; R: PtrUInt);
+var
+  i: PtrUInt;
+  tmp: TSalsaBlock;
+begin
+  MoveFast(Input[(R * 2 - 1) * 16], tmp, 16 * 4);
+  i := 0;
+  repeat
+    SalsaXor(tmp, @Input[i * 16],      @Output[i * 8]);
+    SalsaXor(tmp, @Input[i * 16 + 16], @Output[i * 8 + R * 16]);
+    inc(i, 2);
+  until i >= R * 2;
+end;
+
+procedure SMix(B: pointer; R, N: PtrUInt; X, Y, V: PCardinalArray);
+var
+  i, R32: PtrUInt;
+begin
+  R32 := R * 32;
+  MoveFast(B^, X^, R32 * 4);
+  i := 0;
+  repeat
+    MoveFast(X^, V[i * R32], R32 * 4);
+    BlockMix(X, Y, R);
+    inc(i);
+    MoveFast(Y^, V[i * R32], R32 * 4);
+    BlockMix(Y, X, R);
+    inc(i);
+  until i >= N;
+  i := 0;
+  repeat
+    XorMemory(pointer(X), @V[(X[(R * 2 - 1) * 16] and (N - 1)) * R32], R32 * 4);
+    BlockMix(X, Y, R);
+    XorMemory(pointer(Y), @V[(Y[(R * 2 - 1) * 16] and (N - 1)) * R32], R32 * 4);
+    BlockMix(Y, X, R);
+    inc(i, 2);
+  until i >= N;
+  MoveFast(X^, B^, R32 * 4);
+end;
+
+function SCryptMemoryUse(N, R, P: QWord): QWord;
+begin
+  result := ({data=}(P * R * 32) + {X=}(R * 32) + {Y=}(R * 32) + {V=}(N * R * 32)) * 4;
+end;
+
+function SCryptPascal(const Password: RawUtf8; const Salt: RawByteString;
+  N, R, P, DestLen: PtrUInt): RawByteString;
+var
+  state: PCardinalArray;
+  data: RawByteString;
+  d: PByte;
+  workmem: QWord;
+begin
+  result := '';
+  // validate parameters
+  workmem := ({X=}(R * 32) + {Y=}(R * 32) + {V=}(N * R * 32)) * 4;
+  if (DestLen < 16) or
+     (N <= 1) or
+     (N >= PtrUInt(1 shl 31)) or
+     (not IsPowerOfTwo(N)) or     // must be a power of 2 greater than 1
+     (R = 0) or                   // R = blocksize
+     (P = 0) or                   // P = parallel
+     (workmem >= 1 shl 30) or     // consume up to 1GB of RAM
+     (R * P >= 1 shl 30) or       // must satisfy r * p < 2^30
+     (R > (MaxInt div 256)) or
+     (N > (MaxInt div 128 div R)) then
+    exit;
+  // perform the SCrypt process
+  data := Pbkdf2HmacSha256(Password, Salt, 1, P * R * (32 * 4));
+  if data = '' then
+    exit;
+  GetMem(state, workmem); // allocate all memory at once to leverage the OS
+  d := pointer(data);
+  repeat // no parallel execution yet
+    SMix(d, R, N, @state[0], @state[R * 32], @state[R * 64]);
+    inc(d, 128 * R);
+    dec(P);
+  until P = 0;
+  FreeMem(state);
+  result := Pbkdf2HmacSha256(Password, data, 1, DestLen);
+end;
+
+
 procedure InitializeUnit;
 begin
   {$ifndef PUREMORMOT2}
   assert(SizeOf(TAesFullHeader) = SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
   BCrypt := @BCryptHash; // to implement mcfBCrypt in mormot.crypt.secure
+  if not Assigned(SCrypt) then
+    SCrypt := @SCryptPascal; // if faster OpenSSL is not already set
 end;
 
 initialization
