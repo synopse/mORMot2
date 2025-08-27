@@ -1910,7 +1910,7 @@ var
   /// the shared TAesPrng instance returned by TAesPrng.Main class function
   // - you may override this to a customized instance, e.g. for a specific
   // random generator to be used, like TSystemPrng or TAesPrngOsl
-  MainAesPrng: TAesPrngAbstract;
+  MainAesPrng: TAesPrng;
 
   /// low-level RAND_bytes() OpenSSL API function set by mormot.crypt.openssl
   // - used by TAesPrng.GetEntropy if available to add some audited entropy
@@ -7457,11 +7457,8 @@ begin
   Create({pbkdf2rounds=}16);
 end;
 
-class function TAesPrng.Main: TAesPrngAbstract;
+function SetMainAesPrng: TAesPrng;
 begin
-  result := MainAesPrng;
-  if result <> nil then
-    exit;
   GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
   try
     if MainAesPrng = nil then
@@ -7470,6 +7467,13 @@ begin
     GlobalUnLock;
   end;
   result := MainAesPrng;
+end;
+
+class function TAesPrng.Main: TAesPrngAbstract;
+begin
+  result := MainAesPrng;
+  if result = nil then
+    result := SetMainAesPrng;
 end;
 
 var
