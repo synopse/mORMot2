@@ -53,6 +53,7 @@ type
       const exp, msg: RawUtf8);
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
       const lab: RawUtf8 = 'kerberos'; const ctx: RawUtf8 = '');
+    procedure TestSCript(api: TSCriptRaw; const name: RawUtf8);
     procedure OpenSslTest(Algo: THashAlgo; const msg, exp: RawUtf8); overload;
     procedure OpenSslTest(Algo: THashAlgo; const msg, key, exp: RawUtf8); overload;
   published
@@ -158,6 +159,48 @@ begin
   res := sign.KdfSP800(a, length(exp) shr 1, bin, lab, ctx);
   CheckEqual(length(res), length(exp) shr 1);
   CheckEqualHex(res, exp, msg);
+end;
+
+procedure TTestCoreCrypto.TestSCript(api: TSCriptRaw; const name: RawUtf8);
+
+  procedure One(const Expected, Password, Salt: RawByteString; N, R, P: PtrUInt);
+  var
+    h: RawByteString;
+  begin
+    h := api(Password, Salt, N, R, P, length(Expected) div 2);
+    Check(h <> '');
+    CheckEqual(BinToHexLower(h), Expected, name);
+  end;
+
+var
+  timer: TPrecisionTimer;
+begin
+  if not Assigned(api) then
+    exit;
+  timer.Start;
+  CheckEqual(api('', '', 3, 1, 1, 16), '', 'N=3');
+  One('48b0d2a8a3272611984c50ebd630af52',
+      'p', 's', 2, 1, 1);
+  One('8756bc2e73774a06194e4042746fe3d1',
+      'p', 'p', 2, 1, 1);
+  One('482c858e229055e62f41e0ec819a5ee18bdb87251a534f75acd95ac5e50aa15f',
+      'password', 'salt', 2, 10, 10);
+  One('88bd5edb52d1dd00188772ad36171290224e74829525b18d7323a57f91963c37',
+      'password', 'salt', 16, 100, 100);
+  One('77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442f' +
+      'cd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906',
+      '', '', 16, 1, 1);
+  One('fdbabe1c9d3472007856e7190d01e9fe7c6ad7cbc8237830e77376634b3731622' +
+      'eaf30d92e22a3886ff109279d9830dac727afb94a83ee6d8360cbdfa2cc0640',
+      'password', 'NaCl', 1024, 8, 16);
+  One('7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2d' +
+      '5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887',
+      'pleaseletmein', 'SodiumChloride', 16384, 8, 1);
+  One('c3f182ee2dec846e70a6942fb529985a3a09765ef04c612923b17f18555a37076' +
+      'deb2b9830d69de5492651e4506ae5776d96d40f67aaee37e1777b8ad5c3111432' +
+      'bb3b6f7e1264401879e641ae', 'this is a long '#0' password',
+      'and this is a long '#0' salt', 16384, 8, 1);
+  NotifyTestSpeed('%', [name], 0, 0, @timer, fOwner.MultiThread);
 end;
 
 procedure TTestCoreCrypto.OpenSslTest(Algo: THashAlgo; const msg, exp: RawUtf8);
@@ -1981,6 +2024,13 @@ begin
   exp := '$bcrypt-sha256$v=2,t=2b,r=12$n79VH.0Q2TMWmt3Oqt9uku$Kq4Noyk3094Y2QlB8NdRT8SvGiI4ft2';
   Check(ModularCryptVerify('password', exp) = mcfBCryptSha256);
   Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
+  // OpenSSL SCrypt implementation
+  {$ifdef USE_OPENSSL}
+  if OpenSslIsAvailable then
+    if OpenSslVersion >= OPENSSL3_VERNUM then
+      TestSCript(@OpenSslSCrypt, 'OpenSslSCrypt');
+  {$endif USE_OPENSSL}
+  // validate "Modular Crypt" formats
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
     timer.Start;
