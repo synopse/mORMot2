@@ -3280,6 +3280,9 @@ type
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy to initialize the internal state
   // - you can seed and use your own TLecuyer (threadvar) instance, if needed
+  // - generation numbers are very good for such a simple and proven algorithm:
+  // $   Lecuyer Random32 in 708us i.e. 134.7M/s, aver. 7ns, 538.8 MB/s
+  // $   Lecuyer RandomBytes in 3.75ms, 254.3 MB/s
   {$ifdef USERECORDWITHMETHODS}
   TLecuyer = record
   {$else}

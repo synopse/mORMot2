@@ -1784,16 +1784,16 @@ type
   // - FillRandom() is thread-safe, and its AES process is not blocking: only
   // the CTR is pre-computed inside a lock
   // - use fast hardware AES-NI, and our 8X interleaved asm on x86_64 asm:
-  // $  mORMot Random32 in 3.95ms i.e. 25,303,643/s, aver. 0us, 96.5 MB/s
-  // $  mORMot FillRandom in 46us, 2 GB/s
-  // - it is actually much faster than OpenSSL with the same 256-bit safety level:
-  // $  OpenSSL Random32 in 288.71ms i.e. 346,363/s, aver. 2us, 1.3 MB/s
-  // $  OpenSSL FillRandom in 240us, 397.3 MB/s
-  // - on i386, numbers are similar, but for FillRandom which is not interleaved:
-  // $ mORMot Random32 in 5.54ms i.e. 18,044,027/s, aver. 0us, 68.8 MB/s
-  // $ mORMot FillRandom in 203us, 469.7 MB/s
-  // $ OpenSSL Random32 in 364.24ms i.e. 274,540/s, aver. 3us, 1 MB/s
-  // $ OpenSSL FillRandom in 371us, 257 MB/s
+  // $  mORMot FillRandom in 1.22ms, 7.6 GB/s
+  // $  OpenSSL FillRandom in 1.22ms, 7.6 GB/s
+  // - for small blocks, the OpenSSL overhead seems huge (40x times):
+  // $  mORMot Random32 in 1.32ms i.e. 72M/s, aver. 13ns, 288.3 MB/s
+  // $  OpenSSL Random32 in 49.61ms i.e. 1.9M/s, aver. 496ns, 7.6 MB/s
+  // - on i386, numbers are quite similar, thanks to our 4X interleaved asm:
+  // $  mORMot FillRandom in 1.23ms, 7.5 GB/s
+  // $  OpenSSL FillRandom in 1.23ms, 7.5 GB/s
+  // $  mORMot Random32 in 1.32ms i.e. 71.7M/s, aver. 13ns, 287 MB/s
+  // $  OpenSSL Random32 in 73.33ms i.e. 1.3M/s, aver. 733ns, 5.2 MB/s
   TAesPrng = class(TAesPrngAbstract)
   protected
     fBytesSinceSeed: PtrUInt;
