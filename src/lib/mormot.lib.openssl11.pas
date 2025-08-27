@@ -254,7 +254,12 @@ const
   LIB_CRYPTO = LIB_CRYPTO1;  // for external LIB_CRYPTO function definitions
   LIB_SSL    = LIB_SSL1;     // for external LIB_SSL    function definitions
 
+  OpenSslStatic = true;
+
 {$else}
+
+const
+  OpenSslStatic = false;
 
 var
   /// internal flag used by OpenSslIsAvailable function for dynamic loading
@@ -2736,6 +2741,14 @@ function LoadPkcs12(const Der: RawByteString): PPKCS12;
 // call CA^.FreeX509 if one is allocated
 function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
   out Cert: PX509; out PrivateKey: PEVP_PKEY; CA: PPstack_st_X509 = nil): boolean;
+
+/// low-level SCrypt hash computation as available since OpenSSL 3.x
+// - see http://www.tarsnap.com/scrypt.html and RFC 7914
+// - on i386:   N=65536: 114ms / N=16384: 27ms (SCryptPascal: 136ms / 33ms)
+// - on x86_64: N=65536: 103ms / N=16384: 24ms (SCryptPascal: 139ms / 33ms)
+// - assigned with OpenSSL 3.x to mormot.crypt.core.pas SCrypt() redirection
+function OpenSslSCrypt(const Password: RawUtf8; const Salt: RawByteString;
+  N, R, P, DestLen: PtrUInt): RawByteString;
 
 type
   /// a convenient PX509 array wrapper to leverage mormot.core.os.pas PEM cache
@@ -10679,6 +10692,44 @@ begin
   pkcs12 := LoadPkcs12(Saved);
   result := pkcs12.Extract(Password, @PrivateKey, @Cert, CA);
   pkcs12.Free;
+end;
+
+function OpenSslSCrypt(const Password: RawUtf8; const Salt: RawByteString;
+  N, R, P, DestLen: PtrUInt): RawByteString;
+var
+  ctx: PEVP_PKEY_CTX;
+  len: PtrUInt;
+begin
+  result := '';
+  // validate parameters
+  if (DestLen < 16) or
+     (N <= 1) or
+     (N >= PtrUInt(1 shl 31)) or
+     (not IsPowerOfTwo(N)) or  // must be a power of 2 greater than 1
+     (R = 0) or                // R = blocksize
+     (P = 0) or                // P = parallel
+     (QWord(R) * QWord(N) * 128 >= 1 shl 30) or // consume up to 1GB of RAM
+     (R * P >= 1 shl 30) then                   // must satisfy r * p < 2^30
+    exit;
+  ctx := EVP_PKEY_CTX_new_id(EVP_PKEY_SCRYPT, nil);
+  if ctx <> nil then
+  try
+    // setup parameters
+    if (EVP_PKEY_derive_init(ctx) <= 0) or
+       (EVP_PKEY_CTX_set1_pbe_pass(ctx, pointer(Password), Length(Password)) <= 0) or
+       (EVP_PKEY_CTX_set1_scrypt_salt(ctx, pointer(Salt), length(Salt)) <= 0) or
+       (EVP_PKEY_CTX_set_scrypt_N(ctx, N) <= 0) or
+       (EVP_PKEY_CTX_set_scrypt_r(ctx, R) <= 0) or
+       (EVP_PKEY_CTX_set_scrypt_p(ctx, P) <= 0) then
+      exit;
+   // derive key
+   len := DestLen;
+   if (EVP_PKEY_derive(ctx, FastNewRawByteString(result, len), @len) <= 0) or
+      (len <> DestLen) then
+     result := '';
+  finally
+    EVP_PKEY_CTX_free(ctx);
+  end;
 end;
 
 function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;

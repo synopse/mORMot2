@@ -712,6 +712,7 @@ function ToText(u: TX509Usages): ShortString; overload;
 // - assigned to mormot.core.secure X509Parse() redirection by RegisterOpenSsl
 function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
+
 /// call once at program startup to use OpenSSL when its performance matters
 // - to be typically called after function OpenSslInitialize() by your project
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
@@ -3476,7 +3477,6 @@ begin
 end;
 
 
-
 procedure RegisterOpenSsl;
 var
   caa: TCryptAsymAlgo;
@@ -3534,6 +3534,9 @@ begin
       CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
     end;
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
+  // OpenSSL is faster than mormot.crypt.other for SCrypt
+  if OpenSslVersion >= OPENSSL3_VERNUM then
+    SCrypt := @OpenSslSCrypt;
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
   CreateDummyCertificate := _CreateDummyCertificate;
   // and also for X.509 parsing
