@@ -2550,8 +2550,13 @@ procedure HmacSha256(key, msg: pointer; keylen, msglen: integer;
 /// compute the PBKDF2 derivation of a password using HMAC over SHA-256
 // - this function expect the resulting key length to match SHA-256 digest size
 procedure Pbkdf2HmacSha256(const password, salt: RawByteString;
-  count: integer; out result: TSha256Digest;
-  const saltdefault: RawByteString = '');
+  count: integer; out result: TSha256Digest; const saltdefault: RawByteString = '';
+  partnumber: integer = 1); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-256
+// - overload to iterate Pbkdf2HmacSha256() until destlen bytes are returned
+function Pbkdf2HmacSha256(const password, salt: RawByteString;
+  count, destlen: cardinal): RawByteString; overload;
 
 /// safe key derivation using iterated SHA-3 hashing
 // - you can use SHA3_224, SHA3_256, SHA3_384, SHA3_512 algorithm to fill
@@ -9213,7 +9218,7 @@ end;
 { ****************** PBKDF2 Key Derivation over SHA-256 and SHA-3 }
 
 procedure Pbkdf2HmacSha256(const password, salt: RawByteString; count: integer;
-  out result: TSha256Digest; const saltdefault: RawByteString);
+  out result: TSha256Digest; const saltdefault: RawByteString; partnumber: integer);
 var
   i: integer;
   tmp: TSha256Digest;
@@ -9225,8 +9230,8 @@ begin
     mac.Update(saltdefault)
   else
     mac.Update(salt); 
-  PInteger(@tmp)^ := $01000000;
-  mac.Update(@tmp, 4);
+  partnumber := bswap32(partnumber); // e.g. $01000000 for default 1
+  mac.Update(@partnumber, 4);
   mac.Done(result);
   if count < 2 then
     exit;
@@ -9241,6 +9246,34 @@ begin
   FillcharFast(first, SizeOf(first), 0);
   FillcharFast(mac, SizeOf(mac), 0);
   FillZero(tmp);
+end;
+
+function Pbkdf2HmacSha256(const password, salt: RawByteString;
+  count, destlen: cardinal): RawByteString;
+var
+  l, r, part: cardinal;
+  ti: PHash256;
+begin
+  result := '';
+  if (count = 0) or
+     (count > 16 shl 20) or
+     (destlen = 0) or
+     (destlen > 512 shl 20) then
+    exit;
+  l := destlen shr 5;
+  r := destlen - (l * 32); // mod
+  if r <> 0 then
+    inc(l); // ceil()
+  // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, part)
+  ti := FastNewString(l * 32); // pre-allocate destination buffer
+  pointer(result) := ti;
+  for part := 1 to l do
+  begin
+    Pbkdf2HmacSha256(password, salt, count, ti^, '', part);
+    inc(ti); // just concatenate each Ti
+  end;
+  if r <> 0 then
+    FakeLength(result, destlen); // truncate to the expected destination size
 end;
 
 procedure Pbkdf2Sha3(algo: TSha3Algo; const password, salt: RawByteString;
