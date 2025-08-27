@@ -155,6 +155,11 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 /// entry point of the raw SHA-512 transform function - for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
+type
+  /// the prototype of our SCrypt() raw function
+  TSCriptRaw = function(const Password: RawUtf8; const Salt: RawByteString;
+    N, R, P, DestLen: PtrUInt): RawByteString;
+
 var
   /// 32-bit truncation of GoLang runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing
@@ -191,8 +196,13 @@ var
   /// BCrypt raw implementation function - injected by mormot.crypt.other.pas
   // - Cost should be in range 4..31 and Salt '' or exactly 22 characters (128-bit)
   // - returns e.g. '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m'
-  BCrypt: function(const Password, Salt: RawUtf8; Cost: byte;
-    HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
+  BCrypt: function(const Password: RawUtf8; const Salt: RawUtf8 = '';
+    Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
+
+  /// SCrypt raw implementation function
+  // - injected by mormot.crypt.openssl.pas or by mormot.crypt.other.pas (slower)
+  // - as defined by http://www.tarsnap.com/scrypt.html and RFC 7914
+  SCrypt: TSCriptRaw;
 
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
