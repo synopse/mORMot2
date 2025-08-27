@@ -41,7 +41,7 @@ type
     fDigestAlgo: TDigestAlgo;
     fCatalogAllGenerate: boolean;
     procedure CryptData(dpapi: integer; const name: string);
-    procedure Prng(meta: TAesPrngClass; const name: RawUtf8);
+    procedure Prng(meta: TAesPrngClass; const name, big: RawUtf8);
     function DigestUser(const User, Realm: RawUtf8;
       out HA0: THash512Rec): TAuthServerResult;
     procedure CatalogRunAsym(Context: TObject);
@@ -730,12 +730,13 @@ var
   i: integer;
   big: RawByteString;
 begin
+  SetLength(big, 100000);
   // validate TAesPrgn (+ TAesPrngOsl) generators
   check(TAesPrng.IsAvailable);
   check(TSystemPrng.IsAvailable);
-  Prng(TAesPrng, 'mORMot');
+  Prng(TAesPrng, 'mORMot', big);
   {$ifdef USE_OPENSSL}
-  Prng(TAesPrngOsl, 'OpenSSL');
+  Prng(TAesPrngOsl, 'OpenSSL', big);
   {$endif USE_OPENSSL}
   // include Lecuyer for comparison, with same benchmarks as in Prng()
   timer.Start;
@@ -746,18 +747,18 @@ begin
   for i := 0 to 50000 do
     Check(Random32(maxInt - i) < cardinal(maxInt - i));
   NotifyTestSpeed('Lecuyer Random32', [], 100003, 100003 * 4, @timer);
-  SetLength(big, 100000);
   timer.Start;
-  RandomBytes(pointer(big), length(big));
-  NotifyTestSpeed('       Lecuyer RandomBytes', [], 1, length(big), @timer);
+  for i := 1 to 100 do
+    RandomBytes(pointer(big), length(big));
+  NotifyTestSpeed('       Lecuyer RandomBytes', [], 1, length(big) * 10, @timer);
 end;
 
-procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUtf8);
+procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name, big: RawUtf8);
 var
   p: TAesPrngAbstract;
   b1, b2: TAesBlock;
   a1, a2: TAesPrngAbstract;
-  s1, s2, split, big: RawByteString;
+  s1, s2, split: RawByteString;
   c: cardinal;
   d: double;
   e: TSynExtended;
@@ -889,10 +890,10 @@ begin
   for i := 0 to 50000 do
     Check(p.Random32(maxInt - i) < cardinal(maxInt - i));
   NotifyTestSpeed('% Random32', [name], 100003, 100003 * 4, @timer);
-  SetLength(big, 100000);
   timer.Start;
-  p.FillRandom(pointer(big), length(big));
-  NotifyTestSpeed('       % FillRandom', [name], 1, length(big), @timer);
+  for i := 1 to 100 do
+    p.FillRandom(pointer(big), length(big));
+  NotifyTestSpeed('       % FillRandom', [name], 1, length(big) * 100, @timer);
 end;
 
 function CryptDataSecretWrapper(const Data, AppSecret: RawByteString;
