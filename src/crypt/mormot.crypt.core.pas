@@ -2766,7 +2766,7 @@ type
 
 const
   // used by SHA-256
-  K256: array[0..63] of cardinal = (
+  K256: TBlock2048 = (
     $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1,
     $923f82a4, $ab1c5ed5, $d807aa98, $12835b01, $243185be, $550c7dc3,
     $72be5d74, $80deb1fe, $9bdc06a7, $c19bf174, $e49b69c1, $efbe4786,
@@ -2780,6 +2780,11 @@ const
     $90befffa, $a4506ceb, $bef9a3f7, $c67178f2);
 
 var
+  {$ifdef USEAESNIHASH}
+  // 16*4=64 random bytes (512-bit) set at startup to avoid hash flooding
+  // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
+  AesNiHashKey: PHash512; // = AesNiHashAntiFuzzTable
+  {$endif USEAESNIHASH}
   // AES computed tables - don't change the order below! (used for weak Xor)
   Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: array[byte] of cardinal;
   SBox, InvSBox: TByteToByte;
@@ -10308,12 +10313,7 @@ begin
     // optimized Intel's .asm using SSE4 or SHA-NI HW opcodes
     K256Aligned := @K256;
     if PtrUInt(K256Aligned) and 15 <> 0 then
-    begin
-      if K256AlignedStore = '' then
-        GetMemAligned(K256AlignedStore, @K256, SizeOf(K256), K256Aligned);
-      if PtrUInt(K256Aligned) and 15 <> 0 then
-        K256Aligned := nil; // paranoid
-    end;
+      K256Aligned := GetMemAligned(SizeOf(K256), @K256);
     if cfSHA in CpuFeatures then // detect cpuid with SSE4.1 + SHA opcodes
       try
         Sha256ni(dummy, dummy, 1);
@@ -10328,7 +10328,7 @@ begin
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
-    GetMemAligned(AesNiHashMem, nil, 16 * 4, AesNiHashKey, {align=}16);
+    AesNiHashKey := GetMemAligned(16 * 4);
     AesNiHashAntiFuzzTable := AesNiHashKey;
     XorMemory(PHash128Rec(AesNiHashKey)^, StartupEntropy); // 128-bit salt
     SharedRandom.Fill(AesNiHashKey, 16 * 4); // 512-bit of TLecuyer seed
@@ -10392,6 +10392,14 @@ end;
 
 procedure FinalizeUnit;
 begin
+  {$ifdef ASMX64}
+  if K256Aligned <> @K256 then
+    FreeMemAligned(K256Aligned, SizeOf(K256Aligned^));
+  {$endif ASMX64}
+  {$ifdef USEAESNIHASH}
+  if AesNiHashKey <> nil then
+    FreeMemAligned(AesNiHashKey, SizeOf(AesNiHashKey^));
+  {$endif USEAESNIHASH}
   {$ifdef USE_PROV_RSA_AES}
   if (CryptoApiAesProvider <> nil) and
      (CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED) then

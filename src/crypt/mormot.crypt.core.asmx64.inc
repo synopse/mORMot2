@@ -189,8 +189,7 @@ end;
 // optimized unrolled version from Intel's Sha256Sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
-  K256AlignedStore: RawByteString;
-  K256Aligned: pointer; // movaps + paddd do expect 16 bytes alignment
+  K256Aligned: PBlock2048; // movaps + paddd do expect 16 bytes alignment
 
 const
   STACK_SIZE = 32 {$ifndef SYSVABI} + 7 * 16 {$endif};
@@ -7485,13 +7484,6 @@ end;
 {$endif USEAESNI}
 
 {$ifdef USEAESNIHASH}
-
-var
-  // random 16*4=64 bytes filled at startup to make collisions harder to engineer
-  // - to avoid hash flooding http://ocert.org/advisories/ocert-2012-001.html
-  // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
-  AesNiHashKey: pointer; // = AesNiHashAntiFuzzTable
-  AesNiHashMem: RawByteString;
 
 procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt); forward;
 

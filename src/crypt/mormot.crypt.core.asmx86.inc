@@ -3345,12 +3345,6 @@ end;
 
 {$ifdef USEAESNIHASH}
 
-var
-  // 16*4=64 random bytes (512-bit) set at startup to avoid hash flooding
-  // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
-  AesNiHashKey: pointer; // = 512-bit AesNiHashAntiFuzzTable
-  AesNiHashMem: RawByteString;
-
 procedure _AesNiHashXmm0; forward;
 
 function _AesNiHash64(const seed: QWord; data: pointer; len: PtrUInt): QWord;
