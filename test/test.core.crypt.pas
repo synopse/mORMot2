@@ -2093,8 +2093,7 @@ begin
       dec(PByteArray(u)[length(u) - 5]);
       Check(ModularCryptVerify(pw, u) = mcfInvalid);
     end;
-    if not fOwner.MultiThread then
-      NotifyTestSpeed('% rounds', [ToText(mcf)^], rounds, 0, @timer);
+    NotifyTestSpeed('% rounds', [ToText(mcf)^], rounds, 0, @timer, fOwner.MultiThread);
   end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
@@ -4497,7 +4496,7 @@ begin
   timer.Start;
   c := TRsa.GenerateNew; // with RSA_DEFAULT_GENERATION_* values
   try
-    NotifyTestSpeed('RS256 generate', -1, 0, @timer, {onlylog=}true);
+    NotifyTestSpeed('RS256 generate', -1, 0, @timer, fOwner.MultiThread);
     if CheckFailed(c <> nil, 'TimeOut') then
       exit;
     CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
