@@ -440,6 +440,8 @@
     // FPC SEH is not fully efficient and generate some additional code/calls
   {$ifend}
 
+  {$define HASRTLCRITICALSECTION}
+
   // note: you may remove all unexpexted hints by setting in your project options
   // -vm11047,3187,3123,3124,4055,4079,4081,5023,5024,5027,5028,5036,5037,5058,5059,5060,5089,5090,5091,5092,5093,5094,6018,6058
 
@@ -476,7 +478,8 @@
   {$ifdef MSWINDOWS}
 
     {$define OSWINDOWS}
-
+    {$define HASRTLCRITICALSECTION}
+    
   {$else}
     // 'Delphi for MacOS/Linux/Mobile are not officially supported yet'
     // '-> we recommend using FPC for POSIX platforms'
@@ -490,12 +493,31 @@
     {$endif MACOS}
     {$ifdef ANDROID}
       {$define OSANDROID}
+          {.$define DELPHIANDROID}
+          {.$define OSLINUXANDROID}
+          {.$define NOPATCHRTL}  // don't mess with asm stuff
+          {.$ifdef CPUX86}
+            {.$define FPC_PIC}
+          {.$endif CPUX86}
+          {.$ifdef CPUAARCH64}
+            {.$define OSANDROIDARM64}
+          {.$endif CPUAARCH64}
     {$endif ANDROID}
     {$ifdef LINUX}
       {$define OSLINUX}
+        {.$define DELPHILINUX}
+        {.$ifdef CPUX64}
+          {.$define OSLINUXINTEL}
+          {.$define OSLINUXX64}
+        {.$endif CPUX64}
+        {.$ifdef CPUX86}
+          {.$define OSLINUXINTEL}
+          {.$define OSLINUXX86}
+        {.$endif CPUX86}
     {$endif LINUX}
 
     {$LEGACYIFEND ON} // hint seems to be emitted only on non-Windows targets
+    {$POINTERMATH ON}
 
   {$endif MSWINDOWS}
 

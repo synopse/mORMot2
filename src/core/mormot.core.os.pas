@@ -33,6 +33,10 @@ uses
   {$ifdef OSWINDOWS}
   Windows, // needed here e.g. for redefinition/redirection of standard types
   Messages,
+  {$ELSE}
+     {$ifdef ISDELPHI}
+     mormot.core.posix.delphi,
+     {$endif ISDELPHI}
   {$endif OSWINDOWS}
   classes,
   contnrs,
@@ -2083,7 +2087,11 @@ type
   // - ICU is loaded only when needed outside of mORMot needs
   TIcuLibrary = record
   private
+    {$if defined(ISDELPHI) and defined(POSIX)}
+    icu, icudata, icui18n: NativeUInt;
+    {$else}
     icu, icudata, icui18n: pointer;
+    {$ifend}
     fLoaded: boolean;
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
@@ -2359,6 +2367,12 @@ const
   {$endif OSLINUXX64}
 
 {$undef HAS_OSPTHREADS}
+{$ifdef ISDELPHI}
+  /// defined as in FPC RTL, to avoid dependency to Windows.pas unit
+  // - note that on POSIX, a THandle is a 32-bit integer, but library or
+  // resource handles are likely to map pointers, i.e. up to a 64-bit integer
+  TLibHandle = THandle;
+{$endif ISDELPHI}
 {$ifdef OSLINUX}
   {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
@@ -2440,7 +2454,9 @@ type
   TThreadIDInt = PtrUInt;
 
 {$ifndef OSLINUX} // try to stabilize MacOS/BSD pthreads API calls
-  {$define NODIRECTTHREADMANAGER}
+  {$ifndef ISDELPHI}
+     {$define NODIRECTTHREADMANAGER}
+  {$endif ISDELPHI}
 {$endif OSLINUX}
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
