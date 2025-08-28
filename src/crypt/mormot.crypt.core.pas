@@ -9355,7 +9355,7 @@ begin
   else
     mac.Update(salt); 
   mac.UpdateBigEndian(partnumber); // e.g. $01000000 for default 1
-  mac.Done(result);
+  mac.Done(result, {noinit=}true);
   if count > 1 then
   begin
     tmp := result;
@@ -9400,14 +9400,14 @@ begin
     if l = 1 then
     begin
       first.UpdateBigEndian(1); // single part
-      first.Done(ti^);
+      first.Done(ti^, true);
     end
     else
       for part := 1 to l do
       begin
         mac := first;
         mac.UpdateBigEndian(part);
-        mac.Done(ti^);
+        mac.Done(ti^, {noinit=}part < l);
         inc(ti); // just concatenate each Ti
       end;
   end
@@ -9417,7 +9417,7 @@ begin
       mac := first;
       mac.Update(salt);
       mac.UpdateBigEndian(part);
-      mac.Done(ti^);
+      mac.Done(ti^, true);
       tmp := ti^;
       for i := 2 to count do
       begin
@@ -9428,6 +9428,11 @@ begin
       end;
       inc(ti); // just concatenate each Ti
     end;
+  FillcharFast(first, SizeOf(first), 0);
+  if (count <> 1) or
+     (l <> 1) then
+    FillcharFast(mac, SizeOf(mac), 0);
+  FillZero(tmp);
   if r <> 0 then
     FakeLength(result, destlen); // truncate to the expected destination size
 end;
