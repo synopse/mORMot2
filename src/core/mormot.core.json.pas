@@ -5157,7 +5157,10 @@ begin
     W.AddShort4(JSON_SQLDATE_MAGIC_QUOTE_C)
   else if PInt64(Value)^ = 0 then
   begin
-    W.AddShort4(NULL_LOW);
+    if woDateTimeNullAsVoidString in Options then
+      W.Add('"', '"') // legacy mORMot 1 format
+    else
+      W.AddShort4(NULL_LOW);
     exit;
   end
   else

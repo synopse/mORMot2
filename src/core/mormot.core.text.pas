@@ -423,6 +423,7 @@ type
   // before the ISO-8601 encoded TDateTime value
   // - woDateTimeWithZSuffix will append the Z suffix to the ISO-8601 encoded
   // TDateTime value, to identify the content as strict UTC value
+  // - woDateTimeNullAsVoidString will store TDateTime = 0 as legacy "" content
   // - TTimeLog would be serialized as Int64, unless woTimeLogAsText is defined
   // - since TOrm.ID could be huge Int64 numbers, they may be truncated
   // on client side, e.g. to 53-bit range in JavaScript: you could define
@@ -456,6 +457,7 @@ type
     woEnumSetsAsText,
     woDateTimeWithMagic,
     woDateTimeWithZSuffix,
+    woDateTimeNullAsVoidString,
     woTimeLogAsText,
     woIDAsIDstr,
     woRawBlobAsBase64,
