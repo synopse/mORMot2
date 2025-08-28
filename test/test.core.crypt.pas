@@ -2031,7 +2031,7 @@ begin
     if OpenSslVersion >= OPENSSL3_VERNUM then
       TestSCript(@OpenSslSCrypt, 'OpenSslSCrypt');
   {$endif USE_OPENSSL}
-  TestSCript(@SCryptPascal, 'SCryptPascal');
+  TestSCript(@RawSCrypt, 'RawSCrypt');
   r := SCryptRounds; // default values
   SCryptRoundsDecode(r, logN, blocksize, parallel);
   Check(r = $8000e000);
