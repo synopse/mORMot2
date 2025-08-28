@@ -2959,6 +2959,196 @@ procedure Move512(dst, src: PPtrIntArray);
         movups  dqword ptr [dst + 48], xmm3
 end;
 
+procedure Salsa20x8(B: PCardinalArray);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        push    rbp
+        push    r15
+        push    r14
+        push    r13
+        push    r12
+        push    rbx
+        sub     rsp, 40
+        movdqu  xmm0, dqword ptr [B]
+        movups  xmm1, dqword ptr [B + 16]
+        movups  xmm2, dqword ptr [B + 32]
+        movups  xmm3, dqword ptr [B + 48]
+        mov     qword ptr [rsp - 32], B
+        movdqa  dqword ptr [rsp - 128], xmm0
+        movaps  dqword ptr [rsp - 80],  xmm3
+        movaps  dqword ptr [rsp - 112], xmm1
+        movaps  dqword ptr [rsp - 96],  xmm2
+        mov     r11d, dword ptr [rsp - 128]
+        mov     r8d, dword ptr [rsp - 124]
+        mov     ecx, dword ptr [rsp - 80]
+        mov     edi, dword ptr [rsp - 76]
+        mov     eax, dword ptr [rsp - 112]
+        mov     r15d, dword ptr [rsp - 108]
+        mov     r12d, dword ptr [rsp - 96]
+        mov     ebp, dword ptr [rsp - 92]
+        mov     ebx, dword ptr [rsp - 88]
+        mov     r9d, dword ptr [rsp - 104]
+        mov     r13d, dword ptr [rsp - 72]
+        mov     edx, dword ptr [rsp - 120]
+        mov     qword ptr [rsp - 48], rdx
+        mov     r14d, dword ptr [rsp - 68]
+        mov     r10d, dword ptr [rsp - 84]
+        mov     edx, dword ptr [rsp - 116]
+        mov     qword ptr [rsp - 56], rdx
+        mov     qword ptr [rsp - 40], 4
+        mov     esi, dword ptr [rsp - 100]
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     lea     edx, [rcx + r11]
+        rol     edx, 7
+        xor     edx, eax
+        mov     qword ptr [rsp], rdx
+        lea     eax, [rdx + r11]
+        rol     eax, 9
+        xor     eax, r12d
+        mov     r12, rax
+        mov     qword ptr [rsp + 24], rax
+        add     eax, edx
+        rol     eax, 13
+        xor     eax, ecx
+        mov     qword ptr [rsp + 32], rax
+        add     r12d, eax
+        rol     r12d, 18
+        lea     eax, [r8 + r15]
+        rol     eax, 7
+        xor     eax, ebp
+        mov     qword ptr [rsp + 8], rax
+        lea     ecx, [rax + r15]
+        rol     ecx, 9
+        xor     ecx, edi
+        mov     qword ptr [rsp + 16], rcx
+        add     eax, ecx
+        rol     eax, 13
+        xor     eax, r8d
+        lea     ebp, [rax + rcx]
+        rol     ebp, 18
+        xor     r12d, r11d
+        lea     ecx, [r9 + rbx]
+        rol     ecx, 7
+        xor     ecx, r13d
+        mov     qword ptr [rsp - 8], rcx
+        lea     r11d, [rcx + rbx]
+        rol     r11d, 9
+        xor     r11d, dword ptr [rsp - 48]
+        add     ecx, r11d
+        rol     ecx, 13
+        xor     ecx, r9d
+        lea     edx, [rcx + r11]
+        rol     edx, 18
+        xor     ebp, r15d
+        lea     r9d, [r10 + r14]
+        rol     r9d, 7
+        xor     r9d, dword ptr [rsp - 56]
+        lea     r15d, [r9 + r14]
+        rol     r15d, 9
+        xor     r15d, esi
+        lea     edi, [r15 + r9]
+        rol     edi, 13
+        xor     edi, r10d
+        lea     r13d, [rdi + r15]
+        rol     r13d, 18
+        xor     edx, ebx
+        lea     r8d, [r9 + r12]
+        rol     r8d, 7
+        xor     r8d, eax
+        lea     eax, [r8 + r12]
+        rol     eax, 9
+        xor     eax, r11d
+        lea     esi, [rax + r8]
+        rol     esi, 13
+        xor     esi, r9d
+        mov     qword ptr [rsp - 56], rsi
+        mov     qword ptr [rsp - 48], rax
+        lea     r11d, [rsi + rax]
+        rol     r11d, 18
+        xor     r13d, r14d
+        mov     r10, qword ptr [rsp]
+        lea     r9d, [r10 + rbp]
+        rol     r9d, 7
+        xor     r9d, ecx
+        lea     esi, [r9 + rbp]
+        mov     rcx, rbp
+        rol     esi, 9
+        xor     esi, r15d
+        lea     eax, [rsi + r9]
+        rol     eax, 13
+        xor     eax, r10d
+        lea     r15d, [rax + rsi]
+        rol     r15d, 18
+        xor     r11d, r12d
+        mov     qword ptr [rsp - 16], rdx
+        mov     rbx, qword ptr [rsp + 8]
+        lea     r10d, [rdx + rbx]
+        rol     r10d, 7
+        xor     r10d, edi
+        lea     r12d, [r10 + rdx]
+        rol     r12d, 9
+        xor     r12d, dword ptr [rsp + 24]
+        lea     ebp, [r12 + r10]
+        rol     ebp, 13
+        xor     ebp, ebx
+        lea     ebx, [r12 + rbp]
+        rol     ebx, 18
+        xor     r15d, ecx
+        mov     rdx, qword ptr [rsp - 8]
+        mov     qword ptr [rsp - 24], r13
+        lea     ecx, [rdx + r13]
+        rol     ecx, 7
+        xor     ecx, dword ptr [rsp + 32]
+        lea     edi, [rcx + r13]
+        rol     edi, 9
+        xor     edi, dword ptr [rsp + 16]
+        lea     r13d, [rdi + rcx]
+        rol     r13d, 13
+        xor     r13d, edx
+        lea     r14d, [rdi + r13]
+        rol     r14d, 18
+        xor     ebx, dword ptr [rsp - 16]
+        xor     r14d, dword ptr [rsp - 24]
+        dec     byte ptr [rsp - 40]
+        jnz     @s
+        mov     dword ptr [rsp - 128], r11d
+        mov     dword ptr [rsp - 80], ecx
+        mov     dword ptr [rsp - 112], eax
+        mov     dword ptr [rsp - 96], r12d
+        mov     dword ptr [rsp - 108], r15d
+        mov     dword ptr [rsp - 124], r8d
+        mov     dword ptr [rsp - 92], ebp
+        mov     dword ptr [rsp - 76], edi
+        mov     dword ptr [rsp - 88], ebx
+        mov     dword ptr [rsp - 104], r9d
+        mov     dword ptr [rsp - 72], r13d
+        mov     rax, qword ptr [rsp - 48]
+        mov     dword ptr [rsp - 120], eax
+        mov     dword ptr [rsp - 68], r14d
+        mov     dword ptr [rsp - 84], r10d
+        mov     rax, qword ptr [rsp - 56]
+        mov     dword ptr [rsp - 116], eax
+        mov     dword ptr [rsp - 100], esi
+        mov     rcx, qword ptr [rsp - 32]
+        movdqu  xmm0, dqword ptr [rcx]
+        movdqu  xmm1, dqword ptr [rcx + 16]
+        movdqu  xmm2, dqword ptr [rcx + 32]
+        paddd   xmm0, dqword ptr [rsp - 128]
+        movdqu  xmm3, dqword ptr [rcx + 48]
+        paddd   xmm1, dqword ptr [rsp + 16 - 128]
+        paddd   xmm2, dqword ptr [rsp + 32 - 128]
+        paddd   xmm3, dqword ptr [rsp + 48 - 128]
+        movdqu  dqword ptr [rcx], xmm0
+        movdqu  dqword ptr [rcx + 16], xmm1
+        movdqu  dqword ptr [rcx + 32], xmm2
+        movdqu  dqword ptr [rcx + 48], xmm3
+        add     rsp, 40
+        pop     rbx
+        pop     r12
+        pop     r13
+        pop     r14
+        pop     r15
+        pop     rbp
+end;
 
 procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
