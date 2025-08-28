@@ -1480,6 +1480,54 @@ asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
         pop    ebx
 end;
 
+{$ifdef HASNOSSE2}
+procedure Xor512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
+var
+  i: PtrInt;
+begin
+  for i := 0 to 15 do
+    dst[i] := dst[i] xor src[i];
+end;
+
+procedure Move512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
+var
+  i: PtrInt;
+begin
+  for i := 0 to 15 do
+    dst[i] := src[i];
+end;
+{$else}
+procedure Xor512(dst, src: PPtrIntArray);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        movups  xmm0, dqword ptr [dst]
+        movups  xmm1, dqword ptr [dst + 16]
+        movups  xmm2, dqword ptr [dst + 32]
+        movups  xmm3, dqword ptr [dst + 48]
+        xorps   xmm0, dqword ptr [src]
+        xorps   xmm1, dqword ptr [src + 16]
+        xorps   xmm2, dqword ptr [src + 32]
+        xorps   xmm3, dqword ptr [src + 48]
+        movups  dqword ptr [dst], xmm0
+        movups  dqword ptr [dst + 16], xmm1
+        movups  dqword ptr [dst + 32], xmm2
+        movups  dqword ptr [dst + 48], xmm3
+end;
+
+procedure Move512(dst, src: PPtrIntArray);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        movups  xmm0, dqword ptr [src]
+        movups  xmm1, dqword ptr [src + 16]
+        movups  xmm2, dqword ptr [src + 32]
+        movups  xmm3, dqword ptr [src + 48]
+        movups  dqword ptr [dst], xmm0
+        movups  dqword ptr [dst + 16], xmm1
+        movups  dqword ptr [dst + 32], xmm2
+        movups  dqword ptr [dst + 48], xmm3
+end;
+{$endif HASNOSSE2}
+
 procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
 // semi-unrolled optimized asm version by A. Bouchez
 {$ifdef FPC}nostackframe; assembler;{$endif}

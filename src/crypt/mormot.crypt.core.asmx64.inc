@@ -2931,6 +2931,34 @@ function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         {$endif WIN64ABI}
 end;
 
+procedure Xor512(dst, src: PPtrIntArray);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        movups  xmm0, dqword ptr [dst]
+        movups  xmm1, dqword ptr [dst + 16]
+        movups  xmm2, dqword ptr [dst + 32]
+        movups  xmm3, dqword ptr [dst + 48]
+        xorps   xmm0, dqword ptr [src]
+        xorps   xmm1, dqword ptr [src + 16]
+        xorps   xmm2, dqword ptr [src + 32]
+        xorps   xmm3, dqword ptr [src + 48]
+        movups  dqword ptr [dst], xmm0
+        movups  dqword ptr [dst + 16], xmm1
+        movups  dqword ptr [dst + 32], xmm2
+        movups  dqword ptr [dst + 48], xmm3
+end;
+
+procedure Move512(dst, src: PPtrIntArray);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        movups  xmm0, dqword ptr [src]
+        movups  xmm1, dqword ptr [src + 16]
+        movups  xmm2, dqword ptr [src + 32]
+        movups  xmm3, dqword ptr [src + 48]
+        movups  dqword ptr [dst], xmm0
+        movups  dqword ptr [dst + 16], xmm1
+        movups  dqword ptr [dst + 32], xmm2
+        movups  dqword ptr [dst + 48], xmm3
+end;
+
 
 procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers

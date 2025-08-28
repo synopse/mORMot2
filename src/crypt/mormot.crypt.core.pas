@@ -116,6 +116,14 @@ procedure XorBlock16(A, B, C: PPtrIntArray);
 // ! dst[i] := src[i] xor mask;
 procedure Xor32By128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
 
+/// logical XOR of 512-bit = 64 bytes - use SSE2 on Intel/AMD
+procedure Xor512(dst, src: PPtrIntArray);
+  {$ifndef CPUINTEL} inline;{$endif}
+
+/// efficient Move of 512-bit = 64 bytes - use SSE2 on Intel/AMD
+procedure Move512(dst, src: PPtrIntArray);
+  {$ifndef CPUINTEL} inline;{$endif}
+
 // little endian fast conversion
 // - 160 bits = 5 integers
 // - use fast bswap asm in x86/x64 mode
@@ -2847,6 +2855,52 @@ begin
       dec(count);
     until count = 0;
 end;
+
+{$ifndef CPUINTEL}
+
+{$ifdef CPU32}
+procedure Xor512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
+var
+  i: PtrInt;
+begin
+  for i := 0 to 15 do
+    dst[i] := dst[i] xor src[i];
+end;
+
+procedure Move512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
+var
+  i: PtrInt;
+begin
+  for i := 0 to 15 do
+    dst[i] := src[i];
+end;
+{$else}
+procedure Xor512(dst, src: PPtrIntArray); inline;
+begin
+  dst[0] := dst[0] xor src[0];
+  dst[1] := dst[1] xor src[1];
+  dst[2] := dst[2] xor src[2];
+  dst[3] := dst[3] xor src[3];
+  dst[4] := dst[4] xor src[4];
+  dst[5] := dst[5] xor src[5];
+  dst[6] := dst[6] xor src[6];
+  dst[7] := dst[7] xor src[7];
+end;
+
+procedure Move512(dst, src: PPtrIntArray); inline;
+begin
+  dst[0] := src[0];
+  dst[1] := src[1];
+  dst[2] := src[2];
+  dst[3] := src[3];
+  dst[4] := src[4];
+  dst[5] := src[5];
+  dst[6] := src[6];
+  dst[7] := src[7];
+end;
+{$endif CPU32}
+
+{$endif CPUINTEL}
 
 function Hash128ToExt(P: PHash128Rec): TSynExtended;
 const
