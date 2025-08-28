@@ -330,15 +330,17 @@ type
     // !    fSharedAutoLocker.Leave;
     // !  end;
     // !end;
-    procedure Enter; virtual;
+    procedure Enter;
+      {$ifdef HASINLINE}inline;{$endif}
     /// leave the mutex
     // - as expected by IAutoLocker interface
-    procedure Leave; virtual;
+    procedure Leave;
+      {$ifdef HASINLINE}inline;{$endif}
     /// access to the locking methods of this instance
     // - as expected by IAutoLocker interface
     function Safe: PSynLocker;
     /// direct access to the locking methods of this instance
-    // - faster than IAutoLocker.Safe function
+    // - sligtly faster than IAutoLocker.Safe function if you have a TAutoLocker
     property Locker: TSynLocker
       read fSafe;
   end;
@@ -372,6 +374,7 @@ type
   TSynList = class(TSynPersistent)
   protected
     fCount: integer;
+    fOwnObjects: boolean; // used by TSynObjectList - here for CPU64 alignment
     fList: TPointerDynArray;
     function Get(index: integer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -412,9 +415,9 @@ type
   TSynListClass = class of TSynList;
 
   /// simple and efficient TObjectList, without any notification
+  // - see TSynObjectListLocked for a locked/thread-safe variant
   TSynObjectList = class(TSynList)
   protected
-    fOwnObjects: boolean;
     fItemClass: TClass;
   public
     /// initialize the object list
@@ -424,6 +427,7 @@ type
     /// add one TObject to the list and a variable slot, or release it
     // - return true and store item into sharedslot if it is nil
     // - return false and call item.Free if sharedslot <> nil
+    // - typically used as a local/private garbage collection
     function AddOnceInto(item: TObject; sharedslot: PObject): boolean; virtual;
     /// delete one object from the list
     // - will also Free the item if OwnObjects was set, and dontfree is false
@@ -509,7 +513,7 @@ type
     /// add one item to the list using Safe.WriteLock
     function Add(item: pointer): PtrInt; override;
     /// add one TObject to the list and a variable slot using Safe.WriteLock
-    // - can be used e.g. for thread-safe garbage collection of TObject instances
+    // - typically used as a local/private thread-safe garbage collection
     function AddOnceInto(item: TObject; sharedslot: PObject): boolean; override;
     /// delete all items of the list using Safe.WriteLock
     procedure Clear; override;
@@ -535,9 +539,6 @@ type
   TSynObjectListSorted = class(TSynObjectListLocked)
   protected
     fCompare: TOnObjectCompare;
-    // returns TRUE and the index of existing Item, or FALSE and the index
-    // where the Item is to be inserted so that the array remains sorted
-    function Locate(item: pointer; out index: PtrInt): boolean;
   public
     /// initialize the object list to be sorted with the supplied function
     constructor Create(const aCompare: TOnObjectCompare;
@@ -550,6 +551,9 @@ type
     // - this overriden version won't search for the item pointer itself,
     // but will use the Compare() function until it is 0
     function IndexOf(item: pointer): PtrInt; override;
+    /// returns TRUE and the index of existing Item, or FALSE and the index
+    // where the Item is to be inserted so that the array remains sorted
+    function Locate(item: pointer; out index: PtrInt): boolean;
     /// fast retrieve one item in the list using O(log(n)) binary search
     // - supplied item should have enough information for fCompare to work
     function Find(item: TObject): TObject;
@@ -1054,12 +1058,21 @@ function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec; TypeInfo: PRt
   UriCompatible: boolean = false; TryCustomVariants: PDocVariantOptions = nil): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// crc32c-based hash of a variant value
-// - complex string types will make up to 255 uppercase characters conversion
-// if CaseInsensitive is true
-// - you can specify your own hashing function if crc32c is not what you expect
-function VariantHash(const value: variant; CaseInsensitive: boolean;
-  Hasher: THasher = nil): cardinal;
+/// raw variant hashing function - compatible with SortDynArrayVariantComp()
+// - would stop until Max bytes have been hashed (typically 255 for ptVariant)
+// - will normalize numbers to Int64/double and handle string types as UTF-8,
+// and complex types with redirection e.g. to TDocVariantData.Hash()
+function VariantHash(Seed: cardinal; const Value: variant; var Max: integer;
+  CaseInsensitive: boolean; Hasher: THasher = nil): cardinal;
+
+/// internal function used by VariantHash() to hash after JSON serialization
+function VariantHashAsText(Seed: cardinal; const value: variant;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
+
+var
+  // for TSynInvokeableVariantType.IntHash() support by mormot.core.variants
+  _VariantCustomHash: function(Seed: cardinal; const value: variant;
+    var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
 
 
 { ************ TDynArray and TDynArrayHashed Wrappers }
@@ -1098,42 +1111,42 @@ type
   /// internal enumeration used to specify some standard arrays
   // - mORMot 1.18 did have two serialization engines - we unified it
   // - defined only for backward compatible code; use TRttiParserType instead
-  TDynArrayKind = TRttiParserType;
+  TDynArrayKind  = TRttiParserType;
   TDynArrayKinds = TRttiParserTypes;
 
 const
   /// deprecated TDynArrayKind enumerate mapping
   // - defined only for backward compatible code; use TRttiParserType instead
-  djNone = ptNone;
-  djboolean = ptboolean;
-  djByte = ptByte;
-  djWord = ptWord;
-  djInteger = ptInteger;
-  djCardinal = ptCardinal;
-  djSingle = ptSingle;
-  djInt64 = ptInt64;
-  djQWord = ptQWord;
-  djDouble = ptDouble;
-  djCurrency = ptCurrency;
-  djTimeLog = ptTimeLog;
-  djDateTime = ptDateTime;
-  djDateTimeMS = ptDateTimeMS;
-  djRawUtf8 = ptRawUtf8;
-  djRawJson = ptRawJson;
-  djWinAnsi = ptWinAnsi;
-  djString = ptString;
-  djRawByteString = ptRawByteString;
-  djWideString = ptWideString;
-  djSynUnicode = ptSynUnicode;
-  djHash128 = ptHash128;
-  djHash256 = ptHash256;
-  djHash512 = ptHash512;
-  djVariant = ptVariant;
-  djCustom = ptCustom;
-  djPointer = ptPtrInt;
-  djObject = ptPtrInt;
+  djNone           = ptNone;
+  djboolean        = ptboolean;
+  djByte           = ptByte;
+  djWord           = ptWord;
+  djInteger        = ptInteger;
+  djCardinal       = ptCardinal;
+  djSingle         = ptSingle;
+  djInt64          = ptInt64;
+  djQWord          = ptQWord;
+  djDouble         = ptDouble;
+  djCurrency       = ptCurrency;
+  djTimeLog        = ptTimeLog;
+  djDateTime       = ptDateTime;
+  djDateTimeMS     = ptDateTimeMS;
+  djRawUtf8        = ptRawUtf8;
+  djRawJson        = ptRawJson;
+  djWinAnsi        = ptWinAnsi;
+  djString         = ptString;
+  djRawByteString  = ptRawByteString;
+  djWideString     = ptWideString;
+  djSynUnicode     = ptSynUnicode;
+  djHash128        = ptHash128;
+  djHash256        = ptHash256;
+  djHash512        = ptHash512;
+  djVariant        = ptVariant;
+  djCustom         = ptCustom;
+  djPointer        = ptPtrInt;
+  djObject         = ptPtrInt;
   djUnmanagedTypes = ptUnmanagedTypes;
-  djStringTypes = ptStringTypes;
+  djStringTypes    = ptStringTypes;
 
 {$endif PUREMORMOT2}
 
@@ -1397,6 +1410,12 @@ type
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndDelete(const Item; aIndex: PIntegerDynArray = nil;
       aCompare: TDynArraySortCompare = nil): integer;
+    /// search for all element matching value and delete them
+    // - this method will use the Compare property function for the search,
+    // deleting all entries where aCompare(Value[], Item) = 0, up to Limit
+    // - returns the number of deleted entries (always <= Limit)
+    function FindAndDeleteAll(const Item; aCompare: TDynArraySortCompare;
+      Limit: integer = 1): integer;
     /// search for an element value, then update the item if match
     // - this method will use the Compare property function for the search,
     // or the supplied indexed lookup table and its associated compare function,
@@ -1709,7 +1728,7 @@ type
     // if the source item is a copy of Values[index] with some dynamic arrays
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
       ClearBeforeCopy: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
     // - use the Compare() property function (if set) or using
     // Info.Cache.ItemInfoManaged if available - and fallbacks to binary comparison
@@ -1726,7 +1745,7 @@ type
     /// will fill the element with some random content
     // - this method is thread-safe using Rtti.DoLock/DoUnLock
     procedure ItemRandom(Item: pointer);
-    /// will copy one element content
+    /// will copy one element content raw memory using RTTI
     procedure ItemCopy(Source, Dest: pointer);
       {$ifdef HASINLINE}{$ifndef ISDELPHI2009}inline;{$endif}{$endif}
     /// will copy the first field value of an array element
@@ -1887,7 +1906,7 @@ type
     fState: TDynArrayHasherState;
     fCompare: TDynArraySortCompare;        // function
     fEventCompare: TOnDynArraySortCompare; // function of object
-    fHasher: THasher;
+    fHasher: THasher;                      // function
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
@@ -1953,6 +1972,9 @@ type
        {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
+    /// low-level access to the associated TDynArrayinstance holding the data
+    property DynArray: PDynArray
+      read fDynArray;
     /// associated item comparison - may differ from DynArray^.Compare
     property Compare: TDynArraySortCompare
       read fCompare;
@@ -2034,6 +2056,7 @@ type
     fHash: TDynArrayHasher;
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
+    function GetDynArray: PDynArray; {$ifdef HASINLINE} inline; {$endif}
     procedure SetEventCompare(const cmp: TOnDynArraySortCompare);
     procedure SetEventHash(const hsh: TOnDynArrayHashOne);
   public
@@ -2196,6 +2219,11 @@ type
     // - you can call e.g. Hasher.Clear to invalidate the whole hash table
     property Hasher: TDynArrayHasher
       read fHash;
+    /// low-level access to the associated TDynArray instance holding the data
+    // - simply returns itself as PDynArray(@self)^, to avoid any
+    // ! {$ifdef UNDIRECTDYNARRAY} ... {$endif UNDIRECTDYNARRAY}
+    property DynArray: PDynArray
+      read GetDynArray;
   end;
 
 
@@ -2225,7 +2253,7 @@ function DynArray(aTypeInfo: PRttiInfo; var aValue;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the hash function corresponding to a given standard array type
-// - as used internally by TDynArrayHasher.Init and exported here for testing
+// - as used internally by TDynArrayHasher.Init and exported e.g. for testing
 function DynArrayHashOne(Kind: TRttiParserType;
   CaseInsensitive: boolean = false): TDynArrayHashOne;
 
@@ -2469,7 +2497,7 @@ function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
 
 /// return TRUE if one of the Value of UpperName exists in P, till end of
 // current section
-// - expect UpperName e.g. as 'CONTENT-TYPE: '
+// - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
 // - expect UpperValues to be an array of upper values with left side matching,
 // and ending with nil - as expected by IdemPPChar(), i.e. with at least 2 chars
 function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
@@ -2484,8 +2512,8 @@ function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt
 // - expect UpperName as 'UPPERNAME=', otherwise returns false
 // - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
 // - a typical use may be:
-// ! UpdateIniNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
-function UpdateIniNameValue(var Content: RawUtf8;
+// ! UpdateNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
+function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
 /// fill a class Instance properties from an .ini content
@@ -2869,7 +2897,7 @@ type
     function Contains(const aText: RawUtf8; aFirstIndex: integer = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    function GetText(const Delimiter: RawUtf8 = #13#10): RawUtf8;
+    function GetText(const Delimiter: RawUtf8 = EOL): RawUtf8;
     /// the OnChange event will be raised only when EndUpdate will be called
     // - this method will also call Safe.Lock for thread-safety
     procedure BeginUpdate;
@@ -2880,17 +2908,17 @@ type
     procedure SetFrom(const aText: TRawUtf8DynArray; const aObject: TObjectDynArray);
     /// set all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    procedure SetText(const aText: RawUtf8; const Delimiter: RawUtf8 = #13#10);
+    procedure SetText(const aText: RawUtf8; const Delimiter: RawUtf8 = EOL);
     /// set all lines from a text file
     // - will assume text file with no BOM is already UTF-8 encoded
     // - this method is thread-safe
     procedure LoadFromFile(const FileName: TFileName);
     /// write all lines into the supplied stream
     // - this method is thread-safe
-    procedure SaveToStream(Dest: TStream; const Delimiter: RawUtf8 = #13#10);
+    procedure SaveToStream(Dest: TStream; const Delimiter: RawUtf8 = EOL);
     /// write all lines into a new UTF-8 file
     // - this method is thread-safe
-    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = #13#10);
+    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = EOL);
     /// return the count of stored RawUtf8
     // - reading this property is not thread-safe, since size may change
     property Count: PtrInt
@@ -3604,9 +3632,9 @@ begin
   Safe.WriteLock;
   try
     if Locate(item, result) then // O(log(n)) binary search
-      result := -(result + 1)
+      result := -(result + 1)    // < 0 if already there
     else
-      Insert(item, result);
+      Insert(item, result);      // insert at the expected sorted position
   finally
     Safe.WriteUnLock;
   end;
@@ -4160,12 +4188,12 @@ begin
     result := FindIniEntry(Content, Section, Name, DefaultValue);
 end;
 
-function UpdateIniNameValueInternal(var Content: RawUtf8;
+function UpdateNameValueInternal(var Content: RawUtf8;
   const NewValue, NewValueCRLF: RawUtf8;
   var P: PUtf8Char; UpperName: PAnsiChar; UpperNameLength: integer): boolean;
 var
-  PBeg: PUtf8Char;
-  i: integer;
+  next: PUtf8Char;
+  i: PtrInt;
 begin
   if UpperName <> nil then
     while (P <> nil) and
@@ -4173,82 +4201,74 @@ begin
     begin
       while P^ = ' ' do
         inc(P);   // trim left ' '
-      PBeg := P;
-      P := GotoNextLine(P);
-      if IdemPChar2(@NormToUpperAnsi7, PBeg, UpperName) then
-      begin
-       // update Name=Value entry
+      next := GotoNextLine(P);
+      if IdemPChar2(@NormToUpperAnsi7, P, UpperName) then
+      begin // update Name=Value entry
         result := true;
-        inc(PBeg, UpperNameLength);
-        i := (PBeg - pointer(Content)) + 1;
+        inc(P, UpperNameLength);
+        i := (P - pointer(Content)) + 1;
         if (i = length(NewValue)) and
-           CompareMem(PBeg, pointer(NewValue), i) then
+           mormot.core.base.CompareMem(P, pointer(NewValue), i) then
           exit; // new Value is identical to the old one -> no change
-        if P = nil then // avoid last line (P-PBeg) calculation error
+        if next = nil then // avoid last line (P-PBeg) calculation error
           SetLength(Content, i - 1)
         else
-          delete(Content, i, P - PBeg); // delete old Value
+          delete(Content, i, next - P); // delete old Value
         insert(NewValueCRLF, Content, i); // set new value
         exit;
       end;
+      P := next;
     end;
   result := false;
 end;
 
-function UpdateIniNameValue(var Content: RawUtf8;
+function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 var
   P: PUtf8Char;
 begin
+  result := false;
   if UpperName = '' then
-    result := false
-  else
-  begin
-    P := pointer(Content);
-    result := UpdateIniNameValueInternal(Content, NewValue, NewValue + #13#10,
-      P, pointer(UpperName), length(UpperName));
-    if result or
-       (Name = '') then
-      exit;
-    AppendLine(Content, [Name, NewValue]);
-    result := true;
-  end;
+    exit;
+  P := pointer(Content);
+  result := UpdateNameValueInternal(Content, NewValue, NewValue + #13#10,
+    P, pointer(UpperName), length(UpperName));
+  if result or
+     (Name = '') then
+    exit;
+  AppendLine(Content, [Name, NewValue]);
+  result := true;
 end;
 
-procedure UpdateIniEntry(var Content: RawUtf8;
-  const Section, Name, Value: RawUtf8);
-const
-  CRLF = #13#10;
+procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
 var
   P: PUtf8Char;
   SectionFound: boolean;
-  i, UpperNameLength: PtrInt;
+  i, len: PtrInt;
   V: RawUtf8;
-  UpperSection, UpperName: TByteToAnsiChar;
+  up: TByteToAnsiChar;
 begin
-  UpperNameLength := length(Name);
-  PWord(UpperCopy255Buf(
-    UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
-  inc(UpperNameLength);
-  Join([Value, CRLF], V);
+  Join([Value, EOL], V);
   P := pointer(Content);
   // 1. find Section, and try update within it
   if Section = '' then
     SectionFound := true // find the Name= entry before any [Section]
   else
   begin
-    PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
-    SectionFound := FindSectionFirstLine(P, UpperSection);
+    PWord(UpperCopy255(up{%H-}, Section))^ := ord(']');
+    SectionFound := FindSectionFirstLine(P, up);
   end;
+  len := length(Name);
+  PWord(UpperCopy255Buf(up{%H-}, pointer(Name), len))^ := ord('=');
+  inc(len);
   if SectionFound and
-     UpdateIniNameValueInternal(
-       Content, Value, V, P, @UpperName, UpperNameLength) then
+     UpdateNameValueInternal(Content, Value, V, P, @up, len) then
       exit;
   // 2. section or Name= entry not found: add Name=Value
   V := Join([Name, '=', V]);
   if not SectionFound then
     // create not existing [Section]
-    V := Join(['[', Section, (']' + CRLF), V]);
+    V := Join(['[', Section, (']' + EOL), V]);
   // insert Name=Value at P^ (end of file or end of [Section])
   if P = nil then
     // insert at end of file
@@ -4261,8 +4281,7 @@ begin
   end;
 end;
 
-procedure UpdateIniEntryFile(const FileName: TFileName;
-  const Section, Name, Value: RawUtf8);
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
 var
   Content: RawUtf8;
 begin
@@ -4407,7 +4426,7 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
   Options: TTextWriterWriteObjectOptions; Level: integer): RawUtf8;
 var
   W: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   nested: TRawUtf8DynArray;
   i, nestedcount: integer;
   r: TRttiCustom;
@@ -4420,7 +4439,7 @@ begin
   nestedcount := 0;
   W := DefaultJsonWriter.CreateOwnedStream(tmp);
   try
-    W.CustomOptions := W.CustomOptions + [twoTrimLeftEnumSets];
+    W.CustomOptions := [twoTrimLeftEnumSets];
     W.Add('[%]'#10, [SectionName]);
     r := Rtti.RegisterClass(Instance);
     p := pointer(r.Props.List);
@@ -5932,18 +5951,22 @@ begin
   result := SizeOf(pointer);
 end;
 
-function DelphiType(Info: PRttiInfo): integer;
-  {$ifdef HASINLINE} inline; {$endif}
+function DelphiType(Info: PRttiInfo): integer; {$ifdef HASINLINE} inline; {$endif}
 begin
   // compatible with legacy TDynArray.SaveTo() format
   if Info = nil then
-    result := 0
+    result := 0 // = rkUnknown
   else
     {$ifdef FPC}
     result := ord(FPCTODELPHI[Info^.Kind]);
     {$else}
     result := ord(Info^.Kind);
     {$endif FPC}
+end;
+
+function DelphiText(dt: integer): PShortString; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := GetEnumName(TypeInfo({$ifdef FPC}TDelphiType{$else}TRttiKind{$endif}), dt);
 end;
 
 procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
@@ -6009,10 +6032,15 @@ end;
 
 function DynArrayLoadHeader(var Source: TFastReader;
   ArrayInfo, ItemInfo: PRttiInfo): integer;
+var
+  typ1, typ2: integer;
 begin
   Source.VarNextInt; // ignore stored itemsize (0 stored now)
-  if Source.NextByte <> DelphiType(ItemInfo) then
-    Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.RawName]);
+  typ1 := Source.NextByte;
+  typ2 := DelphiType(ItemInfo);
+  if typ1 <> typ2 then
+    Source.ErrorData('DynArrayLoadHeader(%) failed for %: got %, expected %',
+      [ArrayInfo.RawName, ItemInfo.Name, DelphiText(typ1)^, DelphiText(typ2)^]);
   result := Source.VarUInt32;
   if result <> 0 then
     Source.Next4; // ignore deprecated Hash32 checksum (0 stored now)
@@ -6408,7 +6436,7 @@ begin
     Dest.WriteVar(Data^.vAny, length(UnicodeString(Data^.vAny)) * 2)
   {$endif HASVARUSTRING}
   else
-    _BS_VariantComplex(pointer(Data), Dest);
+    _BS_VariantComplex(pointer(Data), Dest); // redirect to _VariantSaveJson()
   result := SizeOf(Data^);
 end;
 
@@ -6679,7 +6707,7 @@ function BinarySave(Data: pointer; Info: PRttiInfo;
   Kinds: TRttiKinds; WithCrc: boolean): RawByteString;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
@@ -6707,7 +6735,7 @@ function BinarySaveBytes(Data: pointer; Info: PRttiInfo;
   Kinds: TRttiKinds): TBytes;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer;
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
@@ -6763,7 +6791,7 @@ function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean
   Kinds: TRttiKinds; WithCrc: boolean): RawUtf8;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer;
   tmp: RawByteString;
   P: PAnsiChar;
   len: integer;
@@ -7584,7 +7612,7 @@ end;
 procedure TDynArray.SaveToStream(Stream: TStream);
 var
   W: TBufferWriter;
-  tmp: TTextWriterStackBuffer; // 8KB buffer
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (fValue = nil) or
      (Stream = nil) then
@@ -7675,7 +7703,7 @@ procedure TDynArray.SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
   ObjectOptions: TTextWriterWriteObjectOptions; reformat: TTextWriterJsonFormat);
 var
   W: TTextWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if GetCount = 0 then
     result := '[]'
@@ -7683,7 +7711,7 @@ begin
   begin
     W := DefaultJsonWriter.CreateOwnedStream(temp);
     try
-      W.CustomOptions := W.CustomOptions + Options;
+      W.CustomOptions := Options;
       SaveToJson(W, ObjectOptions);
       W.SetText(result, reformat);
     finally
@@ -7719,7 +7747,7 @@ procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8InterningAbstract);
 begin
-  raise ERttiException.Create('GetDataFromJson() not implemented - ' +
+  ERttiException.RaiseU('GetDataFromJson() not implemented - ' +
     'please include mormot.core.json in your uses clause');
 end;
 
@@ -7900,6 +7928,41 @@ begin
   if result >= 0 then
     // if found, delete the item from the array
     Delete(result);
+end;
+
+function TDynArray.FindAndDeleteAll(const Item; aCompare: TDynArraySortCompare;
+  Limit: integer): integer;
+var
+  ndx, siz: PtrUInt;
+  P: PAnsiChar;
+begin
+  result := 0;
+  ndx := GetCount;
+  if (ndx = 0) or
+     (Limit < 1) then
+    exit;
+  if not Assigned(aCompare) then
+    if Assigned(fCompare) then
+      aCompare := fCompare
+    else
+      exit;
+  P := fValue^;
+  siz := fInfo.Cache.ItemSize;
+  dec(ndx);
+  inc(P, ndx * siz); // search downwards for Delete(ndx)
+  repeat
+    if aCompare(P^, Item) = 0 then
+    begin
+      Delete(ndx);
+      inc(result);
+      if result >= Limit then
+        exit;
+    end;
+    if ndx = 0 then
+      break;
+    dec(P, siz);
+    dec(ndx);
+  until false;
 end;
 
 function TDynArray.FindAndUpdate(const Item; aIndex: PIntegerDynArray;
@@ -8557,7 +8620,7 @@ end;
 
 procedure TDynArray.InitFrom(aAnother: PDynArray; var aValue);
 begin
-  self := aAnother^; // raw RTTI fields copy
+  self := aAnother^; // raw RTTI fields binary copy
   fValue := @aValue; // points to the new value
   fCountP := nil;
 end;
@@ -9224,84 +9287,125 @@ begin
   result := Hasher(HashSeed, Item, SizeOf(THash512));
 end;
 
-function VariantHash(const value: variant; CaseInsensitive: boolean;
-  Hasher: THasher): cardinal;
+function VariantHashAsText(Seed: cardinal; const value: variant;
+  var Max: integer; CaseInsensitive: boolean; Hasher: THasher): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid heap allocation
-  vt: cardinal;
+  tmp: TBuffer4K; // avoid heap allocation - usually always < 4KB of JSON
   S: TStream;
   W: TTextWriter;
-  P: pointer;
   len: integer;
+begin
+  S := TFakeWriterStream.Create; // fill and re-fill tmp[] with no real stream
+  W := DefaultJsonWriter.Create(S, @tmp, SizeOf(tmp));
+  try
+    W.AddVariant(value, twJsonEscape); // serialize as JSON into tmp buffer
+    len := W.PendingBytes;
+  finally
+    W.Free;
+    S.Free;
+  end;
+  if (len > Max) and
+     (Max > 0) then
+    len := Max;  // don't hash more than needed
+  dec(Max, len);
+  if CaseInsensitive then
+    len := UpperCopy255Buf(tmp, @tmp, len) - tmp; // in-place uppercase
+  result := Hasher(Seed, @tmp, len);
+end; // note: TDocVariantData have its own dedicated Hash() method
+
+function VariantHash(Seed: cardinal; const value: variant; var Max: integer;
+  CaseInsensitive: boolean; Hasher: THasher): cardinal;
+var
+  vd: PVarData;
+  vt: cardinal;
+  len: integer;
+  P: pointer;
+  utf8: boolean;
+  tmp: TByteToAnsiChar; // 256 bytes on-stack buffer, to avoid heap allocation
 begin
   if not Assigned(Hasher) then
     Hasher := DefaultHasher;
-  with TVarData(value) do
+  utf8 := false;
+  P := @tmp;
+  len := 8; // most common case is normalized to Int64 or double
+  vd := @value;
+  vt := vd^.VType;
+  if vt = varVariantByRef then
   begin
-    vt := VType;
-    P := @VByte; // same address than VWord/VInteger/VInt64...
-    case vt of
-      varNull, varEmpty:
-        len := 0; // good enough for void values
-      varShortInt, varByte:
-        len := 1;
-      varSmallint, varWord, varboolean:
-        len := 2;
-      varLongWord, varInteger, varSingle:
-        len := 4;
-      varInt64, varDouble, varDate, varCurrency, varWord64:
-        len := 8;
-      varString:
-        begin
-          len := length(RawUtf8(VAny));
-          P := VAny;
-        end;
-      varOleStr:
-        begin
-          len := length(WideString(VAny));
-          P := VAny;
-        end;
-      {$ifdef HASVARUSTRING}
-      varUString:
-        begin
-          len := length(UnicodeString(VAny));
-          P := VAny;
-        end;
-      {$endif HASVARUSTRING}
-      else
-      begin
-        S := TFakeWriterStream.Create;
-        W := DefaultJsonWriter.Create(S, @tmp, SizeOf(tmp));
-        try
-          W.AddVariant(value, twJsonEscape);
-          len := W.WrittenBytes;
-          if len > 255 then
-            len := 255;
-          P := @tmp; // big JSON won't be hasheable anyway -> use only buffer
-        finally
-          W.Free;
-          S.Free;
-        end;
-      end;
-    end;
-    if CaseInsensitive and
-       (P <> @VByte) then
-    begin
-      len := UpperCopy255Buf(tmp, P, len) - tmp;
-      P := @tmp;
-    end;
-    result := Hasher(vt xor HashSeed, P, len)
+    vd := vd^.VPointer;
+    vt := vd^.VType;
   end;
+  if vt and varByRef <> 0 then
+  begin
+    vd := vd^.VAny;
+    vt := vd^.VType;
+  end;
+  case vt of // normalize to Int64/Double/Utf8 as expected by FastVarDataComp()
+    varNull, varEmpty:
+      len := 0; // good enough for void values
+    varBoolean, varByte, varShortInt, varSmallint, varWord, varLongWord, varOleUInt:
+      VariantToInt64(value, PInt64(@tmp)^);   // Int64 normalization
+    varInteger, varOleInt:
+      PInt64(@tmp)^ := vd^.VInteger;          // expand signed 32-bit (common)
+    varInt64, varWord64, varDouble, varDate:
+      P := @vd^.VInt64;                       // direct Int64/double hash
+    varSingle, varCurrency:
+      VariantToDouble(value, PDouble(@tmp)^); // double normalization
+    varString:
+      begin
+        P := vd^.VAny;
+        len := Utf8TruncatedLength(RawUtf8(vd.VAny), 255); // don't hash all
+        utf8 := CaseInsensitive;
+      end;
+    varOleStr:
+      begin // convert to UTF-8 so that WideString('toto') match RawUtf8('toto')
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp),
+          vd.VAny, length(WideString(vd.VAny)), [ccfNoTrailingZero]);
+        utf8 := CaseInsensitive;
+      end; // SortDynArrayUnicodeString()=0 for the same text in UTF-8 or UTF-16
+    {$ifdef HASVARUSTRING}
+    varUString:
+      begin // convert to UTF-8 so that string('toto') match RawUtf8('toto')
+        len := RawUnicodeToUtf8(@tmp, SizeOf(tmp),
+          vd.VAny, length(UnicodeString(vd.VAny)), [ccfNoTrailingZero]);
+        utf8 := CaseInsensitive;
+      end;
+    {$endif HASVARUSTRING}
+    else // complex types
+    begin
+      if Assigned(_VariantCustomHash) then // TDocVariant/TBsonVariant.IntHash
+        result := _VariantCustomHash(Seed, value, Max, CaseInsensitive, Hasher)
+      else // regular JSON serialization
+        result := VariantHashAsText(Seed, value, Max, CaseInsensitive, Hasher);
+      exit;
+    end;
+  end;
+  if utf8 then
+  begin
+    len := UpperCopy255Buf(tmp, P, len) - tmp; // (maybe in-place) uppercase
+    P := @tmp; // P=vd^.VAny for varString
+  end;
+  if (len > Max) and
+     (Max > 0) then
+    len := Max;  // don't hash more than needed
+  dec(Max, len); // leave as soon as we have enough data (start from Max=255)
+  result := Hasher(Seed, P, len); // cascaded hash
 end;
 
 function HashVariant(Item: PVariant; Hasher: THasher): cardinal;
+var
+  max: integer;
 begin
-  result := VariantHash(Item^, false, Hasher);
+  max := 255; // see e.g. HashAnsiString() - hashing 255 bytes seems enough
+  result := VariantHash(HashSeed, Item^, max, false, Hasher);
 end;
 
 function HashVariantI(Item: PVariant; Hasher: THasher): cardinal;
+var
+  max: integer;
 begin
-  result := VariantHash(Item^, true, Hasher);
+  max := 255;
+  result := VariantHash(HashSeed, Item^, max, true, Hasher);
 end;
 
 const
@@ -9472,7 +9576,7 @@ end;
 procedure TDynArrayHasher.SetEventCompare(const Value: TOnDynArraySortCompare);
 begin
   if fDynArray^.GetCount <> 0 then
-    raise EDynArray.Create('TDynArrayHasher: late SetEventCompare');
+    EDynArray.RaiseU('TDynArrayHasher: late SetEventCompare');
   fEventCompare := Value;
   HashTableInit(fHasher);
 end;
@@ -9480,7 +9584,7 @@ end;
 procedure TDynArrayHasher.SetEventHash(const Value: TOnDynArrayHashOne);
 begin
   if fDynArray^.GetCount <> 0 then
-    raise EDynArray.Create('TDynArrayHasher: late SetEventHash');
+    EDynArray.RaiseU('TDynArrayHasher: late SetEventHash');
   fEventHash := Value;
   HashTableInit(fHasher);
 end;
@@ -9511,7 +9615,7 @@ const
     {$ifndef DYNARRAYHASH_PO2}
     251, 499, 797, 1259, 2011, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
     {$endif DYNARRAYHASH_PO2}
-    // start after HASH_PO2=2^18=262144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
+    // start after HASH_PO2=2^18=262,144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
     13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
@@ -9529,7 +9633,7 @@ begin
   for i := 0 to high(_PRIMES) do
   begin
     result := P^[i];
-    if result > v then
+    if result > v then // no need of O(log(n)) binary search algorithm
       exit;
   end;
 end;
@@ -9542,7 +9646,7 @@ begin
   {$ifdef DYNARRAYHASH_PO2}
   // Delphi Win32 e.g. is not efficient with Lemire 64-bit multiplication
   if result <= HASH_PO2 then
-    // efficient AND for power of two division
+    // efficient AND for power of two division (up to 262,144 slots)
     result := aHashCode and (result - 1)
   else
   {$endif DYNARRAYHASH_PO2}
@@ -10036,12 +10140,10 @@ begin
   // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
   cap := fDynArray^.Capacity * 2;
   {$ifdef DYNARRAYHASH_PO2}
-  if cap <= HASH_PO2 then
-  begin
-    siz := 256; // find nearest power of two for fast bitwise division
-    while siz < cap do
-      siz := siz shl 1;
-  end
+  if cap <= 256 then
+    siz := 256
+  else if cap <= HASH_PO2 then
+    siz := NextPowerOfTwo(cap) // for fast bitwise division
   else
   {$endif DYNARRAYHASH_PO2}
     siz := NextPrime(cap);
@@ -10351,30 +10453,35 @@ begin
   begin
     hc := fHash.HashOne(@Item);
     result := fHash.FindOrNew(hc, @Item, nil);
-    if (result < 0) and
-       AddIfNotExisting then
-    begin
-      fHash.HashAdd(hc, result); // ReHash only if necessary
-      SetCount(result + 1); // add new item
-    end;
+    if result < 0 then
+      if AddIfNotExisting then
+      begin
+        fHash.HashAdd(hc, result); // ReHash only if necessary + set result
+        SetCount(result + 1);      // add new item at the end
+      end
+      else
+        exit;
+    ItemCopy(@Item, PAnsiChar(Value^) + result * Info.Cache.ItemSize);
   end
   else
     result := -1;
-  if result >= 0 then // update
-    ItemCopy(@Item, PAnsiChar(Value^) + result * Info.Cache.ItemSize);
 end;
 
 function TDynArrayHashed.FindHashedAndDelete(const Item; FillDeleted: pointer;
   noDeleteEntry: boolean): PtrInt;
 begin
   result := fHash.FindBeforeDelete(@Item);
-  if result >= 0 then
-  begin
-    if FillDeleted <> nil then
-      ItemCopyAt(result, FillDeleted);
-    if not noDeleteEntry then
-      Delete(result);
-  end;
+  if result < 0 then
+    exit;
+  if FillDeleted <> nil then
+    ItemCopyAt(result, FillDeleted);
+  if not noDeleteEntry then
+    Delete(result);
+end;
+
+function TDynArrayHashed.GetDynArray: PDynArray;
+begin
+  result := @self; // always starts with the TDynArray fields
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): cardinal;
@@ -11496,7 +11603,8 @@ begin
     end;
   // setup internal function wrappers
   GetDataFromJson := _GetDataFromJson;
-  HashSeed := SharedRandom.Generator.Next; // avoid hash flooding
+  // in-memory hashing are seeded from random to avoid hash flooding
+  HashSeed := SharedRandom.Generator.Next xor StartupEntropy.c0;
 end;
 
 

@@ -28,6 +28,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text,
@@ -1491,7 +1492,7 @@ end;
 
 procedure TXName.ComputeText;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   a: TXAttr;
   first: boolean;
   p: PUtf8Char;
@@ -1697,7 +1698,7 @@ function HumanRandomID: RawUtf8;
 var
   rnd: THash256;
 begin
-  SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
+  SharedRandom.Fill(@rnd, SizeOf(rnd)); // public and unique: use TLecuyer
   rnd[0] := rnd[0] and $7f;     // ensure > 0
   ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
 end;
@@ -2285,7 +2286,7 @@ procedure TX509.ComputeCachedDer;
 begin
   if (SignatureAlgorithm = xsaNone) or
      (SignatureValue = '') then
-    raise EX509.Create('TX509.ToDer with no previous Sign() call');
+    EX509.RaiseU('TX509.ToDer with no previous Sign() call');
   fSafe.Lock;
   try
     if fCachedDer = '' then
@@ -4200,7 +4201,7 @@ end;
 
 function TCryptStoreX509.Save: RawByteString;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TTextWriter;
 begin
   w := TTextWriter.CreateOwnedStream(tmp);

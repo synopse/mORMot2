@@ -138,8 +138,8 @@ A short excerpt from the description gives an insight into the content:
 - AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
 - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
 - SHA-2 SHA-3 Secure Hashing
-- HMAC Authentication over SHA and CRC32C
-- PBKDF2 Key Derivation over SHA2 and SHA3
+- HMAC Authentication over SHA-256
+- PBKDF2 Key Derivation over SHA-256 and SHA-3
 
 One of those many features is `AesPkcs7File`. It can be used to securely encrypt or decrypt a file. Encrypt once and back looks like this:
 

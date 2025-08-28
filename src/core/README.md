@@ -66,6 +66,8 @@ Cross-Platform Operating System Security Definitions
 - Active Directory Definitions
 - Security Descriptor Definition Language (SDDL)
 - `TSecurityDescriptor` Wrapper Object
+- Kerberos KeyTab File Support
+- Basic ASN.1 Support
 - Windows API Specific Security Types and Functions
 
 Even if most of those security definitions comes from the Windows/AD world, our framework (re)implemented them in a cross-platform way.
@@ -249,15 +251,28 @@ Implements SOLID Process via Interface types
 - `IInvokable` Interface Methods and Parameters RTTI Extraction
 - `TInterfaceFactory` Generating Runtime Implementation Class
 - `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
-- `TInterfaceStub` `TInterfaceMock` for Dependency Mocking
+- `TInterfaceStub` for Dependency Stubbing/Mocking
 - `TInterfacedObjectFake` with JITted Methods Execution
 - `TInterfaceMethodExecute` for Method Execution from JSON
 - `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
+- Code/Documentation Generation Logic Extraction from RTTI
+- Documentation Extraction from Source Code Comments
+
+### mormot.core.mvc
+
+Model-View-Controller (MVC) pattern and Mustache
+- Web Views Implementation using Mustache
+- ViewModel/Controller Sessions using Cookies
+- Web Renderer Returning Mustache Views or Json
+- Application ViewModel/Controller using Interfaces
+
+Abstract MVC logic over Mustache, as used by `mormot.rest.mvc.pas` and `mormot.net.mvc.pas`.
 
 ### mormot.core.test
 
 Testing functions shared by all framework units
 - Unit-Testing classes and functions
+- `TInterfaceMock` for Dependency Mocking
 
 ### mormot.core.fpcx64mm
 
@@ -271,6 +286,6 @@ An (optional) Multi-thread Friendly Memory Manager for FPC written in x86_64 ass
 - mremap() makes large block ReallocMem a breeze on Linux :)
 - inlined SSE2 movaps loop is more efficient that subfunction(s)
 - lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
-- optional lockless bin list to avoid freemem() thread contention
+- optional lockless bin list to avoid FreeMem() thread contention
 - three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
 

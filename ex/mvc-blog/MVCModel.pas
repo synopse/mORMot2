@@ -451,7 +451,7 @@ var
   f, r: integer;
 begin
   fName := GetNextItem(Text, ' ');
-  CSVToRawUtf8DynArray(Pointer(GetNextItem(Text, ']')), fFields);
+  CsvToRawUtf8DynArray(Pointer(GetNextItem(Text, ']')), fFields);
   fFieldCount := length(fFields);
   Text := GotoNextLine(Text);
   P := pointer(Text);
@@ -635,7 +635,7 @@ var
               GetUrl(P + 8);
               FN := PublicFolder +
                 UTF8ToString(StringReplaceChars(url, '/', PathDelim));
-              EnsureDirectoryExists(ExtractFilePath(FN));
+              EnsureDirectoryExists(ExtractFilePath(FN), nil, {noexpand=}true);
               if not FileExists(FN) then
                 FileFromString(HttpGet(aDotClearRoot + '/public/' + url, nil,
                   {forceNotSocket=}true), FN);
@@ -752,26 +752,26 @@ begin
   T.SortFields(tag_post_id, true, nil, oftInteger);
   postTable := data.GetObjectFrom('post');
   postTable.SortFields('post_creadt', true, nil, oftDateTime);
-  post_id := postTable.FieldIndexExisting('post_id');
-  post_url := postTable.FieldIndexExisting('post_url');
+  post_id   := postTable.FieldIndexExisting('post_id');
+  post_url  := postTable.FieldIndexExisting('post_url');
   if postTable.Step(true) then
     repeat
       urls.Add(postTable.FieldBuffer(post_url));
     until not postTable.Step;
-  article.Author := TOrmAuthor(1);
-  article.AuthorName := 'synopse';
+  article.Author      := TOrmAuthor(1);
+  article.AuthorName  := 'synopse';
   article.ContentHtml := true;
   for r := 1 to postTable.RowCount do
   begin
-    article.Title := postTable.GetU(r, 'post_title');
+    article.Title    := postTable.GetU(r, 'post_title');
     article.abstract := FixLinks(postTable.Get(r, 'post_excerpt_xhtml'));
-    article.Content := FixLinks(postTable.Get(r, 'post_content_xhtml'));
+    article.Content  := FixLinks(postTable.Get(r, 'post_content_xhtml'));
     if article.abstract = '' then
     begin
       article.abstract := article.Content;
-      article.Content := '';
+      article.Content  := '';
     end;
-    article.CreatedAt := Iso8601ToTimeLog(postTable.GetU(r, 'post_creadt'));
+    article.CreatedAt  := Iso8601ToTimeLog(postTable.GetU(r, 'post_creadt'));
     article.ModifiedAt := Iso8601ToTimeLog(postTable.GetU(r, 'post_upddt'));
     article.SetPublishedMonth(article.CreatedAt);
     postID := postTable.GetAsInteger(r, post_id);

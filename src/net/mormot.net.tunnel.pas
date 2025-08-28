@@ -9,7 +9,6 @@ unit mormot.net.tunnel;
    TCP/UDP Port Forwarding and Tunnelling
    - Abstract Definitions for Port Forwarding
    - Local NAT Client/Server to Tunnel TCP Streams
-   - WebSockets stand-alone Relay Server
 
   *****************************************************************************
 
@@ -32,15 +31,10 @@ uses
   mormot.core.threads,
   mormot.core.rtti,
   mormot.core.log,
-  mormot.soa.core,
-  mormot.soa.server,
   mormot.crypt.core,
-  mormot.crypt.secure,
+  mormot.crypt.secure,   // for ICryptCert
   mormot.crypt.ecc256r1, // for ECDHE encryption
-  mormot.net.sock,
-  mormot.net.ws.core,
-  mormot.net.ws.client,
-  mormot.net.ws.server;
+  mormot.net.sock;
 
 
 { ******************** Abstract Definitions for Port Forwarding }
@@ -77,21 +71,24 @@ type
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// should send Frame to the relay server
     // - no result so that the frames could be gathered e.g. over WebSockets
-    procedure Send(const Frame: RawByteString);
+    procedure Send(Session: TTunnelSession; const Frame: RawByteString);
   end;
 
   /// abstract tunneling service implementation
-  ITunnelLocal = interface(IServiceWithCallbackReleased)
+  ITunnelLocal = interface(IInvokable)
     ['{201150B4-6E28-47A3-AAE5-1335C82B060A}']
+    /// match mormot.soa.core IServiceWithCallbackReleased definition
+    procedure CallbackReleased(const callback: IInvokable;
+      const interfaceName: RawUtf8);
     /// to be called before Open() for proper handshake process
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// this is the main method to start tunneling to the Transmit interface
     // - Session, TransmitOptions and AppSecret should match on both sides
-    // - if Address has a port, will connect a socket to this address:port
-    // - if Address has no port, will bound its address an an ephemeral port,
+    // - if Address has a port, will connect a client socket to this address:port
+    // - if Address has no port, will bound its address as an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       out RemotePort: TNetPort): TNetPort;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
@@ -131,36 +128,45 @@ type
       read fSent;
   end;
 
+  /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
+  TTunnelEcdhFrame = packed record
+    /// the 128-bit client or server random nonce
+    rnd: TAesBlock;
+    /// the public key of this side
+    pub: TEccPublicKey;
+  end;
+
   /// identify the TTunnelLocal handshake protocol version
   TTunnelLocalMagic = (
     tlmNone,
     tlmVersion1);
 
-  /// define the inital frame exchanged between both TTunnelLocal ends
-  // - full frame content (therefore the execution context) should match
-  // - its content is signed if toClientSigned/toServerSigned are in options
-  TTunnelLocalHeader = packed record
+  /// the header of the inital frame exchanged between both TTunnelLocal ends
+  // - full header content (therefore the execution context) should match
+  // - should be at the end of the handshake, and ending with crc+port
+  TTunnelLocalInfo = packed record
     /// protocol version
     magic: TTunnelLocalMagic;
     /// define how this link should be setup
     options: TTunnelOptions;
     /// a genuine integer ID
     session: TTunnelSession;
-    /// SHA3 checksum/padding of the previous fields with app specific salt
-    crc: THash128;
     /// the local port used for communication - may be an ephemeral bound port
     port: word;
+    /// SHAKE128 checksum/padding of all previous TTunnelLocalHandshake fields
+    // - should be the very last field
+    crc: THash128;
   end;
-  PTunnelLocalHeader = ^TTunnelLocalHeader;
 
-  /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
-  TTunnelEcdhFrame = packed record
-    /// the 128-bit client or server random
-    rnd: TAesBlock;
-    /// the public key of this side
-    pub: TEccPublicKey;
+  /// define the inital frame exchanged between both TTunnelLocal ends
+  // - its content is signed if toClientSigned/toServerSigned are in options
+  TTunnelLocalHandshake = packed record
+    /// optional ECDHE information - used if toEcdhe is in Info.Options
+    Ecdh: TTunnelEcdhFrame;
+    /// a digitally signed header with shared information
+    Info: TTunnelLocalInfo;
   end;
-  PTunnelEcdhFrame = ^TTunnelEcdhFrame;
+  PTunnelLocalHandshake = ^TTunnelLocalHandshake;
 
   /// abstract tunneling service implementation
   // - is properly implemented by TTunnelLocalServer/TTunnelLocalClient classes
@@ -180,7 +186,7 @@ type
     fOpenBind: boolean;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
-    procedure EcdheHashRandom(var sha3: TSha3;
+    procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); virtual; abstract;
     // can optionally add a signature to the main handshake frame
     procedure FrameSign(var frame: RawByteString); virtual;
@@ -196,7 +202,7 @@ type
     procedure ClosePort;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
-    procedure Send(const Frame: RawByteString);
+    procedure Send(aSession: TTunnelSession; const aFrame: RawByteString);
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize tunnelling process
@@ -205,7 +211,7 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       out RemotePort: TNetPort): TNetPort;
     /// ITunnelLocal method: return the localport needed
     function LocalPort: RawUtf8;
@@ -254,7 +260,7 @@ type
   TTunnelLocalServer = class(TTunnelLocal)
   protected
     function ComputeOptionsFromCert: TTunnelOptions; override;
-    procedure EcdheHashRandom(var sha3: TSha3;
+    procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
   end;
 
@@ -266,37 +272,8 @@ type
   TTunnelLocalClient = class(TTunnelLocal)
   protected
     function ComputeOptionsFromCert: TTunnelOptions; override;
-    procedure EcdheHashRandom(var sha3: TSha3;
+    procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
-  end;
-
-
-{ ******************** WebSockets stand-alone Relay Server }
-
-type
-  TTunnelRelayIDs = array of TBinaryCookieGeneratorSessionID;
-
-  TTunnelRelayLink = record
-    // order doesn't matter -> just a link between two clients
-    ProcessA, ProcessB: TWebSocketProcess;
-  end;
-  TTunnelRelayLinks = array of TTunnelRelayLink;
-
-  TTunnelRelayServer = class(TWebSocketServer)
-  protected
-    fMainProtocol: TWebSocketProtocolUri;
-    fLinks: TSynDictionary; // TTunnelRelayIDs/TTunnelRelayLinks
-  public
-    /// initialize the Relay Server
-    // - if publicUri is not set, '127.0.0.1:localPort' is used, but you can
-    // use a reverse proxy URI like 'publicdomain.com/websockgateway'
-    constructor Create(const localPort: RawUtf8; const publicUri: RawUtf8 = '';
-      expirationMinutes: integer = 1; aLog: TSynLogClass = nil); reintroduce;
-    /// finalize this Relay Server
-    destructor Destroy; override;
-    /// generate a new WebSockets connection URI and its associated session ID
-    // - will be valid for expirationMinutes time as specified to Create()
-    function NewUri(out SessionID: TTunnelSession): RawUtf8;
   end;
 
 
@@ -429,7 +406,7 @@ begin
                 tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false);
               if (fTransmit <> nil) and
                  not Terminated then
-                fTransmit.Send(tmp);
+                fTransmit.Send(fOwner.fSession, tmp);
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
@@ -486,13 +463,16 @@ begin
   fPort := 0;
 end;
 
-procedure TTunnelLocal.Send(const Frame: RawByteString);
+procedure TTunnelLocal.Send(aSession: TTunnelSession; const aFrame: RawByteString);
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
   if fHandshake <> nil then
-    fHandshake.Push(Frame)    // during the handshake phase
+    fHandshake.Push(aFrame) // during the handshake phase - maybe before Open
   else if fThread <> nil then
-    fThread.OnReceived(Frame); // regular tunelling process
+    if aSession <> fSession then
+      ETunnel.RaiseUtf8('%.Send: session mismatch', [self])
+    else
+      fThread.OnReceived(aFrame); // regular tunelling process
 end;
 
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
@@ -526,19 +506,35 @@ begin
     fThread.fTransmit := Transmit; // could be refreshed during process
 end;
 
+procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
+  const appsecret: RawUtf8; out crc: THash128);
+var
+  sha3: TSha3;
+begin
+  sha3.Init(SHAKE_128); // 128-bit digital signature of Handshake.Ecdh+Info
+  if appsecret = '' then
+    sha3.Update('AB15C52F754F49CB9B23CF88735E39C8') // some default secret
+  else
+    sha3.Update(appsecret); // custom symmetric application-specific secret
+  sha3.Update(@Handshake, SizeOf(Handshake) - SizeOf(Handshake.Info.crc));
+  sha3.Final(@crc, 128);
+end;
+
 function TTunnelLocal.Open(Sess: TTunnelSession;
-  TransmitOptions: TTunnelOptions; TimeOutMS: integer; AppSecret: RawByteString;
-  const Address: RawUtf8; out RemotePort: TNetPort): TNetPort;
+  TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+  const AppSecret, Address: RawUtf8; out RemotePort: TNetPort): TNetPort;
 var
   uri: TUri;
   sock: TNetSocket;
   addr: TNetAddr;
   frame, remote: RawByteString;
-  header: TTunnelLocalHeader;
-  secret: TEccSecretKey;
-  key: THash256Rec;
-  sha3: TSha3;
+  rem: PTunnelLocalHandshake absolute remote;
+  loc: TTunnelLocalHandshake;
+  key, iv: THash256Rec;
+  hmackey, hmaciv: THmacSha256;
   log: ISynLog;
+const // port is asymmetrical so not included to the KDF - nor the crc
+  KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
 begin
   TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
   // validate input parameters
@@ -549,9 +545,9 @@ begin
     ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   RemotePort := 0;
   fSession := Sess;
-  TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
-  TransmitOptions := TransmitOptions + ComputeOptionsFromCert;
-  // bind to a local ephemeral port
+  TransmitOptions := (TransmitOptions - [toClientSigned, toServerSigned]) +
+                     ComputeOptionsFromCert;
+  // bind to a local (ephemeral) port
   ClosePort;
   result := uri.PortInt;
   if result = 0 then
@@ -575,80 +571,86 @@ begin
   fOptions := TransmitOptions;
   try
     // initial handshake: same TTunnelOptions + TTunnelSession from both sides
-    if AppSecret = '' then
-      AppSecret := 'AB15C52F754F49CB9B23CF88735E39C8'; // some default random
-    header.magic := tlmVersion1;
-    header.options := fOptions;
-    header.session := fSession;
-    sha3.Init(SHA3_224);
-    sha3.Update(AppSecret); // custom symmetric application-specific secret
-    sha3.Update(@header, SizeOf(header) - SizeOf(header.crc) - SizeOf(header.port));
-    sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
-    header.port := result; // port is asymmetrical so not part of the crc
-    FastSetRawByteString(frame, @header, SizeOf(header));
+    loc.Info.magic   := tlmVersion1;
+    loc.Info.options := fOptions;
+    loc.Info.session := fSession; // is typically an increasing sequence number
+    loc.Info.port    := result;
+    Random128(@loc.Ecdh.rnd);   // unpredictable
+    if toEcdhe in fOptions then // ECDHE in a single round trip
+    begin
+      if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
+      begin
+        if Assigned(log) then
+          log.Log(sllTrace, 'Open: generate ECHDE key', self);
+        if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
+          ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
+      end;
+      loc.Ecdh.pub := fEcdhe.pub;
+    end
+    else
+      SharedRandom.Fill(@loc.Ecdh.pub, SizeOf(loc.Ecdh.pub)); // some padding
+    TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
+    FastSetRawByteString(frame, @loc, SizeOf(loc));
     FrameSign(frame); // optional digital signature
-    fTransmit.Send(frame);
+    fTransmit.Send(fSession, frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
-      ETunnel.RaiseUtf8('Open handshake timeout on port %', [result]);
+      ETunnel.RaiseUtf8('Open: handshake timeout on port %', [result]);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: after WaitPop1 len=', [length(remote)], self);
-    if not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
-       not CompareMem(pointer(remote), @header,
-             SizeOf(header) - SizeOf(header.port)) then
-      ETunnel.RaiseUtf8('Open handshake failed on port %', [result]);
-    RemotePort := PTunnelLocalHeader(remote)^.port;
-    // optional encryption
+      log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
+    // check the returned header, maybe using the certificate
+    if length(remote) < SizeOf(loc) then // may have a signature trailer
+      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %',
+        [length(remote), result]);
+    if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
+      ETunnel.RaiseUtf8('Open: unexpected handshake on port %',
+        [length(remote), result]);
+    TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
+    if not IsEqual(rem^.Info.crc, key.Lo) then
+      ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
+    if not FrameVerify(remote, SizeOf(loc)) then
+      ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
+    RemotePort := rem^.Info.port;
+    // optional ephemeral encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
     begin
-      sha3.Init(SHA3_256);
-      sha3.Update(@header, SizeOf(header) - SizeOf(header.port)); // no replay
+      if AppSecret = '' then
+        hmackey.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
+      else
+        hmackey.Init(AppSecret);
+      hmackey.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
+      EcdheHashRandom(hmackey, loc.Ecdh, rem^.Ecdh); // rnd+pub in same order
       if toEcdhe in fOptions then
       begin
-        // optional ECDHE ephemeral encryption
-        FastNewRawByteString(frame, SizeOf(TTunnelEcdhFrame));
-        with PTunnelEcdhFrame(frame)^ do
-          SharedRandom.Fill(@rnd, SizeOf(rnd)); // enough for public randomness
-        if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
-          if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
-            ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
-        PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
-        fTransmit.Send(frame);
         if Assigned(log) then
-          log.Log(sllTrace, 'Open: after Send2 len=', [length(frame)], self);
-        if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
+          log.Log(sllTrace, 'Open: ECDHE shared secret', self);
+        if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, key.b) then
           exit;
-        if Assigned(log) then
-          log.Log(sllTrace, 'Open: after WaitPop2 len=', [length(remote)], self);
-        if (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
-           not Ecc256r1SharedSecret(
-             PTunnelEcdhFrame(remote)^.pub, fEcdhe.priv, secret) then
-          exit;
-        EcdheHashRandom(sha3, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
-        sha3.Update(@secret, SizeOf(secret)); // ephemeral secret
-      end
-      else
-        // optional encryption using symmetric secret
-        sha3.Update(AppSecret);
-      sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR key/iv
+        hmackey.Update(key.b); // prime256v1 shared secret
+      end;
+      hmaciv := hmackey;     // two labeled hmacs - see NIST SP 800-108
+      hmackey.Update('AES key'#0);
+      hmackey.Done(key.b);   // AES-128-CTR key
+      hmaciv.Update('IV'#1);
+      hmaciv.Done(iv.b);     // AES-128-CTR iv
     end;
     // launch the background processing thread
     if Assigned(log) then
       log.Log(sllTrace, 'Open: % success', [ToText(fOptions)], self);
     FreeAndNil(fHandshake); // ends the handshaking phase
     fPort := result;
-    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, key.Hi, sock);
+    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
     SleepHiRes(100, fThread.fStarted);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
   end;
   FreeAndNil(fHandshake);
-  FillZero(secret);
   FillZero(key.b);
+  FillZero(iv.b);
 end;
 
 function TTunnelLocal.LocalPort: RawUtf8;
@@ -687,11 +689,11 @@ begin
     include(result, toClientSigned);
 end;
 
-procedure TTunnelLocalServer.EcdheHashRandom(var sha3: TSha3;
+procedure TTunnelLocalServer.EcdheHashRandom(var hmac: THmacSha256;
   const local, remote: TTunnelEcdhFrame);
 begin
-  sha3.Update(@remote.rnd, SizeOf(remote.rnd)); // client random
-  sha3.Update(@local.rnd, SizeOf(local.rnd));   // server random
+  hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // client random
+  hmac.Update(@local. rnd, SizeOf(local.rnd));  // server random
 end;
 
 
@@ -706,138 +708,12 @@ begin
     include(result, toServerSigned);
 end;
 
-procedure TTunnelLocalClient.EcdheHashRandom(var sha3: TSha3;
+procedure TTunnelLocalClient.EcdheHashRandom(var hmac: THmacSha256;
   const local, remote: TTunnelEcdhFrame);
 begin
-  sha3.Update(@local.rnd, SizeOf(local.rnd));   // client random
-  sha3.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
+  hmac.Update(@local. rnd, SizeOf(local.rnd));  // client random
+  hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
 end;
-
-
-{ ******************** WebSockets stand-alone Relay Server }
-
-{ TTunnelRelayServerProtocol }
-
-type
-  TTunnelRelayServerProtocol = class(TWebSocketProtocolUri)
-  protected
-    fReverse: TWebSocketProcess;
-    fOptions: TTunnelOptions;
-    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUtf8); override;
-  end;
-
-procedure AsynchSend(process: TWebSocketProcess; const msg: RawByteString);
-var
-  frame: TWebSocketFrame;
-begin
-  frame.opcode := focBinary;
-  frame.content := [fopAlreadyCompressed]; // it is probably encrypted
-  frame.tix := 0;
-  frame.payload := msg;
-  process.Outgoing.Push(frame, 0);
-end;
-
-procedure TTunnelRelayServerProtocol.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
-var
-  added: boolean;
-  link: ^TTunnelRelayLink;
-  connections: TSynDictionary;
-  session: TTunnelSession;
-  reversed: TTunnelRelayServerProtocol;
-  head: PTunnelLocalHeader;
-begin
-  if (Sender <> nil) and
-     (Sender.Protocol <> nil) and
-     (PClass(Sender.Protocol)^ = TTunnelRelayServerProtocol) then
-  case request.opcode of
-    // focBinary or focContinuation/focConnectionClose
-    focBinary:
-      if fReverse = nil then
-      begin
-        // initialization of this connection
-        session := TTunnelRelayServerProtocol(Sender.Protocol).Session;
-        head := pointer(request.payload);
-        if (length(request.payload) <> SizeOf(head^)) or
-           (head^.session <> session) then
-          ETunnel.RaiseUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
-            [self, length(request.payload), head^.session, session]);
-        fOptions := head^.options;
-        connections := (((Sender as TWebSocketProcessServer).
-                          Socket as TWebSocketServerSocket).
-                          Server as TTunnelRelayServer).fLinks;
-        connections.Safe.Lock;
-        try
-          link := connections.FindValueOrAdd(session, added);
-          if link^.ProcessA = nil then
-            // first end connected for this Session
-            link^.ProcessA := Sender
-          else
-          begin
-            // ensure only one link with matching options per URI/session
-            reversed := link^.ProcessA.Protocol as TTunnelRelayServerProtocol;
-            if (link^.ProcessB <> nil) or
-               (reversed.fOptions <> fOptions) then
-              ETunnel.RaiseUtf8('%.ProcessIncomingFrame: abusive', [self]);
-            // now both sides are properly connected
-            link^.ProcessB := Sender;
-            fReverse := link^.ProcessA;
-            reversed.fReverse := Sender;
-            // unblock both ends to begin normal relay
-            AsynchSend(fReverse, request.PayLoad);
-            AsynchSend(Sender, request.PayLoad);
-            // no connections.DeleteAt(ndx) to ensure any other link creation
-            connections.DeleteDeprecated;
-          end;
-        finally
-          connections.Safe.UnLock;
-        end;
-      end
-      else
-        // normal process: asynch relaying to the other side
-        AsynchSend(fReverse, request.payload);
-    focConnectionClose:
-       if fReverse <> nil then
-         fReverse.Shutdown({waitforpong=}true);
-  end;
-end;
-
-
-{ TTunnelRelayServer }
-
-constructor TTunnelRelayServer.Create(const localPort, publicUri: RawUtf8;
-  expirationMinutes: integer; aLog: TSynLogClass);
-var
-  uri: RawUtf8;
-begin
-  fLinks := TSynDictionary.Create(TypeInfo(TTunnelRelayIDs),
-    TypeInfo(TTunnelRelayLinks), false, {timeout=} expirationMinutes * 60);
-  inherited Create(localPort, nil, nil, 'relaysrv',
-    {threadpool=}2, {keepalive=}30000, {options=}[], aLog);
-  if publicUri = '' then
-    uri := '127.0.0.1:' + localPort
-  else
-    uri := publicUri;
-  fMainProtocol := TTunnelRelayServerProtocol.Create(
-    'mrmtproxy', uri, expirationMinutes, nil);
-  fProtocols.Add(fMainProtocol); // will be cloned for each URI
-end;
-
-destructor TTunnelRelayServer.Destroy;
-begin
-  inherited Destroy;
-  fLinks.Free;
-end;
-
-function TTunnelRelayServer.NewUri(out SessionID: TTunnelSession): RawUtf8;
-var
-  session: TBinaryCookieGeneratorSessionID;
-begin
-  result := fMainProtocol.NewUri(session);
-  SessionID := session;
-end;
-
 
 
 

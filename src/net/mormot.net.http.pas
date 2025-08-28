@@ -150,20 +150,24 @@ function KnownHttpHeader(P: PUtf8Char): THttpHeader;
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 
 /// will remove most usual HTTP headers which are to be recomputed on sending
+// - trim=true would remove any space or CR/LF at the end of the result
 // - as used e.g. during TPublicRelay process from mormot.net.relay
 function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
   upIgnore: PPAnsiChar = nil): RawUtf8;
 
-/// search, copy and remove a given HTTP header
+/// search, copy and remove a given HTTP header as text or Int64
 // - FindNameValue() makes search + copy, but this function also REMOVES the header
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
-  out res: RawUtf8);
+  extractText: PRawUtf8; extractInt: PInt64 = nil);
 
 /// retrieve a HTTP header text value from its case-insensitive name
 function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean; overload;
 
 /// retrieve a HTTP header 64-bit integer value from its case-insensitive name
 function GetHeader(const Headers, Name: RawUtf8; out Value: Int64): boolean; overload;
+
+/// remove an HTTP header entry as specified by its name (e.g. 'Authorization')
+function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 
 /// 'HEAD' and 'OPTIONS' methods would be detected and return true
 // - will check only the first four chars for efficiency
@@ -448,7 +452,7 @@ type
     // - equals 0 if disabled or aborted
     // - several THttpRequestContext could share the same ID
     ProgressiveID: THttpPartialID;
-    /// internal per-second ticks set by THttpServerSocketGeneric.DoProgressive
+    /// internal GetTickSec set by THttpServerSocketGeneric.DoProgressive
     ProgressiveTix: cardinal;
     /// reset this request context to be used prior to any ProcessInit/Read/Write
     procedure Reset;
@@ -746,18 +750,18 @@ type
   // the need to add mormot.net.server.pas dependency
   THttpServerRequestAbstract = class
   protected
-    fRemoteIP,
-    fUrl,
-    fMethod,
-    fInHeaders,
-    fInContentType,
-    fAuthenticatedUser,
-    fHost,
-    fAuthBearer,
-    fUserAgent,
-    fOutContentType,
+    fRemoteIP: RawUtf8;
+    fUrl: RawUtf8;
+    fMethod: RawUtf8;
+    fInHeaders: RawUtf8;
+    fInContentType: RawUtf8;
+    fAuthenticatedUser: RawUtf8;
+    fHost: RawUtf8;
+    fAuthBearer: RawUtf8;
+    fUserAgent: RawUtf8;
+    fOutContentType: RawUtf8;
     fOutCustomHeaders: RawUtf8;
-    fInContent,
+    fInContent: RawByteString;
     fOutContent: RawByteString;
     fConnectionID: THttpServerConnectionID;
     fConnectionFlags: THttpServerRequestFlags;
@@ -939,6 +943,9 @@ type
   end;
   {$M-}
 
+function ToText(a: THttpServerRequestAuthentication): PShortString; overload;
+
+type
   THttpAcceptBan = class;
 
   /// callback event when THttpAcceptBan BanIP() or IsBanned() methods are called
@@ -1717,11 +1724,11 @@ type
     FileName: TFileName;
     Trigger: THttpRotaterTrigger;
     Files: integer;
-    NextTix10: cardinal;
+    NextTix32: cardinal;  // = GetTickSec
     TriggerDate: integer; // = next Trunc(NowUtc)
     OnRotate: procedure(Event: THttpRotaterEvent) of object; // owner access
     procedure Setup(aTrigger: THttpRotaterTrigger; aFiles: integer);
-    procedure TryRotate(Tix10: cardinal; Size: QWord);
+    procedure TryRotate(Tix32: cardinal; Size: QWord);
     procedure PrepareNextRotateDate(dt: TDateTime);
     procedure DoRotate;
   end;
@@ -1732,8 +1739,8 @@ type
     fHost: RawUtf8;
     fOwner: THttpLogger;
     fRotate: THttpRotater;
-    fLastWriteToStreamTix10: cardinal;
-    procedure TryRotate(Tix10: cardinal);
+    fLastWriteToStreamTix32: cardinal; // = GetTickSec
+    procedure TryRotate(Tix32: cardinal);
       {$ifdef HASINLINE} inline; {$endif}
     procedure OnRotate(Event: THttpRotaterEvent);
     procedure WriteToStream(data: pointer; len: PtrUInt); override;
@@ -1836,13 +1843,13 @@ type
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
     fFlags: set of (ffHadDefineHost, ffOwnWriterSingle);
     fVariables: THttpLogVariables;
-    fTimeTix10: cardinal;
+    fTimeTix32: cardinal; // = GetTickSec
     fTimeText: array[hlvTime_Iso8601 .. hlvTime_Http] of THttpDateNowUtc;
-    procedure SetTimeText(Tix64: Int64);
+    procedure SetTimeText(Tix32: cardinal; Tix64: Int64);
     procedure SetSettings(aSettings: THttpLoggerSettings);
     function GetWriterFileName(const aHost: RawUtf8; aError: boolean): TFileName; virtual;
     procedure CreateMainWriters;
-    function GetWriter(Tix10: cardinal; const Host: RawUtf8;
+    function GetWriter(Tix32: cardinal; const Host: RawUtf8;
       Error: boolean): TTextDateWriter;
   public
     /// initialize this multi-host logging instance
@@ -2435,8 +2442,8 @@ var // filled from RTTI enum trimmed text during unit initialization
   HTTP_SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
   HTTP_PERIOD: array[THttpAnalyzerPeriod] of RawUtf8;
 
-function ToText(s: THttpAnalyzerScope): PShortString; overload;  // HTTP_SCOPE[]
-function ToText(p: THttpAnalyzerPeriod): PShortString; overload; // HTTP_PERIOD[]
+function ToText(s: THttpAnalyzerScope): PShortString; overload;  // see also HTTP_SCOPE[]
+function ToText(p: THttpAnalyzerPeriod): PShortString; overload; // see also HTTP_PERIOD[]
 function ToText(v: THttpLogVariable): PShortString; overload;
 function ToText(r: THttpRotaterTrigger): PShortString; overload;
 
@@ -2469,11 +2476,11 @@ begin
 {$endif CPUINTEL}
   result := hhUnknown;
   // standard headers are expected to be pure A-Z chars: fast lowercase search
-  // - or $20 makes conversion to a-z lowercase, and won't affect - / : chars
+  // - "or $20" makes conversion to a-z lowercase, and won't affect - / : chars
   // - the worse case may be some false positive, which won't hurt unless
   // your network architecture suffers from HTTP request smuggling
   // - much less readable than cascaded IdemPPChar(), but O(1) efficiency for
-  // this very sensitive parsing function
+  // this very performance sensitive process
   case PCardinal(P)^ or mask_lower of
     // 'CONTENT-'
     ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
@@ -2612,7 +2619,7 @@ begin
   if AuthToken = '' then
     result := ''
   else
-    result := 'Authorization: Bearer ' + AuthToken;
+    Join(['Authorization: Bearer ', AuthToken], result);
 end;
 
 const
@@ -2630,58 +2637,64 @@ const
 
 function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PPAnsiChar): RawUtf8;
 var
-  pos, len: array[byte] of word;
+  pos, len: array[byte] of word; // delete up to 255 entries
   n, purged, i, l, tot: PtrInt;
-  P, next: PUtf8Char;
+  P, next, last: PUtf8Char;
+  h: PUtf8Char absolute headers;
 begin
   n := 0;
   tot := 0;
   purged := 0;
-  if upIgnore = nil then
-    upIgnore := @TOBEPURGED;
   // put all allowed headers in pos[]/len[]
-  P := pointer(headers);
-  if length(headers) shr 16 = 0 then // defined as word
-    while P <> nil do
-    begin
-      if P^ = #0 then
-        break;
-      next := GotoNextLine(P);
-      if IdemPPChar(P, upIgnore) < 0 then
-      begin
-        if n = high(len) then
-          break;
-        pos[n] := P - pointer(headers);
-        l := next - P;
-        if next = nil then
-          if (purged = 0) and
-             not trim then
-            break
-          else
-            l := StrLen(P);
-        inc(tot, l);
-        len[n] := l;
-        inc(n);
-      end
-      else
-        inc(purged);
-      P := next;
-    end;
-  // recreate an expurgated headers set
-  if (purged = 0) and
-     not trim then
-    // nothing to purge
-    result := headers
-  else if tot = 0 then
-    // genocide
-    result := ''
-  else
+  P := h;
+  if P <> nil then
   begin
-    // allocate at once and append all non-purged headers
+    last := nil;
+    if upIgnore = nil then
+      upIgnore := @TOBEPURGED;
+    if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
+      while (P <> nil) and
+            (P^ <> #0) do
+      begin
+        next := GotoNextLine(P);
+        if IdemPPChar(P, upIgnore) < 0 then // append this entry
+        begin
+          l := next - P;
+          if next = nil then
+            l := (h + PStrLen(h - _STRLEN)^) - P;
+          inc(tot, l);
+          if P = last then
+            inc(len[n - 1], l) // merge with previous block
+          else
+          begin
+            if n = high(len) then
+              break;
+            pos[n] := P - h;
+            len[n] := l;
+            inc(n);
+          end;
+          last := next;
+        end
+        else
+          inc(purged);
+        P := next;
+      end;
+  end;
+  // recreate an expurgated headers set
+  if tot = 0 then // genocide
+    result := ''
+  else if purged = 0 then
+    if (not trim) or
+       (headers[PStrLen(h - _STRLEN)^] > ' ') then
+      result := headers // nothing to purge
+    else
+      result := TrimRight(headers)
+  else
+  begin // allocate at once and append all non-purged headers
     dec(n);
     if trim then
     begin
-      P := PUtf8Char(pointer(headers)) + {%H-}pos[n];
+      P := h + {%H-}pos[n];
       l := {%H-}len[n];
       dec(tot, l);
       while (l > 0) and
@@ -2693,7 +2706,7 @@ begin
     P := FastSetString(result, tot);
     for i := 0 to n do
     begin
-      MoveFast(PByteArray(headers)[pos[i]], P^, len[i]);
+      MoveFast(h[pos[i]], P^, len[i]);
       inc(P, len[i]);
     end;
     assert(P - pointer(result) = tot);
@@ -2720,10 +2733,14 @@ begin
 end;
 
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
-  out res: RawUtf8);
+  extractText: PRawUtf8; extractInt: PInt64);
 var
   i, j, k: PtrInt;
 begin
+  if extractText <> nil then
+    FastAssignNew(extractText^);
+  if extractInt <> nil then
+    extractInt^ := 0;
   if (headers = '') or
       (upname = '') then
     exit;
@@ -2742,7 +2759,10 @@ begin
     begin
       j := i;
       inc(i, length(upname));
-      TrimCopy(headers, i, k - i, res);
+      if extractText <> nil then
+        TrimCopy(headers, i, k - i, extractText^);
+      if extractInt <> nil then
+        SetInt64(@PByteArray(headers)[i - 1], extractInt^);
       while headers[k] in [#1 .. #31] do // delete also ending #13#10
         inc(k);
       delete(headers, j, k - j); // and remove
@@ -2780,6 +2800,23 @@ begin
     exit;
   Value := GetInt64(pointer(v), err);
   result := err = 0;
+end;
+
+function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
+var
+  up: TByteToAnsiChar;
+  u: array[0..1] of PAnsiChar; // IdemPPChar() format
+begin
+  if (Headers = '') or
+     (length(Name) < 2) then
+  begin
+    result := Headers;
+    exit;
+  end;
+  PWord(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ := ord(':');
+  u[0] := @up;
+  u[1] := nil;
+  result := PurgeHeaders(Headers, false, @u);
 end;
 
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
@@ -3008,14 +3045,15 @@ var
 begin
   result := '';
   u.From(Uri);
-  if (u.Server = '') or
-     PropNameEquals(u.Server, 'localhost') or
-     IsLocalHost(pointer(u.Server)) then // supports only local files
+  if (u.UriScheme = usFile) and
+     ((u.Server = '') or
+      PropNameEquals(u.Server, 'localhost') or
+      IsLocalHost(pointer(u.Server))) then // supports only local files
   begin
     Utf8ToFileName(UrlDecodeName(u.Address), result);
     if (result <> '') and
        (result[1] <> '/') then
-      insert('/', result, 1);
+      insert('/', result, 1); // 'path/to' -> '/path/to'
   end;
 end;
 {$endif OSPOSIX}
@@ -3227,10 +3265,7 @@ begin
   while (P^ > #0) and
         (P^ <= ' ') do
     inc(P); // trim left
-  if L >= 0 then
-    dec(L, P - P2)
-  else
-    L := StrLen(P);
+  dec(L, P - P2);
   repeat
     if (L = 0) or
        (P[L - 1] > ' ') then
@@ -3475,8 +3510,6 @@ begin
       ContentLastModified := HttpDateToUnixTimeBuffer(P + 14);
   end;
   // store meaningful headers into WorkBuffer, if not already there
-  if PLen < 0 then
-    PLen := StrLen(P2);
   Head.Append(P2, PLen);
   Head.AppendCRLF;
 end;
@@ -3496,7 +3529,7 @@ begin
   if nfHeadersParsed in HeaderFlags then
     exit;
   include(HeaderFlags, nfHeadersParsed);
-  Head.AsText(Headers, {overheadForRemoteIP=}40, {usemain=}false); // keep 2KB main buffer
+  Head.AsText(Headers, {overheadForRemoteIP=}40); // keep 2KB main buffer
   Head.Reset; // set Len := 0
   if (CompressList <> nil) and
      (AcceptEncoding <> '') then
@@ -3636,28 +3669,28 @@ procedure THttpRequestContext.HeadAddCustom(P, PEnd: PUtf8Char);
 var
   len: PtrInt;
   hh: THttpHeader;
-begin
+begin // caller ensured P <> nil
   repeat
-    len := BufferLineLength(P, PEnd); // use fast SSE2 assembly on x86-64 CPU
-    if len > 0 then // no void line (means headers ending)
-    begin
-      hh := KnownHttpHeader(P);
-      include(HeadCustom, hh); // used e.g. by CompressContentAndFinalizeHead()
-      case hh of
-        hhContentEncoding:
-          // custom CONTENT-ENCODING: disable any late compression
-          integer(CompressAcceptHeader) := 0;
-      end;
-      if not (hh in [hhConnection, hhTransferEncoding]) then
-      begin
-        Head.Append(P, len);
-        Head.AppendCRLF; // normalize CR/LF endings
-      end;
-      inc(P, len);
+    while P^ <= ' ' do
+      if P^ <> #0 then
+        inc(P) // trim spaces, and ignore any kind of line feed or void line
+      else
+        exit;  // end of input
+    len := BufferLineLength(P, PEnd); // SSE2 on x86-64 CPU - we know len <> 0
+    hh := KnownHttpHeader(P);
+    include(HeadCustom, hh); // used e.g. by CompressContentAndFinalizeHead()
+    case hh of
+      hhContentEncoding:
+        // custom CONTENT-ENCODING: disable any late compression
+        integer(CompressAcceptHeader) := 0;
     end;
-    while P^ in [#10, #13] do
-      inc(P);
-  until P^ = #0;
+    if not (hh in [hhConnection, hhTransferEncoding]) then
+    begin
+      Head.Append(P, len);
+      Head.AppendCRLF; // normalize CR/LF endings
+    end;
+    inc(P, len);
+  until false;
 end;
 
 procedure THttpRequestContext.UncompressData;
@@ -4092,8 +4125,8 @@ begin
   exclude(ResponseFlags, rfContentStreamNeedFree);
 end;
 
-function THttpRequestContext.ContentFromFile(
-  const FileName: TFileName; CompressGz: integer): integer;
+function THttpRequestContext.ContentFromFile(const FileName: TFileName;
+  CompressGz: integer): integer;
 var
   gz: TFileName;
   h: THandle;
@@ -4254,53 +4287,38 @@ end;
 
 function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
 var
-  s: RawUtf8;
-  err: integer;
-  line: array[0..8191] of AnsiChar; // avoid most memory allocations
+  len: integer;
+  line: TBuffer8K; // avoid most memory allocations - 8KB seems enough
 begin
-  // parse the headers
   result := false;
   HttpStateReset;
-  if SockIn <> nil then
-    repeat
-      {$I-}
-      readln(SockIn^, line);
-      err := ioresult;
-      if err <> 0 then
-        EHttpSocket.RaiseUtf8('%.GetHeader error=%', [self, err]);
-      {$I+}
-      if line[0] = #0 then
-        break; // HTTP headers end with a void line
-      Http.ParseHeader(@line, {linelen=}-1, HeadersUnFiltered);
-      if Http.State <> hrsNoStateMachine then
-        exit; // error
-    until false
-  else
-    repeat
-      SockRecvLn(s);
-      if s = '' then
-        break;
-      Http.ParseHeader(pointer(s), length(s), HeadersUnFiltered);
-      if Http.State <> hrsNoStateMachine then
-        exit; // error
-    until false;
-  // finalize the headers
-  result := true;
-  Http.ParseHeaderFinalize; // compute all meaningful headers
+  repeat
+    len := SockInReadLn(line, SizeOf(line)); // very efficient readln()
+    if len <= 0 then // HTTP headers end with a void line
+    begin
+      if len < 0 then // -1 = buffer overflow
+        Http.State := hrsErrorPayloadTooLarge;
+      break;
+    end;
+    Http.ParseHeader(@line, len, HeadersUnFiltered);
+  until Http.State <> hrsNoStateMachine;
+  if Http.State = hrsNoStateMachine then
+  begin
+    Http.ParseHeaderFinalize; // compute all meaningful headers
+    result := true;           // success
+  end;
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'GetHeader % % flags=% len=% %', [Http.CommandMethod,
-      Http.CommandUri, ToText(Http.HeaderFlags), Http.ContentLength,
-      Http.ContentType], self);
+    OnLog(sllTrace, 'GetHeader=% % % flags=% len=% %', [ToText(Http.State)^,
+      Http.CommandMethod, Http.CommandUri, ToText(Http.HeaderFlags),
+      Http.ContentLength, Http.ContentType], self);
 end;
 
-{$I-}
 procedure THttpSocket.GetBody(DestStream: TStream);
 var
-  line: RawUtf8;
-  chunkline: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
-  chunk: RawByteString;
-  len32, err: integer;
-  len64: Int64;
+  chunk: RawUtf8;
+  len: PtrInt;
+  remain: Int64;
+  chunksize: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
 begin
   include(fFlags, fBodyRetrieved);
   Http.Content := '';
@@ -4314,62 +4332,50 @@ begin
     // Content-Length header should be ignored when chunked (RFC2616 #4.4.3)
     Http.ContentLength := 0;
     repeat // chunks decoding loop
-      if SockIn <> nil then
-      begin
-        readln(SockIn^, chunkline); // use of a static PChar is convenient
-        err := ioresult;
-        if err <> 0 then
-          EHttpSocket.RaiseUtf8('%.GetBody chunked ioresult=%', [self, err]);
-        len32 := ParseHex0x(chunkline, {noOx=}true); // hexa chunk length
-      end
-      else
-      begin
-        SockRecvLn(line);
-        len32 := ParseHex0x(pointer(line), {noOx=}true); // hexa chunk length
-      end;
-      if len32 = 0 then
+      if SockInReadLn(@chunksize, SizeOf(chunksize)) < 0 then
+        EHttpSocket.RaiseUtf8('%.GetBody: invalid chunk size line', [self]);
+      len := ParseHex0x(chunksize, {noOx=}true); // hexa chunk length
+      if len = 0 then
       begin
         SockRecvLn; // ignore next line (normally void)
-        break; // reached the end of input stream
+        break;      // reached the end of input stream
       end;
       if DestStream <> nil then
       begin
-        if length({%H-}chunk) < len32 then
-          SetString(chunk, nil, len32 + len32 shr 3); // +shr 3 to avoid realloc
-        SockInRead(pointer(chunk), len32);
-        DestStream.WriteBuffer(pointer(chunk)^, len32);
+        if length({%H-}chunk) < len then
+          SetString(chunk, nil, len + len shr 3); // +shr 3 to avoid realloc
+        SockInRead(pointer(chunk), len);
+        DestStream.WriteBuffer(pointer(chunk)^, len);
       end
       else
       begin
-        SetLength(Http.Content, Http.ContentLength + len32); // reserve space for this chunk
-        SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len32); // append data
+        SetLength(Http.Content, Http.ContentLength + len); // space for this chunk
+        SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;
-      inc(Http.ContentLength, len32);
+      inc(Http.ContentLength, len);
       SockRecvLn; // ignore next #13#10
     until false;
   end
   else if Http.ContentLength > 0 then
-    // read Content-Length: header bytes
+    // read Content-Length: header bytes into DestStream or Http.Content
     if DestStream <> nil then
     begin
-      len32 := 256 shl 10; // not chunked: use a 256 KB temp buffer
-      if Http.ContentLength < len32 then
-        len32 := Http.ContentLength;
-      SetLength(chunk, len32);
-      len64 := Http.ContentLength;
+      len := 256 shl 10; // not chunked: use a 256 KB temp buffer
+      remain := Http.ContentLength;
+      if remain < len then
+        len := remain;
+      SetLength(chunk, len);
       repeat
-        if len32 > len64 then
-          len32 := len64;
-        SockInRead(pointer(chunk), len32);
-        DestStream.WriteBuffer(pointer(chunk)^, len32);
-        dec(len64, len32);
-      until len64 = 0;
+        if len > remain then
+          len := remain;
+        SockInRead(pointer(chunk), len);
+        DestStream.WriteBuffer(pointer(chunk)^, len);
+        dec(remain, len);
+      until remain = 0;
     end
     else
-    begin
-      SetLength(Http.Content, Http.ContentLength); // not chuncked: direct read
-      SockInRead(pointer(Http.Content), Http.ContentLength);
-    end
+      SockInRead(FastSetString(RawUtf8(Http.Content), Http.ContentLength),
+                 Http.ContentLength) // not chuncked: direct Http.Content read
   else if (Http.ContentLength < 0) and // -1 means no Content-Length header
           (hfConnectionClose in Http.HeaderFlags) then
   begin
@@ -4377,15 +4383,11 @@ begin
     // mainly for HTTP/1.0: https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
-    if SockIn <> nil then // client loop for compatibility with oldest servers
-    begin
-      while not eof(SockIn^) do
-      begin
-        readln(SockIn^, line);
-        AppendLine(RawUtf8(Http.Content), [line]);
-      end;
-      CloseSockIn; // we have hfConnectionClose anyway
-    end;
+    repeat
+      chunk := SockReceiveString; // rough process
+      Append(RawUtf8(Http.Content), chunk);
+    until chunk = '';
+    CloseSockIn; // we have hfConnectionClose anyway
     Http.ContentLength := length(Http.Content); // update Content-Length
     if DestStream <> nil then
     begin
@@ -4398,14 +4400,7 @@ begin
     Http.UncompressData;
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
-  if SockIn <> nil then
-  begin
-    err := ioresult;
-    if err <> 0 then
-      EHttpSocket.RaiseUtf8('%.GetBody ioresult2=%', [self, err]);
-  end;
 end;
-{$I+}
 
 procedure THttpSocket.HeaderAdd(const aValue: RawUtf8);
 begin
@@ -4445,6 +4440,12 @@ end;
 
 
 { ******************** Abstract Server-Side Types e.g. for Client-Server Protocol }
+
+function ToText(a: THttpServerRequestAuthentication): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpServerRequestAuthentication), ord(a));
+end;
+
 
 { THttpServerRequestAbstract }
 
@@ -4499,7 +4500,7 @@ end;
 
 procedure THttpServerRequestAbstract.ExtractOutContentType;
 begin
-  ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
+  ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', @fOutContentType);
 end;
 
 function THttpServerRequestAbstract.GetRouteValuePosLen(const Name: RawUtf8;
@@ -4985,7 +4986,7 @@ begin
   end;
 end;
 
-procedure THttpRotater.TryRotate(Tix10: cardinal; Size: QWord);
+procedure THttpRotater.TryRotate(Tix32: cardinal; Size: QWord);
 var
   needrotate: boolean;
   dt: TDateTime;
@@ -5000,9 +5001,9 @@ begin
     hrtWeekly:
       begin
         needrotate := Size >= 100 shl 20; // always rotate above 100MB
-        if NextTix10 >= Tix10 then
+        if NextTix32 >= Tix32 then
         begin
-          NextTix10 := Tix10 + 60 * 60; // check TriggerDate every hour
+          NextTix32 := Tix32 + 60 * 60; // check TriggerDate every hour
           dt := NowUtc;
           if Trunc(dt) >= TriggerDate then
           begin
@@ -5095,17 +5096,17 @@ end;
 
 { THttpLoggerWriter }
 
-procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
+procedure THttpLoggerWriter.TryRotate(Tix32: cardinal);
 begin
   if (fStream <> nil) and
      (fRotate.Trigger > hrtDisabled) then
-    fRotate.TryRotate(Tix10, fTotalFileSize + PendingBytes);
+    fRotate.TryRotate(Tix32, WrittenBytes + Int64(PendingBytes));
 end;
 
 procedure THttpLoggerWriter.WriteToStream(data: pointer; len: PtrUInt);
 begin
   // no need of THttpLogger.OnIdle to flush this log file within this second
-  fLastWriteToStreamTix10 := GetTickCount64 shr MilliSecsPerSecShl;
+  fLastWriteToStreamTix32 := GetTickSec;
   // perform the actual flush to disk
   inherited WriteToStream(data, len);
 end;
@@ -5144,9 +5145,9 @@ begin
   s := TFileStreamNoWriteError.CreateAndRenameIfLocked(fRotate.FileName);
   s.Seek(0, soEnd); // append
   inherited Create(s, 65536);
-  fCustomOptions := [twoNoWriteToStreamException,
-                     twoFlushToStreamNoAutoResize,
-                     twoStreamIsOwned];
+  fFlags := [twfStreamIsOwned,
+             twfFlushToStreamNoAutoResize,
+             twfNoWriteToStreamException];
 end;
 
 destructor THttpLoggerWriter.Destroy;
@@ -5214,7 +5215,7 @@ end;
 procedure THttpLogger.OnIdle(tix64: Int64);
 var
   i: PtrInt;
-  tix10: cardinal;
+  tix32: cardinal;
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
@@ -5227,15 +5228,15 @@ begin
   try
     // force write to disk at least every second
     if fWriterSingle <> nil then
-      fWriterSingle.FlushFinal // plain TTextDateWriter with no tix10
+      fWriterSingle.FlushFinal // plain TTextDateWriter with no tix32
     else if (fWriterHost <> nil) and
             fWriterHostSafe.TryLock then
       try
-        tix10 := tix64 shr MilliSecsPerSecShl;
+        tix32 := tix64 div MilliSecsPerSec;
         for i := 0 to length(fWriterHost) - 1 do
           with fWriterHost[i] do
-            if fLastWriteToStreamTix10 <> tix10 then
-              FlushFinal; // no TryRotate(tix10) since may be slow
+            if fLastWriteToStreamTix32 <> tix32 then
+              FlushFinal; // no TryRotate(tix32) since may be slow
       finally
         fWriterHostSafe.UnLock;
       end;
@@ -5270,7 +5271,7 @@ begin
   ObjArrayAdd(fWriterHost, fWriterHostError);
 end;
 
-function THttpLogger.GetWriter(Tix10: cardinal;
+function THttpLogger.GetWriter(Tix32: cardinal;
   const Host: RawUtf8; Error: boolean): TTextDateWriter;
 var
   n: integer;
@@ -5286,7 +5287,7 @@ begin
     result := fWriterHostMain; // very common case of loopback or no Host
     if (Host <> '') and
        (ffHadDefineHost in fFlags) and
-       not IsLocalHost(pointer(Host)) then
+       (PCardinal(Host)^ <> HOST_127) then
     // 127.0.0.0/8 (e.g. from THttpClientSocket.RequestSendHeader) is no host
     begin
       result := fWriterHostLast; // pointer-sized variables are atomic
@@ -5310,7 +5311,7 @@ begin
         result := p^; // p^ = WriterHost[0] = access.log as default
         if (Host <> '') and
            (ffHadDefineHost in fFlags) and
-           not IsLocalHost(pointer(Host)) then
+           (PCardinal(Host)^ <> HOST_127) then
         begin
           n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
           inc(p); // ignore both WriterHost[0/1]
@@ -5345,7 +5346,7 @@ begin
       end;
   end;
   // try rotation before appending any new information - and outside of the lock
-  THttpLoggerWriter(result).TryRotate(Tix10);
+  THttpLoggerWriter(result).TryRotate(Tix32);
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
@@ -5482,11 +5483,11 @@ begin
     DynArrayFakeLength(fUnknownPosLen, un);
 end;
 
-procedure THttpLogger.SetTimeText(Tix64: Int64);
+procedure THttpLogger.SetTimeText(Tix32: cardinal; Tix64: Int64);
 var
   now: TSynSystemTime;
 begin
-  fTimeTix10 := Tix64 shr MilliSecsPerSecShl; // acquire it asap
+  fTimeTix32 := Tix32; // acquire it asap
   // dates are all in UTC/GMT as it should on any serious server design
   FromGlobalTime(now, {local=}false, Tix64); // call OS outside of the lock
   fSafe.Lock; // update all cached text in an atomic way
@@ -5500,7 +5501,7 @@ end;
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   n, urllen: integer;
-  tix10, crc, reqcrc, uricrc: cardinal;
+  tix32, crc, reqcrc, uricrc: cardinal;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
@@ -5515,9 +5516,9 @@ begin
     exit;
   // retrieve the output stream for the expected .log file
   if Context.Tix64 = 0 then
-    Context.Tix64 := GetTickCount64;
-  tix10 := Context.Tix64 shr MilliSecsPerSecShl;
-  wr := GetWriter(tix10, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
+    Context.Tix64 := GetTickCount64; // retrieve from OS and cache for below
+  tix32 := Context.Tix64 div MilliSecsPerSec;
+  wr := GetWriter(tix32, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
   if (wr = nil) or
      (wr.Stream = nil) then
     exit;
@@ -5530,8 +5531,8 @@ begin
     if urllen < 0 then
       urllen := length(RawUtf8(Context.Url));
   end;
-  if fTimeTix10 <> tix10 then
-    SetTimeText(Context.Tix64); // update cached time texts every second
+  if fTimeTix32 <> tix32 then
+    SetTimeText(tix32, Context.Tix64); // update cached time texts every second
   reqcrc := 0;
   uricrc := 0;
   if (hlvRequest_Hash in fVariables) or
@@ -5678,7 +5679,7 @@ begin
     until n = 0;
     wr.AddShorter(LINE_FEED[fSettings.LineFeed]);
     if (fWriterSingle = nil) and
-       (THttpLoggerWriter(wr).fLastWriteToStreamTix10 <> tix10) then
+       (THttpLoggerWriter(wr).fLastWriteToStreamTix32 <> tix32) then
       wr.FlushFinal; // force write to disk at least every second
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -5795,7 +5796,7 @@ begin
     else
       FillcharFast(fState, SizeOf(fState), 0);
   ComputeConsolidateTime(hapAll, fromgz);
-  tix := GetTickCount64 div 1000;
+  tix := GetTickSec;
   if fromgz <> 0 then
     Consolidate(tix); // consolidate old data
   if fSuspendFileAutoSaveMinutes <> 0 then
@@ -6274,7 +6275,7 @@ begin
 end;
 
 const
-  _WIDTH = 10;
+  _WIDTH = 10; // any value < TTextWriter internal buffer size would do
 
 procedure AppendFieldNames(w: TTextWriter);
 begin
@@ -6301,7 +6302,7 @@ var
   s: THttpAnalyzerScope;
   d: THttpAnalyzerStatePerScope;
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   Get(Period, d);
   w := TTextWriter.CreateOwnedStream(tmp);
@@ -6407,7 +6408,7 @@ begin
   try
     // try rotation before appending any new information - and outside Safe.lock
     if fRotate.Trigger > hrtDisabled then
-      fRotate.TryRotate(GetTickCount64 shr 10, FileSize(FileName));
+      fRotate.TryRotate(GetTickSec, FileSize(FileName));
     // append the new information using DoSave() overriden method
     fSafe.Lock;
     try
@@ -6441,7 +6442,7 @@ var
   p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
   w: TTextDateWriter;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
 begin
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
@@ -6496,7 +6497,7 @@ var
   p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
   w: TTextDateWriter;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
 begin
   // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"i":x,"r":x,"w":x}
   existing := Dest.Seek(0, soEnd); // append to existing content
@@ -6626,7 +6627,8 @@ begin
       hapCurrent,
       hapYear,
       hapAll: // paranoid
-        raise EHttpMetrics.Create('Unexpected period');
+        EHttpMetrics.RaiseUtf8('Unexpected %.CreatePeriodIndex(%)',
+          [self, ToText(p^.Period)^]);
     else // hapHour .. hapMonth
       with fPeriod[p^.Period] do
       begin
@@ -6776,7 +6778,7 @@ end;
 procedure THttpMetrics.SaveToFile(const Dest: TFileName; Algo: TAlgoCompress);
 var
   w: TBufferWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Algo = nil then
     w := TBufferWriter.Create(Dest) // direct-to-fly persistence
@@ -7259,7 +7261,7 @@ var
   d: PHttpAnalyzerToSave;
   w: TTextWriter;
   date: TShort16;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Metrics = nil then
     exit;

@@ -14,16 +14,17 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security,
-  mormot.core.text,
-  mormot.core.buffers,
   mormot.core.unicode,
-  mormot.core.rtti,
-  mormot.core.variants,
-  mormot.core.json,
-  mormot.core.data,
+  mormot.core.text,
   mormot.core.datetime,
+  mormot.core.rtti,
+  mormot.core.buffers,
+  mormot.core.data,
+  mormot.core.json,
+  mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.ecc,
   mormot.core.perf,
   mormot.core.search,
   mormot.core.log,
@@ -292,8 +293,8 @@ type
     procedure _TSynFilter;
     /// low-level TSynValidate classes
     procedure _TSynValidate;
-    /// low-level TSynLogFile class
-    procedure _TSynLogFile;
+    /// low-level TSynLogFile class and OS detection
+    procedure Debugging;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
     {$ifdef OSWINDOWS}
@@ -1235,7 +1236,7 @@ begin
     Check(Cities[i].Name = ''); // FindHashedForAdding left void content
     Cities[i] := City; // should fill Cities[i] content by hand
   end;
-  Check(ACities.Count = 3);
+  CheckEqual(ACities.Count, 3);
   Check(City.Name = 'Iasi');
   Check(ACities.FindHashed(City) >= 0);
   // add CITIES_MAX items
@@ -1244,8 +1245,8 @@ begin
     City.Name := IntToString(i);
     City.Latitude := i * 3.14;
     City.Longitude := i * 6.13;
-    Check(ACities.FindHashedAndUpdate(City, true) = i + 2, 'multiple ReHash');
-    Check(ACities.FindHashed(City) = i + 2);
+    CheckEqual(ACities.FindHashedAndUpdate(City, true), i + 2, 'multiple ReHash');
+    CheckEqual(ACities.FindHashed(City), i + 2);
   end;
   ACities.Capacity := CITIES_MAX + 30; // will trigger HASH_PO2
   for i := 2001 to CITIES_MAX do
@@ -1255,8 +1256,8 @@ begin
     City.Longitude := i * 6.13;
     if i = 8703 then
       City.Latitude := i * 3.14;
-    Check(ACities.FindHashedAndUpdate(City, true) = i + 2);
-    Check(ACities.FindHashed(City.Name) = i + 2);
+    CheckEqual(ACities.FindHashedAndUpdate(City, true), i + 2);
+    CheckEqual(ACities.FindHashed(City.Name), i + 2);
   end;
   for i := 1 to CITIES_MAX do
   begin
@@ -3516,6 +3517,7 @@ begin
   Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
   Check(Random32(0) = 0);
+  Check(Random32(1) = 0);
   for i := 1 to 100000 do
     Check(Random32(i) < cardinal(i));
   for i := 0 to 100000 do
@@ -3946,6 +3948,7 @@ begin
     begin
       j := i shr 3 + 1; // circumvent weird FPC code generation bug in -O2 mode
       S := RandomWinAnsi(j);
+      Check(length(S) = j);
       crc := crc32creference(0, pointer(S), length(S));
       inc(totallen, length(S));
       c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
@@ -4088,6 +4091,21 @@ var
   timer: TPrecisionTimer;
 begin
   CheckEqual(9007199254740991, MAX_SAFE_JS_INTEGER);
+  Check(IsPowerOfTwo(0));
+  Check(IsPowerOfTwo(1));
+  Check(IsPowerOfTwo(2));
+  Check(not IsPowerOfTwo(3));
+  Check(IsPowerOfTwo(4));
+  Check(not IsPowerOfTwo(5));
+  Check(not IsPowerOfTwo(6));
+  Check(not IsPowerOfTwo(7));
+  Check(IsPowerOfTwo(8));
+  for i := 9 to 15 do
+    Check(not IsPowerOfTwo(i));
+  Check(IsPowerOfTwo(16));
+  for i := 17 to 31 do
+    Check(not IsPowerOfTwo(i));
+  Check(IsPowerOfTwo(32));
   CheckEqual(NextPowerOfTwo(0), 1);
   CheckEqual(NextPowerOfTwo(1), 1);
   CheckEqual(NextPowerOfTwo(2), 2);
@@ -4103,8 +4121,13 @@ begin
     CheckEqual(NextPowerOfTwo(i), 2048);
   for i := 65537 to 131072 do
     CheckEqual(NextPowerOfTwo(i), 131072);
-  for i := 33554433 to 67108864 do // 33 millions tests in a few ms :)
+  for i := 33554433 to 67108864 - 1 do // millions tests in a few ms :)
+  begin
+    Check(not IsPowerOfTwo(i));
     Check(NextPowerOfTwo(i) = 67108864);
+  end;
+  Check(IsPowerOfTwo(67108864));
+  Check(NextPowerOfTwo(67108864) = 67108864);
   n := 512;
   CheckEqual(MinPtrInt(1, n), 1);
   CheckEqual(MaxPtrInt(1, n), n);
@@ -4550,19 +4573,19 @@ begin
   Check(UInt4DigitsToUtf8(12) = '0012');
   Check(UInt4DigitsToUtf8(123) = '0123');
   Check(UInt4DigitsToUtf8(1234) = '1234');
-  Check(MicroSecToString(0) = '0us');
-  Check(MicroSecToString(QWord(-10)) = '0us');
-  Check(MicroSecToString(10) = '10us');
-  Check(MicroSecToString(999) = '999us');
-  Check(MicroSecToString(1000) = '1ms');
-  Check(MicroSecToString(1001) = '1ms');
-  Check(MicroSecToString(1010) = '1.01ms');
-  Check(MicroSecToString(1100) = '1.10ms');
-  Check(MicroSecToString(999999) = '999.99ms');
-  Check(MicroSecToString(1000000) = '1s');
-  Check(MicroSecToString(1000001) = '1s');
-  Check(MicroSecToString(2030001) = '2.03s');
-  Check(MicroSecToString(200000070001) = '2d');
+  CheckEqualShort(MicroSecToString(0) , '0us');
+  CheckEqualShort(MicroSecToString(QWord(-10)) , '0us');
+  CheckEqualShort(MicroSecToString(10) , '10us');
+  CheckEqualShort(MicroSecToString(999) , '999us');
+  CheckEqualShort(MicroSecToString(1000) , '1ms');
+  CheckEqualShort(MicroSecToString(1001) , '1ms');
+  CheckEqualShort(MicroSecToString(1010) , '1.01ms');
+  CheckEqualShort(MicroSecToString(1100) , '1.10ms');
+  CheckEqualShort(MicroSecToString(999999) , '999.99ms');
+  CheckEqualShort(MicroSecToString(1000000) , '1s');
+  CheckEqualShort(MicroSecToString(1000001) , '1s');
+  CheckEqualShort(MicroSecToString(2030001) , '2.03s');
+  CheckEqualShort(MicroSecToString(200000070001) , '2d');
   Check(KbNoSpace(0)            = '0B' , 'kb0');
   Check(KbNoSpace(99)           = '99B', 'kb99');
   Check(KbNoSpace(1 shl 10 - 1) = '1KB', 'kb1');
@@ -4654,6 +4677,7 @@ begin
   DoubleToShort(@a, d);
   Check(IdemPropName(a, 'Nan'));
   Check(ShortToFloatNan(a) = fnNan);
+  Check(FloatToJsonNan(@a)^ = JSON_NAN[fnNan]);
   s := 'INF';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0, s);
@@ -4661,6 +4685,7 @@ begin
   DoubleToShort(@a, d);
   Check((a = '+Inf') or (a = 'INF'));
   Check(ShortToFloatNan(a) = fnInf);
+  Check(FloatToJsonNan(@a)^ = JSON_NAN[fnInf]);
   s := '-INfinity';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0, s);
@@ -4668,6 +4693,7 @@ begin
   DoubleToShort(@a, d);
   Check(IdemPropName(a, '-Inf'));
   Check(ShortToFloatNan(a) = fnNegInf);
+  Check(FloatToJsonNan(@a)^ = JSON_NAN[fnNegInf]);
   Check(IsAnsiCompatible('t'));
   Check(IsAnsiCompatible('te'));
   Check(IsAnsiCompatible('tes'));
@@ -5295,11 +5321,12 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
   end;
 
 var
-  i, j, k, len, len120, lenup100, CP, L: integer;
+  i, j, k, len, len120, lenup100, CP, L, lcid: integer;
   bak, bakj: AnsiChar;
   W: WinAnsiString;
   WS: WideString;
   SU, SU2: SynUnicode;
+  WU: array[0..3] of WideChar;
   str: string;
   ss: ShortString;
   up4: RawUcs4;
@@ -5309,7 +5336,9 @@ var
   PB: PByte;
   q: RawUtf8;
   Unic: RawByteString;
+  Ucs4: RawUcs4;
   WA, HasValidUtf8Avx2: Boolean;
+  lng: TLanguage;
   rb1, rb2, rb3: RawByteString;
   eng: TSynAnsiConvert;
 const
@@ -5322,6 +5351,8 @@ const
     'TEST', 'TEST', 'TES', 'TEST', 'TESTE', 't', 'U', '2', 'TESTe');
   CHINESE_TEXT: array[0..8] of byte = (
     $e4, $b8, $ad, $e6, $96, $87, $61, $62, $63);
+  UTF8_UCS4: array[0..11] of cardinal = ($01, $81, $801, $fff, $ffff, $10000,
+    UNICODE_MAX, UNICODE_MAX + 1, $1000000, $2000000, $10000000, $7f000000);
 begin
   // Trim*() functions
   CheckEqual(TrimU(''), '');
@@ -5575,10 +5606,24 @@ begin
   check(mormot.core.base.StrLen(@res[1]) = i);
   res := 'one,two,three';
   Check(IdemPCharArrayBy2(nil, 'ONTWTH') < 0);
-  Check(IdemPCharArrayBy2(pointer(res), 'OFTWTH') < 0);
-  Check(IdemPCharArrayBy2(pointer(res), 'ONTWTH') = 0);
-  Check(IdemPCharArrayBy2(pointer(res), 'TWONTW') = 1);
-  Check(IdemPCharArrayBy2(pointer(res), 'TWTHON') = 2);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'OFTWTH'), -1);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'ONTWTH'), 0);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'TWONTW'), 1);
+  CheckEqual(IdemPCharArrayBy2(pointer(res), 'TWTHON'), 2);
+  CheckEqual(IdemPCharSep('one','one|two|three'), -1);
+  CheckEqual(IdemPCharSep('one','ONE|TWO|THREE|'), 0);
+  CheckEqual(IdemPCharSep('one','ZERO|ONE|TWO|THREE|'), 1);
+  CheckEqual(IdemPCharSep('One','ONE|'), 0);
+  CheckEqual(IdemPCharSep('OnE','ONE|'), 0);
+  CheckEqual(IdemPCharSep('ONE','ONE|'), 0);
+  CheckEqual(IdemPCharSep('oN','ONE|ON|'), 1);
+  CheckEqual(IdemPCharSep('ONE?','ONE|'), 0);
+  CheckEqual(IdemPCharSep('0ne','ONE|'), -1);
+  CheckEqual(IdemPCharSep('one','ZERO|ONE|'), 1);
+  CheckEqual(IdemPCharSep('tWo','ZERO|ONE|TWO|THREE|'), 2);
+  CheckEqual(IdemPCharSep('threE','ZERO|ONE|TWO|THREE|'), 3);
+  CheckEqual(IdemPCharSep('threEf','ZERO|ONE|TWO|THREE|'), 3);
+  CheckEqual(IdemPCharSep('thre0','ZERO|ONE|TWO|THREE|'), -1);
   Check(StartWith('three', 'THREE'));
   for i := 1 to length(res) do
     Check(StartWith(res, UpperCase(copy(res, 1, i))));
@@ -5756,14 +5801,14 @@ begin
   CsvToRawUtf8DynArray('item1   item2    item3', arr, {sep=}' ',
     {TrimItems=}true , {AddVoidItems=}false);
   CheckEqual(length(arr), 3);
-  Check(arr[0] = 'item1');
-  Check(arr[1] = 'item2');
-  Check(arr[2] = 'item3');
-  Check(AddPrefixToCsv('One,Two,Three', 'Pre') = 'PreOne,PreTwo,PreThree');
-  Check(CsvOfValue('?', 3) = '?,?,?');
-  Check(GetUnQuoteCsvItem('"""one,""","two "', 1, ',', '"') = 'two ');
-  Check(GetUnQuoteCsvItem('''''''one,''''''', 0) = '''one,''');
-  Check(GetUnQuoteCsvItem('"""one,', 0, ',', '"') = '');
+  CheckEqual(arr[0], 'item1');
+  CheckEqual(arr[1], 'item2');
+  CheckEqual(arr[2], 'item3');
+  CheckEqual(AddPrefixToCsv('One,Two,Three', 'Pre'), 'PreOne,PreTwo,PreThree');
+  CheckEqual(CsvOfValue('?', 3), '?,?,?');
+  CheckEqual(GetUnQuoteCsvItem('"""one,""","two "', 1, ',', '"'), 'two ');
+  CheckEqual(GetUnQuoteCsvItem('''''''one,''''''', 0), '''one,''');
+  CheckEqual(GetUnQuoteCsvItem('"""one,', 0, ',', '"'), '');
   Check(not CsvContains('', 'b'));
   Check(not CsvContains('a', ''));
   Check(CsvContains('a', 'a'));
@@ -5894,6 +5939,7 @@ begin
   AppendLine(U, ['bcdef']);
   CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef');
   Append(U, #13#10);
+  CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef'#13#10);
   AppendLine(U, ['ghij']);
   CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef'#13#10'ghij');
   U := QuotedStr('', '"');
@@ -5927,7 +5973,7 @@ begin
   for i := 0 to 1000 do
   begin
     len := i * 5;
-    W := RandomAnsi7(len);
+    W := RandomAnsi7(len, CP_WINANSI);
     CheckEqual(length(W), len);
     lenup100 := len;
     if lenup100 > 100 then
@@ -5969,10 +6015,12 @@ begin
     if L and 1 <> 0 then
       SetLength(W, L - 1); // force exact UTF-16 buffer length
     W := RandomWinAnsi(len);
+    Check(length(W) = len);
     U := WinAnsiToUtf8(W);
-    check(IsValidUtf8(U), 'IsValidUtf8U');
+    Check(length(U) >= len);
+    check(IsValidUtf8(U), 'IsValidUtf8');
     P := UniqueRawUtf8(U);
-    check(IsValidUtf8(P), 'IsValidUtf8');
+    check(IsValidUtf8Ptr(P), 'IsValidUtf8Ptr');
     check(PosChar(P, #10) = nil);
     if len > 0 then
     begin
@@ -6167,34 +6215,34 @@ begin
     Check(not IsZero(pointer(W), length(W)));
     FillCharFast(pointer(W)^, length(W), 0);
     Check(IsZero(pointer(W), length(W)));
-    Check(FormatUtf8(U, []) = U);
+    CheckEqual(FormatUtf8(U, []), U);
     res := FormatSql(U, [], []); // Delphi 5 bug with high([])>0 :(
-    Check(length(res) = Length(U));
-    Check(res = U);
-    Check(FormatUtf8('%', [U]) = U);
-    Check(FormatSql('%', [U], []) = U);
+    CheckEqual(length(res), Length(U));
+    CheckEqual(res, U);
+    CheckEqual(FormatUtf8('%', [U]), U);
+    CheckEqual(FormatSql('%', [U], []), U);
     q := ':(' + QuotedStr(U) + '):';
-    Check(FormatSql('?', [], [U]) = q);
+    CheckEqual(FormatSql('?', [], [U]), q);
     res := 'ab' + U;
     q := 'ab' + q;
-    Check(FormatUtf8('ab%', [U]) = res);
-    Check(FormatUtf8('%%', ['ab', U]) = res);
-    Check(FormatSql('ab%', [U], []) = res);
-    Check(FormatSql('%%', ['ab', U], []) = res);
-    Check(FormatSql('ab?', [], [U]) = q);
-    Check(FormatSql('%?', ['ab'], [U]) = q);
+    CheckEqual(FormatUtf8('ab%', [U]), res);
+    CheckEqual(FormatUtf8('%%', ['ab', U]), res);
+    CheckEqual(FormatSql('ab%', [U], []), res);
+    CheckEqual(FormatSql('%%', ['ab', U], []), res);
+    CheckEqual(FormatSql('ab?', [], [U]), q);
+    CheckEqual(FormatSql('%?', ['ab'], [U]), q);
     res := res + 'cd';
     q := q + 'cd';
-    Check(FormatUtf8('ab%cd', [U]) = res);
-    Check(FormatSql('ab%cd', [U], []) = res);
-    Check(FormatUtf8('a%%cd', ['b', U]) = res);
-    Check(FormatSql('a%%cd', ['b', U], []) = res);
-    Check(FormatUtf8('%%%', ['ab', U, 'cd']) = res);
-    Check(FormatSql('ab?cd', [], [U]) = q);
-    Check(FormatSql('%?cd', ['ab'], [U]) = q);
-    Check(FormatSql('%?%', ['ab', 'cd'], [U]) = q);
-    Check(FormatSql('%?c%', ['ab', 'd'], [U]) = q);
-    Check(FormatSql('a%?%d', ['b', 'c'], [U]) = q);
+    CheckEqual(FormatUtf8('ab%cd', [U]), res);
+    CheckEqual(FormatSql('ab%cd', [U], []), res);
+    CheckEqual(FormatUtf8('a%%cd', ['b', U]), res);
+    CheckEqual(FormatSql('a%%cd', ['b', U], []), res);
+    CheckEqual(FormatUtf8('%%%', ['ab', U, 'cd']), res);
+    CheckEqual(FormatSql('ab?cd', [], [U]), q);
+    CheckEqual(FormatSql('%?cd', ['ab'], [U]), q);
+    CheckEqual(FormatSql('%?%', ['ab', 'cd'], [U]), q);
+    CheckEqual(FormatSql('%?c%', ['ab', 'd'], [U]), q);
+    CheckEqual(FormatSql('a%?%d', ['b', 'c'], [U]), q);
   end;
   SetLength(U, 4);
   U[1] := #$F0;
@@ -6206,6 +6254,9 @@ begin
     Check(PCardinal(SU)^ = $DCD2D863);
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
   Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
+  PCardinal(@WU)^ := 0;
+  if CheckEqual(Utf8ToWideChar(WU, pointer(U), SizeOf(WU), length(U), false), 4) then
+    Check(PCardinal(@WU)^ = $DCD2D863);
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
@@ -6224,6 +6275,14 @@ begin
   PB := pointer(res);
   FromVarString(PB, U2);
   check(U2 = U);
+  for i := 0 to high(UTF8_UCS4) do
+  begin
+    RawUcs4ToUtf8(@UTF8_UCS4[i], 1, U);
+    Check(U <> '');
+    Ucs4 := Utf8ToRawUcs4(U);
+    CheckEqual(length(Ucs4), 1);
+    CheckEqual(Ucs4[0], UTF8_UCS4[i]);
+  end;
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
@@ -6272,10 +6331,53 @@ begin
     U2 := eng.AnsiToUtf8(RB1);
     CheckEqual(U2, U, 'AnsiToUtf8');
   end;
-  Check(CodePageToText(CP_UTF8) = 'utf8');
-  Check(CodePageToText(CP_UTF16) = 'utf16le');
-  Check(CodePageToText(CP_WINANSI) = 'ms1252');
-  Check(CodePageToText(54936) = 'gb18030');
+  CheckEqual(CodePageToText(CP_UTF8), 'utf8');
+  CheckEqual(CodePageToText(CP_UTF16), 'utf16le');
+  CheckEqual(CodePageToText(CP_WINANSI), 'ms1252');
+  CheckEqual(CodePageToText(54936), 'gb18030');
+  Check(LcidToLanguage(0) = lngUndefined);
+  CheckEqual(LANG_LCID[lngUndefined], LANG_ENGLISH_US);
+  CheckEqual(LANG_ISO[lngUndefined], '');
+  CheckEqual(LANG_TXT[lngUndefined], 'Undefined');
+  Check(LcidToLanguage(LANG_ENGLISH_US) = lngEnglish);
+  CheckEqual(LANG_LCID[lngEnglish], LANG_ENGLISH_US);
+  CheckEqual(LANG_TXT[lngEnglish], 'English');
+  Check(LcidToLanguage(LANG_CHINESE_SIMPLIFIED) = lngChinese);
+  CheckEqual(LANG_LCID[lngChinese], LANG_CHINESE_SIMPLIFIED);
+  CheckEqual(LANG_TXT[lngChinese], 'Chinese');
+  Check(LcidToLanguage(LANG_BOSNIAN_CYRILLIC) = lngBosnian);
+  CheckEqual(LANG_LCID[lngBosnian], LANG_BOSNIAN_CYRILLIC);
+  Check(LcidToLanguage(LANG_SERBIAN_NEUTRAL) = lngSerbian);
+  CheckEqual(LANG_LCID[lngSerbian], LANG_SERBIAN_NEUTRAL);
+  Check(LcidToLanguage(LANG_CROATIAN_NEUTRAL) = lngCroatian);
+  CheckEqual(LANG_LCID[lngCroatian], LANG_CROATIAN_NEUTRAL);
+  Check(IsoTextToLanguage('') = lngUndefined);
+  Check(IsoTextToLanguage('f') = lngUndefined);
+  Check(IsoTextToLanguage('fr') = lngFrench);
+  Check(IsoTextToLanguage('fre') = lngUndefined);
+  Check(IsoTextToLanguage(' fr') = lngUndefined);
+  for lng := succ(low(lng)) to high(lng) do
+  begin
+    lcid := LANG_LCID[lng];
+    Check(lcid <> 0);
+    CheckEqual(ord(LcidToLanguage(lcid)), ord(lng), 'lcid');
+    CheckEqual(ord(LcidToLanguage(lcid)), ord(lng), 'lcidcache');
+    if not (lng in lngBCS) then
+      CheckEqual(ord(LcidToLanguage(LANG_PRI[lng])), ord(lng), 'LANG_PRI');
+    U := LcidToText(lcid);
+    CheckUtf8(length(U) >= 3, U);
+    CheckEqual(U, LANG_TXT[lng]);
+    if lng <> high(lng) then
+      CheckUtf8(SortDynArrayAnsiString(U, LANG_TXT[succ(lng)]) < 0, U);
+    U := LANG_ISO[lng];
+    Check(U <> '');
+    Check(IdemPropNameU(U, @LANG_ISO_SHORT[lng], 2));
+    CheckEqual(ord(IsoTextToLanguage(U)), ord(lng), 'iso');
+    CheckEqual(ord(IsoTextToLanguage(U)), ord(lng), 'isocache');
+    UpperCaseSelf(U);
+    Check(IdemPropNameU(U, @LANG_ISO_SHORT[lng], 2));
+    CheckEqual(ord(IsoTextToLanguage(U)), ord(lng), 'isocache2');
+  end;
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
@@ -7619,6 +7721,7 @@ var
   k: TWellKnownSid;
   s: RawUtf8;
   s1, s2: RawSid;
+  ss: TShort47;
   {$ifdef OSWINDOWS}
   known: TWellKnownSids;
   sids: TRawUtf8DynArray;
@@ -7638,6 +7741,59 @@ begin
     CheckEqual(s, RawSidToText(s2));
     CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
   end;
+  // some cross-platform Windows/Linux/BSD error detection
+  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
+  Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb1');
+  Check(WinErrorConstant(1150)^ = 'OLD_WIN_VERSION', 'wecb2');
+  Check(WinErrorConstant(1450)^ = 'NO_SYSTEM_RESOURCES', 'wecb3');
+  Check(WinErrorConstant(1907)^ = 'PASSWORD_MUST_CHANGE', 'wecb4');
+  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
+  Check(WinErrorConstant(234)^ = 'MORE_DATA', 'wecd');
+  Check(WinErrorConstant(5)^ = 'ACCESS_DENIED', 'wece');
+  Check(WinErrorConstant(12002)^ = 'TIMEOUT', 'wecf');
+  Check(WinErrorConstant($800b010a)^ = 'CERT_E_CHAINING', 'wecg');
+  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecG');
+  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant($80092002)^ = 'CRYPT_E_BAD_ENCODE', 'wecH');
+  Check(WinErrorConstant(1229)^  = 'CONNECTION_INVALID', 'weci');
+  Check(WinErrorConstant(122)^ = 'INSUFFICIENT_BUFFER', 'wecj');
+  Check(WinErrorConstant(12152)^ = 'INVALID_SERVER_RESPONSE', 'weck');
+  Check(WinErrorConstant(87)^ = 'INVALID_PARAMETER', 'wecl');
+  Check(WinErrorConstant(1315)^ = 'INVALID_ACCOUNT_NAME', 'wecm');
+  Check(WinErrorConstant(1331)^ = 'ACCOUNT_DISABLED', 'wecn');
+  Check(WinErrorConstant(1342)^ = 'SERVER_NOT_DISABLED', 'weco');
+  Check(WinErrorShort(0) = '0 ERROR_SUCCESS', 'w0');
+  Check(WinErrorShort(5) = '5 ERROR_ACCESS_DENIED', 'wa');
+  Check(WinErrorShort(12002) = '12002 ERROR_WINHTTP_TIMEOUT', 'w1');
+  Check(WinErrorShort($800b010a) = '800b010a CERT_E_CHAINING', 'w2');
+  Check(WinErrorShort($80000003) = '80000003 EXCEPTION_BREAKPOINT', 'w3');
+  Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
+  Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
+  Check(WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
+  Check(WinErrorShort($80090330) = '80090330 SEC_E_DECRYPT_FAILURE', 'w7');
+  Check(WinErrorShort($00090321) = '590625 SEC_I_RENEGOTIATE', 'w8');
+  Check(WinErrorShort(244, {noint=}false) = '244', '244w');
+  Check(WinErrorShort(245, {noint=}true) = '', '245w');
+  BsdErrorShort(1, @ss);
+  Check(ss = '1 EPERM', '1bsd');
+  BsdErrorShort(5, @ss);
+  Check(ss = '5 EIO', '5bsd');
+  BsdErrorShort(40, @ss);
+  Check(ss = '40 EMSGSIZE', '40bsd');
+  BsdErrorShort(81, @ss);
+  Check(ss = '81 ENEEDAUTH', '81bsd');
+  BsdErrorShort(82, @ss);
+  Check(ss = '82', '82bsd');
+  LinuxErrorShort(1, @ss);
+  Check(ss = '1 EPERM', '1lin');
+  LinuxErrorShort(5, @ss);
+  Check(ss = '5 EIO', '5lin');
+  LinuxErrorShort(124, @ss);
+  Check(ss = '124 EMEDIUMTYPE', '124');
+  LinuxErrorShort(125, @ss);
+  Check(ss = '125', '125');
+  Check(OsErrorShort(244, {noint=}false) = '244', '244a');
+  Check(OsErrorShort(244, {noint=}true) = '', '244b');
   // validate Windows specific SID function, especially about the current user
   {$ifdef OSWINDOWS}
   CurrentRawSid(s1, wttProcess);
@@ -7662,35 +7818,13 @@ begin
     else
       CheckUtf8(not CurrentUserHasGroup(s), s);
   end;
+  CheckEqualShort(OSErrorShort(5), '5 ERROR_ACCESS_DENIED', '5ead');
+  CheckEqualShort(OSErrorShort(5, true), 'ERROR_ACCESS_DENIED', '5ead2');
+  {$else}
+  CheckEqualShort(OSErrorShort(1), '1 EPERM', '1eperm');
+  CheckEqualShort(OSErrorShort(5), '5 EIO', '5eio');
+  CheckEqualShort(OSErrorShort(5, true), 'EIO', '5eio2');
   {$endif OSWINDOWS}
-  // some cross-platform Windows error detection
-  Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
-  Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb');
-  Check(WinErrorConstant(1450)^ = 'NO_SYSTEM_RESOURCES', 'wecB');
-  Check(WinErrorConstant(1907)^ = 'PASSWORD_MUST_CHANGE', 'wecB');
-  Check(WinErrorConstant(1200)^ = 'BAD_DEVICE', 'wecc');
-  Check(WinErrorConstant(234)^ = 'MORE_DATA', 'wecd');
-  Check(WinErrorConstant(5)^ = 'ACCESS_DENIED', 'wece');
-  Check(WinErrorConstant(12002)^ = 'TIMEOUT', 'wecf');
-  Check(WinErrorConstant($800b010a)^ = 'CERT_E_CHAINING', 'wecg');
-  Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecG');
-  Check(WinErrorConstant($800b010d)^ = '', 'wech');
-  Check(WinErrorConstant($80092002)^ = 'CRYPT_E_BAD_ENCODE', 'wecH');
-  Check(WinErrorConstant(1229)^  = 'CONNECTION_INVALID', 'weci');
-  Check(WinErrorConstant(122)^ = 'INSUFFICIENT_BUFFER', 'wecj');
-  Check(WinErrorConstant(12152)^ = 'INVALID_SERVER_RESPONSE', 'weck');
-  Check(WinErrorConstant(87)^ = 'INVALID_PARAMETER', 'wecl');
-  Check(WinErrorConstant(1315)^ = 'INVALID_ACCOUNT_NAME', 'wecm');
-  Check(WinErrorConstant(1331)^ = 'ACCOUNT_DISABLED', 'wecn');
-  Check(WinErrorConstant(1342)^ = 'SERVER_NOT_DISABLED', 'weco');
-  Check(WinErrorShort(0) = '0 ERROR_SUCCESS', 'w0');
-  Check(WinErrorShort(5) = '5 ERROR_ACCESS_DENIED', 'wa');
-  Check(WinErrorShort(12002) = '12002 ERROR_WINHTTP_TIMEOUT', 'w1');
-  Check(WinErrorShort($800b010a) = '800b010a CERT_E_CHAINING', 'w2');
-  Check(WinErrorShort($80000003) = '80000003 EXCEPTION_BREAKPOINT', 'w3');
-  Check(WinErrorShort(1722) = '1722 RPC_S_SERVER_UNAVAILABLE', 'w4');
-  Check(WinErrorShort(12152) = '12152 ERROR_WINHTTP_INVALID_SERVER_RESPONSE', 'w5');
-  Check(WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
 end;
 
 const
@@ -8677,7 +8811,7 @@ begin
   begin
     s := DateTimeToIso8601(Now / 20 + RandomDouble * 20, true);
     t := UrlEncode(s);
-    Check(UrlDecode(t) = s);
+    CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     Check(UrlDecodeNeedParameters(pointer(d), 'where,select'));
     Check(not UrlDecodeNeedParameters(pointer(d), 'foo,select'));
@@ -8709,37 +8843,50 @@ end;
 
 procedure TTestCoreBase.MimeTypes;
 const
-  MIMES: array[0..51] of TFileName = (
-    'png',  'image/png',
-    'PNg',  'image/png',
-    'gif',  'image/gif',
-    'tif',  'image/tiff',
-    'tiff', 'image/tiff',
-    'jpg',  'image/jpeg',
-    'JPG',  'image/jpeg',
-    'jpeg', 'image/jpeg',
-    'bmp',  'image/bmp',
-    'doc',  'application/msword',
-    'docx', 'application/msword',
-    'htm',  HTML_CONTENT_TYPE,
-    'html', HTML_CONTENT_TYPE,
-    'HTML', HTML_CONTENT_TYPE,
-    'css',  'text/css',
-    'js',   'text/javascript',
-    'ico',  'image/x-icon',
-    'pdf',  'application/pdf',
-    'PDF',  'application/pdf',
-    'Json', JSON_CONTENT_TYPE,
-    'webp', 'image/webp',
+  MIM: array[0 .. 27 * 2 - 1] of RawUtf8 = (
+    'png',      'image/png',
+    'PNg',      'image/png',
+    'gif',      'image/gif',
+    'tif',      'image/tiff',
+    'tiff',     'image/tiff',
+    'heic',     'image/heic',
+    'jpg',      'image/jpeg',
+    'JPG',      'image/jpeg',
+    'jpeg',     'image/jpeg',
+    'bmp',      'image/bmp',
+    'doc',      'application/msword',
+    'docx',     'application/msword',
+    'htm',      HTML_CONTENT_TYPE,
+    'html',     HTML_CONTENT_TYPE,
+    'HTML',     HTML_CONTENT_TYPE,
+    'css',      'text/css',
+    'js',       'text/javascript',
+    'ico',      'image/x-icon',
+    'pdf',      'application/pdf',
+    'PDF',      'application/pdf',
+    'Json',     JSON_CONTENT_TYPE,
+    'webp',     'image/webp',
     'manifest', 'text/cache-manifest',
     'appcache', 'text/cache-manifest',
-    'h264', 'video/H264',
-    'x',    'application/x-compress',
-    'ogg',  'video/ogg');
-  BIN: array[0..1] of Cardinal = (
-    $04034B50, $38464947);
-  BIN_MIME: array[0..1] of RawUtf8 = (
-    'application/zip', 'image/gif');
+    'h264',     'video/H264',
+    'x',        'application/x-compress',
+    'ogv',      'video/ogg');
+  BIN: array[0 .. 2] of Cardinal = (
+    $04034B50, $38464947, $fd2fb528);
+  BIN_MIME: array[0 .. high(BIN)] of RawUtf8 = (
+    'application/zip', 'image/gif', 'application/zstd');
+  HEX: array[0 .. 5] of RawUtf8 = (
+    '000000186674797069736F6D0000000069736F6D6D703432',
+    '000000186674797068656963000000006D69663168656963',
+    '0000001C66747970663476200000000069736F6D6D70343266347620',
+    '000000206674797061766966000000006D696631617669666D696166',
+    '4F67675300020000000000000000123456780000000012345678011E01766F7262697' +
+      '3000000000244AC0000000000000000000000000000060F',
+    '4F67675300020000000000000000ABCDEF120000000087654321012A807468656F726' +
+      '10302000050004001E001200000003C00000001000000');
+  HEX_MIME: array[0 .. high(HEX)] of RawUtf8 = (
+    'video/mp4', 'image/heic', 'video/H264', 'image/avif',
+    'audio/ogg', 'video/ogg');
 var
   i, j, n: integer;
   fa: TFileAge;
@@ -8762,14 +8909,14 @@ var
     for i := 0 to high(mp2) do
       if i <= n then
       begin
-        CheckEqual(mp2[i].Name, StringToUtf8(MIMES[i * 2]));
-        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[i * 2 + 1]));
+        CheckEqual(mp2[i].Name,    MIM[i * 2]);
+        CheckEqual(mp2[i].Content, MIM[i * 2 + 1]);
       end
       else
       begin
         j := i - n - 1;
         CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
-        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[j * 2 + 1]));
+        CheckEqual(mp2[i].Content,  MIM[j * 2 + 1]);
       end;
   end;
 
@@ -8849,7 +8996,26 @@ begin
     'Feedfetcher-Google; (+http://www.google.com/feedfetcher.html; 1 subscribers; feed-id=728742641706423)'));
   Check(IsHttpUserAgentBot(
     'Python-urllib/3.4'));
-  // some HTTP methods
+  // some HTTP headers processing methods
+  Check(not IsInvalidHttpHeader(''));
+  Check(not IsInvalidHttpHeader('a=b'));
+  Check(not IsInvalidHttpHeader('a'#13#10));
+  Check(not IsInvalidHttpHeader('a'#13#10'b'#13#10));
+  Check(not IsInvalidHttpHeader('a'#13#10'b'));
+  Check(IsInvalidHttpHeader(#13#10'a'#13#10));
+  Check(IsInvalidHttpHeader(#10'a'#13#10));
+  Check(IsInvalidHttpHeader(#13#10#13#10'a'#13#10));
+  Check(IsInvalidHttpHeader('a'#13#10'b'#10));
+  Check(IsInvalidHttpHeader('a'#10'b'#13#10));
+  Check(IsInvalidHttpHeader('a'#13#10#13#10'b'#13#10));
+  Check(IsInvalidHttpHeader('a'#13#10'b'#13#10#13#10));
+  Check(IsInvalidHttpHeader('a'#13#10#13'b'#13#10));
+  Check(IsInvalidHttpHeader('a'#13#13'b'#13#10));
+  Check(IsInvalidHttpHeader('a'#13#10'b'#13#13));
+  Check(IsInvalidHttpHeader('a'#13#10'b'#13));
+  Check(IsInvalidHttpHeader('a'#13#10'b'#10));
+  s := 'toto'#13#10;
+  Check(not IsInvalidHttpHeader(s));
   CheckEqual(PurgeHeaders(''), '');
   CheckEqual(PurgeHeaders('toto'), 'toto');
   CheckEqual(PurgeHeaders(#13#10), #13#10);
@@ -8860,7 +9026,6 @@ begin
   CheckEqual(PurgeHeaders('toto', true), 'toto');
   CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10, true), 'toto');
   CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10, true), 'toto');
-  s := 'toto'#13#10;
   CheckEqual(PurgeHeaders(s), s);
   CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10), s);
   CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10), s);
@@ -8868,6 +9033,15 @@ begin
     'accept: all'#13#10'toto'#13#10'content-length: 10'#13#10), s);
   CheckEqual(PurgeHeaders(
     'accept: all'#13#10'content-length: 10'#13#10'toto'#13#10), s);
+  CheckEqual(DeleteHeader(s, ''), s);
+  CheckEqual(DeleteHeader('content-length: 10'#13#10'toto'#13#10, 'content-length'), s);
+  CheckEqual(DeleteHeader('toto'#13#10'content-length: 10'#13#10, 'Content-Length'), s);
+  CheckEqual(DeleteHeader(Join([s, s, s, 'Auth: 1']), 'auth'), Join([s, s, s]));
+  CheckEqual(DeleteHeader(Join(['Auth: 0'#13#10, s, s, s]), 'auth'), Join([s, s, s]));
+  CheckEqual(DeleteHeader(Join(['Auth: 0'#13#10, s, s, s, 'Auth: 1']), 'auth'), Join([s, s, s]));
+  CheckEqual(DeleteHeader(Join([s, s, s, 'Auth: 2'#13#10, s]), 'auth'), Join([s, s, s, s]));
+  CheckEqual(DeleteHeader(Join([s, s, s, 'Auth: 2'#13#10, 'ab']), 'auth'), Join([s, s, s, 'ab']));
+  // some HTTP methods
   Check(HttpMethodWithNoBody('HEAD'));
   Check(HttpMethodWithNoBody('head'));
   Check(HttpMethodWithNoBody('HEADER'));
@@ -8888,10 +9062,10 @@ begin
   CheckEqual(GetMimeContentType('', 'toto.a', 'def3'), 'application/a');
   CheckEqual(GetMimeContentType('', 'toto.1', 'def4'), 'def4');
   CheckEqual(GetMimeContentType('', 'toto.ab', 'def5'), 'application/ab');
-  for i := 0 to high(MIMES) shr 1 do
-    CheckEqual(GetMimeContentType('', 'toto.' + MIMES[i * 2]),
-      ToUtf8(MIMES[i * 2 + 1]));
-  FastSetString(s, 34);
+  for i := 0 to high(MIM) shr 1 do
+    CheckEqual(GetMimeContentType('',
+      MakeString(['toto.', MIM[i * 2]])), MIM[i * 2 + 1]);
+  FastSetString(s, 63);
   for i := 0 to high(BIN) do
   begin
     PCardinal(s)^ := BIN[i];
@@ -8900,10 +9074,21 @@ begin
     Check(GetMimeContentTypeFromBuffer(s, ct) <> mtUnknown);
     CheckEqual(ct, BIN_MIME[i]);
   end;
+  for i := 0 to high(HEX) do
+  if not CheckFailed(length(HEX[i]) shr 1 < length(s)) then
+  begin
+    Check(mormot.core.text.HexToBin(pointer(HEX[i]), pointer(s), length(HEX[i]) shr 1));
+    CheckEqual(GetMimeContentType(s), HEX_MIME[i]);
+    ct := '';
+    Check(GetMimeContentTypeFromBuffer(s, ct) <> mtUnknown);
+    CheckEqual(ct, HEX_MIME[i]);
+  end;
   s := '<?xml';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   s := '<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   s := '<!doctype html><html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '<!doctype note>';
@@ -8915,8 +9100,10 @@ begin
   s := '<!DocType HTML<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '{"json":123}';
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
   s := '["json",123]';
+  CheckUtf8(IsContentCompressed(pointer(s), length(s)) = false, s);
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtJson);
   s := '["json",'#0'123]';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
@@ -8930,6 +9117,7 @@ begin
   Check(IsContentTypeCompressibleU('APPLICATION/JSON'));
   Check(IsContentTypeCompressibleU('application/xml'));
   Check(IsContentTypeCompressibleU('application/rtf'));
+  Check(not IsContentTypeCompressibleU('application/octet-stream'));
   Check(not IsContentTypeCompressibleU('application/zrtf'));
   Check(not IsContentTypeCompressibleU('application/xm'));
   Check(IsContentTypeCompressibleU('application/javascript'));
@@ -8962,6 +9150,7 @@ begin
   Check(IsContentTypeTextU('application/json'));
   Check(IsContentTypeTextU('APPLICATION/JSON'));
   Check(IsContentTypeTextU('application/xml'));
+  Check(not IsContentTypeTextU('application/octet-stream'));
   Check(IsContentTypeTextU('application/javascript'));
   Check(IsContentTypeTextU('application/VND.API+JSON'));
   Check(IsContentTypeTextU('application/vnd.mysoft.v1+json'));
@@ -8976,14 +9165,13 @@ begin
   begin
     mp := nil;
     mp2 := nil;
-    n := high(MIMES) shr 1;
+    n := high(MIM) shr 1;
     for i := 0 to n do
-      Check(MultiPartFormDataAddField(
-        StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]), mp));
+      Check(MultiPartFormDataAddField(MIM[i * 2], MIM[i * 2 + 1], mp));
     for i := 0 to high(fn) do
     begin
       fn[i] := WorkDir + 'mp' + IntToStr(i);
-      StringToUtf8(MIMES[i * 2 + 1], s);
+      s := MIM[i * 2 + 1];
       FileFromString(s, fn[i]);
       Check(MultiPartFormDataAddFile(fn[i], mp));
       fa := sysutils.FileAge(fn[i]);
@@ -9013,7 +9201,7 @@ begin
     st := THttpMultiPartStream.Create;
     st.Rfc2388NestedFiles := rfc2388;
     for i := 0 to n do
-      st.AddContent(StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]));
+      st.AddContent(MIM[i * 2], MIM[i * 2 + 1]);
     for i := 0 to high(fn) do
       st.AddFile('', fn[i]);
     st.Flush;
@@ -9077,7 +9265,7 @@ begin
   end;
 end;
 
-procedure TTestCoreBase._TSynLogFile;
+procedure TTestCoreBase.Debugging;
 
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
@@ -9097,11 +9285,9 @@ procedure TTestCoreBase._TSynLogFile;
       Check(L.LevelUsed = [sllEnter, sllLeave, sllDebug]);
       Check(L.RunningUser = 'MySelf');
       Check(L.CPU = '2*0-15-1027');
-      {$ifdef OSWINDOWS}
       Check(L.OS = wXP);
       Check(L.ServicePack = 3);
       Check(not L.Wow64);
-      {$endif OSWINDOWS}
       Check(L.Freq = 0);
       CheckSame(L.StartDateTime, 40640.502882, 1 / SecsPerDay);
       if CheckFailed(L.Count = 3) then
@@ -9124,10 +9310,13 @@ procedure TTestCoreBase._TSynLogFile;
 var
   tmp: array[0..512] of AnsiChar;
   msg, n, v: RawUtf8;
-  os: TOperatingSystem;
+  os, os2: TOperatingSystem;
+  ld: TLinuxDistribution;
+  islinux: boolean;
   osv: TOperatingSystemVersion;
   len: integer;
 begin
+  // validate UserAgentParse()
   Check(not UserAgentParse('toto (mozilla)', n, v, os));
   Check(UserAgentParse('myprogram/3.1.0.2W', n, v, os));
   Check(n = 'myprogram');
@@ -9141,32 +9330,52 @@ begin
   Check(n = 'myprogram');
   Check(v = '3.1.2');
   check(os = osWindows);
+  // validate TOperatingSystemVersion
   osv.os := osWindows;
   osv.win := wSeven;
   osv.winbuild := 0;
-  CheckEqual(ToText(osv), 'Windows 7');
+  CheckEqualShort(ToText(osv), 'Windows 7');
   osv.win := wTen_64;
-  CheckEqual(ToText(osv), 'Windows 10 64bit');
+  CheckEqualShort(ToText(osv), 'Windows 10 64bit');
   osv.winbuild := 10240;
-  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  CheckEqualShort(ToText(osv), 'Windows 10 64bit 1507');
   osv.winbuild := 10241;
-  CheckEqual(ToText(osv), 'Windows 10 64bit 1507');
+  CheckEqualShort(ToText(osv), 'Windows 10 64bit 1507');
   osv.win := wTen;
   osv.winbuild := 19045;
-  CheckEqual(ToText(osv), 'Windows 10 22H2');
+  CheckEqualShort(ToText(osv), 'Windows 10 22H2');
   osv.win := wEleven;
   osv.winbuild := 22000;
-  CheckEqual(ToText(osv), 'Windows 11 21H2');
+  CheckEqualShort(ToText(osv), 'Windows 11 21H2');
   osv.winbuild := 22621;
-  CheckEqual(ToText(osv), 'Windows 11 22H2');
+  CheckEqualShort(ToText(osv), 'Windows 11 22H2');
   osv.win := wEleven_64;
   osv.winbuild := 26100;
-  CheckEqual(ToText(osv), 'Windows 11 64bit 24H2');
+  CheckEqualShort(ToText(osv), 'Windows 11 64bit 24H2');
   osv.winbuild := 26100;
-  CheckEqual(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
+  CheckEqualShort(ToTextOS(cardinal(osv)), 'Windows 11 64bit 24H2 26100');
+  osv.winbuild := 26210;
+  CheckEqualShort(ToTextOS(cardinal(osv)), 'Windows 11 64bit 25H2 26210');
   osv.win := wServer2022_64;
   osv.winbuild := 20349;
-  CheckEqual(ToTextOS(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
+  CheckEqualShort(ToText(osv), 'Windows Server 2022 64bit 21H2');
+  CheckEqual(ToTextOSU(cardinal(osv)), 'Windows Server 2022 64bit 21H2 20349');
+  // validate OS definitions logic
+  for os := low(os) to high(os) do
+  begin
+    islinux := false;
+    for ld := succ(low(ld)) to high(ld) do
+      if os in LINUX_DIST[ld] then
+        if not CheckFailed(not islinux, 'os twice') then
+          if not CheckFailed(LinuxDistribution(os) = ld, 'ld') then
+            islinux := true;
+    Check((os in OS_LINUX) = islinux, 'islinux');
+    Check(islinux = not (os in LINUX_DIST[ldNotLinux]));
+    Check(islinux = (LinuxDistribution(os) <> ldNotLinux));
+    for os2 := low(os) to high(os) do
+      Check((OS_INITIAL[os2] = OS_INITIAL[os]) = (os2 = os), 'OS_INITIAL');
+  end;
+  // validate SyslogMessage()
   FillcharFast(tmp, SizeOf(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
   // Check(len=65); // <-- different for every PC, due to PC name differences
@@ -9180,6 +9389,7 @@ begin
   Check(len < 300, 'truncated to avoid buffer overflow');
   Check(tmp[len - 1] = '+');
   Check(tmp[len] = #1);
+  // validate TSynLogFile
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +
@@ -9614,11 +9824,12 @@ var
   end;
 
 var
-  v: tvalue;
+  v, kv: tvalue;
   s, k, key, val, u, json: RawUtf8;
   i, n: integer;
   i64: Int64;
   exists: boolean;
+  b: byte;
   sdk: TSDKey;
 begin
   SetDict;
@@ -9628,7 +9839,7 @@ begin
   finally
     dict.Free;
   end;
-  SetDict;
+  dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray), True);
   try
     CheckEqual(dict.Count, 0);
     CheckEqual(dict.Capacity, 0);
@@ -9644,7 +9855,7 @@ begin
     CheckEqual(dict.Capacity, 0);
     key := 'Foobar';
     val := 'lol';
-    dict.AddOrUpdate(key, val);
+    Check(dict.AddOrUpdate(key, val) >= 0);
     CheckEqual(dict.Count, 1);
     json := dict.SaveToJson;
     CheckEqual(json, '{"Foobar":"lol"}');
@@ -9811,6 +10022,54 @@ begin
     Check(dict.FindAndCopy(sdk, v), 'ptInteger=search i only');
     Check(v = 10);
   finally
+    dict.Free;
+  end;
+  // validate variant as keys, with proper hashing of simple or complex types
+  {$ifdef HASGENERICS}
+  dict := TSynDictionary.New<variant, byte>;
+  {$else}
+  dict := TSynDictionary.Create(TypeInfo(TVariantDynArray), TypeInfo(TByteDynArray));
+  {$endif HASGENERICS}
+  try
+    kv := byte(1);
+    CheckEqual(TVarData(kv).VType, varByte);
+    b := 0;
+    Check(not dict.FindAndCopy(kv, b));
+    b := 255;
+    CheckEqual(dict.Add(kv, b), 0);
+    b := 0;
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 255);
+    kv := integer(1);
+    CheckEqual(TVarData(kv).VType, varInteger);
+    b := 0;
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 255);
+    RawUtf8ToVariant('toto', kv);
+    b := 0;
+    Check(not dict.FindAndCopy(kv, b));
+    b := 254;
+    CheckEqual(dict.Add(kv, b), 1);
+    b := 0;
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 254);
+    kv := word(1);
+    CheckEqual(TVarData(kv).VType, varWord);
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 255);
+    kv := _JsonFast('[1,2,{a:3}]');
+    b := 0;
+    Check(not dict.FindAndCopy(kv, b));
+    b := 253;
+    CheckEqual(dict.Add(kv, b), 2);
+    kv := WideString('toto');
+    CheckEqual(TVarData(kv).VType, varOleStr);
+    Check(dict.FindAndCopy(kv, b));
+    CheckEqual(b, 254);
+    kv := _JsonFast('[ 1, 2, {"a":3} ]');
+    Check(dict.FindAndCopy(kv, b), 'json should not matter');
+    CheckEqual(b, 253);
+finally
     dict.Free;
   end;
 end;
@@ -10249,8 +10508,11 @@ var
   nfo: TWinProcessInfo;
 begin
   // validate Windows API error code recognition
-  CheckEqual(WinErrorText(1246), 'ERROR__CONTINUE');
-  CheckEqual(WinErrorText(ERROR_INSUFFICIENT_BUFFER), 'ERROR_INSUFFICIENT_BUFFER');
+  CheckEqualShort(WinApiErrorShort(122), 'ERROR_INSUFFICIENT_BUFFER');
+  CheckEqualShort(WinApiErrorShort(1246), 'ERROR__CONTINUE');
+  CheckEqual(WinApiErrorUtf8(122), 'ERROR_INSUFFICIENT_BUFFER');
+  Check(WinApiErrorString(122) = 'ERROR_INSUFFICIENT_BUFFER');
+  Check(WinApiErrorString(1246) = 'ERROR__CONTINUE');
   // validate DotNet exceptions error code recognition
   Win32DotNetException(0, '');
   Win32DotNetException(9234, '');

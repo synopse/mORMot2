@@ -1,4 +1,4 @@
-** CentOS / Ubuntu notes** If you need to use libmozjs-52 on bot CentOS / Ubuntu distribution we recommend to compile it on CentOS,
+** CentOS / Ubuntu notes** If you need to use libmozjs-52 on both CentOS / Ubuntu distribution we recommend to compile it on CentOS,
 because Ubintu 16.04 LTS have newer version of glibc (3.4.21)
 
 Before proceeding Spider Monkey build pease consider reading general

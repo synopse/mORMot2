@@ -62,6 +62,8 @@ type
     /// overriden method creating an index on the Method/MicroSec columns
     class procedure InitializeTable(const Server: IRestOrmServer;
       const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
+    /// fill Input as TDocVariantData
+    procedure SetInput(Json: PUtf8Char; Capacity: PtrInt);
   published
     /// the 'interface.method' identifier of this call
     // - this column will be indexed, for fast SQL queries, with the MicroSec
@@ -793,8 +795,8 @@ type
     ['{8D518FCB-62C3-42EB-9AE7-96ED322140F7}']
     /// will be called when a callback is released on the client side
     // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
-    // signature, so that it will be called with the interface instance by
-    // TServiceContainerServer.ReleaseFakeCallback
+    // signature, so that it will be called as POST root/cacheflush/_callback_
+    // to execute TServiceContainerServer.ClientFakeCallbackRelease()
     // - you may use it as such - see sample restws_chatserver.dpr:
     // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
     // !   const interfaceName: RawUtf8);
@@ -982,6 +984,11 @@ begin
   inherited;
   if FieldName = '' then
     Server.CreateSqlMultiIndex(self, ['Method', 'MicroSec'], false);
+end;
+
+procedure TOrmServiceLog.SetInput(Json: PUtf8Char; Capacity: PtrInt);
+begin
+  PDocVariantData(@fInput)^.InitJsonInPlace(Json, JSON_FAST_EXTENDED, nil, Capacity);
 end;
 
 
@@ -1703,7 +1710,7 @@ function TServiceContainer.AsJson: RawJson;
 var
   WR: TTextWriter;
   i: PtrInt;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   result := '';
   if (self = nil) or

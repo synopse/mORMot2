@@ -192,7 +192,7 @@ type
     // - you should not use this, but rather call OrmMapExternal()
     // - OrmProps.ExternalDatabase will map the associated TSqlDBConnectionProperties
     // - OrmProps.ExternalTableName will retrieve the real full table name,
-    // e.g. including any databas<e schema prefix
+    // e.g. including any database schema prefix
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); override;
     /// delete a row, calling the external engine with SQL
     // - made public since a TRestStorage instance may be created
@@ -1420,7 +1420,7 @@ function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
 var
   stmt: ISqlDBStatement;
   w: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   // TableModelIndex is not useful here
   result := '';
@@ -2236,7 +2236,7 @@ begin
 end;
 
 const
-  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of string[3] = (
+  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of TShort3 = (
     '=?',      // soEqualTo
     '<>?',     // soNotEqualTo
     '<?',      // soLessThan

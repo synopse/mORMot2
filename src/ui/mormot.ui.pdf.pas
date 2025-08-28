@@ -144,15 +144,9 @@ type
   PPoint = PPOINTL;
   TRect = packed record
     case integer of
-      0: (
-        Left, Top, Right, Bottom: integer
-      );
-      1: (
-        TopLeft, BottomRight: TPoint
-      );
-      2: (
-        Rect: Types.TRect
-      );
+      0: (Left, Top, Right, Bottom: integer);
+      1: (TopLeft, BottomRight: TPoint);
+      2: (Rect: Types.TRect);
   end;
   PRect = ^TRect;
 
@@ -4647,7 +4641,7 @@ end;
 
 function TPdfWrite.Add(Value: integer): TPdfWrite;
 var
-  t: array[0..23] of AnsiChar;
+  t: TTemp24;
   P: PAnsiChar;
 begin
   if BEnd - B <= 24 then
@@ -5232,7 +5226,7 @@ var
   fnt: TPdfFontTrueType;
   Glyph: word;
 begin
-  assert((Ttf <> nil) and (Ttf = Ttf.WinAnsiFont));
+  assert((Ttf <> nil) and not Ttf.Unicode);
   changed := fAddGlyphFont = fNone;
   Glyph := Ttf.fUsedWide[Ttf.FindOrAddUsedWideChar(Char)].Glyph;
   with Canvas.fDoc do
@@ -5250,7 +5244,7 @@ begin
       fAddGlyphFont := fFallBack;
       fnt := Canvas.SetFont('', Canvas.fPage.FontSize, Ttf.fStyle, -1,
         fFontFallBackIndex) as TPdfFontTrueType;
-      assert(fnt = fnt.WinAnsiFont);
+      assert(not fnt.Unicode);
       Glyph := fnt.fUsedWide[fnt.FindOrAddUsedWideChar(Char)].Glyph;
     end
     else
@@ -6000,7 +5994,11 @@ var
   n, i: integer;
   aSymbolAnsiChar: AnsiChar;
 begin
-  self := WinAnsiFont;
+  if fUnicode then // we need fUsedWide[] to be the used glyphs
+  begin
+    result := WinAnsiFont.FindOrAddUsedWideChar(aWideChar);
+    exit;
+  end;
   result := fUsedWideChar.Add(ord(aWideChar));
   if result < 0 then
   begin
@@ -6176,7 +6174,11 @@ end;
 
 function TPdfFontTrueType.GetWideCharWidth(aWideChar: WideChar): integer;
 begin
-  self := self.WinAnsiFont; // we need fUsedWide[] to be used glyphs
+  if fUnicode then
+  begin // we need fUsedWide[] to be the used glyphs
+    result := WinAnsiFont.GetWideCharWidth(aWideChar);
+    exit;
+  end;
   result := WideCharToWinAnsi(ord(aWideChar));
   if result >= 0 then
     if (fWinAnsiWidth <> nil) and
@@ -10012,99 +10014,57 @@ end;
 
 {$ifdef USE_METAFILE}
 
-procedure SetGdiCommentApi(h: HDC; n: integer; p: pointer);
+procedure SetGdiComment(h: HDC; pgc: TPdfGdiComment; data: pointer; len: PtrInt;
+  const last: RawByteString = '');
+var
+  tmp: TSynTempAdder;
 begin
+  tmp.Init;
+  tmp.AddDirect(AnsiChar(pgc));
+  tmp.Add(data, len);
+  tmp.Add(last);
   {$ifdef FPC}
-  Windows.GdiComment(h, n, PByte(p)^);
+  Windows.GdiComment(h, tmp.Size, PByte(tmp.Buffer)^);
   {$else}
-  Windows.GdiComment(h, n, p);
+  Windows.GdiComment(h, tmp.Size, tmp.Buffer);
   {$endif FPC}
+  tmp.Store.Done;
 end;
 
 procedure GdiCommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUtf8);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
 begin
   // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
-  L := length(aBookmarkName);
-  SetLength(tmp, L + 1);
-  D := pointer(tmp);
-  D^ := AnsiChar(pgcBookmark);
-  MoveFast(pointer(aBookmarkName)^, D[1], L);
-  SetGdiCommentApi(MetaHandle, L + 1, D);
+  SetGdiComment(MetaHandle, pgcBookmark, nil, 0, aBookMarkName);
 end;
 
 procedure GdiCommentOutline(MetaHandle: HDC; const aTitle: RawUtf8; aLevel: integer);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
 begin
-  L := length(aTitle);
-  SetLength(tmp, L + 2);
-  D := pointer(tmp);
-  D[0] := AnsiChar(pgcOutline);
-  D[1] := AnsiChar(aLevel);
-  MoveFast(pointer(aTitle)^, D[2], L);
-  SetGdiCommentApi(MetaHandle, L + 2, D);
+  SetGdiComment(MetaHandle, pgcOutline, @aLevel, 4, aTitle);
 end;
 
-procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8; const
-  aRect: TRect; NoBorder: boolean);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
+procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8;
+  const aRect: TRect; NoBorder: boolean);
+const
+  pgc: array[boolean] of TPdfGdiComment = (pgcLink, pgcLinkNoBorder);
 begin
-  L := length(aBookmarkName);
-  SetLength(tmp, L + (1 + SizeOf(TRect)));
-  D := pointer(tmp);
-  if NoBorder then
-    D^ := AnsiChar(pgcLinkNoBorder)
-  else
-    D^ := AnsiChar(pgcLink);
-  PRect(D + 1)^ := aRect;
-  MoveFast(pointer(aBookmarkName)^, D[1 + SizeOf(TRect)], L);
-  SetGdiCommentApi(MetaHandle, L + (1 + SizeOf(TRect)), D);
+  SetGdiComment(MetaHandle, pgc[NoBorder], @aRect, SizeOf(aRect), aBookmarkName);
 end;
 
 procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
   const aRect: TRect);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
 begin
-  L := length(aFileName);
-  SetLength(tmp, L + (1 + SizeOf(TRect)));
-  D := pointer(tmp);
-  D^ := AnsiChar(pgcJpegDirect);
-  PRect(D + 1)^ := aRect;
-  MoveFast(pointer(aFileName)^, D[1 + SizeOf(TRect)], L);
-  SetGdiCommentApi(MetaHandle, L + (1 + SizeOf(TRect)), D);
+  SetGdiComment(MetaHandle, pgcJpegDirect, @aRect, SizeOf(aRect), aFileName);
 end;
 
 procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
   Group: TPdfOptionalContentGroup);
-var
-  tmp: packed record
-    pgc: TPdfGdiComment;
-    group: TPdfOptionalContentGroup;
-  end;
 begin
-  tmp.pgc := pgcBeginMarkContent;
-  tmp.group := Group;
-  SetGdiCommentApi(MetaHandle, SizeOf(tmp), @tmp);
+  SetGdiComment(MetaHandle, pgcBeginMarkContent, @Group, SizeOf(Group));
 end;
 
 procedure GdiCommentEndMarkContent(MetaHandle: HDC);
-var
-  pgc: TPdfGdiComment;
 begin
-  pgc := pgcEndMarkContent;
-  SetGdiCommentApi(MetaHandle, 1, @pgc);
+  SetGdiComment(MetaHandle, pgcEndMarkContent, nil, 0);
 end;
 
 
@@ -11448,7 +11408,7 @@ begin
         o := 0;
         a := {%H-}pointer(PtrUInt(data) +
              SizeOf(TEMRPolyPolyline) - SizeOf(TPoint) +
-             (data^.nPolys - 1) * SizeOf(DWORD));
+             (data^.nPolys - 1) * SizeOf(DWord));
         for i := 1 to data^.nPolys do
         begin
           f := o;
@@ -11471,7 +11431,7 @@ begin
         o := 0;
         a16 := {%H-}pointer(PtrUInt(data16) +
                SizeOf(TEMRPolyPolyline16) - SizeOf(TSmallPoint) +
-               (data16^.nPolys - 1) * SizeOf(DWORD));
+               (data16^.nPolys - 1) * SizeOf(DWord));
         for i := 1 to data16^.nPolys do
         begin
           f := o;
@@ -11635,27 +11595,27 @@ var
 begin
   try
     case Kind of
-      pgcOutline:
-        if Len > 1 then
+      pgcOutline: // pgcOutline, @aLevel, 4, aTitle
+        if Len > 4 then
         begin
-          FastSetString(Text, P + 1, Len - 1);
-          Canvas.Doc.CreateOutline(Utf8ToString(Trim(Text)), PByte(P)^,
+          FastSetString(Text, P + 4, Len - 4);
+          Canvas.Doc.CreateOutline(Utf8ToString(Trim(Text)), PInteger(P)^,
             Canvas.I2Y(DC[nDC].position.Y));
         end;
-      pgcBookmark:
+      pgcBookmark: // pgcBookmark, nil, 0, aBookMarkName
         begin
           FastSetString(Text, P, Len);
           Canvas.Doc.CreateBookMark(Canvas.I2Y(DC[nDC].position.Y), Text);
         end;
       pgcLink,
-      pgcLinkNoBorder:
+      pgcLinkNoBorder: // pgc[NoBorder], @aRect, SizeOf(aRect), aBookmarkName
         if Len > Sizeof(TRect) then
         begin
           FastSetString(Text, P + SizeOf(TRect), Len - SizeOf(TRect));
           Canvas.Doc.CreateLink(
             Canvas.RectI(PRect(P)^, true), Text, abSolid, ord(Kind = pgcLink));
         end;
-      pgcJpegDirect:
+      pgcJpegDirect: // pgcJpegDirect, @aRect, SizeOf(aRect), aFileName
         if Len > Sizeof(TRect) then
         begin
           FastSetString(Text, P + SizeOf(TRect), Len - SizeOf(TRect));
@@ -11669,10 +11629,10 @@ begin
           Canvas.DrawXObject(ImgRect.Left, ImgRect.Top,
             ImgRect.Right - ImgRect.Left, ImgRect.Bottom - ImgRect.Top, ImgName);
         end;
-      pgcBeginMarkContent:
+      pgcBeginMarkContent: // pgcBeginMarkContent, @Group, SizeOf(Group)
         if Len = SizeOf(pointer) then
           Canvas.BeginMarkedContent(PPointer(P)^);
-      pgcEndMarkContent:
+      pgcEndMarkContent: // pgcEndMarkContent, nil, 0
         Canvas.EndMarkedContent;
     end;
   except

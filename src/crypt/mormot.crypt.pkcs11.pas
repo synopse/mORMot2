@@ -25,6 +25,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.crypt.ecc256r1,
@@ -186,7 +187,8 @@ type
     fStorageID: TPkcs11ObjectID;  // match TPkcs11Object.StorageID
     fStorageLabel: RawUtf8;       // match TPkcs11Object.StorageLabel
     fLocation: RawUtf8;
-    fSecret, fPin: RawByteString; // anti-forensic PIN storage
+    fPin: RawByteString; // stored encrypted to avoid forensic issues
+    fPinSecret: TAesCtr; // anti-forensic PIN storage in fPin
     fSlotID: TPkcs11SlotID;
     fIsX509: boolean;
     fCaa: TCryptAsymAlgo;
@@ -572,14 +574,14 @@ end;
 
 procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin // caller did "if not fConfigRetrieved then EnsureRetrieveConfig"
-  endtix := GetTickCount64 + MilliSecsPerMin; // never wait forever
+  endtix := GetTickSec + SecsPerMin; // never wait forever
   repeat
-    SleepHiRes(100);
+    SleepHiRes(50);
     if fConfigRetrieved then
       exit;
-  until GetTickCount64 > endtix;
+  until GetTickSec > endtix;
   ECryptCertPkcs11.RaiseUtf8('%.EnsureRetrieveConfig timeout', [self]);
 end;
 
@@ -774,7 +776,7 @@ begin
      (fStorageID = '') or
      (fPin = '') then
     exit;
-  pin := CryptDataForCurrentUser(fPin, fSecret, {encrypt=}false);
+  pin := fPinSecret.DecryptPkcs7(fPin, {ivatbeg=}true);
   try
     fEngine.Open(fSlotID, pin);
     try
@@ -897,15 +899,15 @@ begin
   fCaa := XKA_TO_CAA[xka]; // approximate guess with 256-bit RSA hash
   fSlot := slt^;
   fToken := tok^;
-  fSecret := ToUtf8(RandomGuid); // anti-forensic temp salt
+  fPinSecret := TAesCtr.CreateTemp(128); // anti-forensic PIN storage
   FormatUtf8('%-%', [aSlotID, aStorageID], fLocation);
 end;
 
 destructor TCryptCertPkcs11.Destroy;
 begin
-  FillZero(fSecret);
-  FillZero(fPin); // paranoid
   inherited Destroy;
+  fPinSecret.Free;
+  FillZero(fPin); // paranoid
 end;
 
 function TCryptCertPkcs11.Log: TSynLogClass;
@@ -1001,7 +1003,7 @@ function TCryptCertPkcs11.SetPin(const PinCode: SpiUtf8): boolean;
 begin
   result := false;
   // store the PIN code in memory with proper obfuscation
-  fPin := CryptDataForCurrentUser(PinCode, fSecret, {encrypt=}true);
+  fPin := fPinSecret.EncryptPkcs7(PinCode, {ivatbeg=}true);
   // validate the supplied PIN code
   if OpenPrivateKey = CK_INVALID_HANDLE then
   begin

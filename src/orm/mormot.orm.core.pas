@@ -511,7 +511,7 @@ type
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
     procedure GetJsonValue(Value: TOrm; withID: boolean;
-      const Fields: TFieldBits; out Json: RawUtf8); overload;
+      const Fields: TFieldBits; var Json: RawUtf8); overload;
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
     procedure GetJsonValue(Value: TOrm; withID: boolean;
@@ -4675,9 +4675,9 @@ type
   /// thread-safe class to store a BATCH sequence of writing operations
   TRestBatchLocked = class(TRestBatch)
   protected
+    fSafe: TOSLock;
     fResetTix: Int64;
     fThreshold: integer;
-    fSafe: TSynLocker;
   public
     /// initialize the BATCH instance
     constructor CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
@@ -4691,7 +4691,7 @@ type
       Options: TRestBatchOptions = [boExtendedJson]); override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker
+    property Safe: TOSLock
       read fSafe;
     /// property set to the current GetTickCount64 value when Reset was called
     property ResetTix: Int64
@@ -4708,6 +4708,9 @@ type
 var
   LastOrmProps: TOrmProperties; // naive but efficient thread-safe cache
 {$endif NOPATCHVMT}
+
+/// low-level internal function called by TOrmModel.UriMatch
+function DoUriMatch(u, r: PUtf8Char; rlen: PtrInt; checkcase: boolean): TRestModelMatch;
 
 /// compute the SQL field names, used to create a SQLite3 virtual table
 function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
@@ -5024,36 +5027,36 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TSqlRecord = TOrm;
-  PSqlRecord = POrm;
-  TSqlRecordArray = TOrmArray;
-  PSqlRecordArray = POrmArray;
-  TSqlRecordObjArray = TOrmObjArray;
-  TSqlRecordClass = TOrmClass;
-  TSqlRecordClassDynArray = TOrmClassDynArray;
-  PSqlClass = POrmClass;
-  TSqlTable = TOrmTable;
-  TSqlTableJson = TOrmTableJson;
-  TSqlInitializeTableOption = TOrmInitializeTableOption;
-  TSqlInitializeTableOptions = TOrmInitializeTableOptions;
-  TSqlAccessRights = TOrmAccessRights;
-  PSqlAccessRights = POrmAccessRights;
-  TSqlFieldType = TOrmFieldType;
-  TSqlFieldTables = TOrmTableBits;
-  TSqlModel = TOrmModel;
-  TSqlModelProperties = TOrmModelProperties;
-  TSqlModelPropertiesObjArray = TOrmModelPropertiesObjArray;
-  TSqlProperties = TOrmProperties;
-  TSqlPropInfo = TOrmPropInfo;
-  TSqlPropInfoObjArray = TOrmPropInfoObjArray;
-  TSqlPropInfoClass = TOrmPropInfoClass;
-  TSqlPropInfoListOptions = TOrmPropInfoListOptions;
-  TSqlPropInfoAttribute = TOrmPropInfoAttribute;
-  TSqlPropInfoAttributes = TOrmPropInfoAttributes;
-  TSqlRestCache = TOrmCache;
-  TSqlRestBatch = TRestBatch;
-  TSqlRestBatchLocked = TRestBatchLocked;
-  TOrmPropertiesMapping = TOrmMapping;
+  TSqlRecord                   = TOrm;
+  PSqlRecord                   = POrm;
+  TSqlRecordArray              = TOrmArray;
+  PSqlRecordArray              = POrmArray;
+  TSqlRecordObjArray           = TOrmObjArray;
+  TSqlRecordClass              = TOrmClass;
+  TSqlRecordClassDynArray      = TOrmClassDynArray;
+  PSqlClass                    = POrmClass;
+  TSqlTable                    = TOrmTable;
+  TSqlTableJson                = TOrmTableJson;
+  TSqlInitializeTableOption    = TOrmInitializeTableOption;
+  TSqlInitializeTableOptions   = TOrmInitializeTableOptions;
+  TSqlAccessRights             = TOrmAccessRights;
+  PSqlAccessRights             = POrmAccessRights;
+  TSqlFieldType                = TOrmFieldType;
+  TSqlFieldTables              = TOrmTableBits;
+  TSqlModel                    = TOrmModel;
+  TSqlModelProperties          = TOrmModelProperties;
+  TSqlModelPropertiesObjArray  = TOrmModelPropertiesObjArray;
+  TSqlProperties               = TOrmProperties;
+  TSqlPropInfo                 = TOrmPropInfo;
+  TSqlPropInfoObjArray         = TOrmPropInfoObjArray;
+  TSqlPropInfoClass            = TOrmPropInfoClass;
+  TSqlPropInfoListOptions      = TOrmPropInfoListOptions;
+  TSqlPropInfoAttribute        = TOrmPropInfoAttribute;
+  TSqlPropInfoAttributes       = TOrmPropInfoAttributes;
+  TSqlRestCache                = TOrmCache;
+  TSqlRestBatch                = TRestBatch;
+  TSqlRestBatchLocked          = TRestBatchLocked;
+  TOrmPropertiesMapping        = TOrmMapping;
   TOrmPropertiesMappingOptions = TOrmMappingOptions;
 
 {$endif PUREMORMOT2}
@@ -5144,7 +5147,7 @@ procedure EncodeMultiInsertSQLite3(Props: TOrmProperties;
 var
   f: PtrInt;
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -5613,7 +5616,7 @@ var
   EnumValues: set of 0..63;
   Soundex: TSynSoundEx;
   M: TOrmModel;
-  tmp: array[0..23] of AnsiChar;
+  tmp: TTemp24;
 begin
   result := 0;
   if (self = nil) or
@@ -7099,7 +7102,7 @@ end;
 function TOrm.GetBinary(WithID, SimpleFields: boolean): RawByteString;
 var
   W: TBufferWriter;
-  temp: TTextWriterStackBuffer; // 8KB
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TBufferWriter.Create(temp{%H-});
   try
@@ -7307,7 +7310,7 @@ procedure TOrm.GetJsonValues(Json: TStream; Expand, withID: boolean;
   Occasion: TOrmOccasion; OrmOptions: TOrmWriterOptions);
 var
   serializer: TOrmWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if self = nil then
     exit;
@@ -7856,12 +7859,12 @@ procedure TOrm.EnginePrepareMany(const aClient: IRestOrm;
   out ObjectsClass: TOrmClassDynArray; out SQL, Json: RawUtf8);
 var
   aSqlFields, aSqlFrom, aSqlWhere, aSqlJoin: RawUtf8;
-  aField: string[3];
+  aField: TShort3;
   aMany: RawUtf8;
   f, n, i, SqlFieldsCount: integer;
   Props: TOrmProperties;
   SqlFields: array of record
-    SQL: string[3];
+    SQL: TShort3;
     prop: TOrmPropInfo;
     Instance: TOrm;
   end;
@@ -7877,7 +7880,7 @@ var
     else
       with SqlFields[SqlFieldsCount] do
       begin
-        SQL := aField;
+        PCardinal(@SQL)^ := PCardinal(@aField)^;
         prop := aProp;
         Instance := Objects[f];
         inc(SqlFieldsCount);
@@ -8205,9 +8208,8 @@ begin
     exit; // invalid or {} or null
   i := 0; // for optimistic property name lookup
   repeat
-     name := GetJsonPropName(
-       Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, @namelen);
-     Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}GetJsonFieldOrObjectOrArray;
+     name := GetJsonPropName(Context.Get.Json, @namelen);
+     Context.Get.GetJsonFieldOrObjectOrArray;
      if (name = nil) or
         (Context.Json = nil) then
      begin
@@ -9265,9 +9267,6 @@ begin
   result := pointer(fTableObjArrayRtti);
 end;
 
-const // the most ambigous keywords - others may be used as column names
-  SQLITE3_KEYWORDS = ' from where group in as ';
-
 constructor TOrmProperties.Create(aTable: TOrmClass);
 var
   i, j, nProps: PtrInt;
@@ -9281,7 +9280,7 @@ label
 begin
   inherited Create;
   if aTable = nil then
-    raise EModelException.CreateU('TOrmProperties.Create(nil)');
+    EModelException.RaiseU('TOrmProperties.Create(nil)');
   // register for JsonToObject() and for TOrmPropInfoRttiTID.Create()
   // (should have been done before in TOrmModel.Create/AddTable)
   fTableRtti := Rtti.RegisterClass(aTable) as TRttiJson;
@@ -9292,7 +9291,10 @@ begin
   fModelMax := -1;
   fTable := aTable;
   fSqlTableName := GetDisplayNameFromClass(aTable);
-  fSqlTableNameUpperWithDot := UpperCase(SqlTableName) + '.';
+  if IsSqlReserved(fSqlTableName) then
+    EModelException.RaiseUtf8('% derivated table name ''%'' conflicts ' +
+      'with a SQL keyword: please rename the class', [Table, fSqlTableName]);
+  fSqlTableNameUpperWithDot := UpperCase(fSqlTableName) + '.';
   isTOrmMany := aTable.InheritsFrom(TOrmMany);
   // add properties to internal Fields list
   nProps := ClassFieldCountWithParents(aTable);
@@ -9325,9 +9327,9 @@ begin
     if IsRowID(pointer(F.Name)) then
       EModelException.RaiseUtf8('ID is already defined in TOrm: ' +
         '%.% field name is not allowed as published property', [Table, F.Name]);
-    if PosEx(' ' + LowerCase(F.Name) + ' ', SQLITE3_KEYWORDS) > 0 then
-      EModelException.RaiseUtf8(
-        '%.% field name conflicts with a SQL keyword', [Table, F.Name]);
+    if IsSqlReserved(F.Name) then
+      EModelException.RaiseUtf8('%.% field name conflicts with a SQL keyword:' +
+        ' please rename this published property', [Table, F.Name]);
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then
     begin
@@ -9599,7 +9601,7 @@ var
 begin
   if (cardinal(aIndex) > cardinal(fTablesMax)) or
      (fTableProps[aIndex] <> nil) then
-    raise EModelException.CreateU('TOrmModel.SetTableProps');
+    EModelException.RaiseU('TOrmModel.SetTableProps');
   Table := fTables[aIndex];
   if Table.InheritsFrom(TOrmFts5) then
     Kind := ovkFts5
@@ -9866,40 +9868,29 @@ end;
 
 function TOrmModel.GetTableIndexesFromSqlSelect(const SQL: RawUtf8): TIntegerDynArray;
 var
-  i, j, k, n, ndx: PtrInt;
-begin
-  result := nil;
-  n := 0;
-  i := PosI(' FROM ', SQL);
-  if i > 0 then
-  begin // same parsing logic than GetTableNamesFromSqlSelect()
-    inc(i, 6);
+  p, beg: PUtf8Char;
+  n: PtrInt;
+begin // same logic than in GetTableNamesFromSqlSelect()
+  p := PosSelectTable(pointer(Sql));
+  if p <> nil then
     repeat
-      while SQL[i] in [#1..' '] do
-        inc(i);
-      j := 0;
-      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
-        inc(j);
-      if cardinal(j - 1) > 64 then
-      begin
-        result := nil;
-        exit; // seems too big
-      end;
-      k := i + j;
-      while SQL[k] in [#1..' '] do
-        inc(k);
-      ndx := GetTableIndexPtrLen(PUtf8Char(PtrInt(SQL) + i - 1), j);
-      if ndx >= 0 then
-      begin
-        SetLength(result, n + 1);
-        result[n] := ndx;
-        inc(n);
-      end;
-      if SQL[k] <> ',' then
+      p := GotoNextNotSpace(p);
+      beg := p;
+      while tcIdentifier in TEXT_CHARS[p^] do
+        inc(p);
+      n := p - beg;
+      if n = 0 then
         break;
-      i := k + 1;
+      n := GetTableIndexPtrLen(beg, n);
+      if n < 0 then
+        break; // unknown table
+      AddInteger(result, n);
+      p := GotoNextNotSpace(p);
+      if p^ <> ',' then
+        exit; // reached last table name
+      inc(p);
     until false;
-  end;
+  result := nil;
 end;
 
 function TOrmModel.GetTable(const SqlTableName: RawUtf8): TOrmClass;
@@ -9984,7 +9975,7 @@ end;
 function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
 begin
   if self = nil then
-    raise EModelException.CreateU('nil.GetTableIndexExisting');
+    EModelException.RaiseU('nil.GetTableIndexExisting');
   result := GetTableIndex(aTable);
   if result < 0 then
     EModelException.RaiseUtf8('% is not part of % root=%',
@@ -10059,24 +10050,25 @@ begin
   result := GetUriID(aTable, aID) + '/' + aMethodName;
 end;
 
-function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
-var
-  u: PUtf8Char;
+function DoUriMatch(u, r: PUtf8Char; rlen: PtrInt; checkcase: boolean): TRestModelMatch;
 begin
-  u := pointer(Uri);
-  result := rmNoMatch;
-  if (self <> nil) and
-     (fRoot <> '') and
-     (u <> nil) and
-     (PStrLen(u - _STRLEN)^ >= TStrLen(fRootLen)) and
-     (u[fRootLen] in [#0, '/', '?']) then
-    if CheckCase then
-    begin
-      if CompareMemFixed(u, pointer(fRoot), fRootLen) then
-        result := rmMatchExact;
-    end
-    else if IdemPropNameUSameLenNotNull(u, pointer(fRoot), fRootLen) then
-      result := rmMatchWithCaseChange;
+  if (u = nil) or
+     (r = nil) or
+     (PStrLen(u - _STRLEN)^ < rlen) or
+     not (u[rlen] in [#0, '/', '?']) then
+    result := rmNoMatch // expects 'root', 'root/service' or 'root?param=value'
+  else if CheckCase and
+          CompareMemSmall(u, r, rlen) then
+    result := rmMatchExact
+  else if IdemPropNameUSameLenNotNull(u, r, rlen) then // properly inlined
+    result := rmMatchWithCaseChange
+  else
+    result := rmNoMatch;
+end;
+
+function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
+begin // better code generation by using the DoUriMatch() internal function
+  result := DoUriMatch(pointer(Uri), pointer(fRoot), fRootLen, CheckCase);
 end;
 
 function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
@@ -10725,7 +10717,7 @@ type
 
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try // Sql.TableSimpleFields[withID: boolean; withTableName: boolean]
@@ -11264,7 +11256,7 @@ begin
   fPreviousTable := nil;
   fTable := aTable;
   if boExtendedJson in Options then
-    fBatch.CustomOptions := fBatch.CustomOptions + [twoForceJsonExtended];
+    fBatch.CustomOptions := [twoForceJsonExtended];
   if (aTable <> nil) and
      (fModel <> nil) and
      not (boOnlyObjects in fOptions) then
@@ -11384,7 +11376,7 @@ begin // '{"Table":[...,"PUT",{object},...]}'
 end;
 
 const
-  BATCH_VERB: array[TRestBatchEncoding] of TShort8 = (
+  BATCH_VERB: array[TRestBatchEncoding] of TShort7 = (
     '"POST',    // encPost
     '"SIMPLE',  // encSimple
     '"',        // encPostHex
@@ -11702,15 +11694,15 @@ constructor TRestBatchLocked.CreateNoRest(aModel: TOrmModel; aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
   InternalBufferSize: cardinal);
 begin
-  fSafe.InitFromClass;
+  fSafe.Init;
   inherited CreateNoRest(
     aModel, aTable, AutomaticTransactionPerRow, Options, InternalBufferSize);
 end;
 
 destructor TRestBatchLocked.Destroy;
 begin
-  fSafe.Done;
   inherited Destroy;
+  fSafe.Done;
 end;
 
 procedure TRestBatchLocked.Reset(aTable: TOrmClass;

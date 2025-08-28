@@ -524,6 +524,8 @@ type
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors,
   // and also properly support Unicode or unfinished/nested record type definitions
+  // - opoDescriptionHtmlUnescape will detect and unescape HTML entities
+  // like &lt; &amp; and remove HTML <tags>, converting e.g. <p> into line feeds
   // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
   TOpenApiParserOption = (
     opoNoEnum,
@@ -538,7 +540,8 @@ type
     opoClientOnlySummary,
     opoGenerateSingleApiUnit,
     opoGenerateStringType,
-    opoGenerateOldDelphiCompatible);
+    opoGenerateOldDelphiCompatible,
+    opoDescriptionHtmlUnescape);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
   /// the main OpenAPI parser and pascal code generator class
@@ -2028,7 +2031,7 @@ begin
      not VarIsEmptyOrNull(def^) then
   begin
     // explicit default value
-    if PVarData(def)^.VType = varBoolean then
+    if cardinal(PVarData(def)^.VType) = varBoolean then
       result := BOOL_UTF8[PVarData(def)^.VBoolean] // normalize
     else if VariantToUtf8(def^, result) then
       result := QuotedStr(result); // single quoted pascal string
@@ -2511,6 +2514,8 @@ begin
   all := TrimU(Make(Args));
   if Desc <> '' then
     Append(all, ': ', Desc);
+  if opoDescriptionHtmlUnescape in fOptions then
+    all := HtmlToText(all);
   p := pointer(all);
   repeat
     line := GetNextLine(p, p, {trim=}true);
@@ -2609,8 +2614,11 @@ begin
   if def = nil then
     if not (aSchema^.IsObject or
             aSchema^.HasProperties) then
-      EOpenApi.RaiseUtf8('%.ParseRecordDefinition: % is %, not object',
-        [self, aDefinitionName, aSchema^._Type])
+    begin
+      // this is no true record, but e.g. a regular value in object disguise
+      result.fIsVoidVariant := true;
+      result.fPascalName := 'variant';
+    end
     else
     begin
       SetLength(def, 1);

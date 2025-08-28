@@ -29,6 +29,7 @@ uses
   mormot.core.test,
   mormot.core.threads,
   mormot.core.interfaces,
+  mormot.core.mvc,
   mormot.crypt.jwt,
   mormot.net.client,
   mormot.net.server,
@@ -65,12 +66,17 @@ uses
   test.orm.core;
 
 type
-    /// a record used by IComplexCalculator.GetCustomer
+   /// a record used by IComplexCalculator.GetCustomer
   TCustomerData = packed record
     Id: Integer;
     AccountNum: RawUtf8;
     Name: RawUtf8;
     Address: RawUtf8;
+  end;
+
+  /// a record which is an Homogeneous Floating-point Aggregate (HFA)
+  TCoords = packed record
+    X, Y: double;
   end;
 
   TClientSide = (
@@ -111,6 +117,12 @@ type
       const Strs1: TRawUtf8DynArray; var Str2: TWideStringDynArray;
       const Rec1: TVirtualTableModuleProperties; var Rec2: TEntry;
       Float1: double; var Float2: double): TEntry;
+    /// a variant is a TVarRec with mixed types so is a pointer even on the SysV ABI
+    function VariantCall(const Value: variant): RawUtf8;
+    {$ifndef HASNOSTATICRTTI} // Delphi 7/2007 raises "TGuid has no type info"
+    /// test small TGuid record and HFA to be passed on registers on the SysV ABI
+    function RecordCall(const Uuid: TGuid; const Pos: TCoords): RawJson;
+    {$endif HASNOSTATICRTTI}
     /// validates ArgsInputIsOctetStream raw binary upload
     function DirectCall(const Data: RawBlob): integer;
     // validates huge RawJson/RawUtf8
@@ -339,7 +351,9 @@ type
       const Strs1: TRawUtf8DynArray; var Str2: TWideStringDynArray;
       const Rec1: TVirtualTableModuleProperties; var Rec2: TEntry;
       Float1: double; var Float2: double): TEntry;
-    function DirectCall(const Data: RawBlob): integer;
+    function DirectCall(const Data: RawBlob): integer; // not used on Delphi 7/2007
+    function VariantCall(const Value: variant): RawUtf8;
+    function RecordCall(const Uuid: TGuid; const Pos: TCoords): RawJson;
     function RepeatJsonArray(const item: RawUtf8; count: integer): RawJson;
     function RepeatTextArray(const item: RawUtf8; count: integer): RawUtf8;
     procedure TestDocList(var list: IDocList; const data: variant; out input: IDocList);
@@ -496,6 +510,16 @@ begin
   for i := 1 to Result do
     if Data[i] <> #1 then
       Result := 0;
+end;
+
+function TServiceCalculator.VariantCall(const Value: variant): RawUtf8;
+begin
+  VariantToUtf8(Value, result);
+end;
+
+function TServiceCalculator.RecordCall(const Uuid: TGuid; const Pos: TCoords): RawJson;
+begin
+  result := FormatUtf8('["%",%,%]', [GuidToShort(Uuid), Pos.X, Pos.Y]);
 end;
 
 function TServiceCalculator.RepeatJsonArray(
@@ -980,8 +1004,8 @@ begin
   Check(S.InterfaceTypeInfo^.Kind = rkInterface);
   Check(S.InterfaceTypeInfo^.Name^ = 'ICalculator');
   Check(GuidToString(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
-  Check(GuidToRawUtf8(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
-  Check(S.InterfaceMangledURI = '7chgmrLOCU6H1EoW9Jbl_g');
+  CheckEqual(GuidToRawUtf8(S.InterfaceIID), '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
+  CheckEqual(S.InterfaceMangledURI, '7chgmrLOCU6H1EoW9Jbl_g');
   i := S.ServiceMethodIndex('swap');
   Check(i > 0);
   CheckEqual(S.ServiceMethodIndex('_swap'), i); // /calc/swap -> ICalc._Swap
@@ -991,20 +1015,43 @@ begin
   Check(result.Server.Services['Calculator'] = S);
   Check(result.Server.Services['CALCULAtor'] = S);
   Check(result.Server.Services['CALCULAtors'] = nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods) = 15) then
+  if not CheckEqual(length(S.InterfaceFactory.Methods),
+     16 {$ifndef HASNOSTATICRTTI} + 1 {$endif}, 'methods') then
     exit;
-  //JsonReformatToFile(S.Contract, 'contract.json');
+  //FileFromString{JsonReformatToFile}(S.Contract, 'contract.json');
   //FileFromString(S.ContractHash, 'contract.hash');
-  CheckEqual(S.ContractHash, '"F8E920FC746C9E88"');
+  {$ifdef HASNOSTATICRTTI}
+  CheckEqual(S.ContractHash, '"52FBB4DF85F3145E"');
+  {$else}
+  CheckEqual(S.ContractHash, '"A6BCBB7E50FD2CE3"');
+  with S.InterfaceFactory.Methods[11] do
+  begin // 11 function RecordCall(const Uuid: TGuid; const Pos: TCoords): RawJson;
+    CheckEqual(URI, 'RecordCall');
+    if CheckEqual(length(Args), 4) then
+    begin
+      CheckEqual(ArgsName[0], 'Self');
+      Check(Args[0].ValueDirection = imdConst);
+      Check(Args[0].ValueType = imvSelf);
+      Check(Args[0].ArgTypeName^ = 'ICalculator');
+      CheckEqualShort(Args[1].ParamName^, 'Uuid');
+      CheckEqual(Args[1].ArgRtti.Name, 'TGuid');
+      Check(not (vIsHFA in Args[1].ValueKindAsm), 'hfa1');
+      CheckEqualShort(Args[2].ParamName^, 'Pos');
+      CheckEqual(Args[2].ArgRtti.Name, 'TCoords');
+      Check(vIsHFA in Args[2].ValueKindAsm, 'hfa2');
+    end;
+  end;
+  {$endif HASNOSTATICRTTI}
   Check(TServiceCalculator(nil).Test(1, 2) = '3');
   Check(TServiceCalculator(nil).ToTextFunc(777) = '777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
     with S.InterfaceFactory.Methods[i] do
     begin
-      Check(URI = ExpectedURI[i]);
-      Check(length(Args) = ExpectedParCount[i]);
-      Check(ArgsUsed = ExpectedArgs[i]);
-      Check(Args[0].ParamName^ = 'Self');
+      CheckEqual(URI, ExpectedURI[i]);
+      CheckEqual(length(Args), ExpectedParCount[i]);
+      Check(ArgsUsed = ExpectedArgs[i], 'used');
+      CheckEqualShort(Args[0].ParamName^, 'Self');
+      CheckEqual(ArgsName[0], 'Self');
       Check(Args[0].ValueDirection = imdConst);
       Check(Args[0].ValueType = imvSelf);
       Check(Args[0].ArgTypeName^ = 'ICalculator');
@@ -1015,8 +1062,10 @@ begin
         // 1 function Multiply(n1,n2: Int64): Int64;
         // 2 function Subtract(n1,n2: double): double;
         Check(Args[1].ParamName^ = 'n1');
+        CheckEqual(ArgsName[1], 'n1');
         Check(Args[1].ValueDirection = imdConst);
         Check(Args[2].ParamName^ = 'n2');
+        CheckEqual(ArgsName[2], 'n2');
         Check(Args[2].ValueDirection = imdConst);
         Check(Args[2].ValueType = ExpectedType[i]);
         Check(IdemPropName(Args[3].ArgTypeName^, ExpectedTypes[i]),
@@ -1029,8 +1078,10 @@ begin
         // 3 procedure ToText(Value: Currency; var Result: RawUtf8);
         // 4 function ToTextFunc(Value: double): string;
         Check(Args[1].ParamName^ = 'Value');
+        CheckEqual(ArgsName[1], 'Value');
         Check(Args[1].ValueDirection = imdConst);
         Check(Args[2].ParamName^ = 'Result');
+        CheckEqual(ArgsName[2], 'Result');
         if i < 4 then
           Check(Args[2].ValueDirection = imdVar)
         else
@@ -1044,8 +1095,10 @@ begin
       begin
         // 5 procedure Swap(var n1,n2: double);
         Check(Args[1].ParamName^ = 'n1');
+        CheckEqual(ArgsName[1], 'n1');
         Check(Args[1].ValueDirection = imdVar);
         Check(Args[2].ParamName^ = 'n2');
+        CheckEqual(ArgsName[2], 'n2');
         Check(Args[2].ValueDirection = imdVar);
       end;
     end;
@@ -1199,6 +1252,10 @@ procedure TTestServiceOrientedArchitecture.Test(
     Check(Str2[4] = '');
     s := RawUtf8OfChar(#1, 100);
     CheckEqual(I.DirectCall(s), 100);
+    CheckEqual(I.VariantCall(100), '100');
+    CheckEqual(I.VariantCall(100.0), '100');
+    CheckEqual(JsonUnicodeUnEscape(I.VariantCall(s)), s);
+    CheckEqual(I.VariantCall(_JsonFastFloat('{pi:3.14}')), '{"pi":3.14}');
     s := RandomUri(600);
     u := I.RepeatJsonArray(s, 100);
     t := length(u);
@@ -1491,9 +1548,11 @@ var
   O: TObject;
   sign, sign2, ok: RawUtf8;
   stat: TSynMonitorInputOutput;
+  timer: TPrecisionTimer;
 begin
   if CheckFailed(aClient <> nil) then
     exit;
+  timer.Start;
   FillCharFast(Inst, SizeOf(Inst), 0);
   Inst.ClientSide := aClient.ClientSide;
   ok := '!';
@@ -1570,7 +1629,7 @@ begin
     Check(stat.TaskCount > 0);
     ok := '';
   finally
-    NotifyProgress([ok, aClient.Name]);
+    NotifyProgress([ok, aClient.Name, ' ', timer.Stop]);
   end;
 end;
 
@@ -1578,6 +1637,9 @@ procedure TTestServiceOrientedArchitecture.DirectCall;
 var
   Inst: TTestServiceInstances;
 begin
+  {$ifndef HASNOSTATICRTTI} // Delphi 7/2007 raises "TGuid has no type info"
+  Rtti.RegisterFromText(TypeInfo(TCoords), 'x,y:double');
+  {$endif HASNOSTATICRTTI}
   FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
   Inst.ClientSide := csDirect;
   Inst.I := TServiceCalculator.Create;
@@ -2138,6 +2200,7 @@ var
   end;
 
 begin
+  CheckEqual(SizeOf(TMvcAction), SizeOf(TServiceCustomAnswer));
   Init(direct);
   Parent := nil;
   Check(ParentDestroyed = false);
@@ -2290,7 +2353,7 @@ var
   P: PUtf8Char;
 begin
   if Ctxt.Sender is TInterfaceMock then
-    Ctxt.TestCase.Check(Ctxt.EventParams = 'toto');
+    TInterfaceMock(Ctxt.Sender).TestCase.Check(Ctxt.EventParams = 'toto');
   P := pointer(Ctxt.Params);
   Ctxt.Returns([GetNextItemDouble(P) - GetNextItemDouble(P)]);
   // Ctxt.Result := '['+DoubleToStr(GetNextItemDouble(P)-GetNextItemDouble(P))+']';
@@ -2300,7 +2363,7 @@ procedure TTestServiceOrientedArchitecture.IntSubtractVariant(
   Ctxt: TOnInterfaceStubExecuteParamsVariant);
 begin
   if Ctxt.Sender is TInterfaceMock then
-    Ctxt.TestCase.Check(Ctxt.EventParams = 'toto');
+    TInterfaceMock(Ctxt.Sender).TestCase.Check(Ctxt.EventParams = 'toto');
   Ctxt['result'] := Ctxt['n1'] - Ctxt['n2'];
   // with Ctxt do Output[0] := Input[0]-Input[1];
 end;

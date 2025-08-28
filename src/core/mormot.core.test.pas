@@ -8,6 +8,7 @@ unit mormot.core.test;
 
    Testing functions shared by all framework units
     - Unit-Testing classes and functions
+    - TInterfaceMock for Dependency Mocking
 
   *****************************************************************************
 }
@@ -28,9 +29,11 @@ uses
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
   mormot.core.threads,
+  mormot.core.interfaces,
   mormot.net.client;
 
 
@@ -85,10 +88,12 @@ type
   // the "Sample\07 - SynTest" folder
   TSynTest = class(TSynPersistent)
   protected
-    fTests: array of TSynTestMethodInfo;
-    fIdent: string;
+    fAssertions: integer; // defined here for padding - used by TSynTestCase
+    fAssertionsFailed: integer;
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
+    fTests: array of TSynTestMethodInfo;
+    fIdent: string;
     fWorkDir: TFileName;
     function GetCount: integer;
     function GetIdent: string;
@@ -146,8 +151,6 @@ type
   TSynTestCase = class(TSynTest)
   protected
     fOwner: TSynTests;
-    fAssertions: integer;
-    fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
     fBackgroundRun: TLoggedWorker;
@@ -186,8 +189,7 @@ type
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
     procedure Check(condition: boolean; const msg: string = '');
-      {$ifdef HASSAFEINLINE}// inline;
-      {$endif} // Delphi 2007 has trouble inlining this
+      {$ifdef HASSAFEINLINE}inline;{$endif} // Delphi 2007 has trouble inlining this
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
@@ -210,6 +212,14 @@ type
     // - will ignore the a+b string codepages, and call SortDynArrayRawByteString()
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(const a, b: RawByteString; const msg: RawUtf8 = ''): boolean; overload;
+    /// used by the published methods to run test assertion against UTF-8/Ansi strings
+    // - will ignore the a+b string codepages, and call SortDynArrayRawByteString()
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function CheckEqualShort(const a, b: shortstring; const msg: RawUtf8 = ''): boolean;
+    /// used by the published methods to run test assertion against
+    // - if BinToHexLower(a)<>b, will fail and include '#<>#' hexa before the supplied msg
+    function CheckEqualHex(const a: RawByteString; const b: RawUtf8;
+      const msg: RawUtf8 = ''): boolean;
     /// used by the published methods to run test assertion against UTF-8/Ansi strings
     // - if Trim(a)<>Trim(b), will fail and include '#<>#' text before the supplied msg
     function CheckEqualTrim(const a, b: RawByteString; const msg: RawUtf8 = ''): boolean;
@@ -269,26 +279,10 @@ type
     /// used by the published methods to run test assertion against a Hash32() constant
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
-    /// create a temporary string random content, WinAnsi (code page 1252) content
-    class function RandomWinAnsi(CharCount: integer): WinAnsiString;
     {$ifndef PUREMORMOT2}
     class function RandomString(CharCount: integer): WinAnsiString;
       {$ifdef HASINLINE}inline;{$endif}
     {$endif PUREMORMOT2}
-    /// create a temporary UTF-8 string random content, using WinAnsi
-    // (code page 1252) content
-    // - CharCount is the number of random WinAnsi chars, so it is possible that
-    // length(result) > CharCount once encoded into UTF-8
-    class function RandomUtf8(CharCount: integer): RawUtf8;
-    /// create a temporary UTF-16 string random content, using WinAnsi
-    // (code page 1252) content
-    class function RandomUnicode(CharCount: integer): SynUnicode;
-    /// create a temporary string random content, using ASCII 7-bit content
-    class function RandomAnsi7(CharCount: integer): RawByteString;
-    /// create a temporary string random content, using A..Z,_,0..9 chars only
-    class function RandomIdentifier(CharCount: integer): RawByteString;
-    /// create a temporary string random content, using uri-compatible chars only
-    class function RandomUri(CharCount: integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
       const RandomInclude: RawUtf8 = ''): RawUtf8;
@@ -382,10 +376,9 @@ type
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
   protected
-    fTestCaseClass: array of TSynTestCaseClass;
-    fAssertions: integer;
     fAssertionsFailed: integer;
-    fSafe: TSynLocker;
+    fSafe: TOSLock;
+    fTestCaseClass: array of TSynTestCaseClass;
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurrenceNumber: cardinal;
     fMultiThread: boolean;
@@ -406,7 +399,7 @@ type
     /// low-level output on the console - use TSynTestCase.AddConsole instead
     procedure DoTextLn(const values: array of const); overload;
     /// low-level set the console text color - use TSynTestCase.AddConsole instead
-    procedure DoColor(aColor: TConsoleColor); virtual;
+    procedure DoColor(aColor: TConsoleColor);
     /// low-level output on the console with automatic formatting
     // - use TSynTestCase.NotifyProgress() instead
     procedure DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
@@ -555,13 +548,139 @@ type
   end;
 
 
-const
-  EQUAL_MSG = '%<>% %';
-  NOTEQUAL_MSG = '%=% %';
+const // include some line feed for easier comparison/debugging in the console
+  EQUAL_MSG    = '<>' + CRLF + '%' + CRLF + '% %';
+  NOTEQUAL_MSG = '='  + CRLF + '%' + CRLF + '% %';
 
 var
   /// the kind of .log file generated by TSynTestsLogged
   TSynLogTestLog: TSynLogClass = TSynLog;
+
+
+{ ************ TInterfaceMock for Dependency Mocking }
+
+type
+  /// used to mock an interface implementation via expect-run-verify pattern
+  // - TInterfaceStub will raise an exception on Fails(), ExpectsCount() or
+  // ExpectsTrace() rule activation, but TInterfaceMock will call
+  // TSynTestCase.Check() with no exception with such rules, as expected by
+  // a mocked interface
+  // - this class will follow the expect-run-verify pattern, i.e. expectations
+  // are defined before running the test, and verification is performed
+  // when the instance is released - use TInterfaceMockSpy if you prefer the
+  // more explicit run-verify pattern
+  TInterfaceMock = class(TInterfaceStub)
+  protected
+    fTestCase: TSynTestCase;
+    function InternalCheck(aValid, aExpectationFailed: boolean;
+      const aErrorMsgFmt: RawUtf8;
+      const aErrorMsgArgs: array of const): boolean; override;
+  public
+    /// initialize an interface mock from TypeInfo(IMyInterface)
+    // - aTestCase.Check() will be called in case of mocking failure
+    // ! procedure TMyTestCase.OneTestCaseMethod;
+    // ! var Persist: IPersistence;
+    // ! ...
+    // !   TInterfaceMock.Create(TypeInfo(IPersistence),Persist,self).
+    // !     ExpectsCount('SaveItem',qoEqualTo,1)]);
+    constructor Create(aInterface: PRttiInfo; out aMockedInterface;
+      aTestCase: TSynTestCase); reintroduce; overload;
+    /// initialize an interface mock from an interface TGuid
+    // - aTestCase.Check() will be called during validation of all Expects*()
+    // - you shall have registered the interface by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IPersistence),...])
+    // - once registered, create and use the fake class instance as such:
+    // !procedure TMyTestCase.OneTestCaseMethod;
+    // !var
+    // !  Persist: IPersistence;
+    // ! ...
+    // !   TInterfaceMock.Create(IPersistence,Persist,self).
+    // !     ExpectsCount('SaveItem',qoEqualTo,1)]);
+    // - if the supplied TGuid has not been previously registered, raise an Exception
+    constructor Create(const aGuid: TGuid; out aMockedInterface;
+      aTestCase: TSynTestCase); reintroduce; overload;
+    /// initialize an interface mock from an interface name (e.g. 'IMyInterface')
+    // - aTestCase.Check() will be called in case of mocking failure
+    // - you shall have registered the interface by a previous call to
+    // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
+    // - if the supplied name has not been previously registered, raise an Exception
+    constructor Create(const aInterfaceName: RawUtf8; out aMockedInterface;
+      aTestCase: TSynTestCase); reintroduce; overload;
+    /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
+    // - aTestCase.Check() will be called in case of mocking failure
+    constructor Create(aInterface: PRttiInfo; aTestCase: TSynTestCase);
+      reintroduce; overload;
+    /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
+    // - aTestCase.Check() will be called in case of mocking failure
+    constructor Create(const aGuid: TGuid; aTestCase: TSynTestCase);
+      reintroduce; overload;
+    /// the associated test case
+    property TestCase: TSynTestCase
+      read fTestCase;
+  end;
+
+  /// how TInterfaceMockSpy.Verify() shall generate the calls trace
+  TInterfaceMockSpyCheck = (
+    chkName,
+    chkNameParams,
+    chkNameParamsResults);
+
+  /// used to mock an interface implementation via run-verify pattern
+  // - this class will implement a so called "test-spy" mocking pattern, i.e.
+  // no expectation is to be declared at first, but all calls are internally
+  // logged (i.e. it force imoLogMethodCallsAndResults option to be defined),
+  // and can afterwards been check via Verify() calls
+  TInterfaceMockSpy = class(TInterfaceMock)
+  protected
+    procedure IntSetOptions(Options: TInterfaceStubOptions); override;
+  public
+    /// this will set and force imoLogMethodCallsAndResults option as needed
+    // - you should not call this method, but the overloaded alternatives
+    constructor Create(aFactory: TInterfaceFactory;
+      const aInterfaceName: RawUtf8); override;
+    /// check that a method has been called a specify number of times
+    procedure Verify(const aMethodName: RawUtf8;
+      aOperator: TInterfaceStubRuleOperator = ioGreaterThan;
+      aCount: cardinal = 0); overload;
+    /// check a method calls count with a set of parameters
+    // - parameters shall be defined as a JSON array of values
+    procedure Verify(const aMethodName, aParams: RawUtf8;
+      aOperator: TInterfaceStubRuleOperator = ioGreaterThan;
+      aCount: cardinal = 0); overload;
+    /// check a method calls count with a set of parameters
+    // - parameters shall be defined as a JSON array of values
+    procedure Verify(const aMethodName: RawUtf8; const aParams: array of const;
+      aOperator: TInterfaceStubRuleOperator = ioGreaterThan;
+      aCount: cardinal = 0); overload;
+    /// check an execution trace for the global interface
+    // - text trace format shall follow method calls, e.g.
+    // ! Verify('Multiply,Add',chkName);
+    // or may include parameters:
+    // ! Verify('Multiply(10,30),Add(2,35)',chkNameParams);
+    // or include parameters and function results:
+    // ! Verify('Multiply(10,30)=[300],Add(2,35)=[37]',chkNameParamsResults);
+    procedure Verify(const aTrace: RawUtf8;
+      aScope: TInterfaceMockSpyCheck); overload;
+    /// check an execution trace for a specified method
+    // - text trace format will follow specified scope, e.g.
+    // ! Verify('Add','(10,30),(2,35)',chkNameParams);
+    // or include parameters and function results:
+    // ! Verify('Add','(10,30)=[300],(2,35)=[37]',chkNameParamsResults);
+    // - if aMethodName does not exists or aScope=chkName, will raise an exception
+    procedure Verify(const aMethodName, aTrace: RawUtf8;
+      aScope: TInterfaceMockSpyCheck); overload;
+    /// check an execution trace for a specified method and parameters
+    // - text trace format shall contain only results, e.g.
+    // ! Verify('Add','2,35','[37]');
+    procedure Verify(const aMethodName, aParams, aTrace: RawUtf8); overload;
+    /// check an execution trace for a specified method and parameters
+    // - text trace format shall contain only results, e.g.
+    // ! Verify('Add',[2,35],'[37]');
+    procedure Verify(const aMethodName: RawUtf8; const aParams: array of const;
+      const aTrace: RawUtf8); overload;
+  end;
+
+function ToText(c: TInterfaceMockSpyCheck): PShortString; overload;
 
 
 implementation
@@ -802,6 +921,26 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
+function TSynTestCase.CheckEqualShort(const a, b: shortstring; const msg: RawUtf8): boolean;
+begin
+  inc(fAssertions);
+  result := (a = b);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
+end;
+
+function TSynTestCase.CheckEqualHex(const a: RawByteString; const b, msg: RawUtf8): boolean;
+var
+  hex: RawUtf8;
+begin
+  BinToHexLower(pointer(a), length(a), hex);
+  result := IdemPropNameU(hex, b);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, EQUAL_MSG, [hex, b, msg]);
+end;
+
 function TSynTestCase.CheckEqualTrim(const a, b: RawByteString; const msg: RawUtf8): boolean;
 begin
   result := CheckEqual(TrimU(a), TrimU(b), msg);
@@ -918,19 +1057,6 @@ begin
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
 
-class function TSynTestCase.RandomWinAnsi(CharCount: integer): WinAnsiString;
-var
-  i: PtrInt;
-  R: PByteArray;
-  tmp: TSynTempBuffer;
-begin
-  R := tmp.InitRandom(CharCount);
-  FastSetStringCP(result, nil, CharCount, CP_WINANSI);
-  for i := 0 to CharCount - 1 do
-    PByteArray(result)[i] := 32 + R[i] and 127;
-  tmp.Done;
-end;
-
 {$ifndef PUREMORMOT2}
 class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
 begin
@@ -938,62 +1064,10 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-class function TSynTestCase.RandomAnsi7(CharCount: integer): RawByteString;
-var
-  i: PtrInt;
-  R, D: PByteArray;
-  tmp: TSynTempBuffer;
-begin
-  R := tmp.InitRandom(CharCount);
-  D := FastSetString(RawUtf8(result), CharCount);
-  for i := 0 to CharCount - 1 do
-    D[i] := 32 + R[i] mod 95; // may include tilde #$7e char
-  tmp.Done;
-end;
-
-procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawByteString);
-var
-  i: PtrInt;
-  R, D: PByteArray;
-  tmp: TSynTempBuffer;
-begin
-  R := tmp.InitRandom(count);
-  D := FastSetString(RawUtf8(result), count);
-  for i := 0 to count - 1 do
-    D[i] := ord(chars64[PtrInt(R[i]) and 63]);
-  tmp.Done;
-end;
-
-class function TSynTestCase.RandomIdentifier(CharCount: integer): RawByteString;
-const
-  IDENT_CHARS: array[0..63] of AnsiChar =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
-begin
-  InitRandom64(@IDENT_CHARS, CharCount, result);
-end;
-
-class function TSynTestCase.RandomUri(CharCount: integer): RawByteString;
-const
-  URL_CHARS: array[0..63] of AnsiChar =
-    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
-begin
-  InitRandom64(@URL_CHARS, CharCount, result);
-end;
-
-class function TSynTestCase.RandomUtf8(CharCount: integer): RawUtf8;
-begin
-  result := WinAnsiToUtf8(RandomWinAnsi(CharCount));
-end;
-
-class function TSynTestCase.RandomUnicode(CharCount: integer): SynUnicode;
-begin
-  result := WinAnsiConvert.AnsiToUnicodeString(RandomWinAnsi(CharCount));
-end;
-
 class function TSynTestCase.RandomTextParagraph(WordCount: integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUtf8): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   WR: TTextWriter;
 begin
   WR := TTextWriter.CreateOwnedStream(tmp);
@@ -1012,39 +1086,41 @@ type
   TKind = (
     space, comma, dot, question, paragraph);
 const
-  bla: array[0..7] of string[3] = (
-    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
+  bla: array[0 .. 15] of TShort3 = (
+    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo',
+    'cha', 'che', 'chi', 'cho', 'chu', 'cha', 'chi', 'cho');
   endKind = [dot, paragraph, question];
 var
   n: integer;
-  s: string[3];
+  s: TShort4;
   last: TKind;
   rnd: cardinal;
-  lec: PLecuyer;
 begin
-  lec := Lecuyer;
   last := paragraph;
   while WordCount > 0 do
   begin
-    rnd := lec^.Next; // get 32 bits of randomness for up to 4 words per loop
-    for n := 0 to rnd and 3 do
-    begin
-      // consume up to 4*5 = 20 bits from rnd
-      rnd := rnd shr 2;
-      s := bla[rnd and 7];
-      rnd := rnd shr 3;
+    rnd := Random32;  // get 32 bits of randomness for up to 5 words per loop
+    n := (rnd and 3) + 2;  // n = 2..5
+    rnd := rnd shr 2;      // consume 2 bits
+    repeat
+      PCardinal(@s)^ := PCardinal(@bla[rnd and 15])^;
+      rnd := rnd shr 4;    // consume up to 5*4 = 20 bits from rnd
+      s[0] := #4;
+      s[4] := ' ';
       if last in endKind then
       begin
         last := space;
-        s[1] := NormToUpper[s[1]];
+        s[1] := 'P';
       end;
       WR.AddShorter(s);
-      WR.AddDirect(' ');
       dec(WordCount);
-    end;
+      if WordCount = 0 then
+        break;
+      dec(n);
+    until n = 0;
     WR.CancelLastChar(' ');
-    case rnd and 127 of // consume 7 bits
-      0..4:
+    case rnd and 127 of // consume 7 bits from rnd (total up to 29 bits)
+      0 .. 4:
         begin
           if RandomInclude <> '' then
           begin
@@ -1053,15 +1129,15 @@ begin
           end;
           last := space;
         end;
-      5..65:
+      5 .. 50:
         last := space;
-      66..90:
+      51 .. 90:
         last := comma;
-      91..105:
+      91 .. 105:
         last := dot;
-      106..115:
+      106 .. 115:
         last := question;
-      116..127:
+      116 .. 127:
         if NoLineFeed then
           last := dot
         else
@@ -1082,10 +1158,7 @@ begin
   end;
   if (LastPunctuation <> ' ') and
      not (last in endKind) then
-  begin
-    WR.AddDirect('b', 'l', 'a');
-    WR.AddDirect(LastPunctuation);
-  end;
+    WR.AddDirect('b', 'l', 'a', LastPunctuation);
 end;
 
 function TSynTestCase.DownloadFile(const uri: RawUtf8;
@@ -1264,12 +1337,12 @@ var
   i: PtrInt;
 begin
   for i := 0 to high(TestCase) do
-    PtrArrayAdd(fTestCaseClass, TestCase[i]);
+    PtrArrayAddOnce(fTestCaseClass, TestCase[i]);
 end;
 
 procedure TSynTests.AddCase(TestCase: TSynTestCaseClass);
 begin
-  PtrArrayAdd(fTestCaseClass, TestCase);
+  PtrArrayAddOnce(fTestCaseClass, TestCase);
 end;
 
 function TSynTests.BeforeRun: IUnknown;
@@ -1279,8 +1352,8 @@ end;
 
 constructor TSynTests.Create(const Ident: string);
 begin
+  fSafe.Init;
   inherited Create(Ident);
-  fSafe.InitFromClass;
 end;
 
 procedure TSynTests.EndSaveToFileExternal;
@@ -1438,7 +1511,7 @@ var
   nfo: PSynTestMethodInfo;
   dir: TFileName;
   err: string;
-  started: boolean;
+  started, titledone: boolean;
   c: TSynTestCase;
   log: IUnknown;
 begin
@@ -1477,115 +1550,121 @@ begin
   fAssertions := 0;
   fAssertionsFailed := 0;
   dir := GetCurrentDir;
-  for m := 0 to Count - 1 do
-  try
-    DoColor(ccWhite);
-    DoTextLn([CRLF + CRLF, m + 1, '. ', fTests[m].TestName]);
-    DoColor(ccLightGray);
-    fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
+  repeat
+    for m := 0 to Count - 1 do
     try
-      for i := 0 to high(fTestCaseClass) do
-      begin
-        started := false;
-        c := fTestCaseClass[i].Create(self); // add all published methods
-        try
-          nfo := nil;
-          for t := 0 to c.Count - 1 do
+      titledone := false;
+      fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
+      try
+        for i := 0 to high(fTestCaseClass) do
+        begin
+          started := false;
+          c := fTestCaseClass[i].Create(self); // add all published methods
           try
-            nfo := @c.fTests[t];
-            _CurrentMethodInfo := nfo;
-            // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
-            if IsRestricted(ToText(c.ClassType)) and
-               IsRestricted(FormatUtf8('%.%', [c, nfo^.MethodName])) then
-              continue;
-            if not started then
-            begin
-              c.fAssertions := 0; // reset assertions count
-              c.fAssertionsFailed := 0;
-              c.fWorkDir := fWorkDir;
-              SetCurrentDir(fWorkDir);
-              TotalTimer.Start;
-              c.Setup;
-              DoColor(ccWhite);
-              DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', c.Ident, ': ']);
-              DoColor(ccLightGray);
-              started := true;
-            end;
-            c.fAssertionsBeforeRun := c.fAssertions;
-            c.fAssertionsFailedBeforeRun := c.fAssertionsFailed;
-            c.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
-            log := BeforeRun;
-            TestTimer.Start;
-            c.MethodSetup;
+            nfo := nil;
+            for t := 0 to c.Count - 1 do
             try
-              DoTextLn(['Before "', nfo^.MethodName, '"']);
-              nfo^.Method(); // run tests + Check()
-              // DoTextLn(['Before AfterOneRun']);
-              AfterOneRun;
-            finally
-              c.MethodCleanUp;
-              log := nil; // will trigger logging leave method e.g.
+              nfo := @c.fTests[t];
+              _CurrentMethodInfo := nfo;
+              // e.g. --test TNetworkProtocols.DNSAndLDAP or --test dns
+              if IsRestricted(ToText(c.ClassType)) and
+                 IsRestricted(FormatUtf8('%.%', [c, nfo^.MethodName])) then
+                continue;
+              if not titledone then
+              begin
+                titledone := true;
+                DoColor(ccWhite);
+                DoTextLn([CRLF + CRLF, m + 1, '. ', fTests[m].TestName]);
+                DoColor(ccLightGray);
+              end;
+              if not started then
+              begin
+                c.fAssertions := 0; // reset assertions count
+                c.fAssertionsFailed := 0;
+                c.fWorkDir := fWorkDir;
+                SetCurrentDir(fWorkDir);
+                TotalTimer.Start;
+                c.Setup;
+                DoColor(ccWhite);
+                DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', c.Ident, ': ']);
+                DoColor(ccLightGray);
+                started := true;
+              end;
+              c.fAssertionsBeforeRun := c.fAssertions;
+              c.fAssertionsFailedBeforeRun := c.fAssertionsFailed;
+              c.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
+              log := BeforeRun;
+              TestTimer.Start;
+              c.MethodSetup;
+              try
+                nfo^.Method(); // run tests + Check()
+                AfterOneRun;
+              finally
+                c.MethodCleanUp;
+                log := nil; // will trigger logging leave method e.g.
+              end;
+            except
+              on E: Exception do
+              begin
+                DoColor(ccLightRed);
+                AddFailed(E.ClassName + ': ' + E.Message);
+                if nfo <> nil then
+                  DoTextLn(['! ', nfo^.IdentTestName]);
+                if E.InheritsFrom(EControlC) then
+                  raise; // Control-C should just abort whole test
+                {$ifndef NOEXCEPTIONINTERCEPT}
+                DoTextLn(['! ', GetLastExceptionText]); // with extended info
+                {$endif NOEXCEPTIONINTERCEPT}
+                DoColor(ccLightGray);
+              end;
             end;
-          except
-            on E: Exception do
-            begin
+            _CurrentMethodInfo := nil;
+            if not started then
+              continue;
+            if c.fBackgroundRun.Waiting then
+              c.RunWait({notify=}false, {timeout=}120, {synchronize=}true);
+            c.CleanUp; // to be done before Destroy call and after RunWait()
+            if c.AssertionsFailed = 0 then
+              DoColor(ccLightGreen)
+            else
               DoColor(ccLightRed);
-              AddFailed(E.ClassName + ': ' + E.Message);
-              if nfo <> nil then
-                DoTextLn(['! ', nfo^.IdentTestName, E.ClassName + ': ' + E.Message]);
-              if E.InheritsFrom(EControlC) then
-                raise; // Control-C should just abort whole test
-              {$ifndef NOEXCEPTIONINTERCEPT}
-              DoTextLn(['! ', GetLastExceptionText]); // with extended info
-              {$endif NOEXCEPTIONINTERCEPT}
-              DoColor(ccLightGray);
+            s := '';
+            if c.fRunConsole <> '' then
+            begin
+              Make(['   ', c.fRunConsole, CRLF], s);
+              c.fRunConsole := '';
             end;
+            Append(s, ['  Total failed: ', IntToThousandString(c.AssertionsFailed),
+              ' / ', IntToThousandString(c.Assertions), ' - ', c.Ident]);
+            if c.AssertionsFailed = 0 then
+              AppendShortToUtf8(' PASSED', s)
+            else
+              AppendShortToUtf8(' FAILED', s);
+            Append(s, ['  ', TotalTimer.Stop, CRLF]);
+            DoText(s); // write at once to the console output
+            DoColor(ccLightGray);
+            inc(fAssertions, c.fAssertions); // compute global assertions count
+            inc(fAssertionsFailed, c.fAssertionsFailed);
+          finally
+            FreeAndNil(c);
           end;
-          _CurrentMethodInfo := nil;
-          if not started then
-            continue;
-          if c.fBackgroundRun.Waiting then
-            c.RunWait({notify=}false, {timeout=}120, {synchronize=}true);
-          c.CleanUp; // to be done before Destroy call and after RunWait()
-          if c.AssertionsFailed = 0 then
-            DoColor(ccLightGreen)
-          else
-            DoColor(ccLightRed);
-          s := '';
-          if c.fRunConsole <> '' then
-          begin
-            Make(['   ', c.fRunConsole, CRLF], s);
-            c.fRunConsole := '';
-          end;
-          Append(s, ['  Total failed: ', IntToThousandString(c.AssertionsFailed),
-            ' / ', IntToThousandString(c.Assertions), ' - ', c.Ident]);
-          if c.AssertionsFailed = 0 then
-            AppendShortToUtf8(' PASSED', s)
-          else
-            AppendShortToUtf8(' FAILED', s);
-          Append(s, ['  ', TotalTimer.Stop, CRLF]);
-          DoText(s); // write at once to the console output
-          DoColor(ccLightGray);
-          inc(fAssertions, c.fAssertions); // compute global assertions count
-          inc(fAssertionsFailed, c.fAssertionsFailed);
-        finally
-          FreeAndNil(c);
         end;
+      finally
+        _CurrentMethodInfo := nil;
+        fTestCaseClass := nil; // unregister the test classes once run
       end;
-    finally
-      _CurrentMethodInfo := nil;
-      fTestCaseClass := nil; // unregister the test classes once run
+    except
+      on E: Exception do
+      begin
+        // assume any exception not intercepted above is a failure
+        DoColor(ccLightRed);
+        err := E.ClassName + ': ' + E.Message;
+        AddFailed(err);
+        DoText(['! ', err]);
+      end;
     end;
-  except
-    on E: Exception do
-    begin
-      // assume any exception not intercepted above is a failure
-      DoColor(ccLightRed);
-      err := E.ClassName + ': ' + E.Message;
-      AddFailed(err);
-      DoText(['! ', err]);
-    end;
-  end;
+  until (fAssertionsFailed <> 0) or
+        not Executable.Command.Option('loop');
   SetCurrentDir(dir);
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
@@ -1712,7 +1791,7 @@ var
   restrict: TRawUtf8DynArray;
 begin
   if self = TSynTests then
-    raise ESynException.Create('You should inherit from TSynTests');
+    ESynException.RaiseU('RunAsConsole: you should inherit from TSynTests');
   // properly parse command line switches
   {$ifndef OSPOSIX}
   Executable.Command.Option('noenter', 'do not wait for ENTER key on exit');
@@ -1731,6 +1810,8 @@ begin
        'run logs in verbose mode: enabled only with --test') and
      (restrict <> nil) then
     withLogs := LOG_VERBOSE;
+  Executable.Command.Option('loop',
+    'loop the tests until some assertion failed');
   if options = [] then
     SetValueFromExecutableCommandLine(options, TypeInfo(TSynTestOptions),
       '&options', 'refine logs output content');
@@ -1839,6 +1920,160 @@ begin
     fLogFile.Log(sllFail, 'no context', self)
 end;
 
+
+{ ************ TInterfaceMock for Dependency Mocking }
+
+{ TInterfaceMock }
+
+constructor TInterfaceMock.Create(aInterface: PRttiInfo; out aMockedInterface;
+  aTestCase: TSynTestCase);
+begin
+  inherited Create(aInterface, aMockedInterface);
+  fTestCase := aTestCase;
+end;
+
+constructor TInterfaceMock.Create(const aGuid: TGuid; out aMockedInterface;
+  aTestCase: TSynTestCase);
+begin
+  inherited Create(aGuid, aMockedInterface);
+  fTestCase := aTestCase;
+end;
+
+constructor TInterfaceMock.Create(const aInterfaceName: RawUtf8;
+  out aMockedInterface; aTestCase: TSynTestCase);
+begin
+  inherited Create(aInterfaceName, aMockedInterface);
+  fTestCase := aTestCase;
+end;
+
+constructor TInterfaceMock.Create(aInterface: PRttiInfo; aTestCase: TSynTestCase);
+begin
+  inherited Create(aInterface);
+  fTestCase := aTestCase;
+end;
+
+constructor TInterfaceMock.Create(const aGuid: TGuid; aTestCase: TSynTestCase);
+begin
+  inherited Create(aGuid);
+  fTestCase := aTestCase;
+end;
+
+function TInterfaceMock.InternalCheck(aValid, aExpectationFailed: boolean;
+  const aErrorMsgFmt: RawUtf8; const aErrorMsgArgs: array of const): boolean;
+begin
+  if fTestCase = nil then
+    result := inherited InternalCheck(
+      aValid, aExpectationFailed, aErrorMsgFmt, aErrorMsgArgs)
+  else
+  begin
+    result := true; // do not raise any exception at this stage for TInterfaceMock
+    if aValid xor (imoMockFailsWillPassTestCase in Options) then
+      fTestCase.Check(true)
+    else
+      fTestCase.Check(false, Utf8ToString(FormatUtf8(aErrorMsgFmt, aErrorMsgArgs)));
+  end;
+end;
+
+
+{ TInterfaceMockSpy }
+
+constructor TInterfaceMockSpy.Create(aFactory: TInterfaceFactory;
+  const aInterfaceName: RawUtf8);
+begin
+  inherited Create(aFactory, aInterfaceName);
+  include(fOptions, imoLogMethodCallsAndResults);
+end;
+
+procedure TInterfaceMockSpy.IntSetOptions(Options: TInterfaceStubOptions);
+begin
+  include(Options, imoLogMethodCallsAndResults);
+  inherited IntSetOptions(Options);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
+  const aParams: array of const; aOperator: TInterfaceStubRuleOperator;
+  aCount: cardinal);
+begin
+  Verify(aMethodName, JsonEncodeArray(aParams, true), aOperator, aCount);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
+  const aParams: array of const; const aTrace: RawUtf8);
+begin
+  Verify(aMethodName, JsonEncodeArray(aParams, true), aTrace);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aMethodName: RawUtf8;
+  aOperator: TInterfaceStubRuleOperator; aCount: cardinal);
+var
+  m: integer;
+begin
+  m := fInterface.CheckMethodIndex(aMethodName);
+  IntCheckCount(m, fRules[m].MethodPassCount, aOperator, aCount);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aMethodName, aParams: RawUtf8;
+  aOperator: TInterfaceStubRuleOperator; aCount: cardinal);
+var
+  asmndx, i: PtrInt;
+  c: cardinal;
+begin
+  asmndx := fInterface.CheckMethodIndex(aMethodName) + RESERVED_VTABLE_SLOTS;
+  if aParams = '' then
+    c := fRules[asmndx - RESERVED_VTABLE_SLOTS].MethodPassCount
+  else
+  begin
+    c := 0;
+    for i := 0 to fLogCount - 1 do
+      with fLogs[i] do
+        if (method.ExecutionMethodIndex = asmndx) and
+           (Params = aParams) then
+          inc(c);
+  end;
+  IntCheckCount(asmndx - RESERVED_VTABLE_SLOTS, c, aOperator, aCount);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aTrace: RawUtf8; aScope: TInterfaceMockSpyCheck);
+const
+  VERIFY_SCOPE: array[TInterfaceMockSpyCheck] of TInterfaceStubLogLayouts = (
+    [wName], [wName, wParams], [wName, wParams, wResults]);
+begin
+  InternalCheck(IntGetLogAsText(0, '', VERIFY_SCOPE[aScope], ',') = aTrace,
+    true, 'Verify(''%'',%) failed', [aTrace, ToText(aScope)^]);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aMethodName, aParams, aTrace: RawUtf8);
+var
+  m: integer;
+begin
+  m := fInterface.CheckMethodIndex(aMethodName);
+  InternalCheck(
+    IntGetLogAsText(m + RESERVED_VTABLE_SLOTS, aParams, [wResults], ',') = aTrace,
+    true, 'Verify(''%'',''%'',''%'') failed', [aMethodName, aParams, aTrace]);
+end;
+
+procedure TInterfaceMockSpy.Verify(const aMethodName, aTrace: RawUtf8;
+  aScope: TInterfaceMockSpyCheck);
+const
+  VERIFY_SCOPE: array[TInterfaceMockSpyCheck] of TInterfaceStubLogLayouts = (
+    [], [wParams], [wParams, wResults]);
+var
+  m: integer;
+begin
+  m := fInterface.CheckMethodIndex(aMethodName);
+  if aScope = chkName then
+    raise EInterfaceStub.Create(self, fInterface.Methods[m],
+      'Invalid scope for Verify()');
+  InternalCheck(
+    IntGetLogAsText(m + RESERVED_VTABLE_SLOTS, '', VERIFY_SCOPE[aScope], ',') = aTrace,
+    true, 'Verify(''%'',''%'',%) failed', [aMethodName, aTrace, ToText(aScope)^]);
+end;
+
+
+function ToText(c: TInterfaceMockSpyCheck): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TInterfaceMockSpyCheck), ord(c));
+end;
 
 end.
 

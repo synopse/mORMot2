@@ -367,7 +367,7 @@ type
   // - allow to execute several statements within an PostgreSQL pipeline, and
   // return the results using asynchronous callbacks from a background thread
   // - inherits from TSynLocked so you can use Lock/UnLock
-  TSqlDBPostgresAsync = class(TSynLocked)
+  TSqlDBPostgresAsync = class(TObjectOSLock)
   protected
     fConnection: TSqlDBPostgresConnection;
     fStatements: array of TSqlDBPostgresAsyncStatement;
@@ -735,7 +735,7 @@ constructor TSqlDBPostgresConnectionProperties.Create(
 begin
   PostgresLibraryInitialize; // raise an ESqlDBPostgres on loading failure
   if PQ.IsThreadSafe <> 1 then
-    raise ESqlDBPostgres.CreateU('libpq should be compiled in threadsafe mode');
+    ESqlDBPostgres.RaiseU('libpq should be compiled in threadsafe mode');
   fDbms := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -1360,7 +1360,7 @@ begin
   P := PQ.GetValue(fRes, fCurrentRow, Col);
   if ((P = nil) or (PUtf8Char(P)^ = #0)) and
      (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
-    W.AddShort(NULL_LOW, 4)
+    W.AddShort4(NULL_LOW)
   else
   begin
     c := @fColumns[Col];
@@ -1541,7 +1541,7 @@ begin
           // on fatal DB error don't go any further and notify the callbacks
           if Assigned(log) then
             log.Log(sllWarning, 'Execute: % during %',
-              [E.ClassType, task.Statement.Sql], self);
+              [PClass(E)^, task.Statement.Sql], self);
           if Assigned(task.OnFinished) then
             fOwner.fTasks.Push(task); // task.OnFinished() was never called
           fOwner.DoExecuteAsyncError;
@@ -1550,8 +1550,8 @@ begin
     until Terminated;
   except
     on E: Exception do
-      SynDBLog.Add.Log(sllWarning, 'Execute raised a % -> terminate thread %',
-          [E.ClassType, fName], self);
+      SynDBLog.Add.Log(sllWarning, 'Execute raised % -> terminate thread %',
+        [PClass(E)^, fName], self);
   end;
   fProcessing := false;
   log := nil;
@@ -1599,7 +1599,7 @@ end;
 function TSqlDBPostgresAsync.Prepare(const Sql: RawUtf8; ExpectResults: boolean;
   Options: TSqlDBPostgresAsyncStatementOptions): TSqlDBPostgresAsyncStatement;
 var
-  tix, endtix: Int64;
+  tix32, endtix: cardinal;
   i: PtrInt;
 begin
   // initialize the background thread and connection if needed
@@ -1635,10 +1635,10 @@ begin
       Unlock; // there may be some tasks pending in the background thread
     end;
     SleepHiRes(1);
-    tix := GetTickCount64;
+    tix32 := GetTickSec;
     if endtix = 0 then
-      endtix := tix + 5000 // never wait forever
-    else if tix > endtix then
+      endtix := tix32 + 5 // never wait forever
+    else if tix32 > endtix then
       ESqlDBPostgresAsync.RaiseUtf8('%.NewStatement timeout', [self]);
   until false;
   // initialize the new statement within the acquired lock

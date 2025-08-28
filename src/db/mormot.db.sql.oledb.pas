@@ -664,20 +664,20 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  TOleDBConnectionProperties = TSqlDBOleDBConnectionProperties;
-  TOleDBOracleConnectionProperties = TSqlDBOleDBOracleConnectionProperties;
-  TOleDBMSOracleConnectionProperties = TSqlDBOleDBMSOracleConnectionProperties;
-  TOleDBMSSQLConnectionProperties = TSqlDBOleDBMSSQLConnectionProperties;
+  TOleDBConnectionProperties          = TSqlDBOleDBConnectionProperties;
+  TOleDBOracleConnectionProperties    = TSqlDBOleDBOracleConnectionProperties;
+  TOleDBMSOracleConnectionProperties  = TSqlDBOleDBMSOracleConnectionProperties;
+  TOleDBMSSQLConnectionProperties     = TSqlDBOleDBMSSQLConnectionProperties;
   TOleDBMSSQL2005ConnectionProperties = TSqlDBOleDBMSSQL2005ConnectionProperties;
   TOleDBMSSQL2008ConnectionProperties = TSqlDBOleDBMSSQL2008ConnectionProperties;
   TOleDBMSSQL2012ConnectionProperties = TSqlDBOleDBMSSQL2012ConnectionProperties;
-  TOleDBMySQLConnectionProperties = TSqlDBOleDBMySQLConnectionProperties;
+  TOleDBMySQLConnectionProperties     = TSqlDBOleDBMySQLConnectionProperties;
   {$ifdef CPU32} // Jet is not available on Win64
-  TOleDBJetConnectionProperties = TSqlDBOleDBJetConnectionProperties;
+  TOleDBJetConnectionProperties       = TSqlDBOleDBJetConnectionProperties;
   {$endif CPU32}
-  TOleDBACEConnectionProperties = TSqlDBOleDBACEConnectionProperties;
-  TOleDBAS400ConnectionProperties = TSqlDBOleDBAS400ConnectionProperties;
-  TOleDBOdbcSQLConnectionProperties = TSqlDBOleDBOdbcSQLConnectionProperties;
+  TOleDBACEConnectionProperties       = TSqlDBOleDBACEConnectionProperties;
+  TOleDBAS400ConnectionProperties     = TSqlDBOleDBAS400ConnectionProperties;
+  TOleDBOdbcSQLConnectionProperties   = TSqlDBOleDBOdbcSQLConnectionProperties;
 
 {$endif PUREMORMOT2}
 
@@ -842,14 +842,10 @@ type
     Status: PtrInt;
     Length: PtrUInt; // ignored for alignment
     case integer of
-      0:
-        (Int64: Int64);
-      1:
-        (Double: double);
-      2:
-        (ValueInlined: byte); // for TSqlDBColumnProperty.ColumnValueInlined
-      3:
-        (ByRef: pointer); // DBTYPE_BYREF PWideChar/PAnsiChar
+      0: (Int64: Int64);
+      1: (Double: double);
+      2: (ValueInlined: byte); // for TSqlDBColumnProperty.ColumnValueInlined
+      3: (ByRef: pointer); // DBTYPE_BYREF PWideChar/PAnsiChar
   end;
 
   PColumnValue = ^TColumnValue;
@@ -1861,9 +1857,7 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
     if not Succeeded(aResult) or
            (fOleDBErrorMessage <> '') then
     begin
-      s := string(GetErrorText(aResult));
-      if s = '' then
-        s := 'OLEDB Error ' + IntToHex(aResult, 8);
+      s := WinLastError('OleDB', aResult);
       if s <> fOleDBErrorMessage then
         fOleDBErrorMessage := s + ' - ' + fOleDBErrorMessage;
     end;

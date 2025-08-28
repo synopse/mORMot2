@@ -26,6 +26,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security, // for Windows SetSystemTime()
   mormot.core.unicode,
   mormot.core.text;
 
@@ -265,11 +266,11 @@ function ParseTimeZone(const s: RawUtf8; var Zone: integer): boolean; overload;
 
 const
   /// three-chars abbreviation of all week days, starting at Sunday = index 1
-  HTML_WEEK_DAYS: array[1..7] of string[3] = (
+  HTML_WEEK_DAYS: array[1..7] of TShort3 = (
     'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
 
   /// three-chars abbreviation of all month names, starting at January = index 1
-  HTML_MONTH_NAMES: array[1..12] of string[3] = (
+  HTML_MONTH_NAMES: array[1..12] of TShort3 = (
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
 
@@ -569,6 +570,8 @@ type
     /// compute all fields so that they are in their natural range
     // - set e.g. Second := 60 to force the next minute, or Hour := 24 so that
     // it will be normalized to the next day
+    // - use a naive simple O(n) implementation: not very fast, but correct and
+    // fast enough in its typical THttpAnalyzer.ComputeConsolidateTime usage
     procedure Normalize;
     /// change the system date/time with the value stored in this instance
     // - i.e. call SetSystemTime/fpsettimeofday API with the stored date/time
@@ -730,7 +733,8 @@ const
   /// a contemporary, but elapsed, TUnixTime second-based value
   // - corresponds to Thu, 08 Dec 2016 08:50:20 GMT
   // - may be used to check for a valid just-generated Unix timestamp value
-  // - or to store a timestamp without any 32-bit "Year 2038" overflow issue
+  // - or to store a timestamp without any 32-bit "Year 2038" overflow issue,
+  // valid until year 2152 as cardinal (whereas POSIX Epoch up to 2106)
   UNIXTIME_MINIMAL = 1481187020;
   /// a contemporary, but elapsed, TUnixTimeMS millisecond-based value
   UNIXTIMEMS_MINIMAL = QWord(UNIXTIME_MINIMAL) * MSecsPerSec;
@@ -1904,7 +1908,7 @@ procedure LogToTextFile(Msg: RawUtf8);
 begin
   if Msg = '' then
   begin
-    Msg := GetErrorText(GetLastError);
+    Msg := GetErrorText;
     if Msg = '' then
       exit;
   end;
@@ -2941,25 +2945,26 @@ end;
 var
   _HttpDateNowUtc: record
     Safe: TLightLock;
-    Tix: cardinal; // = GetTickCount64 div 1024 (every second)
+    Tix: cardinal; // = GetTickSec
     Value: THttpDateNowUtc;
   end;
 
 function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
-  c: cardinal;
+  tix32: cardinal;
   T: TSynSystemTime;
   now: ShortString; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   if Tix64 = 0 then
-    Tix64 := GetTickCount64;
-  c := Tix64 shr MilliSecsPerSecShl;
+    tix32 := GetTickSec
+  else
+    tix32 := Tix64 div MilliSecsPerSec;
   with _HttpDateNowUtc do
   begin
     Safe.Lock;
-    if c <> Tix then
+    if tix32 <> Tix then
     begin
-      Tix := c; // let this single thread update the Value
+      Tix := tix32; // let this single thread update the Value
       Safe.UnLock;
       T.FromNowUtc;
       T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');

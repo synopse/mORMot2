@@ -156,7 +156,7 @@ end;
 
 {$ifndef FPC_X86} // FPC RTL has fastmove.inc -> our SSE2/ERMS asm is slower
 
-// fast SSE2 version - force define HASNOSSE2 when run any very old CPU
+// fast SSE2 version - force define HASNOSSE2 when run any very old CPU via FPUS
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -930,39 +930,21 @@ asm
         and     eax, $3f
 end;
 
-{$ifdef HASNOSSE2} // fallback to simple pascal code if no SSE2 available
+{$ifdef HASNOSSE2} // fallback to simple pascal/i386 code if no SSE2 available
 
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 begin
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  result := -1;
+  result := ByteScanIndexPas(P, Count, Value); // may be the FPC RTL
 end;
 
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 begin
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit;
-      inc(result);
-    until false;
-  result := -1;
+  result := WordScanIndexPas(P, Count, Value);
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 begin
-  result := PtrUInt(IntegerScan(P, Count, Value));
+  result := PtrUInt(IntegerScan(P, Count, Value)); // call pure i386 asm below
   if result = 0 then
     dec(result)
   else
@@ -1314,6 +1296,17 @@ asm
         bswap eax
 end;
 
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm     // eax=a, edx=n
+@1:     mov     ecx, dword ptr [eax]
+        bswap   ecx
+        mov     dword ptr [eax], ecx
+        add     eax, 4
+        dec     edx
+        jnz     @1
+end;
+
 function bswap64({$ifdef FPC}constref{$else}const{$endif} a: QWord): QWord;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -1502,6 +1495,115 @@ asm
         pop     ebx
         neg     ecx
         lea     eax, [edx + ecx + 1]
+end;
+
+function adler32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     edi, eax
+        shr     edi, 16
+        movzx   ebx, ax
+        push    ebp
+        mov     esi, edx
+        test    esi, esi
+        mov     ebp, ecx
+        jne     @31
+        mov     eax, 1
+        jmp     @32
+@31:    test    ebp, ebp
+        jbe     @34
+@33:    cmp     ebp, 5552
+        jae     @35
+        mov     eax, ebp
+        jmp     @36
+@35:    mov     eax, 5552
+@36:    sub     ebp, eax
+        cmp     eax, 16
+        jl      @38
+        xor     edx, edx
+        xor     ecx, ecx
+@39:    sub     eax, 16
+        mov     dl, [esi]
+        mov     cl, [esi + 1]
+        add     ebx, edx
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 2]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 3]
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 4]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 5]
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 6]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 7]
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 8]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 9]
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 10]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 11]
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 12]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 13]
+        add     edi, ebx
+        add     ebx, ecx
+        mov     dl, [esi + 14]
+        add     edi, ebx
+        add     ebx, edx
+        mov     cl, [esi + 15]
+        add     edi, ebx
+        add     ebx, ecx
+        add     esi, 16
+        lea     edi, [edi + ebx]
+        cmp     eax, 16
+        jge     @39
+@38:    test    eax, eax
+        je      @42
+@43:    movzx   edx, byte ptr [esi]
+        add     ebx, edx
+        dec     eax
+        lea     esi, [esi + 1]
+        lea     edi, [edi + ebx]
+        jg      @43
+@42:    mov     ecx, 65521
+        mov     eax, ebx
+        xor     edx, edx
+        div     ecx
+        mov     ebx, edx
+        mov     ecx, 65521
+        mov     eax, edi
+        xor     edx, edx
+        div     ecx
+        test    ebp, ebp
+        mov     edi, edx
+        ja      @33
+@34:    mov     eax, edi
+        shl     eax, 16
+        or      eax, ebx
+@32:    pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
 end;
 
 function StrComp(Str1, Str2: pointer): PtrInt;
@@ -2199,26 +2301,12 @@ asm
         sub     eax, 11
         mov     [esp+4], eax
         xor     eax, eax
-        lea     ebx, [esp+24H] // reset offsets lookup table
-        {$ifdef HASNOSSE2}
-        mov     ecx, 1024
-@@089I: mov     [ebx], eax
-        mov     [ebx + 4], eax
-        mov     [ebx + 8], eax
-        mov     [ebx + 12], eax
-        add     ebx, 16
-        {$else}
-        pxor    xmm0, xmm0
-        mov     ecx, 256
-@@089I: movups  dqword ptr [ebx], xmm0
-        movups  dqword ptr [ebx + 16], xmm0
-        movups  dqword ptr [ebx + 32], xmm0
-        movups  dqword ptr [ebx + 48], xmm0
-        add     ebx, 64
-        {$endif HASNOSSE2}
-        dec     ecx
-        jnz     @@089I
         mov     [edi], eax
+        lea     edi, [esp+24H] // reset 16KB offsets lookup table using ERMS
+        mov     ecx, 4096
+        cld
+        rep stosd
+        mov     edi, [esp+18H]
         add     edi, 4
         mov     ebx, 1 // ebx=1 shl CWbit
         // main loop:

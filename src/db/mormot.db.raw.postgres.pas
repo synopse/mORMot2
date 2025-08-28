@@ -186,7 +186,7 @@ type
     SetNoticeProcessor: function(conn: PPGconn; proc: PQnoticeProcessor;
       arg: pointer): PQnoticeProcessor; cdecl;
     Clear: procedure(res: PPGresult); cdecl;
-    Freemem: procedure(ptr: pointer); cdecl;
+    FreeMem: procedure(ptr: pointer); cdecl;
     Exec: function(conn: PPGconn; query: PUtf8Char): PPGresult; cdecl;
     Prepare: function(conn: PPGconn; stmtName, query: PUtf8Char; nParams: integer;
       paramTypes: PCardinal): PPGresult; cdecl;
@@ -328,7 +328,7 @@ begin
       dec(ValueCount)
     until ValueCount = 0;
   //if PAnsiChar(p) - pointer(Bin) <> length(Bin) then
-  //  raise ESqlDBPostgres.CreateU('ToIntArrayOid');
+  //  ESqlDBPostgres.RaiseU('ToIntArrayOid');
   result := true;
 end;
 
@@ -441,7 +441,7 @@ begin
   FormatUtf8('% % failed: % [%]', [self, ctxt, errCode, errMsg], msg);
   if res <> nil then
     Clear(res);
-  raise ESqlDBPostgres.CreateU(msg); // will properly call SetDbError()
+  ESqlDBPostgres.RaiseU(msg); // will properly call SetDbError()
 end;
 
 procedure TSqlDBPostgresLib.Check(conn: PPGconn; const ctxt: ShortString;

@@ -82,7 +82,7 @@ end;
 
 procedure TLongWorkServiceThread.InternalExecute;
 var
-  tix: Int64;
+  tix: Int64; // need ms resolution
 begin
   TSynLog.Add.Log(sllInfo, '%.Execute(%) started', [self, fWorkName]);
   tix := GetTickCount64;

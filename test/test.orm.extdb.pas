@@ -195,9 +195,11 @@ procedure TTestExternalDatabase.AutoAdaptSQL;
 var
   SqlOrigin, s: RawUtf8;
   Props: TSqlDBConnectionProperties;
+  def: TSqlDBDefinition;
   Server: TRestServer;
   Ext: TRestStorageExternalHook;
   v: TRawUtf8DynArray;
+  i: PtrInt;
 
   procedure Test(aDbms: TSqlDBDefinition; AdaptShouldWork: boolean;
     const SQLExpected: RawUtf8 = '');
@@ -273,8 +275,20 @@ begin
   Check(TSqlDBConnectionProperties.IsSQLKeyword(dOracle, ' auDIT '));
   Check(not TSqlDBConnectionProperties.IsSQLKeyword(dMySQL, ' auDIT '));
   Check(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'SELEct'));
-  Check(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'clustER'));
+  Check(not TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'clustER'));
   Check(not TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'value'));
+  for i := 0 to high(SQLITE_KEYWORDS) do
+  begin
+    s := SQLITE_KEYWORDS[i];
+    CheckUtf8(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, s), s);
+  end;
+  for i := 0 to high(SQL_KEYWORDS) do
+  begin
+    s := SQL_KEYWORDS[i]; // such basic SQL keywords should always be detected
+    if not IdemPropNameU(s, 'LIMIT') then // only LIMIT is SQLite3 specific
+      for def := low(def) to high(def) do
+        CheckUtf8(TSqlDBConnectionProperties.IsSQLKeyword(def, s), s);
+  end;
 
   Server := TRestServerFullMemory.Create(fExternalModel);
   try

@@ -507,7 +507,7 @@ end;
 
 procedure TTestOrmCore._TOrm;
 var
-  i: integer;
+  i: PtrInt;
   P: PRttiProp;
   s, s1, s2: RawUtf8;
   wa: WinAnsiString;
@@ -520,22 +520,78 @@ var
   valid: boolean;
   obj, v: Variant;
 begin
+  Check(IsSqlReserved('in'));
+  Check(IsSqlReserved('iF'));
+  Check(IsSqlReserved('TO'));
+  Check(not IsSqlReserved('inz'));
+  Check(not IsSqlReserved('iz'));
+  Check(not IsSqlReserved('TOo'));
+  Check(IsSQLiteReserved('in'));
+  Check(IsSQLiteReserved('iF'));
+  Check(IsSQLiteReserved('TO'));
+  Check(not IsSQLiteReserved('inz'));
+  Check(not IsSQLiteReserved('iz'));
+  Check(not IsSQLiteReserved('TOo'));
+  for i := 0 to high(SQL_KEYWORDS) do
+  begin
+    s := SQL_KEYWORDS[i];
+    Check(IsSqlReserved(s));
+    Check(IsSqliteReserved(s));
+    LowerCaseSelf(s);
+    Check(IsSqlReserved(s));
+    Check(IsSqliteReserved(s));
+    Append(s, 'u');
+    Check(not IsSqlReserved(s));
+    Check(not IsSqliteReserved(s));
+  end;
+  for i := 0 to high(SQLITE_KEYWORDS) do
+  begin
+    s := SQLITE_KEYWORDS[i];
+    Check(IsSqliteReserved(s));
+    LowerCaseSelf(s);
+    Check(IsSqliteReserved(s));
+    Append(s, 'u');
+    Check(not IsSqlReserved(s));
+    Check(not IsSqliteReserved(s));
+  end;
+  Check(PosSelectTable('select * from toto')^ = 't');
+  Check(PosSelectTable('select * from   toto')^ = 't');
+  Check(PosSelectTable('select * from'#9'toto')^ = 't');
+  Check(PosSelectTable('select * fromage toto') = nil);
+  Check(PosSelectTable('select * toto') = nil);
   Check(IsSelect('select * from toto'));
   Check(IsSelect(' select * from toto'));
+  Check(IsSelect(' select * from toto', @s));
+  CheckEqual(s, '*');
+  Check(IsSelect(' select'#10' a, b, fromage, d   from toto', @s));
+  CheckEqual(s, 'a, b, fromage, d');
   Check(IsSelect('vacuum'));
   Check(IsSelect(' vacuum'));
   Check(IsSelect('pragma'));
   Check(IsSelect(' pragma'));
-  Check(IsSelect('with recursive cnt(x) as (values(1) union all ' +
-    'select x+1 from cnt where x<1000000) select x from cnt'));
   Check(not IsSelect('update toto'));
   Check(not IsSelect(' update toto'));
   Check(not IsSelect('insert into toto'));
   Check(not IsSelect(' insert into toto'));
   Check(not IsSelect('delete from toto'));
   Check(not IsSelect(' delete from toto'));
+  Check(IsSelect('with recursive cnt(x) as (values(1) union all ' +
+    'select x+1 from cnt where x<1000000) select x from cnt'));
   Check(not IsSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
+  Check(IsCacheableDML('select * from toto'));
+  Check(IsCacheableDML(' select * from toto'));
+  Check(IsCacheableDML('select'#13#10'* from toto'));
+  Check(not IsCacheableDML('select * from toto where data=1'));
+  Check(IsCacheableDML('select * from toto where data=?'));
+  Check(IsCacheableDML('select'#10'* from toto where data=?'));
+  Check(not IsCacheableDML('selecta * from toto where data=?'));
+  Check(not IsCacheableDML(''));
+  Check(not IsCacheableDML('   '));
+  Check(IsCacheableDML('INSERT INTO users (name, email, age) VALUES (?, ?, ?)'));
+  Check(not IsCacheableDML('INSERT INTO users (name, email, age) VALUES (''?'',''?'',10)'));
+  Check(IsCacheableDML('UPDATE products SET price = ? WHERE product_id = ?'));
+  Check(IsCacheableDML('DELETE FROM orders WHERE order_id = ? AND status = ?'));
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi', false), 'titi');
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi limit 10', false), 'titi');
   CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', false), 'titi');
@@ -553,7 +609,7 @@ begin
   M := TOrmModel.Create([TOrmTest, TOrmJson]);
   for i := 0 to GetRttiProp(TOrmTest, P) - 1 do
   begin
-    Check(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)) = i);
+    CheckEqual(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)), i);
     Check(T.OrmProps.Fields.ByRawUtf8Name(P^.NameUtf8) <> nil);
     P := P^.Next;
   end;

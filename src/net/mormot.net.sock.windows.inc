@@ -523,19 +523,19 @@ end;
 var
   // some extended WinSock functions resolved in InitializeUnit below
   acceptex: function(ListenSocket, AcceptSocket: TSocket; pOutBuff: pointer;
-    ReceiveDataLen, LocalAddrLen, RemoteAddrLen: DWORD; var BytesReceived: DWORD;
+    ReceiveDataLen, LocalAddrLen, RemoteAddrLen: DWord; var BytesReceived: DWord;
     pOverlapped: POverlapped): BOOL; stdcall;
   getacceptexsockaddrs: procedure(lpOutputBuffer: pointer;
-    dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength: DWORD;
+    dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength: DWord;
     var LocalSockaddr: PSockAddr; var LocalSockaddrLength: integer;
     var RemoteSockaddr: PSockAddr; var RemoteSockaddrLength: integer); stdcall;
   connectex: function(Sock: TSocket; Name: PSockAddr; NameLen: integer;
-    SendBuf: pointer; SendLen: DWORD; var BytesSent: DWORD;
+    SendBuf: pointer; SendLen: DWord; var BytesSent: DWord;
     Overlapped: POverlapped): BOOL; stdcall;
   {
   transmitfile: function(s: TSocket; hFile: THandle;
-    NumberOfBytesToWrite, NumberOfBytesPerSend: DWORD; pOvp: POverlapped;
-    pTransmitBuffers: PTransmitFileBuffers; dwFlags: DWORD): BOOL; stdcall;
+    NumberOfBytesToWrite, NumberOfBytesPerSend: DWord; pOvp: POverlapped;
+    pTransmitBuffers: PTransmitFileBuffers; dwFlags: DWord): BOOL; stdcall;
   }
 
 
@@ -766,13 +766,13 @@ end;
 type
   PMIB_IPADDRTABLE = ^MIB_IPADDRTABLE;
   MIB_IPADDRTABLE = record
-    dwNumEntries: DWORD;
+    dwNumEntries: DWord;
     ip: array[byte] of record
-      dwAddr: DWORD;
-      dwIndex: DWORD;
-      dwMask: DWORD;
-      dwBCastAddr: DWORD;
-      dwReasmSize: DWORD;
+      dwAddr: DWord;
+      dwIndex: DWord;
+      dwMask: DWord;
+      dwBCastAddr: DWord;
+      dwReasmSize: DWord;
       unused1: Word;
       wType: Word;
     end;
@@ -783,12 +783,12 @@ var
 
   // some iphlpapi.dll late-binded API via DelayedProc()
   GetIpAddrTable: function (pIpAddrTable: PMIB_IPADDRTABLE;
-    var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall;
+    var pdwSize: DWord; bOrder: BOOL): DWord; stdcall;
 
 function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
 var
   Table: MIB_IPADDRTABLE;
-  Size: DWORD;
+  Size: DWord;
   i: PtrInt;
   n: PtrUInt;
 begin
@@ -849,9 +849,9 @@ type
     iSockaddrLength: integer;
   end;
 
-  IP_PREFIX_ORIGIN = DWORD;
-  IP_SUFFIX_ORIGIN = DWORD;
-  IP_DAD_STATE = DWORD;
+  IP_PREFIX_ORIGIN = DWord;
+  IP_SUFFIX_ORIGIN = DWord;
+  IP_DAD_STATE = DWord;
 
   IP_ADAPTER_UNION = record
     case integer of
@@ -859,7 +859,7 @@ type
         Alignment: QWord);
       1: (
         Length: ULONG;
-        FlagsOrIfIndex: DWORD);
+        FlagsOrIfIndex: DWord);
   end;
 
   PIP_ADAPTER_UNICAST_ADDRESS = ^IP_ADAPTER_UNICAST_ADDRESS;
@@ -906,15 +906,15 @@ type
     DnsSuffix: PWCHAR;
     Description: PWCHAR;
     FriendlyName: PWCHAR;
-    PhysicalAddress: array [0 .. MAX_ADAPTER_ADDRESS_LEN - 1] of BYTE;
-    PhysicalAddressLength: DWORD;
-    Flags: DWORD;
-    Mtu: DWORD;
+    PhysicalAddress: array [0 .. MAX_ADAPTER_ADDRESS_LEN - 1] of byte;
+    PhysicalAddressLength: DWord;
+    Flags: DWord;
+    Mtu: DWord;
     IfType: ULONG;
-    OperStatus: DWORD;
+    OperStatus: DWord;
     // below fields are only available on Windows XP with SP1 and later
-    Ipv6IfIndex: DWORD;
-    ZoneIndices: array [0..15] of DWORD;
+    Ipv6IfIndex: DWord;
+    ZoneIndices: array [0..15] of DWord;
     FirstPrefix: PIP_ADAPTER_PREFIX;
     // below fields are only available on Windows Vista and later
     TransmitLinkSpeed: Int64;
@@ -925,10 +925,10 @@ type
     Ipv6Metric: ULONG;
     Luid: Int64;
     Dhcpv4Server: SOCKET_ADDRESS;
-    CompartmentId: DWORD;
+    CompartmentId: DWord;
     NetworkGuid: TGuid;
-    ConnectionType: DWORD;
-    TunnelType: DWORD;
+    ConnectionType: DWord;
+    TunnelType: DWord;
     // DHCP v6 Info following (not used by our code)
   end;
 
@@ -953,24 +953,24 @@ type
     DomainName: array[0..MAX_DOMAIN_NAME_LEN + 3] of AnsiChar;
     CurrentDnsServer: PIP_ADDR_STRING;
     DnsServerList: IP_ADDR_STRING_LINKED_LIST;
-    NodeType: DWORD;
+    NodeType: DWord;
     ScopeId: array[0 .. MAX_SCOPE_ID_LEN + 3] of AnsiChar;
-    EnableRouting: DWORD;
-    EnableProxy: DWORD;
-    EnableDns: DWORD;
+    EnableRouting: DWord;
+    EnableProxy: DWord;
+    EnableDns: DWord;
   end;
   PFIXED_INFO = ^FIXED_INFO;
 
 var
   // some iphlpapi.dll late-binded API via DelayedProc()
-  GetAdaptersAddresses: function(Family: ULONG; Flags: DWORD; Reserved: pointer;
-      pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
-  SendARP: function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
-    PhyAddrLen: pointer): DWORD; stdcall;
+  GetAdaptersAddresses: function(Family: ULONG; Flags: DWord; Reserved: pointer;
+      pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWord; stdcall;
+  SendARP: function(DestIp: DWord; srcIP: DWord; pMacAddr: pointer;
+    PhyAddrLen: pointer): DWord; stdcall;
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
-    pOutBufLen: PULONG): DWORD; stdcall;
+    pOutBufLen: PULONG): DWord; stdcall;
   GetBestInterface: function(dwDestAddrIPv4: cardinal;
-    var pdwBestIfIndex: DWORD): DWORD; stdcall;
+    var pdwBestIfIndex: DWord): DWord; stdcall;
 
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
@@ -1141,7 +1141,7 @@ function GetLocalMacAddress(const Remote: RawUtf8;
   var Mac: TMacAddress): boolean;
 var
   addr: TNetAddr;
-  dwRemoteIP, ifIndex: DWORD;
+  dwRemoteIP, ifIndex: DWord;
   all: TMacAddressDynArray;
   i: PtrInt;
 begin
@@ -1156,7 +1156,7 @@ begin
   begin
     all := GetMacAddresses;
     for i := 0 to high(all) do
-      if DWORD(all[i].IfIndex) = ifIndex then
+      if DWord(all[i].IfIndex) = ifIndex then
       begin
         Mac := all[i];
         result := true;
@@ -1168,7 +1168,7 @@ end;
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 // implements http://msdn.microsoft.com/en-us/library/aa366358
 var
-  dwRemoteIP: DWORD;
+  dwRemoteIP: DWord;
   PhyAddrLen: Longword;
   pMacAddr: array [0..7] of byte;
 begin
@@ -1442,7 +1442,7 @@ type
   // data structure returned by TWinIocp.Subscribe as PWinIocpSubscription
   PIocpSubscription = ^TIocpSubscription;
   TIocpSubscription = packed record
-    head: TLockedListOne; // should be the first for TLockedList to work
+    head: TLockedListOne; // first field - as required by TLockedList
     over: array[wieRecv .. wieConnect] of TOverlappedEvent;
     tag: TPollSocketTag;
     socket: TSocket;
@@ -1543,7 +1543,7 @@ begin
         fOnLog(sllDebug, 'Destroy waiting=%', [fWaiting], self);
       IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify again (paranoid)
       SleepHiRes(10);
-      tix := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
+      tix := GetTickSec;
       if endtix = 0 then
         endtix := tix + 5
       else if tix > endtix then
@@ -1992,7 +1992,7 @@ type
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
-    fAcceptCert: mormot.core.os.PCCERT_CONTEXT;
+    fAcceptCert: mormot.core.os.security.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
@@ -2029,8 +2029,8 @@ var
   msg: string;
 begin
   sys := GetLastError;
-  msg := format('<%s>: %s returned %x [%s], System Error %d [%s]',
-    [fServerAddressW, ctx, res, SspiResToText(res), sys, GetErrorText(sys)]);
+  msg := format('<%s>: %s returned %s, System Error %d [%s]',
+    [fServerAddressW, ctx, OsErrorShort(res), sys, GetErrorShort(sys)]);
   //writeln(fSocket.Socket,' ',msg);
   raise ESChannel.Create(msg);
 end;

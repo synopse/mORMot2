@@ -375,7 +375,7 @@ type
   // non-reentrant Lock/UnLock to access its individual properties
   TSynMonitor = class(TObjectWithRttiMethods)
   protected
-    fSafe: TOSLightLock;
+    fSafe: TLightLock; // our fast non-reentrant lock
     fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
@@ -462,11 +462,11 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - this method is to be used with an external timer for thread-safety
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
-    /// non-reentrant exclusive lock acquisition - wrap fSafe.Lock
+    /// non-reentrant exclusive lock acquisition - calls TLightLock.Lock
     // - warning: this non-reentrant method would deadlock if called twice
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// release the non-reentrant exclusive lock - wrap fSafe.UnLock
+    /// release the non-reentrant exclusive lock - calls TLightLock.UnLock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// customize JSON Serialization to set woEnumSetsAsText for readibility
@@ -746,8 +746,8 @@ type
   /// abstract class to track, compute and store TSynMonitor detailed statistics
   // - you should inherit from this class to implement proper data persistence,
   // e.g. using TSynMonitorUsageRest for ORM-based storage
-  // - SaveDB may take some time, so a TSynLocker OS lock is used, not TRWLock
-  TSynMonitorUsage = class(TSynLocked)
+  // - SaveDB may take some time, so a regular TObjectOSLock is used, not TRWLock
+  TSynMonitorUsage = class(TObjectOSLock)
   protected
     fLog: TSynLogFamily;
     fTracked: array of TSynMonitorUsageTrack;
@@ -2595,6 +2595,7 @@ end;
 
 function TSynMonitorSize.GetAsText: TShort16;
 begin
+  result[0] := #0;
   AppendKB(fBytes, result, not fTextNoSpace);
 end;
 
@@ -2602,6 +2603,7 @@ end;
 
 function TSynMonitorOneSize.GetAsText: TShort16;
 begin
+  result[0] := #0;
   AppendKB(fBytes, result, not fTextNoSpace);
 end;
 
@@ -2609,6 +2611,7 @@ end;
 
 function TSynMonitorThroughput.GetAsText: TShort16;
 begin
+  result[0] := #0;
   AppendKB(fBytesPerSec, result, not fTextNoSpace);
   AppendShortTwoChars(ord('/') + ord('s') shl 8, @result);
 end;
@@ -2630,7 +2633,6 @@ constructor TSynMonitor.Create(const aName: RawUtf8);
 begin
   Create;
   fName := aName;
-  fSafe.Init; // mandatory for TOSLightLock
 end;
 
 destructor TSynMonitor.Destroy;
@@ -2641,7 +2643,6 @@ begin
   fLastTime.Free;
   fTotalTime.Free;
   inherited Destroy;
-  fSafe.Done; // mandatory for TOSLightLock
 end;
 
 function TSynMonitor.RttiBeforeWriteObject(W: TTextWriter;
@@ -2855,7 +2856,7 @@ end;
 function TSynMonitor.ComputeDetailsJson: RawUtf8;
 var
   W: TJsonWriter;
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
@@ -3129,7 +3130,7 @@ begin
   else
     instanceName := Name;
   if instanceName = '' then
-    ClassToText(Instance.ClassType, instanceName);
+    ClassToText(PClass(Instance)^, instanceName);
   fSafe.Lock;
   try
     n := length(fTracked);
@@ -3833,7 +3834,8 @@ end;
 
 function TSystemUse.HistoryData(aProcessID, aDepth: integer): TSystemUseDataDynArray;
 var
-  i, n, last: PtrInt;
+  i, j, n, last: PtrInt;
+  res: ^TSystemUseData;
 begin
   result := nil;
   if self = nil then
@@ -3850,20 +3852,23 @@ begin
            (n > aDepth) then
           n := aDepth;
         SetLength(result, n); // make ordered copy
+        res := pointer(result);
         for i := 0 to n - 1 do
         begin
-          if i <= fDataIndex then
-            result[i] := Data[fDataIndex - i]
+          j := fDataIndex - i;
+          if j >= 0 then
+            res^ := Data[j]
           else
           begin
-            result[i] := Data[last];
+            res^ := Data[last];
             dec(last);
           end;
-          if PInt64(@result[i].Timestamp)^ = 0 then
-          begin
-            SetLength(result, i); // truncate to latest available sample
+          if PInt64(@res^.Timestamp)^ = 0 then
+          begin // truncate to latest available sample
+            SetLength(result, i); // keep result[0]..result[i-1]
             break;
           end;
+          inc(res);
         end;
       end;
   finally
@@ -4378,8 +4383,8 @@ begin
 end;
 
 const
-  _ROMSIZ: array[0..3] of string[2] = ('MB', 'GB', '??', '??');
-  _VOLT:   array[0..3] of string[3] = ('5', '3.3', '2.9', '?');
+  _ROMSIZ: array[0..3] of TShort3 = ('MB', 'GB', '??', '??');
+  _VOLT:   array[0..3] of TShort3 = ('5', '3.3', '2.9', '?');
 
 procedure CacheSize8(b: PtrUInt; var res: RawUtf8);
 var

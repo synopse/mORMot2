@@ -40,6 +40,7 @@ uses
   mormot.core.rtti,
   mormot.lib.z,
   mormot.crypt.core,
+  mormot.crypt.secure, // for PKBDF2-HMAC-SHA1
   mormot.db.core,
   mormot.db.nosql.bson,
   mormot.net.sock;
@@ -2034,7 +2035,7 @@ end;
 function TMongoRequest.ToJson(Mode: TMongoJsonMode): RawUtf8;
 var
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
@@ -2476,7 +2477,7 @@ begin
   while item.FromNext(bson) do
     case item.NameLen of
       2:
-        if PWord(item.Name)^ = ord('i') + ord('d') shl 8 then
+        if cardinal(PWord(item.Name)^) = ord('i') + ord('d') shl 8 then
           // fCursorID<>0 if getMore is needed
           fCursorID := item.ToInteger;
       9:
@@ -2636,7 +2637,7 @@ begin
     inc(result);
   end;
   if result <> length(Dest) then
-    raise EMongoException.CreateU('Invalid opReply Documents');
+    EMongoException.RaiseU('Invalid opReply Documents');
 end;
 
 procedure TMongoReplyCursor.AppendAllToBson(Dest: TBsonWriter);
@@ -2658,7 +2659,7 @@ function TMongoReplyCursor.AppendAllToDocVariant(var Dest: TDocVariantData): int
 var
   item: variant;
 begin
-  if Dest.VarType <> DocVariantType.VarType then
+  if cardinal(Dest.VarType) <> DocVariantVType then
     // may be called from getMore
     TDocVariant.NewFast(Variant(Dest), dvArray);
   result := Dest.Count;
@@ -2671,7 +2672,7 @@ begin
   while Next(item) do
     Dest.AddItem(item{%H-});
   if Dest.Count <> result then
-    raise EMongoException.CreateU('Invalid opReply Documents');
+    EMongoException.RaiseU('Invalid opReply Documents');
 end;
 
 procedure TMongoReplyCursor.AppendAllAsDocVariant(var Dest: variant);
@@ -2741,7 +2742,7 @@ function TMongoReplyCursor.ToJson(Mode: TMongoJsonMode; WithHeader: boolean;
   MaxSize: PtrUInt): RawUtf8;
 var
   W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (fReply = '') or
      (fDocumentCount <= 0) then
@@ -2795,7 +2796,7 @@ end;
 procedure TMongoConnection.Open;
 begin
   if self = nil then
-    raise EMongoException.CreateU('TMongoConnection(nil).Open');
+    EMongoException.RaiseU('TMongoConnection(nil).Open');
   if fSocket <> nil then
     raise EMongoConnectionException.Create('Duplicate Open', self);
   try
@@ -2868,7 +2869,7 @@ end;
 function TMongoConnection.GetBsonAndFree(Query: TMongoRequest): TBsonDocument;
 var
   W: TBsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TBsonWriter.Create(tmp{%H-});
   try
@@ -2886,7 +2887,7 @@ function TMongoConnection.GetJsonAndFree(Query: TMongoRequest;
 var
   W: TJsonWriter;
   ReturnAsJsonArray: boolean;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   ReturnAsJsonArray := Query.NumberToReturn > 1; // set 1 to return an object
   W := TJsonWriter.CreateOwnedStream(tmp);
@@ -3372,7 +3373,7 @@ constructor EMongoRequestOSException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   fSystemLastError := GetLastError;
-  CreateUtf8('%: % (%)', [aMsg, GetErrorText(fSystemLastError),
+  CreateUtf8('%: % (%)', [aMsg, GetErrorShort(fSystemLastError),
     fSystemLastError], aConnection, aRequest);
 end;
 
@@ -3700,7 +3701,7 @@ begin
     // SCRAM-SHA-1
     // https://tools.ietf.org/html/rfc5802#section-5
     user := StringReplaceAll(UserName, ['=', '=3D', ',', '=2C']);
-    SharedRandom.Fill(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
+    SharedRandom.Fill(@rnd, SizeOf(rnd)); // public from client: use TLecuyer
     nonce := BinToBase64(@rnd, SizeOf(rnd));
     FormatUtf8('n=%,r=%', [user, nonce], first);
     BsonVariantType.FromBinary('n,,' + first, bbtGeneric, bson);
@@ -4090,7 +4091,7 @@ var
 begin
   // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber < 2020000 then
-    raise EMongoException.CreateU('Aggregation needs MongoDB 2.2 or later');
+    EMongoException.RaiseU('Aggregation needs MongoDB 2.2 or later');
   if fDatabase.Client.ServerBuildInfoNumber >= 3060000 then
   begin
     // since 3.6, the cursor:{} parameter is mandatory, even if void
@@ -4283,7 +4284,7 @@ var
   cmd, query: RawUtf8;
   res: variant;
 begin
-  FormatParams(Criteria, Args, Params, {json=}true, query);
+  FormatParams(Criteria, @Args[0], @Params[0], high(Args), high(Params), {json=}true, query);
   FormatUtf8('{count:"%",query:%', [fName, query], cmd);
   if MaxNumberToReturn > 0 then
     cmd := FormatUtf8('%,limit:%', [cmd, MaxNumberToReturn]);

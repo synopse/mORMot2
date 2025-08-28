@@ -149,6 +149,7 @@ type
   // - joNoJwtIDCheck won't decode/deobfuscate the "jti" item
   // - joNoAudienceCheck won't decode and check the "aud" - so is faster
   // - joDoubleInData will allow double floting point values in TJwtContent.data
+  // - joAllClaimsInData will append all claims into TJwtContent.data
   TJwtOption = (
     joHeaderParse,
     joAllowUnexpectedClaims,
@@ -156,7 +157,8 @@ type
     joNoJwtIDGenerate,
     joNoJwtIDCheck,
     joNoAudienceCheck,
-    joDoubleInData);
+    joDoubleInData,
+    joAllClaimsInData);
 
   /// store options for TJwtAbstract process
   TJwtOptions = set of TJwtOption;
@@ -188,18 +190,15 @@ type
     fCacheResults: TJwtResults;
     fCache: TSynDictionary; // TRawUtf8DynArray/TJwtContentDynArray
     procedure SetCacheTimeoutSeconds(value: integer); virtual;
+    procedure SetCacheResults(res: TJwtResults);
     function PayloadToJson(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
       ExpirationMinutes: cardinal): RawUtf8; virtual;
-    procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
-      out headpayload: RawUtf8; out signature: RawByteString;
-      excluded: TJwtClaims); virtual;
     function CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
     // abstract methods which should be overriden by inherited classes
-    function ComputeSignature(const headpayload: RawUtf8): RawUtf8;
-     virtual; abstract;
-    procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var jwt: TJwtContent); virtual; abstract;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; virtual;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; virtual;
   public
     /// initialize the JWT processing instance
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -209,7 +208,7 @@ type
     // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
       const aAudience: array of RawUtf8; aExpirationMinutes: integer;
-      aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+      aIDIdentifier: TSynUniqueIdentifierProcess = 0; aIDObfuscationKey: RawUtf8 = '';
       aIDObfuscationKeyNewKdf: integer = 0); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
@@ -265,6 +264,13 @@ type
     // - this method is thread-safe
     function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUtf8;
       out Jwt: TJwtContent): boolean; overload;
+    /// internal method to parse a token according to this JWT expectations
+    // - without any cache, digital signature nor time consistency check
+    // - as called internally by Verify(), which is the prefered method to call
+    // - see also the associated ParseJwt() function
+    procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
+      headpayload: PValuePUtf8Char = nil; signature: PRawByteString = nil;
+      excluded: TJwtClaims = []); virtual;
     /// in-place decoding and quick check of the JWT header and paylod
     // - it won't check the signature, only the header and payload
     // - the header's algorithm is checked against ExpectedAlgo (if not '')
@@ -321,7 +327,7 @@ type
     // if signature checking uses a lot of resources
     // - only used if CacheTimeoutSeconds>0
     property CacheResults: TJwtResults
-      read fCacheResults write fCacheResults;
+      read fCacheResults write SetCacheResults;
     /// access to the low-level generator associated with jrcJwtID "jti" claim
     property IDGen: TSynUniqueIdentifierGenerator
       read fIDGen;
@@ -343,9 +349,8 @@ type
   // communication is already secured by other means, and use JWT as cookies
   TJwtNone = class(TJwtAbstract)
   protected
-    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var Jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing using the 'none' algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -375,7 +380,6 @@ const
     'jti',    // jrcJwtID
     'data');  // jrcData
 
-
 function ToText(res: TJwtResult): PShortString; overload;
 function ToCaption(res: TJwtResult): string; overload;
 function ToText(claim: TJwtClaim): PShortString; overload;
@@ -389,6 +393,9 @@ function ToText(claims: TJwtClaims): ShortString; overload;
 // there is a chance the supplied text contains a JWT, and extract it
 function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean = false): RawUtf8;
 
+/// raw parsing of a JWT into its main fields (without signature or timestamp check)
+function ParseJwt(const aToken: RawUtf8; var aInfo: TJwtContent;
+  aOptions: TJwtOptions = []): TJwtResult;
 
 
 { **************** JWT Implementation of HS and S3 Algorithms }
@@ -405,8 +412,12 @@ type
     fSignPrepared: TSynSigner;
     function GetAlgo: TSignAlgo; virtual; abstract;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8;
-      const signature: RawByteString; var Jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
+    function GetSignatureSize: integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetSignatureAlgo: TSignAlgo;
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize the JWT processing using SHA3 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -430,14 +441,12 @@ type
     /// low-level read access to the internal signature structure
     property SignPrepared: TSynSigner
       read fSignPrepared;
-    {$ifndef ISDELPHI2009} // avoid Delphi 2009 F2084 Internal Error: DT5830
-    /// the digital signature size, in byte
+    /// the digital signature size, in bytes
     property SignatureSize: integer
-      read fSignPrepared.SignatureSize;
+      read GetSignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
     property SignatureAlgo: TSignAlgo
-      read fSignPrepared.Algo;
-    {$endif ISDELPHI2009}
+      read GetSignatureAlgo;
   end;
 
   /// meta-class for TJwtSynSignerAbstract creations
@@ -445,6 +454,20 @@ type
 
 
 type
+  /// implements JSON Web Tokens using non-standard 'HS1' (HMAC SHA-1) algorithm
+  // - resulting signature size will be of 160 bits
+  TJwtHS1 = class(TJwtSynSignerAbstract)
+  protected
+    function GetAlgo: TSignAlgo; override;
+  end;
+
+  /// implements JSON Web Tokens using 'HS224' (HMAC SHA-224) algorithm
+  // - resulting signature size will be of 224 bits
+  TJwtHS224 = class(TJwtSynSignerAbstract)
+  protected
+    function GetAlgo: TSignAlgo; override;
+  end;
+
   /// implements JSON Web Tokens using 'HS256' (HMAC SHA-256) algorithm
   // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.2
   // - our HMAC SHA-256 implementation used is thread safe, and very fast
@@ -532,10 +555,11 @@ type
 
 const
   /// how TJwtSynSignerAbstract algorithms are identified in the JWT
-  // - SHA-1 will fallback to HS256 (since there will never be SHA-1 support)
+  // - SHA-1 is non-standard and may suffer from collisions so should not be used
+  // on production even if it is likely to be the fastest (especially with SHA-NI)
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   JWT_TEXT: array[TSignAlgo] of RawUtf8 = (
-    'HS256',
+    'HS1',
     'HS256',
     'HS384',
     'HS512',
@@ -544,15 +568,15 @@ const
     'S3384',
     'S3512',
     'S3S128',
-    'S3S256');
+    'S3S256',
+    'HS224');
 
   /// able to instantiate any of the TJwtSynSignerAbstract instance expected
-  // - SHA-1 will fallback to TJwtHS256 (since SHA-1 will never be supported)
-  // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
+  // - SHA-1 and SHA-3 algorithms are non-standard so are for internal use only
   // - typical use is the following:
   // ! result := JWT_CLASS[algo].Create(master, round, claims, [], expirationMinutes);
   JWT_CLASS: array[TSignAlgo] of TJwtSynSignerAbstractClass = (
-    TJwtHS256,
+    TJwtHS1,
     TJwtHS256,
     TJwtHS384,
     TJwtHS512,
@@ -561,7 +585,8 @@ const
     TJwtS3384,
     TJwtS3512,
     TJwtS3S128,
-    TJwtS3S256);
+    TJwtS3S256,
+    TJwtHS224);
 
 
 { ************** JWT Implementation of ES256 Algorithm }
@@ -584,8 +609,8 @@ type
     fVerify: TEcc256r1VerifyAbstract; // includes pre-computed public key
     fOwnCertificate: boolean;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing instance using ECDSA P-256 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -627,8 +652,8 @@ type
     fRsa: TRsa;
     fHash: THashAlgo;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// initialize the JWT processing instance calling SetAlgorithm abstract method
     // - should supply one RSA key, eigher private or public, in PEM or raw DER
@@ -712,8 +737,8 @@ type
     fPublicKey: ICryptPublicKey;
     fPrivateKey: ICryptPrivateKey;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
-    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var jwt: TJwtContent); override;
+    function CheckSignature(headpayload: PValuePUtf8Char;
+      const signature: RawByteString): TJwtResult; override;
   public
     /// check if a given algorithm is supported by this class
     // - just a wrapper to check that CryptPublicKey[aAlgo] factory do exist
@@ -765,7 +790,7 @@ implementation
 
 var
   _TJwtResult: array[TJwtResult] of PShortString;
-  _TJwtClaim: array[TJwtClaim] of PShortString;
+  _TJwtClaim:  array[TJwtClaim]  of PShortString;
 
 function ToText(res: TJwtResult): PShortString;
 begin
@@ -815,6 +840,31 @@ begin
   result := copy(aText, beg, txtlen); // trim base64 encoded part
 end;
 
+function ParseJwt(const aToken: RawUtf8; var aInfo: TJwtContent;
+  aOptions: TJwtOptions): TJwtResult;
+var
+  algo: RawUtf8;
+  jwt: TJwtAbstract;
+begin
+  algo := TJwtAbstract.ExtractAlgo(aToken);
+  if algo = '' then
+  begin
+    RecordZero(@aInfo, TypeInfo(TJwtContent));
+    aInfo.result := jwtInvalidAlgorithm;
+  end
+  else
+  begin
+    jwt := TJwtAbstract.Create(algo, [], [], 0);
+    try
+      jwt.Options := aOptions + [joHeaderParse, joAllowUnexpectedClaims];
+      jwt.Parse(aToken, aInfo, nil, nil, []);
+    finally
+      jwt.Free;
+    end;
+  end;
+  result := aInfo.result;
+end;
+
 
 { TJwtAbstract }
 
@@ -846,7 +896,7 @@ begin
   if fHeader = '' then
     FormatUtf8('{"alg":"%","typ":"JWT"}', [aAlgorithm], fHeader);
   fHeaderB64 := BinToBase64Uri(fHeader) + '.';
-  fCacheResults := [jwtValid];
+  fCacheResults := [jwtValid, jwtNotBeforeFailed];
   fVerifyTimeToleranceSeconds := 30; // default grace delay
 end;
 
@@ -911,19 +961,19 @@ begin
     if Issuer = '' then
       RaiseMissing(jrcIssuer)
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcIssuer], Issuer, true);
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcIssuer], Issuer, true);
   if jrcSubject in fClaims then
     if Subject = '' then
       RaiseMissing(jrcSubject)
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcSubject], Subject, true);
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcSubject], Subject, true);
   if jrcAudience in fClaims then
     if Audience = '' then
       RaiseMissing(jrcAudience)
     else if Audience[1] = '[' then
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcAudience], _JsonFast(Audience))
     else
-      payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcAudience], Audience, true);
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcAudience], Audience, true);
   if jrcNotBefore in fClaims then
     if NotBefore <= 0 then
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore], UnixTimeUtc)
@@ -962,31 +1012,38 @@ begin
       TypeInfo(TRawUtf8DynArray), TypeInfo(TJwtContentDynArray), false, value);
 end;
 
+procedure TJwtAbstract.SetCacheResults(res: TJwtResults);
+begin
+  if res = fCacheResults then
+    exit;
+  fCacheResults := res;
+  SetCacheTimeoutSeconds(fCacheTimeoutSeconds);
+end;
+
 procedure TJwtAbstract.Verify(const Token: RawUtf8; out Jwt: TJwtContent;
   ExcludedClaims: TJwtClaims);
 var
-  headpayload: RawUtf8;
+  headpayload: TValuePUtf8Char; // no allocation: points within Token[]
   signature: RawByteString;
   fromcache: boolean;
 begin
   Jwt.result := jwtNoToken;
-  if Token = '' then
-    exit;
   if (self = nil) or
-     (fCache = nil) then
-    fromcache := false
-  else
+     (Token = '') then
+    exit;
+  fromcache := false;
+  if fCache <> nil then
   begin
-    fromcache := fCache.FindAndCopy(Token, Jwt);
+    fromcache := fCache.FindAndCopy(Token, Jwt); // may have jwtNotBeforeFailed
     fCache.DeleteDeprecated;
   end;
   if not fromcache then
-    Parse(Token, Jwt, headpayload, signature, ExcludedClaims);
+    Parse(Token, Jwt, @headpayload, @signature, ExcludedClaims);
   if Jwt.result in [jwtValid, jwtNotBeforeFailed] then
     if CheckAgainstActualTimestamp(Jwt) and
        not fromcache then
       // depending on the algorithm used
-      CheckSignature(headpayload{%H-}, signature{%H-}, Jwt);
+      Jwt.result := CheckSignature(@headpayload, signature{%H-});
   if not fromcache and
      (self <> nil) and
      (fCache <> nil) and
@@ -1000,6 +1057,17 @@ var
 begin
   Verify(Token, jwt, [jrcData]); // we won't use jwt.data for sure
   result := jwt.result;
+end;
+
+function TJwtAbstract.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
+begin
+  result := jwtValid;
+end;
+
+function TJwtAbstract.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
+begin
+  result := '';
 end;
 
 function TJwtAbstract.CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
@@ -1041,29 +1109,25 @@ const
   JWT_HEAD: array[0..1] of PUtf8Char = (
     'alg',  // 0
     'typ'); // 1
+var
+  JWT_CLAIMS_TEXT4: array[TJwtClaim] of cardinal;
 
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var Jwt: TJwtContent;
-  out headpayload: RawUtf8; out signature: RawByteString; excluded: TJwtClaims);
+  headpayload: PValuePUtf8Char; signature: PRawByteString; excluded: TJwtClaims);
 var
-  payloadend, j, toklen, c, cap, headerlen, Nlen, a: integer;
+  payloadend, toklen, c, headerlen, Nlen, payloadlen, a: integer;
   P: PUtf8Char;
   N: PUtf8Char;
-  info: TGetJsonField;
-  claim: TJwtClaim;
+  info, aud: TGetJsonField;
+  claim: TJwtClaim absolute c;
   requiredclaims: TJwtClaims;
-  value: variant;
   head: array[0..high(JWT_HEAD)] of TValuePUtf8Char;
-  aud: TDocVariantData;
   tok: PAnsiChar absolute Token;
-  temp: TSynTempBuffer;
+  temp: TSynTempBuffer; // fast in-place and on-stack JSON parsing
 begin
-  // 0. initialize parsing
+  // 0. initialize parsing result
+  RecordZero(@Jwt, TypeInfo(TJwtContent));
   Jwt.result := jwtNoToken;
-  byte(Jwt.claims) := 0;
-  word(Jwt.audience) := 0;
-  Finalize(Jwt.reg);
-  Jwt.data.InitFast; // custom claims
-  Jwt.id.Value := 0;
   toklen := length(Token);
   if (toklen = 0) or
      (self = nil) then
@@ -1075,7 +1139,7 @@ begin
     // (slightly) slower parsing
     headerlen := PosExChar('.', Token);
     if (headerlen = 0) or
-       (headerlen > 512) then
+       (headerlen > 512) then // <4KB so no temp.Done needed
       exit;
     if not Base64UriToBin(tok, headerlen - 1, temp) or
        (JsonDecode(temp.buf, @JWT_HEAD, length(JWT_HEAD), @head) = nil) or
@@ -1083,7 +1147,6 @@ begin
        ((head[1].Text <> nil) and
         not head[1].Idem('Jwt')) then
       headerlen := 0;
-    temp.Done;
     if headerlen = 0 then
       exit;
   end
@@ -1092,7 +1155,7 @@ begin
     // fast direct compare of fHeaderB64 (including "alg")
     headerlen := length(fHeaderB64);
     if (toklen <= headerlen) or
-       not CompareMem(pointer(fHeaderB64), tok, headerlen) then
+       not mormot.core.base.CompareMem(pointer(fHeaderB64), tok, headerlen) then
       exit;
   end;
   // 2. extract the payload and signature
@@ -1100,128 +1163,119 @@ begin
   if toklen > JWT_MAXSIZE then
     exit;
   payloadend := PosEx('.', Token, headerlen + 1);
-  if (payloadend = 0) or
-     (payloadend - headerlen > 2700) then
+  if payloadend = 0 then
     exit;
-  Base64UriToBin(tok + payloadend, toklen - payloadend, signature);
-  if (signature = '') and
-     (payloadend <> toklen) then
-    exit;
+  payloadlen := payloadend - headerlen - 1;
+  if payloadlen > 4000 then
+    exit; // bin<4KB so no temp.Done needed
+  if signature <> nil then
+  begin
+    Base64UriToBin(tok + payloadend, toklen - payloadend, signature^);
+    if (signature^ = '') and
+       (payloadend <> toklen) then
+      exit;
+  end;
   Jwt.result := jwtInvalidPayload;
-  try
-    if not Base64UriToBin(tok + headerlen, payloadend - headerlen - 1, temp) then
+  if not Base64UriToBin(tok + headerlen, payloadlen, temp) then
+    exit;
+  // 3. decode payload into Jwt.reg[]/Jwt.claims (known) and Jwt.data (custom)
+  requiredclaims := fClaims - excluded;
+  P := GotoNextNotSpace(temp.buf);
+  if P^ <> '{' then
+    exit;
+  P := GotoNextNotSpace(P + 1);
+  info.Json := P;
+  if P^ <> '}' then
+  repeat
+    Jwt.result := jwtInvalidPayload;
+    N := GetJsonPropName(info.Json, @Nlen);
+    if N = nil then
       exit;
-    // 3. decode payload into Jwt.reg[]/Jwt.claims (known) and Jwt.data (custom)
-    P := GotoNextNotSpace(temp.buf);
-    if P^ <> '{' then
-      exit;
-    P := GotoNextNotSpace(P + 1);
-    if P^ = '}' then
-      cap := 0
-    else
+    info.GetJsonFieldOrObjectOrArray;
+    if (info.Json = nil) or
+       not (info.EndOfObject in [',', '}']) then
+      exit; // error in parsed input
+    c := -1;
+    if (Nlen = 3) and
+       (info.Value <> nil) then
+      // check for the standard non-null JWT claims
+      c := IntegerScanIndex(@JWT_CLAIMS_TEXT4, length(Jwt.reg), PInteger(N)^);
+    if c >= 0 then // found claim = c
     begin
-      cap := JsonObjectPropCount(P); // fast pre-parsing
-      if cap = 0 then
-        exit; // invalid input
-    end;
-    requiredclaims := fClaims - excluded;
-    info.Json := P;
-    if cap > 0 then
-      repeat
-        N := GetJsonPropName(info.Json, @Nlen);
-        if N = nil then
-          exit;
-        info.GetJsonFieldOrObjectOrArray;
-        if info.Json = nil then
-          exit; // error in parsed input
-        if (Nlen = 3) and
-           (info.Value <> nil) then
-        begin
-          // check for the standard Jwt claims
-          c := PInteger(N)^;
-          for claim := low(Jwt.reg) to high(Jwt.reg) do
-            if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then
-            begin
-              if info.Value^ = #0 then
-                exit;
-              include(Jwt.claims, claim);
-              if not (claim in fClaims) and
-                 not (joAllowUnexpectedClaims in fOptions) then
+      if info.ValueLen = 0 then
+        exit;
+      include(Jwt.claims, claim);
+      Jwt.result := jwtUnexpectedClaim;
+      if not (claim in fClaims) and
+         not (joAllowUnexpectedClaims in fOptions) then
+        exit;
+      FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
+      if claim in requiredclaims then
+        case claim of
+          jrcJwtID:
+            if not (joNoJwtIDCheck in fOptions) then
+              if not fIDGen.FromObfuscated(Jwt.reg[jrcJwtID], Jwt.id.Value) or
+                 (Jwt.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
               begin
-                Jwt.result := jwtUnexpectedClaim;
+                Jwt.result := jwtInvalidID;
                 exit;
               end;
-              FastSetString(Jwt.reg[claim], info.Value, info.ValueLen);
-              if claim in requiredclaims then
-                case claim of
-                  jrcJwtID:
-                    if not (joNoJwtIDCheck in fOptions) then
-                      if not fIDGen.FromObfuscated(Jwt.reg[jrcJwtID], Jwt.id.Value) or
-                         (Jwt.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
-                      begin
-                        Jwt.result := jwtInvalidID;
-                        exit;
-                      end;
-                  jrcAudience:
-                    if not (joNoAudienceCheck in fOptions) then
-                      if Jwt.reg[jrcAudience][1] = '[' then
-                      begin
-                        aud.InitJsonInPlace(info.Value, JSON_FAST);
-                        if aud.Count = 0 then
-                          exit;
-                        for j := 0 to aud.Count - 1 do
-                        begin
-                          a := FindRawUtf8(fAudience, VariantToUtf8(aud.Values[j]));
-                          if a < 0 then
-                          begin
-                            Jwt.result := jwtUnknownAudience;
-                            if not (joAllowUnexpectedAudience in fOptions) then
-                              exit;
-                          end
-                          else
-                            include(Jwt.audience, a);
-                        end;
-                        aud.Clear;
-                      end
-                      else
-                      begin
-                        a := FindRawUtf8(fAudience, Jwt.reg[jrcAudience]);
-                        if a < 0 then
-                        begin
-                          Jwt.result := jwtUnknownAudience;
-                          if not (joAllowUnexpectedAudience in fOptions) then
-                            exit;
-                        end
-                        else
-                          include(Jwt.audience, a);
-                      end;
-                end;
-              Nlen := 0; // don't add to Jwt.data
-              dec(cap);
-              break;
+          jrcAudience:
+            if not (joNoAudienceCheck in fOptions) then
+            begin
+              Jwt.result := jwtUnknownAudience;
+              if info.Value^ = '[' then
+              begin // "aud": ["https://example.com", "https://another.com"]
+                aud.Json := info.Value + 1;
+                repeat
+                  aud.GetJsonField;
+                  if aud.Json = nil then
+                    break;
+                  a := -1;
+                  if aud.WasString then
+                    a := FindNonVoidRawUtf8(pointer(fAudience),
+                      aud.Value, aud.ValueLen, length(fAudience));
+                  if a >= 0 then
+                    include(Jwt.audience, a)
+                  else if not (joAllowUnexpectedAudience in fOptions) then
+                    exit;
+                until aud.EndOfObject = ']';
+                if joAllClaimsInData in fOptions then
+                  // aud.GetJsonField did invalidate info.Value -> restore
+                  MoveFast(pointer(Jwt.reg[jrcAudience])^, info.Value^, info.ValueLen);
+              end
+              else
+              begin // "aud": "https://example.com"
+                a := FindRawUtf8(fAudience, Jwt.reg[jrcAudience]);
+                if a >= 0 then
+                  include(Jwt.audience, a)
+                else if not (joAllowUnexpectedAudience in fOptions) then
+                  exit;
+              end;
             end;
-          if Nlen = 0 then
-            continue;
-        end;
-        if jrcData in excluded then
-          continue; // caller didn't want to fill Jwt.data
-        include(Jwt.claims, jrcData);
-        GetVariantFromJsonField(info.Value, info.WasString, value,
-          @JSON_[mFast], joDoubleInData in fOptions, info.ValueLen);
-        if Jwt.data.Count = 0 then
-          Jwt.data.Capacity := cap;
-        Jwt.data.AddValue(N, Nlen, value)
-      until info.EndOfObject = '}';
-    if requiredclaims - Jwt.claims <> [] then
-      Jwt.result := jwtMissingClaim
-    else
-    begin
-      FastSetString(headpayload, tok, payloadend - 1);
-      Jwt.result := jwtValid;
-    end;
-  finally
-    temp.Done;
+          end;
+      if not (joAllClaimsInData in fOptions) then
+        continue; // don't add this known claim into Jwt.data
+    end
+    else if jrcData in excluded then
+      continue; // caller didn't want to fill Jwt.data with unknown claims
+    include(Jwt.claims, jrcData);
+    if Jwt.data.Count = 0 then
+      if joDoubleInData in fOptions then
+        TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFastFloat]
+      else
+        TSynVarData(Jwt.data).VType := JSON_VTYPE[dvObject, mFast];
+    Jwt.data.AddValueJson(N, Nlen, info);
+  until info.EndOfObject = '}';
+  Jwt.result := jwtMissingClaim;
+  if requiredclaims - Jwt.claims <> [] then
+    exit;
+  if headpayload <> nil then
+  begin
+    headpayload^.Text := pointer(Token); // no memory allocation
+    headpayload^.Len :=  payloadend - 1;
   end;
+  Jwt.result := jwtValid;
 end;
 
 function TJwtAbstract.VerifyAuthorizationHeader(
@@ -1238,7 +1292,7 @@ end;
 class function TJwtAbstract.ExtractAlgo(const Token: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
-  V: TValuePUtf8Char;
+  V: TValuePUtf8Char; // only JWT_HEAD[0] = 'alg'
   temp: TSynTempBuffer;
 begin
   result := '';
@@ -1380,18 +1434,13 @@ begin
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-procedure TJwtNone.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var Jwt: TJwtContent);
+function TJwtNone.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 begin
   if signature = '' then // JWA defined empty string for "none" JWS
-    Jwt.result := jwtValid
+    result := jwtValid
   else
-    Jwt.result := jwtInvalidSignature;
-end;
-
-function TJwtNone.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
-begin
-  result := '';
+    result := jwtInvalidSignature;
 end;
 
 
@@ -1399,6 +1448,16 @@ end;
 { **************** JWT Implementation of HS* and S3* Algorithms }
 
 { TJwtSynSignerAbstract }
+
+function TJwtSynSignerAbstract.GetSignatureAlgo: TSignAlgo;
+begin
+  result := fSignPrepared.Algo
+end;
+
+function TJwtSynSignerAbstract.GetSignatureSize: integer;
+begin
+  result := fSignPrepared.SignatureSize;
+end;
 
 constructor TJwtSynSignerAbstract.Create(const aSecret: RawUtf8;
   aSecretPbkdf2Round: integer; aClaims: TJwtClaims;
@@ -1418,23 +1477,21 @@ begin
     fSignPrepared.Init(algo, aSecret);
 end;
 
-procedure TJwtSynSignerAbstract.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var Jwt: TJwtContent);
+function TJwtSynSignerAbstract.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   signer: TSynSigner;
   temp: THash512Rec;
 begin
-  Jwt.result := jwtInvalidSignature;
-  if length(signature) <> fSignPrepared.SignatureSize then
+  result := jwtInvalidSignature;
+  if (headpayload = nil) or
+     (length(signature) <> fSignPrepared.SignatureSize) then
     exit;
   signer := fSignPrepared; // thread-safe re-use of prepared TSynSigner
-  signer.Update(pointer(headpayload), length(headpayload));
-  signer.Final(temp);
-{  writeln('payload=',headpayload);
-   writeln('sign=',bintohex(@temp,SignatureSize));
-   writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
+  signer.Update(headpayload^.Text, headpayload^.Len);
+  signer.Final(@temp);
   if CompareMem(@temp, pointer(signature), fSignPrepared.SignatureSize) then
-    Jwt.result := jwtValid;
+    result := jwtValid;
 end;
 
 function TJwtSynSignerAbstract.ComputeSignature(
@@ -1445,7 +1502,7 @@ var
 begin
   signer := fSignPrepared;
   signer.Update(pointer(headpayload), length(headpayload));
-  signer.Final(temp);
+  signer.Final(@temp);
   result := BinToBase64Uri(@temp, fSignPrepared.SignatureSize);
 end;
 
@@ -1455,6 +1512,19 @@ begin
   inherited Destroy;
 end;
 
+{ TJwtHSHA1}
+
+function TJwtHS1.GetAlgo: TSignAlgo;
+begin
+  result := saSha1;
+end;
+
+{ TJwtHS224 }
+
+function TJwtHS224.GetAlgo: TSignAlgo;
+begin
+  result := saSha224;
+end;
 
 { TJwtHS256 }
 
@@ -1546,18 +1616,19 @@ begin
   inherited;
 end;
 
-procedure TJwtEs256.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtEs256.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   sha: TSha256;
   hash: TSha256Digest;
 begin
-  jwt.result := jwtInvalidSignature;
-  if length(signature) <> SizeOf(TEccSignature) then
+  result := jwtInvalidSignature;
+  if (headpayload = nil) or
+     (length(signature) <> SizeOf(TEccSignature)) then
     exit;
-  sha.Full(pointer(headpayload), length(headpayload), hash);
+  sha.Full(headpayload^.Text, headpayload^.Len, hash);
   if fVerify.Verify(hash, PEccSignature(signature)^) then
-    jwt.result := jwtValid;
+    result := jwtValid;
 end;
 
 class function TJwtEs256.GetAsymAlgo: TCryptAsymAlgo;
@@ -1651,8 +1722,8 @@ begin
   result := BinToBase64Uri(pointer(sig), length(sig));
 end;
 
-procedure TJwtRsa.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtRsa.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   h: TSynHasher;
   dig: THash512Rec;
@@ -1660,12 +1731,13 @@ begin
   if fRsa = nil then
     ERsaException.RaiseUtf8(
       '%.CheckSignature requires a public key', [self]);
-  jwt.result := jwtInvalidSignature;
-  if length(signature) <> fRsa.ModulusLen then
+  result := jwtInvalidSignature;
+  if (headpayload = nil) or
+     (length(signature) <> fRsa.ModulusLen) then
     exit;
-  h.Full(fHash, pointer(headpayload), length(headpayload), dig);
+  h.Full(fHash, headpayload^.Text, headpayload^.Len, dig);
   if fRsa.Verify(@dig, fHash, signature) then // = decrypt with public key
-    jwt.result := jwtValid;
+    result := jwtValid;
 end;
 
 
@@ -1770,27 +1842,32 @@ begin
   result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
-procedure TJwtCrypt.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var jwt: TJwtContent);
+function TJwtCrypt.CheckSignature(headpayload: PValuePUtf8Char;
+  const signature: RawByteString): TJwtResult;
 var
   der: RawByteString;
 begin
   if not Assigned(fPublicKey) then
     EJwtException.RaiseUtf8('%.CheckSignature requires a public key', [self]);
   der := SetSignatureSecurityRaw(fAsymAlgo, signature);
-  if fPublicKey.Verify(fAsymAlgo, headpayload, der) then // = decrypt
-    jwt.result := jwtValid
+  if fPublicKey.Verify(fAsymAlgo, headpayload^.Text, pointer(der),
+                       headpayload^.Len, length(der)) then // = decrypt
+    result := jwtValid
   else
-    jwt.result := jwtInvalidSignature;
+    result := jwtInvalidSignature;
 end;
 
 
 
 
 procedure InitializeUnit;
+var
+  c: TJwtClaim;
 begin
   GetEnumNames(TypeInfo(TJwtResult), @_TJwtResult);
   GetEnumNames(TypeInfo(TJwtClaim), @_TJwtClaim);
+  for c := low(c) to high(c) do
+    JWT_CLAIMS_TEXT4[c] := PInteger(JWT_CLAIMS_TEXT[c])^;
 end;
 
 

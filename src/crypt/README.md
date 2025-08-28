@@ -25,11 +25,10 @@ High-Performance Cryptographic features shared by all framework units
 - AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
 - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
 - SHA-2 SHA-3 Secure Hashing
-- HMAC Authentication over SHA and CRC32C
+- HMAC Authentication over SHA-256
 - PBKDF2 Safe Key Derivation over SHA-2 and SHA-3
 - Digest/Hash to Hexadecimal Text Conversion
-- Deprecated MD5 RC4 SHA-1 Algorithms
-- Deprecated Weak AES/SHA Process
+- Deprecated MD5 SHA-1 Algorithms
 
 This unit is validated against OpenSSL for correctness.
 Optimized assembly is located in separated `mormot.crypt.core.asmx64.inc` and `mormot.crypt.core.asmx86.inc` files.
@@ -47,7 +46,6 @@ Authentication and Security types shared by all framework units.
 - `TBinaryCookieGenerator` Simple Cookie Generator
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
-- Basic ASN.1 Support
 
 ### mormot.crypt.ecc256r1
 
@@ -61,6 +59,7 @@ If `mormot.crypt.openssl.RegisterOpenSsl` is called, faster *OpenSSL* library wi
 
 Certificate-based Public Key Cryptography Classes
 - High-Level Certificate-based *secp256r1* Public Key Cryptography
+- HMAC-CRC32C and HMAC-CRC256C Message Integrity Algorithms
 - `IProtocol` Implemented using Public Key Cryptography
 - Registration of our ECC Engine to the `TCryptAsym`/`TCryptCert` Factories
 
@@ -109,3 +108,14 @@ For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are 
 Access Hardware Security Modules (HSM) via PKCS#11
 - High-Level *PKCS#11* Integration with the Framework Types
 - Registration of the *PKCS#11* Engine to the `TCryptAsym`/`TCryptCert` Factories
+
+### mormot.crypt.other
+
+Deprecated or Seldom Used Cryptographic Features
+- Deprecated MD4 and RC4 Support
+- Deprecated Low-Level Memory Buffers Helper Functions
+- Deprecated Weak AES/SHA Process
+- BlowFish Encryption
+- BCrypt Password-Hashing Function
+- SCrypt Password-Hashing Function
+

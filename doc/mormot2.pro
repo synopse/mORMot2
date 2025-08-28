@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:https://gith
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot 2 Framework Documentation}.\line Copyright (C) 2024 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
+{\i Synopse mORMot 2 Framework Documentation}.\line Copyright (C) 2025 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
 The {\i Synopse mORMot 2 Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application - see @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
 The {\i Synopse mORMot 2 Framework Documentation} is a free document, released under a GPL 3.0 License.
 {\b Trademark Notice}

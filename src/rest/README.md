@@ -86,8 +86,7 @@ Server-Side REST Process over HTTP/WebSockets
 
 ### mormot.rest.mvc
 
-Web Server using Model-View-Controller (MVC) pattern and Mustache
-- Web Views Implementation using `mormot.core.mustache`
-- ViewModel/Controller Sessions using Cookies
-- Web Renderer Returning Mustache HTML5 Views or JSON
-- Application ViewModel/Controller using `Interface`s
+Model-View-Controller (MVC) pattern and Mustache over `TRestServer` and `TOrm`
+- MVC/MVVM Application over a `TRestServer`
+- Expression Helpers for the ORM Data Model
+

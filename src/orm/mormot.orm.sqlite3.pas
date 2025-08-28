@@ -222,17 +222,17 @@ type
   TRestOrmServerDBBatch = record
     Encoding: TRestBatchEncoding;
     Options: TRestBatchOptions;
-    TableIndex: integer;
     ID: TIDDynArray;
     IDCount: integer;
+    TableIndex: integer;
     IDMax: TID;
     Values: TRawUtf8DynArray;
-    ValuesCount: integer;
     Simples: TPUtf8CharDynArray;
+    ValuesCount: integer;
     SimpleFieldsCount: integer;
+    UpdateFieldsCount: integer;
     SimpleFields: TFieldBits;
     UpdateSql: RawUtf8;
-    UpdateFieldsCount: integer;
     Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
     PostValues: array[0..MAX_SQLPARAMS - 1] of RawUtf8;
     Temp: TSynTempBuffer;
@@ -1535,7 +1535,7 @@ var
   sqladd: RawUtf8;
 begin
   if DB.TransactionActive then
-    raise ERestStorage.Create('CreateMissingTables in transaction');
+    ERestStorage.RaiseU('CreateMissingTables in transaction');
   fDB.GetTableNames(tablesatcreation);
   nt := length(tablesatcreation);
   QuickSortRawUtf8(tablesatcreation, nt, nil, @StrIComp);
@@ -1945,7 +1945,7 @@ function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
   WR: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   msg: ShortString absolute tmp;
 begin
   // faster direct access with no ID inlining

@@ -3766,7 +3766,6 @@ const
   EVP_PKEY_SM2 = NID_sm2;
   EVP_PKEY_HMAC = NID_hmac;
   EVP_PKEY_CMAC = NID_cmac;
-  EVP_PKEY_SCRYPT = NID_id_scrypt;
   EVP_PKEY_TLS1_PRF = NID_tls1_prf;
   EVP_PKEY_HKDF = NID_hkdf;
   EVP_PKEY_SIPHASH = NID_siphash;
@@ -9260,7 +9259,7 @@ type
   PCAMELLIA_KEY = ^CAMELLIA_KEY;
 
   cast_key_st = record
-    data: array [0..31] of cardinal;
+    data: TBlock1024;
     short_key: integer;
   end;
 
@@ -10646,7 +10645,7 @@ type
   PRIPEMD160_CTX = ^RIPEMD160_CTX;
 
   seed_key_st = record
-    data: array [0..31] of cardinal;
+    data: TBlock1024;
   end;
 
   SEED_KEY_SCHEDULE = seed_key_st;

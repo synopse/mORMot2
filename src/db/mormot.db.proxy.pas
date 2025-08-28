@@ -504,6 +504,7 @@ type
   // TSqlDBServerSockets - this abstract class won't set any HTTP server
   TSqlDBServerAbstract = class
   protected
+    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
     fServer: THttpServerGeneric;
     fThreadPoolCount: integer;
     fPort, fDatabaseName: RawUtf8;
@@ -511,7 +512,6 @@ type
     fProcessLocked: boolean;
     fProperties: TSqlDBConnectionProperties;
     fProtocol: TSqlDBProxyConnectionProtocol;
-    fSafe: TSynLocker;
     // this is where the process would take place
     function Process(Ctxt: THttpServerRequestAbstract): cardinal;
   public
@@ -783,7 +783,7 @@ end;
 function TSqlDBProxyConnectionProtocol.TransactionStarted(
   connection: TSqlDBConnection; sessionID: integer): boolean;
 var
-  tixend, tix: Int64;
+  tixend, tix: Int64; // retry resolution is in ms
 begin
   if sessionID = 0 then
     ESqlDBRemote.RaiseUtf8(
@@ -797,7 +797,7 @@ begin
       'commit/execute/rollback should be in the same thread/connection',
       [self, connection.Properties]);
   tix := GetTickCount64;
-  tixend := tix + fTransactionRetryTimeout;
+  tixend := tix + fTransactionRetryTimeout; // typical 100ms retry timeout
   repeat
     fSafe.Lock;
     try
@@ -894,10 +894,9 @@ var
 begin
   // follow TSqlDBRemoteConnectionPropertiesAbstract.Process binary layout
   if self = nil then
-    raise ESqlDBRemote.CreateU('RemoteProcessMessage: unexpected self=nil');
+    ESqlDBRemote.RaiseU('RemoteProcessMessage: unexpected self=nil');
   if Connection = nil then
-    ESqlDBRemote.RaiseUtf8(
-      '%.RemoteProcessMessage(connection=nil)', [self]);
+    ESqlDBRemote.RaiseUtf8('%.RemoteProcessMessage(connection=nil)', [self]);
   msgin := HandleInput(Input);
   header := pointer(msgin);
   if (header = nil) or
@@ -908,7 +907,7 @@ begin
      (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDbms]) then
     if not Authenticate.SessionExists(header.SessionID) then
-      raise ESqlDBRemote.Create('You do not have the right to be here');
+      ESqlDBRemote.RaiseU('You do not have the right to be here');
   P := pointer(msgin);
   inc(P, SizeOf(header^));
   try
@@ -1305,7 +1304,7 @@ end;
 procedure TSqlDBProxyConnection.StartTransaction;
 var
   started: boolean;
-  endtix: Int64;
+  endtix: Int64; // timeout is in ms resolution
 begin
   inherited StartTransaction;
   started := false;
@@ -1890,6 +1889,7 @@ constructor TSqlDBServerAbstract.Create(aProperties: TSqlDBConnectionProperties;
   aThreadMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
   aAuthenticate: TSynAuthenticationAbstract);
 begin
+  fSafe.Init;
   fProperties := aProperties;
   if fProperties.InheritsFrom(TSqlDBConnectionPropertiesThreadSafe) then
   begin
@@ -1899,7 +1899,6 @@ begin
       fProcessLocked := true;
   end;
   fDatabaseName := aDatabaseName;
-  fSafe.InitFromClass;
   fPort := aPort;
   fHttps := aHttps;
   fThreadPoolCount := aThreadPoolCount;
@@ -1956,7 +1955,7 @@ var
   status: integer;
 begin
   inherited;
-  fServer := THttpApiServer.Create('', nil, nil, '', []);
+  fServer := THttpApiServer.Create('', nil, nil, '', [], nil, fThreadPoolCount);
   status := THttpApiServer(fServer).AddUrl(
     fDatabaseName, fPort, fHttps, '+', true);
   if status <> NO_ERROR then
@@ -1969,8 +1968,6 @@ begin
         '%.Create: error registering URI % on port %: is not another server ' +
         'instance running on this port?', [self, fDatabaseName, fPort]);
   fServer.OnRequest := Process;
-  if fThreadPoolCount > 1 then
-    THttpApiServer(fServer).Clone(fThreadPoolCount - 1);
 end;
 
 {$endif USEHTTPSYS}

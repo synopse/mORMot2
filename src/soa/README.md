@@ -56,7 +56,6 @@ Server-Side Interface-based Service Oriented Architecture (SOA) Process
 
 SOA API Code and Documentation Generation
 - ORM and SOA Logic Extraction from RTTI
-- Documentation Extraction from Source Code Comments
 - Doc/CodeGen wrapper Functions on Server Side
 - FPC Dedicated Generators
 - Compute Asynchronous Code from Synchronous Interface

@@ -8,6 +8,7 @@ unit mormot.crypt.ecc;
 
    Certificate-based Public Key Cryptography Classes
     - High-Level Certificate-based Public Key Cryptography
+    - HMAC-CRC32C and HMAC-CRC256C Message Integrity Algorithms
     - IProtocol Implemented using our Public Key Cryptography
     - Registration of our ECC Engine to the TCryptAsym/TCryptCert Factories
 
@@ -26,6 +27,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
@@ -421,7 +423,7 @@ type
     // - if Authority is nil, will generate a self-signed certificate
     // - the supplied Issuer name would be stored using AsciiToBaudot(),
     // truncated to the Issuer buffer size, i.e. 16 bytes - if Issuer is '',
-    // TAesPrng.Fill() will be used
+    // Random128() will be used
     // - you may specify some validity time range, if needed
     // - default ParanoidVerify=true will validate the certificate digital
     // signature via a call Ecc256r1Verify() to ensure its usefulness
@@ -860,7 +862,6 @@ type
     fMaxVersion: byte;
     fIsValidCached: boolean;
     fIsValidCacheCount: integer;
-    fIsValidCacheSalt: RawByteString; // avoid flooding on forged input
     fIsValidCache: THash128DynArray;  // low TEccCertificateContent.ComputeHash
     function GetCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1242,6 +1243,101 @@ function EccPrivateKeyEncrypt(const Input: TEccPrivateKey;
 // - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyEncrypt()
 function EccPrivateKeyDecrypt(const Input: RawByteString;
   const PrivatePassword: SpiUtf8): RawByteString;
+
+
+{ ***************** HMAC-CRC32C and HMAC-CRC256C Message Integrity Algorithms }
+
+// HMAC-CRC-256C and HMAC-CRC-32C non-cryptographic algorithms have been moved
+// to this unit, which is the only one making use of those
+
+
+{ ----------- HMAC over CRC-256C }
+
+/// compute the HMAC message authentication code using crc256c as hash function
+// - HMAC over a non cryptographic hash function like crc256c is known to be
+// safe as MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
+procedure HmacCrc256c(key, msg: pointer; keylen, msglen: integer;
+  out result: THash256); overload;
+
+/// compute the HMAC message authentication code using crc256c as hash function
+// - HMAC over a non cryptographic hash function like crc256c is known to be
+// safe as MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
+procedure HmacCrc256c(const key: THash256; const msg: RawByteString; out result: THash256); overload;
+
+/// compute the HMAC message authentication code using crc256c as hash function
+// - HMAC over a non cryptographic hash function like crc256c is known to be
+// safe as MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
+procedure HmacCrc256c(const key, msg: RawByteString; out result: THash256); overload;
+
+
+{ ----------- HMAC over CRC-32C }
+
+type
+  {$A-}
+  /// compute the HMAC message authentication code using crc32c as hash function
+  // - HMAC over a non cryptographic hash function like crc32c is known to be a
+  // safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+  // - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
+  // - you may use HmacCrc32c() overloaded functions for one-step process
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance via Compute()
+  {$ifdef USERECORDWITHMETHODS}
+  THmacCrc32c = record
+  {$else}
+  THmacCrc32c = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    seed: cardinal;
+    step7data: THash512Rec;
+  public
+    /// prepare the HMAC authentication with the supplied key
+    // - consider using Compute to re-use a prepared HMAC instance
+    procedure Init(key: pointer; keylen: integer); overload;
+    /// prepare the HMAC authentication with the supplied key
+    // - consider using Compute to re-use a prepared HMAC instance
+    procedure Init(const key: RawByteString); overload;
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
+    procedure Update(msg: pointer; msglen: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
+    procedure Update(const msg: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// computes the HMAC of all supplied message according to the key
+    function Done(NoInit: boolean = false): cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// computes the HMAC of the supplied message according to the key
+    // - expects a previous call on Init() to setup the shared key
+    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
+    // - this method is thread-safe
+    function Compute(msg: pointer; msglen: integer): cardinal;
+  end;
+  {$A+}
+
+  /// points to HMAC message authentication code using crc32c as hash function
+  PHmacCrc32c = ^THmacCrc32c;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
+function HmacCrc32c(key, msg: pointer; keylen, msglen: integer): cardinal; overload;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
+function HmacCrc32c(const key: THash256; const msg: RawByteString): cardinal; overload;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
+// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
+function HmacCrc32c(const key, msg: RawByteString): cardinal; overload;
 
 
 { ***************** IProtocol Implemented using our Public Key Cryptography }
@@ -2722,13 +2818,13 @@ begin
         ValidityStart := EccDate(StartDate);
       ValidityEnd := ValidityStart + ExpirationDays;
     end;
-    TAesPrng.Fill(TAesBlock(Serial));
+    Random128(@Serial);
     fContent.SetUsage(word(Usage), MaxVers);
     if IssuerText = '' then
       if Subjects <> '' then
         fContent.SetSubject(Subjects, MaxVers)
       else
-        TAesPrng.Fill(TAesBlock(Issuer))
+        Random128(@Issuer)
     else
       EccIssuer(IssuerText, Issuer);
     if not ecc_make_key_pas(PublicKey, fPrivateKey) then
@@ -2851,7 +2947,7 @@ begin
     plain := SaveToBinary;
     if plain <> '' then
       try
-        salt := TAesPrng.Fill(PRIVKEY_SALTSIZE);
+        RandomByteString(PRIVKEY_SALTSIZE, salt); // public: TLecuyer is enough
         Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
         a := Aes.Create(aeskey);
         try
@@ -3160,7 +3256,7 @@ begin
     pub := @dst.PublicKey;
   end
   else
-    raise EEccException.CreateUtf8(
+    raise EEccException.CreateUtf8( // no RaiseUtf8() for Delphi
       '%.SignCertificate: self-sign with no secret', [self]);
   // compute the digital signature of Dest.fContent
   Dest.fContent.ComputeHash(hash);
@@ -3611,7 +3707,6 @@ end;
 constructor TEccCertificateChain.Create;
 begin
   CreateVersion(2);
-  fIsValidCacheSalt := ToUtf8(RandomGuid); // avoid flooding on forged input
 end;
 
 constructor TEccCertificateChain.CreateFromJson(
@@ -3652,7 +3747,6 @@ function TEccCertificateChain.IsValidRaw(const content: TEccCertificateContent;
 var
   authoritypublickey: TEccPublicKey;
   hash: THash256Rec;
-  cached: THash128;
 begin
   // check certificate coherency and date before checking the cache
   result := ecvCorrupted;
@@ -3674,11 +3768,9 @@ begin
   if fIsValidCached then
   begin
     // try to recognize a previous valid certificate in the hash cache
-    cached := hash.Lo; // apply fIsValidCacheSalt and maybe AesNiHash128
-    DefaultHasher128(@cached, pointer(fIsValidCacheSalt), length(fIsValidCacheSalt));
     fSafe.ReadLock;
     try
-      if Hash128Index(pointer(fIsValidCache), fIsValidCacheCount, @cached) >= 0 then
+      if Hash128Index(pointer(fIsValidCache), fIsValidCacheCount, @hash) >= 0 then
         exit; // 128-bit lower part of sha-256 is very unlikely to collide
     finally
       fSafe.ReadUnlock;
@@ -3706,7 +3798,7 @@ begin
       try
         if fIsValidCacheCount > 1024 then
           fIsValidCacheCount := 0; // time to flush the cache once reached 16KB
-        AddHash128(fIsValidCache, cached, fIsValidCacheCount);
+        AddHash128(fIsValidCache, hash.Lo, fIsValidCacheCount);
       finally
         fSafe.WriteUnlock;
       end;
@@ -4280,7 +4372,8 @@ begin
       // store first the certificates
       n := length(fItems);
       if n > 65535 then
-        raise EEccException.Create('Too many items in Chain');
+        EEccException.RaiseUtf8(
+          '%.SaveToBinary: Too many certificates (%) in Chain', [self, n]);
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
       begin
@@ -4292,7 +4385,8 @@ begin
       // then the revocation serials
       n := length(fCrl);
       if n > 65535 then
-        raise EEccException.Create('Too many CRLs in Chain');
+        EEccException.RaiseUtf8(
+          '%.SaveToBinary: Too many CRLs (%) in Chain', [self, n]);
       st.WriteBuffer(n, 2);
       for i := 0 to n - 1 do
         fCrl[i].SaveToStream(st);
@@ -4533,6 +4627,128 @@ begin
     result := LoadFromFileContent(json);
 end;
 
+
+{ ***************** HMAC-CRC32C and HMAC-CRC256C Message Integrity Algorithms }
+
+{ HmacCrc256c }
+
+procedure crc256cmix(h1, h2: cardinal; h: PCardinalArray);
+begin
+  // see // https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
+  h^[0] := h1;
+  inc(h1, h2);
+  h^[1] := h1;
+  inc(h1, h2);
+  h^[2] := h1;
+  inc(h1, h2);
+  h^[3] := h1;
+  inc(h1, h2);
+  h^[4] := h1;
+  inc(h1, h2);
+  h^[5] := h1;
+  inc(h1, h2);
+  h^[6] := h1;
+  inc(h1, h2);
+  h^[7] := h1;
+end;
+
+procedure HmacCrc256c(key, msg: pointer; keylen, msglen: integer;
+  out result: THash256);
+var
+  h1, h2: cardinal;
+  k0, step7data: THash512Rec;
+begin
+  FillCharFast(k0, SizeOf(k0), 0);
+  if keylen > SizeOf(k0) then
+    crc256c(key, keylen, k0.Lo)
+  else
+    MoveFast(key^, k0, keylen);
+  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
+  XorBy128(@k0, @k0, 15, $36363636);
+  h1 := crc32c(crc32c(0,  @k0, SizeOf(k0)), msg, msglen);
+  h2 := crc32c(crc32c(h1, @k0, SizeOf(k0)), msg, msglen);
+  crc256cmix(h1, h2, @result);
+  h1 := crc32c(crc32c(0,  @step7data, SizeOf(step7data)), @result, SizeOf(result));
+  h2 := crc32c(crc32c(h1, @step7data, SizeOf(step7data)), @result, SizeOf(result));
+  crc256cmix(h1, h2, @result);
+  FillCharFast(k0, SizeOf(k0), 0);
+  FillCharFast(step7data, SizeOf(k0), 0);
+end;
+
+procedure HmacCrc256c(const key: THash256; const msg: RawByteString;
+  out result: THash256);
+begin
+  HmacCrc256c(@key, pointer(msg), SizeOf(key), length(msg), result);
+end;
+
+procedure HmacCrc256c(const key, msg: RawByteString; out result: THash256);
+begin
+  HmacCrc256c(pointer(key), pointer(msg), length(key), length(msg), result);
+end;
+
+
+{ THmacCrc32c }
+
+procedure THmacCrc32c.Init(const key: RawByteString);
+begin
+  Init(pointer(key), length(key));
+end;
+
+procedure THmacCrc32c.Init(key: pointer; keylen: integer);
+var
+  k0: THash512Rec;
+begin
+  FillCharFast(k0, SizeOf(k0), 0);
+  if keylen > SizeOf(k0) then
+    crc256c(key, keylen, k0.Lo)
+  else
+    MoveFast(key^, k0, keylen);
+  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
+  XorBy128(@k0, @k0, 15, $36363636);
+  seed := crc32c(0, @k0, SizeOf(k0));
+  FillCharFast(k0, SizeOf(k0), 0);
+end;
+
+procedure THmacCrc32c.Update(msg: pointer; msglen: integer);
+begin
+  seed := crc32c(seed, msg, msglen);
+end;
+
+procedure THmacCrc32c.Update(const msg: RawByteString);
+begin
+  seed := crc32c(seed, pointer(msg), length(msg));
+end;
+
+function THmacCrc32c.Done(NoInit: boolean): cardinal;
+begin
+  result := crc32c(seed, @step7data, SizeOf(step7data));
+  if not NoInit then
+    FillcharFast(self, SizeOf(self), 0);
+end;
+
+function THmacCrc32c.Compute(msg: pointer; msglen: integer): cardinal;
+begin
+  result := crc32c(crc32c(seed, msg, msglen), @step7data, SizeOf(step7data));
+end;
+
+function HmacCrc32c(key, msg: pointer; keylen, msglen: integer): cardinal;
+var
+  mac: THmacCrc32c;
+begin
+  mac.Init(key, keylen);
+  mac.Update(msg, msglen);
+  result := mac.Done;
+end;
+
+function HmacCrc32c(const key: THash256; const msg: RawByteString): cardinal;
+begin
+  result := HmacCrc32c(@key, pointer(msg), SizeOf(key), length(msg));
+end;
+
+function HmacCrc32c(const key, msg: RawByteString): cardinal;
+begin
+  result := HmacCrc32c(pointer(key), pointer(msg), length(key), length(msg));
+end;
 
 
 { ***************** IProtocol Implemented using Public Key Cryptography }
@@ -5031,7 +5247,7 @@ begin
   FillCharFast(aClient, SizeOf(aClient), 0);
   aClient.algo := fAlgo;
   // client-side randomness for ephemeral keys and signatures
-  SharedRandom.Fill(@fRndA, SizeOf(fRndA)); // enough for public randomness
+  Random128(@fRndA); // unpredictable
   aClient.RndA := fRndA;
   // generate the client ephemeral key
   if fAlgo.auth <> authClient then
@@ -5153,7 +5369,7 @@ begin
   FillCharFast(aServer, SizeOf(aServer), 0);
   aServer.algo := fAlgo;
   aServer.RndA := fRndA;
-  SharedRandom.Fill(@fRndB, SizeOf(fRndB)); // enough for public randomness
+  Random128(@fRndB); // unpredictable
   aServer.RndB := fRndB;
   if fAlgo.auth <> authServer then
     if not Ecc256r1MakeKey(aServer.QF, dF) then

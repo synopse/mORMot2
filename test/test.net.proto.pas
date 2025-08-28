@@ -11,6 +11,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
@@ -24,6 +25,7 @@ uses
   mormot.core.perf,
   mormot.core.threads,
   mormot.core.search,
+  mormot.core.zip,
   mormot.crypt.core,
   mormot.crypt.secure,
   {$ifdef OSPOSIX}
@@ -83,8 +85,6 @@ type
   protected // Disabled Tests - successfull
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
-    /// validate mormot.net.openapi unit
-    procedure OpenAPI;
     /// validate DNS and LDAP clients (and NTP/SNTP)
     procedure DNSAndLDAP;
     /// validate THttpPeerCache process
@@ -106,6 +106,8 @@ type
     procedure _TTunnelLocal;
     /// validate IP processing functions
     procedure IPAddresses;
+    /// validate mormot.net.openapi unit
+    procedure OpenAPI;
     {$ifdef OSPOSIX}
     /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
     procedure TFTPServer;
@@ -216,25 +218,23 @@ const
   MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('', 'one', 'and 2');
 
 const
-  // some reference from https://github.com/OAI/OpenAPI-Specification and others
-  OpenApiRef: array[0..4] of RawUtf8 = (
-    'v2.0/json/petstore-simple.json',
-    'v3.0/petstore.json',
-    'https://petstore.swagger.io/v2/swagger.json',
-    'https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json',
-    'https://platform-api-staging.vas.com/api/v1/swagger.json');
-  OpenApiName: array[0..high(OpenApiRef)] of RawUtf8 = (
-    'Pets2',
-    'Pets3',
-    'PetStore',
-    'Qdrant',
-    'VAS');
+  // some reference OpenAPI/Swagger definitions
+  // - downloaded as openapi-ref.zip since some of those endpoints are unstable
+  OpenApiName: array[0 .. 6] of RawUtf8 = (
+    'FinTrack',
+    'Nakama',  // https://github.com/heroiclabs/nakama
+    'Pets2',   // https://petstore.swagger.io/v2/swagger.json
+    'Pets3',   // https://petstore3.swagger.io/api/v3/openapi.json
+    'Qdrant',  // https://qdrant.github.io/qdrant/redoc/v1.8.x/openapi.json
+    'VAS',     // https://platform-api-staging.vas.com/api/v1/swagger.json
+    'JTL');    // https://developer.jtl-software.com/_spec/products/erpapi/@1.1-onprem/openapi.json?download
 
 procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  u, url, dto, client: RawUtf8;
+  key, prev, dto, client: RawUtf8;
+  refzip: RawByteString;
   api: TRawUtf8DynArray;
   oa: TOpenApiParser;
   timer: TPrecisionTimer;
@@ -244,36 +244,35 @@ begin
   CheckEqual(FindCustomEnum(MYENUM2TXT, ''), 0);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and'), 0);
   CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 3'), 0);
-  for i := 1 to high(RESERVED_KEYWORDS) do
-    CheckUtf8(StrComp(pointer(RESERVED_KEYWORDS[i - 1]),
-      pointer(RESERVED_KEYWORDS[i])) < 0, RESERVED_KEYWORDS[i]);
   for i := 0 to high(RESERVED_KEYWORDS) do
   begin
-    u := RESERVED_KEYWORDS[i];
-    Check(IsReservedKeyWord(u));
-    inc(u[1], 32); // lowercase
-    Check(IsReservedKeyWord(u));
-    LowerCaseSelf(u);
-    Check(IsReservedKeyWord(u));
-    u := u + 's';
-    Check(not IsReservedKeyWord(u));
+    key := RESERVED_KEYWORDS[i];
+    CheckUtf8(StrComp(pointer(prev), pointer(key)) < 0, key);
+    prev := key;
+    Check(IsReservedKeyWord(key));
+    inc(key[1], 32);    // lowercase first char
+    Check(IsReservedKeyWord(key));
+    LowerCaseSelf(key); // lowercase all chars
+    Check(IsReservedKeyWord(key));
+    key := key + 's';
+    Check(not IsReservedKeyWord(key));
     Check(not IsReservedKeyWord(UInt32ToUtf8(i)));
   end;
-  SetLength(api, length(OpenApiRef));
-  for i := 0 to high(OpenApiRef) do
-    if OpenApiRef[i] <> '' then
+  SetLength(api, length(OpenApiName));
+  for i := 0 to high(OpenApiName) do
+    if OpenApiName[i] <> '' then
     begin
       fn := FormatString('%OpenApi%.json', [WorkDir, OpenApiName[i]]);
       api[i] := StringFromFile(fn);
       if api[i] <> '' then
-        continue;
-      url := OpenApiRef[i];
-      if not IdemPChar(pointer(url), 'HTTP') then
-        url := Join(['https://raw.githubusercontent.com/OAI/' +
-                 'OpenAPI-Specification/main/examples/', url]);
-      JsonBufferReformat(pointer(DownloadFile(url)), api[i]);
-      if api[i] <> '' then
-        FileFromString(api[i], fn);
+        continue; // already downloaded
+      if refzip <> '' then
+        continue; // download .zip once
+      refzip := DownloadFile('https://synopse.info/files/openapi-ref.zip');
+      if refzip = '' then
+        refzip := 'none'
+      else if UnZipMemAll(refzip, WorkDir) then // one url to rule them all
+        api[i] := StringFromFile(fn); // try once
     end;
   for i := 0 to high(api) do
     if api[i] <> '' then
@@ -288,6 +287,11 @@ begin
         //oa.Options := oa.Options + [opoClientOnlySummary];
         //oa.Options := oa.Options + [opoDtoNoDescription, opoClientNoDescription];
         oa.ParseJson(api[i]);
+        // ensure there was something properly parsed
+        Check(oa.Version <> oavUnknown, 'version');
+        Check(oa.Title <> '', 'title');
+        Check(oa.Operations <> nil, 'operations');
+        // generate the dto/client units
         dto := oa.GenerateDtoUnit;
         client := oa.GenerateClientUnit;
         Check((opoGenerateSingleApiUnit in oa.Options) or (dto <> ''), 'dto');
@@ -371,6 +375,8 @@ var
 
 var
   rmax, r, i: PtrInt;
+  res: TNetResult;
+  raw: integer;
   text: RawUtf8;
   log: ISynLog;
 begin
@@ -381,7 +387,7 @@ begin
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
-    if SystemInfo.dwNumberOfProcessors = 1 then
+    if SystemInfo.dwNumberOfProcessors < 8 then
       Sleep(50); // seems mandatory from LUTI regression tests
     rmax := clientcount - 1;
     streamer := TCrtSocket.Bind(proxy.RtspPort);
@@ -392,7 +398,7 @@ begin
       for r := 0 to rmax do
         with req[r] do
         begin
-          session := TSynTestCase.RandomIdentifier(20 + r and 15);
+          session := RandomIdentifier(20 + r and 15);
           get := THttpSocket.Open('localhost', proxy.Server.Port, nlTcp, 1000);
           get.SndLow('GET /sw.mov HTTP/1.0'#13#10 +
                      'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
@@ -412,6 +418,8 @@ begin
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);
+      if SystemInfo.dwNumberOfProcessors < 8 then
+        Sleep(50); // seems mandatory from LUTI regression tests
       for r := 0 to rmax do
         with req[r] do
         begin
@@ -453,13 +461,17 @@ begin
               'NTAwMDAwDQpBY2NlcHQtTGFuZ3VhZ2U6IGVuLVVTDQpVc2VyLUFnZW50OiBRVFMg'#13#10 +
               'KHF0dmVyPTQuMTtjcHU9UFBDO29zPU1hYyA4LjYpDQoNCg=='); 
           for r := 0 to rmax do
-            test.check(req[r].stream.SockReceiveString =
+          begin
+            text := req[r].stream.SockReceiveString(@res, @raw);
+            test.CheckUtf8(text =
               'DESCRIBE rtsp://tuckru.apple.com/sw.mov RTSP/1.0'#13#10 +
               'CSeq: 1'#13#10 +
               'Accept: application/sdp'#13#10 +
               'Bandwidth: 1500000'#13#10 +
               'Accept-Language: en-US'#13#10 +
-              'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10#13#10);
+              'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10#13#10,
+              'describe res=% raw=%', [ToText(res)^, raw]);
+          end;
         end;
         // stream output should be redirected to the GET request
         for r := 0 to rmax do
@@ -470,11 +482,11 @@ begin
         for r := 0 to rmax do
           with req[r] do
           begin
-            text := get.SockReceiveString;
+            text := get.SockReceiveString(@res, @raw);
             //if log <> nil then
             //  log.Log(sllCustom1, 'RegressionTests % #%/% received %',
             //    [clientcount, r, rmax, text], proxy);
-            test.CheckEqual(text, session);
+            test.CheckUtf8(text = session, 'session res=% raw=%', [ToText(res)^, raw]);
           end;
       end;
       if log <> nil then
@@ -826,7 +838,7 @@ end;
 procedure TNetworkProtocols.RunLdapClient(Sender: TObject);
 var
   rev: RawUtf8;
-  endtix: Int64;
+  endtix: cardinal;
   one: TLdapClient;
   dv: variant;
 begin
@@ -865,14 +877,14 @@ begin
   // retry reverse lookup DNS after some time
   if synopsednsip <> '' then
   begin
-    endtix := GetTickCount64 + 2000; // never wait forever
+    endtix := GetTickSec + 5; // never wait forever
     repeat
       inc(fAssertions);
       rev := DnsReverseLookup(synopsednsip);
       if rev <> '' then
         break; // success
       Sleep(100); // wait a little and retry up to 2 seconds
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     CheckSynopseReverse(self, rev);
   end;
 end;
@@ -904,7 +916,7 @@ var
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   dn: TNameValueDNs;
-  endtix: Int64;
+  endtix: cardinal;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
@@ -962,16 +974,18 @@ begin
   CheckEqual(DnsLookup('LocalHost'), '127.0.0.1');
   CheckEqual(DnsLookup('::1'), '127.0.0.1');
   CheckEqual(DnsLookup('1.2.3.4'), '1.2.3.4');
+  CheckEqual(NetAddrResolve('1.2.3.4'), '1.2.3.4');
   if hasinternet then
   begin
-    endtix := GetTickCount64 + 2000; // never wait forever
+    endtix := GetTickSec + 5; // never wait forever
     repeat
       inc(fAssertions);
       ip := DnsLookup('synopse.info');
       if ip <> '' then
         break;
       Sleep(100); // some DNS servers may fail at first: wait a little
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
+    CheckEqual(NetAddrResolve('synopse.info'), ip, 'NetAddrResolve');
     rev := '62.210.254.173';
     CheckEqual(ip, rev, 'dns1');
     repeat
@@ -980,7 +994,7 @@ begin
       if ip <> '' then
         break;
       Sleep(100); // some DNS servers may fail at first: wait a little
-    until GetTickCount64 > endtix;
+    until GetTickSec > endtix;
     CheckEqual(ip, rev, 'dns2');
     inc(fAssertions);
     rev := DnsReverseLookup(ip);
@@ -989,7 +1003,8 @@ begin
     else
       CheckSynopseReverse(self, rev);
     // async validate actual LDAP client on public ldap.forumsys.com server
-    Run(RunLdapClient, self, 'ldap', true, false);
+    if not fOwner.MultiThread then
+      Run(RunLdapClient, self, 'ldap', true, false); // fails in the background
   end;
   // validate LDAP distinguished name conversion (no client)
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
@@ -1027,17 +1042,18 @@ begin
   Check(not ParseDn('dc=ad, dc=company, dc', dn, {noraise=}true));
   // validate LDAP error recognition
   Check(RawLdapError(-1) = leUnknown);
-  Check(RawLdapError(LDAP_RES_TOO_LATE) = leUnknown);
+  Check(RawLdapError(LDAP_RES_TOO_LATE) = leTooLate);
   Check(RawLdapError(10000) = leUnknown);
   Check(RawLdapError(LDAP_RES_AUTHORIZATION_DENIED) = leAuthorizationDenied);
+  Check(RawLdapError(LDAP_RES_ESYNC_REFRESH_REQUIRED) = leEsyncRefreshRequired);
+  Check(RawLdapError(LDAP_RES_NO_OPERATION) = leNoOperation);
   for le := low(le) to high(le) do
-  begin
     Check(LDAP_ERROR_TEXT[le] <> '');
-    if le <> leUnknown then
-      CheckUtf8(RawLdapError(LDAP_RES_CODE[le]) = le, LDAP_ERROR_TEXT[le]);
-  end;
-  CheckEqual(LDAP_ERROR_TEXT[leUnknown], 'Unknown');
-  CheckEqual(LDAP_ERROR_TEXT[leCompareTrue], 'Compare true');
+  for le := low(LDAP_RES_CODE) to high(LDAP_RES_CODE) do
+    CheckUtf8(RawLdapError(LDAP_RES_CODE[le]) = le, LDAP_ERROR_TEXT[le]);
+  CheckEqual(LDAP_ERROR_TEXT[leUnknown], 'unknown');
+  CheckEqual(LDAP_ERROR_TEXT[leCompareTrue], 'compareTrue');
+  CheckEqual(LDAP_ERROR_TEXT[leEsyncRefreshRequired], 'e-syncRefreshRequired');
   // validate LDAP escape/unescape
   for c := 0 to 200 do
   begin
@@ -1609,12 +1625,12 @@ end;
 
 procedure TNetworkProtocols.IPAddresses;
 var
-  i, n: PtrInt;
+  i, n, n2: PtrInt;
   s: ShortString;
-  txt: RawUtf8;
+  txt, uri: RawUtf8;
   ip: THash128Rec;
   sub: TIp4SubNets;
-  bin: RawByteString;
+  bin, bin2: RawByteString;
   timer: TPrecisionTimer;
 begin
   FillZero(ip.b);
@@ -1700,8 +1716,8 @@ begin
   try
     CheckEqual(sub.AfterAdd, 0);
     bin := sub.SaveToBinary;
-    if CheckEqual(length(bin), 4) then
-      CheckEqual(PInteger(bin)^, 0);
+    if CheckEqual(length(bin), 8) then
+      CheckEqual(PInt64(bin)^, IP4SUBNET_MAGIC);
     Check(not sub.Match('190.16.1.1'));
     Check(not sub.Match('190.16.1.135'));
     Check(not sub.Match('190.16.1.250'));
@@ -1720,7 +1736,7 @@ begin
     Check(not sub.Match('190.16.1.1'));
     Check(not sub.Match('190.16.1.135'));
     Check(not sub.Match('190.16.1.250'));
-    Check(sub.LoadFromBinary(bin), 'load1');
+    CheckEqual(sub.LoadFromBinary(bin), 1, 'load1');
     CheckEqual(sub.AfterAdd, 1);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
@@ -1744,7 +1760,7 @@ begin
     bin := sub.SaveToBinary;
     sub.Clear;
     Check(not sub.Match('190.16.43.1'));
-    Check(sub.LoadFromBinary(bin), 'load2');
+    CheckEqual(sub.LoadFromBinary(bin), 2, 'load');
     CheckEqual(sub.AfterAdd, 2);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
@@ -1773,13 +1789,15 @@ begin
       'refs/heads/master/firehol_level1.netset', 'firehol.netset');
     if txt <> '' then
     begin
+      Make(['file://', WorkDir, 'firehol.netset'], uri);
+      CheckUtf8(DownloadFile(uri) = txt, uri);
       sub.Clear;
       timer.Start;
       n := sub.AddFromText(txt);
       NotifyTestSpeed('parse TIp4SubNets', n, length(txt), @timer);
-      Check(n > 4000);
+      Check(n > 4000); // typically 4520 subnets, 612,853,888 unique IPs
       CheckEqual(sub.AfterAdd, n);
-      CheckEqual(length(sub.SubNet), 18);
+      CheckUtf8(length(sub.SubNet) in [17 .. 18], 'sub=%', [length(sub.SubNet)]);
       Check(not sub.Match('1.2.3.4'));
       Check(not sub.Match('1.2.3.5'));
       Check(not sub.Match('192.168.1.1'), '192'); // only IsPublicIP() was added
@@ -1814,14 +1832,20 @@ begin
         Check(sub.AddFromText(txt) < 1000, 'spamhaus within firehol');
         sub.Clear;
         Check(not sub.Match('10.18.1.1'), '10');
-        Check(sub.AddFromText(txt) > 1000, 'spamhaus=1525');
+        n2 := sub.AddFromText(txt);
+        Check(n2 > 1000, 'spamhaus=1525');
+        Check(not sub.Match('62.210.254.173'), 'cauterets.site');
         Check(sub.Match('223.254.0.1') ,'a2'); // 223.254.0.0/16
         Check(sub.Match('223.254.1.1'), 'b2');
         Check(sub.Match('223.254.200.129'), 'c2');
+        bin2 := sub.SaveToBinary;
         CheckEqual(sub.AddFromText(txt), 0, 'twice');
+        CheckEqual(sub.SaveToBinary, bin2);
+        sub.Clear;
+        CheckEqual(sub.LoadFrom(txt), n2, 'loadtxt');
+        Check(sub.SaveToBinary = bin2, 'savebin');
       end;
-      sub.Clear;
-      Check(sub.LoadFromBinary(bin), 'loadbin');
+      CheckEqual(sub.LoadFrom(bin), n, 'loadfrom');
       Check(sub.SaveToBinary = bin, 'savebin');
       Check(sub.Match('223.254.0.1') ,'a3'); // 223.254.0.0/16
       Check(sub.Match('223.254.1.1'), 'b3');
@@ -1887,7 +1911,7 @@ var
 
   procedure WaitNotProcessing(const Context: string);
   var
-    endtix: Int64;
+    endtix: Int64; // ms resolution
   begin
     if not (gasProcessing in hpc.State) then
     begin
@@ -2206,26 +2230,47 @@ begin
   end;
 end;
 
+const
+  HDR1: PUtf8Char = 'one: value'#13#10'cookie: name=value';
+  HDR2: PUtf8Char = 'one: value'#13#10'cookie: name = value ';
+  HDR3: PUtf8Char = 'cookie: name=value'#13#10 +
+    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
+    'cookone: value'#13#10;
+  HDR4: PUtf8Char = 'cookie: name=value'#10'toto: titi'#10#10 +
+    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
+    'cookone: value'#13#10#13#10;
+
 procedure TNetworkProtocols.HTTP;
 var
   met: TUriMethod;
   s: RawUtf8;
   hc: THttpCookies;
   U: TUri;
-  h: PUtf8Char;
+  h, v: PUtf8Char;
   l: PtrInt;
   dig: THashDigest;
 
   procedure Check4;
   begin
-    CheckEqual(hc.Cookies[0].Name, 'name');
-    CheckEqual(hc.Cookies[0].Value, 'value');
-    CheckEqual(hc.Cookies[1].Name, 'name 1');
-    CheckEqual(hc.Cookies[1].Value, 'value1');
-    CheckEqual(hc.Cookies[2].Name, 'name 2');
-    CheckEqual(hc.Cookies[2].Value, 'value 2');
-    CheckEqual(hc.Cookies[3].Name, 'name3');
-    CheckEqual(hc.Cookies[3].Value, 'value3');
+    CheckEqual(hc.Name(0), 'name');
+    CheckEqual(hc.Value(0), 'value');
+    CheckEqual(hc.Name(1), 'name 1');
+    CheckEqual(hc.Value(1), 'value1');
+    CheckEqual(hc.Name(2), 'name 2');
+    CheckEqual(hc.Value(2), 'value 2');
+    CheckEqual(hc.Name(3), 'name3');
+    CheckEqual(hc.Value(3), 'value3');
+    {$ifdef HASINLINE}
+    CheckEqual(hc.Cookie['name'], 'value');
+    CheckEqual(hc.Cookie['name 1'], 'value1');
+    CheckEqual(hc.Cookie['name 2'], 'value 2');
+    CheckEqual(hc.Cookie['name3'], 'value3');
+    {$else}
+    CheckEqual(hc.GetCookie('name'), 'value');
+    CheckEqual(hc.GetCookie('name 1'), 'value1');
+    CheckEqual(hc.GetCookie('name 2'), 'value 2');
+    CheckEqual(hc.GetCookie('name3'), 'value3');
+    {$endif HASINLINE}
   end;
 
 begin
@@ -2267,17 +2312,24 @@ begin
   CheckEqual(StatusCodeToText(499)^, 'Invalid Request');
   CheckEqual(StatusCodeToText(666)^, 'Client Side Connection Error');
   // validate TUri data structure
+  U.Clear;
+  Check(U.UriScheme = usUndefined);
+  CheckEqual(U.Uri, '');
   Check(U.From('toto.com'));
   CheckEqual(U.Uri, 'http://toto.com/');
+  Check(U.UriScheme = usHttp);
   Check(not U.Https);
   Check(U.From('toto.com:123'));
   CheckEqual(U.Uri, 'http://toto.com:123/');
+  Check(U.UriScheme = usHttp);
   Check(not U.Https);
   Check(U.From('https://toto.com:123/tata/titi'));
   CheckEqual(U.Uri, 'https://toto.com:123/tata/titi');
+  Check(U.UriScheme = usHttps);
   Check(U.Https);
   CheckEqual(U.Address, 'tata/titi');
   Check(U.From('https://toto.com:123/tata/tutu:tete'));
+  Check(U.UriScheme = usHttps);
   CheckEqual(U.Address, 'tata/tutu:tete');
   CheckEqual(U.Uri, 'https://toto.com:123/tata/tutu:tete');
   Check(U.From('http://user:password@server:port/address'));
@@ -2292,40 +2344,129 @@ begin
   CheckEqual(U.User, 'user');
   CheckEqual(U.Password, '');
   Check(U.From('toto.com/tata/tutu:tete'));
+  Check(U.UriScheme = usHttp);
   CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
   CheckEqual(U.User, '');
   CheckEqual(U.Password, '');
+  CheckEqual(U.URI, 'http://toto.com/tata/tutu:tete');
   Check(U.From('file://server/path/to%20image.jpg'));
   CheckEqual(U.Scheme, 'file');
+  Check(U.UriScheme = usFile);
   CheckEqual(U.Server, 'server');
   CheckEqual(U.Address, 'path/to%20image.jpg');
-  Check(not U.From('file:///path/to%20image.jpg'), 'false if valid');
+  CheckEqual(U.Uri, 'file://server/path/to%20image.jpg');
+  Check(U.From('file://server/c:\path\to'));
+  CheckEqual(U.Scheme, 'file');
+  CheckEqual(U.Server, 'server');
+  CheckEqual(U.Address, 'c:\path\to');
+  Check(U.From('file:////server/folder/data.xml'));
+  CheckEqual(U.Scheme, 'file');
+  CheckEqual(U.Server, 'server');
+  CheckEqual(U.Address, 'folder/data.xml');
+  Check(not U.From('file:///C:/DirA/DirB/With%20Spaces.txt'));
   CheckEqual(U.Scheme, 'file');
   CheckEqual(U.Server, '');
+  CheckEqual(U.Address, 'C:/DirA/DirB/With%20Spaces.txt');
+  Check(not U.From('FILE:///path/to%20image.jpg'), 'false if valid');
+  CheckEqual(U.Scheme, 'FILE');
+  Check(U.UriScheme = usFile);
+  CheckEqual(U.Server, '');
+  CheckEqual(U.User, '');
+  CheckEqual(U.Password, '');
   CheckEqual(U.Address, 'path/to%20image.jpg');
-  // validate THttpCookies
+  CheckEqual(U.Uri, 'file:///path/to%20image.jpg');
+  Check(U.From('ftp://user:password@host:port/path'), 'ftp');
+  CheckEqual(U.Scheme, 'ftp');
+  Check(U.UriScheme = usFtp);
+  CheckEqual(U.Server, 'host');
+  CheckEqual(U.Port, 'port');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  CheckEqual(U.Address, 'path');
+  CheckEqual(U.Uri, 'ftp://host:port/path');
+  Check(U.From('ftpS://user:password@host/path'), 'ftps');
+  CheckEqual(U.Scheme, 'ftpS');
+  Check(U.UriScheme = usFtps);
+  CheckEqual(U.Server, 'host');
+  CheckEqual(U.Port, '989');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  CheckEqual(U.Address, 'path');
+  CheckEqual(U.Uri, 'ftps://host/path');
+  s := '?subject=This%20is%20the%20subject' +
+       '&cc=someone_else@example.com&body=This%20is%20the%20body';
+  Check(U.From('mailto://someone@example.com' + s));
+  CheckEqual(U.Scheme, 'mailto');
+  Check(U.UriScheme = usCustom);
+  CheckEqual(U.Server, 'example.com');
+  CheckEqual(U.Port, '');
+  CheckEqual(U.User, 'someone');
+  CheckEqual(U.Password, '');
+  CheckEqual(U.Address, s);
+  CheckEqual(U.Uri, 'mailto://example.com/' + s);
+  U.Clear; // TUri may be used to create an URI from some parameters
+  U.Server := '127.0.0.1';
+  U.Port := '991';
+  U.Address := 'endpoint';
+  CheckEqual(U.Uri, 'http://127.0.0.1:991/endpoint');
+  U.Clear;
+  U.Https := true;
+  U.Server := '127.0.0.1';
+  U.Address := 'endpoint';
+  CheckEqual(U.Port, '');
+  CheckEqual(U.Uri, 'https://127.0.0.1/endpoint');
+  CheckEqual(U.Port, '');
+  U.Port := '443';
+  CheckEqual(U.Uri, 'https://127.0.0.1/endpoint');
+  U.Port := '444';
+  CheckEqual(U.Uri, 'https://127.0.0.1:444/endpoint');
+  // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
-  hc.ParseServer('one: value'#13#10'cookie: name=value');
+  hc.ParseServer(HDR1);
+  CheckEqual(hc.Name(0), 'name');
+  CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
-  CheckEqual(hc.Cookies[0].Name, 'name');
-  CheckEqual(hc.Cookies[0].Value, 'value');
+  CheckEqual(hc.GetCookie('name'), 'value');
+  CheckEqual(hc.Cookies[0].NameLen, 4);
+  CheckEqual(hc.Cookies[0].ValueLen, 5);
+  Check(hc.GetCookie('name2') <> 'value');
   hc.Clear;
   CheckEqual(length(hc.Cookies), 0);
-  hc.ParseServer('one: value'#13#10'cookie: name = value ');
+  hc.ParseServer(HDR2);
+  CheckEqual(hc.Name(0), 'name');
+  CheckEqual(hc.Value(0), 'value');
   CheckEqual(length(hc.Cookies), 1);
-  CheckEqual(hc.Cookies[0].Name, 'name');
-  CheckEqual(hc.Cookies[0].Value, 'value');
-  hc.ParseServer('cookie: name=value'#13#10 +
-    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
-    'cookone: value'#13#10);
+  CheckEqual(hc.GetCookie('name'), 'value');
+  CheckEqual(hc.Cookies[0].NameLen, 4);
+  CheckEqual(hc.Cookies[0].ValueLen, 5);
+  Check(hc.GetCookie('name2') <> 'value');
+  hc.ParseServer(HDR3);
   CheckEqual(length(hc.Cookies), 4);
   Check4;
-  hc.ParseServer('cookie: name=value'#10'toto: titi'#10#10 +
-    'Cookie: name 1=value1; name 2 = value 2; name3=value3'#13#10 +
-    'cookone: value'#13#10#13#10);
+  hc.ParseServer(HDR4);
   CheckEqual(length(hc.Cookies), 4, 'malformatted CRLF');
   Check4;
+  v := nil;
+  CheckEqual(CookieFromHeaders(HDR1, 'name', v), 5);
+  Check((v <> nil) and (v^ = 'v'));
+  CheckEqual(CookieFromHeaders(HDR1, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR1, 'name2', v), 0);
+  CheckEqual(CookieFromHeaders(HDR1, 'name3'), '');
+  v := nil;
+  CheckEqual(CookieFromHeaders(HDR2, 'name', v), 5);
+  Check((v <> nil) and (v^ = 'v'));
+  CheckEqual(CookieFromHeaders(HDR2, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR2, 'name3'), '');
+  CheckEqual(CookieFromHeaders(HDR3, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR3, 'name 1'), 'value1');
+  CheckEqual(CookieFromHeaders(HDR3, 'name 2'), 'value 2');
+  CheckEqual(CookieFromHeaders(HDR3, 'name3'), 'value3');
+  CheckEqual(CookieFromHeaders(HDR4, 'name'), 'value');
+  CheckEqual(CookieFromHeaders(HDR4, 'name 1'), 'value1');
+  CheckEqual(CookieFromHeaders(HDR4, 'name 2'), 'value 2');
+  CheckEqual(CookieFromHeaders(HDR4, 'name3'), 'value3');
+  // validate HttpRequestLength() and HttpRequestHash()
   h := HttpRequestLength(
     'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, l);
   check(h <> nil);

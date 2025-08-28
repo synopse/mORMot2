@@ -143,9 +143,10 @@ const
   WORLD_UPDATE_SQLN = 'update World as t set randomNumber = v.r from ' +
     '(SELECT unnest(?::integer[]), unnest(?::integer[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
-  FORTUNES_SQL      = 'select id,message from Fortune';
 
+  FORTUNES_SQL     = 'select id,message from Fortune';
   FORTUNES_MESSAGE = 'Additional fortune added at request time.';
+
   FORTUNES_TPL     = '<!DOCTYPE html>' +
                      '<html>' +
                      '<head><title>Fortunes</title></head>' +
@@ -159,6 +160,8 @@ const
                      '</body>' +
                      '</html>';
 
+threadvar
+  CurrentThreadGenerator: TLecuyer;
 
 function ComputeRandomWorld(gen: PLecuyer): integer; inline;
 begin
@@ -225,7 +228,7 @@ begin
     '8080', nil, nil, '', threadCount,
     5 * 60 * 1000,         // 5 minutes keep alive connections
     [hsoNoXPoweredHeader,  // not needed for a benchmark
-     hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
+     //hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
      hsoNoStats,           // disable low-level statistic counters
      //hsoThreadCpuAffinity, // worse scaling on multi-servers
      hsoThreadSmooting,    // seems a good option, even if not magical
@@ -285,7 +288,7 @@ begin
   f := TOrmFortune.Create;
   b := TRestBatch.Create(fStore.Orm, nil);
   try
-    gen := Lecuyer;
+    gen := @CurrentThreadGenerator;
     for i := 1 to WORLD_COUNT do
     begin
       w.IDValue := i;
@@ -325,7 +328,7 @@ var
 begin
   result := false;
   SetLength(res{%H-}, cnt);
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   conn := fDbPool.ThreadSafeConnection;
   {$ifdef USE_SQLITE3}
   for i := 0 to cnt - 1 do
@@ -421,7 +424,7 @@ function TRawAsyncServer.db(ctxt: THttpServerRequest): cardinal;
 var
   w: TOrmWorld;
 begin
-  w := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(Lecuyer));
+  w := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(@CurrentThreadGenerator));
   try
     result := ctxt.SetOutJson(w);
   finally
@@ -436,7 +439,7 @@ var
   gen: PLecuyer;
 begin
   SetLength(res, GetQueriesParamValue(ctxt, 'QUERIES='));
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   for i := 0 to length(res) - 1 do
     res[i] := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(gen));
   result := ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
@@ -450,7 +453,7 @@ var
   gen: PLecuyer;
 begin
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   for i := 0 to length(res) - 1 do
     res[i] := fOrmCache.Get(ComputeRandomWorld(gen));
   result := ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
@@ -496,7 +499,7 @@ begin
   b := TRestBatch.Create(fStore.ORM, TOrmWorld, {transrows=}0,
     [boExtendedJson, boNoModelEncoding, boPutNoCacheFlush]);
   try
-    gen := Lecuyer;
+    gen := @CurrentThreadGenerator;
     for i := 0 to length(res) - 1 do
     begin
       w := TOrmWorld.Create;
@@ -523,7 +526,7 @@ begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-  stmt.Bind(1, ComputeRandomWorld(Lecuyer));
+  stmt.Bind(1, ComputeRandomWorld(@CurrentThreadGenerator));
   stmt.ExecutePrepared;
   if stmt.Step then
   begin
@@ -550,7 +553,7 @@ var
   gen: PLecuyer;
 begin
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   for i := 0 to length(res) - 1 do
     res[i] := fRawCache[ComputeRandomWorld(gen) - 1];
   result := ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
@@ -617,7 +620,7 @@ begin
   if not getRawRandomWorlds(cnt, res) then
     exit;
   // generate new randoms
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   for i := 0 to cnt - 1 do
     res[i].randomNumber := ComputeRandomWorld(gen);
   if cnt > 20 then
@@ -656,7 +659,7 @@ function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
 begin
   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT) do
   try
-    Bind(1, ComputeRandomWorld(Lecuyer));
+    Bind(1, ComputeRandomWorld(@CurrentThreadGenerator));
     ExecuteAsync(ctxt.AsyncHandle, OnAsyncDb);
   finally
     UnLock;
@@ -735,7 +738,7 @@ begin
   select := async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT);
   opt := ASYNC_OPT - [asoForceConnectionFlush];
   n := count;
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   repeat
     select.Bind(1, ComputeRandomWorld(gen));
     dec(n);
@@ -779,7 +782,7 @@ var
   params: TIntegerDynArray;
   gen: PLecuyer;
 begin
-  gen := Lecuyer;
+  gen := @CurrentThreadGenerator;
   for i := 0 to count - 1 do
     res[i].randomNumber := ComputeRandomWorld(gen);
   SetLength(params, count);
@@ -876,13 +879,12 @@ begin
   else
     pinServers2Cores := false;   // pinning a single server won't make any sense
   SetLength(rawServers{%H-}, servers);
-  cpuIdx := -1; // do not pin to CPU by default
   for i := 0 to servers - 1 do
   begin
+    cpuIdx := -1; // do not pin to CPU by default
     if pinServers2Cores then
     begin
       k := i mod cpuCount;
-      cpuIdx := -1;
       // find real CPU index according to the cpuMask
       repeat
         inc(cpuIdx);

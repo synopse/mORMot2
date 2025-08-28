@@ -769,8 +769,6 @@ type
   published
     /// the Server name, UTF-8 encoded, e.g. 'mORMot2 (Linux)'
     // - will be served as "Server: ..." HTTP header
-    // - for THttpApiServer, when called from the main instance, will propagate
-    // the change to all cloned instances, and included in any HTTP API 2.0 log
     property ServerName: RawUtf8
       read fServerName write SetServerName;
     /// the associated process name
@@ -1073,6 +1071,11 @@ type
     fBlackListUriNextTix, fBlackListUriCrc: cardinal;
     fBlackListUri: RawUtf8;
     fProgressiveRequests: THttpPartials;
+    {$ifdef OSPOSIX} // keytab files is a POSIX/GSSAPI specific feature
+    fSspiKeyTab: TServerSspiKeyTab;
+    procedure SetKeyTab(const aKeyTab: TFileName);
+    function GetKeyTab: TFileName;
+    {$endif OSPOSIX}
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean; // fRoute or Request()
     function DoProcessBody(var Ctxt: THttpRequestContext;
@@ -1121,6 +1124,8 @@ type
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; ProcessOptions: THttpServerOptions = [];
       aLog: TSynLogClass = nil); reintroduce; virtual;
+    /// finalize this server instance
+    destructor Destroy; override;
     /// defines the WebSockets protocols to be used for this Server
     // - this default implementation will raise an exception
     // - returns the associated PWebSocketProcessSettings reference on success
@@ -1152,8 +1157,7 @@ type
     // events, including callbacks, as supported by OpenSSL
     // - will raise EHttpServer if the server did not start properly, e.g.
     // could not bind the port within the supplied time
-    procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
-      overload;
+    procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil); overload;
     /// ensure the server thread is bound as self-signed HTTPS server
     // - wrap InitNetTlsContextSelfSignedServer() and WaitStarted() with
     // some temporary key files, which are deleted once started
@@ -1291,6 +1295,11 @@ type
     // or from Banned.BlackList registered IPv4/CIDR
     property StatBanned: integer
       index grBanned read GetStat;
+    {$ifdef OSPOSIX}
+    /// the keytab file name propagated to all server threads (POSIX only)
+    property KeyTab: TFileName
+      read GetKeyTab write SetKeyTab;
+    {$endif OSPOSIX}
   end;
 
   /// meta-class of our THttpServerSocketGeneric classes
@@ -2040,7 +2049,18 @@ function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
 type
   THttpApiServer = class;
 
-  THttpApiServers = array of THttpApiServer;
+  /// processing sub-thread of THttpApiServer
+  THttpApiServerThread = class(TLoggedThread)
+  protected
+    fOwner: THttpApiServer;
+    fStarted: boolean;
+    // just redirect to fOwner.DoExecute
+    procedure DoExecute; override;
+  public
+    /// initialize this processing thread
+    constructor Create(aOwner: THttpApiServer); reintroduce;
+  end;
+  THttpApiServerThreads = array of THttpApiServerThread;
 
   /// HTTP server using fast http.sys kernel-mode server
   // - The HTTP Server API enables applications to communicate over HTTP without
@@ -2055,44 +2075,32 @@ type
   // applications running simultaneously.
   THttpApiServer = class(THttpServerGeneric)
   protected
-    /// the internal request queue
-    fReqQueue: THandle;
-    /// contain list of THttpApiServer cloned instances
-    fClones: THttpApiServers;
-    // if cloned, fOwner contains the main THttpApiServer instance
-    fOwner: THttpApiServer;
-    /// list of all registered URL
-    fRegisteredUnicodeUrl: TSynUnicodeDynArray;
+    fReqQueue: THandle;                         // the internal request queue
+    fThreads: THttpApiServerThreads;            // additional processing threads
+    fRegisteredUnicodeUrl: TSynUnicodeDynArray; // all registered URLs
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
-    fLogData: pointer;
-    fLogDataStorage: TBytes;
     fLoggingServiceName: RawUtf8;
-    fAuthenticationSchemes: THttpApiRequestAuthentications;
+    fRegisteredUrl: RawUtf8;
     fReceiveBufferSize: cardinal;
-    procedure SetReceiveBufferSize(Value: cardinal);
-    function GetRegisteredUrl: SynUnicode;
-    function GetCloned: boolean;
+    fAuthenticationSchemes: THttpApiRequestAuthentications; // 8-bit
+    fLogging: boolean;                                      // 8-bit
+    function GetRegisteredUrl: RawUtf8;
     function GetHttpQueueLength: cardinal; override;
     function GetConnectionsActive: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
+    function GetProperty(dest: PHTTP_QOS_SETTING_INFO; destlen: cardinal;
+      qos: HTTP_QOS_SETTING_TYPE): boolean;
+    procedure SetProperty(value: PHTTP_QOS_SETTING_INFO; valuelen: cardinal;
+      qos: HTTP_QOS_SETTING_TYPE; alsoForSession: boolean = false);
     function GetMaxBandwidth: cardinal;
     procedure SetMaxBandwidth(aValue: cardinal);
     function GetMaxConnections: cardinal;
     procedure SetMaxConnections(aValue: cardinal);
-    procedure SetOnTerminate(const Event: TOnNotifyThread); override;
     function GetApiVersion: RawUtf8; override;
-    function GetLogging: boolean;
-    procedure SetServerName(const aName: RawUtf8); override;
-    procedure SetOnRequest(const aRequest: TOnHttpServerRequest); override;
-    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
-    procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
-    procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
-    procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); override;
-    procedure SetMaximumAllowedContentLength(aMax: Int64); override;
-    procedure SetRemoteIPHeader(const aHeader: RawUtf8); override;
-    procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
-    procedure SetLoggingServiceName(const aName: RawUtf8);
+    function Check(Api: THttpApiFunction; Error: integer;
+      Level: TSynLogLevel = sllWarning): integer;
+    procedure Ensure(Api: THttpApiFunction; Error: integer);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
     /// server main loop - don't change directly
@@ -2102,7 +2110,6 @@ type
     /// retrieve flags for SendHttpResponse
    // - if response content type is not STATICFILE_CONTENT_TYPE
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; virtual;
-    /// free resources (for not cloned server)
     procedure DestroyMainThread; virtual;
   public
     /// initialize the HTTP Service
@@ -2116,18 +2123,13 @@ type
     constructor Create(QueueName: SynUnicode = '';
       const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;
       const ProcessName: RawUtf8 = ''; ProcessOptions: THttpServerOptions = [];
-      aLog: TSynLogClass = nil); reintroduce;
-    /// create a HTTP/1.1 processing clone from the main thread
-    // - do not use directly - is called during thread pool creation
-    constructor CreateClone(From: THttpApiServer); virtual;
+      aLog: TSynLogClass = nil; ServerThreadPoolCount: integer = 32); reintroduce;
+    /// ensure the HTTP server threads are actually started
+    // - note that http.sys requires global system-wide registration for its
+    // TLS/https settings
+    function WaitStarted(Seconds: cardinal = 30): boolean;
     /// release all associated memory and handles
     destructor Destroy; override;
-    /// will clone this thread into multiple other threads
-    // - could speed up the process on multi-core CPU
-    // - will work only if the OnProcess property was set (this is the case
-    // e.g. in TRestHttpServer.Create() constructor)
-    // - maximum value is 256 - higher should not be worth it
-    procedure Clone(ChildThreadCount: integer);
     /// register the URLs to Listen On
     // - e.g. AddUrl('root','888')
     // - aDomainName could be either a fully qualified case-insensitive domain
@@ -2165,18 +2167,15 @@ type
     // - if OnlyDelete is true, will delete but won't add the new authorization;
     // in this case, any error message at deletion will be returned
     class function AddUrlAuthorize(const aRoot, aPort: RawUtf8; Https: boolean = false;
-      const aDomainName: RawUtf8 = '*'; OnlyDelete: boolean = false): string;
-    /// will register a compression algorithm
-    // - overridden method which will handle any cloned instances
-    procedure RegisterCompress(aFunction: THttpSocketCompress;
-      aCompressMinSize: integer = 1024; aPriority: integer = 10); override;
-    /// access to the internal THttpApiServer list cloned by this main instance
-    // - as created by Clone() method
-    property Clones: THttpApiServers
-      read fClones;
-  public { HTTP API 2.0 methods and properties }
+      const aDomainName: RawUtf8 = '*'; OnlyDelete: boolean = false): RawUtf8;
+    /// access to the additional processing threads
+    property Threads: THttpApiServerThreads
+      read fThreads;
+  public
+    { HTTP API 2.0 methods and properties }
     /// can be used to check if the HTTP API 2.0 is available
-    function HasApi2: boolean;
+    class function HasApi2: boolean;
+      {$ifdef HASINLINE} inline; static; {$endif}
     /// enable HTTP API 2.0 advanced timeout settings
     // - all those settings are set for the current URL group
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
@@ -2206,8 +2205,6 @@ type
     // so you should better test the availability of the method first:
     // ! if aServer.HasApi2 then
     // !   LogStart(....);
-    // - this method won't do anything on the cloned instances, but the main
-    // instance logging state will be replicated to all cloned instances
     // - you can select the output folder and the expected logging layout
     // - aSoftwareName will set the optional W3C-only software name string
     // - aRolloverSize will be used only when aRolloverType is hlrSize
@@ -2219,8 +2216,6 @@ type
       aLogFields: THttpApiLogFields = [hlfDate..hlfSubStatus];
       aFlags: THttpApiLoggingFlags = [hlfUseUtf8Conversion]);
     /// disable HTTP API 2.0 logging
-    // - this method won't do anything on the cloned instances, but the main
-    // instance logging state will be replicated to all cloned instances
     procedure LogStop;
     /// enable HTTP API 2.0 server-side authentication
     // - once enabled, the client sends an unauthenticated request: it is up to
@@ -2246,13 +2241,11 @@ type
     /// read-only access to check if the HTTP API 2.0 logging is enabled
     // - use LogStart/LogStop methods to change this property value
     property Logging: boolean
-      read GetLogging;
+      read fLogging;
     /// the current HTTP API 2.0 logging Service name
     // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUtf8Conversion])
-    // - this value is dedicated to one instance, so the main instance won't
-    // propagate the change to all cloned instances
     property LoggingServiceName: RawUtf8
-      read fLoggingServiceName write SetLoggingServiceName;
+      read fLoggingServiceName write fLoggingServiceName;
     /// read-only access to the low-level HTTP API 2.0 Session ID
     property ServerSessionID: HTTP_SERVER_SESSION_ID
       read fServerSessionID;
@@ -2265,13 +2258,10 @@ type
     // (406) from client, corresponding to an ERROR_NO_SYSTEM_RESOURCES (1450)
     // exception on server side, when uploading huge data content
     property ReceiveBufferSize: cardinal
-      read fReceiveBufferSize write SetReceiveBufferSize;
+      read fReceiveBufferSize write fReceiveBufferSize;
   published
-    /// TRUE if this instance is in fact a cloned instance for the thread pool
-    property Cloned: boolean
-      read GetCloned;
-    /// return the list of registered URL on this server instance
-    property RegisteredUrl: SynUnicode
+    /// return the list of registered URL on this server instance as a CSV text
+    property RegisteredUrl: RawUtf8
       read GetRegisteredUrl;
     /// the maximum allowed bandwidth rate in bytes per second (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited bandwidth
@@ -2466,6 +2456,7 @@ type
   // and the frames will be received in asynchronous mode
   THttpApiWebSocketServer = class(THttpApiServer)
   protected
+    fOwnedProtocolsSafe: TLightLock;
     fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
     fGuard: TSynWebSocketGuard;
     fLastConnection: PHttpApiWebSocketConnection;
@@ -2475,10 +2466,7 @@ type
     fSendOverlaped: TOverlapped;
     fServiceOverlaped: TOverlapped;
     fOnServiceMessage: TThreadMethod;
-    fOwnedProtocolsSafe: TLightLock;
     fOwnedProtocols: THttpApiWebSocketServerProtocolDynArray;
-    procedure SetOnWSThreadTerminate(const Value: TOnNotifyThread);
-    procedure SetOnWSThreadStart(const Value: TOnNotifyThread);
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); override;
@@ -2494,9 +2482,6 @@ type
       const aOnWSThreadStart: TOnNotifyThread = nil;
       const aOnWSThreadTerminate: TOnNotifyThread = nil;
       ProcessOptions: THttpServerOptions = []); reintroduce;
-    /// create a WebSockets processing clone from the main thread
-    // - do not use directly - is called during thread pool creation
-    constructor CreateClone(From: THttpApiServer); override;
     /// prepare the process for a given THttpApiWebSocketServerProtocol
     procedure RegisterProtocol(const aName: RawUtf8; aManualFragmentManagement: boolean;
       const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
@@ -2522,10 +2507,10 @@ type
     function GetRegisteredProtocols: THttpApiWebSocketServerProtocolDynArray;
     /// event called when the processing thread starts
     property OnWSThreadStart: TOnNotifyThread
-      read fOnWSThreadStart write SetOnWSThreadStart;
+      read fOnWSThreadStart write fOnWSThreadStart;
     /// event called when the processing thread termintes
     property OnWSThreadTerminate: TOnNotifyThread
-      read fOnWSThreadTerminate write SetOnWSThreadTerminate;
+      read fOnWSThreadTerminate write fOnWSThreadTerminate;
     /// send a "service" message to a WebSocketServer to wake up a WebSocket thread
     // - can be called from any thread
     // - when a webSocket thread receives such a message it will call onServiceMessage
@@ -2603,8 +2588,8 @@ begin
     SleepHiRes(10);
     {$endif OSWINDOWS}
     // on binding error, raise exception before the thread is actually created
-    raise EUdpServer.Create('%s.Create binding error on %s:%s',
-      [ClassNameShort(self)^, BindAddress, BindPort], res);
+    raise EUdpServer.Create('Create binding error on %s:%s', self,
+      [BindAddress, BindPort], res);
   end;
   AfterBind;
 end;
@@ -3243,14 +3228,12 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   procedure ProcessStaticFile;
   var
     fn: TFileName;
-    progsizeHeader: RawUtf8; // for rfProgressiveStatic mode
     fsiz: Int64;
   begin
     ExtractOutContentType;
     fn := Utf8ToString(OutContent); // safer than Utf8ToFileName() here
     OutContent := '';
-    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
-    SetInt64(pointer(progsizeHeader), Context.ContentLength); // expected size
+    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, nil, @Context.ContentLength);
     if Context.ContentLength <> 0 then
       // STATICFILE_PROGSIZE: file is not fully available: wait for sending
       if ((not (rfWantRange in Context.ResponseFlags)) or
@@ -3335,10 +3318,10 @@ begin
   // append (and sanitize CRLF) custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
-    Context.HeadAddCustom(P, P + length(OutCustomHeaders));
+    Context.HeadAddCustom(P, P + PStrLen(P - _STRLEN)^);
   P := pointer(Context.ResponseHeaders);
   if P <> nil then // e.g. 'WWW-Authenticate: #####'#13#10
-    Context.HeadAddCustom(P, P + length(Context.ResponseHeaders));
+    Context.HeadAddCustom(P, P + PStrLen(P - _STRLEN)^);
   // generic headers
   if not (hhServer in Context.HeadCustom) then
     h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
@@ -3366,15 +3349,18 @@ function THttpServerRequest.TempJsonWriter(
   var temp: TTextWriterStackBuffer): TJsonWriter;
 begin
   if fTempWriter = nil then
-    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true)
+  begin
+    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true);
+    fTempWriter.FlushToStreamNoAutoResize := true;
+  end
   else
-    fTempWriter.CancelAllWith(temp);
+    fTempWriter.CancelAllWith(temp); // reuse during THttpServerRequest lifetime
   result := fTempWriter;
 end;
 
 function THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo): cardinal;
 var
-  temp: TTextWriterStackBuffer;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   TempJsonWriter(temp).AddTypedJson(Value, TypeInfo, []);
   fTempWriter.SetText(RawUtf8(fOutContent));
@@ -3415,10 +3401,10 @@ begin
     Dest.InitJson(fInContent, JSON_FAST) // try decoding from JSON body
   else
     Dest.InitFromUrl(p + 1, JSON_FAST);  // parameters from /uri?n1=v1&n2=v2
-  Dest.AddValueFromText('url', Split(fUrl, '?'));
-  Dest.AddValueFromText('method', fMethod);
+  Dest.AddValueText('url', Split(fUrl, '?'));
+  Dest.AddValueText('method', fMethod);
   if fInContent <> '' then
-    Dest.AddValueFromText('content', fInContent);
+    Dest.AddValueText('content', fInContent);
 end;
 
 {$ifdef USEWININET}
@@ -3428,8 +3414,8 @@ begin
   if fHttpApiRequest = nil then
     result := ''
   else
-    // fHttpApiRequest^.CookedUrl.FullUrlLength is in bytes -> use ending #0
-    result := fHttpApiRequest^.CookedUrl.pFullUrl;
+    SetString(result, fHttpApiRequest^.CookedUrl.pFullUrl,
+      fHttpApiRequest^.CookedUrl.FullUrlLength shr 1); // length in bytes
 end;
 
 {$endif USEWININET}
@@ -3445,17 +3431,13 @@ begin
   SetServerName('mORMot2 (' + OS_TEXT + ')');
   if hsoEnableLogging in fOptions then
   begin
-    if fLogger = nil then // <> nil from THttpApiServer.CreateClone
-    begin
-      fLogger := THttpLogger.Create;
-      fLogger.Parse(LOGFORMAT_COMBINED); // default nginx-like format
-    end;
-    fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
+    fLogger := THttpLogger.Create;
+    fLogger.Parse(LOGFORMAT_COMBINED);   // default nginx-like format
+    fOnAfterResponse := fLogger.Append;  // redirect requests to the logger
   end;
   if fOptions * [hsoTelemetryCsv, hsoTelemetryJson] <> [] then
   begin
-    if fAnalyzer = nil then // <> nil from THttpApiServer.CreateClone
-      fAnalyzer := THttpAnalyzer.Create; // no suspend file involved
+    fAnalyzer := THttpAnalyzer.Create; // no suspend file involved
     fAnalyzer.OnContinue := fLogger;
     fOnAfterResponse := fAnalyzer.Append;
     if hsoTelemetryCsv in fOptions then
@@ -4140,6 +4122,14 @@ begin
   inherited Create(OnStart, OnStop, ProcessName, ProcessOptions, aLog);
 end;
 
+destructor THttpServerSocketGeneric.Destroy;
+begin
+  inherited Destroy;
+  {$ifdef OSPOSIX}
+  FreeAndNil(fSspiKeyTab);
+  {$endif OSPOSIX}
+end;
+
 function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
 begin
   result := SocketApiVersion;
@@ -4180,9 +4170,9 @@ end;
 procedure THttpServerSocketGeneric.WaitStarted(
   Seconds: integer; TLS: PNetTlsContext);
 var
-  endtix: Int64;
+  tix32: cardinal;
 begin
-  endtix := mormot.core.os.GetTickCount64 + Seconds shl MilliSecsPerSecShl;
+  tix32 := GetTickSec + cardinal(Seconds);
   repeat
     if Terminated then
       exit;
@@ -4194,20 +4184,23 @@ begin
           [self, fExecuteMessage]);
     end;
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > endtix then
+    if GetTickSec > tix32 then
       EHttpServer.RaiseUtf8('%.WaitStarted timeout % after % seconds [%]',
         [self, ToText(GetExecuteState)^, Seconds, fExecuteMessage]);
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (TLS <> nil) and(
-      (TLS^.CertificateFile <> '') or
+     (TLS <> nil) and
+     ((TLS^.CertificateFile <> '') or
       (TLS^.CertificateRaw <> nil) or
       (TLS^.CertificateBin <> '')) and
      ((fSock = nil) or
       not fSock.TLS.Enabled) then
   begin
-    if fSock = nil then
+    fLogClass.Add.Log(sllTrace, 'WaitStarted TLS setup % %',
+      [TLS^.CertificateFile, TLS^.CACertificatesFile], self);
+    while (fSock = nil) and
+          (GetTickSec <= tix32) do
       SleepHiRes(5); // paranoid on some servers which propagate the pointer
     if (fSock <> nil) and
        not fSock.TLS.Enabled then // call InitializeTlsAfterBind once
@@ -4217,6 +4210,7 @@ begin
       SleepHiRes(1); // let some warmup happen
     end;
   end;
+  fLogClass.Add.Log(sllTrace, 'WaitStarted done', self);
 end;
 
 procedure THttpServerSocketGeneric.WaitStartedHttps(Seconds: integer;
@@ -4293,13 +4287,13 @@ begin
     result := true; // success
   except
     on E: Exception do
-      begin
-        // intercept and return Internal Server Error 500 on any fatal exception
-        Ctxt.RespStatus := HTTP_SERVERERROR;
-        Ctxt.SetErrorMessage('%: %', [E, E.Message]);
-        IncStat(grException);
-        // will keep soClose as result to shutdown the connection
-      end;
+    begin
+      // intercept and return Internal Server Error 500 on any fatal exception
+      Ctxt.RespStatus := HTTP_SERVERERROR;
+      Ctxt.SetErrorMessage('%: %', [E, E.Message]);
+      IncStat(grException);
+      // will keep soClose as result to shutdown the connection
+    end;
   end;
 end;
 
@@ -4392,7 +4386,8 @@ begin
     exit;
   fSafe.Lock; // load certificates once from first connected thread
   try
-    fSock.DoTlsAfter(cstaBind);  // validate certificates now
+    if not fSock.TLS.Enabled then
+      fSock.DoTlsAfter(cstaBind);  // validate certificates now
   finally
     fSafe.UnLock;
   end;
@@ -4448,7 +4443,7 @@ begin
   if list = '' then
   begin
     log.Log(sllTrace, 'RefreshBlackListUriExecute will retry soon enough', self);
-    tix32 := mormot.core.os.GetTickCount64 div 1000 + SecsPerMin * 30;
+    tix32 := GetTickSec + SecsPerMin * 30;
     if tix32 < fBlackListUriNextTix then
       fBlackListUriNextTix := tix32; // retry at least twice an hour
     exit;
@@ -4462,8 +4457,7 @@ begin
   fBlackListUriCrc := crc;
   ban.Safe.Lock; // protect ban.BlackList access
   try
-    ban.BlackList.Clear;
-    n := ban.BlackList.AddFromText(list);
+    n := ban.BlackList.LoadFrom(list);
   finally
     ban.Safe.UnLock;
   end;
@@ -4566,24 +4560,57 @@ begin
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
     hraNegotiate:
-      result := 'WWW-Authenticate: Negotiate'#13#10; // with no NTLM support
+      result := SECPKGNAMEHTTPWWWAUTHENTICATE + #13#10; // with no NTLM support
   end;
 end;
+
+{$ifdef OSPOSIX}
+procedure THttpServerSocketGeneric.SetKeyTab(const aKeyTab: TFileName);
+var
+  res: RawUtf8;
+begin
+  if FileIsKeyTab(aKeyTab) then
+    if InitializeDomainAuth then
+    begin
+      fSafe.Lock;
+      if fSspiKeyTab = nil then
+        fSspiKeyTab := TServerSspiKeyTab.Create;
+      fSafe.UnLock;
+      if fSspiKeyTab.SetKeyTab(aKeyTab) then
+        res := 'ok'
+      else
+        res := 'SetKeyTab failed';
+    end
+    else
+      res := 'GSSAPI not available'
+  else
+    res := 'invalid file';
+  fLogClass.Add.Log(LOG_DEBUGERROR[res <> 'ok'],
+    'SetKeyTab(%): %', [aKeyTab, res], self);
+end;
+
+function THttpServerSocketGeneric.GetKeyTab: TFileName;
+begin
+  result := '';
+  if fSspiKeyTab <> nil then
+    result := fSspiKeyTab.KeyTab;
+end;
+{$endif OSPOSIX}
 
 function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
   Opaque: Int64): TAuthServerResult;
 var
-  auth, authend: PUtf8Char;
+  auth, b64, b64end: PUtf8Char;
   user, pass, url: RawUtf8;
   bin, bout: RawByteString;
   ctx: TSecContext;
 begin
   // parse the 'Authorization: basic/digest/negotiate <magic>' header
+  result := asrRejected;
+  auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
+  if auth = nil then
+    exit;
   try
-    result := asrRejected;
-    auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
-    if auth = nil then
-      exit;
     case fAuthorize of
       hraBasic:
         if IdemPChar(auth, 'BASIC ') and
@@ -4614,33 +4641,43 @@ begin
         // - see TRestServerAuthenticationSspi.Auth() for NTLM / three-way
         if IdemPChar(auth, 'NEGOTIATE ') then
         begin
-          inc(auth, 10); // parse 'Authorization: Negotiate <base64 encoding>'
-          authend := PosChar(auth, #13);
-          if (authend = nil) or
-             not Base64ToBin(PAnsiChar(auth), authend - auth, bin) or
-             IdemPChar(pointer(bin), 'NTLM') then // two-way Kerberos only
+          b64 := auth + 10; // parse 'Authorization: Negotiate <base64 encoding>'
+          b64end := PosChar(b64, #13);
+          if (b64end = nil) or
+             not Base64ToBin(PAnsiChar(b64), b64end - auth, bin) or
+             ServerSspiDataNtlm(bin) then // two-way Kerberos only
             exit;
+          {$ifdef OSPOSIX}
+          if Assigned(fSspiKeyTab) then
+            fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
+          {$endif OSPOSIX}
           InvalidateSecContext(ctx);
           try
             if ServerSspiAuth(ctx, bin, bout) then
             begin
               ServerSspiAuthUser(ctx, user);
-              Http.ResponseHeaders := 'WWW-Authenticate: Negotiate ' +
-                mormot.core.buffers.BinToBase64(bout) + #13#10;
+              Http.ResponseHeaders := BinToBase64(bout,
+                SECPKGNAMEHTTPWWWAUTHENTICATE, #13#10, {magic=}false);
               result := asrMatch;
             end;
           finally
             FreeSecContext(ctx);
           end;
-        end
+        end;
     else
       exit;
     end;
     if result = asrMatch then
       Http.BearerToken := user; // see THttpServerRequestAbstract.Prepare
   except
-    result := asrRejected; // any processing error should silently fail the auth
-  end
+    on E: Exception do
+    begin
+      fLogClass.Add.Log(sllTrace, 'Authorization: % from %', [PClass(E)^, auth], self);
+      result := asrRejected; // any processing error should silently fail the auth
+    end;
+  end;
+  fLogClass.Add.Log(sllTrace, 'Authorization(%): % %',
+    [ToText(fAuthorize)^, ToText(result)^, user], self);
 end;
 
 function THttpServerSocketGeneric.ComputeRejectBody(
@@ -4789,7 +4826,7 @@ end;
 procedure THttpServer.DoCallbacks(tix64: Int64; sec32: integer);
 var
   i: integer;
-begin
+begin // is called at most every second, but maybe up to 5 seconds delay
   if Assigned(fOnAcceptIdle) then
     fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
   if Assigned(fLogger) then
@@ -4811,6 +4848,11 @@ begin
   if (fBlackListUriNextTix <> 0) and
      (cardinal(sec32) >= fBlackListUriNextTix) then
     RefreshBlackListUri(sec32);
+  {$ifdef OSPOSIX}
+  if Assigned(fSspiKeyTab) and
+     fSspiKeyTab.TryRefresh(sec32) then
+    fLogClass.Add.Log(sllDebug, 'DoCallbacks: refreshed %', [fSspiKeyTab], self);
+  {$endif OSPOSIX}
 end;
 
 procedure THttpServer.DoExecute;
@@ -4922,7 +4964,7 @@ begin
           on E: Exception do
             // do not stop thread on TLS or socket error
             if Assigned(fSock.OnLog) then
-              fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
+              fSock.OnLog(sllTrace, 'Execute: % [%]', [PClass(E)^, E.Message], self);
         end
       else if Assigned(fThreadPool) then
       begin
@@ -5208,7 +5250,8 @@ var
 begin
   try
     // use SockIn with 1KB buffer if not already initialized: 2x faster
-    CreateSockIn;
+    if SockIn = nil then
+      CreateSockIn;
     // abort now with no exception if socket is obviously broken
     result := grClosed;
     if fServer <> nil then
@@ -5260,7 +5303,7 @@ begin
     end;
     if fServer <> nil then
     begin
-      // allow THttpServer.OnHeaderParsed low-level callback
+      // allow very early THttpServer.OnHeaderParsed low-level callback
       if Assigned(fServer.fOnHeaderParsed) then
       begin
         result := fServer.fOnHeaderParsed(self);
@@ -5396,7 +5439,7 @@ begin
   fServer.fInternalHttpServerRespList.Add(self);
   fConnectionID := aServerSock.fRemoteConnectionID;
   FreeOnTerminate := true;
-  inherited Create(false);
+  inherited Create({suspended=}false);
 end;
 
 procedure THttpServerResp.Shutdown;
@@ -5712,7 +5755,7 @@ begin
   server := THttpServerEphemeral.Create(
     aPort, aResponse, @aParams, aLogClass, aMethods, aOptions);
   try
-    result := server.fReceived.WaitForSafe(aTimeOutSecs shl MilliSecsPerSecShl);
+    result := server.fReceived.WaitForSafe(aTimeOutSecs * MilliSecsPerSec);
     if aLogClass <> nil then
       aLogClass.Add.Log(sllDebug, 'EphemeralHttpServer(%)=% %',
         [aPort, BOOL_STR[result], variant(aParams)], server);
@@ -5768,7 +5811,7 @@ var
   n: cardinal;
 begin
   FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
-  SharedRandom.Fill(@aMsg.Padding, SizeOf(aMsg.Padding)); // Lecuyer is enough
+  SharedRandom.Fill(@aMsg.Padding, SizeOf(aMsg.Padding)); // TLecuyer is enough
   if aSeq = 0 then
     aSeq := InterlockedIncrement(fFrameSeq);
   aMsg.Seq := aSeq;
@@ -6027,7 +6070,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  tix := GetTickCount64 shr MilliSecsPerSecShl; // call OS API every second
+  tix := GetTickSec;
   if tix = fLastNetworkTix then
     exit;
   fLastNetworkTix := tix;
@@ -6672,7 +6715,7 @@ begin
     // similar to git - aFileName[1..2] is the algorithm, so hash starts at [3]
     result := MakePath([fPermFilesPath, aFileName[3]]);
     if lfnEnsureDirectoryExists in aFlags then
-      result := EnsureDirectoryExists(result);
+      result := EnsureDirectoryExistsNoExpand(result);
     result := result + aFileName;
   end
   else
@@ -6948,7 +6991,7 @@ begin
   if (pcoBroadcastNotAlone in fSettings.Options) or
      (waoBroadcastNotAlone in Params.AlternateOptions) then
   begin
-    tix := (GetTickCount64 shr MilliSecsPerSecShl) + 1; // 1024 ms resolution
+    tix := GetTickSec + 1;
     if fBroadcastTix = tix then  // disable broadcasting within up to 1s delay
       exit;
   end;
@@ -7034,9 +7077,9 @@ begin
     begin
       // pcfBearerDirect* for pcoHttpDirect mode: /https/microsoft.com/...
       if (aRemoteIp <> '') and
-         not (IsLocalHost(pointer(aRemoteIP)) or
-              (aRemoteIP = fMac.IP)) then
-        include(err, eDirectIp);
+         (PCardinal(aRemoteIP)^ <> HOST_127) and
+         (aRemoteIP <> fMac.IP) then
+        include(err, eDirectIp); // only accepted from local
       if not Check(BearerDecode(aBearerToken, pcfRequest, msg),
                'OnBeforeBody Direct', msg) then
         include(err, eDirectDecode)
@@ -7745,7 +7788,7 @@ begin
   with msg do
     FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
       [ToText(Kind)^, CardinalToHexShort(Seq), OS_INITIAL[Os.os],
-       OsvToTextShorter(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
+       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
        IP4ToShort(@IP4), IP4ToShort(@DestIP4),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
@@ -7822,7 +7865,31 @@ end;
 
 { **************** THttpApiServer HTTP/1.1 Server Over Windows http.sys Module }
 
+{ THttpApiServerThread }
+
+procedure THttpApiServerThread.DoExecute;
+begin
+  if fOwner = nil then
+    exit;
+  fStarted := true;
+  fOwner.DoExecute; // this main method is re-entrant by design
+end;
+
+constructor THttpApiServerThread.Create(aOwner: THttpApiServer);
+begin
+  fOwner := aOwner;
+  inherited Create({suspended=}false, aOwner.fOnThreadStart,
+    aOwner.fOnThreadTerminate, aOwner.fLogClass,
+    Make([aOwner.ProcessName, ' #', length(aOwner.fThreads) + 1]));
+end;
+
+
 { THttpApiServer }
+
+class function THttpApiServer.HasApi2: boolean;
+begin
+  result := Http.Version.MajorVersion >= 2;
+end;
 
 function THttpApiServer.AddUrl(const aRoot, aPort: RawUtf8; Https: boolean;
   const aDomainName: RawUtf8; aRegisterUri: boolean; aContext: Int64): integer;
@@ -7840,10 +7907,12 @@ begin
     exit; // invalid parameters
   if aRegisterUri then
     AddUrlAuthorize(aRoot, aPort, Https, aDomainName);
-  if Http.Version.MajorVersion > 1 then
-    result := Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext)
+  if HasApi2 then
+    result := Check(hAddUrlToUrlGroup,
+      Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext))
   else
-    result := Http.AddUrl(fReqQueue, pointer(uri));
+    result := Check(hAddUrl,
+      Http.AddUrl(fReqQueue, pointer(uri)));
   if result <> NO_ERROR then
     exit;
   n := length(fRegisteredUnicodeUrl);
@@ -7869,10 +7938,12 @@ begin
   for i := 0 to n do
     if fRegisteredUnicodeUrl[i] = uri then
     begin
-      if Http.Version.MajorVersion > 1 then
-        result := Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0)
+      if HasApi2 then
+        result := Check(hRemoveUrlFromUrlGroup,
+          Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0))
       else
-        result := Http.RemoveUrl(fReqQueue, pointer(uri));
+        result := Check(hRemoveUrl,
+          Http.RemoveUrl(fReqQueue, pointer(uri)));
       if result <> NO_ERROR then
         exit; // shall be handled by caller
       for j := i to n - 1 do
@@ -7883,71 +7954,9 @@ begin
 end;
 
 class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawUtf8;
-  Https: boolean; const aDomainName: RawUtf8; OnlyDelete: boolean): string;
-const
-  /// will allow AddUrl() registration to everyone
-  // - 'GA' (GENERIC_ALL) to grant all access
-  // - 'S-1-1-0'	defines a group that includes all users
-  HTTPADDURLSECDESC: PWideChar = 'D:(A;;GA;;;S-1-1-0)';
-var
-  prefix: SynUnicode;
-  err: HRESULT;
-  cfg: HTTP_SERVICE_CONFIG_URLACL_SET;
-begin
-  try
-    HttpApiInitialize;
-    prefix := RegURL(aRoot, aPort, Https, aDomainName);
-    if prefix = '' then
-      result := 'Invalid parameters'
-    else
-    begin
-      EHttpApiServer.RaiseOnError(hInitialize,
-        Http.Initialize(Http.Version, HTTP_INITIALIZE_CONFIG));
-      try
-        FillcharFast(cfg, SizeOf(cfg), 0);
-        cfg.KeyDesc.pUrlPrefix := pointer(prefix);
-        // first delete any existing information
-        err := Http.DeleteServiceConfiguration(
-          0, hscUrlAclInfo, @cfg, SizeOf(cfg));
-        // then add authorization rule
-        if not OnlyDelete then
-        begin
-          cfg.KeyDesc.pUrlPrefix := pointer(prefix);
-          cfg.ParamDesc.pStringSecurityDescriptor := HTTPADDURLSECDESC;
-          err := Http.SetServiceConfiguration(
-            0, hscUrlAclInfo, @cfg, SizeOf(cfg));
-        end;
-        if (err <> NO_ERROR) and
-           (err <> ERROR_ALREADY_EXISTS) then
-          raise EHttpApiServer.Create(hSetServiceConfiguration, err);
-        result := ''; // success
-      finally
-        Http.Terminate(HTTP_INITIALIZE_CONFIG);
-      end;
-    end;
-  except
-    on E: Exception do
-      result := E.Message;
-  end;
-end;
-
-type
-  THttpApiServerClass = class of THttpApiServer;
-
-procedure THttpApiServer.Clone(ChildThreadCount: integer);
-var
-  i: PtrInt;
-begin
-  if (fReqQueue = 0) or
-     (not Assigned(OnRequest)) or
-     (ChildThreadCount <= 0) or
-     (fClones <> nil) then
-    exit; // nothing to clone (need a queue and a process event)
-  if ChildThreadCount > 256 then
-    ChildThreadCount := 256; // not worth adding
-  SetLength(fClones, ChildThreadCount);
-  for i := 0 to ChildThreadCount - 1 do
-    fClones[i] := THttpApiServerClass(PClass(self)^).CreateClone(self);
+  Https: boolean; const aDomainName: RawUtf8; OnlyDelete: boolean): RawUtf8;
+begin // just redirect to our wrapper in mormot.lib.winhttp
+  result := HttpApiAuthorize(aRoot, aPort, Https, aDomainName, OnlyDelete);
 end;
 
 function THttpApiServer.GetApiVersion: RawUtf8;
@@ -7956,67 +7965,96 @@ begin
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
 end;
 
+function THttpApiServer.Check(Api: THttpApiFunction; Error: integer;
+  Level: TSynLogLevel): integer;
+var
+  msg: RawUtf8;
+begin
+  result := Error;
+  if Assigned(fLogClass) and
+     not HttpApiSucceed(Api, msg, Error) then
+    fLogClass.Add.Log(Level, msg, self);
+end;
+
+procedure THttpApiServer.Ensure(Api: THttpApiFunction; Error: integer);
+begin
+  if Assigned(fLogClass) then
+    fLogClass.Add.Log(sllTrace, '%=%', [HttpApiFunction[Api], Error], self);
+  EHttpApiServer.RaiseOnError(Api, Error);
+end;
+
 constructor THttpApiServer.Create(QueueName: SynUnicode;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-  ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
+  ProcessOptions: THttpServerOptions; aLog: TSynLogClass;
+  ServerThreadPoolCount: integer);
 var
+  log: ISynLog;
   binding: HTTP_BINDING_INFO;
+  i: PtrInt;
 begin
-  SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA)); // should be done 1st
+  aLog.EnterLocal(log, 'Create(%) processname=% threads=%',
+    [QueueName, ProcessName, ServerThreadPoolCount], self);
+  // initialize this thread in suspended mode
   inherited Create(OnStart, OnStop, ProcessName,
-    ProcessOptions + [hsoCreateSuspended], aLog);
-  fOptions := ProcessOptions;
+    ProcessOptions + [hsoCreateSuspended] - [hsoThreadCpuAffinity,
+      hsoThreadSocketAffinity, hsoReusePort, hsoThreadSmooting], aLog);
+  // create the Request Queue
   HttpApiInitialize; // will raise an exception in case of failure
-  EHttpApiServer.RaiseOnError(hInitialize,
+  if Assigned(log) then
+    log.Log(sllHttp, 'Create: new % handle', [GetApiVersion], self);
+  Ensure(hInitialize,
     Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
-  if Http.Version.MajorVersion > 1 then
+  if HasApi2 then
   begin
-    EHttpApiServer.RaiseOnError(hCreateServerSession,
+    Ensure(hCreateServerSession,
       Http.CreateServerSession(Http.Version, fServerSessionID));
-    EHttpApiServer.RaiseOnError(hCreateUrlGroup,
+    Ensure(hCreateUrlGroup,
       Http.CreateUrlGroup(fServerSessionID, fUrlGroupID));
     if QueueName = '' then
       Utf8ToSynUnicode(Int64ToUtf8(fServerSessionID), QueueName);
-    EHttpApiServer.RaiseOnError(hCreateRequestQueue,
+    Ensure(hCreateRequestQueue,
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
     binding.Flags := 1;
     binding.RequestQueueHandle := fReqQueue;
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerBindingProperty,
-        @binding, SizeOf(binding)));
+    Ensure(hSetUrlGroupProperty,
+      Http.SetUrlGroupProperty(fUrlGroupID,
+        HttpServerBindingProperty, @binding, SizeOf(binding)));
   end
   else
-    EHttpApiServer.RaiseOnError(hCreateHttpHandle,
+    Ensure(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
+  // start the other processing threads
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
-  if Suspended then
+  if Assigned(log) then
+    log.Log(sllTrace, 'Create: start threads', self);
+  for i := 2 to ServerThreadPoolCount do
+    ObjArrayAdd(fThreads, THttpApiServerThread.Create(self));
+  // eventually start the main thread
+  Append(fProcessName, [' #', ServerThreadPoolCount]);
+  if not (hsoCreateSuspended in ProcessOptions) then
+  begin
     Suspended := false;
+    exclude(fOptions, hsoCreateSuspended);
+  end;
 end;
 
-constructor THttpApiServer.CreateClone(From: THttpApiServer);
+function THttpApiServer.WaitStarted(Seconds: cardinal): boolean;
+var
+  tix32: cardinal;
+  i: PtrInt;
 begin
-  SetLength(fLogDataStorage, SizeOf(HTTP_LOG_FIELDS_DATA));
-  fOwner := From;
-  fReqQueue := From.fReqQueue;
-  fOnRequest := From.fOnRequest;
-  fOnBeforeBody := From.fOnBeforeBody;
-  fOnBeforeRequest := From.fOnBeforeRequest;
-  fOnAfterRequest := From.fOnAfterRequest;
-  fOnAfterResponse := From.fOnAfterResponse;
-  fMaximumAllowedContentLength := From.fMaximumAllowedContentLength;
-  fCallbackSendDelay := From.fCallbackSendDelay;
-  fCompressList := From.fCompressList;
-  fReceiveBufferSize := From.fReceiveBufferSize;
-  if From.fLogData <> nil then
-    fLogData := pointer(fLogDataStorage);
-  fOptions := From.fOptions; // needed by SetServerName() below
-  fLogger := From.fLogger;   // share same THttpLogger instance
-  SetServerName(From.fServerName); // setters are sometimes needed
-  SetRemoteIPHeader(From.fRemoteIPHeader);
-  SetRemoteConnIDHeader(From.fRemoteConnIDHeader);
-  fLoggingServiceName := From.fLoggingServiceName;
-  inherited Create(From.fOnThreadStart, From.fOnThreadTerminate,
-    From.fProcessName, From.fOptions - [hsoCreateSuspended], fLogClass);
+  result := false;
+  if fReceiveBufferSize = 0 then
+    exit; // Create never reached actual activation
+  tix32 := GetTickSec + Seconds; // never wait forever
+  repeat
+    SleepHiRes(1);  // warning: waits typically 1-15 ms on Windows
+    result := true; // fProcessing may be false if main thread did abort
+    for i := 0 to high(fThreads) do
+      result := result and ((fThreads[i] = nil) or fThreads[i].fStarted);
+  until result or
+        (GetTickSec > tix32);
+  fLogClass.Add.Log(sllTrace, 'WaitStarted(%)=%', [Seconds, BOOL_STR[result]], self);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
@@ -8025,38 +8063,44 @@ var
 begin
   if fReqQueue <> 0 then
   begin
-    for i := 0 to length(fClones) - 1 do
-      fClones[i].Terminate; // for CloseHandle() below to finish Execute
-    if Http.Version.MajorVersion > 1 then
+    fLogClass.Add.Log(sllTrace, 'DestroyMainThread=%', [length(fThreads)], self);
+    for i := 0 to high(fThreads) do
+      if fThreads[i] <> nil then
+        fThreads[i].Terminate; // for CloseHandle() below to finish Execute
+    if HasApi2 then
     begin
       if fUrlGroupID <> 0 then
       begin
-        Http.RemoveUrlFromUrlGroup(fUrlGroupID, nil, HTTP_URL_FLAG_REMOVE_ALL);
-        Http.CloseUrlGroup(fUrlGroupID);
+        Check(hRemoveUrlFromUrlGroup,
+          Http.RemoveUrlFromUrlGroup(fUrlGroupID, nil, HTTP_URL_FLAG_REMOVE_ALL));
+        Check(hCloseUrlGroup,
+          Http.CloseUrlGroup(fUrlGroupID));
         fUrlGroupID := 0;
       end;
       CloseHandle(fReqQueue);
       if fServerSessionID <> 0 then
       begin
-        Http.CloseServerSession(fServerSessionID);
+        Check(hCloseServerSession,
+          Http.CloseServerSession(fServerSessionID));
         fServerSessionID := 0;
       end;
     end
     else
     begin
       for i := 0 to high(fRegisteredUnicodeUrl) do
-        Http.RemoveUrl(fReqQueue, pointer(fRegisteredUnicodeUrl[i]));
+        Check(hRemoveUrl,
+          Http.RemoveUrl(fReqQueue, pointer(fRegisteredUnicodeUrl[i])));
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
     {$ifdef FPC}
-    for i := 0 to length(fClones) - 1 do
-      WaitForSingleObject(fClones[i].Handle, 30000); // sometimes needed on FPC
+    for i := 0 to high(fThreads) do
+      if fThreads[i] <> nil then
+        WaitForSingleObject(fThreads[i].Handle, 30000); // maybe needed on FPC
     {$endif FPC}
-    for i := 0 to length(fClones) - 1 do
-      fClones[i].Free;
-    fClones := nil;
-    Http.Terminate(HTTP_INITIALIZE_SERVER);
+    ObjArrayClear(fThreads, {continueOnException:}true);
+    Check(hTerminate,
+      Http.Terminate(HTTP_INITIALIZE_SERVER));
   end;
 end;
 
@@ -8064,14 +8108,11 @@ destructor THttpApiServer.Destroy;
 begin
   Terminate; // for Execute to be notified about end of process
   try
-    if (fOwner = nil) and
-       (Http.Module <> 0) then // fOwner<>nil for cloned threads
+    if Http.Module <> 0 then
       DestroyMainThread;
     {$ifdef FPC}
     WaitForSingleObject(Handle, 30000); // sometimes needed on FPC
     {$endif FPC}
-    if fOwner <> nil then
-      fLogger := nil; // to be released only by the main thread
   finally
     inherited Destroy;
   end;
@@ -8108,52 +8149,110 @@ const
 var
   global_verbs: TVerbText; // to avoid memory allocation on Delphi
 
+procedure ReqToLog(req: PHTTP_REQUEST; ctxt: THttpServerRequest;
+  log: PHTTP_LOG_FIELDS_DATA); // better code generation with a sub-function
+begin
+  log^.MethodNum     := req^.Verb;
+  log^.UriStemLength := req^.CookedUrl.AbsPathLength;
+  log^.UriStem       := req^.CookedUrl.pAbsPath;
+  with req^.headers.KnownHeaders[reqUserAgent] do
+  begin
+    log^.UserAgentLength := RawValueLength;
+    log^.UserAgent       := pRawValue;
+  end;
+  with req^.headers.KnownHeaders[reqHost] do
+  begin
+    log^.HostLength := RawValueLength;
+    log^.Host       := pRawValue;
+  end;
+  with req^.headers.KnownHeaders[reqReferrer] do
+  begin
+    log^.ReferrerLength := RawValueLength;
+    log^.Referrer       := pRawValue;
+  end;
+  with req^.headers.KnownHeaders[respServer] do
+  begin
+    log^.ServerNameLength := RawValueLength;
+    log^.ServerName       := pRawValue;
+  end;
+  log^.ClientIp       := pointer(ctxt.fRemoteIP);
+  log^.ClientIpLength := length(ctxt.fRemoteIP);
+  log^.Method         := pointer(ctxt.fMethod);
+  log^.MethodLength   := length(ctxt.fMethod);
+  log^.UserName       := pointer(ctxt.fAuthenticatedUser);
+  log^.UserNameLength := Length(ctxt.fAuthenticatedUser);
+end;
+
 procedure THttpApiServer.DoExecute;
-var
+var // lots of local variable so that this method is thread-safe
   req: PHTTP_REQUEST;
+  resp: PHTTP_RESPONSE;
+  reqbuf, respbuf, logbuf: TBytes;
   reqid: HTTP_REQUEST_ID;
-  reqbuf, respbuf: RawByteString;
   i: PtrInt;
   bytesread, bytessent, flags: cardinal;
   compressset: THttpSocketCompressSet;
   comprec: PHttpSocketCompressRec;
   err: HRESULT;
-  incontlen: Qword;
+  incontlen, rangestart, rangelen: Qword;
   incontlenchunk, incontlenread: cardinal;
   incontenc, inaccept, host, range, referer: RawUtf8;
-  outstat: RawUtf8;
+  outstat, outmsg: RawUtf8;
   outstatcode, afterstatcode: cardinal;
   respsent: boolean;
-  urirouter: TUriRouter;
   ctxt: THttpServerRequest;
   filehandle: THandle;
-  resp: PHTTP_RESPONSE;
   bufread, V: PUtf8Char;
-  heads: HTTP_UNKNOWN_HEADERs;
-  rangestart, rangelen: ULONGLONG;
+  heads: HTTP_UNKNOWN_HEADERS;
   outcontlen: ULARGE_INTEGER;
   datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
-  logdata: PHTTP_LOG_FIELDS_DATA;
   started, elapsed: Int64;
-  contrange: ShortString;
+
+  procedure HttpSendResponse(flags: cardinal);
+  var
+    log: PHTTP_LOG_FIELDS_DATA;
+    err: integer;
+  begin
+    // update log information
+    ctxt.RespStatus := resp^.StatusCode; // for ReqToLog()
+    log := nil;
+    if fLogging then // after LogStart (and http.sys API v2)
+    begin
+      log := pointer(logbuf);
+      log^.ProtocolStatus    := resp^.StatusCode;
+      log^.ServerNameLength  := length(fServerName);
+      log^.ServerName        := pointer(fServerName);
+      log^.ServiceNameLength := length(fLoggingServiceName);
+      log^.ServiceName       := pointer(fLoggingServiceName);
+      ReqToLog(req, ctxt, log);
+    end;
+    // send the resp^ HTTP response to the req^ HTTP request
+    resp^.Version := req^.Version;
+    with resp^.headers.KnownHeaders[respServer] do
+    begin
+      pRawValue      := pointer(fServerName);
+      RawValueLength := length(fServerName);
+    end;
+    err := Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
+        bytessent, nil, 0, nil, log);
+    if err <> NO_ERROR then
+      Check(hSendHttpResponse, err);
+    FillcharFast(resp^, SizeOf(resp^), 0);
+  end;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
     E: Exception = nil);
-  var
-    msg: RawUtf8;
   begin
     try
       resp^.SetStatus(StatusCode, outstat);
-      logdata^.ProtocolStatus := StatusCode;
       FormatUtf8('<!DOCTYPE html><html><body style="font-family:verdana;">' +
-        '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], msg);
+        '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], outmsg);
       if E <> nil then
-        Append(msg, [E, ' Exception raised:<br>']);
-      Append(msg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
-      resp^.SetContent(datachunkmem, msg, HTML_CONTENT_TYPE);
-      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
-        bytessent, nil, 0, nil, fLogData);
+        Append(outmsg, [E, ' Exception raised:<br>']);
+      Append(outmsg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
+      resp^.SetContent(datachunkmem, outmsg, HTML_CONTENT_TYPE);
+      HttpSendResponse(0);
     except
       on Exception do
         ; // ignore any HttpApi level errors here (client may have crashed)
@@ -8172,54 +8271,18 @@ var
     resp^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
-    // update log information
-    if Http.Version.MajorVersion >= 2 then
-      with req^, logdata^ do
-      begin
-        MethodNum := Verb;
-        UriStemLength := CookedUrl.AbsPathLength;
-        UriStem := CookedUrl.pAbsPath;
-        with headers.KnownHeaders[reqUserAgent] do
-        begin
-          UserAgentLength := RawValueLength;
-          UserAgent := pRawValue;
-        end;
-        with headers.KnownHeaders[reqHost] do
-        begin
-          HostLength := RawValueLength;
-          Host := pRawValue;
-        end;
-        with headers.KnownHeaders[reqReferrer] do
-        begin
-          ReferrerLength := RawValueLength;
-          Referrer := pRawValue;
-        end;
-        ProtocolStatus := resp^.StatusCode;
-        ClientIp := pointer(ctxt.fRemoteIP);
-        ClientIpLength := length(ctxt.fRemoteip);
-        Method := pointer(ctxt.fMethod);
-        MethodLength := length(ctxt.fMethod);
-        UserName := pointer(ctxt.fAuthenticatedUser);
-        UserNameLength := Length(ctxt.fAuthenticatedUser);
-      end;
-    // send response
-    resp^.Version := req^.Version;
+    // associate response headers
     resp^.SetHeaders(pointer(ctxt.OutCustomHeaders),
       heads, hsoNoXPoweredHeader in fOptions);
     if fCompressList.AcceptEncoding <> '' then
       resp^.AddCustomHeader(pointer(fCompressList.AcceptEncoding), heads, false);
-    with resp^.headers.KnownHeaders[respServer] do
-    begin
-      pRawValue := pointer(fServerName);
-      RawValueLength := length(fServerName);
-    end;
     if ctxt.OutContentType = STATICFILE_CONTENT_TYPE then
     begin
       // response is file -> OutContent is UTF-8 file name to be served
       filehandle := FileOpen(Utf8ToString(ctxt.OutContent), fmOpenReadShared);
       if not ValidHandle(filehandle)  then
       begin
-        SendError(HTTP_NOTFOUND, WinErrorText(GetLastError));
+        SendError(HTTP_NOTFOUND, GetErrorText); // text message from OS
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel
@@ -8254,10 +8317,10 @@ var
                   // "bytes=0-499" -> start=0, len=500
                   datachunkfile.ByteRange.Length.QuadPart := rangelen;
               end; // "bytes=1000-" -> start=1000, to eof
-              FormatShort('Content-range: bytes %-%/%'#0, [rangestart,
+              FormatUtf8('Content-range: bytes %-%/%', [rangestart,
                 rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
-                outcontlen.QuadPart], contrange);
-              resp^.AddCustomHeader(@contrange[1], heads, false);
+                outcontlen.QuadPart], range);
+              resp^.AddCustomHeader(pointer(range), heads, false);
               resp^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
@@ -8269,8 +8332,7 @@ var
         end;
         resp^.EntityChunkCount := 1;
         resp^.pEntityChunks := @datachunkfile;
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
-          bytessent, nil, 0, nil, fLogData);
+        HttpSendResponse(flags);
       finally
         FileClose(filehandle);
       end;
@@ -8289,33 +8351,30 @@ var
               compressset, ctxt.OutContentType, ctxt.fOutContent);
             if comprec <> nil then
             begin
-              pRawValue := pointer(comprec^.Name);
+              pRawValue      := pointer(comprec^.Name);
               RawValueLength := length(comprec^.Name);
             end;
           end;
       resp^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
-      flags := GetSendResponseFlags(ctxt);
-      EHttpApiServer.RaiseOnError(hSendHttpResponse,
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
-          bytessent, nil, 0, nil, fLogData));
+      HttpSendResponse(GetSendResponseFlags(ctxt));
     end;
   end;
 
 begin
   if Terminated then
     exit;
-  ctxt := nil;
+  ctxt := THttpServerRequest.Create(self, 0, self, 0, [], nil);
   try
     // reserve working buffers
     SetLength(heads, 64);
-    SetLength(respbuf, SizeOf(HTTP_RESPONSE));
-    resp := pointer(respbuf);
     SetLength(reqbuf, 16384 + SizeOf(HTTP_REQUEST)); // req^ + 16 KB of headers
+    SetLength(respbuf, SizeOf(HTTP_RESPONSE));
+    if HasApi2 then
+      SetLength(logbuf, SizeOf(HTTP_LOG_FIELDS_DATA));
     req := pointer(reqbuf);
-    logdata := pointer(fLogDataStorage);
+    resp := pointer(respbuf);
     if global_verbs[hvOPTIONS] = '' then
       global_verbs := VERB_TEXT;
-    ctxt := THttpServerRequest.Create(self, 0, self, 0, [], nil);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
     ctxt.fServer := self;
@@ -8371,25 +8430,25 @@ begin
             if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
               // https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
               for i := 0 to req^.RequestInfoCount - 1 do
-                if req^.pRequestInfo^[i].InfoType = HttpRequestInfoTypeAuth then
-                  with PHTTP_REQUEST_AUTH_INFO(req^.pRequestInfo^[i].pInfo)^ do
-                    case AuthStatus of
-                      HttpAuthStatusSuccess:
-                        if AuthType > HttpRequestAuthTypeNone then
+                with req^.pRequestInfo^[i] do
+                if InfoType = HttpRequestInfoTypeAuth then
+                  case pInfo^.AuthStatus of
+                    HttpAuthStatusSuccess:
+                      if pInfo^.AuthType > HttpRequestAuthTypeNone then
+                      begin
+                        byte(ctxt.fAuthenticationStatus) := ord(pInfo^.AuthType) + 1;
+                        if pInfo^.AccessToken <> 0 then
                         begin
-                          byte(ctxt.fAuthenticationStatus) := ord(AuthType) + 1;
-                          if AccessToken <> 0 then
-                          begin
-                            ctxt.fAuthenticatedUser := LookupToken(AccessToken);
-                            // AccessToken lifecycle is application responsibility
-                            CloseHandle(AccessToken);
-                            ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
-                            include(ctxt.fConnectionFlags, hsrAuthorized);
-                          end;
+                          ctxt.fAuthenticatedUser := LookupToken(pInfo^.AccessToken);
+                          // AccessToken lifecycle is application responsibility
+                          CloseHandle(pInfo^.AccessToken);
+                          ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
+                          include(ctxt.fConnectionFlags, hsrAuthorized);
                         end;
-                      HttpAuthStatusFailure:
-                        ctxt.fAuthenticationStatus := hraFailed;
-                    end;
+                      end;
+                    HttpAuthStatusFailure:
+                      ctxt.fAuthenticationStatus := hraFailed;
+                  end;
             // abort request if > MaximumAllowedContentLength or OnBeforeBody
             with req^.headers.KnownHeaders[reqContentLength] do
             begin
@@ -8407,7 +8466,7 @@ begin
                (ctxt.fUserAgent <> '') and
                IsHttpUserAgentBot(ctxt.fUserAgent) then
             begin
-              SendError(HTTP_TEAPOT, 'We don''t need no bot');
+              SendError(HTTP_TEAPOT, BOTBUSTER_RESPONSE);
               continue;
             end;
             if Assigned(OnBeforeBody) then
@@ -8434,7 +8493,7 @@ begin
                 incontlenread := 0;
                 repeat
                   bytesread := 0;
-                  if Http.Version.MajorVersion > 1 then
+                  if HasApi2 then
                     // speed optimization for Vista+
                     flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
                   else
@@ -8456,12 +8515,15 @@ begin
                     break; // should loop until returns ERROR_HANDLE_EOF
                   end;
                   if err <> NO_ERROR then
+                  begin
+                    Check(hReceiveRequestEntityBody, err);
                     break;
+                  end;
                   inc(bufread, bytesread);
                 until incontlenread = incontlen;
                 if err <> NO_ERROR then
                 begin
-                  SendError(HTTP_NOTACCEPTABLE, WinErrorText(err, HTTPAPI_DLL));
+                  SendError(HTTP_NOTACCEPTABLE, WinApiErrorUtf8(err, Http.Module));
                   continue;
                 end;
                 // optionally uncompress input body
@@ -8472,16 +8534,11 @@ begin
             QueryPerformanceMicroSeconds(started);
             try
               // compute response
-              FillcharFast(resp^, SizeOf(resp^), 0);
               respsent := false;
               outstatcode := 0;
-              if fOwner = nil then
-                urirouter := fRoute
-              else
-                urirouter := fOwner.fRoute; // field not propagated in clones
-              if urirouter <> nil then
+              if fRoute <> nil then
                 // URI rewrite or event callback execution
-                outstatcode := urirouter.Process(Ctxt);
+                outstatcode := fRoute.Process(Ctxt);
               if outstatcode = 0 then // no router callback was executed
               begin
                 // regular server-side OnRequest execution
@@ -8509,7 +8566,7 @@ begin
                 // handle any exception raised during process: show must go on!
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
-                    (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
+                     (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
                     SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
             end;
           finally
@@ -8519,19 +8576,25 @@ begin
         ERROR_MORE_DATA:
           begin
             // input buffer was too small to hold the request headers
-            // -> increase buffer size and call the API again
+            fLogClass.Add.Log(sllDebug,
+              'DoExecute: increase buffer size to %', [bytesread], self);
             reqid := req^.RequestId;
             SetLength(reqbuf, bytesread);
-            req := pointer(reqbuf);
+            req := pointer(reqbuf); // will try again
           end;
         ERROR_CONNECTION_INVALID:
-          if reqid = 0 then
-            break
-          else
+          begin
+            Check(hReceiveHttpRequest, err);
+            if reqid = 0 then
+              break;
             // TCP connection was corrupted by the peer -> ignore + next request
             reqid := 0;
+          end
       else
-        break; // unhandled err value
+        begin
+          Check(hReceiveHttpRequest, err);
+          break; // unhandled err value
+        end;
       end;
     until Terminated;
   finally
@@ -8540,34 +8603,25 @@ begin
 end;
 
 function THttpApiServer.GetHttpQueueLength: cardinal;
-var
-  len: ULONG;
 begin
-  if (Http.Version.MajorVersion < 2) or
-     (self = nil) then
-    result := 0
-  else
-  begin
-    if fOwner <> nil then
-      self := fOwner;
-    if fReqQueue = 0 then
-      result := 0
-    else
-      EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
-        Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-          @result, SizeOf(result), 0, @len, nil));
-  end;
+  result := 0;
+  if (self = nil) or
+     (fReqQueue = 0) or
+     not HasApi2 then
+    exit;
+  EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
+    Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
+      @result, SizeOf(result)));
 end;
 
 procedure THttpApiServer.SetHttpQueueLength(aValue: cardinal);
 begin
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);
+  EHttpApiServer.RaiseCheckApi2(hSetRequestQueueProperty);
   if (self <> nil) and
      (fReqQueue <> 0) then
-    EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
+    Ensure(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-        @aValue, SizeOf(aValue), 0, nil));
+        @aValue, SizeOf(aValue)));
 end;
 
 function THttpApiServer.GetConnectionsActive: cardinal;
@@ -8575,139 +8629,100 @@ begin
   result := 0; // unsupported
 end;
 
-function THttpApiServer.GetRegisteredUrl: SynUnicode;
+function THttpApiServer.GetRegisteredUrl: RawUtf8;
 var
   i: PtrInt;
 begin
-  if fRegisteredUnicodeUrl = nil then
-    result := ''
-  else
-    result := fRegisteredUnicodeUrl[0];
+  result := fRegisteredUrl;
+  if (result <> '') or
+     (fRegisteredUnicodeUrl = nil) then
+    exit;
+  fRegisteredUrl := SynUnicodeToUtf8(fRegisteredUnicodeUrl[0]);
   for i := 1 to high(fRegisteredUnicodeUrl) do
-    result := result + ',' + fRegisteredUnicodeUrl[i];
+    Append(fRegisteredUrl, [',', fRegisteredUnicodeUrl[i]]);
+  result := fRegisteredUrl;
 end;
 
-function THttpApiServer.GetCloned: boolean;
+function THttpApiServer.GetProperty(dest: PHTTP_QOS_SETTING_INFO;
+  destlen: cardinal; qos: HTTP_QOS_SETTING_TYPE): boolean;
 begin
-  result := (fOwner <> nil);
+  result := false;
+  if (self = nil) or
+     not HasApi2 then
+    exit;
+  if fUrlGroupID = 0 then
+    exit;
+  dest.QosType := qos;
+  dest.QosSetting := PAnsiChar(dest) + SizeOf(dest^); // should be after header
+  FillCharFast(dest.QosSetting^, destlen - SizeOf(dest^), 0); // for safety
+  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
+    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty, dest, destlen));
+  result := true;
+end;
+
+procedure THttpApiServer.SetProperty(value: PHTTP_QOS_SETTING_INFO;
+  valuelen: cardinal; qos: HTTP_QOS_SETTING_TYPE; alsoForSession: boolean);
+begin
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
+  if fUrlGroupID = 0 then
+    exit;
+  value.QosType := qos;
+  value.QosSetting := PAnsiChar(value) + SizeOf(value^); // just after header
+  if alsoForSession then
+    Ensure(hSetServerSessionProperty,
+      Http.SetServerSessionProperty(fServerSessionID, HttpServerQosProperty,
+        value, valuelen));
+  Ensure(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty, value, valuelen));
 end;
 
 procedure THttpApiServer.SetMaxBandwidth(aValue: cardinal);
 var
-  qos: HTTP_QOS_SETTING_INFO;
   limit: HTTP_BANDWIDTH_LIMIT_INFO;
 begin
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and
-     (fUrlGroupID <> 0) then
-  begin
-    if aValue = 0 then
-      limit.MaxBandwidth := HTTP_LIMIT_INFINITE
-    else if aValue < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE then
-      limit.MaxBandwidth := HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE
-    else
-      limit.MaxBandwidth := aValue;
-    limit.Flags := 1;
-    qos.QosType := HttpQosSettingTypeBandwidth;
-    qos.QosSetting := @limit;
-    EHttpApiServer.RaiseOnError(hSetServerSessionProperty,
-      Http.SetServerSessionProperty(fServerSessionID, HttpServerQosProperty,
-        @qos, SizeOf(qos)));
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-        @qos, SizeOf(qos)));
-  end;
+  limit.Flags := 1;
+  if aValue = 0 then
+    limit.MaxBandwidth := HTTP_LIMIT_INFINITE
+  else if aValue < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE then
+    limit.MaxBandwidth := HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE
+  else
+    limit.MaxBandwidth := aValue;
+  SetProperty(@limit, SizeOf(limit),
+    HttpQosSettingTypeBandwidth, {alsoSession=}true);
 end;
 
 function THttpApiServer.GetMaxBandwidth: cardinal;
 var
-  info: record
-    qos: HTTP_QOS_SETTING_INFO;
-    limit: HTTP_BANDWIDTH_LIMIT_INFO;
-  end;
+  limit: HTTP_BANDWIDTH_LIMIT_INFO;
 begin
-  if (Http.Version.MajorVersion < 2) or
-     (self = nil) then
-  begin
-    result := 0;
-    exit;
-  end;
-  if fOwner <> nil then
-    self := fOwner;
-  if fUrlGroupID = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  info.qos.QosType := HttpQosSettingTypeBandwidth;
-  info.qos.QosSetting := @info.limit;
-  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
-    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-      @info, SizeOf(info)));
-  result := info.limit.MaxBandwidth;
+  result := 0;
+  if GetProperty(@limit, SizeOf(limit), HttpQosSettingTypeBandwidth) then
+    result := limit.MaxBandwidth;
+  if result = HTTP_LIMIT_INFINITE then
+    result := 0; // cleaner for end-user
 end;
 
 function THttpApiServer.GetMaxConnections: cardinal;
 var
-  info: record
-    qos: HTTP_QOS_SETTING_INFO;
-    limit: HTTP_CONNECTION_LIMIT_INFO;
-  end;
-  len: ULONG;
+  limit: HTTP_CONNECTION_LIMIT_INFO;
 begin
-  if (Http.Version.MajorVersion < 2) or
-     (self = nil) then
-  begin
-    result := 0;
-    exit;
-  end;
-  if fOwner <> nil then
-    self := fOwner;
-  if fUrlGroupID = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  info.qos.QosType := HttpQosSettingTypeConnectionLimit;
-  info.qos.QosSetting := @info.limit;
-  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
-    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-      @info, SizeOf(info), @len));
-  result := info.limit.MaxConnections;
+  result := 0;
+  if GetProperty(@limit, SizeOf(limit), HttpQosSettingTypeConnectionLimit) then
+    result := limit.MaxConnections;
+  if result = HTTP_LIMIT_INFINITE then
+    result := 0; // cleaner for end-user
 end;
 
 procedure THttpApiServer.SetMaxConnections(aValue: cardinal);
 var
-  qos: HTTP_QOS_SETTING_INFO;
   limit: HTTP_CONNECTION_LIMIT_INFO;
 begin
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and
-     (fUrlGroupID <> 0) then
-  begin
-    if aValue = 0 then
-      limit.MaxConnections := HTTP_LIMIT_INFINITE
-    else
-      limit.MaxConnections := aValue;
-    limit.Flags := 1;
-    qos.QosType := HttpQosSettingTypeConnectionLimit;
-    qos.QosSetting := @limit;
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-        @qos, SizeOf(qos)));
-  end;
-end;
-
-function THttpApiServer.HasApi2: boolean;
-begin
-  result := Http.Version.MajorVersion >= 2;
-end;
-
-function THttpApiServer.GetLogging: boolean;
-begin
-  result := (fLogData <> nil);
+  limit.Flags := 1;
+  if aValue = 0 then
+    limit.MaxConnections := HTTP_LIMIT_INFINITE
+  else
+    limit.MaxConnections := aValue;
+  SetProperty(@limit, SizeOf(limit), HttpQosSettingTypeConnectionLimit);
 end;
 
 procedure THttpApiServer.LogStart(const aLogFolder: TFileName;
@@ -8718,12 +8733,12 @@ var
   log: HTTP_LOGGING_INFO;
   folder, software: SynUnicode;
 begin
-  if (self = nil) or
-     (fOwner <> nil) then
+  if self = nil then
     exit;
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  fLogData := nil; // disable any previous logging
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
+  // disable any previous logging
+  fLogging := false;
+  // setup log parameters
   FillcharFast(log, SizeOf(log), 0);
   log.Flags := 1;
   log.LoggingFlags := byte(aFlags);
@@ -8731,165 +8746,31 @@ begin
     raise EHttpApiServer.CreateFmt('LogStart(aLogFolder="")', []);
   if length(aLogFolder) > 212 then
     // http://msdn.microsoft.com/en-us/library/windows/desktop/aa364532
-    raise EHttpApiServer.CreateFmt('aLogFolder is too long for LogStart(%s)', [aLogFolder]);
-  folder := SynUnicode(aLogFolder);
+    raise EHttpApiServer.CreateFmt('LogStart(%s): too long path', [aLogFolder]);
+  folder   := SynUnicode(aLogFolder);
   software := SynUnicode(aSoftwareName);
-  log.SoftwareNameLength := length(software) * 2;
-  log.SoftwareName := pointer(software);
+  log.SoftwareNameLength  := length(software) * 2; // in bytes
+  log.SoftwareName        := pointer(software);
   log.DirectoryNameLength := length(folder) * 2;
-  log.DirectoryName := pointer(folder);
+  log.DirectoryName       := pointer(folder);      // in bytes
   log.Format := HTTP_LOGGING_TYPE(aType);
   if aType = hltNCSA then
-    aLogFields := [hlfDate..hlfSubStatus];
+    aLogFields := [hlfDate .. hlfSubStatus];
   log.Fields := integer(aLogFields);
   log.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
   if aRolloverType = hlrSize then
     log.RolloverSize := aRolloverSize;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
-      @log, SizeOf(log)));
-  // on success, update the actual log memory structure
-  fLogData := pointer(fLogDataStorage);
-end;
-
-procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize, aPriority: integer);
-var
-  i: PtrInt;
-begin
-  inherited RegisterCompress(aFunction, aCompressMinSize, aPriority);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].fCompressList := fCompressList; // replicate
-end;
-
-procedure THttpApiServer.SetOnTerminate(const Event: TOnNotifyThread);
-var
-  i: PtrInt;
-begin
-  inherited SetOnTerminate(Event);
-  if fOwner = nil then
-    for i := 0 to length(fClones) - 1 do
-      fClones[i].OnHttpThreadTerminate := Event;
+  Ensure(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID,
+      HttpServerLoggingProperty, @log, SizeOf(log)));
+  // on success, enable the use of these HTTP_LOGGING_INFO settings
+  fLogging := true;
 end;
 
 procedure THttpApiServer.LogStop;
-var
-  i: PtrInt;
 begin
-  if (self = nil) or
-     (fClones = nil) or
-     (fLogData = nil) then
-    exit;
-  fLogData := nil;
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].fLogData := nil;
-end;
-
-procedure THttpApiServer.SetReceiveBufferSize(Value: cardinal);
-var
-  i: PtrInt;
-begin
-  fReceiveBufferSize := Value;
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].fReceiveBufferSize := Value;
-end;
-
-procedure THttpApiServer.SetServerName(const aName: RawUtf8);
-var
-  i: PtrInt;
-begin
-  inherited SetServerName(aName);
-  with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do
-  begin
-    ServerName := pointer(aName);
-    ServerNameLength := Length(aName);
-  end;
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetServerName(aName);
-end;
-
-procedure THttpApiServer.SetOnRequest(const aRequest: TOnHttpServerRequest);
-var
-  i: PtrInt;
-begin
-  inherited SetOnRequest(aRequest);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetOnRequest(aRequest);
-end;
-
-procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
-var
-  i: PtrInt;
-begin
-  inherited SetOnBeforeBody(aEvent);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetOnBeforeBody(aEvent);
-end;
-
-procedure THttpApiServer.SetOnBeforeRequest(const aEvent: TOnHttpServerRequest);
-var
-  i: PtrInt;
-begin
-  inherited SetOnBeforeRequest(aEvent);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetOnBeforeRequest(aEvent);
-end;
-
-procedure THttpApiServer.SetOnAfterRequest(const aEvent: TOnHttpServerRequest);
-var
-  i: PtrInt;
-begin
-  inherited SetOnAfterRequest(aEvent);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetOnAfterRequest(aEvent);
-end;
-
-procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse);
-var
-  i: PtrInt;
-begin
-  inherited SetOnAfterResponse(aEvent);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetOnAfterResponse(aEvent);
-end;
-
-procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: Int64);
-var
-  i: PtrInt;
-begin
-  inherited SetMaximumAllowedContentLength(aMax);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetMaximumAllowedContentLength(aMax);
-end;
-
-procedure THttpApiServer.SetRemoteIPHeader(const aHeader: RawUtf8);
-var
-  i: PtrInt;
-begin
-  inherited SetRemoteIPHeader(aHeader);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetRemoteIPHeader(aHeader);
-end;
-
-procedure THttpApiServer.SetRemoteConnIDHeader(const aHeader: RawUtf8);
-var
-  i: PtrInt;
-begin
-  inherited SetRemoteConnIDHeader(aHeader);
-  for i := 0 to length(fClones) - 1 do
-    fClones[i].SetRemoteConnIDHeader(aHeader);
-end;
-
-procedure THttpApiServer.SetLoggingServiceName(const aName: RawUtf8);
-begin
-  if self = nil then
-    exit;
-  fLoggingServiceName := aName;
-  with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do
-  begin
-    ServiceName := pointer(fLoggingServiceName);
-    ServiceNameLength := Length(fLoggingServiceName);
-  end;
+  if self <> nil then
+    fLogging := false;
 end;
 
 procedure THttpApiServer.SetAuthenticationSchemes(
@@ -8897,11 +8778,9 @@ procedure THttpApiServer.SetAuthenticationSchemes(
 var
   auth: HTTP_SERVER_AUTHENTICATION_INFO;
 begin
-  if (self = nil) or
-     (fOwner <> nil) then
+  if self = nil then
     exit;
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
   fAuthenticationSchemes := schemes;
   FillcharFast(auth, SizeOf(auth), 0);
   auth.Flags := 1;
@@ -8909,19 +8788,19 @@ begin
   auth.ReceiveMutualAuth := true;
   if haBasic in schemes then
   begin
-    auth.BasicParams.RealmLength := Length(Realm);
-    auth.BasicParams.Realm := pointer(Realm);
+    auth.BasicParams.RealmLength := Length(Realm) * 2; // in bytes
+    auth.BasicParams.Realm       := pointer(Realm);
   end;
   if haDigest in schemes then
   begin
-    auth.DigestParams.DomainNameLength := Length(DomainName);
-    auth.DigestParams.DomainName := pointer(DomainName);
-    auth.DigestParams.RealmLength := Length(Realm);
-    auth.DigestParams.Realm := pointer(Realm);
+    auth.DigestParams.DomainNameLength := Length(DomainName) * 2; // in bytes
+    auth.DigestParams.DomainName       := pointer(DomainName);
+    auth.DigestParams.RealmLength      := Length(Realm) * 2;      // in bytes
+    auth.DigestParams.Realm            := pointer(Realm);
   end;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(
-      fUrlGroupID, HttpServerAuthenticationProperty, @auth, SizeOf(auth)));
+  Ensure(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID,
+      HttpServerAuthenticationProperty, @auth, SizeOf(auth)));
 end;
 
 procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
@@ -8929,22 +8808,20 @@ procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
 var
   timeout: HTTP_TIMEOUT_LIMIT_INFO;
 begin
-  if (self = nil) or
-     (fOwner <> nil) then
+  if self = nil then
     exit;
-  if Http.Version.MajorVersion < 2 then
-    raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
+  EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
   FillcharFast(timeout, SizeOf(timeout), 0);
   timeout.Flags := 1;
-  timeout.EntityBody := aEntityBody;
+  timeout.EntityBody      := aEntityBody;
   timeout.DrainEntityBody := aDrainEntityBody;
-  timeout.RequestQueue := aRequestQueue;
-  timeout.IdleConnection := aIdleConnection;
-  timeout.HeaderWait := aHeaderWait;
-  timeout.MinSendRate := aMinSendRate;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(
-      fUrlGroupID, HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
+  timeout.RequestQueue    := aRequestQueue;
+  timeout.IdleConnection  := aIdleConnection;
+  timeout.HeaderWait      := aHeaderWait;
+  timeout.MinSendRate     := aMinSendRate;
+  Ensure(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID,
+      HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
 end;
 
 procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
@@ -8975,7 +8852,6 @@ begin
       fOnAfterResponse := nil; // won't try again
   end;
 end;
-
 
 
 { ****************** THttpApiWebSocketServer Over Windows http.sys Module }
@@ -9553,25 +9429,11 @@ begin
     aSocketThreadsCount);
 end;
 
-constructor THttpApiWebSocketServer.CreateClone(From: THttpApiServer);
-var
-  serv: THttpApiWebSocketServer absolute From;
-begin
-  inherited CreateClone(From);
-  fThreadPoolServer := serv.fThreadPoolServer;
-  fPingTimeout := serv.fPingTimeout;
-end;
-
 function THttpApiWebSocketServer.GetRegisteredProtocols: THttpApiWebSocketServerProtocolDynArray;
-var
-  main: THttpApiWebSocketServer;
 begin
-  main := self;
-  if fOwner <> nil then
-    main := fOwner as THttpApiWebSocketServer;
-  main.fOwnedProtocolsSafe.Lock; // thread-safe by-reference copy
-  result := main.fOwnedProtocols;
-  main.fOwnedProtocolsSafe.UnLock;
+  fOwnedProtocolsSafe.Lock; // thread-safe by-reference copy
+  result := fOwnedProtocols;
+  fOwnedProtocolsSafe.UnLock;
 end;
 
 procedure THttpApiWebSocketServer.DestroyMainThread;
@@ -9696,17 +9558,13 @@ procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUtf8;
   const aOnFragment: TOnHttpApiWebSocketServerMessageEvent);
 var
   proto: THttpApiWebSocketServerProtocol;
-  main: THttpApiWebSocketServer;
 begin
   if self = nil then
     exit;
-  main := self;
-  if fOwner <> nil then
-    main := fOwner as THttpApiWebSocketServer;
   proto := THttpApiWebSocketServerProtocol.Create(aName,
-    aManualFragmentManagement, main, aOnAccept, aOnMessage, aOnConnect,
+    aManualFragmentManagement, self, aOnAccept, aOnMessage, aOnConnect,
     aOnDisconnect, aOnFragment);
-  ObjArrayAdd(main.fOwnedProtocols, proto, main.fOwnedProtocolsSafe);
+  ObjArrayAdd(fOwnedProtocols, proto, fOwnedProtocolsSafe);
 end;
 
 function THttpApiWebSocketServer.Request(
@@ -9725,16 +9583,6 @@ end;
 procedure THttpApiWebSocketServer.SendServiceMessage;
 begin
   IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
-end;
-
-procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TOnNotifyThread);
-begin
-  fOnWSThreadStart := Value;
-end;
-
-procedure THttpApiWebSocketServer.SetOnWSThreadTerminate(const Value: TOnNotifyThread);
-begin
-  fOnWSThreadTerminate := Value;
 end;
 
 
@@ -9839,7 +9687,7 @@ begin
         proto.fSafe.UnLock;
       end;
     end;
-    inc(tix, fServer.PingTimeout shl MilliSecsPerSecShl);
+    inc(tix, fServer.PingTimeout * MilliSecsPerSec);
     while not Terminated and
           (mormot.core.os.GetTickCount64 < tix) do
       SleepHiRes(100);

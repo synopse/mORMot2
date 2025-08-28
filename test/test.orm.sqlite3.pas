@@ -674,7 +674,7 @@ var
   Rec: TOrmPeopleVersioned;
   Slave2Callback: IServiceRecordVersionCallback;
   i, n: integer;
-  timeout: Int64;
+  timeout: cardinal;
 
   function CreateServer(const DBFileName: TFileName;
     DeleteDBFile: boolean): TRestServerDB;
@@ -814,10 +814,10 @@ begin
       TestMasterSlave(Master, Slave1, MasterAccess);
       if Test is TTestBidirectionalRemoteConnection then
       begin
-        timeout := GetTickCount64 + 3000;
+        timeout := GetTickSec + 5;
         repeat
           sleep(1)
-        until (GetTickCount64 > timeout) or // wait all callbacks to be received
+        until (GetTickSec > timeout) or // wait all callbacks to be received
           (Slave2.Server.RecordVersionCurrent(TOrmPeopleVersioned) =
            Master.Server.RecordVersionCurrent(TOrmPeopleVersioned));
         Test.check(Slave2.RecordVersionSynchronizeSlaveStop(TOrmPeopleVersioned));

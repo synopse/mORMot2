@@ -414,7 +414,7 @@ end;
 destructor TWebSocketProcessClient.Destroy;
 var
   t: TWebSocketProcessClientThread;
-  tix: Int64;
+  tix: cardinal;
   {%H-}log: ISynLog;
 begin
   t := fOwnerThread as TWebSocketProcessClientThread;
@@ -422,9 +422,9 @@ begin
   try
     // focConnectionClose would be handled in this thread -> close client thread
     t.Terminate;
-    tix := GetTickCount64 + 7000; // never wait forever
+    tix := GetTickSec + 7; // never wait forever
     while (t.fThreadState = sRun) and
-          (GetTickCount64 < tix) do
+          (GetTickSec < tix) do
       SleepHiRes(1);
     t.fProcess := nil;
   finally
@@ -702,7 +702,7 @@ begin
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       // send initial upgrade request
       RequestSendHeader(aWebSocketsURI, 'GET');
-      SharedRandom.Fill(@key, SizeOf(key)); // Lecuyer is enough for public random
+      SharedRandom.Fill(@key, SizeOf(key)); // public and unique: use TLecuyer
       bin1 := BinToBase64(@key, SizeOf(key));
       SockSendLine(['Content-Length: 0'#13#10 +
                     'Connection: Upgrade'#13#10 +
@@ -717,7 +717,7 @@ begin
          (extout <> '') then // e.g. for TEcdheProtocol
         SockSendLine(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
-        SockSendHeaders(pointer(aCustomHeaders)); // normalizing CRLF
+        SockSendHeaders(aCustomHeaders); // normalizing CRLF
       SockSendCRLF;
       SockSendFlush('');
       // validate the response as WebSockets upgrade
@@ -762,14 +762,9 @@ begin
           exit;
       end;
       // if we reached here, connection is successfully upgraded to WebSockets
-      if (Server = 'localhost') or
-         (Server = '127.0.0.1') then
-      begin
-        aProtocol.RemoteIP := '127.0.0.1';
-        aProtocol.RemoteLocalhost := true;
-      end
-      else
-        aProtocol.RemoteIP := Server;
+      aProtocol.RemoteIP := RemoteIP;
+      aProtocol.RemoteLocalhost := (RemoteIP = '') or
+                                   (PCardinal(RemoteIP)^ = HOST_127);
       // initialize the TWebSocketProcess
       result := ''; // no error message = success
       SetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID')), id);

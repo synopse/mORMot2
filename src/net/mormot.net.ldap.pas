@@ -323,9 +323,11 @@ const
 type
   /// high level LDAP result codes
   // - as returned e.g. by TLdapClient.ResultError property
-  // - leUnknown is a client-side error - check TLdapClient.ResultString text
+  // - leUnknown is likely to be a client-side error - check the
+  // TLdapClient.ResultString text content for more information
   // - use RawLdapError() and RawLdapErrorString() to decode a LDAP result code
   // or LDAP_RES_CODE[] and LDAP_ERROR_TEXT[] to their integer/text value
+  // - see https://ldap.com/ldap-result-code-reference
   TLdapError = (
     leUnknown,
     leSuccess,
@@ -336,12 +338,12 @@ type
     leCompareFalse,
     leCompareTrue,
     leAuthMethodNotSupported,
-    leStrongAuthRequired,
+    leStrongerAuthRequired,
     leReferral,
     leAdminLimitExceeded,
     leUnavailableCriticalExtension,
     leConfidentalityRequired,
-    leSASLBindInProgress,
+    leSaslBindInProgress,
     leNoSuchAttribute,
     leUndefinedAttributeType,
     leInappropriateMatching,
@@ -351,6 +353,7 @@ type
     leNoSuchObject,
     leAliasProblem,
     leInvalidDNSyntax,
+    leIsLeaf,
     leAliasDereferencingProblem,
     leInappropriateAuthentication,
     leInvalidCredentials,
@@ -359,69 +362,134 @@ type
     leUnavailable,
     leUnwillingToPerform,
     leLoopDetect,
+    leSortControlMissing,
+    leOffsetRangeError,
     leNamingViolation,
     leObjectClassViolation,
     leNotAllowedOnNonLeaf,
     leNotAllowedOnRDN,
     leEntryAlreadyExists,
     leObjectClassModsProhibited,
-    leAffectsMultipleDSAS,
-    leNotSupported,
+    leResultsTooLarge,
+    leAffectsMultipleDSAs,
+    leControlError,
+    leOther,
+    leServerDown,
+    leLocalError,
+    leEncodingError,
+    leDecodingError,
     leTimeout,
-    leAuthorizationDenied);
+    leAuthUnknown,
+    leFilterError,
+    leUserCanceled,
+    leParamError,
+    leNoMemory,
+    leConnectError,
+    leNotSupported,
+    leControlNotFound,
+    leNoResultsReturned,
+    leMoreResultsToReturn,
+    leClientLoop,
+    leReferralLimitExceeded,
+    leInvalidResponse,
+    leAmbiguousResponse,
+    leTlsNotSupported,
+    leIntermediateResponse,
+    leUnknownType,
+    leCanceled,
+    leNoSuchOperation,
+    leTooLate,
+    leCannotCancel,
+    leAssertionFailed,
+    leAuthorizationDenied,
+    leEsyncRefreshRequired,
+    leNoOperation);
   PLdapError = ^TLdapError;
 
 var
   /// human friendly text of all TLdapError items
-  // - are the un-camel-cased trimed text of all TLdapError identifiers
+  // - are the official text of all TLdapError identifiers as listed in
+  // https://ldap.com/ldap-result-code-reference
+  // e.g. LDAP_ERROR_TEXT[leEsyncRefreshRequired] = 'e-syncRefreshRequired'
   // - see RawLdapErrorString() to decode a LDAP result code into a full message
   LDAP_ERROR_TEXT: array[TLdapError] of RawUtf8;
 
 const
   /// raw LDAP result codes (in range 0..123) of all TLdapError items
   // - use RawLdapError() or RawLdapErrorString() to decode a LDAP result code
-  LDAP_RES_CODE: array[succ(low(TLdapError)) .. high(TLdapError)] of byte = (
-    LDAP_RES_SUCCESS,
-    LDAP_RES_OPERATIONS_ERROR,
-    LDAP_RES_PROTOCOL_ERROR,
-    LDAP_RES_TIME_LIMIT_EXCEEDED,
-    LDAP_RES_SIZE_LIMIT_EXCEEDED,
-    LDAP_RES_COMPARE_FALSE,
-    LDAP_RES_COMPARE_TRUE,
-    LDAP_RES_AUTH_METHOD_NOT_SUPPORTED,
-    LDAP_RES_STRONGER_AUTH_REQUIRED,
-    LDAP_RES_REFERRAL,
-    LDAP_RES_ADMIN_LIMIT_EXCEEDED,
-    LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION,
-    LDAP_RES_CONFIDENTIALITY_REQUIRED,
-    LDAP_RES_SASL_BIND_IN_PROGRESS,
-    LDAP_RES_NO_SUCH_ATTRIBUTE,
-    LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE,
-    LDAP_RES_INAPPROPRIATE_MATCHING,
-    LDAP_RES_CONSTRAINT_VIOLATION,
-    LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS,
-    LDAP_RES_INVALID_ATTRIBUTE_SYNTAX,
-    LDAP_RES_NO_SUCH_OBJECT,
-    LDAP_RES_ALIAS_PROBLEM,
-    LDAP_RES_INVALID_DN_SYNTAX,
-    LDAP_RES_ALIAS_DEREFERENCING_PROBLEM,
-    LDAP_RES_INAPPROPRIATE_AUTHENTICATION,
-    LDAP_RES_INVALID_CREDENTIALS,
-    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS,
-    LDAP_RES_BUSY,
-    LDAP_RES_UNAVAILABLE,
-    LDAP_RES_UNWILLING_TO_PERFORM,
-    LDAP_RES_LOOP_DETECT,
-    LDAP_RES_NAMING_VIOLATION,
-    LDAP_RES_OBJECT_CLASS_VIOLATION,
-    LDAP_RES_NOT_ALLOWED_ON_NON_LEAF,
-    LDAP_RES_NOT_ALLOWED_ON_RDN,
-    LDAP_RES_ENTRY_ALREADY_EXISTS,
-    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED,
-    LDAP_RES_AFFECTS_MULTIPLE_DSAS,
-    LDAP_RES_NOT_SUPPORTED,
-    LDAP_RES_TIMEOUT,
-    LDAP_RES_AUTHORIZATION_DENIED);
+  LDAP_RES_CODE: array[leSuccess .. leAuthorizationDenied] of byte = (
+    LDAP_RES_SUCCESS,                        // leSuccess
+    LDAP_RES_OPERATIONS_ERROR,               // leOperationsError
+    LDAP_RES_PROTOCOL_ERROR,                 // leProtocolError
+    LDAP_RES_TIME_LIMIT_EXCEEDED,            // leTimeLimitExceeded
+    LDAP_RES_SIZE_LIMIT_EXCEEDED,            // leSizeLimitExceeded
+    LDAP_RES_COMPARE_FALSE,                  // leCompareFalse
+    LDAP_RES_COMPARE_TRUE,                   // leCompareTrue
+    LDAP_RES_AUTH_METHOD_NOT_SUPPORTED,      // leAuthMethodNotSupported
+    LDAP_RES_STRONGER_AUTH_REQUIRED,         // leStrongerAuthRequired
+    LDAP_RES_REFERRAL,                       // leReferral
+    LDAP_RES_ADMIN_LIMIT_EXCEEDED,           // leAdminLimitExceeded
+    LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION, // leUnavailableCriticalExtension
+    LDAP_RES_CONFIDENTIALITY_REQUIRED,       // leConfidentalityRequired
+    LDAP_RES_SASL_BIND_IN_PROGRESS,          // leSaslBindInProgress
+    LDAP_RES_NO_SUCH_ATTRIBUTE,              // leNoSuchAttribute
+    LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE,       // leUndefinedAttributeType
+    LDAP_RES_INAPPROPRIATE_MATCHING,         // leInappropriateMatching
+    LDAP_RES_CONSTRAINT_VIOLATION,           // leConstraintViolation
+    LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS,      // leAttributeOrValueExists
+    LDAP_RES_INVALID_ATTRIBUTE_SYNTAX,       // leInvalidAttributeSyntax
+    LDAP_RES_NO_SUCH_OBJECT,                 // leNoSuchObject
+    LDAP_RES_ALIAS_PROBLEM,                  // leAliasProblem
+    LDAP_RES_INVALID_DN_SYNTAX,              // leInvalidDNSyntax
+    LDAP_RES_IS_LEAF,                        // leIsLeaf
+    LDAP_RES_ALIAS_DEREFERENCING_PROBLEM,    // leAliasDereferencingProblem
+    LDAP_RES_INAPPROPRIATE_AUTHENTICATION,   // leInappropriateAuthentication
+    LDAP_RES_INVALID_CREDENTIALS,            // leInvalidCredentials
+    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS,     // leInsufficientAccessRights
+    LDAP_RES_BUSY,                           // leBusy
+    LDAP_RES_UNAVAILABLE,                    // leUnavailable
+    LDAP_RES_UNWILLING_TO_PERFORM,           // leUnwillingToPerform
+    LDAP_RES_LOOP_DETECT,                    // leLoopDetect
+    LDAP_RES_SORT_CONTROL_MISSING,           // leSortControlMissing
+    LDAP_RES_OFFSET_RANGE_ERROR,             // leOffsetRangeError
+    LDAP_RES_NAMING_VIOLATION,               // leNamingViolation
+    LDAP_RES_OBJECT_CLASS_VIOLATION,         // leObjectClassViolation
+    LDAP_RES_NOT_ALLOWED_ON_NON_LEAF,        // leNotAllowedOnNonLeaf
+    LDAP_RES_NOT_ALLOWED_ON_RDN,             // leNotAllowedOnRDN
+    LDAP_RES_ENTRY_ALREADY_EXISTS,           // leEntryAlreadyExists
+    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED,   // leObjectClassModsProhibited
+    LDAP_RES_RESULTS_TOO_LARGE,              // leResultsTooLarge
+    LDAP_RES_AFFECTS_MULTIPLE_DSAS,          // leAffectsMultipleDSAs
+    LDAP_RES_CONTROL_ERROR,                  // leControlError
+    LDAP_RES_OTHER,                          // leOther
+    LDAP_RES_SERVER_DOWN,                    // leServerDown
+    LDAP_RES_LOCAL_ERROR,                    // leLocalError
+    LDAP_RES_ENCODING_ERROR,                 // leEncodingError
+    LDAP_RES_DECODING_ERROR,                 // leDecodingError
+    LDAP_RES_TIMEOUT,                        // leTimeout
+    LDAP_RES_AUTH_UNKNOWN,                   // leAuthUnknown
+    LDAP_RES_FILTER_ERROR,                   // leFilterError
+    LDAP_RES_USER_CANCELED,                  // leUserCanceled
+    LDAP_RES_PARAM_ERROR,                    // leParamError
+    LDAP_RES_NO_MEMORY,                      // leNoMemory
+    LDAP_RES_CONNECT_ERROR,                  // leConnectError
+    LDAP_RES_NOT_SUPPORTED,                  // leNotSupported
+    LDAP_RES_CONTROL_NOT_FOUND,              // leControlNotFound
+    LDAP_RES_NO_RESULTS_RETURNED,            // leNoResultsReturned
+    LDAP_RES_MORE_RESULTS_TO_RETURN,         // leMoreResultsToReturn
+    LDAP_RES_CLIENT_LOOP,                    // leClientLoop
+    LDAP_RES_REFERRAL_LIMIT_EXCEEDED,        // leReferralLimitExceeded
+    LDAP_RES_INVALID_RESPONSE,               // leInvalidResponse
+    LDAP_RES_AMBIGUOUS_RESPONSE,             // leAmbiguousResponse
+    LDAP_RES_TLS_NOT_SUPPORTED,              // leTlsNotSupported
+    LDAP_RES_INTERMEDIATE_RESPONSE,          // leIntermediateResponse
+    LDAP_RES_UNKNOWN_TYPE,                   // leUnknownType
+    LDAP_RES_CANCELED,                       // leCanceled
+    LDAP_RES_NO_SUCH_OPERATION,              // leNoSuchOperation
+    LDAP_RES_TOO_LATE,                       // leTooLate
+    LDAP_RES_CANNOT_CANCEL,                  // leCannotCancel
+    LDAP_RES_ASSERTION_FAILED,               // leAssertionFailed
+    LDAP_RES_AUTHORIZATION_DENIED);          // leAuthorizationDenied
 
 const
   // LDAP ASN.1 types
@@ -688,7 +756,8 @@ type
     atOperatingSystemVersion,
     atServicePrincipalName,
     atUnicodePwd,
-    atAccountNameHistory);
+    atAccountNameHistory,
+    atTokenGroups);                // virtual/constructed attribute for self
 
   /// set of common Attribute Types
   TLdapAttributeTypes = set of TLdapAttributeType;
@@ -770,7 +839,8 @@ const
     'Operating-System-Version',    // atOperatingSystemVersion
     'Service-Principal-Name',      // atServicePrincipalName
     'Unicode-Pwd',                 // atUnicodePwd
-    'Account-Name-History');       // atAccountNameHistory
+    'Account-Name-History',        // atAccountNameHistory
+    'Token-Groups');               // atTokenGroups
 
   /// how all TLdapAttributeType are actually stored in the LDAP raw value
   AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
@@ -828,7 +898,8 @@ const
     atsRawUtf8,                     // atOperatingSystemVersion
     atsRawUtf8,                     // atServicePrincipalName
     atsUnicodePwd,                  // atUnicodePwd
-    atsRawUtf8);                    // atAccountNameHistory
+    atsRawUtf8,                     // atAccountNameHistory
+    atsSid);                        // atTokenGroups
 
   /// the LDAP raw values stored as UTF-8, which do not require any conversion
   ATS_READABLE = [atsRawUtf8 .. atsIntegerAccountType];
@@ -1796,6 +1867,8 @@ type
     /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
+    // - as an alternative, on POSIX you can specify a keytab associated with
+    // UserName as 'FILE:/full/path/to/my.keytab' into this property
     property Password: SpiUtf8
       read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
@@ -1829,7 +1902,7 @@ type
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
   // - is not thread-safe, but you can call Lock/UnLock to share the connection
-  TLdapClient = class(TSynLocked)
+  TLdapClient = class(TObjectOSLock)
   protected
     fSettings: TLdapClientSettings;
     fSock: TCrtSocket;
@@ -2726,13 +2799,13 @@ begin
       res := DnsServices(n, NameServer);
       if res <> nil then
       begin
-        result := res[0]; // found a matching site
+        result := res[Random32(length(res))]; // return a matching site
         exit;
       end;
     end;
   end;
-  if LdapServers <> nil then
-    result := LdapServers[0] // if no site is defined, use first server
+  if LdapServers <> nil then // if no site is defined, use one of the servers
+    result := LdapServers[Random32(length(LdapServers))]
   else
     result := '';
 end;
@@ -3000,7 +3073,7 @@ end;
 function DNsToCN(const dc, ou, cn: TRawUtf8DynArray): RawUtf8;
 var
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
@@ -3086,15 +3159,19 @@ begin
   result := true;
 end;
 
-
 function RawLdapError(ErrorCode: integer): TLdapError;
 begin
-  if (ErrorCode < 0) or
-     (ErrorCode > LDAP_RES_AUTHORIZATION_DENIED) then
-    result := leUnknown
+  case ErrorCode of
+    LDAP_RES_SUCCESS .. LDAP_RES_AUTHORIZATION_DENIED: // 0 .. 123
+      result := TLdapError(ByteScanIndex(
+        @LDAP_RES_CODE, length(LDAP_RES_CODE), ErrorCode) + 1);
+    LDAP_RES_ESYNC_REFRESH_REQUIRED:                   // 4096
+      result := leEsyncRefreshRequired;
+    LDAP_RES_NO_OPERATION:                             // 16654
+      result := leNoOperation;
   else
-    result := TLdapError(ByteScanIndex(
-      @LDAP_RES_CODE, length(LDAP_RES_CODE), ErrorCode) + 1);
+    result := leUnknown
+  end;
 end;
 
 function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
@@ -3531,7 +3608,8 @@ const
     'operatingSystemVersion',      // atOperatingSystemVersion
     'servicePrincipalName',        // atServicePrincipalName
     'unicodePwd',                  // atUnicodePwd
-    'accountNameHistory');         // atAccountNameHistory
+    'accountNameHistory',          // atAccountNameHistory
+    'tokenGroups');                // atTokenGroups
 
   // reference names to fill the global AttrTypeNameAlt[]
   _AttrTypeNameAlt: array[0 .. high(AttrTypeNameAlt)] of RawUtf8 = (
@@ -3558,7 +3636,9 @@ var
   t: TLdapAttributeType;
   i, n, failed: PtrInt;
 begin
-  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
+  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, false, false,
+    {lowcasefirst=}true);
+  LDAP_ERROR_TEXT[leEsyncRefreshRequired] := 'e-syncRefreshRequired';
   // register all our common Attribute Types names for quick search as pointer()
   _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);
   failed := -1;
@@ -5166,7 +5246,7 @@ end;
 function TLdapResultList.ExportToLdifContent(aHumanFriendly: boolean;
   aMaxLineLen: PtrInt): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TTextWriter;
   i: PtrInt;
 begin
@@ -5292,7 +5372,7 @@ begin
       inc(attr);
     end;
     if ObjectAttributeField = '*' then
-      v^.AddOrUpdateFrom(variant(a), {onlymissing=}true)
+      v^.AddOrUpdateFrom(a, {onlymissing=}true)
     else
       v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
     a.Clear; // mandatory to prepare the next a.Init in this loop
@@ -6032,8 +6112,7 @@ begin
       end;
   end;
   // a non-recoverable socket error occured at sending the request
-  raise ENetSock.Create('%s.SendPacket(%s) failed',
-    [ClassNameShort(self)^, fSock.Server], res, @raw);
+  raise ENetSock.Create('SendPacket(%s) failed', self, [fSock.Server], res, @raw);
 end;
 
 procedure TLdapClient.ReceivePacketFillSockBuffer;
@@ -8018,27 +8097,42 @@ var
   datain, dataout: RawByteString;
 begin
   result := false;
+  if StartWithExact(aPassword, 'FILE:') then
+    exit; // don't cheat with this server credentials :)
   InvalidateSecContext(client);
-  InvalidateSecContext(server);
   try
     try
-      while ClientSspiAuthWithPassword(
-              client, datain, aUser, aPassword, fKerberosSpn, dataout) and
-            ServerSspiAuth(server, dataout, datain) do ;
-      if aFullUserName <> nil then
-        ServerSspiAuthUser(server, aFullUserName^);
-      {$ifdef OSWINDOWS}
-      // on Windows, ensure this user is part of AllowGroupBySid()
-      if (fGroupSid = nil) or
-         ServerSspiAuthGroup(server, fGroupSid) then
-      {$endif OSWINDOWS}
-        result := true;
-    except
-      result := false;
+      if (aFullUserName = nil)
+         {$ifdef OSWINDOWS} and (fGroupSid = nil) {$endif} then
+        // simple aUser/aPassword credential check needs no server side
+        // - see as reference mag_auth_basic() in NGINX's mod_auth_gssapi.c
+        result := ClientSspiAuthWithPassword(client, 'onlypass',
+                    aUser, aPassword, fKerberosSpn, dataout)
+      else
+      begin
+        // more user information currently need a ServerSspiAuth() context
+        InvalidateSecContext(server);
+        try
+          while ClientSspiAuthWithPassword(client, datain,
+                  aUser, aPassword, fKerberosSpn, dataout) and
+                ServerSspiAuth(server, dataout, datain) do ;
+          if aFullUserName <> nil then
+            ServerSspiAuthUser(server, aFullUserName^);
+          {$ifdef OSWINDOWS}
+          // on Windows, ensure this user is part of AllowGroupBySid()
+          if (fGroupSid = nil) or
+             ServerSspiAuthGroup(server, fGroupSid) then
+          {$endif OSWINDOWS}
+            result := true;
+        finally
+          FreeSecContext(server);
+        end;
+      end;
+    finally
+      FreeSecContext(client);
     end;
-  finally
-    FreeSecContext(server);
-    FreeSecContext(client);
+  except
+    result := false;
   end;
 end;
 

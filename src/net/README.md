@@ -137,15 +137,14 @@ Current limitation: only RRQ requests are supported/tested yet.
 TCP/UDP Port Forwarding and Tunnelling
 - Abstract Definitions for Port Forwarding
 - Local NAT Client/Server to Tunnel TCP Streams
-- WebSockets stand-alone Relay Server
 
 ### mormot.net.acme
 
 Automatic Certificate Management Environment (ACME v2) Client
 - JWS HTTP-client implementation
 - ACME client implementation
-- Let's Encrypt TLS / HTTPS Encryption Certificates Support
-- HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
+- Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support
+- HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80
 
 ### mormot.net.ldap
 

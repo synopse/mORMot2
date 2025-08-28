@@ -28,6 +28,7 @@ uses
   mormot.core.test,
   mormot.core.rtti,
   mormot.core.threads,
+  mormot.core.mvc,
   mormot.db.core,
   mormot.rest.core,
   mormot.rest.server,
@@ -89,7 +90,7 @@ type
   end;
 
   /// implements the ViewModel/Controller of this BLOG web site
-  TBlogApplication = class(TMvcApplication, IBlogApplication)
+  TBlogApplication = class(TMvcApplicationRest, IBlogApplication)
   protected
     fBlogMainInfo: variant;
     fTagsLookup: TOrmTags;
@@ -97,7 +98,6 @@ type
     fDefaultLastID: TID;
     fHasFTS: boolean;
     procedure ComputeMinimalData; virtual;
-    procedure FlushAnyCache; override;
     procedure GetViewInfo(MethodIndex: integer; out info: variant); override;
     function GetLoggedAuthorID(Right: TOrmAuthorRight;
       ContentToFillAuthor: TOrmContent): TID;
@@ -105,6 +105,7 @@ type
     procedure TagToText(const Value: variant; out result: variant);
   public
     procedure Start(aServer: TRest; const aTemplatesFolder: TFileName); reintroduce;
+    procedure FlushAnyCache; override;
     property HasFts: boolean
       read fHasFts write fHasFts;
   public
@@ -155,6 +156,8 @@ resourcestring
 { TBlogApplication }
 
 procedure TBlogApplication.Start(aServer: TRest; const aTemplatesFolder: TFileName);
+var
+  run: TMvcRunOnRestServer;
 begin
   fDefaultData := TLockedDocVariant.Create;
   inherited Start(aServer, TypeInfo(IBlogApplication));
@@ -162,18 +165,16 @@ begin
   // TRestOrmServer(TRestServer(aServer).Server).StaticVirtualTable[TOrmArticle]=nil;
   fTagsLookup.Init(RestModel.Orm);
   // publish IBlogApplication using Mustache Views (TMvcRunOnRestServer default)
-  fMainRunner := TMvcRunOnRestServer.Create(self, aTemplatesFolder).
-    SetCache('Default', cacheRootIfNoSession, 15).
-    SetCache('ArticleView', cacheWithParametersIfNoSession, 60).
-    SetCache('AuthorView', cacheWithParametersIgnoringSession, 60);
-  with TMvcRunOnRestServer(fMainRunner) do
-  begin
-    PublishOptions := PublishOptions - [cacheStatic];
-    StaticCacheControlMaxAge := 60 * 30; // 30 minutes
-  end;
-  (TMvcRunOnRestServer(fMainRunner).Views as TMvcViewsMustache).
+  run := TMvcRunOnRestServer.Create(self, aTemplatesFolder);
+  run.SetCache('Default',     cacheRootIfNoSession, 15);
+  run.SetCache('ArticleView', cacheWithParametersIfNoSession, 60);
+  run.SetCache('AuthorView',  cacheWithParametersIgnoringSession, 60);
+  //run.PublishOptions := run.PublishOptions - [cacheStatic];
+  run.StaticCacheControlMaxAge := 60 * 30; // 30 minutes
+  (run.Views as TMvcViewsMustache).
     RegisterExpressionHelpers(['MonthToText'], [MonthToText]).
     RegisterExpressionHelpers(['TagToText'],   [TagToText]);
+  fMainRunner := run; // owned by this TBlogApplication instance
   // data setup
   if not RestModel.Orm.TableHasRows(TOrmArticle) then
     ComputeMinimalData;
@@ -258,9 +259,9 @@ begin
     end;
     info.About := info.About + #13#10'Website powered by mORMot MVC ' +
       SYNOPSE_FRAMEWORK_VERSION + ', compiled with ' + COMPILER_VERSION +
-      ', running on ' + ToText(OSVersion32) + '.';
+      ', running on ' + OSVersionShort + '.';
     info.Copyright := '&copy;' + ToUTF8(CurrentYear) +
-      '<a href=https://synopse.info>Synopse Informatique</a>';
+      ' <a href=https://synopse.info>Synopse Informatique</a>';
     RestModel.Orm.Add(info, true);
   end;
   if RestModel.Orm.TableHasRows(TOrmArticle) then
@@ -474,7 +475,7 @@ begin
     end;
   end
   else
-    EMvcApplication.GotoError(HTTP_NOTFOUND);
+    RedirectError(HTTP_NOTFOUND); // faster than EMvcApplication.GotoError()
 end;
 
 procedure TBlogApplication.AuthorView(var ID: TID; var Author: TOrmAuthor;
@@ -486,7 +487,7 @@ begin
     Articles := RestModel.Orm.RetrieveDocVariantArray(TOrmArticle, '',
       'Author=? order by RowId desc limit 50', [ID], ARTICLE_FIELDS)
   else
-    EMvcApplication.GotoError(HTTP_NOTFOUND);
+    RedirectError(HTTP_NOTFOUND);
 end;
 
 function TBlogApplication.Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
@@ -496,7 +497,7 @@ var
 begin
   if CurrentSession.CheckAndRetrieve <> 0 then
   begin
-    GotoError(result, HTTP_BADREQUEST);
+    GotoError(result, 'Seesion already opened', HTTP_BADREQUEST);
     exit;
   end;
   Author := TOrmAuthor.Create(RestModel.Orm, 'LogonName=?', [LogonName]);
@@ -555,8 +556,9 @@ begin
       GotoView(result, 'ArticleView',
         ['ID', ID,
          'withComments', true,
-         'Scope', _ObjFast(['CommentError', error, 'CommentTitle', comm.Title,
-          'CommentContent', comm.Content])], HTTP_BADREQUEST);
+         'Scope', _ObjFast(['CommentError',   error,
+                            'CommentTitle',   comm.Title,
+                            'CommentContent', comm.Content])], HTTP_BADREQUEST);
   end;
 end;
 
@@ -575,12 +577,21 @@ var
 begin
   AuthorID := GetLoggedAuthorID(canPost, Article);
   if AuthorID = 0 then
-    EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
+  begin
+    RedirectError(sErrorNeedValidAuthorSession);
+    exit;
+  end;
   if ID <> 0 then
     if not RestModel.Orm.Retrieve(ID, Article) then
-      EMvcApplication.GotoError(HTTP_UNAVAILABLE)
+    begin
+      RedirectError(HTTP_UNAVAILABLE);
+      exit;
+    end
     else if Article.Author <> CastID(AuthorID) then
-      EMvcApplication.GotoError(sErrorNeedValidAuthorSession);
+    begin
+      RedirectError(sErrorNeedValidAuthorSession);
+      exit;
+    end;
   if Title <> '' then
     Article.Title := Title;
   if Content <> '' then

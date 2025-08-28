@@ -38,7 +38,8 @@ type
   // name server, or drrCNAME for the alias canonical name
   // - this enumerate has no RTTI because it is mapped to the integer values
   TDnsResourceRecord = (
-    drrA = 1,
+    drrEmpty,
+    drrA,
     drrNS,
     drrMD,
     drrMF,
@@ -508,7 +509,7 @@ procedure DnsParseData(RR: TDnsResourceRecord;
   const Answer: RawByteString; Pos, Len: PtrInt; var Text: RawUtf8);
 var
   p: PByteArray;
-  s1, s2: RawUtf8;
+  s2: RawUtf8;
 begin
   p := @PByteArray(Answer)[Pos];
   case RR of // see https://www.rfc-editor.org/rfc/rfc1035#section-3.3
@@ -539,23 +540,23 @@ begin
       begin
         // HINFO: CPU / OS
         // SOA: MName / RName / Serial:I / Refresh:I / Retry:I / Expire:I / TTL:I
-        Pos := DnsParseString(Answer, Pos, s1);
+        Pos := DnsParseString(Answer, Pos, Text);
         if (Pos <> 0) and
            (DnsParseString(Answer, Pos, s2) <> 0) then
-          Text := s1 + ' ' + s2;
+          Append(Text, ' ', s2);
       end;
     drrSRV: // see https://www.rfc-editor.org/rfc/rfc2782
       if Len > 6 then
         // Priority:W / Weight:W / Port:W / QName
         if DnsParseString(Answer, Pos + 6, Text) <> 0 then
-          Text := Text + ':' + UInt32ToUtf8(bswap16(PWordArray(p)[2])); // :port
+          Append(Text, [':', bswap16(PWordArray(p)[2])]); // QName:port
   end;
 end;
 
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal): RawByteString;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   w: TBufferWriter;
   h: TDnsHeader;
   n: PUtf8Char;
@@ -605,7 +606,7 @@ var
   start, stop: Int64;
   tix16: cardinal;
   lenw: word;
-  tmp: TSynTempBuffer;
+  tmp: TBuffer4K;
   hdr: PDnsHeader;
 begin
   result := false;
@@ -806,7 +807,7 @@ begin
   if PropNameEquals(HostName, 'localhost') or
      (HostName = c6Localhost) then
     Ip := IP4local
-  else if NetIsIP4(pointer(HostName)) then
+  else if NetIsIP4(pointer(HostName)) then // '1.2.3.4'
     Ip := HostName
   else
     result := false; // and Ip has been set to ''
@@ -817,7 +818,7 @@ var
   res: TDnsResult;
   i: PtrInt;
 begin
-  if not DnsLookupKnown(HostName, result) then
+  if not DnsLookupKnown(HostName, result) then // e.g. 'localhost' or '1.2.3.4'
     if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
@@ -834,7 +835,7 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if DnsLookupKnown(HostName, known) then
+  if DnsLookupKnown(HostName, known) then // e.g. 'localhost' or '1.2.3.4'
     AddRawUtf8(result, known)
   else if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do

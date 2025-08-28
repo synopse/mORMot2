@@ -1,4 +1,4 @@
-/// Network ACME / Let's Encrypt Support
+/// Network ACME / Let's Encrypt - ZeroSSL Support
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.net.acme;
@@ -9,7 +9,7 @@ unit mormot.net.acme;
    Automatic Certificate Management Environment (ACME v2) Client
     - JWS HTTP-client implementation
     - ACME client implementation
-    - Let's Encrypt TLS / HTTPS Encryption Certificates Support
+    - Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support
     - HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
     - HTTP/HTTPS Fully Featured Multi-Host Web Server
 
@@ -42,6 +42,7 @@ uses
   mormot.core.threads,
   mormot.core.search,
   mormot.crypt.core,
+  mormot.crypt.jwt,
   mormot.crypt.secure,
   mormot.lib.openssl11, // for per-domain-name PSSL_CTX certificates
   mormot.net.sock,
@@ -131,14 +132,17 @@ type
 
   /// ACME client processing class
   // - implements the ACME V2 client (specified in RFC8555) to download
-  // free domain validated certificates, mainly from Let's Encrypt
+  // free domain validated certificates, mainly from Let's Encrypt or ZeroSSL
   // - see https://letsencrypt.org/how-it-works for a high-level description
-  TAcmeClient = class(TSynLocked)
+  TAcmeClient = class(TObjectOSLightLock)
   protected
     fDirectoryUrl: RawUtf8;
     fContact: RawUtf8;
     fSubjects: RawUtf8;
     fSubject: TRawUtf8DynArray;
+    fEabAlgo: TSignAlgo;
+    fEabKid: RawUtf8;
+    fEabMacKey: RawUtf8;
     fHttpClient: TJwsHttpClient;
     fChallenges: TAcmeChallengeDynArray;
     fOnChallenges: TOnAcmeChallenge;
@@ -149,8 +153,10 @@ type
     fNewAccount: RawUtf8;
     fNewOrder: RawUtf8;
     // URI filled by CreateOrder
+    fOrder: RawUtf8;
     fFinalize: RawUtf8;
     procedure ReadDirectory;
+    procedure ComputeEab(out result: RawUtf8);
     procedure CreateAccount;
     function CreateOrder: TAcmeStatus;
     function RequestAuth(const aJson: RawJson): integer;
@@ -159,8 +165,8 @@ type
   public
     /// create an ACME client instance
     // - aDirectoryUrl is the main URL of a directory object, typically
-    // ACME_LETSENCRYPT_URL (for production) or ACME_LETSENCRYPT_DEBUG_URL
-    // (for testing)
+    // ACME_LETSENCRYPT_URL / ACME_ZEROSSL_URL (for production) or
+    // ACME_LETSENCRYPT_DEBUG_URL / ACME_ZEROSSL_DEBUG_URL (for testing)
     // - aCert is a local private certificate used to identify the client
     // account for the JWK requests - so is not involved in the TLS chain
     constructor Create(aLog: TSynLogClass; const aCert: ICryptCert;
@@ -168,7 +174,7 @@ type
     /// finalize the instance
     destructor Destroy; override;
     /// check if a Server Name text is part of associated Subjects
-    function Match(const aServerName: RawUtf8): boolean;
+    function MatchAny(const aServerName: RawUtf8): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// search for a given Challenge token, and return the associated key
     function GetChallenge(aUri: PUtf8Char; aUriLen: PtrInt;
@@ -179,19 +185,25 @@ type
     procedure StartDomainRegistration;
     /// check if challenge for a domain is completed
     function CheckChallengesStatus: TAcmeStatus;
-    /// finalize the order and download the signed certificate
-    // - aCert contain the final PEM certificate as signed by the ACME server
-    // - aPrivateKey contains the PEM private key generated locally, and
-    // optionally encrypted via aPrivateKeyPassword
-    function CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
+    /// finalize the order by submitting a Certificate Signing Request (CSR)
+    // - RegisterAndWait will eventually wait and call CompleteDomainRegistration()
+    // to actually download the signed certificate
+    // - aPrivateKey contains the PEM private key generated locally,
+    // optionally encrypted via aPrivateKeyPassword, corresponding to the CSR
+    function FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
       const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
+    /// download the signed certificate
+    // - aCert contain the final PEM certificate as signed by the ACME server
+    function CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
+    /// call OnChallenges to clear temp files, if needed
+    procedure ClearDomainRegistration;
     /// will run StartDomainRegistration and wait until it is completed
     // - low-level wrapper using any TOnAcmeChallenge callback
     // - won't execute function CompleteDomainRegistration() if OutSignedCert
     // or OutPrivateKey are not set
     function RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
       const OutSignedCert, OutPrivateKey: TFileName;
-      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
+      const aPrivateKeyPassword: SpiUtf8; WaitForSec: cardinal;
       Terminated: PBoolean): TAcmeStatus;
     /// will run StartDomainRegistration and wait until it is completed
     // - ChallengeWwwFolder is a local folder where to store the temporary
@@ -213,6 +225,20 @@ type
     // - match Subjects CSV field
     property Subject: TRawUtf8DynArray
       read fSubject write fSubject;
+    /// EAB MAC algoritm
+    // - "External Account Binding" can be used to associate an ACME account
+    // with an existing account in non-ACME system
+    // - typically saSha256
+    property EabAlgo: TSignAlgo
+      read fEabAlgo write fEabAlgo;
+    /// EAB key identifier
+    // - provided by external system
+    property EabKid: RawUtf8
+      read fEabKid write fEabKid;
+    /// EAB MAC key
+    // - provided by external system
+    property EabMacKey: RawUtf8
+      read fEabMacKey write fEabMacKey;
     /// low-level direct access to the associated challenges
     // - may be used instead of OnChallenges callback
     property Challenges: TAcmeChallengeDynArray
@@ -229,7 +255,7 @@ type
 function ToText(status: TAcmeStatus): PShortString; overload;
 
 
-{ **************** Let's Encrypt TLS / HTTPS Encryption Certificates Support }
+{ ********** Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support }
 
 const
   ACME_LETSENCRYPT_URL =
@@ -237,10 +263,13 @@ const
   ACME_LETSENCRYPT_DEBUG_URL =
     'https://acme-staging-v02.api.letsencrypt.org/directory';
 
+  ACME_ZEROSSL_URL =
+    'https://acme.zerossl.com/v2/DV90';
+  ACME_ZEROSSL_DEBUG_URL =
+    'https://acme.zerossl.com/v2/DV90/staging';
+
   ACME_CHALLENGE_PATH =
     '/.well-known/acme-challenge/';
-  ACME_CHALLENGE_PATH_UPPER =
-    '/.WELL-KNOWN/ACME-CHALLENGE/';
   ACME_CHALLENGE_PATH_LEN = length(ACME_CHALLENGE_PATH);
 
 type
@@ -248,34 +277,41 @@ type
 
   TAcmeLetsEncrypt = class;
 
-  /// used to generate or renew one Let's Encrypt domain certificate
+  /// used to generate or renew one Let's Encrypt - ZeroSSL domain certificate
   TAcmeLetsEncryptClient = class(TAcmeClient)
   protected
     fDomainJson, fReferenceCert, fSignedCert, fPrivKey: TFileName;
     fOwner: TAcmeLetsEncrypt;
-    fCtx: PSSL_CTX;
+    fSslCtx: PSSL_CTX; // shared for all server connections
     fRedirectHttps: RawUtf8;
     fRenewing: boolean;
+    fServerContextTix32: cardinal;
     fSignedCertTime, fPrivKeyTime: TUnixTime;
-    procedure ClearCtx;
     // internal method called by TAcmeLetsEncrypt.OnNetTlsAcceptServerName
     function GetServerContext: PSSL_CTX;
+    function NewServerContext(const Cert, Key: TFileName): PSSL_CTX;
+    procedure ReplaceContext(New: PSSL_CTX);
   public
     /// initialize certificate management with Let's Encrypt of one domain
     // - aDomainFile is the ##.json of this domain to be read from disk
     // with its associated ##.acme.pem, ##.crt.me, and ##.key.pem files
+    // - typically aDomainFile is
+    // $ {"contact":"mailto:admin@synopse.info","subjects":["synopse.info","www.synopse.info"]}
+    // optionally with a "eab" member e.g. for ZeroSSL:
+    // $ { .. , "eab":{"algo":"Sha256","kid":"xxx","mac_key":"zzzzz'}}
     constructor Create(aOwner: TAcmeLetsEncrypt; const aDomainFile: TFileName); reintroduce;
     /// finalize the information of this domain certificate
     destructor Destroy; override;
   end;
   TAcmeLetsEncryptClientObjArray = array of TAcmeLetsEncryptClient;
 
-  /// handle one or several Let's Encrypt domains certificates
+  /// handle one or several Let's Encrypt - ZeroSSL domains certificates
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynLocked)
+  TAcmeLetsEncrypt = class(TSynPersistent)
   protected
+    fSafe: TRWLightLock;
     fClient: TAcmeLetsEncryptClientObjArray;
     fKeyStoreFolder: TFileName;
     fPrivateKeyPassword: SpiUtf8;
@@ -283,16 +319,17 @@ type
     fLog: TSynLogClass;
     fRenewBeforeEndDays: integer;
     fRenewWaitForSeconds: integer;
-    fRenewTerminated: boolean;
-    fRenewing: boolean;
+    fClientsRenewing: boolean;
+    fShutdown: boolean;
     fOnChallenge: TOnAcmeChallenge;
     function GetClient(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
+    procedure WaitUntilNotRenewing(const Context: ShortString);
     procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); virtual; abstract;
   public
-    /// initialize certificates management with Let's Encrypt
+    /// initialize certificates management with Let's Encrypt - ZeroSSL
     // - if aDirectoryUrl is not '', will use the "staging" environment - you
-    // should specify ACME_LETSENCRYPT_URL on production
+    // should specify ACME_LETSENCRYPT_URL / ACME_ZEROSSL_URL on production
     // - if aAlgo is '', will use 'x509-es256' as default
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
     constructor Create(aLog: TSynLogClass; const aKeyStoreFolder: TFileName;
@@ -310,14 +347,13 @@ type
     // - follow RenewWaitForSeconds timeout for each certificate
     // - this blocking process could take some time (several seconds per domain)
     procedure CheckCertificates(Sender: TObject);
-    /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
-    // global variable of mormot.net.sock
+    /// low-level TOnNetTlsAcceptServerName event for the HTTPS server SNI
+    // - as supplied to THttpServerGeneric.SetTlsServerNameCallback()
     function OnNetTlsAcceptServerName(Context: PNetTlsContext; TLS: pointer;
       ServerName: PUtf8Char): pointer;
-    /// TOnNetTlsAcceptChallenge event, set to OnNetTlsAcceptChallenge
-    // global variable of mormot.net.sock
-    // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
-    function OnNetTlsAcceptChallenge(const domain, uri: RawUtf8;
+    /// compute the challenge to be returned by the HTTP server on port 80
+    // - ACME typical uri is '/.well-known/acme-challenge/<TOKEN>'
+    function HttpServerChallenge(const domain, uri: RawUtf8;
       var content: RawUtf8): boolean;
     /// raw access to the internal Client list
     property Client: TAcmeLetsEncryptClientObjArray
@@ -334,6 +370,8 @@ type
     property KeyStoreFolder: TFileName
       read fKeyStoreFolder;
     /// the URI root folder used for ACME authentication
+    // - typically ACME_LETSENCRYPT_URL / ACME_ZEROSSL_URL (for production) or
+    // ACME_LETSENCRYPT_DEBUG_URL / ACME_ZEROSSL_DEBUG_URL (for testing)
     property DirectoryUrl: RawUtf8
       read fDirectoryUrl;
     /// how many days before expiration CheckCertificates() should renew a
@@ -343,16 +381,16 @@ type
     property RenewBeforeEndDays: integer
       read fRenewBeforeEndDays write fRenewBeforeEndDays;
     /// how many seconds CheckCertificates() should wait for getting a certificate
-    // - default is 30 seconds
+    // - default is 30 seconds, which seems fair enough
     property RenewWaitForSeconds: integer
       read fRenewWaitForSeconds write fRenewWaitForSeconds;
   end;
 
 
-{ **************** HTTP-01 Let's Encrypt Challenges HTTP Server on port 80 }
+{ *********** HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80 }
 
 type
-  /// handle one or several Let's Encrypt domains certificates with an
+  /// handle one or several Let's Encrypt - ZeroSSL domains certificates with an
   // associated HTTP server running on port 80
   // - will support HTTP-01 challenge answers when renewing is active
   // - will redirect any plain HTTP port 80 request to HTTPS port 443
@@ -364,7 +402,7 @@ type
     fHttpServer: THttpServer; // a single threaded HTTP server is enough
     fHttpsServer: THttpServerGeneric;
     fNextCheckTix: Int64;
-    fRedirectHttps: integer;
+    fRedirectHttpsCount: integer; // how many active custom Redirect()
     // (un)assign the TNetTlsContext.OnAcceptServerName callback to this instance
     procedure SetCallbackForLoadFromKeyStoreFolder(Enabled: boolean); override;
     // main entry point for all HTTP requests on port 80
@@ -373,8 +411,9 @@ type
     procedure OnAcceptIdle(Sender: TObject; Tix64: Int64);
   public
     /// initialize certificates management and HTTP server with Let's Encrypt
-    // - if aDirectoryUrl is not '', will use the "staging" environment - you
-    // should specify ACME_LETSENCRYPT_URL on production
+    // - if aDirectoryUrl is not '', will use the ACME_LETSENCRYPT_DEBUG_URL
+    // "staging" environment - you should specify ACME_LETSENCRYPT_URL /
+    // ACME_ZEROSSL_URL on production
     // - if aAlgo is '', will use 'x509-es256' as default
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
     // - you can specify the associated main HTTPS server into aHttpsServer so
@@ -399,6 +438,7 @@ type
     property HttpsServer: THttpServerGeneric
       read fHttpsServer write fHttpsServer;
     /// the limited HTTP server launched by this class, running on port 80
+    // - a single-threaded OnHeaderParsed() process scales well enough
     property HttpServer: THttpServer
       read fHttpServer;
   end;
@@ -472,7 +512,7 @@ begin
   begin
     // no key identifier, need to provide JSON Web Key
     if not fCert.HasPrivateSecret then
-      raise EJwsHttp.Create('No private key');
+      EJwsHttp.RaiseUtf8('%.Post: No private key', [self]);
     // compute JWK JSON object - e.g. '{"e":..,"kty":"RSA","n":..}' for RSA
     jwk := fCert.JwkCompute;
     // the thumbprint of a JWK is computed with no whitespace or line breaks
@@ -506,11 +546,11 @@ end;
 
 function AcmeTextToStatus(p: PUtf8Char): TAcmeStatus;
 begin
-  if IdemPChar(p, 'VALID') then
+  if IdemPChar(p, 'VALID') or   // request has been successfully validated
+     IdemPChar(p, 'READY') then // request is ready for the next step
     result := asValid
-  else if IdemPChar(p, 'READY') then
-    result := asValid
-  else if IdemPChar(p, 'PENDING') then
+  else if IdemPChar(p, 'PENDING') or      // request is still being processed
+          IdemPChar(p, 'PROCESSING') then
     result := asPending
   else
     result := asInvalid;
@@ -560,12 +600,13 @@ begin
   fDirectoryUrl := aDirectoryUrl;
   fContact := aContact;
   if aSubjects = '' then
-    raise EAcmeClient.Create('Create with aSubjects=nil');
+    EAcmeClient.RaiseUtf8('%.Create with aSubjects=nil', [self]);
   fSubjects := aSubjects;
   fSubject := CsvToRawUtf8DynArray(fSubjects);
   for i := 0 to high(fSubject) do
     if fSubject[i] = '' then // not allowed by FindPropName()
-      raise EAcmeClient.Create('Create with a void entry in aSubjects CSV');
+      EAcmeClient.RaiseUtf8('%.Create with a void entry in aSubjects=%',
+        [self, aSubjects]);
   fHttpClient := TJwsHttpClient.Create(fLog, aCert);
 end;
 
@@ -575,7 +616,7 @@ begin
   inherited Destroy;
 end;
 
-function TAcmeClient.Match(const aServerName: RawUtf8): boolean;
+function TAcmeClient.MatchAny(const aServerName: RawUtf8): boolean;
 begin
   // very fast case insensitive O(n) search
   result := FindPropName(pointer(fSubject), aServerName, length(fSubject)) >= 0;
@@ -584,23 +625,22 @@ end;
 function TAcmeClient.GetChallenge(aUri: PUtf8Char; aUriLen: PtrInt;
   var Content: RawUtf8): boolean;
 var
-  i: PtrInt;
+  i: integer;
   c: ^TAcmeChallenge;
 begin
   c := pointer(fChallenges);
   if aUriLen > 0 then
     for i := 1 to length(fChallenges) do
-    begin
       if CompareBuf(c^.Token, aUri, aUriLen) = 0 then
       begin
         if Assigned(fLog) then
-          fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.Token], self);
+          fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.SubjectValue], self);
         result := true;
         Content := c^.Key;
         exit;
-      end;
-      inc(c);
-    end;
+      end
+      else
+        inc(c);
   result := false;
 end;
 
@@ -627,16 +667,44 @@ begin
     EAcmeClient.RaiseUtf8('Invalid directory %', [fDirectoryUrl]);
 end;
 
+procedure TAcmeClient.ComputeEab(out result: RawUtf8);
+var
+  protected: RawUtf8;
+  payload: RawUtf8;
+  signature: RawUtf8;
+  signer: TSynSigner;
+  hash: THash512Rec;
+begin
+  protected := BinToBase64uri(FormatJson('{"alg":?,"kid":?,"url":?',
+    [], [JWT_TEXT[fEabAlgo], fEabKid, fNewAccount]));
+  payload := BinToBase64uri(fHttpClient.fCert.JwkCompute);
+  signer.Init(fEabAlgo, Base64uriToBin(fEabMacKey));
+  signer.Update(protected);
+  signer.Update('.');
+  signer.Update(payload);
+  signer.Final(@hash);
+  signature := BinToBase64uri(@hash, signer.SignatureSize);
+  result := FormatJson(
+    ',"externalAccountBinding":{"protected":?,"payload":?,"signature":?}',
+    [], [protected, payload, signature]);
+end;
+
 procedure TAcmeClient.CreateAccount;
 var
+  eab: RawUtf8;
+  req: RawJson;
   resp: RawJson;
   status: RawUtf8;
 begin
+  // Optional External Account Binding member
+  if (fEabKid <> '') and
+     (fEabMacKey <> '') then
+    ComputeEab(eab);
   // A client creates a new account with the server by sending a POST
   // request to the server's newAccount URL
-  resp := fHttpClient.Post(fNewAccount,
-    ['termsOfServiceAgreed', true,
-     'contact',              _ArrFast([fContact])]);
+  req := FormatJson('{"termsOfServiceAgreed":true,"contact":[?]%}',
+      [eab], [fContact]);
+  resp := fHttpClient.Post(fNewAccount, req);
   status := JsonDecode(pointer(resp), 'status', nil, {handlejsonobjarr=} true);
   if AcmeTextToStatus(pointer(status)) <> asValid then
     EAcmeClient.RaiseUtf8('% returned status % (expected "valid")',
@@ -657,6 +725,8 @@ begin
   // The client begins the certificate issuance process by sending a POST
   // request to the server's newOrder resource
   r1 := fHttpClient.Post(fNewOrder, ['identifiers', GetIdentifiersArr(fSubject)]);
+  if not fHttpClient.Header('Location', fOrder) then
+    EAcmeClient.RaiseU('Location not found for new order');
   JsonDecode(pointer(r1), [
     'status',
     'finalize',
@@ -720,23 +790,26 @@ end;
 
 function TAcmeClient.RequestAuth(const aJson: RawJson): integer;
 var
-  i: PtrInt;
+  i: integer;
   resp: RawJson;
   status: RawUtf8;
+  c: ^TAcmeChallenge;
 begin
+  result := 0; // return how many pending
   // The client indicates to the server that it is ready for the challenge
   // validation by sending an empty body aJson = '{}'.
   // If aJson = '' then client requests validation state
-  result := 0; // return how many pending
-  for i := 0 to length(fChallenges) - 1 do
+  c := pointer(fChallenges);
+  for i := 1 to length(fChallenges) do
   begin
-    if fChallenges[i].Status = asPending then
+    if c^.Status = asPending then
     begin
-      resp := fHttpClient.Post(fChallenges[i].Url, aJson);
+      resp := fHttpClient.Post(c^.Url, aJson);
       status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
-      fChallenges[i].Status := AcmeTextToStatus(pointer(status));
-      inc(result, ord(fChallenges[i].Status = asPending));
+      c^.Status := AcmeTextToStatus(pointer(status));
+      inc(result, ord(c^.Status = asPending));
     end;
+    inc(c);
   end;
 end;
 
@@ -773,8 +846,9 @@ begin
     // Notify top-level application
     if Assigned(fOnChallenges) then
       for i := 0 to length(fChallenges) - 1 do
-        if fChallenges[i].Key <> '' then
-          fOnChallenges(self, fSubjects, fChallenges[i].Key, fChallenges[i].Token);
+        with fChallenges[i] do
+          if Key <> '' then
+            fOnChallenges(self, fSubjects, Key, Token);
     // Queue challenge testing by sending {} to initiate the server process
     n := RequestAuth('{}');
     fLog.Add.Log(sllTrace, 'StartDomainRegistration pending=%', [n], self);
@@ -783,7 +857,8 @@ end;
 
 function TAcmeClient.CheckChallengesStatus: TAcmeStatus;
 var
-  i, pending, valid: PtrInt;
+  i, pending, valid: integer;
+  c: ^TAcmeChallenge;
 begin
   // Before sending a POST request to the server, an ACME client needs to
   // have a fresh anti-replay nonce to put in the "nonce" header of the JWS
@@ -796,13 +871,17 @@ begin
   // else pending
   result := asPending;
   valid := 0;
-  for i := 0 to length(fChallenges) - 1 do
-    case fChallenges[i].Status of
+  c := pointer(fChallenges);
+  for i := 1 to length(fChallenges) do
+  begin
+    case c^.Status of
       asInvalid:
         result := asInvalid;
       asValid:
         inc(valid);
     end;
+    inc(c);
+  end;
   if (result = asPending) and
      (valid = length(fChallenges)) then
     result := asValid;
@@ -810,16 +889,15 @@ begin
     [ToText(result)^, pending, valid, length(fChallenges)], self);
 end;
 
-function TAcmeClient.CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
+function TAcmeClient.FinalizeDomainRegistration(out aPrivateKey: RawUtf8;
   const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
 var
   csr: RawByteString;
   pk, resp: RawUtf8;
-  i: PtrInt;
-  v: array [0..1] of TValuePUtf8Char;
+  status: RawUtf8;
 begin
   try
-    // Generate a new PKCS#10 Certificate Signing Request
+    // Generate a new private key and its PKCS#10 Certificate Signing Request
     csr := PemToDer(fHttpClient.fCert.CertAlgo.CreateSelfSignedCsr(
       fSubjects, aPrivateKeyPassword, pk));
     // Before sending a POST request to the server, an ACME client needs to
@@ -827,9 +905,32 @@ begin
     fHttpClient.Head(fNewNonce);
     // Once the validation process is complete and the server is satisfied
     // that the client has met its requirements, the client finalizes the
-    // order by submitting a Certificate Signing Request (CSR)
+    // order by submitting the Certificate Signing Request (CSR)
     resp := fHttpClient.Post(fFinalize, [
       'csr', BinToBase64uri(csr)]);
+    status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
+    result := AcmeTextToStatus(pointer(status));
+    if result in [asValid, asPending] then
+      // only keep the generated private key on success
+      aPrivateKey := pk
+  finally
+    FillZero(pk);
+  end;
+end;
+
+function TAcmeClient.CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
+var
+  resp: RawUtf8;
+  v: array [0..1] of TValuePUtf8Char;
+begin
+  try
+    // Before sending a POST request to the server, an ACME client needs to
+    // have a fresh anti-replay nonce to put in the "nonce" header of the JWS
+    fHttpClient.Head(fNewNonce);
+    // If a request to finalize an order is successful, the server will
+    // return a 200 (OK) with an updated order object. The status of the
+    // order will indicate what action the client should take
+    resp := fHttpClient.Post(fOrder, '');
     JsonDecode(pointer(resp), [
       'status',
       'certificate'], @v, {handlejsonobjarr=} true);
@@ -841,64 +942,90 @@ begin
       // Download the certificate
       aCert := fHttpClient.Post(v[1].ToUtf8, '');
       if IsPem(aCert) then
-        fLog.Add.Log(sllDebug, 'CompleteDomainRegistration finalize=%',
+        fLog.Add.Log(sllDebug, 'CompleteDomainRegistration cert=%',
           [aCert], self)
       else
         result := asInvalid;
     end;
-    if result = asValid then
-      // only keep the generated private key on success
-      aPrivateKey := pk
   finally
-    FillZero(pk);
     FillZero(resp);
-    if Assigned(fOnChallenges) then
-      // call with key = '' to notify final state
-      for i := 0 to length(fChallenges) - 1 do
-        if fChallenges[i].Key <> '' then
-          fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
-    fChallenges := nil;
   end;
+end;
+
+procedure TAcmeClient.ClearDomainRegistration;
+var
+  i: PtrInt;
+begin
+  if Assigned(fOnChallenges) then
+    // call with key = '' to notify final state
+    for i := 0 to length(fChallenges) - 1 do
+      with fChallenges[i] do
+        if Key <> '' then
+          fOnChallenges(nil, fSubjects, {key=}'', Token);
+  fChallenges := nil;
+  fOrder := '';
+  fFinalize := '';
 end;
 
 function TAcmeClient.RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
   const OutSignedCert, OutPrivateKey: TFileName;
-  const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
+  const aPrivateKeyPassword: SpiUtf8; WaitForSec: cardinal;
   Terminated: PBoolean): TAcmeStatus;
 var
-  endtix: Int64;
+  endtix: cardinal;
   cert, pk: RawUtf8;
   log: ISynLog;
 begin
   fLog.EnterLocal(log, self, 'RegisterAndWait');
   fOnChallenges := OnChallenge;
-  StartDomainRegistration;
-  endtix := GetTickCount64 + WaitForSec * 1000;
-  repeat
-    result := asInvalid;
-    if Terminated = nil then
-      SleepHiRes(1000)
-    else if SleepHiRes(1000, Terminated^) then
+  try
+    StartDomainRegistration;
+    // First loop: wait for domain validation
+    endtix := GetTickSec + WaitForSec; // e.g. RenewWaitForSeconds = 30 secs
+    repeat
+      result := asInvalid;
+      if Terminated = nil then
+        SleepHiRes(500)
+      else if SleepHiRes(500, Terminated^) then
+        exit;
+      result := CheckChallengesStatus; // checking twice per second seems fair
+      if result <> asPending then
+        break;
+    until GetTickSec > endtix;
+    if (result <> asValid) or
+       (OutSignedCert = '') or
+       (OutPrivateKey = '') then
       exit;
-    result := CheckChallengesStatus;
-    if result <> asPending then
-      break;
-  until GetTickCount64 > endtix;
-  if (result <> asValid) or
-     (OutSignedCert = '') or
-     (OutPrivateKey = '') then
-    exit;
-  result := CompleteDomainRegistration(cert, pk, aPrivateKeyPassword);
-  if Assigned(log) then
-    log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
-  if result = asValid then
-    try
-      FileFromString(cert, OutSignedCert);
-      FileFromString(pk, OutPrivateKey);
-    finally
-      FillZero(cert);
-      FillZero(pk);
-    end;
+    // Send CSR
+    result := FinalizeDomainRegistration(pk, aPrivateKeyPassword);
+    if Assigned(log) then
+      log.Log(sllDebug, 'FinalizeDomainRegistration=%', [ToText(result)^], self);
+    if result = asInvalid then
+      exit;
+    // Second loop: wait for certificate
+    repeat
+      result := asInvalid;
+      if Terminated = nil then
+        SleepHiRes(500)
+      else if SleepHiRes(500, Terminated^) then
+        exit;
+      result := CompleteDomainRegistration(cert); // retry twice per second
+      if result <> asPending then
+        break;
+    until GetTickSec > endtix;
+    if Assigned(log) then
+      log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
+    if result = asValid then
+      try
+        FileFromString(cert, OutSignedCert);
+        FileFromString(pk,   OutPrivateKey);
+      finally
+        FillZero(cert);
+        FillZero(pk);
+      end;
+  finally
+    ClearDomainRegistration;
+  end;
 end;
 
 function TAcmeClient.RegisterAndWaitFolder(
@@ -922,93 +1049,147 @@ begin
 end;
 
 
-{ **************** Let's Encrypt TLS / HTTPS Encryption Certificates Support }
+{ ********** Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support }
 
 { TAcmeLetsEncryptClient }
 
 constructor TAcmeLetsEncryptClient.Create(
   aOwner: TAcmeLetsEncrypt; const aDomainFile: TFileName);
 var
-  cc: ICryptCert;
+  local: ICryptCert;
   dom: TDocVariantData;
-  json, c: RawUtf8;
-  s: TRawUtf8DynArray;
+  json, cont: RawUtf8;
+  sub: TRawUtf8DynArray;
+  eab: PDocVariantData;
+  algo: RawUtf8;
 begin
   fOwner := aOwner;
   fDomainJson    := aDomainFile + '.json';
   fReferenceCert := aDomainFile + '.acme.pem';
   fSignedCert    := aDomainFile + '.crt.pem';
   fPrivKey       := aDomainFile + '.key.pem';
+  // load the main domain.json global parameters
   json := StringFromFile(fDomainJson);
   fOwner.fLog.Add.Log(sllTrace, 'Create(%) %', [aDomainFile, json], self);
   dom.InitJsonInPlace(pointer(json), []);
-  c := dom.U['contact'];
-  dom.A['subjects'].ToRawUtf8DynArray(s);
-  cc := Cert(fOwner.fAlgo);
-  if cc = nil then
+  dom.A['subjects'].ToRawUtf8DynArray(sub);
+  if sub = nil then
+    EAcmeLetsEncrypt.RaiseUtf8(
+      '%.Create: void "subjects":[] in %', [self, fDomainJson]);
+  cont := dom.U['contact'];
+  if cont = '' then
+    EAcmeLetsEncrypt.RaiseUtf8(
+      '%.Create: missing "contact":"mailto:xx@yy.zz" in %',
+      [self, fDomainJson]);
+  if dom.GetAsDocVariant('eab', eab) then
+  begin
+    algo := eab^.U['algo'];
+    if not TextToSignAlgo(algo, fEabAlgo) then
+      EAcmeLetsEncrypt.RaiseUtf8(
+       '%.Create: unsupported "eab.algo":"%"', [self, algo]);
+    fEabKid    := eab^.U['kid'];
+    fEabMacKey := eab^.U['mac_key'];
+  end;
+  // load acme.pem local key (used to sign the JWK queries, not for TLS itself)
+  local := Cert(fOwner.fAlgo);
+  if local = nil then
     EAcmeLetsEncrypt.RaiseUtf8('%.Create: unsupported %', [self, fOwner.fAlgo]);
   if not FileExists(fSignedCert) or
      not FileExists(fPrivKey) or
-     not cc.LoadFromFile(fReferenceCert, cccCertWithPrivateKey) then
+     not local.LoadFromFile(fReferenceCert, cccCertWithPrivateKey) then
   begin
-    fOwner.fLog.Add.Log(sllDebug, 'Create(%): invalid certs -> recreate',
-      [aDomainFile], self);
+    fOwner.fLog.Add.Log(sllDebug, 'Create(%): invalid % -> recreate all',
+      [aDomainFile, fReferenceCert], self);
     DeleteFile(fReferenceCert);
     DeleteFile(fSignedCert);
     DeleteFile(fPrivKey);
-    // create a new certificate to sign the JWK queries (not used for TLS)
-    cc.Generate([cuDigitalSignature], s[0], nil, 3650);
-    cc.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
+    local.Generate([cuDigitalSignature], sub[0], nil, 3650);
+    local.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
   end;
-  inherited Create(fOwner.fLog, cc, fOwner.fDirectoryUrl, c, RawUtf8ArrayToCsv(s));
+  // initialize the process
+  inherited Create(fOwner.fLog, local, fOwner.fDirectoryUrl,
+    cont, RawUtf8ArrayToCsv(sub));
 end;
 
 destructor TAcmeLetsEncryptClient.Destroy;
 begin
-  ClearCtx;
+  ReplaceContext({new=}nil);
   inherited Destroy;
 end;
 
-procedure TAcmeLetsEncryptClient.ClearCtx;
+function TAcmeLetsEncryptClient.NewServerContext(const Cert, Key: TFileName): PSSL_CTX;
 begin
-  if fCtx <> nil then
-    fCtx.Free;
-  fCtx := nil;
+  result := SSL_CTX_new(TLS_server_method);
+  try
+    result.SetCertificateFiles(
+      StringToUtf8(Cert), StringToUtf8(Key), fOwner.fPrivateKeyPassword);
+  except
+    result.Free; // release this invalid context on any EOpenSslNetTls
+    result := nil;
+  end;
+  fLog.Add.Log(sllTrace, 'NewServerContext=% for % and %',
+    [BOOL_STR[result <> nil], Cert, Key], self);
 end;
 
 function TAcmeLetsEncryptClient.GetServerContext: PSSL_CTX;
 var
   sc, pk: TUnixTime;
+  tix32: cardinal;
 begin
-  // client made fSafe.Lock
-  result := fCtx;
-  if result <> nil then // most of time, immediate return from cache
+  // client made fSafe.Lock and will eventually make fSafe.UnLock
+  sc := 0;
+  pk := 0;
+  tix32 := GetTickSec;
+  // result <> nil will be attached to a TLS connection via SSL_set_SSL_CTX()
+  result := fSslCtx;
+  // immediate return from cache on a very active server or during renewal
+  if fRenewing or
+     (fServerContextTix32 = tix32) then
     exit;
-  // check missing or unmodified key files
-  sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
-  if sc <= 0 then
-    exit;
-  pk := FileAgeToUnixTimeUtc(fPrivKey);    // ####.key.pem
-  if (pk <= 0) or
-     ((fSignedCertTime = sc) and
-      (fPrivKeyTime = pk)) then
-    exit;
-  // only retry SSL_CTX_new().SetCertificateFiles() if actually changed
-  fSignedCertTime := sc;
-  fPrivKeyTime := pk;
-  // will be assigned by SSL_set_SSL_CTX() which requires only a certificate
-  result := SSL_CTX_new(TLS_server_method);
-  // cut-down version of TOpenSslNetTls.SetupCtx
-  if result.SetCertificateFiles(
-       fSignedCert, fPrivKey, fOwner.fPrivateKeyPassword) then
-    fCtx := result // owned and cached
-  else
+  fServerContextTix32 := tix32; // accessing files once per second is enough
+  if result <> nil then // we already have a PSSL_CTX: check it is still valid
   begin
-    result.Free;
-    result := nil; // silently fallback to main certificate
+    // missing key files could still return the cached PSSL_CTX
+    sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
+    pk := FileAgeToUnixTimeUtc(fPrivKey);    // ####.key.pem
+    if (sc <= 0) or
+       (pk <= 0) then
+      exit;
+    // unmodified key files will also return the cached PSSL_CTX (most often)
+    if (fSignedCertTime = sc) and
+       (fPrivKeyTime = pk) then
+      exit;
   end;
+  // if we reached here, we have deprecated (or no) PSSL_CTX -> create one
+  result := NewServerContext(fSignedCert, fPrivKey);
+  if result <> nil then
+  begin
+    fSslCtx := result; // owned and cached
+    if sc = 0 then
+      sc := FileAgeToUnixTimeUtc(fSignedCert); // ####.crt.pem
+    if pk = 0 then
+      pk := FileAgeToUnixTimeUtc(fPrivKey);   //  ####.key.pem
+    fSignedCertTime := sc;
+    fPrivKeyTime := pk;
+  end
+  else
+    result := fSslCtx; // silently fallback to previous (maybe nil) PSSL_CTX
 end;
 
+procedure TAcmeLetsEncryptClient.ReplaceContext(New: PSSL_CTX);
+var
+  old: PSSL_CTX;
+begin
+  fSafe.Lock;
+  try
+    old := fSslCtx;
+    fSslCtx := New;
+  finally
+    fSafe.UnLock;
+  end;
+  if old <> nil then
+    old.Free;
+end;
 
 
 { TAcmeLetsEncrypt }
@@ -1035,19 +1216,23 @@ begin
   fRenewBeforeEndDays := 30;
 end;
 
-destructor TAcmeLetsEncrypt.Destroy;
+procedure TAcmeLetsEncrypt.WaitUntilNotRenewing(const Context: ShortString);
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin
-  fRenewTerminated := true; // set flag to abort any background task
-  if fRenewing then
-  begin
-    endtix := GetTickCount64 + 1000; // wait for background task to abort
+  endtix := GetTickSec + 30; // never wait forever
+  with fLog.Enter('%: WaitUntilNotRenewing', [Context], self) do
     repeat
-      SleepHiRes(10);
-    until (GetTickCount64 > endtix) or
-          not fRenewing;
-  end;
+      SleepHiRes(50); // wait for background task to abort
+    until (GetTickSec > endtix) or
+          not fClientsRenewing;
+end;
+
+destructor TAcmeLetsEncrypt.Destroy;
+begin
+  fShutdown := true; // set flag to abort any background task
+  if fClientsRenewing then
+    WaitUntilNotRenewing('Destroy');
   FillZero(fPrivateKeyPassword);
   ObjArrayClear(fClient);
   inherited Destroy;
@@ -1060,8 +1245,14 @@ var
   log: ISynLog;
 begin
   fLog.EnterLocal(log, self, 'LoadFromKeyStoreFolder');
+  if fShutdown then
+    exit;
+  if fClientsRenewing then
+    WaitUntilNotRenewing('LoadFromKeyStoreFolder'); // paranoid
+  if fShutdown then
+    exit;
   SetCallbackForLoadFromKeyStoreFolder({enabled=}false);
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     ObjArrayClear(fClient);
     if FindFirst(fKeyStoreFolder + '*.json', faAnyFile, f) = 0 then
@@ -1079,14 +1270,14 @@ begin
                RenameFile(fn, fn + '.invalid'); // don't try it again
                if Assigned(log) then
                  log.Log(sllWarning, 'LoadFromKeyStoreFolder: renamed as ' +
-                   '%.invalid after %', [fn, E.ClassType], self);
+                   '%.invalid after %', [fn, PClass(E)^], self);
              end;
            end;
       until FindNext(f) <> 0;
       FindClose(f);
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
   if fClient <> nil then
     SetCallbackForLoadFromKeyStoreFolder({enabled=}true);
@@ -1105,20 +1296,23 @@ var
   needed: TRawUtf8DynArray; // no long standing fSafe.Lock
   expired: TDateTime;
   res: TAcmeStatus;
+  tmpCert, tmpKey: TFileName;
   log: ISynLog;
 begin
   // this method is run from a transient TLoggedWorkThread
   fLog.EnterLocal(log, self, 'CheckCertificates');
   if (self = nil) or
      (fClient = nil) or
-     (fRenewBeforeEndDays <= 0) then
+     fShutdown or
+     (fRenewBeforeEndDays <= 0) or
+     fClientsRenewing then
     exit;
   // quickly retrieve all certificates which need generation/renewal
   cc := Cert(fAlgo);
   if cc = nil then
     exit;
   expired := NowUtc + fRenewBeforeEndDays;
-  fSafe.Lock;
+  fSafe.ReadLock;
   try
     for i := 0 to length(fClient) - 1 do
     begin
@@ -1127,24 +1321,32 @@ begin
         continue; // paranoid
       sub := c.Subject[0];
       if GetClient(sub) = c then // avoid duplicated names confusion
-        if not cc.LoadFromFile(c.fSignedCert) or
-           (cc.GetNotAfter < expired) then
+        if not cc.LoadFromFile(c.fSignedCert) or // needs generation
+           (cc.GetNotAfter < expired) then       // needs renewal
           AddRawUtf8(needed, sub);
     end;
   finally
-    fSafe.UnLock;
+    fSafe.ReadUnLock;
   end;
-  // renew the needed certificates
   if Assigned(log) then
     log.Log(sllDebug, 'CheckCertificates: renew %',
       [Plural('certificate', length(needed))], self);
   if needed = nil then
     exit;
-  fRenewing := true;
+  // protect the fClient[] list and the c instance during the slow process below
+  fSafe.WriteLock;
+  try
+    if fClientsRenewing then
+      exit; // (unlikely) race condition
+    fClientsRenewing := true;
+  finally
+    fSafe.WriteUnLock;
+  end;
+  // renew all needed certifiates
   try
     for i := 0 to length(needed) - 1 do
     begin
-      if fRenewTerminated then
+      if fShutdown then
         exit;
       c := GetClientLocked(needed[i]); // lookup by subject
       if c = nil then
@@ -1155,43 +1357,48 @@ begin
         continue; // (unlikely) race condition
       end;
       c.fRenewing := true;
-      c.Safe.UnLock; // allow e.g. OnNetTlsAcceptChallenge() lookup
+      c.Safe.UnLock; // allow e.g. HttpServerChallenge() background lookup
       try
-        res := c.RegisterAndWait(nil, c.fSignedCert, c.fPrivKey,
-          fPrivateKeyPassword, fRenewWaitForSeconds, @fRenewTerminated);
-        if fRenewTerminated then
-          exit;
-        if res = asValid then
-          c.ClearCtx;
+        tmpCert := c.fSignedCert + '.tmp'; // apply challenge on transient files
+        tmpKey  := c.fPrivKey    + '.tmp';
+        res := c.RegisterAndWait(nil, tmpCert, tmpKey, fPrivateKeyPassword,
+                 fRenewWaitForSeconds, @fShutdown);
+        if (res = asValid) and
+           not fShutdown then
+        begin
+          // validate these new certificate and private key
+          res := asInvalid;
+          ctx := c.NewServerContext(tmpCert, tmpKey);
+          if ctx <> nil then
+            // we can safely replace the main files
+            DeleteFile(c.fSignedCert);
+            DeleteFile(c.fPrivKey);
+            if RenameFile(tmpCert, c.fSignedCert) and
+               RenameFile(tmpKey, c.fPrivKey) then
+            begin
+              // GetServerContext should now use this new context
+              c.ReplaceContext(ctx);
+              res := asValid;
+            end
+            else
+            begin
+              if Assigned(log) then
+                log.Log(sllLastError,
+                  'CheckCertificates(%): impossible to replace % and %',
+                  [needed[i], c.fSignedCert, c.fPrivKey], self);
+              ctx.Free;
+            end;
+        end;
       except
         res := asInvalid;
       end;
       c.fRenewing := false;
-      if res = asValid then
-      begin
-        // validate and pre-load this new certificate
-        ctx := nil;  // make Delphi compiler happy
-        c.Safe.Lock; // as expected by c.GetServerContext
-        try
-          ctx := c.fCtx; // old context backup
-          c.fCtx := nil; // force re-creation
-          if c.GetServerContext = nil then
-            res := asInvalid;
-        except
-          res := asInvalid;
-        end;
-        if res = asValid then
-          ctx.Free // replaced with the new certificate: dispose the old one
-        else
-          c.fCtx := ctx; // restore the old context (which still works)
-        c.Safe.UnLock; // no need to restart the server :)
-      end;
       if Assigned(log) then
         log.Log(sllTrace, 'CheckCertificates: % = %',
           [needed[i], ToText(res)^], self);
     end;
   finally
-    fRenewing := false;
+    fClientsRenewing := false;
   end;
 end;
 
@@ -1208,26 +1415,25 @@ var
 begin
   p := pointer(fClient);
   for i := 1 to length(fClient) do
-    if p^.Match(ServerName) then
-    begin
-      result := p^;
+  begin
+    result := p^;
+    if result.MatchAny(ServerName) then
       exit;
-    end
-    else
-      inc(p);
+    inc(p);
+  end;
   result := nil; // not found
 end;
 
 function TAcmeLetsEncrypt.GetClientLocked(
   const ServerName: RawUtf8): TAcmeLetsEncryptClient;
 begin
-  fSafe.Lock;
+  fSafe.ReadLock;
   try
     result := GetClient(ServerName); // case-insensitive search
     if result <> nil then
-      result.Safe.Lock;
+      result.Safe.Lock; // caller should eventually call result.Safe.UnLock
   finally
-    fSafe.UnLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -1245,7 +1451,7 @@ begin
   client := GetClientLocked(name); // case-insensitive search
   if client <> nil then
     try
-      result := client.GetServerContext; // cached PSSL_CTX
+      result := client.GetServerContext; // returns the cached PSSL_CTX
     finally
       client.Safe.UnLock;
     end
@@ -1254,7 +1460,7 @@ end;
 const
   _ACME_CHALLENGE_PATH: PUtf8Char = ACME_CHALLENGE_PATH;
 
-function TAcmeLetsEncrypt.OnNetTlsAcceptChallenge(const domain, uri: RawUtf8;
+function TAcmeLetsEncrypt.HttpServerChallenge(const domain, uri: RawUtf8;
   var content: RawUtf8): boolean;
 var
   client: TAcmeLetsEncryptClient;
@@ -1262,14 +1468,17 @@ var
   len: PtrInt;
 begin
   result := false;
-  if not fRenewing then
+  if fShutdown or
+     (fClient = nil) or
+     not fClientsRenewing then
     exit; // no challenge currently happening
+  // quickly parse the /.well-known/acme-challenge/<token> case-insensitive URI
   P := pointer(uri);
   len := length(uri) - ACME_CHALLENGE_PATH_LEN;
-  if (fClient = nil) or
-     (len <= 0) or
+  if (len <= 0) or
      not CompareMem(P, _ACME_CHALLENGE_PATH, ACME_CHALLENGE_PATH_LEN) then
     exit;
+  // recognize the <token> and return its matching TAcmeChallenge.Key
   client := GetClientLocked(domain);
   if client <> nil then
     try
@@ -1280,7 +1489,7 @@ begin
 end;
 
 
-{ **************** HTTP-01 Let's Encrypt Challenges HTTP Server on port 80 }
+{ *********** HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80 }
 
 { TAcmeLetsEncryptServer }
 
@@ -1346,7 +1555,7 @@ end;
 
 destructor TAcmeLetsEncryptServer.Destroy;
 begin
-  fRenewTerminated := true; // abort any background task ASAP
+  fShutdown := true; // abort any background task ASAP
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
@@ -1362,9 +1571,9 @@ begin
     try
       if (Redirection <> '') <> (client.fRedirectHttps <> '') then
         if Redirection = '' then
-          LockedDec32(@fRedirectHttps)
+          LockedDec32(@fRedirectHttpsCount)
         else
-          LockedInc32(@fRedirectHttps);
+          LockedInc32(@fRedirectHttpsCount);
       client.fRedirectHttps := Redirection;
       result := true;
     finally
@@ -1378,15 +1587,19 @@ var
   client: TAcmeLetsEncryptClient;
   body, redirect: RawUtf8;
 begin
-  // quick process of HTTP requests on port 80 into HTTP/1.0 responses
-  if (Request.Http.CommandUri <> '') and
-     (PCardinal(Request.Http.CommandUri)^ =
-            ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
-    // handle Let's Encrypt challenges on /.well-known/* URI
-    if fRenewing and
-       OnNetTlsAcceptChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
-      // return HTTP-01 challenge content
-      Request.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
+  // (very) quick process of HTTP requests on port 80 into HTTP/1.0 responses
+  // - a single thread is able to serve and scale a lot of incoming connections
+  if fShutdown then
+    Request.SockSend('HTTP/1.0 503 Service Unavailable')
+  else if (Request.Http.CommandUri <> '') and
+          (PCardinal(Request.Http.CommandUri)^ =
+             ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
+    // handle Let's Encrypt - ZeroSSL challenges on /.well-known/* URI
+    if fClientsRenewing and
+       HttpServerChallenge(Request.Http.Host, Request.Http.CommandUri, body) then
+      // return the HTTP-01 challenge content
+      Request.SockSend('HTTP/1.0 200 OK'#13#10 +
+                       BINARY_CONTENT_TYPE_HEADER)
     else
       // no redirection for inactive /.well-known/acme-challenge/<Token> URIs
       Request.SockSend('HTTP/1.0 404 Not Found')
@@ -1397,18 +1610,16 @@ begin
       Request.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       Request.SockSend('HTTP/1.0 308 Permanent Redirect');
-    if fRedirectHttps = 0 then
-      client := nil // no Redirect() currently active
-    else
-      client := GetClientLocked(Request.Http.Host);
-    if client <> nil then
+    if fRedirectHttpsCount <> 0 then // same active custom Redirect()
     begin
-      redirect := client.fRedirectHttps; // <> '' if customized
-      client.Safe.UnLock;
-      if redirect = '' then
-        client := nil;
+      client := GetClientLocked(Request.Http.Host);
+      if client <> nil then
+      begin
+        redirect := client.fRedirectHttps; // <> '' if customized
+        client.Safe.UnLock;
+      end;
     end;
-    if client <> nil then
+    if redirect <> '' then
       // redirect to the customized URI for this host
       Request.SockSendLine([
         'Location: ', redirect])
@@ -1416,14 +1627,16 @@ begin
       // redirect to the same URI but on HTTPS host
       Request.SockSendLine([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
-    if IsGet(Request.Http.CommandMethod) then
-      body := 'Back to HTTPS';
+    // 301 and 308 responses expect no body
   end;
   // finalize the headers and send the response body
   Request.SockSend([
     'Server: ', fHttpServer.ServerName, #13#10 +
     'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
+  if (body <> '') and
+     HttpMethodWithNoBody(Request.Http.CommandMethod) then
+    body := ''; // if the ACME server tries a HEAD (unlikely)
   Request.SockSendFlush(body);
   // no regular OnRequest() event: we have sent the response
   result := grIntercepted;
@@ -1433,8 +1646,8 @@ end;
 
 procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject; Tix64: Int64);
 begin
-  if fRenewing or
-     fRenewTerminated or
+  if fClientsRenewing or
+     fShutdown or
      (fClient = nil) or
      (fRenewBeforeEndDays <= 0) or
      (fHttpsServer = nil) or

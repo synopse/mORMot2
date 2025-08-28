@@ -25,7 +25,6 @@ uses
   mormot.core.log,
   mormot.core.perf,
   mormot.core.search,
-  mormot.core.mustache,
   mormot.core.test,
   mormot.core.interfaces,
   mormot.crypt.secure,
@@ -89,7 +88,7 @@ type
   public
     /// this could be called as administrator for THttpApiServer to work
     {$ifndef ONLYUSEHTTPSOCKET}
-    class function RegisterAddUrl(OnlyDelete: boolean): string;
+    class function RegisterAddUrl(OnlyDelete: boolean): RawUtf8;
     {$endif ONLYUSEHTTPSOCKET}
   published
     /// initialize a TRestHttpServer instance
@@ -172,7 +171,7 @@ implementation
 { TTestClientServerAccess }
 
 {$ifndef ONLYUSEHTTPSOCKET}
-class function TTestClientServerAccess.RegisterAddUrl(OnlyDelete: boolean): string;
+class function TTestClientServerAccess.RegisterAddUrl(OnlyDelete: boolean): RawUtf8;
 begin
   result := THttpApiServer.AddUrlAuthorize(
     'root', HTTP_DEFAULTPORT, false, '+', OnlyDelete);

@@ -132,8 +132,8 @@ type
     fStarted: RawUtf8;
     fRunner: TSynAngelizeRunner;
     fRunnerExitCode: integer;
+    fNextWatch: cardinal; // GetTickSec
     fAbortExitCodes: TIntegerDynArray;
-    fNextWatch: Int64;
     fLastNotify: TDoNotify;
     fLastNotifyMsg: RawUtf8;
     procedure SetState(NewState: TServiceState; const Fmt: RawUtf8;
@@ -617,7 +617,7 @@ var
 
 begin
   log := fLog.Add;
-  timeout := fService.RetryStableSec shl MilliSecsPerSecShl;
+  timeout := fService.RetryStableSec * MilliSecsPerSec; // need ms resolution for 1s
   sn := fService.Name;
   se := fService.AbortExitCodes;
   notifytix := false;
@@ -874,7 +874,7 @@ begin
       // any exception on DoOne() should break the starting
       fOwner.DoOne(log, self, acDoStart, fStart[a]);
   if fWatch <> nil then
-    fNextWatch := GetTickCount64 + fWatchDelaySec * MilliSecsPerSec;
+    fNextWatch := GetTickSec + cardinal(fWatchDelaySec);
 end;
 
 function TSynAngelizeService.DoStop(log: TSynLog): boolean;
@@ -1123,11 +1123,11 @@ begin
   if fSas.StateFile = '' then
     // if no StateFile supplied, set something
     if fsoDisableSaveIfNeeded in fSas.SettingsOptions then
-      // this random file name will be persisted in the settings
-      fSas.StateFile := TemporaryFileName
-    else
       // if no name can be persisted, use something consistent between calls
       fSas.StateFile := FormatString('%%-state', [fWorkFolderName, fSas.ServiceName])
+    else
+      // this random file name will be persisted in the settings
+      fSas.StateFile := TemporaryFileName
   else
     fSas.StateFile := ExpandFileName(FileNameExpand(fSas.StateFile)); // with %agl.xx%
   // validate command file name used e.g. for /reload
@@ -1158,21 +1158,10 @@ end;
 
 // TSynDaemon command line methods
 
-const
-  AGL_CMD: array[0..7] of PAnsiChar = (
-    'LIST',
-    'SETTINGS',
-    'NEW',
-    'RETRY', // Windows Services API only
-    'RESUME',
-    'DISABLE',
-    'ENABLE',
-    nil);
-
 function TSynAngelize.CustomParseCmd(P: PUtf8Char): boolean;
 begin
-  result := true; // the command has been identified and processed
-  case IdemPPChar(P, @AGL_CMD) of
+  result := true; // true = the command has been identified and processed
+  case IdemPCharSep(P, 'LIST|SETTINGS|NEW|RETRY|RESUME|DISABLE|ENABLE|') of
     0: // --list
       ListServices;
     1: // --settings
@@ -1200,7 +1189,7 @@ begin
     6: // --enable <servicename>
       ServiceChangeState({disable=}false);
   else
-    result := false; // display syntax
+    result := false; // command not identified: display syntax
   end;
 end;
 
@@ -1565,7 +1554,7 @@ begin
             else
               sec := sec * 3; // wait up to 3 gracefull ending phases
             Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [p, sec], Sender);
-            endtix := GetTickCount64 + sec shl MilliSecsPerSecShl;
+            endtix := GetTickCount64 + sec * MilliSecsPerSec; // need ms resolution for sec=1
             repeat
               SleepHiRes(10);
               if Service.fRunner = nil then
@@ -1740,7 +1729,7 @@ begin
 end;
 
 const
-  ENDI: array[boolean] of string[3] = ('en', 'dis');
+  ENDI: array[boolean] of TShort3 = ('en', 'dis');
 
 procedure TSynAngelize.ServiceChangeState(disable: boolean);
 var
@@ -1897,7 +1886,7 @@ begin
   begin
     log.Log(sllTrace, 'StartServices: wait % sec for level #% start',
       [sec, level], self);
-    endtix := GetTickCount64 + sec shl MilliSecsPerSecShl;
+    endtix := GetTickCount64 + sec * MilliSecsPerSec; // need ms resolution for sec=1
     for i := 0 to high(fStarted) do
     begin
       s := fStarted[i];
@@ -1969,7 +1958,7 @@ end;
 procedure TSynAngelize.WatchEverySecond(Sender: TSynBackgroundThreadProcess);
 var
   i, a: PtrInt;
-  tix: Int64;
+  tix32: cardinal;
   s: TSynAngelizeService;
   cmd: RawUtf8;
   log: ISynLog;
@@ -1988,7 +1977,7 @@ begin
   // note that a process monitored from a "Start": [ "start:/path/to/file" ]
   // previous command is watched in its monitoring thread, not here
   one := nil;
-  tix := GetTickCount64;
+  tix32 := GetTickSec;
   // check all pending watch steps
   for i := 0 to high(fSet.Service) do // ordered by s.Level
   begin
@@ -1996,7 +1985,7 @@ begin
     s := fSet.Service[i];
     if s.Disabled or
        (s.fNextWatch = 0) or
-       (tix < s.fNextWatch) then
+       (tix32 < s.fNextWatch) then
       continue;
     EnsureLogExists;
     // execute all "Watch":[...,...,...] actions
@@ -2008,8 +1997,8 @@ begin
           one.Log(sllWarning, 'WatchEverySecond: DoWatch(%,%) raised %',
             [s.Name, s.fWatch[a], PClass(E)^], self);
       end;
-    tix := GetTickCount64; // may have changed during DoWatch() progress
-    s.fNextWatch := tix + s.WatchDelaySec * MilliSecsPerSec;
+    tix32 := GetTickSec; // may have changed during DoWatch() progress
+    s.fNextWatch := tix32 + cardinal(s.WatchDelaySec);
   end;
   // command line support
   if FileExists(fSas.CommandFile) then

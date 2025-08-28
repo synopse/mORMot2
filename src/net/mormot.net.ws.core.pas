@@ -95,7 +95,7 @@ type
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
-    /// equals GetTickCount64 shr 10, as used for TWebSocketFrameList timeout
+    /// equals GetTickSec, as used for TWebSocketFrameList timeout
     tix: cardinal;
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
@@ -646,7 +646,7 @@ type
 
   /// used to manage a thread-safe list of WebSockets frames
   // - TSynLocked because SendPendingOutgoingFrames() locks it and may take time
-  TWebSocketFrameList = class(TSynLocked)
+  TWebSocketFrameList = class(TObjectOSLock)
   protected
     fTimeoutSec: cardinal;
     fAnswerToIgnore: integer;
@@ -1115,13 +1115,15 @@ type
     /// retrieve the NameSpace value as a shortstring (used e.g. for RaiseESockIO)
     function NameSpaceShort: ShortString;
       {$ifdef HASINLINE} inline; {$endif}
-    /// quickly check if the Data content does match (mainly used for testing)
-    function DataIs(const Content: RawUtf8): boolean;
     /// decode the Data content JSON payload into a TDocVariant
     // - can optionally override the default JSON_SOCKETIO options
     // - warning: the Data/DataLen buffer will be decoded in-place, so modified
     function DataGet(out Dest: TDocVariantData;
-      Options: PDocVariantOptions = nil): boolean;
+      Options: PDocVariantOptions = nil): boolean; overload;
+    /// return the Data content payload raw buffer without any decoding
+    function DataGet(CodePage: cardinal = CP_UTF8): RawByteString; overload;
+    /// quickly check if the Data content does match (mainly used for testing)
+    function DataIs(const Content: RawUtf8): boolean;
     /// raise a ESockIO exception with the specified text context
     procedure RaiseESockIO(const ctx: RawUtf8);
     /// low-level kind of Socket.IO packet of this message
@@ -1622,7 +1624,7 @@ procedure TWebSocketProtocol.SetEncryptKeyAes(aCipher: TAesAbstractClass;
 begin
   fEncryption := nil;
   fConnectionFlags := [hsrWebsockets];
-  if aKeySize < 128 then
+  if not ValidAesKeyBits(aKeySize) then
     exit;
   fEncryption := TProtocolAes.Create(aCipher, aKey, aKeySize);
   include(fConnectionFlags, hsrSecured)
@@ -1809,7 +1811,7 @@ begin
       if fTimeoutSec = 0 then
         continue;
       if currentSec = 0 then
-        currentSec := GetTickCount64 shr MilliSecsPerSecShl;
+        currentSec := GetTickSec;
       if currentSec > item^.tix then
         Delete(i);
     end;
@@ -1828,7 +1830,7 @@ begin
   if fTimeoutSec <= 0 then
     currentSec := 0
   else if currentSec = 0 then
-    currentSec := GetTickCount64 shr MilliSecsPerSecShl;
+    currentSec := GetTickSec;
   Safe.Lock;
   try
     n := Count;
@@ -2037,8 +2039,8 @@ procedure TWebSocketProtocolJson.FrameCompress(const Head: RawUtf8;
   var frame: TWebSocketFrame);
 var
   WR: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
-  i: PtrInt;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
+  v, ve: PVarRec;
 begin
   frame.opcode := focText;
   frame.content := [];
@@ -2048,10 +2050,13 @@ begin
     WR.AddDirect('{');
     WR.AddFieldName(Head);
     WR.AddDirect('[');
-    for i := 0 to High(Values) do
+    v := @Values[0];
+    ve := @Values[High(Values)];
+    while PtrUInt(v) <= PtrUInt(ve) do
     begin
-      WR.AddJsonEscapeVarRec(@Values[i]);
+      WR.AddJsonEscapeVarRec(v);
       WR.AddComma;
+      inc(v);
     end;
     WR.AddDirect('"');
     WR.AddString(ContentType);
@@ -2261,7 +2266,7 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  item: array[0..5] of TTempUtf8; // no memory allocation
+  item: array[0..5] of TTempUtf8; // no TempRawUtf8 memory allocation
   it: PTempUtf8;
   len, i: PtrInt;
   P: PUtf8Char;
@@ -2822,14 +2827,15 @@ begin
   Protocol.fConnectionOpaque := ConnectionOpaque;
   Protocol.fRemoteIP := Http.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
   if Protocol.RemoteIP = '' then
-  begin
-    Protocol.RemoteIP := RemoteIP;
-    Protocol.RemoteLocalhost := (RemoteIP = '127.0.0.1') or
-                                 (RemoteIPLocalHostAsVoidInServers and
-                                  (RemoteIP = ''));
-  end
+    if RemoteIP = '' then
+      Protocol.RemoteLocalhost := RemoteIPLocalHostAsVoidInServers
+    else
+    begin
+      Protocol.RemoteIP := RemoteIP;
+      Protocol.RemoteLocalhost := PCardinal(RemoteIP)^ = HOST_127
+    end
   else
-    Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
+    Protocol.RemoteLocalhost := PCardinal(RemoteIP)^ = HOST_127;
   // call OnUpgraded callback for request custom validation (e.g. bearer)
   if Assigned(fOnUpgraded) then
   begin
@@ -2964,7 +2970,7 @@ end;
 
 destructor TWebSocketProcess.Destroy;
 var
-  timeout: Int64;
+  endtix: cardinal;
   log: ISynLog;
 begin
   if fState = wpsCreate then
@@ -2986,11 +2992,11 @@ begin
     if log <> nil then
       log.Log(sllDebug, 'Destroy: wait for fProcessCount=% fProcessEnded=%',
         [fProcessCount, fProcessEnded], self);
-    timeout := GetTickCount64 + 5000;
+    endtix := GetTickSec + 5;
     repeat
       SleepHiRes(1);
     until ((fProcessCount = 0) and fProcessEnded) or
-          (GetTickCount64 > timeout);
+          (GetTickSec > endtix);
     if log <> nil then
       log.Log(sllDebug,
         'Destroy: waited fProcessCount=%', [fProcessCount], self);
@@ -3216,14 +3222,14 @@ end;
 
 procedure TWebSocketProcess.WaitThreadStarted;
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin
-  endtix := GetTickCount64 + 5000;
+  endtix := GetTickSec + 5;
   repeat
     SleepHiRes(0);
   until fProcessEnded or
         (fState <> wpsCreate) or
-        (GetTickCount64 > endtix);
+        (GetTickSec > endtix);
 end;
 
 function TWebSocketProcess.HiResDelay(var start: Int64): Int64;
@@ -3288,7 +3294,7 @@ begin
         WebSocketLog.Add.Log(sllDebug,
           'NotifyCallback: Waiting for AnswerToIgnore=%',
           [fIncoming.AnswerToIgnore], self);
-        start := GetTickCount64;
+        start := GetTickCount64; // HiResDelay() requires ms resolution
         max := start + 30000; // never wait forever
         repeat
           tix := HiResDelay(start); // 0/1/5/50/120-250 ms steps
@@ -3333,7 +3339,7 @@ begin
       // 2 seconds minimal wait
       max := 2000;
     inc(max, start);
-    while not fIncoming.Pop(fProtocol, head, answer, tix shr MilliSecsPerSecShl) do
+    while not fIncoming.Pop(fProtocol, head, answer, tix div MilliSecsPerSec) do
       if fState in [wpsDestroy, wpsClose] then
       begin
         WebSocketLog.Add.Log(sllError,
@@ -3870,6 +3876,11 @@ begin
   if Options = nil then
     Options := @JSON_SOCKETIO;
   result := Dest.InitJsonInPlace(fData, Options^) <> nil;
+end;
+
+function TSocketIOMessage.DataGet(CodePage: cardinal): RawByteString;
+begin
+  FastSetStringCP(result, fData, fDataLen, CodePage);
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);

@@ -44,6 +44,7 @@ const
   WSAEMFILE        = ESysEMFILE;
   WSAECONNREFUSED  = ESysECONNREFUSED;
   WSAEINPROGRESS   = ESysEINPROGRESS;
+  WSAIOPENDING     = ESysEALREADY;
 
   {$ifdef OSLINUX}
   SOCK_NONBLOCK = O_NONBLOCK; // see net.h
@@ -124,12 +125,9 @@ type
     h_addrtype: integer;
     h_length: socklen_t;
     case integer of
-       0: (
-          h_addr_list: PPAnsiChar);
-       1: (
-          h_addr: ^pin_addr);
-       2: (
-          h_addr6: ^pin6_addr);
+       0: (h_addr_list: PPAnsiChar);
+       1: (h_addr:      ^pin_addr);
+       2: (h_addr6:     ^pin6_addr);
   end;
   PHostEnt = ^THostEnt;
 
@@ -218,7 +216,7 @@ end;
 
 function closesocket(s: integer): integer; inline;
 begin
-  result := fpclose(s);
+  result := FileClose(s);
 end;
 
 function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
@@ -919,7 +917,7 @@ begin
             else
               // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
               if m^.Name <> '' then
-                case PWord(m^.Name)^ of
+                case cardinal(PWord(m^.Name)^) of
                   ord('e') + ord('t') shl 8,  // 'ethX'
                   ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
                     m^.Kind := makEthernet;
@@ -1431,7 +1429,7 @@ procedure TPollSocketEpoll.Terminate;
 begin
   if fEPFD <= 0 then
     exit;
-  fpClose(fEPFD);
+  FileClose(fEPFD);
   fEPFD := -1;
 end;
 

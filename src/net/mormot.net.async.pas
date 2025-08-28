@@ -106,9 +106,9 @@ type
     /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
     fInternalFlags: set of (
       ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing);
-    /// the current (reusable) read data buffer of this connection
+    /// the current (reusable) receiving data buffer of this connection
     fRd: TRawByteStringBuffer;
-    /// the current (reusable) write data buffer of this connection
+    /// the current (reusable) sending data buffer of this connection
     fWr: TRawByteStringBuffer;
     /// re-entrant TryLock/Unlock R/W thread acquisition
     // - by default, a single lock is used for all connection access, but
@@ -701,7 +701,7 @@ type
     procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
       const identargs: array of const; const data: TRawByteStringBuffer);
     /// the current monotonic time elapsed, evaluated in seconds
-    // - IdleEverySecond will set GetTickCount64 div 1000
+    // - IdleEverySecond will set GetTickCount64 div 1000 = GetTickSec
     property LastOperationSec: TAsyncConnectionSec
       read fLastOperationSec;
     /// allow idle connection to release its internal Connection.rd/wr buffers
@@ -745,7 +745,7 @@ type
     // - as supplied to the constructor, but may be overriden just after startup
     property ConnectionClass: TAsyncConnectionClass
       read fConnectionClass write fConnectionClass;
-    /// direct access to the internal AsyncConnectionsThread`s
+    /// direct access to the internal AsyncConnectionsThread's
     property Threads: TAsyncConnectionsThreads
       read fThreads;
   published
@@ -897,6 +897,10 @@ type
     fServer: THttpAsyncServer;
     function ReleaseReadMemoryOnIdle: PtrInt; override;
     procedure OnAfterWriteSubscribe; override;
+  public
+    /// low-level access to the associated HTTP async server instance
+    property Server: THttpAsyncServer
+      read fServer;
   end;
 
   /// define the TOnHttpClientAsync callback state machine steps
@@ -1492,7 +1496,7 @@ function TPollAsyncConnection.ReleaseWriteMemoryOnIdle: PtrInt;
 begin
   // caller made fRWSafe[0/1].TryLock
   if fWr.Len <> 0 then
-    result := 0
+    result := 0 // the buffer is still in use - wait until fWr.Reset
   else
     result := fWr.Clear;
 end;
@@ -2024,7 +2028,7 @@ var
   pse: TPollSocketEvents;
   res: TNetResult;
   start: Int64;
-  wf: string[3];
+  wf: TShort3;
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
   result := true; // if closed or properly read: don't retry
@@ -2634,7 +2638,7 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
-  tix: Int64;
+  tix32: cardinal;
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
 begin
@@ -2712,12 +2716,12 @@ begin
   end;
   {$endif USE_WINIOCP}
   // wait for all threads to be started
-  tix := mormot.core.os.GetTickCount64 + 7000;
+  tix32 := GetTickSec + 7;
   repeat
      if AllThreadsStarted then
        break;
      SleepHiRes(1);
-  until mormot.core.os.GetTickCount64 > tix;
+  until GetTickSec > tix32;
   // setup custom threads affinity
   if acoThreadCpuAffinity in aOptions then
     SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
@@ -3639,10 +3643,7 @@ end;
 procedure TAsyncConnections.SetOnIdle(
   const aOnIdle: TOnPollSocketsIdle; Remove: boolean);
 begin
-  if Remove then
-    MultiEventRemove(fOnIdle, TMethod(aOnIdle))
-  else
-    MultiEventAdd(fOnIdle, TMethod(aOnIdle));
+  MultiEventSet(fOnIdle, TMethod(aOnIdle), Remove);
 end;
 
 {$ifdef USE_WINIOCP}
@@ -4937,7 +4938,7 @@ begin
     begin
       fServer.fOnAfterResponse := nil; // won't try again
       fOwner.DoLog(sllWarning,
-        'AfterWrite: OnAfterResponse raised % -> disabled', [E], self);
+        'AfterWrite: OnAfterResponse raised % -> disabled', [PClass(E)^], self);
     end;
   end;
 end;
@@ -5171,6 +5172,11 @@ begin
   if (fBlackListUriNextTix <> 0) and
      (fAsync.LastOperationSec >= fBlackListUriNextTix) then
     RefreshBlackListUri(fAsync.LastOperationSec);
+  {$ifdef OSPOSIX}
+  if Assigned(fSspiKeyTab) and
+     fSspiKeyTab.TryRefresh(fAsync.fLastOperationSec) then
+    fAsync.DoLog(sllDebug, 'IdleEverySecond: refreshed %', [fSspiKeyTab], self);
+  {$endif OSPOSIX}
 end;
 
 procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);
@@ -5617,7 +5623,7 @@ begin
   Definition.fHashCached.DeleteDeprecated(tix);
   // supplied URI should be a safe local file
   result := HTTP_NOTFOUND;
-  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {name=}true);
+  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
   NormalizeFileNameU(name);
   if not SafePathNameU(name) then
     exit;

@@ -411,7 +411,7 @@ var
   sql, table: RawUtf8;
 begin
   StringToUtf8(fCommandText, sql);
-  table := GetTableNameFromSqlSelect(sql, {uniquetablein:}false);
+  table := GetTableNameFromSqlSelect(sql, {uniquetablein=}false);
   Utf8ToStringVar(table, result);
 end;
 
