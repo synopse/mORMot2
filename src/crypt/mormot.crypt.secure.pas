@@ -1121,6 +1121,20 @@ function SCryptRounds(LogN: cardinal = 16; BlockSize: cardinal = 8;
 // - returns decode LogN=16 BlockSize=R=8 Parallel=P=1 for Rounds = 0
 procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
 
+/// SCrypt password hashing function compatible with passlib.hash.scrypt output
+// - as defined by https://www.tarsnap.com/scrypt/scrypt.pdf and RFC 7914
+// - SCrypt is more memory sensitive than BCrypt, so may be preferred
+// - in SCrypt terms, LogN will generate N = 2^LogN work factor scale, BlockSize
+// is the R parameter (to match CPU cache line), and Parallel the P parameter
+// - memory and CPU usage will scale linearly - e.g. 64MB with default LogN=16
+// and Blocksize=8 (to compare with the 4KB of BCrypt) - see SCryptMemoryUse()
+// - P will increase the CPU time without affecting memory requirements
+// - returning '$scrypt$ln=<log2(N)>,r=<r>,p=<p>$salt$<checksum>' format
+// - will call the available SCrypt() function defined - or a custom API
+function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
+  LogN: PtrUInt = 16; BlockSize: PtrUInt = 8; Parallel: PtrUInt = 1;
+  HashPos: PInteger = nil; Api: TSCriptRaw = nil): RawUtf8;
+
 
 { some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
 
@@ -4793,6 +4807,36 @@ begin
   Parallel := Rounds and 8191;
   if Parallel = 0 then
     Parallel := 1;
+end;
+
+const
+  SCRYPT_KEYLEN = 32; // 32-byte output key
+
+function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8; LogN: PtrUInt;
+  BlockSize: PtrUInt; Parallel: PtrUInt; HashPos: PInteger; Api: TSCriptRaw): RawUtf8;
+var
+  saltbin, saltb64, hash: RawByteString;
+begin
+  result := '';
+  if not Assigned(Api) then
+    Api := @SCrypt; // from mormot.crypt.other or mormot.crypt.openssl
+  if not Assigned(Api) or
+     (LogN <= 1) or
+     (LogN > 31) or
+     (BlockSize = 0) or
+     (Parallel = 0) then
+    exit;
+  if not TAesPrng.Main.RandomSalt(saltbin, saltb64, 22, Salt,
+           @ConvertToBase64, @ConvertBase64ToBin) then
+    exit; // expects standard base64 but without trailing '='
+  hash := Api(Password, saltbin, 1 shl LogN, BlockSize, Parallel, SCRYPT_KEYLEN);
+  if hash = '' then
+    exit;
+  Make(['$scrypt$ln=', LogN, ',r=', BlockSize, ',p=', Parallel, '$',
+        saltb64, '$'], result);
+  if HashPos <> nil then
+    HashPos^ := length(result) + 1;
+  Append(result, BinToBase64uri(hash, @ConvertToBase64));
 end;
 
 
