@@ -9354,15 +9354,16 @@ begin
     mac.Update(salt); 
   mac.UpdateBigEndian(partnumber); // e.g. $01000000 for default 1
   mac.Done(result);
-  if count < 2 then
-    exit;
-  tmp := result;
-  for i := 2 to count do
+  if count > 1 then
   begin
-    mac := first;
-    mac.sha.Update(@tmp, SizeOf(tmp));
-    mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
+    tmp := result;
+    for i := 2 to count do
+    begin
+      mac := first;
+      mac.sha.Update(@tmp, SizeOf(tmp));
+      mac.Done(tmp, true);
+      XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
+    end;
   end;
   FillcharFast(first, SizeOf(first), 0);
   FillcharFast(mac, SizeOf(mac), 0);
