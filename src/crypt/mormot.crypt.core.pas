@@ -8023,7 +8023,7 @@ procedure Sha256CompressPas(var Hash: TShaHash; Data: pointer);
 var
   HW: packed record
     H: TShaHash;
-    W: array[0..63] of cardinal;
+    W: TBlock2048;
   end;
 begin
   // calculate "expanded message blocks"
@@ -8132,7 +8132,7 @@ end;
 
 procedure Sha256CompressPas(var Hash: TShaHash; Data: PCardinalArray);
 var
-  W: array[0..63] of cardinal; // expanded buffer
+  W: TBlock2048; // expanded buffer
 begin
   // calculate "expanded message blocks"
   bswap256(@Data[0], @W[0]); // 256-bit = 8 cardinals
@@ -8209,8 +8209,7 @@ begin
       end
       else
         {$ifdef ASMX64} // try optimized Intel x86_64 asm over whole blocks
-        if (K256Aligned <> nil) and
-           (Len >= 64) then
+        if K256Aligned <> nil then
         begin
           if cfSHA in CpuFeatures then
             Sha256ni(Buffer^, Data.Hash, Len shr 6)     // Intel SHA HW opcodes
@@ -8219,7 +8218,7 @@ begin
           bytes := Len and (not 63); // all whole blocks have been added
         end
         else
-          Sha256CompressPas(Data.Hash, Buffer); // process one block on old CPU
+          Sha256CompressPas(Data.Hash, Buffer); // process on old CPU
         {$else}
         RawSha256Compress(Data.Hash, Buffer); // may be AARCH64 version
         {$endif ASMX64}
