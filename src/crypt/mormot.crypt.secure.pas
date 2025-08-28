@@ -1111,6 +1111,16 @@ function ModularCryptVerify(const password, hash: RawUtf8;
 function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
   var salt: RawUtf8): TModularCryptFormat;
 
+/// compute the fake "rounds" value for ModularCryptHash(mcfSCrypt)
+// - i.e. <logN:5-bit:1..31><R:14-bit:1..32767><P:13-bit:1..8191>
+function SCryptRounds(LogN: cardinal = 16; BlockSize: cardinal = 8;
+  Parallel: cardinal = 1): cardinal;
+
+/// decode the fake "rounds" value for ModularCryptHash(mcfSCrypt) into LogN/R/P
+// - is the reverse function of SCryptRounds()
+// - returns decode LogN=16 BlockSize=R=8 Parallel=P=1 for Rounds = 0
+procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
+
 
 { some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
 
@@ -4765,6 +4775,24 @@ begin
   if (pos = 0) or
      (mormot.core.base.StrComp(P, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
     result := mcfInvalid;
+end;
+
+function SCryptRounds(LogN, BlockSize, Parallel: cardinal): cardinal;
+begin // = <logN:5-bit:1..31><R:14-bit:1..32767><P:13-bit:1..8191>
+  result := (LogN shl 27) + (BlockSize shl 13) + Parallel;
+end;
+
+procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
+begin
+  LogN := Rounds shr 27;
+  if LogN = 0 then
+    LogN := 16;
+  BlockSize :=  (Rounds shr 13) and 32767;
+  if BlockSize = 0 then
+    BlockSize := 8;
+  Parallel := Rounds and 8191;
+  if Parallel = 0 then
+    Parallel := 1;
 end;
 
 
