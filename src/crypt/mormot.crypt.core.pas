@@ -114,7 +114,7 @@ procedure XorBlock16(A, B, C: PPtrIntArray);
 /// logical XOR memory buffers with a 32-bit mask, as done e.g. during HMAC
 // - fill all dst[] cardinals, by 128-bit chunks (e.g. last = 15 or 31):
 // ! dst[i] := src[i] xor mask;
-procedure XorBy128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
+procedure Xor32By128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
 
 // little endian fast conversion
 // - 160 bits = 5 integers
@@ -2823,7 +2823,7 @@ begin
   {$endif CPU32}
 end;
 
-procedure XorBy128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
+procedure Xor32By128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
 begin
   last := PtrUInt(@src[last]);
   repeat
@@ -9134,8 +9134,8 @@ begin
     SHA.Full(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
-  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
-  XorBy128(@k0, @k0, 15, $36363636);
+  Xor32By128(@step7data, @k0, 15, $5c5c5c5c);
+  Xor32By128(@k0, @k0, 15, $36363636);
   SHA.Init;
   SHA.Update(@k0, SizeOf(k0));
   FillZero(k0.b);

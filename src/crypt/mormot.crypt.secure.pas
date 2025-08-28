@@ -4935,8 +4935,8 @@ begin
     fHasher.Full(a, aSecret, aSecretLen, PHash512Rec(@k0)^)
   else
     MoveFast(aSecret^, k0, aSecretLen);
-  XorBy128(@fStep7data, @k0, fBlockMax, $5c5c5c5c);
-  XorBy128(@k0, @k0, fBlockMax, $36363636);
+  Xor32By128(@fStep7data, @k0, fBlockMax, $5c5c5c5c);
+  Xor32By128(@k0, @k0, fBlockMax, $36363636);
   fHasher.Init(a);
   fHasher.Update(@k0, fBlockSize);
   FillCharFast(k0, fBlockSize, 0);

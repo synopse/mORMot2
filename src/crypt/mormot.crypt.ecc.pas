@@ -4663,8 +4663,8 @@ begin
     crc256c(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
-  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
-  XorBy128(@k0, @k0, 15, $36363636);
+  Xor32By128(@step7data, @k0, 15, $5c5c5c5c);
+  Xor32By128(@k0, @k0, 15, $36363636);
   h1 := crc32c(crc32c(0,  @k0, SizeOf(k0)), msg, msglen);
   h2 := crc32c(crc32c(h1, @k0, SizeOf(k0)), msg, msglen);
   crc256cmix(h1, h2, @result);
@@ -4703,8 +4703,8 @@ begin
     crc256c(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
-  XorBy128(@step7data, @k0, 15, $5c5c5c5c);
-  XorBy128(@k0, @k0, 15, $36363636);
+  Xor32By128(@step7data, @k0, 15, $5c5c5c5c);
+  Xor32By128(@k0, @k0, 15, $36363636);
   seed := crc32c(0, @k0, SizeOf(k0));
   FillCharFast(k0, SizeOf(k0), 0);
 end;
