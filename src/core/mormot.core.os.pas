@@ -1108,8 +1108,13 @@ var
   // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
   SystemMemorySize: PtrUInt;
 
-  /// 128-bit of entropy quickly gathered during unit/process initialization
-  StartupEntropy: THash128Rec;
+  /// 256-bit os system entropy source
+  SystemEntropy: record
+    /// 128-bit of entropy quickly gathered during unit/process initialization
+    Startup: THash128Rec;
+    /// 128-bit shuffled when strong randomness is retrieved from the OS
+    LiveFeed: THash128Rec;
+  end;
 
 type
   /// used to retrieve version information from any EXE
@@ -8799,8 +8804,8 @@ begin
     Command.Parse;
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
-  crc32c128(@StartupEntropy, @CpuCache, SizeOf(CpuCache)); // some more entropy
-  crcblock(@StartupEntropy, @Executable.Hash);
+  crc32c128(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache)); // some more
+  crcblock(@SystemEntropy.Startup, @Executable.Hash);
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
@@ -9673,8 +9678,8 @@ begin
            {$ifdef OSPOSIX}
            _AfterDecodeSmbios(RawSmbios); // persist in SMB_CACHE for non-root
            {$endif OSPOSIX}
-           DefaultHasher128(@StartupEntropy, pointer(RawSmbios.Data),
-             MinPtrInt(1024, length(RawSmbios.Data))); // won't hurt
+           DefaultHasher128(@SystemEntropy.LiveFeed, pointer(RawSmbios.Data),
+             MinPtrInt(512, length(RawSmbios.Data))); // won't hurt
            exit;
          end;
       // if not root on POSIX, SMBIOS is not available

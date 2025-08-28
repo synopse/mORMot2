@@ -11599,7 +11599,7 @@ begin
   // setup internal function wrappers
   GetDataFromJson := _GetDataFromJson;
   // in-memory hashing are seeded from random to avoid hash flooding
-  HashSeed := SharedRandom.Generator.Next xor StartupEntropy.c0;
+  HashSeed := SharedRandom.Generator.Next xor SystemEntropy.Startup.c0;
 end;
 
 

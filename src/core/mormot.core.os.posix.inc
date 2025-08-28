@@ -2009,7 +2009,11 @@ begin
   result := false;
   if not (fLinuxGetRandomFailed in _F0) then // KernelRevision checked at startup
     if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
-      result := true // "man getrandom" states to read up to 256 bytes per call
+    begin
+      if len >= SizeOf(SystemEntropy.LiveFeed) then
+        crcblock(@SystemEntropy.LiveFeed, buf);
+      result := true; // "man getrandom" states to read up to 256 bytes per call
+    end
     else
       include(_F0, fLinuxGetRandomFailed); // won't retry on syscall failure
 end;
@@ -3610,13 +3614,13 @@ begin
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time   * 2654435761;
   e.d1 := mach_continuous_time * 3266489917;
-  crcblock(@e.l, @StartupEntropy);
-  inc(StartupEntropy.Lo, e.d1); // StartupEntropy is a bit weak on startup
-  dec(StartupEntropy.Hi, e.d0);
+  crcblock(@e.l, @SystemEntropy.Startup));
+  inc(SystemEntropy.Startup).Lo, e.d1); // a bit weak on startup
+  dec(SystemEntropy.Startup).Hi, e.d0);
   {$else}
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
-  crcblock(@e.l, @StartupEntropy); // 128-bit entropy over nanosecond timestamp
+  crcblock(@e.l, @SystemEntropy.Startup); // 128-bit entropy over nanoseconds
   {$endif OSDARWIN}
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
@@ -3624,6 +3628,8 @@ begin
   {$endif OSLINUX}
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
+  if SystemEntropy.LiveFeed.c0 = 0 then
+    crcblocks(@SystemEntropy.LiveFeed, @e, 2); // we need something
 end;
 
 const
@@ -3671,6 +3677,9 @@ begin
     begin
       result := (fpRead(dev, Buffer^, rd) = rd); // may block until entropy
       FileClose(dev);
+      if result and
+         (rd >= SizeOf(SystemEntropy.LiveFeed)) then
+        crcblock(@SystemEntropy.LiveFeed, pointer(Buffer));
     end;
   end;
   if result then
@@ -4931,7 +4940,7 @@ begin
   GetSystemMacAddress := _GetSystemMacAddress;
   if Sysinfo(@si) = 0 then // uptime + loadavg + meminfo + numprocess
     SystemMemorySize := si.totalram * si.mem_unit;
-  crc32c128(@StartupEntropy, @si, SizeOf(si));
+  crc32c128(@SystemEntropy.Startup, @si, SizeOf(si));
   // https://www.freedesktop.org/software/systemd/man/latest/os-release.html
   FindFileValue('/etc/os-release', 'PRETTY_NAME=', release); // new "standard"
   if release = '' then // oldest Linux Standard Base location
@@ -4983,7 +4992,7 @@ begin
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
   CpuInfoLinux := StringFromFileNoSize('/proc/cpuinfo'); // too big for LoadProcFile
-  crc32c128(@StartupEntropy, pointer(CpuInfoLinux), length(CpuInfoLinux));
+  crc32c128(@SystemEntropy.Startup, pointer(CpuInfoLinux), length(CpuInfoLinux));
   procid := -1;
   cpuinfo := pointer(CpuInfoLinux);
   while cpuinfo <> nil do
@@ -5073,7 +5082,7 @@ begin
     CpuSockets := 1;
   if fpuname(uts) < 0 then
     FillChar(uts, SizeOf(uts), 0);
-  crc32c128(@StartupEntropy, @uts, SizeOf(uts));
+  crc32c128(@SystemEntropy.Startup, @uts, SizeOf(uts));
   SystemInfo.uts.release  := uts.Release;
   SystemInfo.uts.sysname  := uts.SysName;
   SystemInfo.uts.version  := uts.Version;
@@ -5131,7 +5140,7 @@ begin
     include(_F1, fMachTimeNanoSec);
   PInt64Array(@uts)[0] := mach_absolute_time;
   PInt64Array(@uts)[1] := PInt64(@mach_timecoeff)^;
-  crcblock(@StartupEntropy, @uts); // nanoseconds timestamp + coeff
+  crcblock(@SystemEntropy.Startup, @uts); // nanoseconds timestamp + coeff
   {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   tpfail := 0;
@@ -5149,7 +5158,7 @@ begin
   else if clock_gettime(CLOCK_MONOTONIC_HIRES, @tp[2]) <> 0 then
     tpfail := tpfail or 4;
   {$endif OSLINUX}
-  crc32c128(@StartupEntropy, @tp, SizeOf(tp)); // tp[0..2] in nanoseconds
+  crc32c128(@SystemEntropy.Startup, @tp, SizeOf(tp)); // tp[0..2] in nanoseconds
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
   if tpfail <> 0 then
     ConsoleErrorWrite(_fmt('clock_gettime(%d) failed on %s - errno=%d',
@@ -5199,10 +5208,14 @@ begin
   while auxv[0] <> 0 do
   begin
     if auxv[0] = 25 then // AT_RANDOM: 16 random bytes (used for stacks canary)
-      XorMemory(StartupEntropy, PHash128Rec(auxv[1])^);
+      with SystemEntropy do
+      begin
+        XorMemory(Startup, PHash128Rec(auxv[1])^);
+        LiveFeed := PHash128Rec(auxv[1])^; // great initial source
+      end;
     auxv := @auxv[2];
   end;
-  crc32c128(@StartupEntropy, P, PAnsiChar(auxv) - P); // include all auxv info
+  crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   {$endif OSLINUXANDROID}
 end;
 

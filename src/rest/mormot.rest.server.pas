@@ -5222,7 +5222,7 @@ begin
     ServerNonceCache[false].safe.Lock;
     if PInteger(@ServerProcessKdf)^ = 0 then // ensure thread-safe
     begin
-      ServerProcessKdf.Init(@StartupEntropy, SizeOf(StartupEntropy)); // salt
+      ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
       ServerProcessKdf.Update(tmp);
     end;
     ServerNonceCache[false].safe.UnLock;

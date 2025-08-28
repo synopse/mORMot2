@@ -5052,15 +5052,17 @@ begin
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info
-  CoCreateGuid(StartupEntropy); // very fast, and won't hurt
+  CoCreateGuid(SystemEntropy.LiveFeed); // very fast, and won't hurt
+  SystemEntropy.Startup := SystemEntropy.LiveFeed;
   {$ifdef CPUINTEL}
   if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
-    StartupEntropy.Lo := StartupEntropy.Lo xor Rdtsc; // fast and unpredictable
-  RdRand32(@StartupEntropy.c2, 2); // no-op on older CPUs
+    with SystemEntropy.Startup do
+      Lo := Lo xor Rdtsc; // unpredictable
+  RdRand32(@SystemEntropy.Startup.c2, 2); // no-op on older CPUs
   {$endif CPUINTEL}
-  crc32c128(@StartupEntropy, @SystemInfo, SizeOf(SystemInfo));
-  crc32c128(@StartupEntropy, @mem, SizeOf(mem));
-  crc32c128(@StartupEntropy, @OSVersionInfo, SizeOf(OSVersionInfo));
+  crc32c128(@SystemEntropy.Startup, @SystemInfo, SizeOf(SystemInfo));
+  crc32c128(@SystemEntropy.Startup, @mem, SizeOf(mem));
+  crc32c128(@SystemEntropy.Startup, @OSVersionInfo, SizeOf(OSVersionInfo));
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
 end;
 

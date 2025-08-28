@@ -11668,7 +11668,7 @@ var
   ptc: TRttiParserComplexType;
 begin
   // in-memory hashing are seeded from random to avoid hash flooding
-  OrmHashSeed := SharedRandom.Generator.Next xor StartupEntropy.c1;
+  OrmHashSeed := SharedRandom.Generator.Next xor SystemEntropy.Startup.c1;
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;

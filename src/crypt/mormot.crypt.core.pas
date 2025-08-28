@@ -7621,7 +7621,7 @@ begin
     // XOR with some "userland" entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
-    sha3.Update(@StartupEntropy, SizeOf(StartupEntropy)); // 128-bit
+    sha3.Update(@SystemEntropy, SizeOf(SystemEntropy)); // 256-bit
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
@@ -10441,13 +10441,8 @@ procedure InitializeUnit;
 var
   rk: TKeyArray;
   bi, bo: TAesBlock;
-  shablock: THash512;
   i: PtrInt;
 {$endif USEARMCRYPTO}
-{$ifdef ASMX64}
-var
-  dummy: THash256;
-{$endif ASMX64}
 begin
   ComputeAesStaticTables;
   {$ifdef ASMX64}
@@ -10472,7 +10467,7 @@ begin
       K256Aligned := GetMemAligned(SizeOf(K256), @K256);
     if cfSHA in CpuFeatures then // detect cpuid with SSE4.1 + SHA opcodes
       try
-        Sha256ni(dummy, dummy, 1);
+        Sha256ni(SystemEntropy, SystemEntropy, 1); // cryptographic shuffle
       except
         // Intel SHA256 HW opcodes seem not available
         exclude(CpuFeatures, cfSHA);
@@ -10486,7 +10481,7 @@ begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
     AesNiHashKey := GetMemAligned(16 * 4);
     AesNiHashAntiFuzzTable := AesNiHashKey;
-    XorMemory(PHash128Rec(AesNiHashKey)^, StartupEntropy); // 128-bit salt
+    Xor512(pointer(AesNiHashKey), @SystemEntropy);
     SharedRandom.Fill(AesNiHashKey, 16 * 4); // 512-bit of TLecuyer seed
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
@@ -10516,7 +10511,7 @@ begin
     end;
   if ahcSha2 in CpuFeatures then
     try
-      sha256_block_data_order(@rk, @shablock, 1);
+      sha256_block_data_order(@SystemEntropy, @SystemEntropy, 1); // shuffle
       ShaArmAvailable := true;
     except
       // ARMv8 SHA HW opcodes seem not available

@@ -2106,7 +2106,7 @@ initialization
   @Ecc256r1Uncompress   := @ecc_uncompress_key_pas;
   @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_pas;
   // setup ecc_make_key_pas() entropy source
-  EccMakeEntropy := StartupEntropy;
+  EccMakeEntropy := SystemEntropy.Startup;
 
 end.
 
