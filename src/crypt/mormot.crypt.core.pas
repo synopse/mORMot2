@@ -2907,10 +2907,10 @@ end;
 
 procedure Salsa20x8(B: PCardinalArray);
 var
-  x: TSalsaBlock;
+  x: TBlock512;
   i: PtrUInt;
 begin // single B parameter keep the stack small and all offsets in [rsp+0..$7f]
-  x := B;
+  x := PBlock512(B)^;
   for i := 1 to 4 do
   begin
     x[4]  := x[4]  xor RolDWord(x[0]  + x[12], 7); // RoldDWord() intrinsic FPC
