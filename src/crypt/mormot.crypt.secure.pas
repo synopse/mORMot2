@@ -439,7 +439,7 @@ type
     fComputedCount: Int64;
     fCollisions: cardinal;
     fCryptoCRC: cardinal;
-    fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
+    fCrypto: TBlock256; // only fCrypto[6..7] are used in practice
     fCryptoAesE, fCryptoAesD: TAes; // Initialized if aSharedObfuscationKeyNewKdf
   public
     /// initialize the generator for the given 16-bit process identifier

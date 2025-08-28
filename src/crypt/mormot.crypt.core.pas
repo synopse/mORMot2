@@ -2388,7 +2388,7 @@ type
   TSha1Digest = THash160;
   PSha1Digest = ^TSha1Digest;
 
-  TMd5In = array[0..15] of cardinal;
+  TMd5In = TBlock512;
   PMd5In = ^TMd5In;
   TMd5Buf = TBlock128;
 
@@ -8166,10 +8166,12 @@ end;
 { TSha256 }
 
 const
-  SHA256_INIT: array[0..7] of cardinal = (
-    $6a09e667, $bb67ae85, $3c6ef372, $a54ff53a, $510e527f, $9b05688c, $1f83d9ab, $5be0cd19);
-  SHA224_INIT: array[0..7] of cardinal = (
-    $c1059ed8, $367cd507, $3070dd17, $f70e5939, $ffc00b31, $68581511, $64f98fa7, $befa4fa4);
+  SHA256_INIT: TBlock256 = (
+    $6a09e667, $bb67ae85, $3c6ef372, $a54ff53a,
+    $510e527f, $9b05688c, $1f83d9ab, $5be0cd19);
+  SHA224_INIT: TBlock256 = (
+    $c1059ed8, $367cd507, $3070dd17, $f70e5939,
+    $ffc00b31, $68581511, $64f98fa7, $befa4fa4);
 
 procedure TSha256.Init;
 var

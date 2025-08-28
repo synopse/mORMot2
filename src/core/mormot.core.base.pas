@@ -2341,7 +2341,7 @@ type
   PHash224 = ^THash224;
 
   /// store a 256-bit hash value in 32 bytes of memory
-  // - e.g. a SHA-256 digest, a TEccSignature result, or array[0..7] of cardinal
+  // - e.g. a SHA-256 digest, a TEccSignature result, or TBlock256
   THash256 = array[0..31] of byte;
   /// pointer to a 256-bit hash value
   PHash256 = ^THash256;
@@ -2353,7 +2353,7 @@ type
   PHash384 = ^THash384;
 
   /// store a 512-bit hash value in 64 bytes of memory
-  // - e.g. a SHA-512 digest, a TEccSignature result, or array[0..15] of cardinal
+  // - e.g. a SHA-512 digest, a TEccSignature result, or TBlock512
   THash512 = array[0..63] of byte;
   /// pointer to a 512-bit hash value
   PHash512 = ^THash512;
@@ -2363,7 +2363,14 @@ type
   TBlock128 = array[0..3] of cardinal;
   /// pointer to a 128-bit buffer
   PBlock128 = ^TBlock128;
-
+  /// store a 256-bit buffer of 32 bytes, indexed as 32-bit items
+  TBlock256 = array[0..7] of cardinal;
+  /// pointer to a 256-bit buffer, i.e. 32 bytes
+  PBlock256 = ^TBlock256;
+  /// store a 512-bit buffer of 64 bytes, indexed as 32-bit items
+  TBlock512 = array[0..15] of cardinal;
+  /// pointer to a 512-bit buffer, i.e. 64 bytes
+  PBlock512 = ^TBlock512;
   /// store a 1024-bit buffer of 128 bytes, indexed as 32-bit items
   TBlock1024 = array[0..31] of cardinal;
   /// pointer to a 1024-bit buffer, i.e. 128 bytes
@@ -2406,7 +2413,7 @@ type
   /// pointer to an infinite array of 256-bit hash values
   PHash256Array = ^THash256Array;
   /// store several 256-bit hash values
-  // - e.g. SHA-256 digests, TEccSignature results, or array[0..7] of cardinal
+  // - e.g. SHA-256 digests, TEccSignature results, or TBlock256
   // - consumes 32 bytes of memory per item
   THash256DynArray = array of THash256;
 
@@ -2420,7 +2427,7 @@ type
       3: (c0, c1: TBlock128);
       4: (b: THash256);
       5: (q: array[0..3] of QWord);
-      6: (c: array[0..7] of cardinal);
+      6: (c: TBlock256);
       7: (w: array[0..15] of word);
       8: (l, h: THash128Rec);
       9: (sha1: THash160);
@@ -2439,7 +2446,7 @@ type
   /// pointer to an infinite array of 512-bit hash values
   PHash512Array = ^THash512Array;
   /// store several 512-bit hash values
-  // - e.g. SHA-512 digests, or array[0..15] of cardinal
+  // - e.g. SHA-512 digests, or TBlock512
   // - consumes 64 bytes of memory per item
   THash512DynArray = array of THash512;
 
@@ -2458,7 +2465,7 @@ type
       7:  (b224: THash224);
       8:  (b384: THash384);
       9:  (w: array[0..31] of word);
-      10: (c: array[0..15] of cardinal);
+      10: (c: TBlock512);
       11: (i: array[0..7] of Int64);
       12: (q: array[0..7] of QWord);
       13: (r: array[0..3] of THash128Rec);
