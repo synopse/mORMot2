@@ -9373,8 +9373,10 @@ end;
 function Pbkdf2HmacSha256(const password, salt: RawByteString;
   count, destlen: cardinal): RawByteString;
 var
-  l, r, part: cardinal;
+  l, r, part, i: cardinal;
   ti: PHash256;
+  tmp: TSha256Digest;
+  mac, first: THmacSha256; // re-use SHA context for best performance
 begin
   result := '';
   if (count = 0) or
@@ -9389,11 +9391,41 @@ begin
   // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, part)
   ti := FastNewString(l * 32); // pre-allocate destination buffer
   pointer(result) := ti;
-  for part := 1 to l do
+  first.Init(pointer(password), length(password));
+  if count = 1 then // optimze for this specific case
   begin
-    Pbkdf2HmacSha256(password, salt, count, ti^, '', part);
-    inc(ti); // just concatenate each Ti
-  end;
+    first.Update(salt); // may be huge e.g. from RawSCrypt()
+    if l = 1 then
+    begin
+      first.UpdateBigEndian(1); // single part
+      first.Done(ti^);
+    end
+    else
+      for part := 1 to l do
+      begin
+        mac := first;
+        mac.UpdateBigEndian(part);
+        mac.Done(ti^);
+        inc(ti); // just concatenate each Ti
+      end;
+  end
+  else
+    for part := 1 to l do
+    begin
+      mac := first;
+      mac.Update(salt);
+      mac.UpdateBigEndian(part);
+      mac.Done(ti^);
+      tmp := ti^;
+      for i := 2 to count do
+      begin
+        mac := first;
+        mac.sha.Update(@tmp, SizeOf(tmp));
+        mac.Done(tmp, true);
+        XorMemoryPtrInt(pointer(ti), @tmp, SizeOf(ti^) shr POINTERSHR);
+      end;
+      inc(ti); // just concatenate each Ti
+    end;
   if r <> 0 then
     FakeLength(result, destlen); // truncate to the expected destination size
 end;
