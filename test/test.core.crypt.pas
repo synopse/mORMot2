@@ -1791,6 +1791,7 @@ var
   unalign: PtrInt;
   n, rounds, rnd: integer;
   i64: Int64;
+  logN, blocksize, parallel, r,
   exp321, exp322, exp323, exp324, exp325, exp326: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
@@ -2031,6 +2032,18 @@ begin
       TestSCript(@OpenSslSCrypt, 'OpenSslSCrypt');
   {$endif USE_OPENSSL}
   TestSCript(@SCryptPascal, 'SCryptPascal');
+  r := SCryptRounds; // default values
+  SCryptRoundsDecode(r, logN, blocksize, parallel);
+  Check(r = $8000e000);
+  CheckEqual(logN, 16);
+  CheckEqual(blocksize, 8);
+  CheckEqual(parallel, 1);
+  exp := '$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$zeGG+tsAueRzkvXfE1/F58KOKFEFfI0KpBYwE/3ZUWg';
+  Check(ModularCryptVerify('password', exp) = mcfSCrypt);
+  Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
+  exp := '$scrypt$ln=8,r=8,p=1$WKs1xljLudd6z9kbY0wpJQ$yCR4iDZYDKv+iEJj6yHY0lv/epnfB6f/w1EbXrsJOuQ';
+  Check(ModularCryptVerify('password', exp) = mcfSCrypt);
+  Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
   // validate "Modular Crypt" formats
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
@@ -2049,6 +2062,15 @@ begin
           begin
             rnd := 4 + n shr 2; // cost = 4..5 is enough here
             inc(rounds, 3 * (1 shl rnd));
+          end;
+        mcfSCrypt:
+          begin
+            rnd := SCryptRounds(4 + (n shr 2), 8, n);
+            SCryptRoundsDecode(rnd, logN, blocksize, parallel);
+            CheckEqual(logN, 4 + (n shr 2));
+            CheckEqual(blocksize, 8);
+            CheckEqual(parallel, n);
+            inc(rounds, (1 shl logN) * parallel);
           end;
       else
         begin
