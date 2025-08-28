@@ -4022,6 +4022,21 @@ begin
      raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 
+const
+  MAP_LARGE = MAP_PRIVATE or MAP_ANONYMOUS;
+
+function _GetLargeMem(BigSize: PtrUInt): pointer;
+begin
+  result := fpmmap(nil, BigSize, PROT_READ or PROT_WRITE, MAP_LARGE, -1, 0);
+  if result = MAP_FAILED then
+    result := nil; // as VirtualAlloc()
+end;
+
+procedure _FreeLargeMem(p: pointer; BigSize: PtrUInt);
+begin
+  fpmunmap(p, BigSize);
+end;
+
 
 { ****************** Unix Daemon and Windows Service Support }
 

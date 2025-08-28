@@ -2939,6 +2939,16 @@ begin
   // nothing to be done on Windows: PAGE_EXECUTE_READWRITE always work
 end;
 
+function _GetLargeMem(BigSize: PtrUInt): pointer;
+begin
+  result := VirtualAlloc(nil, BigSize, MEM_COMMIT, PAGE_READWRITE);
+end;
+
+procedure _FreeLargeMem(p: pointer; BigSize: PtrUInt);
+begin
+  VirtualFree(p, 0, MEM_RELEASE);
+end;
+
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
 
