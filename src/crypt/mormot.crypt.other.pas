@@ -440,14 +440,13 @@ procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
 
 { **************** SCrypt Password-Hashing Function }
 
-
 /// low-level SCrypt hash computation using our pure pascal code
-// - slightly slower than OpenSslSCrypt() from the mormot.lib.openssl11 unit:
-// - on i386:   N=65536: 136ms / N=16384: 33ms (OpenSSL: 114ms / 27ms)
-// - on x86_64: N=65536: 139ms / N=16384: 33ms (OpenSSL: 103ms / 24ms)
-// - assigned to mormot.crypt.core.pas SCrypt() redirection by this unit,
-// if mormot.crypt.openssl did not alreayd inject its own faster version
-function SCryptPascal(const Password: RawUtf8; const Salt: RawByteString;
+// - this unit SSE2 code is faster than mormot.lib.openssl11 wrapper:
+// $ on Win32:     RawSCrypt in 143ms, OpenSslScrypt in 157ms
+// $ on Win64:     RawSCrypt in 123ms, OpenSslScrypt in 100ms
+// $ on Linux x64: RawSCrypt in 77ms,  OpenSslScrypt in 103ms
+// - assigned to mormot.crypt.core.pas SCrypt() redirection by this unit
+function RawSCrypt(const Password: RawUtf8; const Salt: RawByteString;
   N, R, P, DestLen: PtrUInt): RawByteString;
 
 /// compute how much memory the SCrypt() function will allocate
@@ -1896,6 +1895,209 @@ end;
 
 { **************** SCrypt Password-Hashing Function }
 
+{$ifdef CPUX64} // our SSE2 optimized version - faster than OpenSSL
+
+{
+   Default layout:     SSE2 layout:
+     0  1  2  3         0  5 10 15
+     4  5  6  7        12  1  6 11
+     8  9 10 11         8 13  2  7
+    12 13 14 15         4  9 14  3
+}
+procedure PrepareSse2(blocks: PCardinalArray; count: cardinal); overload;
+var
+  c: cardinal;
+begin
+  repeat
+    c := blocks[1]; blocks[1] := blocks[5];  blocks[5]  := c;
+    c := blocks[2]; blocks[2] := blocks[10]; blocks[10] := c;
+    c := blocks[3]; blocks[3] := blocks[15]; blocks[15] := c;
+    c := blocks[4]; blocks[4] := blocks[12]; blocks[12] := c;
+    c := blocks[7]; blocks[7] := blocks[11]; blocks[11] := c;
+    c := blocks[9]; blocks[9] := blocks[13]; blocks[13] := c;
+    blocks := @blocks[16];
+    dec(count);
+  until count = 0;
+end;
+
+procedure PrepareSse2(dst, src: PCardinalArray; count: cardinal); overload;
+begin
+  repeat
+    dst[1] := src[5];  dst[5]  := src[1];
+    dst[2] := src[10]; dst[10] := src[2];
+    dst[3] := src[15]; dst[15] := src[3];
+    dst[4] := src[12]; dst[12] := src[4];
+    dst[7] := src[11]; dst[11] := src[7];
+    dst[9] := src[13]; dst[13] := src[9];
+    src := @src[16];
+    dst := @dst[16];
+    dec(count);
+  until count = 0;
+end;
+
+{$ifdef FPC}
+  {$WARN 7122 off : Check size of memory operand }
+{$endif FPC}
+
+procedure BlockMix(dst, src, bxor: pointer; R: PtrUInt);
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=dst rdx/rsi=src r8/rdx=BXor r9/rcx=R
+        {$ifdef WIN64ABI}
+        push    rsi   // Win64 expects those registers to be preserved
+        push    rdi
+        mov     rdi, rcx
+        mov     rsi, rdx
+        mov     rdx, r8
+        mov     rcx, r9
+        {$endif WIN64ABI}
+        shl     rcx, 7
+        lea     r9, [rcx - 40H]
+        lea     rax, [rsi + r9]
+        lea     r9, [rdx + r9]
+        and     rdx, rdx
+        movdqa  xmm0, [rax]
+        movdqa  xmm1, [rax + 10H]
+        movdqa  xmm2, [rax + 20H]
+        movdqa  xmm3, [rax + 30H]
+        jz      @no1
+        pxor    xmm0, [r9]
+        pxor    xmm1, [r9 + 10H]
+        pxor    xmm2, [r9 + 20H]
+        pxor    xmm3, [r9 + 30H]
+@no1:   xor     r9, r9
+        xor     r8, r8
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@loop:  and     rdx, rdx
+        pxor    xmm0, [rsi + r9]
+        pxor    xmm1, [rsi + r9 + 10H]
+        pxor    xmm2, [rsi + r9 + 20H]
+        pxor    xmm3, [rsi + r9 + 30H]
+        jz      @no2
+        pxor    xmm0, [rdx + r9]
+        pxor    xmm1, [rdx + r9 + 10H]
+        pxor    xmm2, [rdx + r9 + 20H]
+        pxor    xmm3, [rdx + r9 + 30H]
+@no2:   movdqa  xmm8, xmm0
+        movdqa  xmm9, xmm1
+        movdqa  xmm10, xmm2
+        movdqa  xmm11, xmm3
+        mov     rax, 8
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@s:     movdqa  xmm4, xmm1
+        paddd   xmm4, xmm0
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 7
+        psrld   xmm5, 25
+        pxor    xmm3, xmm4
+        movdqa  xmm4, xmm0
+        pxor    xmm3, xmm5
+        paddd   xmm4, xmm3
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 9
+        psrld   xmm5, 23
+        pxor    xmm2, xmm4
+        movdqa  xmm4, xmm3
+        pxor    xmm2, xmm5
+        pshufd  xmm3, xmm3, 93H
+        paddd   xmm4, xmm2
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 13
+        psrld   xmm5, 19
+        pxor    xmm1, xmm4
+        movdqa  xmm4, xmm2
+        pxor    xmm1, xmm5
+        pshufd  xmm2, xmm2, 4EH
+        paddd   xmm4, xmm1
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 18
+        psrld   xmm5, 14
+        pxor    xmm0, xmm4
+        movdqa  xmm4, xmm3
+        pxor    xmm0, xmm5
+        pshufd  xmm1, xmm1, 39H
+        paddd   xmm4, xmm0
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 7
+        psrld   xmm5, 25
+        pxor    xmm1, xmm4
+        movdqa  xmm4, xmm0
+        pxor    xmm1, xmm5
+        paddd   xmm4, xmm1
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 9
+        psrld   xmm5, 23
+        pxor    xmm2, xmm4
+        movdqa  xmm4, xmm1
+        pxor    xmm2, xmm5
+        pshufd  xmm1, xmm1, 93H
+        paddd   xmm4, xmm2
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 13
+        psrld   xmm5, 19
+        pxor    xmm3, xmm4
+        movdqa  xmm4, xmm2
+        pxor    xmm3, xmm5
+        pshufd  xmm2, xmm2, 4EH
+        paddd   xmm4, xmm3
+        sub     rax, 2
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 18
+        psrld   xmm5, 14
+        pxor    xmm0, xmm4
+        pshufd  xmm3, xmm3, 39H
+        pxor    xmm0, xmm5
+        ja      @s
+        paddd   xmm0, xmm8
+        paddd   xmm1, xmm9
+        paddd   xmm2, xmm10
+        paddd   xmm3, xmm11
+        lea     rax, [r8 + r9]
+        xor     r8, rcx
+        and     rax, -128
+        add     r9, 64
+        shr     rax, 1
+        add     rax, rdi
+        cmp     r9, rcx
+        movdqa  [rax], xmm0
+        movdqa  [rax + 10H], xmm1
+        movdqa  [rax + 20H], xmm2
+        movdqa  [rax + 30H], xmm3
+        jne     @loop
+        {$ifdef WIN64ABI}
+        pop     rdi
+        pop     rsi
+        {$endif WIN64ABI}
+end;
+
+procedure SMix(R, N: PtrUInt; X, Y, V: PCardinalArray);
+var
+  i, j, R128: PtrUInt;
+  b: PByte;
+begin
+  R128 := R * 128;
+  PrepareSse2(X, R * 2);
+  b := pointer(V);
+  MoveFast(X^, b^, R128);
+  i := 0;
+  repeat
+    BlockMix(@b[R128], b, nil, R);
+    b := @b[R128];
+    inc(i);
+  until i = N - 1;
+  BlockMix(X, b, nil, R);
+  i := 0;
+  repeat
+    j := (X[(R * 2 - 1) * 16] and (N - 1));
+    BlockMix(Y, X, @V[j * R * 32], R);
+    j := (Y[(R * 2 - 1) * 16] and (N - 1));
+    BlockMix(X, Y, @V[j * R * 32], R);
+    inc(i, 2);
+  until i = N;
+  PrepareSse2(X, R * 2);
+end;
+
+{$else}
+
 procedure BlockMix(Input, Output: PByteArray; R: PtrUInt);
 var
   i: PtrUInt;
@@ -1939,6 +2141,8 @@ begin
     inc(i, 2);
   until i >= N;
 end;
+
+{$endif CPUX64}
 
 function SCryptMemoryUse(N, R, P: QWord): QWord;
 begin

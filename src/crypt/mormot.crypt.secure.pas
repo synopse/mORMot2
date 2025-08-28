@@ -1118,12 +1118,13 @@ function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
 
 /// compute the fake "rounds" value for ModularCryptHash(mcfSCrypt)
 // - i.e. <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
+// - accepts LogN as [1..31], BlockSize=R as [1..16384] and Parallel=P as [1..8192]
 function SCryptRounds(LogN: cardinal = 16; BlockSize: cardinal = 8;
   Parallel: cardinal = 1): cardinal;
 
 /// decode the fake "rounds" value for ModularCryptHash(mcfSCrypt) into LogN/R/P
 // - is the reverse function of SCryptRounds()
-// - returns decode LogN=16 BlockSize=R=8 Parallel=P=1 for Rounds = 0
+// - for Rounds = 0, returns default LogN=16 BlockSize=R=8 Parallel=P=1 values
 procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
 
 /// SCrypt password hashing function compatible with passlib.hash.scrypt output
