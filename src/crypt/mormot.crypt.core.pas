@@ -8470,7 +8470,15 @@ begin
         RawSha512Compress(Hash, @Data);
         Index := 0;
       end
-      else // avoid temporary copy
+      {$ifdef SHA512_X64}
+      else if (Len > SizeOf(Data)) and
+              (cfSSE41 in CpuFeatures) then
+      begin
+        sha512_sse4(Buffer, @Hash, Len shr 7);
+        aLen := Len and (not 127);
+      end
+      {$endif SHA512_X64}
+      else
         RawSha512Compress(Hash, Buffer);
       dec(Len, aLen);
       inc(PByte(Buffer), aLen);
