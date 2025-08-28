@@ -4875,7 +4875,8 @@ begin
 end;
 
 const
-  SCRYPT_KEYLEN = 32; // 32-byte output key
+  SCRYPT_KEYLEN  = 32; // 32-byte output key = 43 chars
+  SCRYPT_SALTLEN = 16; // 16-byte default salt = 22 chars
 
 function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8; LogN: PtrUInt;
   BlockSize: PtrUInt; Parallel: PtrUInt; HashPos: PInteger; Api: TSCriptRaw): RawUtf8;
@@ -4891,7 +4892,7 @@ begin
      (BlockSize = 0) or
      (Parallel = 0) then
     exit;
-  if not TAesPrng.Main.RandomSalt(saltbin, saltb64, 22, Salt,
+  if not TAesPrng.Main.RandomSalt(saltbin, saltb64, SCRYPT_SALTLEN, Salt,
            @ConvertToBase64, @ConvertBase64ToBin) then
     exit; // expects standard base64 but without trailing '='
   hash := Api(Password, saltbin, 1 shl LogN, BlockSize, Parallel, SCRYPT_KEYLEN);
