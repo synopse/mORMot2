@@ -1112,7 +1112,7 @@ function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
   var salt: RawUtf8): TModularCryptFormat;
 
 /// compute the fake "rounds" value for ModularCryptHash(mcfSCrypt)
-// - i.e. <logN:5-bit:1..31><R:14-bit:1..32767><P:13-bit:1..8191>
+// - i.e. <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
 function SCryptRounds(LogN: cardinal = 16; BlockSize: cardinal = 8;
   Parallel: cardinal = 1): cardinal;
 
@@ -4792,21 +4792,37 @@ begin
 end;
 
 function SCryptRounds(LogN, BlockSize, Parallel: cardinal): cardinal;
-begin // = <logN:5-bit:1..31><R:14-bit:1..32767><P:13-bit:1..8191>
-  result := (LogN shl 27) + (BlockSize shl 13) + Parallel;
+begin // = <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
+  if LogN = 0 then
+    LogN := 16
+  else if LogN > 31 then
+    LogN := 31;
+  if BlockSize = 0 then
+    BlockSize := 8
+  else if BlockSize > 16384 then
+    BlockSize := 16384;
+  if Parallel = 0 then
+    Parallel := 1
+  else if Parallel > 8192 then
+    Parallel := 8192;
+  result := (LogN shl 27) + ((BlockSize - 1) shl 13) + (Parallel - 1);
 end;
 
 procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
 begin
   LogN := Rounds shr 27;
   if LogN = 0 then
-    LogN := 16;
-  BlockSize :=  (Rounds shr 13) and 32767;
+    LogN := 16;     // LogN never 0, 5-bit up to 31
+  BlockSize :=  (Rounds shr 13) and 16383;
   if BlockSize = 0 then
-    BlockSize := 8;
+    BlockSize := 8
+  else
+    inc(BlockSize); // R never 0, 14-bit up to 16384
   Parallel := Rounds and 8191;
   if Parallel = 0 then
-    Parallel := 1;
+    Parallel := 1
+  else
+    inc(Parallel); // P never 0, 13-bit up to 8192
 end;
 
 const
