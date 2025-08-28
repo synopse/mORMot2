@@ -2526,6 +2526,8 @@ type
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// append one big-endian encoded 32-bit value
+    procedure UpdateBigEndian(c: cardinal);
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSha256Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
@@ -9268,6 +9270,12 @@ begin
   SHA.Update(pointer(msg), length(msg));
 end;
 
+procedure THmacSha256.UpdateBigEndian(c: cardinal);
+begin
+  c := bswap32(c);
+  SHA.Update(@c, 4);
+end;
+
 procedure THmacSha256.Done(out result: TSha256Digest; NoInit: boolean);
 begin
   SHA.Final(result, {NoInit=}true);
@@ -9337,8 +9345,7 @@ begin
     mac.Update(saltdefault)
   else
     mac.Update(salt); 
-  partnumber := bswap32(partnumber); // e.g. $01000000 for default 1
-  mac.Update(@partnumber, 4);
+  mac.UpdateBigEndian(partnumber); // e.g. $01000000 for default 1
   mac.Done(result);
   if count < 2 then
     exit;
