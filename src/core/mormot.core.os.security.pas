@@ -6926,7 +6926,7 @@ const
     // note: string[32] to ensure there is a #0 terminator for all items
     'SeCreateTokenPrivilege',          // wspCreateToken
     'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
-    'SeLockMemoryPrivilege',           // wspLockMemory
+    'SeLockMemoryPrivilege',           // wspLockMemory - e.g. MEM_LARGE_PAGES
     'SeIncreaseQuotaPrivilege',        // wspIncreaseQuota
     'SeUnsolicitedInputPrivilege',     // wspUnsolicitedInput
     'SeMachineAccountPrivilege',       // wspMachineAccount

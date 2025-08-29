@@ -1920,21 +1920,6 @@ begin
   until count = 0;
 end;
 
-procedure PrepareSse2(dst, src: PCardinalArray; count: cardinal); overload;
-begin
-  repeat
-    dst[1] := src[5];  dst[5]  := src[1];
-    dst[2] := src[10]; dst[10] := src[2];
-    dst[3] := src[15]; dst[15] := src[3];
-    dst[4] := src[12]; dst[12] := src[4];
-    dst[7] := src[11]; dst[11] := src[7];
-    dst[9] := src[13]; dst[13] := src[9];
-    src := @src[16];
-    dst := @dst[16];
-    dec(count);
-  until count = 0;
-end;
-
 {$ifdef FPC}
   {$WARN 7122 off : Check size of memory operand }
 {$endif FPC}

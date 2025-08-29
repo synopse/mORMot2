@@ -4040,6 +4040,8 @@ const
   // a similar benefit on FreeBSD, and macOS is less predictable but likely
   // to prefer such alignement
   // - so we ensure large blocks are always 2MB aligned on all POSIX systems
+  // - note that Windows has no such automated mechanism, requires explicit
+  // MEM_LARGE_PAGES flag and - even worse - enabling SeLockMemoryPrivilege
   PMD_SIZE = 2 shl 20;
 
 {.$define OSLINUXHUGEPAGES}
