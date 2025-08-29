@@ -385,6 +385,12 @@ type
     // in TInterfaceMethodExecute.Values during execution
     procedure ArgsStackAsDocVariant(Values: PPointerArray;
       out Dest: TDocVariantData; Input: boolean);
+    /// create new input and output TObject instances before execution
+    // - caller should ensure that ArgsUsedCount[imvvObject] <> 0
+    procedure ArgsClassNewInstance(V: PPPointer);
+    /// finalize all managed values after an execution
+    // - caller should ensure that ArgsManagedCount <> 0
+    procedure ArgsReleaseValues(V: PPointer);
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -3242,6 +3248,50 @@ begin
           ArgsObject := doc;
         end;
     end;
+end;
+
+procedure TInterfaceMethod.ArgsClassNewInstance(V: PPPointer);
+var
+  a: PInterfaceMethodArgument;
+  n: PtrInt;
+begin
+  n := ArgsManagedFirst;
+  a := @Args[n];
+  inc(V, n);
+  n := ArgsUsedCount[imvvObject]; // caller ensured <> 0
+  repeat
+    if a^.ValueType = imvObject then
+    begin
+      V^^ := a^.ArgRtti.ClassNewInstance;
+      dec(n);
+      if n = 0 then
+        exit;
+    end;
+    inc(V);
+    inc(a);
+  until false;
+end;
+
+procedure TInterfaceMethod.ArgsReleaseValues(V: PPointer);
+var
+  a: PInterfaceMethodArgument;
+  n: PtrInt;
+begin
+  n := ArgsManagedFirst;
+  a := @Args[n];
+  inc(V, n);
+  n := ArgsManagedCount; // caller ensured <> 0
+  repeat
+    if a^.ValueVar >=  imvvRawUtf8 then // match ArgsManagedCount definition
+    begin
+      a^.ArgRtti.ValueFinalize(V^);
+      dec(n);
+      if n = 0 then
+        break;
+    end;
+    inc(a);
+    inc(V);
+  until false;
 end;
 
 
