@@ -10039,7 +10039,7 @@ begin // Linear Feedback Shift Register (LFSR) - not inlined for better codegen
 end; // use masks of rs1:-2=31-bit rs2:-8=29-bit rs3:-16=28-bit -> 2^88 period
 
 var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random and/or Linux auxv
-  LecuyerEntropy: THash512Rec; // nothing on BSD/Mac but XorEntropy() is enough
+  LecuyerEntropy: THash512Rec; // void on BSD/Mac ARM but XorEntropy() is enough
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
@@ -13597,8 +13597,8 @@ begin
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral      := @_VariantClearSeveral;
   SortDynArrayVariantComp  := @_SortDynArrayVariantComp;
-  _Fill256FromOs := @__Fill256FromOs;
-  ClassUnit      := @_ClassUnit;
+  _Fill256FromOs           := @__Fill256FromOs;
+  ClassUnit                := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
   {$ifndef ASMINTEL}

@@ -1930,6 +1930,7 @@ const
   {$endif CPUX86}
   // other archs (like aarch64) are properly defined - see https://syscall.sh
 
+
 { TSystemD }
 
 procedure TSystemD.DoLoad;
@@ -3610,24 +3611,28 @@ procedure __Fill256FromOs(out e: THash256Rec);
 var
   si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
 begin
-  // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
+  // - no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
+  // - is called once at startup from mormot.core.data
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time   * 2654435761;
   e.d1 := mach_continuous_time * 3266489917;
-  crcblock(@e.l, @SystemEntropy.Startup);
   {$else}
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
-  crcblock(@e.l, @SystemEntropy.Startup); // 128-bit entropy over nanoseconds
   {$endif OSDARWIN}
+  crcblock(@e.l, @SystemEntropy.Startup); // 128-bit entropy over nanoseconds
   {$ifdef OSLINUX}
   if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
     exit;
   {$endif OSLINUX}
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
-  if SystemEntropy.LiveFeed.c0 = 0 then
-    crcblocks(@SystemEntropy.LiveFeed, @e, 2); // we need something
+  {$ifndef CPUINTEL}
+  if SystemEntropy.LiveFeed.c0 = 0 then       // may happen on BSD and MAC ARM
+    crcblocks(@SystemEntropy.LiveFeed, @e, 2) // put something here
+  else
+  {$endif CPUINTEL}
+    crcblock(@e.h, @SystemEntropy.LiveFeed);  // obfuscate
 end;
 
 const
