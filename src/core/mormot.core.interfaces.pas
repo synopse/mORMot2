@@ -3636,11 +3636,11 @@ end;
 procedure TInterfacedObjectFake.FakeCallSetJsonToStack(
   var ctxt: TFakeCallContext; R: PUtf8Char);
 var
-  arg, ValLen: integer; // both should be integers, not PtrInt
+  arg, nameLen: integer; // both should be integers, not PtrInt
+  name: PUtf8Char;
   V: PPointer;
-  Val: PUtf8Char;
   a: PInterfaceMethodArgument;
-  resultAsJsonObject: boolean;
+  asJsonObject: boolean;
   c: TJsonParserContext;
 begin
   if R <> nil then
@@ -3649,10 +3649,10 @@ begin
       repeat
         inc(R)
       until not (R^ in [#1..' ']);
-    resultAsJsonObject := false; // [value,...] JSON array format
+    asJsonObject := false; // [value,...] JSON array format
     if R^ = '{' then
       // {"paramname":value,...} JSON object format
-      resultAsJsonObject := true
+      asJsonObject := true
     else if R^ <> '[' then
       FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
     c.InitParser(R + 1, nil, fFactory.JsonParserOptions,
@@ -3660,20 +3660,20 @@ begin
     arg := ctxt.Method^.ArgsOutFirst;
     if arg > 0 then
       repeat
-        if resultAsJsonObject then
+        if asJsonObject then
         begin
-          Val := GetJsonPropName(c.Get.Json, @ValLen);
-          if Val = nil then
+          name := GetJsonPropName(c.Get.Json, @nameLen);
+          if name = nil then
             // end of JSON object
             break;
           // optimistic process of JSON object with in-order parameters
           if (arg > 0) and
-            not IdemPropName(ctxt.Method^.Args[arg].ParamName^, Val, ValLen) then
+            not IdemPropName(ctxt.Method^.Args[arg].ParamName^, name, nameLen) then
           begin
             // slower but safe ctxt.Method when not in-order
-            arg := ctxt.Method^.ArgIndexOutput(Val, ValLen, false);
+            arg := ctxt.Method^.ArgIndexOutput(name, nameLen);
             if arg < 0 then
-              FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [Val]);
+              FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [name]);
           end;
         end;
         a := @ctxt.Method^.Args[arg];
@@ -3690,7 +3690,7 @@ begin
         if c.Json = nil then
           break;
         c.Json := GotoNextNotSpace(c.Json);
-        if resultAsJsonObject then
+        if asJsonObject then
         begin
           if (c.Json^ = #0) or
              (c.Json^ = '}') then
@@ -7495,12 +7495,12 @@ end;
 function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
   P: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
 var
-  a: integer;
-  ParObjValuesUsed: boolean;
+  arg: integer;
+  asJsonObject: boolean;
   opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
-  c: PServiceCustomAnswer;
-  ctxt: TJsonParserContext;
-  arg: PInterfaceMethodArgument;
+  custom: PServiceCustomAnswer;
+  c: TJsonParserContext;
+  a: PInterfaceMethodArgument;
   ParObjValues: array[0 .. MAX_METHOD_ARGS - 1] of PUtf8Char;
 begin
   // prepare all fValues[] pointers for the input/output arguments
@@ -7508,14 +7508,14 @@ begin
   BeforeExecute;
   try
     // locate input arguments from JSON array or object
-    ParObjValuesUsed := false;
+    asJsonObject := false;
     if (fMethod^.ArgsInputValuesCount <> 0) and
        (P <> nil) then
     begin
       P := GotoNextNotSpace(P);
       case P^ of
         '[':
-          // input arguments as a JSON array , e.g. '[1,2,"three"]' (default)
+          // input arguments as arg JSON array , e.g. '[1,2,"three"]' (default)
           inc(P);
         '{':
           begin
@@ -7525,7 +7525,7 @@ begin
             until not (P^ in [#1..' ']);
             if P^ <> '}' then
               if fMethod^.ArgsParseJsonObject(P, @ParObjValues) then
-                ParObjValuesUsed := true
+                asJsonObject := true
               else
                 exit;
             P := nil;
@@ -7539,7 +7539,7 @@ begin
     end;
     // parse and decode JSON input const/var arguments (if any) into fValues[]
     if (P = nil) and
-       not ParObjValuesUsed then
+       not asJsonObject then
     begin
       if (fMethod^.ArgsInputValuesCount > 0) and
          (optErrorOnMissingParam in Options) then
@@ -7556,16 +7556,16 @@ begin
     else
     begin
       // parse the JSON input values
-      ctxt.InitParser(P, nil, fFactory.JsonParserOptions,
+      c.InitParser(P, nil, fFactory.JsonParserOptions,
         @fDocVariantOptions, nil, nil);
-      for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
+      for arg := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
       begin
-        arg := @fMethod^.Args[a];
-        if arg^.ValueDirection <> imdOut then
-        // (imdResult is excluded with a <= ArgsInLast: can't appear here)
+        a := @fMethod^.Args[arg];
+        if a^.ValueDirection <> imdOut then
+        // (imdResult is excluded with arg <= ArgsInLast: can't appear here)
         begin
-          if ParObjValuesUsed then
-            if ParObjValues[a] = nil then // missing parameter in input JSON
+          if asJsonObject then
+            if ParObjValues[arg] = nil then // missing parameter in input JSON
               if optErrorOnMissingParam in Options then
                 exit
               else
@@ -7573,20 +7573,20 @@ begin
                 continue
             else
               // value to be retrieved from JSON object
-              ctxt.Json := ParObjValues[a]
-          else if ctxt.Json = nil then
-            break; // premature end of ..] (ParObjValuesUsed=false)
-          if (arg^.ValueType = imvInterface) and
-             not (vIsInterfaceJson in arg^.ValueKindAsm) then // e.g. not IDocList
+              c.Json := ParObjValues[arg]
+          else if c.Json = nil then
+            break; // premature end of ..] (asJsonObject=false)
+          if (a^.ValueType = imvInterface) and
+             not (vIsInterfaceJson in a^.ValueKindAsm) then // e.g. not IDocList
             if Assigned(OnCallback) then
               // retrieve TRestServerUriContext.ExecuteCallback fake interface
               // via TServiceContainerServer.GetFakeCallback
-              OnCallback(ctxt, arg^.ArgRtti, PInterface(fValues[a])^)
+              OnCallback(c, a^.ArgRtti, PInterface(fValues[arg])^)
             else
               EInterfaceFactory.RaiseUtf8('OnCallback=nil for %(%: %)',
-                [fMethod^.InterfaceDotMethodName, arg^.ParamName^,
-                 arg^.ArgTypeName^]) // paranoid (already checked before)
-          else if not arg^.SetFromJson(ctxt, fMethod, fValues[a], Error) then
+                [fMethod^.InterfaceDotMethodName, a^.ParamName^,
+                 a^.ArgTypeName^]) // paranoid (already checked before)
+          else if not a^.SetFromJson(c, fMethod, fValues[arg], Error) then
             exit;
         end;
       end;
@@ -7599,17 +7599,17 @@ begin
       // handle custom content (not JSON array/object answer)
       if imfResultIsServiceCustomAnswer in fMethod^.Flags then
       begin
-        c := fValues[fMethod^.ArgsResultIndex];
-        if c^.Header = '' then
+        custom := fValues[fMethod^.ArgsResultIndex];
+        if custom^.Header = '' then
           // set to 'Content-Type: application/json' by default
-          c^.Header := JSON_CONTENT_TYPE_HEADER_VAR;
+          custom^.Header := JSON_CONTENT_TYPE_HEADER_VAR;
         // implementation could override the Header content
-        fServiceCustomAnswerHead := c^.Header;
-        Res.ForceContent(c^.Content);
-        if c^.Status = 0 then
+        fServiceCustomAnswerHead := custom^.Header;
+        Res.ForceContent(custom^.Content);
+        if custom^.Status = 0 then
           // Values[]=@Records[] is filled with 0 by default
-          c^.Status := HTTP_SUCCESS;
-        fServiceCustomAnswerStatus := c^.Status;
+          custom^.Status := HTTP_SUCCESS;
+        fServiceCustomAnswerStatus := custom^.Status;
         result := true;
         exit;
       end
@@ -7618,14 +7618,14 @@ begin
       // write the '{"result":[...' array or object
       opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
       opt[{smdVar=}true] := []; // let var params override void/default values
-      for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
+      for arg := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
       begin
-        arg := @fMethod^.Args[a];
-        if arg^.ValueDirection <> imdConst then
+        a := @fMethod^.Args[arg];
+        if a^.ValueDirection <> imdConst then
         begin
           if ResAsJsonObject then
-            Res.AddPropName(arg^.ParamName^);
-          arg^.AddJson(Res, fValues[a], opt[arg^.ValueDirection = imdVar]);
+            Res.AddPropName(a^.ParamName^);
+          a^.AddJson(Res, fValues[arg], opt[a^.ValueDirection = imdVar]);
           Res.AddComma;
         end;
       end;
