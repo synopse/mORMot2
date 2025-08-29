@@ -334,13 +334,16 @@ type
     ArgsOutputName: TRawUtf8DynArray;
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
+    /// retrieve a const / var argument index in Args[] from its name
+    // - search is case insensitive, returns -1 if not found
+    function ArgIndexInput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
+    /// retrieve a var / out / result argument index in Args[] from its name
+    // - search is case insensitive, returns -1 if not found
+    function ArgIndexOutput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
     /// retrieve an argument index in Args[] from its name
-    // - search is case insensitive
-    // - if Input is TRUE, will search within const / var arguments
-    // - if Input is FALSE, will search within var / out / result arguments
-    // - returns -1 if not found
-    function ArgIndex(ArgName: PUtf8Char; ArgNameLen: integer;
-      Input: boolean): PtrInt;
+    // - search is case insensitive, returns -1 if not found
+    function ArgIndex(const ArgName: RawUtf8; Input: boolean): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
     /// find the next input (const / var) argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgNextInput(var arg: integer): boolean;
@@ -2942,33 +2945,46 @@ end;
 
 { TInterfaceMethod }
 
-function TInterfaceMethod.ArgIndex(ArgName: PUtf8Char; ArgNameLen: integer;
-  Input: boolean): PtrInt;
+function TInterfaceMethod.ArgIndexInput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
 var
   a: PInterfaceMethodArgument;
 begin
   if ArgNameLen > 0 then
-    if Input then
-    begin
-      a := @Args[ArgsInFirst];
-      for result := ArgsInFirst to ArgsInLast do
-        if (a^.ValueDirection in [imdConst, imdVar]) and
-           IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
-            exit
-        else
-          inc(a);
-    end
-    else
-    begin
-      a := @Args[ArgsOutFirst];
-      for result := ArgsOutFirst to ArgsOutLast do
-        if (a^.ValueDirection <> imdConst) and
-           IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
-            exit
-        else
-          inc(a);
-    end;
+  begin
+    a := @Args[ArgsInFirst];
+    for result := ArgsInFirst to ArgsInLast do
+      if (a^.ValueDirection in [imdConst, imdVar]) and
+         IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
+          exit
+      else
+        inc(a);
+  end;
   result := -1;
+end;
+
+function TInterfaceMethod.ArgIndexOutput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
+var
+  a: PInterfaceMethodArgument;
+begin
+  if ArgNameLen > 0 then
+  begin
+    a := @Args[ArgsOutFirst];
+    for result := ArgsOutFirst to ArgsOutLast do
+      if (a^.ValueDirection <> imdConst) and
+         IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
+          exit
+      else
+        inc(a);
+  end;
+  result := -1;
+end;
+
+function TInterfaceMethod.ArgIndex(const ArgName: RawUtf8; Input: boolean): PtrInt;
+begin
+  if Input then
+    result := ArgIndexInput(pointer(ArgName), length(ArgName))
+  else
+    result := ArgIndexOutput(pointer(ArgName), length(ArgName));
 end;
 
 function TInterfaceMethod.ArgNextInput(var arg: integer): boolean;
@@ -3064,7 +3080,7 @@ begin
           (arg <> '') do
     begin
       ok := true;
-      i := ArgIndex(pointer(arg), length(arg), Input);
+      i := ArgIndex(arg, Input);
       if i < 0 then
         if RaiseExceptionOnUnknownParam then
           EInterfaceFactory.RaiseUtf8('Unexpected [%] parameter for %',
@@ -3224,8 +3240,7 @@ begin
       dvObject:
         for a := 0 to ArgsObject.Count - 1 do
         begin
-          ndx := ArgIndex(
-            pointer(ArgsObject.Names[a]), length(ArgsObject.Names[a]), Input);
+          ndx := ArgIndex(ArgsObject.Names[a], Input);
           if ndx >= 0 then
             Args[ndx].FixValue(ArgsObject.Values[a]);
         end;
@@ -3656,7 +3671,7 @@ begin
             not IdemPropName(ctxt.Method^.Args[arg].ParamName^, Val, ValLen) then
           begin
             // slower but safe ctxt.Method when not in-order
-            arg := ctxt.Method^.ArgIndex(Val, ValLen, false);
+            arg := ctxt.Method^.ArgIndexOutput(Val, ValLen, false);
             if arg < 0 then
               FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [Val]);
           end;

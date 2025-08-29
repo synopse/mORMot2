@@ -4405,7 +4405,7 @@ begin
       name := fInput[ndx * 2];
       if InterfaceMethod <> nil then
       begin
-        a := InterfaceMethod.ArgIndex(pointer(name), length(name), {input=}true);
+        a := InterfaceMethod.ArgIndexInput(pointer(name), length(name));
         forcestring := (a >= 0) and
                        (rcfJsonString in InterfaceMethod.Args[a].ArgRtti.Flags);
       end
