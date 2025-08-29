@@ -2299,9 +2299,9 @@ type
     fInput: TDocVariantData;
     fOutput: TDocVariantData;
     procedure SetOptions(const Value: TInterfaceMethodOptions);
-    procedure BeforeExecute;
+    procedure BeforeExecute; {$ifdef HASINLINE} inline; {$endif}
     procedure RawExecute(const Instances: PPointerArray; InstancesLast: integer);
-    procedure AfterExecute;
+    procedure AfterExecute;  {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize the execution instance
     constructor Create(aFactory: TInterfaceFactory; aMethod: PInterfaceMethod;
@@ -7174,35 +7174,16 @@ begin
 end;
 
 procedure TInterfaceMethodExecuteRaw.BeforeExecute;
-var
-  a: PInterfaceMethodArgument;
-  V: PPointer;
-  n: integer;
 begin
-  fExecutedInstancesFailed := nil;
+  if fExecutedInstancesFailed <> nil then
+    fExecutedInstancesFailed := nil;
   if fAlreadyExecuted then
     FillCharFast(pointer(fStorage)^, fMethod^.ArgsSizeAsValue, 0)
   else
     fAlreadyExecuted := true;
-  with fMethod^ do
-    if imvObject in ArgsUsed then
-    begin
-      // set new input and output TObject instances as expected by the call
-      a := @Args[ArgsManagedFirst];
-      V := @fValues[ArgsManagedFirst];
-      n := ArgsUsedCount[imvvObject];
-      repeat
-        if a^.ValueType = imvObject then
-        begin
-          PObject(V^)^ := a^.ArgRtti.ClassNewInstance;
-          dec(n);
-          if n = 0 then
-            break;
-        end;
-        inc(V);
-        inc(a);
-      until false;
-    end;
+  if fMethod.ArgsUsedCount[imvvObject] <> 0 then
+    // set new input and output TObject instances as expected by the call
+    fMethod^.ArgsClassNewInstance(pointer(fValues));
 end;
 
 procedure TInterfaceMethodExecuteRaw.RawExecute(
@@ -7358,59 +7339,10 @@ begin
 end;
 
 procedure TInterfaceMethodExecuteRaw.AfterExecute;
-var
-  V: PPointer;
-  f: PtrInt;
-  arg: PInterfaceMethodArgument;
 begin
   // finalize managed parameters after each call
-  f := fMethod^.ArgsManagedFirst;
-  if f >= 0 then
-  begin
-    arg := @fMethod^.Args[f];
-    V := @fValues[f];
-    f := fMethod^.ArgsManagedCount;
-    repeat
-      case arg^.ValueVar of
-        imvvString:
-          {$ifdef FPC}
-          FastAssignNew(V^^);
-          {$else}
-          PString(V^)^ := '';
-          {$endif FPC}
-        imvvWideString:
-          PWideString(V^)^ := '';
-        imvvRawUtf8:
-          {$ifdef FPC}
-          FastAssignNew(V^^);
-          {$else}
-          PRawUtf8(V^)^ := '';
-          {$endif FPC}
-        imvvDynArray:
-          FastDynArrayClear(V^, arg^.ArgRtti.ArrayRtti.Info);
-        imvvObject:
-          PObject(V^)^.Free;
-        imvvInterface:
-          PInterface(V^)^ := nil;
-        imvvRecord:
-          if arg^.ValueType = imvVariant then
-            VarClearProc(PVarData(V^)^)
-          else
-            FastRecordClear(V^, arg^.ArgRtti.Info);
-        else
-          begin
-            inc(arg);
-            inc(V);
-            continue;
-          end;
-      end;
-      dec(f);
-      if f = 0 then
-        break;
-      inc(arg);
-      inc(V);
-    until false;
-  end;
+  if fMethod^.ArgsManagedCount <> 0 then
+    fMethod^.ArgsReleaseValues(pointer(fValues)); // use TRttiCustom info
 end;
 
 
