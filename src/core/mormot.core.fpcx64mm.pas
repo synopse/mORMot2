@@ -1011,9 +1011,9 @@ const
   SmallBlockTypeSize         = SizeOf(TSmallBlockType);
   MediumBlockPoolHeaderSize  = SizeOf(TMediumBlockPoolHeader);
   LargeBlockHeaderSize       = SizeOf(TLargeBlockHeader);
-  LargeBlockGranularity      = 1 shl 16; // 64KB for (smallest) large blocks
+  LargeBlockGranularityAnd   = (1 shl 16) - 1; // 64KB minimum for large blocks
   {$ifdef FPCMM_LARGEBIGALIGN}
-  LargeBlockGranularity2     = 1 shl 21;      // PMD_SIZE=2MB granularity
+  LargeBlockGranularity2And  = (1 shl 21) - 1; // PMD_SIZE=2MB granularity
   LargeBlockGranularity2Size = 2 shl 21;  // for size >= 4MB
   // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
   {$endif FPCMM_LARGEBIGALIGN}
@@ -1412,14 +1412,15 @@ end;
 function ComputeLargeBlockSize(size: PtrUInt): PtrUInt; inline;
 begin
   inc(size, LargeBlockHeaderSize - 1 + BlockHeaderSize);
+  // aligned_size := ((size + align - 1) AND (NOT (align - 1)))
   {$ifdef FPCMM_LARGEBIGALIGN}
   // on Linux, mremap() on PMD_SIZE=2MB aligned data make a huge speedup
   if size >= LargeBlockGranularity2Size then // trigger if size>=4MB
-    result := (size + LargeBlockGranularity2) and -LargeBlockGranularity2
+    result := (size + LargeBlockGranularity2And) and not LargeBlockGranularity2And
   else
   {$endif FPCMM_LARGEBIGALIGN}
     // use default 64KB granularity for large blocks up to 4MB
-    result := (size + LargeBlockGranularity) and -LargeBlockGranularity;
+    result := (size + LargeBlockGranularityAnd) and not LargeBlockGranularityAnd;
 end;
 
 function AllocateLargeBlockFrom(existing: pointer;
