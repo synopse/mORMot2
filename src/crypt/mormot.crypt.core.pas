@@ -3874,19 +3874,19 @@ const
 procedure ShiftAes(KeySize: cardinal; pk: PCardinalArray);
 var
   i: PtrUInt;
-  sb, temp: PByteArray; // faster on PIC
+  sb, x: PByteArray; // faster on PIC
 begin
   sb := @SBox;
   case KeySize of
     128:
       for i := 0 to 9 do
       begin
-        temp := @pk^[3];
-        // SubWord(RotWord(temp)) if "word" count mod 4 = 0
-        pk^[4] := ((sb[temp[0]]) shl 24) xor
-                  ((sb[temp[1]])) xor
-                  ((sb[temp[2]]) shl 8) xor
-                  ((sb[temp[3]]) shl 16) xor
+        x := @pk^[3];
+        // SubWord(RotWord(x)) if "word" count mod 4 = 0
+        pk^[4] := ((sb[x[0]]) shl 24) xor
+                  ((sb[x[1]])) xor
+                  ((sb[x[2]]) shl 8) xor
+                  ((sb[x[3]]) shl 16) xor
                   pk^[0] xor
                   RCon[i];
         pk^[5] := pk^[1] xor pk^[4];
@@ -3897,12 +3897,12 @@ begin
     192:
       for i := 0 to 7 do
       begin
-        temp := @pk^[5];
-        // SubWord(RotWord(temp)) if "word" count mod 6 = 0
-        pk^[6] := ((sb[temp[0]]) shl 24) xor
-                  ((sb[temp[1]])) xor
-                  ((sb[temp[2]]) shl 8) xor
-                  ((sb[temp[3]]) shl 16) xor
+        x := @pk^[5];
+        // SubWord(RotWord(x)) if "word" count mod 6 = 0
+        pk^[6] := ((sb[x[0]]) shl 24) xor
+                  ((sb[x[1]])) xor
+                  ((sb[x[2]]) shl 8) xor
+                  ((sb[x[3]]) shl 16) xor
                   pk^[0] xor
                   RCon[i];
         pk^[7] := pk^[1] xor pk^[6];
@@ -3917,12 +3917,12 @@ begin
   else // 256
     for i := 0 to 6 do
     begin
-      temp := @pk^[7];
-      // SubWord(RotWord(temp)) if "word" count mod 8 = 0
-      pk^[8] := ((sb[temp[0]]) shl 24) xor
-                ((sb[temp[1]])) xor
-                ((sb[temp[2]]) shl 8) xor
-                ((sb[temp[3]]) shl 16) xor
+      x := @pk^[7];
+      // SubWord(RotWord(x)) if "word" count mod 8 = 0
+      pk^[8] := ((sb[x[0]]) shl 24) xor
+                ((sb[x[1]])) xor
+                ((sb[x[2]]) shl 8) xor
+                ((sb[x[3]]) shl 16) xor
                 pk^[0] xor
                 RCon[i];
       pk^[9]  := pk^[1] xor pk^[8];
@@ -3930,12 +3930,12 @@ begin
       pk^[11] := pk^[3] xor pk^[10];
       if i = 6 then
         break;
-      temp := @pk^[11];
-      // SubWord(temp) if "word" count mod 8 = 4
-      pk^[12] := ((sb[temp[0]])) xor
-                 ((sb[temp[1]]) shl 8) xor
-                 ((sb[temp[2]]) shl 16) xor
-                 ((sb[temp[3]]) shl 24) xor
+      x := @pk^[11];
+      // SubWord(x) if "word" count mod 8 = 4
+      pk^[12] := ((sb[x[0]])) xor
+                 ((sb[x[1]]) shl 8) xor
+                 ((sb[x[2]]) shl 16) xor
+                 ((sb[x[3]]) shl 24) xor
                  pk^[4];
       pk^[13] := pk^[5] xor pk^[12];
       pk^[14] := pk^[6] xor pk^[13];
@@ -3946,38 +3946,34 @@ begin
 end;
 
 // compute AES decryption key from encryption key
-procedure MakeDecrKeyPas(rounds: integer; k: PCardinalArray);
+procedure MakeDecrKeyAes(rounds: integer; k: PByteArray);
 var
-  x: cardinal;
   tab: PCardinalArray; // faster on a PIC system - Td# = tab[#*$100]
   sb: PByteArray;
 begin
   tab := @Td0;
   sb := @SBox;
+  dec(rounds);
   repeat
-    inc(PByte(k), 16);
+    k := @k[16];
+    PCardinal(@k[0])^  := tab[sb[k[0]]] xor
+                          tab[sb[k[1]] + $100] xor
+                          tab[sb[k[2]] + $200] xor
+                          tab[sb[k[3]] + $300];
+    PCardinal(@k[4])^  := tab[sb[k[4]]] xor
+                          tab[sb[k[5]] + $100] xor
+                          tab[sb[k[6]] + $200] xor
+                          tab[sb[k[7]] + $300];
+    PCardinal(@k[8])^  := tab[sb[k[8]]] xor
+                          tab[sb[k[9]]  + $100] xor
+                          tab[sb[k[10]] + $200] xor
+                          tab[sb[k[11]] + $300];
+    PCardinal(@k[12])^ := tab[sb[k[12]]] xor
+                          tab[sb[k[13]] + $100] xor
+                          tab[sb[k[14]] + $200] xor
+                          tab[sb[k[15]] + $300];
     dec(rounds);
-    x := k[0];
-    k[0] := tab[$300 + sb[x shr 24]] xor
-            tab[$200 + sb[x shr 16 and $ff]] xor
-            tab[$100 + sb[x shr 8 and $ff]] xor
-            tab[sb[x and $ff]];
-    x := k[1];
-    k[1] := tab[$300 + sb[x shr 24]] xor
-            tab[$200 + sb[x shr 16 and $ff]] xor
-            tab[$100 + sb[x shr 8 and $ff]] xor
-            tab[sb[x and $ff]];
-    x := k[2];
-    k[2] := tab[$300 + sb[x shr 24]] xor
-            tab[$200 + sb[x shr 16 and $ff]] xor
-            tab[$100 + sb[x shr 8 and $ff]] xor
-            tab[sb[x and $ff]];
-    x := k[3];
-    k[3] := tab[$300 + sb[x shr 24]] xor
-            tab[$200 + sb[x shr 16 and $ff]] xor
-            tab[$100 + sb[x shr 8 and $ff]] xor
-            tab[sb[x and $ff]];
-  until rounds = 1;
+  until rounds = 0;
 end;
 
 
@@ -4138,7 +4134,7 @@ begin
   end
   else
   {$endif USEAESNI}
-    MakeDecrKeyPas(ctx.Rounds, @ctx.RK);
+    MakeDecrKeyAes(ctx.Rounds, @ctx.RK);
 end;
 
 function TAes.DecryptInit(const Key; KeySize: cardinal): boolean;
