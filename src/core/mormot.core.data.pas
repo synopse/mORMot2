@@ -8792,11 +8792,9 @@ begin
          DACntDecFree(p^.refCnt) then
       begin
         if (OldLength <> 0) and
-           not fNoFinalize then
-          if rcfArrayItemManaged in fInfo.Flags then
-            FastFinalizeArray(fValue^, fInfo.Cache.ItemInfoManaged, OldLength)
-          else if rcfObjArray in fInfo.Flags then
-            RawObjectsClear(fValue^, OldLength);
+           (not fNoFinalize) and
+           (fInfo.ArrayRtti <> nil) then // ArrayRtti supports rcfObjArray
+          FastFinalizeArray(fValue^, fInfo.ArrayRtti.Info, OldLength);
         FreeMem(p);
       end;
       fValue^ := nil;
@@ -8822,17 +8820,17 @@ begin
     dec(p); // p^ = start of heap object
     if p^.refCnt = 1 then
     begin
-      // we own the dynamic array instance -> direct reallocation
+      // we own the dynamic array instance -> direct in-place reallocation
       if (NewLength < OldLength) and
-         not fNoFinalize then
-        // reduce array in-place
-        if rcfArrayItemManaged in fInfo.Flags then // in trailing items
-          FastFinalizeArray(pointer(PAnsiChar(p) + needed),
-            fInfo.Cache.ItemInfoManaged, OldLength - NewLength)
-        else if rcfObjArray in fInfo.Flags then // FreeAndNil() of resized objects
-          RawObjectsClear(pointer(PAnsiChar(p) + needed), OldLength - NewLength);
+         (not fNoFinalize) and
+         (fInfo.ArrayRtti <> nil) then // use ArrayRtti to support rcfObjArray
+        FastFinalizeArray(pointer(PAnsiChar(p) + needed),
+          fInfo.ArrayRtti.Info, OldLength - NewLength);
       ReallocMem(p, needed);
     end
+    else if rcfObjArray in fInfo.Flags then
+      EDynArray.RaiseUtf8(
+        'TDynArray.InternalSetLength(%): rcfObjArray unsupported', [fInfo.Name])
     else
     begin
       // dynamic array already referenced elsewhere -> create our own copy
@@ -8855,7 +8853,7 @@ begin
       // for thread safety, adjust the refcount after data copy
       if fNoFinalize then
         FastDynArrayClear(fValue, nil)
-      else // note: rcfObjArray should never appear with refcnt>1
+      else // note: rcfObjArray raise EDynArray above with refcnt>1
         FastDynArrayClear(fValue, fInfo.Cache.ItemInfoManaged);
     end;
   end;
