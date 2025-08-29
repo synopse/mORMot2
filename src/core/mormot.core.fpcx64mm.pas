@@ -833,55 +833,59 @@ const
     {$endif FPCMM_BOOST}
   {$endif FPCMM_BOOSTER}
 
-  NumSmallBlockTypes = 46;
+  NumSmallBlockTypes       = 46;
   NumSmallBlockTypesUnique = NumSmallBlockTypes - 2; // last 2 are redundant
-  MaximumSmallBlockSize = 2608;
+  MaximumSmallBlockSize    = 2608;
+  NumTinyBlockTypes        =
+     1 shl NumTinyBlockTypesPO2; // 8 (128B) or 16 (256B)
+  NumTinyBlockArenas       =
+     (1 shl NumTinyBlockArenasPO2) - 1; // -1 = main Small[]
+  NumSmallInfoBlock        =
+    NumSmallBlockTypes + NumTinyBlockArenas * NumTinyBlockTypes;
   SmallBlockSizes: array[0..NumSmallBlockTypes - 1] of word = (
     16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256,
     272, 288, 304, 320, 352, 384, 416, 448, 480, 528, 576, 624, 672, 736, 800,
     880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
-  NumTinyBlockTypes = 1 shl NumTinyBlockTypesPO2; // 8 (128B) or 16 (256B)
-  NumTinyBlockArenas = (1 shl NumTinyBlockArenasPO2) - 1; // -1 = main Small[]
-  NumSmallInfoBlock = NumSmallBlockTypes + NumTinyBlockArenas * NumTinyBlockTypes;
-  SmallBlockGranularity = 16;
-  TargetSmallBlocksPerPool = 48;
-  MinimumSmallBlocksPerPool = 12;
-  SmallBlockDownsizeCheckAdder = 64;
-  SmallBlockUpsizeAdder = 32;
-  SmallBlockTypePO2 = 6;  // SizeOf(TSmallBlockType)=64
 
-  MediumBlockPoolSizeMem = 20 * 64 * 1024;
-  MediumBlockPoolSize = MediumBlockPoolSizeMem - 16;
-  MediumBlockSizeOffset = 48;
-  MinimumMediumBlockSize = 11 * 256 + MediumBlockSizeOffset;
-  MediumBlockBinsPerGroup = 32;
-  MediumBlockBinGroupCount = 32;
+  SmallBlockGranularity        = 16;
+  TargetSmallBlocksPerPool     = 48;
+  MinimumSmallBlocksPerPool    = 12;
+  SmallBlockDownsizeCheckAdder = 64;
+  SmallBlockUpsizeAdder        = 32;
+  SmallBlockTypePO2            = 6;  // SizeOf(TSmallBlockType)=64
+
+  MediumBlockPoolSizeMem       = 20 * 64 * 1024;
+  MediumBlockPoolSize          = MediumBlockPoolSizeMem - 16;
+  MediumBlockSizeOffset        = 48;
+  MinimumMediumBlockSize       = 11 * 256 + MediumBlockSizeOffset;
+  MediumBlockBinsPerGroup      = 32;
+  MediumBlockBinGroupCount     = 32;
   MediumBlockBinCount = MediumBlockBinGroupCount * MediumBlockBinsPerGroup;
-  MediumBlockGranularity = 256;
-  MaximumMediumBlockSize =
+  MediumBlockGranularity       = 256;
+  MaximumMediumBlockSize       =
     MinimumMediumBlockSize + (MediumBlockBinCount - 1) * MediumBlockGranularity;
   OptimalSmallBlockPoolSizeLowerLimit =
     29 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
   OptimalSmallBlockPoolSizeUpperLimit =
     64 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
-  MaximumSmallBlockPoolSize =
+  MaximumSmallBlockPoolSize   =
     OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
-  MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
+  MediumInPlaceDownsizeLimit  = MinimumMediumBlockSize div 4;
 
   {$ifdef FPCMM_SLEEPTSC}
   // pause using rdtsc (30 cycles latency on hardware but emulated on VM)
-  SpinMediumLockTSC = 10000;
-  SpinLargeLockTSC = 10000;
+  SpinMediumLockTSC          = 10000;
+  SpinLargeLockTSC           = 10000;
   {$ifdef FPCMM_PAUSE}
-  SpinSmallGetmemLockTSC = 1000;
+  SpinSmallGetmemLockTSC     = 1000;
   {$endif FPCMM_PAUSE}
   {$else}
   // pause with constant spinning counts (empirical values from fastmm4-avx)
-  SpinMediumLockCount = 2500;
-  SpinLargeLockCount = 5000;
+  SpinMediumLockCount        = 2500;
+  SpinLargeLockCount         = 5000;
   {$ifdef FPCMM_PAUSE}
-  SpinSmallGetmemLockCount = 500;
+  SpinSmallGetmemLockCount   = 500;
   {$endif FPCMM_PAUSE}
   SpinMediumFreememLockCount = 500;
   {$endif FPCMM_SLEEPTSC}
@@ -896,15 +900,15 @@ const
   {$endif FPCMM_ERMS}
 
   // some binary-level constants for internal flags
-  IsFreeBlockFlag               = 1;
-  IsMediumBlockFlag             = 2;
-  IsSmallBlockPoolInUseFlag     = 4;
-  IsLargeBlockFlag              = 4;
-  PreviousMediumBlockIsFreeFlag = 8;
-  LargeBlockIsSegmented         = 8; // see also OsRemapLarge() above
-  DropSmallFlagsMask            = -8;
-  ExtractSmallFlagsMask         = 7;
-  DropMediumAndLargeFlagsMask   = -16;
+  IsFreeBlockFlag                = 1;
+  IsMediumBlockFlag              = 2;
+  IsSmallBlockPoolInUseFlag      = 4;
+  IsLargeBlockFlag               = 4;
+  PreviousMediumBlockIsFreeFlag  = 8;
+  LargeBlockIsSegmented          = 8; // see also OsRemapLarge() above
+  DropSmallFlagsMask             = -8;
+  ExtractSmallFlagsMask          = 7;
+  DropMediumAndLargeFlagsMask    = -16;
   ExtractMediumAndLargeFlagsMask = 15;
 
 type
@@ -1002,14 +1006,14 @@ type
   end;
 
 const
-  BlockHeaderSize = SizeOf(pointer);
-  SmallBlockPoolHeaderSize = SizeOf(TSmallBlockPoolHeader);
-  SmallBlockTypeSize = SizeOf(TSmallBlockType);
-  MediumBlockPoolHeaderSize = SizeOf(TMediumBlockPoolHeader);
-  LargeBlockHeaderSize = SizeOf(TLargeBlockHeader);
-  LargeBlockGranularity = 1 shl 16; // 64KB for (smallest) large blocks
+  BlockHeaderSize            = SizeOf(pointer);
+  SmallBlockPoolHeaderSize   = SizeOf(TSmallBlockPoolHeader);
+  SmallBlockTypeSize         = SizeOf(TSmallBlockType);
+  MediumBlockPoolHeaderSize  = SizeOf(TMediumBlockPoolHeader);
+  LargeBlockHeaderSize       = SizeOf(TLargeBlockHeader);
+  LargeBlockGranularity      = 1 shl 16; // 64KB for (smallest) large blocks
   {$ifdef FPCMM_LARGEBIGALIGN}
-  LargeBlockGranularity2 = 1 shl 21;      // PMD_SIZE=2MB granularity
+  LargeBlockGranularity2     = 1 shl 21;      // PMD_SIZE=2MB granularity
   LargeBlockGranularity2Size = 2 shl 21;  // for size >= 4MB
   // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
   {$endif FPCMM_LARGEBIGALIGN}
