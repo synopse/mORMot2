@@ -4043,6 +4043,7 @@ const
   // - note that Windows has no such automated mechanism, requires explicit
   // MEM_LARGE_PAGES flag and - even worse - enabling SeLockMemoryPrivilege
   PMD_SIZE = 2 shl 20;
+  PMD_MASK = PMD_SIZE - 1; // aligned := (size + align - 1) AND NOT (align - 1)
 
 {.$define OSLINUXHUGEPAGES}
 // Huge Pages pool is void by default on most distros, and affects only mremap
@@ -4070,7 +4071,7 @@ var
 begin
   flags := MAP_PRIVATE or MAP_ANONYMOUS;
   if BigSize >= PMD_SIZE * 2 then
-    BigSize := (BigSize + PMD_SIZE) and -PMD_SIZE;
+    BigSize := (BigSize + PMD_MASK) and not PMD_MASK;
   if (MAP_HUGE_SIZE <> 0) and
      (BigSize >= PMD_SIZE * 8) then
   begin
@@ -4093,7 +4094,7 @@ end;
 function _GetLargeMem(BigSize: PtrUInt): pointer;
 begin
   if BigSize >= PMD_SIZE * 2 then  // ensure 2MB aligned for Size >= 4MB
-    BigSize := (BigSize + PMD_SIZE) and -PMD_SIZE;
+    BigSize := (BigSize + PMD_MASK) and not PMD_MASK;
   result := fpmmap(nil, BigSize,
     PROT_READ or PROT_WRITE, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
   if result = MAP_FAILED then
@@ -4104,7 +4105,7 @@ end;
 procedure _FreeLargeMem(p: pointer; BigSize: PtrUInt);
 begin
   if BigSize >= PMD_SIZE * 2 then
-    BigSize := (BigSize + PMD_SIZE) and -PMD_SIZE; // as in mmap()
+    BigSize := (BigSize + PMD_MASK) and not PMD_MASK; // as in mmap()
   fpmunmap(p, BigSize);
 end;
 

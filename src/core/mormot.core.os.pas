@@ -8176,7 +8176,10 @@ var
   pad: PtrUInt;
 begin
   if Size >= OS_ALIGNED then
+  begin
+    Size := (Size + 65535) and not 65535; // default align to 64KB boundaries
     result := _GetLargeMem(Size) // mmap or VirtualAlloc will align to pagesize
+  end
   else
   begin
     GetMem(result, Size + 16); // 15 bytes for alignment + 1 byte for padding
@@ -8194,6 +8197,7 @@ begin
     exit;
   if Size >= OS_ALIGNED then
   begin
+    Size := (Size + 65535) and not 65535;
     _FreeLargeMem(p, Size); // munmap or VirtualFree
     exit;
   end;
