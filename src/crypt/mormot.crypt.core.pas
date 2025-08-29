@@ -1712,7 +1712,7 @@ type
     function RandomSalt(var bin, b64: RawByteString; defsiz: integer;
       const salt: RawUtf8 = ''; enc: PChar64 = nil; dec: PAnsiCharDec = nil): boolean;
     /// would force the internal generator to re-seed its private key
-    // - avoid potential attacks on backward or forward security
+    // - avoid potential attacks on backward or forward secrecy
     // - would be called by FillRandom() methods, according to SeedAfterBytes
     // - this method is thread-safe, and does nothing by default
     procedure Seed; virtual;
@@ -1855,7 +1855,7 @@ type
     /// would force the internal generator to re-seed its private key
     // - as called by FillRandom() methods once SeedAfterBytes limit is reached
     // - (re)initialize the internal AES-CTR engine from PBKDF2-SHA-256 of
-    // GetEntropy() to avoid potential attacks on backward or forward security
+    // GetEntropy() to avoid potential attacks on backward or forward secrecy
     // - this method is thread-safe
     procedure Seed; override;
     /// retrieve some entropy bytes from the Operating System and process state
@@ -7621,12 +7621,13 @@ begin
     // XOR with some "userland" entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
-    sha3.Update(@SystemEntropy, SizeOf(SystemEntropy)); // 256-bit
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
+    // 256-bit of mormot.core.os randomness state with strong forward secrecy
+    sha3.Update(@SystemEntropy, SizeOf(SystemEntropy));
     // 512-bit from gsl_rng_taus2 as retrieved at startup for AesNiHash128()
     if AesNiHashAntiFuzzTable <> nil then
       sha3.Update(AesNiHashAntiFuzzTable, SizeOf(AesNiHashAntiFuzzTable^));
@@ -7653,7 +7654,7 @@ begin
         aes.EncryptInit(bits, 128); // for in-place diffusion
       end
       else
-        // 512-bit of perfect forward security using AES-CTR diffusion
+        // 512-bit of forward secrecy using AES-CTR diffusion
         aes.DoBlocksCtr({iv=}@data, @bits, @bits, length(bits.r));
       data := bits;
       safe.UnLock;
@@ -9394,12 +9395,12 @@ begin
   ti := FastNewString(l * 32); // pre-allocate destination buffer
   pointer(result) := ti;
   first.Init(pointer(password), length(password));
-  if count = 1 then // optimze for this specific case
+  if count = 1 then // optimze for this specific case e.g. from RawSCrypt()
   begin
-    first.Update(salt); // may be huge e.g. from RawSCrypt()
+    first.Update(salt);
     if l = 1 then
     begin
-      first.UpdateBigEndian(1); // single part
+      first.UpdateBigEndian(1); // single part output
       first.Done(ti^, true);
     end
     else
@@ -10439,7 +10440,6 @@ end;
 procedure InitializeUnit;
 {$ifdef USEARMCRYPTO}
 var
-  rk: TKeyArray;
   bi, bo: TAesBlock;
   i: PtrInt;
 {$endif USEARMCRYPTO}
@@ -10481,8 +10481,8 @@ begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
     AesNiHashKey := GetMemAligned(16 * 4);
     AesNiHashAntiFuzzTable := AesNiHashKey;
-    Xor512(pointer(AesNiHashKey), @SystemEntropy);
-    SharedRandom.Fill(AesNiHashKey, 16 * 4); // 512-bit of TLecuyer seed
+    Xor512(pointer(AesNiHashKey), @SystemEntropy); // 512-bit system salt
+    SharedRandom.Fill(AesNiHashKey, 16 * 4);       // 512-bit of TLecuyer seed
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;
@@ -10495,7 +10495,7 @@ begin
   {$ifdef USEARMCRYPTO}
   if ahcAes in CpuFeatures then
     try
-      aesencryptarm128(@rk, @bi, @bo); // apply to stack random
+      aesencryptarm128(@TD0, @bi, @bo); // try HW opcodes over stack random
       AesArmAvailable := true;
     except
       // ARMv8 AES HW opcodes seem not available
@@ -10503,7 +10503,7 @@ begin
     end;
   if ahcPmull in CpuFeatures then
     try
-      gf_mul_h_arm(@bi, @bo); // apply to stack random
+      gf_mul_h_arm(@bi, @bo); // try HW opcodes over stack random
       PmullArmAvailable := true;
     except
       // ARMv8 PMULL HW opcodes seem not available

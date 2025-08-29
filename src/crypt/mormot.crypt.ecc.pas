@@ -1485,7 +1485,7 @@ type
   // - the frame will always have the same fixed size of 290 bytes (i.e. 388
   // base64-encoded chars, which could be transmitted in a HTTP header),
   // for both mutual or unilateral authentication
-  // - ephemeral keys may be included for perfect forward security
+  // - ephemeral keys may be included to ensure forward secrecy
   TEcdheFrameClient = packed record
     /// expected algorithm used
     Algo: TEcdheAlgo;
@@ -1508,7 +1508,7 @@ type
   // - the frame will always have the same fixed size of 306 bytes (i.e. 408
   // base64-encoded chars, which could be transmitted in a HTTP header),
   // for both mutual or unilateral authentication
-  // - ephemeral keys may be included for perfect forward security
+  // - ephemeral keys may be included to ensure forward secrecy
   TEcdheFrameServer = packed record
     /// algorithm used by the server
     Algo: TEcdheAlgo;
@@ -1541,7 +1541,7 @@ type
   // classes will implement a secure client/server transmission, with a one-way
   // handshake and asymmetric encryption via public/private key pairs
   // - will validate ECDSA signatures using certificates of the associated PKI
-  // - will create an ephemeral ECC key pair for perfect forward security
+  // - will create an ephemeral ECC key pair to ensure forward secrecy
   // - will use ECDH to compute a shared ephemeral session on both sides,
   // for AES-128 or AES-256 encryption, and HMAC with anti-replay - default
   // algorithm will use fast and safe AES-CTR 128-bit encryption, with efficient

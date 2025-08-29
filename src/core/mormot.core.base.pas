@@ -10051,7 +10051,7 @@ begin
   if entropy <> nil then
     crc32c128(@e.h0, pointer(entropy), entropylen); // user-supplied entropy
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
-  LecuyerEntropy := e; // forward security
+  LecuyerEntropy := e; // forward secrecy
   DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
   rs1 := MaxPtrUInt(rs1 xor h.c0, 2);  // mask = -2 in RawNext
   rs2 := MaxPtrUInt(rs2 xor h.c1, 8);  // mask = -8

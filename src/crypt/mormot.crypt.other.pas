@@ -2107,7 +2107,7 @@ begin
   i := 0;
   repeat
     Xor512(@tmp, @Input[i * 128]); // may use SSE2
-    Salsa20x8(@tmp);
+    Salsa20x8(@tmp);               // in mormot.crypt.core.pas
     Move512(@Output[i * 64], @tmp);
     Xor512(@tmp, @Input[i * 128 + 64]);
     Salsa20x8(@tmp);

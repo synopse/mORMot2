@@ -1205,7 +1205,7 @@ const
   MAX_TRIES = 16; // work almost always on the first trial with TAesPrng
 
 var
-  EccMakeEntropy: THash128Rec; // ensure perfect forward security
+  EccMakeEntropy: THash128Rec; // ensure forward secrecy
 
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;

@@ -2011,7 +2011,7 @@ begin
     if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
     begin
       if len >= SizeOf(SystemEntropy.LiveFeed) then
-        crcblock(@SystemEntropy.LiveFeed, buf);
+        crcblock(@SystemEntropy.LiveFeed, buf); // shuffle live state
       result := true; // "man getrandom" states to read up to 256 bytes per call
     end
     else
@@ -5210,8 +5210,8 @@ begin
     if auxv[0] = 25 then // AT_RANDOM: 16 random bytes (used for stacks canary)
       with SystemEntropy do
       begin
-        XorMemory(Startup, PHash128Rec(auxv[1])^);
-        LiveFeed := PHash128Rec(auxv[1])^; // great initial source
+        LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
+        XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
       end;
     auxv := @auxv[2];
   end;

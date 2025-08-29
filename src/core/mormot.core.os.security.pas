@@ -6746,7 +6746,7 @@ begin
     // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
     SharedRandom.Fill(pointer(Buffer), Len)
   else if Len >= SizeOf(SystemEntropy.LiveFeed) then
-    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer));
+    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer)); // shuffle live state
 end;
 
 { TWinCryptoApi }

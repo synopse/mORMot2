@@ -5052,7 +5052,7 @@ begin
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info
-  CoCreateGuid(SystemEntropy.LiveFeed); // very fast, and won't hurt
+  CoCreateGuid(SystemEntropy.LiveFeed); // very fast and unique value
   SystemEntropy.Startup := SystemEntropy.LiveFeed;
   {$ifdef CPUINTEL}
   if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
