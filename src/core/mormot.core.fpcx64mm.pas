@@ -108,6 +108,7 @@ unit mormot.core.fpcx64mm;
 // customize mmap() allocation strategy
 {.$define FPCMM_MEDIUM32BIT}   // enable MAP_32BIT for OsAllocMedium() on Linux
 {.$define FPCMM_LARGEBIGALIGN} // align large chunks to 21-bit=2MB=PMD_SIZE
+{.$define FPCMM_LARGEPOPULATE} // use MAP_POPULATE flag for large blocks
 
 // force the tiny/small blocks to be in their own arena, not with medium blocks
 // - would use a little more memory, but medium pool is less likely to sleep
@@ -413,7 +414,7 @@ implementation
   - Tiny and small blocks can fed from their own pool(s), not the medium pool;
   - Lock-less free lists to reduce tiny/small/medium FreeMem thread contention;
   - Large blocks logic has been rewritten, especially realloc;
-  - OsAllocMedium() and OsAllocLarge() use MAP_POPULATE to reduce page faults;
+  - OsAllocLarge() can use MAP_POPULATE to reduce page faults;
   - On Linux, mremap is used for efficient realloc of large blocks;
   - Largest blocks can grow by 2MB=PMD_SIZE chunks for even faster mremap.
 
@@ -603,20 +604,22 @@ const
     MAP_POPULATE = $08000;
   {$endif OLDLINUXKERNEL}
 
-  // tiny/small/medium blocks mmap() flags
-  // - MAP_POPULATE is included to enhance performance on single thread app, and
-  // also on heavily multi-threaded process (but perhaps not with few threads)
-  // - FPCMM_MEDIUM32BIT allocates as 31-bit pointers, but may be incompatible
-  // with TOrmTable for data >256KB so requires NOPOINTEROFFSET conditional,
-  // therefore is not set by default
-  MAP_MEDIUM = MAP_PRIVATE or MAP_ANONYMOUS or MAP_POPULATE
+  /// tiny/small/medium blocks mmap() flags
+  // - MAP_POPULATE is not included because small and medium blocks are sparsely
+  // accessed, and OsAllocMedium() is done within the global medium lock
+  // - FPCMM_MEDIUM32BIT allocates only 31-bit pointers, but may be incompatible
+  // e.g. with TOrmTable for data >256KB so would require the NOPOINTEROFFSET
+  // conditional - therefore is not set by default
+  MAP_MEDIUM = MAP_PRIVATE or MAP_ANONYMOUS
      {$ifdef FPCMM_MEDIUM32BIT} or MAP_32BIT {$endif};
 
-  // large blocks mmap() flags
+  /// large blocks mmap() flags
   // - no MAP_32BIT since could use the whole 64-bit address space
-  // - MAP_POPULATE is included on Linux to avoid page faults, with
-  // no penalty since mmap/mremap are called outside the large blocks lock
-  MAP_LARGE = MAP_PRIVATE or MAP_ANONYMOUS or MAP_POPULATE;
+  // - MAP_POPULATE is not included by default, even if mmap/mremap are called
+  // outside the large blocks lock: in practice, it may lead to unnecessary
+  // memory usage and increased initial mapping time - set FPCMM_LARGEPOPULATE
+  MAP_LARGE = MAP_PRIVATE or MAP_ANONYMOUS
+     {$ifdef FPCMM_LARGEPOPULATE} or MAP_POPULATE {$endif};
 
 {$ifdef FPCMM_MEDIUM32BIT}
 var
@@ -636,7 +639,7 @@ begin
     exit;
   // try with no 2GB limit from now on
   AllocMediumflags := AllocMediumflags and not MAP_32BIT;
-  result := OsAllocMedium(Size); // try with no 2GB limit from now on
+  result := OsAllocMedium(Size);
   {$endif FPCMM_MEDIUM32BIT}
 end;
 
