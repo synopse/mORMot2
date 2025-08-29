@@ -1904,7 +1904,7 @@ end;
      8  9 10 11         8 13  2  7
     12 13 14 15         4  9 14  3
 }
-procedure PrepareSse2(blocks: PCardinalArray; count: cardinal); overload;
+procedure PrepareSse2(blocks: PCardinalArray; count: cardinal);
 var
   c: cardinal;
 begin
@@ -1919,10 +1919,6 @@ begin
     dec(count);
   until count = 0;
 end;
-
-{$ifdef FPC}
-  {$WARN 7122 off : Check size of memory operand }
-{$endif FPC}
 
 procedure BlockMix(dst, src, bxor: pointer; R: PtrUInt);
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
@@ -2137,24 +2133,22 @@ end;
 function RawSCrypt(const Password: RawUtf8; const Salt: RawByteString;
   N, R, P, DestLen: PtrUInt): RawByteString;
 var
-  workmem: QWord;
   R128: PtrUInt;
   data: RawByteString;
-  X: PByteArray; // allocated X[R*128] Y[R*128] V[N*R*128]
+  XY, V: PByteArray; // allocate X[R*128] Y[R*128] and V[N*R*128]
   d: pointer;
 begin
   result := '';
   // validate parameters
   R128 := R * 128;
-  workmem := QWord(R128) * ({X+Y=}2 + {Y=}N);
   if (DestLen < 16) or
      (N <= 1) or
      (N >= PtrUInt(1 shl 31)) or
-     (not IsPowerOfTwo(N)) or     // must be a power of 2 greater than 1
-     (R = 0) or                   // R = blocksize
-     (P = 0) or                   // P = parallel
-     (workmem >= 1 shl 30) or     // consume up to 1GB of RAM
-     (R * P >= 1 shl 30) or       // must satisfy r * p < 2^30
+     (not IsPowerOfTwo(N)) or                  // must be > 1 and power of 2
+     (R = 0) or                                // R = blocksize
+     (P = 0) or                                // P = parallel
+     (SCryptMemoryUse(N, R, P) >= 1 shl 30) or // allow up to 1GB of RAM
+     (R * P >= 1 shl 30) or                    // must satisfy r * p < 2^30
      (R > (MaxInt shr 8)) or
      (N > ((MaxInt shr 7) div R)) then
     exit;
@@ -2162,18 +2156,20 @@ begin
   data := Pbkdf2HmacSha256(Password, Salt, 1, P * R128);
   if data = '' then
     exit;
-  X := GetMemAligned(workmem); // allocate all mem at once
+  XY := GetMemAligned(R128 * 2); // allocate X,Y at once
+  V := GetMemAligned(R128 * N);  // allocate V to keep as a power of two
   try
     d := pointer(data);
     repeat // no parallel execution yet
-      MoveFast(d^, X[0], R128);
-      SMix(R, N, @X[0], @X[R128], @X[R128 * 2]);
-      MoveFast(X[0], d^, R128);
+      MoveFast(d^, XY[0], R128);
+      SMix(R, N, @XY[0], @XY[R128], @V[0]);
+      MoveFast(XY[0], d^, R128);
       inc(PByte(d), R128);
       dec(P);
     until P = 0;
   finally
-    FreeMemAligned(X, workmem);
+    FreeMemAligned(XY, R128 * 2);
+    FreeMemAligned(V, R128 * N);
   end;
   result := Pbkdf2HmacSha256(Password, data, 1, DestLen);
 end;
