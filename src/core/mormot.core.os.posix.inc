@@ -3614,9 +3614,7 @@ begin
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time   * 2654435761;
   e.d1 := mach_continuous_time * 3266489917;
-  crcblock(@e.l, @SystemEntropy.Startup));
-  inc(SystemEntropy.Startup).Lo, e.d1); // a bit weak on startup
-  dec(SystemEntropy.Startup).Hi, e.d0);
+  crcblock(@e.l, @SystemEntropy.Startup);
   {$else}
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
