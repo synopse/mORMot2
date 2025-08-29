@@ -1065,8 +1065,8 @@ type
 {$endif OSWINDOWS}
 
 var
-  /// system and process 256-bit state
-  // - could be used as 512-bit: followed by other system state global variables
+  /// system and process 256-bit entropy state
+  // - could be used as 512-bit salt: followed by other system global variables
   SystemEntropy: record
     /// 128-bit of entropy quickly gathered during unit/process initialization
     Startup: THash128Rec;
