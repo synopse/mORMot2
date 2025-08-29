@@ -3871,91 +3871,76 @@ const
   RCon: array[0..9] of cardinal = (
     $01, $02, $04, $08, $10, $20, $40, $80, $1b, $36);
 
-procedure ShiftPas(KeySize: cardinal; pk: PCardinalArray);
+procedure ShiftAes(KeySize: cardinal; pk: PCardinalArray);
 var
-  i: PtrInt;
-  temp: cardinal;
-  sb: PByteArray;  // faster on PIC
+  i: PtrUInt;
+  sb, temp: PByteArray; // faster on PIC
 begin
   sb := @SBox;
   case KeySize of
     128:
       for i := 0 to 9 do
       begin
-        temp := pk^[3];
+        temp := @pk^[3];
         // SubWord(RotWord(temp)) if "word" count mod 4 = 0
-        pk^[4] := ((sb[(temp shr 8) and $ff])) xor
-                  ((sb[(temp shr 16) and $ff]) shl 8) xor
-                  ((sb[(temp shr 24)]) shl 16) xor
-                  ((sb[(temp) and $ff]) shl 24) xor
+        pk^[4] := ((sb[temp[0]]) shl 24) xor
+                  ((sb[temp[1]])) xor
+                  ((sb[temp[2]]) shl 8) xor
+                  ((sb[temp[3]]) shl 16) xor
                   pk^[0] xor
                   RCon[i];
-        pk^[5] := pk^[1] xor
-                  pk^[4];
-        pk^[6] := pk^[2] xor
-                  pk^[5];
-        pk^[7] := pk^[3] xor
-                  pk^[6];
-        inc(PByte(pk), 4 * 4);
+        pk^[5] := pk^[1] xor pk^[4];
+        pk^[6] := pk^[2] xor pk^[5];
+        pk^[7] := pk^[3] xor pk^[6];
+        pk := @pk[4];
       end;
     192:
       for i := 0 to 7 do
       begin
-        temp := pk^[5];
+        temp := @pk^[5];
         // SubWord(RotWord(temp)) if "word" count mod 6 = 0
-        pk^[6] := ((sb[(temp shr 8) and $ff])) xor
-                  ((sb[(temp shr 16) and $ff]) shl 8) xor
-                  ((sb[(temp shr 24)]) shl 16) xor
-                  ((sb[(temp) and $ff]) shl 24) xor
+        pk^[6] := ((sb[temp[0]]) shl 24) xor
+                  ((sb[temp[1]])) xor
+                  ((sb[temp[2]]) shl 8) xor
+                  ((sb[temp[3]]) shl 16) xor
                   pk^[0] xor
                   RCon[i];
-        pk^[7] := pk^[1] xor
-                  pk^[6];
-        pk^[8] := pk^[2] xor
-                  pk^[7];
-        pk^[9] := pk^[3] xor
-                  pk^[8];
+        pk^[7] := pk^[1] xor pk^[6];
+        pk^[8] := pk^[2] xor pk^[7];
+        pk^[9] := pk^[3] xor pk^[8];
         if i = 7 then
-          exit;
-        pk^[10] := pk^[4] xor
-                   pk^[9];
-        pk^[11] := pk^[5] xor
-                   pk^[10];
-        inc(PByte(pk), 6 * 4);
+          break;
+        pk^[10] := pk^[4] xor pk^[9];
+        pk^[11] := pk^[5] xor pk^[10];
+        pk := @pk[6];
       end;
   else // 256
     for i := 0 to 6 do
     begin
-      temp := pk^[7];
+      temp := @pk^[7];
       // SubWord(RotWord(temp)) if "word" count mod 8 = 0
-      pk^[8] := ((sb[(temp shr 8) and $ff])) xor
-                ((sb[(temp shr 16) and $ff]) shl 8) xor
-                ((sb[(temp shr 24)]) shl 16) xor
-                ((sb[(temp) and $ff]) shl 24) xor
+      pk^[8] := ((sb[temp[0]]) shl 24) xor
+                ((sb[temp[1]])) xor
+                ((sb[temp[2]]) shl 8) xor
+                ((sb[temp[3]]) shl 16) xor
                 pk^[0] xor
                 RCon[i];
-      pk^[9] := pk^[1] xor
-                pk^[8];
-      pk^[10] := pk^[2] xor
-                 pk^[9];
-      pk^[11] := pk^[3] xor
-                 pk^[10];
+      pk^[9]  := pk^[1] xor pk^[8];
+      pk^[10] := pk^[2] xor pk^[9];
+      pk^[11] := pk^[3] xor pk^[10];
       if i = 6 then
-        exit;
-      temp := pk^[11];
+        break;
+      temp := @pk^[11];
       // SubWord(temp) if "word" count mod 8 = 4
-      pk^[12] := ((sb[(temp) and $ff])) xor
-                 ((sb[(temp shr 8) and $ff]) shl 8) xor
-                 ((sb[(temp shr 16) and $ff]) shl 16) xor
-                 ((sb[(temp shr 24)]) shl 24) xor
+      pk^[12] := ((sb[temp[0]])) xor
+                 ((sb[temp[1]]) shl 8) xor
+                 ((sb[temp[2]]) shl 16) xor
+                 ((sb[temp[3]]) shl 24) xor
                  pk^[4];
-      pk^[13] := pk^[5] xor
-                 pk^[12];
-      pk^[14] := pk^[6] xor
-                 pk^[13];
-      pk^[15] := pk^[7] xor
-                 pk^[14];
-      inc(PByte(pk), 8 * 4);
+      pk^[13] := pk^[5] xor pk^[12];
+      pk^[14] := pk^[6] xor pk^[13];
+      pk^[15] := pk^[7] xor pk^[14];
+      pk := @pk[8];
     end;
   end;
 end;
@@ -4104,7 +4089,7 @@ begin
     ShiftAesNi(KeySize, @ctx.RK)
   else
   {$endif USEAESNI}
-    ShiftPas(KeySize, pointer(@ctx.RK));
+    ShiftAes(KeySize, pointer(@ctx.RK));
   result := true;
 end;
 
