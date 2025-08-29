@@ -2531,19 +2531,6 @@ begin
   {$ifdef CPUINTEL}
   backup := CpuFeatures;
   {$endif CPUINTEL}
-  Check(AesTablesTest, 'Internal Tables');
-  tab := AesTables;
-  CheckEqual(tab[0],  $50a7f451);
-  CheckEqual(tab[99],  0);
-  CheckEqual(tab[255],  $4257b8d0);
-  CheckEqual(tab[$300 + 0],  $5150a7f4);  // @tab[$300] = @TD3
-  CheckEqual(tab[$300 + 255],  $d04257b8);
-  CheckEqual(tab[$400 + 0],  $a56363c6);  // @tab[$400] = @TE0
-  CheckEqual(tab[$400 + 255],  $3a16162c);
-  CheckEqual(tab[$500 + 0],  $6363c6a5);  // @tab[$500] = @TE1
-  CheckEqual(tab[$500 + 255],  $16162c3a);
-  CheckEqual(tab[$700 + 0],  $c6a56363);  // @tab[$700] = @TE3
-  CheckEqual(tab[$700 + 255],  $2c3a1616);
   CheckEqual(SizeOf(TMd5Buf), SizeOf(TMd5Digest));
   CheckEqual(1 shl AesBlockShift, SizeOf(TAesBlock));
   CheckEqual(SizeOf(TAes), AES_CONTEXT_SIZE);
@@ -2636,6 +2623,20 @@ begin
       '603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4',
       '601EC313775789A5B7A7F504BBF3D228F443E3CA4D62B59ACA84E990CACAF5C5' +
       '2B0930DAA23DE94CE87017BA2D84988DDFC9C58DB67AADA613C2DD08457941A6');
+    // check AES internal tables access
+    Check(AesTablesTest, 'Internal Tables');
+    tab := AesTables;
+    CheckEqual(tab[0],  $50a7f451);
+    CheckEqual(tab[99],  0);
+    CheckEqual(tab[255],  $4257b8d0);
+    CheckEqual(tab[$300 + 0],  $5150a7f4);  // @tab[$300] = @TD3
+    CheckEqual(tab[$300 + 255],  $d04257b8);
+    CheckEqual(tab[$400 + 0],  $a56363c6);  // @tab[$400] = @TE0
+    CheckEqual(tab[$400 + 255],  $3a16162c);
+    CheckEqual(tab[$500 + 0],  $6363c6a5);  // @tab[$500] = @TE1
+    CheckEqual(tab[$500 + 255],  $16162c3a);
+    CheckEqual(tab[$700 + 0],  $c6a56363);  // @tab[$700] = @TE3
+    CheckEqual(tab[$700 + 255],  $2c3a1616);
     // check both mORMot and OpenSSL against our reference vectors
     {%H-}Timer[noaesni].Init;
     for k := 0 to 2 do

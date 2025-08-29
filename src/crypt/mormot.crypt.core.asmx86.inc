@@ -2806,7 +2806,7 @@ end;
 
 {
  1) our simple 4x algorithm is much faster than OpenSSL for small content < 1KB
- 2) for big content, OpenSSL is slightly faster
+ 2) for big content, OpenSSL is only slightly faster
  3) weirdly enough, our very same 4x algorithm is slower on x86_64 than on i386
 
  AesNiEncryptCtrNist32 Win32 on a Core i5 15400:
