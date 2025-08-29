@@ -2566,6 +2566,7 @@ type
     /// finalize the managed properties of this instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     procedure FinalizeManaged(Data: PAnsiChar);
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy the fields of a rkRecordTypes instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     // - will move() all bytes between managed fields
@@ -2657,7 +2658,6 @@ type
     /// efficiently finalize a stored value of this type
     // - if rcfObjArray is defined in Flags, will release all nested TObject
     procedure ValueFinalize(Data: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
     /// efficiently finalize a stored value of this type, and fill it with zeros
     // - if rcfObjArray is defined in Flags, will release all nested TObject
     procedure ValueFinalizeAndClear(Data: pointer);
@@ -7021,7 +7021,7 @@ begin
     begin
       Info := Info^.DynArrayItemType;
       if Info <> nil then
-        FastFinalizeArray(V^, Info, p^.length);
+        FastFinalizeArray(V^, Info, p^.length); // won't handle TObjArray
       FreeMem(p);
     end;
     V^ := nil;
@@ -7831,13 +7831,34 @@ end;
 
 // TRttiCustom methods  defined here for proper inlining
 
+procedure TRttiCustomProps.FinalizeManaged(Data: PAnsiChar);
+var
+  pp: PPRttiCustomProp;
+  p: PRttiCustomProp;
+  n: integer;
+begin
+  pp := pointer(Managed);
+  if pp = nil then
+    exit;
+  n := PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF;
+  repeat
+    p := pp^;
+    p^.Value.ValueFinalize(Data + p.OffsetSet);
+    inc(pp);
+    dec(n);
+  until n = 0;
+end;
+
 procedure TRttiCustom.ValueFinalize(Data: pointer);
 begin
   if Assigned(fFinalize) then
-    // handle any kind of value from RTTI, including T*ObjArray
-    fFinalize(Data, fCache.Info)
+    // handle any kind of value from RTTI
+    if fCache.Kind = rkDynArray then
+      FastDynArrayClear(Data, ArrayRtti.Info) // proper rcfObjArray support
+    else
+      fFinalize(Data, fCache.Info)
   else if rcfWithoutRtti in fFlags then
-    // was defined from text
+    // was defined from text so may be managed even if has no RTTI
     if ArrayRtti <> nil then
       // static or dynamic array (not T*ObjArray)
       NoRttiArrayFinalize(Data)
@@ -8691,25 +8712,6 @@ begin
   end;
 end;
 
-procedure TRttiCustomProps.FinalizeManaged(Data: PAnsiChar);
-var
-  pp: PPRttiCustomProp;
-  p: PRttiCustomProp;
-  n: integer;
-begin
-  pp := pointer(Managed);
-  if pp <> nil then
-  begin
-    n := PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF;
-    repeat
-      p := pp^;
-      p.Value.ValueFinalize(Data + p.OffsetSet);
-      inc(pp);
-      dec(n);
-    until n = 0;
-  end;
-end;
-
 procedure TRttiCustomProps.FinalizeAndClearPublishedProperties(Instance: TObject);
 var
   pp: PRttiCustomProp;
@@ -9113,7 +9115,7 @@ begin
         [self, ArrayRtti.Name, mem.refCnt]);
     n := mem.length;
   end;
-  // release memory (T*ObjArray would never occur here)
+  // release memory (T*ObjArray should never occur here)
   repeat
     fArrayRtti.ValueFinalize(Data);
     inc(Data, fArrayRtti.Size);
