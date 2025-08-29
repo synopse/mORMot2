@@ -4042,6 +4042,52 @@ const
   // - so we ensure large blocks are always 2MB aligned on all POSIX systems
   PMD_SIZE = 2 shl 20;
 
+{.$define OSLINUXHUGEPAGES}
+// Huge Pages pool is void by default on most distros, and affects only mremap
+// - so it is disabled but you may experiment using this conditional
+// - in practice, THP is the preferred way and aligning to PMD_SIZE is enough
+
+{$ifdef OSLINUXHUGEPAGES} // try Huge Page support on x86_64 and ARM64
+const
+  /// populate (prefault) pagetables to avoid page faults later - since 2.5.46
+  // - even for large blocks, it may not be a good idea - not set
+  MAP_POPULATE = $08000;
+
+const
+  /// explicit huge pages - with MAP_HUGE_2MB since Kernel 3.8
+  MAP_HUGETLB    = $40000;
+  MAP_HUGE_SHIFT = 26;
+  MAP_HUGE_2MB   = 21 shl MAP_HUGE_SHIFT; // modifier combined with MAP_HUGETLB
+
+var
+  MAP_HUGE_SIZE: PtrUInt; // equals PMD_SIZE = 2MB since Kernel 3.8
+
+function _GetLargeMem(BigSize: PtrUInt): pointer;
+var
+  flags: cardinal;
+begin
+  flags := MAP_PRIVATE or MAP_ANONYMOUS;
+  if BigSize >= PMD_SIZE * 2 then
+    BigSize := (BigSize + PMD_SIZE) and -PMD_SIZE;
+  if (MAP_HUGE_SIZE <> 0) and
+     (BigSize >= PMD_SIZE * 8) then
+  begin
+    flags := flags or MAP_HUGETLB or MAP_HUGE_2MB;
+    result := fpmmap(nil, BigSize, PROT_READ or PROT_WRITE, flags, -1, 0);
+    if result <> MAP_FAILED then
+      exit;
+    // on mmap() failure, /proc/sys/vm/nr_hugepages is likely to be 0
+    // - check   "cat /proc/meminfo | grep HugePages_Free"
+    // - and try "echo 1000 > /proc/sys/vm/nr_hugepages" as root
+    // - but we did not see any noticeable benefit for this process
+    MAP_HUGE_SIZE := 0; // disable this feature from now on
+    flags := MAP_PRIVATE or MAP_ANONYMOUS;
+  end;
+  result := fpmmap(nil, BigSize, PROT_READ or PROT_WRITE, flags, -1, 0);
+  if result = MAP_FAILED then
+    result := nil; // as VirtualAlloc()
+end;
+{$else}
 function _GetLargeMem(BigSize: PtrUInt): pointer;
 begin
   if BigSize >= PMD_SIZE * 2 then  // ensure 2MB aligned for Size >= 4MB
@@ -4051,6 +4097,7 @@ begin
   if result = MAP_FAILED then
     result := nil; // as VirtualAlloc()
 end;
+{$endif OSLINUXHUGEPAGES}
 
 procedure _FreeLargeMem(p: pointer; BigSize: PtrUInt);
 begin
@@ -5128,6 +5175,11 @@ begin
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
   _Fill256FromOs    := @__Fill256FromOs;
+  {$ifdef OSLINUX}
+  {$ifdef OSLINUXHUGEPAGES}
+  if KernelRevision >= $030800 then // since Kernel 3.8
+    MAP_HUGE_SIZE := PMD_SIZE; // explicit huge pages for _GetLargeMem()
+  {$endif OSLINUXHUGEPAGES}
   {$ifdef HASGETRANDOM}
   if KernelRevision < $031100 then // since Kernel 3.17
     include(_F0, fLinuxGetRandomFailed);
@@ -5136,6 +5188,7 @@ begin
   if KernelRevision < $02061b then // since Kernel 2.6.27
     include(_F0, fLinuxEventFdFailed);
   {$endif HASEVENTFD}
+  {$endif OSLINUX}
   // for inlined RTL calls (avoid one level of redirection)
   {$ifndef NODIRECTTHREADMANAGER}
   GetThreadManager(tm);
