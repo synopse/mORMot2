@@ -4034,18 +4034,28 @@ begin
      raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 
+
 const
-  MAP_LARGE = MAP_PRIVATE or MAP_ANONYMOUS;
+  // Transparent Huge Pages (THP) exist since Linux 2.6.38, Superpages provide
+  // a similar benefit on FreeBSD, and macOS is less predictable but likely
+  // to prefer such alignement
+  // - so we ensure large blocks are always 2MB aligned on all POSIX systems
+  PMD_SIZE = 2 shl 20;
 
 function _GetLargeMem(BigSize: PtrUInt): pointer;
 begin
-  result := fpmmap(nil, BigSize, PROT_READ or PROT_WRITE, MAP_LARGE, -1, 0);
+  if BigSize >= PMD_SIZE * 2 then  // ensure 2MB aligned for Size >= 4MB
+    BigSize := (BigSize + PMD_SIZE) and -PMD_SIZE;
+  result := fpmmap(nil, BigSize,
+    PROT_READ or PROT_WRITE, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
   if result = MAP_FAILED then
     result := nil; // as VirtualAlloc()
 end;
 
 procedure _FreeLargeMem(p: pointer; BigSize: PtrUInt);
 begin
+  if BigSize >= PMD_SIZE * 2 then
+    BigSize := (BigSize + PMD_SIZE) and -PMD_SIZE; // as in mmap()
   fpmunmap(p, BigSize);
 end;
 
