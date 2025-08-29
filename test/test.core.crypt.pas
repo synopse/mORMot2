@@ -2905,7 +2905,8 @@ begin
       cts.iv := iv.b;
       s2 := cts.DecryptCts(crypted);
       CheckEqual(s2, orig);
-      CheckEqual(cts.DecryptCts(cts.EncryptCts(orig, true), true), orig);
+      s3 := cts.EncryptCts(orig, true);
+      CheckEqual(cts.DecryptCts(s3, true), orig);
     end;
   finally
     cts.Free;
