@@ -107,7 +107,7 @@ unit mormot.core.fpcx64mm;
 
 // customize mmap() allocation strategy
 {.$define FPCMM_MEDIUM32BIT}   // enable MAP_32BIT for OsAllocMedium() on Linux
-{.$define FPCMM_LARGEBIGALIGN} // align large chunks to 21-bit=2MB=PMD_SIZE
+{.$define FPCMM_LARGEBIGALIGN} // THP alignment of large chunks to PMD_SIZE=2MB
 {.$define FPCMM_LARGEPOPULATE} // use MAP_POPULATE flag for large blocks
 
 // force the tiny/small blocks to be in their own arena, not with medium blocks
@@ -586,7 +586,9 @@ uses
 {$endif LINUX}
 
 // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
-// see https://lwn.net/Articles/833208 - so FPCMM_LARGEBIGALIGN is always set
+// - Transparent Huge Pages (THP) exists since Kernel 2.6.38
+// - HAVE_MOVE_PMD enabled on arm64 since 2020 - https://lwn.net/Articles/833208
+// - FreeBSD has a similar behavior with its Superpages - feedback is needed
 {$ifdef LINUX}
   {$define FPCMM_LARGEBIGALIGN} // align large chunks to 21-bit = 2MB = PMD_SIZE
 {$endif LINUX}
@@ -1412,7 +1414,7 @@ begin
     result := (size + LargeBlockGranularity2) and -LargeBlockGranularity2
   else
   {$endif FPCMM_LARGEBIGALIGN}
-    // use default 64KB granularity
+    // use default 64KB granularity for large blocks up to 4MB
     result := (size + LargeBlockGranularity) and -LargeBlockGranularity;
 end;
 
