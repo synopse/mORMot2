@@ -3508,7 +3508,7 @@ type
   TDiskPartitions = array of TDiskPartition;
 
 /// return a memory block aligned to 16 bytes, e.g. for proper SMID processs
-// - Size > 128KB will call the OS mmap/VirtualAlloc to returned aligned memory
+// - Size >= 128KB will call the OS mmap/VirtualAlloc to returned aligned memory
 // - do not use FreeMem() on the returned pointer, but FreeMemAligned()
 function GetMemAligned(Size: PtrUInt; FillWith: pointer = nil): pointer;
 
@@ -8169,7 +8169,7 @@ begin
 end;
 
 const
-  OS_ALIGNED = 128 shl 10; // call the OS for any block > 128KB
+  OS_ALIGNED = 128 shl 10; // call the OS for any block >= 128KB
 
 function GetMemAligned(Size: PtrUInt; FillWith: pointer): pointer;
 var
@@ -8177,14 +8177,14 @@ var
 begin
   if Size >= OS_ALIGNED then
   begin
-    Size := (Size + 65535) and not 65535; // default align to 64KB boundaries
-    result := _GetLargeMem(Size) // mmap or VirtualAlloc will align to pagesize
+    Size := (Size + 65535) and not 65535;   // default wrap to 64KB boundaries
+    result := _GetLargeMem(Size)            // mmap/VirtualAlloc is 4KB aligned
   end
-  else
+  else // smaller blocks will just use the heap, with a padding hidden prefix
   begin
     GetMem(result, Size + 16); // 15 bytes for alignment + 1 byte for padding
     pad := 16 - (PtrUInt(result) and 15);   // adjust by 1..16 bytes
-    inc(PAnsiChar(result), pad);
+    inc(PAnsiChar(result), pad);            // Delphi Win32 only needs padding
     PAnsiChar(result)[-1] := AnsiChar(pad); // always store the padding
   end;
   if FillWith <> nil then
@@ -8197,8 +8197,8 @@ begin
     exit;
   if Size >= OS_ALIGNED then
   begin
-    Size := (Size + 65535) and not 65535;
-    _FreeLargeMem(p, Size); // munmap or VirtualFree
+    Size := (Size + 65535) and not 65535;   // as in GetMemAligned()
+    _FreeLargeMem(p, Size);                 // munmap or VirtualFree
     exit;
   end;
   dec(PAnsiChar(p), ord(PAnsiChar(p)[-1])); // adjust back by 1..16 bytes
