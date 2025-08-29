@@ -106,6 +106,7 @@ uses
   math,
   {$ifdef USE_PDFSECURITY}
   mormot.crypt.core,
+  mormot.crypt.other, // for deprecated RC4
   {$endif USE_PDFSECURITY}
   {$ifdef USE_SYNGDIPLUS}
   mormot.ui.gdiplus,
