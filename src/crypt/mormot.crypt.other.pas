@@ -1904,7 +1904,7 @@ end;
      8  9 10 11         8 13  2  7
     12 13 14 15         4  9 14  3
 }
-procedure PrepareSse2(blocks: PCardinalArray; count: cardinal);
+procedure SPrepareSse2(blocks: PCardinalArray; count: cardinal);
 var
   c: cardinal;
 begin
@@ -1920,7 +1920,7 @@ begin
   until count = 0;
 end;
 
-procedure BlockMix(dst, src, bxor: pointer; R: PtrUInt);
+procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
         // rcx/rdi=dst rdx/rsi=src r8/rdx=BXor r9/rcx=R
         {$ifdef WIN64ABI}
@@ -2056,30 +2056,30 @@ var
   b: PByte;
 begin
   R128 := R * 128;
-  PrepareSse2(X, R * 2);
+  SPrepareSse2(X, R * 2);
   b := pointer(V);
   MoveFast(X^, b^, R128);
   i := 0;
   repeat
-    BlockMix(@b[R128], b, nil, R);
+    SBlockMix(@b[R128], b, nil, R);
     b := @b[R128];
     inc(i);
   until i = N - 1;
-  BlockMix(X, b, nil, R);
+  SBlockMix(X, b, nil, R);
   i := 0;
   repeat
     j := (X[(R * 2 - 1) * 16] and (N - 1));
-    BlockMix(Y, X, @V[j * R * 32], R);
+    SBlockMix(Y, X, @V[j * R * 32], R);
     j := (Y[(R * 2 - 1) * 16] and (N - 1));
-    BlockMix(X, Y, @V[j * R * 32], R);
+    SBlockMix(X, Y, @V[j * R * 32], R);
     inc(i, 2);
   until i = N;
-  PrepareSse2(X, R * 2);
+  SPrepareSse2(X, R * 2);
 end;
 
 {$else}
 
-procedure BlockMix(Input, Output: PByteArray; R: PtrUInt);
+procedure SBlockMix(Input, Output: PByteArray; R: PtrUInt);
 var
   i: PtrUInt;
   tmp: THash512;
@@ -2105,20 +2105,20 @@ begin
   i := 0;
   repeat
     MoveFast(X^, V[i * R32], R32 * 4);
-    BlockMix(pointer(X), pointer(Y), R);
+    SBlockMix(pointer(X), pointer(Y), R);
     inc(i);
     MoveFast(Y^, V[i * R32], R32 * 4);
-    BlockMix(pointer(Y), pointer(X), R);
+    SBlockMix(pointer(Y), pointer(X), R);
     inc(i);
   until i >= N;
   i := 0;
   repeat
     j := (X[(R * 2 - 1) * 16] and (N - 1));
     XorMemory(pointer(X), @V[j * R32], R32 * 4);
-    BlockMix(pointer(X), pointer(Y), R);
+    SBlockMix(pointer(X), pointer(Y), R);
     j := (Y[(R * 2 - 1) * 16] and (N - 1));
     XorMemory(pointer(Y), @V[j * R32], R32 * 4);
-    BlockMix(pointer(Y), pointer(X), R);
+    SBlockMix(pointer(Y), pointer(X), R);
     inc(i, 2);
   until i >= N;
 end;
@@ -2156,8 +2156,8 @@ begin
   data := Pbkdf2HmacSha256(Password, Salt, 1, P * R128);
   if data = '' then
     exit;
-  XY := GetMemAligned(R128 * 2); // allocate X,Y at once
-  V := GetMemAligned(R128 * N);  // allocate V to keep as a power of two
+  XY := GetMemAligned(R128 * 2); // contiguous X,Y allocation (a few KB)
+  V  := GetMemAligned(R128 * N); // keep huge V as a power of two for OS call
   try
     d := pointer(data);
     repeat // no parallel execution yet
@@ -2168,7 +2168,7 @@ begin
       dec(P);
     until P = 0;
   finally
-    FreeMemAligned(XY, R128 * 2);
+    FreeMemAligned(XY, R128 * 2); // 16-byte aligned for SSE2 movdqa access
     FreeMemAligned(V, R128 * N);
   end;
   result := Pbkdf2HmacSha256(Password, data, 1, DestLen);
