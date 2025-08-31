@@ -1895,8 +1895,9 @@ end;
 
 { **************** SCrypt Password-Hashing Function }
 
-{$ifdef CPUX64} // our SSE2 optimized version - faster than OpenSSL
+{$ifdef CPUSSE2}
 
+// our SSE2 optimized version for i386 and x86_64 - faster than OpenSSL
 {
    Default layout:     SSE2 layout:
      0  1  2  3         0  5 10 15
@@ -1920,6 +1921,8 @@ begin
   until count = 0;
 end;
 
+{$ifdef CPUX64}
+
 procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
         // rcx/rdi=dst rdx/rsi=src r8/rdx=BXor r9/rcx=R
@@ -1932,14 +1935,13 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         mov     rcx, r9
         {$endif WIN64ABI}
         shl     rcx, 7
-        lea     r9, [rcx - 40H]
-        lea     rax, [rsi + r9]
-        lea     r9, [rdx + r9]
-        and     rdx, rdx
+        lea     rax, [rsi + rcx - 40H]
+        lea     r9,  [rdx + rcx - 40H]
         movdqa  xmm0, [rax]
         movdqa  xmm1, [rax + 10H]
         movdqa  xmm2, [rax + 20H]
         movdqa  xmm3, [rax + 30H]
+        test    rdx, rdx
         jz      @no1
         pxor    xmm0, [r9]
         pxor    xmm1, [r9 + 10H]
@@ -1948,11 +1950,11 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
 @no1:   xor     r9, r9
         xor     r8, r8
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@loop:  and     rdx, rdx
-        pxor    xmm0, [rsi + r9]
+@loop:  pxor    xmm0, [rsi + r9]
         pxor    xmm1, [rsi + r9 + 10H]
         pxor    xmm2, [rsi + r9 + 20H]
         pxor    xmm3, [rsi + r9 + 30H]
+        test     rdx, rdx
         jz      @no2
         pxor    xmm0, [rdx + r9]
         pxor    xmm1, [rdx + r9 + 10H]
@@ -2050,10 +2052,147 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         {$endif WIN64ABI}
 end;
 
+{$else}
+
+procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
+var
+  s2, s3: THash128; // temporary storage (no xmm8 and xmm9 on 32-bit)
+asm
+        // eax=dst edx=src ecx=bxor stack=R
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, R
+        mov     edi, eax
+        mov     esi, edx
+        mov     R, ecx
+        // edi=dst esi=src R=BXor ebx=R
+        shl     ebx, 7
+        test    ecx, ecx
+        lea     eax,  [esi + ebx - 40H]
+        lea     ecx,  [ecx + ebx - 40H]
+        movdqa  xmm0, [eax]
+        movdqa  xmm1, [eax + 10H]
+        movdqa  xmm2, [eax + 20H]
+        movdqa  xmm3, [eax + 30H]
+        jz      @no1
+        pxor    xmm0, [ecx]
+        pxor    xmm1, [ecx + 10H]
+        pxor    xmm2, [ecx + 20H]
+        pxor    xmm3, [ecx + 30H]
+@no1:   xor     ecx, ecx
+        xor     edx, edx
+{$ifdef FPC} align 8 {$endif}
+@loop:  mov     eax, R
+        pxor    xmm0, [esi + ecx]
+        pxor    xmm1, [esi + ecx + 10H]
+        pxor    xmm2, [esi + ecx + 20H]
+        pxor    xmm3, [esi + ecx + 30H]
+        test    eax, eax
+        jz      @no2
+        pxor    xmm0, [eax + ecx]
+        pxor    xmm1, [eax + ecx + 10H]
+        pxor    xmm2, [eax + ecx + 20H]
+        pxor    xmm3, [eax + ecx + 30H]
+@no2:   movdqa  xmm6, xmm0
+        movdqa  xmm7, xmm1
+        movdqu  s2, xmm2
+        movdqu  s3, xmm3
+        mov     eax, 8
+{$ifdef FPC} align 8 {$endif}
+@s:     movdqa  xmm4, xmm1
+        paddd   xmm4, xmm0
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 7
+        psrld   xmm5, 25
+        pxor    xmm3, xmm4
+        movdqa  xmm4, xmm0
+        pxor    xmm3, xmm5
+        paddd   xmm4, xmm3
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 9
+        psrld   xmm5, 23
+        pxor    xmm2, xmm4
+        movdqa  xmm4, xmm3
+        pxor    xmm2, xmm5
+        pshufd  xmm3, xmm3, 93H
+        paddd   xmm4, xmm2
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 13
+        psrld   xmm5, 19
+        pxor    xmm1, xmm4
+        movdqa  xmm4, xmm2
+        pxor    xmm1, xmm5
+        pshufd  xmm2, xmm2, 4EH
+        paddd   xmm4, xmm1
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 18
+        psrld   xmm5, 14
+        pxor    xmm0, xmm4
+        movdqa  xmm4, xmm3
+        pxor    xmm0, xmm5
+        pshufd  xmm1, xmm1, 39H
+        paddd   xmm4, xmm0
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 7
+        psrld   xmm5, 25
+        pxor    xmm1, xmm4
+        movdqa  xmm4, xmm0
+        pxor    xmm1, xmm5
+        paddd   xmm4, xmm1
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 9
+        psrld   xmm5, 23
+        pxor    xmm2, xmm4
+        movdqa  xmm4, xmm1
+        pxor    xmm2, xmm5
+        pshufd  xmm1, xmm1, 93H
+        paddd   xmm4, xmm2
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 13
+        psrld   xmm5, 19
+        pxor    xmm3, xmm4
+        movdqa  xmm4, xmm2
+        pxor    xmm3, xmm5
+        pshufd  xmm2, xmm2, 4EH
+        paddd   xmm4, xmm3
+        sub     eax, 2
+        movdqa  xmm5, xmm4
+        pslld   xmm4, 18
+        psrld   xmm5, 14
+        pxor    xmm0, xmm4
+        pshufd  xmm3, xmm3, 39H
+        pxor    xmm0, xmm5
+        ja      @s
+        movdqu  xmm4, s2
+        movdqu  xmm5, s3
+        paddd   xmm0, xmm6
+        paddd   xmm1, xmm7
+        paddd   xmm2, xmm4
+        paddd   xmm3, xmm5
+        lea     eax, [edx + ecx]
+        xor     edx, ebx
+        and     eax, -128
+        add     ecx, 64
+        shr     eax, 1
+        add     eax, edi
+        cmp     ecx, ebx
+        movdqu  [eax], xmm0
+        movdqu  [eax + 10H], xmm1
+        movdqu  [eax + 20H], xmm2
+        movdqu  [eax + 30H], xmm3
+        jne     @loop
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+{$endif CPUX64}
+
 procedure SMix(R, N: PtrUInt; X, Y, V: PCardinalArray);
 var
   i, j, R128: PtrUInt;
-  b: PByte;
+  b: PByteArray;
 begin
   R128 := R * 128;
   SPrepareSse2(X, R * 2);
@@ -2123,7 +2262,7 @@ begin
   until i >= N;
 end;
 
-{$endif CPUX64}
+{$endif CPUSSE2}
 
 function SCryptMemoryUse(N, R, P: QWord): QWord;
 begin
@@ -2181,8 +2320,10 @@ begin
   assert(SizeOf(TAesFullHeader) = SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
   BCrypt := @BCryptHash; // to implement mcfBCrypt in mormot.crypt.secure
-  if not Assigned(SCrypt) then
-    SCrypt := @RawSCrypt; // if faster OpenSSL is not already set
+  {$ifndef CPUSSE2}
+  if not Assigned(SCrypt) then // if OpenSSL is not already set
+  {$endif CPUSSE2}
+    SCrypt := @RawSCrypt;
 end;
 
 initialization
