@@ -163,9 +163,6 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 /// entry point of the raw SHA-512 transform function - for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
-/// apply in-place Salsa20/8 transformation over a 64 bytes buffer
-procedure Salsa20x8(B: PCardinalArray);
-
 type
   /// the prototype of our SCrypt() raw function
   TSCriptRaw = function(const Password: RawUtf8; const Salt: RawByteString;
@@ -2903,52 +2900,6 @@ begin
   dst[7] := src[7];
 end;
 {$endif CPU32}
-
-procedure Salsa20x8(B: PCardinalArray);
-var
-  x: TBlock512;
-  i: PtrUInt;
-begin // single B parameter keep the stack small and all offsets in [rsp+0..$7f]
-  x := PBlock512(B)^;
-  for i := 1 to 4 do
-  begin
-    x[4]  := x[4]  xor RolDWord(x[0]  + x[12], 7); // RoldDWord() intrinsic FPC
-    x[8]  := x[8]  xor RolDWord(x[4]  + x[0],  9);
-    x[12] := x[12] xor RolDWord(x[8]  + x[4],  13);
-    x[0]  := x[0]  xor RolDWord(x[12] + x[8],  18);
-    x[9]  := x[9]  xor RolDWord(x[5]  + x[1],  7);
-    x[13] := x[13] xor RolDWord(x[9]  + x[5],  9);
-    x[1]  := x[1]  xor RolDWord(x[13] + x[9],  13);
-    x[5]  := x[5]  xor RolDWord(x[1]  + x[13], 18);
-    x[14] := x[14] xor RolDWord(x[10] + x[6],  7);
-    x[2]  := x[2]  xor RolDWord(x[14] + x[10], 9);
-    x[6]  := x[6]  xor RolDWord(x[2]  + x[14], 13);
-    x[10] := x[10] xor RolDWord(x[6]  + x[2],  18);
-    x[3]  := x[3]  xor RolDWord(x[15] + x[11], 7);
-    x[7]  := x[7]  xor RolDWord(x[3]  + x[15], 9);
-    x[11] := x[11] xor RolDWord(x[7]  + x[3],  13);
-    x[15] := x[15] xor RolDWord(x[11] + x[7],  18);
-    x[1]  := x[1]  xor RolDWord(x[0]  + x[3],  7);
-    x[2]  := x[2]  xor RolDWord(x[1]  + x[0],  9);
-    x[3]  := x[3]  xor RolDWord(x[2]  + x[1],  13);
-    x[0]  := x[0]  xor RolDWord(x[3]  + x[2],  18);
-    x[6]  := x[6]  xor RolDWord(x[5]  + x[4],  7);
-    x[7]  := x[7]  xor RolDWord(x[6]  + x[5],  9);
-    x[4]  := x[4]  xor RolDWord(x[7]  + x[6],  13);
-    x[5]  := x[5]  xor RolDWord(x[4]  + x[7],  18);
-    x[11] := x[11] xor RolDWord(x[10] + x[9],  7);
-    x[8]  := x[8]  xor RolDWord(x[11] + x[10], 9);
-    x[9]  := x[9]  xor RolDWord(x[8]  + x[11], 13);
-    x[10] := x[10] xor RolDWord(x[9]  + x[8],  18);
-    x[12] := x[12] xor RolDWord(x[15] + x[14], 7);
-    x[13] := x[13] xor RolDWord(x[12] + x[15], 9);
-    x[14] := x[14] xor RolDWord(x[13] + x[12], 13);
-    x[15] := x[15] xor RolDWord(x[14] + x[13], 18);
-  end;
-  for i := 0 to 15 do
-    inc(B[i], x[i]);
-end;
-
 {$endif CPUSSE2}
 
 function Hash128ToExt(P: PHash128Rec): TSynExtended;
