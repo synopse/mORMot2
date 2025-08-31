@@ -2861,8 +2861,7 @@ begin
     until count = 0;
 end;
 
-{$ifndef CPUINTEL}
-
+{$ifndef CPUSSE2}
 {$ifdef CPU32}
 procedure Xor512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
 var
@@ -2950,7 +2949,7 @@ begin // single B parameter keep the stack small and all offsets in [rsp+0..$7f]
     inc(B[i], x[i]);
 end;
 
-{$endif CPUINTEL}
+{$endif CPUSSE2}
 
 function Hash128ToExt(P: PHash128Rec): TSynExtended;
 const
