@@ -2744,10 +2744,10 @@ function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
 
 /// low-level SCrypt hash computation as available since OpenSSL 3.x
 // - see http://www.tarsnap.com/scrypt.html and RFC 7914
-// - OpenSSL is slower than mormot.crypt.other.pas SSE2 code:
-// $ on Win32:     RawSCrypt in 143ms, OpenSslScrypt in 157ms
-// $ on Win64:     RawSCrypt in 123ms, OpenSslScrypt in 100ms
-// $ on Linux x64: RawSCrypt in 77ms,  OpenSslScrypt in 103ms
+// - OpenSSL is slower than mormot.crypt.other.pas i386/x86_64 tuned SSE2 code:
+// $ on Win32:     RawSCrypt in 101ms, OpenSslScrypt in 157ms
+// $ on Win64:     RawSCrypt in 92ms,  OpenSslScrypt in 124ms
+// $ on Linux x64: RawSCrypt in 74ms,  OpenSslScrypt in 103ms
 // - assigned with OpenSSL 3.x to mormot.crypt.core.pas SCrypt() redirection on
 // non-Intel (e.g. ARM) platforms - where RawSCrypt() is less optimized
 function OpenSslSCrypt(const Password: RawUtf8; const Salt: RawByteString;

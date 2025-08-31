@@ -444,10 +444,10 @@ procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
 procedure Salsa20x8(B: PCardinalArray);
 
 /// low-level SCrypt hash computation using our pure pascal code
-// - this unit SSE2 code is faster than mormot.lib.openssl11 wrapper:
-// $ on Win32:     RawSCrypt in 143ms, OpenSslScrypt in 157ms
-// $ on Win64:     RawSCrypt in 123ms, OpenSslScrypt in 100ms
-// $ on Linux x64: RawSCrypt in 77ms,  OpenSslScrypt in 103ms
+// - the tuned SSE2 code of this unit is faster than mormot.lib.openssl11:
+// $ on Win32:     RawSCrypt in 101ms, OpenSslScrypt in 157ms
+// $ on Win64:     RawSCrypt in 92ms,  OpenSslScrypt in 124ms
+// $ on Linux x64: RawSCrypt in 74ms,  OpenSslScrypt in 103ms
 // - assigned to mormot.crypt.core.pas SCrypt() redirection by this unit
 function RawSCrypt(const Password: RawUtf8; const Salt: RawByteString;
   N, R, P, DestLen: PtrUInt): RawByteString;
