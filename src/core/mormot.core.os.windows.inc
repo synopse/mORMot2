@@ -4793,7 +4793,8 @@ begin
     RedirectCode(@ByteScanIndex,    @ByteScanIndexPas);
     RedirectCode(@IntegerScanIndex, @IntegerScanIndexPas);
     RedirectCode(@WordScanIndex,    @WordScanIndexPas);
-    // note: FillCharFast is handled by mormot.core.base via ERMSB
+    // note: FillCharFast is handled by mormot.core.base via ERMSB, but some
+    // some other (crypto) code is likely to fail at runtime - use HASNOSSE2
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86}

@@ -2937,7 +2937,7 @@ procedure Xor512(dst, src: PPtrIntArray);
         movups  xmm1, dqword ptr [dst + 16]
         movups  xmm2, dqword ptr [dst + 32]
         movups  xmm3, dqword ptr [dst + 48]
-        movups  xmm4, dqword ptr [src]
+        movups  xmm4, dqword ptr [src]      // xorps xmm, [mem] requires aligned
         movups  xmm5, dqword ptr [src + 16]
         {$ifdef WIN64ABI} // Win64 requires to preserve xmm6/xmm7
         xorps   xmm0, xmm4

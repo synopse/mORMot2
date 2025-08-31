@@ -58,7 +58,11 @@
 // - you can enable it if you find out some compatibility problem
 
 {$ifdef CPUX86}
-  {.$define HASNOSSE2} // force x87 code on very very old CPU
+  {.$define HASNOSSE2}
+  // if defined, bypass SSE2 asm on i386 and fallback to pascal code or x87 asm
+  // - SSE2 was introduced with Intel’s Pentium 4 (2000) so we assume it
+  // - Windows requires SSE2 since XP SP2, and FireFox/Chrome since 2017
+  // - we keep this possibility for specific applications on deprecated HW
 {$endif CPUX86}
 
 {.$define NOSYNDBZEOS}

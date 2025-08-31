@@ -1488,7 +1488,7 @@ asm
         movups  xmm1, dqword ptr [dst + 16]
         movups  xmm2, dqword ptr [dst + 32]
         movups  xmm3, dqword ptr [dst + 48]
-        movups  xmm4, dqword ptr [src]
+        movups  xmm4, dqword ptr [src]      // xorps xmm, [mem] requires aligned
         movups  xmm5, dqword ptr [src + 16]
         movups  xmm6, dqword ptr [src + 32]
         movups  xmm7, dqword ptr [src + 48]
@@ -1514,7 +1514,7 @@ asm
         movups  dqword ptr [dst + 32], xmm2
         movups  dqword ptr [dst + 48], xmm3
 end;
-{$endif HASNOSSE2}
+{$endif CPUSSE2}
 
 procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
 // semi-unrolled optimized asm version by A. Bouchez
