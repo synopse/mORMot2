@@ -2881,47 +2881,47 @@ asm
         {$endif FPC}
         pshufb  xmm0, xmm2
         pshufb  xmm1, xmm2
-        movdqa  xmm5, xmm0
-        movdqa  xmm4, xmm0
-        movdqa  xmm2, xmm0
+        movaps  xmm5, xmm0
+        movaps  xmm4, xmm0
+        movaps  xmm2, xmm0
         // pclmulqdq xmm0, xmm1, 16
         db $66, $0f, $3a, $44, $c1, $10
         // pclmulqdq xmm5, xmm1, 17
         db $66, $0f, $3a, $44, $e9, $11
-        movdqa  xmm3, xmm5
+        movaps  xmm3, xmm5
         // pclmulqdq xmm4, xmm1, 0
         db $66, $0f, $3a, $44, $e1, $00
         // pclmulqdq xmm2, xmm1, 1
         db $66, $0f, $3a, $44, $d1, $01
         pslldq  xmm3, 8
         pxor    xmm0, xmm2
-        movdqa  xmm2, xmm4
+        movaps  xmm2, xmm4
         pxor    xmm3, xmm0
         pslldq  xmm2, 8
         punpckhqdq xmm3, xmm5
-        movdqa  xmm1, xmm3
+        movaps  xmm1, xmm3
         pslldq  xmm0, 8
         pxor    xmm0, xmm4
         pslldq  xmm1, 8
         punpckhqdq xmm2, xmm0
-        movdqa  xmm4, xmm2
-        movdqa  xmm7, xmm1
+        movaps  xmm4, xmm2
+        movaps  xmm7, xmm1
         pslldq  xmm4, 8
-        movdqa  xmm1, xmm2
+        movaps  xmm1, xmm2
         psrlq   xmm4, 63
         psrldq  xmm1, 8
         psllq   xmm3, 1
-        movdqa  xmm6, xmm1
+        movaps  xmm6, xmm1
         psllq   xmm2, 1
-        movdqa  xmm1, xmm3
+        movaps  xmm1, xmm3
         por     xmm2, xmm4
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         psrlq   xmm7, 63
         pslldq  xmm3, 8
         por     xmm1, xmm7
-        movdqa  xmm4, xmm3
+        movaps  xmm4, xmm3
         psrlq   xmm6, 63
-        movdqa  xmm0, xmm3
+        movaps  xmm0, xmm3
         psllq   xmm4, 63
         por     xmm1, xmm6
         psllq   xmm3, 57
@@ -2929,14 +2929,14 @@ asm
         pxor    xmm2, xmm3
         pxor    xmm0, xmm4
         pxor    xmm2, xmm0
-        movdqa  xmm3, xmm2
-        movdqa  xmm7, xmm2
+        movaps  xmm3, xmm2
+        movaps  xmm7, xmm2
         psrldq  xmm3, 8
-        movdqa  xmm0, xmm2
-        movdqa  xmm6, xmm2
-        movdqa  xmm4, xmm3
+        movaps  xmm0, xmm2
+        movaps  xmm6, xmm2
+        movaps  xmm4, xmm3
         psrlq   xmm7, 1
-        movdqa  xmm5, xmm3
+        movaps  xmm5, xmm3
         psllq   xmm4, 63
         psllq   xmm3, 57
         por     xmm4, xmm7
@@ -2949,7 +2949,7 @@ asm
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
-        movdqa  xmm0, xmm4
+        movaps  xmm0, xmm4
         psrlq   xmm6, 2
         por     xmm5, xmm6
         pxor    xmm0, xmm5
@@ -3682,7 +3682,7 @@ asm
         test    ecx, ecx
         jz      @0                      // _AesNiHash32 left eax=seed
         mov     eax, dword ptr [AesNiHashKey]
-        movdqa  xmm1, xmm0              // save seed for @17up
+        movaps  xmm1, xmm0              // save seed for @17up
         pxor    xmm0, dqword ptr [eax]  // xor with seed
         aesenc  xmm0, xmm0              // scramble
         // 1..16 bytes have no branch
@@ -3696,7 +3696,7 @@ asm
 @16:    aesenc  xmm1, xmm0  // scramble 3 times
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
-        movdqa  xmm0, xmm1
+        movaps  xmm0, xmm1
         movd    eax,  xmm1   // truncate to 32-bit for _AesNiHash32
 @0:     ret
 @17up:  cmp     ecx, 32
@@ -3713,14 +3713,14 @@ asm
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
         pxor    xmm2, xmm3 // combine result
-        movdqa  xmm0, xmm2
+        movaps  xmm0, xmm2
         movd    eax,  xmm2  // truncate to 32-bit for _AesNiHash32
         ret
 @33up:  cmp     ecx, 64
         ja      @65up
         // 33..64 bytes
-        movdqa  xmm2, xmm1
-        movdqa  xmm3, xmm1
+        movaps  xmm2, xmm1
+        movaps  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]
         pxor    xmm3, dqword ptr [eax + 48]
@@ -3746,7 +3746,7 @@ asm
         pxor    xmm4, xmm6 // combine result
         pxor    xmm5, xmm7
         pxor    xmm4, xmm5
-        movdqa  xmm0, xmm4
+        movaps  xmm0, xmm4
         movd    eax,  xmm4  // truncate to 32-bit for _AesNiHash32
         ret
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -3769,8 +3769,8 @@ asm
         dd $05040302, $09080706, $0d0c0b0a, $ffff0f0e
         dd $04030201, $08070605, $0c0b0a09, $ff0f0e0d
 @65up:  // 65 bytes and up
-        movdqa  xmm2, xmm1
-        movdqa  xmm3, xmm1
+        movaps  xmm2, xmm1
+        movaps  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]
         pxor    xmm3, dqword ptr [eax + 48]

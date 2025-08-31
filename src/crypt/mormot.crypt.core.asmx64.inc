@@ -251,7 +251,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
 @loop1: movaps  xmm9, [rbp]
         paddd   xmm9, xmm4
         movaps  [rsp + 10h], xmm9
-        movdqa  xmm0, xmm7
+        movaps  xmm0, xmm7
         mov     r13d, r8d
         ror     r13d, 14
         mov     r14d, eax
@@ -260,7 +260,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, r8d
         mov     r15d, r9d
         ror     r13d, 5
-        movdqa  xmm1, xmm5
+        movaps  xmm1, xmm5
         xor     r14d, eax
         xor     r15d, r10d
         paddd   xmm0, xmm4
@@ -271,11 +271,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, eax
         ror     r13d, 6
         xor     r15d, r10d
-        movdqa  xmm2, xmm1
+        movaps  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movdqa  xmm3, xmm1
+        movaps  xmm3, xmm1
         mov     r13d, eax
         add     r11d, r15d
         mov     r15d, eax
@@ -289,10 +289,10 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     r11d, r13d
-        movdqa  xmm2, xmm3
+        movaps  xmm2, xmm3
         mov     r13d, esi
         mov     r14d, r11d
-        movdqa  xmm8, xmm3
+        movaps  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, esi
         mov     r15d, r8d
@@ -327,11 +327,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     r10d, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, edi
         mov     r14d, r10d
         ror     r13d, 14
-        movdqa  xmm8, xmm2
+        movaps  xmm8, xmm2
         xor     r13d, edi
         ror     r14d, 9
         mov     r15d, esi
@@ -365,11 +365,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     r9d, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, ebx
         ror     r13d, 14
         mov     r14d, r9d
-        movdqa  xmm4, xmm2
+        movaps  xmm4, xmm2
         ror     r14d, 9
         xor     r13d, ebx
         mov     r15d, edi
@@ -405,7 +405,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm9, [rbp + 10h]
         paddd   xmm9, xmm5
         movaps  [rsp + 10h], xmm9
-        movdqa  xmm0, xmm4
+        movaps  xmm0, xmm4
         mov     r13d, eax
         ror     r13d, 14
         mov     r14d, r8d
@@ -414,7 +414,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, eax
         mov     r15d, ebx
         ror     r13d, 5
-        movdqa  xmm1, xmm6
+        movaps  xmm1, xmm6
         xor     r14d, r8d
         xor     r15d, edi
         paddd   xmm0, xmm5
@@ -425,11 +425,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, r8d
         ror     r13d, 6
         xor     r15d, edi
-        movdqa  xmm2, xmm1
+        movaps  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movdqa  xmm3, xmm1
+        movaps  xmm3, xmm1
         mov     r13d, r8d
         add     esi, r15d
         mov     r15d, r8d
@@ -443,10 +443,10 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     esi, r13d
-        movdqa  xmm2, xmm3
+        movaps  xmm2, xmm3
         mov     r13d, r11d
         mov     r14d, esi
-        movdqa  xmm8, xmm3
+        movaps  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, r11d
         mov     r15d, eax
@@ -481,11 +481,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     edi, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, r10d
         mov     r14d, edi
         ror     r13d, 14
-        movdqa  xmm8, xmm2
+        movaps  xmm8, xmm2
         xor     r13d, r10d
         ror     r14d, 9
         mov     r15d, r11d
@@ -519,11 +519,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     ebx, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, r9d
         ror     r13d, 14
         mov     r14d, ebx
-        movdqa  xmm5, xmm2
+        movaps  xmm5, xmm2
         ror     r14d, 9
         xor     r13d, r9d
         mov     r15d, r10d
@@ -559,7 +559,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm9, [rbp + 20h]
         paddd   xmm9, xmm6
         movaps  [rsp + 10h], xmm9
-        movdqa  xmm0, xmm5
+        movaps  xmm0, xmm5
         mov     r13d, r8d
         ror     r13d, 14
         mov     r14d, eax
@@ -568,7 +568,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, r8d
         mov     r15d, r9d
         ror     r13d, 5
-        movdqa  xmm1, xmm7
+        movaps  xmm1, xmm7
         xor     r14d, eax
         xor     r15d, r10d
         paddd   xmm0, xmm6
@@ -579,11 +579,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, eax
         ror     r13d, 6
         xor     r15d, r10d
-        movdqa  xmm2, xmm1
+        movaps  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movdqa  xmm3, xmm1
+        movaps  xmm3, xmm1
         mov     r13d, eax
         add     r11d, r15d
         mov     r15d, eax
@@ -597,10 +597,10 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     r11d, r13d
-        movdqa  xmm2, xmm3
+        movaps  xmm2, xmm3
         mov     r13d, esi
         mov     r14d, r11d
-        movdqa  xmm8, xmm3
+        movaps  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, esi
         mov     r15d, r8d
@@ -635,11 +635,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     r10d, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, edi
         mov     r14d, r10d
         ror     r13d, 14
-        movdqa  xmm8, xmm2
+        movaps  xmm8, xmm2
         xor     r13d, edi
         ror     r14d, 9
         mov     r15d, esi
@@ -673,11 +673,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     r9d, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, ebx
         ror     r13d, 14
         mov     r14d, r9d
-        movdqa  xmm6, xmm2
+        movaps  xmm6, xmm2
         ror     r14d, 9
         xor     r13d, ebx
         mov     r15d, edi
@@ -714,7 +714,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm9, xmm7
         movaps  [rsp + 10h], xmm9
         add     rbp, 64
-        movdqa  xmm0, xmm6
+        movaps  xmm0, xmm6
         mov     r13d, eax
         ror     r13d, 14
         mov     r14d, r8d
@@ -723,7 +723,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, eax
         mov     r15d, ebx
         ror     r13d, 5
-        movdqa  xmm1, xmm4
+        movaps  xmm1, xmm4
         xor     r14d, r8d
         xor     r15d, edi
         paddd   xmm0, xmm7
@@ -734,11 +734,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, r8d
         ror     r13d, 6
         xor     r15d, edi
-        movdqa  xmm2, xmm1
+        movaps  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movdqa  xmm3, xmm1
+        movaps  xmm3, xmm1
         mov     r13d, r8d
         add     esi, r15d
         mov     r15d, r8d
@@ -752,10 +752,10 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     esi, r13d
-        movdqa  xmm2, xmm3
+        movaps  xmm2, xmm3
         mov     r13d, r11d
         mov     r14d, esi
-        movdqa  xmm8, xmm3
+        movaps  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, r11d
         mov     r15d, eax
@@ -790,11 +790,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     edi, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, r10d
         mov     r14d, edi
         ror     r13d, 14
-        movdqa  xmm8, xmm2
+        movaps  xmm8, xmm2
         xor     r13d, r10d
         ror     r14d, 9
         mov     r15d, r11d
@@ -828,11 +828,11 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     ebx, r13d
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         mov     r13d, r9d
         ror     r13d, 14
         mov     r14d, ebx
-        movdqa  xmm7, xmm2
+        movaps  xmm7, xmm2
         ror     r14d, 9
         xor     r13d, r9d
         mov     r15d, r10d
@@ -1097,8 +1097,8 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         add     eax, r14d
         or      r13d, r15d
         add     eax, r13d
-        movdqa  xmm4, xmm6
-        movdqa  xmm5, xmm7
+        movaps  xmm4, xmm6
+        movaps  xmm5, xmm7
         sub     rcx, 1
         jne     @loop2
         add     eax, [rdx]
@@ -1166,31 +1166,31 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$endif WIN64ABI}
         test    num_bytes, num_bytes
         jz      @0
-        movdqu  xmm5, dqword ptr [digest]
+        movups  xmm5, dqword ptr [digest]
         pxor    xmm1, xmm1
         pinsrd  xmm1, dword ptr [digest + 16], 3
         pshufd  xmm0, xmm5, $1B
-        movdqa  xmm6, xmm1
-        movdqa  xmm4, xmm0
+        movaps  xmm6, xmm1
+        movaps  xmm4, xmm0
         cmp     num_bytes, 63
         jbe     @2
         lea     eax, qword ptr [num_bytes - 64]
-        movdqa  xmm5, dqword ptr [rip + @3]
+        movaps  xmm5, dqword ptr [rip + @3]
         shr     eax, 6
         add     eax, 1
         shl     rax, 6
         add     rax, input_data
-@1:     movdqu  xmm1, dqword ptr [input_data]
-        movdqa  xmm0, xmm6
-        movdqa  xmm2, xmm4
-        movdqa  xmm3, xmm4
+@1:     movups  xmm1, dqword ptr [input_data]
+        movaps  xmm0, xmm6
+        movaps  xmm2, xmm4
+        movaps  xmm3, xmm4
         add     input_data, 64
         pshufb  xmm1, xmm5
         paddd   xmm0, xmm1
         // sha1rnds4 xmm2, xmm0, 0
         db $0f, $3a, $cc, $d0, $00 // the sha1* opcodes are encoded by hand
-        movdqu  xmm0, dqword ptr [input_data - 48]
-        movdqa  xmm8, xmm2
+        movups  xmm0, dqword ptr [input_data - 48]
+        movaps  xmm8, xmm2
         pshufb  xmm0, xmm5
         // sha1nexte xmm3, xmm0
         db $0f, $38, $c8, $d8
@@ -1198,9 +1198,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         db $0f, $38, $c9, $c8
         // sha1rnds4 xmm8, xmm3, 0
         db $44, $0f, $3a, $cc, $c3, $00
-        movdqu  xmm3, dqword ptr [input_data - 32]
-        movdqa  xmm7, xmm8
-        movdqa  xmm9, xmm8
+        movups  xmm3, dqword ptr [input_data - 32]
+        movaps  xmm7, xmm8
+        movaps  xmm9, xmm8
         pshufb  xmm3, xmm5
         // sha1nexte xmm2, xmm3
         db $0f, $38, $c8, $d3
@@ -1209,8 +1209,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         db $0f, $38, $c9, $c3
         // sha1rnds4 xmm7, xmm2, 0
         db $0f, $3a, $cc, $fa, $00
-        movdqu  xmm2, dqword ptr [input_data - 16]
-        movdqa  xmm8, xmm7
+        movups  xmm2, dqword ptr [input_data - 16]
+        movaps  xmm8, xmm7
         pshufb  xmm2, xmm5
         // sha1msg2 xmm1, xmm2
         db $0f, $38, $ca, $ca
@@ -1223,41 +1223,41 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         // sha1nexte xmm7, xmm1
         db $0f, $38, $c8, $f9
         pxor    xmm0, xmm2
-        movdqa  xmm9, xmm7
-        movdqa  xmm7, xmm8
+        movaps  xmm9, xmm7
+        movaps  xmm7, xmm8
         // sha1msg2 xmm0, xmm1
         db $0f, $38, $ca, $c1
         // sha1rnds4 xmm7, xmm9, 0
         db $41, $0f, $3a, $cc, $f9, $00
         pxor    xmm3, xmm1
-        movdqa  xmm9, xmm8
+        movaps  xmm9, xmm8
         // sha1msg2 xmm3, xmm0
         db $0f, $38, $ca, $d8
         // sha1nexte xmm9, xmm0
         db $44, $0f, $38, $c8, $c8
-        movdqa  xmm8, xmm7
+        movaps  xmm8, xmm7
         // sha1rnds4 xmm8, xmm9, 1
         db $45, $0f, $3a, $cc, $c1, $01
         // sha1nexte xmm7, xmm3
         db $0f, $38, $c8, $fb
         // sha1msg1 xmm2, xmm1
         db $0f, $38, $c9, $d1
-        movdqa  xmm9, xmm7
+        movaps  xmm9, xmm7
         // sha1msg1 xmm1, xmm0
         db $0f, $38, $c9, $c8
         pxor    xmm2, xmm0
-        movdqa  xmm7, xmm8
+        movaps  xmm7, xmm8
         // sha1msg2 xmm2, xmm3
         db $0f, $38, $ca, $d3
         pxor    xmm1, xmm3
         // sha1rnds4 xmm7, xmm9, 1
         db $41, $0f, $3a, $cc, $f9, $01
-        movdqa  xmm9, xmm8
+        movaps  xmm9, xmm8
         // sha1msg2 xmm1, xmm2
         db $0f, $38, $ca, $ca
         // sha1nexte xmm9, xmm2
         db $44, $0f, $38, $c8, $ca
-        movdqa  xmm8, xmm7
+        movaps  xmm8, xmm7
         // sha1msg1 xmm0, xmm3
         db $0f, $38, $c9, $c3
         // sha1rnds4 xmm8, xmm9, 1
@@ -1266,18 +1266,18 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         db $0f, $38, $c8, $f9
         // sha1msg1 xmm3, xmm2
         db $0f, $38, $c9, $da
-        movdqa  xmm9, xmm7
+        movaps  xmm9, xmm7
         pxor    xmm0, xmm2
-        movdqa  xmm7, xmm8
+        movaps  xmm7, xmm8
         // sha1msg2 xmm0, xmm1
         db $0f, $38, $ca, $c1
         // sha1rnds4 xmm7, xmm9, 1
         db $41, $0f, $3a, $cc, $f9, $01
         pxor    xmm3, xmm1
-        movdqa  xmm9, xmm8
+        movaps  xmm9, xmm8
         // sha1msg2 xmm3, xmm0
         db $0f, $38, $ca, $d8
-        movdqa  xmm8, xmm7
+        movaps  xmm8, xmm7
         // sha1nexte xmm9, xmm0
         db $44, $0f, $38, $c8, $c8
         // sha1nexte xmm7, xmm3
@@ -1288,42 +1288,42 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         db $45, $0f, $3a, $cc, $c1, $01
         // sha1msg1 xmm1, xmm0
         db $0f, $38, $c9, $c8
-        movdqa  xmm9, xmm7
+        movaps  xmm9, xmm7
         pxor    xmm2, xmm0
-        movdqa  xmm7, xmm8
+        movaps  xmm7, xmm8
         pxor    xmm1, xmm3
         // sha1msg2 xmm2, xmm3
         db $0f, $38, $ca, $d3
         // sha1rnds4 xmm7, xmm9, 2
         db $41, $0f, $3a, $cc, $f9, $02
-        movdqa  xmm9, xmm8
+        movaps  xmm9, xmm8
         // sha1msg2 xmm1, xmm2
         db $0f, $38, $ca, $ca
         // sha1nexte xmm9, xmm2
         db $44, $0f, $38, $c8, $ca
-        movdqa  xmm8, xmm7
+        movaps  xmm8, xmm7
         // sha1rnds4 xmm8, xmm9, 2
         db $45, $0f, $3a, $cc, $c1, $02
         // sha1nexte xmm7, xmm1
         db $0f, $38, $c8, $f9
         // sha1msg1 xmm0, xmm3
         db $0f, $38, $c9, $c3
-        movdqa  xmm9, xmm7
+        movaps  xmm9, xmm7
         // sha1msg1 xmm3, xmm2
         db $0f, $38, $c9, $da
         pxor    xmm0, xmm2
-        movdqa  xmm7, xmm8
+        movaps  xmm7, xmm8
         // sha1msg2 xmm0, xmm1
         db $0f, $38, $ca, $c1
         pxor    xmm3, xmm1
         // sha1rnds4 xmm7, xmm9, 2
         db $41, $0f, $3a, $cc, $f9, $02
-        movdqa  xmm9, xmm8
+        movaps  xmm9, xmm8
         // sha1msg2 xmm3, xmm0
         db $0f, $38, $ca, $d8
         // sha1nexte xmm9, xmm0
         db $44, $0f, $38, $c8, $c8
-        movdqa  xmm8, xmm7
+        movaps  xmm8, xmm7
         // sha1msg1 xmm2, xmm1
         db $0f, $38, $c9, $d1
         // sha1rnds4 xmm8, xmm9, 2
@@ -1332,18 +1332,18 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         db $0f, $38, $c8, $fb
         // sha1msg1 xmm1, xmm0
         db $0f, $38, $c9, $c8
-        movdqa  xmm9, xmm7
+        movaps  xmm9, xmm7
         pxor    xmm2, xmm0
-        movdqa  xmm7, xmm8
+        movaps  xmm7, xmm8
         // sha1msg2 xmm2, xmm3
         db $0f, $38, $ca, $d3
         // sha1rnds4 xmm7, xmm9, 2
         db $41, $0f, $3a, $cc, $f9, $02
         pxor    xmm1, xmm3
-        movdqa  xmm9, xmm8
+        movaps  xmm9, xmm8
         // sha1msg2 xmm1, xmm2
         db $0f, $38, $ca, $ca
-        movdqa  xmm8, xmm7
+        movaps  xmm8, xmm7
         // sha1nexte xmm9, xmm2
         db $44, $0f, $38, $c8, $ca
         // sha1nexte xmm7, xmm1
@@ -1353,8 +1353,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         // sha1rnds4 xmm8, xmm9, 3
         db $45, $0f, $3a, $cc, $c1, $03
         pxor    xmm0, xmm2
-        movdqa  xmm9, xmm7
-        movdqa  xmm7, xmm8
+        movaps  xmm9, xmm7
+        movaps  xmm7, xmm8
         // sha1msg2 xmm0, xmm1
         db $0f, $38, $ca, $c1
         // sha1msg1 xmm3, xmm2
@@ -1366,7 +1366,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         // sha1nexte xmm8, xmm0
         db $44, $0f, $38, $c8, $c0
         pxor    xmm1, xmm3
-        movdqa  xmm3, xmm7
+        movaps  xmm3, xmm7
         // sha1msg2 xmm1, xmm0
         db $0f, $38, $ca, $c8
         // sha1rnds4 xmm3, xmm8, 3
@@ -1376,19 +1376,19 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         db $0f, $38, $ca, $c1
         // sha1nexte xmm7, xmm1
         db $0f, $38, $c8, $f9
-        movdqa  xmm1, xmm3
+        movaps  xmm1, xmm3
         // sha1rnds4 xmm1, xmm7, 3
         db $0f, $3a, $cc, $cf, $03
         // sha1nexte xmm3, xmm0
         db $0f, $38, $c8, $d8
-        movdqa  xmm0, xmm1
+        movaps  xmm0, xmm1
         // sha1nexte xmm1, xmm6
         db $0f, $38, $c8, $ce
         // sha1rnds4 xmm0, xmm3, 3
         db $0f, $3a, $cc, $c3, $03
-        movdqa  xmm6, xmm1
+        movaps  xmm6, xmm1
         paddd   xmm0, xmm4
-        movdqa  xmm4, xmm0
+        movaps  xmm4, xmm0
         cmp     input_data, rax
         jne     @1
 @2:     pshufd  xmm0, xmm0, 1bh
@@ -1430,29 +1430,29 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$endif WIN64ABI}
         test    num_blks, num_blks
         jz      @0
-        movdqu  xmm7, dqword ptr [digest]
+        movups  xmm7, dqword ptr [digest]
         pshufd  xmm0, xmm7, 0B1H
-        movdqu  xmm7, dqword ptr [digest + 16]
-        movdqa  xmm6, xmm0
+        movups  xmm7, dqword ptr [digest + 16]
+        movaps  xmm6, xmm0
         pshufd  xmm7, xmm7, 1BH
         palignr xmm6, xmm7, 08H
         pblendw xmm7, xmm0, 0F0H
-        movdqa  xmm8,  dqword ptr [rip + @c0]
-        movdqa  xmm13, dqword ptr [rip + @c1]
-        movdqa  xmm12, dqword ptr [rip + @c2]
-        movdqa  xmm11, dqword ptr [rip + @c3]
-        movdqa  xmm10, dqword ptr [rip + @c4]
-        movdqa  xmm9,  dqword ptr [rip + @c5]
+        movaps  xmm8,  dqword ptr [rip + @c0]
+        movaps  xmm13, dqword ptr [rip + @c1]
+        movaps  xmm12, dqword ptr [rip + @c2]
+        movaps  xmm11, dqword ptr [rip + @c3]
+        movaps  xmm10, dqword ptr [rip + @c4]
+        movaps  xmm9,  dqword ptr [rip + @c5]
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@1:     movdqu  xmm5, dqword ptr [input_data]
-        movdqa  xmm1, xmm7
-        movdqa  xmm2, xmm6
+@1:     movups  xmm5, dqword ptr [input_data]
+        movaps  xmm1, xmm7
+        movaps  xmm2, xmm6
         add     input_data, 64
-        movdqa  xmm0, xmm13
-        movdqu  xmm14, dqword ptr [input_data - 48]
-        movdqu  xmm3,  dqword ptr [input_data - 16]
+        movaps  xmm0, xmm13
+        movups  xmm14, dqword ptr [input_data - 48]
+        movups  xmm3,  dqword ptr [input_data - 16]
         pshufb  xmm5, xmm8
-        movdqu  xmm4,  dqword ptr [input_data - 32]
+        movups  xmm4,  dqword ptr [input_data - 32]
         paddd   xmm0, xmm5
         pshufb  xmm14, xmm8
         pshufb  xmm3, xmm8
@@ -1462,8 +1462,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pshufb  xmm4, xmm8
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
-        movdqa  xmm0, xmm12
-        movdqa  xmm15, xmm3
+        movaps  xmm0, xmm12
+        movaps  xmm15, xmm3
         paddd   xmm0, xmm14
         palignr xmm15, xmm4, $04
         db $41, $0f, $38, $cc, $ee
@@ -1474,11 +1474,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm5, xmm15
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
-        movdqa  xmm0, xmm11
+        movaps  xmm0, xmm11
         db $0f, $38, $cd, $eb
         // sha256msg2 xmm5, xmm3
         paddd   xmm0, xmm4
-        movdqa  xmm15, xmm5
+        movaps  xmm15, xmm5
         db $44, $0f, $38, $cc, $f4
         // sha256msg1 xmm14, xmm4
         db $0f, $38, $cb, $ca
@@ -1488,7 +1488,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         // sha256msg1 xmm4, xmm3
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
-        movdqa  xmm0, xmm10
+        movaps  xmm0, xmm10
         paddd   xmm0, xmm3
         palignr xmm15, xmm3, $04
         db $0f, $38, $cc, $dd
@@ -1499,18 +1499,18 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm14, xmm15
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
-        movdqa  xmm0, xmm5
+        movaps  xmm0, xmm5
         db $44, $0f, $38, $cd, $f5
         // sha256msg2 xmm14, xmm5
         paddd   xmm0, xmm9
-        movdqa  xmm15, xmm14
+        movaps  xmm15, xmm14
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm5, $04
-        movdqa  xmm0, dqword ptr [rip + @c6]
+        movaps  xmm0, dqword ptr [rip + @c6]
         db $41, $0f, $38, $cc, $ee
         // sha256msg1 xmm5, xmm14
         paddd   xmm4, xmm15
@@ -1519,12 +1519,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm14
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm4
+        movaps  xmm15, xmm4
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm14, $04
-        movdqa  xmm0, dqword ptr [rip + @c7]
+        movaps  xmm0, dqword ptr [rip + @c7]
         db $44, $0f, $38, $cc, $f4
         // sha256msg1 xmm14, xmm4
         paddd   xmm3, xmm15
@@ -1533,12 +1533,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm4
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm3
+        movaps  xmm15, xmm3
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm4, $04
-        movdqa  xmm0, dqword ptr [rip + @c8]
+        movaps  xmm0, dqword ptr [rip + @c8]
         db $0f, $38, $cc, $e3
         // sha256msg1 xmm4, xmm3
         paddd   xmm5, xmm15
@@ -1547,12 +1547,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm3
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm5
+        movaps  xmm15, xmm5
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm3, $04
-        movdqa  xmm0, dqword ptr [rip + @c9]
+        movaps  xmm0, dqword ptr [rip + @c9]
         db $0f, $38, $cc, $dd
         // sha256msg1 xmm3, xmm5
         paddd   xmm14, xmm15
@@ -1561,12 +1561,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm5
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm14
+        movaps  xmm15, xmm14
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm5, $04
-        movdqa  xmm0, dqword ptr [rip + @c10]
+        movaps  xmm0, dqword ptr [rip + @c10]
         db $41, $0f, $38, $cc, $ee
         // sha256msg1 xmm5, xmm14
         paddd   xmm4, xmm15
@@ -1575,12 +1575,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm14
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm4
+        movaps  xmm15, xmm4
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm14, $04
-        movdqa  xmm0, dqword ptr [rip + @c11]
+        movaps  xmm0, dqword ptr [rip + @c11]
         db $44, $0f, $38, $cc, $f4
         // sha256msg1 xmm14, xmm4
         paddd   xmm3, xmm15
@@ -1589,12 +1589,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm4
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm3
+        movaps  xmm15, xmm3
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm4, $04
-        movdqa  xmm0, dqword ptr [rip + @c12]
+        movaps  xmm0, dqword ptr [rip + @c12]
         db $0f, $38, $cc, $e3
         // sha256msg1 xmm4, xmm3
         paddd   xmm5, xmm15
@@ -1603,12 +1603,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm3
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm5
+        movaps  xmm15, xmm5
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm3, $04
-        movdqa  xmm0, dqword ptr [rip + @c13]
+        movaps  xmm0, dqword ptr [rip + @c13]
         db $0f, $38, $cc, $dd
         // sha256msg1 xmm3, xmm5
         paddd   xmm14, xmm15
@@ -1617,13 +1617,13 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm0, xmm5
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm15, xmm14
+        movaps  xmm15, xmm14
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
         palignr xmm15, xmm5, $04
-        movdqa  xmm0, dqword ptr [rip + @c14]
-        movdqa  xmm5, dqword ptr [rip + @c15]
+        movaps  xmm0, dqword ptr [rip + @c14]
+        movaps  xmm5, dqword ptr [rip + @c15]
         paddd   xmm4, xmm15
         db $41, $0f, $38, $cd, $e6
         // sha256msg2 xmm4, xmm14
@@ -1634,10 +1634,10 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pshufd  xmm0, xmm0, $0e
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
-        movdqa  xmm0, xmm5
+        movaps  xmm0, xmm5
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
-        movdqa  xmm0, xmm4
+        movaps  xmm0, xmm4
         palignr xmm0, xmm14, $04
         paddd   xmm3, xmm0
         pshufd  xmm0, xmm5, $0e
@@ -1646,7 +1646,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         paddd   xmm3, dqword ptr [rip + @c16]
         db $0f, $38, $cb, $d1
         // sha256rnds2 xmm2, xmm1, xmm0
-        movdqa  xmm0, xmm3
+        movaps  xmm0, xmm3
         db $0f, $38, $cb, $ca
         // sha256rnds2 xmm1, xmm2, xmm0
         pshufd  xmm0, xmm3, $0e
@@ -1658,7 +1658,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jne     @1
 @2:     pshufd  xmm6, xmm6, $1b
         pshufd  xmm7, xmm7, $b1
-        movdqa  xmm0, xmm6
+        movaps  xmm0, xmm6
         pblendw xmm0, xmm7, $f0
         palignr xmm7, xmm6, $08
         movups  dqword ptr [digest], xmm0
@@ -2970,197 +2970,6 @@ procedure Move512(dst, src: PPtrIntArray);
         movups  dqword ptr [dst + 16], xmm1
         movups  dqword ptr [dst + 32], xmm2
         movups  dqword ptr [dst + 48], xmm3
-end;
-
-procedure Salsa20x8(B: PCardinalArray);
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        push    rbp
-        push    r15
-        push    r14
-        push    r13
-        push    r12
-        push    rbx
-        sub     rsp, 40
-        movdqu  xmm0, dqword ptr [B]
-        movups  xmm1, dqword ptr [B + 16]
-        movups  xmm2, dqword ptr [B + 32]
-        movups  xmm3, dqword ptr [B + 48]
-        mov     qword ptr [rsp - 32], B
-        movdqa  dqword ptr [rsp - 128], xmm0
-        movaps  dqword ptr [rsp - 80],  xmm3
-        movaps  dqword ptr [rsp - 112], xmm1
-        movaps  dqword ptr [rsp - 96],  xmm2
-        mov     r11d, dword ptr [rsp - 128]
-        mov     r8d, dword ptr [rsp - 124]
-        mov     ecx, dword ptr [rsp - 80]
-        mov     edi, dword ptr [rsp - 76]
-        mov     eax, dword ptr [rsp - 112]
-        mov     r15d, dword ptr [rsp - 108]
-        mov     r12d, dword ptr [rsp - 96]
-        mov     ebp, dword ptr [rsp - 92]
-        mov     ebx, dword ptr [rsp - 88]
-        mov     r9d, dword ptr [rsp - 104]
-        mov     r13d, dword ptr [rsp - 72]
-        mov     edx, dword ptr [rsp - 120]
-        mov     qword ptr [rsp - 48], rdx
-        mov     r14d, dword ptr [rsp - 68]
-        mov     r10d, dword ptr [rsp - 84]
-        mov     edx, dword ptr [rsp - 116]
-        mov     qword ptr [rsp - 56], rdx
-        mov     qword ptr [rsp - 40], 4
-        mov     esi, dword ptr [rsp - 100]
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     lea     edx, [rcx + r11]
-        rol     edx, 7
-        xor     edx, eax
-        mov     qword ptr [rsp], rdx
-        lea     eax, [rdx + r11]
-        rol     eax, 9
-        xor     eax, r12d
-        mov     r12, rax
-        mov     qword ptr [rsp + 24], rax
-        add     eax, edx
-        rol     eax, 13
-        xor     eax, ecx
-        mov     qword ptr [rsp + 32], rax
-        add     r12d, eax
-        rol     r12d, 18
-        lea     eax, [r8 + r15]
-        rol     eax, 7
-        xor     eax, ebp
-        mov     qword ptr [rsp + 8], rax
-        lea     ecx, [rax + r15]
-        rol     ecx, 9
-        xor     ecx, edi
-        mov     qword ptr [rsp + 16], rcx
-        add     eax, ecx
-        rol     eax, 13
-        xor     eax, r8d
-        lea     ebp, [rax + rcx]
-        rol     ebp, 18
-        xor     r12d, r11d
-        lea     ecx, [r9 + rbx]
-        rol     ecx, 7
-        xor     ecx, r13d
-        mov     qword ptr [rsp - 8], rcx
-        lea     r11d, [rcx + rbx]
-        rol     r11d, 9
-        xor     r11d, dword ptr [rsp - 48]
-        add     ecx, r11d
-        rol     ecx, 13
-        xor     ecx, r9d
-        lea     edx, [rcx + r11]
-        rol     edx, 18
-        xor     ebp, r15d
-        lea     r9d, [r10 + r14]
-        rol     r9d, 7
-        xor     r9d, dword ptr [rsp - 56]
-        lea     r15d, [r9 + r14]
-        rol     r15d, 9
-        xor     r15d, esi
-        lea     edi, [r15 + r9]
-        rol     edi, 13
-        xor     edi, r10d
-        lea     r13d, [rdi + r15]
-        rol     r13d, 18
-        xor     edx, ebx
-        lea     r8d, [r9 + r12]
-        rol     r8d, 7
-        xor     r8d, eax
-        lea     eax, [r8 + r12]
-        rol     eax, 9
-        xor     eax, r11d
-        lea     esi, [rax + r8]
-        rol     esi, 13
-        xor     esi, r9d
-        mov     qword ptr [rsp - 56], rsi
-        mov     qword ptr [rsp - 48], rax
-        lea     r11d, [rsi + rax]
-        rol     r11d, 18
-        xor     r13d, r14d
-        mov     r10, qword ptr [rsp]
-        lea     r9d, [r10 + rbp]
-        rol     r9d, 7
-        xor     r9d, ecx
-        lea     esi, [r9 + rbp]
-        mov     rcx, rbp
-        rol     esi, 9
-        xor     esi, r15d
-        lea     eax, [rsi + r9]
-        rol     eax, 13
-        xor     eax, r10d
-        lea     r15d, [rax + rsi]
-        rol     r15d, 18
-        xor     r11d, r12d
-        mov     qword ptr [rsp - 16], rdx
-        mov     rbx, qword ptr [rsp + 8]
-        lea     r10d, [rdx + rbx]
-        rol     r10d, 7
-        xor     r10d, edi
-        lea     r12d, [r10 + rdx]
-        rol     r12d, 9
-        xor     r12d, dword ptr [rsp + 24]
-        lea     ebp, [r12 + r10]
-        rol     ebp, 13
-        xor     ebp, ebx
-        lea     ebx, [r12 + rbp]
-        rol     ebx, 18
-        xor     r15d, ecx
-        mov     rdx, qword ptr [rsp - 8]
-        mov     qword ptr [rsp - 24], r13
-        lea     ecx, [rdx + r13]
-        rol     ecx, 7
-        xor     ecx, dword ptr [rsp + 32]
-        lea     edi, [rcx + r13]
-        rol     edi, 9
-        xor     edi, dword ptr [rsp + 16]
-        lea     r13d, [rdi + rcx]
-        rol     r13d, 13
-        xor     r13d, edx
-        lea     r14d, [rdi + r13]
-        rol     r14d, 18
-        xor     ebx, dword ptr [rsp - 16]
-        xor     r14d, dword ptr [rsp - 24]
-        dec     byte ptr [rsp - 40]
-        jnz     @s
-        mov     dword ptr [rsp - 128], r11d
-        mov     dword ptr [rsp - 80], ecx
-        mov     dword ptr [rsp - 112], eax
-        mov     dword ptr [rsp - 96], r12d
-        mov     dword ptr [rsp - 108], r15d
-        mov     dword ptr [rsp - 124], r8d
-        mov     dword ptr [rsp - 92], ebp
-        mov     dword ptr [rsp - 76], edi
-        mov     dword ptr [rsp - 88], ebx
-        mov     dword ptr [rsp - 104], r9d
-        mov     dword ptr [rsp - 72], r13d
-        mov     rax, qword ptr [rsp - 48]
-        mov     dword ptr [rsp - 120], eax
-        mov     dword ptr [rsp - 68], r14d
-        mov     dword ptr [rsp - 84], r10d
-        mov     rax, qword ptr [rsp - 56]
-        mov     dword ptr [rsp - 116], eax
-        mov     dword ptr [rsp - 100], esi
-        mov     rcx, qword ptr [rsp - 32]
-        movdqu  xmm0, dqword ptr [rcx]
-        movdqu  xmm1, dqword ptr [rcx + 16]
-        movdqu  xmm2, dqword ptr [rcx + 32]
-        paddd   xmm0, dqword ptr [rsp - 128]
-        movdqu  xmm3, dqword ptr [rcx + 48]
-        paddd   xmm1, dqword ptr [rsp + 16 - 128]
-        paddd   xmm2, dqword ptr [rsp + 32 - 128]
-        paddd   xmm3, dqword ptr [rsp + 48 - 128]
-        movdqu  dqword ptr [rcx], xmm0
-        movdqu  dqword ptr [rcx + 16], xmm1
-        movdqu  dqword ptr [rcx + 32], xmm2
-        movdqu  dqword ptr [rcx + 48], xmm3
-        add     rsp, 40
-        pop     rbx
-        pop     r12
-        pop     r13
-        pop     r14
-        pop     r15
-        pop     rbp
 end;
 
 procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
@@ -7627,47 +7436,47 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movaps  xmm10, dqword ptr [rip + @swap]
         pshufb  xmm0, xmm10
         pshufb  xmm1, xmm10
-        movdqa  xmm5, xmm0
-        movdqa  xmm4, xmm0
-        movdqa  xmm2, xmm0
+        movaps  xmm5, xmm0
+        movaps  xmm4, xmm0
+        movaps  xmm2, xmm0
         // pclmulqdq xmm0, xmm1, 16
         db $66, $0f, $3a, $44, $c1, $10
         // pclmulqdq xmm5, xmm1, 17
         db $66, $0f, $3a, $44, $e9, $11
-        movdqa  xmm3, xmm5
+        movaps  xmm3, xmm5
         // pclmulqdq xmm4, xmm1, 0
         db $66, $0f, $3a, $44, $e1, $00
         // pclmulqdq xmm2, xmm1, 1
         db $66, $0f, $3a, $44, $d1, $01
         pslldq  xmm3, 8
         pxor    xmm0, xmm2
-        movdqa  xmm2, xmm4
+        movaps  xmm2, xmm4
         pxor    xmm3, xmm0
         pslldq  xmm2, 8
         punpckhqdq xmm3, xmm5
-        movdqa  xmm1, xmm3
+        movaps  xmm1, xmm3
         pslldq  xmm0, 8
         pxor    xmm0, xmm4
         pslldq  xmm1, 8
         punpckhqdq xmm2, xmm0
-        movdqa  xmm4, xmm2
-        movdqa  xmm7, xmm1
+        movaps  xmm4, xmm2
+        movaps  xmm7, xmm1
         pslldq  xmm4, 8
-        movdqa  xmm1, xmm2
+        movaps  xmm1, xmm2
         psrlq   xmm4, 63
         psrldq  xmm1, 8
         psllq   xmm3, 1
-        movdqa  xmm6, xmm1
+        movaps  xmm6, xmm1
         psllq   xmm2, 1
-        movdqa  xmm1, xmm3
+        movaps  xmm1, xmm3
         por     xmm2, xmm4
-        movdqa  xmm3, xmm2
+        movaps  xmm3, xmm2
         psrlq   xmm7, 63
         pslldq  xmm3, 8
         por     xmm1, xmm7
-        movdqa  xmm4, xmm3
+        movaps  xmm4, xmm3
         psrlq   xmm6, 63
-        movdqa  xmm0, xmm3
+        movaps  xmm0, xmm3
         psllq   xmm4, 63
         por     xmm1, xmm6
         psllq   xmm3, 57
@@ -7675,14 +7484,14 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pxor    xmm2, xmm3
         pxor    xmm0, xmm4
         pxor    xmm2, xmm0
-        movdqa  xmm3, xmm2
-        movdqa  xmm7, xmm2
+        movaps  xmm3, xmm2
+        movaps  xmm7, xmm2
         psrldq  xmm3, 8
-        movdqa  xmm0, xmm2
-        movdqa  xmm6, xmm2
-        movdqa  xmm4, xmm3
+        movaps  xmm0, xmm2
+        movaps  xmm6, xmm2
+        movaps  xmm4, xmm3
         psrlq   xmm7, 1
-        movdqa  xmm5, xmm3
+        movaps  xmm5, xmm3
         psllq   xmm4, 63
         psllq   xmm3, 57
         por     xmm4, xmm7
@@ -7690,7 +7499,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
-        movdqa  xmm0, xmm4
+        movaps  xmm0, xmm4
         psrlq   xmm6, 2
         por     xmm5, xmm6
         pxor    xmm0, xmm5
@@ -7753,7 +7562,7 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         test    len, len
         jz      @0
         mov     rax,  qword ptr [rip + AesNiHashKey]
-        movdqa  xmm1, xmm0              // save seed for @17up
+        movaps  xmm1, xmm0              // save seed for @17up
         pxor    xmm0, dqword ptr [rax]  // xor with seed
         aesenc  xmm0, xmm0              // scramble
         // 1..16 bytes have no branch
@@ -7767,7 +7576,7 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
 @16:    aesenc  xmm1, xmm0  // scramble 3 times
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
-        movdqa  xmm0, xmm1
+        movaps  xmm0, xmm1
 @0:     movd    eax,  xmm0  // truncate to 32-bit for _AesNiHash32
         ret
 @17up:  cmp     len, 32
@@ -7784,14 +7593,14 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
         pxor    xmm2, xmm3
-        movdqa  xmm0, xmm2
+        movaps  xmm0, xmm2
         movd    eax,  xmm2  // truncate to 32-bit for _AesNiHash32
         ret
 @33up:  cmp     len, 64
         ja      @65up
         // 33..64 bytes
-        movdqa  xmm2, xmm1
-        movdqa  xmm3, xmm1
+        movaps  xmm2, xmm1
+        movaps  xmm3, xmm1
         pxor    xmm1, dqword ptr [rax + 16]
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
@@ -7844,8 +7653,8 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         movups  dqword ptr [rsp - 16], xmm6
         movups  dqword ptr [rsp - 32], xmm7
         {$endif WIN64ABI}
-        movdqa  xmm2, xmm1
-        movdqa  xmm3, xmm1
+        movaps  xmm2, xmm1
+        movaps  xmm3, xmm1
         pxor    xmm1, dqword ptr [rax + 16]
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
@@ -7898,7 +7707,7 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         movups  xmm7, dqword ptr [rsp - 32]
         {$endif WIN64ABI}
         pxor    xmm4, xmm5
-        movdqa  xmm0, xmm4
+        movaps  xmm0, xmm4
         movd    eax,  xmm4   // truncate to 32-bit for _AesNiHash32
 end;
 

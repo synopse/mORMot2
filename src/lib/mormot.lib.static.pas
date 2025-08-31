@@ -1228,7 +1228,7 @@ asm
         xor     eax, eax
 @@002:  mov     qword ptr [rsp], rax
         mov     qword ptr [rsp+8H], r8
-        movdqu  xmm0, oword ptr [rsp]
+        movups  xmm0, oword ptr [rsp]
         add     rsp, 16
         pop     rbx
         pop     rsi
@@ -1336,7 +1336,7 @@ asm
         mov     qword ptr [r8+8H], 0
 @@002:  mov     qword ptr [rsp], rsi
         mov     qword ptr [rsp+8H], r9
-        movdqu  xmm0, oword ptr [rsp]
+        movups  xmm0, oword ptr [rsp]
         nop
         add     rsp, 24
         pop     rbx
@@ -1505,7 +1505,7 @@ asm
         neg     qword ptr [rsp]
         adc     qword ptr [rsp+8H], 0
         neg     qword ptr [rsp+8H]
-@@005:  movdqu  xmm0, oword ptr [rsp]
+@@005:  movups  xmm0, oword ptr [rsp]
         add     rsp, 16
         pop     rbx
         pop     rsi
@@ -1606,7 +1606,7 @@ asm
 @@001:  xor     r8d, r8d
 @@002:  mov     qword ptr [rsp], r9
         mov     qword ptr [rsp+8H], r8
-        movdqu  xmm0, oword ptr [rsp]
+        movups  xmm0, oword ptr [rsp]
         nop
         add     rsp, 16
         pop     rbx

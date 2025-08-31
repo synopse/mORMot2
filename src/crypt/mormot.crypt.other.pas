@@ -1937,10 +1937,10 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         shl     rcx, 7
         lea     rax, [rsi + rcx - 40H]
         lea     r9,  [rdx + rcx - 40H]
-        movdqa  xmm0, [rax]
-        movdqa  xmm1, [rax + 10H]
-        movdqa  xmm2, [rax + 20H]
-        movdqa  xmm3, [rax + 30H]
+        movaps  xmm0, [rax]
+        movaps  xmm1, [rax + 10H]
+        movaps  xmm2, [rax + 20H]
+        movaps  xmm3, [rax + 30H]
         test    rdx, rdx
         jz      @no1
         pxor    xmm0, [r9]
@@ -1960,70 +1960,70 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         pxor    xmm1, [rdx + r9 + 10H]
         pxor    xmm2, [rdx + r9 + 20H]
         pxor    xmm3, [rdx + r9 + 30H]
-@no2:   movdqa  xmm8, xmm0
-        movdqa  xmm9, xmm1
-        movdqa  xmm10, xmm2
-        movdqa  xmm11, xmm3
+@no2:   movaps  xmm8, xmm0
+        movaps  xmm9, xmm1
+        movaps  xmm10, xmm2
+        movaps  xmm11, xmm3
         mov     rax, 8
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@s:     movdqa  xmm4, xmm1
+@s:     movaps  xmm4, xmm1
         paddd   xmm4, xmm0
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 7
         psrld   xmm5, 25
         pxor    xmm3, xmm4
-        movdqa  xmm4, xmm0
+        movaps  xmm4, xmm0
         pxor    xmm3, xmm5
         paddd   xmm4, xmm3
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 9
         psrld   xmm5, 23
         pxor    xmm2, xmm4
-        movdqa  xmm4, xmm3
+        movaps  xmm4, xmm3
         pxor    xmm2, xmm5
         pshufd  xmm3, xmm3, 93H
         paddd   xmm4, xmm2
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 13
         psrld   xmm5, 19
         pxor    xmm1, xmm4
-        movdqa  xmm4, xmm2
+        movaps  xmm4, xmm2
         pxor    xmm1, xmm5
         pshufd  xmm2, xmm2, 4EH
         paddd   xmm4, xmm1
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 18
         psrld   xmm5, 14
         pxor    xmm0, xmm4
-        movdqa  xmm4, xmm3
+        movaps  xmm4, xmm3
         pxor    xmm0, xmm5
         pshufd  xmm1, xmm1, 39H
         paddd   xmm4, xmm0
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 7
         psrld   xmm5, 25
         pxor    xmm1, xmm4
-        movdqa  xmm4, xmm0
+        movaps  xmm4, xmm0
         pxor    xmm1, xmm5
         paddd   xmm4, xmm1
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 9
         psrld   xmm5, 23
         pxor    xmm2, xmm4
-        movdqa  xmm4, xmm1
+        movaps  xmm4, xmm1
         pxor    xmm2, xmm5
         pshufd  xmm1, xmm1, 93H
         paddd   xmm4, xmm2
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 13
         psrld   xmm5, 19
         pxor    xmm3, xmm4
-        movdqa  xmm4, xmm2
+        movaps  xmm4, xmm2
         pxor    xmm3, xmm5
         pshufd  xmm2, xmm2, 4EH
         paddd   xmm4, xmm3
         sub     rax, 2
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 18
         psrld   xmm5, 14
         pxor    xmm0, xmm4
@@ -2041,10 +2041,10 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         shr     rax, 1
         add     rax, rdi
         cmp     r9, rcx
-        movdqa  [rax], xmm0
-        movdqa  [rax + 10H], xmm1
-        movdqa  [rax + 20H], xmm2
-        movdqa  [rax + 30H], xmm3
+        movaps  [rax], xmm0
+        movaps  [rax + 10H], xmm1
+        movaps  [rax + 20H], xmm2
+        movaps  [rax + 30H], xmm3
         jne     @loop
         {$ifdef WIN64ABI}
         pop     rdi
@@ -2071,10 +2071,10 @@ asm
         test    ecx, ecx
         lea     eax,  [esi + ebx - 40H]
         lea     ecx,  [ecx + ebx - 40H]
-        movdqa  xmm0, [eax]
-        movdqa  xmm1, [eax + 10H]
-        movdqa  xmm2, [eax + 20H]
-        movdqa  xmm3, [eax + 30H]
+        movaps  xmm0, [eax]
+        movaps  xmm1, [eax + 10H]
+        movaps  xmm2, [eax + 20H]
+        movaps  xmm3, [eax + 30H]
         jz      @no1
         pxor    xmm0, [ecx]
         pxor    xmm1, [ecx + 10H]
@@ -2094,78 +2094,78 @@ asm
         pxor    xmm1, [eax + ecx + 10H]
         pxor    xmm2, [eax + ecx + 20H]
         pxor    xmm3, [eax + ecx + 30H]
-@no2:   movdqa  xmm6, xmm0
-        movdqa  xmm7, xmm1
-        movdqu  s2, xmm2
-        movdqu  s3, xmm3
+@no2:   movaps  xmm6, xmm0
+        movaps  xmm7, xmm1
+        movups  s2, xmm2
+        movups  s3, xmm3
         mov     eax, 8
 {$ifdef FPC} align 8 {$endif}
-@s:     movdqa  xmm4, xmm1
+@s:     movaps  xmm4, xmm1
         paddd   xmm4, xmm0
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 7
         psrld   xmm5, 25
         pxor    xmm3, xmm4
-        movdqa  xmm4, xmm0
+        movaps  xmm4, xmm0
         pxor    xmm3, xmm5
         paddd   xmm4, xmm3
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 9
         psrld   xmm5, 23
         pxor    xmm2, xmm4
-        movdqa  xmm4, xmm3
+        movaps  xmm4, xmm3
         pxor    xmm2, xmm5
         pshufd  xmm3, xmm3, 93H
         paddd   xmm4, xmm2
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 13
         psrld   xmm5, 19
         pxor    xmm1, xmm4
-        movdqa  xmm4, xmm2
+        movaps  xmm4, xmm2
         pxor    xmm1, xmm5
         pshufd  xmm2, xmm2, 4EH
         paddd   xmm4, xmm1
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 18
         psrld   xmm5, 14
         pxor    xmm0, xmm4
-        movdqa  xmm4, xmm3
+        movaps  xmm4, xmm3
         pxor    xmm0, xmm5
         pshufd  xmm1, xmm1, 39H
         paddd   xmm4, xmm0
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 7
         psrld   xmm5, 25
         pxor    xmm1, xmm4
-        movdqa  xmm4, xmm0
+        movaps  xmm4, xmm0
         pxor    xmm1, xmm5
         paddd   xmm4, xmm1
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 9
         psrld   xmm5, 23
         pxor    xmm2, xmm4
-        movdqa  xmm4, xmm1
+        movaps  xmm4, xmm1
         pxor    xmm2, xmm5
         pshufd  xmm1, xmm1, 93H
         paddd   xmm4, xmm2
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 13
         psrld   xmm5, 19
         pxor    xmm3, xmm4
-        movdqa  xmm4, xmm2
+        movaps  xmm4, xmm2
         pxor    xmm3, xmm5
         pshufd  xmm2, xmm2, 4EH
         paddd   xmm4, xmm3
         sub     eax, 2
-        movdqa  xmm5, xmm4
+        movaps  xmm5, xmm4
         pslld   xmm4, 18
         psrld   xmm5, 14
         pxor    xmm0, xmm4
         pshufd  xmm3, xmm3, 39H
         pxor    xmm0, xmm5
         ja      @s
-        movdqu  xmm4, s2
-        movdqu  xmm5, s3
+        movups  xmm4, s2
+        movups  xmm5, s3
         paddd   xmm0, xmm6
         paddd   xmm1, xmm7
         paddd   xmm2, xmm4
@@ -2177,16 +2177,15 @@ asm
         shr     eax, 1
         add     eax, edi
         cmp     ecx, ebx
-        movdqu  [eax], xmm0
-        movdqu  [eax + 10H], xmm1
-        movdqu  [eax + 20H], xmm2
-        movdqu  [eax + 30H], xmm3
+        movups  [eax], xmm0
+        movups  [eax + 10H], xmm1
+        movups  [eax + 20H], xmm2
+        movups  [eax + 30H], xmm3
         jne     @loop
         pop     edi
         pop     esi
         pop     ebx
 end;
-
 {$endif CPUX64}
 
 procedure SMix(R, N: PtrUInt; X, Y, V: PCardinalArray);
@@ -2307,7 +2306,7 @@ begin
       dec(P);
     until P = 0;
   finally
-    FreeMemAligned(XY, R128 * 2); // 16-byte aligned for SSE2 movdqa access
+    FreeMemAligned(XY, R128 * 2); // 16-byte aligned for SSE2 movaps access
     FreeMemAligned(V, R128 * N);
   end;
   result := Pbkdf2HmacSha256(Password, data, 1, DestLen);
