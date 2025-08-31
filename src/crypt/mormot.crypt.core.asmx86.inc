@@ -1504,10 +1504,14 @@ asm
         movups  xmm1, dqword ptr [dst + 16]
         movups  xmm2, dqword ptr [dst + 32]
         movups  xmm3, dqword ptr [dst + 48]
-        xorps   xmm0, dqword ptr [src]
-        xorps   xmm1, dqword ptr [src + 16]
-        xorps   xmm2, dqword ptr [src + 32]
-        xorps   xmm3, dqword ptr [src + 48]
+        movups  xmm4, dqword ptr [src]
+        movups  xmm5, dqword ptr [src + 16]
+        movups  xmm6, dqword ptr [src + 32]
+        movups  xmm7, dqword ptr [src + 48]
+        xorps   xmm0, xmm4
+        xorps   xmm1, xmm5
+        xorps   xmm2, xmm6
+        xorps   xmm3, xmm7
         movups  dqword ptr [dst], xmm0
         movups  dqword ptr [dst + 16], xmm1
         movups  dqword ptr [dst + 32], xmm2
