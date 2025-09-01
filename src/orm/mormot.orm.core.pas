@@ -8198,27 +8198,34 @@ end;
 
 class procedure TOrm.RttiJsonRead(var Context: TJsonParserContext; Instance: TObject);
 var
-  name: PUtf8Char;
-  namelen: integer;
-  i: PtrInt;
+  ndx: PtrInt;
+  field: TOrmPropInfo;
   orm: TOrm absolute Instance;
 begin
-  // manually parse incoming JSON object using Orm.Fields.SetValue()
+  // efficiently parse incoming JSON object using Orm.Fields.SetValue()
   if not Context.ParseObject then
     exit; // invalid or {} or null
-  i := 0; // for optimistic property name lookup
+  ndx := 0; // for optimistic property name lookup
   repeat
-     name := GetJsonPropName(Context.Get.Json, @namelen);
-     Context.Get.GetJsonFieldOrObjectOrArray;
-     if (name = nil) or
-        (Context.Json = nil) then
-     begin
-       Context.Valid := false;
-       exit;
-     end;
-     orm.FillValue(i, name, Context.Value, namelen, Context.ValueLen, Context.WasString);
+    Context.Valid := false;
+    if not Context.GetJsonFieldName then
+      exit;
+    if IsRowID(Context.Value, Context.ValueLen) then
+      orm.fID := Context.Get.GetJsonInt64
+    else
+    begin
+      field := orm.Orm.Fields.ByName(Context.Value, Context.ValueLen, ndx);
+      if field = nil then
+        exit;
+      Context.Get.GetJsonFieldOrObjectOrArray;
+      if Context.Json = nil then
+        exit;
+      field.SetValue(orm, Context.Value, Context.ValueLen, Context.WasString);
+    end;
   until Context.EndOfObject = '}';
-  Context.ParseEndOfObject;
+  Context.Json := mormot.core.json.ParseEndOfObject(Context.Json, Context.Get.EndOfObject);
+  if Context.Json <> nil then
+    Context.Valid := true;
 end;
 
 class procedure TOrm.RttiJsonWrite(W: TJsonWriter; Instance: TObject;
