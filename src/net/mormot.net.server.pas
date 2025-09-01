@@ -4089,7 +4089,7 @@ begin
   for i := 1 to length(all) do
   begin
     if IPToCardinal(m^.IP, ip4) and
-       (ip4 and pattern = ip4) and // e.g. 192.168.1.2 and 192.168.1.255
+       (ip4 and pattern = pattern) and // e.g. 192.168.1.2 and 192.168.1.255
        ((fnd = nil) or
         (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind])) then
       fnd := m; // pickup the interface with the best hardware (paranoid)
