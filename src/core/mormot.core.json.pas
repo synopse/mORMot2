@@ -8306,8 +8306,7 @@ var
   j: PUtf8Char;
   root: TRttiJson;
   prop: PRttiCustomProp;
-  propname: PUtf8Char;
-  p, propnamelen: integer;
+  p: integer;
 label
   no, nxt, any;
 begin
@@ -8328,12 +8327,10 @@ no: Ctxt.Valid := false;
     prop := pointer(root.Props.List);
     for p := 1 to root.Props.Count do
     begin
-nxt:  propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
-      if (Ctxt.Json = nil) or
-         (propname = nil) then
+nxt:  if not Ctxt.GetJsonFieldName then
         goto no;
       // O(1) optimistic process of the property name, following RTTI order
-      if prop^.NameMatch(propname, propnamelen) then
+      if prop^.NameMatch(Ctxt.Value, Ctxt.ValueLen) then
         if JsonLoadProp(Data, prop, Ctxt) then
           if Ctxt.EndOfObject = '}' then
             break
@@ -8342,12 +8339,12 @@ nxt:  propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
         else
           break
       else if (Ctxt.Info.Kind = rkClass) and
-              (propnamelen = 9) and // fast "ClassName" case sensitive match
-              (PIntegerArray(propname)[0] =
+              (Ctxt.ValueLen = 9) and // fast "ClassName" case sensitive match
+              (PIntegerArray(Ctxt.Value)[0] =
                 ord('C') + ord('l') shl 8 + ord('a') shl 16 + ord('s') shl 24) and
-              (PIntegerArray(propname)[1] =
+              (PIntegerArray(Ctxt.Value)[1] =
                 ord('s') + ord('N') shl 8 + ord('a') shl 16 + ord('m') shl 24) and
-              (propname[8] = 'e') then
+              (Ctxt.Value[8] = 'e') then
       // woStoreClassName was used -> just ignore the class name
       begin
         Ctxt.Json := GotoNextJsonItem(Ctxt.Json, Ctxt.Get.EndOfObject);
@@ -8360,7 +8357,7 @@ nxt:  propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
         // we didn't find the property in its natural place -> full lookup
         repeat
           prop := FindCustomProp(pointer(root.Props.List),
-            propname, propnamelen, root.Props.Count);
+            Ctxt.Value, Ctxt.ValueLen, root.Props.Count);
           if prop = nil then
             // unexpected "prop": value
             if (rcfReadIgnoreUnknownFields in root.Flags) or
@@ -8376,9 +8373,7 @@ nxt:  propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
             goto no;
           if Ctxt.EndOfObject = '}' then
              break;
-any:      propname := GetJsonPropName(Ctxt.Get.Json, @propnamelen);
-          if (Ctxt.Json = nil) or
-             (propname = nil) then
+any:      if not Ctxt.GetJsonFieldName then
             goto no;
         until false;
         break;
