@@ -1566,7 +1566,7 @@ begin
     ERsaException.RaiseU('TBigInt.FillPrime FIPS_MIN'); // paranoid
   until false;
   // brute force search for the next prime starting at this point
-  result := true; 
+  result := true;
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
@@ -1586,7 +1586,9 @@ begin
     //      with keysize >= 2048-bit (FIPS 186-4 appendix B.3.1 item A)
     // - see https://security.stackexchange.com/a/176396/155098
     //   and https://crypto.stackexchange.com/a/15761/40200
-  until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
+    inc(min);
+  until (min and 63 = 0) and       // check only once in a while (avoid OS call)
+        (GetTickCount64 > EndTix); // IsPrime() may be slow for sure
   result := false; // timed out
 end;
 
