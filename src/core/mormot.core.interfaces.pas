@@ -334,16 +334,18 @@ type
     ArgsOutputName: TRawUtf8DynArray;
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
-    /// retrieve a const / var argument index in Args[] from its name
+    /// retrieve a const / var argument in Args[] from its name
     // - search is case insensitive, returns -1 if not found
-    function ArgIndexInput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
-    /// retrieve a var / out / result argument index in Args[] from its name
+    function ArgInput(ArgName: PUtf8Char; ArgNameLen: PtrInt;
+      ArgIndex: PInteger = nil): PInterfaceMethodArgument;
+    /// retrieve a var / out / result argument Args[] from its name
     // - search is case insensitive, returns -1 if not found
-    function ArgIndexOutput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
+    function ArgOutput(ArgName: PUtf8Char; ArgNameLen: PtrInt;
+      ArgIndex: PInteger = nil): PInterfaceMethodArgument;
     /// retrieve an argument index in Args[] from its name
     // - search is case insensitive, returns -1 if not found
-    function ArgIndex(const ArgName: RawUtf8; Input: boolean): PtrInt;
-      {$ifdef HASINLINE} inline; {$endif}
+    function ArgInputOutput(const ArgName: RawUtf8;
+      Input: boolean): PInterfaceMethodArgument;
     /// find the next input (const / var) argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgNextInput(var arg: integer): boolean;
@@ -2945,46 +2947,65 @@ end;
 
 { TInterfaceMethod }
 
-function TInterfaceMethod.ArgIndexInput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
+function TInterfaceMethod.ArgInput(ArgName: PUtf8Char; ArgNameLen: PtrInt;
+  ArgIndex: PInteger): PInterfaceMethodArgument;
 var
-  a: PInterfaceMethodArgument;
+  i: PtrInt;
 begin
-  if ArgNameLen > 0 then
+  if ArgNameLen >= 0 then
   begin
-    a := @Args[ArgsInFirst];
-    for result := ArgsInFirst to ArgsInLast do
-      if (a^.ValueDirection in [imdConst, imdVar]) and
-         IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
-          exit
-      else
-        inc(a);
+    i := ArgsInFirst;
+    result := @Args[i];
+    while i <= ArgsInLast do
+    begin
+      if (result^.ValueDirection in [imdConst, imdVar]) and
+         IdemPropNameNotNull(result^.ParamName^, ArgName, ArgNameLen) then
+      begin
+        if ArgIndex <> nil then
+          ArgIndex^ := i;
+        exit;
+      end;
+      inc(result);
+      inc(i);
+    end;
   end;
-  result := -1;
+  result := nil;
 end;
 
-function TInterfaceMethod.ArgIndexOutput(ArgName: PUtf8Char; ArgNameLen: integer): PtrInt;
+function TInterfaceMethod.ArgOutput(ArgName: PUtf8Char; ArgNameLen: PtrInt;
+  ArgIndex: PInteger): PInterfaceMethodArgument;
 var
-  a: PInterfaceMethodArgument;
+  i: PtrInt;
 begin
-  if ArgNameLen > 0 then
+  if ArgNameLen >= 0 then
   begin
-    a := @Args[ArgsOutFirst];
-    for result := ArgsOutFirst to ArgsOutLast do
-      if (a^.ValueDirection <> imdConst) and
-         IdemPropName(a^.ParamName^, ArgName, ArgNameLen) then
-          exit
-      else
-        inc(a);
+    i := ArgsOutFirst;
+    result := @Args[i];
+    while i <= ArgsOutLast do
+    begin
+      if (result^.ValueDirection <> imdConst) and
+         IdemPropNameNotNull(result^.ParamName^, ArgName, ArgNameLen) then
+       begin
+         if ArgIndex <> nil then
+           ArgIndex^ := i;
+         exit;
+       end;
+      inc(result);
+      inc(i);
+    end;
   end;
-  result := -1;
+  result := nil;
 end;
 
-function TInterfaceMethod.ArgIndex(const ArgName: RawUtf8; Input: boolean): PtrInt;
+function TInterfaceMethod.ArgInputOutput(const ArgName: RawUtf8;
+  Input: boolean): PInterfaceMethodArgument;
 begin
-  if Input then
-    result := ArgIndexInput(pointer(ArgName), length(ArgName))
-  else
-    result := ArgIndexOutput(pointer(ArgName), length(ArgName));
+  result := pointer(ArgName);
+  if result <> nil then
+    if Input then
+      result := ArgInput(pointer(ArgName), PStrLen(PAnsiChar(result) - _STRLEN)^)
+    else
+      result := ArgOutput(pointer(ArgName), PStrLen(PAnsiChar(result) - _STRLEN)^);
 end;
 
 function TInterfaceMethod.ArgNextInput(var arg: integer): boolean;
