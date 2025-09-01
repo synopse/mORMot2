@@ -3160,23 +3160,27 @@ begin
   if Input then
   begin
     Dest.InitFast(ArgsInputValuesCount, dvObject);
-    arg := @Args[ArgsInFirst];
-    for a := ArgsInFirst to ArgsInLast do
+    a := ArgsInFirst;
+    arg := @Args[a];
+    while a <= ArgsInLast do
     begin
       if arg^.ValueDirection in [imdConst, imdVar] then
         Dest.AddValueRtti(ArgsName[a], Values[a], arg^.ArgRtti);
       inc(arg);
+      inc(a);
     end;
   end
   else
   begin
     Dest.InitFast(ArgsOutputValuesCount, dvObject);
-    arg := @Args[ArgsOutFirst];
-    for a := ArgsOutFirst to ArgsOutLast do
+    a := ArgsOutFirst;
+    arg := @Args[a];
+    while a <= ArgsOutLast do
     begin
       if arg^.ValueDirection <> imdConst then
         Dest.AddValueRtti(ArgsName[a], Values[a], arg^.ArgRtti);
       inc(arg);
+      inc(a);
     end;
   end;
 end;
