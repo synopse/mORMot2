@@ -860,7 +860,7 @@ function GetMainMacAddress(out Mac: TMacAddress;
 
 /// get a network interface from its TMacAddress main fields
 // - search is case insensitive for TMacAddress.Name and Address fields or as
-// exact IP, and eventually as IP bitmask pattern (e.g. 192.168.1.255)
+// exact IP, and eventually as CIDR pattern (e.g. '192.168.1.0/24')
 function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceNameAddressOrIP: RawUtf8;
   UpAndDown: boolean = false): boolean; overload;
@@ -4056,9 +4056,9 @@ end;
 function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceNameAddressOrIP: RawUtf8; UpAndDown: boolean): boolean;
 var
-  i: PtrInt;
+  n: integer;
   all: TMacAddressDynArray;
-  pattern, ip4: cardinal;
+  mask: TIp4SubNet;
   m, fnd: ^TMacAddress;
 begin
   // retrieve the current network interfaces
@@ -4066,35 +4066,33 @@ begin
   if InterfaceNameAddressOrIP = '' then
     exit;
   all := GetMacAddresses(UpAndDown); // from cache
-  if all = nil then
+  n := length(all);
+  if n = 0 then
     exit;
-  // search for exact Name / Address / IP
   m := pointer(all);
-  for i := 1 to length(all) do
-    if IdemPropNameU(m^.Name, InterfaceNameAddressOrIP) or
-       IdemPropNameU(m^.Address, InterfaceNameAddressOrIP) or
-       (m^.IP = InterfaceNameAddressOrIP) then
-    begin
-      Mac := m^;
-      result := true;
-      exit;
-    end
-    else
-      inc(m);
-  // fallback to search as network bitmask pattern
-  if not IPToCardinal(InterfaceNameAddressOrIP, pattern) then
-    exit;
   fnd := nil;
-  m := pointer(all);
-  for i := 1 to length(all) do
-  begin
-    if IPToCardinal(m^.IP, ip4) and
-       (ip4 and pattern = pattern) and // e.g. 192.168.1.2 and 192.168.1.255
-       ((fnd = nil) or
-        (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind])) then
-      fnd := m; // pickup the interface with the best hardware (paranoid)
-    inc(m);
-  end;
+  if mask.From(InterfaceNameAddressOrIP) then
+    // search as IP bitmask pattern e.g. '192.168.1.0/24' or '192.168.1.13'
+    repeat
+      if mask.Match(m^.IP) and // e.g. 192.168.1.2 against '192.168.1.0/24'
+         ((fnd = nil) or
+          (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind])) then
+        fnd := m; // pickup the interface with the best hardware (paranoid)
+      inc(m);
+      dec(n);
+    until n = 0
+  else
+    // search for interface Name or MAC Address
+    repeat
+      if IdemPropNameU(m^.Name,    InterfaceNameAddressOrIP) or
+         IdemPropNameU(m^.Address, InterfaceNameAddressOrIP) then
+      begin
+        fnd := m;
+        break;
+      end;
+      inc(m);
+      dec(n);
+    until n = 0;
   if fnd = nil then
     exit;
   Mac := fnd^;
