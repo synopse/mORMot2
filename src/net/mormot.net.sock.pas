@@ -6225,7 +6225,7 @@ var
   res: integer;
 begin
   res := InputSock(r^);
-  if res < 0 then
+  if res <> NO_ERROR then
     with TextRecUserData(r^)^ do
       Owner.DoRaise('%s', [ctx], LastNetResult, @LastRawError);
 end;
@@ -6364,6 +6364,8 @@ var
         exit;
       end;
       DoInputSock(r, 'SockInReadLn');
+      if r^.BufEnd = r^.BufPos then
+        DoRaise('SockInReadLn: no input or timeout'); // paranoid
     until fAborted in fFlags;
     result := 0;
   end;
@@ -6383,7 +6385,7 @@ begin
               continue;
             end;
           nrClosed:
-            break; // like EOF(SockIn^)
+            break; // stop at end of input stream
         else
           DoRaise('SockInReadLn: TrySockRecv(c) failed', [], res, @err);
         end
@@ -6904,7 +6906,7 @@ begin
           begin
             read := 0; // caller should make RecvPending/WaitFor and retry Recv
             res := nrOk;
-          end
+          end;
       else
         begin
           // no more to read, or socket closed/broken
