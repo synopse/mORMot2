@@ -3636,8 +3636,7 @@ end;
 procedure TInterfacedObjectFake.FakeCallSetJsonToStack(
   var ctxt: TFakeCallContext; R: PUtf8Char);
 var
-  arg, nameLen: integer; // both should be integers, not PtrInt
-  name: PUtf8Char;
+  arg: integer; // should be integer, not PtrInt
   V: PPointer;
   a: PInterfaceMethodArgument;
   asJsonObject: boolean;
@@ -3663,18 +3662,16 @@ begin
         a := @ctxt.Method^.Args[arg];
         if asJsonObject then
         begin
-          name := GetJsonPropName(c.Get.Json, @nameLen);
-          if name = nil then
-            // end of JSON object
-            break;
-          // optimistic process of JSON object with in-order parameters
+          if not c.GetJsonFieldName then
+            break; // end of JSON object
           if (arg = 0) or // arg := 0 below to force search
-             not IdemPropName(a^.ParamName^, name, nameLen) then
+             // optimistic process of JSON object with in-order parameters
+             not IdemPropName(a^.ParamName^, c.Value, c.ValueLen) then
           begin
             // slower but safe ctxt.Method when not in-order (unlikely)
-            a := ctxt.Method^.ArgOutput(name, nameLen, @arg);
+            a := ctxt.Method^.ArgOutput(c.Value, c.ValueLen, @arg);
             if a = nil then
-              FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [name]);
+              FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [c.Value]);
           end;
         end;
         //assert(ValueDirection in [imdVar,imdOut,imdResult]);
@@ -7493,8 +7490,7 @@ end;
 function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
   P: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
 var
-  arg, nameLen: integer; // should be integers, not PtrInt
-  name: PUtf8Char;
+  arg: integer; // should be integer, not PtrInt
   asJsonObject: boolean;
   endofobject: AnsiChar;
   opt: TTextWriterWriteObjectOptionsBoolean;
@@ -7530,16 +7526,14 @@ begin
         a := @fMethod^.Args[arg];
         if asJsonObject then
         begin
-          name := GetJsonPropName(c.Get.Json, @nameLen);
-          if name = nil then
-            // end of JSON object
-            break;
-          // optimistic process of JSON object with in-order parameters
+          if not c.GetJsonFieldName then
+            break; // end of JSON object
           if (arg = 0) or // arg := 0 below to force search
-             not IdemPropName(a^.ParamName^, name, nameLen) then
+             // optimistic process of JSON object with in-order parameters
+             not IdemPropName(a^.ParamName^, c.Value, c.ValueLen) then
           begin
             // slower but safe ctxt.Method when not in-order
-            a := fMethod^.ArgInput(name, nameLen, @arg);
+            a := fMethod^.ArgInput(c.Value, c.ValueLen, @arg);
             if a = nil then
               if optErrorOnMissingParam in fOptions then
                 exit;
