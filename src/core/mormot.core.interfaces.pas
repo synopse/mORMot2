@@ -3110,7 +3110,7 @@ begin
       if not (P^ in [':', '=']) then
         EInterfaceFactory.RaiseUtf8('"%" parameter has no = for %',
           [arg, InterfaceDotMethodName]);
-      P := GotoNextNotSpace(P + 1);
+      P := IgnoreAndGotoNextNotSpace(P);
       if P^ in ['"', '[', '{'] then
       begin
         // name='"value"' or name='{somejson}'

@@ -251,6 +251,10 @@ type
     EndOfObject: AnsiChar;
     /// true if the last parsing succeeded - used in inherited TJsonParserContext
     Valid: boolean;
+    /// decode a JSON field name in-place into Value/ValueLen
+    // - returns true if Value/ValueLen has been set with a non void identifier
+    function GetJsonFieldName: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// decode a JSON field value in-place from an UTF-8 encoded text buffer
     // - warning: will decode in the Json buffer memory itself (no memory copy
     // nor allocation), for faster process - so take care that it is not shared
@@ -1773,14 +1777,15 @@ type
   TJsonParserContext = record
   public
     Get: TGetJsonField;
-    function  GetJson: PUtf8Char;     {$ifdef HASINLINE} inline; {$endif}
-    procedure SetJson(P: PUtf8Char);  {$ifdef HASINLINE} inline; {$endif}
-    function  Value: PUtf8Char;       {$ifdef HASINLINE} inline; {$endif}
-    function  ValueLen: PtrInt;       {$ifdef HASINLINE} inline; {$endif}
-    function  WasString: boolean;     {$ifdef HASINLINE} inline; {$endif}
-    function  EndOfObject: AnsiChar;  {$ifdef HASINLINE} inline; {$endif}
-    function  GetValid: boolean;      {$ifdef HASINLINE} inline; {$endif}
-    procedure SetValid(v: boolean);   {$ifdef HASINLINE} inline; {$endif}
+    function  GetJson: PUtf8Char;       {$ifdef HASINLINE} inline; {$endif}
+    procedure SetJson(P: PUtf8Char);    {$ifdef HASINLINE} inline; {$endif}
+    function  Value: PUtf8Char;         {$ifdef HASINLINE} inline; {$endif}
+    function  ValueLen: PtrInt;         {$ifdef HASINLINE} inline; {$endif}
+    function  WasString: boolean;       {$ifdef HASINLINE} inline; {$endif}
+    function  EndOfObject: AnsiChar;    {$ifdef HASINLINE} inline; {$endif}
+    function  GetValid: boolean;        {$ifdef HASINLINE} inline; {$endif}
+    procedure SetValid(v: boolean);     {$ifdef HASINLINE} inline; {$endif}
+    function GetJsonFieldName: boolean; {$ifdef HASINLINE} inline; {$endif}
     property Json: PUtf8Char read GetJson  write SetJson;
     property Valid: boolean  read GetValid write SetValid;
   {$else}
@@ -3431,6 +3436,13 @@ end;
 
 { TGetJsonField }
 
+function TGetJsonField.GetJsonFieldName: boolean;
+begin
+  Value := GetJsonPropName(Json, @ValueLen);
+  result := (Value <> nil) and
+            (Json <> nil);
+end;
+
 procedure TGetJsonField.GetJsonValue(var Text: RawUtf8);
 begin
   GetJsonField;
@@ -4258,7 +4270,9 @@ begin
     if P^ = '[' then
     begin
       {%H-}parser.Init({strict=}false, nil);
-      P := GotoNextNotSpace(P + 1);
+      repeat
+        inc(P);
+      until not (P^ in [#1..' ']);
       if P^ <> ']' then
         repeat
           if Index <= 0 then
@@ -4315,7 +4329,9 @@ begin
         PropNameLen := 0; // mark 'PropName*' search
       end;
       if P^ = '{' then
-        P := GotoNextNotSpace(P + 1);
+        repeat
+          inc(P);
+        until not (P^ in [#1..' ']);
       if P^ <> '}' then
         repeat
           GetJsonPropNameShort(P, name);
@@ -7721,6 +7737,13 @@ begin
   Get.Valid := v;
 end;
 
+function TJsonParserContext.GetJsonFieldName: boolean;
+begin
+  Get.Value := GetJsonPropName(Get.Json, @Get.ValueLen);
+  result := (Get.Json  <> nil) and
+            (Get.Value <> nil);
+end;
+
 {$else}
 function TJsonParserContext.Get: PGetJsonField;
 begin
@@ -7813,7 +7836,9 @@ begin
   Json := P;
   if P^ = '[' then
   begin
-    P := GotoNextNotSpace(P + 1); // ignore trailing [
+    repeat
+      inc(P);
+    until not (P^ in [#1..' ']); // ignore trailing [
     if P^ = ']' then
     begin
       // void but valid array
@@ -7841,7 +7866,9 @@ begin
   Json := P;
   if P^ = '{' then
   begin
-    P := GotoNextNotSpace(P + 1); // ignore trailing {
+    repeat
+      inc(P);
+    until not (P^ in [#1..' ']); // ignore trailing {
     if P^ = '}' then
     begin
       // void but valid array
