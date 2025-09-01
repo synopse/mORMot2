@@ -1127,8 +1127,16 @@ begin
       '{one:1,two=2}', HTTP_BADREQUEST), '');
     CheckEqual(Ask(result, 'Add', '1,2', 'n1=1&n2=2',
       '{n1:1,n2:2}', HTTP_SUCCESS), '3');
-    CheckEqual(Ask(result, 'Add', '1,0', 'n2=1',
-      '{n2:1}', HTTP_SUCCESS), '1');
+    CheckEqual(Ask(result, 'Add', '1,2', 'n2=2&n1=1',
+      '{n2:2,n1:1}', HTTP_SUCCESS), '3');
+    CheckEqual(Ask(result, 'Add', '1,0', 'n1=1',
+      '{n1:1}', HTTP_SUCCESS), '1');
+    CheckEqual(Ask(result, 'Add', '1,0', 'dummy=10&n2=1',
+      '{dummy:10,n2:1}', HTTP_SUCCESS), '1');
+    CheckEqual(Ask(result, 'Add', '1,0', 'dummy=10&n2=1&dummy2=2',
+      '{dummy:10,n2:1,dummy2:2}', HTTP_SUCCESS), '1');
+    CheckEqual(Ask(result, 'Add', '0,0', 'n2=0',
+      'null', HTTP_SUCCESS), '0');
     CheckEqual(Ask(result, 'Multiply', '2,3', 'n1=2&n2=3',
       '{n0:"abc",n2:3,m:null,n1:2}', HTTP_SUCCESS), '6');
     CheckEqual(Ask(result, 'Subtract', '23,20', 'n2=20&n1=23',
