@@ -5762,7 +5762,7 @@ end;
 
 function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
 const
-  OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+  OPTIONS: TTextWriterWriteObjectOptionsBoolean = (
      [woDontStoreDefault], [woDontStoreDefault, woEnumSetsAsText]);
 begin
   ObjectToVariant(Value, result, OPTIONS[EnumSetsAsText]);

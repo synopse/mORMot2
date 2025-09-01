@@ -471,6 +471,8 @@ type
 
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
+  /// two sets of TTextWriter.WriteObject() options
+  TTextWriterWriteObjectOptionsBoolean = array[boolean] of TTextWriterWriteObjectOptions;
 
   /// the potential places were TJsonWriter.AddHtmlEscape should process
   // proper HTML string escaping, unless hfNone is used
@@ -1242,7 +1244,7 @@ const
     [twoEnumSetsAsTextInRecord]);
 
   /// TTextWriter JSON serialization options including woEnumSetsAsText
-  TEXTWRITEROBJECTOPTIONS_ENUMASTEXT: array[boolean] of TTextWriterWriteObjectOptions = (
+  TEXTWRITEROBJECTOPTIONS_ENUMASTEXT: TTextWriterWriteObjectOptionsBoolean = (
     [],
     [woEnumSetsAsText]);
 

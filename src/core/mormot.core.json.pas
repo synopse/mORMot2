@@ -2117,7 +2117,7 @@ var
   // - mainly by TInterfacedObjectFake and TServiceMethodExecute
   // - to be used as DEFAULT_WRITEOPTIONS[DontStoreVoidJson]
   // - you can modify this global variable to customize the whole process
-  DEFAULT_WRITEOPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+  DEFAULT_WRITEOPTIONS: TTextWriterWriteObjectOptionsBoolean = (
     [woDontStoreDefault, woRawBlobAsBase64],
     [woDontStoreDefault, woDontStoreVoid, woRawBlobAsBase64]);
 

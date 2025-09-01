@@ -7497,7 +7497,7 @@ function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
 var
   arg: integer;
   asJsonObject: boolean;
-  opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
+  opt: TTextWriterWriteObjectOptionsBoolean;
   custom: PServiceCustomAnswer;
   c: TJsonParserContext;
   a: PInterfaceMethodArgument;
