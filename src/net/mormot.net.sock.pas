@@ -6220,7 +6220,7 @@ begin
 end;
 {$endif FPC}
 
-procedure DoInputSock(r: PTextRec; const ctx: ShortString);
+procedure DoInputSock(r: PTextRec; const ctx: ShortString; notvoid: boolean);
 var
   res: integer;
 begin
@@ -6228,6 +6228,9 @@ begin
   if res <> NO_ERROR then
     with TextRecUserData(r^)^ do
       Owner.DoRaise('%s', [ctx], LastNetResult, @LastRawError);
+  if notvoid and
+     (r^.BufEnd = r^.BufPos) then
+    TextRecUserData(r^)^.Owner.DoRaise('%s: void or timeout', [ctx]);
 end;
 
 const
@@ -6354,18 +6357,19 @@ var
   r: PTextRec;
 
   function GetSockInLineLength: PtrInt; {$ifdef FPC} inline; {$endif}
+  var
+    available: PtrInt;
   begin
     repeat
-      len := r^.BufEnd - r^.BufPos;
-      if len > 0 then
+      available := r^.BufEnd - r^.BufPos;
+      if available > 0 then
       begin
+        len := available;
         p := @r^.BufPtr[r^.BufPos];
-        result := BufferLineLength(p, p + len); // SSE2 asm on x86-64
+        result := BufferLineLength(p, p + available); // SSE2 asm on x86-64
         exit;
       end;
-      DoInputSock(r, 'SockInReadLn');
-      if r^.BufEnd = r^.BufPos then
-        DoRaise('SockInReadLn: no input or timeout'); // paranoid
+      DoInputSock(r, 'SockInReadLn', {notvoid=}true);
     until fAborted in fFlags;
     result := 0;
   end;
@@ -6487,7 +6491,7 @@ begin
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
-      DoInputSock(r, 'SockInRead');
+      DoInputSock(r, 'SockInRead', {notvoid=}false);
       // loop until Timeout
     until Timeout = 0;
   // direct receiving of the remaining bytes from socket
