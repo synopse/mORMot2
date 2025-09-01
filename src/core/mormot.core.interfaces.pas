@@ -3215,39 +3215,41 @@ begin
      (ArgsParams.Kind <> dvArray) then
     exit;
   if ArgsObject.Kind = dvUndefined then
-    ArgsObject.Init(ArgsParams.Options);
+    ArgsObject.Init(ArgsParams.Options, dvObject);
   ArgsObject.Capacity := ArgsObject.Count + ArgsParams.Count;
   n := 0;
   if Input then
   begin
-    if ArgsParams.Count = integer(ArgsInputValuesCount) then
+    if ArgsParams.Count <> integer(ArgsInputValuesCount) then
+      exit;
+    a := ArgsInFirst;
+    arg := @Args[a];
+    while a <= ArgsInLast do
     begin
-      arg := @Args[ArgsInFirst];
-      for a := ArgsInFirst to ArgsInLast do
+      if arg^.ValueDirection in [imdConst, imdVar] then
       begin
-        if arg^.ValueDirection in [imdConst, imdVar] then
-        begin
-          ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
-          inc(n);
-        end;
-        inc(arg);
+        ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
+        inc(n);
       end;
+      inc(arg);
+      inc(a);
     end;
   end
   else
   begin
-    if ArgsParams.Count = integer(ArgsOutputValuesCount) then
+    if ArgsParams.Count <> integer(ArgsOutputValuesCount) then
+      exit;
+    a := ArgsOutFirst;
+    arg := @Args[a];
+    while a <= ArgsOutLast do
     begin
-      arg := @Args[ArgsOutFirst];
-      for a := ArgsOutFirst to ArgsOutLast do
+      if arg^.ValueDirection <> imdConst then
       begin
-        if arg^.ValueDirection <> imdConst then
-        begin
-          ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
-          inc(n);
-        end;
-        inc(arg)
+        ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
+        inc(n);
       end;
+      inc(arg);
+      inc(a);
     end;
   end;
 end;
