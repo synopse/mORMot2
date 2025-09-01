@@ -4794,7 +4794,7 @@ begin
     RedirectCode(@IntegerScanIndex, @IntegerScanIndexPas);
     RedirectCode(@WordScanIndex,    @WordScanIndexPas);
     // note: FillCharFast is handled by mormot.core.base via ERMSB, but some
-    // some other (crypto) code is likely to fail at runtime - use HASNOSSE2
+    // other (e.g. crypto) code is likely to fail at runtime - use HASNOSSE2
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86}
@@ -5055,12 +5055,6 @@ begin
   // 5. compute some minimal entropy using the just retrieved info
   CoCreateGuid(SystemEntropy.LiveFeed); // very fast and unique (but not strong)
   SystemEntropy.Startup := SystemEntropy.LiveFeed;
-  {$ifdef CPUINTEL}
-  if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
-    with SystemEntropy.Startup do
-      Lo := Lo xor Rdtsc; // unpredictable
-  RdRand32(@SystemEntropy.Startup.c2, 2); // no-op on older CPUs
-  {$endif CPUINTEL}
   crc32c128(@SystemEntropy.Startup, @SystemInfo, SizeOf(SystemInfo));
   crc32c128(@SystemEntropy.Startup, @mem, SizeOf(mem));
   crc32c128(@SystemEntropy.Startup, @OSVersionInfo, SizeOf(OSVersionInfo));

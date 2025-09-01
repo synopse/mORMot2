@@ -8813,6 +8813,13 @@ begin
     Command.Parse;
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
+  // finalize SystemEntropy.Startup
+  {$ifdef CPUINTEL}
+  if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
+    with SystemEntropy.Startup do
+      Lo := Lo xor Rdtsc; // unpredictable
+  RdRand32(@SystemEntropy.Startup.c2, 2); // no-op on older CPUs
+  {$endif CPUINTEL}
   crc32c128(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache)); // some more
   crcblock(@SystemEntropy.Startup, @Executable.Hash);
 end;
