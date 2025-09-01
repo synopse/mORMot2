@@ -4386,7 +4386,8 @@ end;
 function TRestServerUriContext.GetInputAsTDocVariant(
   const Options: TDocVariantOptions; InterfaceMethod: PInterfaceMethod): variant;
 var
-  n, ndx, a: PtrInt;
+  n, ndx: PtrInt;
+  a: PInterfaceMethodArgument;
   forcestring: boolean;
   v: variant;
   multipart: TMultiPartDynArray;
@@ -4403,14 +4404,14 @@ begin
     for ndx := 0 to n - 1 do
     begin
       name := fInput[ndx * 2];
+      forcestring := false;
       if InterfaceMethod <> nil then
       begin
-        a := InterfaceMethod.ArgIndexInput(pointer(name), length(name));
-        forcestring := (a >= 0) and
-                       (rcfJsonString in InterfaceMethod.Args[a].ArgRtti.Flags);
-      end
-      else
-        forcestring := false;
+        a := InterfaceMethod.ArgInput(pointer(name), length(name));
+        if (a <> nil) and
+           (rcfJsonString in a^.ArgRtti.Flags) then
+          forcestring := true;
+      end;
       GetVariantFromJsonField(pointer(fInput[ndx * 2 + 1]), forcestring, v,
         @Options, fInputAllowDouble, length(fInput[ndx * 2 + 1]));
       res.AddValue(name, v);
