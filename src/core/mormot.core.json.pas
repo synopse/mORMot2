@@ -1804,10 +1804,10 @@ type
     /// optional RawUtf8 values interning
     Interning: TRawUtf8Interning;
     /// initialize this unserialization context
-    procedure InitParser(P: PUtf8Char; Rtti: TRttiCustom; O: TJsonParserOptions;
-      CV: PDocVariantOptions; ObjectListItemClass: TClass;
-      RawUtf8Interning: TRawUtf8Interning);
-    /// call inherited GetJsonField() to retrieve the next JSON value
+    procedure InitParser(P: PUtf8Char; Rtti: TRttiCustom = nil;
+      O: TJsonParserOptions = []; CV: PDocVariantOptions = nil;
+      ObjectListItemClass: TClass = nil; RawUtf8Interning: TRawUtf8Interning = nil);
+    /// call inherited GetJsonField() to retrieve the next simple JSON value
     // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNext: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -12157,7 +12157,7 @@ var
 begin
   tmp.Init(value);
   try
-    ctx.InitParser(tmp.buf, SerializableInterface, [], nil, nil, nil);
+    ctx.InitParser(tmp.buf, SerializableInterface);
     FromJson(ctx);
   finally
     tmp.Done;

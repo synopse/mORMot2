@@ -3378,7 +3378,7 @@ begin
   result := false;
   if Json = nil then
     exit;
-  p.InitParser(Json, nil, [], nil, nil, nil);
+  p.InitParser(Json);
   if not p.ParseArray then
     exit;
   n := JsonArrayCount(p.Json); // prefetch input and compute dest length

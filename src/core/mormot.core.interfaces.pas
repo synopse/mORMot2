@@ -3655,8 +3655,7 @@ begin
       asJsonObject := true
     else if R^ <> '[' then
       FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
-    c.InitParser(R + 1, nil, fFactory.JsonParserOptions,
-      @fFactory.DocVariantOptions, nil, nil);
+    c.InitParser(R + 1, nil, fFactory.JsonParserOptions, @fFactory.DocVariantOptions);
     arg := ctxt.Method^.ArgsOutFirst;
     if arg > 0 then
       repeat
@@ -7556,8 +7555,7 @@ begin
     else
     begin
       // parse the JSON input values
-      c.InitParser(P, nil, fFactory.JsonParserOptions,
-        @fDocVariantOptions, nil, nil);
+      c.InitParser(P, nil, fFactory.JsonParserOptions, @fDocVariantOptions);
       for arg := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
       begin
         a := @fMethod^.Args[arg];
