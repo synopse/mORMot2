@@ -396,9 +396,6 @@ type
     /// finalize all managed values after an execution
     // - caller should ensure that ArgsManagedCount <> 0
     procedure ArgsReleaseValues(V: PPointer);
-    /// retrieve arguments values from JSON object by checking its field names
-    // - as used by TInterfaceMethodExecute.ExecuteJson()
-    function ArgsParseJsonObject(var P: PUtf8Char; Params: PPUtf8CharArray): boolean;
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -3350,43 +3347,6 @@ begin
     inc(a);
     inc(V);
   until false;
-end;
-
-function TInterfaceMethod.ArgsParseJsonObject(var P: PUtf8Char;
-  Params: PPUtf8CharArray): boolean;
-var
-  a, a1: PtrInt;
-  NameLen: integer; // should be a 32-bit "integer" variable, not a PtrInt
-  EndOfObject: AnsiChar;
-  Val, Name: PUtf8Char;
-  arg: PInterfaceMethodArgument;
-begin
-  result := false;
-  FillCharFast(Params^[0], (ArgsInLast + 1) * SizeOf(pointer), 0);
-  a1 := ArgsInFirst;
-  repeat
-    Name := GetJsonPropName(P, @NameLen);
-    if Name = nil then
-      exit; // invalid JSON object in input
-    Val := P;
-    P := GotoNextJsonItem(P, EndOfObject);
-    if P = nil then
-      break;
-    for a := a1 to ArgsInLast do
-    begin
-      arg := @Args[a];
-      if arg^.ValueDirection <> imdOut then
-        if IdemPropName(arg^.ParamName^, Name, NameLen) then // inlined on FPC
-        begin
-          Params^[a] := Val; // fast redirection, without alloc
-          if a = a1 then
-            inc(a1); // optimistic O(1) search for in-order input
-          break;
-        end;
-    end;
-  until (P = nil) or
-        (EndOfObject = '}');
-  result := true;
 end;
 
 
