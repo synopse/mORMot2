@@ -3432,10 +3432,10 @@ var
   arg: integer;
 begin
   FillCharFast(ctxt.I64s, ctxt.Method^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
-  a := pointer(ctxt.Method^.Args);
+  a := pointer(ctxt.Method^.Args); // always <> nil
   for arg := 1 to PDALen(PAnsiChar(a) - _DALEN)^ + (_DAOFF - 1) do
   begin
-    inc(a);
+    inc(a); // increase first, to ignore self
     V := nil;
     {$ifdef CPUX86}
     case a^.RegisterIdent of
@@ -3689,15 +3689,17 @@ begin
         inc(R)
       until not (R^ in [#1..' ']);
     asJsonObject := false; // [value,...] JSON array format
-    if R^ = '{' then
-      // {"paramname":value,...} JSON object format
-      asJsonObject := true
-    else if R^ <> '[' then
-      FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
+    if R^ <> '[' then
+      if R^ = '{' then
+        // {"paramname":value,...} JSON object format
+        asJsonObject := true
+      else
+        FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
     c.InitParser(R + 1, nil, fFactory.JsonParserOptions, @fFactory.DocVariantOptions);
     arg := ctxt.Method^.ArgsOutFirst;
     if arg > 0 then
       repeat
+        a := @ctxt.Method^.Args[arg];
         if asJsonObject then
         begin
           name := GetJsonPropName(c.Get.Json, @nameLen);
@@ -3705,16 +3707,15 @@ begin
             // end of JSON object
             break;
           // optimistic process of JSON object with in-order parameters
-          if (arg > 0) and
-            not IdemPropName(ctxt.Method^.Args[arg].ParamName^, name, nameLen) then
+          if (arg = 0) or // arg := 0 below to force search
+             not IdemPropName(a^.ParamName^, name, nameLen) then
           begin
-            // slower but safe ctxt.Method when not in-order
-            arg := ctxt.Method^.ArgIndexOutput(name, nameLen);
-            if arg < 0 then
+            // slower but safe ctxt.Method when not in-order (unlikely)
+            a := ctxt.Method^.ArgOutput(name, nameLen, @arg);
+            if a = nil then
               FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [name]);
           end;
         end;
-        a := @ctxt.Method^.Args[arg];
         //assert(ValueDirection in [imdVar,imdOut,imdResult]);
         V := ctxt.Value[arg];
         a^.SetFromJson(c, ctxt.Method, V, nil);
@@ -3730,12 +3731,9 @@ begin
         c.Json := GotoNextNotSpace(c.Json);
         if asJsonObject then
         begin
-          if (c.Json^ = #0) or
-             (c.Json^ = '}') then
-            break
-          else
-          // end of JSON object
-          if not ctxt.Method^.ArgNextOutput(arg) then
+          if c.Json^ in [#0, '}'] then
+            break // end of JSON object
+          else if not ctxt.Method^.ArgNextOutput(arg) then
             // no next result argument -> force manual search
             arg := 0;
         end
