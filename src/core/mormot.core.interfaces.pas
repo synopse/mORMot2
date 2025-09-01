@@ -3642,66 +3642,71 @@ var
   asJsonObject: boolean;
   c: TJsonParserContext;
 begin
-  if R <> nil then
-  begin
-    if R^ in [#1..' '] then
-      repeat
-        inc(R)
-      until not (R^ in [#1..' ']);
-    asJsonObject := false; // [value,...] JSON array format
-    if R^ <> '[' then
-      if R^ = '{' then
-        // {"paramname":value,...} JSON object format
-        asJsonObject := true
-      else
-        FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
-    c.InitParser(R + 1, nil, fFactory.JsonParserOptions, @fFactory.DocVariantOptions);
-    arg := ctxt.Method^.ArgsOutFirst;
-    if arg > 0 then
-      repeat
-        a := @ctxt.Method^.Args[arg];
-        if asJsonObject then
-        begin
-          if not c.GetJsonFieldName then
-            break; // end of JSON object
-          if (arg = 0) or // arg := 0 below to force search
-             // optimistic process of JSON object with in-order parameters
-             not IdemPropName(a^.ParamName^, c.Value, c.ValueLen) then
-          begin
-            // slower but safe ctxt.Method when not in-order (unlikely)
-            a := ctxt.Method^.ArgOutput(c.Value, c.ValueLen, @arg);
-            if a = nil then
-              FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [c.Value]);
-          end;
-        end;
-        //assert(ValueDirection in [imdVar,imdOut,imdResult]);
-        V := ctxt.Value[arg];
-        a^.SetFromJson(c, ctxt.Method, V, nil);
-        if a^.ValueDirection = imdResult then
-        begin
-          ctxt.ResultType := a^.ValueType;
-          if a^.ValueType in [imvBoolean..imvCurrency] then
-            // ordinal/real result values to CPU/FPU registers
-            MoveFast(V^, ctxt.Result^, a^.ArgRtti.Size);
-        end;
-        if c.Json = nil then
-          break;
-        c.Json := GotoNextNotSpace(c.Json);
-        if asJsonObject then
-        begin
-          if c.Json^ in [#0, '}'] then
-            break // end of JSON object
-          else if not ctxt.Method^.ArgNextOutput(arg) then
-            // no next result argument -> force manual search
-            arg := 0;
-        end
-        else if not ctxt.Method^.ArgNextOutput(arg) then
-          // end of JSON array
-          break;
-      until false;
-  end
-  else if ctxt.Method^.ArgsOutputValuesCount > 0 then
+  if ctxt.Method^.ArgsOutputValuesCount = 0 then
+    exit;
+  if R = nil then
     FakeCallRaiseError(ctxt, 'method returned value, but OutputJson=''''', []);
+  if R^ in [#1..' '] then
+    repeat
+      inc(R)
+    until not (R^ in [#1..' ']);
+  asJsonObject := false; // [value,...] JSON array format
+  if R^ <> '[' then
+    if R^ = '{' then
+      // {"paramname":value,...} JSON object format
+      asJsonObject := true
+    else
+      FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
+  c.InitParser(R + 1, nil, fFactory.JsonParserOptions, @fFactory.DocVariantOptions);
+  arg := ctxt.Method^.ArgsOutFirst;
+  a := @ctxt.Method^.Args[arg];
+  repeat
+    if asJsonObject then
+    begin
+      if not c.GetJsonFieldName then
+        break; // end of JSON object
+      if (arg = 0) or // arg := 0 below to force search
+         // optimistic process of JSON object with in-order parameters
+         not IdemPropName(a^.ParamName^, c.Value, c.ValueLen) then
+      begin
+        // slower but safe ctxt.Method when not in-order (unlikely)
+        a := ctxt.Method^.ArgOutput(c.Value, c.ValueLen, @arg);
+        if a = nil then
+          FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [c.Value]);
+      end;
+    end;
+    //assert(ValueDirection in [imdVar,imdOut,imdResult]);
+    V := ctxt.Value[arg];
+    a^.SetFromJson(c, ctxt.Method, V, nil);
+    if a^.ValueDirection = imdResult then
+    begin
+      ctxt.ResultType := a^.ValueType;
+      if a^.ValueType in [imvBoolean..imvCurrency] then
+        // ordinal/real result values to CPU/FPU registers
+        MoveFast(V^, ctxt.Result^, a^.ArgRtti.Size);
+    end;
+    if c.Json = nil then
+      break;
+    c.Json := GotoNextNotSpace(c.Json);
+    if asJsonObject then
+    begin
+      if c.Json^ in [#0, '}'] then
+        break; // end of JSON object
+      if arg = 0 then
+        continue;
+    end;
+    repeat
+      inc(arg);
+      if arg > ctxt.Method^.ArgsOutLast then
+      begin
+        if not asJsonObject then
+          exit;
+        arg := 0;
+        break;
+      end;
+      inc(a);
+    until a^.ValueDirection <> imdConst;
+  until false;
 end;
 
 procedure TInterfacedObjectFake.FakeCallInternalProcess(var ctxt: TFakeCallContext);
