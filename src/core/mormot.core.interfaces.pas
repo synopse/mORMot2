@@ -3084,7 +3084,6 @@ end;
 function TInterfaceMethod.ArgsCommandLineToObject(P: PUtf8Char; Input: boolean;
   RaiseExceptionOnUnknownParam: boolean): RawUtf8;
 var
-  i: integer;
   W: TJsonWriter;
   B: PUtf8Char;
   arginfo: PInterfaceMethodArgument;
@@ -3101,14 +3100,13 @@ begin
           (arg <> '') do
     begin
       ok := true;
-      i := ArgIndex(arg, Input);
-      if i < 0 then
+      arginfo := ArgInputOutput(arg, Input);
+      if arginfo = nil then
         if RaiseExceptionOnUnknownParam then
           EInterfaceFactory.RaiseUtf8('Unexpected [%] parameter for %',
             [arg, InterfaceDotMethodName])
         else
           ok := false;
-      arginfo := @Args[i];
       if ok then
         W.AddPropName(arginfo^.ParamName^);
       if not (P^ in [':', '=']) then
