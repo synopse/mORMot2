@@ -1512,6 +1512,12 @@ function IdemPropName(const P1, P2: ShortString): boolean; overload;
 function IdemPropName(const P1: ShortString; P2: PUtf8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// case insensitive comparison of ASCII 7-bit identifiers with P1/P2 <> ''
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
+function IdemPropNameNotNull(const P1: ShortString; P2: PUtf8Char; P2Len: PtrInt): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - behavior is undefined with UTF-8 encoding (some false positive may occur)
@@ -6039,6 +6045,12 @@ begin
   result := (ord(P1[0]) = P2Len) and
             ((P2Len = 0) or
              IdemPropNameUSameLenNotNull(@P1[1], P2, P2Len));
+end;
+
+function IdemPropNameNotNull(const P1: ShortString; P2: PUtf8Char; P2Len: PtrInt): boolean;
+begin
+  result := (ord(P1[0]) = P2Len) and
+            IdemPropNameUSameLenNotNull(@P1[1], P2, P2Len);
 end;
 
 function IdemPropName(P1, P2: PUtf8Char; P1Len, P2Len: PtrInt): boolean;
