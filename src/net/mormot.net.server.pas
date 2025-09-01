@@ -4074,10 +4074,10 @@ begin
   if mask.From(InterfaceNameAddressOrIP) then
     // search as IP bitmask pattern e.g. '192.168.1.0/24' or '192.168.1.13'
     repeat
-      if mask.Match(m^.IP) and // e.g. 192.168.1.2 against '192.168.1.0/24'
-         ((fnd = nil) or
-          (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind])) then
-        fnd := m; // pickup the interface with the best hardware (paranoid)
+      if mask.Match(m^.IP) then // e.g. 192.168.1.2 against '192.168.1.0/24'
+        if (fnd = nil) or
+           (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind]) then
+          fnd := m; // pickup the interface with the best hardware (paranoid)
       inc(m);
       dec(n);
     until n = 0
