@@ -2297,10 +2297,11 @@ type
     fStorage: TByteDynArray;
     fValues: PPointerArray;
     fAlreadyExecuted: boolean;
+    fCurrentStep: TInterfaceMethodExecuteEventStep;
+    fMethodFlags: TInterfaceMethodFlags;
     fOptions: TInterfaceMethodOptions;
     fDocVariantOptions: TDocVariantOptions;
     fOnExecute: TInterfaceMethodExecuteEventDynArray;
-    fCurrentStep: TInterfaceMethodExecuteEventStep;
     fBackgroundExecutionThread: TSynBackgroundThreadMethod;
     fLastException: Exception;
     fExecutedInstancesFailed: TRawUtf8DynArray;
@@ -7225,8 +7226,9 @@ begin
   // set parameters
   fFactory := aFactory;
   fMethod := aMethod;
+  fMethodFlags := aMethod^.Flags;
   SetOptions(aOptions);
-  // initialize temporary storage for call arguments and fValues pointers
+  // initialize temporary storage for all call arguments and fValues pointers
   SetLength(fStorage, integer(fMethod^.ArgsSizeAsValue) +
                       length(aMethod^.Args) shl POINTERSHR);
   // assign the parameters storage to the fValues[] pointers
@@ -7531,86 +7533,71 @@ end;
 function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
   P: PUtf8Char; Res: TJsonWriter; Error: PShortString; ResAsJsonObject: boolean): boolean;
 var
-  arg: integer;
+  arg, nameLen: integer; // should be integers, not PtrInt
+  name: PUtf8Char;
   asJsonObject: boolean;
+  endofobject: AnsiChar;
   opt: TTextWriterWriteObjectOptionsBoolean;
+  a: PInterfaceMethodArgument;
+  V: pointer;
   custom: PServiceCustomAnswer;
   c: TJsonParserContext;
-  a: PInterfaceMethodArgument;
-  ParObjValues: array[0 .. MAX_METHOD_ARGS - 1] of PUtf8Char;
 begin
-  // prepare all fValues[] pointers for the input/output arguments
+  // 1. prepare all fValues[] pointers for the input/output arguments
   result := false;
+  asJsonObject := false;
   BeforeExecute;
   try
-    // locate input arguments from JSON array or object
-    asJsonObject := false;
-    if (fMethod^.ArgsInputValuesCount <> 0) and
-       (P <> nil) then
+    // 2. locate input arguments from JSON array or object
+    if P <> nil then
     begin
       P := GotoNextNotSpace(P);
-      case P^ of
-        '[':
-          // input arguments as arg JSON array , e.g. '[1,2,"three"]' (default)
-          inc(P);
-        '{':
-          begin
-            // retrieve arguments values from JSON object -> field name lookup
-            repeat
-              inc(P);
-            until not (P^ in [#1..' ']);
-            if P^ <> '}' then
-              if fMethod^.ArgsParseJsonObject(P, @ParObjValues) then
-                asJsonObject := true
-              else
-                exit;
-            P := nil;
-          end;
-      else
-        if PInteger(P)^ = NULL_LOW then
+      if P^ <> '[' then
+        if P^ = '{' then
+          // retrieve arguments values from JSON object -> field name lookup
+          asJsonObject := true
+        else if PInteger(P)^ = NULL_LOW then
           P := nil
         else
           exit; // only support JSON array or JSON object as input
-      end;
     end;
-    // parse and decode JSON input const/var arguments (if any) into fValues[]
-    if (P = nil) and
-       not asJsonObject then
+    arg := fMethod^.ArgsInFirst;
+    if (P <> nil) and
+       (arg > 0) then
     begin
-      if (fMethod^.ArgsInputValuesCount > 0) and
-         (optErrorOnMissingParam in Options) then
-        exit; // paranoid setting
-    end
-    else if (imfInputIsOctetStream in fMethod^.Flags) and
-            (P <> nil) and
-            (PCardinal(P)^ = JSON_BIN_MAGIC_C) then
-    begin
-      // passed by reference from TRestServerRoutingRest.ExecuteSoaByInterface
-      inc(PCardinal(P));
-      PRawByteString(fValues[fMethod^.ArgsInFirst])^ := PRawByteString(P)^;
-    end
-    else
-    begin
-      // parse the JSON input values
-      c.InitParser(P, nil, fFactory.JsonParserOptions, @fDocVariantOptions);
-      for arg := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
-      begin
+      c.InitParser(P + 1, nil, fFactory.JsonParserOptions, @fDocVariantOptions);
+      repeat
         a := @fMethod^.Args[arg];
-        if a^.ValueDirection <> imdOut then
-        // (imdResult is excluded with arg <= ArgsInLast: can't appear here)
+        if asJsonObject then
         begin
-          if asJsonObject then
-            if ParObjValues[arg] = nil then // missing parameter in input JSON
-              if optErrorOnMissingParam in Options then
-                exit
-              else
-                // ignore and leave void value by default
-                continue
-            else
-              // value to be retrieved from JSON object
-              c.Json := ParObjValues[arg]
-          else if c.Json = nil then
-            break; // premature end of ..] (asJsonObject=false)
+          name := GetJsonPropName(c.Get.Json, @nameLen);
+          if name = nil then
+            // end of JSON object
+            break;
+          // optimistic process of JSON object with in-order parameters
+          if (arg = 0) or // arg := 0 below to force search
+             not IdemPropName(a^.ParamName^, name, nameLen) then
+          begin
+            // slower but safe ctxt.Method when not in-order
+            a := fMethod^.ArgInput(name, nameLen, @arg);
+            if a = nil then
+              if optErrorOnMissingParam in fOptions then
+                exit;
+          end;
+        end;
+        if a = nil then // ignore this unknown asJsonObject field
+          c.Json := GotoNextJsonItem(c.Json, endofobject)
+        else if a^.ValueDirection <> imdOut then // handle this value
+        begin
+          V := fValues[arg];
+          if (imfInputIsOctetStream in fMethodFlags) and
+             (PCardinal(c.Json)^ = JSON_BIN_MAGIC_C) then
+          begin
+            // passed as pointer from TRestServerRoutingRest.ExecuteSoaByInterface
+            inc(PCardinal(c.Get.Json));
+            PRawByteString(V)^ := PRawByteString(c.Json)^;
+            break; // single parameter
+          end;
           if (a^.ValueType = imvInterface) and
              not (vIsInterfaceJson in a^.ValueKindAsm) then // e.g. not IDocList
             if Assigned(OnCallback) then
@@ -7621,18 +7608,35 @@ begin
               EInterfaceFactory.RaiseUtf8('OnCallback=nil for %(%: %)',
                 [fMethod^.InterfaceDotMethodName, a^.ParamName^,
                  a^.ArgTypeName^]) // paranoid (already checked before)
-          else if not a^.SetFromJson(c, fMethod, fValues[arg], Error) then
+          else if not a^.SetFromJson(c, fMethod, V, Error) then
             exit;
         end;
-      end;
-    end;
-    // execute the method, using prepared input/output fValues[]
+        if c.Json = nil then
+          break;
+        c.Json := GotoNextNotSpace(c.Json);
+        if asJsonObject then
+        begin
+          if c.Json^ in [#0, '}'] then
+            break // end of JSON object
+          else if not fMethod^.ArgNextInput(arg) then
+            // no next result argument -> force manual search
+            arg := 0;
+        end
+        else if not fMethod^.ArgNextInput(arg) then
+          // end of JSON array
+          break;
+      until false;
+    end
+    else if (fMethod^.ArgsInputValuesCount > 0) and
+            (optErrorOnMissingParam in fOptions) then
+      exit; // paranoid setting
+    // 3. execute the method, using prepared input/output fValues[]
     RawExecute(@Instances[0], high(Instances));
-    // send back any var/out output arguments as JSON
+    // 4. send back any var/out output arguments as JSON
     if Res <> nil then
     begin
       // handle custom content (not JSON array/object answer)
-      if imfResultIsServiceCustomAnswer in fMethod^.Flags then
+      if imfResultIsServiceCustomAnswer in fMethodFlags then
       begin
         custom := fValues[fMethod^.ArgsResultIndex];
         if custom^.Header = '' then
@@ -7648,14 +7652,15 @@ begin
         result := true;
         exit;
       end
-      else if imfResultIsServiceCustomStatus in fMethod^.Flags then
+      else if imfResultIsServiceCustomStatus in fMethodFlags then
         fServiceCustomAnswerStatus := PCardinal(fValues[fMethod^.ArgsResultIndex])^;
       // write the '{"result":[...' array or object
-      opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
+      opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in fOptions];
       opt[{smdVar=}true] := []; // let var params override void/default values
-      for arg := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
+      arg := fMethod^.ArgsOutFirst;
+      a := @fMethod^.Args[arg];
+      while arg <= fMethod^.ArgsOutLast do
       begin
-        a := @fMethod^.Args[arg];
         if a^.ValueDirection <> imdConst then
         begin
           if ResAsJsonObject then
@@ -7663,12 +7668,14 @@ begin
           a^.AddJson(Res, fValues[arg], opt[a^.ValueDirection = imdVar]);
           Res.AddComma;
         end;
+        inc(arg);
+        inc(a);
       end;
       Res.CancelLastComma;
     end;
     result := true;
   finally
-    // release any managed input/output parameters from fValues[]
+    // 5. release any managed input/output parameters from fValues[]
     AfterExecute;
   end;
 end;
