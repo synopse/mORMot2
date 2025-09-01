@@ -1226,6 +1226,7 @@ procedure TServiceFactoryServer.OnLogRestExecuteMethod(
 var
   W: TJsonWriter;
   a: PtrInt;
+  arg: PInterfaceMethodArgument;
   len: integer;
 begin
   // append the input/output/error parameters as batch JSON
@@ -1240,23 +1241,28 @@ begin
           W.AddShort('",Input:{'); // as TOrmPropInfoRttiVariant.GetJsonValues
           if not (optNoLogInput in Sender.Options) then
           begin
-            for a := ArgsInFirst to ArgsInLast do
-              with Args[a] do
-                if (ValueDirection <> imdOut) and
-                   ((ValueType <> imvInterface) or
-                    (vIsInterfaceJson in ValueKindAsm)) and
-                   not ArgRtti.ValueIsVoid(Sender.Values[a]) then
+            a := ArgsInFirst;
+            arg := @Args[a];
+            while a <= ArgsInLast do
+            begin
+              if (arg^.ValueDirection <> imdOut) and
+                 ((arg^.ValueType <> imvInterface) or
+                  (vIsInterfaceJson in arg^.ValueKindAsm)) and
+                 not arg^.ArgRtti.ValueIsVoid(Sender.Values[a]) then
+              begin
+                W.AddShort(arg^.ParamName^); // in JSON_FAST_EXTENDED format
+                W.AddDirect(':');
+                if rcfSpi in arg^.ArgRtti.Flags then
+                  W.AddShorter('"****",')
+                else
                 begin
-                  W.AddShort(ParamName^); // in JSON_FAST_EXTENDED format
-                  W.AddDirect(':');
-                  if rcfSpi in ArgRtti.Flags then
-                    W.AddShorter('"****",')
-                  else
-                  begin
-                    AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
-                    W.AddComma;
-                  end;
+                  arg^.AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
+                  W.AddComma;
                 end;
+              end;
+              inc(arg);
+              inc(a);
+            end;
             W.CancelLastComma;
           end;
         end;
@@ -1291,21 +1297,26 @@ begin
               end
             else
             begin
-              for a := ArgsOutFirst to ArgsOutLast do
-                with Args[a] do
-                  if (ValueDirection <> imdConst) and
-                     not ArgRtti.ValueIsVoid(Sender.Values[a]) then
+              a := ArgsOutFirst;
+              arg := @Args[a];
+              while a <= ArgsOutLast do
+              begin
+                if (arg^.ValueDirection <> imdConst) and
+                   not arg^.ArgRtti.ValueIsVoid(Sender.Values[a]) then
+                begin
+                  W.AddShort(arg^.ParamName^);
+                  W.AddDirect(':');
+                  if rcfSpi in arg^.ArgRtti.Flags then
+                    W.AddShorter('"****",')
+                  else
                   begin
-                    W.AddShort(ParamName^);
-                    W.AddDirect(':');
-                    if rcfSpi in ArgRtti.Flags then
-                      W.AddShorter('"****",')
-                    else
-                    begin
-                      AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
-                      W.AddComma;
-                    end;
+                    arg^.AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
+                    W.AddComma;
                   end;
+                end;
+                inc(arg);
+                inc(a);
+              end;
               W.CancelLastComma;
             end;
         end;
