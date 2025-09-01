@@ -1183,7 +1183,9 @@ begin
   P := GotoNextNotSpace(temp.buf);
   if P^ <> '{' then
     exit;
-  P := GotoNextNotSpace(P + 1);
+  repeat
+    inc(P)
+  until not (P^ in [#1..' ']);
   info.Json := P;
   if P^ <> '}' then
   repeat

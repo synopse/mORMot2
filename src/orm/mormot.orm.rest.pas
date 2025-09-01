@@ -1095,7 +1095,7 @@ begin
         '=':
           begin
             // SELECT RowID from Table where RowID=10
-            P := GotoNextNotSpace(P + 1);
+            P := IgnoreAndGotoNextNotSpace(P);
             if PWord(P)^ = ord(':') + ord('(') shl 8 then
               inc(P, 2); // handle inlined parameters
             SetInt64(P, V);
@@ -1114,7 +1114,7 @@ begin
             // SELECT RowID from Table where RowID in [1,2,3]
             P := GotoNextNotSpace(P + 2);
             if (P^ = '(') and
-               (GotoNextNotSpace(P + 1)^ in ['0'..'9']) then
+               (IgnoreAndGotoNextNotSpace(P)^ in ['0'..'9']) then
             begin
               CsvToInt64DynArray(P + 1, Data);
               if Data <> nil then

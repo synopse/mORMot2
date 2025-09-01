@@ -7737,7 +7737,7 @@ begin
             inc(P, 6);
             IdemPCharAndGetNextItem(P, 'NAME="', part.Name, '"');
             if P^ = ';' then
-              P := GotoNextNotSpace(P + 1);
+              P := IgnoreAndGotoNextNotSpace(P);
             IdemPCharAndGetNextItem(P, 'FILENAME="', part.FileName, '"');
           end;
         end

@@ -2268,6 +2268,10 @@ function GotoEndOfQuotedString(P: PUtf8Char): PUtf8Char;
 function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get the next character not in [#1..' ']
+function IgnoreAndGotoNextNotSpace(P: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// get the next character not in [#9,' ']
 function GotoNextNotSpaceSameLine(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
@@ -8821,9 +8825,17 @@ begin
   {$else}
   if P^ in [#1..' '] then
     repeat
-      inc(P)
+      inc(P);
     until not (P^ in [#1..' ']);
   {$endif FPC}
+  result := P;
+end;
+
+function IgnoreAndGotoNextNotSpace(P: PUtf8Char): PUtf8Char;
+begin
+  repeat
+    inc(P);
+  until not (P^ in [#1..' ']);
   result := P;
 end;
 

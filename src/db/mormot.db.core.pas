@@ -2801,7 +2801,7 @@ begin
     if p^ <> ',' then
       exit; // reached last table name
     inc(n);
-    p := GotoNextNotSpace(p + 1);
+    p := IgnoreAndGotoNextNotSpace(p);
   until false;
   result := nil;
 end;
@@ -3207,7 +3207,7 @@ var
     begin
       if P^ <> '(' then // Field not found -> try function(field)
         exit;
-      P := GotoNextNotSpace(P + 1);
+      P := IgnoreAndGotoNextNotSpace(P);
       select.FunctionName := prop;
       inc(fSelectFunctionCount);
       if PropNameEquals(prop, 'COUNT') and
@@ -3215,7 +3215,7 @@ var
       begin
         select.Field := 0; // count( * ) -> count(ID)
         select.FunctionKnown := funcCountStar;
-        P := GotoNextNotSpace(P + 1);
+        P := IgnoreAndGotoNextNotSpace(P);
       end
       else
       begin
@@ -3229,7 +3229,7 @@ var
       end;
       if P^ <> ')' then
         exit;
-      P := GotoNextNotSpace(P + 1);
+      P := IgnoreAndGotoNextNotSpace(P);
     end
     else if P^ = '.' then
     begin
@@ -3576,7 +3576,7 @@ begin
             else if P^ <> ',' then
               break
             else
-              P := GotoNextNotSpace(P + 1);
+              P := IgnoreAndGotoNextNotSpace(P);
             if (P^ = ')') or
                (GetWhereValue(fWhere[whereCount]) and
                 (P^ = ')')) then
@@ -3639,7 +3639,7 @@ lim2: case IdemPCharSep(pointer(prop), 'LIMIT|OFFSET|ORDER|GROUP|') of
                   if P^ <> ',' then
                     break; // no more fields in this ORDER BY clause
                 end;
-                P := GotoNextNotSpace(P + 1);
+                P := IgnoreAndGotoNextNotSpace(P);
               until P^ in [#0, ';'];
             end
             else
@@ -3658,7 +3658,7 @@ lim2: case IdemPCharSep(pointer(prop), 'LIMIT|OFFSET|ORDER|GROUP|') of
                 AddFieldIndex(fGroupByField, ndx);
                 if P^ <> ',' then
                   break;
-                P := GotoNextNotSpace(P + 1);
+                P := IgnoreAndGotoNextNotSpace(P);
               until P^ in [#0, ';'];
             end
             else

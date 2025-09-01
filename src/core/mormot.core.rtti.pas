@@ -9465,7 +9465,7 @@ begin
     end;
     AddInteger(prop, propcount, Props.FromTextPrepare(propname));
     if P^ = ':' then
-      P := GotoNextNotSpace(P + 1);
+      P := IgnoreAndGotoNextNotSpace(P);
     // identify type for prop[]
     typname := '';
     atypname := '';

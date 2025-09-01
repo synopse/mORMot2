@@ -2387,7 +2387,7 @@ var
         end
         else
           inc(P);
-    P := GotoNextNotSpace(P + 1);
+    P := IgnoreAndGotoNextNotSpace(P);
     if EndOfObject <> nil then
       EndOfObject^ := P^;
     inc(P, ord(P^ <> #0));
@@ -2554,7 +2554,7 @@ var
     P := GotoNextNotSpace(Reg + RegLen + 1);
     if P^ <> ',' then
       exit; // $regex:"acme*.corp",$options:"i"}
-    P := GotoNextNotSpace(P + 1);
+    P := IgnoreAndGotoNextNotSpace(P);
     if P^ = '"' then
       inc(P);
     if PInt64(P)^ <> PInt64(@BSON_JSON_REGEX[1][4])^ then
@@ -2566,7 +2566,7 @@ var
     P := GotoNextNotSpace(P);
     if P^ <> ':' then
       exit;
-    P := GotoNextNotSpace(P + 1);
+    P := IgnoreAndGotoNextNotSpace(P);
     if P^ <> '"' then
       exit
     else
