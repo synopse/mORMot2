@@ -3257,7 +3257,8 @@ end;
 procedure TInterfaceMethod.ArgsAsDocVariantFix(var ArgsObject: TDocVariantData;
   Input: boolean);
 var
-  a, ndx: PtrInt;
+  a: PtrInt;
+  arg: PInterfaceMethodArgument;
   doc: TDocVariantData;
 begin
   if ArgsObject.Count > 0 then
@@ -3265,29 +3266,42 @@ begin
       dvObject:
         for a := 0 to ArgsObject.Count - 1 do
         begin
-          ndx := ArgIndex(ArgsObject.Names[a], Input);
-          if ndx >= 0 then
-            Args[ndx].FixValue(ArgsObject.Values[a]);
+          arg := ArgInputOutput(ArgsObject.Names[a], Input);
+          if arg <> nil then
+            arg^.FixValue(ArgsObject.Values[a]);
         end;
       dvArray:
-        if Input then
         begin
-          if ArgsObject.Count <> integer(ArgsInputValuesCount) then
-            exit;
-          {%H-}doc.Init(ArgsObject.Options);
-          for a := ArgsInFirst to ArgsInLast do
-            if Args[a].ValueDirection in [imdConst, imdVar] then
-              Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
-          ArgsObject := doc;
-        end
-        else
-        begin
-          if ArgsObject.Count <> integer(ArgsOutputValuesCount) then
-            exit;
-          doc.Init(ArgsObject.Options);
-          for a := ArgsOutFirst to ArgsOutLast do
-            if Args[a].ValueDirection <> imdConst then
-              Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
+          {%H-}doc.Init(ArgsObject.Options, dvObject);
+          doc.Capacity := ArgsObject.Count;
+          if Input then
+          begin
+            if ArgsObject.Count <> integer(ArgsInputValuesCount) then
+              exit;
+            a := ArgsInFirst;
+            arg := @Args[a];
+            while a <= ArgsInLast do
+            begin
+              if arg^.ValueDirection in [imdConst, imdVar] then
+                arg^.FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
+              inc(arg);
+              inc(a);
+            end;
+          end
+          else
+          begin
+            if ArgsObject.Count <> integer(ArgsOutputValuesCount) then
+              exit;
+            a := ArgsOutFirst;
+            arg := @Args[a];
+            while a <= ArgsOutLast do
+            begin
+              if arg^.ValueDirection <> imdConst then
+                arg^.FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
+              inc(arg);
+              inc(a);
+            end;
+          end;
           ArgsObject := doc;
         end;
     end;
