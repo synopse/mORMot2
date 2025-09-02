@@ -2290,6 +2290,11 @@ procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt;
   const aContinueOnException: boolean = false; aCount: PInteger = nil); overload;
   {$ifdef HASSAFEINLINE}inline;{$endif}
 
+/// wrapper to extract an item from a T*InterfaceArray dynamic array storage
+// - will assign the instance to a local variable, and remove it from the array
+function InterfaceArrayExtract(var aInterfaceArray; aItemIndex: PtrInt;
+  var aExtracted; aCount: PInteger = nil): boolean;
+
 
 { ************ Low-level Types Mapping Binary Structures }
 
@@ -8803,6 +8808,18 @@ begin
   result := PtrArrayDelete(aInterfaceArray, pointer(aItem), nil, pakInterface);
 end;
 
+function InterfaceArrayExtract(var aInterfaceArray; aItemIndex: PtrInt;
+  var aExtracted; aCount: PInteger): boolean;
+var
+  a: TPointerDynArray absolute aInterfaceArray;
+begin
+  result := false;
+  if PtrUInt(aItemIndex) >= ArrayCount(@a, aCount) then
+    exit;
+  pointer(aExtracted) := a[aItemIndex];              // weak assign
+  PtrArrayDelete(a, aItemIndex, aCount, pakPointer); // weak remove
+  result := true;
+end;
 
 
 { ************ low-level types mapping binary structures }
