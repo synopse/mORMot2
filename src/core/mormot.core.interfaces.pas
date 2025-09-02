@@ -353,14 +353,9 @@ type
     // - search is case insensitive, returns -1 if not found
     function ArgInputOutput(const ArgName: RawUtf8;
       Input: boolean): PInterfaceMethodArgument;
-    /// find the next input (const / var) argument index in Args[]
+    /// find the next input or output argument 32-bit index in Args[]
     // - returns true if arg is the new value, false otherwise
-    function ArgNextInput(var arg: integer): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// find the next output (var / out / result) argument index in Args[]
-    // - returns true if arg is the new value, false otherwise
-    function ArgNextOutput(var arg: integer): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+    function ArgNext(var Arg: integer; Input: boolean): boolean;
     /// convert parameters encoded as a JSON array into a JSON object
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
@@ -3023,27 +3018,22 @@ begin
       result := ArgOutput(pointer(ArgName), PStrLen(PAnsiChar(result) - _STRLEN)^);
 end;
 
-function TInterfaceMethod.ArgNextInput(var arg: integer): boolean;
+function TInterfaceMethod.ArgNext(var Arg: integer; Input: boolean): boolean;
 begin
   result := true;
-  inc(arg);
-  while arg <= ArgsInLast do
-    if Args[arg].ValueDirection in [imdConst, imdVar] then
-      exit
-    else
-      inc(arg);
-  result := false;
-end;
-
-function TInterfaceMethod.ArgNextOutput(var arg: integer): boolean;
-begin
-  result := true;
-  inc(arg);
-  while arg <= ArgsOutLast do
-    if Args[arg].ValueDirection <> imdConst then
-      exit
-    else
-      inc(arg);
+  inc(Arg);
+  if Input then
+    while Arg <= ArgsInLast do
+      if Args[Arg].IsInput then
+        exit
+      else
+        inc(Arg)
+  else
+    while Arg <= ArgsOutLast do
+      if Args[Arg].IsOutput then
+        exit
+      else
+        inc(Arg);
   result := false;
 end;
 

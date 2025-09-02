@@ -1067,7 +1067,7 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
   const
     IN_OUT: array[boolean] of RawUtf8 = ('OUT', ' IN');
   var
-    arg: integer;  // should be integer for ArgNextInput/ArgNextOutput below
+    arg: integer; // should be integer, not PtrInt
     i: PtrInt;
     line, typ: RawUtf8;
   begin
