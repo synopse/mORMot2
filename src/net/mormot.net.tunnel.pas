@@ -100,6 +100,7 @@ type
     /// check if the background processing thread is using encrypted frames
     function Encrypted: boolean;
   end;
+  PTunnelLocal = ^ITunnelLocal;
 
   TTunnelLocal = class;
 
@@ -274,8 +275,6 @@ type
       const local, remote: TTunnelEcdhFrame); override;
   end;
 
-
-type
   /// implements client-side tunneling service
   // - here 'server' or 'client' side does not have any specific meaning - one
   // should just be at either end of the tunnel
@@ -285,6 +284,28 @@ type
     procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
   end;
+
+  /// maintain a list of ITunnelLocal instances
+  // - with proper redirection of ITunnelTransmit.Send() frames
+  TTunnelList = class(TInterfacedPersistent,
+    ITunnelTransmit)
+  protected
+    fSafe: TRWLightLock;
+    fItem: array of ITunnelLocal;
+  public
+    /// append one ITunnelLocal to the list
+    function Add(const aInstance: ITunnelLocal): boolean;
+    /// remove one ITunnelLocal from its session ID
+    function Delete(aSession: TTunnelSession): boolean;
+    /// search if one ITunnelLocal matches a session ID
+    function Exists(aSession: TTunnelSession): boolean;
+    /// search the ITunnelLocal matching a session ID
+    function Get(aSession: TTunnelSession; var aInstance: ITunnelLocal): boolean;
+    /// ITunnelTransmit method which will redirect the given frame to the
+    // expected registered TTunnelLocal instance
+    procedure Send(const Frame: RawByteString);
+  end;
+
 
 
 implementation
@@ -754,6 +775,113 @@ procedure TTunnelLocalClient.EcdheHashRandom(var hmac: THmacSha256;
 begin
   hmac.Update(@local. rnd, SizeOf(local.rnd));  // client random
   hmac.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
+end;
+
+
+{ TTunnelList }
+
+function FindIndexLocked(p: PTunnelLocal; s: TTunnelSession): PtrInt;
+var
+  n: PtrInt;
+begin
+  if (s <> 0) and
+     (p <> nil) then
+  begin
+    result := 0;
+    n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
+    repeat
+      if p^.TunnelSession = s then // fast TTunnelLocal.TunnelSession method
+        exit;
+      if result = n then
+        break;
+      inc(p);
+      inc(result);
+    until false;
+  end;
+  result := -1; // not found
+end;
+
+function TTunnelList.Exists(aSession: TTunnelSession): boolean;
+begin
+  fSafe.ReadLock;
+  try
+    result := FindIndexLocked(pointer(fItem), aSession) >= 0;
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TTunnelList.Get(aSession: TTunnelSession; var aInstance: ITunnelLocal): boolean;
+var
+  ndx: PtrInt;
+begin
+  if aSession <> 0 then
+  begin
+    fSafe.ReadLock;
+    try
+      ndx := FindIndexLocked(pointer(fItem), aSession);
+      if ndx >= 0 then
+      begin
+        aInstance := fItem[ndx]; // fast ref counted assignment
+        result := true;
+        exit;
+      end;
+    finally
+      fSafe.ReadUnLock;
+    end;
+  end;
+  result := false;
+end;
+
+function TTunnelList.Add(const aInstance: ITunnelLocal): boolean;
+begin
+  result := false;
+  if aInstance = nil then
+    exit;
+  fSafe.WriteLock;
+  try
+    if FindIndexLocked(pointer(fItem), aInstance.TunnelSession) < 0 then
+      InterfaceArrayAdd(fItem, aInstance);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TTunnelList.Delete(aSession: TTunnelSession): boolean;
+var
+  ndx: PtrInt;
+  instance: ITunnelLocal;
+begin
+  result := false;
+  if aSession = 0 then
+    exit;
+  fSafe.WriteLock;
+  try
+    ndx := FindIndexLocked(pointer(fItem), aSession);
+    if ndx >= 0 then
+      result := InterfaceArrayExtract(fItem, ndx, instance); // weak copy
+  finally
+    fSafe.WriteUnLock;
+  end;
+  instance := nil; // release outside of the lock
+end;
+
+procedure TTunnelList.Send(const Frame: RawByteString);
+var
+  s: TTunnelSession;
+  ndx: PtrInt;
+begin
+  s := FrameSession(Frame);
+  if s = 0 then
+    exit;
+  fSafe.ReadLock;
+  try
+    ndx := FindIndexLocked(pointer(fItem), s);
+    if ndx >= 0 then
+      fItem[ndx].Send(frame); // call ITunnelTransmit method within Read lock
+  finally
+    fSafe.ReadUnLock;
+  end;
 end;
 
 
