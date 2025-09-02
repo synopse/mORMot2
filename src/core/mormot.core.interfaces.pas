@@ -6012,28 +6012,18 @@ end;
 function TOnInterfaceStubExecuteParamsVariant.GetInNamed(
   const aParamName: RawUtf8): variant;
 var
-  L, a, ndx: integer;
-  arg: PInterfaceMethodArgument;
+  ndx: PtrInt;
 begin
-  L := Length(aParamName);
-  ndx := 0;
-  if (L > 0) and
-     (fInput <> nil) then
-    for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
+  if fInput <> nil then
+  begin
+    ndx := FindPropName(pointer(fMethod^.ArgsInputName), aParamName,
+      fMethod^.ArgsInputValuesCount);
+    if ndx >= 0 then
     begin
-      arg := @fMethod^.Args[a];
-      if arg^.ValueDirection in [imdConst, imdVar] then
-      begin
-        if IdemPropName(arg^.ParamName^, pointer(aParamName), L) then
-        begin
-          result := fInput[ndx];
-          exit;
-        end;
-        inc(ndx);
-        if cardinal(ndx) >= cardinal(fMethod^.ArgsInputValuesCount) then
-          break;
-      end;
+      result := fInput[ndx];
+      exit;
     end;
+  end;
   raise EInterfaceStub.Create(fSender, fMethod^, 'unknown input parameter [%]',
     [aParamName]);
 end;
@@ -6050,28 +6040,18 @@ end;
 procedure TOnInterfaceStubExecuteParamsVariant.SetOutNamed(
   const aParamName: RawUtf8; const Value: variant);
 var
-  L, a, ndx: integer;
-  arg: PInterfaceMethodArgument;
+  ndx: PtrInt;
 begin
-  L := Length(aParamName);
-  ndx := 0;
-  if (L > 0) and
-     (fOutput <> nil) then
-    for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
+  if fOutput <> nil then
+  begin
+    ndx := FindPropName(pointer(fMethod^.ArgsOutputName), aParamName,
+        fMethod^.ArgsOutputValuesCount);
+    if ndx >= 0 then
     begin
-      arg := @fMethod^.Args[a];
-      if arg^.ValueDirection <> imdConst then
-      begin
-        if IdemPropName(arg^.ParamName^, pointer(aParamName), L) then
-        begin
-          fOutput[ndx] := Value;
-          exit;
-        end;
-        inc(ndx);
-        if cardinal(ndx) >= cardinal(fMethod^.ArgsOutputValuesCount) then
-          break;
-      end;
+      fOutput[ndx] := Value;
+      exit;
     end;
+  end;
   raise EInterfaceStub.Create(fSender, fMethod^, 'unknown output parameter [%]',
     [aParamName]);
 end;
