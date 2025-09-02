@@ -1493,7 +1493,7 @@ function TRestHttpServer.NotifyCallback(aSender: TRestServer;
   aResult, aErrorMsg: PRawUtf8): boolean;
 var
   ctxt: THttpServerRequest;
-  url: RawUtf8;
+  url, body: RawUtf8;
   status: cardinal;
 begin
   result := false;
@@ -1506,9 +1506,10 @@ begin
       // -> checked in WebSocketsCallback/IsActiveWebSocket
       ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, 0, [], nil);
       try
-        FormatUtf8('%/%/%',
-          [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);
-        ctxt.PrepareDirect(url, 'POST', '', '[' + aParams + ']', '', '');
+        Make([aSender.Model.Root, '/', aInterfaceDotMethodName, '/', aFakeCallID], url);
+        { TODO : recognize imfInputIsOctetStream and use BINARY_CONTENT_TYPE }
+        Join(['[', aParams, ']'], body);
+        ctxt.PrepareDirect(url, 'POST', '', body, '', '');
         // fHttpServer.Callback() raises EHttpServer but for bidir servers
         status := fHttpServer.Callback(ctxt, {nonblocking=}aResult = nil);
         if status = HTTP_SUCCESS then
