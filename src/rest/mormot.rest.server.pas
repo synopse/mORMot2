@@ -5702,11 +5702,9 @@ procedure TRestServerMonitor.ProcessSuccess(IsOutcomingFile: boolean);
 begin
   if self = nil then
     exit;
-  fSafe.Lock;
-  inc(fSuccess);
+  LockedInc64(@fSuccess); // faster than fSafe.Lock/UnLock
   if IsOutcomingFile then
-    inc(fOutcomingFiles);
-  fSafe.UnLock;
+    LockedInc64(@fOutcomingFiles);
 end;
 
 procedure TRestServerMonitor.NotifyOrm(aMethod: TUriMethod);
