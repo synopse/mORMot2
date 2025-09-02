@@ -860,12 +860,14 @@ begin
   fSafe.WriteLock;
   try
     ndx := FindIndexLocked(pointer(fItem), aSession);
-    if ndx >= 0 then
-      result := InterfaceArrayExtract(fItem, ndx, instance); // weak copy
+    if (ndx < 0) or
+       not InterfaceArrayExtract(fItem, ndx, instance) then // weak copy
+      exit;
   finally
     fSafe.WriteUnLock;
   end;
-  instance := nil; // release outside of the lock
+  instance := nil; // release outside of the blocking Write lock
+  result := true;
 end;
 
 procedure TTunnelList.Send(const Frame: RawByteString);
@@ -875,8 +877,8 @@ var
 begin
   s := FrameSession(Frame);
   if s = 0 then
-    exit;
-  fSafe.ReadLock;
+    exit; // invalid frame for sure
+  fSafe.ReadLock; // non-blocking Read lock
   try
     ndx := FindIndexLocked(pointer(fItem), s);
     if ndx >= 0 then
