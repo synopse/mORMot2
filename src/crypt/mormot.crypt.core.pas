@@ -1706,7 +1706,7 @@ type
     function RandomPassword(Len: integer): SpiUtf8;
     /// validate or generate a random Salt with custom Base64-URI encoding
     // - as used e.g. by the "Modular Crypt" process
-    function RandomSalt(var bin, b64: RawByteString; defsiz: integer;
+    function RandomSalt(var bin, b64: RawByteString; defsiz: integer = 0;
       const salt: RawUtf8 = ''; enc: PChar64 = nil; dec: PAnsiCharDec = nil): boolean;
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward secrecy
@@ -7384,6 +7384,8 @@ begin
   result := true;
   if salt = '' then
   begin
+    if defsiz = 0 then
+      defsiz := 16; // 128-bit is the common salt size in proper cryptography
     TAesPrng.Fill(FastNewRawByteString(bin, defsiz), defsiz); // CSPRNG
     b64 := BinToBase64uri(bin, enc);
   end
