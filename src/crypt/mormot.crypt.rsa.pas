@@ -1549,7 +1549,7 @@ begin
   pointer(rnd) := FastNewString(bytes);
   FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
   {$ifdef CPUINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(Value), bytes shr 2); // xor with HW CPU prng
+  RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
   AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
   FillZero(rnd);
