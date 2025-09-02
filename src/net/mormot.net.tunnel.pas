@@ -840,11 +840,13 @@ begin
     exit;
   fSafe.WriteLock;
   try
-    if FindIndexLocked(pointer(fItem), aInstance.TunnelSession) < 0 then
-      InterfaceArrayAdd(fItem, aInstance);
+    if FindIndexLocked(pointer(fItem), aInstance.TunnelSession) >= 0 then
+      exit;
+    InterfaceArrayAdd(fItem, aInstance);
   finally
     fSafe.WriteUnLock;
   end;
+  result := true;
 end;
 
 function TTunnelList.Delete(aSession: TTunnelSession): boolean;
