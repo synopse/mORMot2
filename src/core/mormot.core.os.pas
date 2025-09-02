@@ -3855,7 +3855,7 @@ var
   AppendShortUuid: TAppendShortUuid;
 
   /// late binding to binary encoding to Base64 or Base64-URI
-  // - as seldom used by mormot.net.sock.pas and mormot.crypt.core.pas
+  // - as used by mormot.net.sock.pas for its NetBinToBase64() function
   // - this unit raises an EOSException - properly injected by mormot.core.buffers.pas
   RawToBase64: function(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;
 

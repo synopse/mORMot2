@@ -1945,8 +1945,8 @@ var
   // - is filled with some random bytes by default, but you may override
   // it for a set of custom processes calling CryptDataForCurrentUser
   CryptProtectDataEntropy: THash256 = (
-    $19, $8E, $BA, $52, $FA, $D6, $56, $99, $7B, $73, $1B, $D0, $8B, $3A, $95, $AB,
-    $94, $63, $C2, $C0, $78, $05, $9C, $8B, $85, $B7, $A1, $E3, $ED, $93, $27, $18);
+    $19, $8e, $ba, $52, $fa, $d6, $56, $99, $7b, $73, $1b, $d0, $8b, $3a, $95, $ab,
+    $94, $63, $c2, $c0, $78, $05, $9c, $8b, $85, $b7, $a1, $e3, $ed, $93, $27, $18);
 
 /// protect some data via AES-256-CFB and a secret known by the current user only
 // - will include a TAesCfc.MacEncrypt() checksum to the encrypted output, so
@@ -1956,7 +1956,7 @@ var
 // knowing this application-specific AppSecret value
 // - here data is cyphered using a random secret key stored in a file located in
 // ! GetSystemPath(spUserData)+sep+Pbkdf2HmacSha256(CryptProtectDataEntropy,User)
-// with sep='_' under Windows, and sep='.syn-' under Linux/Posix
+// with sep='syn_' under Windows, and sep='.syn-' under Linux/Posix
 // - under Windows, it will encode the secret file via CryptProtectData DPAPI,
 // so has the same security level than plain CryptDataForCurrentUserDPAPI(),
 // but will be much faster, since it won't call the API each time
@@ -7792,6 +7792,7 @@ var
   fn: TFileName;
   k256: THash256;
   key, key2, appsec: RawByteString;
+  usrdata {$ifdef OSWINDOWS}, fn64 {$endif}: TFileName;
 begin
   _h.safe.Lock;
   try
@@ -7804,9 +7805,20 @@ begin
     FastSetRawByteString(appsec, @CryptProtectDataEntropy, 32);
     Pbkdf2HmacSha256(appsec, Executable.User, 100, k256);
     FillZero(appsec);
-    appsec := RawToBase64(@k256, 15, {uri=}true); // call mormot.core.buffers
-    fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
-      [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
+    usrdata := GetSystemPath(spUserData);
+    {$ifdef OSWINDOWS}
+    // Windows is case insensitive, so mORMot 1 Base64-URI file name may collide
+    fn := FormatString('%syn_%', [usrdata, BinToHexLower(@k256, 15)]);
+    if not FileExists(fn) then
+    begin
+      fn64 := FormatString('%_%', [usrdata, BinToBase64uri(@k256, 15)]);
+      if FileExists(fn64) then
+        RenameFile(fn64, fn); // smooth transition from base64 file name to hexa
+    end;
+    {$else}
+    // .* files are hidden under Linux, and case sensitive (so base64uri is fine)
+    fn := FormatString('%.syn-%', [usrdata, BinToBase64uri(@k256, 15)]);
+    {$endif OSWINDOWS}
     FastSetRawByteString(appsec, @k256[15], 17); // use remaining bytes as key
     Sha256Weak(appsec, k256); // just a common simple way to reduce to 256-bit
     try
@@ -7873,7 +7885,7 @@ begin
   if Data = '' then
     exit;
   if IsZero(_h.k) then
-    read_h;
+    read_h;                 // read once the local syn-xxxxx per-user file key
   try
     hmac := _h.mac;         // thread-safe reuse of CryptProtectDataEntropy salt
     hmac.Update(AppSecret); // application-specific context as additional salt
