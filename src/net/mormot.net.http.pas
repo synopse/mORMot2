@@ -4728,7 +4728,7 @@ end;
 
 procedure THttpAcceptBan.SetSeconds(Value: cardinal);
 begin
-  Value := NextPowerOfTwo(MinPtrUInt(Value, 128));
+  Value := NextPowerOfTwo(MinPtrUInt(128, Value));
   fSafe.Lock;
   try
     fSeconds := Value; // use closest power of two in 1..128 range

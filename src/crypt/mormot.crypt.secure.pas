@@ -4170,12 +4170,12 @@ begin
   if aRounds = 0 then
     aRounds := 535000 // default for hfSha256/hfSha512
   else
-    aRounds := MaxPtrUInt(aRounds, 1000); // >= 1000
+    aRounds := MaxPtrUInt(1000, aRounds); // >= 1000
   case aAlgo of
     hfMD5:
       begin
         aRounds := 1000; // fixed
-        aSaltSize := MinPtrUInt(aSaltSize, 8); // lower range
+        aSaltSize := MinPtrUInt(8, aSaltSize); // lower range
         result := '$1$';
       end;
     hfSha256:

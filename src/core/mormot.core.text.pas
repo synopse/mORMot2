@@ -6396,7 +6396,7 @@ begin
   if (len < 2) or (len > 6) then
     exit;
   by4 := 0;
-  MoveByOne(entity, @by4, MinPtrUInt(len, 4));
+  MoveByOne(entity, @by4, MinPtrUInt(4, len));
   result := IntegerScanIndex(@HTML_UNESCAPE, length(HTML_UNESCAPE), by4) + 1;
   if result >= 37 then // adjust 'frac' as frac14', 'frac12' or 'frac34'
     if result > 37 then

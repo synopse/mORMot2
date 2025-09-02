@@ -2009,7 +2009,7 @@ end;
 
 procedure TLastError.SetCapacity(max: integer);
 begin
-  max := NextPowerOfTwo(MinPtrUInt(max, 1024));
+  max := NextPowerOfTwo(MinPtrUInt(1024, max));
   SetLength(Seq, max);
   SetLength(Msg, max);
   CurrentIndex := 0;
