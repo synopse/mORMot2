@@ -2965,23 +2965,23 @@ end;
 function TInterfaceMethod.ArgInput(ArgName: PUtf8Char; ArgNameLen: PtrInt;
   ArgIndex: PInteger): PInterfaceMethodArgument;
 var
-  i: PtrInt;
+  a: PtrInt;
 begin
   if ArgNameLen >= 0 then
   begin
-    i := ArgsInFirst;
-    result := @Args[i];
-    while i <= ArgsInLast do
+    a := ArgsInFirst;
+    result := @Args[a];
+    while a <= ArgsInLast do
     begin
-      if (result^.ValueDirection in [imdConst, imdVar]) and
+      if result^.IsInput and
          IdemPropNameNotNull(result^.ParamName^, ArgName, ArgNameLen) then
       begin
         if ArgIndex <> nil then
-          ArgIndex^ := i;
+          ArgIndex^ := a;
         exit;
       end;
       inc(result);
-      inc(i);
+      inc(a);
     end;
   end;
   result := nil;
@@ -2990,23 +2990,23 @@ end;
 function TInterfaceMethod.ArgOutput(ArgName: PUtf8Char; ArgNameLen: PtrInt;
   ArgIndex: PInteger): PInterfaceMethodArgument;
 var
-  i: PtrInt;
+  a: PtrInt;
 begin
   if ArgNameLen >= 0 then
   begin
-    i := ArgsOutFirst;
-    result := @Args[i];
-    while i <= ArgsOutLast do
+    a := ArgsOutFirst;
+    result := @Args[a];
+    while a <= ArgsOutLast do
     begin
-      if (result^.ValueDirection <> imdConst) and
+      if result^.IsOutput and
          IdemPropNameNotNull(result^.ParamName^, ArgName, ArgNameLen) then
        begin
          if ArgIndex <> nil then
-           ArgIndex^ := i;
+           ArgIndex^ := a;
          exit;
        end;
       inc(result);
-      inc(i);
+      inc(a);
     end;
   end;
   result := nil;
@@ -3071,10 +3071,10 @@ begin
       inc(a);
       if Input then
       begin
-        if a^.ValueDirection in [imdOut, imdResult] then
+        if not a^.IsInput then
           continue;
       end
-      else if a^.ValueDirection = imdConst then
+      else if not a^.IsOutput then
         continue;
       W.AddPropName(a^.ParamName^);
       P := GotoNextNotSpace(P);
@@ -3179,7 +3179,7 @@ begin
     arg := @Args[a];
     while a <= ArgsInLast do
     begin
-      if arg^.ValueDirection in [imdConst, imdVar] then
+      if arg^.IsInput then
         Dest.AddValueRtti(ArgsName[a], Values[a], arg^.ArgRtti);
       inc(arg);
       inc(a);
@@ -3192,7 +3192,7 @@ begin
     arg := @Args[a];
     while a <= ArgsOutLast do
     begin
-      if arg^.ValueDirection <> imdConst then
+      if arg^.IsOutput then
         Dest.AddValueRtti(ArgsName[a], Values[a], arg^.ArgRtti);
       inc(arg);
       inc(a);
@@ -3241,7 +3241,7 @@ begin
     arg := @Args[a];
     while a <= ArgsInLast do
     begin
-      if arg^.ValueDirection in [imdConst, imdVar] then
+      if arg^.IsInput then
       begin
         ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
         inc(n);
@@ -3258,7 +3258,7 @@ begin
     arg := @Args[a];
     while a <= ArgsOutLast do
     begin
-      if arg^.ValueDirection <> imdConst then
+      if arg^.IsOutput then
       begin
         ArgsObject.AddValue(ArgsName[a], ArgsParams.Values[n]);
         inc(n);
@@ -3297,7 +3297,7 @@ begin
             arg := @Args[a];
             while a <= ArgsInLast do
             begin
-              if arg^.ValueDirection in [imdConst, imdVar] then
+              if arg^.IsInput then
                 arg^.FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
               inc(arg);
               inc(a);
@@ -3311,7 +3311,7 @@ begin
             arg := @Args[a];
             while a <= ArgsOutLast do
             begin
-              if arg^.ValueDirection <> imdConst then
+              if arg^.IsOutput then
                 arg^.FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
               inc(arg);
               inc(a);
@@ -3623,10 +3623,11 @@ begin
     else
       oopt := DEFAULT_WRITEOPTIONS[false];
     W.CustomOptions := wopt;
-    a := @ctxt.Method^.Args[ctxt.Method^.ArgsInFirst];
-    for arg := ctxt.Method^.ArgsInFirst to ctxt.Method^.ArgsInLast do
+    arg := ctxt.Method^.ArgsInFirst;
+    a := @ctxt.Method^.Args[arg];
+    while arg <= ctxt.Method^.ArgsInLast do
     begin
-      if a^.ValueDirection in [imdConst, imdVar] then
+      if a^.IsInput then
       begin
         V := ctxt.Value[arg];
         if (a^.ValueType = imvInterface) and
@@ -3639,6 +3640,7 @@ begin
         end;
       end;
       inc(a);
+      inc(arg);
     end;
     W.CancelLastComma;
     W.SetText(Json); // without [ ]
@@ -3692,7 +3694,6 @@ begin
           FakeCallRaiseError(ctxt, 'unexpected parameter [%]', [c.Value]);
       end;
     end;
-    //assert(ValueDirection in [imdVar,imdOut,imdResult]);
     V := ctxt.Value[arg];
     a^.SetFromJson(c, ctxt.Method, V, nil);
     if a^.ValueDirection = imdResult then
@@ -3722,7 +3723,7 @@ begin
         break;
       end;
       inc(a);
-    until a^.ValueDirection <> imdConst;
+    until a^.IsOutput;
   until false;
 end;
 
@@ -4128,7 +4129,7 @@ begin
         imvInterface:
           if Assigned(a^.ArgRtti.JsonWriter.Code) then
             include(a^.ValueKindAsm, vIsInterfaceJson) // e.g. IDocList
-          else if a^.ValueDirection <> imdConst then
+          else if a^.IsOutput then
             ErrorMsg := ' - interface not allowed as output: ' +
               'use a const parameter';
       end;
@@ -4141,17 +4142,17 @@ begin
       else
       begin
         m^.ArgsNotResultLast := na;
-        if a^.ValueDirection <> imdOut then
+        if a^.IsInput then
         begin
           inc(m^.ArgsInputValuesCount);
           if m^.ArgsInFirst < 0 then
             m^.ArgsInFirst := na;
           m^.ArgsInLast := na;
         end;
-        if a^.ValueDirection <> imdConst then
+        if a^.IsOutput then
           m^.ArgsOutNotResultLast := na;
       end;
-      if a^.ValueDirection <> imdConst then
+      if a^.IsOutput then
       begin
         if m^.ArgsOutFirst < 0 then
           m^.ArgsOutFirst := na;
@@ -4235,7 +4236,7 @@ begin
     SetLength(m^.ArgsInputName, m^.ArgsInputValuesCount);
     u := pointer(m^.ArgsInputName);
     for na := m^.ArgsInFirst to m^.ArgsInLast do
-      if m^.Args[na].ValueDirection in [imdConst, imdVar] then
+      if m^.Args[na].IsInput then
       begin
         ShortStringToAnsi7String(m^.Args[na].ParamName^, u^);
         inc(u);
@@ -4243,7 +4244,7 @@ begin
     SetLength(m^.ArgsOutputName, m^.ArgsOutputValuesCount);
     u := pointer(m^.ArgsOutputName);
     for na := m^.ArgsOutFirst to m^.ArgsOutLast do
-      if m^.Args[na].ValueDirection <> imdConst then
+      if m^.Args[na].IsOutput then
       begin
         ShortStringToAnsi7String(m^.Args[na].ParamName^, u^);
         inc(u);
@@ -4531,7 +4532,7 @@ begin
       WR.AddDirect('[');
       for na := m^.ArgsOutFirst to m^.ArgsOutLast do
         with m^.Args[na] do
-          if ValueDirection <> imdConst then
+          if IsOutput then
             AddDefaultJson(WR);
       WR.CancelLastComma(']');
       WR.SetText(m^.DefaultResult);
@@ -6087,7 +6088,7 @@ end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
 var
-  a: integer;
+  a: PtrInt;
   W: TJsonWriter;
   arg: PInterfaceMethodArgument;
   o: PVarData;
@@ -6100,10 +6101,11 @@ begin
   try
     W.Add('[');
     o := pointer(fOutput);
-    arg := @fMethod^.Args[fMethod^.ArgsOutFirst];
-    for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
+    a := fMethod^.ArgsOutFirst;
+    arg := @fMethod^.Args[a];
+    while a <= fMethod^.ArgsOutLast do
     begin
-      if arg^.ValueDirection <> imdConst then
+      if arg^.IsOutput then
       begin
         if cardinal(o^.VType) = varEmpty then
           arg^.AddDefaultJson(W)
@@ -6115,6 +6117,7 @@ begin
         inc(o);
       end;
       inc(arg);
+      inc(a);
     end;
     W.CancelLastComma(']');
     W.SetText(fResult);
@@ -7590,7 +7593,7 @@ begin
         break;
       end;
       inc(a);
-    until a^.ValueDirection in [imdConst, imdVar];
+    until a^.IsInput;
   until (arg = 0) and
         not asJsonObject;
   result := true;
@@ -7653,7 +7656,7 @@ begin
       a := @fMethod^.Args[arg];
       while arg <= fMethod^.ArgsOutLast do
       begin
-        if a^.ValueDirection <> imdConst then
+        if a^.IsOutput then
         begin
           if ResAsJsonObject then
             Res.AddPropName(a^.ParamName^);
@@ -8296,9 +8299,9 @@ begin
       'dir',       ord(ma^.ValueDirection),
       'dirName',   DIRTODELPHI[ma^.ValueDirection],
       'dirNoOut',  DIRTOSMS[ma^.ValueDirection]], arg);
-    if ma^.ValueDirection in [imdConst, imdVar] then
+    if ma^.IsInput then
       _ObjAddProp('dirInput', true, arg);
-    if ma^.ValueDirection <> imdConst then
+    if ma^.IsOutput then
       _ObjAddProp('dirOutput', true, arg);
     if ma^.ValueDirection = imdResult then
       _ObjAddProp('dirResult', true, arg);
@@ -8306,13 +8309,13 @@ begin
       _ObjAddPropU('commaArg', '; ', arg);
     if a = high(meth.Args) then
       _ObjAddProp('isArgLast', true, arg);
-    if (ma^.ValueDirection in [imdConst, imdVar]) and
+    if (ma^.IsInput) and
        (a < meth.ArgsInLast) then
       _ObjAddPropU('commaInSingle', ',', arg);
     if (ma^.ValueDirection in [imdVar, imdOut]) and
        (a < meth.ArgsOutNotResultLast) then
       _ObjAddPropU('commaOut', '; ', arg);
-    if ma^.ValueDirection <> imdConst then
+    if ma^.IsOutput then
     begin
       _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
       inc(r);

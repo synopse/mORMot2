@@ -4632,10 +4632,11 @@ begin
     WR.AddDirect('[');
     m := fServiceMethod;
     ilow := 0;
-    a := @m^.Args[m^.ArgsInFirst];
-    for arg := m^.ArgsInFirst to m^.ArgsInLast do
+    arg := m^.ArgsInFirst;
+    a := @m^.Args[arg];
+    while arg <= m^.ArgsInLast do
     begin
-      if a^.ValueDirection <> imdOut then
+      if a^.IsInput then
       begin
         argdone := false;
         for i := ilow to (length(fInput) - 1) shr 1 do // search argument in URI
@@ -4651,6 +4652,7 @@ begin
           a^.AddDefaultJson(WR); // allow missing argument (and add ',')
       end;
       inc(a);
+      inc(arg);
     end;
     WR.CancelLastComma(']');
     WR.SetText(fCall^.InBody); // input Body contains new generated input JSON

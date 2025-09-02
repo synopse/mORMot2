@@ -1245,7 +1245,7 @@ begin
             arg := @Args[a];
             while a <= ArgsInLast do
             begin
-              if (arg^.ValueDirection <> imdOut) and
+              if arg^.IsInput and
                  ((arg^.ValueType <> imvInterface) or
                   (vIsInterfaceJson in arg^.ValueKindAsm)) and
                  not arg^.ArgRtti.ValueIsVoid(Sender.Values[a]) then
@@ -1301,7 +1301,7 @@ begin
               arg := @Args[a];
               while a <= ArgsOutLast do
               begin
-                if (arg^.ValueDirection <> imdConst) and
+                if arg^.IsOutput and
                    not arg^.ArgRtti.ValueIsVoid(Sender.Values[a]) then
                 begin
                   W.AddShort(arg^.ParamName^);
