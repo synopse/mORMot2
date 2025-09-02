@@ -9978,30 +9978,52 @@ end;
 
 { **************** TSynLocker Threading Features }
 
+const
+  SPIN_COUNT = 5 shl 5; // = 160
+
 // as reference, take a look at Linus insight (TL&WR: better use futex)
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
+
 {$ifdef CPUINTEL}
+// on Intel/AMD, the pause CPU instruction would relax the core
 procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
 asm
-      pause
+      pause // modern CPUs have bigger pause latency (100 cycles)
 end;
-{$endif CPUINTEL}
-
-const
-  {$ifdef CPUINTEL}
-  SPIN_COUNT = 1000;
-  {$else}
-  SPIN_COUNT = 100; // since DoPause does nothing, switch to thread sooner
-  {$endif CPUINTEL}
 
 function DoSpin(spin: PtrUInt): PtrUInt;
-  {$ifdef CPUINTEL} {$ifdef HASINLINE} inline; {$endif} {$endif}
-  // on Intel, the pause CPU instruction would relax the core
-  // on ARM/AARCH64, the not-inlined function call makes a small delay
 begin
-  {$ifdef CPUINTEL}
+  // linear backoff: no pause up to 32 times, then up to 5 successive "pause"
+  // opcodes to reduce cache coherence traffic
+  result := (SPIN_COUNT - spin) shr 5;
+  if result <> 0 then
+    repeat
+      DoPause;
+      dec(result);
+    until result = 0;
+  dec(spin);
+  if spin = 0 then
+  begin
+    SwitchToThread;     // yield to the OS for long wait - fpnanosleep on POSIX
+    spin := SPIN_COUNT; // try again
+  end;
+  result := spin;
+end;
+{$else}
+
+{$ifdef FPC_CPUARM}
+// arm/aarch short pipeline pause or a hint to the scheduler to optimize power
+procedure DoPause; assembler; nostackframe;
+asm
+     yield
+end;
+{$endif FPC_CPUARM}
+
+function DoSpin(spin: PtrUInt): PtrUInt;
+begin
+  {$ifdef FPC_CPUARM}
   DoPause;
-  {$endif CPUINTEL}
+  {$endif FPC_CPUARM}
   dec(spin);
   if spin = 0 then
   begin
@@ -10010,6 +10032,7 @@ begin
   end;
   result := spin;
 end;
+{$endif CPUINTEL}
 
 
 { TLightLock }
