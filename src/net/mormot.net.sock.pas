@@ -6439,19 +6439,21 @@ begin
         MoveFast(r^.BufPtr[r^.BufPos], Content^, len);
         inc(r^.BufPos, len);
         inc(Content, len);
-        dec(Length, len);
         inc(result, len);
+        dec(Length, len);
       end;
-      if (fAborted in fFlags) or
-         (Length = 0) then
+      if (Length = 0) or
+         (fAborted in fFlags) then
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
+      if Timeout = 0 then
+        SleepHiRes(0); // don't burn 100% of CPU
       DoInputSock(r, 'SockInRead', {notvoid=}false);
-      // loop until Timeout
-    until Timeout = 0;
+    until fAborted in fFlags;
   // direct receiving of the remaining bytes from socket
-  if Length <= 0 then
+  if (Length <= 0) or
+     (fAborted in fFlags) then
     exit;
   SockRecv(Content, Length); // raise ENetSock if failed to read Length
   inc(result, Length);
