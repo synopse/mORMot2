@@ -241,8 +241,9 @@ type
     function MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
     /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
+    // - can reuse a TLecuyer instance between calls as probing random source
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
-      Iterations: integer = 10): boolean;
+      Iterations: integer = 10; Lecuyer: PLecuyer = nil): boolean;
     /// guess a random prime number of the exact current size
     // - a secret is generated from audited sources (OS, cpu RdRand), then
     // looped over TAesPrng.Fill and IsPrime method within a timeout period
@@ -1417,11 +1418,13 @@ begin
   result := false;
 end;
 
-function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer): boolean;
+function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
+  Lecuyer: PLecuyer): boolean;
 var
   r, a, w: PBigInt;
   s, n, attempt, bak: integer;
   v: PtrUInt;
+  rnd: TLecuyer;
 begin
   // first check if not a factor of a well-known small prime
   result := (Size = (32 div HALF_BITS)) and
@@ -1432,6 +1435,12 @@ begin
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
+  if Lecuyer = nil then
+  begin
+    Random128(@rnd);   // 88-bit seed from CSPRNG - if not supplied by caller
+    rnd.SeedGenerator; // setup L'Ecuyer gsl_rng_taus2 uniformous distribution
+    Lecuyer := @rnd;
+  end;
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
   w := Clone.IntSub(1); // w = value-1
@@ -1453,9 +1462,9 @@ begin
         if Size > 2 then
         begin
           repeat
-            n := Random32(Size);
+            n := Lecuyer^.Next(Size);
           until n > 1;
-          SharedRandom.Fill(@a^.Value[0], n * HALF_BYTES); // TLecuyer generator
+          Lecuyer^.Fill(@a^.Value[0], n * HALF_BYTES); // TLecuyer generator
           a^.Value[0] := a^.Value[0] or 1; // odd
           a^.Size := n;
           a^.Trim;
@@ -1463,9 +1472,9 @@ begin
         else
         begin
           if Size = 1 then
-            v := Random32(Value[0]) // ensure a<w
+            v := Lecuyer^.Next(Value[0]) // ensure a<w
           else
-            v := Random32; // only lower HalfUInt is enough for a<w
+            v := Lecuyer^.Next; // only lower HalfUInt is enough for a<w
           a^.Value[0] := v or 1; // odd
           a^.Size := 1;
         end;
