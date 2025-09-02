@@ -3339,6 +3339,10 @@ type
     /// force a well-defined seed of the generator from a buffer initial point
     // - apply crc32c() over the fixedseed buffer to initialize the generator
     procedure SeedGenerator(fixedseed: pointer; fixedseedbytes: integer); overload;
+    /// force a well-defined seed of the generator from its current 128-bit state
+    // - could be used e.g. from a random seed to generate a thread-safe
+    // uniformous distribution in a Monte-Carlo or Miller-Rabin loop
+    procedure SeedGenerator; overload;
     /// compute the next 32-bit pseudo-random value with no Seed - internal call
     function RawNext: cardinal;
   end;
@@ -10072,9 +10076,9 @@ begin
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
   LecuyerEntropy := e; // forward secrecy
   DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
-  rs1 := MaxPtrUInt(rs1 xor h.c0, 2);  // mask = -2 in RawNext
-  rs2 := MaxPtrUInt(rs2 xor h.c1, 8);  // mask = -8
-  rs3 := MaxPtrUInt(rs3 xor h.c2, 16); // mask = -16
+  rs1 := MaxPtrUInt(2, rs1 xor h.c0);  // mask = -2 in RawNext
+  rs2 := MaxPtrUInt(8, rs2 xor h.c1);  // mask = -8
+  rs3 := MaxPtrUInt(16, rs3 xor h.c2); // mask = -16
   seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
   for i := 1 to h.i3 and 7 do
     RawNext; // warm up
@@ -10090,9 +10094,14 @@ begin
   rs1 := crc32c(0,   fixedseed, fixedseedbytes);
   rs2 := crc32c(rs1, fixedseed, fixedseedbytes);
   rs3 := crc32c(rs2, fixedseed, fixedseedbytes);
-  rs1 := MaxPtrUInt(rs1, 2);  // mask = -2 in RawNext
-  rs2 := MaxPtrUInt(rs2, 8);  // mask = -8
-  rs3 := MaxPtrUInt(rs3, 16); // mask = -16
+  SeedGenerator;
+end;
+
+procedure TLecuyer.SeedGenerator;
+begin
+  rs1 := MaxPtrUInt(2, rs1);  // mask = -2 in RawNext
+  rs2 := MaxPtrUInt(8, rs2);  // mask = -8
+  rs3 := MaxPtrUInt(16, rs3); // mask = -16
   seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls (< 2^88)
 end;
 
