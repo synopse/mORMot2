@@ -1766,8 +1766,8 @@ function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 /// IdemPChar() like function, to avoid linking mormot.core.text
 function NetStartWith(p, up: PUtf8Char): boolean;
 
-/// BinToBase64() like function, to avoid linking mormot.core.buffers
-// - only used for TUri.UserPasswordBase64, so is not performance sensitive
+/// BinToBase64() like function, needing mormot.core.buffers in the project
+// - calls mormot.core.os RawToBase64() - only used for TUri.UserPasswordBase64
 function NetBinToBase64(const s: RawByteString): RawUtf8;
 
 /// IsPem() like function, to avoid linking mormot.crypt.secure
@@ -5198,54 +5198,9 @@ begin
   FastSetString(result, S, P - S);
 end;
 
-procedure DoEncode(rp, sp, b64: PAnsiChar; len: cardinal);
-var
-  i, c, by3: cardinal;
-begin
-  by3 := len div 3;
-  for i := 1 to by3 do
-  begin
-    c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
-    rp[0] := b64[(c shr 18) and $3f];
-    rp[1] := b64[(c shr 12) and $3f];
-    rp[2] := b64[(c shr 6) and $3f];
-    rp[3] := b64[c and $3f];
-    inc(rp, 4);
-    inc(sp, 3);
-  end;
-  case len - by3 * 3 of
-    1:
-      begin
-        c := ord(sp[0]) shl 16;
-        rp[0] := b64[(c shr 18) and $3f];
-        rp[1] := b64[(c shr 12) and $3f];
-        rp[2] := '=';
-        rp[3] := '=';
-      end;
-    2:
-      begin
-        c := (ord(sp[0]) shl 16) or ord(sp[1]) shl 8;
-        rp[0] := b64[(c shr 18) and $3f];
-        rp[1] := b64[(c shr 12) and $3f];
-        rp[2] := b64[(c shr 6) and $3f];
-        rp[3] := '=';
-      end;
-  end;
-end;
-
 function NetBinToBase64(const s: RawByteString): RawUtf8;
-const
-  b64: array[0..63] of AnsiChar =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-var
-  len: cardinal;
-begin
-  result := '';
-  len := length(s);
-  if len = 0 then
-    exit;
-  SetLength(result, ((len + 2) div 3) * 4);
-  DoEncode(pointer(result), pointer(s), @b64, len);
+begin // just redirect from mormot.core.os.pas to mormot.core.buffers.pas
+  result := RawToBase64(pointer(s), length(s), {uri=}false);
 end;
 
 function NetIsPem(p: PUtf8Char): boolean;

@@ -7785,61 +7785,6 @@ var
     mac: THmacSha256; // initialized from CryptProtectDataEntropy salt
   end;
 
-// don't use BinToBase64uri() to avoid linking mormot.core.buffers.pas
-
-const
-  _b64: TChar64 =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-
-procedure RawBase64Uri(rp, sp: PAnsiChar; lendiv, lenmod: cardinal);
-var
-  i, c: cardinal;
-  b64: PAnsiChar;
-begin
-  b64 := @_b64;
-  for i := 1 to lendiv do
-  begin
-    c := cardinal(sp[0]) shl 16 + cardinal(sp[1]) shl 8 + cardinal(sp[2]);
-    rp[0] := b64[(c shr 18) and $3f];
-    rp[1] := b64[(c shr 12) and $3f];
-    rp[2] := b64[(c shr 6) and $3f];
-    rp[3] := b64[c and $3f];
-    inc(rp, 4);
-    inc(sp, 3);
-  end;
-  case lenmod of
-    1:
-      begin
-        c := cardinal(sp[0]) shl 16;
-        rp[0] := b64[(c shr 18) and $3f];
-        rp[1] := b64[(c shr 12) and $3f];
-      end;
-    2:
-      begin
-        c := cardinal(sp[0]) shl 16 + cardinal(sp[1]) shl 8;
-        rp[0] := b64[(c shr 18) and $3f];
-        rp[1] := b64[(c shr 12) and $3f];
-        rp[2] := b64[(c shr 6) and $3f];
-      end;
-  end;
-end;
-
-function Base64Uri(P: pointer; len: cardinal): RawUtf8;
-var
-  blen, bdiv, bmod: cardinal;
-begin
-  bdiv := len div 3;
-  bmod := len mod 3;
-  blen := bdiv * 4;
-  case bmod of
-    1:
-      inc(blen, 2);
-    2:
-      inc(blen, 3);
-  end;
-  RawBase64Uri(FastSetString(result, blen), P, bdiv, bmod);
-end;
-
 procedure read_h;
 var
   fn: TFileName;
@@ -7857,7 +7802,7 @@ begin
     FastSetRawByteString(appsec, @CryptProtectDataEntropy, 32);
     Pbkdf2HmacSha256(appsec, Executable.User, 100, k256);
     FillZero(appsec);
-    appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
+    appsec := RawToBase64(@k256, 15, {uri=}true); // call mormot.core.buffers
     fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
       [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
     FastSetRawByteString(appsec, @k256[15], 17); // use remaining bytes as key
@@ -7884,7 +7829,7 @@ begin
           // successfully extracted secret key in _h
           exit;
       end;
-      // persist the new private user key into local hidden file
+      // generate and persist a new private user key into local hidden file
       if FileExists(fn) then
       begin
         // allow rewrite of an invalid local file
