@@ -1538,7 +1538,7 @@ begin
   clienttunnel.SetTransmit(servercb); // set before Open()
   servertunnel.SetTransmit(clientcb);
   // validate handshaking
-  tunnelsession := Random64;
+  tunnelsession := Random32;
   tunnelappsec := RandomAnsi7(10);
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
