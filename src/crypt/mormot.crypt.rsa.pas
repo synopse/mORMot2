@@ -1528,6 +1528,7 @@ var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
+  lecuyer: TLecuyer;
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
@@ -1552,7 +1553,9 @@ begin
   RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
   AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
-  FillZero(rnd);
+  DefaultHasher128(@lecuyer, pointer(rnd), length(rnd)); // may be AesNiHash128
+  FillZero(rnd);         // anti-forensic counter measure
+  lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniformous distribution
   repeat
     // xor the original trusted sources with our CSPRNG until we get enough bits
     TAesPrng.Main.XorRandom(Value, bytes);
@@ -1577,7 +1580,7 @@ begin
   // brute force search for the next prime starting at this point
   result := true;
   repeat
-    if IsPrime(Extend, Iterations) then
+    if IsPrime(Extend, Iterations, @lecuyer) then
       exit; // we got lucky
     IntAdd(2); // incremental search of odd number - see HAC 4.51
     while last32^ < FIPS_MIN do
