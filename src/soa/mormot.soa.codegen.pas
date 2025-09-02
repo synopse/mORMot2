@@ -1079,23 +1079,14 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
     begin
       line := ' { ';
       arg := 0;
-      repeat
-        if input then
-        begin
-          if not method^.ArgNextInput(arg) then
-            break;
-        end
-        else if not method^.ArgNextOutput(arg) then
-            break;
+      while method^.ArgNext(arg, input) do
         with method^.Args[arg] do
         begin
           typ := TYPES_LANG[lngCS, TYPES_SOA[ValueType]];
           if typ = '' then
-            Append(line, ['"', ArgTypeName^, '":', typ])
-          else
-            Append(line, ['"', ParamName^, '":', typ]);
+            typ := ArgRtti.Name;
+          Append(line, ['"', ParamName^, '":', typ, ', ']);
         end;
-      until false;
       i := length(line);
       line[i - 1] := ' ';
       line[i] := '}';
