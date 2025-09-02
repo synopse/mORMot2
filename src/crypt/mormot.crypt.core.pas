@@ -530,7 +530,6 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fEngine: TAes; // hidden internal AES-128 state (storing mask in iv)
-    procedure Random128(iv: PHash128Rec); // used internally by Random128()
   public
     /// create the transient random secret key needed for this process
     // - the internal secret can't be persisted, and will remain in memory
@@ -549,6 +548,7 @@ type
     // - return 0 if the cookie is invalid, or the decoded 32-bit value
     function ValidateCookie(const aCookie: RawUtf8): cardinal; overload;
   end;
+  PAesSignature = ^TAesSignature;
 
   /// the AES chaining modes implemented by this unit
   // - mEcb is unsafe and should not be used as such
@@ -3617,14 +3617,21 @@ end;
 { ********************* AES Encoding/Decoding }
 
 var
-  rnd128safe: TLightLock;   // explicit local variable for aarch64 alignment
-  rnd128gen: TAesSignature; // dedicated thread-safe AES-CTR with 64-bit counter
+  rnd128safe: TLightLock; // explicit local variable for aarch64 alignment
+  rnd128gen: TAes;        // dedicated thread-safe AES-CTR with 64-bit counter
 
 procedure Random128(iv: PAesBlock);
+var
+  aes: PAesContext;
 begin
+  aes := @rnd128gen;
   rnd128safe.Lock; // ensure thread safe with minimal contention
-  rnd128gen.Random128(pointer(iv));
+  if PPtrUInt(aes)^ = 0 then
+    PAesSignature(aes)^.Init; // initialize once at startup
+  iv^ := aes^.iv.b;
+  inc(aes^.iv.Lo); // AES-CTR with 64-bit counter
   rnd128safe.UnLock;
+  aes^.DoBlock(aes^, iv^, iv^); // thread-safe process
 end;
 
 procedure ComputeAesStaticTables;
@@ -5084,17 +5091,6 @@ end;
 function TAesSignature.ValidateCookie(const aCookie: RawUtf8): cardinal;
 begin
   result := ValidateCookie(pointer(aCookie), length(aCookie));
-end;
-
-procedure TAesSignature.Random128(iv: PHash128Rec);
-var
-  aes: TAesContext absolute fEngine;
-begin
-  if PPtrUInt(@aes)^ = 0 then
-    Init; // initialize once at startup
-  iv^.b := aes.iv.b;
-  inc(aes.iv.Lo); // AES-CTR with 64-bit counter
-  aes.DoBlock(aes, iv^, iv^);
 end;
 
 
