@@ -3615,11 +3615,14 @@ end;
 { ********************* AES Encoding/Decoding }
 
 var
+  rnd128safe: TLightLock;   // explicit local variable for aarch64 alignment
   rnd128gen: TAesSignature; // dedicated thread-safe AES-CTR with 64-bit counter
 
 procedure Random128(iv: PAesBlock);
 begin
+  rnd128safe.Lock; // ensure thread safe with minimal contention
   rnd128gen.Random128(pointer(iv));
+  rnd128safe.UnLock;
 end;
 
 procedure ComputeAesStaticTables;
@@ -5085,13 +5088,11 @@ procedure TAesSignature.Random128(iv: PHash128Rec);
 var
   aes: TAesContext absolute fEngine;
 begin
-  PLightLock(@aes.buf)^.Lock; // ensure thread safe with minimal contention
   if PPtrUInt(@aes)^ = 0 then
     Init; // initialize once at startup
   iv^.b := aes.iv.b;
   inc(aes.iv.Lo); // AES-CTR with 64-bit counter
   aes.DoBlock(aes, iv^, iv^);
-  PLightLock(@aes.buf)^.UnLock;
 end;
 
 
