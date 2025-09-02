@@ -151,6 +151,7 @@ type
     /// we do not handle all kind of object pascal variables
     ValueType: TInterfaceMethodValueType;
     /// the variable direction as defined at code level
+    // - you may rather use high-level IsInput/IsOutput inlined methods
     ValueDirection: TInterfaceMethodValueDirection;
     /// how the variable may be stored
     ValueVar: TInterfaceMethodValueVar;
@@ -181,6 +182,12 @@ type
                  reValFpReg, reValFpRegs, reNone);
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
     OffsetAsValue: cardinal;
+    /// true if is a const/var input argument
+    function IsInput: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// true if is a var/out/result output argument
+    function IsOutput: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// serialize the argument into the TServiceContainer.Contract JSON format
     // - non standard types (e.g. class, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
@@ -2767,6 +2774,16 @@ begin
   {$else}
   WR.AddDirect('"', '}', ',');
   {$endif SOA_DEBUG}
+end;
+
+function TInterfaceMethodArgument.IsInput: boolean;
+begin
+  result := ValueDirection <= imdVar;
+end;
+
+function TInterfaceMethodArgument.IsOutput: boolean;
+begin
+  result := ValueDirection <> imdConst;
 end;
 
 function TInterfaceMethodArgument.SetFromJson(var Ctxt: TJsonParserContext;
