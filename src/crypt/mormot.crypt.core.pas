@@ -1941,9 +1941,9 @@ procedure Random128(iv: PAesBlock);
   {$ifdef FPC} inline; {$endif}
 
 var
-  /// salt for CryptDataForCurrentUser function
+  /// salt for CryptDataForCurrentUser() per-user local file name computation
   // - is filled with some random bytes by default, but you may override
-  // it for a set of custom processes calling CryptDataForCurrentUser
+  // it for a set of custom processes calling CryptDataForCurrentUser()
   CryptProtectDataEntropy: THash256 = (
     $19, $8e, $ba, $52, $fa, $d6, $56, $99, $7b, $73, $1b, $d0, $8b, $3a, $95, $ab,
     $94, $63, $c2, $c0, $78, $05, $9c, $8b, $85, $b7, $a1, $e3, $ed, $93, $27, $18);

@@ -6332,8 +6332,9 @@ var
 begin
   result := 0;
   r := pointer(fSockIn);
-  if r = nil then // no SockIn^ buffer -> need multiple sockets API calls
+  if r = nil then
   begin
+    // no SockIn^ buffer -> need multiple sockets API calls
     repeat
       read := 1; // one syscall per char: may be very slow on Windows
       if not TrySockRecv(@c, read, {StopBeforeLength=}false, @res, @err) then
@@ -6863,8 +6864,8 @@ begin
           end;
         nrRetry:
           begin
-            read := 0; // caller should make RecvPending/WaitFor and retry Recv
-            res := nrOk;
+            res := nrOk; // make RecvPending + WaitFor below and retry Recv
+            read := 0;
           end;
       else
         begin
