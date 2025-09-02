@@ -78,7 +78,7 @@ type
   end;
 
   /// abstract tunneling service implementation
-  ITunnelLocal = interface(IInvokable)
+  ITunnelLocal = interface(ITunnelTransmit)
     ['{201150B4-6E28-47A3-AAE5-1335C82B060A}']
     /// match mormot.soa.core IServiceWithCallbackReleased definition
     procedure CallbackReleased(const callback: IInvokable;
@@ -93,6 +93,8 @@ type
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       out RemotePort: TNetPort): TNetPort;
+    /// the associated tunnel session ID
+    function TunnelSession: TTunnelSession;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
     /// check if the background processing thread is using encrypted frames
@@ -178,15 +180,15 @@ type
   TTunnelLocal = class(TInterfacedPersistent,
     ITunnelLocal, ITunnelTransmit)
   protected
-    fOptions: TTunnelOptions;
+    fSession: TTunnelSession;
     fPort: TNetPort;
+    fOptions: TTunnelOptions;
+    fOpenBind: boolean;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
     fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
-    fSession: TTunnelSession;
-    fOpenBind: boolean;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
     procedure EcdheHashRandom(var hmac: THmacSha256;
@@ -215,6 +217,8 @@ type
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       out RemotePort: TNetPort): TNetPort;
+    /// ITunnelLocal method: return the associated tunnel session ID
+    function TunnelSession: TTunnelSession;
     /// ITunnelLocal method: return the localport needed
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: check if the background thread uses encrypted frames
@@ -671,6 +675,11 @@ begin
   FreeAndNil(fHandshake);
   FillZero(key.b);
   FillZero(iv.b);
+end;
+
+function TTunnelLocal.TunnelSession: TTunnelSession;
+begin
+  result := fSession;
 end;
 
 function TTunnelLocal.LocalPort: RawUtf8;
