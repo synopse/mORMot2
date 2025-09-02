@@ -69,9 +69,12 @@ type
   // - if toEcdhe or toEncrypt option is set, the frames are already encrypted
   ITunnelTransmit = interface(IInvokable)
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
-    /// should send Frame to the relay server
+    /// main method to emit the supplied binary Frame to the relay server
+    // - the raw binary frame always end with 8 bytes of 64-bit TTunnelSession
     // - no result so that the frames could be gathered e.g. over WebSockets
-    procedure Send(Session: TTunnelSession; const Frame: RawByteString);
+    // - single binary parameter so that could be transmitted as
+    // BINARY_CONTENT_TYPE without any base-64 encoding (to be done at WS level)
+    procedure Send(const Frame: RawByteString);
   end;
 
   /// abstract tunneling service implementation
@@ -105,7 +108,7 @@ type
     fStarted: boolean;
     fOwner: TTunnelLocal;
     fTransmit: ITunnelTransmit;
-    fAes: array[{send:}boolean] of TAesAbstract;
+    fAes: array[{sending:}boolean] of TAesAbstract;
     fServerSock, fClientSock: TNetSocket;
     fClientAddr: TNetAddr;
     fPort: TNetPort;
@@ -190,8 +193,7 @@ type
       const local, remote: TTunnelEcdhFrame); virtual; abstract;
     // can optionally add a signature to the main handshake frame
     procedure FrameSign(var frame: RawByteString); virtual;
-    function FrameVerify(const frame: RawByteString;
-      payloadlen: PtrInt): boolean; virtual;
+    function FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean; virtual;
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
@@ -202,7 +204,7 @@ type
     procedure ClosePort;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
-    procedure Send(aSession: TTunnelSession; const aFrame: RawByteString);
+    procedure Send(const aFrame: RawByteString);
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize tunnelling process
@@ -250,6 +252,9 @@ const
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
 
+/// extract the 64-bit session trailer from a ITunnelTransmit.Send() frame
+function FrameSession(const Frame: RawByteString): TTunnelSession;
+
 
 { ******************** Local NAT Client/Server to Tunnel TCP Streams }
 
@@ -293,9 +298,9 @@ begin
   if not IsZero(key) then
   begin
     // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
-    fAes[{send:}false] := AesIvUpdatedCreate(mCtr, key, 128);
-    fAes[{send:}true]  := AesIvUpdatedCreate(mCtr, key, 128);
-    // we don't send an IV with each frame, but update it from ecdhe derivation
+    fAes[{sending:}false] := AesIvUpdatedCreate(mCtr, key, 128);
+    fAes[{sending:}true]  := AesIvUpdatedCreate(mCtr, key, 128);
+    // won't include an IV with each frame, but update it from ecdhe derivation
     fAes[false].IV := iv;
     fAes[true].IV := iv;
   end;
@@ -333,7 +338,7 @@ begin
        (fClientSock = nil) then
       exit;
   end;
-  if fAes[{send:}false] = nil then
+  if fAes[{sending:}false] = nil then
     data := Frame
   else
   begin
@@ -400,13 +405,16 @@ begin
             if (tmp <> '') and
                not Terminated then
             begin
-              // send the data (optionally encrypted) to the other side
-              inc(fSent, length(tmp));
+              // emit the (encrypted) data with a 64-bit TTunnelSession trailer
+              inc(fSent, length(tmp)); // Sent/Received are plain sizes in bytes
               if fAes[{send:}true] <> nil then
-                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false);
+                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, {trailer=}8)
+              else
+                SetLength(tmp, length(tmp) + 8);
+              PInt64(@PByteArray(tmp)[length(tmp) - 8])^ := fOwner.fSession;
               if (fTransmit <> nil) and
                  not Terminated then
-                fTransmit.Send(fOwner.fSession, tmp);
+                fTransmit.Send(tmp);
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
@@ -463,16 +471,25 @@ begin
   fPort := 0;
 end;
 
-procedure TTunnelLocal.Send(aSession: TTunnelSession; const aFrame: RawByteString);
+procedure TTunnelLocal.Send(const aFrame: RawByteString);
+var
+  l: PtrInt;
+  p: PAnsiChar;
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
+  l := length(aFrame) - 8;
+  if l <= 0 then
+    ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
   if fHandshake <> nil then
     fHandshake.Push(aFrame) // during the handshake phase - maybe before Open
   else if fThread <> nil then
-    if aSession <> fSession then
-      ETunnel.RaiseUtf8('%.Send: session mismatch', [self])
-    else
-      fThread.OnReceived(aFrame); // regular tunelling process
+  begin
+    p := pointer(aFrame);
+    if PInt64(p + l)^ <> fSession then
+      ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
+    PStrLen(p - _STRLEN)^ := l; // trim 64-bit session trailer
+    fThread.OnReceived(aFrame); // regular tunelling process
+  end;
 end;
 
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
@@ -488,15 +505,13 @@ begin
     Append(frame, fSignCert.Sign(frame));
 end;
 
-function TTunnelLocal.FrameVerify(const frame: RawByteString;
-  payloadlen: PtrInt): boolean;
-var
-  f: PAnsiChar absolute frame;
+function TTunnelLocal.FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean;
 begin
-  result := (length(Frame) >= payloadlen) and
+  dec(framelen, payloadlen);
+  result := (framelen >= 0) and
             ((fVerifyCert = nil) or
-             (fVerifyCert.Verify(f + payloadlen, f,
-               length(frame) - payloadlen, payloadlen) in CV_VALIDSIGN));
+             (fVerifyCert.Verify(frame + payloadlen, frame, framelen, payloadlen)
+               in CV_VALIDSIGN));
 end;
 
 procedure TTunnelLocal.SetTransmit(const Transmit: ITunnelTransmit);
@@ -527,6 +542,7 @@ var
   uri: TUri;
   sock: TNetSocket;
   addr: TNetAddr;
+  l: PtrInt;
   frame, remote: RawByteString;
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
@@ -592,7 +608,10 @@ begin
     TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
     FastSetRawByteString(frame, @loc, SizeOf(loc));
     FrameSign(frame); // optional digital signature
-    fTransmit.Send(fSession, frame);
+    l := length(frame);
+    SetLength(frame, l + 8);
+    PInt64(@PByteArray(frame)^[l])^ := fSession; // 64-bit session trailer
+    fTransmit.Send(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
@@ -601,16 +620,17 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
     // check the returned header, maybe using the certificate
-    if length(remote) < SizeOf(loc) then // may have a signature trailer
-      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %',
-        [length(remote), result]);
+    if FrameSession(remote) <> fSession then
+      ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
+    l := length(remote) - 8;
+    if l < SizeOf(loc) then // may have a signature trailer
+      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
     if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
-      ETunnel.RaiseUtf8('Open: unexpected handshake on port %',
-        [length(remote), result]);
+      ETunnel.RaiseUtf8('Open: unexpected handshake on port %', [result]);
     TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
     if not IsEqual(rem^.Info.crc, key.Lo) then
       ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
-    if not FrameVerify(remote, SizeOf(loc)) then
+    if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
       ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
     RemotePort := rem^.Info.port;
     // optional ephemeral encryption
@@ -673,6 +693,17 @@ end;
 function ToText(opt: TTunnelOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
+end;
+
+function FrameSession(const Frame: RawByteString): TTunnelSession;
+var
+  l: PtrInt;
+begin
+  l := length(Frame) - 8;
+  if l <= 0 then
+    result := 0
+  else
+    result := PInt64(@PByteArray(Frame)[l])^;
 end;
 
 
