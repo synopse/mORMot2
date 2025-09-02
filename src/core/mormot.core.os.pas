@@ -3854,6 +3854,11 @@ var
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
   AppendShortUuid: TAppendShortUuid;
 
+  /// late binding to binary encoding to Base64 or Base64-URI
+  // - as seldom used by mormot.net.sock.pas and mormot.crypt.core.pas
+  // - this unit raises an EOSException - properly injected by mormot.core.buffers.pas
+  RawToBase64: function(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;
+
   /// return the RTTI text of a given enumerate as mormot.core.rtti GetEnumName()
   // - this unit defaults to minimal code, but overriden by mormot.core.rtti.pas
   GetEnumNameRtti: function(Info: pointer; Value: integer): PShortString;
@@ -5954,6 +5959,11 @@ function IsLocalHost(Host: PUtf8Char): boolean;
 begin
   result := (PCardinal(Host)^ = HOST_127) or // also check for c6Localhost:
             (PCardinal(Host)^ = ord(':') + ord(':') shl 8 + ord('1') shl 16);
+end;
+
+function _RawToBase64(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;
+begin
+  raise EOSException.Create('No RawToBase64(): needs mormot.core.buffers.pas');
 end;
 
 
@@ -11631,6 +11641,7 @@ begin
   ShortToUuid           := _ShortToUuid;           // mormot.core.text
   AppendShortUuid       := _AppendShortUuid;
   GetEnumNameRtti       := _GetEnumNameRtti;       // mormot.core.rtti
+  RawToBase64           := _RawToBase64;           // mormot.core.buffers
 end;
 
 procedure FinalizeUnit;

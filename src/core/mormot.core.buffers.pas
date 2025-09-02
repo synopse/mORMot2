@@ -7159,6 +7159,14 @@ begin // caller checked that PCardinal(Value)^ and $ffffff = JSON_BASE64_MAGIC_C
   result := Base64ToBinSafe(PAnsiChar(pointer(Value)) + 3, length(Value) - 3, Blob);
 end;
 
+function _RawToBase64(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;
+begin
+  if Base64Uri then
+    result := BinToBase64uri(Bin, Bytes)
+  else
+    result := BinToBase64(Bin, Bytes);
+end;
+
 
 { --------- Base58 encoding/decoding }
 
@@ -11746,6 +11754,7 @@ begin
     Base64DecodeMain := @Base64DecodeMainAvx2; //  8.7 GB/s vs 0.9 GB/s
   end;
   {$endif ASMX64AVXNOCONST}
+  RawToBase64 := _RawToBase64; // for mormot.net.sock and mormot.crypt.core
   // HTML/Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
