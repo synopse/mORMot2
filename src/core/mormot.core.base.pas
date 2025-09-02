@@ -8404,6 +8404,18 @@ begin
   result := aIndex;
 end;
 
+function ArrayCount(aArray: PPAnsiChar; aCount: PInteger): PtrUInt;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if aCount = nil then
+    if aArray^ <> nil then
+      result := PDALen(aArray^ - _DALEN)^ + _DAOFF
+    else
+      result := 0
+  else
+    result := aCount^;
+end;
+
 procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger;
   aKind: TPtrArrayKind);
 var
@@ -8411,10 +8423,7 @@ var
   v: PPointerArray;
   n: PtrInt;
 begin
-  if aCount = nil then
-    n := length(a)
-  else
-    n := aCount^;
+  n := ArrayCount(@a, aCount);
   if PtrUInt(aIndex) >= PtrUInt(n) then
     exit; // out of range
   v := @a[aIndex];
@@ -8438,7 +8447,7 @@ begin
     if (n and 127 <> 0) then // call ReallocMem() once every 128 deletions
       PDALen(PAnsiChar(a) - _DALEN)^ := n - _DAOFF
     else
-      SetLength(a, n) // ReallocMem() or finalize if n = 0
+      SetLength(a, n) // periodic ReallocMem() or finalize if n = 0
   else
   begin
     aCount^ := n; // no ReallocMem()
@@ -8449,15 +8458,8 @@ end;
 
 function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger;
   aKind: TPtrArrayKind): PtrInt;
-var
-  a: TPointerDynArray absolute aPtrArray;
-  n: PtrInt;
 begin
-  if aCount = nil then
-    n := length(a)
-  else
-    n := aCount^;
-  result := PtrUIntScanIndex(pointer(a), n, PtrUInt(aItem));
+  result := PtrUIntScanIndex(pointer(aPtrArray), ArrayCount(@aPtrArray, aCount), PtrUInt(aItem));
   if result >= 0 then
     PtrArrayDelete(aPtrArray, result, aCount, aKind);
 end;
