@@ -2324,17 +2324,14 @@ begin
   if result <> flagIdle then
     exit; // no need to lock if obviously busy or finished
   fPendingProcessLock.Lock;
-  try
-    result := fPendingProcessFlag;
-    if result = flagIdle then
-    begin
-      // we just acquired the thread! congrats!
-      fPendingProcessFlag := flagStarted; // atomic set "started" flag
-      fCallerThreadID := ThreadID;
-    end;
-  finally
-    fPendingProcessLock.UnLock;
+  result := fPendingProcessFlag;
+  if result = flagIdle then
+  begin
+    // we just acquired the thread! congrats!
+    fPendingProcessFlag := flagStarted; // atomic set "started" flag
+    fCallerThreadID := ThreadID;
   end;
+  fPendingProcessLock.UnLock;
 end;
 
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(
@@ -2436,7 +2433,7 @@ function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boo
 begin
   result := (self <> nil) and
             Assigned(fOnIdle) and
-            (GetPendingProcess <> flagIdle);
+            (fPendingProcessFlag <> flagIdle);
 end;
 
 
