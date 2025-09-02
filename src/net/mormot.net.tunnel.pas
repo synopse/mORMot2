@@ -258,6 +258,7 @@ function ToText(opt: TTunnelOptions): ShortString; overload;
 
 /// extract the 64-bit session trailer from a ITunnelTransmit.Send() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ******************** Local NAT Client/Server to Tunnel TCP Streams }
@@ -709,10 +710,10 @@ var
   l: PtrInt;
 begin
   l := length(Frame) - 8;
-  if l <= 0 then
-    result := 0
+  if l > 0 then
+    result := PInt64(@PByteArray(Frame)[l])^
   else
-    result := PInt64(@PByteArray(Frame)[l])^;
+    result := 0;
 end;
 
 
