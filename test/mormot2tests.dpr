@@ -98,9 +98,9 @@ begin
     ExeDescription := 'mORMot '+ SYNOPSE_FRAMEWORK_VERSION + ' Regression Tests';
     Param('dns', 'a DNS #server name/IP for LDAP tests via Kerberos ' +
       {$ifdef OSWINDOWS}
-      'with current logged user or --ldapusr/--ldappwd');
+      'with current logged user or /ldapusr /ldappwd');
       {$else}
-      'after kinit user or --ldapusr/--ldappwd');
+      'after kinit user or --ldapusr --ldappwd');
       {$endif OSWINDOWS}
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
@@ -109,8 +109,8 @@ begin
     Option('nontp',  'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
-    OpenSslDefaultCrypto := ParamS('lib&crypto', 'the OpenSSL libcrypto #filename');
-    OpenSslDefaultSsl    := ParamS('lib&ssl',    'the OpenSSL libssl #filename');
+    OpenSslDefaultCrypto := ParamS('lib&crypto',   'the OpenSSL libcrypto #filename');
+    OpenSslDefaultSsl    := ParamS('lib&ssl',      'the OpenSSL libssl #filename');
     OpenSslDefaultPath   := ParamS('openssl&path', 'the OpenSSL library #path');
     {$endif USE_OPENSSL}
     {$ifdef OSPOSIX}
@@ -145,7 +145,6 @@ end;
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  //exit;
   AddCase([
     TTestCoreBase,
     TTestCoreProcess,
@@ -161,7 +160,6 @@ end;
 
 procedure TIntegrationTests.ORM;
 begin
-  //exit;
   AddCase([
     TTestOrmCore,
     TTestSqliteFile,
@@ -176,11 +174,9 @@ end;
 
 procedure TIntegrationTests.SOA;
 begin
-  //exit;
   {$ifdef LIBQUICKJSSTATIC}
   AddCase(TTestCoreScript);
   {$endif LIBQUICKJSSTATIC}
-  //exit;
   AddCase([
     TTestServiceOrientedArchitecture,
     TTestBidirectionalRemoteConnection
