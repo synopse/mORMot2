@@ -1938,7 +1938,6 @@ procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 // resistance to cryptographic attacks with an efficient thread-safe process
 // - TLecuyer is predictable so is considered unsafe to generate IV or MAC
 procedure Random128(iv: PAesBlock);
-  {$ifdef FPC} inline; {$endif}
 
 var
   /// salt for CryptDataForCurrentUser() per-user local file name computation
@@ -2048,6 +2047,8 @@ type
     /// update the SHA-224/SHA-256 context with some data
     procedure Update(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// append one big-endian encoded 32-bit value
+    procedure UpdateBigEndian(c: cardinal);
     /// finalize and compute the resulting SHA-224/SHA-256 hash Digest of all data
     // affected to Update() method
     procedure Final(out Digest: TSha256Digest; NoInit: boolean = false); overload;
@@ -2525,6 +2526,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// append one big-endian encoded 32-bit value
     procedure UpdateBigEndian(c: cardinal);
+      {$ifdef HASINLINE} inline; {$endif}
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSha256Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
@@ -7217,7 +7219,7 @@ procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 var
   sha: TSha256;
   dig: TSha256Digest;
-  last, iv: cardinal;
+  last: cardinal;
   i: integer;
 begin
   XorMemory(buf, rnd, size);
@@ -7225,8 +7227,7 @@ begin
   last := size div SizeOf(dig);
   for i := 0 to last - 1 do
   begin
-    iv := bswap32(i); // host byte order independent hash IV (as in TKS1/LUKS)
-    sha.Update(@iv, SizeOf(iv));
+    sha.UpdateBigEndian(i); // host byte order independent (as in TKS1/LUKS)
     sha.Update(buf, SizeOf(dig));
     sha.Final(PSha256Digest(buf)^);
     inc(PSha256Digest(buf));
@@ -7234,8 +7235,7 @@ begin
   dec(size, last * SizeOf(dig));
   if size = 0 then
     exit;
-  iv := bswap32(last);
-  sha.Update(@iv, SizeOf(iv));
+  sha.UpdateBigEndian(last);
   sha.Update(buf, size);
   sha.Final(dig);
   MoveFast(dig, buf^, size);
@@ -8142,6 +8142,12 @@ end;
 procedure TSha256.Update(const Buffer: RawByteString);
 begin
   Update(pointer(Buffer), length(Buffer));
+end;
+
+procedure TSha256.UpdateBigEndian(c: cardinal);
+begin
+  c := bswap32(c);
+  Update(@c, 4);
 end;
 
 procedure TSha256.Final(out Digest: TSha256Digest; NoInit: boolean);
@@ -9184,8 +9190,7 @@ end;
 
 procedure THmacSha256.UpdateBigEndian(c: cardinal);
 begin
-  c := bswap32(c);
-  SHA.Update(@c, 4);
+  SHA.UpdateBigEndian(c);
 end;
 
 procedure THmacSha256.Done(out result: TSha256Digest; NoInit: boolean);
