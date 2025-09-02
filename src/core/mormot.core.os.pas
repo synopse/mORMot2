@@ -9979,7 +9979,7 @@ end;
 { **************** TSynLocker Threading Features }
 
 const
-  SPIN_COUNT = 5 shl 5; // = 160
+  SPIN_COUNT = pred(6 shl 5); // = 191
 
 // as reference, take a look at Linus insight (TL&WR: better use futex)
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
@@ -9990,17 +9990,31 @@ procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
 asm
       pause // modern CPUs have bigger pause latency (100 cycles)
 end;
+{$endif CPUINTEL}
+
+{$ifdef FPC_CPUARM}
+// arm/aarch64 short pipeline pause or a hint to the execution scheduler
+procedure DoPause; assembler; nostackframe;
+asm
+     yield // a few cycles, but helps modern CPU adjust its power requirements
+end;
+{$endif FPC_CPUARM}
 
 function DoSpin(spin: PtrUInt): PtrUInt;
 begin
-  // linear backoff: no pause up to 32 times, then up to 5 successive "pause"
-  // opcodes to reduce cache coherence traffic
+  {$ifdef CPUINTELARM}
+  // logarithmic backoff: no pause up to 32 times, then up to 2^5 = 32
+  // successive "pause" opcodes to reduce cache coherence traffic
   result := (SPIN_COUNT - spin) shr 5;
   if result <> 0 then
+  begin
+    result := 1 shl result;
     repeat
       DoPause;
       dec(result);
     until result = 0;
+  end;
+  {$endif CPUINTELARM}
   dec(spin);
   if spin = 0 then
   begin
@@ -10009,30 +10023,6 @@ begin
   end;
   result := spin;
 end;
-{$else}
-
-{$ifdef FPC_CPUARM}
-// arm/aarch short pipeline pause or a hint to the scheduler to optimize power
-procedure DoPause; assembler; nostackframe;
-asm
-     yield
-end;
-{$endif FPC_CPUARM}
-
-function DoSpin(spin: PtrUInt): PtrUInt;
-begin
-  {$ifdef FPC_CPUARM}
-  DoPause;
-  {$endif FPC_CPUARM}
-  dec(spin);
-  if spin = 0 then
-  begin
-    SwitchToThread; // fpnanosleep on POSIX
-    spin := SPIN_COUNT;
-  end;
-  result := spin;
-end;
-{$endif CPUINTEL}
 
 
 { TLightLock }
