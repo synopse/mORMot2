@@ -3413,18 +3413,20 @@ begin
   // detailed CPU execution context and timing from Linux kernel
   DefaultHasher128(@e.h0, @tmp, LoadProcFile('/proc/self/statm', tmp));
   DefaultHasher128(@e.h0, @tmp, LoadProcFile('/proc/self/stat', tmp));
+  DefaultHasher128(@e.h0, @tmp, LoadProcFile('/proc/self/io', tmp));
   DefaultHasher128(@e.h1, @tmp, LoadProcFile('/proc/stat', tmp));
   clock_gettime(CLOCK_UPTIME, @rt);
   DefaultHasher128(@e.h2, @rt, SizeOf(rt));
-  // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
-  DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/uuid', tmp));
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
   {$ifdef HASGETRANDOM}
   // eventually XOR with getrandom syscall if available
   if LinuxGetRandom(@tmp, SizeOf(e)) then
-    XorMemory(@e, @tmp, SizeOf(e));
+    XorMemory(@e, @tmp, SizeOf(e))
+  else
   {$endif HASGETRANDOM}
+    // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
+    DefaultHasher128(@e.h2, @tmp, LoadProcFile('/proc/sys/kernel/random/uuid', tmp));
 end;
 
 {$ifdef OSANDROID}
