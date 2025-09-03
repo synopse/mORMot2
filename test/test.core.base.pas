@@ -9696,8 +9696,9 @@ const
   MAX = 10000;
 var
   dict: TSynDictionary;
+  rnd: TLecuyer;
 
-  procedure TestSpeed(Count: integer; SetCapacity, DoGuidText: boolean;
+  procedure TestSpeed(Count: integer; SetCapacity, DoText: boolean;
     Hasher: THasher; const Msg: RawUtf8);
   var
     timer: TPrecisionTimer;
@@ -9713,13 +9714,13 @@ var
     SetLength(r, Count);
     for i := 0 to High(a) do // pre-computed values and indexes for fairness
     begin
-      v := Random32(Count shr 2) shl 2; // realistic 25% coverage
+      v := rnd.Next(Count shr 2) shl 2; // realistic 25% coverage
       Check(v < Count, 'random32 overflow');
       r[i] := v;
-      if DoGuidText then
-        a[i] := GuidToRawUtf8(RandomGuid)
+      if DoText then
+        rnd.FillAscii(38, a[i])
       else
-        a[i] := UInt32ToUtf8(i);
+        UInt32ToUtf8(i, a[i]);
     end;
     dic := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(TIntegerDynArray), false, 0, nil, Hasher);
@@ -9792,6 +9793,7 @@ var
   b: byte;
   sdk: TSDKey;
 begin
+  RandomLecuyer(rnd);
   SetDict;
   try
     CheckEqual(dict.Count, 0);
