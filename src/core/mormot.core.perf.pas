@@ -390,14 +390,14 @@ type
     fMinimalTime: TSynMonitorOneTime;
     fAverageTime: TSynMonitorOneTime;
     fMaximalTime: TSynMonitorOneTime;
-    fPerSec: QWord;
     fInternalErrors: TSynMonitorCount;
     fProcessing: boolean;
     fTaskStatus: (taskNotStarted,taskStarted);
     fLastInternalError: variant;
+    function GetPerSec: QWord;
+    function GetAverageTime: TSynMonitorOneTime;
     // warning: lock-free Locked* virtual methods because LightLock is not reentrant
     procedure LockedProcessDoTask; virtual;
-    procedure LockedPerSecProperties; virtual;
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
     procedure LockedFromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
@@ -501,13 +501,13 @@ type
       read fMinimalTime;
     /// the time spent in average during any working process
     property AverageTime: TSynMonitorOneTime
-      read fAverageTime;
+      read GetAverageTime;
     /// the highest time spent during any working process
     property MaximalTime: TSynMonitorOneTime
       read fMaximalTime;
     /// average of how many tasks did occur per second
     property PerSec: QWord
-      read fPerSec;
+      read GetPerSec;
     /// how many errors did occur during the processing
     property Errors: TSynMonitorCount
       read fInternalErrors;
@@ -524,7 +524,7 @@ type
   protected
     fSize: TSynMonitorSize;
     fThroughput: TSynMonitorThroughput;
-    procedure LockedPerSecProperties; override;
+    function GetThroughput: TSynMonitorThroughput;
     procedure LockedSum(another: TSynMonitor); override;
   public
     /// initialize the instance nested class properties
@@ -543,7 +543,7 @@ type
       read fSize;
     /// data processing bandwidth, returned as B/KB/MB per second
     property Throughput: TSynMonitorThroughput
-      read fThroughput;
+      read GetThroughput;
   end;
 
 
@@ -555,7 +555,8 @@ type
     fOutput: TSynMonitorSize;
     fInputThroughput: TSynMonitorThroughput;
     fOutputThroughput: TSynMonitorThroughput;
-    procedure LockedPerSecProperties; override;
+    function GetInputThroughput: TSynMonitorThroughput;
+    function GetOutputThroughput: TSynMonitorThroughput;
     procedure LockedSum(another: TSynMonitor); override;
   public
     /// initialize the instance nested class properties
@@ -576,10 +577,10 @@ type
       read fOutput;
     /// incoming data processing bandwidth, returned as B/KB/MB per second
     property InputThroughput: TSynMonitorThroughput
-      read fInputThroughput;
+      read GetInputThroughput;
     /// outgoing data processing bandwidth, returned as B/KB/MB per second
     property OutputThroughput: TSynMonitorThroughput
-      read fOutputThroughput;
+      read GetOutputThroughput;
   end;
 
 
@@ -2723,7 +2724,6 @@ begin
       fMaximalTime.MicroSec := InternalTimer.LastTimeInMicroSec;
     fTaskStatus := taskNotStarted;
   end;
-  LockedPerSecProperties;
   fProcessing := false;
 end;
 
@@ -2811,12 +2811,16 @@ begin
   ProcessError(info);
 end;
 
-procedure TSynMonitor.LockedPerSecProperties;
-begin
-  if fTaskCount = 0 then
-    exit; // avoid division per zero
-  fPerSec := fTotalTime.PerSecond(fTaskCount);
-  fAverageTime.MicroSec := fTotalTime.MicroSec div fTaskCount;
+function TSynMonitor.GetPerSec: QWord;
+begin // caller made fSafe.Lock before accessing/serializing the properties
+  result := fTotalTime.PerSecond(fTaskCount); // delayed computation
+end;
+
+function TSynMonitor.GetAverageTime: TSynMonitorOneTime;
+begin // caller made fSafe.Lock before accessing/serializing the properties
+  if fTaskCount <> 0 then // avoid division per zero
+    fAverageTime.MicroSec := fTotalTime.MicroSec div fTaskCount;
+  result := fAverageTime;
 end;
 
 procedure TSynMonitor.Sum(another: TSynMonitor);
@@ -2863,7 +2867,6 @@ procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
   fSafe.Lock;
   try
-    LockedPerSecProperties; // may not have been calculated after Sum()
     LockedWriteDetailsTo(W);
   finally
     fSafe.UnLock;
@@ -2906,10 +2909,10 @@ begin
   fSize.Free;
 end;
 
-procedure TSynMonitorWithSize.LockedPerSecProperties;
-begin
-  inherited LockedPerSecProperties;
+function TSynMonitorWithSize.GetThroughput: TSynMonitorThroughput;
+begin // caller made fSafe.Lock before accessing/serializing the properties
   fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
+  result := fThroughput;
 end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
@@ -2955,11 +2958,16 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynMonitorInputOutput.LockedPerSecProperties;
-begin
-  inherited LockedPerSecProperties;
+function TSynMonitorInputOutput.GetInputThroughput: TSynMonitorThroughput;
+begin // caller made fSafe.Lock before accessing/serializing the properties
   fInputThroughput.BytesPerSec  := fTotalTime.PerSecond(fInput.Bytes);
-  fOutputThroughput.BytesPerSec := fTotalTime.PerSecond(fOutput.Bytes);
+  result := fInputThroughput;
+end;
+
+function TSynMonitorInputOutput.GetOutputThroughput: TSynMonitorThroughput;
+begin // caller made fSafe.Lock before accessing/serializing the properties
+  fOutputThroughput.BytesPerSec  := fTotalTime.PerSecond(fOutput.Bytes);
+  result := fOutputThroughput;
 end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
