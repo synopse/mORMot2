@@ -3395,6 +3395,7 @@ begin
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
   if LoadProcFile('/proc/self/statm', tmp) <= 0 then
     exit;
+  P := @tmp;
   info.allocreserved := QWord(_GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmSize
   info.allocused     := QWord(_GetNextCardinal(P)) * SystemInfo.dwPageSize; // VmRSS
 end;
