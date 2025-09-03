@@ -697,7 +697,7 @@ begin
   result.Second := epoch - t * SecsPerMin;
 end;
 
-{$ifdef OSDARWIN} // OSX has no clock_gettime() API
+{$ifdef OSDARWIN} // OSX has no clock_gettime() API but its own MACH API
 
 type
   TTimebaseInfoData = record

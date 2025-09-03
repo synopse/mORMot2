@@ -10011,13 +10011,23 @@ end;
 
 {$ifdef OSWINDOWS} // not defined in the Delphi RTL but in its Windows unit :(
 function GetCurrentThreadId: PtrUInt; stdcall; external 'kernel32';
-{$endif OSWINDOWS}
+function CoCreateGuid(var h: THash128): PtrUInt; stdcall; external 'ole32.dll';
 
 procedure __Fill256FromOs(out e: THash256Rec);
 begin
-  sysutils.CreateGUID(e.l.guid); // = direct CoCreateGuid() on Windows
-  sysutils.CreateGUID(e.h.guid);
+  CoCreateGuid(e.Lo); // fast but not CSPRNG
+  CoCreateGuid(e.Hi);
+end;
+{$else}
+{$ifdef OSDARWIN} // lighter than sysutil's fpgettimeofday(), and in nanoseconds
+function GetTickCount64: UInt64; cdecl external 'c' name 'mach_absolute_time';
+{$endif OSDDARWIN}
+procedure __Fill256FromOs(out e: THash256Rec);
+begin
+  e.q[0] := GetTickCount64;
+  crc256c(@e, SizeOf(e.q[0]), e.b); // weak but not void
 end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
+{$endif OSWINDOWS}
 
 procedure XorEntropy(var e: THash512Rec);
 var
@@ -10034,6 +10044,8 @@ begin
   RdRand32(@tmp.l, 4);              // xor 128-bit HW CSPRNG: no-op if no cfSSE42
   if cfTSC in CpuFeatures then
     e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
+  {$else}
+  e.r[2].L := e.r[2].L xor GetTickCount64; // defined in RTL or just above
   {$endif CPUINTEL}
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
