@@ -9988,37 +9988,36 @@ const
 // on Intel/AMD, the pause CPU instruction would relax the core
 procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
 asm
-      pause // modern CPUs have bigger pause latency (100 cycles)
+      pause // modern CPUs have bigger pause latency (up to 100 cycles)
 end;
 {$endif CPUINTEL}
 
 {$ifdef FPC_CPUARM}
-// arm/aarch64 short pipeline pause or a hint to the execution scheduler
+// "yield" is available since ARMv6K architecture, including ARMv7-A and ARMv8-A
 procedure DoPause; assembler; nostackframe;
 asm
-     yield // a few cycles, but helps modern CPU adjust its power requirements
+     yield // a few cycles, but helps modern CPU adjust their power requirements
 end;
 {$endif FPC_CPUARM}
 
 function DoSpin(spin: PtrUInt): PtrUInt;
 begin
   {$ifdef CPUINTELARM}
-  // logarithmic backoff: no pause up to 32 times, then up to 2^5 = 32
-  // successive "pause" opcodes to reduce cache coherence traffic
-  result := (SPIN_COUNT - spin) shr 5;
-  if result <> 0 then
+  // adaptive spinning to reduce cache coherence traffic
+  result := (SPIN_COUNT - spin) shr 5; // 0..5 range, each 32 times
+  if result <> 0 then // no pause up to 32 times (low latency acquisition)
   begin
-    result := 1 shl result;
+    result := 1 shl pred(result); // exponential backoff: 1,2,4,8,16 x DoPause
     repeat
-      DoPause;
+      DoPause; // called 992 times until yield to the OS
       dec(result);
     until result = 0;
   end;
   {$endif CPUINTELARM}
   dec(spin);
-  if spin = 0 then
+  if spin = 0 then // eventually yield to the OS for long wait
   begin
-    SwitchToThread;     // yield to the OS for long wait - fpnanosleep on POSIX
+    SwitchToThread;     // fpnanosleep on POSIX
     spin := SPIN_COUNT; // try again
   end;
   result := spin;
