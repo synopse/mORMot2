@@ -2847,7 +2847,7 @@ end;
 
 procedure TSynMonitor.LockedSum(another: TSynMonitor);
 begin
-  fTotalTime.MicroSec := fTotalTime.MicroSec + another.fTotalTime.MicroSec;
+  fTotalTime.AddTime(another.fTotalTime.MicroSec);
   if (fMinimalTime.MicroSec = 0) or
      (another.fMinimalTime.MicroSec < fMinimalTime.MicroSec) then
     fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
@@ -2919,14 +2919,14 @@ end;
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
 begin
   fSafe.Lock;
-  fSize.Bytes := fSize.Bytes + Bytes;
+  fSize.AddSize(Bytes);
   fSafe.UnLock;
 end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes, MicroSecs: QWord);
 begin
   fSafe.Lock;
-  fSize.Bytes := fSize.Bytes + Bytes;
+  fSize.AddSize(Bytes);
   LockedFromExternalMicroSeconds(MicroSecs);
   fSafe.UnLock;
 end;
@@ -2974,8 +2974,8 @@ end;
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
   fSafe.Lock;
-  fInput.Bytes  := fInput.Bytes + Incoming;
-  fOutput.Bytes := fOutput.Bytes + Outgoing;
+  fInput.AddSize(Incoming);
+  fOutput.AddSize(Outgoing);
   fSafe.UnLock;
 end;
 
@@ -2987,10 +2987,17 @@ begin
   error := not StatusCodeIsSuccess(Status);
   fSafe.Lock;
   // inlined AddSize
-  fInput.Bytes  := fInput.Bytes + Incoming;
-  fOutput.Bytes := fOutput.Bytes + Outgoing;
-  // inlined FromExternalMicroSeconds
-  LockedFromExternalMicroSeconds(MicroSec);
+  fInput.AddSize(Incoming);
+  fOutput.AddSize(Outgoing);
+  // inlined LockedFromExternalMicroSeconds
+  inc(fTaskCount); // = LockedProcessDoTask
+  fTotalTime.AddTime(MicroSec);
+  fLastTime.MicroSec := MicroSec;
+  if (fMinimalTime.MicroSec = 0) or
+     (MicroSec < fMinimalTime.MicroSec) then
+    fMinimalTime.MicroSec := MicroSec;
+  if MicroSec > fMaximalTime.MicroSec then
+    fMaximalTime.MicroSec := MicroSec;
   // inlined ProcessErrorNumber(Status)
   if error then
     LockedProcessErrorInteger(Status);
