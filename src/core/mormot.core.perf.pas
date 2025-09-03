@@ -2779,11 +2779,12 @@ begin
 end;
 
 procedure TSynMonitor.LockedProcessErrorInteger(info: integer);
+var
+  v: TSynVarData; // no need of a true variant with implicit try..finally
 begin
-  try
-    LockedProcessError(info);
-  except
-  end;
+  v.VType := varInteger;
+  v.VInteger := info;
+  LockedProcessError(variant(v));
 end;
 
 procedure TSynMonitor.ProcessError(const info: variant);
