@@ -3378,6 +3378,11 @@ procedure LecuyerDiffusion(dest: pointer; destsize: PtrUInt; src: PHash128);
 procedure XorEntropy(var e: THash512Rec);
 
 var
+  /// 512-bit filled at startup from Intel cpuid/rdtsc/rdrand and/or Linux auxv
+  // - is likely to be void on BSD/Mac arm/aarch64
+  // - used and updated in-place by TLecuyer.Seed for its forward secrecy
+  LecuyerEntropy: THash512Rec;
+
   /// internal stub used by XorEntropy() to quickly get 256-bit of OS entropy
   // - this default unit with call sysutils.CreateGuid() twice - fine on Windows
   // - mormot.core.os.posix.inc will override it to properly call fast OS APIs
@@ -10067,9 +10072,6 @@ begin // Linear Feedback Shift Register (LFSR) - not inlined for better codegen
   result := rs1 xor rs2 xor result;
 end; // use masks of rs1:-2=31-bit rs2:-8=29-bit rs3:-16=28-bit -> 2^88 period
 
-var // filled by TestCpuFeatures from Intel cpuid/rdtsc/random and/or Linux auxv
-  LecuyerEntropy: THash512Rec; // void on BSD/Mac ARM but XorEntropy() is enough
-
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
   e: THash512Rec; // use a local copy on stack to avoid race condition
@@ -10200,7 +10202,6 @@ begin
     p[chars] := (PtrUInt(p[chars]) and 63) + 32; // 7-bit ASCII
   end;
 end;
-
 
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 var
