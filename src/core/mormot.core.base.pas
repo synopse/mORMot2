@@ -10075,21 +10075,14 @@ end; // use masks of rs1:-2=31-bit rs2:-8=29-bit rs3:-16=28-bit -> 2^88 period
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
   e: THash512Rec; // use a local copy on stack to avoid race condition
-  h: THash128Rec;
-  i: integer;
 begin
   e := LecuyerEntropy; // we only need 88-bit of entropy within these 512-bit
   if entropy <> nil then
     crc32c128(@e.h0, pointer(entropy), entropylen); // user-supplied entropy
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
   LecuyerEntropy := e; // forward secrecy
-  DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
-  rs1 := MaxPtrUInt(2, rs1 xor h.c0);  // mask = -2 in RawNext
-  rs2 := MaxPtrUInt(8, rs2 xor h.c1);  // mask = -8
-  rs3 := MaxPtrUInt(16, rs3 xor h.c2); // mask = -16
-  seedcount := h.c3 shr 24; // may seed slightly before 2^32 RawNext calls
-  for i := 1 to h.i3 and 7 do
-    RawNext; // warm up
+  DefaultHasher128(@self, @e, SizeOf(e)); // may be AesNiHash128
+  SeedGenerator;
 end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: QWord);
@@ -10107,10 +10100,13 @@ end;
 
 procedure TLecuyer.SeedGenerator;
 begin
-  rs1 := MaxPtrUInt(2, rs1);  // mask = -2 in RawNext
-  rs2 := MaxPtrUInt(8, rs2);  // mask = -8
-  rs3 := MaxPtrUInt(16, rs3); // mask = -16
-  seedcount := 1; // will reseed after 16 GB, i.e. 2^32 RawNext calls (< 2^88)
+  if rs1 < 2 then // mask = -2 in RawNext
+    rs1 := 2;
+  if rs2 < 8 then // mask = -8
+    rs2 := 8;
+  if rs3 < 16 then // mask = -16
+    rs3 := 16;
+  seedcount := 1; // reseed after 16 GB, i.e. 2^32 RawNext calls (<2^88)
 end;
 
 function TLecuyer.Next: cardinal;
