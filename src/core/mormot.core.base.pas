@@ -3379,9 +3379,9 @@ procedure XorEntropy(var e: THash512Rec);
 
 var
   /// 512-bit filled at startup from Intel cpuid/rdtsc/rdrand and/or Linux auxv
-  // - is likely to be void on BSD/Mac arm/aarch64
+  // - is likely to be weak (but not void) on BSD/Mac ARM just after start
   // - used and updated in-place by TLecuyer.Seed for its forward secrecy
-  LecuyerEntropy: THash512Rec;
+  BaseEntropy: THash512Rec;
 
   /// internal stub used by XorEntropy() to quickly get 256-bit of OS entropy
   // - this default unit with call sysutils.CreateGuid() twice - fine on Windows
@@ -10076,11 +10076,11 @@ procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
   e: THash512Rec; // use a local copy on stack to avoid race condition
 begin
-  e := LecuyerEntropy; // we only need 88-bit of entropy within these 512-bit
+  e := BaseEntropy; // we only need 88-bit of entropy within these 512-bit
   if entropy <> nil then
     crc32c128(@e.h0, pointer(entropy), entropylen); // user-supplied entropy
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
-  LecuyerEntropy := e; // forward secrecy
+  BaseEntropy := e; // forward secrecy
   DefaultHasher128(@self, @e, SizeOf(e)); // may be AesNiHash128
   SeedGenerator;
 end;
@@ -10100,13 +10100,13 @@ end;
 
 procedure TLecuyer.SeedGenerator;
 begin
-  if rs1 < 2 then // mask = -2 in RawNext
+  if rs1 < 2 then  // mask = -2 in RawNext
     rs1 := 2;
-  if rs2 < 8 then // mask = -8
+  if rs2 < 8 then  // mask = -8
     rs2 := 8;
   if rs3 < 16 then // mask = -16
     rs3 := 16;
-  seedcount := 1; // reseed after 16 GB, i.e. 2^32 RawNext calls (<2^88)
+  seedcount := 1;  // reseed after 16 GB, i.e. 2^32 RawNext calls (<2^88)
 end;
 
 function TLecuyer.Next: cardinal;
@@ -10413,7 +10413,7 @@ end; // no "vector width" bits any more: AVX10 means 128-, 256- and 512-bit
 
 procedure TestCpuFeatures;
 var
-  regs: array[0..3] of TIntelRegisters absolute LecuyerEntropy;
+  regs: array[0..3] of TIntelRegisters absolute BaseEntropy;
   flags: PIntegerArray;
 begin
   // retrieve CPUID raw flags
@@ -11051,8 +11051,8 @@ begin
     while p^ <> 0 do
       inc(p);
     inc(p); // auxv is located after the last textual environment variable
-    e := @LecuyerEntropy;
-    eend := @PByteArray(e)[SizeOf(LecuyerEntropy)];
+    e := @BaseEntropy;
+    eend := @PByteArray(e)[SizeOf(BaseEntropy)];
     while p[0] <> 0 do
     begin
       case p[0] of // 32-bit or 64-bit entries = PtrUInt
@@ -11061,12 +11061,12 @@ begin
         AT_HWCAP2:
           caps[1] := p[1];
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
-          XorMemory(LecuyerEntropy.r[3], PHash128Rec(p[1])^);
+          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^);
       end;
-      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill LecuyerEntropy
+      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy
       inc(e);
       if e = eend then
-        dec(PByte(e), SizeOf(LecuyerEntropy));
+        dec(PByte(e), SizeOf(BaseEntropy));
       p := @p[2];
     end;
     MoveFast(caps, CpuFeatures, SizeOf(CpuFeatures));
@@ -13657,6 +13657,8 @@ begin
   {$ifndef ASMINTEL}
   MoveFast := @Move;
   FillCharFast := @_FillChar;
+  if BaseEntropy.i0 = 0 then // BSD or MAC arm/aarch64
+    XorEntropy(BaseEntropy); // ensure not void
   {$endif ASMINTEL}
 end;
 

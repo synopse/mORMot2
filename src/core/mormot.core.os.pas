@@ -8825,10 +8825,9 @@ begin
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
   // finalize SystemEntropy.Startup
-  if LecuyerEntropy.i0 <> 0 then // cpuid+rdrand+rdtsc (may be void)
-   crcblocks(@SystemEntropy.Startup, @LecuyerEntropy, 512 div 128);
+  crcblocks(@SystemEntropy.Startup, @BaseEntropy, 512 div 128); // cpuid+rdrand+rdtsc
   crcblock(@SystemEntropy.Startup, @Executable.Hash);
-  crc32c128(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache)); // some more
+  crcblocks(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache) div SizeOf(THash128));
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);

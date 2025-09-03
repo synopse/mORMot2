@@ -7581,8 +7581,7 @@ begin
     // 256-bit of mormot.core.os randomness state with strong forward secrecy
     sha3.Update(@SystemEntropy, SizeOf(SystemEntropy));
     // 512-bit randomness and entropy from gsl_rng_taus2 current state
-    if LecuyerEntropy.i0 <> 0 then
-      sha3.Update(@LecuyerEntropy, SizeOf(LecuyerEntropy));
+    sha3.Update(@BaseEntropy, SizeOf(BaseEntropy));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
     if Assigned(OpenSslRandBytes) then
     begin
@@ -7595,10 +7594,8 @@ begin
     // opportunity to initialize the shared gsl_rng_taus2 instance if needed
     if PPtrInt(@SharedRandom.Generator)^ = 0 then // inlined TLecuyer.Seed
     begin
-      if LecuyerEntropy.i0 <> 0 then
-        Xor512(@data, @LecuyerEntropy);
-      LecuyerEntropy := data; // forward secrecy
-      DefaultHasher128(@SharedRandom.Generator, @data, SizeOf(data));
+      Xor512(@BaseEntropy, @data); // forward secrecy
+      DefaultHasher128(@SharedRandom.Generator, @BaseEntropy, SizeOf(BaseEntropy));
       SharedRandom.Generator.SeedGenerator;
     end;
     // 512-bit of low-level Operating System entropy from mormot.core.os
