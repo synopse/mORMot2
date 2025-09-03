@@ -1765,7 +1765,7 @@ type
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: integer;
     fSessionCounterMin: cardinal;
-    fTimestampInfoCacheTix: cardinal;
+    fTimestampInfoCacheTix, fStatsCacheTix: cardinal;
     fOnIdleLastTix: cardinal;
     fPublishedMethodTimestampIndex: ShortInt; // (8-bit in -1..127 range)
     fPublishedMethodAuthIndex: ShortInt;
@@ -1774,7 +1774,7 @@ type
     fSessionAuthentication: TRestServerAuthenticationDynArray;
     fPublishedMethod: TRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
-    fTimestampInfoCache: RawUtf8;
+    fTimestampInfoCache, fStatsCache: RawUtf8;
     fStats: TRestServerMonitor;
     fStatUsage: TSynMonitorUsage;
     fAssociatedServices: TServicesPublishedInterfacesList;
@@ -7790,6 +7790,7 @@ procedure TRestServer.Stat(Ctxt: TRestServerUriContext);
 var
   W: TJsonWriter;
   json, xml, name: RawUtf8;
+  tix: cardinal;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
@@ -7797,17 +7798,27 @@ begin
     Ctxt.RetrieveInputUtf8OrVoid('findservice', name);
     if name = '' then
     begin
-      InternalStat(Ctxt, W);
-      name := 'Stats';
+      tix := Ctxt.TickCount64 shr 12; // refresh every 4 seconds to avoid DoS
+      if fStatsCacheTix <> tix then
+      begin
+        fStatsCacheTix := tix;
+        InternalStat(Ctxt, W);
+        W.SetText(fStatsCache);
+      end;
+      json := fStatsCache;
     end
     else
-      AssociatedServices.FindServiceAll(name, W);
-    W.SetText(json);
+    begin
+      AssociatedServices.FindServiceAll(name, W, Ctxt.TickCount64);
+      W.SetText(json);
+    end;
     if Ctxt.InputExists['format'] or
        PropNameEquals(Ctxt.fUriMethodPath, 'json') then
       json := JsonReformat(json)
     else if PropNameEquals(Ctxt.fUriMethodPath, 'xml') then
     begin
+      if name = '' then
+        name := 'Stats'; // output as <Stats> .. </Stats>
       JsonBufferToXML(pointer(json), XMLUTF8_HEADER, Join(['<', name, '>']), xml);
       Ctxt.Returns(xml, 200, XML_CONTENT_TYPE_HEADER);
       exit;
@@ -7866,7 +7877,7 @@ begin
      not (rsoTimestampInfoUriDisable in fOptions) then
   begin
     if tix shr 12 <> fTimestampInfoCacheTix then
-      ComputeInfo; // cache refreshed every 4.096 seconds
+      ComputeInfo; // cache refreshed every 4.096 seconds to avoid DoS attacks
     Ctxt.Returns(fTimestampInfoCache);
   end
   else
