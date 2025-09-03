@@ -881,9 +881,9 @@ const
   SpinSmallGetmemLockTSC     = 1000;
   {$endif FPCMM_PAUSE}
   {$else}
-  // pause with constant spinning counts (empirical values from fastmm4-avx)
-  SpinMediumLockCount        = 2500;
-  SpinLargeLockCount         = 5000;
+  // pause with constant spinning counts (empirical values)
+  SpinMediumLockCount        = pred(6 shl 5); // exponential backoff
+  SpinLargeLockCount         = 1000;          // linear backoff
   {$ifdef FPCMM_PAUSE}
   SpinSmallGetmemLockCount   = 500;
   {$endif FPCMM_PAUSE}
@@ -1109,12 +1109,22 @@ asm
         cmp     rax, r9
         ja      @rc // timeout
         {$else}
-@s:     mov     edx, SpinMediumLockCount
-@sp:    pause
+        // same algorithm than function DoSpin() in mormot.core.os.pas
+@s:     mov     edx, SpinMediumLockCount // = pred(6 shl 5)
+@sp:    mov     ecx, SpinMediumLockCount
+        sub     ecx, edx
         dec     edx
-        jz      @rc //timeout
+        jz      @rc     // timeout
+        shr     ecx, 5  // 0..6 range, each 32 times
+        jz      @try
+        dec     ecx
+        mov     eax, 1
+        shl     eax, cl // exponential backoff: 1,2,4,8,16 x pause
+@p:     pause           // called 992 times until yield to the OS
+        dec     eax
+        jnz     @p
         {$endif FPCMM_SLEEPTSC}
-        mov     rcx, r10
+@try:   mov     rcx, r10
         mov     eax, $100
         {$ifdef FPCMM_CMPBEFORELOCK_SPIN}
         cmp     byte ptr [r10].TMediumBlockInfo.Locked, true
@@ -1127,7 +1137,7 @@ asm
         push    rdi
         push    r10
         push    r11
-        call    ReleaseCore
+        call    ReleaseCore // fpnanosleep on POSIX
         pop     r11
         pop     r10
         pop     rdi
