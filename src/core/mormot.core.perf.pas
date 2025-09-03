@@ -282,9 +282,12 @@ type
     fMicroSeconds: TSynMonitorTotalMicroSec;
     function GetAsText: TShort16;
   public
+    /// increase the internal time elapsed counter
+    procedure AddTime(MicroSeconds: TSynMonitorTotalMicroSec);
+      {$ifdef HASINLINE} inline; {$endif}
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
-      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+      {$ifdef FPC_OR_UNICODE} inline; {$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorTotalMicroSec
@@ -327,6 +330,10 @@ type
   protected
     fBytes: TSynMonitorTotalBytes;
     function GetAsText: TShort16;
+  public
+    /// increase the internal size counter
+    procedure AddSize(Size: TSynMonitorTotalBytes);
+      {$ifdef HASINLINE} inline; {$endif}
   published
     /// number of bytes, as raw number
     property Bytes: TSynMonitorTotalBytes
@@ -2550,6 +2557,11 @@ begin
   MicroSecToString(fMicroSeconds, result);
 end;
 
+procedure TSynMonitorTime.AddTime(MicroSeconds: TSynMonitorTotalMicroSec);
+begin
+  inc(fMicroSeconds, MicroSeconds);
+end;
+
 function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
 begin
   {$ifdef FPC}
@@ -2597,6 +2609,11 @@ function TSynMonitorSize.GetAsText: TShort16;
 begin
   result[0] := #0;
   AppendKB(fBytes, result, not fTextNoSpace);
+end;
+
+procedure TSynMonitorSize.AddSize(Size: TSynMonitorTotalBytes);
+begin
+  inc(fBytes, Size);
 end;
 
 { TSynMonitorOneSize }
