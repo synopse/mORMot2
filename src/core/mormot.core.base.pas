@@ -3324,6 +3324,8 @@ type
     procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
     /// fill some string[0..31] with 7-bit ASCII pseudo-random text
     procedure FillShort31(var dest: TShort31);
+    /// fill some RawUtf8 with 7-bit ASCII pseudo-random text
+    procedure FillAscii(chars: PtrInt; var text: RawUtf8);
     /// force a pseudo-random seed of the generator from current system state
     // - as executed by the Next method at startup, and after 2^32 values, which
     // is very conservative against Pierre L'Ecuyer's algorithm period of 2^88
@@ -10042,7 +10044,7 @@ begin
   dest[0] := size;
   if size <> 0 then
     repeat
-      dest[size] := (cardinal(dest[size]) and 63) + 32;
+      dest[size] := (PtrUInt(dest[size]) and 63) + 32;
       dec(size);
     until size = 0;
 end;
@@ -10180,6 +10182,19 @@ procedure TLecuyer.FillShort31(var dest: TShort31);
 begin
   Fill(@dest, 32);
   AdjustShortStringFromRandom(@dest, 32);
+end;
+
+procedure TLecuyer.FillAscii(chars: PtrInt; var text: RawUtf8);
+var
+  p: PByteArray;
+begin
+  p := FastSetString(text, chars);
+  Fill(p, chars);
+  while chars > 0 do
+  begin
+    dec(chars);
+    p[chars] := (PtrUInt(p[chars]) and 63) + 32; // 7-bit ASCII
+  end;
 end;
 
 
