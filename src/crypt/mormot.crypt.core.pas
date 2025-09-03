@@ -3640,7 +3640,7 @@ end;
 
 function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
 begin
-  Random128(@rnd);
+  Random128(@rnd); // 88-bit seed from our CSPRNG
   rnd.SeedGenerator;
   result := @rnd;
 end;
@@ -5045,7 +5045,7 @@ begin // note: we can't use Random128() here to avoid endless recursion
   TAesPrng.Main.Fill(aes.iv.b);  // transient AES-128 secret (never persisted)
   fEngine.EncryptInit(aes.iv, 128);
   repeat
-    SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // TLecuyer is enough for padding
+    SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // good enough for padding
   until aes.iv.c0 <> 0;
 end;
 
@@ -10397,8 +10397,7 @@ begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
     AesNiHashKey := GetMemAligned(16 * 4);
     AesNiHashAntiFuzzTable := AesNiHashKey;
-    Xor512(pointer(AesNiHashKey), @SystemEntropy); // 512-bit system salt
-    SharedRandom.Fill(AesNiHashKey, 16 * 4);       // 512-bit of TLecuyer seed
+    LecuyerDiffusion(AesNiHashKey, 16 * 4, @SystemEntropy.Startup); // 512-bit
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;

@@ -1990,9 +1990,7 @@ procedure InitBsonObjectIDComputeNew;
 begin
   with GlobalBsonObjectID do
   begin
-    repeat
-      InitialCounter := SharedRandom.Generator.Next and COUNTER_MASK;  // 24-bit
-    until InitialCounter <> 0;
+    InitialCounter := SystemEntropy.Startup.c2 and COUNTER_MASK;       // 24-bit
     with Executable do
       SharedMachineID := crc32c(crc32c(
         0, pointer(Host), length(Host)), pointer(User), length(User)); // 24-bit
