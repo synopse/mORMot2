@@ -195,12 +195,6 @@ var
   // - DefaultHasher128() is assigned to this function, when available on the CPU
   AesNiHash128: procedure(hash: PHash128; data: pointer; len: PtrUInt);
 
-  /// if AesNiHash128() is available, points to the internal 64 bytes
-  // anti-fuzzing random table - published for low-level testing
-  // - never modify its content at runtime, to not break e.g. all hash tables
-  // - AesNiHashAntiFuzzTable <> nil if AES-NI and SSE 3 are available on this CPU
-  AesNiHashAntiFuzzTable: PHash512;
-
   /// BCrypt raw implementation function - injected by mormot.crypt.other.pas
   // - Cost should be in range 4..31 and Salt '' or exactly 22 characters (128-bit)
   // - returns e.g. '$2b$12$GhvMmNVjRW29ulnudl.LbuAnUtN/LRfe1JsBm1Xu6LE3059z5Tr8m'
@@ -1584,8 +1578,11 @@ function AesAlgoNameDecode(const AesAlgoName: RawUtf8;
 // used for deprecated Xorblock/XorOffset process from mormot.crypt.other.pas
 function AesTables: pointer;
 
-// used for paranoid safety by test.core.crypto.pas
+// used by test.core.crypto.pas for paranoid safety
 function AesTablesTest: boolean;
+
+// used by test.core.crypto.pas to validate AesNiHash128() accross platforms
+function AesNiHashAntiFuzzTable: PHash512;
 
 
 {$ifndef PUREMORMOT2}
@@ -2797,8 +2794,7 @@ const
 
 var
   {$ifdef USEAESNIHASH}
-  // 16*4=64 random bytes (512-bit) set at startup to avoid hash flooding
-  // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
+  // 64 SSE2-aligned random bytes set at startup to avoid hash flooding
   AesNiHashKey: PHash512; // = AesNiHashAntiFuzzTable
   {$endif USEAESNIHASH}
   // filled by ComputeAesStaticTables if needed - don't change the order below
@@ -4315,6 +4311,15 @@ begin
     ComputeAesStaticTables;
   {$endif USEAESNI}
   result := @TD0;
+end;
+
+function AesNiHashAntiFuzzTable: PHash512;
+begin
+  {$ifdef USEAESNIHASH}
+  result := AesNiHashKey;
+  {$else}
+  result := nil;
+  {$endif USEAESNIHASH}
 end;
 
 function AesTablesTest: boolean;
@@ -10396,7 +10401,6 @@ begin
   begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
     AesNiHashKey := GetMemAligned(16 * 4);
-    AesNiHashAntiFuzzTable := AesNiHashKey;
     LecuyerDiffusion(AesNiHashKey, 16 * 4, @SystemEntropy.Startup); // 512-bit
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
