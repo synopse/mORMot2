@@ -93,8 +93,8 @@ function TSimpleHttpAsyncServer.DoOnRequest(Ctxt: THttpServerRequestAbstract): c
 begin
  { if fHttpServer is THttpAsyncServer then
     with THttpAsyncServer(fHttpServer) do
-      if Assigned(Async.Log) then
-        Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);}
+      if Assigned(Async.LogClass) then
+        Async.LogClass.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);}
   if IsPost(Ctxt.Method) then
   begin
     // POST = echo

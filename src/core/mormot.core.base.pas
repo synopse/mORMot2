@@ -10088,7 +10088,7 @@ procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var
   e: THash512Rec; // use a local copy on stack to avoid race condition
 begin
-  e := BaseEntropy; // we only need 88-bit of entropy within these 512-bit
+  e := BaseEntropy; // only need 88-bit of entropy within these 512-bit
   if entropy <> nil then
     crc32c128(@e.h0, pointer(entropy), entropylen); // user-supplied entropy
   XorEntropy(e); // xor 512-bit from _Fill256FromOs + thread + RdRand32 + Rdtsc
@@ -10494,9 +10494,18 @@ begin
       include(X64CpuFeatures, cpuHaswell);
   end;
   {$endif ASMX64}
-  {$endif DISABLE_SSE42}
   // redirect some CPU-aware functions
-  {$ifdef ASMX86} 
+  if cfSSE42 in CpuFeatures then // for both i386 and x86_64
+  begin
+    crc32c          := @crc32csse42;
+    crc32cby4       := @crc32cby4sse42;
+    crcblock        := @crcblocksse42;
+    crcblocks       := @crcblockssse42;
+    DefaultHasher   := @crc32csse42;
+    InterningHasher := @crc32csse42;
+  end;
+  {$endif DISABLE_SSE42}
+  {$ifdef ASMX86}
   {$ifndef HASNOSSE2}
   {$ifdef WITH_ERMS}
   if not (cfSSE2 in CpuFeatures) then // introduced in year 2000 with Pentium 4
@@ -10516,15 +10525,6 @@ begin
   if cfSSE2 in CpuFeatures then
     StrLen := @StrLenSSE2;
   {$endif ASMX86}
-  if cfSSE42 in CpuFeatures then // for both i386 and x86_64
-  begin
-    crc32c          := @crc32csse42;
-    crc32cby4       := @crc32cby4sse42;
-    crcblock        := @crcblocksse42;
-    crcblocks       := @crcblockssse42;
-    DefaultHasher   := @crc32csse42;
-    InterningHasher := @crc32csse42;
-  end;
 end;
 
 {$else not CPUINTEL}
