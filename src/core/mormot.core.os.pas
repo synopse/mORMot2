@@ -4761,6 +4761,7 @@ type
   /// a thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - just wrap a TLecuyer generator with a TLighLock in a 20-24 bytes structure
   // - as used by SharedRandom to implement Random32/RandomBytes/... functions
+  // - see RandomLecuyer() from mormot.crypt.core.pas to setup a local instance
   {$ifdef USERECORDWITHMETHODS}
   TLecuyerThreadSafe = record
   {$else}
@@ -8824,14 +8825,10 @@ begin
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
   // finalize SystemEntropy.Startup
-  {$ifdef CPUINTEL}
-  if cfTSC in CpuFeatures then // may trigger a GPF if CR4.TSD bit is set
-    with SystemEntropy.Startup do
-      Lo := Lo xor Rdtsc; // unpredictable
-  RdRand32(@SystemEntropy.Startup.c2, 2); // no-op on older CPUs
-  {$endif CPUINTEL}
-  crc32c128(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache)); // some more
+  if LecuyerEntropy.i0 <> 0 then // cpuid+rdrand+rdtsc (may be void)
+   crcblocks(@SystemEntropy.Startup, @LecuyerEntropy, 512 div 128);
   crcblock(@SystemEntropy.Startup, @Executable.Hash);
+  crc32c128(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache)); // some more
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);

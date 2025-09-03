@@ -1549,7 +1549,7 @@ begin
   RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
   AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
-  DefaultHasher128(@lecuyer, pointer(rnd), length(rnd)); // may be AesNiHash128
+  DefaultHasher128(@lecuyer, pointer(rnd), bytes); // may be AesNiHash128
   FillZero(rnd);         // anti-forensic counter measure
   lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniformous distribution
   repeat

@@ -5068,7 +5068,7 @@ var
   sign: THash128Rec;
 begin
   Generate(aValue, @sign);
-  result := BinToHexDisplayLower(@sign, SizeOf(sign));
+  BinToHexDisplayLower(@sign, FastSetString(result, SizeOf(sign) * 2), SizeOf(sign));
 end; // 32 hexadecimal chars is perfect for a cookie - no need of Base-64
 
 function TAesSignature.Validate(aSignature: PHash128Rec): cardinal;
