@@ -6911,28 +6911,28 @@ end;
 function MinPtrInt(const A, B: PtrInt): PtrInt;
 begin
   result := A;
-  if B < A then
+  if B < result then // better FPC code generation, especially with A constant
     result := B;
 end;
 
 function MaxPtrInt(const A, B: PtrInt): PtrInt;
 begin
   result := A;
-  if B > A then
+  if B > result then
     result := B;
 end;
 
 function MinPtrUInt(const A, B: PtrUInt): PtrUInt;
 begin
   result := A;
-  if B < A then
+  if B < result then
     result := B;
 end;
 
 function MaxPtrUInt(const A, B: PtrUInt): PtrUInt;
 begin
   result := A;
-  if B > A then
+  if B > result then
     result := B;
 end;
 
