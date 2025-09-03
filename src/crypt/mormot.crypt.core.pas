@@ -7548,12 +7548,7 @@ begin
 end;
 
 var
-  // 512-bit of system-derivated forward-secure seed for TAesPrng.GetEntropy
-  _OSEntropySeed: record
-    safe: TLightLock;
-    bits: THash512Rec;  // retrieved once at startup
-    aes: TAes;          // in-place AES-CTR diffusion at each GetEntropy() call
-  end;
+  _OSEntropy: THash128Rec; // 128-bit of forward secure OS-seeded information
 
 class function TAesPrng.GetEntropy(
   Len: integer; Source: TAesPrngGetEntropySource): RawByteString;
@@ -7562,21 +7557,21 @@ var
   data: THash512Rec;
   sha3: TSha3;
 begin
+  result := '';
   if Len <= 0 then
-    result := ''
-  else
+    exit;
+  // retrieve official "system" entropy (not for gesUserOnly)
+  pointer(fromos) := FastNewString(Len);
+  if Source <> gesUserOnly then
+    FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
+  if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
+  begin
+    result := fromos; // standard, but weaker if OS is outdated/corrupted
+    exit;
+  end;
+  // XOR with some "userland" entropy
+  sha3.Init(SHAKE_256); // SHA-3 in XOF mode for variable-length output
   try
-    // retrieve some official "system" entropy (not for gesUserOnly)
-    pointer(fromos) := FastNewString(Len);
-    if Source <> gesUserOnly then
-      FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
-    if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
-    begin
-      result := fromos; // likely to be faster and standard, but weaker
-      exit;
-    end;
-    // XOR with some "userland" entropy - it won't hurt
-    sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     // system/process information used as salt/padding from mormot.core.os
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
@@ -7585,12 +7580,9 @@ begin
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     // 256-bit of mormot.core.os randomness state with strong forward secrecy
     sha3.Update(@SystemEntropy, SizeOf(SystemEntropy));
-    // 512-bit from gsl_rng_taus2 as retrieved at startup for AesNiHash128()
-    if AesNiHashAntiFuzzTable <> nil then
-      sha3.Update(AesNiHashAntiFuzzTable, SizeOf(AesNiHashAntiFuzzTable^));
     // 512-bit randomness and entropy from gsl_rng_taus2 current state
-    SharedRandom.Fill(@data, SizeOf(data));
-    sha3.Update(@data, SizeOf(data));
+    if LecuyerEntropy.i0 <> 0 then
+      sha3.Update(@LecuyerEntropy, SizeOf(LecuyerEntropy));
     // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
     if Assigned(OpenSslRandBytes) then
     begin
@@ -7600,32 +7592,27 @@ begin
     // 512-bit from _Fill256FromOs + RdRand/Rdtsc + threadid
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
-    // 512-bit from /dev/urandom or CryptGenRandom operating system PRNG
-    with _OSEntropySeed do
+    // opportunity to initialize the shared gsl_rng_taus2 instance if needed
+    if PPtrInt(@SharedRandom.Generator)^ = 0 then // inlined TLecuyer.Seed
     begin
-      safe.Lock; // thread-safe forward aggregation of OS randomness/entropy
-      if bits.d0 = 0 then
-      begin
-        // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
-        FillSystemRandom(@bits, SizeOf(bits), {block=}false);
-        aes.EncryptInit(bits, 128); // for in-place diffusion
-      end
-      else
-        // 512-bit of forward secrecy using AES-CTR diffusion
-        aes.DoBlocksCtr({iv=}@data, @bits, @bits, length(bits.r));
-      data := bits;
-      safe.UnLock;
+      if LecuyerEntropy.i0 <> 0 then
+        Xor512(@data, @LecuyerEntropy);
+      LecuyerEntropy := data; // forward secrecy
+      DefaultHasher128(@SharedRandom.Generator, @data, SizeOf(data));
+      SharedRandom.Generator.SeedGenerator;
     end;
-    sha3.Update(@data, SizeOf(data));
     // 512-bit of low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
     sha3.Update(@data, SizeOf(data));
-    FillZero(data.b);
+    // include 128-bit hash of previous state
+    crcblocks(@_OSEntropy, @data, 512 div 128); // forward secrecy
+    sha3.Update(@_OSEntropy, SizeOf(_OSEntropy));
     // XOR previously retrieved OS entropy using SHA-3 in 256-bit XOF mode
     result := sha3.Cypher(fromos);
   finally
     sha3.Done;
     FillZero(fromos);
+    FillZero(data.b);
   end;
 end;
 
