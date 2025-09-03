@@ -1582,7 +1582,7 @@ function AesTables: pointer;
 function AesTablesTest: boolean;
 
 // used by test.core.crypto.pas to validate AesNiHash128() accross platforms
-function AesNiHashAntiFuzzTable: PHash512;
+function AesNiHashAntiFuzzTable: pointer;
 
 
 {$ifndef PUREMORMOT2}
@@ -2113,6 +2113,8 @@ type
     MLen: QWord;
     Hash: TSha512Hash;
     Data: array[0..127] of byte;
+    procedure Init(InitHashes: pointer);
+      {$ifdef HASINLINE} inline; {$endif}
     /// perform the final step into Hash private field
     procedure FinalStep;
   public
@@ -4313,7 +4315,7 @@ begin
   result := @TD0;
 end;
 
-function AesNiHashAntiFuzzTable: PHash512;
+function AesNiHashAntiFuzzTable: pointer;
 begin
   {$ifdef USEAESNIHASH}
   result := AesNiHashKey;
@@ -8357,7 +8359,29 @@ begin
 end;
 
 
-{ TSha3845121 }
+{ TSha384512 }
+
+const
+  InitSha512_256: array[0..7] of QWord = (
+    QWord($22312194fc2bf72c), QWord($9f555fa3c84c64c2), QWord($2393b86b6f53b151),
+    QWord($963877195940eabd), QWord($96283ee2a88effe3), QWord($be5e1e2553863992),
+    QWord($2b0199fc2c85b8aa), QWord($0eb72ddc81c52ca2));
+  InitSha384: array[0..7] of QWord = (
+    QWord($cbbb9d5dc1059ed8), QWord($629a292a367cd507), QWord($9159015a3070dd17),
+    QWord($152fecd8f70e5939), QWord($67332667ffc00b31), QWord($8eb44a8768581511),
+    QWord($db0c2e0d64f98fa7), QWord($47b5481dbefa4fa4));
+  InitSha512: array[0..7] of QWord = (
+    QWord($6a09e667f3bcc908), QWord($bb67ae8584caa73b), QWord($3c6ef372fe94f82b),
+    QWord($a54ff53a5f1d36f1), QWord($510e527fade682d1), QWord($9b05688c2b3e6c1f),
+    QWord($1f83d9abfb41bd6b), QWord($5be0cd19137e2179));
+
+procedure TSha384512.Init(InitHashes: pointer);
+begin
+  Index := 0;
+  MLen := 0;
+  Move512(@Hash, InitHashes);
+  FillcharFast(Data, SizeOf(Data), 0);
+end;
 
 procedure TSha384512.Update(Buffer: pointer; Len: integer);
 var
@@ -8413,22 +8437,11 @@ begin
   RawSha512Compress(Hash, @Data);
 end;
 
-
 { TSha512_256 }
 
 procedure TSha512_256.Init;
 begin
-  Engine.Hash.a := QWord($22312194fc2bf72c);
-  Engine.Hash.b := QWord($9f555fa3c84c64c2);
-  Engine.Hash.c := QWord($2393b86b6f53b151);
-  Engine.Hash.d := QWord($963877195940eabd);
-  Engine.Hash.e := QWord($96283ee2a88effe3);
-  Engine.Hash.f := QWord($be5e1e2553863992);
-  Engine.Hash.g := QWord($2b0199fc2c85b8aa);
-  Engine.Hash.h := QWord($0eb72ddc81c52ca2);
-  Engine.MLen := 0;
-  Engine.Index := 0;
-  FillcharFast(Engine.Data, SizeOf(Engine.Data), 0);
+  Engine.Init(@InitSha512_256);
 end;
 
 procedure TSha512_256.Update(Buffer: pointer; Len: integer);
@@ -8466,17 +8479,7 @@ end;
 
 procedure TSha384.Init;
 begin
-  Engine.Hash.a := QWord($cbbb9d5dc1059ed8);
-  Engine.Hash.b := QWord($629a292a367cd507);
-  Engine.Hash.c := QWord($9159015a3070dd17);
-  Engine.Hash.d := QWord($152fecd8f70e5939);
-  Engine.Hash.e := QWord($67332667ffc00b31);
-  Engine.Hash.f := QWord($8eb44a8768581511);
-  Engine.Hash.g := QWord($db0c2e0d64f98fa7);
-  Engine.Hash.h := QWord($47b5481dbefa4fa4);
-  Engine.MLen := 0;
-  Engine.Index := 0;
-  FillcharFast(Engine.Data, SizeOf(Engine.Data), 0);
+  Engine.Init(@InitSha384);
 end;
 
 procedure TSha384.Update(Buffer: pointer; Len: integer);
@@ -8514,17 +8517,7 @@ end;
 
 procedure TSha512.Init;
 begin
-  Engine.Hash.a := QWord($6a09e667f3bcc908);
-  Engine.Hash.b := QWord($bb67ae8584caa73b);
-  Engine.Hash.c := QWord($3c6ef372fe94f82b);
-  Engine.Hash.d := QWord($a54ff53a5f1d36f1);
-  Engine.Hash.e := QWord($510e527fade682d1);
-  Engine.Hash.f := QWord($9b05688c2b3e6c1f);
-  Engine.Hash.g := QWord($1f83d9abfb41bd6b);
-  Engine.Hash.h := QWord($5be0cd19137e2179);
-  Engine.MLen := 0;
-  Engine.Index := 0;
-  FillcharFast(Engine.Data, SizeOf(Engine.Data), 0);
+  Engine.Init(@InitSha512);
 end;
 
 procedure TSha512.Update(Buffer: pointer; Len: integer);
