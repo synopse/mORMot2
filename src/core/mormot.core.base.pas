@@ -3288,7 +3288,8 @@ type
   // - SeedGenerator() makes it a sequence generator (or encryptor via Fill)
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy to initialize the internal state
-  // - you can seed and use your own TLecuyer (threadvar) instance, if needed
+  // - you can seed and use your own TLecuyer (threadvar) instance, if needed -
+  // see RandomLecuyer() from mormot.crypt.core.pas to setup a local instance
   // - generation numbers are very good for such a simple and proven algorithm:
   // $   Lecuyer Random32 in 708us i.e. 134.7M/s, aver. 7ns, 538.8 MB/s
   // $   Lecuyer RandomBytes in 3.75ms, 254.3 MB/s
@@ -3363,6 +3364,9 @@ procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
 /// cipher/uncipher some memory buffer using a 64-bit seed and Pierre L'Ecuyer's
 // algorithm, and its gsl_rng_taus2 generator
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
+
+/// use a gsl_rng_taus2 generator to diffuse 128-bit into any output size
+procedure LecuyerDiffusion(dest: pointer; destsize: PtrUInt; src: PHash128);
 
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
 // - XOR _Fill256FromOs() then ThreadID and RdRand32/Rdtsc on Intel/AMD
@@ -10210,6 +10214,15 @@ begin
   gen.SeedGenerator(key);
   gen.Fill(@data[1], length(data));
   FillZero(THash128(gen)); // to avoid forensic leak
+end;
+
+procedure LecuyerDiffusion(dest: pointer; destsize: PtrUInt; src: PHash128);
+var
+  gen: TLecuyer;
+begin
+  PHash128(@gen)^ := src^;
+  gen.SeedGenerator;
+  gen.Fill(dest, destsize);
 end;
 
 {$ifndef PUREMORMOT2}
