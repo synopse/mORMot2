@@ -1939,6 +1939,10 @@ procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 // - TLecuyer is predictable so is considered unsafe to generate IV or MAC
 procedure Random128(iv: PAesBlock);
 
+/// initialize a Pierre L'Ecuyer gsl_rng_taus2 Tausworthe/LFSR generator
+// - used e.g. as a local thread-safe source of uniformly distributed randomness
+function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
+
 var
   /// salt for CryptDataForCurrentUser() per-user local file name computation
   // - is filled with some random bytes by default, but you may override
@@ -3632,6 +3636,13 @@ begin
   inc(aes^.iv.Lo); // AES-CTR with 64-bit counter
   rnd128safe.UnLock;
   aes^.DoBlock(aes^, iv^, iv^); // thread-safe process
+end;
+
+function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
+begin
+  Random128(@rnd);
+  rnd.SeedGenerator;
+  result := @rnd;
 end;
 
 procedure ComputeAesStaticTables;

@@ -1435,12 +1435,8 @@ begin
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
-  if Lecuyer = nil then
-  begin
-    Random128(@rnd);   // 88-bit seed from CSPRNG - if not supplied by caller
-    rnd.SeedGenerator; // setup L'Ecuyer gsl_rng_taus2 uniformous distribution
-    Lecuyer := @rnd;
-  end;
+  if Lecuyer = nil then // 88-bit CSPRNG seed - if not supplied by caller
+    Lecuyer := RandomLecuyer(rnd); // new gsl_rng_taus2 uniformous distribution
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
   w := Clone.IntSub(1); // w = value-1
