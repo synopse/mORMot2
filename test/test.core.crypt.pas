@@ -3233,11 +3233,10 @@ begin
   // validate AesNiHash128() against reference vectors
   // - should be done FIRST with no process in the background
   if Assigned(AesNiHash128) and
-     not CheckFailed(not fBackgroundRun.Waiting, 'no background run') and
-     not CheckFailed(Assigned(AesNiHashAntiFuzzTable)) then
+     not CheckFailed(not fBackgroundRun.Waiting, 'no background run') then
   begin
-    bak := AesNiHashAntiFuzzTable^;
-    AesNiHashAntiFuzzTable^ := PHash512(@bytes)^; // replace to get AESNIHASH_REF
+    Move512(@bak, AesNiHashAntiFuzzTable);
+    Move512(AesNiHashAntiFuzzTable, @bytes); // replace to get AESNIHASH_REF
     ref := AESNIHASH_REF128;
     ref32 := @AESNIHASH_REF32;
     n := 0;
@@ -3260,7 +3259,7 @@ begin
         inc(n, 7);
     until n > 250;
     CheckEqual(n, 251);
-    AesNiHashAntiFuzzTable^ := bak; // needed to preserve existing hash tables
+    Move512(AesNiHashAntiFuzzTable, @bak); // preserve existing hash tables
   end;
   // validate 32-bit, 64-bit and 128-bit crc functions in the background
   Run(CrcSlow, nil, 'crc', {threaded=}true, {notify=}false);
