@@ -1500,11 +1500,13 @@ begin
 end;
 
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
+var
+  local: TTunnelLocal absolute Sender;
 begin
   // one of the two handshakes should be done in another thread
-  tunnelexecutelocal := (Sender as TTunnelLocal).Open(
-    tunnelsession, tunneloptions, 1000, tunnelappsec,
-    cLocalhost, tunnelexecuteremote);
+  tunnelexecutelocal := local.Open(
+    tunnelsession, tunneloptions, 1000, tunnelappsec, cLocalhost);
+  tunnelexecuteremote := local.RemotePort;
   Check(tunnelexecutelocal <> 0);
   Check(tunnelexecuteremote <> 0);
 end;
@@ -1543,8 +1545,9 @@ begin
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
   local := clienttunnel.Open(
-    tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost, remote);
+    tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost);
   Check(local <> 0);
+  remote := clienttunnel.RemotePort;
   Check(remote <> 0);
   SleepHiRes(1000, tunnelexecutedone);
   CheckEqual(local, tunnelexecuteremote);
@@ -1592,6 +1595,9 @@ begin
       Check(clientinstance.Thread.Received < clientinstance.Thread.Sent, 'smaller');
       Check(serverinstance.Thread.Received > serverinstance.Thread.Sent, 'bigger');
     end;
+    Check(_Safe(serverinstance.TunnelInfo)^.Count > 4);
+    Check(_Safe(clientinstance.TunnelInfo)^.Count > 4);
+    //writeln(clientinstance.TunnelInfo);
   finally
     clientsock.ShutdownAndClose(true);
     serversock.ShutdownAndClose(true);
@@ -1886,7 +1892,7 @@ end;
 
 function TNetworkProtocols.OnPeerCacheRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  // a local web server is safer than an Internet resource
+  // a local web server is safer and less error-prone than an Internet resource
   result := HTTP_SUCCESS;
   Ctxt.OutContent := FakeGif(Ctxt.Url);
   Ctxt.OutContentType := 'image/gif';
