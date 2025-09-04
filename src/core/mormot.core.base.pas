@@ -3624,8 +3624,7 @@ type
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] or Source[i];
-procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
+procedure OrMemory(Dest, Source: PByteArray; Size: PtrInt);
 
 /// logical XOR of two memory buffers - using SSE2 asm on x86_64
 // - will perform on all buffer bytes:
@@ -3636,7 +3635,7 @@ procedure XorMemory(Dest, Source: PByteArray; Size: PtrInt); overload;
 /// logical XOR of two memory buffers into a third
 // - will perform on all buffer bytes:
 // ! Dest[i] := Source1[i] xor Source2[i];
-procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt); overload;
+procedure XorMemory(Dest, Source1, Source2: PByteArray; Size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two 128-bit / 16-byte memory buffers
@@ -3648,7 +3647,6 @@ procedure XorMemory(var Dest: THash128Rec;
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] and Source[i];
 procedure AndMemory(Dest, Source: PByteArray; size: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if all bytes equal zero
 function IsZero(P: pointer; Length: integer): boolean; overload;
@@ -12104,19 +12102,19 @@ begin
 end;
 
 
-procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
+procedure OrMemory(Dest, Source: PByteArray; Size: PtrInt);
 begin
-  while size >= SizeOf(PtrInt) do
+  while Size >= SizeOf(PtrInt) do
   begin
-    dec(size, SizeOf(PtrInt));
+    dec(Size, SizeOf(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Dest)^ or PPtrInt(Source)^;
     inc(PPtrInt(Dest));
     inc(PPtrInt(Source));
   end;
-  while size > 0 do
+  while Size > 0 do
   begin
-    dec(size);
-    Dest[size] := Dest[size] or Source[size];
+    dec(Size);
+    Dest[Size] := Dest[Size] or Source[Size];
   end;
 end;
 
@@ -12138,36 +12136,36 @@ begin
 end;
 {$endif CPUX64}
 
-procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt);
+procedure XorMemory(Dest, Source1, Source2: PByteArray; Size: PtrInt);
 begin
-  while size >= SizeOf(PtrInt) do
+  while Size >= SizeOf(PtrInt) do
   begin
-    dec(size, SizeOf(PtrInt));
+    dec(Size, SizeOf(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Source1)^ xor PPtrInt(Source2)^;
     inc(PPtrInt(Dest));
     inc(PPtrInt(Source1));
     inc(PPtrInt(Source2));
   end;
-  while size > 0 do
+  while Size > 0 do
   begin
-    dec(size);
-    Dest[size] := Source1[size] xor Source2[size];
+    dec(Size);
+    Dest[Size] := Source1[Size] xor Source2[Size];
   end;
 end;
 
-procedure AndMemory(Dest, Source: PByteArray; size: PtrInt);
+procedure AndMemory(Dest, Source: PByteArray; Size: PtrInt);
 begin
-  while size >= SizeOf(PtrInt) do
+  while Size >= SizeOf(PtrInt) do
   begin
-    dec(size, SizeOf(PtrInt));
+    dec(Size, SizeOf(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Dest)^ and PPtrInt(Source)^;
     inc(PPtrInt(Dest));
     inc(PPtrInt(Source));
   end;
-  while size > 0 do
+  while Size > 0 do
   begin
-    dec(size);
-    Dest[size] := Dest[size] and Source[size];
+    dec(Size);
+    Dest[Size] := Dest[Size] and Source[Size];
   end;
 end;
 
