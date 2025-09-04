@@ -1126,8 +1126,9 @@ type
     function TypeInfo: PRttiInfo;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// get the next property information
-    // - no range check: use RttiProps()^.PropCount to determine the properties count
-    // - get the first PRttiProp with RttiProps()^.PropList
+    // - no range check: use RttiProps()^.PropCount to determine the properties
+    // count, and get the first PRttiProp with RttiProps()^.PropList
+    // - use GetRttiProp() for a convenient wrapper in your loop
     function Next: PRttiProp;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// returns rpsTrue/rpsFalse if was marked as "stored true/false" or
@@ -1403,7 +1404,7 @@ function GetRttiProps(RttiClass: TClass): PRttiProps;
 //  !  begin
 //  !    CT := ..;
 //  !    repeat
-//  !      for i := 1 to GetRttiProp(CT,P) do
+//  !      for i := 1 to GetRttiProp(CT, P) do
 // !       begin
 //  !        // use P^
 //  !        P := P^.Next;
@@ -1417,11 +1418,19 @@ function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 /// retrieve a Field property RTTI information from a Property Name
 function ClassFieldProp(ClassType: TClass; const PropName: ShortString): PRttiProp;
 
-/// retrieve a Field property RTTI information from a Property Name
-// - this special version also searches into parent properties
-// (TRttiProp search scope is only inside the current class level)
-function ClassFieldPropWithParents(aClassType: TClass; const aPropName: ShortString;
-  aCaseSensitive: boolean = false): PRttiProp;
+/// retrieve a Field property RTTI information from a ShortString Property Name
+// - searches also into parent properties - whereas TRttiProps.FieldProp won't
+function ClassFieldPropWithParents(aClassType: TClass;
+  const aPropName: ShortString; aCaseSensitive: boolean = false): PRttiProp;
+
+/// retrieve a Field property RTTI information from a RawUtf8 Property Name
+// - searches also into parent properties - whereas TRttiProps.FieldProp won't
+function ClassFieldPropWithParentsU(aClassType: TClass;
+  const aPropName: RawUtf8; aCaseSensitive: boolean = false): PRttiProp;
+
+/// retrieve a Field property RTTI information from a UTF-8 Property Name
+function ClassFieldPropWithParentsFromUtf8(aClassType: TClass;
+  PropName: PUtf8Char; PropNameLen: PtrInt; aCaseSensitive: boolean): PRttiProp;
 
 /// retrieve an integer/Int64 Field propery value from a Property Name
 // - this special version also searches into parent properties
@@ -1436,12 +1445,6 @@ function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
 // - returns TRUE and set PropInstance if a matching property was found
 function ClassFieldInstance(Instance: TObject; const PropName: ShortString;
   PropClassType: TClass; out PropInstance): boolean; overload;
-
-/// retrieve a Field property RTTI information from a Property Name
-// - this special version also searches into parent properties
-// (TRttiProp search scope is only inside the current class level)
-function ClassFieldPropWithParentsFromUtf8(aClassType: TClass; PropName: PUtf8Char;
-  PropNameLen: integer; aCaseSensitive: boolean = false): PRttiProp;
 
 /// retrieve a Field property RTTI information searching for an exact
 // Property class type
@@ -5537,34 +5540,22 @@ begin
     result := nil;
 end;
 
-function ClassFieldPropWithParents(aClassType: TClass; const aPropName: ShortString;
-  aCaseSensitive: boolean): PRttiProp;
-var
-  n, i: integer;
+function ClassFieldPropWithParents(aClassType: TClass;
+  const aPropName: ShortString; aCaseSensitive: boolean): PRttiProp;
 begin
-  while aClassType <> nil do
-  begin
-    n := GetRttiProp(aClassType, result);
-    if n <> 0 then
-      if aCaseSensitive then
-        for i := 1 to n do
-          if result^.Name^ = aPropName then
-            exit
-          else
-            result := result^.Next
-      else
-        for i := 1 to n do
-          if IdemPropName(result^.Name^, @aPropName[1], ord(aPropName[0])) then
-            exit
-          else
-            result := result^.Next;
-    aClassType := GetClassParent(aClassType);
-  end;
-  result := nil;
+  result := ClassFieldPropWithParentsFromUtf8(aClassType,
+              @aPropName[1], ord(aPropName[0]), aCaseSensitive);
 end;
 
-function ClassFieldPropWithParentsFromUtf8(aClassType: TClass; PropName: PUtf8Char;
-  PropNameLen: integer; aCaseSensitive: boolean): PRttiProp;
+function ClassFieldPropWithParentsU(aClassType: TClass;
+  const aPropName: RawUtf8; aCaseSensitive: boolean): PRttiProp;
+begin
+  result := ClassFieldPropWithParentsFromUtf8(aClassType,
+              pointer(aPropName), length(aPropName), aCaseSensitive);
+end;
+
+function ClassFieldPropWithParentsFromUtf8(aClassType: TClass;
+  PropName: PUtf8Char; PropNameLen: PtrInt; aCaseSensitive: boolean): PRttiProp;
 var
   n, i: integer;
 begin
