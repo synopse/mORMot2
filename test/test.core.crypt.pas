@@ -3175,7 +3175,7 @@ end;
 const
   // AesNiHash128() responses with fixed byte-increasing AesNiHashAntiFuzzTable
   // - to validate one identical algorithm on both i386 and x64 platforms
-  AESNIHASH_REF128: PAnsiChar = '00000000000000000000000000000000' +
+  AESNIHASH_REF128: PAnsiChar =     '00000000000000000000000000000000' +
     'ebcaa5d9d3111481ca62776f7cc716d5078f6490103c58d95b5e16001d40cf6b' +
     '9b0e47ebccb12f80270b0d17caafa8e1e64ef4b87ee4dd8743650db1ac9d59b0' +
     '345407a79f54f73c6a8120cd19ec289750bc08c882e7f30a72295534c6d5ad1c' +

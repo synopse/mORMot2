@@ -2775,7 +2775,10 @@ begin
   for i := 9 to 15 do
     CheckEqual(BitsToBytes(i), 2);
   s := GuidToRawUtf8(Guid);
-  Check(s = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
+  CheckEqual(s, '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
+  Check(s[16] = '4');
+  Check(s[21] in ['8', '9', 'A', 'B']);
+  Check(IsRandomGuid(@Guid));
   Check(TextToGuid(@s[2], @g2)^ = '}');
   Check(IsEqualGuid(g2, Guid));
   Check(GuidToString(Guid) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
@@ -2861,11 +2864,15 @@ begin
   for i := 1 to 1000 do
   begin
     RandomGuid(g);
+    Check(IsRandomGuid(@g));
     st := GuidToString(g);
+    Check(st <> st2);
     st2 := SysUtils.GuidToString(g);
     Check(st = st2);
     Check(IsEqualGuid(StringToGuid(st), g));
     s := GuidToRawUtf8(g);
+    Check(s[16] = '4');
+    Check(s[21] in ['8', '9', 'A', 'B']);
     Check(st = mormot.core.unicode.Utf8ToString(s));
     st[Random32(38) + 1] := ' ';
     g2 := StringToGuid(st);

@@ -4863,6 +4863,13 @@ procedure RandomGuid(out result: TGuid); overload;
 function RandomGuid: TGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// mark a 128-bit random binary into a UUid value according to RFC 4122
+procedure MakeRandomGuid(u: PHash128);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// check if the supplied UUid value was randomly-generated according to RFC 4122
+function IsRandomGuid(u: PHash128): boolean;
+
 /// seed the global gsl_rng_taus2 Random32/RandomBytes generator
 // - use XorEntropy() and optional entropy/entropylen as derivation source
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
@@ -11149,11 +11156,22 @@ begin
   RandomGuid(result);
 end;
 
-procedure RandomGuid(out result: TGuid);
+procedure MakeRandomGuid(u: PHash128);
 begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
+  PCardinal(@u[6])^ := (PCardinal(@u[6])^ and $ff3f0fff) or $00804000;
+  // u[7] := PtrUInt(u[7] and $0f) or $40; // version bits 12-15 = 4 (random)
+  // u[8] := PtrUInt(u[8] and $3f) or $80; // reserved bits 6-7 = 1
+end;
+
+function IsRandomGuid(u: PHash128): boolean;
+begin
+  result := (u[7] and $f0 = $40) and (u[8] and $c0 = $80);
+end;
+
+procedure RandomGuid(out result: TGuid);
+begin
   SharedRandom.Fill(@result, SizeOf(TGuid));
-  PCardinal(@result.D3)^ := (PCardinal(@result.D3)^ and $ff3f0fff) + $00804000;
-  // version bits 12-15 = 4 (random) and reserved bits 6-7 = 1
+  MakeRandomGuid(@result);
 end;
 
 {$ifndef PUREMORMOT2}
