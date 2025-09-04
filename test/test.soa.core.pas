@@ -1184,8 +1184,8 @@ var
     begin
       i1 := rnd.Next31 - rnd.Next31;
       i2 := rnd.Next31 - i1;
-      Check(I.Add(i1, i2) = i1 + i2);
-      Check(I.Multiply(i1, i2) = Int64(i1) * Int64(i2));
+      CheckEqual(I.Add(i1, i2), integer(i1 + i2));
+      CheckEqual(I.Multiply(i1, i2), Int64(i1) * Int64(i2));
       n1 := rnd.NextDouble * 1E-9 - rnd.NextDouble * 1E-8;
       n2 := n1 * rnd.NextDouble;
       CheckSame(I.Subtract(n1, n2), n1 - n2);
