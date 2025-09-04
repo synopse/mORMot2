@@ -645,7 +645,6 @@
       // e.g. {$ifdef NEEDVCLPREFIX}VCL.Graphics{$else}Graphics{$endif}
       {$define NEEDVCLPREFIX}
       {$define HASVARUSTRARG}
-      {$define HASRETURNADDRESS}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminatedSet
     {$ifend}
     {$if CompilerVersion >= 24.0} // = Delphi XE3

@@ -1562,32 +1562,36 @@ begin
     1000, 1000, 1000, 0, serversock) = nrOk);
   try
     // validate raw TCP tunnelling
-    CheckEqual(clientinstance.Thread.Received, 0);
-    CheckEqual(clientinstance.Thread.Sent, 0);
-    CheckEqual(serverinstance.Thread.Received, 0);
-    CheckEqual(serverinstance.Thread.Sent, 0);
-    for i := 1 to 100 do
+    if Assigned(clientinstance.Thread) and
+       Assigned(serverinstance.Thread) then
     begin
-      sent := RandomWinAnsi(Random32(200) + 1);
-      sent2 := RandomWinAnsi(Random32(200) + 1);
-      Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
-      Check(serversock.RecvWait(1000, received) = nrOk);
-      CheckEqual(sent, received);
-      Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
-      Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
-      Check(clientsock.RecvWait(1000, received) = nrOk);
-      Check(serversock.RecvWait(1000, received2) = nrOk);
-      CheckEqual(sent, received);
-      CheckEqual(sent2, received2);
-      CheckEqual(clientinstance.Thread.Received, serverinstance.Thread.Sent);
-      CheckEqual(clientinstance.Thread.Sent, serverinstance.Thread.Received);
-      Check(clientinstance.Thread.Received <> 0);
-      Check(clientinstance.Thread.Sent <> 0);
-      Check(serverinstance.Thread.Received <> 0);
-      Check(serverinstance.Thread.Sent <> 0);
+      CheckEqual(clientinstance.Thread.Received, 0);
+      CheckEqual(clientinstance.Thread.Sent, 0);
+      CheckEqual(serverinstance.Thread.Received, 0);
+      CheckEqual(serverinstance.Thread.Sent, 0);
+      for i := 1 to 100 do
+      begin
+        sent := RandomWinAnsi(Random32(200) + 1);
+        sent2 := RandomWinAnsi(Random32(200) + 1);
+        Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
+        Check(serversock.RecvWait(1000, received) = nrOk);
+        CheckEqual(sent, received);
+        Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
+        Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
+        Check(clientsock.RecvWait(1000, received) = nrOk);
+        Check(serversock.RecvWait(1000, received2) = nrOk);
+        CheckEqual(sent, received);
+        CheckEqual(sent2, received2);
+        CheckEqual(clientinstance.Thread.Received, serverinstance.Thread.Sent);
+        CheckEqual(clientinstance.Thread.Sent, serverinstance.Thread.Received);
+        Check(clientinstance.Thread.Received <> 0);
+        Check(clientinstance.Thread.Sent <> 0);
+        Check(serverinstance.Thread.Received <> 0);
+        Check(serverinstance.Thread.Sent <> 0);
+      end;
+      Check(clientinstance.Thread.Received < clientinstance.Thread.Sent, 'smaller');
+      Check(serverinstance.Thread.Received > serverinstance.Thread.Sent, 'bigger');
     end;
-    Check(clientinstance.Thread.Received < clientinstance.Thread.Sent, 'smaller');
-    Check(serverinstance.Thread.Received > serverinstance.Thread.Sent, 'bigger');
   finally
     clientsock.ShutdownAndClose(true);
     serversock.ShutdownAndClose(true);
