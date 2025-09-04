@@ -2857,6 +2857,7 @@ begin
   if another.Processing then
     fProcessing := true; // if any thread is active, whole daemon is active
   inc(fInternalErrors, another.Errors);
+  // PerSec and AverageTime are lazily computed on request to avoid div ops
 end;
 
 procedure TSynMonitor.LockedWriteDetailsTo(W: TTextWriter);
@@ -2935,7 +2936,7 @@ procedure TSynMonitorWithSize.LockedSum(another: TSynMonitor);
 begin
   inherited LockedSum(another);
   if another.InheritsFrom(TSynMonitorWithSize) then
-    AddSize(TSynMonitorWithSize(another).Size.Bytes);
+    fSize.AddSize(TSynMonitorWithSize(another).Size.Bytes);
 end;
 
 
@@ -2981,10 +2982,7 @@ end;
 
 procedure TSynMonitorInputOutput.Notify(
   const Incoming, Outgoing, MicroSec: QWord; Status: integer);
-var
-  error: boolean;
 begin
-  error := not StatusCodeIsSuccess(Status);
   fSafe.Lock;
   // inlined AddSize
   fInput.AddSize(Incoming);
@@ -2999,7 +2997,7 @@ begin
   if MicroSec > fMaximalTime.MicroSec then
     fMaximalTime.MicroSec := MicroSec;
   // inlined ProcessErrorNumber(Status)
-  if error then
+  if not StatusCodeIsSuccess(Status) then
     LockedProcessErrorInteger(Status);
   fSafe.UnLock;
 end;
@@ -3007,11 +3005,10 @@ end;
 procedure TSynMonitorInputOutput.LockedSum(another: TSynMonitor);
 begin
   inherited LockedSum(another);
-  if another.InheritsFrom(TSynMonitorInputOutput) then
-  begin
-    fInput.Bytes  := fInput.Bytes  + TSynMonitorInputOutput(another).Input.Bytes;
-    fOutput.Bytes := fOutput.Bytes + TSynMonitorInputOutput(another).Output.Bytes;
-  end;
+  if not another.InheritsFrom(TSynMonitorInputOutput) then
+    exit;
+  fInput.AddSize(TSynMonitorInputOutput(another).Input.Bytes);
+  fOutput.AddSize(TSynMonitorInputOutput(another).Output.Bytes);
 end;
 
 
