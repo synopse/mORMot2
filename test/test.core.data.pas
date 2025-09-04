@@ -6888,6 +6888,13 @@ begin
   Check(not ClassInheritsFromName(TLocalClass, 'TSynPersistent'));
   Check(not ClassInheritsFromName(TLocalClass, 'TPersistent'));
   Check(not ClassInheritsFromName(TLocalClass, 'TInheritedClass'));
+  CheckEqual(ClassFieldNamesAllPropsAsText(TPersistent), '');
+  CheckEqual(ClassFieldNamesAllPropsAsText(TLocalClass), 'Value');
+  CheckEqual(ClassFieldNamesAllPropsAsText(TInheritedClass), 'Another,Value');
+  CheckEqual(ClassFieldNamesAllPropsAsText(TPersistent, true), '');
+  CheckEqual(ClassFieldNamesAllPropsAsText(TLocalClass, true), 'Value: RawUtf8');
+  CheckEqual(ClassFieldNamesAllPropsAsText(TInheritedClass, true),
+    'Another: Integer; Value: RawUtf8');
   local := TLocalClass.Create;
   int := local; // will do local.Free
   local.fValue := 'test';

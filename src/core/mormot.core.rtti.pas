@@ -1510,8 +1510,8 @@ function ClassFieldNamesAllProps(
   ClassType: TClass; IncludePropType: boolean = false;
   Types: TRttiKinds = [low(TRttiKind)..high(TRttiKind)]): TRawUtf8DynArray;
 
-/// retrieve the field names of all published properties of a class
-// - will optionally append the property type to the name, e.g 'Age: integer'
+/// retrieve the field names of all published properties of a class as CSV
+// - optionally append the type to the name, e.g 'One: integer; Two: RawUtf8'
 // - you could select which property types should be included in the list
 function ClassFieldNamesAllPropsAsText(
   ClassType: TClass; IncludePropType: boolean = false;
@@ -5531,9 +5531,14 @@ end;
 
 function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean;
   Types: TRttiKinds): RawUtf8;
+var
+  props: TRawUtf8DynArray;
 begin
-  result := RawUtf8ArrayToCsv(
-    ClassFieldNamesAllProps(ClassType, IncludePropType, Types), ', ');
+  props := ClassFieldNamesAllProps(ClassType, IncludePropType, Types);
+  if IncludePropType then
+    result := RawUtf8ArrayToCsv(props, '; ')
+  else
+    result := RawUtf8ArrayToCsv(props, ',');
 end;
 
 function ClassFieldProp(ClassType: TClass; const PropName: ShortString): PRttiProp;

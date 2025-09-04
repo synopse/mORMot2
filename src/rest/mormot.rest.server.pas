@@ -3107,20 +3107,21 @@ procedure TRestServerUriContext.ConfigurationRestMethod(SettingsStorage: TObject
 var
   value: TDocVariantData;
   valid: boolean;
-  config: variant;
+  v, config: variant;
 begin
   fUriMethodPath := StringReplaceChars(fUriMethodPath, '/', '.');
   if InputExists['value'] then
   begin
     if fUriMethodPath = '' then
       exit;
-    value.InitObjectFromPath(fUriMethodPath, Input['value']);
+    v := Input['value'];
+    value.InitObjectFromPath(fUriMethodPath, v);
     JsonToObject(SettingsStorage, pointer(value.ToJson), valid, nil,
       JSONPARSER_TOLERANTOPTIONS);
     if not valid then
     begin
-      Error('Invalid input [%] - expected %', [variant(value),
-        ClassFieldNamesAllPropsAsText(PClass(SettingsStorage)^, true)]);
+      Error('Invalid input [%] - expected (%)', [v,
+        ClassFieldNamesAllPropsAsText(PClass(SettingsStorage)^, {typed=}true)]);
       exit;
     end;
   end;
