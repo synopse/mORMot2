@@ -2189,12 +2189,15 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
+    // - on FPC/Delphi XE2+, the exception will be raised at the caller address
     class procedure RaiseLastOSError(const Format: RawUtf8;
       const Args: array of const; const Trailer: ShortString = 'OSError');
     /// a wrapper function around raise CreateUtf8()
     // - generated executable code could be slightly shorter
+    // - on FPC/Delphi XE2+, the exception will be raised at the caller address
     class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const);
     /// a wrapper function around raise CreateU()
+    // - on FPC/Delphi XE2+, the exception will be raised at the caller address
     class procedure RaiseU(const Msg: RawUtf8);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
@@ -4281,7 +4284,9 @@ end;
 class procedure TTextWriter.RaiseUnimplemented(const Method: ShortString);
 begin
   raise ESynException.CreateUtf8(
-    '%.% unimplemented: use TJsonWriter', [self, Method]);
+    '%.% unimplemented: use TJsonWriter', [self, Method])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 procedure TTextWriter.Add(const Format: RawUtf8; const Values: array of const;
@@ -10542,18 +10547,24 @@ begin
   error := GetLastError;
   FormatUtf8('% 0x% [%] %', [Trailer, CardinalToHexShort(error),
     StringReplaceAll(GetErrorText(error), '%', '#'), Format], fmt);
-  raise CreateUtf8(fmt, Args);
+  raise CreateUtf8(fmt, Args)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 class procedure ESynException.RaiseUtf8(const Format: RawUtf8;
   const Args: array of const);
 begin
-  raise CreateUtf8(Format, Args);
+  raise CreateUtf8(Format, Args)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 class procedure ESynException.RaiseU(const Msg: RawUtf8);
 begin
-  raise CreateU(Msg);
+  raise CreateU(Msg)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}

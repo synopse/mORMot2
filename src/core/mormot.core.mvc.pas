@@ -2187,23 +2187,27 @@ end;
 class procedure EMvcApplication.GotoView(const aMethod: RawUtf8;
   const aParametersNameValuePairs: array of const; aStatus: cardinal);
 begin
-  raise CreateGotoView(aMethod, aParametersNameValuePairs, aStatus);
+  raise CreateGotoView(aMethod, aParametersNameValuePairs, aStatus)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 class procedure EMvcApplication.GotoError(const aErrorMessage: string;
   aErrorCode: integer);
 begin
-  raise CreateGotoError(aErrorMessage, aErrorCode);
+  raise CreateGotoError(aErrorMessage, aErrorCode)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 class procedure EMvcApplication.GotoError(aHtmlErrorCode: integer);
 begin
-  raise CreateGotoError(aHtmlErrorCode);
+  raise CreateGotoError(aHtmlErrorCode)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 class procedure EMvcApplication.Default(aStatus: cardinal);
 begin
-  raise CreateDefault(aStatus);
+  raise CreateDefault(aStatus)
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 

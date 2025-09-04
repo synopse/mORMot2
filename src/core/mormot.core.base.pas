@@ -13428,7 +13428,9 @@ end;
 
 function {%H-}RaiseStreamError(Caller: TObject; const Context: ShortString): PtrInt;
 begin
-  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
+  raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context])
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 { TStreamWithPosition }

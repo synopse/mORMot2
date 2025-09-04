@@ -5098,7 +5098,9 @@ end;
 
 class procedure EDocVariant.RaiseSafe(Kind: TDocVariantKind);
 begin
-  raise CreateUtf8('_Safe(%)?', [ToText(Kind)^]);
+  raise CreateUtf8('_Safe(%)?', [ToText(Kind)^])
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 { TDocVariant }
@@ -5151,6 +5153,7 @@ begin
       end
       else
         raise EDocVariant.CreateUtf8('[%] property not found', [Name])
+        {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
     else
     begin
       SetVariantByRef(dv.VValue[ndx], PVariant(@Dest)^);
@@ -8787,7 +8790,9 @@ begin
   if Has(dvoReturnNullForUnknownProperty) then
     result := @DocVariantDataFake
   else
-    raise EDocVariant.CreateUtf8('[%] property not found', [aName]); // no RaiseUtf8
+    raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 function TDocVariantData.InternalNotFound(aIndex: integer): PDocVariantData;
@@ -8795,7 +8800,9 @@ begin
   if Has(dvoReturnNullForUnknownProperty) then
     result := @DocVariantDataFake
   else
-    raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
+    raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 function TDocVariantData.DeleteByPath(const aPath: RawUtf8;
@@ -11684,7 +11691,9 @@ end;
 
 class procedure EDocList.GetRaise(method: AnsiChar; pos: integer; const v: variant);
 begin
-  raise CreateUtf8('%[%] on a var%', [method, pos, VariantTypeName(v)^]);
+  raise CreateUtf8('%[%] on a var%', [method, pos, VariantTypeName(v)^])
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 { TDocList }
@@ -12186,7 +12195,9 @@ end;
 
 class procedure EDocDict.Error(method: AnsiChar; const key: RawUtf8; const v: variant);
 begin
-  raise CreateUtf8('%[%] on a var%', [method, key, VariantTypeName(v)^]);
+  raise CreateUtf8('%[%] on a var%', [method, key, VariantTypeName(v)^])
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 { TDocDict }
@@ -12237,7 +12248,9 @@ begin
     if fValue^.Has(dvoReturnNullForUnknownProperty) then
       result := @DocVariantDataFake
     else
-      raise EDocDict.CreateUtf8('%[''%''] key not found', [method, key]);
+      raise EDocDict.CreateUtf8('%[''%''] key not found', [method, key])
+      {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+      {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 function TDocDict.ValueAt(const key: RawUtf8): PVariant;

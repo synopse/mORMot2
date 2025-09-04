@@ -5488,7 +5488,8 @@ begin
     inc(p, length(Group));
   end;
   if p - pointer(result) <> length(result) then
-    raise EOSSecurity.Create('TSecurityDescriptor.ToBinary'); // paranoid
+    raise EOSSecurity.Create('TSecurityDescriptor.ToBinary') // paranoid
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 const

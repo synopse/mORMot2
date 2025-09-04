@@ -5995,6 +5995,7 @@ begin
   if cardinal(Index) >= fMethod^.ArgsInputValuesCount then
     raise EInterfaceStub.Create(fSender, fMethod^, 'Input[%>=%]', [Index,
       fMethod^.ArgsInputValuesCount])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
   else
     result := fInput[Index];
 end;
@@ -6005,6 +6006,7 @@ begin
   if cardinal(Index) >= fMethod^.ArgsOutputValuesCount then
     raise EInterfaceStub.Create(fSender, fMethod^, 'Output[%>=%]',
       [Index, fMethod^.ArgsOutputValuesCount])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
   else
     fOutput[Index] := Value;
 end;
@@ -6024,8 +6026,9 @@ begin
       exit;
     end;
   end;
-  raise EInterfaceStub.Create(fSender, fMethod^, 'unknown input parameter [%]',
-    [aParamName]);
+  raise EInterfaceStub.Create(fSender, fMethod^,
+    'unknown input parameter [%]', [aParamName])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.GetInUtf8(
@@ -6052,8 +6055,9 @@ begin
       exit;
     end;
   end;
-  raise EInterfaceStub.Create(fSender, fMethod^, 'unknown output parameter [%]',
-    [aParamName]);
+  raise EInterfaceStub.Create(fSender, fMethod^,
+    'unknown output parameter [%]', [aParamName])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;

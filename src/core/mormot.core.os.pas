@@ -7173,8 +7173,10 @@ constructor TFileStreamEx.CreateFromHandle(aHandle: THandle;
 begin
   if not ValidHandle(aHandle) then
     raise EOSException.CreateFmt('%s.Create(%s) failed as %s',
-      [ClassNameShort(self)^, aFileName, GetErrorShort]);
-  inherited Create(aHandle); // TFileStreamFromHandle constructor which own it 
+      [ClassNameShort(self)^, aFileName, GetErrorShort])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif};
+  inherited Create(aHandle); // TFileStreamFromHandle constructor which own it
   fFileName := aFileName;
   fDontReleaseHandle := aDontReleaseHandle;
 end;
@@ -10237,7 +10239,8 @@ end;
 procedure TRWLock.AssertDone;
 begin
   if Flags <> 0 then
-    raise EOSException.CreateFmt('TRWLock Flags=%x', [Flags]);
+    raise EOSException.CreateFmt('TRWLock Flags=%x', [Flags])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 // dedicated asm for this most simple (and used) method

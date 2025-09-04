@@ -2063,7 +2063,8 @@ begin
   m := fInterface.CheckMethodIndex(aMethodName);
   if aScope = chkName then
     raise EInterfaceStub.Create(self, fInterface.Methods[m],
-      'Invalid scope for Verify()');
+      'Invalid scope for Verify()')
+      {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif};
   InternalCheck(
     IntGetLogAsText(m + RESERVED_VTABLE_SLOTS, '', VERIFY_SCOPE[aScope], ',') = aTrace,
     true, 'Verify(''%'',''%'',%) failed', [aMethodName, aTrace, ToText(aScope)^]);

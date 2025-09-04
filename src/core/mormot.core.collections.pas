@@ -1601,7 +1601,8 @@ end;
 class function Collections.{%H-}RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer;
 begin
   raise EIList.CreateUtf8('Collections.NewList<>: Type is too complex - ' +
-    'use Collections.NewPlainList<%> instead', [aItemTypeInfo.Name^]);
+    'use Collections.NewPlainList<%> instead', [aItemTypeInfo.Name^])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
     // we tried Delphi' "at ReturnAddress" but disabled to avoid internal errors
 end;
 
@@ -1610,7 +1611,8 @@ class function Collections.{%H-}RaiseUseNewPlainKeyValue(
 begin
   raise EIList.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
     'complex - use Collections.NewPlainKeyValue<%, %> instead',
-    [aContext.KeyItemTypeInfo.Name^, aContext.ValueItemTypeInfo.Name^]);
+    [aContext.KeyItemTypeInfo.Name^, aContext.ValueItemTypeInfo.Name^])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 {$ifdef ISDELPHI} {$HINTS ON} {$endif}
 

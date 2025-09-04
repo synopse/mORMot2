@@ -9445,7 +9445,8 @@ var
   P: PUtf8Char;
 begin
   if high(Buffers) > high(lens) then
-    raise EBufferException.Create('Too many params in AppendBuffersToRawUtf8()');
+    raise EBufferException.Create('Too many params in AppendBuffersToRawUtf8()')
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif};
   len := 0;
   for i := 0 to high(Buffers) do
   begin

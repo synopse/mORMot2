@@ -4170,16 +4170,21 @@ begin
 end;
 
 function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
+var
+  E: ERttiException;
 begin
   if Rtti = nil then
-    raise ERttiException.Create('Unexpected ClassNewInstance(nil)')
+    E := ERttiException.Create('Unexpected ClassNewInstance(nil)')
   else if Rtti.Kind <> rkClass then
-     raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not available for %',
+     E := ERttiException.CreateUtf8('%.ClassNewInstance(%) not available for %',
        [Rtti, Rtti.Name, ToText(Rtti.Kind)^])
   else
-    raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not implemented -> ' +
+    E := ERttiException.CreateUtf8('%.ClassNewInstance(%) not implemented -> ' +
       'please include mormot.core.json unit to register TRttiJson',
       [Rtti, Rtti.Name]);
+  raise E
+  {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
 end;
 
 var
@@ -9174,14 +9179,16 @@ function TRttiCustom.{%H-}ValueCompare(Data, Other: pointer;
   CaseInsensitive: boolean): integer;
 begin
   raise ERttiException.CreateUtf8('%.ValueCompare not implemented -> ' +
-    'please include mormot.core.json unit to register TRttiJson', [self]);
+    'please include mormot.core.json unit to register TRttiJson', [self])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 function TRttiCustom.{%H-}ValueToVariant(Data: pointer;
   out Dest: TVarData; Options: pointer): PtrInt;
 begin
   raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> ' +
-    'please include mormot.core.json unit to register TRttiJson', [self]);
+    'please include mormot.core.json unit to register TRttiJson', [self])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
 procedure TRttiCustom.ValueRandom(Data: pointer);
