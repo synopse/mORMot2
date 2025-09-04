@@ -2853,18 +2853,6 @@ begin
   until PtrUInt(src) >= last;
 end;
 
-procedure XorMemoryPtrInt(dest, source: PPtrInt; count: integer);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  if count > 0 then
-    repeat
-      dest^ := dest^ xor source^;
-      inc(dest);
-      inc(source);
-      dec(count);
-    until count = 0;
-end;
-
 {$ifndef CPUSSE2}
 {$ifdef CPU32}
 procedure Xor512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
@@ -8823,7 +8811,7 @@ end;
 
 procedure TSha3Context.AbsorbQueue;
 begin
-  XorMemoryPtrInt(@State, @DataQueue, Rate shr POINTERSHRBITS);
+  XorMemory(@State, @DataQueue, Rate shr 3);
   KeccakPermutation(@State);
 end;
 
@@ -8847,7 +8835,7 @@ begin
       p := @data^[written shr 3];
       inc(written, blocks * Rate);
       repeat
-        XorMemoryPtrInt(@State, pointer(p), Rate shr POINTERSHRBITS);
+        XorMemory(@State, pointer(p), Rate shr 3);
         KeccakPermutation(@State);
         inc(p, Rate shr 3);
         dec(blocks);
@@ -9270,7 +9258,7 @@ begin
       mac := first;
       mac.sha.Update(@tmp, SizeOf(tmp));
       mac.Done(tmp, true);
-      XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
+      XorMemory(@result, @tmp, SizeOf(result));
     end;
   end;
   FillcharFast(first, SizeOf(first), 0);
@@ -9330,7 +9318,7 @@ begin
         mac := first;
         mac.sha.Update(@tmp, SizeOf(tmp));
         mac.Done(tmp, true);
-        XorMemoryPtrInt(pointer(ti), @tmp, SizeOf(ti^) shr POINTERSHR);
+        XorMemory(pointer(ti), @tmp, SizeOf(ti^));
       end;
       inc(ti); // just concatenate each Ti
     end;
