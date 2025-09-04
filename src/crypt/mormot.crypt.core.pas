@@ -2853,6 +2853,16 @@ begin
   until PtrUInt(src) >= last;
 end;
 
+procedure XorMemoryTrailer(Dest, Source1, Source2: PByteArray; Size: PtrUInt);
+  {$ifdef HASINLINE}inline;{$endif}
+begin // just XOR 0..15 of bytes
+  while Size <> 0 do
+  begin
+    dec(Size);
+    Dest[Size] := Source1[Size] xor Source2[Size];
+  end;
+end;
+
 {$ifndef CPUSSE2}
 {$ifdef CPU32}
 procedure Xor512(dst, src: PPtrIntArray); {$ifdef HASINLINE} inline; {$endif}
@@ -5669,7 +5679,7 @@ begin
   if fAesInit <> initEncrypt then
     EncryptInit;
   TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
-  XorMemory(pointer(fOut), pointer(fIn), @fIV, count);
+  XorMemoryTrailer(pointer(fOut), pointer(fIn), @fIV, count);
 end;
 
 
@@ -6388,7 +6398,7 @@ begin
     if Count = 0 then
       exit;
     TAesContext(fAes).DoBlock(fAes, fIV, tmp);
-    XorMemory(pointer(fOut), pointer(fIn), @tmp, Count);
+    XorMemoryTrailer(pointer(fOut), pointer(fIn), @tmp, Count);
   end;
 end;
 
@@ -6712,7 +6722,7 @@ begin
     ESynCrypto.RaiseLastOSError('in Decrypt() for %', [self]);
   dec(Count, n);
   if Count > 0 then // remaining bytes will be XORed with the supplied IV
-    XorMemory(@PByteArray(BufOut)[n], @PByteArray(BufIn)[n], @fIV, Count);
+    XorMemoryTrailer(@PByteArray(BufOut)[n], @PByteArray(BufIn)[n], @fIV, Count);
 end;
 
 procedure TAesAbstractApi.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
