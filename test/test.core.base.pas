@@ -2863,7 +2863,10 @@ begin
   CheckEqual(s, '1234678');
   for i := 1 to 1000 do
   begin
-    RandomGuid(g);
+    if i and 1 = 0 then
+      RandomGuid(g)
+    else
+      TAesPrng.Main.FillGuid(g);
     Check(IsRandomGuid(@g));
     st := GuidToString(g);
     Check(st <> st2);

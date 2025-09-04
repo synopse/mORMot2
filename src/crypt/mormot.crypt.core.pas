@@ -1677,6 +1677,9 @@ type
     /// returns an hexa-encoded binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomHex(Len: integer): RawUtf8;
+    /// compute a pseudorandom UUid value according to the RFC 4122
+    // - this method is stronger than RandomGuid() from mormot.core.os
+    procedure FillGuid(out Guid: TGuid);
     /// xor a binary buffer with some pseudorandom data
     // - call FillRandom then xor the supplied buffer content
     procedure XorRandom(Buffer: pointer; Len: PtrInt);
@@ -7304,6 +7307,12 @@ begin
     exit;
   FillRandom(bin, Len);
   BinToHexLower(bin, pointer(result), Len);
+end;
+
+procedure TAesPrngAbstract.FillGuid(out Guid: TGuid);
+begin
+  FillRandom(PAesBlock(@Guid)^);
+  MakeRandomGuid(@Guid);
 end;
 
 procedure TAesPrngAbstract.XorRandom(Buffer: pointer; Len: PtrInt);
