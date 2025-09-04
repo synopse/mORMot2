@@ -3626,11 +3626,11 @@ type
 procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// logical XOR of two memory buffers
+/// logical XOR of two memory buffers - using SSE2 asm on x86_64
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] xor Source[i];
-procedure XorMemory(Dest, Source: PByteArray; size: PtrInt); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+procedure XorMemory(Dest, Source: PByteArray; Size: PtrInt); overload;
+  {$ifndef CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// logical XOR of two memory buffers into a third
 // - will perform on all buffer bytes:
@@ -12114,21 +12114,23 @@ begin
   end;
 end;
 
-procedure XorMemory(Dest, Source: PByteArray; size: PtrInt);
+{$ifndef CPUX64} // SSE2 version in mormot.core.base.asmx64.inc
+procedure XorMemory(Dest, Source: PByteArray; Size: PtrInt);
 begin
-  while size >= SizeOf(PtrInt) do
+  while Size >= SizeOf(PtrInt) do
   begin
-    dec(size, SizeOf(PtrInt));
+    dec(Size, SizeOf(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Dest)^ xor PPtrInt(Source)^;
     inc(PPtrInt(Dest));
     inc(PPtrInt(Source));
   end;
-  while size > 0 do
+  while Size > 0 do
   begin
-    dec(size);
-    Dest[size] := Dest[size] xor Source[size];
+    dec(Size);
+    Dest[Size] := Dest[Size] xor Source[Size];
   end;
 end;
+{$endif CPUX64}
 
 procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt);
 begin
