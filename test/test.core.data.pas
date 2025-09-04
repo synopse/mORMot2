@@ -6918,6 +6918,10 @@ begin
   CheckEqual(json, tmp, 'as IUnknown');
   {$endif FPC}
   Check(not ClassFieldInt64(local, 'another', i64));
+  Check(not ClassFieldText(local, 'another', u));
+  CheckNotEqual(u, 'test');
+  Check(ClassFieldText(local, 'value', u));
+  CheckEqual(u, 'test');
   inh := TInheritedClass.Create;
   i64 := 1;
   Check(ClassFieldInt64(inh, 'another', i64));
@@ -6926,6 +6930,12 @@ begin
   inh.fAnother := 10;
   Check(ClassFieldInt64(inh, 'another', i64));
   CheckEqual(i64, 10);
+  CheckEqual(u, 'test');
+  Check(ClassFieldText(inh, 'value', u));
+  CheckEqual(u, '');
+  inh.fValue := 'toto';
+  Check(ClassFieldText(inh, 'value', u));
+  CheckEqual(u, 'toto');
   cc := TComplexClass.Create;
   try
     CheckEqual(RawUtf8ArrayToCsv(cc.arr), '');

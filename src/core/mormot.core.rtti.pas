@@ -1433,15 +1433,19 @@ function ClassFieldPropWithParentsFromUtf8(aClassType: TClass;
   PropName: PUtf8Char; PropNameLen: PtrInt; aCaseSensitive: boolean): PRttiProp;
 
 /// retrieve an integer/Int64 Field propery value from a Property Name
-// - this special version also searches into parent properties
-// (TRttiProp search scope is only inside the current class level)
+// - searches also into parent properties - whereas TRttiProps.FieldProp won't
 // - returns TRUE and set PropValue if a matching property was found
 function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
   out PropValue: Int64): boolean;
 
+/// retrieve a Field propery value from a Property Name as UTF-8 text
+// - searches also into parent properties - whereas TRttiProps.FieldProp won't
+// - returns TRUE and set PropValue if a matching property was found
+function ClassFieldText(Instance: TObject; const PropName: ShortString;
+  out PropValue: RawUtf8): boolean;
+
 /// retrieve a class Field property instance from a Property Name
-// - this special version also searches into parent properties
-// (TRttiProp search scope is only inside the current class level)
+// - searches also into parent properties - whereas TRttiProps.FieldProp won't
 // - returns TRUE and set PropInstance if a matching property was found
 function ClassFieldInstance(Instance: TObject; const PropName: ShortString;
   PropClassType: TClass; out PropInstance): boolean; overload;
@@ -5687,6 +5691,21 @@ begin
   if P = nil then
     exit;
   PropValue := P^.GetInt64Value(Instance);
+  result := true;
+end;
+
+function ClassFieldText(Instance: TObject; const PropName: ShortString;
+  out PropValue: RawUtf8): boolean;
+var
+  P: PRttiProp;
+begin
+  result := false;
+  if Instance = nil then
+    exit;
+  P := ClassFieldPropWithParents(PPointer(Instance)^, PropName);
+  if P = nil then
+    exit;
+  PropValue := P^.GetValueText(Instance); // convert e.g. ordinals to RawUtf8
   result := true;
 end;
 
