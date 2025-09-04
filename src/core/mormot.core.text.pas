@@ -2189,15 +2189,15 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    // - on FPC/Delphi XE2+, the exception will be raised at the caller address
+    // - the exception will be raised at the caller address (as expected)
     class procedure RaiseLastOSError(const Format: RawUtf8;
       const Args: array of const; const Trailer: ShortString = 'OSError');
     /// a wrapper function around raise CreateUtf8()
     // - generated executable code could be slightly shorter
-    // - on FPC/Delphi XE2+, the exception will be raised at the caller address
+    // - the exception will be raised at the caller address (as expected)
     class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const);
     /// a wrapper function around raise CreateU()
-    // - on FPC/Delphi XE2+, the exception will be raised at the caller address
+    // - the exception will be raised at the caller address (as expected)
     class procedure RaiseU(const Msg: RawUtf8);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged

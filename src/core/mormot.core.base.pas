@@ -173,7 +173,7 @@ type
   /// compatibility definition with FPC and newer Delphi
   PUInt64 = ^UInt64;
 
-/// intrinsic since Delphi XE2 - just return [ebp + 4]
+/// cross-platform intrinsic since Delphi XE2 - just return [ebp + 4]
 function ReturnAddress: pointer;
 {$endif ISDELPHIXE2}
 
