@@ -1161,8 +1161,7 @@ var
 
   procedure TestCalculator(const I: ICalculator);
   var
-    i1, i2: PtrInt;
-    n, t, i3: integer;
+    n, t, i1, i2, i3: integer;
     c: cardinal;
     cu: currency;
     n1, n2, s1, s2: double;
@@ -1183,8 +1182,8 @@ var
     CheckEqual(length(strs1), 3);
     for t := 1 to Iterations do
     begin
-      i1 := (rnd.RawNext shr 1) - (rnd.RawNext shr 1);
-      i2 := PtrInt(rnd.RawNext shr 1) - i1;
+      i1 := rnd.Next31 - rnd.Next31;
+      i2 := rnd.Next31 - i1;
       Check(I.Add(i1, i2) = i1 + i2);
       Check(I.Multiply(i1, i2) = Int64(i1) * Int64(i2));
       n1 := rnd.NextDouble * 1E-9 - rnd.NextDouble * 1E-8;
