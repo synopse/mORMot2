@@ -3309,7 +3309,8 @@ type
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute the next 32-bit pseudo-random value, in range [0..max-1]
     function Next(max: cardinal): cardinal; overload;
-      {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// compute the next positive 32-bit pseudo-random value
+    function Next31: integer;
     /// compute a 64-bit integer pseudo-random value
     function NextQWord: QWord;
     /// compute a 64-bit floating point pseudo-random value in range [0..1)
@@ -10133,6 +10134,11 @@ end;
 function TLecuyer.Next(max: cardinal): cardinal;
 begin
   result := (QWord(Next) * max) shr 32;
+end;
+
+function TLecuyer.Next31: integer;
+begin
+  result := Next shr 1;
 end;
 
 function TLecuyer.NextQWord: QWord;
