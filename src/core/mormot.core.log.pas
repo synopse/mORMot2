@@ -5072,7 +5072,7 @@ begin
   pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
-{$STACKFRAMES OFF}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 {$else}
 
@@ -5576,7 +5576,7 @@ begin
   LogText(Level, @tmp[1], Instance); // this method with ending #0 is the fastest
 end;
 
-{$STACKFRAMES OFF}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 {$ifdef WIN64DELPHI} // Delphi Win64 has no 64-bit inline assembler
 procedure DebugBreak;
