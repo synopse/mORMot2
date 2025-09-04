@@ -7175,7 +7175,7 @@ begin
     raise EOSException.CreateFmt('%s.Create(%s) failed as %s',
       [ClassNameShort(self)^, aFileName, GetErrorShort])
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif};
+    {$else} at ReturnAddress {$endif};
   inherited Create(aHandle); // TFileStreamFromHandle constructor which own it
   fFileName := aFileName;
   fDontReleaseHandle := aDontReleaseHandle;

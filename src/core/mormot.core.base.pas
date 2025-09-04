@@ -167,12 +167,15 @@ type
   // this pointer is not defined on older Delphi revisions
   PMethod = ^TMethod;
 
-  {$ifndef ISDELPHIXE2}
+{$ifndef ISDELPHIXE2}
   /// used to store the handle of a system Thread
   TThreadID = cardinal;
   /// compatibility definition with FPC and newer Delphi
   PUInt64 = ^UInt64;
-  {$endif ISDELPHIXE2}
+
+/// intrinsic since Delphi XE2 - just return [ebp + 4]
+function ReturnAddress: pointer;
+{$endif ISDELPHIXE2}
 
 {$endif FPC}
 
@@ -13430,7 +13433,7 @@ function {%H-}RaiseStreamError(Caller: TObject; const Context: ShortString): Ptr
 begin
   raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context])
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 { TStreamWithPosition }

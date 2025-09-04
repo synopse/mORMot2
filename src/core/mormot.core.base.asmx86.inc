@@ -2724,6 +2724,13 @@ begin
     result := BsrDword(c) or 32;   // search in highest 32-bit
 end;
 
+{$ifndef ISDELPHIXE2}
+function ReturnAddress: pointer;
+asm
+   mov   eax, [ebp + 4] // mimics the Delphi XE2+ intrinsic
+end;
+{$endif ISDELPHIXE2}
+
 {$endif WIN32DELPHI}
 
 

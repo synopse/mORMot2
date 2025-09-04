@@ -4184,7 +4184,7 @@ begin
       [Rtti, Rtti.Name]);
   raise E
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 var

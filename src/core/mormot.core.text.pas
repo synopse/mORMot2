@@ -4286,7 +4286,7 @@ begin
   raise ESynException.CreateUtf8(
     '%.% unimplemented: use TJsonWriter', [self, Method])
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+    {$else} at ReturnAddress {$endif}
 end;
 
 procedure TTextWriter.Add(const Format: RawUtf8; const Values: array of const;
@@ -10549,7 +10549,7 @@ begin
     StringReplaceAll(GetErrorText(error), '%', '#'), Format], fmt);
   raise CreateUtf8(fmt, Args)
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 class procedure ESynException.RaiseUtf8(const Format: RawUtf8;
@@ -10557,14 +10557,14 @@ class procedure ESynException.RaiseUtf8(const Format: RawUtf8;
 begin
   raise CreateUtf8(Format, Args)
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 class procedure ESynException.RaiseU(const Msg: RawUtf8);
 begin
   raise CreateU(Msg)
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}

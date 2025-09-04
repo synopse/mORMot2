@@ -5100,7 +5100,7 @@ class procedure EDocVariant.RaiseSafe(Kind: TDocVariantKind);
 begin
   raise CreateUtf8('_Safe(%)?', [ToText(Kind)^])
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 { TDocVariant }
@@ -8792,7 +8792,7 @@ begin
   else
     raise EDocVariant.CreateUtf8('[%] property not found', [aName])
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+    {$else} at ReturnAddress {$endif}
 end;
 
 function TDocVariantData.InternalNotFound(aIndex: integer): PDocVariantData;
@@ -8802,7 +8802,7 @@ begin
   else
     raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount])
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+    {$else} at ReturnAddress {$endif}
 end;
 
 function TDocVariantData.DeleteByPath(const aPath: RawUtf8;
@@ -11693,7 +11693,7 @@ class procedure EDocList.GetRaise(method: AnsiChar; pos: integer; const v: varia
 begin
   raise CreateUtf8('%[%] on a var%', [method, pos, VariantTypeName(v)^])
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 { TDocList }
@@ -12197,7 +12197,7 @@ class procedure EDocDict.Error(method: AnsiChar; const key: RawUtf8; const v: va
 begin
   raise CreateUtf8('%[%] on a var%', [method, key, VariantTypeName(v)^])
   {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-  {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+  {$else} at ReturnAddress {$endif}
 end;
 
 { TDocDict }
@@ -12250,7 +12250,7 @@ begin
     else
       raise EDocDict.CreateUtf8('%[''%''] key not found', [method, key])
       {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-      {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+      {$else} at ReturnAddress {$endif}
 end;
 
 function TDocDict.ValueAt(const key: RawUtf8): PVariant;

@@ -1035,7 +1035,7 @@ begin
   if not Assigned(pthread_mutex_init) then
     raise EOSException.Create('TOSLightLock.Init: no pthread_mutex_init')
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
-    {$else} {$ifdef HASRETURNADDRESS} at ReturnAddress {$endif}{$endif}
+    {$else} at ReturnAddress {$endif}
   else // no recursive attribute -> fast mutex
   {$endif OSPTHREADSLIB}
     pthread_mutex_init(@fMutex, nil);
