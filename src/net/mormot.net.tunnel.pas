@@ -75,6 +75,9 @@ type
     // - single binary parameter so that could be transmitted as
     // BINARY_CONTENT_TYPE without any base-64 encoding (to be done at WS level)
     procedure Send(const Frame: RawByteString);
+    /// return some information about this connection(s)
+    // - as a TDocVariant object for a single connection, or array for a node
+    function Info: variant;
   end;
 
   /// abstract tunneling service implementation
@@ -209,6 +212,8 @@ type
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const aFrame: RawByteString);
+    /// ITunnelTransmit method: return some information about this connection
+    function Info: variant;
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize tunnelling process
@@ -307,9 +312,12 @@ type
     function Exists(aSession: TTunnelSession): boolean;
     /// search the ITunnelLocal matching a session ID
     function Get(aSession: TTunnelSession; var aInstance: ITunnelLocal): boolean;
+  public
     /// ITunnelTransmit method which will redirect the given frame to the
     // expected registered TTunnelLocal instance
     procedure Send(const Frame: RawByteString);
+    /// ITunnelTransmit method: return some information about these connections
+    function Info: variant;
   end;
 
 
@@ -756,10 +764,31 @@ begin
             (fThread.fAes[false] <> nil);
 end;
 
+function TTunnelLocal.Info: variant;
+var
+  dv: TDocVariantData absolute result;
+begin
+  VarClear(result);
+  if fPort = 0 then
+    exit;
+  dv.InitFast(10, dvObject);
+  dv.AddNameValuesToObject([
+    'session',    fSession,
+    'localPort',  fPort,
+    'remotePort', fRemotePort,
+    'encrypted',  Encrypted,
+    'options',    ToText(fOptions)]);
+  if fThread <> nil then
+    dv.AddNameValuesToObject([
+      'in',  fThread.fReceived,
+      'out', fThread.fSent]);
+end;
+
 
 function ToText(opt: TTunnelOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
+  LowerCaseShort(result);
 end;
 
 function FrameSession(const Frame: RawByteString): TTunnelSession;
@@ -924,6 +953,25 @@ begin
     Delete(s); // remove this instance (Send did already make ClosePort)
 end;
 
+function TTunnelList.Info: variant;
+var
+  dv: TDocVariantData absolute result;
+  n, i: PtrInt;
+begin
+  VarClear(result);
+  dv.InitFast(dvArray);
+  if fItem = nil  then
+    exit;
+  fSafe.ReadLock; // non-blocking Read lock
+  try
+    n := length(fItem);
+    dv.Capacity := n;
+    for i := 0 to n - 1 do
+      dv.AddItem(fItem[i].Info);
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
 
 
 end.
