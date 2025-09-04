@@ -678,10 +678,10 @@ begin
           exit
         else
           inc(one);
+    result := -1; // to please Delphi 7
   finally
     fSafe.ReadUnLock;
   end;
-  result := -1;
 end;
 
 function TRestHttpServer.RestServerExists(aServer: TRestServer): boolean;
