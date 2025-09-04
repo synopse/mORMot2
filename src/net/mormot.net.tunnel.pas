@@ -857,12 +857,10 @@ begin
   fSafe.ReadLock;
   try
     ndx := FindIndexLocked(pointer(fItem), aSession);
-    if ndx >= 0 then
-    begin
-      aInstance := fItem[ndx]; // fast ref counted assignment
-      result := true;
+    if ndx < 0 then
       exit;
-    end;
+    aInstance := fItem[ndx]; // fast ref counted assignment
+    result := true;
   finally
     fSafe.ReadUnLock;
   end;
@@ -916,11 +914,14 @@ begin
   fSafe.ReadLock; // non-blocking Read lock
   try
     ndx := FindIndexLocked(pointer(fItem), s);
-    if ndx >= 0 then
-      fItem[ndx].Send(frame); // call ITunnelTransmit method within Read lock
+    if ndx < 0 then
+      exit;
+    fItem[ndx].Send(frame); // call ITunnelTransmit method within Read lock
   finally
     fSafe.ReadUnLock;
   end;
+  if length(Frame) = 8 then // notified end of process from the other party
+    Delete(s); // remove this instance (Send did already make ClosePort)
 end;
 
 
