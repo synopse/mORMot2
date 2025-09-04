@@ -31,6 +31,7 @@ uses
   mormot.core.threads,
   mormot.core.rtti,
   mormot.core.log,
+  mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure,   // for ICryptCert
   mormot.crypt.ecc256r1, // for ECDHE encryption
@@ -44,7 +45,7 @@ type
 
   /// each option available for TTunnelLocal process
   // - toEcdhe will compute an ephemeral secret to encrypt the link
-  // - if toEcdhe is not set, toEncrypt will setup a symmetric encryption
+  // - if toEcdhe is not set, toEncrypt will ensure a symmetric encryption
   // - only localhost clients are accepted, unless toAcceptNonLocal is set
   // - toClientSigned/toServerSigned will be set by Open() according to
   // the actual certificates available, to ensure an authenticated handshake
@@ -60,13 +61,15 @@ type
   PTunnelOptions = ^TTunnelOptions;
 
   /// a session identifier which should match on both sides of the tunnel
-  // - typically a Random64 or a TBinaryCookieGeneratorSessionID value
+  // - typically a Random32 or a TBinaryCookieGeneratorSessionID value
   TTunnelSession = Int64;
   PTunnelSession = ^TTunnelSession;
 
   /// abstract transmission layer with the central relay server
   // - may be implemented as raw sockets or over a mORMot SOA WebSockets link
   // - if toEcdhe or toEncrypt option is set, the frames are already encrypted
+  // - named as Tunnel*() methods to be joined as a single service interface,
+  // to leverage a single WebSockets callback
   ITunnelTransmit = interface(IInvokable)
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// main method to emit the supplied binary Frame to the relay server
@@ -74,10 +77,10 @@ type
     // - no result so that the frames could be gathered e.g. over WebSockets
     // - single binary parameter so that could be transmitted as
     // BINARY_CONTENT_TYPE without any base-64 encoding (to be done at WS level)
-    procedure Send(const Frame: RawByteString);
+    procedure TunnelSend(const Frame: RawByteString);
     /// return some information about this connection(s)
     // - as a TDocVariant object for a single connection, or array for a node
-    function Info: variant;
+    function TunnelInfo: variant;
   end;
 
   /// abstract tunneling service implementation
@@ -211,9 +214,9 @@ type
     procedure ClosePort;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
-    procedure Send(const aFrame: RawByteString);
+    procedure TunnelSend(const aFrame: RawByteString);
     /// ITunnelTransmit method: return some information about this connection
-    function Info: variant;
+    function TunnelInfo: variant;
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize tunnelling process
@@ -268,7 +271,7 @@ const
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
 
-/// extract the 64-bit session trailer from a ITunnelTransmit.Send() frame
+/// extract the 64-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -297,7 +300,7 @@ type
   end;
 
   /// maintain a list of ITunnelLocal instances
-  // - with proper redirection of ITunnelTransmit.Send() frames
+  // - with proper redirection of ITunnelTransmit.TunnelSend() frames
   TTunnelList = class(TInterfacedPersistent,
     ITunnelTransmit)
   protected
@@ -315,9 +318,9 @@ type
   public
     /// ITunnelTransmit method which will redirect the given frame to the
     // expected registered TTunnelLocal instance
-    procedure Send(const Frame: RawByteString);
+    procedure TunnelSend(const Frame: RawByteString);
     /// ITunnelTransmit method: return some information about these connections
-    function Info: variant;
+    function TunnelInfo: variant;
   end;
 
 
@@ -454,7 +457,7 @@ begin
               PInt64(@PByteArray(tmp)[length(tmp) - 8])^ := fOwner.fSession;
               if (fTransmit <> nil) and
                  not Terminated then
-                fTransmit.Send(tmp);
+                fTransmit.TunnelSend(tmp);
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
@@ -501,7 +504,7 @@ begin
     try
       fClosePortNotified := true;
       PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
-      Send(notifycloseport);
+      TunnelSend(notifycloseport);
     except
     end;
   thread := fThread;
@@ -520,7 +523,7 @@ begin
   fPort := 0;
 end;
 
-procedure TTunnelLocal.Send(const aFrame: RawByteString);
+procedure TTunnelLocal.TunnelSend(const aFrame: RawByteString);
 var
   l: PtrInt;
   p: PAnsiChar;
@@ -676,7 +679,7 @@ begin
     l := length(frame);
     SetLength(frame, l + 8);
     PInt64(@PByteArray(frame)^[l])^ := fSession; // 64-bit session trailer
-    fTransmit.Send(frame);
+    fTransmit.TunnelSend(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
@@ -764,7 +767,7 @@ begin
             (fThread.fAes[false] <> nil);
 end;
 
-function TTunnelLocal.Info: variant;
+function TTunnelLocal.TunnelInfo: variant;
 var
   dv: TDocVariantData absolute result;
 begin
@@ -932,7 +935,7 @@ begin
   result := true;
 end;
 
-procedure TTunnelList.Send(const Frame: RawByteString);
+procedure TTunnelList.TunnelSend(const Frame: RawByteString);
 var
   s: TTunnelSession;
   ndx: PtrInt;
@@ -945,7 +948,7 @@ begin
     ndx := FindIndexLocked(pointer(fItem), s);
     if ndx < 0 then
       exit;
-    fItem[ndx].Send(frame); // call ITunnelTransmit method within Read lock
+    fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within Read lock
   finally
     fSafe.ReadUnLock;
   end;
@@ -953,7 +956,7 @@ begin
     Delete(s); // remove this instance (Send did already make ClosePort)
 end;
 
-function TTunnelList.Info: variant;
+function TTunnelList.TunnelInfo: variant;
 var
   dv: TDocVariantData absolute result;
   n, i: PtrInt;
@@ -967,7 +970,7 @@ begin
     n := length(fItem);
     dv.Capacity := n;
     for i := 0 to n - 1 do
-      dv.AddItem(fItem[i].Info);
+      dv.AddItem(fItem[i].TunnelInfo);
   finally
     fSafe.ReadUnLock;
   end;
