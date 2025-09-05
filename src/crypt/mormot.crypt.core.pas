@@ -4220,18 +4220,21 @@ end;
 
 procedure DoBlocksCtrPas(iv: PAesBlock; src, dst: pointer;
   blockcount: cardinal; const ctxt: TAesContext);
+var
+  tmp: TAesBlock;
 begin // sub-procedure for better code generation
   if blockcount > 0 then
     repeat
-      ctxt.DoBlock(ctxt, iv^, ctxt.buf); // tmp=AES(iv)
-      inc(iv^[15]);                      // inc(iv)
-      if iv^[15] = 0 then // manual big-endian increment
-        CtrNistCarryBigEndian(iv^);
-      XorBlock16(src, dst, @ctxt.buf);  // dst := src xor buf
+      ctxt.DoBlock(ctxt, iv^, tmp); // tmp=AES(iv)
+      inc(iv^[15]);                 // inc(iv)
+      if iv^[15] = 0 then
+        CtrNistCarryBigEndian(iv^); // manual big-endian increment
+      XorBlock16(src, dst, @tmp);   // dst := src xor buf
       inc(PAesBlock(src));
       inc(PAesBlock(dst));
       dec(blockcount);
     until blockcount = 0;
+  FillZero(tmp);
 end;
 
 {$ifdef USEAESNICTR}
