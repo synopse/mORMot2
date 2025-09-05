@@ -702,7 +702,7 @@ begin
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       // send initial upgrade request
       RequestSendHeader(aWebSocketsURI, 'GET');
-      SharedRandom.Fill(@key, SizeOf(key)); // public and unique: use TLecuyer
+      Random128(@key); // unpredictable
       bin1 := BinToBase64(@key, SizeOf(key));
       SockSendLine(['Content-Length: 0'#13#10 +
                     'Connection: Upgrade'#13#10 +

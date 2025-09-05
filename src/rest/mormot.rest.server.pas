@@ -5222,9 +5222,9 @@ begin
   if PInteger(@ServerProcessKdf)^ = 0 then
   begin
     // first time used: initialize the HMAC-SHA-256 secret for this process
-    TAesPrng.Main.Fill(tmp); // use strong CSPRNG seed
+    TAesPrng.Main.FillRandom(tmp); // use strong CSPRNG seed
     ServerNonceCache[false].safe.Lock;
-    if PInteger(@ServerProcessKdf)^ = 0 then // ensure thread-safe
+    if PInteger(@ServerProcessKdf)^ = 0 then // thread-safe initialization
     begin
       ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
       ServerProcessKdf.Update(tmp);

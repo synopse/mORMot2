@@ -1336,7 +1336,7 @@ begin
   aServerNonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if aServerNonce = '' then
     exit;
-  SharedRandom.Fill(@rnd, SizeOf(rnd)); // public from client: use TLecuyer
+  Random128(@rnd); // unpredictable
   Join([CardinalToHex(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
     aClientNonce); // 160-bit nonce
   result := ClientGetSessionKey(Sender, User, [
