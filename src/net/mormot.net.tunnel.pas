@@ -357,7 +357,7 @@ begin
     // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
     fAes[{sending:}false] := AesIvUpdatedCreate(mCtr, key, 128);
     fAes[{sending:}true]  := AesIvUpdatedCreate(mCtr, key, 128);
-    // won't include an IV with each frame, but update it from ecdhe derivation
+    // won't include an IV with each frame, but update it from (ecdhe) KDF
     fAes[false].IV := iv;
     fAes[true].IV := iv;
   end;
@@ -628,8 +628,9 @@ var
   uri: TUri;
   sock: TNetSocket;
   addr: TNetAddr;
-  l: PtrInt;
-  frame, remote: RawByteString;
+  l, li: PtrInt;
+  frame, remote, info: RawByteString;
+  infoaes: TAesCtr;
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
   key, iv: THash256Rec;
@@ -679,15 +680,17 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;
+  // initial single round trip handshake
+  infoaes := nil;
   fOptions := TransmitOptions;
   try
-    // initial handshake: same TTunnelOptions + TTunnelSession from both sides
+    // header with optional ECDHE
     loc.Info.magic   := tlmVersion1;
     loc.Info.options := fOptions;
     loc.Info.session := fSession; // is typically an increasing sequence number
     loc.Info.port    := result;
     Random128(@loc.Ecdh.rnd);   // unpredictable
-    if toEcdhe in fOptions then // ECDHE in a single round trip
+    if toEcdhe in fOptions then
     begin
       if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
       begin
@@ -703,23 +706,51 @@ begin
     TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
     FastSetRawByteString(frame, @loc, SizeOf(loc));
     FrameSign(frame); // optional digital signature
-    Append(frame, [#0, JsonEncode(InfoNameValue), #0'01234567']);
-    PInt64(@PByteArray(frame)^[length(frame) - 8])^ := fSession;
+    // append (and potentially encrypt) the info JSON payload
+    info := JsonEncode(InfoNameValue);
+    if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
+    begin
+      if AppSecret = '' then
+        hmackey.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
+      else
+        hmackey.Init(AppSecret);
+      hmackey.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
+      hmaciv := hmackey; // use hmaciv for info KDF
+      hmaciv.Done(key.b);
+      infoaes := TAesCtr.Create(key.Lo); // simple symmetrical encryption
+      infoaes.IV := key.Hi;
+      info := infoaes.EncryptPkcs7(info, {ivatbeg=}false);
+      infoaes.IV := key.Hi; // use the same IV for decoding "remote" info below
+    end;
+    li := length(info);
+    if li > 65535 then
+      ETunnel.RaiseUtf8('Open: too much info (len=%)', [li]);
+    // actually send the frame ending with its session ID
+    Append(frame, [info, '0101234567']); // li:W sess:I64
+    l := length(frame);
+    PWord(@PByteArray(frame)^[l - 10])^ := li;
+    PInt64(@PByteArray(frame)^[l - 8])^ := fSession;
     fTransmit.TunnelSend(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
-    // server will wait until both sides sent an identical (signed) header
+    // this method will wait until both sides sent a valid signed header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
       ETunnel.RaiseUtf8('Open: handshake timeout on port %', [result]);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
-    // check the returned header, maybe using the certificate
+    // ensure the returned frame is for this session
     if FrameSession(remote) <> fSession then
       ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
+    // extract (and potentially decrypt) the associated JSON info payload
     l := length(remote) - 10;
-    while (l > 0) and
-          (PByteArray(remote)[l] <> 0) do
-      dec(l);
+    li := PWord(@PByteArray(remote)^[l])^;
+    FastSetRawByteString(info, @PByteArray(remote)^[l - li], li);
+    if infoaes <> nil then
+      info := infoaes.DecryptPkcs7(info, {ivatbeg=}false);
+    if fInfo.InitJsonInPlace(pointer(info), JSON_FAST) = nil then
+      ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
+    // check the digital signature, maybe using the certificate
+    dec(l, li);
     if l < SizeOf(loc) then // may have a signature trailer
       ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
     if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
@@ -727,20 +758,14 @@ begin
     TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
     if not IsEqual(rem^.Info.crc, key.Lo) then
       ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
-    if fInfo.InitJsonInPlace(@PByteArray(remote)[l + 1], JSON_FAST) = nil then
-      ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
     if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
       ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
     fRemotePort := rem^.Info.port;
-    // optional ephemeral encryption
+    // optional encryption - maybe with ECDHE ephemeral keys
     FillZero(key.b);
-    if toEncrypted * fOptions <> [] then
+    if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
     begin
-      if AppSecret = '' then
-        hmackey.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
-      else
-        hmackey.Init(AppSecret);
-      hmackey.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
+      // hmackey has been pre-computed above with loc.Info and AppSecret
       EcdheHashRandom(hmackey, loc.Ecdh, rem^.Ecdh); // rnd+pub in same order
       if toEcdhe in fOptions then
       begin
@@ -784,6 +809,7 @@ begin
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
   end;
+  infoaes.Free;
   FreeAndNil(fHandshake);
   FillZero(key.b);
   FillZero(iv.b);
