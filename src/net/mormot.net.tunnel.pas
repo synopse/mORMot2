@@ -186,6 +186,7 @@ type
     ITunnelLocal, ITunnelTransmit)
   protected
     fSession: TTunnelSession;
+    fSendSafe: TMultiLightLock;
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
     fOpenBind, fClosePortNotified: boolean;
@@ -550,23 +551,28 @@ begin
   l := length(aFrame) - 8;
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
-  if fHandshake <> nil then
-  begin
-    fHandshake.Push(aFrame); // during the handshake phase - maybe before Open
-    exit;
-  end;
-  p := pointer(aFrame);
-  if PInt64(p + l)^ <> fSession then
-    ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
-  if l = 0 then
-  begin
-    fClosePortNotified := true; // the other party notified end of process
-    ClosePort;
-  end
-  else if fThread <> nil then // = nil after ClosePort (too late)
-  begin
-    PStrLen(p - _STRLEN)^ := l; // trim 64-bit session trailer
-    fThread.OnReceived(aFrame); // regular tunelling process
+  fSendSafe.Lock;
+  try
+    if fHandshake <> nil then
+    begin
+      fHandshake.Push(aFrame); // during the handshake phase - maybe before Open
+      exit;
+    end;
+    p := pointer(aFrame);
+    if PInt64(p + l)^ <> fSession then
+      ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
+    if l = 0 then
+    begin
+      fClosePortNotified := true; // the other party notified end of process
+      ClosePort;
+    end
+    else if fThread <> nil then // = nil after ClosePort (too late)
+    begin
+      PStrLen(p - _STRLEN)^ := l; // trim 64-bit session trailer
+      fThread.OnReceived(aFrame); // regular tunelling process
+    end;
+  finally
+    fSendSafe.UnLock;
   end;
 end;
 
@@ -628,6 +634,7 @@ var
   loc: TTunnelLocalHandshake;
   key, iv: THash256Rec;
   hmackey, hmaciv: THmacSha256;
+  hqueue: TSynQueue;
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
@@ -752,10 +759,19 @@ begin
     // launch the background processing thread
     if Assigned(log) then
       log.Log(sllTrace, 'Open: % success', [ToText(fOptions)], self);
-    FreeAndNil(fHandshake); // ends the handshaking phase
     fPort := result;
     fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
     SleepHiRes(100, fThread.fStarted);
+    hqueue := fHandshake;
+    fSendSafe.Lock; // re-entrant for TunnelSend()
+    try
+      fHandshake := nil; // ends the handshaking phase
+      while hqueue.Pop(frame) do
+        TunnelSend(frame); // paranoid
+    finally
+      fSendSafe.UnLock;
+      hqueue.Free;
+    end;
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
