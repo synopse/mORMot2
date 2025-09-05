@@ -1872,6 +1872,8 @@ begin
          (length(saltbin) <> BCRYPT_SALTLEN) then // always 16 bytes
     exit;
   // initialize BlowFish state from Password using BCrypt "Expensive Key Setup"
+  if Cost = 0 then
+    Cost := 12; // default cost - e.g. from plain ModularCryptHash() wrapper
   if PreSha256 then
   begin
     // https://passlib.readthedocs.io/en/stable/lib/passlib.hash.bcrypt_sha256.html
