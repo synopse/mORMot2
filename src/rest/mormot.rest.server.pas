@@ -5039,14 +5039,15 @@ begin
   begin
     if usrid <> 0 then
     begin
-      // try if TAuthUser.ID was transmitted
-      result := fServer.fAuthUserClass.Create(fServer.ORM, usrid); // may use ORM cache :)
+      // try if TAuthUser.ID was transmitted - may use ORM per-ID cache
+      result := fServer.fAuthUserClass.Create(fServer.ORM, usrid);
       if result.IDValue = 0 then
         FreeAndNil(result);
     end
     else
       result := nil;
     if result = nil then
+      // search by LogonName - may use the JSON cache at SQlite3 DB level
       result := fServer.fAuthUserClass.Create(
         fServer.ORM, 'LogonName=?', [aUserName]);
     if (result.IDValue = 0) and
