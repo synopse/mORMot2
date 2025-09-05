@@ -648,7 +648,7 @@ begin
   if not uri.From(Address, '0') then
     ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   fRemotePort := 0;
-  fRemoteInfo.Clear;
+  fInfo.Clear;
   fSession := Sess;
   TransmitOptions := (TransmitOptions - [toClientSigned, toServerSigned]) +
                      ComputeOptionsFromCert;
@@ -727,7 +727,7 @@ begin
     TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
     if not IsEqual(rem^.Info.crc, key.Lo) then
       ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
-    if fRemoteInfo.InitJsonInPlace(@PByteArray(remote)[l + 1], JSON_FAST) = nil then
+    if fInfo.InitJsonInPlace(@PByteArray(remote)[l + 1], JSON_FAST) = nil then
       ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
     if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
       ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
@@ -762,6 +762,14 @@ begin
     fPort := result;
     fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
     SleepHiRes(100, fThread.fStarted);
+    fStartTicks := GetUptimeSec; // wall clock
+    fInfo.AddNameValuesToObject([
+      'remotePort', fRemotePort,
+      'localPort',  fPort,
+      'started',    NowUtcToString,
+      'session',    fSession,
+      'encrypted',  Encrypted,
+      'options',    ToText(fOptions)]);
     hqueue := fHandshake;
     fSendSafe.Lock; // re-entrant for TunnelSend()
     try
@@ -814,18 +822,12 @@ begin
   VarClear(result);
   if fPort = 0 then
     exit;
-  dv.InitFast(10, dvObject);
+  dv.InitFast(fInfo.Count + 3, dvObject);
+  dv.AddFrom(fInfo);
   dv.AddNameValuesToObject([
-    'session',    fSession,
-    'localPort',  fPort,
-    'remotePort', fRemotePort,
-    'encrypted',  Encrypted,
-    'options',    ToText(fOptions)]);
-  dv.AddFrom(fRemoteInfo);
-  if fThread <> nil then
-    dv.AddNameValuesToObject([
-      'in',  fThread.fReceived,
-      'out', fThread.fSent]);
+    'elapsed',  GetUptimeSec - fStartTicks,
+    'bytesIn',  fReceived,
+    'bytesOut', fSent]);
 end;
 
 
