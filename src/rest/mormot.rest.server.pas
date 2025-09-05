@@ -499,6 +499,9 @@ type
       Handle304NotModified: boolean = true;
       const DefaultFileName: TFileName = 'index.html';
       const Error404Redirect: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0); override;
+    /// return the Server's current nonce in the proper JSON format
+    // - as called from TRestServerAuthenticationDefault.Auth
+    procedure ReturnNonce;
     /// use this method to send back an error to the caller
     // - overriden method with additional logging
     procedure Error(const ErrorMessage: RawUtf8 = '';
@@ -4527,6 +4530,14 @@ begin
     Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;
 
+procedure TRestServerUriContext.ReturnNonce;
+begin
+  if fServer <> nil then
+    Returns(Join(['{"result":"', CurrentNonce(self), '"}']))
+  else
+    Error;
+end;
+
 procedure TRestServerUriContext.Error(const ErrorMessage: RawUtf8;
   Status: integer; CacheControlMaxAgeSec: integer);
 begin
@@ -5327,12 +5338,6 @@ var
   nonce, pwd: PRawUtf8;
   os: TOperatingSystemVersion;
   usr: TAuthUser;
-
-  procedure DoAuthReturnNonce;
-  begin
-    Ctxt.Results([CurrentNonce(Ctxt)]);
-  end;
-
 begin
   // our default schemes require an user name
   result := aUserName <> '';
@@ -5378,7 +5383,7 @@ begin
   end
   else
     // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
-    DoAuthReturnNonce;
+    Ctxt.ReturnNonce;
 end;
 
 function TRestServerAuthenticationDefault.CheckPassword(
