@@ -3347,8 +3347,10 @@ type
     // - apply crc32c() over the fixedseed buffer to initialize the generator
     procedure SeedGenerator(fixedseed: pointer; fixedseedbytes: integer); overload;
     /// force a well-defined seed of the generator from its current 128-bit state
-    // - could be used e.g. from a random seed to generate a thread-safe
-    // uniformous distribution in a Monte-Carlo or Miller-Rabin loop
+    // - used e.g. from a random seed to generate a thread-safe uniform
+    // distribution in a Monte-Carlo or Miller-Rabin loop, or to generate a
+    // local TLecuyer instance for thread-safe non-blocking random generation
+    // e.g. as in mormot.crypt.core.pas RandomLecuyer()
     procedure SeedGenerator; overload;
     /// compute the next 32-bit pseudo-random value with no Seed - internal call
     function RawNext: cardinal;

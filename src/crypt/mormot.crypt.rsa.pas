@@ -1436,7 +1436,7 @@ begin
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
   if Lecuyer = nil then // 88-bit CSPRNG seed - if not supplied by caller
-    Lecuyer := RandomLecuyer(rnd); // new gsl_rng_taus2 uniformous distribution
+    Lecuyer := RandomLecuyer(rnd); // new gsl_rng_taus2 uniform distribution
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
   w := Clone.IntSub(1); // w = value-1
