@@ -338,7 +338,7 @@ procedure BlowFishEncryptCtr(src, dest: PQWord; len: PtrUInt;
 procedure BlowFishCtrInc(iv: PQWord); {$ifndef CPUINTEL} inline; {$endif}
 
 /// regular BlowFish key setup with a given salt and UTF-8 password
-// - salt is expected to be 16 bytes = 128-bit, e.g. from Random128()
+// - Salt is expected to be 16 bytes = 128-bit, e.g. from Random128()
 // - Password will be passed to BlowFishPrepareKey() - so trimmed to 72 bytes -
 // before calling the overloaded BlowFishKeySetup() binary function
 procedure BlowFishKeySetup(var State: TBlowFishState;
@@ -420,10 +420,14 @@ const
 
 /// BCrypt password hashing function as used on BSD systems
 // - this adaptative algorithm has no known weaknesses, and there are reports
-// that the more recent Argon2 is weaker (and less proven) for practical timing
-// - Cost should be in range 4..31 for 2^Cost rounds (default value is 12)
+// that the more recent Argon2 is weaker (and less proven) for practical timing,
+// and SCrypt requires N>=2^14 to be stronger (i.e. at least 16MB), so BCrypt
+// seems still the best solution for server-side password storage
+// - Cost should be in range 4..31 for 2^Cost rounds (default value is 12, and
+// takes 180ms on my computer)
 // - Salt='' would generate one - or should be exactly 22 characters (16 bytes)
-// - PreSha256 would HMAC-SHA-256 the password (returning $bcrypt-sha256$)
+// - PreSha256 would HMAC-SHA-256 the password (returning $bcrypt-sha256$) to
+// circumvent the initial password length limitation of 72 chars
 // - assigned to mormot.crypt.core.pas BCrypt() redirection by this unit
 // - returns e.g. '$2b$<cost>$<salt><checksum>' or
 // '$bcrypt-sha256$v=2,t=2b,r=<cost>$<salt'$
@@ -449,6 +453,11 @@ procedure Salsa20x8(B: PCardinalArray);
 // $ on Win64:     RawSCrypt in 92ms,  OpenSslScrypt in 124ms
 // $ on Linux x64: RawSCrypt in 74ms,  OpenSslScrypt in 103ms
 // - assigned to mormot.crypt.core.pas SCrypt() redirection by this unit
+// - for password storage and interactive login, consider SCryptHash() from
+// mormot.crypt.secure.pas with N=65536=2^16, R=8, P=1 (74ms and 64MB of RAM)
+// - for local key derivation (e.g. file encryption) consider using this
+// function directly with e.g. N=1048576=2^20, R=8, P=1 (1.23s and 1GB) to
+// compute the binary encryption key
 function RawSCrypt(const Password: RawUtf8; const Salt: RawByteString;
   N, R, P, DestLen: PtrUInt): RawByteString;
 
@@ -456,6 +465,12 @@ function RawSCrypt(const Password: RawUtf8; const Salt: RawByteString;
 // - could be used to tune the parameters (N, R, P) somewhat obfuscated meaning
 // - return e.g. 16MB for SCrypt(16384, 8, 1) and 64MB for SCrypt(65536, 8, 1),
 // i.e. equals roughtly N * R * 128 with some more bytes depending on P
+// - SCrypt(16384, 8, 1) are the recommended minimal parameters value to have
+// benefits against BCrypt() - but still consuming 16MB instead of 4KB so may
+// not be ideal for password storage on server side, but fine for a client-side
+// one-time key derivation function to unlock a resource
+// - TL&WR: use N=65536=2^16, R=8, P=1 for safe interactive login (74ms and 64MB
+// of RAM) or N=1048576=2^20, R=8, P=1 for file encryption (1.23s and 1GB)
 function SCryptMemoryUse(N, R, P: QWord): QWord;
 
 
@@ -2799,7 +2814,7 @@ begin
   assert(SizeOf(TAesFullHeader) = SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
   BCrypt := @BCryptHash; // to implement mcfBCrypt in mormot.crypt.secure
-  {$ifndef CPUSSE2}
+  {$ifndef CPUSSE2} // our SSE2 code above is faster than OpenSSL :)
   if not Assigned(SCrypt) then // if OpenSSL is not already set
   {$endif CPUSSE2}
     SCrypt := @RawSCrypt;

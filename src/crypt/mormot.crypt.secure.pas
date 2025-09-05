@@ -1119,6 +1119,7 @@ function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
 /// compute the fake "rounds" value for ModularCryptHash(mcfSCrypt)
 // - i.e. <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
 // - accepts LogN as [1..31], BlockSize=R as [1..16384] and Parallel=P as [1..8192]
+// - default is LogN=16, R=8, P=1 for safe interactive login (74ms and 64MB RAM)
 function SCryptRounds(LogN: cardinal = 16; BlockSize: cardinal = 8;
   Parallel: cardinal = 1): cardinal;
 
@@ -1129,13 +1130,14 @@ procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: ca
 
 /// SCrypt password hashing function compatible with passlib.hash.scrypt output
 // - as defined by https://www.tarsnap.com/scrypt/scrypt.pdf and RFC 7914
-// - SCrypt is more memory sensitive than BCrypt, so may be preferred
+// - returning '$scrypt$ln=<log2(N)>,r=<r>,p=<p>$salt$<checksum>' passlib format
+// - SCrypt is more memory sensitive than BCrypt, so may be preferred if you
+// have enough RAM on your server, or you use challenge-like algorithm like S
 // - in SCrypt terms, LogN will generate N = 2^LogN work factor scale, BlockSize
 // is the R parameter (to match CPU cache line), and Parallel the P parameter
-// - memory and CPU usage will scale linearly - e.g. 64MB with default LogN=16
-// and Blocksize=8 (to compare with the 4KB of BCrypt) - see SCryptMemoryUse()
+// - default is LogN=16, R=8, P=1 for safe interactive login (74ms and 64MB RAM):
+// memory and CPU will scale linearly (BCrypt uses 4KB) - see SCryptMemoryUse()
 // - P will increase the CPU time without affecting memory requirements
-// - returning '$scrypt$ln=<log2(N)>,r=<r>,p=<p>$salt$<checksum>' format
 // - will call the available SCrypt() function defined - or a custom API
 function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
   LogN: PtrUInt = 16; BlockSize: PtrUInt = 8; Parallel: PtrUInt = 1;
