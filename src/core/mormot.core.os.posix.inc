@@ -3653,11 +3653,12 @@ function FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean): boolean;
 var
   rd, dev: integer;
+  rnd: TLecuyer;
 begin
   result := false;
   if Len <= 0 then
     exit;
-  // retrieve up to MAXFROMOS bytes max from OS
+  // retrieve up to MAXFROMOS=256 bytes max
   rd := MinPtrInt(Len, MAXFROMOS);
   {$ifdef OSLINUX} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);
@@ -3695,11 +3696,14 @@ begin
     dec(Len, rd);
     if Len = 0 then
       exit;
-    Buffer := @Buffer[rd];
-  end; // on OS API call failure (paranoid): fallback to TLecuyer (if allowed)
-  if Len > 0 then
-    // use TLecuyer gsl_rng_taus2 for the remaining bytes > MAXFROMOS (unlikely)
-    // - but keep result=false if the Buffer^ was not really filled from OS
+    // pad remaining bytes > rd=MAXFROMOS=256 (unlikely)
+    crcblocks(@rnd, pointer(Buffer), MAXFROMOS div SizeOf(rnd)); // from OS
+    rnd.SeedGenerator;
+    rnd.Fill(@Buffer[MAXFROMOS], Len); // using gsl_rng_taus2 distribution
+  end
+  else
+    // on OS API call failure (paranoid): fallback to TLecuyer
+    // - keep result=false if the Buffer^ was not really filled from OS
     SharedRandom.Fill(Buffer, Len);
 end;
 
