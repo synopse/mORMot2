@@ -1222,15 +1222,13 @@ begin
     if tries = 0 then
       exit;
     // generate a 256-bit secret key with HMAC-SHA-256 over random sources
-    // - keys may be ephemeral so entropy sources were chosen to be fast
+    // - keys may be ephemeral so use our fast but safe CSPRNG as KDF source
     kdf.Init(@EccMakeEntropy, SizeOf(EccMakeEntropy));
-    kdf.Update(@tries, SizeOf(tries));
-    TAesPrng.Main.Fill(priv.b); // 256-bit from our AES-PRNG (max key size)
-    XorMemory(EccMakeEntropy, priv.l);
+    kdf.Update(@tries, SizeOf(tries)); // avoid infinite loop
+    TAesPrng.Main.FillRandom(priv.b);  // 256-bit from CSPRNG (max key size)
     kdf.Update(@priv, SizeOf(priv));
-    _Fill256FromOs(priv);       // 256-bit padding from fast OS entropy sources
-    kdf.Update(@priv, SizeOf(priv));
-    kdf.Done(priv.b);           // apply the HMAC key derivation function
+    crcblock(@EccMakeEntropy, @priv);  // simple forward secrecy
+    kdf.Done(priv.b);                  // apply the HMAC-SHA-256 safe KDF
     if _isZero(priv) or
        _equals(priv, _1) or
        _equals(priv, _11) then
@@ -1342,7 +1340,7 @@ begin
   result := false;
   n := 10;
   repeat
-    TAesPrng.Main.Fill(rnd.b); // TLecuyer is too predictable here
+    Random128(@rnd.l, @rnd.h); // fast unpredictable 256-bit
     dec(n);
     if n = 0 then
       exit; // never try forever if our PRNG is compromised
@@ -1440,7 +1438,7 @@ begin
   tries := 0;
   repeat
     inc(tries);
-    TAesPrng.Main.Fill(k.b); // TLecuyer is too predictable here
+    Random128(@k.l, @k.h); // fast unpredictable 256-bit
     if tries >= MAX_TRIES then
       exit; // the random generator seems broken
     if _isZero(k) or
@@ -2105,8 +2103,8 @@ initialization
   @Ecc256r1Verify       := @ecdsa_verify_pas;
   @Ecc256r1Uncompress   := @ecc_uncompress_key_pas;
   @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_pas;
-  // setup ecc_make_key_pas() entropy source
-  EccMakeEntropy := SystemEntropy.Startup;
+  // setup ecc_make_key_pas() 128-bit entropy source with some initial value
+  EccMakeEntropy := BaseEntropy.r[3];
 
 end.
 

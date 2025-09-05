@@ -5158,7 +5158,7 @@ constructor TAesAbstract.CreateTemp(aKeySize: cardinal);
 var
   tmp: THash256;
 begin
-  TAesPrng.Main.FillRandom(tmp);
+  TAesPrng.Main.FillRandom(tmp); // 256-bit from CSPRNG
   Create(tmp, aKeySize);
   FillZero(tmp);
 end;
@@ -7863,7 +7863,7 @@ begin
         FileSetHidden(fn, {ReadOnly=}false);
         DeleteFile(fn); // WinApi FileCreate can NOT overwrite a hidden file
       end;
-      TAesPrng.Main.FillRandom(_h.k); // from strong CSPRNG random
+      TAesPrng.Main.FillRandom(_h.k); // 256-bit from strong CSPRNG random
       key := TAesPrng.Main.AFSplit(_h.k, SizeOf(_h.k), 126);
       {$ifdef OSWINDOWS}
       // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
