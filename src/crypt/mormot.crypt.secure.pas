@@ -1094,6 +1094,13 @@ const
 // - see associated ModularCryptIdentify/ModularCryptVerify() functions
 // - for mcfBCrypt, rounds is the 2^Cost value, so should be in 4..31 range
 // - for mcfSCrypt, rounds is <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
+// - with default rounds=0 timings on a Core i5-13500 with SHA-NI are Md5Crypt=77us
+// Sha256Crypt=38.13ms Sha512Crypt=97.29ms Pbkdf2Sha1=14.71ms Pbkdf2Sha256=3.35ms
+// Pbkdf2Sha512=12.87ms Pbkdf2Sha3=11.20ms BCrypt=169.59ms BCryptSha256=170.85ms
+// and SCrypt=143.66ms - consider mcfSha256Crypt for fast and safe hashing, and
+// mcfBCrypt/mcfSCrypt for proven password storage, and align with OWASP/NIST
+// recommendations for password hashing (100-250 ms) - SCrypt consuming 64MB of
+// RAM and BCrypt always 4KB
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
 

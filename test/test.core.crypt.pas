@@ -2047,7 +2047,7 @@ begin
   // validate "Modular Crypt" formats
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
-    timer.Start;
+    //timer.Start;
     rounds := 0;
     for n := 1 to 10 do
     begin
@@ -2093,7 +2093,13 @@ begin
       dec(PByteArray(u)[length(u) - 5]);
       Check(ModularCryptVerify(pw, u) = mcfInvalid);
     end;
-    NotifyTestSpeed('% rounds', [ToText(mcf)^], rounds, 0, @timer, fOwner.MultiThread);
+    //NotifyTestSpeed('% rounds', [ToText(mcf)^], rounds, 0, @timer, fOwner.MultiThread);
+  end;
+  for mcf := mcfMd5Crypt to high(mcf) do
+  begin
+    timer.Start; // output password hash with default values
+    ModularCryptHash(mcf, 'password');
+    NotifyProgress([TrimLeftLowerCaseShort(ToText(mcf)), '=', timer.Stop]);
   end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
