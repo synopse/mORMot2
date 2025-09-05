@@ -10887,10 +10887,8 @@ begin
   for k := low(k) to high(k) do
   begin
     // paranoid checks
-    if Assigned(RTTI_FINALIZE[k]) <> (k in rkManagedTypes) then
-      ERttiException.RaiseUtf8('Unexpected RTTI_FINALIZE[%]', [ToText(k)^]);
-    if Assigned(RTTI_MANAGEDCOPY[k]) <> (k in rkManagedTypes) then
-      ERttiException.RaiseUtf8('Unexpected RTTI_MANAGEDCOPY[%]', [ToText(k)^]);
+    assert(Assigned(RTTI_FINALIZE[k]) = (k in rkManagedTypes));
+    assert(Assigned(RTTI_MANAGEDCOPY[k]) = (k in rkManagedTypes));
     // TJsonWriter.AddRttiVarData for TRttiCustomProp.GetRttiVarData
     case k of
       rkEnumeration,
@@ -10951,9 +10949,6 @@ begin
   // ptComplexTypes may have several matching TypeInfo() -> put generic
   PT_INFO[ptOrm]           := TypeInfo(TID);
   PT_INFO[ptTimeLog]       := TypeInfo(TTimeLog);
-  for t := succ(low(t)) to high(t) do
-    if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptOrm, ptTimeLog])) then
-      ERttiException.RaiseUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
   PTC_INFO[pctTimeLog]     := TypeInfo(TTimeLog);
   PTC_INFO[pctID]          := TypeInfo(TID);
   PTC_INFO[pctCreateTime]  := TypeInfo(TTimeLog);
@@ -11004,6 +10999,8 @@ begin
   RedirectRtl;
   {$endif FPC_CPUX64}
   // validate some redefined RTTI structures with compiler definitions
+  for t := succ(low(t)) to high(t) do
+    assert(Assigned(PT_INFO[t]) <> (t in (ptComplexTypes - [ptOrm, ptTimeLog])));
   assert(SizeOf(TRttiVarData) = SizeOf(TVarData));
   assert(SizeOf(TSynVarData) = SizeOf(TVarData));
   assert(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);

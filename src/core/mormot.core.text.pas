@@ -12079,16 +12079,17 @@ var
   c: AnsiChar;
   P: PAnsiChar;
   B, B4: PByteArray;
-  m: TUriMethod;
+  pc: PCardinalArray;
   tmp: array[0..15] of AnsiChar;
 begin
   // initialize internal lookup tables for various text conversions
-  HexLookup(@TwoDigitsHex, '0123456789ABCDEF');
+  HexLookup(@TwoDigitsHex,      '0123456789ABCDEF');
   HexLookup(@TwoDigitsHexLower, '0123456789abcdef');
   {$ifdef DOUBLETOSHORT_USEGRISU}
   MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));
+  B := @TwoDigitByteLookupW;
   for i := 0 to 199 do
-    dec(PByteArray(@TwoDigitByteLookupW)[i], ord('0')); // '0'..'9' -> 0..9
+    dec(B[i], ord('0')); // '0'..'9' -> 0..9
   {$endif DOUBLETOSHORT_USEGRISU}
   FillcharFast(ConvertHexToBin, SizeOf(ConvertHexToBin), 255); // all to 255
   FillcharFast(ConvertHexToShl, SizeOf(ConvertHexToShl), 255);
@@ -12158,8 +12159,12 @@ begin
     if c in [#0, '&', '"'] then
       HTML_ESC[hfWithinAttributes, c] := v;
   end;
-  for m := low(METHODNAME32) to pred(high(METHODNAME32)) do
-    METHODNAME32[m] := PCardinal(METHODNAME[m])^;
+  pc := @METHODNAME32;
+  i := length(METHODNAME32);
+  repeat
+    dec(i);
+    pc[i] := PCardinal(METHODNAME[TUriMethod(i)])^;
+  until i = 0;
   ShortToUuid := _ShortToUuid;
   AppendShortUuid := _AppendShortUuid;
   _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;

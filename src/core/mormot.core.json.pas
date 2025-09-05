@@ -12395,70 +12395,77 @@ type // local type definitions for their own RTTI to be found by name
 
 procedure InitializeUnit;
 var
-  i: integer; // not PtrInt since has just been overriden
+  i: PtrInt;
   c: AnsiChar;
+  jc: TJsonChar;
+  p: PByteArray;
   {$ifdef FPC} dummy: RawUtf8; {$endif}
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
-  JSON_ESCAPE[0]   := JSON_ESCAPE_ENDINGZERO; // 1 for #0 end of input
+  p := @JSON_ESCAPE;
+  p[0]   := JSON_ESCAPE_ENDINGZERO; // 1 for #0 end of input
   for i := 1 to 31 do
-    JSON_ESCAPE[i] := JSON_ESCAPE_UNICODEHEX; // 2 to escape #1..#31 as \u00xx
-  JSON_ESCAPE[8]   := ord('b');  // others contain the escaped character
-  JSON_ESCAPE[9]   := ord('t');
-  JSON_ESCAPE[10]  := ord('n');
-  JSON_ESCAPE[12]  := ord('f');
-  JSON_ESCAPE[13]  := ord('r');
-  JSON_ESCAPE[ord('\')] := ord('\');
-  JSON_ESCAPE[ord('"')] := ord('"');
+    p[i] := JSON_ESCAPE_UNICODEHEX; // 2 to escape #1..#31 as \u00xx
+  p[8]   := ord('b');  // others contain the escaped character
+  p[9]   := ord('t');
+  p[10]  := ord('n');
+  p[12]  := ord('f');
+  p[13]  := ord('r');
+  p[ord('\')] := ord('\');
+  p[ord('"')] := ord('"');
   // branchless JSON unescaping - default JSON_UNESCAPE_UNEXPECTED = #0
-  for c := #32 to #127 do
-    JSON_UNESCAPE[c] := c;
-  JSON_UNESCAPE['b'] := #8;
-  JSON_UNESCAPE['t'] := #9;
-  JSON_UNESCAPE['n'] := #10;
-  JSON_UNESCAPE['f'] := #12;
-  JSON_UNESCAPE['r'] := #13;
-  JSON_UNESCAPE['u'] := JSON_UNESCAPE_UTF16; // = #1
+  p := @JSON_UNESCAPE;
+  for i := 32 to 127 do
+    p[i] := i;
+  p[ord('b')] := 8;
+  p[ord('t')] := 9;
+  p[ord('n')] := 10;
+  p[ord('f')] := 12;
+  p[ord('r')] := 13;
+  p[ord('u')] := ord(JSON_UNESCAPE_UTF16); // = #1
   // fast JSON parsing using JSON_CHARS[] and JSON_TOKENS[] lookup tables
   for c := low(c) to high(c) do
   begin
+    jc := [];
     if c in [#0, ',', ']', '}', ':'] then
-      include(JSON_CHARS[c], jcEndOfJsonFieldOr0);
+      include(jc, jcEndOfJsonFieldOr0);
     if c in [#0, ',', ']', '}'] then
-      include(JSON_CHARS[c], jcEndOfJsonFieldNotName);
+      include(jc, jcEndOfJsonFieldNotName);
     if c in [#0, #9, #10, #13, ' ',  ',', '}', ']'] then
-      include(JSON_CHARS[c], jcEndOfJsonValueField);
+      include(jc, jcEndOfJsonValueField);
     if c in [#0, '"', '\'] then
-      include(JSON_CHARS[c], jcJsonStringMarker);
+      include(jc, jcJsonStringMarker);
     if c in ['-', '0'..'9'] then
     begin
-      include(JSON_CHARS[c], jcDigitFirstChar);
+      include(jc, jcDigitFirstChar);
       JSON_TOKENS[c] := jtFirstDigit;
     end;
     if c in ['-', '+', '0'..'9', '.', 'E', 'e'] then
-      include(JSON_CHARS[c], jcDigitFloatChar);
+      include(jc, jcDigitFloatChar);
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
-      include(JSON_CHARS[c], jcJsonIdentifierFirstChar);
+      include(jc, jcJsonIdentifierFirstChar);
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
-      include(JSON_CHARS[c], jcJsonIdentifier);
+      include(jc, jcJsonIdentifier);
+    JSON_CHARS[c] := jc;
     if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
       // exclude '0'..'9' as already in jtFirstDigit
       JSON_TOKENS[c] := jtIdentifierFirstChar;
   end;
-  JSON_TOKENS[#0 ]  := jtEndOfBuffer;
-  JSON_TOKENS['{']  := jtObjectStart;
-  JSON_TOKENS['}']  := jtObjectStop;
-  JSON_TOKENS['[']  := jtArrayStart;
-  JSON_TOKENS[']']  := jtArrayStop;
-  JSON_TOKENS[':']  := jtAssign;
-  JSON_TOKENS['=']  := jtEqual;
-  JSON_TOKENS[',']  := jtComma;
-  JSON_TOKENS[''''] := jtSingleQuote;
-  JSON_TOKENS['"']  := jtDoubleQuote;
-  JSON_TOKENS['t']  := jtTrueFirstChar;
-  JSON_TOKENS['f']  := jtFalseFirstChar;
-  JSON_TOKENS['n']  := jtNullFirstChar;
-  JSON_TOKENS['/']  := jtSlash;
+  p := @JSON_TOKENS;
+  p[ord(#0 )]  := ord(jtEndOfBuffer);
+  p[ord('{')]  := ord(jtObjectStart);
+  p[ord('}')]  := ord(jtObjectStop);
+  p[ord('[')]  := ord(jtArrayStart);
+  p[ord(']')]  := ord(jtArrayStop);
+  p[ord(':')]  := ord(jtAssign);
+  p[ord('=')]  := ord(jtEqual);
+  p[ord(',')]  := ord(jtComma);
+  p[ord('''')] := ord(jtSingleQuote);
+  p[ord('"')]  := ord(jtDoubleQuote);
+  p[ord('t')]  := ord(jtTrueFirstChar);
+  p[ord('f')]  := ord(jtFalseFirstChar);
+  p[ord('n')]  := ord(jtNullFirstChar);
+  p[ord('/')]  := ord(jtSlash);
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   // now we can register some local type alias to be found by name or ASAP
