@@ -1713,33 +1713,33 @@ type
     // - would be called by FillRandom() methods, according to SeedAfterBytes
     // - this method is thread-safe, and does nothing by default
     procedure Seed; virtual;
-    /// create an anti-forensic representation of a key for safe storage
+    /// create a TKS1 anti-forensic representation of a key for safe storage
     // - a binary buffer will be split into StripesCount items, ready to be
     // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
     // - AFSplit supports secure data destruction crucial for secure on-disk
     // key management. The key idea is to bloat information and therefore
     // improve the chance of destroying a single bit of it. The information
     // is bloated in such a way, that a single missing bit causes the original
-    // information become unrecoverable.
+    // information become unrecoverable
     // - this implementation uses SHA-256 as diffusion element, and the current
     // TAesPrngAbstract instance to gather randomness
     // - for reference, see TKS1 as used for LUKS and defined in
     // @https://gitlab.com/cryptsetup/cryptsetup/wikis/TKS1-draft.pdf
     function AFSplit(const Buffer; BufferBytes,
       StripesCount: integer): RawByteString; overload;
-    /// create an anti-forensic representation of a key for safe storage
+    /// create a TKS1 anti-forensic representation of a key for safe storage
     // - a binary buffer will be split into StripesCount items, ready to be
     // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
     // - just a wrapper around the other overloaded AFSplit() funtion
     function AFSplit(const Buffer: RawByteString;
       StripesCount: integer): RawByteString; overload;
-    /// retrieve a key from its anti-forensic representation
+    /// retrieve a key from TKS1 anti-forensic SHA-256-stretched representation
     // - is the reverse function of AFSplit() method
     // - returns TRUE if the input buffer matches BufferBytes value
     // - is defined as a class function since is stand-alone
     class function AFUnsplit(const Split: RawByteString;
       out Buffer; BufferBytes: integer): boolean; overload;
-    /// retrieve a key from its anti-forensic representation
+    /// retrieve a key from TKS1 anti-forensic SHA-256-stretched representation
     // - is the reverse function of AFSplit() method
     // - returns the un-splitted binary content
     // - returns '' if StripesCount is incorrect
@@ -1927,7 +1927,7 @@ var
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
   HasOpenSsl: boolean;
 
-/// low-level anti-forensic diffusion of a memory buffer using SHA-256
+/// low-level TKS1 anti-forensic diffusion of a memory buffer using SHA-256
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
 // - could also be used to expand some PRNG output into any size
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
