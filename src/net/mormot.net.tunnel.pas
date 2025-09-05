@@ -97,7 +97,8 @@ type
     // - if Address has no port, will bound its address as an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret, Address: RawUtf8): TNetPort;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
+      const InfoNameValue: array of const): TNetPort;
     /// the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// the local port used for the tunnel local process
@@ -197,6 +198,7 @@ type
     fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
+    fRemoteInfo: TDocVariantData;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
     procedure EcdheHashRandom(var hmac: THmacSha256;
@@ -225,7 +227,8 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret, Address: RawUtf8): TNetPort;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
+      const InfoNameValue: array of const): TNetPort;
     /// ITunnelLocal method: return the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// ITunnelLocal method: return the local port
@@ -597,9 +600,9 @@ begin
   sha3.Final(@crc, 128);
 end;
 
-function TTunnelLocal.Open(Sess: TTunnelSession;
-  TransmitOptions: TTunnelOptions; TimeOutMS: integer;
-  const AppSecret, Address: RawUtf8): TNetPort;
+function TTunnelLocal.Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
+  TimeOutMS: integer; const AppSecret, Address: RawUtf8;
+  const InfoNameValue: array of const): TNetPort;
 var
   uri: TUri;
   sock: TNetSocket;
@@ -622,6 +625,7 @@ begin
   if not uri.From(Address, '0') then
     ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   fRemotePort := 0;
+  fRemoteInfo.Clear;
   fSession := Sess;
   TransmitOptions := (TransmitOptions - [toClientSigned, toServerSigned]) +
                      ComputeOptionsFromCert;
@@ -676,9 +680,8 @@ begin
     TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
     FastSetRawByteString(frame, @loc, SizeOf(loc));
     FrameSign(frame); // optional digital signature
-    l := length(frame);
-    SetLength(frame, l + 8);
-    PInt64(@PByteArray(frame)^[l])^ := fSession; // 64-bit session trailer
+    Append(frame, [#0, JsonEncode(InfoNameValue), #0'01234567']);
+    PInt64(@PByteArray(frame)^[length(frame) - 8])^ := fSession;
     fTransmit.TunnelSend(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
@@ -690,7 +693,10 @@ begin
     // check the returned header, maybe using the certificate
     if FrameSession(remote) <> fSession then
       ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
-    l := length(remote) - 8;
+    l := length(remote) - 10;
+    while (l > 0) and
+          (PByteArray(remote)[l] <> 0) do
+      dec(l);
     if l < SizeOf(loc) then // may have a signature trailer
       ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
     if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
@@ -698,6 +704,8 @@ begin
     TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
     if not IsEqual(rem^.Info.crc, key.Lo) then
       ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
+    if fRemoteInfo.InitJsonInPlace(@PByteArray(remote)[l + 1], JSON_FAST) = nil then
+      ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
     if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
       ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
     fRemotePort := rem^.Info.port;
@@ -781,6 +789,7 @@ begin
     'remotePort', fRemotePort,
     'encrypted',  Encrypted,
     'options',    ToText(fOptions)]);
+  dv.AddFrom(fRemoteInfo);
   if fThread <> nil then
     dv.AddNameValuesToObject([
       'in',  fThread.fReceived,
