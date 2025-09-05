@@ -4447,7 +4447,7 @@ end;
 
 { AES-CTR alternative code }
 
-{ $define USEAESNICTRORIGINAL} // our single procedure seems the fastest (yet)
+{$define USEAESNICTRORIGINAL} // our single procedure seems the fastest (yet)
 {$ifdef USEAESNICTRNEW}
   {$undef USEAESNICTRORIGINAL}
 {$endif USEAESNICTRNEW}
