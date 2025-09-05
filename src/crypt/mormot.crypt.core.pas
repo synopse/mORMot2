@@ -5056,13 +5056,12 @@ end;
 
 procedure TAesSignature.Init;
 var
-  aes: TAesContext absolute fEngine;
+  rnd: THash256Rec;
 begin // note: we can't use Random128() here to avoid endless recursion
-  TAesPrng.Main.Fill(aes.iv.b);  // transient AES-128 secret (never persisted)
-  fEngine.EncryptInit(aes.iv, 128);
-  repeat
-    SharedRandom.Fill(@aes.iv, SizeOf(aes.iv)); // good enough for padding
-  until aes.iv.c0 <> 0;
+  TAesPrng.Main.FillRandom(rnd.b);  // 256-bit from CSPRNG
+  fEngine.EncryptInit(rnd.Lo, 128); // transient AES-128 secret
+  TAesContext(fEngine).iv := rnd.h; // safe IV
+  FillZero(rnd.b);                  // anti-forensic
 end;
 
 procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
