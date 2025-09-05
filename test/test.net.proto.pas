@@ -1505,7 +1505,8 @@ var
 begin
   // one of the two handshakes should be done in another thread
   tunnelexecutelocal := local.Open(
-    tunnelsession, tunneloptions, 1000, tunnelappsec, cLocalhost);
+    tunnelsession, tunneloptions, 1000, tunnelappsec, cLocalhost,
+    ['remoteHost', Executable.Host]);
   tunnelexecuteremote := local.RemotePort;
   Check(tunnelexecutelocal <> 0);
   Check(tunnelexecuteremote <> 0);
@@ -1545,7 +1546,8 @@ begin
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
   local := clienttunnel.Open(
-    tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost);
+    tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost,
+    ['remoteHost', Executable.Host]);
   Check(local <> 0);
   remote := clienttunnel.RemotePort;
   Check(remote <> 0);
@@ -1565,36 +1567,34 @@ begin
     1000, 1000, 1000, 0, serversock) = nrOk);
   try
     // validate raw TCP tunnelling
-    if Assigned(clientinstance.Thread) and
-       Assigned(serverinstance.Thread) then
+    Check(Assigned(clientinstance.Thread));
+    Check(Assigned(serverinstance.Thread));
+    CheckEqual(clientinstance.Received, 0);
+    CheckEqual(clientinstance.Sent, 0);
+    CheckEqual(serverinstance.Received, 0);
+    CheckEqual(serverinstance.Sent, 0);
+    for i := 1 to 100 do
     begin
-      CheckEqual(clientinstance.Thread.Received, 0);
-      CheckEqual(clientinstance.Thread.Sent, 0);
-      CheckEqual(serverinstance.Thread.Received, 0);
-      CheckEqual(serverinstance.Thread.Sent, 0);
-      for i := 1 to 100 do
-      begin
-        sent := RandomWinAnsi(Random32(200) + 1);
-        sent2 := RandomWinAnsi(Random32(200) + 1);
-        Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
-        Check(serversock.RecvWait(1000, received) = nrOk);
-        CheckEqual(sent, received);
-        Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
-        Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
-        Check(clientsock.RecvWait(1000, received) = nrOk);
-        Check(serversock.RecvWait(1000, received2) = nrOk);
-        CheckEqual(sent, received);
-        CheckEqual(sent2, received2);
-        CheckEqual(clientinstance.Thread.Received, serverinstance.Thread.Sent);
-        CheckEqual(clientinstance.Thread.Sent, serverinstance.Thread.Received);
-        Check(clientinstance.Thread.Received <> 0);
-        Check(clientinstance.Thread.Sent <> 0);
-        Check(serverinstance.Thread.Received <> 0);
-        Check(serverinstance.Thread.Sent <> 0);
-      end;
-      Check(clientinstance.Thread.Received < clientinstance.Thread.Sent, 'smaller');
-      Check(serverinstance.Thread.Received > serverinstance.Thread.Sent, 'bigger');
+      sent := RandomWinAnsi(Random32(200) + 1);
+      sent2 := RandomWinAnsi(Random32(200) + 1);
+      Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
+      Check(serversock.RecvWait(1000, received) = nrOk);
+      CheckEqual(sent, received);
+      Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
+      Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
+      Check(clientsock.RecvWait(1000, received) = nrOk);
+      Check(serversock.RecvWait(1000, received2) = nrOk);
+      CheckEqual(sent, received);
+      CheckEqual(sent2, received2);
+      CheckEqual(clientinstance.Received, serverinstance.Sent);
+      CheckEqual(clientinstance.Sent, serverinstance.Received);
+      Check(clientinstance.Received <> 0);
+      Check(clientinstance.Sent <> 0);
+      Check(serverinstance.Received <> 0);
+      Check(serverinstance.Sent <> 0);
     end;
+    Check(clientinstance.Received < clientinstance.Sent, 'smaller');
+    Check(serverinstance.Received > serverinstance.Sent, 'bigger');
     Check(_Safe(serverinstance.TunnelInfo)^.Count > 4);
     Check(_Safe(clientinstance.TunnelInfo)^.Count > 4);
     //writeln(clientinstance.TunnelInfo);
