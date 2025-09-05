@@ -205,7 +205,7 @@ var
   // - injected by mormot.crypt.openssl.pas or by mormot.crypt.other.pas (slower)
   // - as defined by http://www.tarsnap.com/scrypt.html and RFC 7914
   // - for password storage and interactive login, consider SCryptHash() from
-  // this unit with N=65536=2^16, R=8, P=1 (74ms and 64MB of RAM)
+  // this unit with default N=65536=2^16, R=8, P=2 (148ms and 64MB of RAM)
   // - for local key derivation (e.g. file encryption) consider using this
   // function directly with e.g. N=1048576=2^20, R=8, P=1 (1.23s and 1GB) to
   // compute the binary encryption key

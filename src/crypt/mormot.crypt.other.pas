@@ -454,7 +454,7 @@ procedure Salsa20x8(B: PCardinalArray);
 // $ on Linux x64: RawSCrypt in 74ms,  OpenSslScrypt in 103ms
 // - assigned to mormot.crypt.core.pas SCrypt() redirection by this unit
 // - for password storage and interactive login, consider SCryptHash() from
-// mormot.crypt.secure.pas with N=65536=2^16, R=8, P=1 (74ms and 64MB of RAM)
+// mormot.crypt.secure.pas with N=65536=2^16, R=8, P=2 (148ms and 64MB of RAM)
 // - for local key derivation (e.g. file encryption) consider using this
 // function directly with e.g. N=1048576=2^20, R=8, P=1 (1.23s and 1GB) to
 // compute the binary encryption key
@@ -469,8 +469,8 @@ function RawSCrypt(const Password: RawUtf8; const Salt: RawByteString;
 // benefits against BCrypt() - but still consuming 16MB instead of 4KB so may
 // not be ideal for password storage on server side, but fine for a client-side
 // one-time key derivation function to unlock a resource
-// - TL&WR: use N=65536=2^16, R=8, P=1 for safe interactive login (74ms and 64MB
-// of RAM) or N=1048576=2^20, R=8, P=1 for file encryption (1.23s and 1GB)
+// - TL&WR: use N=65536=2^16, R=8, P=2 for safe interactive login (148ms and
+// 64MB of RAM) or N=1048576=2^20, R=8, P=1 for file encryption (1.23s and 1GB)
 function SCryptMemoryUse(N, R, P: QWord): QWord;
 
 

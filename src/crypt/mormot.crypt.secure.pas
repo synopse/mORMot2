@@ -1119,13 +1119,14 @@ function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
 /// compute the fake "rounds" value for ModularCryptHash(mcfSCrypt)
 // - i.e. <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
 // - accepts LogN as [1..31], BlockSize=R as [1..16384] and Parallel=P as [1..8192]
-// - default is LogN=16, R=8, P=1 for safe interactive login (74ms and 64MB RAM)
+// - default is LogN=16, R=8, P=2 for safe interactive login (140ms and 64MB RAM)
 function SCryptRounds(LogN: cardinal = 16; BlockSize: cardinal = 8;
-  Parallel: cardinal = 1): cardinal;
+  Parallel: cardinal = 2): cardinal;
 
 /// decode the fake "rounds" value for ModularCryptHash(mcfSCrypt) into LogN/R/P
 // - is the reverse function of SCryptRounds()
-// - for Rounds = 0, returns default LogN=16 BlockSize=R=8 Parallel=P=1 values
+// - for Rounds = 0, returns default LogN=16 BlockSize=R=8 Parallel=P=2 values,
+// which seems fine for interactive login (148ms and 64MB RAM):
 procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
 
 /// SCrypt password hashing function compatible with passlib.hash.scrypt output
@@ -1135,12 +1136,12 @@ procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: ca
 // have enough RAM on your server, or you use challenge-like algorithm like S
 // - in SCrypt terms, LogN will generate N = 2^LogN work factor scale, BlockSize
 // is the R parameter (to match CPU cache line), and Parallel the P parameter
-// - default is LogN=16, R=8, P=1 for safe interactive login (74ms and 64MB RAM):
+// - default is LogN=16, R=8, P=2 for safe interactive login (148ms and 64MB RAM):
 // memory and CPU will scale linearly (BCrypt uses 4KB) - see SCryptMemoryUse()
 // - P will increase the CPU time without affecting memory requirements
 // - will call the available SCrypt() function defined - or a custom API
 function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
-  LogN: PtrUInt = 16; BlockSize: PtrUInt = 8; Parallel: PtrUInt = 1;
+  LogN: PtrUInt = 16; BlockSize: PtrUInt = 8; Parallel: PtrUInt = 2;
   HashPos: PInteger = nil; Api: TSCriptRaw = nil): RawUtf8;
 
 
@@ -4177,7 +4178,7 @@ begin
     hfMD5:
       begin
         aRounds := 1000; // fixed
-        aSaltSize := MinPtrUInt(8, aSaltSize); // lower range
+        aSaltSize := MinPtrUInt(8, aSaltSize); // lower range - default 8
         result := '$1$';
       end;
     hfSha256:
@@ -4190,9 +4191,8 @@ begin
   aPasswordSize := length(aPassword);
   if aSalt = '' then
   begin
-    if aSaltSize = 0 then
-      aSaltSize := 8
-    else if aSaltSize > 16 then
+    if (aSaltSize = 0) or
+       (aSaltSize > 16) then
       aSaltSize := 16; // for hfSha256/hfSha512
     TAesPrng.Main.RandomSalt(sbin, sb64, aSaltSize, '', @HASH64_CHARS, nil);
     FakeLength(sb64, aSaltSize); // aSaltSize is in base-64 chars, not bytes
@@ -4862,6 +4862,13 @@ end;
 
 procedure SCryptRoundsDecode(Rounds: cardinal; out LogN, BlockSize, Parallel: cardinal);
 begin
+  if Rounds = 0 then
+  begin
+    LogN := 16;
+    BlockSize := 8;
+    Parallel := 2; // those default values uses 64MB and 140ms - close to BCrypt
+    exit;
+  end;
   LogN := Rounds shr 27;
   if LogN = 0 then
     LogN := 16;     // LogN never 0, 5-bit up to 31

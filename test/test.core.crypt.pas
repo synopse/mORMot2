@@ -2034,10 +2034,10 @@ begin
   TestSCript(@RawSCrypt, 'RawSCrypt');
   r := SCryptRounds; // default values
   SCryptRoundsDecode(r, logN, blocksize, parallel);
-  Check(r = $8000e000);
+  Check(r = $8000e001);
   CheckEqual(logN, 16);
   CheckEqual(blocksize, 8);
-  CheckEqual(parallel, 1);
+  CheckEqual(parallel, 2);
   exp := '$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$zeGG+tsAueRzkvXfE1/F58KOKFEFfI0KpBYwE/3ZUWg';
   Check(ModularCryptVerify('password', exp) = mcfSCrypt);
   Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
