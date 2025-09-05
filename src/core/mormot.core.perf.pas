@@ -2296,6 +2296,10 @@ var
   /// global variable filled by GetSmbiosInfo from SMBIOS binary information
   Smbios: TSmbiosInfo;
 
+/// register our custom JSON serialization of TSmbiosInfo
+// - called e.g. by GetSmbiosInfo - do nothing if called more than once
+procedure RegisterSmbiosInfoJson;
+
 /// retrieve and decode DMI/SMBIOS data into high-level Smbios global variable
 // - on POSIX, requires at least once root to access SMBIOS raw memory
 // so may return false unless the information has been cached locally
@@ -4323,7 +4327,91 @@ end;
 { ************ DMI/SMBIOS Binary Decoder }
 
 var
-  GetSmbiosInfoChecked: boolean;
+  GetSmbiosInfoChecked, RegisteredSmbiosInfoJson: boolean;
+
+const
+  _TSmbiosBios = 'n,v,b,s,r,f:RawUtf8 c:TSmbiosBiosFlags';
+  _TSmbiosSystem = 'm,p,v,s,u,k,f:RawUtf8 w:TSmbiosSystemWakeup';
+  _TSmbiosBoard = 'm,p,v,s,a,l:RawUtf8 f:TSmbiosBoardFeatures t:TSmbiosBoardType';
+  _TSmbiosChassis = 'l:boolean t:TSmbiosChassisType m,v,s,a:RawUtf8 ' +
+    'b,w,h:TSmbiosChassisState p:TSmbiosChassisSecurityState o:cardinal u,c:byte';
+  _TSmbiosCache = 'd:RawUtf8 v:byte b,k:boolean l:TSmbiosCacheLocation ' +
+    'o:TSmbiosCacheMode s,m:RawUtf8 c,r:TSmbiosCacheSramType n:byte ' +
+    'e:TSmbiosCacheEcc t:TSmbiosCacheType a:TSmbiosCacheAssociativity';
+  _TSmbiosProcessor = 'd:RawUtf8 t:TSmbiosProcessorType f:word i,m,v,g:RawUtf8 ' +
+    'u:TSmbiosProcessorStatus l:boolean p:TSmbiosProcessorUpgrade ' +
+    'x,z,k:word 1,2,3:TSmbiosCache s,a,n:RawUtf8 c,e,r,b:word ' +
+    'h:TSmbiosProcessorFlags';
+  _TSmbiosConnector = 'i:RawUtf8 j:TSmbiosConnectorType e:RawUtf8 ' +
+    'f:TSmbiosConnectorType p:TSmbiosConnectorPort';
+  _TSmbiosSlot = 'd:RawUtf8 t:TSmbiosSlotType w:TSmbiosSlotWidth';
+  _TSmbiosMemory = 'w,d:word s:RawUtf8 f:TSmbiosMemoryFormFactor r:byte ' +
+    't:TSmbiosMemoryType e:TSmbiosMemoryDetails l,b,m,n,a,p:RawUtf8 c:word';
+  _TSmbiosMemoryArray = 'l:TSmbiosMemoryArrayLocation u:TSmbiosMemoryArrayUse ' +
+    'e:TSmbiosMemoryArrayEcc c:RawUtf8 n:word d:array of TSmbiosMemory';
+  _TSmbiosPointingDevice = // no RTTI -> embedded within _TSmbiosInfo
+    't:TSmbiosPointingType i:TSmbiosPointingInterface b:byte';
+  _TSmbiosBattery = 'l,m,s,n,v,c,g,h,d:RawUtf8';
+  _TSmbiosSecurity = 'f,a,k,p:TSmbiosSecurityStatus';
+  _TSmbiosInfo = 'b:TSmbiosBios s:TSmbiosSystem h:{' + _TSmbiosSecurity + '} ' +
+    'm:array of TSmbiosBoard e:array of TSmbiosChassis ' +
+    'p:array of TSmbiosProcessor r:array of TSmbiosMemoryArray ' +
+    'c:array of TSmbiosConnector t:array of TSmbiosSlot ' +
+    'd:[' + _TSmbiosPointingDevice + '] w:array of TSmbiosBattery ' +
+    'o:array of RawUtf8';
+
+procedure RegisterSmbiosInfoJson;
+begin
+  if RegisteredSmbiosInfoJson then
+    exit;
+  Rtti.RegisterTypes([
+    TypeInfo(TSmbiosBiosFlags),
+    TypeInfo(TSmbiosSystemWakeup),
+    TypeInfo(TSmbiosBoardFeatures),
+    TypeInfo(TSmbiosBoardType),
+    TypeInfo(TSmbiosChassisType),
+    TypeInfo(TSmbiosChassisState),
+    TypeInfo(TSmbiosChassisSecurityState),
+    TypeInfo(TSmbiosCacheLocation),
+    TypeInfo(TSmbiosCacheMode),
+    TypeInfo(TSmbiosCacheSramType),
+    TypeInfo(TSmbiosCacheEcc),
+    TypeInfo(TSmbiosCacheType),
+    TypeInfo(TSmbiosCacheAssociativity),
+    TypeInfo(TSmbiosProcessorType),
+    TypeInfo(TSmbiosProcessorStatus),
+    TypeInfo(TSmbiosProcessorUpgrade),
+    TypeInfo(TSmbiosProcessorFlags),
+    TypeInfo(TSmbiosConnectorType),
+    TypeInfo(TSmbiosConnectorPort),
+    TypeInfo(TSmbiosSlotType),
+    TypeInfo(TSmbiosSlotWidth),
+    TypeInfo(TSmbiosMemoryFormFactor),
+    TypeInfo(TSmbiosMemoryType),
+    TypeInfo(TSmbiosMemoryDetails),
+    TypeInfo(TSmbiosMemoryArrayLocation),
+    TypeInfo(TSmbiosMemoryArrayUse),
+    TypeInfo(TSmbiosMemoryArrayEcc),
+    TypeInfo(TSmbiosSecurityStatus),
+    TypeInfo(TSmbiosPointingType),
+    TypeInfo(TSmbiosPointingInterface)
+  ]);
+  Rtti.RegisterFromText([
+    TypeInfo(TSmbiosBios),        _TSmbiosBios,
+    TypeInfo(TSmbiosSystem),      _TSmbiosSystem,
+    TypeInfo(TSmbiosBoard),       _TSmbiosBoard,
+    TypeInfo(TSmbiosChassis),     _TSmbiosChassis,
+    TypeInfo(TSmbiosCache),       _TSmbiosCache,
+    TypeInfo(TSmbiosProcessor),   _TSmbiosProcessor,
+    TypeInfo(TSmbiosConnector),   _TSmbiosConnector,
+    TypeInfo(TSmbiosSlot),        _TSmbiosSlot,
+    TypeInfo(TSmbiosMemory),      _TSmbiosMemory,
+    TypeInfo(TSmbiosMemoryArray), _TSmbiosMemoryArray,
+    TypeInfo(TSmbiosBattery),     _TSmbiosBattery,
+    TypeInfo(TSmbiosInfo),        _TSmbiosInfo
+  ]);
+  RegisteredSmbiosInfoJson := true;
+end;
 
 function GetSmbiosInfo: boolean;
 begin
@@ -4331,6 +4419,7 @@ begin
   begin
     GlobalLock;
     try
+      RegisterSmbiosInfoJson; // may be needed to work with TSmbiosInfo
       if not GetSmbiosInfoChecked then
       begin
         if GetRawSmbios then // fill both RawSmbios and _Smbios[]
@@ -4463,6 +4552,8 @@ var
   cacheh, memh, arrh: TWordDynArray;
   proc: array of record l1, l2, l3: integer; end;
 begin
+  if not RegisteredSmbiosInfoJson then
+    RegisterSmbiosInfoJson;
   Finalize(info);
   FillCharFast(info, SizeOf(info), 0);
   result := false;
@@ -4942,37 +5033,6 @@ begin
 end;
 
 
-const
-  _TSmbiosBios = 'n,v,b,s,r,f:RawUtf8 c:TSmbiosBiosFlags';
-  _TSmbiosSystem = 'm,p,v,s,u,k,f:RawUtf8 w:TSmbiosSystemWakeup';
-  _TSmbiosBoard = 'm,p,v,s,a,l:RawUtf8 f:TSmbiosBoardFeatures t:TSmbiosBoardType';
-  _TSmbiosChassis = 'l:boolean t:TSmbiosChassisType m,v,s,a:RawUtf8 ' +
-    'b,w,h:TSmbiosChassisState p:TSmbiosChassisSecurityState o:cardinal u,c:byte';
-  _TSmbiosCache = 'd:RawUtf8 v:byte b,k:boolean l:TSmbiosCacheLocation ' +
-    'o:TSmbiosCacheMode s,m:RawUtf8 c,r:TSmbiosCacheSramType n:byte ' +
-    'e:TSmbiosCacheEcc t:TSmbiosCacheType a:TSmbiosCacheAssociativity';
-  _TSmbiosProcessor = 'd:RawUtf8 t:TSmbiosProcessorType f:word i,m,v,g:RawUtf8 ' +
-    'u:TSmbiosProcessorStatus l:boolean p:TSmbiosProcessorUpgrade ' +
-    'x,z,k:word 1,2,3:TSmbiosCache s,a,n:RawUtf8 c,e,r,b:word ' +
-    'h:TSmbiosProcessorFlags';
-  _TSmbiosConnector = 'i:RawUtf8 j:TSmbiosConnectorType e:RawUtf8 ' +
-    'f:TSmbiosConnectorType p:TSmbiosConnectorPort';
-  _TSmbiosSlot = 'd:RawUtf8 t:TSmbiosSlotType w:TSmbiosSlotWidth';
-  _TSmbiosMemory = 'w,d:word s:RawUtf8 f:TSmbiosMemoryFormFactor r:byte ' +
-    't:TSmbiosMemoryType e:TSmbiosMemoryDetails l,b,m,n,a,p:RawUtf8 c:word';
-  _TSmbiosMemoryArray = 'l:TSmbiosMemoryArrayLocation u:TSmbiosMemoryArrayUse ' +
-    'e:TSmbiosMemoryArrayEcc c:RawUtf8 n:word d:array of TSmbiosMemory';
-  _TSmbiosPointingDevice = // no RTTI -> embedded within _TSmbiosInfo
-    't:TSmbiosPointingType i:TSmbiosPointingInterface b:byte';
-  _TSmbiosBattery = 'l,m,s,n,v,c,g,h,d:RawUtf8';
-  _TSmbiosSecurity = 'f,a,k,p:TSmbiosSecurityStatus';
-  _TSmbiosInfo = 'b:TSmbiosBios s:TSmbiosSystem h:{' + _TSmbiosSecurity + '} ' +
-    'm:array of TSmbiosBoard e:array of TSmbiosChassis ' +
-    'p:array of TSmbiosProcessor r:array of TSmbiosMemoryArray ' +
-    'c:array of TSmbiosConnector t:array of TSmbiosSlot ' +
-    'd:[' + _TSmbiosPointingDevice + '] w:array of TSmbiosBattery ' +
-    'o:array of RawUtf8';
-
 procedure InitializeUnit;
 begin
   {$ifdef CPUINTELARM}
@@ -4985,52 +5045,6 @@ begin
     CpuFeaturesText := LowerCase(CpuInfoFeatures); // fallback to /proc/cpuinfo
     {$endif OSLINUXANDROID}
   end;
-  Rtti.RegisterTypes([
-    TypeInfo(TSmbiosBiosFlags),
-    TypeInfo(TSmbiosSystemWakeup),
-    TypeInfo(TSmbiosBoardFeatures),
-    TypeInfo(TSmbiosBoardType),
-    TypeInfo(TSmbiosChassisType),
-    TypeInfo(TSmbiosChassisState),
-    TypeInfo(TSmbiosChassisSecurityState),
-    TypeInfo(TSmbiosCacheLocation),
-    TypeInfo(TSmbiosCacheMode),
-    TypeInfo(TSmbiosCacheSramType),
-    TypeInfo(TSmbiosCacheEcc),
-    TypeInfo(TSmbiosCacheType),
-    TypeInfo(TSmbiosCacheAssociativity),
-    TypeInfo(TSmbiosProcessorType),
-    TypeInfo(TSmbiosProcessorStatus),
-    TypeInfo(TSmbiosProcessorUpgrade),
-    TypeInfo(TSmbiosProcessorFlags),
-    TypeInfo(TSmbiosConnectorType),
-    TypeInfo(TSmbiosConnectorPort),
-    TypeInfo(TSmbiosSlotType),
-    TypeInfo(TSmbiosSlotWidth),
-    TypeInfo(TSmbiosMemoryFormFactor),
-    TypeInfo(TSmbiosMemoryType),
-    TypeInfo(TSmbiosMemoryDetails),
-    TypeInfo(TSmbiosMemoryArrayLocation),
-    TypeInfo(TSmbiosMemoryArrayUse),
-    TypeInfo(TSmbiosMemoryArrayEcc),
-    TypeInfo(TSmbiosSecurityStatus),
-    TypeInfo(TSmbiosPointingType),
-    TypeInfo(TSmbiosPointingInterface)
-  ]);
-  Rtti.RegisterFromText([
-    TypeInfo(TSmbiosBios),        _TSmbiosBios,
-    TypeInfo(TSmbiosSystem),      _TSmbiosSystem,
-    TypeInfo(TSmbiosBoard),       _TSmbiosBoard,
-    TypeInfo(TSmbiosChassis),     _TSmbiosChassis,
-    TypeInfo(TSmbiosCache),       _TSmbiosCache,
-    TypeInfo(TSmbiosProcessor),   _TSmbiosProcessor,
-    TypeInfo(TSmbiosConnector),   _TSmbiosConnector,
-    TypeInfo(TSmbiosSlot),        _TSmbiosSlot,
-    TypeInfo(TSmbiosMemory),      _TSmbiosMemory,
-    TypeInfo(TSmbiosMemoryArray), _TSmbiosMemoryArray,
-    TypeInfo(TSmbiosBattery),     _TSmbiosBattery,
-    TypeInfo(TSmbiosInfo),        _TSmbiosInfo
-  ]);
 end;
 
 initialization
