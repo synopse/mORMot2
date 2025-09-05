@@ -2696,7 +2696,7 @@ function GetTickSec: cardinal;
   {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
 /// returns how many seconds the system was up, accouting for time when
-// the computer is asleep
+// the computer is asleep, i.e. the time elapsed on the wall clock
 // - on Windows, computes GetTickCount64 div 1000
 // - on Linux/BSD, will use CLOCK_BOOTTIME/CLOCK_UPTIME clock
 // - on MacOS, will use mach_continuous_time() API

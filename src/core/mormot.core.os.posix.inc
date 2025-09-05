@@ -4921,8 +4921,8 @@ var
   act, aci: TIntegerDynArray;
   i: PtrInt;
   {$endif CPUARM3264}
-  tpfail: byte;
-  tp: array[0..2] of timespec;
+  tpfail: integer;
+  tp: array[0 .. 1{$ifdef OSLINUX} + 2{$endif}] of timespec;
   {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
   temp1, temp2: ShortString;
@@ -4948,7 +4948,7 @@ begin
   if ahcCrc32 in CpuFeatures then
     try
       if (crc32cby4arm64(0, 1) = 3712330424) and
-         (crc32carm64(0, @tp, SizeOf(tp)) = crc32cfast(0, @tp, SizeOf(tp))) then
+         (crc32carm64(0, @uts, SizeOf(uts)) = crc32cfast(0, @uts, SizeOf(uts))) then
       begin
         crc32c          := @crc32carm64;
         DefaultHasher   := @crc32carm64;
@@ -4957,7 +4957,7 @@ begin
         crcblock        := @crc32blockarm64;
         crcblocks       := @crc32blocksarm64;
       end;
-      if crc32arm64(0, @tp, SizeOf(tp)) = crc32fast(0, @tp, SizeOf(tp)) then
+      if crc32arm64(0, @uts, SizeOf(uts)) = crc32fast(0, @uts, SizeOf(uts)) then
         crc32 := @crc32arm64;
     except
       exclude(CpuFeatures, ahcCrc32); // crc32 was actually not supported
@@ -5231,8 +5231,12 @@ begin
     CLOCK_MONOTONIC_HIRES := CLOCK_MONOTONIC_RAW
   else if clock_gettime(CLOCK_MONOTONIC_HIRES, @tp[2]) <> 0 then
     tpfail := tpfail or 4;
+  if clock_gettime(CLOCK_BOOTTIME, @tp[3]) = 0 then // 2.6.39+
+    CLOCK_UPTIME := CLOCK_BOOTTIME
+  else if clock_gettime(CLOCK_UPTIME, @tp[3]) <> 0 then
+    tpfail := tpfail or 8;
   {$endif OSLINUX}
-  crc32c128(@SystemEntropy.Startup, @tp, SizeOf(tp)); // tp[0..2] in nanoseconds
+  crc32c128(@SystemEntropy.Startup, @tp, SizeOf(tp)); // tp[0..n] in nanoseconds
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
   if tpfail <> 0 then
     ConsoleErrorWrite(_fmt('clock_gettime(%d) failed on %s - errno=%d',
