@@ -1549,9 +1549,9 @@ begin
   RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
   AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
-  DefaultHasher128(@lecuyer, pointer(rnd), bytes); // may be AesNiHash128
+  DefaultHasher128(@lecuyer, pointer(rnd), bytes);  // may be AesNiHash128
   FillZero(rnd);         // anti-forensic counter measure
-  lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniformous distribution
+  lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniform distribution
   repeat
     // xor the original trusted sources with our CSPRNG until we get enough bits
     TAesPrng.Main.XorRandom(Value, bytes);

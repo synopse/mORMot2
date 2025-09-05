@@ -1696,11 +1696,11 @@ end;
 
 function HumanRandomID: RawUtf8;
 var
-  rnd: THash256;
+  rnd: THash256Rec;
 begin
-  SharedRandom.Fill(@rnd, SizeOf(rnd)); // public and unique: use TLecuyer
-  rnd[0] := rnd[0] and $7f;     // ensure > 0
-  ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
+  Random128(@rnd.l, @rnd.h);     // unpredictable
+  rnd.b[0] := rnd.b[0] and $7f;  // ensure > 0
+  ToHumanHex(result, @rnd, SizeOf(rnd.sha1)); // 20 bytes is the usual size
 end;
 
 function CsvToDns(p: PUtf8Char): RawByteString;

@@ -10984,7 +10984,7 @@ begin
     TypeInfo(TSecurityDescriptor), _TSecurityDescriptor]);
   // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
   {$ifdef OSWINDOWS}
-  X509Parse := @WinX509Parse; // use mormot.lib.sspi.pas WinCertDecode()
+  X509Parse         := @WinX509Parse; // use mormot.lib.sspi.pas WinCertDecode()
   WinCertInfoToText := @Win2Text;
   {$endif OSWINDOWS}
 end;
