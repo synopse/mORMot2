@@ -208,7 +208,8 @@ type
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
-    constructor Create(SpecificKey: PEccKeyPair = nil); reintroduce;
+    constructor Create(Logger: TSynLogClass = nil;
+      SpecificKey: PEccKeyPair = nil); reintroduce;
     /// finalize the server
     destructor Destroy; override;
     /// called e.g. by CallbackReleased() or by Destroy
@@ -239,6 +240,9 @@ type
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
+    /// access the logging features of this class
+    property LogClass: TSynLogClass
+      read fLogClass write fLogClass;
     /// optional Certificate with private key to sign the output handshake frame
     // - certificate should have [cuDigitalSignature] usage
     // - should match other side's VerifyCert public key property
@@ -358,7 +362,7 @@ begin
   end;
   fServerSock := sock;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, nil, nil, TSynLog, Make(['tun ', fPort]));
+  inherited Create({suspended=}false, nil, nil, fOwner.fLogClass, Make(['tun ', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;
@@ -488,8 +492,9 @@ end;
 
 { TTunnelLocal }
 
-constructor TTunnelLocal.Create(SpecificKey: PEccKeyPair);
+constructor TTunnelLocal.Create(Logger: TSynLogClass; SpecificKey: PEccKeyPair);
 begin
+  fLogClass := Logger;
   inherited Create;
   if SpecificKey <> nil then
     fEcdhe := SpecificKey^;
@@ -627,7 +632,8 @@ var
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
 begin
-  TSynLog.EnterLocal(log, 'Open(%)', [Session], self);
+  if fLogClass <> nil then
+    fLogClass.EnterLocal(log, 'Open(%)', [Session], self);
   // validate input parameters
   if (fPort <> 0) or
      (not Assigned(fTransmit)) then
