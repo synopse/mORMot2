@@ -353,10 +353,14 @@ type
     // TObject field or global variable, but simply declared on the local stack
     procedure InitOnStack;
       {$ifdef FPC}inline;{$endif}
-    /// Initialize AES contexts for cypher
+    /// Initialize AES context for cypher
     // - first method to call before using this object for encryption
     // - KeySize is in bits, i.e. 128, 192 or 256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
+    /// Initialize AES context for cipher, using 128-bit and CSPRNG
+    // - also set the internal IV field to random
+    // - used e.g. by TAesSignature or Random128() for their initialization
+    procedure EncryptInitRandom;
     /// encrypt an AES data block into another data block
     // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Encrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
@@ -366,13 +370,13 @@ type
     procedure Encrypt(var B: TAesBlock); overload;
       {$ifdef FPC}inline;{$endif}
 
-    /// Initialize AES contexts for uncypher
+    /// Initialize AES context for uncypher
     // - first method to call before using this object for decryption
     // - KeySize is in bits, i.e. 128, 192 or 256
     // - note that any stack-allocated TAes instance requires a InitOnStack call
     // before calling this method (nothing is expected if a zeroed TObject field)
     function DecryptInit(const Key; KeySize: cardinal): boolean;
-    /// Initialize AES contexts for uncypher, from another TAes.EncryptInit
+    /// Initialize AES context for uncypher, from another TAes.EncryptInit
     // - note that any stack-allocated TAes instance requires a InitOnStack call
     // before calling this method (nothing is expected if a zeroed TObject field)
     function DecryptInitFrom(const Encryption: TAes; const Key;
@@ -2759,7 +2763,7 @@ type
     RK: TKeyArray;
     // IV or CTR used e.g. by GCM or TAesPrng
     iv: THash128Rec;
-    // work buffer used e.g. by CTR/GCM or AesNiTrailer()
+    // work buffer used e.g. by GCM
     buf: THash128Rec;
     // main thread-safe AES function for one TAesBlock - set at runtime from HW
     DoBlock: TAesContextDoBlock;
@@ -3633,19 +3637,19 @@ procedure Random128(iv, iv2: PAesBlock);
 var
   aes: PAesContext;
 begin
-  aes := @rnd128gen;
   rnd128safe.Lock; // ensure thread safe with minimal contention
+  aes := @rnd128gen;
   if PPtrUInt(aes)^ = 0 then
-    PAesSignature(aes)^.Init; // initialize once at startup
+    PAes(aes)^.EncryptInitRandom; // initialize once at startup
   iv^ := aes^.iv.b;
-  inc(aes^.iv.Lo); // AES-CTR with 64-bit counter
+  inc(aes^.iv.Lo); // AES-CTR with little endian 64-bit counter
   if iv2 <> nil then
   begin
     iv2^ := aes^.iv.b;
     inc(aes^.iv.Lo);
   end;
   rnd128safe.UnLock;
-  aes^.DoBlock(aes^, iv^, iv^); // thread-safe non-blocking process
+  aes^.DoBlock(aes^, iv^, iv^);     // thread-safe non-blocking process
   if iv2 <> nil then
     aes^.DoBlock(aes^, iv2^, iv2^); // optional 256-bit output
 end;
@@ -4078,6 +4082,16 @@ begin
   ShiftAes(KeySize, pointer(@ctx.RK)); // for ARM or
   {$endif USEAESNI}
   result := true;
+end;
+
+procedure TAes.EncryptInitRandom;
+var
+  rnd: THash256Rec;
+begin // note: we can't use Random128() here to avoid endless recursion
+  TAesPrng.Main.FillRandom(rnd.b);    // 256-bit from CSPRNG
+  EncryptInit(rnd.Lo, 128);           // transient AES-128 secret
+  TAesContext(Context).iv := rnd.h;   // safe IV
+  FillZero(rnd.b);                    // anti-forensic
 end;
 
 function TAes.DecryptInitFrom(const Encryption: TAes; const Key;
@@ -5063,13 +5077,8 @@ end;
 { TAesSignature }
 
 procedure TAesSignature.Init;
-var
-  rnd: THash256Rec;
-begin // note: we can't use Random128() here to avoid endless recursion
-  TAesPrng.Main.FillRandom(rnd.b);  // 256-bit from CSPRNG
-  fEngine.EncryptInit(rnd.Lo, 128); // transient AES-128 secret
-  TAesContext(fEngine).iv := rnd.h; // safe IV
-  FillZero(rnd.b);                  // anti-forensic
+begin
+  fEngine.EncryptInitRandom;
 end;
 
 procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
