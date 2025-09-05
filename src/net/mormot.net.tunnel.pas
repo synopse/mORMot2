@@ -31,6 +31,7 @@ uses
   mormot.core.threads,
   mormot.core.rtti,
   mormot.core.log,
+  mormot.core.datetime,
   mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure,   // for ICryptCert
@@ -119,11 +120,11 @@ type
     fStarted: boolean;
     fOwner: TTunnelLocal;
     fTransmit: ITunnelTransmit;
+    fSession: TTunnelSession;
     fAes: array[{sending:}boolean] of TAesAbstract;
     fServerSock, fClientSock: TNetSocket;
     fClientAddr: TNetAddr;
     fPort: TNetPort;
-    fReceived, fSent: Int64;
     /// accept/connect the connection, then crypt/redirect to fTransmit
     procedure DoExecute; override;
   public
@@ -135,18 +136,13 @@ type
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
     procedure OnReceived(const Frame: RawByteString);
-  published
-    property Received: Int64
-      read fReceived;
-    property Sent: Int64
-      read fSent;
   end;
 
   /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
   TTunnelEcdhFrame = packed record
     /// the 128-bit client or server random nonce
     rnd: TAesBlock;
-    /// the public key of this side
+    /// the public key of this side (may be just random if toEcdhe is not set)
     pub: TEccPublicKey;
   end;
 
@@ -198,7 +194,10 @@ type
     fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
-    fRemoteInfo: TDocVariantData;
+    fReceived, fSent: Int64;
+    fLogClass: TSynLogClass;
+    fStartTicks: cardinal;
+    fInfo: TDocVariantData;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
     procedure EcdheHashRandom(var hmac: THmacSha256;
@@ -267,6 +266,12 @@ type
     /// access to the associated background thread processing the data
     property Thread: TTunnelLocalThread
       read fThread;
+    /// input TCP frames bytes
+    property Received: Int64
+      read fReceived;
+    /// output TCP frames bytes
+    property Sent: Int64
+      read fSent;
   end;
 
 const
@@ -340,6 +345,7 @@ constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
 begin
   fOwner := owner;
   fPort := owner.Port;
+  fSession := owner.Session;
   fTransmit := transmit;
   if not IsZero(key) then
   begin
@@ -398,7 +404,8 @@ begin
   // relay the (decrypted) data to the local loopback
   if Terminated then
     exit;
-  inc(fReceived, length(data));
+  if fOwner <> nil then
+    inc(fOwner.fReceived, length(data));
   res := fClientSock.SendAll(pointer(data), length(data), @Terminated);
   if (res = nrOk) or
      Terminated then
@@ -415,7 +422,8 @@ var
 begin
   fStarted := true;
   try
-    if fOwner.fOpenBind then
+    if (fOwner <> nil) and
+       fOwner.fOpenBind then
     begin
       // newsocket() was done in the main thread: blocking accept() now
       fState := stAccepting;
@@ -452,12 +460,13 @@ begin
                not Terminated then
             begin
               // emit the (encrypted) data with a 64-bit TTunnelSession trailer
-              inc(fSent, length(tmp)); // Sent/Received are plain sizes in bytes
+              if fOwner <> nil then
+                inc(fOwner.fSent, length(tmp)); // Sent/Received are plain sizes in bytes
               if fAes[{send:}true] <> nil then
                 tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, {trailer=}8)
               else
                 SetLength(tmp, length(tmp) + 8);
-              PInt64(@PByteArray(tmp)[length(tmp) - 8])^ := fOwner.fSession;
+              PInt64(@PByteArray(tmp)[length(tmp) - 8])^ := fSession;
               if (fTransmit <> nil) and
                  not Terminated then
                 fTransmit.TunnelSend(tmp);
@@ -470,7 +479,8 @@ begin
     fLog.Log(sllTrace, 'DoExecute: ending %', [self]);
   except
     fLog.Log(sllWarning, 'DoExecute: aborted %', [self]);
-    fOwner.ClosePort;
+    if fOwner <> nil then
+      fOwner.ClosePort;
   end;
   fState := stTerminated;
 end;
