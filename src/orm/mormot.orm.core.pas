@@ -2682,11 +2682,15 @@ type
     // - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
     // those fields don't contain any data, but a TOrmMany instance
     // which allow to access to the pivot table data)
+    // - warning: this method won't copy the ID field value, unless both instance
+    // are of the same exact TOrmClass
     procedure FillFrom(aRecord: TOrm); overload;
     /// fill the specified properties of this object from another object
     // - source object must be a parent or of the same class as the current record
     // - copy the fields, as specified by their bit index in the source record;
     // you may use aRecord.GetNonVoidFields if you want to update some fields
+    // - warning: this method won't copy the ID field value, unless both instance
+    // are of the same exact TOrmClass
     procedure FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits); overload;
     /// fill all published properties of this object from a supplied TDocVariant
     // object document
@@ -6605,16 +6609,9 @@ begin
 end;
 
 function TOrm.CreateCopy: TOrm;
-var
-  f: PtrInt;
 begin
-  // create new instance
   result := POrmClass(self)^.Create;
-  // copy properties content
-  result.fID := fID;
-  with Orm do
-    for f := 0 to length(CopiableFields) - 1 do
-      CopiableFields[f].CopyValue(self, result);
+  result.FillFrom(self); // ID + CopiableFields[]
 end;
 
 function TOrm.CreateCopy(const CustomFields: TFieldBits): TOrm;
@@ -6735,10 +6732,23 @@ begin
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm);
+var
+  o: TOrmProperties;
+  f: PtrInt;
 begin
-  if (self <> nil) and
-     (aRecord <> nil) then
-    FillFrom(aRecord, aRecord.Orm.CopiableFieldsBits);
+  if (self = nil) or
+     (aRecord = nil) or
+     (aRecord = self) then
+    exit;
+  o := aRecord.Orm;
+  if POrmClass(aRecord)^ = POrmClass(self)^ then
+  begin
+    fID := aRecord.fID; // same class -> ID values will match
+    for f := 0 to length(o.CopiableFields) - 1 do
+      o.CopiableFields[f].CopyValue(aRecord, self);
+  end
+  else
+    FillFrom(aRecord, o.CopiableFieldsBits); // parent or diverse classes
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
@@ -7621,6 +7631,7 @@ end;
 procedure TOrm.ClearProperties;
 var
   i: PtrInt;
+  p: TOrmPropInfo;
 begin
   if self = nil then
     exit;
@@ -7630,12 +7641,14 @@ begin
     if fFill.JoinedFields then
     begin
       for i := 0 to length(CopiableFields) - 1 do
-        if CopiableFields[i].OrmFieldType <> oftID then
-          CopiableFields[i].SetValue(self, nil, 0, false)
+      begin
+        p := CopiableFields[i];
+        if p.OrmFieldType <> oftID then
+          p.SetValue(self, nil, 0, false)
         else
           // clear nested allocated TOrm
-          TOrm(TOrmPropInfoRttiInstance(CopiableFields[i]).GetInstance(self)).
-            ClearProperties;
+          TOrm(TOrmPropInfoRttiInstance(p).GetInstance(self)).ClearProperties;
+      end;
     end
     else
       for i := 0 to length(CopiableFields) - 1 do

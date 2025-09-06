@@ -2935,7 +2935,7 @@ type
     fFields: TOrmPropInfoList;
     fSimpleFields: TOrmPropInfoObjArray;
     fCopiableFields: TOrmPropInfoObjArray;
-    fDynArrayFields: TOrmPropInfoRttiDynArrayObjArray;
+    fManyFields: TOrmPropInfoRttiManyObjArray;
     fBlobCustomFields: TOrmPropInfoCustomDynArray;
     fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
     fSqlTableName: RawUtf8;
@@ -2944,7 +2944,7 @@ type
     fHasNotSimpleFields: boolean;
     fDynArrayFieldsHasObjArray: boolean;
     fHasTypeFields: TOrmFieldTypes;
-    fManyFields: TOrmPropInfoRttiManyObjArray;
+    fDynArrayFields: TOrmPropInfoRttiDynArrayObjArray;
     fRecordManySourceProp: TOrmPropInfoRttiInstance;
     fRecordManyDestProp: TOrmPropInfoRttiInstance;
     fSqlTableNameUpperWithDot: RawUtf8;
