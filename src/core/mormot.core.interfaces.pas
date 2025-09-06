@@ -184,10 +184,10 @@ type
     OffsetAsValue: cardinal;
     /// true if is a const/var input argument
     function IsInput: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// true if is a var/out/result output argument
     function IsOutput: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// serialize the argument into the TServiceContainer.Contract JSON format
     // - non standard types (e.g. class, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
