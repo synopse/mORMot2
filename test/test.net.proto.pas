@@ -1545,7 +1545,7 @@ begin
   tunnelappsec := RandomAnsi7(10);
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
-  local := clienttunnel.Open(
+  local := clientinstance.Open(
     tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost,
     ['remoteHost', Executable.Host]);
   Check(local <> 0);
