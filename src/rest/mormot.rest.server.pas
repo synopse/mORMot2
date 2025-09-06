@@ -1001,6 +1001,9 @@ type
     fServer: TRestServer;
     fOptions: TRestServerAuthenticationOptions;
     fAlgoName: RawUtf8;
+    fLastUserSafe: TLightLock;
+    fLastUserName: RawUtf8;
+    fLastUser: TAuthUser;
     // GET ModelRoot/auth?UserName=...&Session=... from TRestClientUri.SessionClose
     function AuthSessionRelease(Ctxt: TRestServerUriContext;
       const aUserName: RawUtf8): boolean;
@@ -1025,6 +1028,8 @@ type
     // custom event
     function GetUser(Ctxt: TRestServerUriContext;
       const aUserName: RawUtf8): TAuthUser; virtual;
+    /// flush fLastUser cache - called from TRestServer.AuthenticationFlushCache
+    procedure FlushCache;
     /// create a session on the server for a given user
     // - this default implementation will call fServer.SessionCreate() and
     // return a '{"result":"HEXASALT","logonname":"UserName"}' JSON content
@@ -1040,6 +1045,8 @@ type
     /// initialize the authentication method to a specified server
     // - you can define several authentication schemes for the same server
     constructor Create(aServer: TRestServer); reintroduce; virtual;
+    /// finalize this authentication method
+    destructor Destroy; override;
     /// called by the Server to implement the Auth RESTful method
     // - overridden method shall return TRUE if the request has been handled
     // - returns FALSE to let the next registered TRestServerAuthentication
@@ -2032,6 +2039,9 @@ type
       const aMethods: array of TRestServerAuthenticationClass); overload;
     /// call this method to remove all authentication methods to the server
     procedure AuthenticationUnregisterAll;
+    /// call this method to flush any cached TAuthUser/TAuthGroup cache
+    // - needed e.g. if you modified a password of an existing user
+    procedure AuthenticationFlushCache; virtual;
     /// read-only access to the internal list of sessions
     // - ensure you protect its access using Sessions.Safe TRWLock
     property Sessions: TSynObjectListSorted
@@ -4981,6 +4991,12 @@ begin
   fOptions := [saoUserByLogonOrID];
 end;
 
+destructor TRestServerAuthentication.Destroy;
+begin
+  FreeAndNil(fLastUser);
+  inherited Destroy;
+end;
+
 function TRestServerAuthentication.AuthSessionRelease(
   Ctxt: TRestServerUriContext; const aUserName: RawUtf8): boolean;
 var
@@ -5015,37 +5031,48 @@ begin
   end;
 end;
 
+procedure TRestServerAuthentication.FlushCache;
+begin
+  if fLastUserName = '' then
+    exit;
+  fLastUserSafe.Lock;
+  fLastUserName := '';
+  fLastUserSafe.UnLock;
+end;
+
 function TRestServerAuthentication.GetUser(Ctxt: TRestServerUriContext;
   const aUserName: RawUtf8): TAuthUser;
 var
-  usrid: TID;
-  err: integer;
+  id: Int64;
 begin
-  usrid := GetInt64(pointer(aUserName), err);
-  if (err <> 0) or
-     (usrid <= 0) or
-     not (saoUserByLogonOrID in fOptions) then
-    usrid := 0;
+  result := nil;
+  if (aUserName = '') or
+     (fServer = nil) then
+    exit;
+  fLastUserSafe.Lock;
+  if fLastUserName = aUserName then
+    result := pointer(fLastUser.CreateCopy); // naive but efficient cache
+  fLastUserSafe.UnLock;
+  if result <> nil then
+    exit;
+  id := 0;
+  if (saoUserByLogonOrID in fOptions) and
+     (aUserName[1] in ['0' .. '9']) then
+    ToInt64(aUserName, id);
   if Assigned(fServer.OnAuthenticationUserRetrieve) then
-    result := fServer.OnAuthenticationUserRetrieve(self, Ctxt, usrid, aUserName)
+    result := fServer.OnAuthenticationUserRetrieve(self, Ctxt, id, aUserName)
   else
   begin
-    if usrid <> 0 then
-    begin
+    result := fServer.fAuthUserClass.Create;
+    if id <> 0 then
       // try if TAuthUser.ID was transmitted - may use ORM per-ID cache
-      result := fServer.fAuthUserClass.Create(fServer.ORM, usrid);
-      if result.IDValue = 0 then
-        FreeAndNil(result);
-    end
-    else
-      result := nil;
-    if result = nil then
+      fServer.Orm.Retrieve(id, result);
+    if result.IDValue = 0 then
       // search by LogonName - may use the JSON cache at SQlite3 DB level
-      result := fServer.fAuthUserClass.Create(
-        fServer.ORM, 'LogonName=?', [aUserName]);
+      fServer.Orm.Retrieve('LogonName=?', [], [aUserName], result);
     if (result.IDValue = 0) and
        (saoHandleUnknownLogonAsStar in fOptions) then
-      if fServer.OrmInstance.Retrieve('LogonName=?', [], ['*'], result) then
+      if fServer.Orm.Retrieve('LogonName=?', [], ['*'], result) then
       begin
         result.LogonName := aUserName;
         result.DisplayName := aUserName;
@@ -5065,6 +5092,16 @@ begin
       fServer.InternalLog('%.CanUserLog(%) returned FALSE -> rejected',
         [result, aUserName], sllUserAuth);
     FreeAndNil(result);
+  end
+  else
+  begin
+    fLastUserSafe.Lock;
+    fLastUserName := aUserName;
+    if fLastUser = nil then
+      fLastUser := pointer(result.CreateCopy)
+    else
+      fLastUser.FillFrom(result);
+    fLastUserSafe.UnLock;
   end;
 end;
 
@@ -6469,6 +6506,19 @@ begin
   try
     ObjArrayClear(fSessionAuthentication);
     fHandleAuthentication := false;
+  finally
+    fSessions.Safe.WriteUnLock;
+  end;
+end;
+
+procedure TRestServer.AuthenticationFlushCache;
+var
+  i: PtrInt;
+begin
+  fSessions.Safe.WriteLock;
+  try
+    for i := 0 to high(fSessionAuthentication) do
+      fSessionAuthentication[i].FlushCache;
   finally
     fSessions.Safe.WriteUnLock;
   end;
