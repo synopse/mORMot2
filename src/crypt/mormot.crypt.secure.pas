@@ -4174,13 +4174,16 @@ var
   c: AnsiChar;
   siz, n, aPasswordSize: PtrUInt;
   sbin, sb64, dp, ds: RawByteString;
+  prepared: array of RawByteString;
+  prep: PRawByteString;
   alt: THash512Rec;
 begin
   result := '';
-  if aRounds = 0 then
-    aRounds := 535000 // default for hfSha256/hfSha512
-  else
-    aRounds := MaxPtrUInt(1000, aRounds); // >= 1000
+  if aAlgo <> hfMD5 then // fixed to 1000 rounds (sooo weak!) for MD5-CRYPT
+    if aRounds = 0 then
+      aRounds := 535000 // default for hfSha256/hfSha512
+    else
+      aRounds := MaxPtrUInt(1000, aRounds); // >= 1000
   case aAlgo of
     hfMD5:
       begin
@@ -4260,19 +4263,26 @@ begin
         FinalBin(ds, aSaltSize);
       end;
   end;
-  for n := 0 to aRounds - 1 do
+  SetLength(prepared, 42); // pre-compute all possible rounds combinations
+  prep := pointer(prepared);
+  for n := 0 to 41 do
   begin
     if (n and 1) <> 0 then // add key or last result
-      Update(pointer(dp), aPasswordSize)
-    else
-      Update(@alt, siz);
+      Append(prep^, pointer(dp), aPasswordSize);
     if (n mod 3) <> 0 then // add salt for numbers not divisible by 3
-      Update(pointer(ds), aSaltSize);
+      Append(prep^, pointer(ds), aSaltSize);
     if (n mod 7) <> 0 then // add key for numbers not divisible by 7
-      Update(pointer(dp), aPasswordSize);
+      Append(prep^, pointer(dp), aPasswordSize);
     if (n and 1) = 0 then  // add key or last result
-      Update(pointer(dp), aPasswordSize)
-    else
+      Append(prep^, pointer(dp), aPasswordSize);
+    inc(prep);             // will avoid some memory copy in the main loop
+  end;
+  for n := 0 to aRounds - 1 do
+  begin
+    if (n and 1) = 0 then       // add last result first every even round
+      Update(@alt, siz);
+    Update(prepared[n mod 42]);
+    if (n and 1) <> 0 then      // add last result last every odd round
       Update(@alt, siz);
     Final(alt);
   end;
