@@ -1324,6 +1324,10 @@ function Base64uriToBin(const base64: RawByteString;
 // - you should better not use this, but Base64uriToBin() overloaded functions
 function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 
+/// quickly check if the supplied buffer contains only Base64-URI chars
+// - don't check the length itself, or against an expected value
+function Base64uriValid(p: PUtf8Char; enc: PAnsiCharDec = nil): boolean;
+
 /// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
 // - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
@@ -7054,6 +7058,23 @@ begin
   resultLen := Base64uriToBinLength(base64len);
   result := (resultLen = binlen) and
             Base64AnyDecode(enc, base64, bin, base64len);
+end;
+
+function Base64uriValid(p: PUtf8Char; enc: PAnsiCharDec): boolean;
+begin
+  result := false;
+  if p = nil then
+    exit;
+  if enc = nil then
+    enc := @ConvertBase64UriToBin;
+  while true do
+    if p^ = #0 then
+      break // all valid
+    else if enc[p^] >= 0 then
+      inc(p)
+    else
+      exit;
+  result := true;
 end;
 
 procedure Base64ToUri(var base64: RawUtf8);
