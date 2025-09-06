@@ -1109,8 +1109,8 @@ const
 // Pbkdf2Sha512=110.55ms Pbkdf2Sha3=112.58ms BCrypt=169.59ms BCryptSha256=170.85ms
 // and SCrypt=143.66ms - consider mcfSha256Crypt for fast and safe hashing, and
 // mcfBCrypt/mcfSCrypt for proven password storage, and align with OWASP/NIST
-// recommendations for password hashing (100-250 ms) - SCrypt consuming 64MB of
-// RAM and BCrypt always 4KB - see also MCF_ROUNDS[] global variable
+// recommendations for password hashing (100-250 ms) - note that SCrypt consumes
+// 64MB of RAM and BCrypt only 4KB - see also MCF_ROUNDS[] global variable
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8; overload;
 

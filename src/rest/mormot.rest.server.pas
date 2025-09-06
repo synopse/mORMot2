@@ -499,9 +499,6 @@ type
       Handle304NotModified: boolean = true;
       const DefaultFileName: TFileName = 'index.html';
       const Error404Redirect: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0); override;
-    /// return the Server's current nonce in the proper JSON format
-    // - as called from TRestServerAuthenticationDefault.Auth
-    procedure ReturnNonce;
     /// use this method to send back an error to the caller
     // - overriden method with additional logging
     procedure Error(const ErrorMessage: RawUtf8 = '';
@@ -1838,6 +1835,9 @@ type
     // - it will be called to search for outdated sessions only once per second
     // - returns how many deprecated sessions have been purge
     function SessionDeleteDeprecated(tix32: cardinal): integer;
+    /// return the Server's current nonce in the proper JSON format
+    // - as called from TRestServerAuthenticationDefault.Auth
+    procedure ReturnNonce(Ctxt: TRestServerUriContext; const UserName: RawUtf8);
   public
     /// a method can be specified to be notified when a session is created
     // - for OnSessionCreate, returning TRUE will abort the session creation -
@@ -4530,14 +4530,6 @@ begin
     Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;
 
-procedure TRestServerUriContext.ReturnNonce;
-begin
-  if fServer <> nil then
-    Returns(Join(['{"result":"', CurrentNonce(self), '"}']))
-  else
-    Error;
-end;
-
 procedure TRestServerUriContext.Error(const ErrorMessage: RawUtf8;
   Status: integer; CacheControlMaxAgeSec: integer);
 begin
@@ -5384,7 +5376,7 @@ begin
   end
   else
     // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
-    Ctxt.ReturnNonce;
+    fServer.ReturnNonce(Ctxt, aUserName);
 end;
 
 function TRestServerAuthenticationDefault.CheckPassword(
@@ -7005,6 +6997,15 @@ begin
   if log <> nil then
     log.Log(sllDebug, 'ComputeRoutes %:%',
       [fModel.Root, fRouter.InfoText], self);
+end;
+
+procedure TRestServer.ReturnNonce(Ctxt: TRestServerUriContext; const UserName: RawUtf8);
+var
+  nonce, response: RawUtf8;
+begin
+  CurrentNonce(Ctxt, {prev=}false, @nonce, nil);
+  Join(['{"result":"', nonce, '"}'], response);
+  Ctxt.Returns(response);
 end;
 
 procedure TRestServer.SessionCreate(var User: TAuthUser;
