@@ -1108,7 +1108,11 @@ function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
 // mcfSha256Crypt for '$5$rounds={rounds}${salt}${checksum}'
 // - just check the '${ident}$' prefix, without actually checking the content
-function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
+// - can optionally return the header without the checksum, e.g. to notify a
+// client side for the expected hash algorithm and parameters, i.e. the
+// '${ident}${params}${salt}$' part excluding ending '{checksum}'
+function ModularCryptIdentify(const hash: RawUtf8;
+  info: PRawUtf8 = nil): TModularCryptFormat;
 
 /// decode and check a password against a hash in "Modular Crypt" format
 // - if allowed is not default [], it would return mcfUnknown if not in this set
@@ -4774,7 +4778,7 @@ begin
     result := mcfInvalid;
 end; // on success, P points to the {checksum} part
 
-function ModularCryptIdentify(const hash: RawUtf8): TModularCryptFormat;
+function ModularCryptIdentify(const hash: RawUtf8; info: PRawUtf8): TModularCryptFormat;
 var
   dummyrounds: cardinal;
   dummysalt: RawUtf8;
@@ -4782,6 +4786,10 @@ var
 begin
   P := pointer(hash);
   result := ModularCryptParse(P, dummyrounds, dummysalt);
+  if (info <> nil) and
+     (result <> mcfUnknown) and
+     (P <> nil) then
+    FastSetString(info^, pointer(hash), P - pointer(hash));
 end;
 
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
