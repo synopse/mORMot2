@@ -2128,6 +2128,7 @@ function SSL_get_verify_result(ssl: PSSL): integer;
 procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: PByte; sid_ctx_len: cardinal): integer; cdecl;
 
 { --------- libcrypto entries }
 
@@ -2806,6 +2807,9 @@ function GetPeerCertInfoFromUrl(const url: RawUtf8): RawUtf8;
 
 implementation
 
+uses
+  mormot.crypt.core;
+
 
 { ******************** Dynamic or Static OpenSSL Library Loading }
 
@@ -2968,10 +2972,11 @@ type
     SSL_set1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     SSL_add1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+    SSL_CTX_set_session_id_context: function(ctx: PSSL_CTX; sid_ctx: PByte; sid_ctx_len: cardinal): integer; cdecl;
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..56] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..57] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -3028,6 +3033,7 @@ const
     'SSL_set_hostflags',
     'SSL_set1_host',
     'SSL_add1_host',
+    'SSL_CTX_set_session_id_context',
     nil);
 
 var
@@ -3328,6 +3334,10 @@ begin
   result := libssl.SSL_add1_host(s, hostname);
 end;
 
+function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: PByte; sid_ctx_len: cardinal): integer;
+begin
+  result := libssl.SSL_CTX_set_session_id_context(ctx, sid_ctx, sid_ctx_len);
+end;
 
 { --------- libcrypto entries }
 
@@ -11173,8 +11183,12 @@ end;
 
 procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+const
+  SSL_MAX_SSL_SESSION_ID_LENGTH = 32;
 var
   peer: PPointer;
+  cert: RawByteString;
+  session_ctx: RawByteString;
 begin
   // we don't keep any fSocket/fContext bound socket on server side
   Context.LastError := '';
@@ -11185,6 +11199,44 @@ begin
   fCtx := SSL_CTX_new(TLS_server_method);
   try
     peer^ := self;
+
+    session_ctx := '';
+
+    // If a certificate is available, derive the session id context from it.
+    cert := Context.CertificateBin;
+    if (cert = '') and
+      (Context.CertificateFile <> '') then
+      cert := StringFromFile(TFileName(Context.CertificateFile));
+    if cert <> '' then
+      session_ctx := Sha256(Context.CertificateBin);
+
+    // If no certificate is available, generate 32 random bytes for the session id context
+    if session_ctx = '' then
+    begin
+      SetLength(session_ctx, SSL_MAX_SSL_SESSION_ID_LENGTH);
+      RandomBytes(@session_ctx[1], SSL_MAX_SSL_SESSION_ID_LENGTH);
+    end;
+
+    if Length(session_ctx) > SSL_MAX_SSL_SESSION_ID_LENGTH then
+      SetLength(session_ctx, SSL_MAX_SSL_SESSION_ID_LENGTH);
+
+    { Fix for TOpenSslNetTls.AfterAccept accept:
+      OpenSSL 1010104F error 1 [SSL_ERROR_SSL (error:140D9115:SSL
+      routines:ssl_get_prev_session:session id context uninitialized)]
+
+      This error happens because the OpenSSL session id context is not initialized:
+      error:140D9115:SSL routines:ssl_get_prev_session:session id context uninitialized
+
+      It occurs when the server tries to resume a previous TLS session but
+      the session management context has not been properly configured.
+
+      Therefore we call SSL_CTX_set_session_id_context to set a unique
+      session id context identifier. }
+
+    if SSL_CTX_set_session_id_context(fCtx,
+        Pointer(session_ctx), Length(session_ctx)) <> 1 then
+      raise EOpenSslNetTls.Create('SSL_CTX_set_session_id_context failed');
+
     SetupCtx(Context, {bind=}true);
     // allow SNI per-server certificate via OnAcceptServerName callback
     if EnableOnNetTlsAcceptServerName then
