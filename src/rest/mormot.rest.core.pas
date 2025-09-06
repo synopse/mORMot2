@@ -1035,7 +1035,6 @@ type
     procedure SetPasswordPlain(const Value: RawUtf8);
   public
     /// static function allowing to compute a hashed password
-    // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
     // - aHashRound = 0 uses plain Sha256(), as early mORMot 1 encoding
     // - aHashRound > 0 triggers Pbkdf2HmacSha256() via aHashSalt, and enable
@@ -1043,10 +1042,14 @@ type
     // force attack via rainbow tables)
     // - aHashRound < 0 will use standard DIGEST-HA0 hashing, compatible with
     // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo)
+    // - as a safer alternative, use ModularCryptHash() from mormot.crypt.secure
+    // to fill the PasswordHashHexa field - this class method will recognize
+    // such patterns in aPasswordPlain
     class function ComputeHashedPassword(const aLogonName, aPasswordPlain: RawUtf8;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
+    // or some Pbkdf2HmacSha256() or some "Modular Crypt"
     // - use SetPassword() method if you want to customize the hash salt value
     // and use the much safer Pbkdf2HmacSha256 or DIGEST-HA0 algorithms
     property PasswordPlain: RawUtf8
@@ -1067,7 +1070,7 @@ type
     // - this default implementation will return TRUE, i.e. allow the user
     // to log on
     // - override this method to disable user authentication, e.g. if the user
-    // is disabled via a custom ORM boolean or date/time expiration field
+    // is disabled via a custom ORM field, typically marked as unsafe or expired
     function CanUserLog(Ctxt: TObject): boolean; virtual;
   published
     /// the User identification Name, as entered at log-in
@@ -3671,24 +3674,40 @@ class function TAuthUser.ComputeHashedPassword(const aLogonName, aPasswordPlain,
   aHashSalt: RawUtf8; aHashRound: integer): RawUtf8;
 var
   dig: THash512Rec;
+  bytes: PtrInt;
   algo: TDigestAlgo absolute aHashRound;
 begin
+  if (aPasswordPlain <> '') and
+     (aPasswordPlain[1] = '$') and
+     (ModularCryptIdentify(aPasswordPlain) in mcfValid) then
+  begin
+    // already in the expected new and safe "Modular Crypt" format
+    result := aPasswordPlain;
+    exit;
+  end;
   if (aHashSalt = '') or
      (aHashRound = 0) then
-    result := Sha256U(['salt', aPasswordPlain])
-  else if aHashRound > 0 then
   begin
+    // mORMot 1 legacy format
+    result := Sha256U(['salt', aPasswordPlain]);
+    exit;
+  end;
+  if aHashRound > 0 then
+  begin
+    // mORMot 1 PBKDF2-HMAC-SHA256 pattern
     Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig.Lo);
-    result := Sha256DigestToString(dig.Lo);
+    bytes := SizeOf(dig.Lo);
   end
   else
   begin
+    // store DIGEST-HA0 = Hash(user:realm:password) with aHashSalt = realm
+    // - could be used e.g. if you need DIGEST auth from web clients
     aHashRound := -aHashRound; // aHashRound < 0 = - ord(TDigestAlgo)
     if aHashRound > ord(high(TDigestAlgo)) then
       algo := daSHA256;
-    BinToHexLower(@dig, // aHashSalt = DIGEST-HA0 realm
-      DigestHA0(algo, aLogonName, aHashSalt, aPasswordPlain, dig), result);
+    bytes := DigestHA0(algo, aLogonName, aHashSalt, aPasswordPlain, dig);
   end;
+  BinToHexLower(@dig, bytes, result);
   FillCharFast(dig, SizeOf(dig), 0);
 end;
 
