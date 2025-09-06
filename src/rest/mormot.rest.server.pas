@@ -1125,7 +1125,7 @@ type
   protected
     /// check a supplied password content
     // - will match ClientComputeSessionKey() algorithm as overridden here, i.e.
-    // a SHA-256 based signature with a 10 minutes activation window
+    // a SHA-256 based challenge with a 4.3 minutes * 2 activation window
     // - you can override this method to provide your own password check
     // mechanism, for the given TAuthUser instance
     function CheckPassword(Ctxt: TRestServerUriContext;
@@ -1253,7 +1253,7 @@ type
   // using Kerberos - it will allow to safelyauthenticate on a mORMot server
   // without prompting the user to enter its password
   // - if ClientSetUser() receives aUserName as '', aPassword should contain
-  // the Kerber SPN e.g. 'mymormotservice/myserver.mydomain.tld'
+  // the Kerberos SPN e.g. 'mymormotservice/myserver.mydomain.tld'
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
@@ -1837,7 +1837,8 @@ type
     function SessionDeleteDeprecated(tix32: cardinal): integer;
     /// return the Server's current nonce in the proper JSON format
     // - as called from TRestServerAuthenticationDefault.Auth
-    procedure ReturnNonce(Ctxt: TRestServerUriContext; const UserName: RawUtf8);
+    procedure ReturnNonce(Ctxt: TRestServerUriContext;
+      Auth: TRestServerAuthentication; const UserName: RawUtf8);
   public
     /// a method can be specified to be notified when a session is created
     // - for OnSessionCreate, returning TRUE will abort the session creation -
@@ -5346,16 +5347,16 @@ begin
      (length(nonce^) > 32) then
   begin
     // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
-    usr := GetUser(Ctxt, aUserName);
+    usr := GetUser(Ctxt, aUserName); // likely to use ORM or DB cache
     if usr <> nil then
     try
       // check if match TRestClientUri.SetUser() algorithm
-      pwd := Ctxt.GetInputValue('Password');
+      pwd := Ctxt.GetInputValue('Password'); // not plain, but as challenge
       if pwd = nil then
         pwd := @_NIL;
       if CheckPassword(Ctxt, usr, nonce^, pwd^) then
       begin
-        Ctxt.InputRemoveFromUri('PASSWORD='); // anti-forensic
+        Ctxt.InputRemoveFromUri('PASSWORD='); // anti-forensic (challenge replay)
         // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
         if (length(nonce^) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
            (nonce^[9] = '_') and
@@ -5376,7 +5377,7 @@ begin
   end
   else
     // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
-    fServer.ReturnNonce(Ctxt, aUserName);
+    fServer.ReturnNonce(Ctxt, self, aUserName);
 end;
 
 function TRestServerAuthenticationDefault.CheckPassword(
@@ -5431,7 +5432,7 @@ begin
     exit;
   // GET ModelRoot/auth?UserName=... is enough to create a new session
   // (this kind of weak authentication avoid stronger ones: keep result = true)
-  usr := GetUser(Ctxt, aUserName);
+  usr := GetUser(Ctxt, aUserName); // likely to use ORM or DB cache
   if usr = nil then
     Ctxt.AuthenticationFailed(afUnknownUser)
   else
@@ -5513,7 +5514,7 @@ begin
     Split(Base64ToBin(usrpwd), ':', usr, pwd);
     if usr <> '' then
     begin
-      U := GetUser(Ctxt, usr);
+      U := GetUser(Ctxt, usr); // likely to use ORM or DB cache
       if U <> nil then
       try
         if CheckPassword(Ctxt, U, pwd) then
@@ -5645,7 +5646,7 @@ begin
         fServer.InternalLog('% success for %', [self, usr], sllUserAuth);
       user := nil;
       if usr <> '' then
-        user := GetUser(Ctxt, usr);
+        user := GetUser(Ctxt, usr); // likely to use ORM or DB cache
       if user <> nil then
       try
         // create a session for this user and send back outdata
@@ -6999,12 +7000,35 @@ begin
       [fModel.Root, fRouter.InfoText], self);
 end;
 
-procedure TRestServer.ReturnNonce(Ctxt: TRestServerUriContext; const UserName: RawUtf8);
+procedure TRestServer.ReturnNonce(Ctxt: TRestServerUriContext;
+  Auth: TRestServerAuthentication; const UserName: RawUtf8);
 var
-  nonce, response: RawUtf8;
+  nonce, modular, response: RawUtf8;
+  mcf: TModularCryptFormat;
+  usr: TAuthUser;
 begin
   CurrentNonce(Ctxt, {prev=}false, @nonce, nil);
-  Join(['{"result":"', nonce, '"}'], response);
+  if Assigned(Auth) and
+     Ctxt.InputExists['mcf'] then        // the client supports "Modular Crypt"
+  begin
+    usr := Auth.GetUser(Ctxt, UserName); // likely to use ORM or DB cache
+    if usr <> nil then
+      try
+        if (usr.PasswordHashHexa <> '') and
+           (usr.PasswordHashHexa[1] = '$') then
+        begin
+          mcf := ModularCryptIdentify(usr.PasswordHashHexa, @modular);
+          Ctxt.Log.Log(sllUserAuth, 'ReturnNonce(%)=%',
+            [UserName, ToText(mcf)^], self);
+          if mcf in mcfValid then
+            Join(['{"result":"', nonce, '","mcf":"', modular, '"}'], response);
+        end;
+      finally
+        usr.Free;
+      end;
+  end;
+  if response = '' then
+    Join(['{"result":"', nonce, '"}'], response); // regular mORMot 1 response
   Ctxt.Returns(response);
 end;
 
