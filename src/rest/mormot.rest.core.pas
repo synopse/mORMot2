@@ -1060,12 +1060,17 @@ type
     // (reducing brute force attack via rainbow tables)
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
       aHashRound: integer = 20000); overload;
+    /// set the PasswordHashHexa field using a "Modular Crypt" hash
+    // - with its default parameters, and a random salt
+    procedure SetPassword(const aPasswordPlain: RawUtf8;
+      aModularCrypt: TModularCryptFormat);
     /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
     // - will use the current LogonName as part of the digest
+    // - could be needed if you want your user to authenticate from a Web client
     procedure SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
       aAlgo: TDigestAlgo = daSHA256);
     /// check if the user can authenticate in its current state
-    // - Ctxt is a TRestServerUriContext instance
+    // - Ctxt is a TRestServerUriContext instance (not yet defined in this unit)
     // - called by TRestServerAuthentication.GetUser() method
     // - this default implementation will return TRUE, i.e. allow the user
     // to log on
@@ -1085,6 +1090,8 @@ type
     /// the hexa encoded associated SHA-256 hash of the password
     // - see TAuthUser.ComputeHashedPassword() or SetPassword() methods
     // - store the SHA-256 32 bytes as 64 hexa chars
+    // - as a safer alternative, consider storing ModularCryptHash() hashes
+    // from mormot.crypt.secure e.g. via the SetPassword() overload
     property PasswordHashHexa: RawUtf8
       index 64 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
@@ -3723,6 +3730,14 @@ begin
   if self <> nil then
     fPasswordHashHexa := ComputeHashedPassword(
       fLogonName, aPasswordPlain, aHashSalt, aHashRound);
+end;
+
+procedure TAuthUser.SetPassword(const aPasswordPlain: RawUtf8;
+  aModularCrypt: TModularCryptFormat);
+begin
+  if (self <> nil) and
+     (aModularCrypt in mcfValid) then
+    fPasswordHashHexa := ModularCryptHash(aModularCrypt, aPasswordPlain);
 end;
 
 procedure TAuthUser.SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
