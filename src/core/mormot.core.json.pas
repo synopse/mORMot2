@@ -12395,7 +12395,7 @@ type // local type definitions for their own RTTI to be found by name
 
 procedure InitializeUnit;
 var
-  i: PtrInt;
+  i: {$ifdef FPC}system.PtrInt{$else}integer{$endif}; // circumvent Delphi bug
   c: AnsiChar;
   jc: TJsonChar;
   p: PByteArray;
