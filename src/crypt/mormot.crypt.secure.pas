@@ -822,6 +822,8 @@ const
   SIGNER_SHA3 = [saSha3224 .. saSha3S256];
   SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
   SIGNER_DEFAULT_ALGO = saSha3S128;
+  /// which ModularCryptIdentify/ModularCryptVerify() results are correct
+  mcfValid = [mcfMd5Crypt .. high(TModularCryptFormat)];
 var
   /// default number of rounds for PBKDF2 "Modular Crypt" functions
   // - numbers adjusted on 2025, and align with OWASP Password Storage Cheat
@@ -1096,8 +1098,6 @@ const
   MCF_ALGO: array[TModularCryptFormat] of THashAlgo = (hfShake128, hfShake128,
     hfMD5, hfSHA256, hfSHA512, hfSHA1, hfSHA256, hfSHA512, hfSHA3_512,
     hfShake128, hfSHA256, hfSHA256);
-  /// which ModularCryptIdentify/ModularCryptVerify() results are correct
-  mcfValid = [succ(mcfInvalid) .. high(TModularCryptFormat)];
 
 /// compute the "Modular Crypt" hash of a given password
 // - as returned by the python passlib library
@@ -1110,7 +1110,7 @@ const
 // and SCrypt=143.66ms - consider mcfSha256Crypt for fast and safe hashing, and
 // mcfBCrypt/mcfSCrypt for proven password storage, and align with OWASP/NIST
 // recommendations for password hashing (100-250 ms) - note that SCrypt consumes
-// 64MB of RAM and BCrypt only 4KB - see also MCF_ROUNDS[] global variable
+// 64MB of RAM and BCrypt always 4KB - see also MCF_ROUNDS[] global variable
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8; overload;
 
@@ -1274,6 +1274,8 @@ procedure BasicClient(const UserName: RawUtf8; const Password: SpiUtf8;
 function BasicRealm(const FromServer: RawUtf8): RawUtf8;
 
 /// compute the HA0 for a given set of Digest access credentials
+// - i.e. HA0 = Hash(username:realm:password)
+// - return the number of binary hash bytes stored into HA0
 function DigestHA0(Algo: TDigestAlgo; const UserName, Realm: RawUtf8;
   const Password: SpiUtf8; out HA0: THash512Rec): integer;
 
@@ -4804,7 +4806,7 @@ begin
   P := pointer(hash);
   result := ModularCryptParse(P, dummyrounds, dummysalt);
   if (info <> nil) and
-     (result <> mcfUnknown) and
+     (result in mcfValid) and
      (P <> nil) then
     FastSetString(info^, pointer(hash), P - pointer(hash));
 end;
@@ -4845,7 +4847,7 @@ begin
   FastAssignNew(result);
   P := pointer(format);
   mcf := ModularCryptParse(P, rounds, salt);
-  if mcf <> mcfUnknown then
+  if mcf in mcfValid then
     result := ModularCryptHash(mcf, password, rounds, 0, salt);
 end;
 
