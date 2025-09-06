@@ -1785,11 +1785,11 @@ const
 
 var
   buf: RawByteString;
-  u, pw, exp: RawUtf8;
+  u, pw, nfo, exp: RawUtf8;
   iv: Int64;
   P: PAnsiChar;
   unalign: PtrInt;
-  n, rounds, rnd: integer;
+  n, rnd: integer;
   i64: Int64;
   logN, blocksize, parallel, r,
   exp321, exp322, exp323, exp324, exp325, exp326: cardinal;
@@ -2047,22 +2047,14 @@ begin
   // validate "Modular Crypt" formats
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
-    //timer.Start;
-    rounds := 0;
     for n := 1 to 10 do
     begin
       RandomByteString(n * 7, pw); // should reach at least 64 bytes = 512-bit
       case mcf of
         mcfMd5Crypt:
-          begin
-            rnd := 1000; // fixed number
-            inc(rounds, 3000);
-          end;
+          rnd := 1000; // fixed number
         mcfBCrypt, mcfBCryptSha256:
-          begin
-            rnd := 4 + n shr 2; // cost = 4..5 is enough here
-            inc(rounds, 3 * (1 shl rnd));
-          end;
+          rnd := 4 + n shr 2; // cost = 4..5 is enough here
         mcfSCrypt:
           begin
             rnd := SCryptRounds(4 + (n shr 2), 8, n);
@@ -2070,13 +2062,9 @@ begin
             CheckEqual(logN, 4 + (n shr 2));
             CheckEqual(blocksize, 8);
             CheckEqual(parallel, n);
-            inc(rounds, (1 shl logN) * parallel);
           end;
       else
-        begin
-          rnd := 1000 + n;
-          inc(rounds, 3 * rnd);
-        end;
+        rnd := 1000 + n;
       end;
       u := ModularCryptHash(mcf, pw, rnd, {saltsize=}n);
       Check(u <> '');
@@ -2086,20 +2074,29 @@ begin
         mcfBCrypt:
           CheckEqual(PosEx(Make(['$', UInt2DigitsToShort(rnd), '$']), u), 4);
       end;
-      Check(ModularCryptIdentify(u) = mcf);
+      nfo := '';
+      Check(ModularCryptIdentify(u, @nfo) = mcf);
       Check(ModularCryptVerify(pw, u) = mcf);
+      Check(nfo <> '');
+      Check(StartWithExact(u, nfo));
+      Check(ModularCryptIdentify(nfo) = mcf);
+      CheckEqual(u, ModularCryptHash(nfo, pw)); // simulate client side re-hash
       if u = '' then
         continue; // avoid GPF
       dec(PByteArray(u)[length(u) - 5]);
       Check(ModularCryptVerify(pw, u) = mcfInvalid);
     end;
-    //NotifyTestSpeed('% rounds', [ToText(mcf)^], rounds, 0, @timer, fOwner.MultiThread);
   end;
   for mcf := mcfMd5Crypt to high(mcf) do
   begin
     timer.Start; // output password hash with default values
-    ModularCryptHash(mcf, 'password');
+    u := ModularCryptHash(mcf, 'password');
     NotifyProgress([TrimLeftLowerCaseShort(ToText(mcf)), '=', timer.Stop]);
+    Check(ModularCryptIdentify(u, @nfo) = mcf);
+    Check(nfo <> '');
+    Check(StartWithExact(u, nfo));
+    Check(ModularCryptIdentify(nfo) = mcf);
+    //ConsoleWrite([CRLF,'ModularCryptHash(''',nfo,''',''password'')=''',u,''');']);
   end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
