@@ -1063,7 +1063,7 @@ type
     /// set the PasswordHashHexa field using a "Modular Crypt" hash
     // - with its default parameters, and a random salt
     procedure SetPassword(const aPasswordPlain: RawUtf8;
-      aModularCrypt: TModularCryptFormat);
+      aModularCrypt: TModularCryptFormat); overload;
     /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
     // - will use the current LogonName as part of the digest
     // - could be needed if you want your user to authenticate from a Web client
