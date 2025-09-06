@@ -4160,7 +4160,7 @@ begin
       #0:
         break;
       '.', '/', '0'..'9', 'A'..'Z', 'a'..'z':
-        inc(p); // valid chars
+        inc(p); // valid HASH64_CHARS
     else
       exit;
     end;
@@ -4277,7 +4277,7 @@ begin
     Final(alt);
   end;
   p := b64append(result, siz, aHashPos);
-  case siz of // shuffled Base64uriEncode()
+  case siz of // shuffled Base64uriEncode() with custom HASH64_CHARS
     SizeOf(HASH64_128):
       b64enclast(b64enc(p, @alt.b, @HASH64_128, 5), 0, alt.b[11], siz);
     SizeOf(HASH64_256):
@@ -4695,7 +4695,7 @@ begin
           result := mcfInvalid;
           exit;
         end;
-      end; // for mcfBCrypt: '$2a$rounds$saltchecksum' - here = cost (4..31)
+      end; // for mcfBCrypt: '$2a$rounds$saltchecksum' - rounds = cost (4..31)
     mcfBCryptSha256:
       begin // '$bcrypt-sha256$v=2,t=2b,r=12$n79VH.0Q2TMWmt3Oqt9uk...'
         result := mcfInvalid;
@@ -4721,27 +4721,27 @@ begin
         if not IdemPChar(P, 'LN=') then
           exit;
         inc(P, 3);
-        sLogN := GetNextItemCardinal(P, ','); // logN in [1..31]
+        sLogN := GetNextItemCardinal(P, ','); // logN in [1..31] - default 16
         if (sLogN = 0) or
            (sLogN > 31) or
            not IdemPChar(P, 'R=') then
           exit;
         inc(P, 2);
-        sR := GetNextItemCardinal(P, ',');     // R in [1..16384]
+        sR := GetNextItemCardinal(P, ',');     // R in [1..16384] - default 8
         if (sR = 0) or
            (sR > 16384) or
            not IdemPChar(P, 'P=') then
           exit;
         inc(P, 2);
-        sP := GetNextItemCardinal(P, '$');     // P in [1..8191]
+        sP := GetNextItemCardinal(P, '$');     // P in [1..8191] - default 2
         if (sP = 0) or
            (sP > 8192) then
           exit;
         // rounds := <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
         rounds := SCryptRounds(sLogN, sR, sP);
         GetNextItem(P, '$', salt);
-        if (salt = '') or
-           (P = nil) then
+        if not Base64uriValid(pointer(salt), @ConvertBase64ToBin) or
+           not Base64uriValid(P, @ConvertBase64ToBin) then
           exit;
         result := mcfSCrypt;
         exit; // b64valid() is not the $scrypt$ charset but standard base64
@@ -4752,12 +4752,10 @@ begin
       exit;
     end;
   end;
-  if result = mcfBCrypt then
+  if result = mcfBCrypt then // mcfBCrypt: '$2a$rounds$saltchecksum'
   begin
     FastSetString(salt, P, 22); // fixed 22 chars salt
-    inc(P, 22);
-    if StrLen(P) <> 31 then     // fixed 31 chars checksum
-      P := nil;
+    inc(P, 22);                 // fixed 31 chars checksum (may be > with OPRF)
   end
   else
     GetNextItem(P, '$', salt);
