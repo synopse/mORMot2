@@ -1102,7 +1102,14 @@ const
 // recommendations for password hashing (100-250 ms) - SCrypt consuming 64MB of
 // RAM and BCrypt always 4KB
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
-  rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8;
+  rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8; overload;
+
+/// compute the "Modular Crypt" hash of a given password from expected format
+// - the format is the value returned by info^ in ModularCryptIdentify(), e.g.
+// !ModularCryptHash('$1$gV5s/FALJ/0x8nyo$', 'password') = '$1$gV5s/FALJ/0x8nyo$6yO.DIuu/ZF/eJaK5oHu90'
+// - the format can e.g. be send back to the client to make the proper modular
+// crypt hashing on its side, and then the hash (or nonced proof) to the server
+function ModularCryptHash(const format, password: RawUtf8): RawUtf8; overload;
 
 /// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
@@ -4816,6 +4823,20 @@ begin
   else
     result := '';
   end;
+end;
+
+function ModularCryptHash(const format, password: RawUtf8): RawUtf8;
+var
+  mcf: TModularCryptFormat;
+  P: PUtf8char;
+  rounds: cardinal;
+  salt: RawUtf8;
+begin
+  FastAssignNew(result);
+  P := pointer(format);
+  mcf := ModularCryptParse(P, rounds, salt);
+  if mcf <> mcfUnknown then
+    result := ModularCryptHash(mcf, password, rounds, 0, salt);
 end;
 
 function ModularCryptVerify(const password, hash: RawUtf8;
