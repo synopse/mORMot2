@@ -1092,8 +1092,12 @@ type
     // - store the SHA-256 32 bytes as 64 hexa chars
     // - as a safer alternative, consider storing ModularCryptHash() hashes
     // from mormot.crypt.secure e.g. via the SetPassword() overload
+    // - maximum size was 64 - but has been upgraded to 192 for DIGEST-HA0
+    // with daSHA512 and the new "Modular" hashes: SHA512-Crypt and SCrypt length
+    // is e.g. 122 chars, but safe BCrypt is 60 chars so you could still use it
+    // if you can't easily upgrade the database)
     property PasswordHashHexa: RawUtf8
-      index 64 read fPasswordHashHexa write fPasswordHashHexa;
+      index 192 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
     // - access rights are managed by group
     // - in TAuthSession.User instance, GroupRights property will contain a
