@@ -822,6 +822,16 @@ const
   SIGNER_SHA3 = [saSha3224 .. saSha3S256];
   SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
   SIGNER_DEFAULT_ALGO = saSha3S128;
+var
+  /// default number of rounds for PBKDF2 "Modular Crypt" functions
+  // - numbers adjusted on 2025, and align with OWASP Password Storage Cheat
+  // Sheet, NIST SP 800-63B and RFC 8018, and are higher than "$pbkdf2" passlib
+  // - typical values on my Core i5-13500 PC with SHA-NI are Pbkdf2Sha1=68.28ms
+  // Pbkdf2Sha256=35.89ms Pbkdf2Sha512=110.55ms and Pbkdf2Sha3=112.58ms
+  // - made as a global variable, since you can adjust those values for your
+  // own purpose, as they are part of the hash text itself
+  MCF_ROUNDS: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha3] of cardinal = (
+    600000, 310000, 210000, 200000);
 
 type
   /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
@@ -1095,12 +1105,12 @@ const
 // - for mcfBCrypt, rounds is the 2^Cost value, so should be in 4..31 range
 // - for mcfSCrypt, rounds is <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
 // - with default rounds=0 timings on a Core i5-13500 with SHA-NI are Md5Crypt=77us
-// Sha256Crypt=38.13ms Sha512Crypt=97.29ms Pbkdf2Sha1=14.71ms Pbkdf2Sha256=3.35ms
-// Pbkdf2Sha512=12.87ms Pbkdf2Sha3=11.20ms BCrypt=169.59ms BCryptSha256=170.85ms
+// Sha256Crypt=35.91ms Sha512Crypt=94.18ms Pbkdf2Sha1=68.28ms Pbkdf2Sha256=35.89ms
+// Pbkdf2Sha512=110.55ms Pbkdf2Sha3=112.58ms BCrypt=169.59ms BCryptSha256=170.85ms
 // and SCrypt=143.66ms - consider mcfSha256Crypt for fast and safe hashing, and
 // mcfBCrypt/mcfSCrypt for proven password storage, and align with OWASP/NIST
 // recommendations for password hashing (100-250 ms) - SCrypt consuming 64MB of
-// RAM and BCrypt always 4KB
+// RAM and BCrypt always 4KB - see also MCF_ROUNDS[] global variable
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
   rounds: cardinal = 0; saltsize: cardinal = 0; const salt: RawUtf8 = ''): RawUtf8; overload;
 
@@ -5198,8 +5208,6 @@ end;
 const
   MCF_SIGN: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha3] of TSignAlgo = (
     saSHA1, saSHA256, saSHA512, saSha3512);
-  MCF_ROUNDS: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha3] of cardinal = (
-    131000, 29000, 25000, 20000);
   HASH64_ENC: TChar64 = // the current encoding used by "$pbkdf2" passlib
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./';
 var
