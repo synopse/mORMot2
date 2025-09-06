@@ -92,14 +92,6 @@ type
       const interfaceName: RawUtf8);
     /// to be called before Open() for proper handshake process
     procedure SetTransmit(const Transmit: ITunnelTransmit);
-    /// this is the main method to start tunneling to the Transmit interface
-    // - Session, TransmitOptions and AppSecret should match on both sides
-    // - if Address has a port, will connect a client socket to this address:port
-    // - if Address has no port, will bound its address as an ephemeral port,
-    // which is returned as result for proper client connection
-    function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
-      const InfoNameValue: array of const): TNetPort;
     /// the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// the local port used for the tunnel local process
@@ -109,7 +101,7 @@ type
     /// check if the background processing thread is using encrypted frames
     function Encrypted: boolean;
   end;
-  PTunnelLocal = ^ITunnelLocal;
+  PITunnelLocal = ^ITunnelLocal;
 
   TTunnelLocal = class;
 
@@ -211,7 +203,15 @@ type
     // - if no Context value is supplied, will compute an ephemeral key pair
     constructor Create(Logger: TSynLogClass = nil;
       SpecificKey: PEccKeyPair = nil); reintroduce;
-    /// finalize the server
+    /// main method to initialize tunnelling process
+    // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
+    // - if Address has a port, will connect a socket to this address:port
+    // - if Address has no port, will bound its address an an ephemeral port,
+    // which is returned as result for proper client connection
+    function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
+      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
+      const InfoNameValue: array of const): TNetPort;
+    /// finalize this instance, and its local TCP server
     destructor Destroy; override;
     /// called e.g. by CallbackReleased() or by Destroy
     procedure ClosePort;
@@ -222,14 +222,6 @@ type
     function TunnelInfo: variant;
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
-    /// ITunnelLocal method: initialize tunnelling process
-    // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
-    // - if Address has a port, will connect a socket to this address:port
-    // - if Address has no port, will bound its address an an ephemeral port,
-    // which is returned as result for proper client connection
-    function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
-      const InfoNameValue: array of const): TNetPort;
     /// ITunnelLocal method: return the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// ITunnelLocal method: return the local port
@@ -279,14 +271,14 @@ type
       read fSent;
   end;
 
-const
-  toEncrypted = [toEcdhe, toEncrypt];
-
 function ToText(opt: TTunnelOptions): ShortString; overload;
 
 /// extract the 64-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
   {$ifdef HASINLINE} inline; {$endif}
+
+const
+  toEncrypted = [toEcdhe, toEncrypt];
 
 
 { ******************** Local NAT Client/Server to Tunnel TCP Streams }
@@ -917,7 +909,7 @@ end;
 
 { TTunnelList }
 
-function FindIndexLocked(p: PTunnelLocal; s: TTunnelSession): PtrInt;
+function FindIndexLocked(p: PITunnelLocal; s: TTunnelSession): PtrInt;
 var
   n: PtrInt;
 begin
