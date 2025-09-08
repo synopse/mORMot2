@@ -2086,6 +2086,7 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
 // op/result are cardinal for OpenSSL 1.1, but QWord since OpenSSL 3.0 :(
 function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
 function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
@@ -2578,6 +2579,9 @@ procedure SSL_get_error_short(get_error: integer; var dest: shortstring);
 function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
   dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
 
+// allocate a new TLS_server_method with a genuine session id
+function SSL_CTX_new_server(const id: RawUtf8): PSSL_CTX;
+
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_CTX_add_extra_chain_cert(ctx: PSSL_CTX; cert: PX509): cardinal;
@@ -2928,6 +2932,7 @@ type
     SSL_CTX_set_alpn_protos: function(ctx: PSSL_CTX; protos: PByte; protos_len: cardinal): integer; cdecl;
     SSL_CTX_ctrl: function(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
     SSL_CTX_set_options: pointer; // variable signature between 1.1 vs 3.0 :(
+    SSL_CTX_set_session_id_context: function(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
     SSL_CTX_clear_options: pointer;
     SSL_CTX_callback_ctrl: function(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
     SSL_new: function(ctx: PSSL_CTX): PSSL; cdecl;
@@ -2971,7 +2976,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..56] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..57] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2989,6 +2994,7 @@ const
     'SSL_CTX_set_alpn_protos',
     'SSL_CTX_ctrl',
     'SSL_CTX_set_options',
+    'SSL_CTX_set_session_id_context',
     'SSL_CTX_clear_options',
     'SSL_CTX_callback_ctrl',
     'SSL_new',
@@ -3136,6 +3142,11 @@ begin
     result := TSSL_CTX_clear_options32(libssl.SSL_CTX_clear_options)(ctx, op)
   else
     result := TSSL_CTX_clear_options64(libssl.SSL_CTX_clear_options)(ctx, op);
+end;
+
+function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer;
+begin
+  result := libssl.SSL_CTX_set_session_id_context(ctx, sid_ctx, sid_ctx_len);
 end;
 
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer;
@@ -6172,6 +6183,9 @@ function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): 
 
 function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_options';
+
+function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_session_id_context';
 
 function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_clear_options';
@@ -10309,6 +10323,21 @@ end;
 function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8;
 begin
   result := Digest(md, pointer(buf), length(buf));
+end;
+
+function SSL_CTX_new_server(const id: RawUtf8): PSSL_CTX;
+var
+  h: THash128;
+begin
+  result := SSL_CTX_new(TLS_server_method);
+  // server process seems to expect a genuine session ID otherwise some clients
+  // may trigger https://github.com/synopse/mORMot2/issues/377
+  //   OpenSSL 1010104F error 1 [SSL_ERROR_SSL (error:140D9115:SSL
+  //     routines:ssl_get_prev_session:session id context uninitialized)]
+  // notes: 1. session resumption is a weak feature, even removed in TLS 1.3
+  //        2. Indy seems to set here 1 for all connections, we are not worse ;)
+  FillZero(h);
+  DefaultHasher128(@h, pointer(id), length(id)); // maybe AesNiHash128()
 end;
 
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
