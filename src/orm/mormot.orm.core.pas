@@ -1758,6 +1758,9 @@ type
     procedure ManyFieldsCreate(many: POrmPropInfoRttiMany);
     // called from Create* - could be overriden e.g. to setup internal fields
     procedure InternalCreate; virtual;
+    // faster alternative to TOrm.Create wrapping NewInstance + InternalCreate
+    class function InternalNew: pointer;
+      {$ifdef HASINLINE} inline; {$endif}
     /// register RttiJsonRead/RttiJsonWrite callbacks for custom serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// 'fake' nested TOrm properties would be serialized as integer
@@ -2003,7 +2006,7 @@ type
 
     /// this constructor initializes a plain ORM record
     // - auto-instanciate any TOrmMany instance defined in published properties
-    // - you should NOT override this method if you want to use some internal
+    // - you should NOT OVERRIDE THIS METHOD if you want to use some internal
     // objects (e.g. TStringList or TCollection as published property), but
     // override the InternalCreate protected method instead - mainly for
     // performance reasons since calling an inherited constructor is much slower
@@ -5457,7 +5460,7 @@ begin
     if RecordType = nil then
       exit;
   end;
-  result := RecordType.Create;
+  result := RecordType.InternalNew; // faster TOrm.Create
   if fOwnedRecords = nil then
     fOwnedRecords := TSynObjectList.Create({ownobj=}true);
   fOwnedRecords.Add(result);
@@ -5497,7 +5500,7 @@ begin // inlined FillPrepare/TOrmFill process
   o := 0;
   repeat
     inc(o, fFieldCount); // next row (first is field names)
-    P^ := RecordType.Create;
+    P^ := RecordType.InternalNew; // inlined TOrm.Create
     if fid >= 0 then
       P^.IDValue := GetInt64(GetResults(o + fid));
     map := @maps;
@@ -6573,6 +6576,14 @@ begin
   InternalCreate; // may be overriden
 end;
 
+class function TOrm.InternalNew: pointer; // inlined TOrm.Create
+begin
+  GetMem(result, InstanceSize); // InstanceSize is inlined
+  FillCharFast(pointer(result)^, InstanceSize, 0);
+  PPointer(result)^ := pointer(self); // store VMT
+  TOrm(result).InternalCreate;
+end;
+
 destructor TOrm.Destroy;
 var
   i: PtrInt;
@@ -6610,13 +6621,13 @@ end;
 
 function TOrm.CreateCopy: TOrm;
 begin
-  result := POrmClass(self)^.Create;
+  result := POrmClass(self)^.InternalNew; // inlined TOrm.Create
   result.FillFrom(self); // ID + CopiableFields[]
 end;
 
 function TOrm.CreateCopy(const CustomFields: TFieldBits): TOrm;
 begin
-  result := POrmClass(self)^.Create;
+  result := POrmClass(self)^.InternalNew; // inlined TOrm.Create
   result.FillFrom(self, CustomFields); // ID + fields
 end;
 
@@ -7857,7 +7868,7 @@ begin
     fFill.AddMapSimpleFields(self, SimpleFields, n);
     for i := 1 to length(JoinedFieldsTable) - 1 do
     begin
-      instance := JoinedFieldsTable[i].Create;
+      instance := JoinedFieldsTable[i].InternalNew; // faster TOrm.Create
       JoinedFields[i - 1].SetInstance(self, instance);
       fFill.AddMapSimpleFields(instance,
         JoinedFieldsTable[i].OrmProps.SimpleFields, n);
@@ -8032,7 +8043,7 @@ begin
         EOrmException.RaiseUtf8('%.EnginePrepareMany %:% mismatch',
           [self, Props.ManyFields[f].Name, Props.ManyFields[f].ObjectClass]);
       ObjectsClass[f * 2 + 2] := TOrmClass(fRecordManyDestProp.ObjectClass);
-      D := TOrmClass(fRecordManyDestProp.ObjectClass).Create;
+      D := TOrmClass(fRecordManyDestProp.ObjectClass).InternalNew; // TOrm.Create
       // let TOrmMany.Source and Dest point to real instances
       M.fSourceID^ := PtrInt(self);
       M.fDestID^ := PtrInt(D);
@@ -8173,6 +8184,11 @@ begin
   TOrm(Dest).FillFrom(TOrm(Source)); // we have a fast method for this
 end;
 
+function OrmNewInstance(Rtti: TRttiCustom): pointer;
+begin
+  result := TOrmClass(Rtti.ValueClass).InternalNew; // = TOrm.Create
+end;
+
 class procedure TOrm.RttiCustomSetParser(Rtti: TRttiCustom);
 var
   read: TOnClassJsonRead;
@@ -8183,6 +8199,7 @@ begin
   Rtti.JsonReader := TMethod(read);
   write := RttiJsonWrite;
   Rtti.JsonWriter := TMethod(write);
+  Rtti.SetClassNewInstance(@OrmNewInstance);
   Rtti.CopyObject := @OrmCopyObject;
 end;
 
@@ -8906,7 +8923,7 @@ begin
     result := nil
   else
   begin
-    result := TOrmClass(Orm.fRecordManyDestProp.ObjectClass).Create;
+    result := TOrmClass(Orm.fRecordManyDestProp.ObjectClass).InternalNew;
     t.OwnerMustFree := true;
     result.FillPrepare(t, ctnTrimmed);
   end;
@@ -10221,7 +10238,7 @@ begin
   if aClass = nil then
     result := nil
   else
-    result := aClass.Create;
+    result := aClass.InternalNew; // faster TOrm.Create
 end;
 
 function TOrmModel.GetSqlCreate(aTableIndex: integer): RawUtf8;
@@ -11155,7 +11172,7 @@ begin
      not fCache[aTableIndex].CacheEnable then
     exit;
   tmp.Init(aJson);
-  new := aTable.Create;
+  new := aTable.InternalNew;
   try
     new.FillFrom(tmp.buf, @fields);
     NotifyUpdate(aTableIndex, new, fields);
@@ -11232,7 +11249,7 @@ begin
      (cardinal(aTableIndex) >= cardinal(Length(fCache))) or
      not fCache[aTableIndex].CacheEnable then
     exit;
-  tmp := aTable.Create;
+  tmp := aTable.InternalNew;
   try
     if Retrieve(aID, tmp, aTableIndex) = ocrRetrievedFromCache then
       result := tmp.GetJsonValues({expand=}true, {withid=}false,
