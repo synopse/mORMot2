@@ -2568,10 +2568,6 @@ function CurrentNonce(Ctxt: TRestServerUriContext;
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
   Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64 = 0); overload;
 
-/// returns a safe HMAC-SHA-256 nonce as binary, changing every 4.3 minutes
-function CurrentNonce256(Previous: boolean): THash256;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// validate a HMAC-SHA-256 binary nonce against current or previous nonce
 function IsCurrentNonce(Ctxt: TRestServerUriContext;
   const Nonce256: THash256): boolean; overload;
@@ -5255,19 +5251,6 @@ var // cache HMAC-SHA-256 ServerProcessKdf() of the last two 4.3 minutes ticks
   ServerNonceSafe: TLightLock;
   ServerNonce: array[{previous=}boolean] of THash512Rec; // c[0]=tix32 h=hash
 
-procedure LockedCurrentServerNonceCompute(ticks: cardinal; var h: THash256Rec);
-begin
-  if PInteger(@ServerProcessKdf)^ = 0 then
-  begin
-    // first time used: initialize the HMAC-SHA-256 secret for this process
-    ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
-    Random128(@h.Lo); // 128-bit security is enough
-    ServerProcessKdf.Update(h.Lo);
-  end;
-  // cache the new nonce for this timestamp (called at most every 4.3 minutes)
-  ServerProcessKdf.Compute(@ticks, 4, h.b);
-end;
-
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
   Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64);
 var
@@ -5277,23 +5260,23 @@ var
 begin
   if Tix64 = 0 then
     Tix64 := Ctxt.TickCount64; // works even if Ctxt=nil
-  tix32 := Tix64 shr 18;       // 4.3 minutes resolution
+  tix32 := (Tix64 shr 18) + 1; // 4.3 minutes resolution +1 after reboot
   if Previous then
     dec(tix32);
   n := @ServerNonce[Previous];
   ServerNonceSafe.Lock;
-  if PInteger(@ServerProcessKdf)^ = 0 then
-  begin
-    // first time used: initialize the HMAC-SHA-256 secret for this process
-    ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
-    Random128(@h.Lo); // 128-bit security is enough
-    ServerProcessKdf.Update(h.Lo);
-    n^.c[0] := not tix32; // force cache (tix32 may be 0 at startup)
-  end;
   if tix32 <> n^.c[0] then
   begin
     n^.c[0] := tix32;
-    LockedCurrentServerNonceCompute(tix32, n^.h);
+    if PInteger(@ServerProcessKdf)^ = 0 then
+    begin
+      // first time used: initialize the HMAC-SHA-256 secret for this process
+      ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
+      Random128(@h.Lo); // 128-bit security is enough
+      ServerProcessKdf.Update(h.Lo);
+    end;
+    // cache the new nonce for this timestamp (called at most every 4.3 minutes)
+    ServerProcessKdf.Compute(@tix32, 4, h.b);
   end;
   h := n^.h; // local copy
   ServerNonceSafe.UnLock;
@@ -5311,11 +5294,6 @@ end;
 function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
 begin
   CurrentNonce(Ctxt, Previous, @result, nil);
-end;
-
-function CurrentNonce256(Previous: boolean): THash256;
-begin
-  CurrentNonce(nil, Previous, nil, @result, GetTickCount64);
 end;
 
 function IsCurrentNonce(Ctxt: TRestServerUriContext;
