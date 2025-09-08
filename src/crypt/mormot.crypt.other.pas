@@ -429,8 +429,8 @@ const
 // - PreSha256 would HMAC-SHA-256 the password (returning $bcrypt-sha256$) to
 // circumvent the initial password length limitation of 72 chars
 // - assigned to mormot.crypt.core.pas BCrypt() redirection by this unit
-// - returns e.g. '$2b$<cost>$<salt><checksum>' or
-// '$bcrypt-sha256$v=2,t=2b,r=<cost>$<salt'$
+// - returns e.g. '$2b$<cost>$<salt><checksum>' for the regular BSD format or
+// '$bcrypt-sha256$v=2,t=2b,r=<cost>$<salt'$ for the passlib extended format
 function BCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
  Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
 

@@ -832,8 +832,8 @@ var
   // Pbkdf2Sha256=35.89ms Pbkdf2Sha512=110.55ms and Pbkdf2Sha3=112.58ms
   // - made as a global variable, since you can adjust those values for your
   // own purpose, as they are part of the hash text itself
-  MCF_ROUNDS: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha3] of cardinal = (
-    600000, 310000, 210000, 200000);
+  MCF_ROUNDS: array[mcfMd5Crypt .. mcfPbkdf2Sha3] of cardinal = (
+    1000, 535000, 535000, 600000, 310000, 210000, 200000);
 
 type
   /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
@@ -1143,6 +1143,13 @@ function ModularCryptVerify(const password, hash: RawUtf8;
 // - for mcfSCrypt, rounds is <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
 function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
   var salt: RawUtf8): TModularCryptFormat;
+
+/// return a "Modular Crypt" text format with fake salt computed from an ID
+// - without {checksum} - as returned by ModularCryptIdentify() info^ parameter
+// - used e.g. by TRestServer.ReturnNonce() with an unknown UserName, to avoid
+// the client being able to guess by fuzzing that this UserName is unknown
+function ModularCryptFakeInfo(const id: RawUtf8;
+  format: TModularCryptFormat = mcfUnknown): RawUtf8;
 
 /// compute the fake "rounds" value for ModularCryptHash(mcfSCrypt)
 // - i.e. <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
@@ -4204,7 +4211,7 @@ begin
   result := '';
   if aAlgo <> hfMD5 then // fixed to 1000 rounds (sooo weak!) for MD5-CRYPT
     if aRounds = 0 then
-      aRounds := 535000 // default for hfSha256/hfSha512
+      aRounds := MCF_ROUNDS[mcfSha256Crypt] // same default for mcfSha512Crypt
     else
       aRounds := MaxPtrUInt(1000, aRounds); // >= 1000
   case aAlgo of
@@ -4897,6 +4904,37 @@ begin
   if (pos = 0) or
      (mormot.core.base.StrComp(checksum, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
     result := mcfInvalid;
+end;
+
+function ModularCryptFakeInfo(const id: RawUtf8; format: TModularCryptFormat): RawUtf8;
+var
+  h: THash256Rec; // always return the same fake content for the same id
+  enc: PChar64;
+  salt: TShort23;
+const
+  RANGE = cardinal(high(TModularCryptFormat)) - cardinal(mcfMd5Crypt); // = 9
+begin
+  HmacSha256(@SystemEntropy.Startup, pointer(id), 16, length(id), h.b);
+  if format <= mcfMd5Crypt then // compute consistent format if none supplied
+    format := TModularCryptFormat(h.b[0] mod RANGE + byte(succ(mcfMd5Crypt)));
+  Join(['$', MCF_IDENT[format], '$'], result);
+  enc := @HASH64_CHARS;
+  if format = mcfSCrypt then
+    enc := @ConvertToBase64;
+  salt[0] := #22;  // return consistent salt between calls for the same id
+  Base64uriEncode(@salt[1], @h.Hi, 16, enc);
+  case format of   // as if they were created with our default parameters
+    mcfSha256Crypt .. mcfSha512Crypt:
+      Append(result, ['rounds=', MCF_ROUNDS[format], '$', salt, '$']);
+    mcfPbkdf2Sha1 .. mcfPbkdf2Sha3:
+     Append(result, [MCF_ROUNDS[format], '$', salt, '$']);
+    mcfBCrypt:
+      Append(result, ['12$', salt]);
+    mcfBCryptSha256:
+      Append(result, ['v=2,t=2b,r=12$', salt, '$']);
+    mcfSCrypt:
+      Append(result, ['ln=16,r=8,p=2$', salt, '$']);
+  end;
 end;
 
 function SCryptRounds(LogN, BlockSize, Parallel: cardinal): cardinal;
