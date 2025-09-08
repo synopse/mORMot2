@@ -1593,8 +1593,9 @@ type
   // - rsoSessionInConnectionOpaque uses LowLevelConnectionOpaque^.ValueInternal
   // to store the current TAuthSession - may be used with a lot of sessions
   // - rsoCookieSecure will add the "Secure" directive in the cookie content
-  // - rsoNoUnknownUserResponse returns afInvalidPassword instead of afUnknownUser
-  // to avoid client fuzzing about valid User names
+  // - rsoNoUnknownUserResponse returns "Invalid password" instead of "Unknown
+  // User" message to avoid client fuzzing about valid User names
+  // - rsoSharedNonce won't generate a server nonce specific to each connection
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1616,7 +1617,8 @@ type
     rsoValidateUtf8Input,
     rsoSessionInConnectionOpaque,
     rsoCookieSecure,
-    rsoNoUnknownUserResponse);
+    rsoNoUnknownUserResponse,
+    rsoSharedNonce);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -5249,78 +5251,60 @@ begin
 end;
 
 var // cache HMAC-SHA-256 ServerProcessKdf() of the last two 4.3 minutes ticks
-  ServerNonceCache: array[{previous=}boolean] of record
-    safe: TLightLock;
-    tix: cardinal;
-    res: RawUtf8;
-    hash: THash256;
-  end;
+  ServerNonceSafe: TLightLock;
+  ServerNonce: array[{previous=}boolean] of THash512Rec; // c[0]=tix32 h=hash
 
-procedure CurrentServerNonceCompute(ticks: cardinal; previous: boolean;
-  nonce: PRawUtf8; nonce256: PHash256);
-var
-  hex: RawUtf8;
-  tmp: THash256;
+procedure LockedCurrentServerNonceCompute(ticks: cardinal; var h: THash256Rec);
 begin
   if PInteger(@ServerProcessKdf)^ = 0 then
   begin
     // first time used: initialize the HMAC-SHA-256 secret for this process
-    TAesPrng.Main.FillRandom(tmp); // use strong CSPRNG seed
-    ServerNonceCache[false].safe.Lock;
-    if PInteger(@ServerProcessKdf)^ = 0 then // thread-safe initialization
-    begin
-      ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
-      ServerProcessKdf.Update(tmp);
-    end;
-    ServerNonceCache[false].safe.UnLock;
-    if PInteger(@ServerProcessKdf)^ = 0 then // paranoid
-      ESecurityException.RaiseU('CurrentServerNonceCompute: hmac?');
+    ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
+    Random128(@h.Lo); // 128-bit security is enough
+    ServerProcessKdf.Update(h.Lo);
   end;
   // cache the new nonce for this timestamp (called at most every 4.3 minutes)
-  ServerProcessKdf.Compute(@ticks, 4, tmp); // thread-safe
-  BinToHexLower(@tmp, SizeOf(tmp), hex);
-  if nonce <> nil then
-    nonce^ := hex;
-  if nonce256 <> nil then
-    nonce256^ := tmp;
-  with ServerNonceCache[previous] do
-  begin
-    safe.Lock; // keep this global lock as short as possible
-    tix := ticks;
-    hash := tmp;
-    res := hex;
-    safe.UnLock;
-  end;
+  ServerProcessKdf.Compute(@ticks, 4, h.b);
 end;
 
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
   Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64);
 var
   tix32: cardinal;
+  n: PHash512Rec;
+  h: THash256Rec;
 begin
   if Tix64 = 0 then
     Tix64 := Ctxt.TickCount64; // works even if Ctxt=nil
-  tix32 := Tix64 shr 18; // 4.3 minutes resolution
+  tix32 := Tix64 shr 18;       // 4.3 minutes resolution
   if Previous then
     dec(tix32);
-  with ServerNonceCache[Previous] do
+  n := @ServerNonce[Previous];
+  ServerNonceSafe.Lock;
+  if PInteger(@ServerProcessKdf)^ = 0 then
   begin
-    safe.Lock;
-    if (tix32 = tix) and
-       (res <> '') then  // check for res='' since tix32 may be 0 at startup
-    begin
-      // fast retrieval from cache as binary and/or hexadecimal
-      if Nonce256 <> nil then
-        Nonce256^ := hash;
-      if Nonce <> nil then
-        Nonce^ := res;
-      safe.UnLock;
-      exit;
-    end;
-    safe.UnLock;
+    // first time used: initialize the HMAC-SHA-256 secret for this process
+    ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
+    Random128(@h.Lo); // 128-bit security is enough
+    ServerProcessKdf.Update(h.Lo);
+    n^.c[0] := not tix32; // force cache (tix32 may be 0 at startup)
   end;
-  // we need to (re)compute this value
-  CurrentServerNonceCompute(tix32, Previous, Nonce, Nonce256);
+  if tix32 <> n^.c[0] then
+  begin
+    n^.c[0] := tix32;
+    LockedCurrentServerNonceCompute(tix32, n^.h);
+  end;
+  h := n^.h; // local copy
+  ServerNonceSafe.UnLock;
+  if Assigned(Ctxt) and
+     Assigned(Ctxt.Server) and
+     not (rsoSharedNonce in Ctxt.Server.Options) then
+    DefaultHasher128(@h.Lo, @Ctxt.Call^.LowLevelConnectionID, // maybe AesNiHash
+      SizeOf(TRestConnectionID)); // make nonce unique per connection/client
+  if Nonce256 <> nil then
+    Nonce256^ := h.b;
+  if Nonce <> nil then
+    BinToHexLower(@h, SizeOf(h), Nonce^);
 end;
 
 function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
