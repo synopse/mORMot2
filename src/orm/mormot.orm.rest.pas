@@ -731,10 +731,11 @@ begin
     ForceID := false;
   props := Value.Orm;
   if CustomFields <> nil then
-    if DoNotAutoComputeFields then
-      fields := CustomFields^ * props.CopiableFieldsBits
-    else
-      fields := CustomFields^ * props.CopiableFieldsBits + props.ComputeBeforeAddFieldsBits
+  begin
+    fields := CustomFields^ * props.CopiableFieldsBits; // refine from ALL_FIELDS
+    if not DoNotAutoComputeFields then
+      fields := fields + props.ComputeBeforeAddFieldsBits;
+  end
   else if WithBlobs then
     fields := props.CopiableFieldsBits
   else

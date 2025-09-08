@@ -2216,18 +2216,18 @@ begin
 end;
 
 function TServiceContainerServer.ClientFakeCallbackReplaceConnectionID(
-  aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
+  old, new: TRestConnectionID): integer;
 begin
   result := 0;
   if (fFakeCallbacks = nil) or
-     (aConnectionIDOld <= 0) or
-     (aConnectionIDNew <= 0) or
-     (aConnectionIDOld = aConnectionIDNew) then
+     (old <= 0) or
+     (new <= 0) or
+     (old = new) then
     exit;
   fFakeCallbacks.Safe.ReadOnlyLock;
   try
     result := FakeCallbackReplaceID(pointer(fFakeCallbacks.List),
-      fFakeCallbacks.Count, aConnectionIDOld, aConnectionIDNew);
+      fFakeCallbacks.Count, old, new);
   finally
     fFakeCallbacks.Safe.ReadOnlyUnLock;
   end;

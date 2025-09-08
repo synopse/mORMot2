@@ -5029,7 +5029,7 @@ begin
      (s.User.LogonName = aUserName) then
   begin
     Ctxt.fAuthSession := nil; // avoid GPF
-    if fServer.LockedSessionFind(sessid, ndx) = s then
+    if fServer.LockedSessionFind(sessid, ndx) = s then // fast O(log(n)) search
     begin
       fServer.WriteLockedSessionDelete(ndx, s, Ctxt);
       Ctxt.Success;
@@ -7267,7 +7267,7 @@ begin
     aSessionID := GetCurrentSessionUserID;
   fSessions.Safe.ReadOnlyLock;
   try
-    s := LockedSessionFind(aSessionID, ndx);
+    s := LockedSessionFind(aSessionID, ndx); // fast O(log(n)) search
     if (s = nil) or
        (s.User = nil) then
       exit;
