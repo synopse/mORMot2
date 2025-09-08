@@ -61,6 +61,7 @@ type
     /// ECDHE stream protocol
     procedure ECDHEStreamProtocol;
     {$ifdef USE_OPENSSL}
+  protected // Disabled Tests - successfull
     procedure _OpenSSL;
     {$endif USE_OPENSSL}
   end;

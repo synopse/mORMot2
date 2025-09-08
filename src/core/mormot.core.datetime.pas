@@ -1136,6 +1136,11 @@ type
 
 
 implementation
+{$ifdef ISDELPHI}
+{$ifdef POSIX}
+Uses Mormot.core.posix.delphi;
+{$endif POSIX}
+{$endif ISDELPHI}
 
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }

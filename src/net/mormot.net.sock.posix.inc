@@ -86,7 +86,7 @@ const
     {$ifdef SUNOS}
     MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
-    MSG_NOSIGNAL = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
+    MSG_NOSIGNAL =  sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
     {$endif SUNOS}
 
   {$endif OSBSDDARWIN}
@@ -105,7 +105,12 @@ const
     AF_INET6,
     AF_UNIX);
 
+
+{$ifdef FPC}
 {$packrecords C}
+{$else}
+  // Default should be ok
+{$endif FPC}
 
 type
   /// a socket is always cint = 32-bit integer sized on POSIX
@@ -442,12 +447,12 @@ begin
   // handle domain socket name
   if layer = nlUnix then
   begin
-    // socket file name is just copied to the address struct
-    with psockaddr_un(@Addr)^ do
-      if length(address) >= SizeOf(sun_path) then
-        // avoid buffer overflow or truncated socket name
-        result := nrFatalError
-      else
+    if length(address) >= SizeOf(psockaddr_un(@Addr)^.sun_path) then
+      // avoid buffer overflow or truncated socket name
+      result := nrFatalError
+    else
+      // socket file name is just copied to the address struct
+      with psockaddr_un(@Addr)^ do
       begin
         sun_family := AF_UNIX;
         MoveFast(pointer(address)^, sun_path, length(address) + 1); // +1 for #0

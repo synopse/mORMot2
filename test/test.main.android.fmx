@@ -1,0 +1,36 @@
+object Form1: TForm1
+  Left = 0
+  Top = 0
+  Caption = 'Form1'
+  ClientHeight = 547
+  ClientWidth = 640
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnShow = FormShow
+  DesignerMasterStyle = 3
+  object ButtonStart: TButton
+    Position.X = 216.000000000000000000
+    Position.Y = 8.000000000000000000
+    Size.Width = 161.000000000000000000
+    Size.Height = 44.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    Text = 'Start Tests'
+    TextSettings.Trimming = None
+    OnClick = ButtonStartClick
+  end
+  object Memo1: TMemo
+    Touch.InteractiveGestures = [Pan, LongTap, DoubleTap]
+    DataDetectorTypes = []
+    Anchors = [akLeft, akTop, akRight, akBottom]
+    Position.X = 8.000000000000000000
+    Position.Y = 60.000000000000000000
+    Size.Width = 624.000000000000000000
+    Size.Height = 479.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 2
+    Viewport.Width = 616.000000000000000000
+    Viewport.Height = 471.000000000000000000
+  end
+end

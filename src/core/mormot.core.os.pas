@@ -33,6 +33,28 @@ uses
   {$ifdef OSWINDOWS}
   Windows, // needed here e.g. for redefinition/redirection of standard types
   Messages,
+  {$ELSE}
+     {$ifdef ISDELPHI}
+     posix.dlfcn, // first posix units, some inline overwrites in mormot.core.posix.delphi for adapation of fpc conventions
+     posix.Utime,
+     posix.Errno,
+     Posix.SysMman,
+     Posix.StrOpts,
+     Posix.UniStd,
+     Posix.fcntl,
+     Posix.Stdio,
+     Posix.Time,
+     Posix.SysTime,
+     Posix.SysStat,
+     Posix.Dirent,
+     Posix.Sched,
+     POsix.SysTypes,
+     Posix.Signal,
+     Posix.SysUtsname,
+     System.DateUtils,
+     System.TimeSpan,
+     mormot.core.posix.delphi,
+     {$endif ISDELPHI}
   {$endif OSWINDOWS}
   classes,
   contnrs,
@@ -2056,6 +2078,10 @@ function FileSetTime(const FileName: TFileName;
 function ExpandFileName(const FileName: TFileName): TFileName;
 
 {$else}
+{$ifdef ISDELPHI}
+const
+  ENGLISH_LANGID = 'en-US';
+{$endif ISDELPHI}
 
 /// redefined from FPC RTL sysutils for consistency
 // - warning: this function replaces ALL SysUtils.FileCreate() overloads,
@@ -2093,7 +2119,11 @@ type
   // - ICU is loaded only when needed outside of mORMot needs
   TIcuLibrary = record
   private
+    {$if defined(ISDELPHI) and defined(POSIX)}
+    icu, icudata, icui18n: NativeUInt;
+    {$else}
     icu, icudata, icui18n: pointer;
+    {$ifend}
     fLoaded: boolean;
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
@@ -2368,7 +2398,21 @@ const
   {$endif OSLINUXX86}
   {$endif OSLINUXX64}
 
-{$undef HAS_OSPTHREADS}
+type
+  /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
+  TFileAge = TUnixTime;
+
+  /// system-specific structure holding a non-recursive mutex
+  TOSLightMutex = TRTLCriticalSection;
+
+{$ifdef ISDELPHI}
+  /// defined as in FPC RTL, to avoid dependency to Windows.pas unit
+  // - note that on POSIX, a THandle is a 32-bit integer, but library or
+  // resource handles are likely to map pointers, i.e. up to a 64-bit integer
+  TLibHandle = THandle;
+{$endif ISDELPHI}
+
+
 {$ifdef OSLINUX}
   {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
@@ -2452,6 +2496,13 @@ type
 {$ifndef OSLINUX} // try to stabilize MacOS/BSD pthreads API calls
   {$define NODIRECTTHREADMANAGER}
 {$endif OSLINUX}
+(*
+{$ifdef POSIX}
+  {$ifdef ISDELPHI}
+     {$define NODIRECTTHREADMANAGER}
+  {$endif ISDELPHI}
+{$endif POSIX}
+*)
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
 function GetCurrentThreadId: TThreadID; inline;
@@ -3687,7 +3738,7 @@ const HasConsole = true; // assume POSIX has always a console somewhere
 /// POSIX only: true if StdOut has the TTY flag and env has a known TERM
 // - equals false if the console does not support colors, e.g. piped to a file
 // or from the Lazarus debugger
-function StdOutIsTTY: boolean; inline;
+function StdOutIsTTY: boolean; {$ifndef ISDELPHI} inline; {$endif} // Delphi does not allow hidden unit vars in inline code
 {$endif OSWINDOWS}
 
 /// change the console text writing color

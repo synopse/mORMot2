@@ -88,3 +88,14 @@ _FOSSIL_
 
 backup/
 .idea/
+Debug
+/test/Win32
+/test/Win64
+/test/Android
+/opc
+/src/mormot2_uses_syncommons.inc
+/src/mormot2_uses_syncrypto.inc
+/src/mormot_uses_syncommons.inc
+/src/mormot_uses_syncrypto.inc
+/test/*.skincfg
+/static/mormot2static.7z

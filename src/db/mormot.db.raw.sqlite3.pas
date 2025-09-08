@@ -5580,8 +5580,11 @@ var
 
 
 implementation
-
-
+{$ifdef ISDELPHI}
+   {$ifdef ANDROID}
+    uses AndroidAPI.IOUtils;
+   {$endif}
+{$endif}
 { ************ Raw SQLite3 API Constants and Functions }
 
 function SqlVarToSQlite3Context(const Res: TSqlVar;
@@ -6221,7 +6224,15 @@ begin
   fLoader := TSynLibrary.Create;
   if LibraryName = SQLITE_LIBRARY_DEFAULT_NAME then
     // first search for the standard library in the executable folder
+    {$ifdef ANDROID}
+      {$ifdef ISDELPHI}
+        l1:= IncludeTrailingPathDelimiter(GetLibraryPath) + LibraryName;
+      {$else}
+      l1 := Executable.ProgramFilePath + LibraryName;
+      {$endif ISDELPHI}
+    {$else}
     l1 := Executable.ProgramFilePath + LibraryName;
+    {$endif ISANDROID}
   try
     // try to load the SQLite3 library, raising ESqlite3Exception if missing
     fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);

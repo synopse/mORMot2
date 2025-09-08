@@ -2622,7 +2622,7 @@ procedure ReadBarrier; {$ifndef CPUINTEL} inline; {$endif}
 {$endif ISDELPHI}
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
-{$ifdef CPUINTEL}
+{$if defined(CPUINTEL) or defined(ISDELPHI)}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$else}
 procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
@@ -3002,7 +3002,7 @@ procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
   {$ifndef CPUINTEL} inline; {$endif}
 
 {$ifdef ISDELPHI}
-
+{$ifdef CPUX86}
 /// return the position of the leftmost set bit in a 32-bit value
 // - returns 255 if c equals 0
 // - mimics the FPC intrinsic, via asm on Intel or optimized pure pascal
@@ -4668,6 +4668,10 @@ uses
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
   {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
+{$else}
+   {$ifndef MSWINDOWS}
+   Uses mormot.core.posix.delphi;
+   {$endif}
 {$endif FPC}
 
 
@@ -7135,6 +7139,8 @@ procedure TDynArrayRec.SetLength(len: TDALen);
 begin
   high := len - 1;
 end;
+
+{$endif FPC}
 
 procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlined
 var
@@ -11120,7 +11126,7 @@ begin
   if IsProcessorFeaturePresent(PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE) then
     include(CpuFeatures, ahcCRC32);
 end;
-
+{$endif}
 {$else}
 
 procedure TestCpuFeatures;

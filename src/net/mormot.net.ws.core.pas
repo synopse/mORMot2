@@ -42,7 +42,14 @@ uses
   mormot.crypt.jwt,
   mormot.crypt.secure, // IProtocol definition
   mormot.net.sock,
-  mormot.net.http;
+  mormot.net.http
+  {$ifndef FPC}
+  {$ifdef CPUARM}
+  , mormot.core.posix.delphi
+  {$endif CPUARM}
+  {$endif FPC}
+
+  ;
 
 
 { ******************** WebSockets Frames Definitions }

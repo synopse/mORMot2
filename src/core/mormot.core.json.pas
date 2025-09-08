@@ -1610,7 +1610,8 @@ type
     /// initialize this low-level JSON serialization context
     procedure Init(WR: TJsonWriter;
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} //inline;
+      {$endif}
     /// some basic function to append a shorstring JSON value according to Options
     procedure AddShort(PS: PShortString);
     /// some basic function to append an Int64 JSON value according to Options

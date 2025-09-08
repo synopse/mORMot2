@@ -1899,7 +1899,7 @@ function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
   Options: TFindFilesOptions): TFindFilesDynArray;
 var
   dir: TFileName;
-  names: TRawUtf8DynArray;
+  names: {$ifdef ISDELPHI} TFilenameDynArray {$else} TRawUtf8DynArray {$endif};
   n, r, i: PtrInt;
   d: PFindFiles;
   ts, tolocal: TUnixMSTime;
@@ -1952,9 +1952,22 @@ begin
     cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
     SetMatchs(Mask, {caseinsens=}false, m, ';');
   end;
+  {$ifdef DELPHIANDROID}
+  begin
+    var rawUTF8Result: TRawUtf8DynArray;
+    var i: integer;
+    rawUTF8Result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
+      ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options,
+      ffoIncludeFolder in Options);
+    SetLength(result, length(rawUTF8Result));
+    for i := 0 to length(result) - 1 do
+        result[i]:= rawUTF8Result[i];
+  end;
+  {$else}
   result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
     ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options,
     ffoIncludeFolder in Options);
+  {$endif}
   if result = nil then
     exit;
   if IgnoreFileName <> '' then
@@ -1982,7 +1995,7 @@ begin
   result := FindFilesDynArrayToFileNames(files);
 end;
 
-{$endif OSPOSIX}
+  {$endif OSPOSIX}
 
 function FileNames(const Path: array of const; const Mask: TFileName;
   Options: TFindFilesOptions): TFileNameDynArray;

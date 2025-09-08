@@ -1,4 +1,4 @@
-/// Framework Core Logging
+﻿/// Framework Core Logging
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.log;
@@ -33,7 +33,13 @@ uses
   mormot.core.json,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.datetime;
+  mormot.core.datetime
+  {$ifdef ISDELPHI}
+  {$ifdef POSIX}
+  , Mormot.core.posix.delphi
+  {$endif POSIX}
+  {$endif ISDELPHI}
+  ;
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -1089,11 +1095,11 @@ type
     // TInterfacedObject methods for fake per-thread RefCnt
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGuid; out obj): TIntQry;
-      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} {$ifdef ISDELPHI} stdcall {$else} cdecl {$endif}{$endif};
     function _AddRef: TIntCnt;
-      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} {$ifdef ISDELPHI} stdcall {$else} cdecl {$endif}{$endif};
     function _Release: TIntCnt;
-      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} {$ifdef ISDELPHI} stdcall {$else} cdecl {$endif}{$endif};
     // internal methods
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
@@ -3799,6 +3805,7 @@ end;
 {$else}
 function RetrieveMemoryManagerInfo: RawUtf8;
 begin
+  {$ifdef OSWINDOWS}
   // standard Delphi memory manager
   with GetHeapStatus do
     if TotalAddrSpace <> 0 then
@@ -3810,6 +3817,9 @@ begin
          KBNoSpace(FreeBig),        KBNoSpace(Unused),
          KBNoSpace(Overhead)], result)
     else
+  {$else OSWINDOWS}
+  // Todo: Get Heap Infos
+  {$endif OSWINDOWS}
       result := '';
 end;
 {$endif FPC}
@@ -5034,14 +5044,18 @@ begin
 end;
 
 {$ifdef ISDELPHI} // specific to Delphi: fast get the caller method name
+{$ifdef OSWINDOWS}
+   {$define USEWINDOWSBACKTRACE}
+   {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
+   {$ifdef CPU64}
+     {$define USERTLCAPTURESTACKBACKTRACE}
+   {$else}
+     {$define USEASMX86STACKBACKTRACE}
+   {$endif CPU64}
+{$endif OSWINDOWS}
+{$endif ISDELPHI}
 
-{$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-{$ifdef CPU64}
-  {$define USERTLCAPTURESTACKBACKTRACE}
-{$else}
-  {$define USEASMX86STACKBACKTRACE}
-{$endif CPU64}
-
+{$ifdef USEWINDOWSBACKTRACE} // Delphi on Windows Only
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
 var
   log: TSynLog;
@@ -5082,7 +5096,7 @@ begin
   EnterLocal(result, aInstance, aMethodName);
 end;
 
-{$endif ISDELPHI}
+{$endif USEWINDOWSBACKTRACE}
 
 class function TSynLog.Enter(TextFmt: PUtf8Char;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
@@ -6229,7 +6243,7 @@ end;
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
-{$ifdef CPU64}
+{$if defined(CPU64) or defined(CPUARM)}
 
   procedure AddStackManual(Stack: PPtrUInt);
   begin
@@ -6238,7 +6252,7 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
 {$else}
 
-  procedure AddStackManual(Stack: PPtrUInt); 
+  procedure AddStackManual(Stack: PPtrUInt);
 
     function CheckAsmX86(xret: PtrUInt): boolean; // naive detection
     var
@@ -6302,7 +6316,7 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
     end;
   end;
 
-{$endif CPU64}
+{$ifend defined(CPU64) or defined(CPUARM)}
 
 var
   n, i, logged: integer;

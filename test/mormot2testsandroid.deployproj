@@ -1,0 +1,344 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <Import Condition="Exists('$(BDS)\bin\CodeGear.Deployment.targets')" Project="$(BDS)\bin\CodeGear.Deployment.targets"/>
+    <ProjectExtensions>
+        <ProjectFileVersion>12</ProjectFileVersion>
+    </ProjectExtensions>
+    <PropertyGroup>
+        <DeviceId Condition="'$(Platform)'=='Android'">LP23244600423</DeviceId>
+        <DeviceId Condition="'$(Platform)'=='Android64'">LP23244600423</DeviceId>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(Platform)'=='OSX64'"/>
+    <ItemGroup Condition="'$(Platform)'=='Win32'"/>
+    <ItemGroup Condition="'$(Platform)'=='Android64'"/>
+    <ItemGroup Condition="'$(Platform)'=='Android'">
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_SplashImage_640x480.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-large\</RemoteDir>
+            <RemoteName>splash_image.png</RemoteName>
+            <DeployClass>Android_SplashImage640</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\strings.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\values\</RemoteDir>
+            <RemoteName>strings.xml</RemoteName>
+            <DeployClass>Android_Strings</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\colors.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\values\</RemoteDir>
+            <RemoteName>colors.xml</RemoteName>
+            <DeployClass>Android_Colors</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\splash_image_def.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable\</RemoteDir>
+            <RemoteName>splash_image_def.xml</RemoteName>
+            <DeployClass>AndroidSplashImageDef</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_72x72.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-hdpi\</RemoteDir>
+            <RemoteName>ic_launcher.png</RemoteName>
+            <DeployClass>Android_LauncherIcon72</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_48x48.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-mdpi\</RemoteDir>
+            <RemoteName>ic_launcher.png</RemoteName>
+            <DeployClass>Android_LauncherIcon48</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\sqlite\arm\libsqlite3.49.2.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libsqlite.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_SplashImage_960x720.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xlarge\</RemoteDir>
+            <RemoteName>splash_image.png</RemoteName>
+            <DeployClass>Android_SplashImage960</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\openssl1.1\arm\libcrypto.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libcrypto.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\openssl1.1\arm\libcrypto.so" Condition="'$(Config)'=='Release'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libcrypto.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_NotificationIcon_48x48.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xhdpi\</RemoteDir>
+            <RemoteName>ic_notification.png</RemoteName>
+            <DeployClass>Android_NotificationIcon48</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\styles-v21.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\values-v21\</RemoteDir>
+            <RemoteName>styles.xml</RemoteName>
+            <DeployClass>AndroidSplashStylesV21</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\lib\android\debug\armeabi\libnative-activity.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi\</RemoteDir>
+            <RemoteName>libmormot2testsandroid.so</RemoteName>
+            <DeployClass>AndroidLibnativeArmeabiFile</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_36x36.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-ldpi\</RemoteDir>
+            <RemoteName>ic_launcher.png</RemoteName>
+            <DeployClass>Android_LauncherIcon36</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_NotificationIcon_36x36.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-hdpi\</RemoteDir>
+            <RemoteName>ic_notification.png</RemoteName>
+            <DeployClass>Android_NotificationIcon36</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\sqlite\arm\libsqlite3.so" Condition="'$(Config)'=='Release'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libsqlite3.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\colors-night-v21.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\values-night-v21\</RemoteDir>
+            <RemoteName>colors.xml</RemoteName>
+            <DeployClass>Android_ColorsDark</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_NotificationIcon_96x96.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xxxhdpi\</RemoteDir>
+            <RemoteName>ic_notification.png</RemoteName>
+            <DeployClass>Android_NotificationIcon96</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_SplashImage_470x320.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-normal\</RemoteDir>
+            <RemoteName>splash_image.png</RemoteName>
+            <DeployClass>Android_SplashImage470</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_NotificationIcon_72x72.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xxhdpi\</RemoteDir>
+            <RemoteName>ic_notification.png</RemoteName>
+            <DeployClass>Android_NotificationIcon72</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_144x144.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xxhdpi\</RemoteDir>
+            <RemoteName>ic_launcher.png</RemoteName>
+            <DeployClass>Android_LauncherIcon144</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_192x192.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xxxhdpi\</RemoteDir>
+            <RemoteName>ic_launcher.png</RemoteName>
+            <DeployClass>Android_LauncherIcon192</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\openssl1.1\arm\libssl.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libssl.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\openssl1.1\arm\libssl.so" Condition="'$(Config)'=='Release'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libssl.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_96x96.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-xhdpi\</RemoteDir>
+            <RemoteName>ic_launcher.png</RemoteName>
+            <DeployClass>Android_LauncherIcon96</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\libmormot2testsandroid.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libmormot2testsandroid.so</RemoteName>
+            <DeployClass>ProjectOutput</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+            <Required>True</Required>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\AndroidManifest.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\</RemoteDir>
+            <RemoteName>AndroidManifest.xml</RemoteName>
+            <DeployClass>ProjectAndroidManifest</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\styles.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\values\</RemoteDir>
+            <RemoteName>styles.xml</RemoteName>
+            <DeployClass>AndroidSplashStyles</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\libz\arm\libz.so.1" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libz.so.1</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\libz\arm\libz.so.1" Condition="'$(Config)'=='Release'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libz.so.1</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_NotificationIcon_24x24.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-mdpi\</RemoteDir>
+            <RemoteName>ic_notification.png</RemoteName>
+            <DeployClass>Android_NotificationIcon24</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\lib\android\debug\mips\libnative-activity.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\mips\</RemoteDir>
+            <RemoteName>libmormot2testsandroid.so</RemoteName>
+            <DeployClass>AndroidLibnativeMipsFile</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_SplashImage_426x320.png" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\drawable-small\</RemoteDir>
+            <RemoteName>splash_image.png</RemoteName>
+            <DeployClass>Android_SplashImage426</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="Android\Debug\styles-v35.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\res\values-v35\</RemoteDir>
+            <RemoteName>styles.xml</RemoteName>
+            <DeployClass>AndroidSplashStylesV35</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\libz\arm\libz.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libz.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="L:\delphi_shared_fmx\libs\libz\arm\libz.so" Condition="'$(Config)'=='Release'">
+            <RemoteDir>mormot2testsandroid\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libz.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+    </ItemGroup>
+    <ItemGroup Condition="'$(Platform)'=='Win64'"/>
+    <ItemGroup Condition="'$(Platform)'=='Win64x'"/>
+    <ItemGroup Condition="'$(Platform)'=='Linux64'"/>
+    <ItemGroup Condition="'$(Platform)'=='OSXARM64'"/>
+</Project>
