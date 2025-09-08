@@ -138,10 +138,11 @@ type
     afRemoteServiceExecutionNotAllowed,
     afUnknownUser,
     afInvalidPassword,
-    afSessionAlreadyStartedForThisUser,
+    afSessionAlreadyStarted,
     afSessionCreationAborted,
     afSecureConnectionRequired,
-    afJWTRequired);
+    afJWTRequired,
+    afInvalidCredentials);
 
   /// kind of REST requests defined by TRestServer.ComputeRoutes for TRestTreeNode
   // - rnTable for ModelRoot/TableName GET POST PUT DELETE BEGIN END ABORT
@@ -438,7 +439,8 @@ type
     // - this default implementation will just set OutStatus := HTTP_FORBIDDEN
     // and call TRestServer.OnAuthenticationFailed event (if any)
     // - is used internally
-    procedure AuthenticationFailed(Reason: TOnAuthenticationFailedReason); virtual;
+    procedure AuthenticationFailed(Reason: TOnAuthenticationFailedReason;
+      const aUserName: RawUtf8); virtual;
     /// low-level access to the associated Session
     // - may be nil depending on the context: you should NOT use it, but the
     // safe Session, SessionGroup, SessionUser, SessionUserName fields instead
@@ -1592,6 +1594,8 @@ type
   // - rsoSessionInConnectionOpaque uses LowLevelConnectionOpaque^.ValueInternal
   // to store the current TAuthSession - may be used with a lot of sessions
   // - rsoCookieSecure will add the "Secure" directive in the cookie content
+  // - rsoNoUnknownUserResponse returns afInvalidPassword instead of afUnknownUser
+  // to avoid client fuzzing about valid User names
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1612,7 +1616,8 @@ type
     rsoMethodUnderscoreAsSlashUri,
     rsoValidateUtf8Input,
     rsoSessionInConnectionOpaque,
-    rsoCookieSecure);
+    rsoCookieSecure,
+    rsoNoUnknownUserResponse);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -3000,19 +3005,22 @@ begin
     fSession := CONST_AUTHENTICATION_NOT_USED;
 end;
 
-procedure TRestServerUriContext.AuthenticationFailed(
-  Reason: TOnAuthenticationFailedReason);
 var
-  txt: PShortString;
+  OAFR_TXT: array[TOnAuthenticationFailedReason] of RawUtf8;
+
+procedure TRestServerUriContext.AuthenticationFailed(
+  Reason: TOnAuthenticationFailedReason; const aUserName: RawUtf8);
 begin
-  txt := ToText(Reason);
   if Assigned(fLog) then
-    fLog.Log(sllUserAuth, 'AuthenticationFailed(%) for % (session=%)',
-      [txt^, Call^.Url, Session], self);
+    fLog.Log(sllUserAuth, 'AuthenticationFailed(%) for % % % (session=%)',
+      [OAFR_TXT[Reason], aUserName, Call^.Method, Call^.Url, Session], self);
   // 401 HTTP_UNAUTHORIZED must include a WWW-Authenticate header, so return 403
   fCall^.OutStatus := HTTP_FORBIDDEN;
-  FormatUtf8('Authentication Failed: % (%)',
-    [UnCamelCase(TrimLeftLowerCaseShort(txt)), ord(Reason)], fCustomErrorMsg);
+  if (Reason in [afInvalidPassword, afUnknownUser]) and
+     (rsoNoUnknownUserResponse in Server.Options) then
+    Reason := afInvalidCredentials; // safer to avoid client fuzzing about users
+  FormatUtf8('% Authentication Failed: % (%)',
+    [aUserName, OAFR_TXT[Reason], ord(Reason)], fCustomErrorMsg);
   // call the notification event
   if Assigned(Server.OnAuthenticationFailed) then
     Server.OnAuthenticationFailed(Server, Reason, nil, self);
@@ -5405,12 +5413,12 @@ begin
         SessionCreate(Ctxt, usr);
       end
       else
-        Ctxt.AuthenticationFailed(afInvalidPassword);
+        Ctxt.AuthenticationFailed(afInvalidPassword, aUserName);
     finally
       usr.Free;
     end
     else
-      Ctxt.AuthenticationFailed(afUnknownUser);
+      Ctxt.AuthenticationFailed(afUnknownUser, aUserName);
   end
   else
     // only UserName=... -> return hexadecimal nonce valid for 4.3 minutes
@@ -5471,7 +5479,7 @@ begin
   // (this kind of weak authentication avoid stronger ones: keep result = true)
   usr := GetUser(Ctxt, aUserName); // likely to use ORM or DB cache
   if usr = nil then
-    Ctxt.AuthenticationFailed(afUnknownUser)
+    Ctxt.AuthenticationFailed(afUnknownUser, aUserName)
   else
     SessionCreate(Ctxt, usr); // call Ctxt.AuthenticationFailed on error
 end;
@@ -5571,15 +5579,15 @@ begin
           end;
         end
         else
-          Ctxt.AuthenticationFailed(afInvalidPassword);
+          Ctxt.AuthenticationFailed(afInvalidPassword, aUserName);
       finally
         U.Free;
       end
       else
-        Ctxt.AuthenticationFailed(afUnknownUser);
+        Ctxt.AuthenticationFailed(afUnknownUser, aUserName);
     end
     else
-      Ctxt.AuthenticationFailed(afUnknownUser)
+      Ctxt.AuthenticationFailed(afUnknownUser, aUserName)
   end
   else
   begin
@@ -5656,14 +5664,14 @@ begin
   result := true;
   if not InitializeDomainAuth then
   begin
-    Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed);
+    Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed, SECPKGNAMEAPI);
     exit;
   end;
   data := Base64ToBin(data);
   if (data = '') or                // should be valid Base64
      ServerSspiDataNtlm(data) then // two-way Kerberos only
   begin
-    Ctxt.AuthenticationFailed(afInvalidPassword);
+    Ctxt.AuthenticationFailed(afInvalidPassword, SECPKGNAMEAPI);
     exit;
   end;
   // make the actual SSPI/GSSAPI handshake
@@ -5673,7 +5681,7 @@ begin
       // should be in a single call
       if not ServerSspiAuth(sec, data, outdata) then
       begin
-        Ctxt.AuthenticationFailed(afSessionCreationAborted);
+        Ctxt.AuthenticationFailed(afSessionCreationAborted, SECPKGNAMEAPI);
         exit;
       end;
       outdata := BinToBase64(outdata);
@@ -5701,9 +5709,9 @@ begin
         user.Free;
       end
       else
-        Ctxt.AuthenticationFailed(afUnknownUser);
+        Ctxt.AuthenticationFailed(afUnknownUser, SECPKGNAMEAPI);
     except
-      Ctxt.AuthenticationFailed(afSessionCreationAborted); // on ESynSspi
+      Ctxt.AuthenticationFailed(afSessionCreationAborted, SECPKGNAMEAPI); // on ESynSspi
     end;
   finally
     FreeSecContext(sec);
@@ -7103,7 +7111,7 @@ begin
           InternalLog('User.LogonName=% already connected from %/%',
             [a.User.LogonName, a.RemoteIP, Ctxt.Call^.LowLevelConnectionID],
             sllUserAuth);
-        Ctxt.AuthenticationFailed(afSessionAlreadyStartedForThisUser);
+        Ctxt.AuthenticationFailed(afSessionAlreadyStarted, a.User.LogonName);
         exit; // user already connected
       end;
     end;
@@ -7118,7 +7126,7 @@ begin
           'for User.LogonName=% (connected from %/%) - clients=%, sessions=%',
           [User.LogonName, Session.RemoteIP, Ctxt.Call^.LowLevelConnectionID,
            fStats.GetClientsCurrent, fSessions.Count], sllUserAuth);
-      Ctxt.AuthenticationFailed(afSessionCreationAborted);
+      Ctxt.AuthenticationFailed(afSessionCreationAborted, User.LogonName);
       User := nil;
       FreeAndNil(Session);
       exit;
@@ -7770,16 +7778,16 @@ begin
     if (rsoSecureConnectionRequired in fOptions) and
        (ctxt.MethodIndex <> fPublishedMethodTimestampIndex) and
        not (llfSecured in Call.LowLevelConnectionFlags) then
-      ctxt.AuthenticationFailed(afSecureConnectionRequired)
+      ctxt.AuthenticationFailed(afSecureConnectionRequired, 'URI')
     else if not ctxt.Authenticate then
-      ctxt.AuthenticationFailed(afInvalidSignature)
+      ctxt.AuthenticationFailed(afInvalidSignature, 'URI')
     else if (ctxt.Service <> nil) and
         not (reService in Call.RestAccessRights^.AllowRemoteExecute) then
       if (rsoRedirectForbiddenToAuth in Options) and
          (ctxt.ClientKind = ckAjax) then
         ctxt.Redirect(fRootRedirectForbiddenToAuth)
       else
-        ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed)
+        ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed, 'URI')
     else if (ctxt.Session <> CONST_AUTHENTICATION_NOT_USED) or
             (fJwtForUnauthenticatedRequest = nil) or
             (ctxt.MethodIndex = fPublishedMethodTimestampIndex) or
@@ -8206,6 +8214,7 @@ initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
     SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
+  GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, true);
 
 end.
 
