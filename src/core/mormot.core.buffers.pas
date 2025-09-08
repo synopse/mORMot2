@@ -1251,7 +1251,7 @@ function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer; enc: PChar64 = nil): 
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 // - returns '' if BinBytes void or too big for the resulting ShortString
-function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): ShortString;
+function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer; enc: PChar64 = nil): ShortString;
 
 /// conversion from any Base64 encoded value into URI-compatible encoded text
 // - warning: will modify the supplied base64 string in-place
@@ -6970,7 +6970,7 @@ begin
     FastAssignNew(result);
 end;
 
-function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): ShortString;
+function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer; enc: PChar64): ShortString;
 var
   len: integer;
 begin
@@ -6981,7 +6981,7 @@ begin
   if len > 255 then
     exit;
   byte(result[0]) := len;
-  Base64uriEncode(@result[1], Bin, BinBytes);
+  Base64uriEncode(@result[1], Bin, BinBytes, enc);
 end;
 
 function Base64uriToBinLength(len: PtrInt): PtrInt;
