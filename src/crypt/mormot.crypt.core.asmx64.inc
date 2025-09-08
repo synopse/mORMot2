@@ -7532,7 +7532,7 @@ function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
         // rcx/rdi=seed, rdx/rsi=data, r8/rdx=len
         movq    xmm0, seed
         call    _AesNiHashXmm0 // preserve rcx/rdi=seed flag
-        movq    rax, xmm0 // made 3 AES permutations -> 32/64-bit trunc is good
+        movq    rax, xmm0 // made 3 AES permutations -> 64-bit truncate is fine
 end;
 
 procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
@@ -7548,7 +7548,7 @@ function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
         // ecx/edi=seed, rdx/rsi=data, r8/rdx=len
         movd    xmm0, seed     // explicitly zeroing high bits for consistency
         jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
-        // _AesNiHashXmm0 makes 3 AES permutations -> 32/64-bit trunc is good
+        // _AesNiHashXmm0 makes 3 AES permutations -> 32-bit truncate is fine
 end;
 
 // 128-bit aeshash as implemented in GoLang runtime, using aesni + sse3 opcodes
@@ -7561,10 +7561,10 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         // xmm0=seed, rdx/rsi=data, r8/rdx=len, returns in xmm0 and eax
         test    len, len
         jz      @0
-        mov     rax,  qword ptr [rip + AesNiHashKey]
-        movaps  xmm1, xmm0              // save seed for @17up
-        pxor    xmm0, dqword ptr [rax]  // xor with seed
-        aesenc  xmm0, xmm0              // scramble
+        mov     rax,  qword ptr [rip + AesNiHashKey] // aligned pxor xmm,[rax]
+        movaps  xmm1, xmm0                           // save seed for @17up
+        pxor    xmm0, dqword ptr [rax]               // xor with seed
+        aesenc  xmm0, xmm0                           // scramble
         // 1..16 bytes have no branch
         lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
         cmp     len, 16
@@ -7573,7 +7573,7 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         je      @16
         shl     len, 4
         pshufb  xmm1, dqword ptr [r11 + len]  // shuffle data bits to lower xmm1
-@16:    aesenc  xmm1, xmm0  // scramble 3 times
+@16:    aesenc  xmm1, xmm0                    // scramble 3 times
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
         movaps  xmm0, xmm1

@@ -3656,8 +3656,8 @@ end;
 
 function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
 begin
-  Random128(@rnd); // 88-bit seed from our CSPRNG
-  rnd.SeedGenerator;
+  Random128(@rnd);   // 88-bit seed from our CSPRNG
+  rnd.SeedGenerator; // inlined TLecuyer.Seed
   result := @rnd;
 end;
 
@@ -7627,7 +7627,7 @@ begin
     // opportunity to initialize the shared gsl_rng_taus2 instance if needed
     if PPtrInt(@SharedRandom.Generator)^ = 0 then // inlined TLecuyer.Seed
     begin
-      Xor512(@BaseEntropy, @data); // forward secrecy
+      Xor512(@BaseEntropy, @data); // TLecuyer instances forward secrecy
       DefaultHasher128(@SharedRandom.Generator, @BaseEntropy, SizeOf(BaseEntropy));
       SharedRandom.Generator.SeedGenerator;
     end;
@@ -10398,8 +10398,7 @@ begin
       try
         Sha256ni(SystemEntropy, SystemEntropy, 1); // cryptographic shuffle
       except
-        // Intel SHA256 HW opcodes seem not available
-        exclude(CpuFeatures, cfSHA);
+        exclude(CpuFeatures, cfSHA); // SHA256 HW opcodes seem not available
       end;
   end;
   {$endif ASMX64}
@@ -10408,8 +10407,8 @@ begin
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
-    AesNiHashKey := GetMemAligned(16 * 4);
-    LecuyerDiffusion(AesNiHashKey, 16 * 4, @SystemEntropy.Startup); // 512-bit
+    AesNiHashKey := GetMemAligned(16 * 4, @BaseEntropy);        // non-void init
+    LecuyerDiffusion(AesNiHashKey, 16 * 4, @SystemEntropy.Startup);   // 512-bit
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;

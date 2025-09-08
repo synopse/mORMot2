@@ -10230,7 +10230,7 @@ begin
   UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
   {$endif FPC}
   gen.SeedGenerator(key);
-  gen.Fill(@data[1], length(data));
+  gen.Fill(@data[1], length(data)); // XOR data
   FillZero(THash128(gen)); // to avoid forensic leak
 end;
 
@@ -10240,7 +10240,7 @@ var
 begin
   PHash128(@gen)^ := src^;
   gen.SeedGenerator;
-  gen.Fill(dest, destsize);
+  gen.Fill(dest, destsize); // XOR dest
 end;
 
 {$ifndef PUREMORMOT2}
