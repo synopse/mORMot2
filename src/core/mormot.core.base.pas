@@ -11234,18 +11234,6 @@ procedure _Fillchar(var Dest; count: PtrInt; Value: byte);
 begin
   system.FillChar(Dest, Count, Value);
 end;
-
-{$ifndef FPC} // FPC did already define this
-procedure Div100(Y: cardinal; var res: TDiv100Rec);
-var
-  Y100: cardinal;
-begin
-  Y100 := Y div 100; // FPC will use fast reciprocal
-  res.D := Y100;
-  res.M := Y {%H-}- Y100 * 100; // avoid div twice
-end;
-{$endif FPC}
-
 {$endif ASMINTEL}
 
 
@@ -13692,4 +13680,5 @@ initialization
   InitializeUnit;
 
 end.
+
 
