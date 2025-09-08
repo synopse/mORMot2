@@ -1032,41 +1032,49 @@ type
     fDisplayName: RawUtf8;
     fGroupRights: TAuthGroup;
     fData: RawBlob;
-    procedure SetPasswordPlain(const Value: RawUtf8);
-  public
-    /// static function allowing to compute a hashed password
-    // - defined as virtual so that you may use your own hashing class
+    /// class function called internally to compute a hashed password
+    // - defined as virtual so that you may use your own hashing mechanism
+    // - used by SetPassword/SetPasswordDigest to fill TAuthUser.PasswordHashHexa
     // - aHashRound = 0 uses plain Sha256(), as early mORMot 1 encoding
     // - aHashRound > 0 triggers Pbkdf2HmacSha256() via aHashSalt, and enable
     // Pbkdf2HmacSha256() to increase security on storage side (reducing brute
-    // force attack via rainbow tables)
+    // force attack via rainbow tables) - as mORMot 1 safer approach
     // - aHashRound < 0 will use standard DIGEST-HA0 hashing, compatible with
-    // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo)
+    // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo) - to be
+    // used if you want to log from a HTTP client, also from SetPasswordDigest()
+    // - aLogonName is only used for aHashRound < 0 = DIGEST-HA0 hashing
     // - as a safer alternative, use ModularCryptHash() from mormot.crypt.secure
-    // to fill the PasswordHashHexa field - this class method will recognize
-    // such patterns in aPasswordPlain
+    // to fill the PasswordHashHexa field - this class method will recognize its
+    // patterns in aPasswordPlain or you could use the SetPassword() overload
     class function ComputeHashedPassword(const aLogonName, aPasswordPlain: RawUtf8;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
-    /// able to set the PasswordHashHexa field from a plain password content
-    // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
-    // or some Pbkdf2HmacSha256() or some "Modular Crypt"
-    // - use SetPassword() method if you want to customize the hash salt value
-    // and use the much safer Pbkdf2HmacSha256 or DIGEST-HA0 algorithms
+    // just wrap default ComputeHashedPassword() = SetPassword() plain Sha256()
+    procedure SetPasswordPlain(const Value: RawUtf8);
+  public
+    /// set the PasswordHashHexa field using Sha256 old mORMot 1 encoding
+    // - consider the much safer SetPassword(TModularCryptFormat) method
     property PasswordPlain: RawUtf8
       write SetPasswordPlain;
-    /// set the PasswordHashHexa field using Pbkdf2HmacSha256
-    // - use this method to specify aHashSalt/aHashRound values (see
-    // ComputeHashedPassword method) and increase security on storage side
-    // (reducing brute force attack via rainbow tables)
+    /// set the PasswordHashHexa field using Pbkdf2HmacSha256 old mORMot 1 encoding
+    // - consider the much safer SetPassword(TModularCryptFormat) method
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
       aHashRound: integer = 20000); overload;
     /// set the PasswordHashHexa field using a "Modular Crypt" hash
     // - with its default parameters, and a random salt
+    // - the server will send back the actual format (algo and params) expected
+    // for each user during its login handhake, so you could just login with
+    // TRestClientUri.SetUser() with the plain password and no other info
+    // - in practice: you may still consider PasswordPlain/Sha256 or PasswordDigest
+    // from a Web or JavaScript client, but rather use mcfBCryptSha256 or mcfSCrypt
+    // for login from a mORMot 2 client executable; fallback to PBKDF2 variant
+    // if you need to be compatible with mORMot 1 client (but you need to know
+    // the number of rounds)
     procedure SetPassword(const aPasswordPlain: RawUtf8;
       aModularCrypt: TModularCryptFormat); overload;
     /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
     // - will use the current LogonName as part of the digest
-    // - could be needed if you want your user to authenticate from a Web client
+    // - could be called if you want your user to authenticate from a Web client
+    // using the standard "Http-Authenticate: Digest" mechanism (only over TLS)
     procedure SetPasswordDigest(const aPasswordPlain, aRealm: RawUtf8;
       aAlgo: TDigestAlgo = daSHA256);
     /// check if the user can authenticate in its current state
@@ -1087,15 +1095,19 @@ type
     /// the User Name, as may be displayed or printed
     property DisplayName: RawUtf8
       index 50 read fDisplayName write fDisplayName;
-    /// the hexa encoded associated SHA-256 hash of the password
-    // - see TAuthUser.ComputeHashedPassword() or SetPassword() methods
-    // - store the SHA-256 32 bytes as 64 hexa chars
-    // - as a safer alternative, consider storing ModularCryptHash() hashes
-    // from mormot.crypt.secure e.g. via the SetPassword() overload
-    // - maximum size was 64 - but has been upgraded to 192 for DIGEST-HA0
-    // with daSHA512 and the new "Modular" hashes: SHA512-Crypt and SCrypt length
-    // is e.g. 122 chars, but safe BCrypt is 60 chars so you could still use it
-    // if you can't easily upgrade the database)
+    /// the encoded hash of the password
+    // - use SetPassword/SetPasswordDigest methods to compute this value
+    // - old default is to store the SHA-256 32 bytes as 64 hexa chars (mORMot 1
+    // original algo) - or via PBKDF2 (another mORMot 1 option) or as DIGEST-HA0
+    // - as a safer alternative, consider storing ModularCryptHash() hashes from
+    // mormot.crypt.secure via the SetPassword(TModularCryptFormat) overload
+    // - maximum size (i.e. "index" value) was 64 - but has been upgraded to 192
+    // for DIGEST-HA0 with daSHA512 and the new "Modular" hashes: SHA512-Crypt
+    // and SCrypt lengths are both 122 chars, but safe BCrypt is 60 chars so you
+    // could still use it if you can't easily upgrade the database
+    // - you can set directly your own custom "Modular Crypt" hash - e.g. forcing
+    // mcfSCrypt with LogN=20, R=8, P=1 for admin/root login, burning 1.23s and
+    // 1GB RAM on client side during the hashing (but not on the server side)
     property PasswordHashHexa: RawUtf8
       index 192 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user

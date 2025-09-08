@@ -137,20 +137,19 @@ type
   public
     /// class method to be used on client side to create a remote session
     // - call this method instead of TRestClientUri.SetUser() if you need
-    // a custom authentication class
-    // - if saoUserByLogonOrID is defined in the server Options, aUserName may
-    // be a TAuthUser.ID and not a TAuthUser.LogonName
-    // - for aPasswordKind=passClear, you may specify aHashSalt and aHashRound,
-    // to enable Pbkdf2HmacSha256() use instead of plain Sha256(), or set
-    // aDigestAlgo to use the DIGEST-HA0 algorithm
-    // - safer aPasswordKind=passModularCrypt will ask the server for the
-    // "Modular Crypt" algorithm and parameters to use
+    // a custom authentication class, or some additional parameters
+    // - if saoUserByLogonOrID is defined in the server Options, aUserName would
+    // be accepted either as TAuthUser.LogonName or ToUtf8(TAuthUser.ID)
+    // - default aPasswordKind=passModularCrypt will ask the server for the
+    // "Modular Crypt" algorithm and parameters to use for client-side hashing
+    // - for aPasswordKind=passClear, aHashRound will trigger mORMot 1 PBKDF2;
+    // use aHashRound=0 for plain Sha256(), or set aDigestAlgo for DIGEST-HA0
     // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user
     // - returns true on success
     class function ClientSetUser(Sender: TRestClientUri;
       const aUserName, aPassword: RawUtf8;
-      aPasswordKind: TRestClientSetUserPassword = passClear;
+      aPasswordKind: TRestClientSetUserPassword = passModularCrypt;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000;
       aDigestAlgo: TDigestAlgo = daUndefined): boolean; virtual;
     /// class method to be called on client side to sign an URI
@@ -2939,7 +2938,7 @@ begin
        self, aUserName, aPassword, passKerberosSpn) then
     exit;
   {$endif DOMAINRESTAUTH}
-  kind := passModularCrypt; // will also support passClear
+  kind := passModularCrypt; // will ask the serve, and also support passClear
   if aHashedPassword then
     kind := passHashed;
   result := TRestClientAuthenticationDefault.ClientSetUser(self, aUserName,
