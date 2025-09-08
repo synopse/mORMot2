@@ -7640,29 +7640,33 @@ end;
 
 procedure TOrm.ClearProperties;
 var
-  i: PtrInt;
-  p: TOrmPropInfo;
+  p: POrmPropInfo;
+  n: TDALen;
 begin
   if self = nil then
     exit;
   fInternalState := 0;
   fID := 0;
-  with Orm do
-    if fFill.JoinedFields then
-    begin
-      for i := 0 to length(CopiableFields) - 1 do
-      begin
-        p := CopiableFields[i];
-        if p.OrmFieldType <> oftID then
-          p.SetValue(self, nil, 0, false)
-        else
-          // clear nested allocated TOrm
-          TOrm(TOrmPropInfoRttiInstance(p).GetInstance(self)).ClearProperties;
-      end;
-    end
-    else
-      for i := 0 to length(CopiableFields) - 1 do
-        CopiableFields[i].SetValue(self, nil, 0, false);
+  p := pointer(Orm.CopiableFields);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  if fFill.JoinedFields then
+    repeat
+      if p^.OrmFieldType <> oftID then
+        p^.SetValue(self, nil, 0, false)
+      else
+        // clear nested allocated TOrm
+        TOrm(TOrmPropInfoRttiInstance(p^).GetInstance(self)).ClearProperties;
+      inc(p);
+      dec(n);
+    until n = 0
+  else
+    repeat
+      p^.SetValue(self, nil, 0, false);
+      inc(p);
+      dec(n);
+    until n = 0
 end;
 
 procedure TOrm.ClearProperties(const aFieldsCsv: RawUtf8);
