@@ -2077,7 +2077,7 @@ type
     // from a supplied JSON content
     // - is a wrapper around Create + FillFrom() methods
     // - use JSON data, as exported by GetJsonValues(), expanded or not
-    // - make an internal copy of the JSONTable RawUtf8 before calling
+    // - make an internal copy of the JsonTable RawUtf8 before calling
     // FillFrom() below
     constructor CreateFrom(const JsonRecord: RawUtf8); overload;
     /// this constructor initializes the object as above, and fills its content
@@ -2661,11 +2661,11 @@ type
     /// fill all published properties of this object from a JSON result row
     // - create a TOrmTable from the JSON data
     // - call FillPrepare() then FillRow(Row)
-    procedure FillFrom(const JSONTable: RawUtf8; Row: PtrInt); overload;
+    procedure FillFrom(const JsonTable: RawUtf8; Row: PtrInt); overload;
     /// fill all published properties of this object from a JSON object result
     // - use JSON data, as exported by GetJsonValues()
     // - JSON data may be expanded or not
-    // - make an internal copy of the JSONTable RawUtf8 before calling
+    // - make an internal copy of the JsonTable RawUtf8 before calling
     // FillFrom() below
     // - if FieldBits is defined, it will store the identified field index
     procedure FillFrom(const JsonRecord: RawUtf8; FieldBits: PFieldBits = nil); overload;
@@ -6734,7 +6734,8 @@ end;
 procedure TOrm.FillFrom(aRecord: TOrm);
 var
   o: TOrmProperties;
-  f: PtrInt;
+  p: POrmPropInfo;
+  n: TDALen;
 begin
   if (self = nil) or
      (aRecord = nil) or
@@ -6743,12 +6744,21 @@ begin
   o := aRecord.Orm;
   if POrmClass(aRecord)^ = POrmClass(self)^ then
   begin
-    fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to length(o.CopiableFields) - 1 do
-      o.CopiableFields[f].CopyValue(aRecord, self);
+    // fast atttribution for two identical classes - e.g. from CreateCopy
+    fID := aRecord.fID;
+    p := pointer(o.CopiableFields);
+    if p = nil then
+      exit;
+    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+    repeat
+      p^.CopyValue(aRecord, self);
+      inc(p);
+      dec(n);
+    until n = 0;
   end
   else
-    FillFrom(aRecord, o.CopiableFieldsBits); // parent or diverse classes
+    // parent or diverse classes (less common)
+    FillFrom(aRecord, o.CopiableFieldsBits);
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
@@ -6805,12 +6815,12 @@ begin
   end;
 end;
 
-procedure TOrm.FillFrom(const JSONTable: RawUtf8; Row: PtrInt);
+procedure TOrm.FillFrom(const JsonTable: RawUtf8; Row: PtrInt);
 var
   Table: TOrmTableJson;
   tmp: TSynTempBuffer; // work on a private copy
 begin
-  tmp.Init(JSONTable);
+  tmp.Init(JsonTable);
   try
     Table := TOrmTableJson.Create('', tmp.buf, tmp.len);
     try
@@ -7611,7 +7621,7 @@ begin
     end
     else
     begin
-      // comparison of all properties of Reference against self
+      // comparison of all properties of Reference by name and RawUtf8 value
       This := Orm;
       Ref := Reference.Orm;
       for i := 0 to length(Ref.SimpleFields) - 1 do
@@ -8148,15 +8158,8 @@ begin
 end;
 
 procedure OrmCopyObject(Dest, Source: TObject);
-var
-  i: PtrInt;
 begin
-  if (Source = nil) or (Dest = nil) then
-    exit;
-  TOrm(Dest).fID := TOrm(Source).fID;
-  with TOrm(Dest).Orm do
-    for i := 0 to length(CopiableFields) - 1 do
-      CopiableFields[i].CopyValue(Source, Dest);
+  TOrm(Dest).FillFrom(TOrm(Source)); // we have a fast method for this
 end;
 
 class procedure TOrm.RttiCustomSetParser(Rtti: TRttiCustom);
