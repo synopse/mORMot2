@@ -184,6 +184,8 @@ type
     function CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
     /// low-level method called from client CacheFlush/_ping_ URI
     function RenewSession(tix10, id: cardinal): integer;
+    /// low-level method called when session is finished
+    function CloseSession(aSessionID: cardinal): integer;
   public
     /// initialize the service provider on the server side
     // - expect an direct server-side implementation class, which may inherit
@@ -271,9 +273,6 @@ type
     function SetServiceLog(const aMethod: array of RawUtf8;
       const aLogRest: IRestOrm;
       aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract; override;
-    /// make some garbage collection when session is finished
-    // - return the number of instances released during this process
-    function OnCloseSession(aSessionID: cardinal): integer;
 
     /// the associated TRestServer instance
     property RestServer: TRestServer
@@ -985,25 +984,23 @@ begin
   end;
 end;
 
-function TServiceFactoryServer.OnCloseSession(aSessionID: cardinal): integer;
+function TServiceFactoryServer.CloseSession(aSessionID: cardinal): integer;
 var
   inst: TServiceFactoryServerInstance;
 begin
   result := 0;
-  if (self <> nil) and
-     (fInstances.Count > 0) then
-    case InstanceCreation of
-      sicPerSession:
-        begin
-          // remove the instance associated with this session
-          inst.InstanceID := aSessionID; // O(log(n)) search
-          if RetrieveInstance(nil, inst, ord(imFree), aSessionID) >= 0 then
-            inc(result);
-        end;
-      sicClientDriven:
-        // should be eventually released if not properly notified by the client
-        result := DoInstanceGCSession(aSessionID);
-    end;
+  case InstanceCreation of
+    sicPerSession:
+      begin
+        // trigger "_free_" pseudo-method call on this session instance
+        inst.InstanceID := aSessionID; // O(log(n)) search
+        if RetrieveInstance(nil, inst, ord(imFree), aSessionID) >= 0 then
+          inc(result);
+      end;
+    sicClientDriven:
+      // should be eventually released if not properly notified by the client
+      result := DoInstanceGCSession(aSessionID);
+  end;
 end;
 
 function TServiceFactoryServer.RunOnAllInstances(
@@ -1832,17 +1829,24 @@ end;
 
 function TServiceContainerServer.OnCloseSession(aSessionID: cardinal): integer;
 var
-  i: integer;
+  n: cardinal;
   f: ^TServiceContainerInterface;
+  s: TServiceFactoryServer;
 begin
   result := 0;
   f := pointer(fInterface);
-  if f <> nil then
-    for i := 1 to PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF do
-    begin
-      inc(result, TServiceFactoryServer(f^.Service).OnCloseSession(aSessionID));
-      inc(f);
-    end;
+  if (f = nil) or
+     (aSessionID <= CONST_AUTHENTICATION_NOT_USED) then
+    exit;
+  n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
+  repeat
+    s := pointer(f^.Service);
+    if (s.fInstanceCreation in [sicClientDriven, sicPerSession]) and
+       (s.fInstances.Count > 0) then
+      inc(result, s.CloseSession(aSessionID));
+    inc(f);
+    dec(n);
+  until n = 0;
 end;
 
 function TServiceContainerServer.ClientSessionRenew(Ctxt: TRestServerUriContext): integer;
