@@ -7057,13 +7057,15 @@ begin
         begin
           mcf := ModularCryptIdentify(usr.PasswordHashHexa, @modular);
           Ctxt.Log.Log(sllUserAuth, 'ReturnNonce(%)=%',
-            [UserName, ToText(mcf)^], self);
-          if mcf in mcfValid then
-            Join(['{"result":"', nonce, '","mcf":"', modular, '"}'], response);
-        end;
+              [UserName, ToText(mcf)^], self);
+        end; // plain sha256/pbkdf2/digest hashes won't return any "mcf" field
       finally
         usr.Free;
-      end;
+      end
+    else if rsoNoUnknownUserResponse in fOptions then
+      modular := ModularCryptFakeInfo(UserName); // avoid client fuzzing
+    if modular <> '' then
+      Join(['{"result":"', nonce, '","mcf":"', modular, '"}'], response);
   end;
   if response = '' then
     Join(['{"result":"', nonce, '"}'], response); // regular mORMot 1 response
