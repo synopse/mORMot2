@@ -1797,7 +1797,7 @@ var
   hasher: TSynHasher;
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
-  mcf: TModularCryptFormat;
+  mcf, mcf2: TModularCryptFormat;
   timer: TPrecisionTimer;
 begin
   // validate THashAlgo and TSignAlgo recognition
@@ -2081,10 +2081,20 @@ begin
       Check(StartWithExact(u, nfo));
       Check(ModularCryptIdentify(nfo) = mcf);
       CheckEqual(u, ModularCryptHash(nfo, pw)); // simulate client side re-hash
-      if u = '' then
-        continue; // avoid GPF
-      dec(PByteArray(u)[length(u) - 5]);
-      Check(ModularCryptVerify(pw, u) = mcfInvalid);
+      if u <> '' then // avoid GPF
+      begin
+        dec(PByteArray(u)[length(u) - 5]);
+        Check(ModularCryptVerify(pw, u) = mcfInvalid);
+      end;
+      u := ModularCryptFakeInfo(pw, mcf);
+      nfo := '';
+      mcf2 := ModularCryptIdentify(u, @nfo);
+      if mcf = mcfMd5Crypt then
+        CheckUtf8(mcf2 in mcfValid, u) // random format
+      else
+        Check(mcf2 = mcf);
+      CheckEqual(nfo, u);
+      CheckEqual(ModularCryptFakeInfo(pw, mcf), u, 'consistent fake');
     end;
   end;
   for mcf := mcfMd5Crypt to high(mcf) do
