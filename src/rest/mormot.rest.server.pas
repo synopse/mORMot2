@@ -7944,7 +7944,7 @@ end;
 procedure TRestServer.CacheFlush(Ctxt: TRestServerUriContext);
 var
   n: integer;
-  old: TRestConnectionID;
+  old, new: TRestConnectionID;
   cache: TOrmCache;
   soa: TServiceContainerServer;
 begin
@@ -7988,12 +7988,14 @@ begin
           begin
             // POST root/cacheflush/_replaceconn_ (over a secured connection)
             old := GetInt64(pointer(Ctxt.Call^.InBody));
-            n := soa.ClientFakeCallbackReplaceConnectionID(
-                   old, Ctxt.Call^.LowLevelConnectionID);
+            new := Ctxt.Call^.LowLevelConnectionID;
+            n := 0;
+            if Ctxt.Session > CONST_AUTHENTICATION_NOT_USED then
+              n := soa.ClientReplaceConnectionID(old, new);
+            // note: LockedSessionAccess() did update TAuthSession.ConnectionID
             if sllHTTP in fLogLevel then
-              InternalLog('%: Connection % replaced by % from % on %',
-                [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
-                 Ctxt.RemoteIPNotLocal, Plural('interface', n)], sllHTTP);
+              InternalLog('CacheFlush: replace connection % by % from %: soa=%',
+                [old, new, Ctxt.RemoteIPNotLocal, n], sllHTTP);
             Ctxt.Returns(['n', n]);
           end;
       end;

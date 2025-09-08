@@ -408,9 +408,9 @@ type
     /// low-level method called from client root/cacheflush/_callback_ URI
     procedure ClientFakeCallbackRelease(Ctxt: TRestServerUriContext);
     /// low-level method called from client root/cacheflush/_replaceconn_ URI
-    // - returns the number of callbacks changed
-    function ClientFakeCallbackReplaceConnectionID(
-      aConnectionIDOld, aConnectionIDNew: TRestConnectionID): integer;
+    // - returns the number of SOA callbacks changed
+    // - would also modify any active connection
+    function ClientReplaceConnectionID(old, new: TRestConnectionID): integer;
     /// purge a fake callback from the internal list
     // - called e.g. by ClientFakeCallbackRelease() or
     // RemoveFakeCallbackOnConnectionClose()
@@ -1847,17 +1847,26 @@ end;
 
 function TServiceContainerServer.ClientSessionRenew(Ctxt: TRestServerUriContext): integer;
 var
-  i: integer;
+  n, tix10: cardinal;
   f: ^TServiceContainerInterface;
+  s: TServiceFactoryServer;
 begin
   result := 0;
   f := pointer(fInterface);
-  if f <> nil then
-    for i := 1 to PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF do
-    begin
-      inc(result, TServiceFactoryServer(f^.Service).RenewSession(Ctxt));
-      inc(f);
-    end;
+  if (f = nil) or
+     (Ctxt = nil) or
+     (Ctxt.Session <= CONST_AUTHENTICATION_NOT_USED) then
+    exit;
+  tix10 := Ctxt.TickCount64 shr 10;
+  n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
+  repeat
+    s := pointer(f^.Service);
+    if (s.fInstanceCreation in [sicClientDriven, sicPerSession]) and
+       (s.fInstances.Count > 0) then
+      inc(result, s.RenewSession(tix10, Ctxt.Session));
+    inc(f);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TServiceContainerServer.ClearServiceList;
@@ -2209,7 +2218,7 @@ begin
     until n = 0;
 end;
 
-function TServiceContainerServer.ClientFakeCallbackReplaceConnectionID(
+function TServiceContainerServer.ClientReplaceConnectionID(
   old, new: TRestConnectionID): integer;
 begin
   result := 0;
