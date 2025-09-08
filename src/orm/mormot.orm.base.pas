@@ -4911,17 +4911,23 @@ begin
 end;
 
 procedure TOrmPropInfoRttiInt64.SetValueInt64(Instance: TObject; V64: Int64);
+var
+  off: PtrUInt;
 begin
-  if fSetterIsFieldPropOffset <> 0 then
-    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V64
+  off := fSetterIsFieldPropOffset;
+  if off <> 0 then
+    PInt64(PtrUInt(Instance) + off)^ := V64
   else
     fPropInfo.SetInt64Prop(Instance, V64);
 end;
 
 function TOrmPropInfoRttiInt64.GetValueInt64(Instance: TObject): Int64;
+var
+  off: PtrUInt;
 begin
-  if fGetterIsFieldPropOffset <> 0 then
-    result := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+  off := fGetterIsFieldPropOffset;
+  if off <> 0 then
+    result := PInt64(PtrUInt(Instance) + off)^
   else
     result := fPropInfo.GetInt64Prop(Instance);
 end;
@@ -5083,9 +5089,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiDouble.SetValueDouble(Instance: TObject; V: double);
+var
+  off: PtrUInt;
 begin
-  if fSetterIsFieldPropOffset <> 0 then
-    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
+  off := fSetterIsFieldPropOffset;
+  if off <> 0 then
+    unaligned(PDouble(PtrUInt(Instance) + off)^) := V
   else
     fPropInfo.SetDoubleProp(Instance, V);
 end;
@@ -5225,9 +5234,12 @@ end;
 
 procedure TOrmPropInfoRttiCurrency.SetValueCurrency(Instance: TObject;
   V: currency);
+var
+  off: PtrUInt;
 begin
-  if fSetterIsFieldPropOffset <> 0 then
-    PCurrency(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V
+  off := fSetterIsFieldPropOffset;
+  if off <> 0 then
+    PCurrency(PtrUInt(Instance) + off)^ := V
   else
     fPropInfo.SetCurrencyProp(Instance, V);
 end;
@@ -5456,9 +5468,12 @@ begin
 end;
 
 procedure TOrmPropInfoRttiInstance.SetInstance(Instance, Value: TObject);
+var
+  off: PtrUInt;
 begin
-  if fSetterIsFieldPropOffset <> 0 then
-    PObject(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := Value
+  off := fSetterIsFieldPropOffset;
+  if off <> 0 then
+    PObject(PtrUInt(Instance) + off)^ := Value
   else
     fPropInfo.SetOrdProp(Instance, PtrInt(Value));
 end;
@@ -5621,13 +5636,15 @@ begin
 end;
 
 procedure TOrmPropInfoRttiAnsi.CopyValue(Source, Dest: TObject);
+var
+  off: PtrUInt;
 begin
-  if fInPlaceCopySameClassPropOffset = 0 then
+  off := fInPlaceCopySameClassPropOffset;
+  if off = 0 then
     fPropInfo.CopyLongStrProp(Source, Dest)
   else
     // avoid temporary variable use, for simple fields with no getter/setter
-    PRawByteString(PtrUInt(Dest) + fInPlaceCopySameClassPropOffset)^ :=
-      PRawByteString(PtrUInt(Source) + fInPlaceCopySameClassPropOffset)^;
+    PRawByteString(PtrUInt(Dest) + off)^ := PRawByteString(PtrUInt(Source) + off)^;
 end;
 
 procedure TOrmPropInfoRttiAnsi.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -5913,9 +5930,12 @@ procedure TOrmPropInfoRttiRawUtf8.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
 var
   tmp: pointer;
+var
+  off: PtrUInt;
 begin
-  if fSetterIsFieldPropOffset <> 0 then
-    FastSetString(PRawUtf8(PtrUInt(Instance) + fSetterIsFieldPropOffset)^, Value, ValueLen)
+  off := fSetterIsFieldPropOffset;
+  if off <> 0 then
+    FastSetString(PRawUtf8(PtrUInt(Instance) + off)^, Value, ValueLen)
   else
   begin
     tmp := nil; // manual initialization/finalization with no hidden try/finally
@@ -6715,9 +6735,11 @@ end;
 function TOrmPropInfoRttiVariant.IsValueVoid(Instance: TObject): boolean;
 var
   value: TVarData;
+  off: PtrUInt;
 begin
-  if fGetterIsFieldPropOffset <> 0 then // avoid any temporary variable
-    result := VarIsEmptyOrNull(PVariant(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
+  off := fGetterIsFieldPropOffset;
+  if off <> 0 then // avoid any temporary variable
+    result := VarIsEmptyOrNull(PVariant(PtrUInt(Instance) + off)^)
   else
   begin
     PCardinal(@value)^ := varEmpty;
@@ -6731,6 +6753,7 @@ function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
   V1, V2: TVarData;
+  off: PtrUInt;
 begin
   if Item1 = Item2 then
     result := 0
@@ -6738,19 +6761,22 @@ begin
     result := -1
   else if Item2 = nil then
     result := 1
-  else if fGetterIsFieldPropOffset <> 0 then // avoid any temporary variable
-    result := FastVarDataComp(
-            PVarData(PtrUInt(Item1) + fGetterIsFieldPropOffset),
-            PVarData(PtrUInt(Item2) + fGetterIsFieldPropOffset), CaseInsensitive)
   else
   begin
-    PCardinal(@V1)^ := varEmpty;
-    PCardinal(@V2)^ := varEmpty;
-    fPropInfo.GetVariantProp(Item1, variant(V1), {byref=}true);
-    fPropInfo.GetVariantProp(Item2, variant(V2), {byref=}true);
-    result := FastVarDataComp(@V1, @V2, CaseInsensitive);
-    VarClearProc(V1);
-    VarClearProc(V2);
+    off := fGetterIsFieldPropOffset;
+    if off <> 0 then // avoid any temporary variable
+      result := FastVarDataComp(PVarData(PtrUInt(Item1) + off),
+                                PVarData(PtrUInt(Item2) + off), CaseInsensitive)
+    else
+    begin
+      PCardinal(@V1)^ := varEmpty;
+      PCardinal(@V2)^ := varEmpty;
+      fPropInfo.GetVariantProp(Item1, variant(V1), {byref=}true);
+      fPropInfo.GetVariantProp(Item2, variant(V2), {byref=}true);
+      result := FastVarDataComp(@V1, @V2, CaseInsensitive);
+      VarClearProc(V1);
+      VarClearProc(V2);
+    end;
   end;
 end;
 
@@ -6787,10 +6813,12 @@ var
   tmp: TSynTempBuffer;
   vd: TSynVarData;
   v: PSynVarData;
+  off: PtrUInt;
 begin
-  if fSetterIsFieldPropOffset <> 0 then
+  off := fSetterIsFieldPropOffset;
+  if off <> 0 then
   begin // direct assignment
-    v := pointer(PtrUInt(Instance) + fSetterIsFieldPropOffset);
+    v := pointer(PtrUInt(Instance) + off);
     VarClear(PVariant(v)^);
   end
   else
