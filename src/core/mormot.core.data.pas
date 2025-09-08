@@ -1832,6 +1832,8 @@ type
   /// just a wrapper record to join a TDynArray, its Count and a TRWLightLock
   TDynArrayLocked = record
     /// lightweight multiple Reads / exclusive Write non-upgradable lock
+    // - typical usage is ReadLock/ReadUnLock when accessing the items, and
+    // WriteLock/WriteUnLock when modifying the array (e.g. adding/deleting)
     Safe: TRWLightLock;
     /// the wrapper to a dynamic array
     DynArray: TDynArray;

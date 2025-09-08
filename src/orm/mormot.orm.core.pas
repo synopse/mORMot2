@@ -6622,14 +6622,20 @@ end;
 
 function TOrm.GetNonVoidFields: TFieldBits;
 var
-  f: PtrInt;
+  p: POrmPropInfo;
+  n: TDALen;
 begin
   FillZero(result{%H-});
-  with Orm do
-    for f := 0 to Fields.Count - 1 do
-      if FieldBitGet(CopiableFieldsBits, f) and
-         not Fields.List[f].IsValueVoid(self) then
-        FieldBitSet(result, f);
+  p := pointer(Orm.CopiableFields);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  repeat
+    if not p^.IsValueVoid(self) then
+      FieldBitSet(result, p^.PropertyIndex);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 constructor TOrm.Create(const aClient: IRestOrm; aID: TID; ForUpdate: boolean);
