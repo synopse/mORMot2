@@ -2743,7 +2743,7 @@ type
     function ClassNewInstance: pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// allow low-level customization of the Cache.NewInstance pointer for rkClass/rkInterface
-    procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
+    procedure SetClassNewInstance(FactoryMethod: pointer);
     /// check if this type has ClassNewInstance information for rkClass/rkInterface
     function HasClassNewInstance: boolean;
     /// copy one rkClass instance into another - as used by CopyObject()
@@ -9309,10 +9309,10 @@ begin
     result := nil;
 end;
 
-procedure TRttiCustom.SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
+procedure TRttiCustom.SetClassNewInstance(FactoryMethod: pointer);
 begin
   if fCache.Kind = rkClass then
-    fCache.NewInstance := pointer(@FactoryMethod);
+    fCache.NewInstance := FactoryMethod;
 end;
 
 function TRttiCustom.HasClassNewInstance: boolean;
