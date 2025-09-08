@@ -6615,17 +6615,9 @@ begin
 end;
 
 function TOrm.CreateCopy(const CustomFields: TFieldBits): TOrm;
-var
-  f: PtrInt;
 begin
   result := POrmClass(self)^.Create;
-  // copy properties content
-  result.fID := fID;
-  with Orm do
-    for f := 0 to Fields.Count - 1 do
-      if FieldBitGet(CustomFields, f) and
-         FieldBitGet(CopiableFieldsBits, f) then
-        Fields.List[f].CopyValue(self, result);
+  result.FillFrom(self, CustomFields); // ID + fields
 end;
 
 function TOrm.GetNonVoidFields: TFieldBits;
@@ -6731,9 +6723,34 @@ begin
   // failure in above Server.CreateSqlIndex() are ignored (may already exist)
 end;
 
+procedure FillFromByName(p: POrmPropInfo; src, dst: TOrm; bits: PFieldBits);
+var
+  f: PtrInt;
+  n: TDALen;
+  d: TOrmPropInfoList;
+  wasString: boolean;
+  tmp: RawUtf8;
+begin // sub-function for named properties copy via a transient RawUtf8
+  d := dst.Orm.Fields;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  repeat
+    if (bits = nil) or
+       FieldBitGet(bits^, p^.PropertyIndex) then
+    begin
+      f := d.IndexByNameU(pointer(p^.Name)); // fast enoug (seldom called)
+      if f >= 0 then
+      begin
+        p^.GetValueVar(src, false, tmp, @wasString);
+        d.List[f].SetValueVar(dst, tmp, wasString);
+      end;
+    end;
+    inc(p); // all copiable fields
+    dec(n);
+  until n = 0;
+end;
+
 procedure TOrm.FillFrom(aRecord: TOrm);
 var
-  o: TOrmProperties;
   p: POrmPropInfo;
   n: TDALen;
 begin
@@ -6741,66 +6758,50 @@ begin
      (aRecord = nil) or
      (aRecord = self) then
     exit;
-  o := aRecord.Orm;
+  p := pointer(aRecord.Orm.CopiableFields);
   if POrmClass(aRecord)^ = POrmClass(self)^ then
+    fID := aRecord.fID // fast path e.g. from CreateCopy
+  else if not InheritsFrom(POrmClass(aRecord)^) then
   begin
-    // fast atttribution for two identical classes - e.g. from CreateCopy
-    fID := aRecord.fID;
-    p := pointer(o.CopiableFields);
-    if p = nil then
-      exit;
-    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-    repeat
-      p^.CopyValue(aRecord, self);
-      inc(p);
-      dec(n);
-    until n = 0;
-  end
-  else
-    // parent or diverse classes (less common)
-    FillFrom(aRecord, o.CopiableFieldsBits);
+    FillFromByName(p, aRecord, self, nil); // need to search by name
+    exit;
+  end;
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  repeat
+    p^.CopyValue(aRecord, self); // copy all fields between sibbling classes
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
 var
-  i, f: PtrInt;
-  S, D: TOrmPropInfoList;
-  SP: TOrmPropInfo;
-  wasString: boolean;
-  tmp: RawUtf8;
+  p: POrmPropInfo;
+  n: TDALen;
 begin
   if (self = nil) or
      (aRecord = nil) or
      IsZero(aRecordFieldBits) then
     exit;
-  D := Orm.Fields;
-  if POrmClass(aRecord)^.InheritsFrom(POrmClass(self)^) then
+  p := pointer(aRecord.Orm.CopiableFields);
+  if POrmClass(aRecord)^ = POrmClass(self)^ then
+    fID := aRecord.fID // fast path
+  else if not InheritsFrom(POrmClass(aRecord)^) then
   begin
-    // fast atttribution for two sibbling classes
-    if POrmClass(aRecord)^ = POrmClass(self)^ then
-      fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to D.Count - 1 do
-      if FieldBitGet(aRecordFieldBits, f) then
-        D.List[f].CopyValue(aRecord, self);
+    FillFromByName(p, aRecord, self, @aRecordFieldBits);
     exit;
   end;
-  // two diverse tables -> don't copy ID, and per-name field lookup
-  S := aRecord.Orm.Fields;
-  for i := 0 to S.Count - 1 do
-    if FieldBitGet(aRecordFieldBits, i) then
-    begin
-      SP := S.List[i];
-      if D.List[i].Name = SP.Name then
-        // optimistic match
-        f := i
-      else
-        f := D.IndexByNameU(pointer(SP.Name));
-      if f >= 0 then
-      begin
-        SP.GetValueVar(aRecord, false, tmp, @wasString);
-        D.List[f].SetValueVar(self, tmp, wasString);
-      end;
-    end;
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // two sibbling classes
+  repeat
+    if FieldBitGet(aRecordFieldBits, p^.PropertyIndex) then
+      p^.CopyValue(aRecord, self);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TOrm.FillFrom(Table: TOrmTable; Row: PtrInt);

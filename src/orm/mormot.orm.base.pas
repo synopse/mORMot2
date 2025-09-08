@@ -958,7 +958,7 @@ type
     // the 'Address_Country' flattened property name
     property NameUnflattened: RawUtf8
       read fNameUnflattened;
-    /// the property index in the RTTI
+    /// the property index in the RTTI, i.e. the index in TFieldBits
     property PropertyIndex: integer
       read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
