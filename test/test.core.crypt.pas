@@ -2101,7 +2101,8 @@ begin
   begin
     timer.Start; // output password hash with default values
     u := ModularCryptHash(mcf, 'password');
-    NotifyProgress([TrimLeftLowerCaseShort(ToText(mcf)), '=', timer.Stop]);
+    if not fOwner.MultiThread then
+      NotifyProgress([TrimLeftLowerCaseShort(ToText(mcf)), '=', timer.Stop]);
     Check(ModularCryptIdentify(u, @nfo) = mcf);
     Check(nfo <> '');
     Check(StartWithExact(u, nfo));
