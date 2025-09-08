@@ -182,6 +182,8 @@ type
     // - will handle TInterfacedPersistent and TInjectableObject
     // as expected, if necessary
     function CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
+    /// low-level method called from client CacheFlush/_ping_ URI
+    function RenewSession(tix10, id: cardinal): integer;
   public
     /// initialize the service provider on the server side
     // - expect an direct server-side implementation class, which may inherit
@@ -269,8 +271,6 @@ type
     function SetServiceLog(const aMethod: array of RawUtf8;
       const aLogRest: IRestOrm;
       aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract; override;
-    /// low-level method called from client CacheFlush/_ping_ URI
-    function RenewSession(Ctxt: TRestServerUriContext): integer;
     /// make some garbage collection when session is finished
     // - return the number of instances released during this process
     function OnCloseSession(aSessionID: cardinal): integer;
@@ -959,33 +959,27 @@ begin
     result := fContract; // just return the current value
 end;
 
-function TServiceFactoryServer.RenewSession(Ctxt: TRestServerUriContext): integer;
+function TServiceFactoryServer.RenewSession(tix10, id: cardinal): integer;
 var
-  tix10, id: cardinal;
-  i: integer;
+  n: integer;
   P: PServiceFactoryServerInstance;
 begin
   result := 0;
-  if (self = nil) or
-     (Ctxt = nil) or
-     (fInstances.Count = 0) or
-     (Ctxt.Session <= CONST_AUTHENTICATION_NOT_USED) or
-     not (fInstanceCreation in [sicClientDriven, sicPerSession]) then
-    exit;
-  tix10 := Ctxt.TickCount64 shr 10;
   fInstances.Safe.ReadLock;
   try
     P := pointer(fInstance);
-    id := Ctxt.Session;
-    for i := 1 to fInstances.Count do
-    begin
+    if P = nil then
+      exit;
+    n := fInstances.Count;
+    repeat
       if P^.Session = id then
       begin
         P^.LastAccessTix10 := tix10;
         inc(result);
       end;
       inc(P);
-    end;
+      dec(n);
+    until n = 0;
   finally
     fInstances.Safe.ReadUnLock;
   end;

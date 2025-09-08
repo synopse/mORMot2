@@ -7975,8 +7975,8 @@ begin
           if Ctxt.Session > CONST_AUTHENTICATION_NOT_USED then
             n := soa.ClientSessionRenew(Ctxt);
           if sllUserAuth in fLogLevel then
-            InternalLog('Renew % authenticated session % from %: n=%',
-              [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, n], sllUserAuth);
+            InternalLog('CacheFlush: renew authenticated session % from % soa=%',
+              [Ctxt.Session, Ctxt.RemoteIPNotLocal, n], sllUserAuth);
           Ctxt.Returns(['n', n]);
         end
         else if llfWebsockets in Ctxt.Call^.LowLevelConnectionFlags then
