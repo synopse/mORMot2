@@ -1118,11 +1118,14 @@ begin
 end;
 
 function TAcmeLetsEncryptClient.NewServerContext(const Cert, Key: TFileName): PSSL_CTX;
+var
+  c, k: RawUtF8;
 begin
-  result := SSL_CTX_new(TLS_server_method);
+  StringToUtf8(Cert, c);
+  StringToUtf8(Key, k);
+  result := SSL_CTX_new_server(c);
   try
-    result.SetCertificateFiles(
-      StringToUtf8(Cert), StringToUtf8(Key), fOwner.fPrivateKeyPassword);
+    result.SetCertificateFiles(c, k, fOwner.fPrivateKeyPassword);
   except
     result.Free; // release this invalid context on any EOpenSslNetTls
     result := nil;
