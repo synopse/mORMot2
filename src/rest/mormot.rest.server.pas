@@ -1596,6 +1596,7 @@ type
   // - rsoNoUnknownUserResponse returns "Invalid password" instead of "Unknown
   // User" message to avoid client fuzzing about valid User names
   // - rsoSharedNonce won't generate a server nonce specific to each connection
+  // (may be required e.g. over TPublicRelay)
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,

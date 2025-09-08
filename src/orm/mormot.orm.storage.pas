@@ -520,6 +520,9 @@ type
     procedure RecordVersionFieldHandle(Occasion: TOrmOccasion;
       var Decoder: TJsonObjectDecoder);
     function GetStoredClassName: RawUtf8;
+    /// may be used as a slightly faster alternative to TOrmClass.Create
+    function NewOrmInstance: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the abstract storage data
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); reintroduce; virtual;
@@ -2043,6 +2046,14 @@ begin
     ClassToText(fStoredClass, result);
 end;
 
+function TRestStorage.NewOrmInstance: pointer;
+var
+  rtti: TRttiCustom;
+begin // inlined TRttiCustom.ClassNewInstance
+  rtti := fStoredClassRecordProps.TableRtti;
+  result := TRttiCustomNewInstance(rtti.Cache.NewInstance)(rtti);
+end;
+
 
 
 { ************ TRestStorageInMemory as Stand-Alone JSON/Binary Storage }
@@ -2058,7 +2069,7 @@ begin
   result := 0; // mark error
   if TableModelIndex <> fStoredClassProps.TableIndex then
     exit;
-  rec := fStoredClass.Create;
+  rec := NewOrmInstance; // faster fStoredClass.Create
   try
     rec.FillFrom(SentData); // make an internal copy of SentData
     StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'EngineAdd'{$endif});
@@ -2114,7 +2125,7 @@ begin
       exit; // invalid input
   end;
   // same logic than EngineAdd/EngineUpdate but with no memory alloc
-  rec := fStoredClass.Create;
+  rec := NewOrmInstance; // faster fStoredClass.Create
   try
     if rec.FillFromArray(Fields, Sent) then
     begin
@@ -2154,7 +2165,7 @@ begin
     result := false; // mark error
     exit;
   end;
-  rec := fStoredClass.Create;
+  rec := NewOrmInstance; // faster fStoredClass.Create
   try
     rec.FillFrom(SentData, @fields);
     rec.IDValue := ID;
@@ -2175,7 +2186,7 @@ begin
     result := false; // mark error
     exit;
   end;
-  rec := fStoredClass.Create;
+  rec := NewOrmInstance; // faster fStoredClass.Create
   try
     rec.SetFieldSqlVars(Values);
     rec.IDValue := ID;
@@ -2244,7 +2255,7 @@ begin
       [self, aClass]);
   fFileName := aFileName;
   fBinaryFile := aBinaryFile;
-  fSearchRec := fStoredClass.Create; // used to searched values
+  fSearchRec := NewOrmInstance; // used to searched values
   // hashed and compared by ID, with proper T*ObjArray (fake) RTTI information
   fValues.InitRtti(fStoredClassRecordProps.TableObjArrayRtti, fValue,
     TObjectWithIDDynArrayHashOne, TObjectWithIDDynArrayCompare, nil, @fCount);
@@ -3611,7 +3622,7 @@ begin
         id := 0;
         for i := 0 to n - 1 do
         begin
-          rec := fStoredClass.Create;
+          rec := NewOrmInstance; // faster Create
           inc(id, R.VarUInt64);
           rec.IDValue := id;
           fValue[i] := rec;
@@ -3621,7 +3632,7 @@ begin
         // ReadVarUInt32Array() decoded TID into ID32[]
         for i := 0 to n - 1 do
         begin
-          rec := fStoredClass.Create;
+          rec := NewOrmInstance; // faster Create
           rec.IDValue := ID32[i];
           fValue[i] := rec;
         end;
