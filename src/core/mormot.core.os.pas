@@ -5020,7 +5020,7 @@ function CurrentThreadNameShort: PShortString;
 /// returns the thread id and the thread name as a ShortString
 // - returns e.g. 'Thread 0001abcd [shortthreadname]'
 // - for convenient use when logging or raising an exception
-function GetCurrentThreadInfo: ShortString;
+function GetCurrentThreadInfo: TShort63;
 
 /// enter a process-wide giant lock for thread-safe shared process
 // - shall be protected as such:
@@ -11389,10 +11389,13 @@ begin
   ShortStringToAnsi7String(_CurrentThreadName, result);
 end;
 
-function GetCurrentThreadInfo: ShortString;
+function GetCurrentThreadInfo: TShort63;
 begin
-  result := ShortString(format('Thread %x [%s]',
-    [PtrUInt(GetCurrentThreadId), _CurrentThreadName]));
+  result := 'Thread ';
+  AppendShortIntHex(PtrUInt(GetCurrentThreadId), result);
+  AppendShortTwoChars(ord(' ') + ord('[') shl 8, @result);
+  AppendShort(_CurrentThreadName, result);
+  AppendShortChar(']', @result);
 end;
 
 

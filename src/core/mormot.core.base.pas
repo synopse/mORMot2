@@ -564,6 +564,10 @@ type
   TShort64 = string[64];
   PShort64 = ^TShort64;
 
+  /// a shortstring which takes 64 bytes of memory
+  TShort63 = string[63];
+  PShort63 = ^TShort63;
+
   /// a shortstring which takes 48 bytes of memory - e.g. for StatusCodeToShort
   TShort47 = string[47];
   PShort47 = ^TShort47;
