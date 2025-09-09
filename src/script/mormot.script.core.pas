@@ -662,11 +662,10 @@ begin
     if Assigned(fManager.fOnGetName) then
       fNameForDebug := fManager.fOnGetName(self);
     if fNameForDebug = '' then
-      FormatUtf8('% %', [ToHexShort(@fThreadId, SizeOf(fThreadId)),
-        CurrentThreadNameShort^], fNameForDebug);
+      ShortStringToAnsi7String(GetCurrentThreadInfo, fNameForDebug);
     if Assigned(fManager.fOnGetWebAppRootPath) then
-      fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
-    else
+      fWebAppRootDir := fManager.fOnGetWebAppRootPath(self);
+    if fWebAppRootDir = '' then
       StringToUtf8(Executable.ProgramFilePath, fWebAppRootDir);
   end;
   // TThreadSafeManager will now call AfterCreate outside of its main lock
