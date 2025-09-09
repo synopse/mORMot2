@@ -991,6 +991,8 @@ type
     /// maximum size of auto-rotated logging files, in kilo-bytes (per 1024 bytes)
     // - specify the maximum file size upon which .synlz rotation takes place
     // - is not used if RotateFileCount is left to its default 0
+    // - note that the file size will be checked when flushing to disk, so
+    // RotateFileSizeKB is meaningful only if bigger than BufferSize * 1024
     property RotateFileSizeKB: cardinal
       read fRotateFileSizeKB write fRotateFileSizeKB;
     /// local hour of the day where logging files rotation should be performed
@@ -4756,11 +4758,13 @@ procedure SetThreadInfoAndThreadName(log: TSynLog; nfo: PSynLogThreadInfo);
 var
   p: PIntegerArray;
   ndx: PtrUInt;
-begin
+begin // caller just made GlobalThreadLock.Lock
   log.fThreadInfo := nfo;
-  // very quickly verify if we need to log the "SetThreadName" line
-  if not (logAddThreadName in log.fFlags) then // sllInfo+ptIdentifiedInOneFile
-    exit;
+  // quickly check if we need to rotate or write the "SetThreadName" line
+  if pendingRotate in log.fPendingFlags then   // from OnFlushToStream
+    log.PerformRotation;
+  if not (logAddThreadName in log.fFlags) then 
+    exit; // no sllInfo + ptIdentifiedInOneFile
   p := pointer(log.fThreadNameLogged); // threads bit-set of this TSynLog
   if p <> nil then
   begin
@@ -4769,6 +4773,7 @@ begin
       if p[ndx] and nfo^.ThreadBitLo <> 0 then // fast "if GetBitPtr() then"
         exit; // already done (most common case)
   end;
+  // we need to append the "SetThreadName" line
   log.AddLogThreadName;
 end;
 
@@ -5021,8 +5026,6 @@ begin
   fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
   try
     nfo^.ExceptionIgnore := true;
-    if pendingRotate in fPendingFlags then // from OnFlushToStream
-      PerformRotation;
     LogHeader(sllEnter, inst);
     fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
@@ -6146,7 +6149,7 @@ begin
   // enable background writing in its own TAutoFlushThread
   if fFamily.AutoFlushTimeOut <> 0 then
   begin
-    OnFlushToStream(nil, 0);
+    OnFlushToStream(nil, 0); // compute initial fNextFlushTix32
     fFamily.EnsureAutoFlushThreadRunning;
   end;
 end;
@@ -6164,7 +6167,7 @@ begin
     tix32 := GetTickSec;
     fNextFlushTix32 := tix32 + flushsec;
   end;
-  // check for any PerformRotation - delayed in TSynLog.LogEnterFmt
+  // check for any PerformRotation - delayed in SetThreadInfoAndThreadName
   if not (pendingRotate in fPendingFlags) then
   begin
     flushbytes := fFileRotationBytes;
@@ -8253,8 +8256,8 @@ begin
   SynLogFileFreeing := true;    // to avoid GPF at shutdown
   GlobalThreadLock.Lock;
   files := SynLogFile;
-  SynLogFile := nil;    // would break any background process
-  SynLogFamily := nil;  // paranoid - freed as TRttiCustom.Private
+  SynLogFile := nil;            // would break any background process
+  SynLogFamily := nil;          // paranoid - freed as TRttiCustom.Private
   GlobalThreadLock.UnLock;
   if AutoFlushThread <> nil then
   begin
