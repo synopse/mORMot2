@@ -513,12 +513,16 @@ var
   thread: TTunnelLocalThread;
   notifycloseport: RawByteString;
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
+  log: ISynLog;
 begin
   if self = nil then
     exit;
+  fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
   if not fClosePortNotified then
     try
       fClosePortNotified := true;
+      if Assigned(log) then
+        log.Log(sllTrace, 'ClosePort: notify other end', self);
       PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
       TunnelSend(notifycloseport);
     except
@@ -536,6 +540,8 @@ begin
           callback.ShutdownAndClose({rdwr=}false);
     except
     end;
+  if Assigned(log) then
+    log.Log(sllTrace, 'ClosePort: %', [self]);
   fPort := 0;
 end;
 
@@ -648,7 +654,8 @@ const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
 begin
   if fLogClass <> nil then
-    fLogClass.EnterLocal(log, 'Open(%)', [Session], self);
+    fLogClass.EnterLocal(log, 'Open(%,[%])',
+      [Sess, ToText(TransmitOptions)], self);
   // validate input parameters
   if (fPort <> 0) or
      (not Assigned(fTransmit)) then
@@ -739,12 +746,12 @@ begin
     PInt64(@PByteArray(frame)^[l - 8])^ := fSession;
     fTransmit.TunnelSend(frame);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
+      log.Log(sllTrace, 'Open: after Send len=%', [length(frame)], self);
     // this method will wait until both sides sent a valid signed header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
       ETunnel.RaiseUtf8('Open: handshake timeout on port %', [result]);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: received len=', [length(remote)], self);
+      log.Log(sllTrace, 'Open: received len=%', [length(remote)], self);
     // ensure the returned frame is for this session
     if FrameSession(remote) <> fSession then
       ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
@@ -777,7 +784,7 @@ begin
       if toEcdhe in fOptions then
       begin
         if Assigned(log) then
-          log.Log(sllTrace, 'Open: ECDHE shared secret', self);
+          log.Log(sllTrace, 'Open: compute ECDHE shared secret', self);
         if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, key.b) then
           exit;
         hmackey.Update(key.b); // prime256v1 shared secret
@@ -789,10 +796,10 @@ begin
       hmaciv.Done(iv.b);     // AES-128-CTR iv
     end;
     // launch the background processing thread
-    if Assigned(log) then
-      log.Log(sllTrace, 'Open: % success', [ToText(fOptions)], self);
     fPort := result;
     fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
+    if Assigned(log) then
+      log.Log(sllTrace, 'Open: started %', [fThread], self);
     SleepHiRes(100, fThread.fStarted);
     fStartTicks := GetUptimeSec; // wall clock
     fInfo.AddNameValuesToObject([
@@ -807,7 +814,11 @@ begin
     try
       fHandshake := nil; // ends the handshaking phase
       while hqueue.Pop(frame) do
+      begin
+        if Assigned(log) then
+          log.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
         TunnelSend(frame); // paranoid
+      end;
     finally
       fSendSafe.UnLock;
       hqueue.Free;
