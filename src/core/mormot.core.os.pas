@@ -5739,10 +5739,12 @@ type
   // - roWinJobCloseChildren will setup a Windows Job to close any child
   // process(es) when the created process quits
   // - roWinNoProcessDetach will avoid creating a Windows sub-process and group
+  // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
   TRunOptions = set of (
     roEnvAddExisting,
     roWinJobCloseChildren,
-    roWinNoProcessDetach);
+    roWinNoProcessDetach,
+    roWinKeepProcessOnTimeout);
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
@@ -5814,7 +5816,8 @@ type
   // - ramCtrlC calls CancelProcess(), i.e. send CTRL_C_EVENT
   // - ramQuit calls QuitProcess(), i.e. send WM_QUIT on all the process threads
   // - note that TerminateProcess is always called after RunAbortTimeoutSecs
-  // timeout, or if this set of methods is void
+  // timeout, or if this set of methods is void - unless the
+  // roWinKeepProcessOnTimeout option has been specified
   TRunAbortMethods = set of (ramCtrlC, ramQuit);
 var
   /// RunRedirect/RunCommand methods to gracefully terminate before TerminateProcess
