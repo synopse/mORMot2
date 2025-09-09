@@ -4146,17 +4146,17 @@ end;
 function CancelProcess(pid: cardinal; waitseconds: integer): boolean;
 begin
   result := false;
-  if integer(pid) <= 0 then
+  if (integer(pid) <= 0) or
+     (GetConsoleWindow <> 0) or
+     not AttachConsole(pid) then
     exit;
-  if GetConsoleWindow <> 0 then              // can attach to a single console
-    FreeConsole;
-  if not AttachConsole(pid) then             // attach to the pid console
-    exit;
+  // we are now attached to the pid console
   SetConsoleCtrlHandler(nil, true);          // nil=ignore the event ourself
   GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0); // send Ctrl+C event
   FreeConsole;                               // detach
   SetConsoleCtrlHandler(nil, false);         // remove our nil=ignore handler
-  result := WaitProcess(pid, waitseconds);
+  result := (waitseconds = 0) or
+            WaitProcess(pid, waitseconds);
 end;
 
 function QuitProcess(pid: cardinal; waitseconds: integer): boolean;

@@ -5566,6 +5566,7 @@ function GetServicePid(const aServiceName: RawUtf8;
 
 /// try to gently stop a given Windows console app from its ProcessID
 // - will send a Ctrl-C event (acquiring the process console)
+// - won't wait after this event if waitseconds = 0
 function CancelProcess(pid: cardinal; waitseconds: integer): boolean;
 
 /// try to gently quit a Windows process from its ProcessID
