@@ -187,7 +187,7 @@ type
     fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
-    fReceived, fSent: Int64;
+    fReceived, fSent, fFrames: Int64;
     fLogClass: TSynLogClass;
     fStartTicks: cardinal;
     fInfo: TDocVariantData;
@@ -198,6 +198,7 @@ type
     // can optionally add a signature to the main handshake frame
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean; virtual;
+    function GetElapsed: cardinal;
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
@@ -269,6 +270,12 @@ type
     /// output TCP frames bytes
     property Sent: Int64
       read fSent;
+    /// how many frames have been received
+    property Frames: Int64
+      read fFrames;
+    /// number of seconds elapsed since Open()
+    property Elapsed: cardinal
+      read GetElapsed;
   end;
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
@@ -545,6 +552,7 @@ begin
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
   fSendSafe.Lock;
   try
+    inc(fFrames);
     if fHandshake <> nil then
     begin
       fHandshake.Push(aFrame); // during the handshake phase - maybe before Open
@@ -590,6 +598,15 @@ begin
             ((fVerifyCert = nil) or
              (fVerifyCert.Verify(frame + payloadlen, frame, framelen, payloadlen)
                in CV_VALIDSIGN));
+end;
+
+function TTunnelLocal.GetElapsed: cardinal;
+begin
+  if (self = nil) or
+     (fStartTicks = 0) then
+    result := 0
+  else
+    result := GetUptimeSec - fStartTicks;
 end;
 
 procedure TTunnelLocal.SetTransmit(const Transmit: ITunnelTransmit);
@@ -840,12 +857,13 @@ begin
   VarClear(result);
   if fPort = 0 then
     exit;
-  dv.InitFast(fInfo.Count + 3, dvObject);
+  dv.InitFast(fInfo.Count + 4, dvObject);
   dv.AddFrom(fInfo);
   dv.AddNameValuesToObject([
-    'elapsed',  GetUptimeSec - fStartTicks,
+    'elapsed',  GetElapsed,
     'bytesIn',  fReceived,
-    'bytesOut', fSent]);
+    'bytesOut', fSent,
+    'frames',   fFrames]);
 end;
 
 
