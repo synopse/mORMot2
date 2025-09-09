@@ -354,22 +354,20 @@ begin
   if not IsZero(key) then
   begin
     // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
-    fAes[{sending:}false] := AesIvUpdatedCreate(mCtr, key, 128);
-    fAes[{sending:}true]  := AesIvUpdatedCreate(mCtr, key, 128);
-    // won't include an IV with each frame, but update it from (ecdhe) KDF
-    fAes[false].IV := iv;
-    fAes[true].IV := iv;
+    fAes[{sending:}false] := AesIvUpdatedCreate(mCtr, key, 128, @iv);
+    fAes[{sending:}true]  := AesIvUpdatedCreate(mCtr, key, 128, @iv);
+    // won't include an IV with each frame, but update it after each frame
   end;
   fServerSock := sock;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, nil, nil, fOwner.fLogClass, Make(['tun ', fPort]));
+  inherited Create({susp=}false, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;
 begin
   Terminate;
   if fOwner <> nil then
-    fOwner.ClosePort;
+    fOwner.fThread := nil;
   fServerSock.ShutdownAndClose({rdwr=}true);
   fClientSock.ShutdownAndClose({rdwr=}true);
   inherited Destroy;
