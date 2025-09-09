@@ -862,7 +862,7 @@ type
   end;
 
 /// returns a 64-bit value as inlined ':(1234):' text
-function InlineParameter(ID: Int64): ShortString; overload;
+function InlineParameter(ID: Int64): TShort31; overload;
 
 /// returns a string value as inlined ':("value"):' text
 function InlineParameter(const value: RawUtf8): RawUtf8; overload;
@@ -2388,9 +2388,9 @@ end;
 
 { ************ SQL Parameters Inlining and Processing }
 
-function InlineParameter(ID: Int64): ShortString;
+function InlineParameter(ID: Int64): TShort31;
 begin
-  FormatShort(':(%):', [ID], result);
+  FormatShort31(':(%):', [ID], result);
 end;
 
 function InlineParameter(const value: RawUtf8): RawUtf8;
