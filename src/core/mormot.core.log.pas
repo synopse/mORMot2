@@ -5860,11 +5860,10 @@ var
   FN: array of TFileName;
 begin // caller made GlobalThreadLock.Lock
   exclude(fPendingFlags, pendingRotate);
-  if nfo <> nil then
-  begin
-    bak := nfo^.ExceptionIgnore;
-    nfo^.ExceptionIgnore := true; // avoid infinite locks
-  end;
+  if nfo = nil then
+    nfo := @PerThreadInfo;
+  bak := nfo^.ExceptionIgnore;
+  nfo^.ExceptionIgnore := true; // avoid infinite locks
   try
     CloseLogFile;
     try
@@ -5876,12 +5875,12 @@ begin // caller made GlobalThreadLock.Lock
           // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
           ext := '.log';
           if LogCompressAlgo <> nil then
-            ext := LogCompressAlgo.AlgoFileExt;
+            ext := LogCompressAlgo.AlgoFileExt; // e.g. '.synlz' or '.gz'
           currentMaxSynLZ := 0;
           SetLength(FN, fFamily.fRotateFileCount - 1);
           for i := fFamily.fRotateFileCount - 1 downto 1 do
           begin
-            FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + ext);
+            FN[i - 1] := ChangeFileExt(fFileName, MakeString(['.', i, ext]));
             if (currentMaxSynLZ = 0) and
                FileExists(FN[i - 1]) then
               currentMaxSynLZ := i;
@@ -5920,8 +5919,7 @@ begin // caller made GlobalThreadLock.Lock
     // initialize a brand new log file
     LogFileInit(GetThreadInfo);
   finally
-    if nfo <> nil then
-      nfo^.ExceptionIgnore := bak;
+    nfo^.ExceptionIgnore := bak;
   end;
 end;
 
