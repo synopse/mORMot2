@@ -1129,7 +1129,7 @@ type
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
     function GetThreadCount: integer;
-    procedure PerformRotation; virtual;
+    procedure PerformRotation(nfo: PSynLogThreadInfo); virtual;
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
@@ -4762,7 +4762,7 @@ begin // caller just made GlobalThreadLock.Lock
   log.fThreadInfo := nfo;
   // quickly check if we need to rotate or write the "SetThreadName" line
   if pendingRotate in log.fPendingFlags then   // from OnFlushToStream
-    log.PerformRotation;
+    log.PerformRotation(nfo);
   if not (logAddThreadName in log.fFlags) then 
     exit; // no sllInfo + ptIdentifiedInOneFile
   p := pointer(log.fThreadNameLogged); // threads bit-set of this TSynLog
@@ -5434,7 +5434,7 @@ procedure TSynLog.ForceRotation;
 begin
   GlobalThreadLock.Lock;
   try
-    PerformRotation;
+    PerformRotation(nil);
   finally
     GlobalThreadLock.UnLock;
   end;
@@ -5851,66 +5851,78 @@ begin // set timestamp [+ threadnumber] - usually run outside GlobalThreadLock
   inc(p[0], 3); // final length is 19-20 chars into string[21]
 end;
 
-procedure TSynLog.PerformRotation;
+procedure TSynLog.PerformRotation(nfo: PSynLogThreadInfo);
 var
   currentMaxSynLZ: cardinal;
+  bak: boolean;
   i: PtrInt;
   ext: TFileName;
   FN: array of TFileName;
-begin
-  CloseLogFile;
+begin // caller made GlobalThreadLock.Lock
+  exclude(fPendingFlags, pendingRotate);
+  if nfo <> nil then
+  begin
+    bak := nfo^.ExceptionIgnore;
+    nfo^.ExceptionIgnore := true; // avoid infinite locks
+  end;
   try
-    if not (Assigned(fFamily.fOnRotate) and
-            fFamily.fOnRotate(self, fFileName)) then
-    begin
-      if fFamily.fRotateFileCount > 1 then
+    CloseLogFile;
+    try
+      if not (Assigned(fFamily.fOnRotate) and
+              fFamily.fOnRotate(self, fFileName)) then
       begin
-        // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
-        ext := '.log';
-        if LogCompressAlgo <> nil then
-          ext := LogCompressAlgo.AlgoFileExt;
-        currentMaxSynLZ := 0;
-        SetLength(FN, fFamily.fRotateFileCount - 1);
-        for i := fFamily.fRotateFileCount - 1 downto 1 do
+        if fFamily.fRotateFileCount > 1 then
         begin
-          FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + ext);
-          if (currentMaxSynLZ = 0) and
-             FileExists(FN[i - 1]) then
-            currentMaxSynLZ := i;
-        end;
-        if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
-          // delete (and archive) xxx.9.synlz
-          fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
-        for i := fFamily.fRotateFileCount - 2 downto 1 do
-          // e.g. xxx.8.synlz -> xxx.9.synlz
-          RenameFile(FN[i - 1], FN[i]);
-        // compress the current FN[0] .log file into xxx.1.log/.synlz
-        if LogCompressAlgo = nil then
-          // no compression: quickly rename FN[0] into xxx.1.log
-          RenameFile(fFileName, FN[0])
-        else if (AutoFlushThread <> nil) and
-                (AutoFlushThread.fToCompress = '') and
-                RenameFile(fFileName, FN[0]) then
-        begin
-          // background compression of FN[0] into xxx.1.synlz
-          AutoFlushThread.fToCompress := FN[0];
-          AutoFlushThread.fEvent.SetEvent;
+          // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
+          ext := '.log';
+          if LogCompressAlgo <> nil then
+            ext := LogCompressAlgo.AlgoFileExt;
+          currentMaxSynLZ := 0;
+          SetLength(FN, fFamily.fRotateFileCount - 1);
+          for i := fFamily.fRotateFileCount - 1 downto 1 do
+          begin
+            FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + ext);
+            if (currentMaxSynLZ = 0) and
+               FileExists(FN[i - 1]) then
+              currentMaxSynLZ := i;
+          end;
+          if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
+            // delete (and archive) xxx.9.synlz
+            fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
+          for i := fFamily.fRotateFileCount - 2 downto 1 do
+            // e.g. xxx.8.synlz -> xxx.9.synlz
+            RenameFile(FN[i - 1], FN[i]);
+          // compress the current FN[0] .log file into xxx.1.log/.synlz
+          if LogCompressAlgo = nil then
+            // no compression: quickly rename FN[0] into xxx.1.log
+            RenameFile(fFileName, FN[0])
+          else if (AutoFlushThread <> nil) and
+                  (AutoFlushThread.fToCompress = '') and
+                  RenameFile(fFileName, FN[0]) then
+          begin
+            // background compression of FN[0] into xxx.1.synlz
+            AutoFlushThread.fToCompress := FN[0];
+            AutoFlushThread.fEvent.SetEvent;
+          end
+          else
+          begin
+            // blocking compression in the main processing thread
+            LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
+            DeleteFile(fFileName);
+          end;
         end
         else
-        begin
-          // blocking compression in the main processing thread
-          LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
-          DeleteFile(fFileName);
-        end;
-      end
-      else
-        fFamily.ArchiveAndDeleteFile(fFileName);
+          fFamily.ArchiveAndDeleteFile(fFileName);
+      end;
+    except
+      // just ignore any problem during file rotation, and recreate the log file
     end;
-  except
-    // just ignore any problem during file rotation, and recreate the log file
+    // initialize a brand new log file
+    LogFileInit(GetThreadInfo);
+  finally
+    if nfo <> nil then
+      nfo^.ExceptionIgnore := bak;
   end;
-  // initialize a brand new log file
-  LogFileInit(GetThreadInfo);
 end;
 
 procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
