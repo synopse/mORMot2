@@ -5730,6 +5730,7 @@ type
   // - is called once when the process is started, with text='', ignoring its return
   // - on idle state (each 200ms), is called with text='' to allow execution abort
   // - the raw process ID (dword on Windows, cint on POSIX) is also supplied
+  // - see RedirectToConsole to write to the console e.g. for debugging purpose
   TOnRedirect = function(const text: RawByteString; pid: cardinal): boolean of object;
 
   /// define how RunCommand() and RunRedirect() run their sub-process
@@ -5752,8 +5753,8 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 
 /// like fpSystem, but cross-platform
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
-// - under Windows (especially Windows 10), creating a process can be dead slow
-// https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
+// - under Windows (especially Windows 10/11), creating a process can be dead
+// slow https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
 // - waitfordelayms/processhandle/redirected/onoutput exist on Windows only -
 // and redirected is the raw byte output, which may be OEM, WinAnsi or UTF-16
 // depending on the program itself
@@ -5777,8 +5778,9 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // depends on the actual program so is likely to be CP_OEM but others could
 // use the system code page or even UTF-16 binary with BOM (!) - so you
 // may consider using AnsiToUtf8() with the proper code page
-// - will optionally call onoutput() to notify the new output state
-// - aborts if onoutput() callback returns true, or waitfordelayms expires
+// - abort if waitfordelayms expires
+// - will optionally call onoutput() to notify the new output state; aborts if
+// onoutput() callback returns true - see RedirectToConsole global callback
 // - optional env is Windows only, (FPC popen does not support it), and should
 // be encoded as name=value#0 pairs
 // - you can specify a wrkdir if the path specified by cmd is not good enough
@@ -5789,6 +5791,10 @@ function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const wrkdir: TFileName = ''; options: TRunOptions = []): RawByteString;
 
 var
+  /// a RunRedirect() callback for console output e.g. for debugging purpose
+  // - you should call at least once AllocConsole to setup its content
+  RedirectToConsole: TOnRedirect;
+
   /// how many seconds we should wait for gracefull termination of a process
   // in RunRedirect() - or RunCommand() on Windows
   // - set 0 to disable gracefull exit, and force hard SIGKILL/TerminateProcess
@@ -8383,6 +8389,28 @@ begin
     dec(len, n);
     inc(p, n);
   end;
+end;
+
+function _ToConsole(self: TObject; const text: RawByteString; pid: cardinal): boolean;
+begin
+  result := false; // continue
+  if (text = '') or
+     not HasConsole then
+    exit;
+  ConsoleCriticalSection.Lock;
+  try
+    FileWriteAll(StdOut, pointer(text), length(text)); // no code page involved
+  finally
+    ConsoleCriticalSection.UnLock;
+  end;
+end;
+
+procedure AllocConsole;
+begin
+  TMethod(RedirectToConsole).Code := @_ToConsole;
+  {$ifdef OSWINDOWS}
+  WinAllocConsole;
+  {$endif OSWINDOWS}
 end;
 
 var

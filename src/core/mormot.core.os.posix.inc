@@ -2102,10 +2102,6 @@ end;
 
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
-procedure AllocConsole;
-begin
-end;
-
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   TextAttr: integer = -1; // always change the color at startup
@@ -2217,8 +2213,10 @@ begin
     until false;
   end
   else
+  begin
     ReadLn;
-  ioresult;
+    ioresult;
+  end;
 end;
 {$I+}
 
