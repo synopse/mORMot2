@@ -1538,7 +1538,7 @@ const
 /// create one AES instance which updates its IV between Encrypt/Decrypt calls
 // - will return either TAesFast[aesMode] or TAesInternal[aesMode] as fallback
 function AesIvUpdatedCreate(aesMode: TAesMode;
-  const key; keySizeBits: cardinal): TAesAbstract;
+  const key; keySizeBits: cardinal; iv: PAesBlock = nil): TAesAbstract;
 
 const
   /// the AES chaining modes which supports AEAD process
@@ -6805,11 +6805,11 @@ var
   AesModeIvUpdated: TAesAbstractClasses; // IVUpdated=true -> chain En/Decrypt
 
 function AesIvUpdatedCreate(aesMode: TAesMode;
-  const key; keySizeBits: cardinal): TAesAbstract;
+  const key; keySizeBits: cardinal; iv: PAesBlock): TAesAbstract;
 begin
   if AesModeIvUpdated[aesMode] = nil then
     AesModeIvUpdated[aesMode] := TAesFast[aesMode]; // first try the fastest
-  result := AesModeIvUpdated[aesMode].Create(key, keySizeBits);
+  result := AesModeIvUpdated[aesMode].Create(key, keySizeBits, iv);
   if not result.IVUpdated then // requires sequencial Encrypt/Decrypt() calls
   begin
     result.Free;
