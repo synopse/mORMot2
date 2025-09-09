@@ -6821,7 +6821,6 @@ end;
 constructor TAesPkcs7Abstract.Create(aStream: TStream; const key;
   keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock; bufferSize: integer);
 begin
-  // IV is not used in this abstract class
   if not (aesMode in AES_PKCS7WRITER) then
     RaiseStreamError(self, ToText(aesMode)^);
   dec(bufferSize, bufferSize and AesBlockMod); // fBuf[] have full AES blocks
@@ -6830,7 +6829,7 @@ begin
     RaiseStreamError(self, 'Create');
   fBufAvailable := bufferSize;
   fStream := aStream;
-  fAes := AesIvUpdatedCreate(aesMode, key, keySizeBits);
+  fAes := AesIvUpdatedCreate(aesMode, key, keySizeBits, IV);
 end;
 
 const
@@ -6861,13 +6860,11 @@ constructor TAesPkcs7Writer.Create(outStream: TStream; const key;
 begin
   inherited Create(outStream, key, keySizeBits, aesMode, IV, bufferSize);
   SetLength(fBuf, fBufAvailable + SizeOf(TAesBlock)); // space for padding
-  if IV = nil then
+  if IV = nil then // not supplied by caller
   begin
     Random128(@fAes.fIV); // unpredictable
     fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // stream starts with IV
-  end
-  else
-    fAes.fIV := IV^; // IV is supplied by caller
+  end;
 end;
 
 destructor TAesPkcs7Writer.Destroy;
@@ -6938,9 +6935,7 @@ begin
     RaiseStreamError(self, 'Create: invalid size');
   SetLength(fBuf, fBufAvailable);
   fBufAvailable := 0;
-  if IV <> nil then
-    fAes.IV := IV^ // IV is supplied by caller
-  else
+  if IV = nil then // not supplied by caller
   begin
     inStream.ReadBuffer(fAes.fIV, SizeOf(fAes.IV)); // stream starts with IV
     dec(fStreamSize, SizeOf(fAes.IV));

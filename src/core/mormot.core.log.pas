@@ -5861,7 +5861,7 @@ var
 begin // caller made GlobalThreadLock.Lock
   exclude(fPendingFlags, pendingRotate);
   if nfo = nil then
-    nfo := @PerThreadInfo;
+    nfo := @PerThreadInfo; // from ForceRotation
   bak := nfo^.ExceptionIgnore;
   nfo^.ExceptionIgnore := true; // avoid infinite locks
   try
