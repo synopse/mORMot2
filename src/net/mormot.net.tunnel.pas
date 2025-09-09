@@ -647,7 +647,7 @@ var
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
   key, iv: THash256Rec;
-  hmackey, hmaciv: THmacSha256;
+  hmac, hmac2: THmacSha256;
   hqueue: TSynQueue;
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
@@ -725,14 +725,13 @@ begin
     if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
     begin
       if AppSecret = '' then
-        hmackey.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
+        hmac.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
       else
-        hmackey.Init(AppSecret);
-      hmackey.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
-      hmaciv := hmackey; // use hmaciv for info KDF
-      hmaciv.Done(key.b);
-      infoaes := TAesCtr.Create(key.Lo); // simple symmetrical encryption
-      infoaes.IV := key.Hi;
+        hmac.Init(AppSecret);
+      hmac.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
+      hmac2 := hmac; // use hmac2 to compute info KDF
+      hmac2.Done(key.b);
+      infoaes := TAesCtr.Create(key.Lo, 128, @key.Hi); // simple encryption
       info := infoaes.EncryptPkcs7(info, {ivatbeg=}false);
       infoaes.IV := key.Hi; // use the same IV for decoding "remote" info below
     end;
@@ -779,21 +778,21 @@ begin
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
     begin
-      // hmackey has been pre-computed above with loc.Info and AppSecret
-      EcdheHashRandom(hmackey, loc.Ecdh, rem^.Ecdh); // rnd+pub in same order
+      // hmac has been pre-computed above with loc.Info and AppSecret
+      EcdheHashRandom(hmac, loc.Ecdh, rem^.Ecdh); // rnd+pub in same order
       if toEcdhe in fOptions then
       begin
         if Assigned(log) then
           log.Log(sllTrace, 'Open: compute ECDHE shared secret', self);
         if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, key.b) then
           exit;
-        hmackey.Update(key.b); // prime256v1 shared secret
+        hmac.Update(key.b); // prime256v1 shared secret
       end;
-      hmaciv := hmackey;     // two labeled hmacs - see NIST SP 800-108
-      hmackey.Update('AES key'#0);
-      hmackey.Done(key.b);   // AES-128-CTR key
-      hmaciv.Update('IV'#1);
-      hmaciv.Done(iv.b);     // AES-128-CTR iv
+      hmac2 := hmac;     // two labeled hmacs - see NIST SP 800-108
+      hmac.Update('AES key'#0);
+      hmac.Done(key.b);   // AES-128-CTR key
+      hmac2.Update('IV'#1);
+      hmac2.Done(iv.b);     // AES-128-CTR iv
     end;
     // launch the background processing thread
     fPort := result;
