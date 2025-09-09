@@ -954,12 +954,12 @@ type
       read fWithInstancePointer write fWithInstancePointer;
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
-    // - by default, the log file will be written for every 8KB of log (see
-    // BufferSize property) - this will ensure that the main application won't
-    // be slow down by logging
-    // - in order not to loose any log, a background thread can be created
-    // and will be responsible of flushing all pending log content every
-    // period of time (e.g. every 10 seconds)
+    // - equals 0 by default, so that the log file will be written for every 8KB
+    // of log (see BufferSize property) - to ensure that the main application
+    // won't be slow down during logging
+    // - in order not to loose any log, e.g. on an idle server, a background
+    // thread can be created and will be responsible of flushing all pending
+    // log content every period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal
       read fAutoFlushTimeOut write fAutoFlushTimeOut;
     {$ifdef OSWINDOWS}
@@ -6142,10 +6142,10 @@ begin
     fWriterEcho.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
+  fWriter.OnFlushToStream := OnFlushToStream; // note: overwrites fWriterEcho
   // enable background writing in its own TAutoFlushThread
   if fFamily.AutoFlushTimeOut <> 0 then
   begin
-    fWriter.OnFlushToStream := OnFlushToStream; // note: overwrites fWriterEcho
     OnFlushToStream(nil, 0);
     fFamily.EnsureAutoFlushThreadRunning;
   end;
@@ -6154,6 +6154,7 @@ end;
 procedure TSynLog.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
 var
   flushsec, tix32: cardinal;
+  flushbytes: PtrInt;
 begin
   // compute the next idle timestamp for the background TAutoFlushThread
   tix32 := 0;
@@ -6165,8 +6166,10 @@ begin
   end;
   // check for any PerformRotation - delayed in TSynLog.LogEnterFmt
   if not (pendingRotate in fPendingFlags) then
-    if (fFileRotationBytes > 0) and // reached size to rotate?
-       (fWriter.WrittenBytes + Len > fFileRotationBytes) then
+  begin
+    flushbytes := fFileRotationBytes;
+    if (flushbytes > 0) and // reached size to rotate?
+       (fWriter.WrittenBytes + Len > flushbytes) then
       include(fPendingFlags, pendingRotate)
     else
     begin
@@ -6180,6 +6183,7 @@ begin
           // PerformRotation will call ComputeFileName to recompute DailyTix32
       end;
     end;
+  end;
   // chain to the fWriterEcho process (otherwise Text/Len buffer is lost)
   fWriterEcho.FlushToStream(Text, Len);
 end;
