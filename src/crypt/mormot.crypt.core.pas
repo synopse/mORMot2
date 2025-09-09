@@ -600,7 +600,8 @@ type
     // bytes: do NOT use assign it with a string or a TBytes instance: you would
     // use the pointer to the data as key - either digest the string via
     // CreateFromPbkdf2 or use Create(TBytes)
-    constructor Create(const aKey; aKeySizeBits: cardinal); reintroduce; overload; virtual;
+    constructor Create(const aKey; aKeySizeBits: cardinal;
+      aIV: PAesBlock = nil); reintroduce; overload; virtual;
     /// Initialize AES context for AES-128 cypher
     // - first method to call before using this class
     // - just a wrapper around Create(aKey,128);
@@ -5139,16 +5140,18 @@ end;
 
 { TAesAbstract }
 
-constructor TAesAbstract.Create(const aKey; aKeySizeBits: cardinal);
+constructor TAesAbstract.Create(const aKey; aKeySizeBits: cardinal; aIV: PAesBlock);
 begin
   if not ValidAesKeyBits(aKeySizeBits) then
-    ESynCrypto.RaiseUtf8('%.Create(KeySize=%): 128/192/256 required',
+    ESynCrypto.RaiseUtf8('%.Create(aKeySizeBits=%): 128/192/256 required',
       [self, aKeySizeBits]);
   if @aKey = nil then
     ESynCrypto.RaiseUtf8('%.Create(aKey=nil)', [self]);
   fKeySize := aKeySizeBits;
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey, fKey, fKeySizeBytes);
+  if aIV <> nil then
+    fIV := aIV^;
   AfterCreate;
 end;
 
