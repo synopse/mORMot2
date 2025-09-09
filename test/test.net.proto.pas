@@ -1522,20 +1522,26 @@ var
   clientinstance, serverinstance: TTunnelLocal;
   clientcb, servercb: ITunnelTransmit;
   clienttunnel, servertunnel: ITunnelLocal;
-  i: integer;
   sent, received, sent2, received2: RawByteString;
+  i: integer;
   clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
+  nr: TNetResult;
+  nfo: variant;
+  log: ISynLog;
 begin
   // setup the two instances with the specified options and certificates
+  TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
   clientinstance := TTunnelLocalClient.Create;
   clientinstance.SignCert := clientcert;
   clientinstance.VerifyCert := servercert;
+  clientinstance.LogClass := TSynLog;
   clienttunnel := clientinstance;
   clientcb := clientinstance;
   serverinstance := TTunnelLocalServer.Create;
   serverinstance.SignCert := servercert;
   serverinstance.VerifyCert := clientcert;
+  serverinstance.LogClass := TSynLog;
   servertunnel := serverinstance;
   servercb := serverinstance;
   clienttunnel.SetTransmit(servercb); // set before Open()
@@ -1548,27 +1554,29 @@ begin
   local := clientinstance.Open(
     tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost,
     ['remoteHost', Executable.Host]);
-  Check(local <> 0);
+  Check(local <> 0, 'no local');
   remote := clienttunnel.RemotePort;
-  Check(remote <> 0);
+  Check(remote <> 0, 'no remote');
   SleepHiRes(1000, tunnelexecutedone);
   CheckEqual(local, tunnelexecuteremote);
   CheckEqual(remote, tunnelexecutelocal);
   Check(tunnelexecutedone, 'TunnelExecuted');
   tunnelexecutedone := false; // for the next run
-  Check(clienttunnel.LocalPort <> '');
-  Check(servertunnel.LocalPort <> '');
+  Check(clienttunnel.LocalPort <> '', 'no client localport');
+  Check(servertunnel.LocalPort <> '', 'no server localport');
   Check(servertunnel.LocalPort <> clienttunnel.LocalPort, 'ports');
   Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
-  Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
-  Check(NewSocket('127.0.0.1', clienttunnel.LocalPort, nlTcp, {bind=}false,
-    1000, 1000, 1000, 0, clientsock) = nrOk);
-  Check(NewSocket('127.0.0.1', servertunnel.LocalPort, nlTcp, {bind=}false,
-    1000, 1000, 1000, 0, serversock) = nrOk);
+  Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'sEncrypted');
+  nr := NewSocket('127.0.0.1', clienttunnel.LocalPort, nlTcp, {bind=}false,
+    1000, 1000, 1000, 0, clientsock);
+  CheckUtf8(nr = nrOk, 'clientsock=%', [ToText(nr)^]);
+  nr := NewSocket('127.0.0.1', servertunnel.LocalPort, nlTcp, {bind=}false,
+    1000, 1000, 1000, 0, serversock);
+  CheckUtf8(nr = nrOk, 'serversock=%', [ToText(nr)^]);
+  if not CheckFailed(Assigned(clientinstance.Thread)) and
+     not CheckFailed(Assigned(serverinstance.Thread)) then
   try
     // validate raw TCP tunnelling
-    Check(Assigned(clientinstance.Thread));
-    Check(Assigned(serverinstance.Thread));
     CheckEqual(clientinstance.Received, 0);
     CheckEqual(clientinstance.Sent, 0);
     CheckEqual(serverinstance.Received, 0);
@@ -1579,13 +1587,13 @@ begin
       sent2 := RandomWinAnsi(Random32(200) + 1);
       Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(serversock.RecvWait(1000, received) = nrOk);
-      CheckEqual(sent, received);
+      Check(sent = received, 'block1');
       Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
       Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(clientsock.RecvWait(1000, received) = nrOk);
       Check(serversock.RecvWait(1000, received2) = nrOk);
-      CheckEqual(sent, received);
-      CheckEqual(sent2, received2);
+      Check(sent = received, 'block2');
+      Check(sent2 = received2, 'block3');
       CheckEqual(clientinstance.Received, serverinstance.Sent);
       CheckEqual(clientinstance.Sent, serverinstance.Received);
       Check(clientinstance.Received <> 0);
@@ -1595,9 +1603,14 @@ begin
     end;
     Check(clientinstance.Received < clientinstance.Sent, 'smaller');
     Check(serverinstance.Received > serverinstance.Sent, 'bigger');
-    Check(_Safe(serverinstance.TunnelInfo)^.Count > 4);
-    Check(_Safe(clientinstance.TunnelInfo)^.Count > 4);
-    //writeln(clientinstance.TunnelInfo);
+    nfo := serverinstance.TunnelInfo;
+    Check(_Safe(nfo)^.Count > 4);
+    if Assigned(log) then
+      log.Log(sllTrace, 'TunnelTest: server=%', [nfo], self);
+    nfo := clientinstance.TunnelInfo;
+    Check(_Safe(nfo)^.Count > 4);
+    if Assigned(log) then
+      log.Log(sllTrace, 'TunnelTest: client=%', [nfo], self);
   finally
     clientsock.ShutdownAndClose(true);
     serversock.ShutdownAndClose(true);
