@@ -2662,41 +2662,46 @@ begin
   ConsoleHandleCtrlCPressed := true;
 end;
 
-procedure ConsoleWaitForEnterKey;
+function WaitAndProcessMessages(ms: cardinal): boolean;
 var
   msg: TMsg;
+begin
+  result := false; // notify WM_QUIT
+  if GetCurrentThreadID = MainThreadID then
+ begin
+    // process the messages from the main thread while waiting
+    if IsMultiThread then
+      CheckSynchronize(ms) // call any Synchronize() event
+    else
+      Windows.Sleep(ms);
+    while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
+      if msg.Message = WM_QUIT then
+        exit // stop waiting when the process is gracefully closing
+      else
+      begin
+        TranslateMessage(msg);
+        DispatchMessage(msg);
+      end;
+  end
+  else
+  begin
+    // just intercept any WM_QUIT message on this sub-thread
+    Windows.Sleep(ms);
+    if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
+      if msg.Message = WM_QUIT then
+        exit; // nothing to dispatch with PostThreadMessage()
+  end;
+  result := true; // continue
+end;
+
+procedure ConsoleWaitForEnterKey;
 begin
   ConsoleHandleCtrlCPressed := false;
   HandleCtrlC(TConsoleHandleCtrlC.HandleCtrlC);
   try
-    if GetCurrentThreadID = MainThreadID then
-      // process the messages from the main thread while waiting
-      while not ConsoleKeyPressed(VK_RETURN) and
-            not ConsoleHandleCtrlCPressed do
-      begin
-        if IsMultiThread then
-          CheckSynchronize(100)
-        else
-          Windows.Sleep(100);
-        while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
-          if msg.Message = WM_QUIT then
-            exit // stop waiting when the process is gracefully closing
-          else
-          begin
-            TranslateMessage(msg);
-            DispatchMessage(msg);
-          end;
-      end
-    else
-      // just intercept any WM_QUIT message on this sub-thread
-      while not ConsoleKeyPressed(VK_RETURN) and
-            not ConsoleHandleCtrlCPressed do
-      begin
-        Windows.Sleep(100);
-        if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
-          if msg.Message = WM_QUIT then
-            exit; // nothing to dispatch with PostThreadMessage()
-      end;
+    while WaitAndProcessMessages(100) and
+          not ConsoleKeyPressed(VK_RETURN) and
+          not ConsoleHandleCtrlCPressed do ;
   finally
     HandleCtrlC(nil);
   end;

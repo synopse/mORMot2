@@ -3730,6 +3730,10 @@ function ConsoleReadBody: RawByteString;
 /// low-level access to the keyboard state of a given key
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
+/// Sleep(ms) or CheckSynchronize(ms) then Application.ProcessMessages on main
+// thread, as expected by a regular GUI
+function WaitAndProcessMessages(ms: cardinal): boolean;
+
 var
   /// used by Win32PWideCharToUtf8() when IsAnsiCompatibleW(P, Len) = false
   // - overriden by mormot.core.unicode for performance and Delphi 7/2007 fix
