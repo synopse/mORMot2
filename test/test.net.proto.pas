@@ -1644,7 +1644,7 @@ var
   bak: TSynLogLevels;
 begin
   bak := TSynLog.Family.Level;
-  TSynLog.Family.Level := LOG_VERBOSE;
+  TSynLog.Family.Level := LOG_VERBOSE; // for LUTI debugging
   c := Cert('syn-es256').Generate([cuDigitalSignature]);
   s := Cert('syn-es256').Generate([cuDigitalSignature]);
   // plain tunnelling

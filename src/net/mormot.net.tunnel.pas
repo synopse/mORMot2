@@ -178,7 +178,7 @@ type
     ITunnelLocal, ITunnelTransmit)
   protected
     fSession: TTunnelSession;
-    fSendSafe: TMultiLightLock;
+    fSendSafe: TMultiLightLock; // protect fHandshake+fThread
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
     fFlags: set of (fBound, fClosePortNotified);
@@ -532,33 +532,38 @@ begin
   if self = nil then
     exit;
   fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
-  if not (fClosePortNotified in fFlags) then
-    try
-      include(fFlags, fClosePortNotified);
-      if Assigned(log) then
-        log.Log(sllTrace, 'ClosePort: notify other end', self);
-      PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
-      if Assigned(fTransmit) then
-        fTransmit.TunnelSend(notifycloseport);
-    except
-    end;
-  thread := fThread;
-  if thread <> nil then
-    try
-      fThread := nil;
-      thread.fOwner := nil;
-      thread.Terminate;
-      if thread.fState = stAccepting then
-      begin
+  fSendSafe.Lock;
+  try
+    if not (fClosePortNotified in fFlags) then
+      try
+        include(fFlags, fClosePortNotified);
         if Assigned(log) then
-          log.Log(sllDebug, 'ClosePort: release accept', self);
-        if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
-           {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
-          // Windows socket may not release Accept() until connected
-          callback.ShutdownAndClose({rdwr=}false);
+          log.Log(sllTrace, 'ClosePort: notify other end', self);
+        PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
+        if Assigned(fTransmit) then
+          fTransmit.TunnelSend(notifycloseport);
+      except
       end;
-    except
-    end;
+    thread := fThread;
+    if thread <> nil then
+      try
+        fThread := nil;
+        thread.fOwner := nil;
+        thread.Terminate;
+        if thread.fState = stAccepting then
+        begin
+          if Assigned(log) then
+            log.Log(sllDebug, 'ClosePort: release accept', self);
+          if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
+             {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
+            // Windows socket may not release Accept() until connected
+            callback.ShutdownAndClose({rdwr=}false);
+        end;
+      except
+      end;
+  finally
+    fSendSafe.UnLock;
+  end;
   if Assigned(log) then
     log.Log(sllTrace, 'ClosePort: %', [self]); // final statistics
   fPort := 0;
@@ -571,9 +576,10 @@ var
   p: PAnsiChar;
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
-  l := length(aFrame) - 8;
+  l := length(aFrame);
   if fVerboseLog then
     fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [l]);
+  dec(l, SizeOf(Int64));
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
   fSendSafe.Lock;
@@ -675,6 +681,7 @@ var
   key, iv: THash256Rec;
   hmac, hmac2: THmacSha256;
   hqueue: TSynQueue;
+  thread: TTunnelLocalThread;
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
@@ -723,6 +730,7 @@ begin
       log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;
   // initial single round trip handshake
+  thread := nil;
   infoaes := nil;
   fOptions := TransmitOptions;
   try
@@ -824,10 +832,10 @@ begin
     end;
     // launch the background processing thread
     fPort := result;
-    fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
-    SleepHiRes(100, fThread.fStarted);
+    thread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
+    SleepHiRes(100, thread.fStarted);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: started=% %', [ord(fThread.fStarted), fThread], self);
+      log.Log(sllTrace, 'Open: started=% %', [ord(thread.fStarted), thread], self);
     fStartTicks := GetUptimeSec; // wall clock
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,
@@ -839,6 +847,7 @@ begin
     hqueue := fHandshake;
     fSendSafe.Lock; // re-entrant for TunnelSend()
     try
+      fThread := thread;
       fHandshake := nil; // ends the handshaking phase
       while hqueue.Pop(frame) do
       begin
