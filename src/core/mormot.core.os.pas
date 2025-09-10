@@ -3730,9 +3730,18 @@ function ConsoleReadBody: RawByteString;
 /// low-level access to the keyboard state of a given key
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
-/// Sleep(ms) or CheckSynchronize(ms) then Application.ProcessMessages on main
-// thread, as expected by a regular GUI
-function WaitAndProcessMessages(ms: cardinal): boolean;
+type
+  TWinWaitFor = (wwfFailed, wwfQuit, wwfTimeout, wwfSignaled);
+
+/// can wait for some time and/or event, not blocking the Windows main thread
+// - supposed to be called in a loop, so expects ms value in [50..200] range
+// - can optionally call WaitForSingleObject(h) instead of plain Sleep()
+// - can intercept messages and return wwfQuit on WM_QUIT on a sub-thread
+// - running on the main thread, would properly call CheckSynchronize(ms) then
+// Application.ProcessMessages, as expected by a regular GUI application
+// - outside the main thread, behave like a single Sleep/WaitForSingleObject
+function WinWaitFor(ms: cardinal; h: THandle = 0;
+  checkSubThreadQuit: boolean = false): TWinWaitFor;
 
 var
   /// used by Win32PWideCharToUtf8() when IsAnsiCompatibleW(P, Len) = false

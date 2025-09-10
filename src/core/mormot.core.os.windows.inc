@@ -2662,36 +2662,50 @@ begin
   ConsoleHandleCtrlCPressed := true;
 end;
 
-function WaitAndProcessMessages(ms: cardinal): boolean;
+function WinWaitFor(ms: cardinal; h: THandle; checkSubThreadQuit: boolean): TWinWaitFor;
 var
+  mainthread: boolean;
   msg: TMsg;
 begin
-  result := false; // notify WM_QUIT
-  if GetCurrentThreadID = MainThreadID then
- begin
-    // process the messages from the main thread while waiting
-    if IsMultiThread then
-      CheckSynchronize(ms) // call any Synchronize() event
-    else
-      Windows.Sleep(ms);
+  mainthread := (GetCurrentThreadID = MainThreadID);
+  // first process Windows messages (if needed)
+  result := wwfQuit;
+  if mainthread then // same logic than Application.ProcessMessages
     while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
       if msg.Message = WM_QUIT then
-        exit // stop waiting when the process is gracefully closing
+        exit // always stop waiting when the process is gracefully closing
       else
       begin
         TranslateMessage(msg);
         DispatchMessage(msg);
-      end;
-  end
-  else
-  begin
-    // just intercept any WM_QUIT message on this sub-thread
-    Windows.Sleep(ms);
-    if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
+      end
+  else if checkSubThreadQuit then // e.g. from ConsoleWaitForEnterKey
+    while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
       if msg.Message = WM_QUIT then
-        exit; // nothing to dispatch with PostThreadMessage()
+        exit;
+  // proper Sleep/WaitForSingleObject call
+  mainthread := mainthread and IsMultiThread;
+  if h = 0 then
+  begin
+    if mainthread then
+      CheckSynchronize(ms) // call any Synchronize() event at full speed
+    else
+      Windows.Sleep(ms);
+    result := wwfTimeout;
+    exit;
   end;
-  result := true; // continue
+  if mainthread then
+    CheckSynchronize(0);
+  case WaitForSingleObject(h, ms) of
+    WAIT_TIMEOUT:
+      result := wwfTimeout;
+    WAIT_OBJECT_0:
+      result := wwfSignaled;
+  else
+    result := wwfFailed;
+  end;
+  if mainthread then
+    CheckSynchronize(0);
 end;
 
 procedure ConsoleWaitForEnterKey;
@@ -2699,7 +2713,7 @@ begin
   ConsoleHandleCtrlCPressed := false;
   HandleCtrlC(TConsoleHandleCtrlC.HandleCtrlC);
   try
-    while WaitAndProcessMessages(100) and
+    while (WinWaitFor({ms=}100, {handle=}0, {wm_quit=}true) = wwfTimeout) and
           not ConsoleKeyPressed(VK_RETURN) and
           not ConsoleHandleCtrlCPressed do ;
   finally
