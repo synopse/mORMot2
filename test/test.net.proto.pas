@@ -1519,6 +1519,20 @@ end;
 
 procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert);
 var
+  log: ISynLog;
+
+  procedure CheckBlocks(const sent, recv: RawByteString; num: integer);
+  begin
+    CheckUtf8(sent = recv, 'block% %=%', [num, length(sent), length(recv)]);
+    if (sent <> recv) and
+       Assigned(log) then
+    begin
+      log.Log(sllDebug, 'block%: sent=%', [num, sent], self);
+      log.Log(sllDebug, 'block%: recv=%', [num, recv], self);
+    end;
+  end;
+
+var
   clientinstance, serverinstance: TTunnelLocal;
   clientcb, servercb: ITunnelTransmit;
   clienttunnel, servertunnel: ITunnelLocal;
@@ -1528,7 +1542,6 @@ var
   local, remote: TNetPort;
   nr: TNetResult;
   nfo: variant;
-  log: ISynLog;
 begin
   // setup the two instances with the specified options and certificates
   TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
@@ -1583,17 +1596,17 @@ begin
     CheckEqual(serverinstance.Sent, 0);
     for i := 1 to 100 do
     begin
-      sent  := RandomWinAnsi(Random32(200) + 1);
-      sent2 := RandomWinAnsi(Random32(200) + 1);
+      sent  := RandomAnsi7(Random32(200) + 1);
+      sent2 := RandomAnsi7(Random32(200) + 1);
       Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(serversock.RecvWait(1000, received) = nrOk);
-      CheckUtf8(sent = received, 'block1 %=%', [length(sent), length(received)]);
+      CheckBlocks(sent, received, 1);
       Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
       Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(clientsock.RecvWait(1000, received) = nrOk);
       Check(serversock.RecvWait(1000, received2) = nrOk);
-      CheckUtf8(sent = received, 'block2 %=%', [length(sent), length(received)]);
-      CheckUtf8(sent = received, 'block3 %=%', [length(sent2), length(received2)]);
+      CheckBlocks(sent, received, 2);
+      CheckBlocks(sent2, received2, 3);
       CheckEqual(clientinstance.Received, serverinstance.Sent);
       CheckEqual(clientinstance.Sent, serverinstance.Received);
       Check(clientinstance.Received <> 0);
