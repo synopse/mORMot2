@@ -4842,6 +4842,7 @@ function RandomDouble: double;
 procedure RandomBytes(Dest: pointer; Count: integer);
 
 /// fill a RawByteString with random bytes from the gsl_rng_taus2 generator
+// - content is really binary, i.e. would contain the whole #0..#255 byte range
 // - see also e.g. RandomAnsi7() or RandomIdentifier() in mormot.core.text.pas
 function RandomByteString(Count: integer; var Dest;
   CodePage: cardinal = CP_RAWBYTESTRING): pointer;
@@ -5739,11 +5740,13 @@ type
   // - roWinJobCloseChildren will setup a Windows Job to close any child
   // process(es) when the created process quits
   // - roWinNoProcessDetach will avoid creating a Windows sub-process and group
+  // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
   TRunOptions = set of (
     roEnvAddExisting,
     roWinJobCloseChildren,
     roWinNoProcessDetach,
+    roWinNewConsole,
     roWinKeepProcessOnTimeout);
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish

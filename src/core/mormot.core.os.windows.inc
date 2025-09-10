@@ -4599,10 +4599,13 @@ begin
       rd := 0;
   // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
   flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE;
+  // by default, just behave as a standard Windows process would
   if not (roWinNoProcessDetach in options) then
     flags := flags or (DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP);
   if roWinJobCloseChildren in options then
     flags := flags or CREATE_BREAKAWAY_FROM_JOB; // child process in a new job
+  if roWinNewConsole in options then
+    flags := flags or CREATE_NEW_CONSOLE;
   // actually create the new process
   created := CreateProcessW(nil, pointer(wcmd), @security, @security, true,
     flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
