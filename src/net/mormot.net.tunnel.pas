@@ -480,9 +480,15 @@ begin
       end;
     fLog.Log(sllTrace, 'DoExecute: ending %', [self]);
   except
-    fLog.Log(sllWarning, 'DoExecute: aborted %', [self]);
-    if fOwner <> nil then
-      fOwner.ClosePort;
+    on E: Exception do
+    try
+      fLog.Log(sllWarning, 'DoExecute: aborted due to %', [self, PClass(E)^], self);
+      if fOwner <> nil then
+        fOwner.ClosePort;
+    except
+      on E2: Exception do
+        fLog.Log(sllWarning, 'DoExecute: nested %', [PClass(E2)^], self);
+    end;
   end;
   fState := stTerminated;
 end;
