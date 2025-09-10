@@ -4609,6 +4609,7 @@ begin
     pipesec.bInheritHandle := true;
     if CreatePipe(rd, wr, @pipesec, 0) then
     begin
+      procsec.bInheritHandle := true;
       SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
       startupinfo.wShowWindow := SW_HIDE;
       startupinfo.hStdInput := GetStdHandle(STD_INPUT_HANDLE);
@@ -4626,11 +4627,20 @@ begin
   flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE;
   // by default, just behave as a standard Windows process would
   if not (roWinNoProcessDetach in options) then
+  begin
+    // RunProcess() option is [] to launch a fully uncoupled process
+    // RunCommand() and RunRedirect() use RUN_CMD = [roWinNoProcessDetach]
     flags := flags or (DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP);
+    exclude(ram, ramCtrlC); // not compatible with detached console or group
+  end;
+  if roWinNewConsole in options then
+  begin
+    // DETACHED_PROCESS is mutually exclusive with CREATE_NEW_CONSOLE
+    flags := (flags or CREATE_NEW_CONSOLE) and not DETACHED_PROCESS;
+    exclude(ram, ramCtrlC); // not compatible with stand-alone console
+  end;
   if roWinJobCloseChildren in options then
     flags := flags or CREATE_BREAKAWAY_FROM_JOB; // child process in a new job
-  if roWinNewConsole in options then
-    flags := flags or CREATE_NEW_CONSOLE;
   // actually create the new process
   created := CreateProcessW(nil, pointer(wcmd), @procsec, @procsec, true,
     flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
