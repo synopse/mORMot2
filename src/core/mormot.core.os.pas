@@ -5792,7 +5792,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean = true;
   {$else} processhandle: PHandle = nil {$endif OSPOSIX}): integer;
 
 /// execute a command, returning its output console as text
-// - calls CreateProcessW on Windows (i.e. our RunCommandWin function), and
+// - calls CreateProcessW on Windows (via our RunCommandWin function), and
 // FPC RTL popen/pclose on POSIX to be truly cross-platform
 // - return '' on cmd execution error, or the whole output console text content
 // with no conversion (unless setresult is false - see below)
@@ -5803,7 +5803,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean = true;
 // - will optionally call onoutput() to notify the new output state; aborting if
 // onoutput() callback returns true - see RedirectToConsole global callback
 // - will abort once waitfordelayms expires - if not its default INFINITE
-// - force setresult=false if you only need onouput() and always return ''
+// - force setresult=false if you only need onouput() and will discard the result
 // - optional env is Windows only, (FPC popen does not support it), and should
 // be encoded as name=value#0 pairs
 // - you can specify a wrkdir if the path specified by cmd is not good enough
@@ -5819,8 +5819,8 @@ var
   // - you should call at least once AllocConsole to setup its content
   RedirectToConsole: TOnRedirect;
 
-  /// how many seconds we should wait for gracefull termination of a process
-  // in RunRedirect() - or RunCommand() on Windows
+  /// global variable to define how many seconds RunRedirect/RunCommand should
+  // wait for gracefull/soft process termination
   // - set 0 to disable gracefull exit, and force hard SIGKILL/TerminateProcess
   RunAbortTimeoutSecs: integer = 5;
 
@@ -5829,19 +5829,16 @@ type
   /// for use as RunCommandWin() parameter with no "uses Windows" clause
   TWinProcessInfo = Windows.TProcessInformation;
 
-  /// how RunRedirect() or RunCommand() should try to gracefully terminate
+  /// how RunRedirect/RunCommand/RunCommandWin could try to gracefully terminate
   // - ramCtrlC calls CancelProcess(), i.e. send CTRL_C_EVENT
   // - ramQuit calls QuitProcess(), i.e. send WM_QUIT on all the process threads
-  // - note that TerminateProcess is always called after RunAbortTimeoutSecs
+  // - note that hard TerminateProcess is always called after RunAbortTimeoutSecs
   // timeout, or if this set of methods is void - unless the
   // roWinKeepProcessOnTimeout option has been specified
-  TRunAbortMethods = set of (ramCtrlC, ramQuit);
-var
-  /// RunRedirect/RunCommand methods to gracefully terminate before TerminateProcess
-  RunAbortMethods: TRunAbortMethods = [ramCtrlC, ramQuit];
+  TRunAbortMethod = (ramCtrlC, ramQuit);
 
-/// Windows-specific RunCommand() function returning raw TProcessInformation
-// and with additional parameters
+/// Windows-specific RunCommand/RunRedirect function
+// - returning raw TWinProcessInfo and accepting some additional parameters
 function RunCommandWin(const cmd: TFileName; waitfor: boolean;
   var processinfo: TWinProcessInfo; const env: TFileName = '';
   options: TRunOptions = RUN_CMD; waitfordelayms: cardinal = INFINITE;
@@ -5850,15 +5847,22 @@ function RunCommandWin(const cmd: TFileName; waitfor: boolean;
 
 {$else}
 type
-  /// how RunRedirect() should try to gracefully terminate
+  /// how RunRedirect/RunCommand could try to gracefully terminate
   // - ramSigTerm send a fpkill(pid, SIGTERM) to the process
-  // - note that SIGKILL is always sent after RunAbortTimeoutSecs timeout,
+  // - note that hard SIGKILL is always sent after RunAbortTimeoutSecs timeout,
   // or if ramSigTerm was not supplied
-  TRunAbortMethods = set of (ramSigTerm);
-var
-  /// RunRedirect() methods to gracefully terminate before SIGKILL
-  RunAbortMethods: TRunAbortMethods = [ramSigTerm];
+  TRunAbortMethod = (ramSigTerm);
 {$endif OSWINDOWS}
+type
+  /// define how RunRedirect/RunCommand should try to gracefully terminate
+  TRunAbortMethods = set of TRunAbortMethod;
+const
+  /// by default, RunRedirect/RunCommand tries all soft killing methods
+  RUNABORT_DEFAULT = [low(TRunAbortMethod) .. high(TRunAbortMethod)];
+var
+  /// global variable to define RunRedirect/RunCommand soft termination methods
+  // - used before hard SIGKILL/TerminateProcess
+  RunAbortMethods: TRunAbortMethods = RUNABORT_DEFAULT;
 
 
 implementation

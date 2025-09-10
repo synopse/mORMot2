@@ -4622,7 +4622,7 @@ begin
         begin
           endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
           repeat
-            wr := FpWaitPid(pid, @res, WNOHANG);   // 0 = no state change
+            wr := FpWaitPid(pid, @res, WNOHANG);    // 0 = no state change
             RedirectOutput({killing=}true, result); // continue redirection
             if (wr <> 0) or
                (GetTickCount64 > endtix) then
