@@ -1082,8 +1082,7 @@ type
     fThreadNameLogged: TIntegerDynArray; // bits for ptIdentifiedInOneFile
     fWriterStream: TStream;
     fFileName: TFileName;
-    fFileRotationBytes: integer; // see OnFlushToStream
-    fNextFlushTix32, fNextFileRotateDailyTix32: cardinal; // see OnFlushToStream
+    fRotateBytes, fFlushTix32, fRotateDailyTix32: cardinal; // OnFlushToStream
     fStreamPositionAfterHeader: integer;
     fStartTimestampDateTime: TDateTime;
     fWriterClass: TJsonWriterClass;
@@ -3975,8 +3974,8 @@ begin
            SynLogFileFreeing then // avoid GPF
           break;
         log := files[i];
-        if (log.fNextFlushTix32 <> 0) and
-           (tix32 >= log.fNextFlushTix32) and
+        if (log.fFlushTix32 <> 0) and
+           (tix32 >= log.fFlushTix32) and
            (log.fWriter <> nil) and
            (log.fWriter.PendingBytes > 1) then
           // write pending data after TSynLogFamily.AutoFlushTimeOut seconds
@@ -6030,6 +6029,7 @@ procedure TSynLog.ComputeFileName;
 var
   hourRotate, beforeRotate: TDateTime;
   dup: integer;
+  tix32: cardinal;
   fn: TFileName;
   classn: RawUtf8;
 begin
@@ -6046,25 +6046,29 @@ begin
         fn := FormatString('%(%)', [ProgramName, User])
       else
         Utf8ToFileName(ProgramName, fn);
-  // prepare for any file rotation
-  fFileRotationBytes := 0;
-  fNextFileRotateDailyTix32 := 0; // checked in OnFlushToStrem
+  // prepare for any file flush or rotation - as checked in OnFlushToStream
+  fRotateBytes := 0;
+  fFlushTix32 := 0;
+  fRotateDailyTix32 := 0;
+  tix32 := GetTickSec;
+  if fFamily.AutoFlushTimeOut <> 0 then
+    fFlushTix32 := tix32 + fFamily.AutoFlushTimeOut;
   if fFamily.fRotateFileCount > 0 then
   begin
     if fFamily.fRotateFileSizeKB > 0 then
-      fFileRotationBytes := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
+      fRotateBytes := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
     if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
       hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
       beforeRotate := hourRotate - Time; // use local time hour
       if beforeRotate <= 1 / MinsPerDay then // hour passed, or within 1 minute
         beforeRotate := beforeRotate + 1; // trigger tomorrow
-      fNextFileRotateDailyTix32 := GetTickSec + trunc(beforeRotate * SecsPerDay);
+      fRotateDailyTix32 := tix32 + trunc(beforeRotate * SecsPerDay);
     end;
   end;
   // file name should include current timestamp if no rotation is involved
-  if (fFileRotationBytes = 0) and
-     (fNextFileRotateDailyTix32 = 0) then
+  if (fRotateBytes = 0) and
+     (fRotateDailyTix32 = 0) then
     fn := FormatString('% %',
       [fn, NowToFileShort(fFamily.LocalTimestamp)]);
   {$ifdef OSWINDOWS}
@@ -6158,40 +6162,37 @@ begin
   fWriter.OnFlushToStream := OnFlushToStream; // note: overwrites fWriterEcho
   // enable background writing in its own TAutoFlushThread
   if fFamily.AutoFlushTimeOut <> 0 then
-  begin
-    OnFlushToStream(nil, 0); // compute initial fNextFlushTix32
     fFamily.EnsureAutoFlushThreadRunning;
-  end;
 end;
 
 procedure TSynLog.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
 var
-  flushsec, tix32: cardinal;
-  flushbytes: PtrInt;
+  secs, tix32: cardinal;
+  bytes: PtrInt;
 begin
   // compute the next idle timestamp for the background TAutoFlushThread
   tix32 := 0;
-  flushsec := fFamily.AutoFlushTimeOut;
-  if flushsec <> 0 then
+  secs := fFamily.AutoFlushTimeOut;
+  if secs <> 0 then
   begin
     tix32 := GetTickSec;
-    fNextFlushTix32 := tix32 + flushsec;
+    fFlushTix32 := tix32 + secs;
   end;
   // check for any PerformRotation - delayed in SetThreadInfoAndThreadName
   if not (pendingRotate in fPendingFlags) then
   begin
-    flushbytes := fFileRotationBytes;
-    if (flushbytes > 0) and // reached size to rotate?
-       (fWriter.WrittenBytes + Len > flushbytes) then
+    bytes := fRotateBytes;
+    if (bytes > 0) and // reached size to rotate?
+       (fWriter.WrittenBytes + Len > bytes) then
       include(fPendingFlags, pendingRotate)
     else
     begin
-      flushsec := fNextFileRotateDailyTix32;
-      if flushsec <> 0 then // reached time to rotate?
+      secs := fRotateDailyTix32;
+      if secs <> 0 then // reached time to rotate?
       begin
         if tix32 = 0 then
           tix32 := GetTickSec;
-        if tix32 >= flushsec then
+        if tix32 >= secs then
           include(fPendingFlags, pendingRotate);
           // PerformRotation will call ComputeFileName to recompute DailyTix32
       end;
