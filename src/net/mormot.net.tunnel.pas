@@ -560,11 +560,13 @@ begin
   l := length(aFrame) - 8;
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
+  fLogClass.Add.Log(sllTrace, 'TunnelSend(%)', [l], self);
   fSendSafe.Lock;
   try
     inc(fFrames);
     if fHandshake <> nil then
     begin
+      fLogClass.Add.Log(sllTrace, 'TunnelSend: into fHandshake', self);
       fHandshake.Push(aFrame); // during the handshake phase - maybe before Open
       exit;
     end;
@@ -580,7 +582,9 @@ begin
     begin
       PStrLen(p - _STRLEN)^ := l; // trim 64-bit session trailer
       fThread.OnReceived(aFrame); // regular tunelling process
-    end;
+    end
+    else
+      fLogClass.Add.Log(sllDebug, 'TunnelSend: fThread=nil', self);
   finally
     fSendSafe.UnLock;
   end;
@@ -803,9 +807,9 @@ begin
     // launch the background processing thread
     fPort := result;
     fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
+    SleepHiRes(100, fThread.fStarted);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: started %', [fThread], self);
-    SleepHiRes(100, fThread.fStarted);
     fStartTicks := GetUptimeSec; // wall clock
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,

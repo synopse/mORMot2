@@ -1562,6 +1562,7 @@ begin
   // validate handshaking
   tunnelsession := Random32;
   tunnelappsec := RandomAnsi7(10);
+  tunnelexecutedone := false;
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
   local := clientinstance.Open(
