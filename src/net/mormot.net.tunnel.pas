@@ -181,7 +181,8 @@ type
     fSendSafe: TMultiLightLock;
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
-    fOpenBind, fClosed, fClosePortNotified: boolean;
+    fFlags: set of (fBound, fClosePortNotified);
+    fClosed, fVerboseLog: boolean;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
     fEcdhe: TEccKeyPair;
@@ -237,6 +238,9 @@ type
     /// access the logging features of this class
     property LogClass: TSynLogClass
       read fLogClass write fLogClass;
+    /// log each received frame length for raw debugging
+    property VerboseLog: boolean
+      read fVerboseLog write fVerboseLog;
     /// optional Certificate with private key to sign the output handshake frame
     // - certificate should have [cuDigitalSignature] usage
     // - should match other side's VerifyCert public key property
@@ -385,15 +389,16 @@ var
 begin
   // validate and optionally decrypt the input frame
   if Terminated or
-     (fTransmit = nil) or
      (Frame = '') then
     exit;
   if fClientSock = nil then // may occur with direct calls
   begin
-    SleepHiRes(10); // let the socket be accepted()
-    if Terminated or
+    if SleepOrTerminated(100) or // let the socket be accepted()
        (fClientSock = nil) then
+    begin
+      fLog.Log(sllDebug, 'OnReceived: no ClientSock', self);
       exit;
+    end;
   end;
   if fAes[{sending:}false] = nil then
     data := Frame
@@ -428,7 +433,7 @@ begin
   fStarted := true;
   try
     if (fOwner <> nil) and
-       fOwner.fOpenBind then
+       (fBound in fOwner.fFlags) then
     begin
       // newsocket() was done in the main thread: blocking accept() now
       fState := stAccepting;
@@ -527,9 +532,9 @@ begin
   if self = nil then
     exit;
   fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
-  if not fClosePortNotified then
+  if not (fClosePortNotified in fFlags) then
     try
-      fClosePortNotified := true;
+      include(fFlags, fClosePortNotified);
       if Assigned(log) then
         log.Log(sllTrace, 'ClosePort: notify other end', self);
       PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
@@ -555,7 +560,7 @@ begin
     except
     end;
   if Assigned(log) then
-    log.Log(sllTrace, 'ClosePort: %', [self]);
+    log.Log(sllTrace, 'ClosePort: %', [self]); // final statistics
   fPort := 0;
   fClosed := true;
 end;
@@ -567,9 +572,10 @@ var
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
   l := length(aFrame) - 8;
+  if fVerboseLog then
+    fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [l]);
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
-  fLogClass.Add.Log(sllTrace, 'TunnelSend(%)', [l], self);
   fSendSafe.Lock;
   try
     inc(fFrames);
@@ -584,7 +590,7 @@ begin
       ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
     if l = 0 then
     begin
-      fClosePortNotified := true; // the other party notified end of process
+      include(fFlags, fClosePortNotified); // notified by the other end
       ClosePort;
     end
     else if fThread <> nil then // = nil after ClosePort (too late)
@@ -593,7 +599,7 @@ begin
       fThread.OnReceived(aFrame); // regular tunelling process
     end
     else
-      fLogClass.Add.Log(sllDebug, 'TunnelSend: fThread=nil', self);
+      fLogClass.Add.Log(sllDebug, 'TunnelSend: Thread=nil', self); // unlikely
   finally
     fSendSafe.UnLock;
   end;
@@ -604,7 +610,7 @@ procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
 begin
   if not IdemPChar(pointer(interfaceName), 'ITUNNEL') then
     exit; // should be ITunnelLocal or ITunnelTransmit
-  fClosePortNotified := true; // no need to notify the remote end
+  include(fFlags, fClosePortNotified); // no need to notify the remote end
   ClosePort;
 end;
 
@@ -690,11 +696,13 @@ begin
   // bind to a local (ephemeral) port
   if fThread <> nil then
   begin
-    fClosePortNotified := true; // emulate a clean remote closing
-    ClosePort;                  // close any previous Open()
+    if Assigned(log) then
+      log.Log(sllDebug, 'Open: close/abort previous state', self);
+    include(fFlags, fClosePortNotified); // emulate a clean remote closing
+    ClosePort;
   end;
   fPort := 0;
-  fClosePortNotified := false;
+  fFlags := [];
   result := uri.PortInt;
   if result = 0 then
   begin
@@ -704,7 +712,7 @@ begin
     result := addr.Port;
     if Assigned(log) then
       log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
-    fOpenBind := true;
+    include(fFlags, fBound);
   end
   else
   begin
@@ -819,7 +827,7 @@ begin
     fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
     SleepHiRes(100, fThread.fStarted);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: started %', [fThread], self);
+      log.Log(sllTrace, 'Open: started=% %', [ord(fThread.fStarted), fThread], self);
     fStartTicks := GetUptimeSec; // wall clock
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,

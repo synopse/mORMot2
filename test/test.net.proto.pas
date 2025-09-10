@@ -1550,12 +1550,14 @@ begin
   clientinstance.SignCert := clientcert;
   clientinstance.VerifyCert := servercert;
   clientinstance.LogClass := TSynLog;
+  clientinstance.VerboseLog := true;
   clienttunnel := clientinstance;
   clientcb := clientinstance;
   serverinstance := TTunnelLocalServer.Create;
   serverinstance.SignCert := servercert;
   serverinstance.VerifyCert := clientcert;
   serverinstance.LogClass := TSynLog;
+  serverinstance.VerboseLog := true;
   servertunnel := serverinstance;
   servercb := serverinstance;
   clienttunnel.SetTransmit(servercb); // set before Open()
