@@ -358,7 +358,7 @@ type
     // - KeySize is in bits, i.e. 128, 192 or 256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES context for cipher, using 128-bit and CSPRNG
-    // - also set the internal IV field to random
+    // - also set the internal IV field to a random value
     // - used e.g. by TAesSignature or Random128() for their initialization
     procedure EncryptInitRandom;
     /// encrypt an AES data block into another data block

@@ -539,6 +539,7 @@ begin
   fCmd := aCmd;
   fEnv := aEnv;
   fWrkDir := aWrkDir;
+  // fRunOptions=[] without roWinNoProcessDetach to detach from the current process
   if soWinJobCloseChildren in aService.StartOptions then
     include(fRunOptions, roWinJobCloseChildren); // just ignored on POSIX
   if not (soReplaceEnv in aService.StartOptions) then

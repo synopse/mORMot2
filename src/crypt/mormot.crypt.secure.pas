@@ -4784,7 +4784,7 @@ begin
            not Base64uriValid(P, @ConvertBase64ToBin) then
           exit;
         result := mcfSCrypt;
-        exit; // b64valid() is not the $scrypt$ charset but standard base64
+        exit; // $scrypt$ charset is standard base64 and not passlib b64valid()
       end;
   else
     begin

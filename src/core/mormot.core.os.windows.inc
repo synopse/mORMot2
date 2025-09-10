@@ -4560,7 +4560,7 @@ begin
     path := Executable.ProgramFilePath; // prefers the current folder
   // prepare the main CreateProcessW arguments
   wcmd := SynUnicode(cmd);
-  UniqueString(wcmd);
+  UniqueString(wcmd); // CreateProcessW() modifies wcmd buffer in-place
   wpath := SynUnicode(path);
   if env <> '' then
   begin
