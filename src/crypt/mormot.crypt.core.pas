@@ -7337,7 +7337,7 @@ end;
 
 procedure TAesPrngAbstract.XorRandom(Buffer: pointer; Len: PtrInt);
 var
-  tmp: array[0 .. 8191] of byte;
+  tmp: TBuffer8K;
   n, wipe: PtrInt;
 begin
   wipe := MinPtrInt(SizeOf(tmp), Len);
@@ -7430,7 +7430,7 @@ begin
   begin
     if defsiz = 0 then
       defsiz := 16; // 128-bit is the common salt size in proper cryptography
-    TAesPrng.Fill(FastNewRawByteString(bin, defsiz), defsiz); // CSPRNG
+    bin := TAesPrng.Fill(defsiz); // from CSPRNG
     b64 := BinToBase64uri(bin, enc);
   end
   else if (dec <> nil) and
