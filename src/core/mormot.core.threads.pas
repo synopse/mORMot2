@@ -2306,9 +2306,11 @@ begin
                 fOnAfterProcess(self);
             end;
           except
-            E := AcquireExceptionObject;
+            E := AcquireExceptionObject; // won't be released
             if E.InheritsFrom(Exception) then
-              fBackgroundException := Exception(E);
+              fBackgroundException := Exception(E)
+            else
+              ReleaseExceptionObject; // avoid leak (inlikely)
           end;
         finally
           SetPendingProcess(flagFinished);
