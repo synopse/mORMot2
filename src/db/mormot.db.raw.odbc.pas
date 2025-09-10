@@ -429,7 +429,7 @@ type
   SqlHDbc   = SqlHandle;
   SqlHStmt  = SqlHandle;
   SqlHDesc  = SqlHandle;
-  SqlHWnd   = LongWord;
+  SqlHWnd   = PtrUInt; // match e.g.Windows.HWND
 
 
 { ************ Native ODBC Memory Structures }
