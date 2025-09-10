@@ -5739,7 +5739,7 @@ type
   // existing system environment variable
   // - roWinJobCloseChildren will setup a Windows Job to close any child
   // process(es) when the created process quits
-  // - roWinNoProcessDetach will avoid creating a Windows sub-process and group
+  // - roWinNoProcessDetach will avoid creating its own console and Windows group
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
   TRunOptions = set of (
@@ -5749,8 +5749,16 @@ type
     roWinNewConsole,
     roWinKeepProcessOnTimeout);
 
+const
+  /// the default options for RunCommand() and RunRedirect() transient execution
+  // - detaching the process from the console and Job group by default does only
+  // make sense for RunProcess() which will use TRunOptions = []
+  RUN_CMD = [roWinNoProcessDetach];
+
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
+// - by default, TRunOptions = [] so would detach from the console and Job group
+// as we would expect from launch a new process
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2: TFileName = ''; const arg3: TFileName = '';
   const arg4: TFileName = ''; const arg5: TFileName = '';
@@ -5765,8 +5773,9 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 // depending on the program itself
 // - parsed is implemented on POSIX only
 // - optional env should be encoded as 'n1=v1'#0'n2=v2'#0#0 pairs
+// - TRunOptions = RUN_CMD as expected from executing a transient command
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName = ''; options: TRunOptions = [];
+  const env: TFileName = ''; options: TRunOptions = RUN_CMD;
   {$ifdef OSWINDOWS}
   waitfordelayms: cardinal = INFINITE; processhandle: PHandle = nil;
   redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
@@ -5789,11 +5798,12 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - optional env is Windows only, (FPC popen does not support it), and should
 // be encoded as name=value#0 pairs
 // - you can specify a wrkdir if the path specified by cmd is not good enough
+// - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
   setresult: boolean = true; const env: TFileName = '';
-  const wrkdir: TFileName = ''; options: TRunOptions = []): RawByteString;
+  const wrkdir: TFileName = ''; options: TRunOptions = RUN_CMD): RawByteString;
 
 var
   /// a RunRedirect() callback for console output e.g. for debugging purpose

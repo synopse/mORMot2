@@ -4659,10 +4659,10 @@ begin
     // retrieve the exit code or abort the process on timeout
     if GetExitCodeProcess(processinfo.hProcess, exitcode) and
        (exitcode <> STILL_ACTIVE) then
-      result := exitcode // process finisshed with an exit code
+      result := exitcode // process finished with an exit code
     else
       AbortProcess;
-    // enventually retrieve any pending output
+    // eventually retrieve any pending output
     if rd <> 0 then
       RedirectOutputAborted({killed=}true);
   finally
