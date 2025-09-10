@@ -1537,6 +1537,7 @@ var
   clientcb, servercb: ITunnelTransmit;
   clienttunnel, servertunnel: ITunnelLocal;
   sent, received, sent2, received2: RawByteString;
+  closed: PBoolean;
   i: integer;
   clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
@@ -1629,6 +1630,9 @@ begin
     clientsock.ShutdownAndClose(true);
     serversock.ShutdownAndClose(true);
   end;
+  clientinstance.ClosePort;
+  closed := @serverinstance.Closed; // trick to access this propery by value
+  SleepHiRes(1000, closed^);
   servertunnel.SetTransmit(nil); // avoid memory leak due to circular references
 end;
 
