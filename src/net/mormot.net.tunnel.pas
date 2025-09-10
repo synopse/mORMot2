@@ -181,7 +181,7 @@ type
     fSendSafe: TMultiLightLock;
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
-    fOpenBind, fClosePortNotified: boolean;
+    fOpenBind, fClosed, fClosePortNotified: boolean;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
     fEcdhe: TEccKeyPair;
@@ -222,7 +222,7 @@ type
     /// ITunnelTransmit method: return some information about this connection
     function TunnelInfo: variant;
     /// ITunnelLocal method: to be called before Open()
-    procedure SetTransmit(const Transmit: ITunnelTransmit);
+    procedure SetTransmit(const OtherEnd: ITunnelTransmit);
     /// ITunnelLocal method: return the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// ITunnelLocal method: return the local port
@@ -276,6 +276,9 @@ type
     /// number of seconds elapsed since Open()
     property Elapsed: cardinal
       read GetElapsed;
+    /// equals true after ClosePort
+    property Closed: boolean
+      read fClosed;
   end;
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
@@ -530,7 +533,7 @@ begin
       if Assigned(log) then
         log.Log(sllTrace, 'ClosePort: notify other end', self);
       PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
-      TunnelSend(notifycloseport);
+      fTransmit.TunnelSend(notifycloseport);
     except
     end;
   thread := fThread;
@@ -549,6 +552,7 @@ begin
   if Assigned(log) then
     log.Log(sllTrace, 'ClosePort: %', [self]);
   fPort := 0;
+  fClosed := true;
 end;
 
 procedure TTunnelLocal.TunnelSend(const aFrame: RawByteString);
@@ -623,11 +627,12 @@ begin
     result := GetUptimeSec - fStartTicks;
 end;
 
-procedure TTunnelLocal.SetTransmit(const Transmit: ITunnelTransmit);
+procedure TTunnelLocal.SetTransmit(const OtherEnd: ITunnelTransmit);
 begin
-  fTransmit := Transmit;
-  if fThread <> nil then
-    fThread.fTransmit := Transmit; // could be refreshed during process
+  if (OtherEnd <> nil) and
+     (fThread <> nil) then
+    ETunnel.RaiseUtf8('Too late %.SetTransmit', [self]);
+  fTransmit := OtherEnd;
 end;
 
 procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
@@ -826,7 +831,7 @@ begin
       begin
         if Assigned(log) then
           log.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
-        TunnelSend(frame); // paranoid
+        TunnelSend(frame); // paranoid: redirect to this instance
       end;
     finally
       fSendSafe.UnLock;
