@@ -4411,10 +4411,9 @@ var
   processinfo: TProcessInformation;
 begin
   result := '';
+  redir := nil; // if onoutput is enough (e.g. to avoid huge result)
   if setresult then
-    redir := @result
-  else
-    redir := nil;
+    redir := @result;
   res := RunCommandWin(cmd, {wait=}true, processinfo, env, options,
     waitfordelayms, redir, onoutput, wrkdir);
   if exitcode <> nil then
@@ -4498,20 +4497,20 @@ var
   end;
 
   function RedirectAndWait(endtix: Int64): boolean;
-  var
-    res: cardinal;
   begin
     repeat
-      res := WaitForSingleObject(processinfo.hProcess, 50);
       // note: WaitForMultipleObjects() with rd burns 100% of one core :(
-      if res = WAIT_FAILED then
-      begin
-        ReturnLastError('RedirectAndWait');
-        result := false;
-        exit;
+      case WinWaitFor({ms=}50, processinfo.hProcess) of
+        wwfSignaled:
+          break;
+        wwfFailed, wwfQuit:
+          begin
+            ReturnLastError('RedirectAndWait abort');
+            result := false;
+            exit;
+          end;
       end;
     until RedirectOutputAborted({killed=}false) or
-          (res = WAIT_OBJECT_0) or
           ((endtix <> 0) and
            (GetTickCount64 > endtix));
     result := true;
@@ -4688,19 +4687,14 @@ begin
     if Assigned(onoutput) then
       onoutput('', processinfo.dwProcessId); // notify started
     // main wait (and redirect) until the process is finished (or not)
+    endtix := 0;
+    if waitfordelayms <> INFINITE then
+      endtix := GetTickCount64 + waitfordelayms;
     if rd <> 0 then
-    begin
-      // wait and redirect - https://stackoverflow.com/a/25725197/458259
-      CloseHandle(wr);
-      endtix := 0;
-      if waitfordelayms <> INFINITE then
-        endtix := GetTickCount64 + waitfordelayms;
-      RedirectAndWait(endtix);
-    end
-    else if waitfor then
-      WaitForSingleObject(processinfo.hProcess, waitfordelayms)
-    else
+      CloseHandle(wr) // https://stackoverflow.com/a/25725197/458259
+    else if not waitfor then
       exit; // no wait nor redirection: just launch the process
+    RedirectAndWait(endtix);
     // retrieve the exit code or abort the process on timeout
     if GetExitCodeProcess(processinfo.hProcess, exitcode) and
        (exitcode <> STILL_ACTIVE) then
