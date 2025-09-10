@@ -533,7 +533,8 @@ begin
       if Assigned(log) then
         log.Log(sllTrace, 'ClosePort: notify other end', self);
       PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
-      fTransmit.TunnelSend(notifycloseport);
+      if Assigned(fTransmit) then
+        fTransmit.TunnelSend(notifycloseport);
     except
     end;
   thread := fThread;
@@ -543,10 +544,14 @@ begin
       thread.fOwner := nil;
       thread.Terminate;
       if thread.fState = stAccepting then
+      begin
+        if Assigned(log) then
+          log.Log(sllDebug, 'ClosePort: release accept', self);
         if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
            {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
           // Windows socket may not release Accept() until connected
           callback.ShutdownAndClose({rdwr=}false);
+      end;
     except
     end;
   if Assigned(log) then
