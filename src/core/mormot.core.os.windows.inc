@@ -4379,20 +4379,36 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
-  options: TRunOptions; waitfordelayms: cardinal; processhandle: PHandle;
-  redirected: PRawByteString; const onoutput: TOnRedirect;
-  const wrkdir: TFileName): integer;
+  options: TRunOptions; processhandle: PHandle): integer;
 var
   processinfo: TProcessInformation;
 begin
-  result := RunCommandWin(cmd, waitfor, processinfo, env, options,
-    waitfordelayms, redirected, onoutput, wrkdir);
+  result := RunCommandWin(cmd, waitfor, processinfo, env, options);
   if processhandle <> nil then
     processhandle^ := processinfo.hProcess;
 end;
 
+function RunRedirect(const cmd: TFileName; exitcode: PInteger;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
+  const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
+var
+  res: integer;
+  redir: PRawByteString;
+  processinfo: TProcessInformation;
+begin
+  result := '';
+  if setresult then
+    redir := @result
+  else
+    redir := nil;
+  res := RunCommandWin(cmd, {wait=}true, processinfo, env, options,
+    waitfordelayms, redir, onoutput, wrkdir);
+  if exitcode <> nil then
+    exitcode^ := res;
+end;
+
 function RunCommandWin(const cmd: TFileName; waitfor: boolean;
-  var processinfo: TProcessInformation; const env: TFileName;
+  var processinfo: TWinProcessInfo; const env: TFileName;
   options: TRunOptions; waitfordelayms: cardinal;
   redirected: PRawByteString; const onoutput: TOnRedirect;
   const wrkdir: TFileName; jobtoclose: PHandle): integer;
@@ -4646,7 +4662,7 @@ begin
         jobtoclose^ := job;
     end;
     if Assigned(onoutput) then
-      onoutput('', processinfo.dwProcessId);
+      onoutput('', processinfo.dwProcessId); // notify started
     // main wait (and redirect) until the process is finished (or not)
     if rd <> 0 then
     begin
@@ -4682,24 +4698,6 @@ begin
   end
   else
     ReturnLastError('CreateProcessW');
-end;
-
-function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
-  const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
-var
-  res: integer;
-  redir: PRawByteString;
-begin
-  result := '';
-  if setresult then
-    redir := @result
-  else
-    redir := nil;
-  res := RunCommand(cmd, true, env, options, waitfordelayms, nil,
-    redir, onoutput, wrkdir);
-  if exitcode <> nil then
-    exitcode^ := res;
 end;
 
 

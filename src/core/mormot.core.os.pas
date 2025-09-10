@@ -5774,15 +5774,13 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 // - on Windows, consider RunCommandWin() specific version with more parameters
 // - optional env should be encoded as 'n1=v1'#0'n2=v2'#0#0 pairs
 // - TRunOptions = RUN_CMD as expected from executing a transient command
-function RunCommand(const cmd: TFileName; waitfor: boolean;
+// - parsed^ is implemented on POSIX only, and processhandle^ on Windows only
+// - under Windows (especially Windows 10/11), creating a process can be dead
+// slow https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
+function RunCommand(const cmd: TFileName; waitfor: boolean = true;
   const env: TFileName = ''; options: TRunOptions = RUN_CMD;
-  {$ifdef OSWINDOWS}
-  waitfordelayms: cardinal = INFINITE; processhandle: PHandle = nil;
-  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
-  const wrkdir: TFileName = ''
-  {$else}
-  parsed: PParseCommands = nil
-  {$endif OSWINDOWS}): integer;
+  {$ifdef OSPOSIX} parsed: PParseCommands = nil
+  {$else} processhandle: PHandle = nil {$endif OSPOSIX}): integer;
 
 /// execute a command, returning its output console as text
 // - calls CreateProcessW on Windows (i.e. our RunCommandWin function), and
@@ -5818,15 +5816,10 @@ var
   RunAbortTimeoutSecs: integer = 5;
 
 {$ifdef OSWINDOWS}
-
-/// Windows-specific RunCommand() function returning raw TProcessInformation
-function RunCommandWin(const cmd: TFileName; waitfor: boolean;
-  var processinfo: TProcessInformation; const env: TFileName = '';
-  options: TRunOptions = []; waitfordelayms: cardinal = INFINITE;
-  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
-  const wrkdir: TFileName = ''; jobtoclose: PHandle = nil): integer;
-
 type
+  /// for use as RunCommandWin() parameter with no "uses Windows" clause
+  TWinProcessInfo = Windows.TProcessInformation;
+
   /// how RunRedirect() or RunCommand() should try to gracefully terminate
   // - ramCtrlC calls CancelProcess(), i.e. send CTRL_C_EVENT
   // - ramQuit calls QuitProcess(), i.e. send WM_QUIT on all the process threads
@@ -5837,6 +5830,15 @@ type
 var
   /// RunRedirect/RunCommand methods to gracefully terminate before TerminateProcess
   RunAbortMethods: TRunAbortMethods = [ramCtrlC, ramQuit];
+
+/// Windows-specific RunCommand() function returning raw TProcessInformation
+// and with additional parameters
+function RunCommandWin(const cmd: TFileName; waitfor: boolean;
+  var processinfo: TWinProcessInfo; const env: TFileName = '';
+  options: TRunOptions = RUN_CMD; waitfordelayms: cardinal = INFINITE;
+  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
+  const wrkdir: TFileName = ''; jobtoclose: PHandle = nil): integer;
+
 {$else}
 type
   /// how RunRedirect() should try to gracefully terminate
