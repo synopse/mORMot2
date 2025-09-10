@@ -203,6 +203,8 @@ type
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
+    // - call SetTransmit() to setup the remote link, then Open() to perform
+    // the actual handshaking and start the background tunnelling thread
     constructor Create(Logger: TSynLogClass = nil;
       SpecificKey: PEccKeyPair = nil); reintroduce;
     /// main method to initialize tunnelling process
@@ -210,6 +212,7 @@ type
     // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
+    // - should be called only once per TTunnelLocal instance
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       const InfoNameValue: array of const): TNetPort;
@@ -519,7 +522,7 @@ begin
     ClosePort; // calls Terminate
   inherited Destroy;
   FillCharFast(fEcdhe, SizeOf(fEcdhe), 0);
-  FreeAndNil(fHandshake);
+  FreeAndNil(fHandshake); // if Open() was not called
 end;
 
 procedure TTunnelLocal.ClosePort;
@@ -532,7 +535,7 @@ begin
   if self = nil then
     exit;
   fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
-  fSendSafe.Lock;
+  fSendSafe.Lock; // protect fHandshake+fThread
   try
     if not (fClosePortNotified in fFlags) then
       try
@@ -582,7 +585,7 @@ begin
   dec(l, SizeOf(Int64));
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
-  fSendSafe.Lock;
+  fSendSafe.Lock; // protect fHandshake+fThread
   try
     inc(fFrames);
     if fHandshake <> nil then
@@ -701,13 +704,9 @@ begin
   TransmitOptions := (TransmitOptions - [toClientSigned, toServerSigned]) +
                      ComputeOptionsFromCert;
   // bind to a local (ephemeral) port
-  if fThread <> nil then
-  begin
-    if Assigned(log) then
-      log.Log(sllDebug, 'Open: close/abort previous state', self);
-    include(fFlags, fClosePortNotified); // emulate a clean remote closing
-    ClosePort;
-  end;
+  if (fThread <> nil) or
+     (fHandshake = nil) then
+    ETunnel.RaiseUtf8('%.Open called twice', [self]);
   fPort := 0;
   fFlags := [];
   result := uri.PortInt;
@@ -847,8 +846,8 @@ begin
     hqueue := fHandshake;
     fSendSafe.Lock; // re-entrant for TunnelSend()
     try
-      fThread := thread;
-      fHandshake := nil; // ends the handshaking phase
+      fThread := thread;   // starts the normal tunnelling phase
+      fHandshake := nil;   // ends the handshaking phase
       while hqueue.Pop(frame) do
       begin
         if Assigned(log) then
@@ -864,7 +863,6 @@ begin
     result := 0;
   end;
   infoaes.Free;
-  FreeAndNil(fHandshake);
   FillZero(key.b);
   FillZero(iv.b);
 end;
