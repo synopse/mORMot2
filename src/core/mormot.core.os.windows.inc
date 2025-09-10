@@ -4393,7 +4393,7 @@ function RunCommandWin(const cmd: TFileName; waitfor: boolean;
   const wrkdir: TFileName; jobtoclose: PHandle): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
-  security: TSecurityAttributes;
+  procsec, pipesec: TSecurityAttributes;
   exe, path: TFileName;
   rd, wr, job: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
@@ -4570,9 +4570,8 @@ begin
       UniqueString(wenv);
   end;
   // prepare redirection and execution context
-  security.nLength := SizeOf(security);
-  security.bInheritHandle := true;
-  security.lpSecurityDescriptor := nil;
+  FillCharFast(procsec, SizeOf(procsec), 0);
+  procsec.nLength := SizeOf(procsec);
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
   l := 0;
@@ -4583,7 +4582,11 @@ begin
   ram := RunAbortMethods; // local copy to exclude ramCtrlC
   if Assigned(onoutput) or
      (redirected <> nil) then
-    if CreatePipe(rd, wr, @security, 0) then
+  begin
+    FillCharFast(pipesec, SizeOf(pipesec), 0);
+    pipesec.nLength := SizeOf(pipesec);
+    pipesec.bInheritHandle := true;
+    if CreatePipe(rd, wr, @pipesec, 0) then
     begin
       SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
       startupinfo.wShowWindow := SW_HIDE;
@@ -4597,6 +4600,7 @@ begin
     end
     else
       rd := 0;
+  end;
   // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
   flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE;
   // by default, just behave as a standard Windows process would
@@ -4607,7 +4611,7 @@ begin
   if roWinNewConsole in options then
     flags := flags or CREATE_NEW_CONSOLE;
   // actually create the new process
-  created := CreateProcessW(nil, pointer(wcmd), @security, @security, true,
+  created := CreateProcessW(nil, pointer(wcmd), @procsec, @procsec, true,
     flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
   if (not created) and
      (flags and CREATE_BREAKAWAY_FROM_JOB <> 0) then
@@ -4618,7 +4622,7 @@ begin
     flags := flags and (not CREATE_BREAKAWAY_FROM_JOB);
     wcmd := SynUnicode(cmd); // CreateProcesW() modified wcmd content: recreate
     UniqueString(wcmd);
-    created := CreateProcessW(nil, pointer(wcmd), @security, @security, true,
+    created := CreateProcessW(nil, pointer(wcmd), @procsec, @procsec, true,
       flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
   end;
   if created then
