@@ -181,7 +181,7 @@ type
     // see e.g. TSynMonitor.FromExternalMicroSeconds implementation
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
     procedure FromExternalMicroSeconds(const MicroSeconds: QWord);
-      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+      {$ifdef HASSAFEINLINE} inline; {$endif} // Delphi 2007 is buggy as hell
     /// low-level method to force values settings to allow thread safe timing
     // - by default, this timer is not thread safe: you can use this method to
     // set the timing values from manually computed performance counters
@@ -284,10 +284,10 @@ type
   public
     /// increase the internal time elapsed counter
     procedure AddTime(MicroSeconds: TSynMonitorTotalMicroSec);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif} // Delphi 2007 is buggy as hell
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
-      {$ifdef FPC_OR_UNICODE} inline; {$endif} // Delphi 2007 is buggy as hell
+      {$ifdef HASSAFEINLINE} inline; {$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorTotalMicroSec
@@ -306,7 +306,7 @@ type
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
-      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+      {$ifdef HASSAFEINLINE}inline;{$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorOneMicroSec
@@ -333,7 +333,7 @@ type
   public
     /// increase the internal size counter
     procedure AddSize(Size: TSynMonitorTotalBytes);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
   published
     /// number of bytes, as raw number
     property Bytes: TSynMonitorTotalBytes
