@@ -1583,17 +1583,17 @@ begin
     CheckEqual(serverinstance.Sent, 0);
     for i := 1 to 100 do
     begin
-      sent := RandomWinAnsi(Random32(200) + 1);
+      sent  := RandomWinAnsi(Random32(200) + 1);
       sent2 := RandomWinAnsi(Random32(200) + 1);
       Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(serversock.RecvWait(1000, received) = nrOk);
-      Check(sent = received, 'block1');
+      CheckUtf8(sent = received, 'block1 %=%', [length(sent), length(received)]);
       Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
       Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(clientsock.RecvWait(1000, received) = nrOk);
       Check(serversock.RecvWait(1000, received2) = nrOk);
-      Check(sent = received, 'block2');
-      Check(sent2 = received2, 'block3');
+      CheckUtf8(sent = received, 'block2 %=%', [length(sent), length(received)]);
+      CheckUtf8(sent = received, 'block3 %=%', [length(sent2), length(received2)]);
       CheckEqual(clientinstance.Received, serverinstance.Sent);
       CheckEqual(clientinstance.Sent, serverinstance.Received);
       Check(clientinstance.Received <> 0);
@@ -1621,7 +1621,10 @@ end;
 procedure TNetworkProtocols._TTunnelLocal;
 var
   c, s: ICryptCert;
+  bak: TSynLogLevels;
 begin
+  bak := TSynLog.Family.Level;
+  TSynLog.Family.Level := LOG_VERBOSE;
   c := Cert('syn-es256').Generate([cuDigitalSignature]);
   s := Cert('syn-es256').Generate([cuDigitalSignature]);
   // plain tunnelling
@@ -1641,6 +1644,7 @@ begin
   // ECDHE encrypted tunnelling with mutual authentication
   tunneloptions := [toEcdhe];
   TunnelTest(c, s);
+  TSynLog.Family.Level := bak;
 end;
 
 procedure TNetworkProtocols.IPAddresses;
