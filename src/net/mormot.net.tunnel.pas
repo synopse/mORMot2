@@ -131,7 +131,7 @@ type
   TTunnelEcdhFrame = packed record
     /// the 128-bit client or server random nonce
     rnd: TAesBlock;
-    /// the public key of this side (may be just random if toEcdhe is not set)
+    /// the public key of this side (33 random bytes if toEcdhe is not set)
     pub: TEccPublicKey;
   end;
 
@@ -327,9 +327,12 @@ type
     ITunnelTransmit)
   protected
     fSafe: TRWLightLock;
+    fInfoCacheSafe: TLightLock;
     fItem: array of ITunnelTransmit;
-    fSession: TIntegerDynArray; // stored TTunnelSession (=cardinal) values
+    fSession: TIntegerDynArray; // store TTunnelSession (=cardinal) values
     fCount: integer;
+    fInfoCacheTix32: cardinal;
+    fInfoCache: variant;
   public
     /// append one ITunnelTransmit callback to the list
     function Add(aSession: TTunnelSession;
@@ -343,6 +346,7 @@ type
   public
     /// ITunnelTransmit method which will redirect the given frame to the
     // expected registered ITunnelTransmit instance
+    // - if the Frame does not match any known session, just do nothing
     procedure TunnelSend(const Frame: RawByteString);
     /// ITunnelTransmit method: return a TDocVariant array about all connections
     function TunnelInfo: variant;
@@ -357,6 +361,24 @@ implementation
 
 const
   TRAIL_SIZE = SizeOf(TTunnelSession);
+
+function ToText(opt: TTunnelOptions): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
+  LowerCaseShort(result);
+end;
+
+function FrameSession(const Frame: RawByteString): TTunnelSession;
+var
+  l: PtrInt;
+begin
+  l := length(Frame) - TRAIL_SIZE;
+  if l >= 0 then
+    result := PTunnelSession(@PByteArray(Frame)[l])^
+  else
+    result := 0;
+end;
+
 
 { TTunnelLocalThread }
 
@@ -538,7 +560,7 @@ end;
 procedure TTunnelLocal.ClosePort;
 var
   thread: TTunnelLocalThread;
-  frame: RawByteString;
+  frame: RawByteString; // notification frame to unregister to the other side
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
   log: ISynLog;
 begin
@@ -746,10 +768,10 @@ begin
     loc.Info.options := fOptions;
     loc.Info.session := fSession; // is typically an increasing sequence number
     loc.Info.port    := result;
-    Random128(@loc.Ecdh.rnd);   // unpredictable
+    Random128(@loc.Ecdh.rnd);     // unpredictable
     if toEcdhe in fOptions then
     begin
-      if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
+      if IsZero(fEcdhe.pub) then  // ephemeral key was not specified at Create
       begin
         if Assigned(log) then
           log.Log(sllTrace, 'Open: generate ECHDE key', self);
@@ -916,24 +938,6 @@ begin
 end;
 
 
-function ToText(opt: TTunnelOptions): ShortString;
-begin
-  GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
-  LowerCaseShort(result);
-end;
-
-function FrameSession(const Frame: RawByteString): TTunnelSession;
-var
-  l: PtrInt;
-begin
-  l := length(Frame) - TRAIL_SIZE;
-  if l >= 0 then
-    result := PTunnelSession(@PByteArray(Frame)[l])^
-  else
-    result := 0;
-end;
-
-
 { ******************** Local NAT Client/Server to Tunnel TCP Streams }
 
 { TTunnelLocalServer }
@@ -1054,10 +1058,10 @@ begin
     exit; // invalid frame for sure
   fSafe.ReadLock; // non-blocking Read lock
   try
-    ndx := IntegerScanIndex(pointer(fSession), fCount, s);
+    ndx := IntegerScanIndex(pointer(fSession), fCount, s); // use SSE2 asm
     if ndx < 0 then
-      exit;
-    fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within Read lock
+      exit; // just skip the frame if the session does not exist (anti-fuzzing)
+    fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within ReadLock
   finally
     fSafe.ReadUnLock;
   end;
@@ -1070,20 +1074,32 @@ function TTunnelList.TunnelInfo: variant;
 var
   dv: TDocVariantData absolute result;
   n, i: PtrInt;
+  tix32: cardinal;
 begin
   VarClear(result);
-  dv.InitFast(dvArray);
   if fItem = nil  then
     exit;
+  tix32 := GetTickSec;
+  fInfoCacheSafe.Lock;
+  if tix32 = fInfoCacheTix32 then // cache last info for one second
+    result := fInfoCache;
+  fInfoCacheSafe.UnLock;
+  if dv.Count <> 0 then
+    exit;
+  dv.InitFast(dvArray);
   fSafe.ReadLock; // non-blocking Read lock
   try
     n := length(fItem);
     dv.Capacity := n;
     for i := 0 to n - 1 do
-      dv.AddItem(fItem[i].TunnelInfo);
+      dv.AddItem(fItem[i].TunnelInfo); // call all remote endpoints
   finally
     fSafe.ReadUnLock;
   end;
+  fInfoCacheSafe.Lock;
+  fInfoCacheTix32 := tix32;
+  fInfoCache := result;
+  fInfoCacheSafe.UnLock;
 end;
 
 end.
