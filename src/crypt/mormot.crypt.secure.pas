@@ -2908,7 +2908,12 @@ type
     // - warning: only supported by our 'syn-store' algorithm: OpenSSL Store
     // has no way to lookup the X.509 certificate which actually signed the buffer
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
-      IgnoreError: TCryptCertValidities = []; TimeUtc: TDateTime = 0): TCryptCertValidity;
+      IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
+    /// verify the digital signature of a given memory string
+    function Verify(const Signature, Data: RawByteString;
+      IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
     /// how many trusted certificates are currently stored
     function Count: integer;
     /// how many CRLs are currently stored
@@ -2948,7 +2953,10 @@ type
       date: TDateTime): TCryptCertValidity; virtual;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
-        virtual; abstract;
+        overload; virtual; abstract;
+    function Verify(const Signature, Data: RawByteString;
+      IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
     function Count: integer; virtual; abstract;
     function CrlCount: integer; virtual; abstract;
     function DefaultCertAlgo: TCryptCertAlgo; virtual;
@@ -9080,6 +9088,12 @@ begin
   if n > 1 then
     date := c[n - 2].GetNotBefore; // anchor is not main: adjust date
   result := IsValid(c[n - 1], date);
+end;
+
+function TCryptStore.Verify(const Signature, Data: RawByteString;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
+begin
+  result := Verify(Signature, pointer(Data), length(Data), IgnoreError, TimeUtc);
 end;
 
 function TCryptStore.DefaultCertAlgo: TCryptCertAlgo;
