@@ -188,7 +188,7 @@ type
     fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
-    fReceived, fSent, fFrames: Int64;
+    fBytesIn, fBytesOut, fFramesIn, fFramesOut: Int64;
     fLogClass: TSynLogClass;
     fStartTicks: cardinal;
     fInfo: TDocVariantData;
@@ -271,15 +271,18 @@ type
     /// access to the associated background thread processing the data
     property Thread: TTunnelLocalThread
       read fThread;
-    /// input TCP frames bytes
-    property Received: Int64
-      read fReceived;
-    /// output TCP frames bytes
-    property Sent: Int64
-      read fSent;
+    /// how many bytes have been received
+    property BytesIn: Int64
+      read fBytesIn;
+    /// how many bytes have been sent
+    property BytesOut: Int64
+      read fBytesOut;
     /// how many frames have been received
-    property Frames: Int64
-      read fFrames;
+    property FramesIn: Int64
+      read fFramesIn;
+    /// how many frames have been sent
+    property FramesOut: Int64
+      read fFramesOut;
     /// number of seconds elapsed since Open()
     property Elapsed: cardinal
       read GetElapsed;
@@ -418,7 +421,7 @@ begin
   if Terminated then
     exit;
   if fOwner <> nil then
-    inc(fOwner.fReceived, length(data));
+    inc(fOwner.fBytesIn, length(data));
   res := fClientSock.SendAll(pointer(data), length(data), @Terminated);
   if (res = nrOk) or
      Terminated then
@@ -474,7 +477,7 @@ begin
             begin
               // emit the (encrypted) data with a 64-bit TTunnelSession trailer
               if fOwner <> nil then
-                inc(fOwner.fSent, length(tmp)); // Sent/Received are plain sizes in bytes
+                inc(fOwner.fBytesOut, length(tmp)); // size before encryption
               if fAes[{send:}true] <> nil then
                 tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, {trailer=}8)
               else
@@ -482,7 +485,11 @@ begin
               PInt64(@PByteArray(tmp)[length(tmp) - 8])^ := fSession;
               if (fTransmit <> nil) and
                  not Terminated then
+              begin
+                if fOwner <> nil then
+                  inc(fOwner.fFramesOut);
                 fTransmit.TunnelSend(tmp);
+              end;
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
@@ -544,7 +551,10 @@ begin
           log.Log(sllTrace, 'ClosePort: notify other end', self);
         PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
         if Assigned(fTransmit) then
+        begin
+          inc(fFramesOut);
           fTransmit.TunnelSend(notifycloseport);
+        end;
       except
       end;
     thread := fThread;
@@ -587,7 +597,7 @@ begin
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
   fSendSafe.Lock; // protect fHandshake+fThread
   try
-    inc(fFrames);
+    inc(fFramesIn);
     if fHandshake <> nil then
     begin
       fLogClass.Add.Log(sllTrace, 'TunnelSend: into fHandshake', self);
@@ -778,6 +788,7 @@ begin
     l := length(frame);
     PWord(@PByteArray(frame)^[l - 10])^ := li;
     PInt64(@PByteArray(frame)^[l - 8])^ := fSession;
+    inc(fFramesOut);
     fTransmit.TunnelSend(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: sent % - wait for answer', [length(frame)], self);
@@ -901,13 +912,14 @@ begin
   VarClear(result);
   if fPort = 0 then
     exit;
-  dv.InitFast(fInfo.Count + 4, dvObject);
-  dv.AddFrom(fInfo);
-  dv.AddNameValuesToObject([
-    'elapsed',  GetElapsed,
-    'bytesIn',  fReceived,
-    'bytesOut', fSent,
-    'frames',   fFrames]);
+  dv.InitFast(fInfo.Count + 5, dvObject);
+  dv.AddFrom(fInfo);         // fixed values
+  dv.AddNameValuesToObject([ // changing values
+    'elapsed',   GetElapsed,
+    'bytesIn',   fBytesIn,
+    'bytesOut',  fBytesOut,
+    'framesIn',  fFramesIn,
+    'framesOut', fFramesOut]);
 end;
 
 
