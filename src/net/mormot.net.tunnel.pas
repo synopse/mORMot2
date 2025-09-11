@@ -383,6 +383,9 @@ type
   // about all associated sessions
   // - when the interface is released, will cancel all corresponding sessions
   ITunnelConsole = interface(ITunnelOpen)
+    /// could be used to define a TDocVariant object about this console
+    // - will be completed with "agents":[] array with each associated agents
+    procedure TunnelSetInfo(const info: variant);
     /// initiate a new relay process as a two-phase commit from the console
     // - caller should call this method, then TTunnelLocal.Open() on its side,
     // and once the handhake is ok or ko, call TunnelCommit or TunnelRollback
@@ -439,7 +442,9 @@ type
   // - is in fact owned by TTunnelRelay
   TTunnelConsole = class(TTunnelOpen, ITunnelConsole)
   protected
+    fInfo: TDocVariantData;
     // ITunnelConsole methods
+    procedure TunnelSetInfo(const info: variant);
     function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
     function TunnelInfo: variant;
     procedure TunnelSend(const Frame: RawByteString);
@@ -485,10 +490,12 @@ type
     function DeleteConsole(aConsole: TTunnelConsole): boolean;
     /// ask all TunnelInfo of all opended Agent sessions as TDocVariant array
     function AgentsInfo: TVariantDynArray;
+    /// ask all TunnelInfo of all opended Console sessions as TDocVariant array
+    function ConsolesInfo: TVariantDynArray;
     /// low-level access to the "agents" list
     property Agent: TTunnelAgent
       read fAgent;
-    /// low-level access to the "consoles" list
+    /// low-level access to the "consoles" list - associated with ConsoleCount
     property Console: TTunnelConsoles
       read fConsole;
     /// how many items are actually stored in Console[]
@@ -1419,6 +1426,30 @@ begin
     result := fAgent.fList.GetAllInfo; // with 1 second cache
 end;
 
+function TTunnelRelay.ConsolesInfo: TVariantDynArray;
+var
+  i: PtrInt;
+  dv: PDocVariantData;
+begin
+  result := nil;
+  if (self = nil) or
+     (fConsoleCount = 0) then
+    exit;
+  fConsoleSafe.ReadLock;
+  try
+    SetLength(result, fConsoleCount);
+    dv := pointer(result);
+    for i := 0 to fConsoleCount - 1 do
+    begin
+      dv^ := fConsole[i].fInfo;
+      dv^.AddValue('list', fConsole[i].TunnelInfo);
+      inc(dv);
+    end;
+  finally
+    fConsoleSafe.ReadUnLock;
+  end;
+end;
+
 
 { TTunnelOpen }
 
@@ -1507,6 +1538,12 @@ begin
   if fOwner <> nil then
     fOwner.DeleteConsole(self); // unregister itself
   inherited Destroy;
+end;
+
+procedure TTunnelConsole.TunnelSetInfo(const info: variant);
+begin
+  fInfo.Clear;
+  fInfo := _Safe(info)^;
 end;
 
 function TTunnelConsole.TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
