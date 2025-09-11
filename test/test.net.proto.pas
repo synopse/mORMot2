@@ -1594,10 +1594,10 @@ begin
      not CheckFailed(Assigned(serverinstance.Thread)) then
   try
     // validate raw TCP tunnelling
-    CheckEqual(clientinstance.Received, 0);
-    CheckEqual(clientinstance.Sent, 0);
-    CheckEqual(serverinstance.Received, 0);
-    CheckEqual(serverinstance.Sent, 0);
+    CheckEqual(clientinstance.BytesIn, 0);
+    CheckEqual(clientinstance.BytesOut, 0);
+    CheckEqual(serverinstance.BytesIn, 0);
+    CheckEqual(serverinstance.BytesOut, 0);
     for i := 1 to 100 do
     begin
       sent  := RandomAnsi7(Random32(200) + 1);
@@ -1611,15 +1611,17 @@ begin
       Check(serversock.RecvWait(1000, received2) = nrOk);
       CheckBlocks(sent, received, 2);
       CheckBlocks(sent2, received2, 3);
-      CheckEqual(clientinstance.Received, serverinstance.Sent);
-      CheckEqual(clientinstance.Sent, serverinstance.Received);
-      Check(clientinstance.Received <> 0);
-      Check(clientinstance.Sent <> 0);
-      Check(serverinstance.Received <> 0);
-      Check(serverinstance.Sent <> 0);
+      CheckEqual(clientinstance.BytesIn, serverinstance.BytesOut);
+      CheckEqual(clientinstance.BytesOut, serverinstance.BytesIn);
+      Check(clientinstance.BytesIn <> 0);
+      Check(clientinstance.BytesOut <> 0);
+      Check(serverinstance.BytesIn <> 0);
+      Check(serverinstance.BytesOut <> 0);
     end;
-    Check(clientinstance.Received < clientinstance.Sent, 'smaller');
-    Check(serverinstance.Received > serverinstance.Sent, 'bigger');
+    Check(clientinstance.BytesIn < clientinstance.BytesOut, 'smaller');
+    Check(serverinstance.BytesIn > serverinstance.BytesOut, 'bigger');
+    CheckEqual(serverinstance.FramesIn, clientinstance.FramesOut, 'frames1');
+    CheckEqual(serverinstance.FramesOut, clientinstance.FramesIn, 'frames2');
     nfo := serverinstance.TunnelInfo;
     Check(_Safe(nfo)^.Count > 4);
     if Assigned(log) then
