@@ -1577,9 +1577,8 @@ type
   // - each time zone will be identified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
   // - note that each instance is thread-safe
-  TSynTimeZone = class
+  TSynTimeZone = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
     fZone: TTimeZoneDataDynArray;
     fZoneCount: integer;
     fZones: TDynArrayHashed;
@@ -1596,7 +1595,7 @@ type
   public
     /// initialize the internal storage
     // - but no data is available, until Load* methods are called
-    constructor Create;
+    constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
     /// will retrieve the default shared TSynTimeZone instance

@@ -226,21 +226,20 @@ type
   // proper URI registration with administrator rights
   // - for a true AJAX server, see AccessControlAllowOrigin property and
   // consider TRestServer.NoAjaxJson := false for non-extended JSON transmission
-  TRestHttpServer = class(TSynPersistent)
+  TRestHttpServer = class(TObjectRWLightLock)
   protected
-    fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: RawUtf8;
     fPublicAddress, fPublicPort: RawUtf8;
     fRestServers: array of TRestHttpOneServer;
     fRestServerNames: RawUtf8;
-    fSafe: TRWLightLock; // protect fRestServers[]
     fHosts: TSynNameValue;
-    fAccessControlAllowOrigin: RawUtf8;
-    fAccessControlAllowOriginsMatch: TMatchs;
-    fAccessControlAllowCredential: boolean;
-    fUse: TRestHttpServerUse;
     fOptions: TRestHttpServerOptions;
+    fShutdownInProgress: boolean;
+    fUse: TRestHttpServerUse;
+    fAccessControlAllowCredential: boolean;
+    fAccessControlAllowOriginsMatch: TMatchs;
+    fAccessControlAllowOrigin: RawUtf8;
     fRootRedirectToURI: array[boolean] of RawUtf8;
     fLog: TSynLogClass;
     fWebSocketsSigner: TBinaryCookieGenerator;

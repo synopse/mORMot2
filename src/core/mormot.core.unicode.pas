@@ -2684,9 +2684,8 @@ type
   // case-insensitive search, as it would on a Windows file system
   // - will use our fast PosixFileNames() low-level API to read the names
   // and store them into its in-memory cache (until Flush or after FlushSeconds)
-  TPosixFileCaseInsensitive = class
+  TPosixFileCaseInsensitive = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
     fFiles: TRawUtf8DynArray;
     fFolder: TFileName;
     fNextTix, fFlushSeconds: cardinal;
