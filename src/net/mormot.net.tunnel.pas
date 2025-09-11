@@ -338,6 +338,9 @@ type
       const aInstance: ITunnelTransmit): boolean;
     /// remove one ITunnelTransmit from its session ID
     function Delete(aSession: TTunnelSession): boolean;
+    /// remove all ITunnelTransmit from another list
+    // - returns the number of deleted items
+    function DeleteFrom(aList: TTunnelList): integer;
     /// search if one ITunnelTransmit matches a session ID
     function Exists(aSession: TTunnelSession): boolean;
     /// ask the TunnelInfo of a given session ID as TDocVariant object
@@ -1045,6 +1048,25 @@ begin
     result := true;
   except
     result := false; // show must go on
+  end;
+end;
+
+function TTunnelList.DeleteFrom(aList: TTunnelList): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if (fCount = 0) or
+     (aList = nil) or
+     (aList.fCount = 0) then
+    exit;
+  aList.fSafe.ReadLock;
+  try
+    for i := 0 to aList.fCount - 1 do
+      if Delete(aList.fSession[i]) then // fast enough
+        inc(result);
+  finally
+    aList.fSafe.ReadUnLock;
   end;
 end;
 
