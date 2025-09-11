@@ -1032,22 +1032,6 @@ type
     fDisplayName: RawUtf8;
     fGroupRights: TAuthGroup;
     fData: RawBlob;
-    /// class function called internally to compute a hashed password
-    // - defined as virtual so that you may use your own hashing mechanism
-    // - used by SetPassword/SetPasswordDigest to fill TAuthUser.PasswordHashHexa
-    // - aHashRound = 0 uses plain Sha256(), as early mORMot 1 encoding
-    // - aHashRound > 0 triggers Pbkdf2HmacSha256() via aHashSalt, and enable
-    // Pbkdf2HmacSha256() to increase security on storage side (reducing brute
-    // force attack via rainbow tables) - as mORMot 1 safer approach
-    // - aHashRound < 0 will use standard DIGEST-HA0 hashing, compatible with
-    // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo) - to be
-    // used if you want to log from a HTTP client, also from SetPasswordDigest()
-    // - aLogonName is only used for aHashRound < 0 = DIGEST-HA0 hashing
-    // - as a safer alternative, use ModularCryptHash() from mormot.crypt.secure
-    // to fill the PasswordHashHexa field - this class method will recognize its
-    // patterns in aPasswordPlain or you could use the SetPassword() overload
-    class function ComputeHashedPassword(const aLogonName, aPasswordPlain: RawUtf8;
-      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     // just wrap default ComputeHashedPassword() = SetPassword() plain Sha256()
     procedure SetPasswordPlain(const Value: RawUtf8);
   public
@@ -1085,6 +1069,22 @@ type
     // - override this method to disable user authentication, e.g. if the user
     // is disabled via a custom ORM field, typically marked as unsafe or expired
     function CanUserLog(Ctxt: TObject): boolean; virtual;
+    /// class function called internally to compute a hashed password
+    // - defined as virtual so that you may use your own hashing mechanism
+    // - used by SetPassword/SetPasswordDigest to fill TAuthUser.PasswordHashHexa
+    // - aHashRound = 0 uses plain Sha256(), as early mORMot 1 encoding
+    // - aHashRound > 0 triggers Pbkdf2HmacSha256() via aHashSalt, and enable
+    // Pbkdf2HmacSha256() to increase security on storage side (reducing brute
+    // force attack via rainbow tables) - as mORMot 1 safer approach
+    // - aHashRound < 0 will use standard DIGEST-HA0 hashing, compatible with
+    // TDigestAuthServer, expecting aHashRound as -ord(TDigestAlgo) - to be
+    // used if you want to log from a HTTP client, also from SetPasswordDigest()
+    // - aLogonName is only used for aHashRound < 0 = DIGEST-HA0 hashing
+    // - as a safer alternative, use ModularCryptHash() from mormot.crypt.secure
+    // to fill the PasswordHashHexa field - this class method will recognize its
+    // patterns in aPasswordPlain or you could use the SetPassword() overload
+    class function ComputeHashedPassword(const aLogonName, aPasswordPlain: RawUtf8;
+      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
   published
     /// the User identification Name, as entered at log-in
     // - the same identifier can be used only once (this column is marked as
