@@ -10454,6 +10454,8 @@ type
   {$endif CPUX86NOTPIC}
 
 var
+  /// this is the main Unicode 10.0 case folding lookup table
+  // - undecompressed from 1KB constant at unit initialization
   {$ifdef UU_COMPRESSED}
   UU: TUnicodeUpperTable;
   {$else}
@@ -10858,8 +10860,8 @@ by1:    c := byte(S^);
         end
         else
         begin
-          extra := utf8.Lookup[c];
-          if (extra = UTF8_INVALID) or // allow full UTF-8/UCS-4 range
+          extra := utf8.Lookup[c]; // allow full UTF-8/UCS-4 range
+          if (extra = UTF8_INVALID) or
              (S + extra > PUtf8Char(SLen)) then
             break;
           i := 0;
@@ -11303,8 +11305,8 @@ end;
 
 const
   // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
-  // - UU[] would convert accents into upper accents: this one to upper plain
-  // (e.g. e acute to E)
+  // - UU[] would convert accents into upper accents (e acute to E acute): this
+  // table converts to the upper plain/unaccentuated char (e.g. e acute to E)
   {%H-}WinAnsiToUp: array[138..255] of byte = (
     83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
     153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,

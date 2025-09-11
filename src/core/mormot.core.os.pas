@@ -2602,7 +2602,7 @@ function SetSystemTime(utctime: TUnixTime): boolean;
 
 /// compatibility function, wrapping Win32 API function
 // - returns the current main Window handle on Windows, or 0 on POSIX/Linux
-function GetDesktopWindow: PtrInt;
+function GetDesktopWindow: PtrUInt;
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns the curent system code page for AnsiString types
@@ -6319,7 +6319,7 @@ type
     EFAULT, EINVAL, EMFILE, EWOULDBLOCK, ENOTSOCK, ENETDOWN,
     ENETUNREACH, ENETRESET, ECONNABORTED, ECONNRESET, ENOBUFS,
     ETIMEDOUT, ECONNREFUSED, TRY_AGAIN,
-    // most common WinHttp API errors (in range 12000...12152)
+    // most common WinHttp API (ERROR_WINHTTP_*) errors in range 12000...12152
     TIMEOUT, OPERATION_CANCELLED, CANNOT_CONNECT,
     CLIENT_AUTH_CERT_NEEDED, INVALID_SERVER_RESPONSE,
     // some SEC_I_* status as returned by SSPI
@@ -6342,10 +6342,10 @@ const
     $c0000092, $c0000093, $c0000094, $c0000095, $c0000096, $c00000fd,
     // sparse system errors
     183, 234, 701, 1150, 1450, 1722, 1907, 1909,
-    // main Windows Socket API (WSA) errors
+    // main Windows Socket API (WSA*) errors
     10014, 10022, 10024, 10035, 10038, 10050, 10051, 10052, 10053, 10054, 10055,
     10060, 10061, 11002,
-    // most common WinHttp API errors (in range 12000...12152)
+    // most common WinHttp API (ERROR_WINHTTP_*) errors in range 12000...12152
     12002, 12017, 12029, 12044, 12152,
     // some SEC_I_* status as returned by SSPI
     $00090312, $00090313, $00090314, $00090317, $00090320, $00090321);

@@ -1350,7 +1350,7 @@ begin
     end;
     // extract URI parameters into fUrlParamIndex[]
     c := 1;
-    repeat // /pets/{petId}/  -> /pets/%/
+    repeat // /pets/{petId}/  ->  /pets/%/
       i := PosEx('{', fPath, c);
       if i = 0 then
         break;
@@ -2320,8 +2320,9 @@ begin
   if fName <> '' then
     fName[1] := UpCase(fName[1]);
   fOptions := aOptions;
-  fRecords := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
-  fEnums := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
+  // create internal lists - fNoDuplicate will use O(1) hash table
+  fRecords    := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
+  fEnums      := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fExceptions := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fLineEnd := CRLF; // default to OS value
   FormatUtf8('Generated % by % via % - DO NOT MODIFY BY HAND!',
@@ -2762,6 +2763,7 @@ function TOpenApiParser.GetOperationsByTag: TPascalOperationsByTagDynArray;
 var
   main: PDocVariantData;
   tag: TRawUtf8DynArray;
+  n: RawUtf8;
   i, j, k, count, ndx: PtrInt;
 begin
   result := nil;
@@ -2779,9 +2781,10 @@ begin
       // add to all tags by name in result[1..]
       for j := 0 to high(tag) do
       begin
+        n := tag[j];
         ndx := -1;
         for k := 1 to count - 1 do
-          if result[k].TagName = tag[j] then
+          if result[k].TagName = n then
           begin
             ndx := k;
             break;
@@ -2790,8 +2793,8 @@ begin
         begin
           ndx := count;
           inc(count);
-          result[ndx].TagName := tag[j];
-          main.GetDocVariantByProp('name', tag[j], {casesens:}true,
+          result[ndx].TagName := n;
+          main.GetDocVariantByProp('name', n, {casesens:}true,
             PDocVariantData(result[ndx].Tag)); // maybe nil
         end;
         ObjArrayAdd(result[ndx].Operations, fOperations[i]);

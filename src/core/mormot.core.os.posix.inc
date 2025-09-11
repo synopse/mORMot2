@@ -620,7 +620,7 @@ begin
   end;
 end;
 
-function GetDesktopWindow: PtrInt;
+function GetDesktopWindow: PtrUInt;
 begin
   result := 0; // fixed result on a window-abstracted system
 end;

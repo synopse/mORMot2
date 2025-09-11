@@ -7944,7 +7944,7 @@ begin
     rkChar,
     rkWChar,
     rkWString:
-      result := oftUtf8Text;
+      result := oftUtf8Text; // UTF-16 content will be handled as UTF-8 JSON
     rkDynArray:
       result := oftBlobDynArray;
     {$ifdef PUBLISHRECORD}
