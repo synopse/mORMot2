@@ -2373,7 +2373,7 @@ procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); ov
 
 /// fast append some UTF-8 text into a ShortString, with an ending ','
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
-  trimlowercase: boolean);   {$ifdef FPC} inline; {$endif}
+  trimlowercase: boolean);
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
@@ -9239,20 +9239,22 @@ end;
 
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
   trimlowercase: boolean);
+var
+  textlen: PtrInt;
 begin
   if trimlowercase then
     while text^ in ['a'..'z'] do
-      if len = 1 then
-        exit
-      else
-      begin
-        inc(text);
-        dec(len);
-      end;
-  if integer(ord(result[0])) + len >= 255 then
+    begin
+      inc(text);
+      dec(len);
+      if len = 0 then
+        exit;
+    end;
+  textlen := ord(result[0]);
+  if textlen + len >= 255 then
     exit;
   if len > 0 then
-    MoveByOne(text, @result[ord(result[0]) + 1], len);
+    MoveByOne(text, @result[textlen + 1], len);
   inc(result[0], len + 1);
   result[ord(result[0])] := ',';
 end;
