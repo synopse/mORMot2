@@ -65,6 +65,8 @@ type
     tunneloptions: TTunnelOptions;
     tunnelexecutedone: boolean;
     tunnelexecuteremote, tunnelexecutelocal: TNetPort;
+    tunnelclient: ITunnelTransmit;
+    tunnelclientcert, tunnelservercert: ICryptCert;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelExecuted(Sender: TObject);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
@@ -1505,8 +1507,8 @@ var
 begin
   // one of the two handshakes should be done in another thread
   tunnelexecutelocal := local.Open(
-    tunnelsession, tunneloptions, 1000, tunnelappsec, cLocalhost,
-    ['remoteHost', Executable.Host]);
+    tunnelsession, tunnelclient, tunneloptions, 1000, tunnelappsec, cLocalhost,
+    ['remoteHost', Executable.Host], tunnelservercert, tunnelclientcert);
   tunnelexecuteremote := local.RemotePort;
   Check(tunnelexecutelocal <> 0);
   Check(tunnelexecuteremote <> 0);
@@ -1534,7 +1536,6 @@ var
 
 var
   clientinstance, serverinstance: TTunnelLocal;
-  clientcb, servercb: ITunnelTransmit;
   clienttunnel, servertunnel: ITunnelLocal;
   sent, received, sent2, received2: RawByteString;
   closed: PBoolean;
@@ -1546,31 +1547,24 @@ var
 begin
   // setup the two instances with the specified options and certificates
   TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
-  clientinstance := TTunnelLocalClient.Create;
-  clientinstance.SignCert := clientcert;
-  clientinstance.VerifyCert := servercert;
-  clientinstance.LogClass := TSynLog;
+  clientinstance := TTunnelLocalClient.Create(TSynLog);
   clientinstance.VerboseLog := true;
   clienttunnel := clientinstance;
-  clientcb := clientinstance;
-  serverinstance := TTunnelLocalServer.Create;
-  serverinstance.SignCert := servercert;
-  serverinstance.VerifyCert := clientcert;
-  serverinstance.LogClass := TSynLog;
+  serverinstance := TTunnelLocalServer.Create(TSynLog);
   serverinstance.VerboseLog := true;
   servertunnel := serverinstance;
-  servercb := serverinstance;
-  clienttunnel.SetTransmit(servercb); // set before Open()
-  servertunnel.SetTransmit(clientcb);
   // validate handshaking
   tunnelsession := Random32;
   tunnelappsec := RandomAnsi7(10);
   tunnelexecutedone := false;
+  tunnelclient := clienttunnel;
+  tunnelclientcert := clientcert;
+  tunnelservercert := servercert;
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
   local := clientinstance.Open(
-    tunnelsession, tunneloptions, 1000, tunnelappsec, clocalhost,
-    ['remoteHost', Executable.Host]);
+    tunnelsession, servertunnel, tunneloptions, 1000, tunnelappsec, clocalhost,
+    ['remoteHost', Executable.Host], clientcert, servercert);
   Check(local <> 0, 'no local');
   remote := clienttunnel.RemotePort;
   Check(remote <> 0, 'no remote');
@@ -1637,7 +1631,8 @@ begin
   clientinstance.ClosePort;
   closed := @serverinstance.Closed; // trick to access this propery by value
   SleepHiRes(1000, closed^);
-  servertunnel.SetTransmit(nil); // avoid memory leak due to circular references
+  tunnelclient := nil;
+  clientinstance.RawTransmit := nil; // avoid circular references memory leak
 end;
 
 procedure TNetworkProtocols._TTunnelLocal;

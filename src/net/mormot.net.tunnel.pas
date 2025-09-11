@@ -45,17 +45,18 @@ type
   ETunnel = class(ESynException);
 
   /// each option available for TTunnelLocal process
-  // - toEcdhe will compute an ephemeral secret to encrypt the link
+  // - toEcdhe computes an ephemeral secret to encrypt the link: combined with
+  // toClientSigned/toServerSigned, it offers perfect End-to-end encryption
+  // - toClientSigned/toServerSigned will be set by Open() according to the
+  // actual certificates available, to ensure endpoint authenticated handshake
   // - if toEcdhe is not set, toEncrypt will ensure a symmetric encryption
   // - only localhost clients are accepted, unless toAcceptNonLocal is set
-  // - toClientSigned/toServerSigned will be set by Open() according to
-  // the actual certificates available, to ensure an authenticated handshake
   TTunnelOption = (
     toEcdhe,
-    toEncrypt,
-    toAcceptNonLocal,
     toClientSigned,
-    toServerSigned);
+    toServerSigned,
+    toEncrypt,
+    toAcceptNonLocal);
 
   /// options for TTunnelLocal process
   TTunnelOptions = set of TTunnelOption;
@@ -90,15 +91,13 @@ type
     /// match mormot.soa.core IServiceWithCallbackReleased definition
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
-    /// to be called before Open() for proper handshake process
-    procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
     /// the remote port used for the tunnel local process
     function RemotePort: cardinal;
-    /// check if the background processing thread is using encrypted frames
+    /// check if the background processing thread is using End-to-end encryption
     function Encrypted: boolean;
   end;
   PITunnelLocal = ^ITunnelLocal;
@@ -193,7 +192,7 @@ type
     fStartTicks: cardinal;
     fInfo: TDocVariantData;
     // methods to be overriden according to the client/server side
-    function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
+    procedure IncludeOptionsFromCert; virtual; abstract;
     procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); virtual; abstract;
     // can optionally add a signature to the main handshake frame
@@ -203,19 +202,28 @@ type
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
-    // - call SetTransmit() to setup the remote link, then Open() to perform
-    // the actual handshaking and start the background tunnelling thread
+    // - call Open() to perform actual handshaking and start the background
+    // tunnelling thread
     constructor Create(Logger: TSynLogClass = nil;
       SpecificKey: PEccKeyPair = nil); reintroduce;
     /// main method to initialize tunnelling process
+    // - Sess genuine integer identifier should match on both sides
+    // - Transmit.TunnelSend will be used for sending raw data to the other end
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
+    // - AppSecret is used during handshake (and toEncrypt with no toEcdhe), and
+    // should match on both sides
     // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
+    // - InfoNameValue are name/value pairs of some JSON fields which will be
+    // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name)
+    // - SignCert/VerifyCert should have [cuDigitalSignature] usage, and match
+    // VerifyCert/SignCert corresponding certificate on other side
     // - should be called only once per TTunnelLocal instance
-    function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret, Address: RawUtf8;
-      const InfoNameValue: array of const): TNetPort;
+    function Open(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret, Address: RawUtf8;
+      const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
+      const VerifyCert: ICryptCert = nil): TNetPort;
     /// finalize this instance, and its local TCP server
     destructor Destroy; override;
     /// called e.g. by CallbackReleased() or by Destroy
@@ -223,17 +231,15 @@ type
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure TunnelSend(const aFrame: RawByteString);
-    /// ITunnelTransmit method: return some information about this connection
+    /// ITunnelTransmit method: return a TDocVariant object about this connection
     function TunnelInfo: variant;
-    /// ITunnelLocal method: to be called before Open()
-    procedure SetTransmit(const OtherEnd: ITunnelTransmit);
     /// ITunnelLocal method: return the associated tunnel session ID
     function TunnelSession: TTunnelSession;
     /// ITunnelLocal method: return the local port
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: return the remote port
     function RemotePort: cardinal;
-    /// ITunnelLocal method: check if the background thread uses encrypted frames
+    /// ITunnelLocal method: check if the background thread uses E2EE
     function Encrypted: boolean;
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
@@ -244,16 +250,9 @@ type
     /// log each received frame length for raw debugging
     property VerboseLog: boolean
       read fVerboseLog write fVerboseLog;
-    /// optional Certificate with private key to sign the output handshake frame
-    // - certificate should have [cuDigitalSignature] usage
-    // - should match other side's VerifyCert public key property
-    property SignCert: ICryptCert
-      read fSignCert write fSignCert;
-    /// optional Certificate with public key to verify the input handshake frame
-    // - certificate should have [cuDigitalSignature] usage
-    // - should match other side's SignCert private key property
-    property VerifyCert: ICryptCert
-      read fVerifyCert write fVerifyCert;
+    /// raw access to the transmission method - used during testing
+    property RawTransmit: ITunnelTransmit
+      read fTransmit write fTransmit;
   published
     /// the ephemeral port on the loopback as returned by Open()
     property Port: TNetPort
@@ -306,20 +305,22 @@ const
 type
   /// implements server-side tunneling service
   // - here 'server' or 'client' side does not have any specific meaning - one
-  // should just be at either end of the tunnel
+  // should just be at either end of the tunnel - but they must appear in a
+  // coherent order during the handshake phase by using those overriden methods
   TTunnelLocalServer = class(TTunnelLocal)
   protected
-    function ComputeOptionsFromCert: TTunnelOptions; override;
+    procedure IncludeOptionsFromCert; override;
     procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
   end;
 
   /// implements client-side tunneling service
   // - here 'server' or 'client' side does not have any specific meaning - one
-  // should just be at either end of the tunnel
+  // should just be at either end of the tunnel - but they must appear in a
+  // coherent order during the handshake phase by using those overriden methods
   TTunnelLocalClient = class(TTunnelLocal)
   protected
-    function ComputeOptionsFromCert: TTunnelOptions; override;
+    procedure IncludeOptionsFromCert; override;
     procedure EcdheHashRandom(var hmac: THmacSha256;
       const local, remote: TTunnelEcdhFrame); override;
   end;
@@ -344,7 +345,7 @@ type
     /// ITunnelTransmit method which will redirect the given frame to the
     // expected registered TTunnelLocal instance
     procedure TunnelSend(const Frame: RawByteString);
-    /// ITunnelTransmit method: return some information about these connections
+    /// ITunnelTransmit method: return a TDocVariant array about all connections
     function TunnelInfo: variant;
   end;
 
@@ -654,15 +655,7 @@ begin
      (fStartTicks = 0) then
     result := 0
   else
-    result := GetUptimeSec - fStartTicks;
-end;
-
-procedure TTunnelLocal.SetTransmit(const OtherEnd: ITunnelTransmit);
-begin
-  if (OtherEnd <> nil) and
-     (fThread <> nil) then
-    ETunnel.RaiseUtf8('Too late %.SetTransmit', [self]);
-  fTransmit := OtherEnd;
+    result := GetUptimeSec - fStartTicks; // in seconds
 end;
 
 procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
@@ -679,9 +672,9 @@ begin
   sha3.Final(@crc, 128);
 end;
 
-function TTunnelLocal.Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-  TimeOutMS: integer; const AppSecret, Address: RawUtf8;
-  const InfoNameValue: array of const): TNetPort;
+function TTunnelLocal.Open(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
+  TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret, Address: RawUtf8;
+  const InfoNameValue: array of const; const SignCert, VerifyCert: ICryptCert): TNetPort;
 var
   uri: TUri;
   sock: TNetSocket;
@@ -699,20 +692,23 @@ var
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
 begin
-  if fLogClass <> nil then
-    fLogClass.EnterLocal(log, 'Open(%,[%])',
-      [Sess, ToText(TransmitOptions)], self);
   // validate input parameters
-  if (fPort <> 0) or
-     (not Assigned(fTransmit)) then
-    ETunnel.RaiseUtf8('%.Open invalid call', [self]);
-  if not uri.From(Address, '0') then
-    ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   fRemotePort := 0;
   fInfo.Clear;
   fSession := Sess;
-  TransmitOptions := (TransmitOptions - [toClientSigned, toServerSigned]) +
-                     ComputeOptionsFromCert;
+  fSignCert := SignCert;
+  fVerifyCert := VerifyCert;
+  fOptions := TransmitOptions - [toClientSigned, toServerSigned];
+  IncludeOptionsFromCert; // adjust from fSignCert/fVerifyCert
+  if fLogClass <> nil then
+    fLogClass.EnterLocal(log, 'Open(%,[%])',
+      [Sess, ToText(fOptions)], self);
+  if (fPort <> 0) or
+     (not Assigned(Transmit)) then
+    ETunnel.RaiseUtf8('%.Open invalid call', [self]);
+  if not uri.From(Address, '0') then
+    ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
+  fTransmit := Transmit;
   // bind to a local (ephemeral) port
   if (fThread <> nil) or
      (fHandshake = nil) then
@@ -741,7 +737,6 @@ begin
   // initial single round trip handshake
   thread := nil;
   infoaes := nil;
-  fOptions := TransmitOptions;
   try
     // header with optional ECDHE
     loc.Info.magic   := tlmVersion1;
@@ -945,13 +940,12 @@ end;
 
 { TTunnelLocalServer }
 
-function TTunnelLocalServer.ComputeOptionsFromCert: TTunnelOptions;
+procedure TTunnelLocalServer.IncludeOptionsFromCert;
 begin
-  result := [];
-  if Assigned(fSignCert) then
-    include(result, toServerSigned);
   if Assigned(fVerifyCert) then
-    include(result, toClientSigned);
+    include(fOptions, toClientSigned); // client signature
+  if Assigned(fSignCert) then
+    include(fOptions, toServerSigned); // server signature
 end;
 
 procedure TTunnelLocalServer.EcdheHashRandom(var hmac: THmacSha256;
@@ -964,13 +958,12 @@ end;
 
 { TTunnelLocalClient }
 
-function TTunnelLocalClient.ComputeOptionsFromCert: TTunnelOptions;
+procedure TTunnelLocalClient.IncludeOptionsFromCert;
 begin
-  result := [];
   if Assigned(fSignCert) then
-    include(result, toClientSigned);
+    include(fOptions, toClientSigned); // client signature
   if Assigned(fVerifyCert) then
-    include(result, toServerSigned);
+    include(fOptions, toServerSigned); // server signature
 end;
 
 procedure TTunnelLocalClient.EcdheHashRandom(var hmac: THmacSha256;
