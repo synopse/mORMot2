@@ -81,7 +81,7 @@ type
     // BINARY_CONTENT_TYPE without any base-64 encoding (to be done at WS level)
     procedure TunnelSend(const Frame: RawByteString);
     /// return some information about this connection(s)
-    // - as a TDocVariant object for a single connection, or array for a node
+    // - as a TDocVariant object for a single connection, or null from the relay
     function TunnelInfo: variant;
   end;
   PITunnelTransmit = ^ITunnelTransmit;
@@ -344,15 +344,20 @@ type
     function Delete(aSession: TTunnelSession): boolean;
     /// search if one ITunnelTransmit matches a session ID
     function Exists(aSession: TTunnelSession): boolean;
-    /// search the ITunnelTransmit matching a session ID
-    function Get(aSession: TTunnelSession; var aInstance: ITunnelTransmit): boolean;
+    /// ask the TunnelInfo of a given session ID as TDocVariant object
+    procedure GetInfo(aSession: TTunnelSession; out aInfo: variant);
+    /// ask all TunnelInfo of all opended sessions as TDocVariant array
+    // - with a one second cache
+    // - not published by default over ITunnelTransmit.TunnelInfo for safety
+    procedure GetAllInfo(out aInfo: variant);
   public
     /// ITunnelTransmit method which will redirect the given frame to the
     // expected registered ITunnelTransmit instance
     // - if the Frame does not match any known session, just do nothing
-    procedure TunnelSend(const Frame: RawByteString);
-    /// ITunnelTransmit method: return a TDocVariant array about all connections
-    function TunnelInfo: variant;
+    procedure TunnelSend(const Frame: RawByteString); virtual;
+    /// ITunnelTransmit method: return null for safety
+    // - may be overriden to return GetAllInfo() result
+    function TunnelInfo: variant; virtual;
   end;
 
 
@@ -1003,25 +1008,6 @@ begin
   end;
 end;
 
-function TTunnelList.Get(aSession: TTunnelSession; var aInstance: ITunnelTransmit): boolean;
-var
-  ndx: PtrInt;
-begin
-  result := false;
-  if aSession = 0 then
-    exit;
-  fSafe.ReadLock;
-  try
-    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
-    if ndx < 0 then
-      exit;
-    aInstance := fItem[ndx]; // fast ref counted assignment
-    result := true;
-  finally
-    fSafe.ReadUnLock;
-  end;
-end;
-
 function TTunnelList.Add(aSession: TTunnelSession;
   const aInstance: ITunnelTransmit): boolean;
 begin
@@ -1047,7 +1033,8 @@ var
   instance: ITunnelTransmit;
 begin
   result := false;
-  if aSession = 0 then
+  if (aSession = 0) or
+     (fCount = 0) then
     exit;
   fSafe.WriteLock;
   try
@@ -1069,8 +1056,9 @@ var
   ndx: PtrInt;
 begin
   s := FrameSession(Frame);
-  if s = 0 then
-    exit; // invalid frame for sure
+  if (s = 0) or   // invalid frame
+     (fCount = 0) then
+    exit;
   fSafe.ReadLock; // non-blocking Read lock
   try
     ndx := IntegerScanIndex(pointer(fSession), fCount, s); // use SSE2 asm
@@ -1085,19 +1073,40 @@ begin
     Delete(s); // remove this instance (Send did already make ClosePort)
 end;
 
-function TTunnelList.TunnelInfo: variant;
+procedure TTunnelList.GetInfo(aSession: TTunnelSession; out aInfo: variant);
 var
-  dv: TDocVariantData absolute result;
+  ndx: PtrInt;
+begin
+  if (aSession = 0) or
+     (fCount = 0) then
+    exit;
+  fSafe.ReadLock;
+  try
+    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
+    if ndx >= 0 then
+      aInfo := fItem[ndx].TunnelInfo; // ask the remote endpoint
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TTunnelList.TunnelInfo: variant;
+begin
+  VarClear(result); // return nothing by default for safety - see GetAllInfo()
+end;
+
+procedure TTunnelList.GetAllInfo(out aInfo: variant);
+var
+  dv: TDocVariantData absolute aInfo;
   n, i: PtrInt;
   tix32: cardinal;
 begin
-  VarClear(result);
-  if fItem = nil  then
+  if fCount = 0  then
     exit;
   tix32 := GetTickSec;
   fInfoCacheSafe.Lock;
-  if tix32 = fInfoCacheTix32 then // cache last info for one second
-    result := fInfoCache;
+  if tix32 = fInfoCacheTix32 then // cache last resultset for one second
+    aInfo := fInfoCache;
   fInfoCacheSafe.UnLock;
   if dv.Count <> 0 then
     exit;
@@ -1113,7 +1122,7 @@ begin
   end;
   fInfoCacheSafe.Lock;
   fInfoCacheTix32 := tix32;
-  fInfoCache := result;
+  fInfoCache := aInfo;
   fInfoCacheSafe.UnLock;
 end;
 
