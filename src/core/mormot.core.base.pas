@@ -1905,7 +1905,10 @@ function AddWord(var Values: TWordDynArray; var ValuesCount: integer;
 
 /// add a 8-bit integer value at the end of a dynamic array of integers
 function AddByte(var Values: TByteDynArray; var ValuesCount: integer;
-  Value: byte): PtrInt;
+  Value: byte): PtrInt; overload;
+
+/// add a 8-bit integer value at the end of a dynamic array of integers
+function AddByte(var Values: TByteDynArray; Value: byte): PtrInt; overload;
 
 /// add a 64-bit integer value at the end of a dynamic array of integers
 function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer;
@@ -7294,14 +7297,20 @@ begin
   inc(ValuesCount);
 end;
 
-function AddByte(var Values: TByteDynArray; var ValuesCount: integer;
-  Value: byte): PtrInt;
+function AddByte(var Values: TByteDynArray; var ValuesCount: integer; Value: byte): PtrInt;
 begin
   result := ValuesCount;
   if result = Length(Values) then
     SetLength(Values, NextGrow(result));
   Values[result] := Value;
   inc(ValuesCount);
+end;
+
+function AddByte(var Values: TByteDynArray; Value: byte): PtrInt;
+begin
+  result := Length(Values);
+  SetLength(Values, result + 1);
+  Values[result] := Value;
 end;
 
 function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): PtrInt;
