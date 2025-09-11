@@ -929,8 +929,8 @@ type
   // - as used e.g. by TInterfaceResolverInjected.RegisterGlobal()
   TInterfaceResolverList = class(TInterfaceResolver)
   protected
-    fEntry: TInterfaceResolverListEntries;
     fSafe: TRWLightLock;
+    fEntry: TInterfaceResolverListEntries;
     fOnCreateInstance: TOnResolverCreateInstance;
     function PrepareAddAndWriteLock(aInterface: PRttiInfo;
       aImplementationClass: TClass): PInterfaceEntry; // fSafe.WriteUnLock after

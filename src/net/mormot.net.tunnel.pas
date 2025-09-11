@@ -9,6 +9,7 @@ unit mormot.net.tunnel;
    TCP/UDP Port Forwarding and Tunnelling
    - Abstract Definitions for Port Forwarding
    - Local NAT Client/Server to Tunnel TCP Streams
+   - Abstract SOA implementation of a Relay Server
 
   *****************************************************************************
 
@@ -33,6 +34,7 @@ uses
   mormot.core.log,
   mormot.core.datetime,
   mormot.core.variants,
+  mormot.core.interfaces,
   mormot.crypt.core,
   mormot.crypt.secure,   // for ICryptCert
   mormot.crypt.ecc256r1, // for ECDHE encryption
@@ -356,6 +358,129 @@ type
     function TunnelSend(const Frame: RawByteString;
       aSession: TTunnelSession = 0): boolean; virtual;
   end;
+
+
+{ ******************** Abstract SOA implementation of a Relay Server }
+
+type
+  /// abstract parent to ITunnelAgent/ITunnelConsole
+  // - with shared methods to validate or cancel a two-phase startup
+  ITunnelOpen = interface(ITunnelTransmit)
+    /// finalize a relay process startup after Open() success
+    // - now ITunnelTransmit.TunnelSend will redirect frames from both sides
+    function TunnelCommit(aSession: TTunnelSession): boolean;
+    /// abort a relay after Open() failed
+    // - now this session will be flushed from the internal list
+    function TunnelRollback(aSession: TTunnelSession): boolean;
+  end;
+
+  /// service endpoint called by the consoles on the Relay Server
+  // - here the "console" initiate the relay process, and ask for a Session
+  // to which an "agent" will connect via the ITunnelAgent simple endpoint
+  // - also maps ITunnelTransmit to send remote frames, and is likely to be
+  // implemented as sicPerSession over our SOA WebSockets
+  // - ITunnelTransmit.TunnelInfo will be implemented and return information
+  // about all associated sessions
+  // - when the interface is released, will cancel all corresponding sessions
+  ITunnelConsole = interface(ITunnelOpen)
+    /// initiate a new relay process as a two-phase commit from the console
+    // - caller should call this method, then TTunnelLocal.Open() on its side,
+    // and once the handhake is ok or ko, call TunnelCommit or TunnelRollback
+    function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
+  end;
+
+  /// service endpoint called by the agents on the Relay Server
+  // - here "agent" is a simple TTunnelLocal application opening a localhost
+  // port, for transmitting some information (e.g. a VNC server) to a remote
+  // "console" with its own TTunnelLocal redirected port (e.g. a VNC viewer)
+  // - just maps a ITunnelTransmit, and is likely to be implemented as sicShared
+  // over our SOA WebSockets
+  ITunnelAgent = interface(ITunnelOpen)
+    /// initiate a new relay process as a two-phase commit from the agent
+    // - caller should call this method, then TTunnelLocal.Open() on its side,
+    // and once the handhake is ok or ko, call TunnelCommit or TunnelRollback
+    // - the relay is initiated by ITunnelConsole.TunnelPrepare, and the
+    // returned session should be specified to this command
+    function TunnelPrepare(aSession: TTunnelSession;
+      const callback: ITunnelTransmit): boolean;
+  end;
+
+  TTunnelRelay = class;
+
+  /// abstract parent of TTunnelConsole/TTunnelAgent
+  TTunnelOpen = class(TInterfacedObjectRWLightLocked)
+  protected
+    fOwner: TTunnelRelay;
+    fList: TTunnelList;
+    // transient sessions before TunnelCommit/TunnelRollback
+    fSession: TIntegerDynArray;    // store TTunnelSession (=cardinal) values
+    fSessionTix: TIntegerDynArray; // store GetTickSec
+    fSessionCount: integer;
+    function AddTransient(aSession: TTunnelSession;
+      const callback: ITunnelTransmit): boolean;
+    function RemoveTransient(aSession: TTunnelSession;
+      aRollback: boolean): boolean;
+    // ITunnelOpen methods
+    function TunnelCommit(aSession: TTunnelSession): boolean;
+    function TunnelRollback(aSession: TTunnelSession): boolean;
+  public
+    /// initialize this instance for a given TTunnelRelay main instance
+    constructor Create(aOwner: TTunnelRelay); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// access to the associated main TTunnelRelay instance
+    property Owner: TTunnelRelay
+      read fOwner;
+  end;
+
+  /// implement ITunnelConsole on the Relay Server
+  // - likely to be implemented as sicPerSession over our SOA WebSockets
+  // - is in fact owned by TTunnelRelay
+  TTunnelConsole = class(TTunnelOpen, ITunnelConsole)
+  protected
+    // ITunnelConsole methods
+    function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
+    function TunnelInfo: variant;
+    procedure TunnelSend(const Frame: RawByteString);
+  public
+    /// finalize this instance and remove it from fOwner.fConsole
+    destructor Destroy; override;
+  end;
+
+  /// implement ITunnelAgent on the Relay Server
+  // - likely to be implemented as sicShared over our SOA WebSockets
+  // - is in fact owned by TTunnelRelay
+  TTunnelAgent = class(TTunnelOpen, ITunnelAgent)
+  protected
+    // ITunnelAgent methods
+    function TunnelPrepare(aSession: TTunnelSession;
+      const callback: ITunnelTransmit): boolean;
+    function TunnelInfo: variant;
+    procedure TunnelSend(const Frame: RawByteString);
+  public
+  public
+    /// finalize this instance and remove it from fOwner.fAgent
+    destructor Destroy; override;
+  end;
+
+  /// implement Relay server process
+  // - maintain one TTunnelAgent and several TTunnelConsole
+  TTunnelRelay = class(TInterfaceResolver)
+  protected
+    // note: fAgent and fConsole[] are class instances, to avoid refcount race
+    fAgent: TTunnelAgent;
+    fSafe: TRWLightLock;  // protect fConsole[]
+    fConsole: array of TTunnelConsole; // per-console list of callbacks
+    fConsoleCount: integer;
+    function LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
+    procedure ConsoleTunnelSend(const Frame: RawByteString);
+    // allow to resolve ITunnelConsole instances
+    function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
+  public
+    /// called by TTunnelConsole.Destroy to unregister its own instance
+    function DeleteConsole(aConsole: TTunnelConsole): boolean;
+  end;
+
 
 
 
@@ -1152,6 +1277,240 @@ begin
   fInfoCache := result;
   fInfoCacheSafe.UnLock;
 end;
+
+
+{ ******************** Abstract SOA implementation of a Relay Server }
+
+{ TTunnelRelay }
+
+function TTunnelRelay.LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
+var
+  p: ^TTunnelConsole;
+  n: integer;
+begin
+  p := pointer(fConsole);
+  n := fConsoleCount;
+  if n <> 0 then
+    repeat
+      result := p^;
+      if result.fList.Exists(aSession) then
+        exit;
+      inc(p);
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
+
+procedure TTunnelRelay.ConsoleTunnelSend(const Frame: RawByteString);
+var
+  s: TTunnelSession;
+  p: ^TTunnelConsole;
+  n: integer;
+begin
+  s := FrameSession(Frame);
+  if (s = 0) or
+     (self = nil) then
+    exit;
+  fSafe.ReadLock;
+  try
+    p := pointer(fConsole);
+    n := fConsoleCount;
+    if n <> 0 then
+      repeat
+        if p^.fList.TunnelSend(Frame, s) then
+          exit;
+        inc(p);
+        dec(n);
+      until n = 0;
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TTunnelRelay.TryResolve(aInterface: PRttiInfo; out Obj): boolean;
+var
+  c: TTunnelConsole;
+begin
+  result := false;
+  if aInterface <> TypeInfo(ITunnelConsole) then
+    exit;
+  // create a new TTunnelConsole instance (e.g. in sicPerSession mode)
+  c := TTunnelConsole.Create(self);
+  fSafe.WriteLock;
+  try
+    PtrArrayAdd(fConsole, c, fConsoleCount);
+  finally
+    fSafe.WriteUnLock;
+  end;
+  ITunnelConsole(Obj) := c; // resolve
+end;
+
+function TTunnelRelay.DeleteConsole(aConsole: TTunnelConsole): boolean;
+begin
+  fSafe.WriteLock;
+  try
+    result := ObjArrayDelete(fConsole, fConsoleCount, aConsole) >= 0;
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+
+{ TTunnelOpen }
+
+constructor TTunnelOpen.Create(aOwner: TTunnelRelay);
+begin
+  fOwner := aOwner;
+  fList := TTunnelList.Create;
+end;
+
+destructor TTunnelOpen.Destroy;
+begin
+  FreeAndNil(fList);
+  inherited Destroy;
+end;
+
+function TTunnelOpen.AddTransient(aSession: TTunnelSession;
+  const callback: ITunnelTransmit): boolean;
+var
+  tix32: cardinal;
+begin
+  result := fList.Add(aSession, callback);
+  if not result then
+    exit;
+  tix32 := GetTickSec; // outside of WriteLock
+  fSafe.WriteLock;
+  try
+    AddInteger(fSession, fSessionCount, aSession);
+    if fSessionCount >= length(fSessionTix) then
+      SetLength(fSessionTix, length(fSession));
+    fSessionTix[fSessionCount - 1] := tix32;
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TTunnelOpen.RemoveTransient(aSession: TTunnelSession;
+  aRollback: boolean): boolean;
+var
+  ndx: PtrInt;
+begin
+  result := false;
+  fSafe.WriteLock;
+  try
+    ndx := IntegerScanIndex(pointer(fSession), fSessionCount, aSession);
+    if ndx < 0 then
+      exit;
+    DeleteInteger(fSession, fSessionCount, ndx);
+    UnmanagedDynArrayDelete(fSessionTix, fSessionCount, ndx, 4);
+  finally
+    fSafe.WriteUnLock;
+  end;
+  result := (not aRollback) or
+            fList.Delete(aSession);
+end;
+
+function TTunnelOpen.TunnelCommit(aSession: TTunnelSession): boolean;
+begin
+  result := RemoveTransient(aSession, {roolback=}false);
+end;
+
+function TTunnelOpen.TunnelRollback(aSession: TTunnelSession): boolean;
+begin
+  result := RemoveTransient(aSession, {roolback=}true);
+end;
+
+
+
+{ TTunnelConsole }
+
+destructor TTunnelConsole.Destroy;
+begin
+  if fOwner <> nil then
+    fOwner.DeleteConsole(self); // unregister itself
+  inherited Destroy;
+end;
+
+function TTunnelConsole.TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
+var
+  n: integer;
+begin
+  result := 0;
+  if (fOwner = nil) or
+     (fOwner.fAgent = nil) then
+    exit;
+  fOwner.fSafe.WriteLock;
+  try
+    for n := 1 to 100 do // never loop forever
+    begin
+      result := Random31Not0; // a random session seems the best option
+      if not fList.Exists(result) then                 // in this console list
+        if fOwner.LockedFindConsole(result) = nil then // main list
+          break;
+      result := 0; // very unlikely with 31-bit range - but try up to 100 times
+    end;
+    if result <> 0 then
+      if not AddTransient(result, callback) then
+        result := 0; // unexpected failure
+  finally
+    fOwner.fSafe.WriteUnLock;
+  end;
+end;
+
+function TTunnelConsole.TunnelInfo: variant;
+begin
+  VarClear(result);
+  if fList.fCount <> 0 then // return the list local to this console
+    TDocVariantData(result).InitArrayFromVariants(fList.GetAllInfo, JSON_FAST);
+end;
+
+procedure TTunnelConsole.TunnelSend(const Frame: RawByteString);
+begin
+  if (fOwner <> nil) and
+     (fOwner.fAgent <> nil) then
+    fOwner.fAgent.fList.TunnelSend(Frame);
+end;
+
+
+{ TTunnelAgent }
+
+destructor TTunnelAgent.Destroy;
+begin
+  if (fOwner <> nil) and
+     (fOwner.fAgent = self) then
+    fOwner.fAgent := nil; // paranoid (would not be needed any more)
+  inherited Destroy;
+end;
+
+function TTunnelAgent.TunnelPrepare(aSession: TTunnelSession;
+  const callback: ITunnelTransmit): boolean;
+var
+  c: TTunnelConsole;
+begin
+  result := false;
+  if fOwner = nil then
+    exit;
+  fOwner.fSafe.ReadLock;
+  try
+    c := fOwner.LockedFindConsole(aSession);
+    if c = nil then
+      exit; // missing ITunnelConsole.Prepare()
+    result := AddTransient(aSession, callback);
+  finally
+    fOwner.fSafe.ReadUnLock;
+  end;
+end;
+
+function TTunnelAgent.TunnelInfo: variant;
+begin
+  VarClear(result); // no global list (unsafe)
+end;
+
+procedure TTunnelAgent.TunnelSend(const Frame: RawByteString);
+begin
+  fOwner.ConsoleTunnelSend(Frame);
+end;
+
 
 end.
 
