@@ -64,7 +64,7 @@ type
 
   /// a session identifier which should match on both sides of the tunnel
   // - typically a Random32 or a TBinaryCookieGeneratorSessionID value
-  TTunnelSession = Int64;
+  TTunnelSession = cardinal;
   PTunnelSession = ^TTunnelSession;
 
   /// abstract transmission layer with the central relay server
@@ -75,7 +75,7 @@ type
   ITunnelTransmit = interface(IInvokable)
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// main method to emit the supplied binary Frame to the relay server
-    // - the raw binary frame always end with 8 bytes of 64-bit TTunnelSession
+    // - the raw binary frame always end with 4 bytes of 32-bit TTunnelSession
     // - no result so that the frames could be gathered e.g. over WebSockets
     // - single binary parameter so that could be transmitted as
     // BINARY_CONTENT_TYPE without any base-64 encoding (to be done at WS level)
@@ -100,7 +100,6 @@ type
     /// check if the background processing thread is using End-to-end encryption
     function Encrypted: boolean;
   end;
-  PITunnelLocal = ^ITunnelLocal;
 
   TTunnelLocal = class;
 
@@ -150,7 +149,7 @@ type
     magic: TTunnelLocalMagic;
     /// define how this link should be setup
     options: TTunnelOptions;
-    /// a genuine integer ID
+    /// a genuine 32-bit integer ID
     session: TTunnelSession;
     /// the local port used for communication - may be an ephemeral bound port
     port: word;
@@ -292,7 +291,7 @@ type
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
 
-/// extract the 64-bit session trailer from a ITunnelTransmit.TunnelSend() frame
+/// extract the 32-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -355,6 +354,9 @@ implementation
 
 
 { ******************** Abstract Definitions for Port Forwarding }
+
+const
+  TRAIL_SIZE = SizeOf(TTunnelSession);
 
 { TTunnelLocalThread }
 
@@ -476,14 +478,14 @@ begin
             if (tmp <> '') and
                not Terminated then
             begin
-              // emit the (encrypted) data with a 64-bit TTunnelSession trailer
+              // emit the (encrypted) data with a 32-bit TTunnelSession trailer
               if fOwner <> nil then
                 inc(fOwner.fBytesOut, length(tmp)); // size before encryption
               if fAes[{send:}true] <> nil then
-                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, {trailer=}8)
+                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, TRAIL_SIZE)
               else
-                SetLength(tmp, length(tmp) + 8);
-              PInt64(@PByteArray(tmp)[length(tmp) - 8])^ := fSession;
+                SetLength(tmp, length(tmp) + TRAIL_SIZE);
+              PTunnelSession(@PByteArray(tmp)[length(tmp) - TRAIL_SIZE])^ := fSession;
               if (fTransmit <> nil) and
                  not Terminated then
               begin
@@ -536,7 +538,7 @@ end;
 procedure TTunnelLocal.ClosePort;
 var
   thread: TTunnelLocalThread;
-  notifycloseport: RawByteString;
+  frame: RawByteString;
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
   log: ISynLog;
 begin
@@ -550,11 +552,11 @@ begin
         include(fFlags, fClosePortNotified);
         if Assigned(log) then
           log.Log(sllTrace, 'ClosePort: notify other end', self);
-        PInt64(FastNewRawByteString(notifycloseport, 8))^ := fSession;
+        PTunnelSession(FastNewRawByteString(frame, TRAIL_SIZE))^ := fSession;
         if Assigned(fTransmit) then
         begin
           inc(fFramesOut);
-          fTransmit.TunnelSend(notifycloseport);
+          fTransmit.TunnelSend(frame);
         end;
       except
       end;
@@ -593,7 +595,7 @@ begin
   l := length(aFrame);
   if fVerboseLog then
     fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [l]);
-  dec(l, SizeOf(Int64));
+  dec(l, TRAIL_SIZE);
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
   fSendSafe.Lock; // protect fHandshake+fThread
@@ -606,7 +608,7 @@ begin
       exit;
     end;
     p := pointer(aFrame);
-    if PInt64(p + l)^ <> fSession then
+    if PTunnelSession(p + l)^ <> fSession then
       ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
     if l = 0 then
     begin
@@ -615,7 +617,7 @@ begin
     end
     else if fThread <> nil then // = nil after ClosePort (too late)
     begin
-      PStrLen(p - _STRLEN)^ := l; // trim 64-bit session trailer
+      PStrLen(p - _STRLEN)^ := l; // trim 32-bit session trailer
       fThread.OnReceived(aFrame); // regular tunelling process
     end
     else
@@ -691,6 +693,7 @@ var
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
+  SUFFIX_SIZE = TRAIL_SIZE + SizeOf(word);
 begin
   // validate input parameters
   fRemotePort := 0;
@@ -779,10 +782,10 @@ begin
     if li > 65535 then
       ETunnel.RaiseUtf8('Open: too much info (len=%)', [li]);
     // actually send the frame ending with its session ID
-    Append(frame, [info, '0101234567']); // li:W sess:I64
+    Append(frame, [info, '010123']); // li:W sess:U32 = SUFFIX_SIZE
     l := length(frame);
-    PWord(@PByteArray(frame)^[l - 10])^ := li;
-    PInt64(@PByteArray(frame)^[l - 8])^ := fSession;
+    PWord(@PByteArray(frame)^[l - SUFFIX_SIZE])^ := li;
+    PTunnelSession(@PByteArray(frame)^[l - TRAIL_SIZE])^ := fSession;
     inc(fFramesOut);
     fTransmit.TunnelSend(frame);
     if Assigned(log) then
@@ -796,7 +799,7 @@ begin
     if FrameSession(remote) <> fSession then
       ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
     // extract (and potentially decrypt) the associated JSON info payload
-    l := length(remote) - 10;
+    l := length(remote) - SUFFIX_SIZE;
     li := PWord(@PByteArray(remote)^[l])^;
     FastSetRawByteString(info, @PByteArray(remote)^[l - li], li);
     if infoaes <> nil then
@@ -928,9 +931,9 @@ function FrameSession(const Frame: RawByteString): TTunnelSession;
 var
   l: PtrInt;
 begin
-  l := length(Frame) - 8;
+  l := length(Frame) - TRAIL_SIZE;
   if l >= 0 then
-    result := PInt64(@PByteArray(Frame)[l])^
+    result := PTunnelSession(@PByteArray(Frame)[l])^
   else
     result := 0;
 end;
