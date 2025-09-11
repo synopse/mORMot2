@@ -94,6 +94,7 @@ type
     oplHeader,
     oplCookie,
     oplFormData);
+  TOpenApiParamLocations = set of TOpenApiParamLocation;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Schema
   POpenApiSchema = ^TOpenApiSchema;
@@ -344,7 +345,7 @@ type
   TPascalAbstract = class
   protected
     fName: RawUtf8;
-    fPascalName: RawUtf8;
+    fPascalName, fOriginalPascalName: RawUtf8;
     fParser: TOpenApiParser;
     fSchema: POpenApiSchema;
   public
@@ -355,6 +356,7 @@ type
     property Schema: POpenApiSchema
       read fSchema;
   end;
+  PPascalAbstract = ^TPascalAbstract;
 
   /// define a Pascal property
   TPascalProperty = class(TPascalAbstract)
@@ -469,7 +471,7 @@ type
     fParser: TOpenApiParser;
     fOperationId: RawUtf8;
     fFunctionName: RawUtf8;
-    fMethod, fPath: RawUtf8;
+    fMethod, fPath, fUrl: RawUtf8;
     fPathItem: POpenApiPathItem;
     fOperation: POpenApiOperation;
     fRequestBody: POpenApiRequestBody;
@@ -479,6 +481,8 @@ type
     fSuccessResponseCode: integer;
     fOnErrorIndex: integer;
     fParameters: TPascalParameterDynArray;
+    fUrlParamIndex: TByteDynArray;
+    fLocationCount: array[oplPath .. high(TOpenApiParamLocation)] of byte;
   public
     constructor Create(aParser: TOpenApiParser; const aMethod, aPath: RawUtf8;
       aPathItem: POpenApiPathItem; aOperation: POpenApiOperation);
@@ -671,6 +675,30 @@ implementation
 
 
 { ************************************ OpenAPI Document Wrappers }
+
+function IndexByName(p: PPascalAbstract; const name: RawUtf8): PtrInt;
+begin // p is pointer(array of TPascalAbstract)
+  if p <> nil then
+    for result := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
+      if IdemPropNameU(p^.Name, name) then
+        exit
+      else
+        inc(p);
+  result := -1;
+end;
+
+function IndexByOriginalPascalName(p: PPascalAbstract; const name: RawUtf8;
+  max: PtrInt): PtrInt;
+begin // p is pointer(array of TPascalAbstract)
+  if p <> nil then
+   for result := 0 to max do
+     if IdemPropNameU(p^.fOriginalPascalName, name) then
+       exit
+     else
+       inc(p);
+  result := -1;
+end;
+
 
 { TOpenApiSchema }
 
@@ -1274,8 +1302,10 @@ constructor TPascalOperation.Create(aParser: TOpenApiParser;
   const aMethod, aPath: RawUtf8; aPathItem: POpenApiPathItem;
   aOperation: POpenApiOperation);
 var
-  p, o: POpenApiParameters;
-  pn, i, j, c: PtrInt;
+  pi, op: POpenApiParameters;
+  pp: ^TPascalParameter;
+  p: TPascalParameter;
+  i, j, c: PtrInt;
   n: RawUtf8;
 begin
   fParser := aParser;
@@ -1284,24 +1314,73 @@ begin
   fOperation := aOperation;
   fMethod := aMethod;
   // setup parameters
-  p := fPathItem^.Parameters;
-  pn := p.Count;
-  o := fOperation^.Parameters;
-  SetLength(fParameters, pn + o.Count);
-  for i := 0 to pn - 1 do
-    fParameters[i] := TPascalParameter.Create(fParser, p^.Parameter[i]);
-  for i := 0 to o.Count - 1 do
-    fParameters[pn + i] := TPascalParameter.Create(fParser, o^.Parameter[i]);
-  for i := 1 to length(fParameters) - 1 do
+  pi := fPathItem^.Parameters;
+  op := fOperation^.Parameters;
+  c := pi.Count + op.Count;
+  if c <> 0 then
   begin
-    n := fParameters[i].PascalName;
-    c := 0;
-    for j := 0 to i - 1 do
-      if IdemPropNameU(fParameters[j].PascalName, n) then // dup name
-        inc(c);
-    if c <> 0 then
-      fParameters[i].fPascalName := n + UInt32ToUtf8(c + 1); // make unique
+    if c > 255 then
+      EOpenApi.RaiseUtf8('%.Create: too many parameters in [%]', [self, fPath]);
+    SetLength(fParameters, c);
+    pp := pointer(fParameters);
+    for i := 0 to pi.Count - 1 do
+    begin
+      pp^ := TPascalParameter.Create(fParser, pi^.Parameter[i]);
+      inc(pp);
+    end;
+    for i := 0 to op.Count - 1 do
+    begin
+      pp^ := TPascalParameter.Create(fParser, op^.Parameter[i]);
+      inc(pp);
+    end;
+    pp := pointer(fParameters);
+    for i := 1 to length(fParameters) - 1 do
+    begin
+      inc(pp);
+      pp^.fOriginalPascalName := pp^.PascalName;
+      c := 0;
+      if IndexByOriginalPascalName(
+           pointer(fParameters), pp^.PascalName, i - 1) >= 0 then
+        inc(c); // dup name
+      if c <> 0 then
+        Make([pp^.PascalName, c + 1], pp^.fPascalName); // make unique
+    end;
+    // extract URI parameters into fUrlParamIndex[]
+    c := 1;
+    repeat // /pets/{petId}/  -> /pets/%/
+      i := PosEx('{', fPath, c);
+      if i = 0 then
+        break;
+      j := PosEx('}', fPath, i);
+      if j = 0 then
+        EOpenApi.RaiseUtf8('%.Create: missing } in [%]', [self, fPath]);
+      n := copy(fPath, i + 1, j - i - 1);
+      Append(fUrl, [copy(fPath, c, i - c), '%']);
+      c := j + 1;
+      j := IndexByName(pointer(fParameters), n);
+      if j >= 0 then
+      begin
+        p := fParameters[j];
+        if (p.Location = oplQuery) and
+           (opoRelaxedSchema in fParser.Options) then
+          p.fLocation := oplPath; // fixed parameter location on invalid schema
+        if p.Location = oplPath then
+        begin
+          AddByte(fUrlParamIndex, j);
+          continue;
+        end;
+      end;
+      EOpenApi.RaiseUtf8('%.Body: unknown % in [%] - try opoRelaxedSchema',
+        [self, n, fPath]);
+    until false;
+    if fUrl <> '' then
+      Append(fUrl, copy(fPath, c, 255));
   end;
+  if fUrl = '' then
+    fUrl := fPath;
+  // recognize other supplied parameters
+  for i := 0 to high(fParameters) do
+    inc(fLocationCount[fParameters[i].Location]);
   // setup any request body
   fRequestBody := fOperation^.RequestBody(fParser);
   if fRequestBody <> nil then
@@ -1551,109 +1630,72 @@ end;
 
 procedure TPascalOperation.Body(W: TTextWriter;
   const ClassName, BasePath: RawUtf8);
-var
-  url: RawUtf8;
-  urlName: TRawUtf8DynArray;
-  urlParam, queryParam, headerParam: TIntegerDynArray;
-  i, j, o: PtrInt;
-  p: TPascalParameter;
 
-  procedure AppendParams(const params: TIntegerDynArray);
+  procedure AppendParams(opl: TOpenApiParamLocations);
   var
-    i, j: PtrInt;
-    p: TPascalParameter;
+    n: integer;
+    p: ^TPascalParameter;
+    o: TOpenApiParamLocation;
   begin
-    if params <> nil then
+    p := nil;
+    w.AddShorter(', [');
+    for o := oplQuery to oplCookie do
     begin
-      w.AddStrings([', [', fParser.LineEnd]);
-      for i := 0 to high(params) do
-      begin
-        j := params[i];
-        p := fParameters[j];
-        if i > 0 then
+      if not (o in opl) then
+        continue;
+      n := fLocationCount[o];
+      if n = 0 then
+        continue;
+      if p = nil then
+        w.AddString(fParser.LineEnd);
+      p := pointer(fParameters);
+      repeat
+        if p^.Location = o then
+        begin
+          w.AddShorter('    ''');
+          case p^.Location of
+            oplQuery:
+              if p^.ParamType.IsArray and
+                 p^.Parameter^.Explode then
+                w.AddDirect('*'); // ueStarNameIsCsv for UrlEncodeFull()
+            // oplHeader uses natively CSV in OpenAPI default "simple" style
+            oplCookie:
+              w.AddShorter('Cookie: ');
+              // warning: arrays may not be properly written in cookies
+          end;
+          w.AddStrings([p^.Name, ''', ', p^.ParamType.ToFormatUtf8Arg(p^.PascalName)]);
+          dec(n);
+          if n = 0 then
+            break;
           w.AddStrings([',', fParser.LineEnd]);
-        w.AddShorter('    ''');
-        case p.Location of
-          oplQuery:
-            if p.ParamType.IsArray and
-               p.Parameter^.Explode then
-              w.AddDirect('*'); // ueStarNameIsCsv for UrlEncodeFull()
-          // oplHeader uses natively CSV in OpenAPI default "simple" style
-          oplCookie:
-            w.AddShorter('Cookie: ');
-            // warning: arrays may not be properly written in cookies
         end;
-        w.AddStrings([p.Name, ''', ', p.ParamType.ToFormatUtf8Arg(p.PascalName)]);
-      end;
-      w.AddDirect(']');
-    end
-    else
-      w.AddShorter(', []');
+        inc(p);
+      until false;
+    end;
+    w.AddDirect(']');
   end;
 
+var
+  i: PtrInt;
+  p: TPascalParameter;
 begin
-  // parse the URI and extract all {parameter} names
-  url := BasePath;
-  o := 1;
-  repeat // /pets/{petId}/  -> /pets/%/
-    i := PosEx('{', fPath, o);
-    if i = 0 then
-      break;
-    j := PosEx('}', fPath, i);
-    if j = 0 then
-      EOpenApi.RaiseUtf8('%.Body: missing } in [%]', [self, fPath]);
-    AddRawUtf8(urlName, copy(fPath, i + 1, j - i - 1));
-    Append(url, [copy(fPath, o, i - o), '%']);
-    o := j + 1;
-  until false;
-  Append(url, copy(fPath, o, 255));
-  if length(urlName) > 1 then
-    url := url;
-  SetLength(urlParam, length(urlName));
-  for i := 0 to high(urlParam) do
-    urlParam[i] := -1;
-  // recognize supplied parameters
-  for i := 0 to high(fParameters) do
-  begin
-    p := fParameters[i];
-    case p.Location of
-      oplPath:
-        begin
-          j := FindPropName(urlName, p.Name);
-          if j < 0 then
-            EOpenApi.RaiseUtf8('%.Body: unknown % in [%]', [self, p.Name, fPath]);
-          urlParam[j] := i;
-        end;
-      oplQuery:
-        AddInteger(queryParam, i);
-      oplHeader,
-      oplCookie:
-        AddInteger(headerParam, i);
-    end;
-  end;
-  for i := 0 to high(urlParam) do
-    if urlParam[i] < 0 then
-      EOpenApi.RaiseUtf8('%.Body: missing {%} in [%]', [self, urlName[i], fPath]);
   // emit the body block with its declaration and Request() call
   Declaration(w, ClassName, {implementation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
-         '  fClient.Request(''', UpperCase(fMethod), ''', ''', url, '''']);
-  // Path parameters
+         '  fClient.Request(''', UpperCase(fMethod), ''', ''', BasePath + fUrl, '''']);
+  // Path parameters first
   w.AddDirect(',', ' ', '[');
-  for i := 0 to Length(urlName) - 1 do
+  for i := 0 to Length(fUrlParamIndex) - 1 do
   begin
-    j := urlParam[i];
-    if j < 0 then
-      EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
-    p := fParameters[j];
+    p := fParameters[fUrlParamIndex[i]];
     if i > 0 then
       w.AddDirect(',', ' ');
     w.AddString(p.ParamType.ToFormatUtf8Arg(p.PascalName));
   end;
   w.AddDirect(']');
   // Query and Header parameters
-  AppendParams(queryParam);
-  AppendParams(headerParam);
+  AppendParams([oplQuery]);
+  AppendParams([oplHeader, oplCookie]);
   // Payload and potentially result
   if Assigned(fPayloadParameterType) then
   begin
