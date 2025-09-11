@@ -2907,8 +2907,9 @@ type
     // the associated signing authority (which should be in this Store)
     // - warning: only supported by our 'syn-store' algorithm: OpenSSL Store
     // has no way to lookup the X.509 certificate which actually signed the buffer
-    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
-      IgnoreError: TCryptCertValidities = []; TimeUtc: TDateTime = 0): TCryptCertValidity;
+    function Verify(const Signature, Data: RawByteString;
+      IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity;
     /// how many trusted certificates are currently stored
     function Count: integer;
     /// how many CRLs are currently stored
@@ -2946,7 +2947,7 @@ type
       date: TDateTime): TCryptCertValidity; virtual; abstract;
     function IsValidChain(const chain: ICryptCertChain;
       date: TDateTime): TCryptCertValidity; virtual;
-    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+    function Verify(const Signature, Data: RawByteString;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
         virtual; abstract;
     function Count: integer; virtual; abstract;

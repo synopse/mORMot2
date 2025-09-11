@@ -6385,7 +6385,7 @@ type
        RevocationDate: TDateTime): boolean; override;
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; override;
-    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+    function Verify(const Signature, Data: RawByteString;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
@@ -6495,8 +6495,8 @@ begin
     result := cvUnknownAuthority;
 end;
 
-function TCryptStoreInternal.Verify(const Signature: RawByteString;
-  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities;
+function TCryptStoreInternal.Verify(const Signature, Data: RawByteString;
+  IgnoreError: TCryptCertValidities;
   TimeUtc: TDateTime): TCryptCertValidity;
 var
   s: PEccSignatureCertifiedContent absolute Signature;
@@ -6506,7 +6506,7 @@ begin
   if length(Signature) <> SizeOf(s^) then
     result := cvBadParameter
   else
-    result := TCryptCertValidity(fEcc.IsSigned(s^, Data, Len));
+    result := TCryptCertValidity(fEcc.IsSigned(s^, pointer(Data), Length(Data)));
 end;
 
 function TCryptStoreInternal.Count: integer;

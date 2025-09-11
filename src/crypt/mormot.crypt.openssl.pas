@@ -2317,7 +2317,7 @@ type
       RevocationDate: TDateTime): boolean; override;
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; override;
-    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+    function Verify(const Signature, Data: RawByteString;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
@@ -3311,8 +3311,8 @@ begin
     result := ToValidity(res);
 end;
 
-function TCryptStoreOpenSsl.Verify(const Signature: RawByteString;
-  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities;
+function TCryptStoreOpenSsl.Verify(const Signature, Data: RawByteString;
+  IgnoreError: TCryptCertValidities;
   TimeUtc: TDateTime): TCryptCertValidity;
 begin
   result := cvNotSupported;
