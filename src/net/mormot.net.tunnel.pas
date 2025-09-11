@@ -478,7 +478,8 @@ type
     fConsoleSafe: TRWLightLock;
     fConsole: TTunnelConsoles; // per-console list of callbacks
     fConsoleCount: integer;
-    function HasPrepared(aSession: TTunnelSession): boolean;
+    fTransientTimeOutSecs: cardinal;
+    function HasConsolePrepared(aSession: TTunnelSession): boolean;
     function LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
     // search for matching fConsole[].TunnelSend
     procedure ConsoleTunnelSend(const Frame: RawByteString);
@@ -486,7 +487,7 @@ type
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
   public
     /// initialize this instance
-    constructor Create; override;
+    constructor Create(aTransientTimeOutSecs: cardinal); reintroduce;
     /// finalize this instance and its associated fAgent
     destructor Destroy; override;
     /// called by TTunnelConsole.Destroy to unregister its own instance
@@ -1235,7 +1236,7 @@ begin
   end;
   fSafe.ReadLock; // non-blocking Read lock
   try
-    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession); // use SSE2 asm
+    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession); // SSE2 asm
     if ndx < 0 then
       exit; // just skip the frame if the session does not exist (anti-fuzzing)
     fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within ReadLock
@@ -1309,21 +1310,27 @@ end;
 
 { TTunnelRelay }
 
-constructor TTunnelRelay.Create;
+constructor TTunnelRelay.Create(aTransientTimeOutSecs: cardinal);
 begin
-  fAgent := TTunnelAgent.Create(self);
-  fAgent._AddRef;
+  fTransientTimeOutSecs := aTransientTimeOutSecs;
+  fAgent := TTunnelAgent.Create(self, fTransientTimeOutSecs);
+  fAgent._AddRef; // ready to be used e.g. as a sicShared SOA instance
 end;
 
 destructor TTunnelRelay.Destroy;
+var
+  i: PtrInt;
 begin
   fAgent._Release;
+  if fConsoleCount <> 0 then
+    for i := 0 to fConsoleCount - 1 do
+      fConsole[i].fOwner := nil; // paranoid
   inherited Destroy;
 end;
 
-function TTunnelRelay.HasPrepared(aSession: TTunnelSession): boolean;
+function TTunnelRelay.HasConsolePrepared(aSession: TTunnelSession): boolean;
 var
-  p: ^TTunnelConsole;
+  c: ^TTunnelConsole;
   n: integer;
 begin
   if (self <> nil) and
@@ -1332,13 +1339,13 @@ begin
     fConsoleSafe.ReadLock;
     try
       result := true;
-      p := pointer(fConsole);
+      c := pointer(fConsole);
       n := fConsoleCount;
       if n <> 0 then
         repeat
-          if p^.HasTransient(aSession) then
+          if c^.HasTransient(aSession) then
             exit;
-          inc(p);
+          inc(c);
           dec(n);
         until n = 0;
     finally
@@ -1350,17 +1357,17 @@ end;
 
 function TTunnelRelay.LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
 var
-  p: ^TTunnelConsole;
+  c: ^TTunnelConsole;
   n: integer;
 begin
-  p := pointer(fConsole);
+  c := pointer(fConsole);
   n := fConsoleCount;
   if n <> 0 then
     repeat
-      result := p^;
+      result := c^;
       if result.fList.Exists(aSession) then
         exit;
-      inc(p);
+      inc(c);
       dec(n);
     until n = 0;
   result := nil;
@@ -1369,7 +1376,7 @@ end;
 procedure TTunnelRelay.ConsoleTunnelSend(const Frame: RawByteString);
 var
   s: TTunnelSession;
-  p: ^TTunnelConsole;
+  c: ^TTunnelConsole;
   n: integer;
 begin
   s := FrameSession(Frame);
@@ -1378,13 +1385,13 @@ begin
     exit;
   fConsoleSafe.ReadLock;
   try
-    p := pointer(fConsole);
+    c := pointer(fConsole);
     n := fConsoleCount;
     if n <> 0 then
       repeat
-        if p^.fList.TunnelSend(Frame, s) then
+        if c^.fList.TunnelSend(Frame, s) then
           exit;
-        inc(p);
+        inc(c);
         dec(n);
       until n = 0;
   finally
@@ -1400,7 +1407,7 @@ begin
   if aInterface <> TypeInfo(ITunnelConsole) then
     exit;
   // create a new TTunnelConsole instance (e.g. in sicPerSession mode)
-  c := TTunnelConsole.Create(self);
+  c := TTunnelConsole.Create(self, fTransientTimeOutSecs);
   fConsoleSafe.WriteLock;
   try
     PtrArrayAdd(fConsole, c, fConsoleCount);
@@ -1431,7 +1438,8 @@ end;
 
 function TTunnelRelay.ConsolesInfo: TVariantDynArray;
 var
-  i: PtrInt;
+  c: ^TTunnelConsole;
+  n: integer;
   dv: PDocVariantData;
 begin
   result := nil;
@@ -1442,12 +1450,18 @@ begin
   try
     SetLength(result, fConsoleCount);
     dv := pointer(result);
-    for i := 0 to fConsoleCount - 1 do
-    begin
-      dv^ := fConsole[i].fInfo;
-      dv^.AddValue('list', fConsole[i].TunnelInfo);
-      inc(dv);
-    end;
+    c := pointer(fConsole);
+    n := fConsoleCount;
+    if n <> 0 then
+      repeat
+        dv^.InitFast(c^.fInfo.Count + 2, dvObject);
+        dv^.AddFrom(c^.fInfo);
+        dv^.AddValue('count', c^.fList.fCount);
+        dv^.AddValue('list',  c^.TunnelInfo);
+        inc(c);
+        inc(dv);
+        dec(n);
+      until n = 0;
   finally
     fConsoleSafe.ReadUnLock;
   end;
@@ -1575,13 +1589,13 @@ begin
     exit;
   fOwner.fConsoleSafe.WriteLock;
   try
-    for n := 1 to 100 do // never loop forever
+    for n := 1 to 50 do // never loop forever
     begin
       result := Random31Not0; // a random session seems the best option
       if not fList.Exists(result) then                 // not in this console
         if fOwner.LockedFindConsole(result) = nil then // not in main list
           break;
-      result := 0; // very unlikely with 31-bit range - but try up to 100 times
+      result := 0; // very unlikely with 31-bit range - but try up to 50 times
     end;
     if result <> 0 then
       if not AddTransient(result, callback) then
@@ -1611,7 +1625,7 @@ end;
 function TTunnelAgent.TunnelPrepare(aSession: TTunnelSession;
   const callback: ITunnelTransmit): boolean;
 begin
-  result := fOwner.HasPrepared(aSession) and
+  result := fOwner.HasConsolePrepared(aSession) and
             AddTransient(aSession, callback);
 end;
 
