@@ -294,7 +294,7 @@ function ToText(opt: TTunnelOptions): ShortString; overload;
 
 /// extract the 32-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 const
   toEncrypted = [toEcdhe, toEncrypt];
@@ -889,7 +889,6 @@ begin
       log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;
   // initial single round trip handshake
-  thread := nil;
   infoaes := nil;
   try
     // header with optional ECDHE
@@ -1493,9 +1492,8 @@ begin
   fOwner.fSafe.ReadLock;
   try
     c := fOwner.LockedFindConsole(aSession);
-    if c = nil then
-      exit; // missing ITunnelConsole.Prepare()
-    result := AddTransient(aSession, callback);
+    if c <> nil then // found a proper ITunnelConsole.Prepare()
+      result := AddTransient(aSession, callback);
   finally
     fOwner.fSafe.ReadUnLock;
   end;
