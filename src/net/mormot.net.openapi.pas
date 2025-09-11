@@ -530,6 +530,8 @@ type
   // and also properly support Unicode or unfinished/nested record type definitions
   // - opoDescriptionHtmlUnescape will detect and unescape HTML entities
   // like &lt; &amp; and remove HTML <tags>, converting e.g. <p> into line feeds
+  // - opoRelaxedSchema will try to fix Schema errors like /uri/{param} not
+  // defined as "in":"path"
   // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
   TOpenApiParserOption = (
     opoNoEnum,
@@ -545,7 +547,8 @@ type
     opoGenerateSingleApiUnit,
     opoGenerateStringType,
     opoGenerateOldDelphiCompatible,
-    opoDescriptionHtmlUnescape);
+    opoDescriptionHtmlUnescape,
+    opoRelaxedSchema);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
   /// the main OpenAPI parser and pascal code generator class
