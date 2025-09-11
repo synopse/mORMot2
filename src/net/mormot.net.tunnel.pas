@@ -411,10 +411,13 @@ type
   TTunnelRelay = class;
 
   /// abstract parent of TTunnelConsole/TTunnelAgent
+  // - maintain a list of working tunnels, and another list of transient
+  // tunnels, pending for Open() handshake on both ends
   TTunnelOpen = class(TInterfacedObjectRWLightLocked)
   protected
     fOwner: TTunnelRelay;
     fList: TTunnelList;
+    fDeprecatedTix32, fTimeOutSecs: cardinal;
     // transient sessions before TunnelCommit/TunnelRollback
     fSession: TIntegerDynArray;    // store TTunnelSession (=cardinal) values
     fSessionTix: TIntegerDynArray; // store GetTickSec
@@ -422,14 +425,14 @@ type
     function HasTransient(aSession: TTunnelSession): boolean;
     function AddTransient(aSession: TTunnelSession;
       const callback: ITunnelTransmit): boolean;
-    function RemoveTransient(aSession: TTunnelSession;
-      aRollback: boolean): boolean;
+    function RemoveTransient(aSession: TTunnelSession): boolean;
+    procedure DeleteTransient(ndx: PtrInt);
     // ITunnelOpen methods
     function TunnelCommit(aSession: TTunnelSession): boolean;
     function TunnelRollback(aSession: TTunnelSession): boolean;
   public
     /// initialize this instance for a given TTunnelRelay main instance
-    constructor Create(aOwner: TTunnelRelay); reintroduce;
+    constructor Create(aOwner: TTunnelRelay; aTimeOutSecs: cardinal); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
     /// access to the associated main TTunnelRelay instance
@@ -1453,9 +1456,10 @@ end;
 
 { TTunnelOpen }
 
-constructor TTunnelOpen.Create(aOwner: TTunnelRelay);
+constructor TTunnelOpen.Create(aOwner: TTunnelRelay; aTimeOutSecs: cardinal);
 begin
   fOwner := aOwner;
+  fTimeOutSecs := aTimeOutSecs;
   fList := TTunnelList.Create;
 end;
 
@@ -1482,6 +1486,7 @@ function TTunnelOpen.AddTransient(aSession: TTunnelSession;
   const callback: ITunnelTransmit): boolean;
 var
   tix32: cardinal;
+  i: PtrInt;
 begin
   result := fList.Add(aSession, callback);
   if not result then
@@ -1494,14 +1499,23 @@ begin
     if fSessionCount >= length(fSessionTix) then
       SetLength(fSessionTix, length(fSession));
     fSessionTix[fSessionCount - 1] := tix32;
-    { TODO: check and remove deprecated transient sessions }
+    // check and remove deprecated transient sessions
+    if (fTimeOutSecs = 0) or
+       (tix32 shr 4 = fDeprecatedTix32) then
+      exit;
+    fDeprecatedTix32 := tix32 shr 4; // next check in 16 seconds
+    for i := fSessionCount - 1 downto 0 do
+      if fSessionTix[i] + fTimeOutSecs < tix32 then
+      begin
+        fList.Delete(fSession[i]);
+        DeleteTransient(i);
+      end;
   finally
     fSafe.WriteUnLock;
   end;
 end;
 
-function TTunnelOpen.RemoveTransient(aSession: TTunnelSession;
-  aRollback: boolean): boolean;
+function TTunnelOpen.RemoveTransient(aSession: TTunnelSession): boolean;
 var
   ndx: PtrInt;
 begin
@@ -1511,23 +1525,28 @@ begin
     ndx := IntegerScanIndex(pointer(fSession), fSessionCount, aSession);
     if ndx < 0 then
       exit;
-    DeleteInteger(fSession, fSessionCount, ndx);
-    UnmanagedDynArrayDelete(fSessionTix, fSessionCount, ndx, 4);
+    DeleteTransient(ndx);
   finally
     fSafe.WriteUnLock;
   end;
-  result := (not aRollback) or
-            fList.Delete(aSession);
+  result := true;
+end;
+
+procedure TTunnelOpen.DeleteTransient(ndx: PtrInt);
+begin
+  DeleteInteger(fSession, fSessionCount, ndx);
+  UnmanagedDynArrayDelete(fSessionTix, fSessionCount, ndx, SizeOf(cardinal));
 end;
 
 function TTunnelOpen.TunnelCommit(aSession: TTunnelSession): boolean;
 begin
-  result := RemoveTransient(aSession, {roolback=}false);
+  result := RemoveTransient(aSession);
 end;
 
 function TTunnelOpen.TunnelRollback(aSession: TTunnelSession): boolean;
 begin
-  result := RemoveTransient(aSession, {roolback=}true);
+  result := RemoveTransient(aSession) and
+            fList.Delete(aSession);
 end;
 
 
