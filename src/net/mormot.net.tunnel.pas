@@ -197,6 +197,9 @@ type
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean; virtual;
     function GetElapsed: cardinal;
+    // can be overriden to customize this class process
+    procedure AfterHandshake; virtual;
+    procedure OnTunnelInfo(var Info: TDocVariantData); virtual;
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
@@ -521,7 +524,6 @@ begin
             [self, fPort, ToText(res)^]);
         end;
       end;
-    fLog.Log(sllTrace, 'DoExecute: ending %', [self]);
   except
     on E: Exception do
     try
@@ -865,7 +867,8 @@ begin
     thread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
     SleepHiRes(100, thread.fStarted);
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: started=% %', [ord(thread.fStarted), thread], self);
+      log.Log(sllTrace, 'Open: started=% %',
+        [BOOL_STR[thread.fStarted], thread], self);
     fStartTicks := GetUptimeSec; // wall clock
     hqueue := fHandshake;
     fSendSafe.Lock; // re-entrant for TunnelSend()
@@ -887,9 +890,10 @@ begin
       'remotePort', fRemotePort,
       'localPort',  fPort,
       'started',    NowUtcToString,
-      'session',    fSession,
+      'session',    Int64(fSession),
       'encrypted',  Encrypted,
       'options',    ToText(fOptions)]);
+    AfterHandshake;
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
@@ -897,6 +901,11 @@ begin
   infoaes.Free;
   FillZero(key.b);
   FillZero(iv.b);
+end;
+
+procedure TTunnelLocal.AfterHandshake;
+begin
+  // do nothing by default, but could perform some custom process e.g. on fInfo
 end;
 
 function TTunnelLocal.LocalPort: RawUtf8;
@@ -920,6 +929,11 @@ begin
             (fThread.fAes[false] <> nil);
 end;
 
+procedure TTunnelLocal.OnTunnelInfo(var Info: TDocVariantData);
+begin
+  // do nothing by default, but could remove or add some fields
+end;
+
 function TTunnelLocal.TunnelInfo: variant;
 var
   dv: TDocVariantData absolute result;
@@ -927,14 +941,15 @@ begin
   VarClear(result);
   if fPort = 0 then
     exit;
-  dv.InitFast(fInfo.Count + 5, dvObject);
+  dv.InitFast(fInfo.Count + 7, dvObject);
   dv.AddFrom(fInfo);         // fixed values
-  dv.AddNameValuesToObject([ // changing values
+  dv.AddNameValuesToObject([ // evolving values
     'elapsed',   GetElapsed,
     'bytesIn',   fBytesIn,
     'bytesOut',  fBytesOut,
     'framesIn',  fFramesIn,
     'framesOut', fFramesOut]);
+  OnTunnelInfo(dv);
 end;
 
 
