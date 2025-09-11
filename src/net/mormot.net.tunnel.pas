@@ -73,7 +73,6 @@ type
   // - named as Tunnel*() methods to be joined as a single service interface,
   // to leverage a single WebSockets callback
   ITunnelTransmit = interface(IInvokable)
-    ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// main method to emit the supplied binary Frame to the relay server
     // - the raw binary frame always end with 4 bytes of 32-bit TTunnelSession
     // - no result so that the frames could be gathered e.g. over WebSockets
@@ -325,17 +324,14 @@ type
   end;
 
   /// maintain a list of ITunnelTransmit instances
-  // - is itself a ITunnelTransmit instance, to redirect TunnelSend() frames
-  TTunnelList = class(TInterfacedPersistent,
-    ITunnelTransmit)
+  TTunnelList = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
     fInfoCacheSafe: TLightLock;
     fItem: array of ITunnelTransmit;
     fSession: TIntegerDynArray; // store TTunnelSession (=cardinal) values
     fCount: integer;
     fInfoCacheTix32: cardinal;
-    fInfoCache: variant;
+    fInfoCache: TVariantDynArray;
   public
     /// append one ITunnelTransmit callback to the list
     function Add(aSession: TTunnelSession;
@@ -348,16 +344,14 @@ type
     procedure GetInfo(aSession: TTunnelSession; out aInfo: variant);
     /// ask all TunnelInfo of all opended sessions as TDocVariant array
     // - with a one second cache
-    // - not published by default over ITunnelTransmit.TunnelInfo for safety
-    procedure GetAllInfo(out aInfo: variant);
-  public
-    /// ITunnelTransmit method which will redirect the given frame to the
+    function GetAllInfo: TVariantDynArray;
+    /// ITunnelTransmit-like method which will redirect the given frame to the
     // expected registered ITunnelTransmit instance
-    // - if the Frame does not match any known session, just do nothing
-    procedure TunnelSend(const Frame: RawByteString); virtual;
-    /// ITunnelTransmit method: return null for safety
-    // - may be overriden to return GetAllInfo() result
-    function TunnelInfo: variant; virtual;
+    // - if the Frame does not match any known session, return false
+    // - handle end of process notification from the other side with a frame
+    // with no payload but just the
+    function TunnelSend(const Frame: RawByteString;
+      aSession: TTunnelSession = 0): boolean; virtual;
   end;
 
 
@@ -632,7 +626,7 @@ begin
     inc(fFramesIn);
     if fHandshake <> nil then
     begin
-      fLogClass.Add.Log(sllTrace, 'TunnelSend: into fHandshake', self);
+      fLogClass.Add.Log(sllTrace, 'TunnelSend: into Handshake queue', self);
       fHandshake.Push(aFrame); // during the handshake phase - maybe before Open
       exit;
     end;
@@ -1046,31 +1040,39 @@ begin
   finally
     fSafe.WriteUnLock;
   end;
-  instance := nil; // release outside of the blocking Write lock
-  result := true;
+  try
+    instance := nil; // release outside of the global Write lock
+    result := true;
+  except
+    result := false; // show must go on
+  end;
 end;
 
-procedure TTunnelList.TunnelSend(const Frame: RawByteString);
+function TTunnelList.TunnelSend(const Frame: RawByteString;
+  aSession: TTunnelSession): boolean;
 var
-  s: TTunnelSession;
   ndx: PtrInt;
 begin
-  s := FrameSession(Frame);
-  if (s = 0) or   // invalid frame
-     (fCount = 0) then
+  result := false;
+  if fCount = 0 then
+    exit;
+  if aSession = 0 then
+    aSession := FrameSession(Frame);
+  if aSession = 0 then
     exit;
   fSafe.ReadLock; // non-blocking Read lock
   try
-    ndx := IntegerScanIndex(pointer(fSession), fCount, s); // use SSE2 asm
+    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession); // use SSE2 asm
     if ndx < 0 then
       exit; // just skip the frame if the session does not exist (anti-fuzzing)
     fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within ReadLock
+    result := true;
   finally
     fSafe.ReadUnLock;
   end;
   // handle end of process notification from the other side
   if length(Frame) = TRAIL_SIZE then
-    Delete(s); // remove this instance (Send did already make ClosePort)
+    Delete(aSession); // remove this instance
 end;
 
 procedure TTunnelList.GetInfo(aSession: TTunnelSession; out aInfo: variant);
@@ -1090,39 +1092,42 @@ begin
   end;
 end;
 
-function TTunnelList.TunnelInfo: variant;
-begin
-  VarClear(result); // return nothing by default for safety - see GetAllInfo()
-end;
-
-procedure TTunnelList.GetAllInfo(out aInfo: variant);
+function TTunnelList.GetAllInfo: TVariantDynArray;
 var
-  dv: TDocVariantData absolute aInfo;
   n, i: PtrInt;
   tix32: cardinal;
+  invalid: TIntegerDynArray;
 begin
+  result := nil;
   if fCount = 0  then
     exit;
   tix32 := GetTickSec;
   fInfoCacheSafe.Lock;
-  if tix32 = fInfoCacheTix32 then // cache last resultset for one second
-    aInfo := fInfoCache;
+  if tix32 = fInfoCacheTix32 then // cache last info for one second
+    result := fInfoCache          // fast ref-counted pointer assignment
+  else
+    fInfoCacheTix32 := tix32;
   fInfoCacheSafe.UnLock;
-  if dv.Count <> 0 then
+  if result <> nil then // from cache
     exit;
-  dv.InitFast(dvArray);
   fSafe.ReadLock; // non-blocking Read lock
   try
     n := length(fItem);
-    dv.Capacity := n;
+    SetLength(result, n);
     for i := 0 to n - 1 do
-      dv.AddItem(fItem[i].TunnelInfo); // call all remote endpoints
+      try
+        result[i] := fItem[i].TunnelInfo; // call all remote endpoints
+      except
+        AddInteger(invalid, fSession[i]);
+      end;
   finally
     fSafe.ReadUnLock;
   end;
+  if invalid <> nil then
+    for i := 0 to high(invalid) do
+      Delete(invalid[i]); // eventually delete unstable links
   fInfoCacheSafe.Lock;
-  fInfoCacheTix32 := tix32;
-  fInfoCache := aInfo;
+  fInfoCache := result;
   fInfoCacheSafe.UnLock;
 end;
 
