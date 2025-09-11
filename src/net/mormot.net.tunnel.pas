@@ -836,13 +836,6 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open: started=% %', [ord(thread.fStarted), thread], self);
     fStartTicks := GetUptimeSec; // wall clock
-    fInfo.AddNameValuesToObject([
-      'remotePort', fRemotePort,
-      'localPort',  fPort,
-      'started',    NowUtcToString,
-      'session',    fSession,
-      'encrypted',  Encrypted,
-      'options',    ToText(fOptions)]);
     hqueue := fHandshake;
     fSendSafe.Lock; // re-entrant for TunnelSend()
     try
@@ -858,6 +851,14 @@ begin
       fSendSafe.UnLock;
       hqueue.Free;
     end;
+    // now everything is running and we can finish by preparing the fixed info
+    fInfo.AddNameValuesToObject([
+      'remotePort', fRemotePort,
+      'localPort',  fPort,
+      'started',    NowUtcToString,
+      'session',    fSession,
+      'encrypted',  Encrypted,
+      'options',    ToText(fOptions)]);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
