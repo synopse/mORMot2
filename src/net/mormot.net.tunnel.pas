@@ -84,6 +84,7 @@ type
     // - as a TDocVariant object for a single connection, or array for a node
     function TunnelInfo: variant;
   end;
+  PITunnelTransmit = ^ITunnelTransmit;
 
   /// abstract tunneling service implementation
   ITunnelLocal = interface(ITunnelTransmit)
@@ -91,8 +92,6 @@ type
     /// match mormot.soa.core IServiceWithCallbackReleased definition
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
-    /// the associated tunnel session ID
-    function TunnelSession: TTunnelSession;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
     /// the remote port used for the tunnel local process
@@ -232,8 +231,6 @@ type
     procedure TunnelSend(const aFrame: RawByteString);
     /// ITunnelTransmit method: return a TDocVariant object about this connection
     function TunnelInfo: variant;
-    /// ITunnelLocal method: return the associated tunnel session ID
-    function TunnelSession: TTunnelSession;
     /// ITunnelLocal method: return the local port
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: return the remote port
@@ -324,25 +321,28 @@ type
       const local, remote: TTunnelEcdhFrame); override;
   end;
 
-  /// maintain a list of ITunnelLocal instances
-  // - with proper redirection of ITunnelTransmit.TunnelSend() frames
+  /// maintain a list of ITunnelTransmit instances
+  // - is itself a ITunnelTransmit instance, to redirect TunnelSend() frames
   TTunnelList = class(TInterfacedPersistent,
     ITunnelTransmit)
   protected
     fSafe: TRWLightLock;
-    fItem: array of ITunnelLocal;
+    fItem: array of ITunnelTransmit;
+    fSession: TIntegerDynArray; // stored TTunnelSession (=cardinal) values
+    fCount: integer;
   public
-    /// append one ITunnelLocal to the list
-    function Add(const aInstance: ITunnelLocal): boolean;
-    /// remove one ITunnelLocal from its session ID
+    /// append one ITunnelTransmit callback to the list
+    function Add(aSession: TTunnelSession;
+      const aInstance: ITunnelTransmit): boolean;
+    /// remove one ITunnelTransmit from its session ID
     function Delete(aSession: TTunnelSession): boolean;
-    /// search if one ITunnelLocal matches a session ID
+    /// search if one ITunnelTransmit matches a session ID
     function Exists(aSession: TTunnelSession): boolean;
-    /// search the ITunnelLocal matching a session ID
-    function Get(aSession: TTunnelSession; var aInstance: ITunnelLocal): boolean;
+    /// search the ITunnelTransmit matching a session ID
+    function Get(aSession: TTunnelSession; var aInstance: ITunnelTransmit): boolean;
   public
     /// ITunnelTransmit method which will redirect the given frame to the
-    // expected registered TTunnelLocal instance
+    // expected registered ITunnelTransmit instance
     procedure TunnelSend(const Frame: RawByteString);
     /// ITunnelTransmit method: return a TDocVariant array about all connections
     function TunnelInfo: variant;
@@ -877,11 +877,6 @@ begin
   FillZero(iv.b);
 end;
 
-function TTunnelLocal.TunnelSession: TTunnelSession;
-begin
-  result := fSession;
-end;
-
 function TTunnelLocal.LocalPort: RawUtf8;
 begin
   if (self = nil) or
@@ -979,38 +974,17 @@ end;
 
 { TTunnelList }
 
-function FindIndexLocked(p: PITunnelLocal; s: TTunnelSession): PtrInt;
-var
-  n: PtrInt;
-begin
-  if (s <> 0) and
-     (p <> nil) then
-  begin
-    result := 0;
-    n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
-    repeat
-      if p^.TunnelSession = s then // fast TTunnelLocal.TunnelSession method
-        exit;
-      if result = n then
-        break;
-      inc(p);
-      inc(result);
-    until false;
-  end;
-  result := -1; // not found
-end;
-
 function TTunnelList.Exists(aSession: TTunnelSession): boolean;
 begin
   fSafe.ReadLock;
   try
-    result := FindIndexLocked(pointer(fItem), aSession) >= 0;
+    result := IntegerScanExists(pointer(fSession), fCount, aSession);
   finally
     fSafe.ReadUnLock;
   end;
 end;
 
-function TTunnelList.Get(aSession: TTunnelSession; var aInstance: ITunnelLocal): boolean;
+function TTunnelList.Get(aSession: TTunnelSession; var aInstance: ITunnelTransmit): boolean;
 var
   ndx: PtrInt;
 begin
@@ -1019,7 +993,7 @@ begin
     exit;
   fSafe.ReadLock;
   try
-    ndx := FindIndexLocked(pointer(fItem), aSession);
+    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
     if ndx < 0 then
       exit;
     aInstance := fItem[ndx]; // fast ref counted assignment
@@ -1029,15 +1003,18 @@ begin
   end;
 end;
 
-function TTunnelList.Add(const aInstance: ITunnelLocal): boolean;
+function TTunnelList.Add(aSession: TTunnelSession;
+  const aInstance: ITunnelTransmit): boolean;
 begin
   result := false;
-  if aInstance = nil then
+  if (aInstance = nil) or
+     (aSession = 0) then
     exit;
   fSafe.WriteLock;
   try
-    if FindIndexLocked(pointer(fItem), aInstance.TunnelSession) >= 0 then
+    if IntegerScanExists(pointer(fSession), fCount, aSession) then
       exit;
+    AddInteger(fSession, fCount, aSession);
     InterfaceArrayAdd(fItem, aInstance);
   finally
     fSafe.WriteUnLock;
@@ -1048,17 +1025,18 @@ end;
 function TTunnelList.Delete(aSession: TTunnelSession): boolean;
 var
   ndx: PtrInt;
-  instance: ITunnelLocal;
+  instance: ITunnelTransmit;
 begin
   result := false;
   if aSession = 0 then
     exit;
   fSafe.WriteLock;
   try
-    ndx := FindIndexLocked(pointer(fItem), aSession);
+    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
     if (ndx < 0) or
        not InterfaceArrayExtract(fItem, ndx, instance) then // weak copy
       exit;
+    DeleteInteger(fSession, fCount, ndx);
   finally
     fSafe.WriteUnLock;
   end;
@@ -1076,14 +1054,15 @@ begin
     exit; // invalid frame for sure
   fSafe.ReadLock; // non-blocking Read lock
   try
-    ndx := FindIndexLocked(pointer(fItem), s);
+    ndx := IntegerScanIndex(pointer(fSession), fCount, s);
     if ndx < 0 then
       exit;
     fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within Read lock
   finally
     fSafe.ReadUnLock;
   end;
-  if length(Frame) = 8 then // notified end of process from the other party
+  // handle end of process notification from the other side
+  if length(Frame) = TRAIL_SIZE then
     Delete(s); // remove this instance (Send did already make ClosePort)
 end;
 
@@ -1106,7 +1085,6 @@ begin
     fSafe.ReadUnLock;
   end;
 end;
-
 
 end.
 
