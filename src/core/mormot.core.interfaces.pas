@@ -812,13 +812,12 @@ type
   /// exception raised in case of Dependency Injection (aka IoC) issue
   EInterfaceResolver = class(ESynException);
 
-  {$M+}
   /// abstract factory class allowing to call interface resolution in cascade
   // - you can inherit from this class to chain the TryResolve() calls so
   // that several kind of implementations may be asked by a TInjectableObject,
   // e.g. TInterfaceStub, TServiceContainer or TDDDRepositoryRestObjectMapping
   // - this will implement factory pattern, as a safe and thread-safe DI/IoC
-  TInterfaceResolver = class
+  TInterfaceResolver = class(TSynPersistent)
   protected
     /// override this method to resolve an interface from this instance
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; virtual; abstract;
@@ -864,7 +863,6 @@ type
                       const aObjs: array of pointer;
       aRaiseExceptionIfNotFound: boolean = true); overload;
   end;
-  {$M-}
 
   /// used to store a list of TInterfacedObject instances
   TInterfacedObjectObjArray = array of TInterfacedObject;
