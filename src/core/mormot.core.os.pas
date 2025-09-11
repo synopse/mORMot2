@@ -924,8 +924,13 @@ type
     actCortextA725,
     actCortextA520AE,
     actCortextA720AE,
+    actC1Nano,
+    actC1Pro,
+    actC1Ultra,
     actNeoverseN3,
-    actCortextA320);
+    actCortextA320,
+    actC1Premium);
+
   /// a set of recognized ARM/AARCH64 CPU types
   TArmCpuTypes = set of TArmCpuType;
 
@@ -6593,8 +6598,12 @@ const
     $0d87,  // actCortextA725
     $0d88,  // actCortextA520AE
     $0d89,  // actCortextA720AE
+    $0d8a,  // actC1Nano
+    $0d8b,  // actC1Pro
+    $0d8c,  // actC1Ultra
     $0d8e,  // actNeoverseN3
-    $0d8f); // actCortextA320
+    $0d8f,  // actCortextA320
+    $0d90); // actC1Premium
 
   ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
     0,    // aciUnknown
@@ -6633,8 +6642,8 @@ const
      'Cortex-710',  'Cortex-X2',   'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
      'Cortex-X1C',  'Cortex-A715', 'Cortex-X3',   'Neoverse-V2', 'Cortex-A520',
      'Cortex-A720', 'Cortex-X4',   'Neoverse-V3AE','Neoverse-V3','Cortex-X925',
-     'Cortex-A725', 'Cortex-A520AE', 'Cortex-A720AE', 'Neoverse-N3',
-     'Cortex-A320');
+     'Cortex-A725', 'Cortex-A520AE', 'Cortex-A720AE', 'C1-Nano', 'C1-Pro',
+     'C1-Ultra',    'Neoverse-N3',   'Cortex-A320', 'C1-Premium');
 
   ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of string[18] = (
       '',

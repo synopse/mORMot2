@@ -377,7 +377,7 @@ begin
      IsRowID(pointer(FieldNames[0])) then
     exit; // ID primary key is always indexed by MongoDB
   try
-    fCollection.EnsureIndex(FieldNames, true, Unique);
+    fCollection.EnsureIndex(FieldNames, {ascending=}true, Unique);
   except
     result := false;
   end;
