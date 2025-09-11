@@ -416,6 +416,7 @@ type
     fSession: TIntegerDynArray;    // store TTunnelSession (=cardinal) values
     fSessionTix: TIntegerDynArray; // store GetTickSec
     fSessionCount: integer;
+    function HasTransient(aSession: TTunnelSession): boolean;
     function AddTransient(aSession: TTunnelSession;
       const callback: ITunnelTransmit): boolean;
     function RemoveTransient(aSession: TTunnelSession;
@@ -446,6 +447,7 @@ type
     /// finalize this instance and remove it from fOwner.fConsole
     destructor Destroy; override;
   end;
+  TTunnelConsoles = array of TTunnelConsole;
 
   /// implement ITunnelAgent on the Relay Server
   // - likely to be implemented as sicShared over our SOA WebSockets
@@ -457,10 +459,6 @@ type
       const callback: ITunnelTransmit): boolean;
     function TunnelInfo: variant;
     procedure TunnelSend(const Frame: RawByteString);
-  public
-  public
-    /// finalize this instance and remove it from fOwner.fAgent
-    destructor Destroy; override;
   end;
 
   /// implement Relay server process
@@ -469,16 +467,33 @@ type
   protected
     // note: fAgent and fConsole[] are class instances, to avoid refcount race
     fAgent: TTunnelAgent;
-    fSafe: TRWLightLock;  // protect fConsole[]
-    fConsole: array of TTunnelConsole; // per-console list of callbacks
+    fConsoleSafe: TRWLightLock;
+    fConsole: TTunnelConsoles; // per-console list of callbacks
     fConsoleCount: integer;
+    function HasPrepared(aSession: TTunnelSession): boolean;
     function LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
+    // search for matching fConsole[].TunnelSend
     procedure ConsoleTunnelSend(const Frame: RawByteString);
     // allow to resolve ITunnelConsole instances
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
   public
+    /// initialize this instance
+    constructor Create; override;
+    /// finalize this instance and its associated fAgent
+    destructor Destroy; override;
     /// called by TTunnelConsole.Destroy to unregister its own instance
     function DeleteConsole(aConsole: TTunnelConsole): boolean;
+    /// ask all TunnelInfo of all opended Agent sessions as TDocVariant array
+    function AgentsInfo: TVariantDynArray;
+    /// low-level access to the "agents" list
+    property Agent: TTunnelAgent
+      read fAgent;
+    /// low-level access to the "consoles" list
+    property Console: TTunnelConsoles
+      read fConsole;
+    /// how many items are actually stored in Console[]
+    property ConsoleCount: integer
+      read fConsoleCount;
   end;
 
 
@@ -1203,9 +1218,11 @@ begin
   if fCount = 0 then
     exit;
   if aSession = 0 then
-    aSession := FrameSession(Frame);
-  if aSession = 0 then
-    exit;
+  begin
+    aSession := FrameSession(Frame); // if was not pre-computed
+    if aSession = 0 then
+      exit;
+  end;
   fSafe.ReadLock; // non-blocking Read lock
   try
     ndx := IntegerScanIndex(pointer(fSession), fCount, aSession); // use SSE2 asm
@@ -1282,6 +1299,45 @@ end;
 
 { TTunnelRelay }
 
+constructor TTunnelRelay.Create;
+begin
+  fAgent := TTunnelAgent.Create(self);
+  fAgent._AddRef;
+end;
+
+destructor TTunnelRelay.Destroy;
+begin
+  fAgent._Release;
+  inherited Destroy;
+end;
+
+function TTunnelRelay.HasPrepared(aSession: TTunnelSession): boolean;
+var
+  p: ^TTunnelConsole;
+  n: integer;
+begin
+  if (self <> nil) and
+     (fConsoleCount <> 0) then
+  begin
+    fConsoleSafe.ReadLock;
+    try
+      result := true;
+      p := pointer(fConsole);
+      n := fConsoleCount;
+      if n <> 0 then
+        repeat
+          if p^.HasTransient(aSession) then
+            exit;
+          inc(p);
+          dec(n);
+        until n = 0;
+    finally
+      fConsoleSafe.ReadUnLock;
+    end;
+  end;
+  result := false;
+end;
+
 function TTunnelRelay.LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
 var
   p: ^TTunnelConsole;
@@ -1310,7 +1366,7 @@ begin
   if (s = 0) or
      (self = nil) then
     exit;
-  fSafe.ReadLock;
+  fConsoleSafe.ReadLock;
   try
     p := pointer(fConsole);
     n := fConsoleCount;
@@ -1322,7 +1378,7 @@ begin
         dec(n);
       until n = 0;
   finally
-    fSafe.ReadUnLock;
+    fConsoleSafe.ReadUnLock;
   end;
 end;
 
@@ -1335,23 +1391,32 @@ begin
     exit;
   // create a new TTunnelConsole instance (e.g. in sicPerSession mode)
   c := TTunnelConsole.Create(self);
-  fSafe.WriteLock;
+  fConsoleSafe.WriteLock;
   try
     PtrArrayAdd(fConsole, c, fConsoleCount);
   finally
-    fSafe.WriteUnLock;
+    fConsoleSafe.WriteUnLock;
   end;
   ITunnelConsole(Obj) := c; // resolve
 end;
 
 function TTunnelRelay.DeleteConsole(aConsole: TTunnelConsole): boolean;
 begin
-  fSafe.WriteLock;
+  fConsoleSafe.WriteLock;
   try
     result := ObjArrayDelete(fConsole, fConsoleCount, aConsole) >= 0;
   finally
-    fSafe.WriteUnLock;
+    fConsoleSafe.WriteUnLock;
   end;
+end;
+
+function TTunnelRelay.AgentsInfo: TVariantDynArray;
+begin
+  if (self = nil) or
+     (fAgent = nil) then
+    result := nil
+  else
+    result := fAgent.fList.GetAllInfo; // with 1 second cache
 end;
 
 
@@ -1369,6 +1434,19 @@ begin
   inherited Destroy;
 end;
 
+function TTunnelOpen.HasTransient(aSession: TTunnelSession): boolean;
+begin
+  result := false;
+  if fSessionCount = 0 then
+    exit;
+  fSafe.ReadLock;
+  try
+    result := IntegerScanExists(pointer(fSession), fSessionCount, aSession);
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
 function TTunnelOpen.AddTransient(aSession: TTunnelSession;
   const callback: ITunnelTransmit): boolean;
 var
@@ -1380,10 +1458,12 @@ begin
   tix32 := GetTickSec; // outside of WriteLock
   fSafe.WriteLock;
   try
+    // add this new transient session and its timestamp
     AddInteger(fSession, fSessionCount, aSession);
     if fSessionCount >= length(fSessionTix) then
       SetLength(fSessionTix, length(fSession));
     fSessionTix[fSessionCount - 1] := tix32;
+    { TODO: check and remove deprecated transient sessions }
   finally
     fSafe.WriteUnLock;
   end;
@@ -1420,7 +1500,6 @@ begin
 end;
 
 
-
 { TTunnelConsole }
 
 destructor TTunnelConsole.Destroy;
@@ -1438,13 +1517,13 @@ begin
   if (fOwner = nil) or
      (fOwner.fAgent = nil) then
     exit;
-  fOwner.fSafe.WriteLock;
+  fOwner.fConsoleSafe.WriteLock;
   try
     for n := 1 to 100 do // never loop forever
     begin
       result := Random31Not0; // a random session seems the best option
-      if not fList.Exists(result) then                 // in this console list
-        if fOwner.LockedFindConsole(result) = nil then // main list
+      if not fList.Exists(result) then                 // not in this console
+        if fOwner.LockedFindConsole(result) = nil then // not in main list
           break;
       result := 0; // very unlikely with 31-bit range - but try up to 100 times
     end;
@@ -1452,7 +1531,7 @@ begin
       if not AddTransient(result, callback) then
         result := 0; // unexpected failure
   finally
-    fOwner.fSafe.WriteUnLock;
+    fOwner.fConsoleSafe.WriteUnLock;
   end;
 end;
 
@@ -1473,40 +1552,21 @@ end;
 
 { TTunnelAgent }
 
-destructor TTunnelAgent.Destroy;
-begin
-  if (fOwner <> nil) and
-     (fOwner.fAgent = self) then
-    fOwner.fAgent := nil; // paranoid (would not be needed any more)
-  inherited Destroy;
-end;
-
 function TTunnelAgent.TunnelPrepare(aSession: TTunnelSession;
   const callback: ITunnelTransmit): boolean;
-var
-  c: TTunnelConsole;
 begin
-  result := false;
-  if fOwner = nil then
-    exit;
-  fOwner.fSafe.ReadLock;
-  try
-    c := fOwner.LockedFindConsole(aSession);
-    if c <> nil then // found a proper ITunnelConsole.Prepare()
-      result := AddTransient(aSession, callback);
-  finally
-    fOwner.fSafe.ReadUnLock;
-  end;
+  result := fOwner.HasPrepared(aSession) and
+            AddTransient(aSession, callback);
 end;
 
 function TTunnelAgent.TunnelInfo: variant;
 begin
-  VarClear(result); // no global list (unsafe)
+  VarClear(result); // no global list (unsafe from agent)
 end;
 
 procedure TTunnelAgent.TunnelSend(const Frame: RawByteString);
 begin
-  fOwner.ConsoleTunnelSend(Frame);
+  fOwner.ConsoleTunnelSend(Frame); // search for matching fConsole[].TunnelSend
 end;
 
 
