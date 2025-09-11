@@ -471,7 +471,17 @@ type
       read fSafe;
   end;
 
-  /// adding light locking methods to a TInterfacedObject with virtual constructor
+  /// adding R/W light locking methods to a TInterfacedObject with virtual constructor
+  TInterfacedObjectRWLightLocked = class(TInterfacedPersistent)
+  protected
+    fSafe: TRWLightLock;
+  public
+    /// access to the multiple Read / exclusive Write locking methods of this instance
+    property Safe: TRWLightLock
+      read fSafe;
+  end;
+
+  /// adding R/W upgradable locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectRWLocked = class(TInterfacedPersistent)
   protected
     fSafe: TRWLock;

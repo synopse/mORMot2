@@ -2131,7 +2131,7 @@ function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt; overload;
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - this overloaded function will use a separated variable to store the items
 // count, so will be slightly faster: but you should call SetLength() when done,
-// to have a stand-alone array as expected by our ORM/SOA serialziation
+// to have a stand-alone array as expected by our ORM/SOA serialization
 // - return the index of the item in the dynamic array
 function ObjArrayAddCount(var aObjArray; aItem: TObject;
   var aObjArrayCount: integer): PtrInt;
