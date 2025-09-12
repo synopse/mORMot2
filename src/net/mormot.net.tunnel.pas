@@ -575,7 +575,10 @@ destructor TTunnelLocalThread.Destroy;
 begin
   Terminate;
   if fOwner <> nil then
+  try
     fOwner.fThread := nil;
+  except
+  end;
   fServerSock.ShutdownAndClose({rdwr=}true);
   fClientSock.ShutdownAndClose({rdwr=}true);
   inherited Destroy;
@@ -783,7 +786,6 @@ begin
     if thread <> nil then
       try
         fThread := nil;
-        thread.fOwner := nil;
         thread.Terminate;
         if thread.fState = stAccepting then
         begin
