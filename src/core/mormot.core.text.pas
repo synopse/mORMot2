@@ -2043,20 +2043,20 @@ procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean = tru
 /// create a temporary string random content, WinAnsi (code page 1252) content
 function RandomWinAnsi(CharCount: integer): WinAnsiString;
 
-/// create a temporary UTF-8 string random content, using WinAnsi
-// (code page 1252) content
+/// create a temporary UTF-8 random string, from RandomWinAnsi() content
 // - CharCount is the number of random WinAnsi chars, so it is very likely that
 // length(result) > CharCount once encoded into UTF-8
 function RandomUtf8(CharCount: integer): RawUtf8;
 
-/// create a temporary UTF-16 string random content, using WinAnsi
-// (code page 1252) content
+/// create a temporary UTF-16 random string, from RandomWinAnsi() content
 function RandomUnicode(CharCount: integer): SynUnicode;
 
-/// create a temporary string random content, using ASCII 7-bit content
+/// create a temporary string random content, using only ASCII 7-bit chars
+// - e.g. RandomAnsi7(10) = '1d2I(\?U; ' (from #$20 space to #$7e tilde)
 function RandomAnsi7(CharCount: integer; CodePage: integer = CP_UTF8): RawByteString;
 
 /// create a temporary string random content, using A..Z,_,0..9 chars only
+// - for a strong password, use safer TAesPrng.Main.RandomPassword method
 function RandomIdentifier(CharCount: integer): RawUtf8;
 
 /// create a temporary string random content, using uri-compatible chars only
@@ -10299,7 +10299,7 @@ var
 begin
   R := RandomByteString(CharCount, result, CodePage);
   for i := 0 to CharCount - 1 do
-    R[i] := (R[i] mod 95) + 32; // may include tilde #$7e (#126) char
+    R[i] := (R[i] mod 95) + 32; // [' ' .. #$7e] (#126=tilde) range
 end;
 
 procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawUtf8);
