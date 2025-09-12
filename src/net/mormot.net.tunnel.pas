@@ -106,6 +106,7 @@ type
   /// background thread bound or connected to a local port process
   TTunnelLocalThread = class(TLoggedThread)
   protected
+    fSafe: TLightLock; // protect especially fClientSock at startup/closure
     fState: (stCreated, stAccepting, stProcessing, stTerminated);
     fStarted: boolean;
     fOwner: TTunnelLocal;
@@ -574,13 +575,18 @@ end;
 destructor TTunnelLocalThread.Destroy;
 begin
   Terminate;
-  if fOwner <> nil then
+  fSafe.Lock;
   try
-    fOwner.fThread := nil;
-  except
+    if fOwner <> nil then
+    try
+      fOwner.fThread := nil;
+    except
+    end;
+    fServerSock.ShutdownAndClose({rdwr=}true);
+    fClientSock.ShutdownAndClose({rdwr=}true);
+  finally
+    fSafe.UnLock;
   end;
-  fServerSock.ShutdownAndClose({rdwr=}true);
-  fClientSock.ShutdownAndClose({rdwr=}true);
   inherited Destroy;
   FreeAndNil(fAes[true]);
   FreeAndNil(fAes[false]);
@@ -590,38 +596,38 @@ procedure TTunnelLocalThread.OnReceived(Frame: pointer; FrameLen: PtrInt);
 var
   res: TNetResult;
   data: RawByteString;
-  start: cardinal;
 begin
   // validate and optionally decrypt the input frame
   if Terminated or
-     (Frame = '') then
+     (Frame = nil) then
     exit;
-  if fClientSock = nil then // may occur at startup
+  if not fSafe.TryLock then
   begin
-    fLog.Log(sllDebug, 'OnReceived: wait for ClientSock', self);
-    start := GetTickSec;
-    repeat
-      if SleepOrTerminated(10) then
-        exit;
-      if fClientSock <> nil then
-        break;
-      if GetTickSec - start <= fTimeoutAcceptSecs then
-        continue;
-      fLog.Log(sllWarning, 'OnReceived: no ClientSock', self);
-      exit;
-    until false;
+    fLogClass.Add.Log(sllDebug, 'OnReceived: wait for accept', self);
+    fSafe.Lock;
+    fLogClass.Add.Log(sllDebug, 'OnReceived: accepted', self);
   end;
-  if fAes[{sending:}false] <> nil then
-  begin
-    data := fAes[false].DecryptPkcs7Buffer(
-      Frame, FrameLen, {ivatbeg=}false, {raise=}false);
-    if data = '' then
+  try
+    if fAes[{sending:}false] <> nil then
     begin
-      Terminate;
-      ETunnel.RaiseUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
+      data := fAes[false].DecryptPkcs7Buffer(
+        Frame, FrameLen, {ivatbeg=}false, {raise=}false);
+      if data = '' then
+      begin
+        Terminate;
+        ETunnel.RaiseUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
+      end;
+      Frame := pointer(data);
+      FrameLen := length(data);
     end;
-    Frame := pointer(data);
-    FrameLen := length(data);
+    // relay the (decrypted) data to the local loopback
+    if Terminated then
+      exit;
+    if fOwner <> nil then
+      inc(fOwner.fBytesIn, FrameLen);
+    res := fClientSock.SendAll(Frame, FrameLen, @Terminated);
+  finally
+    fSafe.UnLock;
   end;
   if (res = nrOk) or
      Terminated then
@@ -652,25 +658,30 @@ begin
       fState := stAccepting;
       fLog.Log(sllTrace,
         'DoExecute: waiting for accept on port %', [fPort], self);
-      start := GetTickSec; // socket timeout is 500ms: use a loop
-      repeat
-        res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
-        if (res = nrOk) and
-           not Terminated then
-        begin
-          fLog.Log(sllTrace,
-            'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
-          if (toAcceptNonLocal in fOwner.Options) or
-             (fClientAddr.IP4 = cLocalhost32) then
-           fState := stProcessing // start background process
-          else
-            fLog.Log(sllWarning, 'DoExecute: rejected non local client', self);
-        end;
-      until Terminated or
-            (fState = stProcessing) or
-            (fOwner = nil) or
-            (res <> nrRetry) or
-            (GetTickSec - start > fTimeoutAcceptSecs);
+      fSafe.Lock; // protect early fClientSock access in OnReceived()
+      try
+        start := GetTickSec; // socket timeout is 500ms: use a loop
+        repeat
+          res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
+          if (res = nrOk) and
+             not Terminated then
+          begin
+            fLog.Log(sllTrace,
+              'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
+            if (toAcceptNonLocal in fOwner.Options) or
+               (fClientAddr.IP4 = cLocalhost32) then
+             fState := stProcessing // start background process
+            else
+              fLog.Log(sllWarning, 'DoExecute: rejected non local client', self);
+          end;
+        until Terminated or
+              (fState = stProcessing) or
+              (fOwner = nil) or
+              (res <> nrRetry) or
+              (GetTickSec - start > fTimeoutAcceptSecs);
+      finally
+        fSafe.UnLock;
+      end;
     end
     else
       // newsocket() with connect() was done in the main thread
