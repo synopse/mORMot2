@@ -3185,7 +3185,7 @@ begin
     exit;
   if MS < 32 then
   begin
-    // smaller than GetTickCount64 resolution (under Windows)
+    // smaller than OS timer resolution (at least under Windows)
     SleepHiRes(MS);
     if Terminated then
       exit;
@@ -3199,7 +3199,7 @@ begin
         exit;
     until GetTickCount64 > endtix;
   end;
-  result := false; // abnormal delay expiration
+  result := false; // MS timeout
 end;
 
 procedure TSynThread.DoTerminate;

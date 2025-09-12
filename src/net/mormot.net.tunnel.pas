@@ -126,7 +126,7 @@ type
     /// release all sockets and encryption state
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
-    procedure OnReceived(const Frame: RawByteString);
+    procedure OnReceived(Frame: pointer; FrameLen: PtrInt);
     /// true if internal state is stProcessing, i.e. after accept() and within
     // the main redirection loop
     function Processing: boolean;
@@ -586,7 +586,7 @@ begin
   FreeAndNil(fAes[false]);
 end;
 
-procedure TTunnelLocalThread.OnReceived(const Frame: RawByteString);
+procedure TTunnelLocalThread.OnReceived(Frame: pointer; FrameLen: PtrInt);
 var
   res: TNetResult;
   data: RawByteString;
@@ -611,28 +611,24 @@ begin
       exit;
     until false;
   end;
-  data := Frame;
   if fAes[{sending:}false] <> nil then
   begin
-    data := fAes[false].DecryptPkcs7(data, {ivatbeg=}false, {raise=}false);
+    data := fAes[false].DecryptPkcs7Buffer(
+      Frame, FrameLen, {ivatbeg=}false, {raise=}false);
     if data = '' then
     begin
       Terminate;
       ETunnel.RaiseUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
     end;
+    Frame := pointer(data);
+    FrameLen := length(data);
   end;
-  // relay the (decrypted) data to the local loopback
-  if Terminated then
-    exit;
-  if fOwner <> nil then
-    inc(fOwner.fBytesIn, length(data));
-  res := fClientSock.SendAll(pointer(data), length(data), @Terminated);
   if (res = nrOk) or
      Terminated then
     exit;
-  Terminate;
   ETunnel.RaiseUtf8('%.OnReceived(%): error % when retransmitting',
     [self, fPort, ToText(res)^]);
+  Terminate;
 end;
 
 function TTunnelLocalThread.Processing: boolean;
@@ -837,12 +833,9 @@ begin
       ClosePort;
     end
     else if fThread <> nil then // = nil after ClosePort (too late)
-    begin
-      PStrLen(p - _STRLEN)^ := l; // trim 32-bit session trailer
-      fThread.OnReceived(aFrame); // regular tunelling process
-    end
+      fThread.OnReceived(p, l) // regular tunelling process
     else
-      fLogClass.Add.Log(sllDebug, 'TunnelSend: Thread=nil', self); // unlikely
+      fLogClass.Add.Log(sllWarning, 'TunnelSend: Thread=nil', self); // unlikely
   finally
     fSendSafe.UnLock;
   end;
