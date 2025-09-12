@@ -1623,12 +1623,7 @@ var
   log: ISynLog;
   clientinstance, serverinstance: TTunnelLocal;
   clienttunnel, servertunnel: ITunnelLocal;
-  sent, received, sent2, received2: RawByteString;
-  closed: PBoolean;
-  i: integer;
-  clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
-  nfo: variant;
 begin
   // setup the two instances with the specified options and certificates
   TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
