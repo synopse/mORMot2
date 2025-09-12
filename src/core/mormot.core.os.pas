@@ -7936,31 +7936,30 @@ procedure SynRaiseProc(Obj: TObject; Addr: CodePointer;
 var
   ctxt: TSynLogExceptionContext;
   backuplasterror: DWord;
-  backuphandler: TOnRawLogException;
 begin
   if (Obj <> nil) and
-     Obj.InheritsFrom(Exception) then
+     Obj.InheritsFrom(Exception) and
+     Assigned(_RawLogException) then
   begin
     backuplasterror := GetLastError;
-    backuphandler := _RawLogException;
-    if Assigned(backuphandler) then
-      try
-        _RawLogException := nil; // disable nested exception
-        ctxt.EClass := PPointer(Obj)^;
-        ctxt.EInstance := Exception(Obj);
-        ctxt.EAddr := PtrUInt(Addr);
-        if Obj.InheritsFrom(EExternal) then // e.g. EDivByZero or EMathError
-          ctxt.ELevel := sllExceptionOS
-        else
-          ctxt.ELevel := sllException; // regular "raise" exception
-        ctxt.ETimestamp := UnixTimeUtc;
-        ctxt.EStack := pointer(Frame);
-        ctxt.EStackCount := FrameCount;
-        backuphandler(ctxt);
-      except
-        { ignore any nested exception }
-      end;
-    _RawLogException := backuphandler;
+    try
+      ctxt.EClass := PPointer(Obj)^;
+      ctxt.EInstance := Exception(Obj);
+      ctxt.EAddr := PtrUInt(Addr);
+      if Obj.InheritsFrom(EExternal) then // e.g. EDivByZero or EMathError
+        ctxt.ELevel := sllExceptionOS
+      else
+        ctxt.ELevel := sllException; // regular "raise" exception
+      ctxt.ETimestamp := UnixTimeUtc;
+      ctxt.EStack := pointer(Frame);
+      ctxt.EStackCount := FrameCount;
+      _RawLogException(ctxt); // e.g. SynLogException() from mormot.core.log
+      // note that SynLogException() will use PerThreadInfo.ExceptionIgnore
+      // to avoid recursive exception loggin: _RawLogException should not be set
+      // to nil or exceptions on concurrent threads would not be logged
+    except
+      { ignore any nested exception }
+    end;
     SetLastError(backuplasterror); // may have changed above
   end;
   if Assigned(OldRaiseProc) then
@@ -7970,11 +7969,11 @@ end;
 {$endif WITH_RAISEPROC}
 
 var
-  RawExceptionIntercepted: boolean;
+  RawExceptionIntercepted: boolean; // single global Exception interception
 
 procedure RawExceptionIntercept(const Handler: TOnRawLogException);
 begin
-  _RawLogException := Handler;
+  _RawLogException := Handler; // e.g. SynLogException() from mormot.core.log
   if RawExceptionIntercepted or
      not Assigned(Handler) then
     exit;
