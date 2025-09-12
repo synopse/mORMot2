@@ -10076,12 +10076,14 @@ var
   SpinFactor: PtrUInt = 1; // default value on Intel - set to 10 on AMD Zen3+
 
 // on Intel/AMD, the pause CPU instruction would relax the core
-// - but it is expected to be inlined within the loop itself
+// - but it is expected to be inlined within the spinning loop itself
 // - sadly, Delphi does not support inlined asm on Win64 so we use a function
 {$ifdef WIN64DELPHI}
-procedure DoPause;
+procedure DoPause(n: integer);
 asm
-      pause // = "rep nop" opcode
+@s:   pause          // = "rep nop" opcode
+      dec     rcx
+      jnz     @s     // within its own 1..16x loop (better than nothing)
 end;
 {$endif WIN64DELPHI}
 {$endif CPUINTEL}
@@ -10112,21 +10114,21 @@ begin
   {$endif OSLINUX_SCHEDYIELDONCE}
   begin // exponential backoff: 1,2,4,8,16 x DoPause
     result := SpinFactor shl pred(result);
+    // "pause" called 992 times until SwithToThread = up to 50us on modern CPU
+    {$ifdef WIN64DELPHI}
+    DoPause(result);
+    {$else}
     repeat
-      // called 992 times until SwithToThread = up to 40us on modern CPU
       {$ifdef CPUINTEL}
-      {$ifdef WIN64DELPHI}
-      DoPause;
-      {$else}
       asm
         pause // "rep nop" opcode should be inlined within the spinning loop
       end;
-      {$endif WIN64DELPHI}
       {$else}
       DoPause; // "yield" arm/aarch64 opcode
       {$endif CPUINTEL}
       dec(result);
     until result = 0;
+    {$endif WIN64DELPHI}
   end;
   {$endif CPUINTELARM}
   dec(spin);
