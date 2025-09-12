@@ -4939,7 +4939,10 @@ function SleepDelay(elapsed: PtrInt): PtrInt;
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// similar to Windows SwitchToThread API call, to be truly cross-platform
-// - call fpnanosleep(10) on POSIX systems, or the homonymous API on Windows
+// - call the homonymous API on Windows
+// - call direclty the sched_yield Linux syscall or the FPC RTL on BSD
+// - you should not call this function in your own code, especially since
+// sched_yield is reported to be unfair and misleading by Linux kernel devs
 procedure SwitchToThread;
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
@@ -10060,11 +10063,15 @@ const
 // as reference, take a look at Linus insight (TL&WR: better use futex)
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
 
+// our light locks do not use the resource of an associated futex, so are easier
+// if there is almost no contention - and really seldom call fpnanosleep(10us)
+
 {$ifdef CPUINTEL}
 // on Intel/AMD, the pause CPU instruction would relax the core
+// - modern CPUs have bigger pause latency (up to 100 cycles)
 procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
 asm
-      pause // modern CPUs have bigger pause latency (up to 100 cycles)
+      pause // = "rep nop" opcode
 end;
 {$endif CPUINTEL}
 
@@ -10082,6 +10089,13 @@ begin
   // adaptive spinning to reduce cache coherence traffic
   result := (SPIN_COUNT - spin) shr 5; // 0..5 range, each 32 times
   if result <> 0 then // no pause up to 32 times (low latency acquisition)
+  {$ifdef OSLINUX_SCHEDYIELDONCE}      // yield once during the process
+  {$ifndef OSLINUX_SCHEDYIELD}         // if not already = SwitchToThread
+  if spin = SPIN_COUNT shr 2 then
+    Do_SysCall(syscall_nr_sched_yield) // properly defined in syscall.pp
+  else
+  {$endif OSLINUX_SCHEDYIELD}
+  {$endif OSLINUX_SCHEDYIELDONCE}
   begin
     result := 1 shl pred(result); // exponential backoff: 1,2,4,8,16 x DoPause
     repeat
@@ -10091,9 +10105,9 @@ begin
   end;
   {$endif CPUINTELARM}
   dec(spin);
-  if spin = 0 then // eventually yield to the OS for long wait
+  if spin = 0 then // eventually call the OS for long wait
   begin
-    SwitchToThread;     // fpnanosleep on POSIX
+    SwitchToThread; // homonymous Win API call or proper POSIX call
     spin := SPIN_COUNT; // try again
   end;
   result := spin;
@@ -11300,7 +11314,7 @@ end;
 function SleepDelay(elapsed: PtrInt): PtrInt;
 begin
   if elapsed < 50 then
-    result := 0 // 10us on POSIX, SwitchToThread on Windows
+    result := 0 // redirect to SwitchToThread
   else if elapsed < 200 then
     result := 1
   else if elapsed < 500 then

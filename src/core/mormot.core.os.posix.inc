@@ -1680,6 +1680,33 @@ begin
     fpmunmap(fBuf, fBufSize);
 end;
 
+// we tried sched_yield() on Linux, but since we spin for a while before calling
+// SwitchToThread, it made more syscalls for no wallclock benefit: nanosleep(10us)
+// seems a better solution, and also prevents pathological spinning if the
+// scheduler policy actually is not adapted to this usage
+{ $define OSLINUX_SCHEDYIELD}     // force sched_yield syscall on Linux
+{ $define OSLINUX_SCHEDYIELDONCE} // yield once during DoSpin() - no benefit
+
+{$ifdef OSLINUX_SCHEDYIELD}
+procedure SwitchToThread;
+begin
+  // called more often than nanosleep, with no actual benefit
+  Do_SysCall(syscall_nr_sched_yield); // properly defined in syscall.pp
+end;
+{$else}
+procedure SwitchToThread;
+var
+  t: TTimeSpec;
+begin
+  // note: nanosleep() may flood the kernel with timer/scheduling events under
+  // repeated calls - but here we spin-and-pause between calls so it is fine
+  t.tv_sec := 0;
+  t.tv_nsec := 1000; // 1us seems fair enough in respect to OS timers resolution
+  fpnanosleep(@t, nil);
+  // benchmarks show consistent 50us minimal for tiny requests, so 1us default
+  // could prevent the kernel to jitter with too small intervals like 10ns
+end;
+{$endif OSLINUX_SCHEDYIELD}
 
 procedure SleepHiRes(ms: cardinal);
 var
@@ -1691,9 +1718,10 @@ begin
     // handle SleepHiRes(0) special case
     if SleepHiRes0Yield then
     begin
-      // warning: reported as buggy by Alan on POSIX, and despitable by Linus
+      // reported as unreliable by Alan on most POSIX, and despitable by Linus
       // - from our testing, it gives worse performance than fpnanosleep()
-      ThreadSwitch; // call e.g. POSIX libc's sched_yield API
+      // when waiting for some event (but may be sometimes used for spinning)
+      ThreadSwitch; // FPC RTL redirects to pthread_yield()
       exit;
     end
     else
@@ -1708,17 +1736,6 @@ begin
   end;
   fpnanosleep(@timeout, nil)
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
-end;
-
-procedure SwitchToThread;
-var
-  timeout: Ttimespec;
-begin
-  // nanosleep() seems better than FPC RTL ThreadSwitch = POSIX libc sched_yield
-  timeout.tv_sec := 0;
-  timeout.tv_nsec := 10; // empirically identified on a recent Linux Kernel
-  // note: nanosleep() adds a few dozen of microsecs for context switching
-  fpnanosleep(@timeout, nil);
 end;
 
 
@@ -3404,7 +3421,7 @@ procedure XorOSEntropy(var e: THash512Rec);
 var
   tmp: TBuffer4K;
   si: TSysInfo  absolute tmp; // Linuxism
-  rt: TTimeSpec absolute tmp; // with nanoseconds resolution
+  rt: TTimeSpec absolute tmp; // in nanoseconds resolution
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt);
   DefaultHasher128(@e.h0, @rt, SizeOf(rt)); // maybe AesNiHash128
