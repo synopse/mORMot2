@@ -416,6 +416,7 @@ type
   TTunnelOpen = class(TInterfacedObjectRWLightLocked)
   protected
     fOwner: TTunnelRelay;
+    fLogClass: TSynLogClass;
     fList: TTunnelList;
     fDeprecatedTix32, fTimeOutSecs: cardinal;
     // transient sessions before TunnelCommit/TunnelRollback
@@ -477,6 +478,7 @@ type
     fAgent: TTunnelAgent;
     fConsoleSafe: TRWLightLock;
     fConsole: TTunnelConsoles; // per-console list of callbacks
+    fLogClass: TSynLogClass;
     fConsoleCount: integer;
     fTransientTimeOutSecs: cardinal;
     function HasConsolePrepared(aSession: TTunnelSession): boolean;
@@ -487,7 +489,8 @@ type
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
   public
     /// initialize this instance
-    constructor Create(aTransientTimeOutSecs: cardinal); reintroduce;
+    constructor Create(aLogClass: TSynLogClass;
+      aTransientTimeOutSecs: cardinal = 120); reintroduce;
     /// finalize this instance and its associated fAgent
     destructor Destroy; override;
     /// called by TTunnelConsole.Destroy to unregister its own instance
@@ -1310,8 +1313,10 @@ end;
 
 { TTunnelRelay }
 
-constructor TTunnelRelay.Create(aTransientTimeOutSecs: cardinal);
+constructor TTunnelRelay.Create(aLogClass: TSynLogClass;
+  aTransientTimeOutSecs: cardinal);
 begin
+  fLogClass := aLogClass;
   fTransientTimeOutSecs := aTransientTimeOutSecs;
   fAgent := TTunnelAgent.Create(self, fTransientTimeOutSecs);
   fAgent._AddRef; // ready to be used e.g. as a sicShared SOA instance
@@ -1353,6 +1358,7 @@ begin
     end;
   end;
   result := false;
+  fLogClass.Add.Log(sllTrace, 'HasConsolePrepared(%)=false', [Int64(aSession)], self);
 end;
 
 function TTunnelRelay.LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
@@ -1397,6 +1403,8 @@ begin
   finally
     fConsoleSafe.ReadUnLock;
   end;
+  fLogClass.Add.Log(sllDebug, 'ConsoleTunnelSend(%): unknown session',
+    [Int64(s)], self); // unlikely
 end;
 
 function TTunnelRelay.TryResolve(aInterface: PRttiInfo; out Obj): boolean;
@@ -1415,6 +1423,7 @@ begin
     fConsoleSafe.WriteUnLock;
   end;
   ITunnelConsole(Obj) := c; // resolve
+  fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [pointer(c)], self);
 end;
 
 function TTunnelRelay.DeleteConsole(aConsole: TTunnelConsole): boolean;
@@ -1425,6 +1434,7 @@ begin
   finally
     fConsoleSafe.WriteUnLock;
   end;
+  fLogClass.Add.Log(sllTrace, 'DeleteConsole=% %', [BOOL_STR[result], aConsole], self);
 end;
 
 function TTunnelRelay.AgentsInfo: TVariantDynArray;
@@ -1457,7 +1467,7 @@ begin
         dv^.InitFast(c^.fInfo.Count + 2, dvObject);
         dv^.AddFrom(c^.fInfo);
         dv^.AddValue('count', c^.fList.fCount);
-        dv^.AddValue('list',  c^.TunnelInfo);
+        dv^.AddValue('list',  c^.TunnelInfo); // with 1 second cache
         inc(c);
         inc(dv);
         dec(n);
@@ -1473,6 +1483,7 @@ end;
 constructor TTunnelOpen.Create(aOwner: TTunnelRelay; aTimeOutSecs: cardinal);
 begin
   fOwner := aOwner;
+  fLogClass := aOwner.fLogClass;
   fTimeOutSecs := aTimeOutSecs;
   fList := TTunnelList.Create;
 end;
@@ -1500,32 +1511,39 @@ function TTunnelOpen.AddTransient(aSession: TTunnelSession;
   const callback: ITunnelTransmit): boolean;
 var
   tix32: cardinal;
-  i: PtrInt;
+  i, gc: PtrInt;
 begin
+  gc := 0;
   result := fList.Add(aSession, callback);
-  if not result then
-    exit;
-  tix32 := GetTickSec; // outside of WriteLock
-  fSafe.WriteLock;
   try
-    // add this new transient session and its timestamp
-    AddInteger(fSession, fSessionCount, aSession);
-    if fSessionCount >= length(fSessionTix) then
-      SetLength(fSessionTix, length(fSession));
-    fSessionTix[fSessionCount - 1] := tix32;
-    // check and remove deprecated transient sessions
-    if (fTimeOutSecs = 0) or
-       (tix32 shr 4 = fDeprecatedTix32) then
+    if not result then
       exit;
-    fDeprecatedTix32 := tix32 shr 4; // next check in 16 seconds
-    for i := fSessionCount - 1 downto 0 do
-      if fSessionTix[i] + fTimeOutSecs < tix32 then
-      begin
-        fList.Delete(fSession[i]);
-        DeleteTransient(i);
-      end;
+    tix32 := GetTickSec; // outside of WriteLock
+    fSafe.WriteLock;
+    try
+      // add this new transient session and its timestamp
+      AddInteger(fSession, fSessionCount, aSession);
+      if fSessionCount >= length(fSessionTix) then
+        SetLength(fSessionTix, length(fSession));
+      fSessionTix[fSessionCount - 1] := tix32;
+      // check and remove deprecated transient sessions
+      if (fTimeOutSecs = 0) or
+         (tix32 shr 4 = fDeprecatedTix32) then
+        exit;
+      fDeprecatedTix32 := tix32 shr 4; // next check in 16 seconds
+      for i := fSessionCount - 1 downto 0 do
+        if cardinal(fSessionTix[i]) + fTimeOutSecs < tix32 then
+        begin
+          fList.Delete(fSession[i]);
+          DeleteTransient(i);
+          inc(gc);
+        end;
+    finally
+      fSafe.WriteUnLock;
+    end;
   finally
-    fSafe.WriteUnLock;
+    fLogClass.Add.Log(sllTrace, 'AddTransient(%)=% gc=%, count=%',
+      [Int64(aSession), BOOL_STR[result], gc, fSessionCount], self);
   end;
 end;
 
@@ -1540,10 +1558,12 @@ begin
     if ndx < 0 then
       exit;
     DeleteTransient(ndx);
+    result := true;
   finally
     fSafe.WriteUnLock;
+    fLogClass.Add.Log(sllTrace, 'RemoveTransient(%)=% count=%',
+      [Int64(aSession), BOOL_STR[result], fSessionCount], self);
   end;
-  result := true;
 end;
 
 procedure TTunnelOpen.DeleteTransient(ndx: PtrInt);
@@ -1577,6 +1597,7 @@ procedure TTunnelConsole.TunnelSetInfo(const info: variant);
 begin
   fInfo.Clear;
   fInfo := _Safe(info)^;
+  fLogClass.Add.Log(sllTrace, 'TunnelSetInfo %', [info], self);
 end;
 
 function TTunnelConsole.TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
@@ -1585,7 +1606,8 @@ var
 begin
   result := 0;
   if (fOwner = nil) or
-     (fOwner.fAgent = nil) then
+     (fOwner.fAgent = nil) or
+     (callback = nil) then
     exit;
   fOwner.fConsoleSafe.WriteLock;
   try
@@ -1596,6 +1618,7 @@ begin
         if fOwner.LockedFindConsole(result) = nil then // not in main list
           break;
       result := 0; // very unlikely with 31-bit range - but try up to 50 times
+      fLogClass.Add.Log(sllDebug, 'TunnelPrepare random collision', self);
     end;
     if result <> 0 then
       if not AddTransient(result, callback) then
