@@ -10079,7 +10079,7 @@ var
 // - but it is expected to be inlined within the spinning loop itself
 // - sadly, Delphi does not support inlined asm on Win64 so we use a function
 {$ifdef WIN64DELPHI}
-procedure DoPause(n: integer);
+procedure DoPause(n: PtrUInt);
 asm
 @s:   pause          // = "rep nop" opcode
       dec     rcx
