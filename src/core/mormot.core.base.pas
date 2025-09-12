@@ -2798,6 +2798,9 @@ type
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
 
+  /// recognize the main Intel/AMD CPU manufacturers
+  TIntelCpuManufacturer = (icmOther, icmIntel, icmAmd);
+
   /// 32-bit ARM Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
@@ -2882,6 +2885,10 @@ var
   // - on LINUX, consider CpuInfoArm or the textual CpuInfoFeatures from
   // mormot.core.os.pas
   CpuFeatures: TIntelCpuFeatures;
+
+  // additional low-level Intel/AMD CPU information retrieved using CPUID
+  CpuManufacturer: TIntelCpuManufacturer;
+  CpuFamily, CpuModel: byte;
 
 /// twelve-character ASCII vendor string returned by Intel/AMD cpuid
 // - typical values are 'AuthenticAMD' or 'GenuineIntel'
@@ -10447,41 +10454,58 @@ end; // no "vector width" bits any more: AVX10 means 128-, 256- and 512-bit
 
 procedure TestCpuFeatures;
 var
-  regs: array[0..3] of TIntelRegisters absolute BaseEntropy;
+  regs: TIntelRegisters;
   flags: PIntegerArray;
 begin
   // retrieve CPUID raw flags
-  GetCpuid({eax=}1, {ecx=}0, regs[0]); // EAX=1: Processor Info and Feature Bits
+  GetCpuid({eax=}1, {ecx=}0, regs); // EAX=1: Processor Info and Feature Bits
+  CpuFamily := (regs.eax shr 8) and $0f;
+  if CpuFamily = $0f then
+    inc(CpuFamily, (regs.eax shr 20) and $0f);
+  CpuModel := (((regs.eax shr 16) and $0f) shl 4) or ((regs.eax shr 4) and $0f);
   flags := @CpuFeatures;
-  flags^[0] := regs[0].edx;
-  flags^[1] := regs[0].ecx;
-  GetCpuid(7, 0, regs[1]);             // EAX=7, ECX=0: Extended flags
-  flags^[2] := regs[1].ebx;
-  flags^[3] := regs[1].ecx;
-  flags^[4] := regs[1].edx;
-  if regs[1].eax in [1..9] then        // maximum ecx value for EAX=7
+  flags^[0] := regs.edx;
+  flags^[1] := regs.ecx;
+  BaseEntropy.h0 := PHash128(@regs)^;
+  GetCpuid(7, 0, regs);             // EAX=7, ECX=0: Extended flags
+  flags^[2] := regs.ebx;
+  flags^[3] := regs.ecx;
+  flags^[4] := regs.edx;
+  BaseEntropy.h1 := PHash128(@regs)^;
+  if regs.eax in [1..9] then        // maximum ecx value for EAX=7
   begin
-    GetCpuid(7, 1, regs[2]);           // EAX=7, ECX=1: Extended flags
-    flags^[5] := regs[2].eax;
-    flags^[6] := regs[2].edx;          // just ignoring regs.ebx and regs.ecx
+    GetCpuid(7, 1, regs);           // EAX=7, ECX=1: Extended flags
+    flags^[5] := regs.eax;
+    flags^[6] := regs.edx;          // just ignoring regs.ebx and regs.ecx
+    BaseEntropy.h2 := PHash128(@regs)^;
   end;
+  GetCpuid(0, 0, regs); // EAX=0: Manufacturer ID in EBX,EDX,ECX
+  if (regs.ebx = $756e6547) and
+     (regs.edx = $49656e69) and
+     (regs.ecx = $6c65746e) then
+    CpuManufacturer := icmIntel  // 'GenuineIntel'
+  else if (regs.ebx = $68747541) and
+          (regs.edx = $69746e65) and
+          (regs.ecx = $444d4163) then
+    CpuManufacturer := icmAmd;   // 'AuthenticAMD'
   // validate accuracy of most used HW opcodes against flags reported by CPUID
   if cfTSC in CpuFeatures then
     try
-      PInt64(@regs[3].eax)^ := Rdtsc; // current number of cpu cycles
+      PInt64(@regs.eax)^ := PInt64(@regs.eax)^ xor Rdtsc; // # of cpu cycles
     except // may trigger a GPF if CR4.TSD bit is set on hardened systems
       exclude(CpuFeatures, cfTSC);
     end;
   if cfRAND in CpuFeatures then
     try
-      regs[3].ecx := RdRand32; // don't loose those random values
-      regs[3].edx := RdRand32;
-      if regs[3].ecx = regs[3].edx then
+      regs.ecx := RdRand32; // don't loose those random values
+      regs.edx := RdRand32;
+      if regs.ecx = regs.edx then
         // most probably a RDRAND bug, e.g. on AMD Rizen 3000
         exclude(CpuFeatures, cfRAND);
     except // may trigger an illegal instruction exception on some Ivy Bridge
       exclude(CpuFeatures, cfRAND);
     end;
+  BaseEntropy.h3 := PHash128(@regs)^;
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
