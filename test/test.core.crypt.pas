@@ -872,12 +872,13 @@ begin
         check(s1[j] in [#33 .. #126]);
       // verify Random32 / RandomDouble / RandomDouble distribution
       c := a1.Random32;
-      check(c <> a2.Random32, 'Random32 collision');
       if c < cardinal(maxint) then
         inc(clo)
       else
         inc(chi);
-      check(a1.Random64 <> a2.Random64);
+      check(c <> a2.Random32, 'Random32 collision');
+      check(c <> a1.Random32, 'Random32 twice collision');
+      check(a1.Random64 <> a2.Random64, 'Random64 collision');
       check(a1.Random32(i) < cardinal(i));
       d := a1.RandomDouble;
       check((d >= 0) and (d < 1));
