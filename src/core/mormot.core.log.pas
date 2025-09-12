@@ -6417,9 +6417,9 @@ var
 label
   adr, fin;
 begin
-  if (HandleExceptionFamily = nil) or  // no TSynLogFamily.fHandleExceptions set
-     SynLogFileFreeing or              // inconsistent call at shutdown
-     PerThreadInfo.ExceptionIgnore or  // disabled for this thread
+  if (HandleExceptionFamily = nil) or // no TSynLogFamily.fHandleExceptions set
+     SynLogFileFreeing or             // inconsistent call at shutdown
+     PerThreadInfo.ExceptionIgnore or // disabled for this thread (nested call)
      (Ctxt.EClass = ESynLogSilent) or
      HandleExceptionFamily.ExceptionIgnore.Exists(Ctxt.EClass) then
     exit;
@@ -6965,7 +6965,7 @@ var
   ndx, lev: PtrInt;
   enter64, leave64: Int64;
   thd: cardinal;
-begin
+begin // only called when out-of-range '99.xxx.xxx' was written in sllLeave
   lev := 0;
   ndx := p^.Index;
   if fThreads <> nil then
@@ -6992,7 +6992,7 @@ begin
                 p^.Time mod 1000000
             else
             begin
-              // use high resolution values
+              // directly use high resolution timestamps as 64-bit integers
               HexDisplayToBin(fLines[p^.Index], @enter64, SizeOf(enter64));
               HexDisplayToBin(fLines[ndx],      @leave64, SizeOf(leave64));
               p^.Time := ((leave64 - enter64) * (1000 * 1000)) div fFreq;

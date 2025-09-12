@@ -71,8 +71,8 @@ type
     procedure TunnelExecuted(Sender: TObject);
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
       num: integer);
-    procedure TunnelTest(const clientcert, servercert: ICryptCert);
-    procedure TunnelSocket(const log: ISynLog;
+    procedure TunnelTest(var rnd: TLecuyer; const clientcert, servercert: ICryptCert);
+    procedure TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
       clientinstance, serverinstance: TTunnelLocal);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
@@ -1534,7 +1534,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.TunnelSocket(const log: ISynLog;
+procedure TNetworkProtocols.TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
   clientinstance, serverinstance: TTunnelLocal);
 var
   i: integer;
@@ -1542,7 +1542,8 @@ var
   clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
   closed: PBoolean;
-  sent, received, sent2, received2: RawByteString;
+  sent, sent2: RawUtf8;
+  received, received2: RawByteString;
   nfo: variant;
 begin
   local := clientinstance.Port;
@@ -1574,8 +1575,8 @@ begin
     CheckEqual(serverinstance.BytesOut, 0);
     for i := 1 to 100 do
     begin
-      sent  := RandomAnsi7(Random32(200) + 1);
-      sent2 := RandomAnsi7(Random32(200) + 1);
+      rnd.FillAscii(rnd.Next(200) + 1, sent);
+      rnd.FillAscii(rnd.Next(200) + 1, sent2);
       Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(serversock.RecvWait(1000, received) = nrOk);
       CheckBlocks(log, sent, received, 1);
@@ -1618,7 +1619,7 @@ begin
   SleepHiRes(1000, closed^);
 end;
 
-procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert);
+procedure TNetworkProtocols.TunnelTest(var rnd: TLecuyer; const clientcert, servercert: ICryptCert);
 var
   log: ISynLog;
   clientinstance, serverinstance: TTunnelLocal;
@@ -1634,8 +1635,10 @@ begin
   clienttunnel := clientinstance;
   servertunnel := serverinstance;
   // perform handshaking
-  tunnelsession := Random31Not0;
-  tunnelappsec := RandomAnsi7(10);
+  repeat
+    tunnelsession := rnd.Next31;
+  until tunnelsession <> 0;
+  rnd.FillAscii(10, tunnelappsec);
   tunnelexecutedone := false;
   tunnelclient := clienttunnel;
   tunnelclientcert := clientcert;
@@ -1657,7 +1660,7 @@ begin
   tunnelexecutedone := false; // for the next run
   Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
   Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'sEncrypted');
-  TunnelSocket(log, clientinstance, serverinstance);
+  TunnelSocket(log, rnd, clientinstance, serverinstance);
   tunnelclient := nil;
   clientinstance.RawTransmit := nil; // avoid circular references memory leak
 end;
@@ -1666,28 +1669,30 @@ procedure TNetworkProtocols._TTunnelLocal;
 var
   c, s: ICryptCert;
   bak: TSynLogLevels;
+  rnd: TLecuyer;
 begin
+  RandomLecuyer(rnd);
   bak := TSynLog.Family.Level;
   TSynLog.Family.Level := LOG_VERBOSE; // for LUTI debugging
   c := Cert('syn-es256').Generate([cuDigitalSignature]);
   s := Cert('syn-es256').Generate([cuDigitalSignature]);
   // plain tunnelling
-  TunnelTest(nil, nil);
+  TunnelTest(rnd, nil, nil);
   // symmetric secret encrypted tunnelling
   tunneloptions := [toEncrypt];
-  TunnelTest(nil, nil);
+  TunnelTest(rnd, nil, nil);
   // ECDHE encrypted tunnelling
   tunneloptions := [toEcdhe];
-  TunnelTest(nil, nil);
+  TunnelTest(rnd, nil, nil);
   // tunnelling with mutual authentication
   tunneloptions := [];
-  TunnelTest(c, s);
+  TunnelTest(rnd, c, s);
   // symmetric secret encrypted tunnelling with mutual authentication
   tunneloptions := [toEncrypt];
-  TunnelTest(c, s);
+  TunnelTest(rnd, c, s);
   // ECDHE encrypted tunnelling with mutual authentication
   tunneloptions := [toEcdhe];
-  TunnelTest(c, s);
+  TunnelTest(rnd, c, s);
   TSynLog.Family.Level := bak;
 end;
 
