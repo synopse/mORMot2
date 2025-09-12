@@ -2302,6 +2302,8 @@ begin
     {$ifdef OSWINDOWS}
     WSAETIMEDOUT,
     WSAEWOULDBLOCK,
+    {$else}
+    ESysEINTR,
     {$endif OSWINDOWS}
     WSAIOPENDING,
     WSAEINPROGRESS,
