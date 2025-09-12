@@ -69,7 +69,11 @@ type
     tunnelclientcert, tunnelservercert: ICryptCert;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelExecuted(Sender: TObject);
+    procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
+      num: integer);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
+    procedure TunnelSocket(const log: ISynLog;
+      clientinstance, serverinstance: TTunnelLocal);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
@@ -1519,75 +1523,51 @@ begin
   tunnelexecutedone := true;
 end;
 
-procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert);
-var
-  log: ISynLog;
-
-  procedure CheckBlocks(const sent, recv: RawByteString; num: integer);
+procedure TNetworkProtocols.CheckBlocks(const log: ISynLog; const sent, recv: RawByteString; num: integer);
+begin
+  CheckUtf8(sent = recv, 'block% %=%', [num, length(sent), length(recv)]);
+  if (sent <> recv) and
+     Assigned(log) then
   begin
-    CheckUtf8(sent = recv, 'block% %=%', [num, length(sent), length(recv)]);
-    if (sent <> recv) and
-       Assigned(log) then
-    begin
-      log.Log(sllDebug, 'block%: sent=%', [num, sent], self);
-      log.Log(sllDebug, 'block%: recv=%', [num, recv], self);
-    end;
+    log.Log(sllDebug, 'block%: sent=%', [num, sent], self);
+    log.Log(sllDebug, 'block%: recv=%', [num, recv], self);
   end;
+end;
 
+procedure TNetworkProtocols.TunnelSocket(const log: ISynLog;
+  clientinstance, serverinstance: TTunnelLocal);
 var
-  clientinstance, serverinstance: TTunnelLocal;
-  clienttunnel, servertunnel: ITunnelLocal;
-  sent, received, sent2, received2: RawByteString;
-  closed: PBoolean;
   i: integer;
+  nr: TNetResult;
   clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
-  nr: TNetResult;
+  closed: PBoolean;
+  sent, received, sent2, received2: RawByteString;
   nfo: variant;
 begin
-  // setup the two instances with the specified options and certificates
-  TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
-  clientinstance := TTunnelLocalClient.Create(TSynLog);
-  clientinstance.VerboseLog := true;
-  clienttunnel := clientinstance;
-  serverinstance := TTunnelLocalServer.Create(TSynLog);
-  serverinstance.VerboseLog := true;
-  servertunnel := serverinstance;
-  // validate handshaking
-  tunnelsession := Random32;
-  tunnelappsec := RandomAnsi7(10);
-  tunnelexecutedone := false;
-  tunnelclient := clienttunnel;
-  tunnelclientcert := clientcert;
-  tunnelservercert := servercert;
-  TLoggedWorkThread.Create(
-    TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
-  local := clientinstance.Open(
-    tunnelsession, servertunnel, tunneloptions, 1000, tunnelappsec, clocalhost,
-    ['remoteHost', Executable.Host], clientcert, servercert);
+  local := clientinstance.Port;
+  remote := serverinstance.Port;
   Check(local <> 0, 'no local');
-  remote := clienttunnel.RemotePort;
   Check(remote <> 0, 'no remote');
-  SleepHiRes(1000, tunnelexecutedone);
-  CheckEqual(local, tunnelexecuteremote);
-  CheckEqual(remote, tunnelexecutelocal);
-  Check(tunnelexecutedone, 'TunnelExecuted');
-  tunnelexecutedone := false; // for the next run
-  Check(clienttunnel.LocalPort <> '', 'no client localport');
-  Check(servertunnel.LocalPort <> '', 'no server localport');
-  Check(servertunnel.LocalPort <> clienttunnel.LocalPort, 'ports');
-  Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
-  Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'sEncrypted');
-  nr := NewSocket('127.0.0.1', clienttunnel.LocalPort, nlTcp, {bind=}false,
+  Check(remote = clientinstance.RemotePort);
+  Check(local = serverinstance.RemotePort);
+  Check(clientinstance.LocalPort <> '', 'no client localport');
+  Check(serverinstance.LocalPort <> '', 'no server localport');
+  Check(serverinstance.LocalPort <> clientinstance.LocalPort, 'ports');
+  if Assigned(log) then
+    log.Log(sllTrace, 'TunnelTest: sockets start', self);
+  nr := NewSocket('127.0.0.1', clientinstance.LocalPort, nlTcp, {bind=}false,
     1000, 1000, 1000, 0, clientsock);
   CheckUtf8(nr = nrOk, 'clientsock=%', [ToText(nr)^]);
-  nr := NewSocket('127.0.0.1', servertunnel.LocalPort, nlTcp, {bind=}false,
+  nr := NewSocket('127.0.0.1', serverinstance.LocalPort, nlTcp, {bind=}false,
     1000, 1000, 1000, 0, serversock);
   CheckUtf8(nr = nrOk, 'serversock=%', [ToText(nr)^]);
-  if not CheckFailed(Assigned(clientinstance.Thread)) and
-     not CheckFailed(Assigned(serverinstance.Thread)) then
+  if not CheckFailed(Assigned(clientinstance.Thread), 'no client thread') and
+     not CheckFailed(Assigned(serverinstance.Thread), 'no server thread') then
   try
     // validate raw TCP tunnelling
+    if Assigned(log) then
+      log.Log(sllTrace, 'TunnelTest: sockets started', self);
     CheckEqual(clientinstance.BytesIn, 0);
     CheckEqual(clientinstance.BytesOut, 0);
     CheckEqual(serverinstance.BytesIn, 0);
@@ -1598,13 +1578,16 @@ begin
       sent2 := RandomAnsi7(Random32(200) + 1);
       Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(serversock.RecvWait(1000, received) = nrOk);
-      CheckBlocks(sent, received, 1);
+      CheckBlocks(log, sent, received, 1);
+      if CheckFailed(clientinstance.Thread.Processing, 'no client process') or
+         CheckFailed(serverinstance.Thread.Processing, 'no server process') then
+        break; // don't try any further
       Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
       Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
       Check(clientsock.RecvWait(1000, received) = nrOk);
       Check(serversock.RecvWait(1000, received2) = nrOk);
-      CheckBlocks(sent, received, 2);
-      CheckBlocks(sent2, received2, 3);
+      CheckBlocks(log, sent, received, 2);
+      CheckBlocks(log, sent2, received2, 3);
       CheckEqual(clientinstance.BytesIn, serverinstance.BytesOut);
       CheckEqual(clientinstance.BytesOut, serverinstance.BytesIn);
       Check(clientinstance.BytesIn <> 0);
@@ -1625,12 +1608,61 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'TunnelTest: client=%', [nfo], self);
   finally
+    if Assigned(log) then
+      log.Log(sllTrace, 'TunnelTest: sockets stop', self);
     clientsock.ShutdownAndClose(true);
     serversock.ShutdownAndClose(true);
   end;
   clientinstance.ClosePort;
   closed := @serverinstance.Closed; // trick to access this propery by value
   SleepHiRes(1000, closed^);
+end;
+
+procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert);
+var
+  log: ISynLog;
+  clientinstance, serverinstance: TTunnelLocal;
+  clienttunnel, servertunnel: ITunnelLocal;
+  sent, received, sent2, received2: RawByteString;
+  closed: PBoolean;
+  i: integer;
+  clientsock, serversock: TNetSocket;
+  local, remote: TNetPort;
+  nfo: variant;
+begin
+  // setup the two instances with the specified options and certificates
+  TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
+  clientinstance := TTunnelLocalClient.Create(TSynLog);
+  serverinstance := TTunnelLocalServer.Create(TSynLog);
+  //clientinstance.VerboseLog := true;
+  //serverinstance.VerboseLog := true;
+  clienttunnel := clientinstance;
+  servertunnel := serverinstance;
+  // perform handshaking
+  tunnelsession := Random31Not0;
+  tunnelappsec := RandomAnsi7(10);
+  tunnelexecutedone := false;
+  tunnelclient := clienttunnel;
+  tunnelclientcert := clientcert;
+  tunnelservercert := servercert;
+  tunnelexecutedone := false; // for the next run
+  TLoggedWorkThread.Create(
+    TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
+  local := clientinstance.Open(
+    tunnelsession, servertunnel, tunneloptions, 1000, tunnelappsec, clocalhost,
+    ['remoteHost', Executable.Host], clientcert, servercert);
+  SleepHiRes(1000, tunnelexecutedone);
+  CheckEqual(local, tunnelexecuteremote);
+  if Assigned(log) then
+    log.Log(sllTrace, 'TunnelTest: tunnelexecuteremote=%', [tunnelexecuteremote], self);
+  remote := clienttunnel.RemotePort;
+  CheckEqual(remote, tunnelexecutelocal);
+  // create two local sockets and let them play with the tunnel
+  Check(tunnelexecutedone, 'TunnelExecuted');
+  tunnelexecutedone := false; // for the next run
+  Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
+  Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'sEncrypted');
+  TunnelSocket(log, clientinstance, serverinstance);
   tunnelclient := nil;
   clientinstance.RawTransmit := nil; // avoid circular references memory leak
 end;
