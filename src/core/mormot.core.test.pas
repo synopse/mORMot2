@@ -1337,12 +1337,13 @@ var
   i: PtrInt;
 begin
   for i := 0 to high(TestCase) do
-    PtrArrayAddOnce(fTestCaseClass, TestCase[i]);
+    AddCase(TestCase[i]);
 end;
 
 procedure TSynTests.AddCase(TestCase: TSynTestCaseClass);
 begin
-  PtrArrayAddOnce(fTestCaseClass, TestCase);
+  if TestCase <> nil then
+    PtrArrayAddOnce(fTestCaseClass, TestCase);
 end;
 
 function TSynTests.BeforeRun: IUnknown;
