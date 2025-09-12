@@ -714,8 +714,6 @@ function pthread_self: PtrUInt; external;
 
 {$endif LINUX}
 
-{$endif MSWINDOWS}
-
 {$ifdef FPCMM_OSYIELD}
 procedure SwitchToThread;
 begin
@@ -734,6 +732,8 @@ begin
   fpnanosleep(@t, nil);
 end;
 {$endif FPCMM_OSYIELD}
+
+{$endif MSWINDOWS}
 
 // fallback to safe and simple Alloc/Move/Free pattern
 {$ifdef FPCMM_NOMREMAP}
