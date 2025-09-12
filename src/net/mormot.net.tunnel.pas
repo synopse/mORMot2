@@ -587,25 +587,31 @@ procedure TTunnelLocalThread.OnReceived(const Frame: RawByteString);
 var
   res: TNetResult;
   data: RawByteString;
+  start: cardinal;
 begin
   // validate and optionally decrypt the input frame
   if Terminated or
      (Frame = '') then
     exit;
-  if fClientSock = nil then // may occur with direct calls
+  if fClientSock = nil then // may occur at startup
   begin
-    if SleepOrTerminated(100) or // let the socket be accepted()
-       (fClientSock = nil) then
-    begin
-      fLog.Log(sllDebug, 'OnReceived: no ClientSock', self);
+    fLog.Log(sllDebug, 'OnReceived: wait for ClientSock', self);
+    start := GetTickSec;
+    repeat
+      if SleepOrTerminated(10) then
+        exit;
+      if fClientSock <> nil then
+        break;
+      if GetTickSec - start <= fTimeoutAcceptSecs then
+        continue;
+      fLog.Log(sllWarning, 'OnReceived: no ClientSock', self);
       exit;
-    end;
+    until false;
   end;
-  if fAes[{sending:}false] = nil then
-    data := Frame
-  else
+  data := Frame;
+  if fAes[{sending:}false] <> nil then
   begin
-    data := fAes[false].DecryptPkcs7(Frame, {ivatbeg=}false, {raise=}false);
+    data := fAes[false].DecryptPkcs7(data, {ivatbeg=}false, {raise=}false);
     if data = '' then
     begin
       Terminate;
@@ -917,8 +923,7 @@ begin
   fOptions := TransmitOptions - [toClientSigned, toServerSigned];
   IncludeOptionsFromCert; // adjust from fSignCert/fVerifyCert
   if fLogClass <> nil then
-    fLogClass.EnterLocal(log, 'Open(%,[%])',
-      [Sess, ToText(fOptions)], self);
+    fLogClass.EnterLocal(log, 'Open(%,[%])', [Int64(Sess), ToText(fOptions)], self);
   if (fPort <> 0) or
      (not Assigned(Transmit)) then
     ETunnel.RaiseUtf8('%.Open invalid call', [self]);
