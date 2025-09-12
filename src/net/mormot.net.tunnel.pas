@@ -127,6 +127,12 @@ type
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
     procedure OnReceived(const Frame: RawByteString);
+    /// true if internal state is stProcessing, i.e. after accept() and within
+    // the main redirection loop
+    function Processing: boolean;
+  published
+    property TimeoutAcceptSecs: cardinal
+      read fTimeoutAcceptSecs;
   end;
 
   /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
@@ -620,6 +626,12 @@ begin
     [self, fPort, ToText(res)^]);
 end;
 
+function TTunnelLocalThread.Processing: boolean;
+begin
+  result := (self <> nil) and
+            (fState = stProcessing);
+end;
+
 procedure TTunnelLocalThread.DoExecute;
 var
   tmp: RawByteString;
@@ -667,7 +679,11 @@ begin
           nrRetry:
             continue;
           nrClosed:
-            break;
+            begin
+              fLog.Log(sllTrace, 'DoExecute: closed connection on port %',
+                [fPort], self);
+              break;
+            end;
           nrOK:
             if (tmp <> '') and
                not Terminated then
@@ -689,14 +705,18 @@ begin
               end;
             end;
         else
-          ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
+          ETunnel.RaiseUtf8('%.Execute(%): error % receiving',
             [self, fPort, ToText(res)^]);
         end;
-      end;
+      end
+    else
+      ETunnel.RaiseUtf8('%.Execute(%): accept timeout after % seconds',
+        [self, fPort, fTimeoutAcceptSecs]);
   except
     on E: Exception do
     try
-      fLog.Log(sllWarning, 'DoExecute: aborted due to %', [self, PClass(E)^], self);
+      fLog.Log(sllWarning, 'DoExecute: % aborted due to % [%]',
+        [fProcessName, PClass(E)^, E.Message], self);
       if fOwner <> nil then
         fOwner.ClosePort;
     except
