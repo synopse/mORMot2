@@ -84,6 +84,13 @@ unit mormot.core.fpcx64mm;
 // - may help on a single core CPU, or for very specific workloads
 {.$define FPCMM_NOPAUSE}
 
+{.$define FPCMM_OSYIELD}
+// for yielding in contention, sched_yield is usually considered better as it's
+// designed for that, while nanosleep suits actual sleeps; but for our use case
+// after some "pause" spinning, we prefer to reduce syscalls and rely on a well
+// defined delay of 1us by default, which aligns with typical scheduler quanta
+// - define this conditional if you want to experiment with sched_yield syscall
+
 // let FPCMM_DEBUG include SleepCycles information from rdtsc
 // and FPCMM_PAUSE call rdtsc for its spinnning loop
 // - since rdtsc is emulated so unrealiable on VM, and it may even trigger a
@@ -692,16 +699,30 @@ end;
 
 {$endif FPCMM_NOMREMAP}
 
+{$ifdef FPCMM_TINYPERTHREAD}
+function pthread_self: PtrUInt; external;
+{$endif FPCMM_TINYPERTHREAD}
+
 // experimental detection of object class - use at your own risk
 {$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 // (untested on BSD/DARWIN)
 
-{$else}
+{$else} // BSD branch
 
-  {$define FPCMM_NOMREMAP} // mremap is a Linux-specific syscall
+{$define FPCMM_NOMREMAP} // mremap is a Linux-specific syscall
+{$undef FPCMM_OSYIELD}   // no yield syscall defined
 
 {$endif LINUX}
 
+{$endif MSWINDOWS}
+
+{$ifdef FPCMM_OSYIELD}
+procedure SwitchToThread;
+begin
+  // trigger more syscalls than nanosleep, with no actual benefit
+  Do_SysCall(syscall_nr_sched_yield); // properly defined in syscall.pp
+end;
+{$else}
 procedure SwitchToThread;
 var
   t: TTimeSpec;
@@ -712,10 +733,7 @@ begin
   t.tv_nsec := 1000; // 1us seems fair enough in respect to OS timers resolution
   fpnanosleep(@t, nil);
 end;
-
-function pthread_self: PtrUInt; external;
-
-{$endif MSWINDOWS}
+{$endif FPCMM_OSYIELD}
 
 // fallback to safe and simple Alloc/Move/Free pattern
 {$ifdef FPCMM_NOMREMAP}
