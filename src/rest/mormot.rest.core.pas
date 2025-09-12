@@ -468,7 +468,7 @@ type
     procedure OnRestBackgroundTimerCreate; virtual;
   public
     /// initialize the class, and associate it to a specified database Model
-    constructor Create(aModel: TOrmModel); virtual;
+    constructor Create(aModel: TOrmModel); reintroduce; virtual;
     // inherited classes should unserialize the other aDefinition properties by
     // overriding this method, in a reverse logic to overriden DefinitionTo()
     constructor RegisteredClassCreateFrom(aModel: TOrmModel;

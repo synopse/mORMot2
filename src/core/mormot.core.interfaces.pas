@@ -886,11 +886,11 @@ type
     /// this overriden constructor will check and store the supplied class
     // to implement an interface
     constructor Create(aInterface: PRttiInfo;
-      aImplementation: TInterfacedObjectClass); overload;
+      aImplementation: TInterfacedObjectClass); reintroduce; overload;
     /// this overriden constructor will check and store the supplied class
     // to implement an interface by TGuid
     constructor Create(const aInterface: TGuid;
-      aImplementation: TInterfacedObjectClass); overload;
+      aImplementation: TInterfacedObjectClass); reintroduce;overload;
     /// you can use this method to resolve the interface as a new instance
     function GetOneInstance(out Obj): boolean;
     /// check if can resolve the supplied interface RTTI
