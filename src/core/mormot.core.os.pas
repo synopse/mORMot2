@@ -10057,6 +10057,12 @@ end;
 { **************** TSynLocker Threading Features }
 
 const
+  // default value for all spining, up to 993 "pause" opcode calls
+  // - on Intel, taking around 5us on old CPU, but modern Intel have bigger pause
+  // latency (up to 100 cycles) so takes up to 50us
+  // - AMD Zen 3 and later has a latency of only 1-2 cycles so we identify them
+  // via CPUID and adjust a SpinFactor global variable at startup to reach 5us
+  // - 5..50us range seems consistent with our eventual nanosleep(10us) syscall
   SPIN_COUNT = pred(6 shl 5); // = 191
 
 // as reference, take a look at Linus insight (TL&WR: better use futex)
@@ -10066,8 +10072,10 @@ const
 // if there is almost no contention - and really seldom call fpnanosleep(10us)
 
 {$ifdef CPUINTEL}
+var
+  SpinFactor: PtrUInt = 1; // default value on Intel - set to 10 on AMD Zen3+
+
 // on Intel/AMD, the pause CPU instruction would relax the core
-// - modern CPUs have bigger pause latency (up to 100 cycles)
 procedure DoPause; {$ifdef FPC} assembler; nostackframe; {$endif}
 asm
       pause // = "rep nop" opcode
@@ -10075,6 +10083,9 @@ end;
 {$endif CPUINTEL}
 
 {$ifdef FPC_CPUARM}
+const
+  SpinFactor = 2; // ARM yield has smaller latency than Intel's pause
+
 // "yield" is available since ARMv6K architecture, including ARMv7-A and ARMv8-A
 procedure DoPause; assembler; nostackframe;
 asm
@@ -10096,9 +10107,9 @@ begin
   {$endif OSLINUX_SCHEDYIELD}
   {$endif OSLINUX_SCHEDYIELDONCE}
   begin
-    result := 1 shl pred(result); // exponential backoff: 1,2,4,8,16 x DoPause
-    repeat
-      DoPause; // called 992 times until yield to the OS
+    result := SpinFactor shl pred(result);
+    repeat     // exponential backoff: 1,2,4,8,16 x DoPause
+      DoPause; // called 992 times until SwithToThread = up to 40us on modern CPU
       dec(result);
     until result = 0;
   end;
@@ -11750,6 +11761,12 @@ begin
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
+  {$ifdef CPUINTEL}
+  if (CpuManufacturer = icmAmd) and
+     (CpuFamily = $19) and
+     (CpuModel >= $30) then // Zen 3 or later
+    SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
+  {$endif CPUINTEL}
   // minimal stubs which will be properly implemented in other mormot.core units
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
   SetThreadName         := _SetThreadName;
