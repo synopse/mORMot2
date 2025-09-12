@@ -647,7 +647,7 @@ begin
       fState := stAccepting;
       fLog.Log(sllTrace,
         'DoExecute: waiting for accept on port %', [fPort], self);
-      start := GetTickSec;
+      start := GetTickSec; // socket timeout is 500ms: use a loop
       repeat
         res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
         if (res = nrOk) and
@@ -936,7 +936,7 @@ begin
   begin
     // bind on port='0' = ephemeral port
     ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}true,
-      TimeOutMS, TimeOutMS, TimeOutMS, {retry=}0, sock, @addr), 'Open');
+      500, 500, 500, {retry=}0, sock, @addr), 'Open');
     result := addr.Port;
     if Assigned(log) then
       log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
