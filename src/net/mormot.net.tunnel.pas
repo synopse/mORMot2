@@ -115,13 +115,14 @@ type
     fServerSock, fClientSock: TNetSocket;
     fClientAddr: TNetAddr;
     fPort: TNetPort;
+    fTimeoutAcceptSecs: cardinal;
     /// accept/connect the connection, then crypt/redirect to fTransmit
     procedure DoExecute; override;
   public
     // how much data has been processed by this background thread
     /// initialize the thread - called from Open()
     constructor Create(owner: TTunnelLocal; const transmit: ITunnelTransmit;
-      const key, iv: THash128; sock: TNetSocket); reintroduce;
+      const key, iv: THash128; sock: TNetSocket; acceptSecs: cardinal); reintroduce;
     /// release all sockets and encryption state
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
@@ -212,6 +213,8 @@ type
     // - Sess genuine integer identifier should match on both sides
     // - Transmit.TunnelSend will be used for sending raw data to the other end
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
+    // - TimeOutMS is the delay to receive an handshake answer from the other
+    // end - this value will be used * 2 as TTunnelLocalThread.fTimeoutAcceptSecs
     // - AppSecret is used during handshake (and toEncrypt with no toEcdhe), and
     // should match on both sides
     // - if Address has a port, will connect a socket to this address:port
@@ -542,12 +545,14 @@ end;
 { TTunnelLocalThread }
 
 constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
-  const transmit: ITunnelTransmit; const key, iv: THash128; sock: TNetSocket);
+  const transmit: ITunnelTransmit; const key, iv: THash128; sock: TNetSocket;
+  acceptSecs: cardinal);
 begin
   fOwner := owner;
   fPort := owner.Port;
   fSession := owner.Session;
   fTransmit := transmit;
+  fTimeoutAcceptSecs := acceptSecs;
   if not IsZero(key) then
   begin
     // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
@@ -619,6 +624,7 @@ procedure TTunnelLocalThread.DoExecute;
 var
   tmp: RawByteString;
   res: TNetResult;
+  start: cardinal;
 begin
   fStarted := true;
   try
@@ -629,18 +635,25 @@ begin
       fState := stAccepting;
       fLog.Log(sllTrace,
         'DoExecute: waiting for accept on port %', [fPort], self);
-      res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
-      if (res = nrOk) and
-         not Terminated then
-      begin
-        fLog.Log(sllTrace,
-          'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
-        if (toAcceptNonLocal in fOwner.Options) or
-           (fClientAddr.IP4 = cLocalhost32) then
-         fState := stProcessing // start background process
-        else
-          fLog.Log(sllWarning, 'DoExecute: rejected non local client', self);
-      end;
+      start := GetTickSec;
+      repeat
+        res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
+        if (res = nrOk) and
+           not Terminated then
+        begin
+          fLog.Log(sllTrace,
+            'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
+          if (toAcceptNonLocal in fOwner.Options) or
+             (fClientAddr.IP4 = cLocalhost32) then
+           fState := stProcessing // start background process
+          else
+            fLog.Log(sllWarning, 'DoExecute: rejected non local client', self);
+        end;
+      until Terminated or
+            (fState = stProcessing) or
+            (fOwner = nil) or
+            (res <> nrRetry) or
+            (GetTickSec - start > fTimeoutAcceptSecs);
     end
     else
       // newsocket() with connect() was done in the main thread
@@ -961,7 +974,7 @@ begin
     if li > 65535 then
       ETunnel.RaiseUtf8('Open: too much info (len=%)', [li]);
     // actually send the frame ending with its session ID
-    Append(frame, [info, '010123']); // li:W sess:U32 = SUFFIX_SIZE
+    Append(frame, [info, 'lisess']); // li:W sess:U32 = SUFFIX_SIZE
     l := length(frame);
     PWord(@PByteArray(frame)^[l - SUFFIX_SIZE])^ := li;
     PTunnelSession(@PByteArray(frame)^[l - TRAIL_SIZE])^ := fSession;
@@ -1019,7 +1032,9 @@ begin
     end;
     // launch the background processing thread
     fPort := result;
-    thread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, iv.Lo, sock);
+    TimeOutMS := (TimeOutMS shr 10) + 5; // minimal coherent accept time
+    thread := TTunnelLocalThread.Create(
+      self, fTransmit, key.Lo, iv.Lo, sock, TimeOutMS);
     SleepHiRes(100, thread.fStarted);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: started=% %',
