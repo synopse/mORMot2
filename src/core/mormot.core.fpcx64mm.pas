@@ -226,7 +226,7 @@ type
     Large: TMMStatusArena;
     {$ifdef FPCMM_DEBUG}
     {$ifdef FPCMM_SLEEPTSC}
-    /// how much rdtsc cycles were spent within SwitchToThread/NanoSleep API
+    /// how much rdtsc cycles were spent within SwitchToThread/nanosleep API
     // - we rdtsc since it is an indicative but very fast way of timing on
     // direct hardware
     // - warning: on virtual machines, the rdtsc opcode is usually emulated so
@@ -234,7 +234,7 @@ type
     SleepCycles: PtrUInt;
     {$endif FPCMM_SLEEPTSC}
     {$endif FPCMM_DEBUG}
-    /// how many times the Operating System Sleep/NanoSleep API was called
+    /// how many times the Operating System Sleep/nanosleep API was called
     // - should be as small as possible - 0 is perfect
     SleepCount: PtrUInt;
     /// how many times GetMem() did block and wait for a tiny/small block
@@ -426,7 +426,7 @@ implementation
   - Medium and Large blocks have one giant lock over their own pool;
   - Medium blocks have an unlocked prefetched memory chunk to reduce contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
-  - SwitchToThread/FpNanoSleep OS call is done after initial spinning;
+  - SwitchToThread/nanosleep OS call is done after initial spinning;
   - FPCMM_DEBUG / WriteHeapStatus helps identifying the lock contention(s).
 
 }
@@ -704,11 +704,12 @@ end;
 
 procedure SwitchToThread;
 var
-  t: Ttimespec;
+  t: TTimeSpec;
 begin
-  // note: nanosleep() adds a few dozen of microsecs for context switching
+  // note: nanosleep() may flood the kernel with timer/scheduling events under
+  // repeated calls - but here we spin-and-pause between calls
   t.tv_sec := 0;
-  t.tv_nsec := 10; // empirically identified on a recent Linux Kernel
+  t.tv_nsec := 1000; // 1us seems fair enough in respect to OS timers resolution
   fpnanosleep(@t, nil);
 end;
 
@@ -1120,7 +1121,7 @@ asm
         dec     ecx
         mov     eax, 1
         shl     eax, cl // exponential backoff: 1,2,4,8,16 x pause
-@p:     pause           // called 992 times until yield to the OS
+@p:     pause           // "rep nop" called 992 times until yield to the OS
         dec     eax
         jnz     @p
         {$endif FPCMM_SLEEPTSC}
@@ -1137,7 +1138,7 @@ asm
         push    rdi
         push    r10
         push    r11
-        call    ReleaseCore // fpnanosleep on POSIX
+        call    ReleaseCore // Windows SwitchToThread or POSIX nanosleep(1us)
         pop     r11
         pop     r10
         pop     rdi
