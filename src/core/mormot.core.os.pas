@@ -5604,12 +5604,17 @@ function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 /// install a Windows event handler for Ctrl+C pressed on the Console
 function HandleCtrlC(const OnClose: TThreadMethod): boolean;
 
-/// define a Windows Job to close associated processes together
+/// define a Windows Job with the flags to close associated processes together
 // - warning: main process should include the CREATE_BREAKAWAY_FROM_JOB flag
+// - includes JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flags and
+// JOB_OBJECT_LIMIT_BREAKAWAY_OK but also JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+// to avoid any unexpected behavior in child process (which may not include
+// CREATE_BREAKAWAY_FROM_JOB themselves, e.g. ServiceUI.exe)
 // - you should later call CloseHandle() on the returned handle, if not 0 
 function CreateJobToClose(parentpid: cardinal): THandle;
 
 /// associate a process to a Windows Job created by CreateJobToClose()
+// - is called usually just after CreateJobToClose()
 function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boolean;
 
 {$else}
