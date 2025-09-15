@@ -4451,12 +4451,13 @@ var
   created: boolean;
   i, l: PtrInt;
 
-  procedure ReturnLastError(const Api: ShortString);
+  procedure ReturnLastError(const Api: ShortString; ctxt: cardinal);
   var
     err: cardinal;
   begin
     err := GetLastError;
-    TService.DoLog(sllTrace, 'RunCommand: % = %', [Api, WinErrorShort(err)], nil);
+    TService.DoLog(sllDebug, 'RunCommand: % = % (ctxt=%)',
+      [Api, WinErrorShort(err), Int64(ctxt)]);
     result := -err; // returns OS API error as negative number
   end;
 
@@ -4483,7 +4484,7 @@ var
       n := 0;
       if not ReadFile(rd, tmp, pending, n, nil) then
       begin
-        ReturnLastError('ReadFile');
+        ReturnLastError('ReadFile', pending);
         result := true; // abort
         exit;
       end;
@@ -4518,7 +4519,7 @@ var
           break;
         wwfFailed, wwfQuit:
           begin
-            ReturnLastError('RedirectAndWait abort');
+            ReturnLastError('RedirectAndWait abort', processinfo.dwProcessId);
             result := false;
             exit;
           end;
@@ -4545,7 +4546,7 @@ var
         terminated := CancelProcess(processinfo.dwProcessId, {wait=}0) and
                       RedirectAndWait(endtix);
         TService.DoLog(sllTrace, 'RunCommand: CancelProcess(pid=%)=%',
-          [processinfo.dwProcessId, ord(terminated)], nil);
+          [processinfo.dwProcessId, ord(terminated)]);
       end;
       if (ramQuit in ram) and
          not terminated then
@@ -4554,12 +4555,12 @@ var
         terminated := QuitProcess(processinfo.dwProcessId, {wait=}0) and
                       RedirectAndWait(endtix);
         TService.DoLog(sllTrace, 'RunCommand: QuitProcess(%)=%',
-          [processinfo.dwProcessId, ord(terminated)], nil);
+          [processinfo.dwProcessId, ord(terminated)]);
       end;
       if GetExitCodeProcess(processinfo.hProcess, exitcode) then
         result := exitcode
       else
-        ReturnLastError('GetExitCodeProcess(soft)')
+        ReturnLastError('GetExitCodeProcess(soft)', processinfo.dwProcessId)
     end;
     if exitcode <> STILL_ACTIVE then
       exit;
@@ -4567,7 +4568,7 @@ var
     result := 255;
     terminated := TerminateProcess(processinfo.hProcess, result);
     TService.DoLog(sllTrace, 'RunCommand: TerminateProcess(%)=%',
-      [processinfo.dwProcessId, ord(terminated)], nil);
+      [processinfo.dwProcessId, ord(terminated)]);
   end;
 
 begin
@@ -4673,9 +4674,8 @@ begin
   if (not created) and
      (flags and CREATE_BREAKAWAY_FROM_JOB <> 0) then
   begin
-    TService.DoLog(sllTrace,
-      'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = %',
-      [WinErrorShort(GetLastError)], nil);
+    TService.DoLog(sllLastError,
+      'RunCommand: possible unsupported CREATE_BREAKAWAY_FROM_JOB', []);
     flags := flags and (not CREATE_BREAKAWAY_FROM_JOB);
     wcmd := SynUnicode(cmd); // CreateProcesW() modified wcmd content: recreate
     UniqueString(wcmd);
@@ -4729,7 +4729,7 @@ begin
         CloseHandle(job); // caller should make CloseHandle(jobtoclose^)
   end
   else
-    ReturnLastError('CreateProcessW');
+    ReturnLastError('CreateProcessW', flags);
 end;
 
 
