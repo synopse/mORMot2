@@ -5443,7 +5443,7 @@ type
   public
     /// internal method redirecting to WindowsServiceLog global variable
     class procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
-      const Args: array of const; Instance: TObject);
+      const Args: array of const; Instance: TObject = nil);
     /// Creates the service
     // - the service is added to the internal registered services
     // - main application must instantiate the TServiceSingle class, then call
@@ -5611,7 +5611,7 @@ function HandleCtrlC(const OnClose: TThreadMethod): boolean;
 // to avoid any unexpected behavior in child process (which may not include
 // CREATE_BREAKAWAY_FROM_JOB themselves, e.g. ServiceUI.exe)
 // - you should later call CloseHandle() on the returned handle, if not 0 
-function CreateJobToClose(parentpid: cardinal): THandle;
+function CreateJobToClose(parentpid: cardinal; const ctxt: ShortString): THandle;
 
 /// associate a process to a Windows Job created by CreateJobToClose()
 // - is called usually just after CreateJobToClose()
@@ -5765,8 +5765,9 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
-  // - roWinJobCloseChildren will setup a Windows Job to close any child
-  // process(es) when the created process quits
+  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
+  // run CreateJobToClose() and AssignJobToProcess() on the new process
+  // process(es) when the created process quits via
   // - roWinNoProcessDetach will avoid creating its own console and Windows group
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess

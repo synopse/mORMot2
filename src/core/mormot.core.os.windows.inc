@@ -3454,8 +3454,9 @@ begin
   inherited Create;
   if Path = '' then
   begin
-    TService.DoLog(sllError,
-      'CreateNewService(''%'',''%'') with no Path', [Name, DisplayName], self);
+    if Assigned(WindowsServiceLog) then
+      TService.DoLog(sllError, 'CreateNewService(''%'',''%'') with no Path',
+        [Name, DisplayName], self);
     exit;
   end;
   if TargetComputer = '' then
@@ -3500,8 +3501,9 @@ begin
   t5.Done;
   if fHandle = 0 then
     RaiseLastError('TServiceController.CreateService:', EService);
-  TService.DoLog(sllInfo, 
-    'CreateService(''%'',''%'',''%'')', [Name, DisplayName, exeName], self);
+  if Assigned(WindowsServiceLog) then
+    TService.DoLog(sllInfo, 'CreateService(''%'',''%'',''%'')',
+      [Name, DisplayName, exeName], self);
 end;
 
 constructor TServiceController.CreateOpenService(
@@ -3557,7 +3559,8 @@ begin
     result := ssNotInstalled
   else
     result := CurrentStateToServiceState(GetStatus.dwCurrentState);
-  TService.DoLog(sllTrace, 'GetState(%)=%', [fName, ToText(result)^], self);
+  if Assigned(WindowsServiceLog) then
+    TService.DoLog(sllTrace, 'GetState(%)=%', [fName, ToText(result)^], self);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -4076,7 +4079,7 @@ begin
         end;
       end
       else
-        TService.DoLog(sllLastError, 'GetServicePid(%)', [aServiceName], nil);
+        TService.DoLog(sllLastError, 'GetServicePid(%)', [aServiceName]);
     finally
       CloseServiceHandle(svc);
     end
