@@ -609,7 +609,7 @@ begin
       else if min < 60 then
         result := 120  // retry every 2 min until 1 hour
       else
-        result := 240; // retry every 4 min
+        result := 240; // retry every 4 min until the eventual Apocalypse
   end;
 end;
 

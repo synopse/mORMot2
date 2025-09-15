@@ -375,6 +375,11 @@ type
 type
   /// abstract parent to ITunnelAgent/ITunnelConsole
   // - with shared methods to validate or cancel a two-phase startup
+  // - the steps of a TRelayServer session are the following:
+  // 1) ITunnelConsole.TunnelPrepare() to retrieve a session;
+  // 2) ITunnelAgent.TunnelPrepare() with this session;
+  // 3) TTunnelLocal.Open() on the console and agent sides to start tunnelling
+  // on a localhost port
   ITunnelOpen = interface(ITunnelTransmit)
     /// finalize a relay process startup after Open() success
     // - now ITunnelTransmit.TunnelSend will redirect frames from both sides
@@ -465,6 +470,10 @@ type
   public
     /// finalize this instance and remove it from fOwner.fConsole
     destructor Destroy; override;
+    /// how many seconds this instance would be in TTunnelRelay "pending" queue
+    // - trim if no ITunnelAgent.TunnelPrepare() occured within this time slot
+    property TimeOutSecs: cardinal
+      read fTimeOutSecs;
   end;
   TTunnelConsoles = array of TTunnelConsole;
 
@@ -495,7 +504,7 @@ type
     function LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
     // search for matching fConsole[].TunnelSend
     procedure ConsoleTunnelSend(const Frame: RawByteString);
-    // allow to resolve ITunnelConsole instances
+    // TInterfaceResolver method to resolve ITunnelConsole instances
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
   public
     /// initialize this instance
@@ -1086,7 +1095,7 @@ begin
       fSendSafe.UnLock;
       hqueue.Free;
     end;
-    // now everything is running and we can finish by preparing the fixed info
+    // now everything is running and we can prepare the fixed info
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,
       'localPort',  fPort,
