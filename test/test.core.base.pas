@@ -8910,7 +8910,7 @@ begin
   Check(not IsHttpUserAgentBot(
     'Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko'));
   Check(not IsHttpUserAgentBot(DefaultUserAgent(self)),
-    'Mozilla/5.0 (Linux x64; mORMot) TCB/2 mormot2tests');
+    'Mozilla/5.0 (Linux x64; mORMot) TCB/3 mormot2tests');
   Check(IsHttpUserAgentBot(
     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ' +
     'Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot) ' +

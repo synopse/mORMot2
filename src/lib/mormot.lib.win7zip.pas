@@ -12,7 +12,7 @@ unit mormot.lib.win7zip;
 
   *****************************************************************************
 
-  Two meaningful questions:
+  Two meaningful questions (TL&WR):
 
   Can I use the EXE or DLL files from 7-Zip in a commercial application?
   Yes, but you are required to specify in documentation for your application:

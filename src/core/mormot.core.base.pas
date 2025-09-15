@@ -56,6 +56,11 @@ const
   // - specific branches may have prefixes, e.g. 'lts-2.3.#'
   SYNOPSE_FRAMEWORK_VERSION = {$I ..\mormot.commit.inc};
 
+  /// the corresponding branch of the mORMot framework, e.g. as '3' for 2.3 trunk
+  // - as used by DefaultUserAgent() in mormot.net.client as 'mORMot) HCS/#'
+  // - for a client application, the branch main revision is safe and meaningful
+  SYNOPSE_FRAMEWORK_BRANCH = '3';
+
   /// a text including the version and the main active conditional options
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION

@@ -822,9 +822,9 @@ type
 
 /// returns the HTTP User-Agent header value of a mORMot client including
 // the Instance class name in its minified/uppercase-only translation
-// - typical value is "Mozilla/5.0 (Linux x64; mORMot) HCS/2 Tests/3"
-// for THttpClientSocket from a Tests.exe application in version 3.x
-// - framework is identified as '/2' with no release number, for security
+// - typical value is "Mozilla/5.0 (Linux x64; mORMot) HCS/3 Tests/1" for
+// THttpClientSocket 2.3 from a Tests.exe application in version 1.x
+// - framework branch is identified as '/3' with no build number, for security
 // - note: the framework would identify the 'mORMot' pattern in the user-agent
 // header to enable advanced behavior e.g. about JSON transmission
 function DefaultUserAgent(Instance: TObject): RawUtf8;
@@ -2189,7 +2189,8 @@ begin
   vers[0] := #0;
   if Executable.Version.Major <> 0 then
     FormatShort16('/%', [Executable.Version.Major], vers);
-  FormatUtf8('Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/2 %%',
+  FormatUtf8('Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/' +
+    SYNOPSE_FRAMEWORK_BRANCH + ' %%',
     [name, Executable.ProgramName, vers], result);
 end;
 
