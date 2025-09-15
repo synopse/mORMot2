@@ -5495,10 +5495,9 @@ begin
   if (self = nil) or
      not (Level in fFamily.fLevel) then
     exit;
+  lasterror := 0;
   if Level = sllLastError then
-    lasterror := GetLastError
-  else
-    lasterror := 0;
+    lasterror := GetLastError;
   LockAndDisableExceptions;
   try
     LogHeader(Level, nil);
@@ -5928,10 +5927,9 @@ procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
 var
   lasterror: cardinal;
 begin
+  lasterror := 0;
   if Level = sllLastError then
-    lasterror := GetLastError
-  else
-    lasterror := 0;
+    lasterror := GetLastError;
   LockAndDisableExceptions;
   try
     LogHeader(Level, Instance);
@@ -5953,10 +5951,9 @@ procedure TSynLog.LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
 var
   lasterror, trunclen: PtrInt;
 begin
+  lasterror := 0;
   if Level = sllLastError then
-    lasterror := GetLastError
-  else
-    lasterror := 0;
+    lasterror := GetLastError;
   LockAndDisableExceptions;
   try
     LogHeader(Level, Instance);
