@@ -2793,7 +2793,8 @@ type
 
 /// setup Exception interception for the whole process
 // - the first to call this procedure will be elected until the process ending
-procedure RawExceptionIntercept(const Handler: TOnRawLogException);
+// - returns true on success, false if there is already an handler
+function RawExceptionIntercept(const Handler: TOnRawLogException): boolean;
 
 {$endif NOEXCEPTIONINTERCEPT}
 
@@ -7971,36 +7972,45 @@ end;
 var
   RawExceptionIntercepted: boolean; // single global Exception interception
 
-procedure RawExceptionIntercept(const Handler: TOnRawLogException);
+function RawExceptionIntercept(const Handler: TOnRawLogException): boolean;
 begin
-  _RawLogException := Handler; // e.g. SynLogException() from mormot.core.log
-  if RawExceptionIntercepted or
-     not Assigned(Handler) then
-    exit;
-  RawExceptionIntercepted := true; // intercept once
-  {$ifdef WITH_RAISEPROC}
-  // FPC RTL redirection function
-  if not Assigned(OldRaiseProc) then
-  begin
-    OldRaiseProc := RaiseProc;
-    RaiseProc := @SynRaiseProc;
+  result := false;
+  GlobalLock;
+  try
+    _RawLogException := Handler; // e.g. SynLogException() from mormot.core.log
+    if RawExceptionIntercepted or
+       not Assigned(Handler) then
+      exit;
+    RawExceptionIntercepted := true; // intercept once
+    {$ifdef WITH_RAISEPROC}
+    // FPC RTL redirection function
+    if not Assigned(OldRaiseProc) then
+    begin
+      OldRaiseProc := RaiseProc;
+      RaiseProc := @SynRaiseProc;
+      result := true;
+    end;
+    {$endif WITH_RAISEPROC}
+    {$ifdef WITH_VECTOREXCEPT} // SEH32/SEH64 official API
+    if not AddVectoredExceptionHandlerCalled then
+    begin
+      AddVectoredExceptionHandler(0, @SynLogVectoredHandler);
+      AddVectoredExceptionHandlerCalled := true;
+      result := true;
+    end;
+    {$endif WITH_VECTOREXCEPT}
+    {$ifdef WITH_RTLUNWINDPROC}
+    // Delphi x86 RTL redirection function
+    if not Assigned(OldUnWindProc) then
+    begin
+      OldUnWindProc := RTLUnwindProc;
+      RTLUnwindProc := @SynRtlUnwind;
+      result := true;
+    end;
+    {$endif WITH_RTLUNWINDPROC}
+  finally
+    GlobalUnLock;
   end;
-  {$endif WITH_RAISEPROC}
-  {$ifdef WITH_VECTOREXCEPT} // SEH32/SEH64 official API
-  if not AddVectoredExceptionHandlerCalled then
-  begin
-    AddVectoredExceptionHandler(0, @SynLogVectoredHandler);
-    AddVectoredExceptionHandlerCalled := true;
-  end;
-  {$endif WITH_VECTOREXCEPT}
-  {$ifdef WITH_RTLUNWINDPROC}
-  // Delphi x86 RTL redirection function
-  if not Assigned(OldUnWindProc) then
-  begin
-    OldUnWindProc := RTLUnwindProc;
-    RTLUnwindProc := @SynRtlUnwind;
-  end;
-  {$endif WITH_RTLUNWINDPROC}
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}
