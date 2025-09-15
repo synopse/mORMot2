@@ -44,6 +44,9 @@ uses
   mormot.net.rtsphttp,
   mormot.net.tunnel;
 
+const
+  SYNOPSE_IP = '82.67.73.95'; // the mormot's home in the French mountains :)
+
 type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
@@ -989,7 +992,7 @@ begin
       Sleep(100); // some DNS servers may fail at first: wait a little
     until GetTickSec > endtix;
     CheckEqual(NetAddrResolve('synopse.info'), ip, 'NetAddrResolve');
-    rev := '82.67.73.95'; // the mormot's home IP in the mountains
+    rev := SYNOPSE_IP; // the marmots' home IP
     CheckEqual(ip, rev, 'dns1');
     repeat
       inc(fAssertions);
@@ -1858,6 +1861,7 @@ begin
     Check(sub.SaveToBinary = bin, 'loadtext');
     Check(sub.Match('1.2.3.4'));
     Check(not sub.Match('1.2.3.5'));
+    //deleteFile('firehol.netset');
     txt := DownloadFile('https://raw.githubusercontent.com/firehol/blocklist-ipsets/' +
       'refs/heads/master/firehol_level1.netset', 'firehol.netset');
     if txt <> '' then
@@ -1868,14 +1872,15 @@ begin
       timer.Start;
       n := sub.AddFromText(txt);
       NotifyTestSpeed('parse TIp4SubNets', n, length(txt), @timer);
-      Check(n > 4000); // typically 4520 subnets, 612,853,888 unique IPs
+      // typically 4491 subnets, 612,537,665 unique IPs, 19 unique subnets
+      Check(n > 4000);
       CheckEqual(sub.AfterAdd, n);
-      CheckUtf8(length(sub.SubNet) in [17 .. 18], 'sub=%', [length(sub.SubNet)]);
+      CheckUtf8(length(sub.SubNet) in [17 .. 20], 'sub=%', [length(sub.SubNet)]);
       Check(not sub.Match('1.2.3.4'));
       Check(not sub.Match('1.2.3.5'));
       Check(not sub.Match('192.168.1.1'), '192'); // only IsPublicIP() was added
       Check(not sub.Match('10.18.1.1'), '10');
-      Check(not sub.Match('62.210.254.173'), 'synopse.info');
+      Check(not sub.Match(SYNOPSE_IP), 'synopse.info');
       // 223.254.0.0/16 as https://check.spamhaus.org/results/?query=SBL212803
       Check(sub.Match('223.254.0.1') ,'a0');
       Check(sub.Match('223.254.1.1'), 'b0');
@@ -1907,7 +1912,7 @@ begin
         Check(not sub.Match('10.18.1.1'), '10');
         n2 := sub.AddFromText(txt);
         Check(n2 > 1000, 'spamhaus=1525');
-        Check(not sub.Match('62.210.254.173'), 'cauterets.site');
+        Check(not sub.Match(SYNOPSE_IP), 'cauterets.site');
         Check(sub.Match('223.254.0.1') ,'a2'); // 223.254.0.0/16
         Check(sub.Match('223.254.1.1'), 'b2');
         Check(sub.Match('223.254.200.129'), 'c2');

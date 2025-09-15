@@ -296,9 +296,9 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
   TimeOutMS: integer = DNSQUERY_TIMEOUT; QClass: cardinal = QC_INET): boolean;
 
 /// retrieve the IPv4 address of a DNS host name - using DnsQuery(drrA)
-// - e.g. DnsLookup('synopse.info') currently returns '62.210.254.173'
+// - e.g. DnsLookup('synopse.info') currently returns '82.67.73.95'
 // - for aliases, the CNAME is ignored and only the first A is returned, e.g.
-// DnsLookup('blog.synopse.info') would simply return '62.210.254.173'
+// DnsLookup('blog.synopse.info') would simply return '82.67.73.95'
 // - will also recognize obvious values like 'localhost' or an IPv4 address
 // - this unit will register this function to mormot.net.sock's NewSocketIP4Lookup
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
@@ -309,7 +309,7 @@ function DnsLookup(const HostName: RawUtf8; const NameServers: RawUtf8 = '';
   TimeoutMS: integer = DNSQUERY_TIMEOUT): RawUtf8;
 
 /// retrieve the IPv4 address(es) of a DNS host name - using DnsQuery(drrA)
-// - e.g. DnsLookups('synopse.info') currently returns ['62.210.254.173'] but
+// - e.g. DnsLookups('synopse.info') currently returns ['82.67.73.95'] but
 // DnsLookups('yahoo.com') returns an array of several IPv4 addresses
 // - will also recognize obvious values like 'localhost' or an IPv4 address
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
