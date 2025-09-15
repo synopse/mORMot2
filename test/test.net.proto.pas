@@ -834,8 +834,8 @@ procedure CheckSynopseReverse(test: TNetworkProtocols; const ip: RawUtf8);
 begin
   if ip = 'blog.synopse.info' then // occurs on some weird DNS servers
     test.Check(true)
-  else
-    test.CheckEqual(ip, '62-210-254-173.rev.poneytelecom.eu');
+  else // French marmots have fiber connection in their mountains
+    test.CheckUtf8(PosEx('fbx.proxad.net', ip) <> 0, ip);
 end;
 
 procedure TNetworkProtocols.RunLdapClient(Sender: TObject);
@@ -989,7 +989,7 @@ begin
       Sleep(100); // some DNS servers may fail at first: wait a little
     until GetTickSec > endtix;
     CheckEqual(NetAddrResolve('synopse.info'), ip, 'NetAddrResolve');
-    rev := '62.210.254.173';
+    rev := '82.67.73.95'; // the mormot's home IP in the mountains
     CheckEqual(ip, rev, 'dns1');
     repeat
       inc(fAssertions);
