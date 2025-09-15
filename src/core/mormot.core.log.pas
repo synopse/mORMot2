@@ -667,7 +667,7 @@ type
   // ! end; // when logger is out-of-scope, will log the method leaving
   TSynLogFamily = class
   protected
-    fLevel, fLevelStackTrace, fLevelSysInfo: TSynLogLevels;
+    fLevel, fLevelStackTrace, fLevelSysInfo: TSynLogLevels; // 3 * 32-bit
     fHighResolutionTimestamp: boolean;
     fLocalTimestamp: boolean;
     fZonedTimestamp: boolean;
@@ -1033,7 +1033,7 @@ type
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
     RecursionCount: byte;
     /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
-    // - used only if NOEXCEPTIONINTERCEPT conditional is defined
+    // - used only if NOEXCEPTIONINTERCEPT conditional is undefined
     ExceptionIgnore: boolean;
     /// the internal number of this thread, stored as text using Int18ToChars3()
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
@@ -1075,7 +1075,7 @@ type
     fThreadInfo: PSynLogThreadInfo;
     fFlags: set of (logFileHeaderWritten, logInitDone, logAddThreadName);
     fPendingFlags: set of (pendingDisableRemoteLogLeave, pendingRotate);
-    fExceptionIgnoredBackup: boolean; // with NOEXCEPTIONINTERCEPT conditional
+    fExceptionIgnoredBackup: boolean; // ifndef NOEXCEPTIONINTERCEPT
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
     fWriterEcho: TEchoWriter;
@@ -1478,6 +1478,7 @@ procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
 
 var
   /// a run-time alternative to the NOEXCEPTIONINTERCEPT global conditional
+  // - this global variable affects TSynLogFamily.SetLevel() process
   SynLogNoExceptionIntercept: boolean;
 
 {$endif NOEXCEPTIONINTERCEPT}
@@ -6407,6 +6408,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var
   fam: TSynLogFamily;
   log: TSynLog;
+  nfo: PSynLogThreadInfo;
   info: ^TSynLogExceptionInfo;
   thrdnam: PShortString;
   last: ^TLastException;
@@ -6419,7 +6421,6 @@ label
 begin
   if (HandleExceptionFamily = nil) or // no TSynLogFamily.fHandleExceptions set
      SynLogFileFreeing or             // inconsistent call at shutdown
-     PerThreadInfo.ExceptionIgnore or // disabled for this thread (nested call)
      (Ctxt.EClass = ESynLogSilent) or
      HandleExceptionFamily.ExceptionIgnore.Exists(Ctxt.EClass) then
     exit;
@@ -6431,6 +6432,9 @@ begin
     exit;
   {$endif ISDELPHIXE6}
   {$endif WIN64DELPHI}
+  nfo := @PerThreadInfo;
+  if nfo^.ExceptionIgnore then // disabled for this thread (nested call)
+    exit;
   log := HandleExceptionFamily.Add;
   if log = nil then
    exit;
@@ -6462,8 +6466,7 @@ begin
         MoveFast(Ctxt.EStack[0], last^.Stack[0], n * SizeOf(PtrUInt));
       end;
       // actual exception log - with potential customization
-      LogHeaderNoRecursion(
-        log.fWriter, Ctxt.ELevel, @log.fThreadInfo^.CurrentTimeAndThread);
+      LogHeaderNoRecursion(log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
       if (Ctxt.ELevel = sllException) and
          (Ctxt.EInstance <> nil) then
       begin
@@ -6524,7 +6527,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
       // any nested exception should never be propagated to the OS caller
     end;
   finally
-    log.fThreadInfo^.ExceptionIgnore := log.fExceptionIgnoredBackup;
+    nfo^.ExceptionIgnore := log.fExceptionIgnoredBackup;
     GlobalThreadLock.UnLock;
   end;
 end;
