@@ -1848,7 +1848,7 @@ begin
   // initialize a main Windows Job to kill all sub-process when main is killed
   if fRunJob = 0 then
   begin
-    fRunJob := CreateJobToClose(GetCurrentProcessId);
+    fRunJob := CreateJobToClose(GetCurrentProcessId, 'CloseWithParent');
     AssignJobToProcess(fRunJob, GetCurrentProcess, 'CloseWithParent');
     // all sub-processes will now be part of this Windows Job
     // unless soWinJobCloseChildren is set, so RunRedirect() will use the

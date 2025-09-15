@@ -4331,7 +4331,7 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
 
-function CreateJobToClose(parentpid: cardinal): THandle;
+function CreateJobToClose(parentpid: cardinal; const ctxt: ShortString): THandle;
 var
   security: TSecurityAttributes;
   limits: TJobObjectExtendedLimitInformation;
@@ -4343,7 +4343,11 @@ begin
   _fmt('AutoCloseChild%d', [parentpid], jobname);
   result := CreateJobObjectA(@security, pointer(jobname));
   if result = 0 then
+  begin
+    if Assigned(WindowsServiceLog) then
+      TService.DoLog(sllLastError, '%: CreateJobObjectA(%)', [ctxt, jobname]);
     exit;
+  end;
   FillCharFast(limits, SizeOf(limits), 0);
   limits.BasicLimitInformation.LimitFlags :=
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE or
@@ -4351,21 +4355,26 @@ begin
     JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK; // relaxed for children
   if SetInformationJobObject(result, ExtendedLimitInformation,
        @limits, SizeOf(limits)) then
-    exit;
+  begin
+    if Assigned(WindowsServiceLog) then
+      TService.DoLog(sllTrace, '%: SetInformationJobObject(%) success',
+        [ctxt, jobname]);
+    exit; // success
+  end;
+  if Assigned(WindowsServiceLog) then
+    TService.DoLog(sllLastError, '%: SetInformationJobObject(%)',
+      [ctxt, jobname]);
   CloseHandle(result); // error initializing the job (too old or too new OS?)
   result := 0;
 end;
 
 function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boolean;
 begin
-  result := (job <> 0) and
-            AssignProcessToJobObject(job, process);
-  if result then
-    TService.DoLog(sllTrace, 'RunCommand: % AssignProcessToJobObject success',
-      [ctxt], nil)
-  else
-    TService.DoLog(sllDebug, 'RunCommand: % AssignProcessToJobObject failed as %',
-      [ctxt, WinErrorShort(GetLastError)], nil);
+  result := AssignProcessToJobObject(job, process);
+  if not result then
+    TService.DoLog(sllLastError, '%: AssignProcessToJobObject', [ctxt])
+  else if Assigned(WindowsServiceLog) then
+    TService.DoLog(sllTrace, '%: AssignProcessToJobObject success', [ctxt]);
 end;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
@@ -4678,7 +4687,8 @@ begin
     // setup the newly created process
     if flags and CREATE_BREAKAWAY_FROM_JOB <> 0 then
     begin
-      job := CreateJobToClose(processinfo.dwProcessID);
+      // roWinJobCloseChildren = run the new process in its own Job
+      job := CreateJobToClose(processinfo.dwProcessID, 'CloseChildren');
       if (job <> 0) and
          not AssignJobToProcess(job, processinfo.hProcess, 'CloseChildren') then
       begin
