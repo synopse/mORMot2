@@ -109,7 +109,7 @@ type
     /// RTSP over HTTP, with always temporary buffering
     procedure RTSPOverHTTPBufferedWrite;
     /// validate mormot.net.tunnel
-    procedure _TTunnelLocal;
+    procedure Tunnel;
     /// validate IP processing functions
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
@@ -1668,17 +1668,17 @@ begin
   clientinstance.RawTransmit := nil; // avoid circular references memory leak
 end;
 
-procedure TNetworkProtocols._TTunnelLocal;
+procedure TNetworkProtocols.Tunnel;
 var
-  c, s: ICryptCert;
+  clientcert, servercert: ICryptCert;
   bak: TSynLogLevels;
+  relay: TTunnelRelay;
   rnd: TLecuyer;
 begin
-  RandomLecuyer(rnd);
   bak := TSynLog.Family.Level;
-  TSynLog.Family.Level := LOG_VERBOSE; // for LUTI debugging
-  c := Cert('syn-es256').Generate([cuDigitalSignature]);
-  s := Cert('syn-es256').Generate([cuDigitalSignature]);
+  TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
+  // 1. validate TTunnelLocal and all its handshaking options
+  RandomLecuyer(rnd);
   // plain tunnelling
   TunnelTest(rnd, nil, nil);
   // symmetric secret encrypted tunnelling
@@ -1689,13 +1689,28 @@ begin
   TunnelTest(rnd, nil, nil);
   // tunnelling with mutual authentication
   tunneloptions := [];
-  TunnelTest(rnd, c, s);
+  clientcert := Cert('syn-es256').Generate([cuDigitalSignature]);
+  servercert := Cert('syn-es256').Generate([cuDigitalSignature]);
+  TunnelTest(rnd, clientcert, servercert);
   // symmetric secret encrypted tunnelling with mutual authentication
   tunneloptions := [toEncrypt];
-  TunnelTest(rnd, c, s);
+  TunnelTest(rnd, clientcert, servercert);
   // ECDHE encrypted tunnelling with mutual authentication
   tunneloptions := [toEcdhe];
-  TunnelTest(rnd, c, s);
+  TunnelTest(rnd, clientcert, servercert);
+  // 2. validate TTunnelRelay and its associated TTunnelAgent/TTunnelConsole
+  relay := TTunnelRelay.Create(TSynLog, {timeoutsecs=}120);
+  try
+{    SetLength(a, 1); // number of agents
+    for i := 0 to high(a) do
+      a[i] := TTunnelAgent.Create(relay,0 );
+    // release internal references
+    a := nil;
+    c := nil;}
+  finally
+    relay.Free;
+  end;
+  // 3. cleanup
   TSynLog.Family.Level := bak;
 end;
 
