@@ -417,6 +417,8 @@ type
     Levels: TIntegerDynArray;
     /// if any service needs actually some watching practice
     HasWatchs: boolean;
+    /// union of all Service[].StartOptions
+    UsedStartOptions: TStartOptions;
     /// fill the fields from Owner.Settings.Folder files content
     function LoadServices(Owner: TSynAngelize): integer;
     /// quick check a service from its internal name
@@ -539,7 +541,7 @@ begin
   fCmd := aCmd;
   fEnv := aEnv;
   fWrkDir := aWrkDir;
-  // fRunOptions=[] without roWinNoProcessDetach to detach from the current process
+  // fRunOptions=[] without roWinNoProcessDetach to detach from main console
   if soWinJobCloseChildren in aService.StartOptions then
     include(fRunOptions, roWinJobCloseChildren); // just ignored on POSIX
   if not (soReplaceEnv in aService.StartOptions) then
@@ -1028,6 +1030,7 @@ begin
   ObjArrayClear(Service);
   Finalize(Levels);
   HasWatchs := false;
+  UsedStartOptions := [];
 end;
 
 function SortByLevel(const A, B): integer; // run and display by increasing Level
@@ -1070,6 +1073,7 @@ begin
             AddSortedInteger(Levels, s.Level);
             if s.fWatch <> nil then
               HasWatchs := true;
+            UsedStartOptions := UsedStartOptions + s.StartOptions;
             s := nil; // don't Free - will be owned by Service[]
           end
           else // s.Level <= 0
