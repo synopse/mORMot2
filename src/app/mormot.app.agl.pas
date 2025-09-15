@@ -602,11 +602,11 @@ begin
     if min > 0 then    // retry every 2 sec until 1 min
       if min < 5 then
         result := 15   // retry every 15 sec until 5 min
-      else if min > 10 then
+      else if min < 10 then
         result := 30   // retry every 30 sec until 10 min
-      else if min > 30 then
+      else if min < 30 then
         result := 60   // retry every min until 30 min
-      else if min > 60 then
+      else if min < 60 then
         result := 120  // retry every 2 min until 1 hour
       else
         result := 240; // retry every 4 min
