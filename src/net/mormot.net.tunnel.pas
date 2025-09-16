@@ -75,6 +75,7 @@ type
   // - named as Tunnel*() methods to be joined as a single service interface,
   // to leverage a single WebSockets callback
   ITunnelTransmit = interface(IInvokable)
+    ['{AA661151-81EA-4665-895E-1487EF459AFF}']
     /// main method to emit the supplied binary Frame to the relay server
     // - the raw binary frame always end with 4 bytes of 32-bit TTunnelSession
     // - no result so that the frames could be gathered e.g. over WebSockets
@@ -398,6 +399,7 @@ type
   // about all associated sessions
   // - when the interface is released, will cancel all corresponding sessions
   ITunnelConsole = interface(ITunnelOpen)
+    ['{9453C229-9D4A-4F93-B5B3-E4A05E28267F}']
     /// could be used to define a TDocVariant object about this console
     // - will be completed with "agents":[] array with each associated agents
     procedure TunnelSetInfo(const info: variant);
@@ -414,6 +416,7 @@ type
   // - just maps a ITunnelTransmit, and is likely to be implemented as sicShared
   // over our SOA WebSockets
   ITunnelAgent = interface(ITunnelOpen)
+    ['{B3B39C9F-43AA-4EA0-A88E-662401755AD0}']
     /// initiate a new relay process as a two-phase commit from the agent
     // - caller should call this method, then TTunnelLocal.Open() on its side,
     // and once the handhake is ok or ko, call TunnelCommit or TunnelRollback
@@ -500,6 +503,7 @@ type
     fLogClass: TSynLogClass;
     fConsoleCount: integer;
     fTransientTimeOutSecs: cardinal;
+    fAgentInstance: ITunnelAgent;
     function HasConsolePrepared(aSession: TTunnelSession): boolean;
     function LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
     // search for matching fConsole[].TunnelSend
@@ -1374,7 +1378,7 @@ begin
   fLogClass := aLogClass;
   fTransientTimeOutSecs := aTransientTimeOutSecs;
   fAgent := TTunnelAgent.Create(self, fTransientTimeOutSecs);
-  fAgent._AddRef; // ready to be used e.g. as a sicShared SOA instance
+  fAgentInstance := fAgent; // ready to be used e.g. as a sicShared SOA instance
 end;
 
 destructor TTunnelRelay.Destroy;
@@ -1477,7 +1481,7 @@ begin
   finally
     fConsoleSafe.WriteUnLock;
   end;
-  ITunnelConsole(Obj) := c; // resolve
+  ITunnelConsole(Obj) := c; // resolve as ITunnelConsole
   fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [pointer(c)], self);
 end;
 
@@ -1717,6 +1721,12 @@ begin
   fOwner.ConsoleTunnelSend(Frame); // search for matching fConsole[].TunnelSend
 end;
 
+
+initialization
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(ITunnelTransmit),
+    TypeInfo(ITunnelAgent),
+    TypeInfo(ITunnelConsole)]);
 
 end.
 
