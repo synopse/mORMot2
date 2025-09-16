@@ -5605,8 +5605,8 @@ function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 function HandleCtrlC(const OnClose: TThreadMethod): boolean;
 
 /// define a Windows Job with the flags to close associated processes together
-// - warning: main process should include the CREATE_BREAKAWAY_FROM_JOB flag
-// - includes JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flags and
+// - warning: parent process should include the CREATE_BREAKAWAY_FROM_JOB flag
+// - will create a new Job with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 // JOB_OBJECT_LIMIT_BREAKAWAY_OK but also JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
 // to avoid any unexpected behavior in child process (which may not include
 // CREATE_BREAKAWAY_FROM_JOB themselves, e.g. ServiceUI.exe)
@@ -5765,9 +5765,9 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
-  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
-  // run CreateJobToClose() and AssignJobToProcess() on the new process
-  // process(es) when the created process quits via
+  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and run
+  // CreateJobToClose() and AssignJobToProcess() on the new process so that any
+  // of its future children would be synchronized and closed with their father
   // - roWinNoProcessDetach will avoid creating its own console and Windows group
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess

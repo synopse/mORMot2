@@ -330,7 +330,7 @@ type
 
   /// each main/shared potential option used by TSynAngelizeSettings.Options
   // - saoNoWinJob will disable the main Windows Job created by default to
-  // synchronize all services children execution with this main service process
+  // synchronize all children services execution with this main service process
   TSynAngelizeOption = (
     saoNoWinJob);
   /// the main/shared options used by TSynAngelizeSettings.Options
