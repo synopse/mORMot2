@@ -1142,12 +1142,14 @@ type
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       Sender: TObject; const OnExecute: TNotifyEvent;
-      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
+      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false;
+      ManualWaitForAndFree: boolean = false);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context as its internal TLoggedWork data structure
     constructor Create(Logger: TSynLogClass; const Work: TLoggedWork;
-      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
+      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false;
+      ManualWaitForAndFree: boolean = false);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context supplied to OnExecute() as a TDocVariantData object
@@ -3420,20 +3422,20 @@ begin
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass; const Work: TLoggedWork;
-  const OnExecuted: TNotifyEvent; Suspended: boolean);
+  const OnExecuted: TNotifyEvent; Suspended, ManualWaitForAndFree: boolean);
 begin
   fWork := Work;
   fOnDone := OnExecuted;
-  FreeOnTerminate := true;
+  FreeOnTerminate := not ManualWaitForAndFree;
   inherited Create(Suspended, nil, nil, Logger, Work.Name);
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const ProcessName: RawUtf8; Sender: TObject;
-  const OnExecute, OnExecuted: TNotifyEvent; Suspended: boolean);
+  const OnExecute, OnExecuted: TNotifyEvent; Suspended, ManualWaitForAndFree: boolean);
 begin
   SetWork(fWork, OnExecute, Sender, ProcessName);
-  Create(Logger, fWork, OnExecuted, Suspended);
+  Create(Logger, fWork, OnExecuted, Suspended, ManualWaitForAndFree);
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
