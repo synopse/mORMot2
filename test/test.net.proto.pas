@@ -65,7 +65,10 @@ type
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
+    tunnelsequence: integer;
     procedure TunnelExecute(Sender: TObject);
+    function TunnelOpenBackground(l: TTunnelLocal; s: TTunnelSession;
+     const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
       num: integer);
     procedure TunnelTest(var rnd: TLecuyer; const clientcert, servercert: ICryptCert);
@@ -1509,18 +1512,22 @@ type
      session: TTunnelSession;
      remote: ITunnelTransmit;
      signcert, verifcert: ICryptCert;
-     constructor Create(l: TTunnelLocal; s: TTunnelSession;
-       const r: ITunnelTransmit; const sc, vc: ICryptCert);
    end;
 
-constructor TTunnelExecute.Create(l: TTunnelLocal; s: TTunnelSession;
-  const r: ITunnelTransmit; const sc, vc: ICryptCert);
+function TNetworkProtocols.TunnelOpenBackground(l: TTunnelLocal; s: TTunnelSession;
+  const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
+var
+  context: TTunnelExecute;
 begin
-  local := l;
-  session := s;
-  remote := r;
-  signcert := sc;
-  verifcert := vc;
+  context := TTunnelExecute.Create;
+  context.local := l;
+  context.session := s;
+  context.remote := r;
+  context.signcert := sc;
+  context.verifcert := vc;
+  inc(tunnelsequence);
+  result := TLoggedWorkThread.Create(TSynLog, Make(['open', tunnelsequence]),
+    context, TunnelExecute, nil, {suspended=}false, {ManualWaitForAndFree=}true);
 end;
 
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
@@ -1664,9 +1671,8 @@ begin
     sess := rnd.Next31;
   until sess <> 0;
   rnd.FillAscii(10, tunnelappsec);
-  worker := TLoggedWorkThread.Create(TSynLog, 'servopen', TTunnelExecute.Create(
-    serverinstance,sess, clienttunnel, servercert, clientcert), TunnelExecute,
-    nil, false, {ManualWaitForAndFree=}true);
+  worker := TunnelOpenBackground(
+    serverinstance, sess, clienttunnel, servercert, clientcert);
   try
     local := clientinstance.Open(
       sess, servertunnel, tunneloptions, 1000, tunnelappsec, clocalhost,
