@@ -1669,10 +1669,15 @@ begin
 end;
 
 procedure TNetworkProtocols.Tunnel;
+const
+  AGENT_COUNT = 1;
 var
   clientcert, servercert: ICryptCert;
   bak: TSynLogLevels;
+  i: PtrInt;
   relay: TTunnelRelay;
+  agent: ITunnelAgent;              // single instance (sicShared mode)
+  console: array of ITunnelConsole; // one per console (sicPerSession)
   rnd: TLecuyer;
 begin
   bak := TSynLog.Family.Level;
@@ -1701,12 +1706,16 @@ begin
   // 2. validate TTunnelRelay and its associated TTunnelAgent/TTunnelConsole
   relay := TTunnelRelay.Create(TSynLog, {timeoutsecs=}120);
   try
-{    SetLength(a, 1); // number of agents
-    for i := 0 to high(a) do
-      a[i] := TTunnelAgent.Create(relay,0 );
+    // retrieve SOA agents + consoles endpoints (emulate on stack)
+    agent := relay.Agent;                               // sicShared usage
+    SetLength(console, rnd.Next(AGENT_COUNT) + 1); // several agents per console
+    for i := 0 to high(console) do
+      Check(relay.Resolve(ITunnelConsole, console[i])); // sicPerSession usage
+    // emulate connection of AGENT_COUNT tunnels using several consoles
+
     // release internal references
-    a := nil;
-    c := nil;}
+    agent := nil;
+    console := nil;
   finally
     relay.Free;
   end;
