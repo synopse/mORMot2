@@ -380,7 +380,7 @@ type
   /// abstract parent to ITunnelAgent/ITunnelConsole service endpoints
   // - with shared methods to validate or cancel a two-phase startup
   // - the steps of a TTunnelRelay session are therefore:
-  // 1) TTunnelLocal.Create() to have an ITunnelTransmit callback
+  // 1) TTunnelLocalClient/TTunnelLocalServer.Create as ITunnelTransmit callbacks
   // 2) ITunnelConsole.TunnelPrepare() to retrieve a session;
   // 3) ITunnelAgent.TunnelPrepare() with this session;
   // 4) TTunnelLocal.Open() on the console and agent sides to start tunnelling
@@ -462,6 +462,8 @@ type
     constructor Create(aOwner: TTunnelRelay; aTimeOutSecs: cardinal); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
+    /// return fList.Count or 0 if any instance is nil
+    function Count: integer;
     /// access to the associated main TTunnelRelay instance
     property Owner: TTunnelRelay
       read fOwner;
@@ -805,6 +807,7 @@ begin
   try
     if not (fClosePortNotified in fFlags) then
       try
+        // send frame with only session (and no payload) to notify as closed
         include(fFlags, fClosePortNotified);
         if Assigned(log) then
           log.Log(sllTrace, 'ClosePort: notify other end', self);
@@ -867,7 +870,8 @@ begin
       ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
     if l = 0 then
     begin
-      include(fFlags, fClosePortNotified); // notified by the other end
+      // received frame with only session (and no payload) to notify as closed
+      include(fFlags, fClosePortNotified);
       ClosePort;
     end
     else if fThread <> nil then // = nil after ClosePort (too late)
@@ -1402,16 +1406,15 @@ destructor TTunnelRelay.Destroy;
 var
   i: PtrInt;
 begin
-  fLogClass.Add.Log(sllDebug, 'Destroy', self);
+  fLogClass.Add.Log(sllDebug, 'Destroy: AgentCount=% ConsoleCount=%',
+    [fAgent.Count, fConsoleCount], self);
+  // remove any reference to this now deprecated pointer
   if fAgent <> nil then
     fAgent.fOwner := nil;
-  fAgentInstance := nil;
   if fConsoleCount <> 0 then
-  begin
-    fLogClass.Add.Log(sllDebug, 'Destroy with ConsoleCount=%', [fConsoleCount], self);
     for i := 0 to fConsoleCount - 1 do
       fConsole[i].fOwner := nil; // paranoid
-  end;
+  fAgentInstance := nil;
   inherited Destroy;
 end;
 
@@ -1579,6 +1582,14 @@ begin
   inherited Destroy;
 end;
 
+function TTunnelOpen.Count: integer;
+begin
+  result := 0;
+  if (self <> nil) and
+     (fList <> nil) then
+    result := fList.fCount;
+end;
+
 function TTunnelOpen.HasTransient(aSession: TTunnelSession): boolean;
 begin
   result := false;
@@ -1728,9 +1739,14 @@ end;
 
 procedure TTunnelConsole.TunnelSend(const Frame: RawByteString);
 begin
-  if (fOwner <> nil) and
-     (fOwner.fAgent <> nil) then
-    fOwner.fAgent.fList.TunnelSend(Frame);
+  if (fOwner = nil) or
+     (fOwner.fAgent = nil) then
+    exit;
+  fOwner.fAgent.fList.TunnelSend(Frame);
+  // handle end of process notification from the other side
+  if length(Frame) = TRAIL_SIZE then
+    fLogClass.Add.Log(sllTrace, 'TunnelSend: notified ClosePort(%)',
+      [Int64(PTunnelSession(Frame)^)], self);
 end;
 
 
@@ -1749,8 +1765,19 @@ begin
 end;
 
 procedure TTunnelAgent.TunnelSend(const Frame: RawByteString);
+var
+  s: TTunnelSession;
+  ok: boolean;
 begin
   fOwner.ConsoleTunnelSend(Frame); // search for matching fConsole[].TunnelSend
+  // handle end of process notification from the other side
+  if length(Frame) = TRAIL_SIZE then
+  begin
+    s := PTunnelSession(Frame)^;
+    ok := fList.Delete(s);
+    fLogClass.Add.Log(sllTrace, 'TunnelSend: Delete(%)=% after ClosePort',
+      [Int64(s), BOOL_STR[ok]], self);
+  end;
 end;
 
 
