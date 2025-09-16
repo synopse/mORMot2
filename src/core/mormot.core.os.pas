@@ -5767,10 +5767,12 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
-  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and run
-  // CreateJobToClose() and AssignJobToProcess() on the new process so that any
-  // of its future children would be synchronized and closed with their father
-  // - roWinNoProcessDetach will avoid creating its own console and Windows group
+  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
+  // run CreateJobToClose(allowSilentBreakaway=true) and AssignJobToProcess()
+  // on the new process so that any of its future children would be
+  // synchronized and closed with their father, in a relaxed way
+  // - on Windows, will create its own console and its own execution group, unless
+  // roWinNoProcessDetach is defined - e.g. as RUN_CMD for RunCommand/RunRedirect
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
   TRunOptions = set of (

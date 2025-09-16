@@ -4657,7 +4657,7 @@ begin
   // by default, just behave as a standard Windows process would
   if not (roWinNoProcessDetach in options) then
   begin
-    // RunProcess() option is [] to launch a fully uncoupled process
+    // RunProcess() option is [] to launch a detached console and a new process group
     // RunCommand() and RunRedirect() use RUN_CMD = [roWinNoProcessDetach]
     flags := flags or (DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP);
     exclude(ram, ramCtrlC); // not compatible with detached console or group
