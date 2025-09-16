@@ -521,7 +521,7 @@ type
     /// finalize this instance and its associated fAgent
     destructor Destroy; override;
     /// called by TTunnelConsole.Destroy to unregister its own instance
-    function DeleteConsole(aConsole: TTunnelConsole): boolean;
+    function RemoveConsole(aConsole: TTunnelConsole): boolean;
     /// ask all TunnelInfo of all opended Agent sessions as TDocVariant array
     function AgentsInfo: TVariantDynArray;
     /// ask all TunnelInfo of all opended Console sessions as TDocVariant array
@@ -1395,10 +1395,16 @@ destructor TTunnelRelay.Destroy;
 var
   i: PtrInt;
 begin
-  fAgent._Release;
+  fLogClass.Add.Log(sllTrace, 'Destroy', self);
+  if fAgent <> nil then
+    fAgent.fOwner := nil;
+  fAgentInstance := nil;
   if fConsoleCount <> 0 then
+  begin
+    fLogClass.Add.Log(sllDebug, 'Destroy with ConsoleCount=%', [fConsoleCount], self);
     for i := 0 to fConsoleCount - 1 do
       fConsole[i].fOwner := nil; // paranoid
+  end;
   inherited Destroy;
 end;
 
@@ -1495,11 +1501,11 @@ begin
   fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [pointer(c)], self);
 end;
 
-function TTunnelRelay.DeleteConsole(aConsole: TTunnelConsole): boolean;
+function TTunnelRelay.RemoveConsole(aConsole: TTunnelConsole): boolean;
 begin
   fConsoleSafe.WriteLock;
   try
-    result := ObjArrayDelete(fConsole, fConsoleCount, aConsole) >= 0;
+    result := PtrArrayDelete(fConsole, aConsole, @fConsoleCount) >= 0;
   finally
     fConsoleSafe.WriteUnLock;
   end;
@@ -1658,7 +1664,7 @@ end;
 destructor TTunnelConsole.Destroy;
 begin
   if fOwner <> nil then
-    fOwner.DeleteConsole(self); // unregister itself
+    fOwner.RemoveConsole(self); // unregister itself from weak fConsole[] list
   inherited Destroy;
 end;
 
