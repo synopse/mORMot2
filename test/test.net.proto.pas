@@ -1743,6 +1743,8 @@ begin
   relay := TTunnelRelay.Create(TSynLog, {timeoutsecs=}120);
   try
     // retrieve SOA agents + consoles endpoints (emulated on stack)
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: retrieve SOA endpoints', self);
     agent := relay.Agent; // sicShared usage
     Check(Assigned(agent));
     CheckEqual(relay.ConsoleCount, 0);
@@ -1757,6 +1759,8 @@ begin
     SetLength(agentlocal, AGENT_COUNT);
     SetLength(consolelocal, AGENT_COUNT);
     // 1) TTunnelLocal.Create() to have an ITunnelTransmit callback
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: create % TTunnelLocal callbacks', [AGENT_COUNT], self);
     for i := 0 to AGENT_COUNT - 1 do
     begin
       agentlocal[i]   := TTunnelLocalClient.Create(TSynLog);;
@@ -1767,6 +1771,8 @@ begin
       check(Assigned(consolecallback[i]));
     end;
     // 2) ITunnelConsole.TunnelPrepare() to retrieve a session
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: ITunnelOpen.TunnelPrepare', self);
     SetLength(session, AGENT_COUNT);
     for i := 0 to AGENT_COUNT - 1 do
     begin
@@ -1780,6 +1786,8 @@ begin
       check(agent.TunnelPrepare(session[i], agentcallback[i]));
     end;
     // 4) TTunnelLocal.Open() on the console and agent sides
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: reciprocal Open() handshake', self);
     try
       SetLength(worker, AGENT_COUNT);
       for i := 0 to AGENT_COUNT - 1 do
@@ -1793,14 +1801,17 @@ begin
         check(local <> 0);
         checkEqual(local, consolelocal[i].Port);
       end;
+      if Assigned(log) then
+        log.Log(sllInfo, 'Tunnel: wait for background threads', self);
       for i := 0 to AGENT_COUNT - 1 do
       begin
         worker[i].WaitFinished(1000);
-        worker[i].Free;
         CheckEqual(agentlocal[i].RemotePort, consolelocal[i].Port);
         CheckEqual(agentlocal[i].Port, consolelocal[i].RemotePort);
       end;
       // 5a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result
+      if Assigned(log) then
+        log.Log(sllInfo, 'Tunnel: all TunnelCommit()', self);
       for i := 0 to AGENT_COUNT - 1 do
       begin
         Check(agent.TunnelCommit(session[i]));
@@ -1808,6 +1819,8 @@ begin
         Check(console[c].TunnelCommit(session[i]));
       end;
       // create two local sockets and let them play with each tunnel
+      if Assigned(log) then
+        log.Log(sllInfo, 'Tunnel: actual sockets relay on loopback', self);
       for i := 0 to AGENT_COUNT - 1 do
         TunnelSocket(log, rnd, agentlocal[i], consolelocal[i]);
     finally
@@ -1815,11 +1828,15 @@ begin
         worker[i].Free;
     end;
     // release internal references
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: finalize agent/console references', self);
     agent := nil;
     console := nil;
     agentcallback := nil;
     consolecallback := nil;
   finally
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: eventual TTunnelRelay.Free', self);
     relay.Free;
   end;
   // 3. cleanup
