@@ -1518,6 +1518,7 @@ function TNetworkProtocols.TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSessi
   const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
 var
   context: TTunnelExecute;
+  name: RawUtf8;
 begin
   context := TTunnelExecute.Create;
   context.local := l;
@@ -1526,8 +1527,9 @@ begin
   context.signcert := sc;
   context.verifcert := vc;
   inc(tunnelsequence);
-  result := TLoggedWorkThread.Create(TSynLog, Make(['open', tunnelsequence]),
-    context, TunnelExecute, nil, {suspended=}false, {ManualWaitForAndFree=}true);
+  Make(['open', tunnelsequence], name);
+  result := TLoggedWorkThread.Create(TSynLog, name, context,
+    TunnelExecute, {suspended=}false, {ManualWaitForAndFree=}true);
 end;
 
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
@@ -1783,9 +1785,10 @@ begin
       for i := 0 to AGENT_COUNT - 1 do
       begin
         worker[i] := TunnelBackgroundOpen(agentlocal[i],
-          session[i], consolecallback[i], nil, nil);
+          session[i], agent, nil, nil);
+        c := i mod relay.ConsoleCount; // round-robin of agents over consoles
         local := consolelocal[i].Open(
-          session[i], agentcallback[i], tunneloptions, 1000, tunnelappsec, cLocalhost,
+          session[i], console[c], tunneloptions, 1000, tunnelappsec, cLocalhost,
           ['agentNumber', i]);
         check(local <> 0);
         checkEqual(local, consolelocal[i].Port);
@@ -1808,16 +1811,13 @@ begin
       for i := 0 to AGENT_COUNT - 1 do
         TunnelSocket(log, rnd, agentlocal[i], consolelocal[i]);
     finally
-      // avoid circular references memory leak (not needed over SOA websockets)
       for i := 0 to AGENT_COUNT - 1 do
-        agentlocal[i].RawTransmit := nil;
-      agentcallback := nil;
-      consolecallback := nil;
+        worker[i].Free;
     end;
     // release internal references
     agent := nil;
     console := nil;
-    consolecallback := nil; // TTunnelLocal/ITunnelTransmit should be last released
+    agentcallback := nil;
     consolecallback := nil;
   finally
     relay.Free;
