@@ -1108,8 +1108,9 @@ type
   // - a dedicated thread will be initialized and launched for the process, so
   // OnExecute() should better take some time to be worth the thread creation
   // - see TLoggedWorker for a global mechanism to handle a pool of this class
-  // - note: set FreeOnTerminate := true, so never call Free/Destroy to finalize,
-  // but call Terminate with proper cross-dereference in any owner thread
+  // - note: set FreeOnTerminate := true (unless ManualWaitForAndFree is true),
+  // so never call Free/Destroy to finalize, but call Terminate with proper
+  // cross-dereference in any owner thread
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fOwner: TLoggedWorker;
@@ -1120,30 +1121,35 @@ type
     /// this constructor will directly start the thread in background
     // - with the context supplied to OnExecute() as a regular Sender: TObject
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
-    constructor Create(Owner: TLoggedWorker; const ProcessName: RawUtf8;
+    constructor CreateOwned(Owner: TLoggedWorker; const ProcessName: RawUtf8;
       Sender: TObject; const OnExecute: TNotifyEvent;
       const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
-        reintroduce; overload;
+        overload;
     /// this constructor will directly start the thread in background
     // - with the context supplied to OnExecute() as a TDocVariantData object
     // initialized from name/value pairs from this constructor
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
-    constructor Create(Owner: TLoggedWorker; const ProcessName: RawUtf8;
+    // - named CreateOwnedAs() to circumvent Delphi "array of const" bug
+    constructor CreateOwnedAs(Owner: TLoggedWorker; const ProcessName: RawUtf8;
       const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
       const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
-        reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context as its internal TLoggedWork data structure
-    constructor Create(Owner: TLoggedWorker; const Work: TLoggedWork;
+    constructor CreateOwned(Owner: TLoggedWorker; const Work: TLoggedWork;
       const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
+        overload;
+    /// this constructor will directly start the thread in background
+    // - with the context supplied to OnExecute() as a regular Sender: TObject
+    constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
+      Sender: TObject; const OnExecute: TNotifyEvent;
+      Suspended: boolean = false; ManualWaitForAndFree: boolean = false);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context supplied to OnExecute() as a regular Sender: TObject
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
-      Sender: TObject; const OnExecute: TNotifyEvent;
-      const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false;
-      ManualWaitForAndFree: boolean = false);
+      Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent;
+      Suspended: boolean = false; ManualWaitForAndFree: boolean = false);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context as its internal TLoggedWork data structure
@@ -1155,10 +1161,10 @@ type
     // - with the context supplied to OnExecute() as a TDocVariantData object
     // initialized from name/value pairs from this constructor
     // - OnExecuted() will eventually be run with Sender as TLoggedWorkThread
-    constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
+    // - named CreateAs() to circumvent Delphi "array of const" bug
+    constructor CreateAs(Logger: TSynLogClass; const ProcessName: RawUtf8;
       const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcessData;
       const OnExecuted: TNotifyEvent = nil; Suspended: boolean = false);
-        reintroduce; overload;
   end;
 
   /// execute tasks in a pool of runtime-adjusted TLoggedWorkThread
@@ -3432,13 +3438,21 @@ end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
   const ProcessName: RawUtf8; Sender: TObject;
+  const OnExecute: TNotifyEvent; Suspended, ManualWaitForAndFree: boolean);
+begin
+  SetWork(fWork, OnExecute, Sender, ProcessName);
+  Create(Logger, fWork, fOnDone, Suspended, ManualWaitForAndFree);
+end;
+
+constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
+  const ProcessName: RawUtf8; Sender: TObject;
   const OnExecute, OnExecuted: TNotifyEvent; Suspended, ManualWaitForAndFree: boolean);
 begin
   SetWork(fWork, OnExecute, Sender, ProcessName);
   Create(Logger, fWork, OnExecuted, Suspended, ManualWaitForAndFree);
 end;
 
-constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
+constructor TLoggedWorkThread.CreateAs(Logger: TSynLogClass;
   const ProcessName: RawUtf8; const NameValuePairs: array of const;
   const OnExecute: TOnLoggedWorkProcessData; const OnExecuted: TNotifyEvent;
   Suspended: boolean);
@@ -3447,14 +3461,14 @@ begin
   Create(Logger, fWork, OnExecuted, Suspended);
 end;
 
-constructor TLoggedWorkThread.Create(Owner: TLoggedWorker; const Work: TLoggedWork;
+constructor TLoggedWorkThread.CreateOwned(Owner: TLoggedWorker; const Work: TLoggedWork;
   const OnExecuted: TNotifyEvent; Suspended: boolean);
 begin
   fOwner := Owner;
   Create(Owner.fSynLog, Work, OnExecuted, Suspended);
 end;
 
-constructor TLoggedWorkThread.Create(Owner: TLoggedWorker;
+constructor TLoggedWorkThread.CreateOwned(Owner: TLoggedWorker;
   const ProcessName: RawUtf8; Sender: TObject;
   const OnExecute, OnExecuted: TNotifyEvent; Suspended: boolean);
 begin
@@ -3462,13 +3476,13 @@ begin
   Create(Owner.fSynLog, ProcessName, Sender, OnExecute, OnExecuted, Suspended);
 end;
 
-constructor TLoggedWorkThread.Create(Owner: TLoggedWorker;
+constructor TLoggedWorkThread.CreateOwnedAs(Owner: TLoggedWorker;
   const ProcessName: RawUtf8; const NameValuePairs: array of const;
   const OnExecute: TOnLoggedWorkProcessData; const OnExecuted: TNotifyEvent;
   Suspended: boolean);
 begin
   fOwner := Owner;
-  Create(Owner.fSynLog, ProcessName, NameValuePairs, OnExecute, OnExecuted, Suspended);
+  CreateAs(Owner.fSynLog, ProcessName, NameValuePairs, OnExecute, OnExecuted, Suspended);
 end;
 
 
@@ -3511,7 +3525,7 @@ begin
     begin
       // enough CPU cores to run a new thread now
       inc(fRunning);
-      TLoggedWorkThread.Create(self, Work, RunDone);
+      TLoggedWorkThread.CreateOwned(self, Work, RunDone);
       exit;
     end
     else if ForcedThread then
