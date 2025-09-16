@@ -4331,10 +4331,12 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
 
-function CreateJobToClose(parentpid: cardinal; const ctxt: ShortString): THandle;
+function CreateJobToClose(parentpid: cardinal; const ctxt: ShortString;
+   allowSilentBreakaway: boolean): THandle;
 var
   security: TSecurityAttributes;
   limits: TJobObjectExtendedLimitInformation;
+  flags: cardinal;
   jobname: RawUtf8;
 begin
   security.nLength := SizeOf(security);
@@ -4349,10 +4351,10 @@ begin
     exit;
   end;
   FillCharFast(limits, SizeOf(limits), 0);
-  limits.BasicLimitInformation.LimitFlags :=
-    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE or
-    JOB_OBJECT_LIMIT_BREAKAWAY_OK or
-    JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK; // relaxed for children
+  flags := JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE or JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+  if allowSilentBreakaway then // relaxed for children (e.g. ServiceUI.exe)
+    flags := flags or JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
+  limits.BasicLimitInformation.LimitFlags := flags;
   if SetInformationJobObject(result, ExtendedLimitInformation,
        @limits, SizeOf(limits)) then
   begin
@@ -4688,7 +4690,8 @@ begin
     if flags and CREATE_BREAKAWAY_FROM_JOB <> 0 then
     begin
       // roWinJobCloseChildren = run the new process in its own Job
-      job := CreateJobToClose(processinfo.dwProcessID, 'CloseChildren');
+      job := CreateJobToClose(processinfo.dwProcessID, 'CloseChildren',
+        {allowSilentBreakaway:}true);
       if (job <> 0) and
          not AssignJobToProcess(job, processinfo.hProcess, 'CloseChildren') then
       begin

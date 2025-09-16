@@ -5606,12 +5606,14 @@ function HandleCtrlC(const OnClose: TThreadMethod): boolean;
 
 /// define a Windows Job with the flags to close associated processes together
 // - warning: parent process should include the CREATE_BREAKAWAY_FROM_JOB flag
-// - will create a new Job with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-// JOB_OBJECT_LIMIT_BREAKAWAY_OK but also JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
-// to avoid any unexpected behavior in child process (which may not include
-// CREATE_BREAKAWAY_FROM_JOB themselves, e.g. ServiceUI.exe)
+// - will create a new Job with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE and
+// JOB_OBJECT_LIMIT_BREAKAWAY_OK
+// - allowSilentBreakaway=true will set JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+// to avoid any unexpected behavior in sensitive child process (which may not
+// include CREATE_BREAKAWAY_FROM_JOB themselves, e.g. ServiceUI.exe)
 // - you should later call CloseHandle() on the returned handle, if not 0 
-function CreateJobToClose(parentpid: cardinal; const ctxt: ShortString): THandle;
+function CreateJobToClose(parentpid: cardinal; const ctxt: ShortString;
+  allowSilentBreakaway: boolean = false): THandle;
 
 /// associate a process to a Windows Job created by CreateJobToClose()
 // - is called usually just after CreateJobToClose()
