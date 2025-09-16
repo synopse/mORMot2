@@ -376,11 +376,14 @@ type
 type
   /// abstract parent to ITunnelAgent/ITunnelConsole
   // - with shared methods to validate or cancel a two-phase startup
-  // - the steps of a TRelayServer session are the following:
+  // - the steps of a TRelayServer session are therefore:
   // 1) ITunnelConsole.TunnelPrepare() to retrieve a session;
   // 2) ITunnelAgent.TunnelPrepare() with this session;
   // 3) TTunnelLocal.Open() on the console and agent sides to start tunnelling
-  // on a localhost port
+  // on a localhost TCP port
+  // 4a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result or
+  // 4b) after a timeout, missing TunnelCommit/TunnelRollback would delete any
+  // unfinished TunnelPrepare from an internal transient/pending list
   ITunnelOpen = interface(ITunnelTransmit)
     /// finalize a relay process startup after Open() success
     // - now ITunnelTransmit.TunnelSend will redirect frames from both sides
@@ -429,15 +432,16 @@ type
   TTunnelRelay = class;
 
   /// abstract parent of TTunnelConsole/TTunnelAgent
-  // - maintain a list of working tunnels, and another list of transient
-  // tunnels, pending for Open() handshake on both ends
+  // - maintain a list of working tunnels for ITunnelTransmit.TunnelSend() relay
+  // - maintain also a list of transient/pending sessions, to be purged after
+  // a timeout if TunnelCommit/TunnelRollback() has not been called soon enough
   TTunnelOpen = class(TInterfacedObjectRWLightLocked)
   protected
     fOwner: TTunnelRelay;
     fLogClass: TSynLogClass;
     fList: TTunnelList;
     fDeprecatedTix32, fTimeOutSecs: cardinal;
-    // transient sessions before TunnelCommit/TunnelRollback
+    // transient/pending sessions before TunnelCommit/TunnelRollback
     fSession: TIntegerDynArray;    // store TTunnelSession (=cardinal) values
     fSessionTix: TIntegerDynArray; // store GetTickSec
     fSessionCount: integer;
@@ -457,6 +461,10 @@ type
     /// access to the associated main TTunnelRelay instance
     property Owner: TTunnelRelay
       read fOwner;
+    /// how many seconds a TunnelPrepare() would be in the transient/pending queue
+    // - auto-trim if no TunnelCommit/TunnelRollback occured within this time slot
+    property TimeOutSecs: cardinal
+      read fTimeOutSecs;
   end;
 
   /// implement ITunnelConsole on the Relay Server
@@ -473,10 +481,6 @@ type
   public
     /// finalize this instance and remove it from fOwner.fConsole
     destructor Destroy; override;
-    /// how many seconds this instance would be in TTunnelRelay "pending" queue
-    // - trim if no ITunnelAgent.TunnelPrepare() occured within this time slot
-    property TimeOutSecs: cardinal
-      read fTimeOutSecs;
   end;
   TTunnelConsoles = array of TTunnelConsole;
 
@@ -499,7 +503,7 @@ type
     // note: fAgent and fConsole[] are class instances, to avoid refcount race
     fAgent: TTunnelAgent;
     fConsoleSafe: TRWLightLock;
-    fConsole: TTunnelConsoles; // per-console list of callbacks
+    fConsole: TTunnelConsoles; // per-console list of instances with callbacks
     fLogClass: TSynLogClass;
     fConsoleCount: integer;
     fTransientTimeOutSecs: cardinal;
@@ -523,14 +527,20 @@ type
     /// ask all TunnelInfo of all opended Console sessions as TDocVariant array
     function ConsolesInfo: TVariantDynArray;
     /// low-level access to the "agents" list
+    // - usually published as SOA sicShared ITunnelAgent endpoint
     property Agent: TTunnelAgent
       read fAgent;
     /// low-level access to the "consoles" list - associated with ConsoleCount
+    // - these instances are allocated (as SOA sicPerSession) using Resolve()
     property Console: TTunnelConsoles
       read fConsole;
     /// how many items are actually stored in Console[]
     property ConsoleCount: integer
       read fConsoleCount;
+    /// how many seconds a TunnelPrepare() would be in the transient/pending queue
+    // - auto-trim if no TunnelCommit/TunnelRollback occured within this time slot
+    property TransientTimeOutSecs: cardinal
+      read fTransientTimeOutSecs;
   end;
 
 
