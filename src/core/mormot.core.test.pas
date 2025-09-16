@@ -1198,13 +1198,15 @@ procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
 begin
   if NotifyTask or
-     not fOwner.fMultiThread or
+     ((not fOwner.fMultiThread) and
+      (not ForcedThreaded)) or
      not Threaded then
     NotifyProgress([TaskName]);
   if not Assigned(OnTask) then
     exit;
-  if not fOwner.fMultiThread or // avoid timeout e.g. on slow VMs
-     not Threaded then
+  if ((not fOwner.fMultiThread) or // avoid timeout e.g. on slow VMs
+      (not Threaded)) and
+     not ForcedThreaded then
     OnTask(Sender) // run in main thread
   else
   begin
