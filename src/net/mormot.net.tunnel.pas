@@ -232,6 +232,7 @@ type
     // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name)
     // - SignCert/VerifyCert should have [cuDigitalSignature] usage, and match
     // VerifyCert/SignCert corresponding certificate on other side
+    // - raise ETunnel or return 0 on error; return the new local port on sucsess
     // - should be called only once per TTunnelLocal instance
     function Open(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
       TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret, Address: RawUtf8;
@@ -1120,7 +1121,9 @@ begin
       'session',    Int64(fSession),
       'encrypted',  Encrypted,
       'options',    ToText(fOptions)]);
-    AfterHandshake;
+    AfterHandshake; // may be overriden e.g. to customize fInfo
+    if Assigned(log) then
+      log.Log(sllTrace, 'Open=% %', [result, variant(fInfo)], self);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
