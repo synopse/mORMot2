@@ -318,6 +318,7 @@ type
   // - here 'server' or 'client' side does not have any specific meaning - one
   // should just be at either end of the tunnel - but they must appear in a
   // coherent order during the handshake phase by using those overriden methods
+  // - class usually assigned to ITunnelConsole in the TTunnelRelay context
   TTunnelLocalServer = class(TTunnelLocal)
   protected
     procedure IncludeOptionsFromCert; override;
@@ -329,6 +330,7 @@ type
   // - here 'server' or 'client' side does not have any specific meaning - one
   // should just be at either end of the tunnel - but they must appear in a
   // coherent order during the handshake phase by using those overriden methods
+  // - class usually assigned to ITunnelAgent in the TTunnelRelay context
   TTunnelLocalClient = class(TTunnelLocal)
   protected
     procedure IncludeOptionsFromCert; override;
@@ -374,15 +376,16 @@ type
 { ******************** Abstract SOA implementation of a Relay Server }
 
 type
-  /// abstract parent to ITunnelAgent/ITunnelConsole
+  /// abstract parent to ITunnelAgent/ITunnelConsole service endpoints
   // - with shared methods to validate or cancel a two-phase startup
-  // - the steps of a TRelayServer session are therefore:
-  // 1) ITunnelConsole.TunnelPrepare() to retrieve a session;
-  // 2) ITunnelAgent.TunnelPrepare() with this session;
-  // 3) TTunnelLocal.Open() on the console and agent sides to start tunnelling
-  // on a localhost TCP port
-  // 4a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result or
-  // 4b) after a timeout, missing TunnelCommit/TunnelRollback would delete any
+  // - the steps of a TTunnelRelay session are therefore:
+  // 1) TTunnelLocal.Create() to have an ITunnelTransmit callback
+  // 2) ITunnelConsole.TunnelPrepare() to retrieve a session;
+  // 3) ITunnelAgent.TunnelPrepare() with this session;
+  // 4) TTunnelLocal.Open() on the console and agent sides to start tunnelling
+  // on a localhost TCP port;
+  // 5a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result or
+  // 5b) after a timeout, missing TunnelCommit/TunnelRollback would delete any
   // unfinished TunnelPrepare from an internal transient/pending list
   ITunnelOpen = interface(ITunnelTransmit)
     /// finalize a relay process startup after Open() success
@@ -1386,6 +1389,7 @@ constructor TTunnelRelay.Create(aLogClass: TSynLogClass;
   aTransientTimeOutSecs: cardinal);
 begin
   fLogClass := aLogClass;
+  fLogClass.Add.Log(sllDebug, 'Create timeout=%', [aTransientTimeOutSecs], self);
   fTransientTimeOutSecs := aTransientTimeOutSecs;
   fAgent := TTunnelAgent.Create(self, fTransientTimeOutSecs);
   fAgentInstance := fAgent; // ready to be used e.g. as a sicShared SOA instance
@@ -1395,7 +1399,7 @@ destructor TTunnelRelay.Destroy;
 var
   i: PtrInt;
 begin
-  fLogClass.Add.Log(sllTrace, 'Destroy', self);
+  fLogClass.Add.Log(sllDebug, 'Destroy', self);
   if fAgent <> nil then
     fAgent.fOwner := nil;
   fAgentInstance := nil;
@@ -1498,7 +1502,7 @@ begin
     fConsoleSafe.WriteUnLock;
   end;
   ITunnelConsole(Obj) := c; // resolve as ITunnelConsole
-  fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [pointer(c)], self);
+  fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [c], self);
   result := true;
 end;
 
@@ -1510,7 +1514,8 @@ begin
   finally
     fConsoleSafe.WriteUnLock;
   end;
-  fLogClass.Add.Log(sllTrace, 'DeleteConsole=% %', [BOOL_STR[result], aConsole], self);
+  fLogClass.Add.Log(sllTrace, 'RemoveConsole=% %',
+    [BOOL_STR[result], aConsole], self);
 end;
 
 function TTunnelRelay.AgentsInfo: TVariantDynArray;
@@ -1566,6 +1571,7 @@ end;
 
 destructor TTunnelOpen.Destroy;
 begin
+  fLogClass.Add.Log(sllTrace, 'Destroy count=%', [fList.fCount], self);
   FreeAndNil(fList);
   inherited Destroy;
 end;
@@ -1587,9 +1593,10 @@ function TTunnelOpen.AddTransient(aSession: TTunnelSession;
   const callback: ITunnelTransmit): boolean;
 var
   tix32: cardinal;
-  i, gc: PtrInt;
+  i, n, gc: PtrInt;
+  gctxt: TShort16;
 begin
-  gc := 0;
+  gctxt[0] := #0;
   result := fList.Add(aSession, callback);
   try
     if not result then
@@ -1598,28 +1605,33 @@ begin
     fSafe.WriteLock;
     try
       // add this new transient session and its timestamp
+      n := fSessionCount;
       AddInteger(fSession, fSessionCount, aSession);
       if fSessionCount >= length(fSessionTix) then
         SetLength(fSessionTix, length(fSession));
-      fSessionTix[fSessionCount - 1] := tix32;
+      fSessionTix[n] := tix32;
       // check and remove deprecated transient sessions
       if (fTimeOutSecs = 0) or
          (tix32 shr 4 = fDeprecatedTix32) then
         exit;
       fDeprecatedTix32 := tix32 shr 4; // next check in 16 seconds
-      for i := fSessionCount - 1 downto 0 do
+      if n = 0 then // fSession[n] = just above
+        exit;
+      gc := 0;
+      for i := n - 1 downto 0 do
         if cardinal(fSessionTix[i]) + fTimeOutSecs < tix32 then
         begin
           fList.Delete(fSession[i]);
           DeleteTransient(i);
           inc(gc);
         end;
+      FormatShort16('gc=%, ', [gc], gctxt);
     finally
       fSafe.WriteUnLock;
     end;
   finally
-    fLogClass.Add.Log(sllTrace, 'AddTransient(%)=% gc=%, count=%',
-      [Int64(aSession), BOOL_STR[result], gc, fSessionCount], self);
+    fLogClass.Add.Log(sllTrace, 'AddTransient(%)=% %count=%',
+      [Int64(aSession), BOOL_STR[result], gctxt, fSessionCount], self);
   end;
 end;
 
