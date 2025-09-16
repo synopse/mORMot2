@@ -1499,6 +1499,7 @@ begin
   end;
   ITunnelConsole(Obj) := c; // resolve as ITunnelConsole
   fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [pointer(c)], self);
+  result := true;
 end;
 
 function TTunnelRelay.RemoveConsole(aConsole: TTunnelConsole): boolean;
