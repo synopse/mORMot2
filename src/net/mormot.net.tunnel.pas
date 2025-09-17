@@ -527,6 +527,7 @@ type
     /// finalize this instance and its associated fAgent
     destructor Destroy; override;
     /// called by TTunnelConsole.Destroy to unregister its own instance
+    // - will also remove any associated fAgent.fList session
     function RemoveConsole(aConsole: TTunnelConsole): boolean;
     /// ask all TunnelInfo of all opended Agent sessions as TDocVariant array
     function AgentsInfo: TVariantDynArray;
@@ -1513,15 +1514,23 @@ begin
 end;
 
 function TTunnelRelay.RemoveConsole(aConsole: TTunnelConsole): boolean;
+var
+  asagent, asconsole: integer;
 begin
+  // remove associated agents (happens e.g. on broken connection)
+  asconsole := aConsole.Count;
+  asagent := 0;
+  if asconsole <> 0 then
+    asagent := fAgent.fList.DeleteFrom(aConsole.fList);
+  // remove from main console list
   fConsoleSafe.WriteLock;
   try
     result := PtrArrayDelete(fConsole, aConsole, @fConsoleCount) >= 0;
   finally
     fConsoleSafe.WriteUnLock;
   end;
-  fLogClass.Add.Log(sllTrace, 'RemoveConsole=% %',
-    [BOOL_STR[result], aConsole], self);
+  fLogClass.Add.Log(sllTrace, 'RemoveConsole=% asagent=% asconsole=%',
+    [BOOL_STR[result], asagent, asconsole], self);
 end;
 
 function TTunnelRelay.AgentsInfo: TVariantDynArray;
@@ -1738,15 +1747,22 @@ begin
 end;
 
 procedure TTunnelConsole.TunnelSend(const Frame: RawByteString);
+var
+  s: TTunnelSession;
+  ok: boolean;
 begin
   if (fOwner = nil) or
      (fOwner.fAgent = nil) then
     exit;
   fOwner.fAgent.fList.TunnelSend(Frame);
-  // handle end of process notification from the other side
+  // handle if received end of process notification from the other side
   if length(Frame) = TRAIL_SIZE then
-    fLogClass.Add.Log(sllTrace, 'TunnelSend: notified ClosePort(%)',
-      [Int64(PTunnelSession(Frame)^)], self);
+  begin
+    s := PTunnelSession(Frame)^;
+    ok := fList.Delete(s); // remove from this console list
+    fLogClass.Add.Log(sllTrace, 'TunnelSend: Delete(%)=% after ClosePort',
+      [Int64(s), BOOL_STR[ok]], self);
+  end;
 end;
 
 
@@ -1774,7 +1790,7 @@ begin
   if length(Frame) = TRAIL_SIZE then
   begin
     s := PTunnelSession(Frame)^;
-    ok := fList.Delete(s);
+    ok := fList.Delete(s); // remove from the global agents list
     fLogClass.Add.Log(sllTrace, 'TunnelSend: Delete(%)=% after ClosePort',
       [Int64(s), BOOL_STR[ok]], self);
   end;
