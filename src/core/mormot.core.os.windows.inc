@@ -4710,7 +4710,11 @@ begin
     if rd <> 0 then
       CloseHandle(wr) // https://stackoverflow.com/a/25725197/458259
     else if not waitfor then
-      exit; // no wait nor redirection: just launch the process
+    begin
+      // no wait nor redirection: just launch the process
+      result := 0; // 0 is no true exit code, but CreateProcessW() success
+      exit;
+    end;
     RedirectAndWait(endtix);
     // retrieve the exit code or abort the process on timeout
     if GetExitCodeProcess(processinfo.hProcess, exitcode) and
