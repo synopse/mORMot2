@@ -188,7 +188,7 @@ type
     fSendSafe: TMultiLightLock; // protect fHandshake+fThread
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
-    fFlags: set of (fBound, fClosePortNotified);
+    fFlags: set of (fSocketCreated, fClosePortNotified);
     fClosed, fVerboseLog: boolean;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
@@ -682,7 +682,7 @@ begin
   fStarted := true;
   try
     if (fOwner <> nil) and
-       (fBound in fOwner.fFlags) then
+       (fSocketCreated in fOwner.fFlags) then
     begin
       // newsocket() was done in the main thread: blocking accept() now
       fState := stAccepting;
@@ -983,7 +983,6 @@ begin
     result := addr.Port;
     if Assigned(log) then
       log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
-    include(fFlags, fBound);
   end
   else
   begin
@@ -993,6 +992,7 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;
+  include(fFlags, fSocketCreated);
   // initial single round trip handshake
   infoaes := nil;
   try
