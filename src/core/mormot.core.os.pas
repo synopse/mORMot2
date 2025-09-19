@@ -1015,7 +1015,8 @@ const
       {$if declared(RTLVersion122)} + '.2' {$else}
       {$if declared(RTLVersion121)} + '.1' {$ifend} {$ifend} {$ifend}
                               + ' Athens'
-    {$elseif defined(VER370)} + ' 13 Next'
+    {$elseif defined(VER370)} + ' 13 Florence'
+    {$elseif defined(VER380)} + ' 14 Next'
     {$ifend}
   {$endif FPC}
   {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
