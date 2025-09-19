@@ -714,6 +714,7 @@
     {$ifend}
     {$if CompilerVersion >= 37.0} // = Delphi 13 Florence
       {$define ISDELPHI13}
+      {$define VER370inlinebug} // circumvent Delphi 13 bug
     {$ifend}
     {$if CompilerVersion >= 38.0} // = Delphi 14 Next
       {$define ISDELPHI14}

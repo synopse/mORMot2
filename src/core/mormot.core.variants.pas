@@ -647,7 +647,7 @@ type
     // !  ...
     class procedure NewFast(out aValue: variant;
       aKind: TDocVariantKind = dvUndefined); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifndef VER370inlinebug}{$ifdef HASINLINE}inline;{$endif}{$endif} // Delphi 13 bug
     /// ensure a variant is a TDocVariant instance
     // - if aValue is not a TDocVariant, will create a new JSON_FAST
     class procedure IsOfTypeOrNewFast(var aValue: variant);
