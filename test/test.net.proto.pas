@@ -17,6 +17,7 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
+  mormot.core.interfaces,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
@@ -74,6 +75,8 @@ type
     procedure TunnelTest(var rnd: TLecuyer; const clientcert, servercert: ICryptCert);
     procedure TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
       clientinstance, serverinstance: TTunnelLocal);
+    procedure TunnelRelay(relay: TTunnelRelay; soa: TInterfaceResolver;
+      var rnd: TLecuyer);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
@@ -1695,22 +1698,123 @@ begin
   clientinstance.RawTransmit := nil;
 end;
 
-procedure TNetworkProtocols.Tunnel;
+procedure TNetworkProtocols.TunnelRelay(relay: TTunnelRelay;
+  soa: TInterfaceResolver; var rnd: TLecuyer);
 const
   AGENT_COUNT = 7;
 var
   log: ISynLog;
-  clientcert, servercert: ICryptCert;
-  bak: TSynLogLevels;
-  i, j, c: PtrInt;
-  relay: TTunnelRelay;
   agent: ITunnelAgent;              // single instance (sicShared mode)
   console: array of ITunnelConsole; // one per console (sicPerSession)
   session: array of TTunnelSession;
   worker: array of TLoggedWorkThread; // as multi-threaded as possible
   agentcallback, consolecallback: array of ITunnelTransmit;
   agentlocal, consolelocal: array of TTunnelLocal;
+  i, j, c: PtrInt;
   local: TNetPort;
+begin
+  TSynLogTestLog.EnterLocal(log, 'TTunnelRelay soa=%', [soa], self);
+  if soa = nil then
+    soa := relay;
+  // retrieve SOA agents + consoles endpoints (emulated on stack)
+  if Assigned(log) then
+    log.Log(sllInfo, 'Tunnel: retrieve SOA endpoints', self);
+  Check(soa.Resolve(ITunnelAgent, agent), 'sicShared agent');
+  Check(Assigned(agent));
+  CheckEqual(relay.ConsoleCount, 0);
+  SetLength(console, rnd.Next(AGENT_COUNT) + 1); // several agents per console
+  for i := 0 to high(console) do
+    Check(soa.Resolve(ITunnelConsole, console[i]), 'sicPerSession');
+  CheckEqual(relay.ConsoleCount, length(console));
+  // emulate connection of AGENT_COUNT tunnels using several consoles
+  // (see ITunnelOpen main comment about the typical TTunnelRelay steps)
+  SetLength(agentcallback, AGENT_COUNT);
+  SetLength(consolecallback, AGENT_COUNT);
+  SetLength(agentlocal, AGENT_COUNT);
+  SetLength(consolelocal, AGENT_COUNT);
+  // 1) TTunnelLocal.Create() to have an ITunnelTransmit callback
+  if Assigned(log) then
+    log.Log(sllInfo, 'Tunnel: create % TTunnelLocal callbacks', [AGENT_COUNT], self);
+  for i := 0 to AGENT_COUNT - 1 do
+  begin
+    agentlocal[i]   := TTunnelLocalClient.Create(TSynLog);;
+    consolelocal[i] := TTunnelLocalServer.Create(TSynLog);
+    agentcallback[i]   := agentlocal[i];
+    consolecallback[i] := consolelocal[i];
+    check(Assigned(agentcallback[i]));
+    check(Assigned(consolecallback[i]));
+  end;
+  // 2) ITunnelConsole.TunnelPrepare() to retrieve a session
+  if Assigned(log) then
+    log.Log(sllInfo, 'Tunnel: ITunnelOpen.TunnelPrepare', self);
+  SetLength(session, AGENT_COUNT);
+  for i := 0 to AGENT_COUNT - 1 do
+  begin
+    c := i mod relay.ConsoleCount; // round-robin of agents over consoles
+    Check(c <= high(console));
+    session[i] := console[c].TunnelPrepare(consolecallback[i]);
+    check(session[i] <> 0);
+    for j := 0 to i - 1 do
+      check(session[j] <> session[i], 'unique session');
+    // 3) ITunnelAgent.TunnelPrepare() with this session
+    check(agent.TunnelPrepare(session[i], agentcallback[i]));
+  end;
+  // 4) TTunnelLocal.Open() on the console and agent sides
+  if Assigned(log) then
+    log.Log(sllInfo, 'Tunnel: reciprocal Open() handshake', self);
+  try
+    SetLength(worker, AGENT_COUNT);
+    for i := 0 to AGENT_COUNT - 1 do
+    begin
+      worker[i] := TunnelBackgroundOpen(agentlocal[i],
+        session[i], agent, nil, nil);
+      c := i mod relay.ConsoleCount; // round-robin of agents over consoles
+      local := consolelocal[i].Open(
+        session[i], console[c], tunneloptions, 1000, tunnelappsec, cLocalhost,
+        ['agentNumber', i]);
+      check(local <> 0);
+      checkEqual(local, consolelocal[i].Port);
+    end;
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: wait for background threads', self);
+    for i := 0 to AGENT_COUNT - 1 do
+    begin
+      worker[i].WaitFinished(1000);
+      CheckEqual(agentlocal[i].RemotePort, consolelocal[i].Port);
+      CheckEqual(agentlocal[i].Port, consolelocal[i].RemotePort);
+    end;
+    // 5a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: all TunnelCommit()', self);
+    for i := 0 to AGENT_COUNT - 1 do
+    begin
+      Check(agent.TunnelCommit(session[i]));
+      c := i mod relay.ConsoleCount; // round-robin of agents over consoles
+      Check(console[c].TunnelCommit(session[i]));
+    end;
+    // create two local sockets and let them play with each tunnel
+    if Assigned(log) then
+      log.Log(sllInfo, 'Tunnel: actual sockets relay on loopback', self);
+    for i := 0 to AGENT_COUNT - 1 do
+      TunnelSocket(log, rnd, agentlocal[i], consolelocal[i]);
+  finally
+    for i := 0 to AGENT_COUNT - 1 do
+      worker[i].Free;
+  end;
+  // release internal references
+  if Assigned(log) then
+    log.Log(sllInfo, 'Tunnel: finalize agent/console references', self);
+  agent := nil;
+  console := nil;
+  agentcallback := nil;
+  consolecallback := nil;
+end;
+
+procedure TNetworkProtocols.Tunnel;
+var
+  clientcert, servercert: ICryptCert;
+  bak: TSynLogLevels;
+  relay: TTunnelRelay;
   rnd: TLecuyer;
 begin
   bak := TSynLog.Family.Level;
@@ -1739,108 +1843,15 @@ begin
   // options (e.g. encryption/ecdhe) are now considered validated
   tunneloptions := [];
   // 2. validate TTunnelRelay and its associated TTunnelAgent/TTunnelConsole
-  TSynLogTestLog.EnterLocal(log, self, 'TTunnelRelay');
   relay := TTunnelRelay.Create(TSynLog, {timeoutsecs=}120);
   try
-    // retrieve SOA agents + consoles endpoints (emulated on stack)
-    if Assigned(log) then
-      log.Log(sllInfo, 'Tunnel: retrieve SOA endpoints', self);
-    agent := relay.Agent; // sicShared usage
-    Check(Assigned(agent));
-    CheckEqual(relay.ConsoleCount, 0);
-    SetLength(console, rnd.Next(AGENT_COUNT) + 1); // several agents per console
-    for i := 0 to high(console) do
-      Check(relay.Resolve(ITunnelConsole, console[i])); // sicPerSession usage
-    CheckEqual(relay.ConsoleCount, length(console));
-    // emulate connection of AGENT_COUNT tunnels using several consoles
-    // (see ITunnelOpen main comment about the typical TTunnelRelay steps)
-    SetLength(agentcallback, AGENT_COUNT);
-    SetLength(consolecallback, AGENT_COUNT);
-    SetLength(agentlocal, AGENT_COUNT);
-    SetLength(consolelocal, AGENT_COUNT);
-    // 1) TTunnelLocal.Create() to have an ITunnelTransmit callback
-    if Assigned(log) then
-      log.Log(sllInfo, 'Tunnel: create % TTunnelLocal callbacks', [AGENT_COUNT], self);
-    for i := 0 to AGENT_COUNT - 1 do
-    begin
-      agentlocal[i]   := TTunnelLocalClient.Create(TSynLog);;
-      consolelocal[i] := TTunnelLocalServer.Create(TSynLog);
-      agentcallback[i]   := agentlocal[i];
-      consolecallback[i] := consolelocal[i];
-      check(Assigned(agentcallback[i]));
-      check(Assigned(consolecallback[i]));
-    end;
-    // 2) ITunnelConsole.TunnelPrepare() to retrieve a session
-    if Assigned(log) then
-      log.Log(sllInfo, 'Tunnel: ITunnelOpen.TunnelPrepare', self);
-    SetLength(session, AGENT_COUNT);
-    for i := 0 to AGENT_COUNT - 1 do
-    begin
-      c := i mod relay.ConsoleCount; // round-robin of agents over consoles
-      Check(c <= high(console));
-      session[i] := console[c].TunnelPrepare(consolecallback[i]);
-      check(session[i] <> 0);
-      for j := 0 to i - 1 do
-        check(session[j] <> session[i], 'unique session');
-      // 3) ITunnelAgent.TunnelPrepare() with this session
-      check(agent.TunnelPrepare(session[i], agentcallback[i]));
-    end;
-    // 4) TTunnelLocal.Open() on the console and agent sides
-    if Assigned(log) then
-      log.Log(sllInfo, 'Tunnel: reciprocal Open() handshake', self);
-    try
-      SetLength(worker, AGENT_COUNT);
-      for i := 0 to AGENT_COUNT - 1 do
-      begin
-        worker[i] := TunnelBackgroundOpen(agentlocal[i],
-          session[i], agent, nil, nil);
-        c := i mod relay.ConsoleCount; // round-robin of agents over consoles
-        local := consolelocal[i].Open(
-          session[i], console[c], tunneloptions, 1000, tunnelappsec, cLocalhost,
-          ['agentNumber', i]);
-        check(local <> 0);
-        checkEqual(local, consolelocal[i].Port);
-      end;
-      if Assigned(log) then
-        log.Log(sllInfo, 'Tunnel: wait for background threads', self);
-      for i := 0 to AGENT_COUNT - 1 do
-      begin
-        worker[i].WaitFinished(1000);
-        CheckEqual(agentlocal[i].RemotePort, consolelocal[i].Port);
-        CheckEqual(agentlocal[i].Port, consolelocal[i].RemotePort);
-      end;
-      // 5a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result
-      if Assigned(log) then
-        log.Log(sllInfo, 'Tunnel: all TunnelCommit()', self);
-      for i := 0 to AGENT_COUNT - 1 do
-      begin
-        Check(agent.TunnelCommit(session[i]));
-        c := i mod relay.ConsoleCount; // round-robin of agents over consoles
-        Check(console[c].TunnelCommit(session[i]));
-      end;
-      // create two local sockets and let them play with each tunnel
-      if Assigned(log) then
-        log.Log(sllInfo, 'Tunnel: actual sockets relay on loopback', self);
-      for i := 0 to AGENT_COUNT - 1 do
-        TunnelSocket(log, rnd, agentlocal[i], consolelocal[i]);
-    finally
-      for i := 0 to AGENT_COUNT - 1 do
-        worker[i].Free;
-    end;
-    // release internal references
-    if Assigned(log) then
-      log.Log(sllInfo, 'Tunnel: finalize agent/console references', self);
-    agent := nil;
-    console := nil;
-    agentcallback := nil;
-    consolecallback := nil;
+    // no SOA transmission first
+    TunnelRelay(relay, nil, rnd);
   finally
-    if Assigned(log) then
-      log.Log(sllInfo, 'Tunnel: eventual TTunnelRelay.Free', self);
+    TSynLog.Add.Log(sllInfo, 'Tunnel: eventual TTunnelRelay.Free', self);
     relay.Free;
   end;
   // 3. cleanup
-  log := nil;
   TSynLog.Family.Level := bak;
 end;
 
