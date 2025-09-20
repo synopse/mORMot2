@@ -1498,19 +1498,26 @@ var
   c: TTunnelConsole;
 begin
   result := false;
-  if aInterface <> TypeInfo(ITunnelConsole) then
-    exit;
-  // create a new TTunnelConsole instance (e.g. in sicPerSession mode)
-  c := TTunnelConsole.Create(self, fTransientTimeOutSecs);
-  fConsoleSafe.WriteLock;
-  try
-    PtrArrayAdd(fConsole, c, fConsoleCount);
-  finally
-    fConsoleSafe.WriteUnLock;
-  end;
-  ITunnelConsole(Obj) := c; // resolve as ITunnelConsole
-  fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [c], self);
-  result := true;
+  if aInterface = TypeInfo(ITunnelConsole) then
+  begin
+    // create a new TTunnelConsole instance (e.g. in sicPerSession mode)
+    c := TTunnelConsole.Create(self, fTransientTimeOutSecs);
+    fConsoleSafe.WriteLock;
+    try
+      PtrArrayAdd(fConsole, c, fConsoleCount);
+    finally
+      fConsoleSafe.WriteUnLock;
+    end;
+    ITunnelConsole(Obj) := c; // resolve as new ITunnelConsole
+    fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [c], self);
+    result := true;
+  end
+  else if aInterface = TypeInfo(ITunnelAgent) then
+    if fAgent <> nil then
+    begin
+      ITunnelAgent(Obj) := fAgent; // resolve as shared ITunnelAgent
+      result := true;
+    end;
 end;
 
 function TTunnelRelay.RemoveConsole(aConsole: TTunnelConsole): boolean;
