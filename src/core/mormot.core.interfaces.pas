@@ -5222,15 +5222,12 @@ function TInterfaceResolver.Resolve({$ifdef FPC_HAS_CONSTREF}constref{$else}cons
 var
   known: TInterfaceFactory;
 begin
-  if self = nil then
-    result := false
-  else
+  result := false;
+  if self <> nil then
   begin
     known := TInterfaceFactory.Get(aGuid);
     if known <> nil then
-      result := TryResolve(known.fInterfaceRtti.Info, Obj)
-    else
-      result := false;
+      result := TryResolve(known.fInterfaceRtti.Info, Obj);
   end;
   if (aRaiseIfNotFound <> nil) and
      not result then
