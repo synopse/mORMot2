@@ -43,7 +43,13 @@ uses
   mormot.net.ldap,
   mormot.net.dns,
   mormot.net.rtsphttp,
-  mormot.net.tunnel;
+  mormot.net.tunnel,
+  mormot.soa.core,
+  mormot.rest.core,
+  mormot.rest.server,
+  mormot.rest.memserver,
+  mormot.rest.http.server,
+  mormot.rest.http.client;
 
 const
   SYNOPSE_IP = '82.67.73.95'; // the mormot's home in the French mountains :)
@@ -75,8 +81,8 @@ type
     procedure TunnelTest(var rnd: TLecuyer; const clientcert, servercert: ICryptCert);
     procedure TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
       clientinstance, serverinstance: TTunnelLocal);
-    procedure TunnelRelay(relay: TTunnelRelay; soa: TInterfaceResolver;
-      var rnd: TLecuyer);
+    procedure TunnelRelay(relay: TTunnelRelay; const agent: array of ITunnelAgent;
+      const console: array of ITunnelConsole; var rnd: TLecuyer);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
@@ -1698,14 +1704,16 @@ begin
   clientinstance.RawTransmit := nil;
 end;
 
-procedure TNetworkProtocols.TunnelRelay(relay: TTunnelRelay;
-  soa: TInterfaceResolver; var rnd: TLecuyer);
 const
   AGENT_COUNT = 7;
+  CONSOLE_COUNT = 4;
+
+procedure TNetworkProtocols.TunnelRelay(relay: TTunnelRelay;
+  const agent: array of ITunnelAgent; const console: array of ITunnelConsole;
+  var rnd: TLecuyer);
 var
   log: ISynLog;
-  agent: ITunnelAgent;              // single instance (sicShared mode)
-  console: array of ITunnelConsole; // one per console (sicPerSession)
+  a: ITunnelAgent;
   session: array of TTunnelSession;
   worker: array of TLoggedWorkThread; // as multi-threaded as possible
   agentcallback, consolecallback: array of ITunnelTransmit;
@@ -1713,19 +1721,9 @@ var
   i, j, c: PtrInt;
   local: TNetPort;
 begin
-  TSynLogTestLog.EnterLocal(log, 'TTunnelRelay soa=%', [soa], self);
-  if soa = nil then
-    soa := relay;
-  // retrieve SOA agents + consoles endpoints (emulated on stack)
-  if Assigned(log) then
-    log.Log(sllInfo, 'Tunnel: retrieve SOA endpoints', self);
-  Check(soa.Resolve(ITunnelAgent, agent), 'sicShared agent');
-  Check(Assigned(agent));
-  CheckEqual(relay.ConsoleCount, 0);
-  SetLength(console, rnd.Next(AGENT_COUNT) + 1); // several agents per console
-  for i := 0 to high(console) do
-    Check(soa.Resolve(ITunnelConsole, console[i]), 'sicPerSession');
-  CheckEqual(relay.ConsoleCount, length(console));
+  TSynLogTestLog.EnterLocal(log, self, 'TTunnelRelay');
+  if not CheckEqual(relay.ConsoleCount, length(console)) then
+    exit; // avoid "division by zero" below
   // emulate connection of AGENT_COUNT tunnels using several consoles
   // (see ITunnelOpen main comment about the typical TTunnelRelay steps)
   SetLength(agentcallback, AGENT_COUNT);
@@ -1757,7 +1755,11 @@ begin
     for j := 0 to i - 1 do
       check(session[j] <> session[i], 'unique session');
     // 3) ITunnelAgent.TunnelPrepare() with this session
-    check(agent.TunnelPrepare(session[i], agentcallback[i]));
+    if i >= length(agent) then
+      a := agent[0]
+    else
+      a := agent[i];
+    check(a.TunnelPrepare(session[i], agentcallback[i]));
   end;
   // 4) TTunnelLocal.Open() on the console and agent sides
   if Assigned(log) then
@@ -1766,8 +1768,12 @@ begin
     SetLength(worker, AGENT_COUNT);
     for i := 0 to AGENT_COUNT - 1 do
     begin
+      if i >= length(agent) then
+        a := agent[0]
+      else
+        a := agent[i];
       worker[i] := TunnelBackgroundOpen(agentlocal[i],
-        session[i], agent, nil, nil);
+        session[i], a, nil, nil);
       c := i mod relay.ConsoleCount; // round-robin of agents over consoles
       local := consolelocal[i].Open(
         session[i], console[c], tunneloptions, 1000, tunnelappsec, cLocalhost,
@@ -1788,7 +1794,11 @@ begin
       log.Log(sllInfo, 'Tunnel: all TunnelCommit()', self);
     for i := 0 to AGENT_COUNT - 1 do
     begin
-      Check(agent.TunnelCommit(session[i]));
+      if i >= length(agent) then
+        a := agent[0]
+      else
+        a := agent[i];
+      Check(a.TunnelCommit(session[i]));
       c := i mod relay.ConsoleCount; // round-robin of agents over consoles
       Check(console[c].TunnelCommit(session[i]));
     end;
@@ -1804,8 +1814,7 @@ begin
   // release internal references
   if Assigned(log) then
     log.Log(sllInfo, 'Tunnel: finalize agent/console references', self);
-  agent := nil;
-  console := nil;
+  // retrieve SOA agents + consoles endpoints (emulated on stack)
   agentcallback := nil;
   consolecallback := nil;
 end;
@@ -1816,6 +1825,12 @@ var
   bak: TSynLogLevels;
   relay: TTunnelRelay;
   rnd: TLecuyer;
+  i: PtrInt;
+  agent: array of ITunnelAgent;     // single instance (sicShared mode)
+  console: array of ITunnelConsole; // one per console (sicPerSession)
+  restserver: TRestServerFullMemory;
+  httpserver: TRestHttpServer;
+  agentclient, consoleclient: array of TRestHttpClientWebsockets;
 begin
   bak := TSynLog.Family.Level;
   TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
@@ -1843,10 +1858,67 @@ begin
   // options (e.g. encryption/ecdhe) are now considered validated
   tunneloptions := [];
   // 2. validate TTunnelRelay and its associated TTunnelAgent/TTunnelConsole
+  SetLength(console, CONSOLE_COUNT); // several agents per console
   relay := TTunnelRelay.Create(TSynLog, {timeoutsecs=}120);
   try
     // no SOA transmission first
-    TunnelRelay(relay, nil, rnd);
+    TSynLog.Add.Log(sllInfo, 'Tunnel: retrieve SOA endpoints', self);
+    SetLength(agent, 1);
+    Check(relay.Resolve(ITunnelAgent, agent[0]), 'sicShared agent');
+    Check(Assigned(agent[0]));
+    CheckEqual(relay.ConsoleCount, 0);
+    for i := 0 to high(console) do
+      Check(relay.Resolve(ITunnelConsole, console[i]), 'sicPerSession');
+    TunnelRelay(relay, agent, console, rnd);
+    agent := nil;
+    console := nil;
+    // setup a SOA WebSockets server as actual relay over WebSockets
+    restserver := TRestServerFullMemory.CreateWithOwnModel(
+      [], {withauth=}true, 'tun');
+    try
+      restserver.CreateMissingTables;
+      restserver.ServiceDefine(relay.Agent, [ITunnelAgent]);
+      restserver.ServiceContainer.InjectResolver([relay]);
+      restserver.ServiceDefine(TTunnelconsole, [ITunnelConsole], sicPerSession);
+      restserver.LogClass := TSynLog;
+      httpserver := TRestHttpServer.Create('8888', [restserver], '+',
+        WEBSOCKETS_DEFAULT_MODE);
+      try
+        httpserver.WebSocketsEnable('', 'key', false, []);
+        // setup as many SOA clients over WebSockets as needed
+        SetLength(agentclient, AGENT_COUNT);
+        SetLength(agent, AGENT_COUNT);
+        for i := 0 to high(agentclient) do
+        begin
+          agentclient[i] := TRestHttpClientWebsockets.CreateWithOwnModel(
+            'localhost', '8888', 'tun');
+          agentclient[i].WebSocketsUpgrade('key', false, []);
+          check(agentclient[i].SetUser('User', 'synopse'));
+          agentclient[i].ServiceDefine(ITunnelAgent, sicShared);
+          agentclient[i].Resolve(ITunnelAgent, agent[i]);
+        end;
+        SetLength(consoleclient, CONSOLE_COUNT);
+        SetLength(console, CONSOLE_COUNT);
+        for i := 0 to high(consoleclient) do
+        begin
+          consoleclient[i] := TRestHttpClientWebsockets.CreateWithOwnModel(
+            'localhost', '8888', 'tun');
+          consoleclient[i].WebSocketsUpgrade('key', false, []);
+          check(consoleclient[i].SetUser('User', 'synopse'));
+          consoleclient[i].ServiceDefine(ITunnelConsole, sicPerSession);
+          consoleclient[i].Resolve(ITunnelConsole, console[i]);
+        end;
+        //TunnelRelay(relay, agent, console, rnd);
+      finally
+        agent := nil; // keep refcount clean
+        console := nil;
+        ObjArrayClear(consoleclient);
+        ObjArrayClear(agentclient);
+        httpserver.Free;
+      end;
+    finally
+      restserver.Free;
+    end;
   finally
     TSynLog.Add.Log(sllInfo, 'Tunnel: eventual TTunnelRelay.Free', self);
     relay.Free;
