@@ -145,6 +145,11 @@ type
       const aProxyByPass: RawUtf8 = ''; aSendTimeout: cardinal = 0;
       aReceiveTimeout: cardinal = 0; aConnectTimeout: cardinal = 0);
        reintroduce; overload; virtual;
+    /// connect to TRestHttpServer on aServer:aPort creating a void own model
+    constructor CreateWithOwnModel(const aServer, aPort, aRoot: RawUtf8;
+      aHttps: boolean = false; const aProxyName: RawUtf8 = '';
+      const aProxyByPass: RawUtf8 = ''; aSendTimeout: cardinal = 0;
+      aReceiveTimeout: cardinal = 0; aConnectTimeout: cardinal = 0);
     /// connect to TRestHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
@@ -648,6 +653,19 @@ begin
     fReceiveTimeout := aReceiveTimeout;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
+end;
+
+constructor TRestHttpClientGeneric.CreateWithOwnModel(const aServer, aPort,
+  aRoot: RawUtf8; aHttps: boolean; const aProxyName: RawUtf8;
+  const aProxyByPass: RawUtf8; aSendTimeout: cardinal;
+  aReceiveTimeout: cardinal; aConnectTimeout: cardinal);
+var
+  model: TOrmModel;
+begin
+  model := TOrmModel.Create([], aRoot);
+  Create(aServer, aPort, model, aHttps, aProxyName, aProxyByPass,
+    aSendTimeout, aReceiveTimeout, aConnectTimeout);
+  model.Owner := self;
 end;
 
 constructor TRestHttpClientGeneric.CreateForRemoteLogging(const aServer: RawUtf8;
