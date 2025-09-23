@@ -3252,6 +3252,9 @@ type
     // which should be released via a proper Dispose()
     // - returned B is a newly allocated instance of the TClass specified to Init()
     function ToB(A: pointer): pointer; overload;
+    /// compare A and B fields, using the registered properties mapping
+    // - A/B are either TObject instance or @record pointer, depending on Init()
+    function Compare(A, B: pointer; CaseInsensitive: boolean = false): integer;
   end;
 
 
@@ -10527,6 +10530,29 @@ begin
   else
     result := AllocMem(bRtti.Size);
   ToB(A, result);
+end;
+
+function TRttiMap.Compare(A, B: pointer; CaseInsensitive: boolean): integer;
+var
+  n: integer;
+  pa: PPRttiCustomProp;
+  pb: PRttiCustomProp;
+begin
+  pa := pointer(b2a);
+  pb := pointer(bRtti.Props.List); // always <> nil
+  n := bRtti.Props.Count;          // always > 0
+  repeat
+    if pa^ <> nil then
+    begin
+      result := pa^.CompareValue(A, B, pb^, CaseInsensitive);
+      if result <> 0 then
+        exit; // found some difference in this property
+    end;
+    inc(pa);
+    inc(pb);
+    dec(n);
+  until n = 0;
+  result := ComparePointer(A, B);
 end;
 
 
