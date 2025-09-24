@@ -1350,7 +1350,10 @@ type
     /// access to all input/output parameters at TRestServer.Uri() level
     // - process should better call Results() or Success() methods to set the
     // appropriate answer or Error() method in case of an error
-    // - low-level access to the call parameters can be made via this pointer
+    // - use Method/RemoteIPNotLocal/UserAgent/AuthenticationBearerToken and
+    // InHeader[]/InCookie[] high-level properties instead of this instance
+    // - low-level access to the request parameters can be made via this pointer,
+    // e.g. to access Call^.Url or Call^.LowLevelConnectionID
     property Call: PRestUriParams
       read fCall;
     /// the used Client-Server method (matching the corresponding HTTP Verb)
