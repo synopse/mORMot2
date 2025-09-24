@@ -7190,6 +7190,29 @@ begin
   V^ := SharedRandom.NextDouble;
 end;
 
+procedure _PropsRandom(V: PAnsiChar; RC: TRttiCustom);
+var
+  n: integer;
+  o: PtrInt;
+  p: PRttiCustomProp;
+begin // used for ptRecord and ptClass
+  n := RC.PropsCount;
+  if n = 0 then
+    exit;
+  if RC.Kind = rkClass then
+    V := PPointer(V)^; // TObject is stored by reference, supplied as PObject
+  if V = nil then
+    exit;
+  p := pointer(RC.Props.List);
+  repeat
+    o := p^.OffsetSet;
+    if o >= 0 then
+      p^.Value.ValueRandom(V + o); // setters are not supported yet
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
 var
   PT_RANDOM: array[TRttiParserType] of pointer = (
     @_NoRandom,       //  ptNone
@@ -7206,7 +7229,7 @@ var
     @_StringRandom,   //  ptRawByteString
     @_NoRandom,       //  ptRawJson
     @_StringRandom,   //  ptRawUtf8
-    @_NoRandom,       //  ptRecord
+    @_PropsRandom,    //  ptRecord
     @_SingleRandom,   //  ptSingle
     {$ifdef UNICODE}
     @_UStringRandom,
@@ -7239,7 +7262,7 @@ var
     @_FillRandom,     //  ptWord
     @_FillRandom,     //  ptEnumeration
     @_FillRandom,     //  ptSet
-    @_NoRandom,       //  ptClass
+    @_PropsRandom,    //  ptClass
     @_NoRandom,       //  ptDynArray
     @_NoRandom,       //  ptInterface
     @_NoRandom,       //  ptPUtf8Char is read-only
