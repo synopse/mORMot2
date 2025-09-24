@@ -1333,7 +1333,8 @@ end;
 procedure TTestCoreBase._TDynArray;
 var
   AI, AI2: TIntegerDynArray;
-  AU: TRawUtf8DynArray;
+  AU, AU2: TRawUtf8DynArray;
+  AV1, AV2: TVariantDynArray;
   AR: TRecs;
   AF: TFVs;
   AF2: TFV2s;
@@ -1458,6 +1459,23 @@ begin
   Check(not IsRawUtf8DynArray(TypeInfo(TIntegerDynArray)), 'IsRawUtf8DynArray2');
   Check(not IsRawUtf8DynArray(TypeInfo(TPointerDynArray)), 'IsRawUtf8DynArray3');
   Check(not IsRawUtf8DynArray(TypeInfo(TAmountDynArray)), 'IsRawUtf8DynArray4');
+  SetLength(AU, 2);
+  AU[0] := 'true';
+  AU[1] := 'false';
+  SetLength(AU2, 2);
+  AU2[0] := 'True';
+  AU2[1] := 'False';
+  Check(DynArrayEquals(TypeInfo(TRawUtf8DynArray), AU, AU2,
+    nil, nil, {CaseInsensitive=}True));
+  AU := nil; // for test below
+  SetLength(AV1, 2);
+  AV1[0] := 'true';
+  AV1[1] := 'false';
+  SetLength(AV2, 2);
+  AV2[0] := 'True';
+  AV2[1] := 'False';
+  Check(DynArrayEquals(TypeInfo(TVariantDynArray), AV1, AV2,
+    nil, nil, {CaseInsensitive=}True));
   W := TJsonWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray), AB);
