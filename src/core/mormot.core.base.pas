@@ -11132,7 +11132,7 @@ begin
         dec(PByte(e), SizeOf(BaseEntropy));
       p := @p[2];
     end;
-    MoveFast(caps, CpuFeatures, SizeOf(CpuFeatures));
+    Move(caps, CpuFeatures, SizeOf(CpuFeatures)); // don't use MoveFast() yet
   except
     // may happen on some untested Operating System
   end;
