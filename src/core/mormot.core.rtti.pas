@@ -10593,21 +10593,29 @@ end;
 
 procedure TRttiMap.ZeroA(A: pointer);
 begin
+  if aRtti.Kind = rkClass then
+    A := @A; // low-level TRttiCustom methods expect a PObject
   aRtti.ValueFinalizeAndClear(A); // just use the RTTI
 end;
 
 procedure TRttiMap.ZeroB(B: pointer);
 begin
+  if aRtti.Kind = rkClass then
+    B := @B; // low-level TRttiCustom methods expect a PObject
   bRtti.ValueFinalizeAndClear(B);
 end;
 
 procedure TRttiMap.RandomA(A: pointer);
 begin
+  if aRtti.Kind = rkClass then
+    A := @A; // low-level TRttiCustom methods expect a PObject
   aRtti.ValueRandom(A); // just use the RTTI
 end;
 
 procedure TRttiMap.RandomB(B: pointer);
 begin
+  if aRtti.Kind = rkClass then
+    B := @B; // low-level TRttiCustom methods expect a PObject
   bRtti.ValueRandom(B);
 end;
 
