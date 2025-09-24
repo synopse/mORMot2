@@ -7126,6 +7126,11 @@ begin
   FastSetStringCP(V^, @tmp[1], ord(tmp[0]), RC.Cache.CodePage);
 end;
 
+procedure _RawJsonRandom(V: PRawUtf8; RC: TRttiCustom);
+begin // just '0' ..'999' as valid random JSON content
+  V^ := SmallUInt32Utf8[Random32(high(SmallUInt32Utf8))];
+end;
+
 procedure _WStringRandom(V: PWideString; RC: TRttiCustom);
 var
   tmp: TShort31; // 7-bit ASCII pseudo-random text
@@ -7185,6 +7190,16 @@ begin
   V^ := 38000 + Int64(SharedRandom.Next) / (maxInt shr 12);
 end;
 
+procedure _UnixTimeRandom(V: PInt64; RC: TRttiCustom);
+begin
+  V^ := 1481187020 + SharedRandom.Next shr 8; // as seconds
+end;
+
+procedure _UnixMSRandom(V: PInt64; RC: TRttiCustom);
+begin
+  V^ := Int64(1481187020000) + Int64(SharedRandom.Next); // as milliseconds
+end;
+
 procedure _SingleRandom(V: PSingle; RC: TRttiCustom);
 begin
   V^ := SharedRandom.NextDouble;
@@ -7213,10 +7228,47 @@ begin // used for ptRecord and ptClass
   until n = 0;
 end;
 
+procedure _ArrayRandom(V: PAnsiChar; RC: TRttiCustom);
+var
+  n: integer;
+begin
+  n := RC.Cache.ItemCount;
+  if n <> 0 then
+    if RC.ArrayRtti = nil then
+      SharedRandom.Fill(v, RC.Size)
+    else
+      repeat
+        RC.ArrayRtti.ValueRandom(V);
+        inc(V, RC.Cache.ItemSize);
+        dec(n);
+      until n = 0;
+end;
+
+procedure _DynArrayRandom(V: PPointer; RC: TRttiCustom);
+var
+  n: integer;
+  p: PAnsiChar;
+begin
+  if V^ <> nil then
+    RC.ValueFinalize(V); // reset whole array variable
+  n := SharedRandom.Next and 15; // random length 0..15
+  if n = 0 then
+    exit;
+  p := DynArrayNew(V, n, RC.Cache.ItemSize);
+  if RC.ArrayRtti = nil then
+    SharedRandom.Fill(p, n * RC.Cache.ItemSize)
+  else
+    repeat
+      RC.ArrayRtti.ValueRandom(p);
+      inc(p, RC.Cache.ItemSize);
+      dec(n);
+    until n = 0;
+end;
+
 var
   PT_RANDOM: array[TRttiParserType] of pointer = (
     @_NoRandom,       //  ptNone
-    @_NoRandom,       //  ptArray
+    @_ArrayRandom,    //  ptArray
     @_FillRandom,     //  ptBoolean
     @_FillRandom,     //  ptByte
     @_FillRandom,     //  ptCardinal
@@ -7227,7 +7279,7 @@ var
     @_FillRandom,     //  ptInteger
     @_FillRandom,     //  ptQWord
     @_StringRandom,   //  ptRawByteString
-    @_NoRandom,       //  ptRawJson
+    @_RawJsonRandom,  //  ptRawJson
     @_StringRandom,   //  ptRawUtf8
     @_PropsRandom,    //  ptRecord
     @_SingleRandom,   //  ptSingle
@@ -7254,8 +7306,8 @@ var
     {$else}           //  ptUnicodeString
     @_NoRandom,
     {$endif HASVARUSTRING}
-    @_FillRandom,     //  ptUnixTime
-    @_FillRandom,     //  ptUnixMSTime
+    @_UnixTimeRandom, //  ptUnixTime
+    @_UnixMSRandom,   //  ptUnixMSTime
     @_VariantRandom,  //  ptVariant
     @_WStringRandom,  //  ptWideString
     @_StringRandom,   //  ptWinAnsi
@@ -7263,7 +7315,7 @@ var
     @_FillRandom,     //  ptEnumeration
     @_FillRandom,     //  ptSet
     @_PropsRandom,    //  ptClass
-    @_NoRandom,       //  ptDynArray
+    @_DynArrayRandom, //  ptDynArray
     @_NoRandom,       //  ptInterface
     @_NoRandom,       //  ptPUtf8Char is read-only
     @_NoRandom);      //  ptCustom
