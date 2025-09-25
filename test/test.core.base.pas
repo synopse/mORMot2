@@ -1476,6 +1476,13 @@ begin
   AV2[1] := 'False';
   Check(DynArrayEquals(TypeInfo(TVariantDynArray), AV1, AV2,
     nil, nil, {CaseInsensitive=}True));
+  AV1[0] := SynUnicode('true');
+  AV1[1] := SynUnicode('false');
+  SetLength(AV2, 2);
+  AV2[0] := SynUnicode('True');
+  AV2[1] := SynUnicode('False');
+  Check(DynArrayEquals(TypeInfo(TVariantDynArray), AV1, AV2,
+    nil, nil, {CaseInsensitive=}True));
   W := TJsonWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray), AB);
