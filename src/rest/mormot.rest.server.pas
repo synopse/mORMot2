@@ -7400,13 +7400,11 @@ begin
      (Model.GetTableIndex(aMethodName) >= 0) then
     EServiceException.RaiseUtf8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [obj, aMethodName]);
-  with PRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
-    'Duplicated published method name %.%', [obj, aMethodName], @result))^ do
-  begin
-    Callback := aEvent;
-    ByPassAuthentication := aByPassAuthentication;
-    Methods := m;
-  end;
+  met := fPublishedMethods.AddUniqueName(aMethodName,
+    'Duplicated published method name %.%', [obj, aMethodName], @result);
+  met^.Callback := aEvent;
+  met^.ByPassAuthentication := aByPassAuthentication;
+  met^.Methods := m;
   ResetRoutes;  // fRouter will be re-generated when needed
 end;
 

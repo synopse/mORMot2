@@ -1512,6 +1512,7 @@ var
   ndx: integer;
   im: TServiceInternalMethod;
   m: PtrInt;
+  int: PServiceContainerInterface;
   uri: RawUtf8;
 begin
   if (self = nil) or
@@ -1522,10 +1523,10 @@ begin
     uri := aService.fInterfaceMangledUri
   else
     uri := aService.fInterfaceUri;
-  PServiceContainerInterface(fInterfaces.AddUniqueName(uri, @result))^.
-    Service := aService;
+  int := fInterfaces.AddUniqueName(uri, @result);
+  int^.Service := aService;
   // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
-  uri := uri + '.';
+  Append(uri, '.');
   ndx := 0;
   for im := Low(im) to High(im) do
     AddServiceMethodInternal(uri + SERVICE_PSEUDO_METHOD[im], aService, ndx);

@@ -3902,9 +3902,11 @@ end;
 
 function TSocketIOLocalNamespace.RegisterEvent(const aEventName: RawUtf8;
   const aCallback: TOnSocketIOEvent): TSocketIOLocalNamespace;
+var
+  h: PEventHandler;
 begin
-  PEventHandler(fHandlers.AddUniqueName(aEventName,
-     'Duplicated event name %', [aEventName]))^.OnEvent := aCallback;
+  h := fHandlers.AddUniqueName(aEventName, 'Duplicated h name %', [aEventName]);
+  h^.OnEvent := aCallback;
   result := self;
 end;
 
@@ -3912,24 +3914,28 @@ procedure TSocketIOLocalNamespace.RegisterPublishedMethods(aInstance: TObject);
 var
   met: TPublishedMethodInfoDynArray;
   m: PtrInt;
+  h: PEventHandler;
 begin
   for m := 0 to GetPublishedMethods(aInstance, met) - 1 do
-    PEventHandler(fHandlers.AddUniqueName(met[m].Name,
-       'Duplicated event name % on %', [met[m].Name, aInstance]))^.
-      OnMethod := TOnSocketIOMethod(met[m].Method);
+  begin
+    h := fHandlers.AddUniqueName(met[m].Name,
+       'Duplicated h name % on %', [met[m].Name, aInstance]);
+    h^.OnMethod := TOnSocketIOMethod(met[m].Method);
+  end;
 end;
 
 procedure TSocketIOLocalNamespace.RegisterFrom(aAnother: TSocketIOLocalNamespace);
 var
   i: integer;
-  s: PEventHandler;
+  s, d: PEventHandler;
 begin
   if aAnother = nil then
     exit;
   s := pointer(aAnother.fHandler);
   for i := 1 to length(aAnother.fHandler) do
   begin
-    PEventHandler(fHandlers.AddUniqueName(s^.Name))^ := s^;
+    d := fHandlers.AddUniqueName(s^.Name);
+    d^ := s^;
     inc(s);
   end;
 end;
