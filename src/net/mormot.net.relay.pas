@@ -83,7 +83,7 @@ unit mormot.net.relay;
   down for whatever reason (e.g. network failure), both ends will be notified
   with no dandling sockets.
 
-  Warning: over such relay, rsoSharedNonce is mandatory in TRestServer.Options.
+  Warning: such relay is incompatible with rsoPerConnectionNonce server option.
 
   See Sample "WebSockets Relay" for a stand-alone Public Relay project,
   which could be reused as plain binary - no recompilation is needed.
@@ -269,7 +269,7 @@ type
   end;
 
   /// implements a Public Relay server, e.g. located on a small Linux/BSD box
-  // - warning: over such a relay, rsoSharedNonce is mandatory in TRestServer.Options
+  // - warning: relay is incompatible with rsoPerConnectionNonce server option
   TPublicRelay = class(TAbstractRelay)
   protected
     fServerJwt: TJwtAbstract;
@@ -319,7 +319,7 @@ type
 
   /// implements a Private Relay client, located in a private network behind
   // a restricted firewall
-  // - warning: over such relay, rsoSharedNonce is mandatory in TRestServer.Options
+  // - warning: relay is incompatible with rsoPerConnectionNonce server option
   TPrivateRelay = class(TAbstractRelay)
   protected
     fRelayHost, fRelayPort, fRelayKey, fRelayCustomHeaders,

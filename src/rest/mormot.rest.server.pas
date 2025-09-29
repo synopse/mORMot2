@@ -1597,8 +1597,9 @@ type
   // - rsoCookieSecure will add the "Secure" directive in the cookie content
   // - rsoNoUnknownUserResponse returns "Invalid password" instead of "Unknown
   // User" message to avoid client fuzzing about valid User names
-  // - rsoSharedNonce won't generate a server nonce specific to each connection
-  // (may be required e.g. over TPublicRelay)
+  // - rsoPerConnectionNonce will generate a server nonce specific to each
+  // connection: but won't work e.g. over TPublicRelay, or require proper
+  // "proxy_set_header X-Conn-ID $connection" configuration behind nginx proxy
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1621,7 +1622,7 @@ type
     rsoSessionInConnectionOpaque,
     rsoCookieSecure,
     rsoNoUnknownUserResponse,
-    rsoSharedNonce);
+    rsoPerConnectionNonce);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -5292,7 +5293,7 @@ begin
   ServerNonceSafe.UnLock;
   if Assigned(Ctxt) and
      Assigned(Ctxt.Server) and
-     not (rsoSharedNonce in Ctxt.Server.Options) then
+     (rsoPerConnectionNonce in Ctxt.Server.Options) then
     DefaultHasher128(@h.Lo, @Ctxt.Call^.LowLevelConnectionID, // maybe AesNiHash
       SizeOf(TRestConnectionID)); // make nonce unique per connection/client
   if Nonce256 <> nil then
