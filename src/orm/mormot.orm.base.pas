@@ -8059,6 +8059,10 @@ begin
 end;
 
 procedure TOrmTableAbstract.SetResultsSafe(Offset: PtrInt; Value: PUtf8Char);
+{$ifndef NOPOINTEROFFSET}
+var
+  diff: integer;
+{$endif NOPOINTEROFFSET}
 begin
   {$ifndef NOTORMTABLELEN}
   if fLen <> nil then
@@ -8070,15 +8074,16 @@ begin
   if Value <> nil then
   begin
     dec(Value, PtrUInt(fDataStart));
-    if (PtrInt(PtrUInt(Value)) > MaxInt) or
-       (PtrInt(PtrUInt(Value)) < -MaxInt) then
+    diff := PtrUInt(Value) shr 32;
+    if (diff <> 0) and
+       (diff <> -1) then
       EOrmTable.RaiseUtf8('%.Results[%] set overflow: all PUtf8Char ' +
         'should be in a [-2GB..+2GB] 32-bit range (value=% start=%) - ' +
         'consider forcing NOPOINTEROFFSET conditional for your project'
         // FPCMM_MEDIUM32BIT may be incompatible with TOrmTable for data >256KB
         // so may require NOPOINTEROFFSET conditional, so is not set by default
         {$ifdef FPCMM_MEDIUM32BIT} + ' or disable FPCMM_MEDIUM32BIT' {$endif},
-        [self, Offset, pointer(Value), pointer(fDataStart)]);
+        [self, Offset, pointer(Value), PointerToHexShort(fDataStart)]);
   end;
   fData[Offset] := PtrInt(Value);
   {$endif NOPOINTEROFFSET}
