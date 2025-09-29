@@ -87,8 +87,7 @@
 // disable POSIX mormot.lib.gsssapi support in mormot.rest.client/server units
 
 {.$define NOPOINTEROFFSET}
-// disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
-// note: FPCMM_MEDIUM32BIT may need this for data >256KB
+// disable TOrmTable offsets on 64-bit for JSON > 2GB
 
 {.$define NOTORMTABLELEN}
 // disable TOrmTable internal fLen[] pre-computed table - slower but less memory
