@@ -6470,7 +6470,6 @@ procedure TJsonWriter.AddFmt(Format: PUtf8Char; Values: PVarRec; ValuesCount: in
   Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
 var
   start: PUtf8Char;
-  Len: PtrInt;
 begin
   if Format <> nil then
   repeat
@@ -6481,14 +6480,7 @@ begin
         break;
       inc(Format);
     until false;
-    Len := Format - start;
-    if Len <> 0 then
-    begin
-      if BEnd - B <= Len then  // note: PtrInt(BEnd - B) could be < 0
-        FlushToStream;
-      MoveFast(start^, B[1], Len); // append Format with no escaping
-      inc(B, Len);
-    end;
+    AddNoJsonEscape(start, Format - start);
     if Format^ = #0 then
       exit;
     // add next value as text instead of Format^='%' placeholder
