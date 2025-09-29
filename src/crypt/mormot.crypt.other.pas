@@ -2779,11 +2779,11 @@ begin
   if (DestLen < 16) or
      (N <= 1) or
      (N >= PtrUInt(1 shl 31)) or
-     (not IsPowerOfTwo(N)) or        // must be > 1 and power of 2
-     (R = 0) or                      // R = blocksize
-     (P = 0) or                      // P = parallel
-     (QWord(R128 * N) > 2 shl 30) or // allow up to 2GB of RAM for V
-     (R * P >= 1 shl 30) or          // must satisfy r * p < 2^30
+     (not IsPowerOfTwo(N)) or               // must be > 1 and power of 2
+     (R = 0) or                             // R = blocksize
+     (P = 0) or                             // P = parallel
+     (QWord(R128) * N > QWord(2) shl 30) or // allow up to 2GB of RAM for V
+     (R * P >= 1 shl 30) or                 // must satisfy r * p < 2^30
      (R > (MaxInt shr 8)) or
      (N > ((MaxInt shr 7) div R)) then
     exit;
