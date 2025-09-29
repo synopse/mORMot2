@@ -1525,9 +1525,10 @@ type
       aNode: TRestNode): TRestTreeNode; overload;
     /// register a given URI to the tree, for a given HTTP method
     // - 'modelroot/' will be prefixed to the supplied aUri
-    procedure Setup(aFrom: TUriMethods; const aUri: RawUtf8; aNode: TRestNode;
-      aTable: TOrmModelProperties; aBlob: TOrmPropInfoRttiRawBlob = nil;
-      aMethodIndex: integer = -1; aService: TServiceFactory = nil); overload;
+    procedure Setup(aFrom: TUriMethods; const aUri: array of RawByteString;
+      aNode: TRestNode; aTable: TOrmModelProperties;
+      aBlob: TOrmPropInfoRttiRawBlob = nil; aMethodIndex: integer = -1;
+      aService: TServiceFactory = nil); overload;
     /// quickly search for the node corresponding to Ctxt.Method and Uri
     // - should never raise an exception
     function Lookup(Ctxt: TRestServerUriContext): TRestTreeNode;
@@ -4587,10 +4588,10 @@ var
   begin
     if rn = rnInterfaceClientID then
       Append(aName, '/<int:clientid>');
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], aName, rn, nil, nil,
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], [aName], rn, nil, nil,
       ndx, met^.InterfaceService);
     if rn <> rnInterfaceClientID then
-      Router.Setup([mGET, mPOST, mPUT, mDELETE], aName + '/', rn, nil, nil,
+      Router.Setup([mGET, mPOST, mPUT, mDELETE], [aName, '/'], rn, nil, nil,
         ndx, met^.InterfaceService); // /Model/Interface/Method/
   end;
 
@@ -4764,7 +4765,7 @@ begin
   for i := 0 to Server.Services.Count - 1 do
   begin
     s := @Server.Services.InterfaceList[i];
-    Router.Setup([mPOST], s^.InterfaceName, // as Server.Services[Uri]
+    Router.Setup([mPOST], [s^.InterfaceName], // as Server.Services[Uri]
       rnInterface, nil, nil, -1, s^.Service);
   end;
   // ServiceMethodIndex will be retrieved from "method": in body
@@ -6059,17 +6060,19 @@ begin
   result.Data.Command := exec;
 end;
 
-procedure TRestRouter.Setup(aFrom: TUriMethods; const aUri: RawUtf8;
+procedure TRestRouter.Setup(aFrom: TUriMethods; const aUri: array of RawByteString;
   aNode: TRestNode; aTable: TOrmModelProperties; aBlob: TOrmPropInfoRttiRawBlob;
   aMethodIndex: integer; aService: TServiceFactory);
 var
   m: TUriMethod;
   n: TRestTreeNode;
+  uri: RawUtf8;
 begin
+  Join(aUri, uri);
   for m := low(fTree) to high(fTree) do
     if m in aFrom then
     begin
-      n := Setup(m, aUri, aNode);
+      n := Setup(m, uri, aNode);
       n.Data.Table := aTable;
       n.Data.Blob := aBlob;
       n.Data.MethodIndex := aMethodIndex; // method or service method index
@@ -6961,7 +6964,7 @@ begin
        not (rsoNoTableURI in fOptions) then
     begin
       // ModelRoot
-      r.Setup([mGET, mPOST, mBEGIN, mEND, mABORT], '', rnTable, nil);
+      r.Setup([mGET, mPOST, mBEGIN, mEND, mABORT], [], rnTable, nil);
       if not (rsoNoInternalState in fOptions) then
         r.Setup(mSTATE, '', rnState);
       for i := 0 to fModel.TablesMax do
@@ -6969,26 +6972,26 @@ begin
         m := fModel.TableProps[i];
         t := m.Props.SqlTableName;
         // ModelRoot/TableName
-        r.Setup([mGET, mPOST, mPUT, mDELETE, mBEGIN], t, rnTable, m);
+        r.Setup([mGET, mPOST, mPUT, mDELETE, mBEGIN], [t], rnTable, m);
         // ModelRoot/TableName/<int:tableid>
         r.Setup([mGET, mLOCK, mUNLOCK, mPUT, mDELETE],
-          Join([t, '/<int:tableid>']), rnTableID, m);
+          [t, '/<int:tableid>'], rnTableID, m);
         for j := 0 to high(m.Props.BlobFields) do
         begin
           b := m.Props.BlobFields[j];
           // ModelRoot/TableName/<int:tableid>/BlobField
           r.Setup([mGET, mPUT],
-            Join([t,'/<int:tableid>/', b.Name]), rnTableIDBlob, m, b);
+            [t,'/<int:tableid>/', b.Name], rnTableIDBlob, m, b);
           // ModelRoot/TableName/BlobField/<int:tableid>
           r.Setup([mGET, mPUT],
-            Join([t, '/', b.Name, '/<int:tableid>']), rnTableIDBlob, m, b);
+            [t, '/', b.Name, '/<int:tableid>'], rnTableIDBlob, m, b);
         end;
         // ModelRoot/TableName/<int:tableid>/<method>
         r.Setup([mGET, mPOST, mPUT, mDELETE],
-          Join([t, '/<int:tableid>/<method>']), rnTableIDMethod, m, nil);
+          [t, '/<int:tableid>/<method>'], rnTableIDMethod, m, nil);
         // ModelRoot/TableName/<method>
         r.Setup([mGET, mPOST, mPUT, mDELETE],
-          Join([t, '/<method>']), rnTableMethod, m, nil);
+          [t, '/<method>'], rnTableMethod, m, nil);
       end;
     end;
     // method-based services
@@ -7001,20 +7004,20 @@ begin
       if n = '' then
         continue;
       // ModelRoot/MethodName and ModelRoot/MethodName/
-      r.Setup(sm^.Methods, n, rnMethod, nil, nil, j);
-      r.Setup(sm^.Methods, n + '/', rnMethod, nil, nil, j);
+      r.Setup(sm^.Methods, [n], rnMethod, nil, nil, j);
+      r.Setup(sm^.Methods, [n, '/'], rnMethod, nil, nil, j);
       if (j <> fPublishedMethodAuthIndex) and
          (j <> fPublishedMethodStatIndex) and
          (j <> fPublishedMethodBatchIndex) then
       begin
         // ModelRoot/MethodName/<path:fulluri>
         r.Setup(sm^.Methods,
-          Join([n, '/<path:fulluri>']), rnMethodPath, nil, nil, j);
+          [n, '/<path:fulluri>'], rnMethodPath, nil, nil, j);
         if (rsoMethodUnderscoreAsSlashUri in fOptions) and
            (PosExChar('_', n) <> 0) then
           // ModelRoot/Method/Name from Method_Name
           r.Setup(sm^.Methods,
-            StringReplaceChars(n, '_', '/'), rnMethod, nil, nil, j);
+            [StringReplaceChars(n, '_', '/')], rnMethod, nil, nil, j);
       end;
     end;
     // interface-based services
@@ -7373,6 +7376,7 @@ var
   one: TUriMethod;
   pos: PtrInt;
   obj: TObject;
+  met: PRestServerMethod;
 begin
   // handle '_VERB1_[_VERB2_][..]MethodName' pattern
   TrimSelf(aMethodName);
