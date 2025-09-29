@@ -6457,10 +6457,8 @@ var
   fieldname: PUtf8Char;
   props: TOrmProperties;
 begin
-  if aTable = nil then // avoid any GPF
-    exit;
   fTable := aTable;
-  if aTable.fData = nil then
+  if aTable.RowCount = 0 then
     exit; // void content
   props := nil;
   if aCheckTableName <> ctnNoCheck then
@@ -8163,8 +8161,7 @@ begin
     exit;
   T := TOrmTableJson.CreateFromTables(ObjectsClass, sql, json,
     {ownJSON=}(GetRefCount(json) = 1));
-  if (T = nil) or
-     (T.fData = nil) then
+  if T.RowCount = 0 then
   begin
     T.Free;
     exit;

@@ -2102,9 +2102,9 @@ type
   // - will be fully implemented as TOrmTableJson holding JSON content
   TOrmTableAbstract = class
   protected
-    fRowCount: PtrInt;
-    fFieldCount: PtrInt;
-    fData: TOrmTableDataArray;
+    fRowCount: integer;
+    fFieldCount: integer;
+    fData: TOrmTableDataArray; // 32-bit pointer or fDataStart[] 32-bit offset
     {$ifndef NOPOINTEROFFSET} // reduce memory consumption by half on 64-bit CPU
     fDataStart: PUtf8Char;
     {$endif NOPOINTEROFFSET}
@@ -2679,11 +2679,13 @@ type
     property RowCount: PtrInt
       read GetRowCount;
     /// read-only access to the number of fields for each Row in this table
-    property FieldCount: PtrInt
+    property FieldCount: integer
       read fFieldCount;
     /// raw access to the data values memory pointers
     // - you should rather use the Get*() methods which can use the length
     // - returns the text value, nil for JSON null, or #0 for JSON ""
+    // - setting a value using this property will call SetResultsSafe() which
+    // increase memory consumption on 64-bit targets (but is safe)
     property Results[Offset: PtrInt]: PUtf8Char
       read GetResults write SetResultsSafe;
     /// raw access to the data values UTF-8 length
@@ -8665,7 +8667,6 @@ end;
 function TOrmTableAbstract.GetID(Row: PtrInt): TID;
 begin
   if (self = nil) or
-     (fData = nil) or
      (fFieldIndexID < 0) or
      (PtrUInt(Row) > PtrUInt(fRowCount)) then
     result := 0
@@ -8676,7 +8677,6 @@ end;
 function TOrmTableAbstract.Get(Row, Field: PtrInt): PUtf8Char;
 begin
   if (self = nil) or
-     (fData = nil) or
      (PtrUInt(Row) > PtrUInt(fRowCount)) or
      (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     result := nil
@@ -8688,8 +8688,7 @@ function TOrmTableAbstract.GetWithLen(Row, Field: PtrInt; out Len: integer): PUt
 begin
   if (self = nil) or
      (PtrUInt(Row) > PtrUInt(fRowCount)) or
-     (PtrUInt(Field) >= PtrUInt(fFieldCount)) or
-     (fData = nil) then
+     (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
   begin
     Len := 0;
     result := nil;
@@ -10244,8 +10243,7 @@ end;
 function TOrmTableAbstract.FieldLengthMean(Field: PtrInt): cardinal;
 begin
   if (self = nil) or
-     (PtrUInt(Field) >= PtrUInt(fFieldCount)) or
-     (fData = nil) then
+     (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     result := 0
   else
   begin
