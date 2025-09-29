@@ -118,6 +118,8 @@ type
     fClientAddr: TNetAddr;
     fPort: TNetPort;
     fTimeoutAcceptSecs: cardinal;
+    function TransmitSock: TNetSocket;
+      {$ifdef HASINLINE} inline; {$endif}
     /// accept/connect the connection, then crypt/redirect to fTransmit
     procedure DoExecute; override;
   public
@@ -132,6 +134,7 @@ type
     /// true if internal state is stProcessing, i.e. after accept() and within
     // the main redirection loop
     function Processing: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
   published
     property TimeoutAcceptSecs: cardinal
       read fTimeoutAcceptSecs;
@@ -622,6 +625,19 @@ begin
   FreeAndNil(fAes[false]);
 end;
 
+function TTunnelLocalThread.Processing: boolean;
+begin
+  result := (self <> nil) and
+            (fState = stProcessing);
+end;
+
+function TTunnelLocalThread.TransmitSock: TNetSocket;
+begin
+  result := fClientSock;    // after Accept()
+  if result = nil then
+    result := fServerSock;  // after Connect()
+end;
+
 procedure TTunnelLocalThread.OnReceived(Frame: pointer; FrameLen: PtrInt);
 var
   res: TNetResult;
@@ -655,7 +671,7 @@ begin
       exit;
     if fOwner <> nil then
       inc(fOwner.fBytesIn, FrameLen);
-    res := fClientSock.SendAll(Frame, FrameLen, @Terminated);
+    res := TransmitSock.SendAll(Frame, FrameLen, @Terminated);
   finally
     fSafe.UnLock;
   end;
@@ -665,12 +681,6 @@ begin
   ETunnel.RaiseUtf8('%.OnReceived(%): error % when retransmitting',
     [self, fPort, ToText(res)^]);
   Terminate;
-end;
-
-function TTunnelLocalThread.Processing: boolean;
-begin
-  result := (self <> nil) and
-            (fState = stProcessing);
 end;
 
 procedure TTunnelLocalThread.DoExecute;
@@ -720,7 +730,7 @@ begin
       while not Terminated do
       begin
         // wait for some data on the local loopback
-        res := fClientSock.RecvWait(100, tmp, @Terminated);
+        res := TransmitSock.RecvWait(100, tmp, @Terminated);
         case res of
           nrRetry:
             continue;

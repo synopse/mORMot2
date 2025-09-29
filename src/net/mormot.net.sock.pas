@@ -2367,7 +2367,7 @@ end;
 function NetEventsToNetResult(ev: TNetEvents): TNetResult;
 begin
   if ev * [neRead, neWrite] <> [] then
-    result := nrOk
+    result := nrOk // [neRead/neWrite + neClosed] returns nrOk
   else if ev = [] then
     result := nrRetry
   else if neClosed in ev then
