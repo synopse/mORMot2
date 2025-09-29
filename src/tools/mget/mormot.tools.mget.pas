@@ -173,12 +173,12 @@ end;
 
 function TMGetProcess.GetTcpTimeoutSec: integer;
 begin
-  result := Options.CreateTimeoutMS * 1000;
+  result := Options.CreateTimeoutMS div 1000;
 end;
 
 procedure TMGetProcess.SetTcpTimeoutSec(Seconds: integer);
 begin
-  Options.CreateTimeoutMS := Seconds div 1000;
+  Options.CreateTimeoutMS := Seconds * 1000;
 end;
 
 constructor TMGetProcess.Create;
