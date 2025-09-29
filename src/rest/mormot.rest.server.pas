@@ -6036,6 +6036,7 @@ begin
   inc(fTreeCount[aFrom]);
   inc(fNodeCount[aNode]);
   result.Data.Node := aNode;
+  exec := execNone;
   case aNode of
     rnTable,
     rnTableID,
@@ -6054,9 +6055,9 @@ begin
     rnInterface,
     rnInterfaceClientID:
       exec := execSoaByInterface;
-  else
-    ERestTree.RaiseUtf8('%.Setup(%)?', [self, ToText(aNode)^]);
   end;
+  if exec = execNone then
+    ERestTree.RaiseUtf8('%.Setup(%)?', [self, ToText(aNode)^]);
   result.Data.Command := exec;
 end;
 
