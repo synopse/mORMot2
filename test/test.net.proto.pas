@@ -1876,7 +1876,7 @@ begin
     restserver := TRestServerFullMemory.CreateWithOwnModel(
       [], {withauth=}true, 'tun');
     try
-      restserver.CreateMissingTables;
+      restserver.Server.CreateMissingTables;
       restserver.ServiceDefine(relay.Agent, [ITunnelAgent]);
       restserver.ServiceContainer.InjectResolver([relay]);
       restserver.ServiceDefine(TTunnelconsole, [ITunnelConsole], sicPerSession);
