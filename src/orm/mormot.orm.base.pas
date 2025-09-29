@@ -2107,6 +2107,7 @@ type
     fData: TOrmTableDataArray; // 32-bit pointer or fDataStart[] 32-bit offset
     {$ifndef NOPOINTEROFFSET} // reduce memory consumption by half on 64-bit CPU
     fDataStart: PUtf8Char;
+    fDataSafe: TPUtf8CharDynArray; // SetResultsSafe() for TOrmTableWritable
     {$endif NOPOINTEROFFSET}
     {$ifndef NOTORMTABLELEN}
     fLen: TIntegerDynArray;
@@ -8004,6 +8005,7 @@ begin
   fData := source.fData;
   {$ifndef NOPOINTEROFFSET}
   fDataStart := source.fDataStart;
+  fDataSafe := source.fDataSafe;
   {$endif NOPOINTEROFFSET}
   {$ifndef NOTORMTABLELEN}
   fLen := source.fLen;
@@ -8019,7 +8021,13 @@ begin
   {$ifdef NOPOINTEROFFSET}
   result := fData[Offset];
   {$else}
-  result := PUtf8Char(PtrInt(fData[Offset]));
+  result := pointer(fDataSafe);
+  if result <> nil then
+  begin
+    result := PPUtf8CharArray(result)[Offset]; // for TOrmTableWritable
+    exit;
+  end;
+  result := PUtf8Char(PtrUInt(fData[Offset]));
   Offset := PtrUInt(fDataStart); // in two steps for better code generation
   if result = nil then
     Offset := PtrInt(result); // compile as branchless cmove on FPC
@@ -8056,14 +8064,28 @@ begin
   {$else}
   if Value <> nil then
     dec(Value, PtrUInt(fDataStart));
-  fData[Offset] := PtrInt(Value);
+  fData[Offset] := PtrUInt(Value); // we assume fDataSafe = nil
   {$endif NOPOINTEROFFSET}
 end;
+
+{$ifndef NOPOINTEROFFSET}
+procedure FillSafe(s: PInteger; d: PPUtf8Char; start: PUtf8Char; n: PtrInt);
+begin
+  if s <> nil then
+    repeat
+      if s^ <> 0 then
+        d^ := start + s^; // pointer to the existing data
+      inc(s);
+      inc(d);
+      dec(n);
+    until n = 0;
+end;
+{$endif NOPOINTEROFFSET}
 
 procedure TOrmTableAbstract.SetResultsSafe(Offset: PtrInt; Value: PUtf8Char);
 {$ifndef NOPOINTEROFFSET}
 var
-  diff: integer;
+  n: PtrInt;
 {$endif NOPOINTEROFFSET}
 begin
   {$ifndef NOTORMTABLELEN}
@@ -8073,21 +8095,17 @@ begin
   {$ifdef NOPOINTEROFFSET}
   fData[Offset] := Value;
   {$else}
-  if Value <> nil then
+  n := length(fDataSafe); // use pointers in fDataSafe[] not offsets in fData[]
+  if n = 0 then
   begin
-    dec(Value, PtrUInt(fDataStart));
-    diff := PtrUInt(Value) shr 32;
-    if (diff <> 0) and
-       (diff <> -1) then
-      EOrmTable.RaiseUtf8('%.Results[%] set overflow: all PUtf8Char ' +
-        'should be in a [-2GB..+2GB] 32-bit range (value=% start=%) - ' +
-        'consider forcing NOPOINTEROFFSET conditional for your project'
-        // FPCMM_MEDIUM32BIT may be incompatible with TOrmTable for data >256KB
-        // so may require NOPOINTEROFFSET conditional, so is not set by default
-        {$ifdef FPCMM_MEDIUM32BIT} + ' or disable FPCMM_MEDIUM32BIT' {$endif},
-        [self, Offset, pointer(Value), PointerToHexShort(fDataStart)]);
-  end;
-  fData[Offset] := PtrInt(Value);
+    n := (fRowCount + 1) * fFieldCount; // first row = field names
+    SetLength(fDataSafe, NextGrow(n));  // initial allocation
+    FillSafe(pointer(fData), pointer(fDataSafe), fDataStart, n); // convert
+    fData := nil; // will use fDataSafe[] pointers from now on
+  end
+  else if Offset >= n then
+    SetLength(fDataSafe, NextGrow(Offset));
+  fDataSafe[Offset] := Value;
   {$endif NOPOINTEROFFSET}
 end;
 
@@ -8107,7 +8125,6 @@ var
   up: PNormTableByte;
 begin
   if (self <> nil) and
-     (fData <> nil) and
      (FieldName <> nil) and
      (fFieldCount > 0) then
     if IsRowID(FieldName) then
@@ -8281,9 +8298,15 @@ begin
     exit; // out of range
   if Row < fRowCount then
   begin
-    Row := Row * FieldCount; // convert row index into position in fData[Offset]
-    MoveFast(fData[Row + FieldCount], fData[Row],
-      (fRowCount * FieldCount - Row) * SizeOf(fData[Row]));
+    Row := Row * FieldCount; // convert row index into offset in fData(Safe)[]
+    {$ifndef NOPOINTEROFFSET}
+    if fDataSafe <> nil then
+      MoveFast(fDataSafe[Row + FieldCount], fDataSafe[Row],
+        (fRowCount * FieldCount - Row) * SizeOf(fDataSafe[Row]))
+    else
+    {$endif NOPOINTEROFFSET}
+      MoveFast(fData[Row + FieldCount], fData[Row],
+        (fRowCount * FieldCount - Row) * SizeOf(fData[Row]));
   end;
   dec(fRowCount);
   result := true;
@@ -8695,16 +8718,8 @@ begin
   end
   else
   begin
-    inc(Field, Row * fFieldCount);
-    {$ifdef NOPOINTEROFFSET} // inlined GetResults() for Delphi 7
-    result := fData[Field];
-    {$else}
-    result := PUtf8Char(PtrInt(fData[Field]));
-    Row := PtrUInt(fDataStart); // in two steps for better code generation
-    if result = nil then
-      Row := PtrInt(result); // compile as branchless cmove on FPC
-    inc(result, Row);
-    {$endif NOPOINTEROFFSET}
+    inc(Field, Row * fFieldCount); // now Field = Offset in fData(Safe)[]
+    result := GetResults(Field);
     {$ifdef NOTORMTABLELEN}
     Len := StrLen(result);
     {$else}
@@ -9739,6 +9754,8 @@ begin
   quicksort.Len := pointer(fLen);
   {$endif NOTORMTABLELEN}
   {$ifndef NOPOINTEROFFSET}
+  if fDataSafe <> nil then
+    EOrmTable.RaiseUtf8('%.SortFields not allowed after write', [self]);
   quicksort.DataStart := fDataStart;
   {$endif NOPOINTEROFFSET}
   if fFieldIndexID < 0 then // consummed as OffsetID = OffsetField - OField2ID
@@ -9918,6 +9935,8 @@ begin
   quicksort.Len := pointer(fLen);
   {$endif NOTORMTABLELEN}
   {$ifndef NOPOINTEROFFSET}
+  if fDataSafe <> nil then
+    EOrmTable.RaiseUtf8('%.SortFields not allowed after SetResultSafe', [self]);
   quicksort.DataStart := fDataStart;
   {$endif NOPOINTEROFFSET}
   quicksort.FieldCount := FieldCount;
@@ -9970,6 +9989,10 @@ begin
      (FieldCount <= 0) then
     exit;
   // move fData[] in two passes: rows with bit set, then rows with bit unset
+  {$ifndef NOPOINTEROFFSET}
+  if fDataSafe <> nil then
+    EOrmTable.RaiseUtf8('%.SortBitsFirst after write', [self]);
+  {$endif NOPOINTEROFFSET}
   n := fRowCount * FieldCount;
   SetLength(old, n);
   d := @fData[FieldCount]; // ignore first row = header
