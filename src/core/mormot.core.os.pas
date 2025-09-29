@@ -6029,7 +6029,7 @@ begin
             (PCardinal(Host)^ = ord(':') + ord(':') shl 8 + ord('1') shl 16);
 end;
 
-function _RawToBase64(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;
+function {%H-}_RawToBase64(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;
 begin
   raise EOSException.Create('No RawToBase64(): needs mormot.core.buffers.pas');
 end;
