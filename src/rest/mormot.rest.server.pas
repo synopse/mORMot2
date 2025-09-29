@@ -6105,7 +6105,8 @@ begin
     exit;
   // copy the execution node information into Ctxt
   Ctxt.fNode := result.Data.Node;
-  Ctxt.fCommand := result.Data.Command;
+  if Ctxt.fCommand = execNone then
+    Ctxt.fCommand := result.Data.Command;
   t := result.Data.Table;
   if t <> nil then
   begin
