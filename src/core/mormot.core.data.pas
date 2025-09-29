@@ -11389,6 +11389,7 @@ function TRadixTreeNodeParams.Lookup(P: PUtf8Char; Ctxt: TObject): TRadixTreeNod
 var
   n: TDALen;
   c: PUtf8Char;
+  a: AnsiChar;
   t: PNormTable;
   f: TRadixTreeNodeFlags;
   ch: ^TRadixTreeNodeParams;
@@ -11399,7 +11400,8 @@ begin
   begin
     // static text
     c := pointer(Chars);
-    if c <> nil then
+    if (c <> nil) and
+       (c^ <> '<') then
     begin
       repeat
         if (t^[P^] <> c^) or // may do LowerCaseSelf(Chars) at Insert()
@@ -11422,9 +11424,10 @@ begin
       if (P^ < '0') or (P^ > '9') then
         exit; // void <integer> is not allowed
       repeat
-        inc(P)
-      until (P^ < '0') or (P^ > '9');
-      if (P^ <> #0) and (P^ <> '?') and (P^ <> '/') then
+        inc(P);
+        a := P^;
+      until (a < '0') or (a > '9');
+      if (a <> #0) and (a <> '?') and (a <> '/') then
         exit; // not an integer
     end
     else if rtfParamPath in f then // <path:filename> or * as <path:path>
@@ -11433,7 +11436,8 @@ begin
     else // regular <param>
       while (P^ <> #0) and (P^ <> '?') and (P^ <> '/') do
         inc(P);
-    if (Ctxt <> nil) and not LookupParam(Ctxt, c, P - c) then
+    if (Ctxt <> nil) and
+       not LookupParam(Ctxt, c, P - c) then
       exit; // the parameter is not in the expected format for Ctxt
   end;
   // if we reached here, the URI do match up to now
@@ -11453,6 +11457,7 @@ begin
       n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
       repeat
         if (ch^.Names <> nil) or
+           (ch^.Chars[1] = '<') or
            (ch^.Chars[1] = t^[P^]) then // recursive call only if worth it
         begin
           result := ch^.Lookup(P, Ctxt);
