@@ -1541,7 +1541,7 @@ begin
     result := Rest.EngineList(TableIndex, aSql)
   else
     // complex TOrmVirtualTableJson/External queries will rely on virtual table
-    result := MainEngineList(SQL, false, nil);
+    result := MainEngineList(SQL, {ajax=}false, nil);
   if result = '[]'#$A then
     result := '';
 end;

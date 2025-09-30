@@ -3780,7 +3780,9 @@ begin
       end;
       where := FormatUtf8('% LIMIT % OFFSET %', [where, results, startindex]);
     end;
-  end;
+  end
+  else
+    select := ROWID_TXT; // /root/tablename returns all IDs of this table
   // execute the select/where request on this table
   sql := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
     select, TrimU(where));
@@ -3852,7 +3854,7 @@ begin
           OrmGetTableID
         else if Method <> mLOCK then
           // GET ModelRoot/TableName with 'select=..&where=' or YUI paging
-          OrmGetTable(fParameters);
+          OrmGetTable(fParameters); // use URI parameters after '?'
         if fCall^.OutStatus = HTTP_SUCCESS then
           Server.fStats.NotifyOrm(Method);
       end;
