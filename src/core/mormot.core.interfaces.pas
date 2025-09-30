@@ -2245,21 +2245,6 @@ type
   // TRestServer.ServiceReleaseTimeoutMicrosec delay
   TInterfaceMethodOptions = set of TInterfaceMethodOption;
 
-  /// available execution options for an interface-based service provider
-  // - mimics TServiceFactoryServer homonymous boolean properties
-  TInterfaceOption = (
-    optByPassAuthentication,
-    optResultAsJsonObject,
-    optResultAsJsonObjectWithoutResult,
-    optResultAsXMLObject,
-    optResultAsXMLObjectIfAcceptOnlyXML,
-    optExcludeServiceLogCustomAnswer);
-
-  /// set of execution options for an interface-based service provider
-  // - mimics TServiceFactoryServer homonymous boolean properties
-  // - as used by TServiceFactoryServerAbstract.SetWholeOptions()
-  TInterfaceOptions = set of TInterfaceOption;
-
   /// callback called by TInterfaceMethodExecute to process an interface
   // callback parameter
   // - implementation should set the Obj local variable to an instance of

@@ -1274,7 +1274,7 @@ begin
                   W.AddShorter(',status:');
                   W.AddU(Status);
                 end;
-                if not fExcludeServiceLogCustomAnswer and
+                if not (optExcludeServiceLogCustomAnswer in fOptions) and
                    (len > 0) and
                    (len <= 1024) then
                 begin
