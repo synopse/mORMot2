@@ -1071,7 +1071,7 @@ type
 {$endif OSWINDOWS}
 
 var
-  /// system and process 256-bit entropy state
+  /// system and process 256-bit entropy dual states
   // - could be used as 512-bit salt: followed by other system global variables
   SystemEntropy: record
     /// 128-bit of entropy quickly gathered during unit/process initialization

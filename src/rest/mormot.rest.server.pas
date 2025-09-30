@@ -5295,8 +5295,8 @@ begin
     if PInteger(@ServerProcessKdf)^ = 0 then
     begin
       // first time used: initialize the HMAC-SHA-256 secret for this process
-      ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
       Random128(@h.Lo); // 128-bit security is enough
+      ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
       ServerProcessKdf.Update(h.Lo);
     end;
     // cache the new nonce for this timestamp (called at most every 4.3 minutes)

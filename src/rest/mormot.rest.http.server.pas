@@ -1224,7 +1224,7 @@ begin
      not IsContentTypeJsonU(Ctxt.InContentType) and
      ((call.InHead = '') or
       (FindNameValue(pointer(call.InHead), HEADER_CONTENT_TYPE_UPPER) = nil)) then
-    AppendLine(call.InHead, [HEADER_CONTENT_TYPE, Ctxt.InContenttype]);
+    AppendLine(call.InHead, [HEADER_CONTENT_TYPE, Ctxt.InContentType]);
   call.InBody := Ctxt.InContent;
   // allow custom URI routing before TRestServer instances
   serv := nil;
