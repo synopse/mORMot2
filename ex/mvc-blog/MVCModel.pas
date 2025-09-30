@@ -466,10 +466,11 @@ begin
   else
     FastSetString(fText, P, Text - P);
   SetLength(fJsonData, fFieldCount * (fRowCount + 1));
+  fDataStart := P - 1;
   fData := pointer(fJsonData);
   for f := 0 to fFieldCount - 1 do
   begin
-    SetResultsSafe(f, pointer(fFields[f]));
+    SetResults(f, pointer(fFields[f])); // assume no 32-bit overflow from Text
     SetFieldType(f, oftUTF8Text);
   end;
   for r := 1 to fRowCount do
@@ -478,7 +479,7 @@ begin
     inc(P);
     for f := 0 to fFieldCount - 1 do
     begin
-      SetResultsSafe(r * fFieldCount + f, P);
+      SetResults(r * fFieldCount + f, P);
       D := P;
       while P^ <> '"' do
         if P^ = #0 then
