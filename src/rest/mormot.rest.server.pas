@@ -1603,6 +1603,7 @@ type
   // - rsoPerConnectionNonce will generate a server nonce specific to each
   // connection: but won't work e.g. over TPublicRelay, or require proper
   // "proxy_set_header X-Conn-ID $connection" configuration behind nginx proxy
+  // with the corresponding THttpServerGeneric.RemoteConnIDHeader := 'X-Conn-ID'
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
