@@ -8198,24 +8198,24 @@ end;
 constructor TWrapperContext.CreateFromUsedInterfaces(
   const aSourcePath, aDescriptions: TFileName);
 var
-  interfaces: TSynObjectListLightLocked;
+  cache: TSynObjectListLightLocked;
   services: TDocVariantData;
   i: PtrInt;
 begin
   Create(aSourcePath, aDescriptions);
-  interfaces := TInterfaceFactory.GetUsedInterfaces;
-  if interfaces = nil then
+  cache := TInterfaceFactory.GetUsedInterfaces;
+  if cache = nil then
     exit;
   {%H-}services.InitFast;
-  interfaces.Safe.ReadLock;
+  cache.Safe.ReadLock;
   try
-    for i := 0 to interfaces.Count - 1 do
+    for i := 0 to cache.Count - 1 do
       services.AddItem(_ObjFast([
         'interfaceName',
-          TInterfaceFactory(interfaces.List[i]).InterfaceRtti.Name,
-        'methods', ContextFromMethods(interfaces.List[i])]));
+          TInterfaceFactory(cache.List[i]).InterfaceRtti.Name,
+        'methods', ContextFromMethods(cache.List[i])]));
   finally
-    interfaces.Safe.ReadUnLock;
+    cache.Safe.ReadUnLock;
   end;
   fSOA.InitObject(['enabled',  true,
                    'services', variant(services)], JSON_FAST);

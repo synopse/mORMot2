@@ -763,10 +763,10 @@ type
     fOutCustomHeaders: RawUtf8;
     fInContent: RawByteString;
     fOutContent: RawByteString;
-    fConnectionID: THttpServerConnectionID;
-    fConnectionFlags: THttpServerRequestFlags;
-    fAuthenticationStatus: THttpServerRequestAuthentication;
-    fInternalFlags: set of (ifUrlParamPosSet);
+    fConnectionID: THttpServerConnectionID;                  // 64-bit
+    fConnectionFlags: THttpServerRequestFlags;               // 8-bit
+    fAuthenticationStatus: THttpServerRequestAuthentication; // 8-bit
+    fInternalFlags: set of (ifUrlParamPosSet);               // 8-bit
     fRespStatus: integer;
     fConnectionThread: TThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
