@@ -9186,7 +9186,7 @@ begin
     ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24:
       ; // found
     ord('o') + ord('c') shl 8 + ord('t') shl 16 + ord('e') shl 24:
-      exit; // application/octet-stream is very common
+      exit; // application/octet-stream is the 2nd most common
   else
     begin // try application/vnd.####+json
       inc(ContentType, 12);

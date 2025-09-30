@@ -1945,7 +1945,8 @@ begin
   end
   else
     head := 'request';
-  FrameCompress(head, [RawUtf8(Method), Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
+  FrameCompress(head,
+    [RawUtf8(Method), Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
     Ctxt.InContent, RawUtf8(InContentType), request);
   if fSequencing then
     // 'r000001' -> 'a000001'

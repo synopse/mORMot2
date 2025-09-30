@@ -1722,8 +1722,8 @@ var
   local: TNetPort;
 begin
   TSynLogTestLog.EnterLocal(log, self, 'TTunnelRelay');
-  if not CheckEqual(relay.ConsoleCount, length(console)) then
-    exit; // avoid "division by zero" below
+  if CheckFailed(length(console) <> 0) then
+    exit; // avoid division per zero in "i mod length(console)" below
   // emulate connection of AGENT_COUNT tunnels using several consoles
   // (see ITunnelOpen main comment about the typical TTunnelRelay steps)
   SetLength(agentcallback, AGENT_COUNT);
@@ -1748,7 +1748,7 @@ begin
   SetLength(session, AGENT_COUNT);
   for i := 0 to AGENT_COUNT - 1 do
   begin
-    c := i mod relay.ConsoleCount; // round-robin of agents over consoles
+    c := i mod length(console); // round-robin of agents over consoles
     Check(c <= high(console));
     session[i] := console[c].TunnelPrepare(consolecallback[i]);
     check(session[i] <> 0);
@@ -1761,6 +1761,8 @@ begin
       a := agent[i];
     check(a.TunnelPrepare(session[i], agentcallback[i]));
   end;
+  if not CheckEqual(relay.ConsoleCount, length(console), 'ConsoleCount') then
+    exit; // all console[] should be connected to the relay
   // 4) TTunnelLocal.Open() on the console and agent sides
   if Assigned(log) then
     log.Log(sllInfo, 'Tunnel: reciprocal Open() handshake', self);
@@ -1774,7 +1776,7 @@ begin
         a := agent[i];
       worker[i] := TunnelBackgroundOpen(agentlocal[i],
         session[i], a, nil, nil);
-      c := i mod relay.ConsoleCount; // round-robin of agents over consoles
+      c := i mod length(console); // round-robin of agents over consoles
       local := consolelocal[i].Open(
         session[i], console[c], tunneloptions, 1000, tunnelappsec, cLocalhost,
         ['agentNumber', i]);
@@ -1799,7 +1801,7 @@ begin
       else
         a := agent[i];
       Check(a.TunnelCommit(session[i]));
-      c := i mod relay.ConsoleCount; // round-robin of agents over consoles
+      c := i mod length(console); // round-robin of agents over consoles
       Check(console[c].TunnelCommit(session[i]));
     end;
     // create two local sockets and let them play with each tunnel
