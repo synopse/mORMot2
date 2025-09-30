@@ -5084,7 +5084,7 @@ begin
        (saoHandleUnknownLogonAsStar in fOptions) then
       if fServer.Orm.Retrieve('LogonName=?', [], ['*'], result) then
       begin
-        result.LogonName := aUserName;
+        result.LogonName   := aUserName;
         result.DisplayName := aUserName;
       end;
   end;
@@ -5287,7 +5287,7 @@ begin
       ServerProcessKdf.Update(h.Lo);
     end;
     // cache the new nonce for this timestamp (called at most every 4.3 minutes)
-    ServerProcessKdf.Compute(@tix32, 4, h.b);
+    ServerProcessKdf.Compute(@tix32, 4, n^.h.b);
   end;
   h := n^.h; // local copy
   ServerNonceSafe.UnLock;
