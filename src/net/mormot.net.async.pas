@@ -5207,7 +5207,7 @@ var
   {$endif USE_WINIOCP}
   tix64: Int64;
   tix, lasttix: cardinal;
-  msidle: integer;
+  msidle, mscallbacks: integer;
 begin
   // call ProcessIdleTix - and POSIX Send() output packets in the background
   //SetCurrentThreadName('=M:%', [fAsync.fProcessName]);
@@ -5219,11 +5219,14 @@ begin
       IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
       tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
+      mscallbacks := 0;
+      if fCallbackSendDelay <> nil then
+        mscallbacks := fCallbackSendDelay^;
       {$ifndef USE_WINIOCP}
       ms := 1000; // fine if OnGetOneIdle is called in-between
       if fAsync.fSocketsEpoll then
-        if fCallbackSendDelay <> nil then
-          ms := fCallbackSendDelay^; // for WebSockets frame gathering
+        if mscallbacks <> 0 then
+          ms := mscallbacks; // for WebSockets frame gathering
       {$endif USE_WINIOCP}
       while not Terminated and
             not fAsync.Terminated do
@@ -5233,9 +5236,9 @@ begin
         {$endif USE_WINIOCP}
         begin
           // no socket/poll/epoll API nedeed (most common case)
-          if (fCallbackSendDelay <> nil) and // typically = 10ms
+          if (mscallbacks <> 0) and // typically = 10ms
              (tix = lasttix) then
-            msidle := fCallbackSendDelay^ // delayed SendFrames gathering
+            msidle := mscallbacks   // delayed SendFrames gathering
           else if (fAsync.fGC1.Count = 0) or
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
             msidle := 500 // idle server
@@ -5250,10 +5253,10 @@ begin
           tix64 := mormot.core.os.GetTickCount64;
           tix := tix64 shr 16; // check SendFrame idle after 1 minute (64K ms)
           fAsync.ProcessIdleTix(self, tix64);
-          if (fCallbackSendDelay <> nil) and
+          if (mscallbacks <> 0) and
              //TODO: set and check fCallbackOutgoingCount>0 instead?
              (fAsync.fConnectionCount <> 0) then
-            lasttix := tix; // need fCallbackSendDelay^ for upgraded connections
+            lasttix := tix; // need mscallbacks for upgraded connections
         {$ifndef USE_WINIOCP}
         end
         else
@@ -5262,7 +5265,7 @@ begin
           // note: fWrite.GetOne() calls ProcessIdleTix() while looping
           if fAsync.fSockets.fWrite.GetOne(ms, 'W', notif) then
             fAsync.fSockets.ProcessWrite(notif, 0);
-          if fCallbackSendDelay <> nil then
+          if mscallbacks <> 0 then
           begin
             tix := mormot.core.os.GetTickCount64 shr 16;
             lasttix := tix;

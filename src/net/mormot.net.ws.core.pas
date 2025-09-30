@@ -179,6 +179,8 @@ type
     // - GetTickCount64 resolution is around 16ms on Windows and 4ms on Linux,
     // so default 10 (ms) value seems fine for a cross-platform similar behavior
     // (resulting in a <16ms period on Windows, and <12ms period on Linux)
+    // - setting 0 will disable any frame gathering (may be used on a loopback
+    // or a local network for very low latency - not useful on the Internet)
     SendDelay: cardinal;
     /// will close the connection after a given number of invalid Heartbeat sent
     // - when a Hearbeat is failed to be transmitted, the class will start
@@ -3270,12 +3272,16 @@ begin
     aMode in [wscBlockWithoutAnswer, wscNonBlockWithoutAnswer], request, head);
   case aMode of
     wscNonBlockWithoutAnswer:
+      if fSettings.SendDelay <> 0 then
       begin
         // add to the internal sending list for asynchronous sending
         SendFrameAsync(request); // with potential jumboframes gathering
         result := HTTP_SUCCESS;
         exit;
-      end;
+      end
+      else
+        // frame gathering and delayed output has been disabled with SendDelay=0
+        aMode := wscBlockWithoutAnswer;
     wscBlockWithAnswer:
       // need to block until all previous answers are received
       if fIncoming.AnswerToIgnore > 0 then
