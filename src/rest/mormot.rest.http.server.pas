@@ -1138,7 +1138,7 @@ end;
 
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  call: TRestUriParams; // TRestServer.Uri() don't know anything bout Ctxt
+  call: TRestUriParams; // TRestServer.Uri() don't know anything about Ctxt
   tls, matchcase: boolean;
   match: TRestModelMatch;
   n: integer;
@@ -1220,6 +1220,11 @@ begin
       call.Url := Ctxt.Url;
   call.Method := Ctxt.Method;
   call.InHead := Ctxt.InHeaders;
+  if (Ctxt.InContentType <> '') and // default to JSON if none supplied
+     not IsContentTypeJsonU(Ctxt.InContentType) and
+     ((call.InHead = '') or
+      (FindNameValue(pointer(call.InHead), HEADER_CONTENT_TYPE_UPPER) = nil)) then
+    AppendLine(call.InHead, [HEADER_CONTENT_TYPE, Ctxt.InContenttype]);
   call.InBody := Ctxt.InContent;
   // allow custom URI routing before TRestServer instances
   serv := nil;
