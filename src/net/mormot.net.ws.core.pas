@@ -37,6 +37,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.buffers,
+  mormot.core.interfaces,
   mormot.crypt.core,
   mormot.crypt.ecc,
   mormot.crypt.jwt,
@@ -630,12 +631,6 @@ type
     wspAnswer,
     wspError,
     wspClosed);
-
-  /// indicates how TWebSocketProcess.NotifyCallback() will work
-  TWebSocketProcessNotifyCallback = (
-    wscBlockWithAnswer,
-    wscBlockWithoutAnswer,
-    wscNonBlockWithoutAnswer);
 
   /// used to manage a thread-safe list of WebSockets frames
   // - TSynLocked because SendPendingOutgoingFrames() locks it and may take time

@@ -800,6 +800,13 @@ type
   // return HTTP_SUCCESS if there is an output body, or HTTP_NOCONTENT if void
   TServiceCustomStatus = type cardinal;
 
+  /// indicates how TWebSocketProcess.NotifyCallback() will work
+  // - published early in this unit to be used at pure REST/SOA level
+  TWebSocketProcessNotifyCallback = (
+    wscBlockWithAnswer,
+    wscBlockWithoutAnswer,
+    wscNonBlockWithoutAnswer);
+
 
 /// returns the interface name of a registered Guid, or its hexadecimal value
 function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
