@@ -391,7 +391,8 @@ type
     function WebSocketsConnected: boolean;
     /// will set the HTTP header as expected by THttpClientWebSockets.Request to
     // perform the Callback() query in wscNonBlockWithoutAnswer mode
-    procedure CallbackNonBlockingSetHeader(out Header: RawUtf8); override;
+    procedure CallbackModeSetHeader(Mode: TWebSocketProcessNotifyCallback;
+      out Header: RawUtf8); override;
     /// used to handle an interface parameter as SOA callback
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
@@ -953,7 +954,7 @@ begin
   if WebSockets = nil then
     EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call', [self]);
   FormatUtf8('{"%":%}', [Factory.InterfaceRtti.Name, FakeCallbackID], body);
-  CallbackNonBlockingSetHeader(head); // frames gathering + no wait
+  CallbackModeSetHeader(wscNonBlockWithoutAnswer, head); // frames gathering + no wait
   result := CallBack(
     mPOST, 'CacheFlush/_callback_', body, resp, nil, 0, @head) = HTTP_SUCCESS;
 end;
@@ -1002,10 +1003,16 @@ begin
             (THttpClientWebSockets(fSocket).WebSockets.State = wpsRun);
 end;
 
-procedure TRestHttpClientWebsockets.CallbackNonBlockingSetHeader(
-  out Header: RawUtf8);
+procedure TRestHttpClientWebsockets.CallbackModeSetHeader(
+  Mode: TWebSocketProcessNotifyCallback; out Header: RawUtf8);
 begin
-  Header := 'Sec-WebSocket-REST: NonBlocking'; // frames gathering + no wait
+  // see THttpClientWebSockets.Request
+  case Mode of
+    wscNonBlockWithoutAnswer:
+     Header := 'Sec-WebSocket-REST: NonBlocking'; // frames gathering + no wait
+    wscBlockWithoutAnswer:
+     Header := 'Sec-WebSocket-REST: WithoutAnswer'; // no wait
+  end;
 end;
 
 function TRestHttpClientWebsockets.WebSockets: THttpClientWebSockets;

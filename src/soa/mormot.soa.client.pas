@@ -643,7 +643,7 @@ var
       if fNonBlockWithoutAnswer and
          (head = '') and
          (service^.ArgsOutputValuesCount = 0) then
-        rcu.CallbackNonBlockingSetHeader(head);
+        rcu.CallbackModeSetHeader(wscNonBlockWithoutAnswer, head);
     end;
     // makes the actual HTTP/HTTPS call
     status := rcu.Uri(uri, 'POST', @resp, @head, @sent);

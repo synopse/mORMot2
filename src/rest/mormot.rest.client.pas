@@ -714,9 +714,10 @@ type
     function CallBack(method: TUriMethod; const aMethodName,aSentData: RawUtf8;
       out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
       aResponseHead: PRawUtf8 = nil): integer;
-    /// to be called before CallBack() if the client could ignore the answer
+    /// to be called before CallBack() to customize the client behavior
     // - do nothing by default, but overriden e.g. in TRestHttpClientWebsockets
-    procedure CallbackNonBlockingSetHeader(out Header: RawUtf8); virtual;
+    procedure CallbackModeSetHeader(Mode: TWebSocketProcessNotifyCallback;
+      out Header: RawUtf8); virtual;
 
     /// access or initialize the internal IoC resolver, used for interface-based
     // remote services, and more generaly any Services.Resolve() call
@@ -2716,7 +2717,8 @@ begin
   end;
 end;
 
-procedure TRestClientUri.CallbackNonBlockingSetHeader(out Header: RawUtf8);
+procedure TRestClientUri.CallbackModeSetHeader(Mode: TWebSocketProcessNotifyCallback;
+  out Header: RawUtf8);
 begin
   // nothing to do by default (plain REST/HTTP works in blocking mode)
 end;
