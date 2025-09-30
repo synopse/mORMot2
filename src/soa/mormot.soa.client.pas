@@ -641,7 +641,6 @@ var
          (clientDrivenID = '') then
         sent := service^.ArgsArrayToObject(pointer(sent), true);
       if fNonBlockWithoutAnswer and
-         (head = '') and
          (service^.ArgsOutputValuesCount = 0) then
         rcu.CallbackModeSetHeader(wscNonBlockWithoutAnswer, head);
     end;

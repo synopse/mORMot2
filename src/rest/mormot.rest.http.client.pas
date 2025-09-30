@@ -392,7 +392,7 @@ type
     /// will set the HTTP header as expected by THttpClientWebSockets.Request to
     // perform the Callback() query in wscNonBlockWithoutAnswer mode
     procedure CallbackModeSetHeader(Mode: TWebSocketProcessNotifyCallback;
-      out Header: RawUtf8); override;
+      var Header: RawUtf8); override;
     /// used to handle an interface parameter as SOA callback
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
@@ -1004,15 +1004,15 @@ begin
 end;
 
 procedure TRestHttpClientWebsockets.CallbackModeSetHeader(
-  Mode: TWebSocketProcessNotifyCallback; out Header: RawUtf8);
+  Mode: TWebSocketProcessNotifyCallback; var Header: RawUtf8);
 begin
   // see THttpClientWebSockets.Request
   case Mode of
-    wscNonBlockWithoutAnswer:
-     Header := 'Sec-WebSocket-REST: NonBlocking'; // frames gathering + no wait
-    wscBlockWithoutAnswer:
-     Header := 'Sec-WebSocket-REST: WithoutAnswer'; // no wait
-  end;
+    wscNonBlockWithoutAnswer: // frames gathering + no wait
+      AppendLine(Header, ['Sec-WebSocket-REST: NonBlocking']);
+    wscBlockWithoutAnswer:    // no wait
+      AppendLine(Header, ['Sec-WebSocket-REST: WithoutAnswer']);
+  end; // default wscBlockWithAnswer HTTP-like request needs no specific Header
 end;
 
 function TRestHttpClientWebsockets.WebSockets: THttpClientWebSockets;
