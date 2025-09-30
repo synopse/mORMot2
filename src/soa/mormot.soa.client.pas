@@ -675,7 +675,12 @@ begin
                not (optNoLogInput in fExecution[m].Options);
   if withinput then
     // include non-sensitive input in log
-    p := aParams;
+    if (service <> nil) and
+       ((length(aParams) > 256) or
+        (imfInputIsOctetStream in service^.Flags)) then
+      Make(['len=', length(aParams)], p)
+    else
+      p := aParams;
   fClient.LogClass.EnterLocal(log, 'InternalInvoke I%.%(%) %',
     [fInterfaceUri, aMethod, {%H-}p, clientDrivenID], self);
   // call remote server according to current routing scheme
