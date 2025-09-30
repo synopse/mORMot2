@@ -1822,6 +1822,9 @@ begin
   consolecallback := nil;
 end;
 
+const
+  WS_KEY = ''; // no encryption is needed at WebSockets level - Tunnel ecdhe
+
 procedure TNetworkProtocols.Tunnel;
 var
   clientcert, servercert: ICryptCert;
@@ -1887,9 +1890,10 @@ begin
       restserver.LogClass := TSynLog;
       WebSocketLog := TSynLog;
       httpserver := TRestHttpServer.Create('8888', [restserver], '+',
-        WEBSOCKETS_DEFAULT_MODE);
+        WEBSOCKETS_DEFAULT_MODE, {threads=}2); // TunnelRelay() is sequential
       try
-        httpserver.WebSocketsEnable('', 'key', false, []);
+        httpserver.WebSocketsEnable('', WS_KEY, {WSjson=}false, [])^.
+          SendDelay := 0; // disable frame gathering on the loopback
         // setup as many SOA clients over WebSockets as needed
         TSynLog.Add.Log(sllInfo, 'Tunnel: connect agentclient[]', self);
         SetLength(agentclient, AGENT_COUNT);
@@ -1898,7 +1902,7 @@ begin
         begin
           agentclient[i] := TRestHttpClientWebsockets.CreateWithOwnModel(
             'localhost', '8888', 'tun');
-          agentclient[i].WebSocketsUpgrade('key', false, []);
+          agentclient[i].WebSocketsUpgrade(WS_KEY, false, []);
           check(agentclient[i].SetUser('User', 'synopse'));
           agentclient[i].ServiceDefine(ITunnelAgent, sicShared);
           agentclient[i].Resolve(ITunnelAgent, agent[i]);
@@ -1910,7 +1914,7 @@ begin
         begin
           consoleclient[i] := TRestHttpClientWebsockets.CreateWithOwnModel(
             'localhost', '8888', 'tun');
-          consoleclient[i].WebSocketsUpgrade('key', false, []);
+          consoleclient[i].WebSocketsUpgrade(WS_KEY, false, []);
           check(consoleclient[i].SetUser('User', 'synopse'));
           consoleclient[i].ServiceDefine(ITunnelConsole, sicPerSession);
           consoleclient[i].Resolve(ITunnelConsole, console[i]);
