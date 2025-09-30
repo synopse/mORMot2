@@ -531,9 +531,10 @@ begin
   else
     notify := nil;
   result := TInterfacedObjectFakeClient.Create(self, Invoke, notify);
-  if not fDelayedInstance and
+  if (not fDelayedInstance) and
      (fInstanceCreation = sicClientDriven) and
-    InternalInvoke(SERVICE_PSEUDO_METHOD[imInstance], '', @id) then
+     // call 'root/InterfaceName._instance_' endpoint
+     InternalInvoke(SERVICE_PSEUDO_METHOD[imInstance], '', @id) then
     // thread-safe initialization of the TInterfacedObjectFakeID
     TInterfacedObjectFakeClient(result).fFakeID := GetCardinal(pointer(id));
 end;
@@ -799,7 +800,8 @@ end;
 constructor TServiceFactoryClient.Create(aRest: TRest; aInterface: PRttiInfo;
   aInstanceCreation: TServiceInstanceImplementation; const aContractExpected: RawUtf8);
 var
-  Error, RemoteContract: RawUtf8;
+  err, contract: RawUtf8;
+  cli: TRestClientUri absolute aRest;
 begin
   // extract interface RTTI and create fake interface (and any shared instance)
   if not aRest.InheritsFrom(TRestClientUri) then
@@ -821,21 +823,27 @@ begin
         IInterface(fSharedInstance)._AddRef; // force stay alive
       end;
   end;
-  // check if this interface is supported on the server
+  // check if this interface contract is supported on the server
   if PosEx(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0 then
   begin
-    if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
-       TRestClientUri(fClient).ServicePublishOwnInterfaces, @RemoteContract, @Error) then
-      EServiceException.RaiseUtf8('%.Create(): I% interface or % routing not ' +
-        'supported by server [%]', [self, fInterfaceUri,
-         TRestClientUri(fClient).ServicesRouting, Error]);
-    if ('[' + ContractExpected + ']' <> RemoteContract) and
-       ('{"contract":' + ContractExpected + '}' <> RemoteContract) then
+    // call 'root/InterfaceName._contract_' endpoint
+    if InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
+         cli.ServicePublishOwnInterfaces, @contract, @err) and
+       (contract <> '') then
+      if contract[1] = '[' then
+        contract := copy(contract, 2, length(contract) - 2)
+      else if StartWithExact(contract, '{"contract":"') then
+        contract := copy(contract, 13, length(contract) - 13) else
+    else
+      EServiceException.RaiseUtf8('%.Create(): I% interface or % routing ' +
+        'not supported by this server [%]',
+         [self, fInterfaceUri, cli.ServicesRouting, err]);
+    if contract <> ContractExpected then
       EServiceException.RaiseUtf8('%.Create(): server''s I% contract ' +
         'differs from client''s: expected [%], received % - you may need to ' +
         'upgrade your % client to match % server expectations',
-        [self, fInterfaceUri, ContractExpected, RemoteContract,
-         Executable.Version.DetailedOrVoid, TRestClientUri(fClient).Session.Version]);
+        [self, fInterfaceUri, ContractExpected, contract,
+         Executable.Version.DetailedOrVoid, cli.Session.Version]);
   end;
 end;
 

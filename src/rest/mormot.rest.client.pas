@@ -360,7 +360,7 @@ type
     Server: RawUtf8;
     /// the remote server version, as retrieved after a SetUser() success
     Version: RawUtf8;
-    /// the remote server session tiemout in minutes, as retrieved after
+    /// the remote server session timeout in minutes, as retrieved after
     // a SetUser() success
     // - will be used to set SessionHeartbeatSeconds default
     ServerTimeout: integer;
@@ -1071,7 +1071,7 @@ type
     /// the remote server version, as retrieved after a SetUser() success
     property SessionVersion: RawUtf8
       read fSession.Version;
-    /// the remote server session tiemout in minutes, as retrieved after
+    /// the remote server session timeout in minutes, as retrieved after
     // a SetUser() success
     // - will be used to set SessionHeartbeatSeconds default
     property SessionServerTimeout: integer
