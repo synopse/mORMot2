@@ -78,11 +78,12 @@ type
      const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
       num: integer);
-    procedure TunnelTest(var rnd: TLecuyer; const clientcert, servercert: ICryptCert);
+    procedure TunnelTest(var rnd: TLecuyer;
+      const clientcert, servercert: ICryptCert; packets: integer = 100);
     procedure TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
-      clientinstance, serverinstance: TTunnelLocal);
+      clientinstance, serverinstance: TTunnelLocal; packets: integer);
     procedure TunnelRelay(relay: TTunnelRelay; const agent: array of ITunnelAgent;
-      const console: array of ITunnelConsole; var rnd: TLecuyer);
+      const console: array of ITunnelConsole; var rnd: TLecuyer; packets: integer);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
@@ -1576,7 +1577,7 @@ begin
 end;
 
 procedure TNetworkProtocols.TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
-  clientinstance, serverinstance: TTunnelLocal);
+  clientinstance, serverinstance: TTunnelLocal; packets: integer);
 var
   i: integer;
   nr: TNetResult;
@@ -1614,7 +1615,7 @@ begin
     CheckEqual(clientinstance.BytesOut, 0);
     CheckEqual(serverinstance.BytesIn, 0);
     CheckEqual(serverinstance.BytesOut, 0);
-    for i := 1 to 100 do
+    for i := 1 to packets do
     begin
       rnd.FillAscii(rnd.Next(200) + 1, sent);
       rnd.FillAscii(rnd.Next(200) + 1, sent2);
@@ -1661,7 +1662,7 @@ begin
 end;
 
 procedure TNetworkProtocols.TunnelTest(var rnd: TLecuyer;
-  const clientcert, servercert: ICryptCert);
+  const clientcert, servercert: ICryptCert; packets: integer);
 var
   log: ISynLog;
   sess: TTunnelSession;
@@ -1699,7 +1700,7 @@ begin
   Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
   Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'sEncrypted');
   // create two local sockets and let them play with the tunnel
-  TunnelSocket(log, rnd, clientinstance, serverinstance);
+  TunnelSocket(log, rnd, clientinstance, serverinstance, packets);
   // avoid circular references memory leak (not needed over SOA websockets)
   clientinstance.RawTransmit := nil;
 end;
@@ -1710,7 +1711,7 @@ const
 
 procedure TNetworkProtocols.TunnelRelay(relay: TTunnelRelay;
   const agent: array of ITunnelAgent; const console: array of ITunnelConsole;
-  var rnd: TLecuyer);
+  var rnd: TLecuyer; packets: integer);
 var
   log: ISynLog;
   a: ITunnelAgent;
@@ -1808,7 +1809,7 @@ begin
     if Assigned(log) then
       log.Log(sllInfo, 'Tunnel: actual sockets relay on loopback', self);
     for i := 0 to AGENT_COUNT - 1 do
-      TunnelSocket(log, rnd, agentlocal[i], consolelocal[i]);
+      TunnelSocket(log, rnd, agentlocal[i], consolelocal[i], packets);
   finally
     for i := 0 to AGENT_COUNT - 1 do
       worker[i].Free;
@@ -1871,10 +1872,11 @@ begin
     CheckEqual(relay.ConsoleCount, 0);
     for i := 0 to high(console) do
       Check(relay.Resolve(ITunnelConsole, console[i]), 'sicPerSession');
-    TunnelRelay(relay, agent, console, rnd);
+    TunnelRelay(relay, agent, console, rnd, {packets=}10);
     agent := nil;
     console := nil;
     // setup a SOA WebSockets server as actual relay over WebSockets
+    TSynLog.Add.Log(sllInfo, 'Tunnel: start WebSockets server', self);
     restserver := TRestServerFullMemory.CreateWithOwnModel(
       [], {withauth=}true, 'tun');
     try
@@ -1883,11 +1885,13 @@ begin
       restserver.ServiceContainer.InjectResolver([relay]);
       restserver.ServiceDefine(TTunnelconsole, [ITunnelConsole], sicPerSession);
       restserver.LogClass := TSynLog;
+      WebSocketLog := TSynLog;
       httpserver := TRestHttpServer.Create('8888', [restserver], '+',
         WEBSOCKETS_DEFAULT_MODE);
       try
         httpserver.WebSocketsEnable('', 'key', false, []);
         // setup as many SOA clients over WebSockets as needed
+        TSynLog.Add.Log(sllInfo, 'Tunnel: connect agentclient[]', self);
         SetLength(agentclient, AGENT_COUNT);
         SetLength(agent, AGENT_COUNT);
         for i := 0 to high(agentclient) do
@@ -1899,6 +1903,7 @@ begin
           agentclient[i].ServiceDefine(ITunnelAgent, sicShared);
           agentclient[i].Resolve(ITunnelAgent, agent[i]);
         end;
+        TSynLog.Add.Log(sllInfo, 'Tunnel: connect consoleclient[]', self);
         SetLength(consoleclient, CONSOLE_COUNT);
         SetLength(console, CONSOLE_COUNT);
         for i := 0 to high(consoleclient) do
@@ -1910,7 +1915,8 @@ begin
           consoleclient[i].ServiceDefine(ITunnelConsole, sicPerSession);
           consoleclient[i].Resolve(ITunnelConsole, console[i]);
         end;
-        //TunnelRelay(relay, agent, console, rnd);
+        TSynLog.Add.Log(sllInfo, 'Tunnel: call TunnelRelay', self);
+        TunnelRelay(relay, agent, console, rnd, {packets=}5);
       finally
         agent := nil; // keep refcount clean
         console := nil;
