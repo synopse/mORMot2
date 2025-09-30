@@ -987,9 +987,12 @@ type
   // authenticated could be logged with the same ID (and authorization)
   // than TAuthUser.Logon='*' - of course, this is meaningfull only with
   // an external credential check (e.g. via SSPI or Active Directory)
+  // - saoFullServerVersion will include the full detailed '1.2.3.4' version of
+  // the server executable instead of safer default '1.2' TFileVersion.Main value
   TRestServerAuthenticationOption = (
     saoUserByLogonOrID,
-    saoHandleUnknownLogonAsStar);
+    saoHandleUnknownLogonAsStar,
+    saoFullServerVersion);
 
   /// defines the optional behavior of TRestServerAuthentication class
   TRestServerAuthenticationOptions =
@@ -5140,6 +5143,7 @@ procedure TRestServerAuthentication.SessionCreateReturns(
   const result, data, header: RawUtf8);
 var
   body: TDocVariantData;
+  vers: string;
 begin
   body.InitFast(10, dvObject);
   if result = '' then
@@ -5158,8 +5162,15 @@ begin
       'logondisplay', DisplayName,
       'logongroup',   GroupRights.IDValue,
       'timeout',      GroupRights.SessionTimeout,
-      'server',       Executable.ProgramName,
-      'version',      Executable.Version.DetailedOrVoid]);
+      'server',       Executable.ProgramName]);
+  if Executable.Version.Major <> 0 then
+  begin
+    if saoFullServerVersion in fOptions then
+      vers := Executable.Version.DetailedOrVoid
+    else
+      vers := Executable.Version.Main;
+    body.AddValue('version', StringToVariant(vers));
+  end;
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
 
