@@ -6259,6 +6259,8 @@ begin
   fPublishedMethodAuthIndex := -1;
   fPublishedMethodBatchIndex := -1;
   // setup default mORMot authentication schemes (if specified)
+  if fModel.TablesMax < 0 then // before AuthenticationRegister() User+Group add
+    fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   if aHandleUserAuthentication then
     AuthenticationRegister([
       TRestServerAuthenticationDefault
@@ -6267,8 +6269,6 @@ begin
       {$endif DOMAINRESTAUTH}]);
   // initialize TRestServer
   fRootRedirectForbiddenToAuth := Model.Root + '/auth';
-  if fModel.TablesMax < 0 then
-    fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   fServicesRouting := TRestServerRoutingRest;
   fServiceReleaseTimeoutMicrosec := 500;
