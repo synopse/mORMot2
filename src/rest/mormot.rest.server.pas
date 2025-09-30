@@ -4588,16 +4588,17 @@ var
   rn: TRestNode;
   met: PServiceContainerInterfaceMethod;
   fact: TInterfaceFactory;
+  methods: TUriMethods;
   _name: RawUtf8;
 
   procedure SetupOne(aName: RawUtf8);
   begin
     if rn = rnInterfaceClientID then
       Append(aName, '/<int:clientid>');
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], [aName], rn, nil, nil,
+    Router.Setup(methods, [aName], rn, nil, nil,
       ndx, met^.InterfaceService);
     if rn <> rnInterfaceClientID then
-      Router.Setup([mGET, mPOST, mPUT, mDELETE], [aName, '/'], rn, nil, nil,
+      Router.Setup(methods, [aName, '/'], rn, nil, nil,
         ndx, met^.InterfaceService); // /Model/Interface/Method/
   end;
 
@@ -4609,26 +4610,32 @@ begin
     met := @services.InterfaceMethod[i];
     ndx := met^.InterfaceMethodIndex; // 0..3 are im* pseudo-methods
     sic := met^.InterfaceService.InstanceCreation;
+    methods := (met^.InterfaceService as TServiceFactoryServerAbstract).Methods;
     rn := rnInterface; // with no <clientid> by default
     case ndx of
       // pseudo-methods have a specific URI behavior
       ord(imContract):
-        ; // keep rnInterface with no <clientid>
+        methods := [mPOST]; // keep rnInterface with no <clientid>
       ord(imInstance):
         if sic <> sicClientDriven then
-          // imInstance is for a new sicClientDriven only
-          continue;
+          continue // imInstance is for a new sicClientDriven only
+        else
+          methods := [mPOST];
       ord(imSignature):
-        if not services.PublishSignature then
-          // imSignature is disabled on this server
-          continue;
+        if services.PublishSignature then
+          methods := [mPOST]
+        else
+          continue; // imSignature is disabled on this server
       ord(imFree):
         if sic in SERVICE_IMPLEMENTATION_NOID then
           // imFree need an ID to release the instance
           continue
         else
+        begin
           // imFree can make early release, e.g. from sicThread
           rn := rnInterfaceClientID; // free requires a <clientid>
+          methods := [mPOST];
+        end;
     else // real/regular interface method
       begin
         // interface methods need a /ClientDrivenID only if sicClientDriven

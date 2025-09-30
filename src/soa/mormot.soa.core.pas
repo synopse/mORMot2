@@ -426,8 +426,9 @@ type
     fResultAsJsonObjectWithoutResult: boolean;
     fResultAsXMLObject: boolean;
     fResultAsXMLObjectIfAcceptOnlyXML: boolean;
-    fResultAsXMLObjectNameSpace: RawUtf8;
     fExcludeServiceLogCustomAnswer: boolean;
+    fMethods: TUriMethods;
+    fResultAsXMLObjectNameSpace: RawUtf8;
     function GetAuthGroupIDs(const aGroup: array of RawUtf8;
       out IDs: TIDDynArray): boolean;
   public
@@ -527,6 +528,12 @@ type
     function SetOptions(const aMethod: array of RawUtf8;
       aOptions: TInterfaceMethodOptions;
       aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract;
+    /// define the HTTP methods used for TRestServerUriContext.UriComputeRoutes
+    /// - by default, only [mGET, mPOST] are allowed, but you can set any other
+    // set, e.g. [mGET, mPOST, mPUT, mDELETE] if you want to allow more HTTP verbs
+    // - this method returns self in order to allow direct chaining of settings
+    // calls, in a fluent interface
+    function SetMethods(const aMethods: TUriMethods): TServiceFactoryServerAbstract;
     /// define execution options for the whole interface
     // - fluent alternative of setting homonymous boolean properties of this class
     // - this method returns self in order to allow direct chaining of settings
@@ -611,6 +618,9 @@ type
     // returning TServiceCustomAnswer record (to reduce storage size)
     property ExcludeServiceLogCustomAnswer: boolean
       read fExcludeServiceLogCustomAnswer write fExcludeServiceLogCustomAnswer;
+    /// the HTTP methods used for TRestServerUriContext.UriComputeRoutes
+    property Methods: TUriMethods
+      read fMethods;
   end;
 
 
@@ -1456,6 +1466,14 @@ begin
     fResultAsXMLObjectIfAcceptOnlyXML := (optResultAsXMLObjectIfAcceptOnlyXML in aOptions);
     fExcludeServiceLogCustomAnswer := (optExcludeServiceLogCustomAnswer in aOptions);
   end;
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.SetMethods(
+  const aMethods: TUriMethods): TServiceFactoryServerAbstract;
+begin
+  if self <> nil then
+    fMethods := aMethods;
   result := self;
 end;
 

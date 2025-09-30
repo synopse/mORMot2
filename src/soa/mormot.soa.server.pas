@@ -675,6 +675,7 @@ begin
       end;
   end;
   SetLength(fStats, fInterface.MethodsCount);
+  fMethods := [mGET, mPOST];
   // prepare some reusable execution context (avoid most memory allocations)
   TInterfaceMethodExecuteCached.Prepare(fInterface, fExecuteCached);
 end;
