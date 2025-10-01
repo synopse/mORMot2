@@ -7479,6 +7479,7 @@ var
   asJsonObject: boolean;
   a: PInterfaceMethodArgument;
   V: pointer;
+  magic: PCardinal;
 begin
   result := false;
   case Ctxt.Json^ of
@@ -7513,13 +7514,16 @@ begin
     if a <> nil then
     begin
       V := fValues[arg];
-      if (imfInputIsOctetStream in fMethod.Flags) and
-         (PCardinal(Ctxt.Json)^ = JSON_BIN_MAGIC_C) then
+      if imfInputIsOctetStream in fMethod.Flags then
       begin
-        // passed as pointer from TRestServerRoutingRest.ExecuteSoaByInterface
-        inc(PCardinal(Ctxt.Get.Json));
-        PRawByteString(V)^ := PRawByteString(Ctxt.Json)^;
-        break; // single parameter
+        magic := pointer(Ctxt.Get.Json);
+        if magic^ = JSON_BIN_MAGIC_C then
+        begin
+          // passed as pointer from TRestServerRoutingRest.ExecuteSoaByInterface
+          inc(magic);
+          PRawByteString(V)^ := PRawByteString(magic)^;
+          break; // single parameter
+        end;
       end;
       if (a^.ValueType = imvInterface) and
          not (vIsInterfaceJson in a^.ValueKindAsm) then // e.g. not IDocList
