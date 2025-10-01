@@ -217,6 +217,7 @@ type
     fForceServiceResultAsXMLObject: boolean;
     fForceServiceResultAsXMLObjectNameSpace: RawUtf8;
     fParameters: PUtf8Char;
+    fPlainUrl: PUtf8Char; // = Call.Url or ServerMethod/ServiceMethod^.Name
     fSession: cardinal;
     fSessionOS: TOperatingSystemVersion; // 32-bit raw OS info
     fSessionGroup: TID;
@@ -2823,18 +2824,11 @@ begin
   fMethod := aMethod;
   if aCall.InBody <> '' then
     aCall.InBodyType(fInputContentType, {guessjsonifnone=}false);
+  fPlainUrl := pointer(aCall.Url);
   fServer := aServer;
   fThreadServer := PerThreadRunningContextAddress; // threadvar access once
   fThreadServer^.Request := self;
   fMethodIndex := -1;
-  // initialize optional logging
-  fam := fServer.LogFamily;
-  if (fam = nil) or
-     not (sllEnter in fam.Level) then
-    exit;
-  fLog := fam.Add; // TSynLog instance for the current thread
-  fLog.ManualEnter(fServer,
-    'URI % % in=%', [aCall.Method, aCall.Url, KB(aCall.InBody)]);
 end;
 
 destructor TRestServerUriContext.Destroy;
@@ -3191,9 +3185,8 @@ begin
   cmd := @COMMAND_TEXT[fCommand];
   if sllServer in fServer.LogLevel then
     fLog.Log(sllServer, '% % % % %=% out=% in %', [SessionUserName,
-      RemoteIPNotLocal, cmd^, fCall.Method,
-      fCall.Url, fCall.OutStatus, KB(fCall.OutBody),
-      MicroSecToString(fMicroSecondsElapsed)], self);
+      RemoteIPNotLocal, cmd^, fCall.Method, fPlainUrl, fCall.OutStatus,
+      length(fCall.OutBody), MicroSecToString(fMicroSecondsElapsed)], self);
   if (fCall.OutBody <> '') and
      (sllServiceReturn in fServer.LogLevel) and
      not (optNoLogOutput in fServiceExecutionOptions) then
@@ -6171,6 +6164,7 @@ begin
         i := result.Data.MethodIndex;
         Ctxt.fMethodIndex  := i;
         Ctxt.fServerMethod := @fOwner.fPublishedMethod[i];
+        Ctxt.fPlainUrl := pointer(Ctxt.fServerMethod.Name); // no params
         // for rnMethodPath: Ctxt.fUriPath was set in TRestTreeNode.LookupParam
       end;
     rnTableMethod,
@@ -6192,7 +6186,10 @@ begin
           Ctxt.fServiceMethodIndex := i;
           dec(i, SERVICE_PSEUDO_METHOD_COUNT); // 0..3 for pseudo methods
           if i >= 0 then
+          begin
             Ctxt.fServiceMethod := @Ctxt.fService.InterfaceFactory.Methods[i];
+            Ctxt.fPlainUrl := pointer(Ctxt.fServiceMethod^.InterfaceDotMethodName);
+          end;
         end;
       end;
   end;
@@ -7763,24 +7760,34 @@ begin
   ctxt := fServicesRouting.Create;
   try
     ctxt.Prepare(self, Call, m);
-    // 4. setup the statistics
-    if StatLevels <> [] then
-    begin
-      if ctxt.fMicroSecondsStart = 0 then
-        QueryPerformanceMicroSeconds(ctxt.fMicroSecondsStart); // get from OS
-      fStats.AddCurrentRequestCount(1);
-    end;
-    // 5. decode request URI and validate input
+    // 4. decode request URI and validate input
     fRouterSafe.ReadLock;
     node := fRouter.Lookup(ctxt);
     fRouterSafe.ReadUnLock;
     if (node = nil) or
        (ctxt.fNode = rnNone) then
-      ctxt.Error('Invalid URI', HTTP_BADREQUEST) // /root ok: 400 not 404
-    else if (RootRedirectGet <> '') and
-            (ctxt.Method = mGet) and
-            (ctxt.fNode = rnTable) and // Url = Model.Root
-            (Call.InBody = '') then // unstandard GET with body = execute SELECT
+    begin
+      ctxt.Error('Invalid URI', HTTP_BADREQUEST); // /root ok: 400 not 404
+      if sllServer in fLogLevel then
+        InternalLog('Uri: invalid % %', [Call.Method, Call.Url], sllServer);
+      exit;
+    end;
+    if sllEnter in fLogLevel then
+    begin
+      ctxt.fLog := fLogClass.Add;
+      ctxt.fLog.ManualEnter(self, 'Uri % % in=%', [Call.Method, ctxt.fPlainUrl,
+        length(Call.InBody)], @ctxt.fMicroSecondsStart);
+    end;
+    if StatLevels <> [] then
+    begin
+      if ctxt.fMicroSecondsStart = 0 then // may have been set by ManualEnter()
+        QueryPerformanceMicroSeconds(ctxt.fMicroSecondsStart);
+      fStats.AddCurrentRequestCount(1);
+    end;
+    if (RootRedirectGet <> '') and
+       (ctxt.Method = mGet) and
+       (ctxt.fNode = rnTable) and // Url = Model.Root
+       (Call.InBody = '') then // unstandard GET with body = execute SELECT
       ctxt.Redirect(RootRedirectGet)
     else if (Call.InBody <> '') and
             (rsoValidateUtf8Input in fOptions) and
