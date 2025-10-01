@@ -519,10 +519,14 @@ type
       allowavx: boolean = true): boolean;
   end;
 
-  /// transient simple digital signature of a 32-bit number using AES-128
+  /// transient simple digital signature of a 32-bit number/ID using AES-128
   // - typical use is e.g. TRestServerAuthenticationHttpAbstract cookie process
   // when TBinaryCookieGenerator from mormot.crypt.secure is overkill since
   // TRestServer maintains a list of active sessions with proper expiration
+  // - uses a 96-bit signature with AES encryption as secure MAC with a random
+  // nonce (stored in TAesContext.iv), which is similar to CMAC or TLS/AES-GCM
+  // - modern standards consider this sufficient for authenticity in scenarios
+  // with limited message volumes (not billions of tokens issued per secret key)
   {$ifdef USERECORDWITHMETHODS}
   TAesSignature = record
   {$else}
@@ -534,17 +538,17 @@ type
     /// create the transient random secret key needed for this process
     // - the internal secret can't be persisted, and will remain in memory
     procedure Init;
-    /// compute the 128-bit digital signature of given 32-bit value <> 0
+    /// compute the 128-bit digital signature from a given 32-bit value <> 0
     procedure Generate(aValue: cardinal; aSignature: PHash128Rec);
-    /// compute an hexadecimal cookie of given 32-bit value
+    /// compute a 32-chars hexadecimal cookie from a given 32-bit value
     function GenerateCookie(aValue: cardinal): RawUtf8;
     /// check and extract the 32-bit value from a 128-bit digital signature
     // - return 0 if the signature is invalid, or the decoded 32-bit value
     function Validate(aSignature: PHash128Rec): cardinal;
-    /// check and extract the 32-bit value from hexadecimal cookie
+    /// check and extract the 32-bit value from 32-chars hexadecimal cookie
     // - return 0 if the cookie is invalid, or the decoded 32-bit value
     function ValidateCookie(aHex: PUtf8Char; aHexLen: PtrInt): cardinal; overload;
-    /// check and extract the 32-bit value from hexadecimal cookie
+    /// check and extract the 32-bit value from 32-chars hexadecimal cookie
     // - return 0 if the cookie is invalid, or the decoded 32-bit value
     function ValidateCookie(const aCookie: RawUtf8): cardinal; overload;
   end;
@@ -5067,19 +5071,19 @@ end;
 { TAesSignature }
 
 procedure TAesSignature.Init;
-begin
-  fEngine.EncryptInitRandom;
+begin // AES-256 is 40% slower but twice stronger against Quantum attacks
+  fEngine.EncryptInitRandom(128 shl ord(HasHWAes)); // AES-128 or AES-256
 end;
 
 procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
 var
   aes: TAesContext absolute fEngine;
-begin // 32-bit lower = session, 96-bit upper = digital signature
+begin // 32-bit lower = masked session, 96-bit upper = digital signature
   if aValue = 0 then
     ESynCrypto.RaiseU('Unexpected TAesSignature.Generate(0)');
-  aValue := aValue xor aes.iv.c0;
+  aValue := aValue xor aes.iv.c0; // masked/obfuscated session ID
   aSignature^.c0 := aValue;
-  aSignature^.c1 := aes.iv.c1;
+  aSignature^.c1 := aes.iv.c1;    // aes.iv is a transient hidden CSPRNG secret
   aSignature^.H  := aes.iv.H;
   aes.DoBlock(aes, aSignature^, aSignature^); // fast and thread-safe
   aSignature^.c0 := aValue;
