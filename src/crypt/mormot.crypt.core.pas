@@ -551,6 +551,15 @@ type
     /// check and extract the 32-bit value from 32-chars hexadecimal cookie
     // - return 0 if the cookie is invalid, or the decoded 32-bit value
     function ValidateCookie(const aCookie: RawUtf8): cardinal; overload;
+    /// extract the 32-bit value from a 128-bit digital signature
+    // - without validating the AES-128 signature itself
+    // - could be used e.g. when Validate() has already been called once
+    function Extract(const aSignature: THash128Rec): cardinal; overload;
+      {$ifdef FPC} inline; {$endif}
+    /// extract the 32-bit value from a 32-chars hexadecimal bearer
+    // - without validating the AES-128 signature itself
+    // - could be used e.g. when Validate() has already been called once
+    function Extract(aHex: PUtf8Char): cardinal; overload;
   end;
   PAesSignature = ^TAesSignature;
 
@@ -5128,6 +5137,21 @@ end;
 function TAesSignature.ValidateCookie(const aCookie: RawUtf8): cardinal;
 begin
   result := ValidateCookie(pointer(aCookie), length(aCookie));
+end;
+
+function TAesSignature.Extract(const aSignature: THash128Rec): cardinal;
+begin
+  result := aSignature.c0 xor TAesContext(fEngine).iv.c0; // just de-obfuscate
+end;
+
+function TAesSignature.Extract(aHex: PUtf8Char): cardinal;
+var
+  sign: THash128Rec;
+begin
+  if HexDisplayToBin(pointer(aHex), @sign, SizeOf(sign)) then
+    result := Extract(sign)
+  else
+    result := 0;
 end;
 
 
