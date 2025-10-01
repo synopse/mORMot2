@@ -551,6 +551,7 @@ type
     /// check and extract the 32-bit value from 32-chars hexadecimal cookie
     // - return 0 if the cookie is invalid, or the decoded 32-bit value
     function ValidateCookie(const aCookie: RawUtf8): cardinal; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// extract the 32-bit value from a 128-bit digital signature
     // - without validating the AES-128 signature itself
     // - could be used e.g. when Validate() has already been called once
@@ -5088,7 +5089,8 @@ procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
 var
   aes: TAesContext absolute fEngine;
 begin // 32-bit lower = masked session, 96-bit upper = digital signature
-  if aValue = 0 then
+  if (@self = nil) or
+     (aValue = 0) then
     ESynCrypto.RaiseU('Unexpected TAesSignature.Generate(0)');
   aValue := aValue xor aes.iv.c0; // masked/obfuscated session ID
   aSignature^.c0 := aValue;
@@ -5112,7 +5114,8 @@ var
   sign: THash128Rec;
 begin
   result := 0; // failure
-  if aSignature = nil then
+  if (@self = nil) or
+     (aSignature = nil) then
     exit;
   sign.c0 := aSignature^.c0;
   sign.c1 := aes.iv.c1;
