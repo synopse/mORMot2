@@ -892,8 +892,8 @@ type
       tix: Int64); virtual;
     /// will release the User and User.GroupRights instances
     destructor Destroy; override;
-    /// update the Interfaces[] statistics
-    procedure NotifyInterfaces(aCtxt: TRestServerUriContext; aElapsed: Int64);
+    /// update the Interfaces[] statistics of this session
+    procedure StatsInterfaces(aCtxt: TRestServerUriContext; aElapsed: Int64);
   public
     /// the associated User
     // - this is a true TAuthUser instance, and User.GroupRights will contain
@@ -3222,6 +3222,11 @@ var
   m: PtrInt;
   stat: ^TSynMonitorInputOutput;
 begin
+  Server.fStats.AddCurrentRequestCount(-1);
+  if Server.fStatUsage <> nil then
+    Server.fStatUsage.Modified(Server.fStats, []);
+  if fMicroSecondsStart = 0 then
+    exit; // may happen on early error
   QueryPerformanceMicroSeconds(ms);
   dec(ms, fMicroSecondsStart); // ms = time elapsed in micro seconds
   fMicroSecondsElapsed := ms;
@@ -3267,13 +3272,10 @@ begin
             Server.StatUsage.Modified(stat^, []);
           if (mlSessions in Server.fStatLevels) and
              (fAuthSession <> nil) then
-            fAuthSession.NotifyInterfaces(self, ms);
+            fAuthSession.StatsInterfaces(self, ms);
         end;
       end;
   end;
-  Server.fStats.AddCurrentRequestCount(-1);
-  if Server.fStatUsage <> nil then
-    Server.fStatUsage.Modified(Server.fStats, []);
 end;
 
 procedure TRestServerUriContext.ExecuteSoaByMethod;
@@ -4909,30 +4911,25 @@ begin
   inherited;
 end;
 
-procedure TAuthSession.NotifyInterfaces(
+procedure TAuthSession.StatsInterfaces(
   aCtxt: TRestServerUriContext; aElapsed: Int64);
 var
   m: PtrInt;
 begin
-  if fInterfaces = nil then
+  m  := TServiceFactoryServer(aCtxt.Service).InterfaceMethodIndex +
+        aCtxt.ServiceMethodIndex; // = faster InterfaceMethods.FindHashed()
+  if (fInterfaces = nil) or
+     (fInterfaces[m] = nil) then
   begin
-    aCtxt.Server.Stats.Lock;
-    SetLength(fInterfaces, length(aCtxt.Server.Services.InterfaceMethod));
-    aCtxt.Server.Stats.UnLock;
-  end;
-  m := aCtxt.Server.Services.InterfaceMethods.FindHashed(
-         aCtxt.ServiceMethod^.InterfaceDotMethodName); // mlSessions are slow
-  if m < 0 then
-    exit;
-  if Interfaces[m] = nil then
-  begin
-    aCtxt.Server.Stats.Lock;
-    if Interfaces[m] = nil then
-      Interfaces[m] := TSynMonitorInputOutput.Create(
+    aCtxt.Server.Stats.Lock; // TLightLock
+    if fInterfaces = nil then
+      SetLength(fInterfaces, length(aCtxt.Server.Services.InterfaceMethod));
+    if fInterfaces[m] = nil then
+      fInterfaces[m] := TSynMonitorInputOutput.Create(
         aCtxt.ServiceMethod^.InterfaceDotMethodName);
     aCtxt.Server.Stats.UnLock;
   end;
-  aCtxt.StatsFromContext(Interfaces[m], aElapsed);
+  aCtxt.StatsFromContext(fInterfaces[m], aElapsed);
   // mlSessions stats are not yet tracked per Client
 end;
 
