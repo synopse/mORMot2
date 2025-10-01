@@ -1099,12 +1099,13 @@ type
     function DoEnter: PSynLogThreadInfo;
       {$ifdef FPC}inline;{$endif}
     procedure RaiseDoEnter;
-    procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo); // no profit inlining
+    procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo;
+      microsecs: PInt64); // no profit inlining
     procedure LockAndDisableExceptions; // no profit inlining
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-      fmt: PUtf8Char; args: PVarRec; argscount: PtrInt);
+      fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
     procedure AddLogThreadName;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -1373,7 +1374,7 @@ type
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
-      const TextArgs: array of const); overload;
+      const TextArgs: array of const; MicroSecs: PInt64 = nil); overload;
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualLeave;
@@ -4967,7 +4968,7 @@ begin
     result := nil; // nothing logged above MAX_SYNLOGRECURSION
 end;
 
-procedure TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo);
+procedure TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo; microsecs: PInt64);
 var
   ms, rec: Int64;
 begin
@@ -4978,6 +4979,8 @@ begin
   if sllLeave in fFamily.Level then
   begin
     QueryPerformanceMicroSeconds(ms);
+    if microsecs <> nil then
+      microsecs^ := ms;
     dec(ms, fStartTimestamp);
     FillInfo(nfo, @ms); // timestamp [+ threadnumber]
     rec := ms shl 8 + {RefCnt=}1;
@@ -4985,6 +4988,8 @@ begin
   else
   begin
     FillInfo(nfo, nil);
+    if microsecs <> nil then
+      microsecs^ := 0;
     rec := {RefCnt=}1; // no timestamp needed if no sllLeave
   end;
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
@@ -4996,7 +5001,7 @@ end;
 procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
   {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
 begin
-  LockAndPrepareEnter(nfo);
+  LockAndPrepareEnter(nfo, nil);
   // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -5020,9 +5025,9 @@ begin
 end;
 
 procedure TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt);
+  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
 begin
-  LockAndPrepareEnter(nfo);
+  LockAndPrepareEnter(nfo, microsecs);
   fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
   try
     nfo^.ExceptionIgnore := true;
@@ -5103,7 +5108,7 @@ begin // expects the caller to have set Local = nil
   nfo := result.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs));
+  result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil);
   pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
 end;
 
@@ -5129,7 +5134,7 @@ begin // expects the caller to have set Local = nil
   nfo := result.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  result.LockAndPrepareEnter(nfo); // inlined result.LogEnter()
+  result.LockAndPrepareEnter(nfo, nil); // inlined result.LogEnter()
   result.LogHeader(sllEnter, aInstance);
   if aMethodName <> '' then // direct string output with no temp conversion
     result.fWriter.AddOnSameLineString(aMethodName);
@@ -5148,13 +5153,13 @@ begin
 end;
 
 procedure TSynLog.ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
-  const TextArgs: array of const);
+  const TextArgs: array of const; MicroSecs: PInt64);
 var
   nfo: PSynLogThreadInfo;
 begin
   nfo := DoEnter;
   if nfo <> nil then
-    LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs));
+    LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs);
 end;
 
 procedure TSynLog.ManualLeave;
