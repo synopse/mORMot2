@@ -6278,7 +6278,7 @@ var
     res := sock.SendTo(@frame, SizeOf(frame), remote);
     sock.Close;
     if fOwner.fVerboseLog then
-      DoLog('send %=%', [ToText(resp.Kind)^, ToText(res)^]);
+      DoLog('send %=%', [ToText(resp.Kind)^, _NR[res]]);
     inc(fSent);
   end;
 
@@ -6415,7 +6415,7 @@ begin
       res := sock.SendTo(@frame, SizeOf(frame), fBroadcastAddr);
       if fOwner.fVerboseLog then
         fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
-          [fBroadcastIpPort, ToText(aReq), ToText(res)^], self);
+          [fBroadcastIpPort, ToText(aReq), _NR[res]], self);
       if res <> nrOk then
         exit;
     finally

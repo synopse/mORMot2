@@ -6142,8 +6142,8 @@ begin
     // get as much as possible unciphered data from socket
     fSockBuffer := fSock.SockReceiveString(@res, @err);
   if fSockBuffer = '' then
-    ELdap.RaiseUtf8('%.ReceivePacket: error #% % from %:%', [self,
-      err, ToText(res)^, fSettings.TargetHost, fSettings.TargetPort]);
+    ELdap.RaiseUtf8('%.ReceivePacket: error #% % from %:%',
+      [self, err, _NR[res], fSettings.TargetHost, fSettings.TargetPort]);
   {$ifdef ASNDEBUG}
   ConsoleWrite('Packet received bytes = %', [length(fSockBuffer)]);
   {$endif ASNDEBUG}

@@ -260,7 +260,7 @@ begin
       if nr <> nrRetry then
       begin
         fLog.Log(sllError, 'DoExecute % recvfrom failed: %',
-          [fn, ToText(nr)^], self);
+          [fn, _NR[nr]], self);
         break;
       end;
       if mormot.core.os.GetTickCount64 < fContext.TimeoutTix then
@@ -307,7 +307,7 @@ begin
     if nr <> nrOk then
     begin
       fLog.Log(sllDebug, 'DoExecute %: % abort sending %',
-        [fn, ToText(nr)^, ToText(fContext.Frame^)], self);
+        [fn, _NR[nr], ToText(fContext.Frame^)], self);
       break;
     end;
   until Terminated;
@@ -653,7 +653,7 @@ begin
   begin
     c.Shutdown;
     fLog.Log(sllDebug, 'OnFrameReceived: [%] sending %',
-      [ToText(nr)^, ToText(c.Frame^)], self);
+      [_NR[nr], ToText(c.Frame^)], self);
   end;
 end;
 

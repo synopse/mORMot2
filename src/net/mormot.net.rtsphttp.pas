@@ -264,7 +264,7 @@ begin
     res := aSocket.MakeBlocking; // otherwise sock.GetRequest() fails
     if (res <> nrOK) and
        (log <> nil) then
-      log.Log(sllTrace, 'ConnectionCreate MakeBlocking=%', [ToText(res)^], self);
+      log.Log(sllTrace, 'ConnectionCreate MakeBlocking=%', [_NR[res]], self);
     sock := TProxySocket.Create(nil);
     try
       sock.AcceptRequest(aSocket, nil);
@@ -351,7 +351,7 @@ begin
       res := aSocket.MakeAsync; // as expected by TPollAsyncSockets
       if (res <> nrOK) and
          (log <> nil) then
-        log.Log(sllTrace, 'ConnectionCreate MakeAsync=%', [ToText(res)^], self);
+        log.Log(sllTrace, 'ConnectionCreate MakeAsync=%', [_NR[res]], self);
     end;
     if get = nil then
       exit;
@@ -359,7 +359,7 @@ begin
       fRtspServer, fRtspPort, nlTcp, {bind=}false, 1000, 1000, 1000, 0, rtsp);
     if res <> nrOK then
       ERtspOverHttp.RaiseUtf8('No RTSP server on %:% (%)',
-        [fRtspServer, fRtspPort, ToText(res)^]);
+        [fRtspServer, fRtspPort, _NR[res]]);
     // create the main POST connection and its associated RTSP connection
     postconn := TPostConnection.Create(self, aRemoteIp);
     rtspconn := TRtspConnection.Create(self, aRemoteIp);
@@ -373,7 +373,7 @@ begin
     res := rtspconn.Socket.MakeAsync; // as expected by fClients.Start
     if (res <> nrOK) and
        (log <> nil) then
-      log.Log(sllTrace, 'ConnectionCreate rtspconn.MakeAsync=%', [ToText(res)^], self);
+      log.Log(sllTrace, 'ConnectionCreate rtspconn.MakeAsync=%', [_NR[res]], self);
     if not Sockets.Start(rtspconn) then
     begin
     if log <> nil then

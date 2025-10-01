@@ -3171,7 +3171,7 @@ procedure TMongoConnection.SendAndGetReply(
       raise EMongoRequestException.CreateUtf8(
         '%.SendAndGetReply: Server response timeout or connection broken, ' +
         'probably due to a bad formatted BSON request [% %] -> close socket',
-        [self, err, ToText(res)^], self, Request);
+        [self, err, _NR[res]], self, Request);
     end;
   end;
 

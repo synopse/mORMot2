@@ -679,7 +679,7 @@ begin
      Terminated then
     exit;
   ETunnel.RaiseUtf8('%.OnReceived(%): error % when retransmitting',
-    [self, fPort, ToText(res)^]);
+    [self, fPort, _NR[res]]);
   Terminate;
 end;
 
@@ -762,7 +762,7 @@ begin
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % receiving',
-            [self, fPort, ToText(res)^]);
+            [self, fPort, _NR[res]]);
         end;
       end
     else

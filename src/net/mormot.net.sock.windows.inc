@@ -1630,7 +1630,7 @@ begin
   end;
   if Assigned(fOnLog) then
     fOnLog(sll, 'Subscribe(socket=% seq=%)=% cnt=%',
-      [socket, pointer(o^.head.sequence), ToText(res)^, Count], self);
+      [socket, pointer(o^.head.sequence), _NR[res], Count], self);
   if res = nrOk then
     result := pointer(o)
   else
@@ -1871,7 +1871,7 @@ begin
           sll := sllWarning; // continue: closesocket() on very last wieRecv
         if Assigned(fOnLog) then
           fOnLog(sll, 'GetNext=%% unsub closesocket=%',
-            [IOCP_EVENT[event], sock, ToText(res)^], self);
+            [IOCP_EVENT[event], sock, _NR[res]], self);
         continue;
       end;
       if sll = sllTrace then
@@ -1945,8 +1945,7 @@ begin
   res := nrOK;
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'UnSubscribe(socket=% seq=%) cnt=% %',
-      [pointer(o^.socket), pointer(o^.head.sequence), Count - 1,
-       ToText(res)^], self);
+      [pointer(o^.socket), pointer(o^.head.sequence), Count - 1, _NR[res]], self);
   if wioUnsubscribeShutdownSocket in fOptions then
   begin
     // on Windows, ShutdownAndClose() would prematurely abort the socket

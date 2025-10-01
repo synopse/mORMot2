@@ -2917,7 +2917,7 @@ begin
         ctxt.InStream.Seek(0, soBeginning);
         res := SockSendStream(ctxt.InStream, 1 shl 20,
              {noraise=}false, {checkrecv=}true);
-        AppendLine(fRequestContext, [ctxt.InStream, ' = ', ToText(res)^]);
+        AppendLine(fRequestContext, [ctxt.InStream, ' = ', _NR[res]]);
         if res = nrRetry then
         begin
           // the server interrupted the upload by sending something (e.g. 413)

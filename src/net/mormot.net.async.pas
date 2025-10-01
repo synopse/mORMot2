@@ -1859,7 +1859,7 @@ begin
     begin
       if fDebugLog <> nil then
         DoLog('Write: connection.Send(%)=% len=% handle=%',
-          [pointer(connection.Socket), ToText(res)^,
+          [pointer(connection.Socket), _NR[res],
            sent, connection.Handle], sllLastError);
       exit;  // connection closed or broken -> abort
     end;
@@ -2104,7 +2104,7 @@ begin
           if fDebugLog <> nil then
             fDebugLog.Add.Log(LOG_TRACEWARNING[not (res in [nrOk, nrRetry, nrClosed])],
               'ProcessRead recv(%)=% len=% %in %',
-              [pointer(connection.Socket), ToText(res)^, recved, wf,
+              [pointer(connection.Socket), _NR[res], recved, wf,
                MicroSecFrom(start)], self);
           if connection.fSocket = nil then
             exit; // Stop() called
@@ -2113,7 +2113,7 @@ begin
           if res <> nrOk then
           begin
             // socket closed gracefully or unrecoverable error -> abort
-            CloseConnection(connection, ToText(res)^);
+            CloseConnection(connection, _NR[res]);
             exit;
           end;
           if (recved < 1024) and
@@ -2996,7 +2996,7 @@ begin
     res := client.MakeAsync;
   if res <> nrOK then
     EAsyncConnections.RaiseUtf8('%: %:% connection failure (%)',
-      [self, fThreadClients.Address, fThreadClients.Port, ToText(res)^]);
+      [self, fThreadClients.Address, fThreadClients.Port, _NR[res]]);
   // create and register the async connection as in TAsyncServer.Execute
   if not ConnectionCreate(client, addr, result) then
     client.ShutdownAndClose({rdwr=}false)
@@ -3935,7 +3935,7 @@ begin
           {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
       {$endif USE_WINIOCP}
         {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
-          ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
+          _NR[res], pointer(client), fAccepted, fConnectionHigh], self);}
         // first check if the server was shut down
         if Terminated then
         begin
@@ -3987,7 +3987,7 @@ begin
         begin
           // failure (too many clients?) -> wait and retry
           DoLog(sllDebug, 'Execute: Accept(%) failed as %',
-            [fServer.Port, ToText(res)^], self);
+            [fServer.Port, _NR[res]], self);
           // progressive wait on socket error, including nrTooManyConnections
           SleepStep(start);
           continue;
