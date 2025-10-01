@@ -357,10 +357,10 @@ type
     // - first method to call before using this object for encryption
     // - KeySize is in bits, i.e. 128, 192 or 256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
-    /// Initialize AES context for cipher, using 128-bit and CSPRNG
+    /// Initialize AES context for cipher, using CSPRNG as transient key source
     // - also set the internal IV field to a random value
     // - used e.g. by TAesSignature or Random128() for their initialization
-    procedure EncryptInitRandom;
+    procedure EncryptInitRandom(Bits: integer = 128);
     /// encrypt an AES data block into another data block
     // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Encrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
@@ -3638,12 +3638,12 @@ begin
   rnd128safe.Lock; // ensure thread safe with minimal contention
   aes := @rnd128gen;
   if PPtrUInt(aes)^ = 0 then
-    PAes(aes)^.EncryptInitRandom; // initialize once at startup
+    PAes(aes)^.EncryptInitRandom;   // initialize AES-128 once at startup
   iv^ := aes^.iv.b;
-  inc(aes^.iv.Lo); // AES-CTR with little endian 64-bit counter
+  inc(aes^.iv.Lo);                  // AES-CTR with little endian 64-bit counter
   if iv2 <> nil then
   begin
-    iv2^ := aes^.iv.b;
+    iv2^ := aes^.iv.b;              // additional 128-bit
     inc(aes^.iv.Lo);
   end;
   rnd128safe.UnLock;
@@ -4082,13 +4082,14 @@ begin
   result := true;
 end;
 
-procedure TAes.EncryptInitRandom;
+procedure TAes.EncryptInitRandom(Bits: integer);
 var
   rnd: THash256Rec;
 begin // note: we can't use Random128() here to avoid endless recursion
-  TAesPrng.Main.FillRandom(rnd.b);    // 256-bit from CSPRNG
-  EncryptInit(rnd.Lo, 128);           // transient AES-128 secret
-  TAesContext(Context).iv := rnd.h;   // safe IV
+  TAesPrng.Main.FillRandom(rnd.b);    // up to 256-bit from CSPRNG
+  EncryptInit(rnd, Bits);             // transient AES-128/256 secret
+  TAesPrng.Main.FillRandom(rnd.Lo);
+  TAesContext(Context).iv := rnd.l;   // safe IV from CSPRNG
   FillZero(rnd.b);                    // anti-forensic
 end;
 
