@@ -421,9 +421,6 @@ type
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
     function Initialized: boolean;
       {$ifdef FPC}inline;{$endif}
-    /// return TRUE if the AES-NI instruction sets are available on this CPU
-    function UsesAesni: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
     /// returns the key size in bits (128/192/256)
     function KeyBits: integer;
       {$ifdef FPC}inline;{$endif}
@@ -4315,15 +4312,6 @@ end;
 function TAes.Initialized: boolean;
 begin
   result := aesInitialized in TAesContext(Context).Flags;
-end;
-
-function TAes.UsesAesni: boolean;
-begin
-  {$ifdef ASMINTEL}
-  result := cfAESNI in CpuFeatures; // Flags may not have been set yet/anymore
-  {$else}
-  result := false;
-  {$endif ASMINTEL}
 end;
 
 function TAes.KeyBits: integer;

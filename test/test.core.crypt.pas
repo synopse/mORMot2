@@ -2883,7 +2883,7 @@ begin
         [Timer[false].Stop, Timer[true].Stop]);
       Include(CpuFeatures, cfAESNI); // revert Exclude() below from previous loop
     end;
-    if A.UsesAesni then
+    if HasHWAes then
       Exclude(CpuFeatures, cfAESNI);
     {$endif CPUINTEL}
   end;
