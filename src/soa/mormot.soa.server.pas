@@ -1741,7 +1741,7 @@ begin
     call.Init;
     ctxt := TRestServerUriContext.Create;
     try
-      ctxt.Prepare(fRestServer, call);
+      ctxt.Prepare(fRestServer, call, mPOST);
       for i := fFakeCallbacks.Count - 1 downto 0 do // backward for safety
       begin
         fake := fFakeCallbacks.List[i];
@@ -2032,7 +2032,7 @@ begin
   call.Init;
   ctxt := TRestServerUriContext.Create;
   try
-    ctxt.Prepare(fRestServer, call);
+    ctxt.Prepare(fRestServer, call, mPOST);
     fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
     try
       for i := fFakeCallbacks.Count - 1 downto 0 do // backward for safety

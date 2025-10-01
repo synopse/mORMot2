@@ -291,7 +291,8 @@ type
     // - this method could have been declared as protected, since it should
     // never be called outside the TRestServer.Uri() method workflow
     // - should set Call, and Method members
-    procedure Prepare(aServer: TRestServer; const aCall: TRestUriParams); virtual;
+    procedure Prepare(aServer: TRestServer; const aCall: TRestUriParams;
+      aMethod: TUriMethod); virtual;
     /// finalize the execution context
     destructor Destroy; override;
 
@@ -2815,17 +2816,15 @@ end;
 { TRestServerUriContext }
 
 procedure TRestServerUriContext.Prepare(aServer: TRestServer;
-  const aCall: TRestUriParams);
-var
-  fam: TSynLogFamily;
+  const aCall: TRestUriParams; aMethod: TUriMethod);
 begin
   // setup the state machine
   fCall := @aCall;
-  fMethod := ToMethod(aCall.Method);
+  fMethod := aMethod;
   if aCall.InBody <> '' then
     aCall.InBodyType(fInputContentType, {guessjsonifnone=}false);
   fServer := aServer;
-  fThreadServer := PerThreadRunningContextAddress;
+  fThreadServer := PerThreadRunningContextAddress; // threadvar access once
   fThreadServer^.Request := self;
   fMethodIndex := -1;
   // initialize optional logging
@@ -6124,12 +6123,12 @@ begin
   result := nil;
   if (self = nil) or
      (Ctxt = nil) or
-     (Ctxt.Call^.Url = '') or
      (Ctxt.Method < low(fTree)) or
-     (Ctxt.Method > high(fTree)) or
      (fTree[Ctxt.Method] = nil) then
     exit;
   p := pointer(Ctxt.Call^.Url);
+  if p = nil then
+    exit;
   if p^ = '/' then
     inc(p); // normalize
   result := pointer(TRestTreeNode(fTree[Ctxt.Method].Root).Lookup(p, Ctxt));
@@ -7717,11 +7716,12 @@ var
   node: TRestTreeNode;
   idletix32: cardinal;
   outcomingfile: boolean;
+  m: TUriMethod;
 begin
   // 1. reject ASAP if not worth processing
   if fShutdownRequested then
   begin
-    Call.OutStatus := HTTP_UNAVAILABLE; // too late!
+    Call.OutStatus := HTTP_UNAVAILABLE; // 503 = too late!
     exit;
   end;
   if (fIPBan <> nil) and
@@ -7731,7 +7731,18 @@ begin
   begin
     if sllServer in fLogLevel then
       InternalLog('Uri: banned %', [Call.LowLevelRemoteIP], sllServer);
-    Call.OutStatus := HTTP_TEAPOT; // I'm a teapot!
+    Call.OutStatus := HTTP_TEAPOT; // 418 = I'm a teapot!
+    exit;
+  end;
+  if fRouter = nil then
+    ComputeRoutes; // thread-safe (re)initialize once if needed
+  m := ToMethod(Call.Method);
+  if (m = mNone) or
+     (fRouter.Tree[m] = nil) then
+  begin
+    if sllServer in fLogLevel then
+      InternalLog('Uri: invalid method %', [Call.Method], sllServer);
+    Call.OutStatus := HTTP_NOTALLOWED; // 405
     exit;
   end;
   // 2. pre-request callback
@@ -7746,14 +7757,12 @@ begin
       exit;
     end;
   end;
-  // 3. request initialization
-  if fRouter = nil then
-    ComputeRoutes; // thread-safe (re)initialize once if needed
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
+  // 3. request initialization
   idletix32 := 0; // make compiler happy
   ctxt := fServicesRouting.Create;
   try
-    ctxt.Prepare(self, Call);
+    ctxt.Prepare(self, Call, m);
     // 4. setup the statistics
     if StatLevels <> [] then
     begin
@@ -7800,15 +7809,15 @@ begin
              // HTTPS does not authenticate by itself, WebSockets does
              not (llfHttps in Call.LowLevelConnectionFlags)) or
             ctxt.AuthenticationCheck(fJwtForUnauthenticatedRequest) then
-    // 7. call appropriate ORM / SOA commands in fAcquireExecution[] context
-    try
-      if (not Assigned(OnBeforeUri)) or
-         OnBeforeUri(ctxt) then
-        ctxt.ExecuteCommand;
-    except
-      on E: Exception do
-        HandleUriError(Ctxt, E);
-    end;
+      // 7. call appropriate ORM / SOA commands in fAcquireExecution[] context
+      try
+        if (not Assigned(OnBeforeUri)) or
+           OnBeforeUri(ctxt) then
+          ctxt.ExecuteCommand;
+      except
+        on E: Exception do
+          HandleUriError(Ctxt, E);
+      end;
     // 8. return expected result to the client
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
