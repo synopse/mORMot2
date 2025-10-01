@@ -480,9 +480,26 @@ var
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
 
+const
+  // don't use RTTI to avoid mormot.core.rtti.pas and have better spelling
+  _NR: array[TNetResult] of TShort31 = (
+    'Ok',
+    'Retry',
+    'No Socket',
+    'Not Found',
+    'Not Implemented',
+    'Closed',
+    'Fatal Error',
+    'Unknown Error',
+    'Too Many Connections',
+    'Refused',
+    'Connect Timeout',
+    'Invalid Parameter');
+
 /// returns the plain English text of a network result
-// - e.g. ToText(nrNotFound)='Not Found'
+// - e.g. ToText(nrNotFound)='Not Found' as defined in _NR[] global constant
 function ToText(res: TNetResult): PShortString; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a WaitFor() result set into a regular TNetResult enumerate
 function NetEventsToNetResult(ev: TNetEvents): TNetResult;
@@ -2277,22 +2294,6 @@ implementation
 {$ifdef OSPOSIX}
   {$I mormot.net.sock.posix.inc}
 {$endif OSPOSIX}
-
-const
-  // don't use RTTI to avoid mormot.core.rtti.pas and have better spelling
-  _NR: array[TNetResult] of string[20] = (
-    'Ok',
-    'Retry',
-    'No Socket',
-    'Not Found',
-    'Not Implemented',
-    'Closed',
-    'Fatal Error',
-    'Unknown Error',
-    'Too Many Connections',
-    'Refused',
-    'Connect Timeout',
-    'Invalid Parameter');
 
 function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
 begin
@@ -5999,7 +6000,7 @@ begin
     res := NewSocket(s, fPort, aLayer, doBind, fTimeout, fTimeout, fTimeout,
                      retry, fSock, @addr, aReusePort);
     //if Assigned(OnLog) then
-    //  OnLog(sllTrace, 'After NewSocket=%', [ToText(res)^], self);
+    //  OnLog(sllTrace, 'After NewSocket=%', [_NR[res]], self);
     addr.IP(fRemoteIP, true);
     if res <> nrOK then
       DoRaise('OpenBind(%s:%s): %s [remoteip=%s]',
