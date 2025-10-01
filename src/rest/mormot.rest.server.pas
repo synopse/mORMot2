@@ -2072,7 +2072,8 @@ type
     // - by definition, such JWT authentication won't identify any mORMot user
     // nor session (it just has to be valid), so only sicSingle, sicShared or
     // sicPerThread interface-based services execution are possible
-    // - typical usage is for a public API, in conjunction with
+    // - typical usage is for a public API, with simple client with no knowledge
+    // of our session_signature=xxx calculation algorithm, in conjunction with
     // ServiceDefine(...).ResultAsJsonObjectWithoutResult := true on the server
     // side and TRestClientUri.ServiceDefineSharedApi() method for the client
     // - see also JwtForUnauthenticatedRequestWhiteIP() for additional security
@@ -4141,21 +4142,25 @@ procedure TRestServerUriContext.FillInput(const LogInputIdent: RawUtf8);
 var
   n, max: PtrInt;
   P: PUtf8Char;
+  checksessionsign: boolean;
 begin
   P := fParameters;
   if (fInput <> nil) or
      (P = nil) then
     exit; // only do it once
+  checksessionsign := true;
   n := 0;
   max := 0;
   repeat
-    if IsSessionSignature(P) then // = IdemPChar(P, 'SESSION_SIGNATURE=')
+    if checksessionsign and
+       IsSessionSignature(P) then // = IdemPChar(P, 'SESSION_SIGNATURE=')
     begin
       // don't include the TAuthSession signature into Input[]
       P := PosChar(P + 18, '&');
       if P = nil then
         break;
       inc(P);
+      checksessionsign := false; // no need to check from now on (common case)
     end
     else
     begin
@@ -4707,7 +4712,7 @@ procedure TRestServerRoutingRest.ExecuteSoaByInterface;
 var
   par: PUtf8Char;
   fake: packed record
-    c: AnsiChar;      // [
+    c: AnsiChar;      // [ as default asJsonObject=false
     marker: cardinal; // detected by TInterfaceMethodExecute.ExecuteJson
     bin: pointer;     // RawByteString passed by reference
   end;
