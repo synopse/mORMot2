@@ -1195,7 +1195,7 @@ begin
      not IsValidUtf8NotVoid(Ctxt.InContent) then // may use AVX2
   begin
     // rsoOnlyValidUtf8 rejection
-    result := HTTP_NOTACCEPTABLE;
+    result := HTTP_NOTACCEPTABLE; // 406
     exit;
   end;
   // compute the REST-oriented request information

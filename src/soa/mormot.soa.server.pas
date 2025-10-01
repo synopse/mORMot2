@@ -1518,7 +1518,7 @@ begin
       begin
         // wrong request returns HTTP error 406
         if err[0] <> #0 then
-          Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE)
+          Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE) // 406
         else
           ExecuteError(self, Ctxt, 'execution failed (probably due to bad ' +
             'input parameters: e.g. did you initialize your input record(s)?)',

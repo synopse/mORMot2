@@ -6759,7 +6759,7 @@ begin
   result := HTTP_NOTFOUND;
   if size = 0 then
     exit; // not existing
-  result := HTTP_NOTACCEPTABLE;
+  result := HTTP_NOTACCEPTABLE; // 406
   if (aMessage.Size <> 0) and
      // ExpectedSize may be 0 if waoNoHeadFirst was set, or for pcfBearerDirect*
      (size <> aMessage.Size) then
@@ -7319,7 +7319,7 @@ begin
         [fn, id, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
   if size = 0 then
     exit; // not existing
-  result := HTTP_NOTACCEPTABLE;
+  result := HTTP_NOTACCEPTABLE; // 406
   if (aMessage.Size <> 0) and // ExpectedSize may be 0 if waoNoHeadFirst was set
      (size <> aMessage.Size) then
     exit; // invalid file
@@ -7718,12 +7718,12 @@ begin
     if fSettings = nil then
     begin
       err := oreShutdown;
-      result := HTTP_BADGATEWAY;
+      result := HTTP_BADGATEWAY; // 502
     end
     else if result <> HTTP_SUCCESS then
     begin
       // no local/partial known file: nothing to return
-      if result = HTTP_NOTACCEPTABLE then
+      if result = HTTP_NOTACCEPTABLE then // 406
         err := oreLocalFileNotAcceptable
       else
         err := oreNoLocalFile;

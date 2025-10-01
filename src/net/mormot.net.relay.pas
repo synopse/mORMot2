@@ -969,7 +969,7 @@ begin
     begin
       fLog.Add.Log(sllWarning, 'OnBeforeBody % already connected to %',
         [aRemoteIP, fServerConnected.Protocol.RemoteIP], self);
-      result := HTTP_NOTACCEPTABLE;
+      result := HTTP_NOTACCEPTABLE; // 406
     end
     else
       result := HTTP_SUCCESS // valid bearer -> continue the request

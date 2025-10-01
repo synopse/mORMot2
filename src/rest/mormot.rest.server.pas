@@ -7699,9 +7699,9 @@ begin
   if (not Assigned(OnErrorUri)) or
      OnErrorUri(ctxt, E) then
     if PClass(E)^ = EInterfaceFactory then
-      Ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)
+      Ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE) // 406
     else
-      Ctxt.Error(E, '', [], HTTP_SERVERERROR);
+      Ctxt.Error(E, '', [], HTTP_SERVERERROR);  // 500
 end;
 
 procedure TRestServer.Uri(var Call: TRestUriParams);

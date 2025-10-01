@@ -592,21 +592,21 @@ class function TServiceFactoryClient.GetErrorMessage(status: integer): RawUtf8;
 begin
   case status of
     // client-side exception
-    HTTP_CLIENTERROR:
+    HTTP_CLIENTERROR:    // 666
       result := 'Server not reachable or broken network/connection';
     // real server-side errors
-    HTTP_UNAVAILABLE:
+    HTTP_UNAVAILABLE:    // 503
       result := 'Server may be temporary down for maintenance or overloaded';
-    HTTP_NOTALLOWED:
+    HTTP_NOTALLOWED:     // 405
       result := 'Method forbidden for this User group';
-    HTTP_UNAUTHORIZED:
+    HTTP_UNAUTHORIZED:   // 401
       result := 'No active session';
-    HTTP_FORBIDDEN:
+    HTTP_FORBIDDEN:      // 403
       result := 'Security error';
-    HTTP_NOTACCEPTABLE:
+    HTTP_NOTACCEPTABLE:  // 406
       result := 'Invalid input parameters';
-    HTTP_NOTFOUND,
-    HTTP_NOTIMPLEMENTED:
+    HTTP_NOTFOUND,       // 404
+    HTTP_NOTIMPLEMENTED: // 501
       result := 'Server does not support this request';
   else
     result := '';

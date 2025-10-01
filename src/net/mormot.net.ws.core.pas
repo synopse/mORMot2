@@ -2845,7 +2845,7 @@ begin
     if not Protocol.ProcessHandshake(extins, extout, nil) then
     begin
       Protocol.Free;
-      result := HTTP_NOTACCEPTABLE;
+      result := HTTP_NOTACCEPTABLE; // 406
       exit;
     end;
   end;
