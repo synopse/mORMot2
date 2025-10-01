@@ -189,9 +189,9 @@ type
   protected
     fServer: TRestServer;
     fInput: TRawUtf8DynArray; // [nam1,val1, nam2,val2, ...] pairs
-    fStaticKind: TRestServerKind;
-    fNode: TRestNode;
-    fInputAllowDouble: boolean;
+    fStaticKind: TRestServerKind; // 8-bit
+    fNode: TRestNode;             // 8-bit
+    fInputAllowDouble: boolean;   // 8-bit
     fServiceMethodIndex: integer;
     fUriSessionSignaturePos: integer;
     fMethodIndex: integer;
@@ -199,7 +199,7 @@ type
     fAuthSession: TAuthSession;
     fUriMethodPath: RawUtf8;
     fUriBlobField: TOrmPropInfoRttiRawBlob;
-    fThreadServer: PServiceRunningContext;
+    fThreadServer: PServiceRunningContext; // threadvar access once
     fTable: TOrmClass;
     fTableModelProps: TOrmModelProperties;
     fTableEngine: TRestOrm;
@@ -923,7 +923,7 @@ type
     property Methods: TSynMonitorInputOutputObjArray
       read fMethods;
     /// per-session statistics about interface-based services
-    // - Interfaces[] follows TRestServer.Services.fListInterfaceMethod[] array
+    // - Interfaces[] follows TRestServer.Services.InterfaceMethod[] array
     // - is initialized and maintained only if mlSessions is defined in
     // TRestServer.StatLevels property
     property Interfaces: TSynMonitorInputOutputObjArray
@@ -3172,23 +3172,24 @@ begin
     exit;
   if fStatsInSize = 0 then
   begin
-    // rough estimation - but compute it once
+    // rough estimation - but compute it once for all level of stats
     fStatsInSize := length(fCall^.Url) + length(fCall^.Method) +
-      length(fCall^.InHead) + length(fCall^.InBody) + 12;
+                    length(fCall^.InHead) + length(fCall^.InBody) + 12;
     fStatsOutSize := length(fCall^.OutHead) + length(fCall^.OutBody) + 16;
   end;
   // set all TSynMonitorInputOutput fields in a single TLightLock
   Stats.Notify(fStatsInSize, fStatsOutSize, MicroSec, fCall^.OutStatus);
 end;
 
-procedure TRestServerUriContext.LogFromContext;
 const
-  COMMANDTEXT: array[TRestServerUriContextCommand] of string[15] = (
+  COMMAND_TEXT: array[TRestServerUriContextCommand] of string[15] = (
     '?', 'Method', 'Interface', 'Read', 'Write');
+
+procedure TRestServerUriContext.LogFromContext;
 var
   cmd: PShortString;
 begin
-  cmd := @COMMANDTEXT[fCommand];
+  cmd := @COMMAND_TEXT[fCommand];
   if sllServer in fServer.LogLevel then
     fLog.Log(sllServer, '% % % % %=% out=% in %', [SessionUserName,
       RemoteIPNotLocal, cmd^, fCall.Method,
@@ -3254,7 +3255,7 @@ begin
         begin
           if fAuthSession.fMethods = nil then
             Server.fStats.CreateNotifyAuthSession(fAuthSession.fMethods);
-          stat := @fAuthSession.fMethods[MethodIndex];
+          stat := @fAuthSession.fMethods[fMethodIndex];
           if stat^ = nil then
             Server.fStats.CreateNotify(stat^, fServerMethod^.Name);
           StatsFromContext(stat^, ms);
@@ -6004,7 +6005,7 @@ begin
             if (i = ctx.Server.fPublishedMethodAuthIndex) or
                (i = ctx.Server.fPublishedMethodTimestampIndex) or
                (i = ctx.Server.fPublishedMethodStatIndex) then
-              i := -1 // internal methods are not associated with any table
+              i := -1 // those internal methods have no associated table
             else if i = ctx.Server.fPublishedMethodBatchIndex then
               ctx.Command := execOrmWrite; // BATCH is run as ORM write
           ctx.fMethodIndex := i;
@@ -6748,7 +6749,7 @@ begin
     'memused',   GetMemoryInfoText,
     'diskfree',  GetDiskPartitionsVariant,
     'exception', GetLastExceptions(10)]);
-  Stats.Lock;
+  Stats.Lock; // TLightLock
   try
     Info.AddNameValuesToObject([
       'started',    Stats.StartDate,
@@ -6814,7 +6815,7 @@ begin
   begin
     W.CancelLastComma;
     W.AddShort(',"tables":[');
-    Stats.Lock; // thread-safe Stats.fPerTable[] access
+    Stats.Lock; // thread-safe Stats.fPerTable[] access with TLightLock
     try
       for i := 0 to fModel.TablesMax do
       begin
@@ -7812,7 +7813,7 @@ begin
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
       if ctxt.fUriSessionSignaturePos > 0 then // remove session_signature=...
-        FakeLength(Call.Url, ctxt.fUriSessionSignaturePos - 1);
+        FakeLength(Call.Url, ctxt.fUriSessionSignaturePos - 1); // for HTTP logs
       outcomingfile := false;
       if Call.OutBody <> '' then
         // detect 'Content-type: !STATICFILE' as first header
@@ -7823,7 +7824,7 @@ begin
         // handle Call.OutBody=''
         if (Call.OutStatus = HTTP_SUCCESS) and
            (rsoHttp200WithNoBodyReturns204 in fOptions) then
-          Call.OutStatus := HTTP_NOCONTENT;
+          Call.OutStatus := HTTP_NOCONTENT; // 204
       if StatLevels <> [] then
         fStats.ProcessSuccess(outcomingfile);
     end
@@ -7854,6 +7855,8 @@ begin
        not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(Call.OutHead) then
       ctxt.Error('Unsafe HTTP header rejected', HTTP_SERVERERROR);
+    if Assigned(OnIdle) then
+      idletix32 := ctxt.TickCount64 shr 7; // trigger OnIdle() every 128 ms
   finally
     // 10. gather statistics and log execution
     if StatLevels <> [] then
@@ -7867,8 +7870,6 @@ begin
         OnAfterUri(ctxt);
       except
       end;
-    if Assigned(OnIdle) then
-      idletix32 := ctxt.TickCount64 shr 7; // trigger OnIdle() every 128 ms
     ctxt.Free;
   end;
   // 12. trigger post-request periodic process

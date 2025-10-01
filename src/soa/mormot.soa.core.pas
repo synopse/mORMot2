@@ -436,8 +436,9 @@ type
   // and mormot.soa.server.pas
   TServiceFactoryServerAbstract = class(TServiceFactory)
   protected
-    fOptions: TInterfaceOptions;
-    fMethods: TUriMethods;
+    fOptions: TInterfaceOptions;    // 8-bit
+    fMethods: TUriMethods;          // 16-bit
+    fInterfaceMethodIndex: integer; // 32-bit
     fResultAsXMLObjectNameSpace: RawUtf8;
     function GetOption(opt: TInterfaceOption): boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -675,7 +676,7 @@ type
   /// used to store all methods in a global list of interface-based services
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
-  /// used in TServiceContainer to identify fListInterfaceMethod[] entries
+  /// used to identify TServiceContainer.InterfaceMethod[] entries
   // - maximum bit count of 255 is a limitation of the pascal compiler itself
   TServiceContainerInterfaceMethodBits = set of 0..255;
 
