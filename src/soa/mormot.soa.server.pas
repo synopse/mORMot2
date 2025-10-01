@@ -1816,6 +1816,7 @@ begin
     F := TServiceFactoryServer.Create(fRestServer, aInterfaces[j],
       aInstanceCreation, aImplementationClass, aContractExpected,
       fSessionTimeout, aSharedImplementation);
+    F.fInterfaceMethodIndex := length(fInterfaceMethod);
     if result = nil then
     begin
       result := F; // returns the first registered interface

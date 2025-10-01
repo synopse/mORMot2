@@ -635,6 +635,12 @@ type
     /// the HTTP methods used for TRestServerUriContext.UriComputeRoutes
     property Methods: TUriMethods
       read fMethods;
+    /// index of the first method of this interface in the global container
+    // TRestServer.Services.InterfaceMethod[] array
+    // - used e.g. by TAuthSession.StatsInterfaces to gather stats for each
+    // method as ctxt.Service^.InterfaceMethodIndex + ctxt.ServiceMethodIndex
+    property InterfaceMethodIndex: integer
+      read fInterfaceMethodIndex;
   end;
 
 
