@@ -1441,12 +1441,12 @@ const
   // see https://tools.ietf.org/html/rfc6455
   SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 var
-  SHA: TSha1;
+  sha1: TSha1;
 begin
-  SHA.Init;
-  SHA.Update(pointer(Base64), length(Base64));
-  SHA.Update(@SALT[1], 36);
-  SHA.Final(Digest);
+  sha1.Init;
+  sha1.Update(pointer(Base64), length(Base64));
+  sha1.Update(@SALT[1], 36);
+  sha1.Final(Digest);
 end;
 
 procedure ProcessMask(data: PCardinalArray; mask: PtrUInt; len: PtrInt);
@@ -2767,7 +2767,7 @@ var
   uri, version, prot, subprot, key, extin, extout, protout: RawUtf8;
   extins: TRawUtf8DynArray;
   P: PUtf8Char;
-  Digest: TSha1Digest;
+  dig: TSha1Digest;
 begin
   // validate WebSockets protocol upgrade request
   Protocol := nil;
@@ -2850,7 +2850,7 @@ begin
     end;
   end;
   // return the 101 header and switch protocols
-  ComputeChallenge(key, Digest);
+  ComputeChallenge(key, dig);
   if {%H-}extout <> '' then
     extout := Join(['Sec-WebSocket-Extensions: ', extout, #13#10]);
   FormatUtf8('HTTP/1.1 101 Switching Protocols'#13#10 +
@@ -2858,11 +2858,12 @@ begin
              'Connection: Upgrade'#13#10 +
              'Sec-WebSocket-Connection-ID: %'#13#10 +
              '%' +
-             '%Sec-WebSocket-Accept: %'#13#10#13#10,
+             '%' +
+             'Sec-WebSocket-Accept: %'#13#10#13#10,
     [ConnectionID,
      protout,
      extout,
-     BinToBase64Short(@Digest, SizeOf(Digest))], Response);
+     BinToBase64Short(@dig, SizeOf(dig))], Response);
   result := HTTP_SUCCESS;
   // on connection upgrade, will never be back to plain HTTP/1.1
 end;
