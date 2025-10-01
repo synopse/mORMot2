@@ -354,7 +354,8 @@ type
     /// access to the low-level HTTP header used for authentication
     // - you can force here your own header, e.g. a JWT as authentication bearer
     // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
-    // - used e.g. by TRestClientAuthenticationHttpBasic
+    // - used e.g. by TRestClientAuthenticationHttpBasic or if /auth returned a
+    // "bearer":"xxx" field from rsoAuthenticationBearerHeader in Server options
     HttpHeader: RawUtf8;
     /// the remote server executable name, as retrieved after a SetUser() success
     Server: RawUtf8;
@@ -1226,7 +1227,7 @@ end;
 { TRestClientAuthentication }
 
 const
-  AUTH_N: array[0..9] of PUtf8Char = (
+  AUTH_N: array[0..10] of PUtf8Char = (
     'result',        // 0
     'data',          // 1
     'server',        // 2
@@ -1236,7 +1237,8 @@ const
     'logondisplay',  // 6
     'logongroup',    // 7
     'timeout',       // 8
-    'algo');         // 9
+    'algo',          // 9
+    'bearer');       // 10
 
 class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
@@ -1267,6 +1269,9 @@ begin
   if Sender.fSession.ServerTimeout <= 0 then
     Sender.fSession.ServerTimeout := 60; // default 1 hour if not suppplied
   Sender.fSession.IDHexa8 := '';
+  if values[10].Text <> nil then
+    // from rsoAuthenticationBearerHeader in Server.Options
+    Join(['Authorization: Bearer ', values[10].ToUtf8], Sender.fSession.HttpHeader);
   if values[9].Text <> nil then
   begin
     a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
@@ -2356,6 +2361,7 @@ begin
     fSession.IDHexa8 := '';
     fSession.PrivateKey := 0;
     fSession.Authentication := nil;
+    fSession.HttpHeader := '';
     fSession.Server := '';
     fSession.Version := '';
     FillZero(fSession.Data);

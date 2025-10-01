@@ -1598,7 +1598,7 @@ type
   // to sanitize character encodings - with AVX2 this function is very fast so
   // this could be a good option if you don't trust your clients
   // - rsoSessionInConnectionOpaque uses LowLevelConnectionOpaque^.ValueInternal
-  // to store the current TAuthSession - may be used with a lot of sessions
+  // to store the current TAuthSession - could be used with a lot of sessions
   // - rsoCookieSecure will add the "Secure" directive in the cookie content
   // - rsoNoUnknownUserResponse returns "Invalid password" instead of "Unknown
   // User" message to avoid client fuzzing about valid User names
@@ -1606,6 +1606,9 @@ type
   // connection: but won't work e.g. over TPublicRelay, or require proper
   // "proxy_set_header X-Conn-ID $connection" configuration behind nginx proxy
   // with the corresponding THttpServerGeneric.RemoteConnIDHeader := 'X-Conn-ID'
+  // - rsoAuthenticationBearerHeader let /auth return a "bearer":"xxx" value to
+  // be sent with each request as 'Authentication: Bearer xxx' in addition to
+  // the regular URI-signing feature - using safe and efficient TAesSignature
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1628,7 +1631,8 @@ type
     rsoSessionInConnectionOpaque,
     rsoCookieSecure,
     rsoNoUnknownUserResponse,
-    rsoPerConnectionNonce);
+    rsoPerConnectionNonce,
+    rsoAuthenticationBearerHeader);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -1811,6 +1815,7 @@ type
     fRouter: TRestRouter;
     fRouterSafe: TRWLightLock;
     fOnNotifyCallback: TOnRestServerClientCallback;
+    fAuthenticationBearerHeader: PAesSignature;
     fServiceReleaseTimeoutMicrosec: integer;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
@@ -2055,6 +2060,10 @@ type
       const aMethods: array of TRestServerAuthenticationClass); overload;
     /// call this method to remove all authentication methods to the server
     procedure AuthenticationUnregisterAll;
+    /// access to the TAesSignature instance used by rsoAuthenticationBearerHeader
+    // - may be used at HTTP server level using a custom OnBeforeBody() callback
+    property AuthenticationBearerHeader: PAesSignature
+      read fAuthenticationBearerHeader;
     /// read-only access to the internal list of sessions
     // - ensure you protect its access using Sessions.Safe TRWLock
     property Sessions: TSynObjectListSorted
@@ -2927,7 +2936,7 @@ function TRestServerUriContext.Authenticate: boolean;
 var
   s: TAuthSession;
   a: ^TRestServerAuthentication;
-  tix32: cardinal;
+  tix32, bearerid: cardinal;
   n: integer;
 begin
   result := true;
@@ -2948,6 +2957,23 @@ begin
         (Method in Server.BypassOrmAuthentication)) then
       // no need to check the sessions
       exit;
+    // optional 'Authentication: Bearer xxx' check on pure HTTP mode
+    bearerid := 0;
+    if (rsoAuthenticationBearerHeader in Server.Options) and
+       (Call^.LowLevelConnectionFlags * [llfWebsockets, llfInProcess] = []) then
+    begin
+      bearerid := Server.AuthenticationBearerHeader^.
+                    ValidateCookie(Call^.LowLevelBearerToken); // very fast
+      if bearerid = 0 then
+      begin
+        if Assigned(fLog) and
+           (sllUserAuth in Server.fLogLevel) then
+          fLog.Log(sllUserAuth, 'Authenticate: invalid bearer=%',
+            [Call^.LowLevelBearerToken], self);
+        result := false;
+        exit;
+      end;
+    end;
     // first check for deprecated sessions (every second is enough)
     tix32 := TickCount64 shr 10;
     if Server.fSessionsDeprecatedTix <> tix32 then
@@ -2958,14 +2984,20 @@ begin
     begin
       s := pointer(Call^.LowLevelConnectionOpaque^.ValueInternal);
       if s <> nil then
+      begin
         if PClass(s)^ = Server.fSessionClass then
-        begin
-          // safely avoid signature parsing and session lookup
-          SessionAssign(s);
-          exit;
-        end
-        else
-          Call^.LowLevelConnectionOpaque^.ValueInternal := 0; // paranoid
+          if (bearerid = 0) or
+             (s.ID = bearerid) then
+          begin
+            // safely avoid signature parsing and session lookup
+            SessionAssign(s);
+            exit;
+          end
+          else
+            fLog.Log(sllWarning, 'Authenticate: session bearer=% <> opaque=%',
+              [bearerid, s.ID], self);
+        end;
+      Call^.LowLevelConnectionOpaque^.ValueInternal := 0; // paranoid
     end;
     // parse URI signature (or cookie) to retrieve the associated session
     Server.fSessions.Safe.ReadOnlyLock; // allow concurrent authentication
@@ -2984,6 +3016,11 @@ begin
                (PCardinal(s.RemoteIP)^ <> HOST_127) then
               fLog.Log(sllUserAuth, '%/% %',
                 [s.User.LogonName, s.ID, s.RemoteIP], self);
+            result := (bearerid = 0) or
+                      (s.ID = bearerid);
+            if not result then
+              fLog.Log(sllWarning, 'Authenticate: session bearer=% <> uri=%',
+                [bearerid, s.ID], self);
             exit;
           end;
           inc(a);
@@ -5152,12 +5189,17 @@ begin
   if result = '' then
     body.AddValue('result', Session.ID)
   else
-    body.AddValue('result', RawUtf8ToVariant(result));
+    body.AddValueText('result', result);
+  if rsoAuthenticationBearerHeader in fServer.Options then
+    // TRestClientAuthentication.ClientGetSessionKey would now send an
+    // 'Authentication: Bearer xxx' HTTP header from "bearer":"xxx"
+    body.AddValueText('bearer',
+      fServer.fAuthenticationBearerHeader.GenerateCookie(Session.ID));
   if data <> '' then
-    body.AddValue('data', RawUtf8ToVariant(data));
+    body.AddValueText('data', data);
   if fAlgoName <> '' then
     // match e.g. TRestServerAuthenticationSignedUriAlgo
-    body.AddValue('algo', RawUtf8ToVariant(fAlgoName));
+    body.AddValueText('algo', fAlgoName);
   with Session.User do
     body.AddNameValuesToObject([
       'logonid',      IDValue,
@@ -6311,6 +6353,8 @@ begin
   if GlobalLibraryRequestServer = self then
     GlobalLibraryRequestServer := nil; // unregister
   FreeAndNilSafe(fRouter);
+  if fAuthenticationBearerHeader <> nil then
+    FreeMem(fAuthenticationBearerHeader);
 end;
 
 constructor TRestServer.CreateWithOwnModel(const Tables: array of TOrmClass;
@@ -6976,10 +7020,19 @@ var
   log: ISynLog;
 begin
   fLogClass.EnterLocal(log, self, 'ComputeRoutes');
+  r := nil;
   fRouterSafe.WriteLock;
   try
     if fRouter <> nil then
       exit;
+    // adjust the global context for some options
+    if rsoAuthenticationBearerHeader in fOptions then
+      if fAuthenticationBearerHeader = nil then
+      begin
+        fAuthenticationBearerHeader := AllocMem(SizeOf(TAesSignature));
+        fAuthenticationBearerHeader^.Init;
+      end;
+    // actually allocate the main TRestRouter instance
     r := TRestRouter.Create(self);
     // ORM remote access via REST
     if (fModel.TablesMax >= 0) and
@@ -7046,9 +7099,12 @@ begin
     if Services <> nil then
       fServicesRouting.UriComputeRoutes(r, self); // depends on actual class
     //writeln(r.Tree[mPOST].ToText);
-    fRouter := r; // set it in last position
+    // eventually set the TRestServer router instance
+    fRouter := r;
+    r := nil; // will be own by this TRestServer from now own
   finally
     fRouterSafe.WriteUnLock;
+    r.Free; // don't leak memory on exception above
   end;
   if log <> nil then
     log.Log(sllDebug, 'ComputeRoutes %:%',
@@ -7729,7 +7785,7 @@ begin
     exit;
   end;
   if fRouter = nil then
-    ComputeRoutes; // thread-safe (re)initialize once if needed
+    ComputeRoutes; // thread-safe initialize once or after ResetRoutes
   m := ToMethod(Call.Method);
   if (m = mNone) or
      (fRouter.Tree[m] = nil) then
