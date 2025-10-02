@@ -7306,7 +7306,7 @@ var
     @_FillRandom,     //  ptHash128
     @_FillRandom,     //  ptHash256
     @_FillRandom,     //  ptHash512
-    @_NoRandom,       //  ptOrm
+    @_FillRandom,     //  ptOrm
     @_FillRandom,     //  ptTimeLog
     {$ifdef HASVARUSTRING}
     @_UStringRandom,
@@ -7578,11 +7578,11 @@ begin
   end;
   if nfo <> nil then
   begin
-    p := pointer(nfo.Props.List); // for both records and classes
     if Info^.Kind = rkClass then
       v := PPointer(Value)^ // classes are passed by reference
     else
       v := @Value;          // records are passed by value
+    p := pointer(nfo.Props.List); // for both records and classes
     for i := 1 to nfo.Props.Count do
     begin
       if (p^.OffsetSet >= 0) and
