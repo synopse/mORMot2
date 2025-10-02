@@ -5190,11 +5190,6 @@ begin
     body.AddValue('result', Session.ID)
   else
     body.AddValueText('result', result);
-  if rsoAuthenticationBearerHeader in fServer.Options then
-    // TRestClientAuthentication.ClientGetSessionKey would now send an
-    // 'Authentication: Bearer xxx' HTTP header from "bearer":"xxx"
-    body.AddValueText('bearer',
-      fServer.fAuthenticationBearerHeader.GenerateCookie(Session.ID));
   if data <> '' then
     body.AddValueText('data', data);
   if fAlgoName <> '' then
@@ -5216,6 +5211,12 @@ begin
       vers := Executable.Version.Main;
     body.AddValue('version', StringToVariant(vers));
   end;
+  if rsoAuthenticationBearerHeader in fServer.Options then
+    // TRestClientAuthentication.ClientGetSessionKey would now send an
+    // 'Authentication: Bearer xxx' HTTP header from "bearer":"xxx"
+    body.AddValueText('bearer',
+      fServer.fAuthenticationBearerHeader.GenerateCookie(Session.ID));
+  include(Ctxt.fServiceExecutionOptions, optNoLogOutput); // hide sensitive info
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
 
