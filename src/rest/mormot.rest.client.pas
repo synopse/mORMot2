@@ -691,7 +691,7 @@ type
     function CallBackGet(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
       out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
-      aResponseHead: PRawUtf8 = nil): integer;
+      aResponseHead: PRawUtf8 = nil; noLog: boolean = false): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the UTF-8 decoded JSON result (server must reply with one
@@ -1249,8 +1249,8 @@ var
   cookie: PUtf8Char;
   a: integer;
 begin
-  if (Sender.CallBackGet('auth',
-        aNameValueParameters, resp, nil, 0, @hdr) <> HTTP_SUCCESS) or
+  if (Sender.CallBackGet('auth', aNameValueParameters, resp,
+        nil, 0, @hdr, {nolog=}true) <> HTTP_SUCCESS) or
      (JsonDecode(pointer({%H-}resp), @AUTH_N, length(AUTH_N), @values) = nil) then
   begin
     Sender.fSession.Data := ''; // reset temporary 'data' field
@@ -2664,7 +2664,7 @@ end;
 
 function TRestClientUri.CallBackGet(const aMethodName: RawUtf8;
   const aNameValueParameters: array of const; out aResponse: RawUtf8;
-  aTable: TOrmClass; aID: TID; aResponseHead: PRawUtf8): integer;
+  aTable: TOrmClass; aID: TID; aResponseHead: PRawUtf8; noLog: boolean): integer;
 var
   url, header: RawUtf8;
   {%H-}log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
@@ -2680,7 +2680,8 @@ begin
     result := Uri(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
       aResponseHead^ := header;
-    if sllServiceReturn in fLogLevel then
+    if (sllServiceReturn in fLogLevel) and
+       not noLog then
       InternalLogResponse(aResponse, 'CallBackGet');
   end;
 end;
