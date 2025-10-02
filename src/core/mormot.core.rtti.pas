@@ -3164,9 +3164,11 @@ type
   // - records should have field-level extended RTTI (since Delphi 2010 / FPC
   // trunk), or have been properly defined with Rtti.RegisterFromText() on
   // oldest Delphi or FPC
-  // - allow RTTI or custom mapping, e.g. with Data Transfer Objects (DTO)
-  // - ToA() / ToB() methods are thread-safe by design: once Init() and Map()
-  // have been made, you can safely share a single TRttiMap between threads
+  // - allow RTTI or custom mapping, e.g. between isolated Domain Objects and
+  // Data Transfer Objects (DTO) - also for testing via RandomA/B() and Compare()
+  // - processing methods are thread-safe by design: once Init() and Map()
+  // have been made, you can safely share a single TRttiMap between threads,
+  // e.g. as a global variables in your DTO type definitions unit
   {$ifdef USERECORDWITHMETHODS}
   TRttiMap = record
   {$else}
@@ -3201,7 +3203,7 @@ type
     /// map fields by A,B pairs of names
     // - returns self to continue manual calls to Map() in a fluid interface
     function Map(const ABPairs: array of RawUtf8): PRttiMap; overload;
-    /// thread-safe copy B fields values into A
+    /// thread-safe copy mapped B fields values into A
     // - A and B are either a TObject instance or a @record pointer, depending
     // on Init() supplied types, for instance:
     // !var c: TMyClass;
@@ -3211,10 +3213,10 @@ type
     // !  map.ToA(c, @r); // from TMyRecord to TMyClass
     // !  map.ToB(c, @r); // from TMyClass to TMyRecord
     procedure ToA(A, B: pointer); overload;
-    /// thread-safe copy A fields values into B
+    /// thread-safe copy mapped A fields values into B
     // - A/B are either TObject instance or @record pointer, depending on Init()
     procedure ToB(A, B: pointer); overload;
-    /// thread-safe create a new A, copying field values from B
+    /// thread-safe create a new A, copying mapped field values from B
     // - if Init(A) was a class, returned pointer is a new class instance,
     // which should be released via Free
     // - if Init(A) was a record, returned pointer if a heap-allocated record,
@@ -3245,7 +3247,7 @@ type
     // !  end;
     // !end;
     function ToA(B: pointer): pointer; overload;
-    /// thread-safe create a new B, copying field values from A
+    /// thread-safe create a new B, copying mapped field values from A
     // - if Init(B) was a class, returned pointer is a new class instance,
     // which should be released via Free
     // - if Init(B) was a record, returned pointer if a heap-allocated record,
@@ -3253,14 +3255,16 @@ type
     // - returned B is a newly allocated instance of the TClass specified to Init()
     function ToB(A: pointer): pointer; overload;
     /// compare A and B fields, using the registered properties mapping
-    // - could be useful e.g. for regression tests
+    // - could be useful e.g. for regression tests between DTOs and Domain Objects
     // - A/B are either TObject instance or @record pointer, depending on Init()
     function Compare(A, B: pointer; CaseInsensitive: boolean = false): integer;
     /// fill one A instance fields with some random values
     // - A is either a TObject instance or @record pointer, depending on Init()
+    // - could be useful e.g. for filling some objects during regression tests
     procedure RandomA(A: pointer);
     /// fill one B instance fields with some random values
     // - B is either a TObject instance or @record pointer, depending on Init()
+    // - could be useful e.g. for filling some objects during regression tests
     procedure RandomB(B: pointer);
   end;
 
