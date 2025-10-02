@@ -1875,7 +1875,7 @@ begin
   SetLength(console, CONSOLE_COUNT); // several agents per console
   relay := TTunnelRelay.Create(TSynLog, {timeoutsecs=}120);
   try
-    // no SOA transmission first
+    // 2.1. no SOA transmission first
     TSynLog.Add.Log(sllInfo, 'Tunnel: retrieve SOA endpoints', self);
     SetLength(agent, 1);
     Check(relay.Resolve(ITunnelAgent, agent[0]), 'sicShared agent');
@@ -1886,15 +1886,18 @@ begin
     TunnelRelay(relay, agent, console, rnd, {packets=}10);
     agent := nil;
     console := nil;
-    // setup a SOA WebSockets server as actual relay over WebSockets
+    // 2.2. setup a SOA WebSockets server as actual relay over WebSockets
     TSynLog.Add.Log(sllInfo, 'Tunnel: start WebSockets server', self);
     restserver := TRestServerFullMemory.CreateWithOwnModel(
       [], {withauth=}true, 'tun');
     try
       restserver.Options := restserver.Options +
-        [rsoAuthenticationBearerHeader,
+        [rsoSessionInConnectionOpaque, // also validate some security options :)
          rsoPerConnectionNonce];
+      // validate SetUser('User', 'password') below using mcfMd5Crypt
+      AuthUserDefaultPassword := '$1$3azHgidD$SrJPt7B.9rekpmwJwtON31';
       restserver.Server.CreateMissingTables;
+      AuthUserDefaultPassword := DEFAULT_HASH_SYNOPSE;
       restserver.ServiceDefine(relay.Agent, [ITunnelAgent]);
       restserver.ServiceContainer.InjectResolver([relay]);
       restserver.ServiceDefine(TTunnelconsole, [ITunnelConsole], sicPerSession);
@@ -1914,7 +1917,7 @@ begin
           agentclient[i] := TRestHttpClientWebsockets.CreateWithOwnModel(
             'localhost', '8888', 'tun');
           agentclient[i].WebSocketsUpgrade(WS_KEY, false, []);
-          check(agentclient[i].SetUser('User', 'synopse'));
+          check(agentclient[i].SetUser('User', 'password'), 'setuser1');
           agentclient[i].ServiceDefine(ITunnelAgent, sicShared);
           agentclient[i].Resolve(ITunnelAgent, agent[i]);
         end;
@@ -1926,7 +1929,7 @@ begin
           consoleclient[i] := TRestHttpClientWebsockets.CreateWithOwnModel(
             'localhost', '8888', 'tun');
           consoleclient[i].WebSocketsUpgrade(WS_KEY, false, []);
-          check(consoleclient[i].SetUser('User', 'synopse'));
+          check(consoleclient[i].SetUser('User', 'password'), 'setuser2');
           consoleclient[i].ServiceDefine(ITunnelConsole, sicPerSession);
           consoleclient[i].Resolve(ITunnelConsole, console[i]);
         end;
