@@ -9440,7 +9440,7 @@ procedure TDocVariantData.SetValueOrRaiseException(Index: integer;
 begin
   if cardinal(Index) >= cardinal(VCount) then
     EDocVariant.RaiseUtf8('Out of range Values[%] (count=%)', [Index, VCount]);
-  VValue[Index] := NewValue;
+  InternalSetValue(Index, NewValue);
 end;
 
 function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
