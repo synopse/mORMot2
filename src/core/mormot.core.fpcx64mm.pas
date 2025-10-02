@@ -901,8 +901,8 @@ const
   {$endif FPCMM_PAUSE}
   {$else}
   // pause with constant spinning counts (empirical values)
-  SpinMediumLockCount        = pred(6 shl 5); // exponential backoff
-  SpinLargeLockCount         = 1000;          // linear backoff
+  SpinMediumLockCount        = pred(6 shl 5); // with exponential pause backoff
+  SpinLargeLockCount         = 1000;          // linear backoff is enough here
   {$ifdef FPCMM_PAUSE}
   SpinSmallGetmemLockCount   = 500;
   {$endif FPCMM_PAUSE}

@@ -1356,7 +1356,8 @@ begin
     values[0].ToUtf8(servernonce);
     if servernonce = '' then
       exit;
-    if values[1].Text <> nil then // this user has a "Modular Crypt" hash
+    // hash the password, with proper "Modular Crypt" support
+    if values[1].Text <> nil then // this user got a mcf specific format
       mcfhash := ModularCryptHash(values[1].ToUtf8, User.PasswordHashHexa);
     if mcfhash <> '' then
       User.PasswordHashHexa := mcfhash
@@ -1368,6 +1369,7 @@ begin
     servernonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if servernonce = '' then
     exit;
+  // compute and return a proof, challenged against client and server nonces
   Random128(@rnd); // unpredictable
   Join([CardinalToHex(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
     clientnonce); // 160-bit nonce

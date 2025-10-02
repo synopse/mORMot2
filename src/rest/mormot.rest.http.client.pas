@@ -696,11 +696,11 @@ begin
     [Definition.ServerName, fServer, fPort]);
   Definition.DatabaseName := UrlEncode([
     'IgnoreTlsCertificateErrors', ord(fExtendedOptions.TLS.IgnoreCertificateErrors),
-    'ConnectTimeout', fConnectTimeout,
-    'SendTimeout',    fSendTimeout,
-    'ReceiveTimeout', fReceiveTimeout,
-    'ProxyName',   fProxyName,
-    'ProxyByPass', fProxyByPass], [ueTrimLeadingQuestionMark]);
+    'ConnectTimeout',             fConnectTimeout,
+    'SendTimeout',                fSendTimeout,
+    'ReceiveTimeout',             fReceiveTimeout,
+    'ProxyName',                  fProxyName,
+    'ProxyByPass',                fProxyByPass], [ueTrimLeadingQuestionMark]);
 end;
 
 constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;

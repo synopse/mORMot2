@@ -4328,7 +4328,7 @@ end;
 
 function SortDynArrayWordBoolean(const A, B): integer;
 begin
-  if WordBool(A) then // normalize
+  if WordBool(A) then // normalize (an OLE WordBool may be $ffff)
     if WordBool(B) then
       result := 0
     else
