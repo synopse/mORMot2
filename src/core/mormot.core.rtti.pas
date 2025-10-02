@@ -6992,6 +6992,19 @@ end;
 
 { ************* Managed Types Finalization, Random or Copy }
 
+procedure TRttiCustom.ValueRandom(Data: pointer); // defined here for inlining
+begin
+  fSetRandom(Data, self); // handle most simple kind of values from RTTI
+end;
+
+function TRttiCustom.PropsCount: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := fProps.Count;
+end;
+
 { RTTI_FINALIZE[] implementation functions }
 
 function _StringClear(V: PPointer; Info: PRttiInfo): PtrInt;
@@ -9276,11 +9289,6 @@ begin
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
-procedure TRttiCustom.ValueRandom(Data: pointer);
-begin
-  fSetRandom(Data, self); // handle most simple kind of values from RTTI
-end;
-
 function TRttiCustom.ValueFullHash(const Elem): cardinal;
 begin
   result := DefaultHasher(PtrUInt(self), @Elem, fCache.ItemSize);
@@ -9816,13 +9824,6 @@ begin
   r.fArrayRtti := Rtti.RegisterClass(aItemClass);
 end; // no need to set other fields like Name
 
-function TRttiCustom.PropsCount: integer;
-begin
-  if self = nil then
-    result := 0
-  else
-    result := fProps.Count;
-end;
 
 
 { TRttiCustomList }
@@ -10638,17 +10639,23 @@ begin
 end;
 
 procedure TRttiMap.RandomA(A: pointer);
+var
+  tmp: pointer;
 begin
+  tmp := A;
   if aRtti.Kind = rkClass then
-    A := @A; // low-level TRttiCustom methods expect a PObject
-  aRtti.ValueRandom(A); // just use the RTTI
+    tmp := @A; // low-level TRttiCustom methods expect a PObject
+  aRtti.ValueRandom(tmp); // just use the RTTI
 end;
 
 procedure TRttiMap.RandomB(B: pointer);
+var
+  tmp: pointer;
 begin
-  if aRtti.Kind = rkClass then
-    B := @B; // low-level TRttiCustom methods expect a PObject
-  bRtti.ValueRandom(B);
+  tmp := B;
+  if bRtti.Kind = rkClass then
+    tmp := @B; // low-level TRttiCustom methods expect a PObject
+  bRtti.ValueRandom(tmp);
 end;
 
 
