@@ -4596,7 +4596,7 @@ begin
      (ifUrlParamPosSet in fInternalFlags) then
     exit;
   include(fInternalFlags, ifUrlParamPosSet); // call PosChar() once
-  result := PosChar(pointer(Url), '?');
+  result := PosCharU(Url, '?');
   fUrlParamPos := result;
 end;
 

@@ -8853,7 +8853,7 @@ begin
   // same logic than TJwtAbstract.Verify, but (slower and) with no cache
   // -> TJwtAbstract is to be preferred if the ICryptCert is reused
   result := cvWrongUsage;
-  P := PosChar(pointer(Jwt), '.');
+  P := PosCharU(Jwt, '.');
   if P = nil then
     exit;
   S := PosChar(P + 1, '.');

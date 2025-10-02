@@ -312,7 +312,7 @@ begin
     exit;
   if ctxt.OutSetCookie <> '' then // 'name=value; path=...'
   begin
-    Value := PosChar(pointer(ctxt.OutSetCookie), '='); // assume name=CookieName
+    Value := PosCharU(ctxt.OutSetCookie, '='); // assume name=CookieName
     if Value <> nil then
     begin
       inc(Value);

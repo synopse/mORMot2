@@ -6435,7 +6435,7 @@ var
   amp: PUtf8CHar;
   temp: TTextWriterStackBuffer;
 begin
-  amp := PosChar(pointer(text), length(text), '&');
+  amp := PosCharU(text, '&');
   if amp = nil then
   begin
     result := text; // nothing to change
@@ -6456,7 +6456,7 @@ var
   tag: PUtf8CHar;
   temp: TTextWriterStackBuffer;
 begin
-  tag := PosChar(pointer(text), length(text), '<');
+  tag := PosCharU(text, '<');
   if tag = nil then
   begin
     result := HtmlUnescape(text); // no tag, but there may be some &entity;

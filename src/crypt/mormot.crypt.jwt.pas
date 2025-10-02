@@ -1298,7 +1298,7 @@ var
   temp: TSynTempBuffer;
 begin
   result := '';
-  P := PosChar(pointer(Token), '.');
+  P := PosCharU(Token, '.');
   if (P = nil) or
      (PosChar(P + 1, '.') = nil) then
     exit;
@@ -1335,7 +1335,7 @@ begin
   if Token = '' then
     exit;
   result := jwtInvalidAlgorithm;
-  P := PosChar(pointer(Token), '.');
+  P := PosCharU(Token, '.');
   if P = nil then
     exit;
   if self <> TJwtAbstract then

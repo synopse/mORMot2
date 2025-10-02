@@ -2658,9 +2658,9 @@ begin
     while Sql[i] in [#1 .. ' '] do
       inc(i); // trim left
     result := copy(Sql, i, maxInt);
-    P := PosChar(pointer(result), ' ');
+    P := PosCharU(result, ' ');
     if P = nil then
-      P := PosChar(pointer(result), ';');
+      P := PosCharU(result, ';');
     if P <> nil then
       FakeLength(result, P - pointer(result)); // trim right
   end;
