@@ -6213,6 +6213,9 @@ begin
     check(PosChar(pointer(U2), #0) = nil);
     check(PosChar(pointer(U2), #1) = nil);
     check(PosChar(pointer(U2), #10) = @U2[length(U2)]);
+    check(PosCharU(U2, #0) = nil);
+    check(PosCharU(U2, #1) = nil);
+    check(PosCharU(U2, #10) = @U2[length(U2)]);
     if U = '' then
       continue;
     U2 := QuotedStr(U, '"');

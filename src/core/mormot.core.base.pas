@@ -3207,6 +3207,11 @@ function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char; overload;
 function PosChar(Str: PUtf8Char; StrLen: PtrInt; Chr: AnsiChar): PUtf8Char; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast retrieve the pointer of a given character in a UTF-8 string
+// - will use fast SSE2 asm on x86_64
+function PosCharU(const Str: RawUtf8; Chr: AnsiChar): PUtf8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
 {$ifndef PUREMORMOT2}
 /// fast dedicated RawUtf8 version of Trim()
 // - in the middle of UI code, consider using TrimU() which won't have name
@@ -9539,6 +9544,20 @@ begin
   StrLen := ByteScanIndex(pointer(Str), StrLen, byte(Chr));
   if StrLen >= 0 then
     result := Str + StrLen;
+end;
+
+function PosCharU(const Str: RawUtf8; Chr: AnsiChar): PUtf8Char;
+var
+  len: PtrInt;
+begin
+  result := pointer(Str);
+  if Str = '' then
+    exit;
+  len := ByteScanIndex(pointer(result), PStrLen(result - _STRLEN)^, byte(Chr));
+  if len >= 0 then
+    inc(result, len)
+  else
+    result := nil;
 end;
 
 {$ifdef UNICODE}

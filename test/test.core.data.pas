@@ -6369,7 +6369,7 @@ begin
   CheckEqual(s, '/root?ab=1&ab2=10&d=3');
   Doc.Clear;
   CheckEqual(Doc.Count, 0);
-  p := PosChar(pointer(s), '?');
+  p := PosCharU(s, '?');
   if not CheckFailed(p <> nil) then
     Doc.InitFromUrl(p + 1, JSON_FAST);
   CheckEqual(Doc.Count, 3);
