@@ -5143,7 +5143,7 @@ begin
     result := true
   else
   begin
-    ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
+    ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.Has(dvoNameCaseSensitive));
     if ndx < 0 then
       if NoException or
          dv.Has(dvoReturnNullForUnknownProperty) then
@@ -5175,7 +5175,7 @@ begin
     dv.AddItem(variant(Value));
     exit;
   end;
-  ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
+  ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.Has(dvoNameCaseSensitive));
   if ndx < 0 then
     if dv.IsArray then
       exit // avoid EDocVariant in dv.InternalAddBuf()
@@ -5304,7 +5304,7 @@ begin
       begin
         temp := ToUtf8(Arguments[0]);
         Data.RetrieveValueOrRaiseException(pointer(temp), length(temp),
-          Data.IsCaseSensitive, variant(Dest), true);
+          Data.Has(dvoNameCaseSensitive), variant(Dest), true);
         exit;
       end;
   end;
@@ -7183,7 +7183,7 @@ begin // hash all [names and] values in-place with no memory allocation
   if IsObject then
   begin
     propname := pointer(VName);
-    prophasher := DynArrayHashOne(ptRawUtf8, not IsCaseSensitive); // =Compare()
+    prophasher := DynArrayHashOne(ptRawUtf8, not Has(dvoNameCaseSensitive));
   end;
   v := pointer(VValue);
   repeat
@@ -7222,7 +7222,7 @@ begin
     if not Another.IsObject then
       exit
     else
-      nameCmp := SortDynArrayAnsiStringByCase[not IsCaseSensitive];
+      nameCmp := SortDynArrayAnsiStringByCase[not Has(dvoNameCaseSensitive)];
   // compare as many in-order content as possible
   n := Another.VCount;
   if VCount < n then
@@ -7799,12 +7799,12 @@ begin
   begin // optimistic try if this field appears at the same position
     ndx := aPreviousIndex^;
     if (PtrUInt(ndx) >= PtrUInt(n)) or
-       (SortDynArrayAnsiStringByCase[not IsCaseSensitive](
+       (SortDynArrayAnsiStringByCase[not Has(dvoNameCaseSensitive)](
          VName[ndx], aName) <> 0) then
       ndx := -1;
   end;
   if ndx < 0 then
-    ndx := FindNonVoid[IsCaseSensitive](pointer(VName),
+    ndx := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName),
       pointer(aName), PStrLen(PAnsiChar(pointer(aName)) - _STRLEN)^, n);
   if ndx < 0 then
     exit;
@@ -8124,7 +8124,7 @@ begin
   if Assigned(aNameSortedCompare) then // just like GetVarData() searches names
     namecomp := aNameSortedCompare
   else
-    namecomp := StrCompByCase[not Doc^.IsCaseSensitive];
+    namecomp := StrCompByCase[not Doc^.Has(dvoNameCaseSensitive)];
   for f := 0 to Depth do
   begin
     if aPropNames[f] = '' then
@@ -8757,7 +8757,7 @@ begin
      (VCount <> 0) then
     if VName <> nil then // search dvoObject property name
     begin
-      result := FindNonVoid[IsCaseSensitive](pointer(VName), aCsv, aLen, VCount);
+      result := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName), aCsv, aLen, VCount);
       exit;
     end
     else if aCsv^ in ['0' .. '9'] then // path is index for dvoArray
@@ -8896,7 +8896,7 @@ end;
 
 function TDocVariantData.Exists(const aName: RawUtf8): boolean;
 begin
-  result := GetValueIndex(pointer(aName), Length(aName), IsCaseSensitive) >= 0;
+  result := GetValueIndex(pointer(aName), Length(aName), Has(dvoNameCaseSensitive)) >= 0;
 end;
 
 function TDocVariantData.GetValueIndex(aName: PUtf8Char; aNameLen: PtrInt;
@@ -8948,7 +8948,7 @@ function TDocVariantData.GetValueOrRaiseException(
   const aName: RawUtf8): variant;
 begin
   RetrieveValueOrRaiseException(
-    pointer(aName), length(aName), IsCaseSensitive, result, false);
+    pointer(aName), length(aName), Has(dvoNameCaseSensitive), result, false);
 end;
 
 function TDocVariantData.GetValueOrDefault(const aName: RawUtf8;
@@ -9121,7 +9121,7 @@ function TDocVariantData.GetAsPVariant(
 var
   ndx: PtrInt;
 begin
-  ndx := GetValueIndex(aName, aNameLen, IsCaseSensitive);
+  ndx := GetValueIndex(aName, aNameLen, Has(dvoNameCaseSensitive));
   if ndx >= 0 then
     result := @VValue[ndx]
   else
@@ -9145,15 +9145,14 @@ begin
   end
   else
   begin
-    if Assigned(aSortedCompare) then
-      if @aSortedCompare = @StrComp then
-        // use dedicated (branchless x86_64 asm) function for StrComp()
+    if Assigned(aSortedCompare) then // faster O(log(n)) binary search
+      if @aSortedCompare = @StrComp then // use dedicated branchless/asm function
         ndx := FastFindPUtf8CharSorted(pointer(VName), VCount - 1, pointer(aName))
       else
         ndx := FastFindPUtf8CharSorted(
           pointer(VName), VCount - 1, pointer(aName), aSortedCompare)
     else
-      ndx := FindNonVoid[IsCaseSensitive](pointer(VName),
+      ndx := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName),
         pointer(aName), PStrLen(PAnsiChar(pointer(aName)) - _STRLEN)^, VCount);
     if aFoundIndex <> nil then
       aFoundIndex^ := ndx;
@@ -12048,7 +12047,7 @@ end;
 function TDocList.Reduce(const keys: array of RawUtf8): IDocList;
 begin
   result := DocList(Model);
-  fValue^.Reduce(keys, fValue^.IsCaseSensitive, result.Value^);
+  fValue^.Reduce(keys, fValue^.Has(dvoNameCaseSensitive), result.Value^);
 end;
 
 function TDocList.Remove(const value: variant): integer;
@@ -12257,7 +12256,7 @@ end;
 function TDocDict.GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
 begin
   if fPathDelim = #0 then
-    value := pointer(fValue^.GetVarData(key, fSorted)) // faster
+    value := pointer(fValue^.GetVarData(key, fSorted)) // faster if sorted
   else
     value := fValue^.GetPVariantByPath(key, fPathDelim);
   result := value <> nil; // return false if not found
@@ -12586,7 +12585,7 @@ end;
 function TDocDict.Reduce(const keys: array of RawUtf8): IDocDict;
 begin
   result := TDocDict.CreateOwned;
-  fValue^.Reduce(keys, fValue^.IsCaseSensitive, result.Value^);
+  fValue^.Reduce(keys, fValue^.Has(dvoNameCaseSensitive), result.Value^);
 end;
 
 function TDocDict.SetDefault(const key: RawUtf8): variant;
@@ -12606,7 +12605,7 @@ procedure TDocDict.Sort(reverse: boolean; keycompare: TUtf8Compare;
   nestedDict: boolean);
 begin
   if not Assigned(keycompare) then
-    keycompare := StrCompByCase[fValue^.IsCaseSensitive];
+    keycompare := StrCompByCase[fValue^.Has(dvoNameCaseSensitive)];
   fValue^.SortByName(keycompare, reverse, nestedDict);
   if reverse then
     fSorted := nil
