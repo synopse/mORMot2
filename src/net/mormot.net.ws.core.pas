@@ -3295,9 +3295,9 @@ begin
         // frame gathering and delayed output has been disabled with SendDelay=0
         aMode := wscBlockWithoutAnswer;
     wscBlockWithAnswer:
-      // need to block until all previous answers are received
       if fIncoming.AnswerToIgnore > 0 then
       begin
+        // need to block until all previous answers are received
         WebSocketLog.Add.Log(sllDebug,
           'NotifyCallback: Waiting for AnswerToIgnore=%',
           [fIncoming.AnswerToIgnore], self);
@@ -3333,7 +3333,7 @@ begin
       exit;
     if aMode = wscBlockWithoutAnswer then
     begin
-      result := HTTP_SUCCESS;
+      result := HTTP_SUCCESS; // no need to wait for the answer
       exit;
     end;
     tix := GetTickCount64;

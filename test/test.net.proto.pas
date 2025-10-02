@@ -1891,6 +1891,9 @@ begin
     restserver := TRestServerFullMemory.CreateWithOwnModel(
       [], {withauth=}true, 'tun');
     try
+      restserver.Options := restserver.Options +
+        [rsoAuthenticationBearerHeader,
+         rsoPerConnectionNonce];
       restserver.Server.CreateMissingTables;
       restserver.ServiceDefine(relay.Agent, [ITunnelAgent]);
       restserver.ServiceContainer.InjectResolver([relay]);
