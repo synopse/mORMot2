@@ -952,7 +952,6 @@ type
     VValue: TVariantDynArray;     // pointer
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
-      {$ifdef HASINLINE}inline;{$endif}
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
     // kind is stored as dvoIsArray/dvoIsObject within VOptions
     function GetKind: TDocVariantKind;
@@ -998,7 +997,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant;
       aPreviousIndex: PInteger): boolean;
-    function GetVariantIndex(const aNameOrIndex: variant): integer;
     function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
     function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3214,11 +3212,11 @@ type
     function AsList: IDocList;
     /// returns itself as a IDocDic, or nil if is a IDocList
     function AsDict: IDocDict;
-    /// returns the associated TDocVariant instance
+    /// returns the associated TDocVariant instance as a variant
     function AsVariant: variant;
     /// low-level access to the internal TDocVariantData storage
-    // - warning: is a weak reference pointer to the main IDocList/IDocDict, so
-    // you need to copy it to use it outside of this instance
+    // - warning: is a weak reference to the internal TDocVariant, so you need
+    // to copy its value to use it without this main IDocList/IDocDict instance
     function Value: PDocVariantData;
   end;
 
@@ -8761,7 +8759,8 @@ begin
      (VCount <> 0) then
     if VName <> nil then // search dvoObject property name
     begin
-      result := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName), aCsv, aLen, VCount);
+      result := FindNonVoid[Has(dvoNameCaseSensitive)](
+        pointer(VName), aCsv, aLen, VCount);
       exit;
     end
     else if aCsv^ in ['-', '0' .. '9'] then // path is index for dvoArray
@@ -8926,28 +8925,6 @@ begin
       if cardinal(ndx) < cardinal(VCount) then
         result := ndx;
     end;
-end;
-
-function TDocVariantData.GetVariantIndex(const aNameOrIndex: variant): integer;
-var
-  nameOrIndex: TTempUtf8; // no memory allocation most of the time
-  wasString: boolean;
-begin
-  if VariantToInteger(aNameOrIndex, result) then
-  begin
-    if result < 0 then
-      inc(result, VCount); // -1,-2,-3... to lookup from end of array or object
-    exit;
-  end;
-  result := -1;
-  if VName = nil then
-    exit; // array of void object
-  VariantToTempUtf8(aNameOrIndex, nameOrIndex, wasString);
-  if nameOrIndex.Text = nil then
-    exit;
-  result := FindNonVoid[Has(dvoNameCaseSensitive)](
-    pointer(VName), nameOrIndex.Text, nameOrIndex.Len, VCount);
-  TempUtf8Done(nameOrIndex);
 end;
 
 function TDocVariantData.GetValueOrRaiseException(
@@ -9537,16 +9514,42 @@ begin
 end;
 
 function TDocVariantData.GetValueOrItem(const aNameOrIndex: variant): variant;
+var
+  ndx: integer;
+  wasString: boolean;
+  name: TTempUtf8; // no memory allocation most of the time
 begin
-  RetrieveValueOrRaiseException(
-    GetVariantIndex(aNameOrIndex), result, {DestByRef=}true);
+  if VariantToInteger(aNameOrIndex, ndx) then
+  begin
+    if ndx < 0 then
+      inc(ndx, VCount); // -1,-2,-3... to lookup from end of array or object
+  end
+  else
+  begin
+    ndx := -1;
+    if VName <> nil then
+    begin
+      VariantToTempUtf8(aNameOrIndex, name, wasString);
+      if name.Text <> nil then
+        ndx := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName),
+          name.Text, name.Len, VCount);
+      TempUtf8Done(name);
+    end;
+  end;
+  if cardinal(ndx) >= cardinal(VCount) then
+    if Has(dvoReturnNullForUnknownProperty) then
+      SetVariantNull(result)
+    else
+      EDocVariant.RaiseUtf8('Value[%] property not found', [aNameOrIndex])
+  else
+    SetVariantByRef(VValue[ndx], result);
 end;
 
 procedure TDocVariantData.SetValueOrItem(const aNameOrIndex, aValue: variant);
 var
   ndx: integer;
   wasString: boolean;
-  name: RawUtf8;
+  name: RawUtf8; // use a true variable for InternalAdd()
 begin
   if VariantToInteger(aNameOrIndex, ndx) then
   begin
@@ -9557,11 +9560,11 @@ begin
   end;
   VariantToUtf8(aNameOrIndex, name, wasString);
   if name = '' then
-    EDocVariant.RaiseU('Unexpected Value['''']');
+    EDocVariant.RaiseU('Unexpected set Value['''']');
   ndx := -1;
   if VName <> nil then
-    ndx := FindNonVoid[Has(dvoNameCaseSensitive)](
-      pointer(VName), pointer(name), length(name), VCount);
+    ndx := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName),
+      pointer(name), PStrLen(PAnsiChar(pointer(name)) - _STRLEN)^, VCount);
   if ndx < 0 then
     ndx := InternalAdd(name);
   InternalSetValue(ndx, aValue);
@@ -11722,7 +11725,7 @@ begin
   ndx := position;
   n := fValue^.VCount;
   if position < 0 then
-    inc(ndx, n);
+    inc(ndx, n); // -1,-2... = position from the end of list
   if ndx >= n then
     EDocList.RaiseUtf8('Index % out of range (len=%)', [position, n]);
   result := @fValue^.VValue[ndx];
