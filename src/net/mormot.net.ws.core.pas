@@ -3253,10 +3253,14 @@ begin
     result := fProtocol.fRemoteIP;
 end;
 
+const
+   WSC_TXT: array[TWebSocketProcessNotifyCallback] of AnsiChar = ('B', 'W', 'N');
+
 function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequestAbstract;
   aMode: TWebSocketProcessNotifyCallback): cardinal;
 var
   request, answer: TWebSocketFrame;
+  bak: PAnsiChar;
   i: integer;
   start, max, tix: Int64;
   head: RawUtf8;
@@ -3267,8 +3271,15 @@ begin
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
     exit;
   if WebSocketLog <> nil then
-    WebSocketLog.Add.Log(sllTrace, 'NotifyCallback(%,%)',
-      [aRequest.Url, _TWebSocketProcessNotifyCallback[aMode]^], self);
+  begin
+    bak := PosCharU(aRequest.Url, '?');
+    if bak <> nil then
+      bak^ := #0;  // truncate URI before query parameters
+    WebSocketLog.Add.Log(sllTrace,
+      'NotifyCallback(%,%)', [aRequest.Url, WSC_TXT[aMode]], self);
+    if bak <> nil then
+      bak^ := '?'; // restore
+  end;
   TWebSocketProtocolRest(fProtocol).InputToFrame(aRequest,
     aMode in [wscBlockWithoutAnswer, wscNonBlockWithoutAnswer], request, head);
   case aMode of

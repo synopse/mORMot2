@@ -802,11 +802,11 @@ type
 
   /// indicates how TWebSocketProcess.NotifyCallback() will work
   // - published early in this unit to be used at pure REST/SOA level
+  // - sometimes respectively logged as 'B', 'W' or 'N'
   TWebSocketProcessNotifyCallback = (
     wscBlockWithAnswer,
     wscBlockWithoutAnswer,
     wscNonBlockWithoutAnswer);
-
 
 /// returns the interface name of a registered Guid, or its hexadecimal value
 function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
