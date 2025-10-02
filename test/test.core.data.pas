@@ -5921,7 +5921,12 @@ begin
   CheckEqual(a.Count, 4);
   CheckEqual(a.ToJson, '["0","1","2","3"]');
   for i := 0 to a.Count - 1 do
+  begin
     CheckEqual(GetInteger(pointer(a.GetItemAsText(i))), i);
+    CheckEqual(a.GetValueIndex(SmallUInt32Utf8[i]), i, 'text indexes');
+  end;
+  for i := 1 to a.Count do
+    CheckEqual(a.GetValueIndex(ToUtf8(-i)), a.Count - i, 'negative indexes');
   a.Clear;
   a.Init;
   a.AddObject(['source', 'source0', // not same order as in for loop below
@@ -6056,6 +6061,9 @@ begin
     Check(Doc.Value[0] = 'one');
     Check(Doc.Value[1] = 2);
     Check(Doc.Value[2] = 3.0);
+    Check(Doc.Value[-3] = 'one', 'negative indexes');
+    Check(Doc.Value[-2] = 2);
+    Check(Doc.Value[-1] = 3.0);
     for i := 0 to Doc.Count - 1 do
       Check(VariantCompare(Doc.Values[i], Doc.Value[i]) = 0);
   end;
@@ -6249,11 +6257,15 @@ begin
   vd := _JsonFastFloat('{"price": 0.156}').price; // 0.156 is a varCurrency here
   CheckSame(vd, 0.156);
   V1 := _Arr([]);
-  vs := 1.5;
+  vs := 1;
   _Safe(V1)^.AddItem(vs);
-  CheckEqual(VariantSaveJson(V1), '[1.5]', 'VariantSaveJson');
+  CheckEqual(VariantSaveJson(V1), '[1]', 'VariantSaveJson');
   vd := 1.7;
   _Safe(V1)^.AddItem(vd);
+  CheckEqual(VariantSaveJson(V1), '[1,1.7]');
+  _Safe(V1)^.SetValueByPath('0', 2);
+  CheckEqual(VariantSaveJson(V1), '[2,1.7]');
+  _Safe(V1)^.SetValueByPath('-2', 1.5);
   CheckEqual(VariantSaveJson(V1), '[1.5,1.7]');
   V2 := _obj(['id', 0]);
   CheckEqual(VariantSaveJson(V2), '{"id":0}');
