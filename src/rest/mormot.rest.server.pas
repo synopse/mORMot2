@@ -7829,8 +7829,8 @@ begin
     if sllEnter in fLogLevel then
     begin
       ctxt.fLog := fLogClass.Add;
-      ctxt.fLog.ManualEnter(self, 'Uri % % in=%', [Call.Method, ctxt.fPlainUrl,
-        length(Call.InBody)], @ctxt.fMicroSecondsStart);
+      ctxt.fLog.ManualEnter(self, 'Uri % % % in=%', [Call.LowLevelConnectionID,
+        Call.Method, ctxt.fPlainUrl, length(Call.InBody)], @ctxt.fMicroSecondsStart);
     end;
     if StatLevels <> [] then
     begin
