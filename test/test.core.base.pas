@@ -2475,8 +2475,8 @@ var
   lic: TLicenseData;
   o1: TOrmPeople;
   o2: TPeople2;
-  r: TPeopleR;
-  p: TRecordPeople;
+  r, r2: TPeopleR;
+  p, p2: TRecordPeople;
   m: TRttiMap;
   fo, fr: TRttiFilter;
   err, err2: string;
@@ -2699,6 +2699,29 @@ begin
     finally
       fo.Free;
     end;
+    // TRttiMap.RandomA/B and Compare methods - useful e.g. for testing DTOs
+    m.Map('id', 'rowid');
+    CheckEqual(o1.IDValue, 0, 'o1id1');
+    CheckEqual(p.RowID, 0, 'pRowID1');
+    for i := 1 to 100 do
+    begin
+      o1.IDValue := 0;
+      CheckEqual(o1.IDValue, 0, 'o1id');
+      p.RowID := 0;
+      CheckEqual(p.RowID, 0, 'pRowID2');
+      m.RandomA(o1);
+      CheckNotEqual(o1.IDValue, 0, 'rndo1id');
+      CheckNotEqual(m.Compare(o1, @p), 0, 'rndA');
+      CheckEqual(p.RowID, 0, 'pRowID3');
+      m.ToB(o1, @p);
+      CheckNotEqual(p.RowID, 0, 'pRowID4');
+      CheckEqual(p.RowID, o1.IDValue, 'ids');
+      CheckEqual(m.Compare(o1, @p), 0, 'cmpA');
+      m.RandomB(@p);
+      CheckNotEqual(m.Compare(o1, @p), 0, 'rndB');
+      m.ToA(o1, @p);
+      CheckEqual(m.Compare(o1, @p), 0, 'cmpB');
+    end;
   finally
     o1.Free;
     o2.Free;
@@ -2708,6 +2731,8 @@ begin
   try
     CheckEqual(fr.Count, 0);
     fr.Filter(nil);
+    p.FirstName := 'toto'; // reset the expected values
+    p.LastName := 'titi';
     fr.Filter(@p);
     Check(fr.Validate(@p) = '');
     fr.AddClass('firstName', [TSynFilterUpperCase, TSynValidateNonVoidText]);
