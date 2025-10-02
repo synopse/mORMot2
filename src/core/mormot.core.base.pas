@@ -13037,19 +13037,16 @@ begin
         exit;
       varBoolean: // 16-bit WordBool to 8-bit boolean
         if vd^.VBoolean then
-          Value := true // normalize
+          Value := true // normalize (an OLE WordBool may be $ffff)
         else
           Value := false;
       varInteger: // coming e.g. from TGetJsonField
         Value := vd^.VInteger = 1;
       varString:
         Value := GetBoolean(vd^.VAny);
+      {$ifdef HASVARUSTRING}  varUString, {$endif HASVARUSTRING}
       varOleStr:
         Value := GetBooleanW(vd^.VAny);
-    {$ifdef HASVARUSTRING}
-      varUString:
-        Value := GetBooleanW(vd^.VAny);
-    {$endif HASVARUSTRING}
     else
       begin
         vd := SetVarDataUnRefSimpleValue(vd, tmp{%H-});
@@ -13076,9 +13073,9 @@ begin
         Value := 0;
       varBoolean:
         if vd^.VBoolean then
-          Value := 1
+          Value := 1 // normalize (an OLE WordBool may be $ffff)
         else
-          Value := 0; // normalize
+          Value := 0;
       varSmallint:
         Value := vd^.VSmallInt;
       varShortInt:
@@ -13098,7 +13095,7 @@ begin
           Value := vd^.VInt64
         else
         begin
-          result := false;
+          result := false; // too huge to fit a signed 64-bit integer
           exit;
         end;
       varInt64:
