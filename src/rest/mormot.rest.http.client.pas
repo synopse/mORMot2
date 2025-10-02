@@ -560,73 +560,6 @@ implementation
 
 { TRestHttpClientGeneric }
 
-procedure TRestHttpClientGeneric.InternalUri(var Call: TRestUriParams);
-var
-  Head, Content, ContentType: RawUtf8;
-  P, PBeg: PUtf8Char;
-  res: Int64Rec;
-  log: ISynLog;
-begin
-  fLogClass.EnterLocal(log, 'InternalUri %', [Call.Method], self);
-  if IsOpen then
-  begin
-    Head := Call.InHead;
-    Content := Call.InBody;
-    ContentType := JSON_CONTENT_TYPE_VAR; // consider JSON by default
-    P := pointer(Head);
-    while P <> nil do
-    begin
-      PBeg := P;
-      if IdemPChar(PBeg, 'CONTENT-TYPE:') then
-      begin
-        ContentType := GetNextLine(PBeg + 14, P); // retrieve customized type
-        if P = nil then
-          // last entry in header
-          SetLength(Head, PBeg - pointer(Head))
-        else
-          system.delete(Head, PBeg - pointer(Head) + 1, P - PBeg);
-        TrimSelf(Head);
-        break;
-      end;
-      P := GotoNextLine(P);
-    end;
-    if Content <> '' then // always favor content type from binary
-      GetMimeContentTypeFromBuffer(Content, ContentType);
-    if fUriPrefix <> '' then
-      Call.Url := fUriPrefix + Call.Url;
-    if fCustomHeader <> '' then
-      AppendLine(Head, [fCustomHeader]);
-    fSafe.Enter;
-    try
-      res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);
-    finally
-      fSafe.Leave;
-    end;
-    Call.OutStatus := res.Lo;
-    Call.OutInternalState := res.Hi;
-    Call.OutHead := Head;
-    Call.OutBody := Content;
-  end
-  else
-    Call.OutStatus := HTTP_CLIENTERROR; // indicates no socket
-  if log <> nil then
-    with Call do
-      log.Log(sllClient, '% % status=% len=% state=%',
-        [method, url, OutStatus, length(OutBody), OutInternalState], self);
-end;
-
-procedure TRestHttpClientGeneric.SetCompression(Value: TRestHttpCompressions);
-begin
-  fCompression := Value;
-  InternalClose; // force re-create connection at next request
-end;
-
-procedure TRestHttpClientGeneric.SetKeepAliveMS(Value: cardinal);
-begin
-  fKeepAliveMS := Value;
-  InternalClose; // force re-create connection at next request
-end;
-
 constructor TRestHttpClientGeneric.Create(const aServer, aPort: RawUtf8;
   aModel: TOrmModel; aHttps: boolean; const aProxyName, aProxyByPass: RawUtf8;
   aSendTimeout, aReceiveTimeout, aConnectTimeout: cardinal);
@@ -656,9 +589,9 @@ begin
   fProxyByPass := aProxyByPass;
 end;
 
-constructor TRestHttpClientGeneric.CreateWithOwnModel(const aServer, aPort,
-  aRoot: RawUtf8; aHttps: boolean; const aProxyName: RawUtf8;
-  const aProxyByPass: RawUtf8; aSendTimeout: cardinal;
+constructor TRestHttpClientGeneric.CreateWithOwnModel(
+  const aServer, aPort, aRoot: RawUtf8; aHttps: boolean;
+  const aProxyName, aProxyByPass: RawUtf8; aSendTimeout: cardinal;
   aReceiveTimeout: cardinal; aConnectTimeout: cardinal);
 var
   model: TOrmModel;
@@ -746,6 +679,79 @@ begin
      (aDefaultPort <> 0) then
     uri.Port := Int32ToUtf8(aDefaultPort);
   Create(uri.Address, uri.Port, aModel, aHttps);
+end;
+
+procedure TRestHttpClientGeneric.InternalUri(var Call: TRestUriParams);
+var
+  Head, Content, ContentType: RawUtf8;
+  P, PBeg, bak: PUtf8Char;
+  res: Int64Rec;
+  log: ISynLog;
+begin
+  fLogClass.EnterLocal(log, 'InternalUri %', [Call.Method], self);
+  if IsOpen then
+  begin
+    Head := Call.InHead;
+    Content := Call.InBody;
+    ContentType := JSON_CONTENT_TYPE_VAR; // consider JSON by default
+    P := pointer(Head);
+    while P <> nil do
+    begin
+      PBeg := P;
+      if IdemPChar(PBeg, 'CONTENT-TYPE:') then
+      begin
+        ContentType := GetNextLine(PBeg + 14, P); // retrieve customized type
+        if P = nil then
+          // last entry in header
+          SetLength(Head, PBeg - pointer(Head))
+        else
+          system.delete(Head, PBeg - pointer(Head) + 1, P - PBeg);
+        TrimSelf(Head);
+        break;
+      end;
+      P := GotoNextLine(P);
+    end;
+    if Content <> '' then // always favor content type from binary
+      GetMimeContentTypeFromBuffer(Content, ContentType);
+    if fUriPrefix <> '' then
+      Call.Url := fUriPrefix + Call.Url;
+    if fCustomHeader <> '' then
+      AppendLine(Head, [fCustomHeader]);
+    fSafe.Enter;
+    try
+      res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);
+    finally
+      fSafe.Leave;
+    end;
+    Call.OutStatus := res.Lo;
+    Call.OutInternalState := res.Hi;
+    Call.OutHead := Head;
+    Call.OutBody := Content;
+  end
+  else
+    Call.OutStatus := HTTP_CLIENTERROR; // indicates no socket
+  if log <> nil  then
+  begin
+    bak := PosCharU(call.Url, '?');
+    if bak <> nil then
+      bak^ := #0;  // truncate URI before query parameters
+    log.Log(sllClient, '% % status=% len=% state=%', [call.Method, call.Url,
+      call.OutStatus, length(call.OutBody), call.OutInternalState], self);
+    if bak <> nil then
+      bak^ := '?';
+  end;
+end;
+
+procedure TRestHttpClientGeneric.SetCompression(Value: TRestHttpCompressions);
+begin
+  fCompression := Value;
+  InternalClose; // force re-create connection at next request
+end;
+
+procedure TRestHttpClientGeneric.SetKeepAliveMS(Value: cardinal);
+begin
+  fKeepAliveMS := Value;
+  InternalClose; // force re-create connection at next request
 end;
 
 function TRestHttpClientGeneric.HostName: RawUtf8;
