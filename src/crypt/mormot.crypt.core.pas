@@ -551,7 +551,7 @@ type
     /// check and extract the 32-bit value from 32-chars hexadecimal cookie
     // - return 0 if the cookie is invalid, or the decoded 32-bit value
     function ValidateCookie(const aCookie: RawUtf8): cardinal; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// extract the 32-bit value from a 128-bit digital signature
     // - without validating the AES-128 signature itself
     // - could be used e.g. when Validate() has already been called once
@@ -5139,7 +5139,10 @@ end;
 
 function TAesSignature.ValidateCookie(const aCookie: RawUtf8): cardinal;
 begin
-  result := ValidateCookie(pointer(aCookie), length(aCookie));
+  result := 0;
+  if aCookie <> '' then
+    result := ValidateCookie(pointer(aCookie),
+      PStrLen(PAnsiChar(pointer(aCookie)) - _STRLEN)^);
 end;
 
 function TAesSignature.Extract(const aSignature: THash128Rec): cardinal;
