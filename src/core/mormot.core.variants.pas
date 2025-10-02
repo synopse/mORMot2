@@ -9439,7 +9439,7 @@ procedure TDocVariantData.SetValueOrRaiseException(Index: integer;
   const NewValue: variant);
 begin
   if cardinal(Index) >= cardinal(VCount) then
-    EDocVariant.RaiseUtf8('Out of range Values[%] (count=%)', [Index, VCount]);
+    EDocVariant.RaiseUtf8('Out of range Value[%] (count=%)', [Index, VCount]);
   InternalSetValue(Index, NewValue);
 end;
 
@@ -9544,28 +9544,27 @@ end;
 
 procedure TDocVariantData.SetValueOrItem(const aNameOrIndex, aValue: variant);
 var
-  wasString: boolean;
   ndx: integer;
-  Name: RawUtf8;
+  wasString: boolean;
+  name: RawUtf8;
 begin
-  if IsArray then
-    // fast index lookup e.g. for Value[1]
-    SetValueOrRaiseException(VariantToIntegerDef(aNameOrIndex, -1), aValue)
-  else
+  if VariantToInteger(aNameOrIndex, ndx) then
   begin
-    // by name lookup e.g. for Value['abc']
-    VariantToUtf8(aNameOrIndex, Name, wasString);
-    if wasString then
-    begin
-      ndx := GetValueIndex(Name);
-      if ndx < 0 then
-        ndx := InternalAdd(Name);
-      InternalSetValue(ndx, aValue);
-    end
-    else
-      SetValueOrRaiseException(
-        VariantToIntegerDef(aNameOrIndex, -1), aValue);
+    if ndx < 0 then
+      inc(ndx, VCount); // -1,-2,-3... to lookup from end of array or object
+    SetValueOrRaiseException(ndx, aValue);
+    exit;
   end;
+  VariantToUtf8(aNameOrIndex, name, wasString);
+  if name = '' then
+    EDocVariant.RaiseU('Unexpected Value['''']');
+  ndx := -1;
+  if VName <> nil then
+    ndx := FindNonVoid[Has(dvoNameCaseSensitive)](
+      pointer(VName), pointer(name), length(name), VCount);
+  if ndx < 0 then
+    ndx := InternalAdd(name);
+  InternalSetValue(ndx, aValue);
 end;
 
 function TDocVariantData.AddOrUpdateValue(const aName: RawUtf8;
