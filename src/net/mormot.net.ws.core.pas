@@ -3260,7 +3260,7 @@ function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequestAbstract;
   aMode: TWebSocketProcessNotifyCallback): cardinal;
 var
   request, answer: TWebSocketFrame;
-  bak: PAnsiChar;
+  bak: PUtf8Char;
   i: integer;
   start, max, tix: Int64;
   head: RawUtf8;
