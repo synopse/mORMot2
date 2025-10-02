@@ -3256,12 +3256,6 @@ type
     // - could be useful e.g. for regression tests
     // - A/B are either TObject instance or @record pointer, depending on Init()
     function Compare(A, B: pointer; CaseInsensitive: boolean = false): integer;
-    /// fill one A instance fields with zero / '' values
-    // - A is either a TObject instance or @record pointer, depending on Init()
-    procedure ZeroA(A: pointer);
-    /// fill one B instance fields with zero / '' values
-    // - B is either a TObject instance or @record pointer, depending on Init()
-    procedure ZeroB(B: pointer);
     /// fill one A instance fields with some random values
     // - A is either a TObject instance or @record pointer, depending on Init()
     procedure RandomA(A: pointer);
@@ -10641,20 +10635,6 @@ begin
     dec(n);
   until n = 0;
   result := ComparePointer(A, B);
-end;
-
-procedure TRttiMap.ZeroA(A: pointer);
-begin
-  if aRtti.Kind = rkClass then
-    A := @A; // low-level TRttiCustom methods expect a PObject
-  aRtti.ValueFinalizeAndClear(A); // just use the RTTI
-end;
-
-procedure TRttiMap.ZeroB(B: pointer);
-begin
-  if aRtti.Kind = rkClass then
-    B := @B; // low-level TRttiCustom methods expect a PObject
-  bRtti.ValueFinalizeAndClear(B);
 end;
 
 procedure TRttiMap.RandomA(A: pointer);
