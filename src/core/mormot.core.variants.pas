@@ -952,6 +952,7 @@ type
     VValue: TVariantDynArray;     // pointer
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
     // kind is stored as dvoIsArray/dvoIsObject within VOptions
     function GetKind: TDocVariantKind;
@@ -997,6 +998,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant;
       aPreviousIndex: PInteger): boolean;
+    function GetVariantIndex(const aNameOrIndex: variant): integer;
     function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
     function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2265,15 +2267,11 @@ type
     property Names: TRawUtf8DynArray
       read VName;
     /// find an item in this document, and returns its value
+    // - dvObject will lookup by name using aNameOrIndex string
+    // - dvObjet and dvArray will lookup by index using aNameOrIndex integer,
+    // using -1,-2,... to count the index backwards
     // - raise an EDocVariant if aNameOrIndex is neither an integer nor a string
-    // - raise an EDocVariant if Kind is dvArray and aNameOrIndex is a string
-    // or if Kind is dvObject and aNameOrIndex is an integer
-    // - raise an EDocVariant if Kind is dvObject and if aNameOrIndex is a
-    // string, which is not found within the object property names and
-    // dvoReturnNullForUnknownProperty is set in Options
-    // - raise an EDocVariant if Kind is dvArray and if aNameOrIndex is a
-    // integer, which is not within 0..Count-1 and dvoReturnNullForUnknownProperty
-    // is set in Options
+    // or on failed lookup if dvoReturnNullForUnknownProperty Options is not set
     // - so you can use directly:
     // ! // for an array document:
     // ! aVariant := TDocVariant.NewArray(['one',2,3.0]);
@@ -2293,11 +2291,11 @@ type
     // but of course, if want to want to access the content by index (typically
     // for a dvArray), using Values[] - and Names[] - properties is much faster
     // than this variant-indexed pseudo-property:
-    // ! with TDocVariantData(aVariant) do
+    // ! with _Safe(aVariant)^ do
     // !   for i := 0 to Count-1 do
     // !     Writeln(Values[i]);
     // is faster than:
-    // ! with TDocVariantData(aVariant) do
+    // ! with _Safe(aVariant)^ do
     // !   for i := 0 to Count-1 do
     // !     Writeln(Value[i]);
     // which is faster than:
@@ -9533,25 +9531,9 @@ begin
 end;
 
 function TDocVariantData.GetValueOrItem(const aNameOrIndex: variant): variant;
-var
-  wasString: boolean;
-  Name: RawUtf8;
 begin
-  if IsArray then
-    // fast index lookup e.g. for Value[1]
-    RetrieveValueOrRaiseException(
-      VariantToIntegerDef(aNameOrIndex, -1), result, true)
-  else
-  begin
-    // by name lookup e.g. for Value['abc']
-    VariantToUtf8(aNameOrIndex, Name, wasString);
-    if wasString then
-      RetrieveValueOrRaiseException(
-        pointer(Name), length(Name), IsCaseSensitive, result, true)
-    else
-      RetrieveValueOrRaiseException(
-        GetIntegerDef(pointer(Name), -1), result, true);
-  end;
+  RetrieveValueOrRaiseException(
+    GetVariantIndex(aNameOrIndex), result, {DestByRef=}true);
 end;
 
 procedure TDocVariantData.SetValueOrItem(const aNameOrIndex, aValue: variant);
