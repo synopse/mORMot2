@@ -83,7 +83,8 @@ type
     csUndefined, csDirect, csServer,
     csMainThread, csBackground, csJsonObject, csSessions, csLocked,
     csCrc32, csCrc32c, csXxHash, csMd5, csSha1, csSha256, csSha512, csSha3,
-    csWeak, csBasic, csDbLog, csJsonRpc, csHttp, csHttpLog, csCustomRtti);
+    csWeak, csBasic, csDbLog, csJsonRpc, csHttp, csHttpLog, csHttpBearer,
+    csCustomRtti);
 
   /// a test interface, used by TTestServiceOrientedArchitecture
   // - to test basic and high-level remote service calls
@@ -280,7 +281,7 @@ type
   protected
     fMain: TRestClientDBNamed;
     procedure Test(const Inst: TTestServiceInstances; Iterations: Cardinal = 700);
-    procedure TestHttp(aClient: TRestClientDBNamed; withlog: boolean; const port: RawUtf8);
+    procedure TestHttp(aClient: TRestClientDBNamed; const port: RawUtf8);
     procedure ClientTest(aClient: TRestClientDBNamed; aRouting: TRestServerUriContextClass;
       aAsJsonObject: boolean; aRunInOtherThread: boolean = false;
       aOptions: TInterfaceMethodOptions = []);
@@ -630,7 +631,8 @@ begin
       {$endif OSANDROID}
     csBackground,
     csHttp,
-    csHttpLog:
+    csHttpLog,
+    csHttpBearer:
       if thrid = PtrUInt(MainThreadID) then
         ESynException.RaiseUtf8('% shall NOT be in main thread', [name^])
       else if ServiceRunningContext.RunningThread = nil then
@@ -1274,12 +1276,11 @@ var
     for i1 := 0 to l1.Len - 1 do
       CheckEqual(l1.U[i1], s, 'RJA');
     c := 1; // within the same process, no need to push this request
+    if Inst.ClientSide in [csHttp, csHttpLog, csHttpBearer] then
+      c := 50;   // >5000 for very agressive tests
     n := 100;
-    if Inst.ClientSide in [csHttp, csHttpLog] then
-    begin
-      c := 50; // >5000 for very agressive tests
+    if Inst.ClientSide = csHttp then
       n := 1000; // generate a 600KB response (e.g. test IOCP background send)
-    end;
     repeat
       u := I.RepeatTextArray(s, n);
       t := length(u);
@@ -1324,7 +1325,7 @@ begin
   Check(Inst.I.ToTextFunc(777) = '777', '777');
   x := Inst.CT.GetCurrentThreadID;
   Check(x <> 0, 'x');
-  if not (Inst.ClientSide in [csHttp, csHttpLog]) then
+  if not (Inst.ClientSide in [csHttp, csHttpLog, csHttpBearer]) then
   begin
     y := Inst.CT.GetThreadIDAtCreation;
     Check(x = y, 'x=y');
@@ -1338,7 +1339,8 @@ begin
       Check(y = PtrUInt(MainThreadID), 'thrd1');
     csBackground,
     csHttp,
-    csHttpLog:
+    csHttpLog,
+    csHttpBearer:
       Check(y <> PtrUInt(MainThreadID), 'thrd2');
   end;
   TestCalculator(Inst.I);
@@ -1518,7 +1520,8 @@ begin
         Check(w = 0);
       end;
     csHttp,
-    csHttpLog:
+    csHttpLog,
+    csHttpBearer:
       begin
         Check(z <> 0);
         Check(x <> PtrUInt(MainThreadID));
@@ -1821,6 +1824,7 @@ begin
   One(ClientSideJsonRPC,              csJsonrpc);
   One(ClientSideOverHTTP,             csHttp);
   One(ClientSideOverHTTP,             csHttplog);
+  One(ClientSideOverHTTP,             csHttpBearer);
   // wait for all multi-threaded background process to finish
   RunWait({notifyThreadCount=}false, {timeoutSec=}120, {callSynchronize=}true);
   // RTTI override could NOT be parallelized
@@ -1896,14 +1900,21 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideOverHTTP(Sender: TObject);
 var
   c: TRestClientDBNamed absolute Sender;
+  port: integer;
 begin
-  TestHttp(c, c.ClientSide = csHttpLog,
-    UInt32ToUtf8(GetInteger(HTTP_DEFAULTPORT) + ord(c.ClientSide = csHttpLog)));
+  port := GetInteger(HTTP_DEFAULTPORT); // parallel execution on several ports
+  case c.ClientSide of
+    csHttpLog:
+      inc(port);
+    csHttpBearer:
+      inc(port, 2);
+  end;
+  TestHttp(c, UInt32ToUtf8(port));
   c.Free;
 end;
 
 procedure TTestServiceOrientedArchitecture.TestHttp(
-  aClient: TRestClientDBNamed; withlog: boolean; const port: RawUtf8);
+  aClient: TRestClientDBNamed; const port: RawUtf8);
 var
   srv: TRestHttpServer;
   clt: TRestHttpClient;
@@ -1912,6 +1923,7 @@ var
   i: integer;
   opt: TRestHttpServerOptions;
   URI: TRestServerUriDynArray;
+  timer: TPrecisionTimer;
 const
   SERVICES: array[0..4] of RawUtf8 = (
     'Calculator',
@@ -1920,17 +1932,23 @@ const
     'TestGroup',
     'TestPerThread');
 begin
+  timer.Start;
   Check(aClient.Server.ServicesRouting = TRestServerRoutingRest);
   opt := HTTPSERVER_DEFAULT_OPTIONS;
   //opt := opt + [rsoLogVerbose];
-  if withlog then
-    opt := opt + [rsoEnableLogging, rsoTelemetryCsv, rsoTelemetryJson];
+  case aClient.ClientSide of
+    csHttpLog:
+      opt := opt + [rsoEnableLogging, rsoTelemetryCsv, rsoTelemetryJson];
+    csHttpBearer:
+      aClient.Server.Options := aClient.Server.Options +
+        [rsoAuthenticationBearerHeader];
+  end;
   srv := TRestHttpServer.Create(port, [aClient.Server], '+',
     useBidirAsync, // HTTP_DEFAULT_MODE,
     8, secNone, '', '', opt);
   try
     Check(srv.HttpServer <> nil);
-    if withlog then
+    if aClient.ClientSide = csHttpLog then
     begin
       Check(srv.HttpServer.Logger <> nil);
       Check(srv.HttpServer.Logger.Settings <> nil);
@@ -1994,7 +2012,7 @@ begin
       Check(clt.ServiceRetrieveAssociated(ITestSession, URI));
       Check(length(URI) = 1);
       Test(Inst, 100);
-      NotifyProgress([aClient.Name]);
+      NotifyProgress([aClient.Name, ' ', timer.Stop]);
     finally
       Finalize(Inst);
       clt.Free;

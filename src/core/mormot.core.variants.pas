@@ -1628,13 +1628,13 @@ type
     /// find an item index in this document from its name
     // - search will follow dvoNameCaseSensitive option of this document
     // - lookup the value by name for an object document, or accept an integer
-    // text as index for an array document
+    // text (e.g. '0') as index for an array document (-# to count from the end)
     // - returns -1 if not found
     function GetValueIndex(const aName: RawUtf8): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item index in this document from its name
     // - lookup the value by name for an object document, or accept an integer
-    // text as index for an array document
+    // text as index for an array document (-# to count from the end)
     // - returns -1 if not found
     function GetValueIndex(aName: PUtf8Char; aNameLen: PtrInt;
       aCaseSensitive: boolean): integer; overload;
@@ -1831,7 +1831,7 @@ type
     // range and dvoReturnNullForUnknownProperty is set in Options
     // - create a copy of the variant by default, unless DestByRef is TRUE
     procedure RetrieveValueOrRaiseException(Index: integer;
-     var Dest: variant; DestByRef: boolean); overload;
+      var Dest: variant; DestByRef: boolean); overload;
     /// retrieve an item in this document from its index, and returns its Name
     // - raise an EDocVariant if the supplied Index is not in the 0..Count-1
     // range and dvoReturnNullForUnknownProperty is set in Options
@@ -8902,25 +8902,46 @@ end;
 function TDocVariantData.GetValueIndex(aName: PUtf8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var
-  err: integer;
+  ndx: integer;
 begin
+  result := -1;
   if (cardinal(VType) = DocVariantVType) and
      (aNameLen > 0) and
      (aName <> nil) and
      (VCount > 0) then
-    if IsArray then
-    begin
-      // try index integer as text, for lookup in array document
-      result := GetInteger(aName, err);
-      if (err <> 0) or
-         (cardinal(result) >= cardinal(VCount)) then
-        result := -1;
-    end
-    else
-      // O(n) lookup for name -> efficient brute force sub-functions
+    if VName <> nil then
+      // O(n) object lookup for name -> efficient brute force sub-functions
       result := FindNonVoid[aCaseSensitive](pointer(VName), aName, aNameLen, VCount)
-  else
-    result := -1;
+    else if aName[0] in ['-', '0'..'9'] then // array index as integer text
+    begin
+      ndx := GetInteger(aName, aName + aNameLen);
+      if ndx < 0 then
+        inc(ndx, VCount); // -1,-2,-3... to lookup from end of array
+      if cardinal(ndx) < cardinal(VCount) then
+        result := ndx;
+    end;
+end;
+
+function TDocVariantData.GetVariantIndex(const aNameOrIndex: variant): integer;
+var
+  nameOrIndex: TTempUtf8; // no memory allocation most of the time
+  wasString: boolean;
+begin
+  if VariantToInteger(aNameOrIndex, result) then
+  begin
+    if result < 0 then
+      inc(result, VCount); // -1,-2,-3... to lookup from end of array or object
+    exit;
+  end;
+  result := -1;
+  if VName = nil then
+    exit; // array of void object
+  VariantToTempUtf8(aNameOrIndex, nameOrIndex, wasString);
+  if nameOrIndex.Text = nil then
+    exit;
+  result := FindNonVoid[Has(dvoNameCaseSensitive)](
+    pointer(VName), nameOrIndex.Text, nameOrIndex.Len, VCount);
+  TempUtf8Done(nameOrIndex);
 end;
 
 function TDocVariantData.GetValueOrRaiseException(
