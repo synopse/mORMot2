@@ -2963,7 +2963,7 @@ begin
        (Call^.LowLevelConnectionFlags * [llfWebsockets, llfInProcess] = []) then
     begin
       bearerid := Server.AuthenticationBearerHeader^.
-                    ValidateCookie(Call^.LowLevelBearerToken); // very fast
+                    ValidateCookie(Call^.LowLevelBearerToken); // safe and fast
       if bearerid = 0 then
       begin
         if Assigned(fLog) and
@@ -5481,8 +5481,8 @@ begin
   if p = nil then
     exit;
   sigpos := Ctxt.UriSessionSignaturePos;
-  // expected format is ?session_signature=xxSessionID|xxTimestamp|xxSignature
-  if (sigpos > 0) and
+  // expected format is ?session_signature=xxSessionID
+  if (sigpos > 0) and   //       18            8
      (sigpos + (18 + 8) <= PStrLen(P - _STRLEN)^) and
      HexDisplayToCardinal(p + sigpos + 18, Ctxt.fSession) then
     result := fServer.LockedSessionAccess(Ctxt);

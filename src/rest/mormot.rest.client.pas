@@ -1271,9 +1271,10 @@ begin
   Sender.fSession.IDHexa8 := '';
   if values[10].Text <> nil then
     // from rsoAuthenticationBearerHeader in Server.Options
-    Join(['Authorization: Bearer ', values[10].ToUtf8], Sender.fSession.HttpHeader);
+    Make(['Authorization: Bearer ', values[10].Text], Sender.fSession.HttpHeader);
   if values[9].Text <> nil then
   begin
+    // specific TRestClientAuthenticationSignedUri algorithm
     a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
       values[9].Text, values[9].Len);
     if a >= 0 then
@@ -1284,7 +1285,7 @@ begin
   begin
     cookie := FindNameValue(pointer(hdr), 'SET-COOKIE: ');
     if cookie = nil then
-      exit;
+      exit; // use the default suaCRC32 algorithm by default
     cookie := GotoNextNotSpace(cookie);
     if IdemPChar(cookie, '__SECURE-') then
       inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
