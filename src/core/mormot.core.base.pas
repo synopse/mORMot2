@@ -4190,8 +4190,8 @@ function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): 
 
 /// convert any numerical Variant into a 32-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
-// floating-pointer Variant, which will return FALSE and won't change the
-// Value variable content
+// floating-pointer Variant, which will return FALSE and won't change the Value
+// variable content - but accept cardinal/Int64/QWord values fitting into 32-bit
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
 
 /// convert any numerical Variant into a 64-bit integer
@@ -12902,7 +12902,7 @@ begin
   result := false;
   vd := VarDataFromVariant(V);
   repeat
-    case cardinal(vd^.VType) of
+    case cardinal(vd^.VType) of // use a jmp table on FPC
       varNull,
       varEmpty:
         Value := 0;
@@ -12940,13 +12940,6 @@ begin
           Value := vd^.VInt64
         else
           exit;
-      varDouble,
-      varDate,
-      varSingle,
-      varCurrency,
-      varString,
-      varOleStr:
-        exit;
     else
       begin
         vd := SetVarDataUnRefSimpleValue(vd, tmp{%H-});
@@ -13077,7 +13070,7 @@ var
 begin
   vd := VarDataFromVariant(V);
   repeat
-    case cardinal(vd^.VType) of
+    case cardinal(vd^.VType) of // use a jmp table on FPC
       varNull,
       varEmpty:
         Value := 0;
