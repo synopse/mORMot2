@@ -10634,7 +10634,7 @@ begin
     inc(pb);
     dec(n);
   until n = 0;
-  result := ComparePointer(A, B);
+  result := 0;
 end;
 
 procedure TRttiMap.RandomA(A: pointer);
