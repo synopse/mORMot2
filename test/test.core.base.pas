@@ -2475,8 +2475,8 @@ var
   lic: TLicenseData;
   o1: TOrmPeople;
   o2: TPeople2;
-  r, r2: TPeopleR;
-  p, p2: TRecordPeople;
+  r: TPeopleR;
+  p: TRecordPeople;
   m: TRttiMap;
   fo, fr: TRttiFilter;
   err, err2: string;
