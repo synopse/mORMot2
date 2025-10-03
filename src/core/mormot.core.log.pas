@@ -1048,6 +1048,7 @@ type
     /// the internal number of this thread, stored as text using Int18ToChars3()
     // - is a value in [1..MAX_SYNLOGTHREADS=65500] range after InitThreadNumber
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
+    // - raw value can be retrieved from TSynLog.ThreadIndex class method
     ThreadNumber: word;
     /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value
     // - equals 0 if InitThreadNumber() needs to be called
@@ -1292,6 +1293,15 @@ type
     /// check some specific level(s) in the family of this TSynLog class type
     class function HasLevel(levels: TSynLogLevels): boolean;
       {$ifndef NOPATCHVMT} {$ifdef HASINLINE}inline;{$endif} {$endif}
+    /// return a sequential 16-bit integer to identify the current thread
+    // - as stored internally by TSynLogThreadInfo.ThreadNumber - 1
+    // - by design, returns a value in range [0 .. MAX_SYNLOGTHREADS - 1]
+    // - could be used as a sequential small alternative to GetCurrentThreadId
+    // if you know that TSynLog.NotifyThreadEnded is properly called
+    // - note that after TSynLog.NotifyThreadEnded call, a number/slot will be
+    // reused so it could be a nice way of implementing per-thread resources
+    // with automatic re-use between short-living threads
+    class function ThreadIndex: PtrInt; {$ifdef HASINLINE} static; {$endif}
     /// returns a logging class which will never log anything
     // - i.e. a TSynLog sub-class with Family.Level := []
     class function Void: TSynLogClass;
@@ -4061,7 +4071,7 @@ var
 procedure InitThreadNumber(nfo: PSynLogThreadInfo);
 var
   thd: PSynLogThreads;
-  num: cardinal;
+  num: cardinal; // in [1..MAX_SYNLOGTHREADS=65500] range
 begin
   // compute the thread number - reusing any pre-existing closed thread number
   thd := @SynLogThreads;
@@ -4078,7 +4088,7 @@ begin
         ESynLogException.RaiseUtf8('Too many threads (%): ' +
           'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
       inc(thd^.Count);    // new thread number
-      num := thd^.Count;  // in [1..MAX_SYNLOGTHREADS=65500] range
+      num := thd^.Count;
     end;
   finally
     thd^.Safe.UnLock;
@@ -4696,6 +4706,12 @@ begin
   finally
     thd^.Safe.UnLock;
   end;
+end;
+
+class function TSynLog.ThreadIndex: PtrInt;
+begin
+  result := PtrInt(GetThreadInfo^.ThreadNumber) - 1;
+  // warning: caller should ensure TSynLog.NotifyThreadEnded proper call
 end;
 
 class procedure TSynLog.NotifyThreadEnded;
