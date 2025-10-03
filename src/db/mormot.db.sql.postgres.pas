@@ -49,7 +49,6 @@ type
     fOids: TWordDynArray; // O(n) search in L1 cache - use SSE2 on FPC x86_64
     fOidsFieldTypes: TSqlDBFieldTypeDynArray;
     fOidsCount: integer;
-    fArrayParamsAsBinary: boolean;
     procedure GetForeignKeys; override;
     /// fill mapping of standard OID
     // - at runtime mapping can be defined using Oid2FieldType() method
@@ -85,7 +84,7 @@ type
     // - set this property to true so that binary is sent over the wire for
     // INT4ARRAYOID/INT8ARRAYOID parameters
     property ArrayParamsAsBinary: boolean
-      read fArrayParamsAsBinary write fArrayParamsAsBinary;
+      index cpfArrayParamsAsBinary read GetFlag write SetFlag;
   end;
 
   /// implements a connection via the libpq access layer
@@ -742,7 +741,7 @@ begin
   // JsonDecodedPrepareToSql will detect cPostgreBulkArray and set
   // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
   fBatchSendingAbilities := [cCreate, cDelete, cUpdate, cPostgreBulkArray];
-  fNoBlobBindArray := true; // no BindArray() on ftBlob
+  NoBlobBindArray := true; // no BindArray() on ftBlob
   // disable MultiInsert SQL and rely on cPostgreBulkArray process for cCreate
   fOnBatchInsert := nil; // see TRestStorageExternal.InternalBatchStop
 end;

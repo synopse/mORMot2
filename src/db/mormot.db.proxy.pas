@@ -210,7 +210,6 @@ type
   // - will generate TSqlDBProxyConnection kind of connection
   TSqlDBProxyConnectionPropertiesAbstract = class(TSqlDBConnectionProperties)
   protected
-    fHandleConnection: boolean;
     fProtocol: TSqlDBProxyConnectionProtocol;
     fCurrentSession: integer;
     fStartTransactionTimeOut: Int64;
@@ -252,7 +251,7 @@ type
     // by in synch with the remote proxy connection (should not be used in
     // most cases, unless you are sure you have only one single client at a time
     property HandleConnection: boolean
-      read fHandleConnection write fHandleConnection;
+      index cpfProxyHandleConnection read GetFlag write SetFlag;
     /// milliseconds to way until StartTransaction is allowed by the server
     // - in the current implementation, there should be a single transaction
     // at once on the server side: this is the time to try before reporting

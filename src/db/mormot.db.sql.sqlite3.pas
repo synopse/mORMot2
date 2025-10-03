@@ -41,9 +41,9 @@ type
   /// will implement properties shared by the SQLite3 engine
   TSqlDBSQLite3ConnectionProperties = class(TSqlDBConnectionProperties)
   private
-    fUseMormotCollations: boolean;
     fExistingDB: TSqlDatabase;
-    procedure SetUseMormotCollations(const Value: boolean);
+    procedure SetUseMormotCollations(flag: TSqlDBConnectionPropertiesFlag;
+      value: boolean);
     function GetMainDB: TSqlDataBase;
   protected
     /// initialize fForeignKeys content with all foreign keys of this DB
@@ -81,7 +81,7 @@ type
     // SQLite collations for TEXT: it will make interaction with other programs
     // more compatible, at database file level
     property UseMormotCollations: boolean
-      read fUseMormotCollations write SetUseMormotCollations;
+      index cpfSQliteUseMormotCollations read GetFlag write SetUseMormotCollations;
   end;
 
   /// implements a direct connection to the SQLite3 engine
@@ -295,7 +295,6 @@ implementation
 
 { TSqlDBSQLite3ConnectionProperties }
 
-procedure TSqlDBSQLite3ConnectionProperties.SetUseMormotCollations(const Value: boolean);
 const
   SQLITE3_FIELDS: array[boolean] of TSqlDBFieldTypeDefinition = (
    (' INTEGER',                       // ftUnknown = int32
@@ -314,8 +313,11 @@ const
     ' TEXT COLLATE ISO8601',          // ftDate
     ' TEXT COLLATE SYSTEMNOCASE',     // ftUtf8 with our SYSTEMNOCASE collation
     ' BLOB'));                        // ftBlob
+
+procedure TSqlDBSQLite3ConnectionProperties.SetUseMormotCollations(
+  flag: TSqlDBConnectionPropertiesFlag; value: boolean);
 begin
-  fUseMormotCollations := Value;
+  SetFlag(flag, value);
   fSqlCreateField := SQLITE3_FIELDS[Value];
 end;
 

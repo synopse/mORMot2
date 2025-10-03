@@ -1257,6 +1257,27 @@ type
   // of available classes (see e.g. SynDBExplorer or sample 16)
   TSqlDBConnectionPropertiesClass = class of TSqlDBConnectionProperties;
 
+  /// define TSqlDBConnectionProperties internal flags
+  TSqlDBConnectionPropertiesFlag = (
+    cpfUseCache,
+    cpfStoreVoidStringAsNull,
+    cpfLogSqlStatementOnException,
+    cpfRollbackOnDisconnect,
+    cpfReconnectAfterConnectionError,
+    cpfConnectionTimeOutBackground,
+    cpfEnsureColumnNameUnique,
+    cpfFilterTableViewSchemaName,
+    cpfNoBlobBindArray,
+    cpfIsThreadSafe,
+    cpfVariantStringAsWideString,
+    cpfDeleteConnectionInOwnThread,
+    cpfArrayParamsAsBinary,
+    cpfSQliteUseMormotCollations,
+    cpfProxyHandleConnection);
+  /// store TSqlDBConnectionProperties internal flags
+  // - exposed as boolean properties for mORMot 1 and existing code compatibility
+  TSqlDBConnectionPropertiesFlags = set of TSqlDBConnectionPropertiesFlag;
+
   /// abstract class used to set Database-related properties
   // - handle e.g. the Database server location and connection parameters (like
   // UserID and password)
@@ -1266,33 +1287,27 @@ type
   // from TSqlDBConnectionThreadSafe to maintain one connection per thread
   TSqlDBConnectionProperties = class
   protected
+    fMainConnectionSafe: TLightLock; // topmost to ensure aarch64 alignment
+    fSharedTransactionsSafe: TLightLock;
+    fMainConnection: TSqlDBConnection;
+    fDbms: TSqlDBDefinition;
+    fBatchSendingAbilities: TSqlDBStatementCRUDs;
+    fDateTimeFirstChar: AnsiChar;
+    fFlags: TSqlDBConnectionPropertiesFlags;
+    fBatchMaxSentAtOnce: integer;
+    fLoggedSqlMaxSize: integer;
+    fConnectionTimeOutSecs: integer; // maps ConnectionTimeOutMinutes as secs
+    fStatementMaxMemory: PtrInt;
+    fEngineName: RawUtf8;
     fServerName: RawUtf8;
     fDatabaseName: RawUtf8;
     fPassWord: SpiUtf8;
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
-    fMainConnection: TSqlDBConnection;
-    fMainConnectionSafe: TLightLock; // topmost to ensure aarch64 alignment
-    fSharedTransactionsSafe: TLightLock;
-    fBatchMaxSentAtOnce: integer;
-    fLoggedSqlMaxSize: integer;
-    fConnectionTimeOutSecs: integer; // maps ConnectionTimeOutMinutes as secs
-    fOnBatchInsert: TOnBatchInsert;
-    fDbms: TSqlDBDefinition;
-    fBatchSendingAbilities: TSqlDBStatementCRUDs;
-    fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
-    fRollbackOnDisconnect, fReconnectAfterConnectionError,
-    fConnectionTimeOutBackground, fEnsureColumnNameUnique,
-    fFilterTableViewSchemaName, fNoBlobBindArray, fIsThreadSafe: boolean;
-    {$ifndef UNICODE}
-    fVariantWideString: boolean;
-    {$endif UNICODE}
-    fDateTimeFirstChar: AnsiChar;
-    fStatementMaxMemory: PtrInt;
     fSqlGetServerTimestamp: RawUtf8;
-    fEngineName: RawUtf8;
     fOnProcess: TOnSqlDBProcess;
     fOnStatementInfo: TOnSqlDBInfo;
+    fOnBatchInsert: TOnBatchInsert;
     fStatementCacheReplicates: integer;
     fSqlCreateFieldMax: cardinal;
     fSqlCreateField: TSqlDBFieldTypeDefinition;
@@ -1302,6 +1317,9 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
+    procedure SetFlag(flag: TSqlDBConnectionPropertiesFlag; value: boolean);
+    function GetFlag(flag: TSqlDBConnectionPropertiesFlag): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDbms value or dDefault
@@ -1492,7 +1510,7 @@ type
     // applications, and require e.g. amLocked/amBackgroundThread/amMainThread
     // mode for TRestServer.AcquireExecutionMode[execOrmGet/execOrmWrite]
     property ConnectionTimeOutBackground: boolean
-      read fConnectionTimeOutBackground write fConnectionTimeOutBackground;
+      index cpfConnectionTimeOutBackground read GetFlag write SetFlag;
     /// intercept connection errors at statement preparation and try to reconnect
     // - i.e. detect TSqlDBConnection.LastErrorWasAboutConnection in
     // TSqlDBConnection.NewStatementPrepared
@@ -1500,7 +1518,7 @@ type
     // multi-threaded applications), or some unexpected issues may occur - see
     // AcquireExecutionMode[] recommendations in ConnectionTimeOutMinutes
     property ReconnectAfterConnectionError: boolean
-      read fReconnectAfterConnectionError write fReconnectAfterConnectionError;
+      index cpfReconnectAfterConnectionError read GetFlag write SetFlag;
     /// create a new thread-safe statement
     // - this method just redirects to ThreadSafeConnection.NewStatement
     function NewThreadSafeStatement: TSqlDBStatement;
@@ -1853,8 +1871,8 @@ type
     property LoggedSqlMaxSize: integer
       read fLoggedSqlMaxSize write fLoggedSqlMaxSize;
     /// allow to log the SQL statement when any low-level ESqlDBException is raised
-    property LogSqlStatementOnException: boolean read
-      fLogSqlStatementOnException write fLogSqlStatementOnException;
+    property LogSqlStatementOnException: boolean
+      index cpfLogSqlStatementOnException read GetFlag write SetFlag;
     /// an optional Schema name to be used for SqlGetField() instead of UserID
     // - by default, UserID will be used as schema name, if none is specified
     // (i.e. if table name is not set as SCHEMA.TABLE)
@@ -1866,7 +1884,7 @@ type
     /// if GetTableNames/GetViewNames should only return the table names
     // starting with 'ForcedSchemaName.' prefix
     property FilterTableViewSchemaName: boolean
-      read fFilterTableViewSchemaName write fFilterTableViewSchemaName;
+      index cpfFilterTableViewSchemaName read GetFlag write SetFlag;
     /// TRUE if an internal cache of SQL statement should be used
     // - cache will be accessed for NewStatementPrepared() method only, by
     // returning ISqlDBStatement interface instances
@@ -1875,7 +1893,7 @@ type
     // - will cache only statements containing ? parameters or a SELECT with no
     // WHERE clause within
     property UseCache: boolean
-      read fUseCache write fUseCache;
+      index cpfUseCache read GetFlag write SetFlag;
     /// maximum bytes allowed for FetchAllToJSON/FetchAllToBinary methods
     // - if a result set exceeds this limit, an ESQLDBException is raised
     // - default is 512 shl 20, i.e. 512MB which is very high
@@ -1900,7 +1918,7 @@ type
     // is roll-backed before disconnection
     // - is set to TRUE by default
     property RollbackOnDisconnect: boolean
-      read fRollbackOnDisconnect write fRollbackOnDisconnect;
+      index cpfRollbackOnDisconnect read GetFlag write SetFlag;
     /// by default, result column names won't be checked for name unicity
     // - it is up to your SQL statement to return genuine columns
     // - ColumName() lookup will use O(1) brute force, so you should rather
@@ -1909,13 +1927,13 @@ type
     // names will be hashed for unicity (so will be slower at execution),
     // but will allow faster ColumnName() lookup
     property EnsureColumnNameUnique: boolean
-      read fEnsureColumnNameUnique write fEnsureColumnNameUnique;
+      index cpfEnsureColumnNameUnique read GetFlag write SetFlag;
     /// defines if '' string values are to be stored as SQL null
     // - by default, '' will be stored as ''
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
     property StoreVoidStringAsNull: boolean
-       read fStoreVoidStringAsNull write fStoreVoidStringAsNull;
+      index cpfStoreVoidStringAsNull read GetFlag write SetFlag;
     /// customize the ISO-8601 text format expected by the database provider
     // - is 'T' by default, as expected by the ISO-8601 standard
     // - will be changed e.g. for PostgreSQL, which expects ' ' instead
@@ -1925,7 +1943,7 @@ type
     /// defines if the engine does not support BindArray(ftBlob)
     // - only set for TSqlDBPostgresConnectionProperties by now
     property NoBlobBindArray: boolean
-      read fNoBlobBindArray write fNoBlobBindArray;
+      index cpfNoBlobBindArray read GetFlag write SetFlag;
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
@@ -1945,7 +1963,7 @@ type
     // - if you want a RawUtf8 varString (as used e.g. within TDocVariantData),
     // use ISqlDBStatement.ColumnVariant/ColumnToVariant() with ForceUtf8=true
     property VariantStringAsWideString: boolean
-      read fVariantWideString write fVariantWideString;
+      index cpfVariantStringAsWideString read GetFlag write SetFlag;
     {$endif UNICODE}
     /// SQL statements what will be executed for each new connection, as typical
     // usage scenarios examples:
@@ -2772,7 +2790,6 @@ type
     fConnectionPoolMin, fConnectionPoolMax, fConnectionPoolCount: integer;
     fConnectionPoolDeprecatedTix32: integer;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
-    fDeleteConnectionInOwnThread: boolean;
     procedure DeleteDeprecated(secs: integer);
     procedure RemoveFromPool(conn: TSqlDBConnectionThreadSafe);
     /// overridden method to properly handle multi-thread
@@ -2806,7 +2823,7 @@ type
     // some non-threadsafe database providers may require to free the connection
     // in the very same thread which created it - see also EndCurrentThread
     property DeleteConnectionInOwnThread: boolean
-      read fDeleteConnectionInOwnThread write fDeleteConnectionInOwnThread;
+      index cpfDeleteConnectionInOwnThread read GetFlag write SetFlag;
     /// how many TSqlDBConnectionThreadSafe are currently in tmThreadPool mode
     property ConnectionPoolCount: integer
       read fConnectionPoolCount;
@@ -3468,8 +3485,7 @@ begin
   fUserID := aUserID;
   fPassWord := aPassWord;
   fEngineName := EngineName;
-  fRollbackOnDisconnect := true; // enabled by default
-  fUseCache := true;
+  fFlags := fFlags + [cpfRollbackOnDisconnect, cpfUseCache];
   fLoggedSqlMaxSize := 2048; // log up to 2KB of inlined SQL by default
   fStatementMaxMemory := 512 shl 20; // fetch to JSON/Binary up to 512MB
   SetInternalProperties; // virtual method used to override default parameters
@@ -3494,7 +3510,7 @@ begin
   case db of
     dMSSQL,
     dJet:
-      fStoreVoidStringAsNull := true;
+      StoreVoidStringAsNull := true;
   end;
   if byte(fBatchSendingAbilities) = 0 then // if not already handled by driver
     case db of
@@ -3630,6 +3646,20 @@ var
 begin
   FormatUtf8(SqlFormat, Args, sql);
   result := ExecuteInlined(sql, ExpectResults);
+end;
+
+procedure TSqlDBConnectionProperties.SetFlag(flag: TSqlDBConnectionPropertiesFlag;
+  value: boolean);
+begin
+  if value then
+    include(fFlags, flag)
+  else
+    exclude(fFlags, flag);
+end;
+
+function TSqlDBConnectionProperties.GetFlag(flag: TSqlDBConnectionPropertiesFlag): boolean;
+begin
+  result := flag in fFlags;
 end;
 
 procedure TSqlDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
@@ -3821,7 +3851,7 @@ end;
 
 function TSqlDBConnectionProperties.IsCacheable(P: PUtf8Char): boolean;
 begin
-  result := fUseCache and
+  result := (cpfUseCache in fFlags) and
             IsCacheableDML(P);
 end;
 
@@ -7297,7 +7327,7 @@ end;
 function TSqlDBConnection.GetThreadOwned(aClass: TClass): pointer;
 begin
   if (self = nil) or
-     not fProperties.fIsThreadSafe then
+     not (cpfIsThreadSafe in fProperties.fFlags) then
     result := nil
   else
   begin
@@ -7310,7 +7340,7 @@ end;
 function TSqlDBConnection.SetThreadOwned(aObject: TObject): pointer;
 begin
   if (self = nil) or
-     not fProperties.fIsThreadSafe then
+     not (cpfIsThreadSafe in fProperties.fFlags) then
     ESqlDBException.RaiseUtf8('Unsupported %.SetThreadOwned', [self]);
   result := aObject;
   if result <> nil then
@@ -7713,7 +7743,7 @@ end;
 constructor TSqlDBConnectionPropertiesThreadSafe.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
-  fIsThreadSafe := true;
+  include(fFlags, cpfIsThreadSafe);
   fConnectionPoolMax := -1;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
@@ -7741,7 +7771,7 @@ var
   log: ISynLog;
 begin
   SynDBLog.EnterLocal(log, self, 'ClearConnectionPool');
-  if fDeleteConnectionInOwnThread then
+  if DeleteConnectionInOwnThread then
   begin
     // mark all connections as deprecated - Destroy will be done later on, in
     // the proper thread (some providers may require to keep the same thread)
@@ -7842,8 +7872,8 @@ begin
         if fConnectionTimeOutSecs <> 0 then
         begin
           secs := GetTickSec;
-          if fConnectionTimeOutBackground and // disabled by deault
-             (not fDeleteConnectionInOwnThread) and
+          if ConnectionTimeOutBackground and // disabled by default
+             (not (cpfDeleteConnectionInOwnThread in fFlags)) and
              (fConnectionPoolDeprecatedTix32 <> secs shr 5) then
           begin
             fConnectionPoolDeprecatedTix32 := secs shr 5;
