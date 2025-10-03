@@ -646,8 +646,10 @@ type
   /// available TSynLogThreadInfo.Flags definition
   // - tiExceptionIgnore store TSynLogFamily.ExceptionIgnoreCurrentThread
   // property (used only if NOEXCEPTIONINTERCEPT conditional is undefined)
+  // - tiTemporaryDisable store TSynLogFamily.DisableCurrentThread property
   TSynLogThreadInfoFlag = (
-    tiExceptionIgnore);
+    tiExceptionIgnore,
+    tiTemporaryDisable);
   /// TSynLogThreadInfo.Flags property set type definition
   TSynLogThreadInfoFlags = set of TSynLogThreadInfoFlag;
 
@@ -796,6 +798,11 @@ type
     // to this flag
     property ExceptionIgnoreCurrentThread: boolean
       index tiExceptionIgnore read GetCurrentThreadFlag write SetCurrentThreadFlag;
+    /// allow to temporarly avoid logging in the current thread
+    // - after setting true to this property, should eventually be reset to false
+    // - won't affect exceptions logging, as one would expect for safety
+    property DisableCurrentThread: boolean
+      index tiTemporaryDisable read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
     // - execution of this event handler is protected via the logs global lock
@@ -1104,7 +1111,7 @@ type
     procedure RaiseDoEnter;
     procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo;
       microsecs: PInt64); // no profit inlining
-    procedure LockAndDisableExceptions; // no profit inlining
+    function LockAndDisableExceptions: boolean; // no profit inlining
     procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
     procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
@@ -4783,25 +4790,31 @@ begin // caller just made GlobalThreadLock.Lock
   log.AddLogThreadName;
 end;
 
-procedure TSynLog.LockAndDisableExceptions;
+function TSynLog.LockAndDisableExceptions: boolean;
 var
   nfo: PSynLogThreadInfo;
 begin
-  nfo := @PerThreadInfo; // access the threadvar - inlined GetThreadInfo
-  if PInteger(nfo)^ = 0 then // first access
-    InitThreadNumber(nfo);
-  if not (logInitDone in fFlags) then
-    LogFileInit(nfo); // run once, to set start time and write headers
-  FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
-  GlobalThreadLock.Lock;
-  SetThreadInfoAndThreadName(self, nfo);
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  // any exception within logging process will be ignored from now on
-  fThreadInfoBackup := nfo^.Flags;
-  // caller should always eventually perform in its finally ... end block:
-  //    fThreadInfo^.Flags := fThreadInfoBackup;
-  include(nfo^.Flags, tiExceptionIgnore);
-  {$endif NOEXCEPTIONINTERCEPT}
+  nfo := @PerThreadInfo; // access the threadvar
+  if not (tiTemporaryDisable in nfo^.Flags) then
+  begin
+    if PInteger(nfo)^ = 0 then
+      InitThreadNumber(nfo); // first access - inlined GetThreadInfo
+    if not (logInitDone in fFlags) then
+      LogFileInit(nfo); // run once, to set start time and write headers
+    FillInfo(nfo, nil); // syscall outside of GlobalThreadLock
+    GlobalThreadLock.Lock;
+    SetThreadInfoAndThreadName(self, nfo);
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    // any exception within logging process will be ignored from now on
+    fThreadInfoBackup := nfo^.Flags;
+    // caller should always eventually perform in its finally ... end block:
+    //    fThreadInfo^.Flags := fThreadInfoBackup;
+    include(nfo^.Flags, tiExceptionIgnore);
+    {$endif NOEXCEPTIONINTERCEPT}
+    result := true; // normal process, with eventual fThreadInfoBackup + UnLock
+  end
+  else
+    result := false; // TSynLogFamily.DisableCurrentThread=true for this thread
 end;
 
 function TSynLog.QueryInterface(
@@ -4964,13 +4977,17 @@ begin
      (fFamily.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
     exit;
   result := GetThreadInfo; // may call InitThreadNumber() if first access
-  ndx := result^.RecursionCount;
-  inc(ndx);
-  if ndx = 0 then
-    RaiseDoEnter;
-  result^.RecursionCount := ndx;
-  if ndx > high(result^.Recursion) then
-    result := nil; // nothing logged above MAX_SYNLOGRECURSION
+  if not (tiTemporaryDisable in result^.Flags) then
+  begin
+    ndx := result^.RecursionCount;
+    inc(ndx);
+    if ndx = 0 then
+      RaiseDoEnter;
+    result^.RecursionCount := ndx;
+    if ndx <= high(result^.Recursion) then
+      exit; // fine
+  end;
+  result := nil; // logging disabled, or above MAX_SYNLOGRECURSION
 end;
 
 procedure TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo; microsecs: PInt64);
@@ -5508,7 +5525,7 @@ begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  LockAndDisableExceptions;
+  if LockAndDisableExceptions then
   try
     LogHeader(Level, nil);
     if lasterror <> 0 then
@@ -5543,7 +5560,7 @@ begin
      (Text = nil) or
      not (Level in fFamily.fLevel) then
     exit;
-  LockAndDisableExceptions;
+  if LockAndDisableExceptions then
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -5940,7 +5957,7 @@ begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  LockAndDisableExceptions;
+  if LockAndDisableExceptions then
   try
     LogHeader(Level, Instance);
     fWriter.AddFmt(Format, Values, ValuesCount, twOnSameLine,
@@ -5964,7 +5981,7 @@ begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  LockAndDisableExceptions;
+  if LockAndDisableExceptions then
   try
     LogHeader(Level, Instance);
     if Text = nil then
@@ -6005,7 +6022,7 @@ end;
 procedure TSynLog.LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
-  LockAndDisableExceptions;
+  if LockAndDisableExceptions then
   try
     LogHeader(Level, Instance);
     fWriter.AddOnSameLine(pointer(aName));
@@ -6447,7 +6464,7 @@ begin
   if log = nil then
    exit;
   thrdnam := CurrentThreadNameShort;
-  log.LockAndDisableExceptions;
+  log.LockAndDisableExceptions; // ignore result = tiTemporaryDisable flag
   try
     try
       // ensure we need to log this
