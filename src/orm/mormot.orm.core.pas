@@ -1062,7 +1062,7 @@ type
     // SessionID=CONST_AUTHENTICATION_NOT_USED=1 parameter)
     // - if you have an external database engine which expect transactions to
     // take place in the same thread, ensure TRestServer force execution of
-    // this method when accessed from RESTful clients in the same thread, e.g.:
+    // this method when accessed from RESTful clients in the same thread, e.g.
     // ! AcquireExecutionMode[execOrmWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     function TransactionBegin(aTable: TOrmClass;
@@ -1085,7 +1085,7 @@ type
     // SessionID=CONST_AUTHENTICATION_NOT_USED=1 parameter)
     // - if you have an external database engine which expect transactions to
     // take place in the same thread, ensure TRestServer force execution of
-    // this method when accessed from RESTful clients in the same thread, e.g.:
+    // this method when accessed from RESTful clients in the same thread, e.g.
     // ! AcquireExecutionMode[execOrmWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     // - by default, any exception will be catch and ignored, unless RaiseException
@@ -2847,11 +2847,9 @@ type
   public
     /// ensure the current thread will be taken into account during process
     // - this abstract method won't do anything, but overriden versions may
-    // - low-level method used directly from mormot.rest.core.pas
     procedure BeginCurrentThread(Sender: TThread); virtual;
     /// called when thread is finished to ensure
     // - this abstract method won't do anything, but overriden versions may
-    // - low-level method used directly from mormot.rest.core.pas
     procedure EndCurrentThread(Sender: TThread); virtual;
   end;
 

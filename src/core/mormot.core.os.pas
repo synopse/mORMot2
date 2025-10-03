@@ -2698,6 +2698,7 @@ function GetTickCount64: Int64;
 /// returns a system-wide current monotonic timestamp as 32-bit seconds
 // - simply wrap GetTickCount64 div 1000 on Windows/Mac, or call clock_gettime()
 // and return directly its timespec.tv_sec part on Linux/BSD
+// - overflow after 136 years when compared as 32-bit, or 68 years as 31-bit
 function GetTickSec: cardinal;
   {$ifdef OSWINDOWS} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
@@ -2706,6 +2707,7 @@ function GetTickSec: cardinal;
 // - on Windows, computes GetTickCount64 div 1000
 // - on Linux/BSD, will use CLOCK_BOOTTIME/CLOCK_UPTIME clock
 // - on MacOS, will use mach_continuous_time() API
+// - overflow after 136 years when compared as 32-bit, or 68 years as 31-bit
 function GetUptimeSec: cardinal;
 
 /// returns the current UTC time

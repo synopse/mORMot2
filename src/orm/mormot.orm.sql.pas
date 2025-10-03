@@ -313,7 +313,7 @@ type
 { *********** TOrmVirtualTableExternal for External SQL Virtual Tables }
 
 type
-    /// A Virtual Table cursor for reading a TSqlDBStatement content
+  /// A Virtual Table cursor for reading a TSqlDBStatement content
   // - this is the cursor class associated to TOrmVirtualTableExternal
   TOrmVirtualTableCursorExternal = class(TOrmVirtualTableCursor)
   protected

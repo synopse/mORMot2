@@ -799,8 +799,14 @@ type
     property ExceptionIgnoreCurrentThread: boolean
       index tiExceptionIgnore read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// allow to temporarly avoid logging in the current thread
-    // - after setting true to this property, should eventually be reset to false
     // - won't affect exceptions logging, as one would expect for safety reasons
+    // - after setting true to this property, should eventually be reset to false:
+    // ! TSynLog.Family.DisableCurrentThread := true;
+    // ! try
+    // !   ...
+    // ! finally
+    // !   TSynLog.Family.DisableCurrentThread := false;
+    // ! end;
     property DisableCurrentThread: boolean
       index tiTemporaryDisable read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// you can let exceptions be ignored from a callback
@@ -1300,7 +1306,8 @@ type
     // if you know that TSynLog.NotifyThreadEnded is properly called
     // - note that after TSynLog.NotifyThreadEnded call, a number/slot will be
     // reused so it could be a nice way of implementing per-thread resources
-    // with automatic re-use between short-living threads
+    // with automatic re-use between short-living threads, e.g. as it is
+    // by TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection
     class function ThreadIndex: PtrInt; {$ifdef HASINLINE} static; {$endif}
     /// returns a logging class which will never log anything
     // - i.e. a TSynLog sub-class with Family.Level := []
@@ -4102,9 +4109,9 @@ end;
 
 function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := @PerThreadInfo;       // access the threadvar
-  if result^.ThreadBitLo = 0 then // called once per thread
-    InitThreadNumber(result);
+  result := @PerThreadInfo; // access the threadvar
+  if result^.ThreadBitLo = 0 then
+    InitThreadNumber(result); // initialized once per thread
 end;
 
 
