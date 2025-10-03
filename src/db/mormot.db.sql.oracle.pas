@@ -209,17 +209,17 @@ type
     fStatement: pointer;
     fError: pointer;
     fPreparedParamsCount: integer;
+    fInternalBufferSize: cardinal;
     fRowCount: cardinal;
     fRowBufferCount: cardinal;
     fRowFetched: cardinal;
     fRowFetchedCurrent: cardinal;
     fRowFetchedEnded: boolean;
+    fUseServerSideStatementCache: boolean;
     fRowBuffer: TByteDynArray;
     fBoundCursor: TPointerDynArray;
-    fInternalBufferSize: cardinal;
     // warning: shall be 32 bits aligned!
     fTimeElapsed: TPrecisionTimer;
-    fUseServerSideStatementCache: boolean;
     function DateTimeToDescriptor(aDateTime: TDateTime): pointer;
     procedure FreeHandles(AfterError: boolean);
     procedure FetchTest(Status: integer);
@@ -978,7 +978,7 @@ begin
             W.AddDirect('"');
           end;
         ftBlob:
-          if fForceBlobAsNull then
+          if dsfForceBlobAsNull in fFlags then
             W.AddNull
           else if ColumnValueInlined then
             W.WrBase64(V, ColumnValueDBSize, true)
@@ -1042,7 +1042,7 @@ begin
         Value.VText := pointer(Temp);
       end;
     ftBlob:
-      if fForceBlobAsNull then
+      if dsfForceBlobAsNull in fFlags then
       begin
         Value.VBlob := nil;
         Value.VBlobLen := 0;
@@ -2127,7 +2127,7 @@ begin
             end;
           SQLT_BIN:
             begin
-              if fForceBlobAsNull then
+              if dsfForceBlobAsNull in fFlags then
                 ColumnType := ftNull
               else
                 ColumnType := ftBlob;
@@ -2141,7 +2141,7 @@ begin
               ColumnValueInlined := false;
               ColumnValueDBType := SQLT_BLOB;
               ColumnValueDBSize := SizeOf(POCILobLocator);
-              if fForceBlobAsNull then
+              if dsfForceBlobAsNull in fFlags then
                 ColumnType := ftNull
               else
                 include(ColumnLongTypes, hasLOB);

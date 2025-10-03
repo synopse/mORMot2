@@ -185,8 +185,8 @@ type
     fQuery: TDataSet;
     fPrepared: boolean;
     fDatasetSupportBatchBinding: boolean;
-    fPreparedParamsCount: integer;
     fForceUseWideString: boolean;
+    fPreparedParamsCount: integer;
   protected
     /// convert SqlDBParamType to a standard DB.TParamType to be used in TQuery.Param
     function SqlParamTypeToDBParamType(IO: TSqlDBParamInOutType): TParamType; virtual;
@@ -920,7 +920,7 @@ begin
         mormot.db.core.ftDate:
           begin
             W.Add('"');
-            W.AddDateTime(f.AsDateTime, fForceDateWithMS);
+            W.AddDateTime(f.AsDateTime, GetForceDateWithMS);
             W.AddDirect('"');
           end;
         mormot.db.core.ftUtf8:
@@ -939,7 +939,7 @@ begin
             W.AddDirect('"');
           end;
         mormot.db.core.ftBlob:
-          if fForceBlobAsNull then
+          if dsfForceBlobAsNull in fFlags then
             W.AddNull
           else
           begin

@@ -262,7 +262,6 @@ type
     fCommand: ICommandText;
     fRowSet: IRowSet;
     fRowSetAccessor: HACCESSOR;
-    fRowSize: integer;
     fRowStepResult: HRESULT;
     fRowStepHandleRetrieved: PtrUInt;
     fRowStepHandleCurrent: PtrUInt;
@@ -270,11 +269,12 @@ type
     fRowSetData: TBytes;
     fParamBindings: TDBBindingDynArray;
     fColumnBindings: TDBBindingDynArray;
-    fHasColumnValueByRef: boolean;
     fOleDBConnection: TSqlDBOleDBConnection;
     fDBParams: TDBParams;
+    fRowSize: integer;
     fRowBufferSize: integer;
     fUpdateCount: integer;
+    fHasColumnValueByRef: boolean;
     fAlignBuffer: boolean;
     procedure SetRowBufferSize(Value: integer);
     /// resize fParams[] if necessary, set the VType and return pointer to
@@ -1087,7 +1087,7 @@ begin
             FastSynUnicode(SynUnicode(VAny), P, V^.Length shr 1);
         end;
       ftBlob: // as varString
-        if fForceBlobAsNull then
+        if dsfForceBlobAsNull in fFlags then
           VType := varNull
         else
         begin
@@ -1122,7 +1122,7 @@ Write:case c^.ColumnType of
         ftDate:
           begin
             W.Add('"');
-            W.AddDateTime(@V^.Double, 'T', #0, fForceDateWithMS);
+            W.AddDateTime(@V^.Double, 'T', #0, dsfForceDateWithMS in fFlags);
             W.AddDirect('"');
           end;
         ftUtf8:
@@ -1133,7 +1133,7 @@ Write:case c^.ColumnType of
             W.AddDirect('"');
           end;
         ftBlob:
-          if fForceBlobAsNull then
+          if dsfForceBlobAsNull in fFlags then
             W.AddNull
           else
             W.WrBase64(ColPtr(C, V), V^.Length, true); // withMagic=true

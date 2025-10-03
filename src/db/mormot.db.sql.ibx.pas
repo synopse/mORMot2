@@ -194,7 +194,6 @@ type
   /// implements a statement via a IBX/FB Pascal API database connection
   TSqlDBIbxStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
-    fAutoStartCommitTrans: boolean;
     fStatement: IStatement;
     fResultSet: IResultSet;
     fResults: IResults;
@@ -207,6 +206,7 @@ type
     fInternalTPB: ITPB;
     fInternalTransaction: ITransaction;
     fReadOnlyTransaction: boolean;
+    fAutoStartCommitTrans: boolean;
     procedure InternalStartTransaction;
     procedure InternalCommitTransaction;
     procedure ErrorColAndRowset(const Col: integer);
@@ -1036,7 +1036,7 @@ begin
         end;
       SQL_BLOB:
         begin
-          if fForceBlobAsNull then
+          if ForceBlobAsNull then
             W.AddNull
           else
           begin

@@ -144,10 +144,11 @@ type
     fStatement: TSqlRequest;
     fLogSQLValues: TVariantDynArray;
     fUpdateCount: integer;
-    fShouldLogSQL: boolean; // sllSQL in SynDBLog.Level -> set fLogSQLValues[]
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     procedure AddParamValueAsText(Param: integer; Dest: TJsonWriter;
       MaxCharCount: integer); override;
+    property fShouldLogSQL: boolean // sllSQL in SynDBLog.Level -> set fLogSQLValues[]
+      index dsfShouldLogSQL read GetFlag write SetFlag;
   public
     /// create a SQLite3 statement instance, from an existing SQLite3 connection
     // - the Execute method can be called once per TSqlDBSQLite3Statement instance,
@@ -602,7 +603,7 @@ end;
 procedure TSqlDBSQLite3Statement.ColumnToJson(Col: integer; W: TJsonWriter);
 begin
   fStatement.FieldToJson(W,
-    sqlite3.column_value(fStatement.Request, Col), fForceBlobAsNull);
+    sqlite3.column_value(fStatement.Request, Col), dsfForceBlobAsNull in fFlags);
 end;
 
 function TSqlDBSQLite3Statement.ColumnType(Col: integer;
@@ -806,7 +807,7 @@ begin
   begin
     W.AddProp(sqlite3.column_name(fStatement.Request, col)); // '"ColumnName":'
     fStatement.FieldToJson(W,
-      sqlite3.column_value(fStatement.Request, col), fForceBlobAsNull);
+      sqlite3.column_value(fStatement.Request, col), dsfForceBlobAsNull in fFlags);
     W.AddComma;
   end;
   W.CancelLastComma('}');

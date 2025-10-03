@@ -898,7 +898,7 @@ begin
           W.AddFloatStr(pointer(fColData[Col])); // already as SQL_C_CHAR
         ftDate:
           W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(pointer(fColData[Col]))^.
-            ToIso8601(tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
+            ToIso8601(tmp{%H-}, ColumnValueDBType, dsfForceDateWithMS in fFlags));
         ftUtf8:
           begin
             W.Add('"');
@@ -907,7 +907,7 @@ begin
             W.AddDirect('"');
           end;
         ftBlob:
-          if fForceBlobAsNull then
+          if dsfForceBlobAsNull in fFlags then
             W.AddNull
           else
             W.WrBase64(pointer(fColData[Col]), ColumnDataSize, true);

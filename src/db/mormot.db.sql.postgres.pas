@@ -917,8 +917,8 @@ begin
             DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
         ftDate:
           // libpq expects space instead of T in ISO-8601 expanded format
-          DateTimeToIso8601Var(PDateTime(@p^.VInt64)^,
-            {expand=}true, fForceDateWithMS, ' ', #0, RawUtf8(p^.VData));
+          DateTimeToIso8601Var(PDateTime(@p^.VInt64)^, {expand=}true,
+            dsfForceDateWithMS in fFlags, ' ', #0, RawUtf8(p^.VData));
         ftUtf8:
           ; // UTF-8 text already in p^.VData buffer
         ftBlob:
@@ -1339,7 +1339,7 @@ begin
           Utf8ToSynUnicode(P, L, SynUnicode(v.VAny));
       end;
     ftBlob:
-      if fForceBlobAsNull then
+      if dsfForceBlobAsNull in fFlags then
         v.VType := varNull
       else
         FastSetRawByteString(RawByteString(v.VAny), P,
@@ -1394,7 +1394,7 @@ begin
           W.AddDirect('"');
         end;
       ftBlob:
-        if fForceBlobAsNull then
+        if dsfForceBlobAsNull in fFlags then
           W.AddNull
         else
           W.WrBase64(P, BlobInPlaceDecode(P,

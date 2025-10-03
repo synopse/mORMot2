@@ -1446,7 +1446,7 @@ begin
             WR.AddDirect('"');
           end;
         ftBlob:
-          if fForceBlobAsNull then
+          if dsfForceBlobAsNull in fFlags then
             WR.AddNull
           else if fDbms in [dMySQL, dMariaDB, dSQLite] then
           begin
