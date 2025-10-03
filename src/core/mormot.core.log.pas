@@ -636,14 +636,20 @@ type
     acOverwrite,
     acAppend);
 
-{$ifndef NOEXCEPTIONINTERCEPT}
-
+  {$ifndef NOEXCEPTIONINTERCEPT}
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
   TOnBeforeException = function(const Context: TSynLogExceptionContext;
     const ThreadName: shortstring): boolean of object;
+  {$endif NOEXCEPTIONINTERCEPT}
 
-{$endif NOEXCEPTIONINTERCEPT}
+  /// available TSynLogThreadInfo.Flags definition
+  // - tiExceptionIgnore store TSynLogFamily.ExceptionIgnoreCurrentThread
+  // property (used only if NOEXCEPTIONINTERCEPT conditional is undefined)
+  TSynLogThreadInfoFlag = (
+    tiExceptionIgnore);
+  /// TSynLogThreadInfo.Flags property set type definition
+  TSynLogThreadInfoFlags = set of TSynLogThreadInfoFlag;
 
   /// regroup several logs under an unique family name
   // - you should usualy use one family per application or per architectural
@@ -725,10 +731,8 @@ type
     function GetSynLogClassName: string;
     function ArchiveAndDeleteFile(const aFileName: TFileName): boolean;
     function GetArchiveDestPath(age: TDateTime): TFileName;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    function GetExceptionIgnoreCurrentThread: boolean;
-    procedure SetExceptionIgnoreCurrentThread(aExceptionIgnoreCurrentThread: boolean);
-    {$endif NOEXCEPTIONINTERCEPT}
+    function GetCurrentThreadFlag(ti: TSynLogThreadInfoFlag): boolean;
+    procedure SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
   public
     /// intialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -791,7 +795,7 @@ type
     // - see also ExceptionIgnore property - which is also checked in addition
     // to this flag
     property ExceptionIgnoreCurrentThread: boolean
-      read GetExceptionIgnoreCurrentThread write SetExceptionIgnoreCurrentThread;
+      index tiExceptionIgnore read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
     // - execution of this event handler is protected via the logs global lock
@@ -1032,9 +1036,8 @@ type
     /// number of recursive calls currently stored in Recursion[]
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
     RecursionCount: byte;
-    /// store TSynLogFamily.ExceptionIgnoreCurrentThread property
-    // - used only if NOEXCEPTIONINTERCEPT conditional is undefined
-    ExceptionIgnore: boolean;
+    /// store per-thread behavior, e.g. to disable exceptions or whole logging
+    Flags: TSynLogThreadInfoFlags;
     /// the internal number of this thread, stored as text using Int18ToChars3()
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
     ThreadNumber: word;
@@ -1075,7 +1078,7 @@ type
     fThreadInfo: PSynLogThreadInfo;
     fFlags: set of (logFileHeaderWritten, logInitDone, logAddThreadName);
     fPendingFlags: set of (pendingDisableRemoteLogLeave, pendingRotate);
-    fExceptionIgnoredBackup: boolean; // ifndef NOEXCEPTIONINTERCEPT
+    fThreadInfoBackup: TSynLogThreadInfoFlags;
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
     fWriterEcho: TEchoWriter;
@@ -4126,20 +4129,21 @@ begin
   fLevelSysInfo := [sllException, sllExceptionOS, sllLastError, sllNewRun];
 end;
 
-{$ifndef NOEXCEPTIONINTERCEPT}
-
-function TSynLogFamily.GetExceptionIgnoreCurrentThread: boolean;
+function TSynLogFamily.GetCurrentThreadFlag(ti: TSynLogThreadInfoFlag): boolean;
 begin
-  result := PerThreadInfo.ExceptionIgnore; // private threadvar access
+  result := ti in PerThreadInfo.Flags; // private threadvar access
 end;
 
-procedure TSynLogFamily.SetExceptionIgnoreCurrentThread(
-  aExceptionIgnoreCurrentThread: boolean);
+procedure TSynLogFamily.SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
+var
+  nfo: PSynLogThreadInfo;
 begin
-  PerThreadInfo.ExceptionIgnore := aExceptionIgnoreCurrentThread;
+  nfo := @PerThreadInfo;
+  if value then
+    include(nfo^.Flags, ti)
+  else
+    exclude(nfo^.Flags, ti);
 end;
-
-{$endif NOEXCEPTIONINTERCEPT}
 
 function TSynLogFamily.CreateSynLog: TSynLog;
 begin
@@ -4792,10 +4796,10 @@ begin
   SetThreadInfoAndThreadName(self, nfo);
   {$ifndef NOEXCEPTIONINTERCEPT}
   // any exception within logging process will be ignored from now on
-  fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
-  // caller should always perform in its finally ... end block an eventual:
-  //   fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
-  nfo^.ExceptionIgnore := true;
+  fThreadInfoBackup := nfo^.Flags;
+  // caller should always eventually perform in its finally ... end block:
+  //    fThreadInfo^.Flags := fThreadInfoBackup;
+  include(nfo^.Flags, tiExceptionIgnore);
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
@@ -5028,15 +5032,15 @@ procedure TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
   fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
 begin
   LockAndPrepareEnter(nfo, microsecs);
-  fExceptionIgnoredBackup := nfo^.ExceptionIgnore;
+  fThreadInfoBackup := nfo^.Flags;
   try
-    nfo^.ExceptionIgnore := true;
+    include(nfo^.Flags, tiExceptionIgnore);
     LogHeader(sllEnter, inst);
     fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     fWriterEcho.AddEndOfLine(sllEnter);
   finally
-    nfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    nfo^.Flags := fThreadInfoBackup;
     GlobalThreadLock.UnLock;
   end;
 end;
@@ -5525,7 +5529,7 @@ begin
     {$endif ISDELPHI}
     LogTrailer(Level);
   finally
-    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    fThreadInfo^.Flags := fThreadInfoBackup;
     GlobalThreadLock.UnLock;
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5550,7 +5554,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    fThreadInfo^.Flags := fThreadInfoBackup;
     GlobalThreadLock.UnLock;
   end;
 end;
@@ -5858,7 +5862,7 @@ end;
 procedure TSynLog.PerformRotation(nfo: PSynLogThreadInfo);
 var
   currentMaxSynLZ: cardinal;
-  bak: boolean;
+  bak: TSynLogThreadInfoFlags;
   i: PtrInt;
   ext: TFileName;
   FN: array of TFileName;
@@ -5866,8 +5870,8 @@ begin // caller made GlobalThreadLock.Lock
   exclude(fPendingFlags, pendingRotate);
   if nfo = nil then
     nfo := @PerThreadInfo; // from ForceRotation
-  bak := nfo^.ExceptionIgnore;
-  nfo^.ExceptionIgnore := true; // avoid infinite locks
+  bak := nfo^.Flags;
+  include(nfo^.Flags, tiExceptionIgnore); // avoid infinite locks
   try
     CloseLogFile;
     try
@@ -5923,7 +5927,7 @@ begin // caller made GlobalThreadLock.Lock
     // initialize a brand new log file
     LogFileInit(GetThreadInfo);
   finally
-    nfo^.ExceptionIgnore := bak;
+    nfo^.Flags := bak;
   end;
 end;
 
@@ -5944,7 +5948,7 @@ begin
       AddErrorMessage(lasterror);
     LogTrailer(Level);
   finally
-    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    fThreadInfo^.Flags := fThreadInfoBackup;
     GlobalThreadLock.UnLock;
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -5990,7 +5994,7 @@ begin
       AddErrorMessage(lasterror);
     LogTrailer(Level);
   finally
-    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    fThreadInfo^.Flags := fThreadInfoBackup;
     GlobalThreadLock.UnLock;
     if lasterror <> 0 then
       SetLastError(lasterror);
@@ -6008,7 +6012,7 @@ begin
     fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
     LogTrailer(Level);
   finally
-    fThreadInfo^.ExceptionIgnore := fExceptionIgnoredBackup;
+    fThreadInfo^.Flags := fThreadInfoBackup;
     GlobalThreadLock.UnLock;
   end;
 end;
@@ -6329,16 +6333,16 @@ var
   n, i, logged: integer;
   BackTrace: array[byte] of PtrUInt;
   {$ifndef NOEXCEPTIONINTERCEPT}
-  nointercept: PBoolean;
-  nointerceptbackup: boolean; // paranoid precaution
+  nointercept: ^TSynLogThreadInfoFlags;
+  nointerceptbackup: TSynLogThreadInfoFlags; // paranoid precaution
   {$endif NOEXCEPTIONINTERCEPT}
 begin
   if fFamily.StackTraceLevel <= 0 then
     exit;
   {$ifndef NOEXCEPTIONINTERCEPT}
-  nointercept := @PerThreadInfo.ExceptionIgnore;
+  nointercept := @PerThreadInfo.Flags;
   nointerceptbackup := nointercept^;
-  nointercept^ := true;
+  include(nointercept^, tiExceptionIgnore);
   {$endif NOEXCEPTIONINTERCEPT}
   try
     {$ifdef OSWINDOWS}
@@ -6434,7 +6438,7 @@ begin
   {$endif ISDELPHIXE6}
   {$endif WIN64DELPHI}
   nfo := @PerThreadInfo;
-  if nfo^.ExceptionIgnore then // disabled for this thread (nested call)
+  if tiExceptionIgnore in nfo^.Flags then // disabled for this thread (nested call)
     exit;
   log := HandleExceptionFamily.Add;
   if log = nil then
@@ -6528,7 +6532,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
       // any nested exception should never be propagated to the OS caller
     end;
   finally
-    nfo^.ExceptionIgnore := log.fExceptionIgnoredBackup;
+    nfo^.Flags := log.fThreadInfoBackup;
     GlobalThreadLock.UnLock;
   end;
 end;
