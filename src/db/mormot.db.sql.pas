@@ -1272,7 +1272,7 @@ type
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
-    fMainConnectionLock: TLightLock; // topmost to ensure aarch64 alignment
+    fMainConnectionSafe: TLightLock; // topmost to ensure aarch64 alignment
     fSharedTransactionsSafe: TLightLock;
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
@@ -1501,8 +1501,9 @@ type
     property ReconnectAfterConnectionError: boolean
       read fReconnectAfterConnectionError write fReconnectAfterConnectionError;
     /// create a new thread-safe statement
-    // - this method will call ThreadSafeConnection.NewStatement
+    // - this method just redirects to ThreadSafeConnection.NewStatement
     function NewThreadSafeStatement: TSqlDBStatement;
+      {$ifdef HASINLINE} inline; {$endif}
     /// create a new thread-safe statement from an internal cache (if any)
     // - will call ThreadSafeConnection.NewStatementPrepared
     // - this method should return a prepared statement instance on success
@@ -3652,7 +3653,7 @@ begin
   timeout := fConnectionTimeOutTicks;
   if timeout <> 0 then
     tix := GetTickCount64;
-  fMainConnectionLock.Lock;
+  fMainConnectionSafe.Lock;
   result := fMainConnection;
   if (result = nil) or
      ((timeout <> 0) and
@@ -3682,9 +3683,9 @@ end;
 
 procedure TSqlDBConnectionProperties.ClearConnectionPool;
 begin
-  fMainConnectionLock.Lock;
+  fMainConnectionSafe.Lock;
   FreeAndNilSafe(fMainConnection); // contains its own try..finally
-  fMainConnectionLock.UnLock;
+  fMainConnectionSafe.UnLock;
 end;
 
 function TSqlDBConnectionProperties.NewThreadSafeStatement: TSqlDBStatement;
@@ -7725,9 +7726,9 @@ begin
     else
     begin
       // we can delete all existing connections now
-      fMainConnectionLock.Lock;
+      fMainConnectionSafe.Lock;
       FreeAndNilSafe(fMainConnection);
-      fMainConnectionLock.UnLock;
+      fMainConnectionSafe.UnLock;
       fConnectionPool.ClearFromLast; // to use FreeAndNilSafe
     end;
     fConnectionPoolDeprecatedTix := 0; // trigger ThreadSafeConnection() release
