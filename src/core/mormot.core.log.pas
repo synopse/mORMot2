@@ -4700,11 +4700,14 @@ end;
 
 class procedure TSynLog.NotifyThreadEnded;
 var
+  s: PShortString;
   nfo: PSynLogThreadInfo;
   thd: PSynLogThreads;
   num, i: PtrInt;
 begin
-  CurrentThreadNameShort^[0] := #0; // reset TShort31 threadvar for consistency
+  s := CurrentThreadNameShort;
+  if s^[0] <> #0 then // avoid GPF if returned @NULCHAR
+    s^[0] := #0; // reset TShort31 threadvar for consistency
   nfo := @PerThreadInfo; // no automatic InitThreadNumber()
   num := nfo^.ThreadNumber;
   if num = 0 then // not touched yet by TSynLog, or called twice
