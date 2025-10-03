@@ -1099,7 +1099,7 @@ type
     function _Release: TIntCnt;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     // internal methods
-    function DoEnter: PSynLogThreadInfo;
+    function DoEnter: PSynLogThreadInfo; // returns nil if sllEnter is disabled
       {$ifdef FPC}inline;{$endif}
     procedure RaiseDoEnter;
     procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo;
@@ -4035,6 +4035,59 @@ begin
 end;
 {$endif NOEXCEPTIONINTERCEPT}
 
+type
+  TSynLogThreads = record
+    Safe: TLightLock; // topmost to ensure aarch64 alignment
+    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
+    Count: integer; // as returned by TSynLog.ThreadCount
+    IndexReleasedCount: integer;
+    IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
+  end;
+  PSynLogThreads = ^TSynLogThreads;
+
+var
+  // threads information shared by all TSynLog, protected by its own TLightLock
+  SynLogThreads: TSynLogThreads;
+
+procedure InitThreadNumber(nfo: PSynLogThreadInfo);
+var
+  thd: PSynLogThreads;
+  num: cardinal;
+begin
+  // compute the thread number - reusing any pre-existing closed thread number
+  thd := @SynLogThreads;
+  thd^.Safe.Lock;
+  try
+    if thd^.IndexReleasedCount <> 0 then // reuse NotifyThreadEnded() slot
+    begin
+      dec(thd^.IndexReleasedCount);
+      num := thd^.IndexReleased[thd^.IndexReleasedCount];
+    end
+    else
+    begin
+      if thd^.Count >= MAX_SYNLOGTHREADS then
+        ESynLogException.RaiseUtf8('Too many threads (%): ' +
+          'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
+      inc(thd^.Count); // new thread index
+      num := thd^.Count;
+    end;
+  finally
+    thd^.Safe.UnLock;
+  end;
+  nfo^.ThreadNumber := num;
+  // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
+  dec(num);
+  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] value
+  nfo^.ThreadBitHi := num shr 5;          // index in fThreadNameLogged[]
+end;
+
+function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := @PerThreadInfo; // access the threadvar
+  if PInteger(result)^ = 0 then // first access
+    InitThreadNumber(result);
+end;
+
 
 { TSynLogFamily }
 
@@ -4134,11 +4187,12 @@ begin
   result := ti in PerThreadInfo.Flags; // private threadvar access
 end;
 
-procedure TSynLogFamily.SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
+procedure TSynLogFamily.SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag;
+  value: boolean);
 var
   nfo: PSynLogThreadInfo;
 begin
-  nfo := @PerThreadInfo;
+  nfo := GetThreadInfo; // call InitThreadNumber() before setting the flags
   if value then
     include(nfo^.Flags, ti)
   else
@@ -4612,59 +4666,6 @@ begin
   if Level in fFamily.fLevelSysInfo then
     AddSysInfo;
   fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
-end;
-
-type
-  TSynLogThreads = record
-    Safe: TLightLock; // topmost to ensure aarch64 alignment
-    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
-    Count: integer; // as returned by TSynLog.ThreadCount
-    IndexReleasedCount: integer;
-    IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
-  end;
-  PSynLogThreads = ^TSynLogThreads;
-
-var
-  // threads information shared by all TSynLog, protected by its own TLightLock
-  SynLogThreads: TSynLogThreads;
-
-procedure InitThreadNumber(nfo: PSynLogThreadInfo);
-var
-  thd: PSynLogThreads;
-  num: cardinal;
-begin
-  // compute the thread number - reusing any pre-existing closed thread number
-  thd := @SynLogThreads;
-  thd^.Safe.Lock;
-  try
-    if thd^.IndexReleasedCount <> 0 then // reuse NotifyThreadEnded() slot
-    begin
-      dec(thd^.IndexReleasedCount);
-      num := thd^.IndexReleased[thd^.IndexReleasedCount];
-    end
-    else
-    begin
-      if thd^.Count >= MAX_SYNLOGTHREADS then
-        ESynLogException.RaiseUtf8('Too many threads (%): ' +
-          'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
-      inc(thd^.Count); // new thread index
-      num := thd^.Count;
-    end;
-  finally
-    thd^.Safe.UnLock;
-  end;
-  nfo^.ThreadNumber := num;
-  // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
-  dec(num);
-  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] value
-  nfo^.ThreadBitHi := num shr 5;          // index in fThreadNameLogged[]
-end;
-
-function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
-begin
-  result := @PerThreadInfo; // access the threadvar
-  if PInteger(result)^ = 0 then // first access
-    InitThreadNumber(result);
 end;
 
 procedure InternalSetCurrentThreadName(const Name: RawUtf8);
@@ -6340,9 +6341,9 @@ begin
   if fFamily.StackTraceLevel <= 0 then
     exit;
   {$ifndef NOEXCEPTIONINTERCEPT}
-  nointercept := @PerThreadInfo.Flags;
-  nointerceptbackup := nointercept^;
-  include(nointercept^, tiExceptionIgnore);
+  threadflags := @PerThreadInfo.Flags;
+  bak := threadflags^;
+  include(threadflags^, tiExceptionIgnore);
   {$endif NOEXCEPTIONINTERCEPT}
   try
     {$ifdef OSWINDOWS}
@@ -6438,8 +6439,8 @@ begin
   {$endif ISDELPHIXE6}
   {$endif WIN64DELPHI}
   nfo := @PerThreadInfo;
-  if tiExceptionIgnore in nfo^.Flags then // disabled for this thread (nested call)
-    exit;
+  if tiExceptionIgnore in nfo^.Flags then
+    exit; // disabled for this thread (avoid nested call)
   log := HandleExceptionFamily.Add;
   if log = nil then
    exit;
