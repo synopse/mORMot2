@@ -6332,11 +6332,13 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
 var
   n, i, logged: integer;
-  BackTrace: array[byte] of PtrUInt;
   {$ifndef NOEXCEPTIONINTERCEPT}
-  nointercept: ^TSynLogThreadInfoFlags;
-  nointerceptbackup: TSynLogThreadInfoFlags; // paranoid precaution
+  bak: TSynLogThreadInfoFlags; // paranoid precaution
+  threadflags: ^TSynLogThreadInfoFlags;
   {$endif NOEXCEPTIONINTERCEPT}
+  {$ifdef OSWINDOWS}
+  BackTrace: array[byte] of PtrUInt;
+  {$endif OSWINDOWS}
 begin
   if fFamily.StackTraceLevel <= 0 then
     exit;
@@ -6367,7 +6369,7 @@ begin
     // just ignore any access violation here
   end;
   {$ifndef NOEXCEPTIONINTERCEPT}
-  nointercept^ := nointerceptbackup;
+  threadflags^ := bak;
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
