@@ -1282,8 +1282,8 @@ type
     fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
     fRollbackOnDisconnect, fReconnectAfterConnectionError,
-    fEnsureColumnNameUnique, fFilterTableViewSchemaName,
-    fNoBlobBindArray, fIsThreadSafe: boolean;
+    fConnectionTimeOutBackground, fEnsureColumnNameUnique,
+    fFilterTableViewSchemaName, fNoBlobBindArray, fIsThreadSafe: boolean;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif UNICODE}
@@ -1479,8 +1479,20 @@ type
     // consumpted resources, and stabilize long running n-Tier servers
     // - ThreadSafeConnection method will check for the last activity on each
     // TSqlDBConnection, and release any deprecated instances in their own thread
+    // - ConnectionTimeOutBackground=true would make a global periodic search
+    // and release, but could make the whole process thread-unsafe
     property ConnectionTimeOutMinutes: cardinal
       read GetConnectionTimeOutMinutes write SetConnectionTimeOutMinutes;
+    /// force deprecation check of all connections
+    // - by default (false), each thread will check for ConnectionTimeOutMinutes
+    // idle connections, and recreate a new one for safety
+    // - set true so at most that every 32 seconds, NewThreadSafeStatement will
+    // check for deprecated connections in its all internal list and relase them
+    // - warning: this could lead to issues, especially in multi-threaded
+    // applications, and require e.g. amLocked/amBackgroundThread/amMainThread
+    // mode for TRestServer.AcquireExecutionMode[execOrmGet/execOrmWrite]
+    property ConnectionTimeOutBackground: boolean
+      read fConnectionTimeOutBackground write fConnectionTimeOutBackground;
     /// intercept connection errors at statement preparation and try to reconnect
     // - i.e. detect TSqlDBConnection.LastErrorWasAboutConnection in
     // TSqlDBConnection.NewStatementPrepared
@@ -2761,6 +2773,7 @@ type
     fConnectionPoolDeprecatedTix32: integer;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     fDeleteConnectionInOwnThread: boolean;
+    procedure DeleteDeprecated(secs: integer);
     procedure RemoveFromPool(conn: TSqlDBConnectionThreadSafe);
     /// overridden method to properly handle multi-thread
     function GetMainConnection: TSqlDBConnection; override;
@@ -7791,6 +7804,31 @@ begin // called from TSqlDBConnectionThreadSafe.Destroy
   end;
 end;
 
+procedure TSqlDBConnectionPropertiesThreadSafe.DeleteDeprecated(secs: integer);
+var
+  i: PtrInt;
+  delete: TObjectDynArray; // outside non-reentrant lock
+  deletecount: integer;
+  log: ISynLog;
+begin // called at most every 32 seconds - ensured timeout <> 0 and secs <> 0
+  if fConnectionPoolCount = 0 then
+    exit;
+  deletecount := 0;
+  fConnectionPoolSafe.Lock;
+  try
+    for i := fConnectionPoolMin to fConnectionPoolMax do
+      if (fConnectionPool[i] <> nil) and
+         fConnectionPool[i].IsOutdated(secs) then
+        ObjArrayAddCount(delete, fConnectionPool[i], deletecount);
+  finally
+    fConnectionPoolSafe.UnLock;
+  end;
+  if deletecount = 0 then
+    exit;
+  SynDBLog.EnterLocal(log, 'DeleteDeprecated=%', [deletecount], self);
+  ObjArrayClear(delete, {continueonexc=}true, @deletecount);
+end;
+
 function TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSqlDBConnection;
 var
   secs: integer;
@@ -7802,7 +7840,16 @@ begin
         // first delete any deprecated connection(s) - check every 32 seconds
         secs := 0;
         if fConnectionTimeOutSecs <> 0 then
-          tix := GetTickCount64;
+        begin
+          secs := GetTickSec;
+          if fConnectionTimeOutBackground and // disabled by deault
+             (not fDeleteConnectionInOwnThread) and
+             (fConnectionPoolDeprecatedTix32 <> secs shr 5) then
+          begin
+            fConnectionPoolDeprecatedTix32 := secs shr 5;
+            DeleteDeprecated(secs);
+          end;
+        end;
         // search for an existing connection
         result := nil;
         ndx := TSynLog.ThreadIndex; // efficient slots thread list with reuse
