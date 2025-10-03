@@ -1272,7 +1272,8 @@ type
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
-    fSharedTransactionsSafe: TLightLock; // topmost to ensure aarch64 alignment
+    fMainConnectionLock: TLightLock; // topmost to ensure aarch64 alignment
+    fSharedTransactionsSafe: TLightLock;
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
     fConnectionTimeOutTicks: Int64;
@@ -1301,7 +1302,6 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
-    fMainConnectionLock: TOSLightLock; // = SRW lock or direct pthread mutex
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDbms value or dDefault
@@ -1967,7 +1967,7 @@ type
     fErrorMessage: RawUtf8;
     fServerTimestampOffset: TDateTime;
     fCacheSafe: TOSLightLock; // protect fCache - warning: not reentrant!
-    fCache: TRawUtf8List; // statements cache
+    fCache: TRawUtf8List;     // statements cache
     fCacheLast: RawUtf8;
     fCacheLastIndex: integer;
     fTotalConnectionCount: integer;
@@ -3468,7 +3468,6 @@ constructor TSqlDBConnectionProperties.Create(const aServerName, aDatabaseName,
 var
   db: TSqlDBDefinition;
 begin
-  fMainConnectionLock.Init; // mandatory for TOSLightLock
   fServerName := aServerName;
   fDatabaseName := aDatabaseName;
   fUserID := aUserID;
@@ -3534,7 +3533,6 @@ begin
   fMainConnection.Free;
   FillZero(fPassword);
   inherited;
-  fMainConnectionLock.Done; // mandatory for TOSLightLock
 end;
 
 function TSqlDBConnectionProperties.Execute(const aSql: RawUtf8;
