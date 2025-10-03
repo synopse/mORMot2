@@ -223,7 +223,7 @@ type
     fRemoteDebugger: IRemoteDebugger;
     fWorkerManager: IWorkerManager;
     fOnLog: TSynLogProc;
-    function ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+    function GetThreadEngineIndex(aThreadID: TThreadID): PtrInt;
       {$ifdef HASINLINE} inline; {$endif}
     function GetPauseDebuggerOnFirstStep: boolean;
     procedure SetPauseDebuggerOnFirstStep(aPauseDebuggerOnFirstStep: boolean);
@@ -395,12 +395,12 @@ begin
 end;
 
 {$ifdef THREADID32}
-function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+function TThreadSafeManager.GetThreadEngineIndex(aThreadID: TThreadID): PtrInt;
 begin // use SSE2 on i386/x86_64
   result := IntegerScanIndex(pointer(fEngineID), fEngines.Count, cardinal(aThreadID));
 end;
 {$else}
-function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+function TThreadSafeManager.GetThreadEngineIndex(aThreadID: TThreadID): PtrInt;
 var
   e: ^TThreadID;
 begin
@@ -427,7 +427,7 @@ begin
   result := nil;
   tid := GetCurrentThreadId;
   fEngines.Safe.ReadLock; // no try..finally for exception-safe code
-  existing := ThreadEngineIndex(tid);
+  existing := GetThreadEngineIndex(tid);
   if existing >= 0 then
   begin
     result := fEngines.List[existing];
@@ -451,7 +451,7 @@ begin
   try // some exceptions may occur from now on
     if (existing > fEngines.Count) or
        (fEngines.List[existing] <> result) then
-      existing := ThreadEngineIndex(tid); // paranoid
+      existing := GetThreadEngineIndex(tid); // paranoid
     if existing >= 0 then
     begin
       // the engine is expired or its content changed -> remove and recreate
@@ -512,7 +512,7 @@ begin
     exit;
   fEngines.Safe.ReadLock;
   try
-    i := ThreadEngineIndex(aThreadID);
+    i := GetThreadEngineIndex(aThreadID);
     if i >= 0 then
       result := fEngines.List[i];
   finally
