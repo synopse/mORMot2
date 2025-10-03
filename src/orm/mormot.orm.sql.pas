@@ -245,13 +245,6 @@ type
     function CreateSqlMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUtf8;
       Unique: boolean; IndexName: RawUtf8 = ''): boolean; override;
-    /// this method is called by TRestServer.EndCurrentThread method just
-    // before a thread is finished to ensure that the associated external DB
-    // connection will be released for this thread
-    // - this overridden implementation will clean thread-specific connections,
-    // i.e. call TSqlDBConnectionPropertiesThreadSafe.EndCurrentThread method
-    // - this method shall be called directly, nor from the main thread
-    procedure EndCurrentThread(Sender: TThread); override;
     /// reset the internal cache of external table maximum ID
     // - next EngineAdd/BatchAdd will execute SELECT max(ID) FROM externaltable
     // - is a lighter alternative to EngineAddUseSelectMaxID=TRUE, since this
@@ -2162,12 +2155,6 @@ begin
   finally
     StorageUnLock;
   end;
-end;
-
-procedure TRestStorageExternal.EndCurrentThread(Sender: TThread);
-begin
-  if fProperties.InheritsFrom(TSqlDBConnectionPropertiesThreadSafe) then
-    TSqlDBConnectionPropertiesThreadSafe(fProperties).EndCurrentThread;
 end;
 
 function TRestStorageExternal.InternalFieldNameToFieldExternalIndex(

@@ -691,12 +691,6 @@ type
     // - called in the corresponding thread context
     // - the TThread.OnTerminate event will be called within a Synchronize()
     // wrapper, so it won't fit our purpose
-    // - to be used e.g. to call CoUnInitialize from thread in which CoInitialize
-    // was made, for instance via a method defined as such:
-    // ! procedure TMyServer.OnHttpThreadTerminate(Sender: TThread);
-    // ! begin // TSqlDBConnectionPropertiesThreadSafe
-    // !   fMyConnectionProps.EndCurrentThread;
-    // ! end;
     // - is used e.g. by TRest.EndCurrentThread for proper multi-threading
     property OnHttpThreadTerminate: TOnNotifyThread
       read fOnThreadTerminate write SetOnTerminate;

@@ -601,12 +601,6 @@ type
     // execution mode, e.g. execute all method-based services in a dedicated
     // thread via
     // ! aServer.AcquireExecutionMode[execSoaByMethod] := amBackgroundThread;
-    // - if you use external DB and a custom ConnectionTimeOutMinutes value,
-    // both read and write access should be locked, so you should set:
-    // ! aServer.AcquireExecutionMode[execOrmGet] := am***;
-    // ! aServer.AcquireExecutionMode[execOrmWrite] := am***;
-    // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
-    // amLocked, amBackgroundThread, amBackgroundOrmSharedThread or amMainThread
     property AcquireExecutionMode[Cmd: TRestServerUriContextCommand]: TRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in milli seconds) to try locking internal commands of this class
