@@ -2154,6 +2154,17 @@ type
     scOnClient,
     scOnServer);
 
+  /// define all possible TSqlDBStatement internal flags
+  TSqlDBStatementFlag = (
+    dsfStripSemicolon,
+    dsfExpectResults,
+    dsfForceBlobAsNull,
+    dsfForceDateWithMS,
+    dsfShouldLogSQL);
+  /// store TSqlDBStatement internal flags
+  // - exposed as boolean properties for mORMot 1 and existing code compatibility
+  TSqlDBStatementFlags = set of TSqlDBStatementFlag;
+
   /// generic abstract class to implement a prepared SQL query
   // - inherited classes should implement the DB-specific connection in its
   // overridden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
@@ -2165,18 +2176,19 @@ type
     fColumnCount: integer;
     fTotalRowsRetrieved: integer;
     fCurrentRow: integer;
-    fStripSemicolon: boolean;
-    fExpectResults: boolean;
-    fForceBlobAsNull: boolean;
-    fForceDateWithMS: boolean;
     fDbms: TSqlDBDefinition;
+    fFlags: TSqlDBStatementFlags;
+    fCache: TSqlDBStatementCache;
     fSqlLogLevel: TSynLogLevel;
     fSql: RawUtf8;
-    fCache: TSqlDBStatementCache;
     fSqlLogLog: TSynLog;
     fSqlWithInlinedParams: RawUtf8;
     fSqlLogTimer: TPrecisionTimer;
     fSqlPrepared: RawUtf8;
+    procedure SetFlag(const flag: TSqlDBStatementFlag; const value: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetFlag(const flag: TSqlDBStatementFlag): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetSqlCurrent: RawUtf8;
     function GetSqlWithInlinedParams: RawUtf8;
     procedure ComputeSqlWithInlinedParams;
@@ -2212,6 +2224,8 @@ type
     function DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogLevel): TSynLog;
     function DoSqlLogEnd(Msg: PShortString): Int64;
     {$endif SYNDB_SILENCE}
+    property fExpectResults: boolean // internal compatibility wrapper
+      index dsfExpectResults read GetFlag write SetFlag;
   public
     /// create a statement instance
     constructor Create(aConnection: TSqlDBConnection); virtual;
@@ -2748,7 +2762,7 @@ type
     // - expectation may vary, depending on the SQL statement and the engine
     // - default is true
     property StripSemicolon: boolean
-      read fStripSemicolon write fStripSemicolon;
+      index dsfStripSemicolon read GetFlag write SetFlag;
   end;
 
 
@@ -5711,6 +5725,21 @@ end;
 
 { TSqlDBStatement }
 
+procedure TSqlDBStatement.SetFlag(
+  const flag: TSqlDBStatementFlag; const value: boolean);
+begin
+  if value then
+    include(fFlags, flag)
+  else
+    exclude(fFlags, flag);
+end;
+
+function TSqlDBStatement.GetFlag(const flag: TSqlDBStatementFlag): boolean;
+begin
+  result := flag in fFlags;
+end;
+
+
 procedure TSqlDBStatement.Bind(Param: integer; const Data: TSqlVar;
   IO: TSqlDBParamInOutType);
 begin
@@ -6003,29 +6032,29 @@ end;
 
 function TSqlDBStatement.GetForceBlobAsNull: boolean;
 begin
-  result := fForceBlobAsNull;
+  result := GetFlag(dsfForceBlobAsNull);
 end;
 
 procedure TSqlDBStatement.SetForceBlobAsNull(value: boolean);
 begin
-  fForceBlobAsNull := value;
+  SetFlag(dsfForceBlobAsNull, value);
 end;
 
 function TSqlDBStatement.GetForceDateWithMS: boolean;
 begin
-  result := fForceDateWithMS;
+  result := GetFlag(dsfForceDateWithMS);
 end;
 
 procedure TSqlDBStatement.SetForceDateWithMS(value: boolean);
 begin
-  fForceDateWithMS := value;
+  SetFlag(dsfForceDateWithMS, value);
 end;
 
 constructor TSqlDBStatement.Create(aConnection: TSqlDBConnection);
 begin
   inherited Create;
   fConnection := aConnection;
-  fStripSemicolon := true;
+  SetFlag(dsfStripSemicolon, true);
   if aConnection <> nil then
     fDbms := aConnection.fProperties.GetDbms;
 end;
@@ -6206,7 +6235,7 @@ begin
         Value.VText := pointer(Temp);
       end;
     ftBlob:
-      if fForceBlobAsNull then
+      if dsfForceBlobAsNull in fFlags then
       begin
         Value.VBlob := nil;
         Value.VBlobLen := 0;
@@ -6241,7 +6270,7 @@ begin // default implementation (never called in practice)
       ftDate:
         begin
           W.Add('"');
-          W.AddDateTime(ColumnDateTime(col), fForceDateWithMS);
+          W.AddDateTime(ColumnDateTime(col), dsfForceDateWithMS in fFlags);
           W.Add('"');
         end;
       ftUtf8:
@@ -6254,7 +6283,7 @@ begin // default implementation (never called in practice)
           W.Add('"');
         end;
       ftBlob:
-        if fForceBlobAsNull then
+        if dsfForceBlobAsNull in fFlags then
           W.AddNull
         else
         begin
@@ -6420,7 +6449,7 @@ begin
      (self = nil) or
      (ColumnCount = 0) then
     exit;
-  fForceBlobAsNull := true;
+  SetForceBlobAsNull(true);
   if Tab then
     CommaSep := #9;
   FMax := ColumnCount - 1;
@@ -6874,7 +6903,7 @@ begin
   begin
     if Msg = nil then
     begin
-      if not fExpectResults then
+      if not (dsfExpectResults in fFlags) then
       begin
         AppendShort(' wr=', tmp);
         AppendShortCardinal(UpdateCount, tmp);
@@ -8156,7 +8185,7 @@ begin
       begin
         // not only replace 'T'->timeseparator, but force expanded format
         dt := Iso8601ToDateTime(p^.VArray[i]);
-        DateTimeToIso8601Var(dt, {expanded=}true, {ms=}fForceDateWithMS,
+        DateTimeToIso8601Var(dt, {expanded=}true, dsfForceDateWithMS in fFlags,
           Connection.Properties.DateTimeFirstChar, '''', p^.VArray[i]);
       end;
   fParamsArrayCount := ValuesCount;
@@ -8170,7 +8199,8 @@ begin
   // default implementation is to convert JSON values into SQL values
   p := CheckParam(Param, ParamType, paramIn, 0);
   if not JsonArrayToBoundArray(pointer(JsonArray), ParamType,
-     Connection.Properties.DateTimeFirstChar, fForceDateWithMS, p^.VArray) or
+     Connection.Properties.DateTimeFirstChar, dsfForceDateWithMS in fFlags,
+     p^.VArray) or
     (length(p^.VArray) <> ValuesCount) then
     BindArray(Param, ParamType, nil, 0); // raise exception
   p^.VInt64 := ValuesCount;
