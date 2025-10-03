@@ -6373,16 +6373,15 @@ end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
-procedure DoLogException(Log: TSynLog; const Ctxt: TSynLogExceptionContext);
-var
-  nfo: PSynLogThreadInfo;
+procedure DoLogException(Log: TSynLog; Info: PSynLogThreadInfo;
+  const Ctxt: TSynLogExceptionContext);
 begin // called by SynLogException() within its GlobalThreadLock.Lock
-  if Log = nil then
-    exit; // this TSynLogFamily has no fGlobalLog (yet)
-  nfo := GetThreadInfo;
-  Log.FillInfo(nfo, nil); // timestamp [+ threadnumber]
-  SetThreadInfoAndThreadName(Log, nfo);
-  LogHeaderNoRecursion(Log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
+  if (Log = nil) or
+     (Log.fWriter = nil) then
+    exit; // this TSynLogFamily has no fGlobalLog or opened file (yet)
+  Log.FillInfo(Info, nil); // timestamp [+ threadnumber]
+  SetThreadInfoAndThreadName(Log, Info);
+  LogHeaderNoRecursion(Log.fWriter, Ctxt.ELevel, @Info^.CurrentTimeAndThread);
   DefaultSynLogExceptionToStr(Log.fWriter, Ctxt, {addinfo=}false);
   // stack trace only in the main thread
   Log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
@@ -6519,7 +6518,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
         if (fam <> HandleExceptionFamily) and // if not already logged above
            (Ctxt.ELevel in fam.Level) then
         try
-          DoLogException(fam.fGlobalLog, Ctxt);
+          DoLogException(fam.fGlobalLog, nfo, Ctxt);
         except
           // paranoid: don't try this family again (without SetLevel)
           fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
