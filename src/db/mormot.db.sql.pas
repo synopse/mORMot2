@@ -3603,8 +3603,11 @@ end;
 
 function TSqlDBConnectionProperties.PrepareInlined(const SqlFormat: RawUtf8;
   const Args: array of const; ExpectResults: boolean): ISqlDBStatement;
+var
+  sql: RawUtf8;
 begin
-  result := PrepareInlined(FormatUtf8(SqlFormat, Args), ExpectResults);
+  FormatUtf8(SqlFormat, Args, sql);
+  result := PrepareInlined(sql, ExpectResults);
 end;
 
 function TSqlDBConnectionProperties.ExecuteInlined(const aSql: RawUtf8;
@@ -3624,8 +3627,11 @@ end;
 
 function TSqlDBConnectionProperties.ExecuteInlined(const SqlFormat: RawUtf8;
   const Args: array of const; ExpectResults: boolean): ISqlDBRows;
+var
+  sql: RawUtf8;
 begin
-  result := ExecuteInlined(FormatUtf8(SqlFormat, Args), ExpectResults);
+  FormatUtf8(SqlFormat, Args, sql);
+  result := ExecuteInlined(sql, ExpectResults);
 end;
 
 procedure TSqlDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
@@ -3696,9 +3702,11 @@ end;
 function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(
   const SqlFormat: RawUtf8; const Args: array of const; ExpectResults,
   RaiseExceptionOnError: boolean): ISqlDBStatement;
+var
+  sql: RawUtf8;
 begin
-  result := NewThreadSafeStatementPrepared(FormatUtf8(SqlFormat, Args),
-    ExpectResults, RaiseExceptionOnError);
+  FormatUtf8(SqlFormat, Args, sql);
+  result := NewThreadSafeStatementPrepared(sql, ExpectResults, RaiseExceptionOnError);
 end;
 
 function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
@@ -3849,34 +3857,29 @@ end;
 class function TSqlDBConnectionProperties.GetFieldDefinition(
   const Column: TSqlDBColumnDefine): RawUtf8;
 begin
-  with Column do
-  begin
-    FormatUtf8('% [%', [ColumnName, ColumnTypeNative], result);
-    if (ColumnLength <> 0) or
-       (Column.ColumnPrecision <> 0) or
-       (Column.ColumnScale <> 0) then
-      result := FormatUtf8('% % % %]',
-        [result, ColumnLength, ColumnPrecision, ColumnScale])
-    else
-      AppendShortToUtf8(']', result);
-    if ColumnIndexed then
-      AppendShortToUtf8(' *', result);
-  end;
+  FormatUtf8('% [%', [Column.ColumnName, Column.ColumnTypeNative], result);
+  if (Column.ColumnLength <> 0) or
+     (Column.ColumnPrecision <> 0) or
+     (Column.ColumnScale <> 0) then
+    result := FormatUtf8('% % % %]',
+      [result, Column.ColumnLength, Column.ColumnPrecision, Column.ColumnScale])
+  else
+    AppendShortToUtf8(']', result);
+  if Column.ColumnIndexed then
+    AppendShortToUtf8(' *', result);
 end;
 
 class function TSqlDBConnectionProperties.GetFieldORMDefinition(
   const Column: TSqlDBColumnDefine): RawUtf8;
 begin
   // 'Name: RawUtf8 index 20 read fName write fName;';
-  with Column do
-  begin
-    FormatUtf8('property %: %',
-      [ColumnName, SqlDBFIELDTYPE_TO_DELPHITYPE[ColumnType]], result);
-    if (ColumnType = ftUtf8) and
-       (ColumnLength > 0) then
-      result := FormatUtf8('% index %', [result, ColumnLength]);
-    result := FormatUtf8('% read f% write f%;', [result, ColumnName, ColumnName]);
-  end;
+  FormatUtf8('property %: %',
+    [Column.ColumnName, SqlDBFIELDTYPE_TO_DELPHITYPE[Column.ColumnType]], result);
+  if (Column.ColumnType = ftUtf8) and
+     (Column.ColumnLength > 0) then
+    result := FormatUtf8('% index %', [result, Column.ColumnLength]);
+  result := FormatUtf8('% read f% write f%;',
+    [result, Column.ColumnName, Column.ColumnName]);
 end;
 
 var
@@ -6683,8 +6686,11 @@ end;
 
 procedure TSqlDBStatement.Execute(const SqlFormat: RawUtf8;
   ExpectResults: boolean; const Args, Params: array of const);
+var
+  sql: RawUtf8;
 begin
-  Execute(FormatUtf8(SqlFormat, Args), ExpectResults, Params);
+  FormatUtf8(SqlFormat, Args, sql);
+  Execute(sql, ExpectResults, Params);
 end;
 
 function TSqlDBStatement.UpdateCount: integer;
