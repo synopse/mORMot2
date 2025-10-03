@@ -3658,7 +3658,10 @@ begin
     except
       result := nil;
     end;
-  fMainConnectionLock.UnLock;
+  if (result <> nil) and
+     (tix <> 0) then
+    result.fLastAccessTicks := tix;
+  fMainConnectionSafe.UnLock;
 end;
 
 function TSqlDBConnectionProperties.{%H-}NewConnection: TSqlDBConnection;
@@ -7320,10 +7323,7 @@ begin // caller ensured self <> nil and tix <> 0 and timeout <> 0
   if (last = 0) or                  // brand new connection
      ((last > 0) and                // was not forced by ClearConnectionPool
       (tix - last < timeout)) then  // active enough connection
-  begin
-    fLastAccessTicks := tix;
     result := false;
-  end;
 end;
 
 function TSqlDBConnection.GetInTransaction: boolean;
@@ -7873,8 +7873,11 @@ begin
             // make pool.Delete to release this old instance
             EndCurrentThread
           else
-            // we found a valid connection for this TThreadID
-            exit;
+          begin
+            if tix <> 0 then
+              result.fLastAccessTicks := tix; // mark for IsOutDated()
+            exit; // valid connection for this thread
+          end;
         // we need to (re)create a new connection for this thread
         result := NewConnection; // run outside of the lock (even if fast)
         (result as TSqlDBConnectionThreadSafe).fThreadID := id;
