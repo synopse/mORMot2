@@ -800,7 +800,7 @@ type
       index tiExceptionIgnore read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// allow to temporarly avoid logging in the current thread
     // - after setting true to this property, should eventually be reset to false
-    // - won't affect exceptions logging, as one would expect for safety
+    // - won't affect exceptions logging, as one would expect for safety reasons
     property DisableCurrentThread: boolean
       index tiTemporaryDisable read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// you can let exceptions be ignored from a callback
@@ -1046,9 +1046,11 @@ type
     /// store per-thread behavior, e.g. to disable exceptions or whole logging
     Flags: TSynLogThreadInfoFlags;
     /// the internal number of this thread, stored as text using Int18ToChars3()
+    // - is a value in [1..MAX_SYNLOGTHREADS=65500] range after InitThreadNumber
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
     ThreadNumber: word;
     /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value
+    // - equals 0 if InitThreadNumber() needs to be called
     ThreadBitLo: cardinal;
     /// pre-computed "(ThreadNumber - 1) shr 5" value
     ThreadBitHi: word;
@@ -4044,9 +4046,9 @@ end;
 
 type
   TSynLogThreads = record
-    Safe: TLightLock; // topmost to ensure aarch64 alignment
+    Safe: TLightLock;       // topmost to ensure aarch64 alignment
     Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
-    Count: integer; // as returned by TSynLog.ThreadCount
+    Count: integer;         // as returned by TSynLog.ThreadCount
     IndexReleasedCount: integer;
     IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
   end;
@@ -4075,8 +4077,8 @@ begin
       if thd^.Count >= MAX_SYNLOGTHREADS then
         ESynLogException.RaiseUtf8('Too many threads (%): ' +
           'check for missing TSynLog.NotifyThreadEnded', [thd^.Count]);
-      inc(thd^.Count); // new thread index
-      num := thd^.Count;
+      inc(thd^.Count);    // new thread number
+      num := thd^.Count;  // in [1..MAX_SYNLOGTHREADS=65500] range
     end;
   finally
     thd^.Safe.UnLock;
@@ -4090,8 +4092,8 @@ end;
 
 function GetThreadInfo: PSynLogThreadInfo; {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := @PerThreadInfo; // access the threadvar
-  if PInteger(result)^ = 0 then // first access
+  result := @PerThreadInfo;       // access the threadvar
+  if result^.ThreadBitLo = 0 then // called once per thread
     InitThreadNumber(result);
 end;
 
@@ -4197,13 +4199,13 @@ end;
 procedure TSynLogFamily.SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag;
   value: boolean);
 var
-  nfo: PSynLogThreadInfo;
+  flags: ^TSynLogThreadInfoFlags;
 begin
-  nfo := GetThreadInfo; // call InitThreadNumber() before setting the flags
+  flags := @PerThreadInfo.Flags; // no need of GetThreadInfo/InitThreadNumber
   if value then
-    include(nfo^.Flags, ti)
+    include(flags^, ti)
   else
-    exclude(nfo^.Flags, ti);
+    exclude(flags^, ti);
 end;
 
 function TSynLogFamily.CreateSynLog: TSynLog;
@@ -4682,7 +4684,7 @@ var
 begin
   if SynLogFileFreeing then
     exit; // avoid GPF
-  ndx := GetThreadInfo^.ThreadNumber - 1; // may call InitThreadNumber()
+  ndx := PtrInt(GetThreadInfo^.ThreadNumber) - 1; // may call InitThreadNumber()
   if ndx < 0 then
     exit; // paranoid
   thd := @SynLogThreads;
@@ -4707,7 +4709,7 @@ begin
   num := nfo^.ThreadNumber;
   if num = 0 then // not touched yet by TSynLog, or called twice
     exit;
-  PInteger(nfo)^ := 0; // force InitThreadNumber on next thread access
+  nfo^.ThreadBitLo := 0; // force InitThreadNumber on next thread access
   // reset global thread information
   if SynLogFileFreeing then
     exit; // inconsistent call at shutdown
@@ -4746,8 +4748,8 @@ begin
   ndx := fThreadInfo.ThreadNumber - 1;
   if ndx < 0 then
     exit; // paranoid
-  if ndx >= length(fThreadNameLogged) shl 5 then   // 32-bit array
-    SetLength(fThreadNameLogged, (ndx shr 5)  + 32); // + 1K threads
+  if ndx >= length(fThreadNameLogged) shl 5 then     // 32-bit array
+    SetLength(fThreadNameLogged, (ndx shr 5)  + 32); // alloc per 1K threads
   SetBitPtr(fThreadNameLogged, ndx);
   // add the "SetThreadName" sllInfo line in the expected format
   // see TSynLogFile.ProcessOneLine() for the expected format
@@ -4797,7 +4799,7 @@ begin
   nfo := @PerThreadInfo; // access the threadvar
   if not (tiTemporaryDisable in nfo^.Flags) then
   begin
-    if PInteger(nfo)^ = 0 then
+    if nfo^.ThreadBitLo = 0 then
       InitThreadNumber(nfo); // first access - inlined GetThreadInfo
     if not (logInitDone in fFlags) then
       LogFileInit(nfo); // run once, to set start time and write headers
