@@ -7122,11 +7122,16 @@ procedure _NoRandom(V: PPointer; RC: TRttiCustom);
 begin
 end;
 
-// we use SharedRandom since TLightLock may be faster than a threadvar
+// we use SharedRandom since TLightLock is likely to be faster than a threadvar
 
 procedure _FillRandom(V: PByte; RC: TRttiCustom);
-begin
-  SharedRandom.Fill(V, RC.Cache.Size);
+var
+  lec: ^TLecuyerThreadSafe;
+begin // inlined SharedRandom.Fill() for this most common method
+  lec := @SharedRandom;
+  lec^.Safe.Lock;
+  lec^.Generator.Fill(V, RC.Cache.Size);
+  lec^.Safe.UnLock
 end;
 
 procedure _StringRandom(V: PPointer; RC: TRttiCustom);
