@@ -2710,17 +2710,24 @@ begin
       p.RowID := 0;
       CheckEqual(p.RowID, 0, 'pRowID2');
       m.RandomA(o1);
+      if o1.IDValue = 0 then
+        m.RandomA(o1); // 1 chance over 2^32 - but not twice
       CheckNotEqual(o1.IDValue, 0, 'rndo1id');
       CheckNotEqual(m.Compare(o1, @p), 0, 'rndA');
       CheckEqual(p.RowID, 0, 'pRowID3');
       m.ToB(o1, @p);
       CheckNotEqual(p.RowID, 0, 'pRowID4');
-      CheckEqual(p.RowID, o1.IDValue, 'ids');
+      CheckEqual(p.RowID, o1.IDValue, 'ids1');
       CheckEqual(m.Compare(o1, @p), 0, 'cmpA');
+      p.RowID := 0;
       m.RandomB(@p);
+      if p.RowID = 0 then
+        m.RandomB(@p); // 1 chance over 2^32 - but not twice
+      CheckNotEqual(p.RowID, 0, 'pRowID4');
       CheckNotEqual(m.Compare(o1, @p), 0, 'rndB');
       m.ToA(o1, @p);
       CheckEqual(m.Compare(o1, @p), 0, 'cmpB');
+      CheckEqual(p.RowID, o1.IDValue, 'ids2');
     end;
   finally
     o1.Free;
