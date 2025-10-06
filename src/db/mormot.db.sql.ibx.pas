@@ -1397,7 +1397,7 @@ begin
   fBatchMaxSentAtOnce := 10000;  // iters <= 32767 for better performance
   if aServerName = '' then
     ThreadingMode := tmMainConnection;
-  fUseCache := true;
+  UseCache := true;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
