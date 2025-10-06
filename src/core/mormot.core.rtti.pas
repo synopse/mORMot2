@@ -762,7 +762,7 @@ type
     case TRttiKind of
       rkFloat: (
         RttiFloat: TRttiFloat;
-        IsDateTime: boolean);
+        IsDateTime, IsPureDate: boolean);
       rkLString: ( // from TypeInfo() on older Delphi with no CP RTTI
         CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
         Engine: TSynAnsiConvert);
@@ -4252,6 +4252,7 @@ begin
         else if IsDate then
         begin
           Cache.IsDateTime := true;
+          Cache.IsPureDate := (@self = TypeInfo(TDate)); // force truncate time
           Cache.VarDataVType := varDate;
           Cache.RttiVarDataVType := varDate;
         end
