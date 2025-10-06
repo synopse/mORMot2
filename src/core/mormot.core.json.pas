@@ -8070,7 +8070,10 @@ procedure _JL_DateTime(Data: PDateTime; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     if Ctxt.WasString then
-      Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
+      if Ctxt.Info.Cache.IsPureDate then // parse only 'Thhmmss' or 'hh:mm:ss'
+        Iso8601ToDatePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, PDate(Data)^)
+      else
+        Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
     else
       UnixTimeOrDoubleToDateTime(Ctxt.Value, Ctxt.ValueLen, Data^); // also null
 end;
