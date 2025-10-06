@@ -1607,6 +1607,7 @@ type
     jcoHttpExceptionIntercept,
     jcoHttpErrorRaise,
     jcoPayloadWithoutVoid,
+    jcoPayloadDateTimeWithZ,
     jcoParseTolerant,
     jcoParseErrorClear,
     jcoParseErrorRaise);
@@ -5379,6 +5380,8 @@ begin
     two := [];
     if jcoPayloadWithoutVoid in fOptions then
       two := [twoIgnoreDefaultInRecord];
+    if jcoPayloadDateTimeWithZ in fOptions then
+      include(two, twoDateTimeWithZ);
     SaveJson(Payload^, PayloadInfo, two, b);
   end;
   if Assigned(fOnLog) then
