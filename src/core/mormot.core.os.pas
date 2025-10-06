@@ -1070,63 +1070,6 @@ type
 
 {$endif OSWINDOWS}
 
-var
-  /// system and process 256-bit entropy dual states
-  // - could be used as 512-bit salt: followed by other system global variables
-  SystemEntropy: record
-    /// 128-bit of entropy quickly gathered during unit/process initialization
-    Startup: THash128Rec;
-    /// 128-bit shuffled each time strong randomness is retrieved from the OS
-    // - together with the intangible Startup value, ensure forward secrecy
-    LiveFeed: THash128Rec;
-  end;
-
-  /// the number of physical memory bytes available to the process
-  // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
-  SystemMemorySize: PtrUInt;
-
-{$ifdef OSWINDOWS}
-
-  /// the current System information, as retrieved for the current process
-  // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
-  // to retrieve the real top-most system information
-  // - note that the lpMinimumApplicationAddress field is replaced by a
-  // more optimistic/realistic value ($100000 instead of default $10000)
-  // - under BSD/Linux, only contain dwPageSize and dwNumberOfProcessors fields
-  SystemInfo: TSystemInfo;
-  /// the current Windows edition, as retrieved for the current process
-  OSVersion: TWindowsVersion;
-  /// is set to TRUE if the current process is a 32-bit image running under WOW64
-  // - WOW64 is the x86 emulator that allows 32-bit Windows-based applications
-  // to run seamlessly on 64-bit Windows
-  // - equals always FALSE if the current executable is a 64-bit image
-  IsWow64: boolean;
-  /// is set to TRUE if the current process running through a software emulation
-  // - e.g. a Win32/Win64 Intel application running via Prism on Windows for Arm
-  IsWow64Emulation: boolean;
-  /// low-level Operating System information, as retrieved for the current process
-  OSVersionInfo: TOSVersionInfoEx;
-
-{$else OSWINDOWS}
-
-  /// emulate only the most used fields of Windows' TSystemInfo
-  SystemInfo: record
-    /// retrieved from libc's getpagesize() - is expected to not be 0
-    dwPageSize: cardinal;
-    /// the number of available logical CPUs
-    // - retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
-    // - see CpuSockets for the number of physical CPU sockets
-    dwNumberOfProcessors: cardinal;
-    /// meaningful system information, as returned by fpuname()
-    uts: record
-      sysname, release, version, nodename: RawUtf8;
-    end;
-    /// Linux Distribution release name, retrieved from /etc/*-release
-    release: RawUtf8;
-  end;
-
-{$endif OSWINDOWS}
-
 type
   /// used to retrieve version information from any EXE
   // - under Linux, all version numbers are set to 0 by default, unless
@@ -1496,6 +1439,65 @@ type
   end;
 
 var
+  /// system and process 256-bit entropy dual states
+  // - could be used as 512-bit salt: followed by other system global variables
+  SystemEntropy: record
+    /// 128-bit of entropy quickly gathered during unit/process initialization
+    // - not supposed to change during process execution
+    Startup: THash128Rec;
+    /// 128-bit shuffled each time strong randomness is retrieved from the OS
+    // - set at startup e.g. from getauxval(AT_RANDOM) or CoCreateGuid()
+    // - then e.g. by each FillSystemRandom/GetRawSmbios/LinuxGetRandom call
+    // - together with the intangible Startup value, ensure forward secrecy
+    LiveFeed: THash128Rec;
+  end;
+
+  /// the number of physical memory bytes available to the process
+  // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
+  SystemMemorySize: PtrUInt;
+
+{$ifdef OSWINDOWS}
+
+  /// the current System information, as retrieved for the current process
+  // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
+  // to retrieve the real top-most system information
+  // - note that the lpMinimumApplicationAddress field is replaced by a
+  // more optimistic/realistic value ($100000 instead of default $10000)
+  // - under BSD/Linux, only contain dwPageSize and dwNumberOfProcessors fields
+  SystemInfo: TSystemInfo;
+  /// the current Windows edition, as retrieved for the current process
+  OSVersion: TWindowsVersion;
+  /// is set to TRUE if the current process is a 32-bit image running under WOW64
+  // - WOW64 is the x86 emulator that allows 32-bit Windows-based applications
+  // to run seamlessly on 64-bit Windows
+  // - equals always FALSE if the current executable is a 64-bit image
+  IsWow64: boolean;
+  /// is set to TRUE if the current process running through a software emulation
+  // - e.g. a Win32/Win64 Intel application running via Prism on Windows for Arm
+  IsWow64Emulation: boolean;
+  /// low-level Operating System information, as retrieved for the current process
+  OSVersionInfo: TOSVersionInfoEx;
+
+{$else OSWINDOWS}
+
+  /// emulate only the most used fields of Windows' TSystemInfo
+  SystemInfo: record
+    /// retrieved from libc's getpagesize() - is expected to not be 0
+    dwPageSize: cardinal;
+    /// the number of available logical CPUs
+    // - retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    // - see CpuSockets for the number of physical CPU sockets
+    dwNumberOfProcessors: cardinal;
+    /// meaningful system information, as returned by fpuname()
+    uts: record
+      sysname, release, version, nodename: RawUtf8;
+    end;
+    /// Linux Distribution release name, retrieved from /etc/*-release
+    release: RawUtf8;
+  end;
+
+{$endif OSWINDOWS}
+
   /// global information about the current executable and computer
   // - this structure is initialized in this unit's initialization block below
   // but you need to call GetExecutableVersion to initialize its Version fields
