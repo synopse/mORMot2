@@ -3274,7 +3274,6 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
 
 var
   P: PUtf8Char;
-  status: PtrUInt;
   h: PRawByteStringBuffer;
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
 begin
@@ -3301,10 +3300,7 @@ begin
   else
   begin // other cases
     h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
-    status := fRespStatus;
-    if status > 999 then
-      status := 999; // avoid SmallUInt32Utf8[] overflow
-    h^.Append(SmallUInt32Utf8[status]);
+    h^.Append(SmallUInt32Utf8[MinPtrUInt(high(SmallUInt32Utf8), fRespStatus)]);
     h^.Append(' ');
     h^.Append(mormot.core.text.StatusCodeToText(fRespStatus)^); // need English
     h^.AppendCRLF;
