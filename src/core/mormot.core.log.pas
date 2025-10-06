@@ -6936,36 +6936,33 @@ end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
 var
-  Timestamp: Int64;
+  hires: Int64;
   P: PUtf8Char;
-  Y, M, D, HH, MM, SS, MS: cardinal;
+  Y, M, D, HH, MM, SS, MS4: cardinal;
   hex2bin: PByteArray;
 begin
+  result := 0;
   if cardinal(aIndex) >= cardinal(fCount) then
-    result := 0
-  else if fFreq = 0 then
+    exit;
+  P := fLines[aIndex];
+  if fFreq = 0 then
   begin
-    P := fLines[aIndex];
     hex2bin := @ConvertHexToBin;
-    if Char4ToWord(P, Y, hex2bin) or
-       Char2ToByte(P + 4, M, hex2bin) or
-       Char2ToByte(P + 6, D, hex2bin) or
-       Char2ToByte(P + 9, HH, hex2bin) or
-       Char2ToByte(P + 11, MM, hex2bin) or
-       Char2ToByte(P + 13, SS, hex2bin) or
-       Char2ToByte(P + 15, MS, hex2bin) then
+    if Char4ToWord(P,      Y,   hex2bin) or
+       Char2ToByte(P + 4,  M,   hex2bin) or
+       Char2ToByte(P + 6,  D,   hex2bin) or
+       Char2ToByte(P + 9,  HH,  hex2bin) or
+       Char2ToByte(P + 11, MM,  hex2bin) or
+       Char2ToByte(P + 13, SS,  hex2bin) or
+       Char2ToByte(P + 15, MS4, hex2bin) then
       // not exact YYYYMMDD hhmmsszz layout -> try plain ISO-8601
       Iso8601ToDateTimePUtf8CharVar(P, 17, result)
-    else if TryEncodeDate(Y, M, D, result) then
-      // MS shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
-      result := result + EncodeTime(HH, MM, SS, MS shl 4)
     else
-      result := 0;
+      // MS4 shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
+      result := EncodeDateTime(Y, M, D, HH, MM, SS, MS4 shl 4);
   end
-  else if HexDisplayToBin(fLines[aIndex], @Timestamp, SizeOf(Timestamp)) then
-    result := fStartDateTime + (Timestamp / fFreqPerDay)
-  else
-    result := 0;
+  else if HexDisplayToBin(PAnsiChar(P), @hires, SizeOf(hires)) then
+    result := fStartDateTime + (hires / fFreqPerDay);
 end;
 
 procedure TSynLogFile.CleanLevels;
