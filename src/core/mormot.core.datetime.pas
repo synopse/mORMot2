@@ -3764,11 +3764,13 @@ begin
       T.FromTime(Value^);
       B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second,
         T.MilliSecond, FirstChar, WithMS);
-    end;
+      if twoDateTimeWithZ in fCustomOptions then
+        AddDirect('Z');
+    end
+    else if twoDateTimeWithZ in fCustomOptions then
+      AddShort('00:00:00Z'); // FireFox e.g. requires always some time part
     dec(B);
   end;
-  if twoDateTimeWithZ in fCustomOptions then
-    AddDirect('Z');
   if QuoteChar <> #0 then
     AddDirect(QuoteChar);
 end;

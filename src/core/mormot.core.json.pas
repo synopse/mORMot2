@@ -5166,7 +5166,7 @@ end;
 
 procedure TJsonSaveContext.AddDateTime(Value: PDateTime; WithMS: boolean);
 var
-  d: double;
+  bak: TTextWriterOptions;
 begin
   if woDateTimeWithMagic in Options then
     W.AddShort4(JSON_SQLDATE_MAGIC_QUOTE_C)
@@ -5180,14 +5180,11 @@ begin
   end
   else
     W.Add('"');
-  d := unaligned(Value^);
-  W.AddDateTime(d, WithMS);
+  bak := W.CustomOptions;
   if woDateTimeWithZSuffix in Options then
-    if not (twoDateTimeWithZ in W.CustomOptions) then // if not already done
-      if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
-        W.AddShort('T00:00:00Z') // the same pattern for date and dateTime
-      else
-        W.AddDirect('Z');
+    include(W.fCustomOptions, twoDateTimeWithZ);
+  W.AddDateTime(Value, 'T', #0, WithMS);
+  W.CustomOptions := bak;
   W.AddDirect('"');
 end;
 
