@@ -601,7 +601,7 @@ function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; out Time: TDateTime): boo
   {$ifdef HASINLINE} inline; {$endif}
 
 /// our own faster version of the corresponding RTL function
-// - returns 0 if TryEncodeDate/TryEncodeTime failed
+// - returns 0 if TryEncodeDate() failed but just ignore TryEncodeTime() failure
 function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
 
 /// our own faster version of the corresponding RTL function
@@ -2038,11 +2038,10 @@ function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDate
 var
   time: TDateTime;
 begin
-  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) and
-     mormot.core.datetime.TryEncodeTime(Hour, Min, Sec, MSec, time) then
-    result := result + time
-  else
-    result := 0;
+  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
+    result := 0
+  else if mormot.core.datetime.TryEncodeTime(Hour, Min, Sec, MSec, time) then
+    result := result + time;
 end;
 
 
