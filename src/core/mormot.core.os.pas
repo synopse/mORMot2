@@ -84,10 +84,10 @@ const
   /// human-friendly alias to open a file with no read/write exclusion ($40)
   fmShareReadWrite = fmShareDenyNone;
 
-  /// a convenient constant to open a file for reading without exclusion
+  /// execute FileOpen/TFileStreamEx.Create for reading without exclusion
   fmOpenReadShared = fmOpenRead or fmShareReadWrite;
 
-  /// a convenient constant to open a file for writing without exclusion
+  /// execute FileOpen/TFileStreamEx.Create for writing without exclusion
   fmOpenWriteShared = fmOpenReadWrite or fmShareReadWrite;
 
   /// a convenient constant to create a file without exclusion

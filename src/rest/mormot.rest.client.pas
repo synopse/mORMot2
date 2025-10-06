@@ -75,7 +75,7 @@ type
   // the supplied password
   // - passClear means that the password is not encrypted, e.g. as entered
   // by the user in the login screen
-  // - passHashed means that the passwod is already hashed as in
+  // - passHashed means that the password is already hashed as in
   // TAuthUser.PasswordHashHexa i.e. Sha256('salt'+Value)
   // - passKerberosSpn indicates that the password is the Kerberos SPN domain
   // - passModularCrypt is used internally together with TModularCryptFormat

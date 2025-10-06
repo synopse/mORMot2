@@ -322,7 +322,7 @@ type
     /// the index of the last var / out argument in Args[] (signed 8-bit)
     ArgsOutNotResultLast: ShortInt;
     /// the index of the first argument expecting manual stack initialization
-    // - set for Args[].ValueVar >= imvvRawUtf8
+    // - set for Args[].ValueVar >= imvvRawUtf8 (signed 8-bit)
     ArgsManagedFirst: ShortInt;
     /// how manual stack initialization arguments are defined
     // - set for Args[].ValueVar >= imvvRawUtf8
@@ -680,7 +680,7 @@ type
     /// reference all known interface arguments per value type
     property ArgUsed: TInterfaceFactoryPerArgumentDynArray
       read fArgUsed;
-    /// identifies a CallbackReleased() method in this interface
+    /// identifies a CallbackReleased() method in this interface (signed 8-bit)
     // - i.e. the index in Methods[] of the following signature:
     // ! procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUtf8);
     // - this method will be called e.g. by TInterfacedCallback.Destroy, when
@@ -689,7 +689,7 @@ type
     // - contains -1 if no such method do exist in the interface definition
     property MethodIndexCallbackReleased: ShortInt
       read fMethodIndexCallbackReleased;
-    /// identifies a CurrentFrame() method in this interface
+    /// identifies a CurrentFrame() method in this interface (signed 8-bit)
     // - i.e. the index in Methods[] of the following signature:
     // ! procedure CurrentFrame(isLast: boolean);
     // - this method will be called e.g. by TRestHttpClientWebsockets.CallbackRequest

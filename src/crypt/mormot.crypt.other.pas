@@ -422,7 +422,7 @@ const
 // - this adaptative algorithm has no known weaknesses, and there are reports
 // that the more recent Argon2 is weaker (and less proven) for practical timing,
 // and SCrypt requires N>=2^14 to be stronger (i.e. at least 16MB), so BCrypt
-// seems still the best solution for server-side password storage
+// seems still the best solution for server-side password hashing
 // - Cost should be in range 4..31 for 2^Cost rounds (default value is 12, and
 // takes 180ms on my computer)
 // - Salt='' would generate one - or should be exactly 22 characters (16 bytes)
@@ -434,7 +434,7 @@ const
 function BCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
  Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
 
-/// prepare a BlockFish encryption with a given Salt, UTF-8 Passwod and Cost
+/// prepare a BlockFish encryption with a given Salt, UTF-8 Password and Cost
 // - Password is process using the BCrypt "Expensive Key Setup" algorithm
 // - Cost should be in range 4..31
 // - Salt is expected to be 16 bytes = 128-bit, e.g. from Random128()

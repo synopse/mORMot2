@@ -3997,6 +3997,7 @@ type
     procedure Fts4WithoutContent(ContentTable: TOrmClass);
 
     /// the table index of this TOrm in the associated Model
+    // - in range [0..MAX_TABLES-1] = [0..255] by default
     property TableIndex: integer
       read fTableIndex;
     /// direct access to a property RTTI information, by name
@@ -4506,11 +4507,11 @@ type
     fInternalBufferSize: integer;
     fCalledWithinRest: boolean;
     fPreviousTableMatch: boolean;
+    fOptions: TRestBatchOptions;
     fBatch: TOrmWriter;
     fTable: TOrmClass;
     fTableIndex: integer;
     fBatchCount: integer;
-    fOptions: TRestBatchOptions;
     fAddCount: integer;
     fUpdateCount: integer;
     fDeleteCount: integer;

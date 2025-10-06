@@ -10716,7 +10716,7 @@ const
    'HTTP Version Not Supported',        // HTTP_HTTPVERSIONNONSUPPORTED
    'Network Authentication Required',   // 511
    'Client Side Connection Error',      // HTTP_CLIENTERROR = 666
-   'Invalid Request');                  // 513 should be last INDEX_HTTP_INVALID
+   'Invalid Request');                  // last INDEX_HTTP_INVALID = 513
   HTTP_CODE: array[0 .. INDEX_HTTP_INVALID] of word = ( // match HTTP_REASON[]
     HTTP_SUCCESS,
     HTTP_NOCONTENT,

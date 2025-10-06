@@ -1149,6 +1149,8 @@ function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
 // - without {checksum} - as returned by ModularCryptIdentify() info^ parameter
 // - used e.g. by TRestServer.ReturnNonce() with an unknown UserName, to avoid
 // the client being able to guess by fuzzing that this UserName is unknown
+// - use SystemEntropy.Startup as seed for consistent results between calls, but
+// eventually reset when the process is restarted
 function ModularCryptFakeInfo(const id: RawUtf8;
   format: TModularCryptFormat = mcfUnknown): RawUtf8;
 
