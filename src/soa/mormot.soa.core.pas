@@ -440,9 +440,9 @@ type
     fMethods: TUriMethods;          // 16-bit
     fInterfaceMethodIndex: integer; // 32-bit
     fResultAsXMLObjectNameSpace: RawUtf8;
-    function GetOption(opt: TInterfaceOption): boolean;
+    function GetOption(const opt: TInterfaceOption): boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure SetOption(opt: TInterfaceOption; enable: boolean);
+    procedure SetOption(const opt: TInterfaceOption; const enable: boolean);
     function GetAuthGroupIDs(const aGroup: array of RawUtf8;
       out IDs: TIDDynArray): boolean;
   public
@@ -1282,13 +1282,13 @@ end;
 
 { TServiceFactoryServerAbstract }
 
-function TServiceFactoryServerAbstract.GetOption(opt: TInterfaceOption): boolean;
+function TServiceFactoryServerAbstract.GetOption(const opt: TInterfaceOption): boolean;
 begin
   result := (opt in fOptions);
 end;
 
-procedure TServiceFactoryServerAbstract.SetOption(opt: TInterfaceOption;
-  enable: boolean);
+procedure TServiceFactoryServerAbstract.SetOption(const opt: TInterfaceOption;
+  const enable: boolean);
 begin
   if enable then
     include(fOptions, opt)

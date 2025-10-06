@@ -173,6 +173,15 @@ type
   /// pointer to a description of a method-based service
   PRestServerMethod = ^TRestServerMethod;
 
+  /// potential TRestServerUriContext internal flags
+  TRestServerUriContextFlag = (
+    rcfInputAllowDouble,
+    rcfForceServiceResultAsJsonObject,
+    rcfForceServiceResultAsJsonObjectWithoutResult,
+    rcfForceServiceResultAsXMLObject);
+  /// define TRestServerUriContext internal flags
+  TRestServerUriContextFlags = set of TRestServerUriContextFlag;
+
   /// abstract calling context for a TOnRestServerCallBack event handler
   // - having a dedicated class avoid changing the implementation methods
   // signature if the framework add some parameters or behavior to it
@@ -189,12 +198,14 @@ type
   protected
     fServer: TRestServer;
     fInput: TRawUtf8DynArray; // [nam1,val1, nam2,val2, ...] pairs
-    fStaticKind: TRestServerKind; // 8-bit
-    fNode: TRestNode;             // 8-bit
-    fInputAllowDouble: boolean;   // 8-bit
-    fServiceMethodIndex: integer;
-    fUriSessionSignaturePos: integer;
-    fMethodIndex: integer;
+    fStaticKind: TRestServerKind;                      // 8-bit
+    fNode: TRestNode;                                  // 8-bit
+    fFlags: TRestServerUriContextFlags;                // 8-bit
+    fServiceExecutionOptions: TInterfaceMethodOptions; // 8-bit
+    fServiceMethodIndex: ShortInt;                     // 8-bit
+    fMethodIndex: ShortInt;                            // 8-bit
+    fUriSessionSignaturePos: word;                     // 16-bit
+    fServiceParametersLen: integer; // used for logging only
     fTableIndex: integer;
     fAuthSession: TAuthSession;
     fUriMethodPath: RawUtf8;
@@ -208,17 +219,12 @@ type
     fService: TServiceFactory;
     fServiceMethod: PInterfaceMethod;
     fServiceParameters: PUtf8Char;
-    fServiceParametersLen: PtrInt; // used for logging only
     fServiceInstanceID: TID;
     fServiceExecution: PServiceFactoryExecution;
-    fServiceExecutionOptions: TInterfaceMethodOptions;
-    fForceServiceResultAsJsonObject: boolean;
-    fForceServiceResultAsJsonObjectWithoutResult: boolean;
-    fForceServiceResultAsXMLObject: boolean;
     fForceServiceResultAsXMLObjectNameSpace: RawUtf8;
     fParameters: PUtf8Char;
     fPlainUrl: PUtf8Char; // = Call.Url or ServerMethod/ServiceMethod^.Name
-    fSession: cardinal;
+    fSession: cardinal;                  // 20-bit+ session ID
     fSessionOS: TOperatingSystemVersion; // 32-bit raw OS info
     fSessionGroup: TID;
     fSessionUser: TID;
@@ -231,6 +237,10 @@ type
     fLog: TSynLog;
     fStatsInSize, fStatsOutSize: integer;
     fSessionAccessRights: TOrmAccessRights; // fSession may be deleted meanwhile
+    procedure SetFlag(const flag: TRestServerUriContextFlag; const value: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetFlag(const flag: TRestServerUriContextFlag): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetInput(const ParamName: RawUtf8): variant;
     function GetInputOrVoid(const ParamName: RawUtf8): variant;
     function GetInputValue(const ParamName: RawUtf8): PRawUtf8;
@@ -399,7 +409,7 @@ type
       const ErrorMessageForMissingParameter: string): boolean;
     /// if Input[] InputOrVoid[] InputOrError() variants could be double
     property InputAllowDouble: boolean
-      read fInputAllowDouble write fInputAllowDouble;
+      index rcfInputAllowDouble read GetFlag write SetFlag;
     /// retrieve all input parameters from URI as a variant JSON object
     // - returns Unassigned if no parameter was defined
     // - returns a JSON object with input parameters encoded as
@@ -523,7 +533,7 @@ type
     property UriMethodPath: RawUtf8
       read fUriMethodPath;
     /// 1-indexed position of the &session_signature=... text in Call^.Url string
-    property UriSessionSignaturePos: integer
+    property UriSessionSignaturePos: word
       read fUriSessionSignaturePos;
     /// URI inlined parameters position within Call^.Url, just after trailing '?'
     // - use UrlDecodeValue*() functions to retrieve the values
@@ -559,18 +569,18 @@ type
     property Command: TRestServerUriContextCommand
       read fCommand write fCommand;
     /// the index of the callback published method within the internal class list
-    property MethodIndex: integer
+    property MethodIndex: ShortInt
       read fMethodIndex;
     /// the service identified by an interface-based URI
     // - is in fact a TServiceFactoryServer instance
     property Service: TServiceFactory
       read fService write fService;
-    /// the method index for an interface-based service
+    /// the method index for an interface-based service (signed 8-bit)
     // - filled if Service is not nil
     // - as retrieved by Service.ServiceMethodIndex(), i.e. 0..3 as internal
     // _free_/_contract_/_signature_/_instance_ pseudo-methods or in
     // InterfaceFactory.Methods[ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT]
-    property ServiceMethodIndex: integer
+    property ServiceMethodIndex: ShortInt
       read fServiceMethodIndex write fServiceMethodIndex;
     /// access to the raw information of an interface-based URI
     // - equals nil if ServiceMethodIndex is within 0..3 (pseudo-methods)
@@ -602,7 +612,7 @@ type
     // a JSON object, even if Service.ResultAsJsonObject=false: this may be
     // handy when the method is executed from a JavaScript content
     property ForceServiceResultAsJsonObject: boolean
-      read fForceServiceResultAsJsonObject;
+      index rcfForceServiceResultAsJsonObject read GetFlag write SetFlag;
     /// force the interface-based service methods to return a plain JSON object
     // - i.e. '{....}' instead of '{"result":{....}}'
     // - only set if ForceServiceResultAsJsonObject=TRUE and if no ID is about
@@ -610,7 +620,7 @@ type
     // - could be used e.g. for stateless interaction with a (non mORMot)
     // stateless JSON REST Server
     property ForceServiceResultAsJsonObjectWithoutResult: boolean
-      read fForceServiceResultAsJsonObjectWithoutResult;
+      index rcfForceServiceResultAsJsonObjectWithoutResult read GetFlag write SetFlag;
     /// force the interface-based service methods to return a XML object
     // - default behavior is to follow Service.ResultAsJsonObject property value
     // (which own default is to return a more convenient JSON array)
@@ -620,7 +630,7 @@ type
     // - TRestServerUriContext.InternalExecuteSoaByInterface will inspect the
     // Accept HTTP header to check if the answer should be XML rather than JSON
     property ForceServiceResultAsXMLObject: boolean
-      read fForceServiceResultAsXMLObject;
+      index rcfForceServiceResultAsXMLObject read GetFlag write SetFlag;
     /// specify a custom name space content when returning a XML object
     // - default behavior is to follow Service.ResultAsXMLObjectNameSpace
     // property (which is void by default)
@@ -935,7 +945,7 @@ type
     property RemoteOsVersion: TOperatingSystemVersion
       read fRemoteOsVersion;
   published
-    /// the session ID number, as numerical value
+    /// the session ID number, as 20-bit+ numerical value
     // - never equals to 1 (CONST_AUTHENTICATION_NOT_USED, i.e. authentication
     // mode is not enabled), nor 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED,
     // i.e. session still in handshaking phase)
@@ -1789,7 +1799,7 @@ type
     /// in-memory storage of TAuthSession instances
     fSessions: TSynObjectListSorted; // sorted by ID, with upgradable lock
     fSessionsDeprecatedTix: cardinal;
-    /// used to compute genuine TAuthSession.ID cardinal value
+    /// used to compute genuine TAuthSession.ID 20-bit+ cardinal value
     fSessionCounter: integer;
     fSessionCounterMin: cardinal;
     fTimestampInfoCacheTix, fStatsCacheTix: cardinal;
@@ -2525,7 +2535,7 @@ const
     SendTotalRowsCountFmt: '');
 
   /// default value of TRestServer.StatLevels property
-  // - i.e. gather all statistics, but mlSessions which has a slowdown impact
+  // - i.e. gather all statistics, but mlSessions which consumes more resources
   SERVERDEFAULTMONITORLEVELS: TRestServerMonitorLevels =
     [mlUri, mlTables, mlMethods, mlInterfaces, mlSQLite3];
 
@@ -2824,6 +2834,21 @@ end;
 
 
 { TRestServerUriContext }
+
+procedure TRestServerUriContext.SetFlag(const flag: TRestServerUriContextFlag;
+  const value: boolean);
+begin
+  if value then
+    include(fFlags, flag)
+  else
+    exclude(fFlags, flag);
+end;
+
+function TRestServerUriContext.GetFlag(
+  const flag: TRestServerUriContextFlag): boolean;
+begin
+  result := flag in fFlags;
+end;
 
 procedure TRestServerUriContext.Prepare(aServer: TRestServer;
   const aCall: TRestUriParams; aMethod: TUriMethod);
@@ -3379,18 +3404,16 @@ var
 begin
   s := TServiceFactoryServer(Service);
   // XML needs a full JSON object as input
-  fForceServiceResultAsXMLObject :=
-    fForceServiceResultAsXMLObject or
-    s.ResultAsXMLObject;
-  fForceServiceResultAsJsonObject :=
-    fForceServiceResultAsJsonObject or
-    s.ResultAsJsonObject or
-    s.ResultAsJsonObjectWithoutResult or
-    ForceServiceResultAsXMLObject;
-  fForceServiceResultAsJsonObjectWithoutResult :=
-    ForceServiceResultAsJsonObject and
-    (s.InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
-    s.ResultAsJsonObjectWithoutResult;
+  if s.ResultAsXMLObject then
+    ForceServiceResultAsXMLObject := true;
+  if s.ResultAsJsonObject or
+     s.ResultAsJsonObjectWithoutResult or
+     ForceServiceResultAsXMLObject then
+    ForceServiceResultAsJsonObject := true;
+  if ForceServiceResultAsJsonObject and
+     (s.InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
+     s.ResultAsJsonObjectWithoutResult then
+    ForceServiceResultAsJsonObjectWithoutResult := true;
   if (fForceServiceResultAsXMLObjectNameSpace = '') and
      (s.ResultAsXMLObjectNameSpace <> '') then
     fForceServiceResultAsXMLObjectNameSpace := s.ResultAsXMLObjectNameSpace;
@@ -3502,7 +3525,7 @@ begin
      FindNameValue(Call^.InHead, 'ACCEPT:', fTemp) and
      (PropNameEquals(fTemp, 'application/xml') or
       PropNameEquals(fTemp, 'text/xml')) then
-    fForceServiceResultAsXMLObject := true;
+    ForceServiceResultAsXMLObject := true;
   try
     InternalExecuteSoaByInterfaceComputeResult;
   finally
@@ -3510,7 +3533,7 @@ begin
     ServiceParameters := nil;
   end;
   // optionnally convert result to XML
-  if fForceServiceResultAsXMLObject and
+  if ForceServiceResultAsXMLObject and
      (fCall^.OutBody <> '') and
      (fCall^.OutHead <> '') and
      CompareMemFixed(pointer(fCall^.OutHead),
@@ -4438,12 +4461,12 @@ var
   v: RawUtf8;
 begin
   GetInputByName(ParamName, '', v);
-  VariantLoadJson(result, v, nil, fInputAllowDouble);
+  VariantLoadJson(result, v, nil, InputAllowDouble);
 end;
 
 function TRestServerUriContext.GetInputOrVoid(const ParamName: RawUtf8): variant;
 begin
-  VariantLoadJson(result, GetInputUtf8OrVoid(ParamName), nil, fInputAllowDouble);
+  VariantLoadJson(result, GetInputUtf8OrVoid(ParamName), nil, InputAllowDouble);
 end;
 
 function TRestServerUriContext.InputOrError(const ParamName: RawUtf8;
@@ -4452,7 +4475,7 @@ var
   v: RawUtf8;
 begin
   result := InputUtf8OrError(ParamName, v, ErrorMessageForMissingParameter) and
-            VariantLoadJson(Value, v, nil, fInputAllowDouble);
+            VariantLoadJson(Value, v, nil, InputAllowDouble);
 end;
 
 function TRestServerUriContext.GetInputAsTDocVariant(
@@ -4485,7 +4508,7 @@ begin
           forcestring := true;
       end;
       GetVariantFromJsonField(pointer(fInput[ndx * 2 + 1]), forcestring, v,
-        @Options, fInputAllowDouble, length(fInput[ndx * 2 + 1]));
+        @Options, InputAllowDouble, length(fInput[ndx * 2 + 1]));
       res.AddValue(name, v);
     end;
   end
@@ -6392,7 +6415,8 @@ begin
     include(fOptions, rsoNoAjaxJson)
   else
     exclude(fOptions, rsoNoAjaxJson);
-  (fOrmInstance as TRestOrmServer).SetNoAjaxJson(Value);
+  if Assigned(fOrmInstance) then
+    (fOrmInstance as TRestOrmServer).SetNoAjaxJson(Value);
 end;
 
 function TRestServer.GetNoAjaxJson: boolean;
