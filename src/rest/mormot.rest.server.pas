@@ -7789,8 +7789,8 @@ procedure TRestServer.Uri(var Call: TRestUriParams);
 var
   ctxt: TRestServerUriContext;
   node: TRestTreeNode;
+  i: PtrInt;
   idletix32: cardinal;
-  outcomingfile: boolean;
   m: TUriMethod;
 begin
   // 1. reject ASAP if not worth processing
@@ -7856,7 +7856,7 @@ begin
       ctxt.fLog.ManualEnter(self, 'Uri/% % % in=%', [Call.LowLevelConnectionID,
         Call.Method, ctxt.fPlainUrl, length(Call.InBody)], @ctxt.fMicroSecondsStart);
     end;
-    if StatLevels <> [] then
+    if fStatLevels <> [] then
     begin
       if ctxt.fMicroSecondsStart = 0 then // may have been set by ManualEnter()
         QueryPerformanceMicroSeconds(ctxt.fMicroSecondsStart);
@@ -7906,21 +7906,28 @@ begin
     // 8. return expected result to the client
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
-      if ctxt.fUriSessionSignaturePos > 0 then // remove session_signature=...
-        FakeLength(Call.Url, ctxt.fUriSessionSignaturePos - 1); // for HTTP logs
-      outcomingfile := false;
+      // remove meaninless session_signature=... for success HTTP logs
+      i := ctxt.fUriSessionSignaturePos;
+      if i <> 0 then
+        FakeLength(Call.Url, i - 1);
+      // interpret HTTP success result
       if Call.OutBody <> '' then
-        // detect 'Content-type: !STATICFILE' as first header
-        outcomingfile := (length(Call.OutHead) >= 25) and
-                         (Call.OutHead[15] = '!') and
-          IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER)
+      begin
+        if fStatLevels <> [] then
+          fStats.ProcessSuccess(// detect 'Content-type: !STATICFILE' first header
+            (length(Call.OutHead) >= 25) and
+            (Call.OutHead[15] = '!') and
+          IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER));
+      end
       else
+      begin
         // handle Call.OutBody=''
         if (Call.OutStatus = HTTP_SUCCESS) and
            (rsoHttp200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTTP_NOCONTENT; // 204
-      if StatLevels <> [] then
-        fStats.ProcessSuccess(outcomingfile);
+        if fStatLevels <> [] then
+          fStats.ProcessSuccess({outcomingfile=}false);
+      end
     end
     else if (Call.OutStatus < 200) or
             (Call.OutStatus > 599) then
@@ -7953,7 +7960,7 @@ begin
       idletix32 := ctxt.TickCount64 shr 7; // trigger OnIdle() every 128 ms
   finally
     // 10. gather statistics and log execution
-    if StatLevels <> [] then
+    if fStatLevels <> [] then
       ctxt.ComputeStatsAfterCommand;
     if (ctxt.Log <> nil) and
        (fLogLevel * [sllServer, sllServiceReturn] <> []) then
