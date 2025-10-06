@@ -1005,7 +1005,7 @@ begin
       SQL_TYPE_DATE:
         begin
           W.Add('"');
-          W.AddDateTime(fResults[Col].GetAsDateTime, fForceDateWithMS);
+          W.AddDateTime(fResults[Col].GetAsDateTime, dsfForceDateWithMS in fFlags);
           W.AddDirect('"');
         end;
       SQL_BOOLEAN:

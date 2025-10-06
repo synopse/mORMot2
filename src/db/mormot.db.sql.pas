@@ -1317,8 +1317,9 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
-    procedure SetFlag(flag: TSqlDBConnectionPropertiesFlag; value: boolean);
-    function GetFlag(flag: TSqlDBConnectionPropertiesFlag): boolean;
+    procedure SetFlag(const flag: TSqlDBConnectionPropertiesFlag; const value: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetFlag(const flag: TSqlDBConnectionPropertiesFlag): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
@@ -3662,8 +3663,8 @@ begin
   result := ExecuteInlined(sql, ExpectResults);
 end;
 
-procedure TSqlDBConnectionProperties.SetFlag(flag: TSqlDBConnectionPropertiesFlag;
-  value: boolean);
+procedure TSqlDBConnectionProperties.SetFlag(
+  const flag: TSqlDBConnectionPropertiesFlag; const value: boolean);
 begin
   if value then
     include(fFlags, flag)
@@ -3671,7 +3672,8 @@ begin
     exclude(fFlags, flag);
 end;
 
-function TSqlDBConnectionProperties.GetFlag(flag: TSqlDBConnectionPropertiesFlag): boolean;
+function TSqlDBConnectionProperties.GetFlag(
+  const flag: TSqlDBConnectionPropertiesFlag): boolean;
 begin
   result := flag in fFlags;
 end;
