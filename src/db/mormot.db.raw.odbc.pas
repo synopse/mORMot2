@@ -849,13 +849,13 @@ function SQL_TIMESTAMP_STRUCT.ToDateTime(DataType: SqlSmallint): TDateTime;
 var
   time: TDateTime;
 begin
-  if DataType = SQL_TYPE_TIME then
-    result := 0
-  else
-    result := EncodeDate(Year, Month, Day);
+  if (DataType = SQL_TYPE_TIME) or
+     not mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
+    result := 0;
   if (DataType <> SQL_TYPE_DATE) and
      (PInt64(@Hour)^ <> 0)  and
-     TryEncodeTime(Hour, Minute, Second, Fraction div 1000000, time) then
+     mormot.core.datetime.TryEncodeTime(Hour, Minute, Second,
+                                        Fraction div 1000000, time) then
     result := result  +  time;
 end;
 

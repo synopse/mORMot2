@@ -8069,7 +8069,7 @@ begin
   if Ctxt.ParseNext then
     if Ctxt.WasString then
       if Ctxt.Info.Cache.IsPureDate then // parse only 'Thhmmss' or 'hh:mm:ss'
-        Iso8601ToDatePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, PDate(Data)^)
+        Iso8601ToDatePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, TDate(Data^))
       else
         Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
     else

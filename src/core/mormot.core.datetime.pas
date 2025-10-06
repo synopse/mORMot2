@@ -2204,6 +2204,7 @@ end;
 function TSynSystemTime.EncodeForTimeChange(const aYear: word): TDateTime;
 var
   dow, d: word;
+  t: TDateTime;
 begin
   if DayOfWeek = 0 then
     dow := 7 // Delphi/FPC Sunday = 7
@@ -2223,7 +2224,8 @@ begin
     dec(d);
   end;
   // finally add the time when change is due
-  result := result + EncodeTime(Hour, Minute, Second, MilliSecond);
+  if TryEncodeTime(Hour, Minute, Second, MilliSecond, t) then
+    result := result + t;
 end;
 
 procedure TSynSystemTime.Clear;
@@ -2471,7 +2473,8 @@ begin
       dec(zone, TimeZoneLocalBias);
     dt := ToDateTime - zone div MinsPerDay;
     v := abs(zone mod MinsPerDay);
-    t := EncodeTime(v div 60, v mod 60, 0, 0);
+    if not TryEncodeTime(v div 60, v mod 60, 0, 0, t) then
+      exit;
     if zone < 0 then
       dt := dt + t
     else
@@ -3327,12 +3330,10 @@ begin
   {$else}
   lo := PCardinal(@Value)^;
   {$endif CPU64}
-  if lo and (1 shl SHR_DD - 1) = 0 then
-    result := 0
-  else
-    result := EncodeTime((lo shr SHR_H) and AND_H,
-                         (lo shr SHR_M) and AND_M,
-                         lo and AND_S, 0);
+  if (lo and (1 shl SHR_DD - 1) = 0) or
+     not mormot.core.datetime.TryEncodeTime((lo shr SHR_H) and AND_H,
+           (lo shr SHR_M) and AND_M, lo and AND_S, 0, PDateTime(@result)^) then
+    result := 0;
 end;
 
 function TTimeLogBits.ToDate: TDate;

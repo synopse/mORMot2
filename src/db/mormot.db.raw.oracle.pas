@@ -1013,6 +1013,8 @@ implementation
 // see http://download.oracle.com/docs/cd/B28359_01/appdev.111/b28395/oci03typ.htm#sthref389
 
 function TOracleDate.ToDateTime: TDateTime;
+var
+  time: TDateTime;
 begin
   if (PInteger(@self)^ = 0) and
      (PInteger(PtrUInt(@self) + 3)^ = 0) then
@@ -1020,15 +1022,17 @@ begin
     result := 0
   else
   begin
-    if Cent <= 100 then
+    if (Cent <= 100) or
       // avoid TDateTime values < 0 (generates wrong DecodeTime)
-      result := 0
-    else
-      result := EncodeDate((Cent - 100) * 100 + Year - 100, Month, Day);
+      not mormot.core.datetime.TryEncodeDate(
+            (Cent - 100) * 100 + Year - 100, Month, Day, result) then
+      result := 0;
     if (Hour > 1) or
        (Min > 1) or
        (Sec > 1) then
-      result := result + EncodeTime(Hour - 1, Min - 1, Sec - 1, 0);
+      if mormot.core.datetime.TryEncodeTime(
+           Hour - 1, Min - 1, Sec - 1, 0, time) then
+        result := result + time;
   end;
 end;
 
