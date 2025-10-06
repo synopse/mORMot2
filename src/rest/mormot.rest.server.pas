@@ -1222,8 +1222,6 @@ type
   // as the cookie secrecy on the client side - even if any replay is avoided
   // - note that such sessions can not be persisted on disk
   TRestServerAuthenticationHttpAbstract = class(TRestServerAuthentication)
-  protected
-    fSignature: TAesSignature;
   public
     /// additional salt/realm parameter used for ComputeHashedPassword()
     HashSalt: RawUtf8;
@@ -1231,7 +1229,7 @@ type
     HashRound: integer;
     /// additional parameter for ComputeHashedPassword() and DIGEST-HA0
     DigestAlgo: TDigestAlgo;
-    /// initialize the authentication method to a specified server
+    /// initialize the RESTful authentication method and its TAesSignature instance
     constructor Create(aServer: TRestServer); override;
     /// will check the caller signature
     // - retrieve the session ID from "Cookie: ModelRoot=..." HTTP header
@@ -1831,6 +1829,7 @@ type
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     function GetAuthenticationSchemesCount: integer;
+    procedure EnsureAuthenticationBearerHeaderExists;
     function StatusCodeToText(Code: cardinal): PRawUtf8; virtual;
     procedure HandleUriError(Ctxt: TRestServerUriContext; E: Exception);
     /// ensure the thread will be taken into account during process
@@ -5539,7 +5538,8 @@ end;
 constructor TRestServerAuthenticationHttpAbstract.Create(aServer: TRestServer);
 begin
   inherited Create(aServer);
-  fSignature.Init; // for safe 96-bit digital signature
+  // enable safe 96-bit digital signature shared at TRestServer level
+  aServer.EnsureAuthenticationBearerHeaderExists;
 end;
 
 function TRestServerAuthenticationHttpAbstract.RetrieveSession(
@@ -5548,10 +5548,13 @@ var
   c: PHttpCookie;
 begin
   result := nil;
+  if fServer.AuthenticationBearerHeader = nil then
+    exit; // paranoid
   c := Ctxt.InputCookies^.FindCookie(fServer.Model.Root);
   if c = nil then
     exit; // no cookie
-  Ctxt.fSession := fSignature.ValidateCookie(c^.ValueStart, c^.ValueLen);
+  Ctxt.fSession := fServer.AuthenticationBearerHeader^.
+                     ValidateCookie(c^.ValueStart, c^.ValueLen);
   if Ctxt.fSession <> 0 then
     result := fServer.LockedSessionAccess(Ctxt);
   if result = nil then // invalid cookie should be deleted on client side
@@ -5561,7 +5564,7 @@ end;
 function TRestServerAuthenticationHttpAbstract.ComputeCookieValue(
   aSession: cardinal): RawUtf8;
 begin
-  result := fSignature.GenerateCookie(aSession);
+ result := fServer.AuthenticationBearerHeader^.GenerateCookie(aSession);
 end;
 
 
@@ -7034,6 +7037,15 @@ begin
   end;
 end;
 
+procedure TRestServer.EnsureAuthenticationBearerHeaderExists;
+begin
+  if fAuthenticationBearerHeader = nil then
+  begin
+    fAuthenticationBearerHeader := AllocMem(SizeOf(TAesSignature));
+    fAuthenticationBearerHeader^.Init;
+  end;
+end;
+
 procedure TRestServer.ComputeRoutes;
 var
   r: TRestRouter;
@@ -7052,11 +7064,7 @@ begin
       exit;
     // adjust the global context for some options
     if rsoAuthenticationBearerHeader in fOptions then
-      if fAuthenticationBearerHeader = nil then
-      begin
-        fAuthenticationBearerHeader := AllocMem(SizeOf(TAesSignature));
-        fAuthenticationBearerHeader^.Init;
-      end;
+      EnsureAuthenticationBearerHeaderExists;
     // actually allocate the main TRestRouter instance
     r := TRestRouter.Create(self);
     // ORM remote access via REST
