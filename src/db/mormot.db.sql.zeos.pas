@@ -1425,7 +1425,7 @@ begin
           begin
             WR.AddDirect('"');
             WR.AddDateTime(fResultSet.GetTimestamp(col + FirstDbcIndex),
-              fForceDateWithMS);
+              dsfForceDateWithMS in fFlags);
             WR.AddDirect('"');
           end;
         ftUtf8:
