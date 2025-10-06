@@ -2020,9 +2020,9 @@ begin
   Check(ModularCryptVerify(u, exp, [mcfMd5Crypt, mcfSha512Crypt]) = mcfUnknown);
   Check(ModularCryptVerify(u, exp, [], {maxrounds=}3) = mcfInvalid);
   u[200] := 'b'; // BCrypt truncates the password at 72 bytes long
-  Check(ModularCryptVerify(u, exp) = mcfBCrypt);
+  Check(ModularCryptVerify(u, exp) = mcfBCrypt, 'truncate72');
   u[10] := 'b';
-  Check(ModularCryptVerify(u, exp) = mcfInvalid);
+  Check(ModularCryptVerify(u, exp) = mcfInvalid, 'passwd');
   exp := '$bcrypt-sha256$v=2,t=2b,r=12$n79VH.0Q2TMWmt3Oqt9uku$Kq4Noyk3094Y2QlB8NdRT8SvGiI4ft2';
   Check(ModularCryptVerify('password', exp) = mcfBCryptSha256);
   Check(ModularCryptVerify('pAssword', exp) = mcfInvalid);
@@ -2081,7 +2081,7 @@ begin
       Check(nfo <> '');
       Check(StartWithExact(u, nfo));
       Check(ModularCryptIdentify(nfo) = mcf);
-      CheckEqual(u, ModularCryptHash(nfo, pw)); // simulate client side re-hash
+      CheckEqual(u, ModularCryptHash(nfo, pw), 'simulate client side re-hash');
       if u <> '' then // avoid GPF
       begin
         dec(PByteArray(u)[length(u) - 5]);
