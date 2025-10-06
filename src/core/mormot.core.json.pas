@@ -6623,6 +6623,7 @@ begin
   begin
     ctxt.W := self;
     ctxt.Options := WriteOptions; // other fields are just ignored
+    ctxt.Info := nil;
     save := VARIANT_JSONSAVE[vt];
     if Assigned(save) then
     begin
