@@ -2392,14 +2392,6 @@ type
   {$else}
   TRttiCustomProp = object
   {$endif USERECORDWITHMETHODS}
-  private
-    fOrigName: RawUtf8; // as set by InternalAdd()
-    function InitFrom(RttiProp: PRttiProp): PtrInt;
-    function ValueIsVoidGetter(Data: pointer): boolean;
-    procedure GetRttiVarDataDirect(Data: PByte; rvd: PRttiVarData);
-    procedure GetRttiVarDataGetter(Instance: TObject; rvd: PRttiVarData);
-    function CompareValueComplex(Data, Other: pointer;
-      OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
   public
     /// contains standard TypeInfo/PRttiInfo of this field/property
     // - for instance, Value.Size contains its memory size in bytes
@@ -2486,6 +2478,14 @@ type
     // ! if RVD.NeedsClear then VarClearProc(RVD.Data);
     procedure GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
       {$ifdef HASINLINE}inline;{$endif}
+  private
+    fOrigName: RawUtf8; // as set by InternalAdd()
+    function InitFrom(RttiProp: PRttiProp): PtrInt;
+    function ValueIsVoidGetter(Data: pointer): boolean;
+    procedure GetRttiVarDataDirect(Data: PByte; rvd: PRttiVarData);
+    procedure GetRttiVarDataGetter(Instance: TObject; rvd: PRttiVarData);
+    function CompareValueComplex(Data, Other: pointer;
+      OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
   end;
 
   /// store information about the properties/fields of a given TypeInfo/PRttiInfo
