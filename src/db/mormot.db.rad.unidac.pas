@@ -726,7 +726,7 @@ begin
               P.AsDateTime := Iso8601ToDateTime(tmp);
             end
           else
-            P.AsDateTime := PDateTime(@VInt64)^;
+            P.AsDateTime := unaligned(PDateTime(@VInt64)^);
         mormot.db.core.ftUTF8:
           if fBatchExecute then
           begin

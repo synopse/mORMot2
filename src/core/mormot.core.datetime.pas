@@ -3739,6 +3739,7 @@ procedure TTextDateWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
   QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
 var
   T: TSynSystemTime;
+  d: double; // avoid EBusError on arm32
 begin
   if (PInt64(Value)^ = 0) and
      (QuoteChar = #0) then
@@ -3750,16 +3751,17 @@ begin
   if PInt64(Value)^ <> 0 then
   begin
     inc(B);
+    d := unaligned(Value^);
     if AlwaysDateAndTime or
-       (trunc(Value^) <> 0) then
+       (trunc(d) <> 0) then
     begin
-      T.FromDate(Value^);
+      T.FromDate(d);
       B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
     end;
     if AlwaysDateAndTime or
-       (frac(Value^) <> 0) then
+       (frac(d) <> 0) then
     begin
-      T.FromTime(Value^);
+      T.FromTime(d);
       B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second,
         T.MilliSecond, FirstChar, WithMS);
       if twoDateTimeWithZ in fCustomOptions then

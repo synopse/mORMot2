@@ -8101,7 +8101,7 @@ begin
         ftCurrency:
           Value := PCurrency(@VInt64)^;
         ftDate:
-          Value := PDateTime(@VInt64)^;
+          Value := unaligned(PDateTime(@VInt64)^);
         ftUtf8:
           RawUtf8ToVariant(RawUtf8(VData), Value);
         ftBlob:

@@ -1160,7 +1160,7 @@ begin
           fStatement.SetBigDecimal(i + FirstDbcIndex, PCurrency(@VInt64)^);
           {$endif ZEOS72UP}
         ftDate:
-          fStatement.SetTimestamp(i + FirstDbcIndex, PDateTime(@VInt64)^);
+          fStatement.SetTimestamp(i + FirstDbcIndex, unaligned(PDateTime(@VInt64)^));
         ftUtf8:
           {$ifdef ZEOS72UP}
           fStatement.SetUTF8String(i + FirstDbcIndex, VData);

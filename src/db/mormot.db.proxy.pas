@@ -998,7 +998,7 @@ begin
                   ftCurrency:
                     stmt.Bind(i, PCurrency(@VInt64)^, VInOut);
                   ftDate:
-                    stmt.BindDateTime(i, PDateTime(@VInt64)^, VInOut);
+                    stmt.BindDateTime(i, unaligned(PDateTime(@VInt64)^), VInOut);
                   ftUtf8:
                     stmt.BindTextU(i, VData, VInOut);
                   ftBlob:
@@ -1455,7 +1455,7 @@ begin
       ftDate:
         begin
           W.Add('"');
-          W.AddDateTime(PDateTime(data)^);
+          W.AddDateTime(unaligned(PDateTime(data)^));
           W.AddDirect('"');
         end;
       ftUtf8:
@@ -1647,7 +1647,7 @@ begin
     ftCurrency:
       result := Curr64ToStr(PInt64(data)^);
     ftDate:
-      DateTimeToIso8601TextVar(PDateTime(data)^, 'T', result);
+      DateTimeToIso8601TextVar(unaligned(PDateTime(data)^), 'T', result);
     ftBlob,
     ftUtf8:
       with FromVarBlob(data) do
@@ -1671,7 +1671,7 @@ begin
     ftCurrency:
       result := Curr64ToString(PInt64(data)^);
     ftDate:
-      DateTimeToIso8601StringVar(PDateTime(data)^, 'T', result);
+      DateTimeToIso8601StringVar(unaligned(PDateTime(data)^), 'T', result);
     ftUtf8:
       with FromVarBlob(data) do
         Utf8DecodeToString(PUtf8Char(Ptr), len, result);

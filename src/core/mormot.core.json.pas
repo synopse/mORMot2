@@ -8065,15 +8065,18 @@ begin
 end;
 
 procedure _JL_DateTime(Data: PDateTime; var Ctxt: TJsonParserContext);
+var
+  d: TDateTime; // avoid EBusError on arm32
 begin
   if Ctxt.ParseNext then
     if Ctxt.WasString then
       if Ctxt.Info.Cache.IsPureDate then // parse only 'Thhmmss' or 'hh:mm:ss'
-        Iso8601ToDatePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, TDate(Data^))
+        Iso8601ToDatePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, TDate(d))
       else
-        Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
-    else
-      UnixTimeOrDoubleToDateTime(Ctxt.Value, Ctxt.ValueLen, Data^); // also null
+        Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, TDateTime(d))
+    else // also null
+      UnixTimeOrDoubleToDateTime(Ctxt.Value, Ctxt.ValueLen, TDateTime(d));
+  unaligned(Data^) := d;
 end;
 
 procedure _JL_Guid(Data: PGuid; var Ctxt: TJsonParserContext);

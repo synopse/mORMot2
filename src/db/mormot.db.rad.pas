@@ -1014,7 +1014,7 @@ begin
             P.AsDateTime := Iso8601ToDateTime(tmp);
           end
           else
-            P.AsDateTime := PDateTime(@VInt64)^;
+            P.AsDateTime := unaligned(PDateTime(@VInt64)^);
         mormot.db.core.ftUtf8:
           if aArrayIndex >= 0 then
             if (VArray[aArrayIndex] = '') and
@@ -1076,7 +1076,7 @@ begin
     mormot.db.core.ftCurrency:
       PCurrency(@aParam.VInt64)^ := par.AsCurrency;
     mormot.db.core.ftDate:
-      PDateTime(@aParam.VInt64)^ := par.AsDateTime;
+      unaligned(PDateTime(@aParam.VInt64)^) := par.AsDateTime;
     mormot.db.core.ftUtf8:
       aParam.VData := StringToUtf8(par.AsString);
     mormot.db.core.ftBlob:

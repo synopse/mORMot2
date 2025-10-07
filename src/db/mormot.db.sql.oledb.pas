@@ -1177,7 +1177,7 @@ begin
       ftCurrency:
         Value := PCurrency(@VInt64)^;
       ftDate:
-        Value := PDateTime(@VInt64)^;
+        Value := unaligned(PDateTime(@VInt64)^);
       ftUtf8:
         Value := VText; // returned as WideString/OleStr variant
       ftBlob:
