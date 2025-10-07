@@ -3735,6 +3735,9 @@ begin
   AddDateTime(@dt, 'T', QuoteChar, WithMS, {dateandtime=}true);
 end;
 
+const
+  TIME_00: array[0 .. 8] of AnsiChar = '00:00:00Z';
+
 procedure TTextDateWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
   QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
 var
@@ -3756,20 +3759,26 @@ begin
        (trunc(d) <> 0) then
     begin
       T.FromDate(d);
-      B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
+      B := DateToIso8601PChar(B, {exp=}true, T.Year, T.Month, T.Day);
     end;
     if AlwaysDateAndTime or
        (frac(d) <> 0) then
     begin
       T.FromTime(d);
-      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second,
+      B := TimeToIso8601PChar(B, {exp=}true, T.Hour, T.Minute, T.Second,
         T.MilliSecond, FirstChar, WithMS);
       if twoDateTimeWithZ in fCustomOptions then
-        AddDirect('Z');
+        B^ := 'Z'
+      else
+        dec(B);
     end
     else if twoDateTimeWithZ in fCustomOptions then
-      AddShort('00:00:00Z'); // FireFox e.g. requires always some time part
-    dec(B);
+    begin
+      MoveFast(TIME_00, B^, 9);
+      inc(B, 8); // FireFox e.g. requires always some time part
+    end
+    else
+      dec(B);
   end;
   if QuoteChar <> #0 then
     AddDirect(QuoteChar);
