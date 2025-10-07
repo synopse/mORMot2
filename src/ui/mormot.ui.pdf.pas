@@ -9878,11 +9878,11 @@ procedure TPdfEncryptionRC4MD5.AttachDocument(aDoc: TPdfDocument);
   end;
 
 const
-  HASHSIZE: array[elRC4_40..elRC4_128] of integer = (
+  HASHSIZE: array[elRC4_40..elRC4_128] of byte = (
     5, 16);
   DICT: array[elRC4_40..elRC4_128] of
     record
-      v, r, L: integer
+      v, r, L: byte
     end = (
       (v: 1; r: 2; L: 40),
       (v: 2; r: 3; L: 128));

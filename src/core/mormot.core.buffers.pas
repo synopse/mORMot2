@@ -8800,11 +8800,11 @@ const
      $2a004d4d + 1, $2b004d4d + 1, $46464952 + 1, $e011cfd0 + 1,
      $5367674f + 1, $4d434944 + 1, $fd2fb528 + 1);
   MIME_MAGIC_TYPE: array[0..high(MIME_MAGIC)] of TMimeType = (
-     mtZip, mtPdf, mtRar, mt7z,
-     mtSQlite3, mtWma, mtWmv, mtPng,
-     mtGif, mtFont, mtWebm, mtTiff,
-     mtTiff, mtTiff, mtWebp{=riff}, mtDoc,
-     mtOgg, mtDicom, mtZstd);
+     mtZip,     mtPdf,    mtRar,    mt7z,
+     mtSQlite3, mtWma,    mtWmv,    mtPng,
+     mtGif,     mtFont,   mtWebm,   mtTiff,
+     mtTiff,    mtTiff,   mtWebp{=riff}, mtDoc,
+     mtOgg,     mtDicom,  mtZstd);
 
 function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 var

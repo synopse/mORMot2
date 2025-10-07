@@ -2836,10 +2836,9 @@ end;
 
 { TBsonElement }
 
-var
-  /// size (in bytes) of a BSON element
-  // - equals -1 for varying elements
-  BSON_ELEMENTSIZE: array[TBsonElementType] of integer = (
+const
+  // size (in bytes) of a BSON element- equals -1 for varying elements
+  BSON_ELEMENTSIZE: array[TBsonElementType] of ShortInt = (
     //betEOF, betFloat, betString, betDoc, betArray, betBinary,
     0, SizeOf(Double), -1, -1, -1, -1,
     //betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
@@ -2849,7 +2848,7 @@ var
     //betDeprecatedJSScope, betInt32, betTimestamp, betInt64, betDecimal128
     -1, SizeOf(integer), SizeOf(Int64), SizeOf(Int64), SizeOf(TDecimal128));
 
-  /// types which do not have an exact equivalency to a standard variant
+  // types which do not have an exact equivalency to a standard variant
   // type will be mapped as varUnknown - and will be changed into
   // BsonVariantType.VarType
   BSON_ELEMENTTYPES: array[TBsonElementType] of word = (

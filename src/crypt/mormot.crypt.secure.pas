@@ -10075,7 +10075,7 @@ begin
 end;
 
 const
-  CAA_SIZE: array[TCryptAsymAlgo] of integer = (
+  CAA_SIZE: array[TCryptAsymAlgo] of byte = (
     32,  // caaES256
     48,  // caaES384
     66,  // caaES512

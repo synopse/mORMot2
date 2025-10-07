@@ -250,7 +250,7 @@ const
   // default 15-bit / 32KB size for the LZ77 window
   MAX_WBITS = 15;
   // the LZ77 window parameter value
-  Z_MAX_BITS: array[{ZlibFormat:}boolean] of integer = (
+  Z_MAX_BITS: array[{ZlibFormat:}boolean] of ShortInt = (
     -MAX_WBITS,   // raw output with no header or trailing checksum
      MAX_WBITS);  // include zlib-specific header
 

@@ -807,7 +807,7 @@ type
   end;
 
 const
-  USAGE_VALUE_LEN: array[mugHour..mugYear] of integer = (
+  USAGE_VALUE_LEN: array[mugHour..mugYear] of byte = (
     60, 24, 31, 12);
   USAGE_ID_SHIFT: array[mugHour..mugYear] of byte = (
     0, 5, 10, 14);
@@ -815,7 +815,7 @@ const
     5, 5, 4, 9);
   USAGE_ID_MASK: array[mugHour..mugYear] of integer = (
     31, 31, 15, 511);
-  USAGE_ID_MAX: array[mugHour..mugYear] of cardinal = (
+  USAGE_ID_MAX: array[mugHour..mugYear] of byte = (
     23, 30, 11, 127);
   USAGE_ID_HOURMARKER: array[mugDay..mugYear] of integer = (
     29, 30, 31);
