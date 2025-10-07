@@ -3736,7 +3736,7 @@ begin
 end;
 
 const
-  TIME_00: array[0 .. 8] of AnsiChar = '00:00:00Z';
+  TIME_00: array[0 .. 9] of AnsiChar = 'T00:00:00Z';
 
 procedure TTextDateWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
   QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
@@ -3774,8 +3774,8 @@ begin
     end
     else if twoDateTimeWithZ in fCustomOptions then
     begin
-      MoveFast(TIME_00, B^, 9);
-      inc(B, 8); // FireFox e.g. requires always some time part
+      MoveFast(TIME_00, B^, 10);
+      inc(B, 9); // FireFox e.g. requires always some time part
     end
     else
       dec(B);
