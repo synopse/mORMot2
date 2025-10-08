@@ -309,7 +309,7 @@ function ToText(opt: TTunnelOptions): ShortString; overload;
 
 /// extract the 32-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
-  {$ifdef FPC} inline; {$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 const
   toEncrypted = [toEcdhe, toEncrypt];
@@ -351,6 +351,7 @@ type
     fCount: integer;
     fInfoCacheTix32: cardinal;
     fInfoCache: TVariantDynArray;
+    function LockedExists(aSession: TTunnelSession): boolean;
   public
     /// append one ITunnelTransmit callback to the list
     function Add(aSession: TTunnelSession;
@@ -362,8 +363,6 @@ type
     function DeleteFrom(aList: TTunnelList): integer;
     /// search if one ITunnelTransmit matches a session ID
     function Exists(aSession: TTunnelSession): boolean;
-    /// search if one ITunnelTransmit matches a session ID
-    function ExistsLocked(aSession: TTunnelSession): boolean;
     /// ask the TunnelInfo of a given session ID as TDocVariant object
     procedure GetInfo(aSession: TTunnelSession; out aInfo: variant);
     /// ask all TunnelInfo of all opended sessions as TDocVariant array
@@ -586,7 +585,7 @@ function FrameSession(const Frame: RawByteString): TTunnelSession;
 var
   l: PtrInt;
 begin
-  l := length(Frame) - TRAIL_SIZE;
+  l := length(Frame) - SizeOf(TTunnelSession); // - TRAIL_SIZE
   if l >= 0 then
     result := PTunnelSession(@PByteArray(Frame)[l])^
   else
@@ -1250,7 +1249,7 @@ end;
 
 { TTunnelList }
 
-function TTunnelList.ExistsLocked(aSession: TTunnelSession): boolean;
+function TTunnelList.LockedExists(aSession: TTunnelSession): boolean;
 begin
   result := IntegerScanExists(pointer(fSession), fCount, aSession);
 end;
@@ -1513,7 +1512,7 @@ begin
         repeat
           result := Random32 shr 4; // a random session seems the best option
         until result <> 0;
-        if not fAgent.fList.ExistsLocked(result) then // not in agents list
+        if not fAgent.fList.LockedExists(result) then // not in agents list
           if LockedFindConsole(result) = nil then     // not in consoles list
             break;
         result := 0; // very unlikely with 28-bit range - but try up to 50 times
