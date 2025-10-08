@@ -1571,19 +1571,61 @@ type
   /// THttpPeerCacheSettings.Options values
   THttpPeerCacheOptions = set of THttpPeerCacheOption;
 
+  THttpServerCacheSettings = class(TSynPersistent)
+  protected
+    fCacheTempMaxMB, fCacheTempMaxMin,
+    fCacheTempMinBytes, fCachePermMinBytes: integer;
+    fCacheTempPath, fCachePermPath: TFileName;
+  published
+    /// location of the temporary cached files, available for remote requests
+    // - the files are cached using their THashDigest values as filename
+    // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
+    // - if this value equals '', or pcoNoServer is defined in Options,
+    // temporary caching would be disabled
+    property CacheTempPath: TFileName
+      read fCacheTempPath write fCacheTempPath;
+    /// above how many bytes the peer network should be asked for a temporary file
+    // - there is no size limitation if the file is already in the temporary
+    // cache, or if the waoNoMinimalSize option is specified by WGet()
+    // - default is 2048 bytes, i.e. 2KB
+    property CacheTempMinBytes: integer
+      read fCacheTempMinBytes  write fCacheTempMinBytes;
+    /// after how many MB in CacheTempPath the folder should be cleaned
+    // - default is 1000, i.e. just below 1 GB
+    // - THttpPeerCache.Create will also always ensure that this value won't
+    // take more than 25% of the CacheTempPath folder available space
+    property CacheTempMaxMB: integer
+      read fCacheTempMaxMB write fCacheTempMaxMB;
+    /// after how many minutes files in CacheTempPath could be cleaned
+    // - i.e. the Time-To-Live (TTL) of temporary files
+    // - default is 60 minutes, i.e. 1 hour
+    property CacheTempMaxMin: integer
+      read fCacheTempMaxMin write fCacheTempMaxMin;
+    /// location of the permanent cached files, available for remote requests
+    // - in respect to CacheTempPath, this folder won't be purged
+    // - the files are cached using their THashDigest values as filename
+    // - if this value equals '', or pcoNoServer is defined in Options,
+    // permanent caching would be disabled
+    property CachePermPath: TFileName
+      read fCachePermPath write fCachePermPath;
+    /// above how many bytes the peer network should be asked for a permanent file
+    // - there is no size limitation if the file is already in the permanent
+    // cache, or if the waoNoMinimalSize option is specified by WGet()
+    // - default is 2048 bytes, i.e. 2KB, which is just two network MTU trips
+    property CachePermMinBytes: integer
+      read fCachePermMinBytes  write fCachePermMinBytes;
+  end;
+
   /// define how THttpPeerCache handles its process
-  THttpPeerCacheSettings = class(TSynPersistent)
+  THttpPeerCacheSettings = class(THttpServerCacheSettings)
   protected
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
     fOptions: THttpPeerCacheOptions;
     fLimitMBPerSec, fLimitClientCount,
     fBroadcastTimeoutMS, fBroadcastMaxResponses, fBroadCastDirectMinBytes,
-    fTryAllPeersCount, fHttpTimeoutMS, fRejectInstablePeersMin,
-    fCacheTempMaxMB, fCacheTempMaxMin,
-    fCacheTempMinBytes, fCachePermMinBytes: integer;
+    fTryAllPeersCount, fHttpTimeoutMS, fRejectInstablePeersMin: integer;
     fInterfaceName, fUuid: RawUtf8;
-    fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
     // - i.e. Port=8099, LimitMBPerSec=10, LimitClientCount=32,
@@ -1669,43 +1711,6 @@ type
     // - default to low 500 ms because should be local
     property HttpTimeoutMS: integer
       read fHttpTimeoutMS write fHttpTimeoutMS;
-    /// location of the temporary cached files, available for remote requests
-    // - the files are cached using their THashDigest values as filename
-    // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
-    // - if this value equals '', or pcoNoServer is defined in Options,
-    // temporary caching would be disabled
-    property CacheTempPath: TFileName
-      read fCacheTempPath write fCacheTempPath;
-    /// above how many bytes the peer network should be asked for a temporary file
-    // - there is no size limitation if the file is already in the temporary
-    // cache, or if the waoNoMinimalSize option is specified by WGet()
-    // - default is 2048 bytes, i.e. 2KB
-    property CacheTempMinBytes: integer
-      read fCacheTempMinBytes  write fCacheTempMinBytes;
-    /// after how many MB in CacheTempPath the folder should be cleaned
-    // - default is 1000, i.e. just below 1 GB
-    // - THttpPeerCache.Create will also always ensure that this value won't
-    // take more than 25% of the CacheTempPath folder available space
-    property CacheTempMaxMB: integer
-      read fCacheTempMaxMB write fCacheTempMaxMB;
-    /// after how many minutes files in CacheTempPath could be cleaned
-    // - i.e. the Time-To-Live (TTL) of temporary files
-    // - default is 60 minutes, i.e. 1 hour
-    property CacheTempMaxMin: integer
-      read fCacheTempMaxMin write fCacheTempMaxMin;
-    /// location of the permanent cached files, available for remote requests
-    // - in respect to CacheTempPath, this folder won't be purged
-    // - the files are cached using their THashDigest values as filename
-    // - if this value equals '', or pcoNoServer is defined in Options,
-    // permanent caching would be disabled
-    property CachePermPath: TFileName
-      read fCachePermPath write fCachePermPath;
-    /// above how many bytes the peer network should be asked for a permanent file
-    // - there is no size limitation if the file is already in the permanent
-    // cache, or if the waoNoMinimalSize option is specified by WGet()
-    // - default is 2048 bytes, i.e. 2KB, which is just two network MTU trips
-    property CachePermMinBytes: integer
-      read fCachePermMinBytes  write fCachePermMinBytes;
     /// allow to customize the UUID used to identify this node
     // - instead of the default GetComputerUuid() from SMBios
     property Uuid: RawUtf8
@@ -1871,6 +1876,20 @@ type
   // - should override proper options (and/or header/URI) and return HTTP_SUCCESS
   TOnHttpPeerCacheDirectOptions = function(var aUri: TUri; var aHeader: RawUtf8;
     var aOptions: THttpRequestExtendedOptions): integer of object;
+
+  EHttpServerCache = class(ESynException);
+
+  THttpServerCacheOption = (
+    scoTempSubFolders,
+    scoTempNoCheckSize);
+  THttpServerCacheOptions = set of THttpServerCacheOption;
+
+  /// implement a HTTP server with local caching
+  // - used e.g. by THttpPeerCache
+  THttpServerCache = class
+  protected
+  public
+  end;
 
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery

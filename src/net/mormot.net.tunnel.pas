@@ -362,6 +362,8 @@ type
     function DeleteFrom(aList: TTunnelList): integer;
     /// search if one ITunnelTransmit matches a session ID
     function Exists(aSession: TTunnelSession): boolean;
+    /// search if one ITunnelTransmit matches a session ID
+    function ExistsLocked(aSession: TTunnelSession): boolean;
     /// ask the TunnelInfo of a given session ID as TDocVariant object
     procedure GetInfo(aSession: TTunnelSession; out aInfo: variant);
     /// ask all TunnelInfo of all opended sessions as TDocVariant array
@@ -1237,6 +1239,11 @@ end;
 
 
 { TTunnelList }
+
+function TTunnelList.ExistsLocked(aSession: TTunnelSession): boolean;
+begin
+  result := IntegerScanExists(pointer(fSession), fCount, aSession);
+end;
 
 function TTunnelList.Exists(aSession: TTunnelSession): boolean;
 begin
