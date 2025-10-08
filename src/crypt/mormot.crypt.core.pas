@@ -4100,10 +4100,11 @@ procedure TAes.EncryptInitRandom(Bits: integer);
 var
   rnd: THash256Rec;
 begin // note: we can't use Random128() here to avoid endless recursion
-  TAesPrng.Main.FillRandom(rnd.b);    // up to 256-bit from CSPRNG
+  TAesPrng.Main.FillRandom(rnd.b);    // 256-bit from CSPRNG
   EncryptInit(rnd, Bits);             // transient AES-128/256 secret
-  TAesPrng.Main.FillRandom(rnd.Lo);
-  TAesContext(Context).iv := rnd.l;   // safe IV from CSPRNG
+  if Bits <> 128 then
+    TAesPrng.Main.FillRandom(rnd.Hi); // need 128-bit more CSPRNG for IV
+  TAesContext(Context).iv := rnd.h;   // safe IV from CSPRNG
   FillZero(rnd.b);                    // anti-forensic
 end;
 
