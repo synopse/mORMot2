@@ -521,6 +521,8 @@ type
     fAgentInstance: ITunnelAgent;
     function HasConsolePrepared(aSession: TTunnelSession): boolean;
     function LockedFindConsole(aSession: TTunnelSession): TTunnelConsole;
+    function PrepareNewSession(aEndPoint: TTunnelOpen;
+      const callback: ITunnelTransmit): TTunnelSession;
     // search for matching fConsole[].TunnelSend
     procedure ConsoleTunnelSend(const Frame: RawByteString);
     // TInterfaceResolver method to resolve ITunnelConsole instances
@@ -1482,6 +1484,45 @@ begin
   result := nil;
 end;
 
+function TTunnelRelay.PrepareNewSession(aEndPoint: TTunnelOpen;
+  const callback: ITunnelTransmit): TTunnelSession;
+var
+  n: integer;
+begin
+  result := 0;
+  if (self = nil) or
+     (fAgent = nil) or
+     (aEndPoint = nil) or
+     (callback = nil) then
+    exit;
+  fConsoleSafe.WriteLock; // make all TunnelPrepare() calls thread-safe
+  try
+    // 1. generate a new random session number
+    fAgent.fList.Safe.WriteLock;
+    try
+      for n := 1 to 50 do // never loop forever
+      begin
+        repeat
+          result := Random32 shr 4; // a random session seems the best option
+        until result <> 0;
+        if not fAgent.fList.ExistsLocked(result) then // not in agents list
+          if LockedFindConsole(result) = nil then     // not in consoles list
+            break;
+        result := 0; // very unlikely with 28-bit range - but try up to 50 times
+        fLogClass.Add.Log(sllDebug, 'TunnelPrepare: collision #%', [n], self);
+      end;
+    finally
+      fAgent.fList.Safe.WriteUnLock; // avoid AddTransient() lock from TTunnelAgent
+    end;
+    // 2. add to the corresponding endpoint transient list
+    if result <> 0 then
+      if not aEndPoint.AddTransient(result, callback) then
+        result := 0; // unexpected failure
+  finally
+    fConsoleSafe.WriteUnLock;
+  end;
+end;
+
 procedure TTunnelRelay.ConsoleTunnelSend(const Frame: RawByteString);
 var
   s: TTunnelSession;
@@ -1644,6 +1685,7 @@ var
   gctxt: TShort16;
 begin
   gctxt[0] := #0;
+  // add this session to the main list
   result := fList.Add(aSession, callback);
   try
     if not result then
