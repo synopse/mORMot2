@@ -760,7 +760,7 @@ type
     procedure InternalTrackChangeUpdated(aRec: TOrm; const Fields: TFieldBits);
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetFileName(const aFileName: TFileName);
-    procedure ComputeStateAfterLoad(var loaded: TPrecisionTimer; binary: boolean);
+    procedure ComputeStateAfterLoad(loadstart: Int64; binary: boolean);
     procedure SetBinaryFile(aBinary: boolean);
     procedure GetJsonValuesEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
@@ -3423,7 +3423,7 @@ begin
 end;
 
 procedure TRestStorageInMemory.ComputeStateAfterLoad(
-  var loaded: TPrecisionTimer; binary: boolean);
+  loadstart: Int64; binary: boolean);
 const
   _CALLER: array[boolean] of string[7] = (
     'Json', 'Binary');
@@ -3431,11 +3431,10 @@ var
   f: PtrInt;
   dup: integer; // should be an integer and not a PtrInt for ForceRehash(@dup)
   dupfield: RawUtf8;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
   // now fValue[] contains the just loaded data
-  loaded.Pause;
-  timer.Start;
+  QueryPerformanceMicroSeconds(start);
   fCount := length(fValue);
   fValues.Hasher.ForceReHash(@dup);
   if dup > 0 then
@@ -3470,17 +3469,18 @@ begin
     // JSON may have been tempered, so we actually ensure IDs are sorted
     fMaxID := FindMaxIDAndCheckSorted(pointer(fValue), fCount, fUnSortedID);
   InternalLog('LoadFrom% % count=% load=% index=%',
-    [_CALLER[binary], fStoredClass, fCount, loaded.Stop, timer.Stop]);
+    [_CALLER[binary], fStoredClass, fCount,
+     MicroSecToString(start - loadstart), MicroSecFrom(start)]);
 end;
 
 function TRestStorageInMemory.LoadFromJson(
   JsonBuffer: PUtf8Char; JsonBufferLen: PtrInt): boolean;
 var
   T: TOrmTableJson;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
   result := false;
-  timer.Start;
+  QueryPerformanceMicroSeconds(start);
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'LoadFromJson' {$endif});
   try
     if fCount > 0 then
@@ -3497,7 +3497,7 @@ begin
     finally
       T.Free;
     end;
-    ComputeStateAfterLoad(timer, {binary=}false);
+    ComputeStateAfterLoad(start, {binary=}false);
   finally
     StorageUnLock;
   end;
@@ -3588,13 +3588,13 @@ var
   rec: TOrm;
   id: QWord;
   s: RawUtf8;
-  prop: TOrmPropInfo;
-  timer: TPrecisionTimer;
+  nfo: TOrmPropInfo;
+  start: Int64;
 begin
   result := false;
   if self = nil then
     exit;
-  timer.Start;
+  QueryPerformanceMicroSeconds(start);
   MS := AlgoSynLZ.StreamUnCompress(Stream, TRESTSTORAGEINMEMORY_MAGIC);
   if MS = nil then
     exit;
@@ -3639,11 +3639,11 @@ begin
       // read content, grouped by field (for better compression)
       for f := 0 to fStoredClassRecordProps.Fields.Count - 1 do
       begin
-        prop := fStoredClassRecordProps.Fields.List[f];
+        nfo := fStoredClassRecordProps.Fields.List[f];
         for i := 0 to n - 1 do
-          prop.SetBinary(fValue[i], R);
+          nfo.SetBinary(fValue[i], R);
       end;
-      ComputeStateAfterLoad(timer, {binary=}true);
+      ComputeStateAfterLoad(start, {binary=}true);
       result := true;
     except
       DropValues(false); // on error, reset all values and return false
