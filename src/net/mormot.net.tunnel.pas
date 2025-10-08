@@ -463,7 +463,7 @@ type
     function AddTransient(aSession: TTunnelSession;
       const callback: ITunnelTransmit): boolean;
     function RemoveTransient(aSession: TTunnelSession): boolean;
-    procedure DeleteTransient(ndx: PtrInt);
+    function DeleteTransient(ndx: PtrInt): boolean;
     // ITunnelOpen methods
     function TunnelCommit(aSession: TTunnelSession): boolean;
     function TunnelRollback(aSession: TTunnelSession): boolean;
@@ -1718,7 +1718,9 @@ begin
       for i := n - 1 downto 0 do
         if cardinal(fSessionTix[i]) + fTimeOutSecs < tix32 then
         begin
-          fList.Delete(fSession[i]);
+          if not fList.Delete(fSession[i]) then
+            fLogClass.Add.Log(sllTrace,
+              'AddTransient(): deprecated Delete(%) failed', [i], self);
           DeleteTransient(i);
           inc(gc);
         end;
@@ -1740,10 +1742,8 @@ begin
   fSafe.WriteLock;
   try
     ndx := IntegerScanIndex(pointer(fSession), fSessionCount, aSession);
-    if ndx < 0 then
-      exit;
-    DeleteTransient(ndx);
-    result := true;
+    if ndx >= 0 then
+      result := DeleteTransient(ndx);
   finally
     fSafe.WriteUnLock;
     fLogClass.Add.Log(sllTrace, 'RemoveTransient(%)=% count=%',
@@ -1751,10 +1751,14 @@ begin
   end;
 end;
 
-procedure TTunnelOpen.DeleteTransient(ndx: PtrInt);
+function TTunnelOpen.DeleteTransient(ndx: PtrInt): boolean;
 begin
+  result := false;
+  if PtrUInt(ndx) >= PtrUInt(fSessionCount) then
+    exit; // paranoid
   DeleteInteger(fSession, fSessionCount, ndx);
   UnmanagedDynArrayDelete(fSessionTix, fSessionCount, ndx, SizeOf(cardinal));
+  result := true;
 end;
 
 function TTunnelOpen.TunnelCommit(aSession: TTunnelSession): boolean;
