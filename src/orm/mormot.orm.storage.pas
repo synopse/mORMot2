@@ -3505,7 +3505,7 @@ end;
 
 procedure TRestStorageInMemory.SaveToJson(Stream: TStream; Expand: boolean);
 var
-  i, j: PtrInt;
+  i: PtrInt;
   W: TOrmWriter;
   ndx: TIntegerDynArray;
 begin
@@ -3525,10 +3525,9 @@ begin
         if Expand then
           W.AddCR; // for better readability
         if ndx = nil then
-          j := i
+          fValue[i].GetJsonValues(W)
         else
-          j := ndx[i];
-        fValue[j].GetJsonValues(W);
+          fValue[ndx[i]].GetJsonValues(W);
         W.AddComma;
       end;
       W.EndJsonObject(fCount, fCount);
@@ -3685,15 +3684,86 @@ begin
   end;
 end;
 
+function SaveID32(v: POrmArray; ndx, id32: PIntegerArray; n: PtrInt): boolean;
+var
+  i: PtrInt;
+  id: TID;
+begin
+  result := false;
+  i := 0;
+  if n <> 0 then
+    if ndx = nil then
+      repeat
+        id := v[i].IDValue;
+        id32[i] := id;
+        inc(i);
+        id := id shr 32; // optimized for FPC 64-bit
+        if id <> 0 then
+          exit;          // need to call SaveID64()
+      until i = n
+    else
+      repeat
+        id := v[ndx[i]].IDValue; // version following ndx[] order
+        id32[i] := id;
+        inc(i);
+        id := id shr 32;
+        if id <> 0 then
+          exit;
+      until i = n;
+  result := true; // perfect match for wkSorted
+end;
+
+procedure SaveID64(v: POrmArray; ndx: PIntegerArray; W: TBufferWriter; n: PtrInt);
+var
+  i: PtrInt;
+  lastID, newID: TID;
+begin
+  lastID := 0;
+  i := 0;
+  repeat
+    if ndx <> nil then
+      newID := v[ndx[i]].IDValue
+    else
+      newID := v[i].IDValue;
+    if newID <= lastID then
+      ERestStorage.RaiseUtf8('SaveToBinary: duplicated ID=%', [newID]);
+    // a bit less efficient than wkSorted (no optimization of +1 diff)
+    W.WriteVarUInt64(newID - lastID);
+    lastID := newID;
+    inc(i);
+  until i = n;
+end;
+
+procedure SaveContent(v: POrmArray; W: TBufferWriter; nfo: TOrmPropInfo; n: PtrInt);
+var
+  i: PtrInt;
+begin
+  i := 0;
+  repeat
+    nfo.GetBinary(v[i], W);
+    inc(i);
+  until i = n;
+end;
+
+procedure SaveContentIndexed(v: POrmArray; ndx: PIntegerArray; W: TBufferWriter;
+  nfo: TOrmPropInfo; n: PtrInt);
+var
+  i: PtrInt;
+begin
+  i := 0;
+  repeat
+    nfo.GetBinary(v[ndx[i]], W); // version following ndx[] order
+    inc(i);
+  until i = n;
+end;
+
 function TRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var
   W: TBufferWriter;
   MS: TMemoryStream;
-  i, j, f: PtrInt;
-  hasInt64ID: boolean;
-  p: PID;
-  lastID, newID: TID;
+  f: PtrInt;
   ndx, id32: TIntegerDynArray;
+  nfo: TOrmPropInfo;
 begin
   result := 0;
   if (self = nil) or
@@ -3711,55 +3781,26 @@ begin
       if fUnSortedID then
         fValues.CreateOrderedIndex(ndx, nil);
       SetLength(id32, fCount);
-      hasInt64ID := false;
-      for i := 0 to fCount - 1 do
-      begin
-        if ndx = nil then
-          j := i
-        else
-          j := ndx[i];
-        p := @fValue[j].IDValue;
-        if p^ > high(cardinal) then
-        begin
-          hasInt64ID := true;
-          break;
-        end
-        else
-          id32[i] := PInteger(p)^;
-      end;
-      if hasInt64ID then
+      if SaveID32(pointer(fValue), pointer(ndx), pointer(id32), fCount) then
+        // we can use the efficient wkSorted algorithm on id32[] values
+        W.WriteVarUInt32Values(pointer(id32), fCount, wkSorted)
+      else
       begin
         // some IDs are 64-bit -> manual store difference as WriteVarUInt64
         W.WriteVarUInt32(fCount);
-        W.Write1(ord(wkFakeMarker)); // fake marker
-        lastID := 0;
-        for i := 0 to fCount - 1 do
-        begin
-          // a bit less efficient than wkSorted (no optimization of +1 diff)
-          if ndx = nil then
-            j := i
-          else
-            j := ndx[i];
-          newID := fValue[j].IDValue;
-          if newID <= lastID then
-            ERestStorage.RaiseUtf8('%.SaveToBinary(%): duplicated ID',
-              [self, fStoredClass]);
-          W.WriteVarUInt64(newID - lastID);
-          lastID := newID;
-        end;
-      end
-      else
-        // we can use the efficient wkSorted algorithm on id32[] values
-        W.WriteVarUInt32Values(pointer(id32), fCount, wkSorted);
+        W.Write1(ord(wkFakeMarker)); // notify not real WriteVarUInt32Values()
+        SaveID64(pointer(fValue), pointer(ndx), W, fCount);
+      end;
       // write content, grouped by field (for better compression)
-      for f := 0 to fStoredClassRecordProps.Fields.Count - 1 do
-        with fStoredClassRecordProps.Fields.List[f] do
+      if fCount <> 0 then
+        for f := 0 to fStoredClassRecordProps.Fields.Count - 1 do
+        begin
+          nfo := fStoredClassRecordProps.Fields.List[f];
           if ndx = nil then
-            for i := 0 to fCount - 1 do
-              GetBinary(fValue[i], W)
+            SaveContent(pointer(fValue), W, nfo, fCount)
           else
-            for i := 0 to fCount - 1 do
-              GetBinary(fValue[ndx[i]], W);
+            SaveContentIndexed(pointer(fValue), pointer(ndx), W, nfo, fCount);
+        end;
     finally
       StorageUnLock;
     end;
