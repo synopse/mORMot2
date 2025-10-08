@@ -1201,11 +1201,11 @@ begin
     _sub256(Point.y, Curve_P_32, Point.y);
 end;
 
-const
-  MAX_TRIES = 16; // work almost always on the first trial with TAesPrng
-
 var
-  EccMakeEntropy: THash128Rec; // ensure forward secrecy
+  EccMakeEntropy: THash128Rec; // ensure forward secrecy - from BaseEntropy.r[3]
+
+const
+  MAX_TRIES = 16; // work almost always on the first try with Random128/TAesPrng
 
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
@@ -1225,7 +1225,7 @@ begin
     // - keys may be ephemeral so use our fast but safe CSPRNG as KDF source
     kdf.Init(@EccMakeEntropy, SizeOf(EccMakeEntropy));
     kdf.Update(@tries, SizeOf(tries)); // avoid infinite loop
-    TAesPrng.Main.FillRandom(priv.b);  // 256-bit from CSPRNG (max key size)
+    TAesPrng.Main.FillRandom(priv.b);  // 256-bit from our strong CSPRNG
     kdf.Update(@priv, SizeOf(priv));
     crcblock(@EccMakeEntropy, @priv);  // simple forward secrecy
     kdf.Done(priv.b);                  // apply the HMAC-SHA-256 safe KDF
@@ -1328,6 +1328,23 @@ begin
   _bswap256(@p.h, @u.h);
 end;
 
+function _RandomPoint(var rnd: THash256Rec): boolean;
+var
+  tries: integer;
+begin
+  result := false;
+  tries := MAX_TRIES;
+  repeat
+    dec(tries);
+    if tries = 0 then
+      exit;
+    Random128(@rnd.l, @rnd.h); // fast unpredictable 256-bit
+  until not (_isZero(rnd) or
+             _equals(rnd, _1) or
+             _equals(rnd, _11));
+  result := true;
+end;
+
 function ecdh_shared_secret_uncompressed_pas(
   const PublicPoint: TEccPublicKeyUncompressed;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
@@ -1335,18 +1352,10 @@ var
   priv: THash256Rec;
   product: TEccPoint;
   rnd: THash256Rec; // random lambda element in projective form to protect priv
-  n: integer;
 begin
-  result := false;
-  n := 10;
-  repeat
-    Random128(@rnd.l, @rnd.h); // fast unpredictable 256-bit
-    dec(n);
-    if n = 0 then
-      exit; // never try forever if our PRNG is compromised
-  until not (_isZero(rnd) or
-             _equals(rnd, _1) or
-             _equals(rnd, _11));
+  result := _RandomPoint(rnd);
+  if not result then
+    exit;
   _bswap256(@priv, @PrivateKey);
   EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
   _bswap256(@Secret, @product.x);
@@ -1435,16 +1444,12 @@ var
   tries: integer;
 begin
   result := false;
-  tries := 0;
+  tries := MAX_TRIES;
   repeat
-    inc(tries);
-    Random128(@k.l, @k.h); // fast unpredictable 256-bit
-    if tries >= MAX_TRIES then
-      exit; // the random generator seems broken
-    if _isZero(k) or
-       _equals(k, _1) or
-       _equals(k, _11) then
-      continue;
+    dec(tries);
+    if (tries = 0) or
+       not _RandomPoint(k) then // fast unpredictable 256-bit
+      exit;
     if _cmp256(Curve_N_32, k) <= 0 then
       _dec256(k, Curve_N_32);
     // temp = k * G
