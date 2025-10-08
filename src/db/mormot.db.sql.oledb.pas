@@ -77,6 +77,9 @@ const
 type
   TSqlDBOleDBConnection = class;
 
+  /// meta-class of all OleDB connection properties classes
+  TSqlDBOleDBConnectionPropertiesClass = class of TSqlDBOleDBConnectionProperties;
+
   TSqlDBOleDBOnCustomError = function(Connection: TSqlDBOleDBConnection;
     ErrorRecords: IErrorRecords; RecordNum: cardinal): boolean of object;
 
@@ -539,7 +542,6 @@ type
     // - will handle Microsoft SQL Server error messages (if any)
     function MSOnCustomError(Connection: TSqlDBOleDBConnection;
       ErrorRecords: IErrorRecords; RecordNum: cardinal): boolean;
-  public
   end;
 
   /// OleDB connection properties to Microsoft SQL Server 2005, via
