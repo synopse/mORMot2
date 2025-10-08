@@ -384,39 +384,42 @@ type
 type
   /// abstract parent to ITunnelAgent/ITunnelConsole service endpoints
   // - with shared methods to validate or cancel a two-phase startup
+  // - here "agent" is a simple TTunnelLocal application opening a localhost
+  // port, for transmitting some information (e.g. a VNC server) to a remote
+  // "console" with its own TTunnelLocal redirected port (e.g. a VNC viewer)
   // - the steps of a TTunnelRelay session are therefore:
   // 1) TTunnelLocalClient/TTunnelLocalServer.Create as ITunnelTransmit callbacks
   // 2) ITunnelConsole/ITunnelAgent.TunnelPrepare() to retrieve a session ID;
   // 3) ITunnelAgent/ITunnelConsole.TunnelAccept() with this session ID;
   // 4) TTunnelLocal.Open() on the console and agent sides to start tunnelling
-  // on a localhost TCP port;
+  // on a localhost TCP port (as server or client);
   // 5a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result or
-  // 5b) after a timeout, missing TunnelCommit/TunnelRollback would delete any
-  // unfinished TunnelPrepare from an internal transient/pending list
+  // 5b) after a timeout, the relay would delete any TunnelPrepare missing
+  // proper TunnelAccept or TunnelCommit/TunnelRollback from its internal list
   ITunnelOpen = interface(ITunnelTransmit)
+    /// initiate a new relay process as a two-phase commit from this end
+    // - caller should call this method, then TTunnelLocal.Open() on its side,
+    // and once the handhake is OK or KO, call TunnelCommit or TunnelRollback
+    function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
+    /// accept a new relay process as a two-phase commit from this end
+    // - the relay was initiated by TunnelPrepare on the other end, and the
+    // returned  session should be specified to this method
+    // - caller should call this method, then TTunnelLocal.Open() on its side,
+    // and once the handhake is OK or KO, call TunnelCommit or TunnelRollback
+    function TunnelAccept(aSession: TTunnelSession;
+      const callback: ITunnelTransmit): boolean;
     /// finalize a relay process startup after Open() success
     // - now ITunnelTransmit.TunnelSend will redirect frames from both sides
     function TunnelCommit(aSession: TTunnelSession): boolean;
     /// abort a relay after Open() failed
     // - now this session will be flushed from the internal list
     function TunnelRollback(aSession: TTunnelSession): boolean;
-    /// initiate a new relay process as a two-phase commit from this end
-    // - caller should call this method, then TTunnelLocal.Open() on its side,
-    // and once the handhake is ok or ko, call TunnelCommit or TunnelRollback
-    function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
-    /// accept a new relay process as a two-phase commit from this end
-    // - the relay was initiated by ITunnelAgent.TunnelPrepare on the other end,
-    // and the returned session should be specified to this command
-    // - caller should call this method, then TTunnelLocal.Open() on its side,
-    // and once the handhake is ok or ko, call TunnelCommit or TunnelRollback
-    function TunnelAccept(aSession: TTunnelSession;
-      const callback: ITunnelTransmit): boolean;
   end;
 
   /// service endpoint called by the consoles on the Relay Server
-  // - ITunnelAgent/ITunnelConsole.TunnelPrepare() initiate the relay process,
+  // - ITunnelAgent/ITunnelConsole.TunnelPrepare() initiates the relay process,
   // and the corresponding ITunnelConsole/ITunnelAgent.TunnelAccept() method
-  // setup the connection on the other end
+  // setups the connection on the other end
   // - this service also supplies ITunnelTransmit to send remote frames, and is
   // likely to be implemented as sicPerSession over our SOA WebSockets
   // - ITunnelTransmit.TunnelInfo will be implemented and return information
@@ -424,15 +427,16 @@ type
   // - when the interface is released, will cancel all corresponding sessions
   ITunnelConsole = interface(ITunnelOpen)
     ['{9453C229-9D4A-4F93-B5B3-E4A05E28267F}']
-    /// could be used to define a TDocVariant object about this console
-    // - will be completed with "agents":[] array with each associated agents
+    /// could be used to define a TDocVariant state object about this console
+    // - ITunnelConsole.TunnelInfo will include this value, and will be
+    // completed with "agents":[] array with each associated agent
     procedure TunnelSetInfo(const info: variant);
   end;
 
   /// service endpoint called by the agents on the Relay Server
-  // - here "agent" is a simple TTunnelLocal application opening a localhost
-  // port, for transmitting some information (e.g. a VNC server) to a remote
-  // "console" with its own TTunnelLocal redirected port (e.g. a VNC viewer)
+  // - ITunnelAgent/ITunnelConsole.TunnelPrepare() initiates the relay process,
+  // and the corresponding ITunnelConsole/ITunnelAgent.TunnelAccept() method
+  // setups the connection on the other end
   // - this service also supplies ITunnelTransmit to send remote frames, and is
   // likely to be implemented as sicShared over our SOA WebSockets
   ITunnelAgent = interface(ITunnelOpen)
@@ -443,8 +447,8 @@ type
 
   /// abstract parent of TTunnelConsole/TTunnelAgent
   // - maintain a list of working tunnels for ITunnelTransmit.TunnelSend() relay
-  // - maintain also a list of transient/pending sessions, to be purged after
-  // a timeout if TunnelCommit/TunnelRollback() has not been called soon enough
+  // - maintain also a list of transient/pending sessions, to be purged after a
+  // timeout on missing TunnelAccept() or TunnelCommit/TunnelRollback() calls
   TTunnelOpen = class(TInterfacedObjectRWLightLocked)
   protected
     fOwner: TTunnelRelay;
