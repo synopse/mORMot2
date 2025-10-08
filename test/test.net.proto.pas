@@ -1751,7 +1751,7 @@ begin
     check(Assigned(agentcallback[i]));
     check(Assigned(consolecallback[i]));
   end;
-  // 2) ITunnelConsole.TunnelPrepare() to retrieve a session
+  // 2) ITunnelConsole/ITunnelAgent.TunnelPrepare/TunnelAccept
   if Assigned(log) then
     log.Log(sllInfo, 'Tunnel: ITunnelOpen.TunnelPrepare', self);
   SetLength(session, AGENT_COUNT);
@@ -1759,20 +1759,27 @@ begin
   begin
     c := i mod length(console); // round-robin of agents over consoles
     Check(c <= high(console));
-    session[i] := console[c].TunnelPrepare(consolecallback[i]);
-    check(session[i] <> 0);
-    for j := 0 to i - 1 do
-      check(session[j] <> session[i], 'unique session');
-    // 3) ITunnelAgent.TunnelPrepare() with this session
     if i >= length(agent) then
       a := agent[0]
     else
       a := agent[i];
-    check(a.TunnelPrepare(session[i], agentcallback[i]));
+    if (i and 3) = 0 then // initiate from one endpoint or the other
+    begin
+      session[i] := console[c].TunnelPrepare(consolecallback[i]);
+      check(a.TunnelAccept(session[i], agentcallback[i]));
+    end
+    else
+    begin
+      session[i] := a.TunnelPrepare(agentcallback[i]);
+      check(console[c].TunnelAccept(session[i], consolecallback[i]));
+    end;
+    check(session[i] <> 0, 'session=0');
+    for j := 0 to i - 1 do
+      check(session[j] <> session[i], 'unique session');
   end;
   if not CheckEqual(relay.ConsoleCount, length(console), 'ConsoleCount') then
     exit; // all console[] should be connected to the relay
-  // 4) TTunnelLocal.Open() on the console and agent sides
+  // 3) TTunnelLocal.Open() on the console and agent sides
   if Assigned(log) then
     log.Log(sllInfo, 'Tunnel: reciprocal Open() handshake', self);
   try
@@ -1783,8 +1790,7 @@ begin
         a := agent[0]
       else
         a := agent[i];
-      worker[i] := TunnelBackgroundOpen(agentlocal[i],
-        session[i], a, nil, nil);
+      worker[i] := TunnelBackgroundOpen(agentlocal[i], session[i], a, nil, nil);
       c := i mod length(console); // round-robin of agents over consoles
       local := consolelocal[i].Open(
         session[i], console[c], tunneloptions, 1000, tunnelappsec, cLocalhost,
