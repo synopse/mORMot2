@@ -1379,13 +1379,14 @@ function BinToBase32Length(BinLen: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// conversion from a binary buffer into Base32 encoded text  buffer
-// - default b32enc is RFC4648 upper alphanumeric without misleading 0O 1I 8B
+// - default Encoder is RFC4648 upper alphanumeric without misleading 0O 1I 8B
 procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt;
-  b32enc: PAnsiChar); overload;
+  Encoder: PAnsiChar); overload;
 
 /// conversion from a binary buffer into Base32 encoded text as RawUtf8
-// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
-function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8; overload;
+// - RFC4648 Base32 is defined as alphanumeric without misleading 0O 1I 8B
+function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt;
+  LowerCase: boolean = false): RawUtf8; overload;
 
 /// conversion from a binary buffer into Base32 encoded text as RawUtf8
 // - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
@@ -6423,6 +6424,21 @@ end;
 
 { ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
+procedure FillBaseDecoderChars(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+begin
+  repeat
+    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
+    dec(i);
+  until i = 0;
+  d[s[0]] := 0;
+end;
+
+procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+begin
+  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
+  FillBaseDecoderChars(s, d, i);
+end;
+
 
 { --------- Base64 encoding/decoding }
 
@@ -7360,7 +7376,7 @@ begin
     result := ((BinLen div 5) + cardinal(ord((BinLen mod 5) <> 0))) shl 3;
 end;
 
-procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt; b32enc: PAnsiChar);
+procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt; Encoder: PAnsiChar);
 const
   b32pad: array[0..4] of byte = (8, 6, 4, 3, 1);
 var
@@ -7370,17 +7386,17 @@ begin
   begin
     c := Bin[0];
     d := Bin[1];
-    Dest[0] := b32enc[(c and $f8) shr 3];
-    Dest[1] := b32enc[((d and $c0) shr 6) or ((c and $07) shl 2)];
-    Dest[2] := b32enc[(d and $3e) shr 1];
+    Dest[0] := Encoder[(c and $f8) shr 3];
+    Dest[1] := Encoder[((d and $c0) shr 6) or ((c and $07) shl 2)];
+    Dest[2] := Encoder[(d and $3e) shr 1];
     c := Bin[2];
-    Dest[3] := b32enc[((c and $f0) shr 4) or ((d and $01) shl 4)];
+    Dest[3] := Encoder[((c and $f0) shr 4) or ((d and $01) shl 4)];
     d := Bin[3];
-    Dest[4] := b32enc[((d and $80) shr 7) or ((c and $0f) shl 1)];
-    Dest[5] := b32enc[(d and $7c) shr 2];
+    Dest[4] := Encoder[((d and $80) shr 7) or ((c and $0f) shl 1)];
+    Dest[5] := Encoder[(d and $7c) shr 2];
     c := Bin[4];
-    Dest[6] := b32enc[((c and $e0) shr 5) or ((d and $03) shl 3)];
-    Dest[7] := b32enc[c and $1f];
+    Dest[6] := Encoder[((c and $e0) shr 5) or ((d and $03) shl 3)];
+    Dest[7] := Encoder[c and $1f];
     dec(BinLen, 5);
     if BinLen = 0 then
       exit;
@@ -7389,34 +7405,34 @@ begin
   end;
   repeat // remaining 1..4 bytes in a "repeat until true" block to avoid goto
     c := Bin[0];
-    Dest[0] := b32enc[(c and $f8) shr 3];
+    Dest[0] := Encoder[(c and $f8) shr 3];
     c := (c and $07) shl 2;
     if BinLen < 2 then
     begin
-      Dest[1] := b32enc[c];
+      Dest[1] := Encoder[c];
       break;
     end;
     d := Bin[1];
-    Dest[1] := b32enc[((d and $c0) shr 6) or c];
-    Dest[2] := b32enc[(d and $3e) shr 1];
+    Dest[1] := Encoder[((d and $c0) shr 6) or c];
+    Dest[2] := Encoder[(d and $3e) shr 1];
     c := (d and $01) shl 4;
     if BinLen < 3 then
     begin
-      Dest[3] := b32enc[c];
+      Dest[3] := Encoder[c];
       break;
     end;
     d := Bin[2];
-    Dest[3] := b32enc[((d and $f0) shr 4) or c];
+    Dest[3] := Encoder[((d and $f0) shr 4) or c];
     c := (d and $0f) shl 1;
     if BinLen < 4 then
     begin
-      Dest[4] := b32enc[c];
+      Dest[4] := Encoder[c];
       break;
     end;
     d := Bin[3];
-    Dest[4] := b32enc[((d and $80) shr 7) or c];
-    Dest[5] := b32enc[(d and $7c) shr 2];
-    Dest[6] := b32enc[(d and $03) shl 3];
+    Dest[4] := Encoder[((d and $80) shr 7) or c];
+    Dest[5] := Encoder[(d and $7c) shr 2];
+    Dest[6] := Encoder[(d and $03) shl 3];
   until true;
   BinLen := b32pad[BinLen];
   inc(Dest, 7 - BinLen);
@@ -7427,15 +7443,17 @@ begin
 end;
 
 const
-  b32enc: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  b32encUpp: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  b32encLow: array[0..31] of AnsiChar = 'abcdefghijklmnopqrstuvwxyz234567';
+  b32enc: array[boolean] of PAnsiChar = (@b32encUpp, @b32encLow);
 var
   ConvertBase32ToBin: TAnsiCharDec;
 
-function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8;
+function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt; LowerCase: boolean): RawUtf8;
 begin
   FastSetString(result, BinToBase32Length(BinLen));
   if result <> '' then
-    BinToBase32(pointer(Bin), pointer(result), BinLen, @b32enc);
+    BinToBase32(pointer(Bin), pointer(result), BinLen, b32enc[LowerCase]);
 end;
 
 function BinToBase32(const Bin: RawByteString): RawUtf8;
@@ -7533,7 +7551,10 @@ begin
      ((B32Len and 7) = 0) then
   begin
     if ConvertBase32ToBin[#255] = 0 then // delayed thread-safe initialization
-      FillBaseDecoder(@b32enc, @ConvertBase32ToBin, high(b32enc));
+    begin
+      FillBaseDecoder(@b32encUpp, @ConvertBase32ToBin, high(b32encUpp));
+      FillBaseDecoderChars(@b32encLow, @ConvertBase32ToBin, high(b32encLow));
+    end;
     p := Base32Decode(@ConvertBase32ToBin, B32,
       FastNewRawByteString(result, (B32Len shr 3) * 5), B32Len);
     if p <> nil then
@@ -7548,16 +7569,6 @@ end;
 function Base32ToBin(const base32: RawUtf8): RawByteString;
 begin
   result := Base32ToBin(pointer(base32), length(base32));
-end;
-
-procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
-begin
-  FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
-  repeat
-    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
-    dec(i);
-  until i = 0;
-  d[s[0]] := 0;
 end;
 
 function BlobToRawBlob(P: PUtf8Char; Len: integer): RawBlob;

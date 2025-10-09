@@ -398,13 +398,13 @@ type
   ITunnelOpen = interface(ITunnelTransmit)
     /// initiate a new relay process as a two-phase commit from this end
     // - caller should call this method, then TTunnelLocal.Open() on its side,
-    // and once the handhake is OK or KO, call TunnelCommit or TunnelRollback
+    // and once the handshake is OK or KO, call TunnelCommit or TunnelRollback
     function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
     /// accept a new relay process as a two-phase commit from this end
     // - the relay was initiated by TunnelPrepare on the other end, and the
     // returned  session should be specified to this method
     // - caller should call this method, then TTunnelLocal.Open() on its side,
-    // and once the handhake is OK or KO, call TunnelCommit or TunnelRollback
+    // and once the handshake is OK or KO, call TunnelCommit or TunnelRollback
     function TunnelAccept(aSession: TTunnelSession;
       const callback: ITunnelTransmit): boolean;
     /// finalize a relay process startup after Open() success
