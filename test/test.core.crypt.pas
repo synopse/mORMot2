@@ -2309,6 +2309,14 @@ begin
   CheckEqual(Base32ToBin('MZXW6YTBOI======'), 'foobar');
   CheckEqual(Base32ToBin('MZXW6YTB1'), '');
   CheckEqual(Base32ToBin('MZXW6YTB========'), '');
+  CheckEqual(Base32ToBin('my======'), 'f');
+  CheckEqual(Base32ToBin('mzxq===='), 'fo');
+  CheckEqual(Base32ToBin('mzxw6==='), 'foo');
+  CheckEqual(Base32ToBin('mzxw6yq='), 'foob');
+  CheckEqual(Base32ToBin('mzxw6ytb'), 'fooba');
+  CheckEqual(Base32ToBin('mzxw6ytboi======'), 'foobar');
+  CheckEqual(Base32ToBin('mzxw6ytb1'), '');
+  CheckEqual(Base32ToBin('mzxw6ytb========'), '');
   tmp := '';
   for i := 1 to 1982 do
   begin
