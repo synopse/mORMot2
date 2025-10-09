@@ -1168,7 +1168,7 @@ type
     fIfModifiedSince: boolean;
     fMethods: TUriRouterMethods;
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
-    fAlgos: THashAlgos;
+    fAlgos: THashAlgos; // hfMD5,hfSha1,hfSha256
     fCacheControlMaxAgeSec: integer;
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
@@ -1176,7 +1176,7 @@ type
     fLocalFolder: TFileName;
     fRemoteUri: TUri;
     fMemCached: TSynDictionary;  // Uri:RawUtf8 / Content:RawByteString
-    fHashCached: TSynDictionary; // Uri: RawUtf8 / sha256+md5: TRawUtf8DynArray
+    fHashCached: TSynDictionary; // Uri: RawUtf8 / hash[fAlgos]: TRawUtf8DynArray
     fReject: TUriMatch;
     function ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
       const name: RawUtf8; var fn: TFileName): integer;
@@ -1245,8 +1245,9 @@ type
     psoDisableMemCache,
     psoNoFolderHtmlIndex,
     psoDisableFolderHtmlIndexCache,
-    psoPublishSha256,
-    psoPublishMd5);
+    psoPublishMd5,
+    psoPublishSha1,
+    psoPublishSha256);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -5341,7 +5342,7 @@ begin
     i := length(fn);
     while i > 0 do
       if fn[i] = '.' then
-        break // remove the .sha256 or .md5 file extension
+        break // remove the .md5/.sha1/.sha256 file extension
       else
         dec(i);
     if i = 0 then
@@ -5579,10 +5580,12 @@ begin
             one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
       end;
       one.fAlgos := [];
-      if psoPublishSha256 in fSettings.Server.Options then
-        include(one.fAlgos, hfSha256);
       if psoPublishMd5 in fSettings.Server.Options then
         include(one.fAlgos, hfMd5);
+      if psoPublishSha1 in fSettings.Server.Options then
+        include(one.fAlgos, hfSha1);
+      if psoPublishSha256 in fSettings.Server.Options then
+        include(one.fAlgos, hfSha256);
       if one.fAlgos <> [] then
         one.fHashCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
           TypeInfo(TRawUtf8DynArrayDynArray), PathCaseInsensitive, SecsPerHour);
@@ -5674,16 +5677,18 @@ begin
         result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
       end
       else if siz = 0 then
-        // URI may be a  ####.sha256 / ####.md5 hash
+        // check URI for any .md5/.sha1/.sha256 hash extension
         if Assigned(Definition.fHashCached) then
         begin
           ext := ExtractExtP(name, {withoutdot:}true);
           if ext <> nil then
             case PCardinal(ext)^ of
-              ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
-                result := Definition.ReturnHash(Ctxt, hfSHA256, name, fn);
               ord('m') + ord('d') shl 8 + ord('5') shl 16:
                 result := Definition.ReturnHash(Ctxt, hfMd5, name, fn);
+              ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
+                result := Definition.ReturnHash(Ctxt, hfSHA1, name, fn);
+              ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+                result := Definition.ReturnHash(Ctxt, hfSHA256, name, fn);
             end;
         end;
   end; // may be e.g. HTTP_NOTMODIFIED (304)
