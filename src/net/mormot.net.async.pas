@@ -1362,7 +1362,8 @@ type
   public
     /// initialize this forward proxy instance
     // - the supplied aSettings should be owned by the caller (e.g from a main
-    // settings class instance)
+    // settings class instance) - if nil is supplied, this instance will setup
+    // and own its own instance
     constructor Create(aSettings: THttpProxyServerSettings); reintroduce; virtual;
     /// finalize this class instance
     destructor Destroy; override;

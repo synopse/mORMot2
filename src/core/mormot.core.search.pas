@@ -318,7 +318,7 @@ type
     function MatchString(const aText: string): integer;
   end;
 
-  /// store a decoded URI as full path and file/resource name
+  /// store a decoded URI as full path and file/resource name for TUriMatch
   {$ifdef USERECORDWITHMETHODS}
   TUriMatchName = record
   {$else}
@@ -326,10 +326,12 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// the full URI path
+    // - e.g. 'folder/*.bak' or '*.bak'
     Path: TValuePUtf8Char;
     /// its resource name, as decoded by ParsePath from the Path value
+    // - e.g. '*.bak' for both Path = 'folder/*.bak' and '*.bak'
     Name: TValuePUtf8Char;
-    /// to be called once Path has been populated to compute Name
+    /// to be called once Path has been populated to compute the resource Name
     procedure ParsePath;
   end;
 
@@ -3321,7 +3323,7 @@ var
 begin
   Name := Path;
   i := Name.Len;
-  while i > 0 do // retrieve last
+  while i > 0 do // retrieve last path part, i.e. the resource name itself
   begin
     dec(i);
     if Name.Text[i] <> '/' then

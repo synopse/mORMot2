@@ -447,7 +447,7 @@ type
   // - hsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - hsoCreateSuspended won't start the server thread immediately
   // - hsoLogVerbose could be used to debug a server in production
-  // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
+  // - hsoIncludeDateHeader will always include a "Date: ..." HTTP header
   // - hsoEnableTls enables TLS support for THttpServer socket server, using
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
   // - hsoBan40xIP will reject any IP for a few seconds after a 4xx error code
@@ -1527,7 +1527,7 @@ type
   PHttpPeerCacheMessageEncoded = ^THttpPeerCacheMessageEncoded;
 
   /// each THttpPeerCacheSettings.Options item
-  // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
+  // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-f
   // hash nibble) within CacheTempPath to reduce filesystem fragmentation
   // - pcoCacheTempNoCheckSize will ignore checking CacheTempMaxMB ratio on disk
   // - pcoUseFirstResponse will accept the first positive response, and don't
