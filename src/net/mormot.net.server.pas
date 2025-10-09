@@ -2052,6 +2052,13 @@ procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
   aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
 
+/// hash an URL and the "Etag:" or "Last-Modified:" headers into 32 ascii chars
+// - you could set any custom aDiglen in 5/10/15/20/25/30 set
+// - aHeaders could be supplied as nil so that only the URI resource is hashed
+// - using SHA-256 and lowercase Base-32 encoding, so perfect for a file name
+function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char;
+  aDiglen: integer = 20): RawUtf8;
+
 /// get the content full length, from "Content-Length:" or "Content-Range:"
 function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
 
@@ -7869,7 +7876,17 @@ begin
   aDigest.Algo := aAlgo;
 end;
 
-
+function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char; aDiglen: integer): RawUtf8;
+var
+  dig: THashDigest;
+begin
+  if (aDigLen = 0) or
+     (aDigLen mod 5 <> 0) or
+     (HttpRequestHash(hfSHA256, aUri, aHeaders, dig) < aDiglen) then
+    result := ''
+  else // e.g. default aDigLen=20 bytes=160-bit as 32 chars
+    result := BinToBase32(@dig.Bin, aDiglen, {lower=}true);
+end;
 
 {$ifdef USEWININET}
 
