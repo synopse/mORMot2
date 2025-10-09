@@ -2046,6 +2046,7 @@ procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 
 /// hash an URL and the "Etag:" or "Last-Modified:" headers
 // - could be used to identify a HTTP resource as a binary hash on a given server
+// - aHeaders could be supplied as nil so that only the URI resource is hashed
 // - returns 0 if aUrl/aHeaders have not enough information
 // - returns the number of hash bytes written to aDigest.Bin
 function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
@@ -7833,12 +7834,11 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
 var
   hasher: TSynHasher;
   h: PUtf8Char;
-  l: PtrInt;
+  l: PtrInt; // var PtrInt, not integer
 begin
   result := 0;
   if (aUri.Server = '') or
      (aUri.Address = '') or
-     (aHeaders = nil) or
      not hasher.Init(aAlgo) then
     exit;
   hasher.Update(HTTPS_TEXT[aUri.Https]); // hash normalized URI
@@ -7848,20 +7848,23 @@ begin
   hasher.Update(aUri.Port);
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Address);
-  hasher.Update(@aAlgo, 1);
-  h := FindNameValuePointer(aHeaders, 'ETAG: ', l); // ETAG + URI are genuine
-  if h = nil then
+  if aHeaders <> nil then
   begin
-    // fallback to file date and full size
-    h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', l);
+    hasher.Update(@aAlgo, 1);
+    h := FindNameValuePointer(aHeaders, 'ETAG: ', l); // ETAG + URI are genuine
     if h = nil then
-      exit;
+    begin
+      // fallback to file date and full size
+      h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', l);
+      if h = nil then
+        exit;
+      hasher.Update(h, l);
+      h := HttpRequestLength(aHeaders, l);
+      if h = nil then
+        exit;
+    end;
     hasher.Update(h, l);
-    h := HttpRequestLength(aHeaders, l);
-    if h = nil then
-      exit;
   end;
-  hasher.Update(h, l);
   result := hasher.Final(aDigest.Bin);
   aDigest.Algo := aAlgo;
 end;

@@ -1711,7 +1711,7 @@ type
   /// a 31-bit increasing sequence used for TBinaryCookieGenerator sessions
   TBinaryCookieGeneratorSessionID = type integer;
 
-  /// TBinaryCookieGenerator execution context - to be persisted on disk
+  /// TBinaryCookieGenerator execution context - may be persisted on disk
   TBinaryCookieContext = packed record
     /// identify this data structure on disk - should equal 1 now
     Version: cardinal;

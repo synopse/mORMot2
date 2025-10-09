@@ -1040,7 +1040,7 @@ type
     /// set the PasswordHashHexa field using a "Modular Crypt" hash
     // - with its default parameters, and a random salt
     // - the server will send back the actual format (algo and params) expected
-    // for each user during its login handhake, so you could just login with
+    // for each user during its login handshake, so you could just login with
     // TRestClientUri.SetUser() with the plain password and no other info
     // - in practice: you may still consider PasswordPlain/Sha256 or PasswordDigest
     // from a Web or JavaScript client, but rather use mcfBCryptSha256 or mcfSCrypt
