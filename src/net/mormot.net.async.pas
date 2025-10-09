@@ -5702,7 +5702,7 @@ var
   uri: TUriMatchName;
   met: TUriRouterMethod;
 begin
-  result := HTTP_NOTFOUND;
+  result := HTTP_NOTFOUND; // 404 by default
   // retrieve O(1) execution context
   one := Ctxt.RouteOpaque;
   if (one = nil) or
@@ -5720,7 +5720,10 @@ begin
   // ensure was not marked as rejected
   if (one.RejectCsv <> '') and
      one.fReject.Check(one.RejectCsv, uri, PathCaseInsensitive) then
+  begin
+    result := HTTP_FORBIDDEN; // 403
     exit;
+  end;
   // actual request processing
   case one.fSourced of
     sLocalFolder:
