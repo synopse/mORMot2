@@ -1381,10 +1381,10 @@ function BinToBase32Length(BinLen: cardinal): cardinal;
 /// conversion from a binary buffer into Base32 encoded text  buffer
 // - default Encoder is RFC4648 upper alphanumeric without misleading 0O 1I 8B
 procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt;
-  Encoder: PAnsiChar); overload;
+  Encoder: PAnsiChar = nil); overload;
 
 /// conversion from a binary buffer into Base32 encoded text as RawUtf8
-// - RFC4648 Base32 is defined as alphanumeric without misleading 0O 1I 8B
+// - RFC4648 Base32 is defined as (upper) alphanumeric without misleading 0O 1I 8B
 function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt;
   LowerCase: boolean = false): RawUtf8; overload;
 
@@ -6425,12 +6425,13 @@ end;
 { ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
 procedure FillBaseDecoderChars(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+  {$ifndef CPUX86} inline; {$endif}
 begin
   repeat
     d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
     dec(i);
   until i = 0;
-  d[s[0]] := 0;
+  d[s[0]] := i
 end;
 
 procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
@@ -7376,12 +7377,20 @@ begin
     result := ((BinLen div 5) + cardinal(ord((BinLen mod 5) <> 0))) shl 3;
 end;
 
-procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt; Encoder: PAnsiChar);
 const
+  b32encUpper: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  b32encLower: array[0..31] of AnsiChar = 'abcdefghijklmnopqrstuvwxyz234567';
+  b32enc: array[boolean] of PAnsiChar = (@b32encUpper, @b32encLower);
   b32pad: array[0..4] of byte = (8, 6, 4, 3, 1);
+var
+  ConvertBase32ToBin: TAnsiCharDec;
+
+procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt; Encoder: PAnsiChar);
 var
   c, d: PtrInt; // optimized for x86_64 and ARM/AARCH64
 begin
+  if Encoder = nil then
+    Encoder := @b32encUpper;
   while BinLen >= 5 do // handle whole blocks of 5 input bytes as 8 text chars
   begin
     c := Bin[0];
@@ -7441,13 +7450,6 @@ begin
     dec(BinLen);
   until BinLen = 0;
 end;
-
-const
-  b32encUpp: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  b32encLow: array[0..31] of AnsiChar = 'abcdefghijklmnopqrstuvwxyz234567';
-  b32enc: array[boolean] of PAnsiChar = (@b32encUpp, @b32encLow);
-var
-  ConvertBase32ToBin: TAnsiCharDec;
 
 function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt; LowerCase: boolean): RawUtf8;
 begin
@@ -7552,8 +7554,8 @@ begin
   begin
     if ConvertBase32ToBin[#255] = 0 then // delayed thread-safe initialization
     begin
-      FillBaseDecoder(@b32encUpp, @ConvertBase32ToBin, high(b32encUpp));
-      FillBaseDecoderChars(@b32encLow, @ConvertBase32ToBin, high(b32encLow));
+      FillBaseDecoder(@b32encUpper, @ConvertBase32ToBin, high(b32encUpper));
+      FillBaseDecoderChars(@b32encLower, @ConvertBase32ToBin, high(b32encLower));
     end;
     p := Base32Decode(@ConvertBase32ToBin, B32,
       FastNewRawByteString(result, (B32Len shr 3) * 5), B32Len);
