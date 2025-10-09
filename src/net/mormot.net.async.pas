@@ -1371,8 +1371,8 @@ type
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
-    function OnExecuteLocal(Ctxt: THttpServerRequestAbstract;
-      Definition: THttpProxyUrl; const Uri: TUriMatchName): cardinal;
+    function OnGetHead(Ctxt: THttpServerRequestAbstract; Def: THttpProxyUrl;
+      Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
   public
     /// initialize this forward proxy instance
     // - the supplied aSettings should be owned by the caller (e.g from a main
@@ -5629,46 +5629,58 @@ begin
   end;
 end;
 
-function THttpProxyServer.OnExecuteLocal(Ctxt: THttpServerRequestAbstract;
-  Definition: THttpProxyUrl; const Uri: TUriMatchName): cardinal;
+function THttpProxyServer.OnGetHead(Ctxt: THttpServerRequestAbstract;
+  Def: THttpProxyUrl; Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
   name: RawUtf8;
   cached: RawByteString;
-  tix, siz: Int64;
+  tix64, siz: Int64;
   ext: PUtf8Char;
   pck: THttpProxyCacheKind;
 begin
   // delete any deprecated cached content
-  tix := Int64(fServer.Async.LastOperationSec) * 1000; // = GetTickCount64
-  Definition.fMemCached.DeleteDeprecated(tix);
-  Definition.fHashCached.DeleteDeprecated(tix);
-  // supplied URI should be a safe local file
+  tix64 := Int64(fServer.Async.LastOperationSec) * 1000; // from GetTickSecs
+  Def.fMemCached.DeleteDeprecated(tix64);
+  Def.fHashCached.DeleteDeprecated(tix64);
+  // supplied URI should be a safe resource reference
   result := HTTP_NOTFOUND;
   UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
   NormalizeFileNameU(name);
   if not SafePathNameU(name) then
     exit;
-  // try to assign a local file to the output Ctxt
-  fn := FormatString('%%', [Definition.fLocalFolder, name]);
-  result := Ctxt.SetOutFile(fn, Definition.IfModifiedSince, '',
-    Definition.CacheControlMaxAgeSec, @siz); // to be streamed from file
+  // local the resource from its source
+  case Def.fSourced of
+    sLocalFolder:
+      begin
+        // try to assign a local file to the output Ctxt
+        fn := FormatString('%%', [Def.fLocalFolder, name]);
+        result := Ctxt.SetOutFile(fn, Def.IfModifiedSince, '',
+          Def.CacheControlMaxAgeSec, @siz); // to be streamed from file
+      end;
+    sRemoteUri:
+      begin
+
+      end
+  else
+    exit;
+  end;
   // complete the actual URI process
   case result of
     HTTP_SUCCESS:
-      // this local file does exist: try if we could use Definition.MemCache
-      if Assigned(Definition.fMemCached) then
+      // this local file does exist: try if we could use Def.MemCache
+      if Assigned(Def.fMemCached) then
       begin
-        pck := Definition.MemCache.FromUri(Uri);
+        pck := Def.MemCache.FromUri(Uri);
         if not (pckIgnore in pck) then
           if (pckForce in pck) or
-             (siz <= Definition.MemCache.MaxSize) then
+             (siz <= Def.MemCache.MaxSize) then
           begin
             // use a memory cache
-            if not Definition.fMemCached.FindAndCopy(name, cached) then
+            if not Def.fMemCached.FindAndCopy(name, cached) then
             begin
               cached := StringFromFile(fn);
-              Definition.fMemCached.Add(name, cached);
+              Def.fMemCached.Add(name, cached);
             end;
             Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
             Ctxt.OutContent := cached;
@@ -5681,29 +5693,29 @@ begin
       begin
         // return the folder files info as cached HTML
         if (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) or
-           not Definition.fMemCached.FindAndCopy(name, cached) then
+           not Def.fMemCached.FindAndCopy(name, cached) then
         begin
           FolderHtmlIndex(fn, Ctxt.Url,
             StringReplaceChars(name, PathDelim, '/'), RawUtf8(cached));
-          if Assigned(Definition.fMemCached) and
+          if Assigned(Def.fMemCached) and
              not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
-            Definition.fMemCached.Add(name, cached);
+            Def.fMemCached.Add(name, cached);
         end;
         result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
       end
       else if siz = 0 then
         // check URI for any .md5/.sha1/.sha256 hash extension
-        if Assigned(Definition.fHashCached) then
+        if Assigned(Def.fHashCached) then
         begin
           ext := ExtractExtP(name, {withoutdot:}true);
           if ext <> nil then
             case PCardinal(ext)^ of
               ord('m') + ord('d') shl 8 + ord('5') shl 16:
-                result := Definition.ReturnHash(Ctxt, hfMd5, name, fn);
+                result := Def.ReturnHash(Ctxt, hfMd5, name, fn);
               ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
-                result := Definition.ReturnHash(Ctxt, hfSHA1, name, fn);
+                result := Def.ReturnHash(Ctxt, hfSHA1, name, fn);
               ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
-                result := Definition.ReturnHash(Ctxt, hfSHA256, name, fn);
+                result := Def.ReturnHash(Ctxt, hfSHA256, name, fn);
             end;
         end;
   end; // may be e.g. HTTP_NOTMODIFIED (304)
@@ -5721,12 +5733,16 @@ begin
   // retrieve O(1) execution context
   one := Ctxt.RouteOpaque;
   if (one = nil) or
-     one.Disabled then
+     one.Disabled or
+     (one.fSourced = sUndefined) then
     exit;
   // validate the request method
   if not (UriMethod(Ctxt.Method, met) and
           (met in one.Methods)) then
+  begin
+    result := HTTP_NOTALLOWED; // 405 Method Not Allowed
     exit;
+  end;
   // retrieve path and resource/file name from URI
   Ctxt.RouteAt(0, uri.Path);
   if uri.Path.Len > 512 then // obviously invalid
@@ -5740,17 +5756,18 @@ begin
     exit;
   end;
   // actual request processing
-  case one.fSourced of
-    sLocalFolder:
-      case met of
-        urmGet,
-        urmHead:
-          result := OnExecuteLocal(Ctxt, one, uri);
-      end;
-    sRemoteUri:
-      begin
-        { TODO: implement progressive proxy cache on a remote server }
-      end;
+  case met of
+    urmGet,
+    urmHead:
+      result := OnGetHead(Ctxt, one, met, uri);
+    urmPost,
+    urmPut,
+    urmDelete:
+      if one.fSourced <> sRemoteUri then
+        result := HTTP_NOTALLOWED // 405 Method Not Allowed
+      else
+      { TODO: implement proxy with POST/PUT/DELETE }
+        ;
   end;
 end;
 
