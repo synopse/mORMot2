@@ -1200,11 +1200,11 @@ type
     /// a local folder name or remote origin URL to ask
     // - if Source is a local folder (e.g. 'd:/mysite' or '/var/www/mysite'),
     // the Url prefix chars will be removed from the client request, then used
-    // to locate the file to be served
-    // - if Source is a remote URI (like http://....), the Url prefix chars
-    // will be removed from the client request, then appended
-    // to this remote URI, which is e.g. 'http://ftp.debian.org/debian' or
-    // 'http://security.debian.org/debian-security' matching Local 'debian' or
+    // to locate the file to be served within this local folder
+    // - if Source is a remote URI (like http://....), the Url prefix chars will
+    // be removed from the client request, then appended to this remote URI for
+    // remote proxy with caching, which is e.g. 'http://ftp.debian.org/debian'
+    // 'or http://security.debian.org/debian-security' matching Local 'debian' or
     // 'debian-security' prefixes, to compute a source remote URI
     property Source: RawUtf8
       read fSource write fSource;
@@ -1236,12 +1236,25 @@ type
   THttpProxyUrlObjArray = array of THttpProxyUrl;
 
   /// the available high-level options for THttpProxyServerMainSettings
+  // - psoLogVerbose could be used to debug a server in production
+  // - psoExcludeDateHeader won't include the default "Date: ..." HTTP header
+  // - psoHttpsSelfSigned will enable HTTPS with a self-signed certificate
+  // - psoReusePort will set SO_REUSEPORT on POSIX, to bind several servers
+  // - psoEnableLogging enable an associated THttpServerGeneric.Logger instance
+  // - psoRejectBotUserAgent identifies and rejects Bots via IsHttpUserAgentBot()
+  // - psoBan40xIP will reject any IP for a few seconds after a 4xx error code
+  // - psoDisableMemCache will globally disable all MemCache settings
+  // - psoNoFolderHtmlIndex disable the HTML index generation at folder level
+  // - psoPublishMd5/psoPublishSha1/psoPublishSha256 enable hash content
+  // generation on server side with .md5/.sha1/.sha256 extension on a resource
   THttpProxyServerOption = (
     psoLogVerbose,
     psoExcludeDateHeader,
     psoHttpsSelfSigned,
     psoReusePort,
     psoEnableLogging,
+    psoRejectBotUserAgent,
+    psoBan40xIP,
     psoDisableMemCache,
     psoNoFolderHtmlIndex,
     psoDisableFolderHtmlIndexCache,
@@ -5467,7 +5480,7 @@ begin
   fLog.EnterLocal(log, 'Start %', [fSettings], self);
   if fServer <> nil then
     EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
-  // compute options from settings
+  // compute THttpAsyncServer options from settings
   hso := [hsoNoXPoweredHeader,
           hsoIncludeDateHeader,
           hsoThreadSmooting];
@@ -5480,6 +5493,10 @@ begin
     include(hso, hsoReusePort);
   if psoEnableLogging in fSettings.Server.Options then
     include(hso, hsoEnableLogging);
+  if psoRejectBotUserAgent in fSettings.Server.Options then
+    include(hso, hsoRejectBotUserAgent);
+  if psoBan40xIP in fSettings.Server.Options then
+    include(hso, hsoBan40xIP);
   tls.PrivatePassword := aPrivateKeyPassword; // if not in fSettings
   if (psoHttpsSelfSigned in fSettings.Server.Options) or
      SetupTls(tls) then

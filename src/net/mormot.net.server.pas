@@ -467,7 +467,7 @@ type
   // per-minute metrics logging via an associated THttpServerGeneric.Analyzer
   // - hsoContentTypeNoGuess will disable content-type detection from small
   // content buffers via GetMimeContentTypeFromBuffer()
-  // - hsoRejectBotUserAgent identifis and reject Bots via IsHttpUserAgentBot()
+  // - hsoRejectBotUserAgent identifies and rejects Bots via IsHttpUserAgentBot()
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
