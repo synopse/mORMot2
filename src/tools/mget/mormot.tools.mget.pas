@@ -212,7 +212,7 @@ begin
   begin
     Log.EnterLocal(l, self, 'StartPeerCache: NetworkInterfaceChanged');
     PeerCacheStopping;
-    fPeerCache := nil; // force re-create just below
+    fPeerCache := nil; // release IWGetAlternate to force re-create just below
     fPeerCacheInterface := '';
     l := nil;
   end;
@@ -226,7 +226,7 @@ begin
   try
     peerinstance := THttpPeerCache.Create(fPeerSettings, fPeerSecret,
       nil, 2, self.Log, @ServerTls, @ClientTls);
-    fPeerCache := peerinstance;
+    fPeerCache := peerinstance; // stored as IWGetAlternate
     fPeerCacheInterface := peerinstance.IpPort;
     peerinstance.OnDirectOptions := fOnPeerCacheDirectOptions;
     // THttpAsyncServer could also be tried with rfProgressiveStatic
@@ -326,7 +326,7 @@ begin
     wget.HashCacheDir := EnsureDirectoryExists(CacheFolder);
   if Peer then
   begin
-    wget.Alternate := fPeerCache; // reuse THttpPeerCache on background
+    wget.Alternate := fPeerCache; // reuse background THttpPeerCache
     wget.AlternateOptions := fPeerRequest;
   end;
   // make the actual request
