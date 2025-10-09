@@ -1338,8 +1338,8 @@ type
     procedure AddUrl(one: THttpProxyUrl);
     /// create a THttpProxyUrl definition to serve a local static folder
     // - if optional ExceptionClass is supplied, the local folder should exist
-    procedure AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
-      RaiseExceptionOnNonExistingFolder: ExceptionClass = nil);
+    function AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
+      RaiseExceptionOnNonExistingFolder: ExceptionClass = nil): THttpProxyUrl;
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServerMainSettings
@@ -5424,22 +5424,20 @@ begin
       ObjArrayAdd(fUrl, one); // will be owned as fUri[]
 end;
 
-procedure THttpProxyServerSettings.AddFolder(const folder: TFileName;
-  const uri: RawUtf8; RaiseExceptionOnNonExistingFolder: ExceptionClass);
-var
-  one: THttpProxyUrl;
+function THttpProxyServerSettings.AddFolder(const folder: TFileName;
+  const uri: RawUtf8; RaiseExceptionOnNonExistingFolder: ExceptionClass): THttpProxyUrl;
 begin
   if RaiseExceptionOnNonExistingFolder <> nil then
     if not DirectoryExists(folder) then
       raise RaiseExceptionOnNonExistingFolder.CreateFmt(
         '%s.AddFolder: %s does not exist', [ClassNameShort(self)^, folder]);
-  one := THttpProxyUrl.Create;
-  one.Url := uri;
+  result := THttpProxyUrl.Create;
+  result.Url := uri;
   if RaiseExceptionOnNonExistingFolder = nil then
     RaiseExceptionOnNonExistingFolder := EHttpProxyServer;
-  one.Source := StringToUtf8(EnsureDirectoryExists(
+  result.Source := StringToUtf8(EnsureDirectoryExists(
     folder, RaiseExceptionOnNonExistingFolder));
-  AddUrl(one);
+  AddUrl(result);
 end;
 
 
