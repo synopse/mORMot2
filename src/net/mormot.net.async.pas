@@ -1171,6 +1171,7 @@ type
   // generation on server side with .md5/.sha1/.sha256 extension on a resource
   // - hpoDisable304 disable "if-none-match:" / "if-modified-since:" headers
   // default support as efficient 304 HTTP_NOTMODIFIED response
+  // - hpoClientOnlySocket will be used for THttpProxyUrl.RemoteClientHead()
   THttpProxyUrlOption = (
     hpoNoSubFolder,
     hpoNoFolderHtmlIndex,
@@ -1178,12 +1179,13 @@ type
     hpoPublishMd5,
     hpoPublishSha1,
     hpoPublishSha256,
-    hpoDisable304);
+    hpoDisable304,
+    hpoClientOnlySocket);
   /// store THttpProxyUrl options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
   /// define one URL content setting for THttpProxyServer
-  THttpProxyUrl = class(TSynAutoCreateFields)
+  THttpProxyUrl = class(TSynPersistent)
   protected
     fUrl, fSource: RawUtf8;
     fDisabled: boolean;
@@ -1200,8 +1202,11 @@ type
     fMemCached: TSynDictionary;  // Uri:RawUtf8 / Content:RawByteString
     fHashCached: TSynDictionary; // Uri: RawUtf8 / hash[fAlgos]: TRawUtf8DynArray
     fReject: TUriMatch;
+    fRemoteClient: IHttpClient;
+    fRemoteClientSafe: TOSLightLock;
     function ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
       const name: RawUtf8; var fn: TFileName): integer;
+    function RemoteClientHead(const uri: TUri; var header: RawUtf8): cardinal;
   public
     /// setup the default values of this URL
     constructor Create; override;
@@ -5344,6 +5349,7 @@ begin
   inherited Create;
   fMethods := [urmGet, urmHead];
   fOptions := [];
+  fRemoteClientSafe.Init;
 end;
 
 destructor THttpProxyUrl.Destroy;
@@ -5351,6 +5357,7 @@ begin
   inherited Destroy;
   FreeAndNil(fMemCached);
   FreeAndNil(fHashCached);
+  fRemoteClientSafe.Done;
 end;
 
 function THttpProxyUrl.ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
@@ -5393,6 +5400,19 @@ begin
       end
       else
         inc(i);
+end;
+
+function THttpProxyUrl.RemoteClientHead(const uri: TUri;
+  var header: RawUtf8): cardinal;
+begin
+  fRemoteClientSafe.Lock;
+  try
+    if fRemoteClient = nil then
+      fRemoteClient := TSimpleHttpClient.Create(hpoClientOnlySocket in fOptions);
+    result := fRemoteClient.Request(uri, 'HEAD', '', '', '', {keepalive=}30000);
+  finally
+    fRemoteClientSafe.UnLock;
+  end;
 end;
 
 
