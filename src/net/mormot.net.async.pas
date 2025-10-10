@@ -932,8 +932,8 @@ type
   /// callback used e.g. by THttpAsyncClientConnection.OnStateChanged
   // - should return soContinue on success, or anything else to abort/close
   // - eventually hrsResponseDone or one hrsError* will mark the end of process
-  TOnHttpClientAsync = function(state: TOnHttpClientState;
-    connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite of object;
+  TOnHttpClientAsync = function(Sender: TObject; State: TOnHttpClientState;
+    Connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite of object;
 
   /// handle one HTTP client connection handled by our non-blocking THttpAsyncServer
   // - used e.g. for efficient reverse proxy support with another server
@@ -943,6 +943,7 @@ type
     fResponseStatus: integer;
     fOnStateChange: TOnHttpClientStates;
     fTls: TNetTlsContext;
+    fSender: TObject;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
@@ -960,6 +961,7 @@ type
     property Tls: TNetTlsContext
       read fTls write fTls;
   end;
+  PHttpAsyncClientConnection = ^THttpAsyncClientConnection;
 
   /// handle one HTTP server connection to our non-blocking THttpAsyncServer
   THttpAsyncServerConnection = class(THttpAsyncConnection)
@@ -1037,10 +1039,10 @@ type
       aConnectionTimeoutSec: integer); reintroduce;
     /// start an async connection to a remote HTTP server using a callback
     // - the aOnStateChanged event will be called after each http.State change
-    function StartRequest(var aUrl: TUri; const aMethod, aHeaders: RawUtf8;
-      const aOnStateChanged: TOnHttpClientAsync;
-      aTls: PNetTlsContext; const aDestFileName: TFileName;
-      out aConnection: THttpAsyncClientConnection;
+    function StartRequest(aSender: TObject; var aUrl: TUri;
+      const aMethod, aHeaders: RawUtf8; const aDestFileName: TFileName;
+      aTls: PNetTlsContext = nil; const aOnStateChanged: TOnHttpClientAsync = nil;
+      aConnection: PHttpAsyncClientConnection = nil;
       aOnStateChange: TOnHttpClientStates =
         [low(TOnHttpClientState) .. high(TOnHttpClientState)]): TNetResult;
     /// called to notify that the main process is about to finish
@@ -3840,7 +3842,7 @@ begin
       fGC1.Safe.UnLock;
     end;
   end;
-  // TAsyncServer.Execute made Accept(async=false) from acoEnableTls
+  // TAsyncServer.Execute made Accept(async=false) if acoEnableTls was set
   Sender.fSecure := NewNetTls;  // should work since DoTlsAfter() was fine
   Sender.fSecure.AfterAccept(Sender.fSocket, fServer.TLS, nil, nil);
   Sender.fSocket.MakeAsync;     // as expected by our asynchronous code
@@ -4306,7 +4308,7 @@ begin
   if Assigned(fOnStateChanged) and
      (state in fOnStateChange) then
     try
-      result := fOnStateChanged(state, self);
+      result := fOnStateChanged(fSender, state, self);
     except
       result := soClose;
     end;
@@ -4323,18 +4325,21 @@ begin
   fUserAgent := DefaultUserAgent(self);
 end;
 
-function THttpAsyncClientConnections.StartRequest(var aUrl: TUri;
-  const aMethod, aHeaders: RawUtf8; const aOnStateChanged: TOnHttpClientAsync;
-  aTls: PNetTlsContext; const aDestFileName: TFileName;
-  out aConnection: THttpAsyncClientConnection;
+function THttpAsyncClientConnections.StartRequest(aSender: TObject;
+  var aUrl: TUri; const aMethod, aHeaders: RawUtf8;
+  const aDestFileName: TFileName; aTls: PNetTlsContext;
+  const aOnStateChanged: TOnHttpClientAsync;
+  aConnection: PHttpAsyncClientConnection;
   aOnStateChange: TOnHttpClientStates): TNetResult;
 var
   addr: TNetAddr;
   sock: TNetSocket;
   h: THandle;
-  tag: TPollSocketTag absolute aConnection;
+  c: THttpAsyncClientConnection;
+  tag: TPollSocketTag absolute c;
 begin
-  aConnection := nil;
+  if aConnection <> nil then
+    aConnection^ := nil;
   // validate the input parameters
   if (fOwner = nil) or
      not Assigned(aOnStateChanged) then
@@ -4351,7 +4356,7 @@ begin
     exit;
   end;
   // create a new HttpAsyncClientConnection instance (and its socket)
-  aConnection := THttpAsyncClientConnection.Create(fOwner, addr){%H-};
+  c := THttpAsyncClientConnection.Create(fOwner, addr){%H-};
   try
     result := nrNoSocket;
     sock := addr.NewSocket(nlTcp);
@@ -4359,7 +4364,7 @@ begin
       exit;
     sock.MakeAsync;
     result := nrRefused;
-    if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
+    if not fOwner.ConnectionNew(sock, c, {add=}true) then
       exit;
     if aDestFileName <> '' then
     begin
@@ -4371,56 +4376,63 @@ begin
         result := nrInvalidParameter;
         exit;
       end;
-      aConnection.fHttp.ContentStream := // raise EOSException on invalid h
+      c.fHttp.ContentStream := // raise EOSException on invalid h
         TFileStreamEx.CreateFromHandle(h, aDestFileName);
-      include(aConnection.fHttp.ResponseFlags, rfContentStreamNeedFree);
+      include(c.fHttp.ResponseFlags, rfContentStreamNeedFree);
     end;
-    aConnection.fHttp.CommandMethod := aMethod;
-    aConnection.fHttp.CommandUri := aUrl.Address;
-    aConnection.fHttp.UserAgent := fUserAgent;
+    c.fHttp.CommandMethod := aMethod;
+    c.fHttp.CommandUri := aUrl.Address;
+    c.fHttp.UserAgent := fUserAgent;
     if aHeaders <> '' then
-      aConnection.fHttp.Headers := PurgeHeaders(aHeaders, {trim=}true);
-    aConnection.fHttp.Head.Reserve(2048); // prepare for 2KB headers
+      c.fHttp.Headers := PurgeHeaders(aHeaders, {trim=}true);
+    c.fHttp.Head.Reserve(2048); // prepare for 2KB headers
     if aUrl.Port = DEFAULT_PORT[aTls <> nil] then
-      aConnection.fHttp.Host := aUrl.Server
+      c.fHttp.Host := aUrl.Server
     else
-      Append(aConnection.fHttp.Host, [aUrl.Server, ':', aUrl.Port]);
-    aConnection.fOnStateChange := aOnStateChange;
-    aConnection.fOnStateChanged := aOnStateChanged;
+      Append(c.fHttp.Host, [aUrl.Server, ':', aUrl.Port]);
+    if Assigned(aOnStateChanged) and
+       (aOnStateChange <> []) then
+    begin
+      c.fSender := aSender;
+      c.fOnStateChange := aOnStateChange;
+      c.fOnStateChanged := aOnStateChanged;
+    end;
     // optionally prepare for TLS
     result := nrNotImplemented;
     if (aTls <> nil) or
        aUrl.Https then
     begin
       if aTls <> nil then
-        aConnection.fTls := aTls^;
-      aConnection.fSecure := NewNetTls;
-      if aConnection.fSecure = nil then
+        c.fTls := aTls^;
+      c.fSecure := NewNetTls;
+      if c.fSecure = nil then
         exit;
     end;
     // start async events subscription and connection
     {$ifdef USE_WINIOCP}
-    include(aConnection.fInternalFlags, ifWriteWait);
-    if aConnection.fIocpSub = nil then
-      aConnection.fIocpSub := fOwner.fIocpAccept.Subscribe(aConnection.fSocket, tag);
-    if fOwner.fIocpAccept.PrepareNext('client', aConnection.fIocpSub, wieConnect) then
+    include(c.fInternalFlags, ifWriteWait);
+    if c.fIocpSub = nil then
+      c.fIocpSub := fOwner.fIocpAccept.Subscribe(c.fSocket, tag);
+    if fOwner.fIocpAccept.PrepareNext('client', c.fIocpSub, wieConnect) then
       result := nrOk;
     {$else}
-    result := addr.SocketConnect(aConnection.fSocket, -1);
+    result := addr.SocketConnect(c.fSocket, -1);
     if result <> nrOk then
       exit;
-    if fOwner.fSockets.fWrite.Subscribe(aConnection.fSocket, [pseWrite], tag) then
+    if fOwner.fSockets.fWrite.Subscribe(c.fSocket, [pseWrite], tag) then
       result := nrOk;
     {$endif USE_WINIOCP}
   finally
     if result <> nrOk then
     try
-      aConnection.NotifyStateChange(hcsFailed);
+      c.NotifyStateChange(hcsFailed);
       fOwner.DoLog(sllDebug, 'StartRequest(% %/%)=%',
         [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
     finally
-      FreeAndNil(aConnection);
-    end;
+      FreeAndNil(c);
+    end
+    else if aConnection <> nil then
+      aConnection^ := c;
   end;
 end;
 
