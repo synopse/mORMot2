@@ -470,7 +470,8 @@ begin
   fData := pointer(fJsonData);
   for f := 0 to fFieldCount - 1 do
   begin
-    SetResults(f, pointer(fFields[f])); // assume no 32-bit overflow from Text
+    // assume no 32-bit overflow from Text
+    SetResults(f, pointer(fFields[f]), length(fFields[f]));
     SetFieldType(f, oftUTF8Text);
   end;
   for r := 1 to fRowCount do
@@ -479,7 +480,7 @@ begin
     inc(P);
     for f := 0 to fFieldCount - 1 do
     begin
-      SetResults(r * fFieldCount + f, P);
+      //FIXME SetResults(r * fFieldCount + f, P);
       D := P;
       while P^ <> '"' do
         if P^ = #0 then
