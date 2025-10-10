@@ -1065,7 +1065,7 @@ type
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
     fExecuteEvent: TSynEvent;
-    fSockets: THttpAsyncClientConnections; // allocated when needed
+    fClientSockets: THttpAsyncClientConnections; // allocated when needed
     fHttpDateNowUtc: THttpDateNowUtc;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -5060,15 +5060,15 @@ begin
   // abort pending async processes
   if fAsync <> nil then
     fAsync.Shutdown;
-  if fSockets <> nil then
-    fSockets.Shutdown;
+  if fClientSockets<> nil then
+    fClientSockets.Shutdown;
   // terminate the Execute thread
   if fExecuteEvent <> nil then
     fExecuteEvent.SetEvent;
   inherited Destroy;
   // finalize all thread-pooled connections
   FreeAndNilSafe(fAsync);
-  FreeAndNilSafe(fSockets);
+  FreeAndNilSafe(fClientSockets);
   // release associated context
   if fInterning <> nil then
   begin
@@ -5120,14 +5120,14 @@ end;
 
 function THttpAsyncServer.Clients: THttpAsyncClientConnections;
 begin
-  if fSockets = nil then
-  begin
-    fSafe.Lock;
-    if fSockets = nil then
-      fSockets := THttpAsyncClientConnections.Create(fAsync, {timeoutsec=}0);
-    fSafe.UnLock;
-  end;
-  result := fSockets;
+  result := fClientSockets;
+  if result <> nil then
+    exit;
+  fSafe.Lock;
+  if fClientSockets = nil then
+    fClientSockets := THttpAsyncClientConnections.Create(fAsync, {timeoutsec=}0);
+  fSafe.UnLock;
+  result := fClientSockets;
 end;
 
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
