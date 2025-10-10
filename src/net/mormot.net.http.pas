@@ -868,6 +868,10 @@ type
     function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0;
       FileSize: PInt64 = nil): cardinal;
+    /// return a specific file content, maybe in rfProgressiveStatic mode
+    // - include our internal 'STATIC-PROGSIZE:' header if expected size <> 0
+    procedure SetOutProgressiveFile(const FileName: TFileName;
+      ExpectedFileSize: Int64);
     /// set the OutContent and OutContentType fields to return a specific file
     // - returning status 200 with the supplied Content (and optional ContentType)
     // - Handle304NotModified = TRUE will check the supplied content and return
@@ -4674,6 +4678,16 @@ begin
   StringToUtf8(FileName, RawUtf8(fOutContent));
   result := HTTP_SUCCESS;
 end;
+
+procedure THttpServerRequestAbstract.SetOutProgressiveFile(
+  const FileName: TFileName; ExpectedFileSize: Int64);
+begin
+  StringToUtf8(FileName, RawUtf8(fOutContent));
+  fOutContentType := STATICFILE_CONTENT_TYPE;
+  if ExpectedFileSize <> 0 then // rfProgressiveStatic mode
+    AppendLine(fOutCustomHeaders, [STATICFILE_PROGSIZE + ' ', ExpectedFileSize]);
+end;
+
 
 function THttpServerRequestAbstract.SetOutContent(const Content: RawByteString;
   Handle304NotModified: boolean; const ContentType: RawUtf8;
