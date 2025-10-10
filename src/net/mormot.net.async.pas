@@ -1166,6 +1166,13 @@ type
       read fPath write fPath;
   end;
 
+  THttpProxyUrl = class;
+
+  /// THttpProxyUrl.OnRemoteClient callback signature
+  // - could be used e.g. for interaction, or to customize TLS options
+  TOnHttpProxyUrlClient = procedure(Sender: THttpProxyUrl; const Uri: TUri;
+    var TLS: TNetTlsContext) of object;
+
   /// set of THttpProxyUrl.Options items, used to refine a specific URI process
   // - hpoNoSubFolder disable access to any sub-folder within this URI
   // - hpoNoFolderHtmlIndex disable the HTML index generation at folder level
@@ -1187,7 +1194,7 @@ type
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
   /// define one URL content setting for THttpProxyServer
-  THttpProxyUrl = class(TSynPersistent)
+  THttpProxyUrl = class(TSynAutoCreateFields)
   protected
     fUrl, fSource: RawUtf8;
     fDisabled: boolean;
@@ -1205,7 +1212,8 @@ type
     fHashCached: TSynDictionary; // Uri: RawUtf8 / hash[fAlgos]: TRawUtf8DynArray
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
-    fRemoteClientSafe: TOSLightLock;
+    fRemoteClientSafe: TOSLightLock; // non-reentrant lock
+    fOnRemoteClient: TOnHttpProxyUrlClient;
     function ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
       const name: RawUtf8; var fn: TFileName): integer;
     function RemoteClientHead(const uri: TUri; var header: RawUtf8): cardinal;
@@ -1214,6 +1222,9 @@ type
     constructor Create; override;
     /// finalize this instance
     destructor Destroy; override;
+    /// optional event handler when a remote URI connection is instantiated
+    property OnRemoteClient: TOnHttpProxyUrlClient
+      read fOnRemoteClient write fOnRemoteClient;
   published
     /// this source won't be processed if this property is set to true
     property Disabled: boolean
@@ -1361,6 +1372,10 @@ type
     // - if optional ExceptionClass is supplied, the local folder should exist
     function AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
       RaiseExceptionOnNonExistingFolder: ExceptionClass = nil): THttpProxyUrl;
+    /// load URI definitions from local *.json files
+    // - returns the number of added THttpProxyUrl instances
+    function AddFromFiles(const settingsfolder: TFileName;
+      const mask: TFileName = '*.json'): integer;
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServerMainSettings
@@ -5417,14 +5432,13 @@ end;
 function THttpProxyUrl.RemoteClientHead(const uri: TUri;
   var header: RawUtf8): cardinal;
 begin
-  fRemoteClientSafe.Lock;
-  try
-    if fRemoteClient = nil then
-      fRemoteClient := TSimpleHttpClient.Create(hpoClientOnlySocket in fOptions);
-    result := fRemoteClient.Request(uri, 'HEAD', '', '', '', {keepalive=}30000);
-  finally
-    fRemoteClientSafe.UnLock;
+  if fRemoteClient = nil then
+  begin
+    fRemoteClient := TSimpleHttpClient.Create(hpoClientOnlySocket in fOptions);
+    if Assigned(fOnRemoteClient) then
+      fOnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
   end;
+  result := fRemoteClient.Request(uri, 'HEAD', '', '', '', {keepalive=}30000);
 end;
 
 
@@ -5687,12 +5701,14 @@ end;
 function THttpProxyServer.OnGetHead(Ctxt: THttpServerRequestAbstract;
   Def: THttpProxyUrl; Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
 var
-  fn: TFileName;
-  name: RawUtf8;
+  fn, fnhead: TFileName;
+  name, base32, remotehead, localhead, info: RawUtf8;
   cached: RawByteString;
   tix64, siz: Int64;
   ext: PUtf8Char;
   pck: THttpProxyCacheKind;
+  nr: TNetResult;
+  remote: TUri;
 begin
   // delete any deprecated cached content
   tix64 := fServer.Async.LastOperationMS; // set by ProcessIdleTix()
@@ -5712,13 +5728,58 @@ begin
         if hpoNoSubFolder in Def.Options then
           if PosExChar(PathDelim, name) <> 0 then
             exit;
-        fn := MakeString([Def.fLocalFolder, name]);
+        fn := MakePath([Def.fLocalFolder, name]);
         result := Ctxt.SetOutFile(fn, not(hpoDisable304 in Def.Options), '',
           Def.CacheControlMaxAgeSec, @siz); // to be streamed from file
       end;
     sRemoteUri:
       begin
-
+        if hpoNoSubFolder in Def.Options then
+          if PosExChar(PathDelim, name) <> 0 then
+            exit;
+        // compute the remote URI corresponding to the original server
+        remote := Def.fRemoteUri;
+        AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
+        // quick blocking process to initiate the proxy request
+        Def.fRemoteClientSafe.Lock;
+        try
+          // always perform a HEAD request to the original server
+          result := Def.RemoteClientHead(remote, remotehead);
+          if StatusCodeIsSuccess(result) then
+            if not GetHeader(remotehead, 'content-length', siz) then
+              result := HTTP_NOTFOUND
+            else
+            begin
+              base32 := HttpRequestHashBase32(remote, nil);
+              fn := MakePath([Def.DiskCache.Path, base32]);
+              fnhead := MakeString([fn, '.head']);
+              localhead := StringFromFile(fnhead);
+              if remotehead <> localhead then
+              begin
+                if localhead = '' then
+                  info := 'first '
+                else
+                begin
+                  info := 'refresh ';
+                  if not DeleteFile(fn) then
+                    Append(info, '- failed to delete ', base32);
+                end;
+                FileFromString(remotehead, fnhead)
+              end;
+              // need an asynchronous GET to the remote server
+              nr := fServer.Clients.StartRequest(self, remote, 'GET', '', fn);
+              if nr <> nrOk then
+              begin
+                result := HTTP_NOTFOUND;
+                Append(info, [ToText(nr)^]);
+              end
+              else
+                // start sending the file content back in progressive mode
+                Ctxt.SetOutProgressiveFile(fn, siz);
+            end;
+        finally
+          Def.fRemoteClientSafe.UnLock;
+        end;
       end;
   else
     exit;
@@ -5779,8 +5840,8 @@ begin
             end;
         end;
   end; // may be e.g. HTTP_NOTMODIFIED (304)
-  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
-    [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
+  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=% info=%',
+    [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> ''), info], self);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
