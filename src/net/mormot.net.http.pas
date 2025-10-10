@@ -391,7 +391,8 @@ type
     CommandResp: RawUtf8;
     /// the HTTP method parsed from first header line, e.g. 'GET'
     CommandMethod: RawUtf8;
-    /// the HTTP URI parsed from first header line, e.g. '/path/to/resource'
+    /// the HTTP URI parsed from first header line
+    // - e.g. '/path/to/resource' on Server side or 'HTTP/1.1 200 OK' on client side
     CommandUri: RawUtf8;
     /// will contain all header lines after all ParseHeader()
     // - use HeaderGetValue() to get one HTTP header item value by name
@@ -459,7 +460,7 @@ type
     /// parse CommandUri into CommandMethod/CommandUri fields on server side
     // - e.g. from CommandUri = 'GET /uri HTTP/1.1'
     function ParseCommand: boolean;
-    /// parse CommandUri into result fields on server side
+    /// parse CommandUri into result fields on client side
     // - e.g. from CommandUri = 'HTTP/1.1 200 OK'
     // - returns 0 on parsing error, or the HTTP status (e.g. 200)
     function ParseResponse(out RespStatus: integer): boolean;

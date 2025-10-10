@@ -701,9 +701,13 @@ type
     procedure LogVerbose(connection: TPollAsyncConnection; const ident: RawUtf8;
       const identargs: array of const; const data: TRawByteStringBuffer);
     /// the current monotonic time elapsed, evaluated in seconds
-    // - IdleEverySecond will set GetTickCount64 div 1000 = GetTickSec
+    // - GetTickSecs value set at most every 500ms by ProcessIdleTix()
     property LastOperationSec: TAsyncConnectionSec
       read fLastOperationSec;
+    /// the current monotonic time elapsed, evaluated in milliseconds
+    // - GetTickCount64 value set at most every 500ms by ProcessIdleTix()
+    property LastOperationMS: Int64
+      read fLastOperationMS;
     /// allow idle connection to release its internal Connection.rd/wr buffers
     // - default is 60 seconds, which is pretty conservative
     // - could be tuned in case of high numbers of concurrent connections and
