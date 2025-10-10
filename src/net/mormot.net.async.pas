@@ -1037,7 +1037,7 @@ type
       aConnectionTimeoutSec: integer); reintroduce;
     /// start an async connection to a remote HTTP server using a callback
     // - the aOnStateChanged event will be called after each http.State change
-    function StartRequest(const aUrl, aMethod, aHeaders: RawUtf8;
+    function StartRequest(var aUrl: TUri; const aMethod, aHeaders: RawUtf8;
       const aOnStateChanged: TOnHttpClientAsync;
       aTls: PNetTlsContext; const aDestFileName: TFileName;
       out aConnection: THttpAsyncClientConnection;
@@ -4308,13 +4308,12 @@ begin
   fUserAgent := DefaultUserAgent(self);
 end;
 
-function THttpAsyncClientConnections.StartRequest(
-  const aUrl, aMethod, aHeaders: RawUtf8; const aOnStateChanged: TOnHttpClientAsync;
+function THttpAsyncClientConnections.StartRequest(var aUrl: TUri;
+  const aMethod, aHeaders: RawUtf8; const aOnStateChanged: TOnHttpClientAsync;
   aTls: PNetTlsContext; const aDestFileName: TFileName;
   out aConnection: THttpAsyncClientConnection;
   aOnStateChange: TOnHttpClientStates): TNetResult;
 var
-  uri: TUri;
   addr: TNetAddr;
   sock: TNetSocket;
   h: THandle;
@@ -4326,14 +4325,14 @@ begin
      not Assigned(aOnStateChanged) then
     result := nrNotImplemented
   else if (aMethod = '') or
-          not uri.From(aUrl) then
+          (aUrl.Server = '') then
     result := nrNotFound
   else
-    result := addr.SetFrom(uri.Server, uri.Port, nlTcp);
+    result := addr.SetFrom(aUrl.Server, aUrl.Port, nlTcp);
   if result <> nrOk then
   begin
-    fOwner.DoLog(sllDebug, 'StartRequest(% %)=%',
-      [aMethod, aUrl, ToText(result)^], self);
+    fOwner.DoLog(sllDebug, 'StartRequest(% %/%)=%',
+      [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
     exit;
   end;
   // create a new HttpAsyncClientConnection instance (and its socket)
@@ -4349,8 +4348,8 @@ begin
       exit;
     if aDestFileName <> '' then
     begin
-      fOwner.DoLog(sllTrace, 'StartRequest(% %) %',
-        [aMethod, aUrl, aDestFileName], self);
+      fOwner.DoLog(sllTrace, 'StartRequest(% %/%) %',
+        [aMethod, aUrl.Server, aUrl.Address, aDestFileName], self);
       h := FileCreate(aDestFileName);
       if not ValidHandle(h) then
       begin
@@ -4362,21 +4361,21 @@ begin
       include(aConnection.fHttp.ResponseFlags, rfContentStreamNeedFree);
     end;
     aConnection.fHttp.CommandMethod := aMethod;
-    aConnection.fHttp.CommandUri := uri.Address;
+    aConnection.fHttp.CommandUri := aUrl.Address;
     aConnection.fHttp.UserAgent := fUserAgent;
     if aHeaders <> '' then
       aConnection.fHttp.Headers := PurgeHeaders(aHeaders, {trim=}true);
     aConnection.fHttp.Head.Reserve(2048); // prepare for 2KB headers
-    if uri.Port = DEFAULT_PORT[aTls <> nil] then
-      aConnection.fHttp.Host := uri.Server
+    if aUrl.Port = DEFAULT_PORT[aTls <> nil] then
+      aConnection.fHttp.Host := aUrl.Server
     else
-      Append(aConnection.fHttp.Host, [uri.Server, ':', uri.Port]);
+      Append(aConnection.fHttp.Host, [aUrl.Server, ':', aUrl.Port]);
     aConnection.fOnStateChange := aOnStateChange;
     aConnection.fOnStateChanged := aOnStateChanged;
     // optionally prepare for TLS
     result := nrNotImplemented;
     if (aTls <> nil) or
-       uri.Https then
+       aUrl.Https then
     begin
       if aTls <> nil then
         aConnection.fTls := aTls^;
@@ -4402,7 +4401,8 @@ begin
     if result <> nrOk then
     try
       aConnection.NotifyStateChange(hcsFailed);
-      fOwner.DoLog(sllDebug, 'StartRequest(%)=%', [aUrl, ToText(result)^], self);
+      fOwner.DoLog(sllDebug, 'StartRequest(% %/%)=%',
+        [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
     finally
       FreeAndNil(aConnection);
     end;
