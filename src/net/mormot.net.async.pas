@@ -5683,28 +5683,31 @@ var
   pck: THttpProxyCacheKind;
 begin
   // delete any deprecated cached content
-  tix64 := Int64(fServer.Async.LastOperationSec) * 1000; // from GetTickSecs
+  tix64 := fServer.Async.LastOperationMS; // set by ProcessIdleTix()
   Def.fMemCached.DeleteDeprecated(tix64);
   Def.fHashCached.DeleteDeprecated(tix64);
   // supplied URI should be a safe resource reference
-  result := HTTP_NOTFOUND;
-  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
-  NormalizeFileNameU(name);
+  result := HTTP_FORBIDDEN; // 403
+  // local the resource from its source
   if not SafePathNameU(name) then
     exit;
-  // local the resource from its source
   case Def.fSourced of
     sLocalFolder:
       begin
         // try to assign a local file to the output Ctxt
-        fn := FormatString('%%', [Def.fLocalFolder, name]);
-        result := Ctxt.SetOutFile(fn, Def.IfModifiedSince, '',
+        UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
+        NormalizeFileNameU(name);
+        if hpoNoSubFolder in Def.Options then
+          if PosExChar(PathDelim, name) <> 0 then
+            exit;
+        fn := MakeString([Def.fLocalFolder, name]);
+        result := Ctxt.SetOutFile(fn, not(hpoDisable304 in Def.Options), '',
           Def.CacheControlMaxAgeSec, @siz); // to be streamed from file
       end;
     sRemoteUri:
       begin
 
-      end
+      end;
   else
     exit;
   end;
