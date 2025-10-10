@@ -396,6 +396,8 @@ type
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
     /// just a wrapper around fErrorMessage := FormatString()
     procedure SetErrorMessage(const Fmt: RawUtf8; const Args: array of const);
+    /// append a "Repr-Digest:" HTTP header to the request output
+    procedure SetOutReprDigest(const Hash: THashDigest);
     /// serialize a given value as JSON into OutContent and OutContentType fields
     // - this function returns HTTP_SUCCESS
     function SetOutJson(Value: pointer; TypeInfo: PRttiInfo): cardinal; overload;
@@ -3344,6 +3346,12 @@ procedure THttpServerRequest.SetErrorMessage(const Fmt: RawUtf8;
   const Args: array of const);
 begin
   FormatString(Fmt, Args, fErrorMessage);
+end;
+
+procedure THttpServerRequest.SetOutReprDigest(const Hash: THashDigest);
+begin // implement e.g. pcoHttpReprDigest option
+  SetOutCustomHeader(['Repr-Digest: ', HASH_TXT_LOWER[Hash.Algo],
+    '=:', BinToBase64Short(@Hash.Bin, HASH_SIZE[Hash.Algo]), ':']);
 end;
 
 function THttpServerRequest.TempJsonWriter(
@@ -7628,12 +7636,6 @@ begin
   end;
 end;
 
-procedure AddReprDigest(Ctxt: THttpServerRequestAbstract; const Hash: THashDigest);
-begin // implement pcoHttpReprDigest option
-  Ctxt.SetOutCustomHeader(['Repr-Digest: ', HASH_TXT_LOWER[Hash.Algo],
-    '=:', BinToBase64Short(@Hash.Bin, HASH_SIZE[Hash.Algo]), ':']);
-end;
-
 function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
   const aHash: THashDigest; const aParams: RawUtf8): cardinal;
 var
@@ -7645,7 +7647,7 @@ begin
       // direct HEAD to the remote server, with no redirection
       result := DirectConnectAndHead(self, Ctxt, {redir=}0, aParams, cs);
       if pcoHttpReprDigest in fSettings.Options then
-        AddReprDigest(Ctxt, aHash);
+        (Ctxt as THttpServerRequest).SetOutReprDigest(aHash);
     finally
       cs.Free;
     end;
@@ -7739,7 +7741,7 @@ begin
       if progsize <> 0 then // append header for rfProgressiveStatic mode
         Ctxt.SetOutCustomHeader([STATICFILE_PROGSIZE + ' ', progsize]);
       if pcoHttpReprDigest in fSettings.Options then
-        AddReprDigest(Ctxt, msg.Hash);
+        THttpServerRequest(Ctxt).SetOutReprDigest(msg.Hash);
     end;
   finally
     if err <> oreOK then
