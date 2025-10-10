@@ -1354,7 +1354,7 @@ type
     constructor Create; override;
     /// append and own a given THttpProxyUrl definition at runtime
     // - this instance will be stored and owned in Url[] array
-    procedure AddUrl(one: THttpProxyUrl);
+    function AddUrl(one: THttpProxyUrl): THttpProxyUrl;
     /// create a THttpProxyUrl definition to serve a local static folder
     // - if optional ExceptionClass is supplied, the local folder should exist
     function AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
@@ -5450,13 +5450,14 @@ begin
   fMemCache.TimeoutSec := 15 * SecsPerMin;
 end;
 
-procedure THttpProxyServerSettings.AddUrl(one: THttpProxyUrl);
+function THttpProxyServerSettings.AddUrl(one: THttpProxyUrl): THttpProxyUrl;
 begin
-  if one <> nil then
-    if one.Source = '' then
-      one.Free
+  result := one;
+  if result <> nil then
+    if result.Source = '' then
+      FreeAndNil(result)
     else
-      ObjArrayAdd(fUrl, one); // will be owned as fUri[]
+      ObjArrayAdd(fUrl, result); // will be owned as fUri[]
 end;
 
 function THttpProxyServerSettings.AddFolder(const folder: TFileName;
@@ -5472,7 +5473,7 @@ begin
     RaiseExceptionOnNonExistingFolder := EHttpProxyServer;
   result.Source := StringToUtf8(EnsureDirectoryExists(
     folder, RaiseExceptionOnNonExistingFolder));
-  AddUrl(result);
+  result := AddUrl(result);
 end;
 
 
@@ -5595,7 +5596,7 @@ begin
       // validate source as local file folder or remote http(s) server
       one.fSourced := sUndefined;
       if IsHttp(one.Source) then
-      begin
+      begin // detect also 'http://unix:/path/to/socket.sock:/url/path'
         if one.fRemoteUri.From(one.Source) then
           one.fSourced := sRemoteUri;
       end
