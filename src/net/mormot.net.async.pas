@@ -1164,12 +1164,30 @@ type
       read fPath write fPath;
   end;
 
+  /// set of THttpProxyUrl.Options items, used to refine a specific URI process
+  // - hpoNoSubFolder disable access to any sub-folder within this URI
+  // - hpoNoFolderHtmlIndex disable the HTML index generation at folder level
+  // - hpoPublishMd5/psoPublishSha1/psoPublishSha256 enable hash content
+  // generation on server side with .md5/.sha1/.sha256 extension on a resource
+  // - hpoDisable304 disable "if-none-match:" / "if-modified-since:" headers
+  // default support as efficient 304 HTTP_NOTMODIFIED response
+  THttpProxyUrlOption = (
+    hpoNoSubFolder,
+    hpoNoFolderHtmlIndex,
+    hpoDisableFolderHtmlIndexCache,
+    hpoPublishMd5,
+    hpoPublishSha1,
+    hpoPublishSha256,
+    hpoDisable304);
+  /// store THttpProxyUrl options for a given URI
+  THttpProxyUrlOptions = set of THttpProxyUrlOption;
+
   /// define one URL content setting for THttpProxyServer
   THttpProxyUrl = class(TSynAutoCreateFields)
   protected
     fUrl, fSource: RawUtf8;
     fDisabled: boolean;
-    fIfModifiedSince: boolean;
+    fOptions: THttpProxyUrlOptions;
     fMethods: TUriRouterMethods;
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
     fAlgos: THashAlgos; // hfMD5,hfSha1,hfSha256
@@ -1217,12 +1235,12 @@ type
     // - equals by default [urmGet, urmHead]
     property Methods: TUriRouterMethods
       read fMethods write fMethods;
-    /// handle "if-modified-since:" client header as 304 HTTP_NOTMODIFIED
-    // - default true will support 304 results against the resource timestamp
-    property IfModifiedSince: boolean
-      read fIfModifiedSince write fIfModifiedSince;
+    /// refined the process of this URI definition
+    property Options: THttpProxyUrlOptions
+      read fOptions write fOptions;
     /// support optional "Cache-Control: max-age=..." header timeout value
     // - default 0 value will disable this header transmission
+    // - to be used in conjunction with the hpoIfModifiedSince option
     property CacheControlMaxAgeSec: integer
       read fCacheControlMaxAgeSec write fCacheControlMaxAgeSec;
     /// overwrite the main MemCache setting to tune in-memory caching
@@ -1248,9 +1266,6 @@ type
   // - psoRejectBotUserAgent identifies and rejects Bots via IsHttpUserAgentBot()
   // - psoBan40xIP will reject any IP for a few seconds after a 4xx error code
   // - psoDisableMemCache will globally disable all MemCache settings
-  // - psoNoFolderHtmlIndex disable the HTML index generation at folder level
-  // - psoPublishMd5/psoPublishSha1/psoPublishSha256 enable hash content
-  // generation on server side with .md5/.sha1/.sha256 extension on a resource
   THttpProxyServerOption = (
     psoLogVerbose,
     psoExcludeDateHeader,
@@ -1259,12 +1274,7 @@ type
     psoEnableLogging,
     psoRejectBotUserAgent,
     psoBan40xIP,
-    psoDisableMemCache,
-    psoNoFolderHtmlIndex,
-    psoDisableFolderHtmlIndexCache,
-    psoPublishMd5,
-    psoPublishSha1,
-    psoPublishSha256);
+    psoDisableMemCache);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -5333,7 +5343,7 @@ constructor THttpProxyUrl.Create;
 begin
   inherited Create;
   fMethods := [urmGet, urmHead];
-  fIfModifiedSince := true;
+  fOptions := [];
 end;
 
 destructor THttpProxyUrl.Destroy;
@@ -5414,6 +5424,7 @@ end;
 constructor THttpProxyServerSettings.Create;
 begin
   inherited Create;
+  // set default values in this main instance
   fDiskCache.Path := Executable.ProgramFilePath + 'proxycache';
   fMemCache.MaxSize := 4096;
   fMemCache.TimeoutSec := 15 * SecsPerMin;
@@ -5595,15 +5606,22 @@ begin
             TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
             one.MemCache.TimeoutSec);
         if one.fSourced = sRemoteUri then
+        begin
           if one.DiskCache.MaxSize < 0 then
             one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
+          if one.DiskCache.Path = '' then
+            one.DiskCache.Path := fSettings.DiskCache.Path;
+          if one.DiskCache.TimeoutSec <= 0 then
+            one.DiskCache.TimeoutSec := fSettings.DiskCache.TimeoutSec;
+        end;
       end;
+      // prepare optional hash cache
       one.fAlgos := [];
-      if psoPublishMd5 in fSettings.Server.Options then
+      if hpoPublishMd5 in one.Options then
         include(one.fAlgos, hfMd5);
-      if psoPublishSha1 in fSettings.Server.Options then
+      if hpoPublishSha1 in one.Options then
         include(one.fAlgos, hfSha1);
-      if psoPublishSha256 in fSettings.Server.Options then
+      if hpoPublishSha256 in one.Options then
         include(one.fAlgos, hfSha256);
       if one.fAlgos <> [] then
         one.fHashCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
@@ -5693,19 +5711,21 @@ begin
     HTTP_NOTFOUND:
       // this URI is no file, but may be a folder
       if (siz < 0) and // siz=-1 for folder
-         not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
+         not (hpoNoFolderHtmlIndex in Def.Options) then
       begin
         // return the folder files info as cached HTML
-        if (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) or
+        if (hpoDisableFolderHtmlIndexCache in Def.Options) or
            not Def.fMemCached.FindAndCopy(name, cached) then
         begin
           FolderHtmlIndex(fn, Ctxt.Url,
-            StringReplaceChars(name, PathDelim, '/'), RawUtf8(cached));
+            StringReplaceChars(name, PathDelim, '/'),
+            RawUtf8(cached), hpoNoSubFolder in Def.Options);
           if Assigned(Def.fMemCached) and
-             not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
+             not (hpoDisableFolderHtmlIndexCache in Def.Options) then
             Def.fMemCached.Add(name, cached);
         end;
-        result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
+        result := Ctxt.SetOutContent(cached,
+                    not(hpoDisable304 in Def.Options), HTML_CONTENT_TYPE);
       end
       else if siz = 0 then
         // check URI for any .md5/.sha1/.sha256 hash extension
