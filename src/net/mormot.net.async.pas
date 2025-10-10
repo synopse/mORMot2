@@ -5684,6 +5684,7 @@ begin
             one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
           if one.DiskCache.Path = '' then
             one.DiskCache.Path := fSettings.DiskCache.Path;
+          one.DiskCache.Path := EnsureDirectoryExists(one.DiskCache.Path);
           if one.DiskCache.TimeoutSec <= 0 then
             one.DiskCache.TimeoutSec := fSettings.DiskCache.TimeoutSec;
         end;
