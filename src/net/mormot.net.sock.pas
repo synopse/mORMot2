@@ -5553,7 +5553,7 @@ begin
     p := s + 3;
   end;
   // parse Server
-  if NetStartWith(pointer(p), 'UNIX:') then
+  if NetStartWith(pointer(p), 'UNIX:/') then
   begin
     inc(p, 5); // 'http://unix:/path/to/socket.sock:/url/path'
     Layer := nlUnix;
