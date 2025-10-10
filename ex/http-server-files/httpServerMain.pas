@@ -31,15 +31,12 @@ implementation
 
 procedure Main;
 var
-  F: TSearchRec;
-  fn: TFileName;
-  console, verbose: boolean;
   cmd: TExecutableCommandLine;
   logger: TSynLogFamily;
+  console, verbose: boolean;
   settingsfolder, folder: TFileName;
   url: RawUtf8;
   settings: THttpProxyServerSettings;
-  one: THttpProxyUrl;
   server: THttpProxyServer;
 begin
   settings := THttpProxyServerSettings.Create;
@@ -67,22 +64,8 @@ begin
       exit;
     end;
     // load local *.json files with URI
-    if (settingsfolder <> '') and
-       (FindFirst(MakePath([settingsfolder, '*.json']), faAnyFile - faDirectory, F) = 0) then
-    begin
-      repeat
-        if SearchRecValidFile(F) then
-        begin
-          fn := Executable.ProgramFilePath + F.Name;
-          one := THttpProxyUrl.Create;
-          if JsonFileToObject(fn, one, nil, JSONPARSER_TOLERANTOPTIONS) then
-            settings.AddUrl(one)
-          else
-            one.Free;
-        end;
-      until FindNext(F) <> 0;
-      FindClose(F);
-    end;
+    if settingsfolder <> '' then
+      settings.AddFromFiles(settingsfolder);
     // ensure we have something to serve (maybe from command line)
     if folder <> '' then
       settings.AddFolder(folder, url);
