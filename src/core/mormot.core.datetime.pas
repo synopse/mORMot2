@@ -3052,7 +3052,7 @@ var
   h: PUtf8Char;
   l: PtrInt;
 begin
-  Int64ToHttpEtag((Size shl 16) xor (Time shr 9), Etag); // 512ms resolution
+  Int64ToHttpEtag((Size shl 16) xor (Time shr 9), etag); // 512ms resolution
   if InHeaders <> nil then
   begin
     result := true; // return true as HTTP_NOTMODIFIED (304) status code

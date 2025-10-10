@@ -139,7 +139,7 @@ function SortFindFileTimestamp(const A, B): integer;
 
 /// compute the HTML index page corresponding to a local folder
 procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
-  out Html: RawUtf8);
+  out Html: RawUtf8; NoSubFolder: boolean = false);
 
 
 type
@@ -2140,7 +2140,7 @@ begin
 end;
 
 procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
-  out Html: RawUtf8);
+  out Html: RawUtf8; NoSubFolder: boolean);
 const
   _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
 var
@@ -2171,31 +2171,35 @@ begin
     for i := 1 to length(files) do
     begin
       isfile := f^.Size >= 0; // size = -1 for folders
-      StringToUtf8(f^.Name, n);
-      w.AddShorter('<tr><td>');
-      w.AddShorter(_DIR[isfile]);
-      w.AddShort('</td><td><a href="');
-      if Path <> '' then
+      if isfile or
+         not NoSubFolder then
       begin
-        w.AddHtmlEscapeUtf8(Path);
-        if Path[length(Path)] <> '/' then
+        StringToUtf8(f^.Name, n);
+        w.AddShorter('<tr><td>');
+        w.AddShorter(_DIR[isfile]);
+        w.AddShort('</td><td><a href="');
+        if Path <> '' then
+        begin
+          w.AddHtmlEscapeUtf8(Path);
+          if Path[length(Path)] <> '/' then
+            w.AddDirect('/');
+        end;
+        UrlEncodeName(w, n);
+        if not isFile then
           w.AddDirect('/');
+        w.AddDirect('"', '>');
+        w.AddHtmlEscapeUtf8(n);
+        if not isFile then
+          w.AddDirect('/');
+        w.AddShort('</a></td><td>');
+        w.AddDateTime(@f^.Timestamp, ' ', #0, false, true);
+        w.AddShort('&nbsp;</td><td align="right">');
+        if isFile then
+          w.AddShort(KB(f^.Size))
+        else
+          w.AddDirect('-');
+        w.AddShort('</td><tr>'#13#10);
       end;
-      UrlEncodeName(w, n);
-      if not isFile then
-        w.AddDirect('/');
-      w.AddDirect('"', '>');
-      w.AddHtmlEscapeUtf8(n);
-      if not isFile then
-        w.AddDirect('/');
-      w.AddShort('</a></td><td>');
-      w.AddDateTime(@f^.Timestamp, ' ', #0, false, true);
-      w.AddShort('&nbsp;</td><td align="right">');
-      if isFile then
-        w.AddShort(KB(f^.Size))
-      else
-        w.AddDirect('-');
-      w.AddShort('</td><tr>'#13#10);
       inc(f);
     end;
     w.AddShort('</table>'#13#10'</body>'#13#10'</html>');
