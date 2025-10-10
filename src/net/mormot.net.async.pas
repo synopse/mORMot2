@@ -5502,6 +5502,32 @@ begin
   result := AddUrl(result);
 end;
 
+function THttpProxyServerSettings.AddFromFiles(
+  const settingsfolder, mask: TFileName): integer;
+var
+  F: TSearchRec;
+  fn: TFileName;
+  one: THttpProxyUrl;
+begin
+  result := 0;
+  if (settingsfolder = '') or
+     (FindFirst(MakePath([settingsfolder, mask]), faAnyFile - faDirectory, F) <> 0) then
+    exit;
+  repeat
+    if SearchRecValidFile(F) then
+    begin
+      fn := MakePath([settingsfolder, F.Name]);
+      one := THttpProxyUrl.Create;
+      if not JsonFileToObject(fn, one, nil, JSONPARSER_TOLERANTOPTIONS) then
+        one.Free
+      else if AddUrl(one) <> nil then
+        inc(result); // successfully added this file
+    end;
+  until FindNext(F) <> 0;
+  FindClose(F);
+end;
+
+
 
 { THttpProxyServer }
 
