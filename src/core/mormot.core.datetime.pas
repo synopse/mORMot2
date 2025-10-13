@@ -66,7 +66,7 @@ function Iso8601ToDateTimePUtf8Char(P: PUtf8Char; L: integer = 0): TDateTime;
 /// Date/Time conversion from ISO-8601
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format, with potentially
 // shorten versions has handled by the ISO-8601 standard (e.g. 'YYYY')
-// - will also recognize '.sss' milliseconds suffix, if any
+// - also recognize '.sss' milliseconds suffix or 'Thhmmss' or 'hh:mm:ss' input
 // - any ending/trailing single quote will be removed
 // - if L is left to default 0, it will be computed from StrLen(P)
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: integer;
@@ -1195,7 +1195,8 @@ var
   {$else}
   tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
-// expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
+// expect 'YYYYMMDDThhmmss[.sss]' format but handle also
+// 'YYYY-MM-DDThh:mm:ss[.sss]' or plain '[T]hh:mm:ss[.sss]'
 begin
   PInt64(@result)^ := 0;
   if P = nil then
@@ -1213,17 +1214,22 @@ begin
     if L < 4 then
       exit;
   end;
-  if P[0] = 'T' then
+  if P[0] = 'T' then // 'Thhmmss[.sss]'
   begin
-    dec(P, 8);
+    dec(P, 8); // hhmmss at P[9..] position
     inc(L, 8);
+  end
+  else if P[2] = ':' then // 'hh:mm:ss[.sss]'
+  begin
+    dec(P, 9); // hh:mm:ss at P[9..] position
+    inc(L, 9);
   end
   else
   begin
     {$ifndef CPUX86NOTPIC}
     tab := @ConvertHexToBin;
     {$endif CPUX86NOTPIC}
-    b := tab[ord(P[0])]; // first digit
+    b := tab[ord(P[0])]; // first YYYY digit
     if b > 9 then
       exit
     else
@@ -3137,7 +3143,7 @@ function UnixTimeEqualsMS(secs: TUnixTime; millisecs: TUnixMSTime;
   deltasecs: Int64): boolean;
 begin
   dec(secs, millisecs div MilliSecsPerSec);
-  result := abs(secs) <= deltasecs; // allow -1, 0, +1 secs rounding difference
+  result := abs(secs) <= deltasecs; // allow -1, 0, +1 second rounding difference
 end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
