@@ -44,10 +44,15 @@ const
   /// '"' + UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
   JSON_SQLDATE_MAGIC_QUOTE_C = ord('"') + cardinal(JSON_SQLDATE_MAGIC_C) shl 8;
 
-/// Date/Time conversion from ISO-8601
+/// Date/Time conversion from ISO-8601 text into a TDateTime value
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format
 // - will also recognize '.sss' milliseconds suffix, if any
 function Iso8601ToDateTime(const S: RawByteString): TDateTime; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// Time conversion from ISO-8601 text into a TTime value
+// - handle 'hhmmss' and 'hh:mm:ss' format, with optional '.sss' milliseconds suffix
+function Iso8601ToTime(const S: RawByteString): TTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// Date/Time conversion from ISO-8601
@@ -1167,6 +1172,14 @@ var
   tmp: TDateTime; // circumvent FPC limitation
 begin
   Iso8601ToDateTimePUtf8CharVar(pointer(S), length(S), tmp);
+  result := tmp;
+end;
+
+function Iso8601ToTime(const S: RawByteString): TTime;
+var
+  tmp: TDateTime; // circumvent FPC limitation
+begin
+  Iso8601ToTimePUtf8CharVar(pointer(S), length(S), tmp);
   result := tmp;
 end;
 
