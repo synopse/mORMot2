@@ -4150,6 +4150,8 @@ var
   cb: PSocketIOCallback;
 begin
   result := false;
+  if self = nil then
+    exit;
   fCallbackSafe.Lock;
   try
     cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aAckID);
@@ -4169,6 +4171,8 @@ var
   cb: PSocketIOCallback;
 begin
   result := false;
+  if self = nil then
+    exit;
   fCallbackSafe.Lock;
   try
     cb := pointer(fCallbacks);

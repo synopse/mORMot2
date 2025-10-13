@@ -343,6 +343,14 @@ type
     function Emit(out Dest: TDocVariantData; const EventName: RawUtf8;
       const Data: RawUtf8 = ''; const NameSpace: RawUtf8 = '';
       WaitTimeoutMS: integer = 0): boolean; overload;
+    /// disable a callback for a given packet ID
+    // - e.g. when a form is called and we don't need any notification any more
+    function Discard(aAckID: TSocketIOAckID;
+      const aNameSpace: RawUtf8 = ''): boolean; overload;
+    /// disable a given callback from any packet ID redirecting to it
+    // - e.g. when a form is called and we don't need any notification any more
+    function Discard(const aOnAck: TOnSocketIOAck;
+      const aNameSpace: RawUtf8 = ''): boolean; overload;
     /// refine the TSocketsIOClient process
     property Options: TSocketsIOClientOptions
       read fOptions write fOptions;
@@ -1175,6 +1183,17 @@ begin
   fWaitEventAckID := SIO_NO_ACK
 end;
 
+function TSocketsIOClient.Discard(aAckID: TSocketIOAckID;
+  const aNameSpace: RawUtf8): boolean;
+begin
+  result := TSocketIORemoteNamespace(GetRemote(aNameSpace)).Discard(aAckID);
+end;
+
+function TSocketsIOClient.Discard(const aOnAck: TOnSocketIOAck;
+  const aNameSpace: RawUtf8): boolean;
+begin
+  result := TSocketIORemoteNamespace(GetRemote(aNameSpace)).Discard(aOnAck);
+end;
 
 
 { TWebSocketEngineIOClientProtocol }
