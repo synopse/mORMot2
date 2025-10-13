@@ -1268,6 +1268,12 @@ type
     /// handle an acknowledge message and call the associated callback
     // - will raise an ESocketIO if the packet is invalid or ID was not found
     procedure Acknowledge(const aMessage: TSocketIOMessage);
+    /// disable a callback for a given packet ID
+    // - e.g. when a form is called and we don't need any notification any more
+    function Discard(aAckID: TSocketIOAckID): boolean; overload;
+    /// disable a given callback from any packet ID redirecting to it
+    // - e.g. when a form is called and we don't need any notification any more
+    function Discard(const aOnAck: TOnSocketIOAck): boolean; overload;
     /// low-level associated JSON array data supplied to Connect()
     property HandshakeData: RawUtf8
       read fHandshakeData write fHandshakeData;
@@ -4117,8 +4123,46 @@ begin
       '(may already have been consumed) for namespace %',
         [self, aMessage.ID, fNameSpace]);
   // call the registered callback and remove it from the callback list
-  cb^.OnAck(aMessage);
+  if Assigned(cb^.OnAck) then // if was not discarded
+    cb^.OnAck(aMessage);
   cb^.Ack := SIO_NO_ACK; // O(1) void the slot - to be reused for the next ack
+end;
+
+function TSocketIORemoteNamespace.Discard(aAckID: TSocketIOAckID): boolean;
+var
+  cb: PSocketIOCallback;
+begin
+  result := false;
+  cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aAckID);
+  if (cb = nil) or
+     not Assigned(cb^.OnAck) then
+    exit;
+  cb^.OnAck := nil; // Acknowledge() will just ignore this event
+  result := true;
+end;
+
+function TSocketIORemoteNamespace.Discard(const aOnAck: TOnSocketIOAck): boolean;
+var
+  n: integer;
+  cb: PSocketIOCallback;
+begin
+  result := false;
+  cb := pointer(fCallbacks);
+  if (cb = nil) or
+     not Assigned(aOnAck) then
+    exit;
+  n := PDALen(PAnsiChar(cb) - _DALEN)^ + _DAOFF;
+  repeat
+    if (cb^.Ack <> SIO_NO_ACK) and
+       (TMethod(cb^.OnAck).Code = TMethod(aOnAck).Code) and
+       (TMethod(cb^.OnAck).Data = TMethod(aOnAck).Data) then
+    begin
+      cb^.OnAck := nil; // Acknowledge() will just ignore this event
+      result := true;   // the same callback may be used for several events
+    end;
+    inc(cb);
+    dec(n);
+  until n = 0;
 end;
 
 
