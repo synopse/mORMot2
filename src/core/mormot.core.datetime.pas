@@ -1389,6 +1389,11 @@ begin
     L := StrLen(P);
   if L < 6 then
     exit; // we need 'hhmmss' at least
+  if P[0] = 'T' then
+  begin
+    inc(P); // 'Thhmmss' -> 'hhmmss'
+    dec(L);
+  end;
   H := ord(P[0]) * 10 + ord(P[1]) - (48 + 480);
   if P[2] = ':' then
   begin
