@@ -4445,6 +4445,10 @@ begin
         [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
     finally
       FreeAndNil(c);
+      if (aDestFileName <> '') and
+         not DeleteFile(aDestFileName) then
+        fOwner.DoLog(sllLastError, 'StartRequest: DeleteFile(%) failed',
+          [aDestFileName], self);
     end
     else if aConnection <> nil then
       aConnection^ := c;
