@@ -838,6 +838,7 @@ procedure UnixTimeOrDoubleToDateTime(P: PUtf8Char; Len: PtrInt; var V: TDateTime
 /// convert some text encoded as a number into a TDateTime
 // - will recognize double/COM flots or TUnixTime/TUnixMSTime 64-bit integers
 function UnixTimeAnyToDateTime(const Text: RawUtf8): TDateTime;
+  {$ifdef FPC} inline; {$endif}
 
 
 { ************ TTimeLog efficient 64-bit custom date/time encoding }
@@ -1362,8 +1363,11 @@ begin
 end;
 
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: integer): TDateTime;
+var
+  tmp: TDateTime; // for FPC
 begin
-  Iso8601ToTimePUtf8CharVar(P, L, result);
+  Iso8601ToTimePUtf8CharVar(P, L, tmp);
+  result := tmp;
 end;
 
 procedure Iso8601ToTimePUtf8CharVar(P: PUtf8Char; L: integer;
@@ -1461,8 +1465,11 @@ begin
 end;
 
 function IntervalTextToDateTime(Text: PUtf8Char): TDateTime;
+var
+  tmp: TDateTime; // for FPC
 begin
-  IntervalTextToDateTimeVar(Text, result);
+  IntervalTextToDateTimeVar(Text, tmp);
+  result := tmp;
 end;
 
 procedure IntervalTextToDateTimeVar(Text: PUtf8Char;
@@ -2058,12 +2065,14 @@ end;
 
 function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
 var
-  time: TDateTime;
+  date, time: TDateTime;
 begin
-  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
-    result := 0
-  else if mormot.core.datetime.TryEncodeTime(Hour, Min, Sec, MSec, time) then
-    result := result + time;
+  result := 0;
+  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, date) then
+    if mormot.core.datetime.TryEncodeTime(Hour, Min, Sec, MSec, time) then
+      result := date + time
+    else
+      result := date;
 end;
 
 
@@ -2158,8 +2167,12 @@ begin
 end;
 
 function TSynDate.ToDate: TDate;
+var
+  tmp: TDateTime; // for FPC
 begin
-  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, PDateTime(@result)^) then
+  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, tmp) then
+    result := tmp
+  else
     result := 0;
 end;
 
@@ -3238,8 +3251,11 @@ begin
 end;
 
 function UnixTimeAnyToDateTime(const Text: RawUtf8): TDateTime;
+var
+  tmp: TDateTime;
 begin
-  UnixTimeOrDoubleToDateTime(pointer(Text), length(Text), result);
+  UnixTimeOrDoubleToDateTime(pointer(Text), length(Text), tmp);
+  result := tmp;
 end;
 
 
@@ -3353,15 +3369,18 @@ end;
 function TTimeLogBits.ToTime: TTime;
 var
   lo: PtrUInt;
+  tmp: TDateTime; // for FPC
 begin
   {$ifdef CPU64}
   lo := Value;
   {$else}
   lo := PCardinal(@Value)^;
   {$endif CPU64}
-  if (lo and (1 shl SHR_DD - 1) = 0) or
-     not mormot.core.datetime.TryEncodeTime((lo shr SHR_H) and AND_H,
-           (lo shr SHR_M) and AND_M, lo and AND_S, 0, PDateTime(@result)^) then
+  if (lo and (1 shl SHR_DD - 1) <> 0) and
+     mormot.core.datetime.TryEncodeTime((lo shr SHR_H) and AND_H,
+        (lo shr SHR_M) and AND_M, lo and AND_S, 0, tmp) then
+    result := tmp
+  else
     result := 0;
 end;
 
