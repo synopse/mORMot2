@@ -2399,6 +2399,7 @@ var
   timer: TPrecisionTimer;
 begin
   CheckEqual(SizeOf(msg), 192);
+  CheckEqual(SizeOf(THttpPeerCacheMessage), 192);
   CheckEqual(PEER_CACHE_MESSAGELEN, SizeOf(msg) + 4 + SizeOf(TAesBlock) * 3);
   CheckEqual(Base64uriToBinLength(PEER_CACHE_BEARERLEN), PEER_CACHE_MESSAGELEN);
   // validate THttpRequestExtendedOptions serialization
