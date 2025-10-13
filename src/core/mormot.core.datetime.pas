@@ -754,8 +754,9 @@ function UnixTimeMinimalUtc: TUnixTimeMinimal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compare one TUnixTime (seconds) value against one TUnixMSTime (milliseconds) value
-function UnixTimeEqualsMS(secs: TUnixTime; millisecs: TUnixMSTime;
-  deltasecs: Int64 = 1): boolean;
+function UnixTimeEqualsMS(const secs: TUnixTime; const millisecs: TUnixMSTime;
+  const deltamillisecs: Int64 = 1000): boolean;
+  {$ifdef CPU64}inline;{$endif}
 
 /// convert a second-based c-encoded time as TDateTime
 //  - i.e. number of seconds elapsed since Unix epoch 1/1/1970 into TDateTime
@@ -3139,11 +3140,10 @@ begin
   result := UnixTimeUtc - UNIXTIME_MINIMAL;
 end;
 
-function UnixTimeEqualsMS(secs: TUnixTime; millisecs: TUnixMSTime;
-  deltasecs: Int64): boolean;
-begin
-  dec(secs, millisecs div MilliSecsPerSec);
-  result := abs(secs) <= deltasecs; // allow -1, 0, +1 second rounding difference
+function UnixTimeEqualsMS(const secs: TUnixTime; const millisecs: TUnixMSTime;
+  const deltamillisecs: Int64): boolean;
+begin // allow ] -1 .. +1 [ second rounding difference
+  result := abs(secs * MilliSecsPerSec - millisecs) < deltamillisecs;
 end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
