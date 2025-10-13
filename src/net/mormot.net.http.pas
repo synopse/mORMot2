@@ -864,6 +864,7 @@ type
     function SetOutText(const Fmt: RawUtf8; const Args: array of const;
       const ContentType: RawUtf8 = TEXT_CONTENT_TYPE): cardinal;
     /// set the OutContent and OutContentType fields to return a specific file
+    // - this overloaded method will check the file on disk
     // - returning status 200 with the STATICFILE_CONTENT_TYPE constant marker
     // - Handle304NotModified = TRUE will check the file age and size and return
     // status HTTP_NOTMODIFIED (304) if the file did not change
@@ -871,9 +872,18 @@ type
     // - can optionally return FileSize^ (0 if not found, -1 if is a folder)
     function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0;
-      FileSize: PInt64 = nil): cardinal;
+      FileSize: PInt64 = nil): cardinal; overload;
+    /// set the OutContent and OutContentType fields to return a specific file
+    // - this overload won't check the file on disk, but FileSize/FileLastModified
+    // - returning status 200 with the STATICFILE_CONTENT_TYPE constant marker
+    // - Handle304NotModified = TRUE will check the file age and any "ETag" in
+    // current OutCustomHeaders to return status HTTP_NOTMODIFIED (304)
+    // - set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
+    function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
+      FileSize: Int64; FileLastModified: TUnixMSTime;
+      CacheControlMaxAgeSec: integer = 0): cardinal; overload;
     /// return a specific file content, maybe in rfProgressiveStatic mode
-    // - include our internal 'STATIC-PROGSIZE:' header if expected size <> 0
+    // - include our internal 'STATIC-PROGSIZE:' header if ExpectedFileSize <> 0
     procedure SetOutProgressiveFile(const FileName: TFileName;
       ExpectedFileSize: Int64);
     /// set the OutContent and OutContentType fields to return a specific file
@@ -4685,13 +4695,50 @@ begin
     result := HTTP_NOTMODIFIED;
     exit;
   end;
+  result := HTTP_SUCCESS;
   if ContentType = '' then
     AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, GetMimeContentType('', FileName)])
   else
     AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, ContentType]);
   fOutContentType := STATICFILE_CONTENT_TYPE;
   StringToUtf8(FileName, RawUtf8(fOutContent));
+end;
+
+function THttpServerRequestAbstract.SetOutFile(const FileName: TFileName;
+  Handle304NotModified: boolean; FileSize: Int64; FileLastModified: TUnixMSTime;
+  CacheControlMaxAgeSec: integer): cardinal;
+var
+  e, h: PUtf8Char;
+  el, hl: PtrInt;
+begin
+  result := HTTP_NOTFOUND;
+  if (FileSize <= 0) or
+     (FileName = '') then
+    exit;
+  if Handle304NotModified then
+  begin
+    result := HTTP_NOTMODIFIED;
+    if FileLastModified > 0 then
+    begin
+      h := FindNameValuePointer(pointer(fInHeaders), 'IF-MODIFIED-SINCE: ', hl);
+      if (h <> nil) and
+         IdemPropName(UnixMSTimeUtcToHttpDate(FileLastModified), h, hl) then
+        exit;
+    end;
+    e := FindNameValuePointer(pointer(fOutCustomHeaders), 'ETAG: ', el);
+    if e <> nil then
+    begin
+      h := FindNameValuePointer(pointer(fInHeaders), 'IF-NONE-MATCH: ', hl);
+      if (h <> nil) and
+         IdemPropName(e, h, el, hl) then
+        exit;
+    end;
+  end;
   result := HTTP_SUCCESS;
+  if CacheControlMaxAgeSec <> 0 then
+    AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
+  fOutContentType := STATICFILE_CONTENT_TYPE;
+  StringToUtf8(FileName, RawUtf8(fOutContent));
 end;
 
 procedure THttpServerRequestAbstract.SetOutProgressiveFile(
