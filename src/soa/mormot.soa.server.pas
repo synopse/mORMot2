@@ -358,10 +358,6 @@ type
     fFakeCallbacks: TSynObjectListLocked; // TInterfacedObjectFakeServer instances
     fOnCallbackReleasedOnClientSide: TOnCallbackReleased;
     fOnCallbackReleasedOnServerSide: TOnCallbackReleased;
-    fCallbacks: array of record
-      Service: TInterfaceFactory;
-      Arg: PInterfaceMethodArgument;
-    end;
     fRecordVersionCallback: array of IServiceRecordVersionCallbackDynArray;
     fCallbackNamesSorted: TRawUtf8DynArray;
     fPublishSignature: boolean;
