@@ -7253,13 +7253,19 @@ procedure TTestCoreBase.Iso8601DateAndTime;
       Check(true);
     J.From(E);
     Check(Int64(I) = Int64(J));
-    s := TimeToIso8601(D, Expanded);
+    s := TimeToIso8601(D, Expanded); // e.g. 'T23:36:34'
     Check(PosEx('.', s) = 0);
     Check(abs(frac(D) - Iso8601ToDateTime(s)) < 1 / SecsPerDay);
-    s := TimeToIso8601(D, Expanded, 'T', true);
+    s := TimeToIso8601(D, Expanded, 'T', true); // 'T23:36:34.715'
     Check(PosEx('.', s) > 0);
     F := Iso8601ToDateTime(s);
     Check(abs(frac(D) - F) < 1 / MSecsPerDay, 'withms1');
+    if expanded then
+    begin
+      delete(s, 1, 1); // '23:36:34.715'
+      F := Iso8601ToDateTime(s);
+      Check(abs(frac(D) - F) < 1 / MSecsPerDay, 'withmsNoT');
+    end;
     s := DateToIso8601(D, Expanded);
     Check(trunc(D) = trunc(Iso8601ToDateTime(s)));
     Check(Abs(D - I.ToDateTime) < (1 / SecsPerDay));
