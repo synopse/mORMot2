@@ -166,6 +166,10 @@ function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean; o
 /// retrieve a HTTP header 64-bit integer value from its case-insensitive name
 function GetHeader(const Headers, Name: RawUtf8; out Value: Int64): boolean; overload;
 
+/// extract size and date from HTTP headers
+function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
+  out LastModified: TUnixTime): boolean;
+
 /// remove an HTTP header entry as specified by its name (e.g. 'Authorization')
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 
@@ -2805,6 +2809,17 @@ begin
     exit;
   Value := GetInt64(pointer(v), err);
   result := err = 0;
+end;
+
+function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
+  out LastModified: TUnixTime): boolean;
+var
+  lastmod: RawUtf8;
+begin
+  result := GetHeader(Headers, 'content-length', ContentLength) and
+            GetHeader(Headers, 'Last-Modified', lastmod);
+  if result then
+    LastModified := HttpDateToUnixTime(lastmod);
 end;
 
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
