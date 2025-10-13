@@ -5778,7 +5778,7 @@ begin
         try
           // always perform a HEAD request to the original server
           result := Def.RemoteClientHead(remote, remotehead);
-          if StatusCodeIsSuccess(result) then
+          if result in [HTTP_SUCCESS, HTTP_NOCONTENT] then
             if GetHeaderInfo(remotehead, headsiz, headlastmod) then
             begin
               // check the header against the local cached file
@@ -5802,23 +5802,48 @@ begin
                   begin
                     result := Ctxt.SetOutFile(fn, not(hpoDisable304 in Def.Options),
                       siz, lastmod, Def.CacheControlMaxAgeSec);
-                    info := 'deprecated cache';
+                    info := 'locked cache';
                   end;
                 end;
               if info = '' then
-              begin
-                // need an asynchronous GET to the remote server
-                nr := fServer.Clients.StartRequest(self, remote, 'GET', '', fn);
-                if nr <> nrOk then
+                if siz < 16 shl 10 then
                 begin
-                  Ctxt.OutCustomHeaders := '';
-                  result := HTTP_BADGATEWAY; // 502
-                  Append(info, [ToText(nr)^]);
+                  // smallest files < 16KB could use the existing connection
+                  if siz > 0 then
+                    result := Def.fRemoteClient.Request(
+                      remote, 'GET', '', '', '', {keepalive=}30000);
+                  if result in [HTTP_SUCCESS, HTTP_NOCONTENT] then
+                    if (length(Def.fRemoteClient.Body) = siz) and
+                       FileFromString(Def.fRemoteClient.Body, fn) and
+                       FileSetDateFromUnixUtc(fn, headlastmod) then
+                    begin
+                      result := Ctxt.SetOutFile(fn, not(hpoDisable304 in Def.Options),
+                        siz, lastmod, Def.CacheControlMaxAgeSec);
+                      info := 'small get';
+                    end
+                    else
+                    begin
+                      result := HTTP_BADGATEWAY; // 502
+                      info := 'get error';
+                    end;
                 end
                 else
-                  // start sending the file content back in progressive mode
-                  Ctxt.SetOutProgressiveFile(fn, siz);
-              end;
+                begin
+                  // need an asynchronous GET to the remote server
+                  nr := fServer.Clients.StartRequest(self, remote, 'GET', '', fn);
+                  if nr <> nrOk then
+                  begin
+                    Ctxt.OutCustomHeaders := '';
+                    result := HTTP_BADGATEWAY; // 502
+                    Append(info, [ToText(nr)^]);
+                  end
+                  else
+                  begin
+                    // start sending the file content back in progressive mode
+                    Ctxt.SetOutProgressiveFile(fn, siz);
+                    info := 'progressive';
+                  end;
+                end;
             end
             else
             begin
@@ -5836,6 +5861,7 @@ begin
     exit;
   end;
   // complete the actual URI process
+  if info = '' then
   case result of
     HTTP_SUCCESS:
       // this local file does exist: try if we could use Def.MemCache
@@ -5939,8 +5965,7 @@ begin
       if one.fSourced <> sRemoteUri then
         result := HTTP_NOTALLOWED // 405 Method Not Allowed
       else
-      { TODO: implement proxy with POST/PUT/DELETE }
-        ;
+        ; { TODO: implement proxy with POST/PUT/DELETE }
   end;
 end;
 
