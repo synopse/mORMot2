@@ -1249,8 +1249,9 @@ type
   TSocketIORemoteNamespace = class(TSocketIONamespace)
   protected
     fSid, fHandshakeData: RawUtf8;
-    fAckIdCursor: TSocketIOAckID;
+    fCallbackSafe: TLightLock;
     fCallbacks: array of TSocketIOCallback;
+    fAckIdCursor: TSocketIOAckID;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
     function GenerateAckId(const aOnAck: TOnSocketIOAck): TSocketIOAckID;
   public
@@ -4064,16 +4065,25 @@ var
   cb: PSocketIOCallback;
   n: PtrInt;
 begin
-  result := InterlockedIncrement(fAckIdCursor);
-  n := Length(fCallbacks);
-  cb := SocketIOCallbackSearch(pointer(fCallbacks), n, SIO_NO_ACK); // search any void
-  if cb = nil then
-  begin
-    SetLength(fCallbacks, NextGrow(n)); // no void slot: allocate some new ones
-    cb := @fCallbacks[n];
+  result := SIO_NO_ACK;
+  if not Assigned(aOnAck) then
+    exit;
+  fCallbackSafe.Lock;
+  try
+    inc(fAckIdCursor);
+    result := fAckIdCursor;
+    n := Length(fCallbacks);
+    cb := SocketIOCallbackSearch(pointer(fCallbacks), n, SIO_NO_ACK); // any void
+    if cb = nil then
+    begin
+      SetLength(fCallbacks, NextGrow(n)); // no void slot: allocate some new ones
+      cb := @fCallbacks[n];
+    end;
+    cb^.Ack := result;
+    cb^.OnAck := aOnAck;
+  finally
+    fCallbackSafe.UnLock;
   end;
-  cb^.Ack := result;
-  cb^.OnAck := aOnAck;
   result := result;
 end;
 
@@ -4106,6 +4116,7 @@ end;
 procedure TSocketIORemoteNamespace.Acknowledge(const aMessage: TSocketIOMessage);
 var
   cb: PSocketIOCallback;
+  ack: TOnSocketIOAck;
 begin
   // validate message
   if not aMessage.NameSpaceIs(fNameSpace) then
@@ -4117,15 +4128,21 @@ begin
       'acknowledgment message for namespace %',
       [self, ToText(aMessage.PacketType)^, aMessage.ID, fNameSpace]);
   // search for the registered callback
-  cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aMessage.ID);
-  if cb = nil then
-    ESocketIO.RaiseUtf8('%.Acknowledge: callback for message ID % not found ' +
-      '(may already have been consumed) for namespace %',
-        [self, aMessage.ID, fNameSpace]);
-  // call the registered callback and remove it from the callback list
-  if Assigned(cb^.OnAck) then // if was not discarded
-    cb^.OnAck(aMessage);
-  cb^.Ack := SIO_NO_ACK; // O(1) void the slot - to be reused for the next ack
+  fCallbackSafe.Lock;
+  try
+    cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aMessage.ID);
+    if cb = nil then
+      ESocketIO.RaiseUtf8('%.Acknowledge: callback for message ID % not found ' +
+        '(may already have been consumed) for namespace %',
+          [self, aMessage.ID, fNameSpace]);
+    ack := cb^.OnAck;      // execute callback outside of the lock
+    cb^.Ack := SIO_NO_ACK; // O(1) void the slot - to be reused for the next ack
+  finally
+    fCallbackSafe.UnLock;
+  end;
+  // call the registered callback
+  if Assigned(ack) then // if was not discarded
+    ack(aMessage);
 end;
 
 function TSocketIORemoteNamespace.Discard(aAckID: TSocketIOAckID): boolean;
@@ -4133,12 +4150,17 @@ var
   cb: PSocketIOCallback;
 begin
   result := false;
-  cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aAckID);
-  if (cb = nil) or
-     not Assigned(cb^.OnAck) then
-    exit;
-  cb^.OnAck := nil; // Acknowledge() will just ignore this event
-  result := true;
+  fCallbackSafe.Lock;
+  try
+    cb := SocketIOCallbackSearch(pointer(fCallbacks), length(fCallbacks), aAckID);
+    if (cb = nil) or
+       not Assigned(cb^.OnAck) then
+      exit;
+    cb^.OnAck := nil; // Acknowledge() will just ignore this event
+    result := true;
+  finally
+    fCallbackSafe.UnLock;
+  end;
 end;
 
 function TSocketIORemoteNamespace.Discard(const aOnAck: TOnSocketIOAck): boolean;
@@ -4147,22 +4169,27 @@ var
   cb: PSocketIOCallback;
 begin
   result := false;
-  cb := pointer(fCallbacks);
-  if (cb = nil) or
-     not Assigned(aOnAck) then
-    exit;
-  n := PDALen(PAnsiChar(cb) - _DALEN)^ + _DAOFF;
-  repeat
-    if (cb^.Ack <> SIO_NO_ACK) and
-       (TMethod(cb^.OnAck).Code = TMethod(aOnAck).Code) and
-       (TMethod(cb^.OnAck).Data = TMethod(aOnAck).Data) then
-    begin
-      cb^.OnAck := nil; // Acknowledge() will just ignore this event
-      result := true;   // the same callback may be used for several events
-    end;
-    inc(cb);
-    dec(n);
-  until n = 0;
+  fCallbackSafe.Lock;
+  try
+    cb := pointer(fCallbacks);
+    if (cb = nil) or
+       not Assigned(aOnAck) then
+      exit;
+    n := PDALen(PAnsiChar(cb) - _DALEN)^ + _DAOFF;
+    repeat
+      if (cb^.Ack <> SIO_NO_ACK) and
+         (TMethod(cb^.OnAck).Code = TMethod(aOnAck).Code) and
+         (TMethod(cb^.OnAck).Data = TMethod(aOnAck).Data) then
+      begin
+        cb^.OnAck := nil; // Acknowledge() will just ignore this event
+        result := true;   // the same callback may be used for several events
+      end;
+      inc(cb);
+      dec(n);
+    until n = 0;
+  finally
+    fCallbackSafe.UnLock;
+  end;
 end;
 
 
