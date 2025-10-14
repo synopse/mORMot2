@@ -1415,8 +1415,8 @@ type
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
-    fMemCache: TSynDictionary;  // Uri:RawUtf8 / Content:RawByteString
-    fHashCache: TSynDictionary; // Uri:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
+    fMemCache: TSynDictionary;  // name:RawUtf8 / Content:RawByteString
+    fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
     fHeadCache: TSynDictionary; // name:RawUtf8 / header:RawUtf8
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
@@ -1455,6 +1455,7 @@ type
     fSettingsOwned, fVerboseLog: boolean;
     fServer: THttpAsyncServer;
     fGC: TObjectDynArray;
+    fPartials: THttpPartials;
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
     procedure OnIdle(Sender: TObject; NowTix: Int64);
@@ -5644,7 +5645,8 @@ begin
     end;
     // start sending the file content back in progressive mode
     ctxt.SetOutProgressiveFile(filename, size);
-    loginfo := 'progressive';
+    fOwner.fPartials.Add(filename, size, {hash=}nil, Ctxt.ConnectionHttp);
+    loginfo := 'progressive new';
   finally
     fRemoteClientSafe.UnLock;
   end;
@@ -5761,6 +5763,7 @@ begin
     fServer.Shutdown; // set flag ASAP
   inherited Destroy;
   Stop;
+  FreeAndNil(fPartials);
   if fSettingsOwned then
     fSettings.Free;
   fSettings := nil; // notify background threads and event callbacks
@@ -5811,6 +5814,10 @@ begin
   fServer.SetFavIcon(fav); // do once
   fServer.IdleEverySecond;
   fServer.OnIdle := OnIdle;
+  fPartials := THttpPartials.Create;
+  if hsoLogVerbose in hso then
+    fPartials.OnLog := fLog.DoLog;
+  fServer.fProgressiveRequests := fPartials;
   // setup the URI routes
   AfterServerStarted;
   // wait for actual server availability
@@ -6014,7 +6021,14 @@ begin
         if FileInfoByName(fn, siz, lastmod) and
            (siz >= 0) then // we have a local cached file
         begin
-          if hpoClientNoHead in s.Options then
+          if fPartials.HasFile(fn, @siz, ctxt.ConnectionHttp) then
+          begin
+            // but it is already in progressive mode: join the team
+            Ctxt.SetOutProgressiveFile(fn, siz);
+            info := 'progressive existing';
+            result := HTTP_SUCCESS;
+          end
+          else if hpoClientNoHead in s.Options then
             // assume file won't change on the server: return the current cache
             result := Ctxt.SetOutFile(fn, do304, siz,
               lastmod, s.CacheControlMaxAgeSec);
