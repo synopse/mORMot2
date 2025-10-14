@@ -821,6 +821,10 @@ type
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
     property ConnectionOpaque: PHttpServerConnectionOpaque
       read fConnectionOpaque;
+    /// access to the raw HTTP state machine associated to this connection
+    // - as supplied to Prepare() method
+    property ConnectionHttp: PHttpRequestContext
+      read fHttp;
     /// returns the TUriRouter <parameter> value parsed from URI as text
     // - Name lookup is case-sensitive
     // - is the default property to this function, so that you could write
