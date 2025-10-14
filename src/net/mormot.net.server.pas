@@ -7679,7 +7679,6 @@ function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
   fn: TFileName;
-  http: PHttpRequestContext;
   progsize: Int64; // expected progressive file size, to be supplied as header
   err: TOnRequestError;
   errtxt, opt: RawUtf8;
@@ -7690,7 +7689,6 @@ begin
     exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
-  http := (Ctxt as THttpServerRequest).fHttp;
   if Check(BearerDecode(Ctxt.AuthBearer, pcfRequest, msg, @opt), 'OnRequest', msg) then
   try
     // resource will always be identified by decoded bearer hash
@@ -7709,7 +7707,7 @@ begin
         else
         begin
           // remote HEAD + GET new partial file in a background thread
-          result := DirectFileName(Ctxt, msg, http, fn, progsize, opt);
+          result := DirectFileName(Ctxt, msg, Ctxt.ConnectionHttp, fn, progsize, opt);
           if result <> HTTP_SUCCESS then
           begin
             err := oreDirectRemoteUriFailed;
@@ -7720,7 +7718,7 @@ begin
       begin
         // try first from PartialFileName() then LocalFileName()
         if fPartials <> nil then // check partial first (local may not be finished)
-          result := PartialFileName(msg, http, @fn, @progsize);
+          result := PartialFileName(msg, Ctxt.ConnectionHttp, @fn, @progsize);
         if result <> HTTP_SUCCESS then
           result := LocalFileName(msg, [lfnSetDate], @fn, nil);
       end;
@@ -7757,7 +7755,7 @@ begin
       Ctxt.OutContent := Join([StatusCodeToErrorMsg(result), ' - ', errtxt]);
     fLog.Add.Log(sllDebug, 'OnRequest=% % % % fn=% progsiz=% progid=% %',
       [result, Ctxt.Method, Ctxt.RemoteIP, Ctxt.Url, fn, progsize,
-       http^.ProgressiveID, errtxt], self);
+       Ctxt.ConnectionHttp^.ProgressiveID, errtxt], self);
   end;
 end;
 
