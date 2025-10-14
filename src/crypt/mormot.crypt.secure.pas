@@ -565,6 +565,8 @@ type
     /// up to 512-bit of raw binary hash, according to Algo
     Bin: THash512Rec;
   end;
+  /// a pointer to one hash value and its algorithm
+  PHashDigest = ^THashDigest;
   /// store a dynamic array of hash value and its algorithm
   THashDigests = array of THashDigest;
 

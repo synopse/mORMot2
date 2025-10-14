@@ -4563,11 +4563,11 @@ end;
 
 procedure THttpAsyncServerConnection.BeforeDestroy;
 begin
+  fHttp.ProcessDone; // ContentStream.Free before THttpPartials.Remove()
   if Assigned(fServer) and
      Assigned(fServer.fProgressiveRequests) and
      (rfProgressiveStatic in fHttp.ResponseFlags) then
     fServer.DoProgressiveRequestFree(fHttp);
-  fHttp.ProcessDone; // ContentStream.Free
   FreeAndNil(fRequest);
   // inherited BeforeDestroy; // void parent method
 end;
