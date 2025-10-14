@@ -1207,7 +1207,7 @@ type
     fOptions: THttpProxyUrlOptions;
     fMethods: TUriRouterMethods;
     fCacheControlMaxAgeSec: integer;
-    fHttpKeepAlive, fHttpDirectGetKB: integer;
+    fHttpKeepAlive, fHttpHeadCacheSec, fHttpDirectGetKB: integer;
     fMemCache: THttpProxyMem; // owned as TSynAutoCreateFields
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
@@ -1248,6 +1248,11 @@ type
     // 'debian-security' prefixes, to compute a source remote URI
     property Source: RawUtf8
       read fSource write fSource;
+    /// how many seconds HEAD requests could be cached in memory
+    // - 0 would disable head caching
+    // - default is 120, i.e. cache HEAD response for 2 minutes
+    property HttpHeadCacheSec: integer
+      read fHttpHeadCacheSec write fHttpHeadCacheSec;
     /// seconds of HTTP keep alive source - default to 30
     property HttpKeepAlive: integer
       read fHttpKeepAlive write fHttpKeepAlive;
@@ -1410,8 +1415,9 @@ type
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
-    fMemCached: TSynDictionary;  // Uri:RawUtf8 / Content:RawByteString
-    fHashCached: TSynDictionary; // Uri: RawUtf8 / hash[fAlgos]: TRawUtf8DynArray
+    fMemCache: TSynDictionary;  // Uri:RawUtf8 / Content:RawByteString
+    fHashCache: TSynDictionary; // Uri:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
+    fHeadCache: TSynDictionary; // name:RawUtf8 / header:RawUtf8
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
@@ -1422,10 +1428,12 @@ type
     /// finalize this instance and its associated Settings
     destructor Destroy; override;
     /// compute the (probably cached) hash of a given URI resource
-    function ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
+    function ReturnHash(ctxt: THttpServerRequestAbstract;
       const name: RawUtf8; var fn: TFileName): integer;
     /// perform a HTTP HEAD on the remote proxy URI using a shared connection
-    function RemoteClientHead(const uri: TUri; var header: RawUtf8): cardinal;
+    // - with an in-memory cache as set by THttpProxyUrlSettings.HttpHeadCacheSec
+    function RemoteClientHead(const uri: TUri; const name: RawUtf8;
+      var header: RawUtf8): cardinal;
     /// perform a HTTP GET on the remote proxy URI using a shared connection
     function RemoteClientGet(const uri: TUri): RawByteString;
     /// access to the associated (and owned) settings for this URI
@@ -5421,8 +5429,9 @@ begin
   inherited Create;
   fMethods := [urmGet, urmHead];
   fOptions := [];
-  fHttpKeepAlive := 30;   // 30 seconds
-  fHttpDirectGetKB := 16; // 16 KB
+  fHttpKeepAlive := 30;      // 30 seconds
+  fHttpHeadCacheSec := 120;  // 2 minutes
+  fHttpDirectGetKB := 16;    // 16 KB
 end;
 
 function THttpProxyUrlSettings.SetOptions(aOptions: THttpProxyUrlOptions): THttpProxyUrlSettings;
@@ -5447,8 +5456,9 @@ end;
 destructor THttpProxyUrl.Destroy;
 begin
   inherited Destroy;
-  FreeAndNil(fMemCached);
-  FreeAndNil(fHashCached);
+  FreeAndNil(fMemCache);
+  FreeAndNil(fHashCache);
+  FreeAndNil(fHeadCache);
   FreeAndNil(fSettings);
   fRemoteClientSafe.Done; // mandatory for TOSLightLock
 end;
@@ -5495,10 +5505,19 @@ begin
         inc(i);
 end;
 
-function THttpProxyUrl.RemoteClientHead(const uri: TUri;
+function THttpProxyUrl.RemoteClientHead(const uri: TUri; const name: RawUtf8;
   var header: RawUtf8): cardinal;
-begin
-  if fRemoteClient = nil then
+begin // this method is protected by fRemoteClientSafe.Lock
+  if Assigned(fHeadCache) and
+     fHeadCache.FindAndCopy(name, header) then // from in-memory cache
+  begin
+    if header = '' then
+      result := HTTP_NOTFOUND // already identified as error
+    else
+      result := HTTP_SUCCESS;
+    exit;
+  end;
+  if fRemoteClient = nil then // initialize the connection
   begin
     fRemoteClient := TSimpleHttpClient.Create(hpoClientOnlySocket in fSettings.Options);
     if Assigned(fSettings.OnRemoteClient) then
@@ -5506,6 +5525,10 @@ begin
   end;
   result := fRemoteClient.Request(uri, 'HEAD', '', '', '',
     fSettings.HttpKeepAlive * MilliSecsPerSec);
+  if StatusCodeIsSuccess(result) then
+    header := fRemoteClient.Headers;
+  if Assigned(fHeadCache) then
+    fHeadCache.Add(name, header); // may store '' on error
 end;
 
 function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
