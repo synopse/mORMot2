@@ -1421,6 +1421,10 @@ type
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
+    function StartProxyRequest(ctxt: THttpServerRequestAbstract;
+      const filename: TFileName; const name: RawUtf8;
+      const size: Int64; const lastmod: TUnixMSTime;
+      var loginfo: RawUtf8; var uri: TUri): cardinal;
   public
     /// initialize this instance
     constructor Create(aSettings: THttpProxyUrlSettings;
@@ -5463,17 +5467,31 @@ begin
   fRemoteClientSafe.Done; // mandatory for TOSLightLock
 end;
 
-function THttpProxyUrl.ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
+function THttpProxyUrl.ReturnHash(ctxt: THttpServerRequestAbstract;
   const name: RawUtf8; var fn: TFileName): integer;
 var
   i: PtrInt;
-  a: THashAlgo;
+  a, hf: THashAlgo;
   hashes: TRawUtf8DynArray;
+  ext: PUtf8Char;
 begin
   result := HTTP_NOTFOUND;
-  if not (h in fAlgos) then
+  ext := ExtractExtP(name, {withoutdot:}true);
+  if ext = nil then
     exit;
-  if not fHashCached.FindAndCopy(name, hashes) then
+  case PCardinal(ext)^ of
+    ord('m') + ord('d') shl 8 + ord('5') shl 16:
+      hf := hfMd5;
+    ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
+      hf := hfSHA1;
+    ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+      hf := hfSHA256;
+  else
+    exit;
+  end;
+  if not (hf in fAlgos) then
+    exit;
+  if not fHashCache.FindAndCopy(name, hashes) then
   begin
     // first time this hash is requested: try to load and compute now
     i := length(fn);
@@ -5488,13 +5506,13 @@ begin
     hashes := HashFileRaw(fn, fAlgos);
     if hashes = nil then
       exit; // no such file
-    fHashCached.Add(name, hashes);
+    fHashCache.Add(name, hashes);
   end;
   // return the pre-computed hash of this file
   i := 0;
   for a := low(a) to high(a) do
     if a in fAlgos then
-      if a = h then
+      if a = hf then
       begin
         ctxt.OutContent := hashes[i];
         ctxt.OutContentType := TEXT_CONTENT_TYPE;
@@ -5532,13 +5550,105 @@ begin // this method is protected by fRemoteClientSafe.Lock
 end;
 
 function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
-begin
+begin // this method is protected by fRemoteClientSafe.Lock
   result := '';
   if fRemoteClient.Request(uri, 'GET', '', '', '',
        fSettings.HttpKeepAlive * MilliSecsPerSec) in [HTTP_SUCCESS, HTTP_NOCONTENT] then
     result := fRemoteClient.Body;
 end;
 
+function THttpProxyUrl.StartProxyRequest(ctxt: THttpServerRequestAbstract;
+  const filename: TFileName; const name: RawUtf8; const size: Int64;
+  const lastmod: TUnixMSTime; var loginfo: RawUtf8; var uri: TUri): cardinal;
+var
+  remotehead: RawUtf8;
+  headsiz: Int64;
+  direct: RawByteString;
+  headlastmod: TUnixTime;
+  do304: boolean;
+  nr: TNetResult;
+begin
+  do304 := not (hpoDisable304 in fSettings.Options);
+  // quick blocking process to initiate the proxy request
+  fRemoteClientSafe.Lock;
+  try
+    // always perform a HEAD request to the original server
+    result := RemoteClientHead(uri, name, remotehead);
+    if not (result in [HTTP_SUCCESS, HTTP_NOCONTENT]) then
+    begin
+      loginfo := 'head status';
+      exit;
+    end;
+    if not GetHeaderInfo(remotehead, headsiz, headlastmod) then
+    begin
+      // we require both Content-Length: and Last-Modified: HTTP headers
+      result := HTTP_BADGATEWAY; // 502
+      loginfo := 'weak head';
+      exit;
+    end;
+    // check the header against the local cached file
+    ctxt.OutCustomHeaders := PurgeHeaders(remotehead);
+    if lastmod <> 0 then
+      if (headsiz = size) and
+         UnixTimeEqualsMS(headlastmod, lastmod) then
+      begin
+        // we can stream from local cache
+        loginfo := 'cached';
+        result := ctxt.SetOutFile(filename, do304,
+          size, lastmod, fSettings.CacheControlMaxAgeSec);
+        exit;
+      end
+      else
+      begin
+        // the local file seems invalid and should be removed
+        fOwner.fLog.Add.Log(sllTrace, 'OnExecute: deprecate filename=% %=% %=%',
+          [name, result, size, headsiz, lastmod, headlastmod], self);
+        if not DeleteFile(filename) then // may fail on Windows: use previous
+        begin
+          loginfo := 'locked cache';
+          result := ctxt.SetOutFile(filename, do304,
+            size, lastmod, fSettings.CacheControlMaxAgeSec);
+          exit;
+        end;
+      end;
+    // no matching local file: need to download
+    if size < fSettings.HttpDirectGetKB shl 10 then
+    begin
+      // smallest files < 16KB could use the blocking connection
+      if size > 0 then
+        direct := RemoteClientGet(uri);
+      if (size = 0) or
+         (direct <> '') then
+        if (length(direct) = size) and
+           FileFromString(direct, filename) and
+           FileSetDateFromUnixUtc(filename, headlastmod) then
+        begin
+          result := ctxt.SetOutContent(direct, do304);
+          loginfo := 'small get';
+        end
+        else
+        begin
+          result := HTTP_BADGATEWAY; // 502
+          loginfo := 'get error';
+        end;
+      exit;
+    end;
+    // big files need an asynchronous GET to the uri server
+    nr := fOwner.fServer.Clients.StartRequest(self, uri, 'GET', '', filename);
+    if nr <> nrOk then
+    begin
+      ctxt.OutCustomHeaders := '';
+      result := HTTP_BADGATEWAY; // 502
+      Append(loginfo, [ToText(nr)^]);
+      exit;
+    end;
+    // start sending the file content back in progressive mode
+    ctxt.SetOutProgressiveFile(filename, size);
+    loginfo := 'progressive';
+  finally
+    fRemoteClientSafe.UnLock;
+  end;
+end;
 
 { THttpProxyServerMainSettings }
 
@@ -5745,8 +5855,9 @@ begin
     begin
       one := fSettings.Url[i];
       s := one.Settings;
-      FreeAndNil(one.fMemCached);
-      FreeAndNil(one.fHashCached);
+      FreeAndNil(one.fMemCache);
+      FreeAndNil(one.fHashCache);
+      FreeAndNil(one.fHeadCache);
       if s.Disabled or
          (s.Source = '') then
         continue;
@@ -5780,7 +5891,7 @@ begin
           s.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
         if (s.MemCache.MaxSize > 0) and
            (s.MemCache.TimeoutSec > 0) then
-          one.fMemCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+          one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
             TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
             s.MemCache.TimeoutSec);
         if one.fSourced = sRemoteUri then
@@ -5792,6 +5903,10 @@ begin
           s.DiskCache.Path := EnsureDirectoryExists(s.DiskCache.Path);
           if s.DiskCache.TimeoutSec <= 0 then
             s.DiskCache.TimeoutSec := fSettings.DiskCache.TimeoutSec;
+          if (s.HttpHeadCacheSec > 0) and
+             not (hpoClientNoHead in s.Options) then
+            one.fHeadCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+              TypeInfo(TRawUtf8DynArray), {caseins=}false, s.HttpHeadCacheSec);
         end;
       end;
       // prepare optional hash cache
