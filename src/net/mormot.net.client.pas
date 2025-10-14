@@ -308,7 +308,10 @@ type
     // - caller should eventually run Safe.ReadUnLock
     function FindReadLocked(ID: THttpPartialID): TFileName;
     /// search for a given partial file name
-    function HasFile(const FileName: TFileName): boolean;
+    // - and optionally return the expected final file size, and/or associate
+    // this partial with a given HTTP connection
+    function HasFile(const FileName: TFileName; FileExpectedSize: PInt64 = nil;
+      Http: PHttpRequestContext = nil): boolean;
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// fill Dest buffer from up to MaxSize bytes from Ctxt.ProgressiveID
@@ -2341,7 +2344,10 @@ begin
   end;
 end;
 
-function THttpPartials.HasFile(const FileName: TFileName): boolean;
+function THttpPartials.HasFile(const FileName: TFileName;
+  FileExpectedSize: PInt64; Http: PHttpRequestContext): boolean;
+var
+  p: PHttpPartial;
 begin
   result := false;
   if IsVoid or
@@ -2349,7 +2355,17 @@ begin
     exit;
   Safe.ReadLock;
   try
-    result := FromFile(FileName) <> nil;
+    p := FromFile(FileName);
+    if p = nil then
+      exit;
+    result := true;
+    if FileExpectedSize <> nil then
+      FileExpectedSize^ := p^.FullSize;
+    if Http <> nil then // associate to this HTTP state machine
+    begin
+      PtrArrayAdd(p^.HttpContext, Http);
+      Http^.ProgressiveID := p^.ID;
+    end;
   finally
     Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
@@ -2368,9 +2384,9 @@ begin
     p := FromHash(Hash);
     if p = nil then
       exit;
-    PtrArrayAdd(p^.HttpContext, Http);
-    Http^.ProgressiveID := p^.ID;
     result := true;
+    PtrArrayAdd(p^.HttpContext, Http); // associate to this HTTP state machine
+    Http^.ProgressiveID := p^.ID;
   finally
     Safe.WriteUnLock;
   end;
