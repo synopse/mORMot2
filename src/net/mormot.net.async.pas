@@ -1201,25 +1201,36 @@ type
     fOptions: THttpProxyUrlOptions;
     fMethods: TUriRouterMethods;
     fCacheControlMaxAgeSec: integer;
+    fHttpKeepAlive, fHttpDirectGetKB: integer;
     fMemCache: THttpProxyMem; // owned as TSynAutoCreateFields
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
     fLocalFolder: TFileName;
+    fOnRemoteClient: TOnHttpProxyUrlClient;
   public
     /// setup the default values of this URL
     constructor Create; override;
+    /// allow to customize the processing options in a fluid calling interface
+    function SetOptions(aOptions: THttpProxyUrlOptions): THttpProxyUrlSettings;
+    /// optional event handler when a remote URI connection is instantiated
+    property OnRemoteClient: TOnHttpProxyUrlClient
+      read fOnRemoteClient write fOnRemoteClient;
   published
     /// this source won't be processed if this property is set to true
     property Disabled: boolean
       read fDisabled write fDisabled;
-    /// the local URI prefix to use with the main HTTP(S) server of this instance
+    /// which methods are applied to the local Source folder or relayed to
+    // the Remote server
+    // - equals by default [urmGet, urmHead]
+    property Methods: TUriRouterMethods
+      read fMethods write fMethods;
+    /// refined the process of this URI definition
+    property Options: THttpProxyUrlOptions
+      read fOptions write fOptions;
+    /// the local URI prefix to route the main HTTP(S) server of this instance
     // - a typical value is e.g. 'debian' for 'http://ftp.debian.org/debian'
     property Url: RawUtf8
       read fUrl write fUrl;
-    /// CSV list of GLOB file or directly names to be rejected as not found
-    // - e.g. '*.secret'
-    property RejectCsv: RawUtf8
-      read fRejectCsv write fRejectCsv;
     /// a local folder name or remote origin URL to ask
     // - if Source is a local folder (e.g. 'd:/mysite' or '/var/www/mysite'),
     // the Url prefix chars will be removed from the client request, then used
@@ -1231,14 +1242,17 @@ type
     // 'debian-security' prefixes, to compute a source remote URI
     property Source: RawUtf8
       read fSource write fSource;
-    /// which methods are applied to the local Source folder or relayed to
-    // the Remote server
-    // - equals by default [urmGet, urmHead]
-    property Methods: TUriRouterMethods
-      read fMethods write fMethods;
-    /// refined the process of this URI definition
-    property Options: THttpProxyUrlOptions
-      read fOptions write fOptions;
+    /// seconds of HTTP keep alive source - default to 30
+    property HttpKeepAlive: integer
+      read fHttpKeepAlive write fHttpKeepAlive;
+    /// below this KB size, will make a blocking GET and no background proxy
+    // - default is 16 KB
+    property HttpDirectGetKB: integer
+      read fHttpDirectGetKB write fHttpDirectGetKB;
+    /// CSV list of GLOB file or directly names to be rejected as not found
+    // - e.g. '*.secret'
+    property RejectCsv: RawUtf8
+      read fRejectCsv write fRejectCsv;
     /// support optional "Cache-Control: max-age=..." header timeout value
     // - default 0 value will disable this header transmission
     // - to be used in conjunction with the hpoIfModifiedSince option
@@ -1391,7 +1405,6 @@ type
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
-    fOnRemoteClient: TOnHttpProxyUrlClient;
   public
     /// initialize this instance
     constructor Create(aSettings: THttpProxyUrlSettings); reintroduce;
@@ -1400,7 +1413,7 @@ type
     /// compute the (probably cached) hash of a given URI resource
     function ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
       const name: RawUtf8; var fn: TFileName): integer;
-    /// perform a HTTP HEAD on the remote proxy URI
+    /// perform a HTTP HEAD on the remote proxy URI using a shared connection
     function RemoteClientHead(const uri: TUri; var header: RawUtf8): cardinal;
     /// optional event handler when a remote URI connection is instantiated
     property OnRemoteClient: TOnHttpProxyUrlClient
@@ -5396,6 +5409,15 @@ begin
   inherited Create;
   fMethods := [urmGet, urmHead];
   fOptions := [];
+  fHttpKeepAlive := 30;   // 30 seconds
+  fHttpDirectGetKB := 16; // 16 KB
+end;
+
+function THttpProxyUrlSettings.SetOptions(aOptions: THttpProxyUrlOptions): THttpProxyUrlSettings;
+begin
+  result := self;
+  if result <> nil then
+    fOptions := fOptions + aOptions;
 end;
 
 
@@ -5465,10 +5487,11 @@ begin
   if fRemoteClient = nil then
   begin
     fRemoteClient := TSimpleHttpClient.Create(hpoClientOnlySocket in fSettings.Options);
-    if Assigned(fOnRemoteClient) then
-      fOnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
+    if Assigned(fSettings.OnRemoteClient) then
+      fSettings.OnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
   end;
-  result := fRemoteClient.Request(uri, 'HEAD', '', '', '', {keepalive=}30000);
+  result := fRemoteClient.Request(uri, 'HEAD', '', '', '',
+    fSettings.HttpKeepAlive * MilliSecsPerSec);
 end;
 
 
@@ -5839,9 +5862,10 @@ begin
                   end;
                 end;
               if info = '' then
-                if siz < 16 shl 10 then
+                // no matching local file: need to download
+                if siz < s.HttpDirectGetKB shl 10 then
                 begin
-                  // smallest files < 16KB could use the existing connection
+                  // smallest files < 16KB could use the blocking connection
                   if siz > 0 then
                     result := Def.fRemoteClient.Request(
                       remote, 'GET', '', '', '', {keepalive=}30000);
@@ -5895,62 +5919,61 @@ begin
   end;
   // complete the actual URI process
   if info = '' then
-  case result of
-    HTTP_SUCCESS:
-      // this local file does exist: try if we could use Def.MemCache
-      if Assigned(Def.fMemCached) then
-      begin
-        pck := s.MemCache.FromUri(Uri);
-        if not (pckIgnore in pck) then
-          if (pckForce in pck) or
-             (siz <= s.MemCache.MaxSize) then
-          begin
-            // use a memory cache
-            if not Def.fMemCached.FindAndCopy(name, cached) then
-            begin
-              cached := StringFromFile(fn);
-              Def.fMemCached.Add(name, cached);
-            end;
-            Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
-            Ctxt.OutContent := cached;
-          end;
-      end;
-    HTTP_NOTFOUND:
-      if Def.fSourced = sLocalFolder then
-        // this URI is no file, but may be a folder
-        if (siz < 0) and // siz=-1 for folder
-           not (hpoNoFolderHtmlIndex in s.Options) then
+    case result of
+      HTTP_SUCCESS:
+        // this local file does exist: try if we could use Def.MemCache
+        if Assigned(Def.fMemCached) then
         begin
-          // return the folder files info as cached HTML
-          if (hpoDisableFolderHtmlIndexCache in s.Options) or
-             not Def.fMemCached.FindAndCopy(name, cached) then
-          begin
-            FolderHtmlIndex(fn, Ctxt.Url,
-              StringReplaceChars(name, PathDelim, '/'),
-              RawUtf8(cached), hpoNoSubFolder in s.Options);
-            if Assigned(Def.fMemCached) and
-               not (hpoDisableFolderHtmlIndexCache in s.Options) then
-              Def.fMemCached.Add(name, cached);
-          end;
-          result := Ctxt.SetOutContent(cached,
-                      not(hpoDisable304 in s.Options), HTML_CONTENT_TYPE);
-        end
-        else if siz = 0 then
-          // check URI for any .md5/.sha1/.sha256 hash extension
-          if Assigned(Def.fHashCached) then
-          begin
-            ext := ExtractExtP(name, {withoutdot:}true);
-            if ext <> nil then
-              case PCardinal(ext)^ of
-                ord('m') + ord('d') shl 8 + ord('5') shl 16:
-                  result := Def.ReturnHash(Ctxt, hfMd5, name, fn);
-                ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
-                  result := Def.ReturnHash(Ctxt, hfSHA1, name, fn);
-                ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
-                  result := Def.ReturnHash(Ctxt, hfSHA256, name, fn);
+          pck := s.MemCache.FromUri(Uri);
+          if not (pckIgnore in pck) then
+            if (pckForce in pck) or
+               (siz <= s.MemCache.MaxSize) then
+            begin
+              // use a memory cache
+              if not Def.fMemCached.FindAndCopy(name, cached) then
+              begin
+                cached := StringFromFile(fn);
+                Def.fMemCached.Add(name, cached);
               end;
-          end;
-  end; // may be e.g. HTTP_NOTMODIFIED (304)
+              Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
+              Ctxt.OutContent := cached;
+            end;
+        end;
+      HTTP_NOTFOUND:
+        if Def.fSourced = sLocalFolder then
+          // this URI is no file, but may be a folder
+          if (siz < 0) and // siz=-1 for folder
+             not (hpoNoFolderHtmlIndex in s.Options) then
+          begin
+            // return the folder files info as cached HTML
+            if (hpoDisableFolderHtmlIndexCache in s.Options) or
+               not Def.fMemCached.FindAndCopy(name, cached) then
+            begin
+              FolderHtmlIndex(fn, Ctxt.Url,
+                StringReplaceChars(name, PathDelim, '/'),
+                RawUtf8(cached), hpoNoSubFolder in s.Options);
+              if Assigned(Def.fMemCached) and
+                 not (hpoDisableFolderHtmlIndexCache in s.Options) then
+                Def.fMemCached.Add(name, cached);
+            end;
+            result := Ctxt.SetOutContent(cached, do304, HTML_CONTENT_TYPE);
+          end
+          else if siz = 0 then
+            // check URI for any .md5/.sha1/.sha256 hash extension
+            if Assigned(Def.fHashCached) then
+            begin
+              ext := ExtractExtP(name, {withoutdot:}true);
+              if ext <> nil then
+                case PCardinal(ext)^ of
+                  ord('m') + ord('d') shl 8 + ord('5') shl 16:
+                    result := Def.ReturnHash(Ctxt, hfMd5, name, fn);
+                  ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
+                    result := Def.ReturnHash(Ctxt, hfSHA1, name, fn);
+                  ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+                    result := Def.ReturnHash(Ctxt, hfSHA256, name, fn);
+                end;
+            end;
+    end; // may be e.g. HTTP_NOTMODIFIED (304)
   fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=% info=%',
     [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> ''), info], self);
 end;
