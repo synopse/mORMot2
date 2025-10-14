@@ -1180,6 +1180,8 @@ type
   // generation on server side with .md5/.sha1/.sha256 extension on a resource
   // - hpoDisable304 disable "if-none-match:" / "if-modified-since:" headers
   // default support as efficient 304 HTTP_NOTMODIFIED response
+  // - hpoClientCacheSubFolder could be used with a lot of cached files, to
+  // generate sub-folders following the first hash nibble (0..9/a..z)
   // - hpoClientNoHead will disable the HEAD request to the server if there is a
   // local cached file to be served - faster but won't detect any server change
   // - hpoClientOnlySocket will be used for THttpProxyUrl.RemoteClientHead()
@@ -1191,6 +1193,7 @@ type
     hpoPublishSha1,
     hpoPublishSha256,
     hpoDisable304,
+    hpoClientCacheSubFolder,
     hpoClientNoHead,
     hpoClientOnlySocket);
   /// store THttpProxyUrl.Settings options for a given URI
@@ -5850,8 +5853,13 @@ begin
         remote := Def.fRemoteUri;
         AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
         // check the local file
-        name := HttpRequestHashBase32(remote, nil);
-        fn := MakePath([s.DiskCache.Path, name]);
+        name := HttpRequestHashBase32(remote); // named from hashed URI
+        if name = '' then
+          exit; // paranoid
+        if hpoClientCacheSubFolder in s.Options then
+          fn := MakePath([s.DiskCache.Path, name[1], name]) // hash partitioning
+        else
+          fn := MakePath([s.DiskCache.Path, name]);
         if FileInfoByName(fn, siz, lastmod) then // we have a local cached file
         begin
           if hpoClientNoHead in s.Options then
