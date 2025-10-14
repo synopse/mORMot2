@@ -523,6 +523,7 @@ type
     fRouterClass: TRadixTreeNodeClass;
     fLogger: THttpLogger;
     fAnalyzer: THttpAnalyzer;
+    fOnIdle: TOnPollSocketsIdle;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetRouterClass(aRouter: TRadixTreeNodeClass);
     procedure SetServerName(const aName: RawUtf8); virtual;
@@ -706,6 +707,10 @@ type
     // - see also NginxSendFileFrom() method
     property OnSendFile: TOnHttpServerSendFile
       read fOnSendFile write fOnSendFile;
+    /// this callback would be called on idle state, typically every few seconds
+    // - any implementation should not be blocking for long
+    property OnIdle: TOnPollSocketsIdle
+      read fOnIdle write fOnIdle;
     /// defines request/response internal queue length
     // - default value if 1000, which sounds fine for most use cases
     // - for THttpApiServer, will return 0 if the system does not support HTTP
@@ -4837,9 +4842,11 @@ begin // is called at most every second, but maybe up to 5 seconds delay
   if Assigned(fOnAcceptIdle) then
     fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
   if Assigned(fLogger) then
-    fLogger.OnIdle(tix64) // flush log file(s) on idle server
+    fLogger.OnIdle(tix64)      // flush log file(s) on idle server
   else if Assigned(fAnalyzer) then
-    fAnalyzer.OnIdle(tix64); // consolidate telemetry if needed
+    fAnalyzer.OnIdle(tix64);   // consolidate telemetry if needed
+  if Assigned(fOnIdle) then
+    fOnIdle(self, tix64);      // custom callback
   if Assigned(fBanned) and
      (fBanned.Count <> 0) then
   begin
