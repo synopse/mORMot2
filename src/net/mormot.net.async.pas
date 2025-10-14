@@ -1445,6 +1445,7 @@ type
     fGC: TObjectDynArray;
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
+    procedure OnIdle(Sender: TObject; NowTix: Int64);
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnGetHead(Ctxt: THttpServerRequestAbstract; Def: THttpProxyUrl;
       Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
@@ -5675,6 +5676,8 @@ begin
   if fav = '' then
     fav := 'default';
   fServer.SetFavIcon(fav); // do once
+  fServer.IdleEverySecond;
+  fServer.OnIdle := OnIdle;
   // setup the URI routes
   AfterServerStarted;
   // wait for actual server availability
@@ -5804,13 +5807,31 @@ begin
   end;
 end;
 
+procedure THttpProxyServer.OnIdle(Sender: TObject; NowTix: Int64);
+var
+  i, n: PtrInt;
+  one: THttpProxyUrl;
+begin
+  // delete any deprecated cached content - called every few seconds
+  n := 0;
+  for i := 0 to high(fSettings.Url) do
+  begin
+    one := fSettings.Url[i];
+    inc(n, one.fMemCache.DeleteDeprecated(NowTix));
+    inc(n, one.fHashCache.DeleteDeprecated(NowTix));
+    inc(n, one.fHeadCache.DeleteDeprecated(NowTix));
+  end;
+  if n <> 0 then
+    fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
+end;
+
 function THttpProxyServer.OnGetHead(Ctxt: THttpServerRequestAbstract;
   Def: THttpProxyUrl; Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
   name, remotehead, info: RawUtf8;
   cached: RawByteString;
-  tix64, siz, headsiz: Int64;
+  siz, headsiz: Int64;
   headlastmod: TUnixTime;
   lastmod: TUnixMSTime;
   s: THttpProxyUrlSettings;
@@ -5820,10 +5841,6 @@ var
   do304: boolean;
   remote: TUri;
 begin
-  // delete any deprecated cached content
-  tix64 := fServer.Async.LastOperationMS; // set by ProcessIdleTix()
-  Def.fMemCached.DeleteDeprecated(tix64);
-  Def.fHashCached.DeleteDeprecated(tix64);
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
   // locate the resource from its source
