@@ -470,6 +470,8 @@ type
   // - hsoContentTypeNoGuess will disable content-type detection from small
   // content buffers via GetMimeContentTypeFromBuffer()
   // - hsoRejectBotUserAgent identifies and rejects Bots via IsHttpUserAgentBot()
+  // - hsoTextError will return a small and non-verbose UTF-8 text in case of
+  // HTTP errors, instead of the default human-friendly HTML page
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -489,7 +491,8 @@ type
     hsoTelemetryCsv,
     hsoTelemetryJson,
     hsoContentTypeNoGuess,
-    hsoRejectBotUserAgent);
+    hsoRejectBotUserAgent,
+    hsoTextError);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -3277,17 +3280,25 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   end;
 
   procedure ProcessErrorMessage;
+  var
+    txt: PRawUtf8;
   begin
+    FastAssignNew(fOutCustomHeaders);
+    txt := fServer.StatusCodeToText(fRespStatus);
+    if hsoTextError in fServer.Options then // fast and good enough
+    begin
+      Make([fRespStatus, ' ', txt^, ': ', fErrorMessage], RawUtf8(fOutContent));
+      fOutContentType := TEXT_CONTENT_TYPE;
+      exit;
+    end;
     HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere); // safety
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
       '<h1>% Server Error %</h1>' +
-      '<p><b>HTTP % %:</b> %</p><hr><small><i>%</i></small></body></html>',
-      [fServer.ServerName, fRespStatus, fRespStatus,
-       fServer.StatusCodeToText(fRespStatus)^, fOutContentType, XPOWEREDVALUE],
-      RawUtf8(fOutContent));
-    fOutCustomHeaders := '';
-    fOutContentType := HTML_CONTENT_TYPE; // body = HTML message to display
+      '<p><b>HTTP % %:</b> %</p><hr><small><i>% on %</i></small></body></html>',
+      [fServer.ServerName, fRespStatus, fRespStatus, txt^, fOutContentType,
+       XPOWEREDVALUE, OS_TEXT], RawUtf8(fOutContent));
+    fOutContentType := HTML_CONTENT_TYPE; // body = human friendly HTML message
   end;
 
 var
