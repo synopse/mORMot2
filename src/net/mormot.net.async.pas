@@ -1355,6 +1355,8 @@ type
   /// hold one or several remote content source(s) process for THttpProxyServer
   THttpProxyUrlObjArray = array of THttpProxyUrl;
 
+  THttpProxyServer = class;
+
   /// define the THttpProxyServer forward proxy process
   THttpProxyServerSettings = class(TSynAutoCreateFields)
   protected
@@ -1362,6 +1364,7 @@ type
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
     fUrl: THttpProxyUrlObjArray;
+    fOwner: THttpProxyServer;
   public
     /// initialize the default settings
     constructor Create; override;
@@ -1400,6 +1403,7 @@ type
   THttpProxyUrl = class(TSynPersistent)
   protected
     fSettings: THttpProxyUrlSettings;
+    fOwner: THttpProxyServer;
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
@@ -1410,7 +1414,8 @@ type
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
   public
     /// initialize this instance
-    constructor Create(aSettings: THttpProxyUrlSettings); reintroduce;
+    constructor Create(aSettings: THttpProxyUrlSettings;
+      aOwner: THttpProxyServer); reintroduce;
     /// finalize this instance and its associated Settings
     destructor Destroy; override;
     /// compute the (probably cached) hash of a given URI resource
@@ -5426,11 +5431,13 @@ end;
 
 { THttpProxyUrl }
 
-constructor THttpProxyUrl.Create(aSettings: THttpProxyUrlSettings);
+constructor THttpProxyUrl.Create(aSettings: THttpProxyUrlSettings;
+  aOwner: THttpProxyServer);
 begin
   inherited Create;
   fRemoteClientSafe.Init;
   fSettings := aSettings; // will be owned by this instance from now on
+  fOwner := aOwner;
 end;
 
 destructor THttpProxyUrl.Destroy;
@@ -5549,7 +5556,7 @@ begin
       FreeAndNil(result)
     else
       // supplied one will be owned as a new fUri[].Settings
-      ObjArrayAdd(fUrl, THttpProxyUrl.Create(result));
+      ObjArrayAdd(fUrl, THttpProxyUrl.Create(result, fOwner));
 end;
 
 function THttpProxyServerSettings.AddFolder(const folder: TFileName;
@@ -5608,6 +5615,7 @@ begin
   end
   else
     fSettings := aSettings;
+  fSettings.fOwner := self;
 end;
 
 destructor THttpProxyServer.Destroy;
