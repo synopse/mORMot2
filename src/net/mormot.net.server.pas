@@ -3276,8 +3276,8 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere); // safety
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
-      '<h1>% Server Error %</h1><hr>' +
-      '<p>HTTP % %</p><p>%</p><small>%</small></body></html>',
+      '<h1>% Server Error %</h1>' +
+      '<p><b>HTTP % %:</b> %</p><hr><small><i>%</i></small></body></html>',
       [fServer.ServerName, fRespStatus, fRespStatus,
        fServer.StatusCodeToText(fRespStatus)^, fOutContentType, XPOWEREDVALUE],
       RawUtf8(fOutContent));
