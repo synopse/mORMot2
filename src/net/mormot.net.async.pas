@@ -1418,9 +1418,8 @@ type
       const name: RawUtf8; var fn: TFileName): integer;
     /// perform a HTTP HEAD on the remote proxy URI using a shared connection
     function RemoteClientHead(const uri: TUri; var header: RawUtf8): cardinal;
-    /// optional event handler when a remote URI connection is instantiated
-    property OnRemoteClient: TOnHttpProxyUrlClient
-      read fOnRemoteClient write fOnRemoteClient;
+    /// perform a HTTP GET on the remote proxy URI using a shared connection
+    function RemoteClientGet(const uri: TUri): RawByteString;
     /// access to the associated (and owned) settings for this URI
     property Settings: THttpProxyUrlSettings
       read fSettings;
@@ -1512,6 +1511,7 @@ begin
       aOwner.fOnFirstRead(self); // typically TAsyncServer.OnFirstReadDoTls
     except
       result := false; // notify error within callback
+      // e.g. self-signed 'alert bad certificate' from client with no exception
     end;
 end;
 
@@ -5439,7 +5439,7 @@ begin
   FreeAndNil(fMemCached);
   FreeAndNil(fHashCached);
   FreeAndNil(fSettings);
-  fRemoteClientSafe.Done;
+  fRemoteClientSafe.Done; // mandatory for TOSLightLock
 end;
 
 function THttpProxyUrl.ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
@@ -5497,6 +5497,13 @@ begin
     fSettings.HttpKeepAlive * MilliSecsPerSec);
 end;
 
+function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
+begin
+  result := '';
+  if fRemoteClient.Request(uri, 'GET', '', '', '',
+       fSettings.HttpKeepAlive * MilliSecsPerSec) in [HTTP_SUCCESS, HTTP_NOCONTENT] then
+    result := fRemoteClient.Body;
+end;
 
 
 { THttpProxyServerMainSettings }
