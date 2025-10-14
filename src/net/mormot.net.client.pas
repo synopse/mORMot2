@@ -312,6 +312,7 @@ type
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// fill Dest buffer from up to MaxSize bytes from Ctxt.ProgressiveID
+    // - this method is one of the two called from THttpServerSocketGeneric
     function ProcessBody(var Ctxt: THttpRequestContext;
       var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
     /// notify a partial file name change, when download is complete
@@ -324,8 +325,8 @@ type
     // - returns the number of removed HTTP requests
     function Abort(ID: THttpPartialID): integer;
     /// unregister a HTTP request to a given partial
-    // - called when the request is finished e.g. via
-    // THttpServerSocketGeneric.DoProgressiveRequestFree private method
+    // - this method is one of the two called from THttpServerSocketGeneric,
+    // when the request is finished
     procedure Remove(Sender: PHttpRequestContext);
   end;
 

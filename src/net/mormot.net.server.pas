@@ -2047,7 +2047,7 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
 // - you could set any custom aDiglen in 5/10/15/20/25/30 set
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
 // - using SHA-256 and lowercase Base-32 encoding, so perfect for a file name
-function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char;
+function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char = nil;
   aDiglen: integer = 20): RawUtf8;
 
 /// get the content full length, from "Content-Length:" or "Content-Range:"
