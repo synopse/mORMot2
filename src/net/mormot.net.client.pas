@@ -263,6 +263,8 @@ type
     ID: THttpPartialID;
     /// the expected full size of this download
     FullSize: Int64;
+    /// the timestamp to be affected to the file, when it is fully downloaded
+    EventualTime: TUnixTime;
     /// the partial file name currently downloaded
     PartFile: TFileName;
     /// up to 512-bit of raw binary hash, precessed by hash algo byte
@@ -300,7 +302,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// thread-safe register a new partial download and its associated HTTP request
     function Add(const Partial: TFileName; ExpectedFullSize: Int64;
-      Hash: PHashDigest = nil; Http: PHttpRequestContext = nil): THttpPartialID;
+      Hash: PHashDigest = nil; Http: PHttpRequestContext = nil;
+      EventualTime: TUnixTime = 0): THttpPartialID;
     /// search for given partial file name and size, from its hash
     function Find(const Hash: THashDigest; out Size: Int64;
       aID: PHttpPartialID = nil): TFileName;
@@ -2261,7 +2264,7 @@ begin
 end;
 
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
-  Hash: PHashDigest; Http: PHttpRequestContext): THttpPartialID;
+  Hash: PHashDigest; Http: PHttpRequestContext; EventualTime: TUnixTime): THttpPartialID;
 var
   n: PtrInt;
   p: PHttpPartial;
@@ -2288,6 +2291,7 @@ begin
     else
       p^.Digest := Hash^;
     p^.FullSize := ExpectedFullSize;
+    p^.EventualTime := EventualTime;
     p^.PartFile := Partial;
     p^.HttpContext := nil;
     if Http <> nil then // associate to this HTTP state machine
@@ -2451,6 +2455,7 @@ begin
   p^.ID := 0; // reuse this slot at next Add()
   p^.PartFile := '';
   p^.HttpContext := nil;
+  p^.EventualTime := 0;
   dec(fUsed);
   if (fUsed = 0) and
      (length(fDownload) > 16) then
@@ -2537,17 +2542,24 @@ end;
 procedure THttpPartials.Remove(Sender: PHttpRequestContext);
 var
   p: PHttpPartial;
+  err: TShort23;
 begin
   // nominal case, when the partial retrieval has eventually successed
   if IsVoid or
      (Sender = nil) or
      (Sender.ProgressiveID = 0) then
     exit;
+  err[0] := #0;
   Safe.WriteLock;
   try
     p := FromID(Sender.ProgressiveID);
     if p <> nil then
     begin
+      if p^.EventualTime <> 0 then // e.g. for THttpProxyServer
+        if FileSetDateFromUnixUtc(p^.PartFile, p^.EventualTime) then
+          err := ' FileSetDate'
+        else
+          err := ' FileSetDate failed';
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
         ReleaseSlot(p);
@@ -2555,7 +2567,7 @@ begin
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Remove(%)=%', [Sender.ProgressiveID, (p <> nil)]);
+  DoLog('Remove(%)=%%', [Sender.ProgressiveID, (p <> nil), err]);
 end;
 
 
