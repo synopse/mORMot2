@@ -7313,7 +7313,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownloading') then
     result := 0
   else
-    result := fPartials.Add(Partial, ExpectedFullSize, h, {http=}nil);
+    result := fPartials.Add(Partial, ExpectedFullSize, @h, {http=}nil);
 end;
 
 function THttpPeerCache.PartialFileName(const aMessage: THttpPeerCacheMessage;
@@ -7533,7 +7533,7 @@ begin
           TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
         // mimics THttpPeerCache.OnDownloading() for progressive mode
         cs.DestFileName := aFileName;
-        cs.PartialID := fPartials.Add(aFileName, aSize, aMessage.Hash, aHttp);
+        cs.PartialID := fPartials.Add(aFileName, aSize, @aMessage.Hash, aHttp);
       finally
         fFilesSafe.UnLock;
       end;

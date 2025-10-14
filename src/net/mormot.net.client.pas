@@ -300,7 +300,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// thread-safe register a new partial download and its associated HTTP request
     function Add(const Partial: TFileName; ExpectedFullSize: Int64;
-      const Hash: THashDigest; Http: PHttpRequestContext = nil): THttpPartialID;
+      Hash: PHashDigest = nil; Http: PHttpRequestContext = nil): THttpPartialID;
     /// search for given partial file name and size, from its hash
     function Find(const Hash: THashDigest; out Size: Int64;
       aID: PHttpPartialID = nil): TFileName;
@@ -2258,7 +2258,7 @@ begin
 end;
 
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
-  const Hash: THashDigest; Http: PHttpRequestContext): THttpPartialID;
+  Hash: PHashDigest; Http: PHttpRequestContext): THttpPartialID;
 var
   n: PtrInt;
   p: PHttpPartial;
@@ -2280,11 +2280,14 @@ begin
       p := @fDownload[n];
     end;
     p^.ID := result;
-    p^.Digest := Hash;
+    if Hash = nil then
+      FillCharFast(p^.Digest, SizeOf(p^.Digest), 0)
+    else
+      p^.Digest := Hash^;
     p^.FullSize := ExpectedFullSize;
     p^.PartFile := Partial;
     p^.HttpContext := nil;
-    if Http <> nil then
+    if Http <> nil then // associate to this HTTP state machine
     begin
       PtrArrayAdd(p^.HttpContext, Http);
       Http^.ProgressiveID := p^.ID;
