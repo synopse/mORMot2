@@ -5533,7 +5533,7 @@ begin // this method is protected by fRemoteClientSafe.Lock
     if header = '' then
       result := HTTP_NOTFOUND // already identified as error
     else
-      result := HTTP_SUCCESS;
+      result := HTTP_SUCCESS; // return original cached HTTP headers
     exit;
   end;
   if fRemoteClient = nil then // initialize the connection
@@ -5644,8 +5644,9 @@ begin
       exit;
     end;
     // start sending the file content back in progressive mode
+    fOwner.fPartials.Add(filename, size, {hash=}nil, Ctxt.ConnectionHttp,
+      headlastmod div MilliSecsPerSec);
     ctxt.SetOutProgressiveFile(filename, size);
-    fOwner.fPartials.Add(filename, size, {hash=}nil, Ctxt.ConnectionHttp);
     loginfo := 'progressive new';
   finally
     fRemoteClientSafe.UnLock;
