@@ -5918,7 +5918,7 @@ begin
       if hpoPublishSha256 in s.Options then
         include(one.fAlgos, hfSha256);
       if one.fAlgos <> [] then
-        one.fHashCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+        one.fHashCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
           TypeInfo(TRawUtf8DynArrayDynArray), PathCaseInsensitive, SecsPerHour);
       // compute and register this URI
       uri := s.fUrl;
@@ -5967,15 +5967,12 @@ function THttpProxyServer.OnGetHead(Ctxt: THttpServerRequestAbstract;
   Def: THttpProxyUrl; Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
-  name, remotehead, info: RawUtf8;
+  name, info: RawUtf8;
   cached: RawByteString;
-  siz, headsiz: Int64;
-  headlastmod: TUnixTime;
+  siz: Int64;
   lastmod: TUnixMSTime;
   s: THttpProxyUrlSettings;
-  ext: PUtf8Char;
   pck: THttpProxyCacheKind;
-  nr: TNetResult;
   do304: boolean;
   remote: TUri;
 begin
@@ -5983,7 +5980,6 @@ begin
   result := HTTP_FORBIDDEN; // 403
   // locate the resource from its source
   s := Def.Settings;
-  do304 := not (hpoDisable304 in s.Options);
   case Def.fSourced of
     sLocalFolder:
       begin
@@ -6015,7 +6011,8 @@ begin
           fn := MakePath([s.DiskCache.Path, name[1], name]) // hash partitioning
         else
           fn := MakePath([s.DiskCache.Path, name]);
-        if FileInfoByName(fn, siz, lastmod) then // we have a local cached file
+        if FileInfoByName(fn, siz, lastmod) and
+           (siz >= 0) then // we have a local cached file
         begin
           if hpoClientNoHead in s.Options then
             // assume file won't change on the server: return the current cache
@@ -6025,90 +6022,9 @@ begin
         else
           lastmod := 0;
         if not StatusCodeIsSuccess(result) then
-        begin
-          // quick blocking process to initiate the proxy request
-          Def.fRemoteClientSafe.Lock;
-          try
-            // always perform a HEAD request to the original server
-            result := Def.RemoteClientHead(remote, remotehead);
-            if result in [HTTP_SUCCESS, HTTP_NOCONTENT] then
-              if GetHeaderInfo(remotehead, headsiz, headlastmod) then
-              begin
-                // check the header against the local cached file
-                Ctxt.OutCustomHeaders := PurgeHeaders(remotehead);
-                if lastmod <> 0 then
-                  if (headsiz = siz) and
-                     UnixTimeEqualsMS(headlastmod, lastmod) then
-                  begin
-                    // we can stream from local cache
-                    result := Ctxt.SetOutFile(fn, do304,
-                      siz, lastmod, s.CacheControlMaxAgeSec);
-                    info := 'cached';
-                  end
-                  else
-                  begin
-                    // the local file seems invalid and should be removed
-                    fLog.Add.Log(sllTrace, 'OnExecute: deprecate fn=% %=% %=%',
-                      [name, result, siz, headsiz, lastmod, headlastmod], self);
-                    if not DeleteFile(fn) then // may fail on Windows: use previous
-                    begin
-                      result := Ctxt.SetOutFile(fn, do304,
-                        siz, lastmod, s.CacheControlMaxAgeSec);
-                      info := 'locked cache';
-                    end;
-                  end;
-                if info = '' then
-                  // no matching local file: need to download
-                  if siz < s.HttpDirectGetKB shl 10 then
-                  begin
-                    // smallest files < 16KB could use the blocking connection
-                    if siz > 0 then
-                      cached := Def.RemoteClientGet(remote);
-                    if (siz = 0) or
-                       (cached <> '') then
-                      if (length(cached) = siz) and
-                         FileFromString(cached, fn) and
-                         FileSetDateFromUnixUtc(fn, headlastmod) then
-                      begin
-                        result := Ctxt.SetOutContent(cached, do304);
-                        info := 'small get';
-                      end
-                      else
-                      begin
-                        result := HTTP_BADGATEWAY; // 502
-                        info := 'get error';
-                      end;
-                  end
-                  else
-                  begin
-                    // big files need an asynchronous GET to the remote server
-                    nr := fServer.Clients.StartRequest(self, remote, 'GET', '', fn);
-                    if nr <> nrOk then
-                    begin
-                      Ctxt.OutCustomHeaders := '';
-                      result := HTTP_BADGATEWAY; // 502
-                      Append(info, [ToText(nr)^]);
-                    end
-                    else
-                    begin
-                      // start sending the file content back in progressive mode
-                      Ctxt.SetOutProgressiveFile(fn, siz);
-                      info := 'progressive';
-                    end;
-                  end;
-              end
-              else
-              begin
-                // we require both Content-Length: and Last-Modified: HTTP headers
-                result := HTTP_BADGATEWAY; // 502
-                info := 'weak head';
-              end
-            else
-              info := 'head status';
-          finally
-            Def.fRemoteClientSafe.UnLock;
-          end;
-        end;
+          // no local file: need to initiate a proxy request
+          result := Def.StartProxyRequest(
+            Ctxt, fn, name, siz, lastmod, info, remote);
       end;
   else
     exit;
@@ -6118,7 +6034,7 @@ begin
     case result of
       HTTP_SUCCESS:
         // this local file does exist: try if we could use Def.MemCache
-        if Assigned(Def.fMemCached) then
+        if Assigned(Def.fMemCache) then
         begin
           pck := s.MemCache.FromUri(Uri);
           if not (pckIgnore in pck) then
@@ -6126,10 +6042,10 @@ begin
                (siz <= s.MemCache.MaxSize) then
             begin
               // use a memory cache
-              if not Def.fMemCached.FindAndCopy(name, cached) then
+              if not Def.fMemCache.FindAndCopy(name, cached) then
               begin
                 cached := StringFromFile(fn);
-                Def.fMemCached.Add(name, cached);
+                Def.fMemCache.Add(name, cached);
               end;
               Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
               Ctxt.OutContent := cached;
@@ -6143,32 +6059,21 @@ begin
           begin
             // return the folder files info as cached HTML
             if (hpoDisableFolderHtmlIndexCache in s.Options) or
-               not Def.fMemCached.FindAndCopy(name, cached) then
+               not Def.fMemCache.FindAndCopy(name, cached) then
             begin
               FolderHtmlIndex(fn, Ctxt.Url,
                 StringReplaceChars(name, PathDelim, '/'),
                 RawUtf8(cached), hpoNoSubFolder in s.Options);
-              if Assigned(Def.fMemCached) and
+              if Assigned(Def.fMemCache) and
                  not (hpoDisableFolderHtmlIndexCache in s.Options) then
-                Def.fMemCached.Add(name, cached);
+                Def.fMemCache.Add(name, cached);
             end;
             result := Ctxt.SetOutContent(cached, do304, HTML_CONTENT_TYPE);
           end
           else if siz = 0 then
             // check URI for any .md5/.sha1/.sha256 hash extension
-            if Assigned(Def.fHashCached) then
-            begin
-              ext := ExtractExtP(name, {withoutdot:}true);
-              if ext <> nil then
-                case PCardinal(ext)^ of
-                  ord('m') + ord('d') shl 8 + ord('5') shl 16:
-                    result := Def.ReturnHash(Ctxt, hfMd5, name, fn);
-                  ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
-                    result := Def.ReturnHash(Ctxt, hfSHA1, name, fn);
-                  ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
-                    result := Def.ReturnHash(Ctxt, hfSHA256, name, fn);
-                end;
-            end;
+            if Assigned(Def.fHashCache) then
+              result := Def.ReturnHash(Ctxt, name, fn);
     end; // may be e.g. HTTP_NOTMODIFIED (304)
   fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=% info=%',
     [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> ''), info], self);
