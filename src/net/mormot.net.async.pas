@@ -1180,6 +1180,8 @@ type
   // generation on server side with .md5/.sha1/.sha256 extension on a resource
   // - hpoDisable304 disable "if-none-match:" / "if-modified-since:" headers
   // default support as efficient 304 HTTP_NOTMODIFIED response
+  // - hpoClientNoHead will disable the HEAD request to the server if there is a
+  // local cached file to be served - faster but won't detect any server change
   // - hpoClientOnlySocket will be used for THttpProxyUrl.RemoteClientHead()
   THttpProxyUrlOption = (
     hpoNoSubFolder,
@@ -1189,6 +1191,7 @@ type
     hpoPublishSha1,
     hpoPublishSha256,
     hpoDisable304,
+    hpoClientNoHead,
     hpoClientOnlySocket);
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
@@ -5796,6 +5799,7 @@ var
   ext: PUtf8Char;
   pck: THttpProxyCacheKind;
   nr: TNetResult;
+  do304: boolean;
   remote: TUri;
 begin
   // delete any deprecated cached content
@@ -5806,6 +5810,7 @@ begin
   result := HTTP_FORBIDDEN; // 403
   // locate the resource from its source
   s := Def.Settings;
+  do304 := not (hpoDisable304 in s.Options);
   case Def.fSourced of
     sLocalFolder:
       begin
@@ -5818,7 +5823,7 @@ begin
           if PosExChar(PathDelim, name) <> 0 then
             exit;
         fn := MakePath([s.fLocalFolder, name]);
-        result := Ctxt.SetOutFile(fn, not(hpoDisable304 in s.Options), '',
+        result := Ctxt.SetOutFile(fn, do304, '',
           s.CacheControlMaxAgeSec, @siz); // to be streamed from file
       end;
     sRemoteUri:
@@ -5829,89 +5834,102 @@ begin
             exit;
         remote := Def.fRemoteUri;
         AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
-        // quick blocking process to initiate the proxy request
-        Def.fRemoteClientSafe.Lock;
-        try
-          // always perform a HEAD request to the original server
-          result := Def.RemoteClientHead(remote, remotehead);
-          if result in [HTTP_SUCCESS, HTTP_NOCONTENT] then
-            if GetHeaderInfo(remotehead, headsiz, headlastmod) then
-            begin
-              // check the header against the local cached file
-              Ctxt.OutCustomHeaders := PurgeHeaders(remotehead);
-              name := HttpRequestHashBase32(remote, nil);
-              fn := MakePath([s.DiskCache.Path, name]);
-              if FileInfoByName(fn, siz, lastmod) then
-                if (headsiz = siz) and
-                   UnixTimeEqualsMS(headlastmod, lastmod) then
-                begin
-                  // we can stream from local cache
-                  result := Ctxt.SetOutFile(fn, not(hpoDisable304 in s.Options),
-                    siz, lastmod, s.CacheControlMaxAgeSec);
-                  info := 'cached';
-                end
-                else
-                begin
-                  fLog.Add.Log(sllTrace, 'OnExecute: deprecate fn=% %=% %=%',
-                    [name, result, siz, headsiz, lastmod, headlastmod], self);
-                  if not DeleteFile(fn) then // may fail on Windows: use previous
+        // check the local file
+        name := HttpRequestHashBase32(remote, nil);
+        fn := MakePath([s.DiskCache.Path, name]);
+        if FileInfoByName(fn, siz, lastmod) then // we have a local cached file
+        begin
+          if hpoClientNoHead in s.Options then
+            // assume file won't change on the server: return the current cache
+            result := Ctxt.SetOutFile(fn, do304, siz,
+              lastmod, s.CacheControlMaxAgeSec);
+        end
+        else
+          lastmod := 0;
+        if not StatusCodeIsSuccess(result) then
+        begin
+          // quick blocking process to initiate the proxy request
+          Def.fRemoteClientSafe.Lock;
+          try
+            // always perform a HEAD request to the original server
+            result := Def.RemoteClientHead(remote, remotehead);
+            if result in [HTTP_SUCCESS, HTTP_NOCONTENT] then
+              if GetHeaderInfo(remotehead, headsiz, headlastmod) then
+              begin
+                // check the header against the local cached file
+                Ctxt.OutCustomHeaders := PurgeHeaders(remotehead);
+                if lastmod <> 0 then
+                  if (headsiz = siz) and
+                     UnixTimeEqualsMS(headlastmod, lastmod) then
                   begin
-                    result := Ctxt.SetOutFile(fn, not(hpoDisable304 in s.Options),
+                    // we can stream from local cache
+                    result := Ctxt.SetOutFile(fn, do304,
                       siz, lastmod, s.CacheControlMaxAgeSec);
-                    info := 'locked cache';
-                  end;
-                end;
-              if info = '' then
-                // no matching local file: need to download
-                if siz < s.HttpDirectGetKB shl 10 then
-                begin
-                  // smallest files < 16KB could use the blocking connection
-                  if siz > 0 then
-                    result := Def.fRemoteClient.Request(
-                      remote, 'GET', '', '', '', {keepalive=}30000);
-                  if result in [HTTP_SUCCESS, HTTP_NOCONTENT] then
-                    if (length(Def.fRemoteClient.Body) = siz) and
-                       FileFromString(Def.fRemoteClient.Body, fn) and
-                       FileSetDateFromUnixUtc(fn, headlastmod) then
-                    begin
-                      result := Ctxt.SetOutFile(fn, not(hpoDisable304 in s.Options),
-                        siz, lastmod, s.CacheControlMaxAgeSec);
-                      info := 'small get';
-                    end
-                    else
-                    begin
-                      result := HTTP_BADGATEWAY; // 502
-                      info := 'get error';
-                    end;
-                end
-                else
-                begin
-                  // need an asynchronous GET to the remote server
-                  nr := fServer.Clients.StartRequest(self, remote, 'GET', '', fn);
-                  if nr <> nrOk then
-                  begin
-                    Ctxt.OutCustomHeaders := '';
-                    result := HTTP_BADGATEWAY; // 502
-                    Append(info, [ToText(nr)^]);
+                    info := 'cached';
                   end
                   else
                   begin
-                    // start sending the file content back in progressive mode
-                    Ctxt.SetOutProgressiveFile(fn, siz);
-                    info := 'progressive';
+                    // the local file seems invalid and should be removed
+                    fLog.Add.Log(sllTrace, 'OnExecute: deprecate fn=% %=% %=%',
+                      [name, result, siz, headsiz, lastmod, headlastmod], self);
+                    if not DeleteFile(fn) then // may fail on Windows: use previous
+                    begin
+                      result := Ctxt.SetOutFile(fn, do304,
+                        siz, lastmod, s.CacheControlMaxAgeSec);
+                      info := 'locked cache';
+                    end;
                   end;
-                end;
-            end
+                if info = '' then
+                  // no matching local file: need to download
+                  if siz < s.HttpDirectGetKB shl 10 then
+                  begin
+                    // smallest files < 16KB could use the blocking connection
+                    if siz > 0 then
+                      cached := Def.RemoteClientGet(remote);
+                    if (siz = 0) or
+                       (cached <> '') then
+                      if (length(cached) = siz) and
+                         FileFromString(cached, fn) and
+                         FileSetDateFromUnixUtc(fn, headlastmod) then
+                      begin
+                        result := Ctxt.SetOutContent(cached, do304);
+                        info := 'small get';
+                      end
+                      else
+                      begin
+                        result := HTTP_BADGATEWAY; // 502
+                        info := 'get error';
+                      end;
+                  end
+                  else
+                  begin
+                    // big files need an asynchronous GET to the remote server
+                    nr := fServer.Clients.StartRequest(self, remote, 'GET', '', fn);
+                    if nr <> nrOk then
+                    begin
+                      Ctxt.OutCustomHeaders := '';
+                      result := HTTP_BADGATEWAY; // 502
+                      Append(info, [ToText(nr)^]);
+                    end
+                    else
+                    begin
+                      // start sending the file content back in progressive mode
+                      Ctxt.SetOutProgressiveFile(fn, siz);
+                      info := 'progressive';
+                    end;
+                  end;
+              end
+              else
+              begin
+                // we require both Content-Length: and Last-Modified: HTTP headers
+                result := HTTP_BADGATEWAY; // 502
+                info := 'weak head';
+              end
             else
-            begin
-              // we require both Content-Length: and Last-Modified: HTTP headers
-              result := HTTP_BADGATEWAY; // 502
-              info := 'weak head';
-            end
-          else
-            info := 'head status';
-        finally
-          Def.fRemoteClientSafe.UnLock;
+              info := 'head status';
+          finally
+            Def.fRemoteClientSafe.UnLock;
+          end;
         end;
       end;
   else
