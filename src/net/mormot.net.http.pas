@@ -167,6 +167,9 @@ function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean; o
 function GetHeader(const Headers, Name: RawUtf8; out Value: Int64): boolean; overload;
 
 /// extract size and date from HTTP headers
+// - note that some web servers (e.g. with HEAD, or when chunking) may not
+// return a "Content-Length" header - so we return ContentLength = -1 but
+// result = true if LastModified has been set, but length header is missing
 function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
   out LastModified: TUnixTime): boolean;
 
@@ -2830,10 +2833,13 @@ function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
 var
   lastmod: RawUtf8;
 begin
-  result := GetHeader(Headers, 'content-length', ContentLength) and
-            GetHeader(Headers, 'Last-Modified', lastmod);
-  if result then
-    LastModified := HttpDateToUnixTime(lastmod);
+  if not GetHeader(Headers, 'content-length', ContentLength) then
+    ContentLength := -1; // missing e.g. Apache or with chunked content
+  result := false;
+  if not GetHeader(Headers, 'Last-Modified', lastmod) then
+    exit;
+  LastModified := HttpDateToUnixTime(lastmod);
+  result := LastModified <> 0; // return true if we got some timestamp
 end;
 
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
