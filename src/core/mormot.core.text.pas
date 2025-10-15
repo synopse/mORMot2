@@ -879,6 +879,7 @@ type
     /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeUtf8(const Text: RawUtf8;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere);
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level function removing all &lt; &gt; &amp; &quot; HTML entities
     procedure AddHtmlUnescape(p, amp: PUtf8Char; plen: PtrUInt);
     /// low-level function removing all HTML <tag> and &entities;
@@ -6040,7 +6041,7 @@ begin
       beg := Text;
       repeat
         while true do
-          if esc[Text^] = 0 then
+          if esc[Text^] = 0 then // this loop is faster than TextLen overload
             inc(Text)
           else
             break;
@@ -6054,7 +6055,7 @@ begin
       until Text^ = #0;
     end
     else
-      AddNoJsonEscape(Text, mormot.core.base.StrLen(Text)); // hfNone
+      AddNoJsonEscape(Text); // hfNone
 end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
@@ -6063,29 +6064,27 @@ var
   beg: PUtf8Char;
   esc: PAnsiCharToByte;
 begin
-  if (Text = nil) or
-     (TextLen <= 0) then
-    exit;
-  if Fmt = hfNone then
-  begin
-    AddNoJsonEscape(Text, TextLen);
-    exit;
-  end;
-  inc(TextLen, PtrInt(Text)); // TextLen = final PtrInt(Text)
-  esc := @HTML_ESC[Fmt];
-  repeat
-    beg := Text;
-    while (PtrUInt(Text) < PtrUInt(TextLen)) and
-          (esc[Text^] = 0) do
-      inc(Text);
-    AddNoJsonEscape(beg, Text - beg);
-    if (PtrUInt(Text) = PtrUInt(TextLen)) or
-       (Text^ = #0) then
-      exit
+  if (Text <> nil) and
+     (TextLen > 0) then
+    if Fmt <> hfNone then
+    begin
+      inc(TextLen, PtrInt(Text)); // TextLen = final PtrInt(Text)
+      esc := @HTML_ESC[Fmt];
+      repeat
+        beg := Text;
+        while (PtrUInt(Text) < PtrUInt(TextLen)) and
+              (esc[Text^] = 0) do
+          inc(Text);
+        AddNoJsonEscape(beg, Text - beg);
+        if (PtrUInt(Text) = PtrUInt(TextLen)) or
+           (Text^ = #0) then
+          break;
+        AddShorter(HTML_ESCAPED[esc[Text^]]);
+        inc(Text);
+      until false;
+    end
     else
-      AddShorter(HTML_ESCAPED[esc[Text^]]);
-    inc(Text);
-  until false;
+      AddNoJsonEscape(Text, TextLen); // hfNone
 end;
 
 procedure TTextWriter.AddHtmlEscapeW(Text: PWideChar; Fmt: TTextWriterHtmlFormat);
@@ -6106,16 +6105,21 @@ end;
 procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
 var
   tmp: TSynTempBuffer;
-  len: integer;
 begin
-  len := StringToUtf8(Text, tmp);
-  AddHtmlEscape(tmp.buf, len, Fmt);
+  AddHtmlEscape(StringToUtf8Temp(Text, tmp), tmp.len, Fmt);
   tmp.Done;
 end;
 
 procedure TTextWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHtmlFormat);
+var
+  p: PUtf8Char;
 begin
-  AddHtmlEscape(pointer(Text), length(Text), Fmt);
+  p := pointer(Text);
+  if p <> nil then
+    if Fmt <> hfNone then
+      AddHtmlEscape(p, Fmt) // faster with no TextLen
+    else
+      AddNoJsonEscapeBig(p, PStrLen(p - _STRLEN)^) // seldom called
 end;
 
 procedure TTextWriter.AddHtmlUnescape(p, amp: PUtf8Char; plen: PtrUInt);
