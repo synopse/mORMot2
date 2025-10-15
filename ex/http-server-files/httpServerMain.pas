@@ -35,7 +35,7 @@ var
   logger: TSynLogFamily;
   console, verbose: boolean;
   settingsfolder, folder: TFileName;
-  url: RawUtf8;
+  url, proxy: RawUtf8;
   settings: THttpProxyServerSettings;
   server: THttpProxyServer;
 begin
@@ -49,7 +49,8 @@ begin
     settingsfolder := cmd.ParamS('&settings', '#folder where *.json are located',
       Executable.ProgramFilePath + 'sites-enabled');
     folder := cmd.ParamS('&folder', 'a local #foldername to serve');
-    url := cmd.Param('&url', 'a root #uri to serve this folder');
+    proxy := cmd.Param('pro&xy', 'a remote #uri to cache');
+    url := cmd.Param('&url', 'the root #uri to serve this folder/proxy');
     SetObjectFromExecutableCommandLine(settings.Server, '', ' for HTTP/HTTPS');
     SetObjectFromExecutableCommandLine(settings.Server.Log, 'Log', ' for EnableLogging');
     {$ifdef USE_OPENSSL}
@@ -69,6 +70,8 @@ begin
     // ensure we have something to serve (maybe from command line)
     if folder <> '' then
       settings.AddFolder(folder, url);
+    if proxy <> '' then
+      settings.AddProxy(proxy, url);
     if settings.Url = nil then
     begin
       ConsoleWrite('No folder to serve'#10, ccLightRed);
