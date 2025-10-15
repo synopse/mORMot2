@@ -9819,7 +9819,7 @@ end;
 function TSynDictionary.DeleteDeprecated(tix64: Int64): integer;
 var
   i, tomove: PtrInt;
-  tix32: cardinal;
+  tix32, timeout32: cardinal;
 begin
   result := 0;
   if (self = nil) or
@@ -9836,8 +9836,10 @@ begin
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := tix32;
     for i := fSafe.Padding[DIC_KEYCOUNT].VInteger - 1 downto 0 do
-      if (tix32 > fTimeOut[i]) and
-         (fTimeOut[i] <> 0) and
+    begin
+      timeout32 := fTimeOut[i];
+      if (tix32 > timeout32) and
+         (timeout32 <> 0) and
          (not Assigned(fOnCanDelete) or
           fOnCanDelete(fKeys.ItemPtr(i)^, fValues.ItemPtr(i)^, i)) then
       begin
@@ -9850,6 +9852,7 @@ begin
           MoveFast(fTimeOut[i + 1], fTimeOut[i], tomove * 4);
         inc(result);
       end;
+    end;
     if result <> 0 then
     begin
       if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
