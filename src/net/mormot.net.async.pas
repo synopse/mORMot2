@@ -1463,8 +1463,10 @@ type
     procedure AfterServerStarted; virtual;
     procedure OnIdle(Sender: TObject; NowTix: Int64);
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
-    function OnGetHead(Ctxt: THttpServerRequestAbstract; Def: THttpProxyUrl;
-      Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
+    function OnGetHeadLocalFolder(Ctxt: THttpServerRequestAbstract;
+      const Uri: TUriMatchName): cardinal;
+    function OnGetHeadRemoteUri(Ctxt: THttpServerRequestAbstract;
+      const Uri: TUriMatchName): cardinal;
   public
     /// initialize this forward proxy instance
     // - the supplied aSettings should be owned by the caller (e.g from a main
@@ -6015,127 +6017,107 @@ begin
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
 end;
 
-function THttpProxyServer.OnGetHead(Ctxt: THttpServerRequestAbstract;
-  Def: THttpProxyUrl; Met: TUriRouterMethod; const Uri: TUriMatchName): cardinal;
+function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequestAbstract;
+  const Uri: TUriMatchName): cardinal;
+var
+  fn: TFileName;
+  name, cached: RawUtf8;
+  siz: Int64;
+  one: THttpProxyUrl;
+  opt: THttpProxyUrlOptions;
+begin
+  // supplied URI should be a safe resource reference
+  result := HTTP_FORBIDDEN; // 403
+  one := Ctxt.RouteOpaque;
+  opt := one.Settings.Options;
+  // try to assign a local file to the output Ctxt
+  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
+  NormalizeFileNameU(name);
+  if not SafePathNameU(name) then
+    exit;
+  if hpoNoSubFolder in opt then
+    if PosExChar(PathDelim, name) <> 0 then
+      exit;
+  fn := MakePath([one.Settings.fLocalFolder, name]);
+  result := one.ReturnFile(Ctxt, name, fn, Uri, siz, 0); // stream from file
+  // additional response types
+  case result of
+    HTTP_NOTFOUND:
+      // this URI is no file, but may be a folder
+      if (siz < 0) and // siz=-1 for folder
+         not (hpoNoFolderHtmlIndex in opt) then
+      begin
+        // return the folder files info as cached HTML
+        if (hpoDisableFolderHtmlIndexCache in opt) or
+           not one.fMemCache.FindAndCopy(name, cached) then
+        begin
+          FolderHtmlIndex(fn, Ctxt.Url, StringReplaceChars(name, PathDelim, '/'),
+            cached, hpoNoSubFolder in opt);
+          if Assigned(one.fMemCache) and
+             not (hpoDisableFolderHtmlIndexCache in opt) then
+            one.fMemCache.Add(name, cached);
+        end;
+        result := Ctxt.SetOutContent(
+                    cached, not (hpoDisable304 in opt), HTML_CONTENT_TYPE);
+      end
+      else if siz = 0 then
+        // check URI for any .md5/.sha1/.sha256 hash extension
+        if Assigned(one.fHashCache) then
+          result := one.ReturnHash(Ctxt, name, fn);
+  end; // may be e.g. HTTP_NOTMODIFIED (304)
+  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
+    [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
+end;
+
+function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequestAbstract;
+  const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
   name, info: RawUtf8;
-  cached: RawByteString;
   siz: Int64;
   lastmod: TUnixMSTime;
-  s: THttpProxyUrlSettings;
-  pck: THttpProxyCacheKind;
-  do304: boolean;
+  one: THttpProxyUrl;
   remote: TUri;
 begin
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
-  // locate the resource from its source
-  s := Def.Settings;
-  case Def.fSourced of
-    sLocalFolder:
-      begin
-        // try to assign a local file to the output Ctxt
-        UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
-        NormalizeFileNameU(name);
-        if not SafePathNameU(name) then
-          exit;
-        if hpoNoSubFolder in s.Options then
-          if PosExChar(PathDelim, name) <> 0 then
-            exit;
-        fn := MakePath([s.fLocalFolder, name]);
-        result := Ctxt.SetOutFile(fn, do304, '',
-          s.CacheControlMaxAgeSec, @siz); // to be streamed from file
-      end;
-    sRemoteUri:
-      begin
-        // compute the remote URI corresponding to the original server
-        if hpoNoSubFolder in s.Options then
-          if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
-            exit;
-        remote := Def.fRemoteUri;
-        AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
-        // check the local file
-        name := HttpRequestHashBase32(remote); // named from hashed URI
-        if name = '' then
-          exit; // paranoid
-        if hpoClientCacheSubFolder in s.Options then
-          fn := MakePath([s.DiskCache.Path, name[1], name]) // hash partitioning
-        else
-          fn := MakePath([s.DiskCache.Path, name]);
-        if FileInfoByName(fn, siz, lastmod) and
-           (siz >= 0) then // we have a local cached file
-        begin
-          if fPartials.HasFile(fn, @siz, ctxt.ConnectionHttp) then
-          begin
-            // but it is already in progressive mode: join the team
-            Ctxt.SetOutProgressiveFile(fn, siz);
-            info := 'progressive existing';
-            result := HTTP_SUCCESS;
-          end
-          else if hpoClientNoHead in s.Options then
-            // assume file won't change on the server: return the current cache
-            result := Ctxt.SetOutFile(fn, do304, siz,
-              lastmod, s.CacheControlMaxAgeSec);
-        end
-        else
-          lastmod := 0;
-        if not StatusCodeIsSuccess(result) then
-          // no local file: need to initiate a proxy request
-          result := Def.StartProxyRequest(
-            Ctxt, fn, name, siz, lastmod, info, remote);
-      end;
+  one := Ctxt.RouteOpaque;
+  // compute the remote URI corresponding to the original server
+  if hpoNoSubFolder in one.Settings.Options then
+    if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
+      exit;
+  remote := one.fRemoteUri;
+  AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
+  // check the local file
+  name := HttpRequestHashBase32(remote); // named from hashed URI
+  if name = '' then
+    exit; // paranoid
+  if hpoClientCacheSubFolder in one.Settings.Options then // hash partitioning
+    fn := MakePath([one.Settings.DiskCache.Path, name[1], name])
   else
-    exit;
-  end;
-  // complete the actual URI process
-  if info = '' then
-    case result of
-      HTTP_SUCCESS:
-        // this local file does exist: try if we could use Def.MemCache
-        if Assigned(Def.fMemCache) then
-        begin
-          pck := s.MemCache.FromUri(Uri);
-          if not (pckIgnore in pck) then
-            if (pckForce in pck) or
-               (siz <= s.MemCache.MaxSize) then
-            begin
-              // use a memory cache
-              if not Def.fMemCache.FindAndCopy(name, cached) then
-              begin
-                cached := StringFromFile(fn);
-                Def.fMemCache.Add(name, cached);
-              end;
-              Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
-              Ctxt.OutContent := cached;
-            end;
-        end;
-      HTTP_NOTFOUND:
-        if Def.fSourced = sLocalFolder then
-          // this URI is no file, but may be a folder
-          if (siz < 0) and // siz=-1 for folder
-             not (hpoNoFolderHtmlIndex in s.Options) then
-          begin
-            // return the folder files info as cached HTML
-            if (hpoDisableFolderHtmlIndexCache in s.Options) or
-               not Def.fMemCache.FindAndCopy(name, cached) then
-            begin
-              FolderHtmlIndex(fn, Ctxt.Url,
-                StringReplaceChars(name, PathDelim, '/'),
-                RawUtf8(cached), hpoNoSubFolder in s.Options);
-              if Assigned(Def.fMemCache) and
-                 not (hpoDisableFolderHtmlIndexCache in s.Options) then
-                Def.fMemCache.Add(name, cached);
-            end;
-            result := Ctxt.SetOutContent(cached, do304, HTML_CONTENT_TYPE);
-          end
-          else if siz = 0 then
-            // check URI for any .md5/.sha1/.sha256 hash extension
-            if Assigned(Def.fHashCache) then
-              result := Def.ReturnHash(Ctxt, name, fn);
-    end; // may be e.g. HTTP_NOTMODIFIED (304)
-  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=% info=%',
-    [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> ''), info], self);
+    fn := MakePath([one.Settings.DiskCache.Path, name]);
+  if FileInfoByName(fn, siz, lastmod) and
+     (siz >= 0) then // we have a local cached file
+  begin
+    if fPartials.HasFile(fn, @siz, ctxt.ConnectionHttp) then
+    begin
+      // but it is already in progressive mode: join the team
+      Ctxt.SetOutProgressiveFile(fn, siz);
+      info := 'progressive existing';
+      result := HTTP_SUCCESS;
+    end
+    else if hpoClientNoHead in one.Settings.Options then
+      // assume file won't change on the server: return the current cache
+      result := one.ReturnFile(Ctxt, name, fn, Uri, siz, 0);
+  end
+  else
+    lastmod := 0;
+  if not StatusCodeIsSuccess(result) then
+    // no matching local file: need to initiate a proxy request
+    result := one.StartProxyRequest(
+      Ctxt, fn, name, siz, lastmod, info, remote);
+  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% info=%',
+    [Ctxt.Method, Ctxt.Url, name, result, siz, info], self);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -6174,7 +6156,12 @@ begin
   case met of
     urmGet,
     urmHead:
-      result := OnGetHead(Ctxt, one, met, uri);
+      case one.fSourced of
+        sLocalFolder:
+          result := OnGetHeadLocalFolder(Ctxt, uri);
+        sRemoteUri:
+          result := OnGetHeadRemoteUri(Ctxt, uri);
+      end;
     urmPost,
     urmPut,
     urmDelete:
