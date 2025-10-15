@@ -1421,6 +1421,9 @@ type
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
+    function ReturnFile(ctxt: THttpServerRequestAbstract; const name: RawUtf8;
+      const filename: TFileName; const uri: TUriMatchName; var size: Int64;
+      lastmod: TUnixMSTime): cardinal;
     function StartProxyRequest(ctxt: THttpServerRequestAbstract;
       const filename: TFileName; const name: RawUtf8;
       const size: Int64; const lastmod: TUnixMSTime;
@@ -4563,7 +4566,7 @@ end;
 
 procedure THttpAsyncServerConnection.BeforeDestroy;
 begin
-  fHttp.ProcessDone; // ContentStream.Free before THttpPartials.Remove()
+  fHttp.ProcessDone; // ContentStream.Free - before THttpPartials.Remove()
   if Assigned(fServer) and
      Assigned(fServer.fProgressiveRequests) and
      (rfProgressiveStatic in fHttp.ResponseFlags) then
@@ -5652,6 +5655,47 @@ begin
     fRemoteClientSafe.UnLock;
   end;
 end;
+
+function THttpProxyUrl.ReturnFile(ctxt: THttpServerRequestAbstract;
+  const name: RawUtf8; const filename: TFileName;
+  const uri: TUriMatchName; var size: Int64; lastmod: TUnixMSTime): cardinal;
+
+  procedure FromCache;
+  var
+    cached: RawByteString;
+  begin
+    if not fMemCache.FindAndCopy(name, cached) then
+    begin
+      cached := StringFromFile(filename);
+      fMemCache.Add(name, cached);
+    end;
+    Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
+    Ctxt.OutContent := cached;
+  end;
+
+var
+  pck: THttpProxyCacheKind;
+begin
+  // prepare file streaming as response
+  if lastmod = 0 then
+    // from sLocalFolder
+    result := Ctxt.SetOutFile(filename, hpoDisable304 in fSettings.Options,
+      '', fSettings.CacheControlMaxAgeSec, @size)
+  else
+    // from sRemoteUri
+    result := Ctxt.SetOutFile(filename, hpoDisable304 in fSettings.Options,
+      size, lastmod, fSettings.CacheControlMaxAgeSec);
+  if (result <> HTTP_SUCCESS) or
+     not Assigned(fMemCache) then
+    exit;
+  // try to use the memory cache content
+  pck := fSettings.MemCache.FromUri(uri);
+  if not (pckIgnore in pck) then
+    if (pckForce in pck) or
+       (size <= fSettings.MemCache.MaxSize) then
+      FromCache;
+end;
+
 
 { THttpProxyServerMainSettings }
 

@@ -2562,7 +2562,7 @@ begin
           err := ' FileSetDate failed';
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
-        ReleaseSlot(p);
+        ReleaseSlot(p); // release this partial now, if not with the last http
     end;
   finally
     Safe.WriteUnLock;
