@@ -1392,6 +1392,8 @@ type
     // - this instance will be stored and owned in Url[].Settings array
     function AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
       RaiseExceptionOnNonExistingFolder: ESynExceptionClass = nil): THttpProxyUrlSettings;
+    /// create a THttpProxyUrlSettings definition as remote URI proxy
+    function AddProxy(const remoteuri: RawUtf8; const localuri: RawUtf8 = ''): THttpProxyUrlSettings;
     /// create a THttpProxyUrlSettings definition for using a callback
     function AddEvent(const request: TOnHttpProxyServerRequest;
       const uri: RawUtf8 = ''): THttpProxyUrlSettings;
@@ -5784,6 +5786,17 @@ begin
   result := AddUrl(result);
 end;
 
+function THttpProxyServerSettings.AddProxy(
+  const remoteuri, localuri: RawUtf8): THttpProxyUrlSettings;
+begin
+  if not IsHttp(remoteuri) then
+    EHttpProxyServer.RaiseUtf8('%.AddRemote(%)', [self, remoteuri]);
+  result := THttpProxyUrlSettings.Create;
+  result.Url := localuri;
+  result.Source := remoteuri;
+  result := AddUrl(result);
+end;
+
 function THttpProxyServerSettings.AddEvent(
   const request: TOnHttpProxyServerRequest; const uri: RawUtf8): THttpProxyUrlSettings;
 begin
@@ -5939,7 +5952,7 @@ var
 begin
   new := TUriRouter.Create(TUriTreeNode);
   try
-    // compute all new routes from Settings[]
+    // 1. compute all routes from Settings[]
     for i := 0 to high(fSettings.Url) do
     begin
       one := fSettings.Url[i];
@@ -5953,12 +5966,14 @@ begin
       hps := hpsUndefined;
       if s.Source <> '' then
         if IsHttp(s.Source) then
-        begin // detects also 'http://unix:/path/to/socket.sock:/url/path'
+        begin
+          // detects also 'http://unix:/path/to/socket.sock:/url/path'
           if one.fRemoteUri.From(s.Source) then
             hps := hpsRemoteUri;
         end
         else
         begin
+          // should be a local existing folder name
           Utf8ToFileName(s.Source, s.fLocalFolder);
           if DirectoryExists(s.fLocalFolder) then
           begin
@@ -5967,6 +5982,7 @@ begin
           end;
         end
       else if Assigned(s.OnRequest) then
+        // execute a callback event
         hps := hpsEvent;
       one.fSource := hps;
       if hps = hpsUndefined then
@@ -5975,7 +5991,8 @@ begin
         continue;
       end;
       // normalize cache settings
-      if not (psoDisableMemCache in fSettings.Server.Options) then
+      if (hps <> hpsEvent) and
+         not (psoDisableMemCache in fSettings.Server.Options) then
       begin
         if s.MemCache.MaxSize < 0 then
           s.MemCache.MaxSize := fSettings.MemCache.MaxSize;
@@ -6030,8 +6047,8 @@ begin
       fLog.Add.Log(sllDebug, 'AfterServerStarted: register % URI from %%',
         [uri, s.fLocalFolder, one.fRemoteUri.URI], self);
     end;
-    // replace existing routes at once
-    old := fServer.ReplaceRoute(new);
+    // 2. replace existing routes at once
+    old := fServer.ReplaceRoute(new); // thread-safe
     new := nil; // is owned by fServer from now on
     if old <> nil then
       ObjArrayAdd(fGC, old); // late release at shutdown
@@ -6200,10 +6217,8 @@ begin
   result := HTTP_NOTALLOWED; // 405 Method Not Allowed
   case one.Source of
     hpsEvent:
-      begin
-        result := one.Settings.OnRequest(Ctxt, uri, met);
-        { TODO: implement memcache }
-      end;
+      result := one.Settings.OnRequest(Ctxt, uri, met);
+      // no cache for callback methods (by design)
   else
     case met of
       urmGet,
