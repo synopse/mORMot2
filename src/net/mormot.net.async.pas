@@ -1426,6 +1426,7 @@ type
     hpsLocalFolder,
     hpsRemoteUri,
     hpsEvent);
+  THttpProxySources = set of THttpProxySource;
 
   /// process one remote content source for THttpProxyServer
   THttpProxyUrl = class(TSynPersistent)
@@ -1483,6 +1484,7 @@ type
     fServer: THttpAsyncServer;
     fGC: TObjectDynArray;
     fPartials: THttpPartials;
+    fSources: THttpProxySources;
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
     procedure OnIdle(Sender: TObject; NowTix: Int64);
@@ -1508,6 +1510,9 @@ type
     /// the local HTTP(S) asynchronous server
     property Server: THttpAsyncServer
       read fServer;
+    /// the kind of definitions stored in Settings.Uri[]
+    property Sources: THttpProxySources
+      read fSources;
     /// access to the used settings
     property Settings: THttpProxyServerSettings
       read fSettings;
@@ -5908,12 +5913,15 @@ begin
   fServer.SetFavIcon(fav); // do once
   fServer.IdleEverySecond;
   fServer.OnIdle := OnIdle;
-  fPartials := THttpPartials.Create;
-  if hsoLogVerbose in hso then
-    fPartials.OnLog := fLog.DoLog;
-  fServer.fProgressiveRequests := fPartials;
   // setup the URI routes
   AfterServerStarted;
+  if hpsRemoteUri in fSources then
+  begin
+    fPartials := THttpPartials.Create;
+    if hsoLogVerbose in hso then
+      fPartials.OnLog := fLog.DoLog;
+    fServer.fProgressiveRequests := fPartials;
+  end;
   // wait for actual server availability
   if hsoEnableTls in hso then
     if psoHttpsSelfSigned in fSettings.Server.Options then
@@ -5950,6 +5958,7 @@ var
   hps: THttpProxySource;
   i: PtrInt;
 begin
+  fSources := [];
   new := TUriRouter.Create(TUriTreeNode);
   try
     // 1. compute all routes from Settings[]
@@ -5990,6 +5999,7 @@ begin
         fLog.Add.Log(sllWarning, 'AfterServerStarted: unexpected %', [one], self);
         continue;
       end;
+      include(fSources, hps);
       // normalize cache settings
       if (hps <> hpsEvent) and
          not (psoDisableMemCache in fSettings.Server.Options) then

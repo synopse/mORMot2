@@ -7847,7 +7847,6 @@ var
 begin
   result := 0;
   if (aUri.Server = '') or
-     (aUri.Address = '') or
      not hasher.Init(aAlgo) then
     exit;
   hasher.Update(HTTPS_TEXT[aUri.Https]); // hash normalized URI
