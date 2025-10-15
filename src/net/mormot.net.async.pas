@@ -1427,19 +1427,20 @@ type
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
-    function ReturnFile(ctxt: THttpServerRequestAbstract; const name: RawUtf8;
-      const filename: TFileName; const uri: TUriMatchName; var size: Int64;
-      lastmod: TUnixMSTime): cardinal;
     function StartProxyRequest(ctxt: THttpServerRequestAbstract;
       const filename: TFileName; const name: RawUtf8;
-      const size: Int64; const lastmod: TUnixMSTime;
-      var loginfo: RawUtf8; var uri: TUri): cardinal;
+      var size: Int64; const lastmod: TUnixMSTime; out loginfo: RawUtf8;
+      var remote: TUri; const path: TUriMatchName): cardinal;
   public
     /// initialize this instance
     constructor Create(aSettings: THttpProxyUrlSettings;
       aOwner: THttpProxyServer); reintroduce;
     /// finalize this instance and its associated Settings
     destructor Destroy; override;
+    /// return a local file content with proper fMemCache support
+    function ReturnFile(ctxt: THttpServerRequestAbstract; const name: RawUtf8;
+      const filename: TFileName; const uri: TUriMatchName; var size: Int64;
+      lastmod: TUnixMSTime): cardinal;
     /// compute the (probably cached) hash of a given URI resource
     function ReturnHash(ctxt: THttpServerRequestAbstract;
       const name: RawUtf8; var fn: TFileName): integer;
@@ -1449,6 +1450,9 @@ type
       var header: RawUtf8): cardinal;
     /// perform a HTTP GET on the remote proxy URI using a shared connection
     function RemoteClientGet(const uri: TUri): RawByteString;
+    /// how this URI is implemented
+    property Source: THttpProxySource
+      read fSource;
     /// access to the associated (and owned) settings for this URI
     property Settings: THttpProxyUrlSettings
       read fSettings;
@@ -5570,22 +5574,21 @@ begin // this method is protected by fRemoteClientSafe.Lock
 end;
 
 function THttpProxyUrl.StartProxyRequest(ctxt: THttpServerRequestAbstract;
-  const filename: TFileName; const name: RawUtf8; const size: Int64;
-  const lastmod: TUnixMSTime; var loginfo: RawUtf8; var uri: TUri): cardinal;
+  const filename: TFileName; const name: RawUtf8; var size: Int64;
+  const lastmod: TUnixMSTime; out loginfo: RawUtf8; var remote: TUri;
+  const path: TUriMatchName): cardinal;
 var
   remotehead: RawUtf8;
   headsiz: Int64;
   direct: RawByteString;
   headlastmod: TUnixTime;
-  do304: boolean;
   nr: TNetResult;
 begin
-  do304 := not (hpoDisable304 in fSettings.Options);
   // quick blocking process to initiate the proxy request
   fRemoteClientSafe.Lock;
   try
     // always perform a HEAD request to the original server
-    result := RemoteClientHead(uri, name, remotehead);
+    result := RemoteClientHead(remote, name, remotehead); // may use fHeadCache
     if not (result in [HTTP_SUCCESS, HTTP_NOCONTENT]) then
     begin
       loginfo := 'head status';
@@ -5606,8 +5609,7 @@ begin
       begin
         // we can stream from local cache
         loginfo := 'cached';
-        result := ctxt.SetOutFile(filename, do304,
-          size, lastmod, fSettings.CacheControlMaxAgeSec);
+        result := ReturnFile(ctxt, name, filename, path, size, lastmod);
         exit;
       end
       else
@@ -5618,8 +5620,7 @@ begin
         if not DeleteFile(filename) then // may fail on Windows: use previous
         begin
           loginfo := 'locked cache';
-          result := ctxt.SetOutFile(filename, do304,
-            size, lastmod, fSettings.CacheControlMaxAgeSec);
+          result := ReturnFile(ctxt, name, filename, path, size, lastmod);
           exit;
         end;
       end;
@@ -5628,25 +5629,26 @@ begin
     begin
       // smallest files < 16KB could use the blocking connection
       if size > 0 then
-        direct := RemoteClientGet(uri);
+        direct := RemoteClientGet(remote);
       if (size = 0) or
          (direct <> '') then
         if (length(direct) = size) and
            FileFromString(direct, filename) and
            FileSetDateFromUnixUtc(filename, headlastmod) then
         begin
-          result := ctxt.SetOutContent(direct, do304);
           loginfo := 'small get';
+          result := ctxt.SetOutContent(
+                      direct, not (hpoDisable304 in fSettings.Options));
         end
         else
         begin
-          result := HTTP_BADGATEWAY; // 502
           loginfo := 'get error';
+          result := HTTP_BADGATEWAY; // 502
         end;
       exit;
     end;
     // big files need an asynchronous GET to the uri server
-    nr := fOwner.fServer.Clients.StartRequest(self, uri, 'GET', '', filename);
+    nr := fOwner.fServer.Clients.StartRequest(self, remote, 'GET', '', filename);
     if nr <> nrOk then
     begin
       ctxt.OutCustomHeaders := '';
@@ -5683,15 +5685,17 @@ function THttpProxyUrl.ReturnFile(ctxt: THttpServerRequestAbstract;
 
 var
   pck: THttpProxyCacheKind;
+  with304: boolean;
 begin
   // prepare file streaming as response
+  with304 := not (hpoDisable304 in fSettings.Options);
   if lastmod = 0 then
-    // from sLocalFolder
-    result := Ctxt.SetOutFile(filename, hpoDisable304 in fSettings.Options,
-      '', fSettings.CacheControlMaxAgeSec, @size)
+    // from hpsLocalFolder
+    result := Ctxt.SetOutFile(filename, with304, '',
+      fSettings.CacheControlMaxAgeSec, @size)
   else
-    // from sRemoteUri
-    result := Ctxt.SetOutFile(filename, hpoDisable304 in fSettings.Options,
+    // from hpsRemoteUri
+    result := Ctxt.SetOutFile(filename, with304,
       size, lastmod, fSettings.CacheControlMaxAgeSec);
   if (result <> HTTP_SUCCESS) or
      not Assigned(fMemCache) then
@@ -6113,15 +6117,18 @@ begin
       result := HTTP_SUCCESS;
     end
     else if hpoClientNoHead in one.Settings.Options then
+    begin
       // assume file won't change on the server: return the current cache
-      result := one.ReturnFile(Ctxt, name, fn, Uri, siz, 0);
+      result := one.ReturnFile(Ctxt, name, fn, Uri, siz, lastmod);
+      info := 'no head';
+    end;
   end
   else
     lastmod := 0;
   if not StatusCodeIsSuccess(result) then
     // no matching local file: need to initiate a proxy request
     result := one.StartProxyRequest(
-      Ctxt, fn, name, siz, lastmod, info, remote);
+      Ctxt, fn, name, siz, lastmod, info, remote, Uri);
   fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% info=%',
     [Ctxt.Method, Ctxt.Url, name, result, siz, info], self);
 end;
