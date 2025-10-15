@@ -5769,12 +5769,12 @@ begin
 end;
 
 function THttpProxyServerSettings.AddFolder(const folder: TFileName;
-  const uri: RawUtf8; RaiseExceptionOnNonExistingFolder: ExceptionClass): THttpProxyUrlSettings;
+  const uri: RawUtf8; RaiseExceptionOnNonExistingFolder: ESynExceptionClass): THttpProxyUrlSettings;
 begin
   if RaiseExceptionOnNonExistingFolder <> nil then
     if not DirectoryExists(folder) then
-      raise RaiseExceptionOnNonExistingFolder.CreateFmt(
-        '%s.AddFolder: %s does not exist', [ClassNameShort(self)^, folder]);
+      RaiseExceptionOnNonExistingFolder.RaiseUtf8(
+        '%.AddFolder: % does not exist', [self, folder]);
   result := THttpProxyUrlSettings.Create;
   result.Url := uri;
   if RaiseExceptionOnNonExistingFolder = nil then
@@ -5934,6 +5934,7 @@ var
   new, old: TUriRouter;
   one: THttpProxyUrl;
   s: THttpProxyUrlSettings;
+  hps: THttpProxySource;
   i: PtrInt;
 begin
   new := TUriRouter.Create(TUriTreeNode);
@@ -5946,26 +5947,29 @@ begin
       FreeAndNil(one.fMemCache);
       FreeAndNil(one.fHashCache);
       FreeAndNil(one.fHeadCache);
-      if s.Disabled or
-         (s.Source = '') then
+      if s.Disabled then
         continue;
       // validate source as local file folder or remote http(s) server
-      one.fSource := hpsUndefined;
-      if IsHttp(s.Source) then
-      begin // detect also 'http://unix:/path/to/socket.sock:/url/path'
-        if one.fRemoteUri.From(s.Source) then
-          one.fSource := hpsRemoteUri;
-      end
-      else
-      begin
-        Utf8ToFileName(s.Source, s.fLocalFolder);
-        if DirectoryExists(s.fLocalFolder) then
+      hps := hpsUndefined;
+      if s.Source <> '' then
+        if IsHttp(s.Source) then
+        begin // detects also 'http://unix:/path/to/socket.sock:/url/path'
+          if one.fRemoteUri.From(s.Source) then
+            hps := hpsRemoteUri;
+        end
+        else
         begin
-          s.fLocalFolder := IncludeTrailingPathDelimiter(s.fLocalFolder);
-          one.fSource := hpsLocalFolder;
-        end;
-      end;
-      if one.Source = hpsUndefined then
+          Utf8ToFileName(s.Source, s.fLocalFolder);
+          if DirectoryExists(s.fLocalFolder) then
+          begin
+            s.fLocalFolder := IncludeTrailingPathDelimiter(s.fLocalFolder);
+            hps := hpsLocalFolder;
+          end;
+        end
+      else if Assigned(s.OnRequest) then
+        hps := hpsEvent;
+      one.fSource := hps;
+      if hps = hpsUndefined then
       begin
         fLog.Add.Log(sllWarning, 'AfterServerStarted: unexpected %', [one], self);
         continue;
@@ -5982,7 +5986,7 @@ begin
           one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
             TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
             s.MemCache.TimeoutSec);
-        if one.Source = hpsRemoteUri then
+        if hps = hpsRemoteUri then
         begin
           if s.DiskCache.MaxSize < 0 then
             s.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
@@ -5999,15 +6003,18 @@ begin
       end;
       // prepare optional hash cache
       one.fAlgos := [];
-      if hpoPublishMd5 in s.Options then
-        include(one.fAlgos, hfMd5);
-      if hpoPublishSha1 in s.Options then
-        include(one.fAlgos, hfSha1);
-      if hpoPublishSha256 in s.Options then
-        include(one.fAlgos, hfSha256);
-      if one.fAlgos <> [] then
-        one.fHashCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
-          TypeInfo(TRawUtf8DynArrayDynArray), PathCaseInsensitive, SecsPerHour);
+      if hps = hpsLocalFolder then
+      begin
+        if hpoPublishMd5 in s.Options then
+          include(one.fAlgos, hfMd5);
+        if hpoPublishSha1 in s.Options then
+          include(one.fAlgos, hfSha1);
+        if hpoPublishSha256 in s.Options then
+          include(one.fAlgos, hfSha256);
+        if one.fAlgos <> [] then
+          one.fHashCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+            TypeInfo(TRawUtf8DynArrayDynArray), PathCaseInsensitive, SecsPerHour);
+      end;
       // compute and register this URI
       uri := s.fUrl;
       while (uri <> '') and
