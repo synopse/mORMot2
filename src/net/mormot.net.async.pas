@@ -1407,12 +1407,18 @@ type
       read fUrl;
   end;
 
+  /// define how a THttpProxyUrl definition is implemented
+  THttpProxySource = (
+    hpsUndefined,
+    hpsLocalFolder,
+    hpsRemoteUri);
+
   /// process one remote content source for THttpProxyServer
   THttpProxyUrl = class(TSynPersistent)
   protected
     fSettings: THttpProxyUrlSettings;
     fOwner: THttpProxyServer;
-    fSourced: (sUndefined, sLocalFolder, sRemoteUri);
+    fSource: THttpProxySource;
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
     fMemCache: TSynDictionary;  // name:RawUtf8 / Content:RawByteString
@@ -5916,11 +5922,11 @@ begin
          (s.Source = '') then
         continue;
       // validate source as local file folder or remote http(s) server
-      one.fSourced := sUndefined;
+      one.fSource := hpsUndefined;
       if IsHttp(s.Source) then
       begin // detect also 'http://unix:/path/to/socket.sock:/url/path'
         if one.fRemoteUri.From(s.Source) then
-          one.fSourced := sRemoteUri;
+          one.fSource := hpsRemoteUri;
       end
       else
       begin
@@ -5928,10 +5934,10 @@ begin
         if DirectoryExists(s.fLocalFolder) then
         begin
           s.fLocalFolder := IncludeTrailingPathDelimiter(s.fLocalFolder);
-          one.fSourced := sLocalFolder;
+          one.fSource := hpsLocalFolder;
         end;
       end;
-      if one.fSourced = sUndefined then
+      if one.Source = hpsUndefined then
       begin
         fLog.Add.Log(sllWarning, 'AfterServerStarted: unexpected %', [one], self);
         continue;
@@ -5948,7 +5954,7 @@ begin
           one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
             TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
             s.MemCache.TimeoutSec);
-        if one.fSourced = sRemoteUri then
+        if one.Source = hpsRemoteUri then
         begin
           if s.DiskCache.MaxSize < 0 then
             s.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
@@ -6131,7 +6137,7 @@ begin
   one := Ctxt.RouteOpaque;
   if (one = nil) or
      one.Settings.Disabled or
-     (one.fSourced = sUndefined) then
+     (one.Source = hpsUndefined) then
     exit;
   // validate the request method
   if not (UriMethod(Ctxt.Method, met) and
@@ -6153,21 +6159,19 @@ begin
     exit;
   end;
   // actual request processing
+  result := HTTP_NOTALLOWED; // 405 Method Not Allowed
   case met of
     urmGet,
     urmHead:
-      case one.fSourced of
-        sLocalFolder:
+      case one.Source of
+        hpsLocalFolder:
           result := OnGetHeadLocalFolder(Ctxt, uri);
-        sRemoteUri:
+        hpsRemoteUri:
           result := OnGetHeadRemoteUri(Ctxt, uri);
       end;
     urmPost,
     urmPut,
     urmDelete:
-      if one.fSourced <> sRemoteUri then
-        result := HTTP_NOTALLOWED // 405 Method Not Allowed
-      else
         ; { TODO: implement proxy with POST/PUT/DELETE }
   end;
 end;
