@@ -3639,10 +3639,8 @@ end;
 function TMatchs.MatchString(const aText: string): integer;
 var
   temp: TSynTempBuffer;
-  len: integer;
 begin
-  len := StringToUtf8(aText, temp);
-  result := Match(temp.buf, len);
+  result := Match(StringToUtf8Temp(aText, temp), temp.len);
   temp.Done;
 end;
 

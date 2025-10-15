@@ -6093,14 +6093,14 @@ var
   tmp: TSynTempBuffer;
 begin
   if Text <> nil then
-    if Fmt = hfNone then
-      AddNoJsonEscapeW(pointer(Text))
-    else
+    if Fmt <> hfNone then
     begin
-      RawUnicodeToUtf8(Text, StrLenW(Text), tmp, [ccfNoTrailingZero]);
-      AddHtmlEscape(tmp.buf, tmp.Len, Fmt);
+      RawUnicodeToUtf8(Text, mormot.core.base.StrLenW(Text), tmp, []);
+      AddHtmlEscape(tmp.buf, Fmt); // faster with no TextLen
       tmp.Done;
-    end;
+    end
+    else
+      AddNoJsonEscapeW(pointer(Text)); // seldom called
 end;
 
 procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
