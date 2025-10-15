@@ -1199,6 +1199,10 @@ type
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
+  /// callback function prototype for THttpProxyServerSettings.AddEvent()
+  TOnHttpProxyServerRequest = function(Ctxt: THttpServerRequestAbstract;
+    const Uri: TUriMatchName; Met: TUriRouterMethod): cardinal of object;
+
   /// define one URL content / THttpProxyUrl setting for THttpProxyServer
   THttpProxyUrlSettings = class(TSynAutoCreateFields)
   protected
@@ -1213,6 +1217,7 @@ type
     fRejectCsv: RawUtf8;
     fLocalFolder: TFileName;
     fOnRemoteClient: TOnHttpProxyUrlClient;
+    fOnRequest: TOnHttpProxyServerRequest;
   public
     /// setup the default values of this URL
     constructor Create; override;
@@ -1221,6 +1226,9 @@ type
     /// optional event handler when a remote URI connection is instantiated
     property OnRemoteClient: TOnHttpProxyUrlClient
       read fOnRemoteClient write fOnRemoteClient;
+    /// optional event handler when a callback is to be called
+    property OnRequest: TOnHttpProxyServerRequest
+      read fOnRequest write fOnRequest;
   published
     /// this source won't be processed if this property is set to true
     property Disabled: boolean
@@ -1383,7 +1391,10 @@ type
     // - if optional ExceptionClass is supplied, the local folder should exist
     // - this instance will be stored and owned in Url[].Settings array
     function AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
-      RaiseExceptionOnNonExistingFolder: ExceptionClass = nil): THttpProxyUrlSettings;
+      RaiseExceptionOnNonExistingFolder: ESynExceptionClass = nil): THttpProxyUrlSettings;
+    /// create a THttpProxyUrlSettings definition for using a callback
+    function AddEvent(const request: TOnHttpProxyServerRequest;
+      const uri: RawUtf8 = ''): THttpProxyUrlSettings;
     /// load URI definitions from local *.json files
     // - returns the number of added THttpProxyUrl instances into Url[]
     function AddFromFiles(const settingsfolder: TFileName;
@@ -1411,7 +1422,8 @@ type
   THttpProxySource = (
     hpsUndefined,
     hpsLocalFolder,
-    hpsRemoteUri);
+    hpsRemoteUri,
+    hpsEvent);
 
   /// process one remote content source for THttpProxyServer
   THttpProxyUrl = class(TSynPersistent)
@@ -5748,7 +5760,8 @@ function THttpProxyServerSettings.AddUrl(
 begin
   result := one;
   if result <> nil then
-    if result.Source = '' then
+    if (result.Source = '') and
+       not Assigned(result.OnRequest) then
       FreeAndNil(result)
     else
       // supplied one will be owned as a new fUri[].Settings
@@ -5768,6 +5781,17 @@ begin
     RaiseExceptionOnNonExistingFolder := EHttpProxyServer;
   result.Source := StringToUtf8(EnsureDirectoryExists(
     folder, RaiseExceptionOnNonExistingFolder));
+  result := AddUrl(result);
+end;
+
+function THttpProxyServerSettings.AddEvent(
+  const request: TOnHttpProxyServerRequest; const uri: RawUtf8): THttpProxyUrlSettings;
+begin
+  if not Assigned(request) then
+    EHttpProxyServer.RaiseUtf8('%.AddEvent(nil)', [self]);
+  result := THttpProxyUrlSettings.Create;
+  result.Url := uri;
+  result.OnRequest := request;
   result := AddUrl(result);
 end;
 
@@ -6167,19 +6191,27 @@ begin
   end;
   // actual request processing
   result := HTTP_NOTALLOWED; // 405 Method Not Allowed
-  case met of
-    urmGet,
-    urmHead:
-      case one.Source of
-        hpsLocalFolder:
-          result := OnGetHeadLocalFolder(Ctxt, uri);
-        hpsRemoteUri:
-          result := OnGetHeadRemoteUri(Ctxt, uri);
+  case one.Source of
+    hpsEvent:
+      begin
+        result := one.Settings.OnRequest(Ctxt, uri, met);
+        { TODO: implement memcache }
       end;
-    urmPost,
-    urmPut,
-    urmDelete:
-        ; { TODO: implement proxy with POST/PUT/DELETE }
+  else
+    case met of
+      urmGet,
+      urmHead:
+        case one.Source of
+          hpsLocalFolder:
+            result := OnGetHeadLocalFolder(Ctxt, uri);
+          hpsRemoteUri:
+            result := OnGetHeadRemoteUri(Ctxt, uri);
+        end;
+      urmPost,
+      urmPut,
+      urmDelete:
+          ; { TODO: implement proxy with POST/PUT/DELETE }
+    end;
   end;
 end;
 
