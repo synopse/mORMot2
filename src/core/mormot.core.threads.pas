@@ -3330,7 +3330,7 @@ begin
     NotifyThreadStart(self);
     if fLogClass <> nil then
     begin
-      fLogClass.EnterLocal(ilog, 'Execute % %', [fProcessName, fLogClass], self);
+      fLogClass.EnterLocal(ilog, 'Execute %', [fProcessName], self);
       if Assigned(ilog) then
         fLog := ilog.Instance;
     end;
