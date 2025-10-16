@@ -171,10 +171,9 @@ function HttpRequestLength(aHeaders: PUtf8Char; aHeadersLen: PPtrInt = nil): PUt
 
 /// extract size and date from HTTP headers
 // - note that some web servers (e.g. with HEAD, or when chunking) may not
-// return a "Content-Length" header - so we return ContentLength = -1 but
-// result = true if LastModified has been set, but length header is missing
-function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
-  out LastModified: TUnixTime): boolean;
+// return a "Content-Length" header - so we return ContentLength = -1 for them
+procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
+  out LastModified: TUnixTime);
 
 /// remove an HTTP header entry as specified by its name (e.g. 'Authorization')
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
@@ -2857,18 +2856,19 @@ begin
   end;
 end;
 
-function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
-  out LastModified: TUnixTime): boolean;
+procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
+  out LastModified: TUnixTime);
 var
-  lastmod: RawUtf8;
+  p: PUtf8Char;
 begin
-  if not GetHeader(Headers, 'content-length', ContentLength) then
-    ContentLength := -1; // missing e.g. Apache or with chunked content
-  result := false;
-  if not GetHeader(Headers, 'Last-Modified', lastmod) then
-    exit;
-  LastModified := HttpDateToUnixTime(lastmod);
-  result := LastModified <> 0; // return true if we got some timestamp
+  ContentLength := -1;
+  LastModified := 0;
+  p := HttpRequestLength(pointer(Headers));
+  if p <> nil then // from 'Range: x-y/len' or 'Content-Length: len'
+    ContentLength := GetInt64(p);
+  p := FindNameValue(pointer(Headers), 'LAST-MODIFIED:');
+  if p <> nil then
+    LastModified := HttpDateToUnixTimeBuffer(p);
 end;
 
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
@@ -2983,7 +2983,7 @@ begin
   l := length(UserAgent);
   if l < 10 then
     exit;
-  case PCardinal(p)^ or $20202020 of
+  case PCardinal(p)^ or $20202020 of // fast O(1) hardcoded list
     // Twitterbot/1.0
     ord('t') + ord('w') shl 8 + ord('i') shl 16 + ord('t') shl 24,
     // facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)
