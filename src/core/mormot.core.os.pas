@@ -342,6 +342,8 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
 function IsLocalHost(Host: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// returns 0 if there is no ?parameter nor #anchor in an URI
+function UriTruncLen(const Address: RawUtf8): PtrInt;
 
 { ****************** Gather Operating System Information }
 
@@ -6031,6 +6033,21 @@ function IsLocalHost(Host: PUtf8Char): boolean;
 begin
   result := (PCardinal(Host)^ = HOST_127) or // also check for c6Localhost:
             (PCardinal(Host)^ = ord(':') + ord(':') shl 8 + ord('1') shl 16);
+end;
+
+function UriTruncLen(const Address: RawUtf8): PtrInt;
+var
+  l: PtrInt;
+begin
+  result := PtrUInt(Address);
+  if result = 0 then
+    exit;
+  l := PStrLen(PAnsiChar(result) - _STRLEN)^;
+  result := ByteScanIndex(pointer(Address), l, ord('?')); // exclude ?arguments
+  if result < 0 then
+    result := ByteScanIndex(pointer(Address), l, ord('#')); // exclude #anchor
+  if result < 0 then
+    result := l;
 end;
 
 function {%H-}_RawToBase64(Bin: pointer; Bytes: PtrInt; Base64Uri: boolean): RawUtf8;

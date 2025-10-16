@@ -1649,7 +1649,7 @@ type
     /// the server port, as integer value
     function PortInt: TNetPort;
     /// compute the root resource Address, without any URI-encoded parameter
-    // - e.g. '/category/name/10'
+    // - e.g. '/category/name/10' for '/category/name/10?param=1'
     function Root: RawUtf8;
     /// comute the root resource Address as a resource "file" name
     // - e.g. '10' for '/category/name/10?param=1'
@@ -5669,7 +5669,7 @@ end;
 
 function TUri.Root: RawUtf8;
 begin
-  result := Split(Address, '?');
+  result := copy(Address, 1, UriTruncLen(Address)); // excludes ?params #anchor
 end;
 
 function TUri.ResourceName: RawUtf8;

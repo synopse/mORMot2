@@ -5617,7 +5617,7 @@ end;
 
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
-  n, urllen: integer;
+  n, urllen: PtrInt;
   tix32, crc, reqcrc, uricrc: cardinal;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
@@ -5641,13 +5641,8 @@ begin
     exit;
   // pre-compute CPU intensive values outside of fSafe.Lock
   urllen := 0;
-  if (fVariables * [hlvDocument_Uri, hlvUri, hlvUri_Hash] <> []) and
-     (Context.Url <> nil) then
-  begin
-    urllen := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
-    if urllen < 0 then
-      urllen := length(RawUtf8(Context.Url));
-  end;
+  if (fVariables * [hlvDocument_Uri, hlvUri, hlvUri_Hash] <> []) then
+    urllen := UriTruncLen(RawUtf8(Context.Url)); // excludes ?params and #anchor
   if fTimeTix32 <> tix32 then
     SetTimeText(tix32, Context.Tix64); // update cached time texts every second
   reqcrc := 0;
