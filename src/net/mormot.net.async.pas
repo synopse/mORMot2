@@ -1297,6 +1297,7 @@ type
   // - psoRejectBotUserAgent identifies and rejects Bots via IsHttpUserAgentBot()
   // - psoBan40xIP will reject any IP for a few seconds after a 4xx error code
   // - psoDisableMemCache will globally disable all MemCache settings
+  // - psoDisableGzip won't use runtime gzip content compression
   THttpProxyServerOption = (
     psoLogVerbose,
     psoExcludeDateHeader,
@@ -1305,7 +1306,8 @@ type
     psoEnableLogging,
     psoRejectBotUserAgent,
     psoBan40xIP,
-    psoDisableMemCache);
+    psoDisableMemCache,
+    psoDisableGzip);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -5958,6 +5960,8 @@ begin
   fServer.SetFavIcon(fav); // do once
   fServer.IdleEverySecond;
   fServer.OnIdle := OnIdle;
+  if not (psoDisableGzip in fSettings.Server.Options) then
+    fServer.RegisterCompress(CompressGZip);
   // setup the URI routes
   AfterServerStarted;
   if hpsRemoteUri in fSources then

@@ -7466,7 +7466,7 @@ function THttpPeerCache.DirectFileName(Ctxt: THttpServerRequestAbstract;
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
   out aFileName: TFileName; out aSize: Int64; const aParams: RawUtf8): integer;
 var
-  cs:  THttpClientSocketPeerCache;
+  cs: THttpClientSocketPeerCache;
   err, ip: RawUtf8;
   i: PtrInt;
   localsize: Int64;
