@@ -4448,7 +4448,8 @@ begin
     aConnection^ := nil;
   // validate the input parameters
   if (fOwner = nil) or
-     not Assigned(aOnStateChanged) then
+     ((aOnStateChange <> []) and
+      not Assigned(aOnStateChanged)) then
     result := nrNotImplemented
   else if (aMethod = '') or
           (aUrl.Server = '') then
@@ -5700,7 +5701,8 @@ begin
       exit;
     end;
     // big files need an asynchronous GET to the uri server
-    nr := fOwner.fServer.Clients.StartRequest(self, remote, 'GET', '', filename);
+    nr := fOwner.fServer.Clients.StartRequest(
+      self, remote, 'GET', '', filename, {tls=}nil, nil, nil, []);
     if nr <> nrOk then
     begin
       ctxt.OutCustomHeaders := '';
