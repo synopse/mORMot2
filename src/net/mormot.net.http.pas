@@ -2651,7 +2651,7 @@ begin
 end;
 
 const
-  TOBEPURGED: array[0..9] of PAnsiChar = (
+  TOBEPURGED: array[0..10] of PAnsiChar = (
     'CONTENT-',
     'CONNECTION:',
     'KEEP-ALIVE:',
@@ -2661,6 +2661,7 @@ const
     'REMOTEIP:',
     'HOST:',
     'ACCEPT:',
+    'DATE:',
     nil);
 
 function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PPAnsiChar): RawUtf8;
@@ -2851,8 +2852,7 @@ begin
         exit;
       end;
     inc(result, s);
-    if aHeadersLen <> nil then
-      aHeadersLen^ := Len - s;
+    dec(len, s);
   end;
 end;
 
