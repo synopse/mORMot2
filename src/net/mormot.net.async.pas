@@ -5638,9 +5638,10 @@ type
   end;
 
 const
-  TOBEPURGEDPROXY: array[0..5] of PAnsiChar = (
+  TOBEPURGEDPROXY: array[0..6] of PAnsiChar = (
     'CONTENT-LENGTH:',
     'CONTENT-RANGE:',
+    'CONTENT-ENCODING:',
     'CONNECTION:',
     'KEEP-ALIVE:',
     'DATE:',
@@ -5746,7 +5747,7 @@ begin
   background.stream := TFileStreamEx.Create(filename, fmCreate or fmShareRead);
   background.uri := remote.Address;
   background.filedate := headlastmod;
-  Make(['prog-', id], remotehead);
+  Make(['get-', id], remotehead);
   TLoggedWorkThread.Create(log, remotehead, background, proxy.BackgroundGet);
   result := HTTP_SUCCESS;
 end;
@@ -5771,7 +5772,7 @@ begin
         msg := 'FileSetDateFromUnixUtc failed'
     else
       msg := 'GET error';
-    fOwner.fLog.Add.Log(sllTrace, 'RemoteBackgroundGet=%: % [%]',
+    fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%]',
       [status, fn, msg], self);
   finally
     back.stream.Free;
