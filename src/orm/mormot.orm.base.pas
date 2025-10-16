@@ -5703,7 +5703,7 @@ begin
   if wasSqlString <> nil then
     wasSqlString^ := true;
   fPropInfo.GetLongStrProp(Instance, tmp);
-  result := fEngine.AnsiToUtf8(tmp);
+  fEngine.AnsiToUtf8(tmp, result);
 end;
 
 procedure TOrmPropInfoRttiAnsi.NormalizeValue(var Value: RawUtf8);
@@ -5801,7 +5801,7 @@ procedure TOrmPropInfoRttiAnsi.GetFieldSqlVar(Instance: TObject;
   var aValue: TSqlVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
-  temp := fEngine.AnsiToUtf8(temp);
+  fEngine.AnsiToUtf8(temp, RawUtf8(temp));
   aValue.Options := [];
   aValue.VType := ftUtf8;
   aValue.VText := pointer(temp);
