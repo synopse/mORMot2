@@ -7830,7 +7830,7 @@ begin
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Port);
   hasher.Update(@aAlgo, 1);
-  hasher.Update(pointer(aUri.Address), UriTruncLen(aUri.Address));
+  hasher.Update(pointer(aUri.Address), UriTruncAnchorLen(aUri.Address));
   if aHeaders <> nil then
   begin
     hasher.Update(@aAlgo, 1);

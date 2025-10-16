@@ -345,6 +345,10 @@ function IsLocalHost(Host: PUtf8Char): boolean;
 /// returns length(Address) if there is no ?parameter nor #anchor in the URI
 function UriTruncLen(const Address: RawUtf8): PtrInt;
 
+/// returns length(Address) if there is no ?#anchor in the URI
+function UriTruncAnchorLen(const Address: RawUtf8): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
+
 
 { ****************** Gather Operating System Information }
 
@@ -6047,6 +6051,19 @@ begin
   result := ByteScanIndex(pointer(Address), l, ord('?')); // exclude ?arguments
   if result < 0 then
     result := ByteScanIndex(pointer(Address), l, ord('#')); // exclude #anchor
+  if result < 0 then
+    result := l;
+end;
+
+function UriTruncAnchorLen(const Address: RawUtf8): PtrInt;
+var
+  l: PtrInt;
+begin
+  result := PtrUInt(Address);
+  if result = 0 then
+    exit;
+  l := PStrLen(PAnsiChar(result) - _STRLEN)^;
+  result := ByteScanIndex(pointer(Address), l, ord('#')); // exclude #anchor
   if result < 0 then
     result := l;
 end;
