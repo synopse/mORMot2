@@ -5613,11 +5613,12 @@ begin // this method is protected by fRemoteClientSafe.Lock
 end;
 
 const
-  TOBEPURGEDPROXY: array[0..4] of PAnsiChar = (
+  TOBEPURGEDPROXY: array[0..5] of PAnsiChar = (
     'CONTENT-LENGTH:',
     'CONTENT-RANGE:',
     'CONNECTION:',
     'KEEP-ALIVE:',
+    'DATE:',
     nil);
 
 function THttpProxyUrl.StartProxyRequest(ctxt: THttpServerRequestAbstract;
@@ -6203,7 +6204,7 @@ begin
     if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
       exit;
   remote := one.fRemoteUri;
-  AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
+  AppendBufferToUtf8(Uri.Path.Text, StrLen(Uri.Path.Text), remote.Address);
   // check the local file
   name := HttpRequestHashBase32(remote, nil, 20, @dig); // named from hashed URI
   if name = '' then
