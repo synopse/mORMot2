@@ -342,8 +342,9 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
 function IsLocalHost(Host: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// returns 0 if there is no ?parameter nor #anchor in an URI
+/// returns length(Address) if there is no ?parameter nor #anchor in the URI
 function UriTruncLen(const Address: RawUtf8): PtrInt;
+
 
 { ****************** Gather Operating System Information }
 

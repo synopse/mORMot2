@@ -1439,6 +1439,7 @@ type
     fOwner: THttpProxyServer;
     fSource: THttpProxySource;
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
+    fFlags: set of (fNeedRange);
     fRemoteUri: TUri;
     fMemCache: TSynDictionary;  // name:RawUtf8 / Content:RawByteString
     fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
@@ -5564,6 +5565,8 @@ end;
 
 function THttpProxyUrl.RemoteClientHead(const uri: TUri; const name: RawUtf8;
   var header: RawUtf8): cardinal;
+var
+  keepalive: integer;
 begin // this method is protected by fRemoteClientSafe.Lock
   if Assigned(fHeadCache) and
      fHeadCache.FindAndCopy(name, header) then // from in-memory cache
@@ -5576,12 +5579,26 @@ begin // this method is protected by fRemoteClientSafe.Lock
   end;
   if fRemoteClient = nil then // initialize the connection
   begin
-    fRemoteClient := TSimpleHttpClient.Create(hpoClientOnlySocket in fSettings.Options);
+    fRemoteClient := TSimpleHttpClient.Create(
+      hpoClientOnlySocket in fSettings.Options);
     if Assigned(fSettings.OnRemoteClient) then
       fSettings.OnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
   end;
-  result := fRemoteClient.Request(uri, 'HEAD', '', '', '',
-    fSettings.HttpKeepAlive * MilliSecsPerSec);
+  result := 0;
+  keepalive := fSettings.HttpKeepAlive * MilliSecsPerSec;
+  if not (fNeedRange in fFlags) then
+  begin
+    // always first try with a clean HEAD request
+    result := fRemoteClient.Request(uri, 'HEAD', '', '', '', keepalive);
+    if StatusCodeIsSuccess(result) then
+      if HttpRequestLength(pointer(fRemoteClient.Headers)) = nil then
+      begin
+        include(fFlags, fNeedRange); // wrongly configured server
+        result := 0;
+      end;
+  end;
+  if result = 0 then // server has no length: try range GET trick
+    result := fRemoteClient.Request(uri, 'GET', 'Range: bytes=0-0', '', '', keepalive);
   if StatusCodeIsSuccess(result) then
     header := fRemoteClient.Headers;
   if Assigned(fHeadCache) then
@@ -5591,8 +5608,8 @@ end;
 function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
 begin // this method is protected by fRemoteClientSafe.Lock
   result := '';
-  if fRemoteClient.Request(uri, 'GET', '', '', '',
-       fSettings.HttpKeepAlive * MilliSecsPerSec) in [HTTP_SUCCESS, HTTP_NOCONTENT] then
+  if StatusCodeIsSuccess(fRemoteClient.Request(uri, 'GET', '', '', '',
+       fSettings.HttpKeepAlive * MilliSecsPerSec)) then
     result := fRemoteClient.Body;
 end;
 
