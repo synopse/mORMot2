@@ -3018,7 +3018,8 @@ begin
         exit;
       end;
       // retrieve all HTTP headers
-      GetHeader(hroHeadersUnfiltered in Http.Options);
+      GetHeader((hroHeadersUnfiltered in Http.Options) or
+                IsHead(ctxt.Method));
       if (rfHttp10 in Http.ResponseFlags) and // implicit keepalive in HTTP/1.1
          not (hfConnectionKeepAlive in Http.HeaderFlags) then
         include(Http.HeaderFlags, hfConnectionClose);
@@ -5181,6 +5182,7 @@ begin
   begin
     Close;
     fHttp := THttpClientSocket.OpenOptions(Server, fConnectOptions); // connect
+    fHttp.Http.Options := [hroHeadersUnfiltered]; // least astonishment
   end;
 end;
 
