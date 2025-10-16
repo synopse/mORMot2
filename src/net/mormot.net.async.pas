@@ -1466,7 +1466,7 @@ type
     /// perform a HTTP HEAD on the remote proxy URI using a shared connection
     // - with an in-memory cache as set by THttpProxyUrlSettings.HttpHeadCacheSec
     function RemoteClientHead(const uri: TUri; const name: RawUtf8;
-      var header: RawUtf8): cardinal;
+      var header: RawUtf8; var size: Int64; var time: TUnixTime): cardinal;
     /// perform a HTTP GET on the remote proxy URI using a shared connection
     function RemoteClientGet(const uri: TUri): RawByteString;
     /// how this URI is implemented
@@ -5562,21 +5562,28 @@ begin
 end;
 
 function THttpProxyUrl.RemoteClientHead(const uri: TUri; const name: RawUtf8;
-  var header: RawUtf8): cardinal;
+  var header: RawUtf8; var size: Int64; var time: TUnixTime): cardinal;
 var
   keepalive: integer;
 begin // this method is protected by fRemoteClientSafe.Lock
+  // first try from in-memory cache
   if Assigned(fHeadCache) and
-     fHeadCache.FindAndCopy(name, header) then // from in-memory cache
+     fHeadCache.FindAndCopy(name, header) then
   begin
     if header = '' then
       result := HTTP_NOTFOUND // already identified as error
     else
+    begin
+      GetHeaderInfo(header, size, time);
       result := HTTP_SUCCESS; // return original cached HTTP headers
+    end;
     exit;
   end;
+  // need to make a HEAD to retrieve needed resource information
   if fRemoteClient = nil then // initialize the connection
   begin
+    fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead: connect to %:%',
+      [uri.Server, uri.Port], self);
     fRemoteClient := TSimpleHttpClient.Create(
       hpoClientOnlySocket in fSettings.Options);
     if Assigned(fSettings.OnRemoteClient) then
@@ -5598,17 +5605,27 @@ begin // this method is protected by fRemoteClientSafe.Lock
   if result = 0 then // server has no length: try range GET trick
     result := fRemoteClient.Request(uri, 'GET', 'Range: bytes=0-0', '', '', keepalive);
   if StatusCodeIsSuccess(result) then
+  begin
     header := fRemoteClient.Headers;
+    GetHeaderInfo(header, size, time);
+  end;
   if Assigned(fHeadCache) then
     fHeadCache.Add(name, header); // may store '' on error
+  fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% time=%',
+    [uri.Address, result, size, time], self);
 end;
 
 function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
+var
+  status: integer;
 begin // this method is protected by fRemoteClientSafe.Lock
   result := '';
-  if StatusCodeIsSuccess(fRemoteClient.Request(uri, 'GET', '', '', '',
-       fSettings.HttpKeepAlive * MilliSecsPerSec)) then
+  status := fRemoteClient.Request(uri, 'GET', '', '', '',
+       fSettings.HttpKeepAlive * MilliSecsPerSec);
+  if StatusCodeIsSuccess(status) then
     result := fRemoteClient.Body;
+  fOwner.fLog.Add.Log(sllTrace, 'RemoteClientGet(%)=% size=%',
+    [uri.Address, status, length(result)], self);
 end;
 
 type
@@ -5658,19 +5675,20 @@ var
   id: THttpPartialID;
   opt: THttpRequestExtendedOptions;
 begin
+  headsiz := 0;
+  headlastmod := 0;
   loginfo[0] := #0;
   log := proxy.fOwner.fLog;
   // quick blocking process to initiate the proxy request
   proxy.fRemoteClientSafe.Lock;
   try
     // always perform a HEAD request to the original server
-    result := proxy.RemoteClientHead(remote, name, remotehead); // may be cached
+    result := proxy.RemoteClientHead(remote, name, remotehead, headsiz, headlastmod);
     if not StatusCodeIsSuccess(result) then
     begin
       loginfo := 'head status';
       exit;
     end;
-    GetHeaderInfo(remotehead, headsiz, headlastmod);
     if headsiz < 0 then // progressive download needs an eventual size (by now)
     begin
       result := HTTP_BADGATEWAY; // 502
@@ -6241,7 +6259,7 @@ begin
   end; // may be e.g. HTTP_NOTMODIFIED (304)
   if not StatusCodeIsSuccess(result) then
     Ctxt.SetErrorMessage('serving %', [name]);
-  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
+  fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% cached=%',
     [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
 end;
 
@@ -6299,7 +6317,7 @@ begin
   if (req.loginfo[0] <> #0) and
      not StatusCodeIsSuccess(result) then
     Ctxt.SetErrorMessage('%', [req.loginfo]);
-  fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% info=%',
+  fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% info=%',
     [Ctxt.Method, Ctxt.Url, req.name, result, req.size, req.loginfo], self);
 end;
 
