@@ -1448,8 +1448,8 @@ type
     fRemoteClient: IHttpClient;
     fRemoteClientSafe: TOSLightLock; // non-reentrant lock
     function StartProxyRequest(ctxt: THttpServerRequestAbstract;
-      const filename: TFileName; const name: RawUtf8;
-      var size: Int64; const lastmod: TUnixMSTime; out loginfo: RawUtf8;
+      const filename: TFileName; const name: RawUtf8; const hash: THashDigest;
+      var size: Int64; const lastmod: TUnixMSTime; out loginfo: TShort15;
       var remote: TUri; const path: TUriMatchName): cardinal;
   public
     /// initialize this instance
@@ -5613,10 +5613,18 @@ begin // this method is protected by fRemoteClientSafe.Lock
     result := fRemoteClient.Body;
 end;
 
+const
+  TOBEPURGEDPROXY: array[0..4] of PAnsiChar = (
+    'CONTENT-LENGTH:',
+    'CONTENT-RANGE:',
+    'CONNECTION:',
+    'KEEP-ALIVE:',
+    nil);
+
 function THttpProxyUrl.StartProxyRequest(ctxt: THttpServerRequestAbstract;
-  const filename: TFileName; const name: RawUtf8; var size: Int64;
-  const lastmod: TUnixMSTime; out loginfo: RawUtf8; var remote: TUri;
-  const path: TUriMatchName): cardinal;
+  const filename: TFileName; const name: RawUtf8; const hash: THashDigest;
+  var size: Int64; const lastmod: TUnixMSTime; out loginfo: TShort15;
+  var remote: TUri; const path: TUriMatchName): cardinal;
 var
   remotehead: RawUtf8;
   headsiz: Int64;
@@ -5624,28 +5632,32 @@ var
   headlastmod: TUnixTime;
   nr: TNetResult;
 begin
+  loginfo[0] := #0;
   // quick blocking process to initiate the proxy request
   fRemoteClientSafe.Lock;
   try
     // always perform a HEAD request to the original server
     result := RemoteClientHead(remote, name, remotehead); // may use fHeadCache
-    if not (result in [HTTP_SUCCESS, HTTP_NOCONTENT]) then
+    if not StatusCodeIsSuccess(result) then
     begin
       loginfo := 'head status';
       exit;
     end;
-    if not GetHeaderInfo(remotehead, headsiz, headlastmod) then
+    GetHeaderInfo(remotehead, headsiz, headlastmod);
+    if headsiz < 0 then // progressive download needs an eventual size (by now)
     begin
-      // we require both Content-Length: and Last-Modified: HTTP headers
       result := HTTP_BADGATEWAY; // 502
-      loginfo := 'weak head';
+      loginfo := 'no head size';
       exit;
     end;
-    // check the header against the local cached file
-    ctxt.OutCustomHeaders := PurgeHeaders(remotehead);
-    if lastmod <> 0 then
+    // check the header against the local cached file (headlastmod may be 0)
+    ctxt.OutCustomHeaders := PurgeHeaders(remotehead, false, @TOBEPURGEDPROXY);
+    if (lastmod <> 0) and
+       (size >= 0) and
+       (headsiz >= 0) then
       if (headsiz = size) and
-         UnixTimeEqualsMS(headlastmod, lastmod) then
+         ((headlastmod = 0) or
+          UnixTimeEqualsMS(headlastmod, lastmod)) then
       begin
         // we can stream from local cache
         loginfo := 'cached';
@@ -5665,6 +5677,7 @@ begin
         end;
       end;
     // no matching local file: need to download
+    size := headsiz;
     if size < fSettings.HttpDirectGetKB shl 10 then
     begin
       // smallest files < 16KB could use the blocking connection
@@ -5674,7 +5687,8 @@ begin
          (direct <> '') then
         if (length(direct) = size) and
            FileFromString(direct, filename) and
-           FileSetDateFromUnixUtc(filename, headlastmod) then
+           ((headlastmod = 0) or
+            FileSetDateFromUnixUtc(filename, headlastmod)) then
         begin
           loginfo := 'small get';
           result := ctxt.SetOutContent(
@@ -5693,11 +5707,11 @@ begin
     begin
       ctxt.OutCustomHeaders := '';
       result := HTTP_BADGATEWAY; // 502
-      Append(loginfo, [ToText(nr)^]);
+      loginfo := ToText(nr)^;
       exit;
     end;
     // start sending the file content back in progressive mode
-    fOwner.fPartials.Add(filename, size, {hash=}nil, Ctxt.ConnectionHttp,
+    fOwner.fPartials.Add(filename, size, @hash, Ctxt.ConnectionHttp,
       headlastmod div MilliSecsPerSec);
     ctxt.SetOutProgressiveFile(filename, size);
     loginfo := 'progressive new';
@@ -6171,11 +6185,13 @@ function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequestAbstract;
   const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
-  name, info: RawUtf8;
-  siz: Int64;
+  name: RawUtf8;
+  loginfo: TShort15;
+  size: Int64;
   lastmod: TUnixMSTime;
   one: THttpProxyUrl;
   remote: TUri;
+  dig: THashDigest;
 begin
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
@@ -6187,38 +6203,43 @@ begin
   remote := one.fRemoteUri;
   AppendBufferToUtf8(Uri.Path.Text, Uri.Path.Len, remote.Address);
   // check the local file
-  name := HttpRequestHashBase32(remote); // named from hashed URI
+  name := HttpRequestHashBase32(remote, nil, 20, @dig); // named from hashed URI
   if name = '' then
     exit; // paranoid
+  loginfo[0] := #0;
   if hpoClientCacheSubFolder in one.Settings.Options then // hash partitioning
     fn := MakePath([one.Settings.DiskCache.Path, name[1], name])
   else
     fn := MakePath([one.Settings.DiskCache.Path, name]);
-  if FileInfoByName(fn, siz, lastmod) and
-     (siz >= 0) then // we have a local cached file
+  if FileInfoByName(fn, size, lastmod) and
+     (size >= 0) then
   begin
-    if fPartials.HasFile(fn, @siz, ctxt.ConnectionHttp) then
+    // we have a local cached file
+    if fPartials.HasFile(fn, @size, ctxt.ConnectionHttp) then
     begin
       // but it is already in progressive mode: join the team
-      Ctxt.SetOutProgressiveFile(fn, siz);
-      info := 'progressive existing';
+      Ctxt.SetOutProgressiveFile(fn, size);
+      loginfo := 'partial exists';
       result := HTTP_SUCCESS;
     end
     else if hpoClientNoHead in one.Settings.Options then
     begin
       // assume file won't change on the server: return the current cache
-      result := one.ReturnFile(Ctxt, name, fn, Uri, siz, lastmod);
-      info := 'no head';
+      result := one.ReturnFile(Ctxt, name, fn, Uri, size, lastmod);
+      loginfo := 'no head';
     end;
   end
   else
+  begin
+    size := -1; // no local file
     lastmod := 0;
+  end;
   if not StatusCodeIsSuccess(result) then
     // no matching local file: need to initiate a proxy request
     result := one.StartProxyRequest(
-      Ctxt, fn, name, siz, lastmod, info, remote, Uri);
+      Ctxt, fn, name, dig, size, lastmod, loginfo, remote, Uri);
   fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% info=%',
-    [Ctxt.Method, Ctxt.Url, name, result, siz, info], self);
+    [Ctxt.Method, Ctxt.Url, name, result, size, loginfo], self);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
