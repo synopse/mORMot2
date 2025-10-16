@@ -2808,6 +2808,8 @@ var
   new: pointer; // fast temporary RawUtf8
 begin
   // compute length of the new URI with injected values
+  if THttpServerRequest(Ctxt).fRouteName = nil then
+    exit; // paranoid
   t := pointer(Data.ToUriPosLen); // [pos1,len1,valndx1,...] trio rules
   n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
   v := pointer(THttpServerRequest(Ctxt).fRouteValuePosLen); // [pos,len] pairs
