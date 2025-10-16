@@ -2051,7 +2051,7 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
 // - using SHA-256 and lowercase Base-32 encoding, so perfect for a file name
 function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char = nil;
-  aDiglen: integer = 20): RawUtf8;
+  aDiglen: integer = 20; aDig: PHashDigest = nil): RawUtf8;
 
 
 {$ifdef USEWININET}
@@ -7815,9 +7815,10 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
 var
   hasher: TSynHasher;
   h: PUtf8Char;
-  l: PtrInt; // not integer
+  hl: PtrInt; // not integer
 begin
   result := 0;
+  aDigest.Algo := aAlgo;
   if (aUri.Server = '') or
      not hasher.Init(aAlgo) then
     exit;
@@ -7827,38 +7828,40 @@ begin
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Port);
   hasher.Update(@aAlgo, 1);
-  hasher.Update(aUri.Address); // may be '' for plain http://server.com
+  hasher.Update(pointer(aUri.Address), UriTruncLen(aUri.Address));
   if aHeaders <> nil then
   begin
     hasher.Update(@aAlgo, 1);
-    h := FindNameValuePointer(aHeaders, 'ETAG: ', l); // ETAG + URI are genuine
+    h := FindNameValuePointer(aHeaders, 'ETAG: ', hl); // ETAG + URI are genuine
     if h = nil then
     begin
       // fallback to file date and full size
-      h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', l);
+      h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', hl);
       if h = nil then
         exit;
-      hasher.Update(h, l);
-      h := HttpRequestLength(aHeaders, @l);
+      hasher.Update(h, hl);
+      h := HttpRequestLength(aHeaders, @hl);
       if h = nil then
         exit;
     end;
-    hasher.Update(h, l);
+    hasher.Update(h, hl);
   end;
   result := hasher.Final(aDigest.Bin);
-  aDigest.Algo := aAlgo;
 end;
 
-function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char; aDiglen: integer): RawUtf8;
+function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char;
+  aDiglen: integer; aDig: PHashDigest): RawUtf8;
 var
   dig: THashDigest;
 begin
-  if (aDigLen = 0) or
+  result := '';
+  if (aDigLen = 0) or // e.g. default aDigLen=20 bytes=160-bit as 32 chars
      (aDigLen mod 5 <> 0) or
      (HttpRequestHash(hfSHA256, aUri, aHeaders, dig) < aDiglen) then
-    result := ''
-  else // e.g. default aDigLen=20 bytes=160-bit as 32 chars
-    result := BinToBase32(@dig.Bin, aDiglen, {lower=}true);
+    exit;
+  result := BinToBase32(@dig.Bin, aDiglen, {lower=}true);
+  if aDig <> nil then
+    MoveFast(dig, aDig^, SizeOf(TSha256Digest) + 1);
 end;
 
 {$ifdef USEWININET}
