@@ -2314,7 +2314,7 @@ begin
 end;
 
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
-  aID: PHttpPartialID; Http: PHttpRequestContext = nil): TFileName;
+  aID: PHttpPartialID; Http: PHttpRequestContext): TFileName;
 var
   p: PHttpPartial;
 begin
