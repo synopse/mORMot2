@@ -4642,11 +4642,12 @@ begin
   result := false;
   Value.Text := nil;
   Value.Len := 0;
-  if self = nil then
+  if (self = nil) or
+     (fRouteName = nil) then
     exit;
   v := pointer(fRouteValuePosLen);
   if v = nil then
-    exit;
+    exit; // paranoid
   ParamIndex := ParamIndex * 2;
   if ParamIndex >= PtrUInt(PDALen(PAnsiChar(v) - _DALEN)^ + (_DAOFF - 1)) then
     exit; // avoid buffer overflow
