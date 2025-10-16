@@ -693,7 +693,7 @@ function HttpDateNowUtc(Tix64: Int64 = 0): THttpDateNowUtc;
 
 /// returns the a specified UTC timestamp in HTTP-like format
 // - e.g. as 'Tue, 15 Nov 1994 12:45:26 GMT'
-function UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime): TShort31;
+procedure UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime; var Text: TShort31);
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -3029,16 +3029,16 @@ begin
   end;
 end;
 
-function UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime): TShort31;
+procedure UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime; var Text: TShort31);
 var
   T: TSynSystemTime;
 begin
   if UnixMSTime <= 0 then
-    result[0] := #0
+    Text[0] := #0
   else
   begin
     T.FromUnixMsTime(UnixMSTime);
-    T.ToHttpDateShort(result);
+    T.ToHttpDateShort(Text);
   end;
 end;
 
@@ -3091,6 +3091,7 @@ function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
   InHeaders: PUtf8Char; var OutHeaders: RawUtf8): boolean;
 var
   etag: TShort23;
+  date: TShort31;
   h: PUtf8Char;
   l: PtrInt;
 begin
@@ -3103,9 +3104,12 @@ begin
        IdemPropName(etag, h, l) then
       exit;
     h := FindNameValuePointer(InHeaders, 'IF-MODIFIED-SINCE: ', l);
-    if (h <> nil) and
-       IdemPropName(UnixMSTimeUtcToHttpDate(Time), h, l) then
-      exit;
+    if h <> nil then
+    begin
+      UnixMSTimeUtcToHttpDate(Time, date);
+      if IdemPropName(date, h, l) then
+        exit;
+    end;
   end;
   AppendLine(OutHeaders, ['Etag: ', etag]);
   result := false;

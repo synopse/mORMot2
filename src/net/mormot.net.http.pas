@@ -3946,6 +3946,8 @@ end;
 
 function THttpRequestContext.ContentToOutput(
   aStatus: integer; aOutStream: TStream): integer;
+var
+  date: TShort31;
 begin
   if (aStatus = HTTP_SUCCESS) and
      (ContentLength = 0) then
@@ -3954,8 +3956,10 @@ begin
   // compute response headers for custom protocol (e.g. 'file://')
   AppendLine(Headers, ['Content-Length: ', ContentLength]); // should always be
   if ContentLastModified <> 0 then
-    AppendLine(Headers, ['Last-Modified: ',
-      UnixMSTimeUtcToHttpDate(ContentLastModified)]);
+  begin
+    UnixMSTimeUtcToHttpDate(ContentLastModified, date);
+    AppendLine(Headers, ['Last-Modified: ', date]);
+  end;
   if rfAcceptRange in ResponseFlags then
     AppendLine(Headers, ['Accept-Ranges: bytes']);
   if rfRange in ResponseFlags then
@@ -3982,6 +3986,8 @@ end;
 
 function THttpRequestContext.CompressContentAndFinalizeHead(
   MaxSizeAtOnce: integer): PRawByteStringBuffer;
+var
+  date: TShort31;
 begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
@@ -4037,7 +4043,8 @@ begin
      not (hhLastModified in HeadCustom) then
   begin
     result^.AppendShort('Last-Modified: ');
-    result^.AppendShort(UnixMSTimeUtcToHttpDate(ContentLastModified));
+    UnixMSTimeUtcToHttpDate(ContentLastModified, date);
+    result^.AppendShort(date);
     result^.AppendCRLF;
   end;
   if (ContentType <> '') and
@@ -4750,6 +4757,7 @@ function THttpServerRequestAbstract.SetOutFile(const FileName: TFileName;
 var
   e, h: PUtf8Char;
   el, hl: PtrInt;
+  date: TShort31;
 begin
   result := HTTP_NOTFOUND;
   if (FileSize <= 0) or
@@ -4761,9 +4769,12 @@ begin
     if FileLastModified > 0 then
     begin
       h := FindNameValuePointer(pointer(fInHeaders), 'IF-MODIFIED-SINCE: ', hl);
-      if (h <> nil) and
-         IdemPropName(UnixMSTimeUtcToHttpDate(FileLastModified), h, hl) then
-        exit;
+      if h <> nil then
+      begin
+        UnixMSTimeUtcToHttpDate(FileLastModified, date);
+        if IdemPropName(date, h, hl) then
+          exit;
+      end;
     end;
     e := FindNameValuePointer(pointer(fOutCustomHeaders), 'ETAG: ', el);
     if e <> nil then
