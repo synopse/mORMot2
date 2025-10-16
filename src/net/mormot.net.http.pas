@@ -2854,6 +2854,8 @@ begin
     inc(result, s);
     dec(len, s);
   end;
+  if aHeadersLen <> nil then
+    aHeadersLen^ := len;
 end;
 
 procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
