@@ -1258,7 +1258,7 @@ type
       read fSource write fSource;
     /// how many seconds HEAD requests could be cached in memory
     // - 0 would disable head caching
-    // - default is 120, i.e. cache HEAD response for 2 minutes
+    // - default is 60, i.e. cache HEAD response for 1 minute
     property HttpHeadCacheSec: integer
       read fHttpHeadCacheSec write fHttpHeadCacheSec;
     /// seconds of HTTP keep alive source - default to 30
@@ -5469,7 +5469,7 @@ begin
   fMethods := [urmGet, urmHead];
   fOptions := [];
   fHttpKeepAlive := 30;      // 30 seconds
-  fHttpHeadCacheSec := 120;  // 2 minutes
+  fHttpHeadCacheSec := 60;   // 1 minute
   fHttpDirectGetKB := 16;    // 16 KB
 end;
 
