@@ -166,6 +166,9 @@ function GetHeader(const Headers, Name: RawUtf8; out Value: RawUtf8): boolean; o
 /// retrieve a HTTP header 64-bit integer value from its case-insensitive name
 function GetHeader(const Headers, Name: RawUtf8; out Value: Int64): boolean; overload;
 
+/// get the content full length, from "Content-Length:" or "Content-Range:"
+function HttpRequestLength(aHeaders: PUtf8Char; aHeadersLen: PPtrInt = nil): PUtf8Char;
+
 /// extract size and date from HTTP headers
 // - note that some web servers (e.g. with HEAD, or when chunking) may not
 // return a "Content-Length" header - so we return ContentLength = -1 but
@@ -2826,6 +2829,32 @@ begin
     exit;
   Value := GetInt64(pointer(v), err);
   result := err = 0;
+end;
+
+function HttpRequestLength(aHeaders: PUtf8Char; aHeadersLen: PPtrInt): PUtf8Char;
+var
+  len, s: PtrInt;
+begin
+  result := FindNameValuePointer(aHeaders, 'CONTENT-RANGE: ', len);
+  if result = nil then // no range
+    result := FindNameValuePointer(aHeaders, 'CONTENT-LENGTH: ', len)
+  else
+  begin // content-range: bytes 100-199/3083 -> extract 3083
+    s := len;
+    while true do
+      case result[s - 1] of
+        '/':
+          break;
+        '0' .. '9':
+          dec(s);
+      else
+        result := nil;
+        exit;
+      end;
+    inc(result, s);
+    if aHeadersLen <> nil then
+      aHeadersLen^ := Len - s;
+  end;
 end;
 
 function GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;

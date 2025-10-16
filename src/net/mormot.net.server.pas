@@ -2053,9 +2053,6 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
 function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char = nil;
   aDiglen: integer = 20): RawUtf8;
 
-/// get the content full length, from "Content-Length:" or "Content-Range:"
-function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
-
 
 {$ifdef USEWININET}
 
@@ -7813,37 +7810,12 @@ begin
   AppendShortUuid(msg.Uuid, result);
 end;
 
-function HttpRequestLength(aHeaders: PUtf8Char; out Len: PtrInt): PUtf8Char;
-var
-  s: PtrInt;
-begin
-  result := FindNameValuePointer(aHeaders, 'CONTENT-RANGE: ', Len);
-  if result = nil then // no range
-    result := FindNameValuePointer(aHeaders, 'CONTENT-LENGTH: ', Len)
-  else
-  begin // content-range: bytes 100-199/3083 -> extract 3083
-    s := Len;
-    while true do
-      case result[s - 1] of
-        '/':
-          break;
-        '0' .. '9':
-          dec(s);
-      else
-        result := nil;
-        exit;
-      end;
-    inc(result, s);
-    dec(Len, s);
-  end;
-end;
-
 function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
   aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
 var
   hasher: TSynHasher;
   h: PUtf8Char;
-  l: PtrInt; // var PtrInt, not integer
+  l: PtrInt; // not integer
 begin
   result := 0;
   if (aUri.Server = '') or
@@ -7855,7 +7827,7 @@ begin
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Port);
   hasher.Update(@aAlgo, 1);
-  hasher.Update(aUri.Address);
+  hasher.Update(aUri.Address); // may be '' for plain http://server.com
   if aHeaders <> nil then
   begin
     hasher.Update(@aAlgo, 1);
@@ -7867,7 +7839,7 @@ begin
       if h = nil then
         exit;
       hasher.Update(h, l);
-      h := HttpRequestLength(aHeaders, l);
+      h := HttpRequestLength(aHeaders, @l);
       if h = nil then
         exit;
     end;

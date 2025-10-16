@@ -2809,22 +2809,22 @@ begin
   CheckEqual(CookieFromHeaders(HDR4, 'name3'), 'value3');
   // validate HttpRequestLength() and HttpRequestHash()
   h := HttpRequestLength(
-    'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, l);
+    'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, @l);
   check(h <> nil);
   checkEqual(l, 4);
   Check(IdemPropName('3083', h, 4));
-  h := HttpRequestLength('Content-Length: 100'#13#10, l);
+  h := HttpRequestLength('Content-Length: 100'#13#10, @l);
   check(h <> nil);
   checkEqual(l, 3);
   Check(IdemPropName('100', h, 3));
-  h := HttpRequestLength('Content-Range: 100-199/2000'#13#10, l);
+  h := HttpRequestLength('Content-Range: 100-199/2000'#13#10, @l);
   check(h <> nil);
   checkEqual(l, 4);
   Check(IdemPropName('2000', h, 4));
-  h := HttpRequestLength('Content-Range: 100-199'#13#10, l);
+  h := HttpRequestLength('Content-Range: 100-199'#13#10, @l);
   check(h = nil);
   check(U.From('https://ictuswin.com/toto/titi'));
-  h := HttpRequestLength('Content-Lengths: 100'#13#10, l);
+  h := HttpRequestLength('Content-Lengths: 100'#13#10, @l);
   check(h = nil);
   FillCharFast(dig, SizeOf(dig), 0);
   CheckEqual(ord(dig.Algo), 0);
