@@ -4386,7 +4386,7 @@ begin
           begin
             // prepare for incoming response
             fHttp.Headers := '';
-            fHttp.Options := [hroHeadersUnfiltered];
+            fHttp.Options := [hroHeadersUnfiltered]; // useful as proxy
             fHttp.State := hrsGetCommand;
             result := NotifyStateChange(hcsAfterSendHeaders);
             if (result = soContinue) and
