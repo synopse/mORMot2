@@ -1381,6 +1381,7 @@ type
     fDiskCache: THttpProxyDisk;
     fUrl: THttpProxyUrlObjArray;
     fOwner: THttpProxyServer;
+    procedure SetOwner(aOwner: THttpProxyServer);
   public
     /// initialize the default settings
     constructor Create; override;
@@ -1401,6 +1402,9 @@ type
     // - returns the number of added THttpProxyUrl instances into Url[]
     function AddFromFiles(const settingsfolder: TFileName;
       const mask: TFileName = '*.json'): integer;
+    /// the associated THttpProxyServer main instance (if any)
+    property Owner: THttpProxyServer
+      read fOwner write SetOwner;
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServerMainSettings
@@ -5762,6 +5766,15 @@ begin
   fMemCache.TimeoutSec := 15 * SecsPerMin;
 end;
 
+procedure THttpProxyServerSettings.SetOwner(aOwner: THttpProxyServer);
+var
+  i: PtrInt;
+begin
+  fOwner := aOwner;
+  for i := 0 to high(fUrl) do
+    fUrl[i].fOwner := aOwner;
+end;
+
 function THttpProxyServerSettings.AddUrl(
   one: THttpProxyUrlSettings): THttpProxyUrlSettings;
 begin
@@ -5853,7 +5866,7 @@ begin
   end
   else
     fSettings := aSettings;
-  fSettings.fOwner := self;
+  fSettings.Owner := self;
 end;
 
 destructor THttpProxyServer.Destroy;
