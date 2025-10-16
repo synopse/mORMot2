@@ -267,10 +267,11 @@ type
     EventualTime: TUnixTime;
     /// the partial file name currently downloaded
     PartFile: TFileName;
-    /// up to 512-bit of raw binary hash, precessed by hash algo byte
-    Digest: THashDigest;
     /// background HTTP requests which are waiting for data on this download
     HttpContext: array of PHttpRequestContext;
+    /// up to 512-bit of raw binary hash, prefixed by THashAlgo identifier
+    // - actual file hash for THttpPeerCache, but URI hash for THttpProxyServer
+    Digest: THashDigest;
   end;
   PHttpPartial = ^THttpPartial;
 
@@ -306,7 +307,7 @@ type
       EventualTime: TUnixTime = 0): THttpPartialID;
     /// search for given partial file name and size, from its hash
     function Find(const Hash: THashDigest; out Size: Int64;
-      aID: PHttpPartialID = nil): TFileName;
+      aID: PHttpPartialID = nil; Http: PHttpRequestContext = nil): TFileName;
     /// search for given partial file name from its ID, returning its file name
     // - caller should eventually run Safe.ReadUnLock
     function FindReadLocked(ID: THttpPartialID): TFileName;
@@ -2263,6 +2264,15 @@ begin
   OnLog(sllTrace, '% used=%/%', [txt, fUsed, length(fDownload)], self);
 end;
 
+procedure RawAssociate(http: PHttpRequestContext; partial: PHttpPartial);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if http = nil then
+    exit;
+  http^.ProgressiveID := partial^.ID;
+  PtrArrayAdd(partial^.HttpContext, http);
+end;
+
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
   Hash: PHashDigest; Http: PHttpRequestContext; EventualTime: TUnixTime): THttpPartialID;
 var
@@ -2276,29 +2286,27 @@ begin
   Safe.WriteLock;
   try
     inc(fLastID);
-    inc(fUsed);
     result := fLastID; // returns 1,2,3... THttpPartialID (process specific)
+    inc(fUsed);
     p := FromID(0); // try to reuse an empty slot
     if p = nil then
     begin
       n := length(fDownload);
-      SetLength(fDownload, n + 1); // need a new slot
+      SetLength(fDownload, n + 1); // need a new slot (seldom called)
       p := @fDownload[n];
+    end
+    else
+    begin
+      p^.HttpContext := nil; // force reset
+      FillCharFast(p^.Digest, SizeOf(p^.Digest), 0); // clean but not mandatory
     end;
     p^.ID := result;
-    if Hash = nil then
-      FillCharFast(p^.Digest, SizeOf(p^.Digest), 0)
-    else
-      p^.Digest := Hash^;
     p^.FullSize := ExpectedFullSize;
     p^.EventualTime := EventualTime;
     p^.PartFile := Partial;
-    p^.HttpContext := nil;
-    if Http <> nil then // associate to this HTTP state machine
-    begin
-      PtrArrayAdd(p^.HttpContext, Http);
-      Http^.ProgressiveID := p^.ID;
-    end;
+    if Hash <> nil then
+      MoveFast(Hash^, p^.Digest, HASH_SIZE[Hash^.Algo] + 1);
+    RawAssociate(Http, p);
   finally
     Safe.WriteUnLock;
   end;
@@ -2306,7 +2314,7 @@ begin
 end;
 
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
-  aID: PHttpPartialID): TFileName;
+  aID: PHttpPartialID; Http: PHttpRequestContext = nil): TFileName;
 var
   p: PHttpPartial;
 begin
@@ -2325,6 +2333,7 @@ begin
     result := p^.PartFile;
     if aID <> nil then
       aID^ := p^.ID;
+    RawAssociate(Http, p);
   finally
     Safe.ReadUnLock;
   end;
@@ -2365,11 +2374,7 @@ begin
     result := true;
     if FileExpectedSize <> nil then
       FileExpectedSize^ := p^.FullSize;
-    if Http <> nil then // associate to this HTTP state machine
-    begin
-      PtrArrayAdd(p^.HttpContext, Http);
-      Http^.ProgressiveID := p^.ID;
-    end;
+    RawAssociate(Http, p);
   finally
     Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
@@ -2389,8 +2394,7 @@ begin
     if p = nil then
       exit;
     result := true;
-    PtrArrayAdd(p^.HttpContext, Http); // associate to this HTTP state machine
-    Http^.ProgressiveID := p^.ID;
+    RawAssociate(Http, p);
   finally
     Safe.WriteUnLock;
   end;
@@ -2562,7 +2566,7 @@ begin
           err := ' FileSetDate failed';
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
-        ReleaseSlot(p); // release this partial now, if not with the last http
+        ReleaseSlot(p); // release this partial for the last http usage
     end;
   finally
     Safe.WriteUnLock;
