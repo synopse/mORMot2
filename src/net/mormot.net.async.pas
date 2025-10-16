@@ -1494,10 +1494,8 @@ type
     procedure AfterServerStarted; virtual;
     procedure OnIdle(Sender: TObject; NowTix: Int64);
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
-    function OnGetHeadLocalFolder(Ctxt: THttpServerRequestAbstract;
-      const Uri: TUriMatchName): cardinal;
-    function OnGetHeadRemoteUri(Ctxt: THttpServerRequestAbstract;
-      const Uri: TUriMatchName): cardinal;
+    function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
+    function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
   public
     /// initialize this forward proxy instance
     // - the supplied aSettings should be owned by the caller (e.g from a main
@@ -6129,7 +6127,7 @@ begin
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
 end;
 
-function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequestAbstract;
+function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
@@ -6177,11 +6175,13 @@ begin
         if Assigned(one.fHashCache) then
           result := one.ReturnHash(Ctxt, name, fn);
   end; // may be e.g. HTTP_NOTMODIFIED (304)
+  if not StatusCodeIsSuccess(result) then
+    Ctxt.SetErrorMessage('serving %', [name]);
   fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
     [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
 end;
 
-function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequestAbstract;
+function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
@@ -6238,6 +6238,9 @@ begin
     // no matching local file: need to initiate a proxy request
     result := one.StartProxyRequest(
       Ctxt, fn, name, dig, size, lastmod, loginfo, remote, Uri);
+  if (loginfo[0] <> #0) and
+     not StatusCodeIsSuccess(result) then
+    Ctxt.SetErrorMessage('%', [loginfo]);
   fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% info=%',
     [Ctxt.Method, Ctxt.Url, name, result, size, loginfo], self);
 end;
@@ -6286,9 +6289,9 @@ begin
       urmHead:
         case one.Source of
           hpsLocalFolder:
-            result := OnGetHeadLocalFolder(Ctxt, uri);
+            result := OnGetHeadLocalFolder(THttpServerRequest(Ctxt), uri);
           hpsRemoteUri:
-            result := OnGetHeadRemoteUri(Ctxt, uri);
+            result := OnGetHeadRemoteUri(THttpServerRequest(Ctxt), uri);
         end;
       urmPost,
       urmPut,

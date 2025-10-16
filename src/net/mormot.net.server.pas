@@ -4280,7 +4280,8 @@ begin
            (cod <> HTTP_ASYNCRESPONSE) and
            not StatusCodeIsSuccess(cod) then
         begin
-          Ctxt.fErrorMessage := 'Wrong route';
+          if Ctxt.ErrorMessage = '' then
+            Ctxt.ErrorMessage := 'Wrong route'; // if no OnRequest()
           IncStat(grRejected);
         end;
         Ctxt.RespStatus := cod;
