@@ -755,6 +755,7 @@ begin
     Compute('/static', '/some/static');
     Compute('/static2', '/static2');
     Compute('/', '/');
+    Compute('/static?fmt=text', '/some/static?fmt=text');
     router.Post('/static2', '/some2/static');
     router.Post('/', '/index');
     Compute('/static', '/some/static');
@@ -771,6 +772,8 @@ begin
     Compute('/user/1234/picture/', '/user/1234/picture/');
     Compute('/user/1234', '/root/user.new?id=1234');
     Compute('/user/1234/', '/user/1234/');
+    Compute('/user/1234?fmt=json', '/root/user.new?id=1234&fmt=json');
+    Compute('/user/123', '/root/user.new?id=123');
     Compute('/static', '/some/static');
     Compute('/static2', '/some2/static');
     Compute('/', '/index');
