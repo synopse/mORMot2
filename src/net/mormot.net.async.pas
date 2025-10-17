@@ -1184,7 +1184,7 @@ type
   // generate sub-folders following the first hash nibble (0..9/a..z)
   // - hpoClientNoHead will disable the HEAD request to the server if there is a
   // local cached file to be served - faster but won't detect any server change
-  // - hpoClientOnlySocket will be used for THttpProxyUrl.RemoteClientHead()
+  // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
   THttpProxyUrlOption = (
     hpoNoSubFolder,
     hpoNoFolderHtmlIndex,
@@ -1195,7 +1195,7 @@ type
     hpoDisable304,
     hpoClientCacheSubFolder,
     hpoClientNoHead,
-    hpoClientOnlySocket);
+    hpoClientAlllowWinApi);
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
@@ -5584,7 +5584,7 @@ begin // this method is protected by fRemoteClientSafe.Lock
     fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead: connect to %:%',
       [uri.Server, uri.Port], self);
     fRemoteClient := TSimpleHttpClient.Create(
-      hpoClientOnlySocket in fSettings.Options);
+      not (hpoClientAlllowWinApi in fSettings.Options));
     if Assigned(fSettings.OnRemoteClient) then
       fSettings.OnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
   end;
