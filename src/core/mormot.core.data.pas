@@ -7321,8 +7321,7 @@ end;
 
 procedure TDynArray.Insert(Index: PtrInt; const Item);
 var
-  n: PtrInt;
-  s: PtrUInt;
+  n, s: PtrUInt;
   P: PAnsiChar;
 begin
   if fValue = nil then
@@ -7330,17 +7329,18 @@ begin
   n := GetCount;
   SetCount(n + 1);
   s := fInfo.Cache.ItemSize;
-  if PtrUInt(Index) < PtrUInt(n) then
+  P := PAnsiChar(fValue^);
+  if PtrUInt(Index) < n then
   begin
     // reserve space for the new item
-    P := PAnsiChar(fValue^) + PtrUInt(Index) * s;
-    MoveFast(P[0], P[s], PtrUInt(n - Index) * s);
+    inc(P, PtrUInt(Index) * s);
+    MoveFast(P[0], P[s], (n - PtrUInt(Index)) * s);
     if rcfArrayItemManaged in fInfo.Flags then // avoid GPF in ItemCopy() below
       FillCharFast(P^, s, 0);
   end
   else
-    // Index>=Count -> add at the end
-    P := PAnsiChar(fValue^) + PtrUInt(n) * s;
+    // Index>=Count (or Index<0) -> add at the end
+    inc(P, n * s);
   ItemCopy(@Item, P);
 end;
 
