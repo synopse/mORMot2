@@ -123,12 +123,14 @@ type
     ToUri: RawUtf8;
     /// [pos1,len1,valndx1,pos2,len2,valndx2,...] trios from ToUri content
     ToUriPosLen: TIntegerDynArray;
-    /// the size of all ToUriPosLen[] static content
-    ToUriStaticLen: integer;
+    /// the HTTP error code for a Rewrite() with an integer ToUri (e.g. '404')
+    ToUriErrorStatus: word;
     /// the URI method to be used after ToUri rewrite
     ToUriMethod: TUriRouterMethod;
-    /// the HTTP error code for a Rewrite() with an integer ToUri (e.g. '404')
-    ToUriErrorStatus: {$ifdef CPU32} word {$else} cardinal {$endif};
+    /// some internal flags corresponding to this URI rewrite definition
+    ToUriFlags: set of (tufHasParameters);
+    /// the size of all ToUriPosLen[] static content
+    ToUriStaticLen: cardinal;
     /// the callback registered by Run() for this URI
     Execute: TOnHttpServerRequest;
     /// an additional pointer value, assigned to Ctxt.RouteOpaque of Execute()
@@ -2802,7 +2804,7 @@ end;
 procedure TUriTreeNode.RewriteUri(Ctxt: THttpServerRequestAbstract);
 var
   n: TDALen;
-  len: integer;
+  len, paramslen: integer;
   t, v: PIntegerArray;
   p: PUtf8Char;
   new: pointer; // fast temporary RawUtf8
@@ -2815,7 +2817,11 @@ begin
   v := pointer(THttpServerRequest(Ctxt).fRouteValuePosLen); // [pos,len] pairs
   if v = nil then
      exit; // paranoid
-  len := Data.ToUriStaticLen;
+  paramslen := 0;
+  p := THttpServerRequest(Ctxt).fUrlParamPos; // filled during parsing
+  if p <> nil then
+    paramslen := StrLen(p);
+  len := paramslen + Data.ToUriStaticLen;
   repeat
     if t[2] >= 0 then            // t[2]=valndx in v=fRouteValuePosLen[]
       inc(len, v[t[2] * 2 + 1]); // add value length
@@ -2842,8 +2848,13 @@ begin
     t := @t[3];
     dec(n, 3)
   until n = 0;
+  if paramslen <> 0 then // append original parameters
+  begin
+    MoveFast(THttpServerRequest(Ctxt).fUrlParamPos^, p^, paramslen);
+    if tufHasParameters in Data.ToUriFlags then
+      p^ := '&'; // there are already some parameters in the rewrite
+  end;
   FastAssignNew(THttpServerRequest(Ctxt).fUrl, new); // replace
-  //if p - new <> len then raise EUriRouter.Create('??');
 end;
 
 
@@ -2932,6 +2943,7 @@ begin
       n.Data.ToUri := toU;
       n.Data.ToUriPosLen := nil; // store [pos1,len1,valndx1,...] trios
       n.Data.ToUriStaticLen := 0;
+      n.Data.ToUriFlags := [];
       n.Data.ToUriErrorStatus := Utf8ToInteger(toU, 200, 599, 0);
       if n.Data.ToUriErrorStatus = 0 then // a true URI, not an HTTP error code
       begin
@@ -2940,6 +2952,8 @@ begin
         if u = nil then
           EUriRouter.RaiseUtf8('No ToUri in %.Setup(''%'')',
             [self, aFromUri]);
+        if PosExChar('?', toU) <> 0 then
+          include(n.Data.ToUriFlags, tufHasParameters);
         if PosExChar('<', toU) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
           repeat
             pos := u - pointer(toU);
@@ -3098,15 +3112,17 @@ var
   m: TUriRouterMethod;
   t: TUriTree;
   found: TUriTreeNode;
+  req: THttpServerRequest absolute Ctxt;
 begin
   result := 0; // nothing to process
   if (self = nil) or
-     (Ctxt = nil) or
-     (Ctxt.Url = '') or
-     not UriMethod(Ctxt.Method, m) then
+     (req = nil) or
+     (req.Url = '') or
+     not UriMethod(req.Method, m) then
     exit;
-  THttpServerRequest(Ctxt).fRouteName := nil; // paranoid: if called w/o Prepare
-  THttpServerRequest(Ctxt).fRouteNode := nil;
+  req.fRouteName := nil; // paranoid: if called w/o Prepare
+  req.fRouteNode := nil;
+  req.fUrlParamPos := nil;
   t := fTree[m];
   if t = nil then
     exit; // this method has no registration yet
@@ -3117,7 +3133,7 @@ begin
   begin
   {$endif HASFASTTRYFINALLY}
     // fast recursive parsing - may return nil, but never raises exception
-    found := pointer(TUriTreeNode(t.fRoot).Lookup(pointer(Ctxt.Url), Ctxt));
+    found := pointer(TUriTreeNode(t.fRoot).Lookup(pointer(req.Url), req));
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -3128,20 +3144,23 @@ begin
     if Assigned(found.Data.Execute) then
     begin
       // request is implemented via a method
-      THttpServerRequest(Ctxt).fRouteNode := found;
-      result := found.Data.Execute(Ctxt);
+      req.fRouteNode := found;
+      result := found.Data.Execute(req);
     end
     else if found.Data.ToUri <> '' then
     begin
       // request is not implemented here, but the Url should be rewritten
       if m <> found.Data.ToUriMethod then
-        Ctxt.Method := URIROUTERMETHOD[found.Data.ToUriMethod];
-      if found.Data.ToUriErrorStatus <> 0 then
-        result := found.Data.ToUriErrorStatus // redirect to an error code
-      else if found.Data.ToUriPosLen = nil then
-        Ctxt.Url := found.Data.ToUri    // only static -> just replace URI
-      else
-        found.RewriteUri(Ctxt);         // compute new URI with injected values
+        req.Method := URIROUTERMETHOD[found.Data.ToUriMethod];
+      result := found.Data.ToUriErrorStatus; // redirect to an error code
+      if result = 0 then
+        if found.Data.ToUriPosLen = nil then // only static: just replace URI
+          if req.fUrlParamPos = nil then
+            req.Url := found.Data.ToUri
+          else
+            Make([found.Data.ToUri, req.UrlParamPos], req.fUrl) // append params
+        else
+          found.RewriteUri(req); // compute new URI with injected values
     end;
 end;
 
