@@ -1458,7 +1458,7 @@ type
     /// return a local file content with proper fMemCache support
     function ReturnFile(ctxt: THttpServerRequestAbstract; const name: RawUtf8;
       const filename: TFileName; const uri: TUriMatchName; var size: Int64;
-      lastmod: TUnixMSTime): cardinal;
+      lastmod: TUnixMSTime; canbecached: boolean = true): cardinal;
     /// compute the (probably cached) hash of a given URI resource
     function ReturnHash(ctxt: THttpServerRequestAbstract;
       const name: RawUtf8; var fn: TFileName): integer;
@@ -5667,11 +5667,11 @@ var
   background: TStartProxyRequestClient;
   log: TSynLogClass;
   id: THttpPartialID;
+  stream: TFileStreamEx;
   opt: THttpRequestExtendedOptions;
 begin
   headsiz := 0;
   headlastmod := 0;
-  loginfo[0] := #0;
   log := proxy.fOwner.fLog;
   // quick blocking process to initiate the proxy request
   proxy.fRemoteClientSafe.Lock;
@@ -5703,7 +5703,8 @@ begin
       begin
         // we can stream from local cache
         loginfo := 'cached';
-        result := proxy.ReturnFile(ctxt, name, filename, path, size, lastmod);
+        result := proxy.ReturnFile(
+                    ctxt, name, filename, path, size, lastmod, (headsiz >= 0));
         exit;
       end
       else
@@ -5714,7 +5715,8 @@ begin
         if not DeleteFile(filename) then // may fail on Windows: use previous
         begin
           loginfo := 'locked cache';
-          result := proxy.ReturnFile(ctxt, name, filename, path, size, lastmod);
+          result := proxy.ReturnFile(ctxt, name, filename, path, size, lastmod,
+                      {canbecached=}(headsiz >= 0));
           exit;
         end;
       end;
@@ -5748,34 +5750,43 @@ begin
       exit;
     end;
     // big files need an asynchronous GET to the uri server
+    stream := TFileStreamEx.Create(filename, fmCreate or fmShareRead);
     id := proxy.fOwner.fPartials.Add(filename, size, @hash, Ctxt.ConnectionHttp);
     if id = 0 then
     begin
+      stream.Free;
       loginfo := 'no partial id';
       result := HTTP_SERVERERROR; // 500
       exit;
     end;
     opt := proxy.fRemoteClient.Options^; // non-blocking same options reuse
-    ctxt.SetOutProgressiveFile(filename, size);
-    loginfo := 'progressive new';
   finally
     proxy.fRemoteClientSafe.UnLock;
   end;
   // connect and start background downloading (unlocked)
-  background := TStartProxyRequestClient.OpenOptions(remote, opt);
-  background.stream := TFileStreamEx.Create(filename, fmCreate or fmShareRead);
-  background.uri := remote.Address;
-  background.filedate := headlastmod;
-  Make(['get-', id], remotehead);
-  TLoggedWorkThread.Create(log, remotehead, background, proxy.BackgroundGet);
-  result := HTTP_SUCCESS;
+  ctxt.SetOutProgressiveFile(filename, size);
+  try
+    background := TStartProxyRequestClient.OpenOptions(remote, opt);
+    background.stream := stream;
+    background.uri := remote.Address;
+    background.filedate := headlastmod;
+    Make(['get-', id], remotehead);
+    TLoggedWorkThread.Create(log, remotehead, background, proxy.BackgroundGet);
+    loginfo := 'progressive new';
+    result := HTTP_SUCCESS;
+  except
+    stream.Free;
+    loginfo := 'connection failed';
+    result := HTTP_BADGATEWAY;
+  end;
 end;
 
 procedure THttpProxyUrl.BackgroundGet(Sender: TObject);
 var
   back: TStartProxyRequestClient absolute Sender;
   status: integer;
-  fn, msg: RawUtf8;
+  fn: TFileName;
+  msg: RawUtf8;
 begin
   try
     status := back.Request(back.uri, 'GET',
@@ -5800,8 +5811,8 @@ begin
 end;
 
 function THttpProxyUrl.ReturnFile(ctxt: THttpServerRequestAbstract;
-  const name: RawUtf8; const filename: TFileName;
-  const uri: TUriMatchName; var size: Int64; lastmod: TUnixMSTime): cardinal;
+  const name: RawUtf8; const filename: TFileName; const uri: TUriMatchName;
+  var size: Int64; lastmod: TUnixMSTime; canbecached: boolean): cardinal;
 
   procedure FromCache;
   var
@@ -5810,7 +5821,8 @@ function THttpProxyUrl.ReturnFile(ctxt: THttpServerRequestAbstract;
     if not fMemCache.FindAndCopy(name, cached) then
     begin
       cached := StringFromFile(filename);
-      fMemCache.Add(name, cached);
+      if canbecached then
+        fMemCache.Add(name, cached);
     end;
     Ctxt.ExtractOutContentType; // reverse Ctxt.SetOutFile(fn)
     Ctxt.OutContent := cached;
