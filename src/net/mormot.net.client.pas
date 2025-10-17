@@ -337,6 +337,63 @@ type
     procedure Remove(Sender: PHttpRequestContext);
   end;
 
+  /// exception raised by THttpCacheFiles process
+  EHttpCacheFiles = class(ESynException);
+
+  /// store the metadata of one cached file, from its hash, as 32 bytes
+  // - used by THttpCacheFiles to delete deprecated cache entries
+  THttpCached = packed record
+    /// file hash, truncated to 160-bit, i.e. 20 bytes
+    // - 160-bit ensure no collision, even when truncated from SHA-256/512
+    // - may be e.g. from the real file content hash (for PeerCache), or 160-bit
+    // of the SHA-256 hashed URI (for THttpProxyServer)
+    Hash: THash160;
+    /// the first time this file was written - i.e. creation time for a cache
+    FirstAccess: TUnixTimeMinimal;
+    /// the last time this file was accessed - used to delete deprecated files
+    LastAccess: TUnixTimeMinimal;
+    /// a few (4) bytes to reach 32 bytes per entry
+    Padding: array[1 .. 32 - SizeOf(THash160) - SizeOf(TUnixTimeMinimal) * 2] of byte;
+  end;
+  /// point to one cached file metadata
+  PHttpCached = ^THttpCached;
+  /// store several cached file metadata
+  THttpCachedArray = array of THttpCached;
+
+  /// efficient on-disk storage of some file metadata
+  // - files are identified and searched by their binary hash
+  // - file is stored as 4KB pages on disk, as continuous set of THttpCached
+  // 32-bytes raw binary, so reserve 128 entries per page
+  THttpCacheFiles = class(TObjectOSLightLock)
+  protected
+    fCount: integer;
+    fItems: THttpCachedArray;
+    fFile: TFileStreamEx;
+    fFileName: TFileName;
+    procedure FileUpdateEntry(p: PHttpCached; ndx: PtrInt);
+  public
+    /// initialize this instance
+    // - will open the file on disk for real-time efficient update
+    // - if aFileName = '', all process will be done in memory
+    constructor Create(const aFileName: TFileName); reintroduce;
+    /// finalize the storage
+    destructor Destroy; override;
+    /// update (or add) a file entry LastAccess, identified from its hash
+    // - to be called when a cached file is accessed and served
+    procedure Touch(const hash: THashDigest; len: PtrInt);
+    /// explictly remove a file entry, identified from its hash
+    // - to be called e.g. after FileDelete()
+    function Remove(const hash: THashDigest; len: PtrInt): boolean;
+    /// the file name of the actual storage on disk
+    property FileName: TFileName
+      read fFileName;
+    /// raw access to the internal metadata storage, in range Items[0..Count-1]
+    property Items: THttpCachedArray
+      read fItems;
+    /// how many entries are currently stored in Items[]
+    property Count: integer
+      read fCount;
+  end;
 
 type
   THttpClientSocket = class;
@@ -2572,6 +2629,172 @@ begin
     Safe.WriteUnLock;
   end;
   DoLog('Remove(%)=%%', [Sender.ProgressiveID, (p <> nil), err]);
+end;
+
+
+{ THttpCacheFiles }
+
+const
+  CACHED_PERPAGE = SizeOf(TBuffer4K) div SizeOf(THttpCached); // = 128
+
+constructor THttpCacheFiles.Create(const aFileName: TFileName);
+var
+  size: Int64;
+  n: PtrInt;
+  p: PHttpCached;
+begin
+  inherited Create; // TOSLightLock.Init
+  if aFileName = '' then
+    exit;
+  // load the metadata from disk - keep the file open in exclusive mode
+  fFile := TFileStreamEx.CreateWrite(aFileName); // open or create
+  size := fFile.Size;
+  if size = 0 then
+    exit;
+  n := size div SizeOf(p^);
+  if n * SizeOf(p^) <> size then
+  begin
+    FreeAndNil(fFile);
+    EHttpCacheFiles.RaiseUtf8('%.Create: unexpected % file size = %',
+      [self, aFileName, size]);
+  end;
+  fFileName := aFileName;
+  SetLength(fItems, n);
+  fFile.ReadBuffer(pointer(fItems)^, size);
+  p := pointer(fItems);
+  repeat
+    if p^.LastAccess <> 0 then
+      inc(fCount);
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+destructor THttpCacheFiles.Destroy;
+begin
+  fFile.Free;
+  inherited Destroy; // TOSLightLock.Done
+end;
+
+procedure HashNormalize(const hash: THashDigest; len: PtrInt; var norm: THash160);
+var
+  pad: PtrInt;
+begin
+  if len = 0 then
+    len := HASH_SIZE[hash.Algo];
+  len := MinPtrInt(SizeOf(norm), len); // from THttpPeerCache
+  MoveFast(hash.Bin, norm, len);
+  pad := SizeOf(norm) - len;
+  if pad <> 0 then
+    FillCharFast(norm[len], pad, 0); // normalized padding
+end;
+
+procedure THttpCacheFiles.FileUpdateEntry(p: PHttpCached; ndx: PtrInt);
+begin
+  if fFile = nil then
+    exit;
+  fFile.Seek(ndx * SizeOf(p^), soFromBeginning);
+  fFile.WriteBuffer(p^, SizeOf(p^));
+end;
+
+function CacheEqual(a, b: PIntegerArray): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := false;
+  if (a[0] <> b[0]) or
+     (a[1] <> b[1]) or
+     (a[2] <> b[2]) or
+     (a[3] <> b[3]) or
+     (a[4] <> b[4]) then
+    exit;
+  result := true;
+end;
+
+procedure THttpCacheFiles.Touch(const hash: THashDigest; len: PtrInt);
+var
+  now: TUnixTimeMinimal;
+  max, ndx, void: PtrInt;
+  h: THash160;
+  p: PHttpCached;
+begin
+  HashNormalize(hash, len, h);
+  now := UnixTimeMinimalUtc; // outside of the lock
+  fSafe.Lock;
+  try
+    // quickly update existing entry, and identify any void slot
+    max := fCount;
+    void := -1;
+    p := pointer(fItems);
+    for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
+    begin
+      if p^.LastAccess = 0 then
+      begin
+        void := ndx;
+        if max = 0 then
+          break;
+      end
+      else if CacheEqual(@h, @p^.Hash) then
+      begin
+        if now = p^.LastAccess then
+          exit;
+        p^.LastAccess := now;
+        FileUpdateEntry(p, ndx); // write on disk
+        exit;
+      end
+      else
+        dec(max);
+      inc(p);
+    end;
+    // first time seen: use a new entry
+    if void >= 0 then
+    begin
+      p := @fItems[void];
+      p^.Hash := h;
+      p^.FirstAccess := now;
+      p^.LastAccess := now;
+      FileUpdateEntry(p, void);
+    end
+    else
+    begin
+      // we need to create a new page
+      ndx := fCount;
+      if ndx <> length(fItems) then
+        EHttpCacheFiles.RaiseUtf8('%.Touch: count=% capacity=%',
+          [self, ndx, length(fItems)]); // paranoid
+      SetLength(fItems, ndx + CACHED_PERPAGE); // allocate zeroed 4KB
+      p := @fItems[ndx];
+      p^.Hash := h;
+      p^.FirstAccess := now;
+      p^.LastAccess := now;
+      fFile.Seek(ndx * SizeOf(p^), soFromBeginning);
+      fFile.WriteBuffer(p^, CACHED_PERPAGE * SizeOf(p^));
+    end;
+    inc(fCount);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpCacheFiles.Remove(const hash: THashDigest; len: PtrInt): boolean;
+var
+  ndx: PtrInt;
+  p: PHttpCached;
+  h: THash160;
+begin
+  HashNormalize(hash, len, h);
+  p := pointer(fItems);
+  if p <> nil then
+    for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
+      if CacheEqual(@h, @p^.Hash) then
+      begin
+        FillZero(THash256(p^));
+        FileUpdateEntry(p, ndx);
+        result := true;
+        exit;
+      end
+      else
+        inc(p);
+  result := false;
 end;
 
 

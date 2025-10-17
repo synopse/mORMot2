@@ -2821,7 +2821,7 @@ begin
   p := THttpServerRequest(Ctxt).fUrlParamPos; // filled during parsing
   if p <> nil then
     paramslen := StrLen(p);
-  len := paramslen + Data.ToUriStaticLen;
+  len := integer(Data.ToUriStaticLen) + paramslen;
   repeat
     if t[2] >= 0 then            // t[2]=valndx in v=fRouteValuePosLen[]
       inc(len, v[t[2] * 2 + 1]); // add value length
