@@ -1182,6 +1182,7 @@ type
   // default support as efficient 304 HTTP_NOTMODIFIED response
   // - hpoClientCacheSubFolder could be used with a lot of cached files, to
   // generate sub-folders following the first hash nibble (0..9/a..z)
+  // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientNoHead will disable the HEAD request to the server if there is a
   // local cached file to be served - faster but won't detect any server change
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
@@ -1194,6 +1195,7 @@ type
     hpoPublishSha256,
     hpoDisable304,
     hpoClientCacheSubFolder,
+    hpoClientIgnoreTlsError,
     hpoClientNoHead,
     hpoClientAlllowWinApi);
   /// store THttpProxyUrl.Settings options for a given URI
@@ -5564,6 +5566,7 @@ function THttpProxyUrl.RemoteClientHead(const uri: TUri; const name: RawUtf8;
   var header: RawUtf8; var size: Int64; var time: TUnixTime): cardinal;
 var
   keepalive: integer;
+  client: TSimpleHttpClient;
 begin // this method is protected by fRemoteClientSafe.Lock
   // first try from in-memory cache
   if Assigned(fHeadCache) and
@@ -5583,10 +5586,13 @@ begin // this method is protected by fRemoteClientSafe.Lock
   begin
     fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead: connect to %:%',
       [uri.Server, uri.Port], self);
-    fRemoteClient := TSimpleHttpClient.Create(
+    client := TSimpleHttpClient.Create(
       not (hpoClientAlllowWinApi in fSettings.Options));
+    fRemoteClient := client;
+    if hpoClientIgnoreTlsError in fSettings.Options then
+      client.Options^.TLS.IgnoreCertificateErrors := true;
     if Assigned(fSettings.OnRemoteClient) then
-      fSettings.OnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
+      fSettings.OnRemoteClient(self, uri, client.Options^.TLS);
   end;
   keepalive := fSettings.HttpKeepAlive * MilliSecsPerSec;
   // always first try with a clean HEAD request
