@@ -10093,6 +10093,7 @@ end;
 function Make(const Args: array of const): RawUtf8;
 var
   f: TFormatUtf8;
+  new: PUtf8Char;
 begin
   if high(Args) = 0 then
   begin
@@ -10102,24 +10103,33 @@ begin
   {%H-}f.Init;
   f.AddVarRec(@Args[0], length(Args));
   if f.L <> 0 then
-    f.WriteAll(FastSetString(result, f.L), @f.blocks)
+  begin
+    new := FastNewString(f.L, CP_UTF8); // inlined FastSetString()
+    f.WriteAll(new, @f.blocks);
+  end
   else
-    FastAssignNew(result);
+    new := nil;
+  FastAssignNew(result, new);
 end;
 
 procedure Make(const Args: array of const; var Result: RawUtf8;
   const IncludeLast: RawUtf8);
 var
   f: TFormatUtf8;
+  new: PUtf8Char;
 begin
   {%H-}f.Init;
   f.AddVarRec(@Args[0], length(Args));
   if IncludeLast <> '' then
     f.AddText(IncludeLast);
   if f.L <> 0 then
-    f.WriteAll(FastSetString(result, f.L), @f.blocks)
+  begin
+    new := FastNewString(f.L, CP_UTF8); // inlined FastSetString()
+    f.WriteAll(new, @f.blocks);
+  end
   else
-    FastAssignNew(result);
+    new := nil;
+  FastAssignNew(Result, new);
 end;
 
 function MakeString(const Args: array of const): string;
