@@ -1351,6 +1351,8 @@ type
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
     function Delete(aIndex: PtrInt): boolean;
+    /// move one item from one position to another in the dynamic array
+    function Move(OldIndex, NewIndex: PtrInt): boolean;
     /// search for an element inside the dynamic array using RTTI
     // - return the index found (0..Count-1), or -1 if Item was not found
     // - will search for all properties content of Item: TList.IndexOf()
@@ -7391,6 +7393,28 @@ begin
   wassorted := fSorted;
   SetCount(n); // won't reallocate
   fSorted := wassorted; // deletion won't change the order
+  result := true;
+end;
+
+function TDynArray.Move(OldIndex, NewIndex: PtrInt): boolean;
+var
+  n, siz: PtrUInt;
+  temp: TBuffer1K;
+begin
+  result := OldIndex = NewIndex;
+  if result or
+     (fValue = nil) then
+    exit;
+  n := GetCount;
+  if PtrUInt(OldIndex) >= n then
+    exit; // out of range - Insert(NewIndex<0) would add at the end anyway
+  siz := fInfo.Cache.ItemSize;
+  if siz > SizeOf(temp) then
+    exit; // too big an item (paranoid)
+  MoveFast(PAnsiChar(fValue^)[PtrUInt(OldIndex) * siz], temp, siz);
+  Delete(OldIndex); // move in two steps: not the fastest, but working
+  Insert(NewIndex, temp);
+  fSorted := false; // we did change the order
   result := true;
 end;
 
