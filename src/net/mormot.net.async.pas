@@ -1483,7 +1483,7 @@ type
   protected
     fSettings: THttpProxyServerSettings;
     fLog: TSynLogClass;
-    fSettingsOwned, fVerboseLog: boolean;
+    fSettingsOwned, fHasLog: boolean;
     fServer: THttpAsyncServer;
     fGC: TObjectDynArray;
     fPartials: THttpPartials;
@@ -5634,7 +5634,7 @@ type
     name: RawUtf8;
     size: Int64;
     lastmod: TUnixMSTime;
-    loginfo: TShort15;
+    loginfo: PUtf8Char;
     remote: TUri;
     hash: THashDigest;
     // we need HEAD + GET requests to the remote server
@@ -5785,8 +5785,8 @@ procedure THttpProxyUrl.BackgroundGet(Sender: TObject);
 var
   back: TStartProxyRequestClient absolute Sender;
   status: integer;
-  fn: TFileName;
-  msg: RawUtf8;
+  msg: PUtf8Char;
+  fn: TFileName; // local copy
 begin
   try
     status := back.Request(back.uri, 'GET',
@@ -6012,6 +6012,7 @@ var
   fav: RawByteString;
 begin
   fLog.EnterLocal(log, 'Start %', [fSettings], self);
+  fHasLog := Assigned(log);
   if fServer <> nil then
     EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
   // compute THttpAsyncServer options from settings
@@ -6272,19 +6273,24 @@ begin
   end; // may be e.g. HTTP_NOTMODIFIED (304)
   if not StatusCodeIsSuccess(result) then
     Ctxt.SetErrorMessage('serving %', [name]);
-  fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% cached=%',
-    [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
+  if fHasLog then
+    fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% cached=%',
+      [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
 end;
 
 function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   req: TStartProxyRequest;
+  start: Int64;
 begin
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
   req.ctxt := Ctxt;
   req.proxy := Ctxt.RouteOpaque;
+  req.loginfo := nil;
+  if fHasLog then
+    QueryPerformanceMicroSeconds(start);
   // compute the remote URI corresponding to the original server
   if hpoNoSubFolder in req.proxy.Settings.Options then
     if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
@@ -6295,7 +6301,6 @@ begin
   req.name := HttpRequestHashBase32(req.remote, nil, 20, @req.hash);
   if req.name = '' then
     exit; // paranoid
-  req.loginfo[0] := #0;
   if hpoClientCacheSubFolder in req.proxy.Settings.Options then // hash partitioning
     req.filename := MakePath([req.proxy.Settings.DiskCache.Path, req.name[1], req.name])
   else
@@ -6327,11 +6332,14 @@ begin
   if not StatusCodeIsSuccess(result) then
     // no matching local file: need to initiate a proxy request
     result := req.StartProxyRequest(Uri);
-  if (req.loginfo[0] <> #0) and
+  if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then
     Ctxt.SetErrorMessage('%', [req.loginfo]);
-  fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% info=%',
-    [Ctxt.Method, Ctxt.Url, req.name, result, req.size, req.loginfo], self);
+  if fHasLog then
+    fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
+      'OnExecute: % % fn=% status=% size=% info=% in %',
+      [Ctxt.Method, Ctxt.Url, req.name, result, req.size, req.loginfo,
+       MicroSecFrom(start)], self);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
