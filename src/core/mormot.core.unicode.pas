@@ -5606,7 +5606,7 @@ begin
     exit;
   Temp.Len := PStrLen(result - _STRLEN)^;
   {$ifdef HASCODEPAGE} if PStrRec(result - _STRRECSIZE)^.CodePage = CP_UTF8 then
-  {$else} if IsAnsiCompatible(result, Temp.Len) then {$endif HASCODEPAGE}
+  {$else} if IsAnsiCompatible(PAnsiChar(result), Temp.Len) then {$endif HASCODEPAGE}
     exit; // no conversion needed
   result := Temp.Init(Temp.Len * 3);
   Temp.Len := CurrentAnsiConvert.AnsiBufferToUtf8(result, pointer(Text),
