@@ -1441,7 +1441,6 @@ type
     fOwner: THttpProxyServer;
     fSource: THttpProxySource;
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
-    fFlags: set of (fNeedRange);
     fRemoteUri: TUri;
     fMemCache: TSynDictionary;  // name:RawUtf8 / Content:RawByteString
     fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
@@ -5589,27 +5588,22 @@ begin // this method is protected by fRemoteClientSafe.Lock
     if Assigned(fSettings.OnRemoteClient) then
       fSettings.OnRemoteClient(self, uri, fRemoteClient.Options^.TLS);
   end;
-  result := 0;
   keepalive := fSettings.HttpKeepAlive * MilliSecsPerSec;
-  if not (fNeedRange in fFlags) then
-  begin
-    // always first try with a clean HEAD request
-    result := fRemoteClient.Request(uri, 'HEAD', '', '', '', keepalive);
-    if StatusCodeIsSuccess(result) then
-      if HttpRequestLength(pointer(fRemoteClient.Headers)) = nil then
-      begin
-        include(fFlags, fNeedRange); // wrongly configured server
-        result := 0;
-      end;
-  end;
+  // always first try with a clean HEAD request
+  result := fRemoteClient.Request(uri, 'HEAD', '', '', '', keepalive);
+  if StatusCodeIsSuccess(result) then
+    if HttpRequestLength(pointer(fRemoteClient.Headers)) = nil then
+      result := 0;
   if result = 0 then // server has no length: try range GET trick
     result := fRemoteClient.Request(uri, 'GET', 'Range: bytes=0-0', '', '', keepalive);
+    // Apache+Varnish may return 'Content-Range: bytes 0-0/*' for some text/html :(
   if StatusCodeIsSuccess(result) then
   begin
     header := fRemoteClient.Headers;
     GetHeaderInfo(header, size, time);
   end;
-  if Assigned(fHeadCache) then
+  if Assigned(fHeadCache) and
+     (size >= 0) then             // only store if the size was known
     fHeadCache.Add(name, header); // may store '' on error
   fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% time=%',
     [uri.Address, result, size, time], self);
@@ -5689,18 +5683,21 @@ begin
       loginfo := 'head status';
       exit;
     end;
-    if headsiz < 0 then // progressive download needs an eventual size (by now)
-    begin
-      result := HTTP_BADGATEWAY; // 502
-      loginfo := 'no head size';
-      exit;
-    end;
+    if headsiz < 0 then
+      // note: progressive download needs an eventual size (by now), but Apache
+      // may not provide Content-Length/Range on dynamic content (text/html)
+      if FindNameValue(pointer(remotehead), 'CONTENT-TYPE: TEXT/HTM') = nil then
+      begin
+        result := HTTP_BADGATEWAY; // 502
+        loginfo := 'no head size';
+        exit;
+      end;
     // check the header against the local cached file (headlastmod may be 0)
     ctxt.OutCustomHeaders := PurgeHeaders(remotehead, false, @TOBEPURGEDPROXY);
     if (lastmod <> 0) and
-       (size >= 0) and
-       (headsiz >= 0) then
-      if (headsiz = size) and
+       (size >= 0) then // check the local file
+      if ((headsiz < 0) or
+          (headsiz = size)) and
          ((headlastmod = 0) or
           UnixTimeEqualsMS(headlastmod, lastmod)) then
       begin
@@ -5725,17 +5722,21 @@ begin
     size := headsiz;
     if size < proxy.fSettings.HttpDirectGetKB shl 10 then
     begin
-      // smallest files < 16KB could use the blocking connection
-      if size > 0 then
+      // use the blocking connection for smallest files < 16KB (or without size)
+      if size <> 0 then
         direct := proxy.RemoteClientGet(remote);
       if (size = 0) or
          (direct <> '') then
-        if (length(direct) = size) and
+        if ((size < 0) or // no length/range = retrieve full dynamic content
+            (length(direct) = size)) and
            FileFromString(direct, filename) and
            ((headlastmod = 0) or
             FileSetDateFromUnixUtc(filename, headlastmod)) then
         begin
-          loginfo := 'small get';
+          if size < 0 then
+            loginfo := 'nosize get'
+          else
+            loginfo := 'small get';
           result := ctxt.SetOutContent(
                       direct, not (hpoDisable304 in proxy.fSettings.Options));
         end

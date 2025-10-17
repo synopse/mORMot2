@@ -2848,7 +2848,7 @@ begin
         '0' .. '9':
           dec(s);
       else
-        result := nil;
+        result := nil; // RFC 7233 #2.3 may return 'Content-Range: bytes 0-0/*'
         exit;
       end;
     inc(result, s);
