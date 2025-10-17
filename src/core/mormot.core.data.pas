@@ -7398,22 +7398,19 @@ end;
 
 function TDynArray.Move(OldIndex, NewIndex: PtrInt): boolean;
 var
-  n, siz: PtrUInt;
-  temp: TBuffer1K;
+  siz: PtrUInt;
+  temp: TBuffer1K; // local copy of the moved item
 begin
   result := OldIndex = NewIndex;
-  if result or
-     (fValue = nil) then
-    exit;
-  n := GetCount;
-  if PtrUInt(OldIndex) >= n then
-    exit; // out of range - Insert(NewIndex<0) would add at the end anyway
   siz := fInfo.Cache.ItemSize;
-  if siz > SizeOf(temp) then
-    exit; // too big an item (paranoid)
+  if result or
+     (fValue = nil) or
+     (siz > SizeOf(temp)) then // too big an item (paranoid)
+    exit;
   MoveFast(PAnsiChar(fValue^)[PtrUInt(OldIndex) * siz], temp, siz);
-  Delete(OldIndex); // move in two steps: not the fastest, but working
-  Insert(NewIndex, temp);
+  if not Delete(OldIndex) then
+    exit; // out of range OldIndex - Insert(NewIndex<0) would append at the end
+  Insert(NewIndex, temp); // move in two steps: not the fastest, but working
   fSorted := false; // we did change the order
   result := true;
 end;
