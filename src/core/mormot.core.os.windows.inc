@@ -331,6 +331,16 @@ begin
   result := fCurrentDir + fn;
 end;
 
+function SetDllDirectoryW(lpPathName: PWideChar): BOOL; // affects LoadLibrary()
+  stdcall; external kernel32; // XP SP1+
+
+function LibrarySetDirectory(const Folder: TFileName): boolean;
+var
+  tmp: TW32Temp;
+begin
+  result := SetDllDirectoryW(W32(Folder, tmp));
+end;
+
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 var
   tmp: TW32Temp;

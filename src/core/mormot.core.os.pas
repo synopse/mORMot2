@@ -8631,9 +8631,6 @@ var
   function LoadOne(lib: TFileName; current: PtrInt): boolean;
   var
     j: PtrInt;
-    {$ifdef OSWINDOWS}
-    cwd: TFileName;
-    {$endif OSWINDOWS}
   begin
     // check library name
     result := false;
@@ -8666,16 +8663,18 @@ var
     try
       if nwd <> '' then
       begin
-        GlobalLock; // SetCurrentDir() is for the whole process not the thread
-        cwd := GetCurrentDir;
-        SetCurrentDir(nwd);
-        lib := ExtractFileName(lib); // seems more stable that way
+        GlobalLock; // SetDllDirectoryW() is for the whole process not thread
+        if not LibrarySetDirectory(nwd) then // as documented on microsoft.com
+        begin
+          GlobalUnLock;
+          nwd := '';
+        end;
       end;
       fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box
     finally
       if nwd <> '' then
       begin
-        SetCurrentDir(cwd{%H-});
+        SetDllDirectoryW(nil); // revert to default
         GlobalUnLock;
       end;
     end;
