@@ -6668,6 +6668,7 @@ begin
     fRootDN := '';
     fDefaultDN := '';
     fConfigDN := '';
+    fNetbiosDN := '';
   end;
 end;
 
