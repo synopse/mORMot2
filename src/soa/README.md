@@ -18,7 +18,7 @@ The method-based services:
 The `interface`-based services:
 - are more convenient to define the services contracts, in regular code;
 - can generate a fake implementation `class` on the client side;
-- are more natural when called from object pascal code;
+- are more natural when called from Object Pascal code;
 - offers natural bi-directional communication over WebSockets, by defining `interface` parameters in the contract;
 - has built-in options for authorization/security, threading abilites, JSON/XML marshalling.
 

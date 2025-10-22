@@ -140,15 +140,15 @@ type
   TInterfaceMethodArgument = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// the argument name, as declared in object pascal
+    /// the argument name, as declared in Object Pascal
     // - see also TInterfaceMethod.ArgsName[] array if you need a RawUtf8
     ParamName: PShortString;
-    /// the type name, as declared in object pascal
+    /// the type name, as declared in Object Pascal
     ArgTypeName: PShortString;
     /// the low-level RTTI information of this argument
     // - use ArgRtti.Info to retrieve the TypeInfo() of this argument
     ArgRtti: TRttiJson;
-    /// we do not handle all kind of object pascal variables
+    /// we do not handle all kind of Object Pascal variables
     ValueType: TInterfaceMethodValueType;
     /// the variable direction as defined at code level
     // - you may rather use high-level IsInput/IsOutput inlined methods
@@ -268,7 +268,7 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// the method URI, i.e. the method name
-    // - as declared in object pascal code, e.g. 'Add' for ICalculator.Add
+    // - as declared in Object Pascal code, e.g. 'Add' for ICalculator.Add
     // - this property value is hashed internally for faster access
     Uri: RawUtf8;
     /// the method default result, formatted as a JSON array
@@ -333,11 +333,11 @@ type
     // - follow Args[].OffsetAsValue distribution, and used to allocate/reset
     // the stack memory buffer before execution
     ArgsSizeAsValue: cardinal;
-    /// the RawUtf8 names of all arguments, as declared in object pascal
+    /// the RawUtf8 names of all arguments, as declared in Object Pascal
     ArgsName: TRawUtf8DynArray;
-    /// the RawUtf8 names of all input arguments, as declared in object pascal
+    /// the RawUtf8 names of all input arguments, as declared in Object Pascal
     ArgsInputName: TRawUtf8DynArray;
-    /// the RawUtf8 names of all output arguments, as declared in object pascal
+    /// the RawUtf8 names of all output arguments, as declared in Object Pascal
     ArgsOutputName: TRawUtf8DynArray;
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;

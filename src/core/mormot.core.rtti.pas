@@ -9579,7 +9579,7 @@ begin
         break;
     end
     else if not GetNextFieldProp(P, propname) then
-      // expect regular object pascal identifier (i.e. 0..9,a..z,A..Z,_)
+      // expect regular Object Pascal identifier (i.e. 0..9,a..z,A..Z,_)
       break;
     if P^ = ',' then
     begin
