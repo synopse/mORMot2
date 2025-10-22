@@ -1930,7 +1930,7 @@ type
     fSearchResult: TLdapResultList;
     fSearchRange: TLdapResultList;
     fDefaultDN, fRootDN, fConfigDN, fVendorName, fServiceName: RawUtf8;
-    fNetbiosDN: RawUtf8;
+    fNetbiosDN, fSchemaDN: RawUtf8;
     fMechanisms, fControls, fExtensions, fNamingContexts: TRawUtf8DynArray;
     fSecContext: TSecContext;
     fBoundUser: RawUtf8;
@@ -2009,6 +2009,9 @@ type
     /// the published "configurationNamingContext" attribute in the Root DSE
     // - use an internal cache for fast retrieval
     function ConfigDN: RawUtf8;
+    /// the published "schemaNamingContext" attribute in the Root DSE
+    // - use an internal cache for fast retrieval
+    function SchemaDN: RawUtf8;
     /// the NETBIOS domain name, empty string if not found
     // - retrieved from the CN=Partitions of this server's ConfigDN
     // - use an internal cache for fast retrieval
@@ -5863,6 +5866,7 @@ begin
     'defaultNamingContext',
     'namingContexts',
     'configurationNamingContext',
+    'schemaNamingContext',
     'supportedSASLMechanisms',
     'supportedControl',
     'supportedExtension',
@@ -5882,6 +5886,7 @@ begin
       fDefaultDN := fNamingContexts[0];
   end;
   fConfigDN       := root.Attributes.GetByName('configurationNamingContext');
+  fSchemaDN       := root.Attributes.GetByName('schemaNamingContext');
   fMechanisms     := root.Attributes.Find('supportedSASLMechanisms').GetAllReadable;
   fControls       := root.Attributes.Find('supportedControl').GetAllReadable;
   DeduplicateRawUtf8(fControls);
@@ -5922,6 +5927,13 @@ begin
   if not (fRetrieveRootDseInfo in fFlags) then
     RetrieveRootDseInfo;
   result := fConfigDN;
+end;
+
+function TLdapClient.SchemaDN: RawUtf8;
+begin
+  if not (fRetrieveRootDseInfo in fFlags) then
+    RetrieveRootDseInfo;
+  result := fSchemaDN;
 end;
 
 function TLdapClient.VendorName: RawUtf8;
@@ -6668,6 +6680,7 @@ begin
     fRootDN := '';
     fDefaultDN := '';
     fConfigDN := '';
+    fSchemaDN := '';
     fNetbiosDN := '';
   end;
 end;
