@@ -2357,8 +2357,8 @@ const
   DW_LNE_SET_ADDRESS = 2;
   DW_LNE_DEFINE_FILE = 3;
 
-  DW_TAG_class_type = 2;      // map object pascal class or object
-  DW_TAG_structure_type = 19; // map object pascal record
+  DW_TAG_class_type = 2;      // map Object Pascal class or object
+  DW_TAG_structure_type = 19; // map Object Pascal record
   DW_TAG_subprogram = 46;     // map object function or method
 
   DW_AT_name = $3;

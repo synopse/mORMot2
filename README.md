@@ -52,12 +52,12 @@ The main features of *mORMot* are therefore:
  - Web MVC: publish your ORM/SOA process as responsive Web Applications;
  - A lot of other reusable bricks (e.g. Unicode, network, threads, dictionaries, logging, binary serialization, variants, generics, cross-platform, pdf generation...).
 
-Emphasizing speed and versatility, *mORMot* leverages the advantages of modern object pascal native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It can be used:
+Emphasizing speed and versatility, *mORMot* leverages the advantages of modern Object Pascal native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It can be used:
 
  - to add basic ORM or Client-Server features to simple applications for hobbyists,
  - or let experienced users develop scalable service-based (DDD) projects for their customers, 
  - or leverage FPC cross-platform abilities with an existing Delphi codebase, to embrace the next decades,
- - have fun and see modern object pascal challenge the latest languages or frameworks.
+ - have fun and see modern Object Pascal challenge the latest languages or frameworks.
 
 ### Sub-Folders
 

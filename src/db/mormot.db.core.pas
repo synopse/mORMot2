@@ -85,7 +85,7 @@ type
 
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
-  // high-level object pascal types as TOrmFieldType defined in
+  // high-level Object Pascal types as TOrmFieldType defined in
   // mormot.orm.core.pas
   // - it does not map either all potential types as defined in DB.pas (which
   // are there for compatibility with old RDBMS, and are not abstract enough)
