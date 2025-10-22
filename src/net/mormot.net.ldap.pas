@@ -6681,6 +6681,7 @@ begin
     fDefaultDN := '';
     fConfigDN := '';
     fSchemaDN := '';
+    fNetbiosDN := '';
   end;
 end;
 
