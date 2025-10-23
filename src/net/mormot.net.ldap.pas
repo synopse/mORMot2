@@ -5828,6 +5828,7 @@ begin
     except
       on E: Exception do
       begin
+        result := False;
         FreeAndNil(fSock); // abort and try next dc[]
         SetUnknownError('Connect %: %', [E, E.Message]);
       end;
