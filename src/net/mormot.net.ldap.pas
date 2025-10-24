@@ -6154,6 +6154,24 @@ begin
   else
     // get as much as possible unciphered data from socket
     fSockBuffer := fSock.SockReceiveString(@res, @err);
+
+  case res of
+    nrNoSocket:
+      ELdap.RaiseUtf8('%.ReceivePacketFillSockBuffer: not connected', [self]);
+    nrClosed: // it is usual for most LDAP servers to close any idle socket
+      begin
+        if Assigned(fOnDisconnect) then
+          fOnDisconnect(self)
+        else if fSettings.AutoReconnect then // is TRUE by default
+          if not Reconnect('ReceivePacketFillSockBuffer') then
+            ELdap.RaiseUtf8('%.ReceivePacketFillSockBuffer: AutoReconnect failed as %',
+              [self, fResultString]);
+        if fSock.SockConnected then
+        begin // Not sure about what to do in here
+
+        end;
+      end;
+  end;
   if fSockBuffer = '' then
     ELdap.RaiseUtf8('%.ReceivePacket: error #% % from %:%',
       [self, err, _NR[res], fSettings.TargetHost, fSettings.TargetPort]);
