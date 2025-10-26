@@ -2474,15 +2474,28 @@ end;
 function LocateLastHeader(BufZip: PByteArray; var Size: PtrInt;
   Offset: Int64; out head64: PLastHeader64): PLastHeader;
 var
-  i: PtrInt;
+  endSize, i, pos: PtrInt;
   loc64: PLocator64;
+const
+  // 64 KiB Kommentar + 22 Bytes EOCD
+  MAX_BACKSCAN = 65557;
 begin
+  head64 := nil;
+  result := nil;
+
+  endSize := Size; // Originalgröße merken
+  // maximal erlaubtes Backscan-Fenster
+  if endSize < SizeOf(TLastHeader) then
+    exit;
+
   // resources size may be rounded up -> search in trailing 128 bytes
-  for i := 0 to 127 do
+  for i := 0 to endSize - SizeOf(TLastHeader) do
   begin
-    result := @BufZip[Size - SizeOf(TLastHeader)];
+    pos := endSize - SizeOf(TLastHeader) - i;
+    result := @BufZip[pos];
     if result^.signature + 1 = LASTHEADER_SIGNATURE_INC then
     begin
+      // ZIP64-Fall?
       if (result^.thisFiles    = ZIP32_MAXFILE) or
          (result^.totalFiles   = ZIP32_MAXFILE) or
          (result^.headerSize   = ZIP32_MAXSIZE) or
@@ -2494,20 +2507,22 @@ begin
         if (PtrUInt(loc64) < PtrUInt(BufZip)) or
            (loc64^.signature + 1 <> LASTHEADERLOCATOR64_SIGNATURE_INC) or
            (loc64^.headerOffset + SizeOf({%H-}head64^) >= QWord(Offset + Size)) then
-          break;
-        // validate zip64 last header, stored before the zip64 locator
+        begin
+          result := nil;
+          exit;
+        end;
         head64 := @BufZip[loc64^.headerOffset - QWord(Offset)];
         if head64^.signature + 1 <> LASTHEADER64_SIGNATURE_INC then
-          break;
+        begin
+          result := nil;
+          exit;
+        end;
       end
       else
         // regular zip 2.0 trailer
         head64 := nil;
       exit;
     end;
-    dec(Size);
-    if Size < SizeOf(TLastHeader) then
-      break;
   end;
   result := nil;
 end;
@@ -3979,4 +3994,5 @@ initialization
   InitializeUnit;
 
 end.
+
 
