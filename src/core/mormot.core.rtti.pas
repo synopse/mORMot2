@@ -3268,6 +3268,10 @@ type
     procedure RandomB(B: pointer);
   end;
 
+// low level function defined here for proper inlining - do not call
+procedure RttiMapTo(fromPtr, toPtr: PAnsiChar; fromRtti: TRttiCustom;
+  map: PPRttiCustomProp); {$ifdef HASINLINE} inline; {$endif}
+
 
 { *********** TObjectWithRttiMethods TObjectWithID TClonable Classes }
 
@@ -10571,40 +10575,31 @@ begin
   result := @self;
 end;
 
-procedure TRttiMap.ToA(A, B: pointer);
+procedure RttiMapTo(fromPtr, toPtr: PAnsiChar; fromRtti: TRttiCustom;
+  map: PPRttiCustomProp);
 var
   n: integer;
-  pa: PPRttiCustomProp;
-  pb: PRttiCustomProp;
+  pFrom: PRttiCustomProp;
 begin
-  pa := pointer(b2a);
-  pb := pointer(bRtti.Props.List); // always <> nil
-  n := bRtti.Props.Count;          // always > 0
+  pFrom := pointer(fromRtti.Props.List); // always <> nil
+  n := fromRtti.Props.Count;             // always > 0
   repeat
-    if pa^ <> nil then
-      pb^.CopyValue(A, B, pa^); // copy this mapped property value
-    inc(pa);
-    inc(pb);
+    if map^ <> nil then
+      pFrom^.CopyValue(toPtr, fromPtr, map^); // copy this mapped property value
+    inc(map);
+    inc(pFrom);
     dec(n);
   until n = 0;
 end;
 
-procedure TRttiMap.ToB(A, B: pointer);
-var
-  n: integer;
-  pa: PRttiCustomProp;
-  pb: PPRttiCustomProp;
+procedure TRttiMap.ToA(A, B: pointer);
 begin
-  pa := pointer(aRtti.Props.List);
-  pb := pointer(a2b);
-  n := aRtti.Props.Count;
-  repeat
-    if pb^ <> nil then
-      pa^.CopyValue(B, A, pb^);
-    inc(pa);
-    inc(pb);
-    dec(n);
-  until n = 0;
+  RttiMapTo(B, A, bRtti, pointer(b2a));
+end;
+
+procedure TRttiMap.ToB(A, B: pointer);
+begin
+  RttiMapTo(A, B, aRtti, pointer(a2b));
 end;
 
 function TRttiMap.ToA(B: pointer): pointer;
