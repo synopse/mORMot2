@@ -6,9 +6,12 @@ interface
 
 uses
   mormot.core.base,
+  mormot.core.os,
+  mormot.core.text,
   mormot.core.test,
   dom.entities,
-  dom.infra;
+  dom.infra,
+  api.mobile;
 
 
 type
@@ -25,8 +28,12 @@ type
   end;
 
   TAuditTrailMobileApiTests = class(TSynTestCase)
+  protected
+    fMobileSeq: integer;
+    procedure TestMobile(const mobile: IApiMobile);
   published
-    procedure AddEvent;
+    procedure DirectCall;
+    procedure RemoteCall;
   end;
 
 
@@ -73,7 +80,37 @@ end;
 
 { TAuditTrailMobileApiTests }
 
-procedure TAuditTrailMobileApiTests.AddEvent;
+procedure TAuditTrailMobileApiTests.TestMobile(const mobile: IApiMobile);
+var
+  id: TSourceID;
+  ev: TEventID;
+begin
+  if CheckFailed(Assigned(mobile), 'no API') then
+    exit;
+  // validate mobile sourcing
+  id := mobile.Register(Make(['test', InterlockedIncrement(fMobileSeq)]));
+  CheckNotEqual(id, 0, 'register');
+  Check(mobile.Login(id), 'registered');
+  // validate event posting
+  ev := mobile.NewEvent(0, 'toto');
+  CheckEqual(ev, 0, 'no id');
+  ev := mobile.NewEvent(id, ' ');
+  CheckEqual(ev, 0, 'no description');
+  ev := mobile.NewEvent(id, 'toto');
+  CheckNotEqual(ev, 0, 'new event');
+  // validate mobile unsourcing
+  Check(mobile.UnRegister(id), 'unregister');
+  Check(not mobile.Login(id), 'unregistered');
+  Check(not mobile.UnRegister(id), 'unregister twice');
+  Check(not mobile.Login(id), 'still unregistered');
+end;
+
+procedure TAuditTrailMobileApiTests.DirectCall;
+begin
+  TestMobile(nil);
+end;
+
+procedure TAuditTrailMobileApiTests.RemoteCall;
 begin
 
 end;
