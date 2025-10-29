@@ -88,6 +88,7 @@ procedure TAuditTrailMobileApiTests.TestMobile(const mobile: IApiMobile);
 var
   id: TSourceID;
   ev: TEventID;
+  evs: TEvents;
 begin
   if CheckFailed(Assigned(mobile), 'no API') then
     exit;
@@ -96,12 +97,20 @@ begin
   CheckNotEqual(id, 0, 'register');
   Check(mobile.Login(id), 'registered');
   // validate event posting
+  Check(mobile.LastEvent(id, 10) = nil, 'last event');
   ev := mobile.NewEvent(0, 'toto');
   CheckEqual(ev, 0, 'no id');
   ev := mobile.NewEvent(id, ' ');
   CheckEqual(ev, 0, 'no description');
   ev := mobile.NewEvent(id, 'toto');
   CheckNotEqual(ev, 0, 'new event');
+  evs := mobile.LastEvent(id, 10);
+  if CheckEqual(length(evs), 1) then
+  begin
+    CheckEqual(evs[0].ID, id, 'evs id');
+    CheckNotEqual(evs[0].TimeStamp, 0, 'evs time');
+    CheckEqual(evs[0].Description, 'toto', 'evs');
+  end;
   // validate mobile unsourcing
   Check(mobile.UnRegister(id), 'unregister');
   Check(not mobile.Login(id), 'unregistered');

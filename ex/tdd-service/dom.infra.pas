@@ -16,7 +16,7 @@ type
     function NewSource(source: TDomSource): TDomSourceID;
     function RemoveSource(id: TDomSourceID): boolean;
     function AddEvent(event: TDomEvent): TDomEventID;
-    function LastEvents(count: integer): TDomEventObjArray;
+    function LastEvents(source: TDomSourceID; count: integer): TDomEventObjArray;
   end;
 
 

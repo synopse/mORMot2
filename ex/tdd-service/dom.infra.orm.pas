@@ -28,7 +28,7 @@ type
     function NewSource(source: TDomSource): TDomSourceID;
     function RemoveSource(id: TDomSourceID): boolean;
     function AddEvent(event: TDomEvent): TDomEventID;
-    function LastEvents(count: integer): TDomEventObjArray;
+    function LastEvents(source: TDomSourceID; count: integer): TDomEventObjArray;
   end;
 
 
@@ -75,16 +75,17 @@ begin
   result := fOrm.Add(event, {send=}true);
 end;
 
-function TEventPersistence.LastEvents(count: integer): TDomEventObjArray;
+function TEventPersistence.LastEvents(source: TDomSourceID;
+  count: integer): TDomEventObjArray;
 begin
   ObjArrayClear(result);
-  if count <= 0 then
+  if (count <= 0) or
+     not IsSource(source) then
     exit;
   if count > 50 then
     count := 50; // not too many
-  if not fOrm.RetrieveListObjArray(result, TDomEvent,
-        Make(['order by timestamp limit ', count]), []) then
-    ObjArrayClear(result);
+  fOrm.RetrieveListObjArray(result, TDomEvent,
+    Make(['where source=? order by timestamp desc limit ', count]), [source]);
 end;
 
 end.
