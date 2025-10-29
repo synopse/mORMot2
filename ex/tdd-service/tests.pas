@@ -11,7 +11,8 @@ uses
   mormot.core.test,
   dom.entities,
   dom.infra,
-  api.mobile;
+  api.mobile,
+  api.mobile.impl;
 
 
 type
@@ -106,8 +107,11 @@ begin
 end;
 
 procedure TAuditTrailMobileApiTests.DirectCall;
+var
+  api: IApiMobile;
 begin
-  TestMobile(nil);
+  api := TApiMobile.Create(nil);
+  TestMobile(api);
 end;
 
 procedure TAuditTrailMobileApiTests.RemoteCall;
