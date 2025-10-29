@@ -20,6 +20,7 @@ type
 
   TAuditTrailDomainTests = class(TSynTestCase)
   published
+    // some unit tests for Domain entities
     procedure Entities;
   end;
 
@@ -48,8 +49,25 @@ end;
 { TAuditTrailDomainTests }
 
 procedure TAuditTrailDomainTests.Entities;
+var
+  e: TDomEvent;
 begin
-
+  e := TDomEvent.Create;
+  try
+    e.Normalize;
+    Check(not e.HasAllNeededFields);
+    e.Source := 1;
+    Check(not e.HasAllNeededFields);
+    e.Description := 'toto';
+    e.Context := 123456;
+    Check(e.HasAllNeededFields);
+    e.Description := ' ';
+    Check(not e.HasAllNeededFields);
+    e.Description := 'titi';
+    Check(e.HasAllNeededFields);
+  finally
+    e.Free;
+  end;
 end;
 
 

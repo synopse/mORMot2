@@ -1,5 +1,7 @@
 unit dom.infra;
 
+{$I mormot.defines.inc}
+
 interface
 
 uses
