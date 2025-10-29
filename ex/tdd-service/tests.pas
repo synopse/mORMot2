@@ -13,7 +13,7 @@ uses
   mormot.db.raw.sqlite3.static,
   dom.entities,
   dom.infra,
-  dom.infra.orm,
+  infra.orm,
   api.mobile,
   api.mobile.impl;
 

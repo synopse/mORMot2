@@ -1,4 +1,4 @@
-unit dom.infra.orm;
+unit infra.orm;
 
 {$I mormot.defines.inc}
 
