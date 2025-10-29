@@ -34,12 +34,16 @@ type
     fDescription: RawUtf8;
     fContext: variant;
     fSource: TDomSourceID;
+    fTimeStamp: TUnixMSTime;
   public
     /// normalize the fields content
     procedure Normalize; virtual;
     /// quickly check this entity consistency
     function HasAllNeededFields: boolean; virtual;
   published
+    /// a milliseconds Unix timestamp
+    property TimeStamp: TUnixMSTime
+      read fTimeStamp write fTimeStamp;
     /// is a 64-bit ID to identify the node generating this event
     // - should not be void / 0
     property Source: TDomSourceID

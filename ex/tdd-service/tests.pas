@@ -9,8 +9,11 @@ uses
   mormot.core.os,
   mormot.core.text,
   mormot.core.test,
+  mormot.db.raw.sqlite3,
+  mormot.db.raw.sqlite3.static,
   dom.entities,
   dom.infra,
+  dom.infra.orm,
   api.mobile,
   api.mobile.impl;
 
@@ -109,8 +112,10 @@ end;
 procedure TAuditTrailMobileApiTests.DirectCall;
 var
   api: IApiMobile;
+  persistence: IEventPersistence;
 begin
-  api := TApiMobile.Create(nil);
+  persistence := TEventPersistence.Create(SQLITE_MEMORY_DATABASE_NAME);
+  api := TApiMobile.Create(persistence);
   TestMobile(api);
 end;
 
