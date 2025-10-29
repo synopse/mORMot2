@@ -59,6 +59,14 @@ It is a good example of what could be done to achieve the best performance with 
 
 It is a fully featured sample, with a MVC Web MicroService, hosting its own SQLite3 database, with Full Text search, and some mustache HTML templates.
 
+### tdd-service
+
+[Test-Driven-Development Service](./tdd-service), publishing a simple service, following the TDD and Clean-Architecture patterns.
+
+The source code was made and first shown during a WorkShop at [EKON 29](https://entwickler-konferenz.de/en/). It features a stand-alone REST service, but illustrating some good practice patterns, like TDD, Clean Architecture, KDD/DDD.
+
+You may follow the initial commits history to find out a proposed way of implementing such pattern.
+
 ### rest-websockets
 
 [Demonstrate a SOA service and clients over WebSockets](./rest-websockets), using binary transfer with encryption, and callbacks.
