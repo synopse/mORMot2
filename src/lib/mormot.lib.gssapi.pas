@@ -1201,7 +1201,7 @@ begin
     MajStatus := GssApi.gss_acquire_cred(
       MinStatus, nil, GSS_C_INDEFINITE, nil, GSS_C_ACCEPT,
       aSecContext.CredHandle, nil, nil);
-    GssCheck(MajStatus, MinStatus, 'Failed to aquire credentials for service');
+    GssCheck(MajStatus, MinStatus, 'Failed to acquire credentials for service');
   end;
   InBuf.length := Length(aInData);
   InBuf.value := PByte(aInData);

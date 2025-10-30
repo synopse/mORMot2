@@ -3202,7 +3202,7 @@ type
     // - content is pointed to by the Value and which is Value_bytes bytes long
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-    // copy of the data (this is the prefered way in our Framework)
+    // copy of the data (this is the preferred way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_blob: procedure(Context: TSqlite3FunctionContext;
@@ -3222,7 +3222,7 @@ type
     // Value parameter are taken as the application-defined function result
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-    // copy of the data (this is the prefered way in our Framework)
+    // copy of the data (this is the preferred way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_text: procedure(Context: TSqlite3FunctionContext;
@@ -3304,7 +3304,7 @@ type
     // in the input string, excluding the null terminator
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-    // copy of the data (this is the prefered way in our Framework)
+    // copy of the data (this is the preferred way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     // - note that the official SQLite3 documentation could lead into misunderstanding:
     // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
@@ -3321,7 +3321,7 @@ type
     // - Buf_bytes contains the number of bytes in Buf
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-    // copy of the data (this is the prefered way in our Framework)
+    // copy of the data (this is the preferred way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via FreeMem()
     bind_blob: function(S: TSqlite3Statement;
       Param: integer; Buf: pointer; Buf_bytes: integer;
@@ -4634,7 +4634,7 @@ type
       BindStatic: boolean = false);
     /// bind a RTL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
-    // Bind(Param: integer; Value: RawUtf8) is the prefered method
+    // Bind(Param: integer; Value: RawUtf8) is the preferred method
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESqlite3Exception on any error
     procedure BindS(Param: integer; const Value: string);
@@ -4785,7 +4785,7 @@ type
     /// the associated SQLite3 database instance
     // - any direct access to this cache list should be protected via DB.Lock
     DB: TSqlite3DB;
-    /// intialize the cache
+    /// initialize the cache
     procedure Init(aDB: TSqlite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
     function Prepare(const GenericSql: RawUtf8; WasPrepared: PBoolean = nil;
@@ -5572,7 +5572,7 @@ const
   // - could appear with (TAlgoCompress.AlgoID-1) increment for other algorithms
   SQLITE3_MAGIC = $ABA5A5AB;
 
-  /// the "magic" 16 bytes header stored at the begining of every SQLite3 file
+  /// the "magic" 16 bytes header stored at the beginning of every SQLite3 file
   SQLITE_FILE_HEADER: array[0 .. 15] of AnsiChar = 'SQLite format 3';
 
 var

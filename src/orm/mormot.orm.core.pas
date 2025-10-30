@@ -2767,7 +2767,7 @@ type
     /// this property stores the record's integer ID
     // - if this TOrm is not a instance, but a field value in a published
     //  property of type oftID (i.e. TOrm(aID)), this method will try
-    //  to retrieve it; but prefered method is to typecast it via PtrInt(aProperty),
+    //  to retrieve it; but preferred method is to typecast it via PtrInt(aProperty),
     //  because GetID() relies on some low-level Windows memory mapping trick, and
     //  will recognize an ID value up to 1,048,576 (i.e. $100000)
     // - notice: the Setter should not be used usualy; you should not have to write
@@ -3218,7 +3218,7 @@ type
     /// retrieve all records associated to a particular source record, which
     // has a TOrmMany property
     // - returns the Count of records corresponding to this aSource record
-    // - the records are stored in an internal TOrmTable, refered in the private
+    // - the records are stored in an internal TOrmTable, referred in the private
     // fTable field, and initialized via a FillPrepare call: all Dest items
     // are therefore accessible with standard FillRow, FillOne and FillRewind methods
     // - use a "for .." loop or a "while FillOne do ..." loop to iterate
@@ -4251,7 +4251,7 @@ type
     // - use this to create a working copy of a table's record, e.g.
     // - don't forget to Free it when not used any more (use a try...finally
     // block)
-    // - it's prefered in practice to directly call TOrm*.Create()
+    // - it's preferred in practice to directly call TOrm*.Create()
     // in your code
     function NewRecord(const SqlTableName: RawUtf8): TOrm;
 

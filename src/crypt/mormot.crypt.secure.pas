@@ -266,7 +266,7 @@ type
 
 
 type
-  /// optimized thread-safe storage of a list of IP v4 adresses
+  /// optimized thread-safe storage of a list of IP v4 addresses
   // - can be used e.g. as white-list or black-list of clients
   // - will maintain internally a sorted list of 32-bit integers for fast lookup
   // - with optional binary persistence
@@ -2924,7 +2924,7 @@ type
     function Count: integer;
     /// how many CRLs are currently stored
     function CrlCount: integer;
-    /// return the prefered algo to be used with this store
+    /// return the preferred algo to be used with this store
     // - call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
     function DefaultCertAlgo: TCryptCertAlgo;
   end;
@@ -2978,7 +2978,7 @@ type
     function New: ICryptStore; virtual; abstract;
     /// main factory to create a new Store instance from saved Binary
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
-    /// return the prefered algo to be used with this store
+    /// return the preferred algo to be used with this store
     // - should be the same class as ICryptStore.DefaultCertAlgo
     function DefaultCertAlgo: TCryptCertAlgo; virtual; abstract;
   end;
@@ -3438,7 +3438,7 @@ function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
 function Store(const name: RawUtf8): ICryptStore;
 
 var
-  /// the prefered/default algorithm to be used wth X.509 certificates
+  /// the preferred/default algorithm to be used with X.509 certificates
   // - caaES256 (aka prime256v1 or NISTP-256) seems the new default (faster
   // and with 128-bit of security), even if RSA-2048 (i.e. caaRS256) may still
   // be used for compatiblity with legacy systems (but much slower signing and

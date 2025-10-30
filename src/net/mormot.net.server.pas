@@ -639,7 +639,7 @@ type
     // or custom (synlz) protocols
     // - you can specify a minimal size (in bytes) before which the content won't
     // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
-    // - the first registered algorithm will be the prefered one for compression
+    // - the first registered algorithm will be the preferred one for compression
     // within each priority level (the lower aPriority first)
     procedure RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer = 1024; aPriority: integer = 10); virtual;
@@ -6565,7 +6565,7 @@ begin
     fLog := TSynLog;
   fLog.EnterLocal(ilog, 'Create threads=% %', [aHttpServerThreadCount, aLogClass], self);
   fFilesSafe.Init;
-  // intialize the cryptographic state in inherited THttpPeerCrypt.Create
+  // initialize the cryptographic state in inherited THttpPeerCrypt.Create
   if (fSettings = nil) or
      (fSettings.Uuid = '') then // allow UUID customization
     GetComputerUuid(fUuid)

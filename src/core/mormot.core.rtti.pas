@@ -502,7 +502,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// specify ordinal storage size and sign
-    // - is prefered to MaxValue to identify the number of stored bytes
+    // - is preferred to MaxValue to identify the number of stored bytes
     function RttiOrd: TRttiOrd;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// first value of enumeration type, typicaly 0

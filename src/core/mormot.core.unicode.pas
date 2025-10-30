@@ -1100,7 +1100,7 @@ function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any RTL string into a RawUnicode encoded String
-// - it's prefered to use TLanguageFile.StringToUtf8() method in mORMoti18n,
+// - it's preferred to use TLanguageFile.StringToUtf8() method in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -1109,7 +1109,7 @@ function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload
 function StringToRawUnicode(const S: string): RawUnicode; overload;
 
 /// convert any RTL string into a RawUnicode encoded String
-// - it's prefered to use TLanguageFile.StringToUtf8() method in mORMoti18n,
+// - it's preferred to use TLanguageFile.StringToUtf8() method in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -1227,7 +1227,7 @@ function WinAnsiToSynUnicode(const WinAnsi: WinAnsiString): SynUnicode;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// convert any RTL string into an UTF-8 encoded String
-// - in the VCL context, it's prefered to use TLanguageFile.StringToUtf8()
+// - in the VCL context, it's preferred to use TLanguageFile.StringToUtf8()
 //  method from mORMoti18n, which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -1287,7 +1287,7 @@ function StringBufferToUtf8(Dest: PUtf8Char;
 procedure StringBufferToUtf8(Source: PChar; out result: RawUtf8); overload;
 
 /// convert any RTL string into a SynUnicode encoded String
-// - it's prefered to use TLanguageFile.StringToUtf8() method in mORMoti18n,
+// - it's preferred to use TLanguageFile.StringToUtf8() method in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -1312,7 +1312,7 @@ function SynUnicodeToString(const U: SynUnicode): string;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded String into a RTL string
-// - it's prefered to use TLanguageFile.Utf8ToString() in mORMoti18n,
+// - it's preferred to use TLanguageFile.Utf8ToString() in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -1328,7 +1328,7 @@ procedure Utf8ToStringVar(const Text: RawUtf8; var result: string);
 procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
 
 /// convert any UTF-8 encoded buffer into a RTL string
-// - it's prefered to use TLanguageFile.Utf8ToString() in mORMoti18n,
+// - it's preferred to use TLanguageFile.Utf8ToString() in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -1557,7 +1557,7 @@ function IdemPropNameU(const P1, P2: RawUtf8): boolean; overload;
 /// returns true if the beginning of p^ is the same as up^
 // - ignore case - up^ must be already Upper
 // - chars are compared as 7-bit Ansi only (no accentuated characters): but when
-// you only need to search for field names e.g. IdemPChar() is prefered, because
+// you only need to search for field names e.g. IdemPChar() is preferred, because
 // it'll be faster than IdemPCharU(), if UTF-8 decoding is not mandatory
 // - if p is nil, will return FALSE
 // - if up is nil, will return TRUE
@@ -1571,7 +1571,7 @@ function IdemPChar(p: PUtf8Char; up: PAnsiChar; table: PNormTable): boolean; ove
 // - ignore case - up^ must be already Upper
 // - any white space in the input p^ buffer is just ignored
 // - chars are compared as 7-bit Ansi only (no accentuated characters): but when
-// you only need to search for field names e.g. IdemPChar() is prefered, because
+// you only need to search for field names e.g. IdemPChar() is preferred, because
 // it'll be faster than IdemPCharU(), if UTF-8 decoding is not mandatory
 // - if p is nil, will return FALSE
 // - if up is nil, will return TRUE
@@ -5209,7 +5209,7 @@ begin
   if L = 0 then
     exit;
   // +1 below is for #0 ending -> true WideChar(#0) ending
-  tmp.Init(L * 3); // maximum posible unicode size (if all <#128)
+  tmp.Init(L * 3); // maximum possible unicode size (if all <#128)
   SetString(result, PAnsiChar(tmp.buf), Utf8ToWideChar(tmp.buf, P, L) + 1);
   tmp.Done;
 end;
@@ -5717,7 +5717,7 @@ begin
     result := ''
   else
   begin
-    tmp.Init(L * 3); // maximum posible unicode size (if all <#128)
+    tmp.Init(L * 3); // maximum possible unicode size (if all <#128)
     FastSynUnicode(result, tmp.buf, Utf8ToWideChar(tmp.buf, P, L) shr 1);
     tmp.Done;
   end;
@@ -5903,7 +5903,7 @@ begin
     result := ''
   else
   begin
-    tmp.Init(Len * 3); // maximum posible unicode size (if all <#128)
+    tmp.Init(Len * 3); // maximum possible unicode size (if all <#128)
     SetString(result, PWideChar(tmp.buf), Utf8ToWideChar(tmp.buf, Text, Len) shr 1);
     tmp.Done;
   end;
@@ -5950,7 +5950,7 @@ begin
   end
   else
   begin
-    temp.Init(Len * 3); // maximum posible unicode size (if all <#128)
+    temp.Init(Len * 3); // maximum possible unicode size (if all <#128)
     result := Utf8ToWideChar(temp.buf, Text, Len) shr 1; // as WideChar count
   end;
 end;

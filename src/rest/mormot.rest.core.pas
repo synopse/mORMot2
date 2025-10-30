@@ -2130,7 +2130,7 @@ begin // caller checked that (self <> nil) and (Level in fLogLevel)
     exit;
   max := fLogResponseMaxBytes;
   if max < MAX_LOGESCAPE then
-    // safe ouput of the content, with proper escape if needed (e.g. binary)
+    // safe output of the content, with proper escape if needed (e.g. binary)
     fLogFamily.Add.LogEscape(
       Level, '%', [aContext], aContent, aContentLen, self, max)
   else

@@ -7,7 +7,7 @@
 }
 
 
-(********************** User-Trigerred Conditionals **********************)
+(********************** User-Triggered Conditionals **********************)
 
 {  Those conditionals below can be enabled in your project Options,
    to tune the compilation depending your setup or your project expectations. }
@@ -21,7 +21,7 @@
 // -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
 
 {.$define PUREMORMOT2}
-// if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
+// if defined, no mORMot 1.18 compatibility types nor functions would be enabled
 // - by default, existing projects should (almost) compile with mORMot 2
 // - you should eventually define this conditional to make a perfect code
 // conversion to the new types and methods definitions
@@ -444,7 +444,7 @@
     // FPC SEH is not fully efficient and generate some additional code/calls
   {$ifend}
 
-  // note: you may remove all unexpexted hints by setting in your project options
+  // note: you may remove all unexpected hints by setting in your project options
   // -vm11047,3187,3123,3124,4055,4079,4081,5023,5024,5027,5028,5036,5037,5058,5059,5060,5089,5090,5091,5092,5093,5094,6018,6058
 
   // disable some no-brainer warnings - let FPC align with Delphi in that matter
@@ -925,7 +925,7 @@
       {$define OSDARWINARM}
       {$define LIZARD_EXTERNALONLY}
       {$define NOLIBCSTATIC}
-    {$endif OSDWARWIN}
+    {$endif OSDARWIN}
   {$endif CPUARM3264}
 {$else}
   {$define LIZARD_EXTERNALONLY}     // no static .obj for Delphi Win32/Win64 yet

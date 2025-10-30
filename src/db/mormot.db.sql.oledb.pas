@@ -211,7 +211,7 @@ type
   {$endif CPU64}
   TSqlDBOleDBStatementParam = record
     /// storage used for BLOB (ftBlob) values
-    // - will be refered as DBTYPE_BYREF when sent as OleDB parameters, to
+    // - will be referred as DBTYPE_BYREF when sent as OleDB parameters, to
     // avoid unnecessary memory copy
     VBlob: RawByteString;
     /// storage used for TEXT (ftUtf8) values

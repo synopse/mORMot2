@@ -736,7 +736,7 @@ type
     function GetCurrentThreadFlag(ti: TSynLogThreadInfoFlag): boolean;
     procedure SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
   public
-    /// intialize for a TSynLog class family
+    /// initialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
     constructor Create(aSynLog: TSynLogClass);
     /// close any console echo, and release associated memory
@@ -1153,7 +1153,7 @@ type
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
   public
-    /// intialize for a TSynLog class instance
+    /// initialize for a TSynLog class instance
     // - WARNING: not to be called directly! Use TSynLog.Enter or TSynLog.Add
     // class functions instead
     constructor Create(aFamily: TSynLogFamily = nil); virtual;
@@ -4023,7 +4023,7 @@ begin
         end;
     end;
   until Terminated;
-  // Terminated is set: eventually display delayed console ouput
+  // Terminated is set: eventually display delayed console output
   try
     FlushConsole;
   except
@@ -5505,14 +5505,14 @@ begin
     if pendingDisableRemoteLogLeave in fPendingFlags then
     begin
       GlobalThreadLock.UnLock;
-      ESynLogException.RaiseUtf8('Nested %.DisableRotemoteLog', [self]);
+      ESynLogException.RaiseUtf8('Nested %.DisableRemoteLog', [self]);
     end;
     include(fPendingFlags, pendingDisableRemoteLogLeave);
   end
   else
   begin
     if not (pendingDisableRemoteLogLeave in fPendingFlags) then
-      ESynLogException.RaiseUtf8('Missing %.DisableRotemoteLog(true)', [self]);
+      ESynLogException.RaiseUtf8('Missing %.DisableRemoteLog(true)', [self]);
     // DisableRemoteLog(false) -> add to events, and quit the global mutex
     exclude(fPendingFlags, pendingDisableRemoteLogLeave);
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);

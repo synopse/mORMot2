@@ -4222,7 +4222,7 @@ begin
       inc(P);
       if P^ = #0 then
         exit;
-    until P^ = '{'; // go to object begining
+    until P^ = '{'; // go to object beginning
   end;
   info.Json := P;
   if GetJsonPropName(info.Json) <> nil then // ignore field name
