@@ -1010,6 +1010,18 @@ type
   // UserAccountControlsValue() functions to encode/decode such values
   TUserAccountControls = set of TUserAccountControl;
 
+  /// the decoded fields of msds-supportedencryptiontypes
+  // https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-supportedencryptiontypes
+  // https://ldapwiki.com/wiki/Wiki.jsp?page=MsDS-SupportedEncryptionTypes
+  TMsdsSupportedEncryptionType = (
+    msetDESCBCCRC,              // 1
+    msetDESCBCMD5,              // 2
+    msetRC4HMAC,                // 4
+    msetAES128CTSHMACSHA196,    // 8
+    msetAES256CTSHMACSHA196);   // 10 = 16
+
+  TMsdsSupportedEncryptionTypes = set of TMsdsSupportedEncryptionType;
+
   /// known sAMAccountType values
   // - use SamAccountTypeFromInteger() SamAccountTypeFromText() and
   // SamAccountTypeValue() functions to encode/decode such values
@@ -1324,6 +1336,15 @@ function UserAccountControlsFromInteger(value: integer): TUserAccountControls;
 
 /// compute the integer value stored in a LDAP atUserAccountControl entry
 function UserAccountControlsValue(uac: TUserAccountControls): integer;
+
+/// recognize the text integer value stoed in a LDAP MsDS-SupportedEncryptionTypes entry
+function MsdsSupportedEncryptionTypesFromText(const value: RawUtf8): TMsdsSupportedEncryptionTypes;
+
+/// recognize the integer value stored in a LDAP MsDS-SupportedEncryptionTypes entry
+function MsdsSupportedEncryptionTypesFromInteger(value: integer): TMsdsSupportedEncryptionTypes;
+
+// compute the integer value stored in a LDAP MsDS-SupportedEncryptionTypes entry
+function MsdsSupportedEncryptionTypesValue(encryptionType: TMsdsSupportedEncryptionTypes): integer;
 
 /// recognize the text integer value stored in a LDAP atSystemFlags entry
 function SystemFlagsFromText(const value: RawUtf8): TSystemFlags;
@@ -3867,6 +3888,13 @@ const
     67108864,            // uacPartialSecretsRodc
     integer($80000000)); // uacUserUseAesKeys
 
+  MSDSSUPPORTEDENCRYPTIONTYPES_VALUE: array[TMsdsSupportedEncryptionType] of integer = (
+    1,                   // msetDESCBCCRC
+    2,                   // msetDESCBCMD5
+    4,                   // msetRC4HMAC
+    8,                   // msetAES128CTSHMACSHA196
+    16);                 // msetAES256CTSHMACSHA196
+
   // see https://ldapwiki.com/wiki/Wiki.jsp?page=X-SYSTEMFLAGS
   SF_VALUE: array[TSystemFlag] of integer = (
     1,                   // sfAttrNotReplicated
@@ -3979,6 +4007,48 @@ begin
     for u := low(u) to high(u) do
       if u in uac then
         result := result or UAC_VALUE[u];
+end;
+
+function MsdsSupportedEncryptionTypesFromText(const value: RawUtf8
+  ): TMsdsSupportedEncryptionTypes;
+var
+  v: integer;
+begin
+  result := [];
+  if ToInteger(value, v) then
+    result := MsdsSupportedEncryptionTypesFromInteger(v);
+end;
+
+function MsdsSupportedEncryptionTypesFromInteger(value: integer
+  ): TMsdsSupportedEncryptionTypes;
+var
+  encryptionType: TMsdsSupportedEncryptionType;
+  f: Integer;
+begin
+  result := [];
+  if value <> 0 then
+    for encryptionType := low(encryptionType) to high(encryptionType) do
+    begin
+      f := MSDSSUPPORTEDENCRYPTIONTYPES_VALUE[encryptionType];
+      if value and f = 0 then
+        continue;
+      include(result, encryptionType);
+      dec(value, f);
+      if value = 0 then
+        break;
+    end;
+end;
+
+function MsdsSupportedEncryptionTypesValue(
+  encryptionType: TMsdsSupportedEncryptionTypes): integer;
+var
+  u: TMsdsSupportedEncryptionType;
+begin
+  result := 0;
+  if encryptionType <> [] then
+    for u := low(u) to high(u) do
+      if u in encryptionType then
+        result := result or MSDSSUPPORTEDENCRYPTIONTYPES_VALUE[u];
 end;
 
 function SystemFlagsFromInteger(value: integer): TSystemFlags;
