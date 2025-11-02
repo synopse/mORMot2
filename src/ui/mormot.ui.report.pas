@@ -960,7 +960,7 @@ type
     // meaning that the JPEG compression is not forced, and the engine will use
     // the native resolution of the bitmap - in this case, the resulting
     // PDF file content will be bigger in size (e.g. use this for printing)
-    // - 60 is the prefered way e.g. for publishing PDF over the internet
+    // - 60 is the preferred way e.g. for publishing PDF over the internet
     // - 80/90 is a good ration if you want to have a nice PDF to see on screen
     // - of course, this doesn't affect vectorial (i.e. emf) pictures
     property ExportPdfForceJPEGCompression: integer
@@ -2389,7 +2389,7 @@ begin
   fColumnHeaderPrinted := false; // when next col. started add header
   if InGroup then
   begin
-    // draw the group at the begining of new page + EndGroup
+    // draw the group at the beginning of new page + EndGroup
     DoHeader;
     if fColumnsUsedInGroup then
     begin

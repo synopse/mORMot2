@@ -973,7 +973,7 @@ begin
           begin
             P.Clear;
             {$ifdef UNICODE}
-            P.AsBlob := nil; // avoid type errors when a blob field is adressed
+            P.AsBlob := nil; // avoid type errors when a blob field is addressed
             {$else}
             P.AsString := '';
             {$endif UNICODE}

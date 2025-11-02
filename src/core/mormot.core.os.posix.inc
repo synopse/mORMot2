@@ -5185,7 +5185,7 @@ begin
   else
     CpuInfoText := _fmt('%d x %s %s (' + CPU_ARCH_TEXT + ')',
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
-  // intialize supported APIs
+  // initialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
   _Fill256FromOs    := @__Fill256FromOs;
   {$ifdef OSLINUX}

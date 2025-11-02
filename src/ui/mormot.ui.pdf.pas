@@ -54,7 +54,7 @@ implementation
 
 {$define USE_SYNGDIPLUS}
 // if defined, the PDF engine will use SynGdiPlus to handle all
-// JPG, TIF, PNG and GIF image types (prefered way, but need XP or later OS)
+// JPG, TIF, PNG and GIF image types (preferred way, but need XP or later OS)
 // - if you'd rather use the default jpeg unit (and add some more code to your
 // executable), undefine this conditional
 {$ifdef NO_USE_SYNGDIPLUS}
@@ -1665,7 +1665,7 @@ type
     // meaning that the JPEG compression is not forced, and the engine will use
     // the native resolution of the bitmap - in this case, the resulting
     // PDF file content will be bigger in size (e.g. use this for printing)
-    // - 60 is the prefered way e.g. for publishing PDF over the internet
+    // - 60 is the preferred way e.g. for publishing PDF over the internet
     // - 80/90 is a good ratio if you want to have a nice PDF to see on screen
     // - of course, this doesn't affect vectorial (i.e. emf) pictures
     property ForceJPEGCompression: integer
@@ -5859,7 +5859,7 @@ begin
         begin
           aUnicodeTtf.fIsSymbolFont := false;
           off := offset;
-          break; // prefered specific ID
+          break; // preferred specific ID
         end;
   if (off = 0) or
      (off and 1 <> 0) then

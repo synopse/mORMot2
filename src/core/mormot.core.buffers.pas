@@ -814,7 +814,7 @@ type
   /// available kind of integer array storage, corresponding to the data layout
   // of TBufferWriter
   // - wkUInt32 will write the content as "plain" 4 bytes binary (this is the
-  // prefered way if the integers can be negative)
+  // preferred way if the integers can be negative)
   // - wkVarUInt32 will write the content using our 32-bit variable-length integer
   // encoding
   // - wkVarInt32 will write the content using our 32-bit variable-length integer

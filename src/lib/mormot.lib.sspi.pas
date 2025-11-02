@@ -459,7 +459,7 @@ type
       );
       SCH_CREDENTIALS_VERSION: (
         New: TSChannelCredNew;
-        Tls: TSChannelCredTls; // refered from New.pTlsParameters
+        Tls: TSChannelCredTls; // referred from New.pTlsParameters
       );
   end;
 

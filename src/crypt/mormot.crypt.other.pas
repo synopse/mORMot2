@@ -157,7 +157,7 @@ type
   PAesFull = ^TAesFull;
   /// AES and XOR encryption object for easy direct memory or stream access
   // - calls internally TAes objet methods, and handle memory and streams for best speed
-  // - a TAesFullHeader is encrypted at the begining, allowing fast Key validation,
+  // - a TAesFullHeader is encrypted at the beginning, allowing fast Key validation,
   // but the resulting stream is not compatible with raw TAes object
   // - will use unsafe direct AES-ECB chain mode, so is considered deprecated
   {$ifdef USERECORDWITHMETHODS}

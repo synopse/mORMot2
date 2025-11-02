@@ -532,7 +532,7 @@ type
     // - then append small content (<MaxSizeAtOnce) to result if possible, and
     // refresh the final State to hrsSendBody/hrsResponseDone
     function CompressContentAndFinalizeHead(MaxSizeAtOnce: integer): PRawByteStringBuffer;
-    /// compute ouput headers and body from current output state
+    /// compute output headers and body from current output state
     // - alternate to CompressContentAndFinalizeHead() when Headers and
     // Content/ContentStream/ContentLength/ContentEncoding are manually set
     // - used by THttpClientSocket.Request on custom protocol (e.g. 'file://')
@@ -3237,7 +3237,7 @@ begin
       begin
         // in-place compression of the OutContent body + update header
         result^.Func(OutContent, {compress=}true);
-        exit; // first in fCompress[] is prefered
+        exit; // first in fCompress[] is preferred
       end;
     inc(result);
   end;

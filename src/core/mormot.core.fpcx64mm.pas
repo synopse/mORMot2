@@ -3427,7 +3427,7 @@ begin
   LargeBlocksCircularList.NextLargeBlockHeader := @LargeBlocksCircularList;
 end;
 
-{$I-} // no console ouput error check in write/writeln below
+{$I-} // no console output error check in write/writeln below
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
 

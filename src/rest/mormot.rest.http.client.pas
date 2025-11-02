@@ -790,7 +790,7 @@ begin
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log
   {$endif VERBOSECLIENTLOG}
-  // note that first registered algo will be the prefered one
+  // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then
     // global SHA-256 / AES-256-CFB encryption + SynLZ compression
@@ -848,7 +848,7 @@ begin
   fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
     fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
   fRequest.ExtendedOptions := fExtendedOptions;
-  // note that first registered algo will be the prefered one
+  // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then
     // global SHA-256 / AES-256-CFB encryption + SynLZ compression

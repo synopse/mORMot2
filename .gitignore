@@ -88,3 +88,6 @@ _FOSSIL_
 
 backup/
 .idea/
+
+# Claude Code local settings
+.claude/

@@ -8530,7 +8530,7 @@ var
 
   procedure IgnoreIfDef;
   begin
-    // ignore any $ifdef ... $endif lines (should be at the line begining)
+    // ignore any $ifdef ... $endif lines (should be at the line beginning)
     repeat
       P := GotoNextLine(P);
       if P = nil then

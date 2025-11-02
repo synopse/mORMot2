@@ -528,7 +528,7 @@ type
     procedure OnError(E: Exception);
     procedure DoLog;
   public
-    /// intialize the TRestBatch server-side processing
+    /// initialize the TRestBatch server-side processing
     constructor Create(aRest: TRestOrmServer; aTable: TOrmClass;
       var aData: RawUtf8; aExpectedResultsCount: integer); reintroduce;
     /// execute the TRestBatch server-side processing

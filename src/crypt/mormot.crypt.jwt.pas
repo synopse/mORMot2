@@ -266,7 +266,7 @@ type
       out Jwt: TJwtContent): boolean; overload;
     /// internal method to parse a token according to this JWT expectations
     // - without any cache, digital signature nor time consistency check
-    // - as called internally by Verify(), which is the prefered method to call
+    // - as called internally by Verify(), which is the preferred method to call
     // - see also the associated ParseJwt() function
     procedure Parse(const Token: RawUtf8; var Jwt: TJwtContent;
       headpayload: PValuePUtf8Char = nil; signature: PRawByteString = nil;

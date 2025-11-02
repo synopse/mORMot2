@@ -2264,19 +2264,19 @@ type
     // - a new RawBlob is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
     // or Base64 encoded content ('\uFFF0base64encodedbinary')
-    // - prefered manner is to directly use REST protocol to retrieve a blob field
+    // - preferred manner is to directly use REST protocol to retrieve a blob field
     function GetBlob(Row, Field: PtrInt): RawBlob;
     /// read-only access to a particular Blob value
     // - a new TBytes is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
     //   or Base64 encoded content ('\uFFF0base64encodedbinary')
-    // - prefered manner is to directly use REST protocol to retrieve a blob field
+    // - preferred manner is to directly use REST protocol to retrieve a blob field
     function GetBytes(Row, Field: PtrInt): TBytes;
     /// read-only access to a particular Blob value
     // - a new TCustomMemoryStream is created - caller shall free its instance
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
     //   or Base64 encoded content ('\uFFF0base64encodedbinary')
-    // - prefered manner is to directly use REST protocol to retrieve a blob field
+    // - preferred manner is to directly use REST protocol to retrieve a blob field
     function GetStream(Row, Field: PtrInt): TStream;
     /// read-only access to a particular DateTime field value
     // - expect SQLite3 TEXT field in ISO 8601 'YYYYMMDD hhmmss' or
@@ -9507,7 +9507,7 @@ type
   // designed field, and, if the field value is identical, the ID value is
   // used (it will therefore sort by time all identical values)
   // - code generated is very optimized: stack and memory usage, CPU registers
-  // prefered, multiplication avoided to calculate memory position from index,
+  // preferred, multiplication avoided to calculate memory position from index,
   // hand tuned assembler...
   {$ifdef USERECORDWITHMETHODS}
   TUtf8QuickSort = record
