@@ -715,8 +715,8 @@ type
     atUserPrincipalName,
     atUserAccountControl,
     atSystemFlags,
-    atSAMAccountName,
-    atSAMAccountType,
+    atSamAccountName,
+    atSamAccountType,
     atAdminCount,
     atDescription,
     atGenerationQualifier,
@@ -763,13 +763,13 @@ type
   TLdapAttributeTypes = set of TLdapAttributeType;
 
 var
-  /// the standard "lDAPDisplayName" of our common Attribute Types
+  /// the standard "Ldap-Display-Name" of our common Attribute Types
   // - these value will be interned and recognized internally as raw pointer()
   // - e.g. AttrTypeName[atOrganizationUnitName] = 'ou'
   // - by design, atUndefined would return ''
   AttrTypeName: array[TLdapAttributeType] of RawUtf8;
 
-  /// alternate "lDAPDisplayName" of our common Attribute Types
+  /// alternate "Ldap-Display-Name" of our common Attribute Types
   // - e.g. AttrTypeNameAlt[6] = 'organizationName' and
   // AttrTypeNameAlt[6] = atOrganizationUnitName
   // - defined for unit testing purpose only
@@ -781,9 +781,9 @@ const
     atCommonName, atSurName, atCountryName, atLocalityName, atStateName,
     atStreetAddress, atOrganizationName, atOrganizationUnitName);
 
-  /// the standard RDN of our common Attribute Types
+  /// the standard RDN CN of our common Attribute Types
   // - as retrieved from an actual AD instance catalog
-  // - see AttrTypeName[] for the corresponding standard "lDAPDisplayName"
+  // - see AttrTypeName[] for the corresponding standard "Ldap-Display-Name"
   AttrTypeCommonName: array[TLdapAttributeType] of RawUtf8 = (
     '',                            // atUndefined
     'Obj-Dist-Name',               // atDistinguishedName
@@ -1085,8 +1085,8 @@ type
   // - a "canonicalName" field could be added if roWithCanonicalName is set
   // - roAllValuesAsArray will force all values to be returned as arrays, and
   // roKnownValuesAsArray detect ATS_SINGLEVALUE and store anything else as array
-  // - atNTSecurityDescriptor recognizes known RID unless roNoSddlDomainRid is
-  //  set; it won't recognize known ldapDisplayName unless roSddlKnownUuid is set
+  // - atNTSecurityDescriptor recognizes known RID unless roNoSddlDomainRid is set;
+  //  it won't recognize known "Ldap-Display-Name" unless roSddlKnownUuid is set
   // - roRawValues disable decoding of complex values (map all the following)
   // - roRawBoolean won't generate JSON true/false but keep "TRUE"/"FALSE" string
   // - roRawUac/roRawFlags/roRawGroupType/roRawAccountType disable decoding of
@@ -1283,7 +1283,7 @@ type
     /// find and return first attribute value with the requested type
     // - calls GetAllReadable on the found attribute
     function GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
-    /// access atSAMAccountType attribute value with proper decoding
+    /// access atSamAccountType attribute value with proper decoding
     // - should never be set, because it is defined by the AD at object creation
     function AccountType: TSamAccountType;
     /// access atGroupType attribute value with proper decoding
@@ -1314,11 +1314,11 @@ type
       read fKnownTypes;
   end;
 
-/// recognize the integer value stored in a LDAP atSAMAccountType entry as TSamAccountType
+/// recognize the integer value stored in a LDAP atSamAccountType entry as TSamAccountType
 function SamAccountTypeFromText(const value: RawUtf8): TSamAccountType;
 function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 
-/// convert a TSamAccountType as integer value stored in a LDAP atSAMAccountType entry
+/// convert a TSamAccountType as integer value stored in a LDAP atSamAccountType entry
 function SamAccountTypeValue(sat: TSamAccountType): integer;
 
 /// recognize the text integer value stored in a LDAP atGroupType entry
@@ -2317,7 +2317,7 @@ type
       UnFilterUac: TUserAccountControls = [uacAccountDisable];
       const Match: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
       const BaseDN: RawUtf8 = ''; ObjectNames: PRawUtf8DynArray = nil;
-      Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
+      Attribute: TLdapAttributeType = atSamAccountName): TRawUtf8DynArray;
     /// retrieve the basic information of a LDAP Computer
     // - could lookup by sAMAccountName or distinguishedName
     function GetComputerInfo(const AccountName, DistinguishedName: RawUtf8;
@@ -2346,7 +2346,7 @@ type
       UnFilterUac: TGroupTypes = []; const Match: RawUtf8 = '';
       const CustomFilter: RawUtf8 = ''; const BaseDN: RawUtf8 = '';
       ObjectNames: PRawUtf8DynArray = nil;
-      Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
+      Attribute: TLdapAttributeType = atSamAccountName): TRawUtf8DynArray;
     /// retrieve all User names in the LDAP Server
     // - you can refine your query via CustomFilter or TUserAccountControls
     // - Match allow to search as a (AttributeName=Match) filter
@@ -2356,7 +2356,7 @@ type
       UnFilterUac: TUserAccountControls = [uacAccountDisable];
       const Match: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
       const BaseDN: RawUtf8 = ''; ObjectNames: PRawUtf8DynArray = nil;
-      Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
+      Attribute: TLdapAttributeType = atSamAccountName): TRawUtf8DynArray;
     /// retrieve the basic information of a LDAP Group
     // - could lookup by sAMAccountName or distinguishedName
     function GetGroupInfo(const AccountName, DistinguishedName: RawUtf8;
@@ -4806,7 +4806,7 @@ end;
 
 function TLdapAttributeList.AccountType: TSamAccountType;
 begin
-  result := SamAccountTypeFromText(Get(atSAMAccountType));
+  result := SamAccountTypeFromText(Get(atSamAccountType));
 end;
 
 function TLdapAttributeList.GroupTypes: TGroupTypes;
@@ -5645,7 +5645,7 @@ var
   i: PtrInt;
   t: TLdapAttributeType;
 begin
-  sAMAccountName    := Attributes[atSAMAccountName];
+  sAMAccountName    := Attributes[atSamAccountName];
   distinguishedName := Attributes[atDistinguishedName];
   canonicalName     := DNToCN(distinguishedName, {NoRaise=}true);
   name              := Attributes[atName];
@@ -7447,7 +7447,7 @@ end;
 const
   // TLdapObject attributes, common to TLdapComputer, TLdapGroup and TLdapUser
   LDAPOBJECT_ATTR = [
-    atSAMAccountName,
+    atSamAccountName,
     atDistinguishedName,
     atName,
     atCommonName,
@@ -7553,7 +7553,7 @@ begin
   cDn := NormalizeDN(Join(['CN=', cSafe, ',', ComputerParentDN]));
   cSam := Join([UpperCase(cSafe), '$']); // traditional upper with ending $
   // Search Computer object in the domain
-  cExisting := SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [cSam]);
+  cExisting := SearchFirstFmt([atSamAccountName], '(sAMAccountName=%)', [cSam]);
   // If the search failed, we exit with the error message
   if ResultCode <> LDAP_RES_SUCCESS then
   begin
@@ -7579,7 +7579,7 @@ begin
   end;
   // Create the new computer entry
   attrs := TLdapAttributeList.Create(
-    [atObjectClass, atCommonName, atName, atSAMAccountName],
+    [atObjectClass, atCommonName, atName, atSamAccountName],
     ['computer',    cSafe,        cSafe,  cSam]);
   try
     // attrs.AccountType should not be set, because it is defined by the AD
@@ -7770,11 +7770,11 @@ begin
     filter := FormatUtf8('(|%)', [filter]); // OR operator
   filter := FormatUtf8('(&%%%(member%=%))',
     [OBJECT_FILTER[ofGroups], filter, CustomFilter, NESTED_FLAG[Nested], user]);
-  if Search([atSAMAccountName], filter, BaseDN) and
+  if Search([atSamAccountName], filter, BaseDN) and
      (SearchResult.Count > 0) then
   begin
     if GroupsAN <> nil then
-      GroupsAN^ := SearchResult.ObjectAttributes(atSAMAccountName);
+      GroupsAN^ := SearchResult.ObjectAttributes(atSamAccountName);
     result := true;
   end;
 end;
