@@ -2651,8 +2651,8 @@ begin
   size := fFile.Size;
   if size = 0 then
     exit;
-  n := size div SizeOf(p^);
-  if n * SizeOf(p^) <> size then
+  n := size div SizeOf(THttpCached);
+  if n * SizeOf(THttpCached) <> size then
   begin
     FreeAndNil(fFile);
     EHttpCacheFiles.RaiseUtf8('%.Create: unexpected % file size = %',
@@ -2748,6 +2748,7 @@ begin
     // first time seen: use a new entry
     if void >= 0 then
     begin
+      // we can use a void slot
       p := @fItems[void];
       p^.Hash := h;
       p^.FirstAccess := now;
@@ -2766,6 +2767,7 @@ begin
       p^.Hash := h;
       p^.FirstAccess := now;
       p^.LastAccess := now;
+      // FileUpdateEntry() but for a full 4KB page
       fFile.Seek(ndx * SizeOf(p^), soFromBeginning);
       fFile.WriteBuffer(p^, CACHED_PERPAGE * SizeOf(p^));
     end;
@@ -2782,18 +2784,24 @@ var
   h: THash160;
 begin
   HashNormalize(hash, len, h);
-  p := pointer(fItems);
-  if p <> nil then
-    for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
-      if CacheEqual(@h, @p^.Hash) then
-      begin
-        FillZero(THash256(p^));
-        FileUpdateEntry(p, ndx);
-        result := true;
-        exit;
-      end
-      else
-        inc(p);
+  fSafe.Lock;
+  try
+    p := pointer(fItems);
+    if p <> nil then
+      for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
+        if CacheEqual(@h, @p^.Hash) then
+        begin
+          FillZero(THash256(p^));
+          FileUpdateEntry(p, ndx);
+          result := true;
+          dec(fCount);
+          exit;
+        end
+        else
+          inc(p);
+  finally
+    fSafe.UnLock;
+  end;
   result := false;
 end;
 
