@@ -1264,7 +1264,7 @@ const
     '{3f78c3e5-f79a-46bd-a0b8-9d18116ddc79}',  // kaMsDsAllowedToActOnBehalfOfOtherIdentity
     '{037088f8-0ae1-11d2-b422-00a0c968f939}'); // kaRasInformation
 
-  /// the official ldapDisplayName of our known Active Directory schema attributes
+  /// the official "Ldap-Display-Name" of our known Active Directory schema attributes
   ATTR_TXT: array[TAdsKnownAttribute] of RawUtf8 = (
     '',                                        // kaNull
     'User-Account-Restrictions',               // kaUserAccountRestrictions
@@ -1317,12 +1317,12 @@ function ToText(a: TAdsKnownAttribute): PShortString; overload;
 // - returns kaNull if the supplied TGuid was not found
 function UuidToKnownAttribute(const u: TGuid): TAdsKnownAttribute;
 
-/// recognize the ldapDisplayName of our TAdsKnownAttribute selection
+/// recognize the "Ldap-Display-Name" of our TAdsKnownAttribute selection
 // - use FindNonVoidRawUtf8I(ATTR_TXT[]) O(n) case-insensitive brute force search
-// - returns kaNull if the supplied text does not match any known ldapDisplayName
+// - returns kaNull if the supplied text does not match any known Ldap-Display-Name
 function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
 
-/// append an ObjectID as TAdsKnownAttribute's ldapDisplayName, or as UUID hexa
+/// append an ObjectID as TAdsKnownAttribute's Ldap-Display-Name, or as UUID hexa
 // - if u is a TAdsKnownAttribute, append its ATTR_TXT[] text
 // - otherwise, append regular '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
 // - can be used as TAppendShortUuid optional parameter for SDDL generation
@@ -1337,7 +1337,7 @@ procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
 procedure ObjectUuidToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid: TGuid; uuid: TAppendShortUuid; var Text: RawUtf8);
 
-/// parse an ObjectID, recognizing TAdsKnownAttribute's ldapDisplayName or UUID hexa
+/// parse an ObjectID, recognizing TAdsKnownAttribute's Ldap-Display-Name or UUID hexa
 // - can be used as TShortToUuid optional parameter for SDDL parsing
 // - you can also define your own TShortToUuidfunction
 // - use O(n) case-insensitive brute force search over ATTR_TXT[] values
@@ -1807,7 +1807,7 @@ type
     /// decode a Security Descriptor from its SDDL textual representation
     // - could also recognize SDDL RID placeholders, with the specified
     // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
-    // - recognize ldapDisplayName of TAdsKnownAttribute if uuid=@ShortToKnownUuid
+    // - recognize Ldap-Display-Name of TAdsKnownAttribute if uuid=@ShortToKnownUuid
     function FromText(const SddlText: RawUtf8;
       const RidDomain: RawUtf8 = ''; uuid: TShortToUuid = nil): TAceTextParse; overload;
     /// decode a Security Descriptor from its SDDL textual representation
@@ -1835,7 +1835,7 @@ type
       saf: TSecAceFlags = []): PSecAce; overload;
     /// add one new ACE to the DACL (or SACL) from SDDL text
     // - dom <> nil would enable SDDL RID placeholders recognition
-    // - recognize ldapDisplayName of TAdsKnownAttribute if uuid=@ShortToKnownUuid
+    // - recognize Ldap-Display-Name of TAdsKnownAttribute if uuid=@ShortToKnownUuid
     // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
     // - return nil on sddl input text parsing error, or the newly added entry
     function Add(const sddl: RawUtf8; dom: PSid = nil; uuid: TShortToUuid = nil;
@@ -3546,7 +3546,7 @@ begin
   if a = kaNull then
     AppendShortUuid(u, s) // append as regular UUID hexadecimal text
   else
-    AppendShortAnsi7String(ATTR_TXT[a], s); // append the ldapDisplayName
+    AppendShortAnsi7String(ATTR_TXT[a], s); // append the Ldap-Display-Name
 end;
 
 procedure ObjectUuidToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
