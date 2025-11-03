@@ -1011,11 +1011,11 @@ type
     uacUserUseAesKeys);                   // 80000000
 
   /// define TLdapUser.userAccountControl decoded flags
-  // - use UserAccountControlsFromInteger() UserAccountControlsFromText() and
+  // - use UserAccountControlsFromInteger(), UserAccountControlsFromText() and
   // UserAccountControlsValue() functions to encode/decode such values
   TUserAccountControls = set of TUserAccountControl;
 
-  /// the decoded fields of TLdapUser.userAccountControl
+  /// the decoded fields of atMsdsSupportedEncryptionTypes values
   // - the encryption algorithms supported by user, computer or trust accounts
   // - see https://ldapwiki.com/wiki/Wiki.jsp?page=MsDS-SupportedEncryptionTypes
   // https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-supportedencryptiontypes
@@ -1026,11 +1026,14 @@ type
     metAes128CtsHmacSha1,      // 8
     metAes256CtsHmacSha1);     // 10 = 16
 
-  /// define msds-supportedencryptiontypes decoded flags
+  /// define TLdapAttributeList.SupportedEncryptionTypes decoded flags
+  // - use MsdsSupportedEncryptionTypesFromInteger(),
+  // MsdsSupportedEncryptionTypesFromText() and
+  // MsdsSupportedEncryptionTypesValue () functions to encode/decode such values
   TMsdsSupportedEncryptionTypes = set of TMsdsSupportedEncryptionType;
 
   /// known sAMAccountType values
-  // - use SamAccountTypeFromInteger() SamAccountTypeFromText() and
+  // - use SamAccountTypeFromInteger(), SamAccountTypeFromText() and
   // SamAccountTypeValue() functions to encode/decode such values
   TSamAccountType = (
     satUnknown,
@@ -1226,6 +1229,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
+    function GetSupportedEncryptionTypes: TMsdsSupportedEncryptionTypes;
+    procedure SetSupportedEncryptionTypes(Value: TMsdsSupportedEncryptionTypes);
     procedure AfterModify;
   public
     /// initialize the attribute list with some type/value pairs
@@ -1301,6 +1306,9 @@ type
     /// access atUserAccountControl attribute value with proper decoding/encoding
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
+    /// access atMsdsSupportedEncryptionTypes attribute value with proper decoding/encoding
+    property SupportedEncryptionTypes: TMsdsSupportedEncryptionTypes
+      read GetSupportedEncryptionTypes write SetSupportedEncryptionTypes;
     /// access any attribute value from its known type
     // - calls GetReadable(0) to read, or Add(aoReplaceValue) to write
     // - returns empty string if not found
@@ -4838,6 +4846,18 @@ end;
 procedure TLdapAttributeList.SetUserAccountControl(Value: TUserAccountControls);
 begin
   Add(atUserAccountControl, ToUtf8(UserAccountControlsValue(Value)), aoReplaceValue);
+end;
+
+function TLdapAttributeList.GetSupportedEncryptionTypes: TMsdsSupportedEncryptionTypes;
+begin
+  result := MsdsSupportedEncryptionTypesFromText(Get(atMsdsSupportedEncryptionTypes));
+end;
+
+procedure TLdapAttributeList.SetSupportedEncryptionTypes(
+  Value: TMsdsSupportedEncryptionTypes);
+begin
+  Add(atMsdsSupportedEncryptionTypes,
+    ToUtf8(MsdsSupportedEncryptionTypesValue(Value)), aoReplaceValue);
 end;
 
 function TLdapAttributeList.Domain: PSid;
