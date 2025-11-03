@@ -4831,7 +4831,7 @@ begin // where to cache our computed UUID as a local file
   result := GetSystemPath(spCommonData) + 'synopse.uuid';
 end;
 
-const
+const // https://learn.microsoft.com/en-us/windows/win32/sysinfo/image-file-machine-constants
   IMAGE_FILE_MACHINE_UNKNOWN = 0; // if the process is not under WOW64
   IMAGE_FILE_MACHINE_I386    = $014c;
   IMAGE_FILE_MACHINE_AMD64   = $8664;
@@ -4899,17 +4899,13 @@ begin
     @GetNativeSystemInfo := nil;
   // see https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation
   IsWow64Process2 := LibraryResolve(h, 'IsWow64Process2'); // Windows 10+
-  process := 0; // = IMAGE_FILE_MACHINE_UNKNOWN if not under WOW64
+  process := IMAGE_FILE_MACHINE_UNKNOWN; // default = not under WOW64
   machine := 0;
   IsWow64Emulation := Assigned(IsWow64Process2) and
     IsWow64Process2(GetCurrentProcess, process, machine) and
-    {$ifdef CPUINTEL}
-    (machine <> IMAGE_FILE_MACHINE_I386) and
-    (machine <> IMAGE_FILE_MACHINE_AMD64); // detecting PRISM is enough by now
-    {$else}
+    {$ifdef CPUINTEL} not {$endif} // detecting PRISM is enough by now
     ((machine = IMAGE_FILE_MACHINE_I386) or
      (machine = IMAGE_FILE_MACHINE_AMD64));
-    {$endif CPUINTEL}
   // Vista+ kernel32.dll APIs
   GetTickCount64 := LibraryResolve(h, 'GetTickCount64'); // Vista+
   if not Assigned(GetTickCount64) then
