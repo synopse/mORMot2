@@ -690,6 +690,7 @@ type
     atsIntegerSystemFlags,
     atsIntegerGroupType,
     atsIntegerAccountType,
+    atsIntegerMsdsSupportedEncryptionTypes,
     atsFileTime,
     atsTextTime,
     atsSid,
@@ -714,6 +715,7 @@ type
     atDisplayName,
     atUserPrincipalName,
     atUserAccountControl,
+    atMsdsSupportedEncryptionTypes,
     atSystemFlags,
     atSamAccountName,
     atSamAccountType,
@@ -785,121 +787,123 @@ const
   // - as retrieved from an actual AD instance catalog
   // - see AttrTypeName[] for the corresponding standard "Ldap-Display-Name"
   AttrTypeCommonName: array[TLdapAttributeType] of RawUtf8 = (
-    '',                            // atUndefined
-    'Obj-Dist-Name',               // atDistinguishedName
-    'Object-Class',                // atObjectClass
-    'Object-Category',             // atObjectCategory
-    'Alias',                       // atAlias
-    'RDN',                         // atName
-    'Common-Name',                 // atCommonName
-    'Surname',                     // atSurName
-    'Given-Name',                  // atGivenName
-    'Display-Name',                // atDisplayName
-    'User-Principal-Name',         // atUserPrincipalName
-    'User-Account-Control',        // atUserAccountControl
-    'System-Flags',                // atSystemFlags
-    'SAM-Account-Name',            // atSAMAccountName
-    'SAM-Account-Type',            // atSAMAccountType
-    'Admin-Count',                 // atAdminCount
-    'Description',                 // atDescription
-    'Generation-Qualifier',        // atGenerationQualifier
-    'Initials',                    // atInitials
-    'Organization-Name',           // atOrganizationName
-    'Organizational-Unit-Name',    // atOrganizationUnitName
-    'E-mail-Addresses',            // atMail
-    'Is-Member-Of-DL',             // atMemberOf
-    'Country-Name',                // atCountryName
-    'Locality-Name',               // atLocalityName
-    'State-Or-Province-Name',      // atStateName
-    'Street-Address',              // atStreetAddress
-    'Telephone-Number',            // atTelephoneNumber
-    'Title',                       // atTitle
-    'Serial-Number',               // atSerialNumber
-    'Member',                      // atMember
-    'Owner',                       // atOwner
-    'Group-Type',                  // atGroupType
-    'Primary-Group-ID',            // atPrimaryGroupID
-    'NT-Security-Descriptor',      // atNTSecurityDescriptor
-    'Object-Sid',                  // atObjectSid
-    'Object-Guid',                 // atObjectGuid
-    'Logon-Count',                 // atLogonCount
-    'Bad-Pwd-Count',               // atBadPwdCount
-    'DNS-Host-Name',               // atDnsHostName
-    'Account-Expires',             // atAccountExpires
-    'Bad-Password-Time',           // atBadPasswordTime
-    'Last-Logon',                  // atLastLogon
-    'Last-Logon-Timestamp',        // atLastLogonTimestamp
-    'Last-Logoff',                 // atLastLogoff
-    'Lockout-Time',                // atLockoutTime
-    'Pwd-Last-Set',                // atPwdLastSet
-    'ms-Mcs-AdmPwdExpirationTime', // atMcsAdmPwdExpirationTime
-    'When-Created',                // atWhenCreated
-    'When-Changed',                // atWhenChanged
-    'Operating-System',            // atOperatingSystem
-    'Operating-System-Version',    // atOperatingSystemVersion
-    'Service-Principal-Name',      // atServicePrincipalName
-    'Unicode-Pwd',                 // atUnicodePwd
-    'Account-Name-History',        // atAccountNameHistory
-    'Token-Groups');               // atTokenGroups
+    '',                                         // atUndefined
+    'Obj-Dist-Name',                     // atDistinguishedName
+    'Object-Class',                      // atObjectClass
+    'Object-Category',                   // atObjectCategory
+    'Alias',                             // atAlias
+    'RDN',                               // atName
+    'Common-Name',                       // atCommonName
+    'Surname',                           // atSurName
+    'Given-Name',                        // atGivenName
+    'Display-Name',                      // atDisplayName
+    'User-Principal-Name',               // atUserPrincipalName
+    'User-Account-Control',              // atUserAccountControl
+    'ms-DS-Supported-Encryption-Types',  // atMsdsSupportedEncryptionTypes
+    'System-Flags',                      // atSystemFlags
+    'SAM-Account-Name',                  // atSamAccountName
+    'SAM-Account-Type',                  // atSamAccountType
+    'Admin-Count',                       // atAdminCount
+    'Description',                       // atDescription
+    'Generation-Qualifier',              // atGenerationQualifier
+    'Initials',                          // atInitials
+    'Organization-Name',                 // atOrganizationName
+    'Organizational-Unit-Name',          // atOrganizationUnitName
+    'E-mail-Addresses',                  // atMail
+    'Is-Member-Of-DL',                   // atMemberOf
+    'Country-Name',                      // atCountryName
+    'Locality-Name',                     // atLocalityName
+    'State-Or-Province-Name',            // atStateName
+    'Street-Address',                    // atStreetAddress
+    'Telephone-Number',                  // atTelephoneNumber
+    'Title',                             // atTitle
+    'Serial-Number',                     // atSerialNumber
+    'Member',                            // atMember
+    'Owner',                             // atOwner
+    'Group-Type',                        // atGroupType
+    'Primary-Group-ID',                  // atPrimaryGroupID
+    'NT-Security-Descriptor',            // atNTSecurityDescriptor
+    'Object-Sid',                        // atObjectSid
+    'Object-Guid',                       // atObjectGuid
+    'Logon-Count',                       // atLogonCount
+    'Bad-Pwd-Count',                     // atBadPwdCount
+    'DNS-Host-Name',                     // atDnsHostName
+    'Account-Expires',                   // atAccountExpires
+    'Bad-Password-Time',                 // atBadPasswordTime
+    'Last-Logon',                        // atLastLogon
+    'Last-Logon-Timestamp',              // atLastLogonTimestamp
+    'Last-Logoff',                       // atLastLogoff
+    'Lockout-Time',                      // atLockoutTime
+    'Pwd-Last-Set',                      // atPwdLastSet
+    'ms-Mcs-AdmPwdExpirationTime',       // atMcsAdmPwdExpirationTime
+    'When-Created',                      // atWhenCreated
+    'When-Changed',                      // atWhenChanged
+    'Operating-System',                  // atOperatingSystem
+    'Operating-System-Version',          // atOperatingSystemVersion
+    'Service-Principal-Name',            // atServicePrincipalName
+    'Unicode-Pwd',                       // atUnicodePwd
+    'Account-Name-History',              // atAccountNameHistory
+    'Token-Groups');                     // atTokenGroups
 
   /// how all TLdapAttributeType are actually stored in the LDAP raw value
   AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
-    atsAny,                         // atUndefined
-    atsRawUtf8,                     // atDistinguishedName
-    atsRawUtf8,                     // atObjectClass
-    atsRawUtf8,                     // otObjectCategory
-    atsRawUtf8,                     // atAlias
-    atsRawUtf8,                     // atName
-    atsRawUtf8,                     // atCommonName
-    atsRawUtf8,                     // atSurName
-    atsRawUtf8,                     // atGivenName
-    atsRawUtf8,                     // atDisplayName
-    atsRawUtf8,                     // atUserPrincipalName
-    atsIntegerUserAccountControl,   // atUserAccountControl
-    atsIntegerSystemFlags,          // atSystemFlags
-    atsRawUtf8,                     // atSAMAccountName
-    atsIntegerAccountType,          // atSAMAccountType
-    atsInteger,                     // atAdminCount
-    atsRawUtf8,                     // atDescription
-    atsRawUtf8,                     // atGenerationQualifier
-    atsRawUtf8,                     // atInitials
-    atsRawUtf8,                     // atOrganizationName
-    atsRawUtf8,                     // atOrganizationUnitName
-    atsRawUtf8,                     // atMail
-    atsRawUtf8,                     // atMemberOf
-    atsRawUtf8,                     // atCountryName
-    atsRawUtf8,                     // atLocalityName
-    atsRawUtf8,                     // atStateName
-    atsRawUtf8,                     // atStreetAddress
-    atsRawUtf8,                     // atTelephoneNumber
-    atsRawUtf8,                     // atTitle
-    atsRawUtf8,                     // atSerialNumber
-    atsRawUtf8,                     // atMember
-    atsRawUtf8,                     // atOwner
-    atsIntegerGroupType,            // atGroupType
-    atsInteger,                     // atPrimaryGroupID
-    atsSecurityDescriptor,          // atNTSecurityDescriptor
-    atsSid,                         // atObjectSid
-    atsGuid,                        // atObjectGuid
-    atsInteger,                     // atLogonCount
-    atsInteger,                     // atBadPwdCount
-    atsRawUtf8,                     // atDnsHostName
-    atsFileTime,                    // atAccountExpires
-    atsFileTime,                    // atBadPasswordTime
-    atsFileTime,                    // atLastLogon
-    atsFileTime,                    // atLastLogonTimestamp
-    atsFileTime,                    // atLastLogoff
-    atsFileTime,                    // atLockoutTime
-    atsFileTime,                    // atPwdLastSet
-    atsFileTime,                    // atMcsAdmPwdExpirationTime
-    atsTextTime,                    // atWhenCreated
-    atsTextTime,                    // atWhenChanged
-    atsRawUtf8,                     // atOperatingSystem
-    atsRawUtf8,                     // atOperatingSystemVersion
-    atsRawUtf8,                     // atServicePrincipalName
-    atsUnicodePwd,                  // atUnicodePwd
-    atsRawUtf8,                     // atAccountNameHistory
-    atsSid);                        // atTokenGroups
+    atsAny,                                 // atUndefined
+    atsRawUtf8,                             // atDistinguishedName
+    atsRawUtf8,                             // atObjectClass
+    atsRawUtf8,                             // otObjectCategory
+    atsRawUtf8,                             // atAlias
+    atsRawUtf8,                             // atName
+    atsRawUtf8,                             // atCommonName
+    atsRawUtf8,                             // atSurName
+    atsRawUtf8,                             // atGivenName
+    atsRawUtf8,                             // atDisplayName
+    atsRawUtf8,                             // atUserPrincipalName
+    atsIntegerUserAccountControl,           // atUserAccountControl
+    atsIntegerMsdsSupportedEncryptionTypes, // atMsdsSupportedEncryptionTypes
+    atsIntegerSystemFlags,                  // atSystemFlags
+    atsRawUtf8,                             // atSamAccountName
+    atsIntegerAccountType,                  // atSamAccountType
+    atsInteger,                             // atAdminCount
+    atsRawUtf8,                             // atDescription
+    atsRawUtf8,                             // atGenerationQualifier
+    atsRawUtf8,                             // atInitials
+    atsRawUtf8,                             // atOrganizationName
+    atsRawUtf8,                             // atOrganizationUnitName
+    atsRawUtf8,                             // atMail
+    atsRawUtf8,                             // atMemberOf
+    atsRawUtf8,                             // atCountryName
+    atsRawUtf8,                             // atLocalityName
+    atsRawUtf8,                             // atStateName
+    atsRawUtf8,                             // atStreetAddress
+    atsRawUtf8,                             // atTelephoneNumber
+    atsRawUtf8,                             // atTitle
+    atsRawUtf8,                             // atSerialNumber
+    atsRawUtf8,                             // atMember
+    atsRawUtf8,                             // atOwner
+    atsIntegerGroupType,                    // atGroupType
+    atsInteger,                             // atPrimaryGroupID
+    atsSecurityDescriptor,                  // atNTSecurityDescriptor
+    atsSid,                                 // atObjectSid
+    atsGuid,                                // atObjectGuid
+    atsInteger,                             // atLogonCount
+    atsInteger,                             // atBadPwdCount
+    atsRawUtf8,                             // atDnsHostName
+    atsFileTime,                            // atAccountExpires
+    atsFileTime,                            // atBadPasswordTime
+    atsFileTime,                            // atLastLogon
+    atsFileTime,                            // atLastLogonTimestamp
+    atsFileTime,                            // atLastLogoff
+    atsFileTime,                            // atLockoutTime
+    atsFileTime,                            // atPwdLastSet
+    atsFileTime,                            // atMcsAdmPwdExpirationTime
+    atsTextTime,                            // atWhenCreated
+    atsTextTime,                            // atWhenChanged
+    atsRawUtf8,                             // atOperatingSystem
+    atsRawUtf8,                             // atOperatingSystemVersion
+    atsRawUtf8,                             // atServicePrincipalName
+    atsUnicodePwd,                          // atUnicodePwd
+    atsRawUtf8,                             // atAccountNameHistory
+    atsSid);                                // atTokenGroups
 
   /// the LDAP raw values stored as UTF-8, which do not require any conversion
   ATS_READABLE = [atsRawUtf8 .. atsIntegerAccountType];
@@ -917,7 +921,8 @@ const
     atUndefined,
     atDistinguishedName, atObjectCategory, atName, atCommonName,
     atSurName, atDisplayName, atUserPrincipalName, atUserAccountControl,
-    atSystemFlags, atSAMAccountName, atSAMAccountType, atAdminCount,
+    atMsdsSupportedEncryptionTypes, atSystemFlags,
+    atSamAccountName, atSamAccountType, atAdminCount,
     atGenerationQualifier, atInitials, atMail, atCountryName, atLocalityName,
     atStateName, atStreetAddress, atTelephoneNumber, atTitle, atOwner,
     atGroupType, atPrimaryGroupID, atNTSecurityDescriptor, atObjectSid,
@@ -1089,8 +1094,8 @@ type
   //  it won't recognize known "Ldap-Display-Name" unless roSddlKnownUuid is set
   // - roRawValues disable decoding of complex values (map all the following)
   // - roRawBoolean won't generate JSON true/false but keep "TRUE"/"FALSE" string
-  // - roRawUac/roRawFlags/roRawGroupType/roRawAccountType disable decoding of
-  // of atUserAccountControl/atSystemFlags/atGroupType/atAccountType values
+  // - roRawUac/roRawFlags/roRawGroupType/roRawAccountType/roRawEncryptionTypes
+  // disable decoding of of atUserAccountControl-like values
   TLdapResultOptions = set of (
     roTypesOnly,
     roSortByName,
@@ -1111,7 +1116,8 @@ type
     roRawUac,
     roRawFlags,
     roRawGroupType,
-    roRawAccountType);
+    roRawAccountType,
+    roRawEncryptionTypes);
 
   /// store a named LDAP attribute with the list of its values
   // - inherit from TClonable: Assign or Clone/CloneObjArray methods are usable
@@ -3582,62 +3588,63 @@ end;
 const
   // reference names to fill the global AttrTypeName[]
   _AttrTypeName: array[TLdapAttributeType] of RawUtf8 = (
-    '',                            // atUndefined
-    'distinguishedName',           // atDistinguishedName
-    'objectClass',                 // atObjectClass
-    'objectCategory',              // otObjectCategory
-    'alias',                       // atAlias
-    'name',                        // atName
-    'cn',                          // atCommonName
-    'sn',                          // atSurName
-    'givenName',                   // atGivenName
-    'displayName',                 // atDisplayName
-    'userPrincipalName',           // atUserPrincipalName
-    'userAccountControl',          // atUserAccountControl
-    'systemFlags',                 // atSystemFlags
-    'sAMAccountName',              // atSAMAccountName
-    'sAMAccountType',              // atSAMAccountType
-    'adminCount',                  // atAdminCount
-    'description',                 // atDescription
-    'generationQualifier',         // atGenerationQualifier
-    'initials',                    // atInitials
-    'o',                           // atOrganizationName
-    'ou',                          // atOrganizationUnitName
-    'mail',                        // atMail
-    'memberOf',                    // atMemberOf
-    'c',                           // atCountryName
-    'l',                           // atLocalityName
-    'st',                          // atStateName
-    'street',                      // atStreetAddress
-    'telephoneNumber',             // atTelephoneNumber
-    'title',                       // atTitle
-    'serialNumber',                // atSerialNumber
-    'member',                      // atMember
-    'owner',                       // atOwner
-    'groupType',                   // atGroupType
-    'primaryGroupID',              // atPrimaryGroupID
-    'nTSecurityDescriptor',        // atNTSecurityDescriptor
-    'objectSid',                   // atObjectSid
-    'objectGUID',                  // atObjectGuid
-    'logonCount',                  // atLogonCount
-    'badPwdCount',                 // atBadPwdCount
-    'dNSHostName',                 // atDnsHostName
-    'accountExpires',              // atAccountExpires
-    'badPasswordTime',             // atBadPasswordTime
-    'lastLogon',                   // atLastLogon
-    'lastLogonTimestamp',          // atLastLogonTimestamp
-    'lastLogoff',                  // atLastLogoff
-    'lockoutTime',                 // atLockoutTime
-    'pwdLastSet',                  // atPwdLastSet
-    'ms-MCS-AdmPwdExpirationTime', // atMcsAdmPwdExpirationTime
-    'whenCreated',                 // atWhenCreated
-    'whenChanged',                 // atWhenChanged
-    'operatingSystem',             // atOperatingSystem
-    'operatingSystemVersion',      // atOperatingSystemVersion
-    'servicePrincipalName',        // atServicePrincipalName
-    'unicodePwd',                  // atUnicodePwd
-    'accountNameHistory',          // atAccountNameHistory
-    'tokenGroups');                // atTokenGroups
+    '',                              // atUndefined
+    'distinguishedName',             // atDistinguishedName
+    'objectClass',                   // atObjectClass
+    'objectCategory',                // otObjectCategory
+    'alias',                         // atAlias
+    'name',                          // atName
+    'cn',                            // atCommonName
+    'sn',                            // atSurName
+    'givenName',                     // atGivenName
+    'displayName',                   // atDisplayName
+    'userPrincipalName',             // atUserPrincipalName
+    'userAccountControl',            // atUserAccountControl
+    'msDS-SupportedEncryptionTypes', // atMsdsSupportedEncryptionTypes
+    'systemFlags',                   // atSystemFlags
+    'sAMAccountName',                // atSamAccountName
+    'sAMAccountType',                // atSamAccountType
+    'adminCount',                    // atAdminCount
+    'description',                   // atDescription
+    'generationQualifier',           // atGenerationQualifier
+    'initials',                      // atInitials
+    'o',                             // atOrganizationName
+    'ou',                            // atOrganizationUnitName
+    'mail',                          // atMail
+    'memberOf',                      // atMemberOf
+    'c',                             // atCountryName
+    'l',                             // atLocalityName
+    'st',                            // atStateName
+    'street',                        // atStreetAddress
+    'telephoneNumber',               // atTelephoneNumber
+    'title',                         // atTitle
+    'serialNumber',                  // atSerialNumber
+    'member',                        // atMember
+    'owner',                         // atOwner
+    'groupType',                     // atGroupType
+    'primaryGroupID',                // atPrimaryGroupID
+    'nTSecurityDescriptor',          // atNTSecurityDescriptor
+    'objectSid',                     // atObjectSid
+    'objectGUID',                    // atObjectGuid
+    'logonCount',                    // atLogonCount
+    'badPwdCount',                   // atBadPwdCount
+    'dNSHostName',                   // atDnsHostName
+    'accountExpires',                // atAccountExpires
+    'badPasswordTime',               // atBadPasswordTime
+    'lastLogon',                     // atLastLogon
+    'lastLogonTimestamp',            // atLastLogonTimestamp
+    'lastLogoff',                    // atLastLogoff
+    'lockoutTime',                   // atLockoutTime
+    'pwdLastSet',                    // atPwdLastSet
+    'ms-MCS-AdmPwdExpirationTime',   // atMcsAdmPwdExpirationTime
+    'whenCreated',                   // atWhenCreated
+    'whenChanged',                   // atWhenChanged
+    'operatingSystem',               // atOperatingSystem
+    'operatingSystemVersion',        // atOperatingSystemVersion
+    'servicePrincipalName',          // atServicePrincipalName
+    'unicodePwd',                    // atUnicodePwd
+    'accountNameHistory',            // atAccountNameHistory
+    'tokenGroups');                  // atTokenGroups
 
   // reference names to fill the global AttrTypeNameAlt[]
   _AttrTypeNameAlt: array[0 .. high(AttrTypeNameAlt)] of RawUtf8 = (
@@ -3750,6 +3757,7 @@ begin
     atsRawUtf8, // most used - LDAP v3 requires UTF-8 encoding
     atsInteger,
     atsIntegerUserAccountControl,
+    atsIntegerMsdsSupportedEncryptionTypes,
     atsIntegerSystemFlags,
     atsIntegerGroupType,
     atsIntegerAccountType:
@@ -4357,11 +4365,14 @@ end;
 procedure TLdapAttribute.SetVariantOne(var v: TVarData; const s: RawUtf8;
   options: TLdapResultOptions; dom: PSid; uuid: TAppendShortUuid);
 var
-  i: integer;
+  i32: integer;
   uac: TUserAccountControls;
   gt: TGroupTypes;
   sat: TSamAccountType;
   sf: TSystemFlags;
+  met: TMsdsSupportedEncryptionTypes;
+label
+  returni32;
 begin
   if not (roRawValues in options) then
     case fKnownTypeStorage of
@@ -4390,67 +4401,67 @@ begin
             end;
         end;
       atsIntegerUserAccountControl:
-        if ToInteger(s, i) then
+        if ToInteger(s, i32) then
           if roRawUac in options then
           begin
-            v.VType := varInteger;
-            v.VInteger := i;
+returni32:  v.VType := varInteger;
+            v.VInteger := i32;
             exit;
           end
           else
           begin
-            uac := UserAccountControlsFromInteger(i);
+            uac := UserAccountControlsFromInteger(i32);
             TDocVariantData(v).InitArrayFromSet(
               TypeInfo(TUserAccountControls), uac, JSON_FAST, {trimmed=}true);
             exit;
           end;
+      atsIntegerMsdsSupportedEncryptionTypes:
+      if ToInteger(s, i32) then
+        if roRawEncryptionTypes in options then
+          goto returni32
+        else
+        begin
+          met := MsdsSupportedEncryptionTypesFromInteger(i32);
+          TDocVariantData(v).InitArrayFromSet(
+            TypeInfo(TMsdsSupportedEncryptionTypes), met, JSON_FAST, {trimmed=}true);
+          exit;
+        end;
       atsIntegerSystemFlags:
-        if ToInteger(s, i) then
+        if ToInteger(s, i32) then
           if roRawFlags in options then
-          begin
-            v.VType := varInteger;
-            v.VInteger := i;
-            exit;
-          end
+            goto returni32
           else
           begin
-            sf := SystemFlagsFromInteger(i);
+            sf := SystemFlagsFromInteger(i32);
             TDocVariantData(v).InitArrayFromSet(
               TypeInfo(TSystemFlags), sf, JSON_FAST, {trimmed=}true);
             exit;
           end;
       atsIntegerGroupType:
-        if ToInteger(s, i) then
+        if ToInteger(s, i32) then
           if roRawGroupType in options then
-          begin
-            v.VType := varInteger;
-            v.VInteger := i;
-            exit;
-          end
+            goto returni32
           else
           begin
-            gt := GroupTypesFromInteger(i);
+            gt := GroupTypesFromInteger(i32);
             TDocVariantData(v).InitArrayFromSet(
               TypeInfo(TGroupTypes), gt, JSON_FAST, {trimmed=}true);
             exit;
           end;
       atsIntegerAccountType:
-        if ToInteger(s, i) then
+        if ToInteger(s, i32) then
         begin
           if roRawAccountType in options then
             sat := satUnknown
           else
-            sat := SamAccountTypeFromInteger(i);
+            sat := SamAccountTypeFromInteger(i32);
           if sat <> satUnknown then
           begin
             v.VType := varString;
             ToTextTrimmed(sat, RawUtf8(v.VAny));
           end
           else
-          begin
-            v.VType := varInteger; // store satUnknown as integer
-            v.VInteger := i;
-          end;
+            goto returni32;
           exit;
         end;
       atsFileTime:
