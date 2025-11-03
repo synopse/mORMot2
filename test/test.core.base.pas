@@ -2480,6 +2480,8 @@ var
   m: TRttiMap;
   fo, fr: TRttiFilter;
   err, err2: string;
+  oa: TOrmPeopleObjArray;
+  pa: array of TRecordPeople;
 begin
   // FillZeroRtti()
   CheckEqual(lic.CustomerName, '');
@@ -2733,6 +2735,23 @@ begin
     o1.Free;
     o2.Free;
   end;
+  // TRttiMap.ToArrayA/B methods
+  Check(oa = nil);
+  Check(pa = nil);
+  m.ToArrayA(oa, pa);
+  Check(oa = nil);
+  Check(pa = nil);
+  m.ToArrayB(oa, pa);
+  Check(oa = nil);
+  Check(pa = nil);
+  SetLength(pa, 1);
+  pa[0] := p;
+  m.ToArrayA(oa, pa);
+  CheckEqual(length(oa), 1);
+  Check(oa[0] <> nil);
+  CheckEqual(oa[0].FirstName, p.FirstName);
+  CheckEqual(m.Compare(oa[0], @pa[0]), 0, 'array1');
+  ObjArrayClear(oa);
   // TRttiFilter validation with p record
   fr := TRttiFilter.Create(TypeInfo(TRecordPeople));
   try
