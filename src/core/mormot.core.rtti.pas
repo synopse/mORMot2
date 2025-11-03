@@ -3212,10 +3212,10 @@ type
     // !  map.Init(TMyClass, TypeInfo(TMyRecord)).AutoMap;
     // !  map.ToA(c, @r); // from TMyRecord to TMyClass
     // !  map.ToB(c, @r); // from TMyClass to TMyRecord
-    procedure ToA(A, B: pointer); overload;
+    procedure ToA(A, B: pointer); overload; {$ifdef HASINLINE} inline; {$endif}
     /// thread-safe copy mapped A fields values into B
     // - A/B are either TObject instance or @record pointer, depending on Init()
-    procedure ToB(A, B: pointer); overload;
+    procedure ToB(A, B: pointer); overload; {$ifdef HASINLINE} inline; {$endif}
     /// thread-safe create a new A, copying mapped field values from B
     // - if Init(A) was a class, returned pointer is a new class instance,
     // which should be released via Free
@@ -3270,8 +3270,7 @@ type
 
 // low level function defined here for proper inlining - do not call
 procedure RttiMapTo(fromPtr, toPtr: PAnsiChar; fromRtti: TRttiCustom;
-  map: PPRttiCustomProp); {$ifdef HASINLINE} inline; {$endif}
-
+  map: PPRttiCustomProp);
 
 { *********** TObjectWithRttiMethods TObjectWithID TClonable Classes }
 
@@ -10608,7 +10607,7 @@ begin
     result := aRtti.ClassNewInstance
   else
     result := AllocMem(aRtti.Size);
-  ToA(result, B);
+  RttiMapTo(B, result, bRtti, pointer(b2a));
 end;
 
 function TRttiMap.ToB(A: pointer): pointer;
@@ -10617,7 +10616,7 @@ begin
     result := bRtti.ClassNewInstance
   else
     result := AllocMem(bRtti.Size);
-  ToB(A, result);
+  RttiMapTo(A, result, aRtti, pointer(a2b));
 end;
 
 function TRttiMap.Compare(A, B: pointer; CaseInsensitive: boolean): integer;
@@ -10640,7 +10639,7 @@ begin
     inc(pb);
     dec(n);
   until n = 0;
-  result := 0;
+  result := 0; // all mapped properties are (born) equal
 end;
 
 procedure TRttiMap.RandomA(A: pointer);
