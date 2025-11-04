@@ -8,6 +8,8 @@
 
 { ****************** Unicode, Time, File process }
 
+{$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
+
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
   overload; forward;
 procedure _fmt(const Fmt: string; const Args: array of const;
@@ -2142,7 +2144,7 @@ type
     th32ModuleID:DWord;            // associated exe
     cntThreads: DWord;
     th32ParentProcessID: DWord;    // this process's parent process
-    pcPriClassBase: integer;          // Base priority of process's threads
+    pcPriClassBase: integer;       // base priority of process's threads
     dwFlags: DWord;
     szExeFile: array [0..MAX_PATH - 1] of WideChar;   // Path
   end;
@@ -2151,7 +2153,7 @@ type
     dwSize: DWord;
     cntUsage: DWord;
     th32ThreadID: DWord;       // this thread
-    th32OwnerProcessID: DWord; // Process this thread is associated with
+    th32OwnerProcessID: DWord; // process this thread is associated with
     tpBasePri: integer;
     tpDeltaPri: integer;
     dwFlags: DWord;
@@ -4778,12 +4780,13 @@ type
     CacheInstruction,
     CacheData,
     CacheTrace);
-
-  {$ifdef CPU64}
-  {$A8}
-  {$else}
-  {$A4}
-  {$endif CPU64}
+  TSystemCacheDescriptor = packed record
+    Level: byte;
+    Associativity: byte;
+    LineSize: Word;
+    Size: DWord;
+    CacheType: TSystemLogicalProcessorCache;
+  end;
   TSystemLogicalProcessorInformation = record
     ProcessorMask: PtrUInt;
     case Relationship: TSystemLogicalProcessorRelation of
@@ -4792,18 +4795,10 @@ type
       RelationNumaNode: (
         NumaNodeNumber: DWord);
       RelationCache: (
-        Cache: record
-          Level: byte;
-          Associativity: byte;
-          LineSize: Word;
-          Size: DWord;
-          CacheType: TSystemLogicalProcessorCache;
-        end);
+        Cache: TSystemCacheDescriptor);
       RelationGroup: (
         Reserved: array [0..1] of QWord); // to define the actual struct size
   end;
-  {$A+}
-
 
 {$ifndef UNICODE}
 function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
