@@ -5624,6 +5624,26 @@ procedure THttpServerResp.Execute;
     {$endif SYNCRTDEBUGLOW}
   end;
 
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    try
+      if fServer <> nil then
+        try
+          fServer.OnDisconnect;
+          if Assigned(fOnThreadTerminate) then
+            fOnThreadTerminate(self);
+        finally
+          fServer.fInternalHttpServerRespList.Remove(self);
+          fServer := nil;
+          fOnThreadTerminate := nil;
+        end;
+    finally
+      FreeAndNilSafe(fServerSock);
+      // if Destroy happens before fServerSock.GetRequest() in Execute below
+      fClientSock.ShutdownAndClose({rdwr=}false);
+    end;
+  end;
+
 var
   netsock: TNetSocket;
 begin
@@ -5652,22 +5672,7 @@ begin
           HandleRequestsProcess; // process further kept alive requests
       end;
     finally
-      try
-        if fServer <> nil then
-          try
-            fServer.OnDisconnect;
-            if Assigned(fOnThreadTerminate) then
-              fOnThreadTerminate(self);
-          finally
-            fServer.fInternalHttpServerRespList.Remove(self);
-            fServer := nil;
-            fOnThreadTerminate := nil;
-          end;
-      finally
-        FreeAndNilSafe(fServerSock);
-        // if Destroy happens before fServerSock.GetRequest() in Execute below
-        fClientSock.ShutdownAndClose({rdwr=}false);
-      end;
+      HandleCleanup;
     end;
   except
     on Exception do
@@ -7212,6 +7217,35 @@ var
   local: TFileName;
   localsize, sourcesize, tot, start, stop: Int64;
   localok, istemp: boolean;
+
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    try
+      if ToRename <> '' then
+      begin
+        // optional rename *.partial to final WGet() file name
+        if RenameFile(Partial, ToRename) then
+        begin
+          Params.SetStep(wgsAlternateRename, [ToRename]);
+          if not localok then
+            // if we can't use the cached local file, switch to renamed file
+            // - it will work as long as it can (usually just fine)
+            if fPartials.DoneLocked(Partial, ToRename) then
+              PartialID := 0;
+        end
+        else
+          Params.SetStep(wgsAlternateFailedRename, [Partial, ' as ', ToRename]);
+      end;
+      if localok then
+        fPartials.DoneLocked(Partial, local)
+      else if (PartialID <> 0) and
+              (sourcesize <> 0) then
+          fPartials.DoneLocked(PartialID);
+    finally
+      fPartials.Safe.WriteUnLock;
+    end;
+  end;
+
 begin
   // avoid GPF at shutdown or in case of unexpected method call
   if (fSettings = nil) or
@@ -7287,30 +7321,7 @@ begin
       Partial, local, MicroSecToString(stop - start)], self);
   finally
     fPartials.Safe.WriteLock; // safely move file without background access
-    try
-      if ToRename <> '' then
-      begin
-        // optional rename *.partial to final WGet() file name
-        if RenameFile(Partial, ToRename) then
-        begin
-          Params.SetStep(wgsAlternateRename, [ToRename]);
-          if not localok then
-            // if we can't use the cached local file, switch to renamed file
-            // - it will work as long as it can (usually just fine)
-            if fPartials.DoneLocked(Partial, ToRename) then
-              PartialID := 0;
-        end
-        else
-          Params.SetStep(wgsAlternateFailedRename, [Partial, ' as ', ToRename]);
-      end;
-      if localok then
-        fPartials.DoneLocked(Partial, local)
-      else if (PartialID <> 0) and
-              (sourcesize <> 0) then
-          fPartials.DoneLocked(PartialID);
-    finally
-      fPartials.Safe.WriteUnLock;
-    end;
+    HandleCleanup;
     if (PartialID <> 0) and
        (sourcesize = 0) then
       OnDownloadingFailed(PartialID); // clearly something went wrong

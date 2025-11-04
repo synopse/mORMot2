@@ -1002,6 +1002,19 @@ var
   frame: TWebSocketFrame;
   start, diff: Int64;
   log: ISynLog;
+
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    Safe.Lock;
+    try
+      if PtrArrayDelete(fRestFrame, Ctxt, @fRestFrameCount) < 0 then
+        if log <> nil then
+          log.Log(sllWarning, 'OnClientsRequest: no Ctxt in fRestFrame[]', self);
+    finally
+      Safe.UnLock;
+    end;
+  end;
+
 begin
   fLog.EnterLocal(log, 'OnClientsRequest #% % % %',  [Ctxt.ConnectionID,
     Ctxt.RemoteIP, Ctxt.Method, Ctxt.Url], self);
@@ -1055,14 +1068,7 @@ begin
     until false;
   finally
     LockedDec32(@fRestPending);
-    Safe.Lock;
-    try
-      if PtrArrayDelete(fRestFrame, Ctxt, @fRestFrameCount) < 0 then
-        if log <> nil then
-          log.Log(sllWarning, 'OnClientsRequest: no Ctxt in fRestFrame[]', self);
-    finally
-      Safe.UnLock;
-    end;
+    HandleCleanup;
   end;
 end;
 

@@ -4443,6 +4443,22 @@ var
   h: THandle;
   c: THttpAsyncClientConnection;
   tag: TPollSocketTag absolute c;
+
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    try
+      c.NotifyStateChange(hcsFailed);
+      fOwner.DoLog(sllDebug, 'StartRequest(% %/%)=%',
+        [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
+    finally
+      FreeAndNil(c);
+      if (aDestFileName <> '') and
+         not DeleteFile(aDestFileName) then
+        fOwner.DoLog(sllLastError, 'StartRequest: DeleteFile(%) failed',
+          [aDestFileName], self);
+    end;
+  end;
+
 begin
   if aConnection <> nil then
     aConnection^ := nil;
@@ -4531,17 +4547,7 @@ begin
     {$endif USE_WINIOCP}
   finally
     if result <> nrOk then
-    try
-      c.NotifyStateChange(hcsFailed);
-      fOwner.DoLog(sllDebug, 'StartRequest(% %/%)=%',
-        [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
-    finally
-      FreeAndNil(c);
-      if (aDestFileName <> '') and
-         not DeleteFile(aDestFileName) then
-        fOwner.DoLog(sllLastError, 'StartRequest: DeleteFile(%) failed',
-          [aDestFileName], self);
-    end
+      HandleCleanup
     else if aConnection <> nil then
       aConnection^ := c;
   end;
