@@ -102,7 +102,6 @@ end;
 function TApiMobile.LastEvent(id: TSourceID; max: integer): TEvents;
 var
   e: TDomEventObjArray;
-  i: PtrInt;
 begin
   result := nil;
   if not Assigned(fPersistence) or
@@ -110,11 +109,7 @@ begin
     exit;
   try
     e := fPersistence.LastEvents(id, max);
-    if e = nil then
-      exit;
-    SetLength(result, length(e));
-    for i := 0 to high(e) do
-      fEventMap.ToB(e[i], @result[i]);
+    fEventMap.ToArrayB(e, result);
   finally
     ObjArrayClear(e);
   end;

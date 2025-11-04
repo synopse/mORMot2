@@ -22,7 +22,7 @@ type
   end;
   TEvents = array of TEvent;
 
-  // mobile API as used on both client and server side
+  // mobile API as used on both client and server sides
   IApiMobile = interface(IInvokable)
     ['{068173CE-E307-4166-AE3F-60B7F0EF42F8}']
     function Login(id: TSourceID): boolean;
