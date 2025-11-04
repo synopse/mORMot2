@@ -368,6 +368,9 @@
     {$ifdef CPUAARCH64}
       {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
       {$define FPC_CPUAARCH64}
+      {$ifdef OSWINDOWS}
+        {$undef FPC_SINGLEABI} // aarch64-win64 compatibility
+      {$endif OSWINDOWS}
     {$endif CPUAARCH64}
   {$else}
     // 32-bit Architecture
