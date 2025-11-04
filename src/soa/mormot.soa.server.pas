@@ -1374,6 +1374,28 @@ var
   timeEnd: Int64;
   m: PtrInt;
   err: ShortString;
+
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    try
+      Ctxt.ThreadServer^.Factory := nil;
+      if InstanceCreation = sicSingle then
+        // always release single shot instance immediately (no GC)
+        InstanceFree(Inst.Instance);
+    finally
+      if exec <> nil then
+      begin
+        if Ctxt.ServiceExecution^.LogRest <> nil then
+        begin
+          QueryPerformanceMicroSeconds(timeEnd);
+          dec(timeEnd, Ctxt.MicroSecondsStart);
+          FinalizeLogRest(Ctxt, exec, timeEnd);
+        end;
+        fExecuteCached[m].Release(exec);
+      end;
+    end;
+  end;
+
 begin
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
@@ -1539,23 +1561,7 @@ begin
     end;
     exec.WR.SetText(Ctxt.Call.OutBody);
   finally
-    try
-      Ctxt.ThreadServer^.Factory := nil;
-      if InstanceCreation = sicSingle then
-        // always release single shot instance immediately (no GC)
-        InstanceFree(Inst.Instance);
-    finally
-      if exec <> nil then
-      begin
-        if Ctxt.ServiceExecution^.LogRest <> nil then
-        begin
-          QueryPerformanceMicroSeconds(timeEnd);
-          dec(timeEnd, Ctxt.MicroSecondsStart);
-          FinalizeLogRest(Ctxt, exec, timeEnd);
-        end;
-        fExecuteCached[m].Release(exec);
-      end;
-    end;
+    HandleCleanup;
   end;
 end;
 

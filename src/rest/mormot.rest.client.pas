@@ -2300,6 +2300,18 @@ destructor TRestClientUri.Destroy;
 var
   t, i: PtrInt;
   tounlock: TIDDynArray; // need a private local copy
+
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    try
+      InternalClose; // e.g. websockets calls OnWebSocketsClosed to unregister
+    finally
+      inherited Destroy; // fModel.Free if owned by this TRest instance
+      FreeAndNilSafe(fBackgroundThread); // should be done after fServices.Free
+      fOnIdle := nil;
+    end;
+  end;
+
 begin
   include(fInternalState, isDestroying);
   if SynLogFileFreeing then // may be owned by a TSynLogFamily
@@ -2327,13 +2339,7 @@ begin
       ServerRemoteLogStop;
     end;
     FreeAndNilSafe(fSession.User);
-    try
-      InternalClose; // e.g. websockets calls OnWebSocketsClosed to unregister
-    finally
-      inherited Destroy; // fModel.Free if owned by this TRest instance
-      FreeAndNilSafe(fBackgroundThread); // should be done after fServices.Free
-      fOnIdle := nil;
-    end;
+    HandleCleanup;
   end;
 end;
 
