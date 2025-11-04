@@ -1920,7 +1920,7 @@ begin
         GetAndPrepareStatement(SQL, {forcecache=}false);
         res := TRawByteStringStream.Create;
         try
-          rows := fStatement^.Execute(0, '', res,
+          rows := fStatement^.ExecuteStream(0, '', res,
             ForceAjax or not fOwner.NoAjaxJson, DB.StatementMaxMemory);
           result := res.DataString;
         finally
