@@ -1706,6 +1706,16 @@ begin
 end;
 
 destructor TRestOrmServerDB.Destroy;
+
+  procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
+  begin
+    try
+      fStatementCache.ReleaseAllDBStatements;
+    finally
+      fOwnedDB.Free; // do nothing if DB<>fOwnedDB
+    end;
+  end;
+
 begin
   with fDB.Log.Enter('Destroy %', [fModel.SafeRoot], self) do
     try
@@ -1715,11 +1725,7 @@ begin
         fDB.InternalState := nil;
       inherited Destroy;
     finally
-      try
-        fStatementCache.ReleaseAllDBStatements;
-      finally
-        fOwnedDB.Free; // do nothing if DB<>fOwnedDB
-      end;
+      HandleCleanup;
       Dispose(fBatch);
     end;
 end;
