@@ -709,7 +709,7 @@ var
   // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 13 Ventura (Darwin 22.3.0)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUtf8;
-  /// some addition system information as text, e.g. 'Wine 1.1.5'
+  /// some addition system information as text, e.g. 'Wine 1.1.5' or 'Prism'
   // - also always appended to OSVersionText high-level description
   // - use if PosEx('Wine', OSVersionInfoEx) > 0 then to check for Wine presence
   OSVersionInfoEx: RawUtf8;

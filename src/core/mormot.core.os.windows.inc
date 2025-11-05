@@ -4894,8 +4894,8 @@ begin
     @GetNativeSystemInfo := nil;
   // see https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation
   IsWow64Process2 := LibraryResolve(h, 'IsWow64Process2'); // Windows 10+
-  process := IMAGE_FILE_MACHINE_UNKNOWN; // default = not under WOW64
-  machine := 0;
+  process := 0;
+  machine := IMAGE_FILE_MACHINE_UNKNOWN; // default = not under WOW64
   IsWow64Emulation := Assigned(IsWow64Process2) and
     IsWow64Process2(GetCurrentProcess, process, machine) and
     {$ifdef CPUINTEL} not {$endif} // detecting PRISM is enough by now
@@ -5014,7 +5014,11 @@ begin
     begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
-    end;
+    end
+    {$ifdef CPUINTEL}
+    else if IsWow64Emulation then
+       OSVersionInfoEx := 'Prism'
+    {$endif CPUINTEL};
   end;
   // 4. retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then
