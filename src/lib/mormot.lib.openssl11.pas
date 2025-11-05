@@ -147,10 +147,17 @@ const
     LIB_SSL3    = 'libssl-3.dll';
     _PU = '';
     {$else}
+    {$ifdef OSWINARM}
+    LIB_CRYPTO1 = 'libcrypto-1_1-arm64.dll';
+    LIB_SSL1    = 'libssl-1_1-arm64.dll';
+    LIB_CRYPTO3 = 'libcrypto-3-arm64.dll';
+    LIB_SSL3    = 'libssl-3-arm64.dll';
+    {$else}
     LIB_CRYPTO1 = 'libcrypto-1_1-x64.dll';
     LIB_SSL1    = 'libssl-1_1-x64.dll';
     LIB_CRYPTO3 = 'libcrypto-3-x64.dll';
     LIB_SSL3    = 'libssl-3-x64.dll';
+    {$endif OSWINARM}
     _PU = '';
     {$endif CPU32}
   {$else}
