@@ -5358,9 +5358,9 @@ var
 begin
   if Tix64 = 0 then
     Tix64 := Ctxt.TickCount64; // works even if Ctxt=nil
-  tix32 := (Tix64 shr CurrentNonceResolution) + 1; // 4.3 min +1 after reboot
+  tix32 := (Tix64 shr CurrentNonceResolution) + 2; // 4.3 min +2 after reboot
   if Previous then
-    dec(tix32);
+    dec(tix32); // +2 above to ensure tix32 > 0
   n := @ServerNonce[Previous];
   ServerNonceSafe.Lock;
   if tix32 <> n^.c[0] then
@@ -5369,7 +5369,7 @@ begin
     if PInteger(@ServerProcessKdf)^ = 0 then
     begin
       // first time used: initialize the HMAC-SHA-256 secret for this process
-      Random128(@h.Lo); // 128-bit security is enough
+      Random128(@h.Lo); // unpredictable 128-bit seed
       ServerProcessKdf.Init(@SystemEntropy, SizeOf(SystemEntropy)); // salt
       ServerProcessKdf.Update(h.Lo);
     end;
@@ -7165,7 +7165,7 @@ begin
     if usr <> nil then
       try
         if (usr.PasswordHashHexa <> '') and
-           (usr.PasswordHashHexa[1] = '$') then
+           (usr.PasswordHashHexa[1] in ['$', '#']) then // # for SCRAM-like auth
         begin
           mcf := ModularCryptIdentify(usr.PasswordHashHexa, @modular);
           Ctxt.Log.Log(sllUserAuth, 'ReturnNonce(%)=%',
