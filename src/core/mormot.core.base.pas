@@ -3650,31 +3650,23 @@ type
       read Store.len;
   end;
 
-/// logical OR of two memory buffers
-// - will perform on all buffer bytes:
-// ! Dest[i] := Dest[i] or Source[i];
+/// logical "Dest := Dest OR Source"  of two memory buffers
 procedure OrMemory(Dest, Source: PByteArray; Size: PtrInt);
 
-/// logical XOR of two memory buffers - using SSE2 asm on x86_64
-// - will perform on all buffer bytes:
-// ! Dest[i] := Dest[i] xor Source[i];
+/// logical "Dest := Dest XOR Source" of two memory buffers - using SSE2 asm on x86_64
 procedure XorMemory(Dest, Source: PByteArray; Size: PtrInt); overload;
   {$ifndef CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
-/// logical XOR of two memory buffers into a third
-// - will perform on all buffer bytes:
-// ! Dest[i] := Source1[i] xor Source2[i];
+/// logical "Dest := Source1 XOR Source2" of two memory buffers into a third
 procedure XorMemory(Dest, Source1, Source2: PByteArray; Size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// logical XOR of two 128-bit / 16-byte memory buffers
+/// logical "Dest := Dest XOR Source" of two 128-bit / 16-byte memory buffers
 procedure XorMemory(var Dest: THash128Rec;
   {$ifdef FPC}constref{$else}const{$endif} Source: THash128Rec); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// logical AND of two memory buffers
-// - will perform on all buffer bytes:
-// ! Dest[i] := Dest[i] and Source[i];
+/// logical "Dest := Dest AND Source"  of two memory buffers
 procedure AndMemory(Dest, Source: PByteArray; size: PtrInt);
 
 /// returns TRUE if all bytes equal zero

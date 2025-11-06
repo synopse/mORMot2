@@ -8887,7 +8887,7 @@ function TSqlDataBaseSQLFunction.CreateFunction(DB: TSqlite3DB): integer;
 begin
   if self <> nil then
     result := sqlite3.create_function(DB, pointer(fSqlName),
-      FunctionParametersCount, SQLITE_UTF8, self, fInternalFunction, nil, nil)
+      fFunctionParametersCount, SQLITE_UTF8, self, fInternalFunction, nil, nil)
   else
     result := SQLITE_ERROR;
 end;

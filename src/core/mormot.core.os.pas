@@ -8316,7 +8316,7 @@ begin
     GetMem(result, Size + 16); // 15 bytes for alignment + 1 byte for padding
     pad := 16 - (PtrUInt(result) and 15);   // adjust by 1..16 bytes
     inc(PAnsiChar(result), pad);            // Delphi Win32 only needs padding
-    PAnsiChar(result)[-1] := AnsiChar(pad); // always store the padding
+    PAnsiChar(result)[-1] := AnsiChar(pad); // store the padding in p[-1]
   end;
   if FillWith <> nil then
     MoveFast(FillWith^, result^, Size);
@@ -8332,7 +8332,7 @@ begin
     _FreeLargeMem(p, Size);                 // munmap or VirtualFree
     exit;
   end;
-  dec(PAnsiChar(p), ord(PAnsiChar(p)[-1])); // adjust back by 1..16 bytes
+  dec(PAnsiChar(p), ord(PAnsiChar(p)[-1])); // adjust p[-1]=1..16 padding bytes
   FreeMem(p);
 end;
 

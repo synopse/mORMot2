@@ -116,21 +116,19 @@ procedure XorBlock16(A, B, C: PPtrIntArray);
 // ! dst[i] := src[i] xor mask;
 procedure Xor32By128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
 
-/// logical XOR of 512-bit = 64 bytes - use SSE2 on Intel/AMD
+/// logical "dst := dst XOR src" of 512-bit = 64 bytes - use SSE2 on Intel/AMD
 procedure Xor512(dst, src: PPtrIntArray);
   {$ifndef CPUINTEL} inline;{$endif}
 
-/// efficient Move of 512-bit = 64 bytes - use SSE2 on Intel/AMD
+/// efficient "dst := src" Move of 512-bit = 64 bytes - use SSE2 on Intel/AMD
 procedure Move512(dst, src: PPtrIntArray);
   {$ifndef CPUINTEL} inline;{$endif}
 
-// little endian fast conversion
-// - 160 bits = 5 integers
+// little endian fast conversion of 160 bits = 5 integers values
 // - use fast bswap asm in x86/x64 mode
 procedure bswap160(s, d: PIntegerArray);
 
-// little endian fast conversion
-// - 256-bit = 8 integers = 32 bytes
+// little endian fast conversion of 256-bit = 8 integers = 32 bytes values
 // - use fast bswap asm in x86/x64 mode
 procedure bswap256(s, d: PIntegerArray);
 

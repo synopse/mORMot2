@@ -1274,7 +1274,7 @@ begin
     Make(['Authorization: Bearer ', values[10].Text], Sender.fSession.HttpHeader);
   if values[9].Text <> nil then
   begin
-    // specific TRestClientAuthenticationSignedUri algorithm
+    // decode TRestClientAuthenticationSignedUri "algo"
     a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
       values[9].Text, values[9].Len);
     if a >= 0 then
@@ -1285,7 +1285,7 @@ begin
   begin
     cookie := FindNameValue(pointer(hdr), 'SET-COOKIE: ');
     if cookie = nil then
-      exit; // use the default suaCRC32 algorithm by default
+      exit; // use the default suaCRC32 algorithm as fallback
     cookie := GotoNextNotSpace(cookie);
     if IdemPChar(cookie, '__SECURE-') then
       inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
