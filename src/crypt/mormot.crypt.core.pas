@@ -10472,6 +10472,9 @@ begin
   end;
   {$endif ASMX64}
   {$ifdef USEAESNIHASH}
+  {$ifdef OSWINDOWS}
+  if not IsWow64Emulation then // PRISM seems inconsistent with only few aesenc
+  {$endif OSWINDOWS}
   if (cfAesNi in CpuFeatures) and   // AES-NI
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
