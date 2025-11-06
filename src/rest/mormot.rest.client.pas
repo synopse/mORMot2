@@ -78,7 +78,8 @@ type
   // - passHashed means that the password is already hashed as in
   // TAuthUser.PasswordHashHexa i.e. Sha256('salt'+Value)
   // - passKerberosSpn indicates that the password is the Kerberos SPN domain
-  // - passModularCrypt is used internally together with TModularCryptFormat
+  // - passModularCrypt is used internally together with TModularCryptFormat to
+  // ask the server for the per-user "Modular Crypt" / SCRAM expected format
   TRestClientSetUserPassword = (
     passClear,
     passHashed,
@@ -332,6 +333,7 @@ type
     // for internal use
     Authentication: TRestClientAuthenticationClass;
     IDHexa8: RawUtf8; // fSession.ID in hexadecimal
+    ScramServerProof: RawUtf8;
     PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
@@ -1227,7 +1229,7 @@ end;
 { TRestClientAuthentication }
 
 const
-  AUTH_N: array[0..10] of PUtf8Char = (
+  AUTH_N: array[0..11] of PUtf8Char = (
     'result',        // 0
     'data',          // 1
     'server',        // 2
@@ -1238,7 +1240,8 @@ const
     'logongroup',    // 7
     'timeout',       // 8
     'algo',          // 9
-    'bearer');       // 10
+    'bearer',        // 10
+    'proof');        // 11
 
 class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
@@ -1272,6 +1275,8 @@ begin
   if values[10].Text <> nil then
     // from rsoAuthenticationBearerHeader in Server.Options
     Make(['Authorization: Bearer ', values[10].Text], Sender.fSession.HttpHeader);
+  if values[11].Text <> nil then
+    Sender.fSession.ScramServerProof := values[11].ToUtf8;
   if values[9].Text <> nil then
   begin
     // decode TRestClientAuthenticationSignedUri "algo"
@@ -1339,16 +1344,21 @@ end;
 class function TRestClientAuthenticationDefault.ClientComputeSessionKey(
   Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
-  resp, mcfhash, servernonce, clientnonce: RawUtf8;
-  rnd: THash128;
+  resp, mcfhash, servernonce, clientnonce, proof: RawUtf8;
+  clientsign: THash256;
+  rnd: THash128 absolute clientsign;
   values: array[0..1] of TValuePUtf8Char;
 begin
-  result := '';
+  result := ''; // error
   if User.LogonName = '' then
     exit;
+  // compute the 160-bit client nonce (needed by ScramClientProof)
+  Random128(@rnd); // unpredictable
+  Join([CardinalToHex(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
+    clientnonce);
   // try "mcf" for servers with "Modular Crypt" support
   if (User.PasswordHashHexa <> '') and
-     (User.Data = 'mcf') then // passModularCrypt flag with clear password
+     (User.Data = 'mcf') then // passModularCrypt flag with clear/plain password
   begin
     User.Data := '';
     Sender.CallBackGet('auth', ['username', User.LogonName, 'mcf', 1], resp);
@@ -1360,24 +1370,41 @@ begin
     if values[1].Text <> nil then // this user got a mcf specific format
       mcfhash := ModularCryptHash(values[1].ToUtf8, User.PasswordHashHexa);
     if mcfhash <> '' then
-      User.PasswordHashHexa := mcfhash
+      if values[1].Text^ = '$' then
+        // no mutual auth - regular mORMot 1 hashing
+        User.PasswordHashHexa := mcfhash
+      else
+        // SCRAM-like mutual authentication with irreversible proofs
+        proof := ScramClientProof(mcfhash, clientsign,
+          // match ScramServerProof() msg parameters
+          [Sender.fModel.Root, servernonce, clientnonce, User.LogonName])
     else
       User.SetPassword(User.PasswordHashHexa, ''); // fallback to old hash
   end
   else
-    // regular authentication
+    // regular authentication with User.PasswordHashHexa = hashed value
     servernonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if servernonce = '' then
     exit;
   // compute and return a proof, challenged against client and server nonces
-  Random128(@rnd); // unpredictable
-  Join([CardinalToHex(OSVersionInt32), '_', BinToHexLower(@rnd, SizeOf(rnd))],
-    clientnonce); // 160-bit nonce
+  if proof = '' then
+    // regular mORMot 1 authentication via hexadecimal hashing
+    proof := Sha256U([Sender.fModel.Root, servernonce, clientnonce,
+      User.LogonName, User.PasswordHashHexa]);
   result := ClientGetSessionKey(Sender, User, [
     'username',    User.LogonName,
-    'password',    Sha256U([Sender.fModel.Root, servernonce, clientnonce,
-                            User.LogonName, User.PasswordHashHexa]),
+    'password',    proof,
     'clientnonce', clientnonce]);
+  if (values[1].Text <> nil) and
+     (values[1].Text^ = '#') then
+    // authenticate the SCRAM server from the returned proof
+    if result = '' then
+      User.PasswordHashHexa := ''
+    else if ScramClientServerAuth(mcfhash, Sender.fSession.ScramServerProof, clientsign) then
+      // success: fSession.PrivateKey will be computed from the server DB key
+      User.PasswordHashHexa := ScramPersistedKey(mcfhash)
+    else
+      result := ''; // error
 end;
 
 
