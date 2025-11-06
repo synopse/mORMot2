@@ -116,6 +116,10 @@ procedure XorBlock16(A, B, C: PPtrIntArray);
 // ! dst[i] := src[i] xor mask;
 procedure Xor32By128(dst, src: PCardinalArray; last: PtrUInt; mask: cardinal);
 
+/// logical "dst := dst XOR src" of 256-bit = 32 bytes
+procedure Xor256(dst, src: PPtrIntArray);
+  {$ifdef CPU64} inline;{$endif}
+
 /// logical "dst := dst XOR src" of 512-bit = 64 bytes - use SSE2 on Intel/AMD
 procedure Xor512(dst, src: PPtrIntArray);
   {$ifndef CPUINTEL} inline;{$endif}
@@ -2105,6 +2109,9 @@ function Sha256Digest(Data: pointer; Len: integer): TSha256Digest; overload;
 // with zeros by a ... finally FillZero()
 function Sha256Digest(const Data: RawByteString): TSha256Digest; overload;
 
+/// direct SHA-256 hash calculation of one 256-bit data
+procedure Sha256Digest(var Dest, Data: TSha256Digest); overload;
+
 /// direct SHA-224 hash calculation of some binary data
 // - result is returned in TSha224Digest binary format
 // - since the result would be stored temporarly in the stack, it may be
@@ -2579,6 +2586,10 @@ procedure HmacSha256(const key: TSha256Digest; const msg: RawByteString;
 procedure HmacSha256(key, msg: pointer; keylen, msglen: integer;
   out result: TSha256Digest); overload;
 
+/// compute the HMAC message authentication code using SHA-256 as hash function
+procedure HmacSha256U(key: pointer; len: integer; const msg: array of RawByteString;
+  out result: TSha256Digest; msgSeparator: AnsiChar = #0);
+
 
 { ****************** PBKDF2 Key Derivation over SHA-256 and SHA-3 }
 
@@ -2881,6 +2892,20 @@ begin // just XOR 0..15 of bytes
     dec(Size);
     Dest[Size] := Source1[Size] xor Source2[Size];
   end;
+end;
+
+procedure Xor256(dst, src: PPtrIntArray);
+begin
+  dst[0] := dst[0] xor src[0];
+  dst[1] := dst[1] xor src[1];
+  dst[2] := dst[2] xor src[2];
+  dst[3] := dst[3] xor src[3];
+  {$ifdef CPU32}
+  dst[4] := dst[4] xor src[4];
+  dst[5] := dst[5] xor src[5];
+  dst[6] := dst[6] xor src[6];
+  dst[7] := dst[7] xor src[7];
+  {$endif CPU32}
 end;
 
 {$ifndef CPUSSE2}
@@ -8257,6 +8282,13 @@ begin
   SHA.Full(Data, Len, result);
 end;
 
+procedure Sha256Digest(var Dest, Data: TSha256Digest);
+var
+  SHA: TSha256;
+begin
+  SHA.Full(@Data, SizeOf(Data), Dest);
+end;
+
 function Sha256Digest(const Data: RawByteString): TSha256Digest;
 var
   SHA: TSha256;
@@ -9284,6 +9316,23 @@ procedure HmacSha256(const key: TSha256Digest; const msg: RawByteString;
   out result: TSha256Digest);
 begin
   HmacSha256(@key, pointer(msg), SizeOf(key), length(msg), result);
+end;
+
+procedure HmacSha256U(key: pointer; len: integer; const msg: array of RawByteString;
+  out result: TSha256Digest; msgSeparator: AnsiChar);
+var
+  mac: THmacSha256;
+  i: PtrInt;
+begin
+  mac.Init(key, len);
+  for i := 0 to high(msg) do
+  begin
+    mac.Update(msg[i]);
+    if (msgSeparator <> #0) and
+       (i < high(msg)) then
+      mac.Update(@msgSeparator, 1);
+  end;
+  mac.Done(result);
 end;
 
 
