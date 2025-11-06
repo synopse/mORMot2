@@ -2484,13 +2484,13 @@ var
   pa: array of TRecordPeople;
 begin
   // FillZeroRtti()
-  CheckEqual(lic.CustomerName, '');
+  CheckEqual(lic.CustomerName, '', 'c1');
   lic.CustomerName := 'Toto';
   FillZeroRtti(TypeInfo(TLicenseData), lic);
-  CheckEqual(lic.CustomerName, '');
+  CheckEqual(lic.CustomerName, '', 'c2');
   lic.CustomerName := '1234';
   FillZeroRtti(TypeInfo(TLicenseData), lic);
-  CheckEqual(lic.CustomerName, '');
+  CheckEqual(lic.CustomerName, '', 'c3');
   // validate RecordCopy()
   FillCharFast(A, SizeOf(A), 0);
   FillCharFast(B, SizeOf(B), 0);
@@ -2508,8 +2508,8 @@ begin
   SetLength(A.Dyn, 10);
   A.Dyn[9] := 9;
   RecordCopy(B, A, TypeInfo(TR)); // mORMot 2 doesn't overload RecordCopy()
-  Check(A.One = B.One);
-  Check(A.S1 = B.S1);
+  Check(A.One = B.One, 'c4');
+  Check(A.S1 = B.S1, 'c5');
   Check(A.Three = B.Three);
   Check(A.S2 = B.S2);
   Check(A.Five = B.Five);
@@ -2551,7 +2551,7 @@ begin
   B.Three := 3;
   B.Dyn[0] := 10;
   RecordCopy(C, B, TypeInfo(TR)); // mORMot 2 doesn't overload RecordCopy()
-  CheckEqual(A.One, C.One);
+  CheckEqual(A.One, C.One, 'c6');
   Check(A.S1 = C.S1);
   CheckEqual(C.Three, 3);
   Check(A.S2 = C.S2);
@@ -2572,8 +2572,8 @@ begin
     o1.YearOfBirth := 1926;
     o1.YearOfDeath := 2010;
     CopyObject(o1, o2);
-    CheckEqual(o1.FirstName, 'toto');
-    Check(o2.FirstName = 'toto');
+    CheckEqual(o1.FirstName, 'toto', 'c7');
+    Check(o2.FirstName = 'toto', 'c8');
     CheckEqual(o1.LastName, 'titi');
     CheckEqual(o1.LastName, o2.LastName);
     CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
@@ -2582,18 +2582,18 @@ begin
     p.YearOfBirth := -1;
     CheckEqual(p.YearOfBirth, -1);
     RecordZero(@p, TypeInfo(TRecordPeople));
-    CheckEqual(p.FirstName, '');
+    CheckEqual(p.FirstName, '', 'c9');
     CheckEqual(p.LastName, '');
     CheckEqual(p.YearOfBirth, 0);
     CheckEqual(p.YearOfDeath, 0);
     ObjectToRecord(o2, p, TypeInfo(TRecordPeople));
-    CheckEqual(p.FirstName, 'toto');
+    CheckEqual(p.FirstName, 'toto', 'c10');
     CheckEqual(p.LastName, 'titi');
     CheckEqual(p.YearOfBirth, o2.YearOfBirth);
     CheckEqual(p.YearOfDeath, o2.YearOfDeath);
     o2.Enum := e1;
     ClearObject(o2);
-    Check(o2.FirstName = '');
+    Check(o2.FirstName = '', 'c11');
     CheckEqual(o2.LastName, '');
     CheckEqual(o2.YearOfBirth, 0);
     CheckEqual(o2.YearOfDeath, 0);
@@ -4039,7 +4039,8 @@ begin
   {$endif OSDARWIN}
   {$ifdef CPUX64}
   if (cfSSE42 in CpuFeatures) and
-     (cfAesNi in CpuFeatures) then
+     (cfAesNi in CpuFeatures) and
+     (cfCLMUL in CpuFeatures) then
     Test(crc32c, 'aesni'); // use SSE4.2+pclmulqdq instructions on x64
   {$endif CPUX64}
   {$else}
