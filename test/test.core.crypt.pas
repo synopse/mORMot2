@@ -1786,7 +1786,7 @@ const
 
 var
   buf: RawByteString;
-  u, pw, nfo, exp: RawUtf8;
+  u, pw, nfo, nfo2, exp, db, proof: RawUtf8;
   iv: Int64;
   P: PAnsiChar;
   unalign: PtrInt;
@@ -1795,10 +1795,11 @@ var
   logN, blocksize, parallel, r,
   exp321, exp322, exp323, exp324, exp325, exp326: cardinal;
   exp641, exp642: QWord;
-  hasher: TSynHasher;
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
   mcf, mcf2: TModularCryptFormat;
+  clientsig: THash256;
+  hasher: TSynHasher;
   timer: TPrecisionTimer;
 begin
   // validate THashAlgo and TSignAlgo recognition
@@ -2084,6 +2085,23 @@ begin
       CheckEqual(u, ModularCryptHash(nfo, pw), 'simulate client side re-hash');
       if u <> '' then // avoid GPF
       begin
+        // validate SCRAM-like mutual authentication using MCF hashes
+        Check(u[1] = '$');
+        db := ScramPersistedKey(u);
+        Check(db <> '', 'ScramPersistedKey');
+        Check(db[1] = '#');
+        Check(ModularCryptIdentify(db, @nfo2) = mcf);
+        Check(nfo2[1] = '#');
+        nfo2[1] := '$';
+        CheckEqual(nfo, nfo2);
+        Check(u[1] = '$');
+        proof := ScramClientProof(u, clientsig, ['root', 'user', 'cn', 'sn']);
+        Check(proof <> '', 'ScramClientProof');
+        Check(ScramServerProof(db, proof, ['root', 'user', 'cn', 'so']) = '');
+        proof := ScramServerProof(db, proof, ['root', 'user', 'cn', 'sn']);
+        Check(proof <> '', 'ScramServerProof');
+        Check(ScramClientServerAuth(u, proof, clientsig), 'ScramClientServerAuth');
+        Check(not ScramClientServerAuth(u, proof, clientsig), 'clientsig=0');
         dec(PByteArray(u)[length(u) - 5]);
         Check(ModularCryptVerify(pw, u) = mcfInvalid);
       end;
