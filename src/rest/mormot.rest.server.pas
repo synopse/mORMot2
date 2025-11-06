@@ -2583,6 +2583,12 @@ function ServiceRunningRequest: TRestServerUriContext;
 function CurrentServiceContext: TServiceRunningContext;
 {$endif PUREMORMOT2}
 
+var
+  /// the global "1 shl x" milliseconds resolution for CurrentNonce()
+  // - default 1 shl 18 = 4.3 minutes nonce validity - as in mORMot 1
+  // - you may set e.g. 11 to reduce to a safer/tougher 34 seconds period
+  CurrentNonceResolution: integer = 18;
+
 /// returns a safe HMAC-SHA-256 hexadecimal nonce, changing every 4.3 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, caching a cryptographically-level SHA-256 hash
@@ -5352,7 +5358,7 @@ var
 begin
   if Tix64 = 0 then
     Tix64 := Ctxt.TickCount64; // works even if Ctxt=nil
-  tix32 := (Tix64 shr 18) + 1; // 4.3 minutes resolution +1 after reboot
+  tix32 := (Tix64 shr CurrentNonceResolution) + 1; // 4.3 min +1 after reboot
   if Previous then
     dec(tix32);
   n := @ServerNonce[Previous];
