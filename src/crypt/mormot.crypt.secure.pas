@@ -1191,7 +1191,10 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
 { SCRAM-like Client/Server mutual authentication using ModularCryptHash() }
 
 /// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
-function ScramPersistedKey(const Hash: RawUtf8): RawUtf8;
+function ScramPersistedKey(const Hash: RawUtf8): RawUtf8; overload;
+
+/// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
+function ScramPersistedKey(Mcf: TModularCryptFormat; const Password: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM client proof for a given "Modular Crypt" hash
 function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
@@ -5065,6 +5068,11 @@ begin
   Append(result, BinToBase64uriShort(@stored, SizeOf(stored)));
   FillZero(clientkey);
   FillZero(stored.b);
+end;
+
+function ScramPersistedKey(Mcf: TModularCryptFormat; const Password: RawUtf8): RawUtf8;
+begin
+  result := ScramPersistedKey(ModularCryptHash(mcf, Password));
 end;
 
 function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
