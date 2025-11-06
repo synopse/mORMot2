@@ -813,6 +813,7 @@ type
     mcfBCrypt,
     mcfBCryptSha256,
     mcfSCrypt);
+  PModularCryptFormat = ^TModularCryptFormat;
   /// allow to specify several ModularCryptIdentify/ModularCryptVerify algorithms
   TModularCryptFormats = set of TModularCryptFormat;
 
@@ -1123,7 +1124,8 @@ function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;
 // !ModularCryptHash('$1$gV5s/FALJ/0x8nyo$', 'password') = '$1$gV5s/FALJ/0x8nyo$6yO.DIuu/ZF/eJaK5oHu90'
 // - the format can e.g. be send back to the client to make the proper modular
 // crypt hashing on its side, and send back the hash (or nonced proof) to the server
-function ModularCryptHash(const format, password: RawUtf8): RawUtf8; overload;
+function ModularCryptHash(const format, password: RawUtf8;
+  decodedFormat: PModularCryptFormat = nil): RawUtf8; overload;
 
 /// identify if a given hash matches any "Modular Crypt" format
 // - e.g. returns true and mcfMd5Crypt for '$1${salt}${checksum}' or
@@ -4875,7 +4877,8 @@ begin
   end;
 end;
 
-function ModularCryptHash(const format, password: RawUtf8): RawUtf8;
+function ModularCryptHash(const format, password: RawUtf8;
+  decodedFormat: PModularCryptFormat): RawUtf8;
 var
   mcf: TModularCryptFormat;
   P: PUtf8char;
@@ -4885,6 +4888,8 @@ begin
   FastAssignNew(result);
   P := pointer(format);
   mcf := ModularCryptParse(P, rounds, salt);
+  if decodedFormat <> nil then
+    decodedFormat^ := mcf;
   if mcf in mcfValid then
     result := ModularCryptHash(mcf, password, rounds, 0, salt);
 end;
