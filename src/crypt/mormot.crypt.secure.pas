@@ -1186,6 +1186,25 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
   HashPos: PInteger = nil; Api: TSCriptRaw = nil): RawUtf8;
 
 
+{ SCRAM-like Client/Server mutual authentication using ModularCryptHash() }
+
+/// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
+function ScramPersistedKey(const Hash: RawUtf8): RawUtf8;
+
+/// compute the SCRAM client proof for a given "Modular Crypt" hash
+function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
+  const Msg: array of RawByteString): RawUtf8;
+
+/// compute the SCRAM server proof for a given "Modular Crypt" challenge
+// - and also verify a given ScramClientProof() value
+function ScramServerProof(const PersistedKey, ClientProof: RawUtf8;
+  const Msg: array of RawByteString): RawUtf8;
+
+// verify a given ScramServerProof() value on client side
+function ScramClientServerAuth(const Hash, ServerProof: RawUtf8;
+  var ClientSignature: THash256): boolean;
+
+
 { some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
 
 /// compute the HMAC message authentication code using any hash function
@@ -4709,7 +4728,7 @@ var
 begin
   result := mcfInvalid;
   if (P = nil) or
-     (P^ <> '$') then
+     not (P^ in ['$', '#']) then // allow # prefix for SCRAM-like auth
     exit;
   inc(P);
   GetNextItem(P, '$', salt);
@@ -5021,6 +5040,95 @@ begin
   if HashPos <> nil then
     HashPos^ := length(result) + 1;
   Append(result, BinToBase64uri(hash, @ConvertToBase64));
+end;
+
+
+// SCRAM-like mutual auth - see https://github.com/synopse/mORMot2/issues/405
+
+function ScramPersistedKey(const Hash: RawUtf8): RawUtf8;
+var
+  clientkey: THash256;
+  stored: THash512Rec; // Lo=StoredKey, Hi=ServerKey
+begin
+  result := ''; // error
+  if (Hash = '') or
+     (Hash[1] <> '$') or // should be a true KDF/MCF result
+     not (ModularCryptIdentify(Hash, @result) in mcfValid) then
+    exit;
+  HmacSha256(Hash, 'Client Key', clientkey);
+  Sha256Digest(stored.Lo, clientkey);
+  HmacSha256(Hash, 'Server Key', stored.Hi);
+  result[1] := '#'; // "#MCF prefix" + base64uri(StoredKey + ServerKey)
+  Append(result, BinToBase64uriShort(@stored, SizeOf(stored)));
+  FillZero(clientkey);
+  FillZero(stored.b);
+end;
+
+function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
+  const Msg: array of RawByteString): RawUtf8;
+var
+  clientkey, storedkey: THash256;
+begin
+  result := ''; // error
+  if (Hash = '') or
+     (Hash[1] <> '$') or // should be a true KDF/MCF result
+     not (ModularCryptIdentify(Hash) in mcfValid) then
+    exit;
+  HmacSha256(Hash, 'Client Key', clientkey);
+  Sha256Digest(storedkey, clientkey);
+  HmacSha256U(@storedkey, SizeOf(storedkey), Msg, ClientSignature, '|');
+  Xor256(@clientkey, @ClientSignature);
+  result := BinToBase64uri(@clientkey, SizeOf(clientkey));
+  FillZero(clientkey);
+  FillZero(storedkey);
+end;
+
+function ScramServerProof(const PersistedKey, ClientProof: RawUtf8;
+  const Msg: array of RawByteString): RawUtf8;
+var
+  l: PtrInt;
+  k: PAnsiChar;
+  clientsig, clientkey: THash256;
+  stored: THash512Rec; // Lo=StoredKey, Hi=ServerKey
+begin
+  result := ''; // error
+  if not Base64uriToBin(ClientProof, @clientkey, SizeOf(clientkey)) then
+    exit;
+  l := length(PersistedKey) - 86;
+  k := pointer(PersistedKey);
+  if (l < 0) or // should end with base64-uri encoded 2*256-bit = 86 chars
+     (k[0] <> '#') or
+     not Base64uriToBin(k + l, @stored, 86, SizeOf(stored)) then
+    exit;
+  HmacSha256U(@stored.Lo, SizeOf(stored.Lo), Msg, clientsig, '|');
+  Xor256(@clientkey, @clientsig);
+  Sha256Digest(clientkey, clientkey);
+  if IsEqual(clientkey, stored.Lo) then // H(candidate_ClientKey) = StoredKey
+  begin
+    Xor256(@stored.Hi, @clientsig);
+    result := BinToBase64uri(@stored.Hi, SizeOf(stored.Hi)); // proof on success
+  end;
+  FillZero(clientkey);
+  FillZero(stored.b);
+end;
+
+function ScramClientServerAuth(const Hash, ServerProof: RawUtf8;
+  var ClientSignature: THash256): boolean;
+var
+  serverkey, proof: THash256;
+begin
+  result := false;
+  if (Hash <> '') and
+     (Hash[1] = '$') and // should be a true KDF/MCF result
+     Base64uriToBin(ServerProof, @proof, SizeOf(proof)) then
+  begin
+    HmacSha256(Hash, 'Server Key', serverkey);
+    Xor256(@proof, @ClientSignature);
+    result := IsEqual(proof, serverkey);
+    FillZero(proof);
+    FillZero(serverkey);
+  end;
+  FillZero(ClientSignature);
 end;
 
 
