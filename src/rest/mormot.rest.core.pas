@@ -3698,7 +3698,7 @@ var
   algo: TDigestAlgo absolute aHashRound;
 begin
   if (aPasswordPlain <> '') and
-     (aPasswordPlain[1] = '$') and
+     (aPasswordPlain[1] in ['$', '#']) and // # for SCRAM-like auth
      (ModularCryptIdentify(aPasswordPlain) in mcfValid) then
   begin
     // already in the expected new and safe "Modular Crypt" format

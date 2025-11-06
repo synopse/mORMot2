@@ -4813,8 +4813,7 @@ begin
         // rounds := <logN:5-bit:1..31><R:14-bit:1..16384><P:13-bit:1..8192>
         rounds := SCryptRounds(sLogN, sR, sP);
         GetNextItem(P, '$', salt);
-        if not Base64uriValid(pointer(salt), @ConvertBase64ToBin) or
-           not Base64uriValid(P, @ConvertBase64ToBin) then
+        if not Base64uriValid(pointer(salt), @ConvertBase64ToBin) then
           exit;
         result := mcfSCrypt;
         exit; // $scrypt$ charset is standard base64 and not passlib b64valid()
@@ -4832,10 +4831,9 @@ begin
   end
   else
     GetNextItem(P, '$', salt);
-  if not b64valid(pointer(salt)) or
-     not b64valid(P) then
+  if not b64valid(pointer(salt)) then
     result := mcfInvalid;
-end; // on success, P points to the {checksum} part
+end; // on success, P^ points to the {checksum} part - its encoding is unchecked
 
 function ModularCryptIdentify(const hash: RawUtf8; info: PRawUtf8): TModularCryptFormat;
 var
