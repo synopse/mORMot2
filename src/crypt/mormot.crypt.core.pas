@@ -2803,7 +2803,7 @@ type
   end;
 
   TShaContext = packed record
-    // current hash state (TSha256.Init expect this field to be the first)
+    // current hash state (TSha256/224.Init expect this field to be the first)
     Hash: TShaHash;
     // 64-bit msg length
     MLen: QWord;
@@ -2830,7 +2830,7 @@ const
 
 var
   {$ifdef USEAESNIHASH}
-  // 64 SSE2-aligned random bytes set at startup to avoid hash flooding
+  // SSE2-aligned 64 random bytes set at startup to avoid hash flooding
   AesNiHashKey: PHash512; // = AesNiHashAntiFuzzTable
   {$endif USEAESNIHASH}
   // filled by ComputeAesStaticTables if needed - don't change the order below
@@ -10479,8 +10479,8 @@ begin
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
-    AesNiHashKey := GetMemAligned(16 * 4, @BaseEntropy);        // non-void init
-    LecuyerDiffusion(AesNiHashKey, 16 * 4, @SystemEntropy.Startup);   // 512-bit
+    AesNiHashKey := GetMemAligned(64, @BaseEntropy);            // non-void init
+    LecuyerDiffusion(AesNiHashKey, 64, @SystemEntropy.Startup); // 512-bit xor
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;

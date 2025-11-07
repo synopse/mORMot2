@@ -432,7 +432,7 @@ const
 // - returns e.g. '$2b$<cost>$<salt><checksum>' for the regular BSD format or
 // '$bcrypt-sha256$v=2,t=2b,r=<cost>$<salt'$ for the passlib extended format
 function BCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
- Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
+  Cost: byte = 12; HashPos: PInteger = nil; PreSha256: boolean = false): RawUtf8;
 
 /// prepare a BlockFish encryption with a given Salt, UTF-8 Password and Cost
 // - Password is process using the BCrypt "Expensive Key Setup" algorithm

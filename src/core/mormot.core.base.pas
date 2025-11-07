@@ -10258,7 +10258,7 @@ end;
 
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 var
-  gen: TLecuyer;
+  gen: TLecuyer; // thread-safe local instance
 begin
   if data = '' then
     exit;
@@ -10272,7 +10272,7 @@ end;
 
 procedure LecuyerDiffusion(dest: pointer; destsize: PtrUInt; src: PHash128);
 var
-  gen: TLecuyer;
+  gen: TLecuyer; // thread-safe local instance
 begin
   PHash128(@gen)^ := src^;
   gen.SeedGenerator;

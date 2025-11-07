@@ -800,6 +800,7 @@ type
   // any password, e.g. > than 72 bytes (following passlib.hash.bcrypt_sha256)
   // - mcfSCrypt is the SCrypt memory-intensive hashing algorithm, implemented in
   // mormot.crypt.other.pas or in mormot.crypt.openssl.pas via global SCrypt()
+  // - in practice: use safest mcfBCryptSha256 or mcfSCrypt if possible
   TModularCryptFormat = (
     mcfInvalid,
     mcfUnknown,

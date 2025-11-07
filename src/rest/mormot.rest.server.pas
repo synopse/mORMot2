@@ -2974,7 +2974,7 @@ begin
      (Server.fSessions <> nil) and
      not IsRemoteAdministrationExecute then
   begin
-    // some kind of requests may have been marked to by-pass authentication
+    // some requests may have been marked to by-pass authentication
     fSession := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     if // /auth + /timestamp are e.g. allowed methods without signature
        ((MethodIndex >= 0) and
@@ -5286,7 +5286,7 @@ end;
 procedure TRestServerAuthenticationSignedUri.SetAlgorithm(
   value: TRestAuthenticationSignedUriAlgo);
 begin
-  fComputeSignature :=
+  fComputeSignature := // use the method already defined for the client side
     TRestClientAuthenticationSignedUri.GetComputeSignature(value);
   if value = suaCRC32 then
     fAlgoName := ''

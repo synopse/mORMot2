@@ -88,7 +88,7 @@ type
 
   /// algorithms known by TRestClientAuthenticationSignedUri and
   // TRestServerAuthenticationSignedUri to digitaly compute the
-  // session_signature parameter value for a given URI
+  // 32-bit session_signature parameter value for a given URI
   // - by default, suaCRC32 will compute fast but not cryptographically secure
   // ! crc32(crc32(privatesalt, timestamp, 8), url, urllen)
   // - suaCRC32C and suaXXHASH are similar non-cryptographic alternatives
@@ -98,10 +98,10 @@ type
   // security, by calling e.g.
   // ! (aServer.AuthenticationRegister(TRestClientAuthenticationDefault) as
   // !   TRestServerAuthenticationDefault).Algorithm := suaMD5;
-  // - suaSHA1, suaSHA256, suaSHA512 and suaSHA3 will be slower, and may provide
-  // additional level of trust, depending on your requirements: note that
-  // since the hash is reduced to 32-bit resolution, those may not provide
-  // higher security than suaMD5 or suaSHA1
+  // - since the hash result is reduced to only 32-bit resolution, suaSHA1,
+  // suaSHA256, suaSHA512 or suaSHA3 are likely to not provide much higher
+  // security than suaMD5 or suaSHA1 - consider rsoAuthenticationBearerHeader
+  // as a cryptographic safe (and complementary) alternative to URI signing
   // - note that SynCrossPlatformRest clients only implements suaCRC32 yet
   TRestAuthenticationSignedUriAlgo = (
     suaCRC32,
@@ -115,7 +115,7 @@ type
 
   /// function prototype for TRestClientAuthenticationSignedUri and
   // TRestServerAuthenticationSignedUri computation of the session_signature
-  // parameter value
+  // 32-bit parameter value
   TOnRestAuthenticationSignedUriComputeSignature = function(
     privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal of object;
 
@@ -2185,7 +2185,7 @@ var
   period: integer;
 begin
   result := false;
-  fSession.ID := GetCardinal(pointer(aSessionKey));
+  fSession.ID := GetCardinal(pointer(aSessionKey)); // 'ID+secret128'
   if fSession.ID = 0 then
     exit;
   if fSession.IDHexa8 = '' then // may have been retrieved from 'SetCookie:'

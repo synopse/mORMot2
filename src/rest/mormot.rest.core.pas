@@ -1039,6 +1039,10 @@ type
       aHashRound: integer = 20000); overload;
     /// set the PasswordHashHexa field using "Modular Crypt" SCRAM-like hash
     // - with its default parameters, and a random salt also stored in this field
+    // - in practice: use mcfBCryptSha256 or mcfSCrypt for login from a mORMot
+    // 2.4 client executable for the safest pattern, including mutual authentication;
+    // you may still consider PasswordPlain/Sha256 or PasswordDigest
+    // from a Web or JavaScript client, or for mORMot 1 client compatibility
     // - the server will send back the actual format (algo and params) expected
     // for each user during its login handshake, so you could just login with
     // TRestClientUri.SetUser() with the plain password and no other info
@@ -1048,11 +1052,6 @@ type
     // authenticated to the client, unless aMutualAuth is forced to false (may be
     // needed for weak non-mORMot clients only implementing raw "Modular Crypt"
     // or if the database can't store the 43 additional chars in this field)
-    // - in practice: you may still consider PasswordPlain/Sha256 or PasswordDigest
-    // from a Web or JavaScript client, but rather use mcfBCryptSha256 or mcfSCrypt
-    // for login from a mORMot 2.4 client executable; fallback to PBKDF2 variant
-    // if you need to be compatible with mORMot 1 client (but you need to know
-    // the number of rounds)
     procedure SetPassword(const aPasswordPlain: RawUtf8;
       aModularCrypt: TModularCryptFormat; aMutualAuth: boolean = true); overload;
     /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
@@ -1101,12 +1100,17 @@ type
     // - as a safer alternative, consider storing ModularCryptHash() hashes from
     // mormot.crypt.secure via the SetPassword(TModularCryptFormat) overload
     // - maximum size (i.e. "index" value) was 64 - but has been upgraded to 192
-    // for DIGEST-HA0 with daSHA512 and the new "Modular" hashes: default
-    // aMutualAuth=true would use 90-140 chars, but aMutualAuth=false would use
-    // 60 chars for safe BCrypt if you can't easily upgrade the database
+    // for DIGEST-HA0 with daSHA512 and the new "Modular"/SCRAM hashes: default
+    // SetPassword(mcf*,aMutualAuth=true) would require 90-150 chars, but
+    // SetPassword(mcfBCrypt,false) only 60 chars if you can't upgrade the DB
     // - you can set directly your own custom "Modular Crypt" hash - e.g. forcing
     // mcfSCrypt with LogN=20, R=8, P=1 for admin/root login, burning 1.23s and
     // 1GB RAM on client side during the hashing (but not on the server side)
+    // - so in this field, you may encounter such values:
+    // $ 0123abc.....ffee = 256-bit hexa of mORMot 1 SHA256('salt'+password)
+    // $ bc01a89.....2b07 = HA0 = Hash(username:realm:password) for DIGEST
+    // $ $mcf$params$checkum = standard "Modular Crypt" hash
+    // $ #mcf$params$scramkeys = SCRAM-like "Modular" hash with mutual auth
     property PasswordHashHexa: RawUtf8
       index 192 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
