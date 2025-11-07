@@ -1155,8 +1155,8 @@ function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
 // - without {checksum} - as returned by ModularCryptIdentify() info^ parameter
 // - used e.g. by TRestServer.ReturnNonce() with an unknown UserName, to avoid
 // the client being able to guess by fuzzing that this UserName is unknown
-// - use SystemEntropy.Startup as seed for consistent results between calls, but
-// eventually reset when the process is restarted
+// - use SystemEntropy.Startup as SHA-256 seed for consistent results between
+// calls, but eventually reset when the process is restarted
 function ModularCryptFakeInfo(const id: RawUtf8;
   format: TModularCryptFormat = mcfUnknown): RawUtf8;
 
@@ -4950,11 +4950,15 @@ function ModularCryptFakeInfo(const id: RawUtf8; format: TModularCryptFormat): R
 var
   h: THash256Rec; // always return the same fake content for the same id
   enc: PChar64;
-  salt: TShort23;
+  sha: TSha256;
+  salt: TShort23 absolute sha;
 const
   RANGE = cardinal(high(TModularCryptFormat)) - cardinal(mcfMd5Crypt); // = 9
 begin
-  HmacSha256(@SystemEntropy.Startup, pointer(id), 16, length(id), h.b);
+  sha.Init;
+  sha.Update(@SystemEntropy.Startup, SizeOf(SystemEntropy.Startup));
+  sha.Update(id);
+  sha.Final(h.b, {noinit=}true);
   if format <= mcfMd5Crypt then // compute consistent format if none supplied
     format := TModularCryptFormat(h.b[0] mod RANGE + byte(succ(mcfMd5Crypt)));
   Join(['$', MCF_IDENT[format], '$'], result);
