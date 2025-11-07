@@ -4911,8 +4911,11 @@ begin
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.OrmAccessRights;
   Make([fID, '+', fPrivateKey], fPrivateSalt);
-  fPrivateSaltHash := crc32(crc32(0, pointer(fPrivateSalt), length(fPrivateSalt)),
-    pointer(fUser.PasswordHashHexa), length(fUser.PasswordHashHexa));
+  fPrivateSaltHash := crc32(0, pointer(fPrivateSalt), length(fPrivateSalt));
+  if (fUser.PasswordHashHexa <> '') and // client ignores the SCRAM DB value
+     (fUser.PasswordHashHexa[1] <> '#') then
+    fPrivateSaltHash := crc32(fPrivateSaltHash,
+      pointer(fUser.PasswordHashHexa), length(fUser.PasswordHashHexa));
 end;
 
 constructor TAuthSession.Create(aCtxt: TRestServerUriContext; aUser: TAuthUser);

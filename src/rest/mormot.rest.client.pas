@@ -1402,8 +1402,8 @@ begin
       User.PasswordHashHexa := ''
     else if ScramClientServerAuth(mcfhash, User.LogonName,
               Sender.fSession.ScramServerProof, clientsign) then
-      // success: fSession.PrivateKey will be computed from the server DB key
-      User.PasswordHashHexa := ScramPersistedKey(mcfhash)
+      // success: fSession.PrivateKey computed without the server DB key
+      User.PasswordHashHexa := '#'
     else
       result := ''; // error
 end;
@@ -2192,9 +2192,10 @@ begin
   if fSession.IDHexa8 = '' then // may have been retrieved from 'SetCookie:'
   begin
     fSession.IDHexa8 := CardinalToHexLower(fSession.ID);
-    fSession.PrivateKey := crc32(crc32(0,
-      pointer(aSessionKey), length(aSessionKey)),
-      pointer(aUser.PasswordHashHexa), length(aUser.PasswordHashHexa));
+    fSession.PrivateKey := crc32(0, pointer(aSessionKey), length(aSessionKey));
+    if aUser.PasswordHashHexa <> '#' then // ignore the SCRAM DB value
+      fSession.PrivateKey := crc32(fSession.PrivateKey,
+        pointer(aUser.PasswordHashHexa), length(aUser.PasswordHashHexa));
   end;
   fSession.User := aUser;
   fSession.Authentication := aAuth;
