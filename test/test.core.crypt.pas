@@ -2087,7 +2087,7 @@ begin
       begin
         // validate SCRAM-like mutual authentication using MCF hashes
         Check(u[1] = '$');
-        db := ScramPersistedKey(u);
+        db := ScramPersistedKey(u, 'user');
         Check(db <> '', 'ScramPersistedKey');
         Check(db[1] = '#');
         Check(ModularCryptIdentify(db, @nfo2) = mcf);
@@ -2095,13 +2095,13 @@ begin
         nfo2[1] := '$';
         CheckEqual(nfo, nfo2);
         Check(u[1] = '$');
-        proof := ScramClientProof(u, clientsig, ['root', 'user', 'cn', 'sn']);
+        proof := ScramClientProof(u, 'user', clientsig, ['root', 'user', 'cn', 'sn']);
         Check(proof <> '', 'ScramClientProof');
         Check(ScramServerProof(db, proof, ['root', 'user', 'cn', 'so']) = '');
         proof := ScramServerProof(db, proof, ['root', 'user', 'cn', 'sn']);
         Check(proof <> '', 'ScramServerProof');
-        Check(ScramClientServerAuth(u, proof, clientsig), 'ScramClientServerAuth');
-        Check(not ScramClientServerAuth(u, proof, clientsig), 'clientsig=0');
+        Check(ScramClientServerAuth(u, 'user', proof, clientsig), 'ScramClientServerAuth');
+        Check(not ScramClientServerAuth(u, 'user', proof, clientsig), 'clientsig=0');
         dec(PByteArray(u)[length(u) - 5]);
         Check(ModularCryptVerify(pw, u) = mcfInvalid);
       end;
