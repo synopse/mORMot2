@@ -2031,7 +2031,7 @@ begin
     if do_syscall(syscall_nr_getrandom, TSysParam(buf), len, 0) = len then
     begin
       if len >= SizeOf(SystemEntropy.LiveFeed) then
-        crcblock(@SystemEntropy.LiveFeed, buf); // shuffle live state
+        crcblock(@SystemEntropy.LiveFeed, buf); // quickly shuffle live state
       result := true; // "man getrandom" states to read up to 256 bytes per call
     end
     else
@@ -3644,7 +3644,7 @@ begin
   if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
   {$endif OSDARWIN}
-  crcblock(@e.l, @SystemEntropy.Startup); // 128-bit entropy over nanoseconds
+  crcblock(@e.l, @SystemEntropy.LiveFeed); // obfuscate
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
   {$ifndef CPUINTEL}
@@ -3652,7 +3652,7 @@ begin
     crcblocks(@SystemEntropy.LiveFeed, @e, 2) // put something here
   else
   {$endif CPUINTEL}
-    crcblock(@e.h, @SystemEntropy.LiveFeed);  // obfuscate
+    crcblock(@e.h, @SystemEntropy.Startup);  // obfuscate
 end;
 
 const

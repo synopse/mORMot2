@@ -334,12 +334,18 @@ type
     Authentication: TRestClientAuthenticationClass;
     IDHexa8: RawUtf8; // fSession.ID in hexadecimal
     ScramServerProof: RawUtf8;
-    PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
+    PrivateKey: cardinal;
   {$ifdef HASINLINE}
   public
   {$endif HASINLINE}
+    /// the current session ID as set after a successful SetUser() method call
+    // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
+    // is not started yet - i.e. if SetUser() call failed
+    // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
+    // is not enabled - i.e. after a fresh Create() without SetUser() call
+    ID: cardinal;
     /// the current user as set by SetUser() method
     // - contains nil if no User is currently authenticated
     // - once authenticated, a TAuthUser instance is set, with its ID,
@@ -347,12 +353,6 @@ type
     // TAuthGroup ID casted as a pointer) properties - you can retrieve any
     // optional binary data associated with this user via RetrieveBlobFields()
     User: TAuthUser;
-    /// the current session ID as set after a successful SetUser() method call
-    // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
-    // is not started yet - i.e. if SetUser() call failed
-    // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
-    // is not enabled - i.e. after a fresh Create() without SetUser() call
-    ID: cardinal;
     /// access to the low-level HTTP header used for authentication
     // - you can force here your own header, e.g. a JWT as authentication bearer
     // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
@@ -580,7 +580,7 @@ type
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
     fServiceRoutingSupports: TRestClientSideInvoke;
-    fInternalState: set of (isDestroying, isInAuth, isClientError);
+    fInternalState: set of (isDestroying, isInAuth, isClientError, needsBearer);
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
@@ -1272,9 +1272,9 @@ begin
   if Sender.fSession.ServerTimeout <= 0 then
     Sender.fSession.ServerTimeout := 60; // default 1 hour if not suppplied
   Sender.fSession.IDHexa8 := '';
-  if values[10].Text <> nil then
-    // from rsoAuthenticationBearerHeader in Server.Options
-    Make(['Authorization: Bearer ', values[10].Text], Sender.fSession.HttpHeader);
+  if values[10].ToBoolean then
+    // "bearer":1 from rsoAuthenticationBearerHeader in Server.Options
+    include(Sender.fInternalState, needsBearer);
   if values[11].Text <> nil then
     Sender.fSession.ScramServerProof := values[11].ToUtf8;
   if values[9].Text <> nil then
@@ -1388,13 +1388,14 @@ begin
     exit;
   // compute and return a proof, challenged against client and server nonces
   if proof = '' then
-    // regular mORMot 1 authentication via hexadecimal hashing
+    // regular mORMot 1 authentication via simple hexadecimal hashing
     proof := Sha256U([Sender.fModel.Root, servernonce, clientnonce,
       User.LogonName, User.PasswordHashHexa]);
   result := ClientGetSessionKey(Sender, User, [
     'username',    User.LogonName,
     'password',    proof,
     'clientnonce', clientnonce]);
+  // now result <> '' contains 'id-privatekey' on authentication success
   if (values[1].Text <> nil) and
      (values[1].Text^ = '#') then
     // authenticate the SCRAM server from the returned proof
@@ -2167,6 +2168,10 @@ begin
       period := 25 * 60;
     SetSessionHeartbeatSeconds(period);
   end;
+  if (needsBearer in fInternalState) and
+     (PosExChar('+', aSessionKey) <> 0) then
+    Join(['Authorization: Bearer ', SplitRight(aSessionKey, '+')],
+      fSession.HttpHeader);
   result := true;
 end;
 

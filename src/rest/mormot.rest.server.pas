@@ -4910,7 +4910,7 @@ begin
   fTimeOutShr10 := User.GroupRights.SessionTimeout * (MilliSecsPerMin shr 10);
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.OrmAccessRights;
-  Make([fID, '+', fPrivateKey], fPrivateSalt);
+  Make([fID, '+', fPrivateKey], fPrivateSalt); // 'SessionID+PrivateKey'
   fPrivateSaltHash := crc32(0, pointer(fPrivateSalt), length(fPrivateSalt));
   if (fUser.PasswordHashHexa <> '') and // client ignores the SCRAM DB value
      (fUser.PasswordHashHexa[1] <> '#') then
@@ -4921,7 +4921,7 @@ end;
 constructor TAuthSession.Create(aCtxt: TRestServerUriContext; aUser: TAuthUser);
 var
   gid: TID;
-  rnd: THash256Rec;
+  rnd: THash128;
 begin
   // inherited Create; // not mandatory - should not be overriden
   if (aCtxt = nil) or
@@ -4951,11 +4951,16 @@ begin
         [fUser, fUser.IDValue], self);
   // compute the next Session ID and its associated private key
   fID := InterlockedIncrement(aCtxt.Server.fSessionCounter); // 20-bit number
-  if PInteger(@ServerProcessKdf)^ <> 0 then  // use local thread-safe CSPRNG
-    ServerProcessKdf.Compute(@fID, 8, rnd.b) // 8 > 4 bytes nonce ticks
+  if rsoAuthenticationBearerHeader in aCtxt.Server.Options then
+    // compute a new 'Authentication: Bearer xxx' header for the HTTP client
+    // -> use this genuine bearer as private key, and return "bearer":1
+    fPrivateKey := aCtxt.Server.fAuthenticationBearerHeader.GenerateCookie(fID)
   else
-    Random128(@rnd); // safe (but paranoid) unpredictable fallback
-  BinToHexLower(@rnd, SizeOf(rnd.l), fPrivateKey); // 128-bit is enough
+  begin
+    // manual generation of a private key for URI signing
+    Random128(@rnd); // unpredictable - would be reduced to 32-bit anyway
+    BinToHexLower(@rnd, SizeOf(rnd), fPrivateKey);
+  end;
   ComputeProtectedValues(aCtxt.TickCount64);
   // this session has been successfully created
   if Assigned(aCtxt.fLog) and
@@ -5216,9 +5221,9 @@ var
   body: TDocVariantData;
   vers: string;
 begin
-  body.InitFast(10, dvObject);
+  body.InitFast(12, dvObject);
   if result = '' then
-    body.AddValue('result', Session.ID)
+    body.AddValue('result', Session.ID) // no private key
   else
     body.AddValueText('result', result);
   if data <> '' then
@@ -5229,6 +5234,11 @@ begin
   if Ctxt.fTemp <> '' then
     // ScramServerProof() transient result
     body.AddValueText('proof', Ctxt.fTemp);
+  if (rsoAuthenticationBearerHeader in fServer.Options) and
+     (PosExChar('+', result) <> 0) then
+    // TRestClientAuthentication.ClientGetSessionKey would now send an
+    // 'Authentication: Bearer xxx' HTTP header from "result":"sessionid+xxx"
+    body.AddValue('bearer', 1);
   with Session.User do
     body.AddNameValuesToObject([
       'logonid',      IDValue,
@@ -5245,11 +5255,6 @@ begin
       vers := Executable.Version.Main;
     body.AddValue('version', StringToVariant(vers));
   end;
-  if rsoAuthenticationBearerHeader in fServer.Options then
-    // TRestClientAuthentication.ClientGetSessionKey would now send an
-    // 'Authentication: Bearer xxx' HTTP header from "bearer":"xxx"
-    body.AddValueText('bearer',
-      fServer.fAuthenticationBearerHeader.GenerateCookie(Session.ID));
   include(Ctxt.fServiceExecutionOptions, optNoLogOutput); // hide sensitive info
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
