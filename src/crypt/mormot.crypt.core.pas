@@ -360,7 +360,6 @@ type
     // - KeySize is in bits, i.e. 128, 192 or 256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES context for cipher, using CSPRNG as transient key source
-    // - also set the internal IV field to a random value
     // - used e.g. by TAesSignature or Random128() for their initialization
     procedure EncryptInitRandom(Bits: integer = 128);
     /// encrypt an AES data block into another data block
@@ -4123,12 +4122,14 @@ procedure TAes.EncryptInitRandom(Bits: integer);
 var
   rnd: THash256Rec;
 begin // note: we can't use Random128() here to avoid endless recursion
-  TAesPrng.Main.FillRandom(rnd.b);    // 256-bit from CSPRNG
-  EncryptInit(rnd, Bits);             // transient AES-128/256 secret
-  if Bits <> 128 then
-    TAesPrng.Main.FillRandom(rnd.Hi); // need 128-bit more CSPRNG for IV
-  TAesContext(Context).iv := rnd.h;   // safe IV from CSPRNG
-  FillZero(rnd.b);                    // anti-forensic
+  {$ifdef OSLINUX}
+  if (MainAesPrng = nil) and
+     not LinuxGetRandom(@rnd, Bits shr 3) then // 128/256-bit in 1 syscall
+  {$endif OSLINUX}
+    TAesPrng.Main.FillRandom(rnd.b);   // 256-bit from our CSPRNG (if available)
+  EncryptInit(rnd, Bits);              // transient AES-128/256 secret
+  FillZero(TAesContext(Context).iv.b); // as per NIST SP 800-90A
+  FillZero(rnd.b);                     // anti-forensic
 end;
 
 function TAes.DecryptInitFrom(const Encryption: TAes; const Key;
