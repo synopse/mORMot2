@@ -1191,14 +1191,21 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
 
 { SCRAM-like Client/Server mutual authentication using ModularCryptHash() }
 
-/// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
-function ScramPersistedKey(const Hash: RawUtf8): RawUtf8; overload;
+/// compute the SCRAM challenge to be stored on DB for a given "Modular Crypt" hash
+// - the value is bound to the User logon, so that it can't be reassigned to
+// a more sensitive user on a compromised database ("key swap" attack)
+function ScramPersistedKey(const Hash, User: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
-function ScramPersistedKey(Mcf: TModularCryptFormat; const Password: RawUtf8): RawUtf8; overload;
+function ScramPersistedKey(Mcf: TModularCryptFormat;
+  const Password, User: RawUtf8; Rounds: cardinal = 0): RawUtf8; overload;
+
+/// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
+// - this overload expects the MCF format to be supplied as text
+function ScramPersistedKey(const McfFormat, Password, User: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM client proof for a given "Modular Crypt" hash
-function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
+function ScramClientProof(const Hash, User: RawUtf8; var ClientSignature: THash256;
   const Msg: array of RawByteString): RawUtf8;
 
 /// compute the SCRAM server proof for a given "Modular Crypt" challenge
@@ -1206,8 +1213,10 @@ function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
 function ScramServerProof(const PersistedKey, ClientProof: RawUtf8;
   const Msg: array of RawByteString): RawUtf8;
 
-// verify a given ScramServerProof() value on client side
-function ScramClientServerAuth(const Hash, ServerProof: RawUtf8;
+/// verify a given ScramServerProof() value on client side
+// - can optionally return the server-side persisted value in DB (if needed
+// to compute the URI secret)
+function ScramClientServerAuth(const Hash, User, ServerProof: RawUtf8;
   var ClientSignature: THash256): boolean;
 
 
@@ -5056,7 +5065,7 @@ end;
 
 // SCRAM-like mutual auth - see https://github.com/synopse/mORMot2/issues/405
 
-function ScramPersistedKey(const Hash: RawUtf8): RawUtf8;
+function ScramPersistedKey(const Hash, User: RawUtf8): RawUtf8;
 var
   clientkey: THash256;
   stored: THash512Rec; // Lo=StoredKey, Hi=ServerKey
@@ -5066,21 +5075,27 @@ begin
      (Hash[1] <> '$') or // should be a true KDF/MCF result
      not (ModularCryptIdentify(Hash, @result) in mcfValid) then
     exit;
-  HmacSha256(Hash, 'Client Key', clientkey);
-  Sha256Digest(stored.Lo, clientkey);
-  HmacSha256(Hash, 'Server Key', stored.Hi);
+  HmacSha256U(pointer(Hash), length(Hash), [User, 'Client Key'], clientkey, '|');
+  Sha256Digest(stored.Lo, clientkey); // store H(clientkey) for ScramClientProof
+  HmacSha256U(pointer(Hash), length(Hash), [User, 'Server Key'], stored.Hi, '|');
   result[1] := '#'; // "#MCF prefix" + base64uri(StoredKey + ServerKey)
   Append(result, BinToBase64uriShort(@stored, SizeOf(stored)));
   FillZero(clientkey);
   FillZero(stored.b);
 end;
 
-function ScramPersistedKey(Mcf: TModularCryptFormat; const Password: RawUtf8): RawUtf8;
+function ScramPersistedKey(Mcf: TModularCryptFormat; const Password, User: RawUtf8;
+  Rounds: cardinal): RawUtf8;
 begin
-  result := ScramPersistedKey(ModularCryptHash(mcf, Password));
+  result := ScramPersistedKey(ModularCryptHash(mcf, Password, Rounds), User);
 end;
 
-function ScramClientProof(const Hash: RawUtf8; var ClientSignature: THash256;
+function ScramPersistedKey(const McfFormat, Password, User: RawUtf8): RawUtf8;
+begin
+  result := ScramPersistedKey(ModularCryptHash(McfFormat, Password), User);
+end;
+
+function ScramClientProof(const Hash, User: RawUtf8; var ClientSignature: THash256;
   const Msg: array of RawByteString): RawUtf8;
 var
   clientkey, storedkey: THash256;
@@ -5090,7 +5105,7 @@ begin
      (Hash[1] <> '$') or // should be a true KDF/MCF result
      not (ModularCryptIdentify(Hash) in mcfValid) then
     exit;
-  HmacSha256(Hash, 'Client Key', clientkey);
+  HmacSha256U(pointer(Hash), length(Hash), [User, 'Client Key'], clientkey, '|');
   Sha256Digest(storedkey, clientkey);
   HmacSha256U(@storedkey, SizeOf(storedkey), Msg, ClientSignature, '|');
   Xor256(@clientkey, @ClientSignature);
@@ -5128,7 +5143,7 @@ begin
   FillZero(stored.b);
 end;
 
-function ScramClientServerAuth(const Hash, ServerProof: RawUtf8;
+function ScramClientServerAuth(const Hash, User, ServerProof: RawUtf8;
   var ClientSignature: THash256): boolean;
 var
   serverkey, proof: THash256;
@@ -5138,7 +5153,7 @@ begin
      (Hash[1] = '$') and // should be a true KDF/MCF result
      Base64uriToBin(ServerProof, @proof, SizeOf(proof)) then
   begin
-    HmacSha256(Hash, 'Server Key', serverkey);
+    HmacSha256U(pointer(Hash), length(Hash), [User, 'Server Key'], serverkey, '|');
     Xor256(@proof, @ClientSignature);
     result := IsEqual(proof, serverkey);
     FillZero(proof);
