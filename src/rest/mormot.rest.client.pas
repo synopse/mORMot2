@@ -1445,100 +1445,58 @@ begin
   result := xxHash32(privatesalt, timestamp, 8) xor xxHash32(privatesalt, url, urllen);
 end;
 
-class function TRestClientAuthenticationSignedUri.ComputeSignatureMd5(
+function ComputeSignatureAlgo(algo: THashAlgo;
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
-  digest: THash128Rec;
-  MD5: TMd5;
-  i: PtrInt;
+  digest: THash512Rec;
+  hasher: TSynHasher;
+  by32, i: PtrInt;
 begin
-  MD5.Init;
-  MD5.Update(privatesalt, 4);
-  MD5.Update(timestamp^, 8);
-  MD5.Update(url^, urllen);
-  MD5.Final(digest.b);
+  hasher.Init(algo);
+  hasher.Update(@privatesalt, 4);
+  hasher.Update(timestamp, 8);
+  hasher.Update(url, urllen);
+  by32 := hasher.Final(digest) shr 2;
   result := digest.c[0];
-  for i := 1 to high(digest.c) do
+  for i := 1 to by32 - 1 do
     // we may have used the first 32-bit of the digest, but cascaded xor is fine
     result := result xor digest.c[i];
+end;
+
+class function TRestClientAuthenticationSignedUri.ComputeSignatureMd5(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+begin
+  result := ComputeSignatureAlgo(hfMD5, privatesalt, timestamp, url, urllen);
 end;
 
 class function TRestClientAuthenticationSignedUri.ComputeSignatureSha1(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var
-  digest: array[0..(SizeOf(TSha1Digest) div 4) - 1] of cardinal;
-  SHA1: TSha1; // use Intel/AMD SHA-1 HW opcodes if available
-  i: PtrInt;
 begin
-  SHA1.Init;
-  SHA1.Update(@privatesalt, 4);
-  SHA1.Update(timestamp, 8);
-  SHA1.Update(url, urllen);
-  SHA1.Final(TSha1Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    // we may have used the first 32-bit of the digest, but cascaded xor is fine
-    result := result xor digest[i];
+  result := ComputeSignatureAlgo(hfSHA1, privatesalt, timestamp, url, urllen);
 end;
 
 class function TRestClientAuthenticationSignedUri.ComputeSignatureSha256(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var
-  digest: THash256Rec;
-  SHA256: TSha256; // use Intel/AMD SHA-1 HW opcodes if available
-  i: PtrInt;
 begin
-  SHA256.Init;
-  SHA256.Update(@privatesalt, 4);
-  SHA256.Update(timestamp, 8);
-  SHA256.Update(url, urllen);
-  SHA256.Final(digest.b);
-  result := digest.c[0];
-  for i := 1 to high(digest.c) do
-    // we may have used the first 32-bit of the digest, but cascaded xor is fine
-    result := result xor digest.c[i];
+  result := ComputeSignatureAlgo(hfSHA256, privatesalt, timestamp, url, urllen);
 end;
 
 class function TRestClientAuthenticationSignedUri.ComputeSignatureSha512(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var
-  digest: THash512Rec;
-  SHA512: TSha512;
-  i: PtrInt;
 begin
-  SHA512.Init;
-  SHA512.Update(@privatesalt, 4);
-  SHA512.Update(timestamp, 8);
-  SHA512.Update(url, urllen);
-  SHA512.Final(digest.b);
-  result := digest.c[0];
-  for i := 1 to high(digest.c) do
-    // we may have used the first 32-bit of the digest, but cascaded xor is fine
-    result := result xor digest.c[i];
+  result := ComputeSignatureAlgo(hfSHA512, privatesalt, timestamp, url, urllen);
 end;
 
 class function TRestClientAuthenticationSignedUri.ComputeSignatureSha3(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var
-  digest: THash256Rec;
-  Sha3: TSha3;
-  i: PtrInt;
 begin
-  Sha3.Init(SHA3_256);
-  Sha3.Update(@privatesalt, 4);
-  Sha3.Update(timestamp, 8);
-  Sha3.Update(url, urllen);
-  Sha3.Final(@digest.b);
-  result := digest.c[0];
-  for i := 1 to high(digest.c) do
-    // we may have used the first 32-bit of the digest, but cascaded xor is fine
-    result := result xor digest.c[i];
+  result := ComputeSignatureAlgo(hfSHA3_256, privatesalt, timestamp, url, urllen);
 end;
 
 class function TRestClientAuthenticationSignedUri.GetComputeSignature(
   algo: TRestAuthenticationSignedUriAlgo): TOnRestAuthenticationSignedUriComputeSignature;
 begin
-  // FPC doesn't allow to use constants for procedure of object
+  // FPC doesn't allow to use constants for procedure of object (even class methods)
   case algo of
     suaCRC32C:
       result := ComputeSignatureCrc32c;
