@@ -1052,6 +1052,8 @@ type
     // authenticated to the client, unless aMutualAuth is forced to false (may be
     // needed for weak non-mORMot clients only implementing raw "Modular Crypt"
     // or if the database can't store the 43 additional chars in this field)
+    // - warning: the LogonName field should have already been set for
+    // aMutualAuth=true since it is used to specialize the MCF hash for this user
     procedure SetPassword(const aPasswordPlain: RawUtf8;
       aModularCrypt: TModularCryptFormat; aMutualAuth: boolean = true); overload;
     /// set the PasswordHashHexa field as DIGEST-HA0 from plain password content
@@ -1087,6 +1089,8 @@ type
     // - the same identifier can be used only once (this column is marked as
     // unique via a "stored AS_UNIQUE" - i.e. "stored false" - attribute), and
     // therefore indexed in the database (e.g. hashed in TRestStorageInMemory)
+    // - warning: you call re-call SetPassword(aMutualAuth=true) when this
+    // LogonName field is changed, since PasswordHashHexa is bound to its value
     property LogonName: RawUtf8
       index 20 read fLogonName write fLogonName stored AS_UNIQUE;
     /// the User Name, as may be displayed or printed
@@ -1106,6 +1110,8 @@ type
     // - you can set directly your own custom "Modular Crypt" hash - e.g. forcing
     // mcfSCrypt with LogN=20, R=8, P=1 for admin/root login, burning 1.23s and
     // 1GB RAM on client side during the hashing (but not on the server side)
+    // - warning: you should re-call SetPassword(aMutualAuth=true) when this
+    // LogonName field is changed, since PasswordHashHexa is bound to LogonName
     // - so in this field, you may encounter such values:
     // $ 0123abc.....ffee = 256-bit hexa of mORMot 1 SHA256('salt'+password)
     // $ bc01a89.....2b07 = HA0 = Hash(username:realm:password) for DIGEST
@@ -3762,7 +3768,7 @@ begin
     exit;
   if aMutualAuth then
     // SCRAM-like mutual authentication - stored as irreversible '#....' pattern
-    fPasswordHashHexa := ScramPersistedKey(aModularCrypt, aPasswordPlain)
+    fPasswordHashHexa := ScramPersistedKey(aModularCrypt, aPasswordPlain, LogonName)
   else
     // regular "Modular Crypt" storage - stored as sensitive standard '$...'
     fPasswordHashHexa := ModularCryptHash(aModularCrypt, aPasswordPlain);

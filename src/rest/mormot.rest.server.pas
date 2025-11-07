@@ -5496,7 +5496,7 @@ function TRestServerAuthenticationDefault.CheckPassword(
       // SCRAM-like mutual authentication with irreversible PasswordHashHexa
       Ctxt.fTemp := ScramServerProof(User.PasswordHashHexa, aPassWord,
         [fServer.Model.Root, nonce, aClientNonce, User.LogonName]);
-      result := Ctxt.fTemp <> '';
+      result := Ctxt.fTemp <> ''; // fTemp consummed by SessionCreateReturns()
     end
     else
       // mORMot 1 weaker authentication (User.PasswordHashHexa is sensitive)

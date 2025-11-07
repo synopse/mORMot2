@@ -1375,7 +1375,7 @@ begin
         User.PasswordHashHexa := mcfhash
       else
         // SCRAM-like mutual authentication with irreversible proofs
-        proof := ScramClientProof(mcfhash, clientsign,
+        proof := ScramClientProof(mcfhash, User.LogonName, clientsign,
           // match ScramServerProof() msg parameters
           [Sender.fModel.Root, servernonce, clientnonce, User.LogonName])
     else
@@ -1400,7 +1400,8 @@ begin
     // authenticate the SCRAM server from the returned proof
     if result = '' then
       User.PasswordHashHexa := ''
-    else if ScramClientServerAuth(mcfhash, Sender.fSession.ScramServerProof, clientsign) then
+    else if ScramClientServerAuth(mcfhash, User.LogonName,
+              Sender.fSession.ScramServerProof, clientsign) then
       // success: fSession.PrivateKey will be computed from the server DB key
       User.PasswordHashHexa := ScramPersistedKey(mcfhash)
     else
