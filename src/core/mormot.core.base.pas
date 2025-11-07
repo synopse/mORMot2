@@ -10064,7 +10064,7 @@ function GetTickCount64: UInt64; cdecl external 'c' name 'mach_absolute_time';
 {$endif OSDDARWIN}
 procedure __Fill256FromOs(out e: THash256Rec);
 begin
-  e.q[0] := GetTickCount64;
+  e.q[0] := GetTickCount64;         // always available in FPC RTL
   crc256c(@e, SizeOf(e.q[0]), e.b); // weak but not void
 end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
 {$endif OSWINDOWS}
@@ -10075,7 +10075,7 @@ var
 begin
   _Fill256FromOs(tmp);              // fast 256-bit entropy from OS APIs
   XorMemory(e.r[0], tmp.l);
-  XorMemory(e.r[1], tmp.h);         // on Linux, tmp.h is from getrandom syscall
+  XorMemory(e.r[1], tmp.h);
   e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3;
   e.r[2].H := e.r[2].H xor PtrUInt(GetCurrentThreadId) xor tmp.d2;
   {$ifdef CPUINTEL}

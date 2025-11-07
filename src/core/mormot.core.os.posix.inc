@@ -3437,7 +3437,7 @@ begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
   {$ifdef HASGETRANDOM}
-  // eventually XOR with getrandom syscall if available
+  // eventually XOR with 512-bit getrandom syscall if available
   if LinuxGetRandom(@tmp, SizeOf(e)) then
     XorMemory(@e, @tmp, SizeOf(e))
   else
@@ -3631,8 +3631,12 @@ procedure __Fill256FromOs(out e: THash256Rec);
 var
   si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
 begin
-  // - no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
-  // - is called once at startup from mormot.core.data
+  {$ifdef OSLINUX}
+  // try to get whole 256-bit from OS crypto-PRNG in 1 syscall
+  if LinuxGetRandom(@e, SizeOf(e)) then
+    exit;
+  {$endif OSLINUX}
+  // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time   * 2654435761;
   e.d1 := mach_continuous_time * 3266489917;
@@ -3641,10 +3645,6 @@ begin
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
   {$endif OSDARWIN}
   crcblock(@e.l, @SystemEntropy.Startup); // 128-bit entropy over nanoseconds
-  {$ifdef OSLINUX}
-  if LinuxGetRandom(@e.h, SizeOf(e.h)) then // 128-bit crypto-PRNG in 1 syscall
-    exit;
-  {$endif OSLINUX}
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
   {$ifndef CPUINTEL}
