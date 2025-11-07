@@ -1858,7 +1858,7 @@ var
   agentclient, consoleclient: array of TRestHttpClientWebsockets;
 begin
   bak := TSynLog.Family.Level;
-  TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
+  //TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
   // 1. validate TTunnelLocal and all its handshaking options
   RandomLecuyer(rnd);
   // plain tunnelling
@@ -1905,8 +1905,10 @@ begin
       restserver.Options := restserver.Options +
         [rsoSessionInConnectionOpaque, // also validate some security options :)
          rsoPerConnectionNonce];
-      // validate SetUser('User', 'password') below using mcfMd5Crypt
-      AuthUserDefaultPassword := '$1$3azHgidD$SrJPt7B.9rekpmwJwtON31';
+      // validate SetUser('User', 'password') below using SCRAM-MD5CRYPT
+      //AuthUserDefaultPassword := '$1$3azHgidD$SrJPt7B.9rekpmwJwtON31';
+      AuthUserDefaultPassword := ScramPersistedKey(mcfMd5Crypt, 'password', 'User');
+      //AuthUserDefaultPassword := Sha256('saltpassword');
       restserver.Server.CreateMissingTables;
       AuthUserDefaultPassword := DEFAULT_HASH_SYNOPSE;
       restserver.ServiceDefine(relay.Agent, [ITunnelAgent]);
