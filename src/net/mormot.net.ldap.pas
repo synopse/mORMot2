@@ -8203,12 +8203,15 @@ begin
                     aUser, aPassword, fKerberosSpn, dataout)
       else
       begin
-        // more user information currently need a ServerSspiAuth() context
+        // more user information currently requires a ServerSspiAuth() context
         InvalidateSecContext(server);
         try
+          // loop below raise ESynSspi/EGssApi on authentication error
           while ClientSspiAuthWithPassword(client, datain,
                   aUser, aPassword, fKerberosSpn, dataout) and
-                ServerSspiAuth(server, dataout, datain) do ;
+                ServerSspiAuth(server, dataout, datain) do
+            ; // ServerSspiAuth()=true = CONTINUE flag = need another roundtrip
+          // now authenticated within this context: identify the user
           if aFullUserName <> nil then
             ServerSspiAuthUser(server, aFullUserName^);
           {$ifdef OSWINDOWS}

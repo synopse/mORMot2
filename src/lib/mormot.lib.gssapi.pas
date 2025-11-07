@@ -541,8 +541,9 @@ function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 // - aSecContext holds information between function calls
 // - aInData contains data received from client
 // - aOutData contains data that must be sent to client
-// - if function returns True, server must send aOutData to client
-// and call function again with data, returned from client
+// - will raise an EGssApi if authentication failed (e.g. invalid credentials)
+// - server must send aOutData to the client (if any), and if True was returned,
+// call this function again with any new data receive from the client
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
@@ -1211,7 +1212,7 @@ begin
     aSecContext.CredHandle, @InBuf, SetBind(aSecContext, Bind), nil, nil,
     @OutBuf, @CtxAttr, nil, nil);
   GssCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
-  result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
+  result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0; // need more client input
   FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
@@ -1412,7 +1413,7 @@ begin
   if seq^ = fKeytabSequence then
     exit; // we can reuse existing keytab already set for this particular thread
   seq^ := fKeytabSequence;
-  ServerForceKeytab(fKeyTab);
+  ServerForceKeytab(fKeyTab); // per-thread GSSAPI call
 end;
 
 function TServerSspiKeyTab.SetKeyTab(const aKeyTab: TFileName): boolean;
@@ -1485,8 +1486,11 @@ begin
   end;
   InvalidateSecContext(ctx);
   try
-    if not ServerSspiAuth(ctx, bin, bout) then
+    // code below raise ESynSspi/EGssApi on authentication error
+    if ServerSspiAuth(ctx, bin, bout) then
+      // CONTINUE flag = need more input from the client: unsupported yet
       exit;
+    // now client is authenticated in a single roundtrip: identify the user
     if AuthUser <> nil then
       ServerSspiAuthUser(ctx, AuthUser^);
     result := BinToBase64(bout, SECPKGNAMEHTTPWWWAUTHENTICATE, '', false);

@@ -785,8 +785,9 @@ function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 // - aSecContext holds information between function calls
 // - aInData contains data received from client
 // - aOutData contains data that must be sent to client
-// - if this function returns True, server must send aOutData to client
-// and call function again with the data returned from client
+// - will raise an ESynSspi if authentication failed (e.g. invalid credentials)
+// - server must send aOutData to the client (if any), and if True was returned,
+// call this function again with any new data receive from the client
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
@@ -1894,7 +1895,7 @@ begin
     ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
     SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @outDesc, attr, nil);
   result := (status = SEC_I_CONTINUE_NEEDED) or
-            (status = SEC_I_COMPLETE_AND_CONTINUE);
+            (status = SEC_I_COMPLETE_AND_CONTINUE); // need more client input
   if (status = SEC_I_COMPLETE_NEEDED) or
      (status = SEC_I_COMPLETE_AND_CONTINUE) then
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);

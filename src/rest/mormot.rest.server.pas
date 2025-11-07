@@ -5753,14 +5753,15 @@ begin
   InvalidateSecContext(sec);
   try
     try
-      // should be in a single call
-      if not ServerSspiAuth(sec, data, outdata) then
+      // code below raise ESynSspi/EGssApi on authentication error
+      if ServerSspiAuth(sec, data, outdata) then
       begin
+        // CONTINUE flag = need more input from the client: unsupported yet
         Ctxt.AuthenticationFailed(afSessionCreationAborted, SECPKGNAMEAPI);
         exit;
       end;
       outdata := BinToBase64(outdata);
-      // now client is authenticated: identify the user
+      // now client is authenticated in a single roundtrip: identify the user
       ServerSspiAuthUser(sec, usr);
       if sllUserAuth in fServer.fLogLevel then
         fServer.InternalLog('% success for %', [self, usr], sllUserAuth);

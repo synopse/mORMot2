@@ -4695,13 +4695,15 @@ begin
           {$endif OSPOSIX}
           InvalidateSecContext(ctx);
           try
+            // code below raise ESynSspi/EGssApi on authentication error
             if ServerSspiAuth(ctx, bin, bout) then
-            begin
-              ServerSspiAuthUser(ctx, user);
-              Http.ResponseHeaders := BinToBase64(bout,
-                SECPKGNAMEHTTPWWWAUTHENTICATE, #13#10, {magic=}false);
-              result := asrMatch;
-            end;
+              // CONTINUE flag = need more input from the client: unsupported
+              exit;
+            // now client is authenticated in a single roundtrip: identify user
+            ServerSspiAuthUser(ctx, user);
+            Http.ResponseHeaders := BinToBase64(bout,
+              SECPKGNAMEHTTPWWWAUTHENTICATE, #13#10, {magic=}false);
+            result := asrMatch;
           finally
             FreeSecContext(ctx);
           end;
@@ -4712,7 +4714,7 @@ begin
     if result = asrMatch then
       Http.BearerToken := user; // see THttpServerRequestAbstract.Prepare
   except
-    on E: Exception do
+    on E: Exception do // e.g. ESynSspi/EGssApi on authentication error
     begin
       fLogClass.Add.Log(sllTrace, 'Authorization: % from %', [PClass(E)^, auth], self);
       result := asrRejected; // any processing error should silently fail the auth
