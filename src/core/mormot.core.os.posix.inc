@@ -3631,11 +3631,11 @@ procedure __Fill256FromOs(out e: THash256Rec);
 var
   si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
 begin
-  {$ifdef OSLINUX}
+  {$ifdef HASGETRANDOM}
   // try to get whole 256-bit from OS crypto-PRNG in 1 syscall
   if LinuxGetRandom(@e, SizeOf(e)) then
     exit;
-  {$endif OSLINUX}
+  {$endif HASGETRANDOM}
   // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
   {$ifdef OSDARWIN} // OSX has no clock_gettime() API
   e.d0 := mach_absolute_time   * 2654435761;
@@ -3674,10 +3674,10 @@ begin
     exit;
   // retrieve up to MAXFROMOS=256 bytes max
   rd := MinPtrInt(Len, MAXFROMOS);
-  {$ifdef OSLINUX} // a single syscall to rule them all on Linux
+  {$ifdef HASGETRANDOM} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);
   if not result then
-  {$endif OSLINUX}
+  {$endif HASGETRANDOM}
   begin
     dev := 0;
     if not (fNoURandom in _F0) then
