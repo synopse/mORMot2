@@ -1099,8 +1099,7 @@ begin
   if fInterface = nil then // paranoid
     EServiceException.RaiseUtf8('%.Create: no I%', [self, aInterface^.RawName]);
   fInstanceCreation := aInstanceCreation;
-  fInterfaceMangledUri :=
-    BinToBase64Uri(PAnsiChar(fInterface.InterfaceGuid), SizeOf(TGuid));
+  fInterfaceMangledUri := BinToBase64Uri(PHash128(fInterface.InterfaceGuid)^);
   fInterfaceUri := fInterface.InterfaceUri;
   if fOrm = nil then
     EServiceException.RaiseUtf8('%.Create: I% has no ORM', [self, fInterfaceUri]);

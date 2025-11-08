@@ -5079,7 +5079,7 @@ begin
   Sha256Digest(stored.Lo, clientkey); // store H(clientkey) for ScramClientProof
   HmacSha256U(pointer(Hash), length(Hash), [User, 'Server Key'], stored.Hi, '|');
   result[1] := '#'; // "#MCF prefix" + base64uri(StoredKey + ServerKey)
-  Append(result, BinToBase64uriShort(@stored, SizeOf(stored)));
+  Append(result, BinToBase64uri(stored.b));
   FillZero(clientkey);
   FillZero(stored.b);
 end;
@@ -5109,7 +5109,7 @@ begin
   Sha256Digest(storedkey, clientkey);
   HmacSha256U(@storedkey, SizeOf(storedkey), Msg, ClientSignature, '|');
   Xor256(@clientkey, @ClientSignature);
-  result := BinToBase64uri(@clientkey, SizeOf(clientkey));
+  result := BinToBase64uri(clientkey);
   FillZero(clientkey);
   FillZero(storedkey);
 end;
@@ -5137,7 +5137,7 @@ begin
   if IsEqual(clientkey, stored.Lo) then // H(candidate_ClientKey) = StoredKey
   begin
     Xor256(@stored.Hi, @clientsig);
-    result := BinToBase64uri(@stored.Hi, SizeOf(stored.Hi)); // proof on success
+    result := BinToBase64uri(stored.Hi); // proof on success
   end;
   FillZero(clientkey);
   FillZero(stored.b);

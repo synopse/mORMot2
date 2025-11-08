@@ -519,7 +519,7 @@ begin
     // before or after any syntaxic elements and with the required members
     // ordered lexicographically, using SHA-256 hashing
     thumb := Sha256Digest(jwk);
-    fJwkThumbprint := BinToBase64uri(@thumb, sizeof(thumb));
+    fJwkThumbprint := BinToBase64uri(thumb);
     header := FormatJson('{"alg":?,"jwk":%,"nonce":?,"url":?}',
       [jwk], [CAA_JWT[fCert.AsymAlgo], fNonce, aUrl]);
   end;

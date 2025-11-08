@@ -7171,6 +7171,8 @@ begin
   end;
   utf := BinToBase64Uri(@Guid, SizeOf(Guid));
   Check(utf = '00amyWGct0y_ze4lIsj2Mw');
+  utf := BinToBase64Uri(PHash128(@Guid)^);
+  Check(utf = '00amyWGct0y_ze4lIsj2Mw');
   FillCharFast(Guid2, SizeOf(Guid2), 0);
   Check(Base64uriToBin(utf, @Guid2, SizeOf(Guid2)));
   Check(IsEqualGuid(Guid2, Guid));
