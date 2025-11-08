@@ -4123,7 +4123,7 @@ var
   rnd: THash256Rec;
 begin // note: we can't use Random128() here to avoid endless recursion
   {$ifdef OSLINUX}
-  if (MainAesPrng = nil) and
+  if (MainAesPrng <> nil) or
      not LinuxGetRandom(@rnd, Bits shr 3) then // 128/256-bit in 1 syscall
   {$endif OSLINUX}
     TAesPrng.Main.FillRandom(rnd.b);   // 256-bit from our CSPRNG (if available)
