@@ -2479,7 +2479,7 @@ var
 begin
   // search for the PK#5#6 marker in trailing 64KB (comment size)
   result := @BufZip[Size - SizeOf(TLastHeader)];
-  min := PtrUInt(@BufZip[Size - 65536]);
+  min := PtrUInt(@BufZip[MaxPtrInt(0, Size - 65536)]);
   while PtrUInt(result) > min do
   begin
     if result^.signature + 1 = LASTHEADER_SIGNATURE_INC then
