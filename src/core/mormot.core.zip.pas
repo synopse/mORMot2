@@ -522,8 +522,8 @@ type
     fCentralDirectoryOffset, fCentralDirectoryTotalFiles: Int64;
     fCentralDirectory: PFileHeader;
     fResource: TExecutableResource;
-    procedure LocateCentralDirectory(BufZip: PByteArray;
-      var Size: PtrInt; Offset: Int64);
+    procedure LocateCentralDirectory(BufZip: PByteArray; Size: PtrInt;
+      Offset: Int64);
     function UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
       aDest: TStream): boolean;
   public
@@ -2471,16 +2471,17 @@ begin
   end;
 end;
 
-function LocateLastHeader(BufZip: PByteArray; var Size: PtrInt;
+function LocateEndCentralDirectory(BufZip: PByteArray; Size: PtrInt;
   Offset: Int64; out head64: PLastHeader64): PLastHeader;
 var
-  i: PtrInt;
   loc64: PLocator64;
+  min: PtrUInt;
 begin
-  // resources size may be rounded up -> search in trailing 128 bytes
-  for i := 0 to 127 do
+  // search for the PK#5#6 marker in trailing 64KB (comment size)
+  result := @BufZip[Size - SizeOf(TLastHeader)];
+  min := PtrUInt(@BufZip[Size - 65536]);
+  while PtrUInt(result) > min do
   begin
-    result := @BufZip[Size - SizeOf(TLastHeader)];
     if result^.signature + 1 = LASTHEADER_SIGNATURE_INC then
     begin
       if (result^.thisFiles    = ZIP32_MAXFILE) or
@@ -2505,9 +2506,7 @@ begin
         head64 := nil;
       exit;
     end;
-    dec(Size);
-    if Size < SizeOf(TLastHeader) then
-      break;
+    dec(PByte(result)); // search backward
   end;
   result := nil;
 end;
@@ -2527,8 +2526,8 @@ begin
   until P^ = #0;
 end;
 
-procedure TZipRead.LocateCentralDirectory(BufZip: PByteArray;
-  var Size: PtrInt; Offset: Int64);
+procedure TZipRead.LocateCentralDirectory(BufZip: PByteArray; Size: PtrInt;
+  Offset: Int64);
 var
   lh32: PLastHeader;
   lh64: PLastHeader64;
@@ -2537,7 +2536,7 @@ begin
      (Size < SizeOf(TLastHeader)) then
     lh32 := nil
   else
-    lh32 := LocateLastHeader(BufZip, Size, Offset, lh64);
+    lh32 := LocateEndCentralDirectory(BufZip, Size, Offset, lh64);
   if lh32 = nil then
     ESynZip.RaiseUtf8(
       '%.Create(%): zip trailer signature not found', [self, fFileName]);
