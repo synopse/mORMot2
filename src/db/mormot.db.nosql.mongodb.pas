@@ -3766,6 +3766,15 @@ begin
       if err <> '' then
         EMongoException.RaiseUtf8('%.OpenAuthSCRAM("%") step3: % - res=%',
           [self, DatabaseName, err, res]);
+      //here server version requires auth before calling buildInfo
+      if VarIsEmptyOrNull(_Safe(fServerBuildInfo)^.Value['versionArray']) then begin
+        fConnections[0].RunCommand('admin', 'buildinfo', fServerBuildInfo);
+        with _Safe(fServerBuildInfo)^.A['versionArray']^ do
+          if count = 4 then
+            fServerBuildInfoNumber := // e.g. 02040900 for MongoDB 2.4.9
+              integer(Values[0]) * 1000000 + integer(Values[1]) * 10000 +
+              integer(Values[2]) * 100 +     integer(Values[3]);
+      end;
     end;
   end;
 end;
@@ -3779,6 +3788,9 @@ begin
   if VarIsEmptyOrNull(fServerBuildInfo) then
   begin
     fConnections[0].RunCommand('admin', 'buildinfo', fServerBuildInfo);
+    if _Safe(fServerBuildInfo)^.U['codeName'] = 'Unauthorized' then
+      fServerBuildInfoNumber := 8 * 1000000 + 1 * 10000 //from 8.1 up auth is required before calling buildInfo -> set min db-version
+    else
     with _Safe(fServerBuildInfo)^.A['versionArray']^ do
       if count = 4 then
         fServerBuildInfoNumber := // e.g. 02040900 for MongoDB 2.4.9
@@ -3793,24 +3805,7 @@ begin
       c.AddItemText('zlib');
     fConnections[0].RunCommand('admin',
       BsonVariant(['hello', 1,
-                   'client',
-                     '{',
-                         'application',
-                         '{',
-                             'name', Executable.ProgramName,
-                         '}',
-                         'driver',
-                         '{',
-                             'name',    SYNOPSE_FRAMEWORK_NAME,
-                             'version', SYNOPSE_FRAMEWORK_VERSION,
-                         '}',
-                         'os',
-                         '{',
-                             'type', OS_TEXT,
-                             'name', OSVersionShort,
-                             'architecture', CPU_ARCH_TEXT,
-                         '}',
-                     '}',
+                   'saslSupportedMechs', 'admin.admin',
                    'compression', variant(c)
       ]), fServerInfo);
     with _Safe(fServerInfo, dvObject)^ do
@@ -4750,4 +4745,5 @@ initialization
   {$endif MONGO_OLDPROTOCOL}
 
 end.
+
 
