@@ -4758,6 +4758,8 @@ begin
       result := mcfSha256Crypt;
     6:
       result := mcfSha512Crypt;
+    7:
+      result := mcfSCrypt; // as in Unix crypt utility (but not identical)
   else
     result := TModularCryptFormat(FindNonVoidRawUtf8(@MCF_IDENT,
       pointer(salt), length(salt), length(MCF_IDENT)) + ord(low(MCF_IDENT)));
