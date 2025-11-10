@@ -1970,6 +1970,10 @@ type
     // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
     function AddItemText(const aValue: RawUtf8; aIndex: integer = -1): integer;
+    /// add an item in this array document from a real value and its associated RTTI
+    // - returns the index of the corresponding newly added item
+    function AddItemRtti(aItem: pointer; aRtti: TRttiCustom;
+      aIndex: integer = -1): integer;
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
@@ -7741,6 +7745,18 @@ begin
     DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
   else
     RawUtf8ToVariant(aValue, VValue[result]); // always RawUtf8
+end;
+
+function TDocVariantData.AddItemRtti(aItem: pointer; aRtti: TRttiCustom;
+  aIndex: integer): integer;
+begin
+  result := -1;
+  if IsObject then
+    exit;
+  result := InternalAdd('', aIndex);
+  if (aItem <> nil) and
+     (aRtti <> nil) then
+    aRtti.ValueToVariant(aItem, PVarData(@VValue[result])^, @VOptions);
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
