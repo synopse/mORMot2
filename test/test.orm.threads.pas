@@ -406,13 +406,24 @@ end;
 
 constructor TTestMultiThreadProcess.Create(
   Owner: TSynTests; const Ident: string);
+var
+  clients: integer;
 begin
   inherited;
   fMinThreads := MIN_THREADS;
   fMaxThreads := MAX_THREADS;      // 1, 2, 5, 10, 30, 50
-  fOperationCount := MAX_CLIENTS
+  clients := MAX_CLIENTS;
+  fOperationCount := clients
     {$ifndef FORCE_HTTP10} * 7 {$endif}; // divided among threads
-  fClientPerThread := MAX_CLIENTS div MAX_THREADS;
+  {$ifdef OSWINDOWS}
+  if IsWow64Emulation then // PRISM seems inconsistent with a lot of threads
+  begin
+    fMaxThreads := 2;
+    clients := 2;
+    fOperationCount := 2;
+  end;
+  {$endif OSWINDOWS}
+  fClientPerThread := clients div fMaxThreads;
   // note: IterationCount := OperationCount div RunningThreadCount
   //       and make some round robin around fClientPerThread
   fPendingThreadFinished := TSynEvent.Create;
