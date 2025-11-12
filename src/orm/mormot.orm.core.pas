@@ -5915,7 +5915,7 @@ dt:     if Value <> 0 then
               if (Value <> 0) and
                  (Model<> nil) then // 'TableName ID'
                 {$ifdef UNICODE}
-                Text := Ansi7ToString(Ref.Text(Model))
+                Ansi7ToString(Ref.Text(Model), Text)
                 {$else}
                 Text := Ref.Text(Model)
                 {$endif UNICODE}

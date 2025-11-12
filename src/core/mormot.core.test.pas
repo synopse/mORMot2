@@ -720,9 +720,9 @@ begin
     begin
       inc(fInternalTestsCount);
       if Name[1] = '_' then
-        s := Ansi7ToString(copy(Name, 2, 100))
+        Ansi7ToString(copy(Name, 2, 100), s)
       else
-        s := Ansi7ToString(UnCamelCase(Name));
+        Ansi7ToString(UnCamelCase(Name), s);
       Add(TOnSynTest(Method), Name, s);
     end;
 end;

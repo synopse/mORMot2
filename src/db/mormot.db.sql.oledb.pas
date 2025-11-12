@@ -1036,11 +1036,11 @@ begin
       ftCurrency:
         result := Curr64ToString(V^.Int64);
       ftDate:
-        result := Ansi7ToString(DateTimeToIso8601Text(V^.Double));
+        Ansi7ToString(DateTimeToIso8601Text(V^.Double), result);
       ftUtf8:
         result := RawUnicodeToString(ColPtr(C, V), V^.Length shr 1);
       ftBlob:
-        result := Ansi7ToString(BinToBase64WithMagic(ColPtr(C, V), V^.Length));
+        Ansi7ToString(BinToBase64WithMagic(ColPtr(C, V), V^.Length), result);
     end;
 end;
 

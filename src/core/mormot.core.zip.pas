@@ -2600,7 +2600,7 @@ begin
     SetString(tmp, e^.storedName, h^.fileInfo.nameLen); // better for FPC
     if IsAscii7(pointer(tmp), fZipNamePathDelimReversed, fZipNamePathDelim) then
       // plain ASCII file name needs no conversion
-      e^.zipName := Ansi7ToString(tmp)
+      Ansi7ToString(tmp, string(e^.zipName))
     else
     begin
       extraname := h^.LocateExtra(UNICODEPATH_EXTRA_ID);
