@@ -5722,10 +5722,12 @@ begin
       else
       begin
         // the local file seems invalid and should be removed
-        log.Add.Log(sllTrace, 'OnExecute: deprecate filename=% %=% %=%',
+        log.Add.Log(sllTrace, 'OnExecute: deprecate head=% filename=% %=% %=%',
           [name, result, size, headsiz, lastmod, headlastmod], proxy);
         if not DeleteFile(filename) then // may fail on Windows: use previous
         begin
+          log.Add.Log(sllLastError, 'OnExecute: DeleteFile(%) failed: return existing',
+             [filename], proxy);
           loginfo := 'locked cache';
           result := proxy.ReturnFile(ctxt, name, filename, path, size, lastmod,
                       {canbecached=}(headsiz >= 0));
