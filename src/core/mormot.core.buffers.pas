@@ -952,7 +952,7 @@ type
     procedure WriteVarInt64(Value: Int64);
     /// append an unsigned integer value using 64-bit variable-length encoding
     procedure WriteVarUInt64(Value: QWord);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// append cardinal values (NONE must be negative!) using 32-bit
     // variable-length integer encoding or other specialized algorithm,
     // depending on the data layout
