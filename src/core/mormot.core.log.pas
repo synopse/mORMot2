@@ -5857,7 +5857,7 @@ var
 begin
   fWriter.AddDirect(' ', '"');
   GetErrorShortVar(Error, msg);
-  fWriter.AddOnSameLine(@msg[0], ord(msg[0]));
+  fWriter.AddOnSameLine(@msg[1], ord(msg[0]));
   fWriter.AddDirect('"', ' ', '(');
   fWriter.AddU(Error);
   fWriter.AddDirect(')', ' ');
