@@ -1373,7 +1373,12 @@ function Utf8DecodeToUnicode(Text: PUtf8Char; Len: PtrInt; var temp: TSynTempBuf
 /// convert any Ansi 7-bit encoded String into a RTL string
 // - the Text content must contain only 7-bit pure ASCII characters
 function Ansi7ToString(const Text: RawByteString): string; overload;
-  {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any Ansi 7-bit encoded String into a RTL string
+// - the Text content must contain only 7-bit pure ASCII characters
+procedure Ansi7ToString(const Text: RawByteString; var Dest: string); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Ansi 7-bit encoded String into a RTL string
 // - the Text content must contain only 7-bit pure ASCII characters
@@ -1382,7 +1387,8 @@ function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string; overload;
 
 /// convert any Ansi 7-bit encoded String into a RTL string
 // - the Text content must contain only 7-bit pure ASCII characters
-procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string); overload;
+procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var Dest: string); overload;
+  {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert any RTL string into Ansi 7-bit encoded String
 // - the Text content must contain only 7-bit pure ASCII characters
@@ -5396,27 +5402,23 @@ end;
 
 {$ifdef UNICODE}
 
-function Ansi7ToString(const Text: RawByteString): string;
+procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var Dest: string);
 var
   i: PtrInt;
 begin
-  FastSynUnicode(result, nil, Length(Text));
-  for i := 0 to Length(Text) - 1 do
-    PWordArray(result)[i] := cardinal(PByteArray(Text)[i]); // 7-bit assign
+  FastSynUnicode(Dest, nil, Len);
+  for i := 0 to Len - 1 do
+    PWordArray(Dest)[i] := cardinal(PByteArray(Text)[i]); // 7-bit assign
+end;
+
+procedure Ansi7ToString(const Text: RawByteString; var Dest: string);
+begin
+  Ansi7ToString(pointer(Text), length(Text), Dest);
 end;
 
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string;
 begin
   Ansi7ToString(Text, Len, result);
-end;
-
-procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string);
-var
-  i: PtrInt;
-begin
-  FastSynUnicode(result, nil, Len);
-  for i := 0 to Len - 1 do
-    PWordArray(result)[i] := cardinal(PByteArray(Text)[i]); // 7-bit assign
 end;
 
 function StringToAnsi7(const Text: string): RawByteString;
@@ -5544,12 +5546,12 @@ end;
 
 {$else}
 
-function Ansi7ToString(const Text: RawByteString): string;
+procedure Ansi7ToString(const Text: RawByteString; var Dest: string); overload;
 begin
-  result := Text; // if we are SURE this text is 7-bit Ansi -> direct assign
-  {$ifdef FPC} // if Text is CP_RAWBYTESTRING then FPC won't handle it properly
-  SetCodePage(RawByteString(result), Unicode_CodePage, false);
-  {$endif FPC} // no FakeCodePage() since Text may be read-only
+  Dest := Text; // if we are SURE this text is 7-bit Ansi -> direct assign
+  {$ifdef FPC}  // if Text is CP_RAWBYTESTRING then FPC won't handle it properly
+  SetCodePage(RawByteString(Dest), Unicode_CodePage, false);
+  {$endif FPC}  // no FakeCodePage() since Text may be read-only
 end;
 
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string;
@@ -5557,9 +5559,9 @@ begin
   SetString(result, PAnsiChar(Text), Len);
 end;
 
-procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string);
+procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var Dest: string);
 begin
-  SetString(result, PAnsiChar(Text), Len);
+  SetString(Dest, PAnsiChar(Text), Len);
 end;
 
 function StringToAnsi7(const Text: string): RawByteString;
@@ -5690,6 +5692,11 @@ begin
 end;
 
 {$endif UNICODE}
+
+function Ansi7ToString(const Text: RawByteString): string;
+begin
+  Ansi7ToString(Text, result);
+end;
 
 function ToUtf8(const Ansi7Text: ShortString): RawUtf8;
 begin
