@@ -1289,6 +1289,7 @@ type
   protected
     fMainConnectionSafe: TLightLock; // topmost to ensure aarch64 alignment
     fSharedTransactionsSafe: TLightLock;
+    fConnectionPoolSafe: TLightLock; // for fConnectionPool[TSynLog.ThreadIndex]
     fMainConnection: TSqlDBConnection;
     fDbms: TSqlDBDefinition;
     fBatchSendingAbilities: TSqlDBStatementCRUDs;
@@ -2800,7 +2801,6 @@ type
   // and allows efficient reuse between short-living threads
   TSqlDBConnectionPropertiesThreadSafe = class(TSqlDBConnectionProperties)
   protected
-    fConnectionPoolSafe: TLightLock; // for fConnectionPool[TSynLog.ThreadIndex]
     fConnectionPool: array of TSqlDBConnectionThreadSafe;
     fConnectionPoolMin, fConnectionPoolMax, fConnectionPoolCount: integer;
     fConnectionPoolDeprecatedTix32: integer;
