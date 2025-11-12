@@ -509,10 +509,13 @@ var
   th1, th2: TTestMultiThreadProcessThread;
   longstandingclient: TRest;
   msg: RawUtf8;
+  ilog: ISynLog;
+  log: TSynLog;
   {$ifdef HAS_MESSAGES}
   aMsg: TMsg;
   {$endif HAS_MESSAGES}
 begin
+  log := TSynLog.EnterLocal(ilog, 'Test(%)', [aClass], self);
   if CheckFailed(fTestClass = nil) then
     exit;
   fTestClass := aClass;
@@ -526,6 +529,7 @@ begin
          not FileExists(WorkDir + TTESTMULTITHREADPROCESS_DBFILENAME)) or
        CheckFailed(aClass <> nil) then
       exit;
+    log.Log(sllTrace, 'Test: TRestServerDB.Create', self);
     fDatabase := TRestServerDB.Create(
       fModel, WorkDir + TTESTMULTITHREADPROCESS_DBFILENAME);
     fDatabase.AcquireWriteMode := aWriteMode;
@@ -545,6 +549,7 @@ begin
     {$endif HAS_MESSAGES}
     if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     begin
+      log.Log(sllTrace, 'Test: start TRestHttpServer', self);
       WebSocketLog := TSynLog;
       fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp,
         {threads=}8, secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS + [rsoLogVerbose] );
@@ -564,7 +569,10 @@ begin
   end;
   // 2. Perform the tests
   if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
+  begin
+    log.Log(sllTrace, 'Test: CreateClient', self);
     longstandingclient := CreateClient;
+  end;
   for several := 1 to 1 do // you may try and increase rounds to debug stability
   begin
     fRunningThreadCount := fMinThreads;
@@ -598,7 +606,11 @@ begin
            (fDatabase.AcquireWriteMode = amMainThread) then
           CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
         else
+        begin
+          log.Log(sllTrace, 'Test: before WaitForEver', self);
           fPendingThreadFinished.WaitForEver;
+          log.Log(sllTrace, 'Test: after WaitForEver', self);
+        end;
         allFinished := true;
         for n := 0 to fRunningThreadCount - 1 do
           if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then
@@ -606,15 +618,18 @@ begin
             allFinished := false;
             break;
           end;
+        log.Log(sllTrace, 'Test: allFinished=%', [BOOL_STR[allFinished]], self);
       until allFinished;
       fTimer.Stop;
       //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
       msg := FormatUtf8('% %=%/s',
         [msg, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
+      log.Log(sllTrace, 'Test: %', [msg], self);
       if longstandingclient <> nil then
         Check(longstandingclient.Orm.MemberExists(TOrmPeople,
           TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 2');
       // 2.4. Check INSERTed IDs consistency
+      log.Log(sllTrace, 'Test: check IDs on % threads', [fRunningThreadCount], self);
       for n := 0 to fRunningThreadCount - 1 do
       begin
         th1 := fThreads.List[n];
@@ -656,9 +671,12 @@ begin
       else
       {$endif HAS_MESSAGES}
         fRunningThreadCount := fRunningThreadCount + 20;
+      log.Log(sllTrace, 'Test: fRunningThreadCount=% fMaxThreads=%',
+        [fRunningThreadCount, fMaxThreads], self);
     until fRunningThreadCount > fMaxThreads;
   end;
   // 3. Cleanup for this protocol (but reuse the same threadpool)
+  log.Log(sllTrace, 'Test: Cleanup', self);
   AddConsole('%', [msg]);
   DatabaseClose; // shutdown also fHttpServer
   Check(fDatabase = nil);
@@ -668,6 +686,7 @@ begin
     with TSynLog.Enter(longstandingclient, 'Free') do
       longstandingclient.Free;
   end;
+  log.Log(sllTrace, 'Test: done', self);
 end;
 
 procedure TTestMultiThreadProcess.Locked;
