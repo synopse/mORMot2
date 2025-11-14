@@ -3737,10 +3737,11 @@ begin
   if not Assigned(params.Hasher) then
     params.Hasher := TStreamRedirect; // no hash by default
   if FileExists(result) then
-    if not DeleteFile(result) or
-       FileExists(result) then
-      EHttpSocket.RaiseUtf8(
-        '%.WGet: impossible to delete deprecated %', [self, result]);
+    if not DeleteFile(result) then
+      EHttpSocket.RaiseUtf8('%.WGet: impossible to delete deprecated % [%]',
+        [self, result, OsErrorShort])
+    else if FileExists(result) then
+      EHttpSocket.RaiseUtf8('%.WGet: Delete(%) failed', [self, result]);
   part := result + '.part';
   size := FileSize(part);
   RequestClear; // reset Range from any previous failed request
@@ -3825,8 +3826,8 @@ begin
     // valid .part file can now be converted into the result file
     if FileExists(part) then // if not already done in Alternate.OnDownloaded()
       if not RenameFile(part, result) then
-        EHttpSocket.RaiseUtf8(
-          '%.WGet: impossible to rename % as %', [self, part, result]);
+        EHttpSocket.RaiseUtf8('%.WGet: impossible to rename % as % [%]',
+          [self, part, result, OsErrorShort]);
     // set part='' to notify fully downloaded into result file name
     part := '';
   finally
