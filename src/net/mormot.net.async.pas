@@ -5715,8 +5715,8 @@ begin
       begin
         // we can stream from local cache
         loginfo := 'cached';
-        result := proxy.ReturnFile(
-                    ctxt, name, filename, path, size, lastmod, (headsiz >= 0));
+        result := proxy.ReturnFile(ctxt, name, filename, path, size, lastmod,
+                    {canbecached=}(headsiz >= 0));
         exit;
       end
       else
@@ -5726,8 +5726,9 @@ begin
           [name, result, size, headsiz, lastmod, headlastmod], proxy);
         if not DeleteFile(filename) then // may fail on Windows: use previous
         begin
-          log.Add.Log(sllLastError, 'OnExecute: DeleteFile(%) failed: return existing',
-             [filename], proxy);
+          log.Add.Log(sllLastError,
+            'OnExecute: return existing % bytes after DeleteFile(%) failed as',
+            [FileSize(filename), filename], proxy);
           loginfo := 'locked cache';
           result := proxy.ReturnFile(ctxt, name, filename, path, size, lastmod,
                       {canbecached=}(headsiz >= 0));
@@ -5816,8 +5817,8 @@ begin
         msg := 'FileSetDateFromUnixUtc failed'
     else
       msg := 'GET error';
-    fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%]',
-      [status, fn, msg], self);
+    fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%] size=%',
+      [status, fn, msg, FileSize(fn)], self);
   finally
     back.stream.Free;
     back.Free;
