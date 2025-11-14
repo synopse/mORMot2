@@ -843,7 +843,7 @@ procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = fals
 /// return the error code number, and its regular constant on the current OS
 // - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
-function OsErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overload;
+function OsErrorShort(Code: cardinal = 0; NoInt: boolean = false): TShort47; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// append the error code number, and its regular constant on the current OS
@@ -6547,6 +6547,8 @@ end;
 
 function OsErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
+  if Code = 0 then
+    Code := GetLastError;
   OsErrorShort(Code, @result, NoInt); // redirect to Win/Linux/BsdErrorShort()
 end;
 
