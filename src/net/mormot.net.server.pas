@@ -6830,7 +6830,7 @@ begin
   result := (Params.Hash <> '') and
             (Params.Hasher <> nil) and
             Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) and
-       TStreamRedirectSynHasher(Params.Hasher).GetHashDigest(Params.Hash, Hash);
+       TStreamRedirectSynHasherClass(Params.Hasher).GetHashDigest(Params.Hash, Hash);
 end;
 
 function THttpPeerCache.CachedFileName(const aParams: THttpClientSocketWGet;
