@@ -1520,6 +1520,7 @@ type
       read fSettings;
   end;
 
+function ToText(hps: THttpProxySource): PShortString; overload;
 
 
 implementation
@@ -6104,7 +6105,7 @@ end;
 
 procedure THttpProxyServer.AfterServerStarted;
 var
-  uri: RawUtf8;
+  uri, nfo: RawUtf8;
   new, old: TUriRouter;
   one: THttpProxyUrl;
   s: THttpProxyUrlSettings;
@@ -6154,6 +6155,7 @@ begin
       end;
       include(fSources, hps);
       // normalize cache settings
+      nfo := '';
       if (hps <> hpsEvent) and
          not (psoDisableMemCache in fSettings.Server.Options) then
       begin
@@ -6179,6 +6181,7 @@ begin
              not (hpoClientNoHead in s.Options) then
             one.fHeadCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
               TypeInfo(TRawUtf8DynArray), {caseins=}false, s.HttpHeadCacheSec);
+          Make([' in ', s.DiskCache.Path], nfo);
         end;
       end;
       // prepare optional hash cache
@@ -6207,8 +6210,8 @@ begin
         new.Run(s.Methods, uri, OnExecute, one);
       new.Run(s.Methods, uri + '/', OnExecute, one);
       new.Run(s.Methods, uri + '/*', OnExecute, one);
-      fLog.Add.Log(sllDebug, 'AfterServerStarted: register % URI from %%',
-        [uri, s.fLocalFolder, one.fRemoteUri.URI], self);
+      fLog.Add.Log(sllDebug, 'AfterServerStarted: register % URI as % from %%%',
+        [uri, ToText(hps)^, s.fLocalFolder, one.fRemoteUri.URI, nfo], self);
     end;
     // 2. replace existing routes at once
     old := fServer.ReplaceRoute(new); // thread-safe
@@ -6411,6 +6414,11 @@ begin
           ; { TODO: implement proxy with POST/PUT/DELETE }
     end;
   end;
+end;
+
+function ToText(hps: THttpProxySource): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpProxySource), ord(hps));
 end;
 
 
