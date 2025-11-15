@@ -114,8 +114,7 @@ begin
   if not FileExists(pmcFileName) then Exit; //=>
 
   json := AnyTextFileToRawUtf8(pmcFileName, {AssumeUtf8IfNoBom=} True);
-  if IsValidJson(json)
-    and (DynArrayLoadJson(customers, Pointer(json), TypeInfo(TCustomerItemArray)) <> Nil) then
+  if DynArrayLoadJson(customers, json, TypeInfo(TCustomerItemArray)) then
   begin
     var authUser: TFileAuthUser := TFileAuthUser.Create;
     try
@@ -127,7 +126,8 @@ begin
           authUser.CustomerNum := customers[i].CustomerNum;
           authUser.LogonName := customers[i].LoginUserName;
           // Never work with passwords in plain text, this also applies to saving! Therefore, this is not a good example.
-          authUser.PasswordHashHexa := TAuthUser.ComputeHashedPassword(customers[i].LoginPassword);
+          authUser.PasswordPlain := customers[i].LoginPassword;
+          // consider using SCRAM-MCF with authUser.SetPassword(..., mcfSha256Crypt) here
           authUser.DisplayName := StringToUtf8(Format('Customer number: %d', [customers[i].CustomerNum]));
           authUser.GroupRights := TAuthGroup(3);  // AuthGroup: User
           Server.Add(authUser, True);

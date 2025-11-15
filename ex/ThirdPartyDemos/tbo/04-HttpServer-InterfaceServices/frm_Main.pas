@@ -226,7 +226,7 @@ var
 begin
   if FDocumentService.Client.ServerTimeStampSynchronize then
   begin
-    if FDocumentService.Client.SetUser(pmcUserName, TAuthUser.ComputeHashedPassword(pmcPassword), True) then
+    if FDocumentService.Client.SetUser(pmcUserName, pmcPassword) then
     begin
       if FDocumentService.InitializeServices then
         scsCode := scsOk

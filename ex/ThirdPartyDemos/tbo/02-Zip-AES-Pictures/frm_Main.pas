@@ -96,7 +96,7 @@ end;
 
 destructor TImageResourceFile.Destroy;
 begin
-  FillZero(FPassword);
+  FillZero(RawByteString(FPassword));
   inherited Destroy;
 end;
 

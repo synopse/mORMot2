@@ -267,7 +267,7 @@ begin
     if Length(rawFileContent) > 0 then
     begin
       pmCtxt.OutContent := rawFileContent;
-      pmCtxt.OutContentType := GetMimeContentType(Pointer(rawFileContent), Length(rawFileContent), Utf8ToString(contentFile));
+      pmCtxt.OutContentType := GetMimeContentType(rawFileContent, Utf8ToString(contentFile));
       pmCtxt.OutCustomHeaders := HEADER_CONTENT_TYPE + pmCtxt.OutContentType;
       Result := HTTP_SUCCESS;
     end;
@@ -295,7 +295,7 @@ var
   urlQuery: PUtf8Char;
   urlPathLen: Integer;
 begin
-  p := PUtf8Char(Pointer(pmcUrl));
+  p := pointer(pmcUrl);
   if (p <> Nil) and (p^ = '/') then
     Inc(p)
   else
