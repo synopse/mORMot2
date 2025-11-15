@@ -395,7 +395,6 @@ type
 function ToText(so: TPollAsyncSocketOnReadWrite): PShortString; overload;
 
 
-
 { ******************** Client or Server Asynchronous Process }
 
 type
@@ -5858,9 +5857,10 @@ begin
     result := Ctxt.SetOutFile(filename, with304,
       size, lastmod, fSettings.CacheControlMaxAgeSec);
   if (result <> HTTP_SUCCESS) or
+     IsHead(ctxt.Method) or
      not Assigned(fMemCache) then
     exit;
-  // try to use the memory cache content
+  // try to use the memory cache content (for GET, not HEAD)
   pck := fSettings.MemCache.FromUri(uri);
   if not (pckIgnore in pck) then
     if (pckForce in pck) or
