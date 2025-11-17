@@ -3271,18 +3271,18 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
       // STATICFILE_PROGSIZE: file is not fully available: wait for sending
       if ((not (rfWantRange in Context.ResponseFlags)) or
           Context.ValidateRange) then
-      begin
-        if FileInfoByName(fn, fsiz, Context.ContentLastModified) and
-          (fsiz >= 0) and // not a folder
-          (fsiz <= Context.ContentLength) then
+        if IsHead(Context.CommandMethod) or // HEAD needs no file but a length
+           (FileInfoByName(fn, fsiz, Context.ContentLastModified) and
+            (fsiz >= 0) and // not a folder
+            (fsiz <= Context.ContentLength)) then
         begin
-          Context.ContentStream := TStreamWithPositionAndSize.Create; // <> nil
+          // void Context.ContentStream <> nil needed with both GET and HEAD
+          Context.ContentStream := TStreamWithPositionAndSize.Create;
           Context.ResponseFlags := Context.ResponseFlags +
             [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
         end
         else
-          fRespStatus := HTTP_NOTFOUND;
-      end
+          fRespStatus := HTTP_NOTFOUND
       else
         fRespStatus := HTTP_RANGENOTSATISFIABLE
     else if (not Assigned(fServer.OnSendFile)) or

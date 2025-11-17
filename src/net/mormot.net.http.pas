@@ -3652,7 +3652,7 @@ end;
 
 var
   _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
-const
+const // inlined IsHead() function
   _HEAD32 = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 
 function THttpRequestContext.ParseCommand: boolean;
@@ -4003,7 +4003,7 @@ begin
   if (rfAcceptRange in ResponseFlags) and
       not (hhAcceptRangeBytes in HeadCustom) then
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
-  if ContentStream = nil then
+  if ContentStream = nil then // <> nil e.g. for rfProgressiveStatic
   begin
     fContentPos := pointer(Content); // for ProcessBody below
     ContentLength := length(Content);

@@ -5727,8 +5727,9 @@ begin
       else
       begin
         // the local file seems invalid and should be removed
-        log.Add.Log(sllTrace, 'OnExecute: deprecate head=% filename=% %=% %=%',
-          [name, result, size, headsiz, lastmod, headlastmod], proxy);
+        log.Add.Log(sllTrace, 'OnExecute: deprecate status=% head=% filename=% %=% %=%',
+          [result, ctxt.OutCustomHeaders, name, size, headsiz, lastmod, headlastmod],
+          proxy);
         if not DeleteFile(filename) then // may fail on Windows: use previous
         begin
           log.Add.Log(sllLastError,
@@ -6334,7 +6335,7 @@ begin
     // we have a local cached file
     if fPartials.HasFile(req.filename, @req.size, ctxt.ConnectionHttp) then
     begin
-      // but it is already in progressive mode: join the team
+      // but it is already associated in progressive mode: join the team
       Ctxt.SetOutProgressiveFile(req.filename, req.size);
       req.loginfo := 'partial exists';
       result := HTTP_SUCCESS;
@@ -6353,7 +6354,7 @@ begin
     req.lastmod := 0;
   end;
   if not StatusCodeIsSuccess(result) then
-    // no matching local file: need to initiate a proxy request
+    // no matching local file: need to initiate a HEAD + GET proxy request
     result := req.StartProxyRequest(Uri);
   if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then
