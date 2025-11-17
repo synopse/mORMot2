@@ -9530,6 +9530,9 @@ begin
     for i := 0 to n - 1 do
       fRawParams[i] := RawUtf8(ParamStr(i + 1));
   end;
+  Finalize(fNames);
+  Finalize(fValues);
+  Finalize(fRetrieved);
   n := length(fRawParams);
   if n = 0 then
   begin
