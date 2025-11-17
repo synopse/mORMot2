@@ -1560,7 +1560,7 @@ type
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   // - pcoHttpDirect extends the HTTP endpoint to initiate a download process
   // from localhost, and return the cached content (used e.g. as proxy + cache)
-  // using a URI + Bearer returned by HttpDirectUri() overloaded methods
+  // requiring URI + Bearer as returned by HttpDirectUri() overloaded methods
   // - pcoHttpDirectNoBroadcast would disable UDP peer search for pcoHttpDirect
   // - pcoHttpDirectTryLastPeer could make pcoTryLastPeer for pcoHttpDirect
   // - pcoHttpReprDigest would include a 'Repr-Digest:' header as per RFC 9530
@@ -4765,6 +4765,11 @@ begin
   fBanned := THttpAcceptBan.Create; // for hsoBan40xIP or BlackList
   if ServerThreadPoolCount > 0 then
   begin
+    {$ifdef OSWINDOWS}
+    if IsWow64Emulation then
+      if ServerThreadPoolCount > 4 then
+        ServerThreadPoolCount := 4; // PRISM does not like too much threads
+    {$endif OSWINDOWS}
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
     if hsoThreadCpuAffinity in ProcessOptions then
