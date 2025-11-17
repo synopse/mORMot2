@@ -178,7 +178,8 @@ type
     rcfInputAllowDouble,
     rcfForceServiceResultAsJsonObject,
     rcfForceServiceResultAsJsonObjectWithoutResult,
-    rcfForceServiceResultAsXMLObject);
+    rcfForceServiceResultAsXMLObject,
+    rcfAesSignatureBearer);
   /// define TRestServerUriContext internal flags
   TRestServerUriContextFlags = set of TRestServerUriContextFlag;
 
@@ -3003,6 +3004,7 @@ begin
         result := false;
         exit;
       end;
+      include(fFlags, rcfAesSignatureBearer); // = AuthenticationBearerHeader
     end;
     // first check for deprecated sessions (every second is enough)
     tix32 := TickCount64 shr 10;
@@ -3026,7 +3028,7 @@ begin
           else
             fLog.Log(sllWarning, 'Authenticate: session bearer=% <> opaque=%',
               [bearerid, s.ID], self);
-        end;
+      end;
       Call^.LowLevelConnectionOpaque^.ValueInternal := 0; // paranoid
     end;
     // parse URI signature (or cookie) to retrieve the associated session
