@@ -1364,7 +1364,8 @@ type
     function ConsoleHelpFailed(const exedescription: RawUtf8 = ''): boolean;
     /// fill the stored arguments and options from executable parameters
     // - called e.g. at unit inialization to set Executable.CommandLine variable
-    // - you can execute it again e.g. to customize the switches characters
+    // - you can execute it again e.g. to customize the switches characters -
+    // but to be done at startup, before any Option() or Param() methods
     function Parse(const DescriptionLineFeed: RawUtf8 = CRLF;
       const ShortSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '-' {$endif};
       const LongSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '--' {$endif}): boolean;
