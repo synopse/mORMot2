@@ -1012,13 +1012,23 @@ var
   hm: HMODULE;
 begin
   result := '';
-  FillcharFast(tmp, SizeOf(tmp), 0);
   hm := 0;
   if not GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) then
     exit;
+  FillcharFast(tmp, SizeOf(tmp), 0);
   GetModuleFileNameW(hm, tmp, SizeOf(tmp));
   Win32PWideCharToFileName(tmp, result);
+end;
+
+function IsMainExecutable(aAddress: pointer): boolean;
+var
+  hm: HMODULE;
+begin
+  hm := 0;
+  result := GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
+              GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) and
+            (hm = HINSTANCE);
 end;
 
 function FileIsWritable(const FileName: TFileName): boolean;

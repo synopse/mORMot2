@@ -1527,16 +1527,33 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
+var
+  PosixProgramInfo: dl_info; // set at startup
+
+procedure GetDlInfoName(var dlinfo: dl_info; var result: TFileName);
+begin
+  FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
+  if (result <> '') and
+     (result[1] <> '/') then
+    result := ExpandFileName(string(result));
+end;
+
 function GetExecutableName(aAddress: pointer): TFileName;
 var
   dlinfo: dl_info;
 begin
   FillCharFast(dlinfo, sizeof(dlinfo), 0);
   dladdr(aAddress, @dlinfo);
-  FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
-  if (result <> '') and
-     (result[1] <> '/') then
-    result := ExpandFileName(string(result));
+  GetDlInfoName(dlinfo, result);
+end;
+
+function IsMainExecutable(aAddress: pointer): boolean;
+var
+  dlinfo: dl_info;
+begin
+  FillCharFast(dlinfo, sizeof(dlinfo), 0);
+  dladdr(aAddress, @dlinfo);
+  result := (dlinfo.dli_fbase = PosixProgramInfo.dli_fbase);
 end;
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;

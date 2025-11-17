@@ -1549,6 +1549,10 @@ var
 // - calls dladdr() on POSIX, or GetModuleFileName() on Windows
 function GetExecutableName(aAddress: pointer): TFileName;
 
+/// check if a function address is known within the main executable module
+// - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
+function IsMainExecutable(aAddress: pointer): boolean;
+
 var
   /// retrieve the MAC addresses of all hardware network adapters
   // - mormot.net.sock.pas will inject here its own cross-platform version
@@ -8941,7 +8945,8 @@ begin
     dt := FileAgeToDateTime(ProgramFileName);
     {$else}
     dt := 0;
-    ProgramFileName := GetExecutableName(@InitializeProcessInfo);
+    dladdr(@InitializeProcessInfo, @PosixProgramInfo);
+    GetDlInfoName(PosixProgramInfo, ProgramFileName);
     if ProgramFileName <> '' then
     begin
       dt := FileAgeToDateTime(ProgramFileName);
@@ -8950,6 +8955,7 @@ begin
     end;
     if ProgramFileName = '' then
       ProgramFileName := ExpandFileName(ParamStr(0));
+    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     {$endif OSWINDOWS}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     if IsLibrary then
