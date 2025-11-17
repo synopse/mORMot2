@@ -443,6 +443,11 @@ type
     // be unsafe to use it on production - but may be handy e.g. for debugging
     // or if you can't tweak the HTTP headers - as with websockets on JavaScript)
     function AuthenticationBearerToken: RawUtf8; override;
+    /// indicates that rsoAuthenticationBearerHeader option succeeded
+    // - i.e. AuthenticationBearerToken matches the global TAesSignature
+    // - won't be checked for bypassed addresses e.g. /root/timestamp
+    property AuthenticationBearerHeader: boolean
+      index rcfAesSignatureBearer read GetFlag;
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
     // - overriden to support TRestServer.JwtForUnauthenticatedRequestWhiteIP()
     function AuthenticationCheck(jwt: TJwtAbstract): boolean; override;
@@ -2968,7 +2973,7 @@ var
   s: TAuthSession;
   a: ^TRestServerAuthentication;
   tix32, bearerid: cardinal;
-  n: integer;
+  n: PtrInt;
 begin
   result := true;
   if Server.fHandleAuthentication and
@@ -2977,15 +2982,18 @@ begin
   begin
     // some requests may have been marked to by-pass authentication
     fSession := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
-    if // /auth + /timestamp are e.g. allowed methods without signature
-       ((MethodIndex >= 0) and
-        Server.fPublishedMethod[MethodIndex].ByPassAuthentication) or
-       // you can allow a service to be called directly
-       ((Service <> nil) and
-        TServiceFactoryServerAbstract(Service).ByPassAuthentication) or
-       // allow by-pass for a set of HTTP verbs (e.g. mGET from AJAX clients)
-       ((Table <> nil) and
-        (Method in Server.BypassOrmAuthentication)) then
+    // /auth + /timestamp are e.g. allowed methods without signature
+    n := MethodIndex;
+    if (n >= 0) and
+       Server.fPublishedMethod[n].ByPassAuthentication then
+      exit;
+    // you can allow a service to be called directly
+    if (Service <> nil) and
+       TServiceFactoryServerAbstract(Service).ByPassAuthentication then
+      exit;
+    // allow ORM by-pass for a set of HTTP verbs (e.g. mGET from AJAX clients)
+    if (Table <> nil) and
+       (Method in Server.BypassOrmAuthentication) then
       // no need to check the sessions
       exit;
     // optional 'Authentication: Bearer xxx' check on pure HTTP mode
