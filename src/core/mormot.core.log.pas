@@ -692,7 +692,7 @@ type
     fNoEnvironmentVariable: boolean;
     {$endif OSWINDOWS}
     {$ifndef NOEXCEPTIONINTERCEPT}
-    fHandleExceptions, fNoLibraryException: boolean;
+    fHandleExceptions, fExceptionIgnoreLibrary: boolean;
     fOnBeforeException: TOnBeforeException;
     {$endif NOEXCEPTIONINTERCEPT}
     fAutoFlushTimeOut: cardinal;
@@ -800,8 +800,8 @@ type
       index tiExceptionIgnore read GetCurrentThreadFlag write SetCurrentThreadFlag;
     /// set true will log exceptions only from the main executable, not from library
     // - will follow IsMainExecutable() result
-    property NoLibraryException: boolean
-      read fNoLibraryException write fNoLibraryException;
+    property ExceptionIgnoreLibrary: boolean
+      read fExceptionIgnoreLibrary write fExceptionIgnoreLibrary;
     /// allow to temporarly avoid logging in the current thread
     // - won't affect exceptions logging, as one would expect for safety reasons
     // - after setting true to this property, should eventually be reset to false:
@@ -6495,7 +6495,7 @@ begin
   log := HandleExceptionFamily.Add;
   if log = nil then
     exit;
-  if log.fFamily.NoLibraryException and
+  if log.fFamily.ExceptionIgnoreLibrary and
      (Ctxt.EAddr <> 0) and
      not IsMainExecutable(pointer(Ctxt.EAddr)) then // fast guess
     exit;
