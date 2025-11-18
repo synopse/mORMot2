@@ -3827,12 +3827,12 @@ begin
                          'driver',
                          '{',
                              'name',    SYNOPSE_FRAMEWORK_NAME,
-                             'version', SYNOPSE_FRAMEWORK_VERSION,
+                             'version', '2.' + SYNOPSE_FRAMEWORK_BRANCH,
                          '}',
                          'os',
                          '{',
-                             'type', OS_TEXT,
-                             'name', OSVersionShort,
+                             'type',         OS_TEXT,
+                             'name',         OSVersionShort,
                              'architecture', CPU_ARCH_TEXT,
                          '}',
                      '}',
@@ -3841,9 +3841,9 @@ begin
     with _Safe(fServerInfo, dvObject)^ do
       if Count <> 0 then
       begin
-        GetAsInteger('maxBsonObjectSize', fServerMaxBsonObjectSize);
+        GetAsInteger('maxBsonObjectSize',   fServerMaxBsonObjectSize);
         GetAsInteger('maxMessageSizeBytes', fServerMaxMessageSizeBytes);
-        GetAsInteger('maxWriteBatchSize', fServerMaxWriteBatchSize);
+        GetAsInteger('maxWriteBatchSize',   fServerMaxWriteBatchSize);
         GetAsInteger('maxWireVersion', mw);
         byte(fServerMaxWireVersion) := mw;
         GetAsBoolean('readOnly', fServerReadOnly);
