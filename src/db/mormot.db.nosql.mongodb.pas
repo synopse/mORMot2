@@ -1060,8 +1060,8 @@ type
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
     function GetBytesTransmitted: Int64;
-    procedure Auth(const DatabaseName, UserName, Digest: RawUtf8;
-      ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
+    procedure DoAuth(const DatabaseName, UserName, Password: RawUtf8;
+      ForceMongoDBCR: boolean; ConnectionIndex: PtrInt; Algo: TSignAlgo);
     function ReOpen: boolean;
   public
     /// the optional low-level TLS parameters
@@ -1087,11 +1087,11 @@ type
     /// secure connection to a database on a remote MongoDB server
     // - this method will use authentication and will return the corresponding
     // MongoDB database instance, with a dedicated secured connection
-    // - will use MONGODB-CR for MongoDB engines up to 2.6 (or if ForceMongoDBCR
-    // is TRUE), and SCRAM-SHA-1 since MongoDB 3.x
+    // - will use SCRAM-SHA-256 by default, but you may set ScramAlgo = saSha1
+    // for MongoDB 3.x, or even ForceMongoDBCR = TRUE for legacy MongoDB < 2.6
     // - see http://docs.mongodb.org/manual/administration/security-access-control
     function OpenAuth(const DatabaseName, UserName, PassWord: RawUtf8;
-      ForceMongoDBCR: boolean = false): TMongoDatabase;
+      ScramAlgo: TSignAlgo = saSha256; ForceMongoDBCR: boolean = false): TMongoDatabase;
     /// close the connection and release all associated TMongoDatabase,
     // TMongoCollection and TMongoConnection instances
     destructor Destroy; override;
@@ -3597,9 +3597,8 @@ begin
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName, PassWord: RawUtf8;
-  ForceMongoDBCR: boolean): TMongoDatabase;
+  ScramAlgo: TSignAlgo; ForceMongoDBCR: boolean): TMongoDatabase;
 var
-  digest: RawByteString;
   i: PtrInt;
 begin
   if (self = nil) or
@@ -3609,59 +3608,49 @@ begin
     EMongoException.RaiseUtf8('Invalid %.OpenAuth("%") call',
       [self, DatabaseName]);
   result := fDatabases.GetObjectFrom(DatabaseName);
-  if result = nil then  // not already opened -> try now from primary host
-  try
+  if result <> nil then
+    exit;
+  // not already opened -> try now from primary host
+  for i := 0 to High(fConnections) do
     // ensure we are opened and authenticated on all connections
-    for i := 0 to High(fConnections) do
-      if not fConnections[i].Opened then
+    if not fConnections[i].Opened then
+      try
+        fConnections[i].Open; // open socket connection
         try
-          fConnections[i].Open; // open socket connection
-          digest := PasswordDigest(UserName, Password);
-          Auth(DatabaseName, UserName, digest, ForceMongoDBCR, i);
-          AfterOpen(i); // buildInfo requires auth since MongoDB 8.1
-          with fGracefulReconnect do
-            if Enabled and
-               (EncryptedDigest = '') then
-            begin
-              ForcedDBCR := ForceMongoDBCR;
-              User := UserName;
-              Database := DatabaseName;
-              EncryptedDigest := CryptDataForCurrentUser(digest, Database, true);
-            end;
+          DoAuth(DatabaseName, UserName, PassWord, ForceMongoDBCR, i, ScramAlgo);
         except
-          fConnections[i].Close;
-          raise;
+          if ForceMongoDBCR or
+             (ScramAlgo <> saSha256) then
+            raise;
+          ScramAlgo := saSha1; // fallback for an User created on legacy DB
+          DoAuth(DatabaseName, UserName, Password, ForceMongoDBCR, i, ScramAlgo);
         end;
-    result := TMongoDatabase.Create(Self, DatabaseName);
-    fDatabases.AddObjectUnique(DatabaseName, @result);
-  finally
-    FillZero(digest);
-  end;
+        AfterOpen(i); // buildInfo requires auth since MongoDB 8.1
+      except
+        fConnections[i].Close;
+        raise;
+      end;
+  result := TMongoDatabase.Create(Self, DatabaseName);
+  fDatabases.AddObjectUnique(DatabaseName, @result);
 end;
 
-procedure TMongoClient.Auth(const DatabaseName, UserName, Digest: RawUtf8;
-  ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
+procedure TMongoClient.DoAuth(const DatabaseName, UserName, Password: RawUtf8;
+  ForceMongoDBCR: boolean; ConnectionIndex: PtrInt; Algo: TSignAlgo);
 var
   conn: TMongoConnection;
   res, bson: variant;
-  err, nonce, first, key, user, msg, rnonce: RawUtf8;
+  err, nonce, key, mech: RawUtf8;
   payload: RawByteString;
-  rnd: TAesBlock;
-  sha: TSha1;
-  salted, client, stored, server: TSha1Digest;
-  resp: TDocVariantData;
+  sc: TScramClient;
 
-  procedure CheckPayload;
+  procedure ExtractPayload;
   var
     bin: PVariant;
   begin
-    if err <> '' then
-      exit;
-    if _Safe(res)^.GetAsPVariant('payload', bin) and
-       BsonVariantType.ToBlob({%H-}bin^, payload) then
-      resp.InitFromPairs(pointer(payload), JSON_FAST, '=', ',')
-    else
-      err := 'missing or invalid returned payload';
+    if err = '' then
+      if not _Safe(res)^.GetAsPVariant('payload', bin) or
+         not BsonVariantType.ToBlob({%H-}bin^, payload) then
+        err := 'missing or invalid returned payload';
   end;
 
 begin
@@ -3669,14 +3658,14 @@ begin
   if (self = nil) or
      (DatabaseName = '') or
      (UserName = '') or
-     (Digest = '') or
+     (Password = '') or
      (PtrUInt(ConnectionIndex) >= PtrUInt(length(fConnections))) then
     EMongoException.RaiseUtf8('Invalid %.Auth("%") call',
       [self, DatabaseName]);
   conn := fConnections[ConnectionIndex];
-  if ForceMongoDBCR then // >8.1: ServerBuildInfoNumber not allowed before Auth
+  if ForceMongoDBCR then
   begin
-    // MONGODB-CR
+    // MONGODB-CR - deprecated and even disabled since MongoDB 3.0
     // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
     bson := BsonVariant([
       'getnonce', 1]);
@@ -3687,89 +3676,107 @@ begin
     if err <> '' then
       EMongoException.RaiseUtf8('%.OpenAuthCR("%") step1: % - res=%',
         [self, DatabaseName, err, res]);
-    key := Md5(nonce + UserName + Digest);
+    mech := MongoPasswordDigest(UserName, Password);
+    Join([nonce, UserName, mech], key);
+    FillZero(mech);
     bson := BsonVariant([
       'authenticate', 1,
-      'user', UserName,
-      'nonce', nonce,
-      'key', key]);
+      'user',         UserName,
+      'nonce',        nonce,
+      'key',          Md5(key)]);
+    FillZero(key);
     err := conn.RunCommand(DatabaseName, bson, res);
     if err <> '' then
       EMongoException.RaiseUtf8('%.OpenAuthCR("%") step2: % - res=%',
         [self, DatabaseName, err, res]);
-  end
-  else
-  begin
-    // SCRAM-SHA-1
-    // https://tools.ietf.org/html/rfc5802#section-5
-    user := StringReplaceAll(UserName, ['=', '=3D', ',', '=2C']);
-    Random128(@rnd); // unpredictable
-    nonce := BinToBase64(@rnd, SizeOf(rnd));
-    FormatUtf8('n=%,r=%', [user, nonce], first);
-    BsonVariantType.FromBinary('n,,' + first, bbtGeneric, bson);
+    exit;
+  end;
+  // SCRAM-SHA-1 or SCRAM-SHA-256 according to RFC 5802 or RFC 7677
+  sc := TScramClient.Create(Algo);
+  try
+    nonce := sc.ComputeFirstMessage(UserName, mech);
+    BsonVariantType.FromBinary(nonce, bbtGeneric, bson);
+    (* SEND
+    {
+      "saslStart": 1,                          // command name
+      "mechanism": "SCRAM-SHA-256",            // or "SCRAM-SHA-1"
+      "payload": BinData(0, "biWSM...."),      // client-first-message
+      "autoAuthorize": 1,                      // almost always present in drivers
+      "options": { "skipEmptyExchange": true } // most modern drivers add this
+    }
+    *)
     err := conn.RunCommand(DatabaseName,
       BsonVariant([
-        'saslStart', 1,
-        'mechanism', 'SCRAM-SHA-1',
-        'payload', bson,
+        'saslStart',     1,
+        'mechanism',     mech,
+        'payload',       bson,
         'autoAuthorize', 1
-        ]), res);
-    resp.Init;
-    CheckPayload;
+        ]), res);   // options:{skipEmptyExchange} not needed with autoAuthorize
+    (* RECEIVE
+    {
+      "ok": 1,
+      "payload": BinData(0, "r=rOprNG...s=base64salt...i=15000"),
+      "conversationId": 1,          // reused in next messages
+      "done": false
+    }
+    *)
+    ExtractPayload;
     if err = '' then
     begin
-      rnonce := resp.U['r'];
-      if copy(rnonce, 1, length(nonce)) <> nonce then
-        err := 'returned invalid nonce';
+      key := sc.ComputeFinalMessage(payload, Password);
+      if key = '' then
+        err := sc.LastError;
     end;
     if err <> '' then
-      EMongoException.RaiseUtf8(
-        '%.OpenAuthSCRAM("%") step1: % - res=% payload=%',
-        [self, DatabaseName, err, res, PVariant(@resp)^]);
-    key := 'c=biws,r=' {%H-}+ rnonce;
-    Pbkdf2HmacSha1(Digest, Base64ToBin(resp.U['s']),
-      Utf8ToInteger(resp.U['i']), salted);
-    HmacSha1(salted, 'Client Key', client);
-    sha.Full(@client, SizeOf(client), stored);
-    msg := first + ',' + RawUtf8({%H-}payload) + ',' + key;
-    HmacSha1(stored, msg, stored);
-    XorMemory(@client, @stored, SizeOf(client));
-    HmacSha1(salted, 'Server Key', server);
-    HmacSha1(server, msg, server);
-    msg := key + ',p=' + BinToBase64(@client, SizeOf(client));
-    BsonVariantType.FromBinary(msg, bbtGeneric, bson);
+      EMongoException.RaiseUtf8('%.OpenAuth%("%") step1: % - res=% as %',
+        [self, mech, DatabaseName, err, res, payload]);
+    BsonVariantType.FromBinary(key, bbtGeneric, bson);
+    (* SEND
+    {
+      "saslContinue": 1,
+      "conversationId": 1,
+      "payload": BinData(0, "Yz1iaWS...base64...")   // client-final-message
+    }
+    *)
     err := conn.RunCommand(
       DatabaseName, BsonVariant([
-        'saslContinue', 1,
+        'saslContinue',   1,
         'conversationId', res.conversationId,
-        'payload', bson
+        'payload',        bson
         ]), res);
-    resp.Clear;
-    CheckPayload;
-    if (err = '') and
-       (resp.U['v'] <> BinToBase64(@server, SizeOf(server))) then
-      err := 'Server returned an invalid signature';
-    if err <> '' then
-      EMongoException.RaiseUtf8(
-        '%.OpenAuthSCRAM("%") step2: % - res=% payload=%',
-        [self, DatabaseName, err, res, PVariant(@resp)^]);
-    if not res.done then
-    begin
-      // third empty challenge may be required
-      err := conn.RunCommand(
-        DatabaseName, BsonVariant([
-           'saslContinue', 1,
-           'conversationId', res.conversationId,
-           'payload', ''
-           ]), res);
-      if (err = '') and
-         not res.done then
-        err := 'SASL conversation failed to complete';
-      if err <> '' then
-        EMongoException.RaiseUtf8('%.OpenAuthSCRAM("%") step3: % - res=%',
-          [self, DatabaseName, err, res]);
-    end;
+    (* RECEIVE
+    {
+      "ok": 1,
+      "payload": BinData(0, "dj1TZ...base64..."),   // server-final-message
+      "conversationId": 1,
+      "done": true
+    }
+    *)
+    ExtractPayload;
+    if err = '' then
+      if not sc.CheckFinalResponse(payload) then
+        err := sc.LastError;
+    EMongoException.RaiseUtf8('%.OpenAuth%("%") step2: % - res=% as %',
+      [self, mech, DatabaseName, err, res, payload]);
+  finally
+    sc.Free;
   end;
+  if res.done then
+    exit;
+  // third empty challenge may be required without "autoAuthorize": 1 and
+  // without "options": { "skipEmptyExchange": true }
+  err := conn.RunCommand(
+    DatabaseName, BsonVariant([
+       'saslContinue',   1,
+       'conversationId', res.conversationId,
+       'payload', ''
+       ]), res);
+  if (err = '') and
+     not res.done then
+    err := 'SASL conversation failed to complete';
+  if err <> '' then
+    EMongoException.RaiseUtf8('%.OpenAuth%("%") step3: % - res=%',
+      [self, mech, DatabaseName, err, res]);
 end;
 
 procedure TMongoClient.AfterOpen;
