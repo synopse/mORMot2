@@ -1091,6 +1091,8 @@ type
     // MongoDB database instance, with a dedicated secured connection
     // - will use SCRAM-SHA-256 by default, but you may set ScramAlgo = saSha1
     // for MongoDB 3.x, or even ForceMongoDBCR = TRUE for legacy MongoDB < 2.6
+    // - for compatibility with a mORMot <= 2.3 CreateUser(), you may need to
+    // use saSha1 and MongoPasswordDigest(UsedName, Password) to authenticate
     // - see http://docs.mongodb.org/manual/administration/security-access-control
     function OpenAuth(const DatabaseName, UserName, PassWord: RawUtf8;
       ScramAlgo: TSignAlgo = saSha256; ForceMongoDBCR: boolean = false): TMongoDatabase;
@@ -3990,19 +3992,19 @@ var
   usr: TDocVariantData;
 begin
   if client.ServerBuildInfoNumber < 03000000 then
-    // legacy deprecated MONGODB-CR password storage on antique MongoDB<=2.6
+    // legacy deprecated MONGODB-CR password storage on antique MongoDB <= 2.6
     usr.InitObject([
       'createUser',     UserName,
       'pwd',            MongoPasswordDigest(UserName, Password),
       'digestPassword', false,
       'roles',          roles], JSON_FAST)
   else
+    // notes: 1) passwordDigestor:"client" fails
+    // 2) better not set any mechanism to force SCRAM-SHA-256 on MongoDB >= 4.x
     usr.InitObject([
       'createUser',     UserName,
       'pwd',            Password, // will be hashed server side
       'roles',          roles], JSON_FAST);
-    // notes: 1) passwordDigestor:"client" fails
-    //        2) better not set mechanism to force SCRAM-SHA-256 on MongoDB>=4.x
   result := RunCommand(variant(usr), res);
 end;
 
