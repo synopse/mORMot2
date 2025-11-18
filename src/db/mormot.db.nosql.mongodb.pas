@@ -3635,8 +3635,7 @@ begin
         end;
         AfterOpen(i); // buildInfo requires auth since MongoDB 8.1
         with fGracefulReconnect do
-          if Enabled and
-             (AesPass = '') then
+          if Enabled then
           begin
             ForcedDBCR := ForceMongoDBCR;
             Algo := ScramAlgo;
