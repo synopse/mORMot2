@@ -1895,6 +1895,8 @@ type
   end;
 
 
+/// compute the deprecated MongoDB < 3.0 MD5-DIGEST for a set of credentials
+function MongoPasswordDigest(const UserName, Password: RawUtf8): RawUtf8;
 
 /// ready-to-be displayed text of a TMongoClientWriteConcern item
 function ToText(wc: TMongoClientWriteConcern): PShortString; overload;
@@ -3595,7 +3597,7 @@ begin
   end;
 end;
 
-function PasswordDigest(const UserName, Password: RawUtf8): RawUtf8;
+function MongoPasswordDigest(const UserName, Password: RawUtf8): RawUtf8;
 begin
   result := Md5(UserName + ':mongo:' + Password);
 end;
