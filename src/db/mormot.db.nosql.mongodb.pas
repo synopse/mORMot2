@@ -3989,14 +3989,20 @@ var
   res: variant;
   usr: TDocVariantData;
 begin
-  usr.InitObject([
-    'createUser',     UserName,
-    'pwd',            PasswordDigest(UserName, Password),
-    'digestPassword', false,
-    'roles',          roles], JSON_FAST);
-  // note: passwordDigestor:"client" fails
-  if client.ServerBuildInfoNumber >= 04000000 then
-    usr.AddValue('mechanisms', _ArrFast(['SCRAM-SHA-1']));
+  if client.ServerBuildInfoNumber < 03000000 then
+    // legacy deprecated MONGODB-CR password storage on antique MongoDB<=2.6
+    usr.InitObject([
+      'createUser',     UserName,
+      'pwd',            MongoPasswordDigest(UserName, Password),
+      'digestPassword', false,
+      'roles',          roles], JSON_FAST)
+  else
+    usr.InitObject([
+      'createUser',     UserName,
+      'pwd',            Password, // will be hashed server side
+      'roles',          roles], JSON_FAST);
+    // notes: 1) passwordDigestor:"client" fails
+    //        2) better not set mechanism to force SCRAM-SHA-256 on MongoDB>=4.x
   result := RunCommand(variant(usr), res);
 end;
 
