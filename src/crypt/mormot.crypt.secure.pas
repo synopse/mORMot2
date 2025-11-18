@@ -1196,7 +1196,38 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
   HashPos: PInteger = nil; Api: TSCriptRaw = nil): RawUtf8;
 
 
-{ SCRAM-like Client/Server mutual authentication using ModularCryptHash() }
+{ Official SCRAM Client/Server mutual authentication }
+
+type
+  /// RFC 5802/7677 SCRAM client, as used e.g. by MongoDB
+  TScramClient = class
+  protected
+    fClientNonce, fAuthMessage, fServerProof, fLastError: RawUtf8;
+    fAlgo: TSignAlgo;
+    fSize: byte;
+    fSigner: TSynSigner;
+  public
+    /// initialize the SCRAM client protocol, typically with saSha1 or saSha256
+    constructor Create(aAlgo: TSignAlgo); reintroduce;
+    /// finalize this instannce, and release all sensitive internal buffers
+    destructor Destroy; override;
+    /// generate a client nonce, and return the first client step
+    // - returns e.g. 'n,,n=user,r=...'
+    function ComputeFirstMessage(const User: RawUtf8; out Mechanism: RawUtf8;
+      const TestForceNonce: RawUtf8 = ''): RawUtf8;
+    /// compute the second and final client step
+    // - ServerResponse is e.g. 'r=...,s=...,i=4096'
+    // - returns e.g. 'c=biws,r=...,p=...'
+    function ComputeFinalMessage(const ServerResponse, Password: RawUtf8): RawUtf8;
+    /// check the server proof to complete mutual authentication
+    function CheckFinalResponse(const ServerResponse: RawUtf8): boolean;
+    /// human-readable information about any failed ComputeFinalMessage() = ''
+    // or CheckFinalResponse() = false
+    property LastError: RawUtf8
+      read fLastError;
+  end;
+
+{ our own SCRAM-MCF client/server pattern, using ModularCryptHash() }
 
 /// compute the SCRAM challenge to be stored on DB for a given "Modular Crypt" hash
 // - the value is bound to the User logon, so that it can't be reassigned to
@@ -5169,6 +5200,115 @@ begin
     FillZero(serverkey);
   end;
   FillZero(ClientSignature);
+end;
+
+
+{ TScramClient }
+
+constructor TScramClient.Create(aAlgo: TSignAlgo);
+begin
+  fAlgo := aAlgo;
+end;
+
+destructor TScramClient.Destroy;
+begin
+  FillZero(fAuthMessage);
+  FillZero(fServerProof);
+  inherited Destroy;
+end;
+
+function TScramClient.ComputeFirstMessage(const User: RawUtf8;
+  out Mechanism: RawUtf8; const TestForceNonce: RawUtf8): RawUtf8;
+var
+  usr: RawUtf8;
+begin
+  Join(['SCRAM-', SIGNER_TXT[fAlgo]], Mechanism);
+  if TestForceNonce <> '' then
+    fClientNonce := TestForceNonce // used against reference vectors
+  else
+  begin
+    Random128(@fSigner); // unpredictable - use fSigner as transient storage
+    fClientNonce := BinToBase64(@fSigner, SizeOf(THash128));
+  end;
+  usr := StringReplaceAll(User, ['=', '=3D', ',', '=2C']);
+  FormatUtf8('n=%,r=%', [usr, fClientNonce], fAuthMessage);
+  Join(['n,,', fAuthMessage], result);
+end;
+
+function TScramClient.ComputeFinalMessage(
+  const ServerResponse, Password: RawUtf8): RawUtf8;
+var
+  resp: TDocVariantData;
+  fullnonce, s, i, key, msg: RawUtf8;
+  salt: RawByteString;
+  iterations: integer;
+  salted, client, stored, server: THash512Rec;
+begin
+  // decode input parameters
+  result := '';
+  fServerProof := '';
+  if (fAuthMessage = '') or
+     (fClientNonce = '') then
+  begin
+    fLastError := 'out of order ComputeFinalMessage() usage';
+    exit;
+  end;
+  iterations := 0;
+  resp.InitFromPairs(ServerResponse, JSON_FAST, '=', ',');
+  if not resp.GetAsRawUtf8('r', fullnonce) or
+     not StartWithExact(fullnonce, fClientNonce) or
+     not resp.GetAsRawUtf8('s', s) or
+     not Base64ToBin(pointer(s), length(s), salt) or
+     not resp.GetAsRawUtf8('i', i) or
+     not ToInteger(i, iterations) or
+     (iterations <= 0) then
+  begin
+    fLastError := 'invalid Server initial response';
+    exit;
+  end;
+  // hash password according to server expectations and compute client signature
+  Join(['c=biws,r=', fullnonce], key);
+  Join([fAuthMessage, ',', ServerResponse, ',', key], msg);
+  fSize := fSigner.Pbkdf2(fAlgo, Password, salt, iterations, @salted);
+  fSigner.Full(fAlgo, @salted, fSize, 'Client Key', @client);
+  fSigner.Full(fAlgo, @salted, fSize, 'Server Key', @server);
+  FillZero(salted, fSize);
+  // compute client and server proofs
+  fSigner.Hash(fAlgo, @client, fSize, stored);
+  fSigner.Full(fAlgo, @stored, fSize, msg, @stored);
+  XorMemory(@client, @stored, fSize);
+  fSigner.Full(fAlgo, @server, fSize, msg, @server);
+  fServerProof := BinToBase64(@server, fSize);
+  Join([key, ',p=', BinToBase64(@client, fSize)], result);
+  fLastError := '';
+  FillZero(key);
+  FillZero(client, fSize);
+  FillZero(stored, fSize);
+  FillZero(server, fSize);
+end;
+
+function TScramClient.CheckFinalResponse(const ServerResponse: RawUtf8): boolean;
+var
+  resp: TDocVariantData;
+  proof: RawUtf8;
+begin
+  result := false;
+  if fServerProof = '' then
+  begin
+    fLastError := 'out of order CheckFinalResponse() usage';
+    exit;
+  end;
+  resp.InitFromPairs(ServerResponse, JSON_FAST, '=', ',');
+  if resp.GetAsRawUtf8('v', proof) then
+    if proof = fServerProof then
+    begin
+      fLastError := '';
+      result := true;
+    end
+    else
+      fLastError := 'invalid Server proof'
+  else
+    fLastError := 'invalid Server last response';
 end;
 
 
