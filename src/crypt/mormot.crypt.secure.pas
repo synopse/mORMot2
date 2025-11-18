@@ -894,7 +894,7 @@ type
       aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// one-step binary digital signature of a buffer with PBKDF2 derivation
     function Full(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: PtrInt;
-      const aMessage: RawByteString; aHmac: PHash512Rec): integer;
+      const aMessage: RawByteString; aHmac: PHash512Rec): integer; overload;
     /// one-step hash computation of a buffer as a binary buffer
     // - returns the written aDigest size in bytes
     function Hash(aAlgo: TSignAlgo; aBuffer: pointer; aLen: integer;
