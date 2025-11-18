@@ -3616,9 +3616,9 @@ begin
       if not fConnections[i].Opened then
         try
           fConnections[i].Open; // open socket connection
-          AfterOpen(i); // need ServerBuildInfoNumber just below
           digest := PasswordDigest(UserName, Password);
           Auth(DatabaseName, UserName, digest, ForceMongoDBCR, i);
+          AfterOpen(i); // buildInfo requires auth since MongoDB 8.1
           with fGracefulReconnect do
             if Enabled and
                (EncryptedDigest = '') then
@@ -3642,6 +3642,7 @@ end;
 procedure TMongoClient.Auth(const DatabaseName, UserName, Digest: RawUtf8;
   ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
 var
+  conn: TMongoConnection;
   res, bson: variant;
   err, nonce, first, key, user, msg, rnonce: RawUtf8;
   payload: RawByteString;
@@ -3668,17 +3669,18 @@ begin
   if (self = nil) or
      (DatabaseName = '') or
      (UserName = '') or
-     (Digest = '') then
+     (Digest = '') or
+     (PtrUInt(ConnectionIndex) >= PtrUInt(length(fConnections))) then
     EMongoException.RaiseUtf8('Invalid %.Auth("%") call',
       [self, DatabaseName]);
-  if ForceMongoDBCR or
-     (ServerBuildInfoNumber < 03000000) then
+  conn := fConnections[ConnectionIndex];
+  if ForceMongoDBCR then // >8.1: ServerBuildInfoNumber not allowed before Auth
   begin
     // MONGODB-CR
     // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
     bson := BsonVariant([
       'getnonce', 1]);
-    err := fConnections[ConnectionIndex].RunCommand(DatabaseName, bson, res);
+    err := conn.RunCommand(DatabaseName, bson, res);
     if (err = '') and
        not _Safe(res)^.GetAsRawUtf8('nonce', nonce) then
       err := 'missing returned nonce';
@@ -3691,7 +3693,7 @@ begin
       'user', UserName,
       'nonce', nonce,
       'key', key]);
-    err := fConnections[ConnectionIndex].RunCommand(DatabaseName, bson, res);
+    err := conn.RunCommand(DatabaseName, bson, res);
     if err <> '' then
       EMongoException.RaiseUtf8('%.OpenAuthCR("%") step2: % - res=%',
         [self, DatabaseName, err, res]);
@@ -3705,7 +3707,7 @@ begin
     nonce := BinToBase64(@rnd, SizeOf(rnd));
     FormatUtf8('n=%,r=%', [user, nonce], first);
     BsonVariantType.FromBinary('n,,' + first, bbtGeneric, bson);
-    err := fConnections[ConnectionIndex].RunCommand(DatabaseName,
+    err := conn.RunCommand(DatabaseName,
       BsonVariant([
         'saslStart', 1,
         'mechanism', 'SCRAM-SHA-1',
@@ -3736,7 +3738,7 @@ begin
     HmacSha1(server, msg, server);
     msg := key + ',p=' + BinToBase64(@client, SizeOf(client));
     BsonVariantType.FromBinary(msg, bbtGeneric, bson);
-    err := fConnections[ConnectionIndex].RunCommand(
+    err := conn.RunCommand(
       DatabaseName, BsonVariant([
         'saslContinue', 1,
         'conversationId', res.conversationId,
@@ -3754,7 +3756,7 @@ begin
     if not res.done then
     begin
       // third empty challenge may be required
-      err := fConnections[ConnectionIndex].RunCommand(
+      err := conn.RunCommand(
         DatabaseName, BsonVariant([
            'saslContinue', 1,
            'conversationId', res.conversationId,
