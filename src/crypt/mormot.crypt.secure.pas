@@ -885,13 +885,20 @@ type
     function Final: RawUtf8; overload;
     /// returns the raw computed digital signature
     // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
-    procedure Final(aSignature: PHash512Rec; aNoInit: boolean = false); overload;
+    function Final(aSignature: PHash512Rec; aNoInit: boolean = false): integer; overload;
     /// one-step digital signature of a buffer as lowercase hexadecimal string
     function Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
       aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// one-step digital signature of a buffer with PBKDF2 derivation
     function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
+    /// one-step binary digital signature of a buffer with PBKDF2 derivation
+    function Full(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: PtrInt;
+      const aMessage: RawByteString; aHmac: PHash512Rec): integer;
+    /// one-step hash computation of a buffer as a binary buffer
+    // - returns the written aDigest size in bytes
+    function Hash(aAlgo: TSignAlgo; aBuffer: pointer; aLen: integer;
+      out aDigest: THash512Rec): integer;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     function Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec;
@@ -1227,8 +1234,8 @@ procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
   result: PHash512Rec);
 
 /// compute the PBKDF2 derivation of a password using HMAC over any hash function
-procedure Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count: integer; result: PHash512Rec); overload;
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count: integer; digest: PHash512Rec): integer; overload;
 
 /// compute the PBKDF2 derivation of a password using HMAC over any hash function
 // - this overloaded function will return any size of the derived password
@@ -5239,9 +5246,9 @@ begin
   fHasher.UpdateBigEndian(aValue);
 end;
 
-procedure TSynSigner.Final(aSignature: PHash512Rec; aNoInit: boolean);
+function TSynSigner.Final(aSignature: PHash512Rec; aNoInit: boolean): integer;
 begin
-  fHasher.Final(aSignature^);
+  result := fHasher.Final(aSignature^);
   if fBlockMax = 0 then
     exit; // SHA-3 needs no HMAC
   fHasher.Update(@fStep7data, fBlockSize);
@@ -5273,6 +5280,20 @@ begin
   Init(aAlgo, aSecret, aSalt, aSecretPbkdf2Round);
   Update(aBuffer, aLen);
   result := Final;
+end;
+
+function TSynSigner.Full(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: PtrInt;
+  const aMessage: RawByteString; aHmac: PHash512Rec): integer;
+begin
+  Init(aAlgo, aSecret, aSecretLen);
+  Update(aMessage);
+  result := Final(aHMac);
+end;
+
+function TSynSigner.Hash(aAlgo: TSignAlgo; aBuffer: pointer; aLen: integer;
+  out aDigest: THash512Rec): integer;
+begin
+  result := fHasher.Full(SIGN_HASH[fAlgo], aBuffer, aLen, aDigest);
 end;
 
 function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
@@ -5665,12 +5686,12 @@ begin
   signer.Final(result);
 end;
 
-procedure Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count: integer; result: PHash512Rec);
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count: integer; digest: PHash512Rec): integer;
 var
   signer: TSynSigner;
 begin
-  signer.Pbkdf2(algo, password, salt, count, result);
+  result := signer.Pbkdf2(algo, password, salt, count, digest);
 end;
 
 function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
