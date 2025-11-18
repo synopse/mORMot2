@@ -1039,8 +1039,10 @@ type
     fServerMaxWireVersion: TMongoServerWireVersion;
     fGracefulReconnect: record
       Enabled, ForcedDBCR: boolean;
+      Algo: TSignAlgo;
       User, Database: RawUtf8;
-      EncryptedDigest: RawByteString;
+      Aes: TAesAbstract;
+      AesPass: RawByteString;
     end;
     fFindBatchSize, fGetMoreBatchSize: integer;
     fZlibSize, fZlibNumberToReturn, fZlibLevel: integer;
@@ -3428,6 +3430,7 @@ begin
   fServerMaxWriteBatchSize := 100000;
   fLogReplyEventMaxSize := 1024;
   fGracefulReconnect.Enabled := true;
+  fGracefulReconnect.Aes := TAesCtr.CreateTemp(128); // anti-forensic storage
   FormatUtf8('mongodb%://%:%', [TLS_TEXT[mcoTls in Options], Host, Port],
     fConnectionString);
   CsvToRawUtf8DynArray(pointer(SecondaryHostCsv), secHost);
@@ -3459,6 +3462,7 @@ begin
   for i := 0 to high(fConnections) do
     FreeAndNilSafe(fConnections[i]);
   FreeAndNilSafe(fDatabases);
+  fGracefulReconnect.Aes.Free;
   inherited;
 end;
 
@@ -3626,6 +3630,16 @@ begin
           DoAuth(DatabaseName, UserName, Password, ForceMongoDBCR, i, ScramAlgo);
         end;
         AfterOpen(i); // buildInfo requires auth since MongoDB 8.1
+        with fGracefulReconnect do
+          if Enabled and
+             (AesPass = '') then
+          begin
+            ForcedDBCR := ForceMongoDBCR;
+            Algo := ScramAlgo;
+            User := UserName;
+            Database := DatabaseName;
+            AesPass := Aes.EncryptPkcs7(PassWord, {ivatbeg=}true); // obfuscate
+          end;
       except
         fConnections[i].Close;
         raise;
@@ -3841,7 +3855,7 @@ end;
 
 function TMongoClient.ReOpen: boolean;
 var
-  digest: RawByteString;
+  pw: RawByteString;
   {%H-}log: ISynLog;
 begin
   result := false;
@@ -3851,12 +3865,12 @@ begin
       if fLog <> nil then
         fLog.EnterLocal(log, self, 'ReOpen: graceful reconnect');
       fConnections[0].Open;
-      if EncryptedDigest <> '' then
+      if AesPass <> '' then
       try
-        digest := CryptDataForCurrentUser(EncryptedDigest, Database, false);
-        Auth(Database, user, digest, ForcedDBCR, 0);
+        pw := Aes.DecryptPkcs7(AesPass, {ivatbeg=}true); // de-obfuscate
+        DoAuth(Database, User, pw, ForcedDBCR, 0, Algo);
       finally
-        FillZero(digest);
+        FillZero(pw);
       end;
       result := true;
     except
