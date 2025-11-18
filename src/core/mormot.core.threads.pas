@@ -1381,7 +1381,9 @@ const
   // allow up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolWorkThread stack
   THREADPOOL_MAXTHREADS = 256;
 
-
+/// adjust the number of threads to the actual system it runs on
+// - e.g. Windows ARM PRISM has troubles with multiple threads, so we limit to 4
+procedure ThreadCountAdjust(var aThreadPoolCount: integer);
 
 
 
@@ -3981,6 +3983,15 @@ begin
     SetCurrentThreadName('%%-%', [fOwner.fPoolName, fThreadNumber, fOwner.fName]);
 end;
 
+
+procedure ThreadCountAdjust(var aThreadPoolCount: integer);
+begin
+  {$ifdef OSWINDOWS}
+  if IsWow64Emulation then
+    if aThreadPoolCount > 4 then
+      aThreadPoolCount := 4; // Windows PRISM does not like too much threads
+  {$endif OSWINDOWS}
+end;
 
 end.
 

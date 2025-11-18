@@ -4765,11 +4765,7 @@ begin
   fBanned := THttpAcceptBan.Create; // for hsoBan40xIP or BlackList
   if ServerThreadPoolCount > 0 then
   begin
-    {$ifdef OSWINDOWS}
-    if IsWow64Emulation then
-      if ServerThreadPoolCount > 4 then
-        ServerThreadPoolCount := 4; // PRISM does not like too much threads
-    {$endif OSWINDOWS}
+    ThreadCountAdjust(ServerThreadPoolCount); // e.g. WinARM PRISM
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
     if hsoThreadCpuAffinity in ProcessOptions then

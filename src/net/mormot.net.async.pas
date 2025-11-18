@@ -2795,11 +2795,7 @@ begin
   // setup thread pool parameters
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
-  {$ifdef OSWINDOWS}
-  if IsWow64Emulation then
-    if aThreadPoolCount > 4 then
-      aThreadPoolCount := 4; // PRISM does not like too much threads
-  {$endif OSWINDOWS}
+  ThreadCountAdjust(aThreadPoolCount); // e.g. WinARM PRISM
   {$ifndef USE_WINIOCP}
   fThreadPollingWakeupLoad :=
     (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
