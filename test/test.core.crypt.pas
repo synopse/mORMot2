@@ -1786,7 +1786,7 @@ const
 
 var
   buf: RawByteString;
-  u, pw, nfo, nfo2, exp, db, proof: RawUtf8;
+  u, pw, nfo, nfo2, exp, db, proof, mech: RawUtf8;
   iv: Int64;
   P: PAnsiChar;
   unalign: PtrInt;
@@ -1798,6 +1798,7 @@ var
   h, h2: THashAlgo;
   s, s2: TSignAlgo;
   mcf, mcf2: TModularCryptFormat;
+  sc: TScramClient;
   clientsig: THash256;
   hasher: TSynHasher;
   timer: TPrecisionTimer;
@@ -2144,6 +2145,42 @@ begin
     Check(StartWithExact(u, nfo));
     Check(ModularCryptIdentify(nfo) = mcf);
     //ConsoleWrite([CRLF,'ModularCryptHash(''',nfo,''',''password'')=''',u,''');']);
+  end;
+  // regular SCRAM client validation against RFC reference vectors
+  sc := TScramClient.Create(saSha1);
+  try
+    // from RFC 5802 section 5
+    CheckEqual(sc.LastError, '');
+    u := sc.ComputeFirstMessage('user', mech, 'fyko+d2lbbFgONRv9qkxdawL');
+    CheckEqual(u, 'n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL');
+    CheckEqual(mech, 'SCRAM-SHA-1');
+    CheckEqual(sc.LastError, '');
+    proof := sc.ComputeFinalMessage('r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,' +
+      's=QSXCR+Q6sek8bf92,i=4096', 'pencil');
+    CheckEqual(proof, 'c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,' +
+      'p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=');
+    CheckEqual(sc.LastError, '');
+    Check(sc.CheckFinalResponse('v=rmF9pqV8S7suAoZWja4dJRkFsKQ='));
+  finally
+    sc.Free;
+  end;
+  sc := TScramClient.Create(saSha256);
+  try
+    // from RFC 7677 section 3
+    CheckEqual(sc.LastError, '');
+    u := sc.ComputeFirstMessage('user', mech, 'rOprNGfwEbeRWgbNEkqO');
+    CheckEqual(u, 'n,,n=user,r=rOprNGfwEbeRWgbNEkqO');
+    CheckEqual(mech, 'SCRAM-SHA-256');
+    CheckEqual(sc.LastError, '');
+    proof := sc.ComputeFinalMessage(
+      'r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
+      's=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096', 'pencil');
+    CheckEqual(proof, 'c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
+      'p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=');
+    CheckEqual(sc.LastError, '');
+    Check(sc.CheckFinalResponse('v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4='));
+  finally
+    sc.Free;
   end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
