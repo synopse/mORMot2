@@ -1726,6 +1726,7 @@ type
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
+    // - won't return the letters O and I to avoid confusion with digits 0 and 1
     function RandomPassword(Len: integer): SpiUtf8;
     /// validate or generate a random Salt with custom Base64-URI encoding
     // - as used e.g. by the "Modular Crypt" process

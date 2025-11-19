@@ -828,6 +828,9 @@ const
   SIGNER_DEFAULT_ALGO = saSha3S128;
   /// which ModularCryptIdentify/ModularCryptVerify() results are correct
   mcfValid = [mcfMd5Crypt .. high(TModularCryptFormat)];
+  /// the maximum number of PBKDF2 rounds which may trigger a DoS attack
+  // - 5 millions = 1–5 seconds with SHA-NI is noticeable to be painful
+  MAX_PBKDF2_ROUNDS = 5000000;
 var
   /// default number of rounds for PBKDF2 "Modular Crypt" functions
   // - numbers adjusted on 2025, and align with OWASP Password Storage Cheat
@@ -5261,7 +5264,8 @@ begin
      not Base64ToBin(pointer(s), length(s), salt) or
      not resp.GetAsRawUtf8('i', i) or
      not ToInteger(i, iterations) or
-     (iterations <= 0) then
+     (iterations <= 0) or
+     (iterations > MAX_PBKDF2_ROUNDS) then // avoid DoS attacks
   begin
     fLastError := 'invalid Server initial response';
     exit;
@@ -5277,9 +5281,9 @@ begin
   fSigner.Hash(fAlgo, @client, fSize, stored);
   fSigner.Full(fAlgo, @stored, fSize, msg, @stored);
   XorMemory(@client, @stored, fSize);
+  Join([key, ',p=', BinToBase64(@client, fSize)], result); // client proof
   fSigner.Full(fAlgo, @server, fSize, msg, @server);
-  fServerProof := BinToBase64(@server, fSize);
-  Join([key, ',p=', BinToBase64(@client, fSize)], result);
+  fServerProof := BinToBase64(@server, fSize);             // server proof
   fLastError := '';
   FillZero(key);
   FillZero(client, fSize);
@@ -5582,7 +5586,9 @@ begin
      not (aAlgo in [low(MCF_SIGN) .. high(MCF_SIGN)]) then
     exit;
   if aRounds = 0 then
-    aRounds := MCF_ROUNDS[aAlgo]; // use default of each algorithm
+    aRounds := MCF_ROUNDS[aAlgo] // use default of each algorithm
+  else if aRounds > MAX_PBKDF2_ROUNDS then
+    exit; // avoid naive DoS attacks
   if aSaltSize = 0 then
     aSaltSize := 16;
   if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
