@@ -361,7 +361,8 @@ type
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES context for cipher, using CSPRNG as transient key source
     // - used e.g. by TAesSignature or Random128() for their initialization
-    procedure EncryptInitRandom(Bits: integer = 128);
+    // - Bits=0 will instantiate AES-128 or AES-256 if HasHWAes is available
+    procedure EncryptInitRandom(Bits: integer = 0);
     /// encrypt an AES data block into another data block
     // - this method is thread-safe, unless you call EncryptInit/DecryptInit
     procedure Encrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
@@ -3674,9 +3675,9 @@ begin
   rnd128safe.Lock; // ensure thread safe with minimal contention
   aes := @rnd128gen;
   if PPtrUInt(aes)^ = 0 then
-    PAes(aes)^.EncryptInitRandom;   // initialize AES-128 once at startup
-  iv^ := aes^.iv.b;
-  inc(aes^.iv.Lo);                  // AES-CTR with little endian 64-bit counter
+    PAes(aes)^.EncryptInitRandom;   // initialize AES-128 (or AES-256 if HW AES)
+  iv^ := aes^.iv.b;                 // AES-CTR with little endian 64-bit counter
+  inc(aes^.iv.Lo);                  // overflow after 268,435,456 TB of output
   if iv2 <> nil then
   begin
     iv2^ := aes^.iv.b;              // additional 128-bit
@@ -4120,16 +4121,18 @@ end;
 
 procedure TAes.EncryptInitRandom(Bits: integer);
 var
-  rnd: THash256Rec;
+  rnd: THash256;
 begin // note: we can't use Random128() here to avoid endless recursion
+  if Bits = 0 then
+    Bits := 128 shl ord(HasHWAes); // AES-128 or AES-256
   {$ifdef OSLINUX}
   if (MainAesPrng <> nil) or
      not LinuxGetRandom(@rnd, Bits shr 3) then // 128/256-bit in 1 syscall
   {$endif OSLINUX}
-    TAesPrng.Main.FillRandom(rnd.b);   // 256-bit from our CSPRNG (if available)
+    TAesPrng.Main.FillRandom(rnd);     // 256-bit from our CSPRNG (if available)
   EncryptInit(rnd, Bits);              // transient AES-128/256 secret
   FillZero(TAesContext(Context).iv.b); // as per NIST SP 800-90A
-  FillZero(rnd.b);                     // anti-forensic
+  FillZero(rnd);                       // anti-forensic
 end;
 
 function TAes.DecryptInitFrom(const Encryption: TAes; const Key;
@@ -5107,7 +5110,7 @@ end;
 
 procedure TAesSignature.Init;
 begin // AES-256 is 40% slower but twice stronger against Quantum attacks
-  fEngine.EncryptInitRandom(128 shl ord(HasHWAes)); // AES-128 or AES-256
+  fEngine.EncryptInitRandom; // AES-128 or AES-256 if HW AES
 end;
 
 procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
