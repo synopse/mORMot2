@@ -230,12 +230,12 @@ begin
   fClient.SetLog(TSynLog); // define some verbose log
   {$endif WITHLOG}
   {$ifdef TESTMONGOAUTH}
-  fDB := fClient.OpenAuth(DB_NAME, USER_NAME, USER_PWD); 
+  fDB := fClient.OpenAuth(DB_NAME, USER_NAME, USER_PWD);
   {$else}
   fDB := fClient.Database[DB_NAME];
   {$endif TESTMONGOAUTH}
   Check(fDB <> nil);
-  Check(fDB.Name = DB_NAME);
+  CheckEqual(fDB.Name, DB_NAME);
   errmsg := fDB.RunCommand('hostInfo', res);
   if CheckFailed(errmsg = '') or
      CheckFailed(not VarIsNull(res.system)) then
@@ -261,10 +261,10 @@ begin
   assert(fDB <> nil);
   Coll := fDB.CollectionOrNil[COLL_NAME];
   if Coll <> nil then
-    Check(Coll.Drop = '');
+    CheckEqual(Coll.Drop, '');
   Coll := fDB.CollectionOrCreate[COLL_NAME];
-  Check(Coll.Name = COLL_NAME);
-  Check(Coll.FullCollectionName = DB_NAME + '.' + COLL_NAME);
+  CheckEqual(Coll.Name, COLL_NAME);
+  CheckEqual(Coll.FullCollectionName, DB_NAME + '.' + COLL_NAME);
   Check(Coll.Database = fDB);
   Check(fDB.Collection[COLL_NAME] = Coll);
   Check(fDB.CollectionOrCreate[COLL_NAME] = Coll);
@@ -390,7 +390,7 @@ var
   bytes: Int64;
 begin
   Coll := fDB.Collection[COLL_NAME];
-  Check(Coll.Count = COLL_COUNT);
+  CheckEqual(Coll.Count, COLL_COUNT);
   bytes := fClient.BytesTransmitted;
   for i := 0 to COLL_COUNT - 1 do
   begin
@@ -403,12 +403,12 @@ begin
       Coll.Update('{_id:?}', [fValues[i]._id], '{$set:{Name:?}}', [fValues[i].Name]);
   end;
   NotifyTestSpeed('rows updated', Coll.Count, fClient.BytesTransmitted - bytes);
-  Check(Coll.Count = COLL_COUNT);
+  CheckEqual(Coll.Count, COLL_COUNT);
   for i := 0 to COLL_COUNT - 1 do
   begin
     jsonOne := Coll.FindJSON('{_id:?}', [fValues[i]._id], null, 1);
     expected := VariantSaveMongoJSON(fValues[i], modMongoStrict);
-    Check(jsonOne = expected, 'in-place update');
+    CheckEqual(jsonOne, expected, 'in-place update');
   end;
   jsonArray := Coll.FindJSON(null, BSONVariant(['_id', 0, 'Date', 0, 'Number', 0]));
   Check(JSONArrayCount(@jsonArray[2]) = COLL_COUNT,
@@ -423,7 +423,7 @@ var
   bytes: Int64;
 begin
   Coll := fDB.Collection[COLL_NAME];
-  Check(Coll.Count = fExpectedCount);
+  CheckEqual(Coll.Count, fExpectedCount);
   bytes := fClient.BytesTransmitted;
   beforeCount := fExpectedCount;
   j := 0;
@@ -445,12 +445,12 @@ begin
     end;
   NotifyTestSpeed('rows deleted', beforeCount - fExpectedCount,
    fClient.BytesTransmitted - bytes);
-  Check(Coll.Count = fExpectedCount);
+  CheckEqual(Coll.Count, fExpectedCount);
   for i := 0 to high(fValues) do
     if not VarIsNull(fValues[i]._id) then
     begin
       jsonOne := Coll.FindJSON('{_id:?}', [fValues[i]._id], null, 1);
-      Check(jsonOne = VariantSaveMongoJSON(fValues[i], modMongoStrict), 'delete');
+      CheckEqual(jsonOne, VariantSaveMongoJSON(fValues[i], modMongoStrict), 'delete');
     end;
 end;
 
@@ -474,7 +474,7 @@ begin
   fDB := fMongoClient.Database[DB_NAME];
   {$endif TESTMONGOAUTH}
   Check(fDB <> nil);
-  Check(fDB.Name = DB_NAME);
+  CheckEqual(fDB.Name, DB_NAME);
   Check(fMongoClient.ServerBuildInfoNumber <> 0);
   fModel := TSQLModel.Create([TOrmOdm]);
   fClient := TSQLRestClientDB.Create(fModel, nil, ':memory:', TSQLRestServerDB);
@@ -482,7 +482,7 @@ begin
   check(fStorageMongoDB <> nil);
   fClient.Server.CreateMissingTables;
   fStorageMongoDB.Drop;
-  Check(fClient.TableRowCount(TOrmOdm) = 0);
+  CheckEqual(fClient.TableRowCount(TOrmOdm), 0);
   fStartTimeStamp := fClient.Server.Server.GetServerTimeStamp;
   Check(fStartTimeStamp > 10000);
   fClient.Server.NoAJAXJSON := true;
@@ -513,7 +513,7 @@ begin
       R.Value := _ObjFast(['num', i]);
       R.Ints := nil;
       R.DynArray(1).Add(i);
-      Check(fClient.Add(R, True) = i);
+      CheckEqual(fClient.Add(R, True), i, 'Add');
     end;
   finally
     R.Free;
@@ -530,7 +530,7 @@ var
   bytes: Int64;
   IDs: TIDDynArray;
 begin
-  Check(fClient.TableRowCount(TOrmOdm) = 0);
+  CheckEqual(fClient.TableRowCount(TOrmOdm), 0);
   bytes := fMongoClient.BytesTransmitted;
   fClient.BatchStart(TOrmOdm);
   R := TOrmOdm.Create;
@@ -604,7 +604,7 @@ begin
       inc(n);
       TestOne(R, n);
     end;
-    Check(n = COLL_COUNT);
+    CheckEqual(n, COLL_COUNT);
   finally
     R.Free;
   end;
@@ -628,7 +628,7 @@ begin
         inc(n);
         TestOne(R, i);
       end;
-      Check(n = 1);
+      CheckEqual(n, 1, 'n');
     finally
       R.Free;
     end;
@@ -656,7 +656,7 @@ begin
       inc(n);
       TestOne(R, 43);
     end;
-    Check(n = 1);
+    CheckEqual(n, 1, 'nsql');
   finally
     R.Free;
   end;
@@ -684,7 +684,7 @@ begin
       TestOne(R, R.ID);
       Check(R.ID <> 50);
     end;
-    Check(n = COLL_COUNT - 1);
+    CheckEqual(n, COLL_COUNT - 1);
   finally
     R.Free;
   end;
@@ -711,7 +711,7 @@ begin
       inc(n);
       TestOne(R, n);
     end;
-    Check(n = 10);
+    CheckEqual(n, 10);
   finally
     R.Free;
   end;
@@ -724,7 +724,7 @@ begin
       inc(n);
       TestOne(R, n + 10);
     end;
-    Check(n = 10);
+    CheckEqual(n, 10);
   finally
     R.Free;
   end;
@@ -742,7 +742,7 @@ begin
         Check(StrIComp(pointer(prev), pointer(R.Name)) < 0, 'order by name');
       prev := R.Name;
     end;
-    Check(n = COLL_COUNT, 'client side sort of a text field');
+    CheckEqual(n, COLL_COUNT, 'client side sort of a text field');
     Check(total >= 2682);
   finally
     R.Free;
@@ -770,7 +770,7 @@ begin
       inc(n);
       TestOne(R, 10);
     end;
-    Check(n = 1);
+    CheckEqual(n, 1);
   finally
     R.Free;
   end;
@@ -827,7 +827,7 @@ begin
       Check(IdemPChar(pointer(R.Name), 'NAME 1'));
       TestOne(R, R.ID);
     end;
-    Check(n = 1, '{Name:/^name 1$/i}');
+    CheckEqual(n, 1, '{Name:/^name 1$/i}');
   finally
     R.Free;
   end;
@@ -855,7 +855,7 @@ begin
       Check(not IdemPChar(pointer(R.Name), 'NAME 1'));
       TestOne(R, R.ID);
     end;
-    Check(n + tot = COLL_COUNT, '{Name:/ame 1/i}');
+    CheckEqual(n + tot, COLL_COUNT, '{Name:/ame 1/i}');
   finally
     R.Free;
   end;
@@ -869,15 +869,15 @@ begin
       inc(n);
       TestOne(R, 10);
     end;
-    Check(n = 1, '{Age:{$in:[1,10,20]},Ints:{$in:[10]}}');
+    CheckEqual(n, 1, '{Age:{$in:[1,10,20]},Ints:{$in:[10]}}');
   finally
     R.Free;
   end;
   inc(stat, n);
   check(fClient.OneFieldValue(TOrmOdm, 'count(*)', 'Data is null', [], [], i64));
-  check(i64 = COLL_COUNT, '{Data:null}');
+  CheckEqual(i64, COLL_COUNT, '{Data:null}');
   check(fClient.OneFieldValue(TOrmOdm, 'count(*)', 'Data is not null', [], [], i64));
-  check(i64 = 0, '{Data:{$ne:null}}');
+  CheckEqual(i64, 0, '{Data:{$ne:null}}');
   CheckEqual(fClient.RetrieveListJSON(
     TOrmOdm, '', [], 'min(RowID),max(RowID),Count(RowID)'),
     FormatUTF8('[{"min(RowID)":1,"max(RowID)":%,"Count(RowID)":%}]',
@@ -911,10 +911,10 @@ begin
     n := 0;
     tot := 0;
     tot2 := 0;
-    Check(T.FieldIndex('Age') = 0);
-    Check(T.FieldIndex('first') = 1);
-    Check(T.FieldIndex('count') = 2);
-    Check(T.FieldIndex('total') = 3);
+    CheckEqual(T.FieldIndex('Age'), 0);
+    CheckEqual(T.FieldIndex('first'), 1);
+    CheckEqual(T.FieldIndex('count'), 2);
+    CheckEqual(T.FieldIndex('total'), 3);
     while T.Step(false, @doc) do
     begin
       Check(AddInteger(ages, doc.Age, true));
@@ -953,7 +953,7 @@ begin
       fClient.Update(R);
       inc(n);
     end;
-    Check(n = COLL_COUNT);
+    CheckEqual(n, COLL_COUNT);
   finally
     R.Free;
   end;
@@ -966,7 +966,7 @@ begin
       inc(n);
       TestOne(R, n);
     end;
-    Check(n = COLL_COUNT);
+    CheckEqual(n, COLL_COUNT);
   finally
     R.Free;
   end;
@@ -995,13 +995,13 @@ begin
     begin
       inc(n);
       TestOne(R, n);
-      Check(R.Data = '');
+      CheckEqual(R.Data, '');
       fClient.RetrieveBlob(TOrmOdm, n, 'Data', blobRead);
       PIntegerArray(blob)[0] := n;
       PIntegerArray(blob)[1] := n * $01020304;
-      Check(blobRead = blob);
+      CheckEqual(blobRead, blob);
     end;
-    Check(n = COLL_COUNT);
+    CheckEqual(n, COLL_COUNT);
   finally
     R.Free;
   end;
@@ -1011,17 +1011,17 @@ begin
     while R.FillOne do
     begin
       inc(n);
-      Check(R.ID = n);
-      Check(R.Age = 0);
+      CheckEqual(R.ID, n);
+      CheckEqual(R.Age, 0);
       PIntegerArray(blob)[0] := n;
       PIntegerArray(blob)[1] := n * $01020304;
-      Check(R.Data = blob);
+      CheckEqual(R.Data, blob);
       PIntegerArray(blob)[0] := n * 2;
       PIntegerArray(blob)[1] := n * $02030405;
       R.Data := blob;
       fClient.Server.UpdateBlobFields(R);
     end;
-    Check(n = COLL_COUNT);
+    CheckEqual(n, COLL_COUNT);
   finally
     R.Free;
   end;
@@ -1032,21 +1032,21 @@ begin
     begin
       inc(n);
       TestOne(R, n);
-      Check(R.Data = '');
+      CheckEqual(R.Data, '');
       Check(fClient.Server.RetrieveBlobFields(R));
       PIntegerArray(blob)[0] := n * 2;
       PIntegerArray(blob)[1] := n * $02030405;
-      Check(R.Data = blob);
+      CheckEqual(R.Data, blob);
       R.Data := '';
     end;
-    Check(n = COLL_COUNT);
+    CheckEqual(n, COLL_COUNT);
   finally
     R.Free;
   end;
   check(fClient.OneFieldValue(TOrmOdm, 'count(*)', 'Data is null', [], [], i64));
-  check(i64 = 0, '{Data:null}');
+  CheckEqual(i64, 0, '{Data:null}');
   check(fClient.OneFieldValue(TOrmOdm, 'count(*)', 'Data is not null', [], [], i64));
-  check(i64 = COLL_COUNT, '{Data:{$ne:null}}');
+  CheckEqual(i64, COLL_COUNT, '{Data:{$ne:null}}');
 end;
 
 procedure TTestORM.Delete;
@@ -1080,7 +1080,7 @@ begin
       inc(n);
       TestOne(R, i);
     end;
-    Check(n = ExpectedCount);
+    CheckEqual(n, ExpectedCount);
   finally
     R.Free;
   end;
@@ -1108,8 +1108,8 @@ begin
       Check(fClient.BatchDelete(i) >= 0);
       dec(ExpectedCount);
     end;
-  Check(fClient.BatchSend(IDs) = HTTP_SUCCESS);
-  Check(length(IDs) = COLL_COUNT - ExpectedCount);
+  CheckEqual(fClient.BatchSend(IDs), HTTP_SUCCESS, 'send');
+  CheckEqual(length(IDs), COLL_COUNT - ExpectedCount);
   NotifyTestSpeed('rows deleted', length(IDs), fMongoClient.BytesTransmitted - bytes);
   R := TOrmOdm.CreateAndFillPrepare(fClient.Orm, '');
   try
@@ -1123,7 +1123,7 @@ begin
       inc(n);
       TestOne(R, i);
     end;
-    Check(n = ExpectedCount);
+    CheckEqual(n, ExpectedCount);
   finally
     R.Free;
   end;
