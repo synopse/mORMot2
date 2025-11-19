@@ -5227,11 +5227,14 @@ end;
 
 constructor TAesAbstract.CreateTemp(aKeySize: cardinal);
 var
-  tmp: THash256;
+  tmp: THash256Rec;
 begin
-  TAesPrng.Main.FillRandom(tmp); // 256-bit from CSPRNG
+  if MainAesPrng <> nil then
+    MainAesPrng.FillRandom(tmp.b)   // 256-bit from our CSPRNG (if available)
+  else
+    Random128(@tmp.l, @tmp.h);      // 256-bit of unpredictable random
   Create(tmp, aKeySize);
-  FillZero(tmp);
+  FillZero(tmp, aKeySize shr 3);
 end;
 
 {$ifndef PUREMORMOT2}
