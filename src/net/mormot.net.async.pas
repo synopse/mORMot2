@@ -1513,7 +1513,6 @@ type
     procedure Start(const aPrivateKeyPassword: SpiUtf8 = '');
     /// finalize the HTTP/HTTPS server
     procedure Stop;
-  published
     /// the local HTTP(S) asynchronous server
     property Server: THttpAsyncServer
       read fServer;
