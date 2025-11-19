@@ -4803,7 +4803,6 @@ begin
     AppendLine(fOutCustomHeaders, [STATICFILE_PROGSIZE + ' ', ExpectedFileSize]);
 end;
 
-
 function THttpServerRequestAbstract.SetOutContent(const Content: RawByteString;
   Handle304NotModified: boolean; const ContentType: RawUtf8;
   CacheControlMaxAgeSec: integer): cardinal;

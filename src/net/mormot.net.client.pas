@@ -2608,7 +2608,7 @@ begin
   // nominal case, when the partial retrieval has eventually successed
   if IsVoid or
      (Sender = nil) or
-     (Sender.ProgressiveID = 0) then
+     (Sender.ProgressiveID = 0) then // e.g. for HEAD with no actual download
     exit;
   err[0] := #0;
   Safe.WriteLock;

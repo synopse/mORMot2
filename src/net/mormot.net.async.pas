@@ -5651,7 +5651,7 @@ type
     remote: TUri;
     hash: THashDigest;
     // we need HEAD + GET requests to the remote server
-    function StartProxyRequest(const path: TUriMatchName): cardinal;
+    function AskRemoteServer(const path: TUriMatchName): cardinal;
   end;
   TStartProxyRequestClient = class(THttpClientSocket)
   public
@@ -5671,7 +5671,7 @@ const
     'DATE:',
     nil);
 
-function TStartProxyRequest.StartProxyRequest(const path: TUriMatchName): cardinal;
+function TStartProxyRequest.AskRemoteServer(const path: TUriMatchName): cardinal;
 var
   remotehead: RawUtf8;
   headsiz: Int64;
@@ -5689,7 +5689,7 @@ begin
   // quick blocking process to initiate the proxy request
   proxy.fRemoteClientSafe.Lock;
   try
-    // always perform a HEAD request to the original server
+    // always perform a HEAD request to the original server (maybe from cache)
     result := proxy.RemoteClientHead(remote, name, remotehead, headsiz, headlastmod);
     if not StatusCodeIsSuccess(result) then
     begin
@@ -5737,8 +5737,16 @@ begin
           exit;
         end;
       end;
-    // no matching local file: need to download
+    // no matching local file - but enough to implement a HEAD request
     size := headsiz;
+    if IsHead(ctxt.Method) then
+    begin
+      loginfo := 'HEAD needs no file'; // not in proxy.fOwner.fPartials yet
+      Ctxt.SetOutProgressiveFile(filename, size); // won't need file on disk
+      result := HTTP_SUCCESS;
+      exit;
+    end;
+    // no matching local file: need to download to return the GET body
     if size < proxy.fSettings.HttpDirectGetKB shl 10 then
     begin
       // use the blocking connection for smallest files < 16KB (or without size)
@@ -6351,7 +6359,7 @@ begin
   end;
   if not StatusCodeIsSuccess(result) then
     // no matching local file: need to initiate a HEAD + GET proxy request
-    result := req.StartProxyRequest(Uri);
+    result := req.AskRemoteServer(Uri);
   if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then
     Ctxt.SetErrorMessage('%', [req.loginfo]);
