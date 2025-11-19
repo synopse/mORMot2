@@ -1471,6 +1471,7 @@ type
       var header: RawUtf8; var size: Int64; var time: TUnixTime): cardinal;
     /// perform a HTTP GET on the remote proxy URI using a shared connection
     function RemoteClientGet(const uri: TUri): RawByteString;
+  published
     /// how this URI is implemented
     property Source: THttpProxySource
       read fSource;
@@ -1479,6 +1480,7 @@ type
       read fSettings;
   end;
 
+  /// Exception class raised by THttpProxyServer
   EHttpProxyServer = class(ESynException);
 
   /// implements a HTTP server with forward proxy and caching
@@ -1511,6 +1513,7 @@ type
     procedure Start(const aPrivateKeyPassword: SpiUtf8 = '');
     /// finalize the HTTP/HTTPS server
     procedure Stop;
+  published
     /// the local HTTP(S) asynchronous server
     property Server: THttpAsyncServer
       read fServer;
