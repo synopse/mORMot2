@@ -3773,15 +3773,16 @@ begin
     if err = '' then
       if not sc.CheckFinalResponse(payload) then
         err := sc.LastError;
-    EMongoException.RaiseUtf8('%.OpenAuth%("%") step2: % - res=% as %',
-      [self, mech, DatabaseName, err, res, payload]);
+    if err <> '' then
+      EMongoException.RaiseUtf8('%.OpenAuth%("%") step2: % - res=% as %',
+        [self, mech, DatabaseName, err, res, payload]);
   finally
     sc.Free;
   end;
   if res.done then
     exit;
-  // third empty challenge may be required without "autoAuthorize": 1 and
-  // without "options": { "skipEmptyExchange": true }
+  // third empty challenge may be required when there is no "autoAuthorize": 1
+  // and also no "options": { "skipEmptyExchange": true } alltogether (paranoid)
   err := conn.RunCommand(
     DatabaseName, BsonVariant([
        'saslContinue',   1,
