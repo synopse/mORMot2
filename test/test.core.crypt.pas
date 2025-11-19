@@ -2161,6 +2161,8 @@ begin
       'p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=');
     CheckEqual(sc.LastError, '');
     Check(sc.CheckFinalResponse('v=rmF9pqV8S7suAoZWja4dJRkFsKQ='));
+    Check(not sc.CheckFinalResponse('v=rmF9pqV8S7suAoZWja4dJRkFskQ='));
+    Check(sc.CheckFinalResponse('v=rmF9pqV8S7suAoZWja4dJRkFsKQ='));
   finally
     sc.Free;
   end;
@@ -2178,6 +2180,8 @@ begin
     CheckEqual(proof, 'c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
       'p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=');
     CheckEqual(sc.LastError, '');
+    Check(sc.CheckFinalResponse('v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4='));
+    Check(not sc.CheckFinalResponse('v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G3='));
     Check(sc.CheckFinalResponse('v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4='));
   finally
     sc.Free;
