@@ -1185,6 +1185,7 @@ type
   // - hpoClientNoHead will disable the HEAD request to the server if there is a
   // local cached file to be served - faster but won't detect any server change
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
+  // - hpoNoXProxyName will remove our custom 'X-Proxy-Name: xxxx' output header
   THttpProxyUrlOption = (
     hpoNoSubFolder,
     hpoNoFolderHtmlIndex,
@@ -1196,7 +1197,8 @@ type
     hpoClientCacheSubFolder,
     hpoClientIgnoreTlsError,
     hpoClientNoHead,
-    hpoClientAlllowWinApi);
+    hpoClientAlllowWinApi,
+    hpoNoXProxyName);
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
@@ -6362,7 +6364,9 @@ begin
     result := req.AskRemoteServer(Uri);
   if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then
-    Ctxt.SetErrorMessage('%', [req.loginfo]);
+    Ctxt.SetErrorMessage('%', [req.loginfo])
+  else if not (hpoNoXProxyName in req.proxy.Settings.Options) then
+    Ctxt.AddOutHeader(['X-Proxy-Name: ', req.name]);
   if fHasLog then
     fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
       'OnExecute: % % fn=% status=% size=% info=% in %',
