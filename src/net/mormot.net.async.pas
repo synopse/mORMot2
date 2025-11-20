@@ -5621,8 +5621,9 @@ begin // this method is protected by fSafe.Lock
     GetHeaderInfo(header, size, time);
   end;
   if Assigned(fHeadCache) and
-     (size >= 0) then             // only store if the size was known
-    fHeadCache.Add(name, header); // may store '' on error
+     (result < HTTP_SERVERERROR) and  // retry on pure server or client side
+     (size >= 0) then                 // only store if the size was known
+    fHeadCache.Add(name, header);     // may store '' on error (e.g. 302/404)
   fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% lastmod=%',
     [uri.Address, result, size, time], self);
 end;
