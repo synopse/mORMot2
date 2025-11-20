@@ -2321,13 +2321,15 @@ begin
   OnLog(sllTrace, '% used=%/%', [txt, fUsed, length(fDownload)], self);
 end;
 
-procedure RawAssociate(http: PHttpRequestContext; partial: PHttpPartial);
+function RawAssociate(http: PHttpRequestContext; partial: PHttpPartial): integer;
   {$ifdef HASINLINE} inline; {$endif}
 begin
+  result := 0;
   if http = nil then
     exit;
   http^.ProgressiveID := partial^.ID;
   PtrArrayAdd(partial^.HttpContext, http);
+  result := length(partial^.HttpContext);
 end;
 
 function THttpPartials.Add(const Partial: TFileName; ExpectedFullSize: Int64;
@@ -2363,17 +2365,19 @@ begin
     p^.PartFile := Partial;
     if Hash <> nil then
       MoveFast(Hash^, p^.Digest, HASH_SIZE[Hash^.Algo] + 1);
-    RawAssociate(Http, p);
+    n := RawAssociate(Http, p);
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Add(%,%)=%', [Partial, ExpectedFullSize, result]);
+  DoLog('Add(%,size=%)=% n=%', [Partial, ExpectedFullSize, result, n]);
 end;
 
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
   aID: PHttpPartialID; Http: PHttpRequestContext): TFileName;
 var
   p: PHttpPartial;
+  n: integer;
+  id: THttpPartialID;
 begin
   Size := 0;
   result := '';
@@ -2390,10 +2394,13 @@ begin
     result := p^.PartFile;
     if aID <> nil then
       aID^ := p^.ID;
-    RawAssociate(Http, p);
+    id := p^.ID;
+    n := RawAssociate(Http, p);
   finally
     Safe.ReadUnLock;
   end;
+  if n <> 0 then
+    DoLog('Find(%)=% added n=%', [result, id, n]);
 end;
 
 function THttpPartials.FindReadLocked(ID: THttpPartialID): TFileName;
@@ -2418,6 +2425,8 @@ function THttpPartials.HasFile(const FileName: TFileName;
   FileExpectedSize: PInt64; Http: PHttpRequestContext): boolean;
 var
   p: PHttpPartial;
+  n: integer;
+  id: THttpPartialID;
 begin
   result := false;
   if IsVoid or
@@ -2431,15 +2440,21 @@ begin
     result := true;
     if FileExpectedSize <> nil then
       FileExpectedSize^ := p^.FullSize;
-    RawAssociate(Http, p);
+    id := p^.ID;
+    n := RawAssociate(Http, p);
   finally
     Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
+  if n <> 0 then
+    DoLog('HasFile(%)=% added n=%', [FileName, id, n]);
 end;
 
 function THttpPartials.Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
 var
   p: PHttpPartial;
+  n: integer;
+  id: THttpPartialID;
+  fn: TFileName;
 begin
   result := false;
   if IsVoid or
@@ -2451,10 +2466,13 @@ begin
     if p = nil then
       exit;
     result := true;
-    RawAssociate(Http, p);
+    id := p^.ID;
+    fn := p^.PartFile;
+    n := RawAssociate(Http, p);
   finally
     Safe.WriteUnLock;
   end;
+  DoLog('Associate(%)=% n=%', [fn, id, n]);
 end;
 
 function THttpPartials.ProcessBody(var Ctxt: THttpRequestContext;
@@ -2526,11 +2544,13 @@ end;
 function THttpPartials.DoneLocked(const OldFile, NewFile: TFileName): boolean;
 var
   p: PHttpPartial;
+  n: integer;
 begin
   result := false;
   if IsVoid or
      (OldFile = '') then
     exit;
+  n := 0;
   p := FromFile(OldFile);
   if p <> nil then
   begin
@@ -2538,29 +2558,36 @@ begin
     if p^.HttpContext = nil then
       ReleaseSlot(p)
     else
+    begin
       p^.PartFile := NewFile; // notify any pending background process
+      n := length(p^.HttpContext);
+    end;
   end;
-  DoLog('Done(%,%)=%', [OldFile, NewFile, result]);
+  DoLog('Done(%,%)=% n=%', [OldFile, NewFile, result, n]);
 end;
 
 function THttpPartials.DoneLocked(ID: THttpPartialID): boolean;
 var
   p: PHttpPartial;
+  n: integer;
 begin
   result := false;
   if IsVoid or
      (ID = 0) or
      (cardinal(ID) > fLastID) then
     exit;
+  n := 0;
   p := FromID(ID);
   if p <> nil then
   begin
     result := true;
     if p^.HttpContext = nil then
-      ReleaseSlot(p); // associated to no background download
-    // keep p^.PartFile which may still be available
+      ReleaseSlot(p) // associated to no background download
+    else
+      // keep p^.PartFile which may still be available
+      n := length(p^.HttpContext);
   end;
-  DoLog('Done(%)=%', [ID, result]);
+  DoLog('Done(%)=% n=%', [ID, result, n]);
 end;
 
 function THttpPartials.Abort(ID: THttpPartialID): integer;
@@ -2604,12 +2631,14 @@ procedure THttpPartials.Remove(Sender: PHttpRequestContext);
 var
   p: PHttpPartial;
   err: TShort23;
+  n: integer;
 begin
   // nominal case, when the partial retrieval has eventually successed
   if IsVoid or
      (Sender = nil) or
      (Sender.ProgressiveID = 0) then // e.g. for HEAD with no actual download
     exit;
+  n := 0;
   err[0] := #0;
   Safe.WriteLock;
   try
@@ -2623,12 +2652,14 @@ begin
           err := ' FileSetDate failed';
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
-        ReleaseSlot(p); // release this partial for the last http usage
+        ReleaseSlot(p) // release this partial for the last http usage
+      else
+        n := length(p^.HttpContext);
     end;
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Remove(%)=%%', [Sender.ProgressiveID, (p <> nil), err]);
+  DoLog('Remove(%)=% n=%%', [Sender.ProgressiveID, BOOL_STR[p <> nil], n, err]);
 end;
 
 
