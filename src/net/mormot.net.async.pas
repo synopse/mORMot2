@@ -5810,7 +5810,7 @@ procedure THttpProxyUrl.BackgroundGet(Sender: TObject);
 var
   back: TStartProxyRequestClient absolute Sender;
   status: integer;
-  msg: PUtf8Char;
+  msg: RawUtf8;
   fn: TFileName; // local copy
 begin
   try
@@ -5820,11 +5820,12 @@ begin
     fn := back.stream.FileName;
     FreeAndNil(back.stream);
     if StatusCodeIsSuccess(status) then
-      if (back.filedate = 0) or
+      if (back.filedate <= 0) or
          FileSetDateFromUnixUtc(fn, back.filedate) then
         msg := 'ok'
       else
-        msg := 'FileSetDateFromUnixUtc failed'
+        FormatUtf8('FileSetDate(%,%) failed as %',
+          [fn, back.filedate, OsErrorShort], msg)
     else
       msg := 'GET error';
     fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%] size=%',
