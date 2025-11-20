@@ -5600,6 +5600,7 @@ begin // this method is protected by fSafe.Lock
     client := TSimpleHttpClient.Create(
       not (hpoClientAlllowWinApi in fSettings.Options));
     fRemoteClient := client;
+    client.Options^.RedirectMax := 0; // no automatic redirection
     if hpoClientIgnoreTlsError in fSettings.Options then
       client.Options^.TLS.IgnoreCertificateErrors := true;
     if Assigned(fSettings.OnRemoteClient) then
