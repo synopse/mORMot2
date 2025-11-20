@@ -663,7 +663,7 @@ begin
         if rest.contenttype = '' then
           rest.contenttype := JSON_CONTENT_TYPE_VAR;
         rest.status := http.Request(rest.url, rest.method, {keepalive=}0,
-          rest.headers, rest.content, rest.contenttype, {retry=}false);
+          rest.headers, rest.content, rest.contenttype, {AsRetry=}false);
         SetRestFrame(Frame, rest.status, '', '', http.Http.Headers,
           http.Http.Content, http.Http.ContentType);
         log.Log(sllTrace, 'ProcessIncomingFrame: answered [%] %',

@@ -2073,7 +2073,7 @@ function TSqlDBSocketConnectionProperties.InternalRequest(
   var Data, DataType: RawByteString): integer;
 begin
   result := fSocket.Request(
-    fDatabaseName, 'POST', fKeepAliveMS, '', Data, DataType, false);
+    fDatabaseName, 'POST', fKeepAliveMS, '', Data, DataType, {AsRetry=}false);
   Data := fSocket.Http.Content;
   DataType := fSocket.Http.ContentType;
 end;

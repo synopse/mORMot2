@@ -5813,7 +5813,7 @@ var
 begin
   try
     status := back.Request(back.uri, 'GET',
-      fSettings.HttpKeepAlive * MilliSecsPerSec, '', '', '', false,
+      fSettings.HttpKeepAlive * MilliSecsPerSec, '', '', '', {AsRetry=}false,
       nil, back.stream);
     fn := back.stream.FileName;
     FreeAndNil(back.stream);

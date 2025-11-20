@@ -1685,7 +1685,7 @@ begin
   // emit the body block with its declaration and Request() call
   Declaration(w, ClassName, {implementation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
-         '  fClient.Request(''', UpperCase(fMethod), ''', ''', BasePath + fUrl, '''']);
+    '  fClient.Request(''', UpperCase(fMethod), ''', ''', BasePath + fUrl, '''']);
   // Path parameters first
   w.AddDirect(',', ' ', '[');
   for i := 0 to Length(fUrlParamIndex) - 1 do

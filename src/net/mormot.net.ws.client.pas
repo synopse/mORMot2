@@ -143,7 +143,7 @@ type
     // - after WebSocketsUpgrade() call, will use WebSockets for the communication
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
-      retry: boolean; InStream: TStream = nil; OutStream: TStream = nil): integer; override;
+      AsRetry: boolean; InStream: TStream = nil; OutStream: TStream = nil): integer; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - you may specify an URI to as expected by the server for upgrade
@@ -602,7 +602,7 @@ end;
 
 function THttpClientWebSockets.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
+  const DataType: RawUtf8; AsRetry: boolean; InStream, OutStream: TStream): integer;
 var
   t: TWebSocketProcessClientThread;
   Ctxt: THttpServerRequest;
@@ -613,10 +613,10 @@ begin
   begin
     // standard HTTP/1.1 REST request (before WebSocketsUpgrade call)
     result := inherited Request(url, method, KeepAlive, header, Data, DataType,
-      retry, InStream, OutStream);
+      AsRetry, InStream, OutStream);
     exit;
   end;
-  // WebSocketsUpgrade() did succeed: use the upgraded connection
+  // after successfull WebSocketsUpgrade(): emulate REST over WebSockets
   t := fProcess.fOwnerThread as TWebSocketProcessClientThread;
   if t.fThreadState = sCreate then
     SleepHiRes(10); // paranoid warmup of TWebSocketProcessClientThread.Execute

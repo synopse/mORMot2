@@ -818,7 +818,7 @@ begin
   fLogFamily.Add.Log(sllTrace, 'InternalRequest % calling %(%).Request',
     [method, PClass(fSocket)^, pointer(fSocket)], self);
   result.Lo := fSocket.Request(
-    url, method, KeepAliveMS, Header, RawByteString(Data), DataType, false);
+    url, method, KeepAliveMS, Header, RawByteString(Data), DataType);
   result.Hi := fSocket.Http.ServerInternalState;
   Header := fSocket.Http.Headers;
   Data := fSocket.Http.Content;
