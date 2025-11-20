@@ -1775,7 +1775,7 @@ type
       aClient: THttpClientSocket; aRecvTimeout: integer);
     function LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
       var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
-      aOutStream: TStreamRedirect; aRetry: boolean): integer;
+      aOutStream: TStreamRedirect; aBanInstable: boolean): integer;
     function GetUuidText: RawUtf8;
   public
     /// initialize the cryptography of this peer-to-peer node instance
@@ -6010,7 +6010,7 @@ end;
 
 function THttpPeerCrypt.LocalPeerRequest(const aRequest: THttpPeerCacheMessage;
   var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
-  aOutStream: TStreamRedirect; aRetry: boolean): integer;
+  aOutStream: TStreamRedirect; aBanInstable: boolean): integer;
 var
   head, ip, method: RawUtf8;
 
@@ -6020,7 +6020,7 @@ var
       [method, ip, fPort, aUrl, StatusCodeToText(result)^, E], self);
     if (fInstable <> nil) and // add to RejectInstablePeersMin list
        (E <> nil) and         // on OpenBind() error
-       not aRetry then        // not from partial request before broadcast
+       aBanInstable then      // not from partial request before broadcast
       fInstable.BanIP(aResp.IP4); // this peer may have a HTTP firewall issue
     FreeAndNil(fClient);
     fClientIP4 := 0;
@@ -7026,7 +7026,7 @@ begin
       resp[0] := req;
       FillZero(resp[0].Uuid);
       // OnRequest() returns HTTP_NOCONTENT (204) - and not 404 - if not found
-      result := LocalPeerRequest(req, resp[0], u, OutStream, {aRetry=}true);
+      result := LocalPeerRequest(req, resp[0], u, OutStream, {BanInstable=}false);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
       begin
         Params.SetStep(wgsAlternateLastPeer, [fClient.Server]);
@@ -7064,7 +7064,7 @@ begin
     exit; // partial download would fail the hash anyway
   fClientSafe.Lock;
   try
-    result := LocalPeerRequest(req, resp[0], u, OutStream, {aRetry=}false);
+    result := LocalPeerRequest(req, resp[0], u, OutStream, {BanInstable=}true);
   finally
     fClientSafe.UnLock;
   end;
@@ -7079,7 +7079,7 @@ begin
       if fClientSafe.TryLock then
       try
         Params.SetStep(wgsAlternateGetNext, [IP4ToShort(@resp[i].IP4)]);
-        result := LocalPeerRequest(req, resp[i], u, OutStream, {aRetry=}false);
+        result := LocalPeerRequest(req, resp[i], u, OutStream, {Ban=}true);
         if (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) or
            not ResetOutStreamPosition then
           exit; // success
@@ -7599,7 +7599,7 @@ begin
           SetLength(peers, 1);
           peers[0] := req;
           FillZero(peers[0].Uuid); // "fake" HEAD request to check this peer
-          result := LocalPeerRequest(req, peers[0], Ctxt.Url, nil, {retry=}false);
+          result := LocalPeerRequest(req, peers[0], Ctxt.Url, nil, {Ban=}false);
           if fSettings = nil then
             exit; // shutdown in progress
           if result <> HTTP_SUCCESS then // returns HTTP_NOCONTENT if not found
