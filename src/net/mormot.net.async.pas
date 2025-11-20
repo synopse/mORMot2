@@ -5622,7 +5622,7 @@ begin // this method is protected by fSafe.Lock
   if Assigned(fHeadCache) and
      (size >= 0) then             // only store if the size was known
     fHeadCache.Add(name, header); // may store '' on error
-  fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% time=%',
+  fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% lastmod=%',
     [uri.Address, result, size, time], self);
 end;
 

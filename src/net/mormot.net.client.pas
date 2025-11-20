@@ -261,6 +261,8 @@ type
   THttpPartial = record
     /// genuine 31-bit positive identifier, 0 if empty/recyclable
     ID: THttpPartialID;
+    /// the state of this partial download
+    Flags: set of (pFinished);
     /// the expected full size of this download
     FullSize: Int64;
     /// the timestamp to be affected to the file, when it is fully downloaded
@@ -2437,6 +2439,9 @@ begin
     p := FromFile(FileName);
     if p = nil then
       exit;
+    if assigned(Http) and
+       (pFinished in p^.Flags) then
+      exit; // file is complete - no need of Ctxt.SetOutProgressiveFile()
     result := true;
     if FileExpectedSize <> nil then
       FileExpectedSize^ := p^.FullSize;
@@ -2532,6 +2537,7 @@ end;
 procedure THttpPartials.ReleaseSlot(p: PHttpPartial);
 begin
   p^.ID := 0; // reuse this slot at next Add()
+  byte(p^.Flags) := 0;
   p^.PartFile := '';
   p^.HttpContext := nil;
   p^.EventualTime := 0;
@@ -2645,11 +2651,15 @@ begin
     p := FromID(Sender.ProgressiveID);
     if p <> nil then
     begin
-      if p^.EventualTime <> 0 then // e.g. for THttpProxyServer
-        if FileSetDateFromUnixUtc(p^.PartFile, p^.EventualTime) then
-          err := ' FileSetDate'
-        else
-          err := ' FileSetDate failed';
+      if not (pFinished in p^.Flags) then // file has just been fully downloaded
+      begin
+        include(p^.Flags, pFinished);  // mark file as fully available
+        if p^.EventualTime <> 0 then   // e.g. for THttpProxyServer
+          if FileSetDateFromUnixUtc(p^.PartFile, p^.EventualTime) then
+            err := ' FileSetDate'
+          else
+            err := ' FileSetDate failed';
+      end;
       PtrArrayDelete(p^.HttpContext, Sender);
       if p^.HttpContext = nil then
         ReleaseSlot(p) // release this partial for the last http usage
