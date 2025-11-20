@@ -5460,7 +5460,7 @@ begin
   begin
     Close;
     fHttp := THttpClientSocket.OpenOptions(Server, fConnectOptions); // connect
-    fHttp.Http.Options := [hroHeadersUnfiltered]; // least astonishment
+    include(fHttp.Http.Options, hroHeadersUnfiltered); // least astonishment
   end;
 end;
 
@@ -5510,7 +5510,7 @@ begin
     begin
       // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
       result := fHttp.Request(
-        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, {retry=}true);
+        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType);
       fBody := fHttp.Http.Content;
       fHeaders := fHttp.Http.Headers;
     end;
