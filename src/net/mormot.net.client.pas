@@ -715,7 +715,8 @@ type
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
     // status error otherwise
-    // - retry is usually false, but could be recursively recalled as true
+    // - AsRetry is to be kept as false, because this method already retries by
+    // itself - but could be recursively recalled as true on very specific cases
     // - use either Data or InStream for sending its body request (with its MIME
     // content type as DataMimeType e.g. JSON_CONTENT_TYPE)
     // - response body will be either in Content or in OutStream
@@ -723,7 +724,7 @@ type
     // and RedirectMax handling
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const Header: RawUtf8; const Data: RawByteString = '';
-      const DataMimeType: RawUtf8 = ''; retry: boolean = false;
+      const DataMimeType: RawUtf8 = ''; AsRetry: boolean = false;
       InStream: TStream = nil; OutStream: TStream = nil): integer; virtual;
     /// low-level processing method called from Request()
     // - can be used e.g. when implementing callbacks like OnAuthorize or
@@ -3410,7 +3411,7 @@ end;
 
 function THttpClientSocket.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const Header: RawUtf8; const Data: RawByteString;
-  const DataMimeType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
+  const DataMimeType: RawUtf8; AsRetry: boolean; InStream, OutStream: TStream): integer;
 var
   ctxt: THttpClientRequest;
   newuri: TUri;
@@ -3437,7 +3438,7 @@ begin
     ctxt.OutStreamInitialPos := OutStream.Position;
   ctxt.Status := 0;
   ctxt.Redirected := 0;
-  if retry then
+  if AsRetry then
     ctxt.Retry := [rMain]
   else
     ctxt.Retry := [];
@@ -3499,7 +3500,7 @@ begin
          (ctxt.Status > 399) or              // 400.. are errors
          (ctxt.Redirected >= fExtendedOptions.RedirectMax) then
         break;
-      if retry then
+      if AsRetry then
         ctxt.Retry := [rMain]
       else
         ctxt.Retry := [];
