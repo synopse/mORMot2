@@ -819,6 +819,8 @@ type
   TModularCryptFormats = set of TModularCryptFormat;
 
 const
+  SIGN_SIZE: array[TSignAlgo] of byte = (
+    20, 32, 48, 64, 28, 32, 48, 64, 32, 64, 28);
   /// the standard text of a TSignAlgo
   SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
     'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512', 'SHA3-224', 'SHA3-256',
@@ -1203,23 +1205,27 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
 
 type
   /// RFC 5802/7677 SCRAM client, as used e.g. by MongoDB
+  // - can optionally implement SCRAM-MCF as Key Derivation Function
   TScramClient = class
   protected
     fClientNonce, fAuthMessage, fServerProof, fLastError: RawUtf8;
     fAlgo: TSignAlgo;
     fSize: byte;
+    fMcfSupport: boolean;
     fSigner: TSynSigner;
   public
-    /// initialize the SCRAM client protocol, typically with saSha1 or saSha256
-    constructor Create(aAlgo: TSignAlgo); reintroduce;
+    /// initialize the SCRAM client protocol
+    // - with an associated Hash function, typically saSha1, saSha256 or saSha512
+    // - you can also enable the SCRAM-MCF extension support
+    constructor Create(aAlgo: TSignAlgo; aMcfSupport: boolean = false); reintroduce;
     /// finalize this instannce, and release all sensitive internal buffers
     destructor Destroy; override;
     /// generate a client nonce, and return the first client step
-    // - returns e.g. 'n,,n=user,r=...'
+    // - returns e.g. 'n,,n=user,r=...' or 'n,,n=user,r=...,mcf-support=1'
     function ComputeFirstMessage(const User: RawUtf8; out Mechanism: RawUtf8;
       const TestForceNonce: RawUtf8 = ''): RawUtf8;
     /// compute the second and final client step
-    // - ServerResponse is e.g. 'r=...,s=...,i=4096'
+    // - ServerResponse is e.g. 'r=...,s=...,i=4096' or 'r=...,mcf=...'
     // - returns e.g. 'c=biws,r=...,p=...'
     function ComputeFinalMessage(const ServerResponse, Password: RawUtf8): RawUtf8;
     /// check the server proof to complete mutual authentication
@@ -1228,6 +1234,12 @@ type
     // or CheckFinalResponse() = false
     property LastError: RawUtf8
       read fLastError;
+    /// the size, in bytes, of the internal hash algorithm e.g. 32 for SHA-256
+    property Size: byte
+      read fSize;
+    /// true if this client supports our SCRAM-MCF extension
+    property McfSupport: boolean
+      read fMcfSupport write fMcfSupport;
   end;
 
 { our own SCRAM-MCF client/server pattern, using ModularCryptHash() }
@@ -5208,9 +5220,11 @@ end;
 
 { TScramClient }
 
-constructor TScramClient.Create(aAlgo: TSignAlgo);
+constructor TScramClient.Create(aAlgo: TSignAlgo; aMcfSupport: boolean);
 begin
   fAlgo := aAlgo;
+  fSize := SIGN_SIZE[aAlgo];
+  fMcfSupport := aMcfSupport;
 end;
 
 destructor TScramClient.Destroy;
@@ -5235,6 +5249,8 @@ begin
   end;
   usr := StringReplaceAll(User, ['=', '=3D', ',', '=2C']);
   FormatUtf8('n=%,r=%', [usr, fClientNonce], fAuthMessage);
+  if fMcfSupport then
+    Append(fAuthMessage, ',mcf-support=1');
   Join(['n,,', fAuthMessage], result);
 end;
 
@@ -5242,7 +5258,7 @@ function TScramClient.ComputeFinalMessage(
   const ServerResponse, Password: RawUtf8): RawUtf8;
 var
   resp: TDocVariantData;
-  fullnonce, s, i, key, msg: RawUtf8;
+  fullnonce, s, i, mcf, key, msg: RawUtf8;
   salt: RawByteString;
   iterations: integer;
   salted, client, stored, server: THash512Rec;
@@ -5257,26 +5273,42 @@ begin
     exit;
   end;
   iterations := 0;
+  fLastError := 'invalid Server initial response';
   resp.InitFromPairs(ServerResponse, JSON_FAST, '=', ',');
   if not resp.GetAsRawUtf8('r', fullnonce) or
-     not StartWithExact(fullnonce, fClientNonce) or
-     not resp.GetAsRawUtf8('s', s) or
-     not Base64ToBin(pointer(s), length(s), salt) or
-     not resp.GetAsRawUtf8('i', i) or
-     not ToInteger(i, iterations) or
-     (iterations <= 0) or
-     (iterations > MAX_PBKDF2_ROUNDS) then // avoid DoS attacks
-  begin
-    fLastError := 'invalid Server initial response';
+     not StartWithExact(fullnonce, fClientNonce) then
     exit;
-  end;
+  if fMcfSupport and
+     resp.GetAsRawUtf8('mcf', mcf) then // SCRAM-MCF extension
+  begin
+    mcf := ModularCryptHash(mcf, Password); // i=..,s=.. are just ignored
+    if mcf = '' then
+      exit; // unsupported Modular Crypt algorithm or invalid prefix
+  end
+  else if not resp.GetAsRawUtf8('s', s) or
+          not Base64ToBin(pointer(s), length(s), salt) or
+          not resp.GetAsRawUtf8('i', i) or
+          not ToInteger(i, iterations) or
+          (iterations <= 0) or
+          (iterations > MAX_PBKDF2_ROUNDS) then // avoid DoS attacks
+    // invalid s=... and i=... standard SCRAM parameters
+    exit;
   // hash password according to server expectations and compute client signature
   Join(['c=biws,r=', fullnonce], key);
   Join([fAuthMessage, ',', ServerResponse, ',', key], msg);
-  fSize := fSigner.Pbkdf2(fAlgo, Password, salt, iterations, @salted);
-  fSigner.Full(fAlgo, @salted, fSize, 'Client Key', @client);
-  fSigner.Full(fAlgo, @salted, fSize, 'Server Key', @server);
-  FillZero(salted, fSize);
+  if mcf = '' then
+  begin
+    fSigner.Pbkdf2(fAlgo, Password, salt, iterations, @salted);
+    fSigner.Full(fAlgo, @salted, fSize, 'Client Key', @client);
+    fSigner.Full(fAlgo, @salted, fSize, 'Server Key', @server);
+    FillZero(salted, fSize);
+  end
+  else
+  begin
+    fSigner.Full(fAlgo, pointer(mcf), length(mcf), 'Client Key', @client);
+    fSigner.Full(fAlgo, pointer(mcf), length(mcf), 'Server Key', @server);
+    FillZero(mcf);
+  end;
   // compute client and server proofs
   fSigner.Hash(fAlgo, @client, fSize, stored);
   fSigner.Full(fAlgo, @stored, fSize, msg, @stored);
@@ -5319,8 +5351,6 @@ end;
 { TSynSigner }
 
 const
-  SIGN_SIZE: array[TSignAlgo] of byte = (
-    20, 32, 48, 64, 28, 32, 48, 64, 32, 64, 28);
   BLOCK_SIZE: array[TSignAlgo] of byte = (
     15, 15, 31, 31, 0, 0, 0, 0, 0, 0, 15);
 
