@@ -2186,6 +2186,26 @@ begin
   finally
     sc.Free;
   end;
+  sc := TScramClient.Create(saSha256, {mcfsupport=}true);
+  try
+    // from draft-bouchez-kitten-scram-mcf-00 proposal
+    CheckEqual(sc.LastError, '');
+    u := sc.ComputeFirstMessage('user', mech, 'rOprNGfwEbeRWgbNEkqO');
+    CheckEqual(u, 'n,,n=user,r=rOprNGfwEbeRWgbNEkqO,mcf-support=1');
+    CheckEqual(mech, 'SCRAM-SHA-256');
+    CheckEqual(sc.LastError, '');
+    // '$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$IjXuXIAkQMquDcMPr1JniPO6vG5uSxxFHf8jAIpAbDk'
+    nfo := BinToBase64('$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$');
+    proof := sc.ComputeFinalMessage(
+      'r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
+      'mcf=' + nfo, 'pencil');
+    CheckEqual(proof, 'c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
+      'p=e9kbO4Xa0PN8VWHHboGkVt3AF0qMB07EJcjWkueKnxA=');
+    CheckEqual(sc.LastError, '');
+    Check(sc.CheckFinalResponse('v=6TR/nuhTSs1/eGf7YeoN5696momPErG5RSAZ9gpZtQU='));
+  finally
+    sc.Free;
+  end;
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
   CheckEqualHex(hasher.Mgf1(hfSHA1, pointer(buf), length(buf), 3), '1ac907');
