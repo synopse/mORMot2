@@ -1205,7 +1205,8 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
 
 type
   /// RFC 5802/7677 SCRAM client, as used e.g. by MongoDB
-  // - can optionally implement SCRAM-MCF as Key Derivation Function
+  // - can optionally implement SCRAM-MCF as Key Derivation Function, as
+  // defined by draft-bouchez-kitten-scram-mcf-00 upcoming RFC proposal
   TScramClient = class
   protected
     fClientNonce, fAuthMessage, fServerProof, fLastError: RawUtf8;
@@ -5281,7 +5282,9 @@ begin
   if fMcfSupport and
      resp.GetAsRawUtf8('mcf', mcf) then // SCRAM-MCF extension
   begin
-    mcf := ModularCryptHash(mcf, Password); // i=..,s=.. are just ignored
+    if fAlgo = saSha1 then
+      exit; // this weak algo is rejected by the draft RFC
+    mcf := ModularCryptHash(Base64ToBin(mcf), Password); // ignore i=..,s=..
     if mcf = '' then
       exit; // unsupported Modular Crypt algorithm or invalid prefix
   end
