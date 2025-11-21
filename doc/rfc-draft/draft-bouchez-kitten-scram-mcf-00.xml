@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="https://xml2rfcv3.xsd" type="application/relax-ng-compact-syntax"?>
+<?rfc toc="yes"?>
+<?rfc symrefs="yes"?>
+<?rfc sortrefs="yes"?>
+<?rfc compact="yes"?>
+<?rfc subcompact="no"?>
+
+<rfc category="std" docName="draft-bouchez-scram-mcf-00"
+     ipr="trust200902" submissionType="IETF" consensus="yes"
+     xml:lang="en" version="3">
+
+  <front>
+    <title abbrev="SCRAM-MCF">SCRAM with Modular Crypt Format (SCRAM-MCF)</title>
+
+    <author fullname="Arnaud Bouchez" initials="A." surname="Bouchez">
+      <organization>Tranquil IT SAS</organization>
+      <address>
+        <postal>
+          <street>12 Avenue Jules Verne</street>
+          <city>44230 Saint-Sebastien-sur-Loire</city>
+          <country>France</country>
+        </postal>
+        <email>abouchez@tranquil.it</email>
+      </address>
+    </author>
+
+    <date year="2025" month="November" day="21"/>
+
+    <area>Security</area>
+    <workgroup>SAAG</workgroup>
+
+    <keyword>SCRAM</keyword>
+    <keyword>SASL</keyword>
+    <keyword>MCF</keyword>
+    <keyword>Argon2</keyword>
+    <keyword>SCrypt</keyword>
+    <keyword>bcrypt</keyword>
+
+    <abstract>
+      <t>This document specifies SCRAM-MCF, an extension to the Salted Challenge Response Authentication Mechanism (SCRAM) family of SASL mechanisms (<xref target="RFC5802"/>) and HTTP Digest extensions (<xref target="RFC7616"/>, <xref target="RFC7677"/>).</t>
+      <t>The extension replaces the PBKDF2-specific iteration count attributes <tt>i=</tt> and <tt>s=</tt> in the server-first-message with a generic Modular Crypt Format (MCF) descriptor <tt>mcf=</tt>. This allows servers to use modern memory-hard key derivation functions such as Argon2, SCrypt, or bcrypt while preserving the full security properties and message flow of SCRAM.</t>
+      <t>The change is fully backward compatible: servers can continue sending <tt>i=</tt> and <tt>s=</tt> for legacy clients and only send <tt>mcf=</tt> (or both) when the client advertises support.</t>
+    </abstract>
+  </front>
+
+  <middle>
+
+    <section anchor="introduction" numbered="true" toc="default">
+      <name>Introduction</name>
+      <t>SCRAM as defined in <xref target="RFC5802"/> and its SHA-256 variant in <xref target="RFC7677"/> is widely deployed (PostgreSQL, MongoDB, Kafka, SASL libraries, etc.). Its only key derivation function is PBKDF2-HMAC-SHA-1 or PBKDF2-HMAC-SHA-256. PBKDF2 is no longer considered state-of-the-art against GPU/ASIC-based password cracking.</t>
+
+      <t>Modern password hashing algorithms (Argon2 – winner of the 2015 Password Hashing Competition, SCrypt, bcrypt) are memory-hard and far more resistant to parallel brute-force attacks. However, replacing SCRAM entirely with a new mechanism is unnecessary: the core proof-of-possession construction of SCRAM is excellent. Only the key derivation step needs to become negotiable.</t>
+
+      <t>This document defines the smallest possible standards-compliant extension that achieves exactly that.</t>
+    </section>
+
+    <section anchor="conventions" numbered="true" toc="default">
+      <name>Conventions and Terminology</name>
+      <t>The key words "<bcp14>MUST</bcp14>", "<bcp14>MUST NOT</bcp14>", "<bcp14>REQUIRED</bcp14>", "<bcp14>SHALL</bcp14>", "<bcp14>SHALL NOT</bcp14>", "<bcp14>SHOULD</bcp14>", "<bcp14>SHOULD NOT</bcp14>", "<bcp14>RECOMMENDED</bcp14>", "<bcp14>NOT RECOMMENDED</bcp14>", "<bcp14>MAY</bcp14>", and "<bcp14>OPTIONAL</bcp14>" in this document are to be interpreted as described in BCP 14 <xref target="RFC2119"/> <xref target="RFC8174"/> when, and only when, they appear in all capitals, as shown here.</t>
+
+      <t>The term "Modular Crypt Format" (MCF) refers to the de-facto standard string format used by crypt(3), Passlib, Spring Security, and most modern password hashing libraries. Examples:</t>
+
+      <artwork type="example"><![CDATA[
+$argon2id$v=19$m=65536,t=2,p=4$z8e0jsE2kz7z6...$7KX4Wm6Q7f...
+$scrypt$ln=16,r=8,p=1$z8e0jsE2kz7z6uL0m4zZ6Q$7KX4Wm6Q7...
+$2a$06$m0CrhHm10qJ3lXRY.5zDGO3rS2KdeeWLuGmsfGlMfOxih58VYVfxe]]>
+      </artwork>
+    </section>
+
+    <section anchor="extension" numbered="true" toc="default">
+      <name>SCRAM-MCF Extension</name>
+
+      <section anchor="client-capability" numbered="true" toc="default">
+        <name>Client Capability Advertisement</name>
+        <t>A client that implements SCRAM-MCF <bcp14>MUST</bcp14> include the attribute <tt>mcf-support=1</tt> in the reserved extension field of the client-first-message when using any SCRAM mechanism that supports this extension.</t>
+
+        <t>Example (client-first-message):</t>
+        <artwork type="example">
+n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL,mcf-support=1
+        </artwork>
+
+        <t>Clients that do not send <tt>mcf-support=1</tt> MUST be treated exactly as in the original SCRAM algorithm (legacy clients). They MUST NOT support the <tt>mcf=</tt> attribute if they did not send <tt>mcf-support=1</tt> first.</t>
+      </section>
+
+      <section anchor="server-first-changes" numbered="true" toc="default">
+        <name>Server-first-message Changes</name>
+        <t>A server that receives <tt>mcf-support=1</tt> and wishes to use a modern KDF <bcp14>MUST</bcp14> respond with the attribute <tt>mcf=</tt> instead of <tt>i=</tt> and <tt>s=</tt>.</t>
+
+        <t>The value of <tt>mcf=</tt> is the full MCF identifier string up to but not including the final stored hash part, encoded as base-64. In other words: everything up to and including the base64-encoded salt and its trailing <tt>$</tt> character (if any), then converted to base-64. The MCF identifier MUST be converted to base-64, to ensure no commas signs appear in the attribute value.</t>
+
+        <t>Valid examples of MCF identifiers:</t>
+        <artwork type="example">
+$argon2id$v=19$m=65536,t=2,p=4$z8e0jsE2kz7z6uL0m4zZ6Q$
+$scrypt$ln=16,r=8,p=1$z8e0jsE2kz7z6uL0m4zZ6Q$
+$2a$06$m0CrhHm10qJ3lXRY.5zDGO
+        </artwork>
+
+        <t>Values transmitted as <tt>mcf=</tt> attribute, after base-64 encoding:</t>
+        <artwork type="example">
+mcf=JGFyZ29uMmlkJHY9MTkkbT02NTUzNix0PTIscD00JHo4ZTBqc0Uya3o3ejZ1...
+mcf=JHNjcnlwdCRsbj0xNixyPTgscD0xJHo4ZTBqc0Uya3o3ejZ1TDBtNHpaNlEk
+mcf=JDJhJDA2JG0wQ3JoSG0xMHFKM2xYUlkuNXpER08=
+        </artwork>
+
+        <t>Backward compatibility fallback: If the server cannot or does not want to use MCF, it simply omits <tt>mcf=</tt> and sends the normal <tt>i=</tt> and <tt>s=</tt> attributes.</t>
+      </section>
+
+      <section anchor="client-processing" numbered="true" toc="default">
+        <name>Client Processing Rules</name>
+          <ul spacing="normal">
+            <li>If the server-first-message contains <tt>mcf=</tt>, the client <bcp14>MUST</bcp14> ignore any <tt>i=</tt> and <tt>s=</tt> attributes and <bcp14>MUST</bcp14> use the specified MCF string, after proper base-64 decoding, to derive SaltedPassword exactly as if it were calling the standard password-to-key function of that algorithm with the cleartext password and the MCF parameters/salt.</li>
+            <li>The full encoded output of this MCF KDF, including its identifier, parameters, salt and checksum, <bcp14>MUST</bcp14> become the SaltedPassword as in <xref target="RFC5802"/> Section 3.</li>
+            <li>The rest of the protocol (ClientKey, ServerKey, AuthMessage, ClientProof, etc.) is unchanged.</li>
+            <li>The <tt>H()</tt> and <tt>HMAC()</tt> functions used to compute the client and server proofs <bcp14>MUST</bcp14> follow the SASL negotiation, e.g. SHA-256 and HMAC-SHA-256 for "SCRAM-SHA-256" or SHA-512 and HMAC-SHA-512 for "SCRAM-SHA-512".</li>
+            <li>If the client does not recognize or support the MCF identifier, it <bcp14>MUST</bcp14> respond with a SASL/HTTP error (e.g., "invalid-parameters").</li>
+          </ul>
+      </section>
+
+      <section anchor="algorithm-overview" numbered="true" toc="default">
+        <name>SCRAM-MCF Algorithm Overview</name>
+        <t>The following is a description of the algorithms used in a full, uncompressed SASL SCRAM-MCF authentication exchange.</t>
+
+        <artwork type="code"><![CDATA[
+// SCRAM-MCF password KDF
+SaltedPassword = MCF(Password, identifier, parameters, salt)
+// using MCF prefix identifier, parameters and salt
+// e.g. "$2a$06$m0CrhHm10qJ3lXRY.5zDGO3rS2Kd..."
+
+// initial server storage
+ClientKey       := HMAC(SaltedPassword, "Client Key")
+StoredKey       := H(ClientKey)
+ServerKey       := HMAC(SaltedPassword, "Server Key")
+persist the MCF prefix, StoredKey and ServerKey in the DB
+
+// client
+ClientKey       := HMAC(SaltedPassword, "Client Key")
+ClientSignature := HMAC(StoredKey, AuthMessage)
+return ClientProof := ClientKey XOR ClientSignature
+
+// server
+ClientSignature      := HMAC(StoredKey, AuthMessage)
+CandidateClientKey   := ClientProof XOR ClientSignature
+Checks: H(CandidateClientKey) == StoredKey
+return ServerProof := HMAC(ServerKey, AuthMessage)
+
+// client verifies
+ServerSignature := ServerProof XOR ClientSignature
+Checks: ServerSignature == HMAC(ServerKey, AuthMessage)
+]]></artwork>
+
+        <t>The rest of these messages is defined in <xref target="RFC5802"/> Section 7.</t>
+      </section>
+
+      <section anchor="storage" numbered="true" toc="default">
+        <name>Server Storage Recommendation</name>
+        <t>Servers <bcp14>MUST</bcp14> store the MCF prefix string (identifier + parameters + salt) for each user. For security reasons, the MCF checksum part <bcp14>MUST NOT</bcp14> be persisted; instead, the SCRAM-derived <tt>StoredKey</tt> and <tt>ServerKey</tt> <bcp14>MUST</bcp14> be stored.</t>
+
+        <t>Servers <bcp14>MAY</bcp14> store and accept other SCRAM hashes (e.g., SCRAM-SHA-1 or SCRAM-SHA-256) for backward compatibility. But restricting to the safest algorithms (like SCRAM-MCF) is strongly recommended.</t>
+      </section>
+    </section>
+
+    <section anchor="abnf" numbered="true" toc="default">
+      <name>Formal ABNF Changes (augmented from RFC 5802)</name>
+
+      <artwork type="abnf"><![CDATA[
+server-first-message = ( scram-attr-val "," )* "r=" nonce
+                       [ "," "s=" base64 ]
+                       [ "," "i=" posint ]
+                       [ "," "mcf=" mcf-base64 ]
+                       *( "," scram-extension )
+
+mcf-base64     = base64( mcf-descriptor )
+mcf-descriptor = "$" mcf-id "$" mcf-params "$" base64-salt [ "$" ]
+mcf-id         = "argon2i" / "argon2d" / "argon2id" /
+                 "scrypt" / "2b" / other registered identifiers
+]]></artwork>
+    </section>
+
+    <section anchor="security" numbered="true" toc="default">
+      <name>Security Considerations</name>
+
+    <section anchor="scram-proof" numbered="true" toc="default">
+      <name>Preservation of the SCRAM Proof Construction</name>
+
+      <t>In respect to the standard SCRAM mechanism, this SCRAM-MCF extension could be evaluated as such:</t>
+
+      <ul spacing="normal">
+          <li>The extension preserves channel binding, proof-of-possession, and mutual authentication exactly as in SCRAM.</li>
+          <li>Memory-hard KDFs dramatically increase the cost of offline dictionary attacks.</li>
+          <li>Because the KDF identifier and parameters are sent in the clear (as in standard SCRAM with <tt>i=</tt>), no new information is leaked to an eavesdropper.</li>
+          <li>Thanks to the MCF registration mechanism, this SCRAM-MCF pattern was designed to be future-proof.</li>
+          <li>Clients and servers <bcp14>MUST</bcp14> enforce minimum work factors (e.g., reject Argon2 with m&lt;32 MiB or t&lt;2) to avoid downgrade attacks if the server is compromised.</li>
+          <li>Weaker "SCRAM-SHA-1" <bcp14>MUST</bcp14> be rejected when used with the <tt>mcf=</tt> extension.</li>
+      </ul>
+    </section>
+    
+    <section anchor="mcf-hmac" numbered="true" toc="default">
+      <name>Using MCF-Derived Outputs as HMAC Keys</name>
+      
+      <t>As defined above, <tt>ClientKey</tt> and <tt>ServerKey</tt> are computed using <tt>HMAC()</tt> on the MCF output. The length and structure of this value differ from PBKDF2, as used in classic SCRAM.</t>
+      
+      <t>HMAC constructions (including HMAC-SHA-256 and HMAC-SHA-512 refered by this document) are provably secure even when the supplied key is long or non-uniform.  Per Bellare, Canetti, and Krawczyk (1997; 2006), HMAC guarantees pseudorandomness provided that:</t>
+      <ul spacing="normal">
+        <li>keys longer than the hash function block size are reduced by hashing (as mandated by HMAC), and </li>
+        <li>keys of arbitrary internal structure are permitted.</li>
+      </ul>
+      
+      <t>Thus, MCF outputs — even if longer than a SHA-2 block — are acceptable and safe HMAC keys. Because memory-hard KDFs generate outputs indistinguishable from random to an attacker lacking the password, the resulting <tt>SaltedPassword</tt> is at least as strong as the PBKDF2-derived <tt>SaltedPassword</tt> in classic SCRAM.</t>
+
+        <t>Therefore, replacing PBKDF2 output with memory-hard KDF output does not weaken the HMAC-based authentication proofs of SCRAM.</t>
+      </section>
+
+    </section>
+
+    <section anchor="iana" numbered="true" toc="default">
+      <name>IANA Considerations</name>
+      <t>This document requests IANA registration of the SASL/GS2 extension attribute <tt>mcf-support</tt> and the server-first-message attribute <tt>mcf</tt>.</t>
+
+      <t>No new SASL mechanism name ("SCRAM-MCF-*") needs to be registered. The existing names "SCRAM-SHA-256", "SCRAM-SHA-256-PLUS", "SCRAM-SHA-512", etc. continue to identify the underlying <tt>H()</tt> and <tt>HMAC()</tt> functions used for the proof calculation.</t>
+    </section>
+
+    <section anchor="acknowledgments" numbered="true" toc="default">
+      <name>Acknowledgments</name>
+      <t>The idea of using Modular Crypt Format inside a SCRAM-like flow was first implemented by the author in the Synopse mORMot 2 Framework in 2025 and standardized as the wire-level extension described in this document.</t>
+
+      <t>The author would like to thank the PostgreSQL, MongoDB, and SASL communities for their prior art and feedback on modernizing password hashing in authentication protocols.</t>
+    </section>
+    
+    <section anchor="scram-exchange" numbered="true" toc="default">
+      <name>SCRAM Authentication Exchange</name>
+      <t>This is a simple example of a SCRAM-SHA-256 authentication exchange when the client doesn't support channel bindings (username 'user' and password 'pencil' are used, with SCrypt MCF hashing):</t>
+      <artwork type="example"><![CDATA[
+C: n,,n=user,r=rOprNGfwEbeRWgbNEkqO,mcf-support=1
+S: r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,mcf=
+JHNjcnlwdCRsbj00LHI9OCxwPTEkUU54NE40NTRwcE1lS21Eanh5cmhzaDdRL1BZQlF3JA==
+C: c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,
+   p=e9kbO4Xa0PN8VWHHboGkVt3AF0qMB07EJcjWkueKnxA=
+S: v=6TR/nuhTSs1/eGf7YeoN5696momPErG5RSAZ9gpZtQU=
+]]></artwork>      
+      <t>The corresponding MCF prefix string is "<tt>$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$</tt>", which is base-64 encoded in the <tt>mcf=</tt> attribute above.</t>
+    </section>
+    
+  </middle>
+
+  <back>
+
+    <references>
+      <name>Normative References</name>
+
+      <reference anchor="RFC2119" target="https://www.rfc-editor.org/rfc/rfc2119">
+        <front>
+          <title>Key words for use in RFCs to Indicate Requirement Levels</title>
+          <author initials="S." surname="Bradner" fullname="Scott Bradner">
+            <organization>Harvard University</organization>
+          </author>
+          <date month="March" year="1997"/>
+        </front>
+      </reference>
+
+      <reference anchor="RFC8174" target="https://www.rfc-editor.org/rfc/rfc8174">
+        <front>
+          <title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title>
+          <author initials="B." surname="Leiba" fullname="Barry Leiba"/>
+          <date month="May" year="2017"/>
+        </front>
+      </reference>
+
+      <reference anchor="RFC5802" target="https://www.rfc-editor.org/rfc/rfc5802">
+        <front>
+          <title>Salted Challenge Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms</title>
+          <author initials="C." surname="Newman" fullname="Chris Newman"/>
+          <author initials="A." surname="Menon" fullname="Abhijit Menon"/>
+          <author initials="J." surname="Hildebrand" fullname="John Hildebrand"/>
+          <author initials="K." surname="Zeilenga" fullname="Kurt Zeilenga"/>
+          <date month="July" year="2010"/>
+        </front>
+      </reference>
+
+      <reference anchor="RFC7677" target="https://www.rfc-editor.org/rfc/rfc7677">
+        <front>
+          <title>SCRAM-SHA-256 and SCRAM-SHA-256-PLUS SASL Mechanisms</title>
+          <author initials="T." surname="Hansen" fullname="Tony Hansen"/>
+          <author initials="A." surname="Melnikov" fullname="Alexey Melnikov"/>
+          <date month="November" year="2015"/>
+        </front>
+      </reference>
+
+      <reference anchor="RFC7616" target="https://www.rfc-editor.org/rfc/rfc7616">
+        <front>
+          <title>HTTP Digest Access Authentication</title>
+          <author initials="R." surname="Fielding" fullname="Roy T. Fielding"/>
+          <author initials="J. F." surname="Reschke" fullname="Julian F. Reschke"/>
+          <date month="September" year="2015"/>
+        </front>
+      </reference>
+    </references>
+
+  </back>
+</rfc>
