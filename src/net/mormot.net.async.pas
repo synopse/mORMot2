@@ -5824,8 +5824,7 @@ begin
          FileSetDateFromUnixUtc(fn, back.filedate) then
         msg := 'ok'
       else
-        FormatUtf8('FileSetDate(%,%) failed as %',
-          [fn, back.filedate, OsErrorShort], msg)
+        FormatUtf8('FileSetDate(%) failed as %', [back.filedate, OsErrorShort], msg)
     else
       msg := 'GET error';
     fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%] size=%',
