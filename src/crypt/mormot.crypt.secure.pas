@@ -1206,7 +1206,7 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
 type
   /// RFC 5802/7677 SCRAM client, as used e.g. by MongoDB
   // - can optionally implement SCRAM-MCF as Key Derivation Function, as
-  // defined by draft-bouchez-kitten-scram-mcf-00 upcoming RFC proposal
+  // defined by draft-bouchez-kitten-scram-mcf-01 upcoming RFC proposal
   TScramClient = class
   protected
     fClientNonce, fAuthMessage, fServerProof, fLastError: RawUtf8;
@@ -1222,11 +1222,11 @@ type
     /// finalize this instannce, and release all sensitive internal buffers
     destructor Destroy; override;
     /// generate a client nonce, and return the first client step
-    // - returns e.g. 'n,,n=user,r=...' or 'n,,n=user,r=...,mcf-support=1'
+    // - returns e.g. 'n,,n=user,r=...' or 'n,,n=user,r=...,f=y'
     function ComputeFirstMessage(const User: RawUtf8; out Mechanism: RawUtf8;
       const TestForceNonce: RawUtf8 = ''): RawUtf8;
     /// compute the second and final client step
-    // - ServerResponse is e.g. 'r=...,s=...,i=4096' or 'r=...,mcf=...'
+    // - ServerResponse is e.g. 'r=...,s=...,i=4096' or 'r=...,f=...'
     // - returns e.g. 'c=biws,r=...,p=...'
     function ComputeFinalMessage(const ServerResponse, Password: RawUtf8): RawUtf8;
     /// check the server proof to complete mutual authentication
@@ -5251,7 +5251,7 @@ begin
   usr := StringReplaceAll(User, ['=', '=3D', ',', '=2C']);
   FormatUtf8('n=%,r=%', [usr, fClientNonce], fAuthMessage);
   if fMcfSupport then
-    Append(fAuthMessage, ',mcf-support=1');
+    Append(fAuthMessage, ',f=y');
   Join(['n,,', fAuthMessage], result);
 end;
 
@@ -5280,7 +5280,7 @@ begin
      not StartWithExact(fullnonce, fClientNonce) then
     exit;
   if fMcfSupport and
-     resp.GetAsRawUtf8('mcf', mcf) then // SCRAM-MCF extension
+     resp.GetAsRawUtf8('f', mcf) then // SCRAM-MCF extension
   begin
     if fAlgo = saSha1 then
       exit; // this weak algo is rejected by the draft RFC

@@ -2188,21 +2188,21 @@ begin
   end;
   sc := TScramClient.Create(saSha256, {mcfsupport=}true);
   try
-    // from draft-bouchez-kitten-scram-mcf-00 proposal
+    // from draft-bouchez-kitten-scram-mcf-01 proposal
     CheckEqual(sc.LastError, '');
     u := sc.ComputeFirstMessage('user', mech, 'rOprNGfwEbeRWgbNEkqO');
-    CheckEqual(u, 'n,,n=user,r=rOprNGfwEbeRWgbNEkqO,mcf-support=1');
+    CheckEqual(u, 'n,,n=user,r=rOprNGfwEbeRWgbNEkqO,f=y');
     CheckEqual(mech, 'SCRAM-SHA-256');
     CheckEqual(sc.LastError, '');
     // '$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$IjXuXIAkQMquDcMPr1JniPO6vG5uSxxFHf8jAIpAbDk'
     nfo := BinToBase64('$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$');
     proof := sc.ComputeFinalMessage(
       'r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
-      'mcf=' + nfo, 'pencil');
+      'f=' + nfo, 'pencil');
     CheckEqual(proof, 'c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,' +
-      'p=e9kbO4Xa0PN8VWHHboGkVt3AF0qMB07EJcjWkueKnxA=');
+      'p=LyMcKMrzBJUoDhfO7e8aD0BYBLqe3wBrCoJMTIEhJEg=');
     CheckEqual(sc.LastError, '');
-    Check(sc.CheckFinalResponse('v=6TR/nuhTSs1/eGf7YeoN5696momPErG5RSAZ9gpZtQU='));
+    Check(sc.CheckFinalResponse('v=2c7tBGYYY8tx/oLZNhZVJnjQKWeku17ZDaV0Jh3Hvmo='));
   finally
     sc.Free;
   end;
