@@ -6,7 +6,7 @@
 <?rfc compact="yes"?>
 <?rfc subcompact="no"?>
 
-<rfc category="std" docName="draft-bouchez-scram-mcf-00"
+<rfc category="std" docName="draft-bouchez-scram-mcf-01"
      ipr="trust200902" submissionType="IETF" consensus="yes"
      xml:lang="en" version="3">
 
@@ -22,13 +22,14 @@
           <country>France</country>
         </postal>
         <email>abouchez@tranquil.it</email>
+	<uri>https://tranquil.it</uri>
       </address>
     </author>
 
-    <date year="2025" month="November" day="21"/>
+    <date year="2025" month="November" day="23"/>
 
     <area>Security</area>
-    <workgroup>SAAG</workgroup>
+    <workgroup>KITTEN</workgroup>
 
     <keyword>SCRAM</keyword>
     <keyword>SASL</keyword>
@@ -39,8 +40,9 @@
 
     <abstract>
       <t>This document specifies SCRAM-MCF, an extension to the Salted Challenge Response Authentication Mechanism (SCRAM) family of SASL mechanisms (<xref target="RFC5802"/>) and HTTP Digest extensions (<xref target="RFC7616"/>, <xref target="RFC7677"/>).</t>
-      <t>The extension replaces the PBKDF2-specific iteration count attributes <tt>i=</tt> and <tt>s=</tt> in the server-first-message with a generic Modular Crypt Format (MCF) descriptor <tt>mcf=</tt>. This allows servers to use modern memory-hard key derivation functions such as Argon2, SCrypt, or bcrypt while preserving the full security properties and message flow of SCRAM.</t>
-      <t>The change is fully backward compatible: servers can continue sending <tt>i=</tt> and <tt>s=</tt> for legacy clients and only send <tt>mcf=</tt> (or both) when the client advertises support.</t>
+      <t>The extension replaces the PBKDF2-specific iteration count attributes <tt>i=</tt> and <tt>s=</tt> in the server-first-message with a generic Modular Crypt Format (MCF) descriptor <tt>f=</tt>. This allows servers to use modern memory-hard key derivation functions such as Argon2, SCrypt, or bcrypt while preserving the full security properties and message flow of SCRAM.</t>
+      <t>The change is fully backward compatible: servers can continue sending <tt>i=</tt> and <tt>s=</tt> for legacy clients and only send <tt>f=</tt> (or both) when the client advertises support.</t>
+      <t>This document is intended to be discussed and potentially adopted by the KITTEN working group. Feedback from the KITTEN WG is welcome on the kitten@ietf.org mailing list.</t>
     </abstract>
   </front>
 
@@ -73,21 +75,23 @@ $2a$06$m0CrhHm10qJ3lXRY.5zDGO3rS2KdeeWLuGmsfGlMfOxih58VYVfxe]]>
 
       <section anchor="client-capability" numbered="true" toc="default">
         <name>Client Capability Advertisement</name>
-        <t>A client that implements SCRAM-MCF <bcp14>MUST</bcp14> include the attribute <tt>mcf-support=1</tt> in the reserved extension field of the client-first-message when using any SCRAM mechanism that supports this extension.</t>
+        <t>A client that implements SCRAM-MCF <bcp14>MUST</bcp14> include the attribute <tt>f=y</tt> in the reserved extension field of the client-first-message when using any SCRAM mechanism that supports this extension.</t>
 
         <t>Example (client-first-message):</t>
         <artwork type="example">
-n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL,mcf-support=1
+n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL,f=y
         </artwork>
 
-        <t>Clients that do not send <tt>mcf-support=1</tt> MUST be treated exactly as in the original SCRAM algorithm (legacy clients). They MUST NOT support the <tt>mcf=</tt> attribute if they did not send <tt>mcf-support=1</tt> first.</t>
+        <t>Clients that do not send <tt>f=y</tt> MUST be treated exactly as in the original SCRAM algorithm (legacy clients). They MUST NOT support the <tt>f=</tt> attribute if they did not send <tt>f=y</tt> first.</t>
+        
+        <t>The <tt>f=</tt> attribute name - as in "<tt>f</tt>ormat" - was selected because <xref target="RFC5802"/> states that names are single US-ASCII letters, and that <tt>m=</tt> is already reserved.</t>
       </section>
 
       <section anchor="server-first-changes" numbered="true" toc="default">
         <name>Server-first-message Changes</name>
-        <t>A server that receives <tt>mcf-support=1</tt> and wishes to use a modern KDF <bcp14>MUST</bcp14> respond with the attribute <tt>mcf=</tt> instead of <tt>i=</tt> and <tt>s=</tt>.</t>
+        <t>A server that receives <tt>f=y</tt> and wishes to use a modern KDF <bcp14>MUST</bcp14> respond with the attribute <tt>f=</tt> instead of <tt>i=</tt> and <tt>s=</tt>.</t>
 
-        <t>The value of <tt>mcf=</tt> is the full MCF identifier string up to but not including the final stored hash part, encoded as base-64. In other words: everything up to and including the base64-encoded salt and its trailing <tt>$</tt> character (if any), then converted to base-64. The MCF identifier MUST be converted to base-64, to ensure no commas signs appear in the attribute value.</t>
+        <t>The value of <tt>f=</tt> is the full MCF identifier string up to but not including the final stored hash part, encoded as base-64. In other words: everything up to and including the base64-encoded salt and its trailing <tt>$</tt> character (if any), then converted to base-64. The MCF identifier MUST be converted to base-64, to ensure no commas signs appear in the attribute value.</t>
 
         <t>Valid examples of MCF identifiers:</t>
         <artwork type="example">
@@ -96,20 +100,20 @@ $scrypt$ln=16,r=8,p=1$z8e0jsE2kz7z6uL0m4zZ6Q$
 $2a$06$m0CrhHm10qJ3lXRY.5zDGO
         </artwork>
 
-        <t>Values transmitted as <tt>mcf=</tt> attribute, after base-64 encoding:</t>
+        <t>Values transmitted as <tt>f=</tt> attribute, after base-64 encoding:</t>
         <artwork type="example">
-mcf=JGFyZ29uMmlkJHY9MTkkbT02NTUzNix0PTIscD00JHo4ZTBqc0Uya3o3ejZ1...
-mcf=JHNjcnlwdCRsbj0xNixyPTgscD0xJHo4ZTBqc0Uya3o3ejZ1TDBtNHpaNlEk
-mcf=JDJhJDA2JG0wQ3JoSG0xMHFKM2xYUlkuNXpER08=
+f=JGFyZ29uMmlkJHY9MTkkbT02NTUzNix0PTIscD00JHo4ZTBqc0Uya3o3ejZ1...
+f=JHNjcnlwdCRsbj0xNixyPTgscD0xJHo4ZTBqc0Uya3o3ejZ1TDBtNHpaNlEk
+f=JDJhJDA2JG0wQ3JoSG0xMHFKM2xYUlkuNXpER08=
         </artwork>
 
-        <t>Backward compatibility fallback: If the server cannot or does not want to use MCF, it simply omits <tt>mcf=</tt> and sends the normal <tt>i=</tt> and <tt>s=</tt> attributes.</t>
+        <t>Backward compatibility fallback: If the server cannot or does not want to use MCF, it simply omits <tt>f=</tt> and sends the normal <tt>i=</tt> and <tt>s=</tt> attributes.</t>
       </section>
 
       <section anchor="client-processing" numbered="true" toc="default">
         <name>Client Processing Rules</name>
           <ul spacing="normal">
-            <li>If the server-first-message contains <tt>mcf=</tt>, the client <bcp14>MUST</bcp14> ignore any <tt>i=</tt> and <tt>s=</tt> attributes and <bcp14>MUST</bcp14> use the specified MCF string, after proper base-64 decoding, to derive SaltedPassword exactly as if it were calling the standard password-to-key function of that algorithm with the cleartext password and the MCF parameters/salt.</li>
+            <li>If the server-first-message contains <tt>f=</tt>, the client <bcp14>MUST</bcp14> ignore any <tt>i=</tt> and <tt>s=</tt> attributes and <bcp14>MUST</bcp14> use the specified MCF string, after proper base-64 decoding, to derive SaltedPassword exactly as if it were calling the standard password-to-key function of that algorithm with the cleartext password and the MCF parameters/salt.</li>
             <li>The full encoded output of this MCF KDF, including its identifier, parameters, salt and checksum, <bcp14>MUST</bcp14> become the SaltedPassword as in <xref target="RFC5802"/> Section 3.</li>
             <li>The rest of the protocol (ClientKey, ServerKey, AuthMessage, ClientProof, etc.) is unchanged.</li>
             <li>The <tt>H()</tt> and <tt>HMAC()</tt> functions used to compute the client and server proofs <bcp14>MUST</bcp14> follow the SASL negotiation, e.g. SHA-256 and HMAC-SHA-256 for "SCRAM-SHA-256" or SHA-512 and HMAC-SHA-512 for "SCRAM-SHA-512".</li>
@@ -167,7 +171,7 @@ Checks: ServerSignature == HMAC(ServerKey, AuthMessage)
 server-first-message = ( scram-attr-val "," )* "r=" nonce
                        [ "," "s=" base64 ]
                        [ "," "i=" posint ]
-                       [ "," "mcf=" mcf-base64 ]
+                       [ "," "f=" mcf-base64 ]
                        *( "," scram-extension )
 
 mcf-base64     = base64( mcf-descriptor )
@@ -189,12 +193,61 @@ mcf-id         = "argon2i" / "argon2d" / "argon2id" /
           <li>The extension preserves channel binding, proof-of-possession, and mutual authentication exactly as in SCRAM.</li>
           <li>Memory-hard KDFs dramatically increase the cost of offline dictionary attacks.</li>
           <li>Because the KDF identifier and parameters are sent in the clear (as in standard SCRAM with <tt>i=</tt>), no new information is leaked to an eavesdropper.</li>
+          <li>MCF algorithms <bcp14>MUST</bcp14> use a cryptographically random per-user salt.</li>
+          <li>Clients and servers <bcp14>MUST</bcp14> reject weak MCF parameters (see "Minimum Acceptable" column in <xref target="kdf-levels"/>).</li>
           <li>Thanks to the MCF registration mechanism, this SCRAM-MCF pattern was designed to be future-proof.</li>
-          <li>Clients and servers <bcp14>MUST</bcp14> enforce minimum work factors (e.g., reject Argon2 with m&lt;32 MiB or t&lt;2) to avoid downgrade attacks if the server is compromised.</li>
-          <li>Weaker "SCRAM-SHA-1" <bcp14>MUST</bcp14> be rejected when used with the <tt>mcf=</tt> extension.</li>
+          <li>Weaker "SCRAM-SHA-1" <bcp14>MUST</bcp14> be rejected when used with the <tt>f=</tt> extension.</li>
       </ul>
     </section>
     
+    <section title="Minimum and Recommended MCF Parameters Levels" anchor="kdf-levels">
+    <t>MCF parameters levels are informed by NIST SP 800-63B <xref target="NIST.SP.800-63B"/> (preferring Argon2id with memory-hard properties) and OWASP guidelines <xref target="OWASP.PasswordStorage"/>.</t>     
+      <t>Tune iteratively based on client load; aim for ~500ms-1s per verification to balance security and usability. Note that the server load is not affected by the MCF parameters, since during SCRAM authentication, the password derivation is done on the client side. For performance and Denial Of Service (DoS) mitigation, consider rate-limit derivations, e.g. testing with RFC 5802 <xref target="RFC5802"/> tools.</t>
+
+    <table anchor="kdf-levels-table">
+  <thead>
+    <tr>
+      <th align="left">KDF</th>
+      <th align="left">Minimum Acceptable</th>
+      <th align="left">Recommended (2025+)</th>
+      <th align="left">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="left">Argon2id (preferred)</td>
+      <td align="left">Memory: 19 MiB<br/>t=1, p=1, m=19×1024</td>
+      <td align="left">Memory: 64 MiB<br/>t=3, p=4, m=64×1024</td>
+      <td align="left">Memory-hard; primary recommendation in NIST and OWASP. Salt &gt;= 16 bytes.</td>
+    </tr>
+    <tr>
+      <td align="left">bcrypt</td>
+      <td align="left">cost=10<br/>salt &gt;= 128 bits</td>
+      <td align="left">cost=14–16<br/>salt &gt;= 192 bits</td>
+      <td align="left">Still acceptable when Argon2 is unavailable. 72-byte password limit.</td>
+    </tr>
+    <tr>
+      <td align="left">scrypt</td>
+      <td align="left">N=2^17 (131072), r=8, p=1</td>
+      <td align="left">N=2^20 (1M), r=8, p=4</td>
+      <td align="left">Memory-hard; good alternative when Argon2 cannot be used.</td>
+    </tr>
+    <tr>
+      <td align="left">PBKDF2 (FIPS-only fallback)<br/>(for plain SCRAM)</td>
+      <td align="left">&gt;= 10 000 iterations<br/>HMAC-SHA-256, salt &gt;= 128 bits</td>
+      <td align="left">&gt;= 600 000 iterations<br/>HMAC-SHA-256, salt &gt;= 256 bits</td>
+      <td align="left">Approved by <xref target="NIST.SP.800-132"/> but vulnerable to GPU attacks; use only when FIPS compliance is required.</td>
+    </tr>
+    <tr>
+      <td colspan="4" align="left">
+      PBKDF2 KDF is listed only as reference, and makes little sense to appear as a MCF algorithm, since it is already used by the original SCRAM.
+      </td>
+    </tr>
+  </tbody>
+</table>
+        
+  </section>    
+  
     <section anchor="mcf-hmac" numbered="true" toc="default">
       <name>Using MCF-Derived Outputs as HMAC Keys</name>
       
@@ -215,30 +268,30 @@ mcf-id         = "argon2i" / "argon2d" / "argon2id" /
 
     <section anchor="iana" numbered="true" toc="default">
       <name>IANA Considerations</name>
-      <t>This document requests IANA registration of the SASL/GS2 extension attribute <tt>mcf-support</tt> and the server-first-message attribute <tt>mcf</tt>.</t>
+      <t>This document requests IANA registration of the SASL/GS2 extension attribute <tt>f=y</tt> and the server-first-message attribute <tt>f</tt>.</t>
 
       <t>No new SASL mechanism name ("SCRAM-MCF-*") needs to be registered. The existing names "SCRAM-SHA-256", "SCRAM-SHA-256-PLUS", "SCRAM-SHA-512", etc. continue to identify the underlying <tt>H()</tt> and <tt>HMAC()</tt> functions used for the proof calculation.</t>
     </section>
+
+    <section anchor="scram-exchange" numbered="true" toc="default">
+      <name>SCRAM Authentication Exchange</name>
+      <t>This is a simple example of a SCRAM-SHA-256 authentication exchange when the client doesn't support channel bindings (username 'user' and password 'pencil' are used, with SCrypt MCF hashing):</t>
+      <artwork type="example"><![CDATA[
+C: n,,n=user,r=rOprNGfwEbeRWgbNEkqO,f=y
+S: r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,f=
+JHNjcnlwdCRsbj00LHI9OCxwPTEkUU54NE40NTRwcE1lS21Eanh5cmhzaDdRL1BZQlF3JA==
+C: c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,
+   p=LyMcKMrzBJUoDhfO7e8aD0BYBLqe3wBrCoJMTIEhJEg=
+S: v=2c7tBGYYY8tx/oLZNhZVJnjQKWeku17ZDaV0Jh3Hvmo=
+]]></artwork>      
+      <t>The corresponding MCF prefix string is "<tt>$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$</tt>", which is base-64 encoded in the <tt>f=</tt> attribute above.</t>
+    </section>  
 
     <section anchor="acknowledgments" numbered="true" toc="default">
       <name>Acknowledgments</name>
       <t>The idea of using Modular Crypt Format inside a SCRAM-like flow was first implemented by the author in the Synopse mORMot 2 Framework in 2025 and standardized as the wire-level extension described in this document.</t>
 
-      <t>The author would like to thank the PostgreSQL, MongoDB, and SASL communities for their prior art and feedback on modernizing password hashing in authentication protocols.</t>
-    </section>
-    
-    <section anchor="scram-exchange" numbered="true" toc="default">
-      <name>SCRAM Authentication Exchange</name>
-      <t>This is a simple example of a SCRAM-SHA-256 authentication exchange when the client doesn't support channel bindings (username 'user' and password 'pencil' are used, with SCrypt MCF hashing):</t>
-      <artwork type="example"><![CDATA[
-C: n,,n=user,r=rOprNGfwEbeRWgbNEkqO,mcf-support=1
-S: r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,mcf=
-JHNjcnlwdCRsbj00LHI9OCxwPTEkUU54NE40NTRwcE1lS21Eanh5cmhzaDdRL1BZQlF3JA==
-C: c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,
-   p=e9kbO4Xa0PN8VWHHboGkVt3AF0qMB07EJcjWkueKnxA=
-S: v=6TR/nuhTSs1/eGf7YeoN5696momPErG5RSAZ9gpZtQU=
-]]></artwork>      
-      <t>The corresponding MCF prefix string is "<tt>$scrypt$ln=4,r=8,p=1$QNx4N454ppMeKmDjxyrhsh7Q/PYBQw$</tt>", which is base-64 encoded in the <tt>mcf=</tt> attribute above.</t>
+      <t>The author would like to thank the PostgreSQL, MongoDB, and SASL communities for their prior art and feedback on modernizing password hashing in authentication protocols. A special thanks to Simon Josefsson and Thilo Molitor for their very valuable feedback to our initial proposal.</t>
     </section>
     
   </middle>
@@ -294,7 +347,76 @@ S: v=6TR/nuhTSs1/eGf7YeoN5696momPErG5RSAZ9gpZtQU=
           <date month="September" year="2015"/>
         </front>
       </reference>
-    </references>
 
+  <reference anchor="NIST.SP.800-132" target="https://doi.org/10.6028/NIST.SP.800-132">
+    <front>
+      <title>Recommendation for Password-Based Key Derivation: Part 1: Storage Applications</title>
+      <author fullname="M. S. Turan" initials="M. S." surname="Turan">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="E. Barker" initials="E." surname="Barker">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="W. Burr" initials="W." surname="Burr">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="L. Chen" initials="L." surname="Chen">
+        <organization>NIST</organization>
+      </author>
+      <date month="December" year="2010"/>
+      <area>Security</area>
+    </front>
+    <seriesInfo name="NIST Special Publication" value="800-132"/>
+  </reference>
+
+  <reference anchor="NIST.SP.800-63B" target="https://doi.org/10.6028/NIST.SP.800-63b">
+    <front>
+      <title>Digital Identity Guidelines: Authentication and Lifecycle Management</title>
+      <author fullname="M. L. Grassi" initials="M. L." surname="Grassi">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="M. E. Richer" initials="M. E." surname="Richer">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="S. P. Winters" initials="S. P." surname="Winters">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="K. B. Lefkovitz" initials="K. B." surname="Lefkovitz">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="J. M. Light" initials="J. M." surname="Light">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="W. E. Burr" initials="W. E." surname="Burr">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="S. Nadeau" initials="S." surname="Nadeau">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="M. A. Gruenberg" initials="M. A." surname="Gruenberg">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="D. A. McKay" initials="D. A." surname="McKay">
+        <organization>NIST</organization>
+      </author>
+      <author fullname="J. A. Sigmon" initials="J. A." surname="Sigmon">
+        <organization>NIST</organization>
+      </author>
+      <date month="June" year="2017"/>
+      <area>Security</area>
+    </front>
+    <seriesInfo name="NIST Special Publication" value="800-63B"/>
+  </reference>
+
+  <reference anchor="OWASP.PasswordStorage" target="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">
+    <front>
+      <title>Password Storage Cheat Sheet</title>
+      <author fullname="OWASP Foundation" initials="OWASP" surname="Foundation"/>
+      <date month="November" year="2025"/> <!-- Latest as of current date -->
+      <area>Security</area>
+    </front>
+  </reference>
+
+</references>
   </back>
 </rfc>
