@@ -120,7 +120,7 @@ function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
 // - will send CLDAP NetLogon messages to the known LDAP server(s) to retrieve
 // TCldapDomainInfo.ClientSite then request the DNS for the LDAP of this site
 // - this is the safest approach for a client, safer than CldapBroadcast()
-// or CldapSortHosts() / DnsLdapControlersSorted()
+// or CldapSortHosts() / DnsLdapControllersSorted()
 // - as used with default lccCldap option for TLdapClient.Connect with a
 // ForcedDomainName
 function CldapGetLdapController(const DomainName: RawUtf8;
@@ -210,7 +210,7 @@ procedure CldapSortHosts(var Hosts: TRawUtf8DynArray;
 // - won't sort by UDP response time if UdpFirstDelayMS = 0
 // - used e.g. by TLdapClient.Connect() with the lccClosest option
 // - a safer approach may be to use CldapGetLdapController/CldapMyLdapController
-function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
+function DnsLdapControllersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
   const NameServer: RawUtf8 = ''; UsePosixEnv: boolean = false;
   DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
@@ -3078,7 +3078,7 @@ begin
   Hosts := sorted;
 end;
 
-function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
+function DnsLdapControllersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
   const NameServer: RawUtf8; UsePosixEnv: boolean;
   DomainName: PRawUtf8): TRawUtf8DynArray;
 begin
@@ -5878,7 +5878,7 @@ begin
       begin
         if not (lccClosest in DiscoverMode) then
           DelayMS := 0; // disable CldapSortHosts()
-        dc := DnsLdapControlersSorted(
+        dc := DnsLdapControllersSorted(
           DelayMS, {MinimalUdpCount=}0, '', false, @fSettings.fKerberosDN);
       end;
       if dc = nil then
