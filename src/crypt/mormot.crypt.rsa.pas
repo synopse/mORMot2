@@ -407,6 +407,8 @@ type
     /// unserialize a public key from binary PKCS#1 DER format
     // - will try and fallback to a ASN1_SEQ, as stored in a X509 certificate
     function FromDer(const der: TCertDer): boolean;
+    /// unserialize a public key from JSON "n" and "e" fields of a "kty":"RSA" JWK
+    function FromJwk(const Json: RawUtf8): boolean;
   end;
 
   /// store a RSA private key
@@ -2258,6 +2260,19 @@ begin
     result := (AsnNext(pos, der) = ASN1_SEQ) and
               AsnNextBigInt(pos, der, Modulus) and
               AsnNextBigInt(pos, der, Exponent);
+end;
+
+function TRsaPublicKey.FromJwk(const Json: RawUtf8): boolean;
+var
+  jwk: TDocVariantData;
+  n, e: RawUtf8;
+begin
+  result := jwk.InitJson(Json, JSON_FAST) and
+            (jwk.CompareText('kty', 'RSA') = 0) and
+            jwk.GetAsRawUtf8('n', n) and
+            jwk.GetAsRawUtf8('e', e) and
+            Base64uriToBin(pointer(n), length(n), Modulus) and
+            Base64uriToBin(pointer(e), length(e), Exponent);
 end;
 
 
