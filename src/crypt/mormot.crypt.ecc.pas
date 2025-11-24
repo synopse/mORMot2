@@ -1232,6 +1232,9 @@ function PemDerRawToEcc(const pem: RawUtf8; out priv: TEccPrivateKey): boolean; 
 /// parse ECC public key in raw, PEM or DER format into its binary raw buffer
 function PemDerRawToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; overload;
 
+/// parse ECC public from "x","y" fields of a "kty":"EC", "crv":"P-256" JWK
+function JwkToEcc(const Json: RawUtf8; out PublicKey: TEccPublicKey): boolean;
+
 /// cipher a raw ECC secp256r1 private key buffer into some binary
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
 // - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyDecrypt()
@@ -2306,6 +2309,28 @@ begin
       sig := PEccSignature(der)^
     else
       exit; // accept signature in raw, PEM or DER format
+  result := true;
+end;
+
+function JwkToEcc(const Json: RawUtf8; out PublicKey: TEccPublicKey): boolean;
+var
+  jwk: TDocVariantData;
+  x, y: RawUtf8;
+  xy: THash512Rec;
+  key: TEccPublicKeyUncompressed;
+begin
+  result := false;
+  if not jwk.InitJson(Json, JSON_FAST) or
+     (jwk.CompareText('kty', 'EC') <> 0) or
+     (jwk.CompareText('crv', 'P-256') <> 0) or
+     not jwk.GetAsRawUtf8('x', x) or
+     not jwk.GetAsRawUtf8('y', y) or
+     not Base64uriToBin(x, @xy.Lo, SizeOf(xy.Lo)) or
+     not Base64uriToBin(y, @xy.Hi, SizeOf(xy.Hi)) then
+    exit;
+  bswap256(@xy.Lo, @PHash512Rec(@key)^.Lo);
+  bswap256(@xy.Hi, @PHash512Rec(@key)^.Lo);
+  Ecc256r1Compress(key, PublicKey);
   result := true;
 end;
 
