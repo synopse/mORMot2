@@ -5550,16 +5550,19 @@ begin
   case Algorithm of
     // we only support secp256r1/prime256v1 kind of elliptic curve by now
     ckaEcc256:
-      // try raw uncompressed format, as stored in a X509 certificate
-      if Ecc256r1CompressAsn1(PublicKeySaved, fEccPub) or
-         // try regular ASN1_SEQ format in PEM or DER
-         PemDerRawToEcc(PublicKeySaved, fEccPub) then
       begin
-        fEcc := TEcc256r1Verify.Create(fEccPub); // OpenSSL or our pascal code
-        fKeyAlgo := Algorithm;
-        fSubjectPublicKey := PublicKeySaved;
-        result := true;
-      end;
+        // try raw uncompressed format, as stored in a X509 certificate
+        if Ecc256r1CompressAsn1(PublicKeySaved, fEccPub) then
+          fSubjectPublicKey := PublicKeySaved
+        else if // try regular ASN1_SEQ format in PEM or DER
+                not PemDerRawToEcc(PublicKeySaved, fEccPub) and
+                // try "kty":"EC", "crv":"P-256" kind of JWK
+                not JwkToEcc(PublicKeySaved, fEccPub) then
+            exit;
+      fEcc := TEcc256r1Verify.Create(fEccPub); // OpenSSL or our pascal code
+      fKeyAlgo := Algorithm;
+      result := true;
+    end;
   else
     ECrypt.RaiseUtf8('%.Create: unsupported %', [self, ToText(fKeyAlgo)^]);
   end;
