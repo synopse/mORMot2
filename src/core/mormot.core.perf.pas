@@ -4886,34 +4886,32 @@ begin
           end;
         end;
       22: // Portable Battery (type 22)
+        if s[1] >= $0f then // 2.1+
         begin
           SetLength(info.Battery, length(info.Battery) + 1);
           with info.Battery[high(info.Battery)] do
           begin
-            if s[1] >= $0f then // 2.1+
+            lines[s[4]] := @Location;
+            lines[s[5]] := @Manufacturer;
+            lines[s[7]] := @Serial;
+            lines[s[8]] := @Name;
+            n := PWord(@s[$0c])^; // in mV
+            FormatUtf8('%.% V', [n div 1000, (n mod 1000) div 100], Voltage);
+            lines[s[$0e]] := @Version;
+            cap := PWord(@s[$0a])^; // in mW/H
+            if s[1] >= $15 then // 2.2+
             begin
-              lines[s[4]] := @Location;
-              lines[s[5]] := @Manufacturer;
-              lines[s[7]] := @Serial;
-              lines[s[8]] := @Name;
-              n := PWord(@s[$0c])^; // in mV
-              FormatUtf8('%.% V', [n div 1000, (n mod 1000) div 100], Voltage);
-              lines[s[$0e]] := @Version;
-              cap := PWord(@s[$0a])^; // in mW/H
-              if s[1] >= $15 then // 2.2+
-              begin
-                n := PWord(@s[$12])^;
-                FormatUtf8('%/%/%', [ // mm/dd/yyyy as in info.Bios.BuildDate
-                  UInt2DigitsToShortFast((n shr 5) and 15),
-                  UInt2DigitsToShortFast(n and 31),
-                  1980 + n shr 9], ManufactureDate);
-                lines[s[$14]] := @Chemistry;
-                if s[$15] > 1 then
-                  cap := cap * s[$15]; // Design Capacity Multiplier
-              end;
-              FormatUtf8('%.% W/H',
-                [cap div 1000, (cap mod 1000) div 100], Capacity);
+              n := PWord(@s[$12])^;
+              FormatUtf8('%/%/%', [ // mm/dd/yyyy as in info.Bios.BuildDate
+                UInt2DigitsToShortFast((n shr 5) and 15),
+                UInt2DigitsToShortFast(n and 31),
+                1980 + n shr 9], ManufactureDate);
+              lines[s[$14]] := @Chemistry;
+              if s[$15] > 1 then
+                cap := cap * s[$15]; // Design Capacity Multiplier
             end;
+            FormatUtf8('%.% W/H',
+              [cap div 1000, (cap mod 1000) div 100], Capacity);
           end;
         end;
       24: // Hardware Security (Type 24)
