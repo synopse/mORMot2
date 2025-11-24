@@ -4444,53 +4444,59 @@ end;
 
 procedure MergeSmbiosInfo(const basic: TSmbiosBasicInfos; var info: TSmbiosInfo);
 begin
-  MergeOne(basic[sbiBiosVendor], info.Bios.VendorName);
-  MergeOne(basic[sbiBiosVersion], info.Bios.Version);
-  MergeOne(basic[sbiBiosDate], info.Bios.BuildDate);
-  MergeOne(basic[sbiBiosRelease], info.Bios.Release);
+  MergeOne(basic[sbiBiosVendor],   info.Bios.VendorName);
+  MergeOne(basic[sbiBiosVersion],  info.Bios.Version);
+  MergeOne(basic[sbiBiosDate],     info.Bios.BuildDate);
+  MergeOne(basic[sbiBiosRelease],  info.Bios.Release);
   MergeOne(basic[sbiBiosFirmware], info.Bios.Firmware);
   MergeOne(basic[sbiManufacturer], info.System.Manufacturer);
-  MergeOne(basic[sbiProductName], info.System.ProductName);
-  MergeOne(basic[sbiVersion], info.System.Version);
-  MergeOne(basic[sbiSerial], info.System.Serial);
-  MergeOne(basic[sbiUuid], info.System.Uuid);
-  MergeOne(basic[sbiSku], info.System.Sku);
-  MergeOne(basic[sbiFamily], info.System.Family);
+  MergeOne(basic[sbiProductName],  info.System.ProductName);
+  MergeOne(basic[sbiVersion],      info.System.Version);
+  MergeOne(basic[sbiSerial],       info.System.Serial);
+  MergeOne(basic[sbiUuid],         info.System.Uuid);
+  MergeOne(basic[sbiSku],          info.System.Sku);
+  MergeOne(basic[sbiFamily],       info.System.Family);
   if info.Board = nil then
   begin
     SetLength(info.Board, 1);
     with info.Board[0] do
     begin
       MergeOne(basic[sbiBoardManufacturer], Manufacturer);
-      MergeOne(basic[sbiBoardProductName], Product);
-      MergeOne(basic[sbiBoardVersion], Version);
-      MergeOne(basic[sbiBoardSerial], Serial);
-      MergeOne(basic[sbiBoardAssetTag], AssetTag);
-      MergeOne(basic[sbiBoardLocation], Location);
+      MergeOne(basic[sbiBoardProductName],  Product);
+      MergeOne(basic[sbiBoardVersion],      Version);
+      MergeOne(basic[sbiBoardSerial],       Serial);
+      MergeOne(basic[sbiBoardAssetTag],     AssetTag);
+      MergeOne(basic[sbiBoardLocation],     Location);
     end;
   end;
-  if info.Processor = nil then
+  if (info.Processor = nil) and
+     ((basic[sbiCpuAssetTag] <> '') or
+      (basic[sbiCpuManufacturer] <> '') or
+      (basic[sbiCpuPartNumber] <> '')) then
   begin
     SetLength(info.Processor, 1);
     with info.Processor[0] do
     begin
-      MergeOne(basic[sbiCpuAssetTag], AssetTag);
+      MergeOne(basic[sbiCpuAssetTag],     AssetTag);
       MergeOne(basic[sbiCpuManufacturer], Manufacturer);
-      MergeOne(basic[sbiCpuPartNumber], PartNumber);
-      MergeOne(basic[sbiCpuSerial], Serial);
-      MergeOne(basic[sbiCpuVersion], Version);
+      MergeOne(basic[sbiCpuPartNumber],   PartNumber);
+      MergeOne(basic[sbiCpuSerial],       Serial);
+      MergeOne(basic[sbiCpuVersion],      Version);
     end;
   end;
-  if info.Battery = nil then
+  if (info.Battery = nil) and
+     ((basic[sbiBatteryName] <> '') or
+      (basic[sbiBatteryManufacturer] <> '') or
+      (basic[sbiBatteryChemistry] <> '')) then
   begin
     SetLength(info.Battery, 1);
     with info.Battery[0] do
     begin
-      MergeOne(basic[sbiBatteryChemistry], Chemistry);
-      MergeOne(basic[sbiBatteryLocation], Location);
+      MergeOne(basic[sbiBatteryChemistry],    Chemistry);
+      MergeOne(basic[sbiBatteryLocation],     Location);
       MergeOne(basic[sbiBatteryManufacturer], Manufacturer);
-      MergeOne(basic[sbiBatteryName], Name);
-      MergeOne(basic[sbiBatteryVersion], Version);
+      MergeOne(basic[sbiBatteryName],         Name);
+      MergeOne(basic[sbiBatteryVersion],      Version);
     end;
   end;
   if (info.Oem = nil) and
