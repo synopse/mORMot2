@@ -166,6 +166,14 @@ function CldapGetBestLdapController(const LdapServers: TRawUtf8DynArray;
   const DomainName, NameServer: RawUtf8; TimeOutMS: integer = 500;
   Info: PCldapDomainInfo = nil): RawUtf8;
 
+/// return all preferred LDAP 'server:port' of a set of LDAP servers
+// - will send CLDAP NetLogon messages to the LdapServers[] to retrieve
+// TCldapDomainInfo.ClientSite then request the DNS for the LDAP of this site
+// - if no site is defined, returns LdapServers[] itself
+// - as used by CldapGetBestLdapController(), which takes a random from result
+function CldapGetBestLdapControllers(const LdapServers: TRawUtf8DynArray;
+  const DomainName, NameServer: RawUtf8; TimeOutMS: integer): TRawUtf8DynArray;
+
 type
   /// define one result for a server identified by CldapBroadcast()
   TCldapServer = record
@@ -2870,13 +2878,12 @@ begin
   end;
 end;
 
-function CldapGetBestLdapController(const LdapServers: TRawUtf8DynArray;
-  const DomainName, NameServer: RawUtf8; TimeOutMS: integer): RawUtf8;
+function CldapGetBestLdapControllers(const LdapServers: TRawUtf8DynArray;
+  const DomainName, NameServer: RawUtf8; TimeOutMS: integer): TRawUtf8DynArray;
 var
   i: PtrInt;
   h, p, n: RawUtf8;
   info: TCldapDomainInfo;
-  res: TRawUtf8DynArray;
 begin
   for i := 0 to length(LdapServers) - 1 do
   begin
@@ -2885,18 +2892,33 @@ begin
        (info.ClientSite <> '') then
     begin
       FormatUtf8('_ldap._tcp.%._sites.%', [info.ClientSite, DomainName], n);
-      res := DnsServices(n, NameServer);
-      if res <> nil then
-      begin
-        result := res[Random32(length(res))]; // return a matching site
-        exit;
-      end;
+      result := DnsServices(n, NameServer);
+      if result <> nil then
+        exit; // we found some controllers assigned to our specific site
     end;
   end;
-  if LdapServers <> nil then // if no site is defined, use one of the servers
-    result := LdapServers[Random32(length(LdapServers))]
-  else
+  result := LdapServers; // if no site is defined, return all the servers
+end;
+
+function CldapGetBestLdapController(const LdapServers: TRawUtf8DynArray;
+  const DomainName, NameServer: RawUtf8; TimeOutMS: integer;
+  Info: PCldapDomainInfo): RawUtf8;
+var
+  res: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  res := CldapGetBestLdapControllers(LdapServers, DomainName, NameServer, TimeOutMS);
+  repeat
     result := '';
+    if res = nil then
+      exit; // no server to return
+    i := Random32(length(res));
+    result := res[i];
+    if (Info = nil) or
+       CldapGetDomainInfo(Info^, TimeOutMS, DomainName, result) then
+      exit; // we found a valid server
+    DeleteRawUtf8(res, i);
+  until false;
 end;
 
 function CldapGetLdapController(const DomainName, NameServer: RawUtf8;
