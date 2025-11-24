@@ -5597,9 +5597,12 @@ begin
   if self <> nil then
     case fKeyAlgo of
       ckaEcc256:
-        // for ECC, returns the x,y uncompressed coordinates from stored ASN.1
-        if Ecc256r1ExtractAsn1(fSubjectPublicKey, k) then
         begin
+          // try to extract the x,y already uncompressed coordinates from ASN.1
+          if (fSubjectPublicKey = '') or
+             not Ecc256r1ExtractAsn1(fSubjectPublicKey, k) then
+            // need to uncompress into x,y coordinates for JWK
+            Ecc256r1Uncompress(fEccPub, k);
           pointer(x) := FastNewString(ECC_BYTES);;
           pointer(y) := FastNewString(ECC_BYTES);;
           bswap256(@PHash512Rec(@k)^.Lo, pointer(x));
