@@ -114,7 +114,7 @@ type
 // information of the domain
 function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
   const DomainName, LdapServerAddress: RawUtf8;
-  const LdapServerPort: RawUtf8 = LDAP_PORT): boolean;
+  const LdapServerPort: RawUtf8 = ''): boolean;
 
 /// retrieve the LDAP 'server:port' corresponding of a given AD Domain Name
 // - will send CLDAP NetLogon messages to the known LDAP server(s) to retrieve
@@ -2797,7 +2797,7 @@ function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
 var
   id, len: integer;
   i: PtrInt;
-  filter, v: RawUtf8;
+  srv, port, filter, v: RawUtf8;
   req, response: RawByteString;
   addr, resp: TNetAddr;
   sock: TNetSocket;
@@ -2805,7 +2805,13 @@ var
 begin
   RecordZero(@Info, TypeInfo(TCldapDomainInfo));
   result := false;
-  if addr.SetFrom(LdapServerAddress, LdapServerPort, nlUdp) <> nrOk then
+  srv := LdapServerAddress;
+  port := LdapServerPort;
+  if port = '' then
+    Split(LdapServerAddress, ':', srv, port);
+  if port = '' then
+    port := LDAP_PORT;
+  if addr.SetFrom(srv, port, nlUdp) <> nrOk then
     exit;
   sock := addr.NewSocket(nlUdp);
   if sock <> nil then
