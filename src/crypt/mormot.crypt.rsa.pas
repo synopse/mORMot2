@@ -27,10 +27,11 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security,
-  mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.rtti,
+  mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure;
   
@@ -526,6 +527,8 @@ type
     function LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
     /// load a public key from an hexadecimal E and M fields concatenation
     procedure LoadFromPublicKeyHexa(const Hexa: RawUtf8);
+    /// load a public key from "n" and "e" fields of a "kty":"RSA" JWK
+    function LoadFromPublicKeyJwk(const Json: RawUtf8): boolean;
     /// load a private key from a decoded TRsaPrivateKey record
     procedure LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
     /// load a private key from PKCS#1 or PKCS#8 DER format
@@ -2623,6 +2626,19 @@ procedure TRsa.LoadFromPublicKey(const PublicKey: TRsaPublicKey);
 begin
   LoadFromPublicKeyBinary(pointer(PublicKey.Modulus), pointer(PublicKey.Exponent),
     length(PublicKey.Modulus), length(PublicKey.Exponent));
+end;
+
+function TRsa.LoadFromPublicKeyJwk(const Json: RawUtf8): boolean;
+var
+  key: TRsaPublicKey;
+begin
+  result := key.FromJwk(Json);
+  if result then
+    try
+      LoadFromPublicKey(key);
+    except
+      result := false;
+    end;
 end;
 
 procedure TRsa.LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
