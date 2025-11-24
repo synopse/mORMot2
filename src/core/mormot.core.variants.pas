@@ -1448,6 +1448,9 @@ type
     function Equals(const aName: RawUtf8; const aValue: variant;
       aCaseInsensitive: boolean = false): boolean; overload;
       {$ifdef ISDELPHI}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    /// compare a TTDocVariantData object property with a given text value
+    function CompareText(const aName, aValue: RawUtf8;
+      aCaseInsensitive: boolean = false): integer;
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
@@ -7311,6 +7314,16 @@ begin
   result := (cardinal(VType) = DocVariantVType) and
             GetObjectProp(aName, v{%H-}, nil) and
             (FastVarDataComp(@aValue, pointer(v), aCaseInsensitive) = 0);
+end;
+
+function TDocVariantData.CompareText(const aName, aValue: RawUtf8;
+  aCaseInsensitive: boolean): integer;
+var
+  t: TSynVarData;
+begin
+  t.VType := varString;
+  t.VAny := pointer(aValue);
+  result := Compare(aName, PVariant(@t)^, aCaseInsensitive);
 end;
 
 function TDocVariantData.InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
