@@ -344,9 +344,9 @@ function DnsServices(const HostName: RawUtf8; const NameServers: RawUtf8 = '';
 function DnsLdapServices(const DomainName: RawUtf8;
   const NameServers: RawUtf8 = ''): TRawUtf8DynArray;
 
-/// retrieve the LDAP controlers from the current system AD domain name
+/// retrieve the LDAP controllers from the current system AD domain name
 // - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
-// - optionally return the associated AD controler host name, e.g. 'ad.mycorp.com'
+// - optionally return the associated AD controller host name, e.g. 'ad.mycorp.com'
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - see also CldapMyController() from mormot.net.ldap for a safer client approach

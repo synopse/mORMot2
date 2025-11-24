@@ -5282,7 +5282,7 @@ var
   WindowsServiceLog: TSynLogProc;
 
 type
-  /// TServiceControler class is intended to create a new Windows Service instance
+  /// TServiceController class is intended to create a new Windows Service instance
   // or to maintain (that is start, stop, pause, resume...) an existing Service
   // - to provide the service itself, use the TService class
   TServiceController = class
@@ -5492,10 +5492,10 @@ type
     /// this is the main method, in which the Service should implement its run
     procedure Execute; virtual;
 
-    /// Number of arguments passed to the service by the service controler
+    /// Number of arguments passed to the service by the service controller
     property ArgCount: integer
       read GetArgCount;
-    /// List of arguments passed to the service by the service controler
+    /// List of arguments passed to the service by the service controller
     // - Idx is in range 0..ArgCount - 1
     property Args[Idx: integer]: RawUtf8
       read GetArgs;
