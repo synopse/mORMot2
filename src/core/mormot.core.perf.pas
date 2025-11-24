@@ -4551,7 +4551,7 @@ var
   n, cap: cardinal;
   q: QWord;
   len, trimright, i, c: PtrInt;
-  lines: array[byte] of PRawUtf8; // efficient string decoding
+  lines: array of PRawUtf8; // efficient string decoding
   // linked in 2nd pass:
   cache: array of TSmbiosCache;
   mem: array of TSmbiosMemory;
@@ -4567,7 +4567,7 @@ begin
   if s = nil then
     exit;
   // first pass will fill the main info structures
-  FillCharFast(lines, SizeOf(lines), 0);
+  SetLength(lines, 255);
   repeat
     if (s[0] = 127) or // type (127=EOT)
        (s[1] < 4) then // length
