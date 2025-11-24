@@ -92,14 +92,23 @@ type
   TCldapDomainFlags = set of TCldapDomainFlag;
 
   /// the domain information returned by CldapGetDomainInfo(
+  {$ifdef USERECORDWITHMETHODS}
   TCldapDomainInfo = record
+  {$else}
+  TCldapDomainInfo = object
+  {$endif USERECORDWITHMETHODS}
+  public
     RawLogonType, RawFlags, NTVersion: cardinal;
     LogonType: TCldapDomainLogonType;
     Flags: TCldapDomainFlags;
     Guid: TGuid;
     Forest, Domain, HostName, NetbiosDomain, NetbiosHostname: RawUtf8;
     Unk, User, IP, ServerSite, ClientSite: RawUtf8;
+    /// return most domain information fields as high-level TDocVariant object
+    function ToVariant: variant;
   end;
+  /// pointer to domain information as returned by CldapGetDomainInfo()
+  PCldapDomainInfo = ^TCldapDomainInfo;
 
 /// send a CLDAP NetLogon message to a LDAP server over UDP to retrieve all
 // information of the domain
@@ -2757,7 +2766,28 @@ type
 
 implementation
 
+
 { **************** CLDAP Client Functions }
+
+function TCldapDomainInfo.ToVariant: variant;
+begin
+  VarClear(result);
+  TDocVariantData(result).InitObject([
+    'nt_version',       NTVersion,
+    'logon_type',       GetEnumNameTrimed(TypeInfo(TCldapDomainLogonType), ord(LogonType)),
+    'flags',            GetSetName(TypeInfo(TCldapDomainFlags), Flags, {trimmed=}true),
+    'guid',             GuidToRawUtf8(Guid),
+    'forest',           Forest,
+    'domain',           Domain,
+    'host_name',        HostName,
+    'netbios_domain',   NetbiosDomain,
+    'netbios_hostname', NetbiosHostname,
+    'unk',              Unk,
+    'user',             User,
+    'ip',               IP,
+    'server_site',      ServerSite,
+    'client_site',      ClientSite]);
+end;
 
 const
   NTVER: RawUtf8 = '\06\00\00\00'; // RawLdapTranslateFilter() does UnescapeHex()
