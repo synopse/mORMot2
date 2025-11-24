@@ -123,7 +123,7 @@ function CldapGetLdapController(const DomainName: RawUtf8;
 // - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
 // is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - this is the safest approach for a client, safer than CldapBroadcast()
-// or CldapSortHosts() / DnsLdapControlersSorted()
+// or CldapSortHosts() / DnsLdapControllersSorted()
 // - as used with default lccCldap option for TLdapClient.Connect with no
 // ForcedDomainName
 function CldapMyLdapController(const NameServer: RawUtf8 = '';
@@ -188,7 +188,7 @@ function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer = 100;
   const Address: RawUtf8 = cBroadcast; const Port: RawUtf8 = LDAP_PORT): integer;
 
 /// sort some LDAP host names using CLDAP over UDP
-// - expects Hosts in 'host:port' format, as returned by DnsLdapControlers,
+// - expects Hosts in 'host:port' format, as returned by DnsLdapControllers,
 // e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
 // - hosts not available over UDP within MinimalUdpCount or the TimeoutMS period,
 // are put at the end of the list because they may still be reachable via TCP
@@ -196,8 +196,8 @@ function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer = 100;
 procedure CldapSortHosts(var Hosts: TRawUtf8DynArray;
   TimeoutMS, MinimalUdpCount: integer);
 
-/// retrieve the LDAP controlers sorted by UDP response time
-// - just a wrapper around DnsLdapControlers() and CldapSortHosts()
+/// retrieve the LDAP controllers sorted by UDP response time
+// - just a wrapper around DnsLdapControllers() and CldapSortHosts()
 // - won't sort by UDP response time if UdpFirstDelayMS = 0
 // - used e.g. by TLdapClient.Connect() with the lccClosest option
 // - a safer approach may be to use CldapGetLdapController/CldapMyLdapController
@@ -1858,7 +1858,7 @@ type
       read GetTargetUri write SetTargetUri;
   published
     /// target server IP (or symbolic name)
-    // - default is '' but if not set, Connect will call DnsLdapControlers()
+    // - default is '' but if not set, Connect will call DnsLdapControllers()
     // from mormot.net.dns to retrieve the current value from the system
     // - after connect, will contain the actual server name
     // - typical value is 'dc-one.mycorp.com'
@@ -2024,7 +2024,7 @@ type
     /// try to connect to LDAP server at socket level
     // - without any authentication: consider using Bind/BindSaslKerberos instead
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
-    // DnsLdapControlers() hosts (from mormot.net.dns) following DiscoverMode
+    // DnsLdapControllers() hosts (from mormot.net.dns) following DiscoverMode
     // - do nothing if was already connected
     function Connect(DiscoverMode: TLdapClientConnect = [lccCldap, lccTlsFirst];
       DelayMS: integer = 500): boolean;
@@ -2113,7 +2113,7 @@ type
     /// authenticate a client to the directory server using Kerberos
     // - if no Settings.UserName/Password has been set, will try current logged user
     // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
-    // - if no SPN is supplied, derivate one from Connect's DnsLdapControlers()
+    // - if no SPN is supplied, derivate one from Connect's DnsLdapControllers()
     // - can optionally return the KerberosUser which made the authentication
     function BindSaslKerberos(const AuthIdentify: RawUtf8 = '';
       KerberosUser: PRawUtf8 = nil): boolean;
@@ -2867,7 +2867,7 @@ var
   ldap: TRawUtf8DynArray;
   dn: RawUtf8;
 begin
-  ldap := DnsLdapControlers(NameServer, UsePosixEnv, @dn);
+  ldap := DnsLdapControllers(NameServer, UsePosixEnv, @dn);
   result := CldapGetBestLdapController(ldap, dn, NameServer, TimeOutMS);
   if (result <> '') and
      (DomainName <> nil) then
@@ -3052,7 +3052,7 @@ function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
   const NameServer: RawUtf8; UsePosixEnv: boolean;
   DomainName: PRawUtf8): TRawUtf8DynArray;
 begin
-  result := DnsLdapControlers(NameServer, UsePosixEnv, DomainName);
+  result := DnsLdapControllers(NameServer, UsePosixEnv, DomainName);
   if UdpFirstDelayMS > 0 then
     CldapSortHosts(result, UdpFirstDelayMS, MinimalUdpCount);
 end;

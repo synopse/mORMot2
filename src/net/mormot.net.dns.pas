@@ -350,7 +350,7 @@ function DnsLdapServices(const DomainName: RawUtf8;
 // - default NameServers = '' will call GetDnsAddresses - but NameServers could
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - see also CldapMyController() from mormot.net.ldap for a safer client approach
-function DnsLdapControlers(const NameServers: RawUtf8 = '';
+function DnsLdapControllers(const NameServers: RawUtf8 = '';
   UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
 
@@ -879,7 +879,7 @@ begin
   result := DnsServices('_ldap._tcp.' + DomainName, NameServers);
 end;
 
-function DnsLdapControlers(const NameServers: RawUtf8; UsePosixEnv: boolean;
+function DnsLdapControllers(const NameServers: RawUtf8; UsePosixEnv: boolean;
   DomainName: PRawUtf8): TRawUtf8DynArray;
 var
   ad: TRawUtf8DynArray;
