@@ -5887,6 +5887,7 @@ var
   dc: TRawUtf8DynArray;
   h, p: RawUtf8;
   i: PtrInt;
+  nfo: TCldapDomainInfo;
   log: ISynLog;
 begin
   result := fSock <> nil;
@@ -5904,15 +5905,20 @@ begin
     end
     else
     begin
-      // try all LDAP servers from OS list
+      // try all LDAP servers from OS list with optional CLDAP/DNS discovery
       if ForcedDomainName = '' then
         ForcedDomainName := fSettings.KerberosDN; // may be pre-set
       if lccCldap in DiscoverMode then
       begin
-        h := CldapGetDefaultLdapController(
-          @fSettings.fKerberosDN, @fSettings.fKerberosSpn);
+        h := CldapGetDefaultLdapController(@fSettings.fKerberosDN,
+          @fSettings.fKerberosSpn, @nfo, DelayMS);
         if h <> '' then
+        begin
           AddRawUtf8(dc, h);
+          if Assigned(log) then
+            log.Log(sllTrace, 'Connect(lccCldap): default to %',
+              [nfo.ToVariant], self);
+        end;
       end;
       if dc = nil then
       begin
@@ -5936,7 +5942,7 @@ begin
   for i := 0 to high(dc) do
     try
       Split(dc[i], ':', h, p);
-      if fSettings.TargetHost = '' then // not from DnsLdapControlers
+      if fSettings.TargetHost = '' then // not from DnsLdapControllers
       begin
         if (lccTlsFirst in DiscoverMode) and
            HasOpenSsl and // SChannel seems to have troubles with LDAP TLS
