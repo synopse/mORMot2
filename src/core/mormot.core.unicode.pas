@@ -4417,8 +4417,7 @@ begin
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
     // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() here
-    raise ESynUnicode.CreateFmt('%s.Create - Invalid code page %d',
-      [ClassNameShort(self)^, fCodePage]);
+    ESynUnicode.RaiseFmt(self, 'Create - Invalid code page %d', [fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide, 256);
   if (aCodePage = CP_WINANSI) or
@@ -4444,8 +4443,7 @@ begin
     if (len < 500) or
        (len > 512) then
       // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() now
-      raise ESynUnicode.CreateFmt('OS error for %s.Create(%d) [%d]',
-        [ClassNameShort(self)^, aCodePage, len]);
+      ESynUnicode.RaiseFmt(self, 'Create(%d): OS error [%d]', [aCodePage, len]);
     MoveFast(u[0], fAnsiToWide[0], 512);
   end;
   SetLength(fWideToAnsi, 65536);
@@ -4786,7 +4784,7 @@ end;
 constructor TSynAnsiUtf8.Create(aCodePage: cardinal);
 begin
   if aCodePage <> CP_UTF8 then
-    raise ESynUnicode.CreateFmt('%s.Create(%d)', [ClassNameShort(self)^, aCodePage]);
+    ESynUnicode.RaiseFmt(self, 'Create(%d) is unexpected', [aCodePage]);
   inherited Create(aCodePage);
 end;
 
@@ -4880,7 +4878,7 @@ end;
 constructor TSynAnsiUtf16.Create(aCodePage: cardinal);
 begin
   if aCodePage <> CP_UTF16 then
-    raise ESynUnicode.CreateFmt('%s.Create(%d)', [ClassNameShort(self)^, aCodePage]);
+    ESynUnicode.RaiseFmt(self, 'Create(%d)', [aCodePage]);
   inherited Create(aCodePage);
 end;
 
@@ -9583,7 +9581,7 @@ function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf
 begin
   CamelCase(aName, result);
   if result = '' then
-    raise ESynUnicode.CreateFmt('Unexpected SanitizePascalName(%s)', [aName]);
+    ESynUnicode.RaiseFmt(nil, 'Unexpected SanitizePascalName(%s)', [aName]);
   result[1] := UpCase(result[1]);
   if KeyWordCheck and
      IsReservedKeyWord(result) then

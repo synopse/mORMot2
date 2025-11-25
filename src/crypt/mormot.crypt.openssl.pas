@@ -810,8 +810,7 @@ begin
   EOpenSslCrypto.CheckAvailable(PClass(Owner)^, 'Create');
   Cipher := EVP_get_cipherbyname(aCipherName);
   if Cipher = nil then
-    raise EOpenSslCrypto.CreateFmt('%s.Create: unknown ''%s'' cipher',
-      [ClassNameShort(Owner)^, aCipherName]);
+    EOpenSslCrypto.RaiseFmt(Owner, 'Create: unknown ''%s'' cipher', [aCipherName]);
 end;
 
 procedure TAesOsl.Done;
@@ -1130,7 +1129,7 @@ begin
     if fXof then
       fDigestSize := hashSize // custom size in XOF mode
     else
-      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Unexpected HashSize=' +
+      EOpenSslHash.RaiseFmt(self, 'Create: Unexpected HashSize=' +
         '%d to a non-XOF hash function', [HashSize]);
 end;
 
@@ -1155,8 +1154,7 @@ begin
   result := EVP_MD_CTX_size(fCtx);
   if Dest = nil then
     if result > SizeOf(fDigestValue) then
-      raise EOpenSslHash.CreateFmt(
-        'TOpenSslHash.Digest(nil): size=%d overflow', [result])
+      EOpenSslHash.RaiseFmt(self, 'Digest(nil): size=%d overflow', [result])
     else
       Dest := @fDigestValue;
   if fXof then
@@ -1214,7 +1212,7 @@ procedure TOpenSslHmac.Init(md: PEVP_MD; Key: pointer; KeyLength: cardinal);
 begin
   EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
   if md = nil then
-    raise EOpenSslHash.Create('TOpenSslHmac.Create: Unknown algorithm');
+    EOpenSslHash.RaiseFmt(self, 'Create: Unknown algorithm', []);
   fDigestSize := EVP_MD_size(md);
   fCtx := HMAC_CTX_new;
   if Key = nil then // Key=null for OpenSSL means "reuse previous"
@@ -1313,7 +1311,7 @@ begin
       else
         result := EVP_get_digestbyname(pointer(Algorithm));
       if result = nil then
-        raise EOpenSslHash.CreateFmt(
+        EOpenSslHash.RaiseFmt(nil,
           '%s: unknown [%s] algorithm', [Caller, Algorithm]);
     end;
 end;
@@ -1516,7 +1514,7 @@ var
 begin
   keys := OpenSslGenerateKeys(EvpType, BitsOrCurve);
   if keys = nil then
-    raise EOpenSslHash.CreateFmt(
+    EOpenSslHash.RaiseFmt(nil,
       'OpenSslGenerateKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
   keys.ToPem(PrivateKey, PublicKey, PrivateKeyPassWord);
   keys.Free;
@@ -1529,7 +1527,7 @@ var
 begin
   keys := OpenSslGenerateKeys(EvpType, BitsOrCurve);
   if keys = nil then
-    raise EOpenSslHash.CreateFmt(
+    EOpenSslHash.RaiseFmt(nil,
       'OpenSslGenerateBinaryKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
   PrivateKey := keys.PrivateToDer(PrivateKeyPassWord);
   PublicKey := keys.PublicToDer;
@@ -1872,8 +1870,7 @@ constructor TJwtOpenSsl.Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
 begin
   EOpenSsl.CheckAvailable(PClass(self)^, 'Create');
   if not OpenSslSupports(aGenEvpType) then
-    raise EOpenSsl.CreateFmt('%s.Create: unsupported %s',
-      [ClassNameShort(self)^, aJwtAlgorithm]);
+    EOpenSsl.RaiseFmt(self, 'Create: unsupported %s', [aJwtAlgorithm]);
   fAlgoMd := OpenSslGetMdByName(aHashAlgorithm, 'TJwtOpenSsl.Create');
   fHashAlgorithm := aHashAlgorithm;
   fGenEvpType := aGenEvpType;
@@ -3329,8 +3326,7 @@ begin
     exit;
   r := FromReason(Reason);
   if r = CRL_REASON_NONE then
-    raise EOpenSslCert.CreateFmt(
-      'TCryptStoreOpenSsl.Revoke: unsupported %s', [ToText(Reason)^]);
+    EOpenSslCert.RaiseFmt(self, 'Revoke: unsupported %s', [ToText(Reason)^]);
   c := fStore.MainCrlAcquired;
   if c <> nil then
     try

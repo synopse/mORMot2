@@ -8201,8 +8201,7 @@ constructor TSynMemoryStreamMapped.Create(aFile: THandle;
   aCustomSize: PtrUInt; aCustomOffset: Int64);
 begin
   if not fMap.Map(aFile, aCustomSize, aCustomOffset) then
-    raise EOSException.CreateFmt('%s.Create(%s) mapping error',
-      [ClassNameShort(self)^, fFileName]);
+    EOSException.RaiseFmt(self, 'Create(%s) mapping error', [fFileName]);
   inherited Create(fMap.fBuf, fMap.fBufSize);
 end;
 
