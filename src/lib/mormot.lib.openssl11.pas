@@ -2152,8 +2152,6 @@ function ERR_get_error(): cardinal; cdecl;
 procedure ERR_remove_thread_state(p1: pointer); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_PKEY_new(): PEVP_PKEY; cdecl;
-function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
-procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
 function EVP_PKEY_type(typ: integer): integer; cdecl;
 function EVP_PKEY_id(pkey: PEVP_PKEY): integer; cdecl;
@@ -3370,8 +3368,6 @@ type
     ERR_remove_thread_state: procedure(p1: pointer); cdecl;
     ERR_load_BIO_strings: function(): integer; cdecl;
     EVP_PKEY_new: function(): PEVP_PKEY; cdecl;
-    EVP_MD_CTX_create: function(): PEVP_MD_CTX; cdecl;
-    EVP_MD_CTX_destroy: procedure(ctx: PEVP_MD_CTX); cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
     EVP_PKEY_type: function(typ: integer): integer; cdecl;
     EVP_PKEY_id: function(pkey: PEVP_PKEY): integer; cdecl;
@@ -3719,7 +3715,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..353] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..352] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3729,8 +3725,7 @@ const
     'ERR_get_error',
     'ERR_remove_thread_state',
     'ERR_load_BIO_strings',
-    'EVP_MD_CTX_new',
-    'EVP_MD_CTX_free',
+    'EVP_PKEY_new',
     'EVP_PKEY_get_size EVP_PKEY_size', // OpenSSL 3.0 / 1.1 alternate names
     'EVP_PKEY_type',
     'EVP_PKEY_get_id EVP_PKEY_id',
@@ -3984,8 +3979,8 @@ const
     'EVP_CipherFinal_ex',
     'EVP_CIPHER_CTX_set_padding',
     'EVP_CIPHER_CTX_iv',
-    'EVP_MD_CTX_new',
-    'EVP_MD_CTX_free',
+    'EVP_MD_CTX_new EVP_MD_CTX_create',
+    'EVP_MD_CTX_free EVP_MD_CTX_destroy',
     'EVP_MD_CTX_md',
     'EVP_MD_get_flags EVP_MD_flags', // OpenSSL 3.0 / 1.1 alternate names
     'EVP_MD_get_size EVP_MD_size',
@@ -4129,16 +4124,6 @@ end;
 function EVP_PKEY_new(): PEVP_PKEY;
 begin
   result := libcrypto.EVP_PKEY_new();
-end;
-
-function EVP_MD_CTX_create(): PEVP_MD_CTX;
-begin
-  result := libcrypto.EVP_MD_CTX_create;
-end;
-
-procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX);
-begin
-  libcrypto.EVP_MD_CTX_destroy(ctx);
 end;
 
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer;
@@ -6396,10 +6381,10 @@ function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_PKEY_new(): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_new';
 
-function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
+function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
 
-procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
 
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
