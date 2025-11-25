@@ -3367,7 +3367,8 @@ begin
     exit; // invalid or unsupported
   rsa := fRsaClass.Create;
   try
-    if not rsa.LoadFromPublicKeyPem(pub) then // handle PEM or DER
+    if not rsa.LoadFromPublicKeyPem(pub) and  // handle PEM or DER
+       not rsa.LoadFromPublicKeyJwk(pub) then // handle JWT JSON
       exit;
     FillZero(digest.b);
     hasher.Full(msg, msglen, digest);
@@ -3399,7 +3400,8 @@ begin
     ckaRsaPss:
       begin
         fRsa := CKA_TO_RSA[Algorithm].Create;
-        if fRsa.LoadFromPublicKeyPem(PublicKeySaved) then
+        if fRsa.LoadFromPublicKeyPem(PublicKeySaved) or   // PEM or DER
+           fRsa.LoadFromPublicKeyJwk(PublicKeySaved) then // JWT JSON
         begin
           fKeyAlgo := Algorithm;
           result := true;

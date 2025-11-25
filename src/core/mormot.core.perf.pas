@@ -4330,6 +4330,7 @@ var
   GetSmbiosInfoChecked, RegisteredSmbiosInfoJson: boolean;
 
 const
+  // our custom records/arrays serialization via RTTI using one-char identifiers
   _TSmbiosBios = 'n,v,b,s,r,f:RawUtf8 c:TSmbiosBiosFlags';
   _TSmbiosSystem = 'm,p,v,s,u,k,f:RawUtf8 w:TSmbiosSystemWakeup';
   _TSmbiosBoard = 'm,p,v,s,a,l:RawUtf8 f:TSmbiosBoardFeatures t:TSmbiosBoardType';
