@@ -1913,10 +1913,11 @@ constructor TEcc256r1VerifyOsl.Create(const pub: TEccPublicKey);
 begin
   inherited Create(pub);
   EOpenSslAsymmetric.CheckAvailable(PClass(self)^, 'Create');
-  if not NewPrime256v1Key(fKey) or
-     not PublicKeyToPoint(pub, fPoint) or
-     (EC_KEY_set_public_key(fKey, fPoint) <> OPENSSLSUCCESS) then
-    raise EOpenSslAsymmetric.CreateFmt('%s.Create failed', [ClassNameShort(self)^]);
+  if NewPrime256v1Key(fKey) and
+     PublicKeyToPoint(pub, fPoint) then
+    EOpenSslAsymmetric.Check(self, 'Create', EC_KEY_set_public_key(fKey, fPoint))
+  else
+    EOpenSslAsymmetric.CheckFailed(self, 'Create');
 end;
 
 destructor TEcc256r1VerifyOsl.Destroy;
@@ -2232,12 +2233,14 @@ end;
 function TCryptPublicKeyOpenSsl.GetParams(out x, y: RawByteString): boolean;
 begin
   result := true;
-  if fKeyAlgo in CKA_ECC then
-    fPubKey.EccGetPubKeyUncompressed(x, y)
-  else if fKeyAlgo in CKA_RSA then
-    fPubKey.RsaGetPubKey(x, y)
+  case fKeyAlgo of
+    ckaEcc256, ckaEcc384, ckaEcc512, ckaEcc256k:
+      fPubKey.EccGetPubKeyUncompressed(x, y);
+    ckaRsa, ckaRsaPss:
+      fPubKey.RsaGetPubKey(x, y);
   else
-    result := false;
+    result := false; // ckaEdDSA is unsupported (yet)
+  end;
 end;
 
 function TCryptPublicKeyOpenSsl.Seal(const Message: RawByteString;
@@ -3181,11 +3184,17 @@ begin
 end;
 
 function TCryptCertOpenSsl.GetKeyParams(out x, y: RawByteString): boolean;
+var
+  a: TCryptAsymAlgo;
 begin
   result := true;
-  if AsymAlgo in CAA_ECC then
-    fPrivKey.EccGetPubKeyUncompressed(x, y)
-  else if AsymAlgo in CAA_RSA then
+  a := AsymAlgo;
+  if a in CAA_ECC then
+    if a = caaEdDSA then
+      result := false // unsupported (yet)
+    else
+      fPrivKey.EccGetPubKeyUncompressed(x, y)
+  else if a in CAA_RSA then
     fPrivKey.RsaGetPubKey({e=}x, {n=}y)
   else
     result := false;
