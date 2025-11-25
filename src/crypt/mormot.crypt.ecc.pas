@@ -5604,8 +5604,8 @@ begin
             Ecc256r1Uncompress(fEccPub, k);
           pointer(x) := FastNewString(ECC_BYTES);;
           pointer(y) := FastNewString(ECC_BYTES);;
-          bswap256(@PHash512Rec(@k)^.Lo, pointer(x));
-          bswap256(@PHash512Rec(@k)^.Hi, pointer(y));
+          _bswap256(pointer(x), @PHash512Rec(@k)^.Lo);
+          _bswap256(pointer(y), @PHash512Rec(@k)^.Hi);
           result := true;
         end;
     end;
