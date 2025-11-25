@@ -22,6 +22,7 @@ uses
   mormot.crypt.other,
   mormot.crypt.openssl,
   mormot.crypt.secure,
+  mormot.crypt.ecc256r1,
   mormot.core.perf,
   mormot.core.test,
   mormot.core.variants,
@@ -1060,6 +1061,10 @@ const
     '-----END PUBLIC KEY-----'#13#10;
   _rsajwk = // _rsapub converted as JWK
     '{'#10 +
+    '  "alg": "RS256",'#10 +
+    '  "e": "AQAB",'#10 +
+    '  "ext": true,'#10 +
+    '  "kid": "ccc3cb966a0e09297918052b374e",'#10 +
     '  "kty": "RSA",'#10 +
     '  "n": "tQ4_dhzEXlDpj71dwF3Tt1Sx_COvd6Y8R4kxgcLblmdt3BCmGAYgNS2yf0O' +
        'RcGKse-wYLG-BV8rIT2zRPbrIXfEJmnjlnsQ635n9bMpfhFIyr9pE4w5y5ZUAzJS' +
@@ -1067,11 +1072,26 @@ const
        'Qr5OHynyJS8esD9dpKfsExc7rBx4VH1tCx1SH9yVAMHts0674HjnnyFyveoXOajN' +
        '1gxn4_iN1lfWZzzoWqyVvKWZ5XitCD_FEdhbjFbWKibrku9c_P7HNz7oqMx2QkhG' +
        'a-asefQNnwFv-Nqac9rTCP7ldew",'#10 +
-    '  "e": "AQAB",'#10 +
-    '  "ext": true,'#10 +
-    '  "kid": "ccc3cb966a0e09297918052b374e",'#10 +
-    '  "alg": "RS256",'#10 +
     '  "use": "sig"'#10 +
+    '}'#10;
+
+  _eccpub =
+    '-----BEGIN PUBLIC KEY-----'#10 +
+    'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoIQ8m1iBHYoxrdLT1A6MH9naG+hk'#10 +
+    '/ccw/Ij0p9Mk7JmNdzCUeEjzlU5/E683I9PZaz2/5RFj1HfKPTgDkxQFkA=='#10 +
+    '-----END PUBLIC KEY-----'#10;
+  _eccjwk = // _eccpub converted as JWK
+    '{'#10 +
+    '  "alg": "ES256",'#10 +
+    '  "crv": "P-256",'#10 +
+    '  "ext": true,'#10 +
+    '  "key_ops": ['#10 +
+    '    "verify"'#10 +
+    '  ],'#10 +
+    '  "kid": "VoycxROU3bdddiAPt2RaIuyjtcjcINVUeNp+FO9L+MA=",'#10 +
+    '  "kty": "EC",'#10 +
+    '  "x": "oIQ8m1iBHYoxrdLT1A6MH9naG-hk_ccw_Ij0p9Mk7Jk",'#10 +
+    '  "y": "jXcwlHhI85VOfxOvNyPT2Ws9v-URY9R3yj04A5MUBZA"'#10 +
     '}'#10;
 
 procedure TTestCoreCrypto._JWT;
@@ -1269,10 +1289,7 @@ begin
   finally
     j.Free;
   end;
-  j := TJwtCrypt.Create(caaES256, '-----BEGIN PUBLIC KEY-----'#13#10 +
-    'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoIQ8m1iBHYoxrdLT1A6MH9naG+hk'#13#10 +
-    '/ccw/Ij0p9Mk7JmNdzCUeEjzlU5/E683I9PZaz2/5RFj1HfKPTgDkxQFkA=='#13#10 +
-    '-----END PUBLIC KEY-----'#13#10, [jrcAudience], ['aud'], 60);
+  j := TJwtCrypt.Create(caaES256, _eccpub, [jrcAudience], ['aud'], 60);
   try
     CheckEqual(j.Algorithm, 'ES256');
   finally
@@ -4337,6 +4354,28 @@ var
   crt: TCryptCertAlgo;
   str: TCryptStoreAlgo;
   alg: TCryptAlgos;
+
+ procedure DoEcc(ecc: TCryptPublicKeyClass);
+ var
+   pub: ICryptPublicKey;
+   x1, x2, y1, y2: RawByteString;
+ begin
+   pub := ecc.Create;
+   check(pub.Load(ckaEcc256, _eccpub));
+   check(pub.GetParams(x1, y1));
+   //writeln(BinToHEx(x1)); writeln(bintohex(y1));
+   CheckEqual(BinToBase64Uri(x1), 'oIQ8m1iBHYoxrdLT1A6MH9naG-hk_ccw_Ij0p9Mk7Jk');
+   CheckEqual(BinToBase64Uri(y1), 'jXcwlHhI85VOfxOvNyPT2Ws9v-URY9R3yj04A5MUBZA');
+   pub := ecc.Create;
+   check(pub.Load(ckaEcc256, _eccjwk));
+   check(pub.GetParams(x2, y2));
+   //writeln(BinToHEx(x2)); writeln(bintohex(y2));
+   CheckEqual(BinToBase64Uri(x2), 'oIQ8m1iBHYoxrdLT1A6MH9naG-hk_ccw_Ij0p9Mk7Jk');
+   CheckEqual(BinToBase64Uri(y2), 'jXcwlHhI85VOfxOvNyPT2Ws9v-URY9R3yj04A5MUBZA');
+   check(x1 = x2);
+   check(y1 = y2);
+ end;
+
 begin
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
@@ -4453,6 +4492,11 @@ begin
     end;
   end;
   // validate Asym() High-Level Algorithms Factory
+  {$ifdef USE_OPENSSL}
+  if TOpenSslHash.IsAvailable then
+    DoEcc(TCryptPublicKeyOpenSsl);
+  {$endif USE_OPENSSL}
+  DoEcc(TCryptPublicKeyEcc);
   alg := TCryptAsym.Instances;
   //fCatalogAllGenerate := SystemInfo.dwNumberOfProcessors > 8; // not worth it
   for a := 0 to high(alg) do
