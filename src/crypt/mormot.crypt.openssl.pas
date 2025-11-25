@@ -47,6 +47,7 @@ uses
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.datetime,
+  mormot.core.variants,
   mormot.lib.openssl11,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
@@ -462,7 +463,7 @@ function OpenSslLoadPublicKeyFromParams(EvpType, BitsOrCurve: integer;
 // - for ECC, returns the x,y coordinates
 // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
 // - caller should make result.Free once done with the result
-function OpenSslLoadPublicKeyFromParams(algo: TCryptAsymAlgo;
+function OpenSslLoadPublicKeyFromParams(algo: TCryptKeyAlgo;
   const x, y: RawByteString): PEVP_PKEY; overload;
 
 {
@@ -1585,25 +1586,25 @@ begin
             bx := BN_bin2bn(pointer(X), length(X), nil);
             by := BN_bin2bn(pointer(Y), length(Y), nil);
             if (bx <> nil) and
-               (by <> nil) and
-               (EC_POINT_set_affine_coordinates(g, p, bx, by, nil) = OPENSSLSUCCESS) and
-               (EC_KEY_set_public_key(ec, p) = OPENSSLSUCCESS) then
-            begin
-              result := EVP_PKEY_new;
-              if result <> nil then
-                if EVP_PKEY_assign_EC_KEY(result, ec) = OPENSSLSUCCESS then
-                  ec := nil // result EVP_PKEY will own ec
-                else
-                begin
-                  result.Free;
-                  result := nil;
-                end;
-            end;
+               (by <> nil) then
+              if (EC_POINT_set_affine_coordinates(g, p, bx, by, nil) = OPENSSLSUCCESS) and
+                 (EC_KEY_set_public_key(ec, p) = OPENSSLSUCCESS) then
+              begin
+                result := EVP_PKEY_new;
+                if result <> nil then
+                  if EVP_PKEY_assign_EC_KEY(result, ec) = OPENSSLSUCCESS then
+                    ec := nil // result EVP_PKEY will own ec
+                  else
+                  begin
+                    result.Free;
+                    result := nil;
+                  end;
+              end; // else writeln(OpenSSL_error(ERR_get_error));
             bx.Free;
             by.Free;
             EC_POINT_free(p);
           end;
-        end;
+        end; // EVP_PKEY_ED25519 only needs "x"
         if ec <> nil then
           EC_KEY_free(ec);
         EC_GROUP_free(g);
