@@ -3408,6 +3408,9 @@ function IsCN(const Rdn: RawUtf8): boolean;
 function IsDer(const Rdn: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// compute the minimum JWK output from raw binary parameters
+function SaveAsJwk(algo: TCryptAsymAlgo; const x, y: RawByteString): RawUtf8;
+
 /// main resolver of the randomness generators
 // - a shared TCryptRandom instance is returned: caller should NOT free it
 // - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine,
@@ -9243,24 +9246,11 @@ end;
 function TCryptCert.JwkCompute: RawUtf8;
 var
   x, y: RawByteString;
-  bx, by: RawUtf8;
-  caa: TCryptAsymAlgo;
 begin
-  // retrieve raw public key parameters
+  // retrieve raw public key parameters and export as JWT
   result := '';
-  if not GetKeyParams(x, y) then
-    exit;
-  bx := BinToBase64uri(x);
-  by := BinToBase64uri(y);
-  // parameters are ordered lexicographically, as expected for thumbprints
-  caa := AsymAlgo;
-  if caa in CAA_ECC then
-    // for ECC, GetKeyParams() returned the x,y coordinates
-    FormatUtf8('{"crv":"%","kty":"EC","x":"%","y":"%"}',
-                  [CAA_CRV[caa], bx, by], result)
-  else
-    // for RSA, x was set to the Exponent (e), and y to the Modulus (n)
-    FormatUtf8('{"e":"%","kty":"RSA","n":"%"}', [bx, by], result);
+  if GetKeyParams(x, y) then
+    result := SaveAsJwk(AsymAlgo, x, y);
 end;
 
 function TCryptCert.SharedSecret(const pub: ICryptCert): RawByteString;
@@ -9985,6 +9975,27 @@ begin
   result := (length(Rdn) = 3) and
             (PCardinal(Rdn)^ and $dfdfdf =
                ord('D') + ord('E') shl 8 + ord('R') shl 16);
+end;
+
+function SaveAsJwk(algo: TCryptAsymAlgo; const x, y: RawByteString): RawUtf8;
+var
+  bx, by: RawUtf8;
+begin
+  result := '';
+  if (x = '') or
+     (y = '') or
+     (algo in [caaEdDSA]) then // EDSA not yet supported (single "x" parameter)
+    exit;
+  bx := BinToBase64uri(x);
+  by := BinToBase64uri(y);
+  // parameters are ordered lexicographically, as expected for thumbprints
+  if algo in CAA_ECC then
+    // for ECC, GetKeyParams() returned the x,y coordinates
+    FormatUtf8('{"crv":"%","kty":"EC","x":"%","y":"%"}',
+                  [CAA_CRV[algo], bx, by], result)
+  else
+    // for RSA, x was set to the Exponent (e), and y to the Modulus (n)
+    FormatUtf8('{"e":"%","kty":"RSA","n":"%"}', [bx, by], result);
 end;
 
 
