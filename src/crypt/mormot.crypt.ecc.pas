@@ -2316,8 +2316,7 @@ function JwkToEcc(const Json: RawUtf8; out PublicKey: TEccPublicKey): boolean;
 var
   jwk: TDocVariantData;
   x, y: RawUtf8;
-  xy: THash512Rec;
-  key: TEccPublicKeyUncompressed;
+  xy, key: THash512Rec;
 begin
   result := false;
   if not jwk.InitJson(Json, JSON_FAST) or
@@ -2328,9 +2327,9 @@ begin
      not Base64uriToBin(x, @xy.Lo, SizeOf(xy.Lo)) or
      not Base64uriToBin(y, @xy.Hi, SizeOf(xy.Hi)) then
     exit;
-  bswap256(@xy.Lo, @PHash512Rec(@key)^.Lo);
-  bswap256(@xy.Hi, @PHash512Rec(@key)^.Lo);
-  Ecc256r1Compress(key, PublicKey);
+  _bswap256(@key.Lo, @xy.Lo);
+  _bswap256(@key.Hi, @xy.Hi);
+  Ecc256r1Compress(TEccPublicKeyUncompressed(key), PublicKey);
   result := true;
 end;
 
