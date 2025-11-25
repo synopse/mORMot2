@@ -1680,14 +1680,15 @@ begin
   try
     if aKey <> '' then
       // try as private key, then as public key
-      if fRsa.LoadFromPrivateKeyPem(aKey) then // handle PEM or DER
+      if fRsa.LoadFromPrivateKeyPem(aKey) then  // handle PEM or DER
       begin
         if (fRsa.ModulusBits < 2048) or
            not fRsa.CheckPrivateKey then
         ERsaException.RaiseUtf8('%.Create: invalid %-bit private key',
           [self, fRsa.ModulusBits]);
       end
-      else if fRsa.LoadFromPublicKeyPem(aKey) then // PEM or DER
+      else if fRsa.LoadFromPublicKeyPem(aKey) or   // PEM or DER
+              fRsa.LoadFromPublicKeyJwk(aKey) then // JWT JSON
         if fRsa.ModulusBits < 2048 then
           ERsaException.RaiseUtf8(
             '%.Create: invalid %-bit public key', [self, fRsa.ModulusBits]);
