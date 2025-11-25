@@ -3894,14 +3894,17 @@ var
   crt: TCryptCertAlgo absolute Context;
   timer: TPrecisionTimer;
   caa: TCryptAsymAlgo;
+  cka: TCryptKeyAlgo;
   c1, c2, c3, c4: ICryptCert;
-  s, r, csr: RawByteString;
-  jwt, iss, sub, s2, s3, n, priv: RawUtf8;
+  pub: ICryptPublicKey;
+  s, r, csr, x, y, x2, y2: RawByteString;
+  jwt, iss, sub, s2, s3, n, priv, jwk: RawUtf8;
   fmt: TCryptCertFormat;
   cv: TCryptCertValidity;
   u: TCryptCertUsage;
   fields: TCryptCertFields;
   cpe: TCryptCertPerUsage;
+  eccpub1, eccpub2: TEccPublicKey;
 begin
   timer.Start;
   check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
@@ -3959,6 +3962,34 @@ begin
   check(c1.GetNotBefore <= NowUtc + CERT_DEPRECATION_THRESHOLD, 'nbef');
   check(c1.GetNotAfter > NowUtc - CERT_DEPRECATION_THRESHOLD, 'naft');
   check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
+  jwk := c1.JwkCompute;
+  if jwk <> '' then
+  begin
+    cka := CAA_CKA[caa];
+    //writeln(CRLF, cka, ' from ', c1.Instance.ClassName, ' as ', crt.AlgoName, '  ', jwk);
+    if cka = ckaEcc256 then
+    begin
+      CheckEqual(jwk, c1.JwkCompute);
+      Check(JwkToEcc(jwk, eccpub1));
+      pub := TCryptPublicKeyEcc.Create;
+      x := c1.GetPublicKey;
+      Check(pub.Load(cka, x));
+      Check(pub.GetParams(x, y));
+      CheckEqual(SaveAsJwk(caa, x, y), jwk);
+    end;
+    pub := CryptPublicKey[cka].Create;
+    Check(pub.Load(cka, c1.GetPublicKey), 'jwkpub');
+    Check(pub.KeyAlgo = cka, 'jwkalgo1');
+    Check(pub.GetParams(x, y));
+    CheckEqual(SaveAsJwk(caa, x, y), jwk);
+    pub := CryptPublicKey[cka].Create;
+    Check(pub.Load(cka, jwk), 'jwkload');
+    Check(pub.KeyAlgo = cka, 'jwkalgo2');
+    Check(pub.GetParams(x2, y2));
+    CheckEqual(SaveAsJwk(caa, x2, y2), jwk);
+    CheckEqual(x, x2);
+    CheckEqual(y, y2);
+  end;
   for fmt := ccfBinary to ccfPem do
   begin
     c2 := crt.New;
