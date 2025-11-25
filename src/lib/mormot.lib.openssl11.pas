@@ -2151,6 +2151,7 @@ procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
 procedure ERR_remove_thread_state(p1: pointer); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
+function EVP_PKEY_new(): PEVP_PKEY; cdecl;
 function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
 procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
@@ -2433,6 +2434,8 @@ function RSA_private_decrypt(flen: integer; from: PByte; _to: PByte;
   rsa: PRSA; padding: integer): integer; cdecl;
 function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+function RSA_new(): PRSA; cdecl;
+procedure RSA_free(r: PRSA); cdecl;
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
 function d2i_PrivateKey_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
 function i2d_PUBKEY_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
@@ -2476,7 +2479,6 @@ function EVP_sha1: PEVP_MD;
 function EVP_sha256: PEVP_MD;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
-function EC_KEY_new(): PEC_KEY; cdecl;
 function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
 function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
 function BN_bn2dec(a: PBIGNUM): PUtf8Char; cdecl;
@@ -2493,6 +2495,7 @@ function ASN1_ENUMERATED_new(): PASN1_ENUMERATED; cdecl;
 procedure ASN1_ENUMERATED_free(a: PASN1_ENUMERATED); cdecl;
 function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
 function EC_POINT_hex2point(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+function EC_POINT_set_affine_coordinates(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; ctx: PBN_CTX): integer; cdecl;
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
 function EC_KEY_set_public_key_affine_coordinates(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
 function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
@@ -2500,6 +2503,7 @@ function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
 procedure EC_POINT_free(point: PEC_POINT); cdecl;
 procedure BN_free(a: PBIGNUM); cdecl;
 function BN_num_bits(a: PBIGNUM): integer; cdecl;
+function EC_KEY_new(): PEC_KEY; cdecl;
 procedure EC_KEY_free(key: PEC_KEY); cdecl;
 procedure EC_GROUP_free(group: PEC_GROUP); cdecl;
 function EC_KEY_generate_key(key: PEC_KEY): integer; cdecl;
@@ -2509,6 +2513,7 @@ function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
 function EC_KEY_key2buf(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
 function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
 procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
+function RSA_set0_key(r: PRSA; n: PBIGNUM; e: PBIGNUM; d: PBIGNUM): integer; cdecl;
 function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
 function X509_REQ_get_extensions(req: PX509_REQ): Pstack_st_X509_EXTENSION; cdecl;
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
@@ -2527,6 +2532,7 @@ function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
 function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+function EVP_PKEY_assign(pkey: PEVP_PKEY; typ: integer; key: pointer): integer; cdecl;
 function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
 function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
@@ -2619,6 +2625,8 @@ function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
+function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
+function EVP_PKEY_assign_EC_KEY(pkey: PEVP_PKEY; ec: PEC_KEY): integer;
 function TmToDateTime(const t: tm): TDateTime;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
@@ -3361,6 +3369,7 @@ type
     ERR_get_error: function(): cardinal; cdecl;
     ERR_remove_thread_state: procedure(p1: pointer); cdecl;
     ERR_load_BIO_strings: function(): integer; cdecl;
+    EVP_PKEY_new: function(): PEVP_PKEY; cdecl;
     EVP_MD_CTX_create: function(): PEVP_MD_CTX; cdecl;
     EVP_MD_CTX_destroy: procedure(ctx: PEVP_MD_CTX); cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
@@ -3594,6 +3603,8 @@ type
     RSA_public_decrypt: function(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
     RSA_private_decrypt: function(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
     RSA_pkey_ctx_ctrl: function(ctx: PEVP_PKEY_CTX; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+    RSA_new: function: PRSA; cdecl;
+    RSA_free: procedure(r: PRSA); cdecl;
     i2d_PrivateKey_bio: function(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
     d2i_PrivateKey_bio: function(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
     i2d_PUBKEY_bio: function(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
@@ -3631,7 +3642,6 @@ type
     EVP_sha1: function: PEVP_MD; cdecl;
     EVP_sha256: function: PEVP_MD; cdecl;
     EC_GROUP_new_by_curve_name: function(nid: integer): PEC_GROUP; cdecl;
-    EC_KEY_new: function(): PEC_KEY; cdecl;
     EC_KEY_set_group: function(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
     BN_bin2bn: function(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
     BN_bn2dec: function(a: PBIGNUM): PUtf8Char; cdecl;
@@ -3647,12 +3657,14 @@ type
     ASN1_ENUMERATED_free: procedure(a: PASN1_ENUMERATED); cdecl;
     EC_POINT_bn2point: function(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
     EC_POINT_hex2point: function(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+    EC_POINT_set_affine_coordinates: function(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; ctx: PBN_CTX): integer; cdecl;
     EC_KEY_set_public_key: function(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
     EC_KEY_set_public_key_affine_coordinates: function(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
     ECDSA_verify: function(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
     EC_POINT_free: procedure(point: PEC_POINT); cdecl;
     BN_free: procedure(a: PBIGNUM); cdecl;
     BN_num_bits: function(a: PBIGNUM): integer; cdecl;
+    EC_KEY_new: function(): PEC_KEY; cdecl;
     EC_KEY_free: procedure(key: PEC_KEY); cdecl;
     EC_GROUP_free: procedure(group: PEC_GROUP); cdecl;
     EC_KEY_generate_key: function(key: PEC_KEY): integer; cdecl;
@@ -3662,6 +3674,7 @@ type
     EC_KEY_key2buf: function(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
     EVP_PKEY_get0_RSA: function(pkey: PEVP_PKEY): Prsa_st; cdecl;
     RSA_get0_key: procedure(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
+    RSA_set0_key: function(r: PRSA; n: PBIGNUM; e: PBIGNUM; d: PBIGNUM): integer; cdecl;
     X509_REQ_add_extensions: function(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
     X509_REQ_get_extensions: function(req: PX509_REQ): Pstack_st_X509_EXTENSION; cdecl;
     EC_POINT_point2buf: function(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
@@ -3676,6 +3689,7 @@ type
     EVP_PKEY_paramgen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
     EVP_PKEY_keygen_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
     EVP_PKEY_keygen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+    EVP_PKEY_assign: function(pkey: PEVP_PKEY; typ: integer; key: pointer): integer; cdecl;
     EVP_PKEY_CTX_ctrl: function(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
     EVP_PKEY_CTX_set1_pbe_pass: function(ctx: PEVP_PKEY_CTX; pass: PAnsiChar; passlen: integer): integer; cdecl;
     EVP_PKEY_CTX_set1_scrypt_salt: function(ctx: PEVP_PKEY_CTX; salt: PByte; saltlen: integer): integer; cdecl;
@@ -3705,7 +3719,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..348] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..353] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3948,6 +3962,8 @@ const
     'RSA_public_decrypt',
     'RSA_private_decrypt',
     '?RSA_pkey_ctx_ctrl',
+    'RSA_new',
+    'RSA_free',
     'i2d_PrivateKey_bio',
     'd2i_PrivateKey_bio',
     'i2d_PUBKEY_bio',
@@ -3984,7 +4000,6 @@ const
     'EVP_sha1',
     'EVP_sha256',
     'EC_GROUP_new_by_curve_name',
-    'EC_KEY_new',
     'EC_KEY_set_group',
     'BN_bin2bn',
     'BN_bn2dec',
@@ -4000,12 +4015,14 @@ const
     'ASN1_ENUMERATED_free',
     'EC_POINT_bn2point',
     'EC_POINT_hex2point',
+    'EC_POINT_set_affine_coordinates',
     'EC_KEY_set_public_key',
     'EC_KEY_set_public_key_affine_coordinates',
     'ECDSA_verify',
     'EC_POINT_free',
     'BN_free',
     'BN_num_bits',
+    'EC_KEY_new',
     'EC_KEY_free',
     'EC_GROUP_free',
     'EC_KEY_generate_key',
@@ -4015,6 +4032,7 @@ const
     'EC_KEY_key2buf',
     'EVP_PKEY_get0_RSA',
     'RSA_get0_key',
+    'RSA_set0_key',
     'X509_REQ_add_extensions',
     'X509_REQ_get_extensions',
     'EC_POINT_point2buf',
@@ -4029,6 +4047,7 @@ const
     'EVP_PKEY_paramgen',
     'EVP_PKEY_keygen_init',
     'EVP_PKEY_keygen',
+    'EVP_PKEY_assign',
     'EVP_PKEY_CTX_ctrl',
     '?EVP_PKEY_CTX_set1_pbe_pass', // macros, not real functions on OpenSSL 1.1
     '?EVP_PKEY_CTX_set1_scrypt_salt',
@@ -4076,7 +4095,7 @@ begin
 end;
 
 function CRYPTO_get_ex_new_index(class_index: integer; argl: integer; argp: pointer;
-  new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
+  new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer;
 begin
   result := libcrypto.CRYPTO_get_ex_new_index(
     class_index, argl, argp, new_func, dup_func, free_func);
@@ -4105,6 +4124,11 @@ end;
 function ERR_load_BIO_strings(): integer;
 begin
   result := libcrypto.ERR_load_BIO_strings;
+end;
+
+function EVP_PKEY_new(): PEVP_PKEY;
+begin
+  result := libcrypto.EVP_PKEY_new();
 end;
 
 function EVP_MD_CTX_create(): PEVP_MD_CTX;
@@ -5317,30 +5341,40 @@ begin
 end;
 
 function RSA_private_encrypt(flen: integer; from: PByte; _to: PByte;
-  rsa: PRSA; padding: integer): integer; cdecl;
+  rsa: PRSA; padding: integer): integer;
 begin
   result := libcrypto.RSA_private_encrypt(flen, from, _to, rsa, padding);
 end;
 
 function RSA_public_decrypt(flen: integer; from: PByte; _to: PByte;
-  rsa: PRSA; padding: integer): integer; cdecl;
+  rsa: PRSA; padding: integer): integer;
 begin
   result := libcrypto.RSA_public_decrypt(flen, from, _to, rsa, padding);
 end;
 
 function RSA_private_decrypt(flen: integer; from: PByte; _to: PByte;
-  rsa: PRSA; padding: integer): integer; cdecl;
+  rsa: PRSA; padding: integer): integer;
 begin
   result := libcrypto.RSA_private_decrypt(flen, from, _to, rsa, padding);
 end;
 
 function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer;
-  cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+  cmd: integer; p1: integer; p2: pointer): integer;
 begin
   if Assigned(libcrypto.RSA_pkey_ctx_ctrl) then
     result := libcrypto.RSA_pkey_ctx_ctrl(ctx, optype, cmd, p1, p2)
   else
     result := 0;
+end;
+
+function RSA_new(): PRSA;
+begin
+  result := libcrypto.RSA_new();
+end;
+
+procedure RSA_free(r: PRSA);
+begin
+  libcrypto.RSA_free(r);
 end;
 
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer;
@@ -5536,11 +5570,6 @@ begin
   result := libcrypto.EC_GROUP_new_by_curve_name(nid);
 end;
 
-function EC_KEY_new(): PEC_KEY;
-begin
-  result := libcrypto.EC_KEY_new;
-end;
-
 function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer;
 begin
   result := libcrypto.EC_KEY_set_group(key, group);
@@ -5618,6 +5647,11 @@ begin
   result := libcrypto.EC_POINT_hex2point(p1, p2, p3, p4);
 end;
 
+function EC_POINT_set_affine_coordinates(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; ctx: PBN_CTX): integer;
+begin
+  result := libcrypto.EC_POINT_set_affine_coordinates(group, p, x, y, ctx);
+end;
+
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer;
 begin
   result := libcrypto.EC_KEY_set_public_key(key, pub);
@@ -5647,6 +5681,11 @@ end;
 function BN_num_bits(a: PBIGNUM): integer;
 begin
   result := libcrypto.BN_num_bits(a);
+end;
+
+function EC_KEY_new(): PEC_KEY;
+begin
+  result := libcrypto.EC_KEY_new;
 end;
 
 procedure EC_KEY_free(key: PEC_KEY);
@@ -5693,6 +5732,11 @@ end;
 procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM);
 begin
   libcrypto.RSA_get0_key(r, n, e, d);
+end;
+
+function RSA_set0_key(r: PRSA; n: PBIGNUM; e: PBIGNUM; d: PBIGNUM): integer;
+begin
+  result := libcrypto.RSA_set0_key(r, n, e, d);
 end;
 
 function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer;
@@ -5769,6 +5813,11 @@ begin
   result := libcrypto.EVP_PKEY_keygen(ctx, ppkey);
 end;
 
+function EVP_PKEY_assign(pkey: PEVP_PKEY; typ: integer; key: pointer): integer;
+begin
+  result := libcrypto.EVP_PKEY_assign(pkey, typ, key);
+end;
+
 function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer;
 begin
@@ -5794,7 +5843,7 @@ begin
 end;
 
 
-function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
+function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer;
 begin
   if Assigned(libcrypto.EVP_PKEY_CTX_set_scrypt_N) then
     result := libcrypto.EVP_PKEY_CTX_set_scrypt_N(ctx, n)
@@ -5802,7 +5851,7 @@ begin
     result := 0; // defined as macro in deprecated openssl 1.1
 end;
 
-function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
+function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer;
 begin
   if Assigned(libcrypto.EVP_PKEY_CTX_set_scrypt_r) then
     result := libcrypto.EVP_PKEY_CTX_set_scrypt_r(ctx, r)
@@ -5810,7 +5859,7 @@ begin
     result := 0; // defined as macro in deprecated openssl 1.1
 end;
 
-function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
+function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer;
 begin
   if Assigned(libcrypto.EVP_PKEY_CTX_set_scrypt_p) then
     result := libcrypto.EVP_PKEY_CTX_set_scrypt_p(ctx, p)
@@ -5926,24 +5975,24 @@ begin
   result := libcrypto.X509_print(bp, x);
 end;
 
-function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer;
 begin
   result := libcrypto.EVP_PKEY_decrypt_init(ctx);
 end;
 
 function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
-  input: PByte; inputLen: PtrUInt): integer; cdecl;
+  input: PByte; inputLen: PtrUInt): integer;
 begin
   result := libcrypto.EVP_PKEY_decrypt(ctx, output, outlen, input, inputLen);
 end;
 
-function EVP_PKEY_encrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+function EVP_PKEY_encrypt_init(ctx: PEVP_PKEY_CTX): integer;
 begin
   result := libcrypto.EVP_PKEY_encrypt_init(ctx);
 end;
 
 function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
-  input: PByte; inputLen: PtrUInt): integer; cdecl;
+  input: PByte; inputLen: PtrUInt): integer;
 begin
   result := libcrypto.EVP_PKEY_encrypt(ctx, output, outlen, input, inputLen);
 end;
@@ -6343,6 +6392,9 @@ procedure ERR_remove_thread_state(p1: pointer); cdecl;
 
 function ERR_load_BIO_strings(): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_load_BIO_strings';
+
+function EVP_PKEY_new(): PEVP_PKEY; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_new';
 
 function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
@@ -7079,6 +7131,12 @@ function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer; cmd: integer;
   p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_pkey_ctx_ctrl';
 
+function RSA_new(): PRSA; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_new';
+
+procedure RSA_free(r: PRSA); cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_free';
+
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PrivateKey_bio';
 
@@ -7194,9 +7252,6 @@ function EVP_sha256: PEVP_MD; cdecl;
 function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new_by_curve_name';
 
-function EC_KEY_new(): PEC_KEY; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_new';
-
 function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_set_group';
 
@@ -7245,6 +7300,9 @@ function EC_POINT_hex2point(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT;
   p4: PBN_CTX): PEC_POINT; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_hex2point';
 
+function EC_POINT_set_affine_coordinates(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; ctx: PBN_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_set_affine_coordinates';
+
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key';
 
@@ -7263,6 +7321,9 @@ procedure BN_free(a: PBIGNUM); cdecl;
 
 function BN_num_bits(a: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_num_bits';
+
+function EC_KEY_new(): PEC_KEY; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_new';
 
 procedure EC_KEY_free(key: PEC_KEY); cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_free';
@@ -7291,6 +7352,9 @@ function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
 
 procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
   external LIB_CRYPTO name _PU + 'RSA_get0_key';
+
+function RSA_set0_key(r: PRSA; n: PBIGNUM; e: PBIGNUM; d: PBIGNUM): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_set0_key';
 
 function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_add_extensions';
@@ -7337,6 +7401,9 @@ function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 
 function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen';
+
+function EVP_PKEY_assign(pkey: PEVP_PKEY; typ: integer; key: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_assign';
 
 function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
@@ -10444,9 +10511,19 @@ end;
 
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 begin
-  result := RSA_pkey_ctx_ctrl(ctx,
+  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}RSA_pkey_ctx_ctrl(ctx,
     EVP_PKEY_OP_TYPE_SIG or EVP_PKEY_OP_TYPE_CRYPT,
     EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
+end;
+
+function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
+begin
+  result := EVP_PKEY_assign(pkey, EVP_PKEY_RSA, rsa);
+end;
+
+function EVP_PKEY_assign_EC_KEY(pkey: PEVP_PKEY; ec: PEC_KEY): integer;
+begin
+  result := EVP_PKEY_assign(pkey, EVP_PKEY_EC, ec);
 end;
 
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;

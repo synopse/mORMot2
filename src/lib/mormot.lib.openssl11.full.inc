@@ -14419,9 +14419,6 @@ function EVP_PKEY_set1_engine(pkey: PEVP_PKEY; e: PENGINE): integer; cdecl;
 function EVP_PKEY_get0_engine(pkey: PEVP_PKEY): PENGINE; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_get0_engine';
 
-function EVP_PKEY_assign(pkey: PEVP_PKEY; typ: integer; key: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_assign';
-
 function EVP_PKEY_get0(pkey: PEVP_PKEY): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_get0';
 
@@ -14463,9 +14460,6 @@ function EVP_PKEY_set1_EC_KEY(pkey: PEVP_PKEY; key: Pec_key_st): integer; cdecl;
 
 function EVP_PKEY_get1_EC_KEY(pkey: PEVP_PKEY): Pec_key_st; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_get1_EC_KEY';
-
-function EVP_PKEY_new(): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_new';
 
 function EVP_PKEY_up_ref(pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_up_ref';
@@ -15098,9 +15092,6 @@ function EC_POINT_set_Jprojective_coordinates_GFp(group: PEC_GROUP; p: PEC_POINT
 function EC_POINT_get_Jprojective_coordinates_GFp(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; z: PBIGNUM; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_get_Jprojective_coordinates_GFp';
 
-function EC_POINT_set_affine_coordinates(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; ctx: PBN_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_set_affine_coordinates';
-
 function EC_POINT_get_affine_coordinates(group: PEC_GROUP; p: PEC_POINT; x: PBIGNUM; y: PBIGNUM; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_get_affine_coordinates';
 
@@ -15425,9 +15416,6 @@ function RSA_size(rsa: PRSA): integer; cdecl;
 function RSA_security_bits(rsa: PRSA): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_security_bits';
 
-function RSA_set0_key(r: PRSA; n: PBIGNUM; e: PBIGNUM; d: PBIGNUM): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_set0_key';
-
 function RSA_set0_factors(r: PRSA; p: PBIGNUM; q: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_set0_factors';
 
@@ -15514,9 +15502,6 @@ function RSA_check_key(p1: PRSA): integer; cdecl;
 
 function RSA_check_key_ex(p1: PRSA; cb: PBN_GENCB): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_check_key_ex';
-
-procedure RSA_free(r: PRSA); cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_free';
 
 function RSA_up_ref(r: PRSA): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_up_ref';
