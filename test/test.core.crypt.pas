@@ -1058,6 +1058,21 @@ const
     'XitCD/FEdhbjFbWKibrku9c/P7HNz7oqMx2QkhGa+asefQNnwFv+Nqac9rTCP7ld'#13#10 +
     'ewIDAQAB'#13#10 +
     '-----END PUBLIC KEY-----'#13#10;
+  _rsajwk = // _rsapub converted as JWK
+    '{'#10 +
+    '  "kty": "RSA",'#10 +
+    '  "n": "tQ4_dhzEXlDpj71dwF3Tt1Sx_COvd6Y8R4kxgcLblmdt3BCmGAYgNS2yf0O' +
+       'RcGKse-wYLG-BV8rIT2zRPbrIXfEJmnjlnsQ635n9bMpfhFIyr9pE4w5y5ZUAzJS' +
+       'twYmudykFAfA7_1BWqD-uE3z5PqfnmZHEbYNHeBGt0vIRSfQQXXxj-wnpaQ-_GTY' +
+       'Qr5OHynyJS8esD9dpKfsExc7rBx4VH1tCx1SH9yVAMHts0674HjnnyFyveoXOajN' +
+       '1gxn4_iN1lfWZzzoWqyVvKWZ5XitCD_FEdhbjFbWKibrku9c_P7HNz7oqMx2QkhG' +
+       'a-asefQNnwFv-Nqac9rTCP7ldew",'#10 +
+    '  "e": "AQAB",'#10 +
+    '  "ext": true,'#10 +
+    '  "kid": "ccc3cb966a0e09297918052b374e",'#10 +
+    '  "alg": "RS256",'#10 +
+    '  "use": "sig"'#10 +
+    '}'#10;
 
 procedure TTestCoreCrypto._JWT;
 
@@ -4759,7 +4774,7 @@ var
   rnd: HalfUInt; // truncated to 16-bit or 32-bit value
   a, b, s, d, e, m, v: PBigInt;
   cu, pem, txt: RawUtf8;
-  bin, hash, signed, encrypted: RawByteString;
+  bin, pub, hash, signed, encrypted: RawByteString;
   pub1, pub2: TRsaPublicKey;
   pri1, pri2: TRsaPrivateKey;
   timer: TPrecisionTimer;
@@ -5160,6 +5175,7 @@ begin
   finally
     c.Free;
   end;
+  pub := PemToDer(_rsapub);
   c := TRsa.Create;
   try
     Check(c.LoadFromPublicKeyPem(_rsapub));
@@ -5168,13 +5184,25 @@ begin
     CheckEqual(c.E.ToText, '65537');
     CheckEqual(BigIntToText(c.E.Save), '65537');
     CheckEqual(c.M.ToText, txt);
-    Check(c.SavePublicKeyDer = PemToDer(_rsapub));
+    Check(c.SavePublicKeyDer = pub);
     Check(c.SavePrivateKeyDer = '');
     timer.Start;
     for i := 1 to 100 do
       Check(c.Verify(pointer(hash), hfSHA256, bin), 'verifloop');
     NotifyTestSpeed('RS256 verify', 100, 0, @timer);
     CheckEqualHex(hash, _hash);
+  finally
+    c.Free;
+  end;
+  c := TRsa.Create;
+  try
+    Check(c.LoadFromPublicKeyJwk(_rsajwk));
+    Check(c.HasPublicKey);
+    Check(not c.HasPrivateKey);
+    CheckEqual(c.E.ToText, '65537');
+    CheckEqual(c.M.ToText, txt);
+    Check(c.SavePublicKeyDer = pub);
+    Check(c.SavePrivateKeyDer = '');
   finally
     c.Free;
   end;
