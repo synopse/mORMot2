@@ -2204,8 +2204,8 @@ type
   ICryptPublicKey = interface
     /// unserialize a public key content
     // - this instance should be void, i.e. just created with no prior Load
-    // - will first try from X.509 SubjectPublicKey raw binary, then the main
-    // known PEM or DER usual serialization formats
+    // - will first try the main PEM or DER usual serialization formats, then
+    // from X.509 SubjectPublicKey raw binary, then as JWK format (RSA/EC)
     function Load(Algorithm: TCryptKeyAlgo;
       const PublicKeySaved: RawByteString): boolean;
     /// verify the RSA or ECC signature of a memory buffer

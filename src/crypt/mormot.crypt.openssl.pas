@@ -2214,9 +2214,11 @@ begin
      (PublicKeySaved = '') or
      (fPubKey <> nil) then
     exit;
-  fPubKey := LoadPublicKey(X509PubKeyToDer(Algorithm, PublicKeySaved));
+  fPubKey := LoadPublicKey(X509PubKeyToDer(Algorithm, PublicKeySaved)); // DER/PEM
   if fPubKey = nil then
     fPubKey := LoadPublicKey(PublicKeySaved); // try full PKCS format
+  if fPubKey = nil then
+    fPubKey := OpenSslLoadPublicKeyFromJwk(PublicKeySaved, Algorithm); // JWK
   if fPubKey = nil then
     exit;
   fKeyAlgo := Algorithm;
