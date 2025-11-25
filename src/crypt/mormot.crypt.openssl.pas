@@ -466,6 +466,11 @@ function OpenSslLoadPublicKeyFromParams(EvpType, BitsOrCurve: integer;
 function OpenSslLoadPublicKeyFromParams(algo: TCryptKeyAlgo;
   const x, y: RawByteString): PEVP_PKEY; overload;
 
+/// load a RSA or ECC public key from JWK JSON content
+// - caller should make result.Free once done with the result
+// - if algo is ckaNone, the proper algorithm will be guessed from "kty" (+"crv")
+function OpenSslLoadPublicKeyFromJwk(const jwk: RawUtf8; algo: TCryptKeyAlgo = ckaNone): PEVP_PKEY;
+
 {
 /// compute the (e.g. ECDH) shared secret from a public/private keys inverted pair
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
@@ -1612,11 +1617,86 @@ begin
   end;
 end;
 
-function OpenSslLoadPublicKeyFromParams(algo: TCryptAsymAlgo;
+const
+  CKA_EVPTYPE: array[TCryptKeyAlgo] of integer = (
+    0,                  // ckaNone
+    EVP_PKEY_RSA,       // ckaRsa
+    EVP_PKEY_RSA_PSS,   // ckaRsaPss
+    EVP_PKEY_EC,        // ckaEcc256
+    EVP_PKEY_EC,        // ckaEcc384
+    EVP_PKEY_EC,        // ckaEcc512
+    EVP_PKEY_EC,        // ckaEcc256k
+    EVP_PKEY_ED25519);  // ckaEdDSA
+
+  CKA_BITSORCURVE: array[TCryptKeyAlgo] of integer = (
+    0,                            // ckaNone
+    RSA_DEFAULT_GENERATION_BITS,  // ckaRsa
+    RSA_DEFAULT_GENERATION_BITS,  // ckaRsaPss
+    NID_X9_62_prime256v1,         // ckaEcc256
+    NID_secp384r1,                // ckaEcc384
+    NID_secp521r1,                // ckaEcc512
+    NID_secp256k1,                // ckaEcc256k
+    0);                           // ckaEdDSA
+
+  CKA_JWK: array[ckaEcc256 .. ckaEcc256k] of RawUtf8 = (
+    'P-256',      // ckaEcc256
+    'P-384',      // ckaEcc384
+    'P-521',      // ckaEcc512
+    'secp256k1'); // ckaEcc256k
+    // 'Ed25519');  // ckaEdDSA is not yet supported nor tested
+
+function OpenSslLoadPublicKeyFromParams(algo: TCryptKeyAlgo;
   const x, y: RawByteString): PEVP_PKEY;
 begin
   result := OpenSslLoadPublicKeyFromParams(
-    CAA_EVPTYPE[algo], CAA_BITSORCURVE[algo], x, y);
+    CKA_EVPTYPE[algo], CKA_BITSORCURVE[algo], x, y);
+end;
+
+function OpenSslLoadPublicKeyFromJwk(const jwk: RawUtf8; algo: TCryptKeyAlgo): PEVP_PKEY;
+var
+  v: TDocVariantData;
+  kty, crv, x, y: RawUtf8;
+  bx, by: RawByteString;
+  i: PtrInt;
+  a: TCryptKeyAlgo;
+begin
+  result := nil;
+  if not v.InitJson(jwk, JSON_FAST) or
+     not v.GetAsRawUtf8('kty', kty) then
+    exit;
+  if kty = 'RSA' then
+  begin
+    if algo = ckaNone then
+      algo := ckaRsa // ckaRsaPss is ignored below anyway
+    else if not (algo in CKA_RSA) then
+      exit;
+    if not v.GetAsRawUtf8('e', x) or   // x = Exponent (e)
+       not v.GetAsRawUtf8('n', y) then // y = Modulus (n)
+      exit;
+  end else if kty = 'EC' then
+  begin
+    if not v.GetAsRawUtf8('crv', crv) or
+       (crv = '') or
+       not v.GetAsRawUtf8('x', x) or
+       not v.GetAsRawUtf8('y', y) then
+      exit;
+    i := FindRawUtf8(CKA_JWK, crv);
+    if i < 0 then
+      exit;
+    a := TCryptKeyAlgo(i + ord(low(CKA_JWK)));
+    if algo = ckaNone then
+      algo := a
+    else if algo <> a then
+      exit;
+  end
+  else
+    exit;
+  if (x = '') or
+     (y = '') or
+     not Base64uriToBin(pointer(x), length(x), bx) or
+     not Base64uriToBin(pointer(y), length(y), by) then
+    exit;
+  result := OpenSslLoadPublicKeyFromParams(algo, bx, by);
 end;
 
 {
