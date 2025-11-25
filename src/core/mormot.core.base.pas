@@ -530,7 +530,12 @@ type
   {$M+}
   /// a parent Exception class with RTTI generated for its published properties
   // - not as good as ESynException, but could be used without mormot.core.text
-  ExceptionWithProps = class(Exception);
+  ExceptionWithProps = class(Exception)
+  public
+    /// wrapper to raise CreateFmt() with optional leading 'ClassName.' text
+    class procedure RaiseFmt(caller: TObject; const Fmt: string;
+      const Args: array of const);
+  end;
 
   /// a parent TObject class with a virtual constructor and RTTI generated
   // for its published properties
@@ -5830,6 +5835,20 @@ begin
   until false;
 end;
 
+
+{ ExceptionWithProps }
+
+class procedure ExceptionWithProps.RaiseFmt(caller: TObject;
+  const Fmt: string; const Args: array of const);
+var
+  txt: string;
+begin
+  if caller <> nil then
+    txt := string(caller.ClassName) + '.';
+  raise Create(txt + Format(Fmt, Args))
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} at ReturnAddress {$endif}
+end;
 
 { TSynPersistent}
 
