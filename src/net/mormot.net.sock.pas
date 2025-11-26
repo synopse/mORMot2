@@ -347,7 +347,8 @@ type
     /// check if the socket is not closed nor broken
     // - i.e. check if it is likely to be accept Send() and Recv() calls
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
-    function Available(loerr: system.PInteger = nil): boolean;
+    // - set nowait=true to avoid WaitFor() and just call Recv(MSG_PEEK)
+    function Available(loerr: system.PInteger = nil; nowait: boolean = false): boolean;
     /// call shutdown() on this socket - may be used to simulate a disconnection
     procedure RawShutdown;
     /// finalize a socket, calling Close after shutdown() if needed
@@ -3448,13 +3449,18 @@ begin
   result := nrClosed;
 end;
 
-function TNetSocketWrap.Available(loerr: system.PInteger): boolean;
+function TNetSocketWrap.Available(loerr: system.PInteger; nowait: boolean): boolean;
 var
   events: TNetEvents;
   dummy: integer;
 begin
   result := true;
-  events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
+  if loerr <> nil then
+    loerr^ := 0;
+  if nowait then
+    events := [neRead] // just MSG_PEEK
+  else
+    events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
   if events = [] then
     exit; // the socket seems stable with no pending input
   if neRead in events then
