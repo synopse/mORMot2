@@ -3196,7 +3196,7 @@ begin
           not SockIsDefined then
     DoRetry('connection closed (keepalive timeout or max)', [])
   else if not fSock.Available(@loerr) then
-    DoRetry('connection broken (socketerror=%)', [loerr])
+    DoRetry('connection broken (socketerror=%)', [NetErrorText(loerr)])
   else if not SockConnected then
     DoRetry('getpeername() failed', [])
   else
@@ -3269,7 +3269,7 @@ begin
       else // cspSocketError, cspSocketClosed
         begin
           DoRetry('% % waiting %ms for headers',
-            [ToText(pending)^, CardinalToHexShort(loerr), TimeOut]);
+            [ToText(pending)^, NetErrorText(loerr), TimeOut]);
           exit;
         end;
       end;
