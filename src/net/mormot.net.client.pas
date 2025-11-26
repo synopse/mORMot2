@@ -3219,7 +3219,7 @@ begin
       if ctxt.Header <> '' then
         SockSendHeaders(ctxt.Header); // normalizing CRLF
       if Http.CompressList <> nil then
-        SockSendHeaders(Http.CompressList^.AcceptEncoding);
+        SockSendHeaders(Http.CompressList^.AcceptEncodingClient); // advertise
       SockSendCRLF;
       // flush headers and Data/InStream body
       SockSendFlush(dat);
@@ -4428,8 +4428,8 @@ begin
       if comp <> nil then
         InternalAddHeader(Join(['Content-Encoding: ', comp^.Name]));
     end;
-    if fCompressList.AcceptEncoding <> '' then
-      InternalAddHeader(fCompressList.AcceptEncoding);
+    if fCompressList.AcceptEncodingClient <> '' then
+      InternalAddHeader(fCompressList.AcceptEncodingClient);
     upload:= IsPost(method) or IsPut(method);
     // send request to remote server
     if Assigned(fOnUpload) and
