@@ -5777,7 +5777,9 @@ procedure TCrtSocket.DoRaise(const msg: string; const args: array of const;
 begin
   if exc = nil then
     exc := ENetSock;
-  raise exc.Create(msg, self, args, error, errnumber);
+  raise exc.Create(msg, self, args, error, errnumber)
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} at ReturnAddress {$endif}
 end;
 
 procedure TCrtSocket.DoRaise(const msg: string);
