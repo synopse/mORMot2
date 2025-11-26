@@ -4826,8 +4826,8 @@ begin
   end;
   // state = hrsResponseDone: whole headers (+ body) outgoing content were sent
   if acoVerboseLog in fOwner.fOptions then
-    fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
-      [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
+    fOwner.DoLog(sllTrace, 'AfterWrite Done=% ContentLength=% Wr=% Flags=%',
+      [fRespStatus, fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
   if hfConnectionClose in fHttp.HeaderFlags then
     exit; // return soClose
   // kept alive connection -> reset the HTTP parser and continue
@@ -5605,6 +5605,8 @@ begin // this method is protected by fSafe.Lock
       client.Options^.TLS.IgnoreCertificateErrors := true;
     if Assigned(fSettings.OnRemoteClient) then
       fSettings.OnRemoteClient(self, uri, client.Options^.TLS);
+    if psoLogVerbose in fOwner.fSettings.Server.Options then
+      client.OnLog := TSynLog.DoLog;
   end;
   keepalive := fSettings.HttpKeepAlive * MilliSecsPerSec;
   // always first try with a clean HEAD request
