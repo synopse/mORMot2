@@ -1599,6 +1599,7 @@ type
     fHttps: THttpRequest;
     fOnlyUseClientSocket: boolean;
     {$endif USEHTTPREQUEST}
+    fOnLog: TSynLogProc;
   public
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
@@ -1613,6 +1614,9 @@ type
     /// low-level connection point of this instance, using an TUri as input
     // - rather use the Connected() more usable method
     procedure RawConnect(const Server: TUri); override;
+    /// optional verbose log output, transmitted to THttpClientSocket
+    property OnLog: TSynLogProc
+      read fOnLog write fOnLog;
     // IHttpClient methods
     procedure Close; override;
     function Options: PHttpRequestExtendedOptions; override;
@@ -5446,6 +5450,8 @@ begin
        (fHttps.Server <> Server.Server) or
        (fHttps.Port <> Server.PortInt) then
     begin
+      if Assigned(fOnLog) then
+        fOnLog(sllDebug, 'RawConnect(%:%)', [Server.Server, Server.Port], self);
       Close; // need a new https connection
       fHttps := MainHttpClass.Create(Server, @fConnectOptions); // connect
     end;
@@ -5458,8 +5464,11 @@ begin
      (fHttp.Port <> Server.Port) or
      not fHttp.SockConnected then
   begin
+    if Assigned(fOnLog) then
+      fOnLog(sllDebug, 'RawConnect(%:%)', [Server.Server, Server.Port], self);
     Close;
-    fHttp := THttpClientSocket.OpenOptions(Server, fConnectOptions); // connect
+    fHttp := THttpClientSocket.OpenOptions(
+      Server, fConnectOptions, fOnLog); // connect
     include(fHttp.Http.Options, hroHeadersUnfiltered); // least astonishment
   end;
 end;
