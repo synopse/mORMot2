@@ -3247,7 +3247,14 @@ begin
         cspDataAvailable:
           ; // ok
         cspDataAvailableOnClosedSocket:
-          include(Http.HeaderFlags, hfConnectionClose); // socket is closed
+          begin
+            include(Http.HeaderFlags, hfConnectionClose); // socket is closed
+            if not Sock.Available(@loerr, {nowait=}true) then // on Windows
+            begin
+              DoRetry('Closed FIN/RST during headers', [NetErrorText(loerr)]);
+              exit;
+            end;
+          end;
         cspNoData:
           if SockConnected then // getpeername()=nrOK
           begin
