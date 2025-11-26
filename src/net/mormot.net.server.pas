@@ -3564,7 +3564,7 @@ begin
   begin
     Ctxt.OutContent := fFavIcon;
     Ctxt.OutContentType := 'image/x-icon';
-    Ctxt.OutCustomHeaders := 'Etag: "ok"';
+    Ctxt.OutCustomHeaders := 'Etag: "ok"'#13#10'Cache-Control: max-age=604800';
     result := HTTP_SUCCESS;
   end;
 end;
