@@ -402,6 +402,9 @@ function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
 /// internal low-level function using known operating system error
 function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
 
+/// just a wrapper around ToText(NetErrorFromSystem(SystemError)) + SystemError
+function NetErrorText(SystemError: integer): TShort47;
+
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
@@ -2331,6 +2334,15 @@ begin
   end;
 end;
 
+function NetErrorText(SystemError: integer): TShort47;
+begin
+  result := _NR[NetErrorFromSystem(SystemError, NO_ERROR)];
+  if SystemError = NO_ERROR then
+    exit;
+  AppendShortChar(' ', @result);
+  AppendShortCardinal(SystemError, result);
+end;
+
 function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
 var
   err: integer;
@@ -2343,11 +2355,9 @@ end;
 
 function NetLastErrorMsg(AnotherNonFatal: integer): ShortString;
 var
-  nr: TNetResult;
   err: integer;
 begin
-  nr := NetLastError(AnotherNonFatal, @err);
-  result := _NR[nr];
+  result := _NR[NetLastError(AnotherNonFatal, @err)];
   if err <> 0 then
     OsErrorAppend(err, result, ' ');
 end;
