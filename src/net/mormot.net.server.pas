@@ -8313,8 +8313,6 @@ var // lots of local variable so that this method is thread-safe
     // associate response headers
     resp^.SetHeaders(pointer(ctxt.OutCustomHeaders),
       heads, hsoNoXPoweredHeader in fOptions);
-    if fCompressList.AcceptEncoding <> '' then
-      resp^.AddCustomHeader(pointer(fCompressList.AcceptEncoding), heads, false);
     if ctxt.OutContentType = STATICFILE_CONTENT_TYPE then
     begin
       // response is file -> OutContent is UTF-8 file name to be served
