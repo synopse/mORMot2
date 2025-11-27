@@ -219,10 +219,14 @@ type
   PPollAsyncConnections = ^TPollAsyncConnections;
 
   /// possible options for low-level TPollAsyncSockets process
-  // - as translated from homonymous high-level acoWritePollOnly
-  // TAsyncConnectionsOptions item
+  // - as translated from homonymous high-level acoWritePollOnly/acoWriteNoLoop
+  // TAsyncConnectionsOptions items
+  // - paoWritePollOnly will delay TPollAsyncSockets.Write() sending to the
+  // poll/epoll/iocp subscription pool
+  // - paoWriteNoLoop will disable socket send() loop until short-write occurs
   TPollAsyncSocketsOptions = set of (
-    paoWritePollOnly
+    paoWritePollOnly,
+    paoWriteNoLoop
   );
 
   /// callback prototype for TPollAsyncSockets.OnStart events
@@ -528,7 +532,8 @@ type
   // unless acoOnErrorContinue is defined
   // - acoNoLogRead and acoNoLogWrite could reduce the log verbosity
   // - acoVerboseLog will log transmitted frames content, for debugging purposes
-  // - acoWritePollOnly will be translated into paoWritePollOnly on server
+  // - acoWritePollOnly and acoWriteNoLoop will be translated into
+  // paoWritePollOnly/paoWriteNoLoop raw async TPollAsyncSockets options
   // - acoDebugReadWriteLog would make low-level send/receive logging
   // - acoNoConnectionTrack would force to by-pass the internal Connections list
   // if it is not needed - not used by now
@@ -554,7 +559,8 @@ type
     acoThreadCpuAffinity,
     acoThreadSocketAffinity,
     acoReusePort,
-    acoThreadSmooting
+    acoThreadSmooting,
+    acoWriteNoLoop
   );
 
   /// dynamic array of TAsyncConnectionsThread instances
@@ -2392,7 +2398,8 @@ begin
           break; // still some data in the output buffer - subscribe for writes
         sent := 0;
         res := DoAfterWrite('ProcessWrite', connection); // refill fWr
-      until (res <> soContinue) or
+      until (paoWriteNoLoop in fOptions) or
+            (res <> soContinue) or
             (connection.fWr.Len = 0);
       {$ifdef USE_WINIOCP}
       if res = soContinue then
@@ -2822,6 +2829,8 @@ begin
   opt := [];
   if acoWritePollOnly in aOptions then
     include(opt, paoWritePollOnly);
+  if acoWriteNoLoop in aOptions then
+    include(opt, paoWriteNoLoop);
   fSockets := TAsyncConnectionsSockets.Create(opt, aThreadPoolCount);
   fSockets.fOwner := self;
   fSockets.OnStart := ProcessClientStart;
