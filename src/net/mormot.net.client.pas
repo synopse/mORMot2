@@ -3249,7 +3249,7 @@ begin
         cspDataAvailableOnClosedSocket:
           begin
             include(Http.HeaderFlags, hfConnectionClose); // socket is closed
-            if not Sock.Available(@loerr, {nowait=}true) then // on Windows
+            if not Sock.Available(@loerr, {nowait=}true) then // e.g. on Windows
             begin
               DoRetry('Closed FIN/RST during headers', [NetErrorText(loerr)]);
               exit;

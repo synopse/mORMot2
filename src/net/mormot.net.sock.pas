@@ -2340,7 +2340,13 @@ begin
   if SystemError = NO_ERROR then
     exit;
   AppendShortChar(' ', @result);
+  {$ifdef OSWINDOWS}
+  if SystemError < 0 then
+    AppendShortIntHex(SystemError, result)
+  else
+  {$else}
   AppendShortCardinal(SystemError, result);
+  {$endif OSWINDOWS}
 end;
 
 function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;

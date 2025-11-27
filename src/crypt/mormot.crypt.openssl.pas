@@ -1639,10 +1639,10 @@ const
     0);                           // ckaEdDSA
 
   CKA_JWK: array[ckaEcc256 .. ckaEcc256k] of RawUtf8 = (
-    'P-256',      // ckaEcc256
-    'P-384',      // ckaEcc384
-    'P-521',      // ckaEcc512
-    'secp256k1'); // ckaEcc256k
+    'P-256',        // ckaEcc256
+    'P-384',        // ckaEcc384
+    'P-521',        // ckaEcc512
+    'secp256k1');   // ckaEcc256k
     // 'Ed25519');  // ckaEdDSA is not yet supported nor tested
 
 function OpenSslLoadPublicKeyFromParams(algo: TCryptKeyAlgo;
