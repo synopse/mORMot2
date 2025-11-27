@@ -5111,7 +5111,8 @@ end;
 
 procedure TAesSignature.Init;
 begin // AES-256 is 40% slower but twice stronger against Quantum attacks
-  fEngine.EncryptInitRandom; // AES-128 or AES-256 if HW AES
+  fEngine.EncryptInitRandom;           // random AES-128 key (AES-256 if HW AES)
+  Random128(@TAesContext(fEngine).iv); // another random source to obfuscate
 end;
 
 procedure TAesSignature.Generate(aValue: cardinal; aSignature: PHash128Rec);
@@ -5123,7 +5124,7 @@ begin // 32-bit lower = masked session, 96-bit upper = digital signature
     ESynCrypto.RaiseU('Unexpected TAesSignature.Generate(0)');
   aValue := aValue xor aes.iv.c0; // masked/obfuscated session ID
   aSignature^.c0 := aValue;
-  aSignature^.c1 := aes.iv.c1;    // aes.iv is a transient hidden CSPRNG secret
+  aSignature^.c1 := aes.iv.c1;    // aes.iv is a transient hidden secret
   aSignature^.H  := aes.iv.H;
   aes.DoBlock(aes, aSignature^, aSignature^); // fast and thread-safe
   aSignature^.c0 := aValue;
