@@ -3005,6 +3005,7 @@ begin
                     ValidateCookie(Call^.LowLevelBearerToken); // safe and fast
       if bearerid = 0 then
       begin
+        // reject ASAP in case of missing or invalid bearer (no RetrieveSession)
         if Assigned(fLog) and
            (sllUserAuth in Server.fLogLevel) then
           fLog.Log(sllUserAuth, 'Authenticate: invalid bearer=%',

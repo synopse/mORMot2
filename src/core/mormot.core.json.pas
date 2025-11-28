@@ -6469,31 +6469,31 @@ var
   start: PUtf8Char;
 begin
   if Format <> nil then
-  repeat
-    start := Format;
     repeat
-      if (Format^ = #0) or
-         (Format^ = '%') then
-        break;
+      start := Format;
+      repeat
+        if (Format^ = #0) or
+           (Format^ = '%') then
+          break;
+        inc(Format);
+      until false;
+      AddNoJsonEscape(start, Format - start);
+      if Format^ = #0 then
+        exit;
+      // add next value as text instead of Format^='%' placeholder
       inc(Format);
+      if ValuesCount <= 0 then
+        continue; // missing value will display nothing
+      if (Escape = twNone) or
+         (byte(Values^.VType) in vtNotString) then
+        AddVarRec(Values)
+      else
+        AddVarRec(Values, Escape, WriteObjectOptions);
+      if Format^ = #0 then
+        exit;
+      inc(Values);
+      dec(ValuesCount);
     until false;
-    AddNoJsonEscape(start, Format - start);
-    if Format^ = #0 then
-      exit;
-    // add next value as text instead of Format^='%' placeholder
-    inc(Format);
-    if ValuesCount <= 0 then
-      continue; // missing value will display nothing
-    if (Escape = twNone) or
-       (byte(Values^.VType) in vtNotString) then
-      AddVarRec(Values)
-    else
-      AddVarRec(Values, Escape, WriteObjectOptions);
-    if Format^ = #0 then
-      exit;
-    inc(Values);
-    dec(ValuesCount);
-  until false;
 end;
 
 procedure TJsonWriter.AddCsvUtf8(const Values: array of RawUtf8);
