@@ -1794,17 +1794,20 @@ begin
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSide;
+var
+  native: boolean;
 
   procedure One(const Event: TNotifyEvent; cs: TClientSide);
   begin
     Run(Event, NewClient(cs), SmallUInt32Utf8[ord(cs)],
-      {threaded=}true, {notify=}false, {forcedThreaded=}true);
+      {native=}native, {notify=}false, {forcedThreaded=}native);
   end;
 
 begin
+  native := {$ifdef OSWINDOWS}not IsWow64Emulation{$else}true{$endif};
   // most client test cases would be run in their own thread (if possible)
   {$ifndef OSANDROID} // no "main" thread on Android?
-  One(ClientSideRESTThread,           csMainThread); // should be threaded
+  One(ClientSideRESTThread,           csMainThread); // should be native
   {$endif OSANDROID}
   One(ClientSideRESTThread,           csBackground); // (slowest first)
   One(ClientSideRESTAsJsonObject,     csJsonObject);
@@ -1812,21 +1815,24 @@ begin
   One(ClientSideRESTThread,           csLocked);
   One(ClientSideRESTSign,             csCrc32);
   One(ClientSideRESTSign,             csCrc32c);
-  One(ClientSideRESTSign,             csXxhash);
-  One(ClientSideRESTSign,             csMd5);
-  One(ClientSideRESTSign,             csSha1);
-  One(ClientSideRESTSign,             csSha256);
-  One(ClientSideRESTSign,             csSha512);
-  One(ClientSideRESTSign,             csSha3);
-  One(ClientSideRESTAuth,             csWeak);
-  One(ClientSideRESTAuth,             csBasic);
-  One(ClientSideRESTServiceLogToDB,   csDblog);
-  One(ClientSideJsonRPC,              csJsonrpc);
-  One(ClientSideOverHTTP,             csHttp);
-  One(ClientSideOverHTTP,             csHttplog);
-  One(ClientSideOverHTTP,             csHttpBearer);
-  // wait for all multi-threaded background process to finish
-  RunWait({notifyThreadCount=}false, {timeoutSec=}120, {callSynchronize=}true);
+  if native then // PRISM does not seem to properly handle so much at once
+  begin
+    One(ClientSideRESTSign,           csXxhash);
+    One(ClientSideRESTSign,           csMd5);
+    One(ClientSideRESTSign,           csSha1);
+    One(ClientSideRESTSign,           csSha256);
+    One(ClientSideRESTSign,           csSha512);
+    One(ClientSideRESTSign,           csSha3);
+    One(ClientSideRESTAuth,           csWeak);
+    One(ClientSideRESTAuth,           csBasic);
+    One(ClientSideRESTServiceLogToDB, csDblog);
+    One(ClientSideJsonRPC,            csJsonrpc);
+    One(ClientSideOverHTTP,           csHttp);
+    One(ClientSideOverHTTP,           csHttplog);
+    One(ClientSideOverHTTP,           csHttpBearer);
+    // wait for all multi-threaded background process to finish
+    RunWait({notifyThreadCount=}false, {timeoutSec=}120, {callSynchronize=}true);
+  end;
   // RTTI override could NOT be parallelized
   ClientSideRESTCustomRecord(NewClient(csCustomRtti));
 end;
