@@ -3735,6 +3735,10 @@ function DocDictCopy(const v: variant): IDocDict; overload;
 function DocDictCopy(const dv: TDocVariantData;
   model: TDocVariantModel): IDocDict; overload;
 
+/// create a self-owned IDocDict/IDocList from a JSON object/array content
+// - if json is something else than an object or array, returns nil
+function DocAny(const json: RawUtf8; model: TDocVariantModel): IDocAny;
+
 var
   /// default TDocVariant model for IDocList/IDocDict
   DocAnyDefaultModel: TDocVariantModel = mFastFloat;
@@ -11611,6 +11615,22 @@ begin
   for i := 0 to high(keys) do
     d.fValue^.AddOrUpdateValue(keys[i], value);
   result := d;
+end;
+
+{ IDocAny factories functions }
+
+function DocAny(const json: RawUtf8; model: TDocVariantModel): IDocAny;
+begin
+  result := nil;
+  case GetFirstJsonToken(pointer(json)) of
+    jtObjectStart:
+      result := DocDict(model);
+    jtArrayStart:
+      result := DocList(model);
+  else
+    exit;
+  end;
+  result.SetJson(json);
 end;
 
 
