@@ -11621,16 +11621,14 @@ end;
 
 function DocAny(const json: RawUtf8; model: TDocVariantModel): IDocAny;
 begin
-  result := nil;
   case GetFirstJsonToken(pointer(json)) of
     jtObjectStart:
-      result := DocDict(model);
+      result := DocDict(json, model);
     jtArrayStart:
-      result := DocList(model);
+      result := DocList(json, model);
   else
-    exit;
+    result := nil;
   end;
-  result.SetJson(json);
 end;
 
 
