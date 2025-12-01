@@ -766,10 +766,13 @@ begin
       DoTest(TSqlDBSocketConnectionProperties.Create(
         ADDR, 'root', 'user', 'pass'), 'socket');
       {$ifdef USEWININET}
-      DoTest(TSqlDBWinHTTPConnectionProperties.Create(
-        ADDR, 'root', 'user', 'pass'), 'winhttp');
-      DoTest(TSqlDBWinINetConnectionProperties.Create(
-        ADDR, 'root', 'user', 'pass'), 'wininet');
+      if not IsWow64Emulation then
+      begin
+        DoTest(TSqlDBWinHTTPConnectionProperties.Create(
+          ADDR, 'root', 'user', 'pass'), 'winhttp');
+        DoTest(TSqlDBWinINetConnectionProperties.Create(
+          ADDR, 'root', 'user', 'pass'), 'wininet');
+      end;
       {$endif USEWININET}
       {$ifdef USELIBCURL}
       DoTest(TSqlDBCurlConnectionProperties.Create(
