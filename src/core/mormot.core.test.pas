@@ -501,6 +501,7 @@ type
     property Restrict: TRawUtf8DynArray
       read fRestrict write fRestrict;
     /// if the "--multithread" switch has been defined at command line
+    // - is disabled when run on PRISM (intel/amd executables emulated on WinArm)
     property MultiThread: boolean
       read fMultiThread;
   published
@@ -1519,7 +1520,8 @@ var
   log: IUnknown;
 begin
   result := true;
-  if Executable.Command.Option('multithread') then
+  if Executable.Command.Option('multithread')
+     {$ifdef OSWINDOWS} and not IsWow64Emulation {$endif} then
     fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
   begin
