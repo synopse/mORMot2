@@ -925,7 +925,8 @@ end;
 
 procedure TSqlDBOracleStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
-  V: pointer;
+  v: pointer;
+  p: PSqlDBColumnProperty;
   indicator: integer;
   tmp: array[0..31] of AnsiChar;
   U: RawUtf8;
@@ -934,65 +935,64 @@ begin
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
     ESqlDBOracle.RaiseUtf8('%.ColumnToJson() with no prior Step', [self]);
-  with fColumns[Col] do
+  p := @fColumns[Col];
+  indicator := PSmallIntArray(fRowBuffer)[
+                 cardinal(Col) * fRowCount + fRowFetchedCurrent];
+  if (indicator = -1) or
+     (p^.ColumnType = ftNull) then // ftNull for SQLT_RSET
   begin
-    indicator := PSmallIntArray(fRowBuffer)[
-                   cardinal(Col) * fRowCount + fRowFetchedCurrent];
-    if (indicator = -1) or
-       (ColumnType = ftNull) then // ftNull for SQLT_RSET
-      W.AddNull
-    else
-    begin
-      if indicator <> 0 then
-        LogTruncatedColumn(self, fColumns[Col]);
-      V := @fRowBuffer[ColumnAttr + fRowFetchedCurrent * ColumnValueDBSize];
-      case ColumnType of
-        ftInt64:
-          if ColumnValueDBType = SQLT_INT then
-            W.Add(PInt64(V)^)
-          else
-            W.AddShort(V, StrLen(V)); // already as SQLT_STR
-        ftDouble:
-          W.AddDouble(unaligned(PDouble(V)^));
-        ftCurrency:
-          W.AddFloatStr(V); // already as SQLT_STR
-        ftDate:
-          if ColumnValueDBType = SQLT_DAT then
-            W.AddShort(@tmp, POracleDate(V)^.ToIso8601(tmp{%H-}))
-          else
-          begin
-            W.Add('"');  // SQLT_INTERVAL_YM/SQLT_INTERVAL_DS
-            W.AddDateTime(IntervalTextToDateTime(V));
-            W.AddDirect('"');
-          end;
-        ftUtf8:
-          begin
-            W.Add('"');
-            with TSqlDBOracleConnection(Connection) do
-              if ColumnValueInlined then
-                OCISTRToUtf8(V, U, ColumnValueDBCharSet, ColumnValueDBForm)
-              else
-                OCI.ClobFromDescriptor(self, fContext, fError,
-                  PPOCIDescriptor(V)^, ColumnValueDBForm, U, false);
-            W.AddJsonEscape(pointer(U));
-            W.AddDirect('"');
-          end;
-        ftBlob:
-          if dsfForceBlobAsNull in fFlags then
-            W.AddNull
-          else if ColumnValueInlined then
-            W.WrBase64(V, ColumnValueDBSize, true)
-          else
-          begin
-            with TSqlDBOracleConnection(Connection) do
-              OCI.BlobFromDescriptor(self, fContext, fError,
-                PPOCIDescriptor(V)^, RawByteString(U));
-            W.WrBase64(pointer(U), length(U), true);
-          end;
+    W.AddNull;
+    exit;
+  end;
+  if indicator <> 0 then
+    LogTruncatedColumn(self, fColumns[Col]);
+  v := @fRowBuffer[p^.ColumnAttr + fRowFetchedCurrent * p^.ColumnValueDBSize];
+  case p^.ColumnType of
+    ftInt64:
+      if p^.ColumnValueDBType = SQLT_INT then
+        W.Add(PInt64(v)^)
       else
-        assert(false);
+        W.AddShort(v, StrLen(v)); // already as SQLT_STR
+    ftDouble:
+      W.AddDouble(unaligned(PDouble(v)^));
+    ftCurrency:
+      W.AddFloatStr(v); // already as SQLT_STR
+    ftDate:
+      if p^.ColumnValueDBType = SQLT_DAT then
+        W.AddShort(@tmp, POracleDate(v)^.ToIso8601(tmp{%H-}))
+      else
+      begin
+        W.Add('"');  // SQLT_INTERVAL_YM/SQLT_INTERVAL_DS
+        W.AddDateTime(IntervalTextToDateTime(v));
+        W.AddDirect('"');
       end;
-    end;
+    ftUtf8:
+      begin
+        W.Add('"');
+        with TSqlDBOracleConnection(Connection) do
+          if p^.ColumnValueInlined then
+            OCISTRToUtf8(v, U, p^.ColumnValueDBCharSet, p^.ColumnValueDBForm)
+          else
+            OCI.ClobFromDescriptor(self, fContext, fError,
+              PPOCIDescriptor(v)^, p^.ColumnValueDBForm, U, false);
+        W.AddJsonEscape(pointer(U));
+        W.AddDirect('"');
+      end;
+    ftBlob:
+      if dsfForceBlobAsNull in fFlags then
+        W.AddNull
+      else if p^.ColumnValueInlined then
+        W.WrBase64(v, p^.ColumnValueDBSize, true)
+      else
+      begin
+        with TSqlDBOracleConnection(Connection) do
+          OCI.BlobFromDescriptor(self, fContext, fError,
+            PPOCIDescriptor(v)^, RawByteString(U));
+        W.WrBase64(pointer(U), length(U), true);
+      end;
+  else
+    ESqlDBException.RaiseUtf8('%: Invalid ColumnType(%)=%',
+      [self, Col, ord(p^.ColumnType)]);
   end;
 end;
 
@@ -1072,6 +1072,7 @@ var
   V: pointer;
   tmp: RawUtf8;
   NoDecimal: boolean;
+  d: TSynVarData absolute Value;
 begin
   // dedicated version to avoid as much memory allocation than possible
   V := GetCol(Col, C);
@@ -1080,85 +1081,82 @@ begin
   else
     result := C^.ColumnType;
   VarClear(Value);
-  with TVarData(Value) do
-  begin
-    VType := MAP_FIELDTYPE2VARTYPE[result];
-    case result of
-      ftNull:
-        ; // do nothing
-      ftInt64:
-        if C^.ColumnValueDBType = SQLT_INT then
-          VInt64 := PInt64(V)^
-        else
-          SetInt64(V, VInt64);  // encoded as SQLT_STR
-      ftCurrency:
+  d.VType := MAP_FIELDTYPE2VARTYPE[result];
+  case result of
+    ftNull:
+      ; // do nothing
+    ftInt64:
+      if C^.ColumnValueDBType = SQLT_INT then
+        d.VInt64 := PInt64(V)^
+      else
+        SetInt64(V, d.VInt64);  // encoded as SQLT_STR
+    ftCurrency:
+      begin
+        d.VInt64 := StrToCurr64(V, @NoDecimal); // encoded as SQLT_STR
+        if NoDecimal then
         begin
-          VInt64 := StrToCurr64(V, @NoDecimal); // encoded as SQLT_STR
-          if NoDecimal then
-          begin
-            VType := varInt64; // encoded e.g. from SQLT_NUM as NUMBER(22,0)
-            result := ftInt64;
-          end;
+          d.VType := varInt64; // encoded e.g. from SQLT_NUM as NUMBER(22,0)
+          result := ftInt64;
         end;
-      ftDouble:
-        VInt64 := PInt64(V)^; // copy 64 bit content
-      ftDate:
-        if C^.ColumnValueDBType = SQLT_DAT then
-          VDate := POracleDate(V)^.ToDateTime
-        else // direct retrieval
-          IntervalTextToDateTimeVar(V, VDate); // from SQLT_INTERVAL_* text
-      ftUtf8: // VType is varSynUnicode unless ForceUtf8 is true
-        begin
-          // see TSqlDBStatement.ColumnToVariant() for reference
-          VAny := nil;
-          with TSqlDBOracleConnection(Connection) do
-            if C^.ColumnValueInlined then
-              {$ifndef UNICODE}
-              if (not ForceUtf8) and
-                 (not Connection.Properties.VariantStringAsWideString) then
-              begin
-                VType := varString;
-                OCISTRToAnsiString(V, AnsiString(VAny),
-                  C^.ColumnValueDBCharSet, C^.ColumnValueDBForm);
-                exit;
-              end
-              else
-              {$endif UNICODE}
-                OCISTRToUtf8(V, tmp, C^.ColumnValueDBCharSet, C^.ColumnValueDBForm)
-            else
-              OCI.ClobFromDescriptor(self, fContext, fError,
-                PPOCIDescriptor(V)^, C^.ColumnValueDBForm, tmp);
-          // here tmp contains the UTF-8 encoded text
-          if ForceUtf8 then
-          begin
-            VType := varString;
-            RawUtf8(VAny) := tmp;
-          end
-          else
-          {$ifndef UNICODE}
-          if not Connection.Properties.VariantStringAsWideString then
-          begin
-            VType := varString;
-            AnsiString(VAny) := CurrentAnsiConvert.Utf8ToAnsi(tmp);
-          end
-          else
-          {$endif UNICODE}
-            Utf8ToSynUnicode(tmp, SynUnicode(VAny));
-        end;
-      ftBlob: // as varString
-        begin
-          VAny := nil;
+      end;
+    ftDouble:
+      d.VInt64 := PInt64(V)^; // copy 64 bit content
+    ftDate:
+      if C^.ColumnValueDBType = SQLT_DAT then
+        d.VDate := POracleDate(V)^.ToDateTime
+      else // direct retrieval
+        IntervalTextToDateTimeVar(V, d.VDate); // from SQLT_INTERVAL_* text
+    ftUtf8: // VType is varSynUnicode unless ForceUtf8 is true
+      begin
+        // see TSqlDBStatement.ColumnToVariant() for reference
+        d.VAny := nil;
+        with TSqlDBOracleConnection(Connection) do
           if C^.ColumnValueInlined then
-            FastSetRawByteString(RawByteString(VAny), V, C^.ColumnValueDBSize)
+            {$ifndef UNICODE}
+            if (not ForceUtf8) and
+               (not Connection.Properties.VariantStringAsWideString) then
+            begin
+              d.VType := varString;
+              OCISTRToAnsiString(V, AnsiString(d.VAny),
+                C^.ColumnValueDBCharSet, C^.ColumnValueDBForm);
+              exit;
+            end
+            else
+            {$endif UNICODE}
+              OCISTRToUtf8(V, tmp, C^.ColumnValueDBCharSet, C^.ColumnValueDBForm)
           else
-            with TSqlDBOracleConnection(Connection) do
-              OCI.BlobFromDescriptor(self, fContext, fError,
-                PPOCIDescriptor(V)^, RawByteString(VAny));
-        end;
-    else
-      ESqlDBOracle.RaiseUtf8('%.ColumnToVariant: unexpected % type',
-        [self, ord(result)]);
-    end;
+            OCI.ClobFromDescriptor(self, fContext, fError,
+              PPOCIDescriptor(V)^, C^.ColumnValueDBForm, tmp);
+        // here tmp contains the UTF-8 encoded text
+        if ForceUtf8 then
+        begin
+          d.VType := varString;
+          RawUtf8(d.VAny) := tmp;
+        end
+        else
+        {$ifndef UNICODE}
+        if not Connection.Properties.VariantStringAsWideString then
+        begin
+          d.VType := varString;
+          AnsiString(d.VAny) := CurrentAnsiConvert.Utf8ToAnsi(tmp);
+        end
+        else
+        {$endif UNICODE}
+          Utf8ToSynUnicode(tmp, SynUnicode(d.VAny));
+      end;
+    ftBlob: // as varString
+      begin
+        d.VAny := nil;
+        if C^.ColumnValueInlined then
+          FastSetRawByteString(RawByteString(d.VAny), V, C^.ColumnValueDBSize)
+        else
+          with TSqlDBOracleConnection(Connection) do
+            OCI.BlobFromDescriptor(self, fContext, fError,
+              PPOCIDescriptor(V)^, RawByteString(d.VAny));
+      end;
+  else
+    ESqlDBOracle.RaiseUtf8('%.ColumnToVariant(%): unexpected % type',
+      [self, Col, ord(result)]);
   end;
 end;
 
