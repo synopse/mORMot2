@@ -891,8 +891,8 @@ begin
       W.AddNull
     else
       case ColumnType of
-        ftInt64:
-          W.AddString(fColData[Col]);  // already as SQL_C_CHAR
+        ftInt64:    // already as SQL_C_CHAR
+          W.AddNoJsonEscape(pointer(fColData[Col]), ColumnDataSize);
         ftDouble,
         ftCurrency: // already as SQL_C_CHAR
           W.AddFloatStr(pointer(fColData[Col]), ColumnDataSize);
