@@ -1792,9 +1792,9 @@ begin
         Value := FileTimeToDateTime(PFileTime(@TVarData(V).VInt64)^);
       {$endif OSWINDOWS}
       varString:
-        with TVarData(V) do
         begin
-          Iso8601ToDateTimePUtf8CharVar(VString, length(RawUtf8(VString)), Value);
+          Iso8601ToDateTimePUtf8CharVar(TVarData(V).VString,
+            length(RawUtf8(TVarData(V).VString)), Value);
           result := Value <> 0;
         end;
     else
