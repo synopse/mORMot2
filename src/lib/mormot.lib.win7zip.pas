@@ -1626,11 +1626,10 @@ end;
 
 function VariantToClsid(const v: T7zVariant): TGuid;
 begin
-  with TVarData(v) do
-    if VType = VT_CLSID then // = varOleClsid
-      result := PGuid(VAny)^
-    else
-      FillZero(result{%H-});
+  if TVarData(v).VType = VT_CLSID then // = varOleClsid
+    result := PGuid(TVarData(v).VAny)^
+  else
+    FillZero(result{%H-});
 end;
 
 constructor T7zCodec.Create(lib: T7zLib);
@@ -1882,21 +1881,23 @@ const
     VT_UI8);        // kpidVa
 
 function T7zReader.GetProp(item: cardinal; prop: TPropID): T7zVariant;
+var
+  vt: cardinal;
 begin
   EnsureOpened;
   VarClear(result);
   E7Zip.CheckOK(self, 'GetProp',
     fInArchive.GetProperty(Item, prop, result));
-  with TVarData(result) do
-    if VType = VT_FILETIME then
-      E7Zip.RaiseUtf8('GetProperty(%): VT_FILETIME is unsupported - ' +
-        'use GetPropDateTime instead', [prop])
-    else if (VType <> varEmpty) and
-            (prop >= low(KPID_VTYPE)) and
-            (prop <= high(KPID_VTYPE)) and
-            (VType <> KPID_VTYPE[prop]) then
-      E7Zip.RaiseUtf8('GetProperty(%): expected %, returned %',
-        [prop, KPID_VTYPE[prop], VType])
+  vt := TVarData(result).VType;
+  if vt = VT_FILETIME then
+    E7Zip.RaiseUtf8('GetProperty(%): VT_FILETIME is unsupported - ' +
+      'use GetPropDateTime instead', [prop])
+  else if (vt  <> varEmpty) and
+          (prop >= low(KPID_VTYPE)) and
+          (prop <= high(KPID_VTYPE)) and
+          (vt <> KPID_VTYPE[prop]) then
+    E7Zip.RaiseUtf8('GetProperty(%): expected %, returned %',
+      [prop, KPID_VTYPE[prop], vt])
 end;
 
 procedure T7zReader.GetPropUtf8(item: cardinal; prop: TPropID; out dest: RawUtf8);
@@ -2556,45 +2557,44 @@ begin
     exit;
   end;
   item := fEntries[index];
-  with TVarData(Value) do
-    case propID of
-      kpidNoProperty:
-        VType := varNull;
-      kpidAttributes:
-        begin
-          VType := VT_UI4; // = varLongWord
-          VLongWord := item.Attributes;
-        end;
-      kpidLastWriteTime:
-        if Int64(item.LastWriteTime) <> 0 then
-        begin
-          VType := VT_FILETIME; // = varOleFileTime
-          VInt64 := Int64(item.LastWriteTime);
-        end;
-      kpidCreationTime:
-        if Int64(item.CreationTime) <> 0 then
-        begin
-          VType := VT_FILETIME;
-          VInt64 := Int64(item.CreationTime);
-        end;
-      kpidTimeType:
-        begin
-          VType := VT_UI4;
-          VLongWord := ord(fttWindows);
-        end;
-      kpidPath:
-        if item.ZipName <> '' then
-          value := Utf8ToWideString(item.ZipName);
-      kpidIsFolder:
-        Value := item.IsFolder;
-      kpidIsAnti:
-        value := item.IsAnti;
-      kpidSize:
-        begin
-          VType := VT_UI8; // = varWord64
-          VInt64 := item.Size;
-        end;
-    end;
+  case propID of
+    kpidNoProperty:
+      TVarData(Value).VType := varNull;
+    kpidAttributes:
+      begin
+        TVarData(Value).VType := VT_UI4; // = varLongWord
+        TVarData(Value).VLongWord := item.Attributes;
+      end;
+    kpidLastWriteTime:
+      if Int64(item.LastWriteTime) <> 0 then
+      begin
+        TVarData(Value).VType := VT_FILETIME; // = varOleFileTime
+        TVarData(Value).VInt64 := Int64(item.LastWriteTime);
+      end;
+    kpidCreationTime:
+      if Int64(item.CreationTime) <> 0 then
+      begin
+        TVarData(Value).VType := VT_FILETIME;
+        TVarData(Value).VInt64 := Int64(item.CreationTime);
+      end;
+    kpidTimeType:
+      begin
+        TVarData(Value).VType := VT_UI4;
+        TVarData(Value).VLongWord := ord(fttWindows);
+      end;
+    kpidPath:
+      if item.ZipName <> '' then
+        Value := Utf8ToWideString(item.ZipName);
+    kpidIsFolder:
+      Value := item.IsFolder;
+    kpidIsAnti:
+      value := item.IsAnti;
+    kpidSize:
+      begin
+        TVarData(Value).VType := VT_UI8; // = varWord64
+        TVarData(Value).VInt64 := item.Size;
+      end;
+  end;
   result := S_OK;
 end;
 
