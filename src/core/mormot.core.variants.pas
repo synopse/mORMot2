@@ -6982,11 +6982,9 @@ var
   v: PVarData;
   vv: PVariant;
 begin
-  with TVarData(SourceDocVariant) do
-    if cardinal(VType) = varVariantByRef then
-      Source := VPointer
-    else
-      Source := @SourceDocVariant;
+  Source := @SourceDocVariant;
+  if cardinal(Source^.VType) = varVariantByRef then
+    Source := PVarData(Source)^.VPointer;
   if cardinal(Source^.VType) <> DocVariantVType then
     EDocVariant.RaiseUtf8('Unexpected InitCopy(var%)', [VariantTypeName(PVarData(Source))^]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
