@@ -3537,82 +3537,82 @@ procedure TJSContext.FromVariant(const val: variant; out result: JSValue);
 var
   tmp: TVarData;
   vt: cardinal;
+  v: TVarData absolute val;
 begin
-  vt := TVarData(val).VType;
-  with TVarData(val) do
-    case vt of
-      varEmpty:
-        {%H-}result.Empty;
-      varNull:
-        result.Fill(JS_TAG_NULL, 0);
-      varSmallint:
-        result.From32(VSmallInt);
-      varShortInt:
-        result.From32(VShortInt);
-      varWord:
-        result.From32(VWord);
-      varLongWord:
-        if VInteger >= 0 then
-          result.From32(VLongWord)
-        else
-          result.FromFloat(VLongWord);
-      varByte:
-        result.From32(VByte);
-      varBoolean:
-        result.From(VBoolean);
-      varInteger:
-        result.From32(VInteger);
-      varInt64:
-        result.From64(VInt64);
-      varWord64:
-        if VInt64 >= 0 then
-          result.From64(VInt64)
-        else
-          result.FromFloat(UInt64(VInt64));
-      varSingle:
-        result.FromFloat(VSingle);
-      varDouble:
-        result.FromFloat(VDouble);
-      varCurrency:
-        result.FromFloat(VCurrency);
-      varDate:
-        FromDate(VDate, result);
-      varString:
-        result := From(RawUtf8(VString));
-      {$ifdef HASVARUSTRING}
-      varUString:
-        result := FromW(VAny, length(UnicodeString(VAny)));
-      {$endif HASVARUSTRING}
-      varOleStr:
-        result := FromW(VAny, length(WideString(VAny)));
+  vt := v.VType;
+  case vt of
+    varEmpty:
+      {%H-}result.Empty;
+    varNull:
+      result.Fill(JS_TAG_NULL, 0);
+    varSmallint:
+      result.From32(v.VSmallInt);
+    varShortInt:
+      result.From32(v.VShortInt);
+    varWord:
+      result.From32(v.VWord);
+    varLongWord:
+      if v.VInteger >= 0 then
+        result.From32(v.VLongWord)
+      else
+        result.FromFloat(v.VLongWord);
+    varByte:
+      result.From32(v.VByte);
+    varBoolean:
+      result.From(v.VBoolean);
+    varInteger:
+      result.From32(v.VInteger);
+    varInt64:
+      result.From64(v.VInt64);
+    varWord64:
+      if v.VInt64 >= 0 then
+        result.From64(v.VInt64)
+      else
+        result.FromFloat(UInt64(v.VInt64));
+    varSingle:
+      result.FromFloat(v.VSingle);
+    varDouble:
+      result.FromFloat(v.VDouble);
+    varCurrency:
+      result.FromFloat(v.VCurrency);
+    varDate:
+      FromDate(v.VDate, result);
+    varString:
+      result := From(RawUtf8(v.VString));
+    {$ifdef HASVARUSTRING}
+    varUString:
+      result := FromW(v.VAny, length(UnicodeString(v.VAny)));
+    {$endif HASVARUSTRING}
+    varOleStr:
+      result := FromW(v.VAny, length(WideString(v.VAny)));
+  else
+    if SetVariantUnRefSimpleValue(val, tmp{%H-}) then
+      // simple varByRef
+      FromVariant(Variant(tmp), result)
+    else if vt = varVariantByRef then
+      // complex varByRef
+      FromVariant(PVariant(v.VPointer)^, result)
+    else if vt = varStringByRef then
+      result := From(PRawUtf8(v.VString)^)
+    else if vt = varOleStrByRef then
+      result := FromW(PPointer(v.VAny)^, length(PWideString(v.VAny)^))
     else
-      if SetVariantUnRefSimpleValue(val, tmp{%H-}) then
-        // simple varByRef
-        FromVariant(Variant(tmp), result)
-      else if vt = varVariantByRef then
-        // complex varByRef
-        FromVariant(PVariant(VPointer)^, result)
-      else if vt = varStringByRef then
-        result := From(PRawUtf8(VString)^)
-      else if vt = varOleStrByRef then
-        result := FromW(PPointer(VAny)^, length(PWideString(VAny)^))
-      else
-      {$ifdef HASVARUSTRING}
-      if vt = varUStringByRef then
-        result := FromW(PPointer(VAny)^, length(PUnicodeString(VAny)^))
-      else
-      {$endif HASVARUSTRING}
-        begin
-          // not recognizable vt -> seralize as JSON to handle also custom types
-          tmp.VAny := nil;
-          try
-            _VariantSaveJson(val, twJsonEscape, RawUtf8(tmp.VAny));
-            FromJson(RawUtf8(tmp.VAny), result, {exceptonerror=}false);
-          finally
-            FastAssignNew(tmp.VAny);
-          end;
+    {$ifdef HASVARUSTRING}
+    if vt = varUStringByRef then
+      result := FromW(PPointer(v.VAny)^, length(PUnicodeString(v.VAny)^))
+    else
+    {$endif HASVARUSTRING}
+      begin
+        // not recognizable vt -> seralize as JSON to handle also custom types
+        tmp.VAny := nil;
+        try
+          _VariantSaveJson(val, twJsonEscape, RawUtf8(tmp.VAny));
+          FromJson(RawUtf8(tmp.VAny), result, {exceptonerror=}false);
+        finally
+          FastAssignNew(tmp.VAny);
         end;
-    end;
+      end;
+  end;
 end;
 
 
