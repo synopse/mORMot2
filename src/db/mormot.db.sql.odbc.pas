@@ -622,6 +622,7 @@ const
 
 procedure TSqlDBOdbcStatement.BindColumns;
 var
+  p: PSqlDBColumnProperty;
   nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
   ColumnSize: SqlULen;
   c, siz: integer;
@@ -641,27 +642,25 @@ begin
         DescribeColW(fStatement, c, Name{%H-}, 256, NameLength, DataType,
           ColumnSize, DecimalDigits, Nullable),
         SQL_HANDLE_STMT, fStatement);
-      with AddColumn(RawUnicodeToUtf8(Name, NameLength))^ do
-      begin
-        ColumnValueInlined := true;
-        ColumnValueDBType := DataType;
-        if ColumnSize > 65535 then
-          ColumnSize := 0; // avoid out of memory error for BLOBs
-        ColumnValueDBSize := ColumnSize;
-        ColumnNonNullable := (Nullable = SQL_NO_NULLS);
-        ColumnType := ODBCColumnToFieldType(DataType, 10, DecimalDigits);
-        if ColumnType = ftUtf8 then
-          if ColumnSize = 0 then
-            siz := 256
-          else
-            siz := ColumnSize * 2 + 16
-        else // guess max size as WideChar buffer
-          siz := ColumnSize;
-        if siz < 64 then
-          siz := 64; // ODBC never truncates fixed-length data: ensure minimum
-        if siz > Length(fColData[c - 1]) then
-          SetLength(fColData[c - 1], siz);
-      end;
+      p := AddColumn(RawUnicodeToUtf8(Name, NameLength));
+      p^.ColumnValueInlined := true;
+      p^.ColumnValueDBType := DataType;
+      if ColumnSize > 65535 then
+        ColumnSize := 0; // avoid out of memory error for BLOBs
+      p^.ColumnValueDBSize := ColumnSize;
+      p^.ColumnNonNullable := (Nullable = SQL_NO_NULLS);
+      p^.ColumnType := ODBCColumnToFieldType(DataType, 10, DecimalDigits);
+      if p^.ColumnType = ftUtf8 then
+        if ColumnSize = 0 then
+          siz := 256
+        else
+          siz := ColumnSize * 2 + 16
+      else // guess max size as WideChar buffer
+        siz := ColumnSize;
+      if siz < 64 then
+        siz := 64; // ODBC never truncates fixed-length data: ensure minimum
+      if siz > Length(fColData[c - 1]) then
+        SetLength(fColData[c - 1], siz);
     end;
     assert(fColumnCount = nCols);
   end;
@@ -878,43 +877,44 @@ end;
 
 procedure TSqlDBOdbcStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
-  res: TSqlDBStatementGetCol;
+  p: PSqlDBColumnProperty;
+  v: pointer;
   tmp: array[0..31] of AnsiChar;
 begin
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
     EOdbcException.RaiseUtf8('%.ColumnToJson() with no prior Step', [self]);
-  with fColumns[Col] do
+  p := @fColumns[Col];
+  if GetCol(Col, p^.ColumnType) = colNull then
   begin
-    res := GetCol(Col, ColumnType);
-    if res = colNull then
-      W.AddNull
-    else
-      case ColumnType of
-        ftInt64:    // already as SQL_C_CHAR
-          W.AddNoJsonEscape(pointer(fColData[Col]), ColumnDataSize);
-        ftDouble,
-        ftCurrency: // already as SQL_C_CHAR
-          W.AddFloatStr(pointer(fColData[Col]), ColumnDataSize);
-        ftDate:
-          W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(pointer(fColData[Col]))^.
-            ToIso8601(tmp{%H-}, ColumnValueDBType, dsfForceDateWithMS in fFlags));
-        ftUtf8: // stored as SQL_C_WCHAR
-          begin
-            W.Add('"');
-            if ColumnDataSize > 1 then
-              W.AddJsonEscapeW(pointer(fColData[Col]), ColumnDataSize shr 1);
-            W.AddDirect('"');
-          end;
-        ftBlob:
-          if dsfForceBlobAsNull in fFlags then
-            W.AddNull
-          else
-            W.WrBase64(pointer(fColData[Col]), ColumnDataSize, true);
-      else
-        ESqlDBException.RaiseUtf8('%: Invalid ColumnType()=%',
-          [self, ord(ColumnType)]);
+    W.AddNull;
+    exit;
+  end;
+  v := pointer(fColData[Col]);
+  case p^.ColumnType of
+    ftInt64:    // stored as SQL_C_CHAR
+      W.AddNoJsonEscape(v, p^.ColumnDataSize);
+    ftDouble,
+    ftCurrency: // stored as SQL_C_CHAR
+      W.AddFloatStr(v, p^.ColumnDataSize);
+    ftDate:
+      W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(v)^.
+        ToIso8601(tmp{%H-}, p^.ColumnValueDBType, dsfForceDateWithMS in fFlags));
+    ftUtf8:    // stored as SQL_C_WCHAR
+      begin
+        W.Add('"');
+        if p^.ColumnDataSize > 1 then
+          W.AddJsonEscapeW(v, p^.ColumnDataSize shr 1);
+        W.AddDirect('"');
       end;
+    ftBlob:
+      if dsfForceBlobAsNull in fFlags then
+        W.AddNull
+      else
+        W.WrBase64(v, p^.ColumnDataSize, true);
+  else
+    ESqlDBException.RaiseUtf8('%: Invalid ColumnType(%)=%',
+      [self, Col, ord(p^.ColumnType)]);
   end;
 end;
 
