@@ -1461,6 +1461,7 @@ function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
 type
   /// the content of a binary THttpPeerCacheMessage
   // - could eventually be extended in the future for frame versioning
+  // - pcfBearerDirect* are used for pcoHttpDirect mode: /https/microsoft.com/...
   THttpPeerCacheMessageKind = (
     pcfPing,
     pcfPong,
@@ -6138,7 +6139,7 @@ begin
       [BOOL_STR[result], newmac.Name, newmac.IP, newmac.Broadcast, newmac.NetMask, err], self);
 end;
 
-const // URI start for pcfBearerDirect/pcfBearerDirectPermanent peer requests
+const // URI start for pcfBearerDirect* peer requests
   DIRECTURI_32 = ord('/') + ord('h') shl 8 + ord('t') shl 16 + ord('t') shl 24;
 
 class function THttpPeerCrypt.HttpDirectUri(const aSharedSecret: RawByteString;
@@ -7137,7 +7138,7 @@ begin
         include(err, eDirectDecode)
       else
       begin
-        if not (msg.Kind in [pcfBearerDirect, pcfBearerDirectPermanent]) then
+        if not (msg.Kind >= pcfBearerDirect) then
           include(err, eDirectKind);
         if Int64(msg.Opaque) <> crc63c(pointer(aUrl), length(aUrl)) then
           include(err, eDirectOpaque); // see THttpPeerCrypt.HttpDirectUri()
@@ -7510,7 +7511,7 @@ begin
   cs := nil;
   result := HTTP_BADREQUEST;
   try
-    if aMessage.Kind in [pcfBearerDirect, pcfBearerDirectPermanent] then
+    if aMessage.Kind >= pcfBearerDirect then
     try
       // HEAD to the original server to connect and retrieve size + redirection
       err := 'head';
