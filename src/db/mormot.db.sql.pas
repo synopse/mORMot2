@@ -6102,78 +6102,76 @@ function TSqlDBStatement.ColumnToVariant(Col: integer;
 var
   tmp: RawByteString;
   V: TSqlVar;
+  d: TSynVarData absolute Value;
 begin
   ColumnToSqlVar(Col, V, tmp);
   result := V.VType;
   VarClear(Value);
-  with TVarData(Value) do
-  begin
-    VType := MAP_FIELDTYPE2VARTYPE[result];
-    case result of
-      ftNull:
-        ; // do nothing
-      ftInt64:
-        VInt64 := V.VInt64;
-      ftDouble:
-        VDouble := V.VDouble;
-      ftDate:
-        VDate := V.VDateTime;
-      ftCurrency:
-        VCurrency := V.VCurrency;
-      ftBlob: // as varString
+  d.VType := MAP_FIELDTYPE2VARTYPE[result];
+  case result of
+    ftNull:
+      ; // do nothing
+    ftInt64:
+      d.VInt64 := V.VInt64;
+    ftDouble:
+      d.VDouble := V.VDouble;
+    ftDate:
+      d.VDate := V.VDateTime;
+    ftCurrency:
+      d.VCurrency := V.VCurrency;
+    ftBlob: // as varString
+      begin
+        d.VAny := nil; // avoid GPF below
+        if V.VBlob <> nil then
+          if V.VBlob = pointer(tmp) then
+            RawByteString(d.VAny) := tmp // increment RefCount
+          else
+            FastSetRawByteString(RawByteString(d.VAny), V.VBlob, V.VBlobLen);
+      end;
+    ftUtf8: // VType is varSynUnicode
+      begin
+        d.VAny := nil; // avoid GPF below
+        if V.VText = nil then
+          d.VType := varString // avoid obscure "Invalid variant type" in FPC
+        else if ForceUtf8 then
         begin
-          VAny := nil; // avoid GPF below
-          if V.VBlob <> nil then
-            if V.VBlob = pointer(tmp) then
-              RawByteString(VAny) := tmp // increment RefCount
-            else
-              FastSetRawByteString(RawByteString(VAny), V.VBlob, V.VBlobLen);
-        end;
-      ftUtf8: // VType is varSynUnicode
-        begin
-          VAny := nil; // avoid GPF below
-          if V.VText = nil then
-            VType := varString // avoid obscure "Invalid variant type" in FPC
-          else if ForceUtf8 then
+          d.VType := varString;
+          if V.VText = pointer(tmp) then
           begin
-            VType := varString;
-            if V.VText = pointer(tmp) then
-            begin
-              FakeCodePage(tmp, CP_UTF8);
-              VAny := pointer(tmp); // direct assign with no refcount
-              pointer(tmp) := nil;
-            end
-            else
-              FastSetString(RawUtf8(VAny), V.VText, StrLen(V.VText));
+            FakeCodePage(tmp, CP_UTF8);
+            d.VAny := pointer(tmp); // direct assign with no refcount
+            pointer(tmp) := nil;
           end
           else
+            FastSetString(RawUtf8(d.VAny), V.VText, StrLen(V.VText));
+        end
+        else
+        begin
+          if V.VText = pointer(tmp) then
+            V.VBlobLen := length(tmp)
+          else
+            V.VBlobLen := StrLen(V.VText);
+          {$ifndef UNICODE}
+          if (fConnection <> nil) and
+             not fConnection.Properties.VariantStringAsWideString then
           begin
-            if V.VText = pointer(tmp) then
-              V.VBlobLen := length(tmp)
+            d.VType := varString;
+            if (V.VText = pointer(tmp)) and
+               ((Unicode_CodePage = CP_UTF8) or
+                IsAnsiCompatible(tmp)) then
+              RawByteString(d.VAny) := tmp
             else
-              V.VBlobLen := StrLen(V.VText);
-            {$ifndef UNICODE}
-            if (fConnection <> nil) and
-               not fConnection.Properties.VariantStringAsWideString then
-            begin
-              VType := varString;
-              if (V.VText = pointer(tmp)) and
-                 ((Unicode_CodePage = CP_UTF8) or
-                  IsAnsiCompatible(tmp)) then
-                RawByteString(VAny) := tmp
-              else
-                CurrentAnsiConvert.Utf8BufferToAnsi(
-                  V.VText, V.VBlobLen, RawByteString(VAny));
-            end
-            else
-            {$endif UNICODE}
-              Utf8ToSynUnicode(V.VText, V.VBlobLen, SynUnicode(VAny));
-          end;
+              CurrentAnsiConvert.Utf8BufferToAnsi(
+                V.VText, V.VBlobLen, RawByteString(d.VAny));
+          end
+          else
+          {$endif UNICODE}
+            Utf8ToSynUnicode(V.VText, V.VBlobLen, SynUnicode(d.VAny));
         end;
-    else
-      ESqlDBException.RaiseUtf8(
-        '%.ColumnToVariant: Invalid ColumnType(%)=%', [self, Col, ord(result)]);
-    end;
+      end;
+  else
+    ESqlDBException.RaiseUtf8(
+      '%.ColumnToVariant: Invalid ColumnType(%)=%', [self, Col, ord(result)]);
   end;
 end;
 
