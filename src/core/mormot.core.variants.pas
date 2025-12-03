@@ -4544,45 +4544,44 @@ end;
 
 function VariantEquals(const V: Variant; const Str: RawUtf8;
   CaseSensitive: boolean): boolean;
-
-  function Complex: boolean;
-  var
-    wasString: boolean;
-    tmp: RawUtf8;
-  begin
-    VariantToUtf8(V, tmp, wasString);
-    if CaseSensitive then
-      result := (tmp = Str)
-    else
-      result := PropNameEquals(tmp, Str);
-  end;
-
 var
   v1, v2: Int64;
   vt: cardinal;
+  wasString: boolean;
+  tmp: pointer; // fake RawUtf8
 begin
   vt := TVarData(V).VType;
-  with TVarData(V) do
-    case vt of
-      varEmpty,
-      varNull:
-        result := Str = '';
-      varBoolean:
-        result := VBoolean = (Str <> '');
-      varString:
-        if CaseSensitive then
-          result := RawUtf8(VString) = Str
-        else
-          result := PropNameEquals(RawUtf8(VString), Str);
-    else
-      if VariantToInt64(V, v1) then
-      begin
-        SetInt64(pointer(Str), v2);
-        result := v1 = v2;
-      end
+  case vt of
+    varEmpty,
+    varNull:
+      result := Str = '';
+    varBoolean:
+      result := TVarData(V).VBoolean = (Str <> '');
+    varString:
+      if CaseSensitive then
+        result := RawUtf8(TVarData(V).VString) = Str
       else
-        result := Complex;
+        result := PropNameEquals(RawUtf8(TVarData(V).VString), Str);
+  else
+    if VariantToInt64(V, v1) then
+    begin
+      SetInt64(pointer(Str), v2);
+      result := v1 = v2;
+    end
+    else
+    begin
+      tmp := nil;
+      try
+        VariantToUtf8(V, RawUtf8(tmp), wasString);
+        if CaseSensitive then
+          result := (RawUtf8(tmp) = Str)
+        else
+          result := PropNameEquals(RawUtf8(tmp), Str);
+      finally
+        FastAssignNew(tmp); // VariantToUtf8() may trigger an exception
+      end;
     end;
+  end;
 end;
 
 
