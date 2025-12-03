@@ -847,9 +847,8 @@ type
       0: (Int64: Int64);
       1: (Double: double);
       2: (ValueInlined: byte); // for TSqlDBColumnProperty.ColumnValueInlined
-      3: (ByRef: pointer); // DBTYPE_BYREF PWideChar/PAnsiChar
+      3: (ByRef: pointer);     // DBTYPE_BYREF PWideChar/PAnsiChar
   end;
-
   PColumnValue = ^TColumnValue;
 
 procedure TSqlDBOleDBStatement.LogStatusError(Status: integer;
@@ -1047,56 +1046,54 @@ end;
 function TSqlDBOleDBStatement.ColumnToVariant(
   Col: integer; var Value: Variant; ForceUtf8: boolean): TSqlDBFieldType;
 var
-  C: PSqlDBColumnProperty;
-  V: PColumnValue;
-  P: pointer;
+  c: PSqlDBColumnProperty;
+  cv: PColumnValue;
+  p: pointer;
+  v: TSynVarData absolute Value;
 begin
   // dedicated version to avoid as much memory allocation than possible
-  V := GetCol(Col, C);
-  if V = nil then
+  cv := GetCol(Col, c);
+  if cv = nil then
     result := ftNull
   else
-    result := C^.ColumnType;
+    result := c^.ColumnType;
   VarClear(Value);
-  with TVarData(Value) do
-  begin
-    VType := MAP_FIELDTYPE2VARTYPE[result];
-    case result of
-      ftInt64,
-      ftDouble,
-      ftCurrency,
-      ftDate:
-        VInt64 := V^.Int64; // copy 64 bit content
-      ftUtf8: // VType is varSynUnicode unless ForceUtf8 is set
+  v.VType := MAP_FIELDTYPE2VARTYPE[result];
+  case result of
+    ftInt64,
+    ftDouble,
+    ftCurrency,
+    ftDate:
+      v.VInt64 := cv^.Int64; // copy 64 bit content
+    ftUtf8: // VType is varSynUnicode unless ForceUtf8 is set
+      begin
+        p := ColPtr(c, cv);
+        v.VAny := nil;
+        if ForceUtf8 or
+           (p = nil) or
+           (cv^.Length = 0) then
         begin
-          P := ColPtr(C, V);
-          VAny := nil;
-          if ForceUtf8 or
-             (P = nil) or
-             (V^.Length = 0) then
-          begin
-            VType := varString;
-            RawUnicodeToUtf8(P, V^.Length shr 1, RawUtf8(VAny));
-          end
-          {$ifndef UNICODE}
-          else if not Connection.Properties.VariantStringAsWideString then
-          begin
-            VType := varString;
-            RawUnicodeToString(P, V^.Length shr 1, AnsiString(VAny));
-          end
-          {$endif UNICODE}
-          else
-            FastSynUnicode(SynUnicode(VAny), P, V^.Length shr 1);
-        end;
-      ftBlob: // as varString
-        if dsfForceBlobAsNull in fFlags then
-          VType := varNull
+          v.VType := varString;
+          RawUnicodeToUtf8(p, cv^.Length shr 1, RawUtf8(v.VAny));
+        end
+        {$ifndef UNICODE}
+        else if not Connection.Properties.VariantStringAsWideString then
+        begin
+          v.VType := varString;
+          RawUnicodeToString(p, cv^.Length shr 1, AnsiString(v.VAny));
+        end
+        {$endif UNICODE}
         else
-        begin
-          VAny := nil;
-          FastSetRawByteString(RawByteString(VAny), ColPtr(C, V), V^.Length);
-        end;
-    end;
+          FastSynUnicode(SynUnicode(v.VAny), p, cv^.Length shr 1);
+      end;
+    ftBlob: // as varString
+      if dsfForceBlobAsNull in fFlags then
+        v.VType := varNull
+      else
+      begin
+        v.VAny := nil;
+        FastSetRawByteString(RawByteString(v.VAny), ColPtr(c, cv), cv^.Length);
+      end;
   end;
 end;
 
@@ -1462,15 +1459,24 @@ end;
 
 procedure TSqlDBOleDBStatement.FlushRowSetData;
 var
-  c: PtrInt;
+  c: integer;
+  p: PSqlDBColumnProperty;
+  byref: pointer;
 begin
   if fHasColumnValueByRef then
-    for c := 0 to fColumnCount - 1 do
-      with fColumns[c] do
-        if not ColumnValueInlined then // release DBTYPE_BYREF memory
-          with PColumnValue(@fRowSetData[ColumnAttr])^ do
-            if ByRef <> nil then
-              OleDBConnection.fMalloc.Free(ByRef);
+  begin
+    p := pointer(fColumns);
+    for c := 1 to fColumnCount do
+    begin
+      if not p^.ColumnValueInlined then // release DBTYPE_BYREF memory
+      begin
+        byref := PColumnValue(@fRowSetData[p^.ColumnAttr])^.ByRef;
+        if byref <> nil then
+          OleDBConnection.fMalloc.Free(byref);
+      end;
+      inc(p);
+    end;
+  end;
   FillcharFast(fRowSetData[0], fRowSize, 0);
 end;
 
