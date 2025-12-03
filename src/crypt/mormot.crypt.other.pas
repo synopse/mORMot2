@@ -1075,9 +1075,9 @@ begin
       begin
         // encrypt data
         if (pi = po) and
-           (pi <> nil) then
+           (pi <> nil) then // Head in po^ will overflow data in pi^
         begin
-          assert(false); // Head in po^ will overflow data in pi^
+          ESynCrypto.RaiseU('Unexpected EncodeDecode overflow');
           result := 0;
           exit;
         end;
