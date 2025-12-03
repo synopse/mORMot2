@@ -718,7 +718,7 @@ type
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     // - is used when the input comes from a third-party source with no regular
     // output, e.g. a database driver
-    procedure AddFloatStr(P: PUtf8Char);
+    procedure AddFloatStr(P: PUtf8Char; Len: PtrInt = -1);
     /// append CR+LF (#13#10) chars
     // - this method won't call TEchoWriter.EchoAdd() registered events - use
     // TEchoWriter.AddEndOfLine() method instead
@@ -4964,14 +4964,16 @@ begin
   B^ := c;
 end;
 
-procedure TTextWriter.AddFloatStr(P: PUtf8Char);
+procedure TTextWriter.AddFloatStr(P: PUtf8Char; Len: PtrInt);
 begin
-  if mormot.core.base.StrLen(P) > 127 then
-    exit; // clearly invalid input
   if BEnd - B <= 127 then
     FlushToStream;
   inc(B);
-  if P <> nil then
+  if Len < 0 then
+    Len := mormot.core.base.StrLen(P);
+  if (P <> nil) and
+     (Len >= 0) and
+     (Len < 127) then
     B := FloatStrCopy(P, B) - 1
   else
     B^ := '0';
