@@ -3868,40 +3868,39 @@ var
   custom: TSynInvokeableVariantType;
 begin
   vt := TVarData(V).VType;
-  with TVarData(V) do
-    case vt of
-      varEmpty,
-      varNull:
-        result := true;
-      varBoolean:
-        result := not VBoolean;
-      {$ifdef HASVARUSTRING}
-      varUString,
-      {$endif HASVARUSTRING}
-      varString,
-      varOleStr:
-        result := VAny = nil;
-      varDate:
-        result := VInt64 = 0;
-      // note: 0 as integer or float is considered as non-void
+  case vt of
+    varEmpty,
+    varNull:
+      result := true;
+    varBoolean:
+      result := not TVarData(V).VBoolean;
+    {$ifdef HASVARUSTRING}
+    varUString,
+    {$endif HASVARUSTRING}
+    varString,
+    varOleStr:
+      result := TVarData(V).VAny = nil;
+    varDate:
+      result := TVarData(V).VInt64 = 0;
+    // note: 0 as integer or float is considered as non-void
+  else
+    if vt = varVariantByRef then
+      result := VarIsVoid(PVariant(TVarData(V).VPointer)^)
+    else if (vt = varStringByRef) or
+            (vt = varOleStrByRef)
+            {$ifdef HASVARUSTRING} or
+            (vt = varUStringByRef)
+            {$endif HASVARUSTRING} then
+      result := PPointer(TVarData(V).VAny)^ = nil
+    else if vt = DocVariantVType then
+      result := TDocVariantData(V).Count = 0
     else
-      if vt = varVariantByRef then
-        result := VarIsVoid(PVariant(VPointer)^)
-      else if (vt = varStringByRef) or
-              (vt = varOleStrByRef)
-              {$ifdef HASVARUSTRING} or
-              (vt = varUStringByRef)
-              {$endif HASVARUSTRING} then
-        result := PPointer(VAny)^ = nil
-      else if vt = DocVariantVType then
-        result := TDocVariantData(V).Count = 0
-      else
-      begin
-        custom := FindSynVariantType(vt);
-        result := (custom <> nil) and
-                  custom.IsVoid(TVarData(V)); // e.g. TBsonVariant.IsVoid
-      end;
+    begin
+      custom := FindSynVariantType(vt);
+      result := (custom <> nil) and
+                custom.IsVoid(TVarData(V)); // e.g. TBsonVariant.IsVoid
     end;
+  end;
 end;
 
 function VarStringOrNull(const v: RawUtf8): variant;
