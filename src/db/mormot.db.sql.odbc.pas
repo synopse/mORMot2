@@ -894,12 +894,12 @@ begin
         ftInt64:
           W.AddString(fColData[Col]);  // already as SQL_C_CHAR
         ftDouble,
-        ftCurrency:
-          W.AddFloatStr(pointer(fColData[Col])); // already as SQL_C_CHAR
+        ftCurrency: // already as SQL_C_CHAR
+          W.AddFloatStr(pointer(fColData[Col]), ColumnDataSize);
         ftDate:
           W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(pointer(fColData[Col]))^.
             ToIso8601(tmp{%H-}, ColumnValueDBType, dsfForceDateWithMS in fFlags));
-        ftUtf8:
+        ftUtf8: // stored as SQL_C_WCHAR
           begin
             W.Add('"');
             if ColumnDataSize > 1 then

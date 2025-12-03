@@ -2031,7 +2031,7 @@ begin
       SetCapacity(256); // first time this slot is used
     inc(CurrentID);
     if CurrentID < 0 then
-      CurrentID := 1; // paranoid check after 2^31 messages :)
+      CurrentID := 1; // paranoid check after 2^31 error messages :)
     i := (CurrentIndex + 1) and pred(length(Seq)); // length() is a power of two
     CurrentIndex := i;
     result := CurrentID;
@@ -2080,7 +2080,7 @@ end;
 
 procedure ClearDbError;
 begin
-  LastDbErrorID := 0; // reset
+  LastDbErrorID := 0; // reset for this thread
 end;
 
 function GetDbError: RawUtf8;
