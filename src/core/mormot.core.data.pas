@@ -3940,11 +3940,14 @@ begin // expects UpperName as 'NAME='
                   break;
               repeat // ignore spaces/tabs around the '=' sign
                 inc(PBeg);
-                if PBeg^ in [#1 .. ' '] then
-                  continue
-                else if PBeg^ <> '=' then
+                case PBeg^ of
+                  #1 .. ' ':
+                    continue;
+                  '=', ':':
+                    goto fnd;
+                else
                   break;
-                goto fnd;
+                end;
               until false;
               break;
             end
