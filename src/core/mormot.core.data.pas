@@ -2510,7 +2510,7 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 // - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
 // the '=' sign, and at the end of each input text line
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
-  const DefaultValue: RawUtf8 = ''): RawUtf8;
+  const DefaultValue: RawUtf8 = ''; PEnd: PUtf8Char = nil): RawUtf8;
 
 /// return TRUE if one of the leftmost Value of UpperName exists in P
 // - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
@@ -3866,7 +3866,7 @@ begin
 end;
 
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
-  const DefaultValue: RawUtf8): RawUtf8;
+  const DefaultValue: RawUtf8; PEnd: PUtf8Char): RawUtf8;
 var
   u, PBeg: PUtf8Char;
   l: PtrInt;
@@ -3894,16 +3894,18 @@ begin // expects UpperName as 'NAME='
         break;
       if table[u^] = UpperName[0] then
         PBeg := u;
-      repeat
-        if u^ > #13 then
-        begin
-          inc(u);
-          continue;
-        end;
-        if u^ in [#0, #10, #13] then
-          break;
-        inc(u);
-      until false;
+      {$ifdef CPUX64}
+      if PEnd <> nil then
+        inc(u, BufferLineLength(u, PEnd)) // we can use SSE2
+      else
+      {$endif CPUX64}
+        while true do
+          if u^ > #13 then
+            inc(u)
+          else if u^ in [#0, #10, #13] then
+            break
+          else
+            inc(u);
       if PBeg <> nil then
       begin
         inc(PBeg);
@@ -3944,7 +3946,7 @@ fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
             l := P - PBeg;
             while (l > 0) and
                   (PBeg[l - 1] in [#1 .. ' ']) do
-              dec(l);   // should ttrim spaces/tabs at the end of the line
+              dec(l);      // should trim spaces/tabs at the end of the line
             FastSetString(result, PBeg, l);
             exit;
           end;
