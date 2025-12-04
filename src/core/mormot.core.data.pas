@@ -4185,24 +4185,25 @@ end;
 
 function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
 var
-  P: PUtf8Char;
+  P, PEnd: PUtf8Char;
   UpperSection, UpperName: TByteToAnsiChar;
 begin
   result := DefaultValue;
   P := pointer(Content);
   if P = nil then
     exit;
+  PEnd := P + length(Content);
   // fast UpperName := UpperCase(Name)+'='
   PWord(UpperCopy255(UpperName{%H-}, Name))^ := ord('=');
   if Section = '' then
     // find the Name= entry before any [Section]
-    result := FindIniNameValue(P, UpperName, DefaultValue)
+    result := FindIniNameValue(P, UpperName, DefaultValue, PEnd)
   else
   begin
     // find the Name= entry in the specified [Section]
     PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
     if FindSectionFirstLine(P, UpperSection) then
-      result := FindIniNameValue(P, UpperName, DefaultValue);
+      result := FindIniNameValue(P, UpperName, DefaultValue, PEnd);
   end;
 end;
 
