@@ -2514,6 +2514,7 @@ function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
 
 /// find the Value of UpperName in Content, wrapping FindIniNameValue()
 function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if one of the leftmost Value of UpperName exists in P
 // - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
@@ -4359,7 +4360,7 @@ var
   r: TRttiCustom;
   i: integer;
   p: PRttiCustomProp;
-  section, nested, json: PUtf8Char;
+  section, iniend, nested, json: PUtf8Char;
   name: PAnsiChar;
   n, v: RawUtf8;
   up: TByteToAnsiChar;
@@ -4370,6 +4371,7 @@ begin
     exit;
   PWord(UpperCopy255(up{%H-}, SectionName))^ := ord(']');
   section := pointer(Ini);
+  iniend := section + length(Ini);
   if not FindSectionFirstLine(section, @up) then
     exit; // section not found
   r := Rtti.RegisterClass(Instance);
@@ -4391,7 +4393,7 @@ begin
       else
       begin
         PWord(UpperCopy255(up{%H-}, p^.Name))^ := ord('=');
-        v := FindIniNameValue(section, @up, #0);
+        v := FindIniNameValue(section, @up, #0, iniend);
         if p^.Value.Parser in ptMultiLineStringTypes then
         begin
           if v = #0 then // may be stored in a multi-line section body
