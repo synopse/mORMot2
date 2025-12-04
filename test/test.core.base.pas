@@ -916,18 +916,22 @@ begin
   Check(S = Content, WorkDir + 'test2.ini');
   Content := 'name=value'#13#10' name2= value2 '#13#10 +
              ' name 3  =  value3 '#13#10' name4: value 4 '#13#10;
-  CheckEqual(FindIniNameValue(pointer(Content), 'NAME='), 'value');
-  CheckEqual(FindIniNameValue(pointer(Content), 'NAME2='), 'value2');
-  CheckEqual(FindIniNameValue(pointer(Content), 'NAME3='), '');
-  CheckEqual(FindIniNameValue(pointer(Content), 'NAME 3='), 'value3');
-  CheckEqual(FindIniNameValue(pointer(Content), 'NAME4='), 'value 4');
-  CheckEqual(FindIniNameValue(pointer(Content), 'NAME4:'), 'value 4');
+  CheckEqual(FindIniNameValueU(Content, 'NAME='), 'value');
+  CheckEqual(FindIniNameValueU(Content, 'NAME2='), 'value2');
+  CheckEqual(FindIniNameValueU(Content, 'NAME3='), '');
+  CheckEqual(FindIniNameValueU(Content, 'NAME 3='), 'value3');
+  CheckEqual(FindIniNameValueU(Content, 'NAME4='), 'value 4');
+  CheckEqual(FindIniNameValueU(Content, 'NAME4:'), 'value 4');
   Check(ExistsIniNameValue(pointer(Content), 'NAME=', @VUP));
   Check(ExistsIniNameValue(pointer(Content), 'NAME2=', @VUP));
   Check(not ExistsIniNameValue(pointer(Content), 'NAME3=', @VUP));
   Check(not ExistsIniNameValue(pointer(Content), 'NAME 3=', @VUP));
   Check(ExistsIniNameValue(pointer(Content), 'NAME 3  =', @VUP));
   Check(not ExistsIniNameValue(pointer(Content), 'NAME  3  =', @VUP));
+  CheckEqual(FindIniNameValueU('name=value', 'NAME='), 'value');
+  CheckEqual(FindIniNameValueU('name = value', 'NAME='), 'value');
+  CheckEqual(FindIniNameValueU('toto='#10'name = value ', 'NAME='), 'value');
+  CheckEqual(FindIniNameValueU('toto='#10'name = ', 'NAME='), '');
   Content := 'abc'#13#10'def'#10'ghijkl'#13'1234567890';
   P := pointer(Content);
   Check(GetNextLine(P, P) = 'abc');
