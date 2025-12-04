@@ -2156,10 +2156,10 @@ var
     Check(IniToObject('[main]'#10'somefield=toto', G2));
     CheckEqual(G2.SomeField, 'toto');
     CheckEqual(G2.NestedObject.FieldInteger, 0);
-    Check(IniToObject('[main]'#10'somefield=titi'#10'[nestedobject]'#10'fieldinteger=7', G2));
+    Check(IniToObject('[main]'#10'somefield = titi '#10'[nestedobject]'#10' fieldinteger = 7', G2));
     CheckEqual(G2.SomeField, 'titi');
     CheckEqual(G2.NestedObject.FieldInteger, 7);
-    Check(IniToObject('[main]'#10'[nestedobject]'#10'fieldstring=c:\abc', G2));
+    Check(IniToObject('[main]'#13#10'[nestedobject]'#13#10'fieldstring=c:\abc'#13, G2));
     CheckEqual(G2.SomeField, 'titi');
     CheckEqual(G2.NestedObject.FieldInteger, 7);
     CheckEqual(G2.NestedObject.FieldString, 'c:\abc');
