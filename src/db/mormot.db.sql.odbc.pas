@@ -1355,10 +1355,9 @@ begin
   if ODBC = nil then
     ODBC := TOdbcLib.Create;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
-  // stored UserID is used by SqlSplitProcedureName
-  if aUserID = '' then
-    FUserID := FindIniNameValue(pointer(UpperCase(StringReplaceAll(
-      aDatabaseName, ';', CRLF))), 'UID=');
+  if fUserID = '' then
+    // UserID is needed by SqlSplitProcedureName(): check from connection string
+    fUserID := UpperCase(FindDatabaseNameField('UID='));
 end;
 
 function TSqlDBOdbcConnectionProperties.NewConnection: TSqlDBConnection;
@@ -1674,12 +1673,8 @@ begin
 end;
 
 function TSqlDBOdbcConnectionProperties.GetDatabaseNameSafe: RawUtf8;
-var
-  pwd: RawUtf8;
 begin
-  pwd := FindIniNameValue(pointer(StringReplaceAll(
-    fDatabaseName, ';', CRLF)), 'PWD=');
-  result := StringReplaceAll(fDatabaseName, pwd, '***');
+  result := StringReplaceAll(fDatabaseName, FindDatabaseNameField('PWD='), '***');
 end;
 
 function TSqlDBOdbcConnectionProperties.GetDbms: TSqlDBDefinition;
