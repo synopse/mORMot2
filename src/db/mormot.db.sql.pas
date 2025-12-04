@@ -1324,6 +1324,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
+    function FindDatabaseNameField(Up: PAnsiChar): RawUtf8;
     // this default implementation just returns the fDbms value or dDefault
     // (never returns dUnknwown)
     function GetDbms: TSqlDBDefinition; virtual;
@@ -3686,6 +3687,11 @@ end;
 function TSqlDBConnectionProperties.GetConnectionTimeOutMinutes: cardinal;
 begin
   result := fConnectionTimeOutSecs div SecsPerMin;
+end;
+
+function TSqlDBConnectionProperties.FindDatabaseNameField(Up: PAnsiChar): RawUtf8;
+begin
+  result := FindIniNameValueU(StringReplaceAll(fDatabaseName, ';', #10), Up);
 end;
 
 function TSqlDBConnectionProperties.GetMainConnection: TSqlDBConnection;
