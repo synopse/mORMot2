@@ -2505,8 +2505,10 @@ procedure ReplaceSection(SectionFirstLine: PUtf8Char;
 // - note: won't ignore spaces/tabs around the '=' sign
 function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 
-/// find the Value of UpperName in P, till end of current section
-// - expect UpperName as 'NAME='
+/// find the Value of UpperName in P, till end of current INI section
+// - expect UpperName already as 'NAME=' for efficient INI key=value lookup
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
+// the '=' sign, and at the end of each input text line
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
   const DefaultValue: RawUtf8 = ''): RawUtf8;
 
@@ -3867,14 +3869,15 @@ function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
   const DefaultValue: RawUtf8): RawUtf8;
 var
   u, PBeg: PUtf8Char;
-  by4: cardinal;
+  l: PtrInt;
   {$ifdef CPUX86NOTPIC}
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
   {$endif CPUX86NOTPIC}
-begin
-  // expect UpperName as 'NAME='
+label
+  fnd;
+begin // expects UpperName as 'NAME='
   if (P <> nil) and
      (P^ <> '[') and
      (UpperName <> nil) then
@@ -3885,28 +3888,18 @@ begin
     PBeg := nil;
     u := P;
     repeat
-      while u^ = ' ' do
+      while u^ in [#1 .. ' '] do
         inc(u); // trim left ' '
       if u^ = #0 then
         break;
       if table[u^] = UpperName[0] then
         PBeg := u;
       repeat
-        by4 := PCardinal(u)^;
-        if ToByte(by4) > 13 then
-          if ToByte(by4 shr 8) > 13 then
-            if ToByte(by4 shr 16) > 13 then
-              if ToByte(by4 shr 24) > 13 then
-              begin
-                inc(u, 4);
-                continue;
-              end
-              else
-                inc(u, 3)
-            else
-              inc(u, 2)
-          else
-            inc(u);
+        if u^ > #13 then
+        begin
+          inc(u);
+          continue;
+        end;
         if u^ in [#0, #10, #13] then
           break;
         inc(u);
@@ -3918,16 +3911,36 @@ begin
         u := pointer(UpperName + 1);
         repeat
           if u^ <> #0 then
-            if table[PBeg^] <> u^ then
-              break
-            else
+            if table[PBeg^] = u^ then
             begin
               inc(u);
               inc(PBeg);
             end
+            else
+            begin
+              if (PBeg^ <> ' ') or
+                 (u^ <> '=') then // ignore spaces/tabs around the '=' sign
+                break;
+              repeat
+                inc(PBeg);
+                if PBeg^ in [#1 .. ' '] then
+                  continue
+                else if PBeg^ <> '=' then
+                  break;
+                inc(PBeg);
+                goto fnd;
+              until false;
+              break;
+            end
           else
           begin
-            FastSetString(result, PBeg, P - PBeg);
+fnd:        while PBeg^ in [#1 .. ' '] do
+              inc(PBeg); // should ignore spaces/tabs after the '=' sign
+            l := P - PBeg;
+            while (l > 0) and
+                  (PBeg[l - 1] in [#1 .. ' ']) do
+              dec(l);   // should ttrim spaces/tabs at the end of the line
+            FastSetString(result, PBeg, l);
             exit;
           end;
         until false;
