@@ -885,6 +885,8 @@ var
   Content, S, N, V: RawUtf8;
   Si, Ni, Vi, i, j: integer;
   P: PUtf8Char;
+const
+  VUP: array[0..3] of PAnsiChar = ('VALUE', 'value', 'value2', nil);
 begin
   Content := '';
   for i := 1 to 1000 do
@@ -912,6 +914,17 @@ begin
     exit;
   S := StringFromFile(WorkDir + 'test2.ini');
   Check(S = Content, WorkDir + 'test2.ini');
+  Content := 'name=value'#13#10' name2= value2 '#13#10' name 3  =  value3 ';
+  CheckEqual(FindIniNameValue(pointer(Content), 'NAME='), 'value');
+  CheckEqual(FindIniNameValue(pointer(Content), 'NAME2='), 'value2');
+  CheckEqual(FindIniNameValue(pointer(Content), 'NAME3='), '');
+  CheckEqual(FindIniNameValue(pointer(Content), 'NAME 3='), 'value3');
+  Check(ExistsIniNameValue(pointer(Content), 'NAME=', @VUP));
+  Check(ExistsIniNameValue(pointer(Content), 'NAME2=', @VUP));
+  Check(not ExistsIniNameValue(pointer(Content), 'NAME3=', @VUP));
+  Check(not ExistsIniNameValue(pointer(Content), 'NAME 3=', @VUP));
+  Check(ExistsIniNameValue(pointer(Content), 'NAME 3  =', @VUP));
+  Check(not ExistsIniNameValue(pointer(Content), 'NAME  3  =', @VUP));
   Content := 'abc'#13#10'def'#10'ghijkl'#13'1234567890';
   P := pointer(Content);
   Check(GetNextLine(P, P) = 'abc');
