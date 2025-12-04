@@ -3918,24 +3918,29 @@ begin // expects UpperName as 'NAME='
             end
             else
             begin
-              if (PBeg^ <> ' ') or
-                 (u^ <> '=') then // ignore spaces/tabs around the '=' sign
+              if u^ <> '=' then
                 break;
-              repeat
+              if PBeg^ <> ' ' then
+                if PBeg^ = ':' then // allow ':' within INI (as WinAPI)
+                  goto fnd
+                else
+                  break;
+              repeat // ignore spaces/tabs around the '=' sign
                 inc(PBeg);
                 if PBeg^ in [#1 .. ' '] then
                   continue
                 else if PBeg^ <> '=' then
                   break;
-                inc(PBeg);
                 goto fnd;
               until false;
               break;
             end
           else
           begin
-fnd:        while PBeg^ in [#1 .. ' '] do
-              inc(PBeg); // should ignore spaces/tabs after the '=' sign
+            if PBeg^ in [#1 .. ' '] then
+              repeat
+fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
+              until not (PBeg^ in [#1 .. ' ']);
             l := P - PBeg;
             while (l > 0) and
                   (PBeg[l - 1] in [#1 .. ' ']) do

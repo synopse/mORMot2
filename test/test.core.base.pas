@@ -914,11 +914,14 @@ begin
     exit;
   S := StringFromFile(WorkDir + 'test2.ini');
   Check(S = Content, WorkDir + 'test2.ini');
-  Content := 'name=value'#13#10' name2= value2 '#13#10' name 3  =  value3 ';
+  Content := 'name=value'#13#10' name2= value2 '#13#10 +
+             ' name 3  =  value3 '#13#10' name4: value 4 '#13#10;
   CheckEqual(FindIniNameValue(pointer(Content), 'NAME='), 'value');
   CheckEqual(FindIniNameValue(pointer(Content), 'NAME2='), 'value2');
   CheckEqual(FindIniNameValue(pointer(Content), 'NAME3='), '');
   CheckEqual(FindIniNameValue(pointer(Content), 'NAME 3='), 'value3');
+  CheckEqual(FindIniNameValue(pointer(Content), 'NAME4='), 'value 4');
+  CheckEqual(FindIniNameValue(pointer(Content), 'NAME4:'), 'value 4');
   Check(ExistsIniNameValue(pointer(Content), 'NAME=', @VUP));
   Check(ExistsIniNameValue(pointer(Content), 'NAME2=', @VUP));
   Check(not ExistsIniNameValue(pointer(Content), 'NAME3=', @VUP));
