@@ -2501,7 +2501,8 @@ procedure ReplaceSection(SectionFirstLine: PUtf8Char;
   var Content: RawUtf8; const NewSectionContent: RawUtf8); overload;
 
 /// return TRUE if Value of UpperName does exist in P, till end of current section
-// - expect UpperName as 'NAME='
+// - expects UpperName as 'NAME=' or 'HTTPHEADERNAME:'
+// - note: won't ignore spaces/tabs around the '=' sign
 function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 
 /// find the Value of UpperName in P, till end of current section
@@ -2509,17 +2510,18 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
   const DefaultValue: RawUtf8 = ''): RawUtf8;
 
-/// return TRUE if one of the Value of UpperName exists in P, till end of
-// current section
+/// return TRUE if one of the leftmost Value of UpperName exists in P
 // - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
 // - expect UpperValues to be an array of upper values with left side matching,
 // and ending with nil - as expected by IdemPPChar(), i.e. with at least 2 chars
+// - note: won't ignore spaces/tabs around the '=' sign
 function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
   UpperValues: PPAnsiChar): boolean;
 
 /// find the integer Value of UpperName in P, till end of current section
-// - expect UpperName as 'NAME='
+// - expect UpperName as 'NAME=' or 'CONTENT-LENGTH: '
 // - return 0 if no NAME= entry was found
+// - note: won't ignore spaces/tabs around the '=' sign
 function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
 
 /// replace a value from a given set of name=value lines
@@ -2527,6 +2529,7 @@ function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt
 // - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
 // - a typical use may be:
 // ! UpdateNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
+// - note: won't ignore spaces/tabs around the '=' sign
 function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
