@@ -4024,12 +4024,10 @@ begin
           inc(P)
         until P^ <> ' '; // trim left ' '
       if IdemPChar2(table, P, pointer(UpperName)) then
-      begin
-        inc(P, length(UpperName));
-        if IdemPPChar(P, UpperValues) >= 0 then
-          exit; // found one value
-        break;
-      end;
+        if IdemPPChar(GotoNextNotSpace(P + length(UpperName)), UpperValues) >= 0 then
+          exit // found one value
+        else
+          break;
       P := GotoNextLine(P);
     end;
   end;
