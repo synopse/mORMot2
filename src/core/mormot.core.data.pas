@@ -2512,6 +2512,9 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
   const DefaultValue: RawUtf8 = ''; PEnd: PUtf8Char = nil): RawUtf8;
 
+/// find the Value of UpperName in Content, wrapping FindIniNameValue()
+function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+
 /// return TRUE if one of the leftmost Value of UpperName exists in P
 // - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
 // - expect UpperValues to be an array of upper values with left side matching,
@@ -3863,6 +3866,13 @@ begin
       exit; // found
   until source^ = #0;
   source := nil;
+end;
+
+function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+var
+  p: PUtf8Char absolute Content;
+begin
+  result := FindIniNameValue(p, UpperName, '', p + length(Content));
 end;
 
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
