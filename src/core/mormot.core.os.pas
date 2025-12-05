@@ -3751,6 +3751,7 @@ function ConsoleReadBody: RawByteString;
 {$ifdef OSWINDOWS}
 
 /// low-level access to the keyboard state of a given key
+// - will consume all pending console events until this key is pressed (or not)
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 type

@@ -2647,28 +2647,24 @@ end;
 
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 var
-  events, read: DWord;
+  read: DWord;
   rec: TInputRecord;
   h: THandle;
 begin
   result := false;
   h := GetStdHandle(STD_INPUT_HANDLE);
-  events := 0;
-  GetNumberOfConsoleInputEvents(h, events);
-  if events <> 0 then
-  begin
-    PeekConsoleInput(h, rec, 1, read);
-    if read <> 0 then
-      if rec.EventType = KEY_EVENT then
-        if rec.Event.KeyEvent.bKeyDown and
-           ((ExpectedKey = 0) or
-            (rec.Event.KeyEvent.wVirtualKeyCode = ExpectedKey)) then
-          result := true
-        else
-          FlushConsoleInputBuffer(h)
-      else
-        FlushConsoleInputBuffer(h);
-  end;
+  repeat
+    read := 0;
+    if not PeekConsoleInput(h, rec, 1, read) or
+       (read = 0) then
+      exit;
+    ReadConsoleInput(h, rec, 1, read); // consume the event
+    if rec.EventType = KEY_EVENT then
+      if rec.Event.KeyEvent.bKeyDown and
+         ((ExpectedKey = 0) or
+          (rec.Event.KeyEvent.wVirtualKeyCode = ExpectedKey)) then
+        result := true;
+  until result; // keep draining the queue if the key was not pressed
 end;
 
 type
