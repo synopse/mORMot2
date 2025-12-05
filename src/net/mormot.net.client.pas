@@ -2829,6 +2829,7 @@ var
   p: PHttpCached;
   h: THash160;
 begin
+  result := false;
   HashNormalize(hash, len, h);
   fSafe.Lock;
   try
@@ -2839,8 +2840,8 @@ begin
         begin
           FillZero(THash256(p^));
           FileUpdateEntry(p, ndx);
-          result := true;
           dec(fCount);
+          result := true;
           exit;
         end
         else
@@ -2848,7 +2849,6 @@ begin
   finally
     fSafe.UnLock;
   end;
-  result := false;
 end;
 
 
