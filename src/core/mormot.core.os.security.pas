@@ -2444,24 +2444,25 @@ type
   end;
 
 const
-  PROV_RSA_FULL        = 1;
-  PROV_RSA_AES         = 24;
-  CRYPT_NEWKEYSET      = 8;
-  CRYPT_VERIFYCONTEXT  = DWord($F0000000);
-  PLAINTEXTKEYBLOB     = 8;
-  CUR_BLOB_VERSION     = 2;
-  KP_IV                = 1;
-  KP_MODE              = 4;
-  CALG_AES_128         = $660E;
-  CALG_AES_192         = $660F;
-  CALG_AES_256         = $6610;
-  CRYPT_MODE_CBC       = 1;
-  CRYPT_MODE_ECB       = 2;
-  CRYPT_MODE_OFB       = 3;
-  CRYPT_MODE_CFB       = 4;
-  CRYPT_MODE_CTS       = 5;
-  HCRYPTPROV_NOTTESTED = HCRYPTPROV(-1);
-  NTE_BAD_KEYSET       = HRESULT($80090016);
+  PROV_RSA_FULL                   = 1;
+  PROV_RSA_AES                    = 24;
+  CRYPT_NEWKEYSET                 = 8;
+  CRYPT_VERIFYCONTEXT             = DWord($F0000000);
+  PLAINTEXTKEYBLOB                = 8;
+  CUR_BLOB_VERSION                = 2;
+  KP_IV                           = 1;
+  KP_MODE                         = 4;
+  CALG_AES_128                    = $660E;
+  CALG_AES_192                    = $660F;
+  CALG_AES_256                    = $6610;
+  CRYPT_MODE_CBC                  = 1;
+  CRYPT_MODE_ECB                  = 2;
+  CRYPT_MODE_OFB                  = 3;
+  CRYPT_MODE_CFB                  = 4;
+  CRYPT_MODE_CTS                  = 5;
+  HCRYPTPROV_NOTTESTED            = HCRYPTPROV(-1);
+  NTE_BAD_KEYSET                  = HRESULT($80090016);
+  BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
 
 var
   /// direct access to the Windows CryptoApi - with late binding
@@ -6792,8 +6793,10 @@ begin
 end;
 
 var
-  // BCryptGenRandom() is only available since Vista: use GenRandom() as fallback
-  CryptProv: HCRYPTPROV;
+  BCryptApi: THandle;
+  BCryptGenRandom: function(hAlgorithm, pBuffer: pointer;
+    cbBuffer, dwFlags: ULONG): cardinal; stdcall;
+  CryptProv: HCRYPTPROV; // use GenRandom() as XP fallback
 
 function FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean): boolean;
@@ -6801,13 +6804,19 @@ begin
   result := false;
   if Len <= 0 then
     exit;
-  if CryptProv = nil then
-    if CryptoApi.Available then
-      // warning: on some Windows versions, this could take up to 30 ms!
+  if (OSVersion >= wVista) and
+     DelayedProc(BCryptGenRandom, BCryptApi, 'bcrypt.dll', 'BCryptGenRandom') then
+    // use the new Vista+ API
+    result := BCryptGenRandom(nil, Buffer, Len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) = NOERROR;
+  if not result then
+  begin
+    if (CryptProv = nil) and
+       CryptoApi.Available then
       CryptoApi.AcquireContextA(CryptProv, nil, nil,
-        PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
-  if CryptProv <> nil then
-    result := CryptoApi.GenRandom(CryptProv, Len, Buffer);
+        PROV_RSA_FULL, CRYPT_VERIFYCONTEXT); // initialize once for XP fallback
+    if CryptProv <> nil then
+      result := CryptoApi.GenRandom(CryptProv, Len, Buffer);
+  end;
   if not result then
     // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
     SharedRandom.Fill(pointer(Buffer), Len)
