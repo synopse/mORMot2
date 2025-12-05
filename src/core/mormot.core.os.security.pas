@@ -6727,29 +6727,6 @@ end;
 
 {$ifdef OSWINDOWS}
 
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
-var
-  prov: HCRYPTPROV;
-begin
-  result := false;
-  if Len <= 0 then
-    exit;
-  // warning: on some Windows versions, this could take up to 30 ms!
-  if CryptoApi.Available then
-    if CryptoApi.AcquireContextA(prov, nil, nil,
-      PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
-    begin
-      result := CryptoApi.GenRandom(prov, Len, Buffer);
-      CryptoApi.ReleaseContext(prov, 0);
-    end;
-  if not result then
-    // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
-    SharedRandom.Fill(pointer(Buffer), Len)
-  else if Len >= SizeOf(SystemEntropy.LiveFeed) then
-    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer)); // shuffle live state
-end;
-
 { TWinCryptoApi }
 
 function TWinCryptoApi.Available: boolean;
@@ -6812,6 +6789,30 @@ begin
   FastSetString(text, txt, StrLen(txt));
   LocalFree(HLOCAL(txt));
   result := true;
+end;
+
+var
+  // BCryptGenRandom() is only available since Vista: use GenRandom() as fallback
+  CryptProv: HCRYPTPROV;
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
+begin
+  result := false;
+  if Len <= 0 then
+    exit;
+  if CryptProv = nil then
+    if CryptoApi.Available then
+      // warning: on some Windows versions, this could take up to 30 ms!
+      CryptoApi.AcquireContextA(CryptProv, nil, nil,
+        PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
+  if CryptProv <> nil then
+    result := CryptoApi.GenRandom(CryptProv, Len, Buffer);
+  if not result then
+    // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
+    SharedRandom.Fill(pointer(Buffer), Len)
+  else if Len >= SizeOf(SystemEntropy.LiveFeed) then
+    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer)); // shuffle live state
 end;
 
 type
@@ -7703,6 +7704,13 @@ begin
   if not result then
     SetLastError(bak); // so that WinLastError / RaiseLastError would work
 end;
+
+
+initialization
+
+finalization
+  if CryptProv <> nil then // used as fallback on XP
+    CryptoApi.ReleaseContext(CryptProv, 0);
 
 {$endif OSWINDOWS}
 

@@ -4242,7 +4242,7 @@ end;
 var
   OnHandleCtrlC: TThreadMethod;
 
-function ConsoleCtrlHandler(typ : DWord) : BOOL; stdcall;
+function ConsoleCtrlHandler(typ: DWord): BOOL; stdcall;
 begin
   result := false;
   if Assigned(OnHandleCtrlC) then
@@ -4902,7 +4902,8 @@ begin
   IsWow64Process2 := LibraryResolve(h, 'IsWow64Process2'); // Windows 10+
   process := 0;
   machine := IMAGE_FILE_MACHINE_UNKNOWN; // default = not under WOW64
-  IsWow64Emulation := Assigned(IsWow64Process2) and
+  IsWow64Emulation :=
+    Assigned(IsWow64Process2) and
     IsWow64Process2(GetCurrentProcess, process, machine) and
     {$ifdef CPUINTEL} not {$endif} // detecting PRISM is enough by now
     ((machine = IMAGE_FILE_MACHINE_I386) or
