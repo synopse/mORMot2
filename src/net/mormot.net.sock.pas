@@ -758,8 +758,8 @@ function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolean;
 
 /// get the local IP address used to reach a computer, from its IP Address
-// - will create a SOCK_DGRAM socket over the supplied IP, and check
-// the local socket address created
+// - will create a SOCK_DGRAM socket with the supplied IP over DNS, HTTP, HTTPS,
+// discard (9), NTP ports, and check the local socket address created
 function GetLocalIpAddress(const Remote: RawUtf8): RawUtf8;
 
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
@@ -4091,18 +4091,27 @@ function GetLocalIpAddress(const Remote: RawUtf8): RawUtf8;
 var
   addr: TNetAddr;
   sock: TNetSocket;
+  i: PtrInt;
+const
+  PORTS: array[0..4] of RawUtf8 = ( // connect() may fail on firewall/cap policy
+    '53', '80', '443', '9', '123'); // DNS, HTTP, HTTPS, discard, NTP
 begin
   result := '';
-  if addr.SetFrom(Remote, '9', nlUdp) <> nrOk then // 9 is discard port
-    exit;
-  sock := addr.NewSocket(nlUdp);
-  if sock <> nil then
-    try
-      if (connect(sock.Socket, @addr, addr.Size) = NO_ERROR) and
-         (sock.GetName(addr) = nrOk) then
-        addr.IP(result);
-    finally
-      sock.Close;
+  for i := 0 to high(ports) do
+    if addr.SetFrom(Remote, PORTS[i], nlUdp) = nrOk then
+    begin
+      sock := addr.NewSocket(nlUdp);
+      if sock <> nil then
+      try
+        if (connect(sock.Socket, @addr, addr.Size) = NO_ERROR) and
+           (sock.GetName(addr) = nrOk) then
+        begin
+          addr.IP(result);
+          exit;
+        end;
+      finally
+        sock.Close;
+      end;
     end;
 end;
 
