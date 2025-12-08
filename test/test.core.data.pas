@@ -1448,6 +1448,34 @@ begin
   fEnum := Value;
 end;
 
+type
+  TTest = class(TSynJsonFileSettings)
+  private
+    fprop1: RawUtf8;
+    fprop2: RawUtf8;
+    procedure Setprop1(AValue: RawUtf8);
+    procedure Setprop2(AValue: RawUtf8);
+    published
+      property prop1: RawUtf8
+        read fprop1 write Setprop1;
+      property prop2: RawUtf8
+        read fprop2 write Setprop2;
+  end;
+
+procedure TTest.Setprop1(AValue: rawUtf8);
+begin
+  if fprop1 = AValue then 
+    exit;
+  fprop1 := AValue;
+end;
+
+procedure TTest.Setprop2(AValue: rawUtf8);
+begin
+  if fprop2 = AValue then 
+    exit;
+  fprop2 := AValue;
+end;
+
 const
   SIMPLEENUM2TXT: array[TSimpleEnum] of RawUtf8 = (
     'un', 'd\eux');
@@ -1482,6 +1510,7 @@ var
   Coll, C2: TCollTst;
   MyItem: TCollTest;
   Comp: TComplexNumber;
+  t: TTest;
   DA: TDynArray;
   F: TFV;
   TLNow: TTimeLog;
@@ -2221,6 +2250,18 @@ var
     Check(ObjectEquals(G2, GDtoObject));
     G2.Free;
     GDtoObject.Free;
+
+    t := TTest.Create;
+    try
+      CheckEqual(t.prop1, '');
+      CheckEqual(t.prop2, '');
+      Check(t.LoadFromJson('[global]'#13#10'prop1=test'#13#10#13#10 +
+        '[other]'#13#10'prop2=other'#13#10, 'Global'));
+      CheckEqual(t.prop1, 'test');
+      CheckEqual(t.prop2, '');
+    finally
+      t.Free;
+    end;
 
     owv := TObjectWithVariant.Create;
     J := ObjectToJson(owv);
