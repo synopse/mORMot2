@@ -1449,7 +1449,7 @@ begin
 end;
 
 type
-  TTest = class(TSynJsonFileSettings)
+  TPropTest = class(TSynJsonFileSettings)
   private
     fprop1: RawUtf8;
     fprop2: RawUtf8;
@@ -1462,14 +1462,14 @@ type
         read fprop2 write Setprop2;
   end;
 
-procedure TTest.Setprop1(AValue: rawUtf8);
+procedure TPropTest.Setprop1(AValue: rawUtf8);
 begin
   if fprop1 = AValue then 
     exit;
   fprop1 := AValue;
 end;
 
-procedure TTest.Setprop2(AValue: rawUtf8);
+procedure TPropTest.Setprop2(AValue: rawUtf8);
 begin
   if fprop2 = AValue then 
     exit;
@@ -1510,7 +1510,7 @@ var
   Coll, C2: TCollTst;
   MyItem: TCollTest;
   Comp: TComplexNumber;
-  t: TTest;
+  t: TPropTest;
   DA: TDynArray;
   F: TFV;
   TLNow: TTimeLog;
@@ -2251,7 +2251,7 @@ var
     G2.Free;
     GDtoObject.Free;
 
-    t := TTest.Create;
+    t := TPropTest.Create;
     try
       CheckEqual(t.prop1, '');
       CheckEqual(t.prop2, '');
