@@ -4358,8 +4358,8 @@ var
   r: TRttiCustom;
   i: integer;
   p: PRttiCustomProp;
-  section, iniend, nested, json: PUtf8Char;
-  name: PAnsiChar;
+  section, sectionend, nested, nestedend, json: PUtf8Char;
+  u: PAnsiChar;
   n, v: RawUtf8;
   up: TByteToAnsiChar;
 begin
@@ -4367,10 +4367,9 @@ begin
   if (Ini = '') or
      (Instance = nil) then
     exit;
-  PWord(UpperCopy255(up{%H-}, SectionName))^ := ord(']');
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
   section := pointer(Ini);
-  iniend := section + length(Ini);
-  if not FindSectionFirstLine(section, @up) then
+  if not FindSectionFirstLine(section, @up, @sectionend) then
     exit; // section not found
   r := Rtti.RegisterClass(Instance);
   p := pointer(r.Props.List);
@@ -4390,25 +4389,25 @@ begin
       end
       else
       begin
-        PWord(UpperCopy255(up{%H-}, p^.Name))^ := ord('=');
-        v := FindIniNameValue(section, @up, #0, iniend);
+        PWord(UpperCopy255(@up, p^.Name))^ := ord('=');
+        v := FindIniNameValue(section, @up, #0, sectionend);
         if p^.Value.Parser in ptMultiLineStringTypes then
         begin
           if v = #0 then // may be stored in a multi-line section body
           begin
-            name := @up;
+            u := @up;
             if Level <> 0 then
             begin
-              name := UpperCopy255(name, SectionName);
-              name^ := '.';
-              inc(name);
+              u := UpperCopy255(u, SectionName); // recursive name
+              u^ := '.';
+              inc(u);
             end;
-            PWord(UpperCopy255(name, p^.Name))^ := ord(']');
+            PWord(UpperCopy255(u, p^.Name))^ := ord(']');
             nested := pointer(Ini);
-            if FindSectionFirstLine(nested, @up) then
+            if FindSectionFirstLine(nested, @up, @nestedend) then
             begin
-              // multi-line text value has been stored in its own section
-              v := GetSectionContent(nested);
+              // multi-line text value can been stored in its own section
+              FastSetString(v, nested, nestedend - nested);
               if p^.Prop^.SetValueText(Instance, v) then
                 result := true;
             end;
