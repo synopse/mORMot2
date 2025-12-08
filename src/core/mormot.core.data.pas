@@ -2457,7 +2457,8 @@ procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Val
 
 /// find the position of the [SEARCH] section in source
 // - return true if [SEARCH] was found, and store pointer to the line after it in source
-function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar): boolean;
+function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar;
+  sourceend: PPUtf8Char = nil): boolean;
 
 /// find the position of the [SEARCH] section in source
 // - return true if [SEARCH] was found, and store pointer to the line after it in source
@@ -3821,30 +3822,46 @@ begin
   result := true;
 end;
 
-function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar): boolean;
+function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar;
+  sourceend: PPUtf8Char): boolean;
 var
+  p: PUtf8Char;
   table: PNormTable;
   charset: PTextCharSet;
 begin
   result := false;
-  if (source = nil) or
+  p := source;
+  if (p = nil) or
      (search = nil) then
     exit;
   table := @NormToUpperAnsi7;
   charset := @TEXT_CHARS;
   repeat
-    if source^ = '[' then
+    if p^ = '[' then
     begin
-      inc(source);
-      result := IdemPChar2(table, source, search);
+      inc(p);
+      result := IdemPChar2(table, p, search);
     end;
-    while tcNot01013 in charset[source^] do
-      inc(source);
-    while tc1013 in charset[source^] do
-      inc(source);
+    while tcNot01013 in charset[p^] do
+      inc(p);
+    while tc1013 in charset[p^] do
+      inc(p);
     if result then
-      exit; // found
-  until source^ = #0;
+    begin
+      source := p;
+      if sourceend <> nil then
+      begin
+        repeat
+          while tcNot01013 in charset[p^] do
+            inc(p);
+          while tc1013 in charset[p^] do
+            inc(p);
+        until p^ in [#0, '['];
+        sourceend^ := p;
+      end;
+      exit;
+    end;
+  until p^ = #0;
   source := nil;
 end;
 
