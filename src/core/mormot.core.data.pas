@@ -2466,12 +2466,7 @@ function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar;
 function FindSectionFirstLineW(var source: PWideChar; search: PUtf8Char): boolean;
 
 /// retrieve the whole content of a section as a string
-// - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
-function GetSectionContent(SectionFirstLine: PUtf8Char): RawUtf8; overload;
-
-/// retrieve the whole content of a section as a string
-// - use SectionFirstLine() then previous GetSectionContent()
-function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8; overload;
+function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
 
 /// delete a whole [Section]
 // - if EraseSectionHeader is TRUE (default), then the [Section] line is also
@@ -4085,29 +4080,15 @@ begin
   result := false;
 end;
 
-function GetSectionContent(SectionFirstLine: PUtf8Char): RawUtf8;
-var
-  PBeg: PUtf8Char;
-begin
-  PBeg := SectionFirstLine;
-  while (SectionFirstLine <> nil) and
-        (SectionFirstLine^ <> '[') do
-    SectionFirstLine := GotoNextLine(SectionFirstLine);
-  if SectionFirstLine = nil then
-    result := PBeg
-  else
-    FastSetString(result, PBeg, SectionFirstLine - PBeg);
-end;
-
 function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
 var
-  P: PUtf8Char;
-  UpperSection: TByteToAnsiChar;
+  P, PEnd: PUtf8Char;
+  up: TByteToAnsiChar;
 begin
   P := pointer(Content);
-  PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
-  if FindSectionFirstLine(P, UpperSection) then
-    result := GetSectionContent(P)
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+  if FindSectionFirstLine(P, @up, @PEnd) then
+    FastSetString(result, P, PEnd - P)
   else
     result := '';
 end;
