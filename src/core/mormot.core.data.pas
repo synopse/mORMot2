@@ -3901,17 +3901,17 @@ var
 label
   fnd;
 begin // expects UpperName as 'NAME='
-  if (P <> nil) and
-     (P^ <> '[') and
+  u := P;
+  if (u <> nil) and
+     (u^ <> '[') and
      (UpperName <> nil) then
   begin
     {$ifndef CPUX86NOTPIC}
     table := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
     PBeg := nil;
-    u := P;
     repeat
-      while u^ in [#1 .. ' '] do
+      while u^ in [#9, ' '] do
         inc(u); // trim left ' '
       if u^ = #0 then
         break;
@@ -3953,7 +3953,7 @@ begin // expects UpperName as 'NAME='
               repeat // ignore spaces/tabs around the '=' sign
                 inc(PBeg);
                 case PBeg^ of
-                  #1 .. ' ':
+                  #9, ' ':
                     continue;
                   '=', ':':
                     goto fnd;
@@ -3965,13 +3965,13 @@ begin // expects UpperName as 'NAME='
             end
           else
           begin
-            if PBeg^ in [#1 .. ' '] then
+            if PBeg^ in [#9, ' '] then
               repeat
 fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
-              until not (PBeg^ in [#1 .. ' ']);
+              until not (PBeg^ in [#9, ' ']);
             l := P - PBeg;
             while (l > 0) and
-                  (PBeg[l - 1] in [#1 .. ' ']) do
+                  (PBeg[l - 1] in [#9, ' ']) do
               dec(l);      // should trim spaces/tabs at the end of the line
             FastSetString(result, PBeg, l);
             exit;
@@ -3980,9 +3980,7 @@ fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
         PBeg := nil;
         u := P;
       end;
-      if u^ = #13 then
-        inc(u);
-      if u^ = #10 then
+      while u^ in [#10, #13] do
         inc(u);
     until u^ in [#0, '['];
   end;
