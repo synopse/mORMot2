@@ -8071,10 +8071,15 @@ begin
   // recognize some specific types
   case typ of
     wRecord:
-      if PropNameEquals(typName, 'TGUID') then
-        typ := wGuid
-      else if PropNameEquals(typName, 'TServiceCustomAnswer') then
-        typ := wCustomAnswer;
+      case FindPropName(['TGuid', 'TServiceCustomAnswer',
+        'TBcd', 'RawSid', 'RawSecurityDescriptor', 'TSecAccessMask'], typName) of
+        0:
+          typ := wGuid;
+        1:
+          typ := wCustomAnswer;
+        2, 3, 4, 5:
+          typ := wRawUtf8; // as in mormot.crypt.secure/mormot.db.rad units
+      end;
     wObject:
       if (rtti <> nil) and
          (rtti.Kind = rkClass) then
