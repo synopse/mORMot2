@@ -759,8 +759,8 @@ function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolea
 
 /// get the local IP address used to reach a computer, from its IP Address
 // - will create a SOCK_DGRAM socket with the supplied IP over DNS, HTTP, HTTPS,
-// discard (9), NTP ports, and check the local socket address created
-function GetLocalIpAddress(const Remote: RawUtf8): RawUtf8;
+// NTP and discard (9) ports, then check the local socket address created
+function GetLocalIpAddress(const Remote: RawUtf8 = '8.8.8.8'): RawUtf8;
 
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
 // - on POSIX, return "nameserver" from /etc/resolv.conf unless usePosixEnv is set
@@ -4094,16 +4094,19 @@ var
   i: PtrInt;
 const
   PORTS: array[0..4] of RawUtf8 = ( // connect() may fail on firewall/cap policy
-    '53', '80', '443', '9', '123'); // DNS, HTTP, HTTPS, discard, NTP
+    '53', '80', '443', '123', '9'); // DNS, HTTP, HTTPS, NTP, discard
 begin
   result := '';
-  for i := 0 to high(ports) do
+  for i := 0 to high(PORTS) do
     if addr.SetFrom(Remote, PORTS[i], nlUdp) = nrOk then
     begin
       sock := addr.NewSocket(nlUdp);
       if sock <> nil then
       try
         if (connect(sock.Socket, @addr, addr.Size) = NO_ERROR) and
+           {$ifdef OSWINDOWS}
+           (send(sock.Socket, nil, 0, 0) = 0) and // for Windows < 10.1809
+           {$endif OSWINDOWS}
            (sock.GetName(addr) = nrOk) then
         begin
           addr.IP(result);
