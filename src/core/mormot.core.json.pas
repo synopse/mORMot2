@@ -4315,7 +4315,7 @@ function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
   PropNameFound: PRawUtf8): PUtf8Char;
 var
   name: ShortString; // no memory allocation nor P^ modification
-  PropNameUpper: TByteToAnsiChar;
+  up: TByteToAnsiChar;
   parser: TJsonGotoEndParser;
 begin
   if P <> nil then
@@ -4325,7 +4325,7 @@ begin
     begin
       if PropName[PropNameLen - 1] = '*' then
       begin
-        UpperCopy255Buf(PropNameUpper{%H-}, PropName, PropNameLen - 1)^ := #0;
+        UpperCopy255Buf(@up, PropName, PropNameLen - 1)^ := #0;
         PropNameLen := 0; // mark 'PropName*' search
       end;
       if P^ = '{' then
@@ -4344,7 +4344,7 @@ begin
           if PropNameLen = 0 then // 'PropName*'
           begin
             name[ord(name[0]) + 1] := #0; // make ASCIIZ
-            if IdemPChar(@name[1], PropNameUpper) then
+            if IdemPChar(@name[1], up) then
             begin
               if PropNameFound <> nil then
                 FastSetString(PropNameFound^, @name[1], ord(name[0]));

@@ -8609,7 +8609,7 @@ begin
      (aName = nil) or
      (not IsObject) then
     exit;
-  PWord(UpperCopy255Buf(Up{%H-}, aName, aNameLen))^ := ord(aSepChar); // e.g. 'P.'
+  PWord(UpperCopy255Buf(@Up, aName, aNameLen))^ := ord(aSepChar); // e.g. 'P.'
   for ndx := 0 to VCount - 1 do
     if not IdemPChar(pointer(VName[ndx]), Up) then
       exit; // all fields should match "p.####"
@@ -8904,7 +8904,7 @@ function TDocVariantData.DeleteByStartName(
   aStartName: PUtf8Char; aStartNameLen: integer): integer;
 var
   ndx: PtrInt;
-  upname: TByteToAnsiChar;
+  up: TByteToAnsiChar;
 begin
   result := 0;
   if aStartNameLen = 0 then
@@ -8913,9 +8913,9 @@ begin
      (not IsObject) or
      (aStartNameLen = 0) then
     exit;
-  UpperCopy255Buf(upname{%H-}, aStartName, aStartNameLen)^ := #0;
+  UpperCopy255Buf(@up, aStartName, aStartNameLen)^ := #0;
   for ndx := Count - 1 downto 0 do
-    if IdemPChar(pointer(names[ndx]), upname) then
+    if IdemPChar(pointer(names[ndx]), up) then
     begin
       Delete(ndx);
       inc(result);
@@ -9374,7 +9374,7 @@ end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUtf8): RawUtf8;
 var
-  Up: TByteToAnsiChar;
+  up: TByteToAnsiChar;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   n: integer;
   checkExtendedPropName: boolean;
@@ -9388,7 +9388,7 @@ begin
     result := NULL_STR_VAR;
     exit;
   end;
-  UpperCopy255(Up, aStartName)^ := #0;
+  UpperCopy255(@up, aStartName)^ := #0;
   wr := TJsonWriter.CreateOwnedStream(temp);
   try
     checkExtendedPropName := Has(dvoSerializeAsExtendedJson);
@@ -9397,7 +9397,7 @@ begin
     nam := pointer(VName);
     val := pointer(VValue);
     repeat
-      if IdemPChar(nam^, Up) then
+      if IdemPChar(nam^, up) then
         AddNameValueJson(wr, nam^, val, checkExtendedPropName);
       dec(n);
       if n = 0 then
@@ -9415,7 +9415,7 @@ end;
 function TDocVariantData.GetValuesByStartName(const aStartName: RawUtf8;
   TrimLeftStartName: boolean): variant;
 var
-  Up: TByteToAnsiChar;
+  up: TByteToAnsiChar;
   ndx: PtrInt;
   name: RawUtf8;
 begin
@@ -9429,9 +9429,9 @@ begin
   begin
     VarClear(result{%H-});
     TDocVariant.NewFast(result);
-    UpperCopy255(Up{%H-}, aStartName)^ := #0;
+    UpperCopy255(@up, aStartName)^ := #0;
     for ndx := 0 to VCount - 1 do
-      if IdemPChar(pointer(VName[ndx]), Up) then
+      if IdemPChar(pointer(VName[ndx]), up) then
       begin
         name := VName[ndx];
         if TrimLeftStartName then

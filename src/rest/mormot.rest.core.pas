@@ -3961,8 +3961,8 @@ begin
     result := fInHeaderLastValue
   else
   begin
-    PWord(UpperCopy255(up{%H-}, HeaderName))^ := ord(':');
-    FindNameValue(fCall^.InHead, up, result); // = fCall^.Header(up)
+    PWord(UpperCopy255(@up, HeaderName))^ := ord(':');
+    FindNameValue(fCall^.InHead, @up, result); // = fCall^.Header(up)
     if result <> '' then
     begin
       fInHeaderLastName := HeaderName;

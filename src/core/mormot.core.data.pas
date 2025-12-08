@@ -4095,12 +4095,12 @@ function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
   EraseSectionHeader: boolean): boolean;
 var
   P: PUtf8Char;
-  UpperSection: TByteToAnsiChar;
+  up: TByteToAnsiChar;
 begin
   result := false; // no modification
   P := pointer(Content);
-  PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
-  if FindSectionFirstLine(P, UpperSection) then
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+  if FindSectionFirstLine(P, @up) then
     result := DeleteSection(P, Content, EraseSectionHeader);
 end;
 
@@ -4153,12 +4153,12 @@ end;
 
 procedure ReplaceSection(var Content: RawUtf8; const SectionName, NewSectionContent: RawUtf8);
 var
-  UpperSection: TByteToAnsiChar;
+  up: TByteToAnsiChar;
   P: PUtf8Char;
 begin
   P := pointer(Content);
-  PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
-  if FindSectionFirstLine(P, UpperSection) then
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+  if FindSectionFirstLine(P, @up) then
     ReplaceSection(P, Content, NewSectionContent)
   else
     Append(Content, ['[', SectionName, ']'#13#10, NewSectionContent]);
@@ -4186,24 +4186,23 @@ end;
 function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
 var
   P, PEnd: PUtf8Char;
-  UpperSection, UpperName: TByteToAnsiChar;
+  n, s: TByteToAnsiChar;
 begin
   result := DefaultValue;
   P := pointer(Content);
   if P = nil then
     exit;
-  PEnd := P + length(Content);
-  // fast UpperName := UpperCase(Name)+'='
-  PWord(UpperCopy255(UpperName{%H-}, Name))^ := ord('=');
+  // fast n := UpperCase(Name)+'='
+  PWord(UpperCopy255(@n, Name))^ := ord('=');
   if Section = '' then
     // find the Name= entry before any [Section]
-    result := FindIniNameValue(P, UpperName, DefaultValue, PEnd)
+    result := FindIniNameValue(P, @n, DefaultValue, P + length(Content))
   else
   begin
     // find the Name= entry in the specified [Section]
-    PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
-    if FindSectionFirstLine(P, UpperSection) then
-      result := FindIniNameValue(P, UpperName, DefaultValue, PEnd);
+    PWord(UpperCopy255(@s, Section))^ := ord(']');
+    if FindSectionFirstLine(P, @s, @PEnd) then
+      result := FindIniNameValue(P, @n, DefaultValue, PEnd);
   end;
 end;
 
@@ -4296,11 +4295,11 @@ begin
     SectionFound := true // find the Name= entry before any [Section]
   else
   begin
-    PWord(UpperCopy255(up{%H-}, Section))^ := ord(']');
-    SectionFound := FindSectionFirstLine(P, up);
+    PWord(UpperCopy255(@up, Section))^ := ord(']');
+    SectionFound := FindSectionFirstLine(P, @up);
   end;
   len := length(Name);
-  PWord(UpperCopy255Buf(up{%H-}, pointer(Name), len))^ := ord('=');
+  PWord(UpperCopy255Buf(@up, pointer(Name), len))^ := ord('=');
   inc(len);
   if SectionFound and
      UpdateNameValueInternal(Content, Value, V, P, @up, len) then
@@ -4577,12 +4576,12 @@ end;
 
 function HashInternI(P: PUtf8Char; L: PtrUInt): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid slow heap allocation
+  up: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if (P <> nil) and
      (L <> 0) then
-    result := InterningHasher(HashSeed, tmp{%H-},
-      UpperCopy255Buf(tmp{%H-}, P, L) - {%H-}tmp)
+    result := InterningHasher(HashSeed, @up,
+      UpperCopy255Buf(@up, P, L) - PAnsiChar(@up))
   else
     result := 0;
 end;
@@ -5483,15 +5482,15 @@ end;
 
 function TRawUtf8List.IndexOfName(const Name: RawUtf8): PtrInt;
 var
-  UpperName: TByteToAnsiChar;
+  up: TByteToAnsiChar;
   table: PNormTable;
 begin
   if self <> nil then
   begin
-    PWord(UpperCopy255(UpperName{%H-}, Name))^ := ord(NameValueSep);
+    PWord(UpperCopy255(@up, Name))^ := ord(NameValueSep);
     table := @NormToUpperAnsi7;
     for result := 0 to fCount - 1 do
-      if IdemPChar(pointer(fValue[result]), UpperName, table) then
+      if IdemPChar(pointer(fValue[result]), @up, table) then
         exit;
   end;
   result := -1;
@@ -9226,12 +9225,12 @@ end;
 
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid any slow heap allocation
+  up: TByteToAnsiChar; // avoid any slow heap allocation
 begin
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
-    result := Hasher(HashSeed, tmp{%H-},
-      UpperCopy255Buf(tmp{%H-}, Item, PStrLen(Item - _STRLEN)^) - {%H-}tmp)
+    result := Hasher(HashSeed, @up,
+      UpperCopy255Buf(@up, Item, PStrLen(Item - _STRLEN)^) - PAnsiChar(@up))
   else
     result := 0;
 end;
@@ -9257,10 +9256,10 @@ end;
 
 function HashSynUnicodeI(Item: PSynUnicode; Hasher: THasher): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid slow heap allocation
+  up: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
-    result := Hasher(HashSeed, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp)
+    result := Hasher(HashSeed, @up, UpperCopy255W(@up, Item^) - PAnsiChar(@up))
   else
     result := 0;
 end;
@@ -9276,11 +9275,11 @@ end;
 
 function HashWideStringI(Item: PWideString; Hasher: THasher): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid slow heap allocation
+  up: TByteToAnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
-    result := Hasher(HashSeed, tmp{%H-},
-      UpperCopy255W(tmp{%H-}, pointer(Item^), Length(Item^)) - {%H-}tmp)
+    result := Hasher(HashSeed, @up,
+      UpperCopy255W(@up, pointer(Item^), Length(Item^)) - PAnsiChar(@up))
   else
     result := 0;
 end;
@@ -9296,12 +9295,12 @@ end;
 
 function HashPUtf8CharI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: TByteToAnsiChar; // avoid slow heap allocation
+  up: TByteToAnsiChar; // avoid slow heap allocation
 begin
   Item := PPointer(Item)^; // passed as non-nil PPUtf8Char reference
   if Item <> nil then
-    result := Hasher(HashSeed, tmp{%H-},
-      UpperCopy255Buf(tmp{%H-}, Item, StrLen(Item)) - {%H-}tmp)
+    result := Hasher(HashSeed, @up,
+      UpperCopy255Buf(@up, Item, StrLen(Item)) - PAnsiChar(@up))
   else
     result := 0;
 end;
@@ -9368,7 +9367,7 @@ begin
     len := Max;  // don't hash more than needed
   dec(Max, len);
   if CaseInsensitive then
-    len := UpperCopy255Buf(tmp, @tmp, len) - tmp; // in-place uppercase
+    len := UpperCopy255Buf(@tmp, @tmp, len) - PAnsiChar(@tmp); // in-place upper
   result := Hasher(Seed, @tmp, len);
 end; // note: TDocVariantData have its own dedicated Hash() method
 
@@ -9441,7 +9440,7 @@ begin
   end;
   if utf8 then
   begin
-    len := UpperCopy255Buf(tmp, P, len) - tmp; // (maybe in-place) uppercase
+    len := UpperCopy255Buf(@tmp, P, len) - PAnsiChar(@tmp); // (in-place) upper
     P := @tmp; // P=vd^.VAny for varString
   end;
   if (len > Max) and
