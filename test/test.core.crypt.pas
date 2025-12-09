@@ -3904,7 +3904,7 @@ var
   u: TCryptCertUsage;
   fields: TCryptCertFields;
   cpe: TCryptCertPerUsage;
-  eccpub1, eccpub2: TEccPublicKey;
+  eccpub: TEccPublicKey;
 begin
   timer.Start;
   check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
@@ -3970,7 +3970,7 @@ begin
     if cka = ckaEcc256 then
     begin
       CheckEqual(jwk, c1.JwkCompute);
-      Check(JwkToEcc(jwk, eccpub1));
+      Check(JwkToEcc(jwk, eccpub));
       pub := TCryptPublicKeyEcc.Create;
       x := c1.GetPublicKey;
       Check(pub.Load(cka, x));
