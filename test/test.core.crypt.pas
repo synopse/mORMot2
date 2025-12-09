@@ -1769,7 +1769,7 @@ const
     if expected = 0 then
       expected := hash(0, buf, HASHESMAX) // use first call as aligned reference
     else
-      CheckEqual(hash(0, buf, HASHESMAX), expected, 'alignement problem');
+      CheckEqual(Int64(hash(0, buf, HASHESMAX)), Int64(expected), 'hash64');
     for L := 0 to HASHESMAX do
     begin
       c := hash(0, buf, L);
@@ -1780,7 +1780,7 @@ const
         dec(buf[modif]);
         CheckUtf8(c <> c2, 'L=% modif=%', [L, modif]);
       end;
-      CheckEqual(hash(0, buf, L), c, 'after reset');
+      CheckEqual(Int64(hash(0, buf, L)), Int64(c), 'after reset');
     end;
   end;
 
@@ -1910,7 +1910,7 @@ begin
       Hash32Test(P, @AesNiHash32, exp324);
     Hash32Test(P, @crc32fast,     exp325);
     Hash32Test(P, @adler32,       exp326);
-    Hash64Test(P, @crc32cTwice, exp641);
+    Hash64Test(P, @crc32cTwice,   exp641);
     if Assigned(AesNiHash64) then
       Hash64Test(P, @AesNiHash64, exp642);
     Hash128Test(P, @crc32c128);
@@ -1923,7 +1923,7 @@ begin
   CheckEqual(exp325, 3408302637);
   CheckEqual(exp326, 4027950528);
   CheckEqual(adler32fast(0, P, HASHESMAX), exp326);
-  CheckEqual(exp641, -1170836861443089901);
+  CheckEqual(Int64(exp641), -1170836861443089901);
   // verify "Modular Crypt" hashing functions
   u := '$5$rounds=12345$q3hvJE5mn5jKRsW.$BbbYTFiaImz9rTy03GGi.Jf9YY5bmxN0LU3p3uI1iUB';
   Check(ModularCryptIdentify(u) = mcfSha256Crypt);
