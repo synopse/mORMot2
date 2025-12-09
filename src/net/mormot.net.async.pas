@@ -1132,7 +1132,7 @@ type
   // - set the memory cache settings if used as exact THttpProxyMem class
   THttpProxyMem = class(TSynPersistent)
   protected
-    fMaxSize: Int64;
+    fMaxSizeKB: integer;
     fTimeoutSec: integer;
     fIgnoreCsv, fForceCsv: RawUtf8;
     fIgnore, fForce: TUriMatch; // parsed fIgnoreCsv, fForceCsv
@@ -1142,14 +1142,14 @@ type
     /// check the IgnoreCsv and ForceCSv properties against a given URI
     function FromUri(const uri: TUriMatchName): THttpProxyCacheKind;
   published
-    /// size (in bytes) below which the file should be included in this cache
+    /// size (in kilobytes) below which the file should be included in this cache
     // - default -1 will use the main THttpProxyServerSettings value
-    property MaxSize: Int64
-      read fMaxSize write fMaxSize;
+    property MaxSizeKB: integer
+      read fMaxSizeKB write fMaxSizeKB default -1;
     /// how many seconds this file should remain in this cache
     // - default -1 will use the main THttpProxyServerSettings value
     property TimeoutSec: integer
-      read fTimeoutSec write fTimeoutSec;
+      read fTimeoutSec write fTimeoutSec default -1;
     /// CSV list of GLOB file names to be excluded to this cache
     // - e.g. '*.changelog,*.tmp'
     property IgnoreCsv: RawUtf8
@@ -5474,7 +5474,7 @@ end;
 constructor THttpProxyMem.Create;
 begin
   inherited Create;
-  fMaxSize := -1; // use main THttpProxyServerSettings value
+  fMaxSizeKB := -1; // use main THttpProxyServerSettings value
   fTimeoutSec := -1;
 end;
 
@@ -5891,7 +5891,7 @@ begin
   pck := fSettings.MemCache.FromUri(uri);
   if not (pckIgnore in pck) then
     if (pckForce in pck) or
-       (size <= fSettings.MemCache.MaxSize) then
+       (size <= Int64(fSettings.MemCache.MaxSizeKB) shl 10) then
       FromCache;
 end;
 
@@ -5923,10 +5923,11 @@ end;
 
 constructor THttpProxyServerSettings.Create;
 begin
+  // redirect to AutoCreateFields(self);
   inherited Create;
   // set default values in this main instance
   fDiskCache.Path := Executable.ProgramFilePath + 'proxycache';
-  fMemCache.MaxSize := 4096;
+  fMemCache.MaxSizeKB := 4;
   fMemCache.TimeoutSec := 15 * SecsPerMin;
 end;
 
@@ -6185,19 +6186,19 @@ begin
       if (hps <> hpsEvent) and
          not (psoDisableMemCache in fSettings.Server.Options) then
       begin
-        if s.MemCache.MaxSize < 0 then
-          s.MemCache.MaxSize := fSettings.MemCache.MaxSize;
+        if s.MemCache.MaxSizeKB < 0 then
+          s.MemCache.MaxSizeKB := fSettings.MemCache.MaxSizeKB;
         if s.MemCache.TimeoutSec < 0 then
           s.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
-        if (s.MemCache.MaxSize > 0) and
+        if (s.MemCache.MaxSizeKB > 0) and
            (s.MemCache.TimeoutSec > 0) then
           one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
             TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
             s.MemCache.TimeoutSec);
         if hps = hpsRemoteUri then
         begin
-          if s.DiskCache.MaxSize < 0 then
-            s.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
+          if s.DiskCache.MaxSizeKB < 0 then
+            s.DiskCache.MaxSizeKB := fSettings.DiskCache.MaxSizeKB;
           if s.DiskCache.Path = '' then
             s.DiskCache.Path := fSettings.DiskCache.Path;
           s.DiskCache.Path := EnsureDirectoryExists(s.DiskCache.Path);
