@@ -6695,20 +6695,21 @@ begin
   CheckEqual(SizeOf(TRttiVarData), SizeOf(TVarData));
   CheckEqual(SizeOf(TSynVarData), SizeOf(TVarData));
   Check(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
-  // CSV to set
+  // CSV (or JSON array) to set
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'none'), 0, 'TSetMyEnum?');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'enFirst'), 1, 'TSetMyEnum1');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'entwo'), 2, 'TSetMyEnum2');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'two,first'), 3, 'TSetMyEnum3');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '"two","first"'), 3, 'TSetMyEnum3');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '["two","first"]'), 3, 'TSetMyEnum3');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'two,"first"'), 3, 'TSetMyEnum3');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '"two",first'), 3, 'TSetMyEnum3');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '*'), 31, 'TSetMyEnum*');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '["*"]'), 31, 'TSetMyEnum*');
-  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'one,*'), 31, 'TSetMyEnum*');
-  // JSON to set
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '"two","first"'), 3, 'TSetMyEnum4');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '["two","first"]'), 3, 'TSetMyEnum5');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '[ "FIRST" ]'), 1, 'TSetMyEnum6');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'two,"first"'), 3, 'TSetMyEnum7');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '"two" , first'), 3, 'TSetMyEnum8');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '*'), 31, 'TSetMyEnum*1');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '["*"]'), 31, 'TSetMyEnum*2');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ' ONE , *'), 31, 'TSetMyEnum*3');
+  // JSON array to set
   ep := [enTwo];
   CheckEqual(byte(ep), 2);
   tmp := '["enTwo"]';
@@ -6790,6 +6791,7 @@ begin
       Check(GetEnumNameTrimedValue(tmp) = i);
       Check(GetEnumNameTrimedValue(pointer(tmp)) = i);
       Check(GetEnumNameValue(tmp) = i);
+      Check(GetEnumNameValue(QuotedStrJson(tmp)) = i);
       Check(GetEnumNameValue(pointer(tmp)) = i);
       Check(GetEnumNameValue(
         mormot.core.rtti.GetEnumName(TypeInfo(TSynLogLevel), i)^) = i);
