@@ -2663,8 +2663,9 @@ var
   len: integer;
   tix64: Int64;
   tix, lasttix: cardinal;
-  remote: TNetAddr;
   res: TNetResult;
+  ev: TNetEvents;
+  remote: TNetAddr;
 begin
   lasttix := 0;
   // main server process loop
@@ -2675,30 +2676,51 @@ begin
   else
     while not Terminated do
     begin
-      if fSock.WaitFor(1000, [neRead, neError]) <> [] then
+      ev := fSock.WaitFor(1000, [neRead, neError]);
+      if Terminated then
       begin
-        if Terminated then
-        begin
-          fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
-          break;
-        end;
+        fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
+        break;
+      end;
+      if neRead in ev then // note: [neRead, neError] for ICMP port unreachable
+      begin
         res := fSock.RecvPending(len);
-        if (res = nrOk) and
-           (len >= 4) then
+        if res = nrOk then
         begin
-          PInteger(fFrame)^ := 0;
-          len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
-          if Terminated then
-            break;
-          if (len >= 0) and // -1=error
-             (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
+          if len > 0 then
           begin
-            inc(fReceived);
-            OnFrameReceived(len, remote);
-          end;
+            // some UDP packet received
+            PInteger(fFrame)^ := 0;
+            len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
+            if Terminated then
+              break;
+            if len < 0 then // paranoid
+            begin
+              fLogClass.Add.Log(sllWarning, 'DoExecute: abort after RecvFrom=%',
+                [NetLastErrorMsg], self);
+              break;
+            end;
+            if CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0 then // from Destroy
+            begin
+              inc(fReceived);
+              OnFrameReceived(len, remote);
+            end;
+          end
+          else
+            // len = 0 for ICMP port unreachable: flush reception buffer
+            fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
         end
         else if res <> nrRetry then
-          SleepHiRes(100); // don't loop with 100% cpu on failure
+        begin
+          fLogClass.Add.Log(sllDebug, 'DoExecute: abort after RecvPending=% %',
+            [ToText(res)^, NetLastErrorMsg], self);
+          break;
+        end;
+      end
+      else if neError in ev then
+      begin
+        fLogClass.Add.Log(sllWarning, 'DoExecute: abort after WaitFor', self);
+        break;
       end;
       if Terminated then
         break;
