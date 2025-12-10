@@ -2692,7 +2692,7 @@ begin
         fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
         break;
       end;
-      if neRead in ev then // note: [neRead, neError] for ICMP port unreachable
+      if neRead in ev then // ev=[neRead,neError] for ICMP port unreachable
       begin
         res := fSock.RecvPending(len);
         if res = nrOk then
@@ -2723,7 +2723,7 @@ begin
         else if res <> nrRetry then
         begin
           fLogClass.Add.Log(sllDebug, 'DoExecute: abort after RecvPending=% %',
-            [ToText(res)^, NetLastErrorMsg], self);
+            [_NR[res], NetLastErrorMsg], self);
           break;
         end;
       end

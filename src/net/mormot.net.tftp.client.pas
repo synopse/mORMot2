@@ -213,15 +213,15 @@ type
     LastReceivedSequence: TTftpSequence;
     /// the sequence number of the last DAT fragment which has been acknowledged
     // - may be not in synch with LastReceivedSequence if WindowSize > 1
-    // - server should retry after TimeoutTix
+    // - server should retry after TimeoutTicks
     LastAcknowledgedSequence: TTftpSequence;
     /// RFC 7440 "windowsize" counter, set to WindowSize at each ACK
     LastWindowCounter: cardinal;
     /// upper 16-bit mask of the sequence number of the last DAT fragment received
     // - used to compute the correct processed size after ACK on block overflow
     LastReceivedSequenceHi: cardinal;
-    /// the GetTickCount64 value which made a timeout - as set by SetTimeoutTix
-    TimeoutTix: Int64;
+    /// the GetTickSec value which made a timeout - as set by SetTimeoutTicks
+    TimeoutTicks: cardinal;
     /// the transmitted file name, UTF-8 encoded
     FileName: RawUtf8;
     /// the full file name, as resolved locally on the file system
@@ -272,8 +272,8 @@ type
     procedure GenerateRequestFrame;
     /// generate an ERR packet in Frame/FrameLen
     procedure GenerateErrorFrame(err: TTftpError; const msg: RawUtf8);
-    /// compute TimeOutTix from TimeoutSec
-    procedure SetTimeoutTix;
+    /// compute TimeOutTicks from GetTickSec + TimeoutSec
+    procedure SetTimeoutTicks;
     /// send Frame/FrameLen to Remote address over Sock, and set TimeoutTix
     function SendFrame: TNetResult;
     /// generate and send an ERR packet, then close Sock and FileStream
@@ -319,9 +319,9 @@ begin
   if len <= 0 then
   begin
     if len < 0 then
-      result := 'error'     // -1
+      result := 'error' // -1
     else
-      result := 'shutdown'; // 0
+      result := 'ICMP unreachable'; // 0
     exit;
   end;
   dec(len, SizeOf(Frame.Opcode));
@@ -708,9 +708,9 @@ begin
     AppendTextToFrame(GetEnumNameUnCamelCase(TypeInfo(TTftpError), ord(err)));
 end;
 
-procedure TTftpContext.SetTimeoutTix;
+procedure TTftpContext.SetTimeoutTicks;
 begin
-  TimeoutTix := GetTickCount64 + TimeoutSec * 1000;
+  TimeoutTicks := GetTickSec + TimeoutSec;
 end;
 
 function TTftpContext.SendFrame: TNetResult;
@@ -723,7 +723,7 @@ begin
     result := Sock.SendTo(Frame, FrameLen, Remote);
   if (result = nrOk) and
      (ToOpCode(Frame^) <> toErr) then
-    SetTimeoutTix;
+    SetTimeoutTicks;
 end;
 
 procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
