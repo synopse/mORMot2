@@ -578,10 +578,10 @@ type
     // lowercases 'a'..'z', they will be ignored: e.g. GetEnumNameValue('Warning')
     // will find sllWarning item
     // - return -1 if not found, or if RTTI's MinValue is not 0
-    function GetEnumNameValue(Value: PUtf8Char; ValueLen: integer;
+    function GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt;
       AlsoTrimLowerCase: boolean = true): integer; overload;
     /// get the corresponding enumeration ordinal value, from its trimmed name
-    function GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: integer;
+    function GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: PtrInt;
       CaseSensitive: boolean): integer;
     /// get the corresponding enumeration name, without the first lowercase chars
     // (otDone -> 'Done')
@@ -847,7 +847,7 @@ type
     function RttiOrd: TRttiOrd;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// for ordinal types, get the 64-bit integer value from text
-    // - supports integer numbers but also enums and sets as CSV text
+    // - supports integer numbers but also enums and sets as CSV/JSON text
     function OrdFromText(const Text: RawUtf8; out Value: Int64): boolean;
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
     function IsQWord: boolean;
@@ -3780,24 +3780,32 @@ begin
   result := GetEnumNameValue(Value, StrLen(Value));
 end;
 
-function TRttiEnumType.GetEnumNameValue(Value: PUtf8Char; ValueLen: integer;
+function TRttiEnumType.GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt;
   AlsoTrimLowerCase: boolean): integer;
 begin
-  if (@self <> nil) and
-     (Value <> nil) and
-     (ValueLen > 0) and
-     (MinValue = 0) then
+  result := -1;
+  if (@self = nil) or
+     (Value = nil) or
+     (ValueLen <= 0) or
+     (MinValue <> 0) then
+    exit;
+  if Value^ = '"' then // support JSON "string" as input
   begin
-    result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
-    if (result < 0) and
-       AlsoTrimLowerCase then
-      result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen);
-  end
-  else
-    result := -1;
+    inc(Value);
+    dec(ValueLen);
+    if (ValueLen > 0) and
+       (Value[ValueLen - 1] = '"') then
+      dec(ValueLen);
+    if ValueLen = 0 then
+      exit;
+  end;
+  result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
+  if (result < 0) and
+     AlsoTrimLowerCase then
+    result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen);
 end;
 
-function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: integer;
+function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: PtrInt;
   CaseSensitive: boolean): integer;
 begin
   if (@self <> nil) and
