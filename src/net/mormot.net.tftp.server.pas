@@ -337,6 +337,7 @@ begin
   fMaxRetry := 2;
   fOptions := Options;
   // bind and launch the thread to start serving content
+  fAutoRebind := true; // make it resilient on raw socket errors
   inherited Create(LogClass, BindAddress, BindPort, ProcessName, 5000);
   // setup the execution parameters
   {$ifdef OSPOSIX}
@@ -380,11 +381,11 @@ end;
 
 procedure TTftpServerThread.OnShutdown;
 begin
-  // called by Executed on Terminated
+  // called by Executed on Terminated or AutoRebind
   if fConnection = nil then
     exit;
   NotifyShutdown;
-  FreeAndNil(fConnection); // nil for TTftpConnectionThread.Destroy
+  fConnection.Clear;
 end;
 
 procedure TTftpServerThread.NotifyShutdown;
@@ -575,7 +576,8 @@ begin
   fLog.Log(sllDebug, 'OnFrameReceived: % %',
     [remote.IPShort, ToText(PTftpFrame(fFrame)^, len)], self);
   op := ToOpCode(PTftpFrame(fFrame)^);
-  if not (op in [toRrq, toWrq]) then
+  if (fConnection = nil) or
+     not (op in [toRrq, toWrq]) then
     exit; // just ignore to avoid DoS on fuzzing
   if fConnection.Count >= fMaxConnections then
   begin
