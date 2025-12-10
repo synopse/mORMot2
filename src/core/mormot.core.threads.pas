@@ -3616,20 +3616,20 @@ end;
 
 function TLoggedWorker.RunWait(TimeoutSec: integer; CallSynchronize: boolean): boolean;
 var
-  endtix: Int64;
+  endtix: cardinal;
 begin
   result := (self = nil) or
             (fRunning = 0);
   if result then
     exit;
-  endtix := TimeoutSec shl 10;
+  endtix := TimeoutSec;
   if endtix <> 0 then
-    inc(endtix, GetTickCount64()); // never wait forever
+    inc(endtix, GetTickSec); // never wait forever
   CallSynchronize := CallSynchronize and
                      (GetCurrentThreadID = MainThreadID);
   while fRunning <> 0 do
     if (endtix <> 0) and
-       (GetTickCount64 > endtix) then
+       (GetTickSec > endtix) then
       exit // result = false on timeout
     else if CallSynchronize then
       CheckSynchronize(1)
@@ -3688,7 +3688,7 @@ end;
 destructor TSynThreadPool.Destroy;
 var
   i: PtrInt;
-  endtix: Int64;
+  endtix: cardinal;
 begin
   fTerminated := true; // fWorkThread[].Execute will check this flag
   try
@@ -3706,9 +3706,9 @@ begin
       TaskAbort(fPendingContext[i]);
     {$endif USE_WINIOCP}
     // wait for threads to finish, with 30 seconds TimeOut
-    endtix := GetTickCount64 + 30000;
+    endtix := GetTickSec + 30;
     while (fRunningThreads > 0) and
-          (GetTickCount64 < endtix) do
+          (GetTickSec < endtix) do
       SleepHiRes(5);
     for i := 0 to fWorkThreadCount - 1 do
       fWorkThread[i].Free;
