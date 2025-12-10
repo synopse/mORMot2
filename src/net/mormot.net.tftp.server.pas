@@ -228,6 +228,7 @@ var
   len: integer;
   res: TTftpError;
   nr: TNetResult;
+  ev: TNetEvents;
   tix: Int64;
   fn: RawUtf8;
 begin
@@ -236,34 +237,46 @@ begin
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
      fContext.FileName, fContext.FileNameFull], self);
   StringToUtf8(ExtractFileName(Utf8ToString(fContext.FileName)), fn);
-  fContext.RetryCount := fOwner.MaxRetry;
-  fContext.Sock.SetReceiveTimeout(1000); // check fTerminated every second
   repeat
-    // try to receive a frame on this UDP/IP link
-    PInteger(fContext.Frame)^ := 0;
-    len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
-    if len > 0 then
-      PByteArray(fContext.Frame)^[len] := 0; // 0 ended for StrLen() safety
+    ev := fContext.Sock.WaitFor(1000, [neRead, neError]);
+    if Terminated or
+       (neError in ev) then // socket error (maybe ICMP error on Windows)
+    begin
+      fLogClass.Add.Log(sllWarning, 'DoExecute: abort after WaitFor', self);
+      break;
+    end;
+    len := 0;
+    if neRead in ev then // ev=[neRead,neError] for ICMP port unreachable
+    begin
+      PInteger(fContext.Frame)^ := 0;
+      len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
+      if Terminated then
+        break;
+      if len >= 0 then
+      begin
+        nr := nrOK;
+        PByteArray(fContext.Frame)^[len] := 0; // #0 ended for StrLen() safety
+      end
+      else
+        nr := NetLastError;
+      if ttoLowLevelLog in fOwner.fOptions then
+        fLog.Log(sllTrace, '% recv=% % %/%',
+          [fn, _NR[nr], ToText(fContext.Frame^, len),
+           CardinalToHexShort(fContext.CurrentSize), CardinalToHexShort(fFileSize)]);
+      if (len <= 0) and
+         (nr <> nrRetry) then // on Windows, ICMP error = WSAECONNRESET=nrClosed
+      begin
+        fLogClass.Add.Log(sllWarning, 'DoExecute: abort % after len=% RecvFrom=%',
+          [fn, len, _NR[nr]], self);
+        break; // len<0 = raw socket error, len=0 = ICMP error on POSIX
+      end;
+    end;
     if Terminated then
       break;
-    if ttoLowLevelLog in fOwner.fOptions then
-      fLog.Log(LOG_TRACEWARNING[len <= 0], '% recv % %/%',
-        [fn, ToText(fContext.Frame^, len),
-         CardinalToHexShort(fContext.CurrentSize), CardinalToHexShort(fFileSize)]);
-    if Terminated or
-       (len = 0) then // -1=error, 0=shutdown
-      break;
-    if len < 0 then
+    if len <= 0 then
     begin
-      // network error (may be timeout)
-      nr := NetLastError;
-      if nr <> nrRetry then
-      begin
-        fLog.Log(sllError, 'DoExecute % recvfrom failed: %',
-          [fn, _NR[nr]], self);
-        break;
-      end;
-      if mormot.core.os.GetTickCount64 < fContext.TimeoutTix then
+      // handle WaitFor() timeout
+      if GetTickSec <= fContext.TimeoutTicks then // set by fContext.SendFrame
         // wait for incoming UDP packet within the timeout period
         continue;
       // retry after timeout
@@ -283,7 +296,7 @@ begin
     end
     else
     begin
-      // parse incoming DAT/ACK and generate the answer
+      // parse incoming len>0 DAT/ACK and generate the answer
       res := fContext.ParseData(len);
       if Terminated then
         break;
@@ -314,8 +327,8 @@ begin
   // Destroy will call fContext.Shutdown and remove the connection
   tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
-    fLog.Log(sllDebug, 'DoExecute: % finished at %/s',
-      [fn, KB((fFileSize * 1000) div tix)], self);
+    fLog.Log(sllDebug, 'DoExecute: % finished at %/s - shutdown=%',
+      [fn, KB((fFileSize * 1000) div tix), BOOL_STR[Terminated]], self);
 end;
 
 
