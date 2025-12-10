@@ -226,7 +226,7 @@ end;
 procedure TTftpConnectionThread.DoExecute;
 var
   len: integer;
-  res: TTftpError;
+  te: TTftpError;
   nr: TNetResult;
   ev: TNetEvents;
   tix: Int64;
@@ -238,6 +238,7 @@ begin
      fContext.FileName, fContext.FileNameFull], self);
   StringToUtf8(ExtractFileName(Utf8ToString(fContext.FileName)), fn);
   repeat
+    // use poll/select and wait up to one second
     ev := fContext.Sock.WaitFor(1000, [neRead, neError]);
     if Terminated or
        (neError in ev) then // socket error (maybe ICMP error on Windows)
@@ -246,8 +247,9 @@ begin
       break;
     end;
     len := 0;
-    if neRead in ev then // ev=[neRead,neError] for ICMP port unreachable
+    if neRead in ev then
     begin
+      // receive the pending data
       PInteger(fContext.Frame)^ := 0;
       len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
       if Terminated then
@@ -297,14 +299,14 @@ begin
     else
     begin
       // parse incoming len>0 DAT/ACK and generate the answer
-      res := fContext.ParseData(len);
+      te := fContext.ParseData(len);
       if Terminated then
         break;
-      if res <> teNoError then
+      if te <> teNoError then
       begin
-        if res <> teFinished then
+        if te <> teFinished then
           // fatal error - e.g. teDiskFull
-          fContext.SendErrorAndShutdown(res, fLog, self, 'DoExecute');
+          fContext.SendErrorAndShutdown(te, fLog, self, 'DoExecute'); // and log
         break;
       end;
       MoveFast(fContext.Frame^, fLastSent^, fContext.FrameLen); // backup
@@ -324,11 +326,12 @@ begin
       break;
     end;
   until Terminated;
-  // Destroy will call fContext.Shutdown and remove the connection
+  // thread/socket was aborted or we reached teFinished
   tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
     fLog.Log(sllDebug, 'DoExecute: % finished at %/s - shutdown=%',
       [fn, KB((fFileSize * 1000) div tix), BOOL_STR[Terminated]], self);
+  // note: Destroy will call fContext.Shutdown and remove the connection
 end;
 
 

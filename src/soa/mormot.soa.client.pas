@@ -437,7 +437,7 @@ begin
       if Terminated then
         exit;
     except
-      SleepOrTerminated(fRetryPeriodSeconds * MilliSecsPerSec); // wait before retry
+      SleepOrTerminated(fRetryPeriodSeconds * MilliSecsPerSec); // wait and retry
     end;
     if Terminated then
       exit;
