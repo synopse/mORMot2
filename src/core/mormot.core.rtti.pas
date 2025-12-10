@@ -1742,7 +1742,8 @@ procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
 
 /// helper to parse some CSV values into a set, returned as 64-bit
 // - CSV could be separated by any non identifier char, e.g. ',' ';' or '|'
-// - see also GetSetNameValue() in mormot.core.json.pas for parsing a JSON array
+// - would also properly parse a JSON array like ["one","two"] - see also
+// GetSetNameValue() in mormot.core.json.pas for parsing only a JSON array
 function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char): QWord;
 
 /// helper to retrieve all (translated) caption texts of an enumerate
@@ -4032,7 +4033,7 @@ begin // caller should have verified that Kind in rkOrdinalTypes
     if Value < 0 then
       exit; // not a text enum
   end else if Kind = rkSet then
-    Value := GetSetCsvValue(@self, pointer(Text))
+    Value := GetSetCsvValue(@self, pointer(Text)) // CSV or JSON array
   else
     exit;
   result := true;
@@ -6365,8 +6366,15 @@ begin
      (aTypeInfo^.SetEnumType(names, min, max) <> nil) and
      (Csv <> nil) then
   repeat
-    if Csv^ = '"' then
-      inc(Csv); // allow texta,"textb",textc quoted string
+    while not (tcIdentifier in TEXT_CHARS[Csv^]) do
+      case Csv^ of
+        #0:
+          exit;
+        '*':
+          break;
+      else
+        inc(Csv); // ignore e.g. ',' ';' '|' or leading/trailing '"' '[' ']'
+      end;
     start := Csv;
     if Csv^ = '*' then
       inc(Csv)
@@ -6374,13 +6382,6 @@ begin
       while tcIdentifier in TEXT_CHARS[Csv^] do
         inc(Csv);
     SetNamesValue(names, min, max, start, Csv - start, result);
-    if Csv^ = '"' then
-      inc(Csv);
-    while not (tcIdentifier in TEXT_CHARS[Csv^]) do
-      if Csv^ = #0 then
-        exit
-      else
-        inc(Csv); // ignore e.g. ',' ';' or '|'
   until false;
 end;
 
