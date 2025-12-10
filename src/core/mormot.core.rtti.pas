@@ -6365,6 +6365,8 @@ begin
      (aTypeInfo^.SetEnumType(names, min, max) <> nil) and
      (Csv <> nil) then
   repeat
+    if Csv^ = '"' then
+      inc(Csv); // allow texta,"textb",textc quoted string
     start := Csv;
     if Csv^ = '*' then
       inc(Csv)
@@ -6372,6 +6374,8 @@ begin
       while tcIdentifier in TEXT_CHARS[Csv^] do
         inc(Csv);
     SetNamesValue(names, min, max, start, Csv - start, result);
+    if Csv^ = '"' then
+      inc(Csv);
     while not (tcIdentifier in TEXT_CHARS[Csv^]) do
       if Csv^ = #0 then
         exit

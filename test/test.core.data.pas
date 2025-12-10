@@ -6701,6 +6701,9 @@ begin
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'enFirst'), 1, 'TSetMyEnum1');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'entwo'), 2, 'TSetMyEnum2');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'two,first'), 3, 'TSetMyEnum3');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '"two","first"'), 3, 'TSetMyEnum3');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'two,"first"'), 3, 'TSetMyEnum3');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '"two",first'), 3, 'TSetMyEnum3');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '*'), 31, 'TSetMyEnum*');
   // JSON to set
   ep := [enTwo];
