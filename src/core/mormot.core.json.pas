@@ -4772,15 +4772,14 @@ procedure QuotedStrJson(P: PUtf8Char; PLen: PtrInt; var result: RawUtf8;
 var
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   Lp, Ls: PtrInt;
-  D: PUtf8Char;
+  d, s: PUtf8Char;
 begin
   if ((P = nil) or
       (PLen <= 0)) and
      (aPrefix = '') and
      (aSuffix = '') then
     result := '""'
-  else if (pointer(result) = pointer(P)) or
-          NeedsJsonEscape(P, PLen) then
+  else if NeedsJsonEscape(P, PLen) then
     // use TJsonWriter.AddJsonEscape() for proper JSON escape
     with TJsonWriter.CreateOwnedStream(temp) do
     try
@@ -4799,18 +4798,20 @@ begin
     // direct allocation if no JSON escape is needed
     Lp := length(aPrefix);
     Ls := length(aSuffix);
-    D := FastSetString(result, PLen + Lp + Ls + 2);
+    s := FastNewString(PLen + Lp + Ls + 2, CP_UTF8); // pointer(result) may = P
+    d := s;
     if Lp > 0 then
     begin
-      MoveFast(pointer(aPrefix)^, D^, Lp);
-      inc(D, Lp);
+      MoveFast(pointer(aPrefix)^, d^, Lp);
+      inc(d, Lp);
     end;
-    D^ := '"';
-    MoveFast(P^, D[1], PLen);
-    inc(D, PLen);
-    D[1] := '"';
+    d^ := '"';
+    MoveFast(P^, d[1], PLen);
+    inc(d, PLen);
+    d[1] := '"';
     if Ls > 0 then
-      MoveFast(pointer(aSuffix)^, D[2], Ls);
+      MoveFast(pointer(aSuffix)^, d[2], Ls);
+    FastAssignNew(result, s);
   end;
 end;
 
