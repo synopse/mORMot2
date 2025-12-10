@@ -70,10 +70,11 @@ type
     fSock: TNetSocket;
     fSockAddr: TNetAddr;
     fFrame: PUdpFrame;
-    fReceived: integer;
-    fBound: boolean;
+    fReceived, fTimeout: integer;
+    fBound, fAutoRebind: boolean;
+    fBindAddress, fBindPort: RawUtf8;
+    function DoBind: TNetResult; virtual;
     function GetIPWithPort: RawUtf8;
-    procedure AfterBind; virtual;
     /// will loop for any pending UDP frame, and execute FrameReceived method
     procedure DoExecute; override;
     // this is the main processing method for all incoming frames
@@ -92,6 +93,8 @@ type
       read GetIPWithPort;
     property Received: integer
       read fReceived;
+    property AutoRebind: boolean
+      read fAutoRebind write fAutoRebind;
   end;
 
 const
@@ -2579,6 +2582,16 @@ begin
   // do nothing by default
 end;
 
+function TUdpServerThread.DoBind: TNetResult;
+begin
+  fBound := false;
+  fLogClass.Add.Log(sllDebug, 'DoBind %:%', [fBindAddress, fBindPort], self);
+  result := NewSocket(fBindAddress, fBindPort, nlUdp, {bind=}true,
+    fTimeout, fTimeout, fTimeout, 10, fSock, @fSockAddr);
+  fLogClass.Add.Log(sllDebug, 'DoBind=%', [ToText(result)^], self);
+  fBound := true; // notify DoExecute() ASAP that fSock was set (or not)
+end;
+
 constructor TUdpServerThread.Create(LogClass: TSynLogClass;
   const BindAddress, BindPort, ProcessName: RawUtf8; TimeoutMS: integer);
 var
@@ -2586,15 +2599,16 @@ var
   res: TNetResult;
 begin
   GetMem(fFrame, SizeOf(fFrame^));
+  fBindAddress := BindAddress;
+  fBindPort := BindPort;
+  fTimeout := TimeoutMS;
   ident := ProcessName;
   if ident = '' then
-    FormatUtf8('udp%srv', [BindPort], ident);
+    FormatUtf8('udp%srv', [fBindPort], ident);
   LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
-    [BindAddress, BindPort, ident], self);
+    [fBindAddress, fBindPort, ident], self);
   inherited Create({suspended=}false, nil, nil, LogClass, ident);
-  res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
-    TimeoutMS, TimeoutMS, TimeoutMS, 10, fSock, @fSockAddr);
-  fBound := true; // notify DoExecute() ASAP that fSock should be set (or not)
+  res := DoBind;
   if res <> nrOk then
   begin
     // Windows seems to require this to avoid breaking the process on error
@@ -2606,7 +2620,6 @@ begin
     raise EUdpServer.Create('Create binding error on %s:%s', self,
       [BindAddress, BindPort], res);
   end;
-  AfterBind;
 end;
 
 destructor TUdpServerThread.Destroy;
@@ -2653,11 +2666,6 @@ begin
   fSockAddr.IPWithPort(result);
 end;
 
-procedure TUdpServerThread.AfterBind;
-begin
-  // do nothing by default
-end;
-
 procedure TUdpServerThread.DoExecute;
 var
   len: integer;
@@ -2670,10 +2678,12 @@ begin
   lasttix := 0;
   // main server process loop
   if not fBound then
-    SleepHiRes(100, fBound, {boundDone=}true);
+    SleepHiRes(100, fBound, {fBound value done=}true);
   if fSock = nil then // paranoid check
     FormatUtf8('%.DoExecute: % Bind failed', [self, fProcessName], fExecuteMessage)
   else
+  repeat
+    // inner loop handling receiving frames from bound fSock
     while not Terminated do
     begin
       ev := fSock.WaitFor(1000, [neRead, neError]);
@@ -2732,8 +2742,25 @@ begin
         OnIdle(tix64); // called every 512 ms at most
       end;
     end;
-  // notify method to close all connections
-  OnShutdown;
+    // here, Terminated or broken fSock: notify method to close all connections
+    OnShutdown;
+    if Terminated or
+       not fAutoRebind then
+      break;
+    // implement fAutoRebind=true after main fSock error
+    // (e.g. transient "ip link set eth0 down/up" or "iptables DROP")
+    repeat
+      fLogClass.Add.Log(sllDebug, 'DoExecute: % AutoRebind attempt',
+        [fProcessName], self);
+      fSock.Close;
+      fSock := nil;
+      if SleepOrTerminated(2000) or // wait a little and retry
+         (DoBind = nrOk) then
+        break; // re-bound = go back to the main WaitFor/RecFrom loop
+      fLogClass.Add.Log(sllWarning, 'DoExecute: DoBind=% -> sleep and retry',
+        [NetLastErrorMsg], self);
+    until false;
+  until Terminated;
 end;
 
 
@@ -7857,7 +7884,7 @@ begin
     BinToHexLower(@msg.Hash.Bin, @algohex[1], HASH_SIZE[msg.Hash.Algo]);
     algohex[0] := AnsiChar(HASH_SIZE[msg.Hash.Algo] * 2);
     algoext := pointer(HASH_EXT[msg.Hash.Algo]);
-  end;
+  end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
   with msg do
     FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
       [ToText(Kind)^, CardinalToHexShort(Seq), OS_INITIAL[Os.os],
