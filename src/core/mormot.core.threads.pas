@@ -3189,6 +3189,7 @@ end;
 function TSynThread.SleepOrTerminated(MS: cardinal): boolean;
 var
   endtix: Int64;
+  step, remaining: integer;
 begin
   result := true; // notify Terminated
   if Terminated then
@@ -3202,12 +3203,18 @@ begin
   end
   else
   begin
-    endtix := GetTickCount64 + MS;
+    step := 0;
+    endtix := mormot.core.os.GetTickCount64 + MS;
     repeat
-      SleepHiRes(10);
+      if step < 200 then
+        inc(step, 10); // steps = 10..200 = up to total 2100 ms
+      SleepHiRes(step);
       if Terminated then
         exit;
-    until GetTickCount64 > endtix;
+      remaining := endtix - mormot.core.os.GetTickCount64;
+      if remaining < step then
+        step := remaining;
+    until remaining <= 0;
   end;
   result := false; // MS timeout
 end;
