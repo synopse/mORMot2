@@ -2537,6 +2537,8 @@ function UpdateNameValue(var Content: RawUtf8;
 
 /// fill a class Instance properties from an .ini content
 // - the class property fields are searched in the supplied main SectionName
+// (if SectionName='' then nested objects or arrays will be parsed from their
+// own section)
 // - nested objects and multi-line text values are searched in their own section,
 // named from their section level and property (e.g. [mainprop.nested1.nested2])
 // - nested arrays are persisted as JSON or as [name0-9]/[name.xxx] sections
@@ -4383,10 +4385,14 @@ begin
   if (Ini = '') or
      (Instance = nil) then
     exit;
-  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
-  section := pointer(Ini);
-  if not FindSectionFirstLine(section, @up, @sectionend) then
-    exit; // section not found
+  section := nil; // SectionName='' if only nested rkClass/rkDynArray
+  if SectionName <> '' then
+  begin
+    PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+    section := pointer(Ini);
+    if not FindSectionFirstLine(section, @up, @sectionend) then
+      exit; // section not found
+  end;
   r := Rtti.RegisterClass(Instance);
   p := pointer(r.Props.List);
   for i := 1 to r.Props.Count do
