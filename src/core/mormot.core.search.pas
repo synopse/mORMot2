@@ -5933,7 +5933,7 @@ begin
         result := aObjArray[i];
         exit;
       end;
-    ObjArrayAdd(aObjArray, self);
+    PtrArrayAdd(aObjArray, self);
   end;
   result := self;
 end;

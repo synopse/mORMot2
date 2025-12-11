@@ -2010,6 +2010,7 @@ type
     // objects (e.g. TStringList or TCollection as published property), but
     // override the InternalCreate protected method instead - mainly for
     // performance reasons since calling an inherited constructor is much slower
+    // so our internal ORM code won't call this method but InternalCreate
     constructor Create; overload; override;
     /// this constructor initializes the ORM record and set the simple fields
     // with the supplied values

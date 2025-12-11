@@ -3921,7 +3921,7 @@ begin
   begin
     fac := Get(aGuids[i]);
     if fac <> nil then
-      ObjArrayAddOnce(Obj, fac);
+      PtrArrayAddOnce(Obj, fac);
   end;
 end;
 
@@ -5624,11 +5624,11 @@ begin
       begin
         include(TInterfaceStub(aOtherResolvers[i]).fOptions,
           imoFakeInstanceWontReleaseTInterfaceStub);
-        ObjArrayAdd(fResolversToBeReleased, aOtherResolvers[i]);
+        PtrArrayAdd(fResolversToBeReleased, aOtherResolvers[i]);
       end
       else if OwnOtherResolvers then
-        ObjArrayAdd(fResolversToBeReleased, aOtherResolvers[i]);
-      ObjArrayAddOnce(fResolvers, aOtherResolvers[i]);
+        PtrArrayAdd(fResolversToBeReleased, aOtherResolvers[i]);
+      PtrArrayAddOnce(fResolvers, aOtherResolvers[i]);
     end;
 end;
 
@@ -5641,7 +5641,7 @@ begin
     if aDependencies[i] <> nil then
     begin
       IInterface(aDependencies[i])._AddRef; // Destroy will do _Release
-      ObjArrayAdd(fDependencies, aDependencies[i]);
+      PtrArrayAdd(fDependencies, aDependencies[i]);
     end;
 end;
 

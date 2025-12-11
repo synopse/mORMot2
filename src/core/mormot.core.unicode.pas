@@ -4036,7 +4036,7 @@ begin
           result := TSynAnsiFixedWidth.Create(CodePage) // use lookup table
         else
           result := TSynAnsiConvert.Create(CodePage); // use system API
-        ObjArrayAdd(List.Engine, result);
+        PtrArrayAdd(List.Engine, result);
         AddWord(List.CodePage, List.Count, CodePage);
       end
       else

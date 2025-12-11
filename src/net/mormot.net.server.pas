@@ -8117,7 +8117,7 @@ begin
   if Assigned(log) then
     log.Log(sllTrace, 'Create: start threads', self);
   for i := 2 to ServerThreadPoolCount do
-    ObjArrayAdd(fThreads, THttpApiServerThread.Create(self));
+    PtrArrayAdd(fThreads, THttpApiServerThread.Create(self));
   // eventually start the main thread
   Append(fProcessName, [' #', ServerThreadPoolCount]);
   if not (hsoCreateSuspended in ProcessOptions) then

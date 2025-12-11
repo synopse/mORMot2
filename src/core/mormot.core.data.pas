@@ -11232,7 +11232,7 @@ begin
   FullText := '';
   Child := nil;
   Flags := [];
-  ObjArrayAdd(Child, result);
+  PtrArrayAdd(Child, result);
 end;
 
 destructor TRadixTreeNode.Destroy;
@@ -11384,7 +11384,7 @@ begin
   result := NodeClass.Create(self);
   result.Chars := chars;
   result.FullText := Text;
-  ObjArrayAdd(Node.Child, result);
+  PtrArrayAdd(Node.Child, result);
 end;
 
 procedure TRadixTree.AfterInsert;

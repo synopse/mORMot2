@@ -5768,7 +5768,7 @@ begin
   for i := 0 to high(nested) do
     with nested[i]^ do
       if TypeInfo^.InheritsFrom(PropClassType) then
-        ObjArrayAdd(result, GetObjProp(Instance));
+        PtrArrayAdd(result, GetObjProp(Instance));
 end;
 
 function ClassFieldPropInstanceMatchingClass(
@@ -9736,7 +9736,7 @@ begin
       nested.SetPropsFromText(P, ee, NoRegister); // before NoRttiSetAndRegister()
       nested.NoRttiSetAndRegister(ptRecord, '', NoRegister);
       if NoRegister then
-        ObjArrayAdd(Rtti.fOwnedRtti, nested);
+        PtrArrayAdd(Rtti.fOwnedRtti, nested);
       if pt = ptRecord then
         // rec: record .. end  or  rec: { ... }
         c := nested
@@ -9754,7 +9754,7 @@ begin
       c.fArrayRtti := ac; // before NoRttiSetAndRegister()
       c.NoRttiSetAndRegister(ptDynArray, typname, NoRegister);
       if NoRegister then
-        ObjArrayAdd(Rtti.fOwnedRtti, c);
+        PtrArrayAdd(Rtti.fOwnedRtti, c);
     end;
     // set type for all prop[]
     for i := 0 to propcount - 1 do
@@ -9837,7 +9837,7 @@ begin
       result := FindPrivateSlot(PClass(aObject)^, result); // search again
     if result = nil then
     begin
-      ObjArrayAdd(fPrivateSlots, aObject);
+      PtrArrayAdd(fPrivateSlots, aObject);
       result := aObject;
     end
     else

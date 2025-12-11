@@ -5389,11 +5389,11 @@ begin
   // caller made fWriterHostSafe.Lock
   fWriterHostMain := THttpLoggerWriter.Create(self, '',
     {error=}false, fSettings.DefaultRotate, fSettings.DefaultRotateFiles);
-  ObjArrayAdd(fWriterHost, fWriterHostMain);
+  PtrArrayAdd(fWriterHost, fWriterHostMain);
   // DefineHost() filters '!' so error.log has a fake name for debugging
   fWriterHostError := THttpLoggerWriter.Create(self, '!error.log!',
     {error=}true, fSettings.DefaultRotate, fSettings.DefaultRotateFiles);
-  ObjArrayAdd(fWriterHost, fWriterHostError);
+  PtrArrayAdd(fWriterHost, fWriterHostError);
 end;
 
 function THttpLogger.GetWriter(Tix32: cardinal;
@@ -5513,7 +5513,7 @@ begin
     if aRotateFiles < 0 then
       aRotateFiles := fSettings.DefaultRotateFiles;
     w := THttpLoggerWriter.Create(self, h, {err=}false, aRotate, aRotateFiles);
-    ObjArrayAdd(fWriterHost, w);
+    PtrArrayAdd(fWriterHost, w);
     include(fFlags, ffHadDefineHost);
   finally
     fWriterHostSafe.UnLock;
@@ -6503,7 +6503,7 @@ constructor THttpAnalyzerPersistAbstract.CreateOwned(aOwner: THttpAnalyzer);
 begin
   Create(''); // Rotate.FileName will be set in OnSave() from fOwner.DestFolder
   fRotate.Trigger := hrtDaily;
-  ObjArrayAdd(aOwner.fPersisters, self);
+  PtrArrayAdd(aOwner.fPersisters, self);
   fOnContinue := aOwner.fOnSave;
   aOwner.fOnSave := OnSave;
   fOwner := aOwner;

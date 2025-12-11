@@ -3162,7 +3162,7 @@ begin
       if CsvContains(p^.Signed.Extension[xceIssuerAlternativeName],
            DnsName, ',', {casesensitive=}false) and
          p^.IsValidDate(TimeUtc) then
-        ObjArrayAdd(result, p^);
+        PtrArrayAdd(result, p^);
       inc(p);
     end;
   finally

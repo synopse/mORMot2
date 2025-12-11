@@ -4608,9 +4608,9 @@ begin
         exit;
     end;
     result := aClass.Create; // register variant type
-    ObjArrayAdd(SynVariantTypes, result);
+    PtrArrayAdd(SynVariantTypes, result);
     if sioHasTryJsonToVariant in result.Options then
-      ObjArrayAdd(SynVariantTryJsonTypes, result);
+      PtrArrayAdd(SynVariantTryJsonTypes, result);
   finally
     SynVariantTypesSafe.UnLock;
   end;

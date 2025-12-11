@@ -5252,7 +5252,7 @@ begin
   if existing <> nil then
     EAlgoCompress.RaiseUtf8('%.Create: AlgoID=% already registered by %',
       [self, fAlgoID, existing]);
-  ObjArrayAdd(SynCompressAlgos, self);
+  PtrArrayAdd(SynCompressAlgos, self);
   RegisterGlobalShutdownRelease(self);
 end;
 

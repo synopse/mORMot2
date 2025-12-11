@@ -1657,7 +1657,7 @@ begin
   finally
     Unlock;
   end;
-  ObjArrayAdd(fStatements, result); // statements are owned by this class
+  PtrArrayAdd(fStatements, result); // statements are owned by this class
 end;
 
 function TSqlDBPostgresAsync.PrepareLocked(const Sql: RawUtf8; ExpectResults: boolean;

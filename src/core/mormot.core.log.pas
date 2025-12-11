@@ -4188,7 +4188,7 @@ begin
   fSynLogClass := aSynLog;
   if length(SynLogFamily) >= MAX_SYNLOGFAMILY then
     ESynLogException.RaiseUtf8('%.Create(%): too many classes', [self, aSynLog]);
-  fIdent := ObjArrayAdd(SynLogFamily, self); // index of this TSynLogClass
+  fIdent := PtrArrayAdd(SynLogFamily, self); // index of this TSynLogClass
   fDestinationPath := Executable.ProgramFilePath;
   // use .exe path by default - no [idwExcludeWinSys] needed here
   if not IsDirectoryWritable(fDestinationPath) then
@@ -4237,7 +4237,7 @@ begin
   GlobalThreadLock.Lock;
   try
     result := fSynLogClass.Create(self);
-    ObjArrayAdd(SynLogFile, result);
+    PtrArrayAdd(SynLogFile, result);
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and
          (fRotateFileSizeKB = 0) and

@@ -4052,7 +4052,7 @@ begin
   fSafe.WriteLock;
   try
     if GetBySerial(cert.Signed.Serial) = nil then
-      result := ObjArrayAdd(fItems, cert);
+      result := PtrArrayAdd(fItems, cert);
   finally
     fSafe.WriteUnLock;
   end;
@@ -4519,7 +4519,7 @@ begin
   try
     for i := 0 to high(fItems) do
       if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
-        ObjArrayAdd(result, fItems[i]);
+        PtrArrayAdd(result, fItems[i]);
   finally
     fSafe.ReadUnLock;
   end;
@@ -4546,7 +4546,7 @@ begin
     try
       if auth.FromFile(files[i]) then
       begin
-        ObjArrayAdd(fItems, auth);
+        PtrArrayAdd(fItems, auth);
         auth := nil;
       end
       else
