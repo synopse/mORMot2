@@ -2286,52 +2286,51 @@ var
     finally
       t.Free;
     end;
-    u :=
-      '[Server]'#13#10 +
-      'Port = 809'#13#10 +
-      'ThreadCount = 7'#13#10 +
-      ''#13#10 +
-      '[Server.Log]'#13#10 +
-      'DestMainFile = access1.log'#13#10 +
-      'DestErrorFile = error1.log'#13#10 +
-      'DefaultRotate = After10MB'#13#10 +
-      'DefaultRotateFiles = 5'#13#10 +
-      ''#13#10 +
-      '[MemCache]'#13#10 +
-      'MaxSizeKB = 2'#13#10 +
-      'TimeoutSec = 300'#13#10 +
-      ''#13#10 +
-      '[DiskCache]'#13#10 +
-      'Path = /home/proxycache'#13#10 +
-      ''#13#10 +
-      '[Url.Debian]'#13#10 +
-      'Methods = get,head'#13#10 +
-      'Source = http://ftp.debian.org'#13#10 +
-      'HttpHeadCacheSec = 60'#13#10 +
-      'HttpKeepAlive = 30'#13#10 +
-      'HttpDirectGetKB = 16'#13#10 +
-      ''#13#10 +
-      '[Url.Ubuntu]'#13#10 +
-      'Methods = get,post,head'#13#10 +
-      'Source = http://ftp.ubuntu.org'#13#10 +
-      'HttpHeadCacheSec = 160'#13#10 +
-      'HttpKeepAlive = 130'#13#10 +
-      'HttpDirectGetKB = 161'#13#10;
+    u := '[Server]'#13#10 +
+         'Port = 809'#13#10 +
+         'ThreadCount = 7'#13#10 +
+         #13#10 +
+         '[Server.Log]'#13#10 +
+         'DestMainFile = access1.log'#13#10 +
+         'DestErrorFile = error1.log'#13#10 +
+         'DefaultRotate = After10MB'#13#10 +
+         'DefaultRotateFiles = 5'#13#10 +
+         #13#10 +
+         '[MemCache]'#13#10 +
+         'MaxSizeKB = 2'#13#10 +
+         'TimeoutSec = 300'#13#10 +
+         #13#10 +
+         '[DiskCache]'#13#10 +
+         'Path = /home/proxycache'#13#10 +
+         #13#10 +
+         '[Url-Debian]'#13#10 +
+         'Methods = get,head'#13#10 +
+         'Source = http://ftp.debian.org'#13#10 +
+         'HttpHeadCacheSec = 60'#13#10 +
+         'HttpKeepAlive = 30'#13#10 +
+         'HttpDirectGetKB = 16'#13#10 +
+         #13#10 +
+         '[Url-Ubuntu]'#13#10 +
+         'Methods = get, post, "head" '#13#10 +
+         'Source = http://ftp.ubuntu.org'#13#10 +
+         'HttpHeadCacheSec = 160'#13#10 +
+         'HttpKeepAlive = 130'#13#10 +
+         'HttpDirectGetKB = 161'#13#10;
     ps := THttpProxyServerSettings.Create;
     try
       CheckEqual(ps.Server.Port, '8098');
-      CheckEqual(ps.Server.Log.DestMainFile, 'access.log');
-      CheckEqual(ps.Server.Log.DestErrorFile, 'error.log');
+      Check(ps.Server.Log.DestMainFile = 'access.log');
+      Check(ps.Server.Log.DestErrorFile = 'error.log');
       CheckEqual(ps.MemCache.MaxSizeKB, 4);
-      CheckEqual(ps.DiskCache.Path, Executable.ProgramFilePath + 'proxycache');
+      Check(ps.DiskCache.Path = Executable.ProgramFilePath + 'proxycache');
       CheckEqual(length(ps.Url), 0);
       Check(IniToObject(u, ps, ''));
       CheckEqual(ps.Server.Port, '809');
       CheckEqual(ps.Server.ThreadCount, 7);
-      CheckEqual(ps.Server.Log.DestMainFile, 'access1.log');
-      CheckEqual(ps.Server.Log.DestErrorFile, 'error1.log');
+      Check(ps.Server.Log.DestMainFile = 'access1.log');
+      Check(ps.Server.Log.DestErrorFile = 'error1.log');
       CheckEqual(ps.MemCache.MaxSizeKB, 2);
-      CheckEqual(ps.DiskCache.Path, '/home/proxycache');
+      Check(ps.DiskCache.Path = '/home/proxycache');
       if CheckEqual(length(ps.Url), 2) then
       begin
         Check(ps.Url[0].Methods = [urmGet, urmHead]);
