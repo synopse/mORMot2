@@ -3276,7 +3276,7 @@ var StrLen: function(S: pointer): PtrInt = StrLenSafe;
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
 
-/// fast go to next text line, ended by #13 or #13#10
+/// fast go to next text line, ended by #10 or #13#10
 // - source is expected to be not nil
 // - returns the beginning of next line, or nil if source^=#0 was reached
 function GotoNextLine(source: PUtf8Char): PUtf8Char;
@@ -9890,13 +9890,13 @@ label
   _0, _1, _2, _3; // ugly but faster
 begin
   repeat
-    if source[0] < #13 then
+    if source[0] <= #10 then
       goto _0
-    else if source[1] < #13 then
+    else if source[1] <= #10 then
       goto _1
-    else if source[2] < #13 then
+    else if source[2] <= #10 then
       goto _2
-    else if source[3] < #13 then
+    else if source[3] <= #10 then
       goto _3
     else
     begin
