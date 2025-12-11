@@ -2539,6 +2539,7 @@ function UpdateNameValue(var Content: RawUtf8;
 // - the class property fields are searched in the supplied main SectionName
 // - nested objects and multi-line text values are searched in their own section,
 // named from their section level and property (e.g. [mainprop.nested1.nested2])
+// - nested arrays are persisted as JSON or as [name0-9]/[name.xxx] sections
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8 = 'Main'; DocVariantOptions: PDocVariantOptions = nil;
@@ -4356,12 +4357,27 @@ function IniToObject(const Ini: RawUtf8; Instance: TObject;
   Level: integer): boolean;
 var
   r: TRttiCustom;
-  i: integer;
+  i, uplen: PtrInt;
   p: PRttiCustomProp;
   section, sectionend, nested, nestedend, json: PUtf8Char;
-  u: PAnsiChar;
+  obj: TObject;
   n, v: RawUtf8;
   up: TByteToAnsiChar;
+
+  function FillUp: PAnsiChar;
+  begin
+    result := @up;
+    if Level <> 0 then
+    begin
+      result := UpperCopy255(result, SectionName); // recursive name
+      result^ := '.';
+      inc(result);
+    end;
+    result := UpperCopy255(result, p^.Name);
+    uplen := result - PAnsiChar(@up);
+    nested := pointer(Ini);
+  end;
+
 begin
   result := false; // true when at least one property has been read
   if (Ini = '') or
@@ -4395,15 +4411,7 @@ begin
         begin
           if v = #0 then // may be stored in a multi-line section body
           begin
-            u := @up;
-            if Level <> 0 then
-            begin
-              u := UpperCopy255(u, SectionName); // recursive name
-              u^ := '.';
-              inc(u);
-            end;
-            PWord(UpperCopy255(u, p^.Name))^ := ord(']');
-            nested := pointer(Ini);
+            PWord(FillUp)^ := ord(']');
             if FindSectionFirstLine(nested, @up, @nestedend) then
             begin
               // multi-line text value can been stored in its own section
@@ -4430,7 +4438,38 @@ begin
               nil, p^.Value, DocVariantOptions, true, nil);
             if json <> nil then
               result := true;
-          end;
+          end
+        else if (rcfObjArray in p^.Value.Flags) and
+                (p^.OffsetSet >= 0) then
+        begin
+          // no name=[{...},{...}] field: try all [name0-9]/[name.xxx] sections
+          FillUp^ := #0;
+          repeat
+            if nested^ = '[' then
+            begin
+              inc(nested);
+              if IdemPChar2(@NormToUpperAnsi7, nested, @up) and
+                 (nested[uplen] in ['0' .. '9', '.', ']']) then // but not [names]
+              begin
+                nestedend := PosChar(nested, ']');
+                if nestedend <> nil then
+                begin
+                  FastSetString(n, nested, nestedend - nested);
+                  obj := p^.Value.ArrayRtti.ClassNewInstance;
+                  if obj <> nil then
+                    if IniToObject(Ini, obj, n, DocVariantOptions, Level + 1) then
+                    begin
+                      PtrArrayAdd(PPointer(@PByteArray(Instance)[p^.OffsetSet])^, obj);
+                      result := true;
+                    end
+                    else
+                      obj.Free;
+                end;
+              end;
+            end;
+            nested := GotoNextLine(nested)
+          until nested = nil;
+        end;
       end;
     inc(p);
   end;
