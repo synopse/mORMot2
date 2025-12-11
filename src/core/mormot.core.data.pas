@@ -2541,7 +2541,7 @@ function UpdateNameValue(var Content: RawUtf8;
 // own section)
 // - nested objects and multi-line text values are searched in their own section,
 // named from their section level and property (e.g. [mainprop.nested1.nested2])
-// - nested arrays are persisted as JSON or as [name0-9]/[name.xxx] sections
+// - nested arrays are read as JSON or [name-xxx]/[name.xxx]/[name xxx] sections
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8 = 'Main'; DocVariantOptions: PDocVariantOptions = nil;
@@ -4448,14 +4448,14 @@ begin
         else if (rcfObjArray in p^.Value.Flags) and
                 (p^.OffsetSet >= 0) then
         begin
-          // no name=[{...},{...}] field: try all [name0-9]/[name.xxx] sections
+          // no name=[{...},{...}] field: try [name-xxx]/[name.xxx]/[name xxx]
           FillUp^ := #0;
           repeat
             if nested^ = '[' then
             begin
               inc(nested);
               if IdemPChar2(@NormToUpperAnsi7, nested, @up) and
-                 (nested[uplen] in ['0' .. '9', '.', ']']) then // but not [names]
+                 (nested[uplen] in [' ', '.', '-', ']']) then // but not [names]
               begin
                 nestedend := PosChar(nested, ']');
                 if nestedend <> nil then
