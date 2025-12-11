@@ -5334,6 +5334,8 @@ begin
     fLogger.OnIdle(fAsync.fLastOperationMS) // = ProcessIdleTix() GetTickCount64
   else if fAnalyzer <> nil then
     fAnalyzer.OnIdle(fAsync.fLastOperationMS);
+  if Assigned(fOnIdle) then
+    fOnIdle(self, fAsync.fLastOperationMS); // custom callback
   // clean interned HTTP headers at least every 16 secs
   if (fInterning <> nil) and
      (fAsync <> nil) then
