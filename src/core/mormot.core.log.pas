@@ -948,9 +948,10 @@ type
     // will be ignored (internal thread list shall be defined for one process)
     property PerThreadLog: TSynLogPerThreadMode
       read fPerThreadLog write fPerThreadLog;
-    /// if TRUE, will log high-resolution time stamp instead of ISO 8601 date and time
+    /// if TRUE, will log high-resolution time stamp (as hexadecimal microseconds)
+    // instead of the ISO 8601 date and time
     // - this is less human readable, but allows performance profiling of your
-    // application on the customer side (using TSynLog.Enter methods)
+    // application on the customer side (in addition to TSynLog.Enter methods)
     // - set to FALSE by default, or if RotateFileCount and RotateFileSizeKB /
     // RotateFileDailyAtHour are set (the high resolution frequency is set
     // in the log file header, so expects a single file)

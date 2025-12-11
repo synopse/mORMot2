@@ -1526,7 +1526,7 @@ type
     /// access to the used settings
     property Settings: THttpProxyServerSettings
       read fSettings;
-    /// access to the defined source URIs, set between Start/Stop calls
+    /// access to the defined source URIs process, set between Start/Stop calls
     property Url: THttpProxyUrlObjArray
       read fUrl;
   end;

@@ -577,6 +577,7 @@ type
     // - if AlsoTrimLowerCase is TRUE, and EnumName does not start with
     // lowercases 'a'..'z', they will be ignored: e.g. GetEnumNameValue('Warning')
     // will find sllWarning item
+    // - will also accept JSON '"string"' as input as if it were 'string'
     // - return -1 if not found, or if RTTI's MinValue is not 0
     function GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt;
       AlsoTrimLowerCase: boolean = true): integer; overload;
@@ -4033,11 +4034,11 @@ begin // caller should have verified that Kind in rkOrdinalTypes
   if ToInt64(Text, Value) or // ordinal field from number
      (IsBoolean and  // also FPC rkBool
       GetInt64Bool(pointer(Text), Value)) then // boolean from true/false/yes/no
-  else if Text= '' then
+  else if Text = '' then
     exit
   else if Kind = rkEnumeration then // enumerate field from text
   begin
-    Value := GetEnumNameValue(@self, Text, {trimlowcase=}true);
+    Value := GetEnumNameValue(@self, Text, {trimlowcase=}true); // text/"text"
     if Value < 0 then
       exit; // not a text enum
   end else if Kind = rkSet then
@@ -4596,7 +4597,7 @@ begin
     exit;
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
-    if TypeInfo^.OrdFromText(Value, v) then
+    if TypeInfo^.OrdFromText(Value, v) then // integer but also enum/set idents
       SetInt64Value(Instance, v)
     else
       exit
