@@ -3070,7 +3070,8 @@ begin
   if P <> nil then
   begin
     result := true;
-    inc(P);
+    if P^ = '?' then
+      inc(P);
     repeat
       if UrlDecodeValue(P, UpperName, Value, @P) then
         exit;
@@ -3085,7 +3086,8 @@ begin
   if P <> nil then
   begin
     result := true;
-    inc(P);
+    if P^ = '?' then
+      inc(P);
     repeat
       if UrlDecodeCardinal(P, UpperName, Value, @P) then
         exit;
@@ -3100,7 +3102,8 @@ begin
   if P <> nil then
   begin
     result := true;
-    inc(P);
+    if P^ = '?' then
+      inc(P);
     repeat
       if UrlDecodeInt64(P, UpperName, Value, @P) then
         exit;
