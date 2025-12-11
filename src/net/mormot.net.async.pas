@@ -1296,6 +1296,8 @@ type
     property DiskCache: THttpProxyDisk
       read fDiskCache write fDiskCache;
   end;
+  /// store a dynamic array of THttpProxyUrlSettings instances
+  THttpProxyUrlSettingsObjArray = array of THttpProxyUrlSettings;
 
   /// the available high-level options for THttpProxyServerMainSettings
   // - psoLogVerbose could be used to debug a server in production
@@ -1390,9 +1392,7 @@ type
     fServer: THttpProxyServerMainSettings;
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
-    fUrl: THttpProxyUrlObjArray;
-    fOwner: THttpProxyServer;
-    procedure SetOwner(aOwner: THttpProxyServer);
+    fUrl: THttpProxyUrlSettingsObjArray;
   public
     /// initialize the default settings
     constructor Create; override;
@@ -1413,9 +1413,6 @@ type
     // - returns the number of added THttpProxyUrl instances into Url[]
     function AddFromFiles(const settingsfolder: TFileName;
       const mask: TFileName = '*.json'): integer;
-    /// the associated THttpProxyServer main instance (if any)
-    property Owner: THttpProxyServer
-      read fOwner write SetOwner;
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServerMainSettings
@@ -1429,9 +1426,9 @@ type
     // - can be overriden by Url[].DiskCache property
     property DiskCache: THttpProxyDisk
       read fDiskCache write fDiskCache;
-    /// access the remote content sources process as THttpProxyUrl instances
+    /// access the remote content sources settings
     // - owned as a TSynAutoCreateFields dynarray
-    property Url: THttpProxyUrlObjArray
+    property Url: THttpProxyUrlSettingsObjArray
       read fUrl;
   end;
 
@@ -1490,15 +1487,16 @@ type
   EHttpProxyServer = class(ESynException);
 
   /// implements a HTTP server with forward proxy and caching
-  THttpProxyServer = class(TSynAutoCreateFields)
+  THttpProxyServer = class(TSynPersistent)
   protected
     fSettings: THttpProxyServerSettings;
+    fUrl: THttpProxyUrlObjArray;
     fLog: TSynLogClass;
     fSettingsOwned, fHasLog: boolean;
+    fSources: THttpProxySources;
     fServer: THttpAsyncServer;
     fGC: TObjectDynArray;
     fPartials: THttpPartials;
-    fSources: THttpProxySources;
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
     procedure OnIdle(Sender: TObject; NowTix: Int64);
@@ -1528,6 +1526,9 @@ type
     /// access to the used settings
     property Settings: THttpProxyServerSettings
       read fSettings;
+    /// access to the defined source URIs, set between Start/Stop calls
+    property Url: THttpProxyUrlObjArray
+      read fUrl;
   end;
 
 function ToText(hps: THttpProxySource): PShortString; overload;
@@ -5517,7 +5518,7 @@ constructor THttpProxyUrl.Create(aSettings: THttpProxyUrlSettings;
 begin
   inherited Create;
   fSafe.Init;
-  fSettings := aSettings; // will be owned by this instance from now on
+  fSettings := aSettings;
   fOwner := aOwner;
 end;
 
@@ -5527,7 +5528,7 @@ begin
   FreeAndNil(fMemCache);
   FreeAndNil(fHashCache);
   FreeAndNil(fHeadCache);
-  FreeAndNil(fSettings);
+  // fSettings are owned by THttpProxyServerSettings.Url[]
   fSafe.Done; // mandatory for TOSLightLock
 end;
 
@@ -5931,15 +5932,6 @@ begin
   fMemCache.TimeoutSec := 15 * SecsPerMin;
 end;
 
-procedure THttpProxyServerSettings.SetOwner(aOwner: THttpProxyServer);
-var
-  i: PtrInt;
-begin
-  fOwner := aOwner;
-  for i := 0 to high(fUrl) do
-    fUrl[i].fOwner := aOwner;
-end;
-
 function THttpProxyServerSettings.AddUrl(
   one: THttpProxyUrlSettings): THttpProxyUrlSettings;
 begin
@@ -5949,8 +5941,8 @@ begin
        not Assigned(result.OnRequest) then
       FreeAndNil(result)
     else
-      // supplied one will be owned as a new fUri[].Settings
-      ObjArrayAdd(fUrl, THttpProxyUrl.Create(result, fOwner));
+      // will be owned as a new TSynAutoCreateFields fUri[] instance
+      PtrArrayAdd(fUrl, result);
 end;
 
 function THttpProxyServerSettings.AddFolder(const folder: TFileName;
@@ -6031,7 +6023,6 @@ begin
   end
   else
     fSettings := aSettings;
-  fSettings.Owner := self;
 end;
 
 destructor THttpProxyServer.Destroy;
@@ -6123,6 +6114,7 @@ begin
       fServer.Shutdown;
       FreeAndNil(fServer);
     end;
+  ObjArrayClear(fUrl);
 end;
 
 function THttpProxyServer.SetupTls(var tls: TNetTlsContext): boolean;
@@ -6140,18 +6132,17 @@ var
   i: PtrInt;
 begin
   fSources := [];
+  ObjArrayClear(fUrl);
   new := TUriRouter.Create(TUriTreeNode);
   try
     // 1. compute all routes from Settings[]
     for i := 0 to high(fSettings.Url) do
     begin
-      one := fSettings.Url[i];
-      s := one.Settings;
-      FreeAndNil(one.fMemCache);
-      FreeAndNil(one.fHashCache);
-      FreeAndNil(one.fHeadCache);
+      s := fSettings.Url[i];
       if s.Disabled then
         continue;
+      one := THttpProxyUrl.Create(s, self);
+      PtrArrayAdd(fUrl, one);
       // validate source as local file folder or remote http(s) server
       hps := hpsUndefined;
       if s.Source <> '' then
@@ -6244,7 +6235,7 @@ begin
     old := fServer.ReplaceRoute(new); // thread-safe
     new := nil; // is owned by fServer from now on
     if old <> nil then
-      ObjArrayAdd(fGC, old); // late release at shutdown
+      PtrArrayAdd(fGC, old); // late release at shutdown
   finally
     new.Free;
   end;
@@ -6252,17 +6243,18 @@ end;
 
 procedure THttpProxyServer.OnIdle(Sender: TObject; NowTix: Int64);
 var
-  i, n: PtrInt;
-  one: THttpProxyUrl;
+  i, n: integer;
+  one: ^THttpProxyUrl;
 begin
-  // delete any deprecated cached content - called every few seconds
+  // delete any deprecated cached content - called every second
   n := 0;
-  for i := 0 to high(fSettings.Url) do
+  one := pointer(fUrl);
+  for i := 1 to length(fUrl) do
   begin
-    one := fSettings.Url[i];
-    inc(n, one.fMemCache.DeleteDeprecated(NowTix));
-    inc(n, one.fHashCache.DeleteDeprecated(NowTix));
-    inc(n, one.fHeadCache.DeleteDeprecated(NowTix));
+    inc(n, one^.fMemCache.DeleteDeprecated(NowTix));
+    inc(n, one^.fHashCache.DeleteDeprecated(NowTix));
+    inc(n, one^.fHeadCache.DeleteDeprecated(NowTix));
+    inc(one);
   end;
   if n <> 0 then
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
