@@ -4471,6 +4471,9 @@ begin
   for i := 1 to r.Props.Count do
   begin
     if p^.Prop <> nil then
+    begin
+      if iClearValues in Features then
+        p^.ClearValue(Instance, {freeandnil=}false);
       if p^.Value.Kind = rkClass then
       begin
         obj := p^.Prop^.GetObjProp(Instance);
