@@ -4413,7 +4413,8 @@ var
               FastSetString(n, nested, nestedend - nested);
               item := p^.Value.ArrayRtti.ClassNewInstance;
               if item <> nil then
-                if IniToObject(Ini, item, n, DocVariantOptions, Level + 1) then
+                if IniToObject(Ini, item, n, DocVariantOptions, Level + 1,
+                     Features - [iClassSection] + [iClassValue]) then
                 begin
                   PtrArrayAdd(PPointer(@PByteArray(obj)[p^.OffsetSet])^, item);
                   result := true;
@@ -4487,7 +4488,7 @@ begin
               n := p^.Name
             else
               Join([SectionName, '.', p^.Name], n);
-            if IniToObject(Ini, obj, n, DocVariantOptions, Level + 1) then
+            if IniToObject(Ini, obj, n, DocVariantOptions, Level + 1, Features) then
               result := true;
           end;
       end
