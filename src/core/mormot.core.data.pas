@@ -3995,62 +3995,23 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 var
   table: PNormTable;
 begin
-  result := false;
-  if (P <> nil) and
-     (P^ <> '[') then
+  if UpperName <> nil then
   begin
+    result := true;
     table := @NormToUpperAnsi7;
-    repeat
+    while (P <> nil) and
+          (P^ <> '[') do
+    begin
       if P^ = ' ' then
-      begin
         repeat
           inc(P)
         until P^ <> ' '; // trim left ' '
-        if P^ = #0 then
-          break;
-      end;
-      if IdemPChar2(table, P, UpperName) then
-      begin
-        result := true;
-        exit;
-      end;
-      repeat
-        if P[0] > #13 then
-          if P[1] > #13 then
-            if P[2] > #13 then
-              if P[3] > #13 then
-              begin
-                inc(P, 4);
-                continue;
-              end
-              else
-                inc(P, 3)
-            else
-              inc(P, 2)
-          else
-            inc(P);
-        case P^ of
-          #0:
-            exit;
-          #10:
-            begin
-              inc(P);
-              break;
-            end;
-          #13:
-            begin
-              if P[1] = #10 then
-                inc(P, 2)
-              else
-                inc(P);
-              break;
-            end;
-        else
-          inc(P);
-        end;
-      until false;
-    until P^ = '[';
+      if IdemPChar2(table, P, pointer(UpperName)) then
+        exit; // found name
+      P := GotoNextLine(P);
+    end;
   end;
+  result := false;
 end;
 
 function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
