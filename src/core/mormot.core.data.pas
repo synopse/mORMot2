@@ -2565,7 +2565,8 @@ function IniToObject(const Ini: RawUtf8; Instance: TObject;
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main';
   Options: TTextWriterWriteObjectOptions =
     [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment];
-    Level: integer = 0): RawUtf8;
+    Level: integer = 0; Features: TIniFeatures =
+      [ifClassSection, ifMultiLineSections, ifArraySection]): RawUtf8;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
@@ -4531,36 +4532,42 @@ begin
 end;
 
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
-  Options: TTextWriterWriteObjectOptions; Level: integer): RawUtf8;
+  Options: TTextWriterWriteObjectOptions; Level: integer; Features: TIniFeatures): RawUtf8;
 var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   nested: TRawUtf8DynArray;
-  i, a, nestedcount: integer;
-  v64: Int64;
-  arr: PPointer;
-  r: TRttiCustom;
-  p: PRttiCustomProp;
-  s: RawUtf8;
+  nestedcount, i: integer;
 
-  function FullSectionName: RawUtf8;
+  procedure WriteClassInMainSection(obj: TObject; feat: TIniFeatures;
+    const prefix: RawUtf8);
+  var
+    i, a: PtrInt;
+    v64: Int64;
+    arr: PPointer;
+    o: TObject;
+    r: TRttiCustom;
+    p: PRttiCustomProp;
+    s: RawUtf8;
+
+    function FullSectionName: RawUtf8;
+    begin
+      if Level = 0 then
+        result := p^.Name
+      else
+        Join([SectionName, '.', p^.Name], result);
+    end;
+
+    procedure WriteNameEqual;
+    begin
+      if prefix <> '' then
+        W.AddString(prefix);
+      W.AddString(p^.Name);
+      W.Add('=');
+    end;
+
   begin
-    if Level = 0 then
-      result := p^.Name
-    else
-      Join([SectionName, '.', p^.Name], result);
-  end;
-
-begin
-  result := '';
-  if Instance = nil then
-    exit;
-  nestedcount := 0;
-  W := DefaultJsonWriter.CreateOwnedStream(tmp);
-  try
-    W.CustomOptions := [twoTrimLeftEnumSets];
-    W.Add('[%]'#10, [SectionName]);
-    r := Rtti.RegisterClass(Instance);
+    r := Rtti.RegisterClass(obj);
     p := pointer(r.Props.List);
     for i := 1 to r.Props.Count do
     begin
@@ -4568,10 +4575,18 @@ begin
         case p^.Value.Kind of
           rkClass:
             begin
-              s := ObjectToIni(p^.Prop^.GetObjProp(Instance),
-                     FullSectionName, Options, Level + 1);
-              if s <> '' then
-                AddRawUtf8(nested, nestedcount, s);
+              o := p^.Prop^.GetObjProp(obj);
+              if o <> nil then
+                if ((Level = 0) and
+                    (prefix = '')) or
+                   (ifClassSection in feat) then // priority over ifClassValue
+                begin
+                  s := ObjectToIni(o, FullSectionName, Options, Level + 1, feat);
+                  if s <> '' then
+                    AddRawUtf8(nested, nestedcount, s);
+                end
+                else
+                  WriteClassInMainSection(o, feat, Join([prefix, p^.Name, '.']));
             end;
           rkEnumeration, rkSet:
             begin
@@ -4582,9 +4597,8 @@ begin
                 W.AddString(s);
               end;
               // AddValueJson() would have written "quotes" or ["a","b"]
-              W.AddString(p^.Name);
-              W.Add('=');
-              v64 := p^.Prop^.GetOrdProp(Instance);
+              WriteNameEqual;
+              v64 := p^.Prop^.GetOrdProp(obj);
               if p^.Value.Kind = rkEnumeration then
                 W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(v64))
               else
@@ -4593,31 +4607,34 @@ begin
               W.Add(#10);
             end;
           else
-            if p^.Value.Parser in ptMultiLineStringTypes then // e.g. rkLString
+            if (p^.Value.Parser in ptMultiLineStringTypes) and // e.g. rkLString
+               (ifMultiLineSections in feat) then
             begin
-              p^.Prop^.GetAsString(Instance, s);
+              p^.Prop^.GetAsString(obj, s);
               if TrimAndIsMultiLine(s) then
                 // store multi-line text values in their own section
                 AddRawUtf8(nested, nestedcount,
                   FormatUtf8('[%]'#10'%'#10#10, [FullSectionName, s]))
               else
               begin
-                W.AddString(p^.Name);
-                W.Add('=');
+                WriteNameEqual;
                 W.AddString(s); // single line text
                 W.Add(#10);
               end;
             end
-            else if rcfObjArray in p^.Value.Flags then
+            else if (rcfObjArray in p^.Value.Flags) and
+                    (ifArraySection in feat) then
             begin
-              arr := pointer(p^.Prop^.GetOrdProp(Instance));
+              arr := pointer(p^.Prop^.GetOrdProp(obj));
               if arr <> nil then
                 for a := 0 to PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1) do
                 begin
                   s := SectionName;
                   if s <> '' then
                     Append(s, '.');
-                  s := ObjectToIni(arr^, Make([s, p.Name, '#', a]), Options, Level + 1);
+                  s := ObjectToIni(arr^, Make([s, p.Name, '#', a]),
+                    Options - [woHumanReadableEnumSetAsComment],
+                    Level + 1, feat - [ifClassSection] + [ifClassValue]);
                   if s <> '' then
                     AddRawUtf8(nested, nestedcount, s);
                   inc(arr);
@@ -4625,18 +4642,30 @@ begin
             end
             else
             begin
-              W.AddString(p^.Name);
-              W.Add('=');
-              p^.AddValueJson(W, Instance, // simple and complex types
+              WriteNameEqual;
+              p^.AddValueJson(W, obj, // simple and complex types
                 Options - [woHumanReadableEnumSetAsComment], twOnSameLine);
               W.Add(#10);
             end;
         end;
       inc(p);
     end;
+  end;
+
+begin
+  result := '';
+  if Instance = nil then
+    exit;
+  nestedcount := 0;
+  W := DefaultJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.CustomOptions := [twoTrimLeftEnumSets];
+    if SectionName <> '' then
+      W.Add('[%]'#10, [SectionName]);
+    WriteClassInMainSection(Instance, Features, '');
     W.Add(#10);
     for i := 0 to nestedcount - 1 do
-      W.AddString(nested[i]);
+      W.AddString(nested[i]); // eventually write other sections
     W.SetText(result);
   finally
     W.Free;
