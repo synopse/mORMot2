@@ -4535,10 +4535,21 @@ var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   nested: TRawUtf8DynArray;
-  i, nestedcount: integer;
+  i, a, nestedcount: integer;
+  v64: Int64;
+  arr: PPointer;
   r: TRttiCustom;
   p: PRttiCustomProp;
-  n, s: RawUtf8;
+  s: RawUtf8;
+
+  function FullSectionName: RawUtf8;
+  begin
+    if Level = 0 then
+      result := p^.Name
+    else
+      Join([SectionName, '.', p^.Name], result);
+  end;
+
 begin
   result := '';
   if Instance = nil then
@@ -4553,58 +4564,72 @@ begin
     for i := 1 to r.Props.Count do
     begin
       if p^.Prop <> nil then
-        if p^.Value.Kind = rkClass then
-        begin
-          if Level = 0 then
-            n := p^.Name
+        case p^.Value.Kind of
+          rkClass:
+            begin
+              s := ObjectToIni(p^.Prop^.GetObjProp(Instance),
+                     FullSectionName, Options, Level + 1);
+              if s <> '' then
+                AddRawUtf8(nested, nestedcount, s);
+            end;
+          rkEnumeration, rkSet:
+            begin
+              if woHumanReadableEnumSetAsComment in Options then
+              begin
+                p^.Value.Cache.EnumInfo^.GetEnumNameAll(
+                  s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
+                W.AddString(s);
+              end;
+              // AddValueJson() would have written "quotes" or ["a","b"]
+              W.AddString(p^.Name);
+              W.Add('=');
+              v64 := p^.Prop^.GetOrdProp(Instance);
+              if p^.Value.Kind = rkEnumeration then
+                W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(v64))
+              else
+                p^.Value.Cache.EnumInfo^.GetSetNameJsonArray(
+                  W, v64, ',', {quote=}#0, {star=}true, {trim=}true);
+              W.Add(#10);
+            end;
           else
-            Join([SectionName, '.', p^.Name], n);
-          s := ObjectToIni(p^.Prop^.GetObjProp(Instance), n, Options, Level + 1);
-          if s <> '' then
-            AddRawUtf8(nested, nestedcount, s);
-        end
-        else if p^.Value.Kind = rkEnumeration then
-        begin
-          if woHumanReadableEnumSetAsComment in Options then
-          begin
-            p^.Value.Cache.EnumInfo^.GetEnumNameAll(
-              s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
-            W.AddString(s);
-          end;
-          // AddValueJson() would have written "quotes"
-          W.AddString(p^.Name);
-          W.Add('=');
-          W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(
-            p^.Prop^.GetOrdProp(Instance)));
-          W.Add(#10);
-        end
-        else if p^.Value.Parser in ptMultiLineStringTypes then
-        begin
-          p^.Prop^.GetAsString(Instance, s);
-          if TrimAndIsMultiLine(s) then
-          begin
-            // store multi-line text values in their own section
-            if Level = 0 then
-              FormatUtf8('[%]'#10'%'#10#10, [p^.Name, s], n)
+            if p^.Value.Parser in ptMultiLineStringTypes then // e.g. rkLString
+            begin
+              p^.Prop^.GetAsString(Instance, s);
+              if TrimAndIsMultiLine(s) then
+                // store multi-line text values in their own section
+                AddRawUtf8(nested, nestedcount,
+                  FormatUtf8('[%]'#10'%'#10#10, [FullSectionName, s]))
+              else
+              begin
+                W.AddString(p^.Name);
+                W.Add('=');
+                W.AddString(s); // single line text
+                W.Add(#10);
+              end;
+            end
+            else if rcfObjArray in p^.Value.Flags then
+            begin
+              arr := pointer(p^.Prop^.GetOrdProp(Instance));
+              if arr <> nil then
+                for a := 0 to PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1) do
+                begin
+                  s := SectionName;
+                  if s <> '' then
+                    Append(s, '.');
+                  s := ObjectToIni(arr^, Make([s, p.Name, '#', a]), Options, Level + 1);
+                  if s <> '' then
+                    AddRawUtf8(nested, nestedcount, s);
+                  inc(arr);
+                end;
+            end
             else
-              FormatUtf8('[%.%]'#10'%'#10#10, [SectionName, p^.Name, s], n);
-            AddRawUtf8(nested, nestedcount, n);
-          end
-          else
-          begin
-            W.AddString(p^.Name);
-            W.Add('=');
-            W.AddString(s); // single line text
-            W.Add(#10);
-          end;
-        end
-        else
-        begin
-          W.AddString(p^.Name);
-          W.Add('=');
-          p^.AddValueJson(W, Instance, // simple and complex types
-            Options - [woHumanReadableEnumSetAsComment], twOnSameLine);
-          W.Add(#10);
+            begin
+              W.AddString(p^.Name);
+              W.Add('=');
+              p^.AddValueJson(W, Instance, // simple and complex types
+                Options - [woHumanReadableEnumSetAsComment], twOnSameLine);
+              W.Add(#10);
+            end;
         end;
       inc(p);
     end;
