@@ -4397,7 +4397,7 @@ var
     else // v=#0 i.e. no propname=value in this section
     if (rcfObjArray in p^.Value.Flags) and
        (p^.OffsetSet >= 0) and
-       (iArraySection in Features) then // try e.g. [name-xxx]/[name xxx]
+       (iArraySection in Features) then // recognize e.g. [name-xxx] or [name xxx]
     begin
       FillUp(p)^ := #0;
       repeat

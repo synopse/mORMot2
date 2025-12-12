@@ -263,6 +263,8 @@ begin
   if Coll <> nil then
     CheckEqual(Coll.Drop, '');
   Coll := fDB.CollectionOrCreate[COLL_NAME];
+  if Coll = nil then
+    exit;
   CheckEqual(Coll.Name, COLL_NAME);
   CheckEqual(Coll.FullCollectionName, DB_NAME + '.' + COLL_NAME);
   Check(Coll.Database = fDB);

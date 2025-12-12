@@ -3915,11 +3915,18 @@ var
   j, max: PtrInt;
   PS: PShortString;
 begin
-  W.Add('[');
+  if QuoteChar <> #0 then
+    W.Add('[');
   if FullSetsAsStar and
      (MinValue = 0) and
      GetAllBits(Value, MaxValue + 1) then
-    W.AddDirect('"', '*', '"')
+  begin
+    if QuoteChar <> #0 then
+      W.AddDirect(QuoteChar);
+    W.AddDirect('*');
+    if QuoteChar <> #0 then
+      W.AddDirect(QuoteChar);
+  end
   else
   begin
     PS := NameList;
@@ -3945,7 +3952,10 @@ begin
       inc(PByte(PS), ord(PS^[0]) + 1); // next item
     end;
   end;
-  W.CancelLastComma(']');
+  if QuoteChar <> #0 then
+    W.CancelLastComma(']')
+  else
+    W.CancelLastComma;
 end;
 
 function TRttiEnumType.GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar;

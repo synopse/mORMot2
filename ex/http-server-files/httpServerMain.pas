@@ -48,9 +48,9 @@ begin
     silent  := cmd.Option('silent', 'no output to the console');
     settingsfolder := cmd.ParamS('&settings', '#folder where *.json are located',
       Executable.ProgramFilePath + 'sites-enabled');
-    folder := cmd.ParamS('&folder', 'a local #foldername to serve');
-    proxy := cmd.Param('pro&xy', 'a remote #uri to cache');
-    url := cmd.Param('&url', 'the root #uri to serve this folder/proxy');
+    folder  := cmd.ParamS('&folder', 'a local #foldername to serve');
+    proxy   := cmd.Param('pro&xy', 'a remote #uri to cache');
+    url     := cmd.Param('&url', 'the root #uri to serve this folder/proxy');
     SetObjectFromExecutableCommandLine(settings.Server, '', ' for HTTP/HTTPS');
     SetObjectFromExecutableCommandLine(settings.Server.Log, 'Log', ' for EnableLogging');
     {$ifdef USE_OPENSSL}
