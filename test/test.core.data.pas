@@ -1501,9 +1501,6 @@ var
   JA, JA2: TTestCustomJsonArray;
   JAS: TTestCustomJsonArraySimple;
   JAV: TTestCustomJsonArrayVariant;
-  GDtoObject, G2, G3: TDtoObject;
-  GNest: TDtoObject3;
-  owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco, Disco2: TTestCustomDiscogs;
   Cache: TEntry;
@@ -1879,6 +1876,9 @@ var
     i, a, v: PtrInt;
     mix1: TTestCustomJsonMixed;
     ps: THttpProxyServerSettings;
+    GDtoObject, G2, G3: TDtoObject;
+    GNest: TDtoObject3;
+    owv: TObjectWithVariant;
     {$ifdef HASEXTRECORDRTTI}
     nav, nav2: TConsultaNav;
     nrtti, nrtti2: TNewRtti;
@@ -2278,7 +2278,7 @@ var
       Check(t.LoadFromJson(u, 'Global'));
       CheckEqual(t.prop1, 'test');
       CheckEqual(t.prop2, '');
-      if CheckEqual(length(t.simple), 2) then
+      if CheckEqual(length(t.simple), 2, 't.simple') then
       begin
         Check(t.simple[0].FullName = 'fn1');
         Check(t.simple[1].FullName = 'fn 2');
@@ -2286,17 +2286,7 @@ var
     finally
       t.Free;
     end;
-    u := '[Server]'#13#10 +
-         'Port = 809'#13#10 +
-         'ThreadCount = 7'#13#10 +
-         #13#10 +
-         '[Server.Log]'#13#10 +
-         'DestMainFile = access1.log'#13#10 +
-         'DestErrorFile = error1.log'#13#10 +
-         'DefaultRotate = After10MB'#13#10 +
-         'DefaultRotateFiles = 5'#13#10 +
-         #13#10 +
-         '[MemCache]'#13#10 +
+    u := '[MemCache]'#13#10 +
          'MaxSizeKB = 2'#13#10 +
          'TimeoutSec = 300'#13#10 +
          #13#10 +
@@ -2315,37 +2305,67 @@ var
          'Source = http://ftp.ubuntu.org'#13#10 +
          'HttpHeadCacheSec = 160'#13#10 +
          'HttpKeepAlive = 130'#13#10 +
-         'HttpDirectGetKB = 161'#13#10;
-    ps := THttpProxyServerSettings.Create;
-    try
-      CheckEqual(ps.Server.Port, '8098');
-      Check(ps.Server.Log.DestMainFile = 'access.log');
-      Check(ps.Server.Log.DestErrorFile = 'error.log');
-      CheckEqual(ps.MemCache.MaxSizeKB, 4);
-      Check(ps.DiskCache.Path = Executable.ProgramFilePath + 'proxycache');
-      CheckEqual(length(ps.Url), 0);
-      Check(IniToObject(u, ps, ''));
-      CheckEqual(ps.Server.Port, '809');
-      CheckEqual(ps.Server.ThreadCount, 7);
-      Check(ps.Server.Log.DestMainFile = 'access1.log');
-      Check(ps.Server.Log.DestErrorFile = 'error1.log');
-      CheckEqual(ps.MemCache.MaxSizeKB, 2);
-      Check(ps.DiskCache.Path = '/home/proxycache');
-      if CheckEqual(length(ps.Url), 2) then
-      begin
-        Check(ps.Url[0].Methods = [urmGet, urmHead]);
-        CheckEqual(ps.Url[0].Source, 'http://ftp.debian.org');
-        CheckEqual(ps.Url[0].HttpHeadCacheSec, 60);
-        CheckEqual(ps.Url[0].HttpKeepAlive, 30);
-        CheckEqual(ps.Url[0].HttpDirectGetKB, 16);
-        Check(ps.Url[1].Methods = [urmGet, urmHead, urmPost]);
-        CheckEqual(ps.Url[1].Source, 'http://ftp.ubuntu.org');
-        CheckEqual(ps.Url[1].HttpHeadCacheSec, 160);
-        CheckEqual(ps.Url[1].HttpKeepAlive, 130);
-        CheckEqual(ps.Url[1].HttpDirectGetKB, 161);
+         'HttpDirectGetKB = 161'#13#10 +
+         #13#10 +
+         '[UrlIgnored]'#13#10 +
+         'Methods = post'#13#10 +
+         'Source = http://neverused.org'#13#10 +
+         #13#10 +
+         '[Server]'#13#10 +
+         'Port = 809'#13#10 +
+         'ThreadCount = 7'#13#10;
+    for i := 1 to 2 do
+    begin
+      ps := THttpProxyServerSettings.Create;
+      try
+        CheckEqual(ps.Server.Port, '8098');
+        Check(ps.Server.Log.DestMainFile = 'access.log');
+        Check(ps.Server.Log.DestErrorFile = 'error.log');
+        CheckEqual(ps.Server.Log.DefaultRotateFiles, 9);
+        CheckEqual(ps.MemCache.MaxSizeKB, 4);
+        Check(ps.DiskCache.Path = Executable.ProgramFilePath + 'proxycache');
+        CheckEqual(length(ps.Url), 0);
+        case i of
+          1:
+            j := u +
+              #13#10 +
+              '[Server.Log]'#13#10 +
+              'DestMainFile = access1.log'#13#10 +
+              'DestErrorFile = error1.log'#13#10 +
+              'DefaultRotate = After10MB'#13#10 +
+              'DefaultRotateFiles = 5'#13#10 +
+              #13#10;
+          2:
+            j := u +
+              'Log.DestMainFile = access1.log'#13#10 +
+              'Log.DestErrorFile = error1.log'#13#10 +
+              'Log.DefaultRotate = After10MB'#13#10 +
+              'Log.DefaultRotateFiles = 5';
+        end;
+        Check(IniToObject(j, ps, ''));
+        CheckEqual(ps.Server.Port, '809');
+        CheckEqual(ps.Server.ThreadCount, 7);
+        Check(ps.Server.Log.DestMainFile = 'access1.log');
+        Check(ps.Server.Log.DestErrorFile = 'error1.log');
+        CheckEqual(ps.Server.Log.DefaultRotateFiles, 5);
+        CheckEqual(ps.MemCache.MaxSizeKB, 2);
+        Check(ps.DiskCache.Path = '/home/proxycache');
+        if CheckEqual(length(ps.Url), 2) then
+        begin
+          Check(ps.Url[0].Methods = [urmGet, urmHead]);
+          CheckEqual(ps.Url[0].Source, 'http://ftp.debian.org');
+          CheckEqual(ps.Url[0].HttpHeadCacheSec, 60);
+          CheckEqual(ps.Url[0].HttpKeepAlive, 30);
+          CheckEqual(ps.Url[0].HttpDirectGetKB, 16);
+          Check(ps.Url[1].Methods = [urmGet, urmHead, urmPost]);
+          CheckEqual(ps.Url[1].Source, 'http://ftp.ubuntu.org');
+          CheckEqual(ps.Url[1].HttpHeadCacheSec, 160);
+          CheckEqual(ps.Url[1].HttpKeepAlive, 130);
+          CheckEqual(ps.Url[1].HttpDirectGetKB, 161);
+        end;
+      finally
+        ps.Free;
       end;
-    finally
-      ps.Free;
     end;
 
     owv := TObjectWithVariant.Create;
