@@ -6347,7 +6347,7 @@ utf8: case Escape of // inlined Add(PUtf8Char(P), Len, Escape);
         twJsonEscape:
           AddJsonEscape(PUtf8Char(P), 0); // faster with no Len
         twOnSameLine:
-          AddOnSameLine(PUtf8Char(P), 0); // faster with no Len
+          AddOnSameLine(PUtf8Char(P));    // faster with no Len
       end;
     CP_RAWBYTESTRING:
       if not IsBase64(P, Len) and
