@@ -4332,12 +4332,12 @@ var
   r: TRttiCustom;
   i, uplen: PtrInt;
   p: PRttiCustomProp;
-  section, sectionend, nested, nestedend, json: PUtf8Char;
+  section, sectionend, nested, nestedend: PUtf8Char;
   obj: TObject;
-  n, v: RawUtf8;
+  n: RawUtf8;
   up: TByteToAnsiChar;
 
-  function FillUp: PAnsiChar;
+  function FillUp(p: PRttiCustomProp): PAnsiChar;
   begin
     result := @up;
     if Level <> 0 then
@@ -4349,6 +4349,108 @@ var
     result := UpperCopy255(result, p^.Name);
     uplen := result - PAnsiChar(@up);
     nested := pointer(Ini);
+  end;
+
+  function FillProp(obj: TObject; p: PRttiCustomProp): boolean;
+  var
+    v: RawUtf8;
+    json: PUtf8Char;
+    item: TObject;
+  begin
+    result := false;
+    v := FindIniNameValue(section, @up, #0, sectionend);
+    if p^.Value.Parser in ptMultiLineStringTypes then // e.g. rkLString
+    begin
+      if v = #0 then // may be stored in a multi-line section body
+      begin
+        if iMultiLineSections in Features then
+        begin
+          PWord(FillUp(p))^ := ord(']');
+          if FindSectionFirstLine(nested, @up, @nestedend) then
+          begin
+            // multi-line text value can been stored in its own section
+            FastSetString(v, nested, nestedend - nested);
+            if p^.Prop^.SetValueText(obj, v) then
+              result := true;
+          end;
+        end;
+      end
+      else if p^.Prop^.SetValueText(obj, v) then // single line text
+        result := true;
+    end
+    else if v <> #0 then // we found this propname=value in section..sectionend
+      if (p^.OffsetSet <= 0) or // setter does not support JSON
+         (rcfBoolean in p^.Value.Cache.Flags) or // simple value from text
+         (p^.Value.Kind in (rkIntegerPropTypes + [rkEnumeration, rkSet, rkFloat])) then
+      begin
+        if p^.Prop^.SetValueText(obj, v) then // RTTI conversion from JSON/CSV
+          result := true;
+      end
+      else // e.g. rkVariant, rkDynArray complex values from single line JSON
+      begin
+        json := pointer(v);
+        GetDataFromJson(@PByteArray(obj)[p^.OffsetSet], json,
+          nil, p^.Value, DocVariantOptions, true, nil);
+        if json <> nil then
+          result := true;
+      end
+    else // v=#0 i.e. no propname=value in this section
+    if (rcfObjArray in p^.Value.Flags) and
+       (p^.OffsetSet >= 0) and
+       (iArraySection in Features) then // try e.g. [name-xxx]/[name xxx]
+    begin
+      FillUp(p)^ := #0;
+      repeat
+        if nested^ = '[' then
+        begin
+          inc(nested);
+          if IdemPChar2(@NormToUpperAnsi7, nested, @up) and
+             not (tcIdentifier in TEXT_CHARS[nested[uplen]]) then // not azAZ_09
+          begin
+            nestedend := PosChar(nested, ']');
+            if nestedend <> nil then
+            begin
+              FastSetString(n, nested, nestedend - nested);
+              item := p^.Value.ArrayRtti.ClassNewInstance;
+              if item <> nil then
+                if IniToObject(Ini, item, n, DocVariantOptions, Level + 1) then
+                begin
+                  PtrArrayAdd(PPointer(@PByteArray(obj)[p^.OffsetSet])^, item);
+                  result := true;
+                end
+                else
+                  item.Free;
+            end;
+          end;
+        end;
+        nested := GotoNextLine(nested)
+      until nested = nil;
+    end;
+  end;
+
+  function FillObj: boolean;
+  var
+    i: integer;
+    pp: PRttiCustomProp;
+    r: TRttiCustom;
+    u: PAnsiChar;
+  begin
+    result := false;
+    r := Rtti.RegisterClass(obj);
+    pp := pointer(r.Props.List);
+    for i := 1 to r.Props.Count do
+    begin
+      if pp^.Prop <> nil then
+      begin
+        u := UpperCopy255(@up, p^.Name);
+        u^ := '.';
+        inc(u);
+        PWord(UpperCopy255(u, pp^.Name))^ := ord('='); // [p.Name].[pp.Field]=
+        if FillProp(obj, pp) then
+          result := true;
+      end;
+      inc(pp);
+    end;
   end;
 
 begin
@@ -4371,83 +4473,28 @@ begin
     if p^.Prop <> nil then
       if p^.Value.Kind = rkClass then
       begin
-        // recursive load from another per-property section
-        if Level = 0 then
-          n := p^.Name
-        else
-          Join([SectionName, '.', p^.Name], n);
-        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n,
-              DocVariantOptions, Level + 1) then
-          result := true;
+        obj := p^.Prop^.GetObjProp(Instance);
+        if obj <> nil then
+          if (iClassValue in Features) and // check PropName.Field= entries
+             FillObj then
+            result := true
+          else if iClassSection in Features then
+          begin // recursive load from another per-property section
+            if Level = 0 then
+              n := p^.Name
+            else
+              Join([SectionName, '.', p^.Name], n);
+            if IniToObject(Ini, obj, n, DocVariantOptions, Level + 1) then
+              result := true;
+          end;
       end
       else
       begin
         PWord(UpperCopy255(@up, p^.Name))^ := ord('=');
-        v := FindIniNameValue(section, @up, #0, sectionend);
-        if p^.Value.Parser in ptMultiLineStringTypes then
-        begin
-          if v = #0 then // may be stored in a multi-line section body
-          begin
-            PWord(FillUp)^ := ord(']');
-            if FindSectionFirstLine(nested, @up, @nestedend) then
-            begin
-              // multi-line text value can been stored in its own section
-              FastSetString(v, nested, nestedend - nested);
-              if p^.Prop^.SetValueText(Instance, v) then
-                result := true;
-            end;
-          end
-          else if p^.Prop^.SetValueText(Instance, v) then // single line text
-            result := true;
-        end
-        else if v <> #0 then
-          if (p^.OffsetSet <= 0) or // has a setter?
-             (rcfBoolean in p^.Value.Cache.Flags) or // simple value?
-             (p^.Value.Kind in (rkIntegerPropTypes + [rkEnumeration, rkSet, rkFloat])) then
-          begin
-            if p^.Prop^.SetValueText(Instance, v) then // RTTI conversion
-              result := true;
-          end
-          else // e.g. rkVariant, rkSet, rkDynArray
-          begin
-            json := pointer(v); // convert complex values from JSON
-            GetDataFromJson(@PByteArray(Instance)[p^.OffsetSet], json,
-              nil, p^.Value, DocVariantOptions, true, nil);
-            if json <> nil then
-              result := true;
-          end
-        else if (rcfObjArray in p^.Value.Flags) and
-                (p^.OffsetSet >= 0) then
-        begin
-          // no name=[{...},{...}] field: try e.g. [name-xxx]/[name xxx]
-          FillUp^ := #0;
-          repeat
-            if nested^ = '[' then
-            begin
-              inc(nested);
-              if IdemPChar2(@NormToUpperAnsi7, nested, @up) and
-                 not (tcIdentifier in TEXT_CHARS[nested[uplen]]) then
-              begin
-                nestedend := PosChar(nested, ']');
-                if nestedend <> nil then
-                begin
-                  FastSetString(n, nested, nestedend - nested);
-                  obj := p^.Value.ArrayRtti.ClassNewInstance;
-                  if obj <> nil then
-                    if IniToObject(Ini, obj, n, DocVariantOptions, Level + 1) then
-                    begin
-                      PtrArrayAdd(PPointer(@PByteArray(Instance)[p^.OffsetSet])^, obj);
-                      result := true;
-                    end
-                    else
-                      obj.Free;
-                end;
-              end;
-            end;
-            nested := GotoNextLine(nested)
-          until nested = nil;
-        end;
+        if FillProp(Instance, p) then
+          result := true;
       end;
+    end;
     inc(p);
   end;
 end;
