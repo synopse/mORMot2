@@ -6456,6 +6456,8 @@ initialization
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(
     TypeInfo(THttpProxyUrlObjArray), THttpProxyUrl);
+  Rtti.RegisterObjArray(
+    TypeInfo(THttpProxyUrlSettingsObjArray), THttpProxyUrlSettings);
   {$endif HASDYNARRAYTYPE}
 
 end.

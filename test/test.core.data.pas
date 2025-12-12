@@ -8545,5 +8545,13 @@ end;
 {$endif OSWINDOWS}
 
 
+initialization
+  {$ifndef HASDYNARRAYTYPE}
+  Rtti.RegisterObjArray(TypeInfo(TSimpleExampleObjArray), TSimpleExample);
+  {$endif HASDYNARRAYTYPE}
+
+
+finalization
+
 end.
 
