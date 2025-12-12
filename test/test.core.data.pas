@@ -2299,6 +2299,7 @@ var
          'HttpHeadCacheSec = 60'#13#10 +
          'HttpKeepAlive = 30'#13#10 +
          'HttpDirectGetKB = 16'#13#10 +
+         'MemCache.ForceCsv = csv'#13#10 +
          #13#10 +
          '[Url-Ubuntu]'#13#10 +
          'Methods = get, post, "head" '#13#10 +
@@ -2314,7 +2315,7 @@ var
          '[Server]'#13#10 +
          'Port = 809'#13#10 +
          'ThreadCount = 7'#13#10;
-    for i := 1 to 2 do
+    for i := 1 to 6 do
     begin
       ps := THttpProxyServerSettings.Create;
       try
@@ -2341,8 +2342,12 @@ var
               'Log.DestErrorFile = error1.log'#13#10 +
               'Log.DefaultRotate = After10MB'#13#10 +
               'Log.DefaultRotateFiles = 5';
+        //else writeln(i,'='#10,j);
         end;
-        Check(IniToObject(j, ps, ''));
+        if i >= 5 then
+          Check(IniToObject(j, ps, 'Main')) // we need [Main] for URL=[...]
+        else
+          Check(IniToObject(j, ps, ''));
         CheckEqual(ps.Server.Port, '809');
         CheckEqual(ps.Server.ThreadCount, 7);
         Check(ps.Server.Log.DestMainFile = 'access1.log');
@@ -2357,11 +2362,23 @@ var
           CheckEqual(ps.Url[0].HttpHeadCacheSec, 60);
           CheckEqual(ps.Url[0].HttpKeepAlive, 30);
           CheckEqual(ps.Url[0].HttpDirectGetKB, 16);
+          CheckEqual(ps.Url[0].MemCache.ForceCsv, 'csv');
           Check(ps.Url[1].Methods = [urmGet, urmHead, urmPost]);
           CheckEqual(ps.Url[1].Source, 'http://ftp.ubuntu.org');
           CheckEqual(ps.Url[1].HttpHeadCacheSec, 160);
           CheckEqual(ps.Url[1].HttpKeepAlive, 130);
           CheckEqual(ps.Url[1].HttpDirectGetKB, 161);
+          CheckEqual(ps.Url[1].MemCache.ForceCsv, '');
+        end;
+        case i of // validate all possible combination of INI generation
+          2:
+            j := ObjectToIni(ps, '');
+          3:
+            j := ObjectToIni(ps, '', [], 0, [ifClassValue, ifArraySection]);
+          4:
+            j := ObjectToIni(ps, 'Main', [], 0, [ifClassSection]);
+          5:
+            j := ObjectToIni(ps, 'Main', [], 0, [ifClassValue]);
         end;
       finally
         ps.Free;
