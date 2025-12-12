@@ -2535,18 +2535,27 @@ function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt
 function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
+type
+  /// define IniToObject() extended features
+  // - nested objects and multi-line text (if iMultiLineSections is set) are
+  // searched in their own section, named from their section level and property
+  // (e.g. [mainprop.nested]) with iClassSection feature, and/or as
+  // mainprop.nested.field = value with iClassValue
+  // - nested arrays (with iArraySection) are read as inlined JSON or within
+  // prefixed sections like [nested-xxx] with any not azAZ_09 as xxx separator
+  // - iClearValues will call TRttiCustomProp.ClearValue() on each property
+  TIniToObjectFeatures = set of (
+    iClassSection, iClassValue, iMultiLineSections, iArraySection, iClearValues);
+
 /// fill a class Instance properties from an .ini content
 // - the class property fields are searched in the supplied main SectionName
 // (if SectionName='' then nested objects or arrays will be parsed from their
 // own section)
-// - nested objects and multi-line text values are searched in their own section,
-// named from their section level and property (e.g. [mainprop.nested1.nested2])
-// - nested arrays are read as inlined JSON or within prefixed sections like
-// [nested-xxx] with any not identifier (not AZ_09) as separator
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8 = 'Main'; DocVariantOptions: PDocVariantOptions = nil;
-  Level: integer = 0): boolean;
+  Level: integer = 0; Features: TIniToObjectFeatures =
+    [iClassSection, iClassValue, iMultiLineSections, iArraySection]): boolean;
 
 /// serialize a class Instance properties into an .ini content
 // - the class property fields are written in the supplied main SectionName
@@ -3920,7 +3929,7 @@ begin // expects UpperName as 'NAME='
       if u^ = #0 then
         break;
       if table[u^] = UpperName[0] then
-        PBeg := u;
+        PBeg := u; // check for UpperName=... line below - ignore ; comment
       {$ifdef CPUX64}
       if PEnd <> nil then
         inc(u, BufferLineLength(u, PEnd)) // we can use SSE2
@@ -4218,7 +4227,7 @@ begin
         if next = nil then // avoid last line (P-PBeg) calculation error
           SetLength(Content, i - 1)
         else
-          delete(Content, i, next - P); // delete old Value
+          delete(Content, i, next - P);   // delete old Value
         insert(NewValueCRLF, Content, i); // set new value
         exit;
       end;
@@ -4318,7 +4327,7 @@ end;
 
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8; DocVariantOptions: PDocVariantOptions;
-  Level: integer): boolean;
+  Level: integer; Features: TIniToObjectFeatures): boolean;
 var
   r: TRttiCustom;
   i, uplen: PtrInt;
