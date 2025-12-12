@@ -2536,16 +2536,17 @@ function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
 type
-  /// define IniToObject() extended features
-  // - nested objects and multi-line text (if iMultiLineSections is set) are
-  // searched in their own section, named from their section level and property
-  // (e.g. [mainprop.nested]) with iClassSection feature, and/or as
-  // mainprop.nested.field = value with iClassValue
-  // - nested arrays (with iArraySection) are read as inlined JSON or within
+  /// define IniToObject() and ObjectToIni() extended features
+  // - nested objects and multi-line text (if ifMultiLineSections is set) are
+  // stored in their own section, named from their section level and property
+  // (e.g. [mainprop.nested]) with ifClassSection feature, and/or as
+  // mainprop.nested.field = value with ifClassValue
+  // - nested arrays (with ifArraySection) are stored as inlined JSON or within
   // prefixed sections like [nested-xxx] with any not azAZ_09 as xxx separator
-  // - iClearValues will call TRttiCustomProp.ClearValue() on each property
-  TIniToObjectFeatures = set of (
-    iClassSection, iClassValue, iMultiLineSections, iArraySection, iClearValues);
+  // - ifClearValues will let IniToObject() call TRttiCustomProp.ClearValue()
+  // on each property
+  TIniFeatures = set of (
+    ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection, ifClearValues);
 
 /// fill a class Instance properties from an .ini content
 // - the class property fields are searched in the supplied main SectionName
@@ -2554,8 +2555,8 @@ type
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8 = 'Main'; DocVariantOptions: PDocVariantOptions = nil;
-  Level: integer = 0; Features: TIniToObjectFeatures =
-    [iClassSection, iClassValue, iMultiLineSections, iArraySection]): boolean;
+  Level: integer = 0; Features: TIniFeatures =
+    [ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection]): boolean;
 
 /// serialize a class Instance properties into an .ini content
 // - the class property fields are written in the supplied main SectionName
@@ -4327,7 +4328,7 @@ end;
 
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8; DocVariantOptions: PDocVariantOptions;
-  Level: integer; Features: TIniToObjectFeatures): boolean;
+  Level: integer; Features: TIniFeatures): boolean;
 var
   r: TRttiCustom;
   i, uplen: PtrInt;
@@ -4363,7 +4364,7 @@ var
     begin
       if v = #0 then // may be stored in a multi-line section body
       begin
-        if iMultiLineSections in Features then
+        if ifMultiLineSections in Features then
         begin
           PWord(FillUp(p))^ := ord(']');
           if FindSectionFirstLine(nested, @up, @nestedend) then
@@ -4397,7 +4398,7 @@ var
     else // v=#0 i.e. no propname=value in this section
     if (rcfObjArray in p^.Value.Flags) and
        (p^.OffsetSet >= 0) and
-       (iArraySection in Features) then // recognize e.g. [name-xxx] or [name xxx]
+       (ifArraySection in Features) then // recognize e.g. [name-xxx] or [name xxx]
     begin
       FillUp(p)^ := #0;
       repeat
@@ -4414,7 +4415,7 @@ var
               item := p^.Value.ArrayRtti.ClassNewInstance;
               if item <> nil then
                 if IniToObject(Ini, item, n, DocVariantOptions, Level + 1,
-                     Features - [iClassSection] + [iClassValue]) then
+                     Features - [ifClassSection] + [ifClassValue]) then
                 begin
                   PtrArrayAdd(PPointer(@PByteArray(obj)[p^.OffsetSet])^, item);
                   result := true;
@@ -4473,16 +4474,16 @@ begin
   begin
     if p^.Prop <> nil then
     begin
-      if iClearValues in Features then
+      if ifClearValues in Features then
         p^.ClearValue(Instance, {freeandnil=}false);
       if p^.Value.Kind = rkClass then
       begin
         obj := p^.Prop^.GetObjProp(Instance);
         if obj <> nil then
-          if (iClassValue in Features) and // check PropName.Field= entries
+          if (ifClassValue in Features) and // check PropName.Field= entries
              FillObj then
             result := true
-          else if iClassSection in Features then
+          else if ifClassSection in Features then
           begin // recursive load from another per-property section
             if Level = 0 then
               n := p^.Name
