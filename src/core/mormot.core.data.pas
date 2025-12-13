@@ -4629,7 +4629,7 @@ var
               if arr <> nil then
                 for a := 0 to PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1) do
                 begin
-                  s := SectionName;
+                  s := SectionName;  // e.g. [section.propnam#0]
                   if s <> '' then
                     Append(s, '.');
                   s := ObjectToIni(arr^, Make([s, p.Name, '#', a]),
@@ -4644,7 +4644,8 @@ var
             begin
               WriteNameEqual;
               p^.AddValueJson(W, obj, // simple and complex types
-                Options - [woHumanReadableEnumSetAsComment], twOnSameLine);
+                Options - [woHumanReadableEnumSetAsComment, woInt64AsHex],
+                twOnSameLine);
               W.Add(#10);
             end;
         end;

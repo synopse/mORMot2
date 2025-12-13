@@ -2669,10 +2669,12 @@ type
   // - fsoDisableSaveIfNeeded will disable SaveIfNeeded method process
   // - fsoReadIni will disable JSON loading, and expect INI file format
   // - fsoWriteIni will force SaveIfNeeded to use the INI layout
+  // - fsoNoEnumsComment will customize SaveIfNeeded output
   TSynJsonFileSettingsOption = (
     fsoDisableSaveIfNeeded,
     fsoReadIni,
-    fsoWriteIni);
+    fsoWriteIni,
+    fsoNoEnumsComment);
   TSynJsonFileSettingsOptions = set of TSynJsonFileSettingsOption;
 
   /// abstract parent class able to store settings as JSON file
@@ -12365,16 +12367,20 @@ end;
 function TSynJsonFileSettings.SaveIfNeeded: boolean;
 var
   saved: RawUtf8;
+  opt: TTextWriterWriteObjectOptions;
 begin
   result := false;
   if (self = nil) or
      (fFileName = '') or
      (fsoDisableSaveIfNeeded in fSettingsOptions) then
     exit;
+  opt := SETTINGS_WRITEOPTIONS;
+  if fsoNoEnumsComment in fSettingsOptions then
+    exclude(opt, woHumanReadableEnumSetAsComment);
   if fsoWriteIni in fSettingsOptions then
-    saved := ObjectToIni(self, fSectionName)
+    saved := ObjectToIni(self, fSectionName, opt)
   else
-    saved := ObjectToJson(self, SETTINGS_WRITEOPTIONS);
+    saved := ObjectToJson(self, opt);
   if saved = fInitialJsonContent then
     exit;
   result := FileFromString(saved, fFileName);
