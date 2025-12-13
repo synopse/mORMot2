@@ -2685,10 +2685,13 @@ type
     fFileName: TFileName;
     fLoadedAsIni: boolean;
     fSettingsOptions: TSynJsonFileSettingsOptions;
+    fIniOptions: TIniFeatures;
     fInitialFileHash: cardinal;
     // could be overriden to validate the content coherency and/or clean fields
     function AfterLoad: boolean; virtual;
   public
+    /// initialize this instance and all its published fields
+    constructor Create; override;
     /// read existing settings from a JSON content
     // - if the input is no JSON object, then a .INI structure is tried
     function LoadFromJson(const aJson: RawUtf8;
@@ -2708,6 +2711,9 @@ type
     /// allow to customize the storing process
     property SettingsOptions: TSynJsonFileSettingsOptions
       read fSettingsOptions write fSettingsOptions;
+    /// allow to customize fsoReadIni/fsoWriteIni storing process
+    property IniOptions: TIniFeatures
+      read fIniOptions write fIniOptions;
     /// can be used to compare two instances original file content
     // - will use DefaultHasher, so hash could change after process restart
     property InitialFileHash: cardinal
@@ -12315,6 +12321,12 @@ end;
 
 { TSynJsonFileSettings }
 
+constructor TSynJsonFileSettings.Create;
+begin
+  inherited Create;
+  fIniOptions := [ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection];
+end;
+
 function TSynJsonFileSettings.AfterLoad: boolean;
 begin
   result := true; // success
@@ -12332,7 +12344,7 @@ begin
     result := JsonSettingsToObject(aJson, self);
   if not result then
   begin
-    result := IniToObject(aJson, self, aSectionName, @JSON_[mFastFloat]);
+    result := IniToObject(aJson, self, aSectionName, @JSON_[mFastFloat], 0, fIniOptions);
     if result then
     begin
       fSectionName := aSectionName;
@@ -12378,7 +12390,7 @@ begin
   if fsoNoEnumsComment in fSettingsOptions then
     exclude(opt, woHumanReadableEnumSetAsComment);
   if fsoWriteIni in fSettingsOptions then
-    saved := ObjectToIni(self, fSectionName, opt)
+    saved := ObjectToIni(self, fSectionName, opt, 0, fIniOptions)
   else
     saved := ObjectToJson(self, opt);
   if saved = fInitialJsonContent then
