@@ -162,6 +162,7 @@ type
     fConsoleMode: boolean;
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
+    fAfterCreateLog: TSynLogClass;
     procedure BeforeCreate(const aWorkFolder: TFileName); virtual;
     /// by default, calls fSettings.SetLog() if not running from tests
     // - could be overriden to change this default behavior
@@ -343,11 +344,18 @@ begin
 end;
 
 procedure TSynDaemon.AfterCreate;
+var
+  logger: TSynLogClass;
 begin
   if RunFromSynTests then
     fSettings.fLogClass := TSynLog // share the same TSynLog for all daemons
   else
-    fSettings.SetLog(TSynLog); // real world logging
+  begin
+    logger := fAfterCreateLog; // may be pre-set in inherited Create()
+    if logger = nil then
+      logger := TSynLog;
+    fSettings.SetLog(logger); // real world logging
+  end;
 end;
 
 destructor TSynDaemon.Destroy;
