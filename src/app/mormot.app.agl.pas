@@ -1125,6 +1125,7 @@ begin
   if aServiceClass = nil then
     aServiceClass := TSynAngelizeService;
   fServiceClass := aServiceClass;
+  fAfterCreateLog := aLog;
   inherited Create(TSynAngelizeSettings,
     aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt, aSettingsName,
     aSettingsOptions, aSectionName);
