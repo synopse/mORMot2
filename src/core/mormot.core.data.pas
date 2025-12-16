@@ -4623,9 +4623,10 @@ var
               end;
             end
             else if (rcfObjArray in p^.Value.Flags) and
-                    (ifArraySection in feat) then
+                    (ifArraySection in feat) and
+                    (p^.OffsetGet >= 0) then
             begin
-              arr := pointer(p^.Prop^.GetOrdProp(obj));
+              arr := PPointer(PAnsiChar(obj) + p^.OffsetGet)^;
               if arr <> nil then
                 for a := 0 to PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1) do
                 begin
