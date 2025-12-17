@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 4. Core Units (mormot.core.<em>)
+
+</p>
+<p>
+</em>The Foundation Bricks<em>
+
+</p>
+<p>
+The mORMot 2 framework uses custom low-level types, classes, and functions instead of relying solely on the standard Delphi RTL. This design choice provides:
+
+</p>
+<ul>
+  <li><strong>Cross-platform and cross-compiler support</strong> (Delphi 7 through 12.2, FPC 3.2+)</li>
+  <li><strong>Unicode support</strong> via native UTF-8 encoding for all versions</li>
+  <li><strong>Optimized performance</strong> for speed, multi-threading, and memory efficiency</li>
+  <li><strong>Consistent KISS design</strong> with shared common features</li>
+</ul>
+In mORMot 1, most of this functionality resided in a single 2.3MB <code>SynCommons.pas</code> file. In mORMot 2, this has been split into <strong>24 focused units</strong> in the <code>mormot.core.</em></code> namespace, following SOLID principles.
+
+</p>
+<hr>
+<h2>4.1. Conditional Defines</h2>
+<p>
+A global <code>mormot.defines.inc</code> include file appears in all framework units:
+
+</p>
+<pre><code class="language-pascal">{$I mormot.defines.inc}
+</code></pre>
+<p>
+This defines key conditionals for portable and efficient code:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Define</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>PUREMORMOT2</code></td>
+  <td>Disable mORMot 1.18 compatibility aliases (recommended for new code)</td>
+</tr>
+<tr>
+  <td><code>FPC_X64MM</code></td>
+  <td>Use custom x64 memory manager (FPC only, Linux/Windows)</td>
+</tr>
+<tr>
+  <td><code>FPCMM_BOOST</code> / <code>FPCMM_SERVER</code></td>
+  <td>Memory manager threading modes</td>
+</tr>
+<tr>
+  <td><code>NEWRTTINOTUSED</code></td>
+  <td>Exclude Delphi 2010+ enhanced RTTI (smaller EXE)</td>
+</tr>
+<tr>
+  <td><code>USE_OPENSSL</code></td>
+  <td>Enable OpenSSL integration (required on POSIX)</td>
+</tr>
+</tbody>
+</table>
+<strong>Best Practice</strong>: Set these in project options, not in unit source.
+
+</p>
+<hr>
+<h2>4.2. Unicode and UTF-8</h2>
+<p>
+mORMot 2 has 100% Unicode compatibility across all Delphi and FPC versions. From its core to its uppermost features, the framework is <strong>natively UTF-8</strong>, which is the de-facto character encoding for JSON, SQLite3, and most supported database engines.
+
+</p>
+<h3>4.2.1. String Types</h3>
+<p>
+The following string types are used throughout the framework:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Purpose</th>
+  <th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>RawUtf8</code></td>
+  <td>Primary type for all internal data (UTF-8 encoded)</td>
+  <td><code>mormot.core.base</code></td>
+</tr>
+<tr>
+  <td><code>RawByteString</code></td>
+  <td>Binary byte storage</td>
+  <td><code>mormot.core.base</code></td>
+</tr>
+<tr>
+  <td><code>WinAnsiString</code></td>
+  <td>WinAnsi-encoded text (code page 1252)</td>
+  <td><code>mormot.core.base</code></td>
+</tr>
+<tr>
+  <td><code>SynUnicode</code></td>
+  <td>Fastest native Unicode (<code>WideString</code> pre-2009, <code>UnicodeString</code> after)</td>
+  <td><code>mormot.core.base</code></td>
+</tr>
+<tr>
+  <td><code>string</code></td>
+  <td>Generic VCL/UI text (use only at presentation layer)</td>
+  <td>RTL</td>
+</tr>
+</tbody>
+</table>
+<strong>Key Recommendation</strong>: Use <code>RawUtf8</code> for all business logic and data processing. Convert to <code>string</code> only at the UI layer using <code>Utf8ToString()</code> / <code>StringToUtf8()</code> from <code>mormot.core.unicode</code>:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.core.unicode;
+
+var
+  utf8: RawUtf8;
+  display: string;
+begin
+  utf8 := &#x27;Hello UTF-8 World&#x27;;
+  display := Utf8ToString(utf8);  // Convert for UI display
+  utf8 := StringToUtf8(display);  // Convert back for storage/processing
+end;
+</code></pre>
+<h3>4.2.2. Why UTF-8?</h3>
+<ul>
+  <li><strong>JSON native</strong>: All JSON is UTF-8 encoded</li>
+  <li><strong>SQLite3 native</strong>: SQLite3 stores text as UTF-8</li>
+  <li><strong>Network efficient</strong>: UTF-8 is compact for ASCII-heavy content</li>
+  <li><strong>Memory efficient</strong>: No temporary string conversions during parsing</li>
+  <li><strong>Consistent</strong>: Same encoding across all Delphi versions</li>
+</ul>
+<hr>
+<h2>4.3. Numeric Types</h2>
+<h3>4.3.1. Currency Handling</h3>
+<p>
+The <code>currency</code> type is the standard Delphi type for monetary values, avoiding rounding errors with exact 4-decimal precision. It safely stores numbers in the range -922,337,203,685,477.5808 to 922,337,203,685,477.5807.
+
+</p>
+<p>
+mORMot provides fast currency-to-text conversion functions in <code>mormot.core.text</code> that avoid FPU rounding issues:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.text;
+
+var
+  c: currency;
+  s: RawUtf8;
+begin
+  c := 123.45;
+  s := CurrencyToStr(c);  // Fast, no FPU rounding
+  c := StrToCurrency(s);  // Safe conversion back
+end;
+</code></pre>
+<p>
+The <code>Int64</code> binary representation of <code>currency</code> (i.e., <code>value <em> 10000</code>) is used internally for maximum performance and precision.
+
+</p>
+<h3>4.3.2. Cross-Platform Integer Types</h3>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>PtrInt</code></td>
+  <td>Signed pointer-size integer (32 or 64 bit)</td>
+</tr>
+<tr>
+  <td><code>PtrUInt</code></td>
+  <td>Unsigned pointer-size integer</td>
+</tr>
+<tr>
+  <td><code>TID</code></td>
+  <td>64-bit record ID (Int64)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>4.4. TDynArray: Dynamic Array Wrapper</h2>
+<p>
+<code>TDynArray</code> (in <code>mormot.core.data</code>) provides <code>TList</code>-like functionality for any dynamic array:
+
+</p>
+<h3>4.4.1. Basic Usage</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.core.data;
+
+type
+  TIntegerArray = array of Integer;
+
+var
+  arr: TIntegerArray;
+  da: TDynArray;
+  v: Integer;
+begin
+  da.Init(TypeInfo(TIntegerArray), arr);  // Associate wrapper with array
+
+  for v := 1 to 1000 do
+    da.Add(v);  // TList-like Add method
+
+  da.Sort(SortDynArrayInteger);  // In-place sorting
+
+  v := 500;
+  if da.Find(v) &gt;= 0 then  // Binary search (after sorting)
+    WriteLn(&#x27;Found 500&#x27;);
+
+  da.Delete(0);  // Delete by index
+  WriteLn(&#x27;Count: &#x27;, da.Count);
+end;
+</code></pre>
+<h3>4.4.2. External Count for Performance</h3>
+<p>
+For high-performance scenarios, use an external count variable to avoid reallocation on every Add/Delete:
+
+</p>
+<pre><code class="language-pascal">var
+  arr: TIntegerArray;
+  da: TDynArray;
+  count: Integer;
+begin
+  da.Init(TypeInfo(TIntegerArray), arr, @count);  // External count
+  da.Capacity := 10000;  // Pre-allocate memory
+
+  // Now Add/Delete modify &#x27;count&#x27; without reallocating &#x27;arr&#x27;
+  for i := 1 to 10000 do
+    da.Add(i);  // Much faster with external count
+end;
+</code></pre>
+<h3>4.4.3. Serialization</h3>
+<p>
+<code>TDynArray</code> supports both binary and JSON serialization:
+
+</p>
+<pre><code class="language-pascal">var
+  binary: RawByteString;
+  json: RawUtf8;
+begin
+  // Binary (fast, compact)
+  binary := da.SaveTo;
+  da.LoadFromBinary(binary);
+
+  // JSON (interoperable)
+  json := da.SaveToJson;
+  da.LoadFromJson(json);
+end;
+</code></pre>
+<h3>4.4.4. TDynArrayHashed for Dictionary-Like Access</h3>
+<p>
+<code>TDynArrayHashed</code> adds O(1) hash-based lookup:
+
+</p>
+<pre><code class="language-pascal">type
+  TNameValue = record
+    Name: RawUtf8;
+    Value: Integer;
+  end;
+  TNameValueArray = array of TNameValue;
+
+var
+  arr: TNameValueArray;
+  hash: TDynArrayHashed;
+  added: Boolean;
+  idx: Integer;
+begin
+  hash.Init(TypeInfo(TNameValueArray), arr);  // Auto-detects RawUtf8 key
+
+  // Add or find existing
+  idx := hash.FindHashedForAdding(&#x27;MyKey&#x27;, added);
+  if added then
+  begin
+    arr[idx].Name := &#x27;MyKey&#x27;;
+    arr[idx].Value := 42;
+  end;
+
+  // Fast lookup
+  idx := hash.FindHashed(&#x27;MyKey&#x27;);  // O(1) instead of O(n)
+end;
+</code></pre>
+<h3>4.4.5. TSynDictionary</h3>
+<p>
+<code>TSynDictionary</code> (in <code>mormot.core.json</code>) is a <strong>thread-safe</strong> dictionary storing key-value pairs as two dynamic arrays:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.json;
+
+var
+  dict: TSynDictionary;
+  key: RawUtf8;
+  val, v: Integer;
+begin
+  dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray));
+  try
+    // Add() takes const parameters, so use variables
+    key := &#x27;key1&#x27;; val := 100;
+    dict.Add(key, val);
+    key := &#x27;key2&#x27;; val := 200;
+    dict.Add(key, val);
+
+    key := &#x27;key1&#x27;;
+    if dict.Exists(key) then
+      dict.FindAndCopy(key, v);
+
+    // Thread-safe by default (no external locking needed)
+  finally
+    dict.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>4.5. TDocVariant: Schema-less Documents</h2>
+<p>
+<code>TDocVariant</code> (in <code>mormot.core.variants</code>) is a custom <code>variant</code> type for storing JSON-like documents:
+
+</p>
+<h3>4.5.1. Creating Documents</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.variants;
+
+var
+  doc: Variant;
+begin
+  // Object document
+  doc := _Obj([&#x27;name&#x27;, &#x27;John&#x27;, &#x27;age&#x27;, 30]);
+  // or from JSON
+  doc := _Json(&#x27;{&quot;name&quot;:&quot;John&quot;,&quot;age&quot;:30}&#x27;);
+
+  // Array document
+  doc := _Arr([&#x27;apple&#x27;, &#x27;banana&#x27;, &#x27;cherry&#x27;]);
+  // or from JSON
+  doc := _Json(&#x27;[&quot;apple&quot;,&quot;banana&quot;,&quot;cherry&quot;]&#x27;);
+end;
+</code></pre>
+<h3>4.5.2. Late-Binding Access</h3>
+<pre><code class="language-pascal">var
+  doc: Variant;
+begin
+  doc := _Json(&#x27;{&quot;name&quot;:&quot;John&quot;,&quot;address&quot;:{&quot;city&quot;:&quot;NYC&quot;,&quot;zip&quot;:&quot;10001&quot;}}&#x27;);
+
+  // Read properties via late-binding
+  WriteLn(doc.name);           // &#x27;John&#x27;
+  WriteLn(doc.address.city);   // &#x27;NYC&#x27;
+
+  // Modify properties
+  doc.name := &#x27;Jane&#x27;;
+  doc.address.state := &#x27;NY&#x27;;   // Add new property
+
+  // Convert to JSON
+  WriteLn(doc);  // &#x27;{&quot;name&quot;:&quot;Jane&quot;,&quot;address&quot;:{&quot;city&quot;:&quot;NYC&quot;,&quot;zip&quot;:&quot;10001&quot;,&quot;state&quot;:&quot;NY&quot;}}&#x27;
+end;
+</code></pre>
+<h3>4.5.3. Direct TDocVariantData Access</h3>
+<p>
+For better performance, use direct transtyping:
+
+</p>
+<pre><code class="language-pascal">var
+  doc: Variant;
+begin
+  doc := _Json(&#x27;{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}&#x27;);
+
+  // Safe access via _Safe()
+  with _Safe(doc)^ do
+  begin
+    WriteLn(&#x27;Count: &#x27;, Count);
+    for i := 0 to Count - 1 do
+      WriteLn(Names[i], &#x27;=&#x27;, Values[i]);
+  end;
+
+  // Typed property access
+  WriteLn(_Safe(doc)^.I[&#x27;a&#x27;]);  // Integer access
+  WriteLn(_Safe(doc)^.U[&#x27;b&#x27;]);  // RawUtf8 access
+end;
+</code></pre>
+<h3>4.5.4. Per-Value vs Per-Reference</h3>
+<p>
+By default, <code>_Obj()/_Arr()/_Json()</code> create <strong>per-value</strong> documents (deep copy on assignment):
+
+</p>
+<pre><code class="language-pascal">var
+  v1, v2: Variant;
+begin
+  v1 := _Obj([&#x27;name&#x27;, &#x27;John&#x27;]);
+  v2 := v1;        // Creates a copy
+  v2.name := &#x27;Jane&#x27;;
+  WriteLn(v1.name);  // &#x27;John&#x27; (unchanged)
+  WriteLn(v2.name);  // &#x27;Jane&#x27;
+end;
+</code></pre>
+<p>
+Use <code>_ObjFast()/_ArrFast()/_JsonFast()</code> for <strong>per-reference</strong> documents (shared):
+
+</p>
+<pre><code class="language-pascal">var
+  v1, v2: Variant;
+begin
+  v1 := _ObjFast([&#x27;name&#x27;, &#x27;John&#x27;]);
+  v2 := v1;        // Reference, not copy
+  v2.name := &#x27;Jane&#x27;;
+  WriteLn(v1.name);  // &#x27;Jane&#x27; (both changed!)
+  WriteLn(v2.name);  // &#x27;Jane&#x27;
+end;
+</code></pre>
+<hr>
+<h2>4.6. Date and Time</h2>
+<h3>4.6.1. ISO 8601 Encoding</h3>
+<p>
+Dates are encoded as ISO 8601 text (<code>YYYY-MM-DDThh:mm:ss</code>), which provides:
+<ul>
+  <li>Lexicographical ordering equals chronological ordering</li>
+  <li>Natural sorting in file systems and databases</li>
+  <li>Cross-platform compatibility</li>
+</ul>
+<h3>4.6.2. Time Types</h3>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Resolution</th>
+  <th>Storage</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TDateTime</code></td>
+  <td>Seconds</td>
+  <td>TEXT (ISO 8601)</td>
+  <td>General purpose</td>
+</tr>
+<tr>
+  <td><code>TDateTimeMS</code></td>
+  <td>Milliseconds</td>
+  <td>TEXT (ISO 8601.sss)</td>
+  <td>High precision</td>
+</tr>
+<tr>
+  <td><code>TTimeLog</code></td>
+  <td>Seconds</td>
+  <td>INTEGER (bit-packed)</td>
+  <td>Fast comparison, compact storage</td>
+</tr>
+<tr>
+  <td><code>TUnixTime</code></td>
+  <td>Seconds</td>
+  <td>INTEGER</td>
+  <td>Unix timestamp since 1970</td>
+</tr>
+<tr>
+  <td><code>TUnixMSTime</code></td>
+  <td>Milliseconds</td>
+  <td>INTEGER</td>
+  <td>JavaScript-compatible</td>
+</tr>
+</tbody>
+</table>
+<h3>4.6.3. TTimeLog</h3>
+<p>
+<code>TTimeLog</code> (in <code>mormot.core.datetime</code>) is a proprietary 64-bit format optimized for fast comparison and compact storage:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.datetime;
+
+var
+  t, t1, t2: TTimeLog;
+  dt: TDateTime;
+begin
+  t := TimeLogNow;                    // Current time
+  t := TimeLogFromDateTime(Now);      // From TDateTime
+  dt := TimeLogToDateTime(t);         // Back to TDateTime
+
+  t1 := TimeLogNow;
+  t2 := TimeLogNow;
+  // Direct comparison works (chronological order)
+  if t1 &gt; t2 then
+    WriteLn(&#x27;t1 is later&#x27;);
+
+  // ISO 8601 conversion via TTimeLogBits
+  WriteLn(PTimeLogBits(@t)^.Text(true, &#x27;T&#x27;));  // &#x27;2025-01-15T10:30:45&#x27;
+end;
+</code></pre>
+<h3>4.6.4. Time Zones</h3>
+<p>
+<code>TSynTimeZone</code> (in <code>mormot.core.search</code>) handles time zone conversions:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.search;
+
+var
+  local: TDateTime;
+begin
+  // Convert UTC to local time for a specific zone
+  local := TSynTimeZone.Default.UtcToLocal(NowUtc, &#x27;Eastern Standard Time&#x27;);
+
+  // Get current local time for a zone
+  local := TSynTimeZone.Default.NowToLocal(&#x27;Pacific Standard Time&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>4.7. Thread Safety: TSynLocker</h2>
+<p>
+<code>TSynLocker</code> (in <code>mormot.core.os</code>) provides CPU cache-friendly critical sections:
+
+</p>
+<h3>4.7.1. Basic Usage</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.os;
+
+var
+  Lock: TSynLocker;
+  Counter: Integer;
+begin
+  Lock.Init;
+  try
+    // In thread code:
+    Lock.Lock;
+    try
+      Inc(Counter);  // Protected access
+    finally
+      Lock.UnLock;
+    end;
+  finally
+    Lock.Done;
+  end;
+end;
+</code></pre>
+<h3>4.7.2. Automatic Unlocking</h3>
+<p>
+Use <code>ProtectMethod</code> for RAII-style protection:
+
+</p>
+<pre><code class="language-pascal">procedure TMyClass.ThreadSafeMethod;
+begin
+  fLock.ProtectMethod;  // Returns IUnknown, auto-unlocks at method end
+  // ... protected code ...
+end;  // Automatically unlocks here
+</code></pre>
+<h3>4.7.3. Built-in Storage</h3>
+<p>
+<code>TSynLocker</code> includes 7 variant slots for thread-safe value storage:
+
+</p>
+<pre><code class="language-pascal">var
+  Lock: TSynLocker;
+begin
+  Lock.Init;
+  // Thread-safe integer storage
+  Lock.LockedInt64[0] := 100;
+  Lock.LockedInt64Increment(0, 1);  // Atomic increment
+
+  // Thread-safe string storage
+  Lock.LockedUtf8[1] := &#x27;value&#x27;;
+
+  // Thread-safe variant storage
+  Lock.Locked[2] := _Obj([&#x27;count&#x27;, 42]);
+end;
+</code></pre>
+<h3>4.7.4. Thread-Safe Base Classes</h3>
+<p>
+Inherit from these for built-in <code>TSynLocker</code>:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Inherits From</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSynPersistentLock</code></td>
+  <td><code>TSynPersistent</code></td>
+</tr>
+<tr>
+  <td><code>TInterfacedObjectLocked</code></td>
+  <td><code>TInterfacedObjectWithCustomCreate</code></td>
+</tr>
+<tr>
+  <td><code>TObjectListLocked</code></td>
+  <td><code>TObjectList</code></td>
+</tr>
+<tr>
+  <td><code>TRawUtf8ListLocked</code></td>
+  <td><code>TRawUtf8List</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>4.8. Core Units Reference</h2>
+<h3>4.8.1. Foundation Layer</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+  <th>Key Types</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.core.base</code></td>
+  <td>Foundation types, ASM stubs</td>
+  <td><code>RawUtf8</code>, <code>PtrInt</code>, <code>TDynArray</code> basics</td>
+</tr>
+<tr>
+  <td><code>mormot.core.os</code></td>
+  <td>OS abstraction</td>
+  <td><code>TSynLocker</code>, <code>GetTickCount64</code>, file/process APIs</td>
+</tr>
+<tr>
+  <td><code>mormot.core.unicode</code></td>
+  <td>Charset conversion</td>
+  <td><code>Utf8ToString</code>, <code>WinAnsiToUtf8</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.text</code></td>
+  <td>Text processing</td>
+  <td><code>FormatUtf8</code>, CSV parsing, currency</td>
+</tr>
+<tr>
+  <td><code>mormot.core.datetime</code></td>
+  <td>Date/time handling</td>
+  <td><code>TTimeLog</code>, ISO 8601, <code>TSynTimeZone</code></td>
+</tr>
+</tbody>
+</table>
+<h3>4.8.2. Data Layer</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+  <th>Key Types</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.core.rtti</code></td>
+  <td>RTTI abstraction</td>
+  <td><code>TRttiCustom</code>, <code>PRttiInfo</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.buffers</code></td>
+  <td>Compression, streams</td>
+  <td>SynLZ, Base64, <code>TBufferWriter</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.data</code></td>
+  <td>Data structures</td>
+  <td><code>TDynArray</code>, <code>TDynArrayHashed</code>, <code>TSynDictionary</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.json</code></td>
+  <td>JSON handling</td>
+  <td><code>TJsonWriter</code>, <code>GetJsonField</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.variants</code></td>
+  <td>Dynamic documents</td>
+  <td><code>TDocVariant</code>, <code>IDocDict</code>, <code>IDocList</code></td>
+</tr>
+</tbody>
+</table>
+<h3>4.8.3. Application Layer</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+  <th>Key Types</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.core.log</code></td>
+  <td>Logging framework</td>
+  <td><code>TSynLog</code>, <code>ISynLog</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.perf</code></td>
+  <td>Performance monitoring</td>
+  <td><code>TSynMonitor</code>, timing</td>
+</tr>
+<tr>
+  <td><code>mormot.core.threads</code></td>
+  <td>Threading utilities</td>
+  <td><code>TSynBackgroundThread</code>, <code>TSynParallelProcess</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.search</code></td>
+  <td>Search and filtering</td>
+  <td>Full-text search helpers</td>
+</tr>
+<tr>
+  <td><code>mormot.core.test</code></td>
+  <td>Testing framework</td>
+  <td><code>TSynTestCase</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.mustache</code></td>
+  <td>Template engine</td>
+  <td><code>TSynMustache</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.interfaces</code></td>
+  <td>Interface support</td>
+  <td>DI/IoC container</td>
+</tr>
+<tr>
+  <td><code>mormot.core.zip</code></td>
+  <td>ZIP compression</td>
+  <td>Archive handling</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>4.9. Dependency Order</h2>
+<p>
+Core units have strict dependencies (lower never depends on higher):
+
+</p>
+<pre><code class="language-text">mormot.core.base (RTL types, ASM - no dependencies)
+  └─► mormot.core.os (OS abstraction)
+      └─► mormot.core.unicode (encoding)
+          └─► mormot.core.text (parsing)
+              └─► mormot.core.datetime (dates)
+                  └─► mormot.core.rtti (RTTI)
+                      └─► mormot.core.buffers (compression)
+                          └─► mormot.core.data (TDynArray)
+                              └─► mormot.core.json (JSON)
+                                  └─► [variants, log, threads, etc.]
+</code></pre>
+<p>
+<strong>Critical Rule</strong>: When modifying units, respect this hierarchy. Adding references that create circular dependencies will break compilation.
+
+</p>
+<hr>
+<h2>4.10. Migration from SynCommons.pas</h2>
+<h3>4.10.1. Type Mapping</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>RawUTF8</code></td>
+  <td><code>RawUtf8</code></td>
+  <td>Case change only</td>
+</tr>
+<tr>
+  <td><code>SynCommons.pas</code></td>
+  <td><code>mormot.core.</em></code></td>
+  <td>Split into 24 units</td>
+</tr>
+<tr>
+  <td><code>FormatUTF8()</code></td>
+  <td><code>FormatUtf8()</code></td>
+  <td>Same function, case change</td>
+</tr>
+<tr>
+  <td><code>TDocVariant</code></td>
+  <td><code>TDocVariant</code></td>
+  <td>Now in <code>mormot.core.variants</code></td>
+</tr>
+<tr>
+  <td><code>TSynLog</code></td>
+  <td><code>TSynLog</code></td>
+  <td>Now in <code>mormot.core.log</code></td>
+</tr>
+<tr>
+  <td><code>TDynArray</code></td>
+  <td><code>TDynArray</code></td>
+  <td>Now in <code>mormot.core.data</code></td>
+</tr>
+</tbody>
+</table>
+<h3>4.10.2. Backward Compatibility</h3>
+<p>
+By default, mORMot 2 provides compatibility aliases. Define <code>PUREMORMOT2</code> to disable them and use only new names.
+
+</p>
+<h3>4.10.3. Minimal Uses Clause</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,      // Foundation
+  mormot.core.os,        // OS abstraction
+  mormot.core.text,      // Text utilities
+  mormot.core.json,      // JSON
+  mormot.core.variants;  // TDocVariant
+</code></pre>
+<hr>
+<p>
+<em>Next Chapter: Object-Relational Mapping (TOrm, TOrmModel)</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-03.html">Chapter 3: Meet mORMot 2</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-05.html">Chapter 5: Object-Relational Mapping</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

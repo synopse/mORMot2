@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# mORMot 2 Software Architecture Design Documentation
+
+</p>
+<p>
+This folder contains the complete <strong>Software Architecture Design (SAD)</strong> documentation for the <strong>Synopse mORMot 2 Framework</strong>.
+
+</p>
+<h2>Overview</h2>
+<p>
+The SAD is a comprehensive guide covering all aspects of mORMot 2, from architecture principles to practical implementation patterns. It has been adapted from the original mORMot 1.18 SAD by Arnaud Bouchez, completely updated for mORMot 2's new APIs, unit organization, and features.
+
+</p>
+<h2>Quick Start</h2>
+<p>
+<strong>Start here:</strong>
+1. <a href="mORMot2-SAD-Foreword.html"><strong>Foreword</strong></a> - Document overview and resources
+2. <a href="mORMot2-SAD-Index.html"><strong>Index</strong></a> - Complete table of contents with topic navigation
+3. <a href="mORMot2-SAD-Chapter-01.html"><strong>Chapter 1: Overview</strong></a> - Framework introduction
+
+</p>
+<h2>Document Structure</h2>
+<h3>Core Chapters (1-26)</h3>
+<table>
+<thead>
+<tr>
+  <th>Part</th>
+  <th>Chapters</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>I. Introduction</strong></td>
+  <td>1-4</td>
+  <td>Overview, Architecture, Unit Structure, Core Units</td>
+</tr>
+<tr>
+  <td><strong>II. ORM</strong></td>
+  <td>5-6</td>
+  <td>TOrm, TOrmModel, Daily Patterns</td>
+</tr>
+<tr>
+  <td><strong>III. Database</strong></td>
+  <td>7-9</td>
+  <td>SQLite3, External SQL, MongoDB</td>
+</tr>
+<tr>
+  <td><strong>IV. REST</strong></td>
+  <td>10-13</td>
+  <td>JSON/REST, Client-Server Architecture, ORM Operations</td>
+</tr>
+<tr>
+  <td><strong>V. Services/SOA</strong></td>
+  <td>14-17</td>
+  <td>Method Services, Interfaces, SOA, Cross-Platform</td>
+</tr>
+<tr>
+  <td><strong>VI. Web</strong></td>
+  <td>18-20</td>
+  <td>MVC Pattern, Web Applications, Hosting</td>
+</tr>
+<tr>
+  <td><strong>VII. Advanced</strong></td>
+  <td>21-25</td>
+  <td>Security, Scripting, ECC, DDD, Testing</td>
+</tr>
+<tr>
+  <td><strong>VIII. Reference</strong></td>
+  <td>26</td>
+  <td>Installation and Compilation</td>
+</tr>
+</tbody>
+</table>
+<h3>Files</h3>
+<table>
+<thead>
+<tr>
+  <th>File Pattern</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mORMot2-SAD-Foreword.md/html</code></td>
+  <td>Introduction and resources</td>
+</tr>
+<tr>
+  <td><code>mORMot2-SAD-Index.md/html</code></td>
+  <td>Complete index with navigation</td>
+</tr>
+<tr>
+  <td><code>mORMot2-SAD-Chapter-NN.md/html</code></td>
+  <td>Individual chapters (01-26)</td>
+</tr>
+<tr>
+  <td><code>mORMot2-SAD-Chapters-27-30-Obsolete.md/html</code></td>
+  <td>Status of deprecated mORMot 1 chapters</td>
+</tr>
+</tbody>
+</table>
+<h3>Formats</h3>
+<ul>
+  <li><strong>Markdown</strong> (<code>.md</code>) - Source format, editable</li>
+  <li><strong>HTML</strong> (<code>.html</code>) - Rendered format for viewing</li>
+</ul>
+<h2>Working Files</h2>
+<p>
+The <code>_working/</code> subfolder contains:
+<ul>
+  <li>Source extraction scripts</li>
+  <li>mORMot 1 chapter extracts</li>
+  <li>Migration mapping documentation</li>
+  <li>Code validation projects</li>
+</ul>
+<h2>Key Topics by Chapter</h2>
+<h3>Getting Started</h3>
+<ul>
+  <li><strong>Installation</strong>: Chapter 26</li>
+  <li><strong>Unit organization</strong>: Chapter 3</li>
+  <li><strong>Core utilities</strong>: Chapter 4</li>
+</ul>
+<h3>ORM/Database</h3>
+<ul>
+  <li><strong>TOrm basics</strong>: Chapter 5</li>
+  <li><strong>SQLite3</strong>: Chapter 7</li>
+  <li><strong>External databases</strong>: Chapter 8</li>
+  <li><strong>MongoDB</strong>: Chapter 9</li>
+</ul>
+<h3>Client-Server</h3>
+<ul>
+  <li><strong>REST/JSON fundamentals</strong>: Chapter 10</li>
+  <li><strong>Architecture</strong>: Chapter 11</li>
+  <li><strong>ORM operations</strong>: Chapter 12</li>
+</ul>
+<h3>Services/SOA</h3>
+<ul>
+  <li><strong>Method-based services</strong>: Chapter 14</li>
+  <li><strong>Interface-based services</strong>: Chapter 16</li>
+  <li><strong>Cross-platform clients</strong>: Chapter 17</li>
+</ul>
+<h3>Security & Advanced</h3>
+<ul>
+  <li><strong>Authentication/Authorization</strong>: Chapter 21</li>
+  <li><strong>ECC encryption</strong>: Chapter 23</li>
+  <li><strong>Domain-Driven Design</strong>: Chapter 24</li>
+  <li><strong>Testing/Logging</strong>: Chapter 25</li>
+</ul>
+<h2>Migration from mORMot 1</h2>
+<p>
+Key changes are documented throughout, with dedicated migration sections in:
+<ul>
+  <li>Chapter 3 (Units)</li>
+  <li>Chapter 4 (Core)</li>
+  <li>Chapter 5 (ORM)</li>
+  <li>Chapter 7 (Database)</li>
+  <li>Chapter 8 (External DB)</li>
+  <li>Chapter 11 (REST)</li>
+  <li>Chapter 26 (Installation)</li>
+</ul>
+<h3>Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRecord</code></td>
+  <td><code>TOrm</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRest</code></td>
+  <td><code>TRest</code></td>
+</tr>
+<tr>
+  <td><code>TSQLModel</code></td>
+  <td><code>TOrmModel</code></td>
+</tr>
+<tr>
+  <td><code>SynCommons.pas</code></td>
+  <td><code>mormot.core.<em>.pas</code></td>
+</tr>
+<tr>
+  <td><code>mORMot.pas</code></td>
+  <td><code>mormot.orm.</em></code> + <code>mormot.rest.<em></code></td>
+</tr>
+</tbody>
+</table>
+<h2>Building HTML</h2>
+<p>
+HTML files are generated from Markdown using the conversion script in <code>_working/md_to_html.py</code>:
+
+</p>
+<pre><code class="language-bash">cd _working
+python3 md_to_html.py
+</code></pre>
+<h2>License</h2>
+<p>
+<strong>Synopse mORMot 2 Framework Documentation</strong>
+Copyright (C) 2008-2025 Arnaud Bouchez
+Synopse Informatique - https://synopse.info
+
+</p>
+<p>
+Released under GPL 3.0 License.
+
+</p>
+<h2>External Resources</h2>
+<ul>
+  <li><strong>GitHub</strong>: https://github.com/synopse/mORMot2</li>
+  <li><strong>Forum</strong>: https://synopse.info/forum/viewforum.php?id=24</li>
+  <li><strong>Official Docs</strong>: https://synopse.info/files/doc/mORMot2.html</li>
+  <li><strong>Blog</strong>: https://blog.synopse.info</li>
+</ul>
+<hr>
+<p>
+</em>Last updated: December 2025*
+
+</p>
+</body>
+</html>

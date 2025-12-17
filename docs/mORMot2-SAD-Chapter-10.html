@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 10. JSON and RESTful Fundamentals
+
+</p>
+<p>
+<em>The Language of mORMot</em>
+
+</p>
+<p>
+Before exploring the Client-Server architecture, we need to understand the two key standards that mORMot builds upon: JSON for data interchange and REST for API design.
+
+</p>
+<hr>
+<h2>10.1. JSON in mORMot</h2>
+<h3>10.1.1. Why JSON?</h3>
+<p>
+mORMot uses JSON (JavaScript Object Notation) as its primary data format:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Advantage</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Human-readable</td>
+  <td>Easy to debug and inspect</td>
+</tr>
+<tr>
+  <td>Compact</td>
+  <td>Smaller than XML for most use cases</td>
+</tr>
+<tr>
+  <td>Fast parsing</td>
+  <td>In-place parsing without memory allocation</td>
+</tr>
+<tr>
+  <td>Native UTF-8</td>
+  <td>Matches SQLite3 and web standards</td>
+</tr>
+<tr>
+  <td>Universal</td>
+  <td>Supported by all languages/platforms</td>
+</tr>
+<tr>
+  <td>AJAX-ready</td>
+  <td>Native to JavaScript/browser apps</td>
+</tr>
+</tbody>
+</table>
+<h3>10.1.2. JSON Types</h3>
+<pre><code class="language-json">{
+  &quot;string&quot;: &quot;Hello UTF-8 World&quot;,
+  &quot;number&quot;: 42,
+  &quot;float&quot;: 3.14159,
+  &quot;boolean&quot;: true,
+  &quot;null&quot;: null,
+  &quot;array&quot;: [1, 2, 3],
+  &quot;object&quot;: {&quot;nested&quot;: &quot;value&quot;}
+}
+</code></pre>
+<h3>10.1.3. mORMot JSON Extensions</h3>
+<p>
+mORMot follows the JSON standard with some extensions:
+
+</p>
+<ul>
+  <li><strong>Extended syntax</strong>: Unquoted ASCII property names (MongoDB-style)</li>
+  <li><strong>64-bit integers</strong>: Full <code>Int64</code> support (no JavaScript 53-bit limit)</li>
+  <li><strong>Binary data</strong>: Base64 encoding for BLOBs</li>
+  <li><strong>Custom types</strong>: <code>TDateTime</code>, <code>TTimeLog</code>, <code>Currency</code> serialization</li>
+</ul>
+<pre><code class="language-pascal">// Extended syntax (valid in mORMot)
+{name: &quot;John&quot;, age: 30}
+
+// Standard JSON (always valid)
+{&quot;name&quot;: &quot;John&quot;, &quot;age&quot;: 30}
+</code></pre>
+<hr>
+<h2>10.2. JSON Serialization</h2>
+<h3>10.2.1. Basic Types</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.json;
+
+var
+  i: Integer;
+  d: Double;
+  s: RawUtf8;
+  json: RawUtf8;
+begin
+  // To JSON
+  json := FormatJson(&#x27;{name:?,age:?,score:?}&#x27;, [], [&#x27;John&#x27;, 30, 95.5]);
+  // Result: {&quot;name&quot;:&quot;John&quot;,&quot;age&quot;:30,&quot;score&quot;:95.5}
+
+  // From JSON
+  JsonDecode(pointer(json), [&#x27;name&#x27;, &#x27;age&#x27;, &#x27;score&#x27;], @Values);
+end;
+</code></pre>
+<h3>10.2.2. Record Serialization</h3>
+<p>
+Records are automatically serialized via RTTI (Delphi 2010+):
+
+</p>
+<pre><code class="language-pascal">type
+  TPerson = record
+    Name: RawUtf8;
+    Age: Integer;
+    Email: RawUtf8;
+  end;
+
+var
+  Person: TPerson;
+  json: RawUtf8;
+begin
+  Person.Name := &#x27;John&#x27;;
+  Person.Age := 30;
+  Person.Email := &#x27;john@example.com&#x27;;
+
+  // Record to JSON
+  json := RecordSaveJson(Person, TypeInfo(TPerson));
+  // Result: {&quot;Name&quot;:&quot;John&quot;,&quot;Age&quot;:30,&quot;Email&quot;:&quot;john@example.com&quot;}
+
+  // JSON to Record
+  RecordLoadJson(Person, pointer(json), TypeInfo(TPerson));
+end;
+</code></pre>
+<h3>10.2.3. Dynamic Arrays</h3>
+<pre><code class="language-pascal">type
+  TPersonArray = array of TPerson;
+
+var
+  People: TPersonArray;
+  json: RawUtf8;
+begin
+  SetLength(People, 2);
+  People[0].Name := &#x27;John&#x27;;
+  People[1].Name := &#x27;Jane&#x27;;
+
+  // Array to JSON
+  json := DynArraySaveJson(People, TypeInfo(TPersonArray));
+  // Result: [{&quot;Name&quot;:&quot;John&quot;,...},{&quot;Name&quot;:&quot;Jane&quot;,...}]
+
+  // JSON to Array
+  DynArrayLoadJson(People, pointer(json), TypeInfo(TPersonArray));
+end;
+</code></pre>
+<h3>10.2.4. TDocVariant (Schema-less)</h3>
+<p>
+For flexible JSON handling:
+
+</p>
+<pre><code class="language-pascal">var
+  doc: Variant;
+begin
+  // Create from JSON
+  doc := _JsonFast(&#x27;{&quot;name&quot;:&quot;John&quot;,&quot;tags&quot;:[&quot;admin&quot;,&quot;user&quot;]}&#x27;);
+
+  // Access via late-binding
+  WriteLn(doc.name);           // &#x27;John&#x27;
+  WriteLn(doc.tags._Count);    // 2
+
+  // Modify
+  doc.email := &#x27;john@example.com&#x27;;
+  doc.tags._Add(&#x27;moderator&#x27;);
+
+  // Back to JSON
+  WriteLn(doc);  // Full JSON string
+end;
+</code></pre>
+<h3>10.2.5. Class Serialization</h3>
+<p>
+Classes are serialized via <code>published</code> properties:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyClass = class(TSynPersistent)
+  private
+    fName: RawUtf8;
+    fValue: Integer;
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Value: Integer read fValue write fValue;
+  end;
+
+var
+  Obj: TMyClass;
+  json: RawUtf8;
+begin
+  Obj := TMyClass.Create;
+  Obj.Name := &#x27;Test&#x27;;
+  Obj.Value := 42;
+
+  json := ObjectToJson(Obj);
+  // Result: {&quot;Name&quot;:&quot;Test&quot;,&quot;Value&quot;:42}
+
+  JsonToObject(Obj, pointer(json), Valid);
+end;
+</code></pre>
+<hr>
+<h2>10.3. REST Architecture</h2>
+<h3>10.3.1. What is REST?</h3>
+<p>
+REST (Representational State Transfer) defines how resources are addressed and manipulated over HTTP:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>HTTP Method</th>
+  <th>CRUD</th>
+  <th>ORM Method</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>GET</code></td>
+  <td>Read</td>
+  <td><code>Retrieve()</code></td>
+  <td>Get resource(s)</td>
+</tr>
+<tr>
+  <td><code>POST</code></td>
+  <td>Create</td>
+  <td><code>Add()</code></td>
+  <td>Create new resource</td>
+</tr>
+<tr>
+  <td><code>PUT</code></td>
+  <td>Update</td>
+  <td><code>Update()</code></td>
+  <td>Update existing resource</td>
+</tr>
+<tr>
+  <td><code>DELETE</code></td>
+  <td>Delete</td>
+  <td><code>Delete()</code></td>
+  <td>Remove resource</td>
+</tr>
+</tbody>
+</table>
+<h3>10.3.2. mORMot URI Structure</h3>
+<pre><code class="language-text">http://server:port/root/TableName/ID
+                   │     │         │
+                   │     │         └── Record ID (optional)
+                   │     └── TOrm class name
+                   └── Model.Root
+</code></pre>
+<p>
+<strong>Examples:</strong>
+<pre><code class="language-text">GET    /api/Customer          → List all customers
+GET    /api/Customer/123      → Get customer #123
+POST   /api/Customer          → Create new customer (body = JSON)
+PUT    /api/Customer/123      → Update customer #123
+DELETE /api/Customer/123      → Delete customer #123
+</code></pre>
+<h3>10.3.3. REST vs RPC in mORMot</h3>
+<p>
+mORMot is <strong>REST-oriented</strong> but supports both paradigms:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Feature</th>
+  <th>REST Style</th>
+  <th>RPC Style</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>ORM operations</td>
+  <td>URI + HTTP verbs</td>
+  <td>URI + HTTP verbs</td>
+</tr>
+<tr>
+  <td>Method services</td>
+  <td><code>GET/POST /root/Method</code></td>
+  <td><code>POST /root/Method</code></td>
+</tr>
+<tr>
+  <td>Interface services</td>
+  <td><code>/root/Interface.Method</code></td>
+  <td>JSON-RPC body</td>
+</tr>
+</tbody>
+</table>
+<strong>Important</strong>: mORMot prefers interface-based services (RPC-style) for business logic, using REST primarily for ORM operations.
+
+</p>
+<hr>
+<h2>10.4. JSON in ORM</h2>
+<h3>10.4.1. TOrm to JSON</h3>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+  json: RawUtf8;
+begin
+  Customer := TOrmCustomer.Create;
+  Customer.Name := &#x27;ACME Corp&#x27;;
+  Customer.Email := &#x27;contact@acme.com&#x27;;
+
+  // Single record
+  json := Customer.GetJsonValues(True, True, ooSelect);
+  // Result: {&quot;ID&quot;:0,&quot;Name&quot;:&quot;ACME Corp&quot;,&quot;Email&quot;:&quot;contact@acme.com&quot;}
+
+  // Selected fields only
+  json := Customer.GetJsonValues(True, True, ooSelect, &#x27;Name,Email&#x27;);
+end;
+</code></pre>
+<h3>10.4.2. JSON to TOrm</h3>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+begin
+  Customer := TOrmCustomer.Create;
+  Customer.FillFrom(&#x27;{&quot;Name&quot;:&quot;ACME Corp&quot;,&quot;Email&quot;:&quot;contact@acme.com&quot;}&#x27;);
+end;
+</code></pre>
+<h3>10.4.3. Query Results as JSON</h3>
+<pre><code class="language-pascal">var
+  json: RawUtf8;
+begin
+  // Direct JSON from query
+  json := Server.Orm.RetrieveListJson(TOrmCustomer,
+    &#x27;Country = ?&#x27;, [&#x27;USA&#x27;], &#x27;Name,Email&#x27;);
+  // Result: [{&quot;Name&quot;:&quot;John&quot;,&quot;Email&quot;:&quot;john@...&quot;},...]
+end;
+</code></pre>
+<hr>
+<h2>10.5. JSON in Services</h2>
+<h3>10.5.1. Method-Based Services</h3>
+<pre><code class="language-pascal">type
+  TMyServer = class(TRestServerDB)
+  published
+    procedure Sum(Ctxt: TRestServerUriContext);
+  end;
+
+procedure TMyServer.Sum(Ctxt: TRestServerUriContext);
+var
+  A, B: Integer;
+begin
+  A := Ctxt.InputInt[&#x27;a&#x27;];
+  B := Ctxt.InputInt[&#x27;b&#x27;];
+  Ctxt.Returns([&#x27;result&#x27;, A + B]);
+end;
+
+// Client call: GET /api/Sum?a=10&amp;b=20
+// Response: {&quot;result&quot;:30}
+</code></pre>
+<h3>10.5.2. Interface-Based Services</h3>
+<pre><code class="language-pascal">type
+  ICalculator = interface(IInvokable)
+    [&#x27;{...}&#x27;]
+    function Add(A, B: Integer): Integer;
+  end;
+
+// Server registration
+Server.ServiceDefine(TCalculator, [ICalculator], sicShared);
+
+// Client call (automatic JSON marshalling)
+var
+  Calc: ICalculator;
+begin
+  Client.Services.Resolve(ICalculator, Calc);
+  Result := Calc.Add(10, 20);  // JSON: {&quot;result&quot;:30}
+end;
+</code></pre>
+<hr>
+<h2>10.6. Binary Alternatives</h2>
+<h3>10.6.1. When to Use Binary</h3>
+<table>
+<thead>
+<tr>
+  <th>Format</th>
+  <th>Use Case</th>
+  <th>Trade-off</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>JSON</td>
+  <td>Interoperability, debugging</td>
+  <td>Larger, slower parsing</td>
+</tr>
+<tr>
+  <td>Binary</td>
+  <td>Internal, large data</td>
+  <td>Smaller, faster</td>
+</tr>
+<tr>
+  <td>SynLZ+JSON</td>
+  <td>Compression over network</td>
+  <td>Best of both</td>
+</tr>
+</tbody>
+</table>
+<h3>10.6.2. SynLZ Compression</h3>
+<p>
+mORMot clients automatically negotiate compression:
+
+</p>
+<pre><code class="language-pascal">// Server enables compression (default)
+HttpServer.Compress := [hcSynLZ, hcDeflate];
+
+// SynLZ is 20x faster than Deflate for compression
+// Delphi clients use SynLZ automatically
+// AJAX clients fall back to Deflate
+</code></pre>
+<h3>10.6.3. Binary Serialization</h3>
+<pre><code class="language-pascal">// Binary record save (faster than JSON)
+Binary := RecordSave(Person, TypeInfo(TPerson));
+RecordLoad(Person, pointer(Binary), TypeInfo(TPerson));
+
+// Binary with compression
+Binary := RecordSaveBase64(Person, TypeInfo(TPerson), True);
+</code></pre>
+<hr>
+<h2>10.7. JSON Performance Tips</h2>
+<h3>10.7.1. Avoid Unnecessary Conversions</h3>
+<pre><code class="language-pascal">// SLOW: Multiple conversions
+s := Utf8ToString(json);
+json2 := StringToUtf8(s);
+
+// FAST: Stay in UTF-8
+ProcessRawUtf8(json);
+</code></pre>
+<h3>10.7.2. Use Typed Helpers</h3>
+<pre><code class="language-pascal">// SLOW: Variant access
+value := doc.field;
+
+// FAST: Direct typed access
+value := _Safe(doc)^.I[&#x27;field&#x27;];  // Integer
+value := _Safe(doc)^.U[&#x27;field&#x27;];  // RawUtf8
+</code></pre>
+<h3>10.7.3. Reuse Objects</h3>
+<pre><code class="language-pascal">// SLOW: Create/Free per iteration
+for i := 1 to 1000 do
+begin
+  Obj := TMyClass.Create;
+  try
+    JsonToObject(Obj, pointer(json[i]), Valid);
+    Process(Obj);
+  finally
+    Obj.Free;
+  end;
+end;
+
+// FAST: Reuse single instance
+Obj := TMyClass.Create;
+try
+  for i := 1 to 1000 do
+  begin
+    Obj.ClearProperties;  // Reset fields
+    JsonToObject(Obj, pointer(json[i]), Valid);
+    Process(Obj);
+  end;
+finally
+  Obj.Free;
+end;
+</code></pre>
+<hr>
+<h2>10.8. Migration from mORMot 1</h2>
+<h3>10.8.1. Function Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>JSONToObject()</code></td>
+  <td><code>JsonToObject()</code></td>
+</tr>
+<tr>
+  <td><code>ObjectToJSON()</code></td>
+  <td><code>ObjectToJson()</code></td>
+</tr>
+<tr>
+  <td><code>RecordSaveJSON()</code></td>
+  <td><code>RecordSaveJson()</code></td>
+</tr>
+<tr>
+  <td><code>RecordLoadJSON()</code></td>
+  <td><code>RecordLoadJson()</code></td>
+</tr>
+<tr>
+  <td><code>DynArraySaveJSON()</code></td>
+  <td><code>DynArraySaveJson()</code></td>
+</tr>
+<tr>
+  <td><code>JSONDecode()</code></td>
+  <td><code>JsonDecode()</code></td>
+</tr>
+</tbody>
+</table>
+<h3>10.8.2. Unit Locations</h3>
+<table>
+<thead>
+<tr>
+  <th>Feature</th>
+  <th>mORMot 2 Unit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>JSON parsing</td>
+  <td><code>mormot.core.json</code></td>
+</tr>
+<tr>
+  <td>TDocVariant</td>
+  <td><code>mormot.core.variants</code></td>
+</tr>
+<tr>
+  <td>Record serialization</td>
+  <td><code>mormot.core.rtti</code></td>
+</tr>
+<tr>
+  <td>REST HTTP client/server</td>
+  <td><code>mormot.rest.http.client</code> / <code>mormot.rest.http.server</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>
+<em>Next Chapter: Client-Server Architecture</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-09.html">Chapter 9: External NoSQL Database Access</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-11.html">Chapter 11: Client-Server Architecture</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

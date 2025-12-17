@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 15. Interfaces and SOLID Design
+
+</p>
+<p>
+<em>The Foundation for Robust Architecture</em>
+
+</p>
+<p>
+Before diving into interface-based services, we need to understand the fundamentals of interfaces in Delphi and the SOLID design principles that guide their effective use. This chapter establishes the theoretical foundation; Chapter 16 covers the practical implementation of SOA services.
+
+</p>
+<hr>
+<h2>15.1. Delphi and Interfaces</h2>
+<h3>15.1.1. Declaring an Interface</h3>
+<p>
+In Delphi's OOP model, an <code>interface</code> defines a type comprising abstract virtual methods. It declares "what" is available, not "how" it's implemented — this is the <strong>abstraction</strong> benefit of interfaces.
+
+</p>
+<pre><code class="language-pascal">type
+  ICalculator = interface(IInvokable)
+    [&#x27;{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}&#x27;]
+    /// add two signed 32-bit integers
+    function Add(n1, n2: Integer): Integer;
+  end;
+</code></pre>
+<p>
+Key characteristics:
+<ul>
+  <li><strong>Naming</strong>: <code>ICalculator</code> starts with <code>I</code> (convention for interfaces, vs <code>T</code> for classes)</li>
+  <li><strong>No visibility</strong>: All methods are effectively public</li>
+  <li><strong>No fields</strong>: Only methods (fields are implementation details)</li>
+  <li><strong>GUID</strong>: Unique identifier (press <code>Ctrl+Shift+G</code> in the IDE to generate)</li>
+  <li><strong>Inheritance</strong>: From <code>IInvokable</code> for RTTI support</li>
+</ul>
+<h3>15.1.2. Implementing an Interface</h3>
+<pre><code class="language-pascal">type
+  TServiceCalculator = class(TInterfacedObject, ICalculator)
+  public
+    function Add(n1, n2: Integer): Integer;
+  end;
+
+function TServiceCalculator.Add(n1, n2: Integer): Integer;
+begin
+  Result := n1 + n2;
+end;
+</code></pre>
+<p>
+Notes:
+<ul>
+  <li>The class inherits from <code>TInterfacedObject</code> and implements <code>ICalculator</code></li>
+  <li>Method visibility in the class doesn't affect interface usage</li>
+  <li>Additional methods can exist in the class (not part of the interface)</li>
+  <li>Multiple interfaces can be implemented: <code>class(TInterfacedObject, ICalculator, IAnotherInterface)</code></li>
+</ul>
+<h3>15.1.3. Using an Interface</h3>
+<p>
+<strong>Classic way</strong> (explicit class instance):
+<pre><code class="language-pascal">function MyAdd(a, b: Integer): Integer;
+var
+  Calculator: TServiceCalculator;
+begin
+  Calculator := TServiceCalculator.Create;
+  try
+    Result := Calculator.Add(a, b);
+  finally
+    Calculator.Free;
+  end;
+end;
+</code></pre>
+<p>
+<strong>Interface way</strong> (reference-counted):
+<pre><code class="language-pascal">function MyAdd(a, b: Integer): Integer;
+var
+  Calculator: ICalculator;
+begin
+  Calculator := TServiceCalculator.Create;
+  Result := Calculator.Add(a, b);
+end; // Calculator automatically freed when out of scope
+</code></pre>
+<p>
+Key benefits:
+<ul>
+  <li><strong>Automatic memory management</strong>: Reference counting handles cleanup</li>
+  <li><strong>No try..finally needed</strong>: Compiler generates hidden cleanup code</li>
+  <li><strong>Minimal overhead</strong>: Similar to virtual method call performance</li>
+</ul>
+<h3>15.1.4. Orthogonality and Polymorphism</h3>
+<p>
+Interfaces are orthogonal to class implementations:
+
+</p>
+<pre><code class="language-pascal">type
+  TOtherCalculator = class(TInterfacedObject, ICalculator)
+  public
+    function Add(n1, n2: Integer): Integer;
+  end;
+
+function TOtherCalculator.Add(n1, n2: Integer): Integer;
+begin
+  Result := n2 + n1; // Different implementation, same interface
+end;
+</code></pre>
+<p>
+The client code doesn't need to change:
+<pre><code class="language-pascal">var
+  Calculator: ICalculator;
+begin
+  Calculator := TOtherCalculator.Create; // Different class, same interface
+  Result := Calculator.Add(a, b);
+end;
+</code></pre>
+<h3>15.1.5. The mORMot Magic</h3>
+<p>
+mORMot leverages interfaces for Client-Server communication:
+
+</p>
+<ul>
+  <li><strong>Same interface</strong> on both client and server</li>
+  <li><strong>Client</strong>: "Fake" implementation that serializes calls to JSON</li>
+  <li><strong>Server</strong>: Real implementation executes the logic</li>
+  <li><strong>Transport</strong>: JSON over HTTP (or WebSockets, named pipes, etc.)</li>
+</ul>
+This creates a seamless RPC experience with the elegance of local interface calls.
+
+</p>
+<hr>
+<h2>15.2. SOLID Design Principles</h2>
+<p>
+The SOLID acronym represents five principles for maintainable OOP design:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Principle</th>
+  <th>Summary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>S</strong>ingle Responsibility</td>
+  <td>One reason to change per class</td>
+</tr>
+<tr>
+  <td><strong>O</strong>pen/Closed</td>
+  <td>Open for extension, closed for modification</td>
+</tr>
+<tr>
+  <td><strong>L</strong>iskov Substitution</td>
+  <td>Subtypes must be substitutable for base types</td>
+</tr>
+<tr>
+  <td><strong>I</strong>nterface Segregation</td>
+  <td>Many specific interfaces over one general-purpose</td>
+</tr>
+<tr>
+  <td><strong>D</strong>ependency Inversion</td>
+  <td>Depend on abstractions, not concretions</td>
+</tr>
+</tbody>
+</table>
+These principles combat the three main code weaknesses:
+<ul>
+  <li><strong>Rigidity</strong>: Hard to change (changes cascade everywhere)</li>
+  <li><strong>Fragility</strong>: Changes break unexpected parts</li>
+  <li><strong>Immobility</strong>: Hard to reuse in other contexts</li>
+</ul>
+<h3>15.2.1. Single Responsibility Principle</h3>
+<p>
+<blockquote>"A class should have only one reason to change."</blockquote>
+
+</p>
+<p>
+<strong>Bad</strong> — <code>TBarcodeScanner</code> handles both protocol and communication:
+<pre><code class="language-pascal">type
+  TBarcodeScanner = class
+    function ReadFrame: TProtocolFrame;
+    procedure WriteFrame(const Frame: TProtocolFrame);
+    procedure SetComPort(const Port: string);  // Serial communication
+    procedure SetUsbDevice(DeviceID: Integer);  // USB communication
+  end;
+</code></pre>
+<p>
+<strong>Good</strong> — Separated responsibilities:
+<pre><code class="language-pascal">type
+  // Connection abstraction
+  TAbstractBarcodeConnection = class
+    function ReadChar: Byte; virtual; abstract;
+    procedure WriteChar(aChar: Byte); virtual; abstract;
+  end;
+
+  // Protocol abstraction
+  TAbstractBarcodeProtocol = class
+  protected
+    fConnection: TAbstractBarcodeConnection;
+  public
+    function ReadFrame: TProtocolFrame; virtual; abstract;
+    procedure WriteFrame(const Frame: TProtocolFrame); virtual; abstract;
+  end;
+
+  // Composed scanner
+  TBarcodeScanner = class
+  protected
+    fProtocol: TAbstractBarcodeProtocol;
+    fConnection: TAbstractBarcodeConnection;
+  public
+    property Protocol: TAbstractBarcodeProtocol read fProtocol;
+    property Connection: TAbstractBarcodeConnection read fConnection;
+  end;
+</code></pre>
+<h4>15.2.1.1. Don't Mix UI and Logic</h4>
+<p>
+<strong>Smell in uses clause</strong>:
+<pre><code class="language-pascal">unit MyDataModel;
+
+uses
+  Vcl.Forms,    // BAD: Couples data to GUI framework
+  Windows,      // BAD: Couples to operating system
+  mormot.orm.core;
+</code></pre>
+<p>
+Keep business logic units free of:
+<ul>
+  <li>GUI frameworks (VCL, FMX, LCL)</li>
+  <li>Operating system specifics (<code>Windows</code>, <code>Posix</code>)</li>
+  <li>Any visual form units</li>
+</ul>
+mORMot framework units follow this principle — <code>mormot.orm.core.pas</code> has no GUI dependencies.
+
+</p>
+<h3>15.2.2. Open/Closed Principle</h3>
+<p>
+<blockquote>"Software entities should be open for extension, but closed for modification."</blockquote>
+
+</p>
+<p>
+<strong>Guidelines</strong>:
+<ul>
+  <li>Define abstract classes/interfaces, implement via inheritance</li>
+  <li>Members should be <code>protected</code> (for inheritance) or <code>private</code> (hidden)</li>
+  <li>Avoid singletons and global variables</li>
+  <li>Use RTTI sparingly and via framework abstractions</li>
+</ul>
+<strong>Example — Your code extends mORMot without modifying it</strong>:
+<pre><code class="language-pascal">type
+  TMyRestServer = class(TRestServerDB)
+  published
+    procedure MyCustomService(Ctxt: TRestServerUriContext);
+  end;
+</code></pre>
+<p>
+You extend by inheritance, not by editing <code>mormot.rest.server.pas</code>.
+
+</p>
+<h3>15.2.3. Liskov Substitution Principle</h3>
+<p>
+<blockquote>"Objects of a supertype should be replaceable with objects of any subtype."</blockquote>
+
+</p>
+<p>
+<strong>mORMot Example</strong>:
+<pre><code class="language-pascal">var
+  Rest: TRest;  // Abstract parent type
+begin
+  // Either implementation works identically:
+  Rest := TRestServerDB.Create(Model, &#x27;mydata.db3&#x27;);
+  // OR
+  Rest := TRestHttpClientSocket.Create(&#x27;server&#x27;, &#x27;8080&#x27;, Model);
+
+  // Same API regardless of implementation:
+  Rest.Orm.Add(MyRecord);
+end;
+</code></pre>
+<p>
+<strong>Violations to avoid</strong>:
+<pre><code class="language-pascal">procedure TAbstractScanner.Process;
+begin
+  // BAD: Type checking breaks substitutability
+  if Self is TSerialScanner then
+    // Serial-specific code
+  else if Self is TUsbScanner then
+    // USB-specific code
+end;
+</code></pre>
+<h3>15.2.4. Interface Segregation Principle</h3>
+<p>
+<blockquote>"Many client-specific interfaces are better than one general-purpose interface."</blockquote>
+
+</p>
+<p>
+<strong>Bad</strong> — Fat interface:
+<pre><code class="language-pascal">type
+  IEverything = interface
+    procedure DoThis;
+    procedure DoThat;
+    procedure DoSomethingElse;
+    // ... 50 more methods
+  end;
+</code></pre>
+<p>
+<strong>Good</strong> — Segregated interfaces:
+<pre><code class="language-pascal">type
+  IDoThis = interface
+    procedure DoThis;
+  end;
+
+  IDoThat = interface
+    procedure DoThat;
+  end;
+</code></pre>
+<p>
+This is especially important in SOA: define small, focused service interfaces rather than monolithic ones.
+
+</p>
+<h3>15.2.5. Dependency Inversion Principle</h3>
+<p>
+<blockquote>"Depend on abstractions, not concretions."</blockquote>
+
+</p>
+<p>
+<strong>Bad</strong> — Direct dependency on implementation:
+<pre><code class="language-pascal">type
+  TOrderService = class
+  private
+    fDatabase: TSQLiteDatabase;  // Concrete class
+  end;
+</code></pre>
+<p>
+<strong>Good</strong> — Dependency on abstraction:
+<pre><code class="language-pascal">type
+  TOrderService = class
+  private
+    fRepository: IOrderRepository;  // Interface abstraction
+  public
+    constructor Create(const aRepository: IOrderRepository);
+  end;
+</code></pre>
+<p>
+This enables:
+<ul>
+  <li><strong>Testing</strong>: Inject mock implementations</li>
+  <li><strong>Flexibility</strong>: Swap implementations without code changes</li>
+  <li><strong>Decoupling</strong>: No compile-time dependency on concrete classes</li>
+</ul>
+<hr>
+<h2>15.3. Circular References and Weak Pointers</h2>
+<h3>15.3.1. The Problem</h3>
+<p>
+Interface reference counting can cause memory leaks with circular references:
+
+</p>
+<pre><code class="language-pascal">type
+  IParent = interface
+    procedure SetChild(const Value: IChild);
+    function GetChild: IChild;
+  end;
+
+  IChild = interface
+    procedure SetParent(const Value: IParent);
+    function GetParent: IParent;
+  end;
+</code></pre>
+<p>
+If <code>Parent.Child</code> references <code>Child</code>, and <code>Child.Parent</code> references <code>Parent</code>, neither will ever be freed — both maintain a reference count ≥ 1 indefinitely.
+
+</p>
+<h3>15.3.2. Weak Pointers</h3>
+<p>
+mORMot provides <code>SetWeak</code> to bypass reference counting:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.interfaces;
+
+procedure TChild.SetParent(const Value: IParent);
+begin
+  SetWeak(@fParent, Value);  // No reference count increment
+end;
+</code></pre>
+<p>
+The child holds a reference to parent, but doesn't prevent parent's destruction.
+
+</p>
+<h3>15.3.3. Zeroing Weak Pointers</h3>
+<p>
+For safer weak references that automatically become <code>nil</code> when the target is freed:
+
+</p>
+<pre><code class="language-pascal">procedure TChild.SetParent(const Value: IParent);
+begin
+  SetWeakZero(Self, @fParent, Value);  // Auto-nils when parent freed
+end;
+</code></pre>
+<p>
+When <code>Parent</code> is destroyed:
+<ul>
+  <li>With <code>SetWeak</code>: <code>fParent</code> becomes a dangling pointer (dangerous!)</li>
+  <li>With <code>SetWeakZero</code>: <code>fParent</code> automatically becomes <code>nil</code> (safe)</li>
+</ul>
+<hr>
+<h2>15.4. Dependency Injection in Practice</h2>
+<h3>15.4.1. Constructor Injection</h3>
+<p>
+The simplest and most explicit form:
+
+</p>
+<pre><code class="language-pascal">type
+  IUserRepository = interface(IInvokable)
+    [&#x27;{B21E5B21-28F4-4874-8446-BD0B06DAA07F}&#x27;]
+    function GetUserByName(const Name: RawUtf8): TUser;
+    procedure Save(const User: TUser);
+  end;
+
+  ISmsSender = interface(IInvokable)
+    [&#x27;{8F87CB56-5E2F-437E-B2E6-B3020835DC61}&#x27;]
+    function Send(const Text, Number: RawUtf8): Boolean;
+  end;
+
+  TLoginController = class(TInterfacedObject, ILoginController)
+  private
+    fUserRepository: IUserRepository;
+    fSmsSender: ISmsSender;
+  public
+    constructor Create(const aUserRepository: IUserRepository;
+      const aSmsSender: ISmsSender);
+    procedure ForgotMyPassword(const UserName: RawUtf8);
+  end;
+
+constructor TLoginController.Create(const aUserRepository: IUserRepository;
+  const aSmsSender: ISmsSender);
+begin
+  fUserRepository := aUserRepository;
+  fSmsSender := aSmsSender;
+end;
+</code></pre>
+<h3>15.4.2. TInjectableObject</h3>
+<p>
+For automatic resolution of dependencies, inherit from <code>TInjectableObject</code>:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.interfaces;
+
+type
+  TMyService = class(TInjectableObject, IMyService)
+  private
+    fCalculator: ICalculator;  // Auto-resolved
+  published
+    property Calculator: ICalculator read fCalculator;
+  public
+    function DoWork: Integer;
+  end;
+</code></pre>
+<p>
+Published interface properties are automatically resolved when the object is created through the DI container.
+
+</p>
+<h3>15.4.3. Lazy Resolution</h3>
+<p>
+For on-demand resolution:
+
+</p>
+<pre><code class="language-pascal">procedure TMyService.DoSomething;
+var
+  Repository: IOrderRepository;
+begin
+  Resolve(IOrderRepository, Repository);  // Resolve when needed
+  Repository.SaveOrder(Order);
+end;
+</code></pre>
+<hr>
+<h2>15.5. Stubs and Mocks for Testing</h2>
+<h3>15.5.1. Terminology</h3>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Stub</strong></td>
+  <td>Fake implementation returning pre-arranged responses</td>
+</tr>
+<tr>
+  <td><strong>Mock</strong></td>
+  <td>Fake that verifies interactions (method calls, parameters)</td>
+</tr>
+</tbody>
+</table>
+<strong>Rule</strong>: One mock per test, multiple stubs as needed.
+
+</p>
+<h3>15.5.2. Creating Stubs</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.interfaces;
+
+procedure TMyTest.TestForgotPassword;
+var
+  SmsSender: ISmsSender;
+  UserRepository: IUserRepository;
+begin
+  // Create stub that returns true for Send method
+  TInterfaceStub.Create(TypeInfo(ISmsSender), SmsSender)
+    .Returns(&#x27;Send&#x27;, [True]);
+
+  // Create mock that expects Save to be called once
+  TInterfaceMock.Create(TypeInfo(IUserRepository), UserRepository, Self)
+    .ExpectsCount(&#x27;Save&#x27;, qoEqualTo, 1);
+
+  // Run the test
+  with TLoginController.Create(UserRepository, SmsSender) do
+  try
+    ForgotMyPassword(&#x27;testuser&#x27;);
+  finally
+    Free;
+  end;
+  // Verification happens automatically when UserRepository goes out of scope
+end;
+</code></pre>
+<h3>15.5.3. Stub Return Values</h3>
+<p>
+Simple returns:
+<pre><code class="language-pascal">TInterfaceStub.Create(TypeInfo(ICalculator), Calc)
+  .Returns(&#x27;Add&#x27;, [42]);  // Add always returns 42
+</code></pre>
+<p>
+Conditional returns:
+<pre><code class="language-pascal">TInterfaceStub.Create(TypeInfo(ICalculator), Calc)
+  .Returns(&#x27;Add&#x27;, [1, 2], [3])   // Add(1,2) returns 3
+  .Returns(&#x27;Add&#x27;, [10, 20], [30]); // Add(10,20) returns 30
+</code></pre>
+<h3>15.5.4. Stub with Custom Logic</h3>
+<p>
+Using a callback for complex behavior:
+
+</p>
+<pre><code class="language-pascal">procedure TMyTest.SubtractCallback(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+begin
+  Ctxt[&#x27;Result&#x27;] := Ctxt[&#x27;n1&#x27;] - Ctxt[&#x27;n2&#x27;];
+end;
+
+TInterfaceStub.Create(TypeInfo(ICalculator), Calc)
+  .Executes(&#x27;Subtract&#x27;, SubtractCallback);
+</code></pre>
+<h3>15.5.5. Mock Expectations</h3>
+<pre><code class="language-pascal">TInterfaceMock.Create(TypeInfo(ICalculator), Calc, Self)
+  // Expect Multiply to be called exactly twice
+  .ExpectsCount(&#x27;Multiply&#x27;, qoEqualTo, 2)
+  // Expect Add to be called at least once
+  .ExpectsCount(&#x27;Add&#x27;, qoGreaterThan, 0)
+  // Expect specific call sequence
+  .ExpectsTrace(&#x27;Add(10,20)=[30],Multiply(5,6)=[30]&#x27;);
+</code></pre>
+<h3>15.5.6. Test Spy Pattern</h3>
+<p>
+For "run then verify" testing:
+
+</p>
+<pre><code class="language-pascal">procedure TMyTest.TestCalculator;
+var
+  Calc: ICalculator;
+  Spy: TInterfaceMockSpy;
+begin
+  Spy := TInterfaceMockSpy.Create(TypeInfo(ICalculator), Calc, Self);
+
+  // Run code under test
+  Calc.Add(10, 20);
+  Calc.Multiply(5, 6);
+
+  // Verify after execution
+  Spy.Verify(&#x27;Add&#x27;);
+  Spy.Verify(&#x27;Multiply&#x27;, [5, 6]);
+end;
+</code></pre>
+<hr>
+<h2>15.6. Interface Registration</h2>
+<h3>15.6.1. Global Registration</h3>
+<p>
+Register interfaces at initialization for cleaner code:
+
+</p>
+<pre><code class="language-pascal">unit MyInterfaces;
+
+interface
+
+type
+  ICalculator = interface(IInvokable)
+    [&#x27;{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}&#x27;]
+    function Add(n1, n2: Integer): Integer;
+  end;
+
+  IUserRepository = interface(IInvokable)
+    [&#x27;{B21E5B21-28F4-4874-8446-BD0B06DAA07F}&#x27;]
+    function GetUserByName(const Name: RawUtf8): TUser;
+  end;
+
+implementation
+
+uses
+  mormot.core.interfaces;
+
+initialization
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(ICalculator),
+    TypeInfo(IUserRepository)
+  ]);
+end.
+</code></pre>
+<h3>15.6.2. Using Registered Interfaces</h3>
+<p>
+After registration, you can use interface types directly (no <code>TypeInfo()</code>):
+
+</p>
+<pre><code class="language-pascal">// Instead of:
+TInterfaceStub.Create(TypeInfo(ICalculator), Calc);
+
+// You can write:
+TInterfaceStub.Create(ICalculator, Calc);
+</code></pre>
+<hr>
+<h2>Summary</h2>
+<p>
+This chapter covered the foundations for interface-based development:
+
+</p>
+<ul>
+  <li><strong>Interfaces</strong> provide abstraction and automatic memory management</li>
+  <li><strong>SOLID principles</strong> guide maintainable architecture</li>
+  <li><strong>Weak pointers</strong> solve circular reference problems</li>
+  <li><strong>Dependency injection</strong> enables loose coupling and testability</li>
+  <li><strong>Stubs and mocks</strong> enable isolated unit testing</li>
+</ul>
+These concepts are essential for understanding the next chapter, which shows how mORMot uses interfaces to implement powerful SOA services with automatic client stub generation, contract validation, and multiple instance lifetime patterns.
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-14.html">Chapter 14: Client-Server Services via Methods</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-16.html">Chapter 16: Client-Server Services via Interfaces</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

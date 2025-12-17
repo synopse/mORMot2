@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>11. Client-Server Architecture</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>11. Client-Server Architecture</h1>
+<p>
+<em>Communication Layers and Protocols</em>
+
+</p>
+<p>
+mORMot provides a flexible Client-Server architecture supporting multiple communication protocols. This chapter covers the protocol options, class hierarchy, and configuration patterns.
+
+</p>
+<hr>
+<h2>11.1. Architecture Overview</h2>
+<h3>11.1.1. Communication Layers</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                       Your Application                          │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+┌─────────────────────────────────────────────────────────────────┐
+│                    TRest (Abstract Parent)                      │
+│    ├── Orm: IRestOrm        (Object-Relational Mapping)         │
+│    ├── Services             (Service-Oriented Architecture)     │
+│    └── Run: TRestRunThreads (Threading)                         │
+└─────────────────────────────────────────────────────────────────┘
+           │                                    │
+┌──────────────────────┐          ┌──────────────────────┐         
+│    TRestClient       │          │    TRestServer                │
+│  (Client-side)       │          │  (Server-side)                │
+└──────────────────────┘          └──────────────────────┘         
+           │                                    │
+┌─────────────────────────────────────────────────────────────────┐
+│                      Transport Layer                            │
+│  ┌──────────┐  ┌─────────┐  ┌──────────┐  ┌────────────────┐    │
+│  │In-Process│  │  HTTP   │  │WebSockets│  │Named Pipes/Msg │    │
+│  └──────────┘  └─────────┘  └──────────┘  └────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>11.1.2. Protocol Comparison</h3>
+<table>
+<thead>
+<tr>
+  <th>Protocol</th>
+  <th>Speed</th>
+  <th>Scaling</th>
+  <th>Hosting</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>In-Process</td>
+  <td>★★★★</td>
+  <td>★★★★</td>
+  <td>Same process</td>
+  <td>Testing, embedded</td>
+</tr>
+<tr>
+  <td>HTTP</td>
+  <td>★★</td>
+  <td>★★★★</td>
+  <td>Remote</td>
+  <td>Production servers</td>
+</tr>
+<tr>
+  <td>WebSockets</td>
+  <td>★★★</td>
+  <td>★★★</td>
+  <td>Remote</td>
+  <td>Bidirectional callbacks</td>
+</tr>
+<tr>
+  <td>Named Pipes</td>
+  <td>★★★</td>
+  <td>★</td>
+  <td>Local</td>
+  <td>Windows services</td>
+</tr>
+</tbody>
+</table>
+<h3>11.1.3. Access Methods</h3>
+<table>
+<thead>
+<tr>
+  <th>Method</th>
+  <th>Best For</th>
+  <th>Considerations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>SOA Interfaces</td>
+  <td>Public/private services</td>
+  <td>Recommended, full features</td>
+</tr>
+<tr>
+  <td>SOA Methods</td>
+  <td>Full REST control</td>
+  <td>More verbose</td>
+</tr>
+<tr>
+  <td>MVC Web</td>
+  <td>Dynamic websites</td>
+  <td>HTML-oriented</td>
+</tr>
+<tr>
+  <td>ORM REST</td>
+  <td>Testing, internal</td>
+  <td>Not for public APIs</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>11.2. Server Classes</h2>
+<h3>11.2.1. Class Hierarchy</h3>
+<pre><code class="language-text">TRest (abstract)
+└── TRestServer (abstract)
+    ├── TRestServerDB           → SQLite3 backend
+    ├── TRestServerFullMemory   → In-memory (no SQLite3)
+    └── TRestServerRemoteDB     → Proxy to remote ORM
+</code></pre>
+<h3>11.2.2. TRestServerDB (SQLite3)</h3>
+<p>
+The primary server class with full SQLite3 database:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.core,
+  mormot.rest.sqlite3;
+
+var
+  Model: TOrmModel;
+  Server: TRestServerDB;
+begin
+  Model := TOrmModel.Create([TOrmCustomer, TOrmOrder]);
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+  try
+    Server.CreateMissingTables;
+    // Server ready...
+  finally
+    Server.Free;
+    Model.Free;
+  end;
+end;
+</code></pre>
+<h3>11.2.3. TRestServerFullMemory (No SQLite3)</h3>
+<p>
+Lightweight server without SQLite3 dependency:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.rest.memserver;
+
+var
+  Server: TRestServerFullMemory;
+begin
+  Server := TRestServerFullMemory.Create(Model);
+  try
+    // Fast in-memory storage
+    // Can persist to JSON/binary files
+    Server.StaticDataSaveToFile(&#x27;backup.json&#x27;);
+  finally
+    Server.Free;
+  end;
+end;
+</code></pre>
+<p>
+<strong>Use cases:</strong>
+<ul>
+  <li>Testing without database setup</li>
+  <li>Simple CRUD + authentication</li>
+  <li>Services with minimal ORM needs</li>
+</ul>
+<h3>11.2.4. TRestServerRemoteDB (Proxy)</h3>
+<p>
+Proxies ORM operations to another server:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.rest.core;
+
+var
+  RemoteClient: TRestHttpClient;
+  ProxyServer: TRestServerRemoteDB;
+begin
+  RemoteClient := TRestHttpClientWinHTTP.Create(&#x27;dbserver&#x27;, &#x27;8080&#x27;, Model);
+  ProxyServer := TRestServerRemoteDB.Create(RemoteClient);
+  // ProxyServer forwards ORM to RemoteClient
+end;
+</code></pre>
+<p>
+<strong>Use cases:</strong>
+<ul>
+  <li>DMZ deployment (public proxy → internal database)</li>
+  <li>Service aggregation</li>
+  <li>Load distribution</li>
+</ul>
+<hr>
+<h2>11.3. Client Classes</h2>
+<h3>11.3.1. Class Hierarchy</h3>
+<pre><code class="language-text">TRest (abstract)
+└── TRestClientUri (abstract)
+    ├── TRestClientDB              → Direct SQLite3 access
+    ├── TRestClientLibraryRequest  → In-process DLL
+    └── TRestHttpClientGeneric     → HTTP transport
+        ├── TRestHttpClientWinSock    → Raw sockets
+        ├── TRestHttpClientWinHTTP    → WinHTTP API (recommended)
+        ├── TRestHttpClientWinINet    → WinINet API
+        ├── TRestHttpClientCurl       → libcurl (cross-platform)
+        └── TRestHttpClientWebsockets → WebSocket upgrade
+</code></pre>
+<h3>11.3.2. In-Process Client (TRestClientDB)</h3>
+<p>
+Direct access without network overhead:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.rest.sqlite3;
+
+var
+  Client: TRestClientDB;
+begin
+  // Creates internal TRestServerDB
+  Client := TRestClientDB.Create(Model, nil, &#x27;data.db3&#x27;, TRestServerDB);
+  try
+    Client.Orm.Add(Customer, True);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<h3>11.3.3. HTTP Clients</h3>
+<pre><code class="language-pascal">uses
+  mormot.rest.http.client;
+
+var
+  Client: TRestHttpClientWinHTTP;
+begin
+  // Recommended HTTP client for Windows
+  Client := TRestHttpClientWinHTTP.Create(&#x27;localhost&#x27;, &#x27;8080&#x27;, Model);
+  try
+    if Client.SetUser(&#x27;user&#x27;, &#x27;password&#x27;) then
+      Client.Orm.Retrieve(123, Customer);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<p>
+<strong>Client comparison:</strong>
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Platform</th>
+  <th>HTTPS</th>
+  <th>Speed</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TRestHttpClientWinHTTP</code></td>
+  <td>Windows</td>
+  <td>✓</td>
+  <td>Fast</td>
+  <td><strong>Recommended</strong></td>
+</tr>
+<tr>
+  <td><code>TRestHttpClientWinINet</code></td>
+  <td>Windows</td>
+  <td>✓</td>
+  <td>Medium</td>
+  <td>IE proxy integration</td>
+</tr>
+<tr>
+  <td><code>TRestHttpClientWinSock</code></td>
+  <td>Windows</td>
+  <td>✗</td>
+  <td>Fastest</td>
+  <td>No SSL</td>
+</tr>
+<tr>
+  <td><code>TRestHttpClientCurl</code></td>
+  <td>Cross-platform</td>
+  <td>✓</td>
+  <td>Fast</td>
+  <td>Requires libcurl</td>
+</tr>
+</tbody>
+</table>
+<h3>11.3.4. WebSocket Client</h3>
+<p>
+For bidirectional communication:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.rest.http.client;
+
+var
+  Client: TRestHttpClientWebsockets;
+begin
+  Client := TRestHttpClientWebsockets.Create(&#x27;localhost&#x27;, &#x27;8080&#x27;, Model);
+  try
+    // Upgrade to WebSocket
+    Client.WebSocketsUpgrade(&#x27;&#x27;);
+
+    // Now supports server-to-client callbacks
+    Client.Services.Resolve(IMyCallback, Callback);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>11.4. HTTP Server</h2>
+<h3>11.4.1. TRestHttpServer</h3>
+<p>
+Wraps <code>TRestServer</code> instances for HTTP access:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.rest.http.server;
+
+var
+  HttpServer: TRestHttpServer;
+begin
+  HttpServer := TRestHttpServer.Create(
+    &#x27;8080&#x27;,           // Port
+    [Server],         // TRestServer instances
+    &#x27;+&#x27;,              // Domain (&#x27;+&#x27; = all)
+    useHttpAsync      // Server mode
+  );
+  try
+    HttpServer.AccessControlAllowOrigin := &#x27;*&#x27;;  // CORS
+    // Server running...
+    ReadLn;
+  finally
+    HttpServer.Free;
+  end;
+end;
+</code></pre>
+<h3>11.4.2. Server Modes</h3>
+<table>
+<thead>
+<tr>
+  <th>Mode</th>
+  <th>Description</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>useHttpApi</code></td>
+  <td>Windows HTTP.SYS (kernel-mode)</td>
+  <td>Windows production</td>
+</tr>
+<tr>
+  <td><code>useHttpSocket</code></td>
+  <td>Thread-per-connection</td>
+  <td>Behind reverse proxy</td>
+</tr>
+<tr>
+  <td><code>useHttpAsync</code></td>
+  <td>Event-driven async</td>
+  <td><strong>Best scaling</strong></td>
+</tr>
+<tr>
+  <td><code>useBidirSocket</code></td>
+  <td>WebSockets + threads</td>
+  <td>Callbacks (small scale)</td>
+</tr>
+<tr>
+  <td><code>useBidirAsync</code></td>
+  <td>WebSockets + async</td>
+  <td><strong>Callbacks at scale</strong></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-pascal">// Production server (async, best performance)
+HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;, useHttpAsync);
+
+// WebSocket support
+HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;, useBidirAsync);
+</code></pre>
+<h3>11.4.3. HTTPS / SSL</h3>
+<pre><code class="language-pascal">// Enable TLS (Port, Servers, Domain, Use, ThreadPoolCount, Security)
+HttpServer := TRestHttpServer.Create(&#x27;443&#x27;, [Server], &#x27;+&#x27;,
+  useHttpAsync, 32, secTLS);
+
+// Self-signed certificate (development only)
+HttpServer := TRestHttpServer.Create(&#x27;443&#x27;, [Server], &#x27;+&#x27;,
+  useHttpAsync, 32, secTLSSelfSigned);
+</code></pre>
+<p>
+For http.sys, certificates must be registered:
+<pre><code class="language-bash"># Register certificate (Windows)
+netsh http add sslcert ipport=0.0.0.0:443 certhash=&lt;thumbprint&gt; appid={&lt;guid&gt;}
+</code></pre>
+<h3>11.4.4. Multiple REST Servers</h3>
+<p>
+One HTTP server can host multiple REST servers:
+
+</p>
+<pre><code class="language-pascal">var
+  ApiServer, AdminServer: TRestServerDB;
+begin
+  ApiServer := TRestServerDB.Create(ApiModel, &#x27;api.db3&#x27;);
+  ApiServer.Model.Root := &#x27;api&#x27;;
+
+  AdminServer := TRestServerDB.Create(AdminModel, &#x27;admin.db3&#x27;);
+  AdminServer.Model.Root := &#x27;admin&#x27;;
+
+  HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;,
+    [ApiServer, AdminServer], &#x27;+&#x27;, useHttpAsync);
+
+  // Access via:
+  // http://localhost:8080/api/...
+  // http://localhost:8080/admin/...
+end;
+</code></pre>
+<hr>
+<h2>11.5. Windows http.sys Server</h2>
+<h3>11.5.1. Why http.sys?</h3>
+<p>
+Windows kernel-mode HTTP server provides:
+
+</p>
+<ul>
+  <li><strong>Kernel-mode queuing</strong>: Lower context switching overhead</li>
+  <li><strong>Stability</strong>: Worker process failures don't drop requests</li>
+  <li><strong>Performance</strong>: Direct kernel-to-process routing</li>
+  <li><strong>Embedded SSL</strong>: Kernel-level HTTPS handling</li>
+  <li><strong>URL sharing</strong>: Multiple apps on same port</li>
+</ul>
+<h3>11.5.2. URI Authorization</h3>
+<p>
+http.sys requires URI registration (Administrator rights):
+
+</p>
+<pre><code class="language-pascal">// Option 1: Auto-register (run as Admin once)
+HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;,
+  useHttpApiRegisteringURI);
+
+// Option 2: Manual registration
+THttpApiServer.AddUrlAuthorize(&#x27;api&#x27;, &#x27;8080&#x27;, False, &#x27;+&#x27;);
+</code></pre>
+<p>
+<strong>Manual registration via netsh:</strong>
+<pre><code class="language-bash"># List registered URLs
+netsh http show urlacl
+
+# Add URL reservation
+netsh http add urlacl url=http://+:8080/api/ user=Everyone
+
+# Delete URL reservation
+netsh http delete urlacl url=http://+:8080/api/
+</code></pre>
+<h3>11.5.3. Firewall Configuration</h3>
+<pre><code class="language-bash"># Open port in Windows Firewall
+netsh advfirewall firewall add rule name=&quot;mORMot Server&quot; ^
+  dir=in action=allow protocol=TCP localport=8080
+</code></pre>
+<hr>
+<h2>11.6. Thread Safety</h2>
+<h3>11.6.1. Client Thread Safety</h3>
+<p>
+<code>TRestClientUri</code> classes are thread-safe by design:
+
+</p>
+<pre><code class="language-pascal">// Safe: URI() method is internally locked
+procedure TWorkerThread.Execute;
+begin
+  GlobalClient.Orm.Retrieve(ID, Record);  // Thread-safe
+end;
+</code></pre>
+<h3>11.6.2. Server Execution Modes</h3>
+<pre><code class="language-pascal">type
+  TRestServerAcquireMode = (
+    amUnlocked,          // No locking (read-only operations)
+    amLocked,            // Mutex protection (default for writes)
+    amBackgroundThread,  // Queue to background thread
+    amMainThread         // Queue to main thread (GUI)
+  );
+
+// Configure execution modes
+Server.AcquireWriteMode := amLocked;
+Server.AcquireExecutionMode[execSoaByInterface] := amLocked;
+</code></pre>
+<h3>11.6.3. Execution Contexts</h3>
+<table>
+<thead>
+<tr>
+  <th>Context</th>
+  <th>Default Mode</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>execOrmGet</code></td>
+  <td><code>amUnlocked</code></td>
+  <td>ORM read operations</td>
+</tr>
+<tr>
+  <td><code>execOrmWrite</code></td>
+  <td><code>amLocked</code></td>
+  <td>ORM write operations</td>
+</tr>
+<tr>
+  <td><code>execSoaByMethod</code></td>
+  <td><code>amUnlocked</code></td>
+  <td>Method-based services</td>
+</tr>
+<tr>
+  <td><code>execSoaByInterface</code></td>
+  <td><code>amLocked</code></td>
+  <td>Interface-based services</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>11.7. Connection Patterns</h2>
+<h3>11.7.1. Single Server, Multiple Protocols</h3>
+<pre><code class="language-pascal">var
+  Server: TRestServerDB;
+  HttpServer: TRestHttpServer;
+begin
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+
+  // HTTP access
+  HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server]);
+
+  // Same server accessible via HTTP and in-process
+end;
+</code></pre>
+<h3>11.7.2. Load Balancer Setup</h3>
+<pre><code class="language-text">                    ┌─────────────────┐
+                    │  Load Balancer  │
+                    │   (nginx/HAProxy)│
+                    └────────┬────────┘
+           ┌─────────────────┼─────────────────┐
+           ▼                 ▼                 ▼
+    ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+    │ mORMot Srv 1│   │ mORMot Srv 2│   │ mORMot Srv 3│
+    └─────────────┘   └─────────────┘   └─────────────┘
+           │                 │                 │
+           └─────────────────┼─────────────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │   Database      │
+                    │  (PostgreSQL)   │
+                    └─────────────────┘
+</code></pre>
+<h3>11.7.3. DMZ Architecture</h3>
+<pre><code class="language-text">       Internet
+           │
+   ┌───────┴───────┐
+   │     DMZ       │  TRestServerRemoteDB (services only)
+   │  ┌─────────┐  │
+   │  │ Proxy   │  │
+   │  │ Server  │  │
+   │  └────┬────┘  │
+   └───────┼───────┘
+           │ (Internal network)
+   ┌───────┴───────┐
+   │   Internal    │  TRestServerDB (full ORM + services)
+   │  ┌─────────┐  │
+   │  │  Main   │  │
+   │  │ Server  │  │
+   │  └─────────┘  │
+   └───────────────┘
+</code></pre>
+<hr>
+<h2>11.8. Proper Shutdown</h2>
+<h3>11.8.1. Shutdown Order</h3>
+<pre><code class="language-pascal">// CORRECT shutdown order
+FreeAndNil(HttpServer);  // 1. Stop accepting connections
+FreeAndNil(Server);      // 2. Free REST server
+FreeAndNil(Model);       // 3. Free model last
+
+// WRONG - will cause access violations
+FreeAndNil(Model);       // Model freed while Server uses it!
+FreeAndNil(Server);
+FreeAndNil(HttpServer);
+</code></pre>
+<h3>11.8.2. Graceful Shutdown</h3>
+<pre><code class="language-pascal">procedure GracefulShutdown;
+begin
+  // Signal shutdown
+  HttpServer.Shutdown;
+
+  // Wait for pending requests (with timeout)
+  Sleep(1000);
+
+  // Free resources
+  FreeAndNil(HttpServer);
+  FreeAndNil(Server);
+  FreeAndNil(Model);
+end;
+</code></pre>
+<hr>
+<h2>11.9. Migration from mORMot 1</h2>
+<h3>11.9.1. Class Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRest</code></td>
+  <td><code>TRest</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestServer</code></td>
+  <td><code>TRestServer</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestServerDB</code></td>
+  <td><code>TRestServerDB</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestServerFullMemory</code></td>
+  <td><code>TRestServerFullMemory</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestClient</code></td>
+  <td><code>TRestClient</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestClientDB</code></td>
+  <td><code>TRestClientDB</code></td>
+</tr>
+<tr>
+  <td><code>TSQLHttpServer</code></td>
+  <td><code>TRestHttpServer</code></td>
+</tr>
+<tr>
+  <td><code>TSQLHttpClient<em></code></td>
+  <td><code>TRestHttpClient</em></code></td>
+</tr>
+</tbody>
+</table>
+<h3>11.9.2. Unit Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mORMot.pas</code></td>
+  <td><code>mormot.rest.core</code> + <code>mormot.orm.core</code></td>
+</tr>
+<tr>
+  <td><code>mORMotSQLite3.pas</code></td>
+  <td><code>mormot.rest.sqlite3</code></td>
+</tr>
+<tr>
+  <td><code>mORMotHttpServer.pas</code></td>
+  <td><code>mormot.rest.http.server</code></td>
+</tr>
+<tr>
+  <td><code>mORMotHttpClient.pas</code></td>
+  <td><code>mormot.rest.http.client</code></td>
+</tr>
+</tbody>
+</table>
+<h3>11.9.3. API Changes</h3>
+<pre><code class="language-pascal">// mORMot 1: Direct ORM access on TRest
+Server.Add(Customer, True);
+
+// mORMot 2: Via Orm interface
+Server.Orm.Add(Customer, True);
+</code></pre>
+<hr>
+<p>
+<em>Next Chapter: Client-Server ORM Operations</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-10.html">Chapter 10: JSON and RESTful Fundamentals</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-12.html">Chapter 12: Client-Server ORM Operations</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

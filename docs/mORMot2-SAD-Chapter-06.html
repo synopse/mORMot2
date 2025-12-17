@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 6. Daily ORM
+
+</p>
+<p>
+<em>Practical Patterns for Everyday Use</em>
+
+</p>
+<p>
+When comparing ORM to raw SQL, several advantages stand out:
+
+</p>
+<ul>
+  <li><strong>No field order concerns</strong>: Access properties directly with IDE completion</li>
+  <li><strong>Readable code</strong>: No context-switching between Pascal and SQL syntax</li>
+  <li><strong>Naming consistency</strong>: Refactoring table/field names is handled by the compiler</li>
+  <li><strong>Type safety</strong>: Compile-time checking prevents runtime type mismatches</li>
+  <li><strong>Database agnostic</strong>: Same code works across SQLite3, PostgreSQL, MongoDB, etc.</li>
+</ul>
+This chapter covers practical patterns for daily ORM usage in mORMot 2.
+
+</p>
+<hr>
+<h2>6.1. ORM is Not Just Database</h2>
+<p>
+The ORM should not be thought of as simply mapping an existing database schema. Instead:
+
+</p>
+<ul>
+  <li><strong>Think objects, not tables</strong>: Use high-level types, not just text/numbers</li>
+  <li><strong>Think logical units, not Master/Detail</strong>: Group related data in single records</li>
+  <li><strong>Think classes, not SQL</strong>: Design your domain first</li>
+  <li><strong>Think "What data do I need?", not "How will I store it?"</strong></li>
+</ul>
+<h3>6.1.1. Objects, Not Tables</h3>
+<p>
+With an ORM, you often define <strong>fewer tables</strong> than in traditional RDBMS design. Use <code>TDocVariant</code>, dynamic arrays, <code>TCollection</code>, or <code>TPersistent</code> properties to store nested data within a single record:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmInvoice = class(TOrm)
+  private
+    fCustomerName: RawUtf8;
+    fLines: Variant;  // TDocVariant array of line items
+    fMetadata: Variant;  // TDocVariant object for flexible data
+  published
+    property CustomerName: RawUtf8 read fCustomerName write fCustomerName;
+    property Lines: Variant read fLines write fLines;
+    property Metadata: Variant read fMetadata write fMetadata;
+  end;
+
+// Usage - no separate InvoiceLine table needed
+Invoice.Lines := _JsonFast(&#x27;[
+  {&quot;product&quot;:&quot;Widget&quot;,&quot;qty&quot;:10,&quot;price&quot;:9.99},
+  {&quot;product&quot;:&quot;Gadget&quot;,&quot;qty&quot;:5,&quot;price&quot;:19.99}
+]&#x27;);
+Invoice.Metadata := _ObjFast([&#x27;region&#x27;, &#x27;US&#x27;, &#x27;priority&#x27;, &#x27;high&#x27;]);
+</code></pre>
+<h3>6.1.2. Methods, Not SQL</h3>
+<p>
+<strong>Anti-pattern</strong> (direct SQL):
+
+</p>
+<pre><code class="language-pascal">// DON&#x27;T do this
+Server.DB.Execute(&#x27;CREATE TABLE IF NOT EXISTS drives...&#x27;);
+Server.DB.Execute(&#x27;INSERT OR IGNORE INTO drives (drive) VALUES (&quot;A:&quot;)&#x27;);
+</code></pre>
+<p>
+<strong>Correct ORM approach</strong>:
+
+</p>
+<pre><code class="language-pascal">// DO this
+Server.Server.CreateMissingTables;  // Creates tables from model
+
+if Server.Orm.TableRowCount(TOrmDrive) = 0 then
+begin
+  Drive := TOrmDrive.Create;
+  try
+    for C := &#x27;A&#x27; to &#x27;Z&#x27; do
+    begin
+      Drive.Letter := C;
+      Server.Orm.Add(Drive, True);
+    end;
+  finally
+    Drive.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>6.2. Working with Objects</h2>
+<h3>6.2.1. CRUD Operations</h3>
+<p>
+The fundamental pattern uses <code>Add/Retrieve/Update/Delete</code> methods:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.core;
+
+procedure CrudExample(const Orm: IRestOrm);
+var
+  Baby: TOrmBaby;
+  ID: TID;
+begin
+  // CREATE - Add a new record
+  Baby := TOrmBaby.Create;
+  try
+    Baby.Name := &#x27;Smith&#x27;;
+    Baby.Address := &#x27;New York City&#x27;;
+    Baby.BirthDate := Date;
+    Baby.Sex := sMale;
+    ID := Orm.Add(Baby, True);  // True = include all fields
+  finally
+    Baby.Free;
+  end;
+
+  // RETRIEVE - Load by ID
+  Baby := TOrmBaby.Create(Orm, ID);  // Constructor loads the record
+  try
+    Assert(Baby.Name = &#x27;Smith&#x27;);
+
+    // UPDATE - Modify and save
+    Baby.Name := &#x27;Smythe&#x27;;
+    Orm.Update(Baby);
+  finally
+    Baby.Free;
+  end;
+
+  // Alternative RETRIEVE into existing instance
+  Baby := TOrmBaby.Create;
+  try
+    if Orm.Retrieve(ID, Baby) then
+      WriteLn(&#x27;Found: &#x27;, Baby.Name);
+  finally
+    Baby.Free;
+  end;
+
+  // DELETE - Remove by ID
+  Orm.Delete(TOrmBaby, ID);
+end;
+</code></pre>
+<h3>6.2.2. Reusing Instances</h3>
+<p>
+A single <code>TOrm</code> instance can be reused for multiple operations:
+
+</p>
+<pre><code class="language-pascal">var
+  Baby: TOrmBaby;
+begin
+  Baby := TOrmBaby.Create;
+  try
+    // Add first record
+    Baby.Name := &#x27;Alice&#x27;;
+    Orm.Add(Baby, True);
+
+    // Reuse for second record
+    Baby.ClearProperties;  // Reset fields
+    Baby.Name := &#x27;Bob&#x27;;
+    Orm.Add(Baby, True);
+  finally
+    Baby.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>6.3. Queries</h2>
+<h3>6.3.1. FillPrepare / FillOne Pattern</h3>
+<p>
+The most efficient way to iterate through query results:
+
+</p>
+<pre><code class="language-pascal">var
+  Baby: TOrmBaby;
+begin
+  Baby := TOrmBaby.CreateAndFillPrepare(Orm,
+    &#x27;Name LIKE ? AND Sex = ?&#x27;, [&#x27;A%&#x27;, Ord(sMale)]);
+  try
+    while Baby.FillOne do
+      DoSomethingWith(Baby);  // Process each matching record
+  finally
+    Baby.Free;
+  end;
+end;
+</code></pre>
+<p>
+<strong>Key benefits</strong>:
+<ul>
+  <li>Single instance reused for all rows</li>
+  <li>No separate <code>TOrmTable</code> handling needed</li>
+  <li>Minimal memory allocation</li>
+</ul>
+<h3>6.3.2. Selecting Specific Fields</h3>
+<p>
+Save bandwidth by specifying only needed fields:
+
+</p>
+<pre><code class="language-pascal">// Load only Name and BirthDate fields
+Baby := TOrmBaby.CreateAndFillPrepare(Orm,
+  &#x27;Sex = ?&#x27;, [Ord(sFemale)],
+  &#x27;Name,BirthDate&#x27;);  // aCustomFieldsCSV parameter
+try
+  while Baby.FillOne do
+    WriteLn(Baby.Name, &#x27;: &#x27;, DateToStr(Baby.BirthDate));
+finally
+  Baby.Free;
+end;
+</code></pre>
+<p>
+<strong>Warning</strong>: After partial field retrieval, calling <code>Orm.Update(Baby)</code> will only update the retrieved fields, not the entire record.
+
+</p>
+<h3>6.3.3. Query Parameters</h3>
+<p>
+Parameters are bound using <code>?</code> placeholders:
+
+</p>
+<pre><code class="language-pascal">// String and integer parameters
+Baby.CreateAndFillPrepare(Orm,
+  &#x27;Name LIKE ? AND Sex = ?&#x27;,
+  [&#x27;A%&#x27;, Ord(sMale)]);
+
+// Date parameters - use DateToSql/DateTimeToSql
+Baby.CreateAndFillPrepare(Orm,
+  &#x27;BirthDate &gt;= ?&#x27;,
+  [DateToSql(EncodeDate(2020, 1, 1))]);
+
+// Building complex WHERE clauses
+var
+  Where: RawUtf8;
+begin
+  Where := FormatUtf8(&#x27;ID &gt;= ?&#x27;, [], [MinID]);
+  if OnlyActive then
+    Where := FormatUtf8(&#x27;% AND Active = ?&#x27;, [Where], [True]);
+  if not Category.IsEmpty then
+    Where := FormatUtf8(&#x27;% AND Category = ?&#x27;, [Where], [Category]);
+
+  Baby := TOrmBaby.CreateAndFillPrepare(Orm, Where);
+end;
+</code></pre>
+<h3>6.3.4. IList<T> Alternative</h3>
+<p>
+For simpler code using mORMot2's generic interface (from <code>mormot.core.collections</code>):
+
+</p>
+<pre><code class="language-pascal">var
+  List: IList&lt;TOrmBaby&gt;;
+  Baby: TOrmBaby;
+begin
+  if Orm.RetrieveIList(TOrmBaby, List, &#x27;Name,Sex,BirthDate&#x27;) then
+    for Baby in List do
+      DoSomethingWith(Baby);
+  // IList is reference-counted, no Free needed
+end;
+</code></pre>
+<p>
+<strong>Trade-off</strong>: Creates all instances at once vs. <code>FillPrepare</code>'s single-instance reuse.
+
+</p>
+<p>
+<blockquote><strong>Note</strong>: mORMot2 also provides <code>RetrieveList()</code> returning a non-generic <code>TObjectList</code> if you prefer that pattern.</blockquote>
+
+</p>
+<h3>6.3.5. TOrmTable for Raw Results</h3>
+<p>
+Direct access to query results as a table:
+
+</p>
+<pre><code class="language-pascal">var
+  Table: TOrmTable;
+  Row: Integer;
+begin
+  // ExecuteList takes SQL only (no bounds parameter) - use FormatUtf8 for parameters
+  Table := Orm.ExecuteList([TOrmBaby],
+    FormatUtf8(&#x27;SELECT ID, Name, BirthDate FROM Baby WHERE Sex = ?&#x27;, [], [Ord(sMale)]));
+  try
+    for Row := 1 to Table.RowCount do
+      WriteLn(
+        &#x27;ID=&#x27;, Table.GetAsInteger(Row, 0),
+        &#x27; Name=&#x27;, Table.GetU(Row, 1),
+        &#x27; Born=&#x27;, Table.GetU(Row, 2));
+  finally
+    Table.Free;
+  end;
+end;
+</code></pre>
+<p>
+Or using cursor-style <code>Step</code>:
+
+</p>
+<pre><code class="language-pascal">Table := Orm.MultiFieldValues(TOrmBaby, &#x27;ID,Name&#x27;,
+  &#x27;Sex = ?&#x27;, [Ord(sMale)]);
+try
+  while Table.Step do
+    WriteLn(&#x27;ID=&#x27;, Table.Field(0), &#x27; Name=&#x27;, Table.Field(1));
+finally
+  Table.Free;
+end;
+</code></pre>
+<h3>6.3.6. Late-Binding Variant Access</h3>
+<p>
+For convenient but slower access:
+
+</p>
+<pre><code class="language-pascal">var
+  Baby: Variant;
+begin
+  with Orm.MultiFieldValues(TOrmBaby, &#x27;ID,Name,BirthDate&#x27;, &#x27;Sex = ?&#x27;, [Ord(sMale)]) do
+  try
+    while Step(False, @Baby) do
+      WriteLn(&#x27;ID=&#x27;, Baby.ID, &#x27; Name=&#x27;, Baby.Name);
+  finally
+    Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>6.4. Helper Methods</h2>
+<h3>6.4.1. Single-Value Retrieval</h3>
+<pre><code class="language-pascal">// Get one field value (returns RawUtf8)
+var
+  Name: RawUtf8;
+begin
+  Name := Orm.OneFieldValue(TOrmBaby, &#x27;Name&#x27;, &#x27;ID = ?&#x27;, [], [123]);
+  if Name &lt;&gt; &#x27;&#x27; then
+    WriteLn(&#x27;Found: &#x27;, Name);
+end;
+
+// Get count - use OneFieldValueInt64 for integer results
+var
+  Count: Int64;
+begin
+  Count := Orm.TableRowCount(TOrmBaby);
+  WriteLn(&#x27;Total babies: &#x27;, Count);
+
+  // OneFieldValueInt64 takes WhereClause without bounds - use FormatUtf8
+  Count := Orm.OneFieldValueInt64(TOrmBaby, &#x27;COUNT(*)&#x27;,
+    FormatUtf8(&#x27;Sex = ?&#x27;, [], [Ord(sMale)]));
+  WriteLn(&#x27;Male babies: &#x27;, Count);
+end;
+
+// Alternative: OneFieldValue with out parameter for Int64
+var
+  Count: Int64;
+begin
+  if Orm.OneFieldValue(TOrmBaby, &#x27;COUNT(*)&#x27;, &#x27;Sex = ?&#x27;, [], [Ord(sMale)], Count) then
+    WriteLn(&#x27;Male babies: &#x27;, Count);
+end;
+</code></pre>
+<h3>6.4.2. Multiple Values to Dynamic Array</h3>
+<pre><code class="language-pascal">var
+  IDs: TInt64DynArray;  // Note: mORMot2 uses TInt64DynArray for integer fields
+  Names: TRawUtf8DynArray;
+  i: Integer;
+begin
+  // Get all IDs matching criteria
+  // OneFieldValues takes WhereClause directly - use FormatUtf8 for parameters
+  Orm.OneFieldValues(TOrmBaby, &#x27;ID&#x27;,
+    FormatUtf8(&#x27;Sex = ?&#x27;, [], [Ord(sFemale)]), IDs);
+
+  // Get names into array
+  Orm.OneFieldValues(TOrmBaby, &#x27;Name&#x27;, &#x27;&#x27;, Names);
+  for i := 0 to High(Names) do
+    WriteLn(Names[i]);
+end;
+</code></pre>
+<h3>6.4.3. Existence Check</h3>
+<pre><code class="language-pascal">if Orm.Retrieve(&#x27;Email = ?&#x27;, [], [Email], Customer) then
+  WriteLn(&#x27;Customer exists: &#x27;, Customer.Name)
+else
+  WriteLn(&#x27;Not found&#x27;);
+</code></pre>
+<hr>
+<h2>6.5. Automatic Memory Management</h2>
+<h3>6.5.1. AutoFree Pattern</h3>
+<p>
+Avoid manual <code>try..finally</code> blocks:
+
+</p>
+<pre><code class="language-pascal">function CreateNewBaby(const Orm: IRestOrm; const Name: RawUtf8): TID;
+var
+  Baby: TOrmBaby;
+begin
+  TOrmBaby.AutoFree(Baby);  // Auto-releases at end of function
+  Baby.Name := Name;
+  Baby.BirthDate := Date;
+  Result := Orm.Add(Baby, True);
+end;  // Baby automatically freed here
+</code></pre>
+<h3>6.5.2. AutoFree with Query</h3>
+<pre><code class="language-pascal">var
+  Baby: TOrmBaby;
+begin
+  TOrmBaby.AutoFree(Baby, Orm, &#x27;Name LIKE ?&#x27;, [&#x27;A%&#x27;]);
+  while Baby.FillOne do
+    ProcessBaby(Baby);
+end;  // Baby automatically freed
+</code></pre>
+<h3>6.5.3. FPC Compatibility</h3>
+<p>
+With FPC, assign the result to a local <code>IAutoFree</code> variable:
+
+</p>
+<pre><code class="language-pascal">var
+  Baby: TOrmBaby;
+  Auto: IAutoFree;  // Required for FPC
+begin
+  Auto := TOrmBaby.AutoFree(Baby, Orm, &#x27;Name LIKE ?&#x27;, [&#x27;A%&#x27;]);
+  while Baby.FillOne do
+    ProcessBaby(Baby);
+end;
+</code></pre>
+<hr>
+<h2>6.6. Object Relationships</h2>
+<h3>6.6.1. One-to-One / One-to-Many</h3>
+<p>
+Use <code>TOrm</code> published properties (storing IDs, not instances):
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmFileInfo = class(TOrm)
+  published
+    property FileDate: TDateTime read fFileDate write fFileDate;
+    property FileSize: Int64 read fFileSize write fFileSize;
+  end;
+
+  TOrmFile = class(TOrm)
+  published
+    property FileName: RawUtf8 read fFileName write fFileName;
+    property Info: TOrmFileInfo read fInfo write fInfo;  // Foreign key
+  end;
+
+// Creating linked records
+Info := TOrmFileInfo.Create;
+MyFile := TOrmFile.Create;
+try
+  Info.FileDate := Now;
+  Info.FileSize := 12345;
+  Orm.Add(Info, True);
+
+  MyFile.FileName := &#x27;document.pdf&#x27;;
+  MyFile.Info := Info.AsTOrm;  // Store the ID
+  Orm.Add(MyFile, True);
+finally
+  MyFile.Free;
+  Info.Free;
+end;
+
+// Retrieving - use CreateJoined for automatic loading
+MyFile := TOrmFile.CreateJoined(Orm, FileID);
+try
+  WriteLn(MyFile.Info.FileSize);  // Info is now a real instance
+finally
+  MyFile.Free;  // Also frees MyFile.Info
+end;
+</code></pre>
+<h3>6.6.2. Many-to-Many with TOrmMany</h3>
+<p>
+For pivot tables (e.g., Authors ↔ Books):
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmAuthor = class(TOrm)
+  published
+    property Name: RawUtf8 read fName write fName;
+  end;
+
+  TOrmBook = class(TOrm)
+  published
+    property Title: RawUtf8 read fTitle write fTitle;
+    property Authors: TOrmAuthorBookLink read fAuthors;  // Auto-instantiated
+  end;
+
+  TOrmAuthorBookLink = class(TOrmMany)
+  published
+    property Source: TOrmBook read fSource;     // Book side
+    property Dest: TOrmAuthor read fDest;       // Author side
+    property Contribution: RawUtf8 read fContribution write fContribution;
+  end;
+
+// Adding a many-to-many relationship
+Book.Authors.ManyAdd(Orm, Book.ID, AuthorID);
+
+// Query all authors for a book
+if Book.Authors.FillMany(Orm, Book.ID) then
+  while Book.Authors.FillOne do
+    WriteLn(&#x27;Author: &#x27;, TOrmAuthor(Book.Authors.Dest).Name);
+
+// Query all books for an author
+if Book.Authors.FillManyFromDest(Orm, AuthorID) then
+  while Book.Authors.FillOne do
+    WriteLn(&#x27;Book: &#x27;, TOrmBook(Book.Authors.Source).Title);
+</code></pre>
+<h3>6.6.3. Data Sharding (Embedded Documents)</h3>
+<p>
+Instead of pivot tables, embed data using <code>Variant</code> or dynamic arrays:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmOrder = class(TOrm)
+  private
+    fCustomerName: RawUtf8;
+    fLines: Variant;  // Embedded array of line items
+  published
+    property CustomerName: RawUtf8 read fCustomerName write fCustomerName;
+    property Lines: Variant read fLines write fLines;  // JSON array
+  end;
+
+// Usage
+Order.Lines := _JsonFast(&#x27;[
+  {&quot;sku&quot;:&quot;ABC123&quot;,&quot;qty&quot;:2,&quot;price&quot;:29.99},
+  {&quot;sku&quot;:&quot;XYZ789&quot;,&quot;qty&quot;:1,&quot;price&quot;:49.99}
+]&#x27;);
+
+// Query line items
+for i := 0 to _Safe(Order.Lines)^._Count - 1 do
+  WriteLn(&#x27;SKU: &#x27;, _Safe(Order.Lines)^.Value[i].sku);
+</code></pre>
+<p>
+<strong>Benefits</strong>:
+<ul>
+  <li>Self-contained records (no joins)</li>
+  <li>Better for MongoDB/NoSQL</li>
+  <li>Simpler schema</li>
+  <li>Natural for domain modeling</li>
+</ul>
+<hr>
+<h2>6.7. Batch Operations</h2>
+<h3>6.7.1. TRestBatch for Bulk Inserts</h3>
+<p>
+High-performance bulk operations with single network roundtrip:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.core;
+
+var
+  Batch: TRestBatch;
+  Results: TIDDynArray;
+  Baby: TOrmBaby;
+  i: Integer;
+begin
+  Batch := TRestBatch.Create(Orm, TOrmBaby, 1000);  // Auto-flush every 1000
+  try
+    for i := 1 to 10000 do
+    begin
+      Baby := TOrmBaby.Create;
+      Baby.Name := FormatUtf8(&#x27;Baby %&#x27;, [i]);
+      Baby.BirthDate := Date - Random(365);
+      Batch.Add(Baby, True);  // True = Batch owns Baby, auto-frees
+    end;
+    Orm.BatchSend(Batch, Results);  // Single network call
+    WriteLn(&#x27;Inserted &#x27;, Length(Results), &#x27; records&#x27;);
+  finally
+    Batch.Free;
+  end;
+end;
+</code></pre>
+<h3>6.7.2. Batch Updates and Deletes</h3>
+<pre><code class="language-pascal">Batch := TRestBatch.Create(Orm, TOrmBaby, 100, [boExtendedJson]);
+try
+  // Update multiple records
+  Baby := TOrmBaby.CreateAndFillPrepare(Orm, &#x27;Active = ?&#x27;, [False]);
+  try
+    while Baby.FillOne do
+    begin
+      Baby.Status := sArchived;
+      Batch.Update(Baby);
+    end;
+  finally
+    Baby.Free;
+  end;
+
+  // Delete multiple records
+  for ID in ObsoleteIDs do
+    Batch.Delete(TOrmBaby, ID);
+
+  Orm.BatchSend(Batch, Results);
+finally
+  Batch.Free;
+end;
+</code></pre>
+<hr>
+<h2>6.8. The Best ORM is the One You Need</h2>
+<p>
+mORMot offers multiple persistence patterns:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Pattern</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Native ORM</strong> (<code>TOrm</code> → SQLite3)</td>
+  <td>Embedded apps, single-server</td>
+</tr>
+<tr>
+  <td><strong>External SQL</strong> (<code>OrmMapExternal</code>)</td>
+  <td>Enterprise databases</td>
+</tr>
+<tr>
+  <td><strong>MongoDB ODM</strong> (<code>OrmMapMongoDB</code>)</td>
+  <td>Document store, horizontal scaling</td>
+</tr>
+<tr>
+  <td><strong>In-Memory</strong> (<code>TRestStorageInMemory</code>)</td>
+  <td>Caching, temporary data</td>
+</tr>
+<tr>
+  <td><strong>Repository Services</strong></td>
+  <td>DDD, clean architecture</td>
+</tr>
+</tbody>
+</table>
+<h3>6.8.1. Mix and Match</h3>
+<p>
+Different tables can use different backends:
+
+</p>
+<pre><code class="language-pascal">// SQLite3 for local data
+// (default - no mapping needed)
+
+// PostgreSQL for shared data
+OrmMapExternal(Model, TOrmCustomer, PostgresProps);
+OrmMapExternal(Model, TOrmOrder, PostgresProps);
+
+// MongoDB for logs
+OrmMapMongoDB(Model, TOrmAuditLog, MongoClient.Database[&#x27;logs&#x27;]);
+
+// In-memory for cache
+Model.Props[TOrmSessionCache].SetStorage(TRestStorageInMemory);
+</code></pre>
+<h3>6.8.2. Think Multi-Tier</h3>
+<p>
+Design your architecture with layers:
+
+</p>
+<pre><code class="language-text">┌────────────────────────────────────┐
+│  Presentation Layer                │
+│  (VCL/FMX Forms, Web UI)           │
+│  string, TDataSet, JSON            │
+└────────────────────────────────────┘
+                │
+┌────────────────────────────────────┐
+│  Application Layer                 │
+│  (Services, Controllers)           │
+│  RawUtf8, TOrm, IRestOrm           │
+└────────────────────────────────────┘
+                │
+┌────────────────────────────────────┐
+│  Domain Layer                      │
+│  (Business Logic, Entities)        │
+│  RawUtf8, Domain Objects           │
+└────────────────────────────────────┘
+                │
+┌────────────────────────────────────┐
+│  Infrastructure Layer              │
+│  (Repositories, DB Access)         │
+│  TOrm, IRestOrm, External DB       │
+└────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2>6.9. Summary of Best Practices</h2>
+<p>
+1. <strong>Use <code>IRestOrm</code> interface</strong>, not concrete classes
+2. <strong>Use <code>RawUtf8</code></strong> for all text properties
+3. <strong>Use <code>FillPrepare/FillOne</code></strong> for memory-efficient queries
+4. <strong>Use <code>AutoFree</code></strong> to reduce boilerplate
+5. <strong>Use <code>TDocVariant</code></strong> for schema-less embedded data
+6. <strong>Use <code>TRestBatch</code></strong> for bulk operations
+7. <strong>Use <code>CreateJoined</code></strong> when you need nested objects
+8. <strong>Specify fields</strong> in queries when you don't need all columns
+9. <strong>Design domain-first</strong>, let the ORM handle persistence
+10. <strong>Test with <code>TRestStorageInMemory</code></strong> for fast unit tests
+
+</p>
+<hr>
+<p>
+<em>Next Chapter: Database Layer (SQLite3, Virtual Tables)</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-05.html">Chapter 5: Object-Relational Mapping</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-07.html">Chapter 7: Database Layer</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

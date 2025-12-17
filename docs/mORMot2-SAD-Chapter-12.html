@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 12. Client-Server ORM Operations
+
+</p>
+<p>
+<em>Remote Data Access</em>
+
+</p>
+<p>
+This chapter covers how to perform ORM operations over the network, including remote CRUD, caching, batch operations, and synchronization.
+
+</p>
+<hr>
+<h2>12.1. Remote ORM Basics</h2>
+<h3>12.1.1. Transparent Remote Access</h3>
+<p>
+The ORM works identically whether local or remote:
+
+</p>
+<pre><code class="language-pascal">// Local (in-process)
+Client := TRestClientDB.Create(Model, nil, &#x27;data.db3&#x27;, TRestServerDB);
+
+// Remote (HTTP)
+Client := TRestHttpClientWinHTTP.Create(&#x27;server&#x27;, &#x27;8080&#x27;, Model);
+
+// Same ORM API for both
+Client.Orm.Add(Customer, True);
+Client.Orm.Retrieve(123, Customer);
+Client.Orm.Update(Customer);
+Client.Orm.Delete(TOrmCustomer, 123);
+</code></pre>
+<h3>12.1.2. Authentication Required</h3>
+<p>
+Remote ORM operations require authentication:
+
+</p>
+<pre><code class="language-pascal">var
+  Client: TRestHttpClient;
+begin
+  Client := TRestHttpClientWinHTTP.Create(&#x27;localhost&#x27;, &#x27;8080&#x27;, Model);
+  try
+    // Must authenticate first
+    if not Client.SetUser(&#x27;username&#x27;, &#x27;password&#x27;) then
+      raise Exception.Create(&#x27;Authentication failed&#x27;);
+
+    // Now ORM operations work
+    Client.Orm.Add(Customer, True);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>12.2. CRUD Operations Over Network</h2>
+<h3>12.2.1. Create (Add)</h3>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+  ID: TID;
+begin
+  Customer := TOrmCustomer.Create;
+  try
+    Customer.Name := &#x27;ACME Corp&#x27;;
+    Customer.Email := &#x27;contact@acme.com&#x27;;
+
+    // Remote add - returns new ID
+    ID := Client.Orm.Add(Customer, True);
+
+    if ID &gt; 0 then
+      WriteLn(&#x27;Created customer #&#x27;, ID)
+    else
+      WriteLn(&#x27;Failed to create customer&#x27;);
+  finally
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<h3>12.2.2. Read (Retrieve)</h3>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+begin
+  // By ID
+  Customer := TOrmCustomer.Create(Client.Orm, 123);
+  try
+    WriteLn(Customer.Name);
+  finally
+    Customer.Free;
+  end;
+
+  // Alternative: Retrieve into existing instance
+  Customer := TOrmCustomer.Create;
+  try
+    if Client.Orm.Retrieve(123, Customer) then
+      WriteLn(Customer.Name);
+  finally
+    Customer.Free;
+  end;
+
+  // By unique field
+  Customer := TOrmCustomer.Create;
+  try
+    if Client.Orm.Retrieve(&#x27;Email = ?&#x27;, [], [&#x27;contact@acme.com&#x27;], Customer) then
+      WriteLn(Customer.Name);
+  finally
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<h3>12.2.3. Update</h3>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+begin
+  Customer := TOrmCustomer.Create(Client.Orm, 123);
+  try
+    Customer.Email := &#x27;new@acme.com&#x27;;
+
+    if Client.Orm.Update(Customer) then
+      WriteLn(&#x27;Updated successfully&#x27;);
+  finally
+    Customer.Free;
+  end;
+
+  // Update specific fields only
+  Customer := TOrmCustomer.Create;
+  try
+    Customer.ID := 123;
+    Customer.Email := &#x27;updated@acme.com&#x27;;
+
+    // Only update Email field
+    Client.Orm.Update(Customer, &#x27;Email&#x27;);
+  finally
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<h3>12.2.4. Delete</h3>
+<pre><code class="language-pascal">// By ID
+Client.Orm.Delete(TOrmCustomer, 123);
+
+// By condition
+Client.Orm.Delete(TOrmCustomer, &#x27;Status = ?&#x27;, [Ord(csInactive)]);
+</code></pre>
+<hr>
+<h2>12.3. Query Operations</h2>
+<h3>12.3.1. FillPrepare Pattern</h3>
+<p>
+Efficient iteration over remote results:
+
+</p>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+begin
+  Customer := TOrmCustomer.CreateAndFillPrepare(Client.Orm,
+    &#x27;Country = ?&#x27;, [&#x27;USA&#x27;]);
+  try
+    while Customer.FillOne do
+      WriteLn(Customer.Name, &#x27;: &#x27;, Customer.Email);
+  finally
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<h3>12.3.2. Select Specific Fields</h3>
+<p>
+Reduce network traffic by requesting only needed fields:
+
+</p>
+<pre><code class="language-pascal">// Only transfer Name and Email fields
+Customer := TOrmCustomer.CreateAndFillPrepare(Client.Orm,
+  &#x27;Country = ?&#x27;, [&#x27;USA&#x27;],
+  &#x27;Name,Email&#x27;);  // Fields to retrieve
+</code></pre>
+<h3>12.3.3. RetrieveList</h3>
+<p>
+Get results as object list:
+
+</p>
+<pre><code class="language-pascal">var
+  List: TObjectList&lt;TOrmCustomer&gt;;
+  Customer: TOrmCustomer;
+begin
+  List := Client.Orm.RetrieveList&lt;TOrmCustomer&gt;(
+    &#x27;Country = ?&#x27;, [&#x27;USA&#x27;]);
+  try
+    for Customer in List do
+      WriteLn(Customer.Name);
+  finally
+    List.Free;
+  end;
+end;
+</code></pre>
+<h3>12.3.4. Direct JSON Results</h3>
+<pre><code class="language-pascal">var
+  Json: RawUtf8;
+begin
+  // Get results directly as JSON array
+  Json := Client.Orm.RetrieveListJson(TOrmCustomer,
+    &#x27;Country = ?&#x27;, [&#x27;USA&#x27;], &#x27;Name,Email&#x27;);
+  // Result: [{&quot;Name&quot;:&quot;ACME&quot;,&quot;Email&quot;:&quot;...&quot;},...]
+end;
+</code></pre>
+<hr>
+<h2>12.4. Client-Side Caching</h2>
+<h3>12.4.1. Enable Table Caching</h3>
+<pre><code class="language-pascal">// Cache specific tables on client
+Client.Cache.SetCache(TOrmCustomer);   // Cache all customers
+Client.Cache.SetCache(TOrmProduct);    // Cache all products
+
+// With timeout (milliseconds)
+Client.Cache.SetTimeOut(TOrmCustomer, 60000);  // 1 minute cache
+</code></pre>
+<h3>12.4.2. How Caching Works</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────┐
+│  Client.Orm.Retrieve(123, Customer)                         │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+                  ┌─────────────────┐
+                  │ Check Cache     │
+                  └────────┬────────┘
+                           │
+            ┌──────────────┴──────────────┐
+            │                             │
+            ▼                             ▼
+    ┌───────────────┐            ┌───────────────┐
+    │ Cache Hit     │            │ Cache Miss    │
+    │ Return cached │            │ Fetch from    │
+    │ data          │            │ server        │
+    └───────────────┘            └───────┬───────┘
+                                         │
+                                         ▼
+                                 ┌───────────────┐
+                                 │ Update cache  │
+                                 │ Return data   │
+                                 └───────────────┘
+</code></pre>
+<h3>12.4.3. Cache Invalidation</h3>
+<pre><code class="language-pascal">// Clear specific record from cache
+Client.Cache.NotifyDeletion(TOrmCustomer, 123);
+
+// Reset table cache (re-enable caching, which clears existing entries)
+Client.Cache.SetCache(TOrmCustomer);
+
+// Clear all caches and reset settings
+Client.Cache.Clear;
+</code></pre>
+<h3>12.4.4. Server-Side Cache Notification</h3>
+<p>
+The server can track changes via <code>TRestOrmServer.OnUpdateEvent</code>:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyServer = class
+    function HandleUpdate(Sender: TRestServer; Event: TOrmEvent;
+      aTable: TOrmClass; const aID: TID;
+      const aSentData: RawUtf8): boolean;
+  end;
+
+// Server-side: Enable change notifications
+// OnUpdateEvent requires a method of object (not anonymous procedure)
+(Server.OrmInstance as TRestOrmServer).OnUpdateEvent := MyServer.HandleUpdate;
+</code></pre>
+<hr>
+<h2>12.5. Batch Operations</h2>
+<h3>12.5.1. TRestBatch for Bulk Operations</h3>
+<p>
+Dramatically improve performance for bulk operations:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.core;
+
+var
+  Batch: TRestBatch;
+  Customer: TOrmCustomer;
+  Results: TIDDynArray;
+  i: Integer;
+begin
+  Batch := TRestBatch.Create(Client.Orm, TOrmCustomer, 1000);
+  try
+    for i := 1 to 10000 do
+    begin
+      Customer := TOrmCustomer.Create;
+      Customer.Name := FormatUtf8(&#x27;Customer %&#x27;, [i]);
+      Customer.Email := FormatUtf8(&#x27;cust%@example.com&#x27;, [i]);
+      Batch.Add(Customer, True);  // Batch owns Customer
+    end;
+
+    // Single network roundtrip for all 10000 records
+    if Client.Orm.BatchSend(Batch, Results) = HTTP_SUCCESS then
+      WriteLn(&#x27;Inserted &#x27;, Length(Results), &#x27; records&#x27;);
+  finally
+    Batch.Free;
+  end;
+end;
+</code></pre>
+<h3>12.5.2. Performance Comparison</h3>
+<table>
+<thead>
+<tr>
+  <th>Operation</th>
+  <th>Individual</th>
+  <th>Batch</th>
+  <th>Improvement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>10,000 inserts (local)</td>
+  <td>10 sec</td>
+  <td>0.1 sec</td>
+  <td>100x</td>
+</tr>
+<tr>
+  <td>10,000 inserts (network)</td>
+  <td>100 sec</td>
+  <td>1 sec</td>
+  <td>100x</td>
+</tr>
+<tr>
+  <td>10,000 updates</td>
+  <td>15 sec</td>
+  <td>0.2 sec</td>
+  <td>75x</td>
+</tr>
+</tbody>
+</table>
+<h3>12.5.3. Batch Updates and Deletes</h3>
+<pre><code class="language-pascal">var
+  Batch: TRestBatch;
+  Customer: TOrmCustomer;
+begin
+  Batch := TRestBatch.Create(Client.Orm, TOrmCustomer);
+  try
+    // Mix operations in single batch
+    Customer := TOrmCustomer.Create;
+    Customer.Name := &#x27;New Customer&#x27;;
+    Batch.Add(Customer, True);
+
+    Customer := TOrmCustomer.Create(Client.Orm, 123);
+    Customer.Status := csActive;
+    Batch.Update(Customer);
+
+    Batch.Delete(TOrmCustomer, 456);
+
+    Client.Orm.BatchSend(Batch);
+  finally
+    Batch.Free;
+  end;
+end;
+</code></pre>
+<h3>12.5.4. Automatic Batching</h3>
+<p>
+For transparent batching:
+
+</p>
+<pre><code class="language-pascal">var
+  Results: TIDDynArray;
+begin
+  // Start automatic batching
+  Client.BatchStart(TOrmCustomer, 1000);
+  try
+    for i := 1 to 10000 do
+    begin
+      Customer := TOrmCustomer.Create;
+      Customer.Name := FormatUtf8(&#x27;Customer %&#x27;, [i]);
+      Client.Orm.Add(Customer, True);  // Automatically batched
+      Customer.Free;
+    end;
+  finally
+    Client.BatchSend(Results);  // Send remaining batch
+  end;
+end;
+</code></pre>
+<hr>
+<h2>12.6. BLOB Handling</h2>
+<h3>12.6.1. BLOB Fields</h3>
+<p>
+BLOBs are not included in normal record transfers:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmDocument = class(TOrm)
+  private
+    fName: RawUtf8;
+    fContent: RawBlob;  // Not transferred with other fields
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Content: RawBlob read fContent write fContent;
+  end;
+</code></pre>
+<h3>12.6.2. Upload BLOB</h3>
+<pre><code class="language-pascal">var
+  Doc: TOrmDocument;
+  Data: RawBlob;
+begin
+  Doc := TOrmDocument.Create;
+  try
+    Doc.Name := &#x27;report.pdf&#x27;;
+    Client.Orm.Add(Doc, True);
+
+    // Upload BLOB separately
+    Data := StringFromFile(&#x27;report.pdf&#x27;);
+    Client.Orm.UpdateBlob(TOrmDocument, Doc.ID, &#x27;Content&#x27;, Data);
+  finally
+    Doc.Free;
+  end;
+end;
+</code></pre>
+<h3>12.6.3. Download BLOB</h3>
+<pre><code class="language-pascal">var
+  Data: RawBlob;
+begin
+  if Client.Orm.RetrieveBlob(TOrmDocument, DocID, &#x27;Content&#x27;, Data) then
+    FileFromString(Data, &#x27;downloaded.pdf&#x27;);
+end;
+</code></pre>
+<h3>12.6.4. Streaming BLOBs</h3>
+<p>
+For large files, use streaming:
+
+</p>
+<pre><code class="language-pascal">var
+  Stream: TStream;
+begin
+  Stream := TFileStream.Create(&#x27;large_file.zip&#x27;, fmCreate);
+  try
+    Client.Orm.RetrieveBlobStream(TOrmDocument, DocID, &#x27;Content&#x27;, Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>12.7. Locking and Concurrency</h2>
+<h3>12.7.1. Optimistic Locking</h3>
+<p>
+Default behavior - last write wins:
+
+</p>
+<pre><code class="language-pascal">// Two clients modify same record
+Client1.Orm.Retrieve(123, Customer1);
+Client2.Orm.Retrieve(123, Customer2);
+
+Customer1.Email := &#x27;client1@example.com&#x27;;
+Customer2.Email := &#x27;client2@example.com&#x27;;
+
+Client1.Orm.Update(Customer1);  // Succeeds
+Client2.Orm.Update(Customer2);  // Overwrites Client1&#x27;s change
+</code></pre>
+<h3>12.7.2. TRecordVersion for Change Tracking</h3>
+<pre><code class="language-pascal">type
+  TOrmCustomer = class(TOrm)
+  private
+    fName: RawUtf8;
+    fVersion: TRecordVersion;  // Auto-incremented on changes
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Version: TRecordVersion read fVersion write fVersion;
+  end;
+
+// Server automatically increments Version on each update
+</code></pre>
+<h3>12.7.3. Conflict Detection</h3>
+<pre><code class="language-pascal">var
+  Customer: TOrmCustomer;
+  OriginalVersion: TRecordVersion;
+  CurrentVersion: Int64;
+begin
+  Customer := TOrmCustomer.Create(Client.Orm, 123);
+  try
+    OriginalVersion := Customer.Version;
+
+    // Make changes
+    Customer.Name := &#x27;Updated Name&#x27;;
+
+    // Re-fetch to check version using OneFieldValueInt64
+    // Note: takes WhereClause as RawUtf8, not array of const
+    CurrentVersion := Client.Orm.OneFieldValueInt64(TOrmCustomer,
+      &#x27;Version&#x27;, FormatUtf8(&#x27;ID = %&#x27;, [Customer.ID]));
+    if CurrentVersion &lt;&gt; Int64(OriginalVersion) then
+      raise Exception.Create(&#x27;Record modified by another user&#x27;);
+
+    Client.Orm.Update(Customer);
+  finally
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>12.8. Synchronization</h2>
+<h3>12.8.1. Master-Slave Replication</h3>
+<pre><code class="language-pascal">// On slave: Track changes from master
+var
+  MasterClient: TRestHttpClient;
+  SlaveServer: TRestServerDB;
+begin
+  MasterClient := TRestHttpClientWinHTTP.Create(&#x27;master&#x27;, &#x27;8080&#x27;, Model);
+  SlaveServer := TRestServerDB.Create(Model, &#x27;slave.db3&#x27;);
+
+  // Sync tables
+  SlaveServer.RecordVersionSynchronizeSlave(
+    TOrmCustomer, MasterClient.Orm, 1000);  // Check every second
+end;
+</code></pre>
+<h3>12.8.2. Change Tracking</h3>
+<p>
+mORMot2 provides <code>TOrmHistory</code> in <code>mormot.orm.core</code> for tracking record changes:
+
+</p>
+<pre><code class="language-pascal">// TOrmHistory is defined in mormot.orm.core with fields for:
+// - ModifiedRecord: TID (reference to modified record)
+// - Event: TOrmHistoryEvent
+// - SentDataJson: RawBlob
+// - Timestamp: TModTime
+
+// Server tracks all changes via TRestOrmServer
+var
+  OrmServer: TRestOrmServer;
+begin
+  OrmServer := Server.OrmInstance as TRestOrmServer;
+  OrmServer.TrackChanges([TOrmCustomer, TOrmOrder]);
+end;
+</code></pre>
+<hr>
+<h2>12.9. Error Handling</h2>
+<h3>12.9.1. Check Return Values</h3>
+<pre><code class="language-pascal">var
+  ID: TID;
+begin
+  ID := Client.Orm.Add(Customer, True);
+  if ID = 0 then
+  begin
+    // Check last error
+    WriteLn(&#x27;Error: &#x27;, Client.LastErrorMessage);
+    WriteLn(&#x27;Code: &#x27;, Client.LastErrorCode);
+  end;
+end;
+</code></pre>
+<h3>12.9.2. HTTP Status Codes</h3>
+<table>
+<thead>
+<tr>
+  <th>Code</th>
+  <th>Meaning</th>
+  <th>mORMot Constant</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>200</td>
+  <td>Success</td>
+  <td><code>HTTP_SUCCESS</code></td>
+</tr>
+<tr>
+  <td>201</td>
+  <td>Created</td>
+  <td><code>HTTP_CREATED</code></td>
+</tr>
+<tr>
+  <td>400</td>
+  <td>Bad Request</td>
+  <td><code>HTTP_BADREQUEST</code></td>
+</tr>
+<tr>
+  <td>401</td>
+  <td>Unauthorized</td>
+  <td><code>HTTP_UNAUTHORIZED</code></td>
+</tr>
+<tr>
+  <td>403</td>
+  <td>Forbidden</td>
+  <td><code>HTTP_FORBIDDEN</code></td>
+</tr>
+<tr>
+  <td>404</td>
+  <td>Not Found</td>
+  <td><code>HTTP_NOTFOUND</code></td>
+</tr>
+<tr>
+  <td>500</td>
+  <td>Server Error</td>
+  <td><code>HTTP_SERVERERROR</code></td>
+</tr>
+</tbody>
+</table>
+<h3>12.9.3. Connection Resilience</h3>
+<pre><code class="language-pascal">// Auto-reconnect on connection loss
+Client.RetryOnceOnTimeout := True;
+
+// Custom retry logic
+for Attempt := 1 to 3 do
+begin
+  if Client.Orm.Retrieve(ID, Customer) then
+    Break;
+  if Attempt = 3 then
+    raise Exception.Create(&#x27;Failed after 3 attempts&#x27;);
+  Sleep(1000 * Attempt);  // Exponential backoff
+end;
+</code></pre>
+<hr>
+<h2>12.10. Migration from mORMot 1</h2>
+<h3>12.10.1. ORM Access Pattern</h3>
+<pre><code class="language-pascal">// mORMot 1: Direct on TRest
+Client.Add(Customer, True);
+Client.Retrieve(123, Customer);
+
+// mORMot 2: Via Orm interface
+Client.Orm.Add(Customer, True);
+Client.Orm.Retrieve(123, Customer);
+</code></pre>
+<h3>12.10.2. Batch Changes</h3>
+<pre><code class="language-pascal">// mORMot 1
+Client.BatchStart(TOrmCustomer);
+Client.BatchAdd(Customer);
+Client.BatchSend;
+
+// mORMot 2
+Batch := TRestBatch.Create(Client.Orm, TOrmCustomer);
+Batch.Add(Customer, True);
+Client.Orm.BatchSend(Batch);
+</code></pre>
+<hr>
+<p>
+<em>Next Chapter: Server-Side ORM Processing</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-11.html">Chapter 11: Client-Server Architecture</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-13.html">Chapter 13: Server-Side ORM Processing</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

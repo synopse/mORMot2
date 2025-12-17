@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>25. Testing and Logging</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>25. Testing and Logging</h1>
+<p>
+<em>Quality Assurance and Diagnostics</em>
+
+</p>
+<p>
+mORMot provides comprehensive testing and logging capabilities through <code>mormot.core.test</code> and <code>mormot.core.log</code> units. These tools are essential for building reliable, maintainable applications.
+
+</p>
+<hr>
+<h2>25.1. Automated Testing</h2>
+<h3>25.1.1. Why Test?</h3>
+<p>
+Testing ensures:
+<ul>
+  <li>Code correctness</li>
+  <li>Regression prevention</li>
+  <li>Documentation through examples</li>
+  <li>Refactoring confidence</li>
+  <li>Design quality (testable code is better code)</li>
+</ul>
+<h3>25.1.2. Test-Driven Development</h3>
+<p>
+The recommended approach:
+
+</p>
+<p>
+1. Write a void implementation (interface only)
+2. Write a test
+3. Run test - it must <strong>fail</strong>
+4. Implement the feature
+5. Run test - it must <strong>pass</strong>
+6. Refactor and repeat
+
+</p>
+<hr>
+<h2>25.2. Testing Classes</h2>
+<h3>25.2.1. Class Hierarchy</h3>
+<pre><code class="language-text">TSynTest (abstract)
+├── TSynTestCase    → Individual test case
+└── TSynTests       → Test suite (runs multiple cases)
+</code></pre>
+<h3>25.2.2. TSynTestCase</h3>
+<p>
+Defines individual tests in published methods:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.test;
+
+type
+  TTestMathOperations = class(TSynTestCase)
+  published
+    procedure TestAddition;
+    procedure TestMultiplication;
+    procedure TestDivision;
+  end;
+
+procedure TTestMathOperations.TestAddition;
+begin
+  Check(1 + 1 = 2, &#x27;1+1 should equal 2&#x27;);
+  Check(Add(10, 20) = 30, &#x27;Add function failed&#x27;);
+  CheckEqual(Add(-5, 5), 0, &#x27;Adding opposites&#x27;);
+end;
+</code></pre>
+<h3>25.2.3. TSynTests</h3>
+<p>
+Runs a suite of test cases:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyTestSuite = class(TSynTests)
+  published
+    procedure AllTests;
+  end;
+
+procedure TMyTestSuite.AllTests;
+begin
+  AddCase([
+    TTestMathOperations,
+    TTestStringOperations,
+    TTestDatabaseOperations
+  ]);
+end;
+
+// Main program
+begin
+  with TMyTestSuite.Create(&#x27;My Application Tests&#x27;) do
+  try
+    Run;
+    Readln;
+  finally
+    Free;
+  end;
+end.
+</code></pre>
+<hr>
+<h2>25.3. Check Methods</h2>
+<h3>25.3.1. Basic Assertions</h3>
+<pre><code class="language-pascal">// Boolean check
+Check(Value = Expected, &#x27;Error message&#x27;);
+
+// Equality checks
+CheckEqual(Actual, Expected, &#x27;Error message&#x27;);
+CheckNotEqual(Actual, Unexpected, &#x27;Error message&#x27;);
+
+// Floating-point comparison (with tolerance)
+CheckSame(FloatValue, ExpectedFloat, &#x27;Floating point error&#x27;);
+
+// UTF-8 string comparison
+CheckUtf8(ActualStr, ExpectedStr, &#x27;String mismatch&#x27;);
+
+// Hash comparison
+CheckHash(ActualHash, ExpectedHash, &#x27;Hash mismatch&#x27;);
+</code></pre>
+<h3>25.3.2. Exception Testing</h3>
+<pre><code class="language-pascal">procedure TTestErrors.TestExceptionRaised;
+begin
+  // Verify exception is raised
+  CheckRaised(
+    procedure begin
+      raise EInvalidOperation.Create(&#x27;Test&#x27;);
+    end,
+    EInvalidOperation,
+    &#x27;Expected exception not raised&#x27;
+  );
+end;
+</code></pre>
+<h3>25.3.3. Custom Checks</h3>
+<pre><code class="language-pascal">procedure TTestCustomer.TestOrderValidation;
+var
+  Order: TOrder;
+begin
+  Order := TOrder.Create;
+  try
+    // Multiple checks
+    Check(Order.Items.Count = 0, &#x27;New order should be empty&#x27;);
+    Order.AddItem(1, 2, 10.00);
+    CheckEqual(Order.Items.Count, 1, &#x27;Should have one item&#x27;);
+    CheckSame(Order.TotalAmount, 20.00, &#x27;Total should be 20.00&#x27;);
+  finally
+    Order.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>25.4. Test Output</h2>
+<h3>25.4.1. Console Output</h3>
+<pre><code class="language-pascal">var
+  Suite: TMyTestSuite;
+begin
+  Suite := TMyTestSuite.Create(&#x27;Test Suite&#x27;);
+  try
+    Suite.Run;
+  finally
+    Suite.Free;
+  end;
+end;
+</code></pre>
+<p>
+Output example:
+<pre><code class="language-text">Test Suite
+
+1. Math Operations
+  - Addition: 3 assertions passed  12.5 us
+  - Multiplication: 5 assertions passed  8.2 us
+  - Division: 4 assertions passed  6.1 us
+
+2. String Operations
+  - Concatenation: 10 assertions passed  25.3 us
+  - Parsing: 8 assertions passed  18.7 us
+
+Total: 30 assertions passed in 2 test cases
+</code></pre>
+<h3>25.4.2. Test Options</h3>
+<pre><code class="language-pascal">type
+  TSynTestOptions = set of (
+    tcoLogEachCheck,        // Log each Check() call
+    tcoLogInSubFolder,      // Put logs in ./log subfolder
+    tcoLogVerboseRotate,    // Rotate large log files
+    tcoLogNotHighResolution // Use plain ISO-8601 timestamps
+  );
+
+// Configure
+Suite.Options := [tcoLogEachCheck, tcoLogInSubFolder];
+</code></pre>
+<hr>
+<h2>25.5. Testing with Logging</h2>
+<h3>25.5.1. TSynTestsLogged</h3>
+<p>
+Combines testing with logging:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyLoggedTests = class(TSynTestsLogged)
+  published
+    procedure AllTests;
+  end;
+
+begin
+  with TMyLoggedTests.Create(&#x27;Logged Tests&#x27;) do
+  try
+    Run;
+  finally
+    Free;
+  end;
+end;
+</code></pre>
+<h3>25.5.2. Log Levels in Tests</h3>
+<pre><code class="language-pascal">procedure TTestWithLogging.TestDatabaseConnection;
+begin
+  TSynLog.Enter(self, &#x27;TestDatabaseConnection&#x27;);
+
+  Log.Log(sllInfo, &#x27;Connecting to database...&#x27;);
+  // Test code...
+  Log.Log(sllDebug, &#x27;Connection established&#x27;);
+
+  Check(Connected, &#x27;Should be connected&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>25.6. Mocking and Stubbing</h2>
+<h3>25.6.1. Interface Mocking</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.interfaces;
+
+type
+  ICalculator = interface(IInvokable)
+    [&#x27;{...}&#x27;]
+    function Add(A, B: Integer): Integer;
+    function Multiply(A, B: Integer): Integer;
+  end;
+
+procedure TTestWithMocks.TestServiceWithMockedDependency;
+var
+  Mock: TInterfaceMock;
+  Calculator: ICalculator;
+begin
+  // Create mock
+  Mock := TInterfaceMock.Create(TypeInfo(ICalculator), Calculator, self);
+
+  // Define behavior
+  Mock.ExpectsCount(&#x27;Add&#x27;, qoEqualTo, 2);         // Expect 2 calls
+  Mock.Returns(&#x27;Add&#x27;, [10, 20], 30);              // Return 30 for Add(10,20)
+  Mock.Returns(&#x27;Multiply&#x27;, [], 100);              // Return 100 for any Multiply
+
+  // Use mock
+  CheckEqual(Calculator.Add(10, 20), 30);
+  CheckEqual(Calculator.Multiply(5, 5), 100);
+
+  // Verify expectations
+  Mock.Verify;
+end;
+</code></pre>
+<h3>25.6.2. Stubbing</h3>
+<pre><code class="language-pascal">procedure TTestStubs.TestWithStub;
+var
+  Stub: TInterfaceStub;
+  Service: IMyService;
+begin
+  // Create stub (no verification)
+  Stub := TInterfaceStub.Create(TypeInfo(IMyService), Service);
+
+  // Define returns
+  Stub.Returns(&#x27;GetValue&#x27;, [], &#x27;stubbed value&#x27;);
+
+  // Use stub
+  CheckEqual(Service.GetValue, &#x27;stubbed value&#x27;);
+end;
+</code></pre>
+<h3>25.6.3. Mock Options</h3>
+<pre><code class="language-pascal">type
+  TInterfaceMockOptions = set of (
+    imoMockFailsWillPassTestCase,  // Failures don&#x27;t fail test
+    imoFakeInstanceCreation,       // Create fake objects
+    imoLogMethodCallsAndResults    // Log all calls
+  );
+
+Mock.Options := [imoLogMethodCallsAndResults];
+</code></pre>
+<hr>
+<h2>25.7. Logging with TSynLog</h2>
+<h3>25.7.1. Logging Architecture</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                    Logging Architecture                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐                                            │
+│  │ TSynLogFamily   │  Configuration (levels, rotation, etc.)    │
+│  │ (per-class)     │                                            │
+│  └────────┬────────┘                                            │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────┐                                            │
+│  │ TSynLog         │  Logger instance (per-thread)              │
+│  │ (per-thread)    │                                            │
+│  └────────┬────────┘                                            │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────────────────────────┐                    │
+│  │              Log File                    │                   │
+│  │  • Automatic rotation                    │                   │
+│  │  • Stack traces on errors               │                    │
+│  │  • Thread-safe writes                   │                    │
+│  └─────────────────────────────────────────┘                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>25.7.2. Basic Logging</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.log;
+
+// Simple logging
+TSynLog.Add.Log(sllInfo, &#x27;Application started&#x27;);
+TSynLog.Add.Log(sllDebug, &#x27;Processing item %&#x27;, [ItemID]);
+TSynLog.Add.Log(sllError, &#x27;Failed to connect: %&#x27;, [ErrorMessage]);
+</code></pre>
+<h3>25.7.3. Log Levels</h3>
+<pre><code class="language-pascal">type
+  TSynLogLevel = (
+    sllNone,          // No logging
+    sllInfo,          // Informational messages
+    sllDebug,         // Debug information
+    sllTrace,         // Detailed tracing
+    sllWarning,       // Warnings
+    sllError,         // Errors
+    sllEnter,         // Method entry
+    sllLeave,         // Method exit
+    sllLastError,     // OS last error
+    sllException,     // Exception caught
+    sllExceptionOS,   // OS exception
+    sllMemory,        // Memory allocation
+    sllStackTrace,    // Stack trace
+    sllFail,          // Test failure
+    sllSQL,           // SQL statements
+    sllCache,         // Cache operations
+    sllResult,        // Method results
+    sllDB,            // Database operations
+    sllHTTP,          // HTTP traffic
+    sllClient,        // Client operations
+    sllServer,        // Server operations
+    sllServiceCall,   // Service invocations
+    sllServiceReturn, // Service returns
+    sllUserAuth,      // User authentication
+    sllCustom1..4,    // Custom levels
+    sllNewRun,        // New run marker
+    sllDDDError,      // DDD errors
+    sllDDDInfo,       // DDD info
+    sllMonitoring     // Monitoring data
+  );
+</code></pre>
+<hr>
+<h2>25.8. TSynLogFamily Configuration</h2>
+<h3>25.8.1. Basic Configuration</h3>
+<pre><code class="language-pascal">var
+  LogFamily: TSynLogFamily;
+begin
+  LogFamily := TSynLog.Family;
+
+  // Set log levels
+  LogFamily.Level := LOG_VERBOSE;  // All levels
+
+  // Or specific levels
+  LogFamily.Level := [sllInfo, sllWarning, sllError, sllException];
+
+  // File settings
+  LogFamily.PerThreadLog := ptIdentifiedInOneFile;  // One file, thread IDs
+  LogFamily.DestinationPath := &#x27;C:\Logs\&#x27;;
+  LogFamily.FileExistsAction := acAppend;
+end;
+</code></pre>
+<h3>25.8.2. Log Rotation</h3>
+<pre><code class="language-pascal">// Rotate by size
+LogFamily.RotateFileCount := 5;           // Keep 5 files
+LogFamily.RotateFileSizeKB := 10240;      // 10MB per file
+
+// Rotate by time
+LogFamily.RotateFileDailyAtHour := 0;     // Rotate at midnight
+
+// Archive rotated logs
+LogFamily.RotateFileArchiveCompression := acSynLz;  // Compress with SynLZ
+</code></pre>
+<h3>25.8.3. Stack Traces</h3>
+<pre><code class="language-pascal">// Enable stack traces for errors
+LogFamily.LevelStackTrace := [sllError, sllException, sllExceptionOS];
+
+// Requires .map or .mab file for readable stack traces
+// Generate .mab from .map:
+// mormot2tests.map -&gt; mormot2tests.mab (much smaller)
+</code></pre>
+<hr>
+<h2>25.9. Structured Logging</h2>
+<h3>25.9.1. Method Enter/Leave</h3>
+<pre><code class="language-pascal">procedure TMyClass.ProcessData(const Data: TData);
+begin
+  TSynLog.Enter(self, &#x27;ProcessData&#x27;);  // Logs entry with timestamp
+
+  // Processing...
+  TSynLog.Add.Log(sllDebug, &#x27;Processing % bytes&#x27;, [Length(Data)]);
+
+  // Automatic leave logging on scope exit
+end;
+</code></pre>
+<p>
+Output:
+<pre><code class="language-text">20230615 14:32:15.123  +    TMyClass.ProcessData
+20230615 14:32:15.125       Processing 1024 bytes
+20230615 14:32:15.130  -    00.007
+</code></pre>
+<h3>25.9.2. Logging Objects</h3>
+<pre><code class="language-pascal">// Log object as JSON
+TSynLog.Add.Log(sllDebug, Customer);  // Serializes to JSON
+
+// Log with context
+TSynLog.Add.Log(sllInfo, &#x27;Customer loaded: %&#x27;, [Customer], TypeInfo(TCustomer));
+</code></pre>
+<h3>25.9.3. SQL Logging</h3>
+<pre><code class="language-pascal">// Enable SQL logging
+LogFamily.Level := LogFamily.Level + [sllSQL, sllDB];
+
+// SQL statements are automatically logged by ORM
+// Output:
+// 20230615 14:35:22.456  SQL   SELECT * FROM Customer WHERE ID=?
+</code></pre>
+<hr>
+<h2>25.10. ISynLog Interface</h2>
+<h3>25.10.1. Interface-Based Logging</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.log;
+
+procedure ProcessWithLogging;
+var
+  Log: ISynLog;
+begin
+  Log := TSynLog.Enter(nil, &#x27;ProcessWithLogging&#x27;);
+
+  Log.Log(sllInfo, &#x27;Starting process&#x27;);
+
+  try
+    // Work...
+    Log.Log(sllDebug, &#x27;Step 1 complete&#x27;);
+  except
+    on E: Exception do
+    begin
+      Log.Log(sllException, E);
+      raise;
+    end;
+  end;
+end;  // Automatic leave logged
+</code></pre>
+<h3>25.10.2. Dependency Injection with Logging</h3>
+<pre><code class="language-pascal">type
+  IMyService = interface
+    procedure DoWork;
+  end;
+
+  TMyService = class(TInterfacedObject, IMyService)
+  private
+    fLog: ISynLog;
+  public
+    constructor Create(const aLog: ISynLog);
+    procedure DoWork;
+  end;
+
+procedure TMyService.DoWork;
+begin
+  fLog.Log(sllInfo, &#x27;Starting work&#x27;);
+  // ...
+end;
+</code></pre>
+<hr>
+<h2>25.11. Debug Symbols</h2>
+<h3>25.11.1. TDebugFile</h3>
+<p>
+For readable stack traces, provide debug symbols:
+
+</p>
+<pre><code class="language-pascal">// Delphi: Generate .map file (Project Options &gt; Linker &gt; Map File = Detailed)
+// FPC: Compile with -gl flag, or use external .dbg file
+
+// Convert .map to .mab (optimized format)
+TDebugFile.Create(&#x27;myapp.map&#x27;, true);  // Creates myapp.mab
+</code></pre>
+<h3>25.11.2. .mab File Benefits</h3>
+<table>
+<thead>
+<tr>
+  <th>Format</th>
+  <th>Size (typical)</th>
+  <th>Load Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>.map</td>
+  <td>4-15 MB</td>
+  <td>Slow</td>
+</tr>
+<tr>
+  <td>.dbg</td>
+  <td>10-50 MB</td>
+  <td>Slow</td>
+</tr>
+<tr>
+  <td>.mab</td>
+  <td>200-500 KB</td>
+  <td>Fast</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>25.12. Exception Logging</h2>
+<h3>25.12.1. Global Exception Handler</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.log;
+
+begin
+  // Install global exception handler
+  TSynLog.Family.Level := LOG_VERBOSE + [sllExceptionOS];
+
+  // All unhandled exceptions are logged with stack trace
+end;
+</code></pre>
+<h3>25.12.2. Manual Exception Logging</h3>
+<pre><code class="language-pascal">procedure SafeProcess;
+begin
+  try
+    RiskyOperation;
+  except
+    on E: Exception do
+    begin
+      TSynLog.Add.Log(sllException, E);
+      // Or with additional context
+      TSynLog.Add.Log(sllException, &#x27;% during % processing&#x27;,
+        [E.ClassName, OperationName], E);
+      raise;
+    end;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>25.13. Remote Logging</h2>
+<h3>25.13.1. Log to Remote Server</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.log,
+  mormot.net.client;
+
+var
+  LogFamily: TSynLogFamily;
+begin
+  LogFamily := TSynLog.Family;
+
+  // Enable remote logging
+  LogFamily.EchoRemoteClient := THttpClientSocket.Create(&#x27;logserver&#x27;, &#x27;8080&#x27;);
+  LogFamily.EchoRemoteClientOwned := True;
+end;
+</code></pre>
+<h3>25.13.2. SysLog Support</h3>
+<pre><code class="language-pascal">// Send to SysLog server (RFC 5424)
+LogFamily.EchoToSysLog := True;
+LogFamily.SysLogFacility := sfLocal0;
+</code></pre>
+<hr>
+<h2>25.14. Log File Analysis</h2>
+<h3>25.14.1. TSynLogFile</h3>
+<p>
+Read and analyze log files:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.log;
+
+var
+  LogFile: TSynLogFile;
+  i: Integer;
+begin
+  LogFile := TSynLogFile.Create(&#x27;app.log&#x27;);
+  try
+    // Iterate events
+    for i := 0 to LogFile.EventCount - 1 do
+    begin
+      Writeln(LogFile.EventDateTime[i], &#x27;: &#x27;,
+              LogFile.EventLevel[i], &#x27; - &#x27;,
+              LogFile.EventText[i]);
+    end;
+
+    // Get specific level events
+    Writeln(&#x27;Errors: &#x27;, LogFile.EventCount(sllError));
+  finally
+    LogFile.Free;
+  end;
+end;
+</code></pre>
+<h3>25.14.2. LogView Tool</h3>
+<p>
+mORMot provides a visual log viewer:
+<ul>
+  <li>Located in <code>ex/logview/</code></li>
+  <li>Features: filtering, search, statistics</li>
+  <li>Supports all log formats</li>
+</ul>
+<hr>
+<h2>25.15. Performance Considerations</h2>
+<h3>25.15.1. Conditional Logging</h3>
+<pre><code class="language-pascal">// Use conditional to avoid string formatting overhead
+if sllDebug in TSynLog.Family.Level then
+  TSynLog.Add.Log(sllDebug, &#x27;Complex: % + %&#x27;, [ExpensiveCall1, ExpensiveCall2]);
+</code></pre>
+<h3>25.15.2. Async Logging</h3>
+<pre><code class="language-pascal">// Enable async writes (background thread)
+LogFamily.BufferSize := 32768;  // 32KB buffer
+LogFamily.NoFile := False;
+</code></pre>
+<h3>25.15.3. Production Settings</h3>
+<pre><code class="language-pascal">// Production: minimal overhead
+LogFamily.Level := [sllWarning, sllError, sllException];
+LogFamily.LevelStackTrace := [sllException];
+LogFamily.RotateFileCount := 10;
+LogFamily.RotateFileSizeKB := 20480;  // 20MB
+
+// Development: verbose
+LogFamily.Level := LOG_VERBOSE;
+LogFamily.LevelStackTrace := [sllError, sllException, sllExceptionOS];
+</code></pre>
+<hr>
+<h2>25.16. Summary</h2>
+<h3>25.16.1. Testing Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSynTestCase</code></td>
+  <td>Individual test case</td>
+</tr>
+<tr>
+  <td><code>TSynTests</code></td>
+  <td>Test suite runner</td>
+</tr>
+<tr>
+  <td><code>TSynTestsLogged</code></td>
+  <td>Suite with logging</td>
+</tr>
+<tr>
+  <td><code>TInterfaceMock</code></td>
+  <td>Interface mocking</td>
+</tr>
+<tr>
+  <td><code>TInterfaceStub</code></td>
+  <td>Interface stubbing</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+  <th>Method</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>Check()</code></td>
+  <td>Boolean assertion</td>
+</tr>
+<tr>
+  <td><code>CheckEqual()</code></td>
+  <td>Equality assertion</td>
+</tr>
+<tr>
+  <td><code>CheckSame()</code></td>
+  <td>Float comparison</td>
+</tr>
+<tr>
+  <td><code>CheckRaised()</code></td>
+  <td>Exception testing</td>
+</tr>
+</tbody>
+</table>
+<h3>25.16.2. Logging Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSynLog</code></td>
+  <td>Logger instance</td>
+</tr>
+<tr>
+  <td><code>TSynLogFamily</code></td>
+  <td>Logger configuration</td>
+</tr>
+<tr>
+  <td><code>ISynLog</code></td>
+  <td>Logger interface</td>
+</tr>
+<tr>
+  <td><code>TSynLogFile</code></td>
+  <td>Log file reader</td>
+</tr>
+<tr>
+  <td><code>TDebugFile</code></td>
+  <td>Debug symbols</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+  <th>Level</th>
+  <th>Use For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>sllInfo</code></td>
+  <td>Informational messages</td>
+</tr>
+<tr>
+  <td><code>sllDebug</code></td>
+  <td>Debug output</td>
+</tr>
+<tr>
+  <td><code>sllWarning</code></td>
+  <td>Warnings</td>
+</tr>
+<tr>
+  <td><code>sllError</code></td>
+  <td>Errors</td>
+</tr>
+<tr>
+  <td><code>sllException</code></td>
+  <td>Exceptions</td>
+</tr>
+<tr>
+  <td><code>sllSQL</code></td>
+  <td>SQL statements</td>
+</tr>
+<tr>
+  <td><code>sllHTTP</code></td>
+  <td>HTTP traffic</td>
+</tr>
+</tbody>
+</table>
+<h3>25.16.3. Key Units</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.core.test</code></td>
+  <td>Testing framework</td>
+</tr>
+<tr>
+  <td><code>mormot.core.log</code></td>
+  <td>Logging framework</td>
+</tr>
+<tr>
+  <td><code>mormot.core.interfaces</code></td>
+  <td>Mocking support</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>
+<em>This concludes the mORMot2 SAD Guide. For additional information, consult the source code documentation and the official mORMot forum.</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-24.html">Chapter 24: Domain-Driven Design</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-26.html">Chapter 26: Source Code</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

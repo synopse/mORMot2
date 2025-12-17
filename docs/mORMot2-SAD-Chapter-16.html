@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 16. Client-Server Services via Interfaces
+
+</p>
+<p>
+<em>Service-Oriented Architecture Made Simple</em>
+
+</p>
+<p>
+In Chapter 14, we covered method-based services — a direct approach with full HTTP control. This chapter introduces <strong>interface-based services</strong>, mORMot's powerful SOA implementation that provides automatic client stub generation, contract validation, multiple instance lifetimes, and bidirectional communication via WebSockets.
+
+</p>
+<hr>
+<h2>16.1. Why Interface-Based Services?</h2>
+<p>
+Method-based services have limitations:
+<ul>
+  <li>Manual parameter marshalling on both ends</li>
+  <li>No automatic client stub generation</li>
+  <li>Flat service namespace</li>
+  <li>Testing requires manual mocking</li>
+  <li>No built-in session/workflow management</li>
+  <li>Security checked manually per method</li>
+  <li>No callback mechanism</li>
+</ul>
+Interface-based services solve these problems:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Feature</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Design by Contract</strong></td>
+  <td>Interfaces define the service contract in pure Pascal</td>
+</tr>
+<tr>
+  <td><strong>Auto Marshalling</strong></td>
+  <td>JSON serialization handled automatically</td>
+</tr>
+<tr>
+  <td><strong>Factory Driven</strong></td>
+  <td>Get implementations from interfaces on both client and server</td>
+</tr>
+<tr>
+  <td><strong>Multiple Lifetimes</strong></td>
+  <td>Per-call, shared, per-session, per-user, per-group, client-driven</td>
+</tr>
+<tr>
+  <td><strong>Contract Validation</strong></td>
+  <td>Client/server compatibility verified before execution</td>
+</tr>
+<tr>
+  <td><strong>Bidirectional</strong></td>
+  <td>Callback interfaces for real-time notifications</td>
+</tr>
+<tr>
+  <td><strong>Secure</strong></td>
+  <td>Per-method authorization via user groups</td>
+</tr>
+<tr>
+  <td><strong>Cross-Platform</strong></td>
+  <td>Generated client code for Delphi, FPC, JavaScript</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>16.2. Defining the Service Contract</h2>
+<h3>16.2.1. Basic Interface</h3>
+<pre><code class="language-pascal">type
+  ICalculator = interface(IInvokable)
+    [&#x27;{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}&#x27;]
+    /// add two signed 32-bit integers
+    function Add(n1, n2: Integer): Integer;
+    /// multiply two 64-bit integers
+    function Multiply(n1, n2: Int64): Int64;
+  end;
+</code></pre>
+<p>
+Requirements:
+<ul>
+  <li>Must inherit from <code>IInvokable</code> (ensures RTTI)</li>
+  <li>Must have a GUID (for identification)</li>
+  <li>ASCII method names only (convention for services)</li>
+  <li><code>register</code> calling convention (default)</li>
+</ul>
+<h3>16.2.2. Supported Parameter Types</h3>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Serialization</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>Boolean</code></td>
+  <td>JSON <code>true</code>/<code>false</code></td>
+</tr>
+<tr>
+  <td><code>Integer</code>, <code>Cardinal</code>, <code>Int64</code>, <code>Double</code>, <code>Currency</code></td>
+  <td>JSON number</td>
+</tr>
+<tr>
+  <td>Enumerations</td>
+  <td>JSON number (ordinal value)</td>
+</tr>
+<tr>
+  <td>Sets</td>
+  <td>JSON number (bitmask, up to 32 elements)</td>
+</tr>
+<tr>
+  <td><code>TDateTime</code>, <code>TDateTimeMS</code></td>
+  <td>ISO 8601 JSON string</td>
+</tr>
+<tr>
+  <td><code>RawUtf8</code>, <code>string</code>, <code>UnicodeString</code></td>
+  <td>JSON string (UTF-8)</td>
+</tr>
+<tr>
+  <td><code>RawJson</code></td>
+  <td>JSON passthrough (no escaping)</td>
+</tr>
+<tr>
+  <td><code>RawByteString</code></td>
+  <td>Base64-encoded JSON string</td>
+</tr>
+<tr>
+  <td><code>TPersistent</code>, <code>TOrm</code></td>
+  <td>JSON object (published properties)</td>
+</tr>
+<tr>
+  <td><code>TObjectList</code></td>
+  <td>JSON array with <code>"ClassName"</code> field</td>
+</tr>
+<tr>
+  <td>Dynamic arrays</td>
+  <td>JSON array</td>
+</tr>
+<tr>
+  <td><code>record</code></td>
+  <td>JSON object (with RTTI or custom serialization)</td>
+</tr>
+<tr>
+  <td><code>variant</code>, <code>TDocVariant</code></td>
+  <td>Native JSON</td>
+</tr>
+<tr>
+  <td><code>TServiceCustomAnswer</code></td>
+  <td>Custom response (binary, HTML, etc.)</td>
+</tr>
+<tr>
+  <td><code>interface</code></td>
+  <td>Callback for bidirectional communication</td>
+</tr>
+</tbody>
+</table>
+<h3>16.2.3. Parameter Direction</h3>
+<pre><code class="language-pascal">function Process(const Input: RawUtf8;     // Client → Server only
+                 var InOut: Integer;        // Client ↔ Server (both ways)
+                 out Output: RawUtf8        // Server → Client only
+                ): Boolean;                 // Server → Client (result)
+</code></pre>
+<h3>16.2.4. Complex Interface Example</h3>
+<pre><code class="language-pascal">type
+  IComplexService = interface(IInvokable)
+    [&#x27;{8B5A2B10-7B3C-4A7D-95F3-8C9D7E6A5B4C}&#x27;]
+    // Simple types
+    function Calculate(n1, n2: Double): Double;
+
+    // Record parameters
+    function ProcessOrder(const Order: TOrderRecord): TOrderResult;
+
+    // Dynamic arrays
+    function FilterItems(const Items: TRawUtf8DynArray;
+                        const Filter: RawUtf8): TRawUtf8DynArray;
+
+    // Object parameters (caller allocates)
+    procedure TransformCustomer(var Customer: TCustomer);
+
+    // Variant/TDocVariant for flexible JSON
+    function QueryData(const Params: Variant): Variant;
+
+    // Custom binary response
+    function GetReport(ReportID: Integer): TServiceCustomAnswer;
+  end;
+</code></pre>
+<h3>16.2.5. TServiceCustomAnswer</h3>
+<p>
+For non-JSON responses (PDF, images, HTML):
+
+</p>
+<pre><code class="language-pascal">function TMyService.GetReport(ReportID: Integer): TServiceCustomAnswer;
+begin
+  Result.Header := HEADER_CONTENT_TYPE + &#x27;application/pdf&#x27;;
+  Result.Content := GeneratePDF(ReportID);
+  Result.Status := HTTP_SUCCESS;
+end;
+</code></pre>
+<p>
+<strong>Note</strong>: Methods returning <code>TServiceCustomAnswer</code> cannot have <code>var</code> or <code>out</code> parameters.
+
+</p>
+<hr>
+<h2>16.3. Server-Side Implementation</h2>
+<h3>16.3.1. Implementing the Contract</h3>
+<pre><code class="language-pascal">type
+  TServiceCalculator = class(TInterfacedObject, ICalculator)
+  public
+    function Add(n1, n2: Integer): Integer;
+    function Multiply(n1, n2: Int64): Int64;
+  end;
+
+function TServiceCalculator.Add(n1, n2: Integer): Integer;
+begin
+  Result := n1 + n2;
+end;
+
+function TServiceCalculator.Multiply(n1, n2: Int64): Int64;
+begin
+  Result := n1 * n2;
+end;
+</code></pre>
+<h3>16.3.2. Registering the Service</h3>
+<pre><code class="language-pascal">// Using TypeInfo
+Server.ServiceRegister(TServiceCalculator, [TypeInfo(ICalculator)], sicShared);
+
+// Or using registered interface directly
+Server.ServiceDefine(TServiceCalculator, [ICalculator], sicShared);
+</code></pre>
+<h3>16.3.3. Instance Lifetime Modes</h3>
+<table>
+<thead>
+<tr>
+  <th>Mode</th>
+  <th>Description</th>
+  <th>Thread Safety</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>sicSingle</code></td>
+  <td>New instance per call (default, safest)</td>
+  <td>Not required</td>
+</tr>
+<tr>
+  <td><code>sicShared</code></td>
+  <td>One instance for all calls (fastest)</td>
+  <td><strong>Required</strong></td>
+</tr>
+<tr>
+  <td><code>sicClientDriven</code></td>
+  <td>Instance lives until client releases interface</td>
+  <td>Not required</td>
+</tr>
+<tr>
+  <td><code>sicPerSession</code></td>
+  <td>One instance per authentication session</td>
+  <td><strong>Required</strong></td>
+</tr>
+<tr>
+  <td><code>sicPerUser</code></td>
+  <td>One instance per user across sessions</td>
+  <td><strong>Required</strong></td>
+</tr>
+<tr>
+  <td><code>sicPerGroup</code></td>
+  <td>One instance per user group</td>
+  <td><strong>Required</strong></td>
+</tr>
+<tr>
+  <td><code>sicPerThread</code></td>
+  <td>One instance per server thread</td>
+  <td>Not required</td>
+</tr>
+</tbody>
+</table>
+<h4>Choosing the Right Mode</h4>
+<table>
+<thead>
+<tr>
+  <th>Use Case</th>
+  <th>Recommended Mode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Stateless operations, resource-intensive</td>
+  <td><code>sicSingle</code></td>
+</tr>
+<tr>
+  <td>Simple stateless service, high throughput</td>
+  <td><code>sicShared</code></td>
+</tr>
+<tr>
+  <td>Workflow with state between calls</td>
+  <td><code>sicClientDriven</code></td>
+</tr>
+<tr>
+  <td>Session-specific caching</td>
+  <td><code>sicPerSession</code></td>
+</tr>
+<tr>
+  <td>User preferences/settings</td>
+  <td><code>sicPerUser</code></td>
+</tr>
+<tr>
+  <td>Group-level configuration</td>
+  <td><code>sicPerGroup</code></td>
+</tr>
+<tr>
+  <td>Thread-local resources (e.g., database connection)</td>
+  <td><code>sicPerThread</code></td>
+</tr>
+</tbody>
+</table>
+<h3>16.3.4. Client-Driven Example</h3>
+<pre><code class="language-pascal">type
+  IComplexNumber = interface(IInvokable)
+    [&#x27;{29D753B2-E7EF-41B3-B7C3-827FEB082DC1}&#x27;]
+    procedure Assign(aReal, aImaginary: Double);
+    function GetReal: Double;
+    procedure SetReal(const Value: Double);
+    function GetImaginary: Double;
+    procedure SetImaginary(const Value: Double);
+    procedure Add(aReal, aImaginary: Double);
+    property Real: Double read GetReal write SetReal;
+    property Imaginary: Double read GetImaginary write SetImaginary;
+  end;
+
+  TServiceComplexNumber = class(TInterfacedObject, IComplexNumber)
+  private
+    fReal, fImaginary: Double;
+  public
+    procedure Assign(aReal, aImaginary: Double);
+    function GetReal: Double;
+    procedure SetReal(const Value: Double);
+    function GetImaginary: Double;
+    procedure SetImaginary(const Value: Double);
+    procedure Add(aReal, aImaginary: Double);
+  end;
+
+// Registration
+Server.ServiceDefine(TServiceComplexNumber, [IComplexNumber], sicClientDriven);
+</code></pre>
+<p>
+The server maintains <code>fReal</code> and <code>fImaginary</code> between calls until the client releases the interface.
+
+</p>
+<hr>
+<h2>16.4. Accessing Execution Context</h2>
+<h3>16.4.1. Using TInjectableObjectRest</h3>
+<p>
+The recommended approach — inherit from <code>TInjectableObjectRest</code>:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyService = class(TInjectableObjectRest, IMyService)
+  public
+    function GetCurrentUser: RawUtf8;
+    procedure LogActivity(const Action: RawUtf8);
+  end;
+
+function TMyService.GetCurrentUser: RawUtf8;
+begin
+  if Server &lt;&gt; nil then
+    Result := Server.SessionGetUser(Factory.CurrentSession).LogonName
+  else
+    Result := &#x27;&#x27;;
+end;
+
+procedure TMyService.LogActivity(const Action: RawUtf8);
+begin
+  Server.Add(TOrmActivityLog, [
+    &#x27;Action&#x27;, Action,
+    &#x27;User&#x27;, GetCurrentUser,
+    &#x27;Timestamp&#x27;, NowUtc
+  ]);
+end;
+</code></pre>
+<p>
+Properties available:
+<ul>
+  <li><code>Server: TRestServer</code> — Access to ORM and server methods</li>
+  <li><code>Factory: TServiceFactoryServer</code> — Service factory instance</li>
+</ul>
+<h3>16.4.2. Using ServiceRunningContext</h3>
+<p>
+For services not inheriting from <code>TInjectableObjectRest</code>:
+
+</p>
+<pre><code class="language-pascal">function TMyService.ProcessRequest: RawUtf8;
+var
+  Ctxt: PServiceRunningContext;
+begin
+  Ctxt := PerThreadRunningContextAddress;
+  if Ctxt^.Request &lt;&gt; nil then
+    Result := Ctxt^.Request.SessionUserName
+  else
+    Result := &#x27;Unknown&#x27;;
+end;
+</code></pre>
+<p>
+<strong>Note</strong>: Prefer <code>TInjectableObjectRest</code> — it's safer and works outside client-server context.
+
+</p>
+<hr>
+<h2>16.5. Client-Side Usage</h2>
+<h3>16.5.1. Registering the Interface</h3>
+<pre><code class="language-pascal">// Must match server-side mode
+Client.ServiceRegister([TypeInfo(ICalculator)], sicShared);
+
+// Or with registered interface
+Client.ServiceDefine([ICalculator], sicShared);
+</code></pre>
+<h3>16.5.2. Resolving and Using Services</h3>
+<pre><code class="language-pascal">var
+  Calc: ICalculator;
+begin
+  if Client.Services.Resolve(ICalculator, Calc) then
+    ShowMessage(IntToStr(Calc.Add(10, 20)));
+end;
+</code></pre>
+<p>
+Generic syntax (Delphi 2010+):
+<pre><code class="language-pascal">var
+  Calc: ICalculator;
+begin
+  Calc := Client.Service&lt;ICalculator&gt;;
+  if Calc &lt;&gt; nil then
+    ShowMessage(IntToStr(Calc.Add(10, 20)));
+end;
+</code></pre>
+<h3>16.5.3. Client-Driven Services</h3>
+<pre><code class="language-pascal">var
+  CN: IComplexNumber;
+begin
+  if Client.Services.Resolve(IComplexNumber, CN) then
+  begin
+    CN.Assign(0.01, 3.14);
+    CN.Add(100, 200);
+    ShowMessage(Format(&#x27;%.2f + %.2fi&#x27;, [CN.Real, CN.Imaginary]));
+  end;
+end; // CN released here → server instance also released
+</code></pre>
+<h3>16.5.4. Auto-Registration</h3>
+<p>
+For <code>sicClientDriven</code>, explicit registration is optional:
+<pre><code class="language-pascal">// This works without prior ServiceRegister call
+var
+  CN: IComplexNumber;
+begin
+  Client.Services.Info(IComplexNumber).Get(CN);  // Auto-registers as sicClientDriven
+end;
+</code></pre>
+<hr>
+<h2>16.6. Contract Validation</h2>
+<h3>16.6.1. Automatic Contract Hash</h3>
+<p>
+By default, mORMot generates an MD5 hash of the interface signature:
+<ul>
+  <li>Method names</li>
+  <li>Parameter types and directions</li>
+  <li>Return types</li>
+</ul>
+If client and server contracts don't match, connection fails with a clear error.
+
+</p>
+<h3>16.6.2. Custom Contract Strings</h3>
+<p>
+For explicit version control:
+
+</p>
+<pre><code class="language-pascal">// Server
+Server.ServiceRegister(TMyService, [TypeInfo(IMyService)], sicShared)
+  .SetOptions([], &#x27;v2.5&#x27;);  // Contract = &#x27;v2.5&#x27;
+
+// Client must match
+Client.ServiceRegister([TypeInfo(IMyService)], sicShared, &#x27;v2.5&#x27;);
+</code></pre>
+<p>
+This allows:
+<ul>
+  <li>Semantic versioning</li>
+  <li>Gradual client migration</li>
+  <li>Clear compatibility rules</li>
+</ul>
+<hr>
+<h2>16.7. Authorization and Security</h2>
+<h3>16.7.1. Per-Method Authorization</h3>
+<pre><code class="language-pascal">var
+  Factory: TServiceFactoryServer;
+begin
+  Factory := Server.Services.Info(ICalculator) as TServiceFactoryServer;
+
+  // Deny all by default
+  Factory.DenyAll;
+
+  // Allow specific groups by ID
+  Factory.Allow(ICalculator, [ADMIN_GROUP_ID]);
+
+  // Allow specific methods for other groups by name
+  // Note: AllowByName takes group names (RawUtf8), not IDs
+  Factory.AllowByName([&#x27;Add&#x27;, &#x27;Multiply&#x27;], [&#x27;User&#x27;, &#x27;Guest&#x27;]);
+end;
+</code></pre>
+<h3>16.7.2. Authentication Bypass</h3>
+<p>
+For public methods:
+
+</p>
+<pre><code class="language-pascal">Server.ServiceMethodByPassAuthentication(&#x27;Calculator.GetVersion&#x27;);
+</code></pre>
+<h3>16.7.3. Execution Options</h3>
+<pre><code class="language-pascal">Factory.SetOptions([optExecInMainThread]);  // Execute in main VCL thread
+Factory.SetOptions([optFreeInMainThread]);  // Free instance in main thread
+Factory.SetOptions([optExecInPerInterfaceThread]);  // Dedicated thread per interface
+</code></pre>
+<hr>
+<h2>16.8. Service Logging</h2>
+<h3>16.8.1. Enabling Logging</h3>
+<pre><code class="language-pascal">Factory.SetServiceLog(Server, TOrmServiceLog);
+</code></pre>
+<p>
+This logs:
+<ul>
+  <li>Method name (<code>Interface.Method</code>)</li>
+  <li>Input parameters (JSON)</li>
+  <li>Output parameters (JSON)</li>
+  <li>Execution time (microseconds)</li>
+  <li>Session/User context</li>
+</ul>
+<h3>16.8.2. Custom Log Table</h3>
+<pre><code class="language-pascal">type
+  TOrmMyServiceLog = class(TOrmServiceLog)
+  published
+    property CustomField: RawUtf8 read fCustomField write fCustomField;
+  end;
+
+Factory.SetServiceLog(Server, TOrmMyServiceLog);
+</code></pre>
+<hr>
+<h2>16.9. Bidirectional Communication (Callbacks)</h2>
+<h3>16.9.1. Defining Callback Interfaces</h3>
+<pre><code class="language-pascal">type
+  // Callback interface (client implements this)
+  IProgressCallback = interface(IInvokable)
+    [&#x27;{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}&#x27;]
+    procedure Progress(Percent: Integer; const Status: RawUtf8);
+    procedure Completed(Success: Boolean);
+  end;
+
+  // Service interface
+  ILongRunningTask = interface(IInvokable)
+    [&#x27;{12345678-1234-1234-1234-123456789012}&#x27;]
+    procedure StartTask(const TaskName: RawUtf8; const Callback: IProgressCallback);
+    procedure CancelTask(const TaskID: RawUtf8);
+  end;
+</code></pre>
+<h3>16.9.2. Server Implementation</h3>
+<pre><code class="language-pascal">type
+  TLongRunningTask = class(TInjectableObjectRest, ILongRunningTask)
+  public
+    procedure StartTask(const TaskName: RawUtf8; const Callback: IProgressCallback);
+    procedure CancelTask(const TaskID: RawUtf8);
+  end;
+
+procedure TLongRunningTask.StartTask(const TaskName: RawUtf8;
+  const Callback: IProgressCallback);
+begin
+  // Start background work
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      i: Integer;
+    begin
+      for i := 0 to 100 do
+      begin
+        Sleep(100);
+        Callback.Progress(i, Format(&#x27;Processing %s...&#x27;, [TaskName]));
+      end;
+      Callback.Completed(True);
+    end
+  ).Start;
+end;
+</code></pre>
+<h3>16.9.3. Client Implementation</h3>
+<pre><code class="language-pascal">type
+  TMyProgressCallback = class(TInterfacedCallback, IProgressCallback)
+  private
+    fForm: TForm;
+  public
+    constructor Create(aForm: TForm; aRest: TRestClientUri);
+    procedure Progress(Percent: Integer; const Status: RawUtf8);
+    procedure Completed(Success: Boolean);
+  end;
+
+constructor TMyProgressCallback.Create(aForm: TForm; aRest: TRestClientUri);
+begin
+  inherited Create(aRest, IProgressCallback);  // Register callback
+  fForm := aForm;
+end;
+
+procedure TMyProgressCallback.Progress(Percent: Integer; const Status: RawUtf8);
+begin
+  TThread.Queue(nil,
+    procedure
+    begin
+      fForm.ProgressBar.Position := Percent;
+      fForm.StatusLabel.Caption := Status;
+    end);
+end;
+</code></pre>
+<h3>16.9.4. Using WebSockets</h3>
+<p>
+Callbacks require WebSocket transport:
+
+</p>
+<pre><code class="language-pascal">// Server
+HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;, useHttpAsync);
+HttpServer.WebSocketsEnable(Server, &#x27;privatekey&#x27;);
+
+// Client
+Client := TRestHttpClientWebSockets.Create(&#x27;localhost&#x27;, &#x27;8080&#x27;, Model);
+Client.WebSocketsConnect(&#x27;privatekey&#x27;);
+Client.ServiceDefine([ILongRunningTask], sicShared);
+</code></pre>
+<hr>
+<h2>16.10. Using Services on the Server</h2>
+<h3>16.10.1. Resolving Services</h3>
+<pre><code class="language-pascal">procedure TMyOtherService.DoSomething;
+var
+  Calc: ICalculator;
+begin
+  if Resolve(ICalculator, Calc) then
+    Result := Calc.Add(10, 20);
+end;
+</code></pre>
+<h3>16.10.2. Generic Syntax</h3>
+<pre><code class="language-pascal">procedure TMyOtherService.DoSomething;
+var
+  Calc: ICalculator;
+begin
+  Calc := Server.Service&lt;ICalculator&gt;;
+  if Calc &lt;&gt; nil then
+    Result := Calc.Add(10, 20);
+end;
+</code></pre>
+<hr>
+<h2>16.11. Client Code Generation</h2>
+<p>
+The <code>mormot.soa.codegen.pas</code> unit provides automatic client code generation from server-side service definitions.
+
+</p>
+<h3>16.11.1. Overview</h3>
+<p>
+Generate client stubs automatically for:
+<ul>
+  <li><strong>Delphi/FPC</strong> — Native Pascal clients</li>
+  <li><strong>JavaScript</strong> — Browser and Node.js clients</li>
+  <li><strong>TypeScript</strong> — Type-safe JavaScript clients</li>
+  <li><strong>Custom templates</strong> — Any language via Mustache</li>
+</ul>
+<h3>16.11.2. Extracting Service Metadata</h3>
+<pre><code class="language-pascal">uses
+  mormot.soa.codegen;
+
+var
+  Context: TDocVariantData;
+begin
+  // Extract ORM and SOA metadata as JSON
+  Context := ContextFromModel(Server.Model, Server.Services);
+
+  // Context now contains:
+  // - All TOrm classes with properties
+  // - All registered interfaces with methods
+  // - Parameter types and directions
+  // - Service instance modes
+end;
+</code></pre>
+<h3>16.11.3. Generating Client Code</h3>
+<pre><code class="language-pascal">var
+  Output: RawUtf8;
+begin
+  // Generate using built-in template
+  Output := WrapperFromModel(
+    Server.Model,
+    Server.Services,
+    &#x27;delphi&#x27;  // Template name: &#x27;delphi&#x27;, &#x27;javascript&#x27;, &#x27;typescript&#x27;
+  );
+
+  // Or use custom Mustache template
+  Output := WrapperFromModel(
+    Server.Model,
+    Server.Services,
+    &#x27;&#x27;,                          // No built-in template
+    FileToString(&#x27;MyTemplate.mustache&#x27;)  // Custom template
+  );
+
+  // Save generated code
+  FileFromString(Output, &#x27;GeneratedClient.pas&#x27;);
+end;
+</code></pre>
+<h3>16.11.4. Built-in Templates</h3>
+<table>
+<thead>
+<tr>
+  <th>Template</th>
+  <th>Output</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>delphi</code></td>
+  <td><code>.pas</code> unit</td>
+  <td>Native Delphi/FPC client</td>
+</tr>
+<tr>
+  <td><code>javascript</code></td>
+  <td><code>.js</code> file</td>
+  <td>Browser/Node.js client</td>
+</tr>
+<tr>
+  <td><code>typescript</code></td>
+  <td><code>.ts</code> file</td>
+  <td>TypeScript projects</td>
+</tr>
+</tbody>
+</table>
+<h3>16.11.5. Async Interface Generation</h3>
+<p>
+Convert synchronous interfaces to async versions:
+
+</p>
+<pre><code class="language-pascal">type
+  // Original synchronous interface
+  ICalculator = interface(IInvokable)
+    function Add(n1, n2: Integer): Integer;
+  end;
+
+// Generated async version (conceptual):
+//   ICalculatorAsync = interface(IInvokable)
+//     procedure AddAsync(n1, n2: Integer;
+//       const OnSuccess: TOnAsyncSuccess&lt;Integer&gt;;
+//       const OnError: TOnAsyncError);
+//   end;
+</code></pre>
+<h3>16.11.6. REST API Documentation</h3>
+<p>
+Generate OpenAPI/Swagger documentation:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.net.openapi;
+
+var
+  OpenAPI: TDocVariantData;
+begin
+  // Generate OpenAPI 3.0 spec from model
+  OpenAPI := OpenAPIFromModel(Server.Model, Server.Services);
+  FileFromString(OpenAPI.ToJson(&#x27;&#x27;, &#x27;&#x27;, jsonHumanReadable), &#x27;api-spec.json&#x27;);
+end;
+</code></pre>
+<h3>16.11.7. HTTP Endpoint for Code Generation</h3>
+<p>
+Expose code generation via HTTP:
+
+</p>
+<pre><code class="language-pascal">// Register method-based service
+Server.ServiceMethodRegisterPublishedMethods(&#x27;wrapper&#x27;, TCodeGenService.Create(Server));
+
+// Client can now GET /root/wrapper/delphi to download generated code
+</code></pre>
+<hr>
+<h2>16.12. Complete Example</h2>
+<h3>16.12.1. Shared Interface Unit</h3>
+<pre><code class="language-pascal">unit ProjectInterface;
+
+interface
+
+uses
+  mormot.core.base,
+  mormot.core.interfaces;
+
+type
+  ICalculator = interface(IInvokable)
+    [&#x27;{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}&#x27;]
+    function Add(n1, n2: Integer): Integer;
+    function Multiply(n1, n2: Int64): Int64;
+  end;
+
+const
+  ROOT_NAME = &#x27;api&#x27;;
+  PORT_NAME = &#x27;8080&#x27;;
+
+implementation
+
+initialization
+  TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator)]);
+end.
+</code></pre>
+<h3>16.12.2. Server Application</h3>
+<pre><code class="language-pascal">program Server;
+
+{$APPTYPE CONSOLE}
+
+uses
+  mormot.core.base,
+  mormot.orm.core,
+  mormot.rest.server,
+  mormot.rest.memserver,
+  mormot.rest.http.server,
+  ProjectInterface;
+
+type
+  TServiceCalculator = class(TInterfacedObject, ICalculator)
+  public
+    function Add(n1, n2: Integer): Integer;
+    function Multiply(n1, n2: Int64): Int64;
+  end;
+
+function TServiceCalculator.Add(n1, n2: Integer): Integer;
+begin
+  Result := n1 + n2;
+end;
+
+function TServiceCalculator.Multiply(n1, n2: Int64): Int64;
+begin
+  Result := n1 * n2;
+end;
+
+var
+  Model: TOrmModel;
+  Server: TRestServerFullMemory;
+  HttpServer: TRestHttpServer;
+begin
+  Model := TOrmModel.Create([], ROOT_NAME);
+  Server := TRestServerFullMemory.Create(Model);
+  try
+    Server.ServiceDefine(TServiceCalculator, [ICalculator], sicShared);
+
+    HttpServer := TRestHttpServer.Create(PORT_NAME, [Server], &#x27;+&#x27;, useHttpAsync);
+    try
+      WriteLn(&#x27;Server running on http://localhost:&#x27;, PORT_NAME);
+      WriteLn(&#x27;Press Enter to stop...&#x27;);
+      ReadLn;
+    finally
+      HttpServer.Free;
+    end;
+  finally
+    Server.Free;
+    Model.Free;
+  end;
+end.
+</code></pre>
+<h3>16.12.3. Client Application</h3>
+<pre><code class="language-pascal">program Client;
+
+{$APPTYPE CONSOLE}
+
+uses
+  mormot.core.base,
+  mormot.orm.core,
+  mormot.rest.client,
+  mormot.rest.http.client,
+  ProjectInterface;
+
+var
+  Model: TOrmModel;
+  Client: TRestHttpClientSocket;
+  Calc: ICalculator;
+begin
+  Model := TOrmModel.Create([], ROOT_NAME);
+  Client := TRestHttpClientSocket.Create(&#x27;localhost&#x27;, PORT_NAME, Model);
+  try
+    Client.ServiceDefine([ICalculator], sicShared);
+
+    if Client.Services.Resolve(ICalculator, Calc) then
+    begin
+      WriteLn(&#x27;10 + 20 = &#x27;, Calc.Add(10, 20));
+      WriteLn(&#x27;10 * 20 = &#x27;, Calc.Multiply(10, 20));
+    end
+    else
+      WriteLn(&#x27;Service not available&#x27;);
+  finally
+    Client.Free;
+    Model.Free;
+  end;
+end.
+</code></pre>
+<hr>
+<h2>Summary</h2>
+<p>
+Interface-based services in mORMot 2 provide:
+
+</p>
+<ul>
+  <li><strong>Clean contracts</strong> via Pascal interfaces</li>
+  <li><strong>Automatic marshalling</strong> of complex types to/from JSON</li>
+  <li><strong>Multiple instance modes</strong> for different use cases</li>
+  <li><strong>Contract validation</strong> ensuring client/server compatibility</li>
+  <li><strong>Per-method authorization</strong> with user groups</li>
+  <li><strong>Bidirectional communication</strong> via WebSocket callbacks</li>
+  <li><strong>Execution logging</strong> to database</li>
+  <li><strong>Dependency injection</strong> via <code>TInjectableObjectRest</code></li>
+</ul>
+For most applications, interface-based services are the recommended approach. They provide the structure, safety, and features needed for robust SOA while keeping implementation simple and type-safe.
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-15.html">Chapter 15: Interfaces and SOLID Design</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-17.html">Chapter 17: Cross-Platform Clients</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

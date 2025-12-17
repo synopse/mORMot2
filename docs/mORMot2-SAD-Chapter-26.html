@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 26: Source Code</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>Chapter 26: Source Code</h1>
+<p>
+<em>Adopt a mORMot</em>
+
+</p>
+<p>
+This chapter covers the licensing terms of the <em>mORMot 2</em> framework, its source code availability, and complete installation instructions for both Delphi and Free Pascal/Lazarus development environments. Understanding how to properly set up your development environment is essential for working effectively with <em>mORMot 2</em>.
+
+</p>
+<h2>26.1. License</h2>
+<h3>26.1.1. Three Licenses Model</h3>
+<p>
+The framework source code is licensed under a disjunctive three-license giving the user the choice of one of the three following sets of free software/open source licensing terms:
+<ul>
+  <li><em>Mozilla Public License</em>, version 1.1 or later (MPL);</li>
+  <li><em>GNU General Public License</em>, version 2.0 or later (GPL);</li>
+  <li><em>GNU Lesser General Public License</em>, version 2.1 or later (LGPL), with <em>linking exception</em> of the <em>FPC modified LGPL</em>.</li>
+</ul>
+<em>FPC modified LGPL</em> is the <em>Library GNU General Public License</em> with the following modification:
+
+</p>
+<p>
+<em>As a special exception of the LGPL, the copyright holders of this library give you permission to link this library with independent modules to produce an executable, regardless of the license terms of these independent modules, and to copy and distribute the resulting executable under terms of your choice, provided that you also meet, for each linked independent module, the terms and conditions of the license of that module. An independent module is a module which is not derived from or based on this library. If you modify this library, you may extend this exception to your version of the library, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.</em>
+
+</p>
+<p>
+This allows the use of the framework code in a wide variety of software projects, while still maintaining intellectual rights on library code.
+
+</p>
+<p>
+In short:
+<ul>
+  <li>For GPL projects, use the GPL license - see http://www.gnu.org/licenses/gpl-2.0.html</li>
+  <li>For LGPL projects, use the LGPL license - see http://www.gnu.org/licenses/lgpl-2.1.html</li>
+  <li>For commercial projects, use the MPL License - see http://www.mozilla.org/MPL/MPL-1.1.html - which is the most permissive, or the FPC modified LGPL license, thanks to its linking exception - see http://wiki.freepascal.org/modified_LGPL</li>
+</ul>
+<h3>26.1.2. Publish Modifications and Credit for the Library</h3>
+<p>
+In all cases, any modification made to this source code <strong>should</strong> be published by any mean (e.g. a download link), even in case of MPL. If you need any additional feature, use the forums and we may introduce a patch to the main framework trunk.
+
+</p>
+<p>
+You do not have to pay any fee for using our MPL/GPL/LGPL libraries.
+
+</p>
+<p>
+But please do not forget to put somewhere in your credit window or documentation, a link to https://synopse.info if you use any of the units published under this tri-license.
+
+</p>
+<p>
+For instance, if you select the MPL license, here are the requirements:
+<ul>
+  <li>You accept the license terms with no restriction - see http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;</li>
+  <li>You have to publish any modified unit in a public web site (e.g. <code>http://YourSoftwareCompany.com/MPL</code>), with a description of applied modifications, and no removal of the original license header in source code;</li>
+  <li>You make appear some notice available in the program (About box, documentation, online help), stating e.g.</li>
+</ul>
+<em>This software uses some third-party code of the Synopse mORMot framework (C) 2025 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL</em>
+
+</p>
+<p>
+Note that this documentation is under GPL 3.0 license only, as stated in this document front page.
+
+</p>
+<h3>26.1.3. Derivate Open Source Works</h3>
+<p>
+If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one:
+
+</p>
+<pre><code class="language-pascal">{
+  Sample based on official mORMot 2 sample
+
+  Synopse mORMot 2 framework. Copyright (C) 2025 Arnaud Bouchez
+    Synopse Informatique - https://synopse.info
+  Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
+}
+</code></pre>
+<p>
+You need to ensure that your Open Source project licensing is compatible with our Licensing Terms, and, if possible, notify us that you use our code.
+
+</p>
+<h3>26.1.4. Legal Notice</h3>
+<p>
+There are countries that restrict the use, import, export of cryptographic software. Before keeping, using, or distributing the software, make sure that you comply with these restrictions. If (for any reason) you are unable to do so, you are not allowed to download, use, or distribute the software.
+
+</p>
+<p>
+If you are residing in a country that allows software patents you must verify that no part of the software is covered by a patent in your country. If (for any reason) you are unable to do so, you are not allowed to use or distribute the software.
+
+</p>
+<h3>26.1.5. Commercial Licenses</h3>
+<p>
+Even though our libraries are Open Source with permissive licenses, some users want to obtain a license anyway. For instance, you may want to hold a tangible legal document as evidence that you have the legal right to use and distribute your software containing our library code, or, more likely, your legal department tells you that you have to purchase a license.
+
+</p>
+<p>
+If you feel like you really have to purchase a license for our libraries, <em>Synopse</em>, the company that employs the architect and principal developer of the library, will sell you one. Please contact us directly for a contract proposal.
+
+</p>
+<h2>26.2. Availability</h2>
+<p>
+As a true <em>Open Source</em> project, all source code of the framework is available. The primary location for <em>mORMot 2</em> source code is:
+
+</p>
+<p>
+<strong>GitHub Repository</strong>: https://github.com/synopse/mORMot2
+
+</p>
+<p>
+The source has been commented following the scheme used by documentation tools. All interface definitions of the units have special comments which provide inline documentation.
+
+</p>
+<h3>26.2.1. Obtaining the Source Code</h3>
+<p>
+There are two primary methods to obtain the <em>mORMot 2</em> source code:
+
+</p>
+<h4>Method 1: Clone the Repository (Recommended)</h4>
+<p>
+Cloning the Git repository is the preferred method, as it allows you to easily update to the latest version:
+
+</p>
+<pre><code class="language-bash">git clone https://github.com/synopse/mORMot2.git
+</code></pre>
+<p>
+For example, clone into <code>c:\github\mORMot2</code> on Windows or <code>~/github/mORMot2</code> on Linux/macOS.
+
+</p>
+<h4>Method 2: Download a Release Archive</h4>
+<p>
+For a specific stable version (e.g., for use in a build script):
+1. Go to https://github.com/synopse/mORMot2/releases
+2. Download the <em>Source code (zip)</em> for your desired release
+3. Extract it to your chosen location (e.g., <code>d:\mormot2</code>)
+
+</p>
+<h3>26.2.2. Static Libraries</h3>
+<p>
+After obtaining the source code, you need to download the static libraries for SQLite3 and other compiled C code:
+
+</p>
+<p>
+<strong>Download Options:</strong>
+<ul>
+  <li>https://synopse.info/files/mormot2static.7z (Windows-friendly, 7-Zip compressed)</li>
+  <li>https://synopse.info/files/mormot2static.tgz (POSIX-friendly, tar/gzip compressed)</li>
+  <li>From the matching GitHub release page</li>
+</ul>
+<strong>Important:</strong> Extract the static files into the <code>static</code> sub-folder of your <em>mORMot 2</em> installation.
+
+</p>
+<p>
+For example, if you cloned to <code>c:\github\mORMot2</code>, the static files should be in <code>c:\github\mORMot2\static\</code>.
+
+</p>
+<p>
+For safety, the SHA-256 checksums of the current version of the downloaded binary files are available in the <code>static/dev.sha256</code> file.
+
+</p>
+<h3>26.2.3. Version Synchronization</h3>
+<p>
+<strong>Important:</strong> Always keep the static binaries in sync with the framework source code. Version mismatches can cause unexpected errors.
+
+</p>
+<p>
+The static files are typically updated to match SQLite3 releases, sometimes with a short delay to ensure stability after major SQLite3 releases.
+
+</p>
+<h2>26.3. Repository Structure</h2>
+<p>
+The <em>mORMot 2</em> repository is organized into the following main folders:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Folder</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>src/</code></td>
+  <td>Main source code folder containing the framework units</td>
+</tr>
+<tr>
+  <td><code>packages/</code></td>
+  <td>IDE packages and tools for development environment setup</td>
+</tr>
+<tr>
+  <td><code>static/</code></td>
+  <td>Pre-compiled binary <code>.o</code>/<code>.obj</code> files for static linking</td>
+</tr>
+<tr>
+  <td><code>test/</code></td>
+  <td>Regression tests for all framework features</td>
+</tr>
+<tr>
+  <td><code>res/</code></td>
+  <td>Resources used within <code>src/</code>, including static third-party binaries source</td>
+</tr>
+<tr>
+  <td><code>doc/</code></td>
+  <td>Framework documentation</td>
+</tr>
+<tr>
+  <td><code>ex/</code></td>
+  <td>Example projects and samples</td>
+</tr>
+</tbody>
+</table>
+<h3>26.3.1. Source Code Organization (src/)</h3>
+<p>
+The <code>src/</code> folder contains the framework source code organized into logical layers:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Sub-folder</th>
+  <th>Description</th>
+  <th>Key Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>core/</code></td>
+  <td>Core utilities: RTTI, JSON, text, logging, threads</td>
+  <td><code>mormot.core.base.pas</code>, <code>mormot.core.json.pas</code>, <code>mormot.core.log.pas</code></td>
+</tr>
+<tr>
+  <td><code>lib/</code></td>
+  <td>Raw API definitions for external libraries</td>
+  <td><code>mormot.lib.openssl11.pas</code>, <code>mormot.lib.curl.pas</code></td>
+</tr>
+<tr>
+  <td><code>crypt/</code></td>
+  <td>Cryptographic primitives and secure protocols</td>
+  <td><code>mormot.crypt.core.pas</code>, <code>mormot.crypt.jwt.pas</code>, <code>mormot.crypt.openssl.pas</code></td>
+</tr>
+<tr>
+  <td><code>net/</code></td>
+  <td>Network layer: HTTP, WebSockets, async servers</td>
+  <td><code>mormot.net.http.pas</code>, <code>mormot.net.server.pas</code>, <code>mormot.net.ws.pas</code></td>
+</tr>
+<tr>
+  <td><code>db/</code></td>
+  <td>Database access: SynDB, SQLite3, SQL/NoSQL</td>
+  <td><code>mormot.db.core.pas</code>, <code>mormot.db.sql.pas</code>, <code>mormot.db.nosql.mongodb.pas</code></td>
+</tr>
+<tr>
+  <td><code>orm/</code></td>
+  <td>Object-Relational Mapping</td>
+  <td><code>mormot.orm.core.pas</code>, <code>mormot.orm.sql.pas</code></td>
+</tr>
+<tr>
+  <td><code>rest/</code></td>
+  <td>REST client and server</td>
+  <td><code>mormot.rest.core.pas</code>, <code>mormot.rest.server.pas</code>, <code>mormot.rest.http.server.pas</code></td>
+</tr>
+<tr>
+  <td><code>soa/</code></td>
+  <td>Service-Oriented Architecture (interfaces)</td>
+  <td><code>mormot.soa.core.pas</code>, <code>mormot.soa.server.pas</code></td>
+</tr>
+<tr>
+  <td><code>app/</code></td>
+  <td>Application layer: daemon, console helpers</td>
+  <td><code>mormot.app.daemon.pas</code>, <code>mormot.app.console.pas</code></td>
+</tr>
+<tr>
+  <td><code>script/</code></td>
+  <td>Scripting engine support (QuickJS)</td>
+  <td><code>mormot.script.quickjs.pas</code></td>
+</tr>
+<tr>
+  <td><code>ui/</code></td>
+  <td>User interface components (VCL/LCL)</td>
+  <td><code>mormot.ui.controls.pas</code></td>
+</tr>
+<tr>
+  <td><code>ddd/</code></td>
+  <td>Domain-Driven Design support</td>
+  <td>DDD infrastructure and patterns</td>
+</tr>
+<tr>
+  <td><code>tools/</code></td>
+  <td>Command-line tools source code</td>
+  <td>ECC tool, etc.</td>
+</tr>
+<tr>
+  <td><code>misc/</code></td>
+  <td>Miscellaneous utilities</td>
+  <td>Various helper units</td>
+</tr>
+</tbody>
+</table>
+<h3>26.3.2. Key Include Files</h3>
+<p>
+The <code>src/</code> folder contains important include files:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>File</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.defines.inc</code></td>
+  <td>Global compiler conditionals and settings</td>
+</tr>
+<tr>
+  <td><code>mormot.uses.inc</code></td>
+  <td>Common uses clause for console applications</td>
+</tr>
+<tr>
+  <td><code>mormot.commit.inc</code></td>
+  <td>Current commit hash (updated automatically)</td>
+</tr>
+</tbody>
+</table>
+<h3>26.3.3. Static Libraries Structure</h3>
+<p>
+The <code>static/</code> folder contains pre-compiled binaries organized by target platform:
+
+</p>
+<p>
+<strong>For FPC (cross-platform):</strong>
+<pre><code class="language-text">static/
+├── i386-win32/          # Windows 32-bit
+├── x86_64-win64/        # Windows 64-bit
+├── i386-linux/          # Linux 32-bit
+├── x86_64-linux/        # Linux 64-bit
+├── aarch64-linux/       # Linux ARM64
+├── arm-linux/           # Linux ARM32
+├── i386-darwin/         # macOS 32-bit (legacy)
+├── x86_64-darwin/       # macOS 64-bit Intel
+├── aarch64-darwin/      # macOS ARM64 (Apple Silicon)
+├── x86_64-freebsd/      # FreeBSD 64-bit
+└── x86_64-openbsd/      # OpenBSD 64-bit
+</code></pre>
+<p>
+<strong>For Delphi:</strong>
+<pre><code class="language-text">static/
+└── delphi/              # Win32 .obj and Win64 .o files
+</code></pre>
+<h2>26.4. Expected Compilation Targets</h2>
+<h3>26.4.1. Compiler Support</h3>
+<p>
+The framework source code:
+<ul>
+  <li>Tries to stay compatible with FPC stable and Delphi 7 and up</li>
+  <li>Is currently validated against:</li>
+</ul>  - <strong>FPC</strong>: 3.2.3 (fixes-3_2 branch) and Lazarus 2.2.5 (fixes_2_2 branch)
+  - <strong>Delphi</strong>: 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1, 12.2 Athenes
+
+</p>
+<p>
+<strong>Note:</strong> FPC 3.2.2 has a regression with variant late binding. Use the FPC 3.2.3 fixes branch instead.
+
+</p>
+<h3>26.4.2. Platform Support</h3>
+<p>
+<strong>Server-Side (Full Framework):</strong>
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Platform</th>
+  <th>FPC</th>
+  <th>Delphi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Windows 32-bit</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>Windows 64-bit</td>
+  <td>✓</td>
+  <td>✓ (XE2+)</td>
+</tr>
+<tr>
+  <td>Linux x86_64</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>Linux i386</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>Linux ARM64</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>Linux ARM32</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>macOS Intel</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>macOS Apple Silicon</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>FreeBSD</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+<tr>
+  <td>OpenBSD</td>
+  <td>✓</td>
+  <td>-</td>
+</tr>
+</tbody>
+</table>
+<strong>Client-Side (Cross-Platform Units):</strong>
+<ul>
+  <li>All Delphi targets (Windows, iOS, Android, macOS, Linux) can use the cross-platform client units</li>
+  <li>FPC provides full server and client support on all listed platforms</li>
+</ul>
+<h3>26.4.3. Pure Pascal Fallbacks</h3>
+<p>
+The static <code>.o</code>/<code>.obj</code> files are <strong>not mandatory</strong> to compile the framework. There is always a "pure Pascal" fallback code available for:
+<ul>
+  <li>SQLite3 engine (use external dynamic library instead)</li>
+  <li>Cryptographic routines</li>
+  <li>Compression algorithms</li>
+</ul>
+However, the static-linked versions typically provide better performance and simpler deployment.
+
+</p>
+<h2>26.5. Delphi Installation</h2>
+<h3>26.5.1. Step-by-Step Setup</h3>
+<p>
+Follow these steps to set up <em>mORMot 2</em> for Delphi:
+
+</p>
+<p>
+<strong>Step 1: Get the Source Code</strong>
+
+</p>
+<p>
+Clone the repository or download a release:
+<pre><code class="language-bash">cd c:\github
+git clone https://github.com/synopse/mORMot2.git
+</code></pre>
+<p>
+<strong>Step 2: Download Static Libraries</strong>
+
+</p>
+<p>
+Download and extract <code>mormot2static.7z</code> from https://synopse.info/files/mormot2static.7z into <code>c:\github\mORMot2\static\</code>.
+
+</p>
+<p>
+<strong>Step 3: Create Environment Variable</strong>
+
+</p>
+<p>
+In Delphi IDE:
+1. Go to <em>Tools</em> → <em>Options</em> → <em>IDE</em> → <em>Environment Variables</em>
+2. Create a new <strong>User System Override</strong> variable:
+   - Name: <code>mormot2</code>
+   - Value: <code>c:\github\mORMot2\src</code> (or your chosen path)
+
+</p>
+<p>
+<strong>Step 4: Configure Library Paths</strong>
+
+</p>
+<p>
+In Delphi IDE:
+1. Go to <em>Tools</em> → <em>Options</em> → <em>Language</em> → <em>Delphi Options</em> → <em>Library</em>
+2. Add the following to the <strong>Library path</strong> for each target platform (Win32, Win64):
+
+</p>
+<pre><code class="language-text">$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui;$(mormot2)\tools;$(mormot2)\misc
+</code></pre>
+<p>
+<strong>Step 5: Verify Installation</strong>
+
+</p>
+<p>
+1. Open <code>test/mormot2tests.dpr</code> in the IDE
+2. Compile and run the regression tests
+3. All tests should pass on your machine
+
+</p>
+<h3>26.5.2. Quick Path Setup Reference</h3>
+<p>
+Here's a condensed version of the library path string to copy:
+
+</p>
+<pre><code class="language-text">$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui;$(mormot2)\tools;$(mormot2)\misc
+</code></pre>
+<h3>26.5.3. No Packages Required</h3>
+<p>
+Unlike some frameworks, <em>mORMot 2</em> does not require installing IDE packages for Delphi. Simply configure the library paths and you're ready to go.
+
+</p>
+<p>
+The framework uses relative paths in its source code to include the expected <code>.o</code>/<code>.obj</code> files from the <code>static\delphi</code> sub-folder automatically.
+
+</p>
+<h3>26.5.4. Testing Your Installation</h3>
+<p>
+After setup, compile and run the test project:
+
+</p>
+<p>
+1. Open <code>test/mormot2tests.dpr</code>
+2. Select your target platform (Win32 or Win64)
+3. Build and run
+4. Review the test results
+
+</p>
+<p>
+The test suite covers all framework features and serves as both validation and usage examples.
+
+</p>
+<h2>26.6. FreePascal / Lazarus Installation</h2>
+<h3>26.6.1. Supported Targets</h3>
+<p>
+You can use the <em>FreePascal Compiler</em> (FPC) to (cross-)compile <em>mORMot 2</em> for the following platforms:
+
+</p>
+<p>
+<strong>Windows:</strong>
+<ul>
+  <li>i386-win32</li>
+  <li>x86_64-win64</li>
+</ul>
+<strong>Linux:</strong>
+<ul>
+  <li>i386-linux</li>
+  <li>x86_64-linux</li>
+  <li>arm-linux</li>
+  <li>aarch64-linux</li>
+</ul>
+<strong>macOS:</strong>
+<ul>
+  <li>x86_64-darwin</li>
+  <li>aarch64-darwin (Apple Silicon)</li>
+</ul>
+<strong>BSD:</strong>
+<ul>
+  <li>x86_64-freebsd</li>
+  <li>x86_64-openbsd</li>
+  <li>i386-freebsd</li>
+</ul>
+Linux is a premium target for efficient server hosting. Since <em>mORMot 2</em> has minimal dependencies, installing a new server is as simple as copying the executable to a blank Linux host. No runtime frameworks or virtual machines needed.
+
+</p>
+<h3>26.6.2. Using the Lazarus Package (Recommended)</h3>
+<p>
+The easiest way to set up <em>mORMot 2</em> for Lazarus is to use the provided package:
+
+</p>
+<p>
+<strong>Step 1: Get Source and Static Files</strong>
+
+</p>
+<pre><code class="language-bash">git clone https://github.com/synopse/mORMot2.git
+cd mORMot2
+# Download and extract mormot2static.tgz into the static/ folder
+</code></pre>
+<p>
+<strong>Step 2: Install the Package</strong>
+
+</p>
+<p>
+1. Open Lazarus IDE
+2. Go to <em>Package</em> → <em>Open Package File (.lpk)</em>
+3. Navigate to <code>packages/lazarus/mormot2.lpk</code>
+4. Click <em>Compile</em> (not <em>Install</em> - it's a runtime package)
+
+</p>
+<p>
+For UI components, also compile <code>packages/lazarus/mormot2ui.lpk</code>.
+
+</p>
+<p>
+<strong>Step 3: Configure Your Project</strong>
+
+</p>
+<p>
+Add <code>mormot2</code> package as a dependency to your Lazarus project:
+1. Open your project
+2. Go to <em>Project</em> → <em>Project Inspector</em>
+3. Click <em>Add</em> → <em>New Requirement</em>
+4. Select <code>mormot2</code>
+
+</p>
+<h3>26.6.3. Manual FPC Setup (Without Package)</h3>
+<p>
+For command-line compilation or when not using the package:
+
+</p>
+<p>
+<strong>Project Options:</strong>
+
+</p>
+<p>
+Add to <em>Other unit files (-Fu)</em>:
+<pre><code class="language-text">/path/to/mORMot2/src;/path/to/mORMot2/src/core;/path/to/mORMot2/src/lib;/path/to/mORMot2/src/crypt;/path/to/mORMot2/src/net;/path/to/mORMot2/src/db;/path/to/mORMot2/src/rest;/path/to/mORMot2/src/orm;/path/to/mORMot2/src/soa;/path/to/mORMot2/src/app
+</code></pre>
+<p>
+Add to <em>Include files (-Fi)</em>:
+<pre><code class="language-text">/path/to/mORMot2/src
+</code></pre>
+<p>
+Add to <em>Libraries (-Fl)</em>:
+<pre><code class="language-text">/path/to/mORMot2/static/$(TargetCPU)-$(TargetOS)
+</code></pre>
+<p>
+The <code>$(TargetCPU)-$(TargetOS)</code> macro automatically selects the correct static library folder based on your compilation target.
+
+</p>
+<h3>26.6.4. Setting Up FPC with fpcupdeluxe</h3>
+<p>
+We recommend using <em>fpcupdeluxe</em> to set up a stable FPC/Lazarus environment:
+
+</p>
+<p>
+1. Download from https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases
+2. Run the executable
+3. Select FPC version <code>3.2</code> and Lazarus version matching your needs
+4. Click "Install/update FPC+Laz"
+
+</p>
+<p>
+<strong>Cross-Compilation:</strong>
+
+</p>
+<p>
+<em>fpcupdeluxe</em> makes cross-compilation easy:
+1. Go to the "Cross" tab
+2. Select your target CPU and OS
+3. Click "Install compiler"
+4. Download cross-compiler binaries when prompted
+
+</p>
+<p>
+This allows you to build Linux executables from Windows, or vice versa.
+
+</p>
+<h3>26.6.5. FPC Version Considerations</h3>
+<p>
+<strong>Recommended:</strong> FPC 3.2.3 (fixes-3_2 branch)
+
+</p>
+<p>
+<strong>Known Issues:</strong>
+<ul>
+  <li>FPC 3.2.2 has a regression with variant late binding - avoid using it</li>
+  <li>FPC trunk may have breaking changes; stick to stable branches for production</li>
+</ul>
+<h3>26.6.6. Minimal FPC Console Application</h3>
+<p>
+Here's a minimal FPC project structure:
+
+</p>
+<pre><code class="language-pascal">program MyMormotApp;
+
+{$I mormot.defines.inc}
+{$APPTYPE CONSOLE}
+
+uses
+  {$I mormot.uses.inc}  // Includes FPC-specific units for Linux
+  mormot.core.base,
+  mormot.core.text;
+
+begin
+  writeln(&#x27;Hello from mORMot 2!&#x27;);
+  writeln(&#x27;Current UTC: &#x27;, DateTimeToIso8601(NowUtc, true));
+end.
+</code></pre>
+<p>
+The <code>mormot.uses.inc</code> file automatically includes the necessary units for FPC on various platforms (e.g., <code>cthreads</code>, <code>cwstring</code> on Linux).
+
+</p>
+<h2>26.7. Writing Cross-Platform Code</h2>
+<h3>26.7.1. Common Include File</h3>
+<p>
+In all your source code files, include the <em>mORMot 2</em> defines file to set all compiler options and conditionals:
+
+</p>
+<pre><code class="language-pascal">{$I mormot.defines.inc}
+</code></pre>
+<p>
+This include file defines essential conditionals like <code>HASINLINE</code>, <code>OSWINDOWS</code>, <code>OSPOSIX</code>, CPU architecture flags, and more.
+
+</p>
+<h3>26.7.2. Cross-Platform Guidelines</h3>
+<p>
+To ensure your code compiles on both Delphi and FPC, and on multiple platforms:
+
+</p>
+<p>
+1. <strong>Avoid Direct Windows Unit Usage</strong>: Don't directly reference the <code>Windows</code> unit in cross-platform code. Use <code>mormot.core.os</code> instead.
+
+</p>
+<p>
+2. <strong>Use Framework Types</strong>: Rely on <em>mORMot 2</em> types like <code>RawUtf8</code> for string handling in business logic.
+
+</p>
+<p>
+3. <strong>Conditional Compilation</strong>: When platform-specific code is needed:
+
+</p>
+<pre><code class="language-pascal">{$ifdef OSWINDOWS}
+  // Windows-specific code
+{$endif OSWINDOWS}
+
+{$ifdef OSPOSIX}
+  // Linux/macOS/BSD code
+{$endif OSPOSIX}
+</code></pre>
+<p>
+4. <strong>Use mormot.uses.inc</strong>: In your <code>.dpr</code>/<code>.lpr</code> files:
+
+</p>
+<pre><code class="language-pascal">uses
+  {$I mormot.uses.inc}  // Handles platform-specific units
+  mormot.core.base,
+  // ... your units
+</code></pre>
+<h3>26.7.3. Conditional Defines Reference</h3>
+<p>
+Key conditionals defined in <code>mormot.defines.inc</code>:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Conditional</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>OSWINDOWS</code></td>
+  <td>Compiling for Windows</td>
+</tr>
+<tr>
+  <td><code>OSPOSIX</code></td>
+  <td>Compiling for POSIX (Linux, macOS, BSD)</td>
+</tr>
+<tr>
+  <td><code>OSLINUX</code></td>
+  <td>Compiling for Linux specifically</td>
+</tr>
+<tr>
+  <td><code>OSDARWIN</code></td>
+  <td>Compiling for macOS</td>
+</tr>
+<tr>
+  <td><code>CPU32</code></td>
+  <td>32-bit architecture</td>
+</tr>
+<tr>
+  <td><code>CPU64</code></td>
+  <td>64-bit architecture</td>
+</tr>
+<tr>
+  <td><code>CPUINTEL</code></td>
+  <td>x86 or x86_64 architecture</td>
+</tr>
+<tr>
+  <td><code>CPUARM</code></td>
+  <td>ARM architecture</td>
+</tr>
+<tr>
+  <td><code>FPC</code></td>
+  <td>FreePascal Compiler</td>
+</tr>
+<tr>
+  <td><code>ISDELPHI</code></td>
+  <td>Delphi compiler</td>
+</tr>
+<tr>
+  <td><code>HASINLINE</code></td>
+  <td>Inline functions supported</td>
+</tr>
+<tr>
+  <td><code>PUREMORMOT2</code></td>
+  <td>Use only mORMot 2 type names</td>
+</tr>
+</tbody>
+</table>
+<h3>26.7.4. Recommended Project Structure</h3>
+<p>
+For cross-platform projects:
+
+</p>
+<pre><code class="language-text">myproject/
+├── src/
+│   ├── myproject.core.pas      # Business logic (cross-platform)
+│   └── myproject.server.pas    # Server components
+├── bin/
+│   ├── win32/                  # Windows 32-bit output
+│   ├── win64/                  # Windows 64-bit output
+│   └── linux64/                # Linux 64-bit output
+├── test/
+│   └── myproject.tests.dpr     # Regression tests
+├── myproject.server.dpr        # Delphi project
+├── myproject.server.lpr        # Lazarus project
+└── myproject.server.lpi        # Lazarus project info
+</code></pre>
+<h2>26.8. Server Deployment</h2>
+<h3>26.8.1. Linux Deployment</h3>
+<p>
+Deploying a <em>mORMot 2</em> server on Linux is straightforward:
+
+</p>
+<p>
+1. <strong>Cross-compile</strong> your application for <code>x86_64-linux</code> (or your target architecture)
+2. <strong>Copy</strong> the executable to your Linux server
+3. <strong>Run</strong> it directly - no runtime dependencies needed
+
+</p>
+<p>
+The static linking of SQLite3 and other libraries means you don't need to install anything on the server.
+
+</p>
+<p>
+<strong>Minimal Dependencies:</strong>
+
+</p>
+<p>
+A typical <em>mORMot 2</em> Linux executable only requires:
+<pre><code class="language-text">libpthread.so.0   # Threading (standard)
+libdl.so.2        # Dynamic loading (standard)
+libc.so.6         # C library (standard)
+</code></pre>
+<p>
+These are present on every Linux distribution.
+
+</p>
+<h3>26.8.2. Docker Deployment</h3>
+<p>
+<em>mORMot 2</em> works well in Docker containers. A minimal Dockerfile:
+
+</p>
+<pre><code class="language-dockerfile">FROM scratch
+COPY myserver /
+ENTRYPOINT [&quot;/myserver&quot;]
+</code></pre>
+<p>
+Since <em>mORMot 2</em> executables are statically linked, you can even use a <code>scratch</code> (empty) base image.
+
+</p>
+<h3>26.8.3. Windows Services</h3>
+<p>
+For Windows service deployment, use <code>mormot.app.daemon</code> which provides cross-platform daemon/service functionality. The same code can run as:
+<ul>
+  <li>A Windows Service</li>
+  <li>A Linux systemd daemon</li>
+  <li>A console application (for debugging)</li>
+</ul>
+<h2>26.9. Upgrading from mORMot 1.18</h2>
+<h3>26.9.1. Why a New Version?</h3>
+<p>
+<em>mORMot 2</em> is a complete rewrite of the framework, addressing:
+<ul>
+  <li>Better SOLID principles adherence</li>
+  <li>Split of large monolithic units into focused components</li>
+  <li>Cleaner type names (<code>TOrm</code> instead of <code>TSQLRecord</code>)</li>
+  <li>Modern features (OpenSSL, async servers, QuickJS)</li>
+  <li>Improved performance through optimized kernels</li>
+</ul>
+<h3>26.9.2. Migration Steps</h3>
+<p>
+1. <strong>Create a New Folder</strong>: Don't replace mORMot 1.18; install mORMot 2 in a separate location
+
+</p>
+<p>
+2. <strong>Update Unit Names</strong>: All units have been renamed:
+   - <code>SynCommons.pas</code> → <code>mormot.core.<em>.pas</code> (split into multiple units)
+   - <code>mORMot.pas</code> → <code>mormot.orm.</em>.pas</code> + <code>mormot.rest.<em>.pas</code>
+   - <code>SynDB</em>.pas</code> → <code>mormot.db.<em>.pas</code>
+   - See Chapter 3 for complete unit mapping
+
+</p>
+<p>
+3. <strong>Update Type Names</strong>: In <code>PUREMORMOT2</code> mode:
+   - <code>TSQLRecord</code> → <code>TOrm</code>
+   - <code>TSQLRest</code> → <code>TRest</code>
+   - <code>TSQLModel</code> → <code>TOrmModel</code>
+
+</p>
+<p>
+4. <strong>Review Breaking Changes</strong>:
+   - Delphi 5-6 and Kylix support removed
+   - BigTable, LVCL, RTTI-UI deprecated
+   - Some internal APIs changed
+
+</p>
+<p>
+5. <strong>Consult Examples</strong>: The <code>ex/</code> folder contains updated examples showing new patterns
+
+</p>
+<h3>26.9.3. Parallel Installation</h3>
+<p>
+You can maintain both mORMot 1.18 and mORMot 2 on the same system:
+<ul>
+  <li>Keep mORMot 1.18 for legacy projects</li>
+  <li>Use mORMot 2 for new development</li>
+  <li>Unit names don't conflict, allowing gradual migration</li>
+</ul>
+<h2>26.10. Getting Help</h2>
+<h3>26.10.1. Resources</h3>
+<ul>
+  <li><strong>Official Documentation</strong>: https://synopse.info/files/doc/mORMot2.html</li>
+  <li><strong>GitHub Repository</strong>: https://github.com/synopse/mORMot2</li>
+  <li><strong>Forum</strong>: https://synopse.info/forum/viewforum.php?id=24</li>
+  <li><strong>Blog</strong>: https://blog.synopse.info</li>
+  <li><strong>Telegram Group</strong>: https://t.me/synopse_mormot</li>
+  <li><strong>Discord Server</strong>: https://discord.gg/BcmcpY6afj</li>
+</ul>
+<h3>26.10.2. Sample Projects</h3>
+<p>
+The <code>ex/</code> folder contains many examples:
+<ul>
+  <li>Basic ORM usage</li>
+  <li>HTTP client/server</li>
+  <li>Interface-based services</li>
+  <li>Domain-Driven Design patterns</li>
+  <li>Web MVC applications</li>
+</ul>
+The </em>Thomas Tutorials* (<code>ex/ThirdPartyDemos/tbo/</code>) provide particularly good step-by-step learning resources.
+
+</p>
+<h3>26.10.3. Contributing</h3>
+<p>
+Contributions are welcome:
+<ul>
+  <li>Submit pull requests via GitHub</li>
+  <li>Report issues in the GitHub issue tracker</li>
+  <li>Share your experiences on the forum</li>
+</ul>
+Consider <a href="https://github.com/synopse/mORMot2/blob/master/DONATE.html">sponsoring mORMot 2 development</a> if you find it valuable for your projects.
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-25.html">Chapter 25: Testing and Logging</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td>-</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

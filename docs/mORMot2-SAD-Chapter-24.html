@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>24. Domain-Driven Design</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>24. Domain-Driven Design</h1>
+<p>
+<em>Building Maintainable Business Applications</em>
+
+</p>
+<p>
+Domain-Driven Design (DDD) provides a set of patterns and practices for building complex business applications. mORMot's architecture aligns naturally with DDD principles through its ORM, SOA, and REST layers.
+
+</p>
+<hr>
+<h2>24.1. Introduction to DDD</h2>
+<h3>24.1.1. What is DDD?</h3>
+<p>
+Domain-Driven Design is a software development approach that:
+
+</p>
+<ul>
+  <li>Focuses on the <strong>core domain</strong> and domain logic</li>
+  <li>Bases complex designs on a <strong>model</strong> of the domain</li>
+  <li>Initiates creative collaboration between technical and domain experts</li>
+</ul>
+<h3>24.1.2. Why DDD with mORMot?</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot Feature</th>
+  <th>DDD Concept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TOrm</code> classes</td>
+  <td>Entities, Value Objects</td>
+</tr>
+<tr>
+  <td><code>IInvokable</code> interfaces</td>
+  <td>Domain Services</td>
+</tr>
+<tr>
+  <td><code>IRestOrm</code></td>
+  <td>Repository Pattern</td>
+</tr>
+<tr>
+  <td><code>TRestBatch</code></td>
+  <td>Unit of Work</td>
+</tr>
+<tr>
+  <td>JSON serialization</td>
+  <td>DTOs</td>
+</tr>
+<tr>
+  <td>Interface-based services</td>
+  <td>Application Services</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>24.2. DDD Building Blocks</h2>
+<h3>24.2.1. Core Concepts</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                    DDD Building Blocks                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐                       │
+│  │ Value Objects   │  │ Entities        │                       │
+│  │                 │  │                 │                       │
+│  │ • Immutable     │  │ • Identity      │                       │
+│  │ • No identity   │  │ • Lifecycle     │                       │
+│  │ • Equality by   │  │ • Equality by   │                       │
+│  │   value         │  │   ID            │                       │
+│  └─────────────────┘  └─────────────────┘                       │
+│                              │                                  │
+│                              ▼                                  │
+│                    ┌─────────────────┐                          │
+│                    │ Aggregates      │                          │
+│                    │                 │                          │
+│                    │ • Root Entity   │                          │
+│                    │ • Consistency   │                          │
+│                    │   boundary      │                          │
+│                    │ • Transactional │                          │
+│                    └─────────────────┘                          │
+│                              │                                  │
+│              ┌───────────────┼───────────────┐                  │
+│              ▼               ▼               ▼                  │
+│     ┌──────────────┐ ┌──────────────┐ ┌──────────────┐          │
+│     │ Repository   │ │ Factory      │ │ Services     │          │
+│     │ (IRestOrm)   │ │ (Create)     │ │ (IInvokable) │          │
+│     └──────────────┘ └──────────────┘ └──────────────┘          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2>24.3. Ubiquitous Language</h2>
+<h3>24.3.1. The Foundation of DDD</h3>
+<p>
+The <strong>Ubiquitous Language</strong> is a shared vocabulary between developers and domain experts:
+
+</p>
+<pre><code class="language-pascal">// ❌ Technical naming (unclear domain meaning)
+type
+  TData = class(TOrm)
+    property S: RawUtf8;      // What is S?
+    property N: Integer;       // What is N?
+    property F: Boolean;       // What is F?
+  end;
+
+// ✓ Ubiquitous Language (domain-clear)
+type
+  TCustomerOrder = class(TOrm)
+    property CustomerName: RawUtf8;
+    property OrderNumber: Integer;
+    property IsFulfilled: Boolean;
+  end;
+</code></pre>
+<h3>24.3.2. Specialized Types</h3>
+<p>
+Use type aliases to express domain concepts:
+
+</p>
+<pre><code class="language-pascal">type
+  // Make implicit explicit
+  TCustomerName = type RawUtf8;
+  TEmailAddress = type RawUtf8;
+  TOrderNumber = type Integer;
+  TCurrency = type Currency;
+
+  TCustomer = class(TOrm)
+  published
+    property Name: TCustomerName read fName write fName;
+    property Email: TEmailAddress read fEmail write fEmail;
+  end;
+</code></pre>
+<p>
+Benefits:
+<ul>
+  <li>Compiler catches type mismatches</li>
+  <li>Self-documenting code</li>
+  <li>Domain concepts explicit in code</li>
+</ul>
+<hr>
+<h2>24.4. Value Objects</h2>
+<h3>24.4.1. Characteristics</h3>
+<p>
+Value Objects:
+<ul>
+  <li>Are <strong>immutable</strong> (no setters after creation)</li>
+  <li>Have <strong>no identity</strong> (compared by value)</li>
+  <li>Represent domain concepts (Money, Address, DateRange)</li>
+</ul>
+<h3>24.4.2. Implementation with Records</h3>
+<pre><code class="language-pascal">type
+  /// Money value object - immutable
+  TMoney = packed record
+  private
+    fAmount: Currency;
+    fCurrency: RawUtf8;
+  public
+    class function Create(aAmount: Currency; const aCurrency: RawUtf8): TMoney; static;
+    function Add(const Other: TMoney): TMoney;
+    function Equals(const Other: TMoney): Boolean;
+    property Amount: Currency read fAmount;
+    property CurrencyCode: RawUtf8 read fCurrency;
+  end;
+
+class function TMoney.Create(aAmount: Currency; const aCurrency: RawUtf8): TMoney;
+begin
+  Result.fAmount := aAmount;
+  Result.fCurrency := aCurrency;
+end;
+
+function TMoney.Add(const Other: TMoney): TMoney;
+begin
+  if fCurrency &lt;&gt; Other.fCurrency then
+    raise EDomainError.Create(&#x27;Cannot add different currencies&#x27;);
+  Result := TMoney.Create(fAmount + Other.fAmount, fCurrency);
+end;
+</code></pre>
+<h3>24.4.3. Implementation with Classes</h3>
+<pre><code class="language-pascal">type
+  TAddress = class(TSynPersistent)
+  private
+    fStreet: RawUtf8;
+    fCity: RawUtf8;
+    fPostalCode: RawUtf8;
+    fCountry: RawUtf8;
+  public
+    constructor Create(const aStreet, aCity, aPostalCode, aCountry: RawUtf8);
+    function Equals(Other: TAddress): Boolean;
+  published
+    property Street: RawUtf8 read fStreet;      // No setter = immutable
+    property City: RawUtf8 read fCity;
+    property PostalCode: RawUtf8 read fPostalCode;
+    property Country: RawUtf8 read fCountry;
+  end;
+</code></pre>
+<hr>
+<h2>24.5. Entities</h2>
+<h3>24.5.1. Characteristics</h3>
+<p>
+Entities:
+<ul>
+  <li>Have <strong>identity</strong> (unique ID)</li>
+  <li>Have a <strong>lifecycle</strong> (created, modified, deleted)</li>
+  <li>Are compared by <strong>ID</strong>, not values</li>
+</ul>
+<h3>24.5.2. Implementation with TOrm</h3>
+<pre><code class="language-pascal">type
+  TCustomer = class(TOrm)
+  private
+    fName: RawUtf8;
+    fEmail: RawUtf8;
+    fRegistrationDate: TDateTime;
+    fStatus: TCustomerStatus;
+  public
+    // Domain behavior
+    procedure Activate;
+    procedure Deactivate;
+    function CanPlaceOrder: Boolean;
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Email: RawUtf8 read fEmail write fEmail;
+    property RegistrationDate: TDateTime read fRegistrationDate write fRegistrationDate;
+    property Status: TCustomerStatus read fStatus write fStatus;
+  end;
+
+procedure TCustomer.Activate;
+begin
+  if fStatus = csDeactivated then
+    fStatus := csActive;
+end;
+
+function TCustomer.CanPlaceOrder: Boolean;
+begin
+  Result := (fStatus = csActive) and (fEmail &lt;&gt; &#x27;&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>24.6. Aggregates</h2>
+<h3>24.6.1. Concept</h3>
+<p>
+An <strong>Aggregate</strong> is a cluster of domain objects treated as a single unit:
+
+</p>
+<ul>
+  <li>Has a <strong>Root Entity</strong> (the only entry point)</li>
+  <li>Defines a <strong>consistency boundary</strong></li>
+  <li>External objects can only reference the root</li>
+</ul>
+<h3>24.6.2. Order Aggregate Example</h3>
+<pre><code class="language-pascal">type
+  // Aggregate Root
+  TOrder = class(TOrm)
+  private
+    fCustomerID: TID;
+    fOrderDate: TDateTime;
+    fStatus: TOrderStatus;
+    fItems: TOrmMany;  // Nested entities
+    fTotalAmount: Currency;
+  public
+    // Only aggregate root exposes behavior
+    procedure AddItem(ProductID: TID; Quantity: Integer; UnitPrice: Currency);
+    procedure RemoveItem(ItemID: TID);
+    procedure Submit;
+    procedure Cancel;
+    function CalculateTotal: Currency;
+  published
+    property CustomerID: TID read fCustomerID write fCustomerID;
+    property OrderDate: TDateTime read fOrderDate write fOrderDate;
+    property Status: TOrderStatus read fStatus;
+    property Items: TOrmMany read fItems;  // Read-only access
+    property TotalAmount: Currency read fTotalAmount;
+  end;
+
+  // Nested entity (only accessible via TOrder)
+  TOrderItem = class(TOrm)
+  private
+    fOrderID: TID;
+    fProductID: TID;
+    fQuantity: Integer;
+    fUnitPrice: Currency;
+  published
+    property OrderID: TID read fOrderID write fOrderID;
+    property ProductID: TID read fProductID write fProductID;
+    property Quantity: Integer read fQuantity write fQuantity;
+    property UnitPrice: Currency read fUnitPrice write fUnitPrice;
+  end;
+
+procedure TOrder.AddItem(ProductID: TID; Quantity: Integer; UnitPrice: Currency);
+begin
+  if fStatus &lt;&gt; osCreated then
+    raise EDomainError.Create(&#x27;Cannot modify submitted order&#x27;);
+  // Add item logic...
+  fTotalAmount := CalculateTotal;
+end;
+
+procedure TOrder.Submit;
+begin
+  if Items.Count = 0 then
+    raise EDomainError.Create(&#x27;Cannot submit empty order&#x27;);
+  fStatus := osSubmitted;
+end;
+</code></pre>
+<hr>
+<h2>24.7. Repository Pattern</h2>
+<h3>24.7.1. Concept</h3>
+<p>
+Repositories provide an abstraction over data access:
+
+</p>
+<pre><code class="language-text">┌───────────────────┐     ┌───────────────────┐
+│   Domain Layer    │     │ Infrastructure    │
+├───────────────────┤     ├───────────────────┤
+│                   │     │                   │
+│  IOrderRepository │────►│ TOrmOrderRepo     │
+│  (interface)      │     │ (implementation)  │
+│                   │     │                   │
+└───────────────────┘     └───────────────────┘
+</code></pre>
+<h3>24.7.2. Repository Interface</h3>
+<pre><code class="language-pascal">type
+  IOrderRepository = interface(IInvokable)
+    [&#x27;{A1B2C3D4-...}&#x27;]
+    function GetByID(ID: TID): TOrder;
+    function GetByCustomer(CustomerID: TID): TOrderObjArray;
+    procedure Save(Order: TOrder);
+    procedure Delete(Order: TOrder);
+  end;
+</code></pre>
+<h3>24.7.3. Implementation with IRestOrm</h3>
+<pre><code class="language-pascal">type
+  TOrmOrderRepository = class(TInterfacedObject, IOrderRepository)
+  private
+    fOrm: IRestOrm;
+  public
+    constructor Create(const aOrm: IRestOrm);
+    function GetByID(ID: TID): TOrder;
+    function GetByCustomer(CustomerID: TID): TOrderObjArray;
+    procedure Save(Order: TOrder);
+    procedure Delete(Order: TOrder);
+  end;
+
+function TOrmOrderRepository.GetByID(ID: TID): TOrder;
+begin
+  Result := TOrder.Create;
+  if not fOrm.Retrieve(ID, Result) then
+    FreeAndNil(Result);
+end;
+
+procedure TOrmOrderRepository.Save(Order: TOrder);
+begin
+  if Order.ID = 0 then
+    fOrm.Add(Order, True)
+  else
+    fOrm.Update(Order);
+end;
+</code></pre>
+<hr>
+<h2>24.8. Domain Services</h2>
+<h3>24.8.1. When to Use</h3>
+<p>
+Domain Services handle operations that:
+<ul>
+  <li>Don't belong to any single Entity</li>
+  <li>Involve multiple Aggregates</li>
+  <li>Represent domain concepts (not CRUD)</li>
+</ul>
+<h3>24.8.2. Service Interface</h3>
+<pre><code class="language-pascal">type
+  IOrderProcessingService = interface(IInvokable)
+    [&#x27;{E5F6G7H8-...}&#x27;]
+    function PlaceOrder(CustomerID: TID; const Items: TOrderItemArray): TID;
+    function CancelOrder(OrderID: TID): Boolean;
+    function CalculateShipping(OrderID: TID): Currency;
+  end;
+
+  IPricingService = interface(IInvokable)
+    [&#x27;{I9J0K1L2-...}&#x27;]
+    function CalculateDiscount(CustomerID: TID; Amount: Currency): Currency;
+    function ApplyPromotion(const Code: RawUtf8; Amount: Currency): Currency;
+  end;
+</code></pre>
+<h3>24.8.3. Service Implementation</h3>
+<pre><code class="language-pascal">type
+  TOrderProcessingService = class(TInjectableObject, IOrderProcessingService)
+  private
+    fOrders: IOrderRepository;
+    fCustomers: ICustomerRepository;
+    fPricing: IPricingService;
+  public
+    constructor Create(const aOrders: IOrderRepository;
+                       const aCustomers: ICustomerRepository;
+                       const aPricing: IPricingService);
+    function PlaceOrder(CustomerID: TID; const Items: TOrderItemArray): TID;
+  end;
+
+function TOrderProcessingService.PlaceOrder(CustomerID: TID;
+  const Items: TOrderItemArray): TID;
+var
+  Customer: TCustomer;
+  Order: TOrder;
+  i: Integer;
+begin
+  // Domain validation
+  Customer := fCustomers.GetByID(CustomerID);
+  if Customer = nil then
+    raise EDomainError.Create(&#x27;Customer not found&#x27;);
+  if not Customer.CanPlaceOrder then
+    raise EDomainError.Create(&#x27;Customer cannot place orders&#x27;);
+
+  // Create aggregate
+  Order := TOrder.Create;
+  try
+    Order.CustomerID := CustomerID;
+    Order.OrderDate := Now;
+
+    for i := 0 to High(Items) do
+      Order.AddItem(Items[i].ProductID, Items[i].Quantity, Items[i].UnitPrice);
+
+    // Apply domain rules
+    Order.TotalAmount := fPricing.CalculateDiscount(CustomerID, Order.CalculateTotal);
+
+    Order.Submit;
+    fOrders.Save(Order);
+    Result := Order.ID;
+  finally
+    Order.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>24.9. Application Services</h2>
+<h3>24.9.1. Role</h3>
+<p>
+Application Services:
+<ul>
+  <li>Orchestrate domain objects and services</li>
+  <li>Handle transactions (Unit of Work)</li>
+  <li>Don't contain business logic</li>
+  <li>Convert between DTOs and domain objects</li>
+</ul>
+<h3>24.9.2. Implementation</h3>
+<pre><code class="language-pascal">type
+  IOrderApplicationService = interface(IInvokable)
+    [&#x27;{M3N4O5P6-...}&#x27;]
+    function CreateOrder(const Request: TCreateOrderRequest): TCreateOrderResponse;
+    function GetOrderStatus(OrderID: TID): TOrderStatusResponse;
+  end;
+
+  TOrderApplicationService = class(TInjectableObject, IOrderApplicationService)
+  private
+    fOrderService: IOrderProcessingService;
+    fOrders: IOrderRepository;
+  public
+    function CreateOrder(const Request: TCreateOrderRequest): TCreateOrderResponse;
+  end;
+
+function TOrderApplicationService.CreateOrder(
+  const Request: TCreateOrderRequest): TCreateOrderResponse;
+begin
+  try
+    Result.OrderID := fOrderService.PlaceOrder(Request.CustomerID, Request.Items);
+    Result.Success := True;
+    Result.Message := &#x27;Order created successfully&#x27;;
+  except
+    on E: EDomainError do
+    begin
+      Result.Success := False;
+      Result.Message := E.Message;
+    end;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>24.10. Data Transfer Objects (DTOs)</h2>
+<h3>24.10.1. Purpose</h3>
+<p>
+DTOs:
+<ul>
+  <li>Separate domain from external interfaces</li>
+  <li>Define API contracts</li>
+  <li>Allow domain to evolve independently</li>
+</ul>
+<h3>24.10.2. Implementation</h3>
+<pre><code class="language-pascal">type
+  // Request DTO
+  TCreateOrderRequest = packed record
+    CustomerID: TID;
+    Items: TOrderItemDtoArray;
+  end;
+
+  TOrderItemDto = packed record
+    ProductID: TID;
+    Quantity: Integer;
+    UnitPrice: Currency;
+  end;
+
+  // Response DTO
+  TCreateOrderResponse = packed record
+    Success: Boolean;
+    OrderID: TID;
+    Message: RawUtf8;
+  end;
+
+  TOrderStatusResponse = packed record
+    OrderID: TID;
+    Status: RawUtf8;
+    TotalAmount: Currency;
+    ItemCount: Integer;
+  end;
+</code></pre>
+<hr>
+<h2>24.11. Clean Architecture</h2>
+<h3>24.11.1. Layer Structure</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                     Infrastructure Layer                         │
+│     (Database, External Services, UI, HTTP Server)               │
+├─────────────────────────────────────────────────────────────────┤
+│                     Application Layer                            │
+│           (Use Cases, DTOs, Application Services)                │
+├─────────────────────────────────────────────────────────────────┤
+│                      Domain Layer                                │
+│   (Entities, Value Objects, Aggregates, Domain Services)         │
+└─────────────────────────────────────────────────────────────────┘
+
+Dependencies point inward → Domain has NO external dependencies
+</code></pre>
+<h3>24.11.2. mORMot Architecture Mapping</h3>
+<table>
+<thead>
+<tr>
+  <th>Layer</th>
+  <th>mORMot Components</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Domain</td>
+  <td><code>TOrm</code> entities, <code>TSynPersistent</code> value objects</td>
+</tr>
+<tr>
+  <td>Application</td>
+  <td><code>IInvokable</code> service interfaces</td>
+</tr>
+<tr>
+  <td>Infrastructure</td>
+  <td><code>TRestServer</code>, <code>TRestHttpServer</code>, SQL/NoSQL</td>
+</tr>
+</tbody>
+</table>
+<h3>24.11.3. Dependency Injection</h3>
+<pre><code class="language-pascal">var
+  Server: TRestServer;
+begin
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;, True);
+
+  // Register services with DI
+  Server.ServiceDefine(TOrderProcessingService, [IOrderProcessingService], sicShared);
+  Server.ServiceDefine(TPricingService, [IPricingService], sicShared);
+  Server.ServiceDefine(TOrderApplicationService, [IOrderApplicationService], sicShared);
+
+  // Dependency resolution is automatic for constructor injection
+end;
+</code></pre>
+<hr>
+<h2>24.12. Unit of Work Pattern</h2>
+<h3>24.12.1. Using TRestBatch</h3>
+<pre><code class="language-pascal">procedure SaveOrderWithItems(Server: TRestServer; Order: TOrder);
+var
+  Batch: TRestBatch;
+  i: Integer;
+begin
+  Batch := TRestBatch.Create(Server, nil, 1000);
+  try
+    // Add order (will get ID after send)
+    Batch.Add(Order, True);
+
+    // Add all items
+    for i := 0 to Order.Items.Count - 1 do
+      Batch.Add(Order.Items[i], True);
+
+    // Atomic commit
+    if Server.BatchSend(Batch) &lt;&gt; HTTP_SUCCESS then
+      raise EDomainError.Create(&#x27;Failed to save order&#x27;);
+  finally
+    Batch.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>24.13. Event-Driven Design</h2>
+<h3>24.13.1. Domain Events</h3>
+<pre><code class="language-pascal">type
+  TDomainEvent = class(TSynPersistent)
+  private
+    fTimestamp: TDateTime;
+    fAggregateID: TID;
+  public
+    constructor Create(AggregateID: TID);
+  published
+    property Timestamp: TDateTime read fTimestamp;
+    property AggregateID: TID read fAggregateID;
+  end;
+
+  TOrderPlacedEvent = class(TDomainEvent)
+  private
+    fCustomerID: TID;
+    fTotalAmount: Currency;
+  published
+    property CustomerID: TID read fCustomerID write fCustomerID;
+    property TotalAmount: Currency read fTotalAmount write fTotalAmount;
+  end;
+</code></pre>
+<h3>24.13.2. Event Handling</h3>
+<pre><code class="language-pascal">type
+  IDomainEventHandler = interface
+    procedure Handle(Event: TDomainEvent);
+  end;
+
+  TOrderPlacedHandler = class(TInterfacedObject, IDomainEventHandler)
+  public
+    procedure Handle(Event: TDomainEvent);
+  end;
+
+procedure TOrderPlacedHandler.Handle(Event: TDomainEvent);
+var
+  OrderEvent: TOrderPlacedEvent;
+begin
+  if Event is TOrderPlacedEvent then
+  begin
+    OrderEvent := TOrderPlacedEvent(Event);
+    // Send notification, update inventory, etc.
+    SendOrderConfirmationEmail(OrderEvent.CustomerID, OrderEvent.AggregateID);
+  end;
+end;
+</code></pre>
+<hr>
+<h2>24.14. Testing DDD Code</h2>
+<h3>24.14.1. Domain Unit Tests</h3>
+<pre><code class="language-pascal">procedure TTestOrder.TestCannotAddItemToSubmittedOrder;
+var
+  Order: TOrder;
+begin
+  Order := TOrder.Create;
+  try
+    Order.AddItem(1, 2, 10.00);
+    Order.Submit;
+
+    // Should raise exception
+    CheckException(
+      procedure begin Order.AddItem(2, 1, 5.00); end,
+      EDomainError,
+      &#x27;Cannot modify submitted order&#x27;
+    );
+  finally
+    Order.Free;
+  end;
+end;
+</code></pre>
+<h3>24.14.2. Service Tests with Mocks</h3>
+<pre><code class="language-pascal">procedure TTestOrderService.TestPlaceOrderWithDiscount;
+var
+  MockOrders: IOrderRepository;
+  MockCustomers: ICustomerRepository;
+  MockPricing: IPricingService;
+  Service: IOrderProcessingService;
+begin
+  // Setup mocks
+  MockOrders := TMockOrderRepository.Create;
+  MockCustomers := TMockCustomerRepository.Create;
+  MockPricing := TMockPricingService.Create;
+
+  Service := TOrderProcessingService.Create(MockOrders, MockCustomers, MockPricing);
+
+  // Test
+  // ...
+end;
+</code></pre>
+<hr>
+<h2>24.15. Summary</h2>
+<h3>24.15.1. Key Patterns</h3>
+<table>
+<thead>
+<tr>
+  <th>Pattern</th>
+  <th>mORMot Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Entity</td>
+  <td><code>TOrm</code> class with business methods</td>
+</tr>
+<tr>
+  <td>Value Object</td>
+  <td><code>record</code> or immutable <code>TSynPersistent</code></td>
+</tr>
+<tr>
+  <td>Aggregate</td>
+  <td><code>TOrm</code> with <code>TOrmMany</code> relations</td>
+</tr>
+<tr>
+  <td>Repository</td>
+  <td><code>IRestOrm</code> or custom interface</td>
+</tr>
+<tr>
+  <td>Domain Service</td>
+  <td><code>IInvokable</code> interface</td>
+</tr>
+<tr>
+  <td>Application Service</td>
+  <td><code>IInvokable</code> with DTO I/O</td>
+</tr>
+<tr>
+  <td>Unit of Work</td>
+  <td><code>TRestBatch</code></td>
+</tr>
+</tbody>
+</table>
+<h3>24.15.2. Best Practices</h3>
+<p>
+1. <strong>Start with the domain</strong> - Define entities and value objects first
+2. <strong>Use ubiquitous language</strong> - Name types after domain concepts
+3. <strong>Keep domain pure</strong> - No infrastructure dependencies
+4. <strong>Define clear boundaries</strong> - One aggregate per transaction
+5. <strong>Test domain logic</strong> - Unit tests for business rules
+6. <strong>Use interfaces</strong> - Enable dependency injection and testing
+
+</p>
+<hr>
+<p>
+<em>Next: Chapter 25 covers Testing and Logging.</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-23.html">Chapter 23: Asymmetric Encryption</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-25.html">Chapter 25: Testing and Logging</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

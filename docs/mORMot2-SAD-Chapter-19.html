@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 19. MVC/MVVM Web Applications
+
+</p>
+<p>
+<em>Building Complete Web Applications with mORMot</em>
+
+</p>
+<p>
+This chapter provides a practical guide to building MVC/MVVM web applications using mORMot 2. We'll walk through the blog sample application structure, demonstrating patterns you can apply to your own projects.
+
+</p>
+<hr>
+<h2>19.1. Application Architecture</h2>
+<h3>19.1.1. MVVM in mORMot</h3>
+<p>
+mORMot uses a hybrid MVC/MVVM pattern:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Component</th>
+  <th>File</th>
+  <th>mORMot Class</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Model</strong></td>
+  <td><code>MVCModel.pas</code></td>
+  <td><code>TOrm</code> classes, <code>TOrmModel</code></td>
+</tr>
+<tr>
+  <td><strong>View</strong></td>
+  <td><code><em>.html</code></td>
+  <td>Mustache templates</td>
+</tr>
+<tr>
+  <td><strong>ViewModel</strong></td>
+  <td><code>MVCViewModel.pas</code></td>
+  <td><code>IMvcApplication</code> interface</td>
+</tr>
+</tbody>
+</table>
+The ViewModel acts as both Controller (handling requests) and ViewModel (preparing data for views).
+
+</p>
+<h3>19.1.2. Project Structure</h3>
+<pre><code class="language-text">BlogServer/
+├── BlogServer.dpr          # Main program
+├── MVCModel.pas            # ORM Model definitions
+├── MVCViewModel.pas        # Controller/ViewModel
+└── Views/
+    ├── Default.html        # Home page
+    ├── Error.html          # Error page
+    ├── ArticleView.html    # Single article
+    ├── AuthorView.html     # Author profile
+    ├── Login.html          # Login form
+    └── .static/
+        ├── blog.css        # Stylesheets
+        └── script.js       # Client scripts
+</code></pre>
+<hr>
+<h2>19.2. Defining the Model</h2>
+<h3>19.2.1. Entity Classes</h3>
+<pre><code class="language-pascal">unit MVCModel;
+
+interface
+
+uses
+  mormot.core.base,
+  mormot.orm.core;
+
+type
+  /// Base class with common content fields
+  TOrmContent = class(TOrmTimestamped)
+  private
+    fTitle: RawUtf8;
+    fContent: RawUtf8;
+    fAuthor: TOrmAuthor;
+    fAuthorName: RawUtf8;  // Denormalized for performance
+  published
+    property Title: RawUtf8 index 80 read fTitle write fTitle;
+    property Content: RawUtf8 read fContent write fContent;
+    property Author: TOrmAuthor read fAuthor write fAuthor;
+    property AuthorName: RawUtf8 index 50 read fAuthorName write fAuthorName;
+  end;
+
+  /// Blog article
+  TOrmArticle = class(TOrmContent)
+  private
+    fAbstract: RawUtf8;
+    fPublishedMonth: Integer;
+    fTags: TIntegerDynArray;
+  public
+    class function CurrentPublishedMonth: Integer;
+    class procedure InitializeTable(const Server: IRestOrmServer;
+      const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
+  published
+    property Abstract: RawUtf8 index 1024 read fAbstract write fAbstract;
+    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
+    property Tags: TIntegerDynArray index 1 read fTags write fTags;
+  end;
+
+  /// Comment on an article
+  TOrmComment = class(TOrmContent)
+  private
+    fArticle: TOrmArticle;
+  published
+    property Article: TOrmArticle read fArticle write fArticle;
+  end;
+
+  /// Blog author
+  TOrmAuthor = class(TOrm)
+  private
+    fLogonName: RawUtf8;
+    fPasswordHash: RawUtf8;
+    fFirstName: RawUtf8;
+    fFamilyName: RawUtf8;
+    fEmail: RawUtf8;
+  published
+    property LogonName: RawUtf8 index 30 read fLogonName write fLogonName;
+    property PasswordHash: RawUtf8 index 64 read fPasswordHash write fPasswordHash;
+    property FirstName: RawUtf8 index 50 read fFirstName write fFirstName;
+    property FamilyName: RawUtf8 index 50 read fFamilyName write fFamilyName;
+    property Email: RawUtf8 index 100 read fEmail write fEmail;
+  end;
+
+  /// Tag for categorizing articles
+  TOrmTag = class(TOrm)
+  private
+    fIdent: RawUtf8;
+  published
+    property Ident: RawUtf8 index 30 read fIdent write fIdent;
+  end;
+
+  /// Full-text search index
+  TOrmArticleSearch = class(TOrmFts5)
+  private
+    fTitle: RawUtf8;
+    fAbstract: RawUtf8;
+    fContent: RawUtf8;
+  published
+    property Title: RawUtf8 read fTitle write fTitle;
+    property Abstract: RawUtf8 read fAbstract write fAbstract;
+    property Content: RawUtf8 read fContent write fContent;
+  end;
+
+function CreateBlogModel: TOrmModel;
+
+implementation
+
+class procedure TOrmArticle.InitializeTable(const Server: IRestOrmServer;
+  const FieldName: RawUtf8; Options: TOrmInitializeTableOptions);
+begin
+  inherited;
+  if (FieldName = &#x27;&#x27;) or (FieldName = &#x27;PublishedMonth&#x27;) then
+    Server.CreateSqlIndex(TOrmArticle, &#x27;PublishedMonth&#x27;, False);
+end;
+
+class function TOrmArticle.CurrentPublishedMonth: Integer;
+var
+  Y, M, D: Word;
+begin
+  DecodeDate(Date, Y, M, D);
+  Result := Y * 12 + M;
+end;
+
+function CreateBlogModel: TOrmModel;
+begin
+  Result := TOrmModel.Create(
+    [TOrmAuthor, TOrmTag, TOrmArticle, TOrmComment, TOrmArticleSearch],
+    &#x27;blog&#x27;);
+  // Validation filters
+  TOrmArticle.AddFilterNotVoidText([&#x27;Title&#x27;, &#x27;Content&#x27;]);
+  TOrmComment.AddFilterNotVoidText([&#x27;Title&#x27;, &#x27;Content&#x27;]);
+  TOrmTag.AddFilterNotVoidText([&#x27;Ident&#x27;]);
+  // FTS without content (external content table)
+  Result.Props[TOrmArticleSearch].Fts5WithoutContent(TOrmArticle);
+end;
+
+end.
+</code></pre>
+<h3>19.2.2. Model Design Decisions</h3>
+<p>
+Key patterns demonstrated:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Pattern</th>
+  <th>Example</th>
+  <th>Benefit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Inheritance</strong></td>
+  <td><code>TOrmContent</code> base class</td>
+  <td>Shared fields</td>
+</tr>
+<tr>
+  <td><strong>Denormalization</strong></td>
+  <td><code>AuthorName</code> in content</td>
+  <td>Avoid joins</td>
+</tr>
+<tr>
+  <td><strong>Indexed fields</strong></td>
+  <td><code>PublishedMonth</code></td>
+  <td>Fast queries</td>
+</tr>
+<tr>
+  <td><strong>Dynamic arrays</strong></td>
+  <td><code>Tags: TIntegerDynArray</code></td>
+  <td>No pivot table</td>
+</tr>
+<tr>
+  <td><strong>FTS5 integration</strong></td>
+  <td><code>TOrmArticleSearch</code></td>
+  <td>Full-text search</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>19.3. Defining the ViewModel/Controller</h2>
+<h3>19.3.1. Interface Definition</h3>
+<pre><code class="language-pascal">unit MVCViewModel;
+
+interface
+
+uses
+  mormot.core.base,
+  mormot.core.variants,
+  mormot.core.mvc,
+  mormot.rest.mvc,
+  mormot.orm.core,
+  contnrs,
+  MVCModel;
+
+type
+  IBlogApplication = interface(IMvcApplication)
+    [&#x27;{73B27C06-9DB9-45A0-BFCD-D23E5C62C113}&#x27;]
+    /// View single article with optional comments
+    procedure ArticleView(ID: Integer; var WithComments: Boolean;
+      Direction: Integer; out Article: TOrmArticle; out Author: variant;
+      out Comments: TObjectList);
+    /// View author profile
+    procedure AuthorView(var ID: Integer; out Author: TOrmAuthor;
+      out Articles: variant);
+    /// Login page
+    procedure LoginForm(out Msg: RawUtf8);
+    /// Process login
+    function Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
+    /// Logout
+    function Logout: TMvcAction;
+    /// Article editor
+    procedure ArticleEdit(var ID: Integer; const Title, Content: RawUtf8;
+      const ValidationError: variant; out Article: TOrmArticle);
+    /// Save article
+    function ArticleCommit(ID: Integer;
+      const Title, Content: RawUtf8): TMvcAction;
+  end;
+</code></pre>
+<h3>19.3.2. Controller Implementation</h3>
+<pre><code class="language-pascal">type
+  TBlogApplication = class(TMvcApplicationRest, IBlogApplication)
+  protected
+    fBlogInfo: variant;
+    fTagsLookup: variant;
+    procedure FlushCache;
+    function GetLoggedAuthor: TOrmAuthor;
+  public
+    procedure Start(aRestModel: TRest; aInterface: PRttiInfo); override;
+    // IMvcApplication
+    procedure Default(var Scope: variant);
+    procedure Error(var Msg: RawUtf8; var Scope: variant);
+    // IBlogApplication
+    procedure ArticleView(ID: Integer; var WithComments: Boolean;
+      Direction: Integer; out Article: TOrmArticle; out Author: variant;
+      out Comments: TObjectList);
+    procedure AuthorView(var ID: Integer; out Author: TOrmAuthor;
+      out Articles: variant);
+    procedure LoginForm(out Msg: RawUtf8);
+    function Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
+    function Logout: TMvcAction;
+    procedure ArticleEdit(var ID: Integer; const Title, Content: RawUtf8;
+      const ValidationError: variant; out Article: TOrmArticle);
+    function ArticleCommit(ID: Integer;
+      const Title, Content: RawUtf8): TMvcAction;
+  end;
+</code></pre>
+<h3>19.3.3. Method Implementations</h3>
+<pre><code class="language-pascal">procedure TBlogApplication.Start(aRestModel: TRest; aInterface: PRttiInfo);
+begin
+  inherited Start(aRestModel, TypeInfo(IBlogApplication));
+  FlushCache;
+end;
+
+procedure TBlogApplication.Default(var Scope: variant);
+var
+  lastID: TID;
+begin
+  // Cache blog info
+  if VarIsEmpty(fBlogInfo) then
+    fBlogInfo := RestModel.Orm.RetrieveDocVariant(
+      TOrmBlogInfo, &#x27;ID=?&#x27;, [1], &#x27;Title,Language,Description&#x27;);
+
+  // Get recent articles
+  lastID := RestModel.Orm.TableMaxID(TOrmArticle);
+  Scope := _ObjFast([
+    &#x27;Info&#x27;, fBlogInfo,
+    &#x27;Articles&#x27;, RestModel.Orm.RetrieveDocVariantArray(
+      TOrmArticle, &#x27;&#x27;, &#x27;ID&gt;? order by ID desc limit 20&#x27;,
+      [lastID - 100], &#x27;ID,Title,Abstract,AuthorName,CreatedAt&#x27;)
+  ]);
+end;
+
+procedure TBlogApplication.ArticleView(ID: Integer; var WithComments: Boolean;
+  Direction: Integer; out Article: TOrmArticle; out Author: variant;
+  out Comments: TObjectList);
+var
+  newID: TID;
+const
+  WHERE: array[1..2] of RawUtf8 = (
+    &#x27;ID&lt;? order by ID desc&#x27;,
+    &#x27;ID&gt;? order by ID&#x27;
+  );
+begin
+  // Navigate to previous/next article
+  if Direction in [1, 2] then
+    if RestModel.Orm.OneFieldValue(TOrmArticle, &#x27;ID&#x27;, WHERE[Direction],
+         [], [ID], newID) and (newID &lt;&gt; 0) then
+      ID := newID;
+
+  // Load article
+  RestModel.Orm.Retrieve(ID, Article);
+  if Article.ID = 0 then
+    raise EMvcApplication.CreateGotoError(HTTP_NOTFOUND);
+
+  // Load author (as variant for flexibility)
+  Author := RestModel.Orm.RetrieveDocVariant(
+    TOrmAuthor, &#x27;ID=?&#x27;, [Article.Author.ID], &#x27;FirstName,FamilyName&#x27;);
+
+  // Optionally load comments
+  if WithComments then
+  begin
+    Comments.Free;
+    Comments := RestModel.Orm.RetrieveList(
+      TOrmComment, &#x27;Article=? order by ID&#x27;, [Article.ID]);
+  end;
+end;
+
+function TBlogApplication.Login(const LogonName, PlainPassword: RawUtf8): TMvcAction;
+var
+  Author: TOrmAuthor;
+begin
+  Author := TOrmAuthor.Create(RestModel.Orm, &#x27;LogonName=?&#x27;, [LogonName]);
+  try
+    if (Author.ID = 0) or
+       not PasswordHashMatch(PlainPassword, Author.PasswordHash) then
+      raise EMvcApplication.CreateGotoError(&#x27;Invalid credentials&#x27;);
+
+    // Store in session
+    CurrentSession[&#x27;AuthorID&#x27;] := Author.ID;
+    CurrentSession[&#x27;LogonName&#x27;] := Author.LogonName;
+
+    Result.RedirectToMethodName := &#x27;Default&#x27;;
+  finally
+    Author.Free;
+  end;
+end;
+
+function TBlogApplication.Logout: TMvcAction;
+begin
+  CurrentSession.Clear;
+  Result.RedirectToMethodName := &#x27;Default&#x27;;
+end;
+</code></pre>
+<hr>
+<h2>19.4. View Templates</h2>
+<h3>19.4.1. Main Layout</h3>
+<pre><code class="language-html">&lt;!-- Default.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;{{Info.Language}}&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;utf-8&quot;&gt;
+  &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+  &lt;title&gt;{{Info.Title}}&lt;/title&gt;
+  &lt;link rel=&quot;stylesheet&quot; href=&quot;/.static/blog.css&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;header&gt;
+    &lt;h1&gt;&lt;a href=&quot;/blog/default&quot;&gt;{{Info.Title}}&lt;/a&gt;&lt;/h1&gt;
+    &lt;nav&gt;
+      {{#Main.LogonName}}
+      &lt;span&gt;Welcome, {{.}}&lt;/span&gt;
+      &lt;a href=&quot;/blog/articleEdit&quot;&gt;New Article&lt;/a&gt;
+      &lt;a href=&quot;/blog/logout&quot;&gt;Logout&lt;/a&gt;
+      {{/Main.LogonName}}
+      {{^Main.LogonName}}
+      &lt;a href=&quot;/blog/loginForm&quot;&gt;Login&lt;/a&gt;
+      {{/Main.LogonName}}
+    &lt;/nav&gt;
+  &lt;/header&gt;
+
+  &lt;main&gt;
+    &lt;p&gt;{{Info.Description}}&lt;/p&gt;
+
+    {{#Articles}}
+    &lt;article class=&quot;summary&quot;&gt;
+      &lt;h2&gt;&lt;a href=&quot;/blog/articleView?id={{ID}}&quot;&gt;{{Title}}&lt;/a&gt;&lt;/h2&gt;
+      &lt;p class=&quot;meta&quot;&gt;By {{AuthorName}} on {{DateTimeToText CreatedAt}}&lt;/p&gt;
+      &lt;p&gt;{{Abstract}}&lt;/p&gt;
+    &lt;/article&gt;
+    {{/Articles}}
+
+    {{^Articles}}
+    &lt;p&gt;No articles published yet.&lt;/p&gt;
+    {{/Articles}}
+  &lt;/main&gt;
+
+  &lt;footer&gt;
+    &lt;p&gt;&amp;copy; {{Info.Title}}&lt;/p&gt;
+  &lt;/footer&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<h3>19.4.2. Article View</h3>
+<pre><code class="language-html">&lt;!-- ArticleView.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;{{Article.Title}}&lt;/title&gt;
+  &lt;link rel=&quot;stylesheet&quot; href=&quot;/.static/blog.css&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;header&gt;
+    &lt;nav&gt;
+      &lt;a href=&quot;/blog/default&quot;&gt;&amp;larr; Back to Home&lt;/a&gt;
+    &lt;/nav&gt;
+  &lt;/header&gt;
+
+  &lt;main&gt;
+    &lt;article&gt;
+      &lt;h1&gt;{{Article.Title}}&lt;/h1&gt;
+      &lt;p class=&quot;meta&quot;&gt;
+        By &lt;a href=&quot;/blog/authorView?id={{Article.Author}}&quot;&gt;
+          {{Author.FirstName}} {{Author.FamilyName}}
+        &lt;/a&gt;
+        on {{DateTimeToText Article.CreatedAt}}
+      &lt;/p&gt;
+
+      &lt;div class=&quot;content&quot;&gt;
+        {{{Article.Content}}}
+      &lt;/div&gt;
+
+      &lt;nav class=&quot;pagination&quot;&gt;
+        &lt;a href=&quot;/blog/articleView?id={{Article.ID}}&amp;direction=1&amp;withComments={{WithComments}}&quot;&gt;
+          &amp;larr; Previous
+        &lt;/a&gt;
+        &lt;a href=&quot;/blog/articleView?id={{Article.ID}}&amp;direction=2&amp;withComments={{WithComments}}&quot;&gt;
+          Next &amp;rarr;
+        &lt;/a&gt;
+      &lt;/nav&gt;
+    &lt;/article&gt;
+
+    &lt;section class=&quot;comments&quot;&gt;
+      {{#WithComments}}
+      &lt;h2&gt;Comments&lt;/h2&gt;
+      {{#Comments}}
+      &lt;div class=&quot;comment {{#-odd}}odd{{/-odd}}&quot;&gt;
+        &lt;h3&gt;{{Title}}&lt;/h3&gt;
+        &lt;p class=&quot;meta&quot;&gt;By {{AuthorName}} on {{DateTimeToText CreatedAt}}&lt;/p&gt;
+        &lt;p&gt;{{Content}}&lt;/p&gt;
+      &lt;/div&gt;
+      {{/Comments}}
+      {{^Comments}}
+      &lt;p&gt;No comments yet.&lt;/p&gt;
+      {{/Comments}}
+      &lt;a href=&quot;/blog/articleView?id={{Article.ID}}&amp;withComments=false&quot; class=&quot;btn&quot;&gt;
+        Hide Comments
+      &lt;/a&gt;
+      {{/WithComments}}
+
+      {{^WithComments}}
+      &lt;a href=&quot;/blog/articleView?id={{Article.ID}}&amp;withComments=true#comments&quot;
+         class=&quot;btn&quot;&gt;
+        Show Comments
+      &lt;/a&gt;
+      {{/WithComments}}
+    &lt;/section&gt;
+  &lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<h3>19.4.3. Login Form</h3>
+<pre><code class="language-html">&lt;!-- LoginForm.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;Login&lt;/title&gt;
+  &lt;link rel=&quot;stylesheet&quot; href=&quot;/.static/blog.css&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;main class=&quot;login-page&quot;&gt;
+    &lt;h1&gt;Login&lt;/h1&gt;
+
+    {{#Msg}}
+    &lt;div class=&quot;error&quot;&gt;{{.}}&lt;/div&gt;
+    {{/Msg}}
+
+    &lt;form method=&quot;post&quot; action=&quot;/blog/login&quot;&gt;
+      &lt;div class=&quot;field&quot;&gt;
+        &lt;label for=&quot;logonName&quot;&gt;Username&lt;/label&gt;
+        &lt;input type=&quot;text&quot; id=&quot;logonName&quot; name=&quot;logonName&quot; required autofocus&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;field&quot;&gt;
+        &lt;label for=&quot;plainPassword&quot;&gt;Password&lt;/label&gt;
+        &lt;input type=&quot;password&quot; id=&quot;plainPassword&quot; name=&quot;plainPassword&quot; required&gt;
+      &lt;/div&gt;
+      &lt;button type=&quot;submit&quot;&gt;Login&lt;/button&gt;
+    &lt;/form&gt;
+
+    &lt;p&gt;&lt;a href=&quot;/blog/default&quot;&gt;Back to Home&lt;/a&gt;&lt;/p&gt;
+  &lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<hr>
+<h2>19.5. Hosting the Application</h2>
+<h3>19.5.1. Main Server Program</h3>
+<pre><code class="language-pascal">program BlogServer;
+
+{$APPTYPE CONSOLE}
+
+uses
+  mormot.core.base,
+  mormot.core.os,
+  mormot.orm.core,
+  mormot.rest.sqlite3,
+  mormot.rest.http.server,
+  mormot.rest.mvc,
+  MVCModel,
+  MVCViewModel;
+
+var
+  Model: TOrmModel;
+  Server: TRestServerDB;
+  Application: TBlogApplication;
+  HttpServer: TRestHttpServer;
+begin
+  Model := CreateBlogModel;
+  try
+    Server := TRestServerDB.Create(Model,
+      Executable.ProgramFilePath + &#x27;blog.db3&#x27;);
+    try
+      Server.DB.Synchronous := smNormal;
+      Server.DB.LockingMode := lmExclusive;
+      Server.CreateMissingTables;
+
+      Application := TBlogApplication.Create;
+      try
+        Application.Start(Server, TypeInfo(IBlogApplication));
+
+        // Publish MVC on /blog/*
+        TMvcRunOnRestServer.Create(Application,
+          Executable.ProgramFilePath + &#x27;Views&#x27;, Server, &#x27;&#x27;,
+          nil, [publishMvcInfo, publishStatic, bypassAuthentication]);
+
+        HttpServer := TRestHttpServer.Create(&#x27;8092&#x27;, [Server], &#x27;+&#x27;, useHttpAsync);
+        try
+          HttpServer.RootRedirectToUri(&#x27;blog/default&#x27;);
+
+          WriteLn(&#x27;Blog server running on http://localhost:8092&#x27;);
+          WriteLn(&#x27;Press Enter to stop...&#x27;);
+          ReadLn;
+        finally
+          HttpServer.Free;
+        end;
+      finally
+        Application.Free;
+      end;
+    finally
+      Server.Free;
+    end;
+  finally
+    Model.Free;
+  end;
+end.
+</code></pre>
+<h3>19.5.2. Integration Options</h3>
+<table>
+<thead>
+<tr>
+  <th>Option</th>
+  <th>Configuration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Same server</strong></td>
+  <td>MVC + REST API on same port</td>
+</tr>
+<tr>
+  <td><strong>Sub-URI</strong></td>
+  <td><code>/api/</em></code> for REST, <code>/blog/*</code> for MVC</td>
+</tr>
+<tr>
+  <td><strong>Sub-domain</strong></td>
+  <td><code>api.example.com</code>, <code>www.example.com</code></td>
+</tr>
+</tbody>
+</table>
+Sub-domain configuration:
+<pre><code class="language-pascal">HttpServer.DomainHostRedirect(&#x27;api.example.com&#x27;, &#x27;root&#x27;);
+HttpServer.DomainHostRedirect(&#x27;www.example.com&#x27;, &#x27;root/blog&#x27;);
+HttpServer.DomainHostRedirect(&#x27;example.com&#x27;, &#x27;root/blog&#x27;);
+</code></pre>
+<hr>
+<h2>19.6. Advanced Features</h2>
+<h3>19.6.1. CSRF Protection</h3>
+<p>
+mORMot includes built-in CSRF protection:
+
+</p>
+<pre><code class="language-html">&lt;form method=&quot;post&quot; action=&quot;/blog/articleCommit&quot;&gt;
+  &lt;input type=&quot;hidden&quot; name=&quot;__csrf&quot; value=&quot;{{Main.CsrfToken}}&quot;&gt;
+  &lt;!-- form fields --&gt;
+&lt;/form&gt;
+</code></pre>
+<h3>19.6.2. Full-Text Search</h3>
+<pre><code class="language-pascal">procedure TBlogApplication.Search(const Query: RawUtf8;
+  out Results: variant);
+begin
+  Results := RestModel.Orm.FtsMatch(
+    TOrmArticleSearch, &#x27;Title,Abstract,Content&#x27;, Query,
+    &#x27;ID,Title,Abstract&#x27;, 20);
+end;
+</code></pre>
+<h3>19.6.3. Caching</h3>
+<pre><code class="language-pascal">procedure TBlogApplication.Default(var Scope: variant);
+begin
+  // Cache expensive queries
+  if VarIsEmpty(fCachedInfo) then
+  begin
+    fCachedInfo := RestModel.Orm.RetrieveDocVariant(...);
+    fCacheTime := GetTickCount64;
+  end
+  else if GetTickCount64 - fCacheTime &gt; 60000 then  // 1 minute
+    FlushCache;
+
+  Scope := fCachedInfo;
+end;
+</code></pre>
+<h3>19.6.4. Responsive Design</h3>
+<p>
+Use Bootstrap or similar in templates:
+
+</p>
+<pre><code class="language-html">&lt;link rel=&quot;stylesheet&quot;
+      href=&quot;https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css&quot;&gt;
+
+&lt;div class=&quot;container&quot;&gt;
+  &lt;div class=&quot;row&quot;&gt;
+    &lt;main class=&quot;col-md-8&quot;&gt;
+      {{#Articles}}...{{/Articles}}
+    &lt;/main&gt;
+    &lt;aside class=&quot;col-md-4&quot;&gt;
+      {{#Tags}}...{{/Tags}}
+    &lt;/aside&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+</code></pre>
+<hr>
+<h2>19.7. Testing MVC Applications</h2>
+<h3>19.7.1. Unit Testing Controllers</h3>
+<pre><code class="language-pascal">procedure TBlogTest.TestArticleView;
+var
+  App: TBlogApplication;
+  Article: TOrmArticle;
+  Author: variant;
+  Comments: TObjectList;
+  WithComments: Boolean;
+begin
+  App := TBlogApplication.Create;
+  try
+    App.Start(TestServer, TypeInfo(IBlogApplication));
+
+    Article := nil;
+    Comments := TObjectList.Create;
+    try
+      WithComments := True;
+      App.ArticleView(1, WithComments, 0, Article, Author, Comments);
+
+      Check(Article.ID = 1);
+      Check(Article.Title &lt;&gt; &#x27;&#x27;);
+      Check(not VarIsEmpty(Author));
+    finally
+      Article.Free;
+      Comments.Free;
+    end;
+  finally
+    App.Free;
+  end;
+end;
+</code></pre>
+<h3>19.7.2. Integration Testing</h3>
+<pre><code class="language-pascal">procedure TBlogTest.TestWebPages;
+var
+  Client: THttpClientSocket;
+  Response: RawUtf8;
+begin
+  Client := THttpClientSocket.Create(&#x27;localhost&#x27;, &#x27;8092&#x27;);
+  try
+    Check(Client.Get(&#x27;/blog/default&#x27;, Response) = HTTP_SUCCESS);
+    Check(PosEx(&#x27;&lt;article&#x27;, Response) &gt; 0);
+
+    Check(Client.Get(&#x27;/blog/articleView?id=1&#x27;, Response) = HTTP_SUCCESS);
+    Check(PosEx(&#x27;&lt;/article&gt;&#x27;, Response) &gt; 0);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>Summary</h2>
+<p>
+Building MVC web applications with mORMot 2:
+
+</p>
+<p>
+1. <strong>Model</strong>: Define <code>TOrm</code> classes with proper relationships and indexes
+2. <strong>ViewModel</strong>: Create interface with methods for each page/action
+3. <strong>Views</strong>: Write Mustache templates with proper data binding
+4. <strong>Hosting</strong>: Use <code>TMvcRunOnRestServer</code> to publish on HTTP
+
+</p>
+<p>
+Key benefits:
+<ul>
+  <li><strong>Type safety</strong>: Interface parameters checked at compile time</li>
+  <li><strong>Separation</strong>: Clean split between data, logic, and presentation</li>
+  <li><strong>Performance</strong>: Efficient ORM queries, caching support</li>
+  <li><strong>Testability</strong>: Controllers testable without HTTP</li>
+  <li><strong>Flexibility</strong>: Same data model for MVC and REST API</li>
+</ul>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-18.html">Chapter 18: The MVC Pattern</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-20.html">Chapter 20: Hosting and Deployment</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

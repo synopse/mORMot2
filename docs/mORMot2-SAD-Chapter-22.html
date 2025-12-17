@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>22. Scripting Engine</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>22. Scripting Engine</h1>
+<p>
+<em>JavaScript Integration for Dynamic Applications</em>
+
+</p>
+<p>
+mORMot provides JavaScript scripting capabilities for applications that need dynamic behavior, user-defined workflows, or hot-reloadable business logic. This chapter covers the scripting architecture and available engines.
+
+</p>
+<hr>
+<h2>22.1. Why Scripting?</h2>
+<h3>22.1.1. Use Cases</h3>
+<table>
+<thead>
+<tr>
+  <th>Scenario</th>
+  <th>Benefit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>User-defined workflows</td>
+  <td>End-users customize behavior without recompilation</td>
+</tr>
+<tr>
+  <td>Business rules</td>
+  <td>Domain experts define evolving logic</td>
+</tr>
+<tr>
+  <td>Customization</td>
+  <td>Single executable serves multiple clients</td>
+</tr>
+<tr>
+  <td>Reporting</td>
+  <td>Dynamic report definitions</td>
+</tr>
+<tr>
+  <td>Plugin systems</td>
+  <td>Third-party extensions</td>
+</tr>
+<tr>
+  <td>Rapid prototyping</td>
+  <td>Quick iteration without compilation</td>
+</tr>
+</tbody>
+</table>
+<h3>22.1.2. Language Choice: JavaScript</h3>
+<p>
+mORMot chose JavaScript for scripting because:
+
+</p>
+<ul>
+  <li><strong>Universal knowledge</strong> - Nearly every programmer knows JavaScript</li>
+  <li><strong>Powerful when used well</strong> - Modern ES2020+ features</li>
+  <li><strong>Rich ecosystem</strong> - Thousands of libraries available</li>
+  <li><strong>Client/server sharing</strong> - Same validation logic on both sides</li>
+  <li><strong>Proven engines</strong> - QuickJS and SpiderMonkey are production-ready</li>
+</ul>
+<hr>
+<h2>22.2. Architecture Overview</h2>
+<h3>22.2.1. Two-Layer Design</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                    Application Code                             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│                   mormot.script.core.pas                        │
+│           (Abstract Engine Management Layer)                    │
+│                                                                 │
+│  ┌─────────────────────┐  ┌──────────────────────────────┐      │
+│  │ TThreadSafeManager  │  │ TThreadSafeEngine (abstract) │      │
+│  │                     │  │                              │      │
+│  │ • Engine pooling    │  │ • Per-thread execution       │      │
+│  │ • Thread safety     │  │ • Context isolation          │      │
+│  │ • Hot reload        │  │ • FPU state protection       │      │
+│  │ • Remote debugging  │  │ • Lifecycle hooks            │      │
+│  └─────────────────────┘  └──────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│                   Engine Implementations                        │
+│                                                                 │
+│  ┌──────────────────────┐  ┌──────────────────────────┐         │
+│  │ mormot.lib.quickjs   │  │ (SpiderMonkey planned)   │         │
+│  │                      │  │                          │         │
+│  │ • ES2020 support     │  │ • JIT compilation        │         │
+│  │ • Small footprint    │  │ • High performance       │         │
+│  │ • Static linking     │  │ • node.js compatible     │         │
+│  └──────────────────────┘  └──────────────────────────┘         │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>22.2.2. Supported Engines</h3>
+<table>
+<thead>
+<tr>
+  <th>Engine</th>
+  <th>Use Case</th>
+  <th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>QuickJS</strong></td>
+  <td>Client-side, embedded</td>
+  <td>Available (via <code>mormot.lib.quickjs</code>)</td>
+</tr>
+<tr>
+  <td><strong>SpiderMonkey</strong></td>
+  <td>Server-side, high-performance</td>
+  <td>Planned</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>22.3. QuickJS Integration</h2>
+<h3>22.3.1. About QuickJS</h3>
+<p>
+QuickJS is a small, embeddable JavaScript engine by Fabrice Bellard:
+
+</p>
+<ul>
+  <li><strong>ES2020 support</strong> - Modules, async/await, BigInt, Proxies</li>
+  <li><strong>Small footprint</strong> - ~400KB static library</li>
+  <li><strong>No external dependencies</strong> - Fully standalone</li>
+  <li><strong>Cross-platform</strong> - Windows, Linux, macOS</li>
+</ul>
+<h3>22.3.2. Low-Level API</h3>
+<p>
+The <code>mormot.lib.quickjs.pas</code> unit provides direct QuickJS bindings:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.lib.quickjs;
+
+var
+  Runtime: JSRuntime;
+  Context: JSContext;
+  Value: JSValue;
+  Script: RawUtf8;
+begin
+  // Create runtime and context
+  Runtime := JS_NewRuntime;
+  Context := JS_NewContext(Runtime);
+  try
+    // Execute JavaScript
+    Script := &#x27;function add(a, b) { return a + b; } add(2, 3);&#x27;;
+    Value := JS_Eval(Context, pointer(Script), length(Script),
+                     &#x27;script.js&#x27;, JS_EVAL_TYPE_GLOBAL);
+
+    // Check result
+    if JS_IsNumber(Value) then
+      Writeln(&#x27;Result: &#x27;, JS_ToFloat64(Context, Value));
+
+    JS_FreeValue(Context, Value);
+  finally
+    JS_FreeContext(Context);
+    JS_FreeRuntime(Runtime);
+  end;
+end;
+</code></pre>
+<h3>22.3.3. Enabling QuickJS</h3>
+<p>
+QuickJS requires the <code>LIBQUICKJSSTATIC</code> conditional:
+
+</p>
+<pre><code class="language-pascal">// In project options or .inc file:
+{$define LIBQUICKJSSTATIC}
+</code></pre>
+<p>
+Static libraries are located in:
+<pre><code class="language-text">/mnt/w/mORMot2/static/
+  libquickjs.a        // Linux/macOS
+  libquickjs.obj      // Windows
+</code></pre>
+<hr>
+<h2>22.4. Thread-Safe Engine Management</h2>
+<h3>22.4.1. TThreadSafeManager</h3>
+<p>
+The <code>TThreadSafeManager</code> class provides thread-safe engine pooling:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.script.core;
+
+type
+  // Your engine implementation (inherits from TThreadSafeEngine)
+  TMyQuickJSEngine = class(TThreadSafeEngine)
+  protected
+    procedure AfterCreate; override;
+    procedure DoBeginRequest; override;
+    procedure DoEndRequest; override;
+  end;
+
+var
+  Manager: TThreadSafeManager;
+begin
+  Manager := TThreadSafeManager.Create(TMyQuickJSEngine);
+  try
+    // Configure expiration (recommended for long-running servers)
+    Manager.EngineExpireTimeOutMinutes := 240;  // 4 hours
+
+    // Use in request handlers...
+  finally
+    Manager.Free;
+  end;
+end;
+</code></pre>
+<h3>22.4.2. Per-Thread Engine Access</h3>
+<pre><code class="language-pascal">procedure HandleRequest;
+var
+  Engine: TThreadSafeEngine;
+begin
+  // Get or create engine for current thread
+  Engine := Manager.ThreadSafeEngine;
+
+  // Execute within protected context
+  Engine.ThreadSafeCall(
+    procedure(E: TThreadSafeEngine)
+    begin
+      // FPU state is protected here
+      // Execute JavaScript safely
+    end);
+end;
+</code></pre>
+<h3>22.4.3. Thread Safety Model</h3>
+<pre><code class="language-text">┌────────────────────────────────────────────────────────────────┐
+│                    Thread Safety Model                          │
+├────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Thread 1 ──────► Engine 1 (exclusive)                          │
+│                                                                 │
+│  Thread 2 ──────► Engine 2 (exclusive)                          │
+│                                                                 │
+│  Thread 3 ──────► Engine 3 (exclusive)                          │
+│                                                                 │
+│                   ▲                                             │
+│                   │                                             │
+│  ┌────────────────┴────────────────┐                            │
+│  │     TThreadSafeManager          │                            │
+│  │  (thread-safe pool management)  │                            │
+│  └─────────────────────────────────┘                            │
+│                                                                 │
+│  Key Rules:                                                     │
+│  • One engine per thread (never shared)                         │
+│  • Manager handles allocation/deallocation                      │
+│  • Automatic expiration prevents memory leaks                   │
+│                                                                 │
+└────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2>22.5. Hot Reload Pattern</h2>
+<h3>22.5.1. Content Versioning</h3>
+<pre><code class="language-pascal">// Application detects script changes
+if ScriptFilesModified then
+begin
+  // Increment version - engines will recreate on next access
+  Manager.ContentVersion := Manager.ContentVersion + 1;
+end;
+
+// In request handler
+Engine := Manager.ThreadSafeEngine;
+if Engine.ContentVersion &lt;&gt; Manager.ContentVersion then
+begin
+  // Engine was recreated - reload scripts
+  LoadScriptsIntoEngine(Engine);
+  Engine.ContentVersion := Manager.ContentVersion;
+end;
+</code></pre>
+<h3>22.5.2. Engine Expiration</h3>
+<p>
+For long-running servers, prevent JavaScript memory leaks:
+
+</p>
+<pre><code class="language-pascal">// Recreate engines every 4 hours
+Manager.EngineExpireTimeOutMinutes := 240;
+
+// Mark critical engines as permanent
+MainEngine.NeverExpire := true;
+</code></pre>
+<hr>
+<h2>22.6. Remote Debugging</h2>
+<h3>22.6.1. Firefox DevTools Protocol</h3>
+<p>
+mORMot implements the Firefox Remote Debugging Protocol:
+
+</p>
+<pre><code class="language-pascal">// Start debugger on port 6000
+Manager.StartDebugger(&#x27;6000&#x27;);
+
+// Optional: Break on first line
+Manager.PauseDebuggerOnFirstStep := true;
+</code></pre>
+<h3>22.6.2. Connecting Firefox</h3>
+<p>
+1. Open Firefox
+2. Navigate to <code>about:debugging</code>
+3. Click "This Firefox" → "Settings"
+4. Enable Remote Debugging
+5. Connect to <code>localhost:6000</code>
+
+</p>
+<p>
+<strong>Note:</strong> This uses Firefox DevTools protocol, NOT Chrome DevTools.
+
+</p>
+<hr>
+<h2>22.7. mORMot Integration Patterns</h2>
+<h3>22.7.1. Exposing ORM to JavaScript</h3>
+<pre><code class="language-pascal">// Register native function to access ORM
+procedure RegisterOrmAccess(Engine: TThreadSafeEngine);
+begin
+  // Example: Expose Customer retrieval
+  Engine.RegisterFunction(&#x27;getCustomer&#x27;,
+    function(Args: TJSArgs): TJSValue
+    var
+      ID: TID;
+      Customer: TOrmCustomer;
+    begin
+      ID := Args[0].AsInt64;
+      Customer := TOrmCustomer.Create;
+      try
+        if Server.Orm.Retrieve(ID, Customer) then
+          Result := CustomerToJS(Customer)
+        else
+          Result := JS_NULL;
+      finally
+        Customer.Free;
+      end;
+    end);
+end;
+</code></pre>
+<h3>22.7.2. Calling Services from JavaScript</h3>
+<pre><code class="language-pascal">// JavaScript can call interface-based services
+Engine.RegisterFunction(&#x27;callService&#x27;,
+  function(Args: TJSArgs): TJSValue
+  var
+    ServiceName, MethodName: RawUtf8;
+    Params: TDocVariantData;
+  begin
+    ServiceName := Args[0].AsString;
+    MethodName := Args[1].AsString;
+    Params := Args[2].AsVariant;
+
+    // Execute service and return result as JSON
+    Result := ExecuteServiceMethod(ServiceName, MethodName, Params);
+  end);
+</code></pre>
+<h3>22.7.3. Business Rules in JavaScript</h3>
+<pre><code class="language-pascal">// Define validation rules in JavaScript
+const
+  VALIDATION_SCRIPT = &#x27;&#x27;&#x27;
+    function validateOrder(order) {
+      if (order.total &gt; 10000 &amp;&amp; !order.managerApproval) {
+        return { valid: false, error: &quot;Manager approval required&quot; };
+      }
+      if (order.items.length === 0) {
+        return { valid: false, error: &quot;Order must have items&quot; };
+      }
+      return { valid: true };
+    }
+  &#x27;&#x27;&#x27;;
+
+// Use from Delphi
+function ValidateOrder(const Order: TOrder): boolean;
+var
+  Engine: TThreadSafeEngine;
+  Result: Variant;
+begin
+  Engine := Manager.ThreadSafeEngine;
+  Result := Engine.Call(&#x27;validateOrder&#x27;, [OrderToVariant(Order)]);
+  ValidateOrder := Result.valid;
+  if not ValidateOrder then
+    raise EValidation.Create(Result.error);
+end;
+</code></pre>
+<hr>
+<h2>22.8. Custom Variant Type</h2>
+<h3>22.8.1. Late-Binding Access</h3>
+<p>
+mORMot provides a custom variant type for seamless JavaScript access:
+
+</p>
+<pre><code class="language-pascal">var
+  JSObj: Variant;
+begin
+  // Create JavaScript object
+  JSObj := Engine.NewObject;
+
+  // Late-binding property access (like JavaScript)
+  JSObj.name := &#x27;John&#x27;;
+  JSObj.age := 30;
+  JSObj.greet := Engine.Function(&#x27;return &quot;Hello, &quot; + this.name&#x27;);
+
+  // Call method
+  Writeln(JSObj.greet());  // &quot;Hello, John&quot;
+end;
+</code></pre>
+<h3>22.8.2. Array Handling</h3>
+<pre><code class="language-pascal">var
+  JSArray: Variant;
+begin
+  JSArray := Engine.NewArray;
+
+  // Push elements
+  JSArray.push(1);
+  JSArray.push(2);
+  JSArray.push(3);
+
+  // Access by index
+  Writeln(JSArray[0]);  // 1
+
+  // Array methods
+  JSArray.sort();
+  JSArray.reverse();
+end;
+</code></pre>
+<hr>
+<h2>22.9. Key Units Reference</h2>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.script.core</code></td>
+  <td>Abstract engine management, thread pooling</td>
+</tr>
+<tr>
+  <td><code>mormot.script.quickjs</code></td>
+  <td>QuickJS high-level wrapper (in development)</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.quickjs</code></td>
+  <td>Low-level QuickJS API bindings</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.static</code></td>
+  <td>Static library loading infrastructure</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>22.10. Current Status and Roadmap</h2>
+<h3>22.10.1. Implemented</h3>
+<ul>
+  <li>✓ Abstract <code>TThreadSafeEngine</code> and <code>TThreadSafeManager</code></li>
+  <li>✓ Thread-safe pooling with expiration</li>
+  <li>✓ Remote debugging infrastructure</li>
+  <li>✓ Low-level QuickJS bindings (<code>mormot.lib.quickjs</code>)</li>
+</ul>
+<h3>22.10.2. In Development</h3>
+<ul>
+  <li><code>mormot.script.quickjs</code> high-level wrapper</li>
+  <li>Custom variant type for late-binding</li>
+  <li>ORM/SOA integration helpers</li>
+</ul>
+<h3>22.10.3. Planned</h3>
+<ul>
+  <li>SpiderMonkey integration (for high-performance server scenarios)</li>
+  <li>JIT compilation support</li>
+  <li>node.js module compatibility</li>
+</ul>
+<hr>
+<h2>22.11. Best Practices</h2>
+<h3>22.11.1. When to Use Scripting</h3>
+<table>
+<thead>
+<tr>
+  <th>Use Scripting For</th>
+  <th>Use Compiled Code For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>User-customizable logic</td>
+  <td>Performance-critical paths</td>
+</tr>
+<tr>
+  <td>Frequently changing rules</td>
+  <td>Core business logic</td>
+</tr>
+<tr>
+  <td>Plugin/extension systems</td>
+  <td>Security-sensitive operations</td>
+</tr>
+<tr>
+  <td>Rapid prototyping</td>
+  <td>Database access layer</td>
+</tr>
+<tr>
+  <td>Report templates</td>
+  <td>Infrastructure code</td>
+</tr>
+</tbody>
+</table>
+<h3>22.11.2. Security Considerations</h3>
+<pre><code class="language-pascal">// Limit script capabilities
+Engine.DisableFileAccess := true;
+Engine.DisableNetworkAccess := true;
+Engine.MaxExecutionTimeMs := 5000;  // 5 second timeout
+Engine.MaxMemoryBytes := 64 * 1024 * 1024;  // 64MB limit
+</code></pre>
+<h3>22.11.3. Error Handling</h3>
+<pre><code class="language-pascal">try
+  Result := Engine.Eval(Script);
+except
+  on E: EJSException do
+  begin
+    Log.Error(&#x27;JavaScript error at line %d: %s&#x27;,
+              [E.LineNumber, E.Message]);
+    // E.StackTrace contains full JS stack
+  end;
+end;
+</code></pre>
+<hr>
+<h2>22.12. Summary</h2>
+<h3>22.12.1. Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Need</th>
+  <th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Embed JavaScript</td>
+  <td><code>mormot.lib.quickjs</code> + <code>LIBQUICKJSSTATIC</code></td>
+</tr>
+<tr>
+  <td>Thread-safe execution</td>
+  <td><code>TThreadSafeManager</code></td>
+</tr>
+<tr>
+  <td>Engine pooling</td>
+  <td><code>Manager.ThreadSafeEngine</code></td>
+</tr>
+<tr>
+  <td>Hot reload</td>
+  <td><code>Manager.ContentVersion</code></td>
+</tr>
+<tr>
+  <td>Remote debugging</td>
+  <td><code>Manager.StartDebugger('6000')</code></td>
+</tr>
+<tr>
+  <td>Memory management</td>
+  <td><code>EngineExpireTimeOutMinutes</code></td>
+</tr>
+</tbody>
+</table>
+<h3>22.12.2. When to Choose Each Engine</h3>
+<table>
+<thead>
+<tr>
+  <th>QuickJS</th>
+  <th>SpiderMonkey (when available)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Client-side scripts</td>
+  <td>Server-side heavy processing</td>
+</tr>
+<tr>
+  <td>Small footprint needed</td>
+  <td>JIT performance required</td>
+</tr>
+<tr>
+  <td>Static linking preferred</td>
+  <td>node.js compatibility needed</td>
+</tr>
+<tr>
+  <td>ES2020 sufficient</td>
+  <td>Latest ECMAScript features</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>
+<em>Note: The scripting layer in mORMot2 is actively evolving. Check the source code and forum for the latest implementation status.</em>
+
+</p>
+<p>
+<em>Next: Chapter 23 covers Asymmetric Encryption (ECC) for secure communications.</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-21.html">Chapter 21: Security</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-23.html">Chapter 23: Asymmetric Encryption</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

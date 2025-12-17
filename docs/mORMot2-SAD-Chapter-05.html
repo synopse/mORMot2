@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 5. Object-Relational Mapping
+
+</p>
+<p>
+<em>Persist Your Objects</em>
+
+</p>
+<p>
+The ORM layer of mORMot 2 is implemented across the <code>mormot.orm.<em></code> units. It provides database-agnostic persistence for Delphi objects, supporting SQLite3, external SQL databases (PostgreSQL, Oracle, MS SQL, MySQL, etc.), MongoDB (ODM), and in-memory storage.
+
+</p>
+<p>
+Generic data access is implemented by defining high-level objects as Delphi classes descending from <code>TOrm</code>. These classes serve multiple purposes:
+
+</p>
+<ul>
+  <li><strong>Database persistence</strong>: CRUD operations (SELECT/INSERT/UPDATE/DELETE) without writing SQL</li>
+  <li><strong>RESTful resources</strong>: Business logic objects accessible via REST/JSON</li>
+  <li><strong>UI integration</strong>: Automatic form generation, grid binding, and reporting</li>
+</ul>
+<hr>
+<h2>5.1. TOrm Field Definition</h2>
+<p>
+All ORM functionality relies on the <code>TOrm</code> class (defined in <code>mormot.orm.core</code>). This abstract class provides built-in methods for generic ORM processing.
+
+</p>
+<h3>5.1.1. Primary Key</h3>
+<p>
+<code>TOrm</code> defines a primary key field as <code>ID: TID</code> (where <code>TID = type Int64</code>):
+
+</p>
+<pre><code class="language-pascal">type
+  TID = type Int64;
+
+  TOrm = class(TObject)
+    // ...
+    property ID: TID read GetID write fID;
+  end;
+</code></pre>
+<p>
+The ORM relies on <code>Int64</code> primary keys, matching SQLite3's <code>RowID</code>. While you might prefer <code>TEXT</code> or <code>GUID</code> primary keys in traditional RDBMS design, integer keys are more efficient for ORM internals. You can always define secondary unique keys using <code>stored AS_UNIQUE</code>.
+
+</p>
+<h3>5.1.2. Defining a Table</h3>
+<p>
+All <code>published</code> properties of <code>TOrm</code> descendants are automatically mapped to database columns:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.orm.core;
+
+type
+  /// Enumeration for gender
+  TSex = (sFemale, sMale);
+
+  /// Table for Baby records
+  TOrmBaby = class(TOrm)
+  private
+    fName: RawUtf8;
+    fAddress: RawUtf8;
+    fBirthDate: TDateTime;
+    fSex: TSex;
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Address: RawUtf8 read fAddress write fAddress;
+    property BirthDate: TDateTime read fBirthDate write fBirthDate;
+    property Sex: TSex read fSex write fSex;
+  end;
+</code></pre>
+<p>
+By adding <code>TOrmBaby</code> to a <code>TOrmModel</code>, the corresponding <code>Baby</code> table is automatically created. No SQL required.
+
+</p>
+<h3>5.1.3. Supported Property Types</h3>
+<table>
+<thead>
+<tr>
+  <th>Delphi Type</th>
+  <th>SQLite3 Type</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>Byte</code>, <code>Word</code>, <code>Integer</code>, <code>Cardinal</code>, <code>Int64</code></td>
+  <td>INTEGER</td>
+</tr>
+<tr>
+  <td><code>Boolean</code></td>
+  <td>INTEGER</td>
+  <td>0 = false, non-zero = true</td>
+</tr>
+<tr>
+  <td>Enumeration</td>
+  <td>INTEGER</td>
+  <td>Stored as ordinal value</td>
+</tr>
+<tr>
+  <td>Set</td>
+  <td>INTEGER</td>
+  <td>Bit-packed (up to 64 elements)</td>
+</tr>
+<tr>
+  <td><code>Single</code>, <code>Double</code>, <code>Extended</code></td>
+  <td>FLOAT</td>
+  <td>Extended stored as double</td>
+</tr>
+<tr>
+  <td><code>Currency</code></td>
+  <td>FLOAT</td>
+  <td>Fixed 4 decimals, no rounding errors</td>
+</tr>
+<tr>
+  <td><code>RawUtf8</code></td>
+  <td>TEXT</td>
+  <td><strong>Preferred</strong> for text fields</td>
+</tr>
+<tr>
+  <td><code>string</code></td>
+  <td>TEXT</td>
+  <td>Use <code>RawUtf8</code> instead when possible</td>
+</tr>
+<tr>
+  <td><code>TDateTime</code></td>
+  <td>TEXT</td>
+  <td>ISO 8601 with second resolution</td>
+</tr>
+<tr>
+  <td><code>TDateTimeMS</code></td>
+  <td>TEXT</td>
+  <td>ISO 8601 with millisecond resolution</td>
+</tr>
+<tr>
+  <td><code>TTimeLog</code></td>
+  <td>INTEGER</td>
+  <td>Compact proprietary format</td>
+</tr>
+<tr>
+  <td><code>TModTime</code></td>
+  <td>INTEGER</td>
+  <td>Auto-updated on modification</td>
+</tr>
+<tr>
+  <td><code>TCreateTime</code></td>
+  <td>INTEGER</td>
+  <td>Auto-set on creation</td>
+</tr>
+<tr>
+  <td><code>TUnixTime</code></td>
+  <td>INTEGER</td>
+  <td>Seconds since 1970-01-01</td>
+</tr>
+<tr>
+  <td><code>TUnixMSTime</code></td>
+  <td>INTEGER</td>
+  <td>Milliseconds since 1970-01-01</td>
+</tr>
+<tr>
+  <td><code>TOrm</code></td>
+  <td>INTEGER</td>
+  <td>Foreign key (RowID of another table)</td>
+</tr>
+<tr>
+  <td><code>TID</code></td>
+  <td>INTEGER</td>
+  <td>64-bit foreign key (no table info)</td>
+</tr>
+<tr>
+  <td><code>TOrmMany</code></td>
+  <td>(pivot table)</td>
+  <td>Many-to-many relationship</td>
+</tr>
+<tr>
+  <td><code>TRecordReference</code></td>
+  <td>INTEGER</td>
+  <td>Reference to any table in model</td>
+</tr>
+<tr>
+  <td><code>TSessionUserID</code></td>
+  <td>INTEGER</td>
+  <td>Auto-filled with current user ID</td>
+</tr>
+<tr>
+  <td><code>TPersistent</code></td>
+  <td>TEXT</td>
+  <td>JSON object</td>
+</tr>
+<tr>
+  <td><code>TCollection</code></td>
+  <td>TEXT</td>
+  <td>JSON array of objects</td>
+</tr>
+<tr>
+  <td><code>TObjectList</code></td>
+  <td>TEXT</td>
+  <td>JSON array (requires registration)</td>
+</tr>
+<tr>
+  <td><code>TStrings</code></td>
+  <td>TEXT</td>
+  <td>JSON array of strings</td>
+</tr>
+<tr>
+  <td><code>RawBlob</code></td>
+  <td>BLOB</td>
+  <td>Binary data</td>
+</tr>
+<tr>
+  <td>Dynamic arrays</td>
+  <td>BLOB</td>
+  <td>Binary format via <code>TDynArray.SaveTo</code></td>
+</tr>
+<tr>
+  <td><code>Variant</code></td>
+  <td>TEXT</td>
+  <td>JSON (or TDocVariant)</td>
+</tr>
+<tr>
+  <td><code>TNullableInteger</code>, etc.</td>
+  <td>varies</td>
+  <td>Nullable types supporting SQL NULL</td>
+</tr>
+<tr>
+  <td><code>record</code></td>
+  <td>TEXT</td>
+  <td>JSON (Delphi XE5+)</td>
+</tr>
+<tr>
+  <td><code>TRecordVersion</code></td>
+  <td>INTEGER</td>
+  <td>Monotonic change counter</td>
+</tr>
+</tbody>
+</table>
+<h3>5.1.4. Property Attributes</h3>
+<p>
+Use special attributes in property declarations:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmDiaper = class(TOrm)
+  private
+    fSerialNumber: RawUtf8;
+    fModel: TOrmDiaperModel;
+    fBaby: TOrmBaby;
+  published
+    property SerialNumber: RawUtf8
+      index 30                    // Max 30 chars for external DB
+      read fSerialNumber write fSerialNumber
+      stored AS_UNIQUE;           // Creates unique index
+    property Model: TOrmDiaperModel read fModel write fModel;
+    property Baby: TOrmBaby read fBaby write fBaby;
+  end;
+</code></pre>
+<ul>
+  <li><strong><code>stored AS_UNIQUE</code></strong>: Creates a unique database index</li>
+  <li><strong><code>index N</code></strong>: Maximum character length for external databases</li>
+  <li><strong><code>index N</code></strong> (dynamic arrays): Used for <code>TOrm.DynArray(N)</code> wrapper access</li>
+</ul>
+<hr>
+<h2>5.2. Text Fields</h2>
+<p>
+The preferred type for text storage is <code>RawUtf8</code>. This ensures:
+
+</p>
+<ul>
+  <li>Consistent UTF-8 encoding across all database engines</li>
+  <li>No conversion overhead during JSON serialization</li>
+  <li>Compatibility with all Delphi versions</li>
+</ul>
+<pre><code class="language-pascal">// Business layer: Use RawUtf8
+property CustomerName: RawUtf8 read fCustomerName write fCustomerName;
+
+// UI layer: Convert for display
+var
+  displayName: string;
+begin
+  displayName := Utf8ToString(Customer.CustomerName);
+  Edit1.Text := displayName;
+end;
+</code></pre>
+<p>
+<strong>Domain-Driven Tip</strong>: Using <code>RawUtf8</code> in your domain layer prevents accidental coupling between business logic and presentation.
+
+</p>
+<hr>
+<h2>5.3. Date and Time Fields</h2>
+<h3>5.3.1. TDateTime / TDateTimeMS</h3>
+<p>
+Stored as ISO 8601 text in the database:
+
+</p>
+<pre><code class="language-pascal">property CreatedAt: TDateTime read fCreatedAt write fCreatedAt;
+property PreciseTime: TDateTimeMS read fPreciseTime write fPreciseTime;  // With milliseconds
+</code></pre>
+<h3>5.3.2. TTimeLog / TModTime / TCreateTime</h3>
+<p>
+Stored as INTEGER for fast comparison:
+
+</p>
+<pre><code class="language-pascal">property LastModified: TModTime read fLastModified write fLastModified;  // Auto-updated
+property Created: TCreateTime read fCreated write fCreated;              // Auto-set once
+property Timestamp: TTimeLog read fTimestamp write fTimestamp;           // Manual
+</code></pre>
+<p>
+<code>TModTime</code> and <code>TCreateTime</code> are automatically updated by the server:
+<ul>
+  <li><code>TCreateTime</code>: Set when the record is first inserted</li>
+  <li><code>TModTime</code>: Updated on every modification</li>
+</ul>
+<h3>5.3.3. TUnixTime / TUnixMSTime</h3>
+<p>
+For interoperability with JavaScript/C#/Java:
+
+</p>
+<pre><code class="language-pascal">property UnixTs: TUnixTime read fUnixTs write fUnixTs;        // Seconds
+property UnixMsTs: TUnixMSTime read fUnixMsTs write fUnixMsTs; // Milliseconds
+</code></pre>
+<hr>
+<h2>5.4. TOrm Foreign Key Fields</h2>
+<h3>5.4.1. TOrm Published Properties (NOT Instances)</h3>
+<p>
+<strong>Critical</strong>: <code>TOrm</code> published properties are <strong>NOT</strong> class instances. They store <code>pointer(RowID)</code>:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmOrder = class(TOrm)
+  published
+    property Customer: TOrmCustomer read fCustomer write fCustomer;  // Stores ID, not instance!
+  end;
+
+// WRONG - will cause Access Violation:
+WriteLn(Order.Customer.Name);  // AV! Customer is not an instance
+
+// CORRECT - retrieve separately:
+var
+  cust: TOrmCustomer;
+begin
+  cust := TOrmCustomer.Create(Client, Order.Customer);  // Load by ID
+  try
+    WriteLn(cust.Name);
+  finally
+    cust.Free;
+  end;
+end;
+</code></pre>
+<h3>5.4.2. Setting Foreign Keys</h3>
+<pre><code class="language-pascal">var
+  Order: TOrmOrder;
+  Customer: TOrmCustomer;
+begin
+  Customer := TOrmCustomer.Create;
+  Order := TOrmOrder.Create;
+  try
+    Customer.Name := &#x27;ACME Corp&#x27;;
+    Client.Add(Customer, True);  // Customer.ID is now set
+
+    Order.Customer := Customer.AsTOrm;  // Use AsTOrm for cross-platform
+    // or: Order.Customer := pointer(Customer.ID);  // 32-bit only
+    Client.Add(Order, True);
+  finally
+    Order.Free;
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<h3>5.4.3. CreateJoined for Automatic Loading</h3>
+<p>
+Use <code>CreateJoined</code> to auto-instantiate and load all <code>TOrm</code> properties:
+
+</p>
+<pre><code class="language-pascal">var
+  Order: TOrmOrder;
+begin
+  Order := TOrmOrder.CreateJoined(Client, OrderID);
+  try
+    // Now Order.Customer is a real instance, loaded via JOIN
+    WriteLn(Order.Customer.Name);  // Safe!
+  finally
+    Order.Free;  // Also frees Order.Customer
+  end;
+end;
+</code></pre>
+<h3>5.4.4. Deletion Tracking</h3>
+<p>
+The ORM automatically handles foreign key integrity (emulated, not via SQL constraints):
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Index</th>
+  <th>Deletion Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TOrm</code> property</td>
+  <td>Yes</td>
+  <td>Field reset to 0</td>
+</tr>
+<tr>
+  <td><code>TID</code></td>
+  <td>Yes</td>
+  <td>None (no table info)</td>
+</tr>
+<tr>
+  <td><code>TOrmClassNameID</code></td>
+  <td>Yes</td>
+  <td>Field reset to 0</td>
+</tr>
+<tr>
+  <td><code>TOrmClassNameToBeDeletedID</code></td>
+  <td>Yes</td>
+  <td>Row deleted (cascade)</td>
+</tr>
+<tr>
+  <td><code>TRecordReference</code></td>
+  <td>Yes</td>
+  <td>Field reset to 0</td>
+</tr>
+<tr>
+  <td><code>TRecordReferenceToBeDeleted</code></td>
+  <td>Yes</td>
+  <td>Row deleted (cascade)</td>
+</tr>
+</tbody>
+</table>
+Define typed IDs for explicit cascade behavior:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmCustomerID = type TID;              // Reset to 0 on delete
+  TOrmCustomerToBeDeletedID = type TID;   // Cascade delete
+
+  TOrmOrder = class(TOrm)
+  published
+    property Customer: TOrmCustomerID read fCustomer write fCustomer;
+    property OwnerCustomer: TOrmCustomerToBeDeletedID read fOwner write fOwner;
+  end;
+</code></pre>
+<hr>
+<h2>5.5. TRecordReference: Cross-Table References</h2>
+<p>
+<code>TRecordReference</code> stores a reference to <strong>any</strong> table in the model:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmAuditLog = class(TOrm)
+  published
+    property RelatedRecord: TRecordReference read fRelated write fRelated;
+  end;
+
+// Usage
+var
+  Log: TOrmAuditLog;
+  Ref: RecordRef;  // Helper record
+begin
+  // Store reference to any record (requires Model for table index lookup)
+  Log.RelatedRecord := RecordReference(Model, TOrmCustomer, CustomerID);
+
+  // Retrieve via helper
+  Ref.Value := Log.RelatedRecord;
+  WriteLn(&#x27;Table: &#x27;, Ref.Table(Model).SqlTableName);
+  WriteLn(&#x27;ID: &#x27;, Ref.ID);
+
+  // Load the referenced record directly
+  Rec := Client.Retrieve(Log.RelatedRecord);
+end;
+</code></pre>
+<p>
+<strong>Warning</strong>: <code>TRecordReference</code> encodes table index in high bits. <strong>Never change table order</strong> in <code>TOrmModel</code> after deployment.
+
+</p>
+<hr>
+<h2>5.6. Variant Fields and TDocVariant</h2>
+<p>
+<code>Variant</code> fields are stored as JSON TEXT:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmDocument = class(TOrm)
+  published
+    property Data: Variant read fData write fData;
+  end;
+
+// Usage - schema-less storage
+var
+  Doc: TOrmDocument;
+begin
+  Doc := TOrmDocument.Create;
+  Doc.Data := _ObjFast([&#x27;name&#x27;, &#x27;John&#x27;, &#x27;tags&#x27;, _Arr([&#x27;admin&#x27;, &#x27;user&#x27;])]);
+  Client.Add(Doc, True);
+
+  // Later retrieval
+  Doc := TOrmDocument.Create(Client, DocID);
+  WriteLn(Doc.Data.name);        // &#x27;John&#x27;
+  WriteLn(Doc.Data.tags._Count); // 2
+end;
+</code></pre>
+<p>
+For MongoDB ODM, variants are stored as native BSON documents with full query support.
+
+</p>
+<hr>
+<h2>5.7. Dynamic Array Fields</h2>
+<p>
+Dynamic arrays are stored as BLOB in binary format:
+
+</p>
+<pre><code class="language-pascal">type
+  TIntegerArray = array of Integer;
+
+  TOrmWithArray = class(TOrm)
+  private
+    fScores: TIntegerArray;
+  published
+    property Scores: TIntegerArray index 1 read fScores write fScores;
+  end;
+</code></pre>
+<p>
+Access via <code>TDynArray</code> wrapper:
+
+</p>
+<pre><code class="language-pascal">var
+  Rec: TOrmWithArray;
+  DA: TDynArray;
+  Value: Integer;
+begin
+  DA := Rec.DynArray(1);  // Get wrapper for Scores
+  Value := 100;
+  DA.Add(Value);  // TDynArray.Add takes a reference
+  Value := 200;
+  DA.Add(Value);
+end;
+</code></pre>
+<hr>
+<h2>5.8. TNullable</em> Types</h2>
+<p>
+For SQL NULL support, use nullable types:
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmNullableRecord = class(TOrm)
+  published
+    property OptionalInt: TNullableInteger read fOptionalInt write fOptionalInt;
+    property OptionalText: TNullableUtf8Text index 100 read fOptionalText write fOptionalText;
+    property OptionalDate: TNullableDateTime read fOptionalDate write fOptionalDate;
+  end;
+
+// Usage
+var
+  Rec: TOrmNullableRecord;
+begin
+  Rec := TOrmNullableRecord.Create;
+  Rec.OptionalInt := NullableInteger(42);        // Has value
+  Rec.OptionalText := NullableUtf8TextNull;      // Is NULL
+  Rec.OptionalDate := NullableDateTime(Now);     // Has value
+
+  if NullableIntegerIsEmptyOrNull(Rec.OptionalInt) then
+    WriteLn(&#x27;No value&#x27;)
+  else
+    WriteLn(&#x27;Value: &#x27;, NullableIntegerToValue(Rec.OptionalInt));
+end;
+</code></pre>
+<p>
+Available nullable types:
+<ul>
+  <li><code>TNullableInteger</code> (Int64)</li>
+  <li><code>TNullableBoolean</code></li>
+  <li><code>TNullableFloat</code> (Double)</li>
+  <li><code>TNullableCurrency</code></li>
+  <li><code>TNullableDateTime</code></li>
+  <li><code>TNullableTimeLog</code></li>
+  <li><code>TNullableUtf8Text</code></li>
+</ul>
+<hr>
+<h2>5.9. TOrmModel: Schema Definition</h2>
+<p>
+<code>TOrmModel</code> defines which <code>TOrm</code> classes form your database:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.core;
+
+var
+  Model: TOrmModel;
+begin
+  Model := TOrmModel.Create([
+    TOrmCustomer,
+    TOrmProduct,
+    TOrmOrder,
+    TOrmOrderLine
+  ], &#x27;api&#x27;);  // &#x27;api&#x27; is the root URI
+
+  // Table order matters for TRecordReference - don&#x27;t change after deployment!
+end;
+</code></pre>
+<h3>5.9.1. Field Validation and Constraints</h3>
+<pre><code class="language-pascal">// Add unique validation at runtime (alternative to stored AS_UNIQUE)
+TOrmCustomer.AddFilterOrValidate(&#x27;Email&#x27;, TSynValidateUniqueField.Create);
+
+// For multi-field uniqueness
+TOrmOrder.AddFilterOrValidate(&#x27;OrderNumber&#x27;,
+  TSynValidateUniqueFields.Create(&#x27;{&quot;FieldNames&quot;:&quot;CustomerID,OrderNumber&quot;}&#x27;));
+</code></pre>
+<p>
+<strong>Note</strong>: Prefer using <code>stored AS_UNIQUE</code> in property declarations for compile-time constraints. Runtime validation is useful for conditional or complex uniqueness rules.
+
+</p>
+<hr>
+<h2>5.10. IRestOrm: The ORM Interface</h2>
+<p>
+<strong>Always code against <code>IRestOrm</code> interface</strong>, not concrete classes:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.core;
+
+procedure DoWork(const Orm: IRestOrm);  // Interface parameter
+var
+  Customer: TOrmCustomer;
+begin
+  Customer := TOrmCustomer.Create;
+  try
+    Customer.Name := &#x27;ACME Corp&#x27;;
+    Orm.Add(Customer, True);    // Add via interface
+  finally
+    Customer.Free;
+  end;
+end;
+</code></pre>
+<h3>5.10.1. CRUD Operations</h3>
+<pre><code class="language-pascal">var
+  Orm: IRestOrm;
+  Customer: TOrmCustomer;
+  ID: TID;
+begin
+  // CREATE
+  Customer := TOrmCustomer.Create;
+  Customer.Name := &#x27;New Customer&#x27;;
+  ID := Orm.Add(Customer, True);  // Returns new ID
+
+  // READ
+  Customer := TOrmCustomer.Create(Orm, ID);  // Load by ID
+  // or
+  Orm.Retrieve(ID, Customer);                // Load into existing instance
+
+  // UPDATE
+  Customer.Name := &#x27;Updated Name&#x27;;
+  Orm.Update(Customer);
+
+  // DELETE
+  Orm.Delete(TOrmCustomer, ID);
+end;
+</code></pre>
+<h3>5.10.2. Accessing ORM from TRest</h3>
+<p>
+In mORMot 2, ORM is accessed via the <code>.Orm</code> property:
+
+</p>
+<pre><code class="language-pascal">// mORMot 1 style (deprecated):
+Server.Add(Customer, True);
+
+// mORMot 2 style:
+Server.Orm.Add(Customer, True);
+
+// Or store interface:
+var
+  Orm: IRestOrm;
+begin
+  Orm := Server.Orm;
+  Orm.Add(Customer, True);
+end;
+</code></pre>
+<hr>
+<h2>5.11. Virtual Tables and Storage Backends</h2>
+<h3>5.11.1. In-Memory Storage</h3>
+<pre><code class="language-pascal">uses
+  mormot.rest.memserver;
+
+// Use TRestServerFullMemory for pure in-memory ORM
+Server := TRestServerFullMemory.Create(Model, &#x27;&#x27;, False, False);
+// Or with file persistence:
+Server := TRestServerFullMemory.Create(Model, &#x27;data.json&#x27;, False, False);
+</code></pre>
+<h3>5.11.2. External SQL Database</h3>
+<pre><code class="language-pascal">uses
+  mormot.orm.sql,
+  mormot.db.sql.postgres;
+
+var
+  Props: TSqlDBPostgresConnectionProperties;
+begin
+  Props := TSqlDBPostgresConnectionProperties.Create(
+    &#x27;localhost:5432&#x27;, &#x27;mydb&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+
+  // Map TOrm to external database
+  OrmMapExternal(Model, TOrmCustomer, Props);
+  OrmMapExternal(Model, TOrmOrder, Props);
+end;
+</code></pre>
+<h3>5.11.3. MongoDB (ODM)</h3>
+<pre><code class="language-pascal">uses
+  mormot.orm.mongodb,
+  mormot.db.nosql.mongodb;
+
+var
+  Client: TMongoClient;
+  Server: TRestServer;
+begin
+  Client := TMongoClient.Create(&#x27;localhost&#x27;, 27017);
+  // OrmMapMongoDB requires a Server instance, not Model
+  OrmMapMongoDB(TOrmDocument, Server.OrmInstance, Client.Database[&#x27;mydb&#x27;]);
+end;
+</code></pre>
+<hr>
+<h2>5.12. Migration from mORMot 1</h2>
+<h3>5.12.1. Class Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRecord</code></td>
+  <td><code>TOrm</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRecordClass</code></td>
+  <td><code>TOrmClass</code></td>
+</tr>
+<tr>
+  <td><code>TSQLModel</code></td>
+  <td><code>TOrmModel</code></td>
+</tr>
+<tr>
+  <td><code>TSQLTable</code></td>
+  <td><code>TOrmTable</code></td>
+</tr>
+<tr>
+  <td><code>TSQLTableJSON</code></td>
+  <td><code>TOrmTableJson</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRest</code></td>
+  <td><code>TRest</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRest.Add()</code></td>
+  <td><code>TRest.Orm.Add()</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRecordMany</code></td>
+  <td><code>TOrmMany</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRawBlob</code></td>
+  <td><code>RawBlob</code></td>
+</tr>
+</tbody>
+</table>
+<h3>5.12.2. Unit Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mORMot.pas</code></td>
+  <td><code>mormot.orm.core</code> + <code>mormot.rest.core</code></td>
+</tr>
+<tr>
+  <td><code>mORMotSQLite3.pas</code></td>
+  <td><code>mormot.orm.sqlite3</code> + <code>mormot.rest.sqlite3</code></td>
+</tr>
+<tr>
+  <td><code>mORMotDB.pas</code></td>
+  <td><code>mormot.orm.sql</code></td>
+</tr>
+<tr>
+  <td><code>mORMotMongoDB.pas</code></td>
+  <td><code>mormot.orm.mongodb</code></td>
+</tr>
+</tbody>
+</table>
+<h3>5.12.3. Backward Compatibility</h3>
+<p>
+By default, type aliases are provided:
+<pre><code class="language-pascal">type
+  TSQLRecord = TOrm;
+  TSQLModel = TOrmModel;
+  // etc.
+</code></pre>
+<p>
+Define <code>PUREMORMOT2</code> to disable these and use only new names.
+
+</p>
+<hr>
+<p>
+<em>Next Chapter: Daily ORM (Working with Objects and Queries)</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-04.html">Chapter 4: Core Units</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-06.html">Chapter 6: Daily ORM</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

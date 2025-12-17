@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 9. External NoSQL Database Access
+
+</p>
+<p>
+<em>MongoDB and Object-Document Mapping</em>
+
+</p>
+<p>
+mORMot provides native access to NoSQL databases, with MongoDB as the primary supported engine. The ORM seamlessly transforms into an ODM (Object-Document Mapping) when working with document stores.
+
+</p>
+<hr>
+<h2>9.1. NoSQL Overview</h2>
+<h3>9.1.1. Supported NoSQL Engines</h3>
+<table>
+<thead>
+<tr>
+  <th>Engine</th>
+  <th>Unit</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>MongoDB</td>
+  <td><code>mormot.db.nosql.mongodb</code></td>
+  <td>Full ODM support</td>
+</tr>
+<tr>
+  <td>In-Memory</td>
+  <td><code>mormot.orm.storage</code></td>
+  <td><code>TObjectList</code> with JSON/binary persistence</td>
+</tr>
+</tbody>
+</table>
+<h3>9.1.2. MongoDB Advantages</h3>
+<ul>
+  <li><strong>Schema flexibility</strong>: Documents can have varying structures</li>
+  <li><strong>Horizontal scaling</strong>: Built-in sharding and replication</li>
+  <li><strong>Document model</strong>: Natural fit for mORMot's <code>TDocVariant</code></li>
+  <li><strong>High performance</strong>: Excellent for write-heavy workloads</li>
+  <li><strong>JSON native</strong>: Direct integration with mORMot's JSON handling</li>
+</ul>
+<hr>
+<h2>9.2. MongoDB Client</h2>
+<h3>9.2.1. Unit Structure</h3>
+<pre><code class="language-text">mormot.db.nosql.bson.pas     → BSON encoding/decoding
+        ↓
+mormot.db.nosql.mongodb.pas  → MongoDB wire protocol client
+        ↓
+mormot.orm.mongodb.pas       → ORM/ODM integration
+</code></pre>
+<h3>9.2.2. Connecting to MongoDB</h3>
+<p>
+<strong>Basic connection:</strong>
+<pre><code class="language-pascal">uses
+  mormot.db.nosql.mongodb;
+
+var
+  Client: TMongoClient;
+  DB: TMongoDatabase;
+begin
+  Client := TMongoClient.Create(&#x27;localhost&#x27;, 27017);
+  try
+    DB := Client.Database[&#x27;mydb&#x27;];
+    // Use DB...
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<p>
+<strong>With authentication (SCRAM-SHA-1):</strong>
+<pre><code class="language-pascal">var
+  Client: TMongoClient;
+  DB: TMongoDatabase;
+begin
+  Client := TMongoClient.Create(&#x27;localhost&#x27;, 27017);
+  try
+    // Authenticate and get database
+    DB := Client.OpenAuth(&#x27;mydb&#x27;, &#x27;username&#x27;, &#x27;password&#x27;);
+    // Use DB...
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<p>
+<strong>Replica set connection:</strong>
+<pre><code class="language-pascal">Client := TMongoClient.Create(
+  &#x27;mongodb://host1:27017,host2:27017,host3:27017/?replicaSet=myReplicaSet&#x27;);
+</code></pre>
+<h3>9.2.3. Connection Options</h3>
+<pre><code class="language-pascal">Client := TMongoClient.Create(&#x27;localhost&#x27;, 27017);
+
+// Write concern settings
+Client.WriteConcern := wcAcknowledged;      // Default - wait for ack
+Client.WriteConcern := wcUnacknowledged;    // Fire and forget (fastest)
+Client.WriteConcern := wcMajority;          // Wait for majority
+
+// Read preference
+Client.ReadPreference := rpPrimary;         // Always read from primary
+Client.ReadPreference := rpSecondary;       // Read from secondaries
+Client.ReadPreference := rpNearest;         // Nearest server
+</code></pre>
+<hr>
+<h2>9.3. BSON and TDocVariant</h2>
+<h3>9.3.1. BSON Types</h3>
+<p>
+MongoDB uses BSON (Binary JSON), which extends JSON with additional types:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>BSON Type</th>
+  <th>Delphi Representation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Double</td>
+  <td><code>Double</code></td>
+</tr>
+<tr>
+  <td>String</td>
+  <td><code>RawUtf8</code></td>
+</tr>
+<tr>
+  <td>Document</td>
+  <td><code>TDocVariant</code></td>
+</tr>
+<tr>
+  <td>Array</td>
+  <td><code>TDocVariant</code> (array mode)</td>
+</tr>
+<tr>
+  <td>Binary</td>
+  <td><code>RawByteString</code></td>
+</tr>
+<tr>
+  <td>ObjectId</td>
+  <td><code>TBsonObjectID</code></td>
+</tr>
+<tr>
+  <td>Boolean</td>
+  <td><code>Boolean</code></td>
+</tr>
+<tr>
+  <td>DateTime</td>
+  <td><code>TDateTime</code></td>
+</tr>
+<tr>
+  <td>Null</td>
+  <td><code>Null</code> variant</td>
+</tr>
+<tr>
+  <td>Int32</td>
+  <td><code>Integer</code></td>
+</tr>
+<tr>
+  <td>Int64</td>
+  <td><code>Int64</code></td>
+</tr>
+<tr>
+  <td>Decimal128</td>
+  <td><code>TDecimal128</code></td>
+</tr>
+</tbody>
+</table>
+<h3>9.3.2. TDocVariant Integration</h3>
+<p>
+<code>TDocVariant</code> seamlessly maps to MongoDB documents:
+
+</p>
+<pre><code class="language-pascal">var
+  Doc: Variant;
+begin
+  // Create document with late-binding
+  TDocVariant.New(Doc);
+  Doc.name := &#x27;John Doe&#x27;;
+  Doc.email := &#x27;john@example.com&#x27;;
+  Doc.age := 30;
+  Doc.tags := _Arr([&#x27;developer&#x27;, &#x27;delphi&#x27;, &#x27;mongodb&#x27;]);
+  Doc.address := _Obj([
+    &#x27;street&#x27;, &#x27;123 Main St&#x27;,
+    &#x27;city&#x27;, &#x27;New York&#x27;,
+    &#x27;zip&#x27;, &#x27;10001&#x27;
+  ]);
+
+  // Save to MongoDB
+  Coll.Insert(Doc);
+end;
+</code></pre>
+<h3>9.3.3. ObjectID Generation</h3>
+<pre><code class="language-pascal">var
+  ID: TBsonObjectID;
+begin
+  // Generate new ObjectID (client-side)
+  ID.ComputeNew;  // Use ComputeNew method on record
+
+  // ObjectID contains timestamp
+  WriteLn(&#x27;Created at: &#x27;, DateTimeToStr(ID.CreateDateTime));
+
+  // Use in document
+  Doc._id := ID.ToVariant;
+  Coll.Insert(Doc);
+end;
+</code></pre>
+<hr>
+<h2>9.4. Collection Operations</h2>
+<h3>9.4.1. Getting a Collection</h3>
+<pre><code class="language-pascal">var
+  Coll: TMongoCollection;
+begin
+  // Get or create collection
+  Coll := DB.CollectionOrCreate[&#x27;customers&#x27;];
+
+  // Get existing collection
+  Coll := DB.Collection[&#x27;customers&#x27;];
+end;
+</code></pre>
+<h3>9.4.2. Insert Operations</h3>
+<p>
+<strong>Single document:</strong>
+<pre><code class="language-pascal">var
+  Doc: Variant;
+begin
+  Doc := _ObjFast([
+    &#x27;name&#x27;, &#x27;John Doe&#x27;,
+    &#x27;email&#x27;, &#x27;john@example.com&#x27;,
+    &#x27;age&#x27;, 30
+  ]);
+
+  Coll.Insert(Doc);
+  WriteLn(&#x27;Inserted with _id: &#x27;, Doc._id);  // Auto-generated ObjectID
+end;
+</code></pre>
+<p>
+<strong>Bulk insert (much faster):</strong>
+<pre><code class="language-pascal">var
+  Docs: TVariantDynArray;
+  i: Integer;
+begin
+  SetLength(Docs, 10000);
+  for i := 0 to High(Docs) do
+  begin
+    ID.ComputeNew;  // Generate new ObjectID
+    Docs[i] := _ObjFast([
+      &#x27;_id&#x27;, ID.ToVariant,
+      &#x27;index&#x27;, i,
+      &#x27;data&#x27;, FormatUtf8(&#x27;Record %&#x27;, [i])
+    ]);
+  end;
+
+  Coll.Insert(Docs);  // Single network roundtrip!
+end;
+</code></pre>
+<h3>9.4.3. Find Operations</h3>
+<p>
+<strong>Find one document:</strong>
+<pre><code class="language-pascal">var
+  Doc: Variant;
+begin
+  // By _id
+  Doc := Coll.FindOne(ObjectID);
+  Doc := Coll.FindOne(123);  // Integer _id
+
+  // By query
+  Doc := Coll.FindDoc(&#x27;{name:?}&#x27;, [&#x27;John&#x27;]);
+  Doc := Coll.FindDoc(&#x27;{age:{$gt:?}}&#x27;, [21]);
+end;
+</code></pre>
+<p>
+<strong>Find multiple documents:</strong>
+<pre><code class="language-pascal">var
+  Docs: TVariantDynArray;
+  Doc: Variant;
+begin
+  // Get all matching documents
+  Coll.FindDocs(&#x27;{status:?}&#x27;, [&#x27;active&#x27;], Docs);
+
+  for Doc in Docs do
+    WriteLn(Doc.name);
+end;
+</code></pre>
+<p>
+<strong>Find with projection:</strong>
+<pre><code class="language-pascal">var
+  Json: RawUtf8;
+begin
+  // Return only specific fields
+  Json := Coll.FindJson(
+    &#x27;{status:?}&#x27;,        // Query
+    [&#x27;active&#x27;],          // Parameters
+    &#x27;{name:1,email:1}&#x27;   // Projection (include name and email)
+  );
+end;
+</code></pre>
+<p>
+<strong>Iterating multiple documents:</strong>
+<pre><code class="language-pascal">var
+  Docs: TVariantDynArray;
+  Doc: Variant;
+begin
+  // FindDocs fills array with all matching documents
+  Coll.FindDocs(&#x27;{age:{$gte:?}}&#x27;, [18], Docs, Null);
+  for Doc in Docs do
+    WriteLn(Doc.name);
+end;
+</code></pre>
+<p>
+<blockquote><strong>Note</strong>: mORMot2 MongoDB uses array-based retrieval (<code>FindDocs</code>) rather than cursor iteration. For large result sets, use pagination with <code>NumberToReturn</code> and <code>NumberToSkip</code> parameters.</blockquote>
+
+</p>
+<h3>9.4.4. Update Operations</h3>
+<p>
+<strong>Replace document:</strong>
+<pre><code class="language-pascal">var
+  Doc: Variant;
+begin
+  Doc := Coll.FindOne(123);
+  Doc.status := &#x27;updated&#x27;;
+  Coll.Save(Doc);  // Replace entire document
+end;
+</code></pre>
+<p>
+<strong>Partial update ($set):</strong>
+<pre><code class="language-pascal">// Update specific fields only
+Coll.Update(
+  &#x27;{_id:?}&#x27;, [123],           // Query
+  &#x27;{$set:{status:?,updated:?}}&#x27;, [&#x27;active&#x27;, Now]  // Update
+);
+</code></pre>
+<p>
+<strong>Update multiple documents:</strong>
+<pre><code class="language-pascal">// Set all inactive users to archived
+Coll.UpdateMany(
+  &#x27;{status:?}&#x27;, [&#x27;inactive&#x27;],
+  &#x27;{$set:{archived:?}}&#x27;, [True]
+);
+</code></pre>
+<p>
+<strong>Upsert (insert if not exists):</strong>
+<pre><code class="language-pascal">Coll.Update(
+  &#x27;{email:?}&#x27;, [&#x27;john@example.com&#x27;],
+  &#x27;{$set:{name:?,lastSeen:?}}&#x27;, [&#x27;John&#x27;, Now],
+  [mufUpsert]  // Create if not found
+);
+</code></pre>
+<h3>9.4.5. Delete Operations</h3>
+<p>
+<strong>Delete one:</strong>
+<pre><code class="language-pascal">Coll.Remove(&#x27;{_id:?}&#x27;, [ObjectID]);
+Coll.RemoveOne(123);  // By _id
+</code></pre>
+<p>
+<strong>Delete many:</strong>
+<pre><code class="language-pascal">Coll.Remove(&#x27;{status:?}&#x27;, [&#x27;deleted&#x27;]);  // Delete all matching
+</code></pre>
+<p>
+<strong>Bulk delete:</strong>
+<pre><code class="language-pascal">var
+  IDs: TBsonObjectIDDynArray;
+begin
+  // Much faster than individual deletes
+  Coll.Remove(&#x27;{_id:{$in:?}}&#x27;, [IDs]);
+end;
+</code></pre>
+<hr>
+<h2>9.5. MongoDB Query Language</h2>
+<h3>9.5.1. Comparison Operators</h3>
+<table>
+<thead>
+<tr>
+  <th>Operator</th>
+  <th>Description</th>
+  <th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>$eq</code></td>
+  <td>Equal</td>
+  <td><code>{age:{$eq:30}}</code></td>
+</tr>
+<tr>
+  <td><code>$ne</code></td>
+  <td>Not equal</td>
+  <td><code>{status:{$ne:'deleted'}}</code></td>
+</tr>
+<tr>
+  <td><code>$gt</code></td>
+  <td>Greater than</td>
+  <td><code>{age:{$gt:21}}</code></td>
+</tr>
+<tr>
+  <td><code>$gte</code></td>
+  <td>Greater or equal</td>
+  <td><code>{age:{$gte:18}}</code></td>
+</tr>
+<tr>
+  <td><code>$lt</code></td>
+  <td>Less than</td>
+  <td><code>{price:{$lt:100}}</code></td>
+</tr>
+<tr>
+  <td><code>$lte</code></td>
+  <td>Less or equal</td>
+  <td><code>{stock:{$lte:10}}</code></td>
+</tr>
+<tr>
+  <td><code>$in</code></td>
+  <td>In array</td>
+  <td><code>{status:{$in:['active','pending']}}</code></td>
+</tr>
+<tr>
+  <td><code>$nin</code></td>
+  <td>Not in array</td>
+  <td><code>{role:{$nin:['admin']}}</code></td>
+</tr>
+</tbody>
+</table>
+<h3>9.5.2. Logical Operators</h3>
+<pre><code class="language-pascal">// AND (implicit)
+Coll.FindDocs(&#x27;{age:{$gte:?},status:?}&#x27;, [18, &#x27;active&#x27;], Docs);
+
+// AND (explicit)
+Coll.FindDocs(&#x27;{$and:[{age:{$gte:?}},{age:{$lt:?}}]}&#x27;, [18, 65], Docs);
+
+// OR
+Coll.FindDocs(&#x27;{$or:[{status:?},{priority:{$gt:?}}]}&#x27;, [&#x27;urgent&#x27;, 5], Docs);
+
+// NOT
+Coll.FindDocs(&#x27;{age:{$not:{$lt:?}}}&#x27;, [18], Docs);
+</code></pre>
+<h3>9.5.3. Element Operators</h3>
+<pre><code class="language-pascal">// Field exists
+Coll.FindDocs(&#x27;{email:{$exists:true}}&#x27;, [], Docs);
+
+// Type check
+Coll.FindDocs(&#x27;{age:{$type:&quot;int&quot;}}&#x27;, [], Docs);
+</code></pre>
+<h3>9.5.4. Array Operators</h3>
+<pre><code class="language-pascal">// Element in array
+Coll.FindDocs(&#x27;{tags:?}&#x27;, [&#x27;mongodb&#x27;], Docs);
+
+// All elements match
+Coll.FindDocs(&#x27;{tags:{$all:?}}&#x27;, [_Arr([&#x27;mongodb&#x27;,&#x27;delphi&#x27;])], Docs);
+
+// Array size
+Coll.FindDocs(&#x27;{tags:{$size:?}}&#x27;, [3], Docs);
+
+// Element match
+Coll.FindDocs(&#x27;{items:{$elemMatch:{qty:{$gt:?},price:{$lt:?}}}}&#x27;, [10, 100], Docs);
+</code></pre>
+<h3>9.5.5. Text Search</h3>
+<pre><code class="language-pascal">// Create text index first
+Coll.EnsureIndex(&#x27;{content:&quot;text&quot;}&#x27;);
+
+// Text search
+Coll.FindDocs(&#x27;{$text:{$search:?}}&#x27;, [&#x27;mongodb tutorial&#x27;], Docs);
+</code></pre>
+<hr>
+<h2>9.6. ORM/ODM Integration</h2>
+<h3>9.6.1. Mapping TOrm to MongoDB</h3>
+<pre><code class="language-pascal">uses
+  mormot.orm.mongodb,
+  mormot.db.nosql.mongodb;
+
+var
+  Client: TMongoClient;
+  Model: TOrmModel;
+  Server: TRestServerDB;
+begin
+  // Connect to MongoDB
+  Client := TMongoClient.Create(&#x27;localhost&#x27;, 27017);
+
+  // Create model
+  Model := TOrmModel.Create([TOrmCustomer, TOrmOrder]);
+
+  // Map classes to MongoDB
+  OrmMapMongoDB(Model, TOrmCustomer, Client.Database[&#x27;mydb&#x27;], &#x27;customers&#x27;);
+  OrmMapMongoDB(Model, TOrmOrder, Client.Database[&#x27;mydb&#x27;], &#x27;orders&#x27;);
+
+  // Create server
+  Server := TRestServerDB.Create(Model, &#x27;:memory:&#x27;);
+end;
+</code></pre>
+<h3>9.6.2. TOrm with MongoDB</h3>
+<pre><code class="language-pascal">type
+  TOrmArticle = class(TOrm)
+  private
+    fTitle: RawUtf8;
+    fContent: RawUtf8;
+    fTags: TRawUtf8DynArray;
+    fMetadata: Variant;  // TDocVariant for flexible schema
+  published
+    property Title: RawUtf8 read fTitle write fTitle;
+    property Content: RawUtf8 read fContent write fContent;
+    property Tags: TRawUtf8DynArray read fTags write fTags;
+    property Metadata: Variant read fMetadata write fMetadata;
+  end;
+</code></pre>
+<h3>9.6.3. Using the ORM</h3>
+<p>
+Once mapped, use standard ORM methods:
+
+</p>
+<pre><code class="language-pascal">var
+  Article: TOrmArticle;
+begin
+  // Create
+  Article := TOrmArticle.Create;
+  Article.Title := &#x27;Introduction to MongoDB&#x27;;
+  Article.Content := &#x27;MongoDB is a document database...&#x27;;
+  Article.Tags := [&#x27;mongodb&#x27;, &#x27;nosql&#x27;, &#x27;database&#x27;];
+  Article.Metadata := _ObjFast([&#x27;author&#x27;, &#x27;John&#x27;, &#x27;views&#x27;, 0]);
+  Server.Orm.Add(Article, True);
+
+  // Read
+  Article := TOrmArticle.Create(Server.Orm, ArticleID);
+
+  // Update
+  Article.Metadata.views := Article.Metadata.views + 1;
+  Server.Orm.Update(Article);
+
+  // Delete
+  Server.Orm.Delete(TOrmArticle, ArticleID);
+
+  // Query
+  Article := TOrmArticle.CreateAndFillPrepare(Server.Orm,
+    &#x27;Tags = ?&#x27;, [&#x27;mongodb&#x27;]);
+  while Article.FillOne do
+    WriteLn(Article.Title);
+end;
+</code></pre>
+<h3>9.6.4. MongoDB-Specific Queries</h3>
+<p>
+For advanced queries, use direct MongoDB access:
+
+</p>
+<pre><code class="language-pascal">var
+  Coll: TMongoCollection;
+  Docs: TVariantDynArray;
+begin
+  // Get underlying collection
+  Coll := TRestStorageMongoDB(
+    Server.StaticDataServer[TOrmArticle]).Collection;
+
+  // Complex aggregation
+  Coll.AggregateJson([
+    &#x27;{$match:{status:&quot;published&quot;}}&#x27;,
+    &#x27;{$group:{_id:&quot;$author&quot;,count:{$sum:1}}}&#x27;,
+    &#x27;{$sort:{count:-1}}&#x27;
+  ], Docs);
+end;
+</code></pre>
+<hr>
+<h2>9.7. Aggregation Framework</h2>
+<h3>9.7.1. Pipeline Operations</h3>
+<pre><code class="language-pascal">var
+  Results: TVariantDynArray;
+begin
+  Coll.AggregateDoc([
+    // Stage 1: Filter
+    _ObjFast([&#x27;$match&#x27;, _Obj([&#x27;status&#x27;, &#x27;active&#x27;])]),
+
+    // Stage 2: Group and count
+    _ObjFast([&#x27;$group&#x27;, _Obj([
+      &#x27;_id&#x27;, &#x27;$category&#x27;,
+      &#x27;total&#x27;, _Obj([&#x27;$sum&#x27;, 1]),
+      &#x27;avgPrice&#x27;, _Obj([&#x27;$avg&#x27;, &#x27;$price&#x27;])
+    ])]),
+
+    // Stage 3: Sort
+    _ObjFast([&#x27;$sort&#x27;, _Obj([&#x27;total&#x27;, -1])])
+  ], Results);
+
+  for Doc in Results do
+    WriteLn(Doc._id, &#x27;: &#x27;, Doc.total, &#x27; items, avg $&#x27;, Doc.avgPrice);
+end;
+</code></pre>
+<h3>9.7.2. Common Aggregation Operators</h3>
+<table>
+<thead>
+<tr>
+  <th>Operator</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>$match</code></td>
+  <td>Filter documents</td>
+</tr>
+<tr>
+  <td><code>$group</code></td>
+  <td>Group by field</td>
+</tr>
+<tr>
+  <td><code>$sort</code></td>
+  <td>Sort results</td>
+</tr>
+<tr>
+  <td><code>$project</code></td>
+  <td>Reshape documents</td>
+</tr>
+<tr>
+  <td><code>$limit</code></td>
+  <td>Limit results</td>
+</tr>
+<tr>
+  <td><code>$skip</code></td>
+  <td>Skip documents</td>
+</tr>
+<tr>
+  <td><code>$unwind</code></td>
+  <td>Deconstruct arrays</td>
+</tr>
+<tr>
+  <td><code>$lookup</code></td>
+  <td>Left outer join</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>9.8. Indexes</h2>
+<h3>9.8.1. Creating Indexes</h3>
+<pre><code class="language-pascal">// Single field index
+Coll.EnsureIndex(&#x27;{email:1}&#x27;);  // 1 = ascending
+
+// Compound index
+Coll.EnsureIndex(&#x27;{status:1,created:-1}&#x27;);
+
+// Unique index
+Coll.EnsureIndex(&#x27;{email:1}&#x27;, [ifoUnique]);
+
+// Text index
+Coll.EnsureIndex(&#x27;{title:&quot;text&quot;,content:&quot;text&quot;}&#x27;);
+
+// TTL index (auto-delete after time)
+Coll.EnsureIndex(&#x27;{createdAt:1}&#x27;, [ifoExpireAfterSeconds], 3600);
+</code></pre>
+<h3>9.8.2. Index Hints</h3>
+<pre><code class="language-pascal">// Force index usage
+Coll.FindJson(&#x27;{status:?}&#x27;, [&#x27;active&#x27;], &#x27;&#x27;,
+  &#x27;{$hint:{status:1}}&#x27;);  // Use status index
+</code></pre>
+<hr>
+<h2>9.9. Performance Tips</h2>
+<h3>9.9.1. Write Performance</h3>
+<pre><code class="language-pascal">// 1. Use bulk inserts
+Coll.Insert(DocsArray);  // Single call for many documents
+
+// 2. Use unacknowledged writes for non-critical data
+Client.WriteConcern := wcUnacknowledged;
+try
+  // Fast writes (no server confirmation)
+  Coll.Insert(LogEntries);
+finally
+  Client.WriteConcern := wcAcknowledged;
+end;
+
+// 3. Pre-generate ObjectIDs
+for i := 0 to High(Docs) do
+begin
+  ID.ComputeNew;
+  Docs[i]._id := ID.ToVariant;
+end;
+</code></pre>
+<h3>9.9.2. Read Performance</h3>
+<pre><code class="language-pascal">// 1. Use projections to limit returned fields
+Coll.FindJson(&#x27;{status:?}&#x27;, [&#x27;active&#x27;], &#x27;{name:1,email:1}&#x27;);
+
+// 2. Use covered queries (all fields in index)
+Coll.EnsureIndex(&#x27;{email:1,name:1}&#x27;);
+Coll.FindJson(&#x27;{email:?}&#x27;, [&#x27;john@example.com&#x27;], &#x27;{email:1,name:1,_id:0}&#x27;);
+
+// 3. Use cursor batching for large result sets
+Cursor := Coll.Find(Query, nil, [mqfNoCursorTimeout]);
+Cursor.BatchSize := 1000;
+</code></pre>
+<h3>9.9.3. Index Strategies</h3>
+<ul>
+  <li>Index fields used in <code>$match</code> stages</li>
+  <li>Index fields used in sorts</li>
+  <li>Compound indexes for multi-field queries</li>
+  <li>Cover queries with indexes when possible</li>
+  <li>Monitor with <code>explain()</code> equivalent</li>
+</ul>
+<hr>
+<h2>9.10. Migration from mORMot 1</h2>
+<h3>9.10.1. Unit Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>SynMongoDB.pas</code></td>
+  <td><code>mormot.db.nosql.mongodb.pas</code></td>
+</tr>
+<tr>
+  <td><code>mORMotMongoDB.pas</code></td>
+  <td><code>mormot.orm.mongodb.pas</code></td>
+</tr>
+</tbody>
+</table>
+<h3>9.10.2. Class/Function Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>StaticMongoDBRegister</code></td>
+  <td><code>OrmMapMongoDB</code></td>
+</tr>
+<tr>
+  <td><code>TMongoClient</code></td>
+  <td><code>TMongoClient</code> (unchanged)</td>
+</tr>
+<tr>
+  <td><code>TMongoDatabase</code></td>
+  <td><code>TMongoDatabase</code> (unchanged)</td>
+</tr>
+<tr>
+  <td><code>TMongoCollection</code></td>
+  <td><code>TMongoCollection</code> (unchanged)</td>
+</tr>
+</tbody>
+</table>
+<h3>9.10.3. Protocol Changes</h3>
+<p>
+mORMot 2 uses the new MongoDB wire protocol (OP_MSG) introduced in MongoDB 3.6:
+
+</p>
+<pre><code class="language-pascal">// For older MongoDB versions (&lt; 3.6), define:
+{$DEFINE MONGO_OLDPROTOCOL}
+</code></pre>
+<hr>
+<h2>9.11. Summary</h2>
+<p>
+MongoDB integration in mORMot 2 provides:
+
+</p>
+<ul>
+  <li><strong>Full ODM support</strong>: Use <code>TOrm</code> classes with MongoDB</li>
+  <li><strong>Direct client access</strong>: Low-level <code>TMongoClient</code> for advanced operations</li>
+  <li><strong>TDocVariant integration</strong>: Natural document handling</li>
+  <li><strong>Query flexibility</strong>: Full MongoDB query language support</li>
+  <li><strong>Performance</strong>: Bulk operations, connection pooling, index management</li>
+  <li><strong>Mixing backends</strong>: Combine MongoDB with SQL in same application</li>
+</ul>
+<hr>
+<p>
+<em>Next Chapter: JSON RESTful Client-Server</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-08.html">Chapter 8: External SQL Database Access</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-10.html">Chapter 10: JSON and RESTful Fundamentals</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

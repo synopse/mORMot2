@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>23. Asymmetric Encryption</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>23. Asymmetric Encryption</h1>
+<p>
+<em>Elliptic Curve Cryptography and Public Key Infrastructure</em>
+
+</p>
+<p>
+mORMot provides a complete asymmetric cryptography stack based on Elliptic Curve Cryptography (ECC), enabling digital signatures, secure encryption, and certificate management without external dependencies.
+
+</p>
+<hr>
+<h2>23.1. Public-Key Cryptography Fundamentals</h2>
+<h3>23.1.1. Asymmetric vs Symmetric Encryption</h3>
+<table>
+<thead>
+<tr>
+  <th>Aspect</th>
+  <th>Symmetric</th>
+  <th>Asymmetric</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Keys</td>
+  <td>Single shared secret</td>
+  <td>Public/private pair</td>
+</tr>
+<tr>
+  <td>Speed</td>
+  <td>Fast</td>
+  <td>Slower</td>
+</tr>
+<tr>
+  <td>Key distribution</td>
+  <td>Challenging</td>
+  <td>Easy (public keys shared freely)</td>
+</tr>
+<tr>
+  <td>Use case</td>
+  <td>Bulk data encryption</td>
+  <td>Key exchange, signatures</td>
+</tr>
+</tbody>
+</table>
+<h3>23.1.2. Public Key Operations</h3>
+<p>
+With a public/private key pair, you can:
+
+</p>
+<p>
+1. <strong>Sign</strong> - Create a digital signature with your private key
+2. <strong>Verify</strong> - Confirm a signature with the signer's public key
+3. <strong>Encrypt</strong> - Encrypt data with recipient's public key
+4. <strong>Decrypt</strong> - Decrypt data with your private key
+
+</p>
+<pre><code class="language-text">┌──────────────────────────────────────────────────────────────────┐
+│                     Key Pair Operations                          │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  SIGNING (Authentication)           ENCRYPTION (Confidentiality) │
+│  ─────────────────────────          ──────────────────────────── │
+│                                                                  │
+│  Alice → Private Key → Sign         Bob → Alice&#x27;s Public Key     │
+│          ↓                                   ↓                   │
+│      Signature                          Encrypted Message        │
+│          ↓                                   ↓                   │
+│  Bob ← Alice&#x27;s Public Key ← Verify  Alice ← Private Key ← Decrypt│
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2>23.2. Elliptic Curve Cryptography (ECC)</h2>
+<h3>23.2.1. Why ECC?</h3>
+<p>
+mORMot uses ECC (specifically secp256r1/NIST P-256) for several advantages:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Advantage</th>
+  <th>Explanation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Smaller keys</strong></td>
+  <td>256-bit ECC ≈ 3072-bit RSA security</td>
+</tr>
+<tr>
+  <td><strong>Faster operations</strong></td>
+  <td>Lower CPU usage per operation</td>
+</tr>
+<tr>
+  <td><strong>Perfect forward secrecy</strong></td>
+  <td>Fresh key per encryption</td>
+</tr>
+<tr>
+  <td><strong>No external dependencies</strong></td>
+  <td>Stand-alone implementation</td>
+</tr>
+<tr>
+  <td><strong>Future-proof</strong></td>
+  <td>Endorsed by NIST/NSA</td>
+</tr>
+</tbody>
+</table>
+<h3>23.2.2. Key Units</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.crypt.ecc256r1</code></td>
+  <td>Low-level ECC primitives (secp256r1)</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.ecc</code></td>
+  <td>High-level certificates, encryption, signing</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.secure</code></td>
+  <td>Factory functions (<code>Asym()</code>, <code>Cert()</code>)</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.x509</code></td>
+  <td>X.509 certificate support</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>23.3. High-Level Factory API</h2>
+<h3>23.3.1. Using the Asym() Factory</h3>
+<p>
+The recommended approach uses the factory pattern:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.secure,
+  mormot.crypt.ecc;
+
+var
+  Asym: TCryptAsym;
+  PublicKey, PrivateKey: RawByteString;
+  Message, Signature: RawByteString;
+begin
+  // Get ECC asymmetric instance
+  Asym := mormot.crypt.secure.Asym(&#x27;es256&#x27;);  // secp256r1 ECDSA
+
+  // Generate key pair
+  Asym.GeneratePem(PublicKey, PrivateKey, &#x27;&#x27;);
+
+  // Sign a message
+  Message := &#x27;Hello, World!&#x27;;
+  Asym.Sign(Message, PrivateKey, Signature);
+
+  // Verify signature
+  if Asym.Verify(Message, PublicKey, Signature) then
+    Writeln(&#x27;Signature valid!&#x27;)
+  else
+    Writeln(&#x27;Signature INVALID!&#x27;);
+end;
+</code></pre>
+<h3>23.3.2. Using the Cert() Factory</h3>
+<p>
+For certificate-based operations:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.secure;
+
+var
+  Cert: ICryptCert;
+  PublicPem, PrivatePem: RawUtf8;
+begin
+  // Create certificate (mORMot&#x27;s proprietary format)
+  Cert := mormot.crypt.secure.Cert(&#x27;syn-es256&#x27;);
+
+  // Generate with subject info
+  Cert.Generate([
+    cuDigitalSignature,
+    cuKeyEncipherment
+  ], 365, nil, nil, &#x27;CN=My Certificate&#x27;);
+
+  // Export
+  PublicPem := Cert.Save(cccCertOnly, &#x27;&#x27;, ccfPem);
+  PrivatePem := Cert.Save(cccCertWithPrivateKey, &#x27;password&#x27;, ccfPem);
+end;
+</code></pre>
+<hr>
+<h2>23.4. TEccCertificate Classes</h2>
+<h3>23.4.1. Class Hierarchy</h3>
+<pre><code class="language-text">TEccCertificate (public certificate)
+└── TEccCertificateSecret (public + private key)
+
+TEccCertificateChain (PKI trust chain)
+</code></pre>
+<h3>23.4.2. Creating a Self-Signed Certificate</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.ecc;
+
+var
+  Secret: TEccCertificateSecret;
+begin
+  // Create new self-signed certificate
+  Secret := TEccCertificateSecret.CreateNew(
+    nil,              // No authority (self-signed)
+    &#x27;MyApp&#x27;,          // Issuer identifier
+    365               // Valid for 365 days
+  );
+  try
+    // Save public certificate
+    Secret.SaveToFile(&#x27;myapp.public&#x27;);
+
+    // Save private key (password protected)
+    Secret.SaveToSecureFile(&#x27;myapp.private&#x27;, &#x27;MySecretPassword&#x27;);
+  finally
+    Secret.Free;
+  end;
+end;
+</code></pre>
+<h3>23.4.3. Loading Certificates</h3>
+<pre><code class="language-pascal">var
+  PublicCert: TEccCertificate;
+  SecretCert: TEccCertificateSecret;
+begin
+  // Load public certificate
+  PublicCert := TEccCertificate.Create;
+  PublicCert.LoadFromFile(&#x27;myapp.public&#x27;);
+
+  // Load private certificate
+  SecretCert := TEccCertificateSecret.Create;
+  SecretCert.LoadFromSecureFile(&#x27;myapp.private&#x27;, &#x27;MySecretPassword&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>23.5. Digital Signatures</h2>
+<h3>23.5.1. Signing Data</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.ecc;
+
+var
+  Secret: TEccCertificateSecret;
+  Data: RawByteString;
+  Signature: TEccSignature;
+begin
+  Secret := TEccCertificateSecret.Create;
+  Secret.LoadFromSecureFile(&#x27;signer.private&#x27;, &#x27;password&#x27;);
+  try
+    Data := &#x27;Important document content&#x27;;
+
+    // Sign the data
+    if Secret.Sign(Data, Signature) then
+      Writeln(&#x27;Data signed successfully&#x27;);
+  finally
+    Secret.Free;
+  end;
+end;
+</code></pre>
+<h3>23.5.2. Verifying Signatures</h3>
+<pre><code class="language-pascal">var
+  PublicCert: TEccCertificate;
+  Data: RawByteString;
+  Signature: TEccSignature;
+begin
+  PublicCert := TEccCertificate.Create;
+  PublicCert.LoadFromFile(&#x27;signer.public&#x27;);
+  try
+    // Verify signature
+    if PublicCert.Verify(Data, Signature) then
+      Writeln(&#x27;Signature is VALID&#x27;)
+    else
+      Writeln(&#x27;Signature is INVALID!&#x27;);
+  finally
+    PublicCert.Free;
+  end;
+end;
+</code></pre>
+<h3>23.5.3. Signing Files</h3>
+<pre><code class="language-pascal">var
+  Secret: TEccCertificateSecret;
+begin
+  Secret := TEccCertificateSecret.Create;
+  Secret.LoadFromSecureFile(&#x27;signer.private&#x27;, &#x27;password&#x27;);
+  try
+    // Creates document.pdf.sign file
+    Secret.SignFile(&#x27;document.pdf&#x27;);
+  finally
+    Secret.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>23.6. Encryption</h2>
+<h3>23.6.1. ECIES Encryption</h3>
+<p>
+mORMot uses ECIES (Elliptic Curve Integrated Encryption Scheme):
+
+</p>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                    ECIES Encryption Flow                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Generate ephemeral ECC key pair                             │
+│  2. Derive shared secret via ECDH                               │
+│  3. Use PBKDF2 to derive AES key from shared secret             │
+│  4. Encrypt data with AES-256                                   │
+│  5. Include ephemeral public key with ciphertext                │
+│                                                                 │
+│  Benefits:                                                      │
+│  • Perfect forward secrecy (new key per encryption)             │
+│  • Combines ECC efficiency with AES speed                       │
+│  • Authenticated encryption                                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>23.6.2. Encrypting Data</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.ecc;
+
+var
+  RecipientCert: TEccCertificate;
+  PlainText, Encrypted: RawByteString;
+begin
+  // Load recipient&#x27;s public certificate
+  RecipientCert := TEccCertificate.Create;
+  RecipientCert.LoadFromFile(&#x27;recipient.public&#x27;);
+  try
+    PlainText := &#x27;Secret message for recipient only&#x27;;
+
+    // Encrypt (only recipient can decrypt with their private key)
+    Encrypted := RecipientCert.Encrypt(PlainText);
+  finally
+    RecipientCert.Free;
+  end;
+end;
+</code></pre>
+<h3>23.6.3. Decrypting Data</h3>
+<pre><code class="language-pascal">var
+  SecretCert: TEccCertificateSecret;
+  Encrypted, Decrypted: RawByteString;
+begin
+  // Load your private certificate
+  SecretCert := TEccCertificateSecret.Create;
+  SecretCert.LoadFromSecureFile(&#x27;recipient.private&#x27;, &#x27;password&#x27;);
+  try
+    // Decrypt
+    Decrypted := SecretCert.Decrypt(Encrypted);
+  finally
+    SecretCert.Free;
+  end;
+end;
+</code></pre>
+<h3>23.6.4. ECIES Algorithm Options</h3>
+<pre><code class="language-pascal">type
+  TEciesAlgo = (
+    ecaPBKDF2_HMAC_SHA256_AES256_CFB,     // Default
+    ecaPBKDF2_HMAC_SHA256_AES256_CBC,
+    ecaPBKDF2_HMAC_SHA256_AES256_CTR,
+    ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ,  // With compression
+    ecaPBKDF2_AES256_GCM,                  // Authenticated encryption
+    // ... more options
+  );
+</code></pre>
+<h3>23.6.5. File Encryption</h3>
+<pre><code class="language-pascal">var
+  RecipientCert: TEccCertificate;
+begin
+  RecipientCert := TEccCertificate.Create;
+  RecipientCert.LoadFromFile(&#x27;recipient.public&#x27;);
+  try
+    // Creates document.pdf.synecc encrypted file
+    RecipientCert.EncryptFile(&#x27;document.pdf&#x27;);
+  finally
+    RecipientCert.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>23.7. Certificate Chain (PKI)</h2>
+<h3>23.7.1. Creating a Certificate Authority</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.ecc;
+
+var
+  CA: TEccCertificateSecret;
+begin
+  // Create root CA
+  CA := TEccCertificateSecret.CreateNew(
+    nil,                          // Self-signed (root)
+    &#x27;MyCompany Root CA&#x27;,          // Issuer
+    3650,                         // 10 years validity
+    365,                          // 1 year signature validity
+    [cuCA, cuDigitalSignature]    // CA usage
+  );
+  try
+    CA.SaveToFile(&#x27;ca.public&#x27;);
+    CA.SaveToSecureFile(&#x27;ca.private&#x27;, &#x27;CaSecretPassword&#x27;, 10000);
+  finally
+    CA.Free;
+  end;
+end;
+</code></pre>
+<h3>23.7.2. Issuing Certificates</h3>
+<pre><code class="language-pascal">var
+  CA: TEccCertificateSecret;
+  UserCert: TEccCertificateSecret;
+begin
+  // Load CA
+  CA := TEccCertificateSecret.Create;
+  CA.LoadFromSecureFile(&#x27;ca.private&#x27;, &#x27;CaSecretPassword&#x27;);
+  try
+    // Create user certificate signed by CA
+    UserCert := TEccCertificateSecret.CreateNew(
+      CA,                           // Signed by CA
+      &#x27;John Doe&#x27;,                   // Issuer/subject
+      365,                          // 1 year validity
+      0,                            // Default signature validity
+      [cuDigitalSignature, cuKeyEncipherment]
+    );
+    try
+      UserCert.SaveToFile(&#x27;john.public&#x27;);
+      UserCert.SaveToSecureFile(&#x27;john.private&#x27;, &#x27;JohnPassword&#x27;);
+    finally
+      UserCert.Free;
+    end;
+  finally
+    CA.Free;
+  end;
+end;
+</code></pre>
+<h3>23.7.3. Validating Certificate Chain</h3>
+<pre><code class="language-pascal">var
+  Chain: TEccCertificateChain;
+  UserCert: TEccCertificate;
+  ValidationResult: TEccValidity;
+begin
+  // Build trust chain
+  Chain := TEccCertificateChain.Create;
+  try
+    // Add trusted CA
+    Chain.Add(TEccCertificate.CreateFromFile(&#x27;ca.public&#x27;));
+
+    // Load certificate to validate
+    UserCert := TEccCertificate.Create;
+    UserCert.LoadFromFile(&#x27;john.public&#x27;);
+    try
+      // Validate
+      ValidationResult := Chain.IsValid(UserCert);
+      case ValidationResult of
+        ecvValidSigned:
+          Writeln(&#x27;Certificate is valid and signed by trusted CA&#x27;);
+        ecvValidSelfSigned:
+          Writeln(&#x27;Certificate is self-signed (not in chain)&#x27;);
+        ecvNotValidYet:
+          Writeln(&#x27;Certificate not yet valid&#x27;);
+        ecvExpired:
+          Writeln(&#x27;Certificate has expired&#x27;);
+        ecvRevoked:
+          Writeln(&#x27;Certificate has been revoked&#x27;);
+        ecvUnknownAuthority:
+          Writeln(&#x27;Unknown signing authority&#x27;);
+      else
+        Writeln(&#x27;Certificate validation failed&#x27;);
+      end;
+    finally
+      UserCert.Free;
+    end;
+  finally
+    Chain.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>23.8. Secure Communication Protocol</h2>
+<h3>23.8.1. IProtocol Interface</h3>
+<p>
+mORMot provides <code>IProtocol</code> for encrypted communication:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.secure;
+
+type
+  IProtocol = interface
+    function ProcessHandshake(const Input: RawUtf8;
+      out Output: RawUtf8): TProtocolResult;
+    procedure Encrypt(const Plain: RawByteString;
+      out Encrypted: RawByteString);
+    procedure Decrypt(const Encrypted: RawByteString;
+      out Plain: RawByteString);
+  end;
+</code></pre>
+<h3>23.8.2. Using TProtocolEcc</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.ecc;
+
+var
+  ServerProtocol, ClientProtocol: IProtocol;
+  ServerCert: TEccCertificateSecret;
+  ClientCert: TEccCertificateSecret;
+  Handshake1, Handshake2, Handshake3: RawUtf8;
+begin
+  // Server setup
+  ServerCert := TEccCertificateSecret.CreateFromFile(&#x27;server.private&#x27;, &#x27;pwd&#x27;);
+  ServerProtocol := TProtocolEcc.Create(ServerCert, nil);
+
+  // Client setup
+  ClientCert := TEccCertificateSecret.CreateFromFile(&#x27;client.private&#x27;, &#x27;pwd&#x27;);
+  ClientProtocol := TProtocolEcc.Create(ClientCert,
+    TEccCertificate.CreateFromFile(&#x27;server.public&#x27;));
+
+  // Three-way handshake
+  ClientProtocol.ProcessHandshake(&#x27;&#x27;, Handshake1);       // Client hello
+  ServerProtocol.ProcessHandshake(Handshake1, Handshake2); // Server response
+  ClientProtocol.ProcessHandshake(Handshake2, Handshake3); // Client finish
+
+  // Now encrypted communication is possible
+  var Plain := &#x27;Secret message&#x27;;
+  var Encrypted: RawByteString;
+
+  ClientProtocol.Encrypt(Plain, Encrypted);
+  ServerProtocol.Decrypt(Encrypted, Plain);
+end;
+</code></pre>
+<hr>
+<h2>23.9. X.509 Certificates</h2>
+<h3>23.9.1. X.509 Support</h3>
+<p>
+mORMot also supports standard X.509 certificates:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.x509;
+
+var
+  Cert: ICryptCert;
+begin
+  // Create X.509 certificate with ECC
+  Cert := Cert(&#x27;x509-es256&#x27;);
+  Cert.Generate([cuDigitalSignature], 365, nil, nil,
+    &#x27;CN=My Server,O=My Company,C=US&#x27;);
+
+  // Save in standard formats
+  Cert.Save(cccCertOnly, &#x27;&#x27;, ccfPem);          // PEM format
+  Cert.Save(cccCertWithPrivateKey, &#x27;pwd&#x27;, ccfBinary);  // DER/PKCS12
+end;
+</code></pre>
+<h3>23.9.2. Loading X.509 from PEM/DER</h3>
+<pre><code class="language-pascal">var
+  Cert: ICryptCert;
+  PemContent: RawUtf8;
+begin
+  // Load PEM certificate
+  PemContent := StringFromFile(&#x27;server.crt&#x27;);
+  Cert := Cert(&#x27;x509-es256&#x27;);
+  Cert.LoadFromPem(PemContent, &#x27;&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>23.10. Command-Line ECC Tool</h2>
+<h3>23.10.1. Overview</h3>
+<p>
+mORMot includes an <code>ecc</code> command-line tool for certificate operations:
+
+</p>
+<pre><code class="language-bash"># Key generation
+ecc new -auth &quot;My Authority&quot; -pass &quot;secret&quot; -days 3650
+
+# Sign a certificate
+ecc sign user.public -auth authority.private -pass &quot;secret&quot;
+
+# Encrypt a file
+ecc crypt document.pdf -pub recipient.public
+
+# Decrypt a file
+ecc decrypt document.pdf.synecc -priv recipient.private -pass &quot;secret&quot;
+
+# Verify signature
+ecc verify document.pdf.sign -pub signer.public
+</code></pre>
+<h3>23.10.2. Sample Location</h3>
+<p>
+The ECC tool source is at:
+<pre><code class="language-text">/mnt/w/mORMot2/ex/ecc/
+</code></pre>
+<hr>
+<h2>23.11. Integration with REST Services</h2>
+<h3>23.11.1. Signing Service Requests</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.ecc,
+  mormot.rest.client;
+
+procedure SignRequest(Client: TRestHttpClient; const Body: RawUtf8);
+var
+  Secret: TEccCertificateSecret;
+  Signature: RawByteString;
+begin
+  Secret := TEccCertificateSecret.CreateFromFile(&#x27;client.private&#x27;, &#x27;pwd&#x27;);
+  try
+    Secret.Sign(Body, Signature);
+    Client.SessionHttpHeader := &#x27;X-Signature: &#x27; + BinToBase64(Signature);
+  finally
+    Secret.Free;
+  end;
+end;
+</code></pre>
+<h3>23.11.2. Server-Side Verification</h3>
+<pre><code class="language-pascal">procedure VerifyRequest(Ctxt: TRestServerUriContext);
+var
+  PublicCert: TEccCertificate;
+  SignatureB64: RawUtf8;
+  Signature: RawByteString;
+begin
+  SignatureB64 := Ctxt.InHeader[&#x27;X-Signature&#x27;];
+  Signature := Base64ToBin(SignatureB64);
+
+  PublicCert := TEccCertificate.CreateFromFile(&#x27;client.public&#x27;);
+  try
+    if not PublicCert.Verify(Ctxt.Call^.InBody, Signature) then
+      Ctxt.Error(&#x27;Invalid signature&#x27;, HTTP_FORBIDDEN);
+  finally
+    PublicCert.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>23.12. Performance Considerations</h2>
+<h3>23.12.1. Stand-Alone vs OpenSSL</h3>
+<table>
+<thead>
+<tr>
+  <th>Operation</th>
+  <th>Stand-alone</th>
+  <th>OpenSSL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Key generation</td>
+  <td>Slower</td>
+  <td>Faster</td>
+</tr>
+<tr>
+  <td>ECDSA sign</td>
+  <td>Comparable</td>
+  <td>Faster</td>
+</tr>
+<tr>
+  <td>ECDSA verify</td>
+  <td>Comparable</td>
+  <td>Faster</td>
+</tr>
+<tr>
+  <td>ECDH</td>
+  <td>Comparable</td>
+  <td>Faster</td>
+</tr>
+</tbody>
+</table>
+For production with heavy ECC workloads:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.openssl;
+
+initialization
+  RegisterOpenSsl;  // Use OpenSSL for ECC operations
+</code></pre>
+<h3>23.12.2. Caching Keys</h3>
+<pre><code class="language-pascal">var
+  CachedCert: TEccCertificateSecret;
+
+procedure InitializeCrypto;
+begin
+  // Load once at startup
+  CachedCert := TEccCertificateSecret.CreateFromFile(&#x27;server.private&#x27;, &#x27;pwd&#x27;);
+end;
+
+procedure FinalizeCrypto;
+begin
+  CachedCert.Free;
+end;
+</code></pre>
+<hr>
+<h2>23.13. Security Best Practices</h2>
+<h3>23.13.1. Private Key Protection</h3>
+<pre><code class="language-pascal">// ✓ Use password-protected storage
+Secret.SaveToSecureFile(&#x27;key.private&#x27;, &#x27;StrongPassword&#x27;, 100000);  // High PBKDF2 rounds
+
+// ✓ Clear sensitive data after use
+Secret.Free;  // Securely clears memory
+
+// ❌ Never log or display private keys
+Writeln(Secret.PrivateKey);  // NEVER DO THIS!
+</code></pre>
+<h3>23.13.2. Certificate Validation</h3>
+<pre><code class="language-pascal">// ✓ Always validate certificates
+if Chain.IsValid(Cert) &lt;&gt; ecvValidSigned then
+  raise Exception.Create(&#x27;Invalid certificate&#x27;);
+
+// ✓ Check expiration
+if Cert.IsExpired then
+  raise Exception.Create(&#x27;Certificate expired&#x27;);
+
+// ❌ Don&#x27;t skip validation
+// ProcessData(Cert);  // Without validation - DANGEROUS
+</code></pre>
+<h3>23.13.3. Secure Random Generation</h3>
+<p>
+mORMot uses <code>TAesPrng</code> for cryptographically secure random numbers:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.core;
+
+var
+  Random: TAesPrng;
+  Entropy: THash256;
+begin
+  Random := TAesPrng.Main;  // Thread-safe singleton
+  Random.FillRandom(Entropy);  // Cryptographically secure
+end;
+</code></pre>
+<hr>
+<h2>23.14. Summary</h2>
+<h3>23.14.1. Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Need</th>
+  <th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Generate keys</td>
+  <td><code>TEccCertificateSecret.CreateNew()</code></td>
+</tr>
+<tr>
+  <td>Sign data</td>
+  <td><code>Secret.Sign()</code></td>
+</tr>
+<tr>
+  <td>Verify signature</td>
+  <td><code>PublicCert.Verify()</code></td>
+</tr>
+<tr>
+  <td>Encrypt data</td>
+  <td><code>PublicCert.Encrypt()</code></td>
+</tr>
+<tr>
+  <td>Decrypt data</td>
+  <td><code>Secret.Decrypt()</code></td>
+</tr>
+<tr>
+  <td>Certificate chain</td>
+  <td><code>TEccCertificateChain</code></td>
+</tr>
+<tr>
+  <td>X.509 support</td>
+  <td><code>mormot.crypt.x509</code></td>
+</tr>
+<tr>
+  <td>Secure protocol</td>
+  <td><code>TProtocolEcc</code></td>
+</tr>
+</tbody>
+</table>
+<h3>23.14.2. Key Units</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.crypt.ecc256r1</code></td>
+  <td>Low-level ECC (secp256r1)</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.ecc</code></td>
+  <td>High-level ECC certificates</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.x509</code></td>
+  <td>X.509 certificate support</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.secure</code></td>
+  <td>Factory functions</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.openssl</code></td>
+  <td>OpenSSL acceleration</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>
+<em>Next: Chapter 24 covers Domain-Driven Design patterns with mORMot.</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-22.html">Chapter 22: Scripting Engine</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-24.html">Chapter 24: Domain-Driven Design</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>14. Client-Server Services via Methods</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>14. Client-Server Services via Methods</h1>
+<p>
+<em>The Quick and Powerful Way</em>
+
+</p>
+<p>
+To implement a service in the <em>Synopse mORMot 2 framework</em>, the most direct approach is to define published methods on the server side, then use simple JSON or URL parameter handling to encode and decode requests on both ends.
+
+</p>
+<p>
+This chapter covers <strong>method-based services</strong> — a straightforward, low-level mechanism for exposing custom functionality over HTTP. While mORMot 2 also provides interface-based services (covered in chapters 15-16) for more structured SOA, method-based services offer maximum flexibility and control.
+
+</p>
+<hr>
+<h2>14.1. Publishing a Service on the Server</h2>
+<h3>14.1.1. Basic Structure</h3>
+<p>
+On the server side, we customize a <code>TRestServer</code> descendant (typically <code>TRestServerDB</code> with SQLite3, or the lighter <code>TRestServerFullMemory</code>) by adding a new <code>published</code> method:
+
+</p>
+<pre><code class="language-pascal">type
+  TRestServerTest = class(TRestServerFullMemory)
+  published
+    procedure Sum(Ctxt: TRestServerUriContext);
+  end;
+</code></pre>
+<p>
+The method name (<code>Sum</code>) determines the URI routing — it will be accessible remotely from <code>ModelRoot/Sum</code>. The <code>ModelRoot</code> is the <code>Root</code> parameter defined when creating the model.
+
+</p>
+<h3>14.1.2. Method Signature</h3>
+<p>
+All server-side methods <strong>MUST</strong> follow the <code>TOnRestServerCallBack</code> prototype:
+
+</p>
+<pre><code class="language-pascal">type
+  TOnRestServerCallBack = procedure(Ctxt: TRestServerUriContext) of object;
+</code></pre>
+<p>
+The single <code>Ctxt</code> parameter provides full access to the execution context: incoming parameters, HTTP headers, session information, and output facilities.
+
+</p>
+<h3>14.1.3. Implementation</h3>
+<pre><code class="language-pascal">procedure TRestServerTest.Sum(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.Results([Ctxt.InputDouble[&#x27;a&#x27;] + Ctxt.InputDouble[&#x27;b&#x27;]]);
+end;
+</code></pre>
+<p>
+The <code>Ctxt</code> object exposes typed properties for parameter retrieval:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Property</th>
+  <th>Return Type</th>
+  <th>Exception on Missing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>InputInt['name']</code></td>
+  <td><code>Int64</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td><code>InputDouble['name']</code></td>
+  <td><code>Double</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td><code>InputUtf8['name']</code></td>
+  <td><code>RawUtf8</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td><code>Input['name']</code></td>
+  <td><code>Variant</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td><code>InputIntOrVoid['name']</code></td>
+  <td><code>Int64</code></td>
+  <td>No (returns 0)</td>
+</tr>
+<tr>
+  <td><code>InputDoubleOrVoid['name']</code></td>
+  <td><code>Double</code></td>
+  <td>No (returns 0)</td>
+</tr>
+<tr>
+  <td><code>InputUtf8OrVoid['name']</code></td>
+  <td><code>RawUtf8</code></td>
+  <td>No (returns '')</td>
+</tr>
+<tr>
+  <td><code>InputOrVoid['name']</code></td>
+  <td><code>Variant</code></td>
+  <td>No (returns Unassigned)</td>
+</tr>
+<tr>
+  <td><code>InputExists['name']</code></td>
+  <td><code>Boolean</code></td>
+  <td>N/A</td>
+</tr>
+</tbody>
+</table>
+The default <code>Input['name']</code> array property (via <code>variant</code>) allows the concise syntax <code>Ctxt['name']</code>.
+
+</p>
+<h3>14.1.4. Response Format</h3>
+<p>
+<code>Ctxt.Results([])</code> encodes values as a JSON object with a <code>"Result"</code> member:
+
+</p>
+<pre><code class="language-text">GET /root/Sum?a=3.12&amp;b=4.2
+</code></pre>
+<p>
+Returns:
+<pre><code class="language-json">{&quot;Result&quot;:7.32}
+</code></pre>
+<p>
+This is perfectly AJAX-friendly and compatible with any HTTP client.
+
+</p>
+<h3>14.1.5. Thread Safety</h3>
+<p>
+<strong>Important</strong>: Method implementations <strong>MUST be thread-safe</strong>. The <code>TRestServer.Uri</code> method expects callbacks to handle thread safety internally. This design maximizes performance and scalability by allowing fine-grained resource locking.
+
+</p>
+<p>
+For read-only operations, no locking may be needed. For shared state modifications:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.UpdateCounter(Ctxt: TRestServerUriContext);
+begin
+  fCounterLock.Lock;
+  try
+    Inc(fCounter);
+    Ctxt.Results([fCounter]);
+  finally
+    fCounterLock.UnLock;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>14.2. Defining the Client</h2>
+<h3>14.2.1. Basic Client Call</h3>
+<p>
+The client uses dedicated methods to call services by name with parameters:
+
+</p>
+<pre><code class="language-pascal">function Sum(aClient: TRestClientUri; a, b: Double): Double;
+var
+  err: Integer;
+begin
+  Val(aClient.CallBackGetResult(&#x27;sum&#x27;, [&#x27;a&#x27;, a, &#x27;b&#x27;, b]), Result, err);
+end;
+</code></pre>
+<h3>14.2.2. Client Method Pattern</h3>
+<p>
+A cleaner approach encapsulates service calls in a dedicated client class:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyClient = class(TRestHttpClientSocket)  // or TRestHttpClientWebSockets
+  public
+    function Sum(a, b: Double): Double;
+  end;
+
+function TMyClient.Sum(a, b: Double): Double;
+var
+  err: Integer;
+begin
+  Val(CallBackGetResult(&#x27;sum&#x27;, [&#x27;a&#x27;, a, &#x27;b&#x27;, b]), Result, err);
+end;
+</code></pre>
+<h3>14.2.3. Client API Methods</h3>
+<p>
+<code>TRestClientUri</code> provides several methods for service invocation:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Method</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>CallBackGetResult</code></td>
+  <td>GET request, returns the JSON <code>"Result"</code> value as <code>RawUtf8</code></td>
+</tr>
+<tr>
+  <td><code>CallBackGet</code></td>
+  <td>GET request, returns full response with HTTP status</td>
+</tr>
+<tr>
+  <td><code>CallBackPut</code></td>
+  <td>PUT request with body data</td>
+</tr>
+<tr>
+  <td><code>CallBack</code></td>
+  <td>Generic request with any HTTP method</td>
+</tr>
+</tbody>
+</table>
+<h4>CallBackGet Signature</h4>
+<pre><code class="language-pascal">function CallBackGet(const aMethodName: RawUtf8;
+  const aNameValueParameters: array of const;
+  out aResponse: RawUtf8;
+  aTable: TOrmClass = nil;
+  aID: TID = 0;
+  aResponseHead: PRawUtf8 = nil): Integer;
+</code></pre>
+<h4>CallBackGetResult Signature</h4>
+<pre><code class="language-pascal">function CallBackGetResult(const aMethodName: RawUtf8;
+  const aNameValueParameters: array of const;
+  aTable: TOrmClass = nil;
+  aID: TID = 0): RawUtf8;
+</code></pre>
+<h3>14.2.4. Object Parameters</h3>
+<p>
+Objects can be serialized to JSON automatically:
+
+</p>
+<pre><code class="language-pascal">function TMyClient.ProcessPerson(Person: TPerson): RawUtf8;
+begin
+  Result := CallBackGetResult(&#x27;processperson&#x27;, [&#x27;person&#x27;, ObjectToJson(Person)]);
+end;
+</code></pre>
+<hr>
+<h2>14.3. Direct Parameter Marshalling</h2>
+<h3>14.3.1. Low-Level Access</h3>
+<p>
+For maximum performance, bypass the high-level <code>Input<em>[]</code> properties and parse <code>Ctxt.Parameters</code> directly:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.Sum(Ctxt: TRestServerUriContext);
+var
+  a, b: Double;
+begin
+  if UrlDecodeNeedParameters(Ctxt.Parameters, &#x27;A,B&#x27;) then
+  begin
+    while Ctxt.Parameters &lt;&gt; nil do
+    begin
+      UrlDecodeDouble(Ctxt.Parameters, &#x27;A=&#x27;, a);
+      UrlDecodeDouble(Ctxt.Parameters, &#x27;B=&#x27;, b, @Ctxt.Parameters);
+    end;
+    Ctxt.Results([a + b]);
+  end
+  else
+    Ctxt.Error(&#x27;Missing Parameter&#x27;);
+end;
+</code></pre>
+<h3>14.3.2. URL Decode Functions</h3>
+<p>
+Available in <code>mormot.core.text</code>:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Function</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>UrlDecodeNeedParameters</code></td>
+  <td>Verify required parameters exist</td>
+</tr>
+<tr>
+  <td><code>UrlDecodeInteger</code></td>
+  <td>Extract integer parameter</td>
+</tr>
+<tr>
+  <td><code>UrlDecodeInt64</code></td>
+  <td>Extract 64-bit integer</td>
+</tr>
+<tr>
+  <td><code>UrlDecodeDouble</code></td>
+  <td>Extract floating-point</td>
+</tr>
+<tr>
+  <td><code>UrlDecodeValue</code></td>
+  <td>Extract string value</td>
+</tr>
+<tr>
+  <td><code>UrlDecodeObject</code></td>
+  <td>Deserialize JSON to object</td>
+</tr>
+</tbody>
+</table>
+<h3>14.3.3. JSON Body Access</h3>
+<p>
+For POST/PUT requests, the body is available in <code>Ctxt.Call^.InBody</code>:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.ProcessData(Ctxt: TRestServerUriContext);
+var
+  doc: TDocVariantData;
+begin
+  if doc.InitJson(Ctxt.Call^.InBody, JSON_FAST) then
+  begin
+    // Process doc...
+    Ctxt.Success;
+  end
+  else
+    Ctxt.Error(&#x27;Invalid JSON body&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>14.4. Returning Non-JSON Content</h2>
+<h3>14.4.1. Custom MIME Types</h3>
+<p>
+Use <code>Ctxt.Returns()</code> to return any content type:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServer.Timestamp(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.Returns(Int64ToUtf8(ServerTimestamp), HTTP_SUCCESS, TEXT_CONTENT_TYPE_HEADER);
+end;
+</code></pre>
+<h3>14.4.2. Binary File Response</h3>
+<pre><code class="language-pascal">procedure TRestServer.GetFile(Ctxt: TRestServerUriContext);
+var
+  fileName: TFileName;
+  content: RawByteString;
+begin
+  fileName := &#x27;c:\data\&#x27; + ExtractFileName(Utf8ToString(Ctxt.InputUtf8[&#x27;filename&#x27;]));
+  content := StringFromFile(fileName);
+  if content = &#x27;&#x27; then
+    Ctxt.Error(&#x27;&#x27;, HTTP_NOTFOUND)
+  else
+    Ctxt.Returns(content, HTTP_SUCCESS,
+      HEADER_CONTENT_TYPE + GetMimeContentType(pointer(content), Length(content), fileName));
+end;
+</code></pre>
+<h3>14.4.3. Client-Side Handling</h3>
+<pre><code class="language-pascal">function TMyClient.GetFile(const aFileName: RawUtf8): RawByteString;
+var
+  resp: RawUtf8;
+begin
+  if CallBackGet(&#x27;GetFile&#x27;, [&#x27;filename&#x27;, aFileName], resp) &lt;&gt; HTTP_SUCCESS then
+    raise Exception.CreateFmt(&#x27;Impossible to get file: %s&#x27;, [resp]);
+  Result := RawByteString(resp);
+end;
+</code></pre>
+<p>
+Note: For file serving, prefer <code>Ctxt.ReturnFile()</code> or <code>Ctxt.ReturnFileFromFolder()</code> (covered in section 14.7).
+
+</p>
+<hr>
+<h2>14.5. Advanced Server-Side Processing</h2>
+<h3>14.5.1. RESTful URI with Table Context</h3>
+<p>
+Methods can be linked to ORM tables via RESTful URIs like <code>ModelRoot/TableName/TableID/MethodName</code>:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.DataAsHex(Ctxt: TRestServerUriContext);
+var
+  aData: RawBlob;
+begin
+  if (Self = nil) or (Ctxt.Table &lt;&gt; TOrmPeople) or (Ctxt.TableID &lt;= 0) then
+    Ctxt.Error(&#x27;Need a valid record and its ID&#x27;)
+  else if (Ctxt.Server.Orm as TRestOrmServer).RetrieveBlob(
+      TOrmPeople, Ctxt.TableID, &#x27;Data&#x27;, aData) then
+    Ctxt.Results([BinToHex(aData)])
+  else
+    Ctxt.Error(&#x27;Impossible to retrieve the Data BLOB field&#x27;);
+end;
+</code></pre>
+<p>
+Corresponding client call:
+
+</p>
+<pre><code class="language-pascal">function TOrmPeople.DataAsHex(aClient: TRestClientUri): RawUtf8;
+begin
+  Result := aClient.CallBackGetResult(&#x27;DataAsHex&#x27;, [], TOrmPeople, ID);
+end;
+</code></pre>
+<h3>14.5.2. Context Properties</h3>
+<p>
+The <code>TRestServerUriContext</code> exposes rich information:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Property</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>Table</code></td>
+  <td><code>TOrmClass</code> decoded from URI</td>
+</tr>
+<tr>
+  <td><code>TableIndex</code></td>
+  <td>Index in Server.Model</td>
+</tr>
+<tr>
+  <td><code>TableID</code></td>
+  <td>Record ID from URI</td>
+</tr>
+<tr>
+  <td><code>Session</code></td>
+  <td>Session ID (0 = not started, 1 = auth disabled)</td>
+</tr>
+<tr>
+  <td><code>SessionUser</code></td>
+  <td>Current user's TID</td>
+</tr>
+<tr>
+  <td><code>SessionGroup</code></td>
+  <td>Current group's TID</td>
+</tr>
+<tr>
+  <td><code>SessionUserName</code></td>
+  <td>User's logon name</td>
+</tr>
+<tr>
+  <td><code>Method</code></td>
+  <td>HTTP verb (<code>mGET</code>, <code>mPOST</code>, etc.)</td>
+</tr>
+<tr>
+  <td><code>Call^.InHead</code></td>
+  <td>Raw incoming HTTP headers</td>
+</tr>
+<tr>
+  <td><code>Call^.InBody</code></td>
+  <td>Raw request body</td>
+</tr>
+<tr>
+  <td><code>RemoteIP</code></td>
+  <td>Client IP address</td>
+</tr>
+<tr>
+  <td><code>UserAgent</code></td>
+  <td>Client user-agent string</td>
+</tr>
+</tbody>
+</table>
+<h3>14.5.3. Session and User Details</h3>
+<pre><code class="language-pascal">procedure TRestServerTest.WhoAmI(Ctxt: TRestServerUriContext);
+var
+  User: TAuthUser;
+begin
+  if Ctxt.Session = CONST_AUTHENTICATION_NOT_USED then
+    Ctxt.Returns([&#x27;message&#x27;, &#x27;Authentication not enabled&#x27;])
+  else if Ctxt.Session = CONST_AUTHENTICATION_SESSION_NOT_STARTED then
+    Ctxt.Returns([&#x27;message&#x27;, &#x27;Not authenticated&#x27;])
+  else
+  begin
+    User := Ctxt.Server.SessionGetUser(Ctxt.Session);
+    try
+      if User &lt;&gt; nil then
+        Ctxt.Returns([&#x27;user&#x27;, User.LogonName, &#x27;group&#x27;, Ctxt.SessionGroup])
+      else
+        Ctxt.Error(&#x27;Session not found&#x27;, HTTP_FORBIDDEN);
+    finally
+      User.Free;
+    end;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>14.6. Browser Speed-Up for Unmodified Requests</h2>
+<h3>14.6.1. HTTP 304 Not Modified</h3>
+<p>
+The optional <code>Handle304NotModified</code> parameter enables browser caching:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.GetStaticData(Ctxt: TRestServerUriContext);
+var
+  data: RawUtf8;
+begin
+  data := GetCachedData; // Your cached data source
+  Ctxt.Returns(data, HTTP_SUCCESS, JSON_CONTENT_TYPE_HEADER, true); // Handle304NotModified=true
+end;
+</code></pre>
+<p>
+When enabled:
+<ul>
+  <li>Response content is hashed using <code>crc32c</code> (with SSE4.2 hardware acceleration if available)</li>
+  <li>If unchanged since the last request, returns <code>304 Not Modified</code> without body</li>
+  <li>Significantly reduces bandwidth for periodic polling</li>
+</ul>
+<h3>14.6.2. Caveats</h3>
+<ul>
+  <li><strong>Authentication conflict</strong>: RESTful authentication uses per-URI signatures that change frequently. Use <code>Server.ServiceMethodByPassAuthentication()</code> to disable authentication for cached methods.</li>
+  <li><strong>Hash collisions</strong>: While extremely rare with <code>crc32c</code>, false positives are theoretically possible. Don't use for sensitive accounting data.</li>
+</ul>
+<h3>14.6.3. CDN Integration</h3>
+<p>
+This stateless REST model enables multiple levels of caching:
+<ul>
+  <li>Browser cache</li>
+  <li>Proxy servers</li>
+  <li>Content Delivery Networks (CDN)</li>
+</ul>
+Combined with proper HTTP headers, your mORMot server can scale to thousands of concurrent users worldwide.
+
+</p>
+<hr>
+<h2>14.7. Returning File Content</h2>
+<h3>14.7.1. ReturnFile Method</h3>
+<p>
+<code>Ctxt.ReturnFile()</code> efficiently serves files with automatic MIME type detection:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.DownloadReport(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.ReturnFile(&#x27;c:\reports\&#x27; + Ctxt.InputUtf8[&#x27;name&#x27;] + &#x27;.pdf&#x27;, true);
+end;
+</code></pre>
+<p>
+Features:
+<ul>
+  <li>Automatic MIME type from file extension</li>
+  <li>Optional <code>Handle304NotModified</code> using file timestamp</li>
+  <li>High-performance: HTTP.SYS (Windows) serves files asynchronously from kernel mode</li>
+</ul>
+<h3>14.7.2. ReturnFileFromFolder Method</h3>
+<p>
+Serves any file from a folder based on the URI path:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServerTest.StaticFiles(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.ReturnFileFromFolder(&#x27;c:\www\static\&#x27;, true, &#x27;index.html&#x27;, &#x27;/404.html&#x27;);
+end;
+</code></pre>
+<p>
+Parameters:
+<ul>
+  <li><code>FolderName</code>: Base folder path</li>
+  <li><code>Handle304NotModified</code>: Enable browser caching</li>
+  <li><code>DefaultFileName</code>: Served for root requests (default: <code>'index.html'</code>)</li>
+  <li><code>Error404Redirect</code>: Redirect URI for missing files</li>
+</ul>
+This is ideal for serving static web content (HTML, CSS, JS, images) alongside your REST API.
+
+</p>
+<hr>
+<h2>14.8. JSON Web Tokens (JWT)</h2>
+<h3>14.8.1. Overview</h3>
+<p>
+JSON Web Tokens (JWT) provide stateless authentication and secure information exchange. mORMot 2 implements JWT in <code>mormot.crypt.jwt</code>:
+
+</p>
+<p>
+<strong>Supported Algorithms</strong>:
+<table>
+<thead>
+<tr>
+  <th>Algorithm</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>HS256/384/512</code></td>
+  <td>HMAC-SHA2 (symmetric)</td>
+</tr>
+<tr>
+  <td><code>ES256</code></td>
+  <td>ECDSA P-256 (asymmetric)</td>
+</tr>
+<tr>
+  <td><code>RS256/384/512</code></td>
+  <td>RSA (asymmetric)</td>
+</tr>
+<tr>
+  <td><code>PS256/384/512</code></td>
+  <td>RSA-PSS (asymmetric)</td>
+</tr>
+<tr>
+  <td><code>S3256/384/512</code></td>
+  <td>SHA-3 (non-standard)</td>
+</tr>
+<tr>
+  <td><code>none</code></td>
+  <td>No signature (use with caution)</td>
+</tr>
+</tbody>
+</table>
+<strong>Features</strong>:
+<ul>
+  <li>All standard JWT claims validated</li>
+  <li>Thread-safe with optional caching</li>
+  <li>Cross-platform (no external DLLs)</li>
+  <li>Immune to algorithm confusion attacks</li>
+</ul>
+<h3>14.8.2. Class Hierarchy</h3>
+<pre><code class="language-text">TJwtAbstract
+├── TJwtNone           (algorithm: &quot;none&quot;)
+├── TJwtSynSignerAbstract
+│   ├── TJwtHS256/384/512   (HMAC-SHA2)
+│   └── TJwtS3256/384/512   (SHA-3)   │
+├── TJwtES256          (ECDSA P-256)
+├── TJwtRS256/384/512  (RSA)
+├── TJwtPS256/384/512  (RSA-PSS)
+└── TJwtCrypt          (factory-based, recommended)
+</code></pre>
+<h3>14.8.3. Verifying JWTs</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.jwt;
+
+var
+  jwt: TJwtAbstract;
+  content: TJwtContent;
+begin
+  jwt := TJwtHS256.Create(&#x27;secret&#x27;, 0, [jrcSubject], []);
+  try
+    jwt.Verify(
+      &#x27;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.&#x27; +
+      &#x27;eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.&#x27; +
+      &#x27;TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ&#x27;,
+      content);
+
+    Assert(content.result = jwtValid);
+    Assert(content.reg[jrcSubject] = &#x27;1234567890&#x27;);
+    Assert(content.data.U[&#x27;name&#x27;] = &#x27;John Doe&#x27;);
+    Assert(content.data.B[&#x27;admin&#x27;] = True);
+  finally
+    jwt.Free;
+  end;
+end;
+</code></pre>
+<h3>14.8.4. Creating JWTs</h3>
+<pre><code class="language-pascal">var
+  jwt: TJwtAbstract;
+  token: RawUtf8;
+begin
+  jwt := TJwtHS256.Create(&#x27;secret&#x27;, 10000,  // 10000 PBKDF2 rounds
+    [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 3600);  // 1 hour expiry
+  try
+    token := jwt.Compute([&#x27;http://example.com/is_root&#x27;, True], &#x27;joe&#x27;);
+    // token payload: {&quot;http://example.com/is_root&quot;:true,&quot;iss&quot;:&quot;joe&quot;,&quot;iat&quot;:...,&quot;exp&quot;:...,&quot;jti&quot;:...}
+  finally
+    jwt.Free;
+  end;
+end;
+</code></pre>
+<h3>14.8.5. JWT in Method-Based Services</h3>
+<p>
+Integrate JWT validation using <code>Ctxt.AuthenticationCheck()</code>:
+
+</p>
+<pre><code class="language-pascal">type
+  TMyDaemon = class(TRestServerFullMemory)
+  private
+    fJwt: TJwtAbstract;
+  public
+    constructor Create(aModel: TOrmModel);
+  published
+    procedure SecureFiles(Ctxt: TRestServerUriContext);
+  end;
+
+constructor TMyDaemon.Create(aModel: TOrmModel);
+begin
+  inherited Create(aModel);
+  fJwt := TJwtHS256.Create(&#x27;my-secret-key&#x27;, 10000, [jrcSubject], [], 3600);
+end;
+
+procedure TMyDaemon.SecureFiles(Ctxt: TRestServerUriContext);
+begin
+  if Ctxt.AuthenticationCheck(fJwt) then  // Returns boolean
+    Ctxt.ReturnFileFromFolder(&#x27;c:\protected\&#x27;)
+  else
+    ; // AuthenticationCheck already returned HTTP 401
+end;
+</code></pre>
+<h3>14.8.6. Server-Wide JWT Authentication</h3>
+<p>
+Assign a JWT instance to handle all unauthenticated requests:
+
+</p>
+<pre><code class="language-pascal">Server.JwtForUnauthenticatedRequest := TJwtHS256.Create(&#x27;secret&#x27;, 10000, [], []);
+</code></pre>
+<hr>
+<h2>14.9. Handling Errors</h2>
+<h3>14.9.1. Automatic Exception Handling</h3>
+<p>
+Missing parameters in <code>Input</em>[]</code> properties raise <code>EParsingException</code>, which the server catches and returns as a structured error response:
+
+</p>
+<pre><code class="language-json">{
+  &quot;ErrorCode&quot;: 400,
+  &quot;ErrorText&quot;: &quot;EParsingException: Missing parameter &#x27;name&#x27;&quot;
+}
+</code></pre>
+<h3>14.9.2. Explicit Error Handling</h3>
+<p>
+Use <code>Ctxt.Error()</code> for custom error responses:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServer.UpdateRecord(Ctxt: TRestServerUriContext);
+begin
+  if not CanUpdate(Ctxt.InputInt[&#x27;id&#x27;]) then
+    Ctxt.Error(&#x27;Record is locked&#x27;, HTTP_FORBIDDEN)
+  else if DoUpdate(Ctxt.InputInt[&#x27;id&#x27;], Ctxt.InputUtf8[&#x27;data&#x27;]) then
+    Ctxt.Success
+  else
+    Ctxt.Error(&#x27;Update failed&#x27;, HTTP_SERVERERROR);
+end;
+</code></pre>
+<h3>14.9.3. Success Without Content</h3>
+<p>
+For operations that don't return data:
+
+</p>
+<pre><code class="language-pascal">procedure TRestServer.DeleteItem(Ctxt: TRestServerUriContext);
+begin
+  if DoDelete(Ctxt.InputInt[&#x27;id&#x27;]) then
+    Ctxt.Success  // Returns HTTP 200 with empty body
+  else
+    Ctxt.Error(&#x27;Delete failed&#x27;);
+end;
+</code></pre>
+<h3>14.9.4. HTTP Status Codes</h3>
+<table>
+<thead>
+<tr>
+  <th>Method</th>
+  <th>Default Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>Ctxt.Results()</code></td>
+  <td>200 OK</td>
+</tr>
+<tr>
+  <td><code>Ctxt.Returns()</code></td>
+  <td>200 OK (customizable)</td>
+</tr>
+<tr>
+  <td><code>Ctxt.Success()</code></td>
+  <td>200 OK (customizable)</td>
+</tr>
+<tr>
+  <td><code>Ctxt.Error()</code></td>
+  <td>400 Bad Request (customizable)</td>
+</tr>
+</tbody>
+</table>
+Common status codes:
+<ul>
+  <li><code>HTTP_SUCCESS</code> = 200</li>
+  <li><code>HTTP_CREATED</code> = 201</li>
+  <li><code>HTTP_NOCONTENT</code> = 204</li>
+  <li><code>HTTP_BADREQUEST</code> = 400</li>
+  <li><code>HTTP_FORBIDDEN</code> = 403</li>
+  <li><code>HTTP_NOTFOUND</code> = 404</li>
+  <li><code>HTTP_SERVERERROR</code> = 500</li>
+</ul>
+<hr>
+<h2>14.10. Bypassing Authentication</h2>
+<h3>14.10.1. Per-Method Bypass</h3>
+<p>
+Certain methods (like <code>Timestamp</code> or public API endpoints) should be accessible without authentication:
+
+</p>
+<pre><code class="language-pascal">Server.ServiceMethodByPassAuthentication(&#x27;Timestamp&#x27;);
+Server.ServiceMethodByPassAuthentication(&#x27;GetPublicData&#x27;);
+</code></pre>
+<h3>14.10.2. Allowed HTTP Methods</h3>
+<p>
+Restrict which HTTP verbs are allowed for a method:
+
+</p>
+<pre><code class="language-pascal">// In TRestServerMethod, set during initialization
+Server.PublishedMethods[&#x27;MyMethod&#x27;].Methods := [mGET, mPOST];
+</code></pre>
+<hr>
+<h2>14.11. Benefits and Limitations</h2>
+<h3>14.11.1. Benefits</h3>
+<p>
+Method-based services provide:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Benefit</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Full control</strong></td>
+  <td>Direct access to HTTP headers, binary data, custom MIME types</td>
+</tr>
+<tr>
+  <td><strong>RESTful integration</strong></td>
+  <td>Can be linked to ORM tables via URI routing</td>
+</tr>
+<tr>
+  <td><strong>Low overhead</strong></td>
+  <td>Minimal abstraction layer, maximum performance</td>
+</tr>
+<tr>
+  <td><strong>Flexibility</strong></td>
+  <td>Handle any request type (AJAX, SOAP, custom protocols)</td>
+</tr>
+<tr>
+  <td><strong>Simple debugging</strong></td>
+  <td>Direct mapping between URI and code</td>
+</tr>
+</tbody>
+</table>
+<h3>14.11.2. Security</h3>
+<p>
+The mORMot implementation is inherently secure against certain attacks:
+<ul>
+  <li><strong>Hash collision attacks</strong>: Not vulnerable (unlike some Apache configurations)</li>
+  <li><strong>Parameter injection</strong>: Typed accessors validate input</li>
+  <li><strong>Thread safety</strong>: Enforced by design</li>
+</ul>
+<h3>14.11.3. Limitations</h3>
+<table>
+<thead>
+<tr>
+  <th>Limitation</th>
+  <th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Manual parameter marshalling</td>
+  <td>Use interface-based services (Chapter 16)</td>
+</tr>
+<tr>
+  <td>No automatic client stub generation</td>
+  <td>Use interface-based services</td>
+</tr>
+<tr>
+  <td>Flat service namespace</td>
+  <td>Organize via naming conventions or interfaces</td>
+</tr>
+<tr>
+  <td>No automatic documentation</td>
+  <td>Generate manually or use OpenAPI export</td>
+</tr>
+</tbody>
+</table>
+<h3>14.11.4. When to Use</h3>
+<p>
+<strong>Use method-based services when</strong>:
+<ul>
+  <li>You need binary data handling or custom MIME types</li>
+  <li>You're building a simple REST API</li>
+  <li>You need maximum performance</li>
+  <li>You're integrating with non-mORMot clients</li>
+  <li>You want full HTTP control</li>
+</ul>
+<strong>Use interface-based services when</strong>:
+<ul>
+  <li>Building complex SOA systems</li>
+  <li>You want automatic parameter marshalling</li>
+  <li>You need client stub generation</li>
+  <li>You prefer strongly-typed contracts</li>
+</ul>
+<hr>
+<h2>14.12. Complete Example</h2>
+<h3>14.12.1. Server</h3>
+<pre><code class="language-pascal">unit RestServerUnit;
+
+interface
+
+uses
+  mormot.core.base,
+  mormot.core.text,
+  mormot.core.json,
+  mormot.orm.core,
+  mormot.rest.core,
+  mormot.rest.server,
+  mormot.rest.memserver;
+
+type
+  TMyRestServer = class(TRestServerFullMemory)
+  published
+    procedure Sum(Ctxt: TRestServerUriContext);
+    procedure Echo(Ctxt: TRestServerUriContext);
+    procedure Time(Ctxt: TRestServerUriContext);
+  end;
+
+implementation
+
+procedure TMyRestServer.Sum(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.Results([Ctxt.InputDouble[&#x27;a&#x27;] + Ctxt.InputDouble[&#x27;b&#x27;]]);
+end;
+
+procedure TMyRestServer.Echo(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.Returns(Ctxt.Call^.InBody, HTTP_SUCCESS, TEXT_CONTENT_TYPE_HEADER);
+end;
+
+procedure TMyRestServer.Time(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.Returns([&#x27;timestamp&#x27;, ServerTimestamp, &#x27;utc&#x27;, DateTimeToIso8601(NowUtc, true)]);
+end;
+
+end.
+</code></pre>
+<h3>14.12.2. Client</h3>
+<pre><code class="language-pascal">unit RestClientUnit;
+
+interface
+
+uses
+  mormot.core.base,
+  mormot.rest.client,
+  mormot.rest.http.client;
+
+type
+  TMyRestClient = class(TRestHttpClientSocket)
+  public
+    function Sum(a, b: Double): Double;
+    function Echo(const Text: RawUtf8): RawUtf8;
+    function GetServerTime: TDateTime;
+  end;
+
+implementation
+
+uses
+  mormot.core.json;
+
+function TMyRestClient.Sum(a, b: Double): Double;
+var
+  err: Integer;
+begin
+  Val(CallBackGetResult(&#x27;sum&#x27;, [&#x27;a&#x27;, a, &#x27;b&#x27;, b]), Result, err);
+end;
+
+function TMyRestClient.Echo(const Text: RawUtf8): RawUtf8;
+var
+  resp: RawUtf8;
+begin
+  if CallBack(mPOST, &#x27;echo&#x27;, Text, resp) = HTTP_SUCCESS then
+    Result := resp
+  else
+    Result := &#x27;&#x27;;
+end;
+
+function TMyRestClient.GetServerTime: TDateTime;
+var
+  doc: TDocVariantData;
+  resp: RawUtf8;
+begin
+  if CallBackGet(&#x27;time&#x27;, [], resp) = HTTP_SUCCESS then
+  begin
+    doc.InitJson(resp, JSON_FAST);
+    Result := Iso8601ToDateTime(doc.U[&#x27;utc&#x27;]);
+  end
+  else
+    Result := 0;
+end;
+
+end.
+</code></pre>
+<h3>14.12.3. Main Program</h3>
+<pre><code class="language-pascal">program MethodServicesDemo;
+
+uses
+  mormot.core.base,
+  mormot.orm.core,
+  mormot.rest.http.server,
+  RestServerUnit,
+  RestClientUnit;
+
+var
+  Model: TOrmModel;
+  Server: TMyRestServer;
+  HttpServer: TRestHttpServer;
+  Client: TMyRestClient;
+begin
+  Model := TOrmModel.Create([], &#x27;root&#x27;);
+  Server := TMyRestServer.Create(Model);
+  try
+    Server.ServiceMethodByPassAuthentication(&#x27;Time&#x27;);
+
+    HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;, useHttpAsync);
+    try
+      // Client demo
+      Client := TMyRestClient.Create(&#x27;localhost&#x27;, &#x27;8080&#x27;, TOrmModel.Create([], &#x27;root&#x27;));
+      try
+        WriteLn(&#x27;Sum(3.5, 2.5) = &#x27;, Client.Sum(3.5, 2.5):0:2);
+        WriteLn(&#x27;Echo: &#x27;, Client.Echo(&#x27;Hello mORMot!&#x27;));
+        WriteLn(&#x27;Server time: &#x27;, DateTimeToStr(Client.GetServerTime));
+      finally
+        Client.Free;
+      end;
+
+      WriteLn(&#x27;Press Enter to stop...&#x27;);
+      ReadLn;
+    finally
+      HttpServer.Free;
+    end;
+  finally
+    Server.Free;
+    Model.Free;
+  end;
+end.
+</code></pre>
+<hr>
+<h2>Summary</h2>
+<p>
+Method-based services in mORMot 2 provide:
+
+</p>
+<ul>
+  <li><strong>Direct HTTP control</strong>: Full access to headers, body, and response formatting</li>
+  <li><strong>Simple implementation</strong>: Just add a published method with the right signature</li>
+  <li><strong>Flexible responses</strong>: JSON, HTML, binary, any MIME type</li>
+  <li><strong>RESTful integration</strong>: Link methods to ORM tables via URI patterns</li>
+  <li><strong>JWT support</strong>: Built-in token validation</li>
+  <li><strong>Browser caching</strong>: HTTP 304 support for optimized polling</li>
+  <li><strong>Thread safety</strong>: By design, with fine-grained locking</li>
+</ul>
+While interface-based services (covered in Chapter 16) offer more structure for complex SOA systems, method-based services remain the go-to choice for simple APIs, binary data handling, and maximum control over the HTTP layer.
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-13.html">Chapter 13: Server-Side ORM Processing</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-15.html">Chapter 15: Interfaces and SOLID Design</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

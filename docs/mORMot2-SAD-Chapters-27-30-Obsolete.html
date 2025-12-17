@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# Chapters 27-30: Status Note
+
+</p>
+<p>
+The following chapters from the original mORMot1 Software Architecture Design document have been marked as <strong>obsolete</strong> for mORMot2:
+
+</p>
+<h2>Chapter 27: mORMot Framework Source</h2>
+<p>
+<strong>Status:</strong> Obsolete / Superseded
+
+</p>
+<p>
+The original chapter provided a detailed listing of mORMot1 units and their dependencies. This information has been superseded by:
+<ul>
+  <li><strong>Chapter 3</strong>: Meet mORMot2 - Unit Structure (complete unit organization)</li>
+  <li><strong>Chapter 4</strong>: Core Units (detailed core unit documentation)</li>
+  <li><strong>Chapter 26</strong>: Source Code (repository structure and folder layout)</li>
+</ul>
+The mORMot2 source code is organized in a completely different manner than mORMot1, with clear folder-based separation by functionality. Creating a redundant unit listing chapter is not necessary.
+
+</p>
+<h2>Chapter 28: SynFile Application</h2>
+<p>
+<strong>Status:</strong> Obsolete / No mORMot2 Equivalent
+
+</p>
+<p>
+The SynFile demo application from mORMot1 relied heavily on deprecated components:
+<ul>
+  <li><code>mORMotUI.pas</code> - UI Grid (deprecated)</li>
+  <li><code>mORMotToolBar.pas</code> - ORM-driven toolbar (deprecated)</li>
+  <li><code>mORMotUIEdit.pas</code> - Record edition dialogs (deprecated)</li>
+  <li><code>mORMoti18n.pas</code> - Internationalization (deprecated)</li>
+  <li><code>mORMotReport.pas</code> - Reporting engine (deprecated)</li>
+</ul>
+These RTTI-based UI generation features were removed in mORMot2. Modern mORMot2 applications typically use:
+<ul>
+  <li>Standard VCL/LCL forms with manual UI design</li>
+  <li>Web-based frontends with MVC/MVVM patterns</li>
+  <li>REST API clients with any UI framework</li>
+</ul>
+For learning mORMot2, refer to:
+<ul>
+  <li>The <code>ex/</code> folder sample applications</li>
+  <li>Thomas Tutorials (<code>ex/ThirdPartyDemos/tbo/</code>)</li>
+  <li>The MVC/MVVM chapters (18-19)</li>
+</ul>
+<h2>Chapter 29: Main SynFile Demo Source</h2>
+<p>
+<strong>Status:</strong> Obsolete / No mORMot2 Equivalent
+
+</p>
+<p>
+This chapter documented the unit dependencies of the SynFile demo. Since SynFile does not have a mORMot2 equivalent, this chapter is obsolete.
+
+</p>
+<h2>Chapter 30: SWRS Implications</h2>
+<p>
+<strong>Status:</strong> Obsolete / Historical Reference Only
+
+</p>
+<p>
+The Software Requirements Specification (SWRS) implications chapter was a formal requirements traceability matrix linking design specifications to implementation units. While the design principles still apply to mORMot2:
+<ul>
+  <li>All unit references are outdated (mORMot1 unit names)</li>
+  <li>All class references are outdated (TSQLRecord → TOrm, etc.)</li>
+  <li>The formal SWRS document structure is not used in mORMot2 development</li>
+</ul>
+The concepts documented in Chapter 30 are covered throughout the mORMot2 documentation:
+<ul>
+  <li>DI-2.1.1 (Client-Server): Chapters 10-13</li>
+  <li>DI-2.1.1.1 (RESTful): Chapter 10</li>
+  <li>DI-2.1.2 (UTF-8 JSON): Chapter 10</li>
+  <li>DI-2.1.3 (ORM/RTTI): Chapters 5-6</li>
+  <li>DI-2.1.4 (Cross-Cutting): Chapters 21, 25</li>
+  <li>DI-2.1.5 (SOA): Chapters 15-16</li>
+  <li>DI-2.2.1 (SQLite3): Chapter 7</li>
+  <li>DI-2.2.2 (Unit Testing): Chapter 25</li>
+  <li>DI-2.3.x (UI): Chapters 18-19 (web-based alternatives)</li>
+</ul>
+<hr>
+<h2>Summary</h2>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Original Title</th>
+  <th>mORMot2 Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>27</td>
+  <td>mORMot Framework Source</td>
+  <td>Superseded by Chapters 3, 4, 26</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td>SynFile Application</td>
+  <td>Obsolete (deprecated UI components)</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td>Main SynFile Demo Source</td>
+  <td>Obsolete (SynFile not ported)</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td>SWRS Implications</td>
+  <td>Obsolete (outdated references)</td>
+</tr>
+</tbody>
+</table>
+For mORMot2 development, please refer to:
+<ul>
+  <li>The official samples in <code>ex/</code> folder</li>
+  <li>Thomas Tutorials for step-by-step learning</li>
+  <li>The complete Software Architecture Design chapters 1-26</li>
+</ul>
+</body>
+</html>

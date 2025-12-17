@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# mORMot 2 Software Architecture Design
+
+</p>
+<p>
+<strong>Foreword</strong>
+
+</p>
+<hr>
+<h2>About This Document</h2>
+<table>
+<thead>
+<tr>
+  <th>Item</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Project Name</strong></td>
+  <td>Synopse mORMot 2 Framework</td>
+</tr>
+<tr>
+  <td><strong>Document Name</strong></td>
+  <td>Software Architecture Design (SAD)</td>
+</tr>
+<tr>
+  <td><strong>Document Version</strong></td>
+  <td>2.0</td>
+</tr>
+<tr>
+  <td><strong>Date</strong></td>
+  <td>December 2025</td>
+</tr>
+<tr>
+  <td><strong>Author</strong></td>
+  <td>Based on original work by Arnaud Bouchez</td>
+</tr>
+<tr>
+  <td><strong>Adapted for mORMot 2</strong></td>
+  <td>Claude AI with human oversight</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Document Purpose</h2>
+<p>
+The <em>Software Architecture Design</em> document describes the architecture, design patterns, and implementation guidelines for the <em>Synopse mORMot 2 Framework</em>. It serves as both a learning resource for new developers and a reference guide for experienced users.
+
+</p>
+<p>
+This document has been adapted from the original mORMot 1.18 SAD to reflect the complete rewrite that is mORMot 2, including:
+<ul>
+  <li>New unit organization and naming</li>
+  <li>Updated class names and APIs</li>
+  <li>New features and capabilities</li>
+  <li>Removed deprecated functionality</li>
+</ul>
+<hr>
+<h2>Document License</h2>
+<p>
+<strong>Synopse mORMot 2 Framework Documentation</strong>
+Copyright (C) 2008-2025 Arnaud Bouchez
+Synopse Informatique - https://synopse.info
+
+</p>
+<p>
+The <em>Synopse mORMot 2 Framework Source Code</em> is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
+
+</p>
+<p>
+The <em>Synopse mORMot 2 Framework Documentation</em> is a free document, released under a GPL 3.0 License, distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+</p>
+<hr>
+<h2>Trademark Notice</h2>
+<p>
+Rather than indicating every occurrence of a trademarked name as such, this document uses the names only in an editorial fashion and to the benefit of the trademark owner with no intention of infringement of the trademark.
+
+</p>
+<hr>
+<h2>Resources</h2>
+<table>
+<thead>
+<tr>
+  <th>Resource</th>
+  <th>URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Overview</strong></td>
+  <td><a href="https://github.com/synopse/mORMot2/blob/master/README.html">README.md</a></td>
+</tr>
+<tr>
+  <td><strong>Download</strong></td>
+  <td><a href="https://github.com/synopse/mORMot2/releases">GitHub Releases</a></td>
+</tr>
+<tr>
+  <td><strong>API Reference</strong></td>
+  <td><a href="https://synopse.info/files/doc/mORMot2.html">Official Documentation</a></td>
+</tr>
+<tr>
+  <td><strong>Forum</strong></td>
+  <td><a href="https://synopse.info/forum/viewforum.php?id=24">Synopse Forum</a></td>
+</tr>
+<tr>
+  <td><strong>Blog</strong></td>
+  <td><a href="https://blog.synopse.info">Synopse Blog</a></td>
+</tr>
+<tr>
+  <td><strong>Telegram</strong></td>
+  <td><a href="https://t.me/synopse_mormot">mORMot Telegram Group</a></td>
+</tr>
+<tr>
+  <td><strong>Discord</strong></td>
+  <td><a href="https://discord.gg/BcmcpY6afj">mORMot Discord Server</a></td>
+</tr>
+<tr>
+  <td><strong>Donate</strong></td>
+  <td><a href="https://github.com/synopse/mORMot2/blob/master/DONATE.html">Sponsor mORMot 2</a></td>
+</tr>
+<tr>
+  <td><strong>License Terms</strong></td>
+  <td><a href="https://github.com/synopse/mORMot2/blob/master/LICENCE.html">LICENCE.md</a></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Table of Contents</h2>
+<h3>Part I: Introduction and Core Concepts</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>1</td>
+  <td>mORMot 2 Overview</td>
+  <td>Framework introduction, features, and benefits</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td>Architecture Principles</td>
+  <td>Design patterns: MVC, SOA, ORM, DDD</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td>Meet mORMot 2 - Unit Structure</td>
+  <td>Source code organization and layers</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td>Core Units</td>
+  <td>mormot.core.<em> functionality</td>
+</tr>
+</tbody>
+</table>
+<h3>Part II: Object-Relational Mapping</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>5</td>
+  <td>Object-Relational Mapping</td>
+  <td>TOrm, TOrmModel, field types</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td>Daily ORM</td>
+  <td>Practical ORM patterns and best practices</td>
+</tr>
+</tbody>
+</table>
+<h3>Part III: Database Access</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>7</td>
+  <td>Database Layer</td>
+  <td>SQLite3, virtual tables, FTS</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td>External SQL Database Access</td>
+  <td>mormot.db.sql.</em> - RDBMS integration</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td>External NoSQL Database Access</td>
+  <td>MongoDB ODM integration</td>
+</tr>
+</tbody>
+</table>
+<h3>Part IV: REST and Client-Server</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>10</td>
+  <td>JSON and RESTful Fundamentals</td>
+  <td>JSON serialization, REST concepts</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td>Client-Server Architecture</td>
+  <td>Protocols, TSQLRest classes</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td>Client-Server ORM Operations</td>
+  <td>BATCH, caching, synchronization</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td>Server-Side ORM Processing</td>
+  <td>Performance, stored procedures</td>
+</tr>
+</tbody>
+</table>
+<h3>Part V: Services and SOA</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>14</td>
+  <td>Client-Server Services via Methods</td>
+  <td>Published methods, parameters</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td>Interfaces and SOLID Design</td>
+  <td>SOLID principles, DI, mocking</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td>Client-Server Services via Interfaces</td>
+  <td>Interface-based SOA</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td>Cross-Platform Clients</td>
+  <td>FPC, mobile, JavaScript clients</td>
+</tr>
+</tbody>
+</table>
+<h3>Part VI: Web Applications</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>18</td>
+  <td>The MVC Pattern</td>
+  <td>Model-View-Controller, Mustache</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td>MVC/MVVM Web Applications</td>
+  <td>Web framework implementation</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td>Hosting and Deployment</td>
+  <td>Production deployment strategies</td>
+</tr>
+</tbody>
+</table>
+<h3>Part VII: Security and Advanced Topics</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>21</td>
+  <td>Security</td>
+  <td>Authentication, authorization, sessions</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td>Scripting Engine</td>
+  <td>QuickJS JavaScript integration</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td>Asymmetric Encryption</td>
+  <td>ECC, certificates, encryption</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td>Domain-Driven Design</td>
+  <td>DDD patterns with mORMot 2</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td>Testing and Logging</td>
+  <td>TSynTest, TSynLog, debugging</td>
+</tr>
+</tbody>
+</table>
+<h3>Part VIII: Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Chapter</th>
+  <th>Title</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>26</td>
+  <td>Source Code</td>
+  <td>Installation, licensing, setup</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>What's New in mORMot 2</h2>
+<p>
+mORMot 2 is a complete rewrite of the framework. Key changes include:
+
+</p>
+<h3>Naming Changes</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRecord</code></td>
+  <td><code>TOrm</code></td>
+  <td>Base ORM class</td>
+</tr>
+<tr>
+  <td><code>TSQLRest</code></td>
+  <td><code>TRest</code></td>
+  <td>REST client/server base</td>
+</tr>
+<tr>
+  <td><code>TSQLModel</code></td>
+  <td><code>TOrmModel</code></td>
+  <td>Data model definition</td>
+</tr>
+<tr>
+  <td><code>SynCommons.pas</code></td>
+  <td><code>mormot.core.<em>.pas</code></td>
+  <td>Split into ~24 units</td>
+</tr>
+<tr>
+  <td><code>mORMot.pas</code></td>
+  <td><code>mormot.orm.</em></code> + <code>mormot.rest.<em></code></td>
+  <td>Separated layers</td>
+</tr>
+<tr>
+  <td><code>SynDB</em>.pas</code></td>
+  <td><code>mormot.db.<em>.pas</code></td>
+  <td>Database access</td>
+</tr>
+</tbody>
+</table>
+<h3>New Features</h3>
+<ul>
+  <li><strong>OpenSSL Integration</strong>: Full OpenSSL 1.1/3.0 support for cryptography</li>
+  <li><strong>Async Servers</strong>: Non-blocking HTTP and WebSocket servers</li>
+  <li><strong>QuickJS Scripting</strong>: Modern JavaScript engine (replaces SpiderMonkey)</li>
+  <li><strong>Let's Encrypt</strong>: Automatic HTTPS certificate management</li>
+  <li><strong>libdeflate</strong>: Faster compression alternative</li>
+  <li><strong>Modern Syntax</strong>: Optional generics and enumerators</li>
+</ul>
+<h3>Deprecated Features</h3>
+<p>
+The following mORMot 1 features are not available in mORMot 2:
+
+</p>
+<ul>
+  <li><strong>RTTI-based UI Generation</strong>: mORMotUI</em>, mORMotToolBar, mORMotUIEdit</li>
+  <li><strong>BigTable</strong>: Large binary storage</li>
+  <li><strong>LVCL</strong>: Light VCL replacement</li>
+  <li><strong>Kylix/CrossKylix</strong>: Linux via Kylix compiler</li>
+  <li><strong>Delphi 5-6</strong>: Minimum is now Delphi 7</li>
+  <li><strong>SpiderMonkey</strong>: Replaced by QuickJS</li>
+  <li><strong>SynFile Demo</strong>: No equivalent demo application</li>
+</ul>
+<hr>
+<h2>Quick Start</h2>
+<h3>Installation Summary</h3>
+<p>
+1. <strong>Clone repository</strong>: <code>git clone https://github.com/synopse/mORMot2.git</code>
+2. <strong>Download static files</strong>: Extract <code>mormot2static.7z</code> to <code>static/</code> folder
+3. <strong>Configure IDE</strong>:
+   - <strong>Lazarus</strong>: Open <code>packages/lazarus/mormot2.lpk</code>
+   - <strong>Delphi</strong>: Add library paths via <code>$(mormot2)</code> environment variable
+4. <strong>Verify</strong>: Compile and run <code>test/mormot2tests.dpr</code>
+
+</p>
+<h3>First Steps</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.orm.core,
+  mormot.rest.sqlite3;
+
+type
+  TOrmPerson = class(TOrm)
+  private
+    fName: RawUtf8;
+    fAge: Integer;
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Age: Integer read fAge write fAge;
+  end;
+
+var
+  Model: TOrmModel;
+  Server: TRestServerDB;
+  Person: TOrmPerson;
+begin
+  Model := TOrmModel.Create([TOrmPerson]);
+  Server := TRestServerDB.Create(Model, &#x27;test.db&#x27;);
+  try
+    Server.CreateMissingTables;
+
+    Person := TOrmPerson.Create;
+    try
+      Person.Name := &#x27;John&#x27;;
+      Person.Age := 30;
+      Server.Add(Person, true);
+    finally
+      Person.Free;
+    end;
+  finally
+    Server.Free;
+    Model.Free;
+  end;
+end.
+</code></pre>
+<hr>
+<h2>Learning Path</h2>
+<p>
+For those new to mORMot 2, we recommend the following reading order:
+
+</p>
+<p>
+1. <strong>Chapters 1-2</strong>: Understand the framework philosophy
+2. <strong>Chapters 3-4</strong>: Learn the unit structure and core utilities
+3. <strong>Chapters 5-6</strong>: Master the ORM layer
+4. <strong>Chapters 10-12</strong>: Understand client-server architecture
+5. <strong>Chapters 14-16</strong>: Explore service-oriented features
+6. <strong>Chapter 26</strong>: Set up your development environment
+
+</p>
+<p>
+Then, based on your needs:
+<ul>
+  <li><strong>Database Integration</strong>: Chapters 7-9</li>
+  <li><strong>Web Development</strong>: Chapters 18-20</li>
+  <li><strong>Security</strong>: Chapter 21</li>
+  <li><strong>Advanced Patterns</strong>: Chapters 22-25</li>
+</ul>
+<hr>
+<h2>Sample Applications</h2>
+<p>
+The <code>ex/</code> folder contains many examples:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Sample</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>ex/ThirdPartyDemos/tbo/</code></td>
+  <td>Thomas Tutorials - step-by-step learning</td>
+</tr>
+<tr>
+  <td><code>ex/ThirdPartyDemos/martin-doyle/</code></td>
+  <td>Various feature demonstrations</td>
+</tr>
+<tr>
+  <td><code>ex/mvc-blog/</code></td>
+  <td>MVC web application example</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Acknowledgments</h2>
+<ul>
+  <li><strong>Arnaud Bouchez</strong>: Original framework author and architect</li>
+  <li><strong>All Contributors</strong>: See <a href="https://github.com/synopse/mORMot2/blob/master/CONTRIBUTORS.html">CONTRIBUTORS.md</a></li>
+  <li><strong>The Community</strong>: Forum members, bug reporters, and documentation contributors</li>
+</ul>
+<hr>
+<p>
+<em>Adopt a mORMot!</em>
+
+</p>
+<hr>
+<p>
+<strong>Continue to <a href="mORMot2-SAD-Chapter-01.html">Chapter 1: mORMot 2 Overview</a></strong>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>-</td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-01.html">Chapter 1: mORMot 2 Overview</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8. External SQL Database Access</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>8. External SQL Database Access</h1>
+<p>
+<em>Connect to Any RDBMS</em>
+
+</p>
+<p>
+The mORMot framework provides direct access to external SQL databases through the <code>mormot.db.sql.<em></code> units. These databases can be used standalone or integrated with the ORM via virtual tables.
+
+</p>
+<hr>
+<h2>8.1. Architecture Overview</h2>
+<h3>8.1.1. SynDB Layer (mORMot 2: mormot.db.</em>)</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐ 
+│                     mormot.db.sql.pas                            │
+│              TSqlDBConnectionProperties (abstract)               │
+│              TSqlDBConnection, TSqlDBStatement                   │
+└─────────────────────────────────────────────────────────────────┘ 
+                              │
+      ┌───────────────────────┼───────────────────────┐
+      │                       │                       │
+      ▼                       ▼                       ▼
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐         
+│   Direct    │       │    ODBC     │       │  TDataSet            │
+│   Access    │       │   Access    │       │   Bridge             │
+└─────────────┘       └─────────────┘       └─────────────┘         
+      │                       │                       │
+      ▼                       ▼                       ▼
+  PostgreSQL              Any ODBC              FireDAC
+  Oracle (OCI)            Driver                UniDAC
+  SQLite3                                       NexusDB
+</code></pre>
+<h3>8.1.2. Provider Units</h3>
+<table>
+<thead>
+<tr>
+  <th>Provider</th>
+  <th>Unit</th>
+  <th>Direct Access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>PostgreSQL</td>
+  <td><code>mormot.db.sql.postgres</code></td>
+  <td>Yes (libpq)</td>
+</tr>
+<tr>
+  <td>Oracle</td>
+  <td><code>mormot.db.sql.oracle</code></td>
+  <td>Yes (OCI)</td>
+</tr>
+<tr>
+  <td>SQLite3</td>
+  <td><code>mormot.db.sql.sqlite3</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td>ODBC</td>
+  <td><code>mormot.db.sql.odbc</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td>OleDB</td>
+  <td><code>mormot.db.sql.oledb</code></td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td>Zeos/ZDBC</td>
+  <td><code>mormot.db.sql.zeos</code></td>
+  <td>Yes (recommended)</td>
+</tr>
+<tr>
+  <td>FireDAC</td>
+  <td><code>mormot.db.rad.firedac</code></td>
+  <td>Via TDataSet</td>
+</tr>
+<tr>
+  <td>UniDAC</td>
+  <td><code>mormot.db.rad.unidac</code></td>
+  <td>Via TDataSet</td>
+</tr>
+<tr>
+  <td>NexusDB</td>
+  <td><code>mormot.db.rad.nexusdb</code></td>
+  <td>Via TDataSet</td>
+</tr>
+</tbody>
+</table>
+<h3>8.1.3. Database Engines Supported</h3>
+<table>
+<thead>
+<tr>
+  <th>Database</th>
+  <th>Direct</th>
+  <th>ODBC</th>
+  <th>OleDB</th>
+  <th>Zeos</th>
+  <th>TDataSet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>PostgreSQL</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>Oracle</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>MS SQL Server</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>MySQL/MariaDB</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>SQLite3</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>Firebird</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>IBM DB2</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>Informix</td>
+  <td>-</td>
+  <td>✓</td>
+  <td>-</td>
+  <td>-</td>
+  <td>✓</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>8.2. Connection Properties</h2>
+<h3>8.2.1. Creating Connections</h3>
+<pre><code class="language-pascal">uses
+  mormot.db.sql,
+  mormot.db.sql.postgres;
+
+var
+  Props: TSqlDBPostgresConnectionProperties;
+begin
+  // PostgreSQL direct
+  Props := TSqlDBPostgresConnectionProperties.Create(
+    &#x27;localhost:5432&#x27;, &#x27;mydb&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+
+  // Connection string alternative
+  Props := TSqlDBPostgresConnectionProperties.Create(
+    &#x27;host=localhost port=5432 dbname=mydb&#x27;, &#x27;&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+end;
+</code></pre>
+<h3>8.2.2. Provider-Specific Examples</h3>
+<p>
+<strong>Oracle (direct OCI):</strong>
+<pre><code class="language-pascal">uses
+  mormot.db.sql.oracle;
+
+Props := TSqlDBOracleConnectionProperties.Create(
+  &#x27;myserver/orcl&#x27;, &#x27;&#x27;, &#x27;scott&#x27;, &#x27;tiger&#x27;);
+
+// With TNS alias
+Props := TSqlDBOracleConnectionProperties.Create(
+  &#x27;PROD_DB&#x27;, &#x27;&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+</code></pre>
+<p>
+<strong>MS SQL Server (ODBC):</strong>
+<pre><code class="language-pascal">uses
+  mormot.db.sql.odbc;
+
+Props := TSqlDBOdbcConnectionProperties.Create(
+  &#x27;Driver={SQL Server};Server=.\SQLEXPRESS;Database=mydb&#x27;,
+  &#x27;&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+
+// Windows authentication
+Props := TSqlDBOdbcConnectionProperties.Create(
+  &#x27;Driver={SQL Server};Server=.\SQLEXPRESS;Database=mydb;Trusted_Connection=Yes&#x27;,
+  &#x27;&#x27;, &#x27;&#x27;, &#x27;&#x27;);
+</code></pre>
+<p>
+<strong>Zeos (recommended for cross-database):</strong>
+<pre><code class="language-pascal">uses
+  mormot.db.sql.zeos;
+
+// PostgreSQL via Zeos
+Props := TSqlDBZeosConnectionProperties.Create(
+  &#x27;zdbc:postgresql://localhost:5432/mydb&#x27;, &#x27;&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+
+// MySQL via Zeos
+Props := TSqlDBZeosConnectionProperties.Create(
+  &#x27;zdbc:mysql://localhost:3306/mydb&#x27;, &#x27;&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+
+// Firebird via Zeos
+Props := TSqlDBZeosConnectionProperties.Create(
+  &#x27;zdbc:firebird://localhost/C:\Data\mydb.fdb&#x27;, &#x27;&#x27;, &#x27;SYSDBA&#x27;, &#x27;masterkey&#x27;);
+</code></pre>
+<h3>8.2.3. Connection Properties Lifecycle</h3>
+<pre><code class="language-pascal">var
+  Props: TSqlDBConnectionProperties;
+begin
+  // Create once, use throughout application
+  Props := TSqlDBPostgresConnectionProperties.Create(...);
+  try
+    // Props manages connection pool internally
+    UseDatabase(Props);
+  finally
+    Props.Free;  // Release all connections
+  end;
+end;
+</code></pre>
+<p>
+<strong>Important</strong>: Create <code>TSqlDBConnectionProperties</code> once per application. It manages connection pooling automatically.
+
+</p>
+<hr>
+<h2>8.3. Executing Queries</h2>
+<h3>8.3.1. ISqlDBRows Interface</h3>
+<p>
+The simplest and safest pattern:
+
+</p>
+<pre><code class="language-pascal">var
+  Rows: ISqlDBRows;
+begin
+  Rows := Props.Execute(
+    &#x27;SELECT * FROM Customer WHERE Country = ?&#x27;, [&#x27;USA&#x27;]);
+
+  while Rows.Step do
+    WriteLn(Rows[&#x27;Name&#x27;], &#x27; - &#x27;, Rows[&#x27;City&#x27;]);
+
+  // No try..finally needed - interface auto-releases
+end;
+</code></pre>
+<h3>8.3.2. Statement-Based Access</h3>
+<p>
+For more control:
+
+</p>
+<pre><code class="language-pascal">var
+  Conn: TSqlDBConnection;
+  Stmt: ISqlDBStatement;  // Interface - auto-released
+begin
+  Conn := Props.ThreadSafeConnection;  // Thread-safe connection
+  Stmt := Conn.NewStatementPrepared(
+    &#x27;SELECT * FROM Customer WHERE Country = ?&#x27;, True);  // True = cache
+
+  Stmt.BindTextU(1, &#x27;USA&#x27;);  // Use BindTextU for RawUtf8 strings
+  Stmt.ExecutePrepared;
+
+  while Stmt.Step do
+    WriteLn(Stmt.ColumnUtf8(0));
+  // No try..finally needed - interface auto-releases
+end;
+</code></pre>
+<h3>8.3.3. Late-Binding Access</h3>
+<p>
+For convenient (but slower) field access:
+
+</p>
+<pre><code class="language-pascal">var
+  Row: Variant;
+begin
+  with Props.Execute(
+    &#x27;SELECT * FROM Customer WHERE Country = ?&#x27;,
+    [&#x27;USA&#x27;], @Row) do
+  while Step do
+    WriteLn(Row.Name, &#x27; - &#x27;, Row.City);  // Late-binding!
+end;
+</code></pre>
+<h3>8.3.4. Direct JSON Output</h3>
+<p>
+Export query results directly to JSON:
+
+</p>
+<pre><code class="language-pascal">var
+  Json: RawUtf8;
+begin
+  Json := Props.Execute(
+    &#x27;SELECT ID, Name, Email FROM Customer&#x27;, []).FetchAllAsJson(True);
+  // Returns: [{&quot;ID&quot;:1,&quot;Name&quot;:&quot;John&quot;,&quot;Email&quot;:&quot;john@example.com&quot;},...]
+end;
+</code></pre>
+<hr>
+<h2>8.4. Field Types</h2>
+<h3>8.4.1. TSqlDBFieldType</h3>
+<table>
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Delphi Type</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>ftNull</code></td>
+  <td>-</td>
+  <td>SQL NULL</td>
+</tr>
+<tr>
+  <td><code>ftInt64</code></td>
+  <td><code>Int64</code></td>
+  <td>Any integer</td>
+</tr>
+<tr>
+  <td><code>ftDouble</code></td>
+  <td><code>Double</code></td>
+  <td>Floating-point</td>
+</tr>
+<tr>
+  <td><code>ftCurrency</code></td>
+  <td><code>Currency</code></td>
+  <td>Fixed 4 decimals</td>
+</tr>
+<tr>
+  <td><code>ftDate</code></td>
+  <td><code>TDateTime</code></td>
+  <td>Date and time</td>
+</tr>
+<tr>
+  <td><code>ftUtf8</code></td>
+  <td><code>RawUtf8</code></td>
+  <td>Unicode text</td>
+</tr>
+<tr>
+  <td><code>ftBlob</code></td>
+  <td><code>RawByteString</code></td>
+  <td>Binary data</td>
+</tr>
+</tbody>
+</table>
+<h3>8.4.2. Column Access Methods</h3>
+<pre><code class="language-pascal">// Type-safe access
+Value := Stmt.ColumnInt(0);       // Int64
+Value := Stmt.ColumnDouble(1);    // Double
+Value := Stmt.ColumnCurrency(2);  // Currency
+Value := Stmt.ColumnUtf8(3);      // RawUtf8
+Value := Stmt.ColumnDateTime(4);  // TDateTime
+Value := Stmt.ColumnBlob(5);      // RawByteString
+
+// Null checking
+if Stmt.ColumnNull(0) then
+  WriteLn(&#x27;Value is NULL&#x27;);
+
+// Variant access (auto-conversion)
+Value := Stmt.Column[0];  // Returns Variant
+Value := Stmt[&#x27;ColumnName&#x27;];  // By name
+</code></pre>
+<hr>
+<h2>8.5. Parameter Binding</h2>
+<h3>8.5.1. Positional Parameters</h3>
+<pre><code class="language-pascal">// Use ? for positional parameters
+Stmt := Conn.NewStatementPrepared(
+  &#x27;INSERT INTO Customer (Name, Email, Age) VALUES (?, ?, ?)&#x27;, True);
+Stmt.BindTextU(1, &#x27;John Doe&#x27;);       // Use BindTextU for RawUtf8 strings
+Stmt.BindTextU(2, &#x27;john@example.com&#x27;);
+Stmt.Bind(3, Int64(30));             // Use Bind with Int64 for integers
+Stmt.ExecutePrepared;
+</code></pre>
+<h3>8.5.2. Array Binding (Bulk Insert)</h3>
+<p>
+High-performance bulk operations:
+
+</p>
+<pre><code class="language-pascal">// PostgreSQL, Oracle, and MSSQL support array binding
+Stmt := Conn.NewStatementPrepared(
+  &#x27;INSERT INTO Log (Timestamp, Message) VALUES (?, ?)&#x27;, True);
+
+Stmt.BindArray(1, DateTimes);   // TDateTimeDynArray
+Stmt.BindArray(2, Messages);    // TRawUtf8DynArray
+Stmt.ExecutePrepared;           // Single network roundtrip!
+</code></pre>
+<h3>8.5.3. BLOB Parameters</h3>
+<pre><code class="language-pascal">var
+  Data: RawByteString;
+begin
+  Data := StringFromFile(&#x27;image.png&#x27;);
+  Stmt.Bind(1, ftBlob, Data);  // Explicit type
+  Stmt.ExecutePrepared;
+end;
+</code></pre>
+<hr>
+<h2>8.6. Transactions</h2>
+<h3>8.6.1. Explicit Transactions</h3>
+<pre><code class="language-pascal">var
+  Conn: TSqlDBConnection;
+begin
+  Conn := Props.ThreadSafeConnection;
+  Conn.StartTransaction;
+  try
+    Conn.Execute(&#x27;UPDATE Account SET Balance = Balance - 100 WHERE ID = 1&#x27;);
+    Conn.Execute(&#x27;UPDATE Account SET Balance = Balance + 100 WHERE ID = 2&#x27;);
+    Conn.Commit;
+  except
+    Conn.Rollback;
+    raise;
+  end;
+end;
+</code></pre>
+<h3>8.6.2. Nested Transactions</h3>
+<pre><code class="language-pascal">// Most databases don&#x27;t support true nested transactions
+// mORMot uses SAVEPOINTs where available
+Conn.StartTransaction;      // Begin
+try
+  Conn.StartTransaction;    // SAVEPOINT (if supported)
+  try
+    // Operations
+    Conn.Commit;            // RELEASE SAVEPOINT
+  except
+    Conn.Rollback;          // ROLLBACK TO SAVEPOINT
+    raise;
+  end;
+  Conn.Commit;              // COMMIT
+except
+  Conn.Rollback;            // ROLLBACK
+end;
+</code></pre>
+<hr>
+<h2>8.7. ORM Integration</h2>
+<h3>8.7.1. Mapping TOrm to External Database</h3>
+<pre><code class="language-pascal">uses
+  mormot.orm.sql,
+  mormot.db.sql.postgres;
+
+var
+  Props: TSqlDBPostgresConnectionProperties;
+  Model: TOrmModel;
+  Server: TRestServerDB;
+begin
+  // Create connection properties
+  Props := TSqlDBPostgresConnectionProperties.Create(
+    &#x27;localhost:5432&#x27;, &#x27;mydb&#x27;, &#x27;user&#x27;, &#x27;password&#x27;);
+
+  // Create model
+  Model := TOrmModel.Create([TOrmCustomer, TOrmOrder]);
+
+  // Map ORM classes to external database
+  OrmMapExternal(Model, TOrmCustomer, Props);
+  OrmMapExternal(Model, TOrmOrder, Props);
+
+  // Create server (SQLite3 for other tables)
+  Server := TRestServerDB.Create(Model, &#x27;:memory:&#x27;);
+
+  // Now ORM operations go to PostgreSQL
+  Server.Orm.Add(Customer, True);
+end;
+</code></pre>
+<h3>8.7.2. Table and Field Name Mapping</h3>
+<pre><code class="language-pascal">// Custom table name
+OrmMapExternal(Model, TOrmCustomer, Props, &#x27;CUSTOMERS&#x27;);
+
+// Custom field mapping
+OrmMapExternal(Model, TOrmCustomer, Props, &#x27;CUSTOMERS&#x27;)
+  .MapField(&#x27;Name&#x27;, &#x27;CUSTOMER_NAME&#x27;)
+  .MapField(&#x27;Email&#x27;, &#x27;EMAIL_ADDRESS&#x27;);
+</code></pre>
+<h3>8.7.3. Auto-Create Tables</h3>
+<pre><code class="language-pascal">// mORMot can create tables in external database
+Props.UseFastCreateMissingFields := True;
+Server.CreateMissingTables;  // Creates in PostgreSQL
+</code></pre>
+<hr>
+<h2>8.8. Multi-Database Scenarios</h2>
+<h3>8.8.1. Mixing Storage Backends</h3>
+<pre><code class="language-pascal">var
+  PostgresProps, OracleProps: TSqlDBConnectionProperties;
+begin
+  // Different databases for different tables
+  PostgresProps := TSqlDBPostgresConnectionProperties.Create(...);
+  OracleProps := TSqlDBOracleConnectionProperties.Create(...);
+
+  Model := TOrmModel.Create([
+    TOrmUser,     // Internal SQLite3
+    TOrmProduct,  // PostgreSQL
+    TOrmLegacy    // Oracle
+  ]);
+
+  OrmMapExternal(Model, TOrmProduct, PostgresProps);
+  OrmMapExternal(Model, TOrmLegacy, OracleProps);
+
+  Server := TRestServerDB.Create(Model, &#x27;users.db3&#x27;);
+end;
+</code></pre>
+<h3>8.8.2. Cross-Database Queries</h3>
+<p>
+Thanks to SQLite3 virtual tables, you can JOIN across databases:
+
+</p>
+<pre><code class="language-pascal">// This works even though Product is in PostgreSQL and User is in SQLite3!
+Server.Orm.ExecuteList([TOrmProduct, TOrmUser],
+  &#x27;SELECT Product.Name, User.Email &#x27; +
+  &#x27;FROM Product, User &#x27; +
+  &#x27;WHERE Product.OwnerID = User.ID&#x27;);
+</code></pre>
+<hr>
+<h2>8.9. Database-Specific Notes</h2>
+<h3>8.9.1. PostgreSQL</h3>
+<pre><code class="language-pascal">// Direct libpq access (fastest)
+uses mormot.db.sql.postgres;
+
+Props := TSqlDBPostgresConnectionProperties.Create(
+  &#x27;localhost:5432&#x27;, &#x27;dbname&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+
+// Connection string options
+Props := TSqlDBPostgresConnectionProperties.Create(
+  &#x27;host=localhost port=5432 dbname=mydb sslmode=require&#x27;,
+  &#x27;&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+</code></pre>
+<p>
+<strong>Tips:</strong>
+<ul>
+  <li>Use array binding for bulk inserts</li>
+  <li>PostgreSQL handles UTF-8 natively</li>
+  <li>JSONB columns work well with <code>TDocVariant</code></li>
+</ul>
+<h3>8.9.2. Oracle</h3>
+<pre><code class="language-pascal">// Direct OCI access (fastest for Oracle)
+uses mormot.db.sql.oracle;
+
+Props := TSqlDBOracleConnectionProperties.Create(
+  &#x27;server/service&#x27;, &#x27;&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+
+// Array binding for bulk operations
+Props.ArrayBindingEnabled := True;
+</code></pre>
+<p>
+<strong>Tips:</strong>
+<ul>
+  <li>Use array binding (Oracle excels at this)</li>
+  <li>Direct OCI is much faster than ODBC/OleDB</li>
+  <li>Large BLOBs require special handling</li>
+</ul>
+<h3>8.9.3. MS SQL Server</h3>
+<pre><code class="language-pascal">// ODBC (recommended)
+uses mormot.db.sql.odbc;
+
+Props := TSqlDBOdbcConnectionProperties.Create(
+  &#x27;Driver={ODBC Driver 17 for SQL Server};Server=.\SQLEXPRESS;Database=mydb&#x27;,
+  &#x27;&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+
+// OleDB alternative
+uses mormot.db.sql.oledb;
+
+Props := TSqlDBOleDBConnectionProperties.Create(
+  &#x27;Provider=SQLNCLI11;Server=.\SQLEXPRESS;Database=mydb&#x27;,
+  &#x27;&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+</code></pre>
+<p>
+<strong>Tips:</strong>
+<ul>
+  <li>Use ODBC Driver 17+ for best performance</li>
+  <li>Windows authentication: <code>Trusted_Connection=Yes</code></li>
+  <li>MARS (Multiple Active Result Sets) may cause issues</li>
+</ul>
+<h3>8.9.4. MySQL/MariaDB</h3>
+<pre><code class="language-pascal">// Zeos (recommended)
+uses mormot.db.sql.zeos;
+
+Props := TSqlDBZeosConnectionProperties.Create(
+  &#x27;zdbc:mysql://localhost:3306/mydb&#x27;, &#x27;&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+
+// ODBC alternative
+Props := TSqlDBOdbcConnectionProperties.Create(
+  &#x27;Driver={MySQL ODBC 8.0 Driver};Server=localhost;Database=mydb&#x27;,
+  &#x27;&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+</code></pre>
+<p>
+<strong>Tips:</strong>
+<ul>
+  <li>Use UTF-8 character set (<code>SET NAMES utf8mb4</code>)</li>
+  <li>InnoDB engine for transactions</li>
+  <li>MariaDB is generally faster than MySQL</li>
+</ul>
+<hr>
+<h2>8.10. Performance Tuning</h2>
+<h3>8.10.1. Connection Pooling</h3>
+<pre><code class="language-pascal">// Connection pool is automatic
+Props := TSqlDBPostgresConnectionProperties.Create(...);
+
+// Configure pool size
+Props.ConnectionPoolMaxCount := 20;  // Max connections
+Props.ConnectionPoolTimeout := 60000;  // Timeout in ms
+</code></pre>
+<h3>8.10.2. Statement Caching</h3>
+<pre><code class="language-pascal">// Enable statement caching (True = cache)
+Stmt := Conn.NewStatementPrepared(SQL, True);
+
+// Clear cache if needed
+Conn.ClearStatementCache;
+</code></pre>
+<h3>8.10.3. Batch Operations</h3>
+<pre><code class="language-pascal">// Use ExecuteNoResult for multiple statements
+Conn.ExecuteNoResult(&#x27;DELETE FROM TempTable&#x27;);
+Conn.ExecuteNoResult(&#x27;INSERT INTO TempTable SELECT * FROM Source&#x27;);
+
+// Or use batch interface
+Batch := TRestBatch.Create(Server.Orm, TOrmCustomer);
+try
+  for i := 1 to 10000 do
+    Batch.Add(CreateCustomer(i), True);
+  Server.Orm.BatchSend(Batch);  // Single transaction
+finally
+  Batch.Free;
+end;
+</code></pre>
+<hr>
+<h2>8.11. TDataSet Integration</h2>
+<p>
+For VCL/FMX applications that need <code>TDataSet</code>:
+
+</p>
+<h3>8.11.1. Read-Only DataSet</h3>
+<pre><code class="language-pascal">uses
+  mormot.db.rad.ui.sql;
+
+var
+  DataSet: TSqlDBDataSet;
+begin
+  DataSet := TSqlDBDataSet.Create(Self);
+  DataSet.Connection := Props;
+  DataSet.SQL.Text := &#x27;SELECT * FROM Customer&#x27;;
+  DataSet.Open;
+
+  DBGrid1.DataSource.DataSet := DataSet;
+end;
+</code></pre>
+<h3>8.11.2. From ISqlDBRows</h3>
+<pre><code class="language-pascal">uses
+  mormot.db.rad.ui.sql;
+
+var
+  Rows: ISqlDBRows;
+begin
+  Rows := Props.Execute(&#x27;SELECT * FROM Customer&#x27;, []);
+  DBGrid1.DataSource.DataSet := ToDataSet(Self, Rows);
+end;
+</code></pre>
+<hr>
+<h2>8.12. Migration from mORMot 1</h2>
+<h3>8.12.1. Unit Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>SynDB.pas</code></td>
+  <td><code>mormot.db.sql.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynDBOracle.pas</code></td>
+  <td><code>mormot.db.sql.oracle.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynDBODBC.pas</code></td>
+  <td><code>mormot.db.sql.odbc.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynOleDB.pas</code></td>
+  <td><code>mormot.db.sql.oledb.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynDBZeos.pas</code></td>
+  <td><code>mormot.db.sql.zeos.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynDBSQLite3.pas</code></td>
+  <td><code>mormot.db.sql.sqlite3.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynDBDataset.pas</code></td>
+  <td><code>mormot.db.rad.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynDBFireDAC.pas</code></td>
+  <td><code>mormot.db.rad.firedac.pas</code></td>
+</tr>
+<tr>
+  <td><code>mORMotDB.pas</code></td>
+  <td><code>mormot.orm.sql.pas</code></td>
+</tr>
+</tbody>
+</table>
+<h3>8.12.2. Class Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLDBConnectionProperties</code></td>
+  <td><code>TSqlDBConnectionProperties</code></td>
+</tr>
+<tr>
+  <td><code>TSQLDBConnection</code></td>
+  <td><code>TSqlDBConnection</code></td>
+</tr>
+<tr>
+  <td><code>TSQLDBStatement</code></td>
+  <td><code>TSqlDBStatement</code></td>
+</tr>
+<tr>
+  <td><code>ISQLDBRows</code></td>
+  <td><code>ISqlDBRows</code></td>
+</tr>
+<tr>
+  <td><code>TSQLDBFieldType</code></td>
+  <td><code>TSqlDBFieldType</code></td>
+</tr>
+<tr>
+  <td><code>VirtualTableExternalRegister</code></td>
+  <td><code>OrmMapExternal</code></td>
+</tr>
+</tbody>
+</table>
+<h3>8.12.3. API Changes</h3>
+<pre><code class="language-pascal">// mORMot 1
+VirtualTableExternalRegister(Model, TSQLCustomer, Props);
+
+// mORMot 2
+OrmMapExternal(Model, TOrmCustomer, Props);
+</code></pre>
+<hr>
+<p>
+<em>Next Chapter: External NoSQL Database Access (MongoDB)</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-07.html">Chapter 7: Database Layer</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-09.html">Chapter 9: External NoSQL Database Access</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

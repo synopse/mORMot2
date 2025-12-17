@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# mORMot 2 Software Architecture Design
+
+</p>
+<h2>Complete Index</h2>
+<p>
+This index provides a complete reference to all chapters of the mORMot 2 Software Architecture Design documentation.
+
+</p>
+<hr>
+<h2>Document Information</h2>
+<table>
+<thead>
+<tr>
+  <th>Item</th>
+  <th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Framework</strong></td>
+  <td>Synopse mORMot 2</td>
+</tr>
+<tr>
+  <td><strong>Document</strong></td>
+  <td>Software Architecture Design (SAD)</td>
+</tr>
+<tr>
+  <td><strong>Version</strong></td>
+  <td>2.0</td>
+</tr>
+<tr>
+  <td><strong>Last Updated</strong></td>
+  <td>December 2025</td>
+</tr>
+<tr>
+  <td><strong>Chapters</strong></td>
+  <td>26 (+ Foreword)</td>
+</tr>
+<tr>
+  <td><strong>Based On</strong></td>
+  <td>mORMot 1.18 SAD by Arnaud Bouchez</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Table of Contents</h2>
+<h3>Foreword</h3>
+<ul>
+  <li><a href="mORMot2-SAD-Foreword.html"><strong>Foreword</strong></a> - Document purpose, resources, quick start guide</li>
+</ul>
+<hr>
+<h3>Part I: Introduction and Core Concepts</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>1</td>
+  <td><a href="mORMot2-SAD-Chapter-01.html">mORMot 2 Overview</a></td>
+  <td><code>mORMot2-SAD-Chapter-01.md</code></td>
+  <td>Framework introduction, Client-Server ORM/SOA, highlights, benefits, FAQ</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><a href="mORMot2-SAD-Chapter-02.html">Architecture Principles</a></td>
+  <td><code>mORMot2-SAD-Chapter-02.md</code></td>
+  <td>MVC, Multi-tier, SOA, ORM, NoSQL/ODM, DDD patterns</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><a href="mORMot2-SAD-Chapter-03.html">Meet mORMot 2 - Unit Structure</a></td>
+  <td><code>mORMot2-SAD-Chapter-03.md</code></td>
+  <td>Source organization, layers, unit naming, dependencies</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><a href="mORMot2-SAD-Chapter-04.html">Core Units</a></td>
+  <td><code>mORMot2-SAD-Chapter-04.md</code></td>
+  <td>mormot.core.<em>, Unicode, JSON, TDocVariant, threading</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part II: Object-Relational Mapping</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>5</td>
+  <td><a href="mORMot2-SAD-Chapter-05.html">Object-Relational Mapping</a></td>
+  <td><code>mORMot2-SAD-Chapter-05.md</code></td>
+  <td>TOrm, TOrmModel, field types, relationships, validation</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><a href="mORMot2-SAD-Chapter-06.html">Daily ORM</a></td>
+  <td><code>mORMot2-SAD-Chapter-06.md</code></td>
+  <td>Practical patterns, multi-tier thinking, ORM selection</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part III: Database Access</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>7</td>
+  <td><a href="mORMot2-SAD-Chapter-07.html">Database Layer</a></td>
+  <td><code>mORMot2-SAD-Chapter-07.md</code></td>
+  <td>SQLite3, virtual tables, FTS, ACID, backup</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td><a href="mORMot2-SAD-Chapter-08.html">External SQL Database Access</a></td>
+  <td><code>mORMot2-SAD-Chapter-08.md</code></td>
+  <td>mormot.db.sql.</em>, ODBC, OleDB, Oracle, PostgreSQL, ZEOS</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td><a href="mORMot2-SAD-Chapter-09.html">External NoSQL Database Access</a></td>
+  <td><code>mORMot2-SAD-Chapter-09.md</code></td>
+  <td>MongoDB client, ODM integration, BSON</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part IV: REST and Client-Server</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>10</td>
+  <td><a href="mORMot2-SAD-Chapter-10.html">JSON and RESTful Fundamentals</a></td>
+  <td><code>mORMot2-SAD-Chapter-10.md</code></td>
+  <td>JSON serialization, REST principles, encoding</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td><a href="mORMot2-SAD-Chapter-11.html">Client-Server Architecture</a></td>
+  <td><code>mORMot2-SAD-Chapter-11.md</code></td>
+  <td>Protocols, TRest classes, HTTP servers, threading</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td><a href="mORMot2-SAD-Chapter-12.html">Client-Server ORM Operations</a></td>
+  <td><code>mORMot2-SAD-Chapter-12.md</code></td>
+  <td>BATCH mode, caching, synchronization</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td><a href="mORMot2-SAD-Chapter-13.html">Server-Side ORM Processing</a></td>
+  <td><code>mORMot2-SAD-Chapter-13.md</code></td>
+  <td>Performance optimization, stored procedures, services</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part V: Services and SOA</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>14</td>
+  <td><a href="mORMot2-SAD-Chapter-14.html">Client-Server Services via Methods</a></td>
+  <td><code>mORMot2-SAD-Chapter-14.md</code></td>
+  <td>Published methods, parameters, file serving, JWT</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td><a href="mORMot2-SAD-Chapter-15.html">Interfaces and SOLID Design</a></td>
+  <td><code>mORMot2-SAD-Chapter-15.md</code></td>
+  <td>SOLID principles, dependency injection, mocking</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><a href="mORMot2-SAD-Chapter-16.html">Client-Server Services via Interfaces</a></td>
+  <td><code>mORMot2-SAD-Chapter-16.md</code></td>
+  <td>Interface-based SOA, WebSockets, callbacks</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td><a href="mORMot2-SAD-Chapter-17.html">Cross-Platform Clients</a></td>
+  <td><code>mORMot2-SAD-Chapter-17.md</code></td>
+  <td>FPC, FMX, mobile, code generators</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part VI: Web Applications</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>18</td>
+  <td><a href="mORMot2-SAD-Chapter-18.html">The MVC Pattern</a></td>
+  <td><code>mORMot2-SAD-Chapter-18.md</code></td>
+  <td>Model-View-Controller, Mustache templates</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td><a href="mORMot2-SAD-Chapter-19.html">MVC/MVVM Web Applications</a></td>
+  <td><code>mORMot2-SAD-Chapter-19.md</code></td>
+  <td>Web framework, sessions, controllers, views</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td><a href="mORMot2-SAD-Chapter-20.html">Hosting and Deployment</a></td>
+  <td><code>mORMot2-SAD-Chapter-20.md</code></td>
+  <td>Linux, Docker, nginx, scaling, CDN</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part VII: Security and Advanced Topics</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>21</td>
+  <td><a href="mORMot2-SAD-Chapter-21.html">Security</a></td>
+  <td><code>mORMot2-SAD-Chapter-21.md</code></td>
+  <td>Authentication, authorization, SSPI, JWT</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td><a href="mORMot2-SAD-Chapter-22.html">Scripting Engine</a></td>
+  <td><code>mORMot2-SAD-Chapter-22.md</code></td>
+  <td>QuickJS JavaScript integration</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td><a href="mORMot2-SAD-Chapter-23.html">Asymmetric Encryption</a></td>
+  <td><code>mORMot2-SAD-Chapter-23.md</code></td>
+  <td>ECC, certificates, encryption, licensing</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td><a href="mORMot2-SAD-Chapter-24.html">Domain-Driven Design</a></td>
+  <td><code>mORMot2-SAD-Chapter-24.md</code></td>
+  <td>DDD patterns, CQRS, repositories, aggregates</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td><a href="mORMot2-SAD-Chapter-25.html">Testing and Logging</a></td>
+  <td><code>mORMot2-SAD-Chapter-25.md</code></td>
+  <td>TSynTest, TSynLog, debugging, profiling</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Part VIII: Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Chapter</th>
+  <th>File</th>
+  <th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>26</td>
+  <td><a href="mORMot2-SAD-Chapter-26.html">Source Code</a></td>
+  <td><code>mORMot2-SAD-Chapter-26.md</code></td>
+  <td>Licensing, installation, Delphi/FPC setup</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3>Obsolete Chapters (from mORMot 1.18)</h3>
+<table>
+<thead>
+<tr>
+  <th>#</th>
+  <th>Original Title</th>
+  <th>Status</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>27</td>
+  <td>mORMot Framework Source</td>
+  <td>Superseded</td>
+  <td>See Chapters 3, 4, 26</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td>SynFile Application</td>
+  <td>Obsolete</td>
+  <td>Deprecated UI components</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td>Main SynFile Demo Source</td>
+  <td>Obsolete</td>
+  <td>SynFile not ported</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td>SWRS Implications</td>
+  <td>Obsolete</td>
+  <td>Outdated references</td>
+</tr>
+</tbody>
+</table>
+See <a href="mORMot2-SAD-Chapters-27-30-Obsolete.html">Chapters 27-30 Status</a> for details.
+
+</p>
+<hr>
+<h2>Quick Reference by Topic</h2>
+<h3>Getting Started</h3>
+<ul>
+  <li>Installation: <a href="mORMot2-SAD-Chapter-26.html">Chapter 26</a></li>
+  <li>Unit organization: <a href="mORMot2-SAD-Chapter-03.html">Chapter 3</a></li>
+  <li>Core utilities: <a href="mORMot2-SAD-Chapter-04.html">Chapter 4</a></li>
+</ul>
+<h3>ORM/Database</h3>
+<ul>
+  <li>TOrm basics: <a href="mORMot2-SAD-Chapter-05.html">Chapter 5</a></li>
+  <li>Daily patterns: <a href="mORMot2-SAD-Chapter-06.html">Chapter 6</a></li>
+  <li>SQLite3: <a href="mORMot2-SAD-Chapter-07.html">Chapter 7</a></li>
+  <li>External databases: <a href="mORMot2-SAD-Chapter-08.html">Chapter 8</a></li>
+  <li>MongoDB: <a href="mORMot2-SAD-Chapter-09.html">Chapter 9</a></li>
+</ul>
+<h3>Client-Server</h3>
+<ul>
+  <li>REST/JSON: <a href="mORMot2-SAD-Chapter-10.html">Chapter 10</a></li>
+  <li>Architecture: <a href="mORMot2-SAD-Chapter-11.html">Chapter 11</a></li>
+  <li>Operations: <a href="mORMot2-SAD-Chapter-12.html">Chapter 12</a></li>
+  <li>Server processing: <a href="mORMot2-SAD-Chapter-13.html">Chapter 13</a></li>
+</ul>
+<h3>Services/SOA</h3>
+<ul>
+  <li>Method services: <a href="mORMot2-SAD-Chapter-14.html">Chapter 14</a></li>
+  <li>Interfaces/SOLID: <a href="mORMot2-SAD-Chapter-15.html">Chapter 15</a></li>
+  <li>Interface services: <a href="mORMot2-SAD-Chapter-16.html">Chapter 16</a></li>
+  <li>Cross-platform: <a href="mORMot2-SAD-Chapter-17.html">Chapter 17</a></li>
+</ul>
+<h3>Web Development</h3>
+<ul>
+  <li>MVC pattern: <a href="mORMot2-SAD-Chapter-18.html">Chapter 18</a></li>
+  <li>Web apps: <a href="mORMot2-SAD-Chapter-19.html">Chapter 19</a></li>
+  <li>Hosting: <a href="mORMot2-SAD-Chapter-20.html">Chapter 20</a></li>
+</ul>
+<h3>Security & Advanced</h3>
+<ul>
+  <li>Security: <a href="mORMot2-SAD-Chapter-21.html">Chapter 21</a></li>
+  <li>Scripting: <a href="mORMot2-SAD-Chapter-22.html">Chapter 22</a></li>
+  <li>Encryption: <a href="mORMot2-SAD-Chapter-23.html">Chapter 23</a></li>
+  <li>DDD: <a href="mORMot2-SAD-Chapter-24.html">Chapter 24</a></li>
+  <li>Testing/Logging: <a href="mORMot2-SAD-Chapter-25.html">Chapter 25</a></li>
+</ul>
+<hr>
+<h2>Key Classes Reference</h2>
+<table>
+<thead>
+<tr>
+  <th>mORMot 2 Class</th>
+  <th>Purpose</th>
+  <th>Chapter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TOrm</code></td>
+  <td>Base ORM class</td>
+  <td>5</td>
+</tr>
+<tr>
+  <td><code>TOrmModel</code></td>
+  <td>Data model definition</td>
+  <td>5</td>
+</tr>
+<tr>
+  <td><code>TRest</code></td>
+  <td>REST base class</td>
+  <td>11</td>
+</tr>
+<tr>
+  <td><code>TRestServerDB</code></td>
+  <td>SQLite3 REST server</td>
+  <td>7, 11</td>
+</tr>
+<tr>
+  <td><code>TRestHttpServer</code></td>
+  <td>HTTP server wrapper</td>
+  <td>11</td>
+</tr>
+<tr>
+  <td><code>TRestHttpClient</code></td>
+  <td>HTTP client</td>
+  <td>11</td>
+</tr>
+<tr>
+  <td><code>IInvokable</code></td>
+  <td>Service interface base</td>
+  <td>16</td>
+</tr>
+<tr>
+  <td><code>TSynLog</code></td>
+  <td>Logging framework</td>
+  <td>25</td>
+</tr>
+<tr>
+  <td><code>TSynTest</code></td>
+  <td>Testing framework</td>
+  <td>25</td>
+</tr>
+<tr>
+  <td><code>TDocVariant</code></td>
+  <td>JSON/variant documents</td>
+  <td>4</td>
+</tr>
+<tr>
+  <td><code>TMVCApplication</code></td>
+  <td>MVC controller base</td>
+  <td>19</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Key Units Reference</h2>
+<table>
+<thead>
+<tr>
+  <th>Unit Pattern</th>
+  <th>Purpose</th>
+  <th>Chapter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.core.<em></code></td>
+  <td>Core utilities</td>
+  <td>4</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.</em></code></td>
+  <td>ORM layer</td>
+  <td>5, 6</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql.<em></code></td>
+  <td>SQL database access</td>
+  <td>8</td>
+</tr>
+<tr>
+  <td><code>mormot.db.nosql.</em></code></td>
+  <td>NoSQL database access</td>
+  <td>9</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.<em></code></td>
+  <td>REST client/server</td>
+  <td>11-13</td>
+</tr>
+<tr>
+  <td><code>mormot.soa.</em></code></td>
+  <td>Service-oriented architecture</td>
+  <td>16</td>
+</tr>
+<tr>
+  <td><code>mormot.net.<em></code></td>
+  <td>Network layer</td>
+  <td>11</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.</em></code></td>
+  <td>Cryptography</td>
+  <td>21, 23</td>
+</tr>
+<tr>
+  <td><code>mormot.app.<em></code></td>
+  <td>Application helpers</td>
+  <td>20</td>
+</tr>
+<tr>
+  <td><code>mormot.script.</em></code></td>
+  <td>Scripting support</td>
+  <td>22</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Migration from mORMot 1.18</h2>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRecord</code></td>
+  <td><code>TOrm</code></td>
+  <td>See Chapter 5</td>
+</tr>
+<tr>
+  <td><code>TSQLRest</code></td>
+  <td><code>TRest</code></td>
+  <td>See Chapter 11</td>
+</tr>
+<tr>
+  <td><code>TSQLModel</code></td>
+  <td><code>TOrmModel</code></td>
+  <td>See Chapter 5</td>
+</tr>
+<tr>
+  <td><code>SynCommons.pas</code></td>
+  <td><code>mormot.core.<em>.pas</code></td>
+  <td>See Chapter 3</td>
+</tr>
+<tr>
+  <td><code>mORMot.pas</code></td>
+  <td>Multiple units</td>
+  <td>See Chapter 3</td>
+</tr>
+<tr>
+  <td><code>SynDB</em>.pas</code></td>
+  <td><code>mormot.db.<em>.pas</code></td>
+  <td>See Chapter 8</td>
+</tr>
+<tr>
+  <td>SpiderMonkey</td>
+  <td>QuickJS</td>
+  <td>See Chapter 22</td>
+</tr>
+<tr>
+  <td><code>mORMotUI</em></code></td>
+  <td>(deprecated)</td>
+  <td>Use MVC/web</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>External Resources</h2>
+<ul>
+  <li><strong>GitHub</strong>: https://github.com/synopse/mORMot2</li>
+  <li><strong>Forum</strong>: https://synopse.info/forum/viewforum.php?id=24</li>
+  <li><strong>Documentation</strong>: https://synopse.info/files/doc/mORMot2.html</li>
+  <li><strong>Blog</strong>: https://blog.synopse.info</li>
+  <li><strong>Samples</strong>: <code>ex/</code> folder in repository</li>
+</ul>
+<hr>
+<p>
+<em>Last updated: December 2025</em>
+
+</p>
+</body>
+</html>

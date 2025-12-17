@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 2. Architecture Principles
+
+</p>
+<p>
+<em>Adopt a mORMot</em>
+
+</p>
+<p>
+This framework implements established "best-practice" patterns:
+
+</p>
+<ul>
+  <li><strong>Model-View-Controller</strong> (MVC)</li>
+  <li><strong>Multi-tier architecture</strong></li>
+  <li><strong>Test-Driven Design</strong></li>
+  <li><strong>Stateless CRUD/REST</strong></li>
+  <li><strong>Object-Relational Mapping</strong> (ORM)</li>
+  <li><strong>Object-Document Mapping</strong> (ODM)</li>
+  <li><strong>Service-Oriented Architecture</strong> (SOA)</li>
+</ul>
+These patterns enable implementing projects up to complex <em>Domain-Driven Design</em> architectures.
+
+</p>
+<hr>
+<h2>2.1. General Design</h2>
+<p>
+The mORMot 2 architecture follows a layered design:
+
+</p>
+<pre><code class="language-text">┌────────────────────────────────────────────────────────────────────┐
+│                      mORMot 2 Architecture                         │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  ┌───────────────┐                       ┌───────────────┐         │
+│  │  Web Clients  │                       │ REST Clients  │         │
+│  │ (AJAX/Mobile) │                       │(Delphi/FPC/…) │         │
+│  └───────┬───────┘                       └───────┬───────┘         │
+│          │                                       │                 │
+│          └───────────────┬───────────────────────┘                 │
+│                          │ RESTful JSON                            │
+│                          ▼                                         │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                      TRestServer                             │  │
+│  │  ┌────────────┐  ┌───────────┐  ┌───────────────────────┐    │  │
+│  │  │ Auth       │  │ MVC/MVVM  │  │ Services              │    │  │
+│  │  │ (Sessions) │  │ WebServer │  │ (Interface-based SOA) │    │  │
+│  │  └────────────┘  └───────────┘  └───────────────────────┘    │  │
+│  │                         │                                    │  │
+│  │                ┌────────┴────────┐                           │  │
+│  │                │    IRestOrm     │                           │  │
+│  │                │    ORM Layer    │                           │  │
+│  │                └────────┬────────┘                           │  │
+│  └─────────────────────────┼────────────────────────────────────┘  │
+│                            │                                       │
+│  ┌─────────────────────────┴────────────────────────────────────┐  │
+│  │                    Storage Backends                          │  │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌────────────────┐   │  │
+│  │  │ SQLite3 │  │External │  │ MongoDB │  │ In-Memory/File │   │  │
+│  │  │ (native)│  │  SQL    │  │ (NoSQL) │  │  (JSON/Binary) │   │  │
+│  │  └─────────┘  └─────────┘  └─────────┘  └────────────────┘   │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  Cross-Cutting Features:                                           │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ Compression │ Security │ Crypto │ Logging │ Testing │ JSON   │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<p>
+Key concepts of mORMot 2:
+
+</p>
+<ul>
+  <li><strong>Cross-Platform</strong>: Multiple clients and devices supported</li>
+  <li><strong>Integration-friendly</strong>: Can integrate with existing codebases</li>
+  <li><strong>Client-Server RESTful</strong>: JSON over HTTP/HTTPS/WebSockets</li>
+  <li><strong>Layered (multi-tier)</strong>: Clear separation of concerns</li>
+  <li><strong>Service-Oriented</strong>: Business logic via SOA interfaces</li>
+  <li><strong>Shared Model</strong>: Business rules and data model shared by clients and server</li>
+  <li><strong>ORM/ODM</strong>: Data mapped to objects for SQL and NoSQL</li>
+  <li><strong>Flexible Storage</strong>: SQLite3, external SQL, MongoDB, in-memory, or remote mORMot servers</li>
+  <li><strong>Integrated Security</strong>: Authentication and authorization at all layers</li>
+  <li><strong>MVC/MVVM</strong>: Build web applications from ORM/SOA methods</li>
+  <li><strong>Pattern-based</strong>: REST, JSON, MVC, SOLID principles</li>
+  <li><strong>Testable</strong>: Integrated testing and debugging API</li>
+  <li><strong>Optimized</strong>: Built for scaling and stability</li>
+</ul>
+<hr>
+<h2>2.2. Architecture Design Process</h2>
+<p>
+Architecture should be driven by actual application needs, not by theoretical patterns. There is no "one architecture fits all" solution. Architecture is about <em>how</em> you build your software.
+
+</p>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│            Iterative Architecture Process                       │
+│                                                                 │
+│  Customer ──► BackLog ──► Design ──► Dev ──► Software           │
+│     │            │          │         │         │               │
+│     │            │          │         │         │               │
+│  Use Cases  Requirements  Architecture Tasks   Definition       │
+│                              │                   of Done        │
+│                              │                                  │
+│                         Risk Assessment                         │
+│                         Technology &amp; Models                     │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>Avoiding Weak Design</h3>
+<p>
+Common pitfalls to avoid:
+
+</p>
+<ul>
+  <li>Letting each developer decide implementation without review</li>
+  <li>Letting teams work in isolation without system-wide collaboration</li>
+  <li>Architecture at such a high level it doesn't affect coding</li>
+  <li>Architecture so detailed that code becomes over-engineered</li>
+  <li>Blindly following technology trends without evaluation</li>
+</ul>
+<h3>Recommended Practices</h3>
+<ul>
+  <li><strong>Collaboration</strong>: No one is alone, no team is better, no manager is always right</li>
+  <li><strong>Sharing</strong>: Between individuals, teams, and managers</li>
+  <li><strong>Customer focus</strong>: Stay content and customer focused</li>
+  <li><strong>Long-term thinking</strong>: Today's implementation prepares tomorrow</li>
+  <li><strong>Pragmatism</strong>: Make tomorrow's work easier</li>
+  <li><strong>Courage</strong>: "They did not know it was impossible, so they did it"</li>
+</ul>
+Frameworks like mORMot provide integrated, working sets of classes so you can focus on your product while enjoying collaboration with the Open Source community.
+
+</p>
+<hr>
+<h2>2.3. Model-View-Controller (MVC)</h2>
+<p>
+The <em>Model-View-Controller</em> (MVC) pattern isolates domain logic from user interface, permitting independent development, testing, and maintenance.
+
+</p>
+<pre><code class="language-text">┌───────────────────────────────────────────────────────────┐
+│                    MVC Pattern                            │
+│                                                           │
+│  ┌──────────┐    Uses     ┌──────────┐                    │
+│  │Controller│ ──────────► │  Model   │                    │
+│  └──────────┘             └──────────┘                    │
+│       │                         │                         │
+│       │ Command                 │ Notify Updates          │
+│       ▼                         ▼                         │
+│  ┌──────────┐    Refresh  ┌──────────┐                    │
+│  │   View   │ ◄────────── │  Model   │                    │
+│  └──────────┘             └──────────┘                    │
+└───────────────────────────────────────────────────────────┘
+</code></pre>
+<p>
+<strong>Model</strong>: Manages behavior and data of the application domain. Responds to requests for information about its state and instructions to change state. In mORMot, implemented via <code>TOrmModel</code> class which centralizes all <code>TOrm</code>-inherited classes.
+
+</p>
+<p>
+<strong>View</strong>: Renders the model into a form suitable for interaction:
+<ul>
+  <li><strong>Desktop clients</strong>: Auto-generated UI using RTTI</li>
+  <li><strong>Web clients</strong>: Mustache templates with Delphi controllers</li>
+  <li><strong>AJAX clients</strong>: RESTful JSON services</li>
+</ul>
+<strong>Controller</strong>: Receives user input and initiates responses by making calls on model objects. In mORMot, already implemented within RESTful commands. Custom actions implemented via <code>TOrm</code> classes or RESTful Services.
+
+</p>
+<hr>
+<h2>2.4. Multi-Tier Architecture</h2>
+<p>
+Multi-tier architecture separates presentation, application processing, and data management into logically separate processes.
+
+</p>
+<h3>Two-Tier (Traditional RAD)</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────┐
+│  ┌─────────────────────┐    ┌─────────────────────┐     │
+│  │  Application Tier   │    │    Data Tier        │     │
+│  │  (UI + Logic mixed) │───►│    (Database)       │     │
+│  └─────────────────────┘    └─────────────────────┘     │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>Three-Tier (mORMot ORM/SOA)</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │ Presentation    │  │   Logic Tier    │  │   Data Tier     │  │
+│  │     Tier        │─►│  (ORM + SOA)    │─►│  (Database)     │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>Four-Tier (Domain-Driven Design)</h3>
+<pre><code class="language-text">┌───────────────────────────────────────────────────────────────────────┐
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────┐   │
+│  │ Presentation │  │ Application  │  │Business Logic│  │  Data    │   │
+│  │    Tier      │─►│    Tier      │─►│    Tier      │─►│  Tier    │   │
+│  │(Delphi/AJAX) │  │(JSON Server) │  │  (Domain)    │  │(Storage) │   │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────┘   │
+└───────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<p>
+In mORMot 2:
+
+</p>
+<ul>
+  <li><strong>Data Tier</strong>: SQLite3, external databases (PostgreSQL, MySQL, Oracle, MS SQL, etc.), MongoDB, or in-memory storage</li>
+  <li><strong>Logic Tier</strong>: ORM and SOA implementation - Delphi classes mapped to database via ORM, business logic as interfaces</li>
+  <li><strong>Presentation Tier</strong>: Delphi clients, AJAX applications, or MVC web apps</li>
+</ul>
+<hr>
+<h2>2.5. Service-Oriented Architecture (SOA)</h2>
+<p>
+SOA is a design approach where functionality is packaged as inter-operable services that can be used across multiple systems and business domains.
+
+</p>
+<pre><code class="language-text">┌──────────────────────────────────────────────────────────────────┐
+│                    SOA Architecture                              │
+│                                                                  │
+│  Consumers                Service Bus               Publishers   │
+│  ─────────                ───────────               ──────────   │
+│  ┌─────────┐             ┌───────────┐            ┌───────────┐  │
+│  │Client A │◄───────────►│           │◄──────────►│Publisher 1│  │
+│  └─────────┘             │           │            └───────────┘  │
+│  ┌─────────┐             │  Service  │            ┌───────────┐  │
+│  │Client B │◄───────────►│    Bus    │◄──────────►│Publisher 2│  │
+│  └─────────┘             │           │            └───────────┘  │
+│  ┌─────────┐             │           │            ┌───────────┐  │
+│  │Client C │◄───────────►│           │◄──────────►│Publisher 3│  │
+│  └─────────┘             └───────────┘            └───────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>Key SOA Characteristics</h3>
+<p>
+A software <strong>service</strong> is a logical representation of a repeatable activity that produces a precise result. Services are:
+
+</p>
+<ul>
+  <li><strong>Loosely coupled</strong>: No embedded calls to other services</li>
+  <li><strong>Stateless</strong>: Each invocation is independent</li>
+  <li><strong>Single responsibility</strong>: Each service implements one action</li>
+  <li><strong>Protocol-based</strong>: Defined protocols describe how services communicate</li>
+</ul>
+<h3>SOA Benefits: Decoupling</h3>
+<table>
+<thead>
+<tr>
+  <th>Dependency</th>
+  <th>Desired Decoupling</th>
+  <th>Technique</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Platform</td>
+  <td>Hardware/Framework/OS should not constrain choices</td>
+  <td>Standard protocols (REST/JSON)</td>
+</tr>
+<tr>
+  <td>Location</td>
+  <td>Consumers unaffected by hosting changes</td>
+  <td>Routing and proxies</td>
+</tr>
+<tr>
+  <td>Availability</td>
+  <td>Maintenance transparent to clients</td>
+  <td>Server-side support</td>
+</tr>
+<tr>
+  <td>Versions</td>
+  <td>New services without client upgrades</td>
+  <td>Contract marshalling</td>
+</tr>
+</tbody>
+</table>
+<h3>ORM + SOA Coexistence</h3>
+<p>
+ORM and SOA complement each other:
+
+</p>
+<ul>
+  <li><strong>ORM</strong>: Efficient data access with native objects (CQRS pattern)</li>
+  <li><strong>SOA</strong>: High-level business logic with custom parameters, reducing bandwidth</li>
+</ul>
+In mORMot 2, interface-based SOA allows the same code to run on both client and server with better server performance and full interoperability.
+
+</p>
+<hr>
+<h2>2.6. Object-Relational Mapping (ORM)</h2>
+<p>
+ORM provides methods to persist high-level objects into a relational database.
+
+</p>
+<pre><code class="language-text">┌───────────────────────────────────────────────────────────────┐
+│                      ORM Process                              │
+│                                                               │
+│  ┌──────────────┐    ┌─────────────┐    ┌──────────────────┐  │
+│  │    Object    │───►│     ORM     │───►│     RDBMS        │  │
+│  │   Instance   │    │   (CRUD)    │    │   (Database)     │  │
+│  └──────────────┘    └─────────────┘    └──────────────────┘  │
+│                            │                                  │
+│                      SQL Mapping                              │
+└───────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>ORM Mapping Sources</h3>
+<pre><code class="language-text">┌────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────┐         ┌─────────────────┐               │
+│  │   Class Type    │         │   Data Model    │               │
+│  │   (via RTTI)    │────────►│   (Database)    │               │
+│  └─────────────────┘         └─────────────────┘               │
+│           │                           │                        │
+│           └───────────┬───────────────┘                        │
+│                       │                                        │
+│                  ┌────┴────┐                                   │
+│                  │   ORM   │                                   │
+│                  └─────────┘                                   │
+└────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>Comparison of Approaches</h3>
+<table>
+<thead>
+<tr>
+  <th>Scheme</th>
+  <th>Pros</th>
+  <th>Cons</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>RAD DB Components</strong></td>
+  <td>SQL is powerful; RAD approach</td>
+  <td>Business logic limited; SQL binds to engine; Poor multi-tier</td>
+</tr>
+<tr>
+  <td><strong>Manual SQL Mapping</strong></td>
+  <td>Elaborated business logic</td>
+  <td>SQL must be hand-coded; Duplication; Engine-specific</td>
+</tr>
+<tr>
+  <td><strong>Database ORM</strong></td>
+  <td>SQL generated by ORM; Engine-agnostic</td>
+  <td>More abstraction needed; May retrieve excess data</td>
+</tr>
+<tr>
+  <td><strong>Client-Server ORM</strong></td>
+  <td>All ORM benefits; Services for precise data; Full multi-tier</td>
+  <td>More abstraction needed</td>
+</tr>
+</tbody>
+</table>
+mORMot implements a <strong>Client-Server ORM</strong> that can scale from stand-alone mode to complex Domain-Driven Design.
+
+</p>
+<hr>
+<h2>2.7. NoSQL and Object-Document Mapping (ODM)</h2>
+<h3>SQL vs NoSQL</h3>
+<p>
+<strong>SQL (Relational)</strong>:
+<ul>
+  <li>Schema-based</li>
+  <li>Relational model with JOINs</li>
+  <li>ACID transactions</li>
+  <li>Time-proven and efficient</li>
+</ul>
+<strong>NoSQL</strong>:
+<ul>
+  <li>"Not Only SQL"</li>
+  <li>Designed for web scale and BigData</li>
+  <li>Easy replication and simple APIs</li>
+  <li>No standard (diverse implementations)</li>
+</ul>
+<h3>NoSQL Families</h3>
+<p>
+1. <strong>Graph-oriented</strong>: Store data by relations (e.g., Neo4j)
+2. <strong>Aggregate-oriented</strong>:
+   - Document-based (MongoDB, CouchDB)
+   - Key/Value (Redis, Riak)
+   - Column family (Cassandra, HBase)
+
+</p>
+<h3>Document Model Example</h3>
+<p>
+SQL stores data per table (requires JOINs):
+<pre><code class="language-text">┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│     Users       │  │    Contacts     │  │     Access      │
+├─────────────────┤  ├─────────────────┤  ├─────────────────┤
+│ ID | UserName   │  │ UserID | Phone  │  │ UserID | Level  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+</code></pre>
+<p>
+NoSQL stores as documents (embedded):
+<pre><code class="language-json">{
+  &quot;ID&quot;: 1234,
+  &quot;UserName&quot;: &quot;John Smith&quot;,
+  &quot;Contact&quot;: {
+    &quot;Phone&quot;: &quot;123-456-789&quot;,
+    &quot;Email&quot;: &quot;xyz@abc.com&quot;
+  },
+  &quot;Access&quot;: {
+    &quot;Level&quot;: 5,
+    &quot;Group&quot;: &quot;dev&quot;
+  }
+}
+</code></pre>
+<h3>SQL vs NoSQL Trade-offs</h3>
+<table>
+<thead>
+<tr>
+  <th>SQL</th>
+  <th>NoSQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Ubiquitous SQL language</td>
+  <td>Maps OOP and complex types natively</td>
+</tr>
+<tr>
+  <td>Easy vertical scaling</td>
+  <td>Horizontal scaling (sharding)</td>
+</tr>
+<tr>
+  <td>Data normalization</td>
+  <td>Schema-less evolution</td>
+</tr>
+<tr>
+  <td>Data consistency (single source)</td>
+  <td>Version management</td>
+</tr>
+<tr>
+  <td>Complex ACID transactions</td>
+  <td>Graph/Document native storage</td>
+</tr>
+<tr>
+  <td>Aggregation functions</td>
+  <td>Map/Reduce support</td>
+</tr>
+</tbody>
+</table>
+With mORMot, you can switch from SQL to MongoDB with one line of code change, even at runtime.
+
+</p>
+<hr>
+<h2>2.8. Domain-Driven Design (DDD)</h2>
+<h3>Definition</h3>
+<p>
+From domaindrivendesign.org:
+
+</p>
+<p>
+<em>"The premise of domain-driven design is two-fold:</em>
+<ul>
+  <li><em>For most software projects, the primary focus should be on the domain and domain logic;</em></li>
+  <li><em>Complex domain designs should be based on a model."</em></li>
+</ul>
+<h3>DDD in mORMot</h3>
+<p>
+mORMot enables DDD through:
+
+</p>
+<ul>
+  <li><strong>Entities</strong>: <code>TOrm</code> descendants representing persistent domain objects</li>
+  <li><strong>Value Objects</strong>: Records and managed types for immutable data</li>
+  <li><strong>Aggregates</strong>: Object graphs with clear boundaries</li>
+  <li><strong>Repositories</strong>: <code>IRestOrm</code> interface for data access</li>
+  <li><strong>Services</strong>: Interface-based SOA for domain operations</li>
+  <li><strong>Domain Events</strong>: Async notifications via WebSockets</li>
+</ul>
+<h3>Implementation Layers</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────────────┐
+│                        DDD with mORMot 2                                │
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ Domain Layer (Pure Pascal)                                        │  │
+│  │ · TOrm entities with business logic                               │  │
+│  │ · Value Objects as records                                        │  │
+│  │ · Aggregates with clear boundaries                                │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                  │                                      │
+│  ┌───────────────────────────────┴───────────────────────────────────┐  │
+│  │ Application Layer (Services)                                      │  │
+│  │ · IInvokable interfaces (mormot.soa.*)                            │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                  │                                      │
+│  ┌───────────────────────────────┴───────────────────────────────────┐  │
+│  │ Infrastructure Layer                                              │  │
+│  │ · IRestOrm repositories (mormot.orm.*)                            │  │
+│  │ · TSqlDBConnection (mormot.db.*)                                  │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                  │                                      │
+│  ┌───────────────────────────────┴───────────────────────────────────┐  │
+│  │ Presentation Layer                                                │  │
+│  │ · TRestHttpServer (mormot.rest.*)                                 │  │
+│  │ · MVC views (mormot.core.mvc)                                     │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2>2.9. SOLID Principles in mORMot 2</h2>
+<p>
+mORMot 2 embraces SOLID principles:
+
+</p>
+<h3>Single Responsibility</h3>
+<ul>
+  <li>Each unit focuses on one concern</li>
+  <li><code>mormot.core.json</code> handles JSON, <code>mormot.core.rtti</code> handles RTTI</li>
+</ul>
+<h3>Open/Closed</h3>
+<ul>
+  <li>Classes open for extension via inheritance</li>
+  <li>Core behavior closed to modification</li>
+</ul>
+<h3>Liskov Substitution</h3>
+<ul>
+  <li><code>TOrm</code> descendants can substitute the base class</li>
+  <li>Storage backends interchangeable</li>
+</ul>
+<h3>Interface Segregation</h3>
+<ul>
+  <li><code>IRestOrm</code> vs <code>IRestOrmClient</code> vs <code>IRestOrmServer</code></li>
+  <li>Clients only depend on what they need</li>
+</ul>
+<h3>Dependency Inversion</h3>
+<ul>
+  <li>Code against interfaces (<code>IRestOrm</code>), not implementations</li>
+  <li>DI support via <code>TInjectableObjectRest</code></li>
+</ul>
+<h3>Composition Over Inheritance (mORMot 2 Key Change)</h3>
+<p>
+<strong>mORMot 1</strong> used inheritance:
+<pre><code class="language-pascal">TSQLRestServer = class(TSQLRest)
+  // ORM methods directly in class
+  function Add(...): TID;
+</code></pre>
+<p>
+<strong>mORMot 2</strong> uses composition:
+<pre><code class="language-pascal">TRest = class
+  property Orm: IRestOrm;     // ORM via interface
+  property Services: TServiceContainer;  // SOA via container
+end;
+
+// Access ORM through .Orm property
+Server.Orm.Add(Customer);
+</code></pre>
+<p>
+This change improves:
+<ul>
+  <li><strong>Testability</strong>: Mock individual components</li>
+  <li><strong>Flexibility</strong>: Swap implementations</li>
+  <li><strong>Clarity</strong>: Clear boundaries between concerns</li>
+</ul>
+<hr>
+<p>
+<em>Next Chapter: Meet mORMot 2 - New Units and Structure</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-01.html">Chapter 1: mORMot 2 Overview</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-03.html">Chapter 3: Meet mORMot 2</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 1. mORMot2 Overview
+
+</p>
+<p>
+<em>Meet the mORMot</em>
+
+</p>
+<p>
+<strong>Synopse mORMot 2</strong> is an Open Source Client-Server ORM/SOA/MVC framework for <em>Delphi</em> and <em>Free Pascal</em>, targeting Windows, Linux, BSD, and macOS for the server, and virtually any platform for clients (including mobile and AJAX).
+
+</p>
+<p>
+This is <strong>mORMot 2</strong>, a complete rewrite of the original mORMot framework with improved architecture, cleaner code organization, and modern Object Pascal patterns.
+
+</p>
+<h2>Main Features</h2>
+<p>
+The main features of <em>mORMot 2</em> are:
+
+</p>
+<ul>
+  <li><strong>ORM/ODM</strong>: Object persistence on almost any database (SQL or NoSQL)</li>
+  <li><strong>SOA</strong>: Organize your business logic into RESTful JSON services</li>
+  <li><strong>Clients</strong>: Consume your data or services from any platform, via ORM classes or SOA interfaces</li>
+  <li><strong>Web MVC</strong>: Publish your ORM/SOA processes as responsive Web Applications</li>
+</ul>
+All features work with local or remote access, via an auto-configuring Client-Server REST design.
+
+</p>
+<pre><code class="language-text">┌────────────────────────────────────────────────────────────────────────┐
+│                         mORMot2 Architecture                           │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  SQL Databases              NoSQL Databases        Services            │
+│  ─────────────              ────────────────       ────────            │
+│  · SQLite3                  · MongoDB              · Method-based      │
+│  · PostgreSQL               · In-Memory            · Interface-based   │
+│  · MySQL/MariaDB            · Files                · Asynchronous      │
+│  · MS SQL Server                                   · Remote (SaaS)     │
+│  · Oracle                        ↓                                     │
+│  · Firebird                     ODM                      ↓             │
+│  · DB2                           ↓                      SOA            │
+│  · Informix                      │                       │             │
+│        ↓                         │                       │             │
+│       ORM ───────────────────────┴───────────────────────┘             │
+│        │                                                               │
+│        └─────────────────────────┬────────────────────────             │
+│                                  ↓                                     │
+│                            REST Server                                 │
+│                        ┌────────┴────────┐                             │
+│                        │    MVC/MVVM     │                             │
+│                        │   Web Server    │                             │
+│                        └────────┬────────┘                             │
+│                                 ↓                                      │
+│  ┌──────────────────────────────┴───────────────────────────────────┐  │
+│  │                       REST Clients                               │  │
+│  │   · Delphi Desktop/Mobile  · AJAX  · Any HTTP Client             │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                        │
+│  Cross-Cutting Features:                                               │
+│  · User Management &amp; Security   · Sessions &amp; Replication               │
+│  · Unit Testing &amp; Mocks/Stubs   · Logging &amp; Profiling                  │
+│  · http.sys &amp; WebSockets        · Templates (Mustache)                 │
+│  · JSON &amp; Cryptography          · PDF &amp; Reporting                      │
+└────────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<p>
+<em>mORMot 2</em> offers all features needed for building any kind of modern software project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering <em>convention over configuration</em> solutions, and implemented for speed and efficiency.
+
+</p>
+<h2>Quick Start Examples</h2>
+<p>
+<strong>For storing data</strong>, you define a class, and the framework handles everything: routing, JSON marshalling, table creation, SQL generation, validation.
+
+</p>
+<pre><code class="language-pascal">type
+  TOrmCustomer = class(TOrm)
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Email: RawUtf8 read fEmail write fEmail;
+    property Balance: Currency read fBalance write fBalance;
+  end;
+
+// Create model and server
+Model := TOrmModel.Create([TOrmCustomer]);
+Server := TRestServerDB.Create(Model, &#x27;customers.db3&#x27;);
+Server.Server.CreateMissingTables;
+
+// Add a customer
+Customer := TOrmCustomer.Create;
+Customer.Name := &#x27;John Doe&#x27;;
+Customer.Email := &#x27;john@example.com&#x27;;
+Server.Orm.Add(Customer, true);
+</code></pre>
+<p>
+<strong>For creating a service</strong>, you define an interface and a class:
+
+</p>
+<pre><code class="language-pascal">type
+  ICalculator = interface(IInvokable)
+    [&#x27;{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}&#x27;]
+    function Add(A, B: Integer): Integer;
+    function Multiply(A, B: Integer): Integer;
+  end;
+
+  TCalculator = class(TInjectableObjectRest, ICalculator)
+  public
+    function Add(A, B: Integer): Integer;
+    function Multiply(A, B: Integer): Integer;
+  end;
+
+// Register on server
+Server.ServiceDefine(TCalculator, [ICalculator], sicShared);
+
+// Call from client
+var Calc: ICalculator;
+if Client.Services.Resolve(ICalculator, Calc) then
+  Result := Calc.Add(10, 20);
+</code></pre>
+<p>
+<strong>For building a MVC web site</strong>, write a Controller class in Delphi, then HTML Views using <em>Mustache</em> templates, leveraging the same ORM/SOA methods as Model.
+
+</p>
+<h2>What's New in mORMot 2</h2>
+<p>
+mORMot 2 is a complete rewrite of the original mORMot framework. Key improvements include:
+
+</p>
+<h3>Cleaner Architecture</h3>
+<ul>
+  <li><strong>Renamed types</strong>: <code>TSQLRecord</code> → <code>TOrm</code>, <code>TSQLRest</code> → <code>TRest</code>, <code>TSQLModel</code> → <code>TOrmModel</code></li>
+  <li><strong>Split units</strong>: Large <code>SynCommons.pas</code> split into ~24 focused <code>mormot.core.<em></code> units</li>
+  <li><strong>SOLID principles</strong>: Composition over inheritance, interface-based design</li>
+</ul>
+<h3>Unit Organization</h3>
+<pre><code class="language-text">mormot.core.*   - Foundation (text, JSON, RTTI, logging, threading)
+mormot.crypt.*  - Cryptography (AES, SHA, ECC, RSA, JWT, X.509)
+mormot.net.*    - Networking (HTTP, WebSockets, async I/O)
+mormot.db.*     - Database access (SQL and NoSQL)
+mormot.orm.*    - Object-Relational Mapping
+mormot.soa.*    - Service-Oriented Architecture
+mormot.rest.*   - RESTful client/server
+mormot.app.*    - Application utilities (console, daemon)
+mormot.ui.*     - VCL/LCL components
+</code></pre>
+<h3>New Features in mORMot 2</h3>
+<ul>
+  <li><strong>Async HTTP Server</strong> (<code>useHttpAsync</code>) - Event-driven for massive concurrency</li>
+  <li><strong>Factory-based Cryptography</strong> - <code>Hash()</code>, <code>Sign()</code>, <code>Cipher()</code>, <code>Asym()</code>, <code>Cert()</code> factories</li>
+  <li><strong>ACME/Let's Encrypt</strong> - Automatic TLS certificate management</li>
+  <li><strong>Native X.509/RSA</strong> - Pure Pascal implementation without OpenSSL dependency</li>
+  <li><strong>OpenAPI Generator</strong> - Generate Delphi clients from Swagger specs</li>
+  <li><strong>QuickJS Engine</strong> - Modern JavaScript scripting (replaces SpiderMonkey)</li>
+</ul>
+<h3>Compiler Support</h3>
+<ul>
+  <li><strong>Delphi</strong>: 7 through 12.2 (RAD Studio 12 Athens)</li>
+  <li><strong>Free Pascal</strong>: 3.2.2+ with fixes</li>
+  <li><strong>Platforms</strong>: Windows (32/64-bit), Linux (x64/ARM64), macOS, FreeBSD</li>
+</ul>
+<hr>
+<h2>1.1. Client-Server ORM/SOA Framework</h2>
+<p>
+The </em>mORMot 2 framework<em> implements a Client-Server RESTful architecture, following MVC, N-Tier, ORM, and SOA best-practice patterns.
+
+</p>
+<p>
+Multiple clients can access the same remote or local server using diverse communication protocols:
+
+</p>
+<pre><code class="language-text">┌───────────────────────────────────────────────────────────────────┐
+│                     Network Architecture                          │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────┐  ┌─────────┐                      ┌─────────┐        │
+│  │Client 1 │  │Client 2 │    Internet/VPN      │Client n │        │
+│  │ Delphi  │  │  AJAX   │        ║             │ Delphi  │        │
+│  └────┬────┘  └────┬────┘        ║             └────┬────┘        │
+│       │            │             ║                  │             │
+│       └────────────┴─────────────╨──────────────────┘             │
+│                          │                                        │
+│                   JSON + REST                                     │
+│                   over HTTP/HTTPS                                 │
+│                          │                                        │
+│                   ┌──────┴──────┐                                 │
+│                   │   Server    │                                 │
+│                   │ (mORMot 2)  │                                 │
+│                   └─────────────┘                                 │
+└───────────────────────────────────────────────────────────────────┘
+</code></pre>
+<p>
+Or the application can be stand-alone:
+
+</p>
+<pre><code class="language-text">┌─────────────────────────────────────────┐
+│       Stand-Alone Application           │
+│  ┌──────────┐    ┌──────────┐           │
+│  │  Client  │───►│  Server  │           │
+│  │  Code    │    │  Code    │           │
+│  └──────────┘    └──────────┘           │
+│        direct in-process access         │
+└─────────────────────────────────────────┘
+</code></pre>
+<p>
+Switching between embedded and client-server architecture is just a matter of how </em>mORMot<em> classes are initialized. The same executable can run as a stand-alone application, a server, or a client, depending on runtime parameters!
+
+</p>
+<hr>
+<h2>1.2. Highlights</h2>
+<p>
+Key distinguishing features of mORMot 2:
+
+</p>
+<ul>
+  <li><strong>Client-Server orientation</strong> with optimized request caching and intelligent updates over a RESTful architecture - but can also be used in stand-alone applications</li>
+  <li><strong>No RAD components</strong> - True ORM and SOA approach</li>
+  <li><strong>Multi-Tier architecture</strong> with integrated business rules as fast ORM-based classes and </em>Domain-Driven<em> design</li>
+  <li><strong>Service-Oriented-Architecture</strong> model using custom RESTful JSON services - send any <code>TObject</code>, dynamic array, or record as JSON via interface-based contracts shared on both client and server</li>
+  <li><strong>Truly RESTful authentication</strong> with dual security model (session + per-query)</li>
+  <li><strong>Very fast JSON</strong> producer and parser with caching at SQL level</li>
+  <li><strong>Fast HTTP/HTTPS server</strong> using <code>http.sys</code> kernel-mode server (Windows) or async event-driven server (all platforms) - plus named pipes, WebSockets, or in-process alternatives</li>
+  <li><strong>SQLite3 kernel</strong> with ability to connect to any external database (PostgreSQL, MySQL, Oracle, MS SQL, Firebird, etc.) via direct client libraries, ODBC, or OLE DB</li>
+  <li><strong>RESTful ORM access to NoSQL</strong> like MongoDB with the same code base</li>
+  <li><strong>Multiple databases at once</strong> via SQLite3 Virtual Tables mechanism</li>
+  <li><strong>Full Text Search</strong> engine with Google-like ranking algorithm</li>
+  <li><strong>Native cryptography</strong> including AES, SHA, ECC, RSA, JWT, X.509 with optional OpenSSL acceleration</li>
+  <li><strong>Direct User Interface generation</strong> with grids and Ribbon layouts</li>
+  <li><strong>Integrated Reporting</strong> system serving PDF reports</li>
+  <li><strong>Optimized for performance</strong> (assembly when needed, buffered I/O, multi-threaded architecture)</li>
+  <li><strong>Cross-platform clients</strong> from Delphi, Free Pascal, mobile, and AJAX</li>
+  <li><strong>Full source code</strong> provided under open source license</li>
+</ul>
+<hr>
+<h2>1.3. Benefits</h2>
+<p>
+</em>mORMot<em> provides a comprehensive set of features to manage your crosscutting concerns through a reusable set of components and core functionality.
+
+</p>
+<p>
+Benefits include:
+
+</p>
+<ul>
+  <li><strong>KISS convention over configuration</strong>: All needed features at hand, with one clear way of doing things</li>
+  <li><strong>Pascal-oriented</strong>: Implementation leverages Object Pascal's type system rather than mimicking Java/C# patterns</li>
+  <li><strong>Integrated</strong>: All crosscutting scenarios are coupled with consistent APIs, extensive code reuse, and JSON/RESTful orientation from the ground up</li>
+  <li><strong>Tested</strong>: Most of the framework is test-driven, with comprehensive regression tests including system-wide integration tests</li>
+  <li><strong>Don't reinvent the wheel</strong>: Focus on your business logic, not infrastructure</li>
+  <li><strong>Open Source and maintained</strong>: Active development community - mORMot won't leave you soon!</li>
+</ul>
+<hr>
+<h2>1.4. Legacy Code and Existing Projects</h2>
+<p>
+Even if </em>mORMot<em> works best in projects designed from scratch, it fits very well for evolving existing </em>Delphi<em> projects or creating server-side components for AJAX applications.
+
+</p>
+<p>
+One key benefit is facilitating the transition from traditional Client-Server architecture to N-Tier layered patterns.
+
+</p>
+<p>
+Due to its modular design, you can integrate framework components into existing applications:
+
+</p>
+<ul>
+  <li><strong>Add logging</strong> to track issues and enable customer-side performance profiling</li>
+  <li><strong>Use low-level classes</strong> like record or dynamic array wrappers, or dynamic document storage via <code>TDocVariant</code></li>
+  <li><strong>Use direct DB layers</strong> including high-performance database access, array binding for fast inserts, or NoSQL databases</li>
+  <li><strong>Reports</strong> can use the <code>mormot.ui.report</code> code-based system for server-side PDF generation</li>
+  <li><strong>HTTP requests</strong> can be exposed using method-based services, e.g., for rendering HTML with Mustache templates</li>
+  <li><strong>Migrate to SOA</strong> by moving logic into server services defined via interfaces, without SOAP/WCF overhead</li>
+  <li><strong>RESTful interface</strong> for JSON consumption via AJAX or mobile clients</li>
+  <li><strong>New tables via ORM</strong> in your existing SQL server or new storage like MongoDB</li>
+  <li><strong>In-memory engine</strong> or SQLite3-based consolidation for performance-critical scenarios</li>
+  <li><strong>Support for older Delphi versions</strong> (starting from Delphi 7) for projects that can't easily upgrade</li>
+</ul>
+<hr>
+<h2>1.5. FAQ</h2>
+<p>
+Before going further, here are answers to frequently asked questions.
+
+</p>
+<h3>Should I use mORMot 1 since mORMot 2 is the maintained version?</h3>
+<p>
+<strong>mORMot 2</strong> is the way to go for any new project. mORMot 1 is in bug-fix-only mode. For existing mORMot 1 projects, we continue to fix bugs and supply SQLite3 updates, but no new features will appear. Consider migrating to mORMot 2 when you have time - the process is straightforward once you change to the new units.
+
+</p>
+<h3>The documentation is too long to read quickly.</h3>
+<p>
+You don't need to read everything - most is detailed API reference. But do read the first part covering main concepts and patterns (15-30 minutes). Also see the slides and examples available at https://github.com/synopse/mORMot2
+
+</p>
+<h3>Where should I start?</h3>
+<p>
+1. Read the Architecture Principles (Chapter 2)
+2. Download and install the sources
+3. Compile and run the test programs in <code>/test</code>
+4. Learn about ORM, SOA, and MVC concepts
+5. Try the sample projects in <code>/ex</code> folder
+
+</p>
+<h3>I'm not a fan of ORM - I prefer writing SQL.</h3>
+<p>
+ORM makes development easier, but you can use interface-based services with "manual" SQL via the <code>mormot.db.</em></code> classes for high performance and direct JSON export.
+
+</p>
+<h3>mORMot requires inheriting from TOrm. Can I use any object?</h3>
+<p>
+We discuss this in detail in the ORM chapter. Adding attributes to existing classes pollutes your code. The framework provides CQRS services to persist any PODO (Plain Old Delphi Object) without requiring TOrm inheritance.
+
+</p>
+<h3>Why don't you use generics or class attributes?</h3>
+<p>
+Our framework uses Object Pascal's type system effectively - specifying a class or interface type as parameter is safe and efficient. Generics tend to bloat executables, reduce performance, and hide implementation details. Attributes pollute code and introduce coupling. These features also reduce compatibility with older Delphi and FPC.
+
+</p>
+<h3>What are RawUtf8 and other special types?</h3>
+<p>
+The framework uses UTF-8 internally. <code>RawUtf8</code> is optimized for UTF-8 strings across all Delphi versions. Search the keyword index for <code>RawUtf8</code> or see the Core Units chapter.
+
+</p>
+<h3>My client receives non-standard JSON with unquoted fields.</h3>
+<p>
+Internally, the framework uses MongoDB extended JSON syntax (unquoted fields) for better performance. Add a proper <code>User-Agent</code> HTTP header to receive standard <code>"field":value</code> JSON.
+
+</p>
+<h3>Why is this framework named mORMot?</h3>
+<ul>
+  <li>Because marmots hibernate, like our precious objects</li>
+  <li>Because marmots are highly social and communicate with whistles, like our connected applications</li>
+  <li>Because "Manage Object Relational Mapping Over Territory" works as an acronym</li>
+  <li>Because we like mountains and those large ground rodents!</li>
+</ul>
+<hr>
+<h2>1.6. Getting Started</h2>
+<h3>Installation</h3>
+<p>
+Clone from GitHub:
+<pre><code class="language-bash">git clone https://github.com/synopse/mORMot2.git
+</code></pre>
+<h3>Minimal Project Setup</h3>
+<pre><code class="language-pascal">program MyFirstMormot;
+
+{$APPTYPE CONSOLE}
+
+uses
+  mormot.core.base,
+  mormot.core.os,
+  mormot.orm.core,
+  mormot.orm.sqlite3,
+  mormot.rest.sqlite3,
+  mormot.rest.http.server;
+
+type
+  TOrmSample = class(TOrm)
+  private
+    fName: RawUtf8;
+    fValue: Integer;
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Value: Integer read fValue write fValue;
+  end;
+
+var
+  Model: TOrmModel;
+  Server: TRestServerDB;
+  HttpServer: TRestHttpServer;
+begin
+  // Create ORM model with our class
+  Model := TOrmModel.Create([TOrmSample]);
+
+  // Create REST server with SQLite3 storage
+  Server := TRestServerDB.Create(Model, &#x27;sample.db3&#x27;);
+  Server.Server.CreateMissingTables;
+
+  // Wrap in HTTP server
+  HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;, useHttpAsync);
+  try
+    WriteLn(&#x27;Server running on http://localhost:8080&#x27;);
+    WriteLn(&#x27;Press Enter to quit...&#x27;);
+    ReadLn;
+  finally
+    HttpServer.Free;
+    Server.Free;
+    Model.Free;
+  end;
+end.
+</code></pre>
+<h3>Required Units by Feature</h3>
+<p>
+<strong>Core functionality:</strong>
+<pre><code class="language-pascal">uses
+  mormot.core.base,      // Foundation types
+  mormot.core.os,        // OS abstraction
+  mormot.core.text,      // Text processing
+  mormot.core.json;      // JSON handling
+</code></pre>
+<p>
+<strong>ORM/Database:</strong>
+<pre><code class="language-pascal">uses
+  mormot.orm.core,       // TOrm, TOrmModel
+  mormot.orm.sqlite3,    // SQLite3 ORM
+  mormot.db.sql.sqlite3; // SQLite3 engine (if direct SQL needed)
+</code></pre>
+<p>
+<strong>REST Server/Client:</strong>
+<pre><code class="language-pascal">uses
+  mormot.rest.core,        // TRest base
+  mormot.rest.server,      // TRestServer
+  mormot.rest.client,      // TRestClient
+  mormot.rest.http.server, // TRestHttpServer
+  mormot.rest.http.client; // TRestHttpClient
+</code></pre>
+<p>
+<strong>Services (SOA):</strong>
+<pre><code class="language-pascal">uses
+  mormot.soa.core,    // Service interfaces
+  mormot.soa.server,  // Server-side services
+  mormot.soa.client;  // Client-side service consumption
+</code></pre>
+<hr>
+<p>
+<em>Next Chapter: Architecture Principles</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Foreword.html">Foreword</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-02.html">Chapter 2: Architecture Principles</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

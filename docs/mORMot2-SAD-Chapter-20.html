@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>20. Hosting and Deployment</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>20. Hosting and Deployment</h1>
+<p>
+<em>From Development to Production</em>
+
+</p>
+<p>
+This chapter covers deployment patterns for mORMot 2 applications, from simple stand-alone executables to complex multi-server architectures with CDN integration.
+
+</p>
+<hr>
+<h2>20.1. Platform Support</h2>
+<h3>20.1.1. Operating Systems</h3>
+<p>
+mORMot 2 natively supports:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Platform</th>
+  <th>Compiler</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Windows (32/64-bit)</td>
+  <td>Delphi, FPC</td>
+  <td>Full support including http.sys</td>
+</tr>
+<tr>
+  <td>Linux (x86_64, aarch64)</td>
+  <td>Delphi 12+, FPC</td>
+  <td>Recommended for servers</td>
+</tr>
+<tr>
+  <td>macOS (x86_64, aarch64)</td>
+  <td>Delphi, FPC</td>
+  <td>Development and servers</td>
+</tr>
+<tr>
+  <td>FreeBSD</td>
+  <td>FPC</td>
+  <td>Server deployments</td>
+</tr>
+<tr>
+  <td>Android</td>
+  <td>Delphi, FPC</td>
+  <td>Client applications</td>
+</tr>
+</tbody>
+</table>
+<h3>20.1.2. Resource Requirements</h3>
+<p>
+mORMot applications are extremely efficient:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Component</th>
+  <th>Typical Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>RAM</strong></td>
+  <td>50-200 MB for typical server</td>
+</tr>
+<tr>
+  <td><strong>CPU</strong></td>
+  <td>Minimal; single-core sufficient for most workloads</td>
+</tr>
+<tr>
+  <td><strong>Storage</strong></td>
+  <td>SQLite3 database + application (~5-50 MB)</td>
+</tr>
+<tr>
+  <td><strong>Network</strong></td>
+  <td>Standard HTTP/HTTPS ports</td>
+</tr>
+</tbody>
+</table>
+Compared to traditional stacks (IIS + .NET + SQL Server), mORMot requires:
+<ul>
+  <li><strong>10x less RAM</strong></li>
+  <li><strong>Simpler configuration</strong></li>
+  <li><strong>No additional dependencies</strong></li>
+</ul>
+<hr>
+<h2>20.2. Deployment Patterns</h2>
+<h3>20.2.1. Stand-Alone Application</h3>
+<p>
+The simplest deployment — a single executable:
+
+</p>
+<pre><code class="language-text">┌─────────────────────────────────────┐
+│           Application               │
+│  ┌─────────┐  ┌─────────────────┐   │
+│  │ Client  │──│  Server (HTTP)  │   │
+│  │  Code   │  │  + ORM + SOA    │   │
+│  └─────────┘  └─────────────────┘   │
+│                     │               │
+│              ┌──────┴──────┐        │
+│              │  SQLite3    │        │
+│              │  Database   │        │
+│              └─────────────┘        │
+└─────────────────────────────────────┘
+</code></pre>
+<p>
+Perfect for:
+<ul>
+  <li>Desktop applications with local data</li>
+  <li>Development and testing</li>
+  <li>Single-user scenarios</li>
+</ul>
+<pre><code class="language-pascal">// In-process server access
+var
+  Server: TRestServerDB;
+  Client: TRestClientDB;
+begin
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+  Client := TRestClientDB.Create(Server);
+  // Client and server in same process
+end;
+</code></pre>
+<h3>20.2.2. Shared Server</h3>
+<p>
+One server handling both ORM and SOA:
+
+</p>
+<pre><code class="language-text">┌──────────┐        ┌──────────┐
+│ Client 1 │───┐    │ Client 2 │
+│ (Delphi) │   │    │  (AJAX)  │
+└──────────┘   │    └──────────┘
+               │         │
+               ▼         ▼
+         ┌─────────────────────┐
+         │    HTTP Server      │
+         │  ┌───────────────┐  │
+         │  │   ORM + SOA   │  │
+         │  └───────┬───────┘  │
+         │          │          │
+         │    ┌─────┴─────┐    │
+         │    │  SQLite3  │    │
+         │    └───────────┘    │
+         └─────────────────────┘
+</code></pre>
+<p>
+Suitable for:
+<ul>
+  <li>Small to medium applications</li>
+  <li>Corporate intranets</li>
+  <li>Single-location deployments</li>
+</ul>
+<h3>20.2.3. Separated Services (DMZ)</h3>
+<p>
+For security-sensitive deployments:
+
+</p>
+<pre><code class="language-text">    Internet                    DMZ                    Internal Network
+       │                         │                           │
+┌──────┴──────┐           ┌──────┴──────┐            ┌───────┴───────┐
+│  AJAX/Web   │           │  Services   │            │     ORM       │
+│   Clients   │─────────▶ │   Server    │──────────▶ │    Server     │
+└─────────────┘           │  (Stateless)│            │  + Database   │
+                          └─────────────┘            └───────────────┘
+                                │
+                          ┌─────┴─────┐
+                          │  Firewall │
+                          └───────────┘
+</code></pre>
+<p>
+Benefits:
+<ul>
+  <li>Database never exposed to Internet</li>
+  <li>Services can be stateless (scalable)</li>
+  <li>Clear security boundaries</li>
+</ul>
+Implementation:
+
+</p>
+<pre><code class="language-pascal">// Services server (in DMZ)
+Server := TRestServerFullMemory.Create(Model);
+Server.ServiceDefine(TMyService, [IMyService], sicShared);
+// Connect to internal ORM server
+Server.RemoteDataCreate(InternalOrmClient, TOrmArticle);
+
+// Internal ORM server
+OrmServer := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+</code></pre>
+<h3>20.2.4. Microservices</h3>
+<p>
+Multiple specialized servers:
+
+</p>
+<pre><code class="language-text">┌─────────┐   ┌─────────┐   ┌─────────┐
+│ Client  │   │ Client  │   │ C│
+└────┬────┘   └────┬────┘   └────┬────┘
+     │             │             │
+     └──────┬──────┴──────┬──────┘
+            ▼             │
+     ┌──────────────┐     │
+     │   Gateway    │     │
+     │   Server     │     │
+     └──────┬───────┘     │
+            │             │
+     ┌──────┼──────┬──────┼──────┐
+     ▼      ▼      ▼      ▼      ▼
+┌────────┐ ┌────────┐ ┌────────┐
+│ Auth   │ │ Orders │ │ Reports│
+│ Service│ │ Service│ │ Service│
+└────────┘ └────────┘ └────────┘
+</code></pre>
+<p>
+Each service:
+<ul>
+  <li>Has its own database</li>
+  <li>Independently deployable</li>
+  <li>Communicates via REST/JSON</li>
+</ul>
+<hr>
+<h2>20.3. Windows Deployment</h2>
+<h3>20.3.1. Console Application</h3>
+<p>
+Simplest deployment for development:
+
+</p>
+<pre><code class="language-pascal">program MyServer;
+{$APPTYPE CONSOLE}
+begin
+  // Server initialization
+  WriteLn(&#x27;Server running on http://localhost:8080&#x27;);
+  ReadLn;  // Wait for Enter to stop
+end.
+</code></pre>
+<h3>20.3.2. Windows Service</h3>
+<p>
+For production deployment:
+
+</p>
+<pre><code class="language-pascal">program MyServerService;
+
+uses
+  mormot.app.daemon;
+
+type
+  TMyDaemon = class(TDaemon)
+  protected
+    fServer: TRestServerDB;
+    fHttp: TRestHttpServer;
+    procedure DoStart; override;
+    procedure DoStop; override;
+  end;
+
+procedure TMyDaemon.DoStart;
+begin
+  fServer := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+  fHttp := TRestHttpServer.Create(&#x27;8080&#x27;, [fServer]);
+end;
+
+procedure TMyDaemon.DoStop;
+begin
+  fHttp.Free;
+  fServer.Free;
+end;
+
+begin
+  TDaemonService.Create(TMyDaemon, &#x27;MyServer&#x27;, &#x27;My mORMot Server&#x27;);
+  TDaemonService.RunAsService;
+end.
+</code></pre>
+<p>
+Service management:
+<pre><code class="language-batch">:: Install service
+MyServerService.exe /install
+
+:: Start service
+net start MyServer
+
+:: Stop service
+net stop MyServer
+
+:: Uninstall service
+MyServerService.exe /uninstall
+</code></pre>
+<h3>20.3.3. HTTP.SYS Configuration</h3>
+<p>
+For best Windows performance, use http.sys:
+
+</p>
+<pre><code class="language-pascal">HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;,
+  useHttpApiRegisteringUri);  // Uses http.sys
+</code></pre>
+<p>
+URL reservation (run as Administrator):
+<pre><code class="language-batch">netsh http add urlacl url=http://+:8080/ user=Everyone
+</code></pre>
+<p>
+SSL certificate binding:
+<pre><code class="language-batch">netsh http add sslcert ipport=0.0.0.0:443 ^
+  certhash=YOUR_CERT_THUMBPRINT ^
+  appid={YOUR_APP_GUID}
+</code></pre>
+<hr>
+<h2>20.4. Linux Deployment</h2>
+<h3>20.4.1. Systemd Service</h3>
+<p>
+Create <code>/etc/systemd/system/mormot-server.service</code>:
+
+</p>
+<pre><code class="language-ini">[Unit]
+Description=mORMot Server
+After=network.target
+
+[Service]
+Type=simple
+User=mormot
+Group=mormot
+WorkingDirectory=/opt/mormot
+ExecStart=/opt/mormot/myserver
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<p>
+Management:
+<pre><code class="language-bash"># Enable and start
+sudo systemctl enable mormot-server
+sudo systemctl start mormot-server
+
+# Check status
+sudo systemctl status mormot-server
+
+# View logs
+sudo journalctl -u mormot-server -f
+</code></pre>
+<h3>20.4.2. Docker Deployment</h3>
+<p>
+<code>Dockerfile</code>:
+<pre><code class="language-dockerfile">FROM debian:bookworm-slim
+
+RUN apt-get update &amp;&amp; apt-get install -y \
+    libsqlite3-0 \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY myserver /app/
+COPY Views/ /app/Views/
+
+EXPOSE 8080
+USER nobody:nogroup
+
+CMD [&quot;/app/myserver&quot;]
+</code></pre>
+<p>
+<code>docker-compose.yml</code>:
+<pre><code class="language-yaml">version: &#x27;3.8&#x27;
+services:
+  mormot-server:
+    build: .
+    ports:
+      - &quot;8080:8080&quot;
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - MORMOT_LOG_LEVEL=debug
+</code></pre>
+<h3>20.4.3. Performance Tuning</h3>
+<p>
+System limits (<code>/etc/security/limits.conf</code>):
+<pre><code class="language-text">mormot soft nofile 65535
+mormot hard nofile 65535
+</code></pre>
+<p>
+Kernel parameters (<code>/etc/sysctl.conf</code>):
+<pre><code class="language-text">net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.ip_local_port_range = 1024 65535
+</code></pre>
+<hr>
+<h2>20.5. Process Manager (Angelize)</h2>
+<h3>20.5.1. Overview</h3>
+<p>
+<code>TSynAngelize</code> is mORMot's cross-platform process manager — similar to NSSM (Windows) or supervisord (Linux), but JSON-configured and integrated with the daemon framework.
+
+</p>
+<p>
+<strong>Key Features:</strong>
+<ul>
+  <li>Launch and monitor multiple sub-processes</li>
+  <li>Auto-restart on crash with configurable backoff</li>
+  <li>Health checks via HTTP endpoints</li>
+  <li>Notifications on failure (email, HTTP, log, exec)</li>
+  <li>Cross-platform (Windows services + POSIX daemons)</li>
+  <li>Console output redirection and rotation</li>
+</ul>
+<h3>20.5.2. Architecture</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────┐
+│              TSynAngelize                        │
+│         (Main Launcher/Watcher)                  │
+│                                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────┐ │
+│  │ Service 1   │  │ Service 2   │  │ Service N│ │
+│  │ (API Server)│  │ (Worker)    │  │ (...)    │ │
+│  └─────────────┘  └─────────────┘  └──────────┘ │
+│         │               │               │        │
+│    [Watch]         [Watch]         [Watch]       │
+│    Health          Process         Custom        │
+│    Check           Monitor         Script        │
+└─────────────────────────────────────────────────┘
+</code></pre>
+<h3>20.5.3. Configuration</h3>
+<p>
+Configuration stored in <code><exename>.settings</code> JSON file:
+
+</p>
+<pre><code class="language-json">{
+  &quot;Services&quot;: [
+    {
+      &quot;Name&quot;: &quot;api&quot;,
+      &quot;Description&quot;: &quot;REST API Server&quot;,
+      &quot;Run&quot;: &quot;/opt/app/api-server&quot;,
+      &quot;Start&quot;: [ &quot;start:%run%&quot; ],
+      &quot;Stop&quot;: [ &quot;stop:%run%&quot; ],
+      &quot;Watch&quot;: [ &quot;http://127.0.0.1:8080/health=200&quot; ],
+      &quot;WatchDelaySec&quot;: 60,
+      &quot;RetryStableSec&quot;: 120,
+      &quot;RedirectLogFile&quot;: &quot;%log%api-console.log&quot;,
+      &quot;RedirectLogRotateFiles&quot;: 5,
+      &quot;RedirectLogRotateBytes&quot;: 10485760,
+      &quot;Notify&quot;: &quot;admin@example.com,%log%alerts.log&quot;
+    },
+    {
+      &quot;Name&quot;: &quot;worker&quot;,
+      &quot;Description&quot;: &quot;Background Worker&quot;,
+      &quot;Run&quot;: &quot;/opt/app/worker&quot;,
+      &quot;Start&quot;: [ &quot;start:%run%&quot; ],
+      &quot;Stop&quot;: [ &quot;stop:%run%&quot; ],
+      &quot;AbortExitCodes&quot;: [ 99 ]
+    }
+  ]
+}
+</code></pre>
+<h3>20.5.4. Action Commands</h3>
+<p>
+Actions in <code>Start</code>, <code>Stop</code>, and <code>Watch</code> arrays:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Action</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>start:/path/to/exe</code></td>
+  <td>Launch and monitor process (like NSSM)</td>
+</tr>
+<tr>
+  <td><code>stop:/path/to/exe</code></td>
+  <td>Stop monitored process</td>
+</tr>
+<tr>
+  <td><code>exec:/path/to/exe</code></td>
+  <td>Execute without waiting</td>
+</tr>
+<tr>
+  <td><code>wait:/path/to/exe</code></td>
+  <td>Execute and wait for exit code 0</td>
+</tr>
+<tr>
+  <td><code>http://host/path</code></td>
+  <td>HTTP GET request (expects 200)</td>
+</tr>
+<tr>
+  <td><code>http://host/path=CODE</code></td>
+  <td>HTTP GET expecting specific status code</td>
+</tr>
+<tr>
+  <td><code>sleep:1000</code></td>
+  <td>Wait N milliseconds</td>
+</tr>
+<tr>
+  <td><code>service:Name</code></td>
+  <td>Control Windows service (Windows only)</td>
+</tr>
+</tbody>
+</table>
+<strong>Variables:</strong>
+<ul>
+  <li><code>%run%</code> — Expands to the <code>Run</code> property value</li>
+  <li><code>%log%</code> — Expands to the log directory path</li>
+</ul>
+<h3>20.5.5. Auto-Restart Behavior</h3>
+<p>
+When a monitored process exits unexpectedly:
+
+</p>
+<p>
+1. <strong>Immediate restart</strong> attempted
+2. If crash recurs within <code>RetryStableSec</code>, <strong>backoff delay</strong> increases
+3. Process considered "stable" after running <code>RetryStableSec</code> seconds
+4. <code>AbortExitCodes</code> can prevent restart (e.g., exit code 99 = don't restart)
+5. <code>Notify</code> triggered on persistent failures
+
+</p>
+<h3>20.5.6. Health Checks</h3>
+<p>
+The <code>Watch</code> array defines periodic health checks:
+
+</p>
+<pre><code class="language-json">{
+  &quot;Watch&quot;: [
+    &quot;http://127.0.0.1:8080/health=200&quot;,
+    &quot;http://127.0.0.1:8080/ready&quot;
+  ],
+  &quot;WatchDelaySec&quot;: 30
+}
+</code></pre>
+<p>
+If health check fails:
+1. Process is considered unhealthy
+2. Restart triggered
+3. Notification sent if <code>Notify</code> configured
+
+</p>
+<h3>20.5.7. Usage Example</h3>
+<pre><code class="language-pascal">program ProcessManager;
+
+uses
+  mormot.app.agl;
+
+type
+  TMyAngelize = class(TSynAngelize)
+  end;
+
+begin
+  with TMyAngelize.Create(TSynAngelizeSettings, &#x27;&#x27;, &#x27;&#x27;, &#x27;&#x27;) do
+  try
+    CommandLine;  // Handles install/start/stop/console
+  finally
+    Free;
+  end;
+end.
+</code></pre>
+<p>
+Command line:
+<pre><code class="language-bash"># Windows
+ProcessManager.exe /install
+ProcessManager.exe /start
+ProcessManager.exe /console  # Run in foreground for debugging
+
+# Linux
+./ProcessManager --run       # Run as daemon
+./ProcessManager --console   # Run in foreground
+./ProcessManager --kill      # Stop daemon
+</code></pre>
+<h3>20.5.8. Comparison with Alternatives</h3>
+<table>
+<thead>
+<tr>
+  <th>Feature</th>
+  <th>Angelize</th>
+  <th>NSSM</th>
+  <th>supervisord</th>
+  <th>systemd</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Cross-platform</td>
+  <td>✅</td>
+  <td>❌ Windows</td>
+  <td>❌ Linux</td>
+  <td>❌ Linux</td>
+</tr>
+<tr>
+  <td>JSON config</td>
+  <td>✅</td>
+  <td>❌</td>
+  <td>❌ INI</td>
+  <td>❌ Unit files</td>
+</tr>
+<tr>
+  <td>Health checks</td>
+  <td>✅ HTTP</td>
+  <td>❌</td>
+  <td>✅</td>
+  <td>✅</td>
+</tr>
+<tr>
+  <td>Log rotation</td>
+  <td>✅</td>
+  <td>❌</td>
+  <td>✅</td>
+  <td>✅ journald</td>
+</tr>
+<tr>
+  <td>Notifications</td>
+  <td>✅ Email/HTTP/Log</td>
+  <td>❌</td>
+  <td>❌</td>
+  <td>❌</td>
+</tr>
+<tr>
+  <td>mORMot integration</td>
+  <td>✅ Native</td>
+  <td>❌</td>
+  <td>❌</td>
+  <td>❌</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>20.6. Reverse Proxy Configuration</h2>
+<h3>20.6.1. Nginx</h3>
+<pre><code class="language-nginx">upstream mormot {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name api.example.com;
+
+    location / {
+        proxy_pass http://mormot;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Connection &quot;&quot;;
+
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection &quot;upgrade&quot;;
+    }
+
+    # Static files served by Nginx
+    location /.static/ {
+        alias /opt/mormot/static/;
+        expires 30d;
+    }
+}
+</code></pre>
+<h3>20.6.2. Apache</h3>
+<pre><code class="language-apache">&lt;VirtualHost *:80&gt;
+    ServerName api.example.com
+
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+
+    # WebSocket support
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /(.*) ws://127.0.0.1:8080/$1 [P,L]
+&lt;/VirtualHost&gt;
+</code></pre>
+<h3>20.6.3. SSL Termination</h3>
+<p>
+With Let's Encrypt (certbot):
+<pre><code class="language-bash">sudo certbot --nginx -d api.example.com
+</code></pre>
+<p>
+Or manually in Nginx:
+<pre><code class="language-nginx">server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        # ... proxy settings
+    }
+}
+</code></pre>
+<hr>
+<h2>20.7. CDN Integration</h2>
+<h3>20.7.1. Architecture</h3>
+<pre><code class="language-text">┌─────────┐     ┌─────────┐     ┌─────────┐
+│ Client  │     │ Client  │     │ Client  │
+│  (US)   │     │  (EU)   │     │ (Asia)  │
+└────┬────┘     └────┬────┘     └────┬────┘
+     │               │               │
+     ▼               ▼               ▼
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│ CDN     │     │ CDN     │     │ CDN     │
+│ Edge US │     │ Edge EU │     │Edge Asia│
+└────┬────┘     └────┬────┘     └────┬────┘
+     │               │               │
+     └───────────────┼───────────────┘
+                     │
+                     ▼
+              ┌─────────────┐
+              │   Origin    │
+              │   Server    │
+              │  (mORMot)   │
+              └─────────────┘
+</code></pre>
+<h3>20.7.2. Cache Headers</h3>
+<p>
+Enable caching for appropriate endpoints:
+
+</p>
+<pre><code class="language-pascal">procedure TMyServer.GetPublicData(Ctxt: TRestServerUriContext);
+begin
+  Ctxt.Returns(Data, HTTP_SUCCESS,
+    &#x27;Content-Type: application/json&#x27;#13#10 +
+    &#x27;Cache-Control: public, max-age=300&#x27;,  // 5 minutes
+    True);  // Handle304NotModified
+end;
+</code></pre>
+<h3>20.7.3. Cloudflare Configuration</h3>
+<p>
+Page Rules:
+<ul>
+  <li><code>api.example.com/public/<em></code> → Cache Everything, Edge TTL: 5 minutes</li>
+  <li><code>api.example.com/auth/</em></code> → Bypass Cache</li>
+  <li><code>api.example.com/api/*</code> → Bypass Cache (authenticated)</li>
+</ul>
+Important: Authenticated endpoints must bypass cache:
+
+</p>
+<pre><code class="language-pascal">// Disable authentication for cacheable endpoints
+Server.ServiceMethodByPassAuthentication(&#x27;GetPublicData&#x27;);
+</code></pre>
+<hr>
+<h2>20.8. Monitoring and Logging</h2>
+<h3>20.8.1. Built-in Logging</h3>
+<pre><code class="language-pascal">// Configure logging
+with TSynLog.Family do
+begin
+  Level := LOG_VERBOSE;
+  DestinationPath := &#x27;/var/log/mormot/&#x27;;
+  RotateFileCount := 10;
+  RotateFileSizeKB := 10240;  // 10 MB per file
+end;
+</code></pre>
+<h3>20.8.2. Health Checks</h3>
+<pre><code class="language-pascal">procedure TMyServer.Health(Ctxt: TRestServerUriContext);
+var
+  Status: TDocVariantData;
+begin
+  Status.InitObject([
+    &#x27;status&#x27;, &#x27;ok&#x27;,
+    &#x27;timestamp&#x27;, NowUtc,
+    &#x27;uptime&#x27;, GetTickCount64 - fStartTime,
+    &#x27;connections&#x27;, fActiveConnections
+  ]);
+  Ctxt.Returns(Status.ToJson);
+end;
+
+// Register without authentication
+Server.ServiceMethodByPassAuthentication(&#x27;Health&#x27;);
+</code></pre>
+<h3>20.8.3. Metrics Endpoint</h3>
+<pre><code class="language-pascal">procedure TMyServer.Metrics(Ctxt: TRestServerUriContext);
+var
+  Info: TDocVariantData;
+begin
+  Info.InitObject([
+    &#x27;requests_total&#x27;, fRequestCount,
+    &#x27;requests_per_second&#x27;, fRequestsPerSecond,
+    &#x27;memory_mb&#x27;, GetHeapStatus.TotalAllocated div (1024*1024),
+    &#x27;db_connections&#x27;, Server.DB.ConnectionCount,
+    &#x27;active_sessions&#x27;, Server.Sessions.Count
+  ]);
+  Ctxt.Returns(Info.ToJson);
+end;
+</code></pre>
+<hr>
+<h2>20.9. High Availability</h2>
+<h3>20.9.1. Load Balancing</h3>
+<p>
+Multiple mORMot instances behind a load balancer:
+
+</p>
+<pre><code class="language-nginx">upstream mormot_cluster {
+    least_conn;
+    server 10.0.0.1:8080 weight=5;
+    server 10.0.0.2:8080 weight=5;
+    server 10.0.0.3:8080 backup;
+    keepalive 32;
+}
+</code></pre>
+<h3>20.9.2. Session Affinity</h3>
+<p>
+For stateful services, use sticky sessions:
+
+</p>
+<pre><code class="language-nginx">upstream mormot_cluster {
+    ip_hash;  # Same client always goes to same server
+    server 10.0.0.1:8080;
+    server 10.0.0.2:8080;
+}
+</code></pre>
+<p>
+Or use external session storage (Redis):
+
+</p>
+<pre><code class="language-pascal">// Store sessions externally
+Server.SessionClass := TAuthSessionRedis;
+</code></pre>
+<h3>20.9.3. Database Replication</h3>
+<p>
+For high availability with SQLite3:
+
+</p>
+<pre><code class="language-pascal">// Master server
+MasterServer := TRestServerDB.Create(Model, &#x27;master.db3&#x27;);
+
+// Replica servers (read-only)
+ReplicaServer := TRestServerDB.Create(Model, &#x27;replica.db3&#x27;);
+ReplicaServer.DB.OpenV2(&#x27;replica.db3&#x27;, SQLITE_OPEN_READONLY);
+</code></pre>
+<p>
+Or use external databases with built-in replication (PostgreSQL, MySQL).
+
+</p>
+<hr>
+<h2>20.10. Security Checklist</h2>
+<h3>20.10.1. Network Security</h3>
+<ul>
+  <li>[ ] Use HTTPS in production</li>
+  <li>[ ] Configure firewall (only expose needed ports)</li>
+  <li>[ ] Use reverse proxy for SSL termination</li>
+  <li>[ ] Enable rate limiting</li>
+  <li>[ ] Configure CORS properly</li>
+</ul>
+<h3>20.10.2. Application Security</h3>
+<ul>
+  <li>[ ] Enable authentication for sensitive endpoints</li>
+  <li>[ ] Use strong password hashing (SHA-256 + salt)</li>
+  <li>[ ] Implement proper authorization (per-method)</li>
+  <li>[ ] Validate all input</li>
+  <li>[ ] Sanitize output (automatic with Mustache)</li>
+</ul>
+<h3>20.10.3. Server Hardening</h3>
+<ul>
+  <li>[ ] Run as non-root user</li>
+  <li>[ ] Minimize installed packages</li>
+  <li>[ ] Keep system updated</li>
+  <li>[ ] Configure log rotation</li>
+  <li>[ ] Set up monitoring/alerting</li>
+</ul>
+<hr>
+<h2>Summary</h2>
+<p>
+mORMot 2 deployment options:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Scenario</th>
+  <th>Recommended Setup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Development</td>
+  <td>Console application</td>
+</tr>
+<tr>
+  <td>Windows Production</td>
+  <td>Windows Service + http.sys</td>
+</tr>
+<tr>
+  <td>Linux Production</td>
+  <td>systemd + Nginx</td>
+</tr>
+<tr>
+  <td>Containers</td>
+  <td>Docker with Alpine/Debian</td>
+</tr>
+<tr>
+  <td>High Traffic</td>
+  <td>Load balancer + CDN</td>
+</tr>
+<tr>
+  <td>High Availability</td>
+  <td>Cluster + session sharing</td>
+</tr>
+</tbody>
+</table>
+Key takeaways:
+<ul>
+  <li>mORMot requires minimal resources</li>
+  <li>Single executable deployment</li>
+  <li>Native cross-platform support</li>
+  <li>Easy integration with standard infrastructure</li>
+  <li>Built-in logging and monitoring support</li>
+</ul>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-19.html">Chapter 19: MVC/MVVM Web Applications</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-21.html">Chapter 21: Security</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

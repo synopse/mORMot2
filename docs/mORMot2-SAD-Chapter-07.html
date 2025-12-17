@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7. Database Layer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>7. Database Layer</h1>
+<p>
+<em>SQLite3 at the Core</em>
+
+</p>
+<p>
+mORMot 2's persistence architecture is centered on SQLite3 but not limited to it. The framework supports multiple database backends, all accessible through a unified interface.
+
+</p>
+<hr>
+<h2>7.1. SQLite3-Powered, Not SQLite3-Limited</h2>
+<p>
+The core database of the framework uses SQLite3 - a free, secure, zero-configuration, server-less, cross-platform database engine.
+
+</p>
+<h3>7.1.1. Persistence Options</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────────┐
+│                        mORMot ORM / REST                            │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+     ┌──────────────────────────┼──────────────────────────┐
+     │                          │                          │
+     ▼                          ▼                          ▼
+┌─────────────┐          ┌─────────────┐          ┌─────────────┐      
+│  SQLite3    │          │ External DB │          │   NoSQL           │
+│  (native)   │          │  (via SQL)  │          │  (MongoDB)        │
+└─────────────┘          └─────────────┘          └─────────────┘      
+     │                          │                          │
+     ▼                          ▼                          ▼
+   File/Mem             PostgreSQL/Oracle          Document Store
+                        MSSQL/MySQL/etc.
+</code></pre>
+<table>
+<thead>
+<tr>
+  <th>Storage Backend</th>
+  <th>Unit(s)</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Internal SQLite3</td>
+  <td><code>mormot.orm.sqlite3</code></td>
+  <td>Default, embedded, full SQL</td>
+</tr>
+<tr>
+  <td>In-Memory <code>TObjectList</code></td>
+  <td><code>mormot.orm.storage</code></td>
+  <td>Fastest, no ACID, limited SQL</td>
+</tr>
+<tr>
+  <td>External RDBMS</td>
+  <td><code>mormot.orm.sql</code> + <code>mormot.db.sql.<em></code></td>
+  <td>Enterprise databases</td>
+</tr>
+<tr>
+  <td>MongoDB</td>
+  <td><code>mormot.orm.mongodb</code></td>
+  <td>NoSQL document store</td>
+</tr>
+</tbody>
+</table>
+<h3>7.1.2. SQLite3 as Core</h3>
+<p>
+The framework uses compiled SQLite3 code, included natively in Delphi/FPC:
+
+</p>
+<ul>
+  <li><strong>Static linking</strong> (recommended) or external <code>sqlite3.dll</code></li>
+  <li><strong>Optimized performance</strong> via <code>FastMM4</code> / FPC memory manager</li>
+  <li><strong>Optional encryption</strong> (AES-256) on disk</li>
+  <li><strong>Record-level locking</strong> (SQLite3 only has file-level)</li>
+  <li><strong>Client-Server support</strong> (SQLite3 is normally standalone-only)</li>
+</ul>
+<strong>Compilation options include:</strong>
+<ul>
+  <li>ISO 8601 date/time handling</li>
+  <li>R-Tree extension for range queries</li>
+  <li>FTS3/FTS4/FTS5 full-text search</li>
+  <li>PCRE-based <code>REGEXP</code> operator</li>
+  <li>Custom SQL functions in Delphi</li>
+</ul>
+<h3>7.1.3. Virtual Tables Magic</h3>
+<p>
+SQLite3's Virtual Table mechanism allows mORMot to:
+
+</p>
+<ul>
+  <li>Mix internal SQLite3 tables with external databases in the same query</li>
+  <li>JOIN across different database engines</li>
+  <li>Use <code>TObjectList</code> storage with SQL queries</li>
+  <li>Present MongoDB collections as SQL tables</li>
+</ul>
+<pre><code class="language-pascal">// One model, multiple backends
+Model := TOrmModel.Create([
+  TOrmCustomer,   // Internal SQLite3
+  TOrmProduct,    // External PostgreSQL
+  TOrmOrder,      // External PostgreSQL
+  TOrmAuditLog    // MongoDB
+]);
+
+// Mix in single query (via virtual tables)
+Server.Orm.ExecuteList([TOrmOrder, TOrmCustomer],
+  &#x27;SELECT Order.ID, Customer.Name FROM Order, Customer &#x27; +
+  &#x27;WHERE Order.CustomerID = Customer.ID&#x27;);
+</code></pre>
+<hr>
+<h2>7.2. SQLite3 Implementation</h2>
+<h3>7.2.1. Unit Structure</h3>
+<pre><code class="language-text">mormot.db.raw.sqlite3.pas   → Low-level SQLite3 C API wrapper
+        ↓
+mormot.db.sql.sqlite3.pas   → TSqlDB* implementation for SQLite3
+        ↓
+mormot.orm.sqlite3.pas      → ORM integration (TRestServerDB)
+</code></pre>
+<h3>7.2.2. Static vs Dynamic Linking</h3>
+<table>
+<thead>
+<tr>
+  <th>Mode</th>
+  <th>Unit</th>
+  <th>Deployment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Static</td>
+  <td><code>mormot.db.raw.sqlite3.static</code></td>
+  <td>Embedded in EXE (~1MB)</td>
+</tr>
+<tr>
+  <td>Dynamic</td>
+  <td><code>mormot.db.raw.sqlite3</code></td>
+  <td>External <code>sqlite3.dll</code></td>
+</tr>
+</tbody>
+</table>
+<strong>Static linking</strong> (recommended for Windows):
+<pre><code class="language-pascal">uses
+  mormot.db.raw.sqlite3.static,  // Include static .obj
+  mormot.orm.sqlite3;
+</code></pre>
+<p>
+<strong>Dynamic linking</strong> (required for some platforms):
+<pre><code class="language-pascal">uses
+  mormot.db.raw.sqlite3,
+  mormot.orm.sqlite3;
+
+// Load external DLL
+sqlite3 := TSqlite3LibraryDynamic.Create;
+</code></pre>
+<h3>7.2.3. Database Modes</h3>
+<pre><code class="language-pascal">uses
+  mormot.orm.sqlite3,
+  mormot.rest.sqlite3;
+
+var
+  Server: TRestServerDB;
+begin
+  // File-based (default - ACID, persistent)
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+
+  // In-memory (fast, non-persistent)
+  Server := TRestServerDB.Create(Model, &#x27;:memory:&#x27;);
+
+  // Performance tuning
+  Server.DB.Synchronous := smOff;       // Faster writes (less safe)
+  Server.DB.LockingMode := lmExclusive; // Single-process access
+end;
+</code></pre>
+<h3>7.2.4. Performance Modes</h3>
+<table>
+<thead>
+<tr>
+  <th>Mode</th>
+  <th>Safety</th>
+  <th>Speed</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>smFull</code> (default)</td>
+  <td>ACID</td>
+  <td>Slow writes</td>
+  <td>Production with crash safety</td>
+</tr>
+<tr>
+  <td><code>smOff</code></td>
+  <td>Risk on crash</td>
+  <td>Fast</td>
+  <td>Batch imports, dev/test</td>
+</tr>
+<tr>
+  <td><code>lmExclusive</code></td>
+  <td>Single process</td>
+  <td>Fastest</td>
+  <td>Embedded applications</td>
+</tr>
+</tbody>
+</table>
+<strong>Batch write example:</strong>
+<pre><code class="language-pascal">Server.DB.Synchronous := smOff;
+Server.DB.LockingMode := lmExclusive;
+try
+  // 100x faster bulk insert
+  for i := 1 to 100000 do
+    Server.Orm.Add(CreateRecord(i), True);
+finally
+  Server.DB.Synchronous := smFull;  // Restore safety
+end;
+</code></pre>
+<hr>
+<h2>7.3. Prepared Statements</h2>
+<p>
+mORMot automatically caches prepared SQL statements for reuse.
+
+</p>
+<h3>7.3.1. Parameter Binding</h3>
+<p>
+Use <code>?</code> placeholders for parameters:
+
+</p>
+<pre><code class="language-pascal">// Parameters bound safely (no SQL injection)
+Rec := TOrm.CreateAndFillPrepare(Orm,
+  &#x27;Name LIKE ? AND Active = ?&#x27;, [&#x27;John%&#x27;, True]);
+
+// Date parameters
+Rec := TOrm.CreateAndFillPrepare(Orm,
+  &#x27;Created &gt;= ?&#x27;, [DateToSql(EncodeDate(2024, 1, 1))]);
+</code></pre>
+<h3>7.3.2. Internal Caching</h3>
+<p>
+The framework caches prepared statements internally:
+
+</p>
+<pre><code class="language-pascal">// First call: Parse SQL, prepare statement, execute
+Orm.Retrieve(&#x27;Name = ?&#x27;, [], [&#x27;John&#x27;], Rec);
+
+// Subsequent calls: Reuse prepared statement, rebind parameters
+Orm.Retrieve(&#x27;Name = ?&#x27;, [], [&#x27;Jane&#x27;], Rec);  // Much faster
+</code></pre>
+<h3>7.3.3. JSON Inlined Parameters</h3>
+<p>
+Internally, parameters are encoded as <code>:(value):</code> in JSON:
+
+</p>
+<pre><code class="language-pascal">// API call
+Orm.Retrieve(&#x27;ID = ?&#x27;, [], [42], Rec);
+
+// Transmitted as JSON
+&#x27;{&quot;Where&quot;:&quot;ID=:(42):&quot;}&#x27;
+
+// Prepared SQL
+&#x27;SELECT * FROM TableName WHERE ID = ?&#x27;  // With 42 bound
+</code></pre>
+<hr>
+<h2>7.4. R-Tree Extension</h2>
+<p>
+R-Trees provide fast range queries for multi-dimensional data (geospatial, temporal).
+
+</p>
+<h3>7.4.1. Defining R-Tree Tables</h3>
+<pre><code class="language-pascal">type
+  TOrmMapBox = class(TOrmRTree)
+  private
+    fMinX, fMaxX: Double;
+    fMinY, fMaxY: Double;
+  published
+    property MinX: Double read fMinX write fMinX;
+    property MaxX: Double read fMaxX write fMaxX;
+    property MinY: Double read fMinY write fMinY;
+    property MaxY: Double read fMaxY write fMaxY;
+  end;
+</code></pre>
+<h3>7.4.2. R-Tree Queries</h3>
+<pre><code class="language-pascal">// Find all boxes containing point (10, 20)
+Boxes := TOrmMapBox.CreateAndFillPrepare(Orm,
+  &#x27;MinX &lt;= ? AND MaxX &gt;= ? AND MinY &lt;= ? AND MaxY &gt;= ?&#x27;,
+  [10, 10, 20, 20]);
+
+// Or use RTreeMatch for complex queries
+Orm.RTreeMatch(TOrmMapData, &#x27;BlobField&#x27;, TOrmMapBox,
+  MapData.BlobField, ResultIDs);
+</code></pre>
+<hr>
+<h2>7.5. Full-Text Search (FTS5)</h2>
+<p>
+FTS5 provides fast full-text search capabilities.
+
+</p>
+<h3>7.5.1. FTS Classes</h3>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Tokenizer</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TOrmFTS5</code></td>
+  <td>Simple</td>
+  <td>Basic text search</td>
+</tr>
+<tr>
+  <td><code>TOrmFTS5Porter</code></td>
+  <td>Porter stemmer</td>
+  <td>English text</td>
+</tr>
+<tr>
+  <td><code>TOrmFTS5Unicode61</code></td>
+  <td>Unicode61</td>
+  <td>Non-Latin languages</td>
+</tr>
+</tbody>
+</table>
+<h3>7.5.2. Defining FTS Tables</h3>
+<pre><code class="language-pascal">type
+  TOrmArticleFTS = class(TOrmFTS5Porter)
+  private
+    fTitle: RawUtf8;
+    fBody: RawUtf8;
+  published
+    property Title: RawUtf8 read fTitle write fTitle;
+    property Body: RawUtf8 read fBody write fBody;
+  end;
+</code></pre>
+<h3>7.5.3. Indexing Content</h3>
+<pre><code class="language-pascal">// Link FTS to main table via DocID
+FTS := TOrmArticleFTS.Create;
+FTS.DocID := Article.ID;  // Link to TOrmArticle
+FTS.Title := Article.Title;
+FTS.Body := Article.Content;
+Orm.Add(FTS, True);
+
+// Optimize after bulk inserts (FTS5 inherits from FTS3)
+TOrmArticleFTS.OptimizeFTS3Index(Server.OrmInstance as IRestOrmServer);
+</code></pre>
+<h3>7.5.4. Searching</h3>
+<pre><code class="language-pascal">var
+  IDs: TIDDynArray;
+begin
+  // Basic search
+  Orm.FTSMatch(TOrmArticleFTS, &#x27;database optimization&#x27;, IDs);
+
+  // With field weighting (Title=2x, Body=1x)
+  Orm.FTSMatch(TOrmArticleFTS, &#x27;database&#x27;, IDs, [2.0, 1.0]);
+
+  // Complex queries
+  Orm.FTSMatch(TOrmArticleFTS, &#x27;Title:database AND Body:performance&#x27;, IDs);
+end;
+</code></pre>
+<h3>7.5.5. FTS Query Syntax</h3>
+<table>
+<thead>
+<tr>
+  <th>Pattern</th>
+  <th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>word</code></td>
+  <td>Match exact word</td>
+</tr>
+<tr>
+  <td><code>word</em></code></td>
+  <td>Prefix match</td>
+</tr>
+<tr>
+  <td><code>"exact phrase"</code></td>
+  <td>Match phrase</td>
+</tr>
+<tr>
+  <td><code>word1 AND word2</code></td>
+  <td>Both required</td>
+</tr>
+<tr>
+  <td><code>word1 OR word2</code></td>
+  <td>Either matches</td>
+</tr>
+<tr>
+  <td><code>word1 NOT word2</code></td>
+  <td>Exclude word2</td>
+</tr>
+<tr>
+  <td><code>NEAR(word1 word2, 5)</code></td>
+  <td>Within 5 tokens</td>
+</tr>
+<tr>
+  <td><code>Title:word</code></td>
+  <td>Match in specific column</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7.6. In-Memory Storage</h2>
+<h3>7.6.1. TRestStorageInMemory</h3>
+<p>
+Ultra-fast storage using <code>TObjectList</code>:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.orm.storage,
+  mormot.orm.server;
+
+// Create in-memory storage and register with ORM server
+var
+  Storage: TRestStorageInMemory;
+  OrmServer: TRestOrmServer;
+  TableIndex: Integer;
+begin
+  OrmServer := Server.OrmInstance as TRestOrmServer;
+  Storage := TRestStorageInMemory.Create(TOrmCache, OrmServer);
+  TableIndex := OrmServer.Model.GetTableIndexExisting(TOrmCache);
+  OrmServer.StaticTableSetup(TableIndex, Storage, sStaticDataTable);
+end;
+</code></pre>
+<h3>7.6.2. Features and Limitations</h3>
+<table>
+<thead>
+<tr>
+  <th>Feature</th>
+  <th>In-Memory</th>
+  <th>SQLite3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Speed</td>
+  <td>Fastest</td>
+  <td>Fast</td>
+</tr>
+<tr>
+  <td>ACID</td>
+  <td>No</td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td>SQL Joins</td>
+  <td>Limited</td>
+  <td>Full</td>
+</tr>
+<tr>
+  <td>Max Size</td>
+  <td>RAM</td>
+  <td>Disk</td>
+</tr>
+<tr>
+  <td>Persistence</td>
+  <td>Optional (JSON/Binary)</td>
+  <td>Yes</td>
+</tr>
+<tr>
+  <td>Unique Index</td>
+  <td>O(1) hash</td>
+  <td>B-Tree</td>
+</tr>
+</tbody>
+</table>
+<h3>7.6.3. Persistence Options</h3>
+<pre><code class="language-pascal">var
+  Storage: TRestStorageInMemory;
+  Stream: TFileStream;
+  JsonContent: RawUtf8;
+begin
+  Storage := TRestStorageInMemory.Create(TOrmCache, OrmServer);
+
+  // Save to JSON file (via stream)
+  Stream := TFileStream.Create(&#x27;cache.json&#x27;, fmCreate);
+  try
+    Storage.SaveToJson(Stream, True);  // True = expand JSON
+  finally
+    Stream.Free;
+  end;
+
+  // Load from JSON file - LoadFromJson takes RawUtf8, not Stream
+  JsonContent := StringFromFile(&#x27;cache.json&#x27;);
+  Storage.LoadFromJson(JsonContent);
+
+  // Save binary (via stream)
+  Stream := TFileStream.Create(&#x27;cache.data&#x27;, fmCreate);
+  try
+    Storage.SaveToBinary(Stream);
+  finally
+    Stream.Free;
+  end;
+
+  // Load binary (via stream)
+  Stream := TFileStream.Create(&#x27;cache.data&#x27;, fmOpenRead);
+  try
+    Storage.LoadFromBinary(Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+</code></pre>
+<h3>7.6.4. Virtual Table Mode</h3>
+<p>
+Register in-memory as virtual table for SQL access:
+
+</p>
+<pre><code class="language-pascal">// For SQL joins, register as virtual table BEFORE server creation
+Model.VirtualTableRegister(TOrmCache, TOrmVirtualTableJson);
+
+// Then create server - the virtual table will be available
+Server := TRestServerDB.Create(Model, &#x27;main.db3&#x27;);
+</code></pre>
+<hr>
+<h2>7.7. Virtual Tables</h2>
+<h3>7.7.1. Built-in Virtual Table Classes</h3>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Storage</th>
+  <th>Persistence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TOrmVirtualTableJson</code></td>
+  <td>In-memory</td>
+  <td>JSON file</td>
+</tr>
+<tr>
+  <td><code>TOrmVirtualTableBinary</code></td>
+  <td>In-memory</td>
+  <td>Binary file</td>
+</tr>
+<tr>
+  <td><code>TOrmVirtualTableExternal</code></td>
+  <td>External DB</td>
+  <td>Database</td>
+</tr>
+<tr>
+  <td><code>TOrmVirtualTableMongoDB</code></td>
+  <td>MongoDB</td>
+  <td>MongoDB</td>
+</tr>
+</tbody>
+</table>
+<h3>7.7.2. Registering Virtual Tables</h3>
+<pre><code class="language-pascal">// Must register BEFORE creating server
+Model.VirtualTableRegister(TOrmTempData, TOrmVirtualTableJson);
+Model.VirtualTableRegister(TOrmCustomer, TOrmVirtualTableExternal);
+
+// Then create server
+Server := TRestServerDB.Create(Model, &#x27;main.db3&#x27;);
+</code></pre>
+<h3>7.7.3. Custom Virtual Tables</h3>
+<pre><code class="language-pascal">type
+  TMyVirtualTable = class(TOrmVirtualTable)
+  public
+    class function ModuleName: RawUtf8; override;
+    function Prepare(var Prepared: TOrmVirtualTablePrepared): boolean; override;
+    function Search(var Prepared: TOrmVirtualTablePrepared): boolean; override;
+  end;
+</code></pre>
+<hr>
+<h2>7.8. JSON Functions in SQLite3</h2>
+<p>
+mORMot adds JSON manipulation functions to SQLite3:
+
+</p>
+<h3>7.8.1. JsonGet</h3>
+<p>
+Extract values from JSON columns:
+
+</p>
+<pre><code class="language-sql">-- Get property value
+SELECT JsonGet(DataColumn, &#x27;name&#x27;) FROM Table WHERE ID=1;
+
+-- Get nested property
+SELECT JsonGet(DataColumn, &#x27;address.city&#x27;) FROM Table;
+
+-- Get multiple properties
+SELECT JsonGet(DataColumn, &#x27;name,email&#x27;) FROM Table;
+
+-- Wildcard match
+SELECT JsonGet(DataColumn, &#x27;user.*&#x27;) FROM Table;
+</code></pre>
+<h3>7.8.2. JsonHas</h3>
+<p>
+Check property existence:
+
+</p>
+<pre><code class="language-sql">-- Check if property exists
+SELECT * FROM Table WHERE JsonHas(DataColumn, &#x27;premium&#x27;) = 1;
+
+-- Check nested property
+SELECT * FROM Table WHERE JsonHas(DataColumn, &#x27;settings.darkMode&#x27;) = 1;
+</code></pre>
+<hr>
+<h2>7.9. Backup and Recovery</h2>
+<h3>7.9.1. Online Backup</h3>
+<pre><code class="language-pascal">// Hot backup (while server is running)
+Server.DB.BackupBackground(&#x27;backup.db3&#x27;, 100, 10,
+  procedure(Sender: TSqlDatabase; Step: integer)
+  begin
+    WriteLn(&#x27;Backup progress: &#x27;, Step);
+  end);
+</code></pre>
+<h3>7.9.2. Restore</h3>
+<pre><code class="language-pascal">// Stop server, copy backup file, restart
+Server.Free;
+CopyFile(&#x27;backup.db3&#x27;, &#x27;data.db3&#x27;);
+Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+</code></pre>
+<hr>
+<h2>7.10. Performance Tips</h2>
+<h3>7.10.1. General Guidelines</h3>
+<p>
+1. <strong>Use transactions</strong> for bulk operations
+2. <strong>Use batch operations</strong> (<code>TRestBatch</code>) for inserts
+3. <strong>Use prepared statements</strong> (automatic with <code>?</code> parameters)
+4. <strong>Index foreign keys</strong> and frequently queried columns
+5. <strong>Use <code>smOff</code> temporarily</strong> for bulk imports
+6. <strong>Use <code>lmExclusive</code></strong> for single-process applications
+
+</p>
+<h3>7.10.2. Benchmark Reference</h3>
+<p>
+Typical performance on modern hardware (SSD, Core i7):
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Operation</th>
+  <th>In-Memory</th>
+  <th>SQLite3 (File)</th>
+  <th>External PostgreSQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Insert (single)</td>
+  <td>300,000/s</td>
+  <td>500/s</td>
+  <td>5,000/s</td>
+</tr>
+<tr>
+  <td>Insert (batch)</td>
+  <td>500,000/s</td>
+  <td>200,000/s</td>
+  <td>50,000/s</td>
+</tr>
+<tr>
+  <td>Read (by ID)</td>
+  <td>900,000/s</td>
+  <td>130,000/s</td>
+  <td>10,000/s</td>
+</tr>
+<tr>
+  <td>Read (all)</td>
+  <td>900,000/s</td>
+  <td>550,000/s</td>
+  <td>150,000/s</td>
+</tr>
+</tbody>
+</table>
+<em>Note: Actual performance varies based on hardware, network, and data complexity.</em>
+
+</p>
+<hr>
+<h2>7.11. Migration from mORMot 1</h2>
+<h3>7.11.1. Unit Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>SynSQLite3.pas</code></td>
+  <td><code>mormot.db.raw.sqlite3.pas</code></td>
+</tr>
+<tr>
+  <td><code>SynSQLite3Static.pas</code></td>
+  <td><code>mormot.db.raw.sqlite3.static.pas</code></td>
+</tr>
+<tr>
+  <td><code>mORMotSQLite3.pas</code></td>
+  <td><code>mormot.orm.sqlite3.pas</code> + <code>mormot.rest.sqlite3.pas</code></td>
+</tr>
+</tbody>
+</table>
+<h3>7.11.2. Class Renames</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRestServerDB</code></td>
+  <td><code>TRestServerDB</code></td>
+</tr>
+<tr>
+  <td><code>TSQLDatabase</code></td>
+  <td><code>TSqlDatabase</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRecordFTS3</code></td>
+  <td><code>TOrmFTS3</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRecordFTS5</code></td>
+  <td><code>TOrmFTS5</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRecordRTree</code></td>
+  <td><code>TOrmRTree</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestStorageInMemory</code></td>
+  <td><code>TRestStorageInMemory</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>
+<em>Next Chapter: External SQL Database Access</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-06.html">Chapter 6: Daily ORM</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-08.html">Chapter 8: External SQL Database Access</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

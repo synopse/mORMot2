@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 SAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<p>
+﻿# 3. Meet mORMot 2 - Unit Structure
+
+</p>
+<p>
+<em>Enter the new territory</em>
+
+</p>
+<p>
+mORMot 2 represents a complete restructuring of the original framework. The monolithic units (<code>SynCommons.pas</code>, <code>mORMot.pas</code>) have been split into focused, layered units following SOLID principles.
+
+</p>
+<p>
+This chapter introduces the new unit organization and helps you understand which units to include for your specific needs.
+
+</p>
+<hr>
+<h2>3.1. Layered Architecture Overview</h2>
+<p>
+mORMot 2 organizes its ~130 units into 6 dependency layers:
+
+</p>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 5: Application &amp; Tools                                       │
+│  ┌─────┬─────┬────────┬──────┬───────┬─────┐                        │
+│  │ app │ ui  │ script │ misc │ tools │ ddd │                        │
+│  └─────┴─────┴────────┴──────┴───────┴─────┘                        │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 4: ORM / REST / SOA                                          │
+│  ┌─────┬──────┬─────┐                                               │
+│  │ orm │ rest │ soa │                                               │
+│  └─────┴──────┴─────┘                                               │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 3: Database Access                                           │
+│  ┌────┐                                                             │
+│  │ db │                                                             │
+│  └────┘                                                             │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 2: Networking                                                │
+│  ┌─────┐                                                            │
+│  │ net │                                                            │
+│  └─────┘                                                            │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 1: System Libraries &amp; Cryptography                           │
+│  ┌─────┬────────┐                                                   │
+│  │ lib │ crypt  │                                                   │
+│  └─────┴────────┘                                                   │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 0: Foundation (RTL-Only)                                     │
+│  ┌──────┐                                                           │
+│  │ core │  (24 units - no mORMot dependencies)                      │
+│  └──────┘                                                           │
+└─────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<p>
+<strong>Key Principle</strong>: Lower layers never depend on higher ones. This ensures:
+<ul>
+  <li>Incremental compilation</li>
+  <li>Selective deployment</li>
+  <li>Modular testing</li>
+  <li>Clear separation of concerns</li>
+</ul>
+<hr>
+<h2>3.2. Unit Naming Convention</h2>
+<p>
+All units follow a consistent naming pattern:
+
+</p>
+<pre><code class="language-text">mormot.&lt;layer&gt;.&lt;feature&gt;.pas
+</code></pre>
+<p>
+Examples:
+<ul>
+  <li><code>mormot.core.json.pas</code> - Core layer, JSON feature</li>
+  <li><code>mormot.orm.core.pas</code> - ORM layer, core functionality</li>
+  <li><code>mormot.db.sql.postgres.pas</code> - Database layer, PostgreSQL SQL connector</li>
+</ul>
+<h3>Location Rules</h3>
+<p>
+Units are located in folders matching their layer:
+<ul>
+  <li><code>src/core/mormot.core.<em>.pas</code></li>
+  <li><code>src/orm/mormot.orm.</em>.pas</code></li>
+  <li><code>src/db/mormot.db.<em>.pas</code></li>
+  <li>etc.</li>
+</ul>
+<hr>
+<h2>3.3. Layer 0: Core Foundation (mormot.core.</em>)</h2>
+<p>
+<strong>24 units</strong> providing RTL-level functionality with <strong>zero mORMot dependencies</strong>.
+
+</p>
+<h3>Dependency Chain</h3>
+<pre><code class="language-text">mormot.core.base (RTL types, ASM stubs, no dependencies)
+  └─► mormot.core.os (OS abstraction, threading)
+      └─► mormot.core.unicode (charset/encoding)
+          └─► mormot.core.text (text parsing, formatting)
+              └─► mormot.core.datetime (ISO-8601, TTimeLog)
+                  └─► mormot.core.rtti (RTTI wrapper)
+                      └─► mormot.core.buffers (compression, base64)
+                          └─► mormot.core.data (TDynArray, serialization)
+                              └─► mormot.core.json (JSON parsing)
+                                  └─► [higher units: variants, log, etc.]
+</code></pre>
+<h3>Key Core Units</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+  <th>Key Types</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.core.base</code></td>
+  <td>Foundation types, ASM</td>
+  <td><code>RawUtf8</code>, <code>PtrInt</code>, <code>TDynArray</code> basics</td>
+</tr>
+<tr>
+  <td><code>mormot.core.os</code></td>
+  <td>OS abstraction</td>
+  <td><code>TSynLocker</code>, <code>GetTickCount64</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.unicode</code></td>
+  <td>Charset conversion</td>
+  <td><code>Utf8ToWideString</code>, <code>WinAnsiToUtf8</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.text</code></td>
+  <td>Text processing</td>
+  <td><code>FormatUtf8</code>, CSV parsing</td>
+</tr>
+<tr>
+  <td><code>mormot.core.rtti</code></td>
+  <td>RTTI abstraction</td>
+  <td><code>TRttiCustom</code>, <code>PRttiInfo</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.json</code></td>
+  <td>JSON handling</td>
+  <td><code>TJsonWriter</code>, <code>GetJsonField</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.data</code></td>
+  <td>Data structures</td>
+  <td><code>TDynArray</code>, <code>TDynArrayHashed</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.variants</code></td>
+  <td>Dynamic documents</td>
+  <td><code>TDocVariant</code>, <code>IDocDict</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.log</code></td>
+  <td>Logging framework</td>
+  <td><code>TSynLog</code>, <code>ISynLog</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.threads</code></td>
+  <td>Threading utilities</td>
+  <td><code>TSynBackgroundThread</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.test</code></td>
+  <td>Testing framework</td>
+  <td><code>TSynTestCase</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.mustache</code></td>
+  <td>Template engine</td>
+  <td><code>TSynMustache</code></td>
+</tr>
+<tr>
+  <td><code>mormot.core.interfaces</code></td>
+  <td>Interface support</td>
+  <td>DI/IoC container</td>
+</tr>
+</tbody>
+</table>
+<h3>Minimal Core Usage</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,    // Foundation types
+  mormot.core.os,      // OS abstraction
+  mormot.core.text,    // Text utilities
+  mormot.core.json;    // JSON support
+
+var
+  doc: TDocVariantData;
+begin
+  doc.InitJson(&#x27;{&quot;name&quot;:&quot;John&quot;,&quot;age&quot;:30}&#x27;);
+  WriteLn(doc.U[&#x27;name&#x27;]);  // Output: John
+end;
+</code></pre>
+<hr>
+<h2>3.4. Layer 1: Libraries & Cryptography</h2>
+<h3>External Libraries (mormot.lib.<em>)</h3>
+<p>
+<strong>14 units</strong> wrapping external libraries:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>External Library</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.lib.z</code></td>
+  <td>zlib/libdeflate compression</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.openssl11</code></td>
+  <td>OpenSSL 1.1/3.x</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.curl</code></td>
+  <td>libcurl HTTP client</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.sspi</code></td>
+  <td>Windows SSPI (Kerberos)</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.gssapi</code></td>
+  <td>POSIX GSSAPI</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.quickjs</code></td>
+  <td>QuickJS JavaScript engine</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.winhttp</code></td>
+  <td>Windows WinHTTP</td>
+</tr>
+<tr>
+  <td><code>mormot.lib.pkcs11</code></td>
+  <td>Hardware security modules</td>
+</tr>
+</tbody>
+</table>
+<h3>Cryptography (mormot.crypt.</em>)</h3>
+<p>
+<strong>10 units</strong> for cryptographic operations:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.crypt.core</code></td>
+  <td>AES, SHA-2, SHA-3, HMAC, PBKDF2</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.secure</code></td>
+  <td>High-level factories, password hashing</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.ecc</code></td>
+  <td>Elliptic Curve Cryptography</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.ecc256r1</code></td>
+  <td>secp256r1 curve implementation</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.rsa</code></td>
+  <td>RSA encryption/signatures</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.jwt</code></td>
+  <td>JSON Web Tokens</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.x509</code></td>
+  <td>X.509 certificates</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.openssl</code></td>
+  <td>OpenSSL wrapper</td>
+</tr>
+</tbody>
+</table>
+<h3>Cryptography Factory Pattern</h3>
+<pre><code class="language-pascal">uses
+  mormot.crypt.secure;
+
+// High-level factories (recommended)
+var
+  h: TCryptHasher;
+  c: ICryptCipher;
+begin
+  // Hashing - use Hasher() to get TCryptHasher with Full() method
+  h := Hasher(&#x27;sha256&#x27;);
+  digest := h.Full(pointer(data), length(data));
+
+  // Encryption
+  c := Cipher(&#x27;aes-256-ctr&#x27;, @key[1], {encrypt:}true);
+  c.Process(plain, encrypted, &#x27;&#x27;);
+end;
+</code></pre>
+<hr>
+<h2>3.5. Layer 2: Networking (mormot.net.<em>)</h2>
+<p>
+<strong>18 units</strong> for network communication:
+
+</p>
+<h3>Socket & HTTP</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.net.sock</code></td>
+  <td>Cross-platform socket abstraction</td>
+</tr>
+<tr>
+  <td><code>mormot.net.http</code></td>
+  <td>HTTP protocol state machine</td>
+</tr>
+<tr>
+  <td><code>mormot.net.client</code></td>
+  <td>HTTP clients (Socket, WinHTTP, curl)</td>
+</tr>
+<tr>
+  <td><code>mormot.net.server</code></td>
+  <td>HTTP servers (threaded, http.sys)</td>
+</tr>
+<tr>
+  <td><code>mormot.net.async</code></td>
+  <td>Event-driven async I/O</td>
+</tr>
+</tbody>
+</table>
+<h3>WebSockets</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.net.ws.core</code></td>
+  <td>WebSocket protocol core</td>
+</tr>
+<tr>
+  <td><code>mormot.net.ws.client</code></td>
+  <td>WebSocket client</td>
+</tr>
+<tr>
+  <td><code>mormot.net.ws.server</code></td>
+  <td>WebSocket server</td>
+</tr>
+<tr>
+  <td><code>mormot.net.ws.async</code></td>
+  <td>Async WebSocket server</td>
+</tr>
+</tbody>
+</table>
+<h3>Specialized Protocols</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.net.dns</code></td>
+  <td>DNS resolution</td>
+</tr>
+<tr>
+  <td><code>mormot.net.ldap</code></td>
+  <td>LDAP client</td>
+</tr>
+<tr>
+  <td><code>mormot.net.acme</code></td>
+  <td>ACME/Let's Encrypt</td>
+</tr>
+<tr>
+  <td><code>mormot.net.relay</code></td>
+  <td>Firewall traversal</td>
+</tr>
+<tr>
+  <td><code>mormot.net.openapi</code></td>
+  <td>OpenAPI client generator</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>3.6. Layer 3: Database Access (mormot.db.</em>)</h2>
+<p>
+<strong>27 units</strong> for SQL and NoSQL database access:
+
+</p>
+<h3>Core Database</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.db.core</code></td>
+  <td>Shared database types</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql</code></td>
+  <td>Abstract SQL classes</td>
+</tr>
+<tr>
+  <td><code>mormot.db.proxy</code></td>
+  <td>Remote database proxy</td>
+</tr>
+</tbody>
+</table>
+<h3>Raw Database APIs</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Database</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.db.raw.sqlite3</code></td>
+  <td>SQLite3 native API</td>
+</tr>
+<tr>
+  <td><code>mormot.db.raw.postgres</code></td>
+  <td>PostgreSQL API</td>
+</tr>
+<tr>
+  <td><code>mormot.db.raw.oracle</code></td>
+  <td>Oracle OCI</td>
+</tr>
+<tr>
+  <td><code>mormot.db.raw.odbc</code></td>
+  <td>ODBC API</td>
+</tr>
+<tr>
+  <td><code>mormot.db.raw.oledb</code></td>
+  <td>OLE DB API</td>
+</tr>
+</tbody>
+</table>
+<h3>SQL Connectors</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Database</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.db.sql.sqlite3</code></td>
+  <td>SQLite3</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql.postgres</code></td>
+  <td>PostgreSQL</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql.oracle</code></td>
+  <td>Oracle</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql.odbc</code></td>
+  <td>Any ODBC source</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql.oledb</code></td>
+  <td>Any OLE DB source</td>
+</tr>
+<tr>
+  <td><code>mormot.db.sql.zeos</code></td>
+  <td>Via ZDBC (cross-database)</td>
+</tr>
+</tbody>
+</table>
+<h3>NoSQL</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Database</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.db.nosql.bson</code></td>
+  <td>BSON encoding</td>
+</tr>
+<tr>
+  <td><code>mormot.db.nosql.mongodb</code></td>
+  <td>MongoDB client</td>
+</tr>
+</tbody>
+</table>
+<h3>RAD Adapters</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.db.rad.firedac</code></td>
+  <td>FireDAC integration</td>
+</tr>
+<tr>
+  <td><code>mormot.db.rad.unidac</code></td>
+  <td>UniDAC integration</td>
+</tr>
+<tr>
+  <td><code>mormot.db.rad.ui.orm</code></td>
+  <td>ORM-aware TDataSet</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>3.7. Layer 4: ORM / REST / SOA</h2>
+<h3>ORM Layer (mormot.orm.<em>)</h3>
+<p>
+<strong>9 units</strong> for Object-Relational Mapping:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.orm.base</code></td>
+  <td>Low-level ORM types</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.core</code></td>
+  <td>TOrm, TOrmModel, IRestOrm</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.rest</code></td>
+  <td>REST-based ORM base</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.client</code></td>
+  <td>ORM client</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.server</code></td>
+  <td>ORM server</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.storage</code></td>
+  <td>Storage engine abstraction</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.sql</code></td>
+  <td>SQL-based storage</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.sqlite3</code></td>
+  <td>SQLite3 ORM</td>
+</tr>
+<tr>
+  <td><code>mormot.orm.mongodb</code></td>
+  <td>MongoDB ODM</td>
+</tr>
+</tbody>
+</table>
+<h3>REST Layer (mormot.rest.</em>)</h3>
+<p>
+<strong>8 units</strong> for RESTful services:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.rest.core</code></td>
+  <td>TRest base class</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.client</code></td>
+  <td>REST client</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.server</code></td>
+  <td>REST server</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.http.client</code></td>
+  <td>HTTP REST client</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.http.server</code></td>
+  <td>HTTP REST server</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.mvc</code></td>
+  <td>MVC/MVVM support</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.sqlite3</code></td>
+  <td>SQLite3 REST server</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.memserver</code></td>
+  <td>In-memory REST server</td>
+</tr>
+</tbody>
+</table>
+<h3>SOA Layer (mormot.soa.<em>)</h3>
+<p>
+<strong>4 units</strong> for Service-Oriented Architecture:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.soa.core</code></td>
+  <td>Interface-based SOA types</td>
+</tr>
+<tr>
+  <td><code>mormot.soa.client</code></td>
+  <td>Client service stubs</td>
+</tr>
+<tr>
+  <td><code>mormot.soa.server</code></td>
+  <td>Server service implementation</td>
+</tr>
+<tr>
+  <td><code>mormot.soa.codegen</code></td>
+  <td>Service code generation</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>3.8. Layer 5: Application & Tools</h2>
+<h3>Application (mormot.app.</em>)</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.app.console</code></td>
+  <td>Console application support</td>
+</tr>
+<tr>
+  <td><code>mormot.app.daemon</code></td>
+  <td>Daemon/service support</td>
+</tr>
+</tbody>
+</table>
+<h3>UI Components (mormot.ui.<em>)</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.ui.core</code></td>
+  <td>VCL/LCL compatibility</td>
+</tr>
+<tr>
+  <td><code>mormot.ui.controls</code></td>
+  <td>Custom controls</td>
+</tr>
+<tr>
+  <td><code>mormot.ui.grid.orm</code></td>
+  <td>ORM-aware grids</td>
+</tr>
+<tr>
+  <td><code>mormot.ui.report</code></td>
+  <td>Reporting engine</td>
+</tr>
+<tr>
+  <td><code>mormot.ui.pdf</code></td>
+  <td>PDF generation</td>
+</tr>
+</tbody>
+</table>
+<h3>Scripting (mormot.script.</em>)</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.script.quickjs</code></td>
+  <td>QuickJS JavaScript engine</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>3.9. Common Usage Patterns</h2>
+<h3>Minimal HTTP Server with ORM</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.core.os,
+  mormot.orm.core,
+  mormot.orm.sqlite3,
+  mormot.rest.sqlite3,
+  mormot.rest.http.server;
+
+type
+  TOrmPerson = class(TOrm)
+  private
+    fName: RawUtf8;
+    fAge: Integer;
+  published
+    property Name: RawUtf8 read fName write fName;
+    property Age: Integer read fAge write fAge;
+  end;
+
+var
+  Model: TOrmModel;
+  Server: TRestServerDB;
+  HttpServer: TRestHttpServer;
+begin
+  Model := TOrmModel.Create([TOrmPerson]);
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;);
+  Server.Server.CreateMissingTables;
+
+  HttpServer := TRestHttpServer.Create(&#x27;8080&#x27;, [Server], &#x27;+&#x27;, useHttpAsync);
+  try
+    WriteLn(&#x27;Server running...&#x27;);
+    ReadLn;
+  finally
+    HttpServer.Free;
+    Server.Free;
+    Model.Free;
+  end;
+end.
+</code></pre>
+<h3>Interface-Based Service</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.core.interfaces,
+  mormot.soa.core,
+  mormot.soa.server,
+  mormot.rest.server;
+
+type
+  ICalculator = interface(IInvokable)
+    [&#x27;{...GUID...}&#x27;]
+    function Add(A, B: Integer): Integer;
+  end;
+
+  TCalculator = class(TInjectableObjectRest, ICalculator)
+  public
+    function Add(A, B: Integer): Integer;
+  end;
+
+function TCalculator.Add(A, B: Integer): Integer;
+begin
+  Result := A + B;
+end;
+
+// Registration
+Server.ServiceDefine(TCalculator, [ICalculator], sicShared);
+</code></pre>
+<h3>Database-Only (No REST)</h3>
+<pre><code class="language-pascal">uses
+  mormot.core.base,
+  mormot.db.core,
+  mormot.db.sql,
+  mormot.db.sql.postgres;
+
+var
+  Props: TSqlDBPostgresConnectionProperties;
+  Conn: TSqlDBConnection;
+  Stmt: TSqlDBStatement;
+begin
+  Props := TSqlDBPostgresConnectionProperties.Create(
+    &#x27;localhost:5432&#x27;, &#x27;mydb&#x27;, &#x27;user&#x27;, &#x27;pass&#x27;);
+  Conn := Props.ThreadSafeConnection;
+
+  Stmt := Conn.NewStatementPrepared(&#x27;SELECT * FROM users WHERE id=?&#x27;, true);
+  try
+    Stmt.Bind(1, 42);
+    Stmt.ExecutePrepared;
+    while Stmt.Step do
+      WriteLn(Stmt.ColumnUtf8(0));
+  finally
+    Stmt.Free;
+  end;
+end;
+</code></pre>
+<hr>
+<h2>3.10. Migration from mORMot 1</h2>
+<h3>Unit Mapping Summary</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1 Unit</th>
+  <th>mORMot 2 Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>SynCommons.pas</code></td>
+  <td><code>mormot.core.<em></code> (24 units)</td>
+</tr>
+<tr>
+  <td><code>mORMot.pas</code></td>
+  <td><code>mormot.orm.</em></code> + <code>mormot.rest.<em></code></td>
+</tr>
+<tr>
+  <td><code>SynDB</em>.pas</code></td>
+  <td><code>mormot.db.<em></code></td>
+</tr>
+<tr>
+  <td><code>SynCrypto.pas</code></td>
+  <td><code>mormot.crypt.</em></code></td>
+</tr>
+<tr>
+  <td><code>SynCrtSock.pas</code></td>
+  <td><code>mormot.net.<em></code></td>
+</tr>
+<tr>
+  <td><code>SynEcc.pas</code></td>
+  <td><code>mormot.crypt.ecc</em></code></td>
+</tr>
+</tbody>
+</table>
+<h3>Type Mapping Summary</h3>
+<table>
+<thead>
+<tr>
+  <th>mORMot 1</th>
+  <th>mORMot 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TSQLRecord</code></td>
+  <td><code>TOrm</code></td>
+</tr>
+<tr>
+  <td><code>TSQLModel</code></td>
+  <td><code>TOrmModel</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRest</code></td>
+  <td><code>TRest</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestServer</code></td>
+  <td><code>TRestServer</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestClient</code></td>
+  <td><code>TRestClient</code></td>
+</tr>
+<tr>
+  <td><code>TSQLRestServerDB</code></td>
+  <td><code>TRestServerDB</code></td>
+</tr>
+<tr>
+  <td><code>TSQLHttpServer</code></td>
+  <td><code>TRestHttpServer</code></td>
+</tr>
+<tr>
+  <td><code>RawUTF8</code></td>
+  <td><code>RawUtf8</code></td>
+</tr>
+</tbody>
+</table>
+<h3>Backward Compatibility</h3>
+<p>
+By default, mORMot 2 provides type aliases for compatibility:
+<pre><code class="language-pascal">type
+  TSQLRecord = TOrm;
+  TSQLModel = TOrmModel;
+  // etc.
+</code></pre>
+<p>
+Define <code>PUREMORMOT2</code> to disable these and use only new names:
+<pre><code class="language-pascal">{$DEFINE PUREMORMOT2}
+</code></pre>
+<hr>
+<p>
+<em>Next Chapter: Core Units (mormot.core.</em>)*
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-02.html">Chapter 2: Architecture Principles</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-04.html">Chapter 4: Core Units</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

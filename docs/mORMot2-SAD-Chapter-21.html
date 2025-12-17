@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>21. Security</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 0.2em; }
+        code {
+            background-color: #f8f8f8;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1em;
+            overflow-x: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            line-height: 1.1;
+            font-family: "Cascadia Code", "Fira Code", "Source Code Pro", "DejaVu Sans Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+            font-variant-ligatures: none;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            line-height: 1.1;
+            font-family: inherit;
+            letter-spacing: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        th { background-color: #f8f8f8; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+            padding-left: 1em;
+            color: #666;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .toc { background: #f8f8f8; padding: 1em; border-radius: 5px; }
+        .toc ul { list-style: none; padding-left: 1em; }
+        .note { background: #fff3cd; padding: 1em; border-radius: 5px; margin: 1em 0; }
+        .warning { background: #f8d7da; padding: 1em; border-radius: 5px; margin: 1em 0; }
+    </style>
+</head>
+<body>
+<h1>21. Security</h1>
+<p>
+<em>Authentication, Authorization, and Process Safety</em>
+
+</p>
+<p>
+mORMot implements a comprehensive security architecture through three complementary layers: process safety, authentication, and authorization. This chapter covers the security mechanisms built into the framework.
+
+</p>
+<hr>
+<h2>21.1. Security Overview</h2>
+<h3>21.1.1. The Three Pillars</h3>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│                    Security Architecture                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐        │
+│  │ Process       │  │ Authentication│  │ Authorization │        │
+│  │ Safety        │  │ (Who?)        │  │ (What?)       │        │
+│  ├───────────────┤  ├───────────────┤  ├───────────────┤        │
+│  │ • Encryption  │  │ • Sessions    │  │ • Per-table   │        │
+│  │ • ACID DB     │  │ • Signatures  │  │ • Per-service │        │
+│  │ • Stateless   │  │ • SSPI/Kerb   │  │ • Per-method  │        │
+│  │ • Type safety │  │ • JWT         │  │ • Groups      │        │
+│  │ • Testing     │  │ • HTTP Basic  │  │ • Access bits │        │
+│  └───────────────┘  └───────────────┘  └───────────────┘        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>21.1.2. Security Principles</h3>
+<table>
+<thead>
+<tr>
+  <th>Principle</th>
+  <th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Defense in depth</td>
+  <td>Multiple security layers</td>
+</tr>
+<tr>
+  <td>Least privilege</td>
+  <td>Group-based access rights</td>
+</tr>
+<tr>
+  <td>Fail secure</td>
+  <td>Reject by default</td>
+</tr>
+<tr>
+  <td>No security by obscurity</td>
+  <td>Published algorithms</td>
+</tr>
+<tr>
+  <td>Session management</td>
+  <td>Server-side session tracking</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>21.2. Process Safety</h2>
+<h3>21.2.1. Built-in Safety Mechanisms</h3>
+<p>
+mORMot provides process safety at every architectural level:
+
+</p>
+<p>
+<strong>Encryption:</strong>
+<ul>
+  <li>AES-256 encryption for sensitive data</li>
+  <li>HTTPS support for transport security</li>
+  <li>Optional AES encryption over HTTP (deprecated, use TLS)</li>
+</ul>
+<strong>Database Integrity:</strong>
+<ul>
+  <li>SQLite3 ACID transactions</li>
+  <li>Atomic operations</li>
+  <li>Safe concurrent access</li>
+</ul>
+<strong>Stateless Architecture:</strong>
+<ul>
+  <li>Each request is independent</li>
+  <li>Session tokens for state identification</li>
+  <li>No server-side state dependency</li>
+</ul>
+<strong>Type Safety:</strong>
+<ul>
+  <li>Strong Pascal typing</li>
+  <li>ORM type validation</li>
+  <li>JSON schema enforcement</li>
+</ul>
+<hr>
+<h2>21.3. Authentication</h2>
+<h3>21.3.1. Authentication Concepts</h3>
+<p>
+Authentication confirms user identity. mORMot supports multiple authentication schemes:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Scheme</th>
+  <th>Class</th>
+  <th>Security</th>
+  <th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>mORMot Default</td>
+  <td><code>TRestServerAuthenticationDefault</code></td>
+  <td>★★★★</td>
+  <td>Delphi clients</td>
+</tr>
+<tr>
+  <td>SSPI/Kerberos</td>
+  <td><code>TRestServerAuthenticationSspi</code></td>
+  <td>★★★★</td>
+  <td>Windows domain</td>
+</tr>
+<tr>
+  <td>HTTP Basic</td>
+  <td><code>TRestServerAuthenticationHttpBasic</code></td>
+  <td>★★</td>
+  <td>Browser/legacy</td>
+</tr>
+<tr>
+  <td>None</td>
+  <td><code>TRestServerAuthenticationNone</code></td>
+  <td>★</td>
+  <td>Testing only</td>
+</tr>
+<tr>
+  <td>JWT</td>
+  <td>Via <code>JwtForUnauthenticatedRequest</code></td>
+  <td>★★★</td>
+  <td>Public APIs</td>
+</tr>
+</tbody>
+</table>
+<h3>21.3.2. Enabling Authentication</h3>
+<pre><code class="language-pascal">uses
+  mormot.rest.sqlite3,
+  mormot.rest.server;
+
+var
+  Server: TRestServerDB;
+begin
+  // Create server WITH authentication enabled
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;, True);  // aHandleUserAuthentication = True
+  try
+    Server.CreateMissingTables;  // Creates AuthUser/AuthGroup tables
+    // Server now requires authentication
+  finally
+    Server.Free;
+  end;
+end;
+</code></pre>
+<p>
+The <code>True</code> parameter enables:
+<ul>
+  <li><code>TAuthUser</code> and <code>TAuthGroup</code> tables</li>
+  <li>Session management</li>
+  <li>Default authentication schemes</li>
+</ul>
+<h3>21.3.3. Authentication Classes</h3>
+<pre><code class="language-text">TRestServerAuthentication (abstract)
+├── TRestServerAuthenticationSignedUri
+│   ├── TRestServerAuthenticationDefault   → mORMot secure challenge
+│   └── TRestServerAuthenticationSspi      → Windows SSPI/Kerberos │
+├── TRestServerAuthenticationNone          → Weak (username only)
+└── TRestServerAuthenticationHttpAbstract
+    └── TRestServerAuthenticationHttpBasic → HTTP Basic (Base64)
+</code></pre>
+<hr>
+<h2>21.4. Default mORMot Authentication</h2>
+<h3>21.4.1. Challenge-Response Protocol</h3>
+<p>
+The default authentication uses a secure two-pass challenge:
+
+</p>
+<pre><code class="language-text">Client                                    Server
+  │                                         │
+  │  GET /auth?UserName=John               │
+  ├────────────────────────────────────────►│
+  │                                         │
+  │  {&quot;result&quot;:&quot;&lt;hex_nonce&gt;&quot;}              │
+  │◄────────────────────────────────────────┤
+  │                                         │
+  │  GET /auth?UserName=John&amp;              │
+  │      Password=&lt;computed&gt;&amp;              │
+  │      ClientNonce=&lt;random&gt;              │
+  ├────────────────────────────────────────►│
+  │                                         │
+  │  {&quot;result&quot;:&quot;SessionID+PrivateKey&quot;,     │
+  │   &quot;logonname&quot;:&quot;John&quot;}                  │
+  │◄────────────────────────────────────────┤
+  │                                         │
+  │  All requests now include:             │
+  │  ?session_signature=XXXX               │
+  ├────────────────────────────────────────►│
+</code></pre>
+<h3>21.4.2. Password Computation</h3>
+<p>
+The password sent is computed as:
+
+</p>
+<pre><code class="language-text">Password = SHA256(ModelRoot + ServerNonce + ClientNonce + UserName +
+                  SHA256(&#x27;salt&#x27; + PlainPassword))
+</code></pre>
+<p>
+This ensures:
+<ul>
+  <li>Password never transmitted in clear</li>
+  <li>Replay attacks prevented by nonces</li>
+  <li>Server doesn't store plain password</li>
+</ul>
+<h3>21.4.3. Session Signature</h3>
+<p>
+Each authenticated request includes a signature:
+
+</p>
+<pre><code class="language-text">session_signature = Hexa8(SessionID) +
+                   Hexa8(Timestamp) +
+                   Hexa8(CRC32(SessionID + PrivateKey +
+                               SHA256(&#x27;salt&#x27; + Password) +
+                               Timestamp + URL))
+</code></pre>
+<p>
+Example URL:
+<pre><code class="language-text">root/Customer/123?session_signature=0000004C000F6DD02E24541C
+                                    ^^^^^^^^ ^^^^^^^^ ^^^^^^^^
+                                    SessionID Timestamp Signature
+</code></pre>
+<h3>21.4.4. Client Authentication</h3>
+<pre><code class="language-pascal">uses
+  mormot.rest.http.client;
+
+var
+  Client: TRestHttpClientWinHTTP;
+begin
+  Client := TRestHttpClientWinHTTP.Create(&#x27;localhost&#x27;, &#x27;8080&#x27;, Model);
+  try
+    // Authenticate with username/password
+    if not Client.SetUser(&#x27;Admin&#x27;, &#x27;synopse&#x27;) then
+      raise Exception.Create(&#x27;Authentication failed&#x27;);
+
+    // All subsequent requests are signed automatically
+    Client.Orm.Retrieve(ID, Customer);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<h3>21.4.5. Signature Algorithm Options</h3>
+<pre><code class="language-pascal">// Configure signature algorithm (server-side)
+(Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
+  TRestServerAuthenticationSignedUri).Algorithm := suaSHA256;
+</code></pre>
+<p>
+Available algorithms:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Algorithm</th>
+  <th>Speed</th>
+  <th>Security</th>
+  <th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>suaCRC32</code></td>
+  <td>★★★★</td>
+  <td>★★</td>
+  <td>Default, fast</td>
+</tr>
+<tr>
+  <td><code>suaMD5</code></td>
+  <td>★★★</td>
+  <td>★★</td>
+  <td>Legacy</td>
+</tr>
+<tr>
+  <td><code>suaSHA256</code></td>
+  <td>★★</td>
+  <td>★★★★</td>
+  <td>Recommended for high security</td>
+</tr>
+<tr>
+  <td><code>suaSHA512</code></td>
+  <td>★</td>
+  <td>★★★★</td>
+  <td>Highest security</td>
+</tr>
+<tr>
+  <td><code>suaSHA3</code></td>
+  <td>★★</td>
+  <td>★★★★</td>
+  <td>Modern</td>
+</tr>
+</tbody>
+</table>
+<h3>21.4.6. Timestamp Tolerance</h3>
+<pre><code class="language-pascal">// For AJAX clients with network latency
+(Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
+  TRestServerAuthenticationSignedUri).NoTimestampCoherencyCheck := true;
+
+// Or adjust tolerance (default: 5 seconds)
+(Server.AuthenticationRegister(TRestServerAuthenticationDefault) as
+  TRestServerAuthenticationSignedUri).TimestampCoherencySeconds := 10;
+</code></pre>
+<hr>
+<h2>21.5. Windows Authentication (SSPI)</h2>
+<h3>21.5.1. SSPI Overview</h3>
+<p>
+SSPI allows using Windows credentials without entering username/password:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.rest.http.client;
+
+var
+  Client: TRestHttpClientWinHTTP;
+begin
+  Client := TRestHttpClientWinHTTP.Create(&#x27;server&#x27;, &#x27;8080&#x27;, Model);
+  try
+    // Empty username = use Windows credentials
+    Client.SetUser(&#x27;&#x27;, &#x27;&#x27;);  // NTLM authentication
+
+    // Or with Kerberos SPN
+    Client.SetUser(&#x27;&#x27;, &#x27;mymormotservice/myserver.mydomain.tld&#x27;);
+  finally
+    Client.Free;
+  end;
+end;
+</code></pre>
+<h3>21.5.2. Kerberos Setup</h3>
+<p>
+For Kerberos authentication, register an SPN:
+
+</p>
+<pre><code class="language-batch">rem Register SPN for service running under SYSTEM account
+setspn -a mymormotservice/myserver.mydomain.tld myserver
+
+rem Register SPN for service running under domain account
+setspn -a mymormotservice/myserver.mydomain.tld myserviceaccount
+</code></pre>
+<h3>21.5.3. User Mapping</h3>
+<p>
+SSPI-authenticated users must exist in <code>TAuthUser</code>:
+
+</p>
+<pre><code class="language-pascal">// User.LogonName must match &#x27;DOMAIN\Username&#x27;
+User := TAuthUser.Create;
+try
+  User.LogonName := &#x27;MYDOMAIN\JohnDoe&#x27;;
+  User.DisplayName := &#x27;John Doe&#x27;;
+  User.GroupRights := TAuthGroup(AdminGroupID);
+  Server.Orm.Add(User, true);
+finally
+  User.Free;
+end;
+</code></pre>
+<hr>
+<h2>21.6. HTTP Basic Authentication</h2>
+<h3>21.6.1. Browser Compatibility</h3>
+<p>
+For browser clients or legacy systems:
+
+</p>
+<pre><code class="language-pascal">// Server: Register HTTP Basic
+Server.AuthenticationRegister(TRestServerAuthenticationHttpBasic);
+
+// Client: Use HTTP Basic
+TRestServerAuthenticationHttpBasic.ClientSetUser(Client, &#x27;User&#x27;, &#x27;password&#x27;);
+</code></pre>
+<p>
+<strong>Warning:</strong> HTTP Basic sends credentials as Base64 (not encrypted). Always use HTTPS!
+
+</p>
+<h3>21.6.2. Proxy-Only Authentication</h3>
+<p>
+For authentication without creating a mORMot session:
+
+</p>
+<pre><code class="language-pascal">// Client-side only, for proxy authentication
+TRestServerAuthenticationHttpBasic.ClientSetUserHttpOnly(
+  Client, &#x27;proxyUser&#x27;, &#x27;proxyPass&#x27;);
+</code></pre>
+<hr>
+<h2>21.7. JWT Authentication</h2>
+<h3>21.7.1. JWT for Public APIs</h3>
+<p>
+JWT provides stateless authentication for public APIs:
+
+</p>
+<pre><code class="language-pascal">uses
+  mormot.crypt.jwt,
+  mormot.rest.server;
+
+var
+  Server: TRestServerDB;
+  JwtEngine: TJwtHS256;
+begin
+  Server := TRestServerDB.Create(Model, &#x27;data.db3&#x27;, False);  // No session auth
+
+  // Configure JWT validation
+  JwtEngine := TJwtHS256.Create(
+    &#x27;my-secret-key-at-least-32-bytes!&#x27;,  // Secret
+    60000,                                 // Clock tolerance ms
+    [jrcIssuer, jrcExpirationTime],       // Required claims
+    [],                                    // Audience (optional)
+    60                                     // Expiration minutes
+  );
+  Server.JwtForUnauthenticatedRequest := JwtEngine;  // Server owns it
+
+  // Optionally restrict to specific IPs
+  Server.JwtForUnauthenticatedRequestWhiteIP := &#x27;192.168.1.0/24&#x27;;
+end;
+</code></pre>
+<h3>21.7.2. Client JWT Usage</h3>
+<pre><code class="language-pascal">// Obtain JWT from your authentication service
+var Token: RawUtf8 := GetJwtFromAuthService(&#x27;user&#x27;, &#x27;pass&#x27;);
+
+// Set as HTTP header
+Client.SessionHttpHeader := AuthorizationBearer(Token);
+
+// All requests now include: Authorization: Bearer &lt;token&gt;
+</code></pre>
+<h3>21.7.3. JWT Algorithms</h3>
+<table>
+<thead>
+<tr>
+  <th>Class</th>
+  <th>Algorithm</th>
+  <th>Key Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>TJwtHS256</code></td>
+  <td>HMAC-SHA256</td>
+  <td>Symmetric</td>
+</tr>
+<tr>
+  <td><code>TJwtHS384</code></td>
+  <td>HMAC-SHA384</td>
+  <td>Symmetric</td>
+</tr>
+<tr>
+  <td><code>TJwtHS512</code></td>
+  <td>HMAC-SHA512</td>
+  <td>Symmetric</td>
+</tr>
+<tr>
+  <td><code>TJwtES256</code></td>
+  <td>ECDSA P-256</td>
+  <td>Asymmetric</td>
+</tr>
+<tr>
+  <td><code>TJwtRS256</code></td>
+  <td>RSA-SHA256</td>
+  <td>Asymmetric</td>
+</tr>
+<tr>
+  <td><code>TJwtPS256</code></td>
+  <td>RSA-PSS-SHA256</td>
+  <td>Asymmetric</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>21.8. TAuthUser and TAuthGroup</h2>
+<h3>21.8.1. TAuthGroup Structure</h3>
+<pre><code class="language-pascal">TAuthGroup = class(TOrm)
+published
+  property Ident: RawUtf8;           // Group name (&#x27;Admin&#x27;, &#x27;User&#x27;, etc.)
+  property SessionTimeout: integer;   // Session timeout in minutes
+  property AccessRights: RawUtf8;     // CSV-encoded TOrmAccessRights
+end;
+</code></pre>
+<h3>21.8.2. TAuthUser Structure</h3>
+<pre><code class="language-pascal">TAuthUser = class(TOrm)
+published
+  property LogonName: RawUtf8;       // Login identifier
+  property DisplayName: RawUtf8;      // Display name
+  property PasswordHashHexa: RawUtf8; // SHA-256 hash of password
+  property GroupRights: TAuthGroup;   // Associated group
+  property Data: RawBlob;            // Custom application data
+end;
+</code></pre>
+<h3>21.8.3. Default Groups</h3>
+<p>
+When authentication is enabled, these groups are created automatically:
+
+</p>
+<table>
+<thead>
+<tr>
+  <th>Group</th>
+  <th>POST SQL</th>
+  <th>SELECT SQL</th>
+  <th>Auth R</th>
+  <th>Auth W</th>
+  <th>Tables R</th>
+  <th>Tables W</th>
+  <th>Services</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Admin</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>Supervisor</td>
+  <td>✗</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✗</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>User</td>
+  <td>✗</td>
+  <td>✗</td>
+  <td>✗</td>
+  <td>✗</td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
+</tr>
+<tr>
+  <td>Guest</td>
+  <td>✗</td>
+  <td>✗</td>
+  <td>✗</td>
+  <td>✗</td>
+  <td>✓</td>
+  <td>✗</td>
+  <td>✗</td>
+</tr>
+</tbody>
+</table>
+<strong>Important:</strong> Default password for all users is <code>synopse</code>. Change immediately in production!
+
+</p>
+<h3>21.8.4. Creating Custom Users</h3>
+<pre><code class="language-pascal">var
+  User: TAuthUser;
+  Group: TAuthGroup;
+begin
+  // Find or create group
+  Group := TAuthGroup.Create;
+  try
+    if not Server.Orm.Retrieve(&#x27;Ident=?&#x27;, [], [&#x27;CustomGroup&#x27;], Group) then
+    begin
+      Group.Ident := &#x27;CustomGroup&#x27;;
+      Group.SessionTimeout := 30;
+      Group.OrmAccessRights := SUPERVISOR_ACCESS_RIGHTS;
+      Server.Orm.Add(Group, true);
+    end;
+
+    // Create user
+    User := TAuthUser.Create;
+    try
+      User.LogonName := &#x27;newuser&#x27;;
+      User.DisplayName := &#x27;New User&#x27;;
+      User.SetPasswordPlain(&#x27;secure_password&#x27;);
+      User.GroupRights := TAuthGroup(Group.ID);
+      Server.Orm.Add(User, true);
+    finally
+      User.Free;
+    end;
+  finally
+    Group.Free;
+  end;
+end;
+</code></pre>
+<h3>21.8.5. Password Hashing</h3>
+<pre><code class="language-pascal">// Simple SHA-256 (mORMot 1 compatible)
+User.SetPasswordPlain(&#x27;password&#x27;);  // Uses SHA256(&#x27;salt&#x27; + password)
+
+// PBKDF2-HMAC-SHA256 (more secure)
+User.SetPassword(&#x27;password&#x27;, &#x27;unique-salt&#x27;, 10000);  // 10000 rounds
+</code></pre>
+<hr>
+<h2>21.9. Authorization</h2>
+<h3>21.9.1. TOrmAccessRights</h3>
+<p>
+Authorization is controlled by <code>TOrmAccessRights</code>:
+
+</p>
+<pre><code class="language-pascal">TOrmAccessRights = record
+  AllowRemoteExecute: TOrmAllowRemoteExecute;  // SQL/service flags
+  GET: TOrmTableBits;    // Read access per table
+  POST: TOrmTableBits;   // Create access per table
+  PUT: TOrmTableBits;    // Update access per table
+  DELETE: TOrmTableBits; // Delete access per table
+end;
+</code></pre>
+<h3>21.9.2. AllowRemoteExecute Flags</h3>
+<pre><code class="language-pascal">TOrmAllowRemoteExecute = set of (
+  reSQL,                    // Allow POST with SQL statements
+  reSQLSelectWithoutTable,  // Allow complex SELECT (JOINs)
+  reService,                // Allow interface-based services
+  reUrlEncodedSQL,          // Allow SQL in URL parameters
+  reUrlEncodedDelete,       // Allow DELETE with WHERE clause
+  reOneSessionPerUser       // Enforce single session per user
+);
+</code></pre>
+<h3>21.9.3. Predefined Access Rights</h3>
+<pre><code class="language-pascal">const
+  // Full access (use only for local/in-process)
+  FULL_ACCESS_RIGHTS: TOrmAccessRights = (
+    AllowRemoteExecute: [reSQL, reSQLSelectWithoutTable,
+                         reService, reUrlEncodedSQL,
+                         reUrlEncodedDelete];
+    GET: ALL_ACCESS_RIGHTS;
+    POST: ALL_ACCESS_RIGHTS;
+    PUT: ALL_ACCESS_RIGHTS;
+    DELETE: ALL_ACCESS_RIGHTS;
+  );
+
+  // Admin access (remote, with SQL)
+  ADMIN_ACCESS_RIGHTS: TOrmAccessRights = (
+    AllowRemoteExecute: [reSQL, reSQLSelectWithoutTable, reService];
+    // ...
+  );
+
+  // Supervisor access (remote, SELECT only)
+  SUPERVISOR_ACCESS_RIGHTS: TOrmAccessRights = (
+    AllowRemoteExecute: [reSQLSelectWithoutTable, reService];
+    // ...
+  );
+</code></pre>
+<h3>21.9.4. Per-Table Access Control</h3>
+<pre><code class="language-pascal">var
+  Rights: TOrmAccessRights;
+begin
+  // Start with no access
+  FillChar(Rights, SizeOf(Rights), 0);
+  Rights.AllowRemoteExecute := [reService];
+
+  // Grant full CRUD on Customer table
+  Rights.Edit(Model, TCustomer, True, True, True, True);  // C, R, U, D
+
+  // Grant read-only on Order table
+  Rights.Edit(Model, TOrder, False, True, False, False);  // R only
+
+  // Apply to group
+  Group.OrmAccessRights := Rights;
+end;
+</code></pre>
+<h3>21.9.5. Service Authorization</h3>
+<p>
+For interface-based services:
+
+</p>
+<pre><code class="language-pascal">// Disable authentication for specific service
+Server.ServiceDefine(TMyPublicService, [IMyPublicService], sicShared)
+      .ByPassAuthentication := True;
+
+// Or restrict to specific groups
+Server.ServiceDefine(TMyAdminService, [IMyAdminService], sicShared)
+      .AllowedGroups := [1];  // Group ID 1 only (Admin)
+</code></pre>
+<p>
+For method-based services:
+
+</p>
+<pre><code class="language-pascal">// Bypass authentication for specific method
+Server.ServiceMethodByPassAuthentication(&#x27;Timestamp&#x27;);
+Server.ServiceMethodByPassAuthentication(&#x27;Auth&#x27;);
+</code></pre>
+<hr>
+<h2>21.10. Session Management</h2>
+<h3>21.10.1. Session Storage</h3>
+<p>
+Sessions are stored in-memory as <code>TAuthSession</code> instances:
+
+</p>
+<pre><code class="language-pascal">TAuthSession = class(TSynPersistent)
+  property ID: cardinal;              // Session identifier
+  property User: TAuthUser;           // Associated user (loaded)
+  property TimeOutTix: cardinal;      // Expiration tick
+  property RemoteIP: RawUtf8;         // Client IP address
+  property ConnectionID: TRestConnectionID;
+end;
+</code></pre>
+<h3>21.10.2. Session Lifecycle</h3>
+<pre><code class="language-text">┌──────────────────────────────────────────────────────────────┐
+│                    Session Lifecycle                          │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Client.SetUser()  ──► Auth Request ──► Session Created       │
+│         │                                    │                │
+│         │                                    ▼                │
+│         │                            ┌─────────────┐          │
+│         │                            │ In-Memory   │          │
+│         │                            │ TAuthSession│          │
+│         │                            └─────────────┘          │
+│         │                                    │                │
+│         │                          ┌─────────┴─────────┐      │
+│         │                          ▼                   ▼      │
+│         │                    Session Timeout    Explicit Close│
+│         │                          │                   │      │
+│         │                          └─────────┬─────────┘      │
+│         │                                    ▼                │
+│         │                            Session Destroyed        │
+│         │                                                     │
+└──────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>21.10.3. Session Timeout</h3>
+<p>
+Configure via <code>TAuthGroup.SessionTimeout</code>:
+
+</p>
+<pre><code class="language-pascal">// Set 30-minute timeout for a group
+Group.SessionTimeout := 30;
+Server.Orm.Update(Group);
+</code></pre>
+<h3>21.10.4. Session Persistence</h3>
+<p>
+Sessions can be persisted for server restarts:
+
+</p>
+<pre><code class="language-pascal">// Save sessions before shutdown
+Server.Shutdown(&#x27;sessions.bin&#x27;);
+
+// Restore sessions after restart
+Server.SessionsLoadFromFile(&#x27;sessions.bin&#x27;);
+</code></pre>
+<p>
+<strong>Note:</strong> This works for ORM sessions only, not SOA with stateful services.
+
+</p>
+<h3>21.10.5. Accessing Session Information</h3>
+<pre><code class="language-pascal">// Server-side: Get current session user
+var
+  User: TAuthUser;
+begin
+  User := Server.SessionGetUser(Ctxt.SessionID);
+  if User &lt;&gt; nil then
+    Log(&#x27;Request from: %s&#x27;, [User.DisplayName]);
+end;
+
+// In service implementation
+procedure TMyService.DoSomething;
+var
+  Ctxt: TRestServerUriContext;
+begin
+  Ctxt := ServiceRunningContext;
+  if Ctxt &lt;&gt; nil then
+    Log(&#x27;Session ID: %d, User: %s&#x27;,
+        [Ctxt.SessionID, Ctxt.SessionUser.LogonName]);
+end;
+</code></pre>
+<hr>
+<h2>21.11. Security Best Practices</h2>
+<h3>21.11.1. Transport Security</h3>
+<pre><code class="language-pascal">// Always use HTTPS in production
+HttpServer := TRestHttpServer.Create(
+  &#x27;443&#x27;,
+  [Server],
+  &#x27;+&#x27;,
+  useHttpAsync,
+  secTLS           // Enable TLS
+);
+
+// Configure certificate
+HttpServer.TLS.CertificateFile := &#x27;server.crt&#x27;;
+HttpServer.TLS.PrivateKeyFile := &#x27;server.key&#x27;;
+</code></pre>
+<h3>21.11.2. Password Management</h3>
+<pre><code class="language-pascal">// ❌ Never store plain passwords
+User.PasswordHashHexa := &#x27;plaintext&#x27;;
+
+// ✓ Always hash passwords
+User.SetPasswordPlain(&#x27;password&#x27;);  // SHA-256
+
+// ✓ Or use PBKDF2 for better security
+User.SetPassword(&#x27;password&#x27;, RandomString(16), 10000);
+</code></pre>
+<h3>21.11.3. SQL Injection Prevention</h3>
+<pre><code class="language-pascal">// ❌ Dangerous: SQL injection possible
+Server.Orm.ExecuteFmt(&#x27;SELECT * FROM Customer WHERE Name = &#x27;&#x27;%s&#x27;&#x27;&#x27;, [UserInput]);
+
+// ✓ Safe: Use parameterized queries
+Server.Orm.Retrieve(&#x27;Name = ?&#x27;, [], [UserInput], Customer);
+</code></pre>
+<h3>21.11.4. Principle of Least Privilege</h3>
+<pre><code class="language-pascal">// ❌ Don&#x27;t give all users admin rights
+User.GroupRights := TAuthGroup(AdminGroupID);
+
+// ✓ Create specific groups with minimal rights
+User.GroupRights := TAuthGroup(ReadOnlyGroupID);
+</code></pre>
+<h3>21.11.5. Audit Logging</h3>
+<pre><code class="language-pascal">// Enable detailed logging
+Server.OnAfterUri := procedure(Ctxt: TRestServerUriContext)
+begin
+  if Ctxt.SessionUser &lt;&gt; nil then
+    Log(&#x27;%s: %s %s from %s&#x27;, [
+      DateTimeToIso8601(Now, True),
+      Ctxt.SessionUser.LogonName,
+      Ctxt.Uri,
+      Ctxt.RemoteIP
+    ]);
+end;
+</code></pre>
+<hr>
+<h2>21.12. Custom Authentication</h2>
+<h3>21.12.1. Creating Custom Scheme</h3>
+<pre><code class="language-pascal">type
+  TRestServerAuthenticationCustom = class(TRestServerAuthentication)
+  public
+    function Auth(Ctxt: TRestServerUriContext;
+      const aUserName: RawUtf8): boolean; override;
+    function RetrieveSession(
+      Ctxt: TRestServerUriContext): TAuthSession; override;
+  end;
+
+function TRestServerAuthenticationCustom.Auth(
+  Ctxt: TRestServerUriContext;
+  const aUserName: RawUtf8): boolean;
+var
+  User: TAuthUser;
+  Token: RawUtf8;
+begin
+  Result := False;
+  Token := Ctxt.InputUtf8[&#x27;token&#x27;];
+
+  // Validate token with your external service
+  if not ValidateExternalToken(Token, aUserName) then
+    Exit;
+
+  // Create session
+  User := GetUser(Ctxt, aUserName);
+  if User &lt;&gt; nil then
+  begin
+    SessionCreate(Ctxt, User);
+    Result := True;
+  end;
+end;
+</code></pre>
+<h3>21.12.2. Registering Custom Scheme</h3>
+<pre><code class="language-pascal">Server.AuthenticationRegister(TRestServerAuthenticationCustom);
+</code></pre>
+<h3>21.12.3. Custom User Retrieval</h3>
+<pre><code class="language-pascal">// Override user retrieval from external source
+Server.OnAuthenticationUserRetrieve :=
+  function(Sender: TRestServerAuthentication;
+           Ctxt: TRestServerUriContext;
+           const aUserName: RawUtf8): TAuthUser;
+  begin
+    Result := TAuthUser.Create;
+    Result.LogonName := aUserName;
+    Result.ID := GetUserIdFromLDAP(aUserName);
+    Result.GroupRights := TAuthGroup(GetGroupFromLDAP(aUserName));
+  end;
+</code></pre>
+<hr>
+<h2>21.13. Summary</h2>
+<h3>21.13.1. Authentication Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Need</th>
+  <th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Delphi clients</td>
+  <td><code>TRestServerAuthenticationDefault</code></td>
+</tr>
+<tr>
+  <td>Windows domain</td>
+  <td><code>TRestServerAuthenticationSspi</code></td>
+</tr>
+<tr>
+  <td>Browser/REST API</td>
+  <td><code>TRestServerAuthenticationHttpBasic</code> + HTTPS</td>
+</tr>
+<tr>
+  <td>Public stateless API</td>
+  <td>JWT via <code>JwtForUnauthenticatedRequest</code></td>
+</tr>
+<tr>
+  <td>Development/testing</td>
+  <td><code>TRestServerAuthenticationNone</code></td>
+</tr>
+</tbody>
+</table>
+<h3>21.13.2. Authorization Quick Reference</h3>
+<table>
+<thead>
+<tr>
+  <th>Need</th>
+  <th>Property</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Per-table CRUD</td>
+  <td><code>TOrmAccessRights.GET/POST/PUT/DELETE</code></td>
+</tr>
+<tr>
+  <td>SQL execution</td>
+  <td><code>AllowRemoteExecute</code> flags</td>
+</tr>
+<tr>
+  <td>Service access</td>
+  <td><code>ByPassAuthentication</code>, <code>AllowedGroups</code></td>
+</tr>
+<tr>
+  <td>Group management</td>
+  <td><code>TAuthGroup.AccessRights</code></td>
+</tr>
+</tbody>
+</table>
+<h3>21.13.3. Key Units</h3>
+<table>
+<thead>
+<tr>
+  <th>Unit</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>mormot.rest.server</code></td>
+  <td>Authentication classes, sessions</td>
+</tr>
+<tr>
+  <td><code>mormot.rest.core</code></td>
+  <td><code>TAuthUser</code>, <code>TAuthGroup</code></td>
+</tr>
+<tr>
+  <td><code>mormot.orm.core</code></td>
+  <td><code>TOrmAccessRights</code></td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.jwt</code></td>
+  <td>JWT classes</td>
+</tr>
+<tr>
+  <td><code>mormot.crypt.secure</code></td>
+  <td>Cryptographic primitives</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p>
+<em>Next: Chapter 22 covers the Scripting Engine (if applicable to your mORMot2 version).</em>
+
+</p>
+<hr>
+<h2>Navigation</h2>
+<table>
+<thead>
+<tr>
+  <th>Previous</th>
+  <th>Index</th>
+  <th>Next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><a href="mORMot2-SAD-Chapter-20.html">Chapter 20: Hosting and Deployment</a></td>
+  <td><a href="mORMot2-SAD-Index.html">Index</a></td>
+  <td><a href="mORMot2-SAD-Chapter-22.html">Chapter 22: Scripting Engine</a></td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>
