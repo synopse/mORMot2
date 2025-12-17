@@ -88,6 +88,9 @@ _FOSSIL_
 
 backup/
 .idea/
+.noindex
 
 # Claude Code local settings
 .claude/
+/DOCS/_working/
+/DOCS/PLAN-*.md
