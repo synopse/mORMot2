@@ -109,6 +109,11 @@ cd _working
 python3 md_to_html.py
 ```
 
+## Contributors
+
+**Documentation Conversion & CLAUDE.md files**
+  - Javier Tarí Agulló - First version of CLAUDE.md files and mORMot documentation conversion to mORMot2 (2025)
+
 ## License
 
 **Synopse mORMot 2 Framework Documentation**
