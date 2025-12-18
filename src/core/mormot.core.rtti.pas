@@ -8137,12 +8137,12 @@ begin
   end
   else if Value.Kind = rkDynArray then
   begin
-    a := nil;
+    a := nil; // need a local fake dynamic array variable for getter methods
     try
       a := Prop^.GetDynArrayPropGetter(Data);
       Value.ValueToVariant(@a, Dest, Options); // will create a TDocVariant
     finally
-      FastDynArrayClear(@a, Value.ArrayRtti.Info);
+      FastDynArrayClear(@a, Value.ArrayRtti.Info); // release the fake array
     end;
   end;
 end;
