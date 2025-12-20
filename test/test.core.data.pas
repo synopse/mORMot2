@@ -2057,6 +2057,14 @@ var
     CheckEqual(agg.abArr[1].a, '3');
     CheckEqual(agg.abArr[1].b, 7);
     Finalize(agg);
+    U := 'c;b;a'#13#10'5;1;"2;3"'#13#10'6;7;3'#13#10;
+    Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs), nil, ';'));
+    CheckEqual(length(agg.abArr), 2);
+    CheckEqual(agg.abArr[0].a, '2;3');
+    CheckEqual(agg.abArr[0].b, 1);
+    CheckEqual(agg.abArr[1].a, '3');
+    CheckEqual(agg.abArr[1].b, 7);
+    Finalize(agg);
     CheckEqual(length(agg.abArr), 0);
     U := 'b'#13#10'1'#13#10'2'#13#10#13#10;
     Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
