@@ -526,14 +526,15 @@ const
 // (case-insensitive), not necessary in the same exact order than in the record;
 // any unknown header name within the RTTI fields will just be ignored
 // - following CSV lines will be read and parsed into the dynamic array records
-// - you can optionally intern all RawUtf8 values to reduce memory consumption
+// - you can optionally intern all RawUtf8 values to reduce memory consumption,
+// or change the value separator from comma to another character - e.g. ';'
 function TDynArrayLoadCsv(var Value: TDynArray; Csv: PUtf8Char;
-  Intern: TRawUtf8Interning = nil): boolean;
+  Intern: TRawUtf8Interning = nil; CommaSep: AnsiChar = ','): boolean;
 
 /// parse a CSV UTF-8 string into a dynamic array of records using its RTTI fields
 // - just a wrapper around DynArrayLoadCsv() with a temporary TDynArray
 function DynArrayLoadCsv(var Value; const Csv: RawUtf8; TypeInfo: PRttiInfo;
-  Intern: TRawUtf8Interning = nil): boolean;
+  Intern: TRawUtf8Interning = nil; CommaSep: AnsiChar = ','): boolean;
 
 
 { ****************** Versatile Expression Search Engine }
@@ -3959,7 +3960,7 @@ end;
 { ******************  Efficient CSV Parsing using RTTI }
 
 function TDynArrayLoadCsv(var Value: TDynArray; Csv: PUtf8Char;
-  Intern: TRawUtf8Interning): boolean;
+  Intern: TRawUtf8Interning; CommaSep: AnsiChar): boolean;
 var
   rt: TRttiCustom;
   pr: PRttiCustomProp;
@@ -3987,7 +3988,7 @@ begin
     exit; // no data
   while p <> nil do
   begin
-    GetNextItem(p, ',', '"', s);
+    GetNextItem(p, CommaSep, '"', s);
     if s = '' then
       exit; // we don't support void headers
     if mapcount = length(map) then
@@ -4020,7 +4021,7 @@ begin
       Csv := v;
       if v^ = '"' then
         v := GotoEndOfQuotedString(v); // special handling of double quotes
-      while (v^ <> ',') and
+      while (v^ <> CommaSep) and
             (v^ > #13) do
         inc(v);
       if mcount <> 0 then
@@ -4040,7 +4041,7 @@ begin
         inc(m);
         dec(mcount);
       end;
-      if v^ <> ',' then
+      if v^ <> CommaSep then
         break;
       inc(v);
     until v^ in [#0, #10, #13];
@@ -4057,12 +4058,12 @@ begin
 end;
 
 function DynArrayLoadCsv(var Value; const Csv: RawUtf8; TypeInfo: PRttiInfo;
-  Intern: TRawUtf8Interning): boolean;
+  Intern: TRawUtf8Interning; CommaSep: AnsiChar): boolean;
 var
   da: TDynArray;
 begin
   da.Init(TypeInfo, Value);
-  result := TDynArrayLoadCsv(da, pointer(CSV), Intern);
+  result := TDynArrayLoadCsv(da, pointer(CSV), Intern, CommaSep);
 end;
 
 
