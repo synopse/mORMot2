@@ -181,6 +181,20 @@ type
 { ******************** TQuickJSVariant Custom Variant Type for Late-Binding }
 
 type
+  /// storage for TQuickJSVariant custom variant type
+  // - will store a reference to a JavaScript object for late-binding access
+  TQuickJSVariantData = packed record
+    /// the custom variant type registered number - match TVarData.VType
+    VType: TVarType;
+    VFiller: array[0..SizeOf(TVarData) - SizeOf(TVarType)
+      - SizeOf(TQuickJSEngine) - SizeOf(JSValue) - 1] of byte;
+    /// the associated QuickJS engine
+    Engine: TQuickJSEngine;
+    /// the JavaScript object value (duplicated/rooted for GC protection)
+    Obj: JSValue;
+  end;
+  PQuickJSVariantData = ^TQuickJSVariantData;
+
   /// custom variant type for late-binding JavaScript object access
   // - allows Pascal code to access JS object properties using variant syntax
   // - example: jsObj.propName or jsObj.method(arg1, arg2)
@@ -466,91 +480,81 @@ end;
 
 { TQuickJSVariant }
 
-constructor TQuickJSVariant.Create;
-begin
-  inherited Create;
-end;
-
 procedure TQuickJSVariant.Clear(var V: TVarData);
 var
-  data: PQuickJSVariantData;
+  data: TQuickJSVariantData absolute V;
 begin
-  data := PQuickJSVariantData(@V);
-  if (data^.VEngine <> nil) and not data^.VObj.IsUninitialized then
-    data^.VEngine.fCx.FreeInlined(data^.VObj);
+  if (cardinal(data.VType) = cardinal(QuickJSVariantType.VarType)) and
+     (data.Engine <> nil) and
+     not data.Obj.IsUninitialized then
+    data.Engine.fCx.FreeInlined(data.Obj);
   V.VType := varEmpty;
 end;
 
 procedure TQuickJSVariant.Copy(var Dest: TVarData; const Source: TVarData;
   const Indirect: boolean);
 var
-  src: PQuickJSVariantData;
-  dst: PQuickJSVariantData;
+  src: TQuickJSVariantData absolute Source;
+  dst: TQuickJSVariantData absolute Dest;
 begin
-  if Indirect and VarDataIsByRef(Source) then
+  if Indirect and
+     VarDataIsByRef(Source) then
     SetVariantByRef(variant(Source), variant(Dest))
   else
   begin
     VarClear(variant(Dest));
-    src := PQuickJSVariantData(@Source);
-    dst := PQuickJSVariantData(@Dest);
-    dst^.VType := VarType;
-    dst^.VEngine := src^.VEngine;
-    // Duplicate the JSValue to protect from GC
-    if (src^.VEngine <> nil) and not src^.VObj.IsUninitialized then
-      dst^.VObj := src^.VObj.Duplicate
+    dst.VType := VarType;
+    dst.Engine := src.Engine;
+    if (src.Engine <> nil) and
+       not src.Obj.IsUninitialized then
+      dst.Obj := src.Obj.Duplicate // Duplicate the JSValue to protect from GC
     else
-      dst^.VObj := src^.VObj;
+      dst.Obj := src.Obj;
   end;
 end;
 
-class procedure TQuickJSVariant.New(aEngine: TQuickJSEngine; aObj: JSValue;
+class procedure TQuickJSVariant.New(aEngine: TQuickJSEngine; const aObj: JSValue;
   out Result: variant);
 var
-  data: PQuickJSVariantData;
+  data: TQuickJSVariantData absolute Result;
 begin
   VarClear(Result);
-  data := PQuickJSVariantData(@Result);
-  data^.VType := QuickJSVariantType.VarType;
-  data^.VEngine := aEngine;
-  // Duplicate to protect from GC
-  data^.VObj := aObj.Duplicate;
+  data.VType := QuickJSVariantType.VarType;
+  data.Engine := aEngine;
+  data.Obj := aObj.Duplicate; // Duplicate to protect from GC
 end;
 
 function TQuickJSVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
   Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean;
 var
-  data: PQuickJSVariantData;
+  data: TQuickJSVariantData absolute Instance;
   propName: RawUtf8;
   val: JSValue;
   res: variant;
 begin
-  data := PQuickJSVariantData(@Instance);
-  if (data^.VEngine = nil) or data^.VObj.IsUninitialized then
-  begin
-    result := false;
+  result := false;
+  if (cardinal(data.VType) <> cardinal(QuickJSVariantType.VarType)) or
+     (data.Engine = nil) or
+     data.Obj.IsUninitialized then
     exit;
-  end;
   FastSetString(propName, Name, NameLen);
-  val := JSValue(JS_GetPropertyStr(data^.VEngine.fCx, data^.VObj.Raw,
-    pointer(propName)));
+  val := JSValue(JS_GetPropertyStr(data.Engine.fCx, data.Obj.Raw, pointer(propName)));
   if val.IsException then
   begin
-    data^.VEngine.fCx.FreeInlined(val);
-    result := false;
+    data.Engine.fCx.FreeInlined(val);
     exit;
   end;
   // If the result is an object, wrap it in a TQuickJSVariant
   if val.IsObject then
   begin
-    TQuickJSVariant.New(data^.VEngine, val, res);
-    data^.VEngine.fCx.FreeInlined(val); // New duplicates it
+    TQuickJSVariant.New(data.Engine, val, res);
+    data.Engine.fCx.FreeInlined(val); // New duplicates it
     TVarData(Dest) := TVarData(res);
     TVarData(res).VType := varEmpty; // prevent double-free
   end
   else
   begin
-    if not data^.VEngine.fCx.ToVariantFree(val, res) then
+    if not data.Engine.fCx.ToVariantFree(val, res) then
       VarClear(res);
     TVarData(Dest) := TVarData(res);
     TVarData(res).VType := varEmpty;
@@ -561,78 +565,77 @@ end;
 function TQuickJSVariant.IntSet(const Instance, Value: TVarData;
   Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
-  data: PQuickJSVariantData;
+  data: TQuickJSVariantData absolute Instance;
   propName: RawUtf8;
   val: JSValue;
 begin
-  data := PQuickJSVariantData(@Instance);
-  if (data^.VEngine = nil) or data^.VObj.IsUninitialized then
-  begin
-    result := false;
+  result := false;
+  if (cardinal(data.VType) <> cardinal(QuickJSVariantType.VarType)) or
+     (data.Engine = nil) or
+     data.Obj.IsUninitialized then
     exit;
-  end;
-  FastSetString(propName, Name, NameLen);
-  data^.VEngine.fCx.FromVariant(variant(Value), val);
-  result := JS_SetPropertyStr(data^.VEngine.fCx, data^.VObj.Raw,
+  FastSetString(propName, Name, NameLen); // need a local #0 ended copy
+  data.Engine.fCx.FromVariant(variant(Value), val);
+  result := JS_SetPropertyStr(data.Engine.fCx, data.Obj.Raw,
     pointer(propName), JSValueRaw(val)) >= 0;
 end;
 
 function TQuickJSVariant.DoFunction(var Dest: TVarData; const V: TVarData;
   const Name: string; const Arguments: TVarDataArray): boolean;
 var
-  data: PQuickJSVariantData;
+  data: TQuickJSVariantData absolute V;
   funcName: RawUtf8;
   funcObj, resVal: JSValue;
   jsArgs: array of JSValue;
   i, n: PtrInt;
-  res: variant;
+  res: TSynVarData;
 begin
+  // Ensure supplied V is a QuickJSVariant
   result := false;
-  data := PQuickJSVariantData(@V);
-  if (data^.VEngine = nil) or data^.VObj.IsUninitialized then
+  if (cardinal(data.VType) <> cardinal(QuickJSVariantType.VarType)) or
+     (data.Engine = nil) or
+     data.Obj.IsUninitialized then
     exit;
   // Get the function object
   StringToUtf8(Name, funcName);
-  funcObj := JSValue(JS_GetPropertyStr(data^.VEngine.fCx, data^.VObj.Raw,
+  funcObj := JSValue(JS_GetPropertyStr(data.Engine.fCx, data.Obj.Raw,
     pointer(funcName)));
-  if funcObj.IsException or funcObj.IsUndefined then
+  if funcObj.IsException or
+     funcObj.IsUndefined then
   begin
-    data^.VEngine.fCx.FreeInlined(funcObj);
+    data.Engine.fCx.FreeInlined(funcObj);
     exit;
   end;
   // Convert arguments to JSValues
   n := length(Arguments);
   SetLength(jsArgs, n);
   for i := 0 to n - 1 do
-    data^.VEngine.fCx.FromVariant(variant(Arguments[i]), jsArgs[i]);
+    data.Engine.fCx.FromVariant(variant(Arguments[i]), jsArgs[i]);
   try
     // Call the function
-    resVal := JSValue(JS_Call(data^.VEngine.fCx, funcObj.Raw, data^.VObj.Raw,
+    resVal := JSValue(JS_Call(data.Engine.fCx, funcObj.Raw, data.Obj.Raw,
       n, pointer(jsArgs)));
     // Convert result
     if resVal.IsException then
     begin
-      data^.VEngine.fCx.FreeInlined(resVal);
+      data.Engine.fCx.FreeInlined(resVal);
       exit;
     end;
+    res.VType := varEmpty;
     if resVal.IsObject then
     begin
-      TQuickJSVariant.New(data^.VEngine, resVal, res);
-      data^.VEngine.fCx.FreeInlined(resVal);
+      TQuickJSVariant.New(data.Engine, resVal, PVariant(@res)^);
+      data.Engine.fCx.FreeInlined(resVal);
     end
-    else
-    begin
-      if not data^.VEngine.fCx.ToVariantFree(resVal, res) then
-        VarClear(res);
-    end;
-    TVarData(Dest) := TVarData(res);
-    TVarData(res).VType := varEmpty;
+    else if not data.Engine.fCx.ToVariantFree(resVal, PVariant(@res)^) then
+      VarClear(PVariant(@res)^);
+    Dest := res.Data;
     result := true;
   finally
     // Free argument JSValues and function object
     for i := 0 to n - 1 do
-      data^.VEngine.fCx.FreeInlined(jsArgs[i]);
-    data^.VEngine.fCx.FreeInlined(funcObj);
+      data.Engine.fCx.FreeInlined(jsArgs[i]);
+    data.Engine.fCx.FreeInlined(funcObj);
   end;
 end;
 
