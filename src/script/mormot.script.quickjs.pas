@@ -130,13 +130,13 @@ type
     fLastErrorFileName: RawUtf8;
     fLastErrorLine: integer;
     fErrorExist: boolean;
-    fMethods: TQuickJSMethodInfoDynArray;
-    fMethodCount: integer;
-    fGlobal: variant;
-    fTimeoutValue: double;
     fTimeoutAborted: boolean;
-    fTimeoutStartTick: Int64;
-    procedure SetTimeoutValue(const Value: double);
+    fMethods: TQuickJSMethodVariantDynArray;
+    fMethodCount: integer;
+    fTimeoutValue: cardinal;
+    fTimeoutStartTickSec: cardinal;
+    fLastGCTickSec: cardinal;
+    fGlobal: variant;
     /// clear last error state
     procedure ClearLastError;
   public
@@ -196,8 +196,8 @@ type
     property Global: variant
       read fGlobal;
     /// timeout value in seconds for script execution (0 = no timeout)
-    property TimeoutValue: double
-      read fTimeoutValue write SetTimeoutValue;
+    property TimeoutValue: cardinal
+      read fTimeoutValue write fTimeoutValue;
     /// TRUE if timeout was triggered during last execution
     property TimeoutAborted: boolean
       read fTimeoutAborted;
@@ -245,20 +245,15 @@ implementation
 // Interrupt handler for timeout control
 function QuickJSInterruptHandler(rt: JSRuntime; opaque: pointer): integer; cdecl;
 var
-  engine: TQuickJSEngine;
-  elapsed: Int64;
+  engine: TQuickJSEngine absolute opaque;
 begin
   result := 0;  // 0 = continue execution
-  engine := TQuickJSEngine(opaque);
-  if (engine <> nil) and (engine.fTimeoutValue > 0) then
-  begin
-    elapsed := GetTickCount64 - engine.fTimeoutStartTick;
-    if elapsed >= Int64(Trunc(engine.fTimeoutValue * 1000)) then
-    begin
-      engine.fTimeoutAborted := true;
-      result := 1;  // non-zero = abort execution
-    end;
-  end;
+  if (engine = nil) or
+     (engine.fTimeoutValue = 0) or
+     (GetTickSec - engine.fTimeoutStartTickSec <= engine.fTimeoutValue) then
+    exit;
+  engine.fTimeoutAborted := true;
+  result := 1;  // non-zero = abort execution
 end;
 
 // Native function callback wrapper for RegisterMethod
