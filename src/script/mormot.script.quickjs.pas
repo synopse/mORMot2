@@ -322,6 +322,7 @@ begin
   fLastErrorFileName := '';
   fLastErrorLine := 0;
   fErrorExist := false;
+  fTimeoutAborted := false;
 end;
 
 function TQuickJSEngine.Evaluate(const Script, ScriptName: RawUtf8): variant;
@@ -330,7 +331,6 @@ var
 begin
   ClearLastError;
   // Reset timeout tracking
-  fTimeoutAborted := false;
   if fTimeoutValue <> 0 then
     fTimeoutStartTickSec := GetTickSec;
   // Execute the supplied Script
@@ -338,6 +338,7 @@ begin
   if res.IsException then
   begin
     fErrorExist := true;
+    fLastErrorFileName := ScriptName;
     if fTimeoutAborted then
       fLastErrorMsg := 'Script execution timeout';
     fCx.Free(res);
