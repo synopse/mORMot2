@@ -299,11 +299,8 @@ type
     /// just a wrapper around JS_FreeContext(@self)
     procedure Done;
     /// release the memory used by a JSValueRaw - JS_FreeValue() alternative
-    procedure FreeInlinedRaw(var v: JSValueRaw);
+    procedure FreeInlined(v: PJSValue);
       {$ifdef HASINLINE} inline; {$endif}
-    /// release the memory used by a JSValue - JS_FreeValue() alternative
-    procedure FreeInlined(var v: JSValue);
-      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// release the memory used by a JSValue - JS_FreeValue() alternative
     // - won't be inlined so may be used when performance matters less
     procedure Free(var v: JSValue);
@@ -2931,50 +2928,44 @@ end;
 
 {$ifdef JS_STRICT_NAN_BOXING} // worth manual inlining
 
-procedure TJSContext.FreeInlinedRaw(var v: JSValueRaw);
+procedure TJSContext.FreeInlined(v: PJSValue);
 {$ifdef CPU64}
 var
   q: UInt64;
 {$endif CPU64}
 begin
-  if (JSValue(v).u.tag and $fff80000) <> $00080000 then
+  if (v^.u.tag and $fff80000) <> $00080000 then
     exit;
   {$ifdef CPU32}
-  if JSValue(v).u.u64 > JS_TAG_MASK then
+  if v^.u.u64 > JS_TAG_MASK then
     exit;
-  dec(PInteger(JSValue(v).u.ptr)^);
-  if PInteger(JSValue(v).u.ptr)^ = 0 then
+  dec(PInteger(v^.u.ptr)^);
+  if PInteger(v^.u.ptr)^ = 0 then
   {$else}
-  q := JSValue(v).u.u64;
+  q := v^.u.u64;
   if q > JS_TAG_MASK then
     exit;
   q := q and JS_PTR64_MASK;
   dec(PInteger(q)^);
   if PInteger(q)^ = 0 then
   {$endif CPU32}
-    __JS_FreeValue(@self, v);
+    __JS_FreeValue(@self, PJsValueRaw(v)^);
 end;
 
 {$else}
 
-procedure TJSContext.FreeInlinedRaw(var v: JSValueRaw);
+procedure TJSContext.FreeInlined(v: PJSValue);
 begin
-  if JSValue(v).IsRefCounted and
-     JSValue(v).DecRefCnt then
-    __JS_FreeValue(@self, v);
+  if v^.IsRefCounted and
+     v^.DecRefCnt then
+    __JS_FreeValue(@self, PJsValueRaw(v)^);
 end;
 
 {$endif JS_STRICT_NAN_BOXING}
 
-procedure TJSContext.FreeInlined(var v: JSValue);
-begin
-  FreeInlinedRaw(JSValueRaw(v));
-  v.Empty;
-end;
-
 procedure TJSContext.Free(var v: JSValue);
 begin
-  FreeInlinedRaw(JSValueRaw(v));
+  FreeInlined(@v);
   v.Empty;
 end;
 
@@ -3011,7 +3002,7 @@ function TJSContext.GetValueFree(obj: JSValue; prop: PAnsiChar;
   out val: JSValue; raiseIfNotFound: boolean): boolean;
 begin
   result := GetValue(obj, prop, val, raiseIfNotFound);
-  FreeInlinedRaw(JSValueRaw(obj));
+  FreeInlined(@obj);
 end;
 
 function TJSContext.GetValue(const prop: array of PAnsiChar; out val: JSValue;
@@ -3121,7 +3112,7 @@ end;
 function TJSContext.ToUtf8Free(var v: JSValue; noJson: boolean): RawUtf8;
 begin
   ToUtf8(v, result, noJson);
-  FreeInlinedRaw(JSValueRaw(v));
+  FreeInlined(@v);
 end;
 
 procedure TJSContext.AddUtf8(
@@ -3419,7 +3410,7 @@ end;
 function TJSContext.ToVariantFree(var v: JSValue; var res: variant): boolean;
 begin
   result := ToVariant(v, res);
-  FreeInlinedRaw(JSValueRaw(v));
+  FreeInlined(@v);
 end;
 
 function TJSContext.From(P: PUtf8Char; Len: PtrInt): JSValue;
