@@ -33,7 +33,7 @@ type
   TTestCoreScript = class(TSynTestCase)
   protected
     fNativeCallCount: integer;
-    fNativeLastArgs: string;
+    fNativeLastArgs: RawUtf8;
     /// native method for RegisterMethod test
     function NativeAdd(const This: variant; const Args: array of variant): variant;
     /// native method with string concatenation
@@ -271,17 +271,22 @@ begin
       res := engine.Evaluate('({x:1, y:2})');
       Check(_Safe(res)^.IsObject, 'object type');
       // error handling
-      hadError := false;
-      try
-        res := engine.Evaluate('syntax error !!!');
-      except
-        on E: EQuickJSEngine do
-        begin
-          hadError := true;
-          Check(E.Message <> '', 'should have error message');
+      if not IsDebuggerPresent then
+      begin
+        TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+        hadError := false;
+        try
+          res := engine.Evaluate('syntax error !!!');
+        except
+          on E: EQuickJSEngine do
+          begin
+            hadError := true;
+            Check(E.Message <> '', 'should have error message');
+          end;
         end;
+        TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+        Check(hadError, 'should raise exception');
       end;
-      Check(hadError, 'should raise exception');
       // GlobalObject access - check it's initialized
       Check(not engine.GlobalObj.IsUninitialized, 'global not uninitialized');
       // define function and call it
@@ -300,28 +305,31 @@ end;
 
 function TTestCoreScript.NativeAdd(const This: variant;
   const Args: array of variant): variant;
+var
+  v, a, i: integer;
 begin
   inc(fNativeCallCount);
-  if length(Args) >= 2 then
-    result := integer(Args[0]) + integer(Args[1])
-  else
-    result := 0;
+  v := 0;
+  for i := 0 to high(Args) do
+    if VariantToInteger(Args[i], a) then
+      inc(v, a);
+  result := v;
 end;
 
 function TTestCoreScript.NativeConcat(const This: variant;
   const Args: array of variant): variant;
 var
-  i: integer;
+  i: PtrInt;
 begin
   inc(fNativeCallCount);
-  result := '';
+  fNativeLastArgs := '';
   for i := 0 to high(Args) do
   begin
-    if i > 0 then
-      result := result + ', ';
-    result := result + string(Args[i]);
+    if i <> 0 then
+      Append(fNativeLastArgs, ', ');
+    Append(fNativeLastArgs, [Args[i]]);
   end;
-  fNativeLastArgs := result;
+  result := fNativeLastArgs;
 end;
 
 procedure TTestCoreScript.QuickJSRegisterMethod;
@@ -351,7 +359,7 @@ begin
       // call nativeConcat
       res := engine.Evaluate('nativeConcat("hello", "world", "test")');
       CheckEqual(fNativeCallCount, 3, 'call count 3');
-      CheckEqual(string(res), 'hello, world, test', 'nativeConcat result');
+      CheckEqual(VariantToUtf8(res), 'hello, world, test', 'nativeConcat result');
       CheckEqual(fNativeLastArgs, 'hello, world, test', 'fNativeLastArgs');
       // use native function in JS function
       engine.Evaluate('function double(x) { return nativeAdd(x, x); }');
