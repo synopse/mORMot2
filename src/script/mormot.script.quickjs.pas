@@ -160,7 +160,7 @@ type
       const ScriptName: RawUtf8 = ''): variant;
     /// trigger garbage collection
     procedure GarbageCollect;
-    /// perform GC if beneficial
+    /// perform GC if beneficial (at most once per second)
     procedure MaybeGarbageCollect;
     /// create a new JavaScript object
     procedure NewObject(out Obj: TQuickJSObject);
@@ -396,9 +396,14 @@ begin
 end;
 
 procedure TQuickJSEngine.MaybeGarbageCollect;
+var
+  tix: cardinal;
 begin
-  // QuickJS doesn't have a "maybe" GC, so just run it
-  // In production, you might add heuristics here
+  // QuickJS doesn't have a "maybe" GC, so run once per second
+  tix := GetTickSec;
+  if tix = fLastGCTickSec then
+    exit;
+  fLastGCTickSec := tix;
   JS_RunGC(fRt);
 end;
 
