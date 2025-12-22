@@ -257,6 +257,7 @@ type
     {$packrecords C}
   {$endif FPC}
 
+  PJSValueRaw = ^JSValueRaw;
   PJSValue = ^JSValue;
   JSValues = array[0..(MaxInt div SizeOf(JSValue)) - 1] of JSValue;
   PJSValues = ^JSValues;
@@ -621,7 +622,6 @@ const
 
 type
   PJSContext = ^JSContext;
-  PJSValueRaw = ^JSValueRaw;
 
   JSObject = pointer;
 
@@ -2760,6 +2760,19 @@ begin
   self := JSValue(value); // direct 64-bit binary copy
 end;
 
+function JSValue.Ptr: pointer;
+begin
+  result := u.ptr;
+  {$ifdef JS_ANY_NAN_BOXING_CPU64}
+  PtrUInt(result) := PtrUInt(result) and JS_PTR64_MASK;
+  {$endif JS_ANY_NAN_BOXING_CPU64}
+end;
+
+procedure JSValue.IncRefCnt;
+begin
+  inc(PInteger(Ptr)^);
+end;
+
 function JSValue.Duplicate: JSValue;
 begin
   if IsRefCounted then
@@ -2802,19 +2815,6 @@ begin
   result := u.i32 <> 0; // normalize
 end;
 
-function JSValue.Ptr: pointer;
-begin
-  result := u.ptr;
-  {$ifdef JS_ANY_NAN_BOXING_CPU64}
-  PtrUInt(result) := PtrUInt(result) and JS_PTR64_MASK;
-  {$endif JS_ANY_NAN_BOXING_CPU64}
-end;
-
-procedure JSValue.IncRefCnt;
-begin
-  inc(PInteger(Ptr)^);
-end;
-
 function JSValue.DecRefCnt: boolean;
 var
   prefcnt: PInteger;
@@ -2838,7 +2838,7 @@ begin
   SetTag(newtag);
   {$ifdef JS_ANY_NAN_BOXING_CPU64}
   if PtrUInt(val) > JS_PTR64_MASK then
-    raise EQuickJS.CreateFmt('JSValue.From(%x) 48-bit overflow', [ptr]);
+    raise EQuickJS.CreateFmt('JSValue.From(%x) 48-bit overflow', [Ptr]);
   PtrUInt(u.ptr) := PtrUInt(u.ptr) or PtrUInt(val); // keep upper tag bits
   {$else}
   u.ptr := val;
