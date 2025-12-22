@@ -127,8 +127,7 @@ type
     /// retrieve engine from context
     class function From(aContext: TScriptContext): TThreadSafeEngine; override;
     /// evaluate JavaScript code and return result as variant
-    function Evaluate(const Script: RawUtf8;
-      const ScriptName: RawUtf8 = ''): variant;
+    function Evaluate(const Script: RawUtf8; const ScriptName: RawUtf8 = ''): variant;
     /// evaluate JavaScript code (string/UnicodeString version)
     function EvaluateS(const Script: string;
       const ScriptName: RawUtf8 = ''): variant;
@@ -264,7 +263,7 @@ begin
     // Convert arguments
     SetLength(args, argc);
     for i := 0 to argc - 1 do
-      engine.fCx.ToVariant(JSValue(argv[i]), args[i]);
+      engine.fCx.ToVariant(PJSValue(@argv[i])^, args[i]);
     // Call the Delphi method
     res := engine.fMethods[ndx](thisVar, args);
     // Convert result back to JSValue
@@ -306,7 +305,7 @@ begin
   VarClear(fGlobal);
   // Free global object
   if not fGlobalObj.IsUninitialized then
-    fCx.FreeInlined(fGlobalObj);
+    fCx.Free(fGlobalObj);
   // Free context and runtime
   fCx.Done;
   fRt.Done;
@@ -341,7 +340,7 @@ begin
     fErrorExist := true;
     if fTimeoutAborted then
       fLastErrorMsg := 'Script execution timeout';
-    fCx.FreeInlined(res);
+    fCx.Free(res);
     EQuickJSEngine.RaiseU(fLastErrorMsg);
   end;
   if not fCx.ToVariantFree(res, result) then
@@ -473,7 +472,7 @@ procedure TQuickJSObject.UnRoot;
 begin
   if not fRooted then
     exit;
-  fEngine.fCx.FreeInlined(fDupObj);
+  fEngine.fCx.Free(fDupObj);
   fRooted := false;
 end;
 
@@ -541,14 +540,14 @@ begin
   val := JSValue(JS_GetPropertyStr(data.Engine.fCx, data.Obj.Raw, pointer(propName)));
   if val.IsException then
   begin
-    data.Engine.fCx.FreeInlined(val);
+    data.Engine.fCx.Free(val);
     exit;
   end;
   // If the result is an object, wrap it in a TQuickJSVariant
   if val.IsObject then
   begin
     TQuickJSVariant.New(data.Engine, val, res);
-    data.Engine.fCx.FreeInlined(val); // New duplicates it
+    data.Engine.fCx.Free(val); // New duplicates it
     TVarData(Dest) := TVarData(res);
     TVarData(res).VType := varEmpty; // prevent double-free
   end
@@ -603,7 +602,7 @@ begin
   if funcObj.IsException or
      funcObj.IsUndefined then
   begin
-    data.Engine.fCx.FreeInlined(funcObj);
+    data.Engine.fCx.Free(funcObj);
     exit;
   end;
   // Convert arguments to JSValues
@@ -618,14 +617,14 @@ begin
     // Convert result
     if resVal.IsException then
     begin
-      data.Engine.fCx.FreeInlined(resVal);
+      data.Engine.fCx.Free(resVal);
       exit;
     end;
     res.VType := varEmpty;
     if resVal.IsObject then
     begin
       TQuickJSVariant.New(data.Engine, resVal, PVariant(@res)^);
-      data.Engine.fCx.FreeInlined(resVal);
+      data.Engine.fCx.Free(resVal);
     end
     else if not data.Engine.fCx.ToVariantFree(resVal, PVariant(@res)^) then
       VarClear(PVariant(@res)^);
@@ -634,8 +633,8 @@ begin
   finally
     // Free argument JSValues and function object
     for i := 0 to n - 1 do
-      data.Engine.fCx.FreeInlined(jsArgs[i]);
-    data.Engine.fCx.FreeInlined(funcObj);
+      data.Engine.fCx.Free(jsArgs[i]);
+    data.Engine.fCx.Free(funcObj);
   end;
 end;
 

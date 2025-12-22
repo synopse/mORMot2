@@ -257,7 +257,7 @@ begin
       CheckEqual(integer(res), 4, 'eval result');
       // string result
       res := engine.Evaluate('"Hello, " + "World!"');
-      CheckEqual(string(res), 'Hello, World!', 'string result');
+      CheckEqual(VariantToUtf8(res), 'Hello, World!', 'string result');
       // float result
       res := engine.Evaluate('3.14159 * 2');
       CheckSame(double(res), 6.28318, 0.0001, 'float result');
@@ -394,7 +394,7 @@ begin
       res := engine.Evaluate('add(10, 20)');
       CheckEqual(integer(res), 30, 'evaluate add');
       res := engine.Evaluate('greet("World")');
-      CheckEqual(string(res), 'Hello, World!', 'evaluate greet');
+      CheckEqual(VariantToUtf8(res), 'Hello, World!', 'evaluate greet');
       res := engine.Evaluate('square(7)');
       CheckEqual(integer(res), 49, 'evaluate square');
       res := engine.Evaluate('config');
@@ -411,7 +411,7 @@ begin
       res := global.add(10, 20);
       CheckEqual(integer(res), 30, 'late-bind add');
       res := global.greet('World');
-      CheckEqual(string(res), 'Hello, World!', 'late-bind greet');
+      CheckEqual(VariantToUtf8(res), 'Hello, World!', 'late-bind greet');
       res := global.square(7);
       CheckEqual(integer(res), 49, 'late-bind square');
       // test chained late-binding
