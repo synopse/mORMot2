@@ -674,7 +674,8 @@ end;
 destructor TThreadSafeEngine.Destroy;
 begin
   BeforeDestroy;
-  if Assigned(fManager.RemoteDebugger) then
+  if Assigned(fManager) and
+     Assigned(fManager.RemoteDebugger) then
     fManager.RemoteDebugger.StopDebugCurrentThread(self);
   inherited Destroy;
   fAtomCache.Free;
