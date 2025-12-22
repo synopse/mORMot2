@@ -107,8 +107,12 @@ type
     fRequestFpuBackup: array[0..3] of cardinal;
     function AtomCacheFind(const Name: RawUtf8): TScriptAtom; // nil = not found
       {$ifdef HASINLINE} inline; {$endif}
-    procedure AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom);
+    function AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom): TScriptAtom;
+    function AtomCacheGet(const Name: RawUtf8): TScriptAtom;
     { following methods should be overriden with the proper scripting API }
+    // would raise EScriptException
+    function AtomNew(const Name: RawUtf8): TScriptAtom; virtual;
+    procedure AtomFree(Atom: TScriptAtom); virtual;
     // from ThreadSafeCall(): FPU mask + multi-threading (SM)
     procedure DoBeginRequest; virtual;
     procedure DoEndRequest; virtual;
@@ -672,13 +676,20 @@ begin
 end;
 
 destructor TThreadSafeEngine.Destroy;
+var
+  i: PtrInt;
 begin
+  if Assigned(fAtomCache) then
+  begin
+    for i := 0 to fAtomCache.Count - 1 do
+      AtomFree(TScriptAtom(fAtomCache.ObjectPtr[i]));
+    FreeAndNil(fAtomCache);
+  end;
   BeforeDestroy;
   if Assigned(fManager) and
      Assigned(fManager.RemoteDebugger) then
     fManager.RemoteDebugger.StopDebugCurrentThread(self);
   inherited Destroy;
-  fAtomCache.Free;
 end;
 
 procedure TThreadSafeEngine.ThreadSafeCall(const Event: TEngineEvent);
@@ -702,11 +713,29 @@ begin
     result := fAtomCache.GetObjectFrom(Name);
 end;
 
-procedure TThreadSafeEngine.AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom);
+function TThreadSafeEngine.AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom): TScriptAtom;
 begin
   if fAtomCache = nil then
     fAtomCache := TRawUtf8List.CreateEx([fCaseSensitive, fNoDuplicate]);
   fAtomCache.AddObject(Name, Atom);
+  result := Atom;
+end;
+
+function TThreadSafeEngine.AtomCacheGet(const Name: RawUtf8): TScriptAtom;
+begin
+  result := AtomCacheFind(Name);
+  if result = nil then
+    result := AtomCacheAdd(Name, AtomNew(Name)); // may trigger EScriptException
+end;
+
+function TThreadSafeEngine.AtomNew(const Name: RawUtf8): TScriptAtom;
+begin
+  raise EScriptException.CreateUtf8('%.AtomNew: unsupported', [self]);
+end;
+
+procedure TThreadSafeEngine.AtomFree(Atom: TScriptAtom);
+begin
+  raise EScriptException.CreateUtf8('%.AtomFree: unsupported', [self]);
 end;
 
 procedure TThreadSafeEngine.DoBeginRequest;
