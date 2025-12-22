@@ -54,33 +54,8 @@ type
   // - returns: result as variant
   TQuickJSMethodVariant = function(const This: variant;
     const Args: array of variant): variant of object;
-
-  /// callback signature for native method registration (JSON-based)
-  TQuickJSMethodJSON = function(const This: TQuickJSEngine;
-    const ArgsJson: RawUtf8; var ResultJson: RawUtf8): boolean of object;
-
-  /// internal record to store registered method info
-  TQuickJSMethodInfo = record
-    Engine: TQuickJSEngine;
-    Callback: TQuickJSMethodVariant;
-    ArgCount: integer;
-  end;
-  PQuickJSMethodInfo = ^TQuickJSMethodInfo;
-  TQuickJSMethodInfoDynArray = array of TQuickJSMethodInfo;
-
-  /// storage for TQuickJSVariant custom variant type
-  // - will store a reference to a JavaScript object for late-binding access
-  TQuickJSVariantData = packed record
-    /// the custom variant type registered number
-    VType: TVarType;
-    VFiller: array[0..SizeOf(TVarData) - SizeOf(TVarType)
-      - SizeOf(TQuickJSEngine) - SizeOf(JSValue) - 1] of byte;
-    /// the associated QuickJS engine
-    VEngine: TQuickJSEngine;
-    /// the JavaScript object value (duplicated/rooted for GC protection)
-    VObj: JSValue;
-  end;
-  PQuickJSVariantData = ^TQuickJSVariantData;
+  PQuickJSMethodVariant = ^TQuickJSMethodVariant;
+  TQuickJSMethodVariantDynArray = array of TQuickJSMethodVariant;
 
   /// wrapper for JavaScript object operations
   {$ifdef USERECORDWITHMETHODS}
@@ -258,17 +233,18 @@ function QuickJSMethodDataCallback(ctx: JSContext; this_val: JSValueConst;
   argc: integer; argv: PJSValueConstArr; magic: integer;
   func_data: PJSValue): JSValueRaw; cdecl;
 var
-  infoPtr: PQuickJSMethodInfo;
   engine: TQuickJSEngine;
   args: array of variant;
   thisVar, res: variant;
-  i: integer;
+  ndx, i: PtrInt;
   jsres: JSValue;
 begin
-  engine := TQuickJSEngine(JS_GetContextOpaque(ctx));
-  // Get info pointer from func_data[0]
-  infoPtr := PQuickJSMethodInfo(JSValue(func_data^).Ptr);
   try
+    engine := JS_GetContextOpaque(ctx);
+    // Get method index from func_data[0]
+    ndx := func_data^.Int32;
+    if PtrUInt(ndx) >= PtrUInt(engine.fMethodCount) then
+      EQuickJSEngine.RaiseU('Invalid Callback Index');
     // Convert 'this' to variant
     engine.fCx.ToVariant(JSValue(this_val), thisVar);
     // Convert arguments
@@ -276,16 +252,13 @@ begin
     for i := 0 to argc - 1 do
       engine.fCx.ToVariant(JSValue(argv[i]), args[i]);
     // Call the Delphi method
-    res := infoPtr^.Callback(thisVar, args);
+    res := engine.fMethods[ndx](thisVar, args);
     // Convert result back to JSValue
     engine.fCx.FromVariant(res, jsres);
     result := JSValueRaw(jsres);
   except
     on E: Exception do
-    begin
-      JS_ThrowInternalError(ctx, PAnsiChar(StringToUtf8(E.Message)));
-      result := JS_EXCEPTION;
-    end;
+      result := ctx^.ThrowInternalError(E);
   end;
 end;
 
@@ -400,19 +373,16 @@ function TQuickJSEngine.RegisterMethod(const Obj: JSValue; const MethodName: Raw
 var
   func: JSValue;
   dataVal: JSValue;
-  idx: integer;
+  ndx: PtrInt;
 begin
   // Store method info
-  idx := fMethodCount;
-  Inc(fMethodCount);
-  if idx >= Length(fMethods) then
-    SetLength(fMethods, idx + 16);
-  fMethods[idx].Engine := self;
-  fMethods[idx].Callback := Method;
-  fMethods[idx].ArgCount := ArgCount;
-  // Create data value containing pointer to our info
-  dataVal.Fill(JS_TAG_INT, PtrInt(@fMethods[idx]));
+  ndx := fMethodCount;
+  inc(fMethodCount);
+  if ndx >= Length(fMethods) then
+    SetLength(fMethods, NextGrow(ndx));
+  fMethods[ndx] := Method;
   // Create JS function with data
+  dataVal.From32(ndx); // as index, not pointer because of SetLength(fMethods)
   func := JSValue(JS_NewCFunctionData(fCx, @QuickJSMethodDataCallback,
     ArgCount, 0, 1, @dataVal));
   // Set as property on object
