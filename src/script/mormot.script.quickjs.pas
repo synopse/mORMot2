@@ -57,7 +57,7 @@ type
   PQuickJSMethodVariant = ^TQuickJSMethodVariant;
   TQuickJSMethodVariantDynArray = array of TQuickJSMethodVariant;
 
-  /// wrapper for JavaScript object operations
+  /// convenient wrapper for JavaScript object operations
   {$ifdef USERECORDWITHMETHODS}
   TQuickJSObject = record
   {$else}
@@ -115,7 +115,8 @@ type
     fTimeoutStartTickSec: cardinal;
     fLastGCTickSec: cardinal;
     fGlobal: variant;
-    /// clear last error state
+    function AtomNew(const Name: RawUtf8): TScriptAtom; override;
+    procedure AtomFree(Atom: TScriptAtom); override;
     procedure ClearLastError;
       {$ifdef HASINLINE} inline; {$endif}
   public
@@ -404,6 +405,16 @@ begin
     JSValueRaw(func)) >= 0;
 end;
 
+function TQuickJSEngine.AtomNew(const Name: RawUtf8): TScriptAtom;
+begin
+  result := {%H-}TScriptAtom(JS_NewAtom(fCx, pointer(Name)));
+end;
+
+procedure TQuickJSEngine.AtomFree(Atom: TScriptAtom);
+begin
+  JS_FreeAtom(fCx, {%H-}JSAtom(Atom));
+end;
+
 
 { TQuickJSObject }
 
@@ -415,22 +426,17 @@ begin
 end;
 
 function TQuickJSObject.HasProperty(const PropName: RawUtf8): boolean;
-var
-  atom: JSAtom;
 begin
-  atom := JS_NewAtom(fEngine.fCx, pointer(PropName));
-  result := JS_HasProperty(fEngine.fCx, fObj.Raw, atom) > 0;
-  JS_FreeAtom(fEngine.fCx, atom);
+  result := JS_HasProperty(fEngine.fCx, fObj.Raw,
+    {%H-}JSAtom(fEngine.AtomCacheGet(PropName))) > 0;
 end;
 
 function TQuickJSObject.HasOwnProperty(const PropName: RawUtf8): boolean;
 var
   desc: JSPropertyDescriptor;
-  atom: JSAtom;
 begin
-  atom := JS_NewAtom(fEngine.fCx, pointer(PropName));
-  result := JS_GetOwnProperty(fEngine.fCx, @desc, fObj.Raw, atom) > 0;
-  JS_FreeAtom(fEngine.fCx, atom);
+  result := JS_GetOwnProperty(fEngine.fCx, @desc, fObj.Raw,
+    {%H-}JSAtom(fEngine.AtomCacheGet(PropName))) > 0;
 end;
 
 function TQuickJSObject.GetPropValue(const PropName: RawUtf8): variant;
