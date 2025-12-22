@@ -97,10 +97,10 @@ type
     fManager: TThreadSafeManager;
     fThreadData: pointer;
     fContentVersion: cardinal;
+    fNeverExpire: boolean;
     fCreateTix: Int64;
     fTag: PtrInt;
     fPrivateDataForDebugger: pointer;
-    fNeverExpire: boolean;
     fNameForDebug, fWebAppRootDir: RawUtf8;
     fAtomCache: TRawUtf8List; // hashed list of objects=TScriptAtom
     fDoInteruptInOwnThread: TThreadMethod;

@@ -358,36 +358,24 @@ begin
   fErrorExist := false;
 end;
 
-function TQuickJSEngine.Evaluate(const Script: RawUtf8;
-  const ScriptName: RawUtf8): variant;
+function TQuickJSEngine.Evaluate(const Script, ScriptName: RawUtf8): variant;
 var
   res: JSValue;
-  err: RawUtf8;
-  fn: RawUtf8;
 begin
   ClearLastError;
   // Reset timeout tracking
   fTimeoutAborted := false;
-  if fTimeoutValue > 0 then
-    fTimeoutStartTick := GetTickCount64;
-  if ScriptName = '' then
-    fn := 'script'
-  else
-    fn := ScriptName;
-  res := fCx.Eval(Script, fn, JS_EVAL_TYPE_GLOBAL, err);
+  if fTimeoutValue <> 0 then
+    fTimeoutStartTickSec := GetTickSec;
+  // Execute the supplied Script
+  res := fCx.Eval(Script, Script, JS_EVAL_TYPE_GLOBAL, fLastErrorMsg);
   if res.IsException then
   begin
     fErrorExist := true;
-    // Check if abort was due to timeout
     if fTimeoutAborted then
-    begin
       fLastErrorMsg := 'Script execution timeout';
-      fCx.FreeInlined(res);
-      raise EQuickJSEngine.Create('Script execution timeout');
-    end;
-    fCx.ErrorMessage(true, fLastErrorMsg);
     fCx.FreeInlined(res);
-    raise EQuickJSEngine.Create(Utf8ToString(fLastErrorMsg));
+    EQuickJSEngine.RaiseU(fLastErrorMsg);
   end;
   if not fCx.ToVariantFree(res, result) then
     VarClear(result);
