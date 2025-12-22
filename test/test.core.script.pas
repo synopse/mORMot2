@@ -265,16 +265,18 @@ begin
       res := engine.Evaluate('true && !false');
       Check(boolean(res) = true, 'bool result');
       // array result
-      res := engine.Evaluate('[1,2,3]');
+      res := engine.Evaluate('[ 1, 2, 3 ]');
       Check(_Safe(res)^.IsArray, 'array type');
+      CheckEqual(_Safe(res)^.ToJson, '[1,2,3]');
       // object result
-      res := engine.Evaluate('({x:1, y:2})');
+      res := engine.Evaluate('({x:1,y:2})');
       Check(_Safe(res)^.IsObject, 'object type');
+      CheckEqual(_Safe(res)^.ToJson, '{"x":1,"y":2}');
       // error handling
-      if not IsDebuggerPresent then
+      if not IsDebuggerPresent then // do not pollute the IDE
       begin
-        TSynLog.Family.ExceptionIgnoreCurrentThread := true;
         hadError := false;
+        TSynLog.Family.ExceptionIgnoreCurrentThread := true;
         try
           res := engine.Evaluate('syntax error !!!');
         except
