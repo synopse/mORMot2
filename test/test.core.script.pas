@@ -9,6 +9,7 @@ interface
 
 uses
   sysutils,
+  variants,
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -23,14 +24,30 @@ uses
   mormot.core.log,
   mormot.core.perf,
   mormot.core.test,
-  mormot.lib.quickjs;
+  mormot.lib.quickjs,
+  mormot.script.core,
+  mormot.script.quickjs;
 
 type
   /// this test case will validate several low-level protocols
   TTestCoreScript = class(TSynTestCase)
+  protected
+    fNativeCallCount: integer;
+    fNativeLastArgs: string;
+    /// native method for RegisterMethod test
+    function NativeAdd(const This: variant; const Args: array of variant): variant;
+    /// native method with string concatenation
+    function NativeConcat(const This: variant; const Args: array of variant): variant;
   published
     /// QuickJS low-level direct API tests
     procedure QuickJSLowLevel;
+    /// TQuickJSEngine high-level API tests
+    procedure QuickJSEngine;
+    /// TQuickJSEngine.RegisterMethod tests
+    procedure QuickJSRegisterMethod;
+    /// TQuickJSEngine.Global late-binding access tests
+    // - Tests DoFunction for late-binding function calls like global.func()
+    procedure QuickJSGlobalLateBind;
   end;
 
   
@@ -220,6 +237,187 @@ begin
     end;
   finally
     Check(rt.DoneSafe = '');
+  end;
+end;
+
+procedure TTestCoreScript.QuickJSEngine;
+var
+  manager: TThreadSafeManager;
+  engine: TQuickJSEngine;
+  res: variant;
+  hadError: boolean;
+begin
+  manager := TThreadSafeManager.Create(TQuickJSEngine, nil, 1);
+  try
+    engine := manager.NewEngine as TQuickJSEngine;
+    // NewEngine creates engine outside pool, so we must Free it ourselves
+    try
+      // basic evaluation
+      res := engine.Evaluate('2 + 2');
+      CheckEqual(integer(res), 4, 'eval result');
+      // string result
+      res := engine.Evaluate('"Hello, " + "World!"');
+      CheckEqual(string(res), 'Hello, World!', 'string result');
+      // float result
+      res := engine.Evaluate('3.14159 * 2');
+      CheckSame(double(res), 6.28318, 0.0001, 'float result');
+      // boolean result
+      res := engine.Evaluate('true && !false');
+      Check(boolean(res) = true, 'bool result');
+      // array result
+      res := engine.Evaluate('[1,2,3]');
+      Check(_Safe(res)^.IsArray, 'array type');
+      // object result
+      res := engine.Evaluate('({x:1, y:2})');
+      Check(_Safe(res)^.IsObject, 'object type');
+      // error handling
+      hadError := false;
+      try
+        res := engine.Evaluate('syntax error !!!');
+      except
+        on E: EQuickJSEngine do
+        begin
+          hadError := true;
+          Check(E.Message <> '', 'should have error message');
+        end;
+      end;
+      Check(hadError, 'should raise exception');
+      // GlobalObject access - check it's initialized
+      Check(not engine.GlobalObj.IsUninitialized, 'global not uninitialized');
+      // define function and call it
+      engine.Evaluate('function multiply(a, b) { return a * b; }');
+      res := engine.Evaluate('multiply(6, 7)');
+      CheckEqual(integer(res), 42, 'func result');
+      // garbage collection
+      engine.GarbageCollect;
+    finally
+      engine.Free;
+    end;
+  finally
+    manager.Free;
+  end;
+end;
+
+function TTestCoreScript.NativeAdd(const This: variant;
+  const Args: array of variant): variant;
+begin
+  inc(fNativeCallCount);
+  if length(Args) >= 2 then
+    result := integer(Args[0]) + integer(Args[1])
+  else
+    result := 0;
+end;
+
+function TTestCoreScript.NativeConcat(const This: variant;
+  const Args: array of variant): variant;
+var
+  i: integer;
+begin
+  inc(fNativeCallCount);
+  result := '';
+  for i := 0 to high(Args) do
+  begin
+    if i > 0 then
+      result := result + ', ';
+    result := result + string(Args[i]);
+  end;
+  fNativeLastArgs := result;
+end;
+
+procedure TTestCoreScript.QuickJSRegisterMethod;
+var
+  manager: TThreadSafeManager;
+  engine: TQuickJSEngine;
+  res: variant;
+begin
+  manager := TThreadSafeManager.Create(TQuickJSEngine, nil, 1);
+  try
+    engine := manager.NewEngine as TQuickJSEngine;
+    try
+      fNativeCallCount := 0;
+      // register native method
+      Check(engine.RegisterMethod(engine.GlobalObj, 'nativeAdd', NativeAdd, 2),
+        'register nativeAdd');
+      Check(engine.RegisterMethod(engine.GlobalObj, 'nativeConcat', NativeConcat, 3),
+        'register nativeConcat');
+      // call native method from JavaScript
+      res := engine.Evaluate('nativeAdd(100, 200)');
+      CheckEqual(fNativeCallCount, 1, 'call count 1');
+      CheckEqual(integer(res), 300, 'nativeAdd result');
+      // call with expression
+      res := engine.Evaluate('nativeAdd(10, 20) * 2');
+      CheckEqual(fNativeCallCount, 2, 'call count 2');
+      CheckEqual(integer(res), 60, 'nativeAdd in expression');
+      // call nativeConcat
+      res := engine.Evaluate('nativeConcat("hello", "world", "test")');
+      CheckEqual(fNativeCallCount, 3, 'call count 3');
+      CheckEqual(string(res), 'hello, world, test', 'nativeConcat result');
+      CheckEqual(fNativeLastArgs, 'hello, world, test', 'fNativeLastArgs');
+      // use native function in JS function
+      engine.Evaluate('function double(x) { return nativeAdd(x, x); }');
+      res := engine.Evaluate('double(21)');
+      CheckEqual(fNativeCallCount, 4, 'call count 4');
+      CheckEqual(integer(res), 42, 'double via nativeAdd');
+    finally
+      engine.Free;
+    end;
+  finally
+    manager.Free;
+  end;
+end;
+
+procedure TTestCoreScript.QuickJSGlobalLateBind;
+var
+  manager: TThreadSafeManager;
+  engine: TQuickJSEngine;
+  res: variant;
+  global: variant;
+begin
+  manager := TThreadSafeManager.Create(TQuickJSEngine, nil, 1);
+  try
+    engine := manager.NewEngine as TQuickJSEngine;
+    try
+      // define functions in JavaScript
+      engine.Evaluate('function add(a, b) { return a + b; }');
+      engine.Evaluate('function greet(name) { return "Hello, " + name + "!"; }');
+      engine.Evaluate('function square(x) { return x * x; }');
+      engine.Evaluate('var config = { version: "1.0", debug: true };');
+      // test via evaluate (no late-binding)
+      res := engine.Evaluate('add(10, 20)');
+      CheckEqual(integer(res), 30, 'evaluate add');
+      res := engine.Evaluate('greet("World")');
+      CheckEqual(string(res), 'Hello, World!', 'evaluate greet');
+      res := engine.Evaluate('square(7)');
+      CheckEqual(integer(res), 49, 'evaluate square');
+      res := engine.Evaluate('config');
+      Check(_Safe(res)^.IsObject, 'config is object');
+      CheckEqual(_Safe(res)^.U['version'], '1.0', 'config.version');
+      Check(_Safe(res)^.B['debug'] = true, 'config.debug');
+      // chain calls via evaluate
+      res := engine.Evaluate('add(square(3), square(4))');
+      CheckEqual(integer(res), 25, 'chained: 3^2 + 4^2 = 25');
+      // access Global for late-binding
+      global := engine.Global;
+      Check(not VarIsEmpty(global), 'global not empty');
+      // test late-binding function calls (DoFunction)
+      res := global.add(10, 20);
+      CheckEqual(integer(res), 30, 'late-bind add');
+      res := global.greet('World');
+      CheckEqual(string(res), 'Hello, World!', 'late-bind greet');
+      res := global.square(7);
+      CheckEqual(integer(res), 49, 'late-bind square');
+      // test chained late-binding
+      res := global.add(global.square(3), global.square(4));
+      CheckEqual(integer(res), 25, 'late-bind chained');
+      // clear before cleanup
+      VarClear(res);
+      VarClear(global);
+      engine.GarbageCollect;
+    finally
+      engine.Free;
+    end;
+  finally
+    manager.Free;
   end;
 end;
 
