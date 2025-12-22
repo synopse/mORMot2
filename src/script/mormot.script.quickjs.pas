@@ -218,12 +218,14 @@ type
       const Indirect: boolean); override;
     /// create a variant containing a JavaScript object
     class procedure New(aEngine: TQuickJSEngine; const aObj: JSValue;
-      out Result: variant);
+      var Result: variant);
   end;
 
 var
   /// the global TQuickJSVariant custom variant type instance
   QuickJSVariantType: TQuickJSVariant;
+  /// quick access to QuickJSVariantType.VarType identifier, casted as 32-bit
+  QuickJSVariantVType: cardinal;
 
 
 implementation
@@ -490,11 +492,11 @@ procedure TQuickJSVariant.Clear(var V: TVarData);
 var
   data: TQuickJSVariantData absolute V;
 begin
-  if (cardinal(data.VType) = cardinal(QuickJSVariantType.VarType)) and
+  if (cardinal(data.VType) = cardinal(VarType)) and
      (data.Engine <> nil) and
      not data.Obj.IsUninitialized then
-    data.Engine.fCx.FreeInlined(data.Obj);
-  V.VType := varEmpty;
+    data.Engine.fCx.FreeInlined(@data.Obj);
+  TSynVarData(V).VType := varEmpty;
 end;
 
 procedure TQuickJSVariant.Copy(var Dest: TVarData; const Source: TVarData;
@@ -511,7 +513,8 @@ begin
     VarClear(variant(Dest));
     dst.VType := VarType;
     dst.Engine := src.Engine;
-    if (src.Engine <> nil) and
+    if (cardinal(src.VType) = cardinal(VarType)) and
+       (src.Engine <> nil) and
        not src.Obj.IsUninitialized then
       dst.Obj := src.Obj.Duplicate // Duplicate the JSValue to protect from GC
     else
@@ -520,12 +523,12 @@ begin
 end;
 
 class procedure TQuickJSVariant.New(aEngine: TQuickJSEngine; const aObj: JSValue;
-  out Result: variant);
+  var Result: variant);
 var
   data: TQuickJSVariantData absolute Result;
 begin
   VarClear(Result);
-  data.VType := QuickJSVariantType.VarType;
+  TSynVarData(data).VType := QuickJSVariantVType;
   data.Engine := aEngine;
   data.Obj := aObj.Duplicate; // Duplicate to protect from GC
 end;
@@ -539,7 +542,7 @@ var
   res: variant;
 begin
   result := false;
-  if (cardinal(data.VType) <> cardinal(QuickJSVariantType.VarType)) or
+  if (cardinal(data.VType) <> cardinal(VarType)) or
      (data.Engine = nil) or
      data.Obj.IsUninitialized then
     exit;
@@ -556,14 +559,14 @@ begin
     TQuickJSVariant.New(data.Engine, val, res);
     data.Engine.fCx.Free(val); // New duplicates it
     TVarData(Dest) := TVarData(res);
-    TVarData(res).VType := varEmpty; // prevent double-free
+    TSynVarData(res).VType := varEmpty; // prevent double-free
   end
   else
   begin
     if not data.Engine.fCx.ToVariantFree(val, res) then
       VarClear(res);
     TVarData(Dest) := TVarData(res);
-    TVarData(res).VType := varEmpty;
+    TSynVarData(res).VType := varEmpty;
   end;
   result := true;
 end;
@@ -576,7 +579,7 @@ var
   val: JSValue;
 begin
   result := false;
-  if (cardinal(data.VType) <> cardinal(QuickJSVariantType.VarType)) or
+  if (cardinal(data.VType) <> cardinal(VarType)) or
      (data.Engine = nil) or
      data.Obj.IsUninitialized then
     exit;
@@ -598,7 +601,7 @@ var
 begin
   // Ensure supplied V is a QuickJSVariant
   result := false;
-  if (cardinal(data.VType) <> cardinal(QuickJSVariantType.VarType)) or
+  if (cardinal(data.VType) <> cardinal(VarType)) or
      (data.Engine = nil) or
      data.Obj.IsUninitialized then
     exit;
@@ -649,6 +652,7 @@ end;
 
 initialization
   QuickJSVariantType := TQuickJSVariant.Create;
+  QuickJSVariantVType := QuickJSVariantType.VarType;
 
 finalization
   FreeAndNil(QuickJSVariantType);
