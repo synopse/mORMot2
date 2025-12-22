@@ -38,6 +38,9 @@ uses
   mormot.lib.quickjs,
   mormot.script.core;
 
+
+{ ******************** TQuickJSEngine Thread-Safe Engine Implementation }
+
 type
   // forward declarations
   TQuickJSEngine = class;
@@ -88,11 +91,11 @@ type
   private
     fEngine: TQuickJSEngine;
     fObj: JSValue;
-    fRooted: boolean;
     fDupObj: JSValue;
+    fRooted: boolean;
   public
     /// initialize the wrapper
-    procedure Init(aEngine: TQuickJSEngine; aObj: JSValue);
+    procedure Init(aEngine: TQuickJSEngine; const aObj: JSValue);
     /// check if object has a property
     function HasProperty(const PropName: RawUtf8): boolean;
     /// check if object has own property (not inherited)
@@ -139,14 +142,10 @@ type
     fGlobal: variant;
     /// clear last error state
     procedure ClearLastError;
+      {$ifdef HASINLINE} inline; {$endif}
   public
-    /// initialize the QuickJS engine
-    // - called within TThreadSafeManager lock
-    constructor Create(aManager: TThreadSafeManager; aThreadData: pointer;
-      aTag: PtrInt; aThreadID: TThreadID); override;
-    /// finalize the QuickJS engine
-    destructor Destroy; override;
     /// initialize engine after construction (outside manager lock)
+    // - called within TThreadSafeManager lock
     procedure AfterCreate; override;
     /// cleanup before destruction (outside manager lock)
     procedure BeforeDestroy; override;
@@ -165,7 +164,7 @@ type
     /// create a new JavaScript object
     procedure NewObject(out Obj: TQuickJSObject);
     /// register a native Delphi method callable from JavaScript
-    function RegisterMethod(Obj: JSValue; const MethodName: RawUtf8;
+    function RegisterMethod(const Obj: JSValue; const MethodName: RawUtf8;
       const Method: TQuickJSMethodVariant; ArgCount: integer): boolean;
     /// access to the QuickJS runtime
     property rt: JSRuntime
@@ -203,11 +202,15 @@ type
       read fTimeoutAborted;
   end;
 
+
+{ ******************** TQuickJSVariant Custom Variant Type for Late-Binding }
+
+type
   /// custom variant type for late-binding JavaScript object access
   // - allows Pascal code to access JS object properties using variant syntax
   // - example: jsObj.propName or jsObj.method(arg1, arg2)
   TQuickJSVariant = class(TSynInvokeableVariantType)
-  protected
+  public
     /// get a property value by name
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
@@ -219,15 +222,13 @@ type
     function DoFunction(var Dest: TVarData; const V: TVarData;
       const Name: string; const Arguments: TVarDataArray): boolean; override;
   public
-    /// initialize the custom variant type
-    constructor Create; override;
     /// properly release the JavaScript object reference
     procedure Clear(var V: TVarData); override;
     /// copy variant data (duplicates the JS object reference)
     procedure Copy(var Dest: TVarData; const Source: TVarData;
       const Indirect: boolean); override;
     /// create a variant containing a JavaScript object
-    class procedure New(aEngine: TQuickJSEngine; aObj: JSValue;
+    class procedure New(aEngine: TQuickJSEngine; const aObj: JSValue;
       out Result: variant);
   end;
 
@@ -236,11 +237,7 @@ var
   QuickJSVariantType: TQuickJSVariant;
 
 
-{$endif LIBQUICKJS}
-
 implementation
-
-{$ifdef LIBQUICKJS}
 
 // Interrupt handler for timeout control
 function QuickJSInterruptHandler(rt: JSRuntime; opaque: pointer): integer; cdecl;
@@ -294,18 +291,6 @@ end;
 
 
 { TQuickJSEngine }
-
-constructor TQuickJSEngine.Create(aManager: TThreadSafeManager;
-  aThreadData: pointer; aTag: PtrInt; aThreadID: TThreadID);
-begin
-  inherited Create(aManager, aThreadData, aTag, aThreadID);
-  // Runtime and Context creation deferred to AfterCreate
-end;
-
-destructor TQuickJSEngine.Destroy;
-begin
-  inherited Destroy;
-end;
 
 procedure TQuickJSEngine.AfterCreate;
 begin
@@ -410,7 +395,7 @@ begin
   Obj.Init(self, jsobj);
 end;
 
-function TQuickJSEngine.RegisterMethod(Obj: JSValue; const MethodName: RawUtf8;
+function TQuickJSEngine.RegisterMethod(const Obj: JSValue; const MethodName: RawUtf8;
   const Method: TQuickJSMethodVariant; ArgCount: integer): boolean;
 var
   func: JSValue;
@@ -438,7 +423,7 @@ end;
 
 { TQuickJSObject }
 
-procedure TQuickJSObject.Init(aEngine: TQuickJSEngine; aObj: JSValue);
+procedure TQuickJSObject.Init(aEngine: TQuickJSEngine; const aObj: JSValue);
 begin
   fEngine := aEngine;
   fObj := aObj;
@@ -494,20 +479,18 @@ end;
 
 procedure TQuickJSObject.Root;
 begin
-  if not fRooted then
-  begin
-    fDupObj := fObj.Duplicate;
-    fRooted := true;
-  end;
+  if fRooted then
+    exit;
+  fDupObj := fObj.Duplicate;
+  fRooted := true;
 end;
 
 procedure TQuickJSObject.UnRoot;
 begin
-  if fRooted then
-  begin
-    fEngine.fCx.FreeInlined(fDupObj);
-    fRooted := false;
-  end;
+  if not fRooted then
+    exit;
+  fEngine.fCx.FreeInlined(fDupObj);
+  fRooted := false;
 end;
 
 
@@ -684,24 +667,18 @@ begin
 end;
 
 
-{ TQuickJSEngine - Timeout support }
-
-procedure TQuickJSEngine.SetTimeoutValue(const Value: double);
-begin
-  fTimeoutValue := Value;
-end;
-
-
-{$endif LIBQUICKJS}
 
 initialization
-  {$ifdef LIBQUICKJS}
   QuickJSVariantType := TQuickJSVariant.Create;
-  {$endif LIBQUICKJS}
 
 finalization
-  {$ifdef LIBQUICKJS}
   FreeAndNil(QuickJSVariantType);
-  {$endif LIBQUICKJS}
+
+
+{$else}
+
+implementation // compiles as a void unit if QuickJS is not supported
+
+{$endif LIBQUICKJS}
 
 end.
