@@ -348,6 +348,8 @@ type
     /// output ErrorMessage() text into the current error stream
     // - is the StdErr console by default, but may be redirected e.g. to a log
     procedure ErrorDump(stacktrace: boolean; reason: PJSValue = nil);
+    /// compute a JS_EXCEPTION from an object pascal exception instance
+    function ThrowInternalError(E: Exception): JSValueRaw;
     /// raw execution of some JavaScript code
     function Eval(const code, fn: RawUtf8; flags: integer; out err: RawUtf8): JSValue;
     /// execute some JavaScript code in the global context
@@ -3176,6 +3178,14 @@ var
 begin
   ErrorMessage({stacktrace=}true, err, reason);
   DisplayError('QuickJS: %s', [err]); // default is output to (stderr) console
+end;
+
+function TJSContext.ThrowInternalError(E: Exception): JSValueRaw;
+var
+  msg: RawUtf8;
+begin
+  Make([E, ' ', E.Message], msg);
+  result := JS_ThrowInternalError(@self, pointer(msg));
 end;
 
 function TJSContext.Eval(const code, fn: RawUtf8; flags: integer;
