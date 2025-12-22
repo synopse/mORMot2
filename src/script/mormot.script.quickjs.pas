@@ -154,10 +154,10 @@ type
     class function From(aContext: TScriptContext): TThreadSafeEngine; override;
     /// evaluate JavaScript code and return result as variant
     function Evaluate(const Script: RawUtf8;
-      const ScriptName: RawUtf8 = ''): variant; overload;
-    /// evaluate JavaScript code (SynUnicode version)
-    function Evaluate(const Script: SynUnicode;
-      const ScriptName: RawUtf8 = ''): variant; overload;
+      const ScriptName: RawUtf8 = ''): variant;
+    /// evaluate JavaScript code (string/UnicodeString version)
+    function EvaluateS(const Script: string;
+      const ScriptName: RawUtf8 = ''): variant;
     /// trigger garbage collection
     procedure GarbageCollect;
     /// perform GC if beneficial
@@ -381,10 +381,13 @@ begin
     VarClear(result);
 end;
 
-function TQuickJSEngine.Evaluate(const Script: SynUnicode;
+function TQuickJSEngine.EvaluateS(const Script: string;
   const ScriptName: RawUtf8): variant;
+var
+  u: RawUtf8;
 begin
-  result := Evaluate(SynUnicodeToUtf8(Script), ScriptName);
+  StringToUtf8(Script, u);
+  result := Evaluate(u, ScriptName);
 end;
 
 procedure TQuickJSEngine.GarbageCollect;
