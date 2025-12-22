@@ -6470,6 +6470,7 @@ var
   info: ^TSynLogExceptionInfo;
   thrdnam: PShortString;
   last: ^TLastException;
+  bak: TSynLogThreadInfoFlags;
   i, n: PtrInt;
   {$ifdef FPC}
   curr, prev: PtrUInt;
@@ -6501,7 +6502,9 @@ begin
      not IsMainExecutable(pointer(Ctxt.EAddr)) then // fast guess
     exit;
   thrdnam := CurrentThreadNameShort;
-  log.LockAndDisableExceptions; // ignore result = tiTemporaryDisable flag
+  bak := nfo^.Flags;
+  exclude(nfo^.Flags, tiTemporaryDisable); // always log exceptions
+  if log.LockAndDisableExceptions then
   try
     try
       // ensure we need to log this
@@ -6589,7 +6592,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
       // any nested exception should never be propagated to the OS caller
     end;
   finally
-    nfo^.Flags := log.fThreadInfoBackup;
+    nfo^.Flags := bak; // may reintroduce tiTemporaryDisable
     GlobalThreadLock.UnLock;
   end;
 end;
