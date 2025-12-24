@@ -56,7 +56,7 @@ type
     procedure QuickJSTypedArrays;
     /// TQuickJSEngine garbage collection stress test
     // - Creates many objects to verify GC behavior under load
-    procedure QuickJSGCStress;
+    procedure QuickJSStressGC;
   end;
 
   
@@ -461,7 +461,6 @@ begin
       engine.Evaluate('const greet = name => "Hello, " + name');
       res := engine.Evaluate('greet("World")');
       CheckEqual(VariantToUtf8(res), 'Hello, World', 'arrow greet');
-
       // Array.map
       res := engine.Evaluate('[1, 2, 3].map(x => x * 2)');
       doc := _Safe(res);
@@ -469,24 +468,20 @@ begin
       CheckEqual(doc^.Count, 3, 'map count');
       CheckEqual(integer(doc^.Values[0]), 2, 'map[0]');
       CheckEqual(integer(doc^.Values[2]), 6, 'map[2]');
-
       // Array.reduce
       res := engine.Evaluate('[1, 2, 3, 4, 5].reduce((acc, x) => acc + x, 0)');
       CheckEqual(integer(res), 15, 'reduce sum');
       res := engine.Evaluate('[1, 2, 3, 4].reduce((acc, x) => acc * x, 1)');
       CheckEqual(integer(res), 24, 'reduce product');
-
       // Array.filter
       res := engine.Evaluate('[1, 2, 3, 4, 5, 6].filter(x => x > 3)');
       doc := _Safe(res);
       Check(doc^.IsArray, 'filter is array');
       CheckEqual(doc^.Count, 3, 'filter count');
       CheckEqual(integer(doc^.Values[0]), 4, 'filter[0]');
-
       // Array.find
       res := engine.Evaluate('[1, 2, 3, 4, 5].find(x => x > 3)');
       CheckEqual(integer(res), 4, 'find');
-
       // Array.some/every
       res := engine.Evaluate('[1, 2, 3].some(x => x > 2)');
       Check(boolean(res) = true, 'some true');
@@ -494,15 +489,12 @@ begin
       Check(boolean(res) = true, 'every true');
       res := engine.Evaluate('[1, 2, 3].every(x => x > 1)');
       Check(boolean(res) = false, 'every false');
-
       // undefined handling
       res := engine.Evaluate('undefined');
       Check(VarIsEmpty(res) or VarIsNull(res), 'undefined');
-
       // null handling
       res := engine.Evaluate('null');
       Check(VarIsNull(res), 'null');
-
       // Object with method using this
       engine.Evaluate('var obj = { value: 42, getValue: function() { return this.value; } }');
       res := engine.Evaluate('obj.getValue()');
@@ -540,7 +532,6 @@ begin
       Check(doc^.IsArray, 'Int8Array is array');
       CheckEqual(doc^.Count, 5, 'Int8Array length');
       CheckEqual(integer(doc^.Values[0]), 1, 'Int8Array[0]');
-
       // Uint8Array with boundary values
       res := engine.Evaluate('Array.from(new Uint8Array([0, 128, 255]))');
       doc := _Safe(res);
@@ -548,26 +539,22 @@ begin
       CheckEqual(integer(doc^.Values[0]), 0, 'Uint8Array[0]');
       CheckEqual(integer(doc^.Values[1]), 128, 'Uint8Array[1]');
       CheckEqual(integer(doc^.Values[2]), 255, 'Uint8Array[2]');
-
       // Int16Array with negative values
       res := engine.Evaluate('Array.from(new Int16Array([1000, -1000, 32767]))');
       doc := _Safe(res);
       CheckEqual(doc^.Count, 3, 'Int16Array length');
       CheckEqual(integer(doc^.Values[1]), -1000, 'Int16Array negative');
-
       // Float64Array
       res := engine.Evaluate('Array.from(new Float64Array([1.5, 2.25, 3.125]))');
       doc := _Safe(res);
       CheckEqual(doc^.Count, 3, 'Float64Array length');
       CheckSame(double(doc^.Values[0]), 1.5, DOUBLE_SAME, 'Float64Array[0]');
       CheckSame(double(doc^.Values[1]), 2.25, DOUBLE_SAME, 'Float64Array[1]');
-
       // ArrayBuffer
       res := engine.Evaluate('new ArrayBuffer(16).byteLength');
       CheckEqual(integer(res), 16, 'ArrayBuffer byteLength');
       res := engine.Evaluate('new ArrayBuffer(1024).byteLength');
       CheckEqual(integer(res), 1024, 'ArrayBuffer 1KB');
-
       // DataView read/write
       engine.Evaluate('var buf = new ArrayBuffer(8)');
       engine.Evaluate('var view = new DataView(buf)');
@@ -577,7 +564,6 @@ begin
       engine.Evaluate('view.setFloat64(0, 3.14159, true)');
       res := engine.Evaluate('view.getFloat64(0, true)');
       CheckSame(double(res), 3.14159, 0.00001, 'DataView Float64');
-
       // BYTES_PER_ELEMENT
       res := engine.Evaluate('Int8Array.BYTES_PER_ELEMENT');
       CheckEqual(integer(res), 1, 'Int8 bytes');
@@ -595,10 +581,11 @@ begin
   end;
 end;
 
-procedure TTestCoreScript.QuickJSGCStress;
+procedure TTestCoreScript.QuickJSStressGC;
 var
   manager: TThreadSafeManager;
   engine: TQuickJSEngine;
+  code: RawUtf8;
   res: variant;
   i: integer;
 begin
@@ -619,26 +606,32 @@ begin
       // Should still work after GC
       res := engine.Evaluate('obj1000.x + obj1000.y');
       CheckEqual(integer(res), 3000, 'after GC');
-
       // Create and discard many strings
       for i := 1 to 500 do
+      begin
         res := engine.Evaluate(FormatUtf8('"temporary string number %"', [i]));
-      // Maybe GC (at most once per second)
-      engine.MaybeGarbageCollect;
-
+        Check(VarIsString(res), 'temp string');
+        // Maybe GC (at most once per second)
+        engine.MaybeGarbageCollect;
+      end;
       // Create nested objects
       for i := 1 to 100 do
-        engine.Evaluate(FormatUtf8(
+      begin
+        res := engine.Evaluate(FormatUtf8(
           'var nested% = {a: {b: {c: {value: %}}}}', [i, i * 10]));
+        Check(VarIsEmptyOrNull(res), 'nested#');
+      end;
       res := engine.Evaluate('nested100.a.b.c.value');
       CheckEqual(integer(res), 1000, 'nested100 value');
-
       // Create arrays
       for i := 1 to 100 do
-        engine.Evaluate(FormatUtf8('var arr% = [%, %, %]', [i, i, i+1, i+2]));
+      begin
+        FormatUtf8('var arr% = [%, %, %]', [i, i, i+1, i+2], code);
+        res := engine.Evaluate(code);
+        CheckUtf8(VarIsEmptyOrNull(res), code);
+      end;
       res := engine.Evaluate('arr100[0] + arr100[1] + arr100[2]');
       CheckEqual(integer(res), 303, 'arr100 sum');
-
       // Final GC and verify engine still works
       engine.GarbageCollect;
       res := engine.Evaluate('1 + 1');
