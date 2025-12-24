@@ -28,9 +28,9 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:https://gith
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot 2 Framework Documentation}.\line Copyright (C) 2025 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
-The {\i Synopse mORMot 2 Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application - see @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
-The {\i Synopse mORMot 2 Framework Documentation} is a free document, released under a GPL 3.0 License.
+{\i Synopse mORMot 2 Documentation}.\line Copyright (C) 2025 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
+The {\i Synopse mORMot 2 Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application - see @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
+The {\i Synopse mORMot 2 Documentation} is a free document, released under a GPL 3.0 License.
 {\b Trademark Notice}
 Rather than indicating every occurrence of a trademarked name as such, this document uses the names only in an editorial fashion and to the benefit of the trademark owner with no intention of infringement of the trademark.
 
@@ -112,7 +112,7 @@ This document is intended to describe the Design Input Product Specifications.
 : Project Concept
 :  Purpose and Scope
 This document focuses on the {\i mORMot 2} library.
-The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.3 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
+The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.3 release of the {\i Synopse mORMot library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
 :  Concept Statement
 It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the {\i Delphi} programing environment.
 Latest versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the {\i Delphi} compiler as well, with a more open architecture.
@@ -307,7 +307,7 @@ DocumentFrontPage=ProjectDetails,Warning,PeopleDetails,RevisionDetails,AddPurpos
 Owner=SRS
 Order=SRS
 ; Owner: [SAD-*] -> * reference; Order=SRS -> [SAD-*] have no sub items
-Name=mORMot 2 Framework Documentation
+Name=mORMot Reference Documentation
 Purpose=Describe the implications of each software requirement specification on all the affected software modules
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
@@ -344,7 +344,10 @@ FileName=mORMot2
 %happymormot.png
 : Welcome to mORMot 2!
 This documentation applies to the @=Revision@ revision of the {\i mORMot 2} library.
-After a presentation of the framework architecture and main features, each source code unit is detailed, with clear diagrams and tables showing the dependencies between the units, and the class hierarchy of the objects implemented within.
+After a quick presentation of the toolbox architecture and main features, each source code unit is detailed, with clear diagrams and tables showing the dependencies between the units, and the class hierarchy of the objects implemented within.
+This documentation has been mostly generated from source code and comments, so is acurate to the time of its generation.
+{\b A higher level presentation of {\i mORMot 2} and its main abilites is available in the repository itself, in\line @https://github.com/synopse/mORMot2/tree/master/docs }
+You can download a single-file pdf of this documentation as\line @https://synopse.info/files/doc/mORMot2.pdf
 : Getting Help
 About free or professional support:
 - Support is freely available in the project forum from the {\i mORMot} Open Source community:\line @https://synopse.info/forum;
@@ -353,19 +356,18 @@ About free or professional support:
 - The source is published under a permissive MPL/GPL/LGPL Three-License:\line @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
 - Synopse, as a company, can provide a commercial license, professional support, expertise, bug fixes or enhancements, on request:\line @https://synopse.info/forum/viewtopic.php?id=25
 : Work in progress
-This documentation is in early stage. API documentation is accurate, but we will try to make a new high-level presentation of the framework here.
-For reference, please look at the {\i mORMot 1} documentation, which is very verbose, but very complete, especially about architectural patterns. Most of the information still apply to {\i mORMot 2}, with some minor renaming (e.g. {\f1\fs20 @*TSQLRecord@} into {\f1\fs20 @*TOrm@}):\line @https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
-We would like to reduce this documentation to a startup guide, and an introduction to the framework.
+This documentation is in early stage. As stated above, API documentation is accurate, but its high-level presentation is currently lacking behind {\i mORMot 1} documentation at @https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
+For a general introduction to the toolbox features, please look at the {\i AI-Generated mORMot 2} documentation, which covers its high-level usage - thanks a lot {\i Javier Tarí Agulló} for this amazing work using the latest AI tools:\line @https://github.com/synopse/mORMot2/tree/master/docs
 
 [SAD-Source]
 ; this Section body is added as the introduction of the document first part
 TitleOffset=0
-DisplayName=mORMot Framework Overview
+DisplayName=mORMot 2 Overview
 
 :Synopse mORMot Overview
 %IamLost.png
 : What could you expect?
-{\i Synopse mORMot 2} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for modern Object pascal, on FPC and Delphi.
+{\i Synopse mORMot 2} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ {\i Toolbox} for modern Object pascal, on FPC and Delphi.
 The main features of {\i mORMot} are therefore:
 - An optimized cross-compiler and cross-platform {\i @*JSON@/@*UTF-8@ and @*RTTI@ kernel};
 - {\i Direct SQL and NoSQL} database access (e.g. SQLite3, PostgreSQL, Oracle, MSSQL, OleDB, ODBC, MongoDB);
@@ -375,6 +377,7 @@ The main features of {\i mORMot} are therefore:
 - {\i Clients}: consume your data or services from any platform, via ORM/SOA APIs;
 - {\i Web MVC}: publish your ORM/SOA process as responsive Web Applications;
 - A lot of other {\i reusable bricks} (e.g. network, cryptography, threads, dictionaries, logging, binary serialization, variants, generics, cross-platform...).
+We like to present {\i mORMot 2} not as a "Framework", but like the ultimate "Toolbox" for modern pascal. It is like a RTL-on-steroids, which works directly on several supported platforms, and with both FPC and Delphi as compiler. It is best used instead of the Runtime Library of those compilers, to make modern and efficient applications.
 
 \graph mORMotDesignORMSOA General mORMot architecture
 subgraph cluster_0 {
@@ -426,7 +429,7 @@ Emphasizing speed and versatility, {\i mORMot} leverages the advantages of moder
 - or let experienced users develop scalable service-based (DDD) projects for their customers,
 - or leverage FPC cross-platform abilities with an existing Delphi code base, to embrace the next decades,
 - have fun and see modern object pascal challenge the latest languages or frameworks.
-Speed and scalability has been implemented from the ground up: the rewritten version 2 of the framework has pushed the performance numbers of {\i mORMot 1} even further, and cleaned its source code to ease its maintainability for the next decade.
+Speed and scalability has been implemented from the ground up: the rewritten version 2 of {\i mORMot} has pushed the performance numbers of {\i mORMot 1} even further, and cleaned its source code to ease its maintainability for the next decade.
 \page
 :1 FAQ
 Before you start going any further, we propose here below a simple @**FAQ@ containing the most frequent questions we received on our forums.
@@ -434,25 +437,25 @@ First of all, take a look at the {\i keyword index} available at the very beginn
 Feel free to give your feedback at @https://synopse.info/forum asking new questions or improving answers!
 {\b Should I use {\i mORMot 2} or the older {\i mORMot 1}?}\line You are right, {\i mORMot 2} is the way to go for any new project: {\i mORMot 1} is considered in a bug-fix-only state. And {\i mORMot 2} is not a young project: it is used on production for diverse solutions since more than a year. For an existing {\i mORMot 1} project, we will continue to fix the main bugs and supply the {\i SQLite3} static updates, but no new feature or enhancement will appear anymore on this branch. Consider migrating your project to {\i mORMot 2} as soon as you have a little time. It is not a complex process, since most of the code is compatible, once you change to the new units for your whole project.
 {\b Where should I start?}\line Quickly browse this documentation, then download and install the sources @44@, then compile and run the {\f1\fs20 mormot2tests.dpr} program. Check about the various samples from the {\f1\fs20 ex} sub-folders.
-{\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
+{\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, we see this project as a {\i Toolbox}, aka a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services over existing "manual" SQL statements.
 {\b I am a great fan of ORM, sorry, and your ORM seems limited: I don't see any constraint generation, it is hard to work with legacy databases.}\line You saw right: the {\i mORMot} ORM is not a fully bloated ORM. It was meant to create straightforward object persistence, typically a local MicroService database. It lacks full relational mapping, but features some unique advantages, like requests over several DB using SQLite3 virtual tables. It supports a very fast in-memory engine, and ODM/MongoDB backend, which do not have any SQL constraints. You can use another ORM, or plain SQL, if you want to support legacy or pure relational databases - see the next question. But take a look at the notion of Aggregates, and why a full RDBMS is not always mandatory.
 {\b I would like to replace pieces of Delphi-code by using mORMot and the @*DDD@-concept in a huge system, but its legacy database doesn't have integer primary keys, and {\i mORMot} ORM expects a {\f1\fs20 TID}-like field.}\line By design, such legacy tables are not compatible with {\i SQLite3} virtual tables, or our ORM - unless you define an {\f1\fs20 ID} integer additional primary key, which may not be the best idea. Some hints: write a {\i persistence service} as {\f1\fs20 interface}/{\f1\fs20 class}; uncouple persistence and @*SOA@ services (i.e. the SOA {\f1\fs20 @*TRestServer@} is a {\f1\fs20 @*TRestServerFullMemory@} and not a DB/ORM {\f1\fs20 @*TRestServerDB@}); reuse your existing SQL statements, with {\f1\fs20 mormot.db.*} units as access layer if possible (you will have better performance, and direct @*JSON@ support); use the ORM for @*MicroService@ local persistence (with {\i SQLite3}), and/or for new tables in your legacy DB (or another storage, e.g. @*MongoDB@).
-{\b Why are you not using the latest features of the compiler, like generics or class attributes?}\line Our framework does not rely on {\i generics}, but on the power of the object pascal type system: specifying a {\f1\fs20 class} or {\f1\fs20 interface} type as parameter is safe and efficient. But we include some generic-oriented methods, and even a {\f1\fs20 {\f1\fs20 @*mormot.core.generics.pas@}} unit as an alternative to the Delphi/FPC RTL. We offer enumerates when possible, e.g. {\f1\fs20 for .. in ...} over a {\f1\fs20 @*TDocVariantData@}.
-{\b I also notice in your documentation, data types are different from Delphi. You have {\f1\fs20 RawUtf8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} type, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we encourage using the {\f1\fs20 @*RawUtf8@}={\f1\fs20 @*Utf8String@} type, which works with all versions of {\i Delphi} and FPC. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
-{\b During my tests, my client receives non standard @*JSON@ with unquoted fields.}\line Internally, the framework uses JSON in {\i MongoDB} @*extended syntax@, i.e. fields are not quoted - this gives better performance and reduces memory and bandwidth with a {\i mORMot} client. To receive {\f1\fs20 "field":value} instead of {\f1\fs20 field:value}, just add a proper {\f1\fs20 @**User-Agent@} HTTP header to the client request (as any browser does), and the server will emit standard JSON.
+{\b Why are you not using the latest features of the compiler, like generics or class attributes?}\line Our project does not rely on {\i generics}, but on the power of the object pascal type system: specifying a {\f1\fs20 class} or {\f1\fs20 interface} type as parameter is safe and efficient. But we include some generic-oriented methods, and even a {\f1\fs20 {\f1\fs20 @*mormot.core.generics.pas@}} unit as an alternative to the Delphi/FPC RTL. We offer enumerates when possible, e.g. {\f1\fs20 for .. in ...} over a {\f1\fs20 @*TDocVariantData@}.
+{\b I also notice in your documentation, data types are different from Delphi. You have {\f1\fs20 RawUtf8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} type, but some more optimized types were defined: since the whole codebase is @*UTF-8@ based, we encourage using the {\f1\fs20 @*RawUtf8@}={\f1\fs20 @*Utf8String@} type, which works with all versions of {\i Delphi} and FPC. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
+{\b During my tests, my client receives non standard @*JSON@ with unquoted fields.}\line Internally, the toolbox uses JSON in {\i MongoDB} @*extended syntax@, i.e. fields are not quoted - this gives better performance and reduces memory and bandwidth with a {\i mORMot} client. To receive {\f1\fs20 "field":value} instead of {\f1\fs20 field:value}, just add a proper {\f1\fs20 @**User-Agent@} HTTP header to the client request (as any browser does), and the server will emit standard JSON.
 {\b I encounter strange issues about indexes or collations with external {\i SQLite3} tools.}\line By default, our ORM uses its proprietary {\f1\fs20 SYSTENOCASE} collation, which is perfect for {\i Win1252} accents, but unknown outside of {\i mORMot}. Use our {\f1\fs20 SynDbExplorer} tool instead. Or use a standard collation when defining a new ORM table as stated below.
 {\b When I work with floating points and JSON, sometimes numerical values with more than 4 decimals are converted into JSON strings.}\line By default, {\f1\fs20 double} values are disabled in the JSON serialization, to avoid any hidden precision lost during conversion: see below how to enable it.
 {\b I got an access violation with mormot.db.sql {\f1\fs20 ISqlDBRows}.}\line You need to explicitly release the {\f1\fs20 ISqlDBRows} instance, by setting it to {\f1\fs20 nil}, {\i before} freeing the owner's connection - see below.
 {\b @*Deadlock@ occurs with interface callbacks.}\line When working with asynchronous notifications over {\i WebSockets}, you need to ensure you won't fire directly a callback from a main method execution - see below for several solutions.
-{\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation.  We tried to make the documentation exhaustive and accurate. Then you can still use RAD for UI design, but let business be abstracted in pure code. See e.g. the {\f1\fs20 mORMotVCL.pas} unit which can publish any ORM result as {\f1\fs2 TDataSource} for your UI.
-{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} will be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see below - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see below or @72@.
+{\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. Our project is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation.  We tried to make the documentation exhaustive and accurate. Then you can still use RAD for UI design, but let business be abstracted in pure code. See e.g. the {\f1\fs20 mORMotVCL.pas} unit which can publish any ORM result as {\f1\fs2 TDataSource} for your UI.
+{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use {\i mORMot} to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} will be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see below - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see below or @72@.
 {\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line You can indeed easily create a modern @*MVC@ / @*MVVM@ scaling @*Web Application@. Your {\i mORMot} server can easily publish its ORM / SOA business logic as {\i Model}, use {\i @*Mustache@} logic-less templates rendering - see below - for {\i Views}, and defining the {\i ViewModel} / {\i Controller} as regular Delphi methods. See below for more details, and discovering a sample "blog" application.
 {\b I got a "Circular unit reference to 'variants' error" in recent Delphi.}\line This is a bug in the IDE, when importing a project: remove any {\f1\fs20 mormot.core} in  the "Unit-Prefix" entry of your project options - see @https://github.com/synopse/mORMot2/issues/240
-{\b Why is this framework named {\i mORMot}?}\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our computers are designed not to be isolated;\line - Because even if they are cute little rodents eating greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
+{\b Why is this project named {\i mORMot}?}\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our computers are designed not to be isolated;\line - Because even if they are cute little rodents eating greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
 : Quick start
-The {\i mORMot 2} framework is just a set of units. There is no component to install in the IDE. You just download the source (and some static binaries, e.g. with the latest version of SQLite3), you setup your IDE path, and you write code.
+The {\i mORMot 2} Toolbox is just a set of units. There is no component to install in the IDE. You just download the source (and some static binaries, e.g. with the latest version of SQLite3), you setup your IDE path, and you write code.
 Please follow the installation steps available at @https://github.com/synopse/mORMot2#quick-start
 We advice you to clone the repository using `git`, which will allow you to easily upgrade your source code, and also propose your own pull requests to the main repository!
 
@@ -469,7 +472,7 @@ DisplayName=mORMot2
 
 :Enter new territory
 : Meet the mORMot
-The {\i Synopse mORMot} framework consists in a huge number of units, so we will start by introducing them.
+The {\i Synopse mORMot} Toolbox consists in a huge number of units, so we will start by introducing them.
 
 [SDD]
 Owner=SRS
@@ -499,7 +502,7 @@ DocumentIndex=Pictures,Source,Index
 The whole Software documentation process follows the typical steps of this diagram:
 %%FMEADI
 : Purpose
-This @SDD@ applies to the release of the {\i Synopse mORMot Framework} library.
+This @SDD@ applies to the release of the {\i Synopse mORMot Toolbox} library.
 It summarizes the software implementation of each design input as specified by the @DI@.
 This document is divided into the main parts of the Software implementation:
 \LayoutPage
