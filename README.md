@@ -15,9 +15,9 @@ Thanks to all [Contributors](CONTRIBUTORS.md)!
 ## Resources
 
 You can find more about *mORMot 2* in:
-- its [Official Documentation](https://synopse.info/files/doc/mORMot2.html) (work in progress);
+- its [Official Documentation](https://synopse.info/files/doc/mORMot2.html) (work in progress) and [AI Generated Documentation](docs);
 - the [Samples Folder](ex);
-- the [Thomas Tutorials](https://github.com/synopse/mORMot2/tree/master/ex/ThirdPartyDemos/tbo);
+- the [Thomas Tutorials](ex/ThirdPartyDemos/tbo);
 - the [Synopse Forum](https://synopse.info/forum/viewforum.php?id=24);
 - the [Synopse Blog](https://blog.synopse.info);
 - the [Source Code `src` sub-folder](src);

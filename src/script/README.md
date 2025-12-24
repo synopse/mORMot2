@@ -10,17 +10,21 @@ It is a modern and convenient way to add scripting to your applications, e.g. to
 
 Our *mORMot* allows scripting on client or server side, using several engines. We tried to leverage the scripting engines use, so that you may be able to embed the right engine for the right need.
 
-The framework currently supports:
+The framework eventually supports:
 - [QuickJS](https://bellard.org/quickjs/) as a small, stand-alone but complete JavaScript interpreter - perfect for client side execution;
-- [SpiderMonkey](https://mozilla-spidermonkey.github.io/) as JavaScript interpreter and JIT - could be used on production for high-end services.
+- *to be done* [SpiderMonkey](https://mozilla-spidermonkey.github.io/) as JavaScript interpreter and JIT - could be used on production for high-end services.
 
 
 ## Units Presentation
 
 ### mormot.script.core
 
-
+Abstract Types for Generic Scripting Integration
+- Generic `TThreadSafeEngine` Parent class
+- Generic `TThreadSafeManager` Parent class
 
 ### mormot.script.quickjs
 
-
+*QuickJS* JavaScript Interpreter High-Level Integration
+- `TQuickJSEngine` Thread-Safe Engine Implementation
+- `TQuickJSVariant` Custom Variant Type for Late-Binding

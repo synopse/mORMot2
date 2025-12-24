@@ -7,8 +7,8 @@ unit mormot.script.core;
   *****************************************************************************
 
    Abstract Types for Generic Scripting Integration
-    - Generic Execution Engine Parent class
-    - 
+    - Generic TThreadSafeEngine Parent class
+    - Generic TThreadSafeManager Parent class
 
   *****************************************************************************
 }
@@ -32,7 +32,7 @@ uses
   mormot.lib.static;
 
 
-{ ******************* }
+{ ******************* Generic TThreadSafeEngine Parent class }
 
 type
   /// exception class raised from scripting fatal issues
@@ -206,6 +206,9 @@ type
   /// meta-class of our thread-safe engines
   TThreadSafeEngineClass = class of TThreadSafeEngine;
 
+
+{ ******************* Generic TThreadSafeManager Parent }
+
   /// abstract parent class mananing a list of a per-Thread (Java)Script engines
   // - one TThreadSafeEngine will be maintained per thread
   // - never use this abstract class, but inherited implementations
@@ -362,6 +365,7 @@ type
 
 implementation
 
+{ ******************* Generic TThreadSafeManager Parent }
 
 { TThreadSafeManager }
 
@@ -648,6 +652,8 @@ begin
   fWorkerManager := NewWorkerManager;
 end;
 
+
+{ ******************* Generic TThreadSafeEngine Parent class }
 
 { TThreadSafeEngine }
 
