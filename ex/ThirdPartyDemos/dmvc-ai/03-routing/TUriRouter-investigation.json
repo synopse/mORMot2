@@ -1,0 +1,278 @@
+{
+  "class": "TUriRouter",
+  "location": "/mnt/w/mORMot2/src/net/mormot.net.server.pas",
+  "line_range": "181-326",
+  "documentation": "/mnt/w/mORMot2/docs/sad-drafts/11.X-TUriRouter.md",
+  "overview": "Ultra-fast URI routing engine built on Radix Tree data structure. Provides 25.7M lookups/second with zero-allocation for static routes and efficient parametrized route handling.",
+
+  "architecture": {
+    "foundation": "Radix Tree (compressed trie)",
+    "per_method_trees": "TUriRouterTree = array[urmGet..high(TUriRouterMethod)] of TUriTree",
+    "thread_safety": "TObjectRWLightLock - read locks during Process(), write locks during registration",
+    "node_class": "TUriTreeNode (can be customized via constructor)"
+  },
+
+  "http_methods": [
+    "urmGet",
+    "urmPost",
+    "urmPut",
+    "urmDelete",
+    "urmOptions",
+    "urmHead",
+    "urmPatch"
+  ],
+
+  "key_methods": {
+    "initialization": {
+      "constructor": "Create(aNodeClass: TRadixTreeNodeClass; aOptions: TRadixTreeOptions = [])",
+      "access_via_server": "Server.Route (auto-created on first access)",
+      "custom_node_class": "Set Server.RouterClass BEFORE accessing Route property"
+    },
+
+    "registration": {
+      "static_routes": {
+        "Get": "procedure Get(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil)",
+        "Post": "procedure Post(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil)",
+        "Put": "procedure Put(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil)",
+        "Delete": "procedure Delete(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil)",
+        "example": "Server.Route.Get('/plaintext', DoPlainText)"
+      },
+
+      "parametrized_routes": {
+        "Run": "procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8; const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil)",
+        "example": "Server.Route.Get('/user/<user>/pic/<id>', DoUserPic)",
+        "multi_method_example": "Server.Route.Run([urmGet, urmPost, urmPut, urmDelete], '/user/<user>/pic/<id>', DoCrud)"
+      },
+
+      "uri_rewriting": {
+        "Rewrite": "procedure Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8; aTo: TUriRouterMethod; const aToUri: RawUtf8)",
+        "examples": [
+          "Server.Route.Rewrite(urmGet, '/info', urmGet, '/root/timestamp/info')",
+          "Server.Route.Rewrite(urmGet, '/user/<id>', urmGet, '/root/userservice/new?id=<id>')",
+          "Server.Route.Get('/admin.php', '403')  // Return HTTP error code",
+          "Server.Route.Get('/*', '/static/*')  // Wildcard (synonym for <path:path>)"
+        ]
+      },
+
+      "rtti_based": {
+        "RunMethods": "procedure RunMethods(RouterMethods: TUriRouterMethods; Instance: TObject; const Prefix: RawUtf8 = '/')",
+        "example": "Server.Route.RunMethods([urmGet], Controller, '/api/')",
+        "note": "Published methods become routes. Method names map to URIs (exact case, _ becomes -)"
+      }
+    },
+
+    "parameter_extraction": {
+      "default_property": "Ctxt['param']  // Returns RawUtf8",
+      "type_safe_int64": "Ctxt.RouteInt64('id', userId)  // Returns boolean, sets userId",
+      "type_safe_utf8": "Ctxt.RouteUtf8('name', userName)  // Returns boolean, sets userName",
+      "equality_check": "Ctxt.RouteEquals('status', 'active')  // Returns boolean",
+      "opaque_context": "Ctxt.RouteOpaque  // Returns custom pointer passed during registration"
+    },
+
+    "processing": {
+      "Process": "function Process(Ctxt: THttpServerRequestAbstract): integer",
+      "returns": "0 to continue processing, or HTTP status code if handled by callback",
+      "thread_safe": "Yes (read locks)"
+    },
+
+    "inspection": {
+      "Lookup": "function Lookup(const aUri, aUriMethod: RawUtf8): TUriTreeNode",
+      "statistics": "Router.Gets, Router.Posts, Router.Puts, Router.Deletes, Router.Patchs, Router.Heads, Router.Optionss"
+    },
+
+    "management": {
+      "Clear": "procedure Clear(aMethods: TUriRouterMethods = [urmGet..high(TUriRouterMethod)])",
+      "ReplaceRoute": "function ReplaceRoute(another: TUriRouter): TUriRouter  // Atomic replacement"
+    }
+  },
+
+  "parameter_syntax": {
+    "basic": {
+      "syntax": "<param>",
+      "description": "Any non-empty string (default)",
+      "example": "/user/<id>/pic/<pic_id>"
+    },
+    "typed_integer": {
+      "syntax": "<int:param>",
+      "description": "Must be a valid integer",
+      "example": "/user/<int:id>"
+    },
+    "typed_path": {
+      "syntax": "<path:param>",
+      "description": "Greedy match including slashes (for file paths)",
+      "example": "/static/<path:filepath>"
+    },
+    "wildcard": {
+      "syntax": "*",
+      "description": "Synonym for <path:path>",
+      "example": "/static/*  maps to  /static/<path:path>"
+    }
+  },
+
+  "usage_pattern": {
+    "basic_static_route": [
+      "function DoPlainText(Ctxt: THttpServerRequestAbstract): cardinal;",
+      "begin",
+      "  Ctxt.OutContent := 'Hello, World!';",
+      "  Ctxt.OutContentType := TEXT_CONTENT_TYPE;",
+      "  result := HTTP_SUCCESS;",
+      "end;",
+      "",
+      "Server.Route.Get('/plaintext', DoPlainText);"
+    ],
+
+    "parametrized_route": [
+      "function DoUserPic(Ctxt: THttpServerRequestAbstract): cardinal;",
+      "var",
+      "  user, picId: RawUtf8;",
+      "begin",
+      "  user := Ctxt['user'];",
+      "  picId := Ctxt['id'];",
+      "  Ctxt.OutContent := FormatUtf8('User: %, Picture: %', [user, picId]);",
+      "  result := HTTP_SUCCESS;",
+      "end;",
+      "",
+      "Server.Route.Get('/user/<user>/pic/<id>', DoUserPic);"
+    ],
+
+    "typed_parameter_route": [
+      "function DoUserById(Ctxt: THttpServerRequestAbstract): cardinal;",
+      "var",
+      "  userId: Int64;",
+      "begin",
+      "  if Ctxt.RouteInt64('id', userId) then",
+      "  begin",
+      "    // userId is now a valid Int64",
+      "    Ctxt.OutContent := FormatUtf8('{\"user_id\":%}', [userId]);",
+      "    result := HTTP_SUCCESS;",
+      "  end",
+      "  else",
+      "    result := HTTP_BADREQUEST;",
+      "end;",
+      "",
+      "Server.Route.Get('/user/<int:id>', DoUserById);"
+    ],
+
+    "multi_method_crud": [
+      "function DoCrud(Ctxt: THttpServerRequestAbstract): cardinal;",
+      "begin",
+      "  case Ctxt.Method of",
+      "    'GET': result := DoRetrieve(Ctxt);",
+      "    'POST': result := DoCreate(Ctxt);",
+      "    'PUT': result := DoUpdate(Ctxt);",
+      "    'DELETE': result := DoDelete(Ctxt);",
+      "  else",
+      "    result := HTTP_NOTALLOWED;",
+      "  end;",
+      "end;",
+      "",
+      "Server.Route.Run(",
+      "  [urmGet, urmPost, urmPut, urmDelete],",
+      "  '/user/<user>/pic/<id>',",
+      "  DoCrud",
+      ");"
+    ]
+  },
+
+  "performance": {
+    "uri_lookups": "25.7M/sec (37ns avg)",
+    "static_rewrites": "11.9M/sec (80ns avg)",
+    "parametrized_rewrites": "8.1M/sec (117ns avg)",
+    "static_execute": "10.4M/sec (91ns avg)",
+    "parametrized_execute": "5.8M/sec (162ns avg)",
+    "zero_allocation": "Static routes perform zero heap allocations during request processing",
+    "benchmark_source": "test/test.net.proto.pas - TNetworkProtocols._TUriTree"
+  },
+
+  "test_examples": {
+    "file": "/mnt/w/mORMot2/test/test.net.proto.pas",
+    "procedure": "TNetworkProtocols._TUriTree",
+    "line_range": "597-820",
+    "examples": [
+      "router.Get('/plaintext', DoRequest_)",
+      "router.Get('/do/<one>/pic/<two>', DoRequest0)",
+      "router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest4)",
+      "router.Post('/user/<id>', '/root/user.new?id=<id>')",
+      "router.Post('/user/<id>/picture/<pic>', '/root/user.newpic?pic=<pic>&id=<id>')",
+      "router.Delete('/*', '/static/*')",
+      "router.Delete('/root1/<path:url>', '/roota/<url>')"
+    ]
+  },
+
+  "real_world_example": {
+    "file": "/mnt/w/mORMot2/ex/techempower-bench/raw.pas",
+    "usage": "fHttpServer.Route.RunMethods([urmGet], self)",
+    "description": "TechEmpower benchmark using RTTI-based routing"
+  },
+
+  "integration_with_http_server": {
+    "access": "Server.Route (property that auto-creates TUriRouter on first access)",
+    "process_flow": [
+      "1. Client request arrives → THttpServerRequest.Prepare()",
+      "2. Router.Process(Ctxt) called",
+      "3. Parse HTTP method → Select appropriate TUriTree",
+      "4. Radix tree lookup → Find matching TUriTreeNode",
+      "5. Extract parameters → Store in Ctxt['param']",
+      "6. Execute handler or rewrite URI",
+      "7. If handler executed → Return HTTP status code",
+      "8. If URI rewritten → Continue to OnRequest handler"
+    ],
+    "custom_router_class": [
+      "Server.RouterClass := TMyCustomUriNode;  // Set BEFORE accessing Route",
+      "Server.Route.Get('/custom', DoCustom);"
+    ]
+  },
+
+  "best_practices": [
+    "Group routes by resource for better organization",
+    "Always validate extracted parameters (especially integer conversions)",
+    "Use typed parameters (<int:id>) for automatic validation",
+    "Block unwanted routes explicitly for security (e.g., '/admin.php', '/.env')",
+    "Use consistent API versioning with prefixes (/api/v1/, /api/v2/)",
+    "For file serving, use <path:filepath> or * for greedy path matching",
+    "Register routes during server initialization (setup phase)",
+    "Use Clear() followed by re-registration to modify routing table",
+    "Keep old router alive briefly after ReplaceRoute() for pending requests"
+  ],
+
+  "notes": [
+    "Individual routes cannot be deleted once registered - use Clear() then re-register",
+    "Router is automatically created on first Server.Route access",
+    "Thread-safe for concurrent request processing",
+    "Parameter extraction is case-sensitive",
+    "Wildcard '*' is synonym for '<path:path>'"
+  ],
+
+  "ready_for_refactor": true,
+
+  "recommended_refactor_approach": {
+    "current_pattern": "RPC-style: POST /root/RoutingApi.GetUser with {\"id\":123}",
+    "new_pattern": "RESTful: GET /api/users/123",
+    "implementation_steps": [
+      "1. Keep existing IRoutingApi interface-based RPC endpoints unchanged",
+      "2. Add new TUriRouter-based RESTful endpoints alongside",
+      "3. Create callback functions for each RESTful route",
+      "4. Use Server.Route.Get/Post/Put/Delete with parametrized URIs",
+      "5. Extract path parameters using Ctxt['id'] or Ctxt.RouteInt64('id', userId)",
+      "6. Demonstrate both patterns working side-by-side",
+      "7. Add documentation showing the differences and benefits"
+    ],
+    "example_conversion": {
+      "old_rpc": "POST /root/RoutingApi.GetUser with {\"id\":123}",
+      "new_restful": "GET /api/users/123",
+      "handler": [
+        "function DoGetUser(Ctxt: THttpServerRequestAbstract): cardinal;",
+        "var userId: Int64;",
+        "begin",
+        "  if not Ctxt.RouteInt64('id', userId) then",
+        "    Exit(HTTP_BADREQUEST);",
+        "  // ... retrieve user by userId ...",
+        "  Ctxt.OutContent := user.ToJson;",
+        "  result := HTTP_SUCCESS;",
+        "end;",
+        "",
+        "Server.Route.Get('/api/users/<int:id>', DoGetUser);"
+      ]
+    }
+  }
+}

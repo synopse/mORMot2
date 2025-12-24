@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>mORMot2 CORS Sample</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #856404;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #17a2b8;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #0c5460;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 10px 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        #output {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            color: #27ae60;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        code {
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>mORMot2 CORS Support Sample</h1>
+
+    <div class="warning">
+        <strong>⚠ Important:</strong> This page must be served from a different port (e.g., http://localhost:9090)
+        than the API server (http://localhost:8080) to demonstrate CORS functionality correctly.
+    </div>
+
+    <div class="info">
+        <strong>ℹ How to serve this page:</strong><br>
+        <code>cd www</code><br>
+        <code>python -m http.server 9090</code><br>
+        Then open <code>http://localhost:9090</code>
+    </div>
+
+    <h3>Change CORS configuration in the server:</h3>
+    <p>Run the server with different modes:</p>
+    <ul>
+        <li><code>MiddlewareCors all</code> - Allow all origins (*) ✓</li>
+        <li><code>MiddlewareCors specific</code> - Allow localhost:9090 + anotherserver.com ✓</li>
+        <li><code>MiddlewareCors restrict</code> - Only anotherserver.com (blocks localhost:9090) ✗</li>
+    </ul>
+
+    <h3>Test CORS Requests:</h3>
+
+    <button id="btnCORS">POST request with CORS enabled!</button>
+    <button id="btnNoCORS">POST request with No-CORS!</button>
+    <button id="btnGetAll">GET all customers</button>
+
+    <div id="output"></div>
+
+    <script defer>
+        let output = document.getElementById('output');
+
+        function logOutput(message, isError = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = isError ? 'error' : 'success';
+            output.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        document.getElementById('btnNoCORS').onclick = () => {
+            clearOutput();
+            logOutput('Sending POST request with mode: no-cors...');
+
+            fetch('http://localhost:8080/CustomerApi/CreateCustomer', {
+                "mode": "no-cors",
+                "method": 'POST',
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify({ "hello": "world" })
+            })
+                .then((res) => {
+                    logOutput('Request completed but response is opaque to javascript (no-cors mode)');
+                    logOutput('Response type: ' + res.type);
+                    logOutput('Response status: ' + res.status);
+                })
+                .catch((err) => {
+                    logOutput('Error: ' + err.message, true);
+                });
+        };
+
+        document.getElementById('btnCORS').onclick = () => {
+            clearOutput();
+            logOutput('Sending POST request with CORS...');
+
+            fetch('http://localhost:8080/CustomerApi/CreateCustomer', {
+                "method": 'POST',
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify({ "hello": "world" })
+            })
+                .then((res) => {
+                    logOutput('Response received (status: ' + res.status + ')');
+                    return res.json();
+                })
+                .then((json) => {
+                    logOutput('Success! Response data:');
+                    logOutput(JSON.stringify(json, null, 2));
+                })
+                .catch((err) => {
+                    logOutput('CORS Error: ' + err.message, true);
+                    logOutput('This may happen if:', true);
+                    logOutput('  1. Server is not running on http://localhost:8080', true);
+                    logOutput('  2. CORS mode is "restrict" (blocks localhost:9090)', true);
+                    logOutput('  3. This page is not served from http://localhost:9090', true);
+                });
+        };
+
+        document.getElementById('btnGetAll').onclick = () => {
+            clearOutput();
+            logOutput('Sending POST request to GetAllCustomers...');
+
+            fetch('http://localhost:8080/CustomerApi/GetAllCustomers', {
+                "method": 'POST',
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify({})
+            })
+                .then((res) => {
+                    logOutput('Response received (status: ' + res.status + ')');
+                    return res.json();
+                })
+                .then((json) => {
+                    logOutput('Success! Customers:');
+                    if (json.length === 0) {
+                        logOutput('No customers found. Try creating one first!');
+                    } else {
+                        json.forEach((customer, idx) => {
+                            logOutput(`Customer ${idx + 1}: ${customer}`);
+                        });
+                    }
+                })
+                .catch((err) => {
+                    logOutput('Error: ' + err.message, true);
+                });
+        };
+
+        // Log page load info
+        window.addEventListener('load', () => {
+            logOutput('Page loaded from: ' + window.location.origin);
+            logOutput('API server: http://localhost:8080');
+            logOutput('');
+            if (window.location.port === '9090') {
+                logOutput('✓ Correct setup! This page is served from port 9090');
+            } else {
+                logOutput('⚠ Warning: This page should be served from port 9090 for proper CORS testing', true);
+            }
+        });
+    </script>
+</body>
+
+</html>

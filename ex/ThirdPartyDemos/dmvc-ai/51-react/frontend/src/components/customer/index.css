@@ -1,0 +1,45 @@
+.errors {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.errors h3 {
+    color: #721c24;
+    margin-top: 0;
+}
+
+.errors ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.error {
+    color: #721c24;
+    margin: 0.5rem 0;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+}
+
+.form-group button {
+    margin-right: 0.5rem;
+}

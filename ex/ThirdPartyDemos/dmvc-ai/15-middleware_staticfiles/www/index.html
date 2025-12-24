@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Static Files Sample - Path 1</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .path-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2196f3;
+            margin: 20px 0;
+        }
+        .links {
+            margin-top: 30px;
+        }
+        .links a {
+            display: block;
+            padding: 10px;
+            margin: 5px 0;
+            background: #2196f3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        .links a:hover {
+            background: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>mORMot2 Static Files Middleware Sample</h1>
+
+        <div class="path-info">
+            <strong>Current Path:</strong> /static (www folder)<br>
+            <strong>Server:</strong> mORMot2 TRestHttpServer with custom static file serving<br>
+            <strong>Features:</strong> Default file serving, MIME type detection, cache headers
+        </div>
+
+        <h2>Available Static Paths</h2>
+        <div class="links">
+            <a href="/static">Path 1: /static → www/</a>
+            <a href="/static2">Path 2: /static2 → www2/</a>
+            <a href="/static3">Path 3: /static3 → www3/ (with custom filters)</a>
+        </div>
+
+        <h2>Nested Folders</h2>
+        <div class="links">
+            <a href="/static/www1/">www1/ subfolder</a>
+            <a href="/static/www2/">www2/ subfolder</a>
+        </div>
+
+        <h2>API Endpoints</h2>
+        <div class="links">
+            <a href="/api" style="background: #4caf50;">GET /api - Welcome message</a>
+        </div>
+
+        <h2>About This Sample</h2>
+        <p>
+            This sample demonstrates serving static files in mORMot2, equivalent to
+            DelphiMVCFramework's <code>TMVCStaticFilesMiddleware</code>.
+        </p>
+        <p>
+            The implementation uses a custom <code>TRestHttpServer</code> subclass that
+            overrides the <code>Request()</code> method to intercept GET requests and
+            serve files from the file system.
+        </p>
+    </div>
+</body>
+</html>

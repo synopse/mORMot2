@@ -1,0 +1,119 @@
+<html>
+<head>
+  <title>mORMot2 JWT Authentication Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    h1 { color: #333; }
+    h2 { color: #666; margin-top: 30px; }
+    .section { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
+    ul { line-height: 1.8; }
+    code { background: #e0e0e0; padding: 2px 6px; border-radius: 3px; }
+    .endpoint { color: #0066cc; }
+  </style>
+</head>
+<body>
+  <h1>mORMot2 JWT Authentication Demo</h1>
+
+  <div class="section">
+    <h2>Public Section</h2>
+    <p>No authentication required:</p>
+    <ul>
+      <li><a href="/PublicService/GetPublicMessage" class="endpoint">GET /PublicService/GetPublicMessage</a></li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Protected Sections</h2>
+    <p>Requires JWT token via <code>Authorization: Bearer &lt;token&gt;</code> header:</p>
+    <ul>
+      <li><span class="endpoint">GET /ProtectedService/GetUserInfo</span> - Requires role1</li>
+      <li><span class="endpoint">GET /ProtectedService/GetAdminInfo</span> - Requires role2</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Test Users</h2>
+    <p>Login with username=password:</p>
+    <ul>
+      <li><code>user1/user1</code> - Has role1</li>
+      <li><code>user2/user2</code> - Has role2</li>
+      <li><code>user3/user3</code> - Has role1 and role2</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>How to Test</h2>
+
+    <h3>1. Login and get JWT token:</h3>
+    <pre>curl -X POST http://localhost:8080/auth/Login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"user1","password":"user1"}'</pre>
+
+    <p>Response:</p>
+    <pre>{"token":"eyJhbGc...", "user":"user1", "roles":["role1"]}</pre>
+
+    <h3>2. Access protected endpoint with token:</h3>
+    <pre>TOKEN="&lt;token from step 1&gt;"
+curl http://localhost:8080/ProtectedService/GetUserInfo \
+  -H "Authorization: Bearer $TOKEN"</pre>
+
+    <p>Response:</p>
+    <pre>{"user":"user1","roles":["role1"],"customClaims":{...}}</pre>
+
+    <h3>3. Try without token (should fail):</h3>
+    <pre>curl http://localhost:8080/ProtectedService/GetUserInfo</pre>
+
+    <p>Response: 401 Unauthorized</p>
+  </div>
+
+  <div class="section">
+    <h2>JWT Features Demonstrated</h2>
+    <ul>
+      <li><strong>HS256 Algorithm</strong> - HMAC-SHA256 symmetric signing</li>
+      <li><strong>Token Generation</strong> - Login endpoint issues JWT tokens</li>
+      <li><strong>Token Verification</strong> - Automatic verification on protected endpoints</li>
+      <li><strong>Role-based Access</strong> - Different roles (role1, role2) with different permissions</li>
+      <li><strong>Custom Claims</strong> - Additional data in JWT payload (customkey1, customkey2)</li>
+      <li><strong>Token Expiration</strong> - Tokens expire after 1 hour</li>
+      <li><strong>Issuer/Subject</strong> - Standard JWT claims (iss, sub, iat, exp)</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>API Endpoints Summary</h2>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+      <tr style="background: #ddd;">
+        <th>Method</th>
+        <th>Endpoint</th>
+        <th>Auth Required</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/auth/Login</td>
+        <td>No</td>
+        <td>Authenticate and receive JWT token</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td>/PublicService/GetPublicMessage</td>
+        <td>No</td>
+        <td>Access public content</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td>/ProtectedService/GetUserInfo</td>
+        <td>Yes (role1)</td>
+        <td>Get user information from JWT</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td>/ProtectedService/GetAdminInfo</td>
+        <td>Yes (role2)</td>
+        <td>Get admin information</td>
+      </tr>
+    </table>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,42 @@
+﻿# Delphi compiled outputs
+Win32/
+Win64/
+__history/
+__recovery/
+*.dcu
+*.exe
+*.dll
+*.bpl
+*.dcp
+*.so
+*.apk
+*.drc
+*.map
+*.dres
+*.rsm
+*.tds
+*.dcu
+*.lib
+*.a
+*.o
+*.ocx
+
+# Delphi project files (auto-generated)
+*.local
+*.identcache
+*.projdata
+*.tvsconfig
+*.dsk
+*.~*
+
+# Backup files
+*.bak
+*.~*
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~

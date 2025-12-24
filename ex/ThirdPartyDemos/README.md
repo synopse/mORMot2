@@ -4,8 +4,14 @@
 
 This folder hosts some Third-Party Examples of the *mORMot* Open Source framework, version 2.
 
-This folder contains sub-folders with some example code committed by third party mORMot users.
-Each demo is published as pedagogical material.
+This folder contains sub-folders with some example code committed by third party *mORMot* users.
+Each demo is published as pedagogical material, and *is **not** supported by Synopse*. Please ask each respective author for follow-up of those samples.
+
+### dmvc-ai
+
+[mORMot2 DMVC Sample Collection](./dmvc-ai) is an AI-generated complete port of [DelphiMVCFramework samples](https://github.com/danieleteti/delphimvcframework/tree/master/samples) to *mORMot 2*, demonstrating REST API development patterns and framework equivalence.
+
+It is also a good illustration of how AI-friendly *mORMot* is for code generation. Some code may work, or not, due to the AI magic - any feedback is welcome! Thanks https://github.com/JavierusTk for sharing this!
 
 ### martin-doyle
 

@@ -1,0 +1,180 @@
+{
+  "research_summary": "StaticFile API Investigation for mORMot2",
+  "status": "complete",
+  "findings": {
+    "primary_method": "THttpServerRequestAbstract.SetOutFile",
+    "location": "/mnt/w/mORMot2/src/net/mormot.net.http.pas",
+    "line_numbers": "882-897 (declarations), 4700-4800 (implementations)",
+
+    "method_signatures": [
+      {
+        "signature": "function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean; const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0; FileSize: PInt64 = nil): cardinal;",
+        "description": "Set OutContent and OutContentType fields to return a specific file",
+        "line": "882-884",
+        "features": [
+          "Returns status 200 with STATICFILE_CONTENT_TYPE marker",
+          "Handle304NotModified = TRUE checks file age/size for HTTP_NOTMODIFIED (304)",
+          "CacheControlMaxAgeSec adds Cache-Control: max-age=xxx header",
+          "Optional FileSize parameter (0 if not found, -1 if folder)"
+        ]
+      },
+      {
+        "signature": "function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean; FileSize: Int64; FileLastModified: TUnixMSTime; CacheControlMaxAgeSec: integer = 0): cardinal;",
+        "description": "Set OutContent without checking file on disk",
+        "line": "891-893",
+        "features": [
+          "Overload that doesn't check file on disk",
+          "Uses provided FileSize and FileLastModified",
+          "Handle304NotModified checks file age and ETag in OutCustomHeaders",
+          "Returns HTTP_NOTMODIFIED (304) if appropriate"
+        ]
+      },
+      {
+        "signature": "procedure SetOutProgressiveFile(const FileName: TFileName; ExpectedFileSize: Int64);",
+        "description": "Return file content in progressive mode",
+        "line": "896-897",
+        "features": [
+          "Includes internal STATIC-PROGSIZE: header if ExpectedFileSize <> 0",
+          "Used for progressive static file serving",
+          "File not yet fully available - wait for sending"
+        ]
+      }
+    ],
+
+    "how_it_works": {
+      "mechanism": "Sets special STATICFILE_CONTENT_TYPE marker",
+      "constant_value": "STATICFILE_CONTENT_TYPE = '!STATICFILE' (defined in mormot.core.os.pas:260)",
+      "content_storage": "File path is stored in OutContent field (not file contents)",
+      "server_handling": "THttpServer detects STATICFILE_CONTENT_TYPE and calls ProcessStaticFile (mormot.net.server.pas:3311)",
+      "streaming": "Uses optimized file streaming with optional range support (rfAcceptRange, rfProgressiveStatic flags)"
+    },
+
+    "current_example_implementation": {
+      "file": "/mnt/w/mORMot2/ex/dmvc/15-middleware_staticfiles/src/server.pas",
+      "line_numbers": "213-220",
+      "current_code": [
+        "Ctxt.OutContent := StringToUtf8(fileName);",
+        "Ctxt.OutContentType := HTTP_RESP_STATICFILE;",
+        "Ctxt.OutCustomHeaders := FormatUtf8('Content-Type: %; charset=%'#13#10 + 'Cache-Control: public, max-age=3600', [GetMimeType(fileName, CustomMimeTypes, CustomMimeValues), Charset]);"
+      ],
+      "issues": [
+        "Manual assignment of HTTP_RESP_STATICFILE (alias for STATICFILE_CONTENT_TYPE)",
+        "Manual construction of Content-Type and Cache-Control headers",
+        "No 304 Not Modified support",
+        "No ETag support",
+        "Manual MIME type detection"
+      ]
+    },
+
+    "recommended_refactor": {
+      "approach": "Replace manual assignment with SetOutFile method",
+      "benefits": [
+        "Automatic MIME type detection via GetMimeContentType",
+        "Built-in 304 Not Modified support",
+        "Built-in ETag handling",
+        "Cache-Control header support via CacheControlMaxAgeSec parameter",
+        "Cleaner, more idiomatic code",
+        "Less error-prone"
+      ],
+      "refactored_code": [
+        "// Instead of manual assignment:",
+        "result := Ctxt.SetOutFile(",
+        "  fileName,                    // File path",
+        "  True,                        // Handle304NotModified",
+        "  '',                          // ContentType (empty = auto-detect)",
+        "  3600                         // CacheControlMaxAgeSec",
+        ");"
+      ],
+      "migration_notes": [
+        "SetOutFile returns HTTP status (HTTP_SUCCESS, HTTP_NOTMODIFIED, HTTP_NOTFOUND)",
+        "Automatic MIME detection means custom MIME types need different approach",
+        "Content-Type header is set automatically (can override with 3rd parameter)",
+        "Charset handling needs to be done via ContentType parameter if needed"
+      ]
+    },
+
+    "custom_mime_type_handling": {
+      "challenge": "SetOutFile auto-detects MIME, but example has custom types (.xpi)",
+      "solution": "Pass custom ContentType as 3rd parameter when extension matches custom types",
+      "code_pattern": [
+        "var",
+        "  mimeType: RawUtf8;",
+        "begin",
+        "  // Check custom MIME types first",
+        "  mimeType := GetMimeType(fileName, CustomMimeTypes, CustomMimeValues);",
+        "  ",
+        "  // Use SetOutFile with custom MIME type",
+        "  result := Ctxt.SetOutFile(",
+        "    fileName,",
+        "    True,                      // Handle304NotModified",
+        "    mimeType + '; charset=' + Charset,  // Custom ContentType with charset",
+        "    3600                       // CacheControlMaxAgeSec",
+        "  );"
+      ]
+    },
+
+    "integration_with_rest_http_server": {
+      "pattern": "Override TRestHttpServer.Request() method",
+      "example_file": "/mnt/w/mORMot2/ex/dmvc/15-middleware_staticfiles/src/server.pas",
+      "class_hierarchy": "TStaticFilesHttpServer = class(TRestHttpServer)",
+      "override_location": "function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;",
+      "workflow": [
+        "1. Check if request matches static file paths",
+        "2. If match: call SetOutFile and return status",
+        "3. If no match: call inherited Request() for REST API routing",
+        "4. Server automatically handles STATICFILE_CONTENT_TYPE response"
+      ]
+    },
+
+    "examples_found": {
+      "tbo_05_webmustache": {
+        "file": "/mnt/w/mORMot2/ex/ThirdPartyDemos/tbo/05-WebMustache/u_FileServer.pas",
+        "line": "209-211",
+        "code": [
+          "pmCtxt.OutContent := StringToUtf8(fileName);",
+          "pmCtxt.OutContentType := STATICFILE_CONTENT_TYPE;",
+          "pmCtxt.OutCustomHeaders := STATICFILE_CONTENT_TYPE_HEADER + #13#10 + GetMimeContentTypeHeader('', fileName);"
+        ],
+        "note": "Also uses manual approach - candidate for refactoring"
+      },
+      "mvc_blog": {
+        "file": "/mnt/w/mORMot2/ex/mvc-blog/MVCViewModel.pas",
+        "approach": "Uses TMvcRunOnRestServer with StaticCacheControlMaxAge property",
+        "line": "173",
+        "code": "run.StaticCacheControlMaxAge := 60 * 30; // 30 minutes",
+        "note": "Higher-level MVC pattern - automatic static file serving"
+      }
+    }
+  },
+
+  "ready_for_refactor": true,
+
+  "refactor_recommendations": {
+    "priority": "high",
+    "complexity": "low",
+    "breaking_changes": "none (internal implementation only)",
+    "steps": [
+      "1. Keep GetMimeType() method for custom MIME type detection",
+      "2. In ServeStaticFile(), replace manual OutContent/OutContentType assignment with SetOutFile call",
+      "3. Pass custom MIME type (with charset) to SetOutFile's ContentType parameter",
+      "4. Remove manual Cache-Control header construction (handled by CacheControlMaxAgeSec)",
+      "5. Benefit from automatic 304 Not Modified support",
+      "6. Update README.md to explain idiomatic mORMot2 pattern"
+    ],
+    "testing": [
+      "Verify all three static paths still work (/static, /static2, /static3)",
+      "Test custom MIME type (.xpi files)",
+      "Test custom filter (file1.html -> file2.html redirect)",
+      "Test blocked files (.txt files in /static3)",
+      "Test 304 Not Modified with If-Modified-Since header",
+      "Test Cache-Control headers are present"
+    ]
+  },
+
+  "documentation_references": [
+    "/mnt/w/mORMot2/src/net/mormot.net.http.pas - THttpServerRequestAbstract.SetOutFile methods",
+    "/mnt/w/mORMot2/src/net/mormot.net.server.pas - ProcessStaticFile implementation",
+    "/mnt/w/mORMot2/src/core/mormot.core.os.pas - STATICFILE_CONTENT_TYPE constant",
+    "/mnt/w/mORMot2/ex/ThirdPartyDemos/tbo/05-WebMustache/README.md - Static file serving explanation"
+  ]
+}

@@ -1,0 +1,30 @@
+# Compiled files
+*.exe
+*.dll
+*.bpl
+*.dcu
+*.dcp
+*.o
+*.ppu
+*.compiled
+*.local
+*.identcache
+*.dsk
+*.~*
+
+# Delphi IDE
+__history/
+__recovery/
+*.dproj.local
+*.groupproj.local
+
+# Build output
+Win32/
+Win64/
+Debug/
+Release/
+
+# Logs and data
+*.log
+*.db
+*.sqlite3

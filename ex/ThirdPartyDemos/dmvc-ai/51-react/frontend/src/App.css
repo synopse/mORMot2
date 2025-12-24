@@ -1,0 +1,44 @@
+.App {
+  text-align: center;
+}
+
+nav {
+  padding: 1rem 2rem;
+  margin-bottom: 2rem;
+}
+
+nav span {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+nav ul {
+  list-style: none;
+  display: flex;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+}
+
+nav li {
+  display: inline;
+}
+
+nav a {
+  text-decoration: none;
+  color: #007bff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}
+
+nav a:hover {
+  background-color: #f8f9fa;
+}
+
+table {
+  margin-top: 2rem;
+}
+
+.btn {
+  margin-right: 0.5rem;
+}
