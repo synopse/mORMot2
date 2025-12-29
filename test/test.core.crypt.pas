@@ -963,7 +963,10 @@ begin
   case dpapi of
     {$ifdef OSWINDOWS}
     0:
-      func := CryptDataForCurrentUserDPAPI;
+      if IsWow64Emulation then // PRISM seems inconsistent about this API
+        exit
+      else
+        func := CryptDataForCurrentUserDPAPI;
     {$endif OSWINDOWS}
     1:
       func := CryptDataForCurrentUser;
@@ -976,9 +979,9 @@ begin
     exit;
   end;
   enc := func('warmup', 'appsec', true);
-  Check(enc <> '');
+  Check(enc <> '', 'warmup');
   test := func(enc, 'appsec', false);
-  Check(test <> '');
+  Check(test <> '', 'appsec');
   CheckEqual(test, 'warmup');
   size := 0;
   tim.Start;
@@ -988,11 +991,10 @@ begin
     CheckEqual(length(plain), i);
     UInt32ToUtf8(i, appsec);
     enc := func(plain, appsec, true);
-    if not ((plain = '') or
-            (enc <> '')) then
-      enc := func(plain, appsec, true);
     check((plain = '') or
-          (enc <> ''));
+          (enc <> ''), 'not void');
+    check((plain = '') or
+          (enc <> plain), 'enc<>plain');
     check(length(enc) >= length(plain));
     test := func(enc, appsec, false);
     CheckEqual(length(test), i);
