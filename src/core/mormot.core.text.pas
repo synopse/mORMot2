@@ -10303,14 +10303,31 @@ begin
   {$endif OSPOSIX}
 end;
 
-function RandomWinAnsi(CharCount: integer): WinAnsiString;
+procedure _Random2WinAnsi(p: PByte; n: integer);
 var
-  i: PtrInt;
-  R: PByteArray;
+  c: byte;
 begin
-  R := RandomByteString(CharCount, result, CP_WINANSI);
-  for i := 0 to CharCount - 1 do
-    R[i] := (R[i] and 127) + 32; // may include some WinAnsi accentuated chars
+  if n <> 0 then
+    repeat
+      c := p^;         // in two steps for FPC
+      c := c and 127;  // in range 00..7f +$20 = 20..9f
+      case c of        // note: 81, 8d, 8f, 90, 9d are unused in CP1252
+        $5f .. $6f:
+          inc(c, $60); // 80..$8f -> c0..cf uppercase accents (7f=DEL)
+        $70 .. $7f:
+          inc(c, $70); // 90..9f -> e0..ef lowercase accents
+      else
+        inc(c, $20);   // -> 20..7e chars (' '..'~' range)
+      end;
+      p^ := c;
+      inc(p);
+      dec(n);
+    until n = 0;
+end;
+
+function RandomWinAnsi(CharCount: integer): WinAnsiString;
+begin
+  _Random2WinAnsi(RandomByteString(CharCount, result, CP_WINANSI), CharCount);
 end;
 
 function RandomAnsi7(CharCount, CodePage: integer): RawByteString;
@@ -10352,12 +10369,8 @@ end;
 function RandomUtf8(CharCount: integer): RawUtf8;
 var
   win: TSynTempBuffer;
-  i: PtrInt;
-  R: PByteArray;
 begin
-  R := win.Init(CharCount);
-  for i := 0 to CharCount - 1 do
-    R[i] := (R[i] and 127) + 32; // may include some WinAnsi accentuated chars
+  _Random2WinAnsi(win.Init(CharCount), CharCount); // include accentuated chars
   WinAnsiConvert.AnsiBufferToRawUtf8(win.buf, CharCount, result);
   win.Done;
 end;
