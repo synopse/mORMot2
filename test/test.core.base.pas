@@ -5404,7 +5404,7 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
 var
   i, j, k, len, len120, lenup100, CP, L, lcid: integer;
   bak, bakj: AnsiChar;
-  W: WinAnsiString;
+  W, W2: WinAnsiString;
   WS: WideString;
   SU, SU2: SynUnicode;
   WU: array[0..3] of WideChar;
@@ -6054,6 +6054,7 @@ begin
   for i := 0 to 1000 do
   begin
     len := i * 5;
+    // test encodings on ASCII 7-bit content
     W := RandomAnsi7(len, CP_WINANSI);
     CheckEqual(length(W), len);
     lenup100 := len;
@@ -6092,12 +6093,12 @@ begin
     Test(949, W);
     Test(874, W);
     Test(CP_UTF8, W); // note: CP_UTF16 is not a true ANSI charset for Test()
-    L := Length(W);
-    if L and 1 <> 0 then
-      SetLength(W, L - 1); // force exact UTF-16 buffer length
+    // test WinAnsi/CP1252 encoding with proper accents support
     W := RandomWinAnsi(len);
-    Check(length(W) = len);
-    U := WinAnsiToUtf8(W);
+    if CheckEqual(length(W), len, 'len') then
+      for j := 1 to len do
+        Check(W[j] >= ' ', '#32');
+    U := WinAnsiToUtf8(W);  // ConsoleWrite(U);
     Check(length(U) >= len);
     check(IsValidUtf8(U), 'IsValidUtf8');
     P := UniqueRawUtf8(U);
@@ -6183,15 +6184,19 @@ begin
     json2 := JsonReformat(json1, jsonNoEscapeUnicode);
     CheckEqual(json2, json, 'jeu2');
     Unic := Utf8DecodeToUnicodeRawByteString(U);
-    CheckEqual(Utf8ToWinAnsi(U), W);
+    CheckEqual(Utf8ToWinAnsi(U), W, 'ua');
     WinAnsiConvert.AnsiToUtf8(W, U1);
-    CheckEqual(WinAnsiConvert.Utf8ToAnsi(U), W);
-    CheckEqual(WinAnsiConvert.UnicodeStringToAnsi(WinAnsiConvert.AnsiToUnicodeString(W)), W);
+    CheckEqual(WinAnsiConvert.Utf8ToAnsi(U), W, 'uw');
+    SU := WinAnsiConvert.AnsiToUnicodeString(W);
+    W2 := WinAnsiConvert.UnicodeStringToAnsi(SU);
+    CheckEqual(W2, W, 'A2U(U2A)');
     if CurrentAnsiConvert.InheritsFrom(TSynAnsiFixedWidth) then
     begin
       CurrentAnsiConvert.AnsiToUtf8(W, U1);
-      CheckEqual(CurrentAnsiConvert.Utf8ToAnsi(U1), W);
-      CheckEqual(CurrentAnsiConvert.UnicodeStringToAnsi(CurrentAnsiConvert.AnsiToUnicodeString(W)), W);
+      W2 := CurrentAnsiConvert.Utf8ToAnsi(U1);
+      CheckEqual(W2, W, 'u2a(a2u)');
+      SU := CurrentAnsiConvert.AnsiToUnicodeString(W);
+      CheckEqual(CurrentAnsiConvert.UnicodeStringToAnsi(SU), W, 'U2A(A2U)');
     end;
     res := RawUnicodeToUtf8(pointer(Unic), length(Unic) shr 1);
     CheckEqual(res, U);
@@ -6266,9 +6271,9 @@ begin
     SetString(Up2, PAnsiChar(pointer(U)), L);
     L := Utf8UpperCopy(pointer(Up), pointer(U), L) - pointer(Up);
     Check(L <= length(U));
-    CheckEqual(ConvertCaseUtf8(pointer(Up2), pointer(Up2), NormToUpperByte), L);
+    CheckEqual(ConvertCaseUtf8(pointer(U), pointer(Up2), NormToUpperByte), L);
     if Up <> '' then
-      Check(EqualBuf(Up, Up2));
+      Check(CompareMem(pointer(Up), pointer(Up2), L));
     if CurrentAnsiConvert.CodePage = CODEPAGE_US then
        // initial text above is WinAnsiString (CP 1252)
       CheckEqual(StringToUtf8(Utf8ToString(U)), U, '1252');
