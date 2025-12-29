@@ -2228,13 +2228,15 @@ function FillSystemRandom(Buffer: PByteArray; Len: integer;
 // - the application can specify a secret salt text, which should reflect the
 // current execution context, to ensure nobody could decrypt the data without
 // knowing this application-specific AppSecret value
-// - will use CryptProtectData DPAPI function call under Windows
-// - see https://msdn.microsoft.com/en-us/library/ms995355
+// - will use CryptProtectData DPAPI function call under Windows, as defined
+// by https://msdn.microsoft.com/en-us/library/ms995355
 // - this function is Windows-only, could be slow, and you don't know which
 // algorithm is really used on your system, so using our mormot.crypt.core.pas
 // CryptDataForCurrentUser() is probably a safer (and cross-platform) alternative
 // - also note that DPAPI has been closely reverse engineered - see e.g.
-// https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
+// https://www.passcape.com/index.php?section=docsys&cmd=details&id=28 -
+// and that it seems unreliable under PRISM WinArm emulation so it will return
+// SymmetricEncrypt(Data) weak encryption/obfuscation on this platform
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
@@ -6858,6 +6860,12 @@ var
   e: PDATA_BLOB;
   ok: boolean;
 begin
+  if IsWow64Emulation then // PRISM seems inconsistent about these API calls
+  begin
+    result := Data;
+    SymmetricEncrypt(crc32cHash(AppSecret), result); // weak but consistent
+    exit; // only used internally by read_h as mean of obfuscation
+  end;
   src.pbData := pointer(Data);
   src.cbData := length(Data);
   if AppSecret <> '' then
