@@ -734,7 +734,7 @@ begin
     result := AtomCacheAdd(Name, AtomNew(Name)); // may trigger EScriptException
 end;
 
-function TThreadSafeEngine.AtomNew(const Name: RawUtf8): TScriptAtom;
+function TThreadSafeEngine.{%H-}AtomNew(const Name: RawUtf8): TScriptAtom;
 begin
   raise EScriptException.CreateUtf8('%.AtomNew: unsupported', [self]);
 end;

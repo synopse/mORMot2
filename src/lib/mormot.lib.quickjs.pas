@@ -301,7 +301,7 @@ type
     procedure Done;
     /// release the memory used by a JSValueRaw - JS_FreeValue() alternative
     procedure FreeInlined(v: PJSValue);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// release the memory used by a JSValue - JS_FreeValue() alternative
     // - won't be inlined so may be used when performance matters less
     procedure Free(var v: JSValue);
