@@ -6735,7 +6735,8 @@ begin
     CryptoApiAesProvider := nil;
     if CryptoApi.Available then
     begin
-      if not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil, PROV_RSA_AES, 0) then
+      if not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
+              PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
         if (HRESULT(GetLastError) <> NTE_BAD_KEYSET) or
            not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
              PROV_RSA_AES, CRYPT_NEWKEYSET) then
