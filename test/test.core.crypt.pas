@@ -963,10 +963,13 @@ begin
   case dpapi of
     {$ifdef OSWINDOWS}
     0:
-      if IsWow64Emulation then // PRISM seems inconsistent about this API
-        exit
-      else
+      begin
+        if IsWow64Emulation then // PRISM seems inconsistent about this API
+          exit;
         func := CryptDataForCurrentUserDPAPI;
+        if OSVersion < wVista then
+          max := 100; // slow API on Windows XP
+      end;
     {$endif OSWINDOWS}
     1:
       func := CryptDataForCurrentUser;
