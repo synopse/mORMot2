@@ -7893,6 +7893,8 @@ begin
     {$ifdef OSWINDOWS}
     // Windows is case insensitive, so mORMot 1 Base64-URI file name may collide
     fn := FormatString('%syn_%', [usrdata, BinToHexLower(@k256, 15)]);
+    if IsWow64Emulation then // inconsistent CryptDataForCurrentUserDPAPI()
+      fn := fn + '_prism';   // another encryption of local key for PRISM
     if not FileExists(fn) then
     begin
       fn64 := FormatString('%_%', [usrdata, BinToBase64uri(@k256, 15)]);
