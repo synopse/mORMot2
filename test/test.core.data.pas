@@ -128,6 +128,7 @@ type
   // defined and implemented in the mormot.core.*.pas units
   TTestCoreProcess = class(TSynTestCase)
   protected
+    procedure Setup; override;
     procedure MustacheTranslate(var English: string);
     procedure MustacheHelper(const Value: variant; out Result: variant);
   published
@@ -424,6 +425,18 @@ end;
 
 
 { TTestCoreProcess }
+
+procedure TTestCoreProcess.Setup;
+var
+  refzip: RawByteString;
+begin
+  // one url to rule them all: avoid github https calls for Mustache + JSON
+  if FileExists(WorkDir + discogsFileName) then
+    exit;
+  refzip := DownloadFile('https://synopse.info/files/process-ref.zip');
+  if not CheckFailed(refzip <> '', 'process-ref') then
+    Check(UnZipMemAll(refzip, WorkDir), 'process-unzip');
+end;
 
 procedure TTestCoreProcess.Variants;
 var
@@ -969,6 +982,7 @@ begin
     JSONPARSER_TOLERANTOPTIONS, []);
   for spec := 0 to High(MUSTACHE_SPECS) do
   begin
+    // may have been downloaded+unzipped from process-ref.zip in Setup
     mustacheJson := DownloadFile(
       'https://raw.githubusercontent.com/mustache/spec/' +
       'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json',
@@ -3505,11 +3519,13 @@ begin
   Check(JA.D = '1234');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayWithoutF), '');
 
+  // may have been downloaded+unzipped from process-ref.zip in Setup
   discogsJson := DownloadFile(
     'https://api.discogs.com/artists/45/releases?page=1&per_page=100',
     discogsFileName);
   Check(IsValidJson(discogsJson), 'discogsJson');
 
+  // may have been downloaded+unzipped from process-ref.zip in Setup
   zendframeworkJson := DownloadFile(
     'https://api.github.com/users/zendframework/repos',
     zendframeworkFileName);
