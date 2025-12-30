@@ -862,10 +862,14 @@
   {$ifdef CPUARM}
     {$define CPUARM3264}
     {$define CPUINTELARM}
+    {$ifndef OSANDROID}
+      {$define CPUARMYIELD}
+    {$endif OSANDROID}
   {$endif CPUARM}
   {$ifdef CPUAARCH64}
     {$define CPUARM3264}
     {$define CPUINTELARM}
+    {$define CPUARMYIELD}
   {$endif CPUAARCH64}
   {$ifdef CPU32}
     {$define THREADID32}    // TThreadID = PtrUInt/pointer on pthread
