@@ -6189,6 +6189,7 @@ begin
     CheckEqual(WinAnsiConvert.Utf8ToAnsi(U), W, 'uw');
     SU := WinAnsiConvert.AnsiToUnicodeString(W);
     W2 := WinAnsiConvert.UnicodeStringToAnsi(SU);
+    //ConsoleWrite(['SU len=', length(SU), ' =', SU]); ConsoleWrite(['W2 len=', length(W2), ' =', W2]); readln;
     CheckEqual(W2, W, 'A2U(U2A)');
     if CurrentAnsiConvert.InheritsFrom(TSynAnsiFixedWidth) then
     begin
