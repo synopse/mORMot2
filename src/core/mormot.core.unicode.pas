@@ -4198,6 +4198,7 @@ procedure TSynAnsiConvert.UnicodeBufferToAnsiVar(Source: PWideChar;
   SourceChars: cardinal; var Result: RawByteString);
 var
   tmp: TSynTempBuffer;
+  l: PtrInt;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
@@ -4205,8 +4206,8 @@ begin
   else
   begin
     tmp.Init(SourceChars * 3);
-    FastSetStringCP(Result, tmp.buf, UnicodeBufferToAnsi(
-      tmp.buf, Source, SourceChars) - PAnsiChar(tmp.buf), fCodePage);
+    l := UnicodeBufferToAnsi(tmp.buf, Source, SourceChars) - PAnsiChar(tmp.buf);
+    FastSetStringCP(Result, tmp.buf, l, fCodePage);
     tmp.Done;
   end;
 end;
@@ -4411,6 +4412,7 @@ const
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var
   i, len, c: PtrInt;
+  w: PByteArray; // FPC arm32 prefers a local variable even at -O2 :(
   a: array[0..255] of AnsiChar;
   u: array[0..255] of WideChar;
 begin
@@ -4447,14 +4449,15 @@ begin
     MoveFast(u[0], fAnsiToWide[0], 512);
   end;
   SetLength(fWideToAnsi, 65536);
+  w := pointer(fWideToAnsi);
   for i := 1 to 126 do
-    fWideToAnsi[i] := i;
-  FillcharFast(fWideToAnsi[127], 65536 - 127, ord('?')); // '?' for unknown char
+    w[i] := i;
+  FillcharFast(w^[127], 65536 - 127, ord('?')); // '?' for unknown char
   for i := 127 to 255 do
   begin
     c := fAnsiToWide[i];
     if c <> 0 then
-      fWideToAnsi[c] := i;
+      w[c] := i;
   end;
   // fixed width Ansi will never be bigger than UTF-8
   fAnsiCharShift := 0;

@@ -96,7 +96,7 @@ const
   // - TJsonWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
   CP_RAWBLOB = 65534;
 
-  /// US English Windows Code Page, i.e. WinAnsi standard character encoding
+  /// US English Windows Code Page, i.e. WinAnsi/Western character encoding
   CP_WINANSI = 1252;
 
   /// Latin-1 ISO/IEC 8859-1 Code Page
