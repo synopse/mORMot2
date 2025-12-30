@@ -209,16 +209,15 @@ const
     'u_getDataDirectory',
     'u_setDataDirectory',
     'u_init');
+  ICU_MAX = 80; // latest ICU 78 was released 2025-10-30
   {$ifdef OSANDROID}
   // https://developer.android.com/guide/topics/resources/internationalization
-  ICU_VER: array[1..15] of string = (
+  ICU_VER: array[1..18] of string = (
     '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
-    '_56', '_58', '_60', '_63', '_66', '_68');
-  ICU_MAX = 80;
-  ICU_MIN = 69; // previous versions are known and listed within ICU_VER[]
+    '_56', '_58', '_60', '_63', '_66', '_68', '_70', '_72', '_75');
+  ICU_MIN = 76; // previous versions are known and listed within ICU_VER[]
   SYSDATA: PAnsiChar = '/system/usr/icu';
   {$else}
-  ICU_MAX = 80;
   ICU_MIN = 44;
   SYSDATA: PAnsiChar = '';
   {$endif OSANDROID}
@@ -235,7 +234,7 @@ begin
   GlobalLock;
   try
     if fLoaded then
-      exit;
+      exit; // try once
     fLoaded := true;
     fSharedCount := 0;
     if LibName <> '' then
@@ -299,7 +298,7 @@ begin
     else
     begin
       {$ifdef OSANDROID}
-      for i := high(ICU_VER) downto 1 do
+      for i := high(ICU_VER) downto 1 do // only check official version numbers
       begin
         if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
         begin
