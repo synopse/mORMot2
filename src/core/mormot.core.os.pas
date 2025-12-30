@@ -10164,9 +10164,12 @@ const
   SpinFactor = 2; // ARM yield has smaller latency than Intel's pause
 
 // "yield" is available since ARMv6K architecture, including ARMv7-A and ARMv8-A
+// - but our FPC arm32 asm seems not knowledgable of this
 procedure DoPause; assembler; nostackframe;
 asm
+     {$ifdef CPUARMYIELD}
      yield // a few cycles, but helps modern CPU adjust their power requirements
+     {$endif CPUARMYIELD}
 end;
 {$endif FPC_CPUARM}
 
