@@ -1007,7 +1007,9 @@
 
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
-    {$define LIBCURLSTATIC}
+    {$ifdef CPUARM3264}
+      {$define LIBCURLSTATIC}
+    {$endif CPUARM3264}
 
   {$else}
 
