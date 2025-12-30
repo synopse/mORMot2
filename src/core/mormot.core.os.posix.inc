@@ -4707,7 +4707,7 @@ var
   rel, dist: RawUtf8;
 begin
   rel := UpperCase(release);
-  for distrib := osArch to high(distrib) do
+  for distrib := osArch to pred(osAndroid) do
   begin
     dist := UpperCase(OS_NAME[distrib]);
     if PosEx(dist, rel) > 0 then
