@@ -12,9 +12,11 @@
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
         <SrcPath Value="../../src"/>
       </SearchPaths>
+      <Conditionals Value="if TargetCPU=&apos;arm&apos; then CustomOptions := &apos;-O2&apos;;"/>
       <CodeGeneration>
+        <SmartLinkUnit Value="True"/>
         <Optimizations>
-          <OptimizationLevel Value="2"/>
+          <OptimizationLevel Value="3"/>
         </Optimizations>
       </CodeGeneration>
       <Linking>
