@@ -830,8 +830,8 @@ var
   // Sheet, NIST SP 800-63B and RFC 8018, and are higher than "$pbkdf2" passlib
   // - typical values on my Core i5-13500 PC with SHA-NI are Pbkdf2Sha1=68.28ms
   // Pbkdf2Sha256=35.89ms Pbkdf2Sha512=110.55ms and Pbkdf2Sha3=112.58ms
-  // - made as a global variable, since you can adjust those values for your
-  // own purpose, as they are part of the hash text itself
+  // - made as a global variable, since you can adjust/tune those values for your
+  // own purpose, since they are published with the MCF prefix text itself
   MCF_ROUNDS: array[mcfMd5Crypt .. mcfPbkdf2Sha3] of cardinal = (
     1000, 535000, 535000, 600000, 310000, 210000, 200000);
 

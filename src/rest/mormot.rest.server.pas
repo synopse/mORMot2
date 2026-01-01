@@ -5712,8 +5712,10 @@ end;
 // https://learn.microsoft.com/en-us/previous-versions/ms995330(v=msdn.10)
 
 // note that Negotiate/Kerberos is two-way so a single call is enough
-// (NTLM three-way is deprecated since Windows 11 version 24H2 and Server 2025
-// so was removed from mORMot in August 2025)
+// - NTLM three-way is deprecated since Windows 11 version 24H2 and Server 2025
+// so was removed from mORMot in August 2025, together with multiple roundtrips
+// - probably wrongly in case of credential delegation on the AD - see
+// https://github.com/synopse/mORMot2/issues/407
 
 function TRestServerAuthenticationSspi.Auth(Ctxt: TRestServerUriContext;
   const aUserName: RawUtf8): boolean;
