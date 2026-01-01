@@ -28,7 +28,7 @@ limitations under the License.
 
 ```
 Synopse mORMot framework 2
-Copyright (C) 2025 Arnaud Bouchez
+Copyright (C) 2026 Arnaud Bouchez
 Synopse Informatique - https://synopse.info
 
 Licensed under MPL 1.1/GPL 2.0/LGPL 2.1 triple license.

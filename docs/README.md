@@ -117,7 +117,7 @@ python3 md_to_html.py
 ## License
 
 **Synopse mORMot 2 Framework Documentation**
-Copyright (C) 2008-2025 Arnaud Bouchez
+Copyright (C) 2008-2026 Arnaud Bouchez
 Synopse Informatique - https://synopse.info
 
 Released under GPL 3.0 License.

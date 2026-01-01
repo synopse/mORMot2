@@ -32,7 +32,7 @@ This document has been adapted from the original mORMot 1.18 SAD to reflect the 
 ## Document License
 
 **Synopse mORMot 2 Framework Documentation**
-Copyright (C) 2008-2025 Arnaud Bouchez
+Copyright (C) 2008-2026 Arnaud Bouchez
 Synopse Informatique - https://synopse.info
 
 The *Synopse mORMot 2 Framework Source Code* is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.

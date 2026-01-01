@@ -37,7 +37,7 @@ For instance, if you select the MPL license, here are the requirements:
 - You have to publish any modified unit in a public web site (e.g. `http://YourSoftwareCompany.com/MPL`), with a description of applied modifications, and no removal of the original license header in source code;
 - You make appear some notice available in the program (About box, documentation, online help), stating e.g.
 
-*This software uses some third-party code of the Synopse mORMot framework (C) 2025 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL*
+*This software uses some third-party code of the Synopse mORMot framework (C) 2026 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL*
 
 Note that this documentation is under GPL 3.0 license only, as stated in this document front page.
 
@@ -49,7 +49,7 @@ If you want to include part of the framework source code in your own open-source
 {
   Sample based on official mORMot 2 sample
 
-  Synopse mORMot 2 framework. Copyright (C) 2025 Arnaud Bouchez
+  Synopse mORMot 2 framework. Copyright (C) 2026 Arnaud Bouchez
     Synopse Informatique - https://synopse.info
   Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
 }
