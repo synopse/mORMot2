@@ -2498,8 +2498,9 @@ procedure ReplaceSection(SectionFirstLine: PUtf8Char;
 
 /// return TRUE if Value of UpperName does exist in P, till end of current section
 // - expects UpperName as 'NAME=' or 'HTTPHEADERNAME:'
-// - note: won't ignore spaces/tabs around the '=' sign
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around '='/':'
 function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// find the Value of UpperName in P, till end of current INI section
 // - expect UpperName already as 'NAME=' for efficient INI key=value lookup
@@ -4024,25 +4025,10 @@ end;
 
 function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 var
-  table: PNormTable;
+  v: PUtf8Char;
 begin
-  if UpperName <> nil then
-  begin
-    result := true;
-    table := @NormToUpperAnsi7;
-    while (P <> nil) and
-          (P^ <> '[') do
-    begin
-      if P^ = ' ' then
-        repeat
-          inc(P)
-        until P^ <> ' '; // trim left ' '
-      if IdemPChar2(table, P, pointer(UpperName)) then
-        exit; // found name
-      P := GotoNextLine(P);
-    end;
-  end;
-  result := false;
+  FindIniNameValueP(P, {PEnd=}nil, pointer(UpperName), v);
+  result := v <> nil; // found, but maybe with result length = 0
 end;
 
 function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
