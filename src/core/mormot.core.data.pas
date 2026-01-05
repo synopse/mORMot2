@@ -2527,9 +2527,9 @@ function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
   UpperValues: PPAnsiChar): boolean;
 
 /// find the integer Value of UpperName in P, till end of current section
-// - expect UpperName as 'NAME=' or 'CONTENT-LENGTH: '
+// - expect UpperName as 'NAME=' or 'CONTENT-LENGTH:'
 // - return 0 if no NAME= entry was found
-// - note: won't ignore spaces/tabs around the '=' sign
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around '='/':'
 function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
 
 /// replace a value from a given set of name=value lines
@@ -4148,21 +4148,10 @@ end;
 
 function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
 var
-  table: PNormTable;
+  v: PUtf8Char;
 begin
-  result := 0;
-  if (P = nil) or
-     (UpperName = '') then
-    exit;
-  table := @NormToUpperAnsi7;
-  repeat
-    if IdemPChar2(table, P, pointer(UpperName)) then
-      break;
-    P := GotoNextLine(P);
-    if P = nil then
-      exit;
-  until false;
-  result := GetInteger(P + length(UpperName));
+  FindIniNameValueP(P, {PEnd=}nil, pointer(UpperName), v);
+  result := GetInteger(v);
 end;
 
 function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
