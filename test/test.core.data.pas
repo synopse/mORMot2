@@ -2277,6 +2277,16 @@ var
     Check(IsObjectDefaultOrVoid(GDtoObject));
     Check(IsObjectDefaultOrVoid(G2));
     Check(ObjectEquals(G2, GDtoObject));
+    U := ObjectToIni(G2);
+    CheckHash(U, $79F2E094);
+    U := '[Main]'#10'[NestedObject]'#10'FIeldVariant : [ 1, 2, 3 ]';
+    Check(IniToObject(U, G2));
+    CheckEqual(VariantSaveJson(G2.NestedObject.FieldVariant), '[1,2,3]');
+    U := '[Main]'#10'[NestedObject]'#10'FIeldVariant : [ 1,2, '#10'3]'#10'[dummy]'#10;
+    Check(not IniToObject(U, G2));
+    CheckEqual(VariantSaveJson(G2.NestedObject.FieldVariant), 'null');
+    Check(IniToObject(U, G2, 'Main', nil, 0, [ifClassSection, ifMultiLineJsonArray]));
+    CheckEqual(VariantSaveJson(G2.NestedObject.FieldVariant), '[1,2,3]');
     G2.Free;
     GDtoObject.Free;
     t := TPropTest.Create;
