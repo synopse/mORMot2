@@ -924,7 +924,7 @@ begin
   CheckEqual(FindIniNameValueU(Content, 'NAME4:'), 'value 4');
   Check(ExistsIniName(pointer(Content), 'NAME='), 'exist1');
   Check(ExistsIniName(pointer(Content), 'NAME2='), 'exist2');
-  Check(not ExistsIniName(pointer(Content), 'NAME 3='), 'exist2');
+  Check(ExistsIniName(pointer(Content), 'NAME 3='), 'exist2');
   Check(ExistsIniNameValue(pointer(Content), 'NAME=', @VUP));
   Check(ExistsIniNameValue(pointer(Content), 'NAME2=', @VUP));
   Check(not ExistsIniNameValue(pointer(Content), 'NAME3=', @VUP));
