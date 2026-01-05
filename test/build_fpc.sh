@@ -70,7 +70,7 @@ LIB2="${LIB2:-$MORMOT2_ROOT}"
 BIN="${BIN:-$LIB2/test/bin}"
 STATIC="${STATIC:-$LIB2/static}"
 SRC="$LIB2/src"
-UNITS="$SRC/app;$SRC/core;$SRC/crypt;$SRC/db;$SRC/lib;$SRC/net;$SRC/orm;$SRC/rest;$SRC/soa;$SRC/script;$SRC/misc"
+UNITS="$SRC/app;$SRC/core;$SRC/crypt;$SRC/db;$SRC/lib;$SRC/net;$SRC/orm;$SRC/rest;$SRC/soa;$SRC/script;$SRC/misc;$SRC/tools/mget"
 INCLUDES="$SRC;$SRC/core;$SRC/net"
 
 mkdir -p "$BIN/fpc-$ARCH_TG/lib"
