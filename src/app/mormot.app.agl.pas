@@ -1415,7 +1415,7 @@ type
     aaHttp,
     aaHttps,
     aaSleep,
-    aaService
+    aaService // Windows only by definition
   );
   TAglActions = set of TAglAction;
   TAglActionDynArray = array of TAglAction;
@@ -1466,6 +1466,7 @@ begin
   end;
 end;
 
+// main processing internal function
 function Exec(Sender: TSynAngelize; Log: TSynLog; Service: TSynAngelizeService;
   Action: TAglAction; Ctxt: TAglContext; const Param: RawUtf8): boolean;
 var
@@ -1512,6 +1513,9 @@ begin
     aaHttps:
       if expectedstatus = 0 then // not overriden by ToInteger()
         expectedstatus := HTTP_SUCCESS;
+    aaService:
+      if expectedstatus = 0 then
+        expectedstatus := ord(ssRunning); // = 4
   end;
   result := false;
   Status := 0;
@@ -1619,9 +1623,17 @@ begin
               sc.Start([]);
             acDoStop:
               sc.Stop;
+            acDoWatch:
+              begin
+                status := ord(sc.State);
+                // e.g. notinstalled=0 stopped=1 running=4 failed=8
+                if (status <> expectedstatus) and
+                   (status <> ord(ssErrorRetrievingState)) then
+                  StatusFailed;
+              end;
           end;
           Service.SetState(sc.State,
-            'As Windows Service "%"', [p], {resetmessage=}true);
+            'Windows Service "%"', [p], {resetmessage=}true);
         finally
           sc.Free;
         end;
