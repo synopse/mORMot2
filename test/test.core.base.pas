@@ -2630,9 +2630,11 @@ begin
     o2.Enum := e4;
     {$ifndef HASEXTRECORDRTTI} // oldest Delphi or FPC
     Rtti.RegisterType(TypeInfo(TEnum));
-    Rtti.RegisterFromText(TypeInfo(TPeopleR),
-      'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
+    if not RecordHasFields(TypeInfo(TPeopleR)) then
+      Rtti.RegisterFromText(TypeInfo(TPeopleR),
+        'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
     {$endif HASEXTRECORDRTTI}
+    Check(RecordHasFields(TypeInfo(TPeopleR)), 'RecordHasFields');
     r.YearOfBirth := -1;
     CheckEqual(r.YearOfBirth, -1);
     RecordZero(@r, TypeInfo(TPeopleR));
