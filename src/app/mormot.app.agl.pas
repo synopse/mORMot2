@@ -1466,7 +1466,6 @@ begin
   end;
 end;
 
-// main processing internal function
 function Exec(Sender: TSynAngelize; Log: TSynLog; Service: TSynAngelizeService;
   Action: TAglAction; Ctxt: TAglContext; const Param: RawUtf8): boolean;
 var
@@ -1498,8 +1497,8 @@ begin
   if not ToInteger(SplitRight(Param, '=', @p), expectedstatus) or
      (p = '') then
   begin
+    expectedstatus := -1; // mark <0 as "not set" to use default
     p := Param; // was not a valid "http:...=200" input
-    expectedstatus := 0; // e.g. executable file exitcode = 0 as success
   end;
   if p = '' then
     p := Service.Run; // "exec" = "exec:%run%" (exename or servicename)
@@ -1508,13 +1507,17 @@ begin
     aaWait,
     aaStart,
     aaStop:
-      fn := NormalizeFileName(Utf8ToString(p));
+      begin
+        fn := NormalizeFileName(Utf8ToString(p));
+        if expectedstatus < 0 then
+          expectedstatus := 0; // default executable file exitcode
+      end;
     aaHttp,
     aaHttps:
-      if expectedstatus = 0 then // not overriden by ToInteger()
-        expectedstatus := HTTP_SUCCESS;
-    aaService:
-      if expectedstatus = 0 then
+      if expectedstatus < 0 then
+        expectedstatus := HTTP_SUCCESS; // default response is 200
+    aaService: // Windows only by definition
+      if expectedstatus < 0 then
         expectedstatus := ord(ssRunning); // = 4
   end;
   result := false;
@@ -1632,7 +1635,7 @@ begin
                   StatusFailed;
               end;
           end;
-          Service.SetState(sc.State,
+          Service.SetState(sc.State, // current state (acDoWatch may restart)
             'Windows Service "%"', [p], {resetmessage=}true);
         finally
           sc.Free;
