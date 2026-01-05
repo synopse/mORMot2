@@ -2423,6 +2423,8 @@ function AnyScanExists(P, V: pointer; Count, VSize: PtrInt): boolean;
 // - this function scans the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', find the Name= value before any [Section]
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
+// the '=' or ':' sign, and at the end of each input text line
 function FindIniEntry(const Content, Section, Name: RawUtf8;
   const DefaultValue: RawUtf8 = ''): RawUtf8;
 
@@ -2505,7 +2507,7 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 /// find the Value of UpperName in P, till end of current INI section
 // - expect UpperName already as 'NAME=' for efficient INI key=value lookup
 // - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
-// the '=' sign, and at the end of each input text line
+// the '=' or ':' sign, and at the end of each input text line
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
   const DefaultValue: RawUtf8 = ''; PEnd: PUtf8Char = nil): RawUtf8;
 
@@ -2515,6 +2517,8 @@ function FindIniNameValueP(P, PEnd: PUtf8Char; UpperName: PAnsiChar;
   out Value: PUtf8Char): PtrInt;
 
 /// find the Value of UpperName in Content, wrapping FindIniNameValue()
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
+// the '=' or ':' sign, and at the end of each input text line
 function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
