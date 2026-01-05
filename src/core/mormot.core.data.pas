@@ -2508,6 +2508,11 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
   const DefaultValue: RawUtf8 = ''; PEnd: PUtf8Char = nil): RawUtf8;
 
+/// raw internal function used by FindIniNameValue() with no result allocation
+// - Value=nil if not found, or Value<>nil and return length (may be 0 for '')
+function FindIniNameValueP(P, PEnd: PUtf8Char; UpperName: PAnsiChar;
+  out Value: PUtf8Char): PtrInt;
+
 /// find the Value of UpperName in Content, wrapping FindIniNameValue()
 function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
@@ -3903,11 +3908,11 @@ begin
   result := FindIniNameValue(p, UpperName, '', p + length(Content));
 end;
 
-function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
-  const DefaultValue: RawUtf8; PEnd: PUtf8Char): RawUtf8;
-var
+function FindIniNameValueP(P, PEnd: PUtf8Char; UpperName: PAnsiChar;
+  out Value: PUtf8Char): PtrInt;
+var // note: won't use "out Len: PtrInt" which is confusing with integer vars
   u, PBeg: PUtf8Char;
-  l: PtrInt;
+  first: AnsiChar;
   {$ifdef CPUX86NOTPIC}
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
@@ -3915,12 +3920,13 @@ var
   {$endif CPUX86NOTPIC}
 label
   fnd;
-begin // expects UpperName as 'NAME='
+begin // expects UpperName as 'NAME=' and P^ at the beginning of section content
   u := P;
   if (u <> nil) and
      (u^ <> '[') and
      (UpperName <> nil) then
   begin
+    first := UpperName[0];
     {$ifndef CPUX86NOTPIC}
     table := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
@@ -3930,7 +3936,7 @@ begin // expects UpperName as 'NAME='
         inc(u); // trim left ' '
       if u^ = #0 then
         break;
-      if table[u^] = UpperName[0] then
+      if table[u^] = first then
         PBeg := u; // check for UpperName=... line below - ignore ; comment
       {$ifdef CPUX64}
       if PEnd <> nil then
@@ -3965,7 +3971,7 @@ begin // expects UpperName as 'NAME='
                   goto fnd
                 else
                   break;
-              repeat // ignore spaces/tabs around the '=' sign
+              repeat // ignore spaces/tabs around the '=' or ':' separator
                 inc(PBeg);
                 case PBeg^ of
                   #9, ' ':
@@ -3984,11 +3990,11 @@ begin // expects UpperName as 'NAME='
               repeat
 fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
               until not (PBeg^ in [#9, ' ']);
-            l := P - PBeg;
-            while (l > 0) and
-                  (PBeg[l - 1] in [#9, ' ']) do
-              dec(l);      // should trim spaces/tabs at the end of the line
-            FastSetString(result, PBeg, l);
+            result := P - PBeg;
+            while (result > 0) and
+                  (PBeg[result - 1] in [#9, ' ']) do
+              dec(result); // should trim spaces/tabs at the end of the line
+            Value := PBeg; // <> nil but maybe with result=len=0
             exit;
           end;
         until false;
@@ -3999,7 +4005,21 @@ fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
         inc(u);
     until u^ in [#0, '['];
   end;
-  result := DefaultValue;
+  Value := nil; // not found
+  result := 0;  // value length
+end;
+
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
+  const DefaultValue: RawUtf8; PEnd: PUtf8Char): RawUtf8;
+var
+  v: PUtf8Char;
+  l: PtrInt;
+begin // expects UpperName as 'NAME=' and P^ at the beginning of section content
+  l := FindIniNameValueP(P, PEnd, UpperName, v);
+  if v = nil then
+    result := DefaultValue
+  else
+    FastSetString(result, v, l); // return '' for l=0 (existing void value)
 end;
 
 function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
