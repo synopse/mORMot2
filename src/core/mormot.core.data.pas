@@ -2553,10 +2553,12 @@ type
   // mainprop.nested.field = value with ifClassValue
   // - nested arrays (with ifArraySection) are stored as inlined JSON or within
   // prefixed sections like [nested-xxx] with any not azAZ_09 as xxx separator
+  // - ifMultiLineJsonArray would parse multi-line field=[val1,... JSON arrays
   // - ifClearValues will let IniToObject() call TRttiCustomProp.ClearValue()
   // on each property
   TIniFeatures = set of (
-    ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection, ifClearValues);
+    ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection,
+    ifMultiLineJsonArray, ifClearValues);
 
 /// fill a class Instance properties from an .ini content
 // - the class property fields are searched in the supplied main SectionName
@@ -4387,11 +4389,19 @@ var
         if p^.Prop^.SetValueText(obj, v) then // RTTI conversion from JSON/CSV
           result := true;
       end
-      else // e.g. rkVariant, rkDynArray complex values from single line JSON
+      else // e.g. rkVariant, rkDynArray complex values from JSON array/object
       begin
         json := pointer(v);
         GetDataFromJson(@PByteArray(obj)[p^.OffsetSet], json,
           nil, p^.Value, DocVariantOptions, true, nil);
+        if (json = nil) and
+           (v <> '') and
+           (ifMultiLineJsonArray in Features) and // try multi line JSON
+           (v[1] = '[') and
+           (PosExChar(']', v) = 0) and
+           (FindIniNameValueP(section, sectionend, @up, json) <> 0) then
+          GetDataFromJson(@PByteArray(obj)[p^.OffsetSet], json,
+            nil, p^.Value, DocVariantOptions, true, nil);
         if json <> nil then
           result := true;
       end
