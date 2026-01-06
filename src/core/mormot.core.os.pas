@@ -8932,6 +8932,7 @@ end;
 procedure InitializeProcessInfo; // called once at startup
 var
   dt: TDateTime;
+  rnd: PBlock128;
 begin
   TrimDualSpaces(OSVersionText); // clean InitializeSpecificUnit info
   TrimDualSpaces(OSVersionInfoEx);
@@ -8974,10 +8975,13 @@ begin
     Command.Parse;
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
-  // finalize SystemEntropy.Startup
-  crcblocks(@SystemEntropy.Startup, @BaseEntropy, 512 div 128); // cpuid+rdrand+rdtsc
-  crcblock(@SystemEntropy.Startup, @Executable.Hash);
-  crcblocks(@SystemEntropy.Startup, @CpuCache, SizeOf(CpuCache) div SizeOf(THash128));
+  // finalize SystemEntropy.Startup and setup SharedRandom instance
+  rnd := @SystemEntropy.Startup;
+  crcblocks(rnd, @BaseEntropy, 512 div 128); // cpuid+rdrand+rdtsc
+  PBlock128(@SharedRandom.Generator)^ := rnd^;
+  crcblock(rnd, @Executable.Hash);
+  crcblocks(rnd, @CpuCache, SizeOf(CpuCache) div SizeOf(THash128));
+  SharedRandom.Generator.SeedGenerator; // we have enough entropy yet
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);

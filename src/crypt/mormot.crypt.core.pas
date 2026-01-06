@@ -7679,13 +7679,6 @@ begin
     // 512-bit from _Fill256FromOs + RdRand/Rdtsc + threadid
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
-    // opportunity to initialize the shared gsl_rng_taus2 instance if needed
-    if PPtrInt(@SharedRandom.Generator)^ = 0 then // inlined TLecuyer.Seed
-    begin
-      Xor512(@BaseEntropy, @data); // TLecuyer instances forward secrecy
-      DefaultHasher128(@SharedRandom.Generator, @BaseEntropy, SizeOf(BaseEntropy));
-      SharedRandom.Generator.SeedGenerator;
-    end;
     // 512-bit of low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
     sha3.Update(@data, SizeOf(data));
