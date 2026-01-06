@@ -4947,7 +4947,7 @@ var
   {$else}
   cache, cpuinfo: PUtf8Char;
   release: RawUtf8;
-  procid, phyid, phyndx: integer;
+  procid, phyid, phyndx, cacheshr: integer;
   phy: TIntegerDynArray;
   auxv: PPtrUInt;
   {$ifdef OSLINUX}
@@ -5152,18 +5152,31 @@ begin
       inc(cache);
     case upcase(cache^) of
       'K':
-        CpuCacheSize := CpuCacheSize shl 10;
+        cacheshr := 10;
       'M':
-        CpuCacheSize := CpuCacheSize shl 20;
+        cacheshr := 20;
       'G':
-        CpuCacheSize := CpuCacheSize shl 30;
+        cacheshr := 30;
+    else
+      cacheshr := 0;
     end;
+    CpuCacheSize := CpuCacheSize shl cacheshr;
   end;
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
   SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
+  begin
     _fmt('[%s]', [KBNoSpace(CpuCacheSize)], CpuInfoText);
+    {$ifdef CPUINTEL}
+    with CpuCache[3] do // rough guess without /sys/devices/system/cpu/* lookup
+      if Count = 0 then
+      begin
+        Count := 1;
+        Size := CpuCacheSize;
+      end;
+    {$endif CPUINTEL}
+  end;
   if CpuSockets = 0 then
     CpuSockets := 1;
   if fpuname(uts) < 0 then
