@@ -4854,6 +4854,7 @@ var
   Vers: TWindowsVersion;
   cpu, manuf, prod, prodver: RawUtf8;
   reg: TWinRegistry;
+  rnd: PHash128;
   proc: array of TSystemLogicalProcessorInformation;
   i: integer;
   siz: DWord;
@@ -5134,10 +5135,11 @@ begin
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info
   CoCreateGuid(SystemEntropy.LiveFeed); // very fast and unique (but not strong)
-  SystemEntropy.Startup := SystemEntropy.LiveFeed;
-  crc32c128(@SystemEntropy.Startup, @SystemInfo, SizeOf(SystemInfo));
-  crc32c128(@SystemEntropy.Startup, @mem, SizeOf(mem));
-  crc32c128(@SystemEntropy.Startup, @OSVersionInfo, SizeOf(OSVersionInfo));
+  rnd := @SystemEntropy.Startup;
+  rnd^ := SystemEntropy.LiveFeed.b;
+  crc32c128(rnd, @SystemInfo, SizeOf(SystemInfo));
+  crc32c128(rnd, @mem, SizeOf(mem));
+  crc32c128(rnd, @OSVersionInfo, SizeOf(OSVersionInfo));
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
 end;
 
