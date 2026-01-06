@@ -150,7 +150,7 @@ begin
   begin
     v := li.First;
     for n := 0 to MAX - 2 do
-      Check(VariantCompare(v[n], v[n+1]) <= 0);
+      Check(VariantCompare(v[n], v[n+1]) <= 0, 'vc');
     exit; // Sort+Find do not match with variants due to duplicates
   end;
   {$ifdef USEEQUALOP}
