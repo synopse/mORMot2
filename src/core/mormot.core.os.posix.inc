@@ -5304,7 +5304,7 @@ begin
   while auxv[0] <> 0 do
   begin
     if auxv[0] = 25 then // AT_RANDOM: 16 random bytes (used for stacks canary)
-      with SystemEntropy do
+      with SystemEntropy do // should be available from 2.6.29 on glibc
       begin
         LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
         XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
@@ -5313,6 +5313,7 @@ begin
   end;
   crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   {$endif OSLINUXANDROID}
+  // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
 end;
 
 procedure FinalizeSpecificUnit;

@@ -4909,7 +4909,7 @@ procedure MakeRandomGuid(u: PHash128);
 /// check if the supplied UUid value was randomly-generated according to RFC 4122
 function IsRandomGuid(u: PHash128): boolean;
 
-/// seed the global gsl_rng_taus2 Random32/RandomBytes generator
+/// re-seed the global gsl_rng_taus2 Random32/RandomBytes generator
 // - use XorEntropy() and optional entropy/entropylen as derivation source
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 

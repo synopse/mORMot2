@@ -11161,7 +11161,7 @@ begin
         AT_HWCAP2:
           caps[1] := p[1];
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
-          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^);
+          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // 2.6.29 + glibc
       end;
       inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy
       inc(e);
