@@ -7301,41 +7301,33 @@ begin // used for ptRecord and ptClass
   until n = 0;
 end;
 
-procedure _ArrayRandom(V: PAnsiChar; RC: TRttiCustom);
-var
-  n: integer;
+procedure _ItemsRandom(p: PAnsiChar; n: integer; RC: TRttiCustom);
 begin
-  n := RC.Cache.ItemCount;
-  if n <> 0 then
+  if n <> 0 then // paranoid
     if RC.ArrayRtti = nil then
-      SharedRandom.Fill(v, RC.Size)
+      SharedRandom.Fill(p, n * RC.Cache.ItemSize)
     else
       repeat
-        RC.ArrayRtti.ValueRandom(V);
-        inc(V, RC.Cache.ItemSize);
+        RC.ArrayRtti.ValueRandom(p);
+        inc(p, RC.Cache.ItemSize);
         dec(n);
       until n = 0;
+end;
+
+procedure _ArrayRandom(V: PAnsiChar; RC: TRttiCustom);
+begin
+  _ItemsRandom(V, RC.Cache.ItemCount, RC);
 end;
 
 procedure _DynArrayRandom(V: PPointer; RC: TRttiCustom);
 var
   n: integer;
-  p: PAnsiChar;
 begin
   if V^ <> nil then
     RC.ValueFinalize(V); // reset whole array variable
   n := SharedRandom.Next and 15; // random length 0..15
-  if n = 0 then
-    exit;
-  p := DynArrayNew(V, n, RC.Cache.ItemSize);
-  if RC.ArrayRtti = nil then
-    SharedRandom.Fill(p, n * RC.Cache.ItemSize)
-  else
-    repeat
-      RC.ArrayRtti.ValueRandom(p);
-      inc(p, RC.Cache.ItemSize);
-      dec(n);
-    until n = 0;
+  if n <> 0 then
+    _ItemsRandom(DynArrayNew(V, n, RC.Cache.ItemSize), n, RC);
 end;
 
 var
