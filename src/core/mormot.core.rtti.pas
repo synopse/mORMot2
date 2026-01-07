@@ -1223,6 +1223,7 @@ type
     {$endif HASVARUSTRING}
     /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar as RawUtf8
     // - this would make heap allocations and encoding conversion, so may be slow
+    // - would also detect "array of RawUtf8" and return it as CRLF-separated text
     function GetAsString(Instance: TObject; var Value: RawUtf8): boolean; overload;
     /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar as RawUtf8
     // - just a wrapper around the overloaded GetAsString() function
@@ -5296,7 +5297,8 @@ end;
 function TRttiProp.GetAsString(Instance: TObject; var Value: RawUtf8): boolean;
 var
   v: PtrInt;
-  tmp: pointer;
+  call: TMethod;
+  tmp: pointer absolute call;
 begin
   result := true;
   case TypeInfo^.Kind of
@@ -5330,6 +5332,10 @@ begin
       end;
     {$endif HASVARUSTRING}
   else
+    if IsRawUtf8DynArray(TypeInfo) and
+       (Getter(Instance, @call) = rpcField) then
+      RawUtf8ArrayToCsvVar(PRawUtf8DynArray(call.Data)^, Value, {sep=}#10)
+    else
     begin
       Value := '';
       result := false; // unsupported property
