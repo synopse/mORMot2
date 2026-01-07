@@ -245,6 +245,11 @@ function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray;
   const Sep: RawUtf8 = ','; Reverse: boolean = false): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// return the corresponding CSV text from a dynamic array of UTF-8 strings
+procedure RawUtf8ArrayToCsvVar(const Values: TRawUtf8DynArray; var Csv: RawUtf8;
+  const Sep: RawUtf8 = ','; Reverse: boolean = false);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// return the corresponding CSV text from an array of UTF-8 strings
 // - using a Python-like friendly syntax
 // - we could not use plain Join() overload due to a Delphi compiler limitation
@@ -3846,6 +3851,12 @@ function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray; const Sep: RawUtf8;
   Reverse: boolean): RawUtf8;
 begin
   PRawUtf8ToCsv(pointer(Values), length(Values), Sep, Reverse, result);
+end;
+
+procedure RawUtf8ArrayToCsvVar(const Values: TRawUtf8DynArray; var Csv: RawUtf8;
+  const Sep: RawUtf8; Reverse: boolean);
+begin
+  PRawUtf8ToCsv(@Values[0], length(Values), Sep, Reverse, Csv);
 end;
 
 function JoinCsv(const Sep: RawUtf8; const Values: array of RawUtf8;
