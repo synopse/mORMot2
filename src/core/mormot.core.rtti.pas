@@ -2368,6 +2368,7 @@ type
   // "not stored" for serialization but "UNIQUE SQL"
   // - rcfClassMayBeID is set e.g. for TOrm classes, which may be storing
   // not instances but IDs in published properties PtrInt
+  // - rcfMultiLineStrings matches ptMultiLineStringTypes and arrays of RawUtf8
   TRttiCustomFlag = (
     rcfIsManaged,
     rcfObjArray,
@@ -2386,7 +2387,8 @@ type
     rcfReadIgnoreUnknownFields,
     rcfAutoCreateFields,
     rcfDisableStored,
-    rcfClassMayBeID);
+    rcfClassMayBeID,
+    rcfMultiLineStrings);
 
   /// define specific behaviors for a given TypeInfo/PRttIinfo
   // - as stored in TRttiCustom.Flags
@@ -9098,7 +9100,10 @@ begin
             include(fFlags, rcfObjArray);
             fCache.ObjArrayClass := item.RttiClass^.RttiClass;
           end;
-        end;
+        end
+        else if (item.Kind = rkLString) and
+                (item.AnsiStringCodePage = CP_UTF8) then
+          include(fFlags, rcfMultiLineStrings); // array of RawUtf8
         fArrayRtti := Rtti.RegisterType(item);
         if (fArrayRtti <> nil) and
            (fArrayFirstField = ptNone) then
@@ -9255,6 +9260,8 @@ begin
     include(fFlags, rcfArrayItemManaged);
   if aParser in (ptStringTypes - [ptRawJson]) then
     include(fFlags, rcfJsonString);
+  if aParser in ptMultiLineStringTypes then
+    include(fFlags, rcfMultiLineStrings);
   // setup the processing callbacks
   fSetRandom := PT_RANDOM[aParser];
   fCopy := RTTI_MANAGEDCOPY[fCache.Kind];
