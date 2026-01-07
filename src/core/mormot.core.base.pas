@@ -3818,7 +3818,7 @@ var
   // check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
 
-  /// compute a proprietary 128-bit CRC of 128-bit binary buffers
+  /// compute a proprietary 128-bit CRC of 128-bit / 16-bytes binary buffers
   // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 or ARMv8 hardware accelerated instruction, if available

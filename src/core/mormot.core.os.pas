@@ -8977,11 +8977,11 @@ begin
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
   // finalize SystemEntropy.Startup and setup SharedRandom instance
   rnd := @SystemEntropy.Startup;
-  crcblocks(rnd, @BaseEntropy, 512 div 128); // cpuid+rdrand+rdtsc
+  crcblocks(rnd, @BaseEntropy, SizeOf(BaseEntropy) shr 4); // cpuid+rdrand+rdtsc
   PBlock128(@SharedRandom.Generator)^ := rnd^;
+  SharedRandom.Generator.SeedGenerator; // we have enough entropy yet
   crcblock(rnd, @Executable.Hash);
   crcblocks(rnd, @CpuCache, SizeOf(CpuCache) div SizeOf(THash128));
-  SharedRandom.Generator.SeedGenerator; // we have enough entropy yet
 end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
