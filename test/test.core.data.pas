@@ -1496,6 +1496,16 @@ begin
   fprop2 := AValue;
 end;
 
+type
+  TMySettings = class(THttpProxyServerSettings)
+  protected
+    fLines: TRawUtf8DynArray;
+  published
+    // validate custom text lines (e.g. 'name=value') in its own section
+    property Lines: TRawUtf8DynArray
+      read fLines;
+  end;
+
 const
   SIMPLEENUM2TXT: array[TSimpleEnum] of RawUtf8 = (
     'un', 'd\eux');
@@ -1889,7 +1899,7 @@ var
     AA, AB: TRawUtf8DynArrayDynArray;
     i, a, v: PtrInt;
     mix1: TTestCustomJsonMixed;
-    ps: THttpProxyServerSettings;
+    ps: TMySettings;
     GDtoObject, G2, G3: TDtoObject;
     GNest: TDtoObject3;
     owv: TObjectWithVariant;
@@ -2344,12 +2354,18 @@ var
          'Methods = post'#13#10 +
          'Source = http://neverused.org'#13#10 +
          #13#10 +
+         '[Lines]'#13#10 +
+         ''#13#10 +
+         'one=1'#13#10 +
+         ''#13#10 +
+         'two=2'#13#10 +
+         #13#10 +
          '[Server]'#13#10 +
          'Port = 809'#13#10 +
          'ThreadCount = 7'#13#10;
     for i := 1 to 6 do
     begin
-      ps := THttpProxyServerSettings.Create;
+      ps := TMySettings.Create;
       try
         CheckEqual(ps.Server.Port, '8098');
         Check(ps.Server.Log.DestMainFile = 'access.log');
@@ -2358,6 +2374,7 @@ var
         CheckEqual(ps.MemCache.MaxSizeKB, 4);
         Check(ps.DiskCache.Path = Executable.ProgramFilePath + 'proxycache');
         CheckEqual(length(ps.Url), 0);
+        CheckEqual(length(ps.Lines), 0);
         case i of
           1:
             j := u +
@@ -2387,6 +2404,8 @@ var
         CheckEqual(ps.Server.Log.DefaultRotateFiles, 5);
         CheckEqual(ps.MemCache.MaxSizeKB, 2);
         Check(ps.DiskCache.Path = '/home/proxycache');
+        CheckEqual(length(ps.Lines), 2);
+        CheckEqual(RawUtf8ArrayToCsv(ps.Lines), 'one=1,two=2');
         if CheckEqual(length(ps.Url), 2) then
         begin
           Check(ps.Url[0].Methods = [urmGet, urmHead]);
@@ -2406,11 +2425,14 @@ var
           2:
             j := ObjectToIni(ps, '');
           3:
-            j := ObjectToIni(ps, '', [], 0, [ifClassValue, ifArraySection]);
+            j := ObjectToIni(ps, '', [], 0,
+              [ifClassValue, ifArraySection, ifMultiLineSections]);
           4:
-            j := ObjectToIni(ps, 'Main', [], 0, [ifClassSection]);
+            j := ObjectToIni(ps, 'Main', [], 0,
+              [ifClassSection, ifMultiLineSections]);
           5:
-            j := ObjectToIni(ps, 'Main', [], 0, [ifClassValue]);
+            j := ObjectToIni(ps, 'Main', [], 0,
+              [ifClassValue, ifMultiLineSections]);
         end;
       finally
         ps.Free;
