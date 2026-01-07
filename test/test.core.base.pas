@@ -5835,6 +5835,9 @@ begin
   LinesToRawUtf8DynArray('first'#13#10#13#10'one'#10'two'#10#13#10, arr);
   CheckEqual(length(arr), 3);
   CheckEqual(RawUtf8ArrayToCsv(arr), 'first,one,two');
+  LinesToRawUtf8DynArray(#13#10'one'#13#10, arr);
+  CheckEqual(length(arr), 1);
+  CheckEqual(RawUtf8ArrayToCsv(arr), 'one');
   CheckEqual(Join([]), '');
   CheckEqual(Join(['one']), 'one');
   CheckEqual(Join(['one', 'two']), 'onetwo');
