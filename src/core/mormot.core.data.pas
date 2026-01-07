@@ -4361,29 +4361,24 @@ var
   begin
     result := false;
     v := FindIniNameValue(section, @up, #0, sectionend);
-    if p^.Value.Parser in ptMultiLineStringTypes then // e.g. rkLString
+    if (ifMultiLineSections in Features) and
+       (v = #0) and
+       (rcfMultiLineStrings in p^.Value.Flags) then // strings or array of RawUtf8
     begin
-      if v = #0 then // may be stored in a multi-line section body
+      PWord(FillUp(p))^ := ord(']');
+      if FindSectionFirstLine(nested, @up, @nestedend) then
       begin
-        if ifMultiLineSections in Features then
-        begin
-          PWord(FillUp(p))^ := ord(']');
-          if FindSectionFirstLine(nested, @up, @nestedend) then
-          begin
-            // multi-line text value can been stored in its own section
-            FastSetString(v, nested, nestedend - nested);
-            if p^.Prop^.SetValueText(obj, v) then
-              result := true;
-          end;
-        end;
-      end
-      else if p^.Prop^.SetValueText(obj, v) then // single line text
-        result := true;
+        // multi-line text value has been stored in its own section
+        FastSetString(v, nested, nestedend - nested);
+        if p^.Prop^.SetValueText(obj, v) then
+          result := true;
+      end;
     end
     else if v <> #0 then // we found this propname=value in section..sectionend
       if (p^.OffsetSet <= 0) or // setter does not support JSON
          (rcfBoolean in p^.Value.Cache.Flags) or // simple value from text
-         (p^.Value.Kind in (rkIntegerPropTypes + [rkEnumeration, rkSet, rkFloat])) then
+         (p^.Value.Kind in (rkIntegerPropTypes + rkStringTypes +
+                            [rkEnumeration, rkSet, rkFloat])) then
       begin
         if p^.Prop^.SetValueText(obj, v) then // RTTI conversion from JSON/CSV
           result := true;
@@ -4527,7 +4522,7 @@ begin
     dec(L);
     if L = 0 then
     begin
-      U := ''; // no meaningful text
+      FastAssignNew(U); // no meaningful text
       exit;
     end;
   end;
@@ -4615,10 +4610,10 @@ var
               W.Add(#10);
             end;
           else
-            if (p^.Value.Parser in ptMultiLineStringTypes) and // e.g. rkLString
-               (ifMultiLineSections in feat) then
+            if (ifMultiLineSections in feat) and
+               (rcfMultiLineStrings in p^.Value.Flags) then
             begin
-              p^.Prop^.GetAsString(obj, s);
+              p^.Prop^.GetAsString(obj, s); // strings or array of RawUtf8
               if TrimAndIsMultiLine(s) then
                 // store multi-line text values in their own section
                 AddRawUtf8(nested, nestedcount,
