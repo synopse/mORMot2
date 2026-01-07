@@ -1241,7 +1241,8 @@ type
     /// set a property value from a text value
     // - handle simple kind of fields, e.g. converting from text into ordinals
     // or floats, and also enumerates or sets; but won't support complex types
-    // like class instances, dynamic arrays or variants
+    // like class instances, dynamic arrays or variants (unless array of RawUtf8
+    // as a set of linefeed-separated text lines)
     function SetValueText(Instance: TObject; const Value: RawUtf8): boolean;
   end;
 
@@ -4613,14 +4614,17 @@ var
   k: TRttiKind;
   v: Int64;
   f: double;
+  nfo: PRttiInfo;
+  call: TMethod;
 begin
   result := false; // invalid or unsupported type
   if (@self = nil) or
      (Instance = nil) then
     exit;
-  k := TypeInfo^.Kind;
+  nfo := TypeInfo;
+  k := nfo^.Kind;
   if k in rkOrdinalTypes then
-    if TypeInfo^.OrdFromText(Value, v) then // integer but also enum/set idents
+    if nfo^.OrdFromText(Value, v) then // integer but also enum/set idents
       SetInt64Value(Instance, v)
     else
       exit
@@ -4633,6 +4637,9 @@ begin
       exit
   else if k = rkVariant then
     SetVariantProp(Instance, Value) // store as text
+  else if IsRawUtf8DynArray(nfo) and
+          (Setter(Instance, @call) = rpcField) then
+    LinesToRawUtf8DynArray(Value, PRawUtf8DynArray(call.Data)^)
   else
     exit;
   result := true;
