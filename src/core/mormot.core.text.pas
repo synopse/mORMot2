@@ -3874,7 +3874,7 @@ begin
   SetLength(tmp, length(Values));
   for i := 0 to High(Values) do
     QuotedStr(Values[i], Quote, tmp[i]);
-  result := RawUtf8ArrayToCsv(tmp, Sep);
+  RawUtf8ArrayToCsvVar(tmp, result, Sep);
 end;
 
 procedure CsvToIntegerDynArray(Csv: PUtf8Char; var List: TIntegerDynArray;

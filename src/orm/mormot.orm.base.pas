@@ -11722,7 +11722,7 @@ var
   ptc: TRttiParserComplexType;
 begin
   // in-memory hashing are seeded from random to avoid hash flooding
-  OrmHashSeed := SystemEntropy.Startup.c1;
+  OrmHashSeed := SystemEntropy.Startup.c1; // not the same as mormot.core.data
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;

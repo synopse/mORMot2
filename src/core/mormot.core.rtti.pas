@@ -5601,9 +5601,9 @@ var
 begin
   props := ClassFieldNamesAllProps(ClassType, IncludePropType, Types);
   if IncludePropType then
-    result := RawUtf8ArrayToCsv(props, '; ')
+    RawUtf8ArrayToCsvVar(props, result, '; ')
   else
-    result := RawUtf8ArrayToCsv(props, ',');
+    RawUtf8ArrayToCsvVar(props, result, ',');
 end;
 
 function ClassFieldProp(ClassType: TClass; const PropName: ShortString): PRttiProp;

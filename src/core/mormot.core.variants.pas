@@ -9751,7 +9751,7 @@ var
   tmp: TRawUtf8DynArray; // fast enough in practice
 begin
   ToRawUtf8DynArray(tmp);
-  result := RawUtf8ArrayToCsv(tmp, Separator);
+  RawUtf8ArrayToCsvVar(tmp, result, Separator);
 end;
 
 procedure TDocVariantData.ToTextPairsVar(out Result: RawUtf8;

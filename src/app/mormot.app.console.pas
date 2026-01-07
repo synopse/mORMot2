@@ -251,7 +251,7 @@ end;
 
 function TCommandLine.ConsoleText(const LineFeed: RawUtf8): RawUtf8;
 begin
-  result := RawUtf8ArrayToCsv(fLines, LineFeed);
+  RawUtf8ArrayToCsvVar(fLines, result, LineFeed);
 end;
 
 procedure TCommandLine.SetNoConsole(value: boolean);

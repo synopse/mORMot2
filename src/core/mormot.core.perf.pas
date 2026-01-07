@@ -4096,8 +4096,8 @@ end;
 function GetDiskPartitionsText(
   nocache, withfreespace, nospace, nomount: boolean): RawUtf8;
 begin
-  result := RawUtf8ArrayToCsv(GetDiskPartitionsTexts(
-    nocache, withfreespace, nospace, nomount), ', ');
+  RawUtf8ArrayToCsvVar(GetDiskPartitionsTexts(
+    nocache, withfreespace, nospace, nomount), result, ', ');
 end;
 
 
