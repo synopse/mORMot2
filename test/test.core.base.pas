@@ -1344,7 +1344,8 @@ type
   TDataItems = array of TDataItem;
 
   TRawUtf8DynArray1 = type TRawUtf8DynArray;
-  TRawUtf8DynArray2 = array of RawUtf8;
+  TRawUtf8DynArray2 = array of SpiUtf8;
+  TAnsiStringDynArray = array of AnsiString;
 
 function FVSort(const A, B): integer;
 begin
@@ -1478,6 +1479,8 @@ begin
   Check(IsRawUtf8DynArray(TypeInfo(TRawUtf8DynArray)), 'IsRawUtf8DynArray1');
   Check(IsRawUtf8DynArray(TypeInfo(TRawUtf8DynArray1)), 'IsRawUtf8DynArray11');
   Check(IsRawUtf8DynArray(TypeInfo(TRawUtf8DynArray2)), 'IsRawUtf8DynArray12');
+  Check(not IsRawUtf8DynArray(TypeInfo(TRawByteStringDynArray)), 'TRawByteStringDynArray');
+  Check(not IsRawUtf8DynArray(TypeInfo(TAnsiStringDynArray)), 'TAnsiStringDynArray');
   Check(not IsRawUtf8DynArray(TypeInfo(TAmount)), 'IsRawUtf8DynArray2');
   Check(not IsRawUtf8DynArray(TypeInfo(TIntegerDynArray)), 'IsRawUtf8DynArray2');
   Check(not IsRawUtf8DynArray(TypeInfo(TPointerDynArray)), 'IsRawUtf8DynArray3');

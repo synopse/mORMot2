@@ -1913,7 +1913,7 @@ procedure RawUtf8DynArrayClear(var Value: TRawUtf8DynArray);
 
 /// check if the TypeInfo() points to an "array of RawUtf8"
 // - e.g. returns true for TypeInfo(TRawUtf8DynArray) or other sub-types
-// defined as "type aNewType = type TRawUtf8DynArray"
+// defined as "type aNewType = type TRawUtf8DynArray" or "= array of RawUtf8"
 function IsRawUtf8DynArray(Info: PRttiInfo): boolean;
 
 /// initialize a record content
@@ -4380,7 +4380,7 @@ begin
     result := CP_UTF8; // default is UTF-8
   {$else}
   if @self = TypeInfo(RawUtf8) then
-    result := CP_UTF8
+    result := CP_UTF8 // most common case
   else if @self = TypeInfo(WinAnsiString) then
     result := CP_WINANSI
   {$ifndef PUREMORMOT2}
@@ -4392,7 +4392,7 @@ begin
   else if @self = TypeInfo(AnsiString) then
     result := CP_ACP
   else
-    result := CP_UTF8; // default is UTF-8
+    result := CP_UTF8; // default to fallback to UTF-8 on specific types
   {$endif HASCODEPAGE}
 end;
 
@@ -6719,14 +6719,17 @@ end;
 
 function IsRawUtf8DynArray(Info: PRttiInfo): boolean;
 var
-  r: TRttiCustom;
+  item: PRttiInfo;
 begin
-  r := Rtti.RegisterType(Info);
-  if r <> nil then
-    r := r.ArrayRtti;
-  result := (r <> nil) and
-            (r.Parser = ptRawUtf8) and
-            (r.Cache.CodePage = CP_UTF8); // properly detected on Delphi 7/2007
+  result := false;
+  if (Info = nil) or
+     (Info^.Kind <> rkDynArray) then
+    exit;
+  item := Info^.DynArrayItemType;
+  if (item <> nil) and
+     (item^.Kind = rkLString) and
+     (item^.AnsiStringCodePage = CP_UTF8) then
+    result := true;
 end;
 
 procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
