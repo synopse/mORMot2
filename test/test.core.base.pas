@@ -5821,6 +5821,17 @@ begin
   Check(RawUtf8DynArrayContains(arr, arr2, {insens=}true), 'RawUtf8DynArrayContains5i');
   Check(not RawUtf8DynArraySame(arr, arr2), 'RawUtf8DynArraySame5');
   Check(not RawUtf8DynArraySame(arr, arr2, true), 'RawUtf8DynArraySame5i');
+  LinesToRawUtf8DynArray('', arr);
+  CheckEqual(length(arr), 0);
+  LinesToRawUtf8DynArray('one', arr);
+  CheckEqual(length(arr), 1);
+  CheckEqual(RawUtf8ArrayToCsv(arr), 'one');
+  LinesToRawUtf8DynArray('first'#13#10#13#10'one', arr);
+  CheckEqual(length(arr), 2);
+  CheckEqual(RawUtf8ArrayToCsv(arr), 'first,one');
+  LinesToRawUtf8DynArray('first'#13#10#13#10'one'#10'two'#10#13#10, arr);
+  CheckEqual(length(arr), 3);
+  CheckEqual(RawUtf8ArrayToCsv(arr), 'first,one,two');
   CheckEqual(Join([]), '');
   CheckEqual(Join(['one']), 'one');
   CheckEqual(Join(['one', 'two']), 'onetwo');
