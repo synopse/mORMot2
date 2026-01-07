@@ -5296,10 +5296,7 @@ end;
 function TRttiProp.GetAsString(Instance: TObject; var Value: RawUtf8): boolean;
 var
   v: PtrInt;
-  WS: WideString;
-  {$ifdef HASVARUSTRING}
-  US: UnicodeString;
-  {$endif HASVARUSTRING}
+  tmp: pointer;
 begin
   result := true;
   case TypeInfo^.Kind of
@@ -5318,14 +5315,18 @@ begin
       GetLongStrProp(Instance, RawByteString(Value));
     rkWString:
       begin
-        GetWideStrProp(Instance, WS);
-        RawUnicodeToUtf8(pointer(WS), length(WS), Value);
+        tmp := nil;
+        GetWideStrProp(Instance, WideString(tmp));
+        RawUnicodeToUtf8(tmp, length(WideString(tmp)), Value);
+        WideString(tmp) := '';
       end;
     {$ifdef HASVARUSTRING}
     rkUString:
       begin
-        GetUnicodeStrProp(Instance, US);
-        RawUnicodeToUtf8(pointer(US), length(US), Value);
+        tmp := nil;
+        GetUnicodeStrProp(Instance, UnicodeString(tmp));
+        RawUnicodeToUtf8(tmp, length(UnicodeString(tmp)), Value);
+        UnicodeString(tmp) := '';
       end;
     {$endif HASVARUSTRING}
   else
