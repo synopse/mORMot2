@@ -4611,11 +4611,10 @@ begin
     else
       exit
   else if k = rkFloat then
-  begin
-    if not AnyVariantToDouble(Value, f) then // also tries _Iso8601ToDateTime()
-      exit;
-    SetFloatProp(Instance, f);
-  end
+    if AnyVariantToDouble(Value, f) then // also tries _Iso8601ToDateTime()
+      SetFloatProp(Instance, f)
+    else
+      exit
   else if k = rkVariant then
     SetVariantProp(Instance, Value)
   else
@@ -9500,7 +9499,7 @@ begin
       rkWChar:
         result := fCache.RttiOrd = Another.fCache.RttiOrd; // exact same ordinal
       rkFloat:
-        result := (fCache.RttiFloat = Another.fCache.RttiFloat) and
+        result := (fCache.RttiFloat  = Another.fCache.RttiFloat) and
                   (fCache.IsDateTime = Another.fCache.IsDateTime);
       rkInt64,
       {$ifdef FPC}
