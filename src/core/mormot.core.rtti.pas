@@ -4579,27 +4579,35 @@ var
   k: TRttiKind;
   v: Int64;
   f: double;
-  u: RawUtf8;
+  tmp: pointer;
 begin
   result := false; // invalid or unsupported type
   if (@self = nil) or
      (Instance = nil) then
     exit;
+  tmp := nil;
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
     if VariantToInt64(Value, v) then // include FPC rkBool
       SetInt64Value(Instance, v)
-    else if (k = rkEnumeration) and
-            VariantToText(Value, u) and
-            SetValueText(Instance, u) then
-      // value found from GetEnumNameValue()
     else
-      exit
+    begin
+      if (k = rkEnumeration) and
+         VariantToText(Value, RawUtf8(tmp)) then
+      begin
+        result := SetValueText(Instance, RawUtf8(tmp)); // GetEnumNameValue()
+        FastAssignNew(tmp);
+      end;
+      exit;
+    end
   else if k in rkStringTypes then
     if VarIsEmptyOrNull(Value) then // otherwise would set 'null' text
       SetAsString(Instance, '')
-    else if VariantToUtf8(Value, u) then
-      SetAsString(Instance, u)
+    else if VariantToUtf8(Value, RawUtf8(tmp)) then
+    begin
+      SetAsString(Instance, RawUtf8(tmp));
+      FastAssignNew(tmp);
+    end
     else
       exit
   else if k = rkFloat then
