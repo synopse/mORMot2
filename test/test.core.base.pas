@@ -36,6 +36,7 @@ uses
   mormot.db.core,
   mormot.orm.base,
   mormot.orm.core,
+  mormot.rest.core,
   mormot.rest.client;
 
 const
@@ -2484,6 +2485,29 @@ type
     Enum: TEnum;
   end;
 
+  TTipoUsuario = (ti0, ti1, ti2);
+
+  TUsuario = class(TAuthUser)
+   protected
+     FTipo: TTipoUsuario;
+     FEmpresaID: TID;
+     FIdExterno: TNullableInteger;
+   public
+     function IdExternoEquals(const value: variant): boolean;
+   published
+     property Tipo: TTipoUsuario read FTipo write FTipo;
+     property EmpresaID: TID read FEmpresaID write FEmpresaID;
+     property IdExterno: TNullableInteger read FIdExterno write FIdExterno;
+   end;
+
+   TDTOUsuario = packed record
+     ID: Int64;
+     IdExterno: variant;
+     Email: RawUtf8;
+     Nome: RawUtf8;
+     Cpf: RawUtf8;
+   end;
+
 function TPeople2.GetEnum: TEnum;
 begin
   result := fEnum;
@@ -2492,6 +2516,11 @@ end;
 procedure TPeople2.SetEnum(const Value: TEnum);
 begin
   fEnum := Value;
+end;
+
+function TUsuario.IdExternoEquals(const value: variant): boolean;
+begin // circumvent weird FPC compiler issue with variant sub types
+  result := VariantCompare(PVariant(@FIdExterno)^, value) = 0;
 end;
 
 procedure TTestCoreBase._Records;
@@ -2508,6 +2537,8 @@ var
   err, err2: string;
   oa: TOrmPeopleObjArray;
   pa: array of TRecordPeople;
+  ua: TUsuario;
+  ub: TDTOUsuario;
 begin
   // FillZeroRtti()
   CheckEqual(lic.CustomerName, '', 'c1');
@@ -2780,6 +2811,27 @@ begin
   CheckEqual(oa[0].FirstName, p.FirstName);
   CheckEqual(m.Compare(oa[0], @pa[0]), 0, 'array1');
   ObjArrayClear(oa);
+  //  A:TDTOUsuario B:TUsuario with TNullableInteger
+  Rtti.RegisterFromText(TypeInfo(TDTOUsuario),
+    'ID:Int64 IdExterno:variant Email,Nome,Cpf:RawUtf8');
+  m.Init(TUsuario, TypeInfo(TDTOUsuario)).AutoMap
+   .Map([
+     'DisplayName', 'Nome',
+     'LogonName',   'Email'
+  ]);
+  ua := TUsuario.Create;
+  try
+    m.RandomA(ua);
+    Check(m.Compare(ua, @ub) <> 0, 'ua0');
+    m.ToA(ua, @ub);
+    Check(ua.IdExternoEquals(ub.IdExterno));
+    Check(m.Compare(ua, @ub) = 0, 'ua1');
+    ub.IdExterno := 10;
+    m.ToA(ua, @ub);
+    Check(ua.IdExternoEquals(10));
+  finally
+    ua.Free;
+  end;
   // TRttiFilter validation with p record
   fr := TRttiFilter.Create(TypeInfo(TRecordPeople));
   try
