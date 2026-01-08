@@ -8539,7 +8539,8 @@ begin
     DestRtti := @self;
   if (OffsetGet < 0) or
      (DestRtti^.OffsetSet < 0) or
-     (DestRtti^.Value <> Value) then
+     ((DestRtti^.Value <> Value) and
+      not Value.SameAs(DestRtti^.Value)) then
   begin
     // getter or a setter, or diverse types -> use local temp value
     GetValueVariant(Source, v);
