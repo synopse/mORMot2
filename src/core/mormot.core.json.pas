@@ -10890,7 +10890,10 @@ begin
     {$endif HASVARUSTRING}
     varVariant:
       // rkVariant
-      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}true);
+      begin
+        TSynVarData(Dest).VType := varEmpty; // for next line
+        SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}true);
+      end;
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
