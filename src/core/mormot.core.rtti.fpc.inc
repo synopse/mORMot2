@@ -678,7 +678,7 @@ const
     {$else}
     4,   // vmtAutoTable is used instead of rkClass slot
     {$endif NOPATCHVMT}
-    8,  // rkObject
+    8,   // rkObject
     2,   // rkWChar
     3,   // rkBool
     9,   // rkInt64
