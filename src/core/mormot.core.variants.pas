@@ -3734,6 +3734,7 @@ function DocDictFromKeys(const keys: array of RawUtf8; const value: variant;
   model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
 /// create a IDocDict as weak reference to a TDocVariant dvObject
+// - returns nil if the supplied variant is not a TDocVariant dvObject
 function DocDictFrom(const v: variant): IDocDict;
 
 /// create a IDocDict as weak reference to a TDocVariantData dvObject
@@ -4615,7 +4616,7 @@ function SynRegisterCustomVariantType(
 var
   i: PtrInt;
 begin
-  SynVariantTypesSafe.Lock;
+  SynVariantTypesSafe.Lock; // late-call at runtime from several threads
   try
     for i := 0 to length(SynVariantTypes) - 1 do
     begin
@@ -7435,7 +7436,7 @@ begin
     SetLength(VValue, len);
   end
   else
-    EnsureUnique(VValue); // make unique as SetLengh() does
+    EnsureUnique(VValue); // make unique as SetLength() does
   result := VCount;
   inc(VCount);
   if cardinal(aIndex) < cardinal(result) then
@@ -7872,7 +7873,7 @@ begin
   added := InternalAdd(aName);
   obj := @VValue[added];
   if PInteger(obj)^ = 0 then // most common case is adding a new value
-    obj^.InitClone(self)     // same options than owner document
+    obj^.InitClone(self, dvoIsObject) // same options than owner document
   else if (cardinal(obj^.VType) <> cardinal(VType)) or
           not obj^.IsObject then
     EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
