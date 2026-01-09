@@ -1372,6 +1372,10 @@ type
     // - multiple object field names will be stored as dvArray
     // - Url should point to the first character after '?' in the URI
     procedure InitFromUrlArray(Url: PUtf8Char; aOptions: TDocVariantOptions);
+    /// initialize a document as stored in an IDocList or IDocDict instance
+    // - returns true and copy TDocAny.fValue^ for such instances
+    // - returns false and left self.VType = varEmpty otherwise
+    function InitFromIDocAny(const I: IInterface): boolean;
 
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
@@ -11625,6 +11629,23 @@ begin
   else
     result := nil;
   end;
+end;
+
+function TDocVariantData.InitFromIDocAny(const I: IInterface): boolean;
+var
+  obj: TObject;
+begin
+  result := false;
+  TSynVarData(self).VType := varEmpty; // if not made by caller
+  obj := ObjectFromInterface(I);       // fast enough
+  if (obj = nil) or
+     not obj.InheritsFrom(TDocAny) or  // support IDocDict and IDocList params
+     (TDocAny(obj).fValue = nil) then
+    exit;
+  result := true;
+  pointer(VName)  := nil; // to avoid GPF when copied from fValue^
+  pointer(VValue) := nil;
+  self := TDocAny(obj).fValue^;
 end;
 
 
