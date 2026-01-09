@@ -1379,7 +1379,7 @@ type
     /// initialize a document as stored in an IDocList or IDocDict instance
     // - returns true and copy TDocAny.fValue^ for such instances
     // - returns false and left self.VType = varEmpty otherwise
-    function InitFromIDocAny(const I: IInterface): boolean;
+    function InitFromIDocAny(const Int: IInterface): boolean;
 
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
@@ -11701,13 +11701,13 @@ begin
   end;
 end;
 
-function TDocVariantData.InitFromIDocAny(const I: IInterface): boolean;
+function TDocVariantData.InitFromIDocAny(const Int: IInterface): boolean;
 var
   obj: TObject;
 begin
   result := false;
   TSynVarData(self).VType := varEmpty; // if not made by caller
-  obj := ObjectFromInterface(I);       // fast enough
+  obj := ObjectFromInterface(Int);     // fast enough
   if (obj = nil) or
      not obj.InheritsFrom(TDocAny) or  // support IDocDict and IDocList params
      (TDocAny(obj).fValue = nil) then
