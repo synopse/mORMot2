@@ -1331,7 +1331,10 @@ type
     // - the same options will be used, without the dvArray/dvObject flags
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
     // e.g. never call _Safe(...)^.InitClone() because it could leak memory
-    procedure InitClone(const CloneFrom: TDocVariantData);
+    procedure InitClone(const CloneFrom: TDocVariantData); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// clone a document-based variant with same options, no data but a Kind
+    procedure InitClone(const CloneFrom: TDocVariantData; CloneAs: TDocVariantOption); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level copy a document-based variant with the very same options and count
     // - will copy Count and Names[] by reference, but Values[] only if CloneValues
@@ -6068,6 +6071,15 @@ end;
 procedure TDocVariantData.InitClone(const CloneFrom: TDocVariantData);
 begin
   TSynVarData(self).VType := TSynVarData(CloneFrom).VType and not (_DVO shl 16);
+  VCount := 0;
+  pointer(VName)  := nil; // to avoid GPF
+  pointer(VValue) := nil;
+end;
+
+procedure TDocVariantData.InitClone(const CloneFrom: TDocVariantData; CloneAs: TDocVariantOption);
+begin
+  TSynVarData(self).VType := TSynVarData(CloneFrom).VType and
+    (not (_DVO shl 16)) or cardinal(1 shl (ord(CloneAs) + 16));
   VCount := 0;
   pointer(VName)  := nil; // to avoid GPF
   pointer(VValue) := nil;
