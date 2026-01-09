@@ -682,6 +682,7 @@ type
     // ! TDocVariant.New(aVariant);
     // ! TDocVariantData(aVariant).AddValue('name','John');
     // ! TDocVariantData(aVariant).AddValue('year',1972);
+    // - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
     // - by default, every internal value will be copied, so access of nested
     // properties can be slow - if you expect the data to be read-only or not
     // propagated into another place, set Options=[dvoValueCopiedByReference]
@@ -1000,8 +1001,7 @@ type
     function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
     function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InternalSetVarRec(aIndex: PtrInt; aValue: PVarRec);
-      {$ifdef HASSAFEINLINE}inline;{$endif}
+    procedure InternalAddVarRec(var aValue: PVarRec; aEnd: PtrUInt);
     procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(aCsv: PUtf8Char; aPathDelim: AnsiChar;
       out aLen: PtrInt): PtrInt; {$ifdef FPC} inline; {$endif}
@@ -1075,6 +1075,7 @@ type
     // !  Doc.AddValue('name','John');
     // !  Doc.AddValue('year',1972);
     // - this method is called e.g. by _Obj() and _ObjFast() global functions
+    // - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
     // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     // - if you call Init*() methods in a row, ensure you call Clear in-between,
     // e.g. never call _Safe(...)^.InitObject() because it could leak memory
@@ -1925,7 +1926,8 @@ type
     function AddValueText(const aName, aValue: RawUtf8;
       DoUpdate: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
-    // - data is supplied two by two, as Name,Value pairs
+    // - data is supplied two by two, as Name,Value pairs, and nested objects
+    // or arrays could be supplied as '[',...,']' or '{',...,'}' patterns
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be duplicated - use Update() if you want to
     // replace any existing value
@@ -1992,6 +1994,7 @@ type
     /// add one object document to this document
     // - if the document is an array, keep aName=''
     // - if the document is an object, set the new object property as aName
+    // - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
     // - new object will keep the same options as this document
     // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     // - slightly faster than AddItem(_Obj(...)) or AddValue(aName, _Obj(...))
@@ -2560,6 +2563,7 @@ function _DV(const DocVariant: variant;
 // ! aVariant := _Obj(['name','John','year',1972]);
 // or even with nested objects:
 // ! aVariant := _Obj(['name','John','doc',_Obj(['one',1,'two',2.0])]);
+// - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
 // - this global function is an alias to TDocVariant.NewObject()
 // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 // - by default, every internal value will be copied, so access of nested
@@ -2591,6 +2595,7 @@ procedure _ObjAddPropU(const Name: RawUtf8; const Value: RawUtf8;
 // - if Obj is a TDocVariant object, will add the Name/Value pairs
 // - if Obj is not a TDocVariant, will create a new fast document,
 // initialized with supplied the Name/Value pairs
+// - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
 // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
@@ -3673,10 +3678,12 @@ function DocListFromResults(const json: RawUtf8;
   model: TDocVariantModel = mFastFloat): IDocList;
 
 /// create a self-owned IDocList from a set of values
+// - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
 function DocList(const values: array of const;
   model: TDocVariantModel = mFastFloat): IDocList; overload;
 
 /// create a IDocList as weak reference to a TDocVariant dvArray
+// - returns nil if the supplied variant is not a TDocVariant dvArray
 function DocListFrom(const v: variant): IDocList; overload;
 
 /// create a self-owned IDocList from a dynamic array of IDocDict values
@@ -3712,6 +3719,7 @@ function DocDictDynArray(const json: RawUtf8;
   jsonfromresults: boolean = false): IDocDicts;
 
 /// create a self-owned IDocDict from a set of key,value pairs
+// - nested objects arrays could be supplied as '[',...,']' or '{',...,'}'
 // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
 function DocDict(const keyvalues: array of const;
   model: TDocVariantModel = mFastFloat;
@@ -3721,7 +3729,7 @@ function DocDict(const keyvalues: array of const;
 function DocDictFromKeys(const keys: array of RawUtf8;
   model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
-/// create a self-owned IDocDict from a set of keys and a gien value
+/// create a self-owned IDocDict from a set of keys and a given value
 function DocDictFromKeys(const keys: array of RawUtf8; const value: variant;
   model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
@@ -6159,29 +6167,75 @@ begin
   AddNameValuesToObject(NameValuePairs, DontAddDefault);
 end;
 
-procedure TDocVariantData.InternalSetVarRec(aIndex: PtrInt; aValue: PVarRec);
+procedure EnsureBigEnough(var V: TDocVariantData);
 var
-  v: PVariant;
+  n: PtrInt;
 begin
-  v := @VValue[aIndex];
-  if Has(dvoValueCopiedByReference) or
-     (aValue^.VType <> vtVariant) then
-    VarRecToVariant(aValue, v^)
+  if (V.VValue <> nil) and
+     ((PDALen(PAnsiChar(V.VValue) - _DALEN)^ + _DAOFF) >= V.VCount) then
+    exit; // big enough
+  n := NextGrow(V.VCount);
+  SetLength(V.VValue, n);
+  if V.Has(dvoIsObject) then
+    SetLength(V.VName, n);
+end;
+
+procedure TDocVariantData.InternalAddVarRec(var aValue: PVarRec; aEnd: PtrUInt);
+var
+  v: PDocVariantData;
+begin
+  v := @VValue[VCount];
+  case VarRecAsChar(aValue) of
+    ord('['):
+      begin
+        v^.InitClone(self, dvoIsArray);
+        while PtrUInt(aValue) < aEnd do
+        begin
+          inc(aValue);
+          if VarRecAsChar(aValue) = ord(']') then
+            break;
+          EnsureBigEnough(v^);
+          v^.InternalAddVarRec(aValue, aEnd);
+        end;
+      end;
+    ord('{'):
+      begin
+        v^.InitClone(self, dvoIsObject);
+        while PtrUInt(aValue) < aEnd do
+        begin
+          inc(aValue);
+          if (PtrUInt(aValue) >= aEnd) or
+             (VarRecAsChar(aValue) = ord('}')) then
+            break;
+          EnsureBigEnough(v^);
+          VarRecToUtf8(aValue, v^.VName[v^.VCount]);
+          inc(aValue);
+          v^.InternalAddVarRec(aValue, aEnd);
+        end;
+      end;
   else
-    SetVariantByValue(aValue^.VVariant^, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
-  if Has(dvoInternValues) then
-    InternalUniqueValueAt(aIndex);
+    begin
+      if Has(dvoValueCopiedByReference) or
+         (aValue^.VType <> vtVariant) then
+        VarRecToVariant(aValue, PVariant(v)^)
+      else
+        SetVariantByValue(aValue^.VVariant^, PVariant(v)^,
+          Has(dvoValueDoNotNormalizeAsRawUtf8));
+      if Has(dvoInternValues) then
+        InternalUniqueValueAt(VCount);
+    end;
+  end;
+  inc(VCount);
 end;
 
 procedure TDocVariantData.AddNameValuesToObject(
   const NameValuePairs: array of const; DontAddDefault: boolean);
 var
-  n, len, ndx: PtrInt;
-  arg: PVarRecArray;
+  n, len: PtrInt;
+  arg, argEnd: PVarRec;
 begin
   n := length(NameValuePairs);
-  if (n = 0) or
-     (n and 1 = 1) then
+  if n = 0 then
     exit; // nothing to add
   case GetKind of
     dvUndefined:
@@ -6189,8 +6243,7 @@ begin
     dvArray:
       exit;
   end;
-  n := n shr 1;
-  len := n + VCount;
+  len := (n shr 1) + VCount; // prepare for maximum length
   if length(VValue) < len then
   begin
     SetLength(VValue, len); // grow up the internal arrays
@@ -6201,22 +6254,22 @@ begin
     EnsureUnique(VValue); // as SetLength() above
     EnsureUnique(VName);
   end;
-  ndx := VCount;
   arg := @NameValuePairs[0];
+  argEnd := @NameValuePairs[high(NameValuePairs)];
   repeat
     if not (DontAddDefault and
-            VarRecIsDefault(@arg[1])) then
+            VarRecIsDefault(@PVarRecArray(arg)[1])) then
     begin
-      VarRecToUtf8(@arg[0], VName[ndx]);
+      VarRecToUtf8(arg, VName[VCount]);
+      inc(arg);
       if Has(dvoInternNames) then
-        DocVariantType.InternNames.UniqueText(VName[ndx]);
-      InternalSetVarRec(ndx, @arg[1]);
-      inc(ndx);
-    end;
-    arg := @arg[2];
-    dec(n);
-  until n = 0;
-  VCount := ndx;
+        DocVariantType.InternNames.UniqueText(VName[VCount]);
+      InternalAddVarRec(arg, PtrUInt(argEnd));
+      inc(arg);
+    end
+    else
+      inc(arg, 2);
+  until PtrUInt(arg) >= PtrUInt(argEnd);
 end;
 
 {$ifndef PUREMORMOT2}
@@ -6288,23 +6341,20 @@ end;
 procedure TDocVariantData.InitArray(const aItems: array of const;
   aOptions: TDocVariantOptions);
 var
-  n, ndx: PtrInt;
-  arg: PVarRec;
+  n: PtrInt;
+  arg, argEnd: PVarRec;
 begin
   Init(aOptions, dvArray);
   n := length(aItems);
   if n = 0 then
     exit;
-  VCount := n;
-  SetLength(VValue, n);
-  ndx := 0;
+  SetLength(VValue, n); // prepare capacity
   arg := @aItems[0];
+  argEnd := @aItems[high(aItems)];
   repeat
-    InternalSetVarRec(ndx, arg);
-    inc(ndx);
+    InternalAddVarRec(arg, PtrUInt(argEnd));
     inc(arg);
-    dec(n)
-  until n = 0;
+  until PtrUInt(arg) > PtrUInt(argEnd);
 end;
 
 procedure TDocVariantData.InitArray(const aItems: array of const;
