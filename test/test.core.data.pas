@@ -4976,6 +4976,14 @@ begin
   d.Merge(d2);
   CheckEqual(d.Json, '{"name":"Mustermann","address":{"city":"Musterstadt",' +
     '"street":"Lindenallee","postal_code":"12345"},"surname":"Max"}');
+  l := DocList([1, 2, 3, DocDict(['a', '1', 'b', 2]), '5']);
+  Check(l <> nil);
+  CheckEqual(l.Len, 5);
+  CheckEqual(l.Json, '[1,2,3,{"a":"1","b":2},"5"]');
+  l := DocList([1, _ObjFast(['a', '1', 'b', 2]), '3']);
+  Check(l <> nil);
+  CheckEqual(l.Len, 3);
+  CheckEqual(l.Json, '[1,{"a":"1","b":2},"3"]');
   // validate IDocList/IDocDict as published properties
   any := TDocAnyTest.Create;
   try
