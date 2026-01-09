@@ -11417,7 +11417,7 @@ function DocListFromResults(const json: RawUtf8;
   model: TDocVariantModel): IDocList;
 begin
   result := TDocList.CreateOwned;
-  if not result.Value^.InitArrayFromResults(json, model) then
+  if not result.Value^.InitArrayFromResults(json, JSON_[model]) then
     result := nil;
 end;
 
@@ -11460,9 +11460,12 @@ begin
 end;
 
 function DocList(const values: array of const; model: TDocVariantModel): IDocList;
+var
+  v: TDocList;
 begin
-  result := TDocList.CreateOwned;
-  result.Value^.InitArray(values, model);
+  v := TDocList.CreateOwned;
+  v.fValue^.InitArray(values, JSON_[model]);
+  result := v;
 end;
 
 function DocListFrom(const v: variant): IDocList;
@@ -11514,7 +11517,7 @@ begin
   result := nil;
   if jsonfromresults then
   begin
-    if not main.InitArrayFromResults(json, model) then
+    if not main.InitArrayFromResults(json, JSON_[model]) then
       exit;
   end
   else if not main.InitJson(json, model) or
@@ -11592,9 +11595,12 @@ end;
 
 function DocDict(const keyvalues: array of const; model: TDocVariantModel;
   dontAddDefault: boolean): IDocDict;
+var
+  d: TDocDict;
 begin
-  result := TDocDict.CreateOwned;
-  result.Value^.InitObject(keyvalues, model, dontAddDefault);
+  d := TDocDict.CreateOwned;
+  d.fValue^.InitObject(keyvalues, model, dontAddDefault);
+  result := d;
 end;
 
 function DocDictFromKeys(const keys: array of RawUtf8;
