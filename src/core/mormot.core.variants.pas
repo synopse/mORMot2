@@ -4287,7 +4287,9 @@ begin
       begin // raw pointer <> nil will be serialized as PtrInt
         r.VType := varPtrInt;
         r.VInt64 := PtrInt(V^.VPointer);
-      end
+      end;
+    vtInterface: // support IDocDict and IDocList instances
+      TDocVariantData(result).InitFromIDocAny(IInterface(V^.VInterface));
   else
     ESynVariant.RaiseUtf8('Unhandled TVarRec.VType=%', [V^.VType]);
   end;
