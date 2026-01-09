@@ -4984,6 +4984,14 @@ begin
   Check(l <> nil);
   CheckEqual(l.Len, 3);
   CheckEqual(l.Json, '[1,{"a":"1","b":2},"3"]');
+  l := DocList([1, 2, 3, '{', 'a', '1', 'b', 2, '}', '5']);
+  Check(l <> nil);
+  CheckEqual(l.Len, 5);
+  CheckEqual(l.Json, '[1,2,3,{"a":"1","b":2},"5"]');
+  l := DocList([1, 2, '{', 'a', '[', ']', '}', '5']);
+  Check(l <> nil);
+  CheckEqual(l.Len, 4);
+  CheckEqual(l.Json, '[1,2,{"a":[]},"5"]');
   // validate IDocList/IDocDict as published properties
   any := TDocAnyTest.Create;
   try
@@ -6154,6 +6162,21 @@ begin
   end;
   for i := 1 to a.Count do
     CheckEqual(a.GetValueIndex(ToUtf8(-i)), a.Count - i, 'negative indexes');
+  a.Clear;
+  a.InitObject(['a', 1, 'obj', '{', 'o', 2, '}']);
+  CheckEqual(a.ToJson, '{"a":1,"obj":{"o":2}}');
+  a.Clear;
+  a.InitObject(['a', 1, 'obj', '{', 'b', 2, 'c', 'cest', '}', 'd', 0]);
+  CheckEqual(a.ToJson, '{"a":1,"obj":{"b":2,"c":"cest"},"d":0}');
+  a.Clear;
+  a.InitObject(['a', 1, 'obj', '{', 'arr', '[', 0, 1, 2, ']', '}']);
+  CheckEqual(a.ToJson, '{"a":1,"obj":{"arr":[0,1,2]}}');
+  a.Clear;
+  a.InitArray(['a', '{', 'arr', '[', 0, 1, 2, ']', '}', 2]);
+  CheckEqual(a.ToJson, '["a",{"arr":[0,1,2]},2]');
+  a.Clear;
+  a.InitArray(['a', '{', 'arr', '[', 0, 1, ']', '}']);
+  CheckEqual(a.ToJson, '["a",{"arr":[0,1]}]');
   a.Clear;
   a.Init;
   a.AddObject(['source', 'source0', // not same order as in for loop below
