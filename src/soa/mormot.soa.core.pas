@@ -633,6 +633,7 @@ type
     property ExcludeServiceLogCustomAnswer: boolean
       index optExcludeServiceLogCustomAnswer read GetOption write SetOption;
     /// the HTTP methods used for TRestServerUriContext.UriComputeRoutes
+    // - call fluent SetMethods() to customize it
     property Methods: TUriMethods
       read fMethods;
     /// index of the first method of this interface in the global container
