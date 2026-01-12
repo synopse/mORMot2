@@ -39,7 +39,11 @@ interface
       {$ifdef OSANDROID}
         {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)
       {$else}
-        {$define ZLIBEXT}  // FPC other POSIX: system's libz.so
+        {$ifdef CPUARM}
+          {$define ZLIBSTATIC} // use our static/arm-linux/libz.a for FPC
+        {$else}
+          {$define ZLIBEXT}  // FPC other POSIX: system's libz.so
+        {$endif CPUARM}
       {$endif OSANDROID}
     {$endif OSWINDOWS}
   {$else not FPC}
@@ -626,6 +630,10 @@ end;
     {$L ..\..\static\x86_64-win64\adler32.o}
     {$L ..\..\static\x86_64-win64\crc32.o}
   {$endif WIN64}
+
+  {$ifdef CPUARM}
+    {$linklib ../../static/arm-linux/libz.a}
+  {$endif CPUARM}
 
 {$else} // for Delphi Win32 - Delphi 7 has no reliable zlib.pas
 
