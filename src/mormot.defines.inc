@@ -765,7 +765,8 @@
 
   {$define MORMOT22}  // defined since mORMot 2.2 stable
   {$define MORMOT23}  // defined since mORMot 2.3 stable
-  {.$define MORMOT24} // defined since mORMot 2.4 stable
+  {$define MORMOT24}  // defined since mORMot 2.4 stable
+  {.$define MORMOT25} // defined since mORMot 2.5 stable
 
 // -----------
 // -- about pascal code expectations

@@ -1,10 +1,20 @@
 # Changelog
 
-All notable changes to the *mORMot Open Source Framework* project will be documented in this file.
+All notable changes to the *mORMot 2 Open Source* project will be documented in this file.
 Details are available [on out GitHub repository](https://github.com/synopse/mORMot2/commits/master)
 
-## [2.3.stable] - 2024-10-16
+## [2.4.stable] - 2026-01-13
 This is the latest stable release of *mORMot* v2.
+### Added
+- SCRAM-MCF based REST Authentication support (secure password hashing and mutual authentication).
+- Modern password hashing algorithms (`bcrypt scrypt`...) for secure server-side storage.
+- AI-Generated new Samples and new Documentation.
+### Changed
+- Upgraded SQLite3 to 3.51.2.
+- Fixed slow REST server startup when a lot of services are defined (PUT/POST not enabled by default any more for interfaces).
+- Lots other bug fixes, optimisations and enhancements in all parts of the framework: more than 4500 commits since the previous version.
+
+## [2.3.stable] - 2024-10-16
 ### Added
 - [Swagger/OpenAPI Client Generator](https://blog.synopse.info/?post/2024/09/06/Swagger/OpenAPI-Client-Generator-for-Delphi-and-FPC)
 - [IDocList/IDocDict Containers](https://blog.synopse.info/?post/2024/02/01/Easy-JSON-with-Delphi-and-FPC)

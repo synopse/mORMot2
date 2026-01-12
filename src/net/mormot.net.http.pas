@@ -265,7 +265,7 @@ const
   XPOWEREDNAME = 'X-Powered-By';
 
   /// the full text of the current Synopse mORMot framework version
-  // - e.g. 'mORMot 2.3' : won't supply full version number with build revision
+  // - e.g. 'mORMot 2.4' : won't supply full version number with build revision
   // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attacker knowledge
   XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2.' + SYNOPSE_FRAMEWORK_BRANCH;
 
