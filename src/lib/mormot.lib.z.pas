@@ -202,7 +202,7 @@ function zlibCompressMax(input: PtrUInt): PtrUInt;
 
 
 const
-  ZLIB_VERSION = '1.2.3';
+  ZLIB_VERSION = '1.2.3'; // conservative API version
 
   // block methods results
   Z_NO_FLUSH      = 0;
@@ -226,11 +226,12 @@ const
   Z_VERSION_ERROR = -6;
 
   // compression levels
-  Z_DEFAULT_COMPRESSION = -1; // documented to match Z_USUAL_COMPRESSION (6)
-  Z_NO_COMPRESSION      = 0;
-  Z_BEST_SPEED          = 1;
-  Z_USUAL_COMPRESSION   = 6;
-  Z_BEST_COMPRESSION    = {$ifdef LIBDEFLATESTATIC} 12 {$else} 9 {$endif};
+  Z_DEFAULT_COMPRESSION   = -1; // documented to match Z_USUAL_COMPRESSION (6)
+  Z_NO_COMPRESSION        = 0;
+  Z_BEST_SPEED            = 1;
+  Z_USUAL_COMPRESSION     = 6;
+  Z_BEST_COMPRESSION      = {$ifdef LIBDEFLATESTATIC} 12 {$else} 9 {$endif};
+  Z_BEST_COMPRESSION_ZLIB = 9; // for zlib stream functions
 
   // compression strategies/algorithms
   Z_DEFAULT_STRATEGY = 0;
@@ -810,8 +811,8 @@ end;
 
 function TZLib.CompressInit(CompressionLevel: integer; ZlibFormat: boolean): boolean;
 begin
-  if CompressionLevel > Z_BEST_COMPRESSION then
-    CompressionLevel := Z_BEST_COMPRESSION; // libdeflate is up to 12
+  if CompressionLevel > Z_BEST_COMPRESSION_ZLIB then // zlib limit is 9
+    CompressionLevel := Z_BEST_COMPRESSION_ZLIB; // libdeflate is up to 12
   result := deflateInit2_(
     Stream, CompressionLevel, Z_DEFLATED, Z_MAX_BITS[ZLibFormat],
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, SizeOf(Stream)) >= 0;
