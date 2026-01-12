@@ -16,7 +16,9 @@ rm *.o
 FLAGS="Wall -Wextra -Wcast-qual -Wcast-align -Wshadow -Wswitch-enum -Wdeclaration-after-statement -Wstrict-prototypes -Wundef -Wpointer-arith -Wstrict-aliasing=1"
 CFILES="entropy_common.c fse_compress.c fse_decompress.c huf_compress.c huf_decompress.c lizard_compress.c lizard_decompress.c"
 
-$GCC -static -fPIC -fno-stack-protector -O2 -m32 -fomit-frame-pointer -fno-exceptions -fno-asynchronous-unwind-tables  -fno-unwind-tables -std=c99 -I. -nostdlib -fvisibility=hidden -D_ANSI_SOURCE  -c  $CFILES
+# note: -fPIC fails to compile on i386-linux -> no-pic and force LIZARD_EXTERNALONLY when compiling into a .so library 
+
+$GCC -static -fno-pic -fno-stack-protector -O2 -m32 -fomit-frame-pointer -fno-exceptions -fno-asynchronous-unwind-tables  -fno-unwind-tables -std=c99 -I. -nostdlib -fvisibility=hidden -D_ANSI_SOURCE  -c  $CFILES
 
 strip -d -x *.o
 

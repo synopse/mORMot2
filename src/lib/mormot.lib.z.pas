@@ -13,6 +13,7 @@ unit mormot.lib.z;
    - Simple Wrapper Functions for Deflate/ZLib Process
 
   FPC Intel-Linux and Win32 use the faster libdeflate for in-memory compression
+  Note: when compiling on i386-linux .so library, define NOLIBDEFLATESTATIC
 
   *****************************************************************************
 

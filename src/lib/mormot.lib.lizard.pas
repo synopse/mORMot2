@@ -11,6 +11,8 @@ unit mormot.lib.lizard;
    - Low-Level Lizard API Process
    - TAlgoLizard/TAlgoLizardFast/TAlgoLizardHuffman High-Level Algorithms
 
+   Note: when compiling on i386-linux .so library, define LIZARD_EXTERNALONLY
+
   *****************************************************************************
 
 
