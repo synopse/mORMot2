@@ -15,7 +15,8 @@ Each sub-folder contains the compilation scripts of the static libraries, and th
 - [`libdeflate`](libdeflate) for fast in-memory `zlib`/`deflate` compression;
 - [`liblizard`](liblizard) for the `LZ5`/`Lizard` compression library;
 - [`libquickjs`](libquickjs) for the `QuickJS` JavaScript interpreter;
-- [`libspidermonkey`](libspidermonkey) for the `SpiderMonkey` JavaScript Engine.
+- [`libspidermonkey`](libspidermonkey) for the `SpiderMonkey` JavaScript Engine;
+- [`libzlib`](libzlib) for the `zlib` official 1.3.1 revision for the arm-linux/RPi platform.
 
 
 ## Licensing
