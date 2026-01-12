@@ -477,8 +477,8 @@ const
     '13 Ventura',
     '14 Sonoma',
     '15 Sequoia',
-    '26 Tahoe',
-    '27 Next');
+    '26 Tahoe', // last ARM+Intel suport
+    '27 Next'); // expected in 2026, ARM-only
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
