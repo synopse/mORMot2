@@ -782,7 +782,7 @@ begin
   Stream.next_out := dst;
   Stream.avail_out := dstLen;
   {$ifndef ZLIBPAS}
-  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
+  Stream.zalloc := @zlibAllocMem; // even under Linux/BSD, use program heap
   Stream.zfree  := @zlibFreeMem;
   {$endif ZLIBPAS}
   Written := 0;
@@ -997,6 +997,7 @@ begin
   FreeMem(P);
 end;
 
+{$ifndef ZLIBPAS}
 function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC;
 begin
   result := libdeflate_crc32(crc, buf, len);
@@ -1006,6 +1007,7 @@ function adler32(adler: TZCRC; buf: pointer; len: cardinal): TZCRC;
 begin
   result := libdeflate_adler32(adler, buf, len);
 end;
+{$endif ZLIBPAS}
 
 {$endif LIBDEFLATESTATIC}
 
@@ -1223,6 +1225,10 @@ end;
 {$endif LIBDEFLATESTATIC}
 
 initialization
+  (*{$ifdef ZLIBSTATIC} writeln('ZLIBSTATIC'); {$endif}
+  {$ifdef ZLIBPAS} writeln('ZLIBPAS');  {$endif}
+  {$ifdef ZLIBEXT} writeln('ZLIBEXT');  {$endif}
+  {$ifdef LIBDEFLATESTATIC} writeln('LIBDEFLATE'); {$endif}*)
   mormot.core.base.crc32   := @crc;
   mormot.core.base.adler32 := @adler;
 
