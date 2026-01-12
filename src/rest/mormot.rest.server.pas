@@ -6376,11 +6376,17 @@ begin
   if fModel.TablesMax < 0 then // before AuthenticationRegister() User+Group add
     fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   if aHandleUserAuthentication then
-    AuthenticationRegister([
-      TRestServerAuthenticationDefault
-      {$ifdef DOMAINRESTAUTH},
-      TRestServerAuthenticationSspi
-      {$endif DOMAINRESTAUTH}]);
+  begin
+    AuthenticationRegister(TRestServerAuthenticationDefault);
+    {$ifdef DOMAINRESTAUTH}
+    // detect mormot.lib.sspi/gssapi unit depending on the OS and availability
+    if InitializeDomainAuth then // avoid ESecurityException at startup
+      AuthenticationRegister(TRestServerAuthenticationSspi)
+    else
+      TSynLog.Add.Log(sllWarning, 'Create: no % available: bypass %',
+        [SECPKGNAMEAPI, TRestServerAuthenticationSspi], self);
+    {$endif DOMAINRESTAUTH}
+  end;
   // initialize TRestServer
   fRootRedirectForbiddenToAuth := Model.Root + '/auth';
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
