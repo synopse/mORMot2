@@ -385,6 +385,8 @@ begin
   result := abs(x);
 end;
 
+{$endif CPU32}
+
 function strchr(p: PAnsiChar; chr: AnsiChar): PAnsiChar; cdecl;
 begin // needed since 3.46.1
   result := nil;
@@ -396,8 +398,6 @@ begin // needed since 3.46.1
         inc(p);
   result := p;
 end;
-
-{$endif CPU32}
 
 function memchr(p: pointer; chr: byte; n: PtrInt): PAnsiChar; cdecl;
 var
