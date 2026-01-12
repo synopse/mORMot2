@@ -900,8 +900,8 @@
       {$undef LIZARD_EXTERNALONLY}  // static liblizard.a
     {$endif CPUINTEL}
     {$ifdef CPUARM}
+      {$define LIBDEFLATESTATIC}    // seems stable enough since mORMot 2.4
       {.$undef LIZARD_EXTERNALONLY} // static liblizard.a is not tested
-      {.$define LIBDEFLATESTATIC}   // compiles, but untested
       {.$define LIBQUICKJSSTATIC}   // compiles, but untested
     {$endif CPUARM}
     {$ifdef CPUAARCH64}
