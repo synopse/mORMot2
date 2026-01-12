@@ -366,12 +366,14 @@ var
    atm: time_t;
 
 function localtime32(t: PCardinal): pointer; cdecl;
+  {$ifdef FPC} public name _PREFIX + '_localtime32'; {$endif}
 begin
   localtime32_s(t^, atm);
   result := @atm;
 end;
 
 function localtime64(t: PInt64): pointer; cdecl;
+  {$ifdef FPC} public name _PREFIX + '_localtime64'; {$endif}
 begin
   localtime64_s(t^, atm);
   result := @atm;
