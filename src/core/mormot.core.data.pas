@@ -1955,6 +1955,7 @@ type
     function Find(Item: pointer): PtrInt; overload;
     /// search for a hashed element value inside the dynamic array with hashing
     function Find(Item: pointer; aHashCode: cardinal): PtrInt; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// search for a hash position inside the dynamic array with hashing
     function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
@@ -10196,16 +10197,16 @@ begin
     exit;
 end;
 
-function TDynArrayHasher.Find(Item: pointer): PtrInt;
-begin
-  result := Find(Item, HashOne(Item));
-end;
-
 function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): PtrInt;
 begin
   result := FindOrNew(aHashCode, Item, nil); // fallback to Scan() if needed
   if result < 0 then
     result := -1; // for coherency with most search methods
+end;
+
+function TDynArrayHasher.Find(Item: pointer): PtrInt;
+begin
+  result := Find(Item, HashOne(Item));
 end;
 
 type // dedicated TFastReHash engine for better register allocation
