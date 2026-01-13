@@ -4116,6 +4116,7 @@ type
     /// get the index of aTable in Tables[]
     // - raise an EModelException if the table is not in the model
     function GetTableIndexExisting(aTable: TOrmClass): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
     /// get the index of a table in Tables[]
     // - expects SqlTableName to be SQL-like formatted (i.e. without TOrm[Record])
     function GetTableIndex(const SqlTableName: RawUtf8): PtrInt; overload;
@@ -5070,6 +5071,16 @@ type
 
 
 implementation
+
+{ early definition for proper inlining }
+
+function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
+begin
+  result := GetTableIndex(aTable);
+  if result < 0 then
+    EModelException.RaiseUtf8('% is not part of % root=%',
+      [aTable, self, fRoot]);
+end;
 
 
 { -------------------- ORM Specific TOrmPropInfoRtti Classes }
@@ -10017,16 +10028,6 @@ begin
       if Tables[result].InheritsFrom(aTable) then
         exit;
   result := -1;
-end;
-
-function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
-begin
-  if self = nil then
-    EModelException.RaiseU('nil.GetTableIndexExisting');
-  result := GetTableIndex(aTable);
-  if result < 0 then
-    EModelException.RaiseUtf8('% is not part of % root=%',
-      [aTable, self, fRoot]);
 end;
 
 function TOrmModel.GetTableExactIndex(const TableName: RawUtf8): PtrInt;
