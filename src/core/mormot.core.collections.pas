@@ -43,8 +43,8 @@ interface
 //    TDynArray and TSynDictionary, then specialization helps a little more
 {.$define NOSPECIALIZE}
 
-// you could try to define this conditional to generate even less code, which
-// may be slightly slower - perhaps not really noticeable on production
+// try to define this conditional to generate even less code for IKeyValue<>
+// - may be slightly slower (not really noticeable on production)
 {.$define SMALLGENERICS}
 
 uses

@@ -2306,7 +2306,7 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 
 {$endif UNICODE}
 
-function CoCreateGuid(out guid: THash128Rec): HRESULT;
+function CoCreateGuid(out guid: THash128): HRESULT;
   stdcall; external 'ole32.dll';
 
 procedure XorOSEntropy(var e: THash512Rec);
@@ -2334,7 +2334,7 @@ begin
   DefaultHasher128(@e.h3, @ft, SizeOf(ft));
   for i := 0 to high(e.r) do
   begin
-    CoCreateGuid(u); // very fast on Windows - used to obfuscate system info
+    CoCreateGuid(u.b); // very fast on Windows - used to obfuscate system info
     XorMemory(e.r[i], u);
   end;
   QueryPerformanceCounter(u.Lo); // is likely to have changed in-between
@@ -5134,9 +5134,9 @@ begin
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info
-  CoCreateGuid(SystemEntropy.LiveFeed); // very fast and unique (but not strong)
   rnd := @SystemEntropy.Startup;
-  rnd^ := SystemEntropy.LiveFeed.b;
+  CoCreateGuid(rnd^); // very fast and unique (but not strong)
+  SystemEntropy.LiveFeed.b := rnd^;
   crc32c128(rnd, @SystemInfo, SizeOf(SystemInfo));
   crc32c128(rnd, @mem, SizeOf(mem));
   crc32c128(rnd, @OSVersionInfo, SizeOf(OSVersionInfo));
