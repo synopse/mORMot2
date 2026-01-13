@@ -12,6 +12,8 @@ Thanks to all [Contributors](CONTRIBUTORS.md)!
 
 **NOTICE: This version 2 replaces [*mORMot 1.18*](https://github.com/synopse/mORMot) which is now in maintainance-only mode. Consider using *mORMot 2* for any new or maintainable project.**
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/synopse/mORMot2)
+
 ## Resources
 
 You can find more about *mORMot 2* in:
