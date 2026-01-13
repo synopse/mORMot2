@@ -4990,7 +4990,7 @@ begin
       if Vers = wServer2016 then
         // we identify only LTSC server versions
         // see e.g. https://betawiki.net/wiki/Windows_Server_2025
-        if OSVersionInfo.dwBuildNumber >= 177609 then    // up to 17763 RTM
+        if OSVersionInfo.dwBuildNumber >= 17609 then     // up to 17763 RTM
           if OSVersionInfo.dwBuildNumber >= 19504 then   // up to 20348 Preview
             if OSVersionInfo.dwBuildNumber >= 25871 then // up to 26100 Preview
               Vers := wServer2025_64
