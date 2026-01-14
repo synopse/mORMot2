@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:https://gith
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot 2 Documentation}.\line Copyright (C) 2025 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
+{\i Synopse mORMot 2 Documentation}.\line Copyright (C) 2026 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
 The {\i Synopse mORMot 2 Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application - see @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
 The {\i Synopse mORMot 2 Documentation} is a free document, released under a GPL 3.0 License.
 {\b Trademark Notice}
@@ -53,7 +53,7 @@ ApprovedBy=
 ; Revision* multiple revision Table: ignored values are taken from current, older below
 RevisionDescription=Current Version
 RevisionDate=
-Revision=2.3
+Revision=2.4
 ; [DILayout] list the global DI outline (lines beginning with : are titles)
 ; [DI-*] details all items
 DefaultPreparedBy=Arnaud Bouchez
@@ -112,7 +112,7 @@ This document is intended to describe the Design Input Product Specifications.
 : Project Concept
 :  Purpose and Scope
 This document focuses on the {\i mORMot 2} library.
-The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.3 release of the {\i Synopse mORMot library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
+The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.4 release of the {\i Synopse mORMot library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
 :  Concept Statement
 It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the {\i Delphi} programing environment.
 Latest versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the {\i Delphi} compiler as well, with a more open architecture.
@@ -168,7 +168,7 @@ Purpose=List {\i Failure Modes and Effects Analysis} (FMEA)
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -235,7 +235,7 @@ Purpose=Interpret design inputs and specify software design features
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -295,7 +295,7 @@ Purpose=Perform a risk assessment of the SWRS implementation
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -354,7 +354,6 @@ About free or professional support:
 - Issues are better first discussed in our forum:\line @https://synopse.info/forum/viewforum.php?id=24 \line before being tracked in our public repository located at\line @https://github.com/synopse/mORMot2/issues \line (without preliminary discussion in the forum, premature tickets are likely to be closed)
 - You are welcome to propose some pull requests for sharing your changes of the source code:\line @https://github.com/synopse/mORMot2/pulls
 - The source is published under a permissive MPL/GPL/LGPL Three-License:\line @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
-- Synopse, as a company, can provide a commercial license, professional support, expertise, bug fixes or enhancements, on request:\line @https://synopse.info/forum/viewtopic.php?id=25
 : Work in progress
 This documentation is in early stage. As stated above, API documentation is accurate, but its high-level presentation is currently lacking behind {\i mORMot 1} documentation at @https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
 For a general introduction to the toolbox features, please look at the {\i AI-Generated mORMot 2} documentation, which covers its high-level usage - thanks a lot {\i Javier Tarí Agulló} for this amazing work using the latest AI tools:\line @https://github.com/synopse/mORMot2/tree/master/docs
@@ -466,7 +465,7 @@ SourceFile=mormot2tests.dpr;mormot.*.pas
 ; mormot.*.pas will find all official mORMot units in all IncludePath folders :)
 SourceIgnoreSymbol=select,check,open,connect,send,sqlite3,mORMot,JavaScript,cypher,execute,cache
 SourceIgnoreSymbolByUnit=SynCrossPlatformJSON,SynCrossPlatformREST,SynCrossPlatformSpecific,SynCrossPlatformTests
-Version=2.3
+Version=2.4
 TitleOffset=0
 DisplayName=mORMot2
 
@@ -483,7 +482,7 @@ Purpose=Summarize the software DI implementation for QA review
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -524,7 +523,7 @@ Purpose=Define the testing required for the updates to the mORMot Framework soft
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -584,7 +583,7 @@ Purpose=Describe all Test protocols with specific pass/fail criteria
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -669,7 +668,7 @@ ItemName=SCRS
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -704,7 +703,7 @@ Purpose=Present all software modifications introduced in the current release
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.3
+Revision=2.4
 RevisionDate=
 RevisionDescription=Initial version
 ; Revision* multiple revision Table: ignored values are taken from current
