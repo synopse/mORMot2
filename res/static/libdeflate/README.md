@@ -4,7 +4,8 @@ The following modifications have been made by Synopse to the original libdeflate
 
 - `libdeflate_malloc/free` defined as exported symbols to redirect to the pascal MM;
 - `cdecl` ABI on all targets (as recent libdeflate revisions do) - in `utils.c`;
-- simple per-target compilation scripts (no complex make files) dedicated to FPC and Delphi static linking using the [FpcUpDeluxe cross-compilers](https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases).
+- simple per-target compilation scripts (no complex make files) dedicated to FPC and Delphi static linking using the [FpcUpDeluxe cross-compilers](https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases);
+- backported [a later fix](https://github.com/ebiggers/libdeflate/issues/323) to ensure the output format is compatible with Windows Explorer.
 
 This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases or https://synopse.info/files/mormot2static.7z
 

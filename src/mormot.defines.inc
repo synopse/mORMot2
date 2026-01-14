@@ -919,7 +919,7 @@
         {$define LIBQUICKJSSTATIC}
       {$endif CPUX86}
       {$ifdef CPUX64}
-        {$define LIBDEFLATESTATIC}
+        {$define LIBDEFLATESTATIC} // seems stable enough since mORMot 2.4
         {$define LIBQUICKJSSTATIC}
       {$endif CPUX64}
     {$else}
