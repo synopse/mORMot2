@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FPCUP=/home/ab/fpcup
+FPCUP=$HOME/fpcup
 FPC_SYS="$FPCUP/fpc/bin/x86_64-linux/fpc.sh"
 FPC_OOTB="$FPCUP/fpc-ootb/fpc-ootb-64"
 
