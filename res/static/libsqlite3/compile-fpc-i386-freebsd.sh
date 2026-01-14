@@ -2,7 +2,7 @@
 
 FPCARCH=i386-freebsd
 FPCARCHVERSION=12
-CROSS=/home/ab/fpcup/cross/bin/$FPCARCH
+CROSS=$HOME/fpcup/cross/bin/$FPCARCH
 GCC=$CROSS/$FPCARCH$FPCARCHVERSION-gcc
 DST=../../static/$FPCARCH/sqlite3.o
 DST2=../../../lib2/static/$FPCARCH/sqlite3.o

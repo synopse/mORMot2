@@ -64,7 +64,7 @@ Install the following package:
 
 Ensure you installed the latest version of the corresponding cross-compilers in `fpcupdeluxe` (in the *Cross* tab), and modify the `*.sh` path if necessary, from its default value:
 
-    CROSS=/home/ab/fpcup/cross/bin/$ARCH 
+    CROSS=$HOME/fpcup/cross/bin/$ARCH 
 
 ## Technical Notes
 

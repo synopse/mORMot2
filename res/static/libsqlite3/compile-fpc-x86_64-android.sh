@@ -2,7 +2,7 @@
 
 ARCH=x86_64-android
 
-CROSS=/home/ab/fpcup/cross/bin/all-android/bin
+CROSS=$HOME/fpcup/cross/bin/all-android/bin
 GCC=$CROSS/clang
 DST=../../static/$ARCH/sqlite3.o
 DST2=../../../lib2/static/$ARCH/sqlite3.o

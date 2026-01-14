@@ -2,7 +2,7 @@
 
 FPCARCH=arm-android
 DEST=../../dev/lib2/static/$FPCARCH
-CROSS=/home/ab/fpcup/cross/bin/$FPCARCH
+CROSS=$HOME/fpcup/cross/bin/$FPCARCH
 GCC=$CROSS/arm-linux-androideabi-gcc 
 # gcc not available yet in FpcUpDeluxe cross compiler package :(
 

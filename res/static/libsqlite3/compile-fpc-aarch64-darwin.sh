@@ -2,7 +2,7 @@
 
 ARCH=aarch64-darwin
 
-CLANG=/home/ab/fpcup/cross/bin/all-apple/bin/aarch64-apple-darwin19-clang
+CLANG=$HOME/fpcup/cross/bin/all-apple/bin/aarch64-apple-darwin19-clang
 DST=../../static/$ARCH/sqlite3.o
 DST2=../../../lib2/static/$ARCH/sqlite3.o
 

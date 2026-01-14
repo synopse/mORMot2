@@ -2,7 +2,7 @@
 
 ARCH=aarch64-linux
 
-CROSS=/home/ab/fpcup/cross/bin/$ARCH
+CROSS=$HOME/fpcup/cross/bin/$ARCH
 GCC=$CROSS/$ARCH-gcc
 DST=../../static/$ARCH/sqlite3.o
 DST2=../../../lib2/static/$ARCH/sqlite3.o

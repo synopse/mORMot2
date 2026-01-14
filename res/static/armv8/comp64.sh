@@ -2,7 +2,7 @@
 
 ARCH=aarch64-linux
 
-CROSS=/home/ab/fpcup/cross/bin/$ARCH
+CROSS=$HOME/fpcup/cross/bin/$ARCH
 GCC=$CROSS/$ARCH-gcc
 
 rm $DST2

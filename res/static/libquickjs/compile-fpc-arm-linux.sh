@@ -2,7 +2,7 @@
 
 FPCARCH=arm-linux
 DEST=../../dev/lib2/static/$FPCARCH
-CROSS=/home/ab/fpcup/cross/bin/$FPCARCH
+CROSS=$HOME/fpcup/cross/bin/$FPCARCH
 GCC=$CROSS/arm-linux-gnueabihf-gcc 
 
 echo
