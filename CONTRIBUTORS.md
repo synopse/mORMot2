@@ -44,7 +44,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - F-Vicente
 - Goran Despalatovic (gigo)
 - Hubert Touvet
-- Javierus TK
+- Javier Tarí Agulló (Javierus TK)
 - Jean-Baptiste Roussia (jbroussia)
 - Joe (jokusoft)
 - Johan Bontes

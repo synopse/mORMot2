@@ -2,7 +2,7 @@
 
 **The mORMot framework. Copyright (C) 2026 Arnaud Bouchez**
 
-**Synopse Informatique - https://synopse.info**
+**https://synopse.info**
 
 The files in this repository are part of the mORMot framework 2, and are released under a disjunctive MPL 1.1/GPL 2.0/LGPL 2.1 three-license. Its use in any project expects the full acceptance of its licensing terms.
 
@@ -64,8 +64,7 @@ If you want to include part of the framework source code in your own open-source
       Sample based on official mORMot's sample
       "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 
-      Synopse mORMot framework. Copyright (C) 2026 Arnaud Bouchez
-        Synopse Informatique - https://synopse.info
+      Synopse mORMot framework. Copyright (C) 2026 Arnaud Bouchez https://synopse.info
       Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
     }
 
@@ -79,5 +78,4 @@ Even though our libraries are Open Source with permissive licenses, some users w
 
 For instance, you may want to hold a tangible legal document as evidence that you have the legal right to use and distribute your software containing our library code, or, more likely, your legal department tells you that you have to purchase a license.
 
-If you feel like you really have to purchase a license for our libraries, *Synopse*, the company that employs the architect and principal developer of the libray, will sell you one. Please contact us directly for a contract proposal.
-
+If you really have to purchase a license for our libraries, feel free to contact Arnaud Bouchez, owner of the source code base.
