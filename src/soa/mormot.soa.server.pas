@@ -1531,7 +1531,7 @@ begin
       else
         // regular execution
         execres := exec.ExecuteJson([instancePtr], Ctxt.ServiceParameters,
-          exec.WR, @err, Ctxt.ForceServiceResultAsJsonObject);
+          exec.WR, @err, rcfForceServiceResultAsJsonObject in Ctxt.Flags);
       if not execres then
       begin
         // wrong request returns HTTP error 406
