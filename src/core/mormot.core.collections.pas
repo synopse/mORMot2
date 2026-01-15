@@ -261,6 +261,14 @@ type
     /// add some items from another IList<T> instance
     procedure AddFrom(const Another: IList<T>; Offset: PtrInt = 0;
       Limit: PtrInt = -1);
+    /// wrapper around Data^.SaveToJson to be used e.g. with SOA methods
+    function ToJson: RawJson;
+    /// wrapper around Data^.LoadFromJson to be used e.g. with SOA methods
+    function FromJson(const Json: RawJson): boolean;
+    /// wrapper around Data^.SaveToBinary
+    function ToBinary: RawByteString;
+    /// wrapper around Data^.LoadFromBinary
+    function FromBinary(const Binary: RawByteString): boolean;
     /// high-level access to the stored values from their associated indexes
     // - raise EIList if the supplied index is out of range
     // - SetItem() will raise EIList if loCreateUniqueIndex is defined
@@ -287,8 +295,6 @@ type
     // - TRWLock is spinning on wait, so locks are expected to be released ASAP
     function Safe: PRWLock;
     /// low-level access to the internal TDynArray wrapper
-    // - you can use e.g. Data.SaveToJson/SaveTo and
-    // Data.LoadFromJson/LoadFromBinary
     function Data: PDynArray;
   end;
 
@@ -366,6 +372,14 @@ type
     function Sorted: boolean;
     /// low-level IList<> method to access the first item of the collection
     function First: pointer; inline;
+    /// IList<> method wrapper around Data^.SaveToJson
+    function ToJson: RawJson;
+    /// IList<> method wrapper around Data^.LoadFromJson
+    function FromJson(const Json: RawJson): boolean;
+    /// IList<> method wrapper around Data^.SaveToBinary
+    function ToBinary: RawByteString;
+    /// IList<> method wrapper around Data^.LoadFromBinary
+    function FromBinary(const Binary: RawByteString): boolean;
     /// IList<> method to return the number of items actually stored
     property Count: PtrInt
       read GetCount write SetCount;
@@ -530,6 +544,14 @@ type
     // - this is not thread-safe so to be protected by ReadLock/ReadUnLock if
     // you want to use the Key[] Value[] indexed properties
     function Count: integer;
+    /// wrapper around Data^.SaveToJson to be used e.g. with SOA methods
+    function ToJson: RawJson;
+    /// wrapper around Data^.LoadFromJson to be used e.g. with SOA methods
+    function FromJson(const Json: RawJson): boolean;
+    /// wrapper around Data^.SaveToBinary
+    function ToBinary: RawByteString;
+    /// wrapper around Data^.LoadFromBinary
+    function FromBinary(const Binary: RawByteString): boolean;
     /// high-level access to the stored values from their associated keys
     // - GetItem() raise an EIKeyValue if the key is not available, unless
     // kvoDefaultIfNotFound option was set - use TryGetValue() if you want to
@@ -559,8 +581,7 @@ type
     /// low-level access to the internal TSynDictionary storage
     // - which handles a lot of other useful methods not included as generics
     // to reduce the executable code size
-    // - you can use e.g. Data.Keys/Data.Values or Data.SaveToJson/SaveToBinary
-    // and Data.LoadFromJson/LoadFromBinary
+    // - you can use e.g. Data.Keys/Data.Values or other advanced methods
     function Data: TSynDictionary;
   end;
 
@@ -626,6 +647,14 @@ type
     procedure Clear;
     /// IKeyValue<> method to get the number of key/value pairs actually stored
     function Count: integer;
+    /// IKeyValue<> method wrapper around Data^.SaveToJson
+    function ToJson: RawJson;
+    /// IKeyValue<> method wrapper around Data^.LoadFromJson
+    function FromJson(const Json: RawJson): boolean;
+    /// IKeyValue<> method wrapper around Data^.SaveToBinary
+    function ToBinary: RawByteString;
+    /// IKeyValue<> method wrapper around Data^.LoadFromBinary
+    function FromBinary(const Binary: RawByteString): boolean;
     /// IKeyValue<> method to get the internal TSynDictionary capacity
     property Capacity: integer
       read GetCapacity write SetCapacity;
@@ -1157,6 +1186,26 @@ begin
   result := fValue;
 end;
 
+function TIListParent.ToJson: RawJson;
+begin
+  fDynArray.SaveToJson(RawUtf8(result));
+end;
+
+function TIListParent.FromJson(const Json: RawJson): boolean;
+begin
+  result := fDynArray.LoadFromJson(Json);
+end;
+
+function TIListParent.ToBinary: RawByteString;
+begin
+  result := fDynArray.SaveTo;
+end;
+
+function TIListParent.FromBinary(const Binary: RawByteString): boolean;
+begin
+  result := fDynArray.LoadFromBinary(Binary);
+end;
+
 function TIListParent.Data: PDynArray;
 begin
   result := @fDynArray;
@@ -1444,6 +1493,26 @@ end;
 function TIKeyValueParent.Count: integer;
 begin
   result := fData.Count;
+end;
+
+function TIKeyValueParent.ToJson: RawJson;
+begin
+  result := fData.SaveToJson;
+end;
+
+function TIKeyValueParent.FromJson(const Json: RawJson): boolean;
+begin
+  result := fData.LoadFromJson(Json, nil);
+end;
+
+function TIKeyValueParent.ToBinary: RawByteString;
+begin
+  result := fData.SaveToBinary({nocompression=}true);
+end;
+
+function TIKeyValueParent.FromBinary(const Binary: RawByteString): boolean;
+begin
+  result := fData.LoadFromBinary(Binary);
 end;
 
 function TIKeyValueParent.Data: TSynDictionary;
