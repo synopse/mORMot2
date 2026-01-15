@@ -527,6 +527,12 @@ type
   end;
 
 var
+  /// the current list of registered TAlgoCompress class instances
+  // - as used by TAlgoCompress.Algo(AlgoID)
+  // - made public mostly for testing purposes
+  SynCompressAlgos: array of TAlgoCompress;
+
+var
   /// our fast SynLZ compression as a TAlgoCompress class
   // - please use this global variable methods instead of the deprecated
   // SynLZCompress/SynLZDecompress wrapper functions
@@ -5249,10 +5255,6 @@ end;
 { ************ TAlgoCompress Compression/Decompression Classes }
 
 { TAlgoCompress }
-
-var
-  // don't use TObjectList before mormot.core.json registered TRttiJson
-  SynCompressAlgos: array of TAlgoCompress;
 
 constructor TAlgoCompress.Create;
 var
