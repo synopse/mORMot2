@@ -264,11 +264,11 @@ type
     /// wrapper around Data^.SaveToJson to be used e.g. with SOA methods
     function ToJson: RawJson;
     /// wrapper around Data^.LoadFromJson to be used e.g. with SOA methods
-    function FromJson(const Json: RawJson): boolean;
+    function TryFromJson(const Json: RawJson): boolean;
     /// wrapper around Data^.SaveToBinary
     function ToBinary: RawByteString;
     /// wrapper around Data^.LoadFromBinary
-    function FromBinary(const Binary: RawByteString): boolean;
+    function TryFromBinary(const Binary: RawByteString): boolean;
     /// high-level access to the stored values from their associated indexes
     // - raise EIList if the supplied index is out of range
     // - SetItem() will raise EIList if loCreateUniqueIndex is defined
@@ -375,11 +375,11 @@ type
     /// IList<> method wrapper around Data^.SaveToJson
     function ToJson: RawJson;
     /// IList<> method wrapper around Data^.LoadFromJson
-    function FromJson(const Json: RawJson): boolean;
+    function TryFromJson(const Json: RawJson): boolean;
     /// IList<> method wrapper around Data^.SaveToBinary
     function ToBinary: RawByteString;
     /// IList<> method wrapper around Data^.LoadFromBinary
-    function FromBinary(const Binary: RawByteString): boolean;
+    function TryFromBinary(const Binary: RawByteString): boolean;
     /// IList<> method to return the number of items actually stored
     property Count: PtrInt
       read GetCount write SetCount;
@@ -547,11 +547,11 @@ type
     /// wrapper around Data^.SaveToJson to be used e.g. with SOA methods
     function ToJson: RawJson;
     /// wrapper around Data^.LoadFromJson to be used e.g. with SOA methods
-    function FromJson(const Json: RawJson): boolean;
+    function TryFromJson(const Json: RawJson): boolean;
     /// wrapper around Data^.SaveToBinary
     function ToBinary: RawByteString;
     /// wrapper around Data^.LoadFromBinary
-    function FromBinary(const Binary: RawByteString): boolean;
+    function TryFromBinary(const Binary: RawByteString): boolean;
     /// high-level access to the stored values from their associated keys
     // - GetItem() raise an EIKeyValue if the key is not available, unless
     // kvoDefaultIfNotFound option was set - use TryGetValue() if you want to
@@ -650,11 +650,11 @@ type
     /// IKeyValue<> method wrapper around Data^.SaveToJson
     function ToJson: RawJson;
     /// IKeyValue<> method wrapper around Data^.LoadFromJson
-    function FromJson(const Json: RawJson): boolean;
+    function TryFromJson(const Json: RawJson): boolean;
     /// IKeyValue<> method wrapper around Data^.SaveToBinary
     function ToBinary: RawByteString;
     /// IKeyValue<> method wrapper around Data^.LoadFromBinary
-    function FromBinary(const Binary: RawByteString): boolean;
+    function TryFromBinary(const Binary: RawByteString): boolean;
     /// IKeyValue<> method to get the internal TSynDictionary capacity
     property Capacity: integer
       read GetCapacity write SetCapacity;
@@ -1191,7 +1191,7 @@ begin
   fDynArray.SaveToJson(RawUtf8(result));
 end;
 
-function TIListParent.FromJson(const Json: RawJson): boolean;
+function TIListParent.TryFromJson(const Json: RawJson): boolean;
 begin
   result := fDynArray.LoadFromJson(Json);
 end;
@@ -1201,7 +1201,7 @@ begin
   result := fDynArray.SaveTo;
 end;
 
-function TIListParent.FromBinary(const Binary: RawByteString): boolean;
+function TIListParent.TryFromBinary(const Binary: RawByteString): boolean;
 begin
   result := fDynArray.LoadFromBinary(Binary);
 end;
@@ -1500,7 +1500,7 @@ begin
   result := fData.SaveToJson;
 end;
 
-function TIKeyValueParent.FromJson(const Json: RawJson): boolean;
+function TIKeyValueParent.TryFromJson(const Json: RawJson): boolean;
 begin
   result := fData.LoadFromJson(Json, nil);
 end;
@@ -1510,7 +1510,7 @@ begin
   result := fData.SaveToBinary({nocompression=}true);
 end;
 
-function TIKeyValueParent.FromBinary(const Binary: RawByteString): boolean;
+function TIKeyValueParent.TryFromBinary(const Binary: RawByteString): boolean;
 begin
   result := fData.LoadFromBinary(Binary);
 end;
