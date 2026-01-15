@@ -1814,7 +1814,7 @@ type
     /// direct access to the TOrmProperties info of an existing TOrm instance
     // - same as OrmProps, but when we know that PropsCreate is never needed
     function Orm: TOrmProperties;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifndef NOPATCHVMT}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// the Table name in the database, associated with this TOrm class
     // - 'TSql' or 'TOrm' chars are trimmed at the beginning of the ClassName
     // - or the ClassName is returned as is, if no 'TSql' or 'TOrm' at first
@@ -6258,7 +6258,7 @@ end;
 class function TOrm.OrmProps: TOrmProperties;
 begin
   {$ifdef NOPATCHVMT}
-  result := LastOrmProps;
+  result := LastOrmProps; // atomic shared pointer access
   if (result <> nil) and
      (result.Table = self) then
     exit;
@@ -6282,7 +6282,7 @@ function TOrm.Orm: TOrmProperties;
 begin
   // we know TRttiCustom is in the slot, and PrivateSlot is TOrmProperties
   {$ifdef NOPATCHVMT} // no need of a TOrmProperties field (LastOrmProps is ok)
-  result := LastOrmProps;
+  result := LastOrmProps; // atomic shared pointer access
   if (result <> nil) and
      (result.Table = PClass(self)^) then
     exit;
@@ -9977,7 +9977,7 @@ function TOrmModel.GetTableIndex(aTable: TOrmClass): PtrInt;
 var
   {$ifndef NOPATCHVMT}
   max: integer;
-  Props: TOrmProperties;
+  o: TOrmProperties;
   m: ^TOrmPropertiesModelEntry;
   {$endif NOPATCHVMT}
   c: POrmClass;
@@ -9986,14 +9986,14 @@ begin
      (aTable <> nil) then
   begin
     {$ifndef NOPATCHVMT}
-    Props := aTable.OrmProps;
-    if Props <> nil then
+    o := aTable.OrmProps;
+    if o <> nil then
     begin
-      max := Props.fModelMax;
+      max := o.fModelMax;
       if (max >= 0) and (max <= fTablesMax) then
       begin
         // fastest O(1) search in all registered models (if worth it)
-        m := pointer(Props.fModel);
+        m := pointer(o.fModel);
         repeat
           if m^.Model = self then
           begin
