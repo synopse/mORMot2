@@ -324,6 +324,14 @@ type
 
   {$endif DOMAINRESTAUTH}
 
+  /// used internally to store one "soa" entry after authentication
+  TRestClientService = packed record
+    Name, ExpectedContract: RawUtf8;
+    Creation: TServiceInstanceImplementation;
+  end;
+  /// used internally to store "soa" array information after authentication
+  TRestClientServices = array of TRestClientService;
+
   /// store the information about the current session
   // - as set after a successful TRestClientUri.SetUser() method
   TRestClientSession = record
@@ -375,6 +383,8 @@ type
     // 25 minutes matches the default service timeout of 30 minutes
     // - you may set 0 to disable this SOA-level heartbeat feature
     HeartbeatSeconds: integer;
+    /// decoded "soa" array information after authentication
+    Services: TRestClientServices;
   end;
 
 
@@ -1229,7 +1239,7 @@ end;
 { TRestClientAuthentication }
 
 const
-  AUTH_N: array[0..11] of PUtf8Char = (
+  AUTH_N: array[0..12] of PUtf8Char = (
     'result',        // 0
     'data',          // 1
     'server',        // 2
@@ -1241,7 +1251,35 @@ const
     'timeout',       // 8
     'algo',          // 9
     'bearer',        // 10
-    'proof');        // 11
+    'proof',         // 11
+    'soa');          // 12
+
+procedure ParseSoa(var soa: TRestClientServices; p: PUtf8Char);
+var
+  s: ^TRestClientService;
+  n: PtrInt;
+begin
+  if p^ <> '[' then
+    exit;
+  n := 0;
+  repeat
+    if n = length(soa) then
+      SetLength(soa, NextGrow(n));
+    s := @soa[n];
+    inc(p);
+    if not GetJsonItemAsRawUtf8(p, s^.Name) then
+      exit;
+    GetJsonItemAsRawJson(p, RawJson(s^.ExpectedContract)); // keep double-quoted
+    if (p = nil) or
+       (p^ < '0') or
+       (p^ > AnsiChar(ord(high(TServiceInstanceImplementation)) + ord('0'))) then
+      exit;
+    s^.Creation := TServiceInstanceImplementation(ord(p^) - ord('0'));
+    inc(p);
+    inc(n);
+  until p^ = ']';
+  SetLength(soa, n);
+end;
 
 class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
@@ -1254,7 +1292,7 @@ var
 begin
   if (Sender.CallBackGet('auth', aNameValueParameters, resp,
         nil, 0, @hdr, {nolog=}true) <> HTTP_SUCCESS) or
-     (JsonDecode(pointer({%H-}resp), @AUTH_N, length(AUTH_N), @values) = nil) then
+     (JsonDecode(pointer({%H-}resp), @AUTH_N, length(AUTH_N), @values, true) = nil) then
   begin
     Sender.fSession.Data := ''; // reset temporary 'data' field
     result := ''; // error
@@ -1277,6 +1315,8 @@ begin
     include(Sender.fInternalState, needsBearer);
   if values[11].Text <> nil then
     Sender.fSession.ScramServerProof := values[11].ToUtf8;
+  if values[12].Text <> nil then
+    ParseSoa(Sender.fSession.Services, values[12].Text);
   if values[9].Text <> nil then
   begin
     // decode TRestClientAuthenticationSignedUri "algo"
