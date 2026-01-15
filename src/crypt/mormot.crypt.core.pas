@@ -10485,7 +10485,7 @@ begin
   begin
     // 32/64/128-bit aesnihash as implemented in Go runtime, using aesenc opcode
     AesNiHashKey := GetMemAligned(64, @BaseEntropy);            // non-void init
-    LecuyerDiffusion(AesNiHashKey, 64, @SystemEntropy.Startup); // 512-bit xor
+    LecuyerDiffusion(AesNiHashKey, 64, @SystemEntropy.Startup); // 128 to 512-bit
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;

@@ -7970,7 +7970,7 @@ end;
 
 { TTestCoreCompression }
 
-procedure MakeUncompressible(p: PByteArray);
+procedure MakeHardlyCompressible(p: PByteArray);
 var
   i: PtrInt;
   c1, c2: byte;
@@ -7995,7 +7995,7 @@ begin
     SetLength(Data, 1 shl 20 + 1 shl 10); // no need to compress more than 1.1MB
   DataFile := WorkDir + 'exe.1mb';
   FileFromString(Data, DataFile);
-  MakeUncompressible(FastNewRawByteString(Raw10K, 10240));
+  MakeHardlyCompressible(FastNewRawByteString(Raw10K, 10240));
   CheckEqual(Crc32String(Raw10K), $BF4C2F58, 'raw10k');
 end;
 
@@ -8006,7 +8006,7 @@ begin
 end;
 
 const
-  // regression tests use a const table instead of our computed array
+  // regression tests use a const table instead of our runtime-computed array
   crc32tab: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
     $990951BA, $076DC419, $706AF48F, $E963A535, $9E6495A3, $0EDB8832, $79DCB8A4,
     $E0D5E91E, $97D2D988, $09B64C2B, $7EB17CBD, $E7B82D07, $90BF1D91, $1DB71064,
@@ -8101,9 +8101,9 @@ begin
     dec(L, n);
   end;
   Check(crc0 = ReferenceCrc32(0, Pointer(Data), length(Data)));
-  Check(crc0 = Z.CRC, 'crc32');
-  Check(crc2 = crc0, 'crc32');
-  Check(crc3 = crc0, 'crc32');
+  Check(crc0 = Z.CRC, '0crc32');
+  Check(crc2 = crc0,  '2crc32');
+  Check(crc3 = crc0,  '3crc32');
   Z.Free;
   Check(GZRead(M.Memory, M.Position) = Data, 'gzread');
   crc1 := crc32(0, M.Memory, M.Position);
