@@ -207,6 +207,7 @@ var
   s: TClassWithoutRtti;
   ls: IList<TClassWithoutRtti>;
   u: RawUtf8;
+  bin: RawByteString;
   pu: PRawUtf8;
   lu: IList<RawUtf8>;
   lh: IList<THash128>;
@@ -248,6 +249,18 @@ begin
     Check(cardinal(i) <= MAX);
   for i in li do
     CheckEqual(li.IndexOf(i), i);   // O(1) hash table search
+  li := Collections.NewList<integer>;
+  for i := 1 to 5 do
+    CheckEqual(li.Add(i), i - 1);
+  CheckEqual(li.ToJson, '[1,2,3,4,5]');
+  bin := li.ToBinary;
+  Check(bin <> '');
+  li.Clear;
+  CheckEqual(li.ToJson, '[]');
+  Check(li.TryFromJson('[ 1, 3, 7 ]'));
+  CheckEqual(li.ToJson, '[1,3,7]');
+  Check(li.TryFromBinary(bin), 'bin');
+  CheckEqual(li.ToJson, '[1,2,3,4,5]');
   // manual IList<double> validation
   ld := Collections.NewList<double>;
   for d in ld do
@@ -453,6 +466,7 @@ var
   pu: PRawUtf8Array;
   vu: double;
   du: IKeyValue<RawUtf8, double>;
+  bin: RawByteString;
   eu: TPair<RawUtf8, double>;
   setcapa: boolean;
   setcapatxt: PUtf8Char;
@@ -572,6 +586,19 @@ begin
     du.Clear;
     Check(du.Count = 0);
   end;
+  Check(du.Count = 0);
+  CheckEqual(du.ToJson, 'null');
+  du.Add('a',1.0);
+  du.Add('b',2.0);
+  CheckEqual(du.ToJson, '{"a":1,"b":2}');
+  bin := du.ToBinary;
+  Check(bin <> '', 'tobin');
+  Check(du.TryFromJson('{c:3.14,d:5}'));
+  CheckEqual(du.ToJson, '{"c":3.14,"d":5}');
+  du.Clear;
+  Check(du.Count = 0);
+  Check(du.TryFromBinary(bin));
+  CheckEqual(du.ToJson, '{"a":1,"b":2}');
   // manual IKeyValue<SynUnicode, integer> validation
   ui := Collections.NewKeyValue<SynUnicode, integer>;
   Utf8ToSynUnicode(RawUtf8OfChar('x', 300), s); // used to trigger GPF
