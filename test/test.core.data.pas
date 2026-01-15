@@ -176,6 +176,7 @@ type
   protected
     Data: RawByteString; // contains the first 1MB of mormot2tests executable
     DataFile: TFileName; // (may be truncated) mormot2tests executable copy
+    Raw10K: RawByteString; // https://github.com/ebiggers/libdeflate/issues/323
     M: TMemoryStream;
     crc0, crc1: cardinal; // crc0=plain crc1=deflated
     ZipFile: TFileName;
@@ -7969,6 +7970,28 @@ end;
 
 { TTestCoreCompression }
 
+procedure MakeUncompressible(p: PByteArray);
+var
+  i: PtrInt;
+  c1, c2: byte;
+begin
+  c1 := $40;
+  c2 := $07;
+  for i := 1 to 10240 shr 1 do
+  begin
+    p[0] := c1;
+    p[1] := c2;
+    if c1 = $ff then
+    begin
+      c1 := $00;
+      inc(c2);
+    end
+    else
+      inc(c1);
+    p := @p[2];
+  end;
+end;
+
 procedure TTestCoreCompression.Setup;
 begin
   Data := StringFromFile(Executable.ProgramFileName);
@@ -7976,6 +7999,8 @@ begin
     SetLength(Data, 1 shl 20 + 1 shl 10); // no need to compress more than 1.1MB
   DataFile := WorkDir + 'exe.1mb';
   FileFromString(Data, DataFile);
+  MakeUncompressible(FastNewRawByteString(Raw10K, 10240));
+  CheckEqual(Crc32String(Raw10K), $BF4C2F58, 'raw10k');
 end;
 
 procedure TTestCoreCompression.CleanUp;
@@ -8472,6 +8497,8 @@ procedure TTestCoreCompression._TAlgoCompress;
       Check(s2 <> '');
       Check(algo.Decompress(s2) = t);
     end;
+    s2 := algo.Decompress(algo.Compress(Raw10K));
+    checkUtf8(s2 = Raw10k, 'uncompressible%', [algo]);
     plain := 0;
     comp := 0;
     timecomp := 0;
