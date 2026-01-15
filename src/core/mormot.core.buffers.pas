@@ -575,8 +575,18 @@ const
   ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (
     aclNormal, aclSafeSlow);
 
-  COMPRESS_STORED = #0;
-  COMPRESS_SYNLZ = 1;
+  // the current reserved AlgoID raw values
+  COMPRESS_STORED      = #0;
+  COMPRESS_SYNLZ       = 1;
+  COMPRESS_DEFLATE     = 2;
+  COMPRESS_DEFLATEFAST = 3;
+  COMPRESS_LIZARD      = 4;
+  COMPRESS_LIZARDFAST  = 5;
+  COMPRESS_LIZARDHUFF  = 6;
+  COMPRESS_RLZ         = 7;
+  COMPRESS_RLE         = 8;
+  COMPRESS_GZ          = 9;
+  COMPRESS_GZFAST      = 10;
 
 
 /// fast concatenation of several AnsiStrings
@@ -6040,7 +6050,7 @@ end;
 
 constructor TAlgoSynLZ.Create;
 begin
-  fAlgoID := COMPRESS_SYNLZ; // =1
+  fAlgoID := COMPRESS_SYNLZ; // 1
   fAlgoFileExt := '.synlz';
   inherited Create;
 end;
@@ -6184,7 +6194,7 @@ end;
 
 constructor TAlgoRleLZ.Create;
 begin
-  fAlgoID := 7;
+  fAlgoID := COMPRESS_RLZ; // 7
   fAlgoFileExt := '.synrlz';
   inherited Create;
 end;
@@ -6220,7 +6230,7 @@ end;
 
 constructor TAlgoRle.Create;
 begin
-  fAlgoID := 8;
+  fAlgoID := COMPRESS_RLE; // 8
   fAlgoFileExt := '.synrle';
   inherited Create;
 end;

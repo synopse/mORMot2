@@ -462,7 +462,7 @@ type
 constructor TAlgoLizard.Create;
 begin
   if fAlgoID = 0 then
-    fAlgoID := 4;
+    fAlgoID := COMPRESS_LIZARD; // 4
   fAlgoFileExt := '.synliz';
   inherited Create;
   fCompressionLevel := LIZARD_DEFAULT_CLEVEL;
@@ -499,7 +499,7 @@ end;
 
 constructor TAlgoLizardFast.Create;
 begin
-  fAlgoID := 5;
+  fAlgoID := COMPRESS_LIZARDFAST; // 5
   inherited Create;
   fCompressionLevel := LIZARD_MIN_CLEVEL;
 end;
@@ -509,7 +509,7 @@ end;
 
 constructor TAlgoLizardHuffman.Create;
 begin
-  fAlgoID := 6;
+  fAlgoID := COMPRESS_LIZARDHUFF; // 6
   inherited Create;
   fCompressionLevel := LIZARD_HUFFMAN_CLEVEL;
 end;

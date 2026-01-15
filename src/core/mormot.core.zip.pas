@@ -3711,7 +3711,7 @@ type
 constructor TAlgoDeflate.Create;
 begin
   if fAlgoID = 0 then // TAlgoDeflateFast.Create may have already set it
-    fAlgoID := 2;
+    fAlgoID := COMPRESS_DEFLATE; // 2
   fAlgoFileExt := '.synz';
   inherited Create;
   fDeflateLevel := Z_USUAL_COMPRESSION;
@@ -3751,7 +3751,7 @@ type
 
 constructor TAlgoDeflateFast.Create;
 begin
-  fAlgoID := 3;
+  fAlgoID := COMPRESS_DEFLATEFAST; // 3
   fAlgoFileExt := '.synz';
   inherited Create;
   fDeflateLevel := Z_BEST_SPEED; // = 1
@@ -3803,7 +3803,7 @@ type
 constructor TAlgoGZ.Create;
 begin
   if fAlgoID = 0 then // if not overriden by TAlgoGZFast
-    fAlgoID := 9;
+    fAlgoID := COMPRESS_GZ; // 9
   fAlgoFileExt := '.gz';
   fCompressionLevel := Z_USUAL_COMPRESSION;
   fAlgoHasForcedFormat := true; // trigger EAlgoCompress e.g. on stream methods
@@ -3948,7 +3948,7 @@ type
 
 constructor TAlgoGZFast.Create;
 begin
-  fAlgoID := 10;
+  fAlgoID := COMPRESS_GZFAST; // 10
   inherited Create;
   // fastest - ideal for logs, especially with libdeflate
   fCompressionLevel := Z_BEST_SPEED; // = 1
