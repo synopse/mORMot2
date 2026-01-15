@@ -869,6 +869,13 @@ type
     procedure Resolve(const aInterfaces: array of TGuid;
                       const aObjs: array of pointer;
       aRaiseExceptionIfNotFound: boolean = true); overload;
+    {$ifdef HASGENERICS}
+    /// can be used to perform an DI/IoC for a given interface using generics
+    // - raise EInterfaceResolver if T is not implemented by this resolver
+    function Resolve<T: IInvokable>: T; overload;
+    /// can be used to perform an DI/IoC for a given interface using generics
+    function Resolve<T: IInvokable>(out Instance: T): boolean; overload;
+    {$endif HASGENERICS}
   end;
 
   /// used to store a list of TInterfacedObject instances
@@ -5265,6 +5272,25 @@ begin
             [self, info^.RawName]);
     end;
 end;
+
+{$ifdef HASGENERICS}
+
+function TInterfaceResolver.Resolve<T>: T;
+begin
+  result := nil;
+  if not TryResolve(TypeInfo(T), result) then
+    EInterfaceResolver.RaiseUtf8('%.Resolve(%) unsatisfied',
+      [self, PRttiInfo(TypeInfo(T))^.RawName]);
+end;
+
+function TInterfaceResolver.Resolve<T>(out Instance: T): boolean;
+begin
+  Instance := nil; // paranoid
+  result := TryResolve(TypeInfo(T), Instance);
+end;
+
+{$endif HASGENERICS}
+
 
 { TInterfaceResolverForSingleInterface }
 
