@@ -350,6 +350,7 @@ type
       read fContract;
     /// the published service contract, as expected by both client and server
     // - by default, will contain ContractHash property value (for security)
+    // - already quoted as '"xxxxx"' (or '"*"' for SERVICE_CONTRACT_NONE_EXPECTED)
     // - but you can override this value using plain Contract or any custom
     // value (e.g. a custom version number) - in this case, both TServiceFactoryClient
     // and TServiceFactoryServer instances must have a matching ContractExpected
@@ -700,6 +701,7 @@ type
     fInterfaceMethod: TServiceContainerInterfaceMethods; // dynamic array
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
+    fAsSoa: TDocVariantData;
     procedure SetExpectMangledUri(Mangled: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
@@ -755,9 +757,14 @@ type
     // - i.e. all interface names without the initial 'I', e.g. 'Calculator' for
     // ICalculator
     procedure SetInterfaceNames(out Names: TRawUtf8DynArray);
-    /// retrieve all registered Services contracts as a JSON array
+    /// retrieve all registered Services contracts as a verbose JSON array
     // - i.e. a JSON array of TServiceFactory.Contract JSON objects
     function AsJson: RawJson;
+    /// retrieve all registered Services as a short TDocVariant array
+    // - defined as ["name","contractexpected",ord(sic*),...] triplets e.g.
+    // ["Calculator","*",0,...] for a sicSingle ICalculator with no contract
+    // - used e.g. for "soa" in TRestServerAuthentication.SessionCreateReturns
+    function AsSoa: variant;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledUri property
@@ -1767,7 +1774,7 @@ begin
     WR.AddDirect('[');
     for i := 0 to high(fInterface) do
     begin
-      WR.AddString(fInterface[i].Service.Contract);
+      WR.AddString(fInterface[i].Service.Contract); // as JSON object
       WR.AddComma;
     end;
     WR.CancelLastComma(']');
@@ -1775,6 +1782,29 @@ begin
   finally
     WR.Free;
   end;
+end;
+
+procedure _Set(var v: TDocVariantData; p: PServiceContainerInterface; n: integer);
+begin
+  v.InitFast(n * 3, dvArray);
+  repeat
+    v.AddItems([p^.InterfaceName,
+                UnQuoteSqlString(p^.Service.ContractExpected),
+                ord(p^.Service.InstanceCreation)]);
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+function TServiceContainer.AsSoa: variant;
+begin
+  VarClear(result);
+  if (self = nil) or
+     (fInterface = nil) then
+    exit;
+  if fAsSoa.Count = 0 then
+    _Set(fAsSoa, pointer(fInterface), length(fInterface)); // compute once
+  result := PVariant(@fAsSoa)^;
 end;
 
 function TServiceContainer.TryResolve(aInterface: PRttiInfo; out Obj): boolean;

@@ -5285,7 +5285,6 @@ end;
 
 function TInterfaceResolver.Resolve<T>(out Instance: T): boolean;
 begin
-  Instance := nil; // paranoid
   result := TryResolve(TypeInfo(T), Instance);
 end;
 
