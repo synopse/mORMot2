@@ -727,7 +727,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a service provider from its index in the list
     // - returns nil if out of range index
-    function Index(aIndex: integer): TServiceFactory; overload;
+    function Index(aIndex: PtrInt): TServiceFactory; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a service provider from its GUID / Interface type
     // - you shall have registered the interface by a previous call to
@@ -1818,10 +1818,10 @@ begin
     result := factory.Get(Obj);
 end;
 
-function TServiceContainer.Index(aIndex: integer): TServiceFactory;
+function TServiceContainer.Index(aIndex: PtrInt): TServiceFactory;
 begin
   if (self = nil) or
-     (cardinal(aIndex) > cardinal(high(fInterface))) then
+     (PtrUInt(aIndex) > PtrUInt(high(fInterface))) then
     result := nil
   else
     result := fInterface[aIndex].Service;
