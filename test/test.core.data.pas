@@ -7981,13 +7981,9 @@ begin
   begin
     p[0] := c1;
     p[1] := c2;
-    if c1 = $ff then
-    begin
-      c1 := $00;
+    inc(c1);
+    if c1 = 0 then
       inc(c2);
-    end
-    else
-      inc(c1);
     p := @p[2];
   end;
 end;
@@ -8535,22 +8531,21 @@ procedure TTestCoreCompression._TAlgoCompress;
     Check(s2 = s, algo.ClassName);
   end;
 
+var
+  i: PtrInt;
 begin
-  TestAlgo(AlgoSynLZ);
-  TestAlgo(AlgoRleLZ); // don't compress much better, but validate the class
-  TestAlgo(AlgoRle);   // don't compress exe nor log, but validate the class
+  CheckEqual(AlgoSynLZ.AlgoID, COMPRESS_SYNLZ);
+  CheckEqual(AlgoDeflateFast.AlgoID, COMPRESS_DEFLATEFAST);
   Check(AlgoSynLZ.AlgoName = 'synlz');
+  Check(AlgoDeflateFast.AlgoName = 'deflatefast');
   {$ifdef OSWINDOWS}
   if (Lizard = nil) and
      FileExists(Executable.ProgramFilePath + LIZARD_LIB_NAME) then
     Lizard := TSynLizardDynamic.Create;
   {$endif OSWINDOWS}
-  TestAlgo(AlgoLizard);
-  TestAlgo(AlgoLizardFast);
-  TestAlgo(AlgoLizardHuffman);
-  TestAlgo(AlgoDeflate);
-  TestAlgo(AlgoDeflateFast);
-  Check(AlgoDeflateFast.AlgoName = 'deflatefast');
+  // validate all registered compression classes
+  for i := 0 to high(SynCompressAlgos) do
+    TestAlgo(SynCompressAlgos[i]);
 end;
 
 {$ifdef OSWINDOWS}
