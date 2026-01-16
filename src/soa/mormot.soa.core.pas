@@ -263,7 +263,9 @@ type
   // ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
   // - TRestClientUri will have to register an interface remote access as:
   // ! Client.ServiceRegister([TypeInfo(ICalculator)],sicShared));
-  // note that the implementation (TServiceCalculator) remain on the server side
+  // but after Client.SetUser() you could directly call Client.Services.Resolve<>
+  // which will register the interface type using the "soa" information - note
+  // that the implementation (TServiceCalculator) remain on the server side
   // only: the client only needs the ICalculator interface
   // - then TRestServer and TRestClientUri will both have access to the
   // service, via their Services property, e.g. as:
@@ -274,6 +276,9 @@ type
   // !   result := I.Add(10,20);
   // which is in practice to be used with the faster wrapper method:
   // ! if Services.Resolve(ICalculator,I) then
+  // !   result := I.Add(10,20);
+  // or, using generics:
+  // ! if Services.Resolve<ICalculator>(I) then
   // !   result := I.Add(10,20);
   TServiceFactory = class(TInjectableObject)
   protected
