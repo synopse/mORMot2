@@ -1104,7 +1104,7 @@ begin
         Check(Args[2].ValueDirection = imdVar);
       end;
     end;
-  // IComplexCalculator + IComplexNumber services
+  // register IComplexCalculator + IComplexNumber services on server side
   Check(result.Server.ServiceRegister(
     TServiceComplexCalculator, [TypeInfo(IComplexCalculator)], sicSingle) <> nil);
   Check(result.Server.ServiceRegister(
@@ -1122,7 +1122,7 @@ begin
   begin
     result.ServicesRouting := ROUTING[rout].ClientRouting;
     result.Server.ServicesRouting := ROUTING[rout];
-    if rout = 0 then
+    if rout = 0 then // TRestServerRoutingRest not JsonRpc
       (result.Server.Services['Calculator'] as TServiceFactoryServer).
         ResultAsXMLObjectIfAcceptOnlyXML := true;
     CheckEqual(Ask(result, 'None', '1,2', 'one=1&two=2',
@@ -1570,12 +1570,20 @@ begin
   Inst.ClientSide := aClient.ClientSide;
   ok := '!';
   try
+    // define at least ICalculator with specific options
     Check(aClient.ServiceRegister([TypeInfo(ICalculator)], sicShared));
-    Check(aClient.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
-    Check(aClient.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
-    Check(aClient.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
-    Check(aClient.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
-    Check(aClient.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
+    {
+    // no need to register other services - after SetUser "soa" or via GET /stat/soa
+    if aClient.Session.Services = nil then
+    begin
+      // after aClient.SetUser(), can't rely on late registration using "soa"
+      Check(aClient.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
+      Check(aClient.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
+      Check(aClient.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
+      Check(aClient.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
+      Check(aClient.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
+    end;
+    }
     (aClient.Services['Calculator'] as TServiceFactoryClient).
       ParamsAsJsonObject := aAsJsonObject;
     SetOptions(aClient, aAsJsonObject, aOptions);
@@ -1590,6 +1598,7 @@ begin
     // once registered, can be accessed by its GUID or URI
     if CheckFailed(
          aClient.Services.Info(TypeInfo(ICalculator)).Get(Inst.I)) or
+       // those services will use late registration via "soa" info
        CheckFailed(
          aClient.Services.Info(TypeInfo(IComplexCalculator)).Get(Inst.CC)) or
        CheckFailed(
@@ -1971,15 +1980,17 @@ begin
       //clt.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
       // clt.Compression := [hcSynShaAes]; // 350ms (300ms for [])
       Check(clt.SetUser('User', 'synopse'));
-      // register services on the client side
+      {
+      // no need to register services on the client side - will use SetUser "soa"
       Check(clt.ServiceRegister([TypeInfo(ICalculator)], sicShared));
       Check(clt.ServiceRegister([TypeInfo(IComplexCalculator)], sicSingle));
       Check(clt.ServiceRegister([TypeInfo(ITestSession)], sicPerSession));
       Check(clt.ServiceRegister([TypeInfo(ITestUser)], sicPerUser));
       Check(clt.ServiceRegister([TypeInfo(ITestGroup)], sicPerGroup));
       Check(clt.ServiceRegister([TypeInfo(ITestPerThread)], sicPerThread));
+      }
       // retrieve service instances
-      if CheckFailed(clt.Services.Info(TypeInfo(ICalculator)).
+      if CheckFailed(clt.ServiceContainer.Info(TypeInfo(ICalculator)).
            Get(Inst.I)) or
          CheckFailed(clt.Services.Info(TypeInfo(IComplexCalculator)).
            Get(Inst.CC)) or
