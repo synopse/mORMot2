@@ -8061,7 +8061,7 @@ begin
   begin
     case Ctxt.Method of
       mGET:
-        Ctxt.ReturnsJson(fServices.AsSoa);
+        Ctxt.ReturnsJson(fServices.AsSoa);  // GET /stat/soa from ParseSoa()
       mPOST:
         if (Ctxt.Call^.InBody <> '') and
            (Ctxt.Call^.InBody <> '[]') then // POST /stat/soa from SetUser()

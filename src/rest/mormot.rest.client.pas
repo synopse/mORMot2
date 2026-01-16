@@ -329,6 +329,7 @@ type
     Name, ExpectedContract: RawUtf8;
     Creation: TServiceInstanceImplementation;
   end;
+  PRestClientService = ^TRestClientService;
   /// used internally to store "soa" array information after authentication
   TRestClientServices = array of TRestClientService;
 
@@ -590,7 +591,8 @@ type
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
     fServiceRoutingSupports: TRestClientSideInvoke;
-    fInternalState: set of (isDestroying, isInAuth, isClientError, needsBearer);
+    fInternalState: set of (
+      isDestroying, isInAuth, isClientError, needsBearer, hasSoa);
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
@@ -845,6 +847,7 @@ type
     property ServiceRoutingSupports: TRestClientSideInvoke
       read fServiceRoutingSupports;
     // internal methods used by mormot.soa.client
+    function ParseSoa(p: PUtf8Char): PRestClientService;
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
       ParamValue: pointer): TRestClientCallbackID; virtual;
@@ -1254,19 +1257,33 @@ const
     'proof',         // 11
     'soa');          // 12
 
-procedure ParseSoa(var soa: TRestClientServices; p: PUtf8Char);
+function TRestClientUri.ParseSoa(p: PUtf8Char): PRestClientService;
 var
-  s: ^TRestClientService;
+  soa: RawUtf8;
+  s: PRestClientService;
   n: PtrInt;
-begin // manual "soa" array parsing of ["name","contract",sic,...] triplets
+begin
+  result := nil;
+  if p = nil then
+  begin
+    // from TServiceFactoryClient.Create before SetUser()
+    if hasSoa in fInternalState then
+      exit; // call GET /stat/soa once
+    include(fInternalState, hasSoa);
+    if (CallBack(mGET, 'stat/soa', '', soa) <> HTTP_SUCCESS) or
+       (soa = '') then
+      exit;
+    p := pointer(soa);
+  end;
+  // manual "soa" array parsing of ["name","contract",sic,...] triplets
   if p^ <> '[' then
     exit;
   n := 0;
   repeat
     inc(p); // ignore initial '[' or in-between ','
-    if n = length(soa) then
-      SetLength(soa, NextGrow(n));
-    s := @soa[n];
+    if n = length(fSession.Services) then
+      SetLength(fSession.Services, NextGrow(n));
+    s := @fSession.Services[n];
     if not GetJsonItemAsRawUtf8(p, s^.Name) then // parse e.g. "Calculator"
       break;
     GetJsonItemAsRawJson(p, RawJson(s^.ExpectedContract)); // keep double-quoted
@@ -1279,11 +1296,13 @@ begin // manual "soa" array parsing of ["name","contract",sic,...] triplets
     inc(n);
     if p^ = ']' then
     begin
-      SetLength(soa, n);
+      include(fInternalState, hasSoa);
+      SetLength(fSession.Services, n);
+      result := pointer(fSession.Services);
       exit;
     end;
   until p^ <> ',';
-  soa := nil; // parsing error
+  fSession.Services := nil; // parsing error
 end;
 
 class function TRestClientAuthentication.ClientGetSessionKey(
@@ -1321,7 +1340,7 @@ begin
   if values[11].Text <> nil then
     Sender.fSession.ScramServerProof := values[11].ToUtf8;
   if values[12].Text <> nil then
-    ParseSoa(Sender.fSession.Services, values[12].Text);
+    Sender.ParseSoa(values[12].Text);
   if values[9].Text <> nil then
   begin
     // decode TRestClientAuthenticationSignedUri "algo"
@@ -3002,6 +3021,7 @@ begin
   if result and
      (ServicePublishOwnInterfaces <> '') and
      (fSession.Services <> nil) then
+    // we won't call _contract_: notify the server of our client services
     CallBack(mPOST, 'stat/soa', ServicePublishOwnInterfaces, dummy);
 end;
 
