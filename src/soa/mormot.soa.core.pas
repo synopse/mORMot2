@@ -1105,7 +1105,7 @@ begin
   inherited CreateWithResolver(aOwner, {raiseIfNotFound=}true);
   fInterface := TInterfaceFactory.Get(aInterface);
   if fInterface = nil then // paranoid
-    EServiceException.RaiseUtf8('%.Create: no I%', [self, aInterface^.RawName]);
+    EServiceException.RaiseUtf8('%.Create: no %', [self, aInterface^.RawName]);
   fInstanceCreation := aInstanceCreation;
   fInterfaceMangledUri := BinToBase64Uri(PHash128(fInterface.InterfaceGuid)^);
   fInterfaceUri := fInterface.InterfaceUri;
@@ -1119,17 +1119,17 @@ begin
   FormatUtf8('{"contract":"%","implementation":"%","methods":%}',
     [fInterfaceUri, LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
      fInterface.Contract], fContract);
-  fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
-    CardinalToHex(crc32(0, pointer(fContract), length(fContract))) + '"';
-    // 2 hashes to avoid collision
+  // combine two 32-bit hashes to avoid collision (paranoid)
+  Join(['"', CardinalToHex(Hash32(fContract)), CardinalToHex(
+        crc32(0, pointer(fContract), length(fContract))), '"'], fContractHash);
   if aContractExpected <> '' then // override default contract
     if aContractExpected[1] <> '"' then
       // stored as JSON string
-      fContractExpected := '"' + aContractExpected + '"'
+      Join(['"', aContractExpected, '"'], fContractExpected)
     else
       fContractExpected := aContractExpected
   else
-    fContractExpected := fContractHash; // for security
+    fContractExpected := fContractHash; // default to safe and short hash
 end;
 
 function TServiceFactory.ServiceMethodIndex(const aUri: RawUtf8): PtrInt;
