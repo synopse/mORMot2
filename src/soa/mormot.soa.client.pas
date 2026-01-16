@@ -811,11 +811,21 @@ var
   cli: TRestClientUri absolute aRest;
   s: ^TRestClientService;
   n: TDALen;
+
+  procedure RaiseWrongClient(const contract: RawUtf8);
+  begin
+    EServiceException.RaiseUtf8('%.Create(): server''s I% contract ' +
+      'differs from client''s: expected %, received % - you may need to ' +
+      'upgrade your % client to match % server expectations',
+      [self, fInterfaceUri, ContractExpected, contract,
+       Executable.Version.DetailedOrVoid, cli.Session.Version]);
+  end;
+
 begin
   // ensure we are working with an associated TRestClientUri instance
   if not aRest.InheritsFrom(TRestClientUri) then
-    EServiceException.RaiseUtf8('%.Create(): % interface requires a Client',
-      [self, aInterface^.Name]);
+    EServiceException.RaiseUtf8('Unexpected %.Create(%,%)',
+      [self, aInterface^.Name, aRest]);
   if fClient = nil then
     fClient := aRest;
   // extract interface RTTI and create fake interface
@@ -835,8 +845,7 @@ begin
         if (PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0) and
            (PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, s^.ExpectedContract) = 0) and
            (ContractExpected <> s^.ExpectedContract) then
-          EServiceException.RaiseUtf8('%.Create(): I% service contract %<>%',
-            [self, fInterfaceUri, ContractExpected, s^.ExpectedContract]);
+          RaiseWrongClient(s^.ExpectedContract);
         break; // valid
       end;
       dec(n);
@@ -849,6 +858,7 @@ begin
   else if PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0 then
   begin
     // call 'root/InterfaceName._contract_' endpoint to verify this endpoint
+    // (legacy mORMot 1.18-2.4 behavior)
     if InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
          cli.ServicePublishOwnInterfaces, @contract, @err) and
        (contract <> '') then
@@ -860,12 +870,8 @@ begin
       EServiceException.RaiseUtf8('%.Create(): I% interface or % routing ' +
         'not supported by this server [%]',
          [self, fInterfaceUri, cli.ServicesRouting, err]);
-    if contract <> ContractExpected then
-      EServiceException.RaiseUtf8('%.Create(): server''s I% contract ' +
-        'differs from client''s: expected %, received % - you may need to ' +
-        'upgrade your % client to match % server expectations',
-        [self, fInterfaceUri, ContractExpected, contract,
-         Executable.Version.DetailedOrVoid, cli.Session.Version]);
+    if ContractExpected <> contract then
+      RaiseWrongClient(contract);
   end;
   // interface seems valid: initialize a shared instance (if needed)
   case fInstanceCreation of
