@@ -1109,9 +1109,10 @@ type
     // - can optionally override the default JSON_SOCKETIO options
     // - warning: the Data/DataLen buffer will be decoded in-place, so modified
     function DataGet(out Dest: TDocVariantData;
-      Options: PDocVariantOptions = nil): boolean; overload;
+      Options: PDocVariantOptions = nil): boolean;
     /// return the Data content payload raw buffer without any decoding
-    function DataGet(CodePage: cardinal = CP_UTF8): RawByteString; overload;
+    // - will detect UTF-8 content and set CP_UTF8 or return a RawByteString
+    function DataRaw: RawByteString;
     /// quickly check if the Data content does match (mainly used for testing)
     function DataIs(const Content: RawUtf8): boolean;
     /// raise a ESockIO exception with the specified text context
@@ -3892,9 +3893,14 @@ begin
   result := Dest.InitJsonInPlace(fData, Options^) <> nil;
 end;
 
-function TSocketIOMessage.DataGet(CodePage: cardinal): RawByteString;
+function TSocketIOMessage.DataRaw: RawByteString;
+var
+  cp: integer;
 begin
-  FastSetStringCP(result, fData, fDataLen, CodePage);
+  cp := CP_RAWBYTESTRING;
+  if IsValidUtf8Buffer(fData, fDataLen) then
+    cp := CP_UTF8; // may allow some #0 within the buffer
+  FastSetStringCP(result, fData, fDataLen, cp);
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
