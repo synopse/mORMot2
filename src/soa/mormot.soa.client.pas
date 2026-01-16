@@ -806,31 +806,46 @@ constructor TServiceFactoryClient.Create(aRest: TRest; aInterface: PRttiInfo;
 var
   err, contract: RawUtf8;
   cli: TRestClientUri absolute aRest;
+  s: ^TRestClientService;
+  n: integer;
 begin
-  // extract interface RTTI and create fake interface (and any shared instance)
+  // ensure we are working on a TRestClientUri instance
   if not aRest.InheritsFrom(TRestClientUri) then
     EServiceException.RaiseUtf8('%.Create(): % interface requires a Client',
       [self, aInterface^.Name]);
   if fClient = nil then
     fClient := aRest;
+  // extract interface RTTI and create fake interface (and any shared instance)
   inherited Create(aRest, aInterface, aInstanceCreation, aContractExpected);
-  // initialize a shared instance (if needed)
-  case fInstanceCreation of
-    sicShared,
-    sicPerSession,
-    sicPerUser,
-    sicPerGroup,
-    sicPerThread:
-      begin
-        // the instance shall remain active during the whole client session
-        fSharedInstance := CreateFakeInstance;
-        IInterface(fSharedInstance)._AddRef; // force stay alive
-      end;
-  end;
-  // check if this interface contract is supported on the server
-  if PosEx(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0 then
+  // validate the interface from its server side contract
+  s := pointer(cli.Session.Services);
+  if s <> nil then
   begin
-    // call 'root/InterfaceName._contract_' endpoint
+    n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+    repeat
+      if PropNameEquals(s^.Name, fInterfaceUri) then
+      begin
+        // interface known from authentication "soa": no _contract_ call needed
+        if fInstanceCreation <> s^.Creation then
+          EServiceException.RaiseUtf8('%.Create(): I% interface %<>%',
+            [self, fInterfaceUri, ToText(fInstanceCreation)^, ToText(s^.Creation)^]);
+        if (PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0) and
+           (PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, s^.ExpectedContract) = 0) and
+           (ContractExpected <> s^.ExpectedContract) then
+           EServiceException.RaiseUtf8('%.Create(): I% interface %<>%',
+             [self, fInterfaceUri, ToText(fInstanceCreation)^, ToText(s^.Creation)^]);
+        break;
+      end;
+      dec(n);
+      if n = 0 then
+        EServiceException.RaiseUtf8('%.Create(): I% interface ' +
+          'not supported by this server', [self, fInterfaceUri]);
+      inc(s);
+    until false;
+  end
+  else if PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0 then
+  begin
+    // call 'root/InterfaceName._contract_' endpoint to verify this endpoint
     if InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
          cli.ServicePublishOwnInterfaces, @contract, @err) and
        (contract <> '') then
@@ -848,6 +863,19 @@ begin
         'upgrade your % client to match % server expectations',
         [self, fInterfaceUri, ContractExpected, contract,
          Executable.Version.DetailedOrVoid, cli.Session.Version]);
+  end;
+  // initialize a shared instance (if needed)
+  case fInstanceCreation of
+    sicShared,
+    sicPerSession,
+    sicPerUser,
+    sicPerGroup,
+    sicPerThread:
+      begin
+        // the instance shall remain active during the whole client session
+        fSharedInstance := CreateFakeInstance;
+        IInterface(fSharedInstance)._AddRef; // force stay alive
+      end;
   end;
 end;
 
