@@ -2370,9 +2370,11 @@ type
     {$endif PUREMORMOT2}
 
     /// main access to the IRestOrmServer methods of this instance
-    // - the Orm: IRestOrm property will publish most needed CRUDbusiness logic,
+    // - the Orm: IRestOrm property will publish most needed CRUD business logic,
     // but this IRestOrmServer interface could be used to properly setup the
     // storage, e.g. via CreateMissingTables() or CreateSqlIndex() methods
+    // - you should NEVER use TRestOrmServer itself, but only IRestOrmServer
+    // interface via this property or IRestOrm via TRest.Orm
     property Server: IRestOrmServer
       read fServer;
     /// set this property to true to transmit the JSON data in a "not expanded" format

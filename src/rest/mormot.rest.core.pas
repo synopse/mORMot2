@@ -559,6 +559,8 @@ type
     procedure SetServerTimestamp(const Value: TTimeLog);
 
     /// main access to the IRestOrm methods of this instance
+    // - you should NEVER use any TRestOrm class themself, but only an IRestOrm
+    // interface via this property or TRestServer.Server as IRestOrmServer
     property Orm: IRestOrm
       read fOrm;
     /// low-level access to the associated Data Model
@@ -573,6 +575,9 @@ type
     // - safer typical use, following the DI/IoC pattern, and which will not
     // trigger any access violation if Services=nil, could be:
     // ! if fServer.Services.Resolve(ICalculator, Calc) then
+    // !   ...
+    // or, using generics:
+    // ! if fServer.Services.Resolve<ICalculator>(Calc) then
     // !   ...
     property Services: TServiceContainer
       read fServices;
