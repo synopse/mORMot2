@@ -337,7 +337,8 @@ var
   port: integer;
 begin
   WebSocketLog := TSynLog; // for very detailed log
-  TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService), TypeInfo(IBidirCallback)]);
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(IBidirService), TypeInfo(IBidirCallback)]);
   // sicClientDriven services expect authentication for sessions
   fServer := TRestServerFullMemory.CreateWithOwnModel([], {withauth=}true);
   fServer.Server.CreateMissingTables;
@@ -361,8 +362,12 @@ var
   v: variant;
   res: TServiceCustomAnswer;
 begin
+  {$ifdef HASGENERICS}
+  if CheckFailed(Rest.Services.Resolve<IBidirService>(I)) then
+  {$else}
   Rest.Services.Resolve(IBidirService, I);
   if CheckFailed(Assigned(I), 'Rest IBidirService') then
+  {$endif HASGENERICS}
     exit;
   for a := -10 to 10 do
     for b := -10 to 10 do
@@ -411,8 +416,12 @@ var
   end;
 
 begin
+  {$ifdef HASGENERICS}
+  if CheckFailed(Rest.Services.Resolve<IBidirService>(I)) then
+  {$else}
   Rest.Services.Resolve(IBidirService, I);
   if CheckFailed(Assigned(I), 'Callback IBidirService') then
+  {$endif HASGENERICS}
     exit;
   subscribed := TBidirCallbackInterfacedObject.Create;
   for d := -5 to 6 do
@@ -499,7 +508,7 @@ begin
         'WebSocketsUpgrade2');
       ServiceDefine(c2, '2');
       TestCallback(c2, {tryreconnect=}true);
-      if Relay then
+      if Relay then // try TPublicRelay.GetStats
       begin
         stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
         check(PosEx('"version"', stats) > 0, 'stats');
@@ -540,7 +549,7 @@ begin
   checkEqual(OpenHttpGet(
     '127.0.0.1', fPublicRelayPort, '/invalid', ''), '', 'wrong URI');
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
-  check(PosEx('version', stats) > 0, 'stats');
+  check(PosEx('version', stats) > 0, 'stats'); // = TPublicRelay.GetStats
   Check(not (rsoPerConnectionNonce in fServer.Options), 'default check connection');
 end;
 
@@ -565,7 +574,7 @@ var
   stats: RawUtf8;
 begin
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
-  check(PosEx('"version"', stats) > 0, 'stats');
+  check(PosEx('"version"', stats) > 0, 'stats'); // = TPublicRelay.GetStats
   fPrivateRelay.Free;
   SleepHiRes(100);
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
