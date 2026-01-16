@@ -2975,6 +2975,7 @@ function TRestClientUri.SetUser(const aUserName, aPassword: RawUtf8;
   aHashedPassword: boolean): boolean;
 var
   kind: TRestClientSetUserPassword;
+  dummy: RawUtf8;
 begin
   result := false;
   if self = nil then
@@ -2993,6 +2994,10 @@ begin
     kind := passHashed;
   result := TRestClientAuthenticationDefault.ClientSetUser(self, aUserName,
     aPassword, kind);
+  if result and
+     (ServicePublishOwnInterfaces <> '') and
+     (fSession.Services <> nil) then
+    CallBack(mPOST, 'stat/soa', ServicePublishOwnInterfaces, dummy);
 end;
 
 {$ifndef PUREMORMOT2}

@@ -6415,7 +6415,7 @@ begin
   ServiceMethodRegister(
     'cacheflush', CacheFlush, false, [mGET, mPOST]); // for ORM and callbacks
   fPublishedMethodStatIndex := ServiceMethodRegister(
-    'stat', Stat, false, [mGET]);
+    'stat', Stat, false, [mGET, mPOST]);
 end;
 
 var
@@ -7174,7 +7174,6 @@ begin
       r.Setup(sm^.Methods, [n], rnMethod, nil, nil, j);
       r.Setup(sm^.Methods, [n, '/'], rnMethod, nil, nil, j);
       if (j <> fPublishedMethodAuthIndex) and
-         (j <> fPublishedMethodStatIndex) and
          (j <> fPublishedMethodBatchIndex) then
       begin
         // ModelRoot/MethodName/<path:fulluri>
@@ -8056,6 +8055,26 @@ var
   tix: cardinal;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
+  if PropNameEquals(Ctxt.fUriMethodPath, 'soa') then
+  begin
+    case Ctxt.Method of
+      mGET:
+        Ctxt.ReturnsJson(fServices.AsSoa);
+      mPOST:
+        if (Ctxt.Call^.InBody <> '') and
+           (Ctxt.Call^.InBody <> '[]') then // POST /stat/soa from SetUser()
+        begin
+          AssociatedServices.RegisterFromClientJson(Ctxt.Call^.InBody);
+          Ctxt.Call^.OutStatus := HTTP_SUCCESS;
+        end;
+    end;
+    exit;
+  end;
+  if Ctxt.Method <> mGET then
+  begin
+    Ctxt.Error('', HTTP_NOTALLOWED); // 405
+    exit;
+  end;
   W := TJsonWriter.CreateOwnedStream(temp);
   try
     Ctxt.RetrieveInputUtf8OrVoid('findservice', name);
