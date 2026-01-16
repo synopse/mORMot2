@@ -809,7 +809,7 @@ constructor TServiceFactoryClient.Create(aRest: TRest; aInterface: PRttiInfo;
 var
   err, contract: RawUtf8;
   cli: TRestClientUri absolute aRest;
-  s: ^TRestClientService;
+  s: PRestClientService;
   n: TDALen;
 
   procedure RaiseWrongClient(const contract: RawUtf8);
@@ -832,6 +832,8 @@ begin
   inherited Create(aRest, aInterface, aInstanceCreation, aContractExpected);
   // validate the interface from its server side contract
   s := pointer(cli.Session.Services);
+  if s = nil then
+    s := cli.ParseSoa(nil); // make GET stat/soa once if we are before SetUser()
   if s <> nil then
   begin
     // verify interface from authentication "soa" info without _contract_ call
@@ -1027,7 +1029,7 @@ end;
 
 function TServiceContainerClient.Info(aTypeInfo: PRttiInfo): TServiceFactory;
 var
-  s: ^TRestClientService;
+  s: PRestClientService;
   n: TDALen;
   sic: TServiceInstanceImplementation;
 begin
@@ -1038,6 +1040,8 @@ begin
   // allow late registration of this interface type
   sic := sicClientDriven; // make Delphi compiler happy
   s := pointer((fOwner as TRestClientUri).Session.Services);
+  if s = nil then // make GET stat/soa once if we are before SetUser()
+    s := TRestClientUri(fOwner).ParseSoa(nil);
   if s <> nil then
   begin
     // register using accurate SetUser() "soa" server-side information

@@ -2079,7 +2079,7 @@ const
   _TRestServerUri =
     'Address,Port,Root: RawUtf8';
   _TServicesPublishedInterfaces =
-    'PublicUri:TRestServerUri Names: array of RawUtf8';
+    'PublicUri:TRestServerUri Names:array of RawUtf8';
 
 procedure InitializeUnit;
 begin
