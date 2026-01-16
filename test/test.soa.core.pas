@@ -1595,7 +1595,25 @@ begin
     CheckEqual(sign, sign2, 'sign');
     (aClient.Server.Services as TServiceContainerServer).PublishSignature := false;
     CheckEqual(aClient.Services['Calculator'].RetrieveSignature, '');
-    // once registered, can be accessed by its GUID or URI
+    // client access by its GUID or URI (with "soa" resolution)
+    {$ifdef HASGENERICS}
+    if CheckFailed(
+         aClient.Services.Resolve<ICalculator>(Inst.I)) or
+       // those services will use late registration via "soa" info
+       CheckFailed(
+         aClient.Services.Resolve<IComplexCalculator>(Inst.CC)) or
+       CheckFailed(
+         aClient.Services.Resolve<IComplexNumber>(Inst.CN)) or
+       CheckFailed(
+         aClient.Services.Resolve<ITestUser>(Inst.CU)) or
+       CheckFailed(
+         aClient.Services.Resolve<ITestSession>(Inst.CS)) or
+       CheckFailed(
+         aClient.Services.Resolve<ITestGroup>(Inst.CG)) or
+       CheckFailed(
+         aClient.Services.Resolve<ITestPerThread>(Inst.CT)) then
+      exit;
+    {$else}
     if CheckFailed(
          aClient.Services.Info(TypeInfo(ICalculator)).Get(Inst.I)) or
        // those services will use late registration via "soa" info
@@ -1612,6 +1630,7 @@ begin
        CheckFailed(
          aClient.Services.Info(TypeInfo(ITestPerThread)).Get(Inst.CT)) then
       exit;
+    {$endif HASGENERICS}
     O := ObjectFromInterface(Inst.I);
     Check((O <> nil) and
           (Copy(O.ClassName, 1, 21) = 'TInterfacedObjectFake'));
