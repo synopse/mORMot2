@@ -1258,27 +1258,32 @@ procedure ParseSoa(var soa: TRestClientServices; p: PUtf8Char);
 var
   s: ^TRestClientService;
   n: PtrInt;
-begin
+begin // manual "soa" array parsing of ["name","contract",sic,...] triplets
   if p^ <> '[' then
     exit;
   n := 0;
   repeat
+    inc(p); // ignore initial '[' or in-between ','
     if n = length(soa) then
       SetLength(soa, NextGrow(n));
     s := @soa[n];
-    inc(p);
-    if not GetJsonItemAsRawUtf8(p, s^.Name) then
-      exit;
+    if not GetJsonItemAsRawUtf8(p, s^.Name) then // parse e.g. "Calculator"
+      break;
     GetJsonItemAsRawJson(p, RawJson(s^.ExpectedContract)); // keep double-quoted
     if (p = nil) or
        (p^ < '0') or
        (p^ > AnsiChar(ord(high(TServiceInstanceImplementation)) + ord('0'))) then
-      exit;
+      break;
     s^.Creation := TServiceInstanceImplementation(ord(p^) - ord('0'));
-    inc(p);
+    inc(p); // parsed '0'..'6' char
     inc(n);
-  until p^ = ']';
-  SetLength(soa, n);
+    if p^ = ']' then
+    begin
+      SetLength(soa, n);
+      exit;
+    end;
+  until p^ <> ',';
+  soa := nil; // parsing error
 end;
 
 class function TRestClientAuthentication.ClientGetSessionKey(
