@@ -1246,9 +1246,11 @@ begin
     sioConnect,
     sioConnectError:
       fClient.AfterNamespaceConnect(Message);
-    sioEvent:
+    sioEvent,
+    sioBinaryEvent:
       fClient.OnEvent(Message);
-    sioAck:
+    sioAck,
+    sioBinaryAck:
       fClient.OnAck(Message);
   else
     ESocketIO.RaiseUtf8('%.SocketPacketReceived: not supported packet type: %',

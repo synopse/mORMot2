@@ -1320,10 +1320,13 @@ type
     // called by Create: can override this method to register some events
     procedure RegisterHandlers; virtual;
   public
-    /// global callback triggerred when any event message is received and
+    /// global callback triggerred when a JSON/text event message is received and
     // decoded for this name space
     OnEventReceived: procedure(Sender: TSocketIOLocalNamespace;
       const EventName: RawUtf8; var Data: TDocVariantData) of object;
+    /// global callback triggerred when any binary event message is received
+    OnBinaryEventReceived: function(Sender: TSocketIOLocalNamespace;
+      const Data: RawByteString): RawByteString of object;
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
@@ -3983,9 +3986,21 @@ begin
     ESocketIO.RaiseUtf8('%.HandleEvent: unexpected namespace ([%]<>[%])',
       [self, aMessage.NameSpaceShort, fNameSpace]);
   if aMessage.PacketType <> sioEvent then
-    ESocketIO.RaiseUtf8('%.HandleEvent: unexpected % message for namespace %',
-      [self, ToText(aMessage.PacketType)^, fNameSpace]);
-  // decode the input JSON array
+    if aMessage.PacketType = sioBinaryEvent then
+    begin
+      // binary packets have their own direct callback process
+      if Assigned(OnBinaryEventReceived) then
+        ack := OnBinaryEventReceived(self, aMessage.DataRaw); // detect CP_UTF8
+      // optionally call back the server with an ACK payload
+      if aMessage.ID <> SIO_NO_ACK then
+        SocketIOSendPacket(fOwner.fWebSockets, sioBinaryAck, fNameSpace,
+          pointer(ack), length(ack), aMessage.ID);
+      exit;
+    end
+    else
+      ESocketIO.RaiseUtf8('%.HandleEvent: unexpected % message for namespace %',
+        [self, ToText(aMessage.PacketType)^, fNameSpace]);
+  // decode the input JSON array into a TDocVariant data
   if not aMessage.DataGet(data) or
      not data.IsArray or
      (data.Count = 0) then
@@ -4130,8 +4145,8 @@ begin
   if not aMessage.NameSpaceIs(fNameSpace) then
     ESocketIO.RaiseUtf8('%.Acknowledge: unexpected namespace ([%]<>[%])',
       [self, aMessage.NameSpaceShort, fNameSpace]);
-  if (aMessage.PacketType <> sioAck) or
-     (aMessage.ID = SIO_NO_ACK) then
+  if (aMessage.ID = SIO_NO_ACK) or
+     not (aMessage.PacketType in [sioAck, sioBinaryAck]) then
     ESocketIO.RaiseUtf8('%.Acknowledge: message %#% is not a valid ' +
       'acknowledgment message for namespace %',
       [self, ToText(aMessage.PacketType)^, aMessage.ID, fNameSpace]);
