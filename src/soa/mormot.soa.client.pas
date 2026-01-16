@@ -807,38 +807,38 @@ var
   err, contract: RawUtf8;
   cli: TRestClientUri absolute aRest;
   s: ^TRestClientService;
-  n: integer;
+  n: TDALen;
 begin
-  // ensure we are working on a TRestClientUri instance
+  // ensure we are working with an associated TRestClientUri instance
   if not aRest.InheritsFrom(TRestClientUri) then
     EServiceException.RaiseUtf8('%.Create(): % interface requires a Client',
       [self, aInterface^.Name]);
   if fClient = nil then
     fClient := aRest;
-  // extract interface RTTI and create fake interface (and any shared instance)
+  // extract interface RTTI and create fake interface
   inherited Create(aRest, aInterface, aInstanceCreation, aContractExpected);
   // validate the interface from its server side contract
   s := pointer(cli.Session.Services);
   if s <> nil then
   begin
+    // verify interface from authentication "soa" info without _contract_ call
     n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
     repeat
       if PropNameEquals(s^.Name, fInterfaceUri) then
       begin
-        // interface known from authentication "soa": no _contract_ call needed
         if fInstanceCreation <> s^.Creation then
-          EServiceException.RaiseUtf8('%.Create(): I% interface %<>%',
+          EServiceException.RaiseUtf8('%.Create(): I% service %<>%',
             [self, fInterfaceUri, ToText(fInstanceCreation)^, ToText(s^.Creation)^]);
         if (PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0) and
            (PosExChar(SERVICE_CONTRACT_NONE_EXPECTED, s^.ExpectedContract) = 0) and
            (ContractExpected <> s^.ExpectedContract) then
-           EServiceException.RaiseUtf8('%.Create(): I% interface %<>%',
-             [self, fInterfaceUri, ToText(fInstanceCreation)^, ToText(s^.Creation)^]);
-        break;
+          EServiceException.RaiseUtf8('%.Create(): I% service contract %<>%',
+            [self, fInterfaceUri, ContractExpected, s^.ExpectedContract]);
+        break; // valid
       end;
       dec(n);
       if n = 0 then
-        EServiceException.RaiseUtf8('%.Create(): I% interface ' +
+        EServiceException.RaiseUtf8('%.Create(): I% service ' +
           'not supported by this server', [self, fInterfaceUri]);
       inc(s);
     until false;
@@ -859,12 +859,12 @@ begin
          [self, fInterfaceUri, cli.ServicesRouting, err]);
     if contract <> ContractExpected then
       EServiceException.RaiseUtf8('%.Create(): server''s I% contract ' +
-        'differs from client''s: expected [%], received % - you may need to ' +
+        'differs from client''s: expected %, received % - you may need to ' +
         'upgrade your % client to match % server expectations',
         [self, fInterfaceUri, ContractExpected, contract,
          Executable.Version.DetailedOrVoid, cli.Session.Version]);
   end;
-  // initialize a shared instance (if needed)
+  // interface seems valid: initialize a shared instance (if needed)
   case fInstanceCreation of
     sicShared,
     sicPerSession,
