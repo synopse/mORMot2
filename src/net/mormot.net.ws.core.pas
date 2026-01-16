@@ -3899,7 +3899,9 @@ end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
 begin
-  ESocketIO.RaiseUtf8('% NameSpace=% Data=%', [ctx, NameSpaceShort, fData]);
+  raise ESocketIO.CreateUtf8('% NameSpace=% Data=%', [ctx, NameSpaceShort, fData])
+    {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame)
+    {$else} at ReturnAddress {$endif}
 end;
 
 
