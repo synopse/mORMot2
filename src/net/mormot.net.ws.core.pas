@@ -1337,10 +1337,8 @@ type
     /// global callback triggerred when a JSON/text event message is received and
     // decoded for this name space
     OnEventReceived: procedure(Sender: TSocketIOLocalNamespace;
-      const EventName: RawUtf8; var Data: TDocVariantData) of object;
-    /// global callback triggerred when any binary event message is received
-    OnBinaryEventReceived: function(Sender: TSocketIOLocalNamespace;
-      const Data: RawByteString): RawByteString of object;
+      const EventName: RawUtf8; var Data: TDocVariantData;
+      const Binary: TRawByteStringDynArray) of object;
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
@@ -4012,7 +4010,7 @@ end;
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage;
   aIgnoreUnknownEvent: boolean);
 var
-  ndx: PtrInt;
+  n, ndx: PtrInt;
   event, ack: RawUtf8;
   data: TDocVariantData;
   d: PDocVariantData;
@@ -4022,38 +4020,39 @@ begin
      not aMessage.NameSpaceIs(fNameSpace) then
     ESocketIO.RaiseUtf8('%.HandleEvent: unexpected namespace ([%]<>[%])',
       [self, aMessage.NameSpaceShort, fNameSpace]);
-  if aMessage.PacketType <> sioEvent then
-    if aMessage.PacketType = sioBinaryEvent then
-    begin
-      // binary packets have their own direct callback process
-      if Assigned(OnBinaryEventReceived) then
-        ack := OnBinaryEventReceived(self, aMessage.DataRaw); // detect CP_UTF8
-      // optionally call back the server with an ACK payload
-      if aMessage.ID <> SIO_NO_ACK then
-        SocketIOSendPacket(fOwner.fWebSockets, sioBinaryAck, fNameSpace,
-          pointer(ack), length(ack), aMessage.ID);
-      exit;
-    end
-    else
-      ESocketIO.RaiseUtf8('%.HandleEvent: unexpected % message for namespace %',
-        [self, ToText(aMessage.PacketType)^, fNameSpace]);
-  // decode the input JSON array into a TDocVariant data
-  if not aMessage.DataGet(data) or
-     not data.IsArray or
-     (data.Count = 0) then
-    if snoIgnoreIncorrectData in fOptions then
-      exit // ignore in silence
-    else
-      ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
-  VariantToUtf8(data.Values[0], event);
-  data.Delete(0); // trim the event name from the data array
-  d := @data;
-  if (d^.Count = 1) and
-     _Safe(d^.Values[0])^.IsObject then
-    d := _Safe(d^.Values[0]); // return a single object as root (common case)
-  // optional callback
+  case aMessage.PacketType of
+    sioBinaryEvent:
+      begin
+        n := length(aMessage.BinaryAttachments);
+        data.InitFast(n, dvArray);
+        for ndx := 0 to n - 1 do
+          data.AddItemFromText(BinToBase64(aMessage.BinaryAttachments[ndx]));
+        d := @data; // supply attachements as base-64 encoded array
+      end;
+    sioEvent:
+      begin
+        if not aMessage.DataGet(data) or
+           not data.IsArray or
+           (data.Count = 0) then
+          if snoIgnoreIncorrectData in fOptions then
+            exit // ignore in silence
+          else
+            ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
+        // decode the input JSON array into a TDocVariant data
+        VariantToUtf8(data.Values[0], event);
+        data.Delete(0); // trim the event name from the data array
+        d := @data;
+        if (d^.Count = 1) and
+           _Safe(d^.Values[0])^.IsObject then
+          d := _Safe(d^.Values[0]); // return a single object as root (common case)
+      end;
+  else
+    ESocketIO.RaiseUtf8('%.HandleEvent: unexpected % message for namespace %',
+      [self, ToText(aMessage.PacketType)^, fNameSpace]);
+  end;
+  // optional global callback
   if Assigned(OnEventReceived) then
-    OnEventReceived(self, event, d^);
+    OnEventReceived(self, event, d^, aMessage.BinaryAttachments);
   // retrieve event name and search for associated handler
   ndx := fHandlers.FindHashed(event);
   if ndx < 0 then
@@ -4074,6 +4073,7 @@ begin
      (aMessage.ID <> SIO_NO_ACK) then
     SocketIOSendPacket(fOwner.fWebSockets, sioAck, fNameSpace,
       pointer(ack), length(ack), aMessage.ID);
+  // TODO: check ack is not CP_UTF8 and return the payload as sioBinaryAck ?
 end;
 
 
