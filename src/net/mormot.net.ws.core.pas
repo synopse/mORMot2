@@ -1087,9 +1087,9 @@ type
     fData: PUtf8Char;
     fDataLen: PtrInt;
     fPacketType: TSocketIOPacket;
-    fDataBinary: boolean;
     fID: TSocketIOAckID;
     fBinaryAttachment: cardinal;
+    fBinaryAttachments: TRawByteStringDynArray;
   public
     /// decode a Socket.IO raw text packet into its message fields
     // - mainly used for testing purposes
@@ -1097,7 +1097,9 @@ type
     /// decode a Socket.IO raw packet into its message fields
     // - returns true on success, false if the input PayLoad is incorrect
     function InitBuffer(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
-      PayLoadBinary: boolean; Process: TWebSocketProcess): boolean;
+      Process: TWebSocketProcess): boolean;
+    /// finalize all internal fields
+    procedure Reset;
     /// quickly check if the NameSpace value does match (case sensitive)
     function NameSpaceIs(const Name: RawUtf8): boolean;
     /// retrieve the NameSpace value as a new RawUtf8
@@ -1115,6 +1117,10 @@ type
     function DataRaw: RawByteString;
     /// quickly check if the Data content does match (mainly used for testing)
     function DataIs(const Content: RawUtf8): boolean;
+    /// add to BinaryAttachments[] if length is < BinaryAttachment maximum count
+    // - returns true if all attachements have been received so this message is
+    // considered as complete
+    function AddBinaryAttachment(PayLoad: pointer; PayLoadLen: PtrInt): boolean;
     /// raise a ESockIO exception with the specified text context
     procedure RaiseESockIO(const ctx: RawUtf8);
     /// low-level kind of Socket.IO packet of this message
@@ -1123,9 +1129,14 @@ type
     /// optional low-level Socket.IO acknowledge ID of this message
     property ID: TSocketIOAckID
       read fID;
-    /// optional low-level Socket.IO binary attachement ID of this message
+    /// optional low-level Socket.IO binary attachement numbers in this message
+    // - BinaryAttachments[0..BinaryAttachment-1] buffers are received just
+    // after the initial focText frame, as individual websocket focBinary frames
     property BinaryAttachment: cardinal
       read fBinaryAttachment;
+    /// contain [0..BinaryAttachment-1] raw focBinary websockets buffers
+    property BinaryAttachments: TRawByteStringDynArray
+      read fBinaryAttachments;
     /// access to the internal NameSpace text buffer - for internal use
     // - call NameSpaceIs() and NameSpaceGet() functions instead
     // - warning: this buffer is NOT #0 ended but follows NameSpaceLen
@@ -1142,6 +1153,9 @@ type
 const
   /// constant used if no TSocketIOAckID is necessary
   SIO_NO_ACK = 0;
+
+  /// the TSocketIOPacket kinds which are followed by binary attachments
+  SIO_BINARY = [sioBinaryEvent, sioBinaryAck];
 
 function ToText(p: TEngineIOPacket): PShortString; overload;
 function ToText(p: TSocketIOPacket): PShortString; overload;
@@ -3786,8 +3800,18 @@ end;
 
 { TSocketIOMessage }
 
+procedure TSocketIOMessage.Reset;
+begin
+  fSender := nil;
+  fID := 0;
+  fData := nil;
+  fDataLen := 0;
+  fBinaryAttachment := 0;
+  fBinaryAttachments := nil;
+end;
+
 function TSocketIOMessage.InitBuffer(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
-  PayLoadBinary: boolean; Process: TWebSocketProcess): boolean;
+  Process: TWebSocketProcess): boolean;
 var
   v: PtrUInt;
 begin
@@ -3795,14 +3819,13 @@ begin
   if (PayLoad = nil) or
      (PayLoadLen = 0) then
     exit;
+  Reset;
   fPacketType := TSocketIOPacket(PByte(PayLoad)^ - ord('0'));
   if byte(fPacketType) > byte(high(fPacketType)) then
     exit;
   fSender := Process;
   fNameSpaceLen := 1; // '/' by default (if not specified)
   fNameSpace := pointer(DefaultSocketIONameSpace);
-  fID := 0;
-  fBinaryAttachment := 0;
   inc(PayLoad);
   dec(PayLoadLen);
   if PayLoadLen <> 0 then
@@ -3855,13 +3878,12 @@ begin
     PayLoad := nil;
   fData := PayLoad;
   fDataLen := PayLoadLen;
-  fDataBinary := PayLoadBinary;
   result := true;
 end;
 
 function TSocketIOMessage.Init(const PayLoad: RawUtf8): boolean;
 begin
-  result := InitBuffer(pointer(PayLoad), length(PayLoad), {binary=}false, nil);
+  result := InitBuffer(pointer(PayLoad), length(PayLoad), nil);
 end;
 
 function TSocketIOMessage.NameSpaceIs(const Name: RawUtf8): boolean;
@@ -3902,8 +3924,22 @@ var
 begin
   cp := CP_RAWBYTESTRING;
   if IsValidUtf8Buffer(fData, fDataLen) then
-    cp := CP_UTF8; // may allow some #0 within the buffer
+    cp := CP_UTF8; // socket.io eioMessage frame should always be valid JSON
   FastSetStringCP(result, fData, fDataLen, cp);
+end;
+
+function TSocketIOMessage.AddBinaryAttachment(
+  PayLoad: pointer; PayLoadLen: PtrInt): boolean;
+var
+  n: PtrUInt;
+begin
+  result := false;
+  n := length(fBinaryAttachments);
+  if n >= fBinaryAttachment then
+    exit;
+  SetLength(fBinaryAttachments, n + 1);
+  FastSetRawByteString(fBinaryAttachments[n], PayLoad, PayLoadLen);
+  result := n = fBinaryAttachment;
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
