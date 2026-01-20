@@ -4287,36 +4287,45 @@ var
   p: TEngineIOPacket;
 begin
   // focText/focBinary or focContinuation/focConnectionClose
-  if not (Request.opcode in [focText, focBinary]) then
-    exit;
-  if Request.payload = '' then
-    EEngineIO.RaiseUtf8('%.ProcessIncomingFrame with no Payload', [self]);
-  p := TEngineIOPacket(PByte(Request.payload)^ - ord('0'));
-  case p of
-    eioOpen:
-      if fOpened then
-        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: OPEN twice', [self])
-      else
-        fOpened := true;
-    eioClose:
-      if fOpened then
-        fOpened := false
-      else
-        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
-    eioPing:
-      EngineIOSendPacket(Sender, nil, 0, {binary=}false, eioPong);
-    eioPong:
-      ; // process depends on the client or server side (mostly do nothing)
-    eioMessage:
-      if not fOpened then
-        EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: missing OPEN', [self]);
-  else // eioUpgrade, eioNoop
-    EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected % (%)',
-      [self, ToText(p)^, Request.payload[1]])
+  case Request.opcode of
+    focText:
+      // JSON only event or ack in engine.io format
+      begin
+        if Request.payload = '' then
+          EEngineIO.RaiseUtf8('%.ProcessIncomingFrame with no Payload', [self]);
+        p := TEngineIOPacket(PByte(Request.payload)^ - ord('0'));
+        case p of
+          eioOpen:    // '0'
+            if fOpened then
+              EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: OPEN twice', [self])
+            else
+              fOpened := true;
+          eioClose:   // '1'
+            if fOpened then
+              fOpened := false
+            else
+              EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected CLOSE', [self]);
+          eioPing:    // '2'
+            EngineIOSendPacket(Sender, nil, 0, {binary=}false, eioPong);
+          eioPong:    // '3'
+            ; // process depends on the client or server side (mostly do nothing)
+          eioMessage: // '4'
+            if not fOpened then
+              EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: missing OPEN', [self]);
+        else // eioUpgrade, eioNoop
+          EEngineIO.RaiseUtf8('%.ProcessIncomingFrame: unexpected % (%)',
+            [self, ToText(p)^, Request.payload[1]])
+        end;
+        // call virtual method for proper process of this incoming Engine.IO packet
+        EnginePacketReceived(Sender, p, @PByteArray(Request.payload)[1],
+          length(Request.payload) - 1, {payloadBin=}false);
+      end;
+    focBinary:
+      // after sioBinaryEvent or sioBinaryAck: raw attachement
+      // call virtual method for proper process of this incoming Engine.IO packet
+      EnginePacketReceived(Sender, eioMessage, pointer(Request.payload),
+        length(Request.payload), {payloadBin=}true);
   end;
-  // call virtual method for proper process of this incoming Engine.IO packet
-  EnginePacketReceived(Sender, p, @PByteArray(Request.payload)[1],
-    length(Request.payload) - 1, (Request.opcode = focBinary));
 end;
 
 
