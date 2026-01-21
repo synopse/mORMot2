@@ -1185,6 +1185,8 @@ type
   ESocketIO = class(ESynException);
 
   /// Socket.IO process Acknowledgment callback
+  // - you can use Message.DataDecode() to retrieve the associated JSON data,
+  // potentially with binary attachements encoded as Base-64 strings
   TOnSocketIOAck = procedure(const Message: TSocketIOMessage) of object;
 
   /// internal slot for one Socket.IO process Acknowledgment callback
@@ -1195,13 +1197,15 @@ type
   PSocketIOCallback = ^TSocketIOCallback;
 
   /// Socket.IO process Event handler callback signature
-  // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
+  // - the associated JSON data is decoded and supplied as a TDocVariant,
+  // potentially with binary attachements encoded as Base-64 strings
   // - if the result is not '', it is expected to be JSON array acknowledgment
   // payload, e.g. from JsonEncodeArray([])
   TOnSocketIOEvent = function(Sender: TSocketIOLocalNamespace;
     const EventName: RawUtf8; const Data: TDocVariantData): RawJson of object;
   /// Socket.IO process published methods handler signature
-  // - the associated JSON data is decoded and supplied as a TDocVariant dvArray
+  // - the associated JSON data is decoded and supplied as a TDocVariant,
+  // potentially with binary attachements encoded as Base-64 strings
   // - required signature of TSocketIOLocalNamespace.RegisterPublishedMethods()
   // - if the result is not '', it is expected to be JSON array acknowledgment
   // payload, e.g. from JsonEncodeArray([])
@@ -1345,8 +1349,7 @@ type
     /// global callback triggerred when a JSON/text event message is received and
     // decoded for this name space
     OnEventReceived: procedure(Sender: TSocketIOLocalNamespace;
-      const EventName: RawUtf8; var Data: TDocVariantData;
-      const Binary: TRawByteStringDynArray) of object;
+      const EventName: RawUtf8; var Data: TDocVariantData) of object;
     /// initialize this instance
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
@@ -4090,7 +4093,7 @@ begin
       ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
   // optional global callback
   if Assigned(OnEventReceived) then
-    OnEventReceived(self, event, d^, aMessage.BinaryAttachments);
+    OnEventReceived(self, event, data);
   // retrieve event name and search for associated handler
   ndx := fHandlers.FindHashed(event);
   if ndx < 0 then

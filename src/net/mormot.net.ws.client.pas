@@ -1156,7 +1156,7 @@ begin
     exit;
   dest := fWaitEventData;
   if dest <> nil then
-    Message.DataGet(dest^);
+    Message.DataParse(dest^);
   WaitEventDone(wepEmit);
   fWaitEventAckID := SIO_NO_ACK;
 end;
@@ -1247,7 +1247,7 @@ begin
             fPendingMessage.RaiseESockIO('BinaryAttachment EnginePacketReceived');
         // if we reached here, we got a full message with its attachements
         SocketPacketReceived(fPendingMessage);
-        fPendingMessage.Reset;
+        fPendingMessage.Reset; // better safe than sorry
       end;
   end;
 end;
