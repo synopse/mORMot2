@@ -3860,20 +3860,18 @@ begin
   L := 0;
   repeat
     case Text^ of
+      #0:
+        exit; // premature end of input text
       ' ',
       ':':
         ; // just ignore human readable text markers
-      '0' .. '9',
-      'A' .. 'F',
-      'a' .. 'f':
-        begin
-          tmp[L] := Text^;
-          inc(L);
-          if L = SizeOf(tmp) then
-            break;
-        end;
     else
-      exit; // this is not a valid MAC address
+      begin
+        tmp[L] := Text^; // append hexa chars (tested below in ParseHex)
+        inc(L);
+        if L = SizeOf(tmp) then
+          break;
+      end;
     end;
     inc(Text)
   until false;

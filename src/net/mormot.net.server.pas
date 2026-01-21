@@ -2033,7 +2033,7 @@ const
   PEER_CACHE_PATTERN = '*.cache';
 
   PEER_CACHE_MESSAGELEN = SizeOf(THttpPeerCacheMessageEncoded);
-  PEER_CACHE_AESLEN = PEER_CACHE_MESSAGELEN - SizeOf(cardinal);
+  PEER_CACHE_AESLEN = PEER_CACHE_MESSAGELEN - SizeOf(cardinal); // length - crc
   /// base-64 HttpDirectUri() bearer size in chars, from PEER_CACHE_MESSAGELEN
   PEER_CACHE_BEARERLEN = 326;
 
