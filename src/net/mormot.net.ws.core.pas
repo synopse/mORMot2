@@ -1108,10 +1108,10 @@ type
     /// retrieve the NameSpace value as a shortstring (used e.g. for RaiseESockIO)
     function NameSpaceShort: ShortString;
       {$ifdef HASINLINE} inline; {$endif}
-    /// decode the Data content JSON payload into a TDocVariant
+    /// parse the Data content JSON payload into a TDocVariant
     // - can optionally override the default JSON_SOCKETIO options
     // - warning: the Data/DataLen buffer will be decoded in-place, so modified
-    function DataGet(out Dest: TDocVariantData;
+    function DataParse(out Dest: TDocVariantData;
       Options: PDocVariantOptions = nil): boolean;
     /// return the Data content payload raw buffer without any decoding
     // - will detect UTF-8 content and set CP_UTF8 or return a RawByteString
@@ -3915,9 +3915,10 @@ begin
              CompareMemFast(pointer(Content), fData, fDataLen));
 end;
 
-function TSocketIOMessage.DataGet(out Dest: TDocVariantData;
+function TSocketIOMessage.DataParse(out Dest: TDocVariantData;
   Options: PDocVariantOptions): boolean;
 begin
+  // decode the input JSON array into a TDocVariant data
   if Options = nil then
     Options := @JSON_SOCKETIO;
   result := Dest.InitJsonInPlace(fData, Options^) <> nil;
@@ -4101,7 +4102,7 @@ var
   data: TDocVariantData;
   sid, namespace: RawUtf8;
 begin
-  if not aMessage.DataGet(data) or
+  if not aMessage.DataParse(data) or
      not data.GetAsRawUtf8('sid', sid) then
     EEngineIO.RaiseUtf8('%.Create: missing "sid" in message', [aOwner]);
   aMessage.NameSpaceGet(namespace);
