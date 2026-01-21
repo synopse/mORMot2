@@ -1089,7 +1089,7 @@ type
     fPacketType: TSocketIOPacket;
     fID: TSocketIOAckID;
     fBinaryAttachment: cardinal;
-    fBinaryAttachments: TRawByteStringDynArray;
+    fBase64Attachment: TRawUtf8DynArray; // base-64 encoded
     fDataOwned: RawUtf8; // when fBinaryAttachment>0
   public
     /// decode a Socket.IO raw text packet into its message fields
@@ -1118,7 +1118,7 @@ type
     function DataRaw: RawByteString;
     /// quickly check if the Data content does match (mainly used for testing)
     function DataIs(const Content: RawUtf8): boolean;
-    /// add to BinaryAttachments[] if length is < BinaryAttachment maximum count
+    /// add to Base64Attachment[] if length is < BinaryAttachment maximum count
     // - returns true if all attachements have been received so this message is
     // considered as complete
     function AddBinaryAttachment(PayLoad: pointer; PayLoadLen: PtrInt): boolean;
@@ -1131,13 +1131,13 @@ type
     property ID: TSocketIOAckID
       read fID;
     /// optional low-level Socket.IO binary attachement numbers in this message
-    // - BinaryAttachments[0..BinaryAttachment-1] buffers are received just
-    // after the initial focText frame, as individual websocket focBinary frames
+    // - Base64Attachment[0..BinaryAttachment-1] buffers are received just after
+    // the initial focText frame, as individual websocket focBinary frames
     property BinaryAttachment: cardinal
       read fBinaryAttachment;
-    /// contain [0..BinaryAttachment-1] raw focBinary websockets buffers
-    property BinaryAttachments: TRawByteStringDynArray
-      read fBinaryAttachments;
+    /// contain [0..BinaryAttachment-1] base-64 encoded focBinary websockets buffers
+    property Base64Attachment: TRawUtf8DynArray
+      read fBase64Attachment;
     /// access to the internal NameSpace text buffer - for internal use
     // - call NameSpaceIs() and NameSpaceGet() functions instead
     // - warning: this buffer is NOT #0 ended but follows NameSpaceLen
@@ -3806,7 +3806,7 @@ begin
   fData := nil;
   fDataLen := 0;
   fBinaryAttachment := 0;
-  fBinaryAttachments := nil;
+  fBase64Attachment := nil;
   fDataOwned := '';
 end;
 
@@ -3877,9 +3877,9 @@ begin
   result := true;
   if PayLoadLen = 0 then
     exit;
-  if fBinaryAttachment <> 0 then // this focText payload will vanish
+  if fBinaryAttachment <> 0 then // this focText payload buffer will vanish
   begin
-    FastSetString(fDataOwned, PayLoad, PayLoadLen);
+    FastSetString(fDataOwned, PayLoad, PayLoadLen); // make a private copy
     PayLoad := pointer(fDataOwned);
   end;
   fData := PayLoad;
@@ -3935,17 +3935,12 @@ end;
 
 function TSocketIOMessage.AddBinaryAttachment(
   PayLoad: pointer; PayLoadLen: PtrInt): boolean;
-var
-  n: PtrUInt;
 begin
   result := false;
-  n := length(fBinaryAttachments);
-  if (fSender = nil) or
-     (n >= fBinaryAttachment) then
+  if length(fBase64Attachment) >= fBinaryAttachment then
     exit;
-  SetLength(fBinaryAttachments, n + 1);
-  FastSetRawByteString(fBinaryAttachments[n], PayLoad, PayLoadLen);
-  result := n = fBinaryAttachment;
+  AddRawUtf8(fBase64Attachment, BinToBase64(PayLoad, PayLoadLen));
+  result := length(fBase64Attachment) = fBinaryAttachment; // true = got'm all
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
