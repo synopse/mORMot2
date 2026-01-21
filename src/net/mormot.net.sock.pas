@@ -625,6 +625,9 @@ procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 function MacToText(mac: PByteArray): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// reverse function from MacToText() or MacToHex()
+function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
+
 /// convert a MAC address value from its standard hexadecimal text representation
 // - returns e.g. '12:50:b6:1e:c6:aa' from '1250b61ec6aa' or '1250B61EC6AA'
 function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
@@ -3846,6 +3849,35 @@ end;
 function MacToText(mac: PByteArray): RawUtf8;
 begin
   ToHumanHex(result, pointer(mac), 6);
+end;
+
+function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
+var
+  tmp: array[0..11] of AnsiChar; // local copy of raw hexadecimal chars
+  L: PtrInt;
+begin
+  result := false;
+  L := 0;
+  repeat
+    case Text^ of
+      ' ',
+      ':':
+        ; // just ignore human readable text markers
+      '0' .. '9',
+      'A' .. 'F',
+      'a' .. 'f':
+        begin
+          tmp[L] := Text^;
+          inc(L);
+          if L = SizeOf(tmp) then
+            break;
+        end;
+    else
+      exit; // this is not a valid MAC address
+    end;
+    inc(Text)
+  until false;
+  result := (ParseHex(@tmp, Mac, 6) - PAnsiChar(@tmp)) = SizeOf(tmp);
 end;
 
 function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
