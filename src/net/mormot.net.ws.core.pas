@@ -1113,6 +1113,13 @@ type
     // - warning: the Data/DataLen buffer will be decoded in-place, so modified
     function DataParse(out Dest: TDocVariantData;
       Options: PDocVariantOptions = nil): boolean;
+    /// decode the Data content JSON payload into a TDocVariant
+    // - first call DataParse() to decode the JSON payload in-place
+    // - will adjust the payload so that 1) an array with a single object will
+    // return this single object 2) any Base64Attachment[] will replace the
+    // {"_placeholder":true,num:#} items as base-64 encoded binary
+    function DataDecode(out Dest: TDocVariantData; EventName: PRawUtf8 = nil;
+      Options: PDocVariantOptions = nil): boolean;
     /// return the Data content payload raw buffer without any decoding
     // - will detect UTF-8 content and set CP_UTF8 or return a RawByteString
     function DataRaw: RawByteString;
@@ -3921,7 +3928,56 @@ begin
   // decode the input JSON array into a TDocVariant data
   if Options = nil then
     Options := @JSON_SOCKETIO;
-  result := Dest.InitJsonInPlace(fData, Options^) <> nil;
+  result := (Dest.InitJsonInPlace(fData, Options^) <> nil);
+end;
+
+function TSocketIOMessage.DataDecode(out Dest: TDocVariantData;
+  EventName: PRawUtf8; Options: PDocVariantOptions): boolean;
+var
+  ndx, i: PtrInt;
+  num: integer; // not PtrInt
+  bin64: variant;
+  d: PDocVariantData;
+  tmp: TDocVariantData;
+begin
+  // decode the input JSON array into a TDocVariant data
+  result := false;
+  if not DataParse(Dest, Options) or
+     (Dest.Count = 0) or
+     not Dest.IsArray then
+    exit;
+  result := true;
+  if EventName <> nil then
+  begin
+    // trim the event name from the data array (ACK will use EventName=nil)
+    VariantToUtf8(Dest.Values[0], EventName^);
+    Dest.Delete(0);
+  end;
+  if fBase64Attachment <> nil then
+    // replace place holders with base-64 encoded binary attachements
+    for ndx := 0 to length(fBase64Attachment) - 1 do
+    begin
+      RawUtf8ToVariant(fBase64Attachment[ndx], bin64);
+      for i := 0 to Dest.Count - 1 do
+        if _SafeObject(Dest.Values[i], d) and
+           d^.Exists('_placeholder') and
+           d^.GetAsInteger('num', num) and
+           (num = ndx) then
+        begin
+          Dest.Values[i] := bin64;
+          VarClear(bin64); // mark added in the proper position
+          break;
+        end;
+      if not VarIsEmptyOrNull(bin64) then
+        Dest.AddItem(bin64); // _placeholder not found: just append as base-64
+    end;
+  // return a single object as root (common case)
+  if (Dest.Count = 1) and
+     _SafeObject(Dest.Values[0], d) then
+  begin
+    tmp := d^; // need a transient safe local copy
+    Dest := tmp;
+  end;
 end;
 
 function TSocketIOMessage.DataRaw: RawByteString;
@@ -4014,46 +4070,24 @@ end;
 procedure TSocketIOLocalNamespace.HandleEvent(const aMessage: TSocketIOMessage;
   aIgnoreUnknownEvent: boolean);
 var
-  n, ndx: PtrInt;
+  ndx: PtrInt;
   event, ack: RawUtf8;
   data: TDocVariantData;
-  d: PDocVariantData;
 begin
   // validate input context (paranoid checks)
   if (fNameSpace <> '*') and
      not aMessage.NameSpaceIs(fNameSpace) then
     ESocketIO.RaiseUtf8('%.HandleEvent: unexpected namespace ([%]<>[%])',
       [self, aMessage.NameSpaceShort, fNameSpace]);
-  case aMessage.PacketType of
-    sioBinaryEvent:
-      begin
-        n := length(aMessage.BinaryAttachments);
-        data.InitFast(n, dvArray);
-        for ndx := 0 to n - 1 do
-          data.AddItemFromText(BinToBase64(aMessage.BinaryAttachments[ndx]));
-        d := @data; // supply attachements as base-64 encoded array
-      end;
-    sioEvent:
-      begin
-        if not aMessage.DataGet(data) or
-           not data.IsArray or
-           (data.Count = 0) then
-          if snoIgnoreIncorrectData in fOptions then
-            exit // ignore in silence
-          else
-            ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
-        // decode the input JSON array into a TDocVariant data
-        VariantToUtf8(data.Values[0], event);
-        data.Delete(0); // trim the event name from the data array
-        d := @data;
-        if (d^.Count = 1) and
-           _Safe(d^.Values[0])^.IsObject then
-          d := _Safe(d^.Values[0]); // return a single object as root (common case)
-      end;
-  else
+  if not (aMessage.PacketType in [sioEvent, sioBinaryEvent]) then
     ESocketIO.RaiseUtf8('%.HandleEvent: unexpected % message for namespace %',
       [self, ToText(aMessage.PacketType)^, fNameSpace]);
-  end;
+  // decode the input JSON array and binary attachements into a TDocVariant data
+  if not aMessage.DataDecode(data, @event) then
+    if snoIgnoreIncorrectData in fOptions then
+      exit // ignore in silence
+    else
+      ESocketIO.RaiseUtf8('%.HandleEvent: message is not a JSON array', [self]);
   // optional global callback
   if Assigned(OnEventReceived) then
     OnEventReceived(self, event, d^, aMessage.BinaryAttachments);
@@ -4069,9 +4103,9 @@ begin
   // call the handler
   with fHandler[ndx] do
     if Assigned(OnEvent) then
-      ack := OnEvent(self, event, d^)
+      ack := OnEvent(self, event, data)
     else if Assigned(OnMethod) then
-      ack := OnMethod(d^);
+      ack := OnMethod(data);
   // optionally call back the server with an ACK payload
   if (ack <> '') and
      (aMessage.ID <> SIO_NO_ACK) then
