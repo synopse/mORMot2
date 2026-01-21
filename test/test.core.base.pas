@@ -2970,6 +2970,12 @@ begin
   CheckEqual(MacTextFromHex(UpperCase(s)), x);
   CheckEqual(HumanHexCompare(x, x), 0);
   CheckEqual(HumanHexCompare(x, MacTextFromHex(s)), 0);
+  x := MacToText(@Guid);
+  CheckEqual(x, 'd3:46:a6:c9:61:9c');
+  FillZero(g);
+  CheckEqual(MacToText(@g), '00:00:00:00:00:00');
+  Check(TextToMac(pointer(x), @g));
+  CheckEqual(MacToText(@g), x);
   for i := 1 to 100 do
   begin
     x2 := x;
