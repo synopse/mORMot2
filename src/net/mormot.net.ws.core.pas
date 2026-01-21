@@ -1090,6 +1090,7 @@ type
     fID: TSocketIOAckID;
     fBinaryAttachment: cardinal;
     fBinaryAttachments: TRawByteStringDynArray;
+    fDataOwned: RawUtf8; // when fBinaryAttachment>0
   public
     /// decode a Socket.IO raw text packet into its message fields
     // - mainly used for testing purposes
@@ -3806,6 +3807,7 @@ begin
   fDataLen := 0;
   fBinaryAttachment := 0;
   fBinaryAttachments := nil;
+  fDataOwned := '';
 end;
 
 function TSocketIOMessage.InitBuffer(PayLoad: PUtf8Char; PayLoadLen: PtrInt;
@@ -3822,7 +3824,7 @@ begin
   if byte(fPacketType) > byte(high(fPacketType)) then
     exit;
   fSender := Process;
-  fNameSpaceLen := 1; // '/' by default (if not specified)
+  fNameSpaceLen := length(DefaultSocketIONameSpace); // '/' if not specified
   fNameSpace := pointer(DefaultSocketIONameSpace);
   inc(PayLoad);
   dec(PayLoadLen);
@@ -3872,11 +3874,16 @@ begin
         dec(PayLoadLen);
       end;
   end;
+  result := true;
   if PayLoadLen = 0 then
-    PayLoad := nil;
+    exit;
+  if fBinaryAttachment <> 0 then // this focText payload will vanish
+  begin
+    FastSetString(fDataOwned, PayLoad, PayLoadLen);
+    PayLoad := pointer(fDataOwned);
+  end;
   fData := PayLoad;
   fDataLen := PayLoadLen;
-  result := true;
 end;
 
 function TSocketIOMessage.Init(const PayLoad: RawUtf8): boolean;
@@ -3933,7 +3940,8 @@ var
 begin
   result := false;
   n := length(fBinaryAttachments);
-  if n >= fBinaryAttachment then
+  if (fSender = nil) or
+     (n >= fBinaryAttachment) then
     exit;
   SetLength(fBinaryAttachments, n + 1);
   FastSetRawByteString(fBinaryAttachments[n], PayLoad, PayLoadLen);
