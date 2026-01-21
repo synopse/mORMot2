@@ -1555,8 +1555,8 @@ begin
   {$endif CPUINTEL}
   AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
   DefaultHasher128(@lecuyer, pointer(rnd), bytes);  // may be AesNiHash128
-  FillZero(rnd);         // anti-forensic counter measure
   lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniform distribution
+  FillZero(rnd);         // anti-forensic counter measure
   repeat
     // xor the original trusted sources with our CSPRNG until we get enough bits
     TAesPrng.Main.XorRandom(Value, bytes);
