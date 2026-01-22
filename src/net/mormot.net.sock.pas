@@ -2249,6 +2249,11 @@ var
   // - 256KB seems fair enough, safer and not slower in practice
   CrtSocketSendRecvMaxBytes: PtrInt = 256 shl 10;
 
+var
+  /// global debug hook for all TCrtSocket instances - assign TSynLog.DoLog
+  // - see also the more focused OnHttpClientSocketLog in mormot.net.client
+  OnCrtSocketLog: TSynLogProc;
+
 
 { ********* NTP / SNTP Protocol Client }
 
@@ -5805,6 +5810,9 @@ end;
 constructor TCrtSocket.Create(aTimeOut: integer);
 begin
   fTimeOut := aTimeOut;
+  if Assigned(OnCrtSocketLog) and
+     not Assigned(OnLog) then
+    OnLog := OnCrtSocketLog; // global hook for all classes
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
