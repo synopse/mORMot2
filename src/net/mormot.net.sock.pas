@@ -2004,7 +2004,11 @@ type
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
     // - slightly faster than SockSend([]) if all appended items are RawUtf8
+    // - use SockSendRaw([]) to append content with no trailing #13#10 like write()
     procedure SockSendLine(const Values: array of RawUtf8);
+    /// simulate write() with no trailing #13#10
+    // - use SockSend([]) for a trailing #13#10 like writeln()
+    procedure SockSendRaw(const Values: array of RawUtf8);
     /// simulate writeln() with a single line - includes trailing #13#10
     procedure SockSend(const Line: RawByteString); overload;
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
@@ -2192,6 +2196,7 @@ type
     property RawSocket: PtrInt
       read GetRawSocket;
     /// HTTP Proxy URI used for tunnelling, from Tunnel.Server/Port values
+    // - e.g. 'http://srvproxy.ad.mycompany.com:8080/'
     property ProxyUrl: RawUtf8
       read fProxyUrl;
     /// if higher than 0, read loop will wait for incoming data till
@@ -6701,6 +6706,23 @@ begin
     inc(p, len);
   end;
   PWord(p)^ := EOLW;
+end;
+
+procedure TCrtSocket.SockSendRaw(const Values: array of RawUtf8);
+var
+  i, len: PtrInt;
+  p: PUtf8Char;
+begin
+  len := 0;
+  for i := 0 to high(Values) do
+    inc(len, length(Values[i]));
+  p := EnsureSockSend(len); // reserve all needed memory at once
+  for i := 0 to high(Values) do
+  begin
+    len := length(Values[i]);
+    MoveFast(pointer(Values[i])^, p^, len);
+    inc(p, len);
+  end;
 end;
 
 procedure TCrtSocket.SockSend(const Line: RawByteString);
