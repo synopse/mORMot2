@@ -5341,7 +5341,7 @@ end;
 function THttpServerSocket.GetRequest(withBody: boolean;
   headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var
-  P: PUtf8Char;
+  P, B: PUtf8Char;
   status, tix32: cardinal;
   noheaderfilter, http10: boolean;
 begin
@@ -5367,6 +5367,15 @@ begin
     if P = nil then
       exit; // connection is likely to be broken or closed
     GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
+    if (PCardinal(P)^ = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24) and
+       (PCardinal(P + 4)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16) then
+    begin
+      // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
+      B := P;
+      P := PosChar(P + 7, '/');
+      if P = nil then
+        P := B; // paranoid
+    end;
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
     result := grRejected;
     if (P = nil) or
