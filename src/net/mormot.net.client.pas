@@ -942,6 +942,10 @@ var
   /// disable proxy for any IPv4 '1.2.3.4' address in GetSystemProxyUri() function
   DefaultHttpClientSocketProxyNotForIp4: boolean;
 
+  /// global debug hook for all THttpClientSocket instances - assign TSynLog.DoLog
+  // - see also the more global OnCrtSocketLog hook in mormot.net.sock
+  OnHttpClientSocketLog: TSynLogProc;
+
 
 /// ask the Operating System to return the Tunnel/Proxy settings for a given URI
 // - as used internally by OpenHttp/OpenHttpGet and TSimpleHttpClient to call
@@ -3018,6 +3022,9 @@ constructor THttpClientSocket.Create(aTimeOut: integer);
 begin
   if aTimeOut = 0 then
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
+  if Assigned(OnHttpClientSocketLog) and
+     not Assigned(OnLog) then
+    OnLog := OnHttpClientSocketLog;
   inherited Create(aTimeOut);
   if fExtendedOptions.UserAgent = '' then
     fExtendedOptions.UserAgent := DefaultUserAgent(self);
