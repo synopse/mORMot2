@@ -3633,7 +3633,7 @@ begin
            match(p, pointer(Value), l) then
           exit;
         p := s + 1;
-        s := PosChar(p, Sep);
+        s := PosChar(p, Sep); // use fast SSE2 asm on x86_64
         if s <> nil then
           continue;
         if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and
@@ -5943,7 +5943,7 @@ begin
   if Text <> nil then
   begin
     repeat
-      q := ByteScanIndex(pointer(Text), TextLen, byte(Quote));
+      q := ByteScanIndex(pointer(Text), TextLen, byte(Quote)); // may use SSE2
       if q < 0 then
       begin
         AddNoJsonEscape(Text, TextLen); // no double quote
@@ -6143,7 +6143,7 @@ begin
   repeat
     if amp = nil then
     begin
-      amp := PosChar(p, plen, '&');
+      amp := PosChar(p, plen, '&'); // use fast SSE2 asm on x86_64
       if amp = nil then
       begin
         AddNoJsonEscape(p, plen); // no more content to escape
@@ -6228,7 +6228,7 @@ begin
   repeat
     if tag = nil then
     begin
-      tag := PosChar(p, plen, '<');
+      tag := PosChar(p, plen, '<'); // use fast SSE2 asm on x86_64
       if tag = nil then
       begin
         AddHtmlUnescape(p, nil, plen);
@@ -6452,7 +6452,7 @@ var
   amp: PUtf8CHar;
   temp: TTextWriterStackBuffer;
 begin
-  amp := PosCharU(text, '&');
+  amp := PosCharU(text, '&'); // use fast SSE2 asm on x86_64
   if amp = nil then
   begin
     result := text; // nothing to change
@@ -6473,7 +6473,7 @@ var
   tag: PUtf8CHar;
   temp: TTextWriterStackBuffer;
 begin
-  tag := PosCharU(text, '<');
+  tag := PosCharU(text, '<'); // use fast SSE2 asm on x86_64
   if tag = nil then
   begin
     result := HtmlUnescape(text); // no tag, but there may be some &entity;

@@ -5637,7 +5637,7 @@ begin
   end
   else
   begin
-    p1 := pointer(PosChar(pointer(p), '@'));
+    p1 := pointer(PosChar(pointer(p), '@')); // use fast SSE2 asm on x86_64
     if p1 <> nil then
     begin
       // parse 'https://user:password@server:port/address'

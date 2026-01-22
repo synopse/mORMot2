@@ -8864,7 +8864,7 @@ begin
       vlen := i - v; // vlen may be 0 if DetailedOrVoid was ''
       if UserAgent[i + 1] in [#0, '3'] then // end with OS_INITIAL or '32' suffix
         o := ByteScanIndex(pointer(@OS_INITIAL),
-          ord(high(TOperatingSystem)) + 1, ord(UserAgent[i]));
+          ord(high(TOperatingSystem)) + 1, ord(UserAgent[i])); // may use SSE2
       break;
     end;
   if o < 0 then

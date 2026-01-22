@@ -3781,7 +3781,7 @@ begin
     exit;
   end;
   result := lngUndefined;
-  i := ByteScanIndex(@LANG_PRI, length(LANG_PRI), lcid and 255);
+  i := ByteScanIndex(@LANG_PRI, length(LANG_PRI), lcid and 255); // may use SSE2
   if i <= 0 then
     exit;
   result := TLanguage(i);
@@ -5816,7 +5816,7 @@ begin
     exit;
   s := pointer(bin);
   z := StrLen(s);
-  c := ByteScanIndex(pointer(s), len, ord(ZEROED_CW));
+  c := ByteScanIndex(pointer(s), len, ord(ZEROED_CW)); // may use SSE2
   if (z = len) and
      (c < 0) then
   begin
@@ -5863,7 +5863,7 @@ begin
   if len = 0 then
     exit;
   s := pointer(u);
-  c := ByteScanIndex(pointer(s), len, ord(ZEROED_CW));
+  c := ByteScanIndex(pointer(s), len, ord(ZEROED_CW)); // may use SSE2
   if c < 0 then
   begin
     result := u;
@@ -8483,7 +8483,7 @@ var
   p: PAnsiChar;
 begin
   len := length(text);
-  first := ByteScanIndex(pointer(text), len, ord(exclude));
+  first := ByteScanIndex(pointer(text), len, ord(exclude)); // may use SSE2
   if first < 0 then
   begin
     result := text; // no exclude char found
@@ -8629,7 +8629,7 @@ begin
     if (Lookup = nil) and
        (length(OldPattern) = 1) then
       first := ByteScanIndex(pointer(S), {%H-}PStrLen(PtrUInt(S) - _STRLEN)^,
-        byte(OldPattern[1])) + 1
+        byte(OldPattern[1])) + 1  // may use SSE2
     else
       first := PosExI(OldPattern, S, 1, Lookup); // handle Lookup=nil
     if first = 0 then
@@ -8671,7 +8671,7 @@ begin
      (Source <> '') then
   begin
     n := length(Source);
-    i := ByteScanIndex(pointer(Source), n, ord(OldChar));
+    i := ByteScanIndex(pointer(Source), n, ord(OldChar)); // may use SSE2
     if i >= 0 then
     begin
       FastSetString(result, pointer(Source), n);
@@ -8771,7 +8771,7 @@ var
   c: AnsiChar;
 begin
   nquote := 0;
-  quote1 := ByteScanIndex(pointer(P), PLen, byte(Quote)); // asm if available
+  quote1 := ByteScanIndex(pointer(P), PLen, byte(Quote)); // may use SSE2
   if quote1 >= 0 then
     for i := quote1 to PLen - 1 do
       if P[i] = Quote then

@@ -2072,7 +2072,7 @@ begin
     else
     begin
       // e.g. '[...,"POST@Table",{object},...]'
-      cmdtable := PosChar(fCommand, '@');
+      cmdtable := PosChar(fCommand, '@'); // use fast SSE2 asm on x86_64
       if cmdtable <> nil then
       begin
         cmdtable^ := #0; // isolate 'POST' or 'hex'/'ihex' prefix

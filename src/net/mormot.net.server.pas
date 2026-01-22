@@ -5372,7 +5372,7 @@ begin
     begin
       // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
       B := P;
-      P := PosChar(P + 7, '/');
+      P := PosChar(P + 7, '/'); // use fast SSE2 asm on x86_64
       if P = nil then
         P := B; // paranoid
     end;

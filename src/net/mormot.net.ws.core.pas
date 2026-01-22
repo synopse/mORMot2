@@ -2335,7 +2335,7 @@ begin
   P := pointer(frame.payload);
   if not CompareMemFast(pointer(Head), P, len) then
     exit;
-  result := PosChar(P + len, FRAME_HEAD_SEP);
+  result := PosChar(P + len, FRAME_HEAD_SEP); // use fast SSE2 asm on x86_64
   if result = nil then
     exit;
   if PMax <> nil then
@@ -3306,7 +3306,7 @@ begin
     exit;
   if WebSocketLog <> nil then
   begin
-    bak := PosCharU(aRequest.Url, '?');
+    bak := PosCharU(aRequest.Url, '?'); // use fast SSE2 asm on x86_64
     if bak <> nil then
       bak^ := #0;  // truncate URI before query parameters
     WebSocketLog.Add.Log(sllTrace,

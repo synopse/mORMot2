@@ -2269,6 +2269,7 @@ begin
   FormatUtf8('Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/' +
     SYNOPSE_FRAMEWORK_BRANCH + ' %%',
     [name, Executable.ProgramName, vers], result);
+  // 'Mozilla/5.0 (Linux x64; mORMot) HCS/4 Tests/1' for THttpClientSocket 2.4
 end;
 
 
@@ -3380,6 +3381,7 @@ begin
     exit;
   if SockIn = nil then
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  // append command line
   noport := (fPort = '') or // = '' for fProxyHttp on port 80
             (fPort = DEFAULT_PORT[ServerTls]);
   fSndBufLen := 0;
@@ -3396,6 +3398,7 @@ begin
      (url[1] <> '/') then
     EnsureSockSend(1)^ := '/'; // should always start with /
   SockSendLine([url, ' HTTP/1.1']);
+  // append main headers
   {$ifdef OSPOSIX}
   if SocketLayer = nlUnix then
     SockSend('Host: unix') // not part of the HTTP standard anyway

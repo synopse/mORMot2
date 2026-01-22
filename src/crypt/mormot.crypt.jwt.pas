@@ -1335,7 +1335,7 @@ begin
   if Token = '' then
     exit;
   result := jwtInvalidAlgorithm;
-  P := PosCharU(Token, '.');
+  P := PosCharU(Token, '.'); // use fast SSE2 asm on x86_64
   if P = nil then
     exit;
   if self <> TJwtAbstract then

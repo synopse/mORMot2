@@ -316,7 +316,7 @@ begin
     if Value <> nil then
     begin
       inc(Value);
-      valueend := PosChar(Value, ';');
+      valueend := PosChar(Value, ';'); // use fast SSE2 asm on x86_64
       if valueend <> nil then
         result := valueend - Value
       else

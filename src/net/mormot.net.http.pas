@@ -3710,7 +3710,7 @@ begin
      (PCardinal(P + 4)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16) then
   begin
     // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
-    P := PosChar(P + 7, '/');
+    P := PosChar(P + 7, '/'); // use fast SSE2 asm on x86_64
     if P = nil then
       P := B // paranoid
     else
@@ -4683,7 +4683,7 @@ begin
      (ifUrlParamPosSet in fInternalFlags) then
     exit;
   include(fInternalFlags, ifUrlParamPosSet); // call PosChar() once
-  result := PosCharU(Url, '?');
+  result := PosCharU(Url, '?'); // use fast SSE2 asm on x86_64
   fUrlParamPos := result;
 end;
 

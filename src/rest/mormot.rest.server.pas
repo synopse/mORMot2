@@ -4234,7 +4234,7 @@ begin
        IsSessionSignature(P) then // = IdemPChar(P, 'SESSION_SIGNATURE=')
     begin
       // don't include the TAuthSession signature into Input[]
-      P := PosChar(P + 18, '&');
+      P := PosChar(P + 18, '&'); // use fast SSE2 asm on x86_64
       if P = nil then
         break;
       inc(P);

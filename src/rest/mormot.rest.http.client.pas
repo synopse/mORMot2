@@ -732,7 +732,7 @@ begin
     Call.OutStatus := HTTP_CLIENTERROR; // indicates no socket
   if log <> nil  then
   begin
-    bak := PosCharU(call.Url, '?');
+    bak := PosCharU(call.Url, '?'); // use fast SSE2 asm on x86_64
     if bak <> nil then
       bak^ := #0;  // truncate URI before query parameters
     log.Log(sllClient, '% % status=% len=% state=%', [call.Method, call.Url,

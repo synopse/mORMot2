@@ -3071,7 +3071,7 @@ Bin:      W.WrBase64(Element, ElementBytes, true);
         modMongoStrict:
           goto regex;
         modMongoShell:
-          if (PosChar(Data.RegEx, '/') = nil) and
+          if (PosChar(Data.RegEx, '/') = nil) and // use fast SSE2 asm on x86_64
              (PosChar(Data.RegExOptions, '/') = nil) then
           begin
             W.Add('/');

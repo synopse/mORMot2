@@ -11260,13 +11260,13 @@ end;
 function AnyScanIndex(P, V: pointer; Count, VSize: PtrInt): PtrInt;
 begin
   case VSize of
-    // optimized versions for arrays of most simple types
+    // optimized versions for arrays of most simple types - may use SSE2 asm
     1:
-      result := ByteScanIndex(P, Count, PByte(V)^); // SSE2 asm on Intel/AMD
+      result := ByteScanIndex(P, Count, PByte(V)^);
     2:
-      result := WordScanIndex(P, Count, PWord(V)^); // may use SSE2 asm
+      result := WordScanIndex(P, Count, PWord(V)^);
     4:
-      result := IntegerScanIndex(P, Count, PInteger(V)^); // may use SSE2 asm
+      result := IntegerScanIndex(P, Count, PInteger(V)^);
     8:
       result := Int64ScanIndex(P, Count, PInt64(V)^);
     SizeOf(THash128):

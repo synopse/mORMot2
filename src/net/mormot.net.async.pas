@@ -4021,7 +4021,7 @@ begin
     // BIND + LISTEN (TLS is done later)
     fServer := TCrtSocket.Create(5000);
     if fLogClass <> nil  then
-      fServer.OnLog := fLogClass.DoLog;
+      fServer.OnLog := fLogClass.DoLog; // bind + TLS process
     fServer.BindPort(fSockPort, nlTcp, acoReusePort in fOptions);
     if not fServer.SockIsDefined then // paranoid check
       EAsyncConnections.RaiseUtf8('%.Execute: bind % failed', [self, fSockPort]);
