@@ -133,6 +133,8 @@ implementation
 procedure TNetworkProtocols._SocketIO;
 var
   m: TSocketIOMessage;
+  abc, event: RawUtf8;
+  d: TDocVariantData;
 begin
   // validate low-level Socket.IO message decoder
   Check(not m.Init(''));
@@ -205,12 +207,30 @@ begin
   Check(m.DataIs('["baz",{"_placeholder":true,"num":0}]'));
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 1);
+  abc := 'abc';
+  Check(m.AddBinaryAttachment(pointer(abc), 1));
+  if CheckEqual(length(m.Base64Attachment), 1) then
+    CheckEqual(m.Base64Attachment[0], BinToBase64(pointer(abc), 1));
+  Check(m.DataDecode(d, @event));
+  CheckEqual(event, 'baz');
+  CheckEqual(d.ToJson, '["YQ=="]');
   Check(m.Init('52-/admin,["baz",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'));
   Check(m.PacketType = sioBinaryEvent);
   Check(m.NameSpaceIs('/admin'));
-  Check(m.DataIs('["baz",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'));
   CheckEqual(m.ID, 0);
   CheckEqual(m.BinaryAttachment, 2);
+  Check(m.DataIs('["baz",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'));
+  Check(not m.AddBinaryAttachment(pointer(abc), 1));
+  Check(m.AddBinaryAttachment(pointer(abc), 2));
+  Check(m.DataIs('["baz",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'));
+  if CheckEqual(length(m.Base64Attachment), 2) then
+  begin
+    CheckEqual(m.Base64Attachment[0], BinToBase64(pointer(abc), 1));
+    CheckEqual(m.Base64Attachment[1], BinToBase64(pointer(abc), 2));
+  end;
+  Check(m.DataDecode(d, @event));
+  CheckEqual(event, 'baz');
+  CheckEqual(d.ToJson, '["YQ==","YWI="]');
   Check(m.Init('61-15["bar",{"_placeholder":true,"num":0}]'));
   Check(m.PacketType = sioBinaryAck);
   Check(m.NameSpaceIs('/'));
@@ -223,6 +243,11 @@ begin
   Check(m.DataIs('[{"_placeholder":true,"num":0}]'));
   CheckEqual(m.ID, 1);
   CheckEqual(m.BinaryAttachment, 1);
+  Check(m.AddBinaryAttachment(pointer(abc), 3));
+  if CheckEqual(length(m.Base64Attachment), 1) then
+    CheckEqual(m.Base64Attachment[0], BinToBase64(pointer(abc), 3));
+  Check(m.DataDecode(d));
+  CheckEqual(d.ToJson, '["YWJj"]');
 end;
 
 type
