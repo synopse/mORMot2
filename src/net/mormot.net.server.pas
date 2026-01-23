@@ -2722,15 +2722,18 @@ begin
         end
         else if res <> nrRetry then
         begin
-          fLogClass.Add.Log(sllDebug, 'DoExecute: abort after RecvPending=% %',
+          fLogClass.Add.Log(sllDebug, 'DoExecute: RecvPending=% %',
             [_NR[res], NetLastErrorMsg], self);
           break;
         end;
       end
       else if neError in ev then
       begin
-        fLogClass.Add.Log(sllWarning, 'DoExecute: abort after WaitFor', self);
-        break;
+        res := NetLastError;
+        fLogClass.Add.Log(sllWarning, 'DoExecute: WaitFor=%', [_NR[res]], self);
+        if res <> nrRetry then
+          break;
+        SleepHiRes(100); // don't burn too much CPU
       end;
       if Terminated then
         break;
@@ -2754,11 +2757,13 @@ begin
         [fProcessName], self);
       fSock.Close;
       fSock := nil;
-      if SleepOrTerminated(2000) or // wait a little and retry
-         (DoBind = nrOk) then
+      if SleepOrTerminated(2000) then // wait a little and retry
+        break;
+      res := DoBind;
+      if res = nrOk then
         break; // re-bound = go back to the main WaitFor/RecFrom loop
       fLogClass.Add.Log(sllWarning, 'DoExecute: DoBind=% -> sleep and retry',
-        [NetLastErrorMsg], self);
+        [_NR[res]], self);
     until false;
   until Terminated;
 end;
