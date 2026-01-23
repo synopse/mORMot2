@@ -652,12 +652,24 @@ const
 
   {$else}
 
+const
   // https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/if_arp.h
   ARPHRD_ETHER     = 1;
   ARPHRD_PPP       = 512;
   ARPHRD_TUNNEL    = 768;
   ARPHRD_TUNNEL6   = 769;
   ARPHRD_IEEE80211 = 801;
+
+  ETH_P_IP  = $0800;
+  ETH_P_ARP = $0806;
+
+  ARPOP_REQUEST   = 1;  // ARP request
+  ARPOP_REPLY     = 2;  // ARP reply
+  ARPOP_RREQUEST  = 3;  // RARP request
+  ARPOP_RREPLY    = 4;  // RARP reply
+  ARPOP_InREQUEST = 8;  // InARP request
+  ARPOP_InREPLY   = 8;  // InARP reply
+  ARPOP_NAK       = 10; // (ATM)ARP NAK
 
   {$endif OSBSDDARWIN}
 
@@ -673,6 +685,7 @@ const
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
+
 procedure RetrieveEnhancedInfo(var a: TMacAddress; var procnetroute: RawUtf8);
 var
   fn: ShortString;
@@ -719,6 +732,7 @@ begin
     p := GotoNextLine(p);
   end;
 end;
+
 {$endif OSLINUX}
 
 {$ifdef USE_IFADDRS}
@@ -972,6 +986,129 @@ begin
   end;
 end;
 
+{$ifdef OSLINUX} // SOCK_RAW linux-specific code (requiring root or CAP_NET_RAW)
+
+type
+  // a low-level ARP frame binary content, with its SOCK_RAW ethernet header
+  TRawARP = packed record
+    Dest: TNetMac;
+    Src: TNetMac;
+    EType: word;
+    HType: word;
+    PType: word;
+    HLen: byte;
+    PLen: byte;
+    Op:  word;
+    SHA: TNetMac;
+    SPA: TNetIP4;
+    THA: TNetMac;
+    TPA: TNetIP4;
+  end;
+  PRawARP = ^TRawARP;
+
+const
+  MAC_BROADCAST: TNetMac = ($ff, $ff, $ff, $ff, $ff, $ff);
+  MAC_ZERO:      TNetMac = ($00, $00, $00, $00, $00, $00);
+
+var
+  SharedArpLock: TLightLock; // thread-safe reuse of a shared SOCK_RAW socket
+  SharedArpSock: TSocket;
+
+function GetRemoteMacAddress(const IP: RawUtf8; TimeoutMS: integer): RawUtf8;
+var
+  s: TSocket;
+  ns: TNetSocket absolute s;
+  local: TMacAddress;
+  arp: TRawARP;
+  addr: sockaddr_ll;
+  resp: RawByteString;
+  retry: integer;
+  start: Int64;
+begin
+  result := '';
+  // validate and prepare input parameters
+  if not NetIsIP4(pointer(IP), @arp.TPA) or
+     not GetLocalMacAddress(IP, local) or // ask the kernel routage table
+     not NetIsIP4(pointer(local.IP), @arp.SPA) or
+     not TextToMac(pointer(local.Address), @arp.Src) then
+    exit;
+  if arp.TPA = arp.SPA then
+  begin
+    result := local.Address; // handle case of self IP
+    exit;
+  end;
+  arp.Dest  := MAC_BROADCAST;
+  arp.EType := bswap16(ETH_P_ARP);
+  arp.HType := bswap16(ARPHRD_ETHER);
+  arp.PType := bswap16(ETH_P_IP);
+  arp.HLen  := SizeOf(TNetMac);
+  arp.PLen  := SizeOf(TNetIP4);
+  arp.Op    := bswap16(ARPOP_REQUEST);
+  arp.SHA   := arp.Src;
+  arp.THA   := MAC_ZERO;
+  FillCharFast(addr, SizeOf(addr), 0);
+  addr.sll_family   := AF_PACKET;
+  addr.sll_protocol := bswap16(ETH_P_ARP);
+  addr.sll_ifindex  := local.IfIndex;
+  addr.sll_halen    := SizeOf(MAC_BROADCAST);
+  PNetMac(@addr.sll_addr)^ := MAC_BROADCAST;
+  // acquire a SOCK_RAW - shared between calls since closesocket() is slow
+  if SharedArpLock.TryLock then
+  begin
+    if SharedArpSock = 0 then
+      SharedArpSock := socket(AF_PACKET, SOCK_RAW, bswap16(ETH_P_ARP));
+    s := SharedArpSock;
+    if s <= 0 then // typically not root or CAP_NET_RAW
+    begin
+      SharedArpLock.UnLock; // no retry any more since SharedArpSock=-1 now
+      exit;
+    end;
+  end
+  else
+  begin
+    s := socket(AF_PACKET, SOCK_RAW, bswap16(ETH_P_ARP)); // transient socket
+    if s <= 0 then
+      exit; // paranoid (e.g. fd exhaustion)
+  end;
+  // main send/recv loop
+  start := 0;
+  if TimeoutMS > 0 then
+    start := GetTickCount64;
+  for retry := 0 to 4 do // with some exponential backoff on network congestion
+  begin
+    if sendto(s, @arp, SizeOf(arp), 0, @addr, SizeOf(addr)) >= 0 then
+    begin
+      if ns.RecvWait(100 + retry * 50, resp) = nrOK then
+        repeat
+          if length(resp) >= SizeOf(TRawArp) then
+            with PRawARP(resp)^ do
+              if (Op = bswap16(ARPOP_REPLY)) and // reply
+                 (TPA = arp.SPA) and             // from expected IPs
+                 (SPA = arp.TPA) then
+              begin
+                result := MacToText(@SHA);
+                break;
+              end;
+        until ns.RecvWait(20, resp) <> nrOK; // get all responses
+      if result <> '' then
+        break; // found one
+    end
+    else if retry > 0 then
+      break; // allow one sendto() failure for the first occurence
+    SleepHiRes(50); // avoid mini flood detection between retries
+    if (TimeoutMS > 0) and
+       (GetTickCount64 - start > TimeoutMS) then
+      break; // don't wait too long
+  end;
+  // resource cleanup
+  if s = SharedArpSock then
+    SharedArpLock.UnLock // can be reused
+  else
+    ns.Close; // release transient socket - 35 ms on my Debian
+end;
+
+{$endif OSLINUX}
+
 {$else}
 
 function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
@@ -1046,10 +1183,10 @@ var
   i: PtrInt;
 begin
   result := false;
-  local := GetLocalIpAddress(Remote);
+  local := GetLocalIpAddress(Remote); // ask the kernel routage table
   if local = '' then
     exit;
-  all := GetMacAddresses;
+  all := GetMacAddresses; // fast refcnt threadsafe access, with a 65 secs cache
   for i := 0 to high(all) do
     if all[i].IP = local then
     begin
@@ -1586,5 +1723,10 @@ end;
 procedure FinalizeUnit;
 begin
   _gethostbynamesafe.Done;
+  {$ifdef OSLINUX}
+  if SharedArpSock <> 0 then
+    TNetSocket(SharedArpSock).Close;
+  {$endif OSLINUX}
+
 end;
 

@@ -751,11 +751,18 @@ procedure MacIPAddressFlush;
 
 {$ifdef OSWINDOWS}
 /// remotely get the MAC address of a computer, from its IP Address
-// - only works under Windows, which features a SendARP() API in user space:
-// on POSIX, implementing ARP sadly requires root rights
-// - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
+// - calls SendARP() Windows API available in user space
+// - so will first check the system ARP cache, then send an ARP packet if needed
+// - return the address in its usual human-readable text, e.g. '12:50:b6:1e:c6:aa'
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 {$endif OSWINDOWS}
+
+{$ifdef OSLINUX}
+/// remotely get the MAC address of a computer, from its IP Address, using ARP
+// - use Linux specific SOCK_RAW feature but requires root or CAP_NET_RAW
+// - return the address in its usual human-readable text, e.g. '12:50:b6:1e:c6:aa'
+function GetRemoteMacAddress(const IP: RawUtf8; TimeoutMS: integer = 500): RawUtf8;
+{$endif OSLINUX}
 
 /// get the local MAC address used to reach a computer, from its IP or Host name
 // - return the local interface as a TMacAddress, with all its available info
@@ -7386,6 +7393,14 @@ initialization
   DefaultListenBacklog := SOMAXCONN;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
+  (*{$ifdef OSLINUX}
+  writeln(GetRemoteMacAddress('192.168.0.1'));
+  writeln(GetRemoteMacAddress('192.168.0.254'));
+  writeln(GetRemoteMacAddress('192.168.0.2'));
+  writeln(GetRemoteMacAddress('192.168.0.121'));
+  writeln(GetRemoteMacAddress('10.0.2.15'));
+  writeln(GetRemoteMacAddress('10.0.2.2'));
+  {$endif OSLINUX}*)
 
 finalization
   FinalizeUnit;  // in mormot.net.sock.windows/posix.inc
