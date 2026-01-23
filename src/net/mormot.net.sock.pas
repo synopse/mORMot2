@@ -767,7 +767,8 @@ function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolea
 
 /// get the local IP address used to reach a computer, from its IP Address
 // - will create a SOCK_DGRAM socket with the supplied IP over DNS, HTTP, HTTPS,
-// NTP and discard (9) ports, then check the local socket address created
+// NTP and discard (9) ports, then check the local socket address created - it
+// won't make any actual network connection, just ask the system routing table
 function GetLocalIpAddress(const Remote: RawUtf8 = '8.8.8.8'): RawUtf8;
 
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
@@ -3971,7 +3972,7 @@ var
   // GetMacAddresses / GetMacAddressesText cache - refreshed every 65 seconds
   MacAddresses: array[{UpAndDown=}boolean] of record
     Safe: TLightLock;
-    Tix: integer;
+    Tix: integer; // = GetTickCount64 shr 16 + 1
     Addresses: TMacAddressDynArray;
     Text: array[{WithoutName=}boolean] of RawUtf8;
   end;
@@ -4054,23 +4055,20 @@ function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
   now: integer;
 begin
+  now := mormot.core.os.GetTickCount64 shr 16 + 1; // refresh every 65536 ms
   with MacAddresses[UpAndDown] do
   begin
-    now := mormot.core.os.GetTickCount64 shr 16 + 1; // refresh every 65536 ms
-    if Tix <> now then
-    begin
-      Safe.Lock;
-      try
-        if Tix <> now then
-        begin
-          Addresses := RetrieveMacAddresses(UpAndDown);
-          Tix := now
-        end;
-      finally
-        Safe.UnLock;
+    Safe.Lock;
+    try
+      if Tix <> now then
+      begin
+        Tix := now;
+        Addresses := RetrieveMacAddresses(UpAndDown);
       end;
+      result := Addresses;
+    finally
+      Safe.UnLock;
     end;
-    result := Addresses;
   end;
 end;
 
@@ -4142,6 +4140,7 @@ const
   PORTS: array[0..4] of RawUtf8 = ( // connect() may fail on firewall/cap policy
     '53', '80', '443', '123', '9'); // DNS, HTTP, HTTPS, NTP, discard
 begin
+  // note: UDP connect() makes no network request but browse the kernel routage
   result := '';
   for i := 0 to high(PORTS) do
     if addr.SetFrom(Remote, PORTS[i], nlUdp) = nrOk then
@@ -4183,9 +4182,9 @@ begin
     try
       if tix32 <> Tix then
       begin
-        Value := _GetDnsAddresses(usePosixEnv, false);
+        Value := _GetDnsAddresses(usePosixEnv, false); // from OS
         for i := 0 to length(Custom) - 1 do
-          NetAddRawUtf8(Value, Custom[i]);
+          NetAddRawUtf8(Value, Custom[i]);          // from RegisterDnsAddress()
         Tix := tix32;
       end;
       result := Value;
