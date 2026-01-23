@@ -763,7 +763,7 @@ type
     sll_hatype: word;
     sll_pkttype: byte;
     sll_halen: byte;
-    sll_addr: TByteToByte;
+    sll_addr: array[0..7] of byte;
   end;
   {$endif OSBSDDARWIN}
 
