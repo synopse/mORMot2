@@ -10440,7 +10440,7 @@ var
   derlen: cardinal;
   der: PByteArray;
   eccbytes, len: PtrUInt;
-  buf: array [0..131] of AnsiChar;
+  buf: array[0..131] of AnsiChar;
 begin
   if algo in CAA_RAWSIGNATURE then
   begin

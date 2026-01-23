@@ -1294,8 +1294,8 @@ function SecEncrypt(var aSecContext: TSecContext;
 var
   sizes: TSecPkgContext_Sizes;
   len: cardinal;
-  token:   array [0..127] of byte; // Usually 60 bytes
-  padding: array [0..63]  of byte; // Usually 1 byte
+  token:   array[0..127] of byte; // Usually 60 bytes
+  padding: array[0..63]  of byte; // Usually 1 byte
   inDesc: TSecBufferDesc;
   buffer: RawByteString;
   status: integer;

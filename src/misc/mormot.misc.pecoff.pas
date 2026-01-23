@@ -203,7 +203,7 @@ type
     SizeOfHeapCommit: cardinal;
     LoaderFlags: cardinal;
     NumberOfRvaAndSizes: cardinal;
-    DataDirectory: array [0..IMAGE_NUMBEROF_DIRECTORY_ENTRIES - 1] of TImageDataDirectory;
+    DataDirectory: array[0..IMAGE_NUMBEROF_DIRECTORY_ENTRIES - 1] of TImageDataDirectory;
   end;
   TImageOptionalHeader32 = _IMAGE_OPTIONAL_HEADER;
   PImageOptionalHeader32 = ^_IMAGE_OPTIONAL_HEADER;
@@ -234,7 +234,7 @@ type
     SizeOfHeapCommit: Int64;
     LoaderFlags: cardinal;
     NumberOfRvaAndSizes: cardinal;
-    DataDirectory: array [0..IMAGE_NUMBEROF_DIRECTORY_ENTRIES - 1] of TImageDataDirectory;
+    DataDirectory: array[0..IMAGE_NUMBEROF_DIRECTORY_ENTRIES - 1] of TImageDataDirectory;
   end;
   TImageOptionalHeader64 = _IMAGE_OPTIONAL_HEADER64;
   PImageOptionalHeader64 = ^_IMAGE_OPTIONAL_HEADER64;

@@ -736,7 +736,7 @@ const
 type
   /// Oracle native number low-level representation
   OCINumber = packed record
-    OCINumberPart: array [0..OCI_NUMBER_SIZE-1] of ub1;
+    OCINumberPart: array[0..OCI_NUMBER_SIZE - 1] of ub1;
   end;
 
 

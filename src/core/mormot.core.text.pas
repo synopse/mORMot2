@@ -7694,11 +7694,11 @@ const
 
 type
   TDIY_FP_Cached_Power10 = record
-    base:         array [ 0 .. 9 ] of TDIY_FP_Power_of_10;
-    factor_plus:  array [ 0 .. 1 ] of TDIY_FP_Power_of_10;
-    factor_minus: array [ 0 .. 1 ] of TDIY_FP_Power_of_10;
+    base:         array[0 .. 9] of TDIY_FP_Power_of_10;
+    factor_plus:  array[0 .. 1] of TDIY_FP_Power_of_10;
+    factor_minus: array[0 .. 1] of TDIY_FP_Power_of_10;
     // extra mantissa correction [ulp; signed]
-    corrector:    array [ 0 .. C_PWR10_COUNT - 1 ] of shortint;
+    corrector:    array[0 .. C_PWR10_COUNT - 1] of shortint;
   end;
 
 const

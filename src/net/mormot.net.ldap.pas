@@ -1744,7 +1744,7 @@ type
     lkoManagedServiceAccounts);
 
   /// the resultset of TLdapClient.GetWellKnownObject()
-  TLdapKnownCommonNames = array [TLdapKnownObject] of RawUtf8;
+  TLdapKnownCommonNames = array[TLdapKnownObject] of RawUtf8;
   PLdapKnownCommonNames = ^TLdapKnownCommonNames;
 
   /// high-level information of a User or Group object in the LDAP database
@@ -6158,7 +6158,7 @@ const
   // Well-Known LDAP Objects GUID
   // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
   //   5a00c890-6be5-4575-93c4-8bf8be0ca8d8
-  LDAP_GUID: array [TLdapKnownObject] of RawUtf8 = (
+  LDAP_GUID: array[TLdapKnownObject] of RawUtf8 = (
     'AA312825768811D1ADED00C04FD8D5CD',  // lkoComputers
     '18E2EA80684F11D2B9AA00C04F79F805',  // lkoDeletedObjects
     'A361B2FFFFD211D1AA4B00C04FD7D83A',  // lkoDomainControllers

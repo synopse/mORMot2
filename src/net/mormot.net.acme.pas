@@ -647,7 +647,7 @@ end;
 procedure TAcmeClient.ReadDirectory;
 var
   resp: RawJson;
-  v: array [0..2] of TValuePUtf8Char;
+  v: array[0..2] of TValuePUtf8Char;
 begin
   // In order to help clients configure themselves with the right URLs for
   // each ACME operation, ACME servers provide a directory object
@@ -716,7 +716,7 @@ var
   i, j, n: PtrInt;
   ch: ^TAcmeChallenge;
   r1, r2: RawJson;
-  v1, v2: array [0..2] of TValuePUtf8Char;
+  v1, v2: array[0..2] of TValuePUtf8Char;
   auth: TRawUtf8DynArray;
   p: PUtf8Char;
   chs: TPUtf8CharDynArray;
@@ -921,7 +921,7 @@ end;
 function TAcmeClient.CompleteDomainRegistration(out aCert: RawUtf8): TAcmeStatus;
 var
   resp: RawUtf8;
-  v: array [0..1] of TValuePUtf8Char;
+  v: array[0..1] of TValuePUtf8Char;
 begin
   try
     // Before sending a POST request to the server, an ACME client needs to

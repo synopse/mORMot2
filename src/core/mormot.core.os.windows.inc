@@ -2156,7 +2156,7 @@ type
     th32ParentProcessID: DWord;    // this process's parent process
     pcPriClassBase: integer;       // base priority of process's threads
     dwFlags: DWord;
-    szExeFile: array [0..MAX_PATH - 1] of WideChar;   // Path
+    szExeFile: array[0..MAX_PATH - 1] of WideChar;   // Path
   end;
 
   TThreadEntry32 = record
@@ -4803,7 +4803,7 @@ type
       RelationCache: (
         Cache: TSystemCacheDescriptor);
       RelationGroup: (
-        Reserved: array [0..1] of QWord); // to define the actual struct size
+        Reserved: array[0..1] of QWord); // to define the actual struct size
   end;
 
 {$ifndef UNICODE}

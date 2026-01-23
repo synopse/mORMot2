@@ -218,7 +218,7 @@ type
   TColorPalette = packed record
     Flags: UINT;
     Count: UINT;
-    Entries: array [0..0] of cardinal;
+    Entries: array[0..0] of cardinal;
   end;
   PColorPalette = ^TColorPalette;
 
@@ -295,7 +295,7 @@ const
 
 const
   /// the corresponding file extension for every saving format type
-  GdipPictureExt: array [TGdipPictureType] of TFileName = (
+  GdipPictureExt: array[TGdipPictureType] of TFileName = (
     '.gif',
     '.png',
     '.jpg',

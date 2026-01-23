@@ -1310,7 +1310,7 @@ type
   /// used to map a TPropInfo.GetProc/SetProc pointer and retrieve its kind
   // - published here for proper Delphi inlining
   PropWrap = packed record
-    FillBytes: array [0 .. SizeOf(pointer) - 2] of byte;
+    FillBytes: array[0 .. SizeOf(pointer) - 2] of byte;
     /// =$ff for a ptField address, or =$fe for a ptVirtual method
     Kind: byte;
   end;

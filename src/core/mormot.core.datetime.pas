@@ -1157,7 +1157,7 @@ implementation
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
 
 const // sysutils' MonthDays[] stores Word values - and better alignment here
-  DaysPerMonth: array [{leapYear=}boolean, 0 .. 15] of byte = (
+  DaysPerMonth: array[{leapYear=}boolean, 0 .. 15] of byte = (
    (0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0),
    (0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0));
 

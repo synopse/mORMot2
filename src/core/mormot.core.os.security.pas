@@ -6989,7 +6989,7 @@ type
 
   TOKEN_GROUPS = record
     GroupCount: DWord;
-    Groups: array [0..0] of SID_AND_ATTRIBUTES;
+    Groups: array[0..0] of SID_AND_ATTRIBUTES;
   end;
   PTOKEN_GROUPS = ^TOKEN_GROUPS;
 

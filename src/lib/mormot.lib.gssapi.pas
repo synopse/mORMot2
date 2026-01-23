@@ -139,7 +139,7 @@ const
   // raw 1.2.840.113554.1.2.1.1 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
   //  generic(1) user-name(1)}
-  gss_nt_user_name: array [0..9] of byte = (
+  gss_nt_user_name: array[0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
   gss_nt_user_name_desc: gss_OID_desc = (
     length: SizeOf(gss_nt_user_name);
@@ -149,7 +149,7 @@ const
   // raw 1.2.840.113554.1.2.1.2 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
   //  generic(1) machine_uid_name(2)}
-  gss_nt_machine_name: array [0..9] of byte = (
+  gss_nt_machine_name: array[0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 2);
   gss_nt_machine_name_desc: gss_OID_desc = (
     length: SizeOf(gss_nt_machine_name);
@@ -159,7 +159,7 @@ const
   // raw 1.2.840.113554.1.2.1.3 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
   //  generic(1) string_uid_name(3)}
-  gss_nt_stringuidname_name: array [0..9] of byte = (
+  gss_nt_stringuidname_name: array[0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 3);
   gss_nt_stringuidname_name_desc: gss_OID_desc = (
     length: SizeOf(gss_nt_stringuidname_name);
@@ -169,7 +169,7 @@ const
   // raw 1.2.840.113554.1.2.1.2 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
   //  generic(1) service_name(4)}
-  gss_nt_hostbased_name: array [0..9] of byte = (
+  gss_nt_hostbased_name: array[0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 4);
   gss_nt_hostbased_name_desc: gss_OID_desc = (
     length: SizeOf(gss_nt_hostbased_name);
@@ -179,7 +179,7 @@ const
   // raw 1.2.840.113554.1.2.2.1 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
   //  krb5(2) krb5-name(1)}
-  gss_nt_krb5_name: array [0..9] of byte = (
+  gss_nt_krb5_name: array[0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
   gss_nt_krb5_name_desc: gss_OID_desc = (
     length: SizeOf(gss_nt_krb5_name);
@@ -188,7 +188,7 @@ const
 
   // raw 1.2.840.113554.1.2.2 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) krb5(2)}
-  gss_mech_krb5: array [0..8] of byte = (
+  gss_mech_krb5: array[0..8] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 2);
   gss_mech_krb5_desc: gss_OID_desc = (
     length: SizeOf(gss_mech_krb5);
@@ -197,7 +197,7 @@ const
 
   // raw 1.3.6.1.5.5.2 OID for SPNEGO Simple and Protected Negotiation Mechanism
   // {iso(1) org(3) dod(6) internet(1) security(5) mechanisms(5) snego(2)}
-  gss_mech_spnego: array [0..5] of byte = (
+  gss_mech_spnego: array[0..5] of byte = (
     43, 6, 1, 5, 5, 2);
   gss_mech_spnego_desc: gss_OID_desc = (
     length: SizeOf(gss_mech_spnego);
@@ -207,7 +207,7 @@ const
   // raw 1.3.6.1.4.1.311.2.2.10 OID for GS2-NTLM (NTLM) Mechanism
   // {iso(1) identified-organization(3) dod(6) internet(1) private(4)
   //  enterprise(1) 311 2 2 10}
-  gss_mech_ntlm: array [0..9] of byte = (
+  gss_mech_ntlm: array[0..9] of byte = (
     $2b, $06, $01, $04, $01, $82, $37, $02, $02, $0a);
   gss_mech_ntlm_desc: gss_OID_desc = (
     length: SizeOf(gss_mech_ntlm);

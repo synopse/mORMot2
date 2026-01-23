@@ -8870,7 +8870,7 @@ type
   PWHIRLPOOL_CTX = ^WHIRLPOOL_CTX;
 
   aes_key_st = record
-    rd_key: array [0..59] of cardinal;
+    rd_key: array[0..59] of cardinal;
     rounds: integer;
   end;
 
@@ -9234,14 +9234,14 @@ type
   PPASYNC_WAIT_CTX = ^PASYNC_WAIT_CTX;
 
   bf_key_st = record
-    P: array [0..17] of cardinal;
-    S: array [0..1023] of cardinal;
+    P: array[0..17] of cardinal;
+    S: array[0..1023] of cardinal;
   end;
 
   BF_KEY = bf_key_st;
   PBF_KEY = ^BF_KEY;
 
-  KEY_TABLE_TYPE = array [0..67] of cardinal;
+  KEY_TABLE_TYPE = array[0..67] of cardinal;
 
   _anonymous_type_2 = record
     case integer of
@@ -9285,7 +9285,7 @@ type
 
   evp_cipher_info_st = record
     cipher: PEVP_CIPHER;
-    iv: array [0..15] of Byte;
+    iv: array[0..15] of Byte;
   end;
 
   EVP_CIPHER_INFO = evp_cipher_info_st;
@@ -9320,7 +9320,7 @@ type
     h4: cardinal;
     Nl: cardinal;
     Nh: cardinal;
-    data: array [0..15] of cardinal;
+    data: array[0..15] of cardinal;
     num: cardinal;
   end;
 
@@ -9328,10 +9328,10 @@ type
   PSHA_CTX = ^SHA_CTX;
 
   SHA256state_st = record
-    h: array [0..7] of cardinal;
+    h: array[0..7] of cardinal;
     Nl: cardinal;
     Nh: cardinal;
-    data: array [0..15] of cardinal;
+    data: array[0..15] of cardinal;
     num: cardinal;
     md_len: cardinal;
   end;
@@ -9341,13 +9341,13 @@ type
 
   _anonymous_type_3 = record
     case integer of
-      0: (d: array [0..15] of Qword);
-      1: (p: array [0..127] of Byte);
+      0: (d: array[0..15] of Qword);
+      1: (p: array[0..127] of Byte);
   end;
   P_anonymous_type_3 = ^_anonymous_type_3;
 
   SHA512state_st = record
-    h: array [0..7] of Qword;
+    h: array[0..7] of Qword;
     Nl: Qword;
     Nh: Qword;
     u: _anonymous_type_3;
@@ -10360,20 +10360,20 @@ type
 
   DES_LONG = cardinal;
   PDES_LONG = ^DES_LONG;
-  DES_cblock = array [0..7] of Byte;
+  DES_cblock = array[0..7] of Byte;
   PDES_cblock = ^DES_cblock;
-  const_DES_cblock = array [0..7] of Byte;
+  const_DES_cblock = array[0..7] of Byte;
   Pconst_DES_cblock = ^const_DES_cblock;
 
   _anonymous_type_12 = record
     case integer of
       0: (cblock: DES_cblock);
-      1: (deslong: array [0..1] of DES_LONG);
+      1: (deslong: array[0..1] of DES_LONG);
   end;
   P_anonymous_type_12 = ^_anonymous_type_12;
 
   DES_ks = record
-    ks: array [0..15] of _anonymous_type_12;
+    ks: array[0..15] of _anonymous_type_12;
   end;
 
   DES_key_schedule = DES_ks;
@@ -10410,12 +10410,12 @@ type
   PUI_string_types = ^UI_string_types;
 
   err_state_st = record
-    err_flags: array [0..15] of integer;
-    err_buffer: array [0..15] of cardinal;
-    err_data: array [0..15] of PUtf8Char;
-    err_data_flags: array [0..15] of integer;
-    err_file: array [0..15] of PUtf8Char;
-    err_line: array [0..15] of integer;
+    err_flags: array[0..15] of integer;
+    err_buffer: array[0..15] of cardinal;
+    err_data: array[0..15] of PUtf8Char;
+    err_data_flags: array[0..15] of integer;
+    err_file: array[0..15] of PUtf8Char;
+    err_line: array[0..15] of integer;
     top: integer;
     bottom: integer;
   end;
@@ -10485,7 +10485,7 @@ type
   IDEA_INT = cardinal;
 
   idea_key_st = record
-    data: array [0..8] of array [0..5] of IDEA_INT;
+    data: array[0..8] of array[0..5] of IDEA_INT;
   end;
 
   IDEA_KEY_SCHEDULE = idea_key_st;
@@ -10498,7 +10498,7 @@ type
     D: cardinal;
     Nl: cardinal;
     Nh: cardinal;
-    data: array [0..15] of cardinal;
+    data: array[0..15] of cardinal;
     num: cardinal;
   end;
 
@@ -10512,7 +10512,7 @@ type
     D: cardinal;
     Nl: cardinal;
     Nh: cardinal;
-    data: array [0..15] of cardinal;
+    data: array[0..15] of cardinal;
     num: cardinal;
   end;
 
@@ -10521,7 +10521,7 @@ type
 
   mdc2_ctx_st = record
     num: cardinal;
-    data: array [0..7] of Byte;
+    data: array[0..7] of Byte;
     h: DES_cblock;
     hh: DES_cblock;
     pad_type: integer;
@@ -10547,7 +10547,7 @@ type
   PArray = pointer;
 
   ocb128_f = procedure(_in: PByte; _out: PByte; blocks: PtrUInt; key: pointer;
-    start_block_num: PtrUInt; offset_i: PByte; L_: PArray {Parray [0..15] of Byte};
+    start_block_num: PtrUInt; offset_i: PByte; L_: PArray {Parray[0..15] of Byte};
     checksum: PByte); cdecl;
 
   POCSP_CERTID = pointer;
@@ -10614,7 +10614,7 @@ type
   RC2_INT = cardinal;
 
   rc2_key_st = record
-    data: array [0..63] of RC2_INT;
+    data: array[0..63] of RC2_INT;
   end;
 
   RC2_KEY = rc2_key_st;
@@ -10623,7 +10623,7 @@ type
   rc4_key_st = record
     x: cardinal;
     y: cardinal;
-    data: array [0..255] of cardinal;
+    data: array[0..255] of cardinal;
   end;
 
   RC4_KEY = rc4_key_st;
@@ -10637,7 +10637,7 @@ type
     E: cardinal;
     Nl: cardinal;
     Nh: cardinal;
-    data: array [0..15] of cardinal;
+    data: array[0..15] of cardinal;
     num: cardinal;
   end;
 
@@ -10859,16 +10859,16 @@ type
 
   _anonymous_type_14 = record
     case integer of
-      0: (c: array [0..63] of Byte);
-      1: (q: array [0..7] of Double);
+      0: (c: array[0..63] of Byte);
+      1: (q: array[0..7] of Double);
   end;
   P_anonymous_type_14 = ^_anonymous_type_14;
 
   WHIRLPOOL_CTX = record
     H: _anonymous_type_14;
-    data: array [0..63] of Byte;
+    data: array[0..63] of Byte;
     bitoff: cardinal;
-    bitlen: array [0..3] of PtrUInt;
+    bitlen: array[0..3] of PtrUInt;
   end;
 
   PPasn1_ps_func = pointer;

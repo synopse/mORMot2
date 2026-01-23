@@ -2789,7 +2789,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fSafe: TRWLock; // thread-safe and not blocking concurrent IsLocked()
-    fID: TIDDynArray;        // array [0..Count-1] of locked TID
+    fID: TIDDynArray;        // array[0..Count-1] of locked TID
     fTix: TCardinalDynArray; // GetTickSec values at the Lock() time
     fCount: PtrInt;
     fLastPurge: integer;
