@@ -66,6 +66,9 @@ var
   IP4local: RawUtf8;
 
 type
+  /// safe FPC alias in objpas mode without Windows units re-definition
+  PNetErrorInt = PInteger;
+
   /// the error codes returned by TNetSocket wrapper
   // - convenient cross-platform error handling is not possible, mostly because
   // Windows doesn't behave exactly like other targets: this enumeration
@@ -93,13 +96,13 @@ type
   public
     /// reintroduced constructor with TNetResult information
     constructor Create(msg: string; obj: TObject; const args: array of const;
-      error: TNetResult = nrOK; errnumber: system.PInteger = nil); reintroduce;
+      error: TNetResult = nrOK; errnumber: PNetErrorInt = nil); reintroduce;
     /// reintroduced constructor with NetLastError call
     constructor CreateLastError(const msg: string; const args: array of const;
       error: TNetResult = nrOk);
     /// raise ENetSock if res is not nrOK or nrRetry
     class procedure Check(res: TNetResult; const context: ShortString;
-      errnumber: system.PInteger = nil);
+      errnumber: PNetErrorInt = nil);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: ShortString;
       ForceRaise: boolean = false; AnotherNonFatal: integer = 0);
@@ -320,10 +323,10 @@ type
     function MakeBlocking: TNetResult;
     /// low-level sending of some data via this socket
     function Send(Buf: pointer; var len: integer;
-      rawError: system.PInteger = nil): TNetResult;
+      rawError: PNetErrorInt = nil): TNetResult;
     /// low-level receiving of some data from this socket
     function Recv(Buf: pointer; var len: integer;
-      rawError: system.PInteger = nil): TNetResult;
+      rawError: PNetErrorInt = nil): TNetResult;
     /// low-level UDP sending to an address of some data
     function SendTo(Buf: pointer; len: integer; const addr: TNetAddr): TNetResult;
     /// low-level UDP receiving from an address of some data
@@ -332,7 +335,7 @@ type
     // - using poll() on POSIX (as required), and select() on Windows
     // - ms < 0 means an infinite timeout (blocking until events happen)
     function WaitFor(ms: integer; scope: TNetEvents;
-      loerr: system.PInteger = nil): TNetEvents;
+      loerr: PNetErrorInt = nil): TNetEvents;
     /// retrieve how many bytes are actually pending in the receiving queue
     function RecvPending(out pending: integer): TNetResult;
     /// return how many pending bytes are in the receiving queue
@@ -353,7 +356,7 @@ type
     // - i.e. check if it is likely to be accept Send() and Recv() calls
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
     // - set nowait=true to avoid WaitFor() and just call Recv(MSG_PEEK)
-    function Available(loerr: system.PInteger = nil; nowait: boolean = false): boolean;
+    function Available(loerr: PNetErrorInt = nil; nowait: boolean = false): boolean;
     /// call shutdown() on this socket - may be used to simulate a disconnection
     procedure RawShutdown;
     /// finalize a socket, calling Close after shutdown() if needed
@@ -399,7 +402,7 @@ function RawSocketErrNo: integer; {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// internal low-level function retrieving the latest socket error information
 function NetLastError(AnotherNonFatal: integer = NO_ERROR;
-  Error: system.PInteger = nil): TNetResult;
+  Error: PNetErrorInt = nil): TNetResult;
 
 /// internal low-level function retrieving the latest socket error message
 function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
@@ -1872,7 +1875,7 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     procedure DoRaise(const msg: string; const args: array of const;
-      error: TNetResult = nrOK; errnumber: system.PInteger = nil;
+      error: TNetResult = nrOK; errnumber: PNetErrorInt = nil;
       exc: ENetSockClass = nil); overload;
     procedure DoRaise(const msg: string); overload;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
@@ -2065,7 +2068,7 @@ type
     // - warning: on Windows, may wait for the next system timer interrupt, so
     // actual wait may be a less than TimeOutMS if < 16 (select bug/feature)
     function SockReceivePending(TimeOutMS: integer;
-      loerr: system.PInteger = nil): TCrtSocketPending;
+      loerr: PNetErrorInt = nil): TCrtSocketPending;
     /// return how many pending bytes are in the receiving socket or INetTls queue
     // - returns 0 if no data is available, or if the connection is broken: call
     // SockReceivePending() to check for the actual state of the connection
@@ -2073,7 +2076,7 @@ type
     /// returns the socket input stream as a string
     // - returns up to 64KB from the OS or TLS buffers within TimeOut
     function SockReceiveString(NetResult: PNetResult = nil;
-      RawError: system.PInteger = nil): RawByteString;
+      RawError: PNetErrorInt = nil): RawByteString;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^.Buffer
@@ -2085,7 +2088,7 @@ type
     // this case, Close method won't be called
     function TrySockRecv(Buffer: pointer; var Length: integer;
       StopBeforeLength: boolean = false; NetResult: PNetResult = nil;
-      RawError: system.PInteger = nil): boolean;
+      RawError: PNetErrorInt = nil): boolean;
     /// faster readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
     // - just wrap SockInReadLn() with a 16KB buffer (which is enough e.g. with HTTP)
     // - use TimeOut milliseconds wait for incoming data
@@ -2113,7 +2116,7 @@ type
     // (if not nil) would contain the actual socket error
     // - bypass the SockSend() buffers
     function TrySndLow(P: pointer; Len: integer; NetResult: PNetResult = nil;
-      RawError: system.PInteger = nil): boolean;
+      RawError: PNetErrorInt = nil): boolean;
     /// direct accept an new incoming connection on a bound socket
     // - instance should have been setup as a server via a previous Bind() call
     // - returns nil on error or a ResultClass instance on success
@@ -2375,7 +2378,7 @@ begin
   {$endif OSWINDOWS}
 end;
 
-function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
+function NetLastError(AnotherNonFatal: integer; Error: PNetErrorInt): TNetResult;
 var
   err: integer;
 begin
@@ -2424,7 +2427,7 @@ end;
 { ENetSock }
 
 constructor ENetSock.Create(msg: string; obj: TObject;
-  const args: array of const; error: TNetResult; errnumber: system.PInteger);
+  const args: array of const; error: TNetResult; errnumber: PNetErrorInt);
 begin
   if obj <> nil then
     msg := format('%s.%s', [ClassNameShort(obj)^, msg]);
@@ -2455,7 +2458,7 @@ begin
 end;
 
 class procedure ENetSock.Check(res: TNetResult; const context: ShortString;
-  errnumber: system.PInteger);
+  errnumber: PNetErrorInt);
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
@@ -3330,7 +3333,7 @@ begin
 end;
 
 function TNetSocketWrap.Send(Buf: pointer; var len: integer;
-  rawError: system.PInteger): TNetResult;
+  rawError: PNetErrorInt): TNetResult;
 begin
   if @self = nil then
     result := nrNoSocket
@@ -3347,7 +3350,7 @@ begin
 end;
 
 function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
-  rawError: system.PInteger): TNetResult;
+  rawError: PNetErrorInt): TNetResult;
 begin
   if @self = nil then
     result := nrNoSocket
@@ -3492,7 +3495,7 @@ begin
   result := nrClosed;
 end;
 
-function TNetSocketWrap.Available(loerr: system.PInteger; nowait: boolean): boolean;
+function TNetSocketWrap.Available(loerr: PNetErrorInt; nowait: boolean): boolean;
 var
   events: TNetEvents;
   dummy: integer;
@@ -5846,7 +5849,7 @@ begin
 end;
 
 procedure TCrtSocket.DoRaise(const msg: string; const args: array of const;
-  error: TNetResult; errnumber: system.PInteger; exc: ENetSockClass);
+  error: TNetResult; errnumber: PNetErrorInt; exc: ENetSockClass);
 begin
   if exc = nil then
     exc := ENetSock;
@@ -6880,7 +6883,7 @@ begin
 end;
 
 function TCrtSocket.SockReceivePending(TimeOutMS: integer;
-  loerr: system.PInteger): TCrtSocketPending;
+  loerr: PNetErrorInt): TCrtSocketPending;
 var
   events: TNetEvents;
 begin
@@ -6924,7 +6927,7 @@ begin
 end;
 
 function TCrtSocket.SockReceiveString(
-  NetResult: PNetResult; RawError: system.PInteger): RawByteString;
+  NetResult: PNetResult; RawError: PNetErrorInt): RawByteString;
 var
   read: integer;
   tmp: TBuffer64K; // big enough for INetTls or the socket API
@@ -6938,7 +6941,7 @@ begin
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
-  StopBeforeLength: boolean; NetResult: PNetResult; RawError: system.PInteger): boolean;
+  StopBeforeLength: boolean; NetResult: PNetResult; RawError: PNetErrorInt): boolean;
 var
   expected, read, pending: integer;
   events: TNetEvents;
@@ -7056,7 +7059,7 @@ begin
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer; NetResult: PNetResult;
-  RawError: system.PInteger): boolean;
+  RawError: PNetErrorInt): boolean;
 var
   sent: integer;
   events: TNetEvents;

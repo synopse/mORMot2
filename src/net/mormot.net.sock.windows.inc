@@ -681,7 +681,7 @@ begin
 end;
 
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
-  loerr: system.PInteger): TNetEvents;
+  loerr: PNetErrorInt): TNetEvents;
 var
   sock: TSocket;
   rd, wr, er: record

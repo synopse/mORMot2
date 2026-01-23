@@ -594,7 +594,7 @@ begin
 end;
 
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
-  loerr: system.PInteger): TNetEvents;
+  loerr: PNetErrorInt): TNetEvents;
 var
   res: integer;
   p: TPollFD; // select() limits p.fd<FD_SETSIZE=1024 on POSIX -> use poll()
