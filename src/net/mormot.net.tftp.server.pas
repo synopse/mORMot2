@@ -53,7 +53,9 @@ type
   // - ttoAllowSubFolders will allow RRW/WRQ to access nested files in
   // TTftpServerThread.FileFolder sub-directories
   // - ttoLowLevelLog will log each incoming/outgoing TFTP/UDP frames
-  // - ttoDropPriviledges on POSIX would impersonate the process as 'nobody'
+  // - ttoDropPriviledges on POSIX would impersonate the process as 'nobody' -
+  // but note that it is incompatible with the AutoRebind := true feature with
+  // any port < 1024 which requires root priviledged for socket binding
   // - ttoChangeRoot on POSIX would make the FileFolder the root folder
   // - ttoCaseInsensitiveFileName on POSIX would make file names case-insensitive
   // as they are on Windows (using an in-memory cache, refreshed every minute)
@@ -361,7 +363,10 @@ begin
   begin
     ok := DropPriviledges;
     if not ok then
-      exclude(fOptions, ttoDropPriviledges);
+      exclude(fOptions, ttoDropPriviledges)
+    else if fAutoRebind and
+            (GetInteger(pointer(BindPort)) < 1024) then
+      fAutoRebind := false; // only root can bind low ports
     LogClass.Add.Log(LOG_INFOWARNING[not ok],
       'Create: DropPriviledges(nobody)=%', [ok], self);
   end;
