@@ -619,7 +619,7 @@ begin
     res := RawSocketErrNo;
     if loerr <> nil then
       loerr^ := res;
-    if res = ESysEAGAIN then
+    if res in [ESysEAGAIN, ESysEINTR] then
       // timeout, not a true error
       result := [];
     exit;
