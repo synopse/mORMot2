@@ -71,7 +71,7 @@ type
     fSockAddr: TNetAddr;
     fFrame: PUdpFrame;
     fReceived, fTimeout: integer;
-    fBound, fAutoRebind: boolean;
+    fInitialBound, fAutoRebind: boolean;
     fBindAddress, fBindPort: RawUtf8;
     function DoBind: TNetResult; virtual;
     function GetIPWithPort: RawUtf8;
@@ -88,6 +88,9 @@ type
       TimeoutMS: integer); reintroduce;
     /// finalize the processing thread
     destructor Destroy; override;
+    /// low-level access to the bound UDP socket (for debugging purposes)
+    property Sock: TNetSocket
+      read fSock;
   published
     property IPWithPort: RawUtf8
       read GetIPWithPort;
@@ -2584,12 +2587,13 @@ end;
 
 function TUdpServerThread.DoBind: TNetResult;
 begin
-  fBound := false;
+  fInitialBound := false;
   fLogClass.Add.Log(sllDebug, 'DoBind %:%', [fBindAddress, fBindPort], self);
   result := NewSocket(fBindAddress, fBindPort, nlUdp, {bind=}true,
     fTimeout, fTimeout, fTimeout, 10, fSock, @fSockAddr);
-  fLogClass.Add.Log(sllDebug, 'DoBind=%', [ToText(result)^], self);
-  fBound := true; // notify DoExecute() ASAP that fSock was set (or not)
+  if result <> nrOK then
+    fLogClass.Add.Log(sllWarning, 'DoBind=%', [NetLastErrorMsg], self);
+  fInitialBound := true; // notify DoExecute() ASAP that fSock was set (or not)
 end;
 
 constructor TUdpServerThread.Create(LogClass: TSynLogClass;
@@ -2609,17 +2613,16 @@ begin
     [fBindAddress, fBindPort, ident], self);
   inherited Create({suspended=}false, nil, nil, LogClass, ident);
   res := DoBind;
-  if res <> nrOk then
-  begin
-    // Windows seems to require this to avoid breaking the process on error
-    {$ifdef OSWINDOWS}
-    Resume{%H-}; // force Execute/DoExecute launch
-    SleepHiRes(10);
-    {$endif OSWINDOWS}
-    // on binding error, raise exception before the thread is actually created
-    raise EUdpServer.Create('Create binding error on %s:%s', self,
-      [BindAddress, BindPort], res);
-  end;
+  if res = nrOk then
+    exit;
+  // Windows seems to require this to avoid breaking the process on error
+  {$ifdef OSWINDOWS}
+  Resume{%H-}; // force Execute/DoExecute launch
+  SleepHiRes(10);
+  {$endif OSWINDOWS}
+  // on binding error, raise exception before the thread is actually created
+  raise EUdpServer.Create('Create binding error on %s:%s', self,
+    [BindAddress, BindPort], res);
 end;
 
 destructor TUdpServerThread.Destroy;
@@ -2677,8 +2680,8 @@ var
 begin
   lasttix := 0;
   // main server process loop
-  if not fBound then
-    SleepHiRes(100, fBound, {fBound value done=}true);
+  if not fInitialBound then
+    SleepHiRes(100, fInitialBound, {Bound value done=}true);
   if fSock = nil then // paranoid check
     FormatUtf8('%.DoExecute: % Bind failed', [self, fProcessName], fExecuteMessage)
   else
@@ -2722,18 +2725,16 @@ begin
         end
         else if res <> nrRetry then
         begin
-          fLogClass.Add.Log(sllDebug, 'DoExecute: RecvPending=% %',
-            [_NR[res], NetLastErrorMsg], self);
+          fLogClass.Add.Log(sllDebug, 'DoExecute: RecvPending=%',
+            [NetLastErrorMsg], self);
           break;
         end;
       end
       else if neError in ev then
       begin
-        res := NetLastError;
-        fLogClass.Add.Log(sllWarning, 'DoExecute: WaitFor=%', [_NR[res]], self);
-        if res <> nrRetry then
-          break;
-        SleepHiRes(100); // don't burn too much CPU
+        fLogClass.Add.Log(sllWarning, 'DoExecute: WaitFor=%',
+          [NetLastErrorMsg], self);
+        break;
       end;
       if Terminated then
         break;
