@@ -3997,10 +3997,10 @@ function TSocketIOMessage.AddBinaryAttachment(
   PayLoad: pointer; PayLoadLen: PtrInt): boolean;
 begin
   result := false;
-  if length(fBase64Attachment) >= fBinaryAttachment then
+  if length(fBase64Attachment) >= PtrInt(fBinaryAttachment) then
     exit;
   AddRawUtf8(fBase64Attachment, BinToBase64(PayLoad, PayLoadLen));
-  result := length(fBase64Attachment) = fBinaryAttachment; // true = got'm all
+  result := length(fBase64Attachment) = PtrInt(fBinaryAttachment); // got'm all
 end;
 
 procedure TSocketIOMessage.RaiseESockIO(const ctx: RawUtf8);
