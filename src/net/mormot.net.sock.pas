@@ -2343,6 +2343,7 @@ begin
     WSAEINPROGRESS,
     WSATRY_AGAIN:
       result := nrRetry;
+    WSAEADDRNOTAVAIL,
     WSAEINVAL:
       result := nrInvalidParameter;
     WSAEMFILE:
@@ -3064,7 +3065,7 @@ begin
   sock := addr.NewSocket(layer);
   if sock = nil then
   begin
-    result := NetLastError(WSAEADDRNOTAVAIL);
+    result := NetLastError;
     if fromcache then
     begin
       // force call the DNS resolver again, perhaps load-balacing is needed
@@ -3096,12 +3097,12 @@ begin
       if (bind(sock.Socket, @addr, addr.Size) <> NO_ERROR) or
          ((layer <> nlUdp) and
           (listen(sock.Socket, DefaultListenBacklog) <> NO_ERROR)) then
-        result := NetLastError(WSAEADDRNOTAVAIL);
+        result := NetLastError;
     end
     else
       // open blocking Client connection (use system-defined timeout)
       if connect(sock.Socket, @addr, addr.Size) <> NO_ERROR then
-        result := NetLastError(WSAEADDRNOTAVAIL);
+        result := NetLastError;
     if (result = nrOK) or
        (retry <= 0) then
       break;
