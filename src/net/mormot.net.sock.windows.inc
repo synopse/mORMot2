@@ -85,7 +85,7 @@ type
   in_addr = packed record
     case integer of
       0: (S_bytes: packed array [0..3] of byte);
-      1: (S_addr: cardinal);
+      1: (S_addr: TNetIP4);
   end;
 
   PSockAddrIn = ^sockaddr_in;
@@ -570,7 +570,7 @@ end; // some obscure Windows docs seem to state that zeroing is expected
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
-  p: cardinal;
+  p: TNetPort;
 begin
   Clear;
   result := nrNotImplemented;
@@ -933,7 +933,7 @@ type
   end;
 
   IP_ADDRESS_STRING = array [0..15] of AnsiChar;
-  IP_ADDR_IP4 = cardinal;
+  IP_ADDR_IP4 = TNetIP4;
 
   IP_ADDR_STRING = packed record
     IpAddress: IP_ADDRESS_STRING;

@@ -680,7 +680,7 @@ var
   s: RawUtf8;
   p: PUtf8Char;
   l: PtrInt;
-  ip: cardinal;
+  ip: TNetIP4;
 begin
   // see https://www.kernel.org/doc/Documentation/ABI/testing/fn-class-net
   fn := '/sys/class/net/';

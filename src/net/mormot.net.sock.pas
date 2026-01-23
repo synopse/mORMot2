@@ -134,9 +134,14 @@ type
     nfIP6,
     nfUnix);
 
-  /// the IP port to connect/bind to
+  /// store the 4 bytes of a typical IP address as 32-bit unsigned integer
+  TNetIP4 = cardinal;
+  /// store the 16-bit IP port to connect/bind a socket
   TNetPort = cardinal;
-
+  /// store the 6 bytes of a typical ethernet MAC address binary
+  TNetMac = array[0..5] of byte;
+  /// pointer to an ethernet MAC address binary buffer
+  PNetMac = ^TNetMac;
 
 const
   NO_ERROR = 0;
@@ -184,7 +189,7 @@ type
     function SetFromIP4(const address: RawUtf8; noNewSocketIP4Lookup: boolean): boolean;
     /// initialize this address from a standard IPv4
     // - set a given 32-bit IPv4 address and its network port (0..65535)
-    function SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
+    function SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
     /// returns the network family of this address
     function Family: TNetFamily;
     /// compare two IPv4/IPv6  network addresses
@@ -199,7 +204,7 @@ type
     /// convert this address into its 32-bit IPv4 value, 0 on IPv6/nlUnix
     // - may return cLocalhost32 for 127.0.0.1
     // - returns 0 (i.e. 0.0.0.0) for AF_INET6 or AF_UNIX
-    function IP4: cardinal;
+    function IP4: TNetIP4;
       {$ifdef FPC}inline;{$endif}
     /// convert an IPv4 value into text, or '' for AF_INET6 or AF_UNIX
     function IP4Short: TShort16;
@@ -455,7 +460,7 @@ var
   // - this level of DNS resolution has a simple in-memory cache of 32 seconds
   // - NewSocketAddressCache from mormot.net.client will implement a more
   // tunable cache, for both IPv4 and IPv6 resolutions
-  NewSocketIP4Lookup: function(const HostName: RawUtf8; out IP4: cardinal): boolean;
+  NewSocketIP4Lookup: function(const HostName: RawUtf8; out IP4: TNetIP4): boolean;
 
   /// the DNS resolver address(es) to be used by NewSocketIP4Lookup() callback
   // - default '' would call GetDnsAddresses to ask the server known by the OS
@@ -537,27 +542,27 @@ type
 
 /// detect IANA private IPv4 address space from its 32-bit raw value
 // - i.e. 10.x.x.x, 172.16-31.x.x and 192.168.x.x addresses
-function IsPublicIP(ip4: cardinal): boolean;
+function IsPublicIP(ip4: TNetIP4): boolean;
 
 /// detect APIPA private IPv4 address space from its 32-bit raw value
 // - Automatic Private IP Addressing (APIPA) is used by Windows clients to
 // setup some IP in case of local DHCP failure
 // - it covers the 169.254.0.1 - 169.254.254.255 range
 // - see tiaIPv4Dhcp, tiaIPv4DhcpPublic and tiaIPv4DhcpPrivate filters
-function IsApipaIP(ip4: cardinal): boolean;
+function IsApipaIP(ip4: TNetIP4): boolean;
 
 /// detect IANA private IPv4 masks as 32-bit raw values
 // - i.e. 10.x.x.x, 172.16-31.x.x and 192.168.x.x addresses into
 // 255.0.0.0, 255.255.0.0, 255.255.255.0 or 255.255.255.255
-function IP4Mask(ip4: cardinal): cardinal;
+function IP4Mask(ip4: TNetIP4): TNetIP4;
 
 /// compute a broadcast address from a IPv4 current address and its known mask
 // - e.g. ip4=172.16.144.160 and mask4=255.255.255.0 returns 172.16.144.255
-function IP4Broadcast(ip4, mask4: cardinal): cardinal;
+function IP4Broadcast(ip4, mask4: TNetIP4): TNetIP4;
 
 /// compute the prefix size of a IPv4 prefix from a 32-bit network mask
 // - e.g. returns 8 for 255.0.0.0
-function IP4Prefix(netmask4: cardinal): integer; overload;
+function IP4Prefix(netmask4: TNetIP4): integer; overload;
 
 /// compute the prefix size of a IPv4 prefix from a text network mask
 // - e.g. IP4Prefix('255.255.255.0') returns 24
@@ -565,15 +570,15 @@ function IP4Prefix(const netmask4: RawUtf8): integer; overload;
 
 /// reverse conversion of IP4Prefix() into a 32-bit network mask
 // - e.g. IP4Netmask(24) returns 255.255.255.0
-function IP4Netmask(prefix: integer): cardinal; overload;
+function IP4Netmask(prefix: integer): TNetIP4; overload;
 
 /// reverse conversion of IP4Prefix() into a 32-bit network mask
-function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
+function IP4Netmask(prefix: integer; out mask: TNetIP4): boolean; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// compute a subnet/CIDR value from a 32-bit IPv4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
-function IP4Subnet(ip4, netmask4: cardinal): TShort23; overload;
+function IP4Subnet(ip4, netmask4: TNetIP4): TShort23; overload;
 
 /// compute a subnet/CIDR value from an IPv4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
@@ -586,7 +591,7 @@ function IP4Match(const ip4, subnet: RawUtf8): boolean;
 /// filter an IPv4 address to a given TIPAddress kind
 // - return true if the supplied address does match the filter
 // - by design, both 0.0.0.0 and 127.0.0.1 always return false
-function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
+function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
 
 /// convert an IPv4 raw value into a ShortString text
 // - won't use the Operating System network layer API so works on XP too
@@ -793,7 +798,7 @@ function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 // - i.e. use a cache of /etc/hosts or c:\windows\system32\drivers\etc\hosts
 // - returns true and the IPv4 address of the stored host found
 // - if the file is modified on disk, the internal cache will be flushed
-function GetKnownHost(const HostName: RawUtf8; out ip4: cardinal): boolean;
+function GetKnownHost(const HostName: RawUtf8; out ip4: TNetIP4): boolean;
 
 /// append a custom host/ipv4 pair in addition to the OS hosts file
 // - to be appended to GetKnownHost() internal cache
@@ -1676,15 +1681,15 @@ type
   TIp4SubNet = object
   {$endif USERECORDWITHMETHODS}
     /// 32-bit masked IP, e.g. 1.2.3.0 for '1.2.3.4/24'
-    ip: cardinal;
+    ip: TNetIP4;
     /// 32-bit IP mask, e.g. 255.255.255.0 for '1.2.3.4/24'
-    mask: cardinal;
+    mask: TNetIP4;
     /// check and decode the supplied CIDR address text from its format '1.2.3.4/24'
     // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
     // - plain IP address like '1.2.3.4' will be decoded with mask=255.255.255.255
     function From(const subnet: RawUtf8): boolean;
     /// check if an 32-bit IPv4 matches a decoded CIDR sub-network
-    function Match(ip4: cardinal): boolean; overload;
+    function Match(ip4: TNetIP4): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
@@ -1693,7 +1698,7 @@ type
   /// store one TIp4SubNets CIDR mask definition
   TIp4SubNetMask = record
     /// 32-bit IP mask, e.g. 255.255.255.0 for '1.2.3.4/24'
-    Mask: cardinal;
+    Mask: TNetIP4;
     /// how many 32-bit masked IP are actually stored in IP[]
     IPCount: integer;
     /// list of 32-bit masked IPs, e.g. 1.2.3.0 for '1.2.3.4/24'
@@ -1713,7 +1718,7 @@ type
     function Add(const subnet: RawUtf8): boolean; overload;
     /// decode and register the supplied CIDR address as TIp4SubNet ip/mask
     // - by definition, private IP like 192.168.x.x are not added
-    function Add(ip, mask: cardinal): boolean; overload;
+    function Add(ip, mask: TNetIP4): boolean; overload;
     /// decode and add all IP and CIDR listed in a text content
     // - i.e. netsets as IP or CIDR with # or ; comments e.g. as in
     // https://www.spamhaus.org/drop/drop.txt or
@@ -1727,7 +1732,7 @@ type
     function AfterAdd: integer;
     /// check if a 32-bit IPv4 matches a registered CIDR sub-network
     // - reach 16M/s per core with spamhaus or firehol databases
-    function Match(ip4: cardinal): boolean; overload;
+    function Match(ip4: TNetIP4): boolean; overload;
     /// check if a textual IPv4 matches a registered CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
     // remove all registered CIDR sub-networks
@@ -1757,7 +1762,7 @@ const
 // - directly parse TIp4SubNets.SaveToBinary output for conveniency
 // - performance is in pair with TIp4SubNets.Match - so could be an option
 // if you do not need to Add() items at runtime, but only check a fixed list
-function IP4SubNetMatch(P: PCardinalArray; ip4: cardinal): boolean; overload;
+function IP4SubNetMatch(P: PCardinalArray; ip4: TNetIP4): boolean; overload;
 
 /// check if a textual IPv4 matches a registered CIDR sub-network binary buffer
 function IP4SubNetMatch(const bin: RawByteString; const ip4: RawUtf8): boolean; overload;
@@ -2484,11 +2489,11 @@ type
     Count, Capacity: integer;
     IP: TCardinalDynArray;
     function TixDeprecated: boolean;
-    procedure Add(const hostname: RawUtf8; ip4: cardinal);
+    procedure Add(const hostname: RawUtf8; ip4: TNetIP4);
     procedure AddFrom(const other: TNetHostCache);
-    function Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
-    procedure SafeAdd(const hostname: RawUtf8; ip4, deprec: cardinal);
-    function SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
+    function Find(const hostname: RawUtf8; out ip4: TNetIP4): boolean;
+    procedure SafeAdd(const hostname: RawUtf8; ip4: TNetIP4; deprec: cardinal);
+    function SafeFind(const hostname: RawUtf8; out ip4: TNetIP4): boolean;
     procedure SafeFlush(const hostname: RawUtf8);
   end;
 
@@ -2504,7 +2509,7 @@ begin
     Tix := tix32;
 end;
 
-procedure TNetHostCache.Add(const hostname: RawUtf8; ip4: cardinal);
+procedure TNetHostCache.Add(const hostname: RawUtf8; ip4: TNetIP4);
 begin
   if hostname = '' then
     exit;
@@ -2527,7 +2532,7 @@ begin
     Add(other.Host[i], other.IP[i]);
 end;
 
-function TNetHostCache.Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
+function TNetHostCache.Find(const hostname: RawUtf8; out ip4: TNetIP4): boolean;
 var
   i: PtrInt;
 begin
@@ -2542,7 +2547,7 @@ begin
   result := true;
 end;
 
-procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4, deprec: cardinal);
+procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4: TNetIP4; deprec: cardinal);
 begin
   Safe.Lock;
   if deprec <> 0 then
@@ -2555,7 +2560,7 @@ begin
   Safe.UnLock;
 end;
 
-function TNetHostCache.SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
+function TNetHostCache.SafeFind(const hostname: RawUtf8; out ip4: TNetIP4): boolean;
 begin
   result := false;
   if Count = 0 then
@@ -2710,7 +2715,7 @@ begin
   IP(result, localasvoid);
 end;
 
-function TNetAddr.IP4: cardinal;
+function TNetAddr.IP4: TNetIP4;
 var
   ad4: sockaddr absolute Addr;
 begin
@@ -2799,7 +2804,7 @@ begin
     result := nrNotFound;
 end;
 
-function TNetAddr.SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
+function TNetAddr.SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
 var
   ad4: sockaddr absolute Addr;
 begin
@@ -2901,7 +2906,8 @@ end;
 function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLayer;
   out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 var
-  p, ip4: cardinal;
+  p: TNetPort;
+  ip4: TNetIP4;
 begin
   fromcache := false;
   tobecached := false;
@@ -3556,7 +3562,7 @@ end;
 const // should be local for better code generation
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
-function IsPublicIP(ip4: cardinal): boolean;
+function IsPublicIP(ip4: TNetIP4): boolean;
 begin
   result := false;
   case ToByte(ip4) of // ignore IANA private IPv4 address spaces
@@ -3572,13 +3578,13 @@ begin
   result := true;
 end;
 
-function IsApipaIP(ip4: cardinal): boolean;
+function IsApipaIP(ip4: TNetIP4): boolean;
 begin
   result := (ip4 and $ffff = ord(169) + ord(254) shl 8) and
             (ToByte(ip4 shr 16) < 255);
 end;
 
-function IP4Mask(ip4: cardinal): cardinal;
+function IP4Mask(ip4: TNetIP4): TNetIP4;
 begin
   result := $ffffffff;
   case ToByte(ip4) of // detect IANA private IPv4 address spaces
@@ -3593,13 +3599,13 @@ begin
   end;
 end;
 
-function IP4Broadcast(ip4, mask4: cardinal): cardinal;
+function IP4Broadcast(ip4, mask4: TNetIP4): TNetIP4;
 begin
   // e.g. ip4=172.16.144.160 mask4=255.255.255.0
   result := (ip4 and mask4) {=172.16.144.0} or (not mask4); {=172.16.144.255}
 end;
 
-function IP4Netmask(prefix: integer): cardinal;
+function IP4Netmask(prefix: integer): TNetIP4;
 begin
   if cardinal(prefix - 1) < 32 then // needed for 32-bit ARM
     result := bswap32($ffffffff shl (32 - prefix))
@@ -3607,13 +3613,13 @@ begin
     result := 0;
 end;
 
-function IP4Netmask(prefix: integer; out mask: cardinal): boolean;
+function IP4Netmask(prefix: integer; out mask: TNetIP4): boolean;
 begin
   mask := IP4Netmask(prefix);
   result := (mask <> 0);
 end;
 
-function TIp4SubNet.Match(ip4: cardinal): boolean; // defined here for inlining
+function TIp4SubNet.Match(ip4: TNetIP4): boolean; // defined here for inlining
 begin
   // e.g. ip4=172.16.144.160 subip=172.16.144.0 submask=255.255.255.0
   result := (ip4 and mask) = ip;
@@ -3627,7 +3633,7 @@ begin
             sub.Match(ip4);
 end;
 
-function IP4Prefix(netmask4: cardinal): integer;
+function IP4Prefix(netmask4: TNetIP4): integer;
 begin
   result := GetBitsCountPtrInt(netmask4); // may use SSE4.2 or optimized asm
   if IP4Netmask(result) <> netmask4 then
@@ -3636,7 +3642,7 @@ end;
 
 function IP4Prefix(const netmask4: RawUtf8): integer;
 var
-  mask: cardinal;
+  mask: TNetIP4;
 begin
   if NetIsIP4(pointer(netmask4), @mask) then
     result := IP4Prefix(mask)
@@ -3644,7 +3650,7 @@ begin
     result := 0;
 end;
 
-function IP4Subnet(ip4, netmask4: cardinal): TShort23;
+function IP4Subnet(ip4, netmask4: TNetIP4): TShort23;
 var
   w: integer;
 begin
@@ -3660,7 +3666,7 @@ end;
 
 function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8;
 var
-  ip, mask: cardinal;
+  ip, mask: TNetIP4;
 begin
   if NetIsIP4(pointer(ip4), @ip) and
      NetIsIP4(pointer(netmask4), @mask) then
@@ -3669,7 +3675,7 @@ begin
     result := '';
 end;
 
-function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
+function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
 begin
   result := false; // e.g. tiaIPv6 or 0.0.0.0 or 127.0.0.1
   if (ip4 <> $0100007f) and
@@ -4222,7 +4228,7 @@ var
 procedure KnownHostCacheReload;
 var
   p: PUtf8Char;
-  ip4: cardinal;
+  ip4: TNetIP4;
   h: RawUtf8;
 begin
   KnownHostCache.Count := 0;
@@ -4250,7 +4256,7 @@ begin
   end;
 end;
 
-function GetKnownHost(const HostName: RawUtf8; out ip4: cardinal): boolean;
+function GetKnownHost(const HostName: RawUtf8; out ip4: TNetIP4): boolean;
 var
   tixfile: TUnixTime;
 begin
@@ -4280,7 +4286,7 @@ end;
 
 procedure RegisterKnownHost(const HostName, Ip4: RawUtf8);
 var
-  ip32: cardinal;
+  ip32: TNetIP4;
 begin
   if (HostName <> '') and
      NetIsIP4(pointer(ip4), @ip32) then
@@ -5319,7 +5325,7 @@ end;
 function TIp4SubNet.From(const subnet: RawUtf8): boolean;
 var
   ip4, sub4: RawUtf8;
-  ip32, prefix: cardinal; // local temporary ip32 is needed on Delphi XE4 :(
+  ip32, prefix: TNetIP4; // local temporary ip32 is needed on Delphi XE4 :(
 begin
   if SplitFromRight(subnet, '/', ip4, sub4) then // regular '1.2.3.4/sub' mask
   begin
@@ -5339,7 +5345,7 @@ end;
 
 function TIp4SubNet.Match(const ip4: RawUtf8): boolean;
 var
-  ip32: cardinal;
+  ip32: TNetIP4;
 begin
   result := NetIsIP4(pointer(ip4), @ip32) and
             Match(ip32{%H-});
@@ -5348,7 +5354,7 @@ end;
 
 { TIp4SubNets }
 
-function FindIp4SubNetsMask(m: PIp4SubNetMask; mask4: cardinal): PIp4SubNetMask;
+function FindIp4SubNetsMask(m: PIp4SubNetMask; mask4: TNetIP4): PIp4SubNetMask;
 var
   n: integer;
 begin
@@ -5365,13 +5371,13 @@ begin
   result := nil;
 end;
 
-function TIp4SubNets.Add(ip, mask: cardinal): boolean;
+function TIp4SubNets.Add(ip, mask: TNetIP4): boolean;
 var
   p: PIp4SubNetMask;
   n: PtrInt;
 begin
   result := false;
-  if (ip = cardinal(-1)) or  // 255.255.255.255
+  if (ip = TNetIP4(-1)) or  // 255.255.255.255
      not IsPublicIP(ip) then // e.g. 192.168.1.1
     exit;
   p := FindIp4SubNetsMask(pointer(fSubNet), mask);
@@ -5393,7 +5399,7 @@ begin
             Add(sub.ip, sub.mask);
 end;
 
-function TIp4SubNets.Match(ip4: cardinal): boolean;
+function TIp4SubNets.Match(ip4: TNetIP4): boolean;
 var
   p: PIp4SubNetMask;
   n: integer;
@@ -5416,7 +5422,7 @@ end;
 
 function TIp4SubNets.Match(const ip4: RawUtf8): boolean;
 var
-  ip32: cardinal;
+  ip32: TNetIP4;
 begin
   result := NetIsIP4(pointer(ip4), @ip32) and
             Match(ip32{%H-});
@@ -5492,7 +5498,7 @@ end;
 function TIp4SubNets.AddFromText(const text: RawUtf8): integer;
 var
   p: PUtf8Char;
-  ip, mask: cardinal;
+  ip, mask: TNetIP4;
 begin
   result := 0;
   p := pointer(text);
@@ -5505,7 +5511,7 @@ begin
       while p^ in ['0' .. '9', '.', ' '] do
         inc(p);
       if p^ <> '/' then
-        mask := cardinal(-1) // single IP has 255.255.255.255 mask
+        mask := TNetIP4(-1) // single IP has 255.255.255.255 mask
       else
         mask := IP4Netmask(GetCardinal(p + 1)); // CIDR
       if (mask <> 0) and
@@ -5548,7 +5554,7 @@ begin
   result := -1;
 end;
 
-function IP4SubNetMatch(P: PCardinalArray; ip4: cardinal): boolean;
+function IP4SubNetMatch(P: PCardinalArray; ip4: TNetIP4): boolean;
 var
   n: integer;
 begin
@@ -5569,7 +5575,7 @@ end;
 
 function IP4SubNetMatch(const bin: RawByteString; const ip4: RawUtf8): boolean;
 var
-  ip32: cardinal;
+  ip32: TNetIP4;
 begin
   result := (bin <> '') and
             (PCardinal(bin)^ = IP4SUBNET_MAGIC) and

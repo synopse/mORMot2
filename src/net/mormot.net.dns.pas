@@ -899,7 +899,7 @@ begin
   end;
 end;
 
-function _NewSocketIP4Lookup(const HostName: RawUtf8; out IP4: cardinal): boolean;
+function _NewSocketIP4Lookup(const HostName: RawUtf8; out IP4: TNetIP4): boolean;
 var
   ip: RawUtf8;
 begin
