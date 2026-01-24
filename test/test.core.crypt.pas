@@ -4868,8 +4868,8 @@ begin
     begin
       CheckEqual(c.ActiveCount, 0, 'nomem');
       rnd := Random32;
-      if rnd = 0 then
-        continue; // avoid division per zero
+      if (rnd < 1024) then
+        continue; // avoid division per zero or too small number of bits
       b := c.AllocateFrom(rnd);
       CheckEqual(b^.Size, 1);
       CheckEqual(b^.Value[0], rnd);
@@ -5033,7 +5033,8 @@ begin
       CheckEqual(b^.Size, 1);
       Check(not b^.IsZero);
       b.Release;
-      CheckUtf8(s^.Size > 80, '%>80', [s^.Size]); // typical 90 .. 512 bytes
+      CheckUtf8(s^.Size > 80, '%>80 rnd=%',
+        [s^.Size, Int64(rnd)]); // typical 90 .. 512 bytes
       Check(not s^.IsZero);
       s.Release;
       CheckEqual(c.ActiveCount, 0);
