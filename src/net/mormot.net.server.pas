@@ -70,7 +70,7 @@ type
     fSock: TNetSocket;
     fSockAddr: TNetAddr;
     fFrame: PUdpFrame;
-    fReceived, fTimeout: integer;
+    fReceived, fTimeout, fRebindRetry, fRebindCount: integer;
     fInitialBound, fAutoRebind: boolean;
     fBindAddress, fBindPort: RawUtf8;
     function DoBind: TNetResult; virtual;
@@ -98,6 +98,10 @@ type
       read fReceived;
     property AutoRebind: boolean
       read fAutoRebind write fAutoRebind;
+    property RebindRetry: integer
+      read fRebindRetry;
+    property RebindCount: integer
+      read fRebindCount;
   end;
 
 const
@@ -2754,15 +2758,19 @@ begin
     // implement fAutoRebind=true after main fSock error
     // (e.g. transient "ip link set eth0 down/up" or "iptables DROP")
     repeat
-      fLogClass.Add.Log(sllDebug, 'DoExecute: % AutoRebind attempt',
-        [fProcessName], self);
+      inc(fRebindRetry);
+      fLogClass.Add.Log(sllDebug, 'DoExecute: % AutoRebind attempt retry=% rebind=%',
+        [fProcessName, fRebindRetry, fRebindCount], self);
       fSock.Close;
       fSock := nil;
       if SleepOrTerminated(2000) then // wait a little and retry
         break;
       res := DoBind;
       if res = nrOk then
+      begin
+        inc(fRebindCount);
         break; // re-bound = go back to the main WaitFor/RecFrom loop
+      end;
       fLogClass.Add.Log(sllWarning, 'DoExecute: DoBind=% -> sleep and retry',
         [_NR[res]], self);
     until false;
