@@ -45,7 +45,7 @@
     </CompilerOptions>
     <Description Value="mORMot 2 framework LCL Components "/>
     <License Value="MPL, GPL or LGPL"/>
-    <Version Major="2" Release="1"/>
+    <Version Major="2" Minor="4"/>
     <Files Count="4">
       <Item1>
         <Filename Value="../../src/ui/mormot.ui.grid.orm.pas"/>

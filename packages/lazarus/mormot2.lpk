@@ -48,7 +48,7 @@
     </CompilerOptions>
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
-    <Version Major="2" Release="1"/>
+    <Version Major="2" Minor="4"/>
     <Files Count="118">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
