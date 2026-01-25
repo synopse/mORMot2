@@ -2677,7 +2677,7 @@ procedure TUdpServerThread.DoExecute;
 var
   len: integer;
   tix64: Int64;
-  tix, lasttix: cardinal;
+  tix, lasttix, delay: cardinal;
   res: TNetResult;
   ev: TNetEvents;
   remote: TNetAddr;
@@ -2720,7 +2720,7 @@ begin
             if CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0 then // from Destroy
             begin
               inc(fReceived);
-              OnFrameReceived(len, remote); // received from another process
+              OnFrameReceived(len, remote); // new request
             end;
           end
           else
