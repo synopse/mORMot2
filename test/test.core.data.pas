@@ -1769,7 +1769,7 @@ var
         check(TrimU(s) = '"' + name + '"');
         check(GetInteger(JsonObjectByPath(item, 'owner.id')) = owner.id);
         check(GetInteger(JsonObjectByPath(item, 'owner.i*')) = owner.id);
-        check(JsonObjectByPath(item, 'owner.name') = '');
+        check(JsonObjectByPath(item, 'owner.name') = nil);
         check(JsonObjectsByPath(item, 'toto') = '');
         check(JsonObjectsByPath(item, 'toto,titi') = '');
         check(JsonObjectsByPath(item, 'toto,name') = '{"name":"' + name + '"}');
@@ -8700,4 +8700,5 @@ initialization
 finalization
 
 end.
+
 
