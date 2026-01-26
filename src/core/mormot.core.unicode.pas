@@ -886,6 +886,9 @@ const
   BOM_UTF16LE = #$feff;
   /// UTF-16BE BOM WideChar marker, seen only in legacy/niche systems
   BOM_UTF16BE = #$fffe;
+  /// the UTF-8 BOM is hard to put as a string constant on Delphi 2009+
+  BOM_UTF8_CHARS: RawByteString =
+    AnsiChar($ef) + AnsiChar($bb) + AnsiChar($bf);
 
 /// check the file BOM at the beginning of a file buffer
 // - BOM is common only with Microsoft products
