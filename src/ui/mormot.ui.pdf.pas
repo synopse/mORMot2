@@ -7142,8 +7142,8 @@ begin
   {$endif USE_PDFSECURITY}
   if fPdfA <> pdfaNone then
   begin
-    if fPdfA >= pdfa3A then
-    begin // PDF/A-3 is a subtype of 1.7 (ISO 32000-1:2008)
+    if fPdfA >= pdfa2A then
+    begin // PDF/A-2 is a subtype of 1.7 (ISO 32000-1:2008)
       if fFileFormat < pdf17 then
         fFileFormat := pdf17;
     end
