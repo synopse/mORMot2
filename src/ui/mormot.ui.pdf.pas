@@ -1535,9 +1535,14 @@ type
     procedure CreateOptionalContentRadioGroup(
       const ContentGroups: array of TPdfOptionalContentGroup);
     /// create an attached file from its name
+    // - Description is a human readable description of the file content
+    // - MimeType could be '' so it would be guessed from Title and Buffer
     function CreateFileAttachment(const AttachFile: TFileName;
       const Description: string = ''; const MimeType: string = ''): TPdfDictionary;
     /// create an attached file from a buffer and/or a TStream
+    // - Title is typically the file name (without any path)
+    // - Description is a human readable description of the file content
+    // - MimeType could be '' so it would be guessed from Title and Buffer
     function CreateFileAttachmentFrom(const Buffer: RawByteString;
       const Title, Description, MimeType: string; CreationDate, ModDate: TDateTime;
       Stream: TStream = nil; Relationship: TPdfAFRelationship = afrAlternative): TPdfDictionary;
@@ -7931,7 +7936,6 @@ function TPdfDocument.CreateFileAttachment(const AttachFile: TFileName;
 var
   lw, fc: TUnixMSTime;
   fs: TStream;
-  mt: string;
 begin
   result := nil;
   if not FileInfoByName(AttachFile, nil, nil, @lw, @fc) then
@@ -7939,11 +7943,8 @@ begin
   fs := FileStreamSequentialRead(AttachFile);
   if fs <> nil then
     try
-      mt := MimeType;
-      if mt = '' then
-        mt := GetMimeContentType('', AttachFile);
       result := CreateFileAttachmentFrom(
-        '', ExtractFileName(AttachFile), Description, mt,
+        '', ExtractFileName(AttachFile), Description, MimeType,
         UnixMSTimeToDateTimeZ(fc), UnixMSTimeToDateTimeZ(lw), fs);
     finally
       fs.Free;
@@ -7973,8 +7974,8 @@ begin
   str.Attributes.AddItem('Type', 'EmbeddedFile');
   if MimeType <> '' then
     StringToUtf8(MimeType, mime)
-  else if Pos('.', Description) <> 0 then
-    mime := GetMimeContentType(Buffer, Description)
+  else if Pos('.', Title) <> 0 then
+    mime := GetMimeContentType(Buffer, Title)
   else
     mime := GetMimeContentType(Buffer);
   str.Attributes.AddItem('Subtype', mime);
