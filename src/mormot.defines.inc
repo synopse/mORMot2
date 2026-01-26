@@ -150,7 +150,7 @@
     FPC_X64MM
 
   Delphi only:
-    ISDELPHI ISDELPHIxxx WIN32DELPHI WIN64DELPHI DISPINVOKEBYVALUE
+    ISDELPHI ISDELPHIxxx WIN32DELPHI WIN64DELPHI WINARMDELPHI DISPINVOKEBYVALUE
 
 ********************** Conditionals **********************)
 
@@ -566,6 +566,7 @@
     {$ifdef CPUARM64}
       {$define CPUAARCH64}
       {$define CPU64}
+      {$define CPUAARCH64DELPHI}
     {$endif CPUARM64}
     {$ifdef CPUINTEL}
       {$define ASMINTEL}  // either ASMX86 or ASMX64
@@ -676,9 +677,11 @@
     {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
-      {$ifdef CPU64}
-        {$define CPUX64ASM}       // e.g. XE4 SSE asm is buggy :(
-      {$endif CPU64}
+      {$ifdef CPUINTEL}
+        {$ifdef CPU64}
+          {$define CPUX64ASM}       // e.g. XE4 SSE asm is buggy :(
+        {$endif CPU64}
+      {$endif CPUINTEL}
     {$ifend}
     {$if CompilerVersion >= 29.0} // = Delphi XE8
       {$define ISDELPHIXE8}
@@ -707,10 +710,10 @@
     {$ifend}
     {$if CompilerVersion >= 35.0} // = Delphi 11.x Alexandria
       {$define ISDELPHI11}
-      {$ifdef CPU64}
+      {$ifdef CPUX64}
         {.$define ASMX64AVX}      // initial AVX/AVX2/AVX512 support - but broken
         {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
-      {$endif CPU64}
+      {$endif CPUX64}
     {$ifend}
     {$if CompilerVersion >= 36.0} // = Delphi 12 Athens
       {$define ISDELPHI12}
@@ -738,9 +741,14 @@
       {$define DISPINVOKEBYVALUE} // DispInvoke() expects varVariant by value
     {$endif CPUX86}
     {$ifdef CPUX64}
-      {$define WIN64DELPHI}       // Delphi with Win64 asm functions
       {$define ASMX64}            // supports asm with globals
     {$endif CPUX64}
+    {$ifdef CPU64}
+      {$define WIN64DELPHI}       // Delphi with Win64 functions
+    {$endif CPU64}
+    {$ifdef CPUARM64}
+      {$define WINARMDELPHI}
+    {$endif CPUARM64}
   {$else}
   // no optimization outside known Windows platforms (better safe than sorry)
   {$endif OSWINDOWS}
@@ -937,24 +945,31 @@
     {$endif OSDARWIN}
   {$endif CPUARM3264}
 {$else}
+  // Delphi
   {$define LIZARD_EXTERNALONLY}     // no static .obj for Delphi Win32/Win64 yet
-  {$ifdef CPUX86}
-    {$define LIBQUICKJSSTATIC}      // our quickjs.obj seems fine on Win32 :)
-  {$endif CPUX86}
-  // there is a linking bug with Delphi XE4 on Win64
-  {$ifdef CPUX64}
-    {$if (CompilerVersion = 23.0) or
-         (CompilerVersion = 25.0) or
-         (CompilerVersion = 28.0) or
-         (CompilerVersion = 29.0)}  // exactly XE2/XE4/XE7/XE8 are known to GPF
-      // other Win32/Win64 Delphi platforms "should work" (tm) as expected
-      {$define NOSQLITE3STATIC}
-    {$ifend}
-    {$define LIBQUICKJSSTATIC}      // seems fine BUT on Delphi 10.4+ Win64
-    {$if CompilerVersion >= 34.0}    // = Delphi 10.4 and later
-      {$undef LIBQUICKJSSTATIC}
-    {$ifend}
-  {$endif}
+  {$ifdef CPUINTEL}
+    {$ifdef CPUX86}
+      {$define LIBQUICKJSSTATIC}      // our quickjs.obj seems fine on Win32 :)
+    {$endif CPUX86}
+    // there is a linking bug with Delphi XE4 on Win64
+    {$ifdef CPUX64}
+      {$if (CompilerVersion = 23.0) or
+           (CompilerVersion = 25.0) or
+           (CompilerVersion = 28.0) or
+           (CompilerVersion = 29.0)}  // exactly XE2/XE4/XE7/XE8 are known to GPF
+        // other Win32/Win64 Delphi platforms "should work" (tm) as expected
+        {$define NOSQLITE3STATIC}
+      {$ifend}
+      {$define LIBQUICKJSSTATIC}      // seems fine BUT on Delphi 10.4+ Win64
+      {$if CompilerVersion >= 34.0}    // = Delphi 10.4 and later
+        {$undef LIBQUICKJSSTATIC}
+      {$ifend}
+    {$endif CPUX64}
+  {$else}
+    // Delphi for WinArm has no SQlite3/QuickJS static support yet
+    {$define NOSQLITE3STATIC}
+    {$undef LIBQUICKJSSTATIC}
+  {$endif CPUINTEL}
 {$endif FPC}
 
 {$ifdef OSWINDOWS}
