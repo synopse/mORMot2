@@ -7175,6 +7175,7 @@ begin
     cat.AddItem('MarkInfo', TPdfRawText.Create('<</Marked true>>'));
     cat.AddItem('Metadata', fMetaData);
     fStructTree := TPdfDictionary.Create(fXRef);
+    fStructTree.AddItem('Type', 'StructTreeRoot');
     fRoot.Data.AddItem('StructTreeRoot', fStructTree);
     needFileID := true;
   end;
