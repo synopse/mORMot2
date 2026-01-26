@@ -766,6 +766,8 @@ type
     function AddIso8601(DateTime: TDateTime): TPdfWrite;
     /// add an integer value as binary, specifying a storage size in bytes
     function AddIntegerBin(value: integer; bytesize: cardinal): TPdfWrite;
+    /// append all TStream content using CopyFrom()
+    function AddFrom(source: TStream): TPdfWrite;
   public
     /// flush the internal buffer to the destination stream
     procedure Save;
@@ -5003,6 +5005,26 @@ begin
   tmp[L] := ' '; // append space at the end
   MoveFast(tmp[1], B^, L);
   inc(B, L);
+  result := self;
+end;
+
+function TPdfWrite.AddFrom(source: TStream): TPdfWrite;
+begin
+  if Assigned(source) then
+  begin
+    if B <> @fTmp then
+      Save; // flush pending data from buffer
+    if (fDestStreamPosition = 0) and
+       fDestStream.InheritsFrom(TMemoryStream) then
+    begin
+      // optimize reading all content with no temp buffer
+      TMemoryStream(fDestStream).LoadFromStream(source);
+      fDestStreamPosition := TMemoryStream(fDestStream).Size;
+    end
+    else
+      // StreamCopyUntilEnd() = read() + write() seems safer than CopyFrom()
+      inc(fDestStreamPosition, StreamCopyUntilEnd(source, fDestStream));
+  end;
   result := self;
 end;
 
