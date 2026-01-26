@@ -460,7 +460,7 @@ function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
 
 /// go to a buffer-named property of a JSON object
 // - as called by overloaded JsonObjectItem()
-function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
+function JsonObjectItem(P, PropName: PUtf8Char; PropNameLen: PtrInt;
   PropNameFound: PRawUtf8): PUtf8Char; overload;
 
 /// go to a property of a JSON object, by its full path, e.g. 'parent.child'
@@ -4319,7 +4319,7 @@ begin
   result := JsonObjectItem(P, pointer(PropName), length(PropName), PropNameFound);
 end;
 
-function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
+function JsonObjectItem(P, PropName: PUtf8Char; PropNameLen: PtrInt;
   PropNameFound: PRawUtf8): PUtf8Char;
 var
   name: ShortString; // no memory allocation nor P^ modification

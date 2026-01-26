@@ -10375,7 +10375,7 @@ begin
     exit;
   fSafe.WriteLock;
   try
-    fFiles := nil; // force list refresh
+    fFiles := nil; // force list refresh at next Find() calll
   finally
     fSafe.WriteUnLock;
   end;
