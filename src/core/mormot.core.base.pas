@@ -2962,6 +2962,13 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}
 
+{$ifdef ISDELPHI}
+/// redirect to Delphi AtomicIncrement() on non Intel CPU
+function InterlockedIncrement(var I: integer): integer; inline;
+/// redirect to Delphi AtomicDecrement() on non Intel CPU
+function InterlockedDecrement(var I: integer): integer; inline;
+{$endif ISDELPHI}
+
 /// redirect to FPC InterlockedIncrement() or Delphi AtomicIncrement() on non Intel CPU
 procedure LockedInc32(int32: PInteger); inline;
 
@@ -10078,6 +10085,9 @@ end;
 {$ifdef OSWINDOWS} // not defined in the Delphi RTL but in its Windows unit :(
 function GetCurrentThreadId: PtrUInt; stdcall; external 'kernel32';
 function CoCreateGuid(var h: THash128): PtrUInt; stdcall; external 'ole32.dll';
+{$ifndef CPUINTEL} // always available on WinARM
+function GetTickCount64: UInt64; stdcall; external 'kernel32';
+{$endif CPUINTEL}
 
 procedure __Fill256FromOs(out e: THash256Rec);
 begin
@@ -10111,7 +10121,7 @@ begin
   if cfTSC in CpuFeatures then
     e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
   {$else}
-  e.r[2].L := e.r[2].L xor GetTickCount64; // defined in RTL or just above
+  e.r[2].L := e.r[2].L xor GetTickCount64; // defined in FPC RTL or just above
   {$endif CPUINTEL}
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
@@ -10922,7 +10932,17 @@ begin
     b^[i] := {$ifdef FPC}SwapEndian{$else}bswap64{$endif}(a^[i]);
 end;
 
-{$ifdef ISDELPHI}
+{$ifdef ISDELPHI}  // use Delphi intrinsic function
+
+function InterlockedIncrement(var I: integer): integer; // FPC intrinsic naming
+begin
+  result := AtomicIncrement(I);
+end;
+
+function InterlockedDecrement(var I: integer): integer; // FPC intrinsic naming
+begin
+  result := AtomicDecrement(I);
+end;
 
 procedure LockedInc64(int64: PInt64);
 begin
@@ -10964,6 +10984,14 @@ begin
             ((result and QWord($0000ffff0000ffff)) shl 16);
   result:=  ((result and QWord($ff00ff00ff00ff00)) shr 8) or
             ((result and QWord($00ff00ff00ff00ff)) shl 8);
+end;
+
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+begin
+  repeat // assume n > 0 like the asm
+    dec(n);
+    a[n] := bswap32(a[n]);
+  until n = 0;
 end;
 
 function BSRdword(c: cardinal): cardinal;
