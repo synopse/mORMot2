@@ -1277,6 +1277,16 @@ type
   /// generic PDF Optional Content entry
   TPdfOptionalContentGroup = class(TPdfDictionary);
 
+  /// predefined values for relationships for associated files 
+  // - as defined by ISO 32000-2, 14.13, also in PDF/A-3B
+  // - see https://www.loc.gov/preservation/digital/formats/fdd/fdd000360.shtml
+  TPdfAFRelationship = (
+    afrUnspecified,
+    afrSource,
+    afrData,
+    afrAlternative,
+    afrSupplement);
+
   TPdfInfo = class;
   TPdfCatalog = class;
   TPdfDestination = class;
@@ -1526,11 +1536,11 @@ type
       const ContentGroups: array of TPdfOptionalContentGroup);
     /// create an attached file from its name
     function CreateFileAttachment(const AttachFile: TFileName;
-      const Description: string = ''): TPdfDictionary;
-    /// create an attached file from its buffer content
-    function CreateFileAttachmentFromBuffer(const Buffer: RawByteString;
-      const Title, Description, MimeType: string;
-      CreationDate, ModDate: TDateTime): TPdfDictionary;
+      const Description: string = ''; const MimeType: string = ''): TPdfDictionary;
+    /// create an attached file from a buffer and/or a TStream
+    function CreateFileAttachmentFrom(const Buffer: RawByteString;
+      const Title, Description, MimeType: string; CreationDate, ModDate: TDateTime;
+      Stream: TStream = nil; Relationship: TPdfAFRelationship = afrAlternative): TPdfDictionary;
     /// retrieve the current PDF Canvas, associated to the current page
     property Canvas: TPdfCanvas
       read fCanvas;
@@ -7917,32 +7927,49 @@ begin
 end;
 
 function TPdfDocument.CreateFileAttachment(const AttachFile: TFileName;
-  const Description: string): TPdfDictionary;
+  const Description, MimeType: string): TPdfDictionary;
 var
   lw, fc: TUnixMSTime;
-  buf: RawByteString;
+  fs: TStream;
+  mt: string;
 begin
   result := nil;
   if not FileInfoByName(AttachFile, nil, nil, @lw, @fc) then
     exit;
-  buf := StringFromFile(AttachFile);
-  if buf <> '' then
-    result := CreateFileAttachmentFromBuffer(buf, ExtractFileName(AttachFile),
-      Description, '', UnixMSTimeToDateTimeZ(fc), UnixMSTimeToDateTimeZ(lw));
+  fs := FileStreamSequentialRead(AttachFile);
+  if fs <> nil then
+    try
+      mt := MimeType;
+      if mt = '' then
+        mt := GetMimeContentType('', AttachFile);
+      result := CreateFileAttachmentFrom(
+        '', ExtractFileName(AttachFile), Description, mt,
+        UnixMSTimeToDateTimeZ(fc), UnixMSTimeToDateTimeZ(lw), fs);
+    finally
+      fs.Free;
+    end;
 end;
 
-function TPdfDocument.CreateFileAttachmentFromBuffer(const Buffer: RawByteString;
-  const Title, Description, MimeType: string; CreationDate, ModDate: TDateTime): TPdfDictionary;
+const
+  AFRelationshipNames: array[TPdfAFRelationship] of PDFString = (
+    'Unspecified', 'Source', 'Data', 'Alternative', 'Supplement');
+
+function TPdfDocument.CreateFileAttachmentFrom(const Buffer: RawByteString;
+  const Title, Description, MimeType: string; CreationDate, ModDate: TDateTime;
+  Stream: TStream; Relationship: TPdfAFRelationship): TPdfDictionary;
 var
   fs, ef, ndic, efdic, parms: TPdfDictionary;
-  arr: TPdfArray;
+  arr, af: TPdfArray;
   str: TPdfStream;
   txt: TPdfTextString;
   mime: RawUtf8;
 begin
   // create embedded file stream with main attributes
   str := TPdfStream.Create(Self);
-  str.Writer.Add(pointer(Buffer), length(Buffer));
+  if pointer(Buffer) <> nil then
+    str.Writer.Add(pointer(Buffer), length(Buffer));
+  if Assigned(Stream) then
+    str.Writer.AddFrom(Stream);
   str.Attributes.AddItem('Type', 'EmbeddedFile');
   if MimeType <> '' then
     StringToUtf8(MimeType, mime)
@@ -7966,17 +7993,17 @@ begin
   fs.AddItemTextString('F', Title);
   fs.AddItemTextString('UF', Title);
   fs.AddItemTextString('Desc', Description);
-  fs.AddItem('AFRelationship', 'Alternative'); // alternative or source
+  fs.AddItem('AFRelationship', AFRelationshipNames[Relationship]);
   ef := TPdfDictionary.Create(fXref);
   ef.AddItem('F', str);
   ef.AddItem('UF', str);
   fs.AddItem('EF', ef);
   // ensure we have the needed Names and EmbeddedFiles dictionaries
-  ndic := Root.Data.PdfDictionaryByName('Names');
+  ndic := fRoot.Data.PdfDictionaryByName('Names');
   if ndic = nil then
   begin
     ndic := TPdfDictionary.Create(fXref);
-    root.Data.AddItem('Names', ndic);
+    fRoot.Data.AddItem('Names', ndic);
   end;
   efdic := ndic.PdfDictionaryByName('EmbeddedFiles');
   if efdic = nil then
@@ -7992,6 +8019,18 @@ begin
   txt := TPdfTextString.Create(Title);
   arr.AddItem(txt);
   arr.AddItem(fs);
+  // PDF/A requires an AF (associated files) array at root
+  if fPdfA >= pdfa2A then // no embedded file in PDF/A-1
+  begin
+    af := fRoot.Data.PdfArrayByName('AF'); 
+    if af = nil then
+    begin
+      af := TPdfArray.Create(fXRef);
+      fxRef.AddObject(af);
+      fRoot.Data.AddItem('AF', af);
+    end;
+    af.AddItem(fs);
+  end;
   // return the newly created Filespec dictionary
   result := fs;
 end;
