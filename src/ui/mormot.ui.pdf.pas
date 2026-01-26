@@ -7352,6 +7352,8 @@ const
     ' ', '1', '1', '2', '2', '3', '3');
   PDFA_CONFORMANCE: array[TPdfALevel] of AnsiChar = (
     ' ', 'A', 'B', 'A', 'B', 'A', 'B');
+  // PDF/A conformation requires at least four binary (>#128) characters
+  PDFA_MARKER: array[0..5] of byte = (ord('%'), 237, 238, 239, 240, 10);
 
 procedure TPdfDocument.SaveToStreamDirectBegin(AStream: TStream; ForceModDate: TDateTime);
 begin
@@ -7407,8 +7409,7 @@ begin
   fSaveToStreamWriter := TPdfWrite.Create(self, AStream);
   fSaveToStreamWriter.Add('%PDF-1.').Add(PDF_HEADER[fFileformat]).Add(#10);
   if fFileFormat > pdf13 then
-    // PDF/A conformation requires at least four binary (>#128) characters
-    fSaveToStreamWriter.Add(RawByteString('%'#237#238#239#240#10));
+    fSaveToStreamWriter.Add(@PDFA_MARKER, SizeOf(PDFA_MARKER));
 end;
 
 procedure TPdfDocument.SaveToStreamDirectPageFlush(FlushCurrentPageNow: boolean);
