@@ -6492,6 +6492,31 @@ begin
           end;
         end;
       end;
+      // PDF/A requires ToUnicode CMap for all fonts, including WinAnsi
+      if (fDoc.fPdfA <> pdfaNone) and
+         (fFirstChar <> 0) then
+      begin
+        tounicode := TPdfStream.Create(fDoc);
+        tounicode.Writer.Add('/CIDInit/ProcSet findresource begin'#10 +
+          '12 dict begin'#10'begincmap'#10'/CIDSystemInfo'#10'<<'#10'/Registry (').
+          Add(ShortCut).
+          Add('+0)'#10'/Ordering (UCS)'#10'/Supplement 0'#10'>> def'#10 +
+          '/CMapName/').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10 +
+          '1 begincodespacerange'#10'<00> <FF>'#10'endcodespacerange'#10);
+        count := 0;
+        for c := AnsiChar(fFirstChar) to AnsiChar(fLastChar) do
+          if c in fWinAnsiUsed then
+            inc(count);
+        tounicode.Writer.Add(count).Add(' beginbfchar'#10);
+        for c := AnsiChar(fFirstChar) to AnsiChar(fLastChar) do
+          if c in fWinAnsiUsed then
+            tounicode.Writer.Add('<').Add(HexChars[ord(c) shr 4]).
+              Add(HexChars[ord(c) and $F]).Add('> <').
+              AddHex4(WinAnsiConvert.AnsiToWide[ord(c)]).Add('>'#10);
+        tounicode.Writer.Add('endbfchar'#10'endcmap'#10 +
+          'CMapName currentdict /CMap defineresource pop'#10'end'#10'end');
+        Data.AddItem('ToUnicode', tounicode);
+      end;
     end;
   finally
     WR.Free;
