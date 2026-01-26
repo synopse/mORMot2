@@ -552,9 +552,13 @@ type
 /// detect a TypeInfo(TNullable*) RTTI pointer to nullable variant types
 function NullableVariantType(info: PRttiInfo): TNullableVariantType;
 
+const
+  /// defined in the same unit to circumvent Delphi LLVM compilation issue
+  NullNullable: TVarData = (VType: varNull{%H-});
+
 var
   /// a nullable integer value containing null
-  NullableIntegerNull: TNullableInteger absolute NullVarData;
+  NullableIntegerNull: TNullableInteger absolute NullNullable;
 
 /// creates a nullable integer value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableInteger = type variant
@@ -581,7 +585,7 @@ function NullableIntegerToValue(const V: TNullableInteger): Int64;
 
 var
   /// a nullable boolean value containing null
-  NullableBooleanNull: TNullableBoolean absolute NullVarData;
+  NullableBooleanNull: TNullableBoolean absolute NullNullable;
 
 /// creates a nullable boolean value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableBoolean = type variant
@@ -608,7 +612,7 @@ function NullableBooleanToValue(const V: TNullableBoolean): boolean;
 
 var
   /// a nullable float value containing null
-  NullableFloatNull: TNullableFloat absolute NullVarData;
+  NullableFloatNull: TNullableFloat absolute NullNullable;
 
 /// creates a nullable floating-point value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableFloat = type variant
@@ -635,7 +639,7 @@ function NullableFloatToValue(const V: TNullableFloat): double;
 
 var
   /// a nullable currency value containing null
-  NullableCurrencyNull: TNullableCurrency absolute NullVarData;
+  NullableCurrencyNull: TNullableCurrency absolute NullNullable;
 
 /// creates a nullable Currency value from a supplied currency value
 // - we defined the currency type to circumvent FPC cross-platform issues
@@ -668,7 +672,7 @@ function NullableCurrencyToValue(const V: TNullableCurrency): currency;
 
 var
   /// a nullable TDateTime value containing null
-  NullableDateTimeNull: TNullableDateTime absolute NullVarData;
+  NullableDateTimeNull: TNullableDateTime absolute NullNullable;
 
 /// creates a nullable TDateTime value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableDateTime = type variant
@@ -695,7 +699,7 @@ function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
 
 var
   /// a nullable TTimeLog value containing null
-  NullableTimeLogNull: TNullableTimeLog absolute NullVarData;
+  NullableTimeLogNull: TNullableTimeLog absolute NullNullable;
 
 /// creates a nullable TTimeLog value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableTimeLog = type variant
@@ -722,7 +726,7 @@ function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
 
 var
   /// a nullable UTF-8 encoded text value containing null
-  NullableUtf8TextNull: TNullableUtf8Text absolute NullVarData;
+  NullableUtf8TextNull: TNullableUtf8Text absolute NullNullable;
 
 /// creates a nullable UTF-8 encoded text value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableUtf8 = type variant
