@@ -1900,9 +1900,11 @@ begin
       end
       else
       begin
+        {$ifndef LLVM}
         if Assigned(ExceptClsProc) then
           ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
         else
+        {$endif LLVM}
           ctxt.EClass := EExternal;
         ctxt.EInstance := nil;
         ctxt.ELevel := sllExceptionOS;
@@ -3362,7 +3364,9 @@ function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
 var
   siz: DWord;
   tmp: RawByteString;
+  {$ifdef CPUINTEL}
   addr: PtrUInt;
+  {$endif CPUINTEL}
   get: function(sig, id: DWord; buf: pointer; siz: DWord): PtrUInt; stdcall;
 begin
   // first try to use Vista+ API which supports EFI (even on aarch64-win64!)

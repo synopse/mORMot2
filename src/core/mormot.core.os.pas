@@ -10177,6 +10177,17 @@ asm
 end;
 {$endif FPC_CPUARM}
 
+{$ifdef CPUAARCH64DELPHI}
+const
+  SpinFactor = 20; // no inline asm on Delphi ARM, so no "yield"
+
+procedure DoPause(n: PtrUInt);
+begin
+   while n <> 0 do
+     dec(n);
+end;
+{$endif CPUAARCH64DELPHI}
+
 function DoSpin(spin: PtrUInt): PtrUInt;
 begin
   {$ifdef CPUINTELARM}

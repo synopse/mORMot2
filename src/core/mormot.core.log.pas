@@ -5641,11 +5641,17 @@ end;
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 {$ifdef WIN64DELPHI} // Delphi Win64 has no 64-bit inline assembler
+{$ifdef CPUINTEL}
 procedure DebugBreak;
 asm
      .noframe
      int  3
 end;
+{$else}
+procedure DebugBreak; // no ARM64 assembler on Delphi
+begin
+end;
+{$endif CPUINTEL}
 {$endif WIN64DELPHI}
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
