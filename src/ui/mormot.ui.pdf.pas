@@ -7405,13 +7405,16 @@ begin
       fTrailer.ToCrossReference(self);
     for i := 1 to fXRef.ItemCount - 1 do
       with fXRef.Items[i] do
-        if ByteOffset <= 0 then
+        if (fByteOffset <= 0) and
+           (Value <> fTrailer.fCrossReference) then
         begin
           fByteOffset := fSaveToStreamWriter.Position;
-          if Value <> fTrailer.fCrossReference then
-            Value.WriteValueTo(fSaveToStreamWriter);
+          Value.WriteValueTo(fSaveToStreamWriter);
         end;
     fTrailer.XrefAddress := fSaveToStreamWriter.Position;
+    if Assigned(fTrailer.fCrossReference) and
+      (fTrailer.fCrossReference.ObjectNumber > 0) then
+      fXRef.Items[fTrailer.fCrossReference.ObjectNumber].fByteOffset := fTrailer.XrefAddress;
     if fFileFormat < pdf15 then
       fXRef.WriteTo(fSaveToStreamWriter);
     fTrailer.Attributes.PdfNumberByName('Size').Value := fXRef.ItemCount;
