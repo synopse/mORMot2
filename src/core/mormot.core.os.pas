@@ -9234,8 +9234,8 @@ begin
   if i = 0 then
     exit;
   delete(result[0], i, 1);
-  result[1] := result[0]; // &# char first
-  result[0] := copy(name, i + 1, 1);
+  result[1] := result[0];            // [1] = full text (& placeholder removed)
+  result[0] := copy(name, i + 1, 1); // [0] = single char shortcut alone
 end;
 
 function TExecutableCommandLine.Option(const name, description: RawUtf8): boolean;
@@ -9310,9 +9310,9 @@ function TExecutableCommandLine.Get(const name: array of RawUtf8;
 var
   tmp: RawUtf8;
 begin
-  result := Get(name, tmp, description);
+  result := Get(name, tmp, description, default);
   if result then
-    value := string(tmp)
+    value := string(tmp) // RTL conversion is fast enough in this unit
   else
     value := default; // no conversion needed
 end;
