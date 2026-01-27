@@ -9308,11 +9308,12 @@ end;
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
   out value: string; const description: RawUtf8; const default: string): boolean;
 var
-  tmp: RawUtf8;
+  def, tmp: RawUtf8; // RTL conversion is fast enough in this unit
 begin
-  result := Get(name, tmp, description, default);
+  def := RawUtf8(tmp);
+  result := Get(name, tmp, description, def);
   if result then
-    value := string(tmp) // RTL conversion is fast enough in this unit
+    value := string(tmp)
   else
     value := default; // no conversion needed
 end;
