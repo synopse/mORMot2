@@ -12170,7 +12170,7 @@ var
     begin
       tmp := Pen;
       pen.color := Font.color;
-      pen.width := ss / 15 / Canvas.fWorldFactorX / Canvas.fDevScaleX;
+      pen.width := ss / (fscaleY * 15);
       pen.style := PS_SOLID;
       pen.null := false;
       NeedPen;
@@ -12251,8 +12251,8 @@ begin
       begin
         dx := pointer(PtrUInt(@R) + R.emrtext.offDx);
         w := DXTextWidth(dx, R.emrText.nChars);
-        if w < R.rclBounds.Right - R.rclBounds.Left then // offDX=0 or within box
-          dx := nil;
+        if w < Trunc(R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
+          dx := nil; // offDX=0 or within box
       end
       else
         dx := nil;
@@ -12460,9 +12460,9 @@ begin
       Canvas.EndText;
       // handle underline or strike out styles (direct draw PDF lines on canvas)
       if Font.LogFont.lfUnderline <> 0 then
-        DrawLine(posi, ss / 8 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
+        DrawLine(posi, ss / (fScaleY * 8));
       if Font.LogFont.lfStrikeOut <> 0 then
-        DrawLine(posi, -ss / 3 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
+        DrawLine(posi, -ss / (fScaleY * 4));
       // end any pending clipped TextRect() region
       if clipped then
       begin
