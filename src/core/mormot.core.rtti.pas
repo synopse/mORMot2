@@ -3155,7 +3155,7 @@ function SetValueFromExecutableCommandLine(var Value; ValueInfo: PRttiInfo;
 type
   /// optional callback used by SetObjectFromExecutableCommandLine()
   // - allow to refine the information about a given property
-  // - return true to add the property, or avoid this property by returning false
+  // - return true to add the property, or false to skip setting this property
   TOnObjectDefine = function(Sender: TExecutableCommandLine; Value: TObject;
     Rtti: TRttiCustom; Prop: PRttiCustomProp;
     var Description, Default: RawUtf8): boolean of object;
@@ -3168,6 +3168,7 @@ var
 // - SwitchPrefix + property name will be searched in CommandLine.Names[]
 // - is typically used to fill a settings class instance
 // - won't include any nested class or dynamic array properties
+// - see also OnSetObjectFromExecutableCommandLine global callback
 function SetObjectFromExecutableCommandLine(Value: TObject;
   const SwitchPrefix, DescriptionSuffix: RawUtf8;
   CommandLine: TExecutableCommandLine = nil): boolean;
