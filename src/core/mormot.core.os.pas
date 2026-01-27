@@ -1213,7 +1213,7 @@ type
     fCaseSensitiveNames: boolean;
     fSwitch: array[{long=}boolean] of RawUtf8;
     fLineFeed, fExeDescription, fUnknown: RawUtf8;
-    procedure Describe(const v: array of RawUtf8;
+    procedure SetDescription(const v: array of RawUtf8;
       k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
     function Find(const v: array of RawUtf8;
       k: TExecutableCommandLineKind = clkUndefined; const d: RawUtf8 = '';
@@ -8998,7 +8998,7 @@ begin
   Join([fSwitch[length(v) > 1], v], result);
 end;
 
-procedure TExecutableCommandLine.Describe(const v: array of RawUtf8;
+procedure TExecutableCommandLine.SetDescription(const v: array of RawUtf8;
   k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
 var
   i, j: PtrInt;
@@ -9132,7 +9132,7 @@ begin
   if self <> nil then
   begin
     if k <> clkUndefined then
-      Describe(v, k, d, def, -1);
+      SetDescription(v, k, d, def, -1);
     if (high(v) >= 0) and
        (fNames[k] <> nil) then
       for i := 0 to high(v) do
@@ -9168,7 +9168,7 @@ begin
     if optional then
       fRetrieved[clkArg][index] := true;
   end;
-  Describe([], clkArg, description, '', index + 1);
+  SetDescription([], clkArg, description, '', index + 1);
 end;
 
 function TExecutableCommandLine.ArgU(index: integer; const description: RawUtf8;
@@ -9263,7 +9263,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  Describe(name, clkParam, description, '', -1);
+  SetDescription(name, clkParam, description, '', -1);
   first := 0;
   repeat
     i := Find(name, clkParam, '', '', first);
