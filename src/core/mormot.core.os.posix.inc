@@ -2687,7 +2687,7 @@ var
               with PStrRec(PAnsiChar(fn) - _STRRECSIZE)^ do
               begin
                 fn[length] := ord('/'); // full nested path/ in sub[]
-                inc(length);
+                inc(length); // FastNewString() ends with four #0
               end;
               if subcount = length(sub) then
                 SetLength(sub, NextGrow(subcount));
