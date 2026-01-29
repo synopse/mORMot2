@@ -124,7 +124,7 @@ function DhcpDiscover(var dhcp: TDhcpPacket; const addr: TNetMac;
 
 /// append a byte value to the TDhcpPacket.options packet
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 /// append a raw binary value to the TDhcpPacket.options packet
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pbyte; len: PtrUInt); overload;
@@ -351,7 +351,7 @@ begin
      (dhcp^.options[dmt] <> 1) then // length
     exit;
   dmt := dhcp^.options[dmt + 1];    // value
-  if (dmt > ord(high(TDhcpMessageType))) or
+  if (dmt > byte(high(TDhcpMessageType))) or
      (DHCP_BOOT[TDhcpMessageType(dmt)] <> dhcp^.op) then // inconsistent type
     exit;
   result := TDhcpMessageType(dmt);
