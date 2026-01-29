@@ -171,6 +171,52 @@ type
 
 { **************** High-Level DHCP Server }
 
+type
+  /// main high-level options for a minimal DHCP Server
+  TDhcpServerSettings = class(TSynPersistent)
+  protected
+    fSubnetMask: RawUtf8;
+    fRangeMin: RawUtf8;
+    fRangeMax: RawUtf8;
+    fDefaultGateway: RawUtf8;
+    fDnsServers: RawUtf8;
+    fDomainName: RawUtf8;
+    fBroadCastAddress: RawUtf8;
+    fLeaseTimeSeconds: cardinal;
+    fServerIdentifier: RawUtf8;
+  public
+    /// setup this instance with default values
+    constructor Create; override;
+  published
+    /// Subnet Mask e.g. '255.255.255.0'
+    property SubnetMask: RawUtf8
+      read fSubnetMask write fSubnetMask;
+    /// minimal IP range e.g. '192.168.1.10'
+    property RangeMin: RawUtf8
+      read fRangeMin write fRangeMin;
+    /// maximal IP range e.g. '192.168.1.254'
+    property RangeMax: RawUtf8
+      read fRangeMax write fRangeMax;
+    /// Default Gateway e.g. '192.168.1.1'
+    property DefaultGateway: RawUtf8
+      read fDefaultGateway write fDefaultGateway;
+    /// DNS Servers 6 e.g. '8.8.8.8,8.8.4.4'
+    property DnsServers: RawUtf8
+      read fDnsServers write fDnsServers;
+    /// Domain Name  e.g. 'lan.local'
+    property DomainName: RawUtf8
+      read fDomainName write fDomainName;
+    /// Broadcast Address e.g. '192.168.1.255'
+    property BroadCastAddress: RawUtf8
+      read fBroadCastAddress write fBroadCastAddress;
+    /// IP Lease Duration in seconds e.g. 86400 for 24h)
+    property LeaseTimeSeconds: cardinal
+      read fLeaseTimeSeconds write fLeaseTimeSeconds;
+    /// DHCP Server Identifier e.g. '192.168.1.1'
+    property ServerIdentifier: RawUtf8
+      read fServerIdentifier write fServerIdentifier;
+  end;
+
 
 implementation
 
@@ -371,6 +417,24 @@ end;
 
 
 { **************** High-Level DHCP Server }
+
+{ TDhcpServerSettings }
+
+constructor TDhcpServerSettings.Create;
+begin
+  inherited Create;
+  fSubnetMask := '255.255.255.0';
+  fRangeMin := '192.168.1.10';
+  fRangeMax := '192.168.1.254';
+  fDefaultGateway := '192.168.1.1';
+  fDnsServers := '192.168.1.1';
+  fDomainName := 'lan.local';
+  fBroadCastAddress := '192.168.1.255';
+  fLeaseTimeSeconds := 86400; // for 24h
+  ServerIdentifier := '192.168.1.1';
+end;
+
+
 
 
 initialization
