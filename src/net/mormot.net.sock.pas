@@ -630,7 +630,7 @@ procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 
 /// convert a MAC address value into its standard RawUtf8 text representation
 // - calls ToHumanHex(mac, 6), returning e.g. '12:50:b6:1e:c6:aa'
-function MacToText(mac: PByteArray): RawUtf8;
+function MacToText(mac: pointer): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// reverse function from MacToText() or MacToHex()
@@ -3874,9 +3874,9 @@ begin
   FastSetString(result, @s[1], ord(s[0]));
 end;
 
-function MacToText(mac: PByteArray): RawUtf8;
+function MacToText(mac: pointer): RawUtf8;
 begin
-  ToHumanHex(result, pointer(mac), 6);
+  ToHumanHex(result, mac, 6);
 end;
 
 function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
