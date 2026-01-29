@@ -9319,27 +9319,27 @@ end;
 procedure TRttiCustom.NoRttiArrayFinalize(Data: PAnsiChar);
 var
   n: integer;
-  mem: PDynArrayRec;
+  da: PDynArrayRec;
 begin
   if Kind = rkArray then
   begin
     // static array has fixed number of items
     n := fCache.ItemCount;
-    mem := nil;
+    da := nil;
   end
   else
   begin
     // dereference rkDynArray pointer and retrieve length
-    mem := PPointer(Data)^;
-    if mem = nil then
+    da := PPointer(Data)^;
+    if da = nil then
       exit;
     PPointer(Data)^ := nil;
-    Data := pointer(mem);
-    dec(mem);
-    if (mem^.refCnt <= 0) or
-       not DACntDecFree(mem^.refCnt) then
+    Data := pointer(da);
+    dec(da);
+    if (da^.refCnt <= 0) or
+       not DACntDecFree(da^.refCnt) then
       exit;
-    n := mem.length;
+    n := da^.length;
   end;
   // release memory (T*ObjArray should never occur here)
   repeat
@@ -9347,8 +9347,8 @@ begin
     inc(Data, fArrayRtti.Size);
     dec(n);
   until n = 0;
-  if mem <> nil then
-    FreeMem(mem);
+  if da <> nil then
+    FreeMem(da);
 end;
 
 function TRttiCustom.ValueIsVoid(Data: PAnsiChar): boolean;
