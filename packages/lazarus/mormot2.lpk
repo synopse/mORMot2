@@ -49,7 +49,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Minor="4"/>
-    <Files Count="118">
+    <Files Count="119">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -523,6 +523,10 @@
         <Filename Value="../../src/crypt/mormot.crypt.other.pas"/>
         <UnitName Value="mormot.crypt.other"/>
       </Item118>
+      <Item119>
+        <Filename Value="../../src/net/mormot.net.dhcp.pas"/>
+        <UnitName Value="mormot.net.dhcp"/>
+      </Item119>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>
