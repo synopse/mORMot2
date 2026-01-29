@@ -9336,9 +9336,9 @@ begin
     PPointer(Data)^ := nil;
     Data := pointer(mem);
     dec(mem);
-    if mem.refCnt > 1 then
-      ERttiException.RaiseUtf8('%.ArrayFinalize: % has refcnt=%',
-        [self, ArrayRtti.Name, mem.refCnt]);
+    if (mem^.refCnt <= 0) or
+       not DACntDecFree(mem^.refCnt) then
+      exit;
     n := mem.length;
   end;
   // release memory (T*ObjArray should never occur here)
