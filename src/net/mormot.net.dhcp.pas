@@ -148,8 +148,8 @@ type
 
 /// parse a raw DHCP binary frame and return the length of all recognized options
 // - returns dmtUndefined on invalid input DHCP frame
-function DhcpParse(dhcp: PDhcpPacket; len: PtrInt;
-  var lens: TDhcpParsed; found: PDhcpOptions = nil): TDhcpMessageType;
+function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
+  found: PDhcpOptions = nil; mac: PNetMac = nil): TDhcpMessageType;
 
 /// decode the pointer corresponding to lens[opt] within dhcp^.option[]
 function DhcpData(dhcp: PDhcpPacket; len: PtrUInt): PShortString;
@@ -349,10 +349,11 @@ begin
   result^ := #255; // only for internal/debug use
 end;
 
-function DhcpParse(dhcp: PDhcpPacket; len: PtrInt;
-  var lens: TDhcpParsed; found: PDhcpOptions): TDhcpMessageType;
+function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
+  found: PDhcpOptions; mac: PNetMac): TDhcpMessageType;
 var
   p: PAnsiChar;
+  m: PNetMac;
   opt: PtrInt; // TDhcpOption
   dmt: byte;   // TDhcpMessageType
 begin
@@ -360,6 +361,7 @@ begin
   if found <> nil then
     found^ := [];
   FillCharFast(lens, SizeOf(lens), 0);
+  // validate header
   dec(len, PtrInt(PtrUInt(@PDhcpPacket(nil)^.options)));
   if (len <= 0) or
      (dhcp = nil) or
@@ -369,6 +371,7 @@ begin
      (dhcp^.xid = 0) or
      not (dhcp^.op in [BOOT_REQUEST, BOOT_REPLY]) then
     exit;
+  // parse DHCP options
   p := @dhcp^.options;
   repeat
     dec(len, ord(p[1]) + 2);
@@ -383,6 +386,7 @@ begin
     end;
     p := @p[ord(p[1]) + 2];
   until p^ = #255;
+  // validate message consistency
   dmt := lens[doMessageType];
   if (dmt = 0) or                   // not set
      (dhcp^.options[dmt] <> 1) then // length
@@ -391,6 +395,14 @@ begin
   if (dmt > byte(high(TDhcpMessageType))) or
      (DHCP_BOOT[TDhcpMessageType(dmt)] <> dhcp^.op) then // inconsistent type
     exit;
+  // here we have a valid DHCP frame
+  if mac <> nil then
+  begin
+    m := DhcpMac(dhcp, lens[doClientIdentifier]);
+    if m = nil then
+      m := @dhcp^.chaddr; // no option 61: fallback to BOOTP value
+    mac^ := m^; // copy
+  end;
   result := TDhcpMessageType(dmt);
 end;
 
