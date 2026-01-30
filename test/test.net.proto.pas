@@ -1666,7 +1666,73 @@ begin
   CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTimeValue]), 3600);
   ip4 := DhcpIP4(pointer(bin), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
-
+  // validate TDhcpLease process
+  server := TDhcpLease.Create;
+  try
+    //TSynLog.Family.Level := LOG_VERBOSE;
+    server.Log := TSynLog;
+    server.Setup({settings=}nil);
+    // DISCOVER -> OFFER
+    Check(server.ProcessUdpFrame(disc, disclen), 'discover');
+    CheckEqual(disc.xid, $1d3d0000);
+    CheckEqual(MacToText(@disc.chaddr), mac);
+    Check(DhcpParse(@disc, disclen, lens, @fnd) = dmtOffer);
+    Check(fnd = FND_RESP);
+    sip4 := DhcpIP4(@disc, lens[doServerIdentifier]);
+    CheckEqual(IP4ToText(@sip4), '192.168.1.1');
+    CheckEqual(disc.siaddr, sip4);
+    // REQUEST -> ACK
+    ip4 := 0;
+    for i := 1 to 3 do // validate offer + renewal
+    begin
+      disc := req;
+      disclen := reqlen; // backup during the loop
+      Check(server.ProcessUdpFrame(req, reqlen), 'request');
+      CheckEqual(req.xid, $1e3d0000);
+      CheckEqual(MacToText(@req.chaddr), mac);
+      Check(DhcpParse(@req, reqlen, lens, @fnd) = dmtAck);
+      Check(fnd = FND_RESP);
+      sip4 := DhcpIP4(@req, lens[doServerIdentifier]);
+      CheckEqual(IP4ToText(@sip4), '192.168.1.1');
+      CheckEqual(req.siaddr, sip4);
+      if ip4 = 0 then
+        ip4 := req.ciaddr
+      else
+        CheckEqual(req.ciaddr, ip4);
+      Check(not server.ProcessUdpFrame(req, reqlen), 'ack');
+      req := disc;
+      reqlen := disclen;
+    end;
+    CheckEqual(server.Count, 1);
+    // make 200 concurrent requests - more than 2M handshakes per second ;)
+    n := 200;
+    SetLength(macs, n);
+    SetLength(ips, n);
+    RandomBytes(pointer(macs), SizeOf(macs[0]) * n);
+    timer.Start;
+    xid := 0;
+    for i := 0 to high(macs) do
+    begin
+      reqlen := DhcpClient(req, dmtDiscover, macs[i]) - PAnsiChar(@req) + 1;
+      Check(CompareMem(@macs[i], @req.chaddr, SizeOf(macs[0])));
+      CheckNotEqual(xid, req.xid);
+      xid := req.xid;
+      Check(server.ProcessUdpFrame(req, reqlen), 'request#');
+      CheckEqual(req.xid, xid);
+      Check(CompareMem(@macs[i], @req.chaddr, SizeOf(macs[0])));
+      ips[i] := req.ciaddr;
+    end;
+    CheckEqual(server.Count, n + 1);
+    for i := high(macs) downto 0 do // in reverse order
+      DoRequest(i);
+    CheckEqual(server.Count, n + 1);
+    NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
+    // twice with the requests to validate efficient renewal
+    for i := 1 to n do
+      DoRequest(Random32(n)); // in Random order
+  finally
+    server.Free;
+  end;
 end;
 
 type
