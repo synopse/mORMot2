@@ -1807,6 +1807,12 @@ const
 // - end text input parsing at final #0 '/' or any char <= ' '
 function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 
+/// just a wrapper around NetIsIP4(pointer(text)) which set result=0 on error
+function ToIP4(const text: RawUtf8): TNetIP4;
+
+/// decode one or several IP addresses from CSV text
+function ToIP4s(const text: RawUtf8): TNetIP4s;
+
 /// parse a text input buffer until the end space or EOL
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
@@ -5297,6 +5303,35 @@ begin
   result := true; // 1.2.3.4
 end;
 
+function ToIP4(const text: RawUtf8): TNetIP4;
+begin
+  if not NetIsIP4(pointer(text), @result) then
+    result := 0;
+end;
+
+function ToIP4s(const text: RawUtf8): TNetIP4s;
+var
+  p: PUtf8Char;
+  v: TNetIP4;
+begin
+  result := nil;
+  p := pointer(text);
+  if p <> nil then
+    repeat
+      while p^ = ' ' do
+        inc(p);
+      if not NetIsIP4(p, @v) then
+        exit;
+      AddInteger(TIntegerDynArray(result), v);
+      while p^ <> ',' do
+        if p^ = #0 then
+          exit
+        else
+          inc(p);
+      inc(p); // jump ','
+    until false;
+end;
+
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 var
   S: PUtf8Char;
@@ -5369,7 +5404,7 @@ begin
   end
   else
   begin
-    mask := cardinal(-1); // 255.255.255.255
+    mask := cAnyHost32; // 255.255.255.255
     result := NetIsIP4(pointer(subnet), @ip32); // plain '1.2.3.4' IPv4 address
   end;
   ip := ip32 and mask; // normalize
