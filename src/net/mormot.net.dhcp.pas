@@ -633,7 +633,8 @@ begin
   if fFreeListCount <> 0 then
   begin
     dec(fFreeListCount);
-    result := @fEntry[fFreeList[fFreeListCount]];
+    fLastFind := fFreeList[fFreeListCount];
+    result := @fEntry[fLastFind];
     if result^.State = lsFree then
       exit; // paranoid
   end;
@@ -641,12 +642,13 @@ begin
   if fCount = length(fEntry) then
     SetLength(fEntry, NextGrow(fCount));
   result := @fEntry[fCount];
+  fLastFind := fCount;
   inc(fCount);
 end;
 
 function TDhcpLease.NextIp4: TNetIP4;
 var
-  bak: TNetIP4;
+  le: TNetIP4;
   looped: boolean;
   existing, outdated: PLease;
 begin
@@ -687,15 +689,15 @@ begin
         looped := true;
         result := fIpMinLE;
       end;
-    bak := result;
-    result := bswap32(result);
+    le := result;
+    result := bswap32(result); // network order
     if not IntegerScanExists(pointer(fStatic), length(fStatic), result) then
     begin
       existing := FindIp4(result);
       if existing = nil then
       begin
         // return the unused IP found
-        fLastIpLE := bak;
+        fLastIpLE := le;
         exit;
       end
       else if (existing^.State = lsOutdated) and
@@ -703,7 +705,7 @@ begin
                (existing^.Timeout < outdated^.Timeout)) then
         outdated := existing; // mark oldest outdated entry
     end;
-    result := bak;
+    result := le;
   until false;
 end;
 
@@ -811,7 +813,13 @@ begin
         end;
         inc(p);
       end;
-      fCount := n;
+      if n <> fCount then
+      begin
+        fLog.Add.Log(sllTrace, 'Setup: subnet adjust count=% from %',
+          [n, fCount], self);
+        fCount := n;
+      end;
+      fFreeListCount := 0;
     end;
     // log the used network context
     if Assigned(fLog) then
@@ -1005,7 +1013,7 @@ begin
              (p^.IP4 = 0) or
              not ((p^.State in [lsReserved, lsAck]) or
                   ((p^.State = lsOutdated) and
-                   (fGraceFactor <> 0) and
+                   (fGraceFactor > 1) and
                    (fLeaseTime < SecsPerHour) and // grace period
                    (utc - p^.Timeout < fLeaseTime * fGraceFactor))) then
           begin
