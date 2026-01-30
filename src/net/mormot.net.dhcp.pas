@@ -29,6 +29,9 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.datetime,
+  mormot.core.rtti,
+  mormot.core.log,
   mormot.net.sock;
 
 
@@ -94,7 +97,7 @@ type
    doBroadcastAddr,         // Broadcast Address 28 (192.168.1.255)
    doNtpServer,             // NTP Server 42
    doRequestedIp,           // Requested IP Address 50 (0.0.0.0)
-   doLeaseTime,             // IP Lease Duration in seconds 51 (86400 for 24h)
+   doLeaseTimeValue,        // IP Lease Duration in seconds 51 (86400 for 24h)
    doMessageType,           // DHCP Message Type 53 (TDhcpMessageType)
    doServerIdentifier,      // DHCP Server Identifier 54 (192.168.1.1)
    doParameterRequestList,  // Parameter Request List 55 (1,3,6,15,51,54)
@@ -112,15 +115,17 @@ type
  /// pointer to a set of supported DHCP options
  PDhcpOptions = ^TDhcpOptions;
 
+function ToText(dmt: TDhcpMessageType): PShortString; overload;
+function ToText(opt: TDhcpOption): PShortString; overload;
+
 const
+  /// 1,3,6,15,28 options as used for DhcpClient()
+  DHCP_REQUEST = [doSubnetMask, doRouter, doDns, doDomainName, doBroadcastAddr];
 
-  /// 1,3,6,15,28 options as used for DhcpDiscover()
-  DHCP_DISCOVER = [doSubnetMask, doRouter, doDns, doDomainName, doBroadcastAddr];
-
-/// initialize a DHCP discover packet for a client
+/// initialize a DHCP client discover/request packet
 // - returns pointer to @dhcp.options for additional DhcpAddOption() fluent calls
-function DhcpDiscover(var dhcp: TDhcpPacket; const addr: TNetMac;
-  req: TDhcpOptions = DHCP_DISCOVER): PAnsiChar;
+function DhcpClient(var dhcp: TDhcpPacket; dmt: TDhcpMessageType;
+  const addr: TNetMac; req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
 
 /// append a byte value to the TDhcpPacket.options packet
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte); overload;
@@ -223,6 +228,16 @@ implementation
 
 { **************** Low-Level DHCP Protocol Definitions }
 
+function ToText(dmt: TDhcpMessageType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDhcpMessageType), ord(dmt));
+end;
+
+function ToText(opt: TDhcpOption): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDhcpOption), ord(opt));
+end;
+
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
@@ -284,30 +299,40 @@ const
 
   ARPHRD_ETHER = 1; // from linux/if_arp.h
 
+var
+  DhcpClientId: integer; // thread-safe global random-initialized sequence
+
 function DhcpNew(var dhcp: TDhcpPacket; dmt: TDhcpMessageType; xid: cardinal;
-  const addr: TNetMac): PAnsiChar;
+  const addr: TNetMac; serverid: TNetIP4 = 0): PAnsiChar;
 begin
   FillCharFast(dhcp, SizeOf(dhcp) - SizeOf(dhcp.options), 0);
   dhcp.op := DHCP_BOOT[dmt];
   dhcp.htype := ARPHRD_ETHER;
   dhcp.hlen := SizeOf(addr);
+  if xid = 0 then
+  begin
+    if DhcpClientId = 0 then
+      DhcpClientId := Random32Not0;
+    xid := InterlockedIncrement(DhcpClientId);
+  end;
   dhcp.xid := xid;
   dhcp.flags := $8000; // not unicast in this userland UDP socket API unit
   PNetMac(@dhcp.chaddr)^ := addr;
   dhcp.cookie := DHCP_MAGIC_COOKIE;
   result := @dhcp.options;
   DhcpAddOption(result, doMessageType, ord(dmt));
+  if serverid <> 0 then
+  begin
+    dhcp.siaddr := serverid;
+    DhcpAddOption(result, doServerIdentifier, @serverid);
+  end;
+  result^ := #255;
 end;
 
-var
-  DhcpDiscoverId: integer;
-
-function DhcpDiscover(var dhcp: TDhcpPacket; const addr: TNetMac;
-  req: TDhcpOptions): PAnsiChar;
+function DhcpClient(var dhcp: TDhcpPacket; dmt: TDhcpMessageType;
+  const addr: TNetMac; req: TDhcpOptions): PAnsiChar;
 begin
-  if DhcpDiscoverId = 0 then
-    DhcpDiscoverId := Random32Not0;
-  result := DhcpNew(dhcp, dmtDiscover, InterlockedIncrement(DhcpDiscoverId), addr);
+  result := DhcpNew(dhcp, dmt, {xid=}0, addr);
   result := DhcpAddOptionRequestList(result, req);
   result^ := #255; // only for internal/debug use
 end;
