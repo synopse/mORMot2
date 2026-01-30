@@ -173,12 +173,6 @@ const
   BOOT_REQUEST = 1;
   BOOT_REPLY   = 2;
 
-type
-  TLease = record
-    Mac: TNetMac;
-    IP4: TNetIP4;
-  end;
-
 
 { **************** High-Level DHCP Server }
 
@@ -187,6 +181,7 @@ type
   TDhcpServerSettings = class(TSynPersistent)
   protected
     fSubnetMask: RawUtf8;
+    fStaticIPs: RawUtf8;
     fRangeMin: RawUtf8;
     fRangeMax: RawUtf8;
     fDefaultGateway: RawUtf8;
@@ -195,37 +190,64 @@ type
     fBroadCastAddress: RawUtf8;
     fLeaseTimeSeconds: cardinal;
     fServerIdentifier: RawUtf8;
+    fOfferHoldingSecs: cardinal;
+    fGraceFactor: cardinal;
   public
     /// setup this instance with default values
+    // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
+    // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
   published
-    /// Subnet Mask e.g. '255.255.255.0'
+    /// Subnet Mask e.g. '192.168.1.1/24'
+    // - the CIDR 'ip/mask' pattern will compute RangeMin/RangeMax and
+    // ServerIdentifier directly from this pattern
+    // - accept also plain '255.255.255.0' IP if you want to specify by hand the
+    // raw value sent in DHCP headers, and fill RangeMin/RangeMax and others
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
+    /// some static IP addresses as CSV, reserved on the network
+    // - e.g. '192.168.1.2,192.168.1.100'
+    // - default is ''
+    property StaticIPs: RawUtf8
+      read fStaticIPs write fStaticIPs;
     /// minimal IP range e.g. '192.168.1.10'
+    // - default is '' and will be filled by SubnetMask value as 10..254
     property RangeMin: RawUtf8
       read fRangeMin write fRangeMin;
     /// maximal IP range e.g. '192.168.1.254'
+    // - default is '' and will be filled by SubnetMask value as 10..254
     property RangeMax: RawUtf8
       read fRangeMax write fRangeMax;
-    /// Default Gateway e.g. '192.168.1.1'
+    /// Default Gateway e.g. '192.168.1.1' - default is ''
     property DefaultGateway: RawUtf8
       read fDefaultGateway write fDefaultGateway;
-    /// DNS Servers 6 e.g. '8.8.8.8,8.8.4.4'
+    /// DNS Servers as CSV (option 6) e.g. '8.8.8.8,8.8.4.4' - default is ''
     property DnsServers: RawUtf8
       read fDnsServers write fDnsServers;
-    /// Domain Name  e.g. 'lan.local'
+    /// Domain Name e.g. 'lan.local' - default is ''
     property DomainName: RawUtf8
       read fDomainName write fDomainName;
-    /// Broadcast Address e.g. '192.168.1.255'
+    /// Broadcast Address e.g. '192.168.1.255' - default is ''
     property BroadCastAddress: RawUtf8
       read fBroadCastAddress write fBroadCastAddress;
-    /// IP Lease Duration in seconds e.g. 86400 for 24h)
+    /// IP Lease Duration in seconds - default is 120 for 2 minutes
+    // - options 51/58/59 Lease/Renewal/Rebinding will use 100/50/87.5 percents
+    // - default 120 secs seems fine for our minimal iPXE-oriented DHCP server
     property LeaseTimeSeconds: cardinal
       read fLeaseTimeSeconds write fLeaseTimeSeconds;
     /// DHCP Server Identifier e.g. '192.168.1.1'
+    // - default is '' and will be filled by SubnetMask value
     property ServerIdentifier: RawUtf8
       read fServerIdentifier write fServerIdentifier;
+    /// how many seconds a DHCP dmtOffer would stay available - default is 5
+    property OfferHoldingSecs: cardinal
+      read fOfferHoldingSecs write fOfferHoldingSecs;
+    /// if lease time is < 1 hour, allow relaxed lease expansion after expiry
+    // - default is 2, meaning that for PXE with LeaseTimeSeconds = 120 < 1 hour,
+    // a grace period of 240 seconds
+    // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
+    property GraceFactor: cardinal
+      read fGraceFactor write fGraceFactor default 2;
   end;
 
 
@@ -474,15 +496,9 @@ end;
 constructor TDhcpServerSettings.Create;
 begin
   inherited Create;
-  fSubnetMask := '255.255.255.0';
-  fRangeMin := '192.168.1.10';
-  fRangeMax := '192.168.1.254';
-  fDefaultGateway := '192.168.1.1';
-  fDnsServers := '192.168.1.1';
-  fDomainName := 'lan.local';
-  fBroadCastAddress := '192.168.1.255';
-  fLeaseTimeSeconds := 86400; // for 24h
-  ServerIdentifier := '192.168.1.1';
+  fSubnetMask := '192.168.1.1/24';
+  fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
+  fOfferHoldingSecs := 5;
 end;
 
 
