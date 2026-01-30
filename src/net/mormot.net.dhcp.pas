@@ -285,6 +285,58 @@ type
   /// a dynamic array of TLease entries, as stored within TDhcpLease
   TLeaseDynArray = array of TLease;
 
+  /// Exception class raised by this unit
+  EDhcp = class(ESynException);
+
+  /// maintain a list of DHCP leases
+  // - contains the data logic of a simple DHCP server, good enough to implement
+  // iPXE network boot together with mormot.net.tftp.server.pas
+  TDhcpLease = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;
+    fEntry: TLeaseDynArray;
+    fLog: TSynLogClass;
+    fCount, fLastFind, fFreeListCount: integer;
+    fFreeList: TIntegerDynArray;
+    fLastIpLE, fIpMinLE, fIpMaxLE: TNetIP4; // all little-endian for NextIp4
+    fSubnetMask, fBroadcast, fGateway, fServerIdentifier: TNetIP4;
+    fDnsServer, fStatic: TNetIP4s;
+    fLeaseTime, fRenewalTime, fRebinding, fOfferHolding, fGraceFactor: cardinal;
+    fSubnet: TIp4SubNet;
+    fIdleTix: cardinal;
+    // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
+    function FindMac(mac: Int64): PLease;
+    function FindIp4(ip4: TNetIP4): PLease;
+    function NewLease: PLease;
+    function NextIp4: TNetIP4;
+  public
+    /// setup this DHCP process using the specified settings
+    // - raise an EDhcp exception if the parameters are not correct
+    // - if aSettings = nil, will use TDhcpServerSettings default parameters
+    procedure Setup(aSettings: TDhcpServerSettings);
+    /// register another static IP address to the internal pool
+    function AddStatic(const ip: RawUtf8): boolean;
+    /// flush the internal entry list
+    procedure Clear;
+    /// should be called every second
+    procedure OnIdle(tix32: cardinal);
+    /// persist the internal entry list using raw binary
+    function SaveToFile(const FileName: TFileName): boolean;
+    /// restore the internal entry list using raw binary
+    function LoadFromFile(const FileName: TFileName): boolean;
+    /// this is the main processing function of the DHCP server logic
+    // - returns false if the Frame input was invalid
+    // - fills Frame with the proper answer, and return true and set Len to
+    // the number of bytes of Frame as response to send back as UDP broadcast
+    function ProcessUdpFrame(var Frame: TDhcpPacket; var Len: PtrInt): boolean;
+    /// the associated TSynLog class used to debug the execution context
+    property Log: TSynLogClass
+      read fLog write fLog;
+    /// how many entries are currently reserved in memory
+    property Count: integer
+      read fCount;
+  end;
+
 
 implementation
 
@@ -525,6 +577,480 @@ end;
 
 
 { **************** High-Level DHCP Server }
+
+
+{ TDhcpLease }
+
+{ low-level methods, thread-safe by the caller making fSafe.Lock/UnLock }
+
+const
+  MAC_MASK = $0000ffffffffffff; // truncate 64-bit to TNetMac
+
+function TDhcpLease.FindMac(mac: Int64): PLease;
+var
+  n: integer;
+begin // code below expects result^.Mac to be first
+  result := nil;
+  if fCount = 0 then
+    exit;
+  mac := mac and MAC_MASK;
+  if fLastFind < fCount then
+  begin
+    result := @fEntry[fLastFind];
+    if PInt64(result)^ and MAC_MASK = mac then
+      exit; // naive but efficient search during DHCP negotiation
+  end;
+  result := pointer(fEntry); // efficient O(n) brute force search
+  n := fCount;
+  repeat
+    if PInt64(result)^ and MAC_MASK = mac then
+      exit;
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := nil;
+end;
+
+function TDhcpLease.FindIp4(ip4: TNetIP4): PLease;
+var
+  n: integer;
+begin
+  result := pointer(fEntry);
+  n := fCount;
+  if n <> 0 then
+    repeat
+      if result^.IP4 = ip4 then
+        exit;
+      inc(result);
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
+
+function TDhcpLease.NewLease: PLease;
+begin
+  // first try if we have any lsFree entries
+  if fFreeListCount <> 0 then
+  begin
+    dec(fFreeListCount);
+    result := @fEntry[fFreeList[fFreeListCount]];
+    if result^.State = lsFree then
+      exit; // paranoid
+  end;
+  // we need to add a new entry - maybe with reallocation
+  if fCount = length(fEntry) then
+    SetLength(fEntry, NextGrow(fCount));
+  result := @fEntry[fCount];
+  inc(fCount);
+end;
+
+function TDhcpLease.NextIp4: TNetIP4;
+var
+  bak: TNetIP4;
+  looped: boolean;
+  existing, outdated: PLease;
+begin
+  result := fLastIpLE; // all those f*LE variables are in little-endian order
+  if (result < fIpMinLE) or
+     (result > fIpMaxLE) then
+    result := fIpMinLE - 1; // e.g. at startup
+  outdated := nil;
+  looped := false;
+  repeat
+    inc(result);
+    if result > fIpMaxLE then
+      // we reached the end of IP range
+      if looped then
+      begin
+        // all IPs are already used in the internal list
+        if outdated <> nil then
+        begin
+          // reuse the oldest outdated slot
+          AddInteger(fFreeList, fFreeListCount,
+            {index=}(PtrUInt(outdated) - PtrUInt(fEntry)) div SizeOf(fEntry[0]));
+          result := outdated^.IP4; // reuse this IP4
+          FillZero(THash128(outdated^)); // and set outdated^.State := lsFree;
+          // TODO: call ARP on outdated^.IP4 to ensure is actually free?
+          //       or add some logic in OnIdle to call ARP before lsOutdated?
+          //       - it seems overkill: the user should rather tune the lease
+          //       duration or use a bigger netmask if /24 is too small
+          //       - so it is clever to let the client do its own ARP request
+        end
+        else
+          // pool exhausted: consider shorten the lease duration to 60-300 secs
+          result := 0;
+        exit;
+      end
+      else
+      begin
+        // wrap around the IP range once
+        looped := true;
+        result := fIpMinLE;
+      end;
+    bak := result;
+    result := bswap32(result);
+    if not IntegerScanExists(pointer(fStatic), length(fStatic), result) then
+    begin
+      existing := FindIp4(result);
+      if existing = nil then
+      begin
+        // return the unused IP found
+        fLastIpLE := bak;
+        exit;
+      end
+      else if (existing^.State = lsOutdated) and
+              ((outdated = nil) or
+               (existing^.Timeout < outdated^.Timeout)) then
+        outdated := existing; // mark oldest outdated entry
+    end;
+    result := bak;
+  until false;
+end;
+
+
+{ general-purpose methods }
+
+procedure TDhcpLease.Setup(aSettings: TDhcpServerSettings);
+var
+  owned: boolean;
+  i, n: PtrInt;
+  p: PLease;
+
+  procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
+  begin
+    if not fSubnet.Match(ip) then
+      EDhcp.RaiseUtf8('%.Setup: SubNetMask=% does not match %=%',
+        [self, aSettings.SubnetMask, ident, IP4ToShort(@ip)]);
+  end;
+
+begin
+  owned := aSettings = nil;
+  if owned then
+    aSettings := TDhcpServerSettings.Create; // use default values
+  fSafe.Lock;
+  try
+    // convert the text settings into binary raw values
+    fGateway          := ToIP4(aSettings.DefaultGateway);
+    fBroadcast        := ToIP4(aSettings.BroadCastAddress);
+    fServerIdentifier := ToIP4(aSettings.ServerIdentifier);
+    fLastIpLE         := 0;
+    fIpMinLE          := ToIP4(aSettings.RangeMin);
+    fIpMaxLE          := ToIP4(aSettings.RangeMax);
+    fDnsServer        := ToIP4s(aSettings.DnsServers);
+    fStatic           := ToIP4s(aSettings.StaticIPs);
+    fLeaseTime        := aSettings.LeaseTimeSeconds; // 100%
+    if fLeaseTime < 30 then
+      fLeaseTime := 30;                              // 30 seconds minimum lease
+    fRenewalTime      := fLeaseTime shr 1;           // 50%
+    fRebinding        := (fLeaseTime * 7) shr 3;     // 87.5%
+    fOfferHolding     := aSettings.OfferHoldingSecs; // 5 seconds
+    if fOfferHolding < 1 then
+      fOfferHolding := 1
+    else if fOfferHolding > fRenewalTime then
+      fOfferHolding := fRenewalTime;
+    fGraceFactor      := aSettings.GraceFactor;      // * 2
+    // retrieve the subnet mask from settings
+    if not fSubnet.From(aSettings.SubnetMask) then
+      EDhcp.RaiseUtf8(
+        '%.Setup: unexpected SubNetMask=% (should be mask ip or ip/sub)',
+        [self, aSettings.SubnetMask]);
+    if fSubnet.mask = cAnyHost32 then
+    begin
+      // SubNetMask was not '192.168.0.1/24': is expected to be '255.255.255.0'
+      if IP4Prefix(fSubnet.ip) = 0 then
+        EDhcp.RaiseUtf8('%.Setup: SubNetMask=% is not a mask IPv4',
+          [self, aSettings.SubnetMask]);
+      fSubnetMask := fSubnet.ip;
+      // we expect other parameters to be set specifically: compute fSubnet
+      if fServerIdentifier = 0 then
+        EDhcp.RaiseUtf8('%.Setup: SubNetMask=% but without ServerIdentifier',
+          [self, aSettings.SubnetMask]);
+      fSubnet.mask := fSubnetMask;
+      fSubnet.ip := fServerIdentifier and fSubnetMask; // normalize as in From()
+    end
+    else
+      // SubNetMask was e.g. '192.168.0.1/24'
+      if fServerIdentifier = 0 then
+        // extract from exact SubNetMask text, since fSubnet.ip = 192.168.0.0
+        fServerIdentifier := ToIP4(aSettings.SubnetMask);
+    // validate all settings values from the actual subnet
+    fSubnetMask := fSubnet.mask;
+    if fGateway <> 0 then
+      CheckSubnet('DefaultGateway', fGateway);
+    CheckSubnet('ServerIdentifier', fServerIdentifier);
+    if fIpMinLE = 0 then
+      fIpMinLE := fSubnet.ip + $0a000000; // e.g. 192.168.0.10
+    CheckSubnet('RangeMin', fIpMinLE);
+    if fIpMaxLE = 0 then
+      // e.g. 192.168.0.0 + pred(not(255.255.255.0)) = 192.168.0.254
+      fIpMaxLE := bswap32(bswap32(fSubnet.ip) + pred(not(bswap32(fSubnet.mask))));
+    CheckSubnet('RangeMax', fIpMaxLE);
+    if bswap32(fIpMaxLE) <= bswap32(fIpMinLE) then
+      EDhcp.RaiseUtf8('%.Setup: unexpected %..% range',
+        [self, IP4ToShort(@fIpMinLE), IP4ToShort(@fIpMaxLE)]);
+    if fBroadcast <> 0 then
+      CheckSubNet('BroadCastAddress', fBroadcast);
+    for i := 0 to high(fStatic) do
+      CheckSubnet('Static', fStatic[i]);
+    AddInteger(TIntegerDynArray(fStatic), fServerIdentifier, {nodup=}true);
+    // prepare the leases in-memory database
+    if fEntry = nil then
+      SetLength(fEntry, 250) // pre-allocate 4KB of working entries
+    else
+    begin
+      // validate all current leases from the actual subnet
+      n := 0;
+      p := pointer(fEntry);
+      for i := 0 to fCount - 1 do
+      begin
+        if fSubnet.Match(p^.IP4) then
+        begin
+          if n <> i then
+            fEntry[n] := p^;
+          inc(n);
+        end;
+        inc(p);
+      end;
+      fCount := n;
+    end;
+    // log the used network context
+    if Assigned(fLog) then
+      fLog.Add.Log(sllInfo, 'Setup%: subnet=% min=% max=% server=% broadcast=%' +
+        ' gateway=% static=% dns=% lease=% renew=% rebind=% offer=%',
+        [aSettings, IP4ToShort(@fSubnetMask), IP4ToShort(@fIpMinLE),
+         IP4ToShort(@fIpMaxLE), IP4ToShort(@fServerIdentifier),
+         IP4ToShort(@fBroadcast), IP4ToShort(@fGateway),
+         IP4sToText(fStatic),  IP4sToText(fDnsServer),
+         fLeaseTime, fRenewalTime, fRebinding, fOfferHolding],
+        self);
+    // store internal values in the more efficient endianess for direct usage
+    fIpMinLE     := bswap32(fIpMinLE);      // little-endian
+    fIpMaxLE     := bswap32(fIpMaxLE);
+    fLeaseTime   := bswap32(fLeaseTime);    // big-endian
+    fRenewalTime := bswap32(fRenewalTime);
+    fRebinding   := bswap32(fRebinding);
+  finally
+    fSafe.UnLock;
+    if owned then
+      aSettings.Free; // avoid memory leak
+  end;
+end;
+
+function TDhcpLease.AddStatic(const ip: RawUtf8): boolean;
+var
+  ip4: TNetIP4;
+begin
+  result := NetIsIP4(pointer(ip), @ip4);
+  if not result then
+    exit;
+  fSafe.Lock;
+  try
+    result := AddInteger(TIntegerDynArray(fStatic), ip4, {nodup=}true);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TDhcpLease.Clear;
+begin
+  fSafe.Lock;
+  fCount := 0;
+  fEntry := nil;
+  fSafe.UnLock;
+end;
+
+procedure TDhcpLease.OnIdle(tix32: cardinal);
+var
+  n: integer;
+  utc: TUnixTimeMinimal;
+  p: PLease;
+begin
+  if (tix32 = fIdleTix) or
+     (fCount = 0) then
+    exit;
+  utc := UnixTimeMinimalUtc;
+  fIdleTix := tix32;
+  fSafe.Lock;
+  try
+    // TODO: check deprecated entries
+    n := fCount;
+    p := pointer(fEntry);
+    if n <> 0 then
+      repeat
+
+        inc(p);
+        dec(n);
+      until n = 0;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDhcpLease.SaveToFile(const FileName: TFileName): boolean;
+begin
+  fSafe.Lock;
+  result := FileFromBuffer(pointer(fEntry), fCount * SizeOf(fEntry[0]), FileName);
+  fSafe.UnLock;
+end;
+
+function TDhcpLease.LoadFromFile(const FileName: TFileName): boolean;
+var
+  bin: RawByteString;
+begin
+  Clear;
+  bin := StringFromFile(FileName);
+  result := false;
+  if (bin <> '') and
+     (length(bin) mod SizeOf(fEntry[0]) <> 0) then
+    exit;
+  result := true;
+  if bin = '' then
+    exit;
+  fSafe.Lock;
+  fCount := length(bin) div SizeOf(fEntry[0]);
+  SetLength(fEntry, NextGrow(fCount));
+  MoveFast(pointer(bin)^, pointer(fEntry)^, length(bin));
+  fSafe.UnLock;
+end;
+
+function TDhcpLease.ProcessUdpFrame(
+  var Frame: TDhcpPacket; var Len: PtrInt): boolean;
+var
+  lens: TDhcpParsed;
+  dmt: TDhcpMessageType;
+  fnd: TDhcpOptions;
+  p: PLease;
+  f: PAnsiChar;
+  mac64: Int64;
+  mac: TNetMac absolute mac64;
+  ip4: TNetIP4;
+  utc: TUnixTimeMinimal;
+  macx: string[12]; // no memory allocation during the process
+begin
+  result := false;
+  // parse and validate the request
+  ip4 := 0;
+  mac64 := 0;
+  dmt := DhcpParse(@Frame, Len, lens, @fnd, @mac);
+  macx[0] := #12;
+  if Assigned(fLog) then
+    BinToHexLower(@mac, @macx[1], 6);
+  if (mac64 = 0) or
+     not (dmt in [dmtDiscover, dmtRequest]) then
+  begin
+    if Assigned(fLog) then
+      fLog.Add.Log(sllTrace, 'ProcessUdpFrame: invalid % frame from %',
+        [ToText(dmt)^, macx], self);
+    exit; // invalid or unsupported frame
+  end;
+  // compute the corresponding IPv4 according to the internal lease list
+  utc := UnixTimeMinimalUtc;
+  fSafe.Lock;
+  try
+    case dmt of
+      dmtDiscover:
+        begin
+          p := FindMac(mac64);
+          if (p = nil) or
+             (p^.IP4 = 0) then
+          begin
+            // first time seen (most common case)
+            if lens[doRequestedIp] <> 0 then
+            begin
+              ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // try to renew
+              if ip4 <> 0 then
+                if (not fSubNet.Match(ip4)) or
+                   IntegerScanExists(pointer(fStatic), length(fStatic), ip4) or
+                   (FindIp4(ip4) <> nil) then
+                begin
+                  // this IP seems already used by another MAC
+                  if Assigned(fLog) then
+                    fLog.Add.Log(sllDebug,
+                      'ProcessUdpFrame: ignore invalid requestedip=%',
+                      [IP4ToShort(@ip4)], self);
+                  ip4 := 0; // NextIP4
+                end;
+            end;
+            if ip4 = 0 then
+              ip4 := NextIp4;
+            if ip4 = 0 then
+            begin
+              // IPv4 exhausted: don't return NAK, but silently ignore
+              // - client will retry automatically after a small temporisation
+              fLog.Add.Log(sllWarning,
+                'ProcessUdpFrame: IPv4 exhausted for Discover %', [macx], self);
+              exit;
+            end;
+            if p = nil then
+            begin
+              p := NewLease;
+              p^.Mac := mac;
+            end;
+            p^.IP4 := ip4;
+          end
+          else
+            // keep existing/previous IP4
+            ip4 := p^.IP4;
+          // respond with an OFFER
+          p^.State := lsReserved;
+          p^.Timeout := utc + fOfferHolding;
+          dmt := dmtOffer;
+        end;
+      dmtRequest:
+        begin
+          // especially for PXE networks, it is safe and common to ignore
+          // Option 50 and ciaddr in REQUEST and just ACK the already OFFERed IP
+          p := FindMac(mac64);
+          if (p = nil) or
+             (p^.IP4 = 0) or
+             not ((p^.State in [lsReserved, lsAck]) or
+                  ((p^.State = lsOutdated) and
+                   (fGraceFactor <> 0) and
+                   (fLeaseTime < SecsPerHour) and // grace period
+                   (utc - p^.Timeout < fLeaseTime * fGraceFactor))) then
+          begin
+            fLog.Add.Log(sllDebug,
+              'ProcessUdpFrame: NAK after out-of-sync Request %', [macx], self);
+            // send a NAK response anyway
+            f := DhcpNew(Frame, dmtNak, Frame.xid, mac, fServerIdentifier);
+            Len := f - PAnsiChar(@Frame) + 1;
+            result := true;
+            exit;
+          end;
+          // respond with an ACK on the known IP
+          ip4 := p^.IP4;
+          p^.State := lsAck;
+          p^.Timeout := utc + fLeaseTime;
+          dmt := dmtAck;
+        end;
+    else
+      exit; // paranoid
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+  // compute the response frame over the very same xid
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % IP=% for mac=%',
+        [ToText(dmt)^, IP4ToShort(@ip4), macx], self);
+  f := DhcpNew(Frame, dmt, Frame.xid, mac, fServerIdentifier);
+  Frame.ciaddr := ip4;
+  DhcpAddOption(f,   doSubnetMask,         @fSubnetMask);
+  if fBroadcast <> 0 then
+    DhcpAddOption(f, doBroadcastAddr,      @fBroadcast);
+  if fGateway <> 0 then
+    DhcpAddOption(f, doRouter,             @fGateway);
+  DhcpAddOptions(f,  doDns,                pointer(fDnsServer));
+  DhcpAddOption(f,   doLeaseTimeValue,     @fLeaseTime); // already big-endian
+  DhcpAddOption(f,   doRenewalTimeValue,   @fRenewalTime);
+  DhcpAddOption(f,   doRebindingTimeValue, @fRebinding);
+  // TODO: IPXE host/file options
+  // TODO: custom callback
+  f^ := #255;
+  Len := f - PAnsiChar(@Frame) + 1;
+  result := true;
+end;
+
 
 { TDhcpServerSettings }
 
