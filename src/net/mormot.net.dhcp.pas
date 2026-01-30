@@ -163,6 +163,7 @@ function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
 function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
 
 /// decode the MAC address corresponding to lens[opt] within dhcp^.option[]
+// - no DUID decoding is supported yet: only MAC or Eth=1 + MAC values
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 
 /// decode the lens[doParameterRequestList] within dhcp^.option[]
@@ -403,7 +404,7 @@ end;
 
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
 begin
-  result := PtrUInt(len);
+  result := 0;
   if len = 0 then
     exit;
   inc(len, PtrUInt(@dhcp.options));
@@ -418,15 +419,17 @@ end;
 
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 begin
-  result := pointer(len);
+  result := nil;
   if len = 0 then
     exit;
   inc(len, PtrUInt(@dhcp.options));
-  case PByte(len)^ of
+  case PByte(len)^ of // e.g. client identifier
     SizeOf(TNetMac):
+      // PXE clients often use MAC-only (6 bytes)
       result := pointer(len + 1);
     SizeOf(TNetMac) + 1:
-      if PByte(len + 1)^ = ARPHRD_ETHER then // e.g. client identifier
+      // Windows PE or iPXE may use 1-byte type + MAC (7 bytes)
+      if PByte(len + 1)^ = ARPHRD_ETHER then
         result := pointer(len + 2);
   end;
 end;
