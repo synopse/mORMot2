@@ -53,6 +53,7 @@ const
   cAnyPort    = '0';
 
   cLocalhost32 = $0100007f;
+  cAnyHost32   = $ffffffff;
 
   {$ifdef OSWINDOWS}
   SOCKADDR_SIZE = 28;
@@ -139,12 +140,15 @@ type
 
   /// store the 4 bytes of a typical IP address as 32-bit unsigned integer
   TNetIP4 = cardinal;
+  /// store several 4 bytes of a typical IP address as 32-bit unsigned integers
+  TNetIP4s = array of TNetIP4;
   /// store the 16-bit IP port to connect/bind a socket
   TNetPort = cardinal;
-  /// store the 6 bytes of a typical ethernet MAC address binary
+  /// store the 6 bytes / 48-bit of a typical ethernet MAC address binary
   TNetMac = array[0..5] of byte;
   /// pointer to an ethernet MAC address binary buffer
   PNetMac = ^TNetMac;
+  PPNetMac = ^PNetMac;
 
 const
   NO_ERROR = 0;
@@ -612,6 +616,9 @@ procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 /// convert an IPv4 raw value into a RawUtf8 text
 function IP4ToText(ip4addr: PByteArray): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// convert an array of IPv4 raw value into a RawUtf8 CSV text
+function IP4sToText(const ip4: array of TNetIP4): RawUtf8;
 
 /// convert an IPv6 raw value into a ShortString text
 // - will shorten the address using the regular 0 removal scheme, e.g.
@@ -2659,7 +2666,7 @@ begin
     ad4.sin_addr.s_addr := cLocalhost32 // 127.0.0.1
   else if (address = cBroadcast) or
           (address = c6Broadcast) then
-    ad4.sin_addr.s_addr := cardinal(-1) // 255.255.255.255
+    ad4.sin_addr.s_addr := cAnyHost32 // 255.255.255.255
   else if address = cAnyHost then
     // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
   else if NetIsIP4(pointer(address), @ad4.sin_addr) or
@@ -3749,6 +3756,21 @@ end;
 function IP4ToText(ip4addr: PByteArray): RawUtf8;
 begin
   IP4Text(ip4addr, result);
+end;
+
+function IP4sToText(const ip4: array of TNetIP4): RawUtf8;
+var
+  s: TShort16;
+  i: PtrInt;
+begin
+  result := '';
+  for i := 0 to high(ip4) do
+  begin
+    IP4Short(@ip4[i], s);
+    if i <> high(ip4) then
+      AppendShortChar(',', @s);
+    AppendBufferToUtf8(@s[1], ord(s[0]), result);
+  end;
 end;
 
 procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
