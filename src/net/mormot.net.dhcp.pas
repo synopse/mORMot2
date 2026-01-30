@@ -132,7 +132,12 @@ procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte); overload;
   {$ifdef FPC} inline; {$endif}
 
 /// append a raw binary value to the TDhcpPacket.options packet
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pbyte; len: PtrUInt); overload;
+procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pbyte;
+  len: PtrUInt = 4); overload;
+
+/// append a TNetIP4s dynamic array to the TDhcpPacket.options packet
+procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
 
 type
  /// efficient DhcpParse() resultset
@@ -256,6 +261,12 @@ begin
   if len <> 0 then
     MoveFast(b^, p[2], len);
   p := @p[len + 2];
+end;
+
+procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
+begin
+  if ips <> nil then // ips is a dynamic array of TNetIP4 = cardinal
+    DhcpAddOption(p, op, pointer(ips), (PDALen(ips - _DALEN)^ + _DAOFF) * 4);
 end;
 
 function DhcpAddOptionRequestList(p: PAnsiChar; op: TDhcpOptions): PAnsiChar;
