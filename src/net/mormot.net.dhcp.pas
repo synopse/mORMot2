@@ -250,6 +250,41 @@ type
       read fGraceFactor write fGraceFactor default 2;
   end;
 
+type
+  /// the state of one DHCP TLease entry in memory
+  // - lsFree identify an lsOutdated slot which IP4 has been reused
+  // - lsReserved is used when an OFFER has been sent back to the client with IP4
+  // - lsAck is used when REQUEST has been recevied and ASK has been sent
+  // - lsOutdated is set once Timeout has been reached, so that the IP4 address
+  // could be reused on the next DISCOVER for this MAC
+  TLeaseState = (
+    lsFree,
+    lsReserved,
+    lsAck,
+    lsOutdated);
+
+  /// store one DHCP lease in memory
+  // - efficiently padded to 16 bytes
+  TLease = packed record
+    /// the MAC address of this entry - should be first
+    // - we only lookup clients by MAC: no DUID is supported (we found it error
+    // prone in practice, when some VMs are duplicated with the same DUID)
+    Mac: TNetMac;
+    /// how this entry should be handled
+    State: TLeaseState;
+    /// align the whole structure to cpu-cache-friendly 16 bytes
+    Padding: byte;
+    /// the 32-bit reserved IP
+    IP4: TNetIP4;
+    /// TUnixTime value stored as 32-bit unsigned integer (valid up to year 2152)
+    Timeout: TUnixTimeMinimal;
+  end;
+  /// points to one DHCP lease entry in memory
+  PLease = ^TLease;
+
+  /// a dynamic array of TLease entries, as stored within TDhcpLease
+  TLeaseDynArray = array of TLease;
+
 
 implementation
 
