@@ -1546,21 +1546,48 @@ begin
     end;
 end;
 
+const
+  FND_RESP = [doSubnetMask, doLeaseTimeValue, doMessageType,
+    doServerIdentifier, doRenewalTimeValue, doRebindingTimeValue];
+
 procedure TNetworkProtocols.DHCP;
 var
   bin: RawByteString;
   mac: RawUtf8;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
-  ip4: TNetIP4;
+  ip4, sip4: TNetIP4;
+  xid: cardinal;
+  disc, req: TDhcpPacket;
+  disclen, reqlen, i, n: PtrInt;
+  server: TDhcpLease;
+  macs: array of TNetMac;
+  ips: TNetIP4s;
+  timer: TPrecisionTimer;
+
+  procedure DoRequest(ndx: PtrInt);
+  begin
+    reqlen := DhcpClient(req, dmtRequest, macs[ndx], []) - PAnsiChar(@req) + 1;
+    Check(CompareMem(@macs[ndx], @req.chaddr, SizeOf(macs[0])));
+    CheckNotEqual(xid, req.xid);
+    xid := req.xid;
+    Check(server.ProcessUdpFrame(req, reqlen), 'ack#');
+    CheckEqual(req.xid, xid);
+    Check(CompareMem(@macs[ndx], @req.chaddr, SizeOf(macs[0])));
+    CheckEqual(ips[ndx], req.ciaddr);
+  end;
+
 begin
-  // validate DISCOVER frame from WireShark
+  // validate client DISCOVER disc from WireShark
   bin := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAABjglNjNQEBPQcBAAuCAfxCMgQAAAAANwQBAwYq/wAAAAAAAAA=');
+  disclen := length(bin);
+  Check(disclen < SizeOf(disc));
+  MoveFast(pointer(bin)^, disc, disclen);
   CheckEqual(PDhcpPacket(bin)^.xid, $1d3d0000);
   mac := '00:0b:82:01:fc:42';
   CheckEqual(MacToText(@PDhcpPacket(bin)^.chaddr), mac);
@@ -1576,7 +1603,8 @@ begin
   CheckEqual(DhcpIP4(pointer(bin), lens[doRequestedIp]), 0);
   Check(DhcpRequestList(pointer(bin), lens) =
     [doSubnetMask, doRouter, doDns, doNtpServer]);
-  // validate OFFER frame from WireShark
+  Check(CompareMem(pointer(bin), @disc, disclen), 'no modif');
+  // validate server OFFER frame from WireShark
   bin := Base64ToBin(
     'AgEGAAAAPR0AAAAAAAAAAMCoAArAqAABAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1587,15 +1615,14 @@ begin
   CheckEqual(PDhcpPacket(bin)^.xid, $1d3d0000);
   CheckEqual(MacToText(@PDhcpPacket(bin)^.chaddr), mac);
   Check(DhcpParse(pointer(bin), length(bin), lens, @fnd) = dmtOffer);
-  Check(fnd = [doSubnetMask, doLeaseTime, doMessageType,
-    doServerIdentifier, doRenewalTimeValue, doRebindingTimeValue]);
+  Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(bin), lens[doSubnetMask]), IP4Netmask(24));
   CheckEqual(DhcpInt(pointer(bin), lens[doRenewalTimeValue]), 1800);
   CheckEqual(DhcpInt(pointer(bin), lens[doRebindingTimeValue]), 3150);
-  CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTime]), 3600);
+  CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTimeValue]), 3600);
   ip4 := DhcpIP4(pointer(bin), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
-  // validate REQUEST frame from WireShark
+  // validate client REQUEST frame from WireShark
   bin := Base64ToBin(
     'AQEGAAAAPR4AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1603,6 +1630,9 @@ begin
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAABjglNjNQEDPQcBAAuCAfxCMgTAqAAKNgTAqAABNwQ' +
     'BAwYq/wA=');
+  reqlen := length(bin);
+  Check(reqlen < SizeOf(req));
+  MoveFast(pointer(bin)^, req, reqlen);
   CheckEqual(PDhcpPacket(bin)^.xid, $1e3d0000);
   CheckEqual(MacToText(@PDhcpPacket(bin)^.chaddr), mac);
   fnd := [];
@@ -1618,7 +1648,7 @@ begin
   CheckEqual(IP4ToText(@ip4), '192.168.0.10');
   Check(DhcpRequestList(pointer(bin), lens) =
     [doSubnetMask, doRouter, doDns, doNtpServer]);
-  // validate ACK frame from WireShark
+  // validate server ACK frame from WireShark
   bin := Base64ToBin(
     'AgEGAAAAPR4AAAAAAAAAAMCoAAoAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
     'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1629,12 +1659,11 @@ begin
   CheckEqual(PDhcpPacket(bin)^.xid, $1e3d0000);
   CheckEqual(MacToText(@PDhcpPacket(bin)^.chaddr), mac);
   Check(DhcpParse(pointer(bin), length(bin), lens, @fnd) = dmtAck);
-  Check(fnd = [doSubnetMask, doLeaseTime, doMessageType,
-    doServerIdentifier, doRenewalTimeValue, doRebindingTimeValue]);
+  Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(bin), lens[doSubnetMask]), IP4Netmask(24));
   CheckEqual(DhcpInt(pointer(bin), lens[doRenewalTimeValue]), 1800);
   CheckEqual(DhcpInt(pointer(bin), lens[doRebindingTimeValue]), 3150);
-  CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTime]), 3600);
+  CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTimeValue]), 3600);
   ip4 := DhcpIP4(pointer(bin), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
 
