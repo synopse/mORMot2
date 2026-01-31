@@ -318,8 +318,9 @@ type
     function AddStatic(const ip: RawUtf8): boolean;
     /// flush the internal entry list
     procedure Clear;
-    /// should be called every second
-    procedure OnIdle(tix32: cardinal);
+    /// to be called on regular pace to identify outdated entries every second
+    // - return the number of outdated entries identified during this call
+    function OnIdle(tix32: cardinal): integer;
     /// persist the internal entry list using raw binary
     function SaveToFile(const FileName: TFileName): boolean;
     /// restore the internal entry list using raw binary
@@ -1079,6 +1080,7 @@ begin
   fSubnetMask := '192.168.1.1/24';
   fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
   fOfferHoldingSecs := 5;
+  fGraceFactor := 2;
 end;
 
 
