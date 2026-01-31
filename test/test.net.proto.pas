@@ -1575,6 +1575,7 @@ var
     CheckNotEqual(reqlen, 0);
     CheckEqual(req.xid, xid);
     Check(CompareMem(@macs[ndx], @req.chaddr, SizeOf(macs[0])));
+    Check(server.Subnet.Match(req.ciaddr));
     CheckEqual(ips[ndx], req.ciaddr);
   end;
 
@@ -1673,6 +1674,8 @@ begin
     //TSynLog.Family.Level := LOG_VERBOSE;
     server.Log := TSynLog;
     server.Setup({settings=}nil);
+    Check(server.Subnet.Match('192.168.1.1'));
+    Check(not server.Subnet.Match('8.8.8.8'));
     // DISCOVER -> OFFER
     Check(server.ProcessUdpFrame(disc, disclen), 'discover');
     CheckNotEqual(disclen, 0);
@@ -1729,6 +1732,7 @@ begin
       CheckEqual(req.xid, xid);
       Check(CompareMem(@macs[i], @req.chaddr, SizeOf(macs[0])));
       ips[i] := req.ciaddr;
+      Check(server.Subnet.Match(ips[i]));
     end;
     CheckEqual(server.Count, n + 1);
     for i := high(macs) downto 0 do // in reverse order

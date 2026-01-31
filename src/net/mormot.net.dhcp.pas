@@ -330,6 +330,9 @@ type
     // - fills Frame with the proper answer, and return true and set Len to
     // the number of bytes of Frame as response to send back as UDP broadcast
     function ProcessUdpFrame(var Frame: TDhcpPacket; var Len: PtrInt): boolean;
+    /// can be used e.g. to check if IP address match the DHCP server network mask
+    property Subnet: TIp4SubNet
+      read fSubnet;
     /// the associated TSynLog class used to debug the execution context
     property Log: TSynLogClass
       read fLog write fLog;
