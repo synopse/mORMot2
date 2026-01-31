@@ -301,9 +301,9 @@ type
     fLastIpLE, fIpMinLE, fIpMaxLE: TNetIP4; // all little-endian for NextIp4
     fSubnetMask, fBroadcast, fGateway, fServerIdentifier: TNetIP4;
     fDnsServer, fStatic: TNetIP4s;
-    fLeaseTime, fRenewalTime, fRebinding, fOfferHolding, fGraceFactor: cardinal;
+    fLeaseTime, fLeaseTimeLE, fRenewalTime, fRebinding, fOfferHolding: cardinal;
     fSubnet: TIp4SubNet;
-    fIdleTix: cardinal;
+    fGraceFactor, fIdleTix: cardinal;
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
     function FindMac(mac: Int64): PLease;
     function FindIp4(ip4: TNetIP4): PLease;
@@ -835,6 +835,7 @@ begin
     // store internal values in the more efficient endianess for direct usage
     fIpMinLE     := bswap32(fIpMinLE);      // little-endian
     fIpMaxLE     := bswap32(fIpMaxLE);
+    fLeaseTimeLE := fLeaseTime;
     fLeaseTime   := bswap32(fLeaseTime);    // big-endian
     fRenewalTime := bswap32(fRenewalTime);
     fRebinding   := bswap32(fRebinding);
@@ -974,7 +975,7 @@ begin
           if (p = nil) or
              (p^.IP4 = 0) then
           begin
-            // first time seen (most common case)
+            // first time seen (most common case), or renewal
             if lens[doRequestedIp] <> 0 then
             begin
               ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // try to renew
@@ -1026,8 +1027,8 @@ begin
              not ((p^.State in [lsReserved, lsAck]) or
                   ((p^.State = lsOutdated) and
                    (fGraceFactor > 1) and
-                   (fLeaseTime < SecsPerHour) and // grace period
-                   (utc - p^.Timeout < fLeaseTime * fGraceFactor))) then
+                   (fLeaseTimeLE < SecsPerHour) and // grace period
+                   (utc - p^.Timeout < fLeaseTimeLE * fGraceFactor))) then
           begin
             fLog.Add.Log(sllDebug,
               'ProcessUdpFrame: NAK after out-of-sync Request %', [macx], self);
@@ -1040,7 +1041,7 @@ begin
           // respond with an ACK on the known IP
           ip4 := p^.IP4;
           p^.State := lsAck;
-          p^.Timeout := utc + fLeaseTime;
+          p^.Timeout := utc + fLeaseTimeLE;
           dmt := dmtAck;
         end;
     else
