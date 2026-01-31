@@ -1564,6 +1564,7 @@ var
   macs: array of TNetMac;
   ips: TNetIP4s;
   timer: TPrecisionTimer;
+  f: PAnsiChar;
 
   procedure DoRequest(ndx: PtrInt);
   begin
@@ -1710,6 +1711,11 @@ begin
       else
         CheckEqual(req.ciaddr, ip4);
       Check(not server.ProcessUdpFrame(req, reqlen), 'ack');
+      CheckEqual(reqlen, 0);
+      CheckEqual(DhcpIP4(@req, lens[doSubnetMask]), IP4Netmask(24));
+      CheckEqual(DhcpInt(@req, lens[doRenewalTimeValue]),   60);
+      CheckEqual(DhcpInt(@req, lens[doRebindingTimeValue]), 105);
+      CheckEqual(DhcpInt(@req, lens[doLeaseTimeValue]),     120);
       req := disc;
       reqlen := disclen;
     end;
@@ -1746,6 +1752,31 @@ begin
     CheckEqual(server.Count, n + 1);
     server.Clear;
     CheckEqual(server.Count, 0);
+    // validate DECLINE process
+    reqlen := DhcpClient(req, dmtDiscover, macs[0]) - PAnsiChar(@req) + 1;
+    Check(CompareMem(@macs[0], @req.chaddr, SizeOf(macs[0])));
+    CheckNotEqual(xid, req.xid);
+    xid := req.xid;
+    Check(server.ProcessUdpFrame(req, reqlen), 'request1');
+    CheckNotEqual(reqlen, 0);
+    CheckEqual(req.xid, xid);
+    CheckNotEqual(req.ciaddr, ips[0]);
+    Check(server.Subnet.Match(req.ciaddr));
+    ips[0] := req.ciaddr;
+    f := DhcpClient(req, dmtDecline, macs[0]);
+    reqlen := f - PAnsiChar(@req) + 1;
+    xid := req.xid;
+    Check(server.ProcessUdpFrame(req, reqlen), 'request2');
+    CheckEqual(reqlen, 0);
+    CheckEqual(req.xid, xid);
+    reqlen := DhcpClient(req, dmtDiscover, macs[0]) - PAnsiChar(@req) + 1;
+    xid := req.xid;
+    Check(server.ProcessUdpFrame(req, reqlen), 'request3');
+    CheckNotEqual(reqlen, 0);
+    CheckEqual(req.xid, xid);
+    Check(CompareMem(@macs[0], @req.chaddr, SizeOf(macs[0])));
+    Check(server.Subnet.Match(req.ciaddr));
+    CheckNotEqual(req.ciaddr, ips[0]);
   finally
     server.Free;
   end;
