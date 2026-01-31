@@ -255,12 +255,14 @@ type
   // - lsFree identify an lsOutdated slot which IP4 has been reused
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
   // - lsAck is used when REQUEST has been recevied and ASK has been sent
+  // - lsDeclinedIP is set when a DECLINE message is received from a client
   // - lsOutdated is set once Timeout has been reached, so that the IP4 address
   // could be reused on the next DISCOVER for this MAC
   TLeaseState = (
     lsFree,
     lsReserved,
     lsAck,
+    lsDeclinedIP,
     lsOutdated);
 
   /// store one DHCP lease in memory
@@ -269,6 +271,7 @@ type
     /// the MAC address of this entry - should be first
     // - we only lookup clients by MAC: no DUID is supported (we found it error
     // prone in practice, when some VMs are duplicated with the same DUID)
+    // - may contain 0 for a lsFree or lsDeclinedIP entry
     Mac: TNetMac;
     /// how this entry should be handled
     State: TLeaseState;
@@ -676,11 +679,6 @@ begin
             {index=}(PtrUInt(outdated) - PtrUInt(fEntry)) div SizeOf(fEntry[0]));
           result := outdated^.IP4; // reuse this IP4
           FillZero(THash128(outdated^)); // and set outdated^.State := lsFree;
-          // TODO: call ARP on outdated^.IP4 to ensure is actually free?
-          //       or add some logic in OnIdle to call ARP before lsOutdated?
-          //       - it seems overkill: the user should rather tune the lease
-          //       duration or use a bigger netmask if /24 is too small
-          //       - so it is clever to let the client do its own ARP request
         end
         else
           // pool exhausted: consider shorten the lease duration to 60-300 secs
@@ -704,10 +702,10 @@ begin
         fLastIpLE := le;
         exit;
       end
-      else if (existing^.State = lsOutdated) and
+      else if (existing^.State in [lsDeclinedIP, lsOutdated]) and
               ((outdated = nil) or
                (existing^.Timeout < outdated^.Timeout)) then
-        outdated := existing; // mark oldest outdated entry
+        outdated := existing; // detect oldest outdated entry
     end;
     result := le;
   until false;
@@ -878,7 +876,7 @@ begin
   if n <> 0 then
     repeat
       if (p^.Timeout < utc) and
-         (p^.State in [lsReserved, lsAck]) then
+         (p^.State in [lsReserved, lsAck, lsDeclinedIP]) then
       begin
         inc(result);
         p^.State := lsOutdated;
@@ -908,6 +906,9 @@ begin
   if (result <> 0) and
      Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'OnIdle: outdated=%', [result], self);
+  // no ARP call here to clean the internal list: the user should rather tune
+  // lease duration or use a bigger netmask; the RFC states that the client
+  // would do its own ARP request and resend (dmtDecline +) dmtDiscover
 end;
 
 function TDhcpLease.SaveToFile(const FileName: TFileName): boolean;
@@ -956,11 +957,12 @@ begin
   ip4 := 0;
   mac64 := 0;
   dmt := DhcpParse(@Frame, Len, lens, @fnd, @mac);
+  Len := 0; // no response
   macx[0] := #12;
   if Assigned(fLog) then
     BinToHexLower(@mac, @macx[1], 6);
   if (mac64 = 0) or
-     not (dmt in [dmtDiscover, dmtRequest]) then
+     not (dmt in [dmtDiscover, dmtRequest, dmtDecline]) then
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: invalid % frame from %',
@@ -976,7 +978,7 @@ begin
         begin
           p := FindMac(mac64);
           if (p = nil) or    // first time this MAC is seen
-             (p^.IP4 = 0) or // paranoid
+             (p^.IP4 = 0) or // may happen after dmtDecline
              (p^.State = lsReserved) then // reserved = client refused this IP
           begin
             // first time seen (most common case), or renewal
@@ -1047,6 +1049,34 @@ begin
           p^.State := lsAck;
           p^.Timeout := utc + fLeaseTimeLE;
           dmt := dmtAck;
+        end;
+      dmtDecline:
+        begin
+          // client ARPed the OFFERed IP and detect conflict: rejects it
+          ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // authoritative IP
+          if (ip4 <> 0) and
+             not fSubNet.Match(ip4) then // need clean IP
+            ip4 := 0;
+          p := FindMac(mac64);
+          if p <> nil then
+          begin
+            // invalidate OFFERed IP
+            p^.State := lsDeclinedIP;
+            if ip4 = 0 then
+              ip4 := p^.IP4; // option 50 was not set
+            p^.IP4 := 0;
+          end;
+          if ip4 <> 0 then
+          begin
+            // store internally this IP as declined for NextIP4
+            p := NewLease;
+            PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
+            p^.State := lsDeclinedIP;
+            p^.IP4 := ip4;
+            p^.Timeout := utc + fLeaseTimeLE; // use main lease time
+          end;
+          result := true; // server MUST NOT respond to a DHCPDECLINE message
+          exit;
         end;
     else
       exit; // paranoid
