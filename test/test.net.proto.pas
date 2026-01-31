@@ -1560,7 +1560,7 @@ var
   xid: cardinal;
   disc, req: TDhcpPacket;
   disclen, reqlen, i, n: PtrInt;
-  server: TDhcpLease;
+  server: TDhcpProcess;
   macs: array of TNetMac;
   ips: TNetIP4s;
   timer: TPrecisionTimer;
@@ -1668,8 +1668,8 @@ begin
   CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTimeValue]),     3600);
   ip4 := DhcpIP4(pointer(bin), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
-  // validate TDhcpLease process
-  server := TDhcpLease.Create;
+  // validate TDhcpProcess logic (without any actual UDP transmission)
+  server := TDhcpProcess.Create;
   try
     //TSynLog.Family.Level := LOG_VERBOSE;
     server.Log := TSynLog;

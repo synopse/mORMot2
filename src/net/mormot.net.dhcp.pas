@@ -251,7 +251,7 @@ type
   end;
 
 type
-  /// the state of one DHCP TLease entry in memory
+  /// the state of one DHCP TDhcpLease entry in memory
   // - lsFree identify an lsOutdated slot which IP4 has been reused
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
   // - lsAck is used when REQUEST has been recevied and ASK has been sent
@@ -267,7 +267,7 @@ type
 
   /// store one DHCP lease in memory
   // - efficiently padded to 16 bytes
-  TLease = packed record
+  TDhcpLease = packed record
     /// the MAC address of this entry - should be first
     // - we only lookup clients by MAC: no DUID is supported (we found it error
     // prone in practice, when some VMs are duplicated with the same DUID)
@@ -283,10 +283,10 @@ type
     Timeout: TUnixTimeMinimal;
   end;
   /// points to one DHCP lease entry in memory
-  PLease = ^TLease;
+  PDhcpLease = ^TDhcpLease;
 
-  /// a dynamic array of TLease entries, as stored within TDhcpLease
-  TLeaseDynArray = array of TLease;
+  /// a dynamic array of TDhcpLease entries, as stored within TDhcpProcess
+  TLeaseDynArray = array of TDhcpLease;
 
   /// Exception class raised by this unit
   EDhcp = class(ESynException);
@@ -294,7 +294,7 @@ type
   /// maintain a list of DHCP leases
   // - contains the data logic of a simple DHCP server, good enough to implement
   // iPXE network boot together with mormot.net.tftp.server.pas
-  TDhcpLease = class(TSynPersistent)
+  TDhcpProcess = class(TSynPersistent)
   protected
     fSafe: TLightLock;
     fEntry: TLeaseDynArray;
@@ -308,9 +308,9 @@ type
     fSubnet: TIp4SubNet;
     fGraceFactor, fIdleTix: cardinal;
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
-    function FindMac(mac: Int64): PLease;
-    function FindIp4(ip4: TNetIP4): PLease;
-    function NewLease: PLease;
+    function FindMac(mac: Int64): PDhcpLease;
+    function FindIp4(ip4: TNetIP4): PDhcpLease;
+    function NewLease: PDhcpLease;
     function NextIp4: TNetIP4;
   public
     /// setup this DHCP process using the specified settings
@@ -586,14 +586,14 @@ end;
 { **************** High-Level DHCP Server }
 
 
-{ TDhcpLease }
+{ TDhcpProcess }
 
 { low-level methods, thread-safe by the caller making fSafe.Lock/UnLock }
 
 const
   MAC_MASK = $0000ffffffffffff; // truncate 64-bit to TNetMac
 
-function TDhcpLease.FindMac(mac: Int64): PLease;
+function TDhcpProcess.FindMac(mac: Int64): PDhcpLease;
 var
   n: integer;
 begin // code below expects result^.Mac to be first
@@ -618,7 +618,7 @@ begin // code below expects result^.Mac to be first
   result := nil;
 end;
 
-function TDhcpLease.FindIp4(ip4: TNetIP4): PLease;
+function TDhcpProcess.FindIp4(ip4: TNetIP4): PDhcpLease;
 var
   n: integer;
 begin
@@ -634,7 +634,7 @@ begin
   result := nil;
 end;
 
-function TDhcpLease.NewLease: PLease;
+function TDhcpProcess.NewLease: PDhcpLease;
 begin
   // first try if we have any lsFree entries
   if fFreeListCount <> 0 then
@@ -653,11 +653,11 @@ begin
   inc(fCount);
 end;
 
-function TDhcpLease.NextIp4: TNetIP4;
+function TDhcpProcess.NextIp4: TNetIP4;
 var
   le: TNetIP4;
   looped: boolean;
-  existing, outdated: PLease;
+  existing, outdated: PDhcpLease;
 begin
   result := fLastIpLE; // all those f*LE variables are in little-endian order
   if (result < fIpMinLE) or
@@ -714,11 +714,11 @@ end;
 
 { general-purpose methods }
 
-procedure TDhcpLease.Setup(aSettings: TDhcpServerSettings);
+procedure TDhcpProcess.Setup(aSettings: TDhcpServerSettings);
 var
   owned: boolean;
   i, n: PtrInt;
-  p: PLease;
+  p: PDhcpLease;
 
   procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
   begin
@@ -847,7 +847,7 @@ begin
   end;
 end;
 
-function TDhcpLease.AddStatic(const ip: RawUtf8): boolean;
+function TDhcpProcess.AddStatic(const ip: RawUtf8): boolean;
 var
   ip4: TNetIP4;
 begin
@@ -862,7 +862,7 @@ begin
   end;
 end;
 
-procedure TDhcpLease.Clear;
+procedure TDhcpProcess.Clear;
 begin
   fSafe.Lock;
   fCount := 0;
@@ -870,7 +870,7 @@ begin
   fSafe.UnLock;
 end;
 
-function DoOutdated(p: PLease; utc: TUnixTimeMinimal; n: integer): integer;
+function DoOutdated(p: PDhcpLease; utc: TUnixTimeMinimal; n: integer): integer;
 begin
   result := 0;
   if n <> 0 then
@@ -886,7 +886,7 @@ begin
     until n = 0;
 end;
 
-function TDhcpLease.OnIdle(tix32: cardinal): integer;
+function TDhcpProcess.OnIdle(tix32: cardinal): integer;
 var
   utc: TUnixTimeMinimal;
 begin
@@ -911,14 +911,14 @@ begin
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
 end;
 
-function TDhcpLease.SaveToFile(const FileName: TFileName): boolean;
+function TDhcpProcess.SaveToFile(const FileName: TFileName): boolean;
 begin
   fSafe.Lock;
   result := FileFromBuffer(pointer(fEntry), fCount * SizeOf(fEntry[0]), FileName);
   fSafe.UnLock;
 end;
 
-function TDhcpLease.LoadFromFile(const FileName: TFileName): boolean;
+function TDhcpProcess.LoadFromFile(const FileName: TFileName): boolean;
 var
   bin: RawByteString;
 begin
@@ -938,13 +938,13 @@ begin
   fSafe.UnLock;
 end;
 
-function TDhcpLease.ProcessUdpFrame(
+function TDhcpProcess.ProcessUdpFrame(
   var Frame: TDhcpPacket; var Len: PtrInt): boolean;
 var
   lens: TDhcpParsed;
   dmt: TDhcpMessageType;
   fnd: TDhcpOptions;
-  p: PLease;
+  p: PDhcpLease;
   f: PAnsiChar;
   mac64: Int64;
   mac: TNetMac absolute mac64;
