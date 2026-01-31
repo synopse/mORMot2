@@ -1572,6 +1572,7 @@ var
     CheckNotEqual(xid, req.xid);
     xid := req.xid;
     Check(server.ProcessUdpFrame(req, reqlen), 'ack#');
+    CheckNotEqual(reqlen, 0);
     CheckEqual(req.xid, xid);
     Check(CompareMem(@macs[ndx], @req.chaddr, SizeOf(macs[0])));
     CheckEqual(ips[ndx], req.ciaddr);
@@ -1661,9 +1662,9 @@ begin
   Check(DhcpParse(pointer(bin), length(bin), lens, @fnd) = dmtAck);
   Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(bin), lens[doSubnetMask]), IP4Netmask(24));
-  CheckEqual(DhcpInt(pointer(bin), lens[doRenewalTimeValue]), 1800);
+  CheckEqual(DhcpInt(pointer(bin), lens[doRenewalTimeValue]),   1800);
   CheckEqual(DhcpInt(pointer(bin), lens[doRebindingTimeValue]), 3150);
-  CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTimeValue]), 3600);
+  CheckEqual(DhcpInt(pointer(bin), lens[doLeaseTimeValue]),     3600);
   ip4 := DhcpIP4(pointer(bin), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   // validate TDhcpLease process
@@ -1674,6 +1675,7 @@ begin
     server.Setup({settings=}nil);
     // DISCOVER -> OFFER
     Check(server.ProcessUdpFrame(disc, disclen), 'discover');
+    CheckNotEqual(disclen, 0);
     CheckEqual(disc.xid, $1d3d0000);
     CheckEqual(MacToText(@disc.chaddr), mac);
     Check(DhcpParse(@disc, disclen, lens, @fnd) = dmtOffer);
@@ -1681,6 +1683,10 @@ begin
     sip4 := DhcpIP4(@disc, lens[doServerIdentifier]);
     CheckEqual(IP4ToText(@sip4), '192.168.1.1');
     CheckEqual(disc.siaddr, sip4);
+    CheckEqual(DhcpIP4(@disc, lens[doSubnetMask]), IP4Netmask(24));
+    CheckEqual(DhcpInt(@disc, lens[doRenewalTimeValue]),   60);
+    CheckEqual(DhcpInt(@disc, lens[doRebindingTimeValue]), 105);
+    CheckEqual(DhcpInt(@disc, lens[doLeaseTimeValue]),     120);
     // REQUEST -> ACK
     ip4 := 0;
     for i := 1 to 3 do // validate offer + renewal
@@ -1688,6 +1694,7 @@ begin
       disc := req;
       disclen := reqlen; // backup during the loop
       Check(server.ProcessUdpFrame(req, reqlen), 'request');
+      CheckNotEqual(reqlen, 0);
       CheckEqual(req.xid, $1e3d0000);
       CheckEqual(MacToText(@req.chaddr), mac);
       Check(DhcpParse(@req, reqlen, lens, @fnd) = dmtAck);
@@ -1718,6 +1725,7 @@ begin
       CheckNotEqual(xid, req.xid);
       xid := req.xid;
       Check(server.ProcessUdpFrame(req, reqlen), 'request#');
+      CheckNotEqual(reqlen, 0);
       CheckEqual(req.xid, xid);
       Check(CompareMem(@macs[i], @req.chaddr, SizeOf(macs[0])));
       ips[i] := req.ciaddr;
