@@ -867,31 +867,42 @@ begin
   fSafe.UnLock;
 end;
 
-procedure TDhcpLease.OnIdle(tix32: cardinal);
-var
-  n: integer;
-  utc: TUnixTimeMinimal;
-  p: PLease;
+function DoOutdated(p: PLease; utc: TUnixTimeMinimal; n: integer): integer;
 begin
+  result := 0;
+  if n <> 0 then
+    repeat
+      if (p^.Timeout < utc) and
+         (p^.State in [lsReserved, lsAck]) then
+      begin
+        inc(result);
+        p^.State := lsOutdated;
+      end;
+      inc(p);
+      dec(n);
+    until n = 0;
+end;
+
+function TDhcpLease.OnIdle(tix32: cardinal): integer;
+var
+  utc: TUnixTimeMinimal;
+begin
+  result := 0;
   if (tix32 = fIdleTix) or
      (fCount = 0) then
     exit;
-  utc := UnixTimeMinimalUtc;
   fIdleTix := tix32;
+  utc := UnixTimeMinimalUtc;
   fSafe.Lock;
   try
-    // TODO: check deprecated entries
-    n := fCount;
-    p := pointer(fEntry);
-    if n <> 0 then
-      repeat
-
-        inc(p);
-        dec(n);
-      until n = 0;
+    // check deprecated entries
+    result := DoOutdated(pointer(fEntry), utc, fCount); // efficient O(n) loop
   finally
     fSafe.UnLock;
   end;
+  if (result <> 0) and
+     Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'OnIdle: outdated=%', [result], self);
 end;
 
 function TDhcpLease.SaveToFile(const FileName: TFileName): boolean;
