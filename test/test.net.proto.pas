@@ -1730,6 +1730,10 @@ begin
     // twice with the requests to validate efficient renewal
     for i := 1 to n do
       DoRequest(Random32(n)); // in Random order
+    CheckEqual(server.OnIdle(1), 0);
+    CheckEqual(server.Count, n + 1);
+    server.Clear;
+    CheckEqual(server.Count, 0);
   finally
     server.Free;
   end;
