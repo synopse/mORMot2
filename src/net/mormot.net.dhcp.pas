@@ -972,8 +972,9 @@ begin
       dmtDiscover:
         begin
           p := FindMac(mac64);
-          if (p = nil) or
-             (p^.IP4 = 0) then
+          if (p = nil) or    // first time this MAC is seen
+             (p^.IP4 = 0) or // paranoid
+             (p^.State = lsReserved) then // reserved = client refused this IP
           begin
             // first time seen (most common case), or renewal
             if lens[doRequestedIp] <> 0 then
