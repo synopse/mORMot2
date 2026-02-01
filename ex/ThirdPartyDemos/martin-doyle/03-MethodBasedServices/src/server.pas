@@ -7,6 +7,7 @@ uses
   mormot.core.base,
   mormot.core.data,
   mormot.core.os,
+  mormot.core.text,
   mormot.core.unicode,
   mormot.orm.core,
   mormot.orm.rest,
