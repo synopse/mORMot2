@@ -318,7 +318,12 @@ type
     // - if aSettings = nil, will use TDhcpServerSettings default parameters
     procedure Setup(aSettings: TDhcpServerSettings);
     /// register another static IP address to the internal pool
+    // - in addition to aSettings.StaticIPs CSV list
+    // - could be used at runtime depending on the network logic
+    // - static IPs - as StaticIPs - are not persisted by SaveToFile
     function AddStatic(const ip: RawUtf8): boolean;
+    /// remove one static IP address which was registered by AddStatic()
+    function RemoveStatic(const ip: RawUtf8): boolean;
     /// flush the internal entry list
     procedure Clear;
     /// to be called on regular pace to identify outdated entries every second
@@ -327,6 +332,7 @@ type
     /// persist the internal entry list using raw binary
     function SaveToFile(const FileName: TFileName): boolean;
     /// restore the internal entry list using raw binary
+    // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
     /// this is the main processing function of the DHCP server logic
     // - returns false if the Frame input was invalid
@@ -857,6 +863,26 @@ begin
   fSafe.Lock;
   try
     result := AddInteger(TIntegerDynArray(fStatic), ip4, {nodup=}true);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDhcpProcess.RemoveStatic(const ip: RawUtf8): boolean;
+var
+  ip4: TNetIP4;
+  ndx: PtrInt;
+begin
+  result := NetIsIP4(pointer(ip), @ip4);
+  if not result then
+    exit;
+  fSafe.Lock;
+  try
+    ndx := IntegerScanIndex(pointer(fStatic), length(fStatic), ip4);
+    if ndx < 0 then
+      result := false
+    else
+      DeleteInteger(TIntegerDynArray(fStatic), ndx);
   finally
     fSafe.UnLock;
   end;
