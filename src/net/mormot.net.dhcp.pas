@@ -1339,6 +1339,9 @@ begin
           if ip4 <> 0 then
           begin
             // store internally this IP as declined for NextIP4
+            if Assigned(fLog) then
+              fLog.Add.Log(sllTrace, 'ProcessUdpFrame: decline IP=% for mac=%',
+                  [IP4ToShort(@ip4), macx], self);
             p := NewLease;
             PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
             p^.State := lsDeclinedIP;
