@@ -306,7 +306,9 @@ type
     fDnsServer, fStatic: TNetIP4s;
     fLeaseTime, fLeaseTimeLE, fRenewalTime, fRebinding, fOfferHolding: cardinal;
     fSubnet: TIp4SubNet;
-    fGraceFactor, fIdleTix: cardinal;
+    fGraceFactor, fIdleTix, fModifSequence, fModifSaved: cardinal;
+    fFileName: TFileName;
+    procedure SetFileName(const name: TFileName);
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
     function FindMac(mac: Int64): PDhcpLease;
     function FindIp4(ip4: TNetIP4): PDhcpLease;
@@ -320,7 +322,7 @@ type
     /// register another static IP address to the internal pool
     // - in addition to aSettings.StaticIPs CSV list
     // - could be used at runtime depending on the network logic
-    // - static IPs - as StaticIPs - are not persisted by SaveToFile
+    // - static IPs - as StaticIPs - are not persisted in FileName/SaveToFile
     function AddStatic(const ip: RawUtf8): boolean;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(const ip: RawUtf8): boolean;
@@ -328,6 +330,7 @@ type
     procedure Clear;
     /// to be called on regular pace to identify outdated entries every second
     // - return the number of outdated entries identified during this call
+    // - if FileName was set, would persist any change in the internal list
     function OnIdle(tix32: cardinal): integer;
     /// persist the internal entry list using raw binary
     function SaveToFile(const FileName: TFileName): boolean;
@@ -348,6 +351,16 @@ type
     /// how many entries are currently reserved in memory
     property Count: integer
       read fCount;
+    /// if set, OnIdle will persist the internal list into this file when needed
+    // - trigger LoadFromFile() when you set a file name
+    // - at startup, you should set the file name before calling Setup()
+    property FileName: TFileName
+      read fFileName write SetFileName;
+    /// the internal list modification sequence number
+    // - increased at every update of the internal entry list
+    // - used e.g. by OnIdle() to trigger SaveToFile() if FileName is defined
+    property ModifSequence: cardinal
+      read fModifSequence;
   end;
 
 
@@ -826,6 +839,7 @@ begin
         fLog.Add.Log(sllTrace, 'Setup: subnet adjust count=% from %',
           [n, fCount], self);
         fCount := n;
+        inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
       end;
       fFreeListCount := 0;
     end;
@@ -893,6 +907,8 @@ begin
   fSafe.Lock;
   fCount := 0;
   fEntry := nil;
+  fModifSequence := 0;
+  fModifSaved := 0;
   fSafe.UnLock;
 end;
 
@@ -915,32 +931,52 @@ end;
 function TDhcpProcess.OnIdle(tix32: cardinal): integer;
 var
   utc: TUnixTimeMinimal;
+  saved: boolean;
 begin
   result := 0;
+  // make periodical process at most every second
   if (tix32 = fIdleTix) or
      (fCount = 0) then
     exit;
   fIdleTix := tix32;
+  // check deprecated entries
   utc := UnixTimeMinimalUtc;
   fSafe.Lock;
   try
-    // check deprecated entries
     result := DoOutdated(pointer(fEntry), utc, fCount); // efficient O(n) loop
+    if result <> 0 then
+      inc(fModifSequence); // trigger SaveToFile() below
   finally
     fSafe.UnLock;
   end;
-  if (result <> 0) and
-     Assigned(fLog) then
-    fLog.Add.Log(sllTrace, 'OnIdle: outdated=%', [result], self);
+  saved := false;
+  // persist into FileName if needed
+  if (fFileName <> '') and
+     (fModifSaved <> fModifSequence) then
+    saved := SaveToFile(fFileName);
+  if Assigned(fLog) and
+     ((result <> 0) or
+      saved) then
+    fLog.Add.Log(sllTrace, 'OnIdle: outdated=% saved=%', [result, saved], self);
   // no ARP call here to clean the internal list: the user should rather tune
   // lease duration or use a bigger netmask; the RFC states that the client
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
+end;
+
+procedure TDhcpProcess.SetFileName(const name: TFileName);
+begin
+  if fFileName = name then
+    exit;
+  LoadFromFile(name);
+  fFileName := name;
 end;
 
 function TDhcpProcess.SaveToFile(const FileName: TFileName): boolean;
 begin
   fSafe.Lock;
   result := FileFromBuffer(pointer(fEntry), fCount * SizeOf(fEntry[0]), FileName);
+  if result then
+    fModifSaved := fModifSequence; // won't retry on next OnIdle()
   fSafe.UnLock;
 end;
 
@@ -961,6 +997,8 @@ begin
   fCount := length(bin) div SizeOf(fEntry[0]);
   SetLength(fEntry, NextGrow(fCount));
   MoveFast(pointer(bin)^, pointer(fEntry)^, length(bin));
+  fModifSequence := 0;
+  fModifSaved := 0;
   fSafe.UnLock;
 end;
 
@@ -1101,6 +1139,7 @@ begin
             p^.IP4 := ip4;
             p^.Timeout := utc + fLeaseTimeLE; // use main lease time
           end;
+          inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
           result := true; // server MUST NOT respond to a DHCPDECLINE message
           exit;
         end;
@@ -1129,6 +1168,7 @@ begin
   // TODO: custom callback
   f^ := #255;
   Len := f - PAnsiChar(@Frame) + 1;
+  inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
   result := true;
 end;
 
