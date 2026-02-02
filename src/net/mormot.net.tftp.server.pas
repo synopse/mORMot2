@@ -470,35 +470,40 @@ end;
 
 function TTftpServerThread.GetFileName(const RequestedFileName: RawUtf8): TFileName;
 var
-  fn: TFileName;
+  u: RawUtf8;
   {$ifdef OSPOSIX}
   readms: integer;
   {$endif OSPOSIX}
 begin
   result := '';
-  fn := NormalizeFileName(Utf8ToString(RequestedFileName));
-  if fn = '' then
-    exit;
-  while (fn[1] = '/') or
-        (fn[1] = '\') do
-    delete(fn, 1, 1); // trim any leading root (we start from fFileFolder anyway)
-  if SafeFileName(fn) and
+  u := RequestedFileName;
+  NormalizeFileNameU(u);
+  repeat
+    if u = '' then
+      exit;
+    if not (u[1] in ['/', '\']) then
+      break;
+    delete(u, 1, 1); // trim any leading path delimiter
+  until false;
+  if SafeFileNameU(u) and
      ((ttoAllowSubFolders in fOptions) or
-      (Pos(PathDelim, fn) = 0)) then
+      (PosExChar(PathDelim, u) = 0)) then
   begin
     {$ifdef OSPOSIX}
     if Assigned(fPosixFileNames) then
     begin
-      fn := fPosixFileNames.Find(fn, @readms);
+      u := fPosixFileNames.Find(u, @readms);
       if readms <> 0 then
         // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
         fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
           [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
-      if fn = '' then
+      if u = '' then
         exit; // file does not exist
     end;
+    result := fFileFolder + u;
+    {$else}
+    result := fFileFolder + Utf8ToString(u);
     {$endif OSPOSIX}
-    result := fFileFolder + fn;
   end;
 end;
 
