@@ -1088,7 +1088,7 @@ begin
       b := p;
       utc := GetNextItemQWord(b, ' ');
       if (utc >= boot - SecsPerMonth) and  // not too old
-         (utc < UNIXTIME_MINIMAL * 2) then // valid timestamp in seconds
+         (utc < TUnixTime(UNIXTIME_MINIMAL) * 2) then // range in seconds
       begin
         p := GotoNextSpace(b);
         if (p - b = 17) and
