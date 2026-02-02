@@ -108,6 +108,7 @@ type
    doTftpServerName,        // TFTP Server Name (PXE) 66 (192.168.10.10 or host name)
    doBootfileName,          // Bootfile Name (PXE) 67 (pxelinux.0)
    doUserClass,             // User Class (PXE RFC 3004) 77 (PXEClient:Arch:00000)
+   doRelayAgent,            // Relay Agent (RFC 3046) 82
    doEnding                 // End Of Options marker 255
  );
  /// set of supported DHCP options
@@ -420,7 +421,7 @@ end;
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
-    58, 59, 60, 61, 66, 67, 77, 255);
+    58, 59, 60, 61, 66, 67, 77, 82, 255);
 
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte);
 begin
@@ -1199,7 +1200,9 @@ var
   ip4: TNetIP4;
   tix32: cardinal;
   macx: string[17]; // no memory allocation during the process
+  len82: byte;
   dmt: TDhcpMessageType;
+  opt82: PByte; // copied in end of Frame.options[]
 begin
   result := false;
   // do nothing on missing Setup() or after Shutdown
@@ -1223,6 +1226,18 @@ begin
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: unexpected % frame from %',
         [ToText(dmt)^, macx], self);
     exit; // invalid or unsupported frame
+  end;
+  // support Option 82 Relay Agent by sending it back with the response frame
+  opt82 := nil;
+  if lens[doRelayAgent] <> 0 then
+  begin
+    len82 := Frame.options[lens[doRelayAgent]];
+    if len82 < 200 then
+    begin
+      // copy the whole option value at the end of Frame.options[]
+      opt82 := @Frame.options[high(Frame.options) - len82];
+      MoveFast(Frame.options[lens[doRelayAgent] + 1], opt82^, len82);
+    end;
   end;
   // compute the corresponding IPv4 according to the internal lease list
   tix32 := GetTickSec;
@@ -1294,6 +1309,8 @@ begin
               'ProcessUdpFrame: NAK after out-of-sync Request %', [macx], self);
             // send a NAK response anyway
             f := DhcpNew(Frame, dmtNak, Frame.xid, mac, fServerIdentifier);
+            if opt82 <> nil then
+              DhcpAddOption(f, doRelayAgent, opt82, len82);
             Len := f - PAnsiChar(@Frame) + 1;
             result := true;
             exit;
@@ -1358,7 +1375,7 @@ begin
   finally
     fSafe.UnLock;
   end;
-  // compute the response frame over the very same xid
+  // compute the dmtOffer/dmtAck response frame over the very same xid
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % IP=% for mac=%',
         [ToText(dmt)^, IP4ToShort(@ip4), macx], self);
@@ -1375,6 +1392,8 @@ begin
   DhcpAddOption(f,   doRebindingTimeValue, @fRebinding);
   // TODO: IPXE host/file options
   // TODO: custom callback
+  if opt82 <> nil then
+    DhcpAddOption(f, doRelayAgent, opt82, len82); // should be the last option
   f^ := #255;
   Len := f - PAnsiChar(@Frame) + 1;
   inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
