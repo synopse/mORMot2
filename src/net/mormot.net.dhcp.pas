@@ -1229,6 +1229,7 @@ begin
   end;
   // support Option 82 Relay Agent by sending it back with the response frame
   opt82 := nil;
+  len82 := 0; // make Delphi compiler happy
   if lens[doRelayAgent] <> 0 then
   begin
     len82 := Frame.options[lens[doRelayAgent]];
