@@ -347,6 +347,15 @@ type
     // - return the number of outdated entries identified during this call
     // - if FileName was set, would persist any change in the internal list
     function OnIdle(tix64: Int64): integer;
+    /// persist the internal entry list using human-readable text format
+    // - follow "<expiry> <MAC> <IP>" dnsmasq lease file pattern, using the
+    // standard seconds since epoch (Unix time) for the <expiry> value, e.g.
+    // $ 1770034159 c2:07:2c:9d:eb:71 192.168.1.207
+    // - we skip <hostname> and <client id> values since we don't handle them
+    // - by design, only lsAck and recently lsOutdated entries are included
+    function SaveToText: RawUtf8;
+    /// restore the internal entry list using SaveToText() format
+    function LoadFromText(const Text: RawUtf8): boolean;
     /// persist the internal entry list using raw binary
     function SaveToFile(const FileName: TFileName): boolean;
     /// restore the internal entry list using raw binary
@@ -999,6 +1008,130 @@ begin
   // no ARP call here to clean the internal list: the user should rather tune
   // lease duration or use a bigger netmask; the RFC states that the client
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
+end;
+
+procedure DhcpTextWrite(p: PDhcpLease; n, grace: cardinal; W: TTextWriter);
+var
+  tix32: cardinal;
+  boot: TUnixTime;
+begin
+  tix32 := GetTickSec;
+  boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
+  if boot > UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
+    repeat
+      // OFFERed leases are temporary; the client hasn't accepted this IP
+      // DECLINED IPs (with MAC = 0) are ephemeral internal-only markers
+      if (PInt64(@p^.Mac)^ and MAC_MASK <> 0) and
+         (p^.IP4 <> 0) and
+         (((p^.State = lsAck) or
+          ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
+           (cardinal(tix32 - p^.Expired) < grace)))) then // still realistic
+      begin
+        // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207"
+        W.AddQ(boot + Int64(p^.Expired));
+        W.AddDirect(' ');
+        W.AddShort(MacToShort(@p^.Mac));
+        W.AddDirect(' ');
+        W.AddShort(IP4ToShort(@p^.IP4));
+        W.AddDirectNewLine;
+      end;
+      inc(p);
+      dec(n);
+    until n = 0;
+end;
+
+function DhcpTextParse(p: PUtf8Char; var e: TLeaseDynArray): PtrInt;
+var
+  utc, boot: TUnixTime;
+  tix32: cardinal;
+  mac: TNetMac;
+  ip4: TNetIP4;
+  b: PUtf8Char;
+  new: PDhcpLease;
+begin
+  result := 0; // number of entries in e[]
+  if (p = nil) or
+     (PWord(p)^ = 13) or
+     (PCardinal(p)^ and $ffffff = $0a0d) then // '' or CRLF
+    exit;
+  tix32 := GetTickSec;
+  boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
+  if boot > UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
+    repeat
+      // format is "<expiry> <MAC> <IP>"
+      b := p;
+      utc := GetNextItemQWord(b, ' ');
+      if (utc >= boot - SecsPerMonth) and  // not too old
+         (utc < UNIXTIME_MINIMAL * 2) then // valid timestamp in seconds
+      begin
+        p := GotoNextSpace(b);
+        if (p - b = 17) and
+           (p^ = ' ') and
+           TextToMac(b, @mac) and
+           (PInt64(@mac)^ and MAC_MASK <> 0) and
+           NetIsIP4(p + 1, @ip4) and
+           (ip4 <> 0) then
+        begin
+          if length(e) = result then
+            SetLength(e, NextGrow(result));
+          new := @e[result];
+          PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+DeclineCount
+          new^.IP4 := ip4;
+          new^.Expired := utc - boot;
+          if new^.Expired < tix32 then // same logic than DoOutdated()
+            new^.State := lsOutdated
+          else
+            new^.State := lsAck;
+          inc(result);
+        end;
+      end;
+      // invalid lines are just skipped
+      p := GotoNextLine(p);
+    until (p = nil) or
+          (p^ = #0);
+end;
+
+function TDhcpProcess.SaveToText: RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  local: TLeaseDynArray; // local unlocked copy
+  W: TTextWriter;
+  grace: cardinal;
+begin
+  result := CRLF; // return something not void
+  if fCount = 0 then
+    exit;
+  fSafe.Lock;
+  try
+    grace := fLeaseTimeLE * MaxPtrUInt(fGraceFactor, 2); // not too deprecated
+    local := copy(fEntry, 0, fCount); // keep lock as short as possible
+  finally
+    fSafe.UnLock;
+  end;
+  if local = nil then
+    exit;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    DhcpTextWrite(pointer(local), length(local), grace, W);
+    if W.TextLength <> 0 then
+      W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function TDhcpProcess.LoadFromText(const Text: RawUtf8): boolean;
+begin
+  fSafe.Lock;
+  if fEntry = nil then
+    SetLength(fEntry, 250); // pre-allocate as in Setup()
+  fCount := DhcpTextParse(pointer(Text), fEntry);
+  fFreeListCount := 0;
+  fModifSequence := 0;
+  fModifSaved := 0;
+  fSafe.UnLock;
+  fLog.Add.Log(sllDebug, 'LoadFromText: entries=%', [fCount], self);
+  result := true;
 end;
 
 procedure TDhcpProcess.SetFileName(const name: TFileName);
