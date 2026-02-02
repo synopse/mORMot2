@@ -8916,7 +8916,7 @@ begin
             if (PtrInt(bswap32(PCardinal(Content)^)) <= Len) and
                (PCardinalArray(Content)^[1] = $70797466) then // 'ftyp'
               case PCardinalArray(Content)^[2] of // brand
-                $20207471, // qt   Apple’s QuickTime File Format
+                $20207471, // qt   Apple's QuickTime File Format
                 $3134706d, // mp41 old ISO/IEC 14496-1 MPEG-4 Version 1
                 $3234706d, // mp42 MPEG-4 Version 2 video/QuickTime file
                 $326f7369, // iso2 ISO Base Media file (MPEG-4) v2
@@ -8927,7 +8927,7 @@ begin
                 $6d6f7369: // isom ISO Base Media file (MPEG-4) v1
                   result := mtMp4;
                 $20763466, // f4v  Adobe Flash Video
-                $2076346d, // m4v  Apple’s iTunes and QuickTime
+                $2076346d, // m4v  Apple's iTunes and QuickTime
                 $31637661, // avc1 H.264/AVC codec
                 $35706733, // 3gp5 Mobile optimized 3GPP Release 5
                 $36706733: // 3gp6 Mobile optimized 3GPP Release 6
