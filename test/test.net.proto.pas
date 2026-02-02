@@ -1549,6 +1549,7 @@ end;
 const
   FND_RESP = [doSubnetMask, doLeaseTimeValue, doMessageType,
     doServerIdentifier, doRenewalTimeValue, doRebindingTimeValue];
+  OPTION82: string[7] = 'OPT__82';
 
 procedure TNetworkProtocols.DHCP;
 var
@@ -1807,9 +1808,12 @@ begin
     server.Clear;
     CheckEqual(server.Count, 0);
     CheckEqual(server.SaveToText, CRLF, 'after clear');
-    // validate DECLINE process
+    // validate DECLINE process - and option 82 Relay Agent
     CheckEqual(server.OnIdle(1), 0); // trigger MaxDeclinePerSec process
-    reqlen := DhcpClient(req, dmtDiscover, macs[0]) - PAnsiChar(@req) + 1;
+    f := DhcpClient(req, dmtDiscover, macs[0]);
+    DhcpAddOption(f, doRelayAgent, @OPTION82[1], 7);
+    f^ := #255;
+    reqlen := f - PAnsiChar(@req) + 1;
     Check(CompareMem(@macs[0], @req.chaddr, SizeOf(macs[0])));
     CheckNotEqual(xid, req.xid);
     xid := req.xid;
@@ -1818,6 +1822,11 @@ begin
     CheckEqual(req.xid, xid);
     CheckNotEqual(req.ciaddr, ips[0]);
     Check(server.Subnet.Match(req.ciaddr));
+    CheckEqual(lens[doRelayAgent], 0, 'no relay agent');
+    Check(DhcpParse(@req, reqlen, lens, @fnd) = dmtOffer);
+    Check(fnd = FND_RESP + [doRelayAgent]);
+    CheckNotEqual(lens[doRelayAgent], 0, 'propagated relay agent');
+    Check(DhcpData(@req, lens[doRelayAgent])^ = OPTION82);
     ips[0] := req.ciaddr;
     f := DhcpClient(req, dmtDecline, macs[0]);
     reqlen := f - PAnsiChar(@req) + 1;
