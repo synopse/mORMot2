@@ -189,6 +189,7 @@ type
     fDomainName: RawUtf8;
     fBroadCastAddress: RawUtf8;
     fLeaseTimeSeconds: cardinal;
+    fMaxDeclinePerSecond: cardinal;
     fServerIdentifier: RawUtf8;
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
@@ -235,6 +236,11 @@ type
     // - default 120 secs seems fine for our minimal iPXE-oriented DHCP server
     property LeaseTimeSeconds: cardinal
       read fLeaseTimeSeconds write fLeaseTimeSeconds;
+    /// how many DECLINE requests are allowed per second before ignoring them
+    // - a malicious client can poison the pool by sending repeated DECLINEs
+    // - default is 5 which seems reasonable and conservative
+    property MaxDeclinePerSecond: cardinal
+      read fMaxDeclinePerSecond write fMaxDeclinePerSecond default 5;
     /// DHCP Server Identifier e.g. '192.168.1.1'
     // - default is '' and will be filled by SubnetMask value
     property ServerIdentifier: RawUtf8
@@ -269,14 +275,17 @@ type
   // - efficiently padded to 16 bytes
   TDhcpLease = packed record
     /// the MAC address of this entry - should be first
-    // - we only lookup clients by MAC: no DUID is supported (we found it error
+    // - we only lookup clients by MAC: no DUID is supported (we found it error-
     // prone in practice, when some VMs are duplicated with the same DUID)
     // - may contain 0 for a lsFree or lsDeclinedIP entry
     Mac: TNetMac;
     /// how this entry should be handled
     State: TLeaseState;
-    /// align the whole structure to cpu-cache-friendly 16 bytes
-    Padding: byte;
+    /// how many dmtDecline requests have been received since the last OnIdle
+    // - OnIdle() will reset it to 0, ProcessUdpFrame() will increment it, and
+    // silently ignore any dmtDecline request > 5 times in a row
+    // - also align the whole structure to cpu-cache-friendly 16 bytes
+    DeclineCount: byte;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
     /// TUnixTime value stored as 32-bit unsigned integer (valid up to year 2152)
@@ -306,7 +315,8 @@ type
     fDnsServer, fStatic: TNetIP4s;
     fLeaseTime, fLeaseTimeLE, fRenewalTime, fRebinding, fOfferHolding: cardinal;
     fSubnet: TIp4SubNet;
-    fGraceFactor, fIdleTix, fModifSequence, fModifSaved: cardinal;
+    fMaxDeclinePerSec, fGraceFactor: cardinal;
+    fIdleTix, fModifSequence, fModifSaved: cardinal;
     fFileName: TFileName;
     procedure SetFileName(const name: TFileName);
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
@@ -776,7 +786,8 @@ begin
       fOfferHolding := 1
     else if fOfferHolding > fRenewalTime then
       fOfferHolding := fRenewalTime;
-    fGraceFactor      := aSettings.GraceFactor;      // * 2
+    fMaxDeclinePerSec := aSettings.MaxDeclinePerSecond; // max 5 DECLINE per sec
+    fGraceFactor      := aSettings.GraceFactor;         // * 2
     // retrieve the subnet mask from settings
     if not fSubnet.From(aSettings.SubnetMask) then
       EDhcp.RaiseUtf8(
@@ -943,6 +954,10 @@ begin // dedicated sub-function for better codegen (100ns for 200 entries)
         inc(result);
         p^.State := lsOutdated;
       end;
+      {$ifndef CPUINTEL}           // seems actually slower on modern Intel/AMD
+      if p^.DeclineCount <> 0 then // don't invalidate L1 cache unless necessary
+      {$endif CPUINTEL}
+        p^.DeclineCount := 0;
       inc(p);
       dec(n);
     until n = 0;
@@ -1065,7 +1080,7 @@ begin
       dmtDiscover:
         begin
           if (p = nil) or    // first time this MAC is seen
-             (p^.IP4 = 0) or // may happen after dmtDecline
+             (p^.IP4 = 0) or // may happen after DECLINE
              (p^.State = lsReserved) then // reserved = client refused this IP
           begin
             // first time seen (most common case), or renewal
@@ -1098,7 +1113,7 @@ begin
             if p = nil then
             begin
               p := NewLease;
-              p^.Mac := mac;
+              PInt64(@p^.Mac)^ := mac64; // also reset State+DeclineCount
             end;
             p^.IP4 := ip4;
           end
@@ -1138,19 +1153,36 @@ begin
         end;
       dmtDecline:
         begin
-          // client ARPed the OFFERed IP and detect conflict: rejects it
+          // client ARPed the OFFERed IP and detect conflict, so DECLINE it
+          if (p = nil) or
+             (p^.State <> lsReserved) then
+          begin
+            // ensure the server recently OFFERed one IP to that client
+            // (match RFC intent and prevent blind poisoning of arbitrary IPs)
+            fLog.Add.Log(sllDebug,
+              'ProcessUdpFrame: DECLINE with no previous OFFER %', [macx], self);
+            exit;
+          end;
+          if (fMaxDeclinePerSec <> 0) and // = 5 by default
+             (fIdleTix <> 0) then         // OnIdle() is actually running
+            if p^.DeclineCount < fMaxDeclinePerSec then
+              inc(p^.DeclineCount)        // will be reset to 0 by OnIdle()
+            else
+            begin
+              // malicious client poisons the pool by sending repeated DECLINE
+              fLog.Add.Log(sllDebug,
+                'ProcessUdpFrame: too many DECLINE from %', [macx], self);
+              exit;
+            end;
+          // invalidate OFFERed IP
           ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // authoritative IP
           if (ip4 <> 0) and
              not fSubNet.Match(ip4) then // need clean IP
             ip4 := 0;
-          if p <> nil then
-          begin
-            // invalidate OFFERed IP
-            p^.State := lsDeclinedIP;
-            if ip4 = 0 then
-              ip4 := p^.IP4; // option 50 was not set
-            p^.IP4 := 0;
-          end;
+          if ip4 = 0 then
+            ip4 := p^.IP4; // option 50 was not set (or not in our subnet)
+          p^.State := lsDeclinedIP;
+          p^.IP4 := 0; // invalidate the previous offered IP
           if ip4 <> 0 then
           begin
             // store internally this IP as declined for NextIP4
@@ -1202,6 +1234,7 @@ begin
   fSubnetMask := '192.168.1.1/24';
   fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
   fOfferHoldingSecs := 5;
+  fMaxDeclinePerSecond := 5;
   fGraceFactor := 2;
 end;
 
