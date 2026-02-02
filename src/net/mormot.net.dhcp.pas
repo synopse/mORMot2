@@ -328,6 +328,11 @@ type
     function RemoveStatic(const ip: RawUtf8): boolean;
     /// flush the internal entry list
     procedure Clear;
+    /// should be called when the server is about to leave for a clean shutdown
+    // - will mark the internal state as "do-nothing" and persist FileName
+    // - won't clear the internal list
+    // - if you want to re-start the server, call Setup() again
+    procedure Shutdown;
     /// to be called on regular pace to identify outdated entries every second
     // - return the number of outdated entries identified during this call
     // - if FileName was set, would persist any change in the internal list
@@ -912,8 +917,23 @@ begin
   fSafe.UnLock;
 end;
 
-function DoOutdated(p: PDhcpLease; utc: TUnixTimeMinimal; n: integer): integer;
+procedure TDhcpProcess.Shutdown;
 begin
+  // disable ProcessUdpFrame()
+  if fSubnet.mask = 0 then
+    exit; // no Setup(), or called twice
+  fSubnet.mask := 0;
+  // persist FileName for clean shutdown
+  if (fFileName <> '') and
+     (fModifSaved <> fModifSequence) then
+    SaveToFile(fFileName);
+  fLog.Add.Log(sllDebug, 'Shutdown: count=% seq=% saved=%',
+    [fCount, fModifSequence, fModifSaved], self);
+  // don't Clear the entries: we may call Setup() and restart again
+end;
+
+function DoOutdated(p: PDhcpLease; utc: TUnixTimeMinimal; n: integer): integer;
+begin // dedicated sub-function for better codegen (100ns for 200 entries)
   result := 0;
   if n <> 0 then
     repeat
@@ -1017,11 +1037,14 @@ var
   macx: string[12]; // no memory allocation during the process
 begin
   result := false;
+  Len := 0; // no response
+  // do nothing on missing Setup() or after Shutdown
+  if fSubnet.mask = 0 then
+    exit;
   // parse and validate the request
   ip4 := 0;
   mac64 := 0;
   dmt := DhcpParse(@Frame, Len, lens, @fnd, @mac);
-  Len := 0; // no response
   macx[0] := #12;
   if Assigned(fLog) then
     BinToHexLower(@mac, @macx[1], 6);
@@ -1037,10 +1060,10 @@ begin
   utc := UnixTimeMinimalUtc;
   fSafe.Lock;
   try
+    p := FindMac(mac64);
     case dmt of
       dmtDiscover:
         begin
-          p := FindMac(mac64);
           if (p = nil) or    // first time this MAC is seen
              (p^.IP4 = 0) or // may happen after dmtDecline
              (p^.State = lsReserved) then // reserved = client refused this IP
@@ -1091,7 +1114,6 @@ begin
         begin
           // especially for PXE networks, it is safe and common to ignore
           // Option 50 and ciaddr in REQUEST and just ACK the already OFFERed IP
-          p := FindMac(mac64);
           if (p = nil) or
              (p^.IP4 = 0) or
              not ((p^.State in [lsReserved, lsAck]) or
@@ -1121,7 +1143,6 @@ begin
           if (ip4 <> 0) and
              not fSubNet.Match(ip4) then // need clean IP
             ip4 := 0;
-          p := FindMac(mac64);
           if p <> nil then
           begin
             // invalidate OFFERed IP
