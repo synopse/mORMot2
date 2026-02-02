@@ -193,6 +193,8 @@ type
     fServerIdentifier: RawUtf8;
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
+    fFileName: TFileName;
+    fFileFlushSeconds: cardinal;
   public
     /// setup this instance with default values
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
@@ -254,6 +256,15 @@ type
     // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
     property GraceFactor: cardinal
       read fGraceFactor write fGraceFactor default 2;
+    /// if set, OnIdle will persist the internal list into this file when needed
+    // - file on disk would be regular dnsmasq-compatible format
+    property FileName: TFileName
+      read fFileName write fFileName;
+    /// at which pace the FileName should be written on disk by OnIdle
+    // - default is 30 seconds which seems light and safe enough
+    // - set to 0 will disable background write, and persist only at shutdown
+    property FileFlushSeconds: cardinal
+      read fFileFlushSeconds write fFileFlushSeconds default 30;
   end;
 
 type
@@ -316,8 +327,8 @@ type
     fDnsServer, fSortedStatic: TIntegerDynArray;
     fLeaseTime, fLeaseTimeLE, fRenewalTime, fRebinding, fOfferHolding: cardinal;
     fSubnet: TIp4SubNet;
-    fMaxDeclinePerSec, fGraceFactor: cardinal;
-    fIdleTix, fModifSequence, fModifSaved: cardinal;
+    fMaxDeclinePerSec, fGraceFactor, fFileFlushSeconds: cardinal;
+    fIdleTix, fFileFlushTix, fModifSequence, fModifSaved: cardinal;
     fFileName: TFileName;
     procedure SetFileName(const name: TFileName);
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
@@ -380,6 +391,7 @@ type
     // - trigger LoadFromFile() when you set a file name
     // - at startup, you should set the file name before calling Setup()
     // - file on disk would be in SaveToText() regular dnsmasq-compatible format
+    // - it is easier and cleaner to use TDhcpServerSettings.FileName instead
     property FileName: TFileName
       read fFileName write SetFileName;
     /// the internal list modification sequence number
@@ -778,6 +790,10 @@ begin
     aSettings := TDhcpServerSettings.Create; // use default values
   fSafe.Lock;
   try
+    // support FileName background persistence
+    if aSettings.FileName <> '' then
+      SetFileName(aSettings.FileName); // LoadFromFile() now
+    fFileFlushSeconds := aSettings.FileFlushSeconds;
     // convert the text settings into binary raw values
     fGateway          := ToIP4(aSettings.DefaultGateway);
     fBroadcast        := ToIP4(aSettings.BroadCastAddress);
@@ -982,11 +998,12 @@ var
   tix32: cardinal;
   saved: boolean;
 begin
-  result := 0;
   // make periodical process at most every second
+  result := 0;
   tix32 := tix64 div MilliSecsPerSec; // GetTickSec from GetTickCount64
   if (tix32 = fIdleTix) or
-     (fCount = 0) then
+     (fCount = 0) or
+     (fSubnet.mask = 0) then // after Shutdown
     exit;
   fIdleTix := tix32;
   // check deprecated entries
@@ -998,18 +1015,25 @@ begin
   finally
     fSafe.UnLock;
   end;
+  // background persist into FileName if needed
   saved := false;
-  // persist into FileName if needed
   if (fFileName <> '') and
-     (fModifSaved <> fModifSequence) then
-    saved := SaveToFile(fFileName);
+     (fFileFlushSeconds <> 0) and         // = 0 if disabled
+     (fModifSaved <> fModifSequence) then // if something new to be written
+    if (fFileFlushTix = 0) or
+       (tix32 >= fFileFlushTix) then      // reached the next persistence time
+    begin
+      saved := SaveToFile(fFileName);     // do not aggressively retry if false
+      fFileFlushTix := tix32 + fFileFlushSeconds; // every 30 seconds by default
+    end;
+  // no ARP call here to clean the internal list: the user should rather tune
+  // lease duration or use a bigger netmask; the RFC states that the client
+  // would do its own ARP request and resend (dmtDecline +) dmtDiscover
+  // - we mitigate aggressive clients via DeclineCount anyway
   if Assigned(fLog) and
      ((result <> 0) or
       saved) then
     fLog.Add.Log(sllTrace, 'OnIdle: outdated=% saved=%', [result, saved], self);
-  // no ARP call here to clean the internal list: the user should rather tune
-  // lease duration or use a bigger netmask; the RFC states that the client
-  // would do its own ARP request and resend (dmtDecline +) dmtDiscover
 end;
 
 procedure DhcpTextWrite(p: PDhcpLease; n, grace: cardinal; W: TTextWriter);
@@ -1365,6 +1389,7 @@ begin
   fOfferHoldingSecs := 5;
   fMaxDeclinePerSecond := 5;
   fGraceFactor := 2;
+  fFileFlushSeconds := 30; // good tradeoff: low disk writes, still safe for PXE
 end;
 
 
