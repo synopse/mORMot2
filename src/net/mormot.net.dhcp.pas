@@ -177,7 +177,7 @@ const
 { **************** High-Level DHCP Server }
 
 type
-  /// main high-level options for a minimal DHCP Server
+  /// main high-level options for our DHCP Server
   TDhcpServerSettings = class(TSynPersistent)
   protected
     fSubnetMask: RawUtf8;
@@ -262,8 +262,8 @@ type
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
   // - lsAck is used when REQUEST has been recevied and ASK has been sent
   // - lsDeclinedIP is set when a DECLINE message is received from a client
-  // - lsOutdated is set once Timeout has been reached, so that the IP4 address
-  // could be reused on the next DISCOVER for this MAC
+  // - lsOutdated is set once Expired timestamp has been reached, so that the
+  // IP4 address could be reused on the next DISCOVER for this MAC
   TLeaseState = (
     lsFree,
     lsReserved,
@@ -288,8 +288,8 @@ type
     DeclineCount: byte;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
-    /// TUnixTime value stored as 32-bit unsigned integer (valid up to year 2152)
-    Timeout: TUnixTimeMinimal;
+    /// GetTickSec monotonic value stored as 32-bit unsigned integer
+    Expired: cardinal;
   end;
   /// points to one DHCP lease entry in memory
   PDhcpLease = ^TDhcpLease;
@@ -346,7 +346,7 @@ type
     /// to be called on regular pace to identify outdated entries every second
     // - return the number of outdated entries identified during this call
     // - if FileName was set, would persist any change in the internal list
-    function OnIdle(tix32: cardinal): integer;
+    function OnIdle(tix64: Int64): integer;
     /// persist the internal entry list using raw binary
     function SaveToFile(const FileName: TFileName): boolean;
     /// restore the internal entry list using raw binary
@@ -738,7 +738,7 @@ begin
       end
       else if (existing^.State in [lsDeclinedIP, lsOutdated]) and
               ((outdated = nil) or
-               (existing^.Timeout < outdated^.Timeout)) then
+               (existing^.Expired < outdated^.Expired)) then
         outdated := existing; // detect oldest outdated entry
     end;
     result := le;
@@ -943,12 +943,12 @@ begin
   // don't Clear the entries: we may call Setup() and restart again
 end;
 
-function DoOutdated(p: PDhcpLease; utc: TUnixTimeMinimal; n: integer): integer;
+function DoOutdated(p: PDhcpLease; tix32: cardinal; n: integer): integer;
 begin // dedicated sub-function for better codegen (100ns for 200 entries)
   result := 0;
   if n <> 0 then
     repeat
-      if (p^.Timeout < utc) and
+      if (p^.Expired < tix32) and
          (p^.State in [lsReserved, lsAck, lsDeclinedIP]) then
       begin
         inc(result);
@@ -963,22 +963,22 @@ begin // dedicated sub-function for better codegen (100ns for 200 entries)
     until n = 0;
 end;
 
-function TDhcpProcess.OnIdle(tix32: cardinal): integer;
+function TDhcpProcess.OnIdle(tix64: Int64): integer;
 var
-  utc: TUnixTimeMinimal;
+  tix32: cardinal;
   saved: boolean;
 begin
   result := 0;
   // make periodical process at most every second
+  tix32 := tix64 div MilliSecsPerSec; // GetTickSec from GetTickCount64
   if (tix32 = fIdleTix) or
      (fCount = 0) then
     exit;
   fIdleTix := tix32;
   // check deprecated entries
-  utc := UnixTimeMinimalUtc;
   fSafe.Lock;
   try
-    result := DoOutdated(pointer(fEntry), utc, fCount); // efficient O(n) loop
+    result := DoOutdated(pointer(fEntry), tix32, fCount); // efficient O(n) loop
     if result <> 0 then
       inc(fModifSequence); // trigger SaveToFile() below
   finally
@@ -1048,7 +1048,7 @@ var
   mac64: Int64;
   mac: TNetMac absolute mac64;
   ip4: TNetIP4;
-  utc: TUnixTimeMinimal;
+  tix32: cardinal;
   macx: string[12]; // no memory allocation during the process
 begin
   result := false;
@@ -1075,7 +1075,7 @@ begin
     exit; // invalid or unsupported frame
   end;
   // compute the corresponding IPv4 according to the internal lease list
-  utc := UnixTimeMinimalUtc;
+  tix32 := GetTickSec;
   fSafe.Lock;
   try
     p := FindMac(mac64);
@@ -1125,7 +1125,7 @@ begin
             ip4 := p^.IP4;
           // respond with an OFFER
           p^.State := lsReserved;
-          p^.Timeout := utc + fOfferHolding;
+          p^.Expired := tix32 + fOfferHolding;
           dmt := dmtOffer;
         end;
       dmtRequest:
@@ -1138,7 +1138,7 @@ begin
                   ((p^.State = lsOutdated) and
                    (fGraceFactor > 1) and
                    (fLeaseTimeLE < SecsPerHour) and // grace period
-                   (utc - p^.Timeout < fLeaseTimeLE * fGraceFactor))) then
+                   (tix32 - p^.Expired < fLeaseTimeLE * fGraceFactor))) then
           begin
             fLog.Add.Log(sllDebug,
               'ProcessUdpFrame: NAK after out-of-sync Request %', [macx], self);
@@ -1151,7 +1151,7 @@ begin
           // respond with an ACK on the known IP
           ip4 := p^.IP4;
           p^.State := lsAck;
-          p^.Timeout := utc + fLeaseTimeLE;
+          p^.Expired := tix32 + fLeaseTimeLE;
           dmt := dmtAck;
         end;
       dmtDecline:
@@ -1193,7 +1193,7 @@ begin
             PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
             p^.State := lsDeclinedIP;
             p^.IP4 := ip4;
-            p^.Timeout := utc + fLeaseTimeLE; // use main lease time
+            p^.Expired := tix32 + fLeaseTimeLE; // use main lease time
           end;
           inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
           result := true; // server MUST NOT respond to a DHCPDECLINE message
