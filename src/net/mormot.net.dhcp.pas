@@ -289,6 +289,7 @@ type
     /// the 32-bit reserved IP
     IP4: TNetIP4;
     /// GetTickSec monotonic value stored as 32-bit unsigned integer
+    // - TUnixTime is used on disk but not during server process (not monotonic)
     Expired: cardinal;
   end;
   /// points to one DHCP lease entry in memory
@@ -356,9 +357,9 @@ type
     function SaveToText: RawUtf8;
     /// restore the internal entry list using SaveToText() format
     function LoadFromText(const Text: RawUtf8): boolean;
-    /// persist the internal entry list using raw binary
+    /// persist the internal entry list using SaveToText() format
     function SaveToFile(const FileName: TFileName): boolean;
-    /// restore the internal entry list using raw binary
+    /// restore the internal entry list using SaveToText() format
     // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
     /// this is the main processing function of the DHCP server logic
@@ -378,6 +379,7 @@ type
     /// if set, OnIdle will persist the internal list into this file when needed
     // - trigger LoadFromFile() when you set a file name
     // - at startup, you should set the file name before calling Setup()
+    // - file on disk would be in SaveToText() regular dnsmasq-compatible format
     property FileName: TFileName
       read fFileName write SetFileName;
     /// the internal list modification sequence number
@@ -1144,33 +1146,22 @@ end;
 
 function TDhcpProcess.SaveToFile(const FileName: TFileName): boolean;
 begin
+  result := FileFromString(SaveToText, FileName);
+  if not result then
+    exit;
   fSafe.Lock;
-  result := FileFromBuffer(pointer(fEntry), fCount * SizeOf(fEntry[0]), FileName);
-  if result then
-    fModifSaved := fModifSequence; // won't retry on next OnIdle()
+  fModifSaved := fModifSequence; // success: won't retry on next OnIdle()
   fSafe.UnLock;
 end;
 
 function TDhcpProcess.LoadFromFile(const FileName: TFileName): boolean;
 var
-  bin: RawByteString;
+  txt: RawUtf8;
 begin
-  Clear;
-  bin := StringFromFile(FileName);
   result := false;
-  if (bin <> '') and
-     (length(bin) mod SizeOf(fEntry[0]) <> 0) then
-    exit;
-  result := true;
-  if bin = '' then
-    exit;
-  fSafe.Lock;
-  fCount := length(bin) div SizeOf(fEntry[0]);
-  SetLength(fEntry, NextGrow(fCount));
-  MoveFast(pointer(bin)^, pointer(fEntry)^, length(bin));
-  fModifSequence := 0;
-  fModifSaved := 0;
-  fSafe.UnLock;
+  txt := StringFromFile(FileName);
+  if txt <> '' then
+    result := LoadFromText(txt);
 end;
 
 function TDhcpProcess.ProcessUdpFrame(
