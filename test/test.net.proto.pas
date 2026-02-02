@@ -1553,7 +1553,7 @@ const
 procedure TNetworkProtocols.DHCP;
 var
   bin: RawByteString;
-  mac: RawUtf8;
+  mac, txt: RawUtf8;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
   ip4, sip4: TNetIP4;
@@ -1578,6 +1578,28 @@ var
     Check(CompareMem(@macs[ndx], @req.chaddr, SizeOf(macs[0])));
     Check(server.Subnet.Match(req.ciaddr));
     CheckEqual(ips[ndx], req.ciaddr);
+  end;
+
+  procedure CheckSaveTextMatch(const saved: RawUtf8);
+  var
+    s: TDhcpProcess;
+    new: RawUtf8;
+  begin
+    s := TDhcpProcess.Create;
+    try
+      // no s.Setup(nil) needed here
+      Check(s.LoadFromText(saved));
+      new := s.SaveToText;
+      if new <> saved then // allow one (unlikely) GetTickSec slip
+      begin
+        s.Clear;
+        Check(s.LoadFromText(saved));
+        new := s.SaveToText;
+      end;
+      CheckEqual(new, saved, 'LoadFromText');
+    finally
+      s.Free;
+    end;
   end;
 
 begin
@@ -1677,6 +1699,7 @@ begin
     server.Setup({settings=}nil);
     Check(server.Subnet.Match('192.168.1.1'));
     Check(not server.Subnet.Match('8.8.8.8'));
+    CheckEqual(server.SaveToText, CRLF);
     // DISCOVER -> OFFER
     Check(server.ProcessUdpFrame(disc, disclen), 'discover');
     CheckNotEqual(disclen, 0);
@@ -1691,6 +1714,7 @@ begin
     CheckEqual(DhcpInt(@disc, lens[doRenewalTimeValue]),   60);
     CheckEqual(DhcpInt(@disc, lens[doRebindingTimeValue]), 105);
     CheckEqual(DhcpInt(@disc, lens[doLeaseTimeValue]),     120);
+    CheckEqual(server.SaveToText, CRLF, 'offer not saved');
     // REQUEST -> ACK
     ip4 := 0;
     for i := 1 to 3 do // validate offer + renewal
@@ -1720,6 +1744,11 @@ begin
       reqlen := disclen;
     end;
     CheckEqual(server.Count, 1);
+    txt := server.SaveToText;
+    CheckNotEqual(txt, CRLF, 'offer not saved');
+    CheckEqual(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt), 11, 'mac ip saved');
+    Check(length(txt) < 1000, 'saved len');
+    CheckSaveTextMatch(txt);
     // make 200 concurrent requests - more than 2M handshakes per second ;)
     n := 200;
     SetLength(macs, n);
@@ -1740,19 +1769,32 @@ begin
       ips[i] := req.ciaddr;
       Check(server.Subnet.Match(ips[i]));
     end;
+    CheckEqual(server.SaveToText, txt, 'only offer');
     CheckEqual(server.Count, n + 1);
     for i := high(macs) downto 0 do // in reverse order
       DoRequest(i);
     CheckEqual(server.Count, n + 1);
     NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
+    txt := server.SaveToText;
+    CheckSaveTextMatch(txt);
+    CheckNotEqual(txt, CRLF, 'offer not saved');
+    CheckEqual(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt), 11, 'saved 2');
+    Check(length(txt) > 2000, 'saved len2');
     // twice with the requests to validate efficient renewal
     for i := 1 to n do
       DoRequest(Random32(n)); // in Random order
-    CheckEqual(server.OnIdle(1), 0);
+    CheckEqual(server.SaveToText, txt, 'no new offer');
+    // benchmark OnIdle() performance
+    timer.Start;
+    for i := 1 to n * 10 do
+      CheckEqual(server.OnIdle(i shl 10), 0); // increasing tix32 to trigger process
+    NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
     CheckEqual(server.Count, n + 1);
     server.Clear;
     CheckEqual(server.Count, 0);
+    CheckEqual(server.SaveToText, CRLF, 'after clear');
     // validate DECLINE process
+    CheckEqual(server.OnIdle(1), 0); // trigger MaxDeclinePerSec process
     reqlen := DhcpClient(req, dmtDiscover, macs[0]) - PAnsiChar(@req) + 1;
     Check(CompareMem(@macs[0], @req.chaddr, SizeOf(macs[0])));
     CheckNotEqual(xid, req.xid);
@@ -1769,6 +1811,7 @@ begin
     Check(server.ProcessUdpFrame(req, reqlen), 'request2');
     CheckEqual(reqlen, 0);
     CheckEqual(req.xid, xid);
+    CheckEqual(server.SaveToText, CRLF, 'declined not saved');
     reqlen := DhcpClient(req, dmtDiscover, macs[0]) - PAnsiChar(@req) + 1;
     xid := req.xid;
     Check(server.ProcessUdpFrame(req, reqlen), 'request3');
@@ -1777,6 +1820,7 @@ begin
     Check(CompareMem(@macs[0], @req.chaddr, SizeOf(macs[0])));
     Check(server.Subnet.Match(req.ciaddr));
     CheckNotEqual(req.ciaddr, ips[0]);
+    CheckEqual(server.SaveToText, CRLF, 'declined no offer');
   finally
     server.Free;
   end;
