@@ -16,7 +16,7 @@ object MainForm: TMainForm
   OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 16
-  object LabelEdit: TLabel
+  object LabelName: TLabel
     Left = 32
     Top = 16
     Width = 71
@@ -24,14 +24,14 @@ object MainForm: TMainForm
     Caption = 'Your Name:'
     FocusControl = NameEdit
   end
-  object LabelList: TLabel
+  object LabelNames: TLabel
     Left = 32
     Top = 168
     Width = 50
     Height = 16
     Caption = 'Names:'
   end
-  object NameEdit: TEdit
+  object EditName: TEdit
     Left = 32
     Top = 36
     Width = 121
@@ -47,20 +47,20 @@ object MainForm: TMainForm
     TabOrder = 1
     OnClick = ButtonFindClick
   end
-  object QuestionMemo: TMemo
+  object MemoQuestion: TMemo
     Left = 32
     Top = 72
     Width = 313
     Height = 81
     TabOrder = 2
   end
-  object NamesList: TListBox
+  object ListNames: TListBox
     Left = 32
     Top = 188
     Width = 313
     Height = 121
     TabOrder = 3
-    OnClick = NamesListClick
+    OnClick = ListNamesClick
   end
   object ButtonNew: TButton
     Left = 32
