@@ -33,6 +33,7 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure NamesListClick(Sender: TObject);
   private
+    function GetSelectedID: TID;
     procedure RefreshNamesList;
   public
     Client: TSampleClient;
@@ -49,6 +50,14 @@ implementation
 {
 ********************************** TMainForm ***********************************
 }
+function TMainForm.GetSelectedID: TID;
+begin
+  if NamesList.ItemIndex >= 0 then
+    Result := TID(NamesList.Items.Objects[NamesList.ItemIndex])
+  else
+    Result := 0;
+end;
+
 procedure TMainForm.RefreshNamesList;
 var
   Rec: TOrmSample;
@@ -79,7 +88,7 @@ begin
   if NamesList.ItemIndex >= 0 then
   begin
     // Update existing record
-    RecID := TID(NamesList.Items.Objects[NamesList.ItemIndex]);
+    RecID := GetSelectedID;
     Rec := TOrmSample.Create(Client.Orm, RecID);
     try
       Rec.Name := StringToUTF8(NameEdit.Text);
@@ -115,7 +124,9 @@ begin
     ShowMessage('No record selected');
     Exit;
   end;
-  RecID := TID(NamesList.Items.Objects[NamesList.ItemIndex]);
+  if MessageDlg('Delete this record?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    Exit;
+  RecID := GetSelectedID;
   if not Client.Orm.Delete(TOrmSample, RecID) then
     ShowMessage('Error deleting the data')
   else
@@ -166,9 +177,9 @@ var
   Rec: TOrmSample;
   RecID: TID;
 begin
-  if NamesList.ItemIndex < 0 then
+  RecID := GetSelectedID;
+  if RecID = 0 then
     Exit;
-  RecID := TID(NamesList.Items.Objects[NamesList.ItemIndex]);
   Rec := TOrmSample.Create(Client.Orm, RecID);
   try
     if Rec.ID > 0 then
