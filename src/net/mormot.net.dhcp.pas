@@ -312,7 +312,7 @@ type
     fFreeList: TIntegerDynArray;
     fLastIpLE, fIpMinLE, fIpMaxLE: TNetIP4; // all little-endian for NextIp4
     fSubnetMask, fBroadcast, fGateway, fServerIdentifier: TNetIP4;
-    fDnsServer, fStatic: TNetIP4s;
+    fDnsServer, fSortedStatic: TIntegerDynArray;
     fLeaseTime, fLeaseTimeLE, fRenewalTime, fRebinding, fOfferHolding: cardinal;
     fSubnet: TIp4SubNet;
     fMaxDeclinePerSec, fGraceFactor: cardinal;
@@ -727,9 +727,9 @@ begin
       end;
     le := result;
     result := bswap32(result); // network order
-    if not IntegerScanExists(pointer(fStatic), length(fStatic), result) then
+    if FastFindIntegerSorted(fSortedStatic, result) < 0 then // fast O(log(n))
     begin
-      existing := FindIp4(result);
+      existing := FindIp4(result); // O(n)
       if existing = nil then
       begin
         // return the unused IP found
@@ -774,8 +774,8 @@ begin
     fLastIpLE         := 0;
     fIpMinLE          := ToIP4(aSettings.RangeMin);
     fIpMaxLE          := ToIP4(aSettings.RangeMax);
-    fDnsServer        := ToIP4s(aSettings.DnsServers);
-    fStatic           := ToIP4s(aSettings.StaticIPs);
+    fDnsServer        := TIntegerDynArray(ToIP4s(aSettings.DnsServers));
+    fSortedStatic     := TIntegerDynArray(ToIP4s(aSettings.StaticIPs));
     fLeaseTime        := aSettings.LeaseTimeSeconds; // 100%
     if fLeaseTime < 30 then
       fLeaseTime := 30;                              // 30 seconds minimum lease
@@ -829,20 +829,22 @@ begin
         [self, IP4ToShort(@fIpMinLE), IP4ToShort(@fIpMaxLE)]);
     if fBroadcast <> 0 then
       CheckSubNet('BroadCastAddress', fBroadcast);
-    for i := 0 to high(fStatic) do
-      CheckSubnet('Static', fStatic[i]);
-    AddInteger(TIntegerDynArray(fStatic), fServerIdentifier, {nodup=}true);
+    for i := 0 to high(fSortedStatic) do
+      CheckSubnet('Static', fSortedStatic[i]);
+    AddInteger(fSortedStatic, fServerIdentifier, {nodup=}true);
+    QuickSortInteger(fSortedStatic); // for fast branchless O(log(n)) search
     // prepare the leases in-memory database
     if fEntry = nil then
       SetLength(fEntry, 250) // pre-allocate 4KB of working entries
     else
     begin
-      // validate all current leases from the actual subnet
+      // validate all current leases from the actual subnet and statics
       n := 0;
       p := pointer(fEntry);
       for i := 0 to fCount - 1 do
       begin
-        if fSubnet.Match(p^.IP4) then
+        if fSubnet.Match(p^.IP4) and
+           (FastFindIntegerSorted(fSortedStatic, p^.IP4) < 0) then
         begin
           if n <> i then
             fEntry[n] := p^;
@@ -866,7 +868,7 @@ begin
         [aSettings, IP4ToShort(@fSubnetMask), IP4ToShort(@fIpMinLE),
          IP4ToShort(@fIpMaxLE), IP4ToShort(@fServerIdentifier),
          IP4ToShort(@fBroadcast), IP4ToShort(@fGateway),
-         IP4sToText(fStatic),  IP4sToText(fDnsServer),
+         IP4sToText(TNetIP4s(fSortedStatic)),  IP4sToText(TNetIP4s(fDnsServer)),
          fLeaseTime, fRenewalTime, fRebinding, fOfferHolding],
         self);
     // store internal values in the more efficient endianess for direct usage
@@ -892,7 +894,7 @@ begin
     exit;
   fSafe.Lock;
   try
-    result := AddInteger(TIntegerDynArray(fStatic), ip4, {nodup=}true);
+    result := AddSortedInteger(fSortedStatic, ip4) >= 0;
   finally
     fSafe.UnLock;
   end;
@@ -908,11 +910,11 @@ begin
     exit;
   fSafe.Lock;
   try
-    ndx := IntegerScanIndex(pointer(fStatic), length(fStatic), ip4);
+    ndx := FastFindIntegerSorted(fSortedStatic, ip4);
     if ndx < 0 then
       result := false
     else
-      DeleteInteger(TIntegerDynArray(fStatic), ndx);
+      DeleteInteger(fSortedStatic, ndx);
   finally
     fSafe.UnLock;
   end;
@@ -1092,7 +1094,7 @@ begin
               ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // try to renew
               if ip4 <> 0 then
                 if (not fSubNet.Match(ip4)) or
-                   IntegerScanExists(pointer(fStatic), length(fStatic), ip4) or
+                   (FastFindIntegerSorted(fSortedStatic, ip4) >= 0) or
                    (FindIp4(ip4) <> nil) then
                 begin
                   // this IP seems already used by another MAC
