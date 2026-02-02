@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = 886
   Top = 313
   Width = 418
-  Height = 373
+  Height = 400
   Caption = ' Sample 01 - In Memory ORM'
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -18,51 +18,84 @@ object MainForm: TMainForm
   TextHeight = 16
   object LabelEdit: TLabel
     Left = 32
-    Top = 48
+    Top = 16
     Width = 71
     Height = 16
     Caption = 'Your Name:'
     FocusControl = NameEdit
   end
+  object LabelList: TLabel
+    Left = 32
+    Top = 168
+    Width = 50
+    Height = 16
+    Caption = 'Names:'
+  end
   object NameEdit: TEdit
     Left = 32
-    Top = 72
+    Top = 36
     Width = 121
     Height = 24
     TabOrder = 0
   end
   object ButtonFind: TButton
     Left = 184
-    Top = 72
+    Top = 36
     Width = 161
     Height = 25
-    Caption = 'Find previous message'
+    Caption = 'Find'
     TabOrder = 1
     OnClick = ButtonFindClick
   end
   object QuestionMemo: TMemo
     Left = 32
-    Top = 112
+    Top = 72
     Width = 313
-    Height = 129
+    Height = 81
     TabOrder = 2
   end
-  object ButtonAdd: TButton
+  object NamesList: TListBox
     Left = 32
-    Top = 256
-    Width = 137
-    Height = 25
-    Caption = 'Add message'
+    Top = 188
+    Width = 313
+    Height = 121
     TabOrder = 3
-    OnClick = ButtonAddClick
+    OnClick = NamesListClick
+  end
+  object ButtonNew: TButton
+    Left = 32
+    Top = 328
+    Width = 70
+    Height = 25
+    Caption = 'New'
+    TabOrder = 4
+    OnClick = ButtonNewClick
+  end
+  object ButtonSave: TButton
+    Left = 113
+    Top = 328
+    Width = 70
+    Height = 25
+    Caption = 'Save'
+    TabOrder = 5
+    OnClick = ButtonSaveClick
+  end
+  object ButtonDelete: TButton
+    Left = 194
+    Top = 328
+    Width = 70
+    Height = 25
+    Caption = 'Delete'
+    TabOrder = 6
+    OnClick = ButtonDeleteClick
   end
   object ButtonQuit: TButton
-    Left = 272
-    Top = 256
-    Width = 75
+    Left = 275
+    Top = 328
+    Width = 70
     Height = 25
     Caption = 'Quit'
-    TabOrder = 4
+    TabOrder = 7
     OnClick = ButtonQuitClick
   end
 end
