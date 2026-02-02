@@ -1554,6 +1554,7 @@ procedure TNetworkProtocols.DHCP;
 var
   bin: RawByteString;
   mac, txt: RawUtf8;
+  fn: TFileName;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
   ip4, sip4: TNetIP4;
@@ -1696,7 +1697,15 @@ begin
   try
     //TSynLog.Family.Level := LOG_VERBOSE;
     server.Log := TSynLog;
+    Check(server.FileName = '');
+    fn := WorkDir + 'dnsmasq.leases';
+    if FileExists(fn) then
+      Check(DeleteFile(fn), 'deletefile');
+    server.FileName := fn;
+    Check(not FileExists(fn));
+    Check(server.FileName = fn);
     server.Setup({settings=}nil);
+    Check(server.FileName = fn);
     Check(server.Subnet.Match('192.168.1.1'));
     Check(not server.Subnet.Match('8.8.8.8'));
     CheckEqual(server.SaveToText, CRLF);
@@ -1785,11 +1794,16 @@ begin
       DoRequest(Random32(n)); // in Random order
     CheckEqual(server.SaveToText, txt, 'no new offer');
     // benchmark OnIdle() performance
+    Check(not FileExists(fn), 'file before OnIdle');
     timer.Start;
     for i := 1 to n * 10 do
       CheckEqual(server.OnIdle(i shl 10), 0); // increasing tix32 to trigger process
     NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
+    // ensure OnIdle() did persist the file on disk
     CheckEqual(server.Count, n + 1);
+    Check(server.FileName = fn);
+    Check(FileExists(fn), 'file after OnIdle');
+    CheckEqual(StringFromFile(fn), txt);
     server.Clear;
     CheckEqual(server.Count, 0);
     CheckEqual(server.SaveToText, CRLF, 'after clear');
