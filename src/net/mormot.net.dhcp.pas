@@ -1052,14 +1052,17 @@ var
   macx: string[12]; // no memory allocation during the process
 begin
   result := false;
-  Len := 0; // no response
   // do nothing on missing Setup() or after Shutdown
   if fSubnet.mask = 0 then
+  begin
+    Len := 0; // no response
     exit;
+  end;
   // parse and validate the request
   ip4 := 0;
   mac64 := 0;
   dmt := DhcpParse(@Frame, Len, lens, @fnd, @mac);
+  Len := 0;
   macx[0] := #12;
   if Assigned(fLog) then
     BinToHexLower(@mac, @macx[1], 6);
