@@ -640,6 +640,10 @@ procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 function MacToText(mac: pointer): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// convert a MAC address into a 17-chars shortstring like '12:50:b6:1e:c6:aa'
+function MacToShort(mac: pointer): TShort23;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// reverse function from MacToText() or MacToHex()
 function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
 
@@ -3905,6 +3909,12 @@ end;
 function MacToText(mac: pointer): RawUtf8;
 begin
   ToHumanHex(result, mac, 6);
+end;
+
+function MacToShort(mac: pointer): TShort23;
+begin
+  result[0] := #17;
+  ToHumanHexP(@result[1], mac, 6);
 end;
 
 function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
