@@ -1168,15 +1168,14 @@ function TDhcpProcess.ProcessUdpFrame(
   var Frame: TDhcpPacket; var Len: PtrInt): boolean;
 var
   lens: TDhcpParsed;
-  dmt: TDhcpMessageType;
-  fnd: TDhcpOptions;
   p: PDhcpLease;
   f: PAnsiChar;
   mac64: Int64;
   mac: TNetMac absolute mac64;
   ip4: TNetIP4;
   tix32: cardinal;
-  macx: string[12]; // no memory allocation during the process
+  macx: string[17]; // no memory allocation during the process
+  dmt: TDhcpMessageType;
 begin
   result := false;
   // do nothing on missing Setup() or after Shutdown
@@ -1188,16 +1187,16 @@ begin
   // parse and validate the request
   ip4 := 0;
   mac64 := 0;
-  dmt := DhcpParse(@Frame, Len, lens, @fnd, @mac);
+  dmt := DhcpParse(@Frame, Len, lens, nil, @mac);
   Len := 0;
-  macx[0] := #12;
+  macx[0] := #17;
   if Assigned(fLog) then
-    BinToHexLower(@mac, @macx[1], 6);
+    ToHumanHexP(@macx[1], @mac, 6);
   if (mac64 = 0) or
      not (dmt in [dmtDiscover, dmtRequest, dmtDecline]) then
   begin
     if Assigned(fLog) then
-      fLog.Add.Log(sllTrace, 'ProcessUdpFrame: invalid % frame from %',
+      fLog.Add.Log(sllTrace, 'ProcessUdpFrame: unexpected % frame from %',
         [ToText(dmt)^, macx], self);
     exit; // invalid or unsupported frame
   end;
