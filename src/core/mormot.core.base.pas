@@ -1156,7 +1156,11 @@ function ParseHex(p: PAnsiChar; b: PByte; n: integer): PAnsiChar;
 /// convert a binary into its human-friendly per-byte hexadecimal lowercase text
 // - returns e.g. '12:50:b6:1e:c6:aa', i.e. the DN/MAC format
 // - used e.g. in mormot.lib.openssl11 and mormot.net.sock
-procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer;
+procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: PtrInt;
+  reverse: boolean = false);
+
+/// convert a binary into its human-friendly per-byte hexadecimal lowercase text
+procedure ToHumanHexP(hex: PAnsiChar; bin: PByte; len: PtrInt;
   reverse: boolean = false);
 
 // backward compatibility types redirections
@@ -5818,30 +5822,33 @@ begin
   result := p;
 end;
 
-procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer; reverse: boolean);
-var
-  p: PAnsiChar;
-  c: PtrInt;
-  tab: PAnsichar;
+procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: PtrInt; reverse: boolean);
 begin
   result := '';
   if len <= 0 then
     exit;
   pointer(result) := FastNewString((len * 3) - 1, CP_UTF8);
+  ToHumanHexP(pointer(result), bin, len, reverse);
+end;
+
+procedure ToHumanHexP(hex: PAnsiChar; bin: PByte; len: PtrInt; reverse: boolean);
+var
+  c: PtrInt;
+  tab: PAnsichar;
+begin
   tab := @HexCharsLower;
-  p := pointer(result);
   if reverse then
     inc(bin, len - 1);
   repeat
     c := bin^;
-    p[0] := tab[c shr 4];
+    hex[0] := tab[c shr 4];
     c := c and 15;
-    p[1] := tab[c];
+    hex[1] := tab[c];
     dec(len);
     if len = 0 then
       break;
-    p[2] := ':'; // to please (most) human limited hexadecimal capabilities
-    inc(p, 3);
+    hex[2] := ':'; // to please (most) human limited hexadecimal capabilities
+    inc(hex, 3);
     if reverse then
       dec(bin)
     else
