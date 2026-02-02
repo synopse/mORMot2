@@ -925,6 +925,7 @@ begin
   fSafe.Lock;
   fCount := 0;
   fEntry := nil;
+  fFreeListCount := 0;
   fModifSequence := 0;
   fModifSaved := 0;
   fSafe.UnLock;
