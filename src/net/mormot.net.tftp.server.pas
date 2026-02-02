@@ -484,7 +484,7 @@ begin
     delete(fn, 1, 1); // trim any leading root (we start from fFileFolder anyway)
   if SafeFileName(fn) and
      ((ttoAllowSubFolders in fOptions) or
-      (Pos(PathDelim, result) = 0)) then
+      (Pos(PathDelim, fn) = 0)) then
   begin
     {$ifdef OSPOSIX}
     if Assigned(fPosixFileNames) then
