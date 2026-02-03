@@ -3087,7 +3087,7 @@ begin
 end;
 
 var
-  OAFR_TXT: array[TOnAuthenticationFailedReason] of RawUtf8;
+  OAFR_TXT: array[TOnAuthenticationFailedReason] of RawUtf8; // stUnCamelCase
 
 procedure TRestServerUriContext.AuthenticationFailed(
   Reason: TOnAuthenticationFailedReason; const aUserName: RawUtf8);
@@ -8410,7 +8410,7 @@ initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
     SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
-  GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, true);
+  GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, stUnCamelCase);
 
 end.
 
