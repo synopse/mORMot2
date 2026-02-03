@@ -206,6 +206,10 @@ type
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
     // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
+    /// validate the consistency of settings, mainly about IPv4 subnet
+    // - returns '' if no error occured with the current property values
+    // - returns the TDhcpProcess.Setup() Exception message on failure
+    function Verify: string;
   published
     /// Subnet Mask e.g. '192.168.1.1/24'
     // - the CIDR 'ip/mask' pattern will compute RangeMin/RangeMax and
@@ -397,7 +401,8 @@ type
     function NextIp4: TNetIP4;
   public
     /// setup this DHCP process using the specified settings
-    // - raise an EDhcp exception if the parameters are not correct
+    // - raise an EDhcp exception if the parameters are not correct - see
+    // TDhcpServerSettings.Verify() if you want to intercept such errors
     // - if aSettings = nil, will use TDhcpServerSettings default parameters
     procedure Setup(aSettings: TDhcpServerSettings);
     /// register another static IP address to the internal pool
@@ -1576,7 +1581,24 @@ begin
   fFileFlushSeconds := 30; // good tradeoff: low disk writes, still safe for PXE
 end;
 
-
+function TDhcpServerSettings.Verify: string;
+var
+  process: TDhcpProcess;
+begin
+  result := ''; // no error
+  if self <> nil then
+    try
+      process := TDhcpProcess.Create;
+      try
+        process.Setup(self); // may trigger EDhcp exception
+      finally
+        process.Free;
+      end;
+    except
+      on E: Exception do
+        result := E.Message;
+    end;
+end;
 
 
 initialization
