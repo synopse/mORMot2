@@ -276,15 +276,15 @@ type
   /// the state of one DHCP TDhcpLease entry in memory
   // - lsFree identify an lsOutdated slot which IP4 has been reused
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
-  // - lsAck is used when REQUEST has been recevied and ASK has been sent
-  // - lsDeclinedIP is set when a DECLINE message is received from a client
+  // - lsAck is used when REQUEST has been received and ACK has been sent back
+  // - lsDeclined is set when a DECLINE message is received with an IP
   // - lsOutdated is set once Expired timestamp has been reached, so that the
   // IP4 address could be reused on the next DISCOVER for this MAC
   TLeaseState = (
     lsFree,
     lsReserved,
     lsAck,
-    lsDeclinedIP,
+    lsDeclined,
     lsOutdated);
 
   /// store one DHCP lease in memory
@@ -293,7 +293,7 @@ type
     /// the MAC address of this entry - should be first
     // - we only lookup clients by MAC: no DUID is supported (we found it error-
     // prone in practice, when some VMs are duplicated with the same DUID)
-    // - may contain 0 for a lsFree or lsDeclinedIP entry
+    // - may contain 0 for a lsFree or lsDeclined entry
     Mac: TNetMac;
     /// how this entry should be handled
     State: TLeaseState;
@@ -826,7 +826,7 @@ begin
         fLastIpLE := le;
         exit;
       end
-      else if (existing^.State in [lsDeclinedIP, lsOutdated]) and
+      else if (existing^.State in [lsDeclined, lsOutdated]) and
               ((outdated = nil) or
                (existing^.Expired < outdated^.Expired)) then
         outdated := existing; // detect oldest outdated entry
@@ -1046,7 +1046,7 @@ begin // dedicated sub-function for better codegen (100ns for 200 entries)
   if n <> 0 then
     repeat
       if (p^.Expired < tix32) and
-         (p^.State in [lsReserved, lsAck, lsDeclinedIP]) then
+         (p^.State in [lsReserved, lsAck, lsDeclined]) then
       begin
         inc(result);
         p^.State := lsOutdated;
@@ -1402,7 +1402,7 @@ begin
           end;
           if (fMaxDeclinePerSec <> 0) and // = 5 by default
              (fIdleTix <> 0) then         // OnIdle() is actually running
-            if p^.DeclineCount < fMaxDeclinePerSec then
+            if p^.DeclineCount < fMaxDeclinePerSec then // rate limiting
               inc(p^.DeclineCount)        // will be reset to 0 by OnIdle()
             else
             begin
@@ -1418,7 +1418,7 @@ begin
             Data.Ip4 := 0;
           if Data.Ip4 = 0 then
             Data.Ip4 := p^.IP4; // option 50 was not set (or not in our subnet)
-          p^.State := lsDeclinedIP;
+          p^.State := lsDeclined;
           p^.IP4 := 0; // invalidate the previous offered IP
           if Data.Ip4 <> 0 then
           begin
@@ -1431,7 +1431,7 @@ begin
             end;
             p := NewLease;
             PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
-            p^.State := lsDeclinedIP;
+            p^.State := lsDeclined;
             p^.IP4 := Data.Ip4;
             p^.Expired := Data.Tix32 + fLeaseTimeLE; // use main lease time
           end;
