@@ -351,6 +351,9 @@ type
     Send: TDhcpPacket;
     /// some pointer value set by the UDP server for its internal process
     Opaque: pointer;
+    /// points to the raw value of doHostName option 12 in Recv.option[]
+    // - points to @NULCHAR so HostName^='' if there is no such option
+    HostName: PShortString;
     /// IP address allocated for Send (raw Ip4) as human readable text
     Ip: TShort16;
     /// contains the client MAC address (raw Mac64) as human readable text
@@ -655,7 +658,7 @@ begin
   if len = 0 then
     result := @NULCHAR
   else
-    result := @dhcp^.options[len];
+    result := @dhcp^.options[len]; // len+data matches PShortString binary
 end;
 
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
@@ -1304,17 +1307,23 @@ begin
   Data.Mac64 := 0;
   Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
   Data.Ip[0] := #0;
-  Data.Mac[0] := #17;
-  if Assigned(fLog) or
-     Assigned(fOnProcessUdpFrame) then
+  if (Data.Mac64 <> 0) and
+     (Assigned(fLog) or
+      Assigned(fOnProcessUdpFrame)) then
+  begin
+    Data.Mac[0] := #17;
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
+  end
+  else
+    Data.Mac[0] := #0;
+  Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
   if (Data.Mac64 = 0) or
      not (Data.RecvType in
             [dmtDiscover, dmtRequest, dmtDecline, dmtRelease, dmtInform]) then
   begin
     if Assigned(fLog) then
-      fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % % unexpected',
-        [DHCP_TXT[Data.RecvType], Data.Mac], self);
+      fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % % unexpected %',
+        [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^], self);
     exit; // invalid or unsupported frame
   end;
   // compute the corresponding IPv4 according to the internal lease list
@@ -1344,8 +1353,8 @@ begin
                   begin
                     IP4Short(@Data.Ip4, Data.Ip);
                     fLog.Add.Log(sllTrace,
-                      'ProcessUdpFrame: DISCOVER % ignored requestedip=%',
-                      [Data.Mac, Data.Ip], self);
+                      'ProcessUdpFrame: DISCOVER % ignored requestedip=% %',
+                      [Data.Mac, Data.Ip, Data.HostName^], self);
                   end;
                   Data.Ip4 := 0; // NextIP4
                 end;
@@ -1357,7 +1366,8 @@ begin
               // IPv4 exhausted: don't return NAK, but silently ignore
               // - client will retry automatically after a small temporisation
               fLog.Add.Log(sllWarning,
-                'ProcessUdpFrame: DISCOVER % exhausted IPv4', [Data.Mac], self);
+                'ProcessUdpFrame: DISCOVER % exhausted IPv4 %',
+                  [Data.Mac, Data.HostName^], self);
               exit;
             end;
             if p = nil then
@@ -1388,7 +1398,8 @@ begin
                    (Data.Tix32 - p^.Expired < fLeaseTimeLE * fGraceFactor))) then
           begin
             fLog.Add.Log(sllDebug,
-              'ProcessUdpFrame: REQUEST % out-of-sync NAK', [Data.Mac], self);
+              'ProcessUdpFrame: REQUEST % out-of-sync NAK %',
+                [Data.Mac, Data.HostName^], self);
             // send a NAK response anyway
             Data.SendType := dmtNak;
             Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
@@ -1411,7 +1422,8 @@ begin
             // ensure the server recently OFFERed one IP to that client
             // (match RFC intent and prevent blind poisoning of arbitrary IPs)
             fLog.Add.Log(sllDebug,
-              'ProcessUdpFrame: DECLINE % with no previous OFFER', [Data.Mac], self);
+              'ProcessUdpFrame: DECLINE % with no previous OFFER %',
+                [Data.Mac, Data.HostName^], self);
             exit;
           end;
           if (fMaxDeclinePerSec <> 0) and // = 5 by default
@@ -1522,8 +1534,11 @@ begin
      Assigned(fOnProcessUdpFrame) then
     IP4Short(@Data.Ip4, Data.Ip);
   if Assigned(fLog) then
-    fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % % into % %',
-      [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType], Data.Ip], self);
+    with fLog.Family do
+      if sllTrace in Level then
+        Add.Log(sllTrace, 'ProcessUdpFrame: % % into % % %',
+          [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType], Data.Ip,
+           Data.HostName^], self);
   Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
     PNetMac(@Data.Mac64)^, fServerIdentifier);
   Data.Send.ciaddr := Data.Ip4;
