@@ -140,6 +140,11 @@ procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pbyte;
 procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// append a copy of an existing TDhcpPacket.options option for lens[opt]
+// - sourcelen should point to recv[lens[opt]] with lens[opt] <> 0
+procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
+
 type
  /// efficient DhcpParse() resultset
  // - store the length position of an option in TDhcpPacket.options[]
@@ -463,6 +468,13 @@ procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
 begin
   if ips <> nil then // ips is a dynamic array of TNetIP4 = cardinal
     DhcpAddOption(p, op, pointer(ips), (PDALen(ips - _DALEN)^ + _DAOFF) * 4);
+end;
+
+procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
+begin
+  // copy whole "DHCP_OPTION_NUM + len + data" binary block
+  MoveFast(sourcelen[-1], p^, ord(sourcelen^) + 2);
+  inc(p, ord(sourcelen^) + 2);
 end;
 
 function DhcpAddOptionRequestList(p: PAnsiChar; op: TDhcpOptions): PAnsiChar;
