@@ -1429,9 +1429,10 @@ function Base32ToBin(B32: PAnsiChar; B32Len: integer): RawByteString; overload;
 function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// internal raw function used to initialize Base32/58/64/64uri decoding lookup
+// internal raw functions used to initialize Base32/58/64/64uri decoding lookup
+procedure FillLookupTable(s, d: PByteArray; i: PtrUInt);
+  {$ifndef CPUX86} inline; {$endif}
 procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
-
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -6445,11 +6446,10 @@ end;
 
 { ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
-procedure FillBaseDecoderChars(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
-  {$ifndef CPUX86} inline; {$endif}
+procedure FillLookupTable(s, d: PByteArray; i: PtrUInt);
 begin
   repeat
-    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
+    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful chars
     dec(i);
   until i = 0;
   d[s[0]] := i
@@ -6458,7 +6458,7 @@ end;
 procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
 begin
   FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
-  FillBaseDecoderChars(s, d, i);
+  FillLookupTable(pointer(s), pointer(d), i);
 end;
 
 
@@ -7591,7 +7591,7 @@ begin
     if ConvertBase32ToBin[#255] = 0 then // delayed thread-safe initialization
     begin
       FillBaseDecoder(@b32encUpper, @ConvertBase32ToBin, high(b32encUpper));
-      FillBaseDecoderChars(@b32encLower, @ConvertBase32ToBin, high(b32encLower));
+      FillLookupTable(@b32encLower, @ConvertBase32ToBin, high(b32encLower));
     end;
     p := Base32Decode(@ConvertBase32ToBin, B32,
       FastNewRawByteString(result, (B32Len shr 3) * 5), B32Len);
