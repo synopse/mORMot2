@@ -1647,7 +1647,15 @@ function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 // - may be used as cache for overloaded ToText() content
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
 
-/// helper to retrieve all trimmed texts of an enumerate
+type
+  /// how ShortTrim() and GetEnumTrimmedNames() process an identifier
+  TShortTrim = (
+    stNoTrim, stTrimLeft, stUnCamelCase, stLowerCase, stLowerCaseFirst, stUpperCase);
+
+/// compute a RawUtf8 from a shortstring RTTI identifier
+procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TShortTrim);
+
+/// helper to retrieve all trimmed texts of an enumerate into a RawUtf8 array
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
 // - can optionally generate the un-camelcased text of the enumerate values
 // - typical usage is the following:
@@ -6222,6 +6230,27 @@ begin
       inc(aDest);
     end;
   end;
+end;
+
+procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TShortTrim);
+begin
+  if aKind = stNoTrim then
+  begin
+    FastSetString(aDest, @aShort^[1], length(aShort^));
+    exit;
+  end;
+  TrimLeftLowerCaseShort(aShort, aDest);
+  if aDest <> '' then
+    case aKind of
+      stUnCamelCase:
+        UnCamelCaseSelf(aDest);
+      stLowerCase:
+        CaseNew(aDest, @NormToLowerAnsi7);
+      stLowerCaseFirst:
+        PByte(aDest)^ := NormToLowerAnsi7Byte[PByte(aDest)^];
+      stUpperCase:
+        CaseNew(aDest, @NormToUpperAnsi7);
+    end;
 end;
 
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
