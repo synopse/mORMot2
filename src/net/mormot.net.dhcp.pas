@@ -53,7 +53,7 @@ type
     dmtAck,
     dmtNak,
     dmtRelease,
-    dmtInFrom,
+    dmtInform,
     dmtForceRenew,
     dmtLeaseQuery,
     dmtLeaseUnassigned,
@@ -343,7 +343,7 @@ type
     Send: TDhcpPacket;
     /// some pointer value set by the UDP server for its internal process
     Opaque: pointer;
-    /// IP address allocated for Send  (raw Ip4) as human readable text
+    /// IP address allocated for Send (raw Ip4) as human readable text
     Ip: TShort16;
     /// contains the client MAC address (raw Mac64) as human readable text
     // - ready for logging, with no memory allocation during the process
@@ -382,6 +382,7 @@ type
     function FindMac(mac: Int64): PDhcpLease;
     function FindIp4(ip4: TNetIP4): PDhcpLease;
     function NewLease: PDhcpLease;
+    function ReuseIp4(p: PDhcpLease): TNetIP4;
     function NextIp4: TNetIP4;
   public
     /// setup this DHCP process using the specified settings
@@ -532,7 +533,7 @@ const
     BOOT_REPLY,   // dmtAck
     BOOT_REPLY,   // dmtNak
     BOOT_REQUEST, // dmtRelease
-    BOOT_REQUEST, // dmtInFrom
+    BOOT_REQUEST, // dmtInform
     BOOT_REQUEST, // dmtForceRenew
     BOOT_REQUEST, // dmtLeaseQuery
     BOOT_REPLY,   // dmtLeaseUnassigned
@@ -773,6 +774,14 @@ begin
   inc(fCount);
 end;
 
+function TDhcpProcess.ReuseIp4(p: PDhcpLease): TNetIP4;
+begin
+  AddInteger(fFreeList, fFreeListCount,
+    {index=}(PtrUInt(p) - PtrUInt(fEntry)) div SizeOf(fEntry[0]));
+  result := p^.IP4; // return this IP4
+  FillZero(THash128(p^)); // set MAC=0 IP=0 State=lsFree
+end;
+
 function TDhcpProcess.NextIp4: TNetIP4;
 var
   le: TNetIP4;
@@ -793,13 +802,8 @@ begin
       begin
         // all IPs are already used in the internal list
         if outdated <> nil then
-        begin
           // reuse the oldest outdated slot
-          AddInteger(fFreeList, fFreeListCount,
-            {index=}(PtrUInt(outdated) - PtrUInt(fEntry)) div SizeOf(fEntry[0]));
-          result := outdated^.IP4; // reuse this IP4
-          FillZero(THash128(outdated^)); // and set outdated^.State := lsFree;
-        end
+          result := ReuseIP4(outdated) // set MAC=0 IP=0 State=lsFree
         else
           // pool exhausted: consider shorten the lease duration to 60-300 secs
           result := 0;
