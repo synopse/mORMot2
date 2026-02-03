@@ -285,31 +285,31 @@ type
   // - lsFree identify an lsOutdated slot which IP4 has been reused
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
   // - lsAck is used when REQUEST has been received and ACK has been sent back
-  // - lsDeclined is set when a DECLINE message is received with an IP
+  // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
   // - lsOutdated is set once Expired timestamp has been reached, so that the
   // IP4 address could be reused on the next DISCOVER for this MAC
   TLeaseState = (
     lsFree,
     lsReserved,
     lsAck,
-    lsDeclined,
+    lsUnavailable,
     lsOutdated);
 
   /// store one DHCP lease in memory
-  // - efficiently padded to 16 bytes
+  // - efficiently padded to 16 bytes (128-bit)
   TDhcpLease = packed record
     /// the MAC address of this entry - should be first
     // - we only lookup clients by MAC: no DUID is supported (we found it error-
     // prone in practice, when some VMs are duplicated with the same DUID)
-    // - may contain 0 for a lsFree or lsDeclined entry
+    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
     Mac: TNetMac;
     /// how this entry should be handled
     State: TLeaseState;
-    /// how many dmtDecline requests have been received since the last OnIdle
+    /// how many lsUnavailable IPs have been marked since the last OnIdle
     // - OnIdle() will reset it to 0, ProcessUdpFrame() will increment it, and
-    // silently ignore any dmtDecline request > 5 times in a row
+    // silently ignore any abusive DECLINE/INFORM requests as rate limitation
     // - also align the whole structure to cpu-cache-friendly 16 bytes
-    DeclineCount: byte;
+    Unavailable: byte;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
     /// GetTickSec monotonic value stored as 32-bit unsigned integer
@@ -836,7 +836,7 @@ begin
         fLastIpLE := le;
         exit;
       end
-      else if (existing^.State in [lsDeclined, lsOutdated]) and
+      else if (existing^.State in [lsUnavailable, lsOutdated]) and
               ((outdated = nil) or
                (existing^.Expired < outdated^.Expired)) then
         outdated := existing; // detect oldest outdated entry
@@ -1059,15 +1059,15 @@ begin // dedicated sub-function for better codegen (100ns for 200 entries)
   if n <> 0 then
     repeat
       if (p^.Expired < tix32) and
-         (p^.State in [lsReserved, lsAck, lsDeclined]) then
+         (p^.State in [lsReserved, lsAck, lsUnavailable]) then
       begin
         inc(result);
         p^.State := lsOutdated;
       end;
-      {$ifndef CPUINTEL}           // seems actually slower on modern Intel/AMD
-      if p^.DeclineCount <> 0 then // don't invalidate L1 cache unless necessary
+      {$ifndef CPUINTEL}          // seems actually slower on modern Intel/AMD
+      if p^.Unavailable <> 0 then // don't invalidate L1 cache
       {$endif CPUINTEL}
-        p^.DeclineCount := 0;
+        p^.Unavailable := 0;
       inc(p);
       dec(n);
     until n = 0;
@@ -1109,7 +1109,7 @@ begin
   // no ARP call here to clean the internal list: the user should rather tune
   // lease duration or use a bigger netmask; the RFC states that the client
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
-  // - we mitigate aggressive clients via DeclineCount anyway
+  // - we mitigate aggressive clients via the Unavailable counter anyway
   if Assigned(fLog) and
      ((result <> 0) or
       saved) then
@@ -1126,7 +1126,7 @@ begin
   if boot > UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
     repeat
       // OFFERed leases are temporary; the client hasn't accepted this IP
-      // DECLINED IPs (with MAC = 0) are ephemeral internal-only markers
+      // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
       if (PInt64(@p^.Mac)^ and MAC_MASK <> 0) and
          (p^.IP4 <> 0) and
          (((p^.State = lsAck) or
@@ -1181,7 +1181,7 @@ begin
           if length(e) = result then
             SetLength(e, NextGrow(result));
           new := @e[result];
-          PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+DeclineCount
+          PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+Unavailable
           new^.IP4 := ip4;
           new^.Expired := utc - boot;
           if new^.Expired < tix32 then // same logic than DoOutdated()
@@ -1363,7 +1363,7 @@ begin
             if p = nil then
             begin
               p := NewLease;
-              PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+DeclineCount
+              PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
             end;
             p^.IP4 := Data.Ip4;
           end
@@ -1416,8 +1416,8 @@ begin
           end;
           if (fMaxDeclinePerSec <> 0) and // = 5 by default
              (fIdleTix <> 0) then         // OnIdle() is actually running
-            if p^.DeclineCount < fMaxDeclinePerSec then // rate limiting
-              inc(p^.DeclineCount)        // will be reset to 0 by OnIdle()
+            if p^.Unavailable < fMaxDeclinePerSec then // rate limiting
+              inc(p^.Unavailable)         // will be reset to 0 by OnIdle()
             else
             begin
               // malicious client poisons the pool by sending repeated DECLINE
@@ -1432,11 +1432,11 @@ begin
             Data.Ip4 := 0;
           if Data.Ip4 = 0 then
             Data.Ip4 := p^.IP4; // option 50 was not set (or not in our subnet)
-          p^.State := lsDeclined;
+          p^.State := lsUnavailable;
           p^.IP4 := 0; // invalidate the previous offered IP
           if Data.Ip4 <> 0 then
           begin
-            // store internally this IP as declined for NextIP4
+            // store internally this IP as unavailable for NextIP4
             if Assigned(fLog) then
             begin
               IP4Short(@Data.Ip4, Data.Ip);
@@ -1445,7 +1445,7 @@ begin
             end;
             p := NewLease;
             PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
-            p^.State := lsDeclined;
+            p^.State := lsUnavailable;
             p^.IP4 := Data.Ip4;
             p^.Expired := Data.Tix32 + fDeclineTime;
           end;
@@ -1479,8 +1479,8 @@ begin
           // client requests configuration options for its static IP
           Data.Ip4 := Data.Recv.ciaddr;
           if ((p <> nil) and
-              ((p^.DeclineCount >= MAX_INFORM) or // rate limit to 3 per sec
-               not (p^.State in [lsDeclined, lsOutdated]))) or
+              ((p^.Unavailable >= MAX_INFORM) or // rate limit to 3 per sec
+               not (p^.State in [lsUnavailable, lsOutdated]))) or
              not fSubnet.Match(Data.Ip4) then
           begin
             IP4Short(@Data.Ip4, Data.Ip);
@@ -1493,13 +1493,12 @@ begin
           begin
             // create a new lease for this MAC
             p := NewLease;
-            PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+DeclineCount
-            inc(p^.DeclineCount);
+            PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
+            inc(p^.Unavailable);            // will be reset to 0 by OnIdle()
           end
           else
           begin
-            p^.State := lsDeclined; // may be lsOudated in the list
-            inc(p^.DeclineCount);   // up to 3 IP per MAC per second
+            inc(p^.Unavailable);            // will be reset to 0 by OnIdle()
             if p^.IP4 <> Data.Ip4 then
             begin
               // create a new MAC-free lease for this IP
@@ -1507,7 +1506,7 @@ begin
               PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
             end;
           end;
-          p^.State := lsDeclined;
+          p^.State := lsUnavailable;
           p^.IP4 := Data.Ip4;
           p^.Expired := Data.Tix32 + fDeclineTime;
           Data.SendType := dmtAck;
