@@ -973,13 +973,15 @@ begin
     end;
     // log the used network context
     if Assigned(fLog) then
-      fLog.Add.Log(sllInfo, 'Setup%: subnet=% min=% max=% server=% broadcast=%' +
-        ' gateway=% static=% dns=% lease=% renew=% rebind=% offer=%',
+      fLog.Add.Log(sllInfo, 'Setup%: subnet=% min=% max=% server=% ' +
+        'broadcast=% gateway=% static=% dns=% lease=% renew=% rebind=% ' +
+        'offer=% maxdecline=% declinetime=% grace=%',
         [aSettings, IP4ToShort(@fSubnetMask), IP4ToShort(@fIpMinLE),
          IP4ToShort(@fIpMaxLE), IP4ToShort(@fServerIdentifier),
          IP4ToShort(@fBroadcast), IP4ToShort(@fGateway),
          IP4sToText(TNetIP4s(fSortedStatic)),  IP4sToText(TNetIP4s(fDnsServer)),
-         fLeaseTime, fRenewalTime, fRebinding, fOfferHolding],
+         fLeaseTime, fRenewalTime, fRebinding, fOfferHolding,
+         fMaxDeclinePerSec, fDeclineTime, fGraceFactor],
         self);
     // store internal values in the more efficient endianess for direct usage
     fIpMinLE     := bswap32(fIpMinLE);      // little-endian
