@@ -148,7 +148,7 @@ type
  /// efficient DhcpParse() resultset
  // - store the length position of an option in TDhcpPacket.options[]
  // - 0 means that this TDhcpOption was not transmitted
- // - very efficient O(1) lookup of recognized options with no memory allocation
+ // - very efficient O(1) lookup of recognized options
  TDhcpParsed = array[TDhcpOption] of byte;
 
 /// parse a raw DHCP binary frame and return the length of all recognized options
@@ -331,6 +331,7 @@ type
 
   /// data context used by TDhcpProcess.ProcessUdpFrame
   // - and as supplied to TOnDhcpProcess callback
+  // - static allocation of all memory needed during the frame processing
   TDhcpProcessData = {$ifdef CPUINTEL} packed {$endif} record
     /// binary MAC address from the Recv frame, zero-extended to 64-bit/8-bytes
     Mac64: Int64;
@@ -343,7 +344,7 @@ type
     Tix32: cardinal;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
-    /// parsed options position in Recv.option[]
+    /// parsed options length position in Recv.option[]
     RecvLens: TDhcpParsed;
     /// the DHCP message type parsed from Recv
     RecvType: TDhcpMessageType;
@@ -494,7 +495,7 @@ const
     0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
     58, 59, 60, 61, 66, 67, 77, 82, 255);
 var
-  DHCP_OPTION_INV: array[0 .. 82] of TDhcpOption; // for O(1) lookup
+  DHCP_OPTION_INV: array[0 .. 82] of TDhcpOption; // for fast O(1) lookup
 
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte);
 begin
@@ -631,15 +632,17 @@ begin
     dec(len, ord(p[1]) + 2);
     if len < 1 then
       exit; // avoid buffer overflow
+    // fast O(1) option number lookup and lens[] initialization
     opt := doPadding;
     if ord(p[0]) <= high(DHCP_OPTION_INV) then
       opt := DHCP_OPTION_INV[ord(p[0])];
-    if opt <> doPadding then // just ignore unsupported options
+    if opt <> doPadding then
     begin
       if found <> nil then
         include(found^, opt);
       lens[opt] := PAnsiChar(@p[1]) - PAnsiChar(@dhcp^.options);
     end;
+    // just ignore unsupported options
     p := @p[ord(p[1]) + 2];
   until p^ = #255;
   // validate message consistency
@@ -718,7 +721,7 @@ begin
       inc(p);
       opt := doPadding;
       if PByte(p)^ <= high(DHCP_OPTION_INV) then
-        opt := DHCP_OPTION_INV[PByte(p)^]; // O(1) lookup
+        opt := DHCP_OPTION_INV[PByte(p)^]; // fast O(1) option number lookup
       if opt <> doPadding then
         include(result, opt);
       dec(n);
