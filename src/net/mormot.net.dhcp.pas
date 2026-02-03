@@ -366,7 +366,7 @@ type
     fEntry: TLeaseDynArray;
     fLog: TSynLogClass;
     fCount, fLastFind, fFreeListCount: integer;
-    fFreeList: TIntegerDynArray;
+    fFreeList: TIntegerDynArray; // store indexes in fEntry[]
     fLastIpLE, fIpMinLE, fIpMaxLE: TNetIP4; // all little-endian for NextIp4
     fSubnetMask, fBroadcast, fGateway, fServerIdentifier: TNetIP4;
     fDnsServer, fSortedStatic: TIntegerDynArray;
@@ -757,11 +757,11 @@ end;
 
 function TDhcpProcess.NewLease: PDhcpLease;
 begin
-  // first try if we have any lsFree entries
+  // first try if we have any lsFree entries from ReuseIp4()
   if fFreeListCount <> 0 then
   begin
     dec(fFreeListCount);
-    fLastFind := fFreeList[fFreeListCount];
+    fLastFind := fFreeList[fFreeListCount]; // LIFO is the fastest
     result := @fEntry[fLastFind];
     if result^.State = lsFree then
       exit; // paranoid
@@ -1296,7 +1296,7 @@ begin
      Assigned(fOnProcessUdpFrame) then
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
   if (Data.Mac64 = 0) or
-     not (Data.RecvType in [dmtDiscover, dmtRequest, dmtDecline]) then
+     not (Data.RecvType in [dmtDiscover, dmtRequest, dmtDecline, dmtRelease]) then
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % % unexpected',
@@ -1438,7 +1438,29 @@ begin
           inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
           exit; // server MUST NOT respond to a DECLINE message
         end;
-      // TODO: dmtRelease and dmtInform
+      dmtRelease:
+        begin
+          // client informs the DHCP server that it no longer needs the lease
+          if (p = nil) or
+             (p^.IP4 <> Data.Recv.ciaddr) or
+             not (p^.State in [lsAck, lsOutdated]) then
+            // detect and ignore out-of-synch or malicious client
+            fLog.Add.Log(sllDebug,
+              'ProcessUdpFrame: RELEASE % unexpected', [Data.Mac], self)
+          else
+          begin
+            if Assigned(fLog) then
+            begin
+              IP4Short(@p^.IP4, Data.Ip);
+              fLog.Add.Log(sllTrace, 'ProcessUdpFrame: RELEASE % as %',
+                [Data.Mac, Data.Ip], self);
+            end;
+            ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
+            inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+          end;
+          exit; // server MUST NOT respond to a RELEASE message
+        end
+      // TODO: dmtInform
     else
       exit; // paranoid
     end;
