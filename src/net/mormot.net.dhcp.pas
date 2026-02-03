@@ -319,6 +319,7 @@ type
   EDhcp = class(ESynException);
 
   /// data context used by TDhcpProcess.ProcessUdpFrame
+  // - and as supplied to TOnDhcpProcess callback
   TDhcpProcessData = record
     /// the parsed options position in Recv.option[]
     RecvLens: TDhcpParsed;
@@ -338,6 +339,13 @@ type
     Mac: string[17];
   end;
 
+  TDhcpProcess = class;
+
+  /// optional callback signature for TDhcpProcess.ProcessUdpFrame
+  // - input frame is parsed in Data.Recv/RecvLen/RecvLens
+  // - could update SendEnd with DhcpAddOption() or set SendEnd=nil for no response
+  TOnDhcpProcess = procedure(Sender: TDhcpProcess; var Data: TDhcpProcessData);
+
   /// maintain a list of DHCP leases
   // - contains the data logic of a simple DHCP server, good enough to implement
   // iPXE network boot together with mormot.net.tftp.server.pas
@@ -356,6 +364,7 @@ type
     fMaxDeclinePerSec, fGraceFactor, fFileFlushSeconds: cardinal;
     fIdleTix, fFileFlushTix, fModifSequence, fModifSaved: cardinal;
     fFileName: TFileName;
+    fOnProcessUdpFrame: TOnDhcpProcess;
     procedure SetFileName(const name: TFileName);
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
     function FindMac(mac: Int64): PDhcpLease;
@@ -426,6 +435,10 @@ type
     // - used e.g. by OnIdle() to trigger SaveToFile() if FileName is defined
     property ModifSequence: cardinal
       read fModifSequence;
+    /// optional callback for TDhcpProcess.ProcessUdpFrame customization
+    // - is called after parsing, when Data.Send is about to be returned
+    property OnProcessUdpFrame: TOnDhcpProcess
+      read fOnProcessUdpFrame write fOnProcessUdpFrame;
   end;
 
 
@@ -1241,7 +1254,7 @@ begin
   dmt := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @mac);
   Data.Mac[0] := #17;
   if Assigned(fLog) or
-     Assigned(fOnProcess) then
+     Assigned(fOnProcessUdpFrame) then
     ToHumanHexP(@Data.Mac[1], @mac, 6);
   if (mac64 = 0) or
      not (dmt in [dmtDiscover, dmtRequest, dmtDecline]) then
@@ -1322,6 +1335,13 @@ begin
               'ProcessUdpFrame: NAK after out-of-sync Request %', [Data.Mac], self);
             // send a NAK response anyway
             Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid, mac, fServerIdentifier);
+            // optional callback support
+            if Assigned(fOnProcessUdpFrame) then
+            begin
+              fOnProcessUdpFrame(self, Data);
+              if Data.SendEnd = nil then
+                exit; // callback asked to silently ignore this frame
+            end;
             // support Option 82 Relay Agent by sending it back - should be last option
             if Data.RecvLens[doRelayAgent] <> 0 then
               DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doRelayAgent]]);
@@ -1403,6 +1423,13 @@ begin
   DhcpAddOption(Data.SendEnd,   doRenewalTimeValue,   @fRenewalTime);
   DhcpAddOption(Data.SendEnd,   doRebindingTimeValue, @fRebinding);
   // TODO: IPXE host/file options
+  // optional callback support
+  if Assigned(fOnProcessUdpFrame) then
+  begin
+    fOnProcessUdpFrame(self, Data);
+    if Data.SendEnd = nil then
+      exit; // callback asked to silently ignore this frame
+  end;
   // support Option 82 Relay Agent by sending it back - should be last option
   if Data.RecvLens[doRelayAgent] <> 0 then
     DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doRelayAgent]]);
