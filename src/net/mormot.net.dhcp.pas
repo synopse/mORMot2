@@ -1468,8 +1468,8 @@ begin
           // client requests configuration options for its static IP
           Data.Ip4 := Data.Recv.ciaddr;
           if ((p <> nil) and
-              ((p^.State <> lsDeclined) or
-               (p^.DeclineCount >= MAX_INFORM))) or // rate limit to 3 per sec
+              ((p^.DeclineCount >= MAX_INFORM) or // rate limit to 3 per sec
+               not (p^.State in [lsDeclined, lsOutdated]))) or
              not fSubnet.Match(Data.Ip4) then
           begin
             IP4Short(@Data.Ip4, Data.Ip);
@@ -1477,18 +1477,21 @@ begin
               'ProcessUdpFrame: INFORM % unexpected %', [Data.Mac, Data.Ip], self);
             exit;
           end;
-          // respond with an ACK and its options (but not timeout values)
+          // respond with an ACK and its options (but no timeout values)
           if p = nil then
           begin
+            // create a new lease for this MAC
             p := NewLease;
             PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+DeclineCount
             inc(p^.DeclineCount);
           end
           else
           begin
-            inc(p^.DeclineCount); // up to 3 IP per MAC per second
+            p^.State := lsDeclined; // may be lsOudated in the list
+            inc(p^.DeclineCount);   // up to 3 IP per MAC per second
             if p^.IP4 <> Data.Ip4 then
             begin
+              // create a new MAC-free lease for this IP
               p := NewLease;
               PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
             end;
