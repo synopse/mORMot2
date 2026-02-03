@@ -342,6 +342,11 @@ type
     Ip4: TNetIP4;
     /// the GetTickSec current value
     Tix32: cardinal;
+    /// some pointer value set by the UDP server for its internal process
+    Opaque: pointer;
+    /// points to the raw value of doHostName option 12 in Recv.option[]
+    // - points to @NULCHAR so HostName^='' if there is no such option
+    HostName: PShortString;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
     /// parsed options length position in Recv.option[]
@@ -354,11 +359,6 @@ type
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
     Send: TDhcpPacket;
-    /// some pointer value set by the UDP server for its internal process
-    Opaque: pointer;
-    /// points to the raw value of doHostName option 12 in Recv.option[]
-    // - points to @NULCHAR so HostName^='' if there is no such option
-    HostName: PShortString;
     /// IP address allocated for Send (raw Ip4) as human readable text
     Ip: TShort16;
     /// contains the client MAC address (raw Mac64) as human readable text
