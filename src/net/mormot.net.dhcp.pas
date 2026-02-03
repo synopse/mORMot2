@@ -195,6 +195,7 @@ type
     fBroadCastAddress: RawUtf8;
     fLeaseTimeSeconds: cardinal;
     fMaxDeclinePerSecond: cardinal;
+    fDeclineTimeSeconds: cardinal;
     fServerIdentifier: RawUtf8;
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
@@ -246,8 +247,15 @@ type
     /// how many DECLINE requests are allowed per second before ignoring them
     // - a malicious client can poison the pool by sending repeated DECLINEs
     // - default is 5 which seems reasonable and conservative
+    // - note that INFORM rate limitation is hardcoded to 3 per second per MAC
     property MaxDeclinePerSecond: cardinal
       read fMaxDeclinePerSecond write fMaxDeclinePerSecond default 5;
+    /// IP Decline Duration in seconds
+    // - default to 0, to reuse the same value than LeaseTimeSeconds
+    // - if LeaseTimeSeconds is small, you could set a bigger value here to be
+    // more conservative about the static IP persistence in the network
+    property DeclineTimeSeconds: cardinal
+      read fDeclineTimeSeconds write fDeclineTimeSeconds;
     /// DHCP Server Identifier e.g. '192.168.1.1'
     // - default is '' and will be filled by SubnetMask value
     property ServerIdentifier: RawUtf8
@@ -372,7 +380,7 @@ type
     fDnsServer, fSortedStatic: TIntegerDynArray;
     fLeaseTime, fLeaseTimeLE, fRenewalTime, fRebinding, fOfferHolding: cardinal;
     fSubnet: TIp4SubNet;
-    fMaxDeclinePerSec, fGraceFactor, fFileFlushSeconds: cardinal;
+    fMaxDeclinePerSec, fDeclineTime, fGraceFactor, fFileFlushSeconds: cardinal;
     fIdleTix, fFileFlushTix, fModifSequence, fModifSaved: cardinal;
     fFileName: TFileName;
     fOnProcessUdpFrame: TOnDhcpProcess;
@@ -883,6 +891,9 @@ begin
     else if fOfferHolding > fRenewalTime then
       fOfferHolding := fRenewalTime;
     fMaxDeclinePerSec := aSettings.MaxDeclinePerSecond; // max 5 DECLINE per sec
+    fDeclineTime      := aSettings.DeclineTimeSeconds;
+    if fDeclineTime = 0 then
+      fDeclineTime := fLeaseTime;
     fGraceFactor      := aSettings.GraceFactor;         // * 2
     // retrieve the subnet mask from settings
     if not fSubnet.From(aSettings.SubnetMask) then
@@ -1436,7 +1447,7 @@ begin
             PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
             p^.State := lsDeclined;
             p^.IP4 := Data.Ip4;
-            p^.Expired := Data.Tix32 + fLeaseTimeLE; // use main lease time
+            p^.Expired := Data.Tix32 + fDeclineTime;
           end;
           inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
           exit; // server MUST NOT respond to a DECLINE message
@@ -1498,7 +1509,7 @@ begin
           end;
           p^.State := lsDeclined;
           p^.IP4 := Data.Ip4;
-          p^.Expired := Data.Tix32 + fLeaseTimeLE;
+          p^.Expired := Data.Tix32 + fDeclineTime;
           Data.SendType := dmtAck;
         end;
     else
