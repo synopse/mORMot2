@@ -493,6 +493,8 @@ const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
     58, 59, 60, 61, 66, 67, 77, 82, 255);
+var
+  DHCP_OPTION_INV: array[0 .. 82] of TDhcpOption; // for O(1) lookup
 
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte);
 begin
@@ -606,7 +608,7 @@ function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
 var
   p: PAnsiChar;
   m: PNetMac;
-  opt: PtrInt; // TDhcpOption
+  opt: TDhcpOption;
   dmt: byte;   // TDhcpMessageType
 begin
   result := dmtUndefined;
@@ -629,12 +631,14 @@ begin
     dec(len, ord(p[1]) + 2);
     if len < 1 then
       exit; // avoid buffer overflow
-    opt := ByteScanIndex(@DHCP_OPTION_NUM, SizeOf(DHCP_OPTION_NUM), ord(p[0]));
-    if opt >= 0 then // just ignore unsupported options
+    opt := doPadding;
+    if ord(p[0]) <= high(DHCP_OPTION_INV) then
+      opt := DHCP_OPTION_INV[ord(p[0])];
+    if opt <> doPadding then // just ignore unsupported options
     begin
       if found <> nil then
-        include(found^, TDhcpOption(opt));
-      lens[TDhcpOption(opt)] := PAnsiChar(@p[1]) - PAnsiChar(@dhcp^.options);
+        include(found^, opt);
+      lens[opt] := PAnsiChar(@p[1]) - PAnsiChar(@dhcp^.options);
     end;
     p := @p[ord(p[1]) + 2];
   until p^ = #255;
@@ -700,7 +704,8 @@ end;
 
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
 var
-  p, n, o: PtrUInt;
+  p, n: PtrUInt;
+  opt: TDhcpOption;
 begin
   result := [];
   p := lens[doParameterRequestList];
@@ -711,9 +716,11 @@ begin
   if n <> 0 then
     repeat
       inc(p);
-      o := ByteScanIndex(@DHCP_OPTION_NUM, SizeOf(DHCP_OPTION_NUM), PByte(p)^);
-      if o > 0 then
-        include(result, TDhcpOption(o));
+      opt := doPadding;
+      if PByte(p)^ <= high(DHCP_OPTION_INV) then
+        opt := DHCP_OPTION_INV[PByte(p)^]; // O(1) lookup
+      if opt <> doPadding then
+        include(result, opt);
       dec(n);
     until n = 0;
 end;
@@ -796,7 +803,7 @@ function TDhcpProcess.ReuseIp4(p: PDhcpLease): TNetIP4;
 begin
   AddInteger(fFreeList, fFreeListCount,
     {index=}(PtrUInt(p) - PtrUInt(fEntry)) div SizeOf(fEntry[0]));
-  result := p^.IP4; // return this IP4
+  result := p^.IP4;       // return this IP4
   FillZero(THash128(p^)); // set MAC=0 IP=0 State=lsFree
 end;
 
@@ -1606,6 +1613,8 @@ initialization
   assert(PtrUInt(@PDhcpPacket(nil)^.options) = 240);
   assert(SizeOf(TDhcpPacket) = 548);
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, stUpperCase);
+  FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
+  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = doRelayAgent);
 
 end.
 
