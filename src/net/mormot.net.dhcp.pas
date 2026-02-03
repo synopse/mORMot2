@@ -1229,9 +1229,7 @@ var
   mac: TNetMac absolute mac64;
   ip4: TNetIP4;
   tix32: cardinal;
-  len82: byte;
   dmt: TDhcpMessageType;
-  opt82: PByte; // copied in end of Frame.options[]
 begin
   result := -1; // error
   // do nothing on missing Setup() or after Shutdown
@@ -1252,19 +1250,6 @@ begin
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: unexpected % frame from %',
         [ToText(dmt)^, Data.Mac], self);
     exit; // invalid or unsupported frame
-  end;
-  // support Option 82 Relay Agent by sending it back with the response frame
-  opt82 := nil;
-  len82 := 0; // make Delphi compiler happy
-  if Data.RecvLens[doRelayAgent] <> 0 then
-  begin
-    len82 := Data.Recv.options[Data.RecvLens[doRelayAgent]];
-    if len82 < 200 then
-    begin
-      // copy the whole option value at the end of Data.Recv.options[]
-      opt82 := @Data.Recv.options[high(Data.Recv.options) - len82];
-      MoveFast(Data.Recv.options[Data.RecvLens[doRelayAgent] + 1], opt82^, len82);
-    end;
   end;
   // compute the corresponding IPv4 according to the internal lease list
   result := 0; // no response, but no error
@@ -1337,8 +1322,9 @@ begin
               'ProcessUdpFrame: NAK after out-of-sync Request %', [Data.Mac], self);
             // send a NAK response anyway
             Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid, mac, fServerIdentifier);
-            if opt82 <> nil then
-              DhcpAddOption(Data.SendEnd, doRelayAgent, opt82, len82);
+            // support Option 82 Relay Agent by sending it back - should be last option
+            if Data.RecvLens[doRelayAgent] <> 0 then
+              DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doRelayAgent]]);
             result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
             exit;
           end;
@@ -1404,7 +1390,7 @@ begin
   // compute the dmtOffer/dmtAck response frame over the very same xid
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % IP=% for mac=%',
-        [ToText(dmt)^, IP4ToShort(@ip4), Data.Mac], self);
+      [ToText(dmt)^, IP4ToShort(@ip4), Data.Mac], self);
   Data.SendEnd := DhcpNew(Data.Send, dmt, Data.Recv.xid, mac, fServerIdentifier);
   Data.Send.ciaddr := ip4;
   DhcpAddOption(Data.SendEnd,   doSubnetMask,         @fSubnetMask);
@@ -1417,9 +1403,9 @@ begin
   DhcpAddOption(Data.SendEnd,   doRenewalTimeValue,   @fRenewalTime);
   DhcpAddOption(Data.SendEnd,   doRebindingTimeValue, @fRebinding);
   // TODO: IPXE host/file options
-  // TODO: custom callback
-  if opt82 <> nil then
-    DhcpAddOption(Data.SendEnd, doRelayAgent, opt82, len82); // should be the last option
+  // support Option 82 Relay Agent by sending it back - should be last option
+  if Data.RecvLens[doRelayAgent] <> 0 then
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doRelayAgent]]);
   Data.SendEnd^ := #255;
   result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
   inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
