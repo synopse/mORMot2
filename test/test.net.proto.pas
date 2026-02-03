@@ -1567,6 +1567,7 @@ var
   ips: TNetIP4s;
   timer: TPrecisionTimer;
   f: PAnsiChar;
+  hostname: TShort7;
 
   procedure DoRequest(ndx: PtrInt);
   begin
@@ -1752,6 +1753,7 @@ begin
     d.Recv := d.Send;
     d.RecvLen := n;
     Check(server.ProcessUdpFrame(d) < 0, 'ack');
+    Check(d.HostName^ = '', 'no hostname');
     CheckEqual(server.Count, 1);
     txt := server.SaveToText;
     CheckNotEqual(txt, CRLF, 'offer not saved');
@@ -1767,12 +1769,18 @@ begin
     xid := 0;
     for i := 0 to high(macs) do
     begin
-      d.RecvLen := DhcpClient(d.Recv, dmtDiscover, macs[i]) - PAnsiChar(@d.Recv) + 1;
+      hostname := 'HOST';
+      AppendShortCardinal(i, hostname);
+      f := DhcpClient(d.Recv, dmtDiscover, macs[i]);
+      DhcpAddOption(f, doHostName, @hostname[1], length(hostname));
+      f^ := #255;
+      d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
       Check(CompareMem(@macs[i], @d.Recv.chaddr, SizeOf(macs[0])));
       CheckNotEqual(xid, d.Recv.xid);
       xid := d.Recv.xid;
       Check(server.ProcessUdpFrame(d) > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
+      Check(d.HostName^ = hostname, 'hostname');
       Check(CompareMem(@macs[i], @d.Recv.chaddr, SizeOf(macs[0])));
       Check(CompareMem(@macs[i], @d.Send.chaddr, SizeOf(macs[0])));
       ips[i] := d.Send.ciaddr; // OFFERed IP
