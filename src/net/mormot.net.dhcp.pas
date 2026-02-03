@@ -713,6 +713,8 @@ end;
 const
   // truncate 64-bit integer to 6-bytes TNetMac - efficient on Intel and aarch64
   MAC_MASK = $0000ffffffffffff;
+  // hardcore limit of dmtInform to 3 IPs per second
+  MAX_INFORM = 3;
 
 function TDhcpProcess.FindMac(mac: Int64): PDhcpLease;
 var
@@ -1296,7 +1298,8 @@ begin
      Assigned(fOnProcessUdpFrame) then
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
   if (Data.Mac64 = 0) or
-     not (Data.RecvType in [dmtDiscover, dmtRequest, dmtDecline, dmtRelease]) then
+     not (Data.RecvType in
+            [dmtDiscover, dmtRequest, dmtDecline, dmtRelease, dmtInform]) then
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % % unexpected',
@@ -1459,8 +1462,42 @@ begin
             inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
           end;
           exit; // server MUST NOT respond to a RELEASE message
-        end
-      // TODO: dmtInform
+        end;
+      dmtInform:
+        begin
+          // client requests configuration options for its static IP
+          Data.Ip4 := Data.Recv.ciaddr;
+          if ((p <> nil) and
+              ((p^.State <> lsDeclined) or
+               (p^.DeclineCount >= MAX_INFORM))) or // rate limit to 3 per sec
+             not fSubnet.Match(Data.Ip4) then
+          begin
+            IP4Short(@Data.Ip4, Data.Ip);
+            fLog.Add.Log(sllDebug,
+              'ProcessUdpFrame: INFORM % unexpected %', [Data.Mac, Data.Ip], self);
+            exit;
+          end;
+          // respond with an ACK and its options (but not timeout values)
+          if p = nil then
+          begin
+            p := NewLease;
+            PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+DeclineCount
+            inc(p^.DeclineCount);
+          end
+          else
+          begin
+            inc(p^.DeclineCount); // up to 3 IP per MAC per second
+            if p^.IP4 <> Data.Ip4 then
+            begin
+              p := NewLease;
+              PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
+            end;
+          end;
+          p^.State := lsDeclined;
+          p^.IP4 := Data.Ip4;
+          p^.Expired := Data.Tix32 + fLeaseTimeLE;
+          Data.SendType := dmtAck;
+        end;
     else
       exit; // paranoid
     end;
@@ -1484,9 +1521,12 @@ begin
     DhcpAddOption(Data.SendEnd, doRouter, @fGateway);
   if fDnsServer <> nil then
     DhcpAddOptions(Data.SendEnd, doDns, pointer(fDnsServer));
-  DhcpAddOption(Data.SendEnd, doLeaseTimeValue, @fLeaseTime); // big-endian
-  DhcpAddOption(Data.SendEnd, doRenewalTimeValue, @fRenewalTime);
-  DhcpAddOption(Data.SendEnd, doRebindingTimeValue, @fRebinding);
+  if Data.RecvType <> dmtInform then // static INFORM don't need timeouts
+  begin
+    DhcpAddOption(Data.SendEnd, doLeaseTimeValue, @fLeaseTime); // big-endian
+    DhcpAddOption(Data.SendEnd, doRenewalTimeValue, @fRenewalTime);
+    DhcpAddOption(Data.SendEnd, doRebindingTimeValue, @fRebinding);
+  end;
   // TODO: IPXE host/file options
   result := FinalizeProcessUdpFrame(Data); // callback + option 82 + length
   inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
