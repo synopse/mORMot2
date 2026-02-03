@@ -313,6 +313,26 @@ type
   /// Exception class raised by this unit
   EDhcp = class(ESynException);
 
+  /// data context used by TDhcpProcess.ProcessUdpFrame
+  TDhcpProcessData = record
+    /// the parsed options position in Recv.option[]
+    RecvLens: TDhcpParsed;
+    /// the length of the UDP frame received from the client
+    RecvLen: integer;
+    /// the UDP frame received from the client, parsed in RecvLens[]
+    Recv: TDhcpPacket;
+    /// the UDP frame to be sent back to the client, after processing
+    Send: TDhcpPacket;
+    /// points to the last option of Send buffer
+    // - callback could use this to call DhcpAddOption() overloads
+    SendEnd: PAnsiChar;
+    /// some pointer value set by the UDP server for its internal process
+    Opaque: pointer;
+    /// contains the client MAC address from the frame as human readable text
+    // - ready for logging, with no memory allocation during the process
+    Mac: string[17];
+  end;
+
   /// maintain a list of DHCP leases
   // - contains the data logic of a simple DHCP server, good enough to implement
   // iPXE network boot together with mormot.net.tftp.server.pas
@@ -375,10 +395,11 @@ type
     // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
     /// this is the main processing function of the DHCP server logic
-    // - returns false if the Frame input was invalid
-    // - fills Frame with the proper answer, and return true and set Len to
-    // the number of bytes of Frame as response to send back as UDP broadcast
-    function ProcessUdpFrame(var Frame: TDhcpPacket; var Len: PtrInt): boolean;
+    // - input should be stored in Data.Recv / Data.RecvLen - and is untouched
+    // - returns -1 if this input was invalid or unsupported
+    // - returns 0 if input was valid, but no response is needed (e.g. decline)
+    // - return > 0 the number of Data.Send bytes to broadcast back as UDP
+    function ProcessUdpFrame(var Data: TDhcpProcessData): PtrInt;
     /// can be used e.g. to check if IP address match the DHCP server network mask
     property Subnet: TIp4SubNet
       read fSubnet;
@@ -1189,58 +1210,52 @@ begin
     result := LoadFromText(txt);
 end;
 
-function TDhcpProcess.ProcessUdpFrame(
-  var Frame: TDhcpPacket; var Len: PtrInt): boolean;
+function TDhcpProcess.ProcessUdpFrame(var Data: TDhcpProcessData): PtrInt;
 var
-  lens: TDhcpParsed;
   p: PDhcpLease;
-  f: PAnsiChar;
   mac64: Int64;
   mac: TNetMac absolute mac64;
   ip4: TNetIP4;
   tix32: cardinal;
-  macx: string[17]; // no memory allocation during the process
   len82: byte;
   dmt: TDhcpMessageType;
   opt82: PByte; // copied in end of Frame.options[]
 begin
-  result := false;
+  result := -1; // error
   // do nothing on missing Setup() or after Shutdown
   if fSubnet.mask = 0 then
-  begin
-    Len := 0; // no response
     exit;
-  end;
   // parse and validate the request
   ip4 := 0;
   mac64 := 0;
-  dmt := DhcpParse(@Frame, Len, lens, nil, @mac);
-  Len := 0;
-  macx[0] := #17;
-  if Assigned(fLog) then
-    ToHumanHexP(@macx[1], @mac, 6);
+  dmt := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @mac);
+  Data.Mac[0] := #17;
+  if Assigned(fLog) or
+     Assigned(fOnProcess) then
+    ToHumanHexP(@Data.Mac[1], @mac, 6);
   if (mac64 = 0) or
      not (dmt in [dmtDiscover, dmtRequest, dmtDecline]) then
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: unexpected % frame from %',
-        [ToText(dmt)^, macx], self);
+        [ToText(dmt)^, Data.Mac], self);
     exit; // invalid or unsupported frame
   end;
   // support Option 82 Relay Agent by sending it back with the response frame
   opt82 := nil;
   len82 := 0; // make Delphi compiler happy
-  if lens[doRelayAgent] <> 0 then
+  if Data.RecvLens[doRelayAgent] <> 0 then
   begin
-    len82 := Frame.options[lens[doRelayAgent]];
+    len82 := Data.Recv.options[Data.RecvLens[doRelayAgent]];
     if len82 < 200 then
     begin
-      // copy the whole option value at the end of Frame.options[]
-      opt82 := @Frame.options[high(Frame.options) - len82];
-      MoveFast(Frame.options[lens[doRelayAgent] + 1], opt82^, len82);
+      // copy the whole option value at the end of Data.Recv.options[]
+      opt82 := @Data.Recv.options[high(Data.Recv.options) - len82];
+      MoveFast(Data.Recv.options[Data.RecvLens[doRelayAgent] + 1], opt82^, len82);
     end;
   end;
   // compute the corresponding IPv4 according to the internal lease list
+  result := 0; // no response, but no error
   tix32 := GetTickSec;
   fSafe.Lock;
   try
@@ -1253,9 +1268,9 @@ begin
              (p^.State = lsReserved) then // reserved = client refused this IP
           begin
             // first time seen (most common case), or renewal
-            if lens[doRequestedIp] <> 0 then
+            if Data.RecvLens[doRequestedIp] <> 0 then
             begin
-              ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // try to renew
+              ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]);
               if ip4 <> 0 then
                 if (not fSubNet.Match(ip4)) or
                    (FastFindIntegerSorted(fSortedStatic, ip4) >= 0) or
@@ -1276,7 +1291,7 @@ begin
               // IPv4 exhausted: don't return NAK, but silently ignore
               // - client will retry automatically after a small temporisation
               fLog.Add.Log(sllWarning,
-                'ProcessUdpFrame: IPv4 exhausted for Discover %', [macx], self);
+                'ProcessUdpFrame: IPv4 exhausted for Discover %', [Data.Mac], self);
               exit;
             end;
             if p = nil then
@@ -1307,13 +1322,12 @@ begin
                    (tix32 - p^.Expired < fLeaseTimeLE * fGraceFactor))) then
           begin
             fLog.Add.Log(sllDebug,
-              'ProcessUdpFrame: NAK after out-of-sync Request %', [macx], self);
+              'ProcessUdpFrame: NAK after out-of-sync Request %', [Data.Mac], self);
             // send a NAK response anyway
-            f := DhcpNew(Frame, dmtNak, Frame.xid, mac, fServerIdentifier);
+            Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid, mac, fServerIdentifier);
             if opt82 <> nil then
-              DhcpAddOption(f, doRelayAgent, opt82, len82);
-            Len := f - PAnsiChar(@Frame) + 1;
-            result := true;
+              DhcpAddOption(Data.SendEnd, doRelayAgent, opt82, len82);
+            result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
             exit;
           end;
           // respond with an ACK on the known IP
@@ -1331,7 +1345,7 @@ begin
             // ensure the server recently OFFERed one IP to that client
             // (match RFC intent and prevent blind poisoning of arbitrary IPs)
             fLog.Add.Log(sllDebug,
-              'ProcessUdpFrame: DECLINE with no previous OFFER %', [macx], self);
+              'ProcessUdpFrame: DECLINE with no previous OFFER %', [Data.Mac], self);
             exit;
           end;
           if (fMaxDeclinePerSec <> 0) and // = 5 by default
@@ -1342,11 +1356,11 @@ begin
             begin
               // malicious client poisons the pool by sending repeated DECLINE
               fLog.Add.Log(sllDebug,
-                'ProcessUdpFrame: too many DECLINE from %', [macx], self);
+                'ProcessUdpFrame: too many DECLINE from %', [Data.Mac], self);
               exit;
             end;
           // invalidate OFFERed IP
-          ip4 := DhcpIP4(@Frame, lens[doRequestedIp]); // authoritative IP
+          ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]); // authoritative IP
           if (ip4 <> 0) and
              not fSubNet.Match(ip4) then // need clean IP
             ip4 := 0;
@@ -1359,7 +1373,7 @@ begin
             // store internally this IP as declined for NextIP4
             if Assigned(fLog) then
               fLog.Add.Log(sllTrace, 'ProcessUdpFrame: decline IP=% for mac=%',
-                  [IP4ToShort(@ip4), macx], self);
+                  [IP4ToShort(@ip4), Data.Mac], self);
             p := NewLease;
             PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
             p^.State := lsDeclinedIP;
@@ -1367,8 +1381,7 @@ begin
             p^.Expired := tix32 + fLeaseTimeLE; // use main lease time
           end;
           inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-          result := true; // server MUST NOT respond to a DHCPDECLINE message
-          exit;
+          exit; // server MUST NOT respond to a DHCPDECLINE message
         end;
     else
       exit; // paranoid
@@ -1379,26 +1392,25 @@ begin
   // compute the dmtOffer/dmtAck response frame over the very same xid
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % IP=% for mac=%',
-        [ToText(dmt)^, IP4ToShort(@ip4), macx], self);
-  f := DhcpNew(Frame, dmt, Frame.xid, mac, fServerIdentifier);
-  Frame.ciaddr := ip4;
-  DhcpAddOption(f,   doSubnetMask,         @fSubnetMask);
+        [ToText(dmt)^, IP4ToShort(@ip4), Data.Mac], self);
+  Data.SendEnd := DhcpNew(Data.Send, dmt, Data.Recv.xid, mac, fServerIdentifier);
+  Data.Send.ciaddr := ip4;
+  DhcpAddOption(Data.SendEnd,   doSubnetMask,         @fSubnetMask);
   if fBroadcast <> 0 then
-    DhcpAddOption(f, doBroadcastAddr,      @fBroadcast);
+    DhcpAddOption(Data.SendEnd, doBroadcastAddr,      @fBroadcast);
   if fGateway <> 0 then
-    DhcpAddOption(f, doRouter,             @fGateway);
-  DhcpAddOptions(f,  doDns,                pointer(fDnsServer));
-  DhcpAddOption(f,   doLeaseTimeValue,     @fLeaseTime); // already big-endian
-  DhcpAddOption(f,   doRenewalTimeValue,   @fRenewalTime);
-  DhcpAddOption(f,   doRebindingTimeValue, @fRebinding);
+    DhcpAddOption(Data.SendEnd, doRouter,             @fGateway);
+  DhcpAddOptions(Data.SendEnd,  doDns,                pointer(fDnsServer));
+  DhcpAddOption(Data.SendEnd,   doLeaseTimeValue,     @fLeaseTime); // big-endian
+  DhcpAddOption(Data.SendEnd,   doRenewalTimeValue,   @fRenewalTime);
+  DhcpAddOption(Data.SendEnd,   doRebindingTimeValue, @fRebinding);
   // TODO: IPXE host/file options
   // TODO: custom callback
   if opt82 <> nil then
-    DhcpAddOption(f, doRelayAgent, opt82, len82); // should be the last option
-  f^ := #255;
-  Len := f - PAnsiChar(@Frame) + 1;
+    DhcpAddOption(Data.SendEnd, doRelayAgent, opt82, len82); // should be the last option
+  Data.SendEnd^ := #255;
+  result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
   inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-  result := true;
 end;
 
 
