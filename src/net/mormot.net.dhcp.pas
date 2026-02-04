@@ -349,6 +349,8 @@ type
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
 type
+  TDhcpProcess = class;
+
   /// main high-level options for defining one scope/subnet for our DHCP Server
   TDhcpScopeSettings = class(TSynPersistent)
   protected
@@ -366,17 +368,14 @@ type
     fServerIdentifier: RawUtf8;
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
-    fFileName: TFileName;
-    fFileFlushSeconds: cardinal;
   public
     /// setup this instance with default values
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
     // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
-    /// validate the consistency of settings, mainly about IPv4 subnet
-    // - returns '' if no error occured with the current property values
-    // - returns the TDhcpProcess.Setup() Exception message on failure
-    function Verify: string;
+    /// compute the low-level TDhcpScope data structure for current settings
+    // - raise an EDhcp exception if the parameters are not correct
+    procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
   published
     /// Subnet Mask e.g. '192.168.1.1/24'
     // - the CIDR 'ip/mask' pattern will compute RangeMin/RangeMax and
@@ -440,6 +439,30 @@ type
     // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
     property GraceFactor: cardinal
       read fGraceFactor write fGraceFactor default 2;
+  end;
+  /// a dynamyc array of DHCP Server scope/subnet settings
+  TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
+
+  /// main high-level options for defining our DHCP Server process
+  TDhcpServerSettings = class(TSynAutoCreateFields)
+  protected
+    fFileName: TFileName;
+    fFileFlushSeconds: cardinal;
+    fScope: TDhcpScopeSettingsObjArray;
+  public
+    /// setup this instance with default values
+    // - no scope is defined yet: you could just call AddScope to create
+    // one default scope/subnet
+    constructor Create; override;
+    /// validate the consistency of settings, mainly about IPv4 subnets
+    // - returns '' if no error occured with the current property values
+    // - returns the TDhcpProcess.Setup() Exception message on failure
+    function Verify: string;
+    /// append at runtime a new scope/subnet settings
+    // - call without any TDhcpScopeSettings parameter to create a default one
+    // - supplied one will be owned by this instance from now on
+    procedure AddScope(one: TDhcpScopeSettings = nil);
+  published
     /// if set, OnIdle will persist the internal list into this file when needed
     // - file on disk would be regular dnsmasq-compatible format
     property FileName: TFileName
@@ -449,6 +472,9 @@ type
     // - set to 0 will disable background write, and persist only at shutdown
     property FileFlushSeconds: cardinal
       read fFileFlushSeconds write fFileFlushSeconds default 30;
+    /// store the per subnet scope settings
+    property Scope: TDhcpScopeSettingsObjArray
+      read fScope;
   end;
 
   /// data context used by TDhcpProcess.ProcessUdpFrame
@@ -1215,6 +1241,114 @@ end;
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
+{ TDhcpScopeSettings }
+
+constructor TDhcpScopeSettings.Create;
+begin
+  inherited Create;
+  fSubnetMask := '192.168.1.1/24';
+  fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
+  fOfferHoldingSecs := 5;
+  fMaxDeclinePerSecond := 5;
+  fGraceFactor := 2;
+end;
+
+procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
+var
+  mask: TNetIP4;
+begin
+  // convert the text settings into Data.* raw values
+  Data.Gateway          := ToIP4(DefaultGateway);
+  Data.Broadcast        := ToIP4(BroadCastAddress);
+  Data.ServerIdentifier := ToIP4(ServerIdentifier);
+  Data.LastIpLE         := 0;
+  Data.IpMinLE          := ToIP4(RangeMin);
+  Data.IpMaxLE          := ToIP4(RangeMax);
+  Data.DnsServer        := TIntegerDynArray(ToIP4s(DnsServers));
+  Data.SortedStatic     := TIntegerDynArray(ToIP4s(StaticIPs));
+  Data.LeaseTime        := LeaseTimeSeconds; // 100%
+  if Data.LeaseTime < 30 then                // 30 seconds minimum lease
+    Data.LeaseTime := 30;
+  Data.RenewalTime      := Data.LeaseTime shr 1;       // 50%
+  Data.Rebinding        := (Data.LeaseTime * 7) shr 3; // 87.5%
+  Data.OfferHolding     := OfferHoldingSecs; // 5 seconds
+  if Data.OfferHolding < 1 then
+    Data.OfferHolding := 1
+  else if Data.OfferHolding > Data.RenewalTime then
+    Data.OfferHolding := Data.RenewalTime;
+  Data.MaxDeclinePerSec := MaxDeclinePerSecond; // max 5 DECLINE per sec
+  Data.DeclineTime      := DeclineTimeSeconds;
+  if Data.DeclineTime = 0 then
+    Data.DeclineTime := Data.LeaseTime;
+  Data.GraceFactor      := GraceFactor;         // * 2
+  // retrieve the subnet mask from settings
+  if not Data.Subnet.From(SubnetMask) then
+    EDhcp.RaiseUtf8(
+      'PrepareScope: unexpected SubNetMask=% (should be mask ip or ip/sub)',
+      [SubnetMask]);
+  if Data.Subnet.mask = cAnyHost32 then
+  begin
+    // SubNetMask was not '192.168.0.1/24': is expected to be '255.255.255.0'
+    if IP4Prefix(Data.Subnet.ip) = 0 then
+      EDhcp.RaiseUtf8('PrepareScope: SubNetMask=% is not a valid IPv4 mask',
+        [SubnetMask]);
+    mask := Data.Subnet.ip;
+    // we expect other parameters to be set specifically: compute final Subnet
+    if Data.ServerIdentifier = 0 then
+      EDhcp.RaiseUtf8('PrepareScope: SubNetMask=% but without ServerIdentifier',
+        [SubnetMask]);
+    Data.Subnet.mask := mask;
+    Data.Subnet.ip := Data.ServerIdentifier and mask; // normalize as in From()
+  end
+  else
+    // SubNetMask was e.g. '192.168.0.1/24'
+    if Data.ServerIdentifier = 0 then
+      // extract from exact SubNetMask text, since Subnet.ip = 192.168.0.0
+      Data.ServerIdentifier := ToIP4(SubnetMask);
+  // validate all settings values from the actual subnet
+  Data.AfterFill(Sender.Log.Add); // may raise an EDhcp exception
+  // trigger SaveToFile() in next OnIdle()
+  inc(Sender.fModifSequence);
+end;
+
+
+{ TDhcpServerSettings }
+
+constructor TDhcpServerSettings.Create;
+begin
+  inherited Create;
+  fFileFlushSeconds := 30; // good tradeoff: low disk writes, still safe for PXE
+end;
+
+function TDhcpServerSettings.Verify: string;
+var
+  process: TDhcpProcess;
+begin
+  result := ''; // no error
+  if self <> nil then
+    try
+      process := TDhcpProcess.Create;
+      try
+        process.Setup(self); // may trigger EDhcp exception
+      finally
+        process.Free;
+      end;
+    except
+      on E: Exception do
+        result := E.Message;
+    end;
+end;
+
+procedure TDhcpServerSettings.AddScope(one: TDhcpScopeSettings);
+begin
+  if self = nil then
+    exit;
+  if one = nil then
+    one := TDhcpScopeSettings.Create; // default '192.168.1.1/24' subnet
+  PtrArrayAdd(fScope, one); // will be owned by this instance
+end;
+
+
 function TDhcpProcess.OnIdle(tix64: Int64): integer;
 var
   tix32: cardinal;
@@ -1706,38 +1840,6 @@ begin
   inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
 end;
 
-
-{ TDhcpServerSettings }
-
-constructor TDhcpServerSettings.Create;
-begin
-  inherited Create;
-  fSubnetMask := '192.168.1.1/24';
-  fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
-  fOfferHoldingSecs := 5;
-  fMaxDeclinePerSecond := 5;
-  fGraceFactor := 2;
-  fFileFlushSeconds := 30; // good tradeoff: low disk writes, still safe for PXE
-end;
-
-function TDhcpServerSettings.Verify: string;
-var
-  process: TDhcpProcess;
-begin
-  result := ''; // no error
-  if self <> nil then
-    try
-      process := TDhcpProcess.Create;
-      try
-        process.Setup(self); // may trigger EDhcp exception
-      finally
-        process.Free;
-      end;
-    except
-      on E: Exception do
-        result := E.Message;
-    end;
-end;
 
 
 initialization
