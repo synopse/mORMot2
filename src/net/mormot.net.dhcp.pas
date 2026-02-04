@@ -8,7 +8,8 @@ unit mormot.net.dhcp;
 
    Simple Dynamic Host Configuration Protocol (DHCP) Protocol Support
     - Low-Level DHCP Protocol Definitions
-    - High-Level DHCP Server
+    - Middle-Level DHCP Scope and Lease Logic
+    - High-Level Multi-Scope DHCP Server Processing Logic
 
    Purpose of this DCHP Server is not to be fully featured, but simple and
    compliant enough to implement e.g. a local PXE environment with our
@@ -221,11 +222,135 @@ function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
 
 
-{ **************** High-Level DHCP Server }
+{ **************** Middle-Level DHCP Scope and Lease Logic }
 
 type
-  /// main high-level options for our DHCP Server
-  TDhcpServerSettings = class(TSynPersistent)
+  /// the state of one DHCP TDhcpLease entry in memory
+  // - lsFree identify an lsOutdated slot which IP4 has been reused
+  // - lsReserved is used when an OFFER has been sent back to the client with IP4
+  // - lsAck is used when REQUEST has been received and ACK has been sent back
+  // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
+  // - lsOutdated is set once Expired timestamp has been reached, so that the
+  // IP4 address could be reused on the next DISCOVER for this MAC
+  TLeaseState = (
+    lsFree,
+    lsReserved,
+    lsAck,
+    lsUnavailable,
+    lsOutdated);
+
+  /// store one DHCP lease in memory with all its logical properties
+  // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
+  TDhcpLease = packed record
+    /// the MAC address of this entry - should be the first of this record
+    // - we only lookup clients by MAC: no DUID is supported (we found it error-
+    // prone in practice, when some VMs are duplicated with the same DUID)
+    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
+    Mac: TNetMac;
+    /// how this entry should be handled
+    State: TLeaseState;
+    /// how many lsUnavailable IPs have been marked since the last OnIdle
+    // - OnIdle() will reset it to 0, ComputeResponse() will increment it, and
+    // silently ignore any abusive DECLINE/INFORM requests as rate limitation
+    // - also align the whole structure to cpu-cache-friendly 16 bytes
+    Unavailable: byte;
+    /// the 32-bit reserved IP
+    IP4: TNetIP4;
+    /// GetTickSec monotonic value stored as 32-bit unsigned integer
+    // - TUnixTime is used on disk but not during server process (not monotonic)
+    Expired: cardinal;
+  end;
+  /// points to one DHCP lease entry in memory
+  PDhcpLease = ^TDhcpLease;
+
+  /// a dynamic array of TDhcpLease entries, as stored within TDhcpProcess
+  // - 10,000 leases would consume 160KB which fits in L2 cache on modern CPU
+  TLeaseDynArray = array of TDhcpLease;
+
+  /// define one scope/subnet processing context from TDhcpServerSettings
+  // - fields and methods are optimized to efficiently map TDhcpProcess logic
+  // - most methods are not thread-safe: the caller should make Safe.Lock/UnLock
+  // - each record consume a bit less than 128 bytes of memory
+  {$ifdef USERECORDWITHMETHODS}
+  TDhcpScope = record
+  {$else}
+  TDhcpScope = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// simple but not-rentrant lock to protect Entry[0..Count-1] values
+    Safe: TLightLock;
+    /// define the subnet of this scope
+    // - Subnet.mask is the doSubnetMask option 1 of this scope
+    Subnet: TIp4SubNet;
+    /// store the current leases on this scope
+    Entry: TLeaseDynArray;
+    /// number of used slots in Entry[]
+    Count: integer;
+    /// the broadcast IP of this scope for doBroadcastAddr option 28
+    Broadcast: TNetIP4;
+    /// the gateway IP of this scope for doRouter option 3
+    Gateway: TNetIP4;
+    /// the server IP of this scope for doServerIdentifier option 54
+    ServerIdentifier: TNetIP4;
+    /// the DNS IPs of this scope for doDns option 6
+    DnsServer: TIntegerDynArray;
+    /// the 32-bit-integer-sorted list of static IPs of this scope
+    // - sorted as 32-bit for efficient O(log(n)) branchless binary search
+    SortedStatic: TIntegerDynArray;
+    /// readjust all internal values according to to Subnet policy
+    // - raise an EDhcp exception if the parameters are not correct
+    procedure AfterFill(log: TSynLog);
+    /// register another static IP address to the internal pool
+    function AddStatic(ip4: TNetIP4): boolean;
+    /// remove one static IP address which was registered by AddStatic()
+    function RemoveStatic(ip4: TNetIP4): boolean;
+    /// efficient L1-cache friendly O(n) search of a MAC address in Entry[]
+    function FindMac(mac: Int64): PDhcpLease;
+    /// efficient L1-cache friendly O(n) search of an IPv4 address in Entry[]
+    function FindIp4(ip4: TNetIP4): PDhcpLease;
+    /// retrieve a new lease in Entry[] - maybe recycled from ReuseIp4()
+    function NewLease: PDhcpLease;
+    /// release a lease in Entry[] - add it to the recycled FreeList[]
+    function ReuseIp4(p: PDhcpLease): TNetIP4;
+    /// return the index in Entry[] of a given lease
+    // - no range check is performed against the supplied p pointer
+    function Index(p: PDhcpLease): cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// compute the next IPv4 address available in this scope
+    function NextIp4: TNetIP4;
+    /// call DhcpAddOptions() with the settings of this scope
+    procedure AddOptions(var f: PAnsiChar; andLeaseTimes: boolean);
+    /// check all TDhcpLease.Expired against tix32
+    // - return the number of leases marked as lsOutdated
+    // - this method is thread safe and will call Safe.Lock/UnLock
+    function CheckOutdated(tix32: cardinal): integer;
+    /// persist all leases with "<expiry> <MAC> <IP>" dnsmasq file pattern
+    // - this method is thread safe and will call Safe.Lock/UnLock
+    // - returns the number of entries/lines added to the text file
+    function TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime): integer;
+  private
+    // little-endian IP range values for NextIP
+    LastIpLE, IpMinLE, IpMaxLE: TNetIP4;
+    // match scope settings values in efficient actionable format
+    LeaseTime, LeaseTimeLE, RenewalTime, Rebinding, OfferHolding: cardinal;
+    MaxDeclinePerSec, DeclineTime, GraceFactor: cardinal;
+    // some internal values for fast lookup and efficient Entry[] process
+    LastDiscover, FreeListCount: integer;
+    FreeList: TIntegerDynArray;
+  end;
+
+  /// access to one scope/subnet definition
+  PDhcpScope = ^TDhcpScope;
+
+  /// store all scope/subnet definitions in a dynamic array
+  TDhcpScopes = array of TDhcpScope;
+
+
+{ **************** High-Level Multi-Scope DHCP Server Processing Logic }
+
+type
+  /// main high-level options for defining one scope/subnet for our DHCP Server
+  TDhcpScopeSettings = class(TSynPersistent)
   protected
     fSubnetMask: RawUtf8;
     fStaticIPs: RawUtf8;
@@ -325,48 +450,6 @@ type
     property FileFlushSeconds: cardinal
       read fFileFlushSeconds write fFileFlushSeconds default 30;
   end;
-
-type
-  /// the state of one DHCP TDhcpLease entry in memory
-  // - lsFree identify an lsOutdated slot which IP4 has been reused
-  // - lsReserved is used when an OFFER has been sent back to the client with IP4
-  // - lsAck is used when REQUEST has been received and ACK has been sent back
-  // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
-  // - lsOutdated is set once Expired timestamp has been reached, so that the
-  // IP4 address could be reused on the next DISCOVER for this MAC
-  TLeaseState = (
-    lsFree,
-    lsReserved,
-    lsAck,
-    lsUnavailable,
-    lsOutdated);
-
-  /// store one DHCP lease in memory
-  // - efficiently padded to 16 bytes (128-bit)
-  TDhcpLease = packed record
-    /// the MAC address of this entry - should be first
-    // - we only lookup clients by MAC: no DUID is supported (we found it error-
-    // prone in practice, when some VMs are duplicated with the same DUID)
-    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
-    Mac: TNetMac;
-    /// how this entry should be handled
-    State: TLeaseState;
-    /// how many lsUnavailable IPs have been marked since the last OnIdle
-    // - OnIdle() will reset it to 0, ProcessUdpFrame() will increment it, and
-    // silently ignore any abusive DECLINE/INFORM requests as rate limitation
-    // - also align the whole structure to cpu-cache-friendly 16 bytes
-    Unavailable: byte;
-    /// the 32-bit reserved IP
-    IP4: TNetIP4;
-    /// GetTickSec monotonic value stored as 32-bit unsigned integer
-    // - TUnixTime is used on disk but not during server process (not monotonic)
-    Expired: cardinal;
-  end;
-  /// points to one DHCP lease entry in memory
-  PDhcpLease = ^TDhcpLease;
-
-  /// a dynamic array of TDhcpLease entries, as stored within TDhcpProcess
-  TLeaseDynArray = array of TDhcpLease;
 
   /// data context used by TDhcpProcess.ProcessUdpFrame
   // - and as supplied to TOnDhcpProcess callback
@@ -766,35 +849,21 @@ begin
 end;
 
 
-{ **************** High-Level DHCP Server }
+{ **************** Middle-Level DHCP Scope and Lease Logic }
 
-
-{ TDhcpProcess }
-
-{ low-level methods, thread-safe by the caller making fSafe.Lock/UnLock }
+{ TDhcpScope }
 
 const
   // truncate 64-bit integer to 6-bytes TNetMac - efficient on Intel and aarch64
   MAC_MASK = $0000ffffffffffff;
   // hardcore limit of dmtInform to 3 IPs per second
   MAX_INFORM = 3;
+  // pre-allocate 4KB of working entries for TDhcpScope.AfterFill
+  PREALLOCATE_LEASES = 250;
 
-function TDhcpProcess.FindMac(mac: Int64): PDhcpLease;
-var
-  n: integer;
-begin // code below expects result^.Mac to be first
-  result := nil;
-  if fCount = 0 then
-    exit;
-  mac := mac and MAC_MASK;
-  if fLastFind < fCount then
-  begin
-    result := @fEntry[fLastFind];
-    if PInt64(result)^ and MAC_MASK = mac then
-      exit; // naive but efficient search during DHCP negotiation
-  end;
-  result := pointer(fEntry); // efficient O(n) brute force search
-  n := fCount;
+function DoFindMac(p: PDhcpLease; mac: Int64; n: cardinal): PDhcpLease;
+begin // dedicated sub-function for better codegen
+  result := p;
   repeat
     if PInt64(result)^ and MAC_MASK = mac then
       exit;
@@ -804,12 +873,26 @@ begin // code below expects result^.Mac to be first
   result := nil;
 end;
 
-function TDhcpProcess.FindIp4(ip4: TNetIP4): PDhcpLease;
-var
-  n: integer;
-begin
-  result := pointer(fEntry);
-  n := fCount;
+function TDhcpScope.FindMac(mac: Int64): PDhcpLease;
+begin // code below expects result^.Mac to be the first field
+  result := nil;
+  if Count = 0 then
+    exit;
+  mac := mac and MAC_MASK;
+  // naive but efficient lookup of the last added lease during DHCP negotiation
+  if cardinal(LastDiscover) < cardinal(Count) then
+  begin
+    result := @Entry[LastDiscover];
+    if PInt64(result)^ and MAC_MASK = mac then
+      exit;
+  end;
+  // O(n) brute force search in L1/L2 cache is fine up to 100,000 items
+  result := DoFindMac(pointer(Entry), mac, Count);
+end;
+
+function DoFindIp(p: PDhcpLease; ip4: TNetIP4; n: cardinal): PDhcpLease;
+begin // dedicated sub-function for better codegen
+  result := p;
   if n <> 0 then
     repeat
       if result^.IP4 = ip4 then
@@ -820,48 +903,58 @@ begin
   result := nil;
 end;
 
-function TDhcpProcess.NewLease: PDhcpLease;
+function TDhcpScope.FindIp4(ip4: TNetIP4): PDhcpLease;
+begin
+  result := DoFindIp(pointer(Entry), ip4, Count);
+end;
+
+function TDhcpScope.NewLease: PDhcpLease;
+var
+  n: PtrInt;
 begin
   // first try if we have any lsFree entries from ReuseIp4()
-  if fFreeListCount <> 0 then
+  if FreeListCount <> 0 then
   begin
-    dec(fFreeListCount);
-    fLastFind := fFreeList[fFreeListCount]; // LIFO is the fastest
-    result := @fEntry[fLastFind];
+    dec(FreeListCount);
+    result := @Entry[FreeList[FreeListCount]]; // LIFO is the fastest
     if result^.State = lsFree then
       exit; // paranoid
   end;
   // we need to add a new entry - maybe with reallocation
-  if fCount = length(fEntry) then
-    SetLength(fEntry, NextGrow(fCount));
-  result := @fEntry[fCount];
-  fLastFind := fCount;
-  inc(fCount);
+  n := Count;
+  if n = length(Entry) then
+    SetLength(Entry, NextGrow(n));
+  result := @Entry[n];
+  inc(Count);
 end;
 
-function TDhcpProcess.ReuseIp4(p: PDhcpLease): TNetIP4;
+function TDhcpScope.Index(p: PDhcpLease): cardinal;
 begin
-  AddInteger(fFreeList, fFreeListCount,
-    {index=}(PtrUInt(p) - PtrUInt(fEntry)) div SizeOf(fEntry[0]));
+  result := cardinal(PtrUInt(p) - PtrUInt(Entry)) shr 4;
+end;
+
+function TDhcpScope.ReuseIp4(p: PDhcpLease): TNetIP4;
+begin
+  AddInteger(FreeList, FreeListCount, Index(p));
   result := p^.IP4;       // return this IP4
   FillZero(THash128(p^)); // set MAC=0 IP=0 State=lsFree
 end;
 
-function TDhcpProcess.NextIp4: TNetIP4;
+function TDhcpScope.NextIp4: TNetIP4;
 var
   le: TNetIP4;
   looped: boolean;
   existing, outdated: PDhcpLease;
 begin
-  result := fLastIpLE; // all those f*LE variables are in little-endian order
-  if (result < fIpMinLE) or
-     (result > fIpMaxLE) then
-    result := fIpMinLE - 1; // e.g. at startup
+  result := LastIpLE; // all those f*LE variables are in little-endian order
+  if (result < IpMinLE) or
+     (result > IpMaxLE) then
+    result := IpMinLE - 1; // e.g. at startup
   outdated := nil;
   looped := false;
   repeat
     inc(result);
-    if result > fIpMaxLE then
+    if result > IpMaxLE then
       // we reached the end of IP range
       if looped then
       begin
@@ -878,17 +971,17 @@ begin
       begin
         // wrap around the IP range once
         looped := true;
-        result := fIpMinLE;
+        result := IpMinLE;
       end;
     le := result;
     result := bswap32(result); // network order
-    if FastFindIntegerSorted(fSortedStatic, result) < 0 then // fast O(log(n))
+    if FastFindIntegerSorted(SortedStatic, result) < 0 then // fast O(log(n))
     begin
-      existing := FindIp4(result); // O(n)
+      existing := DoFindIp(pointer(Entry), result, Count);  // O(n)
       if existing = nil then
       begin
         // return the unused IP found
-        fLastIpLE := le;
+        LastIpLE := le;
         exit;
       end
       else if (existing^.State in [lsUnavailable, lsOutdated]) and
@@ -900,217 +993,177 @@ begin
   until false;
 end;
 
-
-{ general-purpose methods }
-
-procedure TDhcpProcess.Setup(aSettings: TDhcpServerSettings);
+procedure TDhcpScope.AfterFill(log: TSynLog);
 var
-  owned: boolean;
   i, n: PtrInt;
   p: PDhcpLease;
 
   procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
   begin
-    if not fSubnet.Match(ip) then
-      EDhcp.RaiseUtf8('%.Setup: SubNetMask=% does not match %=%',
-        [self, aSettings.SubnetMask, ident, IP4ToShort(@ip)]);
+    if not Subnet.Match(ip) then
+      EDhcp.RaiseUtf8(
+        'PrepareScope: SubNetMask=% does not match %=%',
+        [Subnet.Mask, ident, IP4ToShort(@ip)]);
   end;
 
 begin
-  owned := aSettings = nil;
-  if owned then
-    aSettings := TDhcpServerSettings.Create; // use default values
-  fSafe.Lock;
-  try
-    // support FileName background persistence
-    if aSettings.FileName <> '' then
-      SetFileName(aSettings.FileName); // LoadFromFile() now
-    fFileFlushSeconds := aSettings.FileFlushSeconds;
-    // convert the text settings into binary raw values
-    fGateway          := ToIP4(aSettings.DefaultGateway);
-    fBroadcast        := ToIP4(aSettings.BroadCastAddress);
-    fServerIdentifier := ToIP4(aSettings.ServerIdentifier);
-    fLastIpLE         := 0;
-    fIpMinLE          := ToIP4(aSettings.RangeMin);
-    fIpMaxLE          := ToIP4(aSettings.RangeMax);
-    fDnsServer        := TIntegerDynArray(ToIP4s(aSettings.DnsServers));
-    fSortedStatic     := TIntegerDynArray(ToIP4s(aSettings.StaticIPs));
-    fLeaseTime        := aSettings.LeaseTimeSeconds; // 100%
-    if fLeaseTime < 30 then
-      fLeaseTime := 30;                              // 30 seconds minimum lease
-    fRenewalTime      := fLeaseTime shr 1;           // 50%
-    fRebinding        := (fLeaseTime * 7) shr 3;     // 87.5%
-    fOfferHolding     := aSettings.OfferHoldingSecs; // 5 seconds
-    if fOfferHolding < 1 then
-      fOfferHolding := 1
-    else if fOfferHolding > fRenewalTime then
-      fOfferHolding := fRenewalTime;
-    fMaxDeclinePerSec := aSettings.MaxDeclinePerSecond; // max 5 DECLINE per sec
-    fDeclineTime      := aSettings.DeclineTimeSeconds;
-    if fDeclineTime = 0 then
-      fDeclineTime := fLeaseTime;
-    fGraceFactor      := aSettings.GraceFactor;         // * 2
-    // retrieve the subnet mask from settings
-    if not fSubnet.From(aSettings.SubnetMask) then
-      EDhcp.RaiseUtf8(
-        '%.Setup: unexpected SubNetMask=% (should be mask ip or ip/sub)',
-        [self, aSettings.SubnetMask]);
-    if fSubnet.mask = cAnyHost32 then
+  // validate all settings values from the actual subnet
+  if Gateway <> 0 then
+    CheckSubnet('DefaultGateway', Gateway);
+  CheckSubnet('ServerIdentifier', ServerIdentifier);
+  if IpMinLE = 0 then
+    IpMinLE := Subnet.ip + $0a000000; // e.g. 192.168.0.10
+  CheckSubnet('RangeMin', IpMinLE);
+  if IpMaxLE = 0 then
+    // e.g. 192.168.0.0 + pred(not(255.255.255.0)) = 192.168.0.254
+    IpMaxLE := bswap32(bswap32(Subnet.ip) +
+                    pred(not(bswap32(Subnet.mask))));
+  CheckSubnet('RangeMax', IpMaxLE);
+  if bswap32(IpMaxLE) <= bswap32(IpMinLE) then
+    EDhcp.RaiseUtf8('PrepareScope: unexpected %..% range',
+      [IP4ToShort(@IpMinLE), IP4ToShort(@IpMaxLE)]);
+  if Broadcast <> 0 then
+    CheckSubNet('BroadCastAddress', Broadcast);
+  for i := 0 to high(SortedStatic) do
+    CheckSubnet('Static', SortedStatic[i]);
+  AddInteger(SortedStatic, ServerIdentifier, {nodup=}true);
+  QuickSortInteger(SortedStatic); // for fast branchless O(log(n)) search
+  // prepare the leases in-memory database
+  if Entry = nil then
+    SetLength(Entry, PREALLOCATE_LEASES)
+  else
+  begin
+    // filter/validate all current leases from the actual subnet and statics
+    n := 0;
+    p := pointer(Entry);
+    for i := 0 to Count - 1 do
     begin
-      // SubNetMask was not '192.168.0.1/24': is expected to be '255.255.255.0'
-      if IP4Prefix(fSubnet.ip) = 0 then
-        EDhcp.RaiseUtf8('%.Setup: SubNetMask=% is not a mask IPv4',
-          [self, aSettings.SubnetMask]);
-      fSubnetMask := fSubnet.ip;
-      // we expect other parameters to be set specifically: compute fSubnet
-      if fServerIdentifier = 0 then
-        EDhcp.RaiseUtf8('%.Setup: SubNetMask=% but without ServerIdentifier',
-          [self, aSettings.SubnetMask]);
-      fSubnet.mask := fSubnetMask;
-      fSubnet.ip := fServerIdentifier and fSubnetMask; // normalize as in From()
-    end
-    else
-      // SubNetMask was e.g. '192.168.0.1/24'
-      if fServerIdentifier = 0 then
-        // extract from exact SubNetMask text, since fSubnet.ip = 192.168.0.0
-        fServerIdentifier := ToIP4(aSettings.SubnetMask);
-    // validate all settings values from the actual subnet
-    fSubnetMask := fSubnet.mask;
-    if fGateway <> 0 then
-      CheckSubnet('DefaultGateway', fGateway);
-    CheckSubnet('ServerIdentifier', fServerIdentifier);
-    if fIpMinLE = 0 then
-      fIpMinLE := fSubnet.ip + $0a000000; // e.g. 192.168.0.10
-    CheckSubnet('RangeMin', fIpMinLE);
-    if fIpMaxLE = 0 then
-      // e.g. 192.168.0.0 + pred(not(255.255.255.0)) = 192.168.0.254
-      fIpMaxLE := bswap32(bswap32(fSubnet.ip) + pred(not(bswap32(fSubnet.mask))));
-    CheckSubnet('RangeMax', fIpMaxLE);
-    if bswap32(fIpMaxLE) <= bswap32(fIpMinLE) then
-      EDhcp.RaiseUtf8('%.Setup: unexpected %..% range',
-        [self, IP4ToShort(@fIpMinLE), IP4ToShort(@fIpMaxLE)]);
-    if fBroadcast <> 0 then
-      CheckSubNet('BroadCastAddress', fBroadcast);
-    for i := 0 to high(fSortedStatic) do
-      CheckSubnet('Static', fSortedStatic[i]);
-    AddInteger(fSortedStatic, fServerIdentifier, {nodup=}true);
-    QuickSortInteger(fSortedStatic); // for fast branchless O(log(n)) search
-    // prepare the leases in-memory database
-    if fEntry = nil then
-      SetLength(fEntry, 250) // pre-allocate 4KB of working entries
-    else
-    begin
-      // validate all current leases from the actual subnet and statics
-      n := 0;
-      p := pointer(fEntry);
-      for i := 0 to fCount - 1 do
+      if Subnet.Match(p^.IP4) and
+         (FastFindIntegerSorted(SortedStatic, p^.IP4) < 0) then
       begin
-        if fSubnet.Match(p^.IP4) and
-           (FastFindIntegerSorted(fSortedStatic, p^.IP4) < 0) then
-        begin
-          if n <> i then
-            fEntry[n] := p^;
-          inc(n);
-        end;
-        inc(p);
+        if n <> i then
+          Entry[n] := p^;
+        inc(n);
       end;
-      if n <> fCount then
-      begin
-        fLog.Add.Log(sllTrace, 'Setup: subnet adjust count=% from %',
-          [n, fCount], self);
-        fCount := n;
-        inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-      end;
-      fFreeListCount := 0;
+      inc(p);
     end;
-    // log the used network context
-    if Assigned(fLog) then
-      fLog.Add.Log(sllInfo, 'Setup%: subnet=% min=% max=% server=% ' +
-        'broadcast=% gateway=% static=% dns=% lease=% renew=% rebind=% ' +
-        'offer=% maxdecline=% declinetime=% grace=%',
-        [aSettings, IP4ToShort(@fSubnetMask), IP4ToShort(@fIpMinLE),
-         IP4ToShort(@fIpMaxLE), IP4ToShort(@fServerIdentifier),
-         IP4ToShort(@fBroadcast), IP4ToShort(@fGateway),
-         IP4sToText(TNetIP4s(fSortedStatic)),  IP4sToText(TNetIP4s(fDnsServer)),
-         fLeaseTime, fRenewalTime, fRebinding, fOfferHolding,
-         fMaxDeclinePerSec, fDeclineTime, fGraceFactor],
-        self);
-    // store internal values in the more efficient endianess for direct usage
-    fIpMinLE     := bswap32(fIpMinLE);      // little-endian
-    fIpMaxLE     := bswap32(fIpMaxLE);
-    fLeaseTimeLE := fLeaseTime;
-    fLeaseTime   := bswap32(fLeaseTime);    // big-endian
-    fRenewalTime := bswap32(fRenewalTime);
-    fRebinding   := bswap32(fRebinding);
-  finally
-    fSafe.UnLock;
-    if owned then
-      aSettings.Free; // avoid memory leak
+    if n <> Count then
+    begin
+      if Assigned(log) then
+        log.Log(sllTrace, 'PrepareScope: subnet adjust count=% from %',
+          [n, Count]);
+      Count := n;
+    end;
+    FreeListCount := 0;
   end;
+  // log the scope settings and the computed sub-network context
+  if Assigned(log) then
+    log.Log(sllInfo, 'PrepareScope: scope=% subnet=% min=% max=% server=% ' +
+      'broadcast=% gateway=% static=% dns=% lease=%s renew=%s rebind=%s ' +
+      'offer=%s maxdecline=% declinetime=%s grace=%',
+      [Subnet.ToShort, IP4ToShort(@Subnet.mask), IP4ToShort(@IpMinLE),
+       IP4ToShort(@IpMaxLE), IP4ToShort(@ServerIdentifier),
+       IP4ToShort(@Broadcast), IP4ToShort(@Gateway),
+       IP4sToText(TNetIP4s(SortedStatic)),  IP4sToText(TNetIP4s(DnsServer)),
+       LeaseTime, RenewalTime, Rebinding, OfferHolding,
+       MaxDeclinePerSec, DeclineTime, GraceFactor]);
+  // store internal values in the more efficient endianess for direct usage
+  IpMinLE     := bswap32(IpMinLE);      // little-endian
+  IpMaxLE     := bswap32(IpMaxLE);
+  LeaseTimeLE := LeaseTime;
+  LeaseTime   := bswap32(LeaseTime);    // big-endian
+  RenewalTime := bswap32(RenewalTime);
+  Rebinding   := bswap32(Rebinding);
 end;
 
-function TDhcpProcess.AddStatic(const ip: RawUtf8): boolean;
-var
-  ip4: TNetIP4;
+function TDhcpScope.AddStatic(ip4: TNetIP4): boolean;
 begin
-  result := NetIsIP4(pointer(ip), @ip4);
+  result := (@self <> nil) and
+            SubNet.Match(ip4);
   if not result then
     exit;
-  fSafe.Lock;
+  Safe.Lock;
   try
-    result := AddSortedInteger(fSortedStatic, ip4) >= 0;
+     result := AddSortedInteger(SortedStatic, ip4) >= 0;
   finally
-    fSafe.UnLock;
+    Safe.UnLock;
   end;
 end;
 
-function TDhcpProcess.RemoveStatic(const ip: RawUtf8): boolean;
+function TDhcpScope.RemoveStatic(ip4: TNetIP4): boolean;
 var
-  ip4: TNetIP4;
   ndx: PtrInt;
 begin
-  result := NetIsIP4(pointer(ip), @ip4);
+  result := (@self <> nil) and
+            SubNet.Match(ip4);
   if not result then
     exit;
-  fSafe.Lock;
+  Safe.Lock;
   try
-    ndx := FastFindIntegerSorted(fSortedStatic, ip4);
+    ndx := FastFindIntegerSorted(SortedStatic, ip4);
     if ndx < 0 then
       result := false
     else
-      DeleteInteger(fSortedStatic, ndx);
+      DeleteInteger(SortedStatic, ndx);
   finally
-    fSafe.UnLock;
+    Safe.UnLock;
   end;
 end;
 
-procedure TDhcpProcess.Clear;
+function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime): integer;
+var
+  p: PDhcpLease;
+  n, grace: cardinal;
+  header: boolean;
 begin
-  fSafe.Lock;
-  fCount := 0;
-  fEntry := nil;
-  fFreeListCount := 0;
-  fModifSequence := 0;
-  fModifSaved := 0;
-  fSafe.UnLock;
+  result := 0;
+  if Count = 0 then
+    exit;
+  Safe.Lock;
+  try
+    n := Count;
+    if n = 0 then
+      exit;
+    // append all lines
+    header := false;
+    grace := LeaseTimeLE * MaxPtrUInt(GraceFactor, 2); // not too deprecated
+    p := pointer(Entry);
+    repeat
+      // OFFERed leases are temporary; the client hasn't accepted this IP
+      // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
+      if (PInt64(@p^.Mac)^ and MAC_MASK <> 0) and
+         (p^.IP4 <> 0) and
+         (((p^.State = lsAck) or
+          ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
+           (cardinal(tix32 - p^.Expired) < grace)))) then // still realistic
+      begin
+        if not header then
+        begin
+          // first add the subnet mask as '# 192.168.0.1/24' comment line
+          header := true;
+          W.AddDirect('#', ' ');
+          W.AddShort(Subnet.ToShort);
+          W.AddShorter(' subnet');
+          W.AddDirectNewLine;
+        end;
+        // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207"
+        W.AddQ(boot + Int64(p^.Expired));
+        W.AddDirect(' ');
+        W.AddShort(MacToShort(@p^.Mac));
+        W.AddDirect(' ');
+        W.AddShort(IP4ToShort(@p^.IP4));
+        W.AddDirectNewLine;
+        inc(result);
+      end;
+      inc(p);
+      dec(n);
+    until n = 0;
+  finally
+    Safe.UnLock;
+  end;
 end;
 
-procedure TDhcpProcess.Shutdown;
-begin
-  // disable ProcessUdpFrame()
-  if fSubnet.mask = 0 then
-    exit; // no Setup(), or called twice
-  fSubnet.mask := 0;
-  // persist FileName for clean shutdown
-  if (fFileName <> '') and
-     (fModifSaved <> fModifSequence) then
-    SaveToFile(fFileName);
-  fLog.Add.Log(sllDebug, 'Shutdown: count=% seq=% saved=%',
-    [fCount, fModifSequence, fModifSaved], self);
-  // don't Clear the entries: we may call Setup() and restart again
-end;
-
-function DoOutdated(p: PDhcpLease; tix32: cardinal; n: integer): integer;
+function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
 begin // dedicated sub-function for better codegen (100ns for 200 entries)
   result := 0;
   if n <> 0 then
@@ -1124,11 +1177,43 @@ begin // dedicated sub-function for better codegen (100ns for 200 entries)
       {$ifndef CPUINTEL}          // seems actually slower on modern Intel/AMD
       if p^.Unavailable <> 0 then // don't invalidate L1 cache
       {$endif CPUINTEL}
-        p^.Unavailable := 0;
+        p^.Unavailable := 0; // reset the rate limiter every second
       inc(p);
       dec(n);
     until n = 0;
 end;
+
+function TDhcpScope.CheckOutdated(tix32: cardinal): integer;
+begin
+  result := 0;
+  if Count = 0 then
+    exit;
+  Safe.Lock;
+  try
+    result := DoOutdated(pointer(Entry), tix32, Count);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TDhcpScope.AddOptions(var f: PAnsiChar; andLeaseTimes: boolean);
+begin
+  DhcpAddOption(f, doSubnetMask, @Subnet.mask);
+  if Broadcast <> 0 then
+    DhcpAddOption(f, doBroadcastAddr, @Broadcast);
+  if Gateway <> 0 then
+    DhcpAddOption(f, doRouter, @Gateway);
+  if DnsServer <> nil then
+    DhcpAddOptions(f, doDns, pointer(DnsServer));
+  if not andLeaseTimes then // static INFORM don't need timeouts
+    exit;
+  DhcpAddOption(f, doLeaseTimeValue,     @LeaseTime); // big-endian
+  DhcpAddOption(f, doRenewalTimeValue,   @RenewalTime);
+  DhcpAddOption(f, doRebindingTimeValue, @Rebinding);
+end;
+
+
+{ **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
 function TDhcpProcess.OnIdle(tix64: Int64): integer;
 var
