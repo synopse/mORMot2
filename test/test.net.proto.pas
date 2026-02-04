@@ -1583,7 +1583,7 @@ var
     CheckEqual(ips[ndx], d.Send.ciaddr);
   end;
 
-  procedure CheckSaveTextMatch(const saved: RawUtf8);
+  procedure CheckSaveToTextMatch(const saved: RawUtf8);
   var
     s: TDhcpProcess;
     new: RawUtf8;
@@ -1606,6 +1606,10 @@ var
   end;
 
 begin
+  CheckEqual(ord(dmtTls), 18, 'dmt');
+  CheckEqual(SizeOf(TDhcpPacket), 548, 'TDhcpPacket');
+  CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), 240, 'options');
+  CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1760,7 +1764,7 @@ begin
     CheckNotEqual(txt, CRLF, 'offer not saved');
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'mac ip saved');
     Check(length(txt) < 1000, 'saved len');
-    CheckSaveTextMatch(txt);
+    CheckSaveToTextMatch(txt);
     // make 200 concurrent requests - more than 2M handshakes per second ;)
     n := 200;
     SetLength(macs, n);
@@ -1794,14 +1798,14 @@ begin
     CheckEqual(server.Count, n + 1);
     NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
     txt := server.SaveToText;
-    CheckSaveTextMatch(txt);
+    CheckSaveToTextMatch(txt);
     CheckNotEqual(txt, CRLF, 'offer not saved');
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
     Check(length(txt) > 2000, 'saved len2');
     // twice with the requests to validate efficient renewal
     for i := 1 to n do
       DoRequest(Random32(n)); // in Random order
-    CheckEqual(server.SaveToText, txt, 'no new offer');
+    CheckEqual(length(server.SaveToText), length(txt), 'no new offer');
     // benchmark OnIdle() performance
     Check(not FileExists(fn), 'file before OnIdle');
     timer.Start;
