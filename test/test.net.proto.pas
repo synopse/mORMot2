@@ -1711,6 +1711,7 @@ begin
     CheckEqual(server.SaveToText, CRLF);
     // DISCOVER -> OFFER
     d.RecvLen := length(refdisc);
+    d.RecvIp4 := 0; // use the default server.Scope[]
     MoveFast(pointer(refdisc)^, d.Recv, d.RecvLen);
     n := server.ComputeResponse(d);
     Check(n > 0, 'discover');

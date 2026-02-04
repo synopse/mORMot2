@@ -507,6 +507,9 @@ type
     HostName: PShortString;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
+    /// the server IP socket which received the UDP frame
+    // - allow several UDP bound server sockets to share a single TDhcpProcess
+    RecvIp4: TNetIP4;
     /// parsed options length position in Recv.option[]
     RecvLens: TDhcpParsed;
     /// the DHCP message type parsed from Recv
@@ -594,7 +597,7 @@ type
     // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
     /// this is the main processing function of the DHCP server logic
-    // - input should be stored in Data.Recv / Data.RecvLen - and is untouched
+    // - input should be stored in Data.Recv/RecvLen/RecvIp4 - and is untouched
     // - returns -1 if this input was invalid or unsupported
     // - returns 0 if input was valid, but no response is needed (e.g. decline)
     // - return > 0 the number of Data.Send bytes to broadcast back as UDP
@@ -1748,14 +1751,16 @@ begin
         [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^], self);
     exit; // invalid or unsupported frame
   end;
-  // detect the proper scope to use from the Gateway IP Address field
+  // detect the proper scope to use from the Gateway IP field or bound server IP
   if Data.Recv.giaddr <> 0 then
     // e.g. VLAN 10 relay set giaddr=192.168.10.1
     Data.Scope := GetScope(Data.Recv.giaddr)
+  else if Data.RecvIp4 <> 0 then
+    // no giaddr: check RecvIp4 bound server IP as set by the UDP server
+    Data.Scope := GetScope(Data.Recv.giaddr)
   else
-    // no giaddr: default to fScope[0]
+    // no giaddr nor RecvIp4: default to fScope[0]
     Data.Scope := pointer(fScope);
-    // TODO: use Data.RecvIP4 if TDhcpProcess is shared between several bound IP
   if Data.Scope = nil then
   begin
     if Assigned(fLog) then
