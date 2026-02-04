@@ -1158,6 +1158,7 @@ end;
 function DoWrite(W: TTextWriter; p: PDhcpLease; n, tix32, grace: cardinal;
   boot: TUnixTime; subnet: PIp4SubNet): integer;
 begin // dedicated sub-function for better codegen
+  result := 0;
   repeat
     // OFFERed leases are temporary; the client hasn't accepted this IP
     // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
@@ -1615,7 +1616,7 @@ end;
 
 function TDhcpProcess.SaveToText(SavedCount: PInteger): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
   W: TTextWriter;
   tix32, saved, n: cardinal;
   boot: TUnixTime;
@@ -1633,7 +1634,7 @@ begin
     exit;
   // save all leases in all scopes in dnsmasq format
   saved := 0;
-  n := MinPtrUInt(1 shl 20, 256 + (n + length(fScope)) * 46); // up to 1MB buffer
+  n := MinPtrUInt(1 shl 20, 256 + (n + cardinal(length(fScope))) * 46);
   W := TTextWriter.CreateOwnedStream(tmp, n);
   try
     fScopeSafe.ReadLock;
