@@ -334,7 +334,9 @@ type
     /// persist all leases with "<expiry> <MAC> <IP>" dnsmasq file pattern
     // - this method is thread safe and will call Safe.Lock/UnLock
     // - returns the number of entries/lines added to the text file
-    function TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime): integer;
+    // - localcopy=true would make a transient copy of Entry[] to reduce the lock
+    function TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime;
+      localcopy: boolean): integer;
   private
     // little-endian IP range values for NextIP
     LastIpLE, IpMinLE, IpMaxLE: TNetIP4;
@@ -1145,57 +1147,69 @@ begin
   end;
 end;
 
-function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime): integer;
+function DoWrite(W: TTextWriter; p: PDhcpLease; n, tix32, grace: cardinal;
+  boot: TUnixTime; subnet: PIp4SubNet): integer;
+begin // dedicated sub-function for better codegen
+  repeat
+    // OFFERed leases are temporary; the client hasn't accepted this IP
+    // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
+    if (PInt64(@p^.Mac)^ and MAC_MASK <> 0) and
+       (p^.IP4 <> 0) and
+       (((p^.State = lsAck) or
+        ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
+         (cardinal(tix32 - p^.Expired) < grace)))) then // still realistic
+    begin
+      if subnet <> nil then
+      begin
+        // first add the subnet mask as '# 192.168.0.1/24' comment line
+        W.AddDirect('#', ' ');
+        W.AddShort(subnet^.ToShort);
+        W.AddShorter(' subnet');
+        W.AddDirectNewLine;
+        subnet := nil; // append once, and only if necessary
+      end;
+      // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207"
+      W.AddQ(boot + Int64(p^.Expired));
+      W.AddDirect(' ');
+      W.AddShort(MacToShort(@p^.Mac));
+      W.AddDirect(' ');
+      W.AddShort(IP4ToShort(@p^.IP4));
+      W.AddDirectNewLine;
+      inc(result);
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime;
+  localcopy: boolean): integer;
 var
-  p: PDhcpLease;
-  n, grace: cardinal;
-  header: boolean;
+  local: TLeaseDynArray; // 10,000 leases would use 160KB of temporary memory
+  grace: cardinal;
 begin
   result := 0;
   if Count = 0 then
     exit;
+  // make a transient copy of all leases to keep the lock small for this subnet
   Safe.Lock;
   try
-    n := Count;
-    if n = 0 then
+    if Count = 0 then
       exit;
-    // append all lines
-    header := false;
     grace := LeaseTimeLE * MaxPtrUInt(GraceFactor, 2); // not too deprecated
-    p := pointer(Entry);
-    repeat
-      // OFFERed leases are temporary; the client hasn't accepted this IP
-      // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
-      if (PInt64(@p^.Mac)^ and MAC_MASK <> 0) and
-         (p^.IP4 <> 0) and
-         (((p^.State = lsAck) or
-          ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
-           (cardinal(tix32 - p^.Expired) < grace)))) then // still realistic
-      begin
-        if not header then
-        begin
-          // first add the subnet mask as '# 192.168.0.1/24' comment line
-          header := true;
-          W.AddDirect('#', ' ');
-          W.AddShort(Subnet.ToShort);
-          W.AddShorter(' subnet');
-          W.AddDirectNewLine;
-        end;
-        // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207"
-        W.AddQ(boot + Int64(p^.Expired));
-        W.AddDirect(' ');
-        W.AddShort(MacToShort(@p^.Mac));
-        W.AddDirect(' ');
-        W.AddShort(IP4ToShort(@p^.IP4));
-        W.AddDirectNewLine;
-        inc(result);
-      end;
-      inc(p);
-      dec(n);
-    until n = 0;
+    if (Count < 1000) or
+       not localcopy then
+      // small output could be done within the lock
+      result := DoWrite(W, pointer(Entry), Count, tix32, grace, boot, @Subnet)
+    else
+      // local copy may eventually be done if OnIdle() made a background thread
+      local := copy(Entry, 0, Count); // allocate Count * 16 bytes
   finally
     Safe.UnLock;
   end;
+  // append all text lines from the local copy (if any) - not used yet
+  if local <> nil then
+    result := DoWrite(W, pointer(local), length(local), tix32, grace, boot, @Subnet)
 end;
 
 function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
@@ -1541,6 +1555,8 @@ begin
     begin
       saved := SaveToFile(fFileName);     // do not aggressively retry if false
       fFileFlushTix := tix32 + fFileFlushSeconds; // every 30 seconds by default
+      // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
+      // recv(UDP packet) so we would need to create a background thread
     end;
   // no ARP call here to clean the internal list: the user should rather tune
   // lease duration or use a bigger netmask; the RFC states that the client
@@ -2004,6 +2020,7 @@ initialization
   assert(ord(dmtTls) = 18);
   assert(PtrUInt(@PDhcpPacket(nil)^.options) = 240);
   assert(SizeOf(TDhcpPacket) = 548);
+  assert(SizeOf(TDhcpLease) = 16);
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, stUpperCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = doRelayAgent);
