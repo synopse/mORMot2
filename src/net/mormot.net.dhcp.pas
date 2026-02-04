@@ -1757,7 +1757,7 @@ begin
     Data.Scope := GetScope(Data.Recv.giaddr)
   else if Data.RecvIp4 <> 0 then
     // no giaddr: check RecvIp4 bound server IP as set by the UDP server
-    Data.Scope := GetScope(Data.Recv.giaddr)
+    Data.Scope := GetScope(Data.RecvIp4)
   else
     // no giaddr nor RecvIp4: default to fScope[0]
     Data.Scope := pointer(fScope);
@@ -1765,7 +1765,10 @@ begin
   begin
     if Assigned(fLog) then
     begin
-      IP4Short(@Data.Recv.giaddr, Data.Ip);
+      if Data.Recv.giaddr <> 0 then
+        IP4Short(@Data.Recv.giaddr, Data.Ip)
+      else if Data.RecvIp4 <> 0 then
+        IP4Short(@Data.RecvIP4, Data.Ip);
       fLog.Add.Log(sllDebug, 'ComputeResponse: % % no subnet for % %',
         [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^], self);
     end;
