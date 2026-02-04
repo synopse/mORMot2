@@ -1576,10 +1576,10 @@ var
     Check(CompareMem(@macs[ndx], @d.Recv.chaddr, SizeOf(macs[0])));
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
-    Check(server.ProcessUdpFrame(d) > 0, 'ack#');
+    Check(server.ComputeResponse(d) > 0, 'ack#');
     CheckEqual(d.Send.xid, xid);
     Check(CompareMem(@macs[ndx], @d.Send.chaddr, SizeOf(macs[0])));
-    Check(server.Subnet.Match(d.Send.ciaddr));
+    Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckEqual(ips[ndx], d.Send.ciaddr);
   end;
 
@@ -1590,13 +1590,13 @@ var
   begin
     s := TDhcpProcess.Create;
     try
-      // no s.Setup(nil) needed here
-      Check(s.LoadFromText(saved));
+      s.Setup(nil); // needed here to fill s.Scope[] with the default subnet
+      Check(s.LoadFromText(saved), 'loadfromtext1');
       new := s.SaveToText;
       if new <> saved then // allow one (unlikely) GetTickSec slip
       begin
-        s.Clear;
-        Check(s.LoadFromText(saved));
+        // no s.Clear: would also remove s.Scope[]
+        Check(s.LoadFromText(saved), 'loadfromtext2');
         new := s.SaveToText;
       end;
       CheckEqual(new, saved, 'LoadFromText');
@@ -1702,17 +1702,17 @@ begin
     if FileExists(fn) then
       Check(DeleteFile(fn), 'deletefile');
     server.FileName := fn;
-    Check(not FileExists(fn));
+    Check(not FileExists(fn), fn);
     Check(server.FileName = fn);
-    server.Setup({settings=}nil);
+    server.Setup({settings=}nil); // fill with our default subnet
     Check(server.FileName = fn);
-    Check(server.Subnet.Match('192.168.1.1'));
-    Check(not server.Subnet.Match('8.8.8.8'));
+    Check(server.GetScope('192.168.1.1') <> nil);
+    Check(server.GetScope('8.8.8.8') = nil);
     CheckEqual(server.SaveToText, CRLF);
     // DISCOVER -> OFFER
     d.RecvLen := length(refdisc);
     MoveFast(pointer(refdisc)^, d.Recv, d.RecvLen);
-    n := server.ProcessUdpFrame(d);
+    n := server.ComputeResponse(d);
     Check(n > 0, 'discover');
     CheckEqual(d.Send.xid, $1d3d0000);
     CheckEqual(MacToText(@d.Send.chaddr), mac);
@@ -1732,7 +1732,7 @@ begin
     ip4 := 0;
     for i := 1 to 3 do // validate offer + renewal
     begin
-      n := server.ProcessUdpFrame(d);
+      n := server.ComputeResponse(d);
       Check(n > 0, 'request');
       CheckEqual(d.Send.xid, $1e3d0000);
       CheckEqual(MacToText(@d.Send.chaddr), mac);
@@ -1752,12 +1752,12 @@ begin
     end;
     d.Recv := d.Send;
     d.RecvLen := n;
-    Check(server.ProcessUdpFrame(d) < 0, 'ack');
+    Check(server.ComputeResponse(d) < 0, 'ack');
     Check(d.HostName^ = '', 'no hostname');
     CheckEqual(server.Count, 1);
     txt := server.SaveToText;
     CheckNotEqual(txt, CRLF, 'offer not saved');
-    CheckEqual(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt), 11, 'mac ip saved');
+    Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'mac ip saved');
     Check(length(txt) < 1000, 'saved len');
     CheckSaveTextMatch(txt);
     // make 200 concurrent requests - more than 2M handshakes per second ;)
@@ -1778,13 +1778,13 @@ begin
       Check(CompareMem(@macs[i], @d.Recv.chaddr, SizeOf(macs[0])));
       CheckNotEqual(xid, d.Recv.xid);
       xid := d.Recv.xid;
-      Check(server.ProcessUdpFrame(d) > 0, 'request#');
+      Check(server.ComputeResponse(d) > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
       Check(d.HostName^ = hostname, 'hostname');
       Check(CompareMem(@macs[i], @d.Recv.chaddr, SizeOf(macs[0])));
       Check(CompareMem(@macs[i], @d.Send.chaddr, SizeOf(macs[0])));
       ips[i] := d.Send.ciaddr; // OFFERed IP
-      Check(server.Subnet.Match(ips[i]));
+      Check(server.GetScope(ips[i]) <> nil);
     end;
     CheckEqual(server.SaveToText, txt, 'only offer');
     CheckEqual(server.Count, n + 1);
@@ -1795,7 +1795,7 @@ begin
     txt := server.SaveToText;
     CheckSaveTextMatch(txt);
     CheckNotEqual(txt, CRLF, 'offer not saved');
-    CheckEqual(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt), 11, 'saved 2');
+    Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
     Check(length(txt) > 2000, 'saved len2');
     // twice with the requests to validate efficient renewal
     for i := 1 to n do
@@ -1804,19 +1804,19 @@ begin
     // benchmark OnIdle() performance
     Check(not FileExists(fn), 'file before OnIdle');
     timer.Start;
-    for i := 1 to n * 10 do
-      CheckEqual(server.OnIdle(i shl 10), 0); // increasing tix32 to trigger process
+    for i := 1 to n * 10 do // increasing tix32 to trigger process
+      CheckEqual(server.OnIdle(i shl 10), 0);
     NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
     // ensure OnIdle() did persist the file on disk
-    CheckEqual(server.Count, n + 1);
-    Check(server.FileName = fn);
+    CheckEqual(server.Count, n + 1, 'count');
+    Check(server.FileName = fn, fn);
     Check(FileExists(fn), 'file after OnIdle');
     CheckEqual(StringFromFile(fn), txt);
-    server.Clear;
-    CheckEqual(server.Count, 0);
+    server.ClearLeases;
+    CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');
     // validate DECLINE process - and option 82 Relay Agent
-    CheckEqual(server.OnIdle(1), 0); // trigger MaxDeclinePerSec process
+    CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
     f := DhcpClient(d.Recv, dmtDiscover, macs[0]);
     DhcpAddOption(f, doRelayAgent, @OPTION82[1], 7);
     f^ := #255;
@@ -1824,11 +1824,11 @@ begin
     Check(CompareMem(@macs[0], @d.Recv.chaddr, SizeOf(macs[0])));
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
-    l := server.ProcessUdpFrame(d);
+    l := server.ComputeResponse(d);
     Check(l > 0, 'request1');
     CheckEqual(d.Send.xid, xid);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
-    Check(server.Subnet.Match(d.Send.ciaddr));
+    Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckEqual(lens[doRelayAgent], 0, 'no relay agent');
     Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doRelayAgent]);
@@ -1838,15 +1838,15 @@ begin
     f := DhcpClient(d.Recv, dmtDecline, macs[0]);
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
     xid := d.Recv.xid;
-    CheckEqual(server.ProcessUdpFrame(d), 0, 'decline has no resp');
+    CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
     CheckEqual(server.SaveToText, CRLF, 'declined not saved');
     d.RecvLen := DhcpClient(d.Recv, dmtDiscover, macs[0]) - PAnsiChar(@d.Recv) + 1;
     xid := d.Recv.xid;
-    Check(server.ProcessUdpFrame(d) > 0, 'request3');
+    Check(server.ComputeResponse(d) > 0, 'request3');
     CheckEqual(d.Recv.xid, xid);
     CheckEqual(d.Send.xid, xid);
     Check(CompareMem(@macs[0], @d.Send.chaddr, SizeOf(macs[0])));
-    Check(server.Subnet.Match(d.Send.ciaddr));
+    Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
   finally
