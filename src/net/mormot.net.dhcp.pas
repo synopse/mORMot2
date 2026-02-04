@@ -541,10 +541,11 @@ type
   // on its own interface, all sharing this single TDhcpProcess subnets
   TDhcpProcess = class(TSynPersistent)
   protected
-    fLog: TSynLogClass;
+    fScopeSafe: TRWLightLock; // multi-read reentrant lock to protect Scope[]
     fScope: TDhcpScopes;
     fFileFlushSeconds: cardinal;
     fIdleTix, fFileFlushTix, fModifSequence, fModifSaved: cardinal;
+    fLog: TSynLogClass;
     fFileName: TFileName;
     fOnComputeResponse: TOnComputeResponse;
     fState: (sNone, sSetup, sSetupFailed, sShutdown);
@@ -571,18 +572,20 @@ type
     procedure ClearLeases;
     /// return the Scope[] entry matching its subnet mask
     // - can be used e.g. to check if IP address match the DHCP server subnets
+    // - this method is not thread-safe by design
     function GetScope(ip: TNetIP4): PDhcpScope; overload;
     /// return the Scope[] entry matching its subnet mask
     // - can be used e.g. to check if IP address match the DHCP server subnets
+    // - this method is not thread-safe by design
     function GetScope(const ip: RawUtf8): PDhcpScope; overload;
     /// should be called when the server is about to leave for a clean shutdown
     // - will mark the internal state as "do-nothing" and persist FileName
     // - won't clear the internal list
     // - if you want to re-start the server, call Setup() again
     procedure Shutdown;
-    /// to be called on regular pace to identify outdated entries every second
-    // - return the number of outdated entries identified during this call
-    // - if FileName was set, would persist any change in the internal list
+    /// to be called on regular pace to make some background process
+    // - every second, identify and return the number of outdated entries
+    // - if FileName was set, would persist leases at FileFlushSeconds=30 pace
     function OnIdle(tix64: Int64): integer;
     /// persist the internal entry list using human-readable text format
     // - follow "<expiry> <MAC> <IP>" dnsmasq lease file pattern, using the
@@ -605,9 +608,13 @@ type
     // - returns 0 if input was valid, but no response is needed (e.g. decline)
     // - return > 0 the number of Data.Send bytes to broadcast back as UDP
     function ComputeResponse(var Data: TDhcpProcessData): PtrInt;
-    /// access to the internal scope/subnet lists
+    /// raw access to the internal scope/subnet lists
+    // - this property is not thread-safe by design
     property Scope: TDhcpScopes
       read fScope;
+    /// raw multi-read reentrant lock to protect Scope[]
+    property ScopeSafe: TRWLightLock
+      read fScopeSafe;
     /// the associated TSynLog class used to debug the execution context
     property Log: TSynLogClass
       read fLog write fLog;
@@ -1384,12 +1391,14 @@ begin
   s := pointer(fScope);
   if s = nil then
     exit;
+  fScopeSafe.ReadLock;
   n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
   repeat
     inc(result, s^.Count - s^.FreeListCount);
     inc(s);
     dec(n);
   until n = 0;
+  fScopeSafe.ReadUnLock;
 end;
 
 function TDhcpProcess.GetScope(ip: TNetIP4): PDhcpScope;
@@ -1435,6 +1444,7 @@ begin
     aSettings := TDhcpServerSettings.Create; // use default values
     aSettings.AddScope; // with a single default scope
   end;
+  fScopeSafe.WriteLock;
   try
     fState := sSetupFailed; // keep on EDhcp exception
     // assign aSettings.Scope[] subnet definitions
@@ -1456,6 +1466,7 @@ begin
     // success
     fState := sSetup;
   finally
+    fScopeSafe.WriteUnLock;
     if owned then
       aSettings.Free; // avoid memory leak
   end;
@@ -1465,23 +1476,42 @@ function TDhcpProcess.AddStatic(const ip: RawUtf8): boolean;
 var
   ip4: TNetIP4;
 begin
-  result := NetIsIP4(pointer(ip), @ip4) and
-            GetScope(ip4)^.AddStatic(ip4);
+  result := NetIsIP4(pointer(ip), @ip4);
+  if not result then
+    exit;
+  fScopeSafe.ReadLock;
+  try
+    result := GetScope(ip4)^.AddStatic(ip4);
+  finally
+    fScopeSafe.ReadUnLock;
+  end;
 end;
 
 function TDhcpProcess.RemoveStatic(const ip: RawUtf8): boolean;
 var
   ip4: TNetIP4;
 begin
-  result := NetIsIP4(pointer(ip), @ip4) and
-            GetScope(ip4)^.RemoveStatic(ip4);
+  result := NetIsIP4(pointer(ip), @ip4);
+  if not result then
+    exit;
+  fScopeSafe.ReadLock;
+  try
+    result := GetScope(ip4)^.RemoveStatic(ip4);
+  finally
+    fScopeSafe.ReadUnLock;
+  end;
 end;
 
 procedure TDhcpProcess.Clear;
 begin
-  fScope := nil;
-  fModifSequence := 0;
-  fModifSaved := 0;
+  fScopeSafe.WriteLock;
+  try
+    fScope := nil;
+    fModifSequence := 0;
+    fModifSaved := 0;
+  finally
+    fScopeSafe.WriteUnLock;
+  end;
 end;
 
 procedure TDhcpProcess.ClearLeases;
@@ -1489,19 +1519,24 @@ var
   s: PDhcpScope;
   i: PtrInt;
 begin
-  s := pointer(fScope);
-  for i := 1 to length(fScope) do
-  begin
-    s^.Safe.Lock;
-    s^.Entry := nil;
-    SetLength(s^.Entry, PREALLOCATE_LEASES); // as in TDhcpScope.AfterFill
-    s^.Count := 0;
-    s^.FreeListCount := 0;
-    s^.Safe.UnLock;
-    inc(s);
+  fScopeSafe.WriteLock;
+  try
+    s := pointer(fScope);
+    for i := 1 to length(fScope) do
+    begin
+      s^.Safe.Lock;
+      s^.Entry := nil;
+      SetLength(s^.Entry, PREALLOCATE_LEASES); // as in TDhcpScope.AfterFill
+      s^.Count := 0;
+      s^.FreeListCount := 0;
+      s^.Safe.UnLock;
+      inc(s);
+    end;
+    fModifSequence := 0;
+    fModifSaved := 0;
+  finally
+    fScopeSafe.WriteUnLock;
   end;
-  fModifSequence := 0;
-  fModifSaved := 0;
 end;
 
 procedure TDhcpProcess.Shutdown;
@@ -1509,11 +1544,16 @@ begin
   // disable ComputeResponse()
   if fState in [sNone, sShutdown] then
     exit; // no Setup(), or called twice
-  fState := sShutdown;
+  fScopeSafe.WriteLock;
+  try
+    fState := sShutdown;
+  finally
+    fScopeSafe.WriteUnLock;
+  end;
   // persist FileName for clean shutdown
   if (fFileName <> '') and
      (fModifSaved <> fModifSequence) then
-    SaveToFile(fFileName);
+    SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
   fLog.Add.Log(sllDebug, 'Shutdown: count=% seq=% saved=%',
     [GetCount, fModifSequence, fModifSaved], self);
   // don't Clear the entries: we may call Setup() and restart again
@@ -1533,32 +1573,37 @@ begin
      (fState <> sSetup) then // e.g. after Shutdown
     exit;
   fIdleTix := tix32;
-  // check deprecated entries in all scopes
-  s := pointer(fScope);
-  if s <> nil then
-  begin
-    n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
-    repeat
-      inc(result, s^.CheckOutdated(tix32));
-      inc(s);
-      dec(n);
-    until n = 0;
-  end;
-  if result <> 0 then
-    inc(fModifSequence); // trigger SaveToFile() below
-  // background persist into FileName if needed
-  saved := false;
-  if (fFileName <> '') and
-     (fFileFlushSeconds <> 0) and         // = 0 if disabled
-     (fModifSaved <> fModifSequence) then // if something new to be written
-    if (fFileFlushTix = 0) or
-       (tix32 >= fFileFlushTix) then      // reached the next persistence time
+  fScopeSafe.ReadLock;
+  try
+    // check deprecated entries in all scopes
+    s := pointer(fScope);
+    if s <> nil then
     begin
-      saved := SaveToFile(fFileName);     // do not aggressively retry if false
-      fFileFlushTix := tix32 + fFileFlushSeconds; // every 30 seconds by default
-      // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
-      // recv(UDP packet) so we would need to create a background thread
+      n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+      repeat
+        inc(result, s^.CheckOutdated(tix32)); // 5us for 100k leases ;)
+        inc(s);
+        dec(n);
+      until n = 0;
     end;
+    if result <> 0 then
+      inc(fModifSequence); // trigger SaveToFile() below
+    // background persist into FileName if needed
+    saved := 0;
+    if (fFileName <> '') and
+       (fFileFlushSeconds <> 0) and         // = 0 if disabled
+       (fModifSaved <> fModifSequence) then // if something new to be written
+      if tix32 >= fFileFlushTix then     // reached the next persistence time
+      begin
+        saved := SaveToFile(fFileName);// make fScopeSafe.ReadLock/ReadUnLock
+        // do not aggressively retry if saved<0 (write failed)
+        fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
+        // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
+        // recv(UDP packet) so we would need to create a background thread
+      end;
+  finally
+    fScopeSafe.ReadUnLock;
+  end;
   // no ARP call here to clean the internal list: the user should rather tune
   // lease duration or use a bigger netmask; the RFC states that the client
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
@@ -1579,7 +1624,7 @@ begin
   result := CRLF; // returns something not void
   if SavedCount <> nil then
     SavedCount^ := 0;
-  n := Count;
+  n := GetCount;
   if n = 0 then
     exit;
   tix32 := GetTickSec;
@@ -1591,15 +1636,20 @@ begin
   n := MinPtrUInt(1 shl 20, 256 + (n + length(fScope)) * 46); // up to 1MB buffer
   W := TTextWriter.CreateOwnedStream(tmp, n);
   try
-    s := pointer(fScope);
-    if s <> nil then
-    begin
-      n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
-      repeat
-        inc(saved, s^.TextWrite(W, tix32, boot, {localcopy=}false));
-        inc(s);
-        dec(n);
-      until n = 0;
+    fScopeSafe.ReadLock;
+    try
+      s := pointer(fScope);
+      if s <> nil then
+      begin
+        n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+        repeat
+          inc(saved, s^.TextWrite(W, tix32, boot, {localcopy=}false));
+          inc(s);
+          dec(n);
+        until n = 0;
+      end;
+    finally
+      fScopeSafe.ReadUnLock;
     end;
     if W.TextLength <> 0 then
       W.SetText(result);
@@ -1628,56 +1678,61 @@ begin
   ClearLeases;
   entries := 0;
   last := nil;
-  p := pointer(Text);
-  if (p <> nil) and
-     (fScope <> nil) then
-  repeat
-    // line format is "<expiry> <mac> <ip4>" as for dnsmasq leases
-    p := GotoNextNotSpace(p);
-    if p^ in ['0' .. '9'] then // parse <expiry> but ignore e.g. '# 1.2.3.4/24'
-    begin
-      b := p;
-      expiry := GetNextItemQWord(b, ' ');
-      if (expiry >= boot - SecsPerMonth) and  // not too old
-         (expiry < TUnixTime(UNIXTIME_MINIMAL) * 2) then // range in seconds
+  fScopeSafe.WriteLock; // easier than complex s^.Lock/UnLock
+  try
+    p := pointer(Text);
+    if (p <> nil) and
+       (fScope <> nil) then
+    repeat
+      // line format is "<expiry> <mac> <ip4>" as for dnsmasq leases
+      p := GotoNextNotSpace(p);
+      if p^ in ['0' .. '9'] then // parse <expiry> but ignore e.g. '# 1.2.3.4/24'
       begin
-        p := GotoNextSpace(b);
-        if (p - b = 17) and
-           (p^ = ' ') and
-           TextToMac(b, @mac) and
-           (PInt64(@mac)^ and MAC_MASK <> 0) and
-           NetIsIP4(p + 1, @ip4) and
-           (ip4 <> 0) then
+        b := p;
+        expiry := GetNextItemQWord(b, ' ');
+        if (expiry >= boot - SecsPerMonth) and  // not too old
+           (expiry < TUnixTime(UNIXTIME_MINIMAL) * 2) then // range in seconds
         begin
-          // we parsed a valid lease into expiry/mac/ip4: locate its scope
-          s := last;
-          if (s = nil) or
-             not s^.Subnet.Match(ip4) then
+          p := GotoNextSpace(b);
+          if (p - b = 17) and
+             (p^ = ' ') and
+             TextToMac(b, @mac) and
+             (PInt64(@mac)^ and MAC_MASK <> 0) and
+             NetIsIP4(p + 1, @ip4) and
+             (ip4 <> 0) then
           begin
-            s := GetScope(ip4); // called once per sub-net or incorrect IP
+            // we parsed a valid lease into expiry/mac/ip4: locate its scope
+            s := last;
+            if (s = nil) or
+               not s^.Subnet.Match(ip4) then
+            begin
+              s := GetScope(ip4); // called once per sub-net or incorrect IP
+              if s <> nil then
+                last := s; // is likely not to change for the next line
+            end;
             if s <> nil then
-              last := s; // is likely not to change for the next line
-          end;
-          if s <> nil then
-          begin
-            // add this lease to the internal list of this scope
-            new := s^.NewLease;
-            PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+Unavailable
-            new^.IP4 := ip4;
-            new^.Expired := expiry - boot;
-            if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
-              new^.State := lsOutdated
-            else
-              new^.State := lsAck;
-            inc(entries);
+            begin
+              // add this lease to the internal list of this scope
+              new := s^.NewLease;
+              PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+Unavailable
+              new^.IP4 := ip4;
+              new^.Expired := expiry - boot;
+              if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
+                new^.State := lsOutdated
+              else
+                new^.State := lsAck;
+              inc(entries);
+            end;
           end;
         end;
       end;
-    end;
-    // invalid lines are just skipped
-    p := GotoNextLine(p);
-  until (p = nil) or
-        (p^ = #0);
+      // invalid lines are just skipped
+      p := GotoNextLine(p);
+    until (p = nil) or
+          (p^ = #0);
+  finally
+    fScopeSafe.WriteUnLock;
+  end;
   fLog.Add.Log(sllDebug, 'LoadFromText: leases=%', [entries], self);
   result := true;
 end;
@@ -1686,18 +1741,19 @@ procedure TDhcpProcess.SetFileName(const name: TFileName);
 begin
   if fFileName = name then
     exit;
-  LoadFromFile(name);
+  LoadFromFile(name); // make fScopeSafe.WriteLock/WriteUnlock
   fFileName := name;
 end;
 
-function TDhcpProcess.SaveToFile(const FileName: TFileName): boolean;
+function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
 var
   txt: RawUtf8;
 begin
-  txt := SaveToText;
-  result := FileFromString(txt, FileName);
-  if result then
-    fModifSaved := fModifSequence; // success: won't retry on next OnIdle()
+  txt := SaveToText(@result); // make fScopeSafe.ReadLock/ReadUnLock
+  if FileFromString(txt, FileName) then
+    fModifSaved := fModifSequence // success: won't retry on next OnIdle()
+  else
+    result := -1; // indicates error writing to disk
 end;
 
 function TDhcpProcess.LoadFromFile(const FileName: TFileName): boolean;
@@ -1707,7 +1763,7 @@ begin
   result := false;
   txt := StringFromFile(FileName);
   if txt <> '' then
-    result := LoadFromText(txt);
+    result := LoadFromText(txt); // make fScopeSafe.WriteLock/WriteUnlock
 end;
 
 function TDhcpProcess.ParseFrame(var Data: TDhcpProcessData): boolean;
@@ -1771,251 +1827,256 @@ begin
         [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^], self);
     exit; // invalid or unsupported frame
   end;
-  // detect the proper scope to use from the Gateway IP field or bound server IP
-  if Data.Recv.giaddr <> 0 then
-    // e.g. VLAN 10 relay set giaddr=192.168.10.1
-    Data.Scope := GetScope(Data.Recv.giaddr)
-  else if Data.RecvIp4 <> 0 then
-    // no giaddr: check RecvIp4 bound server IP as set by the UDP server
-    Data.Scope := GetScope(Data.RecvIp4)
-  else
-    // no giaddr nor RecvIp4: default to fScope[0]
-    Data.Scope := pointer(fScope);
-  if Data.Scope = nil then
-  begin
-    if Assigned(fLog) then
-    begin
-      if Data.Recv.giaddr <> 0 then
-        IP4Short(@Data.Recv.giaddr, Data.Ip)
-      else if Data.RecvIp4 <> 0 then
-        IP4Short(@Data.RecvIP4, Data.Ip);
-      fLog.Add.Log(sllDebug, 'ComputeResponse: % % no subnet for % %',
-        [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^], self);
-    end;
-    exit; // MUST NOT respond if no subnet matches giaddr
-  end;
-  // compute the corresponding IPv4 according to the internal lease list
-  result := 0; // no response, but no error
-  Data.Tix32 := GetTickSec;
-  Data.Scope^.Safe.Lock;
+  fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
   try
-    p := Data.Scope^.FindMac(Data.Mac64);
-    case Data.RecvType of
-      dmtDiscover:
-        begin
-          if (p = nil) or    // first time this MAC is seen
-             (p^.IP4 = 0) or // may happen after DECLINE
-             (p^.State = lsReserved) then // reserved = client refused this IP
+    // detect the proper scope to use from the Gateway IP field or bound server IP
+    if Data.Recv.giaddr <> 0 then
+      // e.g. VLAN 10 relay set giaddr=192.168.10.1
+      Data.Scope := GetScope(Data.Recv.giaddr)
+    else if Data.RecvIp4 <> 0 then
+      // no giaddr: check RecvIp4 bound server IP as set by the UDP server
+      Data.Scope := GetScope(Data.RecvIp4)
+    else
+      // no giaddr nor RecvIp4: default to Scope[0]
+      Data.Scope := pointer(fScope);
+    if Data.Scope = nil then
+    begin
+      if Assigned(fLog) then
+      begin
+        if Data.Recv.giaddr <> 0 then
+          IP4Short(@Data.Recv.giaddr, Data.Ip)
+        else if Data.RecvIp4 <> 0 then
+          IP4Short(@Data.RecvIP4, Data.Ip);
+        fLog.Add.Log(sllDebug, 'ComputeResponse: % % no subnet for % %',
+          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^], self);
+      end;
+      exit; // MUST NOT respond if no subnet matches giaddr
+    end;
+    // compute the corresponding IPv4 according to the internal lease list
+    result := 0; // no response, but no error
+    Data.Tix32 := GetTickSec;
+    Data.Scope^.Safe.Lock; // blocking for this subnet
+    try
+      p := Data.Scope^.FindMac(Data.Mac64);
+      case Data.RecvType of
+        dmtDiscover:
           begin
-            // first time seen (most common case), or renewal
-            if Data.RecvLens[doRequestedIp] <> 0 then
+            if (p = nil) or    // first time this MAC is seen
+               (p^.IP4 = 0) or // may happen after DECLINE
+               (p^.State = lsReserved) then // reserved = client refused this IP
             begin
-              Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]);
-              if Data.Ip4 <> 0 then
-                if (not Data.Scope^.SubNet.Match(Data.Ip4)) or
-                   (FastFindIntegerSorted(Data.Scope^.SortedStatic, Data.Ip4) >= 0) or
-                   (Data.Scope^.FindIp4(Data.Ip4) <> nil) then
-                begin
-                  // this IP seems already used by another MAC
-                  if Assigned(fLog) then
+              // first time seen (most common case), or renewal
+              if Data.RecvLens[doRequestedIp] <> 0 then
+              begin
+                Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]);
+                if Data.Ip4 <> 0 then
+                  if (not Data.Scope^.SubNet.Match(Data.Ip4)) or
+                     (FastFindIntegerSorted(Data.Scope^.SortedStatic, Data.Ip4) >= 0) or
+                     (Data.Scope^.FindIp4(Data.Ip4) <> nil) then
                   begin
-                    IP4Short(@Data.Ip4, Data.Ip);
-                    fLog.Add.Log(sllTrace,
-                      'ComputeResponse: DISCOVER % ignored requestedip=% %',
-                      [Data.Mac, Data.Ip, Data.HostName^], self);
+                    // this IP seems already used by another MAC
+                    if Assigned(fLog) then
+                    begin
+                      IP4Short(@Data.Ip4, Data.Ip);
+                      fLog.Add.Log(sllTrace,
+                        'ComputeResponse: DISCOVER % ignored requestedip=% %',
+                        [Data.Mac, Data.Ip, Data.HostName^], self);
+                    end;
+                    Data.Ip4 := 0; // NextIP4
                   end;
-                  Data.Ip4 := 0; // NextIP4
-                end;
-            end;
-            if Data.Ip4 = 0 then
-              Data.Ip4 := Data.Scope^.NextIp4;
-            if Data.Ip4 = 0 then
+              end;
+              if Data.Ip4 = 0 then
+                Data.Ip4 := Data.Scope^.NextIp4;
+              if Data.Ip4 = 0 then
+              begin
+                // IPv4 exhausted: don't return NAK, but silently ignore
+                // - client will retry automatically after a small temporisation
+                fLog.Add.Log(sllWarning,
+                  'ComputeResponse: DISCOVER % exhausted IPv4 %',
+                    [Data.Mac, Data.HostName^], self);
+                exit;
+              end;
+              if p = nil then
+              begin
+                p := Data.Scope^.NewLease;
+                Data.Scope^.LastDiscover := Data.Scope^.Index(p);
+                PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
+              end;
+              p^.IP4 := Data.Ip4;
+            end
+            else
+              // keep existing/previous IP4
+              Data.Ip4 := p^.IP4;
+            // respond with an OFFER
+            p^.State := lsReserved;
+            p^.Expired := Data.Tix32 + Data.Scope^.OfferHolding;
+            Data.SendType := dmtOffer;
+          end;
+        dmtRequest:
+          begin
+            // especially for PXE networks, it is safe and common to ignore
+            // Option 50 and ciaddr in REQUEST and ACK the already OFFERed IP
+            if (p = nil) or
+               (p^.IP4 = 0) or
+               not ((p^.State in [lsReserved, lsAck]) or
+                    ((p^.State = lsOutdated) and
+                     (Data.Scope^.GraceFactor > 1) and
+                     (Data.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
+                     (Data.Tix32 - p^.Expired <
+                        Data.Scope^.LeaseTimeLE * Data.Scope^.GraceFactor))) then
             begin
-              // IPv4 exhausted: don't return NAK, but silently ignore
-              // - client will retry automatically after a small temporisation
-              fLog.Add.Log(sllWarning,
-                'ComputeResponse: DISCOVER % exhausted IPv4 %',
+              fLog.Add.Log(sllDebug,
+                'ComputeResponse: REQUEST % out-of-sync NAK %',
+                  [Data.Mac, Data.HostName^], self);
+              // send a NAK response anyway
+              Data.SendType := dmtNak;
+              Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
+                PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
+              result := FinalizeFrame(Data);
+              exit;
+            end;
+            // respond with an ACK on the known IP
+            Data.Ip4 := p^.IP4;
+            p^.State := lsAck;
+            p^.Expired := Data.Tix32 + Data.Scope^.LeaseTimeLE;
+            Data.SendType := dmtAck;
+          end;
+        dmtDecline:
+          begin
+            // client ARPed the OFFERed IP and detect conflict, so DECLINE it
+            if (p = nil) or
+               (p^.State <> lsReserved) then
+            begin
+              // ensure the server recently OFFERed one IP to that client
+              // (match RFC intent and prevent blind poisoning of arbitrary IPs)
+              fLog.Add.Log(sllDebug,
+                'ComputeResponse: DECLINE % with no previous OFFER %',
                   [Data.Mac, Data.HostName^], self);
               exit;
             end;
-            if p = nil then
+            if (Data.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
+               (fIdleTix <> 0) then  // OnIdle() is actually running
+              if p^.Unavailable < Data.Scope^.MaxDeclinePerSec then // rate limit
+                inc(p^.Unavailable)  // will be reset to 0 by OnIdle()
+              else
+              begin
+                // malicious client poisons the pool by sending repeated DECLINE
+                fLog.Add.Log(sllDebug,
+                  'ComputeResponse: DECLINE % overload', [Data.Mac], self);
+                exit;
+              end;
+            // invalidate OFFERed IP
+            Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]);
+            if (Data.Ip4 <> 0) and // authoritative IP
+               not Data.Scope^.SubNet.Match(Data.Ip4) then // need clean IP
+              Data.Ip4 := 0;
+            if Data.Ip4 = 0 then
+              Data.Ip4 := p^.IP4; // option 50 was not set (or not in our subnet)
+            p^.State := lsUnavailable;
+            p^.IP4 := 0; // invalidate the previous offered IP
+            if Data.Ip4 <> 0 then
             begin
+              // store internally this IP as unavailable for NextIP4
+              if Assigned(fLog) then
+              begin
+                IP4Short(@Data.Ip4, Data.Ip);
+                fLog.Add.Log(sllTrace, 'ComputeResponse: DECLINE % as %',
+                  [Data.Mac, Data.Ip], self);
+              end;
               p := Data.Scope^.NewLease;
-              Data.Scope^.LastDiscover := Data.Scope^.Index(p);
-              PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
+              PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
+              p^.State := lsUnavailable;
+              p^.IP4 := Data.Ip4;
+              p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
             end;
-            p^.IP4 := Data.Ip4;
-          end
-          else
-            // keep existing/previous IP4
-            Data.Ip4 := p^.IP4;
-          // respond with an OFFER
-          p^.State := lsReserved;
-          p^.Expired := Data.Tix32 + Data.Scope^.OfferHolding;
-          Data.SendType := dmtOffer;
-        end;
-      dmtRequest:
-        begin
-          // especially for PXE networks, it is safe and common to ignore
-          // Option 50 and ciaddr in REQUEST and just ACK the already OFFERed IP
-          if (p = nil) or
-             (p^.IP4 = 0) or
-             not ((p^.State in [lsReserved, lsAck]) or
-                  ((p^.State = lsOutdated) and
-                   (Data.Scope^.GraceFactor > 1) and
-                   (Data.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
-                   (Data.Tix32 - p^.Expired <
-                      Data.Scope^.LeaseTimeLE * Data.Scope^.GraceFactor))) then
-          begin
-            fLog.Add.Log(sllDebug,
-              'ComputeResponse: REQUEST % out-of-sync NAK %',
-                [Data.Mac, Data.HostName^], self);
-            // send a NAK response anyway
-            Data.SendType := dmtNak;
-            Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
-              PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
-            result := FinalizeFrame(Data);
-            exit;
+            inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+            exit; // server MUST NOT respond to a DECLINE message
           end;
-          // respond with an ACK on the known IP
-          Data.Ip4 := p^.IP4;
-          p^.State := lsAck;
-          p^.Expired := Data.Tix32 + Data.Scope^.LeaseTimeLE;
-          Data.SendType := dmtAck;
-        end;
-      dmtDecline:
-        begin
-          // client ARPed the OFFERed IP and detect conflict, so DECLINE it
-          if (p = nil) or
-             (p^.State <> lsReserved) then
+        dmtRelease:
           begin
-            // ensure the server recently OFFERed one IP to that client
-            // (match RFC intent and prevent blind poisoning of arbitrary IPs)
-            fLog.Add.Log(sllDebug,
-              'ComputeResponse: DECLINE % with no previous OFFER %',
-                [Data.Mac, Data.HostName^], self);
-            exit;
-          end;
-          if (Data.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
-             (fIdleTix <> 0) then  // OnIdle() is actually running
-            if p^.Unavailable < Data.Scope^.MaxDeclinePerSec then // rate limit
-              inc(p^.Unavailable)  // will be reset to 0 by OnIdle()
+            // client informs the DHCP server that it no longer needs the lease
+            if (p = nil) or
+               (p^.IP4 <> Data.Recv.ciaddr) or
+               not (p^.State in [lsAck, lsOutdated]) then
+              // detect and ignore out-of-synch or malicious client
+              fLog.Add.Log(sllDebug,
+                'ComputeResponse: RELEASE % unexpected', [Data.Mac], self)
             else
             begin
-              // malicious client poisons the pool by sending repeated DECLINE
-              fLog.Add.Log(sllDebug,
-                'ComputeResponse: DECLINE % overload', [Data.Mac], self);
-              exit;
+              if Assigned(fLog) then
+              begin
+                IP4Short(@p^.IP4, Data.Ip);
+                fLog.Add.Log(sllTrace, 'ComputeResponse: RELEASE % as %',
+                  [Data.Mac, Data.Ip], self);
+              end;
+              Data.Scope^.ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
+              inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
             end;
-          // invalidate OFFERed IP
-          Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]); // authoritative IP
-          if (Data.Ip4 <> 0) and
-             not Data.Scope^.SubNet.Match(Data.Ip4) then // need clean IP
-            Data.Ip4 := 0;
-          if Data.Ip4 = 0 then
-            Data.Ip4 := p^.IP4; // option 50 was not set (or not in our subnet)
-          p^.State := lsUnavailable;
-          p^.IP4 := 0; // invalidate the previous offered IP
-          if Data.Ip4 <> 0 then
+            exit; // server MUST NOT respond to a RELEASE message
+          end;
+        dmtInform:
           begin
-            // store internally this IP as unavailable for NextIP4
-            if Assigned(fLog) then
+            // client requests configuration options for its static IP
+            Data.Ip4 := Data.Recv.ciaddr;
+            if ((p <> nil) and
+                ((p^.Unavailable >= MAX_INFORM) or // rate limit to 3 per sec
+                 not (p^.State in [lsUnavailable, lsOutdated]))) or
+               not Data.Scope^.Subnet.Match(Data.Ip4) then
             begin
               IP4Short(@Data.Ip4, Data.Ip);
-              fLog.Add.Log(sllTrace, 'ComputeResponse: DECLINE % as %',
+              fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % unexpected %',
                 [Data.Mac, Data.Ip], self);
+              exit;
             end;
-            p := Data.Scope^.NewLease;
-            PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
+            // respond with an ACK and its options (but no timeout values)
+            if p = nil then
+            begin
+              // create a new lease for this MAC
+              p := Data.Scope^.NewLease;
+              PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
+              inc(p^.Unavailable);            // will be reset to 0 by OnIdle()
+            end
+            else
+            begin
+              inc(p^.Unavailable);            // will be reset to 0 by OnIdle()
+              if p^.IP4 <> Data.Ip4 then
+              begin
+                // create a new MAC-free lease for this IP
+                p := Data.Scope^.NewLease;
+                PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
+              end;
+            end;
             p^.State := lsUnavailable;
             p^.IP4 := Data.Ip4;
             p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
+            Data.SendType := dmtAck;
           end;
-          inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-          exit; // server MUST NOT respond to a DECLINE message
-        end;
-      dmtRelease:
-        begin
-          // client informs the DHCP server that it no longer needs the lease
-          if (p = nil) or
-             (p^.IP4 <> Data.Recv.ciaddr) or
-             not (p^.State in [lsAck, lsOutdated]) then
-            // detect and ignore out-of-synch or malicious client
-            fLog.Add.Log(sllDebug,
-              'ComputeResponse: RELEASE % unexpected', [Data.Mac], self)
-          else
-          begin
-            if Assigned(fLog) then
-            begin
-              IP4Short(@p^.IP4, Data.Ip);
-              fLog.Add.Log(sllTrace, 'ComputeResponse: RELEASE % as %',
-                [Data.Mac, Data.Ip], self);
-            end;
-            Data.Scope^.ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
-            inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-          end;
-          exit; // server MUST NOT respond to a RELEASE message
-        end;
-      dmtInform:
-        begin
-          // client requests configuration options for its static IP
-          Data.Ip4 := Data.Recv.ciaddr;
-          if ((p <> nil) and
-              ((p^.Unavailable >= MAX_INFORM) or // rate limit to 3 per sec
-               not (p^.State in [lsUnavailable, lsOutdated]))) or
-             not Data.Scope^.Subnet.Match(Data.Ip4) then
-          begin
-            IP4Short(@Data.Ip4, Data.Ip);
-            fLog.Add.Log(sllDebug,
-              'ComputeResponse: INFORM % unexpected %', [Data.Mac, Data.Ip], self);
-            exit;
-          end;
-          // respond with an ACK and its options (but no timeout values)
-          if p = nil then
-          begin
-            // create a new lease for this MAC
-            p := Data.Scope^.NewLease;
-            PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
-            inc(p^.Unavailable);            // will be reset to 0 by OnIdle()
-          end
-          else
-          begin
-            inc(p^.Unavailable);            // will be reset to 0 by OnIdle()
-            if p^.IP4 <> Data.Ip4 then
-            begin
-              // create a new MAC-free lease for this IP
-              p := Data.Scope^.NewLease;
-              PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
-            end;
-          end;
-          p^.State := lsUnavailable;
-          p^.IP4 := Data.Ip4;
-          p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
-          Data.SendType := dmtAck;
-        end;
-    else
-      exit; // paranoid
+      else
+        exit; // paranoid
+      end;
+    finally
+      Data.Scope^.Safe.UnLock;
     end;
+    // compute the dmtOffer/dmtAck response frame over the very same xid
+    if Assigned(fLog) or
+       Assigned(fOnComputeResponse) then
+      IP4Short(@Data.Ip4, Data.Ip);
+    if Assigned(fLog) then
+      with fLog.Family do
+        if sllTrace in Level then
+          Add.Log(sllTrace, 'ComputeResponse: % % into % % %',
+            [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType],
+             Data.Ip, Data.HostName^], self);
+    Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
+      PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
+    Data.Send.ciaddr := Data.Ip4;
+    Data.Scope^.AddOptions(Data.SendEnd, Data.RecvType <> dmtInform);
+    // TODO: IPXE host/file options
+    result := FinalizeFrame(Data); // callback + option 82 + length
+    inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
   finally
-    Data.Scope^.Safe.UnLock;
+    fScopeSafe.ReadUnLock;
   end;
-  // compute the dmtOffer/dmtAck response frame over the very same xid
-  if Assigned(fLog) or
-     Assigned(fOnComputeResponse) then
-    IP4Short(@Data.Ip4, Data.Ip);
-  if Assigned(fLog) then
-    with fLog.Family do
-      if sllTrace in Level then
-        Add.Log(sllTrace, 'ComputeResponse: % % into % % %',
-          [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType], Data.Ip,
-           Data.HostName^], self);
-  Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
-    PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
-  Data.Send.ciaddr := Data.Ip4;
-  Data.Scope^.AddOptions(Data.SendEnd, Data.RecvType <> dmtInform);
-  // TODO: IPXE host/file options
-  result := FinalizeFrame(Data); // callback + option 82 + length
-  inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
 end;
 
 
