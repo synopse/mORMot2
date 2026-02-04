@@ -1570,37 +1570,42 @@ end;
 
 function TDhcpProcess.SaveToText(SavedCount: PInteger): RawUtf8;
 var
-  temp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer;
   W: TTextWriter;
   tix32, saved, n: cardinal;
   boot: TUnixTime;
   s: PDhcpScope;
 begin
-  result := CRLF; // return something not void
-  if fScope = nil then
-    exit;
+  saved := 0;
+  result := CRLF; // returns something not void
   tix32 := GetTickSec;
   boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
-  if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
-    exit;
-  // save all leases in all scopes in dnsmasq format
-  saved := 0;
-  W := TTextWriter.CreateOwnedStream(temp);
-  try
-    s := pointer(fScope);
-    if s <> nil then
+  if (fScope <> nil) and
+     (boot > UNIXTIME_MINIMAL) then // we should have booted after 08 Dec 2016
+  begin
+    n := Count;
+    if n <> 0 then
     begin
-      n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
-      repeat
-        inc(saved, s^.TextWrite(W, tix32, boot));
-        inc(s);
-        dec(n);
-      until n = 0;
+      // save all leases in all scopes in dnsmasq format
+      n := MinPtrUInt(1 shl 20, (n + length(fScope)) * 46); // up to 1MB buffer
+      W := TTextWriter.CreateOwnedStream(tmp, n);
+      try
+        s := pointer(fScope);
+        if s <> nil then
+        begin
+          n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+          repeat
+            inc(saved, s^.TextWrite(W, tix32, boot, {localcopy=}false));
+            inc(s);
+            dec(n);
+          until n = 0;
+        end;
+        if W.TextLength <> 0 then
+          W.SetText(result);
+      finally
+        W.Free;
+      end;
     end;
-    if W.TextLength <> 0 then
-      W.SetText(result);
-  finally
-    W.Free;
   end;
   if SavedCount <> nil then
     SavedCount^ := saved;
