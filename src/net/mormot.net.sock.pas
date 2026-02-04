@@ -1715,6 +1715,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
+    /// return the CIDR sub-network as standard '1.2.3.4/24' text
+    function ToShort: TShort23;
   end;
 
   /// store one TIp4SubNets CIDR mask definition
@@ -5426,6 +5428,18 @@ var
 begin
   result := NetIsIP4(pointer(ip4), @ip32) and
             Match(ip32{%H-});
+end;
+
+function TIp4SubNet.ToShort: TShort23;
+var
+  prefix: cardinal;
+begin
+  IP4Short(@ip, result);
+  prefix := IP4Prefix(mask);
+  if prefix = 0 then
+    exit;
+  AppendShortChar('/', @result);
+  AppendShortCardinal(prefix, result);
 end;
 
 
