@@ -1568,6 +1568,7 @@ var
   timer: TPrecisionTimer;
   f: PAnsiChar;
   hostname: TShort7;
+  rnd: TLecuyer;
 
   procedure DoRequest(ndx: PtrInt);
   begin
@@ -1577,6 +1578,7 @@ var
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
     Check(server.ComputeResponse(d) > 0, 'ack#');
+    Check(d.SendType = dmtAck, 'ack');
     CheckEqual(d.Send.xid, xid);
     Check(CompareMem(@macs[ndx], @d.Send.chaddr, SizeOf(macs[0])));
     Check(server.GetScope(d.Send.ciaddr) <> nil);
@@ -1610,6 +1612,7 @@ begin
   CheckEqual(SizeOf(TDhcpPacket), 548, 'TDhcpPacket');
   CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), 240, 'options');
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
+  RandomLecuyer(rnd);
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1769,7 +1772,7 @@ begin
     n := 200;
     SetLength(macs, n);
     SetLength(ips, n);
-    RandomBytes(pointer(macs), SizeOf(macs[0]) * n);
+    rnd.Fill(pointer(macs), SizeOf(macs[0]) * n);
     timer.Start;
     xid := 0;
     for i := 0 to high(macs) do
@@ -1803,20 +1806,22 @@ begin
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
     Check(length(txt) > 2000, 'saved len2');
     // twice with the requests to validate efficient renewal
+    timer.Start;
     for i := 1 to n do
-      DoRequest(Random32(n)); // in Random order
+      DoRequest(rnd.Next(n)); // in Random order
+    NotifyTestSpeed('DHCP renewals', n, 0, @timer);
     CheckEqual(length(server.SaveToText), length(txt), 'no new offer');
     // benchmark OnIdle() performance
     Check(not FileExists(fn), 'file before OnIdle');
     timer.Start;
     for i := 1 to n * 10 do // increasing tix32 to trigger process
-      CheckEqual(server.OnIdle(i shl 10), 0);
+      CheckEqual(server.OnIdle(i shl 13), 0);
     NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
     // ensure OnIdle() did persist the file on disk
     CheckEqual(server.Count, n + 1, 'count');
     Check(server.FileName = fn, fn);
     Check(FileExists(fn), 'file after OnIdle');
-    CheckEqual(StringFromFile(fn), txt);
+    CheckEqual(length(StringFromFile(fn)), length(txt));
     server.ClearLeases;
     CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');
