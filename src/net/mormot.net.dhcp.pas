@@ -594,7 +594,8 @@ type
     /// restore the internal entry list using SaveToText() format
     function LoadFromText(const Text: RawUtf8): boolean;
     /// persist the internal entry list using SaveToText() format
-    function SaveToFile(const FileName: TFileName): boolean;
+    // - returns the number of entries stored in the file, or -1 on write error
+    function SaveToFile(const FileName: TFileName): integer;
     /// restore the internal entry list using SaveToText() format
     // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
@@ -1521,7 +1522,7 @@ end;
 function TDhcpProcess.OnIdle(tix64: Int64): integer;
 var
   tix32, n: cardinal;
-  saved: boolean;
+  saved: integer;
   s: PDhcpScope;
 begin
   // make periodical process at most every second
@@ -1563,8 +1564,7 @@ begin
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
   // - we mitigate aggressive clients via the Unavailable counter anyway
   if Assigned(fLog) and
-     ((result <> 0) or
-      saved) then
+     ((result or saved) <> 0) then
     fLog.Add.Log(sllTrace, 'OnIdle: outdated=% saved=%', [result, saved], self);
 end;
 
