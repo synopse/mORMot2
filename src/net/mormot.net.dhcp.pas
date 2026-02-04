@@ -11,9 +11,16 @@ unit mormot.net.dhcp;
     - Middle-Level DHCP Scope and Lease Logic
     - High-Level Multi-Scope DHCP Server Processing Logic
 
-   Purpose of this DCHP Server is not to be fully featured, but simple and
-   compliant enough to implement e.g. a local PXE environment with our
-   mormot.net.tftp.server.pas unit.
+   Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
+   Background lease persistence using dnsmasq text file.
+   Scale up to dozen of thousands of leases with minimal RAM/CPU consumption.
+   Support VLAN via SubNets / Scope and Relay Agent 82 Option.
+   Prevent most client abuse with proper rate limiting.
+   Cross-Platform on Windows, Linux and MacOS.
+   Meaningful logging of the actual process.
+   Easy configuration via JSON or INI files.
+   Expandable in code via callbacks or virtual methods.
+   e.g. as full local PXE environment with our mormot.net.tftp.server.pas unit
 
   *****************************************************************************
 }
