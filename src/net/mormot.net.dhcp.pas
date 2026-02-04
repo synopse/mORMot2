@@ -31,6 +31,7 @@ uses
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.log,
   mormot.net.sock;
 
@@ -47,6 +48,9 @@ const
   BOOT_REPLY   = 2;
 
 type
+  /// Exception class raised by this unit
+  EDhcp = class(ESynException);
+
   /// a DHCP raw UDP packet message as defined in RFC 2131 from BOOTP layout
   TDhcpPacket = packed record
     /// BOOTP type i.e. BOOT_REQUEST/BOOT_REPLY, not TDhcpMessageType
@@ -104,29 +108,51 @@ type
     dmtTls);
 
   /// the main DHCP options - at least those parsed and recognized in this unit
+  // - doPadding is Padding option 0 (not a true value)
+  // - doSubnetMask is Subnet Mask option 1 (255.255.255.0)
+  // - doRouter is Default Gateway option 3 (192.168.1.1)
+  // - doDns is DNS Servers option 6 (8.8.8.8, 8.8.4.4)
+  // - doHostName is Hostname option 12 (client01)
+  // - doDomainName is Domain Name option 15 (example.local)
+  // - doBroadcastAddr is Broadcast Address option 28 (192.168.1.255)
+  // - doNtpServer is NTP Server option 42
+  // - doRequestedIp is Requested IP Address option 50 (0.0.0.0)
+  // - doLeaseTimeValue is IP Lease Duration in seconds option 51 (86400 for 24h)
+  // - doMessageType is DHCP Message Type option 53 (TDhcpMessageType)
+  // - doServerIdentifier is DHCP Server Identifier option 54 (192.168.1.1)
+  // - doParameterRequestList is Parameter Request List option 55 (1,3,6,15,51,54)
+  // - doRenewalTimeValue is Renewal Time Value (T1) in seconds option 58 (43200 for 12h)
+  // - doRebindingTimeValue is Rebinding Time Value (T2) in seconds option 59 (75600 for 21h)
+  // - doVendorClassIdentifier is Vendor Class Identifier (PXE RFC 2132) option 60 (PXEClient)
+  // - doClientIdentifier is Client Identifier option 61 ($01 + MAC)
+  // - doTftpServerName is TFTP Server Name (PXE) option 66 (192.168.10.10 or host name)
+  // - doBootfileName is Bootfile Name (PXE) option 67 (pxelinux.0)
+  // - doUserClass is User Class (PXE RFC 3004) option 77 (PXEClient:Arch:00000)
+  // - doRelayAgent is Relay Agent (RFC 3046) option 82
+  // - doEnding is End Of Options marker option 255 (not a true value)
   TDhcpOption = (
-   doPadding,               // Padding value 0
-   doSubnetMask,            // Subnet Mask 1 (255.255.255.0)
-   doRouter,                // Default Gateway 3 (192.168.1.1)
-   doDns,                   // DNS Servers 6 (8.8.8.8, 8.8.4.4)
-   doHostName,              // Hostname 12 (client01)
-   doDomainName,            // Domain Name 15 (example.local)
-   doBroadcastAddr,         // Broadcast Address 28 (192.168.1.255)
-   doNtpServer,             // NTP Server 42
-   doRequestedIp,           // Requested IP Address 50 (0.0.0.0)
-   doLeaseTimeValue,        // IP Lease Duration in seconds 51 (86400 for 24h)
-   doMessageType,           // DHCP Message Type 53 (TDhcpMessageType)
-   doServerIdentifier,      // DHCP Server Identifier 54 (192.168.1.1)
-   doParameterRequestList,  // Parameter Request List 55 (1,3,6,15,51,54)
-   doRenewalTimeValue,      // Renewal Time Value (T1) in seconds 58 (43200 for 12h)
-   doRebindingTimeValue,    // Rebinding Time Value (T2) in seconds 59 (75600 for 21h)
-   doVendorClassIdentifier, // Vendor Class Identifier (PXE RFC 2132) 60 (PXEClient)
-   doClientIdentifier,      // Client Identifier 61 ($01 + MAC)
-   doTftpServerName,        // TFTP Server Name (PXE) 66 (192.168.10.10 or host name)
-   doBootfileName,          // Bootfile Name (PXE) 67 (pxelinux.0)
-   doUserClass,             // User Class (PXE RFC 3004) 77 (PXEClient:Arch:00000)
-   doRelayAgent,            // Relay Agent (RFC 3046) 82
-   doEnding                 // End Of Options marker 255
+   doPadding,
+   doSubnetMask,
+   doRouter,
+   doDns,
+   doHostName,
+   doDomainName,
+   doBroadcastAddr,
+   doNtpServer,
+   doRequestedIp,
+   doLeaseTimeValue,
+   doMessageType,
+   doServerIdentifier,
+   doParameterRequestList,
+   doRenewalTimeValue,
+   doRebindingTimeValue,
+   doVendorClassIdentifier,
+   doClientIdentifier,
+   doTftpServerName,
+   doBootfileName,
+   doUserClass,
+   doRelayAgent,
+   doEnding
  );
  /// set of supported DHCP options
  TDhcpOptions = set of TDhcpOption;
@@ -166,10 +192,9 @@ procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
 procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
 
 type
- /// efficient DhcpParse() resultset
- // - store the length position of an option in TDhcpPacket.options[]
+ /// efficient DhcpParse() results as O(1) lookup of recognized options
  // - 0 means that this TDhcpOption was not transmitted
- // - very efficient O(1) lookup of recognized options
+ // - or store the position of an option length in TDhcpPacket.options[]
  TDhcpParsed = array[TDhcpOption] of byte;
 
 /// parse a raw DHCP binary frame and return the length of all recognized options
@@ -342,9 +367,6 @@ type
 
   /// a dynamic array of TDhcpLease entries, as stored within TDhcpProcess
   TLeaseDynArray = array of TDhcpLease;
-
-  /// Exception class raised by this unit
-  EDhcp = class(ESynException);
 
   /// data context used by TDhcpProcess.ProcessUdpFrame
   // - and as supplied to TOnDhcpProcess callback
@@ -556,7 +578,7 @@ begin
 end;
 
 const
-  DHCP_MAGIC_COOKIE = $63538263;  // little-endian 'c' 'S' 'c' 'C'
+  DHCP_MAGIC_COOKIE = $63538263;  // little-endian 'cScC'
 
   DHCP_BOOT: array[TDhcpMessageType] of byte = (
     0,            // dmtUndefined
