@@ -1431,7 +1431,6 @@ function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
 
 // internal raw functions used to initialize Base32/58/64/64uri decoding lookup
 procedure FillLookupTable(s, d: PByteArray; i: PtrUInt);
-  {$ifndef CPUX86} inline; {$endif}
 procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
 
 /// fill a RawBlob from TEXT-encoded blob data
