@@ -23,15 +23,15 @@ Sample <NN> - <Description>
 ┌─────────────────────────────────────┐
 │  Your Name:                         │  Top: 16
 │  ┌──────────┐  ┌─────────────────┐  │  Top: 36
-│  │ NameEdit │  │ ButtonFind      │  │
+│  │ EditName │  │ ButtonFind      │  │
 │  └──────────┘  └─────────────────┘  │
 │  ┌─────────────────────────────┐    │  Top: 72
-│  │      QuestionMemo           │    │
+│  │      MemoQuestion           │    │
 │  └─────────────────────────────┘    │
 │  Names:                             │  Top: 168
 │  ┌─────────────────────────────┐    │  Top: 188
 │  │                             │    │
-│  │      NamesList              │    │
+│  │      ListNames              │    │
 │  │                             │    │
 │  └─────────────────────────────┘    │
 │  ┌────┐ ┌────┐ ┌──────┐ ┌────┐     │  Top: 328
@@ -44,12 +44,12 @@ Sample <NN> - <Description>
 
 | Component | Left | Top | Width | Height | TabOrder |
 |-----------|------|-----|-------|--------|----------|
-| LabelEdit | 32 | 16 | 71 | 16 | - |
-| NameEdit | 32 | 36 | 121 | 24 | 0 |
+| LabelName | 32 | 16 | 71 | 16 | - |
+| EditName | 32 | 36 | 121 | 24 | 0 |
 | ButtonFind | 184 | 36 | 161 | 25 | 1 |
-| QuestionMemo | 32 | 72 | 313 | 81 | 2 |
-| LabelList | 32 | 168 | 50 | 16 | - |
-| NamesList | 32 | 188 | 313 | 121 | 3 |
+| MemoQuestion | 32 | 72 | 313 | 81 | 2 |
+| LabelNames | 32 | 168 | 50 | 16 | - |
+| ListNames | 32 | 188 | 313 | 121 | 3 |
 | ButtonNew | 32 | 328 | 70 | 25 | 4 |
 | ButtonSave | 113 | 328 | 70 | 25 | 5 |
 | ButtonDelete | 194 | 328 | 70 | 25 | 6 |
@@ -69,32 +69,48 @@ ButtonQuit.Caption := 'Quit';
 
 | Type | Prefix | Example |
 |------|--------|---------|
-| TLabel | Label | LabelEdit, LabelList |
-| TEdit | - | NameEdit |
-| TMemo | - | QuestionMemo |
-| TListBox | - | NamesList |
+| TLabel | Label | LabelName, LabelNames |
+| TEdit | Edit | EditName |
+| TMemo | Memo | MemoQuestion |
+| TListBox | List | ListNames |
 | TButton | Button | ButtonNew, ButtonSave, ButtonDelete, ButtonQuit |
 
 ## Event Handlers
 
 ```pascal
-FormCreate          - Initialize Model, Client, load NamesList
+FormCreate          - Initialize Model, Client, load ListNames
 FormDestroy         - Free Client, Model
-ButtonFindClick     - Jump to Name in NamesList
-ButtonNewClick      - Clear NameEdit and QuestionMemo
+ButtonFindClick     - Jump to Name in ListNames
+ButtonNewClick      - Clear EditName and MemoQuestion
 ButtonSaveClick     - Add (no selection) or Update (selection)
-ButtonDeleteClick   - Delete selected record
+ButtonDeleteClick   - Confirm, then delete selected record
 ButtonQuitClick     - Close form
-NamesListClick      - Show selected record in fields
+ListNamesClick      - Show selected record in fields
+```
+
+## Private Methods
+
+```pascal
+function GetSelectedID: TID;   - Return ID of selected item (0 if none)
+procedure RefreshNamesList;    - Reload ListNames from database
 ```
 
 ## Save Logic
 
 ```
-if NamesList.ItemIndex >= 0 then
+if ListNames.ItemIndex >= 0 then
   Update existing record
 else
   Add new record
+```
+
+## Delete Logic
+
+```
+if ListNames.ItemIndex < 0 then
+  ShowMessage('No record selected')
+else if MessageDlg confirms then
+  Delete record and refresh list
 ```
 
 ## Margins
