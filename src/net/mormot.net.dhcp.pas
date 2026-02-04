@@ -38,10 +38,48 @@ uses
 { **************** Low-Level DHCP Protocol Definitions }
 
 const
+  /// regular UDP port of DHCP server
   DHCP_SERVER_PORT = 67;
+  /// regular UDP port of DHCP client
   DHCP_CLIENT_PORT = 68;
 
+  BOOT_REQUEST = 1;
+  BOOT_REPLY   = 2;
+
 type
+  /// a DHCP raw UDP packet message as defined in RFC 2131 from BOOTP layout
+  TDhcpPacket = packed record
+    /// BOOTP type i.e. BOOT_REQUEST/BOOT_REPLY, not TDhcpMessageType
+    op:     byte;
+    /// hardware type, mostly ARPHRD_ETHER = 1
+    htype:  byte;
+    /// hardware number of bytes, mostly 6 = SizeOf(TNetMac)
+    hlen:   byte;
+    hops:   byte;
+    /// request transaction sequence
+    xid:    cardinal;
+    secs:   word;
+    flags:  word;
+    /// client IP address
+    ciaddr: TNetIP4;
+    /// your IP address
+    yiaddr: TNetIP4;
+    /// server IP address
+    siaddr: TNetIP4;
+    /// gateway IP address
+    giaddr: TNetIP4;
+    /// client MAC address - only chaddr[0..5] for htype=1 and hlen=6
+    chaddr: array[0..15] of byte;
+    sname:  array[0..63] of byte;
+    file_:  array[0..127] of byte;
+    /// magic cookie for DHCP encapsulated in BOOTP message
+    cookie: cardinal;
+    /// the raw DHCP options, as type/len/value triplets, ending with $ff
+    options: array[0..307] of byte;
+  end;
+  /// points to a DHCP raw UDP packet message
+  PDhcpPacket = ^TDhcpPacket;
+
   /// the DHCP message types as defined in RFC 2132, 3203, 4388, 6926, 7724
   // - ord() value does match the actual byte value within the DHCP frame
   TDhcpMessageType = (
@@ -65,35 +103,14 @@ type
     dmtLeaseQueryStatus,
     dmtTls);
 
-  /// a DHCP UDP packet message as defined in RFC 2131 / BOOTP
-  TDhcpPacket = packed record
-    op:     byte;  // BOOTP type, not TDhcpMessageType
-    htype:  byte;  // hardware type, mostly
-    hlen:   byte;
-    hops:   byte;
-    xid:    cardinal;
-    secs:   word;
-    flags:  word;
-    ciaddr: TNetIP4;
-    yiaddr: TNetIP4;
-    siaddr: TNetIP4;
-    giaddr: TNetIP4;
-    chaddr: array[0..15] of byte;
-    sname:  array[0..63] of byte;
-    file_:  array[0..127] of byte;
-    cookie: cardinal;
-    options: array[0..307] of byte;
-  end;
-  PDhcpPacket = ^TDhcpPacket;
-
-  /// the main DHCP options
+  /// the main DHCP options - at least those parsed and recognized in this unit
   TDhcpOption = (
    doPadding,               // Padding value 0
    doSubnetMask,            // Subnet Mask 1 (255.255.255.0)
    doRouter,                // Default Gateway 3 (192.168.1.1)
    doDns,                   // DNS Servers 6 (8.8.8.8, 8.8.4.4)
    doHostName,              // Hostname 12 (client01)
-   doDomainName,            // Domain Name  15 (example.local)
+   doDomainName,            // Domain Name 15 (example.local)
    doBroadcastAddr,         // Broadcast Address 28 (192.168.1.255)
    doNtpServer,             // NTP Server 42
    doRequestedIp,           // Requested IP Address 50 (0.0.0.0)
@@ -116,11 +133,15 @@ type
  /// pointer to a set of supported DHCP options
  PDhcpOptions = ^TDhcpOptions;
 
+var
+  /// trimmed stUpperCase value of each DHCP message, e.g. 'DISCOVER' or 'ACK'
+  DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
+
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
 function ToText(opt: TDhcpOption): PShortString; overload;
 
 const
-  /// 1,3,6,15,28 options as used for DhcpClient()
+  /// 1,3,6,15,28 options as used by default for DhcpClient()
   DHCP_REQUEST = [doSubnetMask, doRouter, doDns, doDomainName, doBroadcastAddr];
 
 /// initialize a DHCP client discover/request packet
@@ -173,10 +194,6 @@ function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 
 /// decode the lens[doParameterRequestList] within dhcp^.option[]
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
-
-const
-  BOOT_REQUEST = 1;
-  BOOT_REPLY   = 2;
 
 
 { **************** High-Level DHCP Server }
@@ -393,7 +410,8 @@ type
     fFileName: TFileName;
     fOnProcessUdpFrame: TOnDhcpProcess;
     procedure SetFileName(const name: TFileName);
-    function FinalizeProcessUdpFrame(var Data: TDhcpProcessData): PtrInt; virtual;
+    function FinalizeUdpFrame(var Data: TDhcpProcessData): PtrInt; virtual;
+    function ParseUdpFrame(var Data: TDhcpProcessData): boolean; virtual;
     // low-level methods, thread-safe by the caller making fSafe.Lock/UnLock
     function FindMac(mac: Int64): PDhcpLease;
     function FindIp4(ip4: TNetIP4): PDhcpLease;
@@ -476,9 +494,6 @@ implementation
 
 
 { **************** Low-Level DHCP Protocol Definitions }
-
-var
-  DHCP_TXT: array[TDhcpMessageType] of RawUtf8; // stUpperCase
 
 function ToText(dmt: TDhcpMessageType): PShortString;
 begin
@@ -1288,7 +1303,28 @@ begin
     result := LoadFromText(txt);
 end;
 
-function TDhcpProcess.FinalizeProcessUdpFrame(var Data: TDhcpProcessData): PtrInt;
+function TDhcpProcess.ParseUdpFrame(var Data: TDhcpProcessData): boolean;
+begin
+  Data.Ip4 := 0;
+  Data.Mac64 := 0;
+  Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
+  Data.Ip[0] := #0;
+  if (Data.Mac64 <> 0) and
+     (Assigned(fLog) or
+      Assigned(fOnProcessUdpFrame)) then
+  begin
+    Data.Mac[0] := #17;
+    ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
+  end
+  else
+    Data.Mac[0] := #0;
+  Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
+  result := (Data.Mac64 <> 0) and
+            (Data.RecvType in
+              [dmtDiscover, dmtRequest, dmtDecline, dmtRelease, dmtInform]);
+end;
+
+function TDhcpProcess.FinalizeUdpFrame(var Data: TDhcpProcessData): PtrInt;
 begin
   // optional callback support
   if Assigned(fOnProcessUdpFrame) then
@@ -1314,29 +1350,14 @@ end;
 function TDhcpProcess.ProcessUdpFrame(var Data: TDhcpProcessData): PtrInt;
 var
   p: PDhcpLease;
+  f: PAnsiChar;
 begin
   result := -1; // error
   // do nothing on missing Setup() or after Shutdown
   if fSubnet.mask = 0 then
     exit;
   // parse and validate the request
-  Data.Ip4 := 0;
-  Data.Mac64 := 0;
-  Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
-  Data.Ip[0] := #0;
-  if (Data.Mac64 <> 0) and
-     (Assigned(fLog) or
-      Assigned(fOnProcessUdpFrame)) then
-  begin
-    Data.Mac[0] := #17;
-    ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
-  end
-  else
-    Data.Mac[0] := #0;
-  Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
-  if (Data.Mac64 = 0) or
-     not (Data.RecvType in
-            [dmtDiscover, dmtRequest, dmtDecline, dmtRelease, dmtInform]) then
+  if not ParseUdpFrame(Data) then
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ProcessUdpFrame: % % unexpected %',
@@ -1421,7 +1442,7 @@ begin
             Data.SendType := dmtNak;
             Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
               PNetMac(@Data.Mac64)^, fServerIdentifier);
-            result := FinalizeProcessUdpFrame(Data);
+            result := FinalizeUdpFrame(Data);
             exit;
           end;
           // respond with an ACK on the known IP
@@ -1556,24 +1577,25 @@ begin
         Add.Log(sllTrace, 'ProcessUdpFrame: % % into % % %',
           [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType], Data.Ip,
            Data.HostName^], self);
-  Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
+  f := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
     PNetMac(@Data.Mac64)^, fServerIdentifier);
   Data.Send.ciaddr := Data.Ip4;
-  DhcpAddOption(Data.SendEnd, doSubnetMask, @fSubnetMask);
+  DhcpAddOption(f, doSubnetMask, @fSubnetMask);
   if fBroadcast <> 0 then
-    DhcpAddOption(Data.SendEnd, doBroadcastAddr, @fBroadcast);
+    DhcpAddOption(f, doBroadcastAddr, @fBroadcast);
   if fGateway <> 0 then
-    DhcpAddOption(Data.SendEnd, doRouter, @fGateway);
+    DhcpAddOption(f, doRouter, @fGateway);
   if fDnsServer <> nil then
-    DhcpAddOptions(Data.SendEnd, doDns, pointer(fDnsServer));
+    DhcpAddOptions(f, doDns, pointer(fDnsServer));
   if Data.RecvType <> dmtInform then // static INFORM don't need timeouts
   begin
-    DhcpAddOption(Data.SendEnd, doLeaseTimeValue, @fLeaseTime); // big-endian
-    DhcpAddOption(Data.SendEnd, doRenewalTimeValue, @fRenewalTime);
-    DhcpAddOption(Data.SendEnd, doRebindingTimeValue, @fRebinding);
+    DhcpAddOption(f, doLeaseTimeValue,     @fLeaseTime); // big-endian
+    DhcpAddOption(f, doRenewalTimeValue,   @fRenewalTime);
+    DhcpAddOption(f, doRebindingTimeValue, @fRebinding);
   end;
   // TODO: IPXE host/file options
-  result := FinalizeProcessUdpFrame(Data); // callback + option 82 + length
+  Data.SendEnd := f;
+  result := FinalizeUdpFrame(Data); // callback + option 82 + length
   inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
 end;
 
