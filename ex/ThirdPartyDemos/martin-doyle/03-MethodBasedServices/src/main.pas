@@ -72,7 +72,7 @@ var
   Response: RawUTF8;
   Doc: TDocVariantData;
   i: Integer;
-  ID: TID;
+  ID: Int64;
   Name: RawUTF8;
 begin
   ListNames.Items.Clear;
@@ -81,7 +81,7 @@ begin
     Doc.InitJSON(Response);
     for i := 0 to Doc.Count - 1 do
     begin
-      ID := TID(Int64(Doc.Values[i].ID));
+      VariantToInt64(Doc.Values[i].ID, ID);
       Name := VariantToUTF8(Doc.Values[i].Name);
       ListNames.Items.AddObject(UTF8ToString(Name), TObject(ID));
     end;
