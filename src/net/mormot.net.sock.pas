@@ -1718,6 +1718,7 @@ type
     /// return the CIDR sub-network as standard '1.2.3.4/24' text
     function ToShort: TShort23;
   end;
+  PIp4SubNet = ^TIp4SubNet;
 
   /// store one TIp4SubNets CIDR mask definition
   TIp4SubNetMask = record

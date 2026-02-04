@@ -4171,7 +4171,7 @@ end;
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
   aBufSize: integer; NoSharedStream: boolean);
 begin
-  if aBufSize > SizeOf(aStackBuf) then // too small -> allocate on heap
+  if aBufSize > SizeOf(aStackBuf) then // temp too small -> allocate on heap
     CreateOwnedStream(nil, aBufSize, NoSharedStream)
   else
     CreateOwnedStream(aStackBuf, NoSharedStream);
