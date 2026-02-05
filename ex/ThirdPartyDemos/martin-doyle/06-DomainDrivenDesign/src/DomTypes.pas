@@ -18,6 +18,12 @@ type
     Question: TQuestion;
   end;
 
+  TSampleInfo = packed record
+    ID: TID;
+    Name: TName;
+  end;
+  TSampleInfoDynArray = array of TSampleInfo;
+
 implementation
 
 
