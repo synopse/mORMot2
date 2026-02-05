@@ -115,52 +115,52 @@ type
     dmtLeaseQueryStatus,
     dmtTls);
 
-  /// the main DHCP options - at least those parsed and recognized in this unit
-  // - doPadding is Padding option 0 (not a true value)
-  // - doSubnetMask is Subnet Mask option 1 (255.255.255.0)
-  // - doRouter is Default Gateway option 3 (192.168.1.1)
-  // - doDns is DNS Servers option 6 (8.8.8.8, 8.8.4.4)
-  // - doHostName is Hostname option 12 (client01)
-  // - doDomainName is Domain Name option 15 (example.local)
-  // - doBroadcastAddr is Broadcast Address option 28 (192.168.1.255)
-  // - doNtpServer is NTP Server option 42
-  // - doRequestedIp is Requested IP Address option 50 (0.0.0.0)
-  // - doLeaseTimeValue is IP Lease Duration in seconds option 51 (86400 for 24h)
-  // - doMessageType is DHCP Message Type option 53 (TDhcpMessageType)
-  // - doServerIdentifier is DHCP Server Identifier option 54 (192.168.1.1)
-  // - doParameterRequestList is Parameter Request List option 55 (1,3,6,15,51,54)
-  // - doRenewalTimeValue is Renewal Time Value (T1) in seconds option 58 (43200 for 12h)
-  // - doRebindingTimeValue is Rebinding Time Value (T2) in seconds option 59 (75600 for 21h)
-  // - doVendorClassIdentifier is Vendor Class Identifier (PXE RFC 2132) option 60 (PXEClient)
-  // - doClientIdentifier is Client Identifier option 61 ($01 + MAC)
-  // - doTftpServerName is TFTP Server Name (PXE) option 66 (192.168.10.10 or host name)
-  // - doBootfileName is Bootfile Name (PXE) option 67 (pxelinux.0)
-  // - doUserClass is User Class (PXE RFC 3004) option 77 (PXEClient:Arch:00000)
-  // - doRelayAgent is Relay Agent (RFC 3046) option 82
-  // - doEnding is End Of Options marker option 255 (not a true value)
-  TDhcpOption = (
-   doPadding,
+ /// the main DHCP options - at least those parsed and recognized in this unit
+ // - doPad is option 0 (not a true value)
+ // - doSubnetMask is option 1 (255.255.255.0)
+ // - doRouters is Default Gateway option 3 (192.168.1.1)
+ // - doDomainNameServers is DNS Servers option 6 (8.8.8.8, 8.8.4.4)
+ // - doHostName is option 12 (client01)
+ // - doDomainName is option 15 (example.local)
+ // - doBroadcastAddress is option 28 (192.168.1.255)
+ // - doNtpServers is option 42
+ // - doDhcpRequestedAddress is Requested IP Address option 50 (0.0.0.0)
+ // - doDhcpLeaseTime is IP Lease Duration in seconds option 51 (86400 for 24h)
+ // - doDhcpMessageType is option 53 (TDhcpMessageType) - first to appear
+ // - doDhcpServerIdentifier is option 54 (192.168.1.1)
+ // - doDhcpParameterRequestList is option 55 (1,3,6,15,51,54)
+ // - doDhcpRenewalTime is T1 in seconds option 58 (43200 for 12h)
+ // - doDhcpRebindingTime is T2 in seconds option 59 (75600 for 21h)
+ // - doVendorClassIdentifier is PXE RFC 2132 option 60 (PXEClient)
+ // - doDhcpClientIdentifier is option 61 ($01 + MAC)
+ // - doTftpServerName is PXE option 66 (192.168.10.10 or host name)
+ // - doBootFileName is PXE option 67 (pxelinux.0)
+ // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
+ // - doDhcpAgentOptions is Relay Agent (RFC 3046) option 82 - last to appear
+ // - doEnd is "End Of Options" marker option 255 (not a true value)
+ TDhcpOption = (
+   doPad,
    doSubnetMask,
-   doRouter,
-   doDns,
+   doRouters,
+   doDomainNameServers,
    doHostName,
    doDomainName,
-   doBroadcastAddr,
-   doNtpServer,
-   doRequestedIp,
-   doLeaseTimeValue,
-   doMessageType,
-   doServerIdentifier,
-   doParameterRequestList,
-   doRenewalTimeValue,
-   doRebindingTimeValue,
+   doBroadcastAddress,
+   doNtpServers,
+   doDhcpRequestedAddress,
+   doDhcpLeaseTime,
+   doDhcpMessageType,
+   doDhcpServerIdentifier,
+   doDhcpParameterRequestList,
+   doDhcpRenewalTime,
+   doDhcpRebindingTime,
    doVendorClassIdentifier,
-   doClientIdentifier,
+   doDhcpClientIdentifier,
    doTftpServerName,
-   doBootfileName,
+   doBootFileName,
    doUserClass,
-   doRelayAgent,
-   doEnding
+   doDhcpAgentOptions,
+   doEnd
  );
  /// set of supported DHCP options
  TDhcpOptions = set of TDhcpOption;
@@ -168,7 +168,7 @@ type
  PDhcpOptions = ^TDhcpOptions;
 
 var
-  /// trimmed stUpperCase value of each DHCP message, e.g. 'DISCOVER' or 'ACK'
+  /// uppercase identifier of each DHCP message type, e.g. 'DISCOVER' or 'ACK'
   DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
 
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
@@ -176,7 +176,8 @@ function ToText(opt: TDhcpOption): PShortString; overload;
 
 const
   /// 1,3,6,15,28 options as used by default for DhcpClient()
-  DHCP_REQUEST = [doSubnetMask, doRouter, doDns, doDomainName, doBroadcastAddr];
+  DHCP_REQUEST = [
+    doSubnetMask, doRouters, doDomainNameServers, doDomainName, doBroadcastAddress];
 
 /// initialize a DHCP client discover/request packet
 // - returns pointer to @dhcp.options for additional DhcpAddOption() fluent calls
@@ -225,7 +226,7 @@ function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
 // - no DUID decoding is supported yet: only MAC or Eth=1 + MAC values
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 
-/// decode the lens[doParameterRequestList] within dhcp^.option[]
+/// decode the lens[doDhcpParameterRequestList] within dhcp^.option[]
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
 
 
@@ -293,13 +294,13 @@ type
     Entry: TLeaseDynArray;
     /// number of used slots in Entry[]
     Count: integer;
-    /// the broadcast IP of this scope for doBroadcastAddr option 28
+    /// the broadcast IP of this scope for doBroadcastAddress option 28
     Broadcast: TNetIP4;
     /// the gateway IP of this scope for doRouter option 3
     Gateway: TNetIP4;
-    /// the server IP of this scope for doServerIdentifier option 54
+    /// the server IP of this scope for doDhcpServerIdentifier option 54
     ServerIdentifier: TNetIP4;
-    /// the DNS IPs of this scope for doDns option 6
+    /// the DNS IPs of this scope for doDomainNameServers option 6
     DnsServer: TIntegerDynArray;
     /// the 32-bit-integer-sorted list of static IPs of this scope
     // - sorted as 32-bit for efficient O(log(n)) branchless binary search
@@ -694,7 +695,7 @@ function DhcpAddOptionRequestList(p: PAnsiChar; op: TDhcpOptions): PAnsiChar;
 var
   o: TDhcpOption;
 begin
-  PCardinal(p)^ := DHCP_OPTION_NUM[doParameterRequestList];
+  PCardinal(p)^ := DHCP_OPTION_NUM[doDhcpParameterRequestList];
   inc(p);
   for o := succ(low(o)) to pred(high(o)) do
     if o in op then
@@ -752,11 +753,11 @@ begin
   PNetMac(@dhcp.chaddr)^ := addr;
   dhcp.cookie := DHCP_MAGIC_COOKIE;
   result := @dhcp.options;
-  DhcpAddOption(result, doMessageType, ord(dmt));
+  DhcpAddOption(result, doDhcpMessageType, ord(dmt));
   if serverid <> 0 then
   begin
     dhcp.siaddr := serverid;
-    DhcpAddOption(result, doServerIdentifier, @serverid);
+    DhcpAddOption(result, doDhcpServerIdentifier, @serverid);
   end;
   result^ := #255;
 end;
@@ -798,10 +799,10 @@ begin
     if len < 1 then
       exit; // avoid buffer overflow
     // fast O(1) option number lookup and lens[] initialization
-    opt := doPadding;
+    opt := doPad;
     if ord(p[0]) <= high(DHCP_OPTION_INV) then
       opt := DHCP_OPTION_INV[ord(p[0])];
-    if opt <> doPadding then
+    if opt <> doPad then
     begin
       if found <> nil then
         include(found^, opt);
@@ -811,7 +812,7 @@ begin
     p := @p[ord(p[1]) + 2];
   until p^ = #255;
   // validate message consistency
-  dmt := lens[doMessageType];
+  dmt := lens[doDhcpMessageType];
   if (dmt = 0) or                   // not set
      (dhcp^.options[dmt] <> 1) then // length
     exit;
@@ -822,7 +823,7 @@ begin
   // here we have a valid DHCP frame
   if mac <> nil then
   begin
-    m := DhcpMac(dhcp, lens[doClientIdentifier]);
+    m := DhcpMac(dhcp, lens[doDhcpClientIdentifier]);
     if m = nil then
       m := @dhcp^.chaddr; // no option 61: fallback to BOOTP value
     mac^ := m^; // copy
@@ -876,7 +877,7 @@ var
   opt: TDhcpOption;
 begin
   result := [];
-  p := lens[doParameterRequestList];
+  p := lens[doDhcpParameterRequestList];
   if p = 0 then
     exit;
   inc(p, PtrUInt(@dhcp.options));
@@ -884,10 +885,10 @@ begin
   if n <> 0 then
     repeat
       inc(p);
-      opt := doPadding;
+      opt := doPad;
       if PByte(p)^ <= high(DHCP_OPTION_INV) then
         opt := DHCP_OPTION_INV[PByte(p)^]; // fast O(1) option number lookup
-      if opt <> doPadding then
+      if opt <> doPad then
         include(result, opt);
       dec(n);
     until n = 0;
@@ -1258,16 +1259,16 @@ procedure TDhcpScope.AddOptions(var f: PAnsiChar; andLeaseTimes: boolean);
 begin
   DhcpAddOption(f, doSubnetMask, @Subnet.mask);
   if Broadcast <> 0 then
-    DhcpAddOption(f, doBroadcastAddr, @Broadcast);
+    DhcpAddOption(f, doBroadcastAddress, @Broadcast);
   if Gateway <> 0 then
-    DhcpAddOption(f, doRouter, @Gateway);
+    DhcpAddOption(f, doRouters, @Gateway);
   if DnsServer <> nil then
-    DhcpAddOptions(f, doDns, pointer(DnsServer));
+    DhcpAddOptions(f, doDomainNameServers, pointer(DnsServer));
   if not andLeaseTimes then // static INFORM don't need timeouts
     exit;
-  DhcpAddOption(f, doLeaseTimeValue,     @LeaseTime); // big-endian
-  DhcpAddOption(f, doRenewalTimeValue,   @RenewalTime);
-  DhcpAddOption(f, doRebindingTimeValue, @Rebinding);
+  DhcpAddOption(f, doDhcpLeaseTime,      @LeaseTime); // big-endian
+  DhcpAddOption(f, doDhcpRenewalTime,   @RenewalTime);
+  DhcpAddOption(f, doDhcpRebindingTime, @Rebinding);
 end;
 
 
@@ -1804,8 +1805,8 @@ begin
     end;
   end;
   // support Option 82 Relay Agent by sending it back - should be the last option
-  if Data.RecvLens[doRelayAgent] <> 0 then
-    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doRelayAgent]]);
+  if Data.RecvLens[doDhcpAgentOptions] <> 0 then
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpAgentOptions]]);
   // add trailer to the Data.Send frame and returns its final size in bytes
   Data.SendEnd^ := #255;
   result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
@@ -1867,9 +1868,9 @@ begin
                (p^.State = lsReserved) then // reserved = client refused this IP
             begin
               // first time seen (most common case), or renewal
-              if Data.RecvLens[doRequestedIp] <> 0 then
+              if Data.RecvLens[doDhcpRequestedAddress] <> 0 then
               begin
-                Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]);
+                Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]);
                 if Data.Ip4 <> 0 then
                   if (not Data.Scope^.SubNet.Match(Data.Ip4)) or
                      (FastFindIntegerSorted(Data.Scope^.SortedStatic, Data.Ip4) >= 0) or
@@ -1967,7 +1968,7 @@ begin
                 exit;
               end;
             // invalidate OFFERed IP
-            Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doRequestedIp]);
+            Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]);
             if (Data.Ip4 <> 0) and // authoritative IP
                not Data.Scope^.SubNet.Match(Data.Ip4) then // need clean IP
               Data.Ip4 := 0;
