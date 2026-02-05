@@ -2451,6 +2451,10 @@ function CamelCase(const text: RawUtf8): RawUtf8; overload;
 /// convert a string into an human-friendly lowerCamelCase identifier (as in Java)
 // - just like CamelCase() but with the first letter forced in lowercase
 function LowerCamelCase(const text: RawUtf8): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a string into an human-friendly lowerCamelCase identifier (as in Java)
+procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 
 /// convert a string with the first letter forced in lowercase
 function UriCase(const text: RawUtf8): RawUtf8;
@@ -9515,19 +9519,24 @@ begin
   CamelCase(pointer(text), length(text), s, isWord);
 end;
 
-function CamelCase(const text: RawUtf8): RawUtf8; overload;
+function CamelCase(const text: RawUtf8): RawUtf8;
 begin
   CamelCase(pointer(text), length(text), result);
 end;
 
+procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8);
+begin
+  CamelCase(P, len, s);
+  if s <> '' then
+    if IsUpper(s) then
+      LowerCaseSelf(s)
+    else
+      PByte(s)^ := NormToLowerAnsi7Byte[PByte(s)^];
+end;
+
 function LowerCamelCase(const text: RawUtf8): RawUtf8;
 begin
-  CamelCase(pointer(text), length(text), result);
-  if result <> '' then
-    if IsUpper(result) then
-      LowerCaseSelf(result)
-    else
-      PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
+  LowerCamelCase(pointer(text), length(text), result);
 end;
 
 function UriCase(const text: RawUtf8): RawUtf8;
