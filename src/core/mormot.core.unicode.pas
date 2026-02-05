@@ -2377,6 +2377,9 @@ function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
 // to 2007, and UTF-8 encoded with Delphi 2009+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
 
+/// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
+function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
+
 /// fast append some UTF-8 text into a ShortString, with an ending ','
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
   trimlowercase: boolean);
@@ -9204,23 +9207,34 @@ begin
   TrimLeftLowerCaseToShort(V, result);
 end;
 
+function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
+var
+  p: PAnsiChar;
+begin
+  result := length(V^);
+  p := @V^[1];
+  if result <> 0 then
+    while p^ in ['a'..'z'] do
+    begin
+      inc(p);
+      dec(result);
+      if result = 0 then
+      begin
+        result := length(V^);
+        Trimmed := @V^[1]; // nothing to trim
+        exit;
+      end;
+    end;
+  Trimmed := p;
+end;
+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString);
 var
   p: PAnsiChar;
   len: PtrInt;
 begin
-  len := length(V^);
-  p := @V^[1];
-  while (len > 0) and
-        (p^ in ['a'..'z']) do
-  begin
-    inc(p);
-    dec(len);
-  end;
-  if len = 0 then
-    result := V^
-  else
-    SetString(result, p, len);
+  len := TrimLeftLowerCaseP(V, p);
+  SetString(result, p, len);
 end;
 
 function TrimLeftLowerCaseShort(V: PShortString): RawUtf8;
@@ -9233,20 +9247,7 @@ var
   p: PAnsiChar;
   len: PtrInt;
 begin
-  len := length(V^);
-  p := @V^[1];
-  if len > 0 then
-    while p^ in ['a'..'z'] do
-    begin
-      inc(p);
-      dec(len);
-      if len = 0 then
-      begin
-        p := @V^[1]; // nothing to trim
-        len := length(V^);
-        break;
-      end;
-    end;
+  len := TrimLeftLowerCaseP(V, p);
   FastSetString(U, p, len);
 end;
 
