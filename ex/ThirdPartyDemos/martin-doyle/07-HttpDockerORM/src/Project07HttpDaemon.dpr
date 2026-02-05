@@ -68,6 +68,7 @@ end;
 procedure TSampleDaemon.Start;
 begin
   SQLite3Log.Enter(self);
+  ForceDirectories(DataPath);
   Model := CreateSampleModel;
   SampleServer := TSampleServer.Create(Model, DataPath + Executable.ProgramName + '.db');
   SampleServer.DB.Synchronous := smOff;
