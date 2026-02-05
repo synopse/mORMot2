@@ -1848,7 +1848,7 @@ begin
       // no giaddr: check RecvIp4 bound server IP as set by the UDP server
       Data.Scope := GetScope(Data.RecvIp4)
     else
-      // no giaddr nor RecvIp4: default to Scope[0]
+      // no option 118 no giaddr nor RecvIp4: default to Scope[0]
       Data.Scope := pointer(fScope);
     if Data.Scope = nil then
     begin

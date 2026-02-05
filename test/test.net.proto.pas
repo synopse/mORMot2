@@ -1614,6 +1614,7 @@ begin
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
   CheckEqual(DHCP_OPTION[doSubnetMask], 'subnet-mask');
   CheckEqual(DHCP_OPTION[doRouters], 'routers');
+  CheckEqual(DHCP_OPTION[doTftpServerName], 'tftp-server-name');
   CheckEqual(DHCP_OPTION[doDhcpAgentOptions], 'dhcp-agent-options');
   RandomLecuyer(rnd);
   // validate client DISCOVER disc from WireShark

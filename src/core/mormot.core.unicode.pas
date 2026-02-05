@@ -2393,7 +2393,7 @@ type
   /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
   // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
   // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lowerCaseFirst',
-  // 'UPPERCASE',/ 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case',
+  // 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case',
   // 'dot.case', 'camelCase', 'TitleCase' and 'PascalCase'
   TSetCase = (
     scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle, scLowerCase,
