@@ -4077,8 +4077,7 @@ end;
 
 function ToUtf8(r: TExprParserResult): RawUtf8;
 begin
-  result := TrimLeftLowerCaseShort(ToText(r));
-  UnCamelCaseSelf(result);
+  TrimLeftLowerUncamelCaseShort(ToText(r), result);
 end;
 
 

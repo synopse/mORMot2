@@ -9218,7 +9218,7 @@ begin
       if result = 0 then
       begin
         result := length(V^);
-        Trimmed := @V^[1]; // nothing to trim
+        Trimmed := @V^[1]; // all lowercase: return initial V^ content
         exit;
       end;
     end;
