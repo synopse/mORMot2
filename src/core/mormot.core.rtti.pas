@@ -6249,7 +6249,7 @@ begin
     len := TrimLeftLowerCaseP(aShort, p);
   case aKind of
     stUnCamelCase:
-      UnCamelCase(p, len, aDest);
+      UnCamelCase(aDest, p, len);
     stLowerCase:
       CaseCopy(p, len, @NormToLowerAnsi7, aDest);
     stLowerCaseFirst:

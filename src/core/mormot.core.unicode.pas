@@ -2406,7 +2406,7 @@ function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
 procedure UnCamelCaseSelf(var S: RawUtf8);
 
 /// convert a 'CamelCase' buffer into a space-separated 'Camel case' human text
-function UnCamelCase(P: PUtf8Char; Len: PtrInt; var Dest: RawUtf8): RawUtf8; overload;
+function UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt): RawUtf8; overload;
 
 /// raw convert a 'CamelCase' buffer into a space-separated 'Camel case' buffer
 // - destination D should be at least Len * 2 bytes long
@@ -9347,15 +9347,15 @@ end;
 
 function UnCamelCase(const S: RawUtf8): RawUtf8;
 begin
-  UnCamelCase(pointer(S), length(S), result);
+  UnCamelCase(result, pointer(S), length(S));
 end;
 
 procedure UnCamelCaseSelf(var S: RawUtf8);
 begin
-  UnCamelCase(pointer(S), length(S), S);
+  UnCamelCase(S, pointer(S), length(S));
 end;
 
-function UnCamelCase(P: PUtf8Char; Len: PtrInt; var Dest: RawUtf8): RawUtf8;
+function UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt): RawUtf8;
 var
   tmp: TSynTempBuffer; // 4KB means no temporary memalloc from RTTI identifiers
   destlen: PtrInt;
