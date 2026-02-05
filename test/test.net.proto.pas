@@ -1770,7 +1770,7 @@ begin
     CheckEqual(d.Send.xid, $1d3d0000);
     CheckEqual(MacToText(@d.Send.chaddr), mac);
     Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtOffer);
-    Check(fnd = FND_RESP);
+    Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
     sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
     CheckEqual(IP4ToText(@sip4), '192.168.1.1');
     CheckEqual(d.Send.siaddr, sip4);
@@ -1790,7 +1790,7 @@ begin
       CheckEqual(d.Send.xid, $1e3d0000);
       CheckEqual(MacToText(@d.Send.chaddr), mac);
       Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtAck);
-      Check(fnd = FND_RESP);
+      Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
       sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
       CheckEqual(IP4ToText(@sip4), '192.168.1.1');
       CheckEqual(d.Send.siaddr, sip4);

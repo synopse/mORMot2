@@ -1823,6 +1823,9 @@ begin
       exit; // callback asked to silently ignore this frame
     end;
   end;
+  // send back verbatim Option 61 if any
+  if Data.RecvLens[doDhcpClientIdentifier] <> 0 then
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpClientIdentifier]]);
   // support Option 82 Relay Agent by sending it back - should be the last option
   if Data.RecvLens[doDhcpAgentOptions] <> 0 then
     DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpAgentOptions]]);
@@ -2092,7 +2095,7 @@ begin
             [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType],
              Data.Ip, Data.HostName^], self);
     Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
-      PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
+      PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
     Data.Send.ciaddr := Data.Ip4;
     Data.Scope^.AddOptions(Data.SendEnd, Data.RecvType <> dmtInform);
     // TODO: IPXE host/file options
