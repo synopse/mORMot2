@@ -1547,8 +1547,8 @@ begin
 end;
 
 const
-  FND_RESP = [doSubnetMask, doLeaseTimeValue, doMessageType,
-    doServerIdentifier, doRenewalTimeValue, doRebindingTimeValue];
+  FND_RESP = [doSubnetMask, doDhcpLeaseTime, doDhcpMessageType,
+    doDhcpServerIdentifier, doDhcpRenewalTime, doDhcpRebindingTime];
   OPTION82: string[7] = 'OPT__82';
 
 procedure TNetworkProtocols.DHCP;
@@ -1612,6 +1612,9 @@ begin
   CheckEqual(SizeOf(TDhcpPacket), 548, 'TDhcpPacket');
   CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), 240, 'options');
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
+  CheckEqual(DHCP_OPTION[doSubnetMask], 'subnet-mask');
+  CheckEqual(DHCP_OPTION[doRouters], 'routers');
+  CheckEqual(DHCP_OPTION[doDhcpAgentOptions], 'dhcp-agent-options');
   RandomLecuyer(rnd);
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
@@ -1624,18 +1627,18 @@ begin
   CheckEqual(PDhcpPacket(refdisc)^.xid, $1d3d0000);
   mac := '00:0b:82:01:fc:42';
   CheckEqual(MacToText(@PDhcpPacket(refdisc)^.chaddr), mac);
-  fnd := [doPadding, doEnding];
+  fnd := [doPad, doEnd];
   Check(DhcpParse(pointer(refdisc), length(refdisc), lens, @fnd) = dmtDiscover);
-  Check(fnd = [doMessageType, doClientIdentifier, doRequestedIp,
-    doParameterRequestList]);
-  CheckEqual(lens[doPadding], 0);
-  CheckEqual(lens[doMessageType], 1);
-  CheckNotEqual(lens[doClientIdentifier], 0);
-  CheckEqual(MacToText(DhcpMac(pointer(refdisc), lens[doClientIdentifier])), mac);
-  CheckNotEqual(lens[doRequestedIp], 0);
-  CheckEqual(DhcpIP4(pointer(refdisc), lens[doRequestedIp]), 0);
+  Check(fnd = [doDhcpMessageType, doDhcpClientIdentifier, doDhcpRequestedAddress,
+    doDhcpParameterRequestList]);
+  CheckEqual(lens[doPad], 0);
+  CheckEqual(lens[doDhcpMessageType], 1);
+  CheckNotEqual(lens[doDhcpClientIdentifier], 0);
+  CheckEqual(MacToText(DhcpMac(pointer(refdisc), lens[doDhcpClientIdentifier])), mac);
+  CheckNotEqual(lens[doDhcpRequestedAddress], 0);
+  CheckEqual(DhcpIP4(pointer(refdisc), lens[doDhcpRequestedAddress]), 0);
   Check(DhcpRequestList(pointer(refdisc), lens) =
-    [doSubnetMask, doRouter, doDns, doNtpServer]);
+    [doSubnetMask, doRouters, doDomainNameServers, doNtpServers]);
   CheckHash(refdisc, $79ADDD50, 'no modif');
   // validate server OFFER frame from WireShark
   refoffer := Base64ToBin(
@@ -1651,10 +1654,10 @@ begin
   Check(DhcpParse(pointer(refoffer), length(refoffer), lens, @fnd) = dmtOffer);
   Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(refoffer), lens[doSubnetMask]), IP4Netmask(24));
-  CheckEqual(DhcpInt(pointer(refoffer), lens[doRenewalTimeValue]), 1800);
-  CheckEqual(DhcpInt(pointer(refoffer), lens[doRebindingTimeValue]), 3150);
-  CheckEqual(DhcpInt(pointer(refoffer), lens[doLeaseTimeValue]), 3600);
-  ip4 := DhcpIP4(pointer(refoffer), lens[doServerIdentifier]);
+  CheckEqual(DhcpInt(pointer(refoffer), lens[doDhcpRenewalTime]), 1800);
+  CheckEqual(DhcpInt(pointer(refoffer), lens[doDhcpRebindingTime]), 3150);
+  CheckEqual(DhcpInt(pointer(refoffer), lens[doDhcpLeaseTime]), 3600);
+  ip4 := DhcpIP4(pointer(refoffer), lens[doDhcpServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   // validate client REQUEST frame from WireShark
   refreq := Base64ToBin(
@@ -1669,17 +1672,17 @@ begin
   CheckEqual(MacToText(@PDhcpPacket(refreq)^.chaddr), mac);
   fnd := [];
   Check(DhcpParse(pointer(refreq), length(refreq), lens, @fnd) = dmtRequest);
-  Check(fnd = [doRequestedIp, doMessageType, doServerIdentifier,
-    doParameterRequestList, doClientIdentifier]);
-  CheckEqual(lens[doMessageType], 1);
-  CheckNotEqual(lens[doClientIdentifier], 0);
-  CheckEqual(MacToText(DhcpMac(pointer(refreq), lens[doClientIdentifier])), mac);
-  ip4 := DhcpIP4(pointer(refreq), lens[doServerIdentifier]);
+  Check(fnd = [doDhcpRequestedAddress, doDhcpMessageType, doDhcpServerIdentifier,
+    doDhcpParameterRequestList, doDhcpClientIdentifier]);
+  CheckEqual(lens[doDhcpMessageType], 1);
+  CheckNotEqual(lens[doDhcpClientIdentifier], 0);
+  CheckEqual(MacToText(DhcpMac(pointer(refreq), lens[doDhcpClientIdentifier])), mac);
+  ip4 := DhcpIP4(pointer(refreq), lens[doDhcpServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
-  ip4 := DhcpIP4(pointer(refreq), lens[doRequestedIp]);
+  ip4 := DhcpIP4(pointer(refreq), lens[doDhcpRequestedAddress]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.10');
   Check(DhcpRequestList(pointer(refreq), lens) =
-    [doSubnetMask, doRouter, doDns, doNtpServer]);
+    [doSubnetMask, doRouters, doDomainNameServers, doNtpServers]);
   // validate server ACK frame from WireShark
   refack := Base64ToBin(
     'AgEGAAAAPR4AAAAAAAAAAMCoAAoAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1694,10 +1697,10 @@ begin
   Check(DhcpParse(pointer(refack), length(refack), lens, @fnd) = dmtAck);
   Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(refack), lens[doSubnetMask]), IP4Netmask(24));
-  CheckEqual(DhcpInt(pointer(refack), lens[doRenewalTimeValue]),   1800);
-  CheckEqual(DhcpInt(pointer(refack), lens[doRebindingTimeValue]), 3150);
-  CheckEqual(DhcpInt(pointer(refack), lens[doLeaseTimeValue]),     3600);
-  ip4 := DhcpIP4(pointer(refack), lens[doServerIdentifier]);
+  CheckEqual(DhcpInt(pointer(refack), lens[doDhcpRenewalTime]),   1800);
+  CheckEqual(DhcpInt(pointer(refack), lens[doDhcpRebindingTime]), 3150);
+  CheckEqual(DhcpInt(pointer(refack), lens[doDhcpLeaseTime]),     3600);
+  ip4 := DhcpIP4(pointer(refack), lens[doDhcpServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   // validate TDhcpProcess logic (without any actual UDP transmission)
   server := TDhcpProcess.Create;
@@ -1726,13 +1729,13 @@ begin
     CheckEqual(MacToText(@d.Send.chaddr), mac);
     Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP);
-    sip4 := DhcpIP4(@d.Send, lens[doServerIdentifier]);
+    sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
     CheckEqual(IP4ToText(@sip4), '192.168.1.1');
     CheckEqual(d.Send.siaddr, sip4);
     CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(24));
-    CheckEqual(DhcpInt(@d.Send, lens[doRenewalTimeValue]),   60);
-    CheckEqual(DhcpInt(@d.Send, lens[doRebindingTimeValue]), 105);
-    CheckEqual(DhcpInt(@d.Send, lens[doLeaseTimeValue]),     120);
+    CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
+    CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
+    CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
     CheckEqual(server.SaveToText, CRLF, 'offer not saved');
     // REQUEST -> ACK
     d.RecvLen := length(refreq);
@@ -1746,7 +1749,7 @@ begin
       CheckEqual(MacToText(@d.Send.chaddr), mac);
       Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtAck);
       Check(fnd = FND_RESP);
-      sip4 := DhcpIP4(@d.Send, lens[doServerIdentifier]);
+      sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
       CheckEqual(IP4ToText(@sip4), '192.168.1.1');
       CheckEqual(d.Send.siaddr, sip4);
       if ip4 = 0 then
@@ -1754,9 +1757,9 @@ begin
       else
         CheckEqual(d.Send.ciaddr, ip4, 'consecutive ips');
       CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(24));
-      CheckEqual(DhcpInt(@d.Send, lens[doRenewalTimeValue]),   60);
-      CheckEqual(DhcpInt(@d.Send, lens[doRebindingTimeValue]), 105);
-      CheckEqual(DhcpInt(@d.Send, lens[doLeaseTimeValue]),     120);
+      CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
+      CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
+      CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
     end;
     d.Recv := d.Send;
     d.RecvLen := n;
@@ -1828,7 +1831,7 @@ begin
     // validate DECLINE process - and option 82 Relay Agent
     CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
     f := DhcpClient(d.Recv, dmtDiscover, macs[0]);
-    DhcpAddOption(f, doRelayAgent, @OPTION82[1], 7);
+    DhcpAddOption(f, doDhcpAgentOptions, @OPTION82[1], 7);
     f^ := #255;
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
     Check(CompareMem(@macs[0], @d.Recv.chaddr, SizeOf(macs[0])));
@@ -1839,11 +1842,11 @@ begin
     CheckEqual(d.Send.xid, xid);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
     Check(server.GetScope(d.Send.ciaddr) <> nil);
-    CheckEqual(lens[doRelayAgent], 0, 'no relay agent');
+    CheckEqual(lens[doDhcpAgentOptions], 0, 'no relay agent');
     Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
-    Check(fnd = FND_RESP + [doRelayAgent]);
-    CheckNotEqual(lens[doRelayAgent], 0, 'propagated relay agent');
-    Check(DhcpData(@d.Send, lens[doRelayAgent])^ = OPTION82);
+    Check(fnd = FND_RESP + [doDhcpAgentOptions]);
+    CheckNotEqual(lens[doDhcpAgentOptions], 0, 'propagated relay agent');
+    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = OPTION82);
     ips[0] := d.Send.ciaddr;
     f := DhcpClient(d.Recv, dmtDecline, macs[0]);
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
