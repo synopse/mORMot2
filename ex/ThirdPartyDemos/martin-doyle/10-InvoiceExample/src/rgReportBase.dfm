@@ -8,7 +8,6 @@ object ReportBaseForm: TReportBaseForm
   ClientHeight = 500
   ClientWidth = 700
   Position = poMainFormCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   object FilterPanel: TPanel

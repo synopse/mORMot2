@@ -8,7 +8,6 @@ object PaymentEntryForm: TPaymentEntryForm
   ClientHeight = 250
   ClientWidth = 350
   Position = poMainFormCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   object LabelInvoice: TLabel

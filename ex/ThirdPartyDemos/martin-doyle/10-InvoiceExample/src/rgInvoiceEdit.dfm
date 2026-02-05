@@ -8,7 +8,6 @@ object InvoiceEditForm: TInvoiceEditForm
   ClientHeight = 550
   ClientWidth = 650
   Position = poMainFormCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   object LabelCustomer: TLabel

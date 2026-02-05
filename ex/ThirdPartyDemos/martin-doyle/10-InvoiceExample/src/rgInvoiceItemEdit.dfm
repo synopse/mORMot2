@@ -8,7 +8,6 @@ object InvoiceItemEditForm: TInvoiceItemEditForm
   ClientHeight = 220
   ClientWidth = 400
   Position = poMainFormCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   object LabelDescription: TLabel
     Left = 16

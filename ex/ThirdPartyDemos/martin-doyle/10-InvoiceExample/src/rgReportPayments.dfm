@@ -2,7 +2,6 @@ inherited PaymentReceiptsReportForm: TPaymentReceiptsReportForm
   Caption = 'Payment Receipts Report'
   ClientHeight = 500
   ClientWidth = 700
-  LCLVersion = '4.5.0.0'
   inherited FilterPanel: TPanel
     Width = 700
     Height = 60

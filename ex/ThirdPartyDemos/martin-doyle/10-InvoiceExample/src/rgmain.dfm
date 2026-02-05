@@ -8,7 +8,6 @@ object MainForm: TMainForm
   ClientWidth = 1300
   Menu = MainMenu
   ParentFont = True
-  LCLVersion = '4.5.0.0'
   WindowState = wsMaximized
   OnCreate = FormCreate
   OnDestroy = FormDestroy

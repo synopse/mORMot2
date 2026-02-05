@@ -2,7 +2,6 @@ inherited CustomerRevenueReportForm: TCustomerRevenueReportForm
   Caption = 'Customer Revenue Report'
   ClientHeight = 500
   ClientWidth = 750
-  LCLVersion = '4.5.0.0'
   inherited FilterPanel: TPanel
     Width = 750
     Height = 60

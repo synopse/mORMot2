@@ -10,7 +10,6 @@ object CustomerListForm: TCustomerListForm
   OnDestroy = FormDestroy
   OnResize = FormResize
   OnShow = FormShow
-  LCLVersion = '3.7.0.0'
   object ToolbarPanel: TPanel
     Left = 0
     Height = 40
@@ -56,7 +55,6 @@ object CustomerListForm: TCustomerListForm
       Top = 8
       Width = 200
       TabOrder = 3
-      TextHint = 'Search...'
       OnChange = SearchEditChange
     end
   end

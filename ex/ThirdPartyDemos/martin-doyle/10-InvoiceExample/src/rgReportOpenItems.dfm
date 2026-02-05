@@ -2,7 +2,6 @@ inherited OpenItemsReportForm: TOpenItemsReportForm
   Caption = 'Open Items Report'
   ClientHeight = 500
   ClientWidth = 800
-  LCLVersion = '4.5.0.0'
   inherited FilterPanel: TPanel
     Width = 800
     Height = 60

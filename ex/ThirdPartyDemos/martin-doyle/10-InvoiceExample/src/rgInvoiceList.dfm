@@ -10,7 +10,6 @@ object InvoiceListForm: TInvoiceListForm
   OnDestroy = FormDestroy
   OnResize = FormResize
   OnShow = FormShow
-  LCLVersion = '4.5.0.0'
   object ToolbarPanel: TPanel
     Left = 0
     Height = 40

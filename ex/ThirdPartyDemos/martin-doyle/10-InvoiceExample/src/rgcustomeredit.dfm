@@ -8,7 +8,6 @@ object CustomerEditForm: TCustomerEditForm
   ClientHeight = 487
   ClientWidth = 160
   Position = poMainFormCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   object LabelCustomerNo: TLabel

@@ -10,7 +10,6 @@ object AboutForm: TAboutForm
   Color = clBtnFace
   ParentFont = True
   Position = poDesktopCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnShow = FormShow
   object Copyright: TLabel

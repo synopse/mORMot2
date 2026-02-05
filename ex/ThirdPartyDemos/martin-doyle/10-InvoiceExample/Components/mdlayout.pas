@@ -70,6 +70,7 @@ function LayoutSectionSpacing(const AMargins: TLayoutMargins; AMultiplier: Singl
 function LayoutSpacingProportional(ADistance: Single): TLayoutSpacing;
 function LayoutSpacingFixed(APixels: Integer): TLayoutSpacing;
 
+type
   { TLayoutHelper - Main layout helper class }
   TLayoutHelper = class
   private
