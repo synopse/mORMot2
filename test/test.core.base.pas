@@ -429,7 +429,7 @@ begin
   begin
     v := GetEnumNameTrimed(TypeInfo(TSetCase), ord(k));
     v2 := SetCase(v, k);
-    Check((v = v2) = (k in [scNoTrim, scTrimLeft, scPascalCase]), v);
+    CheckUtf8((v = v2) = (k in [scNoTrim, scTrimLeft, scPascalCase]), v);
     v := SetCase(v, k);
     CheckEqual(v, v2, 'SetCase(self)');
     Append(all, v, ',');

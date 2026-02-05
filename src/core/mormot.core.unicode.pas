@@ -9281,7 +9281,7 @@ var
   len: PtrInt;
 begin
   len := TrimLeftLowerCaseP(V, p);
-  UnCamelCase(U, p, len);
+  UnCamelCase(U, pointer(p), len);
 end;
 
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase);
@@ -9292,16 +9292,16 @@ begin
   else
     case aKind of
       scUnCamelCase:        // 'Un camel case'
-        UnCamelCase(Dest, Text, TextLen);
+        UnCamelCase(Dest, pointer(Text), TextLen);
       scLowerCase:          // 'lowercase'
-        CaseCopy(Text, TextLen, @NormToLowerAnsi7, Dest);
+        CaseCopy(pointer(Text), TextLen, @NormToLowerAnsi7, Dest);
       scLowerCaseFirst:     // 'lowerCaseFirst'
         begin
           FastSetString(Dest, Text, TextLen);
           PByte(Dest)^ := NormToLowerAnsi7Byte[PByte(Dest)^];
         end;
       scUpperCase:          // 'UPPERCASE'
-        CaseCopy(Text, TextLen, @NormToUpperAnsi7, Dest);
+        CaseCopy(pointer(Text), TextLen, @NormToUpperAnsi7, Dest);
       scSnakeCase:          // 'snake_case'
         SnakeCase(Text, TextLen, Dest);
       scScreamingSnakeCase: // 'SCREAMING_SNAKE_CASE'
