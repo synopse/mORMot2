@@ -2383,6 +2383,12 @@ procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); ov
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
 
+/// capitalize the first letter of each word, as done with English titles
+procedure TitleCaseSelf(var Text: RawUtf8);
+
+/// capitalize the first letter of each word, as done with English titles
+procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
+
 type
   /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
   // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
@@ -9282,6 +9288,28 @@ var
 begin
   len := TrimLeftLowerCaseP(V, p);
   UnCamelCase(U, pointer(p), len);
+end;
+
+procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
+begin
+  FastSetString(Dest, Text, TextLen);
+  Text := pointer(Dest);
+  if Text = nil then
+    exit;
+  Text^ := NormToUpperAnsi7[Text^]; // do nothing if next char is not a..z
+  repeat
+    if Text^ = ' ' then
+      Text[1] := NormToUpperAnsi7[Text[1]];
+    inc(Text);
+  until Text^ = #0;
+end;
+
+procedure TitleCaseSelf(var Text: RawUtf8);
+begin
+  if (Text <> '') and
+     ((Text[1] in ['a' ..'z']) or
+      (PosExChar(' ', Text) <> 0)) then
+    TitleCase(Text, pointer(Text), length(Text));
 end;
 
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase);

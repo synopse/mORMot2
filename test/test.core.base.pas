@@ -425,6 +425,18 @@ begin
   CheckEqual(SnakeCase('Variable Name'), 'variable_name');
   CheckEqual(SnakeCase('VARIABLE NAME'), 'variable_name');
   CheckEqual(SnakeCase('VariableName'), 'variable_name');
+  v := 'Something';
+  TitleCaseSelf(v);
+  CheckEqual(v, 'Something');
+  v := 'something';
+  TitleCaseSelf(v);
+  CheckEqual(v, 'Something');
+  v := 'Some title';
+  TitleCaseSelf(v);
+  CheckEqual(v, 'Some Title');
+  v := 'some title';
+  TitleCaseSelf(v);
+  CheckEqual(v, 'Some Title');
   for k := low(k) to high(k) do
   begin
     v := GetEnumNameTrimed(TypeInfo(TSetCase), ord(k));
