@@ -9324,7 +9324,10 @@ end;
 
 function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8;
 begin
-  SetCase(result, pointer(Text), length(Text), aKind);
+  if aKind in [scNoTrim, scTrimLeft] then
+    result := Text // return by reference
+  else
+    SetCase(result, pointer(Text), length(Text), aKind);
 end;
 
 procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TSetCase);

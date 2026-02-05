@@ -351,7 +351,9 @@ end;
 
 procedure TTestCoreBase._CamelCase;
 var
-  v: RawUtf8;
+  v, v2, all: RawUtf8;
+  k: TSetCase;
+  i: integer;
 begin
   CheckEqual(UnCamelCase(''), '');
   v := UnCamelCase('On');
@@ -423,6 +425,18 @@ begin
   CheckEqual(SnakeCase('Variable Name'), 'variable_name');
   CheckEqual(SnakeCase('VARIABLE NAME'), 'variable_name');
   CheckEqual(SnakeCase('VariableName'), 'variable_name');
+  for k := low(k) to high(k) do
+  begin
+    v := GetEnumNameTrimed(TypeInfo(TSetCase), ord(k));
+    v2 := SetCase(v, k);
+    Check((v = v2) = (k in [scNoTrim, scTrimLeft, scPascalCase]), v);
+    v := SetCase(v, k);
+    CheckEqual(v, v2, 'SetCase(self)');
+    Append(all, v, ',');
+  end;
+  CheckEqual(all, 'NoTrim,TrimLeft,Un camel case,lowercase,lowerCaseFirst,' +
+    'UPPERCASE,snake_case,SCREAMING_SNAKE_CASE,kebab-case,dot.case,camelCase,' +
+    'PascalCase,');
 end;
 
 function GetBitsCount64(const Bits; Count: PtrInt): PtrInt;
