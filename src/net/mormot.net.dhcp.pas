@@ -171,6 +171,10 @@ var
   /// uppercase identifier of each DHCP message type, e.g. 'DISCOVER' or 'ACK'
   DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
 
+  /// KEA identifier of each DHCP option, e.g. 'subnet-mask' or 'routers'
+  // - https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#standard-dhcpv4-options
+  DHCP_OPTION: array[TDhcpOption] of RawUtf8;
+
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
 function ToText(opt: TDhcpOption): PShortString; overload;
 
@@ -2089,8 +2093,9 @@ initialization
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
-  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = doRelayAgent);
+  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = doDhcpAgentOptions);
 
 end.
 
