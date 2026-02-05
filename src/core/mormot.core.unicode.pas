@@ -2366,6 +2366,9 @@ function TrimLeftLowerCaseShort(V: PShortString): RawUtf8; overload;
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 procedure TrimLeftLowerCaseShort(V: PShortString; var U: RawUtf8); overload;
 
+/// trim first lowercase chars ('otMadeIt' will return 'Made it' e.g.)
+procedure TrimLeftLowerUncamelCaseShort(V: PShortString; var U: RawUtf8);
+
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
@@ -9243,6 +9246,15 @@ var
 begin
   len := TrimLeftLowerCaseP(V, p);
   FastSetString(U, p, len);
+end;
+
+procedure TrimLeftLowerUncamelCaseShort(V: PShortString; var U: RawUtf8);
+var
+  p: PAnsiChar;
+  len: PtrInt;
+begin
+  len := TrimLeftLowerCaseP(V, p);
+  UnCamelCase(U, p, len);
 end;
 
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
