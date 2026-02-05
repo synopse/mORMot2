@@ -9205,6 +9205,15 @@ begin
   Check(IsInvalidHttpHeader('a'#13#10'b'#13#13));
   Check(IsInvalidHttpHeader('a'#13#10'b'#13));
   Check(IsInvalidHttpHeader('a'#13#10'b'#10));
+  s := 'Content-Type: text/html;charset=utf-8'#13#10'ETag: "E039C149"';
+  Check(not IsInvalidHttpHeader(s), 'httphead0');
+  Check(not IsInvalidHttpHeader(s), 'httphead1');
+  Append(s, [#13#10]);
+  Check(not IsInvalidHttpHeader(s), 'httphead2');
+  AppendLine(s, ['name: ', 10]);
+  Check(not IsInvalidHttpHeader(s), 'httphead3');
+  AppendLine(s, ['ident: ', 7]);
+  CheckHash(s, $56DED9BD, 'httphead4');
   s := 'toto'#13#10;
   Check(not IsInvalidHttpHeader(s));
   CheckEqual(PurgeHeaders(''), '');
