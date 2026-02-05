@@ -1,0 +1,13 @@
+# Local Configuration for Claude Code
+# Copy this file to .claude.local and adjust paths for your system.
+
+# mORMot2 framework source location
+# Download from: https://github.com/synopse/mORMot2
+MORMOT2_PATH=/path/to/mORMot2
+
+# Lazarus lazbuild executable
+# Typically installed via fpcupdeluxe or Lazarus installer
+LAZBUILD_PATH=/path/to/lazarus/lazbuild
+
+# Project directory (optional, defaults to current directory)
+PROJECT_PATH=/path/to/Rechnung

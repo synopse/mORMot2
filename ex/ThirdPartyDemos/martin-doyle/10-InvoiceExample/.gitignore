@@ -1,0 +1,11 @@
+fpc/.DS_Store
+fpc/bin/.DS_Store
+fpc/lib/
+fpc/bin/aarch64-darwin/
+fpc/bin/aarch64-linux/
+fpc/bin/x86_64-win64/
+Rechnung.app/
+backup/
+
+# Local configuration (machine-specific paths)
+.claude.local
