@@ -105,7 +105,7 @@ var
   Layout: TLayoutHelper;
   Margins: TLayoutMargins;
 begin
-  Margins := TLayoutMargins.Create(FBaseHeight);
+  Margins := LayoutMargins(FBaseHeight);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;

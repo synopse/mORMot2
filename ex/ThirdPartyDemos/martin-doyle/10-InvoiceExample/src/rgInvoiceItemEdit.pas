@@ -96,7 +96,7 @@ var
   BaseHeight: Integer;
 begin
   BaseHeight := LabelDescription.Height;
-  Margins := TLayoutMargins.Create(BaseHeight);
+  Margins := LayoutMargins(BaseHeight);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;

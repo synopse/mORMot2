@@ -27,7 +27,7 @@ var
   Margins: TLayoutMargins;
 begin
   // Create margins based on a base height (usually a label or button height)
-  Margins := TLayoutMargins.Create(Button1.Height);
+  Margins := LayoutMargins(Button1.Height);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     // Apply platform fixes
@@ -69,10 +69,10 @@ Defines spacing between controls:
 
 ```pascal
 // Proportional spacing (multiplied by reference height)
-TLayoutSpacing.Proportional(0.5)
+LayoutSpacingProportional(0.5)
 
 // Fixed pixel spacing
-TLayoutSpacing.Fixed(10)
+LayoutSpacingFixed(10)
 ```
 
 ### TLayoutMargins
@@ -81,10 +81,10 @@ Form margins:
 
 ```pascal
 // Auto-calculated margins
-Margins := TLayoutMargins.Create(BaseHeight);
+Margins := LayoutMargins(BaseHeight);
 
 // Custom margins
-Margins := TLayoutMargins.CreateCustom(10, 10, 20, 20, 15);
+Margins := LayoutMarginsCustom(10, 10, 20, 20, 15);
 // Left, Top, Right, Bottom, Middle
 ```
 
@@ -99,7 +99,7 @@ Place a control relative to another:
 Layout.Place(Reference, Target, ldBelow, 0.5);
 
 // Placement with spacing object
-Layout.Place(Reference, Target, ldRight, TLayoutSpacing.Fixed(10));
+Layout.Place(Reference, Target, ldRight, LayoutSpacingFixed(10));
 ```
 
 ### TLayoutHelper.PlaceColumn
@@ -110,7 +110,7 @@ Place multiple controls in a column:
 Layout.PlaceColumn(
   StartLabel,
   [Label2, Label3, Label4],
-  TLayoutSpacing.Proportional(0.5)
+  LayoutSpacingProportional(0.5)
 );
 ```
 
@@ -122,7 +122,7 @@ Place multiple controls in a row:
 Layout.PlaceRow(
   StartButton,
   [OKButton, CancelButton, HelpButton],
-  TLayoutSpacing.Fixed(8)
+  LayoutSpacingFixed(8)
 );
 ```
 
@@ -177,18 +177,18 @@ var
   Margins: TLayoutMargins;
   RowTop: Integer;
 begin
-  Margins := TLayoutMargins.Create(EditName.Height);
+  Margins := LayoutMargins(EditName.Height);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;
 
     // First row
     LabelName.SetBounds(Margins.Left, Margins.Top, LabelName.Width, LabelName.Height);
-    Layout.Place(LabelName, EditName, ldRight, TLayoutSpacing.Fixed(10));
+    Layout.Place(LabelName, EditName, ldRight, LayoutSpacingFixed(10));
 
     // Second row
     Layout.Place(LabelName, LabelEmail, ldBelow, 1.0);
-    Layout.Place(LabelEmail, EditEmail, ldRight, TLayoutSpacing.Fixed(10));
+    Layout.Place(LabelEmail, EditEmail, ldRight, LayoutSpacingFixed(10));
 
     // Button row
     Layout.AutoSizeForm;
@@ -197,7 +197,7 @@ begin
       ClientHeight - Margins.Bottom - OKButton.Height,
       OKButton.Width, OKButton.Height
     );
-    Layout.Place(OKButton, CancelButton, ldLeft, TLayoutSpacing.Fixed(8));
+    Layout.Place(OKButton, CancelButton, ldLeft, LayoutSpacingFixed(8));
 
   finally
     Layout.Free;
@@ -214,7 +214,7 @@ var
   Builder: TLayoutBuilder;
   Margins: TLayoutMargins;
 begin
-  Margins := TLayoutMargins.Create(16);
+  Margins := LayoutMargins(16);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;
@@ -252,7 +252,7 @@ var
   CellWidth, CellHeight: Integer;
   CurrentControl: TControl;
 begin
-  Margins := TLayoutMargins.Create(20);
+  Margins := LayoutMargins(20);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;
@@ -332,7 +332,7 @@ uses mdLayout;
 var
   Layout: TLayoutHelper;
 begin
-  Layout := TLayoutHelper.Create(Self, TLayoutMargins.Create(16));
+  Layout := TLayoutHelper.Create(Self, LayoutMargins(16));
   try
     Layout.Place(Reference, Component, ldRight, 0.5);
     Layout.Place(Reference, Component, ldBelow, 0.5);

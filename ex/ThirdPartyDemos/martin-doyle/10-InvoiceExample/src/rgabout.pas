@@ -112,7 +112,7 @@ begin
   Memory.Caption := GetMemoryInfoText;
 
   // Calculate margins based on label height
-  Margins := TLayoutMargins.Create(SKUName.Height);
+  Margins := LayoutMargins(SKUName.Height);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     // Apply platform-specific fixes (macOS transparency, button heights)
@@ -147,7 +147,7 @@ begin
     Layout.PlaceSeparator(Copyright, Line, OS);
 
     // Place remaining system info labels
-    Layout.PlaceColumn(OS, [CPU, BIOS, Memory], TLayoutSpacing.Proportional(0.5));
+    Layout.PlaceColumn(OS, [CPU, BIOS, Memory], LayoutSpacingProportional(0.5));
 
     // Auto-size form based on content
     Layout.AutoSizeForm;

@@ -120,7 +120,7 @@ begin
   BaseHeight := LabelCustomerNo.Height;
 
   // Calculate margins based on base height
-  Margins := TLayoutMargins.Create(BaseHeight);
+  Margins := LayoutMargins(BaseHeight);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;

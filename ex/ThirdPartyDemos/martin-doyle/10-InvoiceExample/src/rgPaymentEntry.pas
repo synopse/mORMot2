@@ -108,7 +108,7 @@ var
   BaseHeight: Integer;
 begin
   BaseHeight := LabelInvoice.Height;
-  Margins := TLayoutMargins.Create(BaseHeight);
+  Margins := LayoutMargins(BaseHeight);
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;

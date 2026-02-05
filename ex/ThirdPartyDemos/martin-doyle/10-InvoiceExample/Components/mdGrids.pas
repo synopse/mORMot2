@@ -38,7 +38,12 @@ unit mdGrids;
 interface
 
 uses
-  Classes, SysUtils, Controls, Graphics, Grids, Forms, LCLType, LCLIntf;
+  Classes, SysUtils, Controls, Graphics, Grids, Forms,
+  {$IFDEF FPC}
+  LCLType, LCLIntf
+  {$ELSE}
+  Windows
+  {$ENDIF};
 
 type
   TMDListGrid = class;
@@ -211,7 +216,9 @@ type
     // Inherited properties
     property Align;
     property Anchors;
+    {$IFDEF FPC}
     property BorderSpacing;
+    {$ENDIF}
     property Color;
     property Constraints;
     property Enabled;
@@ -506,7 +513,8 @@ begin
   FGrid.FixedCols := 0;
   FGrid.FixedRows := 1;
   FGrid.Options := [goFixedHorzLine, goFixedVertLine, goVertLine,
-                    goHorzLine, goRowSelect, goThumbTracking];
+                    goHorzLine, goRowSelect
+                    {$IFDEF FPC}, goThumbTracking{$ENDIF}];
   FGrid.RowCount := 1;
   FGrid.ColCount := 1;
 

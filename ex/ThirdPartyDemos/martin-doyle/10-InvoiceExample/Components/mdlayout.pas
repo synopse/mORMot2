@@ -55,18 +55,20 @@ type
     Left, Top, Right, Bottom: Integer;
     Middle: Integer; // Spacing between major sections
     BaseHeight: Integer; // Base control height for proportional calculations
-    class function Create(ABaseHeight: Integer): TLayoutMargins; static;
-    class function CreateCustom(ALeft, ATop, ARight, ABottom, AMiddle: Integer): TLayoutMargins; static;
-    function SectionSpacing(AMultiplier: Single = 2.0): Integer;
   end;
 
   { TLayoutSpacing - Defines spacing between controls }
   TLayoutSpacing = record
     Distance: Single;      // Multiplier for proportional, pixels for fixed
     Mode: TSpacingMode;
-    class function Proportional(ADistance: Single): TLayoutSpacing; static;
-    class function Fixed(APixels: Integer): TLayoutSpacing; static;
   end;
+
+// Record factory functions (Delphi 7 compatible)
+function LayoutMargins(ABaseHeight: Integer): TLayoutMargins;
+function LayoutMarginsCustom(ALeft, ATop, ARight, ABottom, AMiddle: Integer): TLayoutMargins;
+function LayoutSectionSpacing(const AMargins: TLayoutMargins; AMultiplier: Single): Integer;
+function LayoutSpacingProportional(ADistance: Single): TLayoutSpacing;
+function LayoutSpacingFixed(APixels: Integer): TLayoutSpacing;
 
   { TLayoutHelper - Main layout helper class }
   TLayoutHelper = class
@@ -147,9 +149,9 @@ implementation
 uses
   Math;
 
-{ TLayoutMargins }
+{ Record factory functions }
 
-class function TLayoutMargins.Create(ABaseHeight: Integer): TLayoutMargins;
+function LayoutMargins(ABaseHeight: Integer): TLayoutMargins;
 begin
   Result.BaseHeight := ABaseHeight;
   Result.Left := ABaseHeight;
@@ -159,12 +161,7 @@ begin
   Result.Middle := ABaseHeight;
 end;
 
-function TLayoutMargins.SectionSpacing(AMultiplier: Single = 2.0): Integer;
-begin
-  Result := Round(AMultiplier * BaseHeight);
-end;
-
-class function TLayoutMargins.CreateCustom(ALeft, ATop, ARight, ABottom, AMiddle: Integer): TLayoutMargins;
+function LayoutMarginsCustom(ALeft, ATop, ARight, ABottom, AMiddle: Integer): TLayoutMargins;
 begin
   Result.Left := ALeft;
   Result.Top := ATop;
@@ -173,15 +170,18 @@ begin
   Result.Middle := AMiddle;
 end;
 
-{ TLayoutSpacing }
+function LayoutSectionSpacing(const AMargins: TLayoutMargins; AMultiplier: Single): Integer;
+begin
+  Result := Round(AMultiplier * AMargins.BaseHeight);
+end;
 
-class function TLayoutSpacing.Proportional(ADistance: Single): TLayoutSpacing;
+function LayoutSpacingProportional(ADistance: Single): TLayoutSpacing;
 begin
   Result.Distance := ADistance;
   Result.Mode := smProportional;
 end;
 
-class function TLayoutSpacing.Fixed(APixels: Integer): TLayoutSpacing;
+function LayoutSpacingFixed(APixels: Integer): TLayoutSpacing;
 begin
   Result.Distance := APixels;
   Result.Mode := smFixed;
@@ -264,7 +264,7 @@ end;
 procedure TLayoutHelper.Place(const AReference: TControl; const ATarget: TControl;
   ADirection: TLayoutDirection; ADistance: Single = 0.5);
 begin
-  Place(AReference, ATarget, ADirection, TLayoutSpacing.Proportional(ADistance));
+  Place(AReference, ATarget, ADirection, LayoutSpacingProportional(ADistance));
 end;
 
 procedure TLayoutHelper.AlignTo(const AReference: TControl; const ATarget: TControl;
@@ -494,9 +494,9 @@ var
 begin
   // Calculate margins based on first info label height
   if Length(AInfoLabels) > 0 then
-    Margins := TLayoutMargins.Create(AInfoLabels[0].Height)
+    Margins := LayoutMargins(AInfoLabels[0].Height)
   else
-    Margins := TLayoutMargins.Create(16); // Default
+    Margins := LayoutMargins(16); // Default
 
   Layout := TLayoutHelper.Create(AForm, Margins);
   try
