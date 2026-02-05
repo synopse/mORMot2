@@ -73,7 +73,7 @@ uses
 begin
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := ExpandFileName(IncludeTrailingPathDelimiter(ApplicationPath) +
-    '..\' + IniDataPath + '\');
+    '..\..\..\' + IniDataPath + '\');
   TSynLog.Family.Level := LOG_VERBOSE;
   TSynLog.Family.OnArchive := EventArchiveSynLZ;
   TSynLog.Family.ArchiveAfterDays := 1;
