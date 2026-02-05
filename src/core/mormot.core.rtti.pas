@@ -6237,24 +6237,31 @@ begin
 end;
 
 procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TShortTrim);
+var
+  p: PAnsiChar;
+  len: PTrInt;
 begin
-  if aKind = stNoTrim then
-  begin
-    FastSetString(aDest, @aShort^[1], length(aShort^));
-    exit;
-  end;
-  TrimLeftLowerCaseShort(aShort, aDest);
-  if aDest <> '' then
-    case aKind of
-      stUnCamelCase:
-        UnCamelCaseSelf(aDest);
-      stLowerCase:
-        CaseNew(aDest, @NormToLowerAnsi7);
-      stLowerCaseFirst:
+  len := length(aShort^);
+  if (len = 0) or
+     (aKind = stNoTrim) then
+    p := @aShort^[1]
+  else
+    len := TrimLeftLowerCaseP(aShort, p);
+  case aKind of
+    stUnCamelCase:
+      UnCamelCase(p, len, aDest);
+    stLowerCase:
+      CaseCopy(p, len, @NormToLowerAnsi7, aDest);
+    stLowerCaseFirst:
+      begin
+        FastSetString(aDest, p, len);
         PByte(aDest)^ := NormToLowerAnsi7Byte[PByte(aDest)^];
-      stUpperCase:
-        CaseNew(aDest, @NormToUpperAnsi7);
-    end;
+      end;
+    stUpperCase:
+      CaseCopy(p, len, @NormToUpperAnsi7, aDest);
+  else // stNoTrim, stTrimLeft:
+      FastSetString(aDest, p, len);
+  end;
 end;
 
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
