@@ -2384,21 +2384,22 @@ procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); ov
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
 
 /// capitalize the first letter of each word, as done with English titles
-procedure TitleCaseSelf(var Text: RawUtf8);
+// - e.g. TitleCase('Some text') = 'Some Text'
+procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
 
 /// capitalize the first letter of each word, as done with English titles
-procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
+procedure TitleCaseSelf(var Text: RawUtf8);
 
 type
   /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
   // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
   // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lowerCaseFirst',
   // 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case',
-  // 'dot.case', 'camelCase', 'TitleCase' and 'PascalCase'
+  // 'dot.case', 'TitleCase', 'camelCase' and 'PascalCase'
   TSetCase = (
     scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle, scLowerCase,
     scLowerCaseFirst, scUpperCase, scSnakeCase, scScreamingSnakeCase,
-    scKebabCase, scDotCase, scCamelCase, scTitleCase, scPascalCase);
+    scKebabCase, scDotCase, scTitleCase, scCamelCase, scPascalCase);
 
 /// change the casing of an UTF-8 text buffer
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase); overload;
@@ -2436,7 +2437,7 @@ function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
 procedure UnCamelCaseSelf(var S: RawUtf8);
 
 /// convert a 'CamelCase' buffer into a space-separated 'Camel case' human text
-function UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt): RawUtf8; overload;
+procedure UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt); overload;
 
 /// raw convert a 'CamelCase' buffer into a space-separated 'Camel case' buffer
 // - destination D should be at least Len * 2 bytes long
@@ -9346,10 +9347,10 @@ begin
         SnakeCase(Text, TextLen, Dest, '-');
       scDotCase:            // 'dot.case'
         SnakeCase(Text, TextLen, Dest, '.');
-      scCamelCase:          // 'camelCase'
-        LowerCamelCase(Text, TextLen, Dest);
       scTitleCase:          // 'TitleCase'
         TitleCase(Dest, Text, TextLen);
+      scCamelCase:          // 'camelCase'
+        LowerCamelCase(Text, TextLen, Dest);
       scPascalCase:         // 'PascalCase'
         CamelCase(Text, TextLen, Dest);
     else // scNoTrim, scTrimLeft: 'stNoTrim', 'TrimLeft'
@@ -9489,7 +9490,7 @@ begin
   UnCamelCase(S, pointer(S), length(S));
 end;
 
-function UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt): RawUtf8;
+procedure UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt);
 var
   tmp: TSynTempBuffer; // 4KB means no temporary memalloc from RTTI identifiers
   destlen: PtrInt;
