@@ -89,13 +89,27 @@ end;
 procedure TMainForm.ButtonSaveClick(Sender: TObject);
 var
   Sample: TSample;
+  RecID: TID;
 begin
   Sample.Name := StringToUTF8(EditName.Text);
   Sample.Question := StringToUTF8(MemoQuestion.Text);
-  if ExampleService.AddSample(Sample) = sSuccess then
-    RefreshNamesList
+  if ListNames.ItemIndex >= 0 then
+  begin
+    // Update existing record
+    RecID := GetSelectedID;
+    if ExampleService.UpdateSample(RecID, Sample) = sSuccess then
+      RefreshNamesList
+    else
+      ShowMessage('Error updating the data');
+  end
   else
-    ShowMessage('Error saving the data');
+  begin
+    // Add new record
+    if ExampleService.AddSample(Sample) = sSuccess then
+      RefreshNamesList
+    else
+      ShowMessage('Error adding the data');
+  end;
 end;
 
 procedure TMainForm.ButtonDeleteClick(Sender: TObject);

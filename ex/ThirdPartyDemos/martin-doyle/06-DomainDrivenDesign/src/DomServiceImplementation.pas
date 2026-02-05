@@ -17,6 +17,7 @@ type
   public
     constructor Create(ARepository: ISampleRepository); reintroduce;
     function AddSample(var ASample: TSample): TSampleServiceError;
+    function UpdateSample(AID: TID; var ASample: TSample): TSampleServiceError;
     function FindSample(var ASample: TSample): TSampleServiceError;
     function ListSamples(out ASamples: TSampleInfoDynArray): TSampleServiceError;
     function DeleteSample(AID: TID): TSampleServiceError;
@@ -44,6 +45,19 @@ begin
     Result := sSuccess
   else
     Result := sPersistenceError;
+end;
+
+function TSampleService.UpdateSample(AID: TID; var ASample: TSample): TSampleServiceError;
+begin
+  if (ASample.Name = '') or (ASample.Question = '') then
+  begin
+    Result := sMissingField;
+    exit;
+  end;
+  if FRepository.UpdateSample(AID, ASample) = srSuccess then
+    Result := sSuccess
+  else
+    Result := sNotFound;
 end;
 
 function TSampleService.FindSample(var ASample: TSample): TSampleServiceError;

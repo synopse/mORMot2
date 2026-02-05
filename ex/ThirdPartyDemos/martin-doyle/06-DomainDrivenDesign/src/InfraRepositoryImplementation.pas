@@ -39,6 +39,7 @@ type
     destructor Destroy; override;
     function RetrieveSample(var ASample: TSample): TSampleRepositoryError;
     function SaveNewSample(var ASample: TSample): TSampleRepositoryError;
+    function UpdateSample(AID: TID; var ASample: TSample): TSampleRepositoryError;
     function ListSamples(out ASamples: TSampleInfoDynArray): TSampleRepositoryError;
     function DeleteSample(AID: TID): TSampleRepositoryError;
   end;
@@ -112,6 +113,27 @@ begin
     OrmSample.Question := ASample.Question;
     if FRestOrm.Add(OrmSample, true) > 0 then
       Result := srSuccess
+  finally
+    OrmSample.Free;
+  end;
+end;
+
+function TSampleRepository.UpdateSample(AID: TID; var ASample: TSample):
+    TSampleRepositoryError;
+var
+  OrmSample: TOrmSample;
+begin
+  Result := srNotFound;
+  OrmSample := TOrmSample.Create(FRestOrm, AID);
+  try
+    if OrmSample.IDValue = 0 then
+      exit;
+    OrmSample.Name := ASample.Name;
+    OrmSample.Question := ASample.Question;
+    if FRestOrm.Update(OrmSample) then
+      Result := srSuccess
+    else
+      Result := srWriteFailure;
   finally
     OrmSample.Free;
   end;

@@ -19,6 +19,7 @@ type
   ISampleService = interface(IInvokable)
     ['{B8DE093D-A027-4C61-A67B-638FB0F23242}']
     function AddSample(var ASample: TSample): TSampleServiceError;
+    function UpdateSample(AID: TID; var ASample: TSample): TSampleServiceError;
     function FindSample(var ASample: TSample): TSampleServiceError;
     function ListSamples(out ASamples: TSampleInfoDynArray): TSampleServiceError;
     function DeleteSample(AID: TID): TSampleServiceError;
