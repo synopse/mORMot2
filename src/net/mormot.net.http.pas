@@ -7356,30 +7356,22 @@ end;
 
 function FromText(const Text: RawUtf8; out Scope: THttpAnalyzerScope): boolean;
 var
-  s: THttpAnalyzerScope;
+  i: PtrInt;
 begin
-  for s := low(s) to high(s) do
-    if IdemPropNameU(Text, HTTP_SCOPE[s]) then
-    begin
-      Scope := s;
-      result := true;
-      exit;
-    end;
-  result := false;
+  i := FindPropName(@HTTP_SCOPE, Text, length(HTTP_SCOPE));
+  result := i >= 0;
+  if result then
+    byte(Scope) := i;
 end;
 
 function FromText(const Text: RawUtf8; out Period: THttpAnalyzerPeriod): boolean;
 var
-  p: THttpAnalyzerPeriod;
+  i: PtrInt;
 begin
-  for p := low(p) to high(p) do
-    if IdemPropNameU(Text, HTTP_PERIOD[p]) then
-    begin
-      Period := p;
-      result := true;
-      exit;
-    end;
-  result := false;
+  i := FindPropName(@HTTP_PERIOD, Text, length(HTTP_PERIOD));
+  result := i >= 0;
+  if result then
+    byte(Period) := i;
 end;
 
 const
