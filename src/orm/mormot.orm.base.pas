@@ -2174,6 +2174,7 @@ type
     function Get(Row, Field: PtrInt): PUtf8Char; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field UTF-8 value and length
+    // - warning: caller should ensure Len is a 32-bit integer, not a PtrInt
     function GetWithLen(Row, Field: PtrInt; out Len: integer): PUtf8Char;
     /// read-only access to a particular field value, as RawUtf8 text
     function GetU(Row, Field: PtrInt): RawUtf8; overload;
@@ -4106,7 +4107,7 @@ end;
 
 function TOrmPropInfo.GetNameDisplay: string;
 begin
-  GetCaptionFromPCharLen(pointer(fName), result);
+  GetCaptionFromPCharLen(pointer(fName), result, length(fName));
 end;
 
 procedure TOrmPropInfo.TextToBinary(Value: PUtf8Char; var result: RawByteString);
@@ -8731,7 +8732,7 @@ end;
 function TOrmTableAbstract.GetU(Row, Field: PtrInt): RawUtf8;
 var
   P: PUtf8Char;
-  PLen: integer;
+  PLen: integer; // not a PtrInt
 begin
   P := GetWithLen(Row, Field, PLen);
   if (P = nil) or
@@ -8837,7 +8838,7 @@ end;
 function TOrmTableAbstract.GetString(Row, Field: PtrInt): string;
 var
   U: PUtf8Char;
-  ULen: integer;
+  ULen: integer; // not a PtrInt
 begin
   U := GetWithLen(Row, Field, ULen);
   if (U = nil) or
@@ -8854,7 +8855,7 @@ end;
 function TOrmTableAbstract.GetSynUnicode(Row, Field: PtrInt): SynUnicode;
 var
   U: PUtf8Char;
-  ULen: integer;
+  ULen: integer; // not a PtrInt
 begin
   result := '';
   U := GetWithLen(Row, Field, ULen);
@@ -8864,8 +8865,15 @@ begin
 end;
 
 function TOrmTableAbstract.GetCaption(Row, Field: PtrInt): string;
+var
+  U: PUtf8Char;
+  ULen: integer; // not a PtrInt
 begin
-  GetCaptionFromPCharLen(Get(Row, Field), result);
+  result := '';
+  U := GetWithLen(Row, Field, ULen);
+  if (U <> nil) and
+     (ULen <> 0) then
+    GetCaptionFromPCharLen(U, result, ULen);
 end;
 
 function TOrmTableAbstract.GetBlob(Row, Field: PtrInt): RawBlob;
@@ -10442,7 +10450,7 @@ var
   aType: TOrmFieldType;
   info: POrmTableFieldType;
   U: PUtf8Char;
-  ULen: integer;
+  ULen: integer; // not a PtrInt
 begin
   if Row = 0 then // Field Name
     RawUtf8ToVariant(GetU(0, Field), result)
