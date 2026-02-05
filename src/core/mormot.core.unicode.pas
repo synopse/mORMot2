@@ -2398,24 +2398,18 @@ function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
 function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
   aValue: PUtf8Char; aValueLen: PtrInt): integer;
 
-/// convert a CamelCase string into a space separated one
-// - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
-// - will handle capital words at the beginning, middle or end of the text, e.g.
-// 'KLMFlightNumber' will return 'KLM flight number' and 'GoodBBCProgram' will
-// return 'Good BBC program'
-// - will handle a number at the beginning, middle or end of the text, e.g.
-// 'Email12' will return 'Email 12'
-// - '_' char is transformed into ' - '
-// - '__' chars are transformed into ': '
-// - return an RawUtf8 string: enumeration names are pure 7-bit ANSI with Delphi
-// up to 2007, and UTF-8 encoded with Delphi 2009+
+/// convert a 'CamelCase' string into a space-separated 'Camel case' human text
 function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert in-place a CamelCase string into a space separated one
+/// convert a 'CamelCase' string into a space-separated 'Camel case' human text
 procedure UnCamelCaseSelf(var S: RawUtf8);
 
-/// convert a CamelCase string into a space separated one
+/// convert a 'CamelCase' buffer into a space-separated 'Camel case' human text
+function UnCamelCase(P: PUtf8Char; Len: PtrInt; var Dest: RawUtf8): RawUtf8; overload;
+
+/// raw convert a 'CamelCase' buffer into a space-separated 'Camel case' buffer
+// - destination D should be at least Len * 2 bytes long
 // - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
 // - will handle capital words at the beginning, middle or end of the text, e.g.
 // 'KLMFlightNumber' will return 'KLM flight number' and 'GoodBBCProgram' will
@@ -2427,7 +2421,7 @@ procedure UnCamelCaseSelf(var S: RawUtf8);
 // are pure 7-bit ANSI with Delphi 7 to 2007, and UTF-8 encoded with Delphi 2009+
 // - '_' char is transformed into ' - '
 // - '__' chars are transformed into ': '
-function UnCamelCase(D, P: PUtf8Char): integer; overload;
+function UnCamelCase(D, P: PUtf8Char; PEnd: PUtf8Char = nil): integer; overload;
 
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
@@ -9353,22 +9347,29 @@ end;
 
 function UnCamelCase(const S: RawUtf8): RawUtf8;
 begin
-  result := S;
-  UnCamelCaseSelf(result);
+  UnCamelCase(pointer(S), length(S), result);
 end;
 
 procedure UnCamelCaseSelf(var S: RawUtf8);
-var
-  tmp: TSynTempBuffer;
-  destlen: PtrInt;
 begin
-  if S = '' then
-    exit;
-  destlen := UnCamelCase(tmp.Init(length(S) * 2), pointer(S));
-  tmp.Done(PAnsiChar(tmp.buf) + destlen, S);
+  UnCamelCase(pointer(S), length(S), S);
 end;
 
-function UnCamelCase(D, P: PUtf8Char): integer;
+function UnCamelCase(P: PUtf8Char; Len: PtrInt; var Dest: RawUtf8): RawUtf8;
+var
+  tmp: TSynTempBuffer; // 4KB means no temporary memalloc from RTTI identifiers
+  destlen: PtrInt;
+begin
+  if P = nil then
+  begin
+    FastAssignNew(Dest);
+    exit;
+  end;
+  destlen := UnCamelCase(tmp.Init(Len * 2), P, P + Len);
+  tmp.Done(PAnsiChar(tmp.buf) + destlen, Dest);
+end;
+
+function UnCamelCase(D, P, PEnd: PUtf8Char): integer;
 var
   Space, SpaceBeg, DBeg: PUtf8Char;
   CapitalCount: integer;
@@ -9377,10 +9378,10 @@ label
   Next;
 begin
   DBeg := D;
-  if (D <> nil) and
-     (P <> nil) then
+  if (D <> nil) and  (P <> nil) then // avoid GPF
   begin
-    // avoid GPF
+    if PEnd = nil then
+      PEnd := P + StrLen(P);
     Space := D;
     SpaceBeg := D;
     repeat
@@ -9392,15 +9393,15 @@ begin
           D^ := P^;
           inc(P);
           inc(D);
-        until not (P^ in ['0'..'9'])
+        until (P = PEnd) or not (P^ in ['0'..'9'])
       else
         repeat
           inc(CapitalCount);
           D^ := P^;
           inc(P);
           inc(D);
-        until not (P^ in ['A'..'Z']);
-      if P^ = #0 then
+        until (P = PEnd) or not (P^ in ['A'..'Z']);
+      if P = PEnd then
         break; // no lowercase conversion of last fully uppercased word
       if (CapitalCount > 1) and
          not Number then
@@ -9408,14 +9409,14 @@ begin
         dec(P);
         dec(D);
       end;
-      while P^ in ['a'..'z'] do
+      while (P < PEnd) and (P^ in ['a'..'z']) do
       begin
         D^ := P^;
         inc(D);
         inc(P);
       end;
       if P^ = '_' then
-        if P[1] = '_' then
+        if (P < PEnd) and (P[1] = '_') then
         begin
           D^ := ':';
           inc(P);
@@ -9433,7 +9434,7 @@ Next:     if Space = SpaceBeg then
         end
       else
         Space := D;
-      if P^ = #0 then
+      if P >= PEnd then
         break;
       D^ := ' ';
       inc(D);
