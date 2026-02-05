@@ -1558,6 +1558,8 @@ var
   fn: TFileName;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
+  opt, opt2: TDhcpOption;
+  dmt, dmt2: TDhcpMessageType;
   ip4, sip4: TNetIP4;
   xid: cardinal;
   d: TDhcpProcessData;
@@ -1608,6 +1610,7 @@ var
   end;
 
 begin
+  // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
   CheckEqual(SizeOf(TDhcpPacket), 548, 'TDhcpPacket');
   CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), 240, 'options');
@@ -1617,6 +1620,44 @@ begin
   CheckEqual(DHCP_OPTION[doTftpServerName], 'tftp-server-name');
   CheckEqual(DHCP_OPTION[doDhcpAgentOptions], 'dhcp-agent-options');
   RandomLecuyer(rnd);
+  for dmt := low(dmt) to high(dmt) do
+  begin
+    dmt2 := pred(dmt);
+    Check(FromText(DHCP_TXT[dmt], dmt2));
+    Check(dmt = dmt2);
+    txt := LowerCase(DHCP_TXT[dmt]);
+    dmt2 := pred(dmt);
+    Check(FromText(txt, dmt2));
+    Check(dmt = dmt2);
+    txt := TrimLeftLowerCaseShort(ToText(dmt));
+    dmt2 := pred(dmt);
+    Check(FromText(txt, dmt2));
+    Check(dmt = dmt2);
+    LowerCaseSelf(txt);
+    dmt2 := pred(dmt);
+    Check(FromText(txt, dmt2));
+    Check(dmt = dmt2);
+  end;
+  Check(not FromText('none', dmt2));
+  for opt := low(opt) to high(opt) do
+  begin
+    opt2 := pred(opt);
+    Check(FromText(DHCP_OPTION[opt], opt2));
+    Check(opt = opt2);
+    txt := UpperCase(DHCP_OPTION[opt]);
+    opt2 := pred(opt);
+    Check(FromText(txt, opt2));
+    Check(opt = opt2);
+    txt := TrimLeftLowerCaseShort(ToText(opt));
+    opt2 := pred(opt);
+    Check(FromText(txt, opt2));
+    Check(opt = opt2);
+    UpperCaseSelf(txt);
+    opt2 := pred(opt);
+    Check(FromText(txt, opt2));
+    Check(opt = opt2);
+  end;
+  Check(not FromText('none', opt2));
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +

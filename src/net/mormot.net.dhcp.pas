@@ -180,6 +180,9 @@ var
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
 function ToText(opt: TDhcpOption): PShortString; overload;
 
+function FromText(const V: RawUtf8; out dmt: TDhcpMessageType): boolean; overload;
+function FromText(const V: RawUtf8; out opt: TDhcpOption): boolean; overload;
+
 const
   /// 1,3,6,15,28 options as used by default for DhcpClient()
   DHCP_REQUEST = [
@@ -660,6 +663,16 @@ end;
 function ToText(opt: TDhcpOption): PShortString;
 begin
   result := GetEnumName(TypeInfo(TDhcpOption), ord(opt));
+end;
+
+function FromText(const V: RawUtf8; out dmt: TDhcpMessageType): boolean;
+begin
+  result := GetEnumNameValue(TypeInfo(TDhcpMessageType), V, dmt, @DHCP_TXT);
+end;
+
+function FromText(const V: RawUtf8; out opt: TDhcpOption): boolean;
+begin
+  result := GetEnumNameValue(TypeInfo(TDhcpOption), V, opt, @DHCP_OPTION);
 end;
 
 const

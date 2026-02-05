@@ -353,7 +353,6 @@ procedure TTestCoreBase._CamelCase;
 var
   v, v2, all: RawUtf8;
   k: TSetCase;
-  i: integer;
 begin
   CheckEqual(UnCamelCase(''), '');
   v := UnCamelCase('On');
@@ -459,7 +458,7 @@ begin
   begin
     dec(Count);
     if Count in TBits64(Bits) then // bt dword[rdi],edx is slow in such a loop
-      inc(result);                 // ... but correct :)
+      inc(result);                 // ... but simple and correct :)
   end;
 end;
 
