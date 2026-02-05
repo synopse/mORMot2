@@ -2383,6 +2383,24 @@ procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); ov
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
 
+type
+  /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
+  // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
+  // 'TrimLeft', 'Un camel case', 'lowercase', 'lowerCaseFirst', 'UPPERCASE',
+  // 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case', 'dot.case', 'camelCase'
+  // and 'PascalCase'
+  TSetCase = (
+    scNoTrim, scTrimLeft, scUnCamelCase, scLowerCase, scLowerCaseFirst,
+    scUpperCase, scSnakeCase, scScreamingSnakeCase, scKebabCase, scDotCase,
+    scCamelCase, scPascalCase);
+
+/// change the casing of an UTF-8 text buffer
+procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase); overload;
+
+/// change the casing of an UTF-8 text string
+function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// fast append some UTF-8 text into a ShortString, with an ending ','
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
   trimlowercase: boolean);
@@ -2426,14 +2444,14 @@ function UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt): RawUtf8; ove
 // - '__' chars are transformed into ': '
 function UnCamelCase(D, P: PUtf8Char; PEnd: PUtf8Char = nil): integer; overload;
 
-/// convert a string into an human-friendly CamelCase identifier
+/// convert a string into human-friendly CamelCase/PascalCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 // - will convert up to the first 256 AnsiChar of the buffer
 procedure CamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
 
-/// convert a string into an human-friendly CamelCase identifier
+/// convert a string into human-friendly CamelCase/PascalCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 // - will convert up to the first 256 AnsiChar of text
@@ -2441,19 +2459,19 @@ procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a string into an human-friendly CamelCase identifier (as in Pascal)
+/// convert a string into human-friendly CamelCase/PascalCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 // - will convert up to the first 256 AnsiChar of text
 function CamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a string into an human-friendly lowerCamelCase identifier (as in Java)
-// - just like CamelCase() but with the first letter forced in lowercase
+/// convert a string into human-friendly camelCase identifier (as in Java)
+// - just like CamelCase/PascalCase but with the first letter forced in lowercase
 function LowerCamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a string into an human-friendly lowerCamelCase identifier (as in Java)
+  /// convert a string into human-friendly camelCase identifier (as in Java)
 procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 
 /// convert a string with the first letter forced in lowercase
@@ -9261,6 +9279,49 @@ var
 begin
   len := TrimLeftLowerCaseP(V, p);
   UnCamelCase(U, p, len);
+end;
+
+procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase);
+begin
+  if (Text = nil) or
+     (TextLen <= 0) then
+    FastAssignNew(Dest)
+  else
+    case aKind of
+      scUnCamelCase:        // 'Un camel case'
+        UnCamelCase(Dest, Text, TextLen);
+      scLowerCase:          // 'lowercase'
+        CaseCopy(Text, TextLen, @NormToLowerAnsi7, Dest);
+      scLowerCaseFirst:     // 'lowerCaseFirst'
+        begin
+          FastSetString(Dest, Text, TextLen);
+          PByte(Dest)^ := NormToLowerAnsi7Byte[PByte(Dest)^];
+        end;
+      scUpperCase:          // 'UPPERCASE'
+        CaseCopy(Text, TextLen, @NormToUpperAnsi7, Dest);
+      scSnakeCase:          // 'snake_case'
+        SnakeCase(Text, TextLen, Dest);
+      scScreamingSnakeCase: // 'SCREAMING_SNAKE_CASE'
+        begin
+          SnakeCase(Text, TextLen, Dest);
+          CaseSelf(Dest, @NormToUpperAnsi7);
+        end;
+      scKebabCase:          // 'kebab-case'
+        SnakeCase(Text, TextLen, Dest, '-');
+      scDotCase:            // 'dot.case'
+        SnakeCase(Text, TextLen, Dest, '.');
+      scCamelCase:          // 'camelCase'
+        LowerCamelCase(Text, TextLen, Dest);
+      scPascalCase:         // 'PascalCase'
+        CamelCase(Text, TextLen, Dest);
+    else // scNoTrim, scTrimLeft: 'stNoTrim', 'TrimLeft'
+      FastSetString(Dest, Text, TextLen);
+    end;
+end;
+
+function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8;
+begin
+  SetCase(result, pointer(Text), length(Text), aKind);
 end;
 
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
