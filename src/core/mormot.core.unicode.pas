@@ -2401,6 +2401,9 @@ procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TS
 function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// compute a RawUtf8 from a shortstring RTTI identifier with custom casing
+procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TSetCase);
+
 /// fast append some UTF-8 text into a ShortString, with an ending ','
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
   trimlowercase: boolean);
@@ -9322,6 +9325,20 @@ end;
 function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8;
 begin
   SetCase(result, pointer(Text), length(Text), aKind);
+end;
+
+procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TSetCase);
+var
+  p: PAnsiChar;
+  len: PTrInt;
+begin
+  len := length(aShort^);
+  if (len = 0) or
+     (aKind = scNoTrim) then
+    p := @aShort^[1]
+  else
+    len := TrimLeftLowerCaseP(aShort, p);
+  SetCase(aDest, p, len, aKind);
 end;
 
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
