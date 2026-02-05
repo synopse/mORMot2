@@ -1755,7 +1755,7 @@ procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);
 /// UnCamelCase and translate the enumeration item
 function GetCaptionFromEnum(aTypeInfo: PRttiInfo; aIndex: integer): string;
 
-/// low-level helper to retrieve a (translated) caption from a PShortString
+/// low-level helper to retrieve a (translated) caption from a RTTI PShortString
 // - as used e.g. by GetEnumCaptions or GetCaptionFromEnum
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
@@ -3672,9 +3672,7 @@ end;
 procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
   UsedValuesBits: pointer);
 var
-  i, L: PtrInt;
-  Line: TByteToAnsiChar;
-  P: PAnsiChar;
+  i: PtrInt;
   V: PShortString;
   s: string;
 begin
@@ -3688,23 +3686,7 @@ begin
       if (UsedValuesBits = nil) or
          GetBitPtr(UsedValuesBits, i) then
       begin
-        L := ord(V^[0]);
-        P := @V^[1];
-        while (L > 0) and
-              (P^ in ['a'..'z']) do
-        begin
-          // ignore left lowercase chars
-          inc(P);
-          dec(L);
-        end;
-        if L = 0 then
-        begin
-          L := ord(V^[0]);
-          P := @V^[1];
-        end;
-        Line[L] := #0; // GetCaptionFromPCharLen() expect it as ASCIIZ
-        MoveFast(P^, Line, L);
-        GetCaptionFromPCharLen(Line, s);
+        GetCaptionFromTrimmed(V, s);
         Strings.AddObject(s, pointer(i));
       end;
       inc(PByte(V), length(V^)+1);
@@ -6213,8 +6195,7 @@ end;
 
 function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 begin
-  result := GetEnumNameTrimed(aTypeInfo, aIndex);
-  UnCamelCaseSelf(result);
+  TrimLeftLowerUncamelCaseShort(GetEnumName(aTypeInfo, aIndex), result);
 end;
 
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
@@ -6509,21 +6490,11 @@ end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 var
-  tmp: TByteToAnsiChar;
-  L: integer;
+  p: PAnsiChar;
+  len: PtrInt;
 begin
-  L := ord(PS^[0]);
-  inc(PByte(PS));
-  while (L > 0) and
-        (PS^[0] in ['a'..'z']) do
-  begin
-    inc(PByte(PS));
-    dec(L);
-  end;
-  tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
-  if L > 0 then
-    MoveFast(PS^, tmp, L);
-  GetCaptionFromPCharLen(tmp, result);
+  len := TrimLeftLowerCaseP(PS, p);                // 'otDone' -> 'Done'
+  GetCaptionFromPCharLen(pointer(p), result, len); // UnCamelCase and translate
 end;
 
 procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);
