@@ -1,16 +1,16 @@
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache libc6-compat sqlite-libs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+RUN mkdir data log
 
-RUN mkdir data
-RUN mkdir log
+COPY ./Project07Daemon /app/Project07Daemon
 
-COPY /Project07Daemon /app/Project07Daemon
-
-VOLUME ["/app/data","app/log"]
+VOLUME ["/app/data", "/app/log"]
 
 EXPOSE 11111
 
