@@ -137,6 +137,7 @@ type
  // - doBootFileName is PXE option 67 (pxelinux.0)
  // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
  // - doDhcpAgentOptions is Relay Agent (RFC 3046) option 82 - last to appear
+ // - doSubnetSelection is option 118 to override the giaddr value
  // - doEnd is "End Of Options" marker option 255 (not a true value)
  TDhcpOption = (
    doPad,
@@ -160,6 +161,7 @@ type
    doBootFileName,
    doUserClass,
    doDhcpAgentOptions,
+   doSubnetSelection,
    doEnd
  );
  /// set of supported DHCP options
@@ -663,9 +665,9 @@ end;
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
-    58, 59, 60, 61, 66, 67, 77, 82, 255);
+    58, 59, 60, 61, 66, 67, 77, 82, 118, 255);
 var
-  DHCP_OPTION_INV: array[0 .. 82] of TDhcpOption; // for fast O(1) lookup
+  DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption; // for fast O(1) lookup
 
 procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte);
 begin
@@ -1835,9 +1837,12 @@ begin
   end;
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
   try
-    // detect the proper scope to use from the Gateway IP field or bound server IP
-    if Data.Recv.giaddr <> 0 then
-      // e.g. VLAN 10 relay set giaddr=192.168.10.1
+    // detect the proper scope to use
+    if Data.RecvLens[doSubnetSelection] <> 0 then
+      // RFC 3011 defined option 118 which overrides giaddr
+      Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]))
+    else if Data.Recv.giaddr <> 0 then
+      // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
       Data.Scope := GetScope(Data.Recv.giaddr)
     else if Data.RecvIp4 <> 0 then
       // no giaddr: check RecvIp4 bound server IP as set by the UDP server
@@ -2095,7 +2100,7 @@ initialization
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
-  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = doDhcpAgentOptions);
+  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
 
 end.
 
