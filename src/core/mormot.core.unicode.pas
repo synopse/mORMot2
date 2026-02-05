@@ -2506,9 +2506,9 @@ var
   LoadResStringTranslate: procedure(var Text: string) = nil;
 
 /// UnCamelCase and translate a char buffer
-// - P is expected to be #0 ended
+// - P is expected to be #0 ended, or we will use the supplied Len
 // - return "string" type, i.e. UnicodeString for Delphi 2009+
-procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
+procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string; Len: PtrUInt = 0);
 
 
 { ************ TRawUtf8DynArray Processing Functions }
@@ -9611,16 +9611,18 @@ begin
     result := '_' + result; // avoid identifier name collision
 end;
 
-procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
+procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string; Len: PtrUInt);
 var
   tmp: TByteToAnsiChar;
 begin
   if P = nil then
     exit;
+  if Len <> 0 then
+    inc(Len, PtrUInt(P)); // pointer(Len) = PEnd
   {$ifdef UNICODE}
-  Utf8DecodeToUnicodeString(tmp, UnCamelCase(@tmp, P), result);
+  Utf8DecodeToUnicodeString(tmp, UnCamelCase(@tmp, P, pointer(Len)), result);
   {$else}
-  SetString(result, PAnsiChar(@tmp), UnCamelCase(@tmp, P));
+  SetString(result, PAnsiChar(@tmp), UnCamelCase(@tmp, P, pointer(Len)));
   {$endif UNICODE}
   if Assigned(LoadResStringTranslate) then
     LoadResStringTranslate(result);
