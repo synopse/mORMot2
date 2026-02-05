@@ -1,5 +1,7 @@
 # Run mORMot daemon in Docker
 
+## Copy this file to the folder where your executable is
+
 ## Go to the folder where your executable is
 
 ## Build Docker image
