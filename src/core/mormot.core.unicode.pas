@@ -2474,11 +2474,13 @@ var
 
 /// convert a text buffer into a snake_case identifier (as in Python)
 // - will convert up to the first 256 AnsiChar of the buffer
-procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
+// - you can set e.g. sep='-' to convert to kekab-case as used e.g. in RFC
+procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; sep: AnsiChar = '_'); overload;
 
 /// convert a string into a snake_case identifier (as in Python)
 // - will convert up to the first 256 AnsiChar of text
-function SnakeCase(const text: RawUtf8): RawUtf8; overload;
+// - you can set e.g. sep='-' to convert to kekab-case as used e.g. in RFC
+function SnakeCase(const text: RawUtf8; sep: AnsiChar = '_'): RawUtf8; overload;
 
 const
   // published for unit testing in TNetworkProtocols.OpenAPI (e.g. if sorted)
@@ -9551,7 +9553,7 @@ type // SnakeCase() state machine
 var
   SNAKE_CHARS: array[AnsiChar] of TSnakeCase;
 
-procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8);
+procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; sep: AnsiChar);
 var
   tmp: TByteToAnsiChar;
   d: PAnsiChar;
@@ -9578,7 +9580,7 @@ begin
           ((scUp in flags) and (not (scLow in last)) and (len > 0) and
            (P[1] in ['a' .. 'z'])))) then
       begin
-        d^ := '_';
+        d^ := sep;
         inc(d);
         include(flags, sc_);
       end;
@@ -9595,9 +9597,9 @@ begin
   FastSetString(s, @tmp, d - PAnsiChar(@tmp));
 end;
 
-function SnakeCase(const text: RawUtf8): RawUtf8;
+function SnakeCase(const text: RawUtf8; sep: AnsiChar): RawUtf8;
 begin
-  SnakeCase(pointer(text), length(text), result);
+  SnakeCase(pointer(text), length(text), result, sep);
 end;
 
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
