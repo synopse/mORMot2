@@ -24,7 +24,7 @@
       <UseVersionInfo Value="True"/>
       <AutoIncrementBuild Value="True"/>
       <MajorVersionNr Value="2"/>
-      <BuildNr Value="637"/>
+      <BuildNr Value="640"/>
       <Language Value="0407"/>
       <StringTable CompanyName="martindoyle"/>
     </VersionInfo>
@@ -997,12 +997,12 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+      <Filename Value="..\fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir);Components"/>
-      <OtherUnitFiles Value="Components"/>
-      <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+      <OtherUnitFiles Value="..\Components"/>
+      <UnitOutputDirectory Value="..\fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Conditionals Value="if TargetOS=&apos;darwin&apos; then
    CustomOptions := &apos; -Cg-&apos;;"/>
