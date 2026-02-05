@@ -2392,13 +2392,13 @@ procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
 type
   /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
   // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
-  // 'TrimLeft', 'Un camel case', 'lowercase', 'lowerCaseFirst', 'UPPERCASE',
-  // 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case', 'dot.case', 'camelCase'
-  // and 'PascalCase'
+  // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lowerCaseFirst',
+  // 'UPPERCASE',/ 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case',
+  // 'dot.case', 'camelCase', 'TitleCase' and 'PascalCase'
   TSetCase = (
-    scNoTrim, scTrimLeft, scUnCamelCase, scLowerCase, scLowerCaseFirst,
-    scUpperCase, scSnakeCase, scScreamingSnakeCase, scKebabCase, scDotCase,
-    scCamelCase, scPascalCase);
+    scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle, scLowerCase,
+    scLowerCaseFirst, scUpperCase, scSnakeCase, scScreamingSnakeCase,
+    scKebabCase, scDotCase, scCamelCase, scTitleCase, scPascalCase);
 
 /// change the casing of an UTF-8 text buffer
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase); overload;
@@ -9321,6 +9321,11 @@ begin
     case aKind of
       scUnCamelCase:        // 'Un camel case'
         UnCamelCase(Dest, pointer(Text), TextLen);
+      scUnCamelTitle:       // 'Un Camel Title'
+        begin
+          UnCamelCase(Dest, pointer(Text), TextLen);
+          TitleCaseSelf(Dest);
+        end;
       scLowerCase:          // 'lowercase'
         CaseCopy(pointer(Text), TextLen, @NormToLowerAnsi7, Dest);
       scLowerCaseFirst:     // 'lowerCaseFirst'
@@ -9343,6 +9348,8 @@ begin
         SnakeCase(Text, TextLen, Dest, '.');
       scCamelCase:          // 'camelCase'
         LowerCamelCase(Text, TextLen, Dest);
+      scTitleCase:          // 'TitleCase'
+        TitleCase(Dest, Text, TextLen);
       scPascalCase:         // 'PascalCase'
         CamelCase(Text, TextLen, Dest);
     else // scNoTrim, scTrimLeft: 'stNoTrim', 'TrimLeft'
