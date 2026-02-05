@@ -8410,7 +8410,7 @@ initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
     SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
-  GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, stUnCamelCase);
+  GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, scUnCamelCase);
 
 end.
 

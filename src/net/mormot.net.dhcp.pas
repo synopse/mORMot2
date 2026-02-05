@@ -2087,7 +2087,7 @@ initialization
   assert(PtrUInt(@PDhcpPacket(nil)^.options) = 240);
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
-  GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, stUpperCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = doRelayAgent);
 

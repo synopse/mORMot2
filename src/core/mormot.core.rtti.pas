@@ -1634,10 +1634,11 @@ function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 
 /// get the corresponding enumeration name, without the first lowercase chars
-// - e.g. otDone -> 'Done'
+// - e.g. otDone -> 'Done' or following any other TSetCase conversion
 // - this will return the code-based English text; use GetEnumCaption() to
 // retrieve the enumeration display text
-function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
+function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer;
+  aKind: TSetCase = scTrimLeft): RawUtf8;
 
 /// get the enumeration name, without the first lowercase chars, and uncamelcased
 // - e.g. otProcessDone -> 'Process done'
@@ -1649,14 +1650,14 @@ procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
 
 /// helper to retrieve all trimmed texts of an enumerate into a RawUtf8 array
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
-// - can optionally generate the un-camelcased text of the enumerate values
+// - can optionally use another SetCase(), e.g. scUnCamelCase or scSnakeCase
 // - typical usage is the following:
 // ! var
 // !   TXT: array[TBenchmark] of RawUtf8;
 // ! ...
 // !   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
-  aKind: TShortTrim = stTrimLeft); overload;
+  aKind: TSetCase = scTrimLeft); overload;
 
 /// helper to retrieve all trimmed texts of an enumerate - compatibility function
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
@@ -6180,9 +6181,9 @@ begin
   end;
 end;
 
-function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
+function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer; aKind: TSetCase): RawUtf8;
 begin
-  TrimLeftLowerCaseShort(GetEnumName(aTypeInfo, aIndex), result);
+  ShortTrim(GetEnumName(aTypeInfo, aIndex), result, aKind);
 end;
 
 function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
@@ -6210,7 +6211,7 @@ begin
 end;
 
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
-  aKind: TShortTrim);
+  aKind: TSetCase);
 var
   info: PRttiEnumType;
   p: PShortString;
@@ -6232,16 +6233,16 @@ end;
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
   aUnCamelCase, aLowerCase, aLowerCaseFirst: boolean);
 var
-  st: TShortTrim;
+  sc: TSetCase; // just a backward compatibility wrapper function
 begin
-  st := stTrimLeft;
+  sc := scTrimLeft;
   if aUnCamelCase then
-    st := stUnCamelCase
+    sc := scUnCamelCase
   else if aLowerCase then
-    st := stLowerCase
+    sc := scLowerCase
   else if aLowerCaseFirst then
-    st := stLowerCaseFirst;
-  GetEnumTrimmedNames(aTypeInfo, aDest, st);
+    sc := scLowerCaseFirst;
+  GetEnumTrimmedNames(aTypeInfo, aDest, sc);
 end;
 
 function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray;

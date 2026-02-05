@@ -3750,7 +3750,7 @@ var
   t: TLdapAttributeType;
   i, n, failed: PtrInt;
 begin
-  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, stLowerCaseFirst);
+  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, scLowerCaseFirst);
   LDAP_ERROR_TEXT[leEsyncRefreshRequired] := 'e-syncRefreshRequired';
   // register all our common Attribute Types names for quick search as pointer()
   _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);
