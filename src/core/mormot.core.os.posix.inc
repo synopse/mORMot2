@@ -5150,12 +5150,12 @@ begin
     CpuCacheSize := _GetNextCardinal(cache);
     while cache^ = ' ' do
       inc(cache);
-    case upcase(cache^) of
-      'K':
+    case cache^ of
+      'k', 'K':
         cacheshr := 10;
-      'M':
+      'm', 'M':
         cacheshr := 20;
-      'G':
+      'g', 'G':
         cacheshr := 30;
     else
       cacheshr := 0;

@@ -8606,7 +8606,7 @@ begin
       desc := GetNextLine(GotoNextNotSpace(P + 3), P);
       if desc = '' then
         break;
-      desc[1] := UpCase(desc[1]);
+      desc[1] := NormToUpperAnsi7[desc[1]];
       repeat
         if P = nil then
           exit;

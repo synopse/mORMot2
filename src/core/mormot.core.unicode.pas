@@ -9694,7 +9694,7 @@ begin
   CamelCase(aName, result);
   if result = '' then
     ESynUnicode.RaiseFmt(nil, 'Unexpected SanitizePascalName(%s)', [aName]);
-  result[1] := UpCase(result[1]);
+  result[1] := NormToUpperAnsi7[result[1]]; // ensure PascalCase
   if KeyWordCheck and
      IsReservedKeyWord(result) then
     result := '_' + result; // avoid identifier name collision

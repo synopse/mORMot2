@@ -1829,7 +1829,7 @@ begin
       Append(line, ', ');
       CamelCase(ToUtf8(fChoices.Values[i]), item);
       if item <> '' then
-        item[1] := UpCase(item[1]);
+        item[1] := NormToUpperAnsi7[item[1]]; // ensure PascalCase identifier
       if (item = '') or
          (FindPropName(pointer(items), item, itemscount) >= 0) then
         Append(item, [i]); // duplicated, or no ascii within -> make unique
@@ -2001,7 +2001,7 @@ begin
     begin
       if result[1] <> 'T' then
       begin
-        result[1] := UpCase(result[1]);
+        result[1] := NormToUpperAnsi7[result[1]];
         insert('T', result, 1);
       end;
       Append(result, 'DynArray'); // use mormot.core.base arrays
@@ -2318,7 +2318,7 @@ constructor TOpenApiParser.Create(const aName: RawUtf8; aOptions: TOpenApiParser
 begin
   fName := aName;
   if fName <> '' then
-    fName[1] := UpCase(fName[1]);
+    fName[1] := NormToUpperAnsi7[fName[1]];
   fOptions := aOptions;
   // create internal lists - fNoDuplicate will use O(1) hash table
   fRecords    := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
