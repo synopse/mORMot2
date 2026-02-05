@@ -397,6 +397,7 @@ type
     class procedure SnakeCase(const Value: variant; out Result: variant);
     class procedure KebabCase(const Value: variant; out Result: variant);
     class procedure DotCase(const Value: variant; out Result: variant);
+    class procedure TitleCase(const Value: variant; out Result: variant);
     class procedure EnumTrim(const Value: variant; out Result: variant);
     class procedure EnumTrimRight(const Value: variant; out Result: variant);
     class procedure PowerOfTwo(const Value: variant; out Result: variant);
@@ -2547,6 +2548,12 @@ class procedure TSynMustache.DotCase(const Value: variant;
   out Result: variant);
 begin
   DoCase(Value, Result, scDotCase);
+end;
+
+class procedure TSynMustache.TitleCase(const Value: variant;
+  out Result: variant);
+begin
+  DoCase(Value, Result, scTitleCase);
 end;
 
 
