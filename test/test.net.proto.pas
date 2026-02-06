@@ -1748,7 +1748,7 @@ begin
   // validate TDhcpProcess logic (without any actual UDP transmission)
   server := TDhcpProcess.Create;
   try
-    //TSynLog.Family.Level := LOG_VERBOSE;
+    // setup the DHCP server logic
     server.Log := TSynLog;
     Check(server.FileName = '');
     fn := WorkDir + 'dnsmasq.leases';
@@ -1758,6 +1758,29 @@ begin
     Check(not FileExists(fn), fn);
     Check(server.FileName = fn);
     server.Setup({settings=}nil); // fill with our default subnet
+    // precompute some random MAC addresses and setup a few statics
+    n := 200;
+    SetLength(macs, n);
+    for i := 0 to n - 1 do
+      Check(IsZero(macs[i]));
+    rnd.Fill(pointer(macs), SizeOf(macs[0]) * n);
+    Check(server.AddStatic('192.168.1.100'));
+    Check(server.AddStatic(Join([MacToText(@macs[10]), '=192.168.1.110'])));
+    Join([MacToText(@macs[1]), '=192.168.1.110'], txt);
+    Check(not server.AddStatic(txt));
+    Check(server.RemoveStatic('192.168.1.110'));
+    Check(server.AddStatic(txt));
+    Check(not server.AddStatic('192.168.0.100'));
+    Check(not server.RemoveStatic('192.168.1.111'));
+    Check(server.AddStatic('414243444546474849=192.168.1.111'));
+    Check(not server.AddStatic('414243444546474849=192.168.1.111'));
+    Check(not server.AddStatic('514243444546474849=192.168.1.111'));
+    Check(not server.AddStatic('414243444546474849=192.168.1.112'));
+    Check(server.AddStatic('616263666566676869=192.168.1.112'));
+    Check(server.RemoveStatic('192.168.1.112'));
+    Check(not server.RemoveStatic('192.168.1.112'));
+    Check(server.RemoveStatic('192.168.1.111'));
+    Check(not server.RemoveStatic('192.168.1.111'));
     Check(server.FileName = fn);
     Check(server.GetScope('192.168.1.1') <> nil);
     Check(server.GetScope('8.8.8.8') = nil);
@@ -1815,12 +1838,8 @@ begin
     Check(length(txt) < 1000, 'saved len');
     CheckSaveToTextMatch(txt);
     // make 200 concurrent requests - more than 2M handshakes per second ;)
-    n := 200;
-    SetLength(macs, n);
+    n := length(macs);
     SetLength(ips, n);
-    for i := 0 to n - 1 do
-      Check(IsZero(macs[i]));
-    rnd.Fill(pointer(macs), SizeOf(macs[0]) * n);
     timer.Start;
     xid := 0;
     for i := 0 to n - 1 do
@@ -1843,16 +1862,22 @@ begin
       Check(server.GetScope(ips[i]) <> nil);
     end;
     CheckEqual(length(server.SaveToText), length(txt), 'only offer');
-    CheckEqual(server.Count, n + 1);
+    CheckEqual(server.Count, n, 'one is static');
     for i := n - 1 downto 0 do // in reverse order
       DoRequest(i);
     NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
-    CheckEqual(server.Count, n + 1);
+    CheckEqual(server.Count, n);
     txt := server.SaveToText;
     CheckSaveToTextMatch(txt);
     CheckNotEqual(txt, CRLF, 'offer not saved');
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
+    CheckEqual(PosEx(' 192.168.1.100', txt), 0, 'no static ip');
     Check(PosEx(' 192.168.1.101', txt) <> 0, 'saved 3');
+    Check(PosEx(' 192.168.1.109', txt) <> 0, 'saved 4');
+    CheckEqual(PosEx(' 192.168.1.110', txt), 0, 'no static mac=ip');
+    Check(PosEx(' 192.168.1.111', txt) <> 0, 'saved 5');
+    CheckEqual(PosEx(MacToText(@macs[1]), txt), 0, 'no static mac=ip');
+    CheckNotEqual(PosEx(MacToText(@macs[10]), txt), 0, 'saved 6');
     Check(length(txt) > 2000, 'saved len2');
     // validate ParseMacIP()
     for i := 0 to n - 1 do
@@ -1897,7 +1922,7 @@ begin
       CheckEqual(server.OnIdle((i * 1000) mod 6000), 0, 'onidle');
     NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
     // ensure OnIdle() did persist the file on disk
-    CheckEqual(server.Count, n + 1, 'count');
+    CheckEqual(server.Count, n, 'count');
     Check(server.FileName = fn, fn);
     Check(FileExists(fn), 'file after OnIdle');
     CheckEqual(length(StringFromFile(fn)), length(txt));
