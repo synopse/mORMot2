@@ -612,6 +612,7 @@ type
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     function ParseFrame(var Data: TDhcpProcessData): boolean; virtual;
+    function RetrieveFrameIP(var Data: TDhcpProcessData; Lease: PDhcpLease): boolean; virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
   public
     /// setup this DHCP process using the specified settings
@@ -1943,6 +1944,35 @@ begin
               [dmtDiscover, dmtRequest, dmtDecline, dmtRelease, dmtInform]);
 end;
 
+function TDhcpProcess.RetrieveFrameIP(
+  var Data: TDhcpProcessData; Lease: PDhcpLease): boolean;
+var
+  ip4: TNetIP4;
+begin
+  // called from DISCOVER and REQUEST
+  result := false;
+  ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]);
+  if ip4 = 0 then
+    exit;
+  if (Lease = nil) or
+     (Lease^.IP4 <> ip4) then
+    if (not Data.Scope^.SubNet.Match(ip4)) or
+       Data.Scope^.IsStaticIP(ip4) or
+       (Data.Scope^.FindIp4(ip4) <> nil) then
+    begin
+      // this IP seems already used by another MAC
+      if Assigned(fLog) then
+      begin
+        IP4Short(@ip4, Data.Ip);
+        fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignore requested=% %',
+          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^], self);
+      end;
+      exit;
+    end;
+  Data.Ip4 := ip4;
+  result := true;
+end;
+
 function TDhcpProcess.FinalizeFrame(var Data: TDhcpProcessData): PtrInt;
 begin
   // optional callback support
@@ -2019,7 +2049,7 @@ begin
     Data.Tix32 := GetTickSec;
     Data.Scope^.Safe.Lock; // blocking for this subnet
     try
-      p := Data.Scope^.FindMac(Data.Mac64);
+      p := Data.Scope^.FindMac(Data.Mac64); // from Entry[] and StaticMac[]
       case Data.RecvType of
         dmtDiscover:
           begin
@@ -2028,35 +2058,18 @@ begin
                (p^.State = lsReserved) then // reserved = client refused this IP
             begin
               // first time seen (most common case), or renewal
-              if Data.RecvLens[doDhcpRequestedAddress] <> 0 then
+              if not RetrieveFrameIP(Data, p) then // IP from option 50
               begin
-                Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]);
-                if Data.Ip4 <> 0 then
-                  if (not Data.Scope^.SubNet.Match(Data.Ip4)) or
-                     Data.Scope^.IsStaticIP(Data.Ip4) or
-                     (Data.Scope^.FindIp4(Data.Ip4) <> nil) then
-                  begin
-                    // this IP seems already used by another MAC
-                    if Assigned(fLog) then
-                    begin
-                      IP4Short(@Data.Ip4, Data.Ip);
-                      fLog.Add.Log(sllTrace,
-                        'ComputeResponse: DISCOVER % ignored requestedip=% %',
-                        [Data.Mac, Data.Ip, Data.HostName^], self);
-                    end;
-                    Data.Ip4 := 0; // NextIP4
-                  end;
-              end;
-              if Data.Ip4 = 0 then
-                Data.Ip4 := Data.Scope^.NextIp4;
-              if Data.Ip4 = 0 then
-              begin
-                // IPv4 exhausted: don't return NAK, but silently ignore
-                // - client will retry automatically after a small temporisation
-                fLog.Add.Log(sllWarning,
-                  'ComputeResponse: DISCOVER % exhausted IPv4 %',
-                    [Data.Mac, Data.HostName^], self);
-                exit;
+                Data.Ip4 := Data.Scope^.NextIp4; // guess a free IP from pool
+                if Data.Ip4 = 0 then
+                begin
+                  // IPv4 exhausted: don't return NAK, but silently ignore
+                  // - client will retry after a small temporisation
+                  fLog.Add.Log(sllWarning,
+                    'ComputeResponse: DISCOVER % exhausted IPv4 %',
+                      [Data.Mac, Data.HostName^], self);
+                  exit;
+                end;
               end;
               if p = nil then
               begin
