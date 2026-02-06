@@ -290,7 +290,7 @@ type
     // - OnIdle() will reset it to 0, ComputeResponse() will increment it, and
     // silently ignore any abusive DECLINE/INFORM requests as rate limitation
     // - also align the whole structure to cpu-cache-friendly 16 bytes
-    Unavailable: byte;
+    RateLimit: byte;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
     /// GetTickSec monotonic value stored as 32-bit unsigned integer
@@ -978,9 +978,9 @@ var
 begin
   result := false;
   nfo.macp := nil;
-  if TrimSplit(macip, mac, ip, '=') then
-    if (length(mac) = 17) and
-       (TextToMac(pointer(mac), @nfo.mac)) then // 'mac=ip' format
+  if TrimSplit(macip, mac, ip, '=') then // 'mac=ip' format
+    if (length(mac) = 17) and // exact 'xx:xx:xx:xx:xx:xx' format
+       (TextToMac(pointer(mac), @nfo.mac)) then
     begin
       nfo.macp := @nfo.mac;
       p := pointer(ip);
@@ -1381,10 +1381,10 @@ begin // dedicated sub-function for better codegen (100ns for 200 entries)
         inc(result);
         p^.State := lsOutdated;
       end;
-      {$ifndef CPUINTEL}          // seems actually slower on modern Intel/AMD
-      if p^.Unavailable <> 0 then // don't invalidate L1 cache
+      {$ifndef CPUINTEL}        // seems actually slower on modern Intel/AMD
+      if p^.RateLimit <> 0 then // don't invalidate L1 cache
       {$endif CPUINTEL}
-        p^.Unavailable := 0; // reset the rate limiter every second
+        p^.RateLimit := 0;      // reset the rate limiter every second
       inc(p);
       dec(n);
     until n = 0;
@@ -1763,7 +1763,7 @@ begin
   // no ARP call here to clean the internal list: the user should rather tune
   // lease duration or use a bigger netmask; the RFC states that the client
   // would do its own ARP request and resend (dmtDecline +) dmtDiscover
-  // - we mitigate aggressive clients via the Unavailable counter anyway
+  // - we mitigate aggressive clients via the RateLimit counter anyway
   if Assigned(fLog) and
      ((result or saved) <> 0) then
     fLog.Add.Log(sllTrace, 'OnIdle: outdated=% saved=%', [result, saved], self);
@@ -1870,7 +1870,7 @@ begin
             begin
               // add this lease to the internal list of this scope
               new := s^.NewLease;
-              PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+Unavailable
+              PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+RateLimit
               new^.IP4 := ip4;
               new^.Expired := expiry - boot;
               if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
@@ -2062,7 +2062,7 @@ begin
               begin
                 p := Data.Scope^.NewLease;
                 Data.Scope^.LastDiscover := Data.Scope^.Index(p);
-                PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
+                PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
               end;
               p^.IP4 := Data.Ip4;
             end
@@ -2105,7 +2105,6 @@ begin
               exit;
             end;
             // update the lease information
-            Data.Ip4 := p^.IP4;
             if p^.State = lsStatic then
               p^.Expired := Data.Tix32
             else
@@ -2115,6 +2114,7 @@ begin
               p^.Expired := Data.Tix32 + Data.Scope^.LeaseTimeLE;
             end;
             // respond with an ACK on the known IP
+            Data.Ip4 := p^.IP4;
             Data.SendType := dmtAck;
           end;
         dmtDecline:
@@ -2131,9 +2131,9 @@ begin
               exit;
             end;
             if (Data.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
-               (fIdleTix <> 0) then  // OnIdle() is actually running
-              if p^.Unavailable < Data.Scope^.MaxDeclinePerSec then // rate limit
-                inc(p^.Unavailable)  // will be reset to 0 by OnIdle()
+               (fIdleTix <> 0) then  // OnIdle() would reset RateLimit := 0
+              if p^.RateLimit < Data.Scope^.MaxDeclinePerSec then
+                inc(p^.RateLimit)
               else
               begin
                 // malicious client poisons the pool by sending repeated DECLINE
@@ -2203,24 +2203,30 @@ begin
                 [Data.Mac, Data.Ip], self);
               exit;
             end;
-            // temporarily marks the client IP as unavailable to avoid conflicts
-            // (this is stronger than the RFC requires)
-            // TODO: don't mark INFORM as unavailable - noone is doing this
-            if p = nil then
+            if (p <> nil) and
+               (p^.State = lsStatic) then
+              p^.Expired := Data.Tix32
+            else if (dsoInformRateLimit in Data.Scope^.Options) and
+                    (fIdleTix <> 0) and // OnIdle() would reset RateLimit := 0
+                    not Data.Scope^.IsStaticIP(Data.Ip4) then
             begin
-              p := Data.Scope^.NewLease;
-              PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+Unavailable
-            end
-            else if p^.State <> lsStatic then
-              if p^.Unavailable >= 3 then // rate limit of transient leases
+              // temporarily marks client IP as unavailable to avoid conflicts
+              // (not set by default: stronger than the RFC requires, and no
+              // other DHCP server like KEA, dnsmasq or Windows implements it)
+              if p = nil then
+              begin
+                p := Data.Scope^.NewLease;
+                PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
+              end
+              else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
               begin
                 fLog.Add.Log(sllDebug,
-                  'ComputeResponse: INFORM % rate limit', [Data.Mac], self);
+                  'ComputeResponse: INFORM % overload', [Data.Mac], self);
                 exit;
               end
               else
               begin
-                inc(p^.Unavailable); // will be reset to 0 by OnIdle()
+                inc(p^.RateLimit);
                 // mark this IP as temporary unavailable
                 if p^.IP4 <> Data.Ip4 then
                 begin
@@ -2229,15 +2235,10 @@ begin
                   PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
                 end;
               end;
-            // update the lease information
-            if p^.State = lsStatic then
-              p^.Expired := Data.Tix32
-            else
-            begin
+              // update the lease information
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
               p^.State := lsUnavailable;
               p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
-              inc(p^.Unavailable); // will be reset to 0 by OnIdle()
               p^.IP4 := Data.Ip4;
             end;
             // respond with an ACK and the standard options
