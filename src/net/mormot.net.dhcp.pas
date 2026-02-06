@@ -12,11 +12,13 @@ unit mormot.net.dhcp;
     - High-Level Multi-Scope DHCP Server Processing Logic
 
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
-   Background lease persistence using dnsmasq text file.
+   Background lease persistence using dnsmasq-like text file.
    Scale up to dozen of thousands of leases with minimal RAM/CPU consumption.
+   No memory allocation is performed during the response computation.
+   Static IP reservation using MAC address or UUID Identifiers 61 Option.
    Support VLAN via SubNets / Scope and Relay Agent 82 Option.
    Prevent most client abuse with proper rate limiting.
-   Cross-Platform on Windows, Linux and MacOS.
+   Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
    Meaningful logging of the actual process.
    Easy configuration via JSON or INI files.
    Expandable in code via callbacks or virtual methods.
@@ -2076,7 +2078,7 @@ var
   found: integer;
 begin
   result := nil;
-  case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8–16 bytes
+  case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8-16 bytes
     0 .. 3, // < MIN_UUID_BYTES
     6:
       exit; // too short, or 6-bytes MAC
