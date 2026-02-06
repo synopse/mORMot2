@@ -40,7 +40,7 @@ interface
 uses
   Classes, SysUtils, Controls, Graphics, Grids, Forms,
   {$IFDEF FPC}
-  LCLType, LCLIntf
+  LCLType, LCLIntf, Themes
   {$ELSE}
   Windows
   {$ENDIF};
@@ -652,28 +652,42 @@ end;
 procedure TMDListGrid.DrawHeaderCell(ACol: Integer; const ARect: TRect);
 var
   Col: TMDListColumn;
+  {$IFDEF FPC}
+  Details: TThemedElementDetails;
+  {$ENDIF}
 begin
   if (ACol < 0) or (ACol >= FColumns.Count) then
     Exit;
 
   Col := FColumns[ACol];
 
-  // Background
-  FGrid.Canvas.Brush.Color := clBtnFace;
-  FGrid.Canvas.FillRect(ARect);
+  {$IFDEF FPC}
+  // Themed header background (native on macOS Cocoa, GTK, Windows)
+  if ThemeServices.ThemesEnabled then
+  begin
+    Details := ThemeServices.GetElementDetails(thHeaderItemNormal);
+    ThemeServices.DrawElement(FGrid.Canvas.Handle, Details, ARect);
+  end
+  else
+  {$ENDIF}
+  begin
+    // Classic drawing (Delphi 7 / themes disabled)
+    FGrid.Canvas.Brush.Color := clBtnFace;
+    FGrid.Canvas.FillRect(ARect);
+    FGrid.Canvas.Pen.Color := clBtnShadow;
+    FGrid.Canvas.MoveTo(ARect.Right - 1, ARect.Top);
+    FGrid.Canvas.LineTo(ARect.Right - 1, ARect.Bottom);
+    FGrid.Canvas.MoveTo(ARect.Left, ARect.Bottom - 1);
+    FGrid.Canvas.LineTo(ARect.Right, ARect.Bottom - 1);
+  end;
 
-  // Border
-  FGrid.Canvas.Pen.Color := clBtnShadow;
-  FGrid.Canvas.MoveTo(ARect.Right - 1, ARect.Top);
-  FGrid.Canvas.LineTo(ARect.Right - 1, ARect.Bottom);
-  FGrid.Canvas.MoveTo(ARect.Left, ARect.Bottom - 1);
-  FGrid.Canvas.LineTo(ARect.Right, ARect.Bottom - 1);
-
-  // Text (bold, centered)
+  // Text (bold, centered) - bsClear preserves themed background
+  FGrid.Canvas.Brush.Style := bsClear;
   FGrid.Canvas.Font := Self.Font;
   FGrid.Canvas.Font.Style := [fsBold];
   DrawCellText(ARect, Col.Caption, taCenter);
   FGrid.Canvas.Font.Style := [];
+  FGrid.Canvas.Brush.Style := bsSolid;
 end;
 
 procedure TMDListGrid.DrawDataCell(ACol, ARow: Integer; const ARect: TRect;
@@ -682,6 +696,9 @@ var
   Item: TMDListItem;
   Col: TMDListColumn;
   Text: string;
+  {$IFDEF FPC}
+  Details: TThemedElementDetails;
+  {$ENDIF}
 begin
   if (ARow < 0) or (ARow >= FItems.Count) then
     Exit;
@@ -693,10 +710,29 @@ begin
 
   // Background
   if gdSelected in State then
-    FGrid.Canvas.Brush.Color := clHighlight
+  begin
+    {$IFDEF FPC}
+    // Themed selection for native look (macOS Cocoa, GTK, Windows)
+    if ThemeServices.ThemesEnabled then
+    begin
+      if FGrid.Focused then
+        Details := ThemeServices.GetElementDetails(ttItemSelected)
+      else
+        Details := ThemeServices.GetElementDetails(ttItemSelectedNotFocus);
+      ThemeServices.DrawElement(FGrid.Canvas.Handle, Details, ARect);
+    end
+    else
+    {$ENDIF}
+    begin
+      FGrid.Canvas.Brush.Color := clHighlight;
+      FGrid.Canvas.FillRect(ARect);
+    end;
+  end
   else
+  begin
     FGrid.Canvas.Brush.Color := Self.Color;
-  FGrid.Canvas.FillRect(ARect);
+    FGrid.Canvas.FillRect(ARect);
+  end;
 
   // Text color
   FGrid.Canvas.Font := Self.Font;
@@ -713,7 +749,10 @@ begin
   else
     Text := '';
 
+  // bsClear preserves themed background
+  FGrid.Canvas.Brush.Style := bsClear;
   DrawCellText(ARect, Text, Col.Alignment);
+  FGrid.Canvas.Brush.Style := bsSolid;
 end;
 
 procedure TMDListGrid.DrawCellText(const ARect: TRect; const AText: string;
