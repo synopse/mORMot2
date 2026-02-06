@@ -347,15 +347,20 @@ type
     // - also contain the StaticMac[].IP4 values for fast lookup
     StaticIP: TIntegerDynArray;
     /// list of MAC addresses with their static IP for this scope
+    // - will be checked against plain chaddr or "01+MAC" option 61 values
     StaticMac: TLeaseDynArray;
+    /// list of binary UUID with their static IP for this scope for option 61
+    // - will be checked against not-"01+MAC" option 61 values - mainly UUID
+    // - stored as RawByteString = doDhcpClientIdentifier-binary + 4-bytes-IP
+    StaticUuid: TRawByteStringDynArray;
     /// readjust all internal values according to to Subnet policy
     // - raise an EDhcp exception if the parameters are not correct
     procedure AfterFill(log: TSynLog);
     /// register another static IP address to the internal pool
-    // - can be associated with a fixed MAC address for resolution
-    function AddStatic(ip4: TNetIP4; mac: PNetMac): boolean; overload;
+    // - can be associated with a fixed MAC address or option 61 UUID
+    function AddStatic(var nfo: TMacIP): boolean; overload;
     /// register another static IP address to the internal pool
-    // - value is expected to be supplied as 'ip' or 'mac=ip' text
+    // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuidhex=ip' text
     function AddStatic(const macip: RawUtf8): boolean; overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
@@ -365,6 +370,10 @@ type
     /// efficient L1-cache friendly O(n) search of an IPv4 address in Entry[]
     // - won't search in StaticIP[] and StaticMac[]
     function FindIp4(ip4: TNetIP4): PDhcpLease;
+      {$ifdef FPC} inline; {$endif}
+    /// search an Option 61 client-identifier in StaticUuid[]
+    function FindUuid(opt61: PByteArray; var ip4: TNetIP4): TNetIP4;
+      {$ifdef FPC} inline; {$endif}
     /// retrieve a new lease in Entry[] - maybe recycled from ReuseIp4()
     function NewLease: PDhcpLease;
     /// release a lease in Entry[] - add it to the recycled FreeList[]
@@ -1195,7 +1204,7 @@ begin
     CheckSubnet('Static', StaticIP[i]);
   for i := 0 to high(StaticMac) do
     CheckSubnet('Static', StaticMac[i].IP4);
-  AddStatic(ServerIdentifier, nil);
+  AddStatic(IP4ToText(@ServerIdentifier));
   // prepare the leases in-memory database
   if Entry = nil then
     SetLength(Entry, PREALLOCATE_LEASES)
@@ -1244,29 +1253,85 @@ begin
   Rebinding   := bswap32(Rebinding);
 end;
 
-function TDhcpScope.AddStatic(ip4: TNetIP4; mac: PNetMac): boolean;
+const
+  MIN_UUID_BYTES = 4; // < 4 bytes is too short to reliably identify a client
+
+function DoFindUuid(u: PPAnsiChar; bin: PCardinalArray; binlen: TStrLen): TNetIP4;
+var
+  n: cardinal;
+begin
+  result := 0;
+  if (u = nil) or
+     (binlen < MIN_UUID_BYTES) then
+    exit;
+  n := PDALen(PAnsiChar(u) - _DALEN)^ + _DAOFF; // = length(StaticUuid)
+  inc(binlen, 4); // StaticUuid[] stores raw BIN+IP
+  repeat
+    if (PStrLen(u^ - _STRLEN)^ = binlen) and
+       (PCardinal(u^)^ = bin[0]) and // efficient 32-bit check < MIN_UUID_BYTES
+       CompareMemSmall(@bin[1], u^ + 4, binlen - 8) then
+    begin
+      result := PCardinal(u^ + binlen - 4)^;
+      exit;
+    end;
+    inc(u);
+    dec(n);
+  until n = 0;
+end;
+
+function TDhcpScope.FindUuid(opt61: PByteArray; var ip4: TNetIP4): TNetIP4;
+begin
+  result := 0;
+  case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8–16 bytes
+    0 .. 4, // <= MIN_UUID_BYTES
+    6:
+      exit; // too short, or 6-bytes MAC
+    7:
+      if opt61^[1] = 1 then
+        exit; // Eth=1 + MAC
+  end;
+  result := DoFindUuid(pointer(StaticUuid), @opt61[1], opt61[0]);
+  ip4 := result;
+end;
+
+function TDhcpScope.AddStatic(var nfo: TMacIP): boolean;
 var
   n: PtrInt;
   p: PDhcpLease;
 begin
   result := false;
   if (@self = nil) or
-     not SubNet.Match(ip4) then
+     not SubNet.Match(nfo.ip) then
     exit;
   Safe.Lock;
   try
-    if (mac <> nil) and
-       (DoFindMac(pointer(StaticMac), PInt64(mac)^ and MAC_MASK, length(StaticMac)) <> nil) then
-      exit; // duplicated static MAC (check first) - but allow leases override
-    if AddSortedInteger(StaticIP, ip4) < 0 then
-      exit; // duplicated IP
-    if mac <> nil then
+    // duplicated static MAC or UUID (check first) - but allow leases override
+    if not IsZero(nfo.mac) then
+      if (nfo.uuid <> '') or
+         (DoFindMac(pointer(StaticMac), PInt64(@nfo.mac)^ and MAC_MASK,
+            length(StaticMac)) <> nil) then
+      exit;
+    n := length(nfo.uuid);
+    if n <> 0 then
+      if (n < MIN_UUID_BYTES) or
+         (DoFindUuid(pointer(StaticUuid), pointer(nfo.uuid), n) <> 0) then
+        exit;
+    // register IP, properly sorted, and rejecting any duplicate
+    if AddSortedInteger(StaticIP, nfo.ip) < 0 then
+      exit;
+    // register the MAC or UUID value
+    if not IsZero(nfo.mac) then
     begin
       n := length(StaticMac);
       SetLength(StaticMac, n + 1);
       p := @StaticMac[n];
-      p^.Mac := mac^;
-      p^.IP4 := ip4;
+      p^.Mac := nfo.mac;
+      p^.IP4 := nfo.ip;
+    end
+    else if nfo.uuid <> '' then
+    begin
+      Append(nfo.uuid, @nfo.ip, 4); // stored as raw BIN+IP
+      AddRawUtf8(TRawUtf8DynArray(StaticUuid), nfo.uuid);
     end;
     result := true;
   finally
@@ -1279,13 +1344,14 @@ var
   nfo: TMacIP;
 begin
   result := ParseMacIP(nfo, macip) and
-            AddStatic(nfo.ip, nfo.macp);
+            AddStatic(nfo);
 end;
 
 function TDhcpScope.RemoveStatic(ip4: TNetIP4): boolean;
 var
   i, n: PtrInt;
   p: PDhcpLease;
+  u: PPAnsiChar;
 begin
   result := false;
   if (@self = nil) or
@@ -1293,22 +1359,38 @@ begin
     exit;
   Safe.Lock;
   try
+    // remove this IP from the main sorted StaticIP[] list
     i := FastFindIntegerSorted(StaticIP, ip4);
     if i < 0 then
       exit; // no previous AddStatic(ip4)
-    result := true;
     DeleteInteger(StaticIP, i);
+    // remove this IP from StaticMac[]
     n := length(StaticMac);
     p := DoFindIp(pointer(StaticMac), ip4, n);
-    if p = nil then
-      exit; // no associated MAC for this IP
-    i := (PtrUInt(p) - PtrUInt(StaticMac)) shr 4; // index in StaticMac[]
-    dec(n);
-    UnmanagedDynArrayDelete(StaticMac, n, i, SizeOf(TNetMac));
-    SetLength(StaticMac, n);
+    if p <> nil then
+    begin
+      i := (PtrUInt(p) - PtrUInt(StaticMac)) shr 4; // index in StaticMac[]
+      dec(n);
+      UnmanagedDynArrayDelete(StaticMac, n, i, SizeOf(TNetMac));
+      SetLength(StaticMac, n);
+    end
+    else
+    begin
+      // remove this IP from StaticUuid[]
+      u := pointer(StaticUuid);
+      for i := 0 to length(StaticUuid) - 1 do
+        if PCardinal(u^ + PStrLen(u^ - _STRLEN)^ - 4)^ = ip4 then
+        begin
+          DeleteRawUtf8(TRawUtf8DynArray(StaticUuid), i);
+          break;
+        end
+        else
+          inc(u);
+    end;
   finally
     Safe.UnLock;
   end;
+  result := true;
 end;
 
 function DoWrite(W: TTextWriter; p: PDhcpLease; n, tix32, grace: cardinal;
