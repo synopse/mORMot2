@@ -515,11 +515,11 @@ begin
   FGrid.BorderStyle := bsSingle;
   FGrid.DefaultDrawing := False;
   FGrid.FixedCols := 0;
+  FGrid.RowCount := 2;
   FGrid.FixedRows := 1;
   FGrid.Options := [goFixedHorzLine, goFixedVertLine, goVertLine,
                     goHorzLine, goRowSelect
                     {$IFDEF FPC}, goThumbTracking{$ENDIF}];
-  FGrid.RowCount := 1;
   FGrid.ColCount := 1;
 
   // Connect events
@@ -582,21 +582,24 @@ begin
     FGrid.ColWidths[0] := FGrid.ClientWidth;
   end;
 
-  // Update row count
+  // Update row count - always set RowCount before FixedRows to satisfy
+  // TStringGrid constraint: FixedRows must be less than RowCount
   if FShowHeader then
   begin
-    FGrid.FixedRows := 1;
     RowCount := FItems.Count + 1;
+    if RowCount < 2 then
+      RowCount := 2;
+    FGrid.RowCount := RowCount;
+    FGrid.FixedRows := 1;
   end
   else
   begin
-    FGrid.FixedRows := 0;
     RowCount := FItems.Count;
+    if RowCount < 1 then
+      RowCount := 1;
+    FGrid.RowCount := RowCount;
+    FGrid.FixedRows := 0;
   end;
-
-  if RowCount < 1 then
-    RowCount := 1;
-  FGrid.RowCount := RowCount;
 
   // Sync selection
   SyncGridSelection;
