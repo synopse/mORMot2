@@ -144,11 +144,22 @@ type
   TNetIP4s = array of TNetIP4;
   /// store the 16-bit IP port to connect/bind a socket
   TNetPort = cardinal;
+
   /// store the 6 bytes / 48-bit of a typical ethernet MAC address binary
   TNetMac = array[0..5] of byte;
+  /// store several ethernet MAC addresses binary
+  TNetMacs = array of TNetMac;
   /// pointer to an ethernet MAC address binary buffer
   PNetMac = ^TNetMac;
   PPNetMac = ^PNetMac;
+  TNetMacArray = array[ 0 .. MaxInt div SizeOf(TNetMac) - 1 ] of TNetMac;
+  PNetMacArray = ^TNetMacArray;
+  /// store the 48-bit of a typical ethernet MAC address binary as cardinal+word
+  TNetMac48 = packed record
+    c: cardinal;
+    w: word;
+  end;
+  PNetMac48 = ^TNetMac48;
 
 const
   NO_ERROR = 0;
@@ -646,6 +657,13 @@ function MacToShort(mac: pointer): TShort23;
 
 /// reverse function from MacToText() or MacToHex()
 function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
+
+/// fill a MAC address as 00:00:00:00:00:00
+procedure FillZero(var Mac: TNetMac); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// search a MAC address from an array of TNetMac items using O(n) scan
+function MacIndex(first, mac: PNetMac48; n: PtrInt): PtrInt;
 
 /// convert a MAC address value from its standard hexadecimal text representation
 // - returns e.g. '12:50:b6:1e:c6:aa' from '1250b61ec6aa' or '1250B61EC6AA'
@@ -1820,7 +1838,7 @@ function ToIP4(const text: RawUtf8): TNetIP4;
 /// decode one or several IP addresses from CSV text
 function ToIP4s(const text: RawUtf8): TNetIP4s;
 
-/// parse a text input buffer until the end space or EOL
+/// parse a text input buffer until the end space or EOL - used for config files
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
 /// IdemPChar() like function, to avoid linking mormot.core.text
@@ -3918,6 +3936,29 @@ function MacToShort(mac: pointer): TShort23;
 begin
   result[0] := #17;
   ToHumanHexP(@result[1], mac, 6);
+end;
+
+procedure FillZero(var Mac: TNetMac);
+begin
+  TNetMac48(Mac).c := 0;
+  TNetMac48(Mac).w := 0;
+end;
+
+function MacIndex(first, mac: PNetMac48; n: PtrInt): PtrInt;
+var
+  c: cardinal;
+begin
+  result := 0;
+  c := mac^.c;
+  while result < n do
+  begin
+    if (first^.c = c) and
+       (first^.w = mac^.w) then
+      exit;
+    inc(first);
+    inc(result);
+  end;
+  result := -1;
 end;
 
 function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
