@@ -245,6 +245,17 @@ function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 /// decode the lens[doDhcpParameterRequestList] within dhcp^.option[]
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
 
+type
+  /// internal resultset used by ParseMacIP()
+  TMacIP = record
+    macp: pointer;
+    ip: TNetIP4;
+    mac: TNetMac;
+  end;
+
+/// parse a 'ip' or 'mac=ip' text into binary TNetIP4/TNetMac
+function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
+
 
 { **************** Middle-Level DHCP Scope and Lease Logic }
 
@@ -926,6 +937,27 @@ begin
         include(result, opt);
       dec(n);
     until n = 0;
+end;
+
+function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
+var
+  mac, ip: RawUtf8;
+  p: PUtf8Char;
+begin
+  result := false;
+  nfo.macp := nil;
+  if TrimSplit(macip, mac, ip, '=') then
+    if (length(mac) = 17) and
+       (TextToMac(pointer(mac), @nfo.mac)) then // 'mac=ip' format
+    begin
+      nfo.macp := @nfo.mac;
+      p := pointer(ip);
+    end
+    else
+      exit // invalid MAC
+  else
+    p := pointer(macip); // only 'ip'
+  result := NetIsIP4(p, @nfo.ip); // valid IP
 end;
 
 

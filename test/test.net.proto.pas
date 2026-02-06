@@ -1571,6 +1571,7 @@ var
   f: PAnsiChar;
   hostname: TShort7;
   rnd: TLecuyer;
+  nfo: TMacIP;
 
   procedure DoRequest(ndx: PtrInt);
   begin
@@ -1853,8 +1854,28 @@ begin
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
     Check(PosEx(' 192.168.1.101', txt) <> 0, 'saved 3');
     Check(length(txt) > 2000, 'saved len2');
+    // validate ParseMacIP()
     for i := 0 to n - 1 do
+    begin
       CheckNotEqual(ips[i], 0, 'ips');
+      FillZero(nfo.mac);
+      Check(IsZero(nfo.mac));
+      mac := IP4ToText(@ips[i]);
+      Check(ParseMacIP(nfo, mac));
+      Check(nfo.macp = nil);
+      Check(not IsEqual(nfo.mac, macs[i]));
+      CheckEqual(nfo.ip, ips[i]);
+      if i and 1 = 0 then
+        Make([MacToShort(@macs[i]), '=', mac], mac)
+      else
+        Make([MacToShort(@macs[i]), ' = ', mac], mac);
+      Check(ParseMacIP(nfo, mac));
+      Check(nfo.macp <> nil);
+      Check(nfo.macp = @nfo.mac);
+      Check(IsEqual(nfo.mac, macs[i]));
+      Check(not IsZero(nfo.mac));
+      CheckEqual(nfo.ip, ips[i]);
+    end;
     // twice with the requests to validate efficient renewal
     timer.Start;
     for i := 1 to n do
