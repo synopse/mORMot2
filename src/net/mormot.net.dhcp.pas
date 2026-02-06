@@ -248,12 +248,13 @@ function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptio
 type
   /// internal resultset used by ParseMacIP()
   TMacIP = record
-    macp: pointer;
     ip: TNetIP4;
     mac: TNetMac;
+    uuid: RawByteString;
   end;
 
-/// parse a 'ip' or 'mac=ip' text into binary TNetIP4/TNetMac
+/// parse a 'ip', 'mac=ip' or 'uuidhex=ip' text into binary TNetIP4/TNetMac
+// - recognize 'xx:xx:xx:xx:xx:xx' for MAC, and hexadecimal for UUID
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 
 
@@ -978,16 +979,21 @@ var
   p: PUtf8Char;
 begin
   result := false;
-  nfo.macp := nil;
-  if TrimSplit(macip, mac, ip, '=') then // 'mac=ip' format
-    if (length(mac) = 17) and // exact 'xx:xx:xx:xx:xx:xx' format
-       (TextToMac(pointer(mac), @nfo.mac)) then
+  FillZero(nfo.mac);
+  nfo.uuid := '';
+  if TrimSplit(macip, mac, ip, '=') then // 'mac=ip' or 'uuidhex=ip' format
+    if ((length(mac) = 17) and
+        (TextToMac(pointer(mac), @nfo.mac))) then
+      // exact 'xx:xx:xx:xx:xx:xx' format
+      p := pointer(ip)
+    else if HexToBin(pointer(mac), length(mac), nfo.uuid) then
     begin
-      nfo.macp := @nfo.mac;
+      // '0123456789abcdef'
+      FillZero(nfo.mac);
       p := pointer(ip);
     end
     else
-      exit // invalid MAC
+      exit // invalid MAC or hexadecimal UUID
   else
     p := pointer(macip); // only 'ip'
   result := NetIsIP4(p, @nfo.ip); // valid IP

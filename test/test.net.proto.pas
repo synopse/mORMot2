@@ -1554,7 +1554,7 @@ const
 procedure TNetworkProtocols.DHCP;
 var
   refdisc, refoffer, refreq, refack: RawByteString;
-  mac, txt: RawUtf8;
+  mac, ip, txt: RawUtf8;
   fn: TFileName;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
@@ -1860,21 +1860,27 @@ begin
       CheckNotEqual(ips[i], 0, 'ips');
       FillZero(nfo.mac);
       Check(IsZero(nfo.mac));
-      mac := IP4ToText(@ips[i]);
-      Check(ParseMacIP(nfo, mac));
-      Check(nfo.macp = nil);
+      ip := IP4ToText(@ips[i]);
+      Check(ParseMacIP(nfo, ip));
+      Check(IsZero(nfo.mac));
+      CheckEqual(nfo.uuid, '');
       Check(not IsEqual(nfo.mac, macs[i]));
       CheckEqual(nfo.ip, ips[i]);
       if i and 1 = 0 then
-        Make([MacToShort(@macs[i]), '=', mac], mac)
+        Make([MacToShort(@macs[i]), '=', ip], mac)
       else
-        Make([MacToShort(@macs[i]), ' = ', mac], mac);
+        Make([MacToShort(@macs[i]), ' = ', ip], mac);
       Check(ParseMacIP(nfo, mac));
-      Check(nfo.macp <> nil);
-      Check(nfo.macp = @nfo.mac);
+      Check(not IsZero(nfo.mac));
+      CheckEqual(nfo.uuid, '');
       Check(IsEqual(nfo.mac, macs[i]));
       Check(not IsZero(nfo.mac));
       CheckEqual(nfo.ip, ips[i]);
+      Make([BinToHexLower(@macs[i], 5), ' = ', ip], mac);
+      Check(ParseMacIP(nfo, mac));
+      Check(IsZero(nfo.mac));
+      CheckEqual(length(nfo.uuid), 5);
+      Check(CompareMem(pointer(nfo.uuid), @macs[i], 5));
     end;
     // twice with the requests to validate efficient renewal
     timer.Start;
