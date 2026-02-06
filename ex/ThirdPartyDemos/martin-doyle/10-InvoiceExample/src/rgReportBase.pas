@@ -131,7 +131,7 @@ end;
 
 procedure TReportBaseForm.CloseButtonClick(Sender: TObject);
 begin
-  ModalResult := mrClose;
+  ModalResult := mrCancel;
 end;
 
 procedure TReportBaseForm.RefreshReport;
@@ -148,7 +148,7 @@ end;
 function TReportBaseForm.ShowReport: Boolean;
 begin
   RefreshReport;
-  Result := ShowModal = mrClose;
+  Result := ShowModal = mrCancel;
 end;
 
 function TReportBaseForm.GetFormMenu: TMainMenu;
