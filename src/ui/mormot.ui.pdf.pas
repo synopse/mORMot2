@@ -12251,7 +12251,7 @@ begin
       begin
         dx := pointer(PtrUInt(@R) + R.emrtext.offDx);
         w := DXTextWidth(dx, R.emrText.nChars);
-        if w < Trunc(R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
+        if w < Trunc((R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
           dx := nil; // offDX=0 or within box
       end
       else
