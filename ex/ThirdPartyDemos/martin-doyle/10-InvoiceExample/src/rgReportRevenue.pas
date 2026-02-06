@@ -69,7 +69,8 @@ var
 implementation
 
 uses
-  mdGrids, DateUtils;
+  mdGrids, DateUtils,
+  mormot.core.base;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;

@@ -78,6 +78,7 @@ implementation
 
 uses
   mdGrids,
+  mormot.core.base,
   mormot.core.text,
   mormot.core.unicode;
 
@@ -194,6 +195,8 @@ function TOpenItemsReportForm.ParseAmount(const AText: string;
   out AAmount: currency): Boolean;
 var
   TempText: string;
+  TempValue: extended;
+  err: integer;
 begin
   Result := False;
   AAmount := 0;
@@ -207,7 +210,10 @@ begin
   end;
 
   TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
-  AAmount := StrToCurrency(pointer(StringToUtf8(TempText)));
+  TempValue := GetExtended(pointer(StringToUtf8(TempText)), err);
+  if err <> 0 then
+    Exit;
+  AAmount := TempValue;
   Result := True;
 end;
 

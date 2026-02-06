@@ -73,7 +73,8 @@ var
 implementation
 
 uses
-  mdGrids;
+  mdGrids,
+  mormot.core.base;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -178,7 +179,7 @@ begin
 
   if not ParseDate(EditFromDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid From Date (%s).', [FormatSettings.ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid From Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
     EditFromDate.SetFocus;
     Exit;
   end;
@@ -186,7 +187,7 @@ begin
 
   if not ParseDate(EditToDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid To Date (%s).', [FormatSettings.ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid To Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
     EditToDate.SetFocus;
     Exit;
   end;
