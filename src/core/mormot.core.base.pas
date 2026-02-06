@@ -9821,7 +9821,7 @@ begin
       exit;
     end;
   end;
-  result := '';
+  FastAssignNew(result); // done last becase result could point to S
 end;
 
 function Split(const Str, SepStr: RawUtf8; StartPos: PtrInt): RawUtf8;
@@ -10092,7 +10092,7 @@ end;
 {$ifdef OSWINDOWS} // not defined in the Delphi RTL but in its Windows unit :(
 function GetCurrentThreadId: PtrUInt; stdcall; external 'kernel32';
 function CoCreateGuid(var h: THash128): PtrUInt; stdcall; external 'ole32.dll';
-{$ifndef CPUINTEL} // always available on WinARM
+{$ifndef CPUINTEL} // always available on WinARM on not defined on Delphi RTL
 function GetTickCount64: UInt64; stdcall; external 'kernel32';
 {$endif CPUINTEL}
 

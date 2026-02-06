@@ -305,6 +305,15 @@ type
   // - 10,000 leases would consume 160KB which fits in L2 cache on modern CPU
   TLeaseDynArray = array of TDhcpLease;
 
+  /// how to refine DHCP server process for one TDhcpScopeSettings
+  // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
+  // (not included by default since seems overkill and KEA/Windows don't do it)
+  TDhcpScopeOption = (
+    dsoInformRateLimit
+    );
+  /// refine DHCP server process for one TDhcpScopeSettings
+  TDhcpScopeOptions = set of TDhcpScopeOption;
+
   /// define one scope/subnet processing context from TDhcpServerSettings
   // - fields and methods are optimized to efficiently map TDhcpProcess logic
   // - most methods are not thread-safe: the caller should make Safe.Lock/UnLock
@@ -381,6 +390,7 @@ type
     function TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime;
       localcopy: boolean): integer;
   private
+    Options: TDhcpScopeOptions;
     // little-endian IP range values for NextIP
     LastIpLE, IpMinLE, IpMaxLE: TNetIP4;
     // match scope settings values in efficient actionable format
@@ -422,6 +432,7 @@ type
     fServerIdentifier: RawUtf8;
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
+    fOptions: TDhcpScopeOptions;
   public
     /// setup this instance with default values
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
@@ -493,6 +504,10 @@ type
     // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
     property GraceFactor: cardinal
       read fGraceFactor write fGraceFactor default 2;
+    /// refine DHCP server process for this scope
+    // - default is [] but you may tune it for your actual network needs
+    property Options: TDhcpScopeOptions
+      read fOptions write fOptions;
   end;
   /// a dynamyc array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
@@ -1425,44 +1440,45 @@ var
   i: PtrInt;
 begin
   // convert the text settings into Data.* raw values
-  Data.Gateway           := ToIP4(DefaultGateway);
-  Data.Broadcast         := ToIP4(BroadCastAddress);
-  Data.ServerIdentifier  := ToIP4(ServerIdentifier);
+  Data.Gateway           := ToIP4(fDefaultGateway);
+  Data.Broadcast         := ToIP4(fBroadCastAddress);
+  Data.ServerIdentifier  := ToIP4(fServerIdentifier);
   Data.LastIpLE          := 0;
-  Data.IpMinLE           := ToIP4(RangeMin);
-  Data.IpMaxLE           := ToIP4(RangeMax);
-  Data.DnsServer         := TIntegerDynArray(ToIP4s(DnsServers));
+  Data.IpMinLE           := ToIP4(fRangeMin);
+  Data.IpMaxLE           := ToIP4(fRangeMax);
+  Data.DnsServer         := TIntegerDynArray(ToIP4s(fDnsServers));
   Data.StaticIP          := nil;
   Data.StaticMac         := nil;
-  for i := 0 to high(Static) do
-    if not Data.AddStatic(Static[i]) then // add sorted, from 'ip' or 'mac=ip'
-      EDhcp.RaiseUtf8('PrepareScope: invalid Static=%', [Static[i]]);
-  Data.LeaseTime         := LeaseTimeSeconds; // 100%
-  if Data.LeaseTime < 30 then                // 30 seconds minimum lease
-    Data.LeaseTime := 30;
+  for i := 0 to high(fStatic) do
+    if not Data.AddStatic(fStatic[i]) then // add sorted, from 'ip' or 'mac=ip'
+      EDhcp.RaiseUtf8('PrepareScope: invalid Static=%', [fStatic[i]]);
+  Data.LeaseTime         := fLeaseTimeSeconds; // 100%
+  if Data.LeaseTime < 30 then
+    Data.LeaseTime := 30;                      // 30 seconds minimum lease
   Data.RenewalTime       := Data.LeaseTime shr 1;       // 50%
   Data.Rebinding         := (Data.LeaseTime * 7) shr 3; // 87.5%
-  Data.OfferHolding      := OfferHoldingSecs; // 5 seconds
+  Data.OfferHolding      := fOfferHoldingSecs; // 5 seconds
   if Data.OfferHolding < 1 then
     Data.OfferHolding := 1
   else if Data.OfferHolding > Data.RenewalTime then
     Data.OfferHolding := Data.RenewalTime;
-  Data.MaxDeclinePerSec  := MaxDeclinePerSecond; // max 5 DECLINE per sec
-  Data.DeclineTime       := DeclineTimeSeconds;
+  Data.MaxDeclinePerSec  := fMaxDeclinePerSecond; // max 5 DECLINE per sec
+  Data.DeclineTime       := fDeclineTimeSeconds;
   if Data.DeclineTime = 0 then
     Data.DeclineTime := Data.LeaseTime;
-  Data.GraceFactor       := GraceFactor;         // * 2
-  // retrieve the subnet mask from settings
-  if not Data.Subnet.From(SubnetMask) then
+  Data.GraceFactor       := fGraceFactor;         // * 2
+  Data.Options           := fOptions;
+  // retrieve and adjust the subnet mask from settings
+  if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
       'PrepareScope: unexpected SubNetMask=% (should be mask ip or ip/sub)',
-      [SubnetMask]);
+      [fSubnetMask]);
   if Data.Subnet.mask = cAnyHost32 then
   begin
     // SubNetMask was not '192.168.0.1/24': is expected to be '255.255.255.0'
     if IP4Prefix(Data.Subnet.ip) = 0 then
       EDhcp.RaiseUtf8('PrepareScope: SubNetMask=% is not a valid IPv4 mask',
-        [SubnetMask]);
+        [fSubnetMask]);
     mask := Data.Subnet.ip;
     // we expect other parameters to be set specifically: compute final Subnet
     if Data.ServerIdentifier = 0 then
