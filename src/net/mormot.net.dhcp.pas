@@ -198,16 +198,23 @@ procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte); overload;
   {$ifdef FPC} inline; {$endif}
 
 /// append a raw binary value to the TDhcpPacket.options packet
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pbyte;
+// - default length is 4 so that you could use just @SomeIP4
+procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pointer;
   len: PtrUInt = 4); overload;
 
-/// append a TNetIP4s dynamic array to the TDhcpPacket.options packet
-procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
+/// append a non-TDhcpOption to the TDhcpPacket.options packet
+// - could be used to append some unsupported option to the response
+procedure DhcpAddOption(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt); overload;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// append a TNetIP4s dynamic array to the TDhcpPacket.options packet
+// -  here ips is a <> nil pointer(dynamicarray) of TNetIP4 = cardinal
+procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
 
 /// append a copy of an existing TDhcpPacket.options option for lens[opt]
 // - sourcelen should point to recv[lens[opt]] with lens[opt] <> 0
 procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
+
 
 type
  /// efficient DhcpParse() results as O(1) lookup of recognized options
@@ -688,13 +695,21 @@ begin
   p := @p[3];
 end;
 
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pbyte; len: PtrUInt);
+procedure DhcpAddOption(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt);
+var
+  d: PByteArray;
 begin
-  p[0] := AnsiChar(DHCP_OPTION_NUM[op]);
-  p[1] := AnsiChar(len);
+  d := pointer(p);
+  d[0] := op;
+  d[1] := len;
   if len <> 0 then
-    MoveFast(b^, p[2], len);
-  p := @p[len + 2];
+    MoveFast(b^, d[2], len);
+  p := @d[len + 2];
+end;
+
+procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pointer; len: PtrUInt);
+begin
+  DhcpAddOption(p, DHCP_OPTION_NUM[op], b, len);
 end;
 
 procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
@@ -714,8 +729,8 @@ function DhcpAddOptionRequestList(p: PAnsiChar; op: TDhcpOptions): PAnsiChar;
 var
   o: TDhcpOption;
 begin
-  PCardinal(p)^ := DHCP_OPTION_NUM[doDhcpParameterRequestList];
-  inc(p);
+  PCardinal(p)^ := DHCP_OPTION_NUM[doDhcpParameterRequestList]; // op + len=0
+  inc(p); // p[0]=len
   for o := succ(low(o)) to pred(high(o)) do
     if o in op then
     begin
