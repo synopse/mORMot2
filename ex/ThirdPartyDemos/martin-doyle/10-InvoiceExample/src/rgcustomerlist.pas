@@ -187,6 +187,7 @@ var
   MinCompanyWidth: Integer;
   MinCityWidth: Integer;
 begin
+  if FCustomerListGrid = nil then Exit;
   if FCustomerListGrid.Columns.Count < 2 then Exit;
 
   MinCompanyWidth := Round(12 * FBaseHeight);

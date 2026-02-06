@@ -231,6 +231,7 @@ var
   AvailableWidth: Integer;
   NoWidth, DateWidth, AmountWidth, PaidWidth, OpenWidth, StatusWidth: Integer;
 begin
+  if FInvoiceListGrid = nil then Exit;
   if FInvoiceListGrid.Columns.Count < 6 then Exit;
 
   StatusWidth := Round(2 * FBaseHeight);
