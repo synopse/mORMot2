@@ -74,7 +74,8 @@ implementation
 
 uses
   mdGrids,
-  mormot.core.base;
+  mormot.core.base,
+  mormot.core.text;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -224,7 +225,7 @@ begin
       ListItem.Caption := '';
     ListItem.SubItems.Add(Item.Company);
     ListItem.SubItems.Add(Item.OrderNo);
-    ListItem.SubItems.Add(Format('%.2n', [Double(Item.AmountPaid)]));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.AmountPaid)^));
     ListItem.Data := Pointer(PtrInt(Item.OrderID));
   end;
 end;

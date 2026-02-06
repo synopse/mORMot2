@@ -80,6 +80,7 @@ implementation
 
 uses
   mormot.core.base,
+  mormot.core.text,
   mormot.core.unicode;
 
 {$R *.dfm}
@@ -241,7 +242,7 @@ begin
 
   EditDescription.Text := AItem.Description;
   EditQuantity.Text := Format('%.2f', [AItem.Quantity]);
-  EditPrice.Text := Format('%.2f', [Double(AItem.ListPrice)]);
+  EditPrice.Text := Curr64ToString(PInt64(@AItem.ListPrice)^);
   SpinDiscount.Value := AItem.Discount;
 
   ActiveControl := EditDescription;

@@ -206,8 +206,9 @@ begin
 
   if Amount > FOpenAmount then
   begin
-    if MessageDlg(Format('Amount %.2n exceeds open amount %.2n. Continue?',
-        [Double(Amount), Double(FOpenAmount)]),
+    if MessageDlg('Amount ' + Curr64ToString(PInt64(@Amount)^) +
+        ' exceeds open amount ' + Curr64ToString(PInt64(@FOpenAmount)^) +
+        '. Continue?',
       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
     begin
       EditAmount.SetFocus;
@@ -265,8 +266,8 @@ begin
   FPaymentSuccessful := False;
 
   LabelInvoiceNo.Caption := AInvoiceNo;
-  LabelOpenValue.Caption := Format('%.2n', [Double(AOpenAmount)]);
-  EditAmount.Text := Format('%.2f', [Double(AOpenAmount)]);
+  LabelOpenValue.Caption := Curr64ToString(PInt64(@AOpenAmount)^);
+  EditAmount.Text := Curr64ToString(PInt64(@AOpenAmount)^);
   EditDate.Text := FormatDateTime('dd.mm.yyyy', Date);
 
   EditAmount.SelectAll;

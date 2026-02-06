@@ -255,9 +255,9 @@ begin
       ListItem.Caption := IntToStr(Item.Position);
       ListItem.SubItems.Add(Item.Description);
       ListItem.SubItems.Add(Format('%.2f', [Item.Quantity]));
-      ListItem.SubItems.Add(Format('%.2n', [Double(Item.ListPrice)]));
+      ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.ListPrice)^));
       ListItem.SubItems.Add(IntToStr(Item.Discount));
-      ListItem.SubItems.Add(Format('%.2n', [Double(Item.Amount)]));
+      ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.Amount)^));
       ListItem.Data := Pointer(PtrInt(i));
     end;
   finally
@@ -278,8 +278,11 @@ begin
 end;
 
 procedure TInvoiceEditForm.UpdateTotal;
+var
+  Total: currency;
 begin
-  LabelTotalValue.Caption := Format('%.2n', [Double(FInvoiceService.GetItemsTotal)]);
+  Total := FInvoiceService.GetItemsTotal;
+  LabelTotalValue.Caption := Curr64ToString(PInt64(@Total)^);
 end;
 
 procedure TInvoiceEditForm.FormDestroy(Sender: TObject);

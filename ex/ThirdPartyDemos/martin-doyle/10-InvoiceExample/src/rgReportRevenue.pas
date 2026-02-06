@@ -70,7 +70,8 @@ implementation
 
 uses
   mdGrids, DateUtils,
-  mormot.core.base;
+  mormot.core.base,
+  mormot.core.text;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -202,9 +203,9 @@ begin
     ListItem := FResultGrid.Items.Add;
     ListItem.Caption := Item.Company;
     ListItem.SubItems.Add(IntToStr(Item.InvoiceCount));
-    ListItem.SubItems.Add(Format('%.2n', [Double(Item.TotalRevenue)]));
-    ListItem.SubItems.Add(Format('%.2n', [Double(Item.TotalPaid)]));
-    ListItem.SubItems.Add(Format('%.2n', [Double(Item.TotalOpen)]));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalRevenue)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalPaid)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalOpen)^));
     ListItem.Data := Pointer(PtrInt(Item.CustomerID));
   end;
 end;
