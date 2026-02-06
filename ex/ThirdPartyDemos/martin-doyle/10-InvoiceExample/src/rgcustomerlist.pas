@@ -335,8 +335,7 @@ begin
   CustomerID := GetSelectedCustomerID;
   if CustomerID > 0 then
   begin
-    if MessageDlg('Delete Customer',
-                  'Are you sure you want to delete this customer?',
+    if MessageDlg('Are you sure you want to delete this customer?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     begin
       // TODO: Implement customer deletion
