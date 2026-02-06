@@ -106,7 +106,6 @@ begin
   // Create TMDListGrid (replaces TListView for BUG-004 fix)
   FCustomerListGrid := TMDListGrid.Create(Self);
   FCustomerListGrid.Parent := Self;
-  FCustomerListGrid.Align := alClient;
   FCustomerListGrid.OnSelectItem := CustomerListGridSelectItem;
   FCustomerListGrid.OnDblClick := CustomerListGridDblClick;
 
@@ -121,6 +120,7 @@ end;
 
 procedure TCustomerListForm.FormShow(Sender: TObject);
 begin
+  FCustomerListGrid.Align := alClient;
   LoadCustomers;
   UpdateButtons;
 end;

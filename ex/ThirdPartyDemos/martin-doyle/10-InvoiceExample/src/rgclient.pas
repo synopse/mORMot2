@@ -1325,6 +1325,7 @@ end;
 
 function TInvoiceEditService.GetItem(AIndex: integer): TDtoInvoiceItem;
 begin
+  Finalize(Result);
   FillChar(Result, SizeOf(Result), 0);
   if (AIndex >= 0) and (AIndex < Length(FItems)) then
     Result := FItems[AIndex];
