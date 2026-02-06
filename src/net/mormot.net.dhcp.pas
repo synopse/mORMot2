@@ -1285,7 +1285,7 @@ begin
     DhcpAddOptions(f, doDomainNameServers, pointer(DnsServer));
   if not andLeaseTimes then // static INFORM don't need timeouts
     exit;
-  DhcpAddOption(f, doDhcpLeaseTime,      @LeaseTime); // big-endian
+  DhcpAddOption(f, doDhcpLeaseTime,     @LeaseTime); // big-endian
   DhcpAddOption(f, doDhcpRenewalTime,   @RenewalTime);
   DhcpAddOption(f, doDhcpRebindingTime, @Rebinding);
 end;

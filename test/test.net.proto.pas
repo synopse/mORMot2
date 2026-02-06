@@ -1858,9 +1858,11 @@ begin
     CheckEqual(length(server.SaveToText), length(txt), 'no new offer');
     // benchmark OnIdle() performance
     Check(not FileExists(fn), 'file before OnIdle');
+    CheckEqual(server.OnIdle(2000), 0, 'onidle persist but no outdated');
+    Check(FileExists(fn), 'file after OnIdle');
     timer.Start;
-    for i := 1 to n * 10 do // increasing tix32 to trigger process
-      CheckEqual(server.OnIdle(i shl 13), 0);
+    for i := 1 to n * 10 do // increasing tix32 to trigger CheckOutdated
+      CheckEqual(server.OnIdle((i * 1000) mod 6000), 0, 'onidle');
     NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
     // ensure OnIdle() did persist the file on disk
     CheckEqual(server.Count, n + 1, 'count');
