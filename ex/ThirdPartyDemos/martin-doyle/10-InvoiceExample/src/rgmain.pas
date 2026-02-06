@@ -40,7 +40,8 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ActnList, Menus,
-  StdActns, ExtCtrls, StdCtrls, MdForms, rgClient, rgCustomerList, rgInvoiceList;
+  StdActns, ExtCtrls, StdCtrls, MdForms, rgClient, rgCustomerList, rgInvoiceList,
+  ImgList;
 
 type
 

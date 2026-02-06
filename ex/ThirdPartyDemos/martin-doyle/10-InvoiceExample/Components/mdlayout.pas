@@ -199,8 +199,10 @@ begin
 end;
 
 procedure TLayoutHelper.ApplyPlatformFixes;
+{$IFDEF DARWIN}
 var
   i: Integer;
+{$ENDIF}
 begin
   if FPlatformAdjusted then Exit;
 
