@@ -420,8 +420,7 @@ begin
   InvoiceID := GetSelectedInvoiceID;
   if InvoiceID > 0 then
   begin
-    if MessageDlg('Delete Invoice',
-                  'Are you sure you want to delete this invoice?',
+    if MessageDlg('Are you sure you want to delete this invoice?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     begin
       // TODO: Implement invoice deletion

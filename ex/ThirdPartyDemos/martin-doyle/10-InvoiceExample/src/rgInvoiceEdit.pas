@@ -352,8 +352,7 @@ begin
   if FItemsListGrid.Selected = nil then
     Exit;
 
-  if MessageDlg('Remove Item',
-                'Are you sure you want to remove this item?',
+  if MessageDlg('Are you sure you want to remove this item?',
                 mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
     Exit;
 
