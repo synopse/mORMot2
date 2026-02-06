@@ -407,7 +407,7 @@ type
   TDhcpScopeSettings = class(TSynPersistent)
   protected
     fSubnetMask: RawUtf8;
-    fStaticIPs: RawUtf8;
+    fStatic: TRawUtf8DynArray;
     fRangeMin: RawUtf8;
     fRangeMax: RawUtf8;
     fDefaultGateway: RawUtf8;
@@ -436,11 +436,11 @@ type
     // raw value sent in DHCP headers, and fill RangeMin/RangeMax and others
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
-    /// some static IP addresses as CSV, reserved on the network
-    // - e.g. '192.168.1.2,192.168.1.100'
-    // - default is ''
-    property StaticIPs: RawUtf8
-      read fStaticIPs write fStaticIPs;
+    /// some static IP addresses potentially with their MAC, reserved on the network
+    // - supplied as 'ip' or 'mac=ip' items
+    // - e.g. ['192.168.1.2','2f:af:9e:0f:b8:2a=192.168.1.100']
+    property Static: TRawUtf8DynArray
+      read fStatic write fStatic;
     /// minimal IP range e.g. '192.168.1.10'
     // - default is '' and will be filled by SubnetMask value as 10..254
     property RangeMin: RawUtf8
@@ -1414,31 +1414,36 @@ end;
 procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
 var
   mask: TNetIP4;
+  i: PtrInt;
 begin
   // convert the text settings into Data.* raw values
-  Data.Gateway          := ToIP4(DefaultGateway);
-  Data.Broadcast        := ToIP4(BroadCastAddress);
-  Data.ServerIdentifier := ToIP4(ServerIdentifier);
-  Data.LastIpLE         := 0;
-  Data.IpMinLE          := ToIP4(RangeMin);
-  Data.IpMaxLE          := ToIP4(RangeMax);
-  Data.DnsServer        := TIntegerDynArray(ToIP4s(DnsServers));
-  Data.SortedStatic     := TIntegerDynArray(ToIP4s(StaticIPs));
-  Data.LeaseTime        := LeaseTimeSeconds; // 100%
+  Data.Gateway           := ToIP4(DefaultGateway);
+  Data.Broadcast         := ToIP4(BroadCastAddress);
+  Data.ServerIdentifier  := ToIP4(ServerIdentifier);
+  Data.LastIpLE          := 0;
+  Data.IpMinLE           := ToIP4(RangeMin);
+  Data.IpMaxLE           := ToIP4(RangeMax);
+  Data.DnsServer         := TIntegerDynArray(ToIP4s(DnsServers));
+  Data.StaticIP          := nil;
+  Data.StaticMac         := nil;
+  for i := 0 to high(Static) do
+    if not Data.AddStatic(Static[i]) then // add sorted, from 'ip' or 'mac=ip'
+      EDhcp.RaiseUtf8('PrepareScope: invalid Static=%', [Static[i]]);
+  Data.LeaseTime         := LeaseTimeSeconds; // 100%
   if Data.LeaseTime < 30 then                // 30 seconds minimum lease
     Data.LeaseTime := 30;
-  Data.RenewalTime      := Data.LeaseTime shr 1;       // 50%
-  Data.Rebinding        := (Data.LeaseTime * 7) shr 3; // 87.5%
-  Data.OfferHolding     := OfferHoldingSecs; // 5 seconds
+  Data.RenewalTime       := Data.LeaseTime shr 1;       // 50%
+  Data.Rebinding         := (Data.LeaseTime * 7) shr 3; // 87.5%
+  Data.OfferHolding      := OfferHoldingSecs; // 5 seconds
   if Data.OfferHolding < 1 then
     Data.OfferHolding := 1
   else if Data.OfferHolding > Data.RenewalTime then
     Data.OfferHolding := Data.RenewalTime;
-  Data.MaxDeclinePerSec := MaxDeclinePerSecond; // max 5 DECLINE per sec
-  Data.DeclineTime      := DeclineTimeSeconds;
+  Data.MaxDeclinePerSec  := MaxDeclinePerSecond; // max 5 DECLINE per sec
+  Data.DeclineTime       := DeclineTimeSeconds;
   if Data.DeclineTime = 0 then
     Data.DeclineTime := Data.LeaseTime;
-  Data.GraceFactor      := GraceFactor;         // * 2
+  Data.GraceFactor       := GraceFactor;         // * 2
   // retrieve the subnet mask from settings
   if not Data.Subnet.From(SubnetMask) then
     EDhcp.RaiseUtf8(
