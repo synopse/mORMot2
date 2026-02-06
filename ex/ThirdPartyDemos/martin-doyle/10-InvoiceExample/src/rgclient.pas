@@ -1176,6 +1176,7 @@ begin
   for i := 0 to FOrder.Items.Count - 1 do
   begin
     Item := FOrder.Items[i];
+    Finalize(DtoItem);
     FillChar(DtoItem, SizeOf(DtoItem), 0);
     DtoItem.Position := Item.Position;
     DtoItem.PartNo := Utf8ToString(Item.PartNo);
