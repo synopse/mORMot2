@@ -460,8 +460,8 @@ type
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
     /// some static IP addresses potentially with their MAC, reserved on the network
-    // - supplied as 'ip' or 'mac=ip' items
-    // - e.g. ['192.168.1.2','2f:af:9e:0f:b8:2a=192.168.1.100']
+    // - supplied as "ip", "mac=ip" or "uuidhex=ip" string items
+    // - e.g. ["192.168.1.2","2f:af:9e:0f:b8:2a=192.168.1.100"]
     property Static: TRawUtf8DynArray
       read fStatic write fStatic;
     /// minimal IP range e.g. '192.168.1.10'
@@ -597,6 +597,8 @@ type
     /// contains the client MAC address (raw Mac64) as human readable text
     // - ready for logging, with no memory allocation during the process
     Mac: string[17];
+    /// some temporary storage for a fake DHCP lease
+    Temp: TDhcpLease;
   end;
 
   /// optional callback signature for TDhcpProcess.ComputeResponse
@@ -630,7 +632,7 @@ type
     // TDhcpServerSettings.Verify() if you want to intercept such errors
     // - if aSettings = nil, will use TDhcpServerSettings default parameters
     procedure Setup(aSettings: TDhcpServerSettings = nil);
-    /// register another static 'ip' or 'mac=ip' address to the internal pool
+    /// register another static 'ip', 'mac=ip' or 'uuidhex=ip' to the pool
     // - in addition to aScopeSettings.Static array
     // - could be used at runtime depending on the network logic
     // - those static IPs are not persisted in FileName/SaveToFile
@@ -1539,7 +1541,7 @@ begin
   Data.StaticIP          := nil;
   Data.StaticMac         := nil;
   for i := 0 to high(fStatic) do
-    if not Data.AddStatic(fStatic[i]) then // add sorted, from 'ip' or 'mac=ip'
+    if not Data.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
       EDhcp.RaiseUtf8('PrepareScope: invalid Static=%', [fStatic[i]]);
   Data.LeaseTime         := fLeaseTimeSeconds; // 100%
   if Data.LeaseTime < 30 then
@@ -1726,7 +1728,7 @@ begin
     exit;
   fScopeSafe.ReadLock;
   try
-    result := GetScope(nfo.ip)^.AddStatic(nfo.ip, nfo.macp);
+    result := GetScope(nfo.ip)^.AddStatic(nfo);
   finally
     fScopeSafe.ReadUnLock;
   end;
@@ -2137,7 +2139,19 @@ begin
     Data.Tix32 := GetTickSec;
     Data.Scope^.Safe.Lock; // blocking for this subnet
     try
-      p := Data.Scope^.FindMac(Data.Mac64); // from Entry[] and StaticMac[]
+      // find any existing lease - or StaticMac[] StaticUuid[] fake lease
+      if (Data.Scope^.StaticUuid <> nil) and
+         (Data.RecvLens[doDhcpClientIdentifier] <> 0) and
+         (Data.Scope^.FindUuid(@Data.Recv.options[
+            Data.RecvLens[doDhcpClientIdentifier]], Data.Temp.IP4) <> 0) then
+      begin
+        p := @Data.Temp; // fake PDhcpLease for this StaticUuid[]
+        PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
+        p^.State := lsStatic;
+      end
+      else
+        p := Data.Scope^.FindMac(Data.Mac64); // from Entry[] and StaticMac[]
+      // process the received DHCP message
       case Data.RecvType of
         dmtDiscover:
           begin
