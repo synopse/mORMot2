@@ -86,7 +86,8 @@ implementation
 
 uses
   mormot.core.base,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.unicode;
 
 {$R *.dfm}
 
