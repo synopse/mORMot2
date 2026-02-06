@@ -460,8 +460,10 @@ end;
 procedure TMDListItems.BeginUpdate;
 begin
   Inc(FUpdateCount);
+  {$IFDEF FPC}
   if (FOwner <> nil) and (FOwner.FGrid <> nil) then
     FOwner.FGrid.BeginUpdate;
+  {$ENDIF}
 end;
 
 procedure TMDListItems.EndUpdate;
@@ -474,8 +476,10 @@ begin
       if (FOwner <> nil) then
       begin
         FOwner.UpdateGridSize;
+        {$IFDEF FPC}
         if FOwner.FGrid <> nil then
           FOwner.FGrid.EndUpdate;
+        {$ENDIF}
       end;
     end;
   end;
