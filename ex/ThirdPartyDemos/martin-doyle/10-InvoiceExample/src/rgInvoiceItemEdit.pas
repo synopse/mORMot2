@@ -78,6 +78,10 @@ var
 
 implementation
 
+uses
+  mormot.core.base,
+  mormot.core.unicode;
+
 {$R *.dfm}
 
 { TInvoiceItemEditForm }
@@ -160,6 +164,7 @@ function TInvoiceItemEditForm.ParseDecimal(const AText: string;
   out AValue: Double): Boolean;
 var
   TempText: string;
+  err: integer;
 begin
   Result := False;
   AValue := 0;
@@ -168,10 +173,9 @@ begin
   if TempText = '' then
     Exit;
 
-  TempText := StringReplace(TempText, ',', FormatSettings.DecimalSeparator, [rfReplaceAll]);
-  TempText := StringReplace(TempText, '.', FormatSettings.DecimalSeparator, [rfReplaceAll]);
-
-  Result := TryStrToFloat(TempText, AValue);
+  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
+  AValue := GetExtended(pointer(StringToUtf8(TempText)), err);
+  Result := (err = 0);
 end;
 
 function TInvoiceItemEditForm.ValidateInput: Boolean;
