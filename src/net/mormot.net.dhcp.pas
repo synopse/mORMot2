@@ -397,6 +397,8 @@ type
   /// store all scope/subnet definitions in a dynamic array
   TDhcpScopes = array of TDhcpScope;
 
+function ToText(st: TLeaseState): PShortString; overload;
+
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
@@ -977,6 +979,12 @@ end;
 
 
 { **************** Middle-Level DHCP Scope and Lease Logic }
+
+function ToText(st: TLeaseState): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TLeaseState), ord(st));
+end;
+
 
 { TDhcpScope }
 
