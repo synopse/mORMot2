@@ -17,8 +17,6 @@ object InvoiceListForm: TInvoiceListForm
     Width = 600
     Align = alTop
     BevelOuter = bvNone
-    ClientHeight = 40
-    ClientWidth = 600
     TabOrder = 0
     object NewButton: TButton
       Left = 8
@@ -68,8 +66,6 @@ object InvoiceListForm: TInvoiceListForm
     Width = 600
     Align = alBottom
     BevelOuter = bvNone
-    ClientHeight = 30
-    ClientWidth = 600
     TabOrder = 2
     object LegendPaid: TLabel
       Left = 8

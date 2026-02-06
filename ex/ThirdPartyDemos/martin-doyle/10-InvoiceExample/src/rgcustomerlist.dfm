@@ -17,8 +17,6 @@ object CustomerListForm: TCustomerListForm
     Width = 600
     Align = alTop
     BevelOuter = bvNone
-    ClientHeight = 40
-    ClientWidth = 600
     TabOrder = 0
     object NewButton: TButton
       Left = 8

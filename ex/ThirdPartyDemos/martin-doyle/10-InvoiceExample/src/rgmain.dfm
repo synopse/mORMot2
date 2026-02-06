@@ -19,8 +19,6 @@ object MainForm: TMainForm
     Width = 1300
     Align = alTop
     BevelOuter = bvNone
-    ClientHeight = 50
-    ClientWidth = 1300
     ParentBackground = False
     TabOrder = 0
     object QuickInfoCustomerCount: TLabel
@@ -90,8 +88,6 @@ object MainForm: TMainForm
     Width = 1300
     Align = alClient
     BevelOuter = bvNone
-    ClientHeight = 516
-    ClientWidth = 1300
     ParentBackground = False
     TabOrder = 1
     object LeftSplitter: TSplitter
@@ -117,8 +113,6 @@ object MainForm: TMainForm
       Width = 775
       Align = alClient
       BevelOuter = bvNone
-      ClientHeight = 516
-      ClientWidth = 775
       ParentBackground = False
       TabOrder = 1
       object CustomerSummaryPanel: TPanel
@@ -128,8 +122,6 @@ object MainForm: TMainForm
         Width = 775
         Align = alTop
         BevelOuter = bvNone
-        ClientHeight = 60
-        ClientWidth = 775
         ParentBackground = False
         TabOrder = 0
         object CustomerSummaryName: TLabel
@@ -167,8 +159,6 @@ object MainForm: TMainForm
     Width = 1300
     Align = alBottom
     BevelOuter = bvNone
-    ClientHeight = 26
-    ClientWidth = 1300
     ParentBackground = False
     TabOrder = 2
     object StatusLabel: TLabel
