@@ -77,7 +77,9 @@ var
 implementation
 
 uses
-  mdGrids;
+  mdGrids,
+  mormot.core.text,
+  mormot.core.unicode;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -192,7 +194,6 @@ function TOpenItemsReportForm.ParseAmount(const AText: string;
   out AAmount: currency): Boolean;
 var
   TempText: string;
-  TempDouble: Double;
 begin
   Result := False;
   AAmount := 0;
@@ -205,12 +206,9 @@ begin
     Exit;
   end;
 
-  TempText := StringReplace(TempText, ',', FormatSettings.DecimalSeparator, [rfReplaceAll]);
-  TempText := StringReplace(TempText, '.', FormatSettings.DecimalSeparator, [rfReplaceAll]);
-
-  Result := TryStrToFloat(TempText, TempDouble);
-  if Result then
-    AAmount := TempDouble;
+  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
+  AAmount := StrToCurrency(pointer(StringToUtf8(TempText)));
+  Result := True;
 end;
 
 function TOpenItemsReportForm.ValidateFilters: Boolean;
@@ -222,7 +220,7 @@ begin
 
   if not ParseDate(EditFromDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid From Date (%s).', [FormatSettings.ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid From Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
     EditFromDate.SetFocus;
     Exit;
   end;
@@ -230,7 +228,7 @@ begin
 
   if not ParseDate(EditToDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid To Date (%s).', [FormatSettings.ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid To Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
     EditToDate.SetFocus;
     Exit;
   end;
