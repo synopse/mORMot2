@@ -371,9 +371,6 @@ type
     // - won't search in StaticIP[] and StaticMac[]
     function FindIp4(ip4: TNetIP4): PDhcpLease;
       {$ifdef FPC} inline; {$endif}
-    /// search an Option 61 client-identifier in StaticUuid[]
-    function FindUuid(opt61: PByteArray; var ip4: TNetIP4): TNetIP4;
-      {$ifdef FPC} inline; {$endif}
     /// retrieve a new lease in Entry[] - maybe recycled from ReuseIp4()
     function NewLease: PDhcpLease;
     /// release a lease in Entry[] - add it to the recycled FreeList[]
@@ -596,8 +593,9 @@ type
     Ip: TShort16;
     /// contains the client MAC address (raw Mac64) as human readable text
     // - ready for logging, with no memory allocation during the process
-    Mac: string[17];
-    /// some temporary storage for a fake DHCP lease
+    // - may contain hexadecimal UUID of static Option 61 client-identifier
+    Mac: string[63];
+    /// some temporary storage for a StaticUuid[] fake DHCP lease
     Temp: TDhcpLease;
   end;
 
@@ -1281,21 +1279,6 @@ begin
   until n = 0;
 end;
 
-function TDhcpScope.FindUuid(opt61: PByteArray; var ip4: TNetIP4): TNetIP4;
-begin
-  result := 0;
-  case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8–16 bytes
-    0 .. 4, // <= MIN_UUID_BYTES
-    6:
-      exit; // too short, or 6-bytes MAC
-    7:
-      if opt61^[1] = 1 then
-        exit; // Eth=1 + MAC
-  end;
-  result := DoFindUuid(pointer(StaticUuid), @opt61[1], opt61[0]);
-  ip4 := result;
-end;
-
 function TDhcpScope.AddStatic(var nfo: TMacIP): boolean;
 var
   n: PtrInt;
@@ -1366,33 +1349,32 @@ begin
     if i < 0 then
       exit; // no previous AddStatic(ip4)
     DeleteInteger(StaticIP, i);
+    result := true;
     // remove this IP from StaticMac[]
-    n := length(StaticMac);
-    p := DoFindIp(pointer(StaticMac), ip4, n);
-    if p <> nil then
-    begin
-      i := (PtrUInt(p) - PtrUInt(StaticMac)) shr 4; // index in StaticMac[]
-      dec(n);
-      UnmanagedDynArrayDelete(StaticMac, n, i, SizeOf(TNetMac));
-      SetLength(StaticMac, n);
-    end
-    else
-    begin
-      // remove this IP from StaticUuid[]
-      u := pointer(StaticUuid);
-      for i := 0 to length(StaticUuid) - 1 do
-        if PCardinal(u^ + PStrLen(u^ - _STRLEN)^ - 4)^ = ip4 then
-        begin
-          DeleteRawUtf8(TRawUtf8DynArray(StaticUuid), i);
-          break;
-        end
-        else
-          inc(u);
-    end;
+    n := length(StaticMac) - 1;
+    p := pointer(StaticMac);
+    for i := 0 to n do
+      if p^.IP4 = ip4 then
+      begin
+        UnmanagedDynArrayDelete(StaticMac, n, i, SizeOf(TNetMac));
+        SetLength(StaticMac, n);
+        exit; // one IP should not be in StaticMac[] and StaticUuid[]
+      end
+      else
+        inc(p);
+    // remove this IP from StaticUuid[]
+    u := pointer(StaticUuid);
+    for i := 0 to length(StaticUuid) - 1 do
+      if PCardinal(u^ + PStrLen(u^ - _STRLEN)^ - 4)^ = ip4 then
+      begin
+        DeleteRawUtf8(TRawUtf8DynArray(StaticUuid), i);
+        break;
+      end
+      else
+        inc(u);
   finally
     Safe.UnLock;
   end;
-  result := true;
 end;
 
 function DoWrite(W: TTextWriter; p: PDhcpLease; n, tix32, grace: cardinal;
@@ -2089,6 +2071,30 @@ begin
   result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
 end;
 
+function ClientUuid(opt61: PByteArray; var data: TDhcpProcessData; uuid: pointer): PDhcpLease;
+var
+  found: integer;
+begin
+  result := nil;
+  case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8–16 bytes
+    0 .. 3, // < MIN_UUID_BYTES
+    6:
+      exit; // too short, or 6-bytes MAC
+    7:
+      if opt61^[1] = 1 then
+        exit; // Eth=1 + MAC
+  end;
+  found := DoFindUuid(uuid, @opt61[1], opt61[0]);
+  if found = 0 then
+    exit;
+  result := @data.Temp; // fake PDhcpLease for this StaticUuid[]
+  result^.IP4 := found;
+  PInt64(@result^.Mac)^ := Data.Mac64; // also reset State+RateLimit
+  result^.State := lsStatic;
+  // write UUID in logs instead of MAC address (up to 32 bytes = 256-bit)
+  BinToHex(@opt61^[1], @data.Mac, MinPtrUInt(SizeOf(data.Mac) div 2, opt61^[0]));
+end;
+
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
 var
   p: PDhcpLease;
@@ -2140,16 +2146,12 @@ begin
     Data.Scope^.Safe.Lock; // blocking for this subnet
     try
       // find any existing lease - or StaticMac[] StaticUuid[] fake lease
+      p := nil;
       if (Data.Scope^.StaticUuid <> nil) and
-         (Data.RecvLens[doDhcpClientIdentifier] <> 0) and
-         (Data.Scope^.FindUuid(@Data.Recv.options[
-            Data.RecvLens[doDhcpClientIdentifier]], Data.Temp.IP4) <> 0) then
-      begin
-        p := @Data.Temp; // fake PDhcpLease for this StaticUuid[]
-        PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
-        p^.State := lsStatic;
-      end
-      else
+         (Data.RecvLens[doDhcpClientIdentifier] <> 0) then
+        p := ClientUuid(@Data.Recv.options[Data.RecvLens[doDhcpClientIdentifier]],
+           Data, pointer(Data.Scope^.StaticUuid));
+      if p = nil then
         p := Data.Scope^.FindMac(Data.Mac64); // from Entry[] and StaticMac[]
       // process the received DHCP message
       case Data.RecvType of
