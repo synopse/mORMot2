@@ -2039,7 +2039,7 @@ begin
       begin
         IP4Short(@ip4, Data.Ip);
         fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignore requested=% %',
-          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^], self);
+          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^]);
       end;
       exit;
     end;
@@ -2057,7 +2057,7 @@ begin
     begin
       if Assigned(fLog) then
         fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignored by callback',
-          [DHCP_TXT[Data.RecvType], Data.Mac], self);
+          [DHCP_TXT[Data.RecvType], Data.Mac]);
       result := 0;
       exit; // callback asked to silently ignore this frame
     end;
@@ -2111,7 +2111,7 @@ begin
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ComputeResponse: % % unexpected %',
-        [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^], self);
+        [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
     exit; // invalid or unsupported frame
   end;
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
@@ -2138,7 +2138,7 @@ begin
         else if Data.RecvIp4 <> 0 then
           IP4Short(@Data.RecvIP4, Data.Ip);
         fLog.Add.Log(sllDebug, 'ComputeResponse: % % no subnet for % %',
-          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^], self);
+          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^]);
       end;
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
@@ -2173,7 +2173,7 @@ begin
                   // - client will retry after a small temporisation
                   fLog.Add.Log(sllWarning,
                     'ComputeResponse: DISCOVER % exhausted IPv4 %',
-                      [Data.Mac, Data.HostName^], self);
+                      [Data.Mac, Data.HostName^]);
                   exit;
                 end;
               end;
@@ -2228,7 +2228,7 @@ begin
                 // no lease, and none or invalid Option 50 = send NAK response
                 fLog.Add.Log(sllDebug,
                   'ComputeResponse: REQUEST % out-of-sync NAK %',
-                    [Data.Mac, Data.HostName^], self);
+                  [Data.Mac, Data.HostName^]);
                 Data.SendType := dmtNak;
                 Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
                   PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
@@ -2258,7 +2258,7 @@ begin
               // (match RFC intent and prevent blind poisoning of arbitrary IPs)
               fLog.Add.Log(sllDebug,
                 'ComputeResponse: DECLINE % with no previous OFFER %',
-                  [Data.Mac, Data.HostName^], self);
+                [Data.Mac, Data.HostName^]);
               exit;
             end;
             if (Data.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
@@ -2269,7 +2269,7 @@ begin
               begin
                 // malicious client poisons the pool by sending repeated DECLINE
                 fLog.Add.Log(sllDebug,
-                  'ComputeResponse: DECLINE % overload', [Data.Mac], self);
+                  'ComputeResponse: DECLINE % overload', [Data.Mac]);
                 exit;
               end;
             // invalidate OFFERed IP
@@ -2288,7 +2288,7 @@ begin
               begin
                 IP4Short(@Data.Ip4, Data.Ip);
                 fLog.Add.Log(sllTrace, 'ComputeResponse: DECLINE % as %',
-                  [Data.Mac, Data.Ip], self);
+                  [Data.Mac, Data.Ip]);
               end;
               p := Data.Scope^.NewLease;
               PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
@@ -2306,15 +2306,15 @@ begin
                (p^.IP4 <> Data.Recv.ciaddr) or
                not (p^.State in [lsAck, lsOutdated]) then
               // detect and ignore out-of-synch or malicious client
-              fLog.Add.Log(sllDebug,
-                'ComputeResponse: RELEASE % unexpected', [Data.Mac], self)
+              fLog.Add.Log(sllDebug, 'ComputeResponse: RELEASE % unexpected',
+                [Data.Mac])
             else
             begin
               if Assigned(fLog) then
               begin
                 IP4Short(@p^.IP4, Data.Ip);
                 fLog.Add.Log(sllTrace, 'ComputeResponse: RELEASE % as %',
-                  [Data.Mac, Data.Ip], self);
+                  [Data.Mac, Data.Ip]);
               end;
               Data.Scope^.ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
@@ -2331,7 +2331,7 @@ begin
             begin
               IP4Short(@Data.Ip4, Data.Ip);
               fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % unexpected %',
-                [Data.Mac, Data.Ip], self);
+                [Data.Mac, Data.Ip]);
               exit;
             end;
             if (p <> nil) and
@@ -2351,8 +2351,8 @@ begin
               end
               else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
               begin
-                fLog.Add.Log(sllDebug,
-                  'ComputeResponse: INFORM % overload', [Data.Mac], self);
+                fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % overload',
+                  [Data.Mac]);
                 exit;
               end
               else
@@ -2387,7 +2387,7 @@ begin
           if sllTrace in Level then
             Add.Log(sllTrace, 'ComputeResponse: % % into % % %',
               [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType],
-               Data.Ip, Data.HostName^], self);
+               Data.Ip, Data.HostName^]);
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
