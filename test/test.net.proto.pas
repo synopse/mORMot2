@@ -1576,13 +1576,13 @@ var
   begin
     d.RecvLen := DhcpClient(d.Recv, dmtRequest, macs[ndx], [])
       - PAnsiChar(@d.Recv) + 1;
-    Check(CompareMem(@macs[ndx], @d.Recv.chaddr, SizeOf(macs[0])));
+    Check(IsEqual(macs[ndx], PNetMac(@d.Recv.chaddr)^));
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
     Check(server.ComputeResponse(d) > 0, 'ack#');
     Check(d.SendType = dmtAck, 'ack');
     CheckEqual(d.Send.xid, xid);
-    Check(CompareMem(@macs[ndx], @d.Send.chaddr, SizeOf(macs[0])));
+    Check(IsEqual(macs[ndx], PNetMac(@d.Send.chaddr)^));
     Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckEqual(ips[ndx], d.Send.ciaddr);
   end;
@@ -1830,14 +1830,14 @@ begin
       DhcpAddOption(f, doHostName, @hostname[1], length(hostname));
       f^ := #255;
       d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
-      Check(CompareMem(@macs[i], @d.Recv.chaddr, SizeOf(macs[0])));
+      Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       CheckNotEqual(xid, d.Recv.xid);
       xid := d.Recv.xid;
       Check(server.ComputeResponse(d) > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
       Check(d.HostName^ = hostname, 'hostname');
-      Check(CompareMem(@macs[i], @d.Recv.chaddr, SizeOf(macs[0])));
-      Check(CompareMem(@macs[i], @d.Send.chaddr, SizeOf(macs[0])));
+      Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
+      Check(IsEqual(macs[i], PNetMac(@d.Send.chaddr)^));
       ips[i] := d.Send.ciaddr; // OFFERed IP
       Check(server.GetScope(ips[i]) <> nil);
     end;
@@ -1883,7 +1883,7 @@ begin
     DhcpAddOption(f, doDhcpAgentOptions, @OPTION82[1], 7);
     f^ := #255;
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
-    Check(CompareMem(@macs[0], @d.Recv.chaddr, SizeOf(macs[0])));
+    Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
     l := server.ComputeResponse(d);
@@ -1907,7 +1907,7 @@ begin
     Check(server.ComputeResponse(d) > 0, 'request3');
     CheckEqual(d.Recv.xid, xid);
     CheckEqual(d.Send.xid, xid);
-    Check(CompareMem(@macs[0], @d.Send.chaddr, SizeOf(macs[0])));
+    Check(IsEqual(macs[0], PNetMac(@d.Send.chaddr)^));
     Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
