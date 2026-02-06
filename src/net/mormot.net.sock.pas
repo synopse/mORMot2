@@ -662,6 +662,12 @@ function TextToMac(Text: PUtf8Char; Mac: PByte): boolean;
 procedure FillZero(var Mac: TNetMac); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// compare two MAC address raw binary values
+function IsEqual(const A, B: TNetMac): boolean; overload;
+
+/// returns TRUE if all 6 bytes of this MAC address buffer equal zero
+function IsZero(const Mac: TNetMac): boolean; overload;
+
 /// search a MAC address from an array of TNetMac items using O(n) scan
 function MacIndex(first, mac: PNetMac48; n: PtrInt): PtrInt;
 
@@ -3942,6 +3948,18 @@ procedure FillZero(var Mac: TNetMac);
 begin
   TNetMac48(Mac).c := 0;
   TNetMac48(Mac).w := 0;
+end;
+
+function IsEqual(const A, B: TNetMac): boolean;
+begin
+  result := (TNetMac48(A).c = TNetMac48(B).c) and
+            (TNetMac48(A).w = TNetMac48(B).w);
+end;
+
+function IsZero(const Mac: TNetMac): boolean;
+begin
+  result := (TNetMac48(Mac).c = 0) and
+            (TNetMac48(Mac).w = 0);
 end;
 
 function MacIndex(first, mac: PNetMac48; n: PtrInt): PtrInt;

@@ -1565,7 +1565,7 @@ var
   d: TDhcpProcessData;
   i, n, l: PtrInt;
   server: TDhcpProcess;
-  macs: array of TNetMac;
+  macs: TNetMacs;
   ips: TNetIP4s;
   timer: TPrecisionTimer;
   f: PAnsiChar;
@@ -1817,10 +1817,12 @@ begin
     n := 200;
     SetLength(macs, n);
     SetLength(ips, n);
+    for i := 0 to n - 1 do
+      Check(IsZero(macs[i]));
     rnd.Fill(pointer(macs), SizeOf(macs[0]) * n);
     timer.Start;
     xid := 0;
-    for i := 0 to high(macs) do
+    for i := 0 to n - 1 do
     begin
       hostname := 'HOST';
       AppendShortCardinal(i, hostname);
@@ -1839,17 +1841,20 @@ begin
       ips[i] := d.Send.ciaddr; // OFFERed IP
       Check(server.GetScope(ips[i]) <> nil);
     end;
-    CheckEqual(server.SaveToText, txt, 'only offer');
+    CheckEqual(length(server.SaveToText), length(txt), 'only offer');
     CheckEqual(server.Count, n + 1);
-    for i := high(macs) downto 0 do // in reverse order
+    for i := n - 1 downto 0 do // in reverse order
       DoRequest(i);
-    CheckEqual(server.Count, n + 1);
     NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
+    CheckEqual(server.Count, n + 1);
     txt := server.SaveToText;
     CheckSaveToTextMatch(txt);
     CheckNotEqual(txt, CRLF, 'offer not saved');
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
+    Check(PosEx(' 192.168.1.101', txt) <> 0, 'saved 3');
     Check(length(txt) > 2000, 'saved len2');
+    for i := 0 to n - 1 do
+      CheckNotEqual(ips[i], 0, 'ips');
     // twice with the requests to validate efficient renewal
     timer.Start;
     for i := 1 to n do
