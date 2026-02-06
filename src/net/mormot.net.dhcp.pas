@@ -2096,8 +2096,8 @@ begin
           end;
         dmtRequest:
           begin
-            // especially for PXE networks, it is safe and common to ignore
-            // Option 50 and ciaddr in REQUEST and ACK the already OFFERed IP
+            // RFC 2131: lease is Reserved after OFFER = SELECTING
+            //           lease is Ack/Static/Outdated = RENEWING/REBINDING
             if (p = nil) or
                (p^.IP4 = 0) or
                not ((p^.State in [lsReserved, lsAck, lsStatic]) or
@@ -2106,17 +2106,29 @@ begin
                      (Data.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
                      (Data.Tix32 - p^.Expired <
                         Data.Scope^.LeaseTimeLE * Data.Scope^.GraceFactor))) then
-            begin
-              fLog.Add.Log(sllDebug,
-                'ComputeResponse: REQUEST % out-of-sync NAK %',
-                  [Data.Mac, Data.HostName^], self);
-              // send a NAK response anyway
-              Data.SendType := dmtNak;
-              Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
-                PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
-              result := FinalizeFrame(Data);
-              exit;
-            end;
+              // no good-enough lease
+              if RetrieveFrameIP(Data, p) then
+              begin
+                // no lease, but Option 50 = INIT-REBOOT
+                if p = nil then
+                begin
+                  p := Data.Scope^.NewLease;
+                  PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
+                end;
+                p^.IP4 := Data.Ip4;
+              end
+              else
+              begin
+                // no lease, and none or invalid Option 50 = send NAK response
+                fLog.Add.Log(sllDebug,
+                  'ComputeResponse: REQUEST % out-of-sync NAK %',
+                    [Data.Mac, Data.HostName^], self);
+                Data.SendType := dmtNak;
+                Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
+                  PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
+                result := FinalizeFrame(Data);
+                exit;
+              end;
             // update the lease information
             if p^.State = lsStatic then
               p^.Expired := Data.Tix32
