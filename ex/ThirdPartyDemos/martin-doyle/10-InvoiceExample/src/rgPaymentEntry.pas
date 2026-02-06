@@ -169,7 +169,6 @@ function TPaymentEntryForm.ParseAmount(const AText: string;
   out AAmount: currency): Boolean;
 var
   TempText: string;
-  TempDouble: Double;
 begin
   Result := False;
   AAmount := 0;
@@ -178,12 +177,9 @@ begin
   if TempText = '' then
     Exit;
 
-  TempText := StringReplace(TempText, ',', FormatSettings.DecimalSeparator, [rfReplaceAll]);
-  TempText := StringReplace(TempText, '.', FormatSettings.DecimalSeparator, [rfReplaceAll]);
-
-  Result := TryStrToFloat(TempText, TempDouble);
-  if Result then
-    AAmount := TempDouble;
+  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
+  AAmount := StrToCurrency(pointer(StringToUtf8(TempText)));
+  Result := (AAmount <> 0);
 end;
 
 function TPaymentEntryForm.ValidateInput: Boolean;
@@ -209,8 +205,7 @@ begin
 
   if Amount > FOpenAmount then
   begin
-    if MessageDlg('Overpayment',
-      Format('Amount %.2n exceeds open amount %.2n. Continue?',
+    if MessageDlg(Format('Amount %.2n exceeds open amount %.2n. Continue?',
         [Double(Amount), Double(FOpenAmount)]),
       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
     begin
