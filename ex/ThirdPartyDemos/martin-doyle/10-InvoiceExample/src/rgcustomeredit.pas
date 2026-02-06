@@ -348,8 +348,7 @@ procedure TCustomerEditForm.CancelButtonClick(Sender: TObject);
 begin
   if (FormMode in [fmInsert, fmEdit]) and HasChanges then
   begin
-    if MessageDlg('Cancel Changes',
-                  'Are you sure you want to cancel your changes?',
+    if MessageDlg('Are you sure you want to cancel your changes?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
       ModalResult := mrCancel;
   end

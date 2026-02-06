@@ -236,6 +236,8 @@ begin
     SpacingPixels := Round(ASpacing.Distance);
 
   // Calculate position based on direction
+  Left := 0;
+  Top := 0;
   case ADirection of
     ldRight:
       begin
