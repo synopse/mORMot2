@@ -1,6 +1,6 @@
 # mORMot2 Tutorial Demos
 
-Step-by-step examples for learning the mORMot2 framework - from basic ORM to Docker deployment.
+Step-by-step examples for learning the mORMot2 framework - from basic ORM to real-world applications.
 
 ## Projects
 
@@ -13,6 +13,7 @@ Step-by-step examples for learning the mORMot2 framework - from basic ORM to Doc
 | 05 | [HttpDaemonORM](05-HttpDaemonORM/) | HTTP server as daemon/service |
 | 06 | [DomainDrivenDesign](06-DomainDrivenDesign/) | DDD with repository pattern |
 | 07 | [HttpDockerORM](07-HttpDockerORM/) | Docker container deployment |
+| 10 | [InvoiceExample](10-InvoiceExample/) | Invoice management with service layer and DTOs |
 
 ## Requirements
 

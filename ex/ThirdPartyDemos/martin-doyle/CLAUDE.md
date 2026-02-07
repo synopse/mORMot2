@@ -28,6 +28,7 @@ Consult CLAUDE.md in source directories:
 - `src/orm/CLAUDE.md` - Object-Relational Mapping
 - `src/rest/CLAUDE.md` - REST client/server
 - `src/db/CLAUDE.md` - Database connectivity
+- `10-InvoiceExample/src/CLAUDE.md` - Invoice app architecture, conventions, services
 
 ## ORM Model
 
@@ -49,6 +50,7 @@ end;
 05-HttpDaemonORM/           - Daemon/service
 06-DomainDrivenDesign/      - DDD pattern
 07-HttpDockerORM/           - Docker deployment
+10-InvoiceExample/          - Invoice management (Rechnung)
 docs/                       - UI-DESIGN.md, IMPLEMENTATION-PLAN.md
 ```
 
