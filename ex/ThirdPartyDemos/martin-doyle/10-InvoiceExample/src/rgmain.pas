@@ -131,9 +131,6 @@ type
     procedure HandleCustomerSelected(Sender: TObject; CustomerID: longint);
     procedure HandlePaymentCompleted(Sender: TObject);
 
-  public
-    CustomerService: ICustomerService;
-    CustomerOrderService: ICustomerOrderService;
   end;
 
 var
@@ -183,10 +180,6 @@ begin
   HelpMenu.Add(HelpAboutMenuItem);
   {$ENDIF DARWIN}
 
-  // Set Services
-  CustomerService := TCustomerService.Create;
-  CustomerOrderService := TCustomerOrderService.Create;
-
   // Initialize forms
   FCustomerListForm := nil;
   FInvoiceListForm := nil;
@@ -199,9 +192,6 @@ begin
     FreeAndNil(FCustomerListForm);
   if FInvoiceListForm <> nil then
     FreeAndNil(FInvoiceListForm);
-
-  CustomerService := nil;
-  CustomerOrderService := nil;
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);

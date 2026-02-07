@@ -41,12 +41,12 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="..\bin\fpc\$(TargetCPU)-$(TargetOS)\RechnungDaemon"/>
+      <Filename Value="..\fpc\bin\$(TargetCPU)-$(TargetOS)\RechnungDaemon"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
       <OtherUnitFiles Value="..\src"/>
-      <UnitOutputDirectory Value="..\lib\fpc\$(TargetCPU)-$(TargetOS)"/>
+      <UnitOutputDirectory Value="..\fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
       <SyntaxOptions>
