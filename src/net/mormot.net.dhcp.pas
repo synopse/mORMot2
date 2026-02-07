@@ -12,12 +12,12 @@ unit mormot.net.dhcp;
     - High-Level Multi-Scope DHCP Server Processing Logic
 
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
-   Background lease persistence using dnsmasq-like text file.
-   Scale up to dozen of thousands of leases with minimal RAM/CPU consumption.
+   Background lease persistence using dnsmasq-compatible text files.
+   Static IP reservation using MAC address or UUID Identifiers Option 61.
+   Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
+   Scale up to 100k+ leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
-   Static IP reservation using MAC address or UUID Identifiers 61 Option.
-   Support VLAN via SubNets / Scope and Relay Agent 82 Option.
-   Prevent most client abuse with proper rate limiting.
+   Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
    Meaningful logging of the actual process.
    Easy configuration via JSON or INI files.
@@ -374,7 +374,7 @@ type
     function FindIp4(ip4: TNetIP4): PDhcpLease;
       {$ifdef FPC} inline; {$endif}
     /// retrieve a new lease in Entry[] - maybe recycled from ReuseIp4()
-    function NewLease: PDhcpLease;
+    function NewLease(mac64: Int64): PDhcpLease;
     /// release a lease in Entry[] - add it to the recycled FreeList[]
     function ReuseIp4(p: PDhcpLease): TNetIP4;
     /// return the index in Entry[] of a given lease
@@ -1081,7 +1081,7 @@ begin
   result := DoFindIp(pointer(Entry), ip4, Count);
 end;
 
-function TDhcpScope.NewLease: PDhcpLease;
+function TDhcpScope.NewLease(mac64: Int64): PDhcpLease;
 var
   n: PtrInt;
 begin
@@ -1090,14 +1090,16 @@ begin
   begin
     dec(FreeListCount);
     result := @Entry[FreeList[FreeListCount]]; // LIFO is the fastest
-    if result^.State = lsFree then
-      exit; // paranoid
+    PInt64(result)^ := mac64; // also reset State+RateLimit
+    if result^.State = lsFree then // paranoid
+      exit;
   end;
   // we need to add a new entry - maybe with reallocation
   n := Count;
   if n = length(Entry) then
     SetLength(Entry, NextGrow(n));
   result := @Entry[n];
+  PInt64(result)^ := mac64; // also reset State+RateLimit
   inc(Count);
 end;
 
@@ -1944,8 +1946,7 @@ begin
             if s <> nil then
             begin
               // add this lease to the internal list of this scope
-              new := s^.NewLease;
-              PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+RateLimit
+              new := s^.NewLease(PInt64(@mac)^); // also reset State+RateLimit
               new^.IP4 := ip4;
               new^.Expired := expiry - boot;
               if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
@@ -2089,7 +2090,7 @@ begin
   found := DoFindUuid(uuid, @opt61[1], opt61[0]);
   if found = 0 then
     exit;
-  result := @data.Temp; // fake PDhcpLease for this StaticUuid[]
+  result := @data.Temp; // fake transient PDhcpLease for this StaticUuid[]
   result^.IP4 := found;
   PInt64(@result^.Mac)^ := Data.Mac64; // also reset State+RateLimit
   result^.State := lsStatic;
@@ -2179,9 +2180,8 @@ begin
               end;
               if p = nil then
               begin
-                p := Data.Scope^.NewLease;
+                p := Data.Scope^.NewLease(Data.Mac64);
                 Data.Scope^.LastDiscover := Data.Scope^.Index(p);
-                PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
               end;
               p^.IP4 := Data.Ip4;
             end
@@ -2217,10 +2217,7 @@ begin
               begin
                 // no lease, but Option 50 = INIT-REBOOT
                 if p = nil then
-                begin
-                  p := Data.Scope^.NewLease;
-                  PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
-                end;
+                  p := Data.Scope^.NewLease(Data.Mac64);
                 p^.IP4 := Data.Ip4;
               end
               else
@@ -2290,8 +2287,7 @@ begin
                 fLog.Add.Log(sllTrace, 'ComputeResponse: DECLINE % as %',
                   [Data.Mac, Data.Ip]);
               end;
-              p := Data.Scope^.NewLease;
-              PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
+              p := Data.Scope^.NewLease(0); // mac=0: sentinel to store this IP
               p^.State := lsUnavailable;
               p^.IP4 := Data.Ip4;
               p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
@@ -2345,10 +2341,7 @@ begin
               // (not set by default: stronger than the RFC requires, and no
               // other DHCP server like KEA, dnsmasq or Windows implements it)
               if p = nil then
-              begin
-                p := Data.Scope^.NewLease;
-                PInt64(@p^.Mac)^ := Data.Mac64; // also reset State+RateLimit
-              end
+                p := Data.Scope^.NewLease(Data.Mac64)
               else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
               begin
                 fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % overload',
@@ -2360,11 +2353,8 @@ begin
                 inc(p^.RateLimit);
                 // mark this IP as temporary unavailable
                 if p^.IP4 <> Data.Ip4 then
-                begin
                   // create a new MAC-free lease for this other IP
-                  p := Data.Scope^.NewLease;
-                  PInt64(@p^.Mac)^ := 0; // used as sentinel to store this IP
-                end;
+                  p := Data.Scope^.NewLease(0) // mac=0: sentinel for this IP
               end;
               // update the lease information
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
