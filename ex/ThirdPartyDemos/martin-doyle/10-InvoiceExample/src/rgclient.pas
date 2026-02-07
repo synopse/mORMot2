@@ -140,6 +140,36 @@ type
     function GetInvoiceOpenAmount(AInvoiceID: longint): currency;
   end;
 
+  TCustomerEditResult = (cerSuccess, cerNotFound, cerMissingField, cerHasReferences, cerDatabaseError);
+
+  { ICustomerEditService }
+
+  ICustomerEditService = interface(IInvokable)
+    ['{A6B7C8D9-E0F1-2345-A678-90ABCDEF1234}']
+    function LoadCustomer(ACustomerID: longint): Boolean;
+    function CreateNewCustomer: Boolean;
+    function GetCustomerNo: string;
+    procedure SetCustomerNo(const AValue: string);
+    function GetCompany: string;
+    procedure SetCompany(const AValue: string);
+    function GetPhone: string;
+    procedure SetPhone(const AValue: string);
+    function GetFax: string;
+    procedure SetFax(const AValue: string);
+    function GetAddress: string;
+    procedure SetAddress(const AValue: string);
+    function GetZip: string;
+    procedure SetZip(const AValue: string);
+    function GetCity: string;
+    procedure SetCity(const AValue: string);
+    function GetCountry: string;
+    procedure SetCountry(const AValue: string);
+    function Save: TCustomerEditResult;
+    function DeleteCustomer(ACustomerID: longint): TCustomerEditResult;
+    function IsNewCustomer: Boolean;
+    function GenerateCustomerNo: string;
+  end;
+
   TInvoiceEditResult = (ierSuccess, ierNotFound, ierMissingField, ierDatabaseError);
 
   { IInvoiceEditService }
@@ -386,6 +416,43 @@ type
     function GenerateOrderNo: string;
   end;
 
+  { TCustomerEditService }
+
+  TCustomerEditService = class(TInterfacedObject, ICustomerEditService)
+  private
+    FRestOrm: IRestOrm;
+    FCustomer: TOrmCustomer;
+    FIsNew: Boolean;
+    function EnsureContact: TPersonItem;
+    function EnsureAddress: TAddressItem;
+  public
+    constructor Create; overload;
+    constructor Create(ARestOrm: IRestOrm); overload;
+    destructor Destroy; override;
+    function LoadCustomer(ACustomerID: longint): Boolean;
+    function CreateNewCustomer: Boolean;
+    function GetCustomerNo: string;
+    procedure SetCustomerNo(const AValue: string);
+    function GetCompany: string;
+    procedure SetCompany(const AValue: string);
+    function GetPhone: string;
+    procedure SetPhone(const AValue: string);
+    function GetFax: string;
+    procedure SetFax(const AValue: string);
+    function GetAddress: string;
+    procedure SetAddress(const AValue: string);
+    function GetZip: string;
+    procedure SetZip(const AValue: string);
+    function GetCity: string;
+    procedure SetCity(const AValue: string);
+    function GetCountry: string;
+    procedure SetCountry(const AValue: string);
+    function Save: TCustomerEditResult;
+    function DeleteCustomer(ACustomerID: longint): TCustomerEditResult;
+    function IsNewCustomer: Boolean;
+    function GenerateCustomerNo: string;
+  end;
+
   { TOpenItemsReportService }
 
   TOpenItemsReportService = class(TInterfacedObject, IOpenItemsReportService)
@@ -468,6 +535,7 @@ begin
   FModel := CreateModel;
   inherited Create(FModel, nil, DataFile,
     TRestServerDB, False, '');
+  Server.CreateMissingTables;
 end;
 
 destructor TRgRestClient.Destroy;
@@ -1432,6 +1500,300 @@ begin
   NumPart := Utf8ToInteger(MaxNo, 0);
   Inc(NumPart);
   Result := Format('%.6d', [NumPart]);
+end;
+
+{ TCustomerEditService }
+
+constructor TCustomerEditService.Create(ARestOrm: IRestOrm);
+begin
+  inherited Create;
+  FRestOrm := ARestOrm;
+  FCustomer := nil;
+  FIsNew := False;
+end;
+
+constructor TCustomerEditService.Create;
+begin
+  Create(RgRestClient.Orm);
+end;
+
+destructor TCustomerEditService.Destroy;
+begin
+  if FCustomer <> nil then
+    FreeAndNil(FCustomer);
+  inherited Destroy;
+end;
+
+function TCustomerEditService.EnsureContact: TPersonItem;
+begin
+  if FCustomer.Contacts.Count = 0 then
+  begin
+    Result := TPersonItem(FCustomer.Contacts.Add);
+    Result.Phones.Add('');
+    Result.Phones.Add('');
+    Result.Addresses.Add;
+  end
+  else
+    Result := FCustomer.Contacts[0];
+end;
+
+function TCustomerEditService.EnsureAddress: TAddressItem;
+var
+  Contact: TPersonItem;
+begin
+  Contact := EnsureContact;
+  if Contact.Addresses.Count = 0 then
+    Result := TAddressItem(Contact.Addresses.Add)
+  else
+    Result := Contact.Addresses[0];
+end;
+
+function TCustomerEditService.LoadCustomer(ACustomerID: longint): Boolean;
+begin
+  Result := False;
+
+  if FCustomer <> nil then
+    FreeAndNil(FCustomer);
+
+  FCustomer := TOrmCustomer.Create(FRestOrm, ACustomerID);
+  if FCustomer.ID = 0 then
+  begin
+    FreeAndNil(FCustomer);
+    Exit;
+  end;
+
+  FIsNew := False;
+  Result := True;
+end;
+
+function TCustomerEditService.CreateNewCustomer: Boolean;
+begin
+  if FCustomer <> nil then
+    FreeAndNil(FCustomer);
+
+  FCustomer := TOrmCustomer.Create;
+  FCustomer.CustomerNo := StringToUtf8(GenerateCustomerNo);
+  EnsureContact;
+
+  FIsNew := True;
+  Result := True;
+end;
+
+function TCustomerEditService.GetCustomerNo: string;
+begin
+  Result := '';
+  if FCustomer <> nil then
+    Result := Utf8ToString(FCustomer.CustomerNo);
+end;
+
+procedure TCustomerEditService.SetCustomerNo(const AValue: string);
+begin
+  if FCustomer <> nil then
+    FCustomer.CustomerNo := StringToUtf8(AValue);
+end;
+
+function TCustomerEditService.GetCompany: string;
+begin
+  Result := '';
+  if FCustomer <> nil then
+    Result := Utf8ToString(FCustomer.Company);
+end;
+
+procedure TCustomerEditService.SetCompany(const AValue: string);
+begin
+  if FCustomer <> nil then
+    FCustomer.Company := StringToUtf8(AValue);
+end;
+
+function TCustomerEditService.GetPhone: string;
+var
+  Contact: TPersonItem;
+begin
+  Result := '';
+  if (FCustomer <> nil) and (FCustomer.Contacts.Count > 0) then
+  begin
+    Contact := FCustomer.Contacts[0];
+    if Contact.Phones.Count > 0 then
+      Result := Utf8ToString(Contact.Phones[0]);
+  end;
+end;
+
+procedure TCustomerEditService.SetPhone(const AValue: string);
+var
+  Contact: TPersonItem;
+begin
+  if FCustomer <> nil then
+  begin
+    Contact := EnsureContact;
+    while Contact.Phones.Count < 1 do
+      Contact.Phones.Add('');
+    Contact.Phones[0] := StringToUtf8(AValue);
+  end;
+end;
+
+function TCustomerEditService.GetFax: string;
+var
+  Contact: TPersonItem;
+begin
+  Result := '';
+  if (FCustomer <> nil) and (FCustomer.Contacts.Count > 0) then
+  begin
+    Contact := FCustomer.Contacts[0];
+    if Contact.Phones.Count > 1 then
+      Result := Utf8ToString(Contact.Phones[1]);
+  end;
+end;
+
+procedure TCustomerEditService.SetFax(const AValue: string);
+var
+  Contact: TPersonItem;
+begin
+  if FCustomer <> nil then
+  begin
+    Contact := EnsureContact;
+    while Contact.Phones.Count < 2 do
+      Contact.Phones.Add('');
+    Contact.Phones[1] := StringToUtf8(AValue);
+  end;
+end;
+
+function TCustomerEditService.GetAddress: string;
+begin
+  Result := '';
+  if (FCustomer <> nil) and (FCustomer.Contacts.Count > 0) and
+     (FCustomer.Contacts[0].Addresses.Count > 0) then
+    Result := Utf8ToString(FCustomer.Contacts[0].Addresses[0].Street1);
+end;
+
+procedure TCustomerEditService.SetAddress(const AValue: string);
+begin
+  if FCustomer <> nil then
+    EnsureAddress.Street1 := StringToUtf8(AValue);
+end;
+
+function TCustomerEditService.GetZip: string;
+begin
+  Result := '';
+  if (FCustomer <> nil) and (FCustomer.Contacts.Count > 0) and
+     (FCustomer.Contacts[0].Addresses.Count > 0) then
+    Result := Utf8ToString(FCustomer.Contacts[0].Addresses[0].Code);
+end;
+
+procedure TCustomerEditService.SetZip(const AValue: string);
+begin
+  if FCustomer <> nil then
+    EnsureAddress.Code := StringToUtf8(AValue);
+end;
+
+function TCustomerEditService.GetCity: string;
+begin
+  Result := '';
+  if (FCustomer <> nil) and (FCustomer.Contacts.Count > 0) and
+     (FCustomer.Contacts[0].Addresses.Count > 0) then
+    Result := Utf8ToString(FCustomer.Contacts[0].Addresses[0].City);
+end;
+
+procedure TCustomerEditService.SetCity(const AValue: string);
+begin
+  if FCustomer <> nil then
+    EnsureAddress.City := StringToUtf8(AValue);
+end;
+
+function TCustomerEditService.GetCountry: string;
+begin
+  Result := '';
+  if (FCustomer <> nil) and (FCustomer.Contacts.Count > 0) and
+     (FCustomer.Contacts[0].Addresses.Count > 0) then
+    Result := Utf8ToString(FCustomer.Contacts[0].Addresses[0].Country);
+end;
+
+procedure TCustomerEditService.SetCountry(const AValue: string);
+begin
+  if FCustomer <> nil then
+    EnsureAddress.Country := StringToUtf8(AValue);
+end;
+
+function TCustomerEditService.Save: TCustomerEditResult;
+begin
+  Result := cerDatabaseError;
+
+  if FCustomer = nil then
+    Exit;
+
+  if Trim(Utf8ToString(FCustomer.CustomerNo)) = '' then
+  begin
+    Result := cerMissingField;
+    Exit;
+  end;
+
+  if Trim(Utf8ToString(FCustomer.Company)) = '' then
+  begin
+    Result := cerMissingField;
+    Exit;
+  end;
+
+  if FIsNew then
+  begin
+    if FRestOrm.Add(FCustomer, True) > 0 then
+    begin
+      FIsNew := False;
+      Result := cerSuccess;
+    end;
+  end
+  else
+  begin
+    if FRestOrm.Update(FCustomer) then
+      Result := cerSuccess;
+  end;
+end;
+
+function TCustomerEditService.IsNewCustomer: Boolean;
+begin
+  Result := FIsNew;
+end;
+
+function TCustomerEditService.GenerateCustomerNo: string;
+var
+  MaxNo: RawUtf8;
+  NumPart: integer;
+begin
+  MaxNo := FRestOrm.OneFieldValue(TOrmCustomer,
+    'MAX(CAST(CustomerNo AS INTEGER))', '', []);
+  NumPart := Utf8ToInteger(MaxNo, 0);
+  Inc(NumPart);
+  Result := Format('%.6d', [NumPart]);
+end;
+
+function TCustomerEditService.DeleteCustomer(ACustomerID: longint): TCustomerEditResult;
+var
+  CountValue: RawUtf8;
+  OrderCount: integer;
+begin
+  Result := cerDatabaseError;
+
+  if ACustomerID <= 0 then
+  begin
+    Result := cerNotFound;
+    Exit;
+  end;
+
+  if not FRestOrm.MemberExists(TOrmCustomer, ACustomerID) then
+  begin
+    Result := cerNotFound;
+    Exit;
+  end;
+
+  CountValue := FRestOrm.OneFieldValue(TOrmCustomerOrder,
+    'COUNT(*)', 'Customer=?', [ACustomerID]);
+  OrderCount := Utf8ToInteger(CountValue, 0);
+  if OrderCount > 0 then
+  begin
+    Result := cerHasReferences;
+    Exit;
+  end;
+
+  if FRestOrm.Delete(TOrmCustomer, ACustomerID) then
+    Result := cerSuccess;
 end;
 
 { TOpenItemsReportService }

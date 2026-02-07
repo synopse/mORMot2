@@ -9,7 +9,7 @@
   Module : rgInvoiceEdit.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -97,7 +97,8 @@ implementation
 
 uses
   mormot.core.base,
-  mormot.core.text;
+  mormot.core.text,
+  mdDates;
 
 {$R *.dfm}
 
@@ -377,16 +378,16 @@ begin
     Exit;
   end;
 
-  if not TryStrToDate(EditSaleDate.Text, SaleDate) then
+  if not AppTryStrToDate(EditSaleDate.Text, SaleDate) then
   begin
-    ShowMessage('Please enter a valid sale date (dd.mm.yyyy).');
+    ShowMessage(Format('Please enter a valid sale date (%s).', [AppDateFormatHint]));
     EditSaleDate.SetFocus;
     Exit;
   end;
 
-  if not TryStrToDate(EditShipDate.Text, ShipDate) then
+  if not AppTryStrToDate(EditShipDate.Text, ShipDate) then
   begin
-    ShowMessage('Please enter a valid due date (dd.mm.yyyy).');
+    ShowMessage(Format('Please enter a valid due date (%s).', [AppDateFormatHint]));
     EditShipDate.SetFocus;
     Exit;
   end;
@@ -450,8 +451,8 @@ begin
   Caption := 'New Invoice';
   LabelCustomerValue.Caption := FInvoiceService.GetCustomerName;
   EditOrderNo.Text := FInvoiceService.GetOrderNo;
-  EditSaleDate.Text := FormatDateTime('dd.mm.yyyy', FInvoiceService.GetSaleDate);
-  EditShipDate.Text := FormatDateTime('dd.mm.yyyy', FInvoiceService.GetShipDate);
+  EditSaleDate.Text := AppDateToStr(FInvoiceService.GetSaleDate);
+  EditShipDate.Text := AppDateToStr(FInvoiceService.GetShipDate);
 
   LoadItemsToListGrid;
 
@@ -475,8 +476,8 @@ begin
   Caption := 'Edit Invoice';
   LabelCustomerValue.Caption := FInvoiceService.GetCustomerName;
   EditOrderNo.Text := FInvoiceService.GetOrderNo;
-  EditSaleDate.Text := FormatDateTime('dd.mm.yyyy', FInvoiceService.GetSaleDate);
-  EditShipDate.Text := FormatDateTime('dd.mm.yyyy', FInvoiceService.GetShipDate);
+  EditSaleDate.Text := AppDateToStr(FInvoiceService.GetSaleDate);
+  EditShipDate.Text := AppDateToStr(FInvoiceService.GetShipDate);
 
   LoadItemsToListGrid;
 

@@ -9,7 +9,7 @@
   Module : rgReportOpenItems.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -80,7 +80,8 @@ uses
   mdGrids,
   mormot.core.base,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mdDates;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -100,8 +101,8 @@ begin
   FFromDate := Date - 90;
   FMinAmount := 0;
 
-  EditFromDate.Text := DateToStr(FFromDate);
-  EditToDate.Text := DateToStr(FToDate);
+  EditFromDate.Text := AppDateToStr(FFromDate);
+  EditToDate.Text := AppDateToStr(FToDate);
   EditMinAmount.Text := '0';
 end;
 
@@ -145,18 +146,8 @@ end;
 
 function TOpenItemsReportForm.ParseDate(const AText: string;
   out ADate: TDateTime): Boolean;
-var
-  TempText: string;
 begin
-  Result := False;
-  ADate := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-    Exit;
-
-  // Use system locale for date parsing
-  Result := TryStrToDate(TempText, ADate);
+  Result := AppTryStrToDate(AText, ADate);
 end;
 
 procedure TOpenItemsReportForm.ConfigureColumns;
@@ -226,7 +217,7 @@ begin
 
   if not ParseDate(EditFromDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid From Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid From Date (%s).', [AppDateFormatHint]));
     EditFromDate.SetFocus;
     Exit;
   end;
@@ -234,7 +225,7 @@ begin
 
   if not ParseDate(EditToDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid To Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid To Date (%s).', [AppDateFormatHint]));
     EditToDate.SetFocus;
     Exit;
   end;
@@ -276,7 +267,7 @@ begin
     ListItem.Caption := Item.Company;
     ListItem.SubItems.Add(Item.OrderNo);
     if Item.SaleDate > 0 then
-      ListItem.SubItems.Add(DateToStr(Item.SaleDate))
+      ListItem.SubItems.Add(AppDateToStr(Item.SaleDate))
     else
       ListItem.SubItems.Add('');
     ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.ItemsTotal)^));

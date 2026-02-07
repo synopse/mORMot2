@@ -9,7 +9,7 @@
   Module : rgInvoiceList.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -99,6 +99,7 @@ implementation
 uses
   mormot.core.base,
   mormot.core.text,
+  mdDates,
   rgPaymentEntry,
   rgInvoiceEdit;
 
@@ -288,7 +289,7 @@ begin
 
         Item := FInvoiceListGrid.Items.Add;
         Item.Caption := Invoice.OrderNo;
-        Item.SubItems.Add(FormatDateTime('dd.mm.yyyy', Invoice.SaleDate));
+        Item.SubItems.Add(AppDateToStr(Invoice.SaleDate));
         Item.SubItems.Add(Curr64ToString(PInt64(@Invoice.ItemsTotal)^));
         Item.SubItems.Add(Curr64ToString(PInt64(@Invoice.AmountPaid)^));
         Item.SubItems.Add(Curr64ToString(PInt64(@Invoice.OpenAmount)^));

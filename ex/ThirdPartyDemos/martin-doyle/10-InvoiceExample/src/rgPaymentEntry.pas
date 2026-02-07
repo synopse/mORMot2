@@ -9,7 +9,7 @@
   Module : rgPaymentEntry.pas
 
   Last modified
-    Date : 29.01.2026
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -87,7 +87,8 @@ implementation
 uses
   mormot.core.base,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mdDates;
 
 {$R *.dfm}
 
@@ -216,9 +217,9 @@ begin
     end;
   end;
 
-  if not TryStrToDate(EditDate.Text, PayDate) then
+  if not AppTryStrToDate(EditDate.Text, PayDate) then
   begin
-    ShowMessage('Please enter a valid date (dd.mm.yyyy).');
+    ShowMessage(Format('Please enter a valid date (%s).', [AppDateFormatHint]));
     EditDate.SetFocus;
     Exit;
   end;
@@ -268,7 +269,7 @@ begin
   LabelInvoiceNo.Caption := AInvoiceNo;
   LabelOpenValue.Caption := Curr64ToString(PInt64(@AOpenAmount)^);
   EditAmount.Text := Curr64ToString(PInt64(@AOpenAmount)^);
-  EditDate.Text := FormatDateTime('dd.mm.yyyy', Date);
+  EditDate.Text := AppDateToStr(Date);
 
   EditAmount.SelectAll;
 

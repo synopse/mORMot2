@@ -9,7 +9,7 @@
   Module : rgReportPayments.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -75,7 +75,8 @@ implementation
 uses
   mdGrids,
   mormot.core.base,
-  mormot.core.text;
+  mormot.core.text,
+  mdDates;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -94,8 +95,8 @@ begin
   FToDate := Date;
   FFromDate := Date - 30;
 
-  EditFromDate.Text := DateToStr(FFromDate);
-  EditToDate.Text := DateToStr(FToDate);
+  EditFromDate.Text := AppDateToStr(FFromDate);
+  EditToDate.Text := AppDateToStr(FToDate);
 end;
 
 destructor TPaymentReceiptsReportForm.Destroy;
@@ -136,18 +137,8 @@ end;
 
 function TPaymentReceiptsReportForm.ParseDate(const AText: string;
   out ADate: TDateTime): Boolean;
-var
-  TempText: string;
 begin
-  Result := False;
-  ADate := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-    Exit;
-
-  // Use system locale for date parsing
-  Result := TryStrToDate(TempText, ADate);
+  Result := AppTryStrToDate(AText, ADate);
 end;
 
 procedure TPaymentReceiptsReportForm.ConfigureColumns;
@@ -180,7 +171,7 @@ begin
 
   if not ParseDate(EditFromDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid From Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid From Date (%s).', [AppDateFormatHint]));
     EditFromDate.SetFocus;
     Exit;
   end;
@@ -188,7 +179,7 @@ begin
 
   if not ParseDate(EditToDate.Text, TempDate) then
   begin
-    ShowMessage(Format('Please enter a valid To Date (%s).', [{$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat]));
+    ShowMessage(Format('Please enter a valid To Date (%s).', [AppDateFormatHint]));
     EditToDate.SetFocus;
     Exit;
   end;
@@ -220,7 +211,7 @@ begin
     Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
     if Item.SaleDate > 0 then
-      ListItem.Caption := DateToStr(Item.SaleDate)
+      ListItem.Caption := AppDateToStr(Item.SaleDate)
     else
       ListItem.Caption := '';
     ListItem.SubItems.Add(Item.Company);

@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— © martindoyle 2017-2025 ——
+———————————————————————————————————————————————— © martindoyle 2017-2026 ——
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgConst.pas
 
   Last modified
-    Date : 26.12.2025
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -73,7 +73,7 @@ uses
 begin
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := ExpandFileName(IncludeTrailingPathDelimiter(ApplicationPath) +
-    '..\..\..\' + IniDataPath + '\');
+    '..\' + IniDataPath + '\');
   TSynLog.Family.Level := LOG_VERBOSE;
   TSynLog.Family.OnArchive := EventArchiveSynLZ;
   TSynLog.Family.ArchiveAfterDays := 1;
@@ -82,8 +82,9 @@ begin
   TSynLog.Add.Log(sllInfo, 'DataPath: ' + DataPath);
   if not FileExists(DataFile) then
   begin
-    TSynLog.Add.Log(sllInfo, 'DataFile: ' + DataFile + ' missing.');
-    TSynLog.Add.Log(sllError, mErrorNoDatabase);
-    raise EInOutError.Create(mErrorNoDatabase);
+    if not DirectoryExists(DataPath) then
+      ForceDirectories(DataPath);
+    TSynLog.Add.Log(sllInfo, 'DataFile: ' + DataFile +
+      ' not found. A new database will be created.');
   end;
 end.

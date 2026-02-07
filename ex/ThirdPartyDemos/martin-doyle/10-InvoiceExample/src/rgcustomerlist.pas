@@ -332,6 +332,8 @@ end;
 procedure TCustomerListForm.DeleteButtonClick(Sender: TObject);
 var
   CustomerID: longint;
+  Service: ICustomerEditService;
+  Res: TCustomerEditResult;
 begin
   CustomerID := GetSelectedCustomerID;
   if CustomerID > 0 then
@@ -339,9 +341,18 @@ begin
     if MessageDlg('Are you sure you want to delete this customer?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     begin
-      // TODO: Implement customer deletion
-      ShowMessage('Delete customer ID: ' + IntToStr(CustomerID));
-      RefreshList;
+      Service := TCustomerEditService.Create;
+      Res := Service.DeleteCustomer(CustomerID);
+      case Res of
+        cerSuccess:
+          RefreshList;
+        cerHasReferences:
+          ShowMessage('This customer cannot be deleted because there are existing invoices.');
+        cerNotFound:
+          ShowMessage('Customer not found.');
+      else
+        ShowMessage('Database error. The customer could not be deleted.');
+      end;
     end;
   end;
 end;

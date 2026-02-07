@@ -68,7 +68,7 @@ type
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
   private
-    FCustomerService: ICustomerService;
+    FCustomerEditService: ICustomerEditService;
     FCustomerID: longint;
     FOriginalCustomerNo: string;
     FOriginalCompany: string;
@@ -103,7 +103,7 @@ implementation
 
 procedure TCustomerEditForm.FormCreate(Sender: TObject);
 begin
-  FCustomerService := TCustomerService.Create;
+  FCustomerEditService := TCustomerEditService.Create;
   FCustomerID := 0;
   FormMode := fmBrowse;
   SetupLayout;
@@ -200,7 +200,7 @@ end;
 
 procedure TCustomerEditForm.FormDestroy(Sender: TObject);
 begin
-  FCustomerService := nil;
+  FCustomerEditService := nil;
 end;
 
 procedure TCustomerEditForm.SetFormMode(AValue: TFormMode);
@@ -272,22 +272,19 @@ begin
 end;
 
 procedure TCustomerEditForm.LoadCustomerData;
-var
-  Customer: TDtoCustomer;
 begin
   if FCustomerID > 0 then
   begin
-    if FCustomerService.LoadCustomerByID(FCustomerID) then
+    if FCustomerEditService.LoadCustomer(FCustomerID) then
     begin
-      Customer := FCustomerService.GetCustomer;
-      EditCustomerNo.Text := Customer.CustomerNo;
-      EditCompany.Text := Customer.Company;
-      EditPhone.Text := Customer.Phone;
-      EditFax.Text := Customer.Fax;
-      EditAddress.Text := Customer.Address;
-      EditZip.Text := Customer.Zip;
-      EditCity.Text := Customer.City;
-      EditCountry.Text := Customer.Country;
+      EditCustomerNo.Text := FCustomerEditService.GetCustomerNo;
+      EditCompany.Text := FCustomerEditService.GetCompany;
+      EditPhone.Text := FCustomerEditService.GetPhone;
+      EditFax.Text := FCustomerEditService.GetFax;
+      EditAddress.Text := FCustomerEditService.GetAddress;
+      EditZip.Text := FCustomerEditService.GetZip;
+      EditCity.Text := FCustomerEditService.GetCity;
+      EditCountry.Text := FCustomerEditService.GetCountry;
     end
     else
     begin
@@ -311,14 +308,17 @@ procedure TCustomerEditForm.NewCustomer;
 begin
   FCustomerID := 0;
   ClearFields;
+  FCustomerEditService.CreateNewCustomer;
+  EditCustomerNo.Text := FCustomerEditService.GetCustomerNo;
   StoreOriginalValues;
   FormMode := fmInsert;
   ShowModal;
 end;
 
 procedure TCustomerEditForm.SaveButtonClick(Sender: TObject);
+var
+  Res: TCustomerEditResult;
 begin
-  // Validate fields
   if Trim(EditCustomerNo.Text) = '' then
   begin
     ShowMessage('Customer number is required.');
@@ -333,15 +333,24 @@ begin
     Exit;
   end;
 
-  // TODO: Save customer data through service
-  case FormMode of
-    fmInsert:
-      ShowMessage('Insert new customer: ' + EditCompany.Text);
-    fmEdit:
-      ShowMessage('Update customer ID: ' + IntToStr(FCustomerID));
-  end;
+  FCustomerEditService.SetCustomerNo(Trim(EditCustomerNo.Text));
+  FCustomerEditService.SetCompany(Trim(EditCompany.Text));
+  FCustomerEditService.SetPhone(Trim(EditPhone.Text));
+  FCustomerEditService.SetFax(Trim(EditFax.Text));
+  FCustomerEditService.SetAddress(Trim(EditAddress.Text));
+  FCustomerEditService.SetZip(Trim(EditZip.Text));
+  FCustomerEditService.SetCity(Trim(EditCity.Text));
+  FCustomerEditService.SetCountry(Trim(EditCountry.Text));
 
-  ModalResult := mrOk;
+  Res := FCustomerEditService.Save;
+  case Res of
+    cerSuccess:
+      ModalResult := mrOk;
+    cerMissingField:
+      ShowMessage('Required fields are missing.');
+    cerDatabaseError:
+      ShowMessage('Database error. The customer could not be saved.');
+  end;
 end;
 
 procedure TCustomerEditForm.CancelButtonClick(Sender: TObject);

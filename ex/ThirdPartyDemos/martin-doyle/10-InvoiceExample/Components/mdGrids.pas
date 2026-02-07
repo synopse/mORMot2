@@ -622,7 +622,12 @@ begin
   if (GridRow >= FGrid.FixedRows) and (GridRow < FGrid.RowCount) then
     FGrid.Row := GridRow
   else if FGrid.RowCount > FGrid.FixedRows then
+  begin
     FGrid.Row := FGrid.FixedRows;
+    // Keep FItemIndex in sync with the visual grid selection
+    if FItems.Count > 0 then
+      FItemIndex := 0;
+  end;
 end;
 
 procedure TMDListGrid.GridDrawCell(Sender: TObject; ACol, ARow: Integer;
