@@ -186,16 +186,104 @@ Port logic from existing `rgClient.pas` classes (replace iterator with batch que
 
 | # | Task | Status |
 |---|------|--------|
-| B.6.1 | Create `src/rgServer.pas` — `TRgServer` extending `TRestServerDB`, constructor with 5 `ServiceDefine` calls | planned |
-| B.6.2 | Full compile of all Phase B units together | planned |
+| B.6.1 | Create `src/rgServer.pas` — `TRgServer` extending `TRestServerDB`, constructor with 5 `ServiceDefine` calls | done |
+| B.6.2 | Full compile of all Phase B units together | done |
 
-### Phase C: Daemon
+### Phase C: Daemon (Delphi 7 + FPC compatible)
+
+Uses `.dpr` (not `.lpr`) for dual-compiler support: Delphi 7 compiles `.dpr` natively,
+Lazarus references it via `.lpi`. Follows `05-HttpDaemonORM/src/Project05HttpDaemon.dpr` pattern.
+
+All code is Delphi 7 safe: no generics, no anonymous methods, no inline variables.
+`TSynDaemon` uses only virtual methods and standard OOP constructs.
+
+Command-line switches handled by `TSynDaemon.CommandLine`:
+- Windows: `/console`, `/verbose`, `/install`, `/start`, `/stop`, `/uninstall`, `/state`
+- Linux/POSIX: `--console`, `--verbose`, `--run`, `--fork`, `--kill`, `--state`
+
+#### C.1: Daemon program file
 
 | # | Task | Status |
 |---|------|--------|
-| C.1 | Create `daemon/RechnungDaemon.lpr` + `daemon/RechnungDaemon.lpi` | planned |
-| C.2 | Implement `TRgDaemon` (TSynDaemon: Start creates TRgServer + TRestHttpServer, Stop frees) | planned |
-| C.3 | Compile + test `--console` mode | planned |
+| C.1.1 | Create `daemon/RechnungDaemon.dpr` — program header with `{$APPTYPE CONSOLE}`, `{$I mormot.defines.inc}`, uses clause: `{$I mormot.uses.inc}`, `SysUtils`, `mormot.app.daemon`, `mormot.core.base`, `mormot.core.os`, `mormot.core.log`, `mormot.db.raw.sqlite3`, `mormot.db.raw.sqlite3.static`, `mormot.orm.core`, `mormot.rest.http.server`, `rgData`, `rgConst`, `rgServer`, `rgServiceInterfaces`, `rgServiceImplementation`. Also created `daemon/RechnungDaemon.lpi` (needed for compilation). | done |
+| C.1.2 | Implement `TRgDaemonSettings` (subclass `TSynDaemonSettings`) — override `Create`: set `Log := LOG_VERBOSE`, `ServiceName := 'RechnungDaemon'`, `ServiceDisplayName := 'Rechnung Daemon'` | done |
+| C.1.3 | Implement `TRgDaemon` class (subclass `TSynDaemon`) — protected fields: `fModel: TOrmModel`, `fServer: TRgServer`, `fHttpServer: TRestHttpServer`; public: override `Start` + `Stop` | done |
+| C.1.4 | Implement `TRgDaemon.Start` — `fModel := CreateModel`, `fServer := TRgServer.Create(fModel, DataFile)` (uses `rgConst.DataFile` set during unit init, which also calls `ForceDirectories`), `fServer.DB.Synchronous := smOff`, `fServer.DB.LockingMode := lmExclusive`, `fHttpServer := TRestHttpServer.Create(HttpPort, [fServer], '+', HTTP_DEFAULT_MODE, 4)`, `fHttpServer.AccessControlAllowOrigin := '*'`, log startup | done |
+| C.1.5 | Implement `TRgDaemon.Stop` — guard with `fHttpServer <> nil`, free `fHttpServer`, `fServer`, `fModel` in nested try/except/finally (idempotent, safe for double-call), nil all fields, log shutdown | done |
+| C.1.6 | Implement main program block — `SQLite3Log.Family`: set `Level := LOG_VERBOSE`, `PerThreadLog := ptIdentifiedInOnFile`, `EchoToConsole := LOG_VERBOSE`; create `TRgDaemon(TRgDaemonSettings, Executable.ProgramFilePath, '', '')`, call `CommandLine` in try/finally, free daemon | done |
+
+Expected structure:
+```pascal
+program RechnungDaemon;
+
+{$APPTYPE CONSOLE}
+{$I mormot.defines.inc}
+
+uses
+  {$I mormot.uses.inc}
+  SysUtils,
+  mormot.app.daemon,
+  mormot.core.base,
+  mormot.core.os,
+  mormot.core.log,
+  mormot.db.raw.sqlite3,
+  mormot.db.raw.sqlite3.static,
+  mormot.orm.core,
+  mormot.rest.http.server,
+  rgData,
+  rgConst,
+  rgServer,
+  rgServiceInterfaces,
+  rgServiceImplementation;
+
+type
+  TRgDaemonSettings = class(TSynDaemonSettings)
+  public
+    constructor Create; override;
+  end;
+
+  TRgDaemon = class(TSynDaemon)
+  protected
+    fModel: TOrmModel;
+    fServer: TRgServer;
+    fHttpServer: TRestHttpServer;
+  public
+    procedure Start; override;
+    procedure Stop; override;
+  end;
+
+// ... implementations ...
+
+var
+  Daemon: TRgDaemon;
+begin
+  with SQLite3Log.Family do begin
+    Level := LOG_VERBOSE;
+    PerThreadLog := ptIdentifiedInOnFile;
+    EchoToConsole := LOG_VERBOSE;
+  end;
+  Daemon := TRgDaemon.Create(
+    TRgDaemonSettings, Executable.ProgramFilePath, '', '');
+  try
+    Daemon.CommandLine;
+  finally
+    Daemon.Free;
+  end;
+end.
+```
+
+#### C.2: Lazarus project file
+
+| # | Task | Status |
+|---|------|--------|
+| C.2.1 | Create `daemon/RechnungDaemon.lpi` — reference `RechnungDaemon.dpr` as main source, `RequiredPackages` = `mormot2`, search path `../src` for shared units (`rgData`, `rgConst`, `rgServer`, etc.), output to `../bin/fpc/$(TargetCPU)-$(TargetOS)/`, custom options `-dPUREMORMOT2 -dBorland -dVer150 -dDelphi7 -dCompiler6_Up`, Delphi syntax mode, based on `05-HttpDaemonORM` `.lpi` template | done |
+
+#### C.3: Compile + verify
+
+| # | Task | Status |
+|---|------|--------|
+| C.3.1 | Compile with `lazbuild daemon/RechnungDaemon.lpi` | done |
+| C.3.2 | Test `--console` / `/console` mode: daemon starts, HTTP server listens on port 11111, Ctrl+C shuts down cleanly | done |
 
 ### Phase D: Client Adaptation
 
@@ -294,8 +382,8 @@ Pattern change:
 | `src/rgServiceImplementation.pas` | ~800 | 5 TInjectableObjectRest implementations (built incrementally in B.1-B.5) |
 | `src/rgServer.pas` | ~50 | TRgServer + ServiceDefine |
 | `src/rgConfig.pas` | ~80 | JSON config |
-| `daemon/RechnungDaemon.lpr` | ~100 | TSynDaemon entry |
-| `daemon/RechnungDaemon.lpi` | - | Lazarus project |
+| `daemon/RechnungDaemon.dpr` | ~100 | TSynDaemon entry (`.dpr` for Delphi 7 + FPC dual-compiler) |
+| `daemon/RechnungDaemon.lpi` | - | Lazarus project file (references `.dpr`) |
 
 ### Modified Files
 | File | Change |
@@ -322,14 +410,23 @@ Pattern change:
 - `packed record` with `string` fields: register via mORMot2 RTTI for JSON serialization
 - `currency`: native mORMot2 support (Int64 * 10000)
 - `TDateTime`: ISO 8601 serialization
-- Delphi 7 compatible: no generics, no anonymous methods
+- Delphi 7 compatible: no generics, no anonymous methods, no inline variables
+- Daemon uses `.dpr` extension (not `.lpr`): Delphi 7 compiles natively, Lazarus via `.lpi`
+- `TSynDaemon` is fully Delphi 7 compatible (virtual methods, standard OOP only)
 - Port: 11111 (per root CLAUDE.md)
 
 ## Verify
 
 ```bash
+# Lazarus/FPC
 ${LAZBUILD_PATH} src/Rechnung.lpi
 ${LAZBUILD_PATH} daemon/RechnungDaemon.lpi
+
+# Delphi 7 (daemon only — GUI requires LCL)
+dcc32 daemon/RechnungDaemon.dpr
+
+# Test
 # Local: set "Mode":"local" in rechnung.config.json, run GUI
 # Service: ./RechnungDaemon --console, set "Mode":"service", run GUI
+# Windows service: RechnungDaemon.exe /install, then /start
 ```

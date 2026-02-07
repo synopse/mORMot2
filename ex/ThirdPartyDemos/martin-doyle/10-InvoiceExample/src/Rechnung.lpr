@@ -64,6 +64,7 @@ uses
   rgDtoTypes,
   rgServiceInterfaces,
   rgServiceImplementation,
+  rgServer,
   rgConfig,
   rgClient,
   rgCustomerList,
