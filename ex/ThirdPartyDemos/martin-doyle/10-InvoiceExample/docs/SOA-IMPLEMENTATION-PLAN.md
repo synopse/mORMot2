@@ -144,13 +144,13 @@ Port logic from existing `rgClient.pas` classes (replace iterator with batch que
 
 | # | Task | Status |
 |---|------|--------|
-| B.2.1 | Implement `TRgCustomerService.ListCustomers` — batch query via `CreateAndFillPrepare`, build `TDtoCustomerDynArray` (source: `rgClient.pas:561-705`) | planned |
-| B.2.2 | Implement `TRgCustomerService.GetCustomer` — single row fetch, map ORM to DTO including nested contact/address fields | planned |
-| B.2.3 | Implement `TRgCustomerService.CreateCustomer` — build `TOrmCustomer` + nested contact/address from DTO, `Orm.Add` (source: `rgClient.pas:1498-1600`) | planned |
-| B.2.4 | Implement `TRgCustomerService.UpdateCustomer` — load existing, update from DTO, `Orm.Update` (source: `rgClient.pas:1600-1700`) | planned |
-| B.2.5 | Implement `TRgCustomerService.DeleteCustomer` — check for orders, then `Orm.Delete` (source: `rgClient.pas:1700-1756`) | planned |
-| B.2.6 | Implement `TRgCustomerService.GenerateCustomerNo` — MAX() query + increment (source: `rgClient.pas:1540-1560`) | planned |
-| B.2.7 | Compile | planned |
+| B.2.1 | Implement `TRgCustomerService.ListCustomers` — batch query via `CreateAndFillPrepare`, build `TDtoCustomerDynArray` (source: `rgClient.pas:561-705`) | done |
+| B.2.2 | Implement `TRgCustomerService.GetCustomer` — single row fetch, map ORM to DTO including nested contact/address fields | done |
+| B.2.3 | Implement `TRgCustomerService.CreateCustomer` — build `TOrmCustomer` + nested contact/address from DTO, `Orm.Add` (source: `rgClient.pas:1498-1600`) | done |
+| B.2.4 | Implement `TRgCustomerService.UpdateCustomer` — load existing, update from DTO, `Orm.Update` (source: `rgClient.pas:1600-1700`) | done |
+| B.2.5 | Implement `TRgCustomerService.DeleteCustomer` — check for orders, then `Orm.Delete` (source: `rgClient.pas:1700-1756`) | done |
+| B.2.6 | Implement `TRgCustomerService.GenerateCustomerNo` — MAX() query + increment (source: `rgClient.pas:1540-1560`) | done |
+| B.2.7 | Compile | done |
 
 #### B.3: InvoiceService
 

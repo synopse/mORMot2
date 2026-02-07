@@ -117,36 +117,232 @@ implementation
 ******************************* TRgCustomerService *****************************
 }
 function TRgCustomerService.ListCustomers(out ACustomers: TDtoCustomerDynArray): TCustomerEditResult;
+var
+  Customer: TOrmCustomer;
+  Contact: TPersonItem;
+  Address: TAddressItem;
+  Count: integer;
 begin
   SetLength(ACustomers, 0);
-  Result := cerDatabaseError; // TODO: implement in B.2.1
+  Customer := TOrmCustomer.CreateAndFillPrepare(Self.Server.Orm, '',
+    'ID, CustomerNo, Company, Contacts');
+  try
+    Customer.FillTable.SortFields(2); // sort by Company
+    Count := 0;
+    SetLength(ACustomers, Customer.FillTable.RowCount);
+    while Customer.FillOne do
+    begin
+      ACustomers[Count].CustomerID := Customer.ID;
+      ACustomers[Count].CustomerNo := Utf8ToString(Customer.CustomerNo);
+      ACustomers[Count].Company := Utf8ToString(Customer.Company);
+      if Customer.Contacts.Count > 0 then
+      begin
+        Contact := Customer.Contacts[0];
+        ACustomers[Count].Phone := Utf8ToString(Contact.Phones[0]);
+        ACustomers[Count].Fax := Utf8ToString(Contact.Phones[1]);
+        if Contact.Addresses.Count > 0 then
+        begin
+          Address := Contact.Addresses[0];
+          ACustomers[Count].Address := Utf8ToString(Address.Street1);
+          ACustomers[Count].Zip := Utf8ToString(Address.Code);
+          ACustomers[Count].City := Utf8ToString(Address.City);
+          ACustomers[Count].Country := Utf8ToString(Address.Country);
+        end;
+      end;
+      Inc(Count);
+    end;
+    SetLength(ACustomers, Count);
+    Result := cerSuccess;
+  finally
+    Customer.Free;
+  end;
 end;
 
 function TRgCustomerService.GetCustomer(ACustomerID: longint; out ACustomer: TDtoCustomer): TCustomerEditResult;
+var
+  Customer: TOrmCustomer;
+  Contact: TPersonItem;
+  Address: TAddressItem;
 begin
-  Result := cerDatabaseError; // TODO: implement in B.2.2
+  Customer := TOrmCustomer.Create(Self.Server.Orm, ACustomerID);
+  try
+    if Customer.ID = 0 then
+    begin
+      Result := cerNotFound;
+      Exit;
+    end;
+
+    ACustomer.CustomerID := Customer.ID;
+    ACustomer.CustomerNo := Utf8ToString(Customer.CustomerNo);
+    ACustomer.Company := Utf8ToString(Customer.Company);
+    if Customer.Contacts.Count > 0 then
+    begin
+      Contact := Customer.Contacts[0];
+      ACustomer.Phone := Utf8ToString(Contact.Phones[0]);
+      ACustomer.Fax := Utf8ToString(Contact.Phones[1]);
+      if Contact.Addresses.Count > 0 then
+      begin
+        Address := Contact.Addresses[0];
+        ACustomer.Address := Utf8ToString(Address.Street1);
+        ACustomer.Zip := Utf8ToString(Address.Code);
+        ACustomer.City := Utf8ToString(Address.City);
+        ACustomer.Country := Utf8ToString(Address.Country);
+      end;
+    end;
+    Result := cerSuccess;
+  finally
+    Customer.Free;
+  end;
 end;
 
 function TRgCustomerService.CreateCustomer(const ACustomer: TDtoCustomer; out ANewID: longint): TCustomerEditResult;
+var
+  Customer: TOrmCustomer;
+  Contact: TPersonItem;
+  Address: TAddressItem;
 begin
   ANewID := 0;
-  Result := cerDatabaseError; // TODO: implement in B.2.3
+  Result := cerDatabaseError;
+
+  if Trim(ACustomer.CustomerNo) = '' then
+  begin
+    Result := cerMissingField;
+    Exit;
+  end;
+  if Trim(ACustomer.Company) = '' then
+  begin
+    Result := cerMissingField;
+    Exit;
+  end;
+
+  Customer := TOrmCustomer.Create;
+  try
+    Customer.CustomerNo := StringToUtf8(ACustomer.CustomerNo);
+    Customer.Company := StringToUtf8(ACustomer.Company);
+
+    // Build nested contact with phones and address
+    Contact := TPersonItem(Customer.Contacts.Add);
+    Contact.Phones.Add(StringToUtf8(ACustomer.Phone));
+    Contact.Phones.Add(StringToUtf8(ACustomer.Fax));
+    Address := TAddressItem(Contact.Addresses.Add);
+    Address.Street1 := StringToUtf8(ACustomer.Address);
+    Address.Code := StringToUtf8(ACustomer.Zip);
+    Address.City := StringToUtf8(ACustomer.City);
+    Address.Country := StringToUtf8(ACustomer.Country);
+
+    ANewID := Self.Server.Orm.Add(Customer, True);
+    if ANewID > 0 then
+      Result := cerSuccess;
+  finally
+    Customer.Free;
+  end;
 end;
 
 function TRgCustomerService.UpdateCustomer(ACustomerID: longint; const ACustomer: TDtoCustomer): TCustomerEditResult;
+var
+  Customer: TOrmCustomer;
+  Contact: TPersonItem;
+  Address: TAddressItem;
 begin
-  Result := cerDatabaseError; // TODO: implement in B.2.4
+  Result := cerDatabaseError;
+
+  if Trim(ACustomer.CustomerNo) = '' then
+  begin
+    Result := cerMissingField;
+    Exit;
+  end;
+  if Trim(ACustomer.Company) = '' then
+  begin
+    Result := cerMissingField;
+    Exit;
+  end;
+
+  Customer := TOrmCustomer.Create(Self.Server.Orm, ACustomerID);
+  try
+    if Customer.ID = 0 then
+    begin
+      Result := cerNotFound;
+      Exit;
+    end;
+
+    Customer.CustomerNo := StringToUtf8(ACustomer.CustomerNo);
+    Customer.Company := StringToUtf8(ACustomer.Company);
+
+    // Ensure contact structure exists
+    if Customer.Contacts.Count = 0 then
+    begin
+      Contact := TPersonItem(Customer.Contacts.Add);
+      Contact.Phones.Add('');
+      Contact.Phones.Add('');
+      Contact.Addresses.Add;
+    end
+    else
+      Contact := Customer.Contacts[0];
+
+    while Contact.Phones.Count < 2 do
+      Contact.Phones.Add('');
+    Contact.Phones[0] := StringToUtf8(ACustomer.Phone);
+    Contact.Phones[1] := StringToUtf8(ACustomer.Fax);
+
+    if Contact.Addresses.Count = 0 then
+      Address := TAddressItem(Contact.Addresses.Add)
+    else
+      Address := Contact.Addresses[0];
+    Address.Street1 := StringToUtf8(ACustomer.Address);
+    Address.Code := StringToUtf8(ACustomer.Zip);
+    Address.City := StringToUtf8(ACustomer.City);
+    Address.Country := StringToUtf8(ACustomer.Country);
+
+    if Self.Server.Orm.Update(Customer) then
+      Result := cerSuccess;
+  finally
+    Customer.Free;
+  end;
 end;
 
 function TRgCustomerService.DeleteCustomer(ACustomerID: longint): TCustomerEditResult;
+var
+  CountValue: RawUtf8;
+  OrderCount: integer;
 begin
-  Result := cerDatabaseError; // TODO: implement in B.2.5
+  Result := cerDatabaseError;
+
+  if ACustomerID <= 0 then
+  begin
+    Result := cerNotFound;
+    Exit;
+  end;
+
+  if not Self.Server.Orm.MemberExists(TOrmCustomer, ACustomerID) then
+  begin
+    Result := cerNotFound;
+    Exit;
+  end;
+
+  CountValue := Self.Server.Orm.OneFieldValue(TOrmCustomerOrder,
+    'COUNT(*)', 'Customer=?', [ACustomerID]);
+  OrderCount := Utf8ToInteger(CountValue, 0);
+  if OrderCount > 0 then
+  begin
+    Result := cerHasReferences;
+    Exit;
+  end;
+
+  if Self.Server.Orm.Delete(TOrmCustomer, ACustomerID) then
+    Result := cerSuccess;
 end;
 
 function TRgCustomerService.GenerateCustomerNo(out ACustomerNo: RawUtf8): TCustomerEditResult;
+var
+  MaxNo: RawUtf8;
+  NumPart: integer;
 begin
-  ACustomerNo := '';
-  Result := cerDatabaseError; // TODO: implement in B.2.6
+  MaxNo := Self.Server.Orm.OneFieldValue(TOrmCustomer,
+    'MAX(CAST(CustomerNo AS INTEGER))', '', []);
+  NumPart := Utf8ToInteger(MaxNo, 0);
+  Inc(NumPart);
+  ACustomerNo := StringToUtf8(Format('%.6d', [NumPart]));
+  Result := cerSuccess;
 end;
 
 {
