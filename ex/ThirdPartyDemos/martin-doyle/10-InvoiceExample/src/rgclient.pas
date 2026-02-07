@@ -41,9 +41,10 @@ interface
 uses
   Classes, SysUtils,
   mormot.core.base, mormot.core.text, mormot.core.unicode, mormot.core.variants,
-  mormot.orm.core,
+  mormot.core.interfaces,
+  mormot.orm.core, mormot.rest.core, mormot.soa.core,
   mormot.rest.sqlite3, mormot.db.raw.sqlite3.static, mormot.rest.http.client,
-  rgData, rgDtoTypes;
+  rgData, rgDtoTypes, rgServiceInterfaces, rgServer;
 
 type
 
@@ -56,6 +57,34 @@ type
     constructor Create; reintroduce; overload;
     destructor Destroy; override;
   end;
+
+  { TRgServiceClient }
+
+  TRgServiceClient = class(TObject)
+  private
+    fModel: TOrmModel;
+    fServer: TRgServer;
+    fHttpClient: TRestHttpClient;
+    fCustomerService: IRgCustomerService;
+    fInvoiceService: IRgInvoiceService;
+    fPaymentService: IRgPaymentService;
+    fStatisticsService: IRgStatisticsService;
+    fReportService: IRgReportService;
+  public
+    constructor CreateLocal;
+    constructor CreateService(const AHost, APort: RawUtf8);
+    destructor Destroy; override;
+    property CustomerService: IRgCustomerService read fCustomerService;
+    property InvoiceService: IRgInvoiceService read fInvoiceService;
+    property PaymentService: IRgPaymentService read fPaymentService;
+    property StatisticsService: IRgStatisticsService read fStatisticsService;
+    property ReportService: IRgReportService read fReportService;
+  end;
+
+var
+  RgServices: TRgServiceClient;
+
+type
 
   { ICustomerService }
 
@@ -511,7 +540,8 @@ implementation
 
 uses
   mormot.core.datetime,
-  rgConst;
+  rgConst,
+  rgConfig;
 
 var
   RgRestClient: TRgRestClient;
@@ -535,6 +565,46 @@ begin
   FModel.Free;
 end;
 
+{ TRgServiceClient }
+
+constructor TRgServiceClient.CreateLocal;
+begin
+  inherited Create;
+  fModel := CreateModel;
+  fServer := TRgServer.Create(fModel, DataFile);
+  fServer.Services.Resolve(TypeInfo(IRgCustomerService), fCustomerService);
+  fServer.Services.Resolve(TypeInfo(IRgInvoiceService), fInvoiceService);
+  fServer.Services.Resolve(TypeInfo(IRgPaymentService), fPaymentService);
+  fServer.Services.Resolve(TypeInfo(IRgStatisticsService), fStatisticsService);
+  fServer.Services.Resolve(TypeInfo(IRgReportService), fReportService);
+end;
+
+constructor TRgServiceClient.CreateService(const AHost, APort: RawUtf8);
+begin
+  inherited Create;
+  fModel := CreateModel;
+  fHttpClient := TRestHttpClient.Create(AHost, APort, fModel);
+  fHttpClient.ServiceDefine([IRgCustomerService, IRgInvoiceService,
+    IRgPaymentService, IRgStatisticsService, IRgReportService], sicShared);
+  fHttpClient.Services.Resolve(TypeInfo(IRgCustomerService), fCustomerService);
+  fHttpClient.Services.Resolve(TypeInfo(IRgInvoiceService), fInvoiceService);
+  fHttpClient.Services.Resolve(TypeInfo(IRgPaymentService), fPaymentService);
+  fHttpClient.Services.Resolve(TypeInfo(IRgStatisticsService), fStatisticsService);
+  fHttpClient.Services.Resolve(TypeInfo(IRgReportService), fReportService);
+end;
+
+destructor TRgServiceClient.Destroy;
+begin
+  fCustomerService := nil;
+  fInvoiceService := nil;
+  fPaymentService := nil;
+  fStatisticsService := nil;
+  fReportService := nil;
+  FreeAndNil(fHttpClient);
+  FreeAndNil(fServer);
+  FreeAndNil(fModel);
+  inherited Destroy;
+end;
 
 {
 ******************************* TCustomerService *******************************
@@ -2145,8 +2215,16 @@ end;
 
 initialization
   RgRestClient := TRgRestClient.Create;
+  case rgConfig.RgConfig.Mode of
+    rmLocal:
+      RgServices := TRgServiceClient.CreateLocal;
+    rmService:
+      RgServices := TRgServiceClient.CreateService(
+        rgConfig.RgConfig.Host, rgConfig.RgConfig.Port);
+  end;
 
 finalization
+  FreeAndNil(RgServices);
   RgRestClient.Free;
 
 end.

@@ -61,7 +61,6 @@ type
     procedure CancelButtonClick(Sender: TObject);
     procedure EditAmountKeyPress(Sender: TObject; var Key: char);
   private
-    FPaymentService: IPaymentService;
     FInvoiceID: longint;
     FInvoiceNo: string;
     FOpenAmount: currency;
@@ -96,7 +95,6 @@ uses
 
 procedure TPaymentEntryForm.FormCreate(Sender: TObject);
 begin
-  FPaymentService := TPaymentService.Create;
   FInvoiceID := 0;
   FPaymentSuccessful := False;
   SetupLayout;
@@ -158,7 +156,7 @@ end;
 
 procedure TPaymentEntryForm.FormDestroy(Sender: TObject);
 begin
-  FPaymentService := nil;
+  // nothing to free - services accessed via RgServices global
 end;
 
 procedure TPaymentEntryForm.EditAmountKeyPress(Sender: TObject; var Key: char);
@@ -236,7 +234,7 @@ begin
   if not ValidateInput then
     Exit;
 
-  PayResult := FPaymentService.AddPayment(FInvoiceID, FPaymentAmount, FPaymentDate);
+  PayResult := RgServices.PaymentService.AddPayment(FInvoiceID, FPaymentAmount, FPaymentDate);
 
   case PayResult of
     prSuccess:

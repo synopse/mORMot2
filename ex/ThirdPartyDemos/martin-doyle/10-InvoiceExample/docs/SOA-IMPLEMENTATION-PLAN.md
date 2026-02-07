@@ -302,20 +302,20 @@ Pattern change:
 
 | # | Task | Status |
 |---|------|--------|
-| D.1.1 | Create new `rgClient.pas` with `TRgServiceClient` class declaration: 5 service interface properties (`CustomerService`, `InvoiceService`, `PaymentService`, `StatisticsService`, `ReportService`), global `var RgServices` | planned |
-| D.1.2 | Implement local mode constructor — create `TRgServer` (embedded), resolve 5 service interfaces via `Services[].Get()` | planned |
-| D.1.3 | Implement service mode constructor — create `TRestHttpClientUri`, resolve 5 service interfaces via `ServiceDefine` + `Services[].Get()` | planned |
-| D.1.4 | Implement destructor + initialization/finalization (load config, create `RgServices`, free on finalization) | planned |
-| D.1.5 | Compile | planned |
+| D.1.1 | Add `TRgServiceClient` class declaration to `rgClient.pas`: 5 service interface properties (`CustomerService`, `InvoiceService`, `PaymentService`, `StatisticsService`, `ReportService`), `var RgServices` global, uses clause additions (`rgServiceInterfaces`, `rgServer`, `rgConfig`, `mormot.core.interfaces`, `mormot.rest.core`). Old code kept alongside for backward compat during transition. | done |
+| D.1.2 | Implement local mode constructor — create `TRgServer` (embedded), resolve 5 service interfaces via `Services.Resolve(TypeInfo(...))` | done |
+| D.1.3 | Implement service mode constructor — create `TRestHttpClient`, `ServiceDefine` with 5 GUIDs + `sicShared`, resolve via `Services.Resolve(TypeInfo(...))` | done |
+| D.1.4 | Implement destructor + initialization/finalization (load config, create `RgServices`, free on finalization) | done |
+| D.1.5 | Compile | done |
 
 #### D.2: Simple form adaptations (payment + lists)
 
 | # | Task | Status |
 |---|------|--------|
-| D.2.1 | Adapt `rgPaymentEntry.pas` — replace `FPaymentService` with `RgServices.PaymentService` (nearly compatible API, ~10 lines) | planned |
-| D.2.2 | Adapt `rgCustomerList.pas` — replace iterator loop (`LoadCustomers`/`NextCustomer`/`GetCustomer`) with `ListCustomers(out Array)` + index loop | planned |
-| D.2.3 | Adapt `rgInvoiceList.pas` — replace iterator loop with `ListInvoicesForCustomer(CustomerID, out Array)` + index loop | planned |
-| D.2.4 | Compile | planned |
+| D.2.1 | Adapt `rgPaymentEntry.pas` — replace `FPaymentService` with `RgServices.PaymentService` (nearly compatible API, ~10 lines) | done |
+| D.2.2 | Adapt `rgCustomerList.pas` — replace iterator loop (`LoadCustomers`/`NextCustomer`/`GetCustomer`) with `ListCustomers(out Array)` + index loop | done |
+| D.2.3 | Adapt `rgInvoiceList.pas` — replace iterator loop with `ListInvoicesForCustomer(CustomerID, out Array)` + index loop | done |
+| D.2.4 | Compile | done |
 
 #### D.3: Report forms
 

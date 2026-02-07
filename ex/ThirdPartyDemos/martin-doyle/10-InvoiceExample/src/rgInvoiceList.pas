@@ -64,7 +64,6 @@ type
     procedure DeleteButtonClick(Sender: TObject);
     procedure PayButtonClick(Sender: TObject);
   private
-    FInvoiceService: IInvoiceService;
     FCurrentCustomerID: longint;
     FBaseHeight: Integer;
     FOnPaymentCompleted: TPaymentCompletedEvent;
@@ -115,7 +114,6 @@ const
 
 procedure TInvoiceListForm.FormCreate(Sender: TObject);
 begin
-  FInvoiceService := TInvoiceService.Create;
   FCurrentCustomerID := 0;
   FBaseHeight := GetBaseHeight;
 
@@ -132,7 +130,7 @@ end;
 
 procedure TInvoiceListForm.FormDestroy(Sender: TObject);
 begin
-  FInvoiceService := nil;
+  // nothing to free - services accessed via RgServices global
 end;
 
 procedure TInvoiceListForm.FormShow(Sender: TObject);
@@ -266,9 +264,8 @@ end;
 
 procedure TInvoiceListForm.LoadInvoices;
 var
-  Invoice: TDtoOrder;
+  Invoices: TDtoOrderDynArray;
   Item: TMDListItem;
-  Count: Integer;
   i: Integer;
 begin
   FInvoiceListGrid.Items.BeginUpdate;
@@ -278,24 +275,18 @@ begin
     if FCurrentCustomerID <= 0 then
       Exit;
 
-    FInvoiceService.LoadInvoicesForCustomer(FCurrentCustomerID);
-    Count := FInvoiceService.GetInvoiceCount;
+    RgServices.InvoiceService.ListInvoicesForCustomer(FCurrentCustomerID, Invoices);
 
-    for i := 0 to Count - 1 do
+    for i := 0 to High(Invoices) do
     begin
-      if FInvoiceService.NextInvoice then
-      begin
-        Invoice := FInvoiceService.GetInvoice;
-
-        Item := FInvoiceListGrid.Items.Add;
-        Item.Caption := Invoice.OrderNo;
-        Item.SubItems.Add(AppDateToStr(Invoice.SaleDate));
-        Item.SubItems.Add(Curr64ToString(PInt64(@Invoice.ItemsTotal)^));
-        Item.SubItems.Add(Curr64ToString(PInt64(@Invoice.AmountPaid)^));
-        Item.SubItems.Add(Curr64ToString(PInt64(@Invoice.OpenAmount)^));
-        Item.SubItems.Add(StatusToIndicator(Invoice.Status));
-        Item.Data := Pointer(PtrInt(Invoice.OrderID));
-      end;
+      Item := FInvoiceListGrid.Items.Add;
+      Item.Caption := Invoices[i].OrderNo;
+      Item.SubItems.Add(AppDateToStr(Invoices[i].SaleDate));
+      Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].ItemsTotal)^));
+      Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].AmountPaid)^));
+      Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].OpenAmount)^));
+      Item.SubItems.Add(StatusToIndicator(Invoices[i].Status));
+      Item.Data := Pointer(PtrInt(Invoices[i].OrderID));
     end;
   finally
     FInvoiceListGrid.Items.EndUpdate;
@@ -322,26 +313,25 @@ end;
 
 function TInvoiceListForm.GetSelectedInvoice: TDtoOrder;
 var
+  Invoices: TDtoOrderDynArray;
   InvoiceID: longint;
   i: Integer;
 begin
+  Finalize(Result);
   FillChar(Result, SizeOf(Result), 0);
   InvoiceID := GetSelectedInvoiceID;
   if InvoiceID <= 0 then
     Exit;
 
-  FInvoiceService.LoadInvoicesForCustomer(FCurrentCustomerID);
-  for i := 0 to FInvoiceService.GetInvoiceCount - 1 do
+  RgServices.InvoiceService.ListInvoicesForCustomer(FCurrentCustomerID, Invoices);
+  for i := 0 to High(Invoices) do
   begin
-    if FInvoiceService.NextInvoice then
+    if Invoices[i].OrderID = InvoiceID then
     begin
-      Result := FInvoiceService.GetInvoice;
-      if Result.OrderID = InvoiceID then
-        Exit;
+      Result := Invoices[i];
+      Exit;
     end;
   end;
-
-  FillChar(Result, SizeOf(Result), 0);
 end;
 
 function TInvoiceListForm.IsSelectedInvoiceOpen: Boolean;
@@ -418,6 +408,7 @@ end;
 procedure TInvoiceListForm.DeleteButtonClick(Sender: TObject);
 var
   InvoiceID: longint;
+  Res: TInvoiceEditResult;
 begin
   InvoiceID := GetSelectedInvoiceID;
   if InvoiceID > 0 then
@@ -425,9 +416,19 @@ begin
     if MessageDlg('Are you sure you want to delete this invoice?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     begin
-      // TODO: Implement invoice deletion
-      ShowMessage('Delete invoice ID: ' + IntToStr(InvoiceID));
-      RefreshList;
+      Res := RgServices.InvoiceService.DeleteInvoice(InvoiceID);
+      case Res of
+        ierSuccess:
+        begin
+          RefreshList;
+          if Assigned(FOnPaymentCompleted) then
+            FOnPaymentCompleted(Self);
+        end;
+        ierNotFound:
+          ShowMessage('Invoice not found.');
+      else
+        ShowMessage('Database error. The invoice could not be deleted.');
+      end;
     end;
   end;
 end;
@@ -477,7 +478,6 @@ end;
 procedure TInvoiceListForm.ClearList;
 begin
   FCurrentCustomerID := 0;
-  FInvoiceService.Clear;
   FInvoiceListGrid.Items.Clear;
   UpdateButtons;
 end;
