@@ -63,6 +63,7 @@ uses
   rgData,
   rgDtoTypes,
   rgServiceInterfaces,
+  rgServiceImplementation,
   rgConfig,
   rgClient,
   rgCustomerList,

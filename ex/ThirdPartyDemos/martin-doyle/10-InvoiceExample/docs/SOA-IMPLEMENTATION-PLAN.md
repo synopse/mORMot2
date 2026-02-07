@@ -135,10 +135,10 @@ Port logic from existing `rgClient.pas` classes (replace iterator with batch que
 
 | # | Task | Status |
 |---|------|--------|
-| B.1.1 | Create `src/rgServiceImplementation.pas` with unit header, uses clause, all 5 class declarations (empty), and initialization section | planned |
-| B.1.2 | Implement `TRgPaymentService.AddPayment` — load order, validate amount, update AmountPaid (source: `rgClient.pas:1131-1189`) | planned |
-| B.1.3 | Implement `TRgPaymentService.GetInvoiceOpenAmount` — load order, return ItemsTotal - AmountPaid | planned |
-| B.1.4 | Compile | planned |
+| B.1.1 | Create `src/rgServiceImplementation.pas` with unit header, uses clause, all 5 class declarations (empty), and initialization section | done |
+| B.1.2 | Implement `TRgPaymentService.AddPayment` — load order, validate amount, update AmountPaid (source: `rgClient.pas:1131-1189`) | done |
+| B.1.3 | Implement `TRgPaymentService.GetInvoiceOpenAmount` — load order, return ItemsTotal - AmountPaid | done |
+| B.1.4 | Compile | done |
 
 #### B.2: CustomerService
 
