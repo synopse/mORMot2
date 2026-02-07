@@ -13,7 +13,6 @@
       </Flags>
       <SessionStorage Value="InProjectDir"/>
       <Title Value="Project03MethodBasedServer"/>
-      <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
     <BuildModes Count="1">
