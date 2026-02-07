@@ -50,7 +50,6 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: IMonthlyOverviewReportService;
     FSelectedYear: integer;
     procedure PopulateYearCombo;
   protected
@@ -83,7 +82,6 @@ type
 constructor TMonthlyOverviewReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TMonthlyOverviewReportService.Create;
 
   PopulateYearCombo;
 
@@ -96,7 +94,6 @@ end;
 
 destructor TMonthlyOverviewReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -171,8 +168,9 @@ end;
 
 procedure TMonthlyOverviewReportForm.LoadData;
 var
+  Items: TDtoMonthlyOverviewDynArray;
+  Totals: TDtoMonthlyOverview;
   i: integer;
-  Item, Totals: TDtoMonthlyOverview;
   ListItem: TMDListItem;
   YearText: string;
   TempYear: integer;
@@ -194,22 +192,20 @@ begin
   end;
 
   FSelectedYear := TempYear;
-  FReportService.LoadMonthlyOverview(FSelectedYear);
+  RgServices.ReportService.GetMonthlyOverviewReport(FSelectedYear, Items, Totals);
 
   // Add monthly rows
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Item.MonthName;
-    ListItem.SubItems.Add(IntToStr(Item.InvoiceCount));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.Revenue)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.PaymentsReceived)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.OpenAmount)^));
+    ListItem.Caption := Items[i].MonthName;
+    ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].Revenue)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].PaymentsReceived)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].OpenAmount)^));
   end;
 
   // Add totals row
-  Totals := FReportService.GetTotals;
   ListItem := FResultGrid.Items.Add;
   ListItem.Caption := '--- ' + Totals.MonthName + ' ---';
   ListItem.SubItems.Add(IntToStr(Totals.InvoiceCount));

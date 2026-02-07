@@ -38,7 +38,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, Menus, MdForms, mdLayout, mdGrids, rgClient, rgDtoTypes,
+  ExtCtrls, Menus, MdForms, mdLayout, mdGrids, rgDtoTypes,
   rgInvoiceItemEdit;
 
 type
@@ -70,9 +70,10 @@ type
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
   private
-    FInvoiceService: IInvoiceEditService;
+    FItems: TDtoInvoiceItemArray;
     FInvoiceID: longint;
     FCustomerID: longint;
+    FIsNew: Boolean;
     FSaveSuccessful: Boolean;
     FItemsListGrid: TMDListGrid;
     procedure SetupLayout;
@@ -98,7 +99,9 @@ implementation
 uses
   mormot.core.base,
   mormot.core.text,
-  mdDates;
+  mormot.core.unicode,
+  mdDates,
+  rgClient;
 
 {$R *.dfm}
 
@@ -106,10 +109,11 @@ uses
 
 procedure TInvoiceEditForm.FormCreate(Sender: TObject);
 begin
-  FInvoiceService := TInvoiceEditService.Create;
   FInvoiceID := 0;
   FCustomerID := 0;
+  FIsNew := False;
   FSaveSuccessful := False;
+  SetLength(FItems, 0);
 
   // Create TMDListGrid (replaces TListView to fix BUG-004)
   FItemsListGrid := TMDListGrid.Create(Self);
@@ -241,24 +245,21 @@ end;
 procedure TInvoiceEditForm.LoadItemsToListGrid;
 var
   i: Integer;
-  Item: TDtoInvoiceItem;
   ListItem: TMDListItem;
 begin
   FItemsListGrid.Items.BeginUpdate;
   try
     FItemsListGrid.Items.Clear;
 
-    for i := 0 to FInvoiceService.GetItemCount - 1 do
+    for i := 0 to Length(FItems) - 1 do
     begin
-      Item := FInvoiceService.GetItem(i);
-
       ListItem := FItemsListGrid.Items.Add;
-      ListItem.Caption := IntToStr(Item.Position);
-      ListItem.SubItems.Add(Item.Description);
-      ListItem.SubItems.Add(Format('%.2f', [Item.Quantity]));
-      ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.ListPrice)^));
-      ListItem.SubItems.Add(IntToStr(Item.Discount));
-      ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.Amount)^));
+      ListItem.Caption := IntToStr(FItems[i].Position);
+      ListItem.SubItems.Add(FItems[i].Description);
+      ListItem.SubItems.Add(Format('%.2f', [FItems[i].Quantity]));
+      ListItem.SubItems.Add(Curr64ToString(PInt64(@FItems[i].ListPrice)^));
+      ListItem.SubItems.Add(IntToStr(FItems[i].Discount));
+      ListItem.SubItems.Add(Curr64ToString(PInt64(@FItems[i].Amount)^));
       ListItem.Data := Pointer(PtrInt(i));
     end;
   finally
@@ -281,14 +282,17 @@ end;
 procedure TInvoiceEditForm.UpdateTotal;
 var
   Total: currency;
+  i: Integer;
 begin
-  Total := FInvoiceService.GetItemsTotal;
+  Total := 0;
+  for i := 0 to Length(FItems) - 1 do
+    Total := Total + FItems[i].Amount;
   LabelTotalValue.Caption := Curr64ToString(PInt64(@Total)^);
 end;
 
 procedure TInvoiceEditForm.FormDestroy(Sender: TObject);
 begin
-  FInvoiceService := nil;
+  SetLength(FItems, 0);
 end;
 
 procedure TInvoiceEditForm.ItemsListGridSelectItem(Sender: TObject;
@@ -307,6 +311,7 @@ procedure TInvoiceEditForm.AddItemButtonClick(Sender: TObject);
 var
   NewItem: TDtoInvoiceItem;
   ItemEditForm: TInvoiceItemEditForm;
+  Len: Integer;
 begin
   FillChar(NewItem, SizeOf(NewItem), 0);
   NewItem.Quantity := 1;
@@ -317,7 +322,13 @@ begin
   try
     if ItemEditForm.ShowItemEdit(NewItem, True) then
     begin
-      FInvoiceService.AddItem(NewItem);
+      Len := Length(FItems);
+      SetLength(FItems, Len + 1);
+      NewItem.Position := Len + 1;
+      NewItem.Amount := NewItem.ListPrice * NewItem.Quantity;
+      if NewItem.Discount > 0 then
+        NewItem.Amount := NewItem.Amount * (100 - NewItem.Discount) / 100;
+      FItems[Len] := NewItem;
       LoadItemsToListGrid;
     end;
   finally
@@ -335,13 +346,20 @@ begin
     Exit;
 
   Index := Integer(PtrInt(FItemsListGrid.Selected.Data));
-  Item := FInvoiceService.GetItem(Index);
+  if (Index < 0) or (Index >= Length(FItems)) then
+    Exit;
+
+  Item := FItems[Index];
 
   ItemEditForm := TInvoiceItemEditForm.Create(Self);
   try
     if ItemEditForm.ShowItemEdit(Item, False) then
     begin
-      FInvoiceService.UpdateItem(Index, Item);
+      Item.Position := Index + 1;
+      Item.Amount := Item.ListPrice * Item.Quantity;
+      if Item.Discount > 0 then
+        Item.Amount := Item.Amount * (100 - Item.Discount) / 100;
+      FItems[Index] := Item;
       LoadItemsToListGrid;
     end;
   finally
@@ -351,7 +369,7 @@ end;
 
 procedure TInvoiceEditForm.RemoveItemButtonClick(Sender: TObject);
 var
-  Index: Integer;
+  Index, i: Integer;
 begin
   if FItemsListGrid.Selected = nil then
     Exit;
@@ -361,8 +379,16 @@ begin
     Exit;
 
   Index := Integer(PtrInt(FItemsListGrid.Selected.Data));
-  FInvoiceService.DeleteItem(Index);
-  LoadItemsToListGrid;
+  if (Index >= 0) and (Index < Length(FItems)) then
+  begin
+    for i := Index to Length(FItems) - 2 do
+    begin
+      FItems[i] := FItems[i + 1];
+      FItems[i].Position := i + 1;
+    end;
+    SetLength(FItems, Length(FItems) - 1);
+    LoadItemsToListGrid;
+  end;
 end;
 
 function TInvoiceEditForm.ValidateInput: Boolean;
@@ -392,27 +418,39 @@ begin
     Exit;
   end;
 
-  if FInvoiceService.GetItemCount = 0 then
+  if Length(FItems) = 0 then
   begin
     ShowMessage('Invoice must have at least one item.');
     Exit;
   end;
-
-  FInvoiceService.SetOrderNo(Trim(EditOrderNo.Text));
-  FInvoiceService.SetSaleDate(SaleDate);
-  FInvoiceService.SetShipDate(ShipDate);
 
   Result := True;
 end;
 
 procedure TInvoiceEditForm.SaveButtonClick(Sender: TObject);
 var
+  Invoice: TDtoInvoiceSave;
+  SaleDate, ShipDate: TDateTime;
+  NewID: longint;
   SaveResult: TInvoiceEditResult;
 begin
   if not ValidateInput then
     Exit;
 
-  SaveResult := FInvoiceService.Save;
+  AppTryStrToDate(EditSaleDate.Text, SaleDate);
+  AppTryStrToDate(EditShipDate.Text, ShipDate);
+
+  Finalize(Invoice);
+  FillChar(Invoice, SizeOf(Invoice), 0);
+  Invoice.OrderNo := Trim(EditOrderNo.Text);
+  Invoice.SaleDate := SaleDate;
+  Invoice.ShipDate := ShipDate;
+  Invoice.Items := FItems;
+
+  if FIsNew then
+    SaveResult := RgServices.InvoiceService.CreateInvoice(FCustomerID, Invoice, NewID)
+  else
+    SaveResult := RgServices.InvoiceService.UpdateInvoice(FInvoiceID, Invoice);
 
   case SaveResult of
     ierSuccess:
@@ -435,11 +473,14 @@ begin
 end;
 
 function TInvoiceEditForm.ShowNewInvoice(ACustomerID: longint): Boolean;
+var
+  OrderNo: RawUtf8;
+  Summary: TDtoCustomerSummary;
 begin
   Result := False;
   FSaveSuccessful := False;
 
-  if not FInvoiceService.CreateNewInvoice(ACustomerID) then
+  if ACustomerID <= 0 then
   begin
     ShowMessage('Could not create new invoice. Customer not found.');
     Exit;
@@ -447,12 +488,20 @@ begin
 
   FCustomerID := ACustomerID;
   FInvoiceID := 0;
+  FIsNew := True;
+  SetLength(FItems, 0);
+
+  // Get customer name via statistics service
+  RgServices.StatisticsService.GetCustomerSummary(ACustomerID, Summary);
+
+  // Generate order number
+  RgServices.InvoiceService.GenerateOrderNo(OrderNo);
 
   Caption := 'New Invoice';
-  LabelCustomerValue.Caption := FInvoiceService.GetCustomerName;
-  EditOrderNo.Text := FInvoiceService.GetOrderNo;
-  EditSaleDate.Text := AppDateToStr(FInvoiceService.GetSaleDate);
-  EditShipDate.Text := AppDateToStr(FInvoiceService.GetShipDate);
+  LabelCustomerValue.Caption := Summary.CustomerName;
+  EditOrderNo.Text := Utf8ToString(OrderNo);
+  EditSaleDate.Text := AppDateToStr(Date);
+  EditShipDate.Text := AppDateToStr(Date + 14);
 
   LoadItemsToListGrid;
 
@@ -460,24 +509,30 @@ begin
 end;
 
 function TInvoiceEditForm.ShowEditInvoice(AInvoiceID: longint): Boolean;
+var
+  Detail: TDtoInvoiceDetail;
+  Res: TInvoiceEditResult;
 begin
   Result := False;
   FSaveSuccessful := False;
 
-  if not FInvoiceService.LoadInvoice(AInvoiceID) then
+  Res := RgServices.InvoiceService.GetInvoice(AInvoiceID, Detail);
+  if Res <> ierSuccess then
   begin
     ShowMessage('Invoice not found.');
     Exit;
   end;
 
   FInvoiceID := AInvoiceID;
-  FCustomerID := FInvoiceService.GetCustomerID;
+  FCustomerID := Detail.CustomerID;
+  FIsNew := False;
+  FItems := Detail.Items;
 
   Caption := 'Edit Invoice';
-  LabelCustomerValue.Caption := FInvoiceService.GetCustomerName;
-  EditOrderNo.Text := FInvoiceService.GetOrderNo;
-  EditSaleDate.Text := AppDateToStr(FInvoiceService.GetSaleDate);
-  EditShipDate.Text := AppDateToStr(FInvoiceService.GetShipDate);
+  LabelCustomerValue.Caption := Detail.CustomerName;
+  EditOrderNo.Text := Detail.OrderNo;
+  EditSaleDate.Text := AppDateToStr(Detail.SaleDate);
+  EditShipDate.Text := AppDateToStr(Detail.ShipDate);
 
   LoadItemsToListGrid;
 

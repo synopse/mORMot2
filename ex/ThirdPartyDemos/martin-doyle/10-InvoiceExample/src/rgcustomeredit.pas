@@ -68,7 +68,6 @@ type
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
   private
-    FCustomerEditService: ICustomerEditService;
     FCustomerID: longint;
     FOriginalCustomerNo: string;
     FOriginalCompany: string;
@@ -97,13 +96,15 @@ var
 
 implementation
 
+uses
+  mormot.core.base;
+
 {$R *.dfm}
 
 { TCustomerEditForm }
 
 procedure TCustomerEditForm.FormCreate(Sender: TObject);
 begin
-  FCustomerEditService := TCustomerEditService.Create;
   FCustomerID := 0;
   FormMode := fmBrowse;
   SetupLayout;
@@ -200,7 +201,7 @@ end;
 
 procedure TCustomerEditForm.FormDestroy(Sender: TObject);
 begin
-  FCustomerEditService := nil;
+  // nothing to free - services accessed via RgServices global
 end;
 
 procedure TCustomerEditForm.SetFormMode(AValue: TFormMode);
@@ -272,19 +273,23 @@ begin
 end;
 
 procedure TCustomerEditForm.LoadCustomerData;
+var
+  Customer: TDtoCustomer;
+  Res: TCustomerEditResult;
 begin
   if FCustomerID > 0 then
   begin
-    if FCustomerEditService.LoadCustomer(FCustomerID) then
+    Res := RgServices.CustomerService.GetCustomer(FCustomerID, Customer);
+    if Res = cerSuccess then
     begin
-      EditCustomerNo.Text := FCustomerEditService.GetCustomerNo;
-      EditCompany.Text := FCustomerEditService.GetCompany;
-      EditPhone.Text := FCustomerEditService.GetPhone;
-      EditFax.Text := FCustomerEditService.GetFax;
-      EditAddress.Text := FCustomerEditService.GetAddress;
-      EditZip.Text := FCustomerEditService.GetZip;
-      EditCity.Text := FCustomerEditService.GetCity;
-      EditCountry.Text := FCustomerEditService.GetCountry;
+      EditCustomerNo.Text := Customer.CustomerNo;
+      EditCompany.Text := Customer.Company;
+      EditPhone.Text := Customer.Phone;
+      EditFax.Text := Customer.Fax;
+      EditAddress.Text := Customer.Address;
+      EditZip.Text := Customer.Zip;
+      EditCity.Text := Customer.City;
+      EditCountry.Text := Customer.Country;
     end
     else
     begin
@@ -305,11 +310,13 @@ begin
 end;
 
 procedure TCustomerEditForm.NewCustomer;
+var
+  CustomerNo: RawUtf8;
 begin
   FCustomerID := 0;
   ClearFields;
-  FCustomerEditService.CreateNewCustomer;
-  EditCustomerNo.Text := FCustomerEditService.GetCustomerNo;
+  RgServices.CustomerService.GenerateCustomerNo(CustomerNo);
+  EditCustomerNo.Text := Utf8ToString(CustomerNo);
   StoreOriginalValues;
   FormMode := fmInsert;
   ShowModal;
@@ -317,6 +324,8 @@ end;
 
 procedure TCustomerEditForm.SaveButtonClick(Sender: TObject);
 var
+  Customer: TDtoCustomer;
+  NewID: longint;
   Res: TCustomerEditResult;
 begin
   if Trim(EditCustomerNo.Text) = '' then
@@ -333,16 +342,23 @@ begin
     Exit;
   end;
 
-  FCustomerEditService.SetCustomerNo(Trim(EditCustomerNo.Text));
-  FCustomerEditService.SetCompany(Trim(EditCompany.Text));
-  FCustomerEditService.SetPhone(Trim(EditPhone.Text));
-  FCustomerEditService.SetFax(Trim(EditFax.Text));
-  FCustomerEditService.SetAddress(Trim(EditAddress.Text));
-  FCustomerEditService.SetZip(Trim(EditZip.Text));
-  FCustomerEditService.SetCity(Trim(EditCity.Text));
-  FCustomerEditService.SetCountry(Trim(EditCountry.Text));
+  Finalize(Customer);
+  FillChar(Customer, SizeOf(Customer), 0);
+  Customer.CustomerID := FCustomerID;
+  Customer.CustomerNo := Trim(EditCustomerNo.Text);
+  Customer.Company := Trim(EditCompany.Text);
+  Customer.Phone := Trim(EditPhone.Text);
+  Customer.Fax := Trim(EditFax.Text);
+  Customer.Address := Trim(EditAddress.Text);
+  Customer.Zip := Trim(EditZip.Text);
+  Customer.City := Trim(EditCity.Text);
+  Customer.Country := Trim(EditCountry.Text);
 
-  Res := FCustomerEditService.Save;
+  if FormMode = fmInsert then
+    Res := RgServices.CustomerService.CreateCustomer(Customer, NewID)
+  else
+    Res := RgServices.CustomerService.UpdateCustomer(FCustomerID, Customer);
+
   case Res of
     cerSuccess:
       ModalResult := mrOk;

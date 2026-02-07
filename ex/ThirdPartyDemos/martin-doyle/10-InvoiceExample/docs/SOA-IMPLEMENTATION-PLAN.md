@@ -321,37 +321,37 @@ Pattern change:
 
 | # | Task | Status |
 |---|------|--------|
-| D.3.1 | Adapt `rgReportOpenItems.pas` — replace `FReportService.LoadOpenItems` iterator with `RgServices.ReportService.GetOpenItemsReport(..., out FItems)` | planned |
-| D.3.2 | Adapt `rgReportPayments.pas` — replace iterator with `GetPaymentReceiptsReport(..., out FItems)` | planned |
-| D.3.3 | Adapt `rgReportRevenue.pas` — replace iterator with `GetCustomerRevenueReport(..., out FItems)` | planned |
-| D.3.4 | Adapt `rgReportMonthly.pas` — replace iterator with `GetMonthlyOverviewReport(..., out FItems, out FTotals)` (note: extra `out ATotals` param) | planned |
-| D.3.5 | Compile | planned |
+| D.3.1 | Adapt `rgReportOpenItems.pas` — replace `FReportService.LoadOpenItems` iterator with `RgServices.ReportService.GetOpenItemsReport(..., out FItems)` | done |
+| D.3.2 | Adapt `rgReportPayments.pas` — replace iterator with `GetPaymentReceiptsReport(..., out FItems)` | done |
+| D.3.3 | Adapt `rgReportRevenue.pas` — replace iterator with `GetCustomerRevenueReport(..., out FItems)` | done |
+| D.3.4 | Adapt `rgReportMonthly.pas` — replace iterator with `GetMonthlyOverviewReport(..., out FItems, out FTotals)` (note: extra `out ATotals` param) | done |
+| D.3.5 | Compile | done |
 
 #### D.4: Main form (dashboard stats consolidation)
 
 | # | Task | Status |
 |---|------|--------|
-| D.4.1 | Adapt `rgMain.pas` — replace `FStatisticsService` (5 separate getters) with single `RgServices.StatisticsService.GetDashboardStats(out AStats)` call, read fields from DTO | planned |
-| D.4.2 | Adapt `rgMain.pas` — replace `FCustomerSummaryService` with `RgServices.StatisticsService.GetCustomerSummary(CustomerID, out ASummary)` | planned |
-| D.4.3 | Compile | planned |
+| D.4.1 | Adapt `rgMain.pas` — replace `FStatisticsService` (5 separate getters) with single `RgServices.StatisticsService.GetDashboardStats(out AStats)` call, read fields from DTO | done |
+| D.4.2 | Adapt `rgMain.pas` — replace `FCustomerSummaryService` with `RgServices.StatisticsService.GetCustomerSummary(CustomerID, out ASummary)` | done |
+| D.4.3 | Compile | done |
 
 #### D.5: Customer edit form (moderate — DTO construction)
 
 | # | Task | Status |
 |---|------|--------|
-| D.5.1 | Adapt `rgCustomerEdit.pas` load path — replace 8 property getters (`GetCustomerNo`, `GetCompany`, etc.) with single `RgServices.CustomerService.GetCustomer(ID, out ACustomer)`, populate form from DTO fields | planned |
-| D.5.2 | Adapt `rgCustomerEdit.pas` save path — build `TDtoCustomer` from form fields, call `CreateCustomer(DTO, out NewID)` or `UpdateCustomer(ID, DTO)` | planned |
-| D.5.3 | Adapt `rgCustomerEdit.pas` delete + generate — replace `DeleteCustomer` and `GenerateCustomerNo` calls (direct mapping) | planned |
-| D.5.4 | Compile | planned |
+| D.5.1 | Adapt `rgCustomerEdit.pas` load path — replace 8 property getters (`GetCustomerNo`, `GetCompany`, etc.) with single `RgServices.CustomerService.GetCustomer(ID, out ACustomer)`, populate form from DTO fields | done |
+| D.5.2 | Adapt `rgCustomerEdit.pas` save path — build `TDtoCustomer` from form fields, call `CreateCustomer(DTO, out NewID)` or `UpdateCustomer(ID, DTO)` | done |
+| D.5.3 | Adapt `rgCustomerEdit.pas` delete + generate — replace `DeleteCustomer` and `GenerateCustomerNo` calls (direct mapping) | done |
+| D.5.4 | Compile | done |
 
 #### D.6: Invoice edit form (most complex — local item array management)
 
 | # | Task | Status |
 |---|------|--------|
-| D.6.1 | Adapt `rgInvoiceEdit.pas` load path — add local `FItems: TDtoInvoiceItemArray` field, load via `RgServices.InvoiceService.GetInvoice(ID, out ADetail)`, populate form + `FItems` from DTO | planned |
-| D.6.2 | Adapt `rgInvoiceEdit.pas` item operations — rewrite Add/Update/Delete item buttons to modify local `FItems` array directly (insert/update/remove array elements) | planned |
-| D.6.3 | Adapt `rgInvoiceEdit.pas` save path — build `TDtoInvoiceSave` from form fields + `FItems` array, call `CreateInvoice` or `UpdateInvoice` with full DTO | planned |
-| D.6.4 | Compile | planned |
+| D.6.1 | Adapt `rgInvoiceEdit.pas` load path — add local `FItems: TDtoInvoiceItemArray` field, load via `RgServices.InvoiceService.GetInvoice(ID, out ADetail)`, populate form + `FItems` from DTO | done |
+| D.6.2 | Adapt `rgInvoiceEdit.pas` item operations — rewrite Add/Update/Delete item buttons to modify local `FItems` array directly (insert/update/remove array elements) | done |
+| D.6.3 | Adapt `rgInvoiceEdit.pas` save path — build `TDtoInvoiceSave` from form fields + `FItems` array, call `CreateInvoice` or `UpdateInvoice` with full DTO | done |
+| D.6.4 | Compile | done |
 
 #### D.7: Project files + final compile
 

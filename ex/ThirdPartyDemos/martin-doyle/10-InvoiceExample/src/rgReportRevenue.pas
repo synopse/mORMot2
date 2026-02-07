@@ -50,7 +50,6 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: ICustomerRevenueReportService;
     FSelectedYear: integer;
     procedure PopulateYearCombo;
   protected
@@ -84,7 +83,6 @@ type
 constructor TCustomerRevenueReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TCustomerRevenueReportService.Create;
 
   PopulateYearCombo;
 
@@ -97,7 +95,6 @@ end;
 
 destructor TCustomerRevenueReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -172,8 +169,8 @@ end;
 
 procedure TCustomerRevenueReportForm.LoadData;
 var
+  Items: TDtoCustomerRevenueDynArray;
   i: integer;
-  Item: TDtoCustomerRevenue;
   ListItem: TMDListItem;
   YearText: string;
   TempYear: integer;
@@ -195,18 +192,17 @@ begin
   end;
 
   FSelectedYear := TempYear;
-  FReportService.LoadCustomerRevenue(FSelectedYear);
+  RgServices.ReportService.GetCustomerRevenueReport(FSelectedYear, Items);
 
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Item.Company;
-    ListItem.SubItems.Add(IntToStr(Item.InvoiceCount));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalRevenue)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalPaid)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalOpen)^));
-    ListItem.Data := Pointer(PtrInt(Item.CustomerID));
+    ListItem.Caption := Items[i].Company;
+    ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalRevenue)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalPaid)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalOpen)^));
+    ListItem.Data := Pointer(PtrInt(Items[i].CustomerID));
   end;
 end;
 

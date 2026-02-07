@@ -54,7 +54,6 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: IOpenItemsReportService;
     FFromDate: TDateTime;
     FToDate: TDateTime;
     FMinAmount: currency;
@@ -94,7 +93,6 @@ type
 constructor TOpenItemsReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TOpenItemsReportService.Create;
 
   // Default filter values: last 90 days
   FToDate := Date;
@@ -108,7 +106,6 @@ end;
 
 destructor TOpenItemsReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -251,29 +248,28 @@ end;
 
 procedure TOpenItemsReportForm.LoadData;
 var
+  Items: TDtoOpenItemDynArray;
   i: integer;
-  Item: TDtoOpenItem;
   ListItem: TMDListItem;
 begin
   if not ValidateFilters then
     Exit;
 
-  FReportService.LoadOpenItems(FFromDate, FToDate, FMinAmount);
+  RgServices.ReportService.GetOpenItemsReport(FFromDate, FToDate, FMinAmount, Items);
 
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Item.Company;
-    ListItem.SubItems.Add(Item.OrderNo);
-    if Item.SaleDate > 0 then
-      ListItem.SubItems.Add(AppDateToStr(Item.SaleDate))
+    ListItem.Caption := Items[i].Company;
+    ListItem.SubItems.Add(Items[i].OrderNo);
+    if Items[i].SaleDate > 0 then
+      ListItem.SubItems.Add(AppDateToStr(Items[i].SaleDate))
     else
       ListItem.SubItems.Add('');
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.ItemsTotal)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.OpenAmount)^));
-    ListItem.SubItems.Add(IntToStr(Item.DaysOverdue));
-    ListItem.Data := Pointer(PtrInt(Item.OrderID));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].ItemsTotal)^));
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].OpenAmount)^));
+    ListItem.SubItems.Add(IntToStr(Items[i].DaysOverdue));
+    ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;
 end;
 

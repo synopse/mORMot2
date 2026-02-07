@@ -52,7 +52,6 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: IPaymentReceiptsReportService;
     FFromDate: TDateTime;
     FToDate: TDateTime;
     function ParseDate(const AText: string; out ADate: TDateTime): Boolean;
@@ -89,7 +88,6 @@ type
 constructor TPaymentReceiptsReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TPaymentReceiptsReportService.Create;
 
   // Default filter values: last 30 days
   FToDate := Date;
@@ -101,7 +99,6 @@ end;
 
 destructor TPaymentReceiptsReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -197,27 +194,26 @@ end;
 
 procedure TPaymentReceiptsReportForm.LoadData;
 var
+  Items: TDtoPaymentReceiptDynArray;
   i: integer;
-  Item: TDtoPaymentReceipt;
   ListItem: TMDListItem;
 begin
   if not ValidateFilters then
     Exit;
 
-  FReportService.LoadPaymentReceipts(FFromDate, FToDate);
+  RgServices.ReportService.GetPaymentReceiptsReport(FFromDate, FToDate, Items);
 
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    if Item.SaleDate > 0 then
-      ListItem.Caption := AppDateToStr(Item.SaleDate)
+    if Items[i].SaleDate > 0 then
+      ListItem.Caption := AppDateToStr(Items[i].SaleDate)
     else
       ListItem.Caption := '';
-    ListItem.SubItems.Add(Item.Company);
-    ListItem.SubItems.Add(Item.OrderNo);
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.AmountPaid)^));
-    ListItem.Data := Pointer(PtrInt(Item.OrderID));
+    ListItem.SubItems.Add(Items[i].Company);
+    ListItem.SubItems.Add(Items[i].OrderNo);
+    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].AmountPaid)^));
+    ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;
 end;
 

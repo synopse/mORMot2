@@ -40,8 +40,8 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ActnList, Menus,
-  StdActns, ExtCtrls, StdCtrls, MdForms, rgClient, rgCustomerList, rgInvoiceList,
-  ImgList;
+  StdActns, ExtCtrls, StdCtrls, MdForms, rgClient, rgDtoTypes,
+  rgCustomerList, rgInvoiceList, ImgList;
 
 type
 
@@ -121,8 +121,6 @@ type
   private
     FCustomerListForm: TCustomerListForm;
     FInvoiceListForm: TInvoiceListForm;
-    FStatisticsService: IStatisticsService;
-    FCustomerSummaryService: ICustomerSummaryService;
     FCurrentCustomerID: longint;
     procedure ShowCustomerList;
     procedure ShowInvoiceList;
@@ -188,8 +186,6 @@ begin
   // Set Services
   CustomerService := TCustomerService.Create;
   CustomerOrderService := TCustomerOrderService.Create;
-  FStatisticsService := TStatisticsService.Create;
-  FCustomerSummaryService := TCustomerSummaryService.Create;
 
   // Initialize forms
   FCustomerListForm := nil;
@@ -206,8 +202,6 @@ begin
 
   CustomerService := nil;
   CustomerOrderService := nil;
-  FStatisticsService := nil;
-  FCustomerSummaryService := nil;
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);
@@ -245,22 +239,17 @@ end;
 
 procedure TMainForm.UpdateQuickInfo;
 var
-  CustomerCount, OpenCount, DueCount, OverdueCount: integer;
-  OpenAmount: currency;
+  Stats: TDtoDashboardStats;
 begin
-  CustomerCount := FStatisticsService.GetCustomerCount;
-  OpenCount := FStatisticsService.GetOpenItemsCount;
-  OpenAmount := FStatisticsService.GetOpenItemsAmount;
-  DueCount := FStatisticsService.GetDueTodayCount;
-  OverdueCount := FStatisticsService.GetOverdueCount;
+  RgServices.StatisticsService.GetDashboardStats(Stats);
 
-  QuickInfoCustomerCount.Caption := Format('%d Customers', [CustomerCount]);
-  QuickInfoOpenItems.Caption := Format('Open: %d (%.2n)', [OpenCount, OpenAmount]);
-  QuickInfoDueToday.Caption := Format('Due: %d', [DueCount]);
-  QuickInfoOverdue.Caption := Format('Overdue: %d', [OverdueCount]);
+  QuickInfoCustomerCount.Caption := Format('%d Customers', [Stats.CustomerCount]);
+  QuickInfoOpenItems.Caption := Format('Open: %d (%.2n)', [Stats.OpenItemsCount, Stats.OpenItemsAmount]);
+  QuickInfoDueToday.Caption := Format('Due: %d', [Stats.DueTodayCount]);
+  QuickInfoOverdue.Caption := Format('Overdue: %d', [Stats.OverdueCount]);
 
   // Highlight overdue if > 0
-  if OverdueCount > 0 then
+  if Stats.OverdueCount > 0 then
     QuickInfoOverdue.Font.Color := clRed
   else
     QuickInfoOverdue.Font.Color := clDefault;
@@ -269,10 +258,6 @@ end;
 procedure TMainForm.HandleCustomerSelected(Sender: TObject; CustomerID: longint);
 begin
   FCurrentCustomerID := CustomerID;
-  if CustomerID > 0 then
-    FCustomerSummaryService.LoadForCustomer(CustomerID)
-  else
-    FCustomerSummaryService.Clear;
   UpdateCustomerSummary;
   UpdateInvoiceList(CustomerID);
 end;
@@ -290,17 +275,19 @@ end;
 
 procedure TMainForm.UpdateCustomerSummary;
 var
+  Summary: TDtoCustomerSummary;
   StatsText: string;
 begin
-  if FCustomerSummaryService.IsLoaded then
+  if FCurrentCustomerID > 0 then
   begin
-    CustomerSummaryName.Caption := FCustomerSummaryService.GetCustomerName;
+    RgServices.StatisticsService.GetCustomerSummary(FCurrentCustomerID, Summary);
+    CustomerSummaryName.Caption := Summary.CustomerName;
     StatsText := Format('%d Invoices | Revenue: %.2n | %d open (%.2n) | %d paid',
-      [FCustomerSummaryService.GetInvoiceCount,
-       FCustomerSummaryService.GetTotalRevenue,
-       FCustomerSummaryService.GetOpenCount,
-       FCustomerSummaryService.GetOpenAmount,
-       FCustomerSummaryService.GetPaidCount]);
+      [Summary.InvoiceCount,
+       Summary.TotalRevenue,
+       Summary.OpenCount,
+       Summary.OpenAmount,
+       Summary.PaidCount]);
     CustomerSummaryStats.Caption := StatsText;
   end
   else
@@ -312,16 +299,10 @@ end;
 
 procedure TMainForm.HandlePaymentCompleted(Sender: TObject);
 begin
-  // Refresh statistics
-  FStatisticsService.Refresh;
   UpdateQuickInfo;
 
-  // Refresh customer summary if a customer is selected
   if FCurrentCustomerID > 0 then
-  begin
-    FCustomerSummaryService.LoadForCustomer(FCurrentCustomerID);
     UpdateCustomerSummary;
-  end;
 end;
 
 procedure TMainForm.HelpAboutActionExecute(Sender: TObject);
