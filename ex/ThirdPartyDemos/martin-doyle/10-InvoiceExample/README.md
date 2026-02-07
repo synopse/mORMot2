@@ -45,6 +45,16 @@ Key source files:
 | `rgDtoTypes.pas` | Data Transfer Objects for UI layer |
 | `rgConst.pas` | Application constants, resourcestrings, paths |
 
+## Sample Database
+
+A ready-to-use SQLite database (`Project10.db`) is available in the
+[Data/](https://github.com/martin-doyle/mORMot2-Examples/tree/main/10-InvoiceExample/Data)
+folder of the companion repository. It was migrated from the classic **Borland
+DBDEMOS** database (the sample `.mdb` that shipped with Delphi) and contains
+customers, orders, items, parts, vendors, and employees for a fictional
+dive-equipment business. The migration collapsed flat relational tables into
+mORMot2 ORM entities with embedded JSON for nested data.
+
 ## Build
 
 ### Free Pascal / Lazarus
