@@ -156,21 +156,21 @@ Port logic from existing `rgClient.pas` classes (replace iterator with batch que
 
 | # | Task | Status |
 |---|------|--------|
-| B.3.1 | Implement `TRgInvoiceService.ListInvoicesForCustomer` — batch query, calculate OpenAmount/Status per row (source: `rgClient.pas:1003-1129`) | planned |
-| B.3.2 | Implement `TRgInvoiceService.GetInvoice` — load order + items + customer name, flatten to `TDtoInvoiceDetail` (source: `rgClient.pas:1191-1300`) | planned |
-| B.3.3 | Implement `TRgInvoiceService.CreateInvoice` — build `TOrmCustomerOrder` + `TItemCollection` from DTO items array, calculate totals (source: `rgClient.pas:1300-1400`) | planned |
-| B.3.4 | Implement `TRgInvoiceService.UpdateInvoice` — load existing, update order + items, recalculate total (source: `rgClient.pas:1400-1494`) | planned |
-| B.3.5 | Implement `TRgInvoiceService.DeleteInvoice` — simple `Orm.Delete` | planned |
-| B.3.6 | Implement `TRgInvoiceService.GenerateOrderNo` — MAX() query on OrderNo (source: `rgClient.pas:1320-1340`) | planned |
-| B.3.7 | Compile | planned |
+| B.3.1 | Implement `TRgInvoiceService.ListInvoicesForCustomer` — batch query, calculate OpenAmount/Status per row (source: `rgClient.pas:1003-1129`) | done |
+| B.3.2 | Implement `TRgInvoiceService.GetInvoice` — load order + items + customer name, flatten to `TDtoInvoiceDetail` (source: `rgClient.pas:1191-1300`) | done |
+| B.3.3 | Implement `TRgInvoiceService.CreateInvoice` — build `TOrmCustomerOrder` + `TItemCollection` from DTO items array, calculate totals (source: `rgClient.pas:1300-1400`) | done |
+| B.3.4 | Implement `TRgInvoiceService.UpdateInvoice` — load existing, update order + items, recalculate total (source: `rgClient.pas:1400-1494`) | done |
+| B.3.5 | Implement `TRgInvoiceService.DeleteInvoice` — simple `Orm.Delete` | done |
+| B.3.6 | Implement `TRgInvoiceService.GenerateOrderNo` — MAX() query on OrderNo (source: `rgClient.pas:1320-1340`) | done |
+| B.3.7 | Compile | done |
 
 #### B.4: StatisticsService
 
 | # | Task | Status |
 |---|------|--------|
-| B.4.1 | Implement `TRgStatisticsService.GetDashboardStats` — combined SQL with CASE/COALESCE aggregations (source: `rgClient.pas:783-889`) | planned |
-| B.4.2 | Implement `TRgStatisticsService.GetCustomerSummary` — customer row + aggregated invoice stats SQL (source: `rgClient.pas:891-1001`) | planned |
-| B.4.3 | Compile | planned |
+| B.4.1 | Implement `TRgStatisticsService.GetDashboardStats` — combined SQL with CASE/COALESCE aggregations (source: `rgClient.pas:783-889`) | done |
+| B.4.2 | Implement `TRgStatisticsService.GetCustomerSummary` — customer row + aggregated invoice stats SQL (source: `rgClient.pas:891-1001`) | done |
+| B.4.3 | Compile | done |
 
 #### B.5: ReportService
 

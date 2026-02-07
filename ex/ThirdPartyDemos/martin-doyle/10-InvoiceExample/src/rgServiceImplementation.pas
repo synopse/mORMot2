@@ -45,6 +45,8 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.data,
+  mormot.core.datetime,
+  mormot.core.text,
   mormot.core.unicode,
   mormot.orm.core,
   mormot.orm.rest,
@@ -350,39 +352,274 @@ end;
 }
 function TRgInvoiceService.ListInvoicesForCustomer(ACustomerID: longint;
   out AInvoices: TDtoOrderDynArray): TInvoiceEditResult;
+var
+  Order: TOrmCustomerOrder;
+  ShipDateTime: TDateTime;
+  OpenAmount: currency;
+  Count: integer;
 begin
   SetLength(AInvoices, 0);
-  Result := ierDatabaseError; // TODO: implement in B.3.1
+
+  Order := TOrmCustomerOrder.CreateAndFillPrepare(Self.Server.Orm,
+    'Customer=?', [ACustomerID],
+    'ID, OrderNo, SaleDate, ShipDate, ItemsTotal, AmountPaid');
+  try
+    Order.FillTable.SortFields(2, False); // sort by SaleDate descending
+    Count := 0;
+    SetLength(AInvoices, Order.FillTable.RowCount);
+    while Order.FillOne do
+    begin
+      AInvoices[Count].OrderID := Order.ID;
+      AInvoices[Count].OrderNo := Utf8ToString(Order.OrderNo);
+      AInvoices[Count].SaleDate := TimeLogToDateTime(Order.SaleDate);
+
+      if Order.ShipDate > 0 then
+        ShipDateTime := TimeLogToDateTime(Order.ShipDate)
+      else
+        ShipDateTime := 0;
+      AInvoices[Count].ShipDate := ShipDateTime;
+
+      AInvoices[Count].ItemsTotal := Order.ItemsTotal;
+      AInvoices[Count].AmountPaid := Order.AmountPaid;
+      OpenAmount := Order.ItemsTotal - Order.AmountPaid;
+      AInvoices[Count].OpenAmount := OpenAmount;
+
+      // Determine status
+      if OpenAmount <= 0 then
+        AInvoices[Count].Status := isPaid
+      else if (ShipDateTime > 0) and (ShipDateTime < Date) then
+        AInvoices[Count].Status := isOverdue
+      else
+        AInvoices[Count].Status := isOpen;
+
+      Inc(Count);
+    end;
+    SetLength(AInvoices, Count);
+    Result := ierSuccess;
+  finally
+    Order.Free;
+  end;
 end;
 
 function TRgInvoiceService.GetInvoice(AInvoiceID: longint;
   out AInvoice: TDtoInvoiceDetail): TInvoiceEditResult;
+var
+  Order: TOrmCustomerOrder;
+  ShipDateTime: TDateTime;
+  OpenAmount: currency;
+  Item: TItem;
+  ItemAmount: currency;
+  i: integer;
 begin
-  Result := ierDatabaseError; // TODO: implement in B.3.2
+  Result := ierDatabaseError;
+
+  Order := TOrmCustomerOrder.CreateJoined(Self.Server.Orm, AInvoiceID);
+  try
+    if Order.ID = 0 then
+    begin
+      Result := ierNotFound;
+      Exit;
+    end;
+
+    AInvoice.OrderID := Order.ID;
+    AInvoice.OrderNo := Utf8ToString(Order.OrderNo);
+    AInvoice.SaleDate := TimeLogToDateTime(Order.SaleDate);
+
+    if Order.ShipDate > 0 then
+      ShipDateTime := TimeLogToDateTime(Order.ShipDate)
+    else
+      ShipDateTime := 0;
+    AInvoice.ShipDate := ShipDateTime;
+
+    AInvoice.CustomerID := Order.Customer.ID;
+    AInvoice.CustomerName := Utf8ToString(Order.Customer.Company);
+
+    AInvoice.ItemsTotal := Order.ItemsTotal;
+    AInvoice.AmountPaid := Order.AmountPaid;
+    OpenAmount := Order.ItemsTotal - Order.AmountPaid;
+    AInvoice.OpenAmount := OpenAmount;
+
+    if OpenAmount <= 0 then
+      AInvoice.Status := isPaid
+    else if (ShipDateTime > 0) and (ShipDateTime < Date) then
+      AInvoice.Status := isOverdue
+    else
+      AInvoice.Status := isOpen;
+
+    // Map items from TItemCollection to TDtoInvoiceItemArray
+    SetLength(AInvoice.Items, Order.Items.Count);
+    for i := 0 to Order.Items.Count - 1 do
+    begin
+      Item := Order.Items[i];
+      AInvoice.Items[i].Position := Item.Position;
+      AInvoice.Items[i].PartNo := Utf8ToString(Item.PartNo);
+      AInvoice.Items[i].Description := Utf8ToString(Item.Description);
+      AInvoice.Items[i].Quantity := Item.Quantity;
+      AInvoice.Items[i].ListPrice := Item.ListPrice;
+      AInvoice.Items[i].Discount := Item.Discount;
+      ItemAmount := Item.ListPrice * Item.Quantity;
+      if Item.Discount > 0 then
+        ItemAmount := ItemAmount * (100 - Item.Discount) / 100;
+      AInvoice.Items[i].Amount := ItemAmount;
+    end;
+
+    Result := ierSuccess;
+  finally
+    Order.Free;
+  end;
 end;
 
 function TRgInvoiceService.CreateInvoice(ACustomerID: longint;
   const AInvoice: TDtoInvoiceSave; out ANewID: longint): TInvoiceEditResult;
+var
+  Order: TOrmCustomerOrder;
+  Customer: TOrmCustomer;
+  Item: TItem;
+  ItemTotal: currency;
+  Total: currency;
+  i: integer;
 begin
   ANewID := 0;
-  Result := ierDatabaseError; // TODO: implement in B.3.3
+  Result := ierDatabaseError;
+
+  if Trim(AInvoice.OrderNo) = '' then
+  begin
+    Result := ierMissingField;
+    Exit;
+  end;
+
+  // Validate customer exists
+  Customer := TOrmCustomer.Create(Self.Server.Orm, ACustomerID);
+  try
+    if Customer.ID = 0 then
+    begin
+      Result := ierNotFound;
+      Exit;
+    end;
+
+    Order := TOrmCustomerOrder.Create;
+    try
+      Order.Customer := Customer.AsTOrm;
+      Order.OrderNo := StringToUtf8(AInvoice.OrderNo);
+      Order.SaleDate := TimeLogFromDateTime(AInvoice.SaleDate);
+      Order.ShipDate := TimeLogFromDateTime(AInvoice.ShipDate);
+      Order.AmountPaid := 0;
+
+      // Build TItemCollection from DTO items and calculate total
+      Total := 0;
+      for i := 0 to Length(AInvoice.Items) - 1 do
+      begin
+        Item := TItem(Order.Items.Add);
+        Item.Position := i + 1;
+        Item.PartNo := StringToUtf8(AInvoice.Items[i].PartNo);
+        Item.Description := StringToUtf8(AInvoice.Items[i].Description);
+        Item.Quantity := AInvoice.Items[i].Quantity;
+        Item.ListPrice := AInvoice.Items[i].ListPrice;
+        Item.Discount := AInvoice.Items[i].Discount;
+        ItemTotal := Item.ListPrice * Item.Quantity;
+        if Item.Discount > 0 then
+          ItemTotal := ItemTotal * (100 - Item.Discount) / 100;
+        Total := Total + ItemTotal;
+      end;
+      Order.ItemsTotal := Total;
+
+      ANewID := Self.Server.Orm.Add(Order, True);
+      if ANewID > 0 then
+        Result := ierSuccess;
+    finally
+      Order.Free;
+    end;
+  finally
+    Customer.Free;
+  end;
 end;
 
 function TRgInvoiceService.UpdateInvoice(AInvoiceID: longint;
   const AInvoice: TDtoInvoiceSave): TInvoiceEditResult;
+var
+  Order: TOrmCustomerOrder;
+  Item: TItem;
+  ItemTotal: currency;
+  Total: currency;
+  i: integer;
 begin
-  Result := ierDatabaseError; // TODO: implement in B.3.4
+  Result := ierDatabaseError;
+
+  if Trim(AInvoice.OrderNo) = '' then
+  begin
+    Result := ierMissingField;
+    Exit;
+  end;
+
+  Order := TOrmCustomerOrder.Create(Self.Server.Orm, AInvoiceID);
+  try
+    if Order.ID = 0 then
+    begin
+      Result := ierNotFound;
+      Exit;
+    end;
+
+    Order.OrderNo := StringToUtf8(AInvoice.OrderNo);
+    Order.SaleDate := TimeLogFromDateTime(AInvoice.SaleDate);
+    Order.ShipDate := TimeLogFromDateTime(AInvoice.ShipDate);
+
+    // Rebuild TItemCollection from DTO items and recalculate total
+    Order.Items.Clear;
+    Total := 0;
+    for i := 0 to Length(AInvoice.Items) - 1 do
+    begin
+      Item := TItem(Order.Items.Add);
+      Item.Position := i + 1;
+      Item.PartNo := StringToUtf8(AInvoice.Items[i].PartNo);
+      Item.Description := StringToUtf8(AInvoice.Items[i].Description);
+      Item.Quantity := AInvoice.Items[i].Quantity;
+      Item.ListPrice := AInvoice.Items[i].ListPrice;
+      Item.Discount := AInvoice.Items[i].Discount;
+      ItemTotal := Item.ListPrice * Item.Quantity;
+      if Item.Discount > 0 then
+        ItemTotal := ItemTotal * (100 - Item.Discount) / 100;
+      Total := Total + ItemTotal;
+    end;
+    Order.ItemsTotal := Total;
+
+    if Self.Server.Orm.Update(Order) then
+      Result := ierSuccess;
+  finally
+    Order.Free;
+  end;
 end;
 
 function TRgInvoiceService.DeleteInvoice(AInvoiceID: longint): TInvoiceEditResult;
 begin
-  Result := ierDatabaseError; // TODO: implement in B.3.5
+  Result := ierDatabaseError;
+
+  if AInvoiceID <= 0 then
+  begin
+    Result := ierNotFound;
+    Exit;
+  end;
+
+  if not Self.Server.Orm.MemberExists(TOrmCustomerOrder, AInvoiceID) then
+  begin
+    Result := ierNotFound;
+    Exit;
+  end;
+
+  if Self.Server.Orm.Delete(TOrmCustomerOrder, AInvoiceID) then
+    Result := ierSuccess;
 end;
 
 function TRgInvoiceService.GenerateOrderNo(out AOrderNo: RawUtf8): TInvoiceEditResult;
+var
+  MaxNo: RawUtf8;
+  NumPart: integer;
 begin
-  AOrderNo := '';
-  Result := ierDatabaseError; // TODO: implement in B.3.6
+  MaxNo := Self.Server.Orm.OneFieldValue(TOrmCustomerOrder,
+    'MAX(CAST(OrderNo AS INTEGER))', '', []);
+  NumPart := Utf8ToInteger(MaxNo, 0);
+  Inc(NumPart);
+  AOrderNo := StringToUtf8(Format('%.6d', [NumPart]));
+  Result := ierSuccess;
 end;
 
 {
@@ -447,14 +684,100 @@ end;
 ***************************** TRgStatisticsService *****************************
 }
 function TRgStatisticsService.GetDashboardStats(out AStats: TDtoDashboardStats): integer;
+var
+  Today: Int64;
+  SQL: RawUtf8;
+  Table: TOrmTable;
 begin
-  Result := -1; // TODO: implement in B.4.1
+  FillCharFast(AStats, SizeOf(AStats), 0);
+
+  // Customer count from separate table
+  AStats.CustomerCount := Self.Server.Orm.TableRowCount(TOrmCustomer);
+
+  // Combined query for all order statistics
+  Today := TimeLogFromDateTime(Date);
+  SQL := FormatUtf8(
+    'SELECT ' +
+    'SUM(CASE WHEN COALESCE(AmountPaid, 0) < ItemsTotal THEN 1 ELSE 0 END), ' +
+    'COALESCE(SUM(CASE WHEN COALESCE(AmountPaid, 0) < ItemsTotal ' +
+      'THEN ItemsTotal - COALESCE(AmountPaid, 0) ELSE 0 END), 0), ' +
+    'SUM(CASE WHEN COALESCE(AmountPaid, 0) < ItemsTotal AND ShipDate = % THEN 1 ELSE 0 END), ' +
+    'SUM(CASE WHEN COALESCE(AmountPaid, 0) < ItemsTotal AND ShipDate < % AND ShipDate > 0 THEN 1 ELSE 0 END) ' +
+    'FROM CustomerOrder', [Today, Today]);
+
+  Table := Self.Server.Orm.ExecuteList([TOrmCustomerOrder], SQL);
+  if Table <> nil then
+  try
+    if Table.RowCount > 0 then
+    begin
+      AStats.OpenItemsCount := Table.GetAsInteger(1, 0);
+      AStats.OpenItemsAmount := Table.GetAsCurrency(1, 1);
+      AStats.DueTodayCount := Table.GetAsInteger(1, 2);
+      AStats.OverdueCount := Table.GetAsInteger(1, 3);
+    end;
+  finally
+    Table.Free;
+  end;
+
+  Result := 0;
 end;
 
 function TRgStatisticsService.GetCustomerSummary(ACustomerID: longint;
   out ASummary: TDtoCustomerSummary): integer;
+var
+  Customer: TOrmCustomer;
+  SQL: RawUtf8;
+  Table: TOrmTable;
 begin
-  Result := -1; // TODO: implement in B.4.2
+  FillCharFast(ASummary, SizeOf(ASummary), 0);
+
+  if ACustomerID <= 0 then
+  begin
+    Result := -1;
+    Exit;
+  end;
+
+  // Load customer name
+  Customer := TOrmCustomer.Create(Self.Server.Orm, ACustomerID);
+  try
+    if Customer.ID = 0 then
+    begin
+      Result := -1;
+      Exit;
+    end;
+    ASummary.CustomerID := Customer.ID;
+    ASummary.CustomerName := Utf8ToString(Customer.Company);
+  finally
+    Customer.Free;
+  end;
+
+  // Combined query for all invoice statistics
+  SQL := FormatUtf8(
+    'SELECT ' +
+    'COUNT(*), ' +
+    'COALESCE(SUM(ItemsTotal), 0), ' +
+    'SUM(CASE WHEN COALESCE(AmountPaid, 0) < ItemsTotal THEN 1 ELSE 0 END), ' +
+    'COALESCE(SUM(CASE WHEN COALESCE(AmountPaid, 0) < ItemsTotal ' +
+      'THEN ItemsTotal - COALESCE(AmountPaid, 0) ELSE 0 END), 0), ' +
+    'SUM(CASE WHEN COALESCE(AmountPaid, 0) >= ItemsTotal THEN 1 ELSE 0 END) ' +
+    'FROM CustomerOrder WHERE Customer = %', [ACustomerID]);
+
+  Table := Self.Server.Orm.ExecuteList([TOrmCustomerOrder], SQL);
+  if Table <> nil then
+  try
+    if Table.RowCount > 0 then
+    begin
+      ASummary.InvoiceCount := Table.GetAsInteger(1, 0);
+      ASummary.TotalRevenue := Table.GetAsCurrency(1, 1);
+      ASummary.OpenCount := Table.GetAsInteger(1, 2);
+      ASummary.OpenAmount := Table.GetAsCurrency(1, 3);
+      ASummary.PaidCount := Table.GetAsInteger(1, 4);
+    end;
+  finally
+    Table.Free;
+  end;
+
+  Result := 0;
 end;
 
 {
