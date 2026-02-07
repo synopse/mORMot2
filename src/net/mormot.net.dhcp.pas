@@ -642,7 +642,7 @@ type
     /// flush the internal lease lists and all Scope[] definitions
     procedure Clear;
     /// flush the internal lease lists but keep Scope[] definitions
-    procedure ClearLeases;
+    procedure ClearLeases(keepWriteLock: boolean = false);
     /// return the Scope[] entry matching its subnet mask
     // - can be used e.g. to check if IP address match the DHCP server subnets
     // - this method is not thread-safe by design
@@ -1747,7 +1747,7 @@ begin
   end;
 end;
 
-procedure TDhcpProcess.ClearLeases;
+procedure TDhcpProcess.ClearLeases(keepWriteLock: boolean);
 var
   s: PDhcpScope;
   i: PtrInt;
@@ -1768,7 +1768,8 @@ begin
     fModifSequence := 0;
     fModifSaved := 0;
   finally
-    fScopeSafe.WriteUnLock;
+    if not keepWriteLock then
+      fScopeSafe.WriteUnLock;
   end;
 end;
 
@@ -1895,7 +1896,7 @@ end;
 
 function TDhcpProcess.LoadFromText(const Text: RawUtf8): boolean;
 var
-  tix32: cardinal;
+  tix32, entries: cardinal;
   boot, expiry: TUnixTime;
   mac: TNetMac;
   ip4: TNetIP4;
@@ -1908,11 +1909,10 @@ begin
   boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
   if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
     exit;
-  ClearLeases;
+  entries := 0;
   last := nil;
-  fScopeSafe.WriteLock; // easier than complex s^.Lock/UnLock
+  ClearLeases({keepWriteLock=}true); // easier than complex s^.Lock/UnLock
   try
-    Count := 0; // paranoid
     p := pointer(Text);
     if (p <> nil) and
        (fScope <> nil) then
@@ -1957,6 +1957,7 @@ begin
                 new^.State := lsOutdated
               else
                 new^.State := lsAck;
+              inc(entries);
             end;
           end;
         end;
@@ -1968,7 +1969,7 @@ begin
   finally
     fScopeSafe.WriteUnLock;
   end;
-  fLog.Add.Log(sllDebug, 'LoadFromText: leases=%', [Count], self);
+  fLog.Add.Log(sllDebug, 'LoadFromText: leases=%', [entries], self);
   result := true;
 end;
 
