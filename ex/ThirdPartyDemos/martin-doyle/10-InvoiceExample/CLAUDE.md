@@ -85,18 +85,76 @@ See `docs/UI-DESIGN.md` for specification. Key rules:
 - Modal dialogs for editing
 - Reports as modal dialogs with filter + print
 
-## Service Pattern
+## Architecture: Client-Server SOA
 
-Services in `rgClient.pas` abstract DB access from UI. Interface + implementation pattern:
+Two operating modes configured via `rechnung.config` (JSON):
 
-```pascal
-ICustomerService = interface(IInvokable)
-  procedure LoadCustomers;
-  function GetCustomer: TDtoCustomer;
-end;
+- **Local mode** (`"Mode": "local"`): GUI embeds `TRgServer` with SQLite directly
+- **Service mode** (`"Mode": "service"`): GUI connects via HTTP to `RechnungDaemon`
+
+```
+[GUI Client] --HTTP/JSON--> [RechnungDaemon + SQLite + Services]
+OR (local mode): [GUI + embedded TRgServer + SQLite + Services]
 ```
 
-Global client: `RgRestClient` initialized via `initialization`/`finalization` in `rgClient.pas`.
+### Projects
+
+| Project | Path | Purpose |
+|---------|------|---------|
+| `Rechnung.lpi` | `src/` | GUI client (LCL) |
+| `RechnungDaemon.lpi` | `daemon/` | Console/service daemon (no GUI) |
+
+### SOA Interfaces (5 services)
+
+Defined in `rgServiceInterfaces.pas`, implemented in `rgServiceImplementation.pas`:
+
+| Interface | Purpose |
+|-----------|---------|
+| `IRgCustomerService` | CRUD + list customers |
+| `IRgInvoiceService` | CRUD + list invoices |
+| `IRgPaymentService` | Add payment, get open amount |
+| `IRgStatisticsService` | Dashboard stats, customer summary |
+| `IRgReportService` | Open items, payments, revenue, monthly reports |
+
+All services are `sicShared` (stateless, thread-safe). Server implementations
+inherit from `TInjectableObjectRest` and access ORM via `Self.Server.Orm`.
+
+### Service Client
+
+Global `RgServices: TRgServiceClient` in `rgClient.pas` provides access to all 5 interfaces.
+Initialized in `rgClient.pas` `initialization` section based on config mode.
+
+```pascal
+// Usage in forms:
+RgServices.CustomerService.ListCustomers(Customers);
+RgServices.InvoiceService.GetInvoice(ID, Detail);
+RgServices.StatisticsService.GetDashboardStats(Stats);
+```
+
+### Key Units
+
+| Unit | Purpose |
+|------|---------|
+| `rgDtoTypes.pas` | All DTO records, enums, dynamic arrays |
+| `rgServiceInterfaces.pas` | 5 SOA interfaces + `RegisterInterfaces` |
+| `rgServiceImplementation.pas` | 5 `TInjectableObjectRest` implementations |
+| `rgServer.pas` | `TRgServer` (`TRestServerDB` + `ServiceDefine`) |
+| `rgConfig.pas` | `TRgConfig` (`TSynJsonFileSettings` for JSON config) |
+| `rgClient.pas` | `TRgServiceClient` + legacy service classes |
+| `rgConst.pas` | Constants (`HttpPort`, `ConfigFileName`, `DataFile`) |
+| `rgData.pas` | ORM model (`TOrmCustomer`, `TOrmCustomerOrder`) |
+
+### Config File
+
+`rechnung.config` (JSON, auto-created with defaults):
+
+```json
+{
+  "Mode": "local",
+  "Host": "localhost",
+  "Port": "11111"
+}
+```
 
 ## DB Query Optimization
 
@@ -109,18 +167,41 @@ Global client: `RgRestClient` initialized via `initialization`/`finalization` in
 
 1. **Plan**: Develop 2-3 alternatives, recommend best, wait for user decision
 2. **Implement**: Make changes, update file headers
-3. **Compile**: `${LAZBUILD_PATH} ${PROJECT_PATH}/Rechnung.lpi`
+3. **Compile**: Both projects must build cleanly:
+   - GUI: `${LAZBUILD_PATH} src/Rechnung.lpi`
+   - Daemon: `${LAZBUILD_PATH} daemon/RechnungDaemon.lpi`
 4. **Test**: User runs and confirms
-5. **Document**: Update `docs/IMPLEMENTATION-PLAN.md` if needed
+5. **Document**: Update `docs/IMPLEMENTATION-PLAN.md` or `docs/SOA-IMPLEMENTATION-PLAN.md` if needed
 6. **Commit**: Only after user confirms. Format: `Phase X: <Title>`
 
 **Bug fixes follow the same workflow** - research first, develop alternatives, let user decide.
 
 **Prohibited**: Writing code without user decision. Quick fixes without analysis. Assumptions without documentation check.
 
+## Daemon
+
+`daemon/RechnungDaemon.dpr` — `TSynDaemon`-based server process.
+
+```bash
+# Linux
+./RechnungDaemon --console     # foreground with logging
+./RechnungDaemon --run          # run as background process
+./RechnungDaemon --fork         # daemonize
+
+# Windows
+RechnungDaemon.exe /console    # foreground
+RechnungDaemon.exe /install    # install as Windows service
+RechnungDaemon.exe /start      # start service
+RechnungDaemon.exe /stop       # stop service
+RechnungDaemon.exe /uninstall  # remove service
+```
+
+Port: 11111 (configurable via daemon settings JSON).
+
 ## Documentation
 
 - `docs/UI-DESIGN.md` - UI specification
 - `docs/IMPLEMENTATION-PLAN.md` - Implementation roadmap
+- `docs/SOA-IMPLEMENTATION-PLAN.md` - SOA migration plan
 - `Components/mdlayout_usage.md` - Layout guide
 - Always use `docs/` directory (not `doc/`) for documentation files

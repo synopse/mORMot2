@@ -913,6 +913,14 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
+        <Filename Value="rgServiceImplementation.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="rgServer.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
         <Filename Value="rgclient.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="rgClient"/>

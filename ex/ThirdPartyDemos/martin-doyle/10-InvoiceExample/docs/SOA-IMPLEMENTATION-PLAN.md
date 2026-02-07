@@ -357,9 +357,9 @@ Pattern change:
 
 | # | Task | Status |
 |---|------|--------|
-| D.7.1 | Update `Rechnung.lpr` uses clause — add `rgServer`, `rgServiceImplementation` (needed for local mode registration) | planned |
-| D.7.2 | Update `Rechnung.lpi` — add new units to project | planned |
-| D.7.3 | Full compile of all Phase D changes together | planned |
+| D.7.1 | Update `Rechnung.lpr` uses clause — add `rgServer`, `rgServiceImplementation` (needed for local mode registration) | done (already present from D.1) |
+| D.7.2 | Update `Rechnung.lpi` — add `rgServiceImplementation.pas` and `rgServer.pas` to project units | done |
+| D.7.3 | Full compile of all Phase D changes together | done |
 
 ### Phase E: Testing + Documentation
 

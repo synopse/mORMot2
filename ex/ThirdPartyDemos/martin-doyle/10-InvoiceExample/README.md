@@ -7,40 +7,62 @@ Invoice management application built with the mORMot2 framework.
 - **Language**: Free Pascal (FPC) / Delphi 7
 - **IDE**: Lazarus (LCL) or Delphi 7
 - **Framework**: mORMot2 (Synopse)
-- **Database**: Local SQLite (no network)
+- **Database**: SQLite (embedded or via HTTP daemon)
 - **Platforms**: Windows, macOS, Linux
 
 ## Project Structure
 
 ```
 10-InvoiceExample/
-  src/                     - Application source
+  src/                     - GUI application source
     *.pas                  - Pascal units (prefix: rg = Rechnung)
     *.dfm                  - Form definitions (Lazarus + Delphi compatible)
-    Rechnung.lpi / .lpr    - Lazarus project
-    RechnungDelphi.dpr     - Delphi 7 project
+    Rechnung.lpi / .lpr    - Lazarus GUI project
+    RechnungDelphi.dpr     - Delphi 7 GUI project
+  daemon/                  - Server daemon
+    RechnungDaemon.dpr     - TSynDaemon entry point (Delphi 7 + FPC)
+    RechnungDaemon.lpi     - Lazarus daemon project
   Components/              - Reusable components (prefix: md = MartinDoyle)
     mdlayout.pas           - Platform-independent layout engine
     mdforms.pas            - Base form classes
     mdlayout_usage.md      - Layout framework guide
+  docs/                    - Project documentation
 ```
 
-## Data Architecture
+## Architecture
+
+The application supports two operating modes, configured via `rechnung.config` (JSON):
+
+- **Local mode** (`"Mode": "local"`): GUI embeds `TRgServer` + SQLite directly
+- **Service mode** (`"Mode": "service"`): GUI connects via HTTP to `RechnungDaemon`
 
 ```
-  UI (Forms)
-  Services (ICustomerService, IInvoiceService, ...)
-  DTOs (TDtoCustomer, TDtoOrder, ...)
-  ORM (TOrmCustomer, TOrmOrder, ...)
-  REST Client (TRgRestClient)
-  SQLite Database (local file)
+Local mode:
+  UI (Forms) → SOA Interfaces → TRgServer → ORM → SQLite
+
+Service mode:
+  UI (Forms) → SOA Interfaces → HTTP/JSON → RechnungDaemon → TRgServer → ORM → SQLite
 ```
+
+Five stateless SOA interfaces (`sicShared`, thread-safe):
+
+| Interface | Purpose |
+|-----------|---------|
+| `IRgCustomerService` | CRUD + list customers |
+| `IRgInvoiceService` | CRUD + list invoices |
+| `IRgPaymentService` | Add payment, get open amount |
+| `IRgStatisticsService` | Dashboard stats, customer summary |
+| `IRgReportService` | Open items, payments, revenue, monthly reports |
 
 Key source files:
 
 | File | Purpose |
 |------|---------|
-| `rgClient.pas` | REST client, service interfaces and implementations |
+| `rgServiceInterfaces.pas` | 5 SOA interface definitions + `RegisterInterfaces` |
+| `rgServiceImplementation.pas` | 5 `TInjectableObjectRest` server implementations |
+| `rgServer.pas` | `TRgServer` (`TRestServerDB` + `ServiceDefine`) |
+| `rgClient.pas` | `TRgServiceClient` (resolves interfaces in local/service mode) |
+| `rgConfig.pas` | `TRgConfig` (`TSynJsonFileSettings` for JSON config) |
 | `rgData.pas` | ORM model definitions |
 | `rgDtoTypes.pas` | Data Transfer Objects for UI layer |
 | `rgConst.pas` | Application constants, resourcestrings, paths |
@@ -75,13 +97,14 @@ component that provides a ListView-compatible API (`Columns`, `Items`,
 on each platform and follows the mORMot2 `TOrmTableToGrid` pattern for safe
 destruction (event handlers set to `nil` before freeing).
 
-### Service Layer Isolation
+### SOA Service Layer
 
-No form accesses the ORM directly.  Every database operation goes through a
-dedicated **interface / implementation** pair in `rgClient.pas`
-(e.g. `ICustomerEditService` → `TCustomerEditService`).  Each service receives
-`IRestOrm` via constructor injection, keeping UI, business logic, and
-persistence cleanly separated.
+No form accesses the ORM directly.  Every database operation goes through one
+of 5 **SOA interfaces** defined in `rgServiceInterfaces.pas` and implemented
+in `rgServiceImplementation.pas`.  Server implementations inherit from
+`TInjectableObjectRest` and access the ORM via `Self.Server.Orm`.  Forms use
+the global `RgServices` client which resolves interfaces either locally
+(embedded server) or remotely (HTTP client) based on the JSON config.
 
 ### Data Transfer Objects
 
@@ -108,12 +131,39 @@ mORMot2 ORM entities with embedded JSON for nested data.
 ### Free Pascal / Lazarus
 
 ```bash
-lazbuild Rechnung.lpi
+# GUI client
+lazbuild src/Rechnung.lpi
+
+# Server daemon
+lazbuild daemon/RechnungDaemon.lpi
 ```
 
 ### Delphi 7
 
-Open `RechnungDelphi.dpr` in the Delphi IDE and compile.
+- GUI: Open `src/RechnungDelphi.dpr` in the Delphi IDE and compile.
+- Daemon: Open `daemon/RechnungDaemon.dpr` in the Delphi IDE and compile.
+
+## Running
+
+### Local Mode (default)
+
+Run the GUI directly. It embeds the server and SQLite database.
+
+### Service Mode
+
+```bash
+# 1. Start the daemon (port 11111)
+./RechnungDaemon --console
+
+# 2. Configure the GUI client
+#    Set "Mode": "service" in rechnung.config
+
+# 3. Run the GUI client
+./Rechnung
+```
+
+The daemon supports Windows service installation (`/install`, `/start`, `/stop`)
+and Linux daemonization (`--fork`).
 
 ## Configuration
 
@@ -124,7 +174,7 @@ Copy `.claude.local.example` to `.claude.local` and adjust for your system.
 
 | Document | Purpose |
 |----------|---------|
+| `docs/SOA-IMPLEMENTATION-PLAN.md` | SOA migration plan and status |
+| `docs/UI-DESIGN.md` | UI specification |
 | `Components/mdlayout_usage.md` | mdLayout framework guide |
 | `CLAUDE.md` | Coding rules for Claude Code |
-
-Note: Documentation is in the `docs/` directory (at `martin-doyle/docs/` level).
