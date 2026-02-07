@@ -308,6 +308,74 @@ type
   // - 10,000 leases would consume 160KB which fits in L2 cache on modern CPU
   TLeaseDynArray = array of TDhcpLease;
 
+  /// all available per-scope DHCP metrics
+  // -  - Protocol messages
+  // - dsmDiscover: DISCOVER packet is successfully received and processed
+  // - dsmOffer: OFFER is sent in response to a DISCOVER
+  // - dsmRequest: REQUEST is received and valid
+  // - dsmAck: ACK is sent in response to REQUEST or INFORM
+  // - dsmNak: NAK is sent in response to REQUEST with invalid or unavailable IP
+  // - dsmInform: INFORM is received and processed
+  // - dsmRelease: RELEASE is received and a lease is freed
+  // - dsmDecline: DECLINE is received and IP is marked declined/unavailable
+  // -  - Lease lifecycle
+  // - dsmLeaseAllocated: new dynamic lease is allocated to a client
+  // - dsmLeaseRenewed: existing lease is renewed via REQUEST
+  // - dsmLeaseExpired: lease expires (OnIdle cleanup)
+  // - dsmLeaseReleased: lease is freed due to RELEASE
+  // -  - Static vs dynamic hits
+  // - dsmStaticHits: static reservation (MAC or Option61) is used to assign an IP
+  // - dsmDynamicHits: dynamic lease (from the pool) is used
+  // -  Rate limiting / abuse
+  // - dsmRateLimitHit: DECLINE packet is ignored due to rate limiting
+  // - dsmInformRateLimitHit: INFORM packet is ignored due to rate limiting
+  // - dsmInvalidRequest: received packet is malformed or cannot be processed
+  // - dsmUnsupportedRequest: only DISCOVER/REQUEST/DECLINE/RELEASE/INFORM are handled
+  // -  - Option usage counters
+  // - dsmOption50Hits: Option50 (requested-address) is present and used to setup IP
+  // - dsmOption61Hits: Option61 (client-identifier) is present and used to assign/lookup a lease
+  // - dsmOption82Hits: Option82 (Relay Agent) is present and processed
+  // - dsmOption118Hits: Option118 (subnet-selection) is present and valid
+  // - - Drop / error reasons
+  // - dsmDroppedPackets: incremented for any packet dropped silently (not matching a scope or giaddr)
+  // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or Option118
+  // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
+  // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
+  // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
+  TDhcpScopeMetric = (
+    dsmDiscover,
+    dsmOffer,
+    dsmRequest,
+    dsmAck,
+    dsmNak,
+    dsmInform,
+    dsmRelease,
+    dsmDecline,
+    dsmLeaseAllocated,
+    dsmLeaseRenewed,
+    dsmLeaseExpired,
+    dsmLeaseReleased,
+    dsmStaticHits,
+    dsmDynamicHits,
+    dsmRateLimitHit,
+    dsmInformRateLimitHit,
+    dsmInvalidRequest,
+    dsmUnsupportedRequest,
+    dsmOption50Hits,
+    dsmOption61Hits,
+    dsmOption82Hits,
+    dsmOption118Hits,
+    dsmDroppedPackets,
+    dsmDroppedNoSubnet,
+    dsmDroppedNoAvailableIP,
+    dsmDroppedInvalidIP,
+    dsmDroppedCallback);
+  /// set of available per-scope DHCP metrics
+  TDhcpScopeMetrics = set of TDhcpScopeMetric;
+
+  /// store per-scope DHCP metrics as 64-bit unsigned monotonic counters
+  TDhcpMetrics = array[TDhcpScopeMetric] of QWord;
+
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
   // (not included by default since seems overkill and KEA/Windows don't do it)
@@ -408,6 +476,9 @@ type
     // some internal values for fast lookup and efficient Entry[] process
     LastDiscover, FreeListCount: integer;
     FreeList: TIntegerDynArray;
+  public
+    /// the 64-bit monotonic counters tracking this subnet/scope activity
+    Metrics: TDhcpMetrics;
   end;
 
   /// access to one scope/subnet definition
@@ -1085,6 +1156,7 @@ function TDhcpScope.NewLease(mac64: Int64): PDhcpLease;
 var
   n: PtrInt;
 begin
+  inc(Metrics[dsmLeaseAllocated]);
   // first try if we have any lsFree entries from ReuseIp4()
   if FreeListCount <> 0 then
   begin
@@ -1475,6 +1547,8 @@ begin
   Safe.Lock;
   try
     result := DoOutdated(pointer(Entry), tix32, Count);
+    if result <> 0 then
+      inc(Metrics[dsmLeaseExpired], result);
   finally
     Safe.UnLock;
   end;
@@ -2030,7 +2104,7 @@ var
 begin
   // called from DISCOVER and REQUEST
   result := false;
-  ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]);
+  ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]); // opt 50
   if ip4 = 0 then
     exit;
   if (Lease = nil) or
@@ -2046,8 +2120,10 @@ begin
         fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignore requested=% %',
           [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^]);
       end;
+      inc(Data.Scope^.Metrics[dsmDroppedInvalidIP]);
       exit;
     end;
+  inc(Data.Scope^.Metrics[dsmOption50Hits]);
   Data.Ip4 := ip4;
   result := true;
 end;
@@ -2063,16 +2139,23 @@ begin
       if Assigned(fLog) then
         fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignored by callback',
           [DHCP_TXT[Data.RecvType], Data.Mac]);
+      inc(Data.Scope^.Metrics[dsmDroppedCallback]);
       result := 0;
       exit; // callback asked to silently ignore this frame
     end;
   end;
   // send back verbatim Option 61 if any
   if Data.RecvLens[doDhcpClientIdentifier] <> 0 then
+  begin
     DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpClientIdentifier]]);
+    inc(Data.Scope^.Metrics[dsmOption61Hits]);
+  end;
   // support Option 82 Relay Agent by sending it back - should be the last option
   if Data.RecvLens[doDhcpAgentOptions] <> 0 then
+  begin
     DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpAgentOptions]]);
+    inc(Data.Scope^.Metrics[dsmOption82Hits]);
+  end;
   // add trailer to the Data.Send frame and returns its final size in bytes
   Data.SendEnd^ := #255;
   result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
@@ -2108,23 +2191,34 @@ var
 begin
   result := -1; // error
   // do nothing on missing Setup() or after Shutdown
-  if (fState <> sSetup) or
+  if (self = nil) or
+     (fState <> sSetup) or
      (fScope = nil) then
+  begin
+    inc(Data.Scope^.Metrics[dsmDroppedPackets]);
     exit;
+  end;
   // parse and validate the request
   if not ParseFrame(Data) then
   begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ComputeResponse: % % unexpected %',
         [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
+    if Data.RecvType = dmtUndefined then
+      inc(Data.Scope^.Metrics[dsmInvalidRequest])
+    else
+      inc(Data.Scope^.Metrics[dsmUnsupportedRequest]);
     exit; // invalid or unsupported frame
   end;
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
   try
     // detect the proper scope to use
     if Data.RecvLens[doSubnetSelection] <> 0 then
+    begin
       // RFC 3011 defined option 118 which overrides giaddr
-      Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]))
+      Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
+      inc(Data.Scope^.Metrics[dsmOption118Hits]);
+    end
     else if Data.Recv.giaddr <> 0 then
       // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
       Data.Scope := GetScope(Data.Recv.giaddr)
@@ -2145,6 +2239,7 @@ begin
         fLog.Add.Log(sllDebug, 'ComputeResponse: % % no subnet for % %',
           [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^]);
       end;
+      inc(Data.Scope^.Metrics[dsmDroppedNoSubnet]);
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
     // compute the corresponding IPv4 according to the internal lease list
@@ -2164,6 +2259,7 @@ begin
       case Data.RecvType of
         dmtDiscover:
           begin
+            inc(Data.Scope^.Metrics[dsmDiscover]);
             if (p = nil) or    // first time this MAC is seen
                (p^.IP4 = 0) or // may happen after DECLINE
                (p^.State = lsReserved) then // reserved = client refused this IP
@@ -2179,6 +2275,7 @@ begin
                   fLog.Add.Log(sllWarning,
                     'ComputeResponse: DISCOVER % exhausted IPv4 %',
                       [Data.Mac, Data.HostName^]);
+                  inc(Data.Scope^.Metrics[dsmDroppedNoAvailableIP]);
                   exit;
                 end;
               end;
@@ -2194,34 +2291,42 @@ begin
               Data.Ip4 := p^.IP4;
             // update the lease information
             if p^.State = lsStatic then
-              p^.Expired := Data.Tix32
+            begin
+              p^.Expired := Data.Tix32;
+              inc(Data.Scope^.Metrics[dsmStaticHits]);
+            end
             else
             begin
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
               p^.State := lsReserved;
               p^.Expired := Data.Tix32 + Data.Scope^.OfferHolding;
+              inc(Data.Scope^.Metrics[dsmDynamicHits]);
             end;
             // respond with an OFFER
+            inc(Data.Scope^.Metrics[dsmOffer]);
             Data.SendType := dmtOffer;
           end;
         dmtRequest:
           begin
-            // RFC 2131: lease is Reserved after OFFER = SELECTING
-            //           lease is Ack/Static/Outdated = RENEWING/REBINDING
-            if (p = nil) or
-               (p^.IP4 = 0) or
-               not ((p^.State in [lsReserved, lsAck, lsStatic]) or
-                    ((p^.State = lsOutdated) and
-                     (Data.Scope^.GraceFactor > 1) and
-                     (Data.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
-                     (Data.Tix32 - p^.Expired <
-                        Data.Scope^.LeaseTimeLE * Data.Scope^.GraceFactor))) then
-              // no good-enough lease
-              if RetrieveFrameIP(Data, p) then
+            inc(Data.Scope^.Metrics[dsmRequest]);
+            if (p <> nil) and
+               (p^.IP4 <> 0) and
+               ((p^.State in [lsReserved, lsAck, lsStatic]) or
+                ((p^.State = lsOutdated) and
+                 (Data.Scope^.GraceFactor > 1) and
+                 (Data.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
+                 (Data.Tix32 - p^.Expired <
+                    Data.Scope^.LeaseTimeLE * Data.Scope^.GraceFactor))) then
+              // RFC 2131: lease is Reserved after OFFER = SELECTING
+              //           lease is Ack/Static/Outdated = RENEWING/REBINDING
+              inc(Data.Scope^.Metrics[dsmLeaseRenewed])
+            else if RetrieveFrameIP(Data, p) then
               begin
                 // no lease, but Option 50 = INIT-REBOOT
                 if p = nil then
-                  p := Data.Scope^.NewLease(Data.Mac64);
+                  p := Data.Scope^.NewLease(Data.Mac64)
+                else
+                  inc(Data.Scope^.Metrics[dsmLeaseRenewed]);
                 p^.IP4 := Data.Ip4;
               end
               else
@@ -2234,23 +2339,30 @@ begin
                 Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
                   PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
                 result := FinalizeFrame(Data);
+                inc(Data.Scope^.Metrics[dsmNak]);
                 exit;
               end;
             // update the lease information
             if p^.State = lsStatic then
-              p^.Expired := Data.Tix32
+            begin
+              p^.Expired := Data.Tix32;
+              inc(Data.Scope^.Metrics[dsmStaticHits]);
+            end
             else
             begin
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
               p^.State := lsAck;
               p^.Expired := Data.Tix32 + Data.Scope^.LeaseTimeLE;
+              inc(Data.Scope^.Metrics[dsmDynamicHits]);
             end;
             // respond with an ACK on the known IP
+            inc(Data.Scope^.Metrics[dsmAck]);
             Data.Ip4 := p^.IP4;
             Data.SendType := dmtAck;
           end;
         dmtDecline:
           begin
+            inc(Data.Scope^.Metrics[dsmDecline]);
             // client ARPed the OFFERed IP and detected conflict, so DECLINE it
             if (p = nil) or
                (p^.State <> lsReserved) then
@@ -2260,6 +2372,7 @@ begin
               fLog.Add.Log(sllDebug,
                 'ComputeResponse: DECLINE % with no previous OFFER %',
                 [Data.Mac, Data.HostName^]);
+              inc(Data.Scope^.Metrics[dsmDroppedPackets]);
               exit;
             end;
             if (Data.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
@@ -2271,15 +2384,21 @@ begin
                 // malicious client poisons the pool by sending repeated DECLINE
                 fLog.Add.Log(sllDebug,
                   'ComputeResponse: DECLINE % overload', [Data.Mac]);
+                inc(Data.Scope^.Metrics[dsmRateLimitHit]);
                 exit;
               end;
             // invalidate OFFERed IP
             Data.Ip4 := DhcpIP4(@Data.Recv, Data.RecvLens[doDhcpRequestedAddress]);
             if (Data.Ip4 <> 0) and // authoritative IP
                not Data.Scope^.SubNet.Match(Data.Ip4) then // need clean IP
+            begin
+              inc(Data.Scope^.Metrics[dsmDroppedInvalidIP]);
               Data.Ip4 := 0;
+            end;
             if Data.Ip4 = 0 then
-              Data.Ip4 := p^.IP4; // option 50 was not set (or not in our subnet)
+              Data.Ip4 := p^.IP4 // option 50 was not set (or not in our subnet)
+            else
+              inc(Data.Scope^.Metrics[dsmOption50Hits]);
             p^.State := lsUnavailable;
             p^.IP4 := 0; // invalidate the previous offered IP
             if Data.Ip4 <> 0 then
@@ -2301,13 +2420,17 @@ begin
           end;
         dmtRelease:
           begin
+            inc(Data.Scope^.Metrics[dsmRelease]);
             // client informs the DHCP server that it no longer needs the lease
             if (p = nil) or
                (p^.IP4 <> Data.Recv.ciaddr) or
                not (p^.State in [lsAck, lsOutdated]) then
+            begin
               // detect and ignore out-of-synch or malicious client
               fLog.Add.Log(sllDebug, 'ComputeResponse: RELEASE % unexpected',
-                [Data.Mac])
+                [Data.Mac]);
+              inc(Data.Scope^.Metrics[dsmDroppedInvalidIP]);
+            end
             else
             begin
               if Assigned(fLog) then
@@ -2318,11 +2441,13 @@ begin
               end;
               Data.Scope^.ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+              inc(Data.Scope^.Metrics[dsmLeaseReleased]);
             end;
             exit; // server MUST NOT respond to a RELEASE message
           end;
         dmtInform:
           begin
+            inc(Data.Scope^.Metrics[dsmInform]);
             // client requests configuration options for its static IP
             Data.Ip4 := Data.Recv.ciaddr;
             if not Data.Scope^.Subnet.Match(Data.Ip4) or
@@ -2332,43 +2457,54 @@ begin
               IP4Short(@Data.Ip4, Data.Ip);
               fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % unexpected %',
                 [Data.Mac, Data.Ip]);
+              inc(Data.Scope^.Metrics[dsmDroppedInvalidIP]);
               exit;
             end;
             if (p <> nil) and
                (p^.State = lsStatic) then
-              p^.Expired := Data.Tix32
-            else if (dsoInformRateLimit in Data.Scope^.Options) and
-                    (fIdleTix <> 0) and // OnIdle() would reset RateLimit := 0
-                    not Data.Scope^.IsStaticIP(Data.Ip4) then
             begin
-              // temporarily marks client IP as unavailable to avoid conflicts
-              // (not set by default: stronger than the RFC requires, and no
-              // other DHCP server like KEA, dnsmasq or Windows implements it)
-              if p = nil then
-                p := Data.Scope^.NewLease(Data.Mac64)
-              else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
+              p^.Expired := Data.Tix32;
+              inc(Data.Scope^.Metrics[dsmStaticHits]);
+            end
+            else
+            begin
+              if p <> nil then
+                inc(Data.Scope^.Metrics[dsmDynamicHits]);
+              if (dsoInformRateLimit in Data.Scope^.Options) and
+                 (fIdleTix <> 0) and // OnIdle() would reset RateLimit := 0
+                 not Data.Scope^.IsStaticIP(Data.Ip4) then
               begin
-                fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % overload',
-                  [Data.Mac]);
-                exit;
-              end
-              else
-              begin
-                inc(p^.RateLimit);
-                // mark this IP as temporary unavailable
-                if p^.IP4 <> Data.Ip4 then
-                  // create a new MAC-free lease for this other IP
-                  p := Data.Scope^.NewLease(0) // mac=0: sentinel for this IP
+                // temporarily marks client IP as unavailable to avoid conflicts
+                // (not set by default: stronger than the RFC requires, and no
+                // other DHCP server like KEA, dnsmasq or Windows implements it)
+                if p = nil then
+                  p := Data.Scope^.NewLease(Data.Mac64)
+                else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
+                begin
+                  fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % overload',
+                    [Data.Mac]);
+                  inc(Data.Scope^.Metrics[dsmInformRateLimitHit]);
+                  exit;
+                end
+                else
+                begin
+                  inc(p^.RateLimit);
+                  // mark this IP as temporary unavailable
+                  if p^.IP4 <> Data.Ip4 then
+                    // create a new MAC-free lease for this other IP
+                    p := Data.Scope^.NewLease(0); // mac=0: sentinel for this IP
+                end;
+                // update the lease information
+                inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+                p^.State := lsUnavailable;
+                p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
+                p^.IP4 := Data.Ip4;
               end;
-              // update the lease information
-              inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-              p^.State := lsUnavailable;
-              p^.Expired := Data.Tix32 + Data.Scope^.DeclineTime;
-              p^.IP4 := Data.Ip4;
+              // respond with an ACK and the standard options
+              inc(Data.Scope^.Metrics[dsmAck]);
+              Data.SendType := dmtAck;
             end;
-            // respond with an ACK and the standard options
-            Data.SendType := dmtAck;
-          end;
+          end
       else
         exit; // paranoid
       end;
