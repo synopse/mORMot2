@@ -2195,7 +2195,7 @@ begin
      (fState <> sSetup) or
      (fScope = nil) then
   begin
-    inc(Data.Scope^.Metrics[dsmDroppedPackets]);
+    // TODO inc(Metrics[dsmDroppedPackets]); // no Data.Scope yet: use global metrics
     exit;
   end;
   // parse and validate the request
@@ -2204,10 +2204,10 @@ begin
     if Assigned(fLog) then
       fLog.Add.Log(sllTrace, 'ComputeResponse: % % unexpected %',
         [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
-    if Data.RecvType = dmtUndefined then
-      inc(Data.Scope^.Metrics[dsmInvalidRequest])
-    else
-      inc(Data.Scope^.Metrics[dsmUnsupportedRequest]);
+    // TODO if Data.RecvType = dmtUndefined then
+    //  inc(Metrics[dsmInvalidRequest])
+    //else
+    //  inc(Metrics[dsmUnsupportedRequest]);
     exit; // invalid or unsupported frame
   end;
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
@@ -2217,7 +2217,8 @@ begin
     begin
       // RFC 3011 defined option 118 which overrides giaddr
       Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
-      inc(Data.Scope^.Metrics[dsmOption118Hits]);
+      if Data.Scope <> nil then
+        inc(Data.Scope^.Metrics[dsmOption118Hits]);
     end
     else if Data.Recv.giaddr <> 0 then
       // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
