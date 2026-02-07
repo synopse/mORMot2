@@ -1895,7 +1895,7 @@ end;
 
 function TDhcpProcess.LoadFromText(const Text: RawUtf8): boolean;
 var
-  tix32, entries: cardinal;
+  tix32: cardinal;
   boot, expiry: TUnixTime;
   mac: TNetMac;
   ip4: TNetIP4;
@@ -1909,10 +1909,10 @@ begin
   if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
     exit;
   ClearLeases;
-  entries := 0;
   last := nil;
   fScopeSafe.WriteLock; // easier than complex s^.Lock/UnLock
   try
+    Count := 0; // paranoid
     p := pointer(Text);
     if (p <> nil) and
        (fScope <> nil) then
@@ -1946,14 +1946,17 @@ begin
             if s <> nil then
             begin
               // add this lease to the internal list of this scope
-              new := s^.NewLease(PInt64(@mac)^); // also reset State+RateLimit
+              if s^.Count = length(s^.Entry) then
+                SetLength(s^.Entry, NextGrow(s^.Count));
+              new := @s^.Entry[s^.Count];
+              inc(s^.Count);
+              PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+RateLimit
               new^.IP4 := ip4;
               new^.Expired := expiry - boot;
               if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
                 new^.State := lsOutdated
               else
                 new^.State := lsAck;
-              inc(entries);
             end;
           end;
         end;
@@ -1965,7 +1968,7 @@ begin
   finally
     fScopeSafe.WriteUnLock;
   end;
-  fLog.Add.Log(sllDebug, 'LoadFromText: leases=%', [entries], self);
+  fLog.Add.Log(sllDebug, 'LoadFromText: leases=%', [Count], self);
   result := true;
 end;
 
