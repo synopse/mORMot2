@@ -176,11 +176,11 @@ Port logic from existing `rgClient.pas` classes (replace iterator with batch que
 
 | # | Task | Status |
 |---|------|--------|
-| B.5.1 | Implement `TRgReportService.GetOpenItemsReport` — multi-table JOIN, date range filter, days overdue calc (source: `rgClient.pas:1790-1879`) | planned |
-| B.5.2 | Implement `TRgReportService.GetPaymentReceiptsReport` — JOIN with AmountPaid > 0 filter (source: `rgClient.pas:1881-1959`) | planned |
-| B.5.3 | Implement `TRgReportService.GetCustomerRevenueReport` — GROUP BY customer, year filter (source: `rgClient.pas:1961-2042`) | planned |
-| B.5.4 | Implement `TRgReportService.GetMonthlyOverviewReport` — loop-based aggregation with TTimeLogBits month extraction (source: `rgClient.pas:2044-2144`) | planned |
-| B.5.5 | Compile | planned |
+| B.5.1 | Implement `TRgReportService.GetOpenItemsReport` — multi-table JOIN, date range filter, days overdue calc (source: `rgClient.pas:1790-1879`) | done |
+| B.5.2 | Implement `TRgReportService.GetPaymentReceiptsReport` — JOIN with AmountPaid > 0 filter (source: `rgClient.pas:1881-1959`) | done |
+| B.5.3 | Implement `TRgReportService.GetCustomerRevenueReport` — GROUP BY customer, year filter (source: `rgClient.pas:1961-2042`) | done |
+| B.5.4 | Implement `TRgReportService.GetMonthlyOverviewReport` — loop-based aggregation with TTimeLogBits month extraction (source: `rgClient.pas:2044-2144`) | done |
+| B.5.5 | Compile | done |
 
 #### B.6: Server unit
 

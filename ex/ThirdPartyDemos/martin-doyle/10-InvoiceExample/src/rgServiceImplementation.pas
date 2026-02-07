@@ -785,30 +785,219 @@ end;
 }
 function TRgReportService.GetOpenItemsReport(AFromDate, AToDate: TDateTime;
   AMinAmount: currency; out AItems: TDtoOpenItemDynArray): integer;
+var
+  SQL: RawUtf8;
+  Table: TOrmTable;
+  FromDate, ToDate: Int64;
+  MinAmountInt64: Int64;
+  i: integer;
+  SaleDateValue: Int64;
 begin
   SetLength(AItems, 0);
-  Result := -1; // TODO: implement in B.5.1
+
+  FromDate := TimeLogFromDateTime(AFromDate);
+  ToDate := TimeLogFromDateTime(AToDate);
+  // Currency is stored as Int64 * 10000 in mORMot
+  MinAmountInt64 := Trunc(AMinAmount * 10000);
+
+  SQL := FormatUtf8(
+    'SELECT o.ID, c.Company, o.OrderNo, o.SaleDate, o.ItemsTotal, ' +
+    '(o.ItemsTotal - COALESCE(o.AmountPaid, 0)) as OpenAmount ' +
+    'FROM CustomerOrder o ' +
+    'INNER JOIN Customer c ON o.Customer = c.ID ' +
+    'WHERE COALESCE(o.AmountPaid, 0) < o.ItemsTotal ' +
+    'AND o.SaleDate >= % ' +
+    'AND o.SaleDate <= % ' +
+    'AND (o.ItemsTotal - COALESCE(o.AmountPaid, 0)) >= % ' +
+    'ORDER BY o.SaleDate ASC',
+    [FromDate, ToDate, MinAmountInt64]);
+
+  Table := Self.Server.Orm.ExecuteList([TOrmCustomerOrder, TOrmCustomer], SQL);
+  if Table <> nil then
+  try
+    SetLength(AItems, Table.RowCount);
+    for i := 1 to Table.RowCount do
+    begin
+      AItems[i - 1].OrderID := Table.GetAsInteger(i, 0);
+      AItems[i - 1].Company := Utf8ToString(Table.GetU(i, 1));
+      AItems[i - 1].OrderNo := Utf8ToString(Table.GetU(i, 2));
+      SaleDateValue := Table.GetAsInt64(i, 3);
+      if SaleDateValue > 0 then
+        AItems[i - 1].SaleDate := TimeLogToDateTime(SaleDateValue)
+      else
+        AItems[i - 1].SaleDate := 0;
+      AItems[i - 1].ItemsTotal := Table.GetAsCurrency(i, 4);
+      AItems[i - 1].OpenAmount := Table.GetAsCurrency(i, 5);
+      if SaleDateValue > 0 then
+        AItems[i - 1].DaysOverdue := Trunc(Date - AItems[i - 1].SaleDate)
+      else
+        AItems[i - 1].DaysOverdue := 0;
+    end;
+  finally
+    Table.Free;
+  end;
+
+  Result := Length(AItems);
 end;
 
 function TRgReportService.GetPaymentReceiptsReport(AFromDate, AToDate: TDateTime;
   out AItems: TDtoPaymentReceiptDynArray): integer;
+var
+  SQL: RawUtf8;
+  Table: TOrmTable;
+  FromDate, ToDate: Int64;
+  i: integer;
+  SaleDateValue: Int64;
 begin
   SetLength(AItems, 0);
-  Result := -1; // TODO: implement in B.5.2
+
+  FromDate := TimeLogFromDateTime(AFromDate);
+  ToDate := TimeLogFromDateTime(AToDate);
+
+  SQL := FormatUtf8(
+    'SELECT o.ID, o.SaleDate, c.Company, o.OrderNo, o.AmountPaid ' +
+    'FROM CustomerOrder o ' +
+    'INNER JOIN Customer c ON o.Customer = c.ID ' +
+    'WHERE COALESCE(o.AmountPaid, 0) > 0 ' +
+    'AND o.SaleDate >= % ' +
+    'AND o.SaleDate <= % ' +
+    'ORDER BY o.SaleDate DESC',
+    [FromDate, ToDate]);
+
+  Table := Self.Server.Orm.ExecuteList([TOrmCustomerOrder, TOrmCustomer], SQL);
+  if Table <> nil then
+  try
+    SetLength(AItems, Table.RowCount);
+    for i := 1 to Table.RowCount do
+    begin
+      AItems[i - 1].OrderID := Table.GetAsInteger(i, 0);
+      SaleDateValue := Table.GetAsInt64(i, 1);
+      if SaleDateValue > 0 then
+        AItems[i - 1].SaleDate := TimeLogToDateTime(SaleDateValue)
+      else
+        AItems[i - 1].SaleDate := 0;
+      AItems[i - 1].Company := Utf8ToString(Table.GetU(i, 2));
+      AItems[i - 1].OrderNo := Utf8ToString(Table.GetU(i, 3));
+      AItems[i - 1].AmountPaid := Table.GetAsCurrency(i, 4);
+    end;
+  finally
+    Table.Free;
+  end;
+
+  Result := Length(AItems);
 end;
 
 function TRgReportService.GetCustomerRevenueReport(AYear: integer;
   out AItems: TDtoCustomerRevenueDynArray): integer;
+var
+  SQL: RawUtf8;
+  Table: TOrmTable;
+  YearStart, YearEnd: Int64;
+  StartDate, EndDate: TDateTime;
+  i: integer;
 begin
   SetLength(AItems, 0);
-  Result := -1; // TODO: implement in B.5.3
+
+  StartDate := EncodeDate(AYear, 1, 1);
+  EndDate := EncodeDate(AYear, 12, 31);
+  YearStart := TimeLogFromDateTime(StartDate);
+  YearEnd := TimeLogFromDateTime(EndDate);
+
+  SQL := FormatUtf8(
+    'SELECT c.ID, c.Company, ' +
+    'COUNT(o.ID) as InvoiceCount, ' +
+    'COALESCE(SUM(o.ItemsTotal), 0) as TotalRevenue, ' +
+    'COALESCE(SUM(o.AmountPaid), 0) as TotalPaid, ' +
+    'COALESCE(SUM(o.ItemsTotal - COALESCE(o.AmountPaid, 0)), 0) as TotalOpen ' +
+    'FROM Customer c ' +
+    'LEFT JOIN CustomerOrder o ON o.Customer = c.ID ' +
+    'AND o.SaleDate >= % AND o.SaleDate <= % ' +
+    'GROUP BY c.ID, c.Company ' +
+    'HAVING COUNT(o.ID) > 0 ' +
+    'ORDER BY TotalRevenue DESC',
+    [YearStart, YearEnd]);
+
+  Table := Self.Server.Orm.ExecuteList([TOrmCustomer, TOrmCustomerOrder], SQL);
+  if Table <> nil then
+  try
+    SetLength(AItems, Table.RowCount);
+    for i := 1 to Table.RowCount do
+    begin
+      AItems[i - 1].CustomerID := Table.GetAsInteger(i, 0);
+      AItems[i - 1].Company := Utf8ToString(Table.GetU(i, 1));
+      AItems[i - 1].InvoiceCount := Table.GetAsInteger(i, 2);
+      AItems[i - 1].TotalRevenue := Table.GetAsCurrency(i, 3);
+      AItems[i - 1].TotalPaid := Table.GetAsCurrency(i, 4);
+      AItems[i - 1].TotalOpen := Table.GetAsCurrency(i, 5);
+    end;
+  finally
+    Table.Free;
+  end;
+
+  Result := Length(AItems);
 end;
 
 function TRgReportService.GetMonthlyOverviewReport(AYear: integer;
   out AItems: TDtoMonthlyOverviewDynArray; out ATotals: TDtoMonthlyOverview): integer;
+const
+  MonthNames: array[1..12] of string = (
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  );
+var
+  Orders: TOrmCustomerOrder;
+  i, MonthNum: integer;
+  YearStart, YearEnd: TTimeLog;
+  StartDate, EndDate: TDateTime;
+  SaleDateBits: TTimeLogBits;
 begin
-  SetLength(AItems, 0);
-  Result := -1; // TODO: implement in B.5.4
+  StartDate := EncodeDate(AYear, 1, 1);
+  EndDate := EncodeDate(AYear, 12, 31) + 0.99999;
+  YearStart := TimeLogFromDateTime(StartDate);
+  YearEnd := TimeLogFromDateTime(EndDate);
+
+  // Initialize 12 months
+  SetLength(AItems, 12);
+  for i := 1 to 12 do
+  begin
+    FillCharFast(AItems[i - 1], SizeOf(TDtoMonthlyOverview), 0);
+    AItems[i - 1].Month := i;
+    AItems[i - 1].MonthName := MonthNames[i];
+  end;
+
+  // Load all orders for the year and aggregate in Pascal
+  Orders := TOrmCustomerOrder.CreateAndFillPrepare(Self.Server.Orm,
+    'SaleDate >= ? AND SaleDate <= ?', [YearStart, YearEnd]);
+  try
+    while Orders.FillOne do
+    begin
+      SaleDateBits.Value := Orders.SaleDate;
+      MonthNum := SaleDateBits.Month;
+      if (MonthNum >= 1) and (MonthNum <= 12) then
+      begin
+        Inc(AItems[MonthNum - 1].InvoiceCount);
+        AItems[MonthNum - 1].Revenue := AItems[MonthNum - 1].Revenue + Orders.ItemsTotal;
+        AItems[MonthNum - 1].PaymentsReceived := AItems[MonthNum - 1].PaymentsReceived + Orders.AmountPaid;
+        AItems[MonthNum - 1].OpenAmount := AItems[MonthNum - 1].OpenAmount +
+          (Orders.ItemsTotal - Orders.AmountPaid);
+      end;
+    end;
+  finally
+    Orders.Free;
+  end;
+
+  // Calculate totals
+  FillCharFast(ATotals, SizeOf(ATotals), 0);
+  ATotals.MonthName := 'Total';
+  for i := 0 to 11 do
+  begin
+    ATotals.InvoiceCount := ATotals.InvoiceCount + AItems[i].InvoiceCount;
+    ATotals.Revenue := ATotals.Revenue + AItems[i].Revenue;
+    ATotals.PaymentsReceived := ATotals.PaymentsReceived + AItems[i].PaymentsReceived;
+    ATotals.OpenAmount := ATotals.OpenAmount + AItems[i].OpenAmount;
+  end;
+
+  Result := Length(AItems);
 end;
 
 end.
