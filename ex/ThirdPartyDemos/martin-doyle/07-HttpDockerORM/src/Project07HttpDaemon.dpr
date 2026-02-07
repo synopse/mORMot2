@@ -68,6 +68,7 @@ end;
 procedure TSampleDaemon.Start;
 begin
   SQLite3Log.Enter(self);
+  ForceDirectories(DataPath);
   Model := CreateSampleModel;
   SampleServer := TSampleServer.Create(Model, DataPath + Executable.ProgramName + '.db');
   SampleServer.DB.Synchronous := smOff;
@@ -106,7 +107,7 @@ begin
   LogFamily.EchoToConsole := LOG_VERBOSE;
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := MakeExpandedPath([ApplicationPath, 'data'], true);
-  LogPath  := MakeExpandedPath([ApplicationPath, 'log', true);
+  LogPath  := MakeExpandedPath([ApplicationPath, 'log'], true);
   LogFamily.DestinationPath := LogPath;
   SQLite3Log.Add.Log(sllInfo, DataPath);
   SQLite3Log.Add.Log(sllInfo, LogPath);

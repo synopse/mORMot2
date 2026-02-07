@@ -1,0 +1,857 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <Target>
+      <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+    </Target>
+    <SearchPaths>
+      <IncludeFiles Value="$(ProjOutDir)"/>
+      <OtherUnitFiles Value="Components"/>
+      <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+    <Parsing>
+      <SyntaxOptions>
+        <SyntaxMode Value="Delphi"/>
+        <IncludeAssertionCode Value="True"/>
+      </SyntaxOptions>
+    </Parsing>
+    <CodeGeneration>
+      <Checks>
+        <IOChecks Value="True"/>
+        <StackChecks Value="True"/>
+      </Checks>
+      <Optimizations>
+        <OptimizationLevel Value="0"/>
+      </Optimizations>
+    </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf3"/>
+        <UseLineInfoUnit Value="False"/>
+        <UseHeaptrc Value="True"/>
+      </Debugging>
+    </Linking>
+    <Other>
+      <Verbosity>
+        <ShowNotes Value="False"/>
+        <ShowHints Value="False"/>
+      </Verbosity>
+      <CustomOptions Value="-dPUREMORMOT2"/>
+      <OtherDefines Count="1">
+        <Define0 Value="PUREMORMOT2"/>
+      </OtherDefines>
+    </Other>
+  </CompilerOptions>
+  <BuildModes Count="16">
+    <Item1 Name="default" Default="True"/>
+    <Item2 Name="win32">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="i386"/>
+          <TargetOS Value="win32"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+        </Other>
+      </CompilerOptions>
+    </Item2>
+    <Item3 Name="win64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="x86_64"/>
+          <TargetOS Value="win64"/>
+          <Optimizations>
+            <OptimizationLevel Value="2"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <GenerateDebugInfo Value="False"/>
+            <RunWithoutDebug Value="True"/>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+-dFPC_X64MM
+-dFPCMM_DEBUG
+-dFPCMM_REPORTMEMORYLEAKS"/>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item3>
+    <Item4 Name="lin386">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="i386"/>
+          <TargetOS Value="linux"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+        </Other>
+      </CompilerOptions>
+    </Item4>
+    <Item5 Name="linx64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="x86_64"/>
+          <TargetOS Value="linux"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <CompilerMessages>
+            <IgnoredMessages idx5089="True"/>
+          </CompilerMessages>
+          <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+-dFPC_X64MM
+-dFPCMM_DEBUG
+-dFPCMM_REPORTMEMORYLEAKS
+-dPUREMORMOT2
+-dFPCMM_SERVER"/>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item5>
+    <Item6 Name="bsd386">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="i386"/>
+          <TargetOS Value="freebsd"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="6">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item6>
+    <Item7 Name="bsdx64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="x86_64"/>
+          <TargetOS Value="freebsd"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+        </Other>
+      </CompilerOptions>
+    </Item7>
+    <Item8 Name="darw386">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="i386"/>
+          <TargetOS Value="darwin"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+        </Other>
+      </CompilerOptions>
+    </Item8>
+    <Item9 Name="darwx64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="//if TargetOS=&apos;darwin&apos; then
+//   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="x86_64"/>
+          <TargetOS Value="darwin"/>
+          <Optimizations>
+            <OptimizationLevel Value="2"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item9>
+    <Item10 Name="linarm32">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetProcessor Value="ARMV7A"/>
+          <TargetCPU Value="arm"/>
+          <TargetOS Value="linux"/>
+          <Optimizations>
+            <OptimizationLevel Value="2"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item10>
+    <Item11 Name="linarm64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="aarch64"/>
+          <TargetOS Value="linux"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <GenerateDebugInfo Value="False"/>
+            <RunWithoutDebug Value="True"/>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+        </Other>
+      </CompilerOptions>
+    </Item11>
+    <Item12 Name="andarm32">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetProcessor Value="ARMV7A"/>
+          <TargetCPU Value="arm"/>
+          <TargetOS Value="android"/>
+          <Optimizations>
+            <OptimizationLevel Value="2"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item12>
+    <Item13 Name="andarm64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="aarch64"/>
+          <TargetOS Value="android"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item13>
+    <Item14 Name="andi386">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="i386"/>
+          <TargetOS Value="android"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item14>
+    <Item15 Name="andx64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="if TargetOS=&apos;darwin&apos; then
+   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="x86_64"/>
+          <TargetOS Value="android"/>
+          <Optimizations>
+            <OptimizationLevel Value="3"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <OtherDefines Count="7">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item15>
+    <Item16 Name="darwarm64">
+      <CompilerOptions>
+        <Version Value="11"/>
+        <PathDelim Value="\"/>
+        <Target>
+          <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\Rechnung"/>
+        </Target>
+        <SearchPaths>
+          <IncludeFiles Value="$(ProjOutDir)"/>
+          <OtherUnitFiles Value="Components"/>
+          <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+        </SearchPaths>
+        <Conditionals Value="//if TargetOS=&apos;darwin&apos; then
+//   CustomOptions := &apos; -Cg-&apos;;"/>
+        <Parsing>
+          <SyntaxOptions>
+            <SyntaxMode Value="Delphi"/>
+            <IncludeAssertionCode Value="True"/>
+          </SyntaxOptions>
+        </Parsing>
+        <CodeGeneration>
+          <SmartLinkUnit Value="True"/>
+          <RelocatableUnit Value="True"/>
+          <Checks>
+            <IOChecks Value="True"/>
+          </Checks>
+          <TargetCPU Value="aarch64"/>
+          <TargetOS Value="darwin"/>
+          <Optimizations>
+            <OptimizationLevel Value="2"/>
+          </Optimizations>
+        </CodeGeneration>
+        <Linking>
+          <Debugging>
+            <GenerateDebugInfo Value="False"/>
+            <RunWithoutDebug Value="True"/>
+            <DebugInfoType Value="dsDwarf3"/>
+            <UseLineInfoUnit Value="False"/>
+          </Debugging>
+          <LinkSmart Value="True"/>
+        </Linking>
+        <Other>
+          <Verbosity>
+            <ShowNotes Value="False"/>
+            <ShowHints Value="False"/>
+          </Verbosity>
+          <CustomOptions Value="-dPUREMORMOT2"/>
+          <OtherDefines Count="10">
+            <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+            <Define1 Value="FPC_X64MM"/>
+            <Define2 Value="FPCMM_DEBUG"/>
+            <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+            <Define4 Value="PUREMORMOT2"/>
+            <Define5 Value="FPCMM_SERVER"/>
+            <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            <Define7 Value="USE_OPENSSL"/>
+            <Define8 Value="USEZEOS"/>
+            <Define9 Value="FPC_LIBCMM"/>
+          </OtherDefines>
+        </Other>
+      </CompilerOptions>
+    </Item16>
+  </BuildModes>
+</CONFIG>
