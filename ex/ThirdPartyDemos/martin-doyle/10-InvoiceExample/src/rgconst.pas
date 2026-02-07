@@ -46,6 +46,8 @@ const
   AppVersionBuild = 489;
   AppBuildDate = '26.12.2025';
   DatabaseFile = 'Project10.db';
+  HttpPort = '11111';
+  ConfigFileName = 'rechnung.config';
   { Path }
   IniDataPath = 'Data';
 

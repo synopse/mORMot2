@@ -24,7 +24,7 @@
       <UseVersionInfo Value="True"/>
       <AutoIncrementBuild Value="True"/>
       <MajorVersionNr Value="2"/>
-      <BuildNr Value="640"/>
+      <BuildNr Value="653"/>
       <Language Value="0407"/>
       <StringTable CompanyName="martindoyle"/>
     </VersionInfo>
@@ -905,6 +905,14 @@
         <UnitName Value="rgDtoTypes"/>
       </Unit>
       <Unit>
+        <Filename Value="rgServiceInterfaces.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="rgConfig.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
         <Filename Value="rgclient.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="rgClient"/>
@@ -955,6 +963,10 @@
         <Filename Value="Components/mdforms.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="MdForms"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Components/mdDates.pas"/>
+        <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="rgReportBase.pas"/>

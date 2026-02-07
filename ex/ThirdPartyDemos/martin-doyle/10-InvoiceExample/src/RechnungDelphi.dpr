@@ -58,7 +58,14 @@ uses
 
   Forms,
   rgMain,
-  rgConst;
+  rgConst,
+  rgData,
+  rgDtoTypes,
+  rgServiceInterfaces,
+  rgConfig,
+  rgClient,
+  rgCustomerList,
+  rgCustomerEdit, MdForms;
 
 {$R *.res}
 

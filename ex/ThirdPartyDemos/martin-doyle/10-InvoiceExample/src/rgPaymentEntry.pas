@@ -38,7 +38,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, Menus, MdForms, mdLayout, rgClient;
+  ExtCtrls, Menus, MdForms, mdLayout, rgDtoTypes, rgClient;
 
 type
 

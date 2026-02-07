@@ -9,7 +9,7 @@
   Module : rgDtoTypes.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 07.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -43,6 +43,10 @@ uses
 
 type
   TInvoiceStatus = (isPaid, isOpen, isOverdue);
+
+  TCustomerEditResult = (cerSuccess, cerNotFound, cerMissingField, cerHasReferences, cerDatabaseError);
+  TInvoiceEditResult = (ierSuccess, ierNotFound, ierMissingField, ierDatabaseError);
+  TPaymentResult = (prSuccess, prInvoiceNotFound, prInvalidAmount, prDatabaseError);
 
   PDtoInvoiceItem = ^TDtoInvoiceItem;
 
@@ -158,6 +162,63 @@ type
   end;
 
   TDtoMonthlyOverviewArray = array of TDtoMonthlyOverview;
+
+  // SOA dynamic array types (mORMot convention)
+  TDtoCustomerDynArray = array of TDtoCustomer;
+  TDtoOrderDynArray = array of TDtoOrder;
+  TDtoOpenItemDynArray = array of TDtoOpenItem;
+  TDtoPaymentReceiptDynArray = array of TDtoPaymentReceipt;
+  TDtoCustomerRevenueDynArray = array of TDtoCustomerRevenue;
+  TDtoMonthlyOverviewDynArray = array of TDtoMonthlyOverview;
+
+  // SOA DTO types
+
+  PDtoInvoiceDetail = ^TDtoInvoiceDetail;
+
+  TDtoInvoiceDetail = packed record
+    OrderID: longint;
+    OrderNo: string;
+    SaleDate: TDateTime;
+    ShipDate: TDateTime;
+    CustomerID: longint;
+    CustomerName: string;
+    ItemsTotal: currency;
+    AmountPaid: currency;
+    OpenAmount: currency;
+    Status: TInvoiceStatus;
+    Items: TDtoInvoiceItemArray;
+  end;
+
+  PDtoInvoiceSave = ^TDtoInvoiceSave;
+
+  TDtoInvoiceSave = packed record
+    OrderNo: string;
+    SaleDate: TDateTime;
+    ShipDate: TDateTime;
+    Items: TDtoInvoiceItemArray;
+  end;
+
+  PDtoDashboardStats = ^TDtoDashboardStats;
+
+  TDtoDashboardStats = packed record
+    CustomerCount: integer;
+    OpenItemsCount: integer;
+    OpenItemsAmount: currency;
+    DueTodayCount: integer;
+    OverdueCount: integer;
+  end;
+
+  PDtoCustomerSummary = ^TDtoCustomerSummary;
+
+  TDtoCustomerSummary = packed record
+    CustomerID: longint;
+    CustomerName: string;
+    InvoiceCount: integer;
+    TotalRevenue: currency;
+    OpenCount: integer;
+    OpenAmount: currency;
+    PaidCount: integer;
+  end;
 
 implementation
 

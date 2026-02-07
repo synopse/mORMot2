@@ -57,9 +57,6 @@ type
     destructor Destroy; override;
   end;
 
-  TCustomerServiceResult = (
-    csSuccess, csNotFound, csMissingField, csPersistenceError);
-
   { ICustomerService }
 
   ICustomerService = interface(IInvokable)
@@ -129,8 +126,6 @@ type
     function GetCurrentCustomerID: longint;
   end;
 
-  TPaymentResult = (prSuccess, prInvoiceNotFound, prInvalidAmount, prDatabaseError);
-
   { IPaymentService }
 
   IPaymentService = interface(IInvokable)
@@ -139,8 +134,6 @@ type
       ADate: TDateTime): TPaymentResult;
     function GetInvoiceOpenAmount(AInvoiceID: longint): currency;
   end;
-
-  TCustomerEditResult = (cerSuccess, cerNotFound, cerMissingField, cerHasReferences, cerDatabaseError);
 
   { ICustomerEditService }
 
@@ -169,8 +162,6 @@ type
     function IsNewCustomer: Boolean;
     function GenerateCustomerNo: string;
   end;
-
-  TInvoiceEditResult = (ierSuccess, ierNotFound, ierMissingField, ierDatabaseError);
 
   { IInvoiceEditService }
 
