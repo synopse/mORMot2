@@ -1347,7 +1347,7 @@ begin
        (PCardinal(u^)^ = bin[0]) and // efficient 32-bit check < MIN_UUID_BYTES
        CompareMemSmall(@bin[1], u^ + 4, binlen - 8) then
     begin
-      result := PCardinal(u^ + binlen - 4)^;
+      result := PCardinal(u^ + binlen - 4)^; // get IP from BIN+IP layout
       exit;
     end;
     inc(u);
@@ -1438,7 +1438,7 @@ begin
       end
       else
         inc(p);
-    // remove this IP from StaticUuid[]
+    // remove this IP from StaticUuid[] storing raw BIN+IP
     u := pointer(StaticUuid);
     for i := 0 to length(StaticUuid) - 1 do
       if PCardinal(u^ + PStrLen(u^ - _STRLEN)^ - 4)^ = ip4 then
@@ -1498,7 +1498,6 @@ begin
   result := 0;
   if Count = 0 then
     exit;
-  // make a transient copy of all leases to keep the lock small for this subnet
   Safe.Lock;
   try
     if Count = 0 then
@@ -1509,7 +1508,8 @@ begin
       // small output could be done within the lock
       result := DoWrite(W, pointer(Entry), Count, tix32, grace, boot, @Subnet)
     else
-      // local copy may eventually be done if OnIdle() made a background thread
+      // make a transient copy of all leases to keep the lock small for this subnet
+      // - could eventually be done if OnIdle() made a background thread (not yet)
       local := copy(Entry, 0, Count); // allocate Count * 16 bytes
   finally
     Safe.UnLock;
