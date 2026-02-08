@@ -3175,7 +3175,7 @@ function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 var
   h: THandle;
   pos, read: PtrInt;
-  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
+  tmp: TBuffer64K; // 64KB stack buffer - /proc/cpuinfo could be huge
 begin
   result := '';
   if FileName = '' then
@@ -3189,8 +3189,8 @@ begin
     if read <= 0 then
       break; // end of input
     inc(pos, read);
-    if pos < SizeOf(tmp) then // is likely to flush before 32KB of output
-      continue;
+    if pos < SizeOf(tmp) then // kernel-side may iterate on PAGE_SIZE (4KB)
+      continue;               // but is likely to flush before 64KB of output
     AppendBufferToUtf8(@tmp, pos, RawUtf8(result)); // in-place resize
     pos := 0;
   until false;
