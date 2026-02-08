@@ -49,8 +49,8 @@ uses
   mormot.db.raw.sqlite3.static,
   mormot.orm.core,
   mormot.rest.http.server,
-  rgData,
   rgConst,
+  rgData,
   rgServer,
   rgServiceInterfaces,
   rgServiceImplementation;
@@ -68,10 +68,15 @@ type
 
   TRgDaemon = class(TSynDaemon)
   protected
+    FRunning: boolean;
     fModel: TOrmModel;
     fServer: TRgServer;
     fHttpServer: TRestHttpServer;
   public
+    constructor Create(aSettingsClass: TSynDaemonSettingsClass; const
+        aWorkFolder, aSettingsFolder, aLogFolder: TFileName; const
+        aSettingsExt: TFileName = '.settings'; const aSettingsName: TFileName =
+        '');
     procedure Start; override;
     procedure Stop; override;
   end;
@@ -88,6 +93,13 @@ end;
 
 { TRgDaemon }
 
+constructor TRgDaemon.Create(aSettingsClass: TSynDaemonSettingsClass; const
+    aWorkFolder, aSettingsFolder, aLogFolder: TFileName; const aSettingsExt:
+    TFileName = '.settings'; const aSettingsName: TFileName = '');
+begin
+  inherited Create(aSettingsClass, aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt, aSettingsName);
+end;
+
 procedure TRgDaemon.Start;
 begin
   SQLite3Log.Enter(self);
@@ -100,11 +112,12 @@ begin
   fHttpServer.AccessControlAllowOrigin := '*';
   SQLite3Log.Add.Log(sllInfo,
     'Rechnung HTTP server started on port %', [HttpPort]);
+  FRunning := True;
 end;
 
 procedure TRgDaemon.Stop;
 begin
-  if fHttpServer = nil then
+  if not FRunning then
     exit;
   SQLite3Log.Enter(self);
   try
@@ -122,6 +135,7 @@ begin
       SQLite3Log.Add.Log(sllWarning, 'Error shutting down server');
     end;
     FreeAndNil(fModel);
+    FRunning := false;
   end;
 end;
 
@@ -129,16 +143,12 @@ var
   Daemon: TRgDaemon;
 
 begin
-  with SQLite3Log.Family do
-  begin
-    Level := LOG_VERBOSE;
-    PerThreadLog := ptIdentifiedInOnFile;
-    EchoToConsole := LOG_VERBOSE;
-  end;
   Daemon := TRgDaemon.Create(
     TRgDaemonSettings, Executable.ProgramFilePath, '', '');
+  SQLite3Log.Add.Log(sllInfo, 'Daemon started, listening on port '  + HttpPort);
   try
     Daemon.CommandLine;
+    SQLite3Log.Add.Log(sllInfo, 'Daemon shut down');
   finally
     Daemon.Free;
   end;

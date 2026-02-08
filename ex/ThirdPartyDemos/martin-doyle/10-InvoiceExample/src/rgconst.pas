@@ -76,9 +76,14 @@ begin
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := ExpandFileName(IncludeTrailingPathDelimiter(ApplicationPath) +
     '..\' + IniDataPath + '\');
+  TSynLog.Family.DestinationPath:='log';
+  TSynLog.Family.ArchivePath:='log';
+  TSynLog.Family.RotateFileDailyAtHour:=0;
   TSynLog.Family.Level := LOG_VERBOSE;
+  TSynLog.Family.PerThreadLog := ptIdentifiedInOnFile;
   TSynLog.Family.OnArchive := EventArchiveSynLZ;
   TSynLog.Family.ArchiveAfterDays := 1;
+  TSynLog.Family.EchoToConsole:= LOG_NFO;
   DataFile := DataPath + DatabaseFile;
   TSynLog.Add.Log(sllInfo, 'ApplicationPath: ' + ApplicationPath);
   TSynLog.Add.Log(sllInfo, 'DataPath: ' + DataPath);

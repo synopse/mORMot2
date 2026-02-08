@@ -76,6 +76,7 @@ begin
     GRgConfig.LoadFromFile(
       IncludeTrailingPathDelimiter(Executable.ProgramFilePath) +
       ConfigFileName);
+    GRgConfig.SaveIfNeeded;
   end;
   Result := GRgConfig;
 end;
