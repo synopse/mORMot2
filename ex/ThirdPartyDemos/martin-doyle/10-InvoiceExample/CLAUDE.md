@@ -102,7 +102,7 @@ OR (local mode): [GUI + embedded TRgServer + SQLite + Services]
 | Project | Path | Purpose |
 |---------|------|---------|
 | `Rechnung.lpi` | `src/` | GUI client (LCL) |
-| `RechnungDaemon.lpi` | `daemon/` | Console/service daemon (no GUI) |
+| `RechnungDaemon.lpi` | `src/` | Console/service daemon (no GUI) |
 
 ### SOA Interfaces (5 services)
 
@@ -139,21 +139,18 @@ RgServices.StatisticsService.GetDashboardStats(Stats);
 | `rgServiceInterfaces.pas` | 5 SOA interfaces + `RegisterInterfaces` |
 | `rgServiceImplementation.pas` | 5 `TInjectableObjectRest` implementations |
 | `rgServer.pas` | `TRgServer` (`TRestServerDB` + `ServiceDefine`) |
-| `rgConfig.pas` | `TRgConfig` (`TSynJsonFileSettings` for JSON config) |
 | `rgClient.pas` | `TRgServiceClient` + legacy service classes |
-| `rgConst.pas` | Constants (`HttpPort`, `ConfigFileName`, `DataFile`) |
+| `rgConst.pas` | Constants, config, version init, logging setup |
 | `rgData.pas` | ORM model (`TOrmCustomer`, `TOrmCustomerOrder`) |
 
-### Config File
+### Configuration
 
-`rechnung.config` (JSON, auto-created with defaults):
+Operating mode and connection settings are constants in `rgConst.pas`:
 
-```json
-{
-  "Mode": "local",
-  "Host": "localhost",
-  "Port": "11111"
-}
+```pascal
+RunMode: TRunMode = rmLocal;  // rmLocal or rmService
+HttpHost = 'localhost';
+HttpPort = '11111';
 ```
 
 ## DB Query Optimization
@@ -169,7 +166,7 @@ RgServices.StatisticsService.GetDashboardStats(Stats);
 2. **Implement**: Make changes, update file headers
 3. **Compile**: Both projects must build cleanly:
    - GUI: `${LAZBUILD_PATH} src/Rechnung.lpi`
-   - Daemon: `${LAZBUILD_PATH} daemon/RechnungDaemon.lpi`
+   - Daemon: `${LAZBUILD_PATH} src/RechnungDaemon.lpi`
 4. **Test**: User runs and confirms
 5. **Document**: Update `docs/IMPLEMENTATION-PLAN.md` or `docs/SOA-IMPLEMENTATION-PLAN.md` if needed
 6. **Commit**: Only after user confirms. Format: `Phase X: <Title>`
@@ -180,7 +177,7 @@ RgServices.StatisticsService.GetDashboardStats(Stats);
 
 ## Daemon
 
-`daemon/RechnungDaemon.dpr` — `TSynDaemon`-based server process.
+`src/RechnungDaemon.dpr` — `TSynDaemon`-based server process.
 
 ```bash
 # Linux

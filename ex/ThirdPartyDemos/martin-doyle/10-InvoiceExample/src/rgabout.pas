@@ -101,8 +101,9 @@ var
   MaxLabelWidth: Integer;
 begin
   // Set Label text
-  AppVersion.Caption := FormatString('Version %.%.% (Build: %)',
-    [AppVersionMajor, AppVersionMinor, AppVersionBuild, AppBuildDate]);
+  LabelmORMot.Caption:= 'Rechnung using mORMot2';
+  AppVersion.Caption := FormatString('Version % (Build: %)',
+    [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
   SKUName.Caption := 'Generated with: ' + COMPILER_VERSION;
   Copyright.Caption := 'Using mORMot' + SYNOPSE_FRAMEWORK_FULLVERSION;
   OS.Caption := OSVersionText;
@@ -123,7 +124,7 @@ begin
       ImageMain.Width, ImageMain.Height);
 
     // Place header label with larger font
-    LabelmORMot.Font.Size := Round(1.7 * SKUName.Height);
+    LabelmORMot.Font.Size := Round(1.2 * SKUName.Height);
     LabelmORMot.Font.Style := [fsBold];
     LabelmORMot.SetBounds(
       Margins.Left + ImageMain.Width + Margins.Middle,

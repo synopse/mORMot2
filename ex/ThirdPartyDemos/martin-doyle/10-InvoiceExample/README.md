@@ -14,12 +14,11 @@ Invoice management application built with the mORMot2 framework.
 
 ```
 10-InvoiceExample/
-  src/                     - GUI application source
+  src/                     - All application source
     *.pas                  - Pascal units (prefix: rg = Rechnung)
     *.dfm                  - Form definitions (Lazarus + Delphi compatible)
     Rechnung.lpi / .lpr    - Lazarus GUI project
     RechnungDelphi.dpr     - Delphi 7 GUI project
-  daemon/                  - Server daemon
     RechnungDaemon.dpr     - TSynDaemon entry point (Delphi 7 + FPC)
     RechnungDaemon.lpi     - Lazarus daemon project
   Components/              - Reusable components (prefix: md = MartinDoyle)
@@ -62,10 +61,9 @@ Key source files:
 | `rgServiceImplementation.pas` | 5 `TInjectableObjectRest` server implementations |
 | `rgServer.pas` | `TRgServer` (`TRestServerDB` + `ServiceDefine`) |
 | `rgClient.pas` | `TRgServiceClient` (resolves interfaces in local/service mode) |
-| `rgConfig.pas` | `TRgConfig` (`TSynJsonFileSettings` for JSON config) |
 | `rgData.pas` | ORM model definitions |
 | `rgDtoTypes.pas` | Data Transfer Objects for UI layer |
-| `rgConst.pas` | Application constants, resourcestrings, paths |
+| `rgConst.pas` | Constants, config, version init, logging setup |
 
 ## Design Decisions
 
@@ -106,6 +104,21 @@ in `rgServiceImplementation.pas`.  Server implementations inherit from
 the global `RgServices` client which resolves interfaces either locally
 (embedded server) or remotely (HTTP client) based on the JSON config.
 
+### About Box with Runtime System Information
+
+The About dialog (`rgAbout.pas`) uses `mdLayout` for fully responsive positioning
+and retrieves all information at runtime — nothing is hardcoded. Version number
+and build date come from the executable's embedded version resources via
+mORMot2's `Executable.Version` (`TFileVersion`). On Windows, `GetExecutableVersion`
+reads PE resources natively. On POSIX (Linux, macOS), `rgConst.pas` reads
+version resources directly using FPC's standard `fileinfo` + `elfreader` /
+`machoreader` units and feeds the result into `SetExecutableVersion`, avoiding
+any dependency on the `FPCUSEVERSIONINFO` conditional in mORMot2's shared source.
+System information (OS, CPU, BIOS, memory) comes from mORMot2's
+`OSVersionText`, `CpuInfoText`, `BiosInfoText`, and `GetMemoryInfoText` helpers.
+The layout places the application image on the left, info labels on the right
+with a separator line, and auto-sizes the form to fit the content.
+
 ### Data Transfer Objects
 
 ORM entities store contacts as deeply nested JSON collections.  Rather than
@@ -135,13 +148,13 @@ mORMot2 ORM entities with embedded JSON for nested data.
 lazbuild src/Rechnung.lpi
 
 # Server daemon
-lazbuild daemon/RechnungDaemon.lpi
+lazbuild src/RechnungDaemon.lpi
 ```
 
 ### Delphi 7
 
 - GUI: Open `src/RechnungDelphi.dpr` in the Delphi IDE and compile.
-- Daemon: Open `daemon/RechnungDaemon.dpr` in the Delphi IDE and compile.
+- Daemon: Open `src/RechnungDaemon.dpr` in the Delphi IDE and compile.
 
 ## Running
 

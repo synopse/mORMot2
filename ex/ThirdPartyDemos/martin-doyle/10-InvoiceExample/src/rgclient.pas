@@ -77,8 +77,7 @@ var
 implementation
 
 uses
-  rgConst,
-  rgConfig;
+  rgConst;
 
 { TRgServiceClient }
 
@@ -122,12 +121,12 @@ begin
 end;
 
 initialization
-  case rgConfig.RgConfig.Mode of
+  case RunMode of
     rmLocal:
       RgServices := TRgServiceClient.CreateLocal;
     rmService:
       RgServices := TRgServiceClient.CreateService(
-        rgConfig.RgConfig.Host, rgConfig.RgConfig.Port);
+        HttpHost, HttpPort);
   end;
 
 finalization

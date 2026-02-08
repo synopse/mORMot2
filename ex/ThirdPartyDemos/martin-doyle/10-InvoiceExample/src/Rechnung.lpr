@@ -58,17 +58,8 @@ uses
   mormot.db.raw.sqlite3, // for the SQLite3 version below
 
   Forms,
-  rgMain,
   rgConst,
-  rgData,
-  rgDtoTypes,
-  rgServiceInterfaces,
-  rgServiceImplementation,
-  rgServer,
-  rgConfig,
-  rgClient,
-  rgCustomerList,
-  rgCustomerEdit, MdForms;
+  rgMain;
 
   {$R *.res}
 

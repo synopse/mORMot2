@@ -38,14 +38,14 @@ interface
 
 {$I mormot.defines.inc}
 
+type
+  TRunMode = (rmLocal, rmService);
 
 const
   ApplicationTitle = 'Rechnung';
-  AppVersionMajor = 2;
-  AppVersionMinor = 0;
-  AppVersionBuild = 489;
-  AppBuildDate = '26.12.2025';
   DatabaseFile = 'Project10.db';
+  RunMode: TRunMode = rmLocal;
+  HttpHost = 'localhost';
   HttpPort = '11111';
   ConfigFileName = 'rechnung.config';
   { Path }
@@ -68,11 +68,47 @@ implementation
 
 uses
   SysUtils,
+  {$ifdef OSPOSIX}
+  fileinfo,
+  {$ifdef OSDARWIN}
+  machoreader,
+  {$else}
+  elfreader,
+  {$endif OSDARWIN}
+  {$endif OSPOSIX}
   mormot.core.base,
   mormot.core.log,
   mormot.core.os;
 
+{$ifdef OSPOSIX}
+procedure InitVersionFromResources;
+var
+  Info: TVersionInfo;
 begin
+  Info := TVersionInfo.Create;
+  try
+    try
+      Info.Load(HInstance);
+      SetExecutableVersion(
+        Info.FixedInfo.FileVersion[0],
+        Info.FixedInfo.FileVersion[1],
+        Info.FixedInfo.FileVersion[2],
+        Info.FixedInfo.FileVersion[3]);
+    except
+      // no version resource embedded
+    end;
+  finally
+    Info.Free;
+  end;
+end;
+{$endif OSPOSIX}
+
+begin
+  {$ifdef OSWINDOWS}
+  GetExecutableVersion;
+  {$else}
+  InitVersionFromResources;
+  {$endif OSWINDOWS}
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := ExpandFileName(IncludeTrailingPathDelimiter(ApplicationPath) +
     '..\' + IniDataPath + '\');

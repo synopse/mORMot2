@@ -10,13 +10,14 @@ object AboutForm: TAboutForm
   Color = clBtnFace
   ParentFont = True
   Position = poDesktopCenter
+  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnShow = FormShow
   object Copyright: TLabel
     Left = 370
-    Height = 16
+    Height = 18
     Top = 97
-    Width = 252
+    Width = 310
     Caption = 'Copyright 1983 - 2024  Borland, Synopse'
   end
   object Line: TBevel
@@ -27,24 +28,24 @@ object AboutForm: TAboutForm
   end
   object SKUName: TLabel
     Left = 370
-    Height = 16
+    Height = 18
     Top = 73
-    Width = 77
+    Width = 95
     Caption = 'Using Delphi'
   end
   object Memory: TLabel
     Left = 386
-    Height = 16
+    Height = 18
     Top = 248
-    Width = 49
+    Width = 61
     Alignment = taRightJustify
     Caption = 'Memory'
   end
   object OS: TLabel
     Left = 374
-    Height = 16
+    Height = 18
     Top = 175
-    Width = 18
+    Width = 22
     Caption = 'OS'
   end
   object ImageMain: TImage
@@ -379,32 +380,32 @@ object AboutForm: TAboutForm
   end
   object LabelmORMot: TLabel
     Left = 368
-    Height = 16
+    Height = 18
     Top = 24
-    Width = 61
+    Width = 75
     Caption = 'mORMot2'
   end
   object AppVersion: TLabel
     Left = 370
-    Height = 16
+    Height = 18
     Top = 49
-    Width = 103
+    Width = 133
     Caption = 'Version 2.0.489'
     Font.Style = [fsBold]
     ParentFont = False
   end
   object CPU: TLabel
     Left = 374
-    Height = 16
+    Height = 18
     Top = 200
-    Width = 27
+    Width = 31
     Caption = 'CPU'
   end
   object BIOS: TLabel
     Left = 376
-    Height = 16
+    Height = 18
     Top = 224
-    Width = 30
+    Width = 37
     Caption = 'BIOS'
   end
   object OKButton: TButton
