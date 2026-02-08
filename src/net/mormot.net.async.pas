@@ -6335,7 +6335,7 @@ begin
     if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
       exit;
   req.remote := req.proxy.fRemoteUri;
-  AppendBufferToUtf8(Uri.Path.Text, StrLen(Uri.Path.Text), req.remote.Address);
+  Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
   // check the local file (named from hashed URI)
   req.name := HttpRequestHashBase32(req.remote, nil, 20, @req.hash);
   if req.name = '' then
