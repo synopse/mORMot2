@@ -21,6 +21,7 @@ unit mormot.net.dhcp;
    Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
    Meaningful logging of the actual process.
+   Generate detailed JSON and CSV metrics as local files, global and per scope.
    Easy configuration via JSON or INI files.
    Expandable in code via callbacks or virtual methods.
    e.g. as full local PXE environment with our mormot.net.tftp.server.pas unit
@@ -647,7 +648,9 @@ type
   TDhcpServerSettings = class(TSynAutoCreateFields)
   protected
     fFileName: TFileName;
+    fMetricsFolder: TFileName;
     fFileFlushSeconds: cardinal;
+    fMetricsCsvMinutes: cardinal;
     fScope: TDhcpScopeSettingsObjArray;
   public
     /// setup this instance with default values
@@ -672,6 +675,18 @@ type
     // - set to 0 will disable background write, and persist only at shutdown
     property FileFlushSeconds: cardinal
       read fFileFlushSeconds write fFileFlushSeconds default 30;
+    /// if set, OnIdle will persist the internal metrics on disk in this folder
+    // - will persist a MetricsFolder + 'metrics.json' with the current total
+    // - and MetricsFolder + '192-168-1-0_24.json' with the per-scope total
+    // - those .json files will be written/updated at FileFlushSeconds pace
+    // - and MetricsFolder + '202602-192-168-1-0_24.csv' for a monthly CSV
+    // aggregation file of the metrics, written at MetricsCsvMinutes pace
+    property MetricsFolder: TFileName
+      read fMetricsFolder write fMetricsFolder;
+    /// at which pace the CSV metrics should be written in MetricsFolder by OnIdle
+    // - default is every 5 minutes, which is convenient and not storage
+    property MetricsCsvMinutes: cardinal
+      read fMetricsCsvMinutes write fMetricsCsvMinutes default 5;
     /// store the per subnet scope settings
     property Scope: TDhcpScopeSettingsObjArray
       read fScope;
@@ -737,14 +752,15 @@ type
   protected
     fScopeSafe: TRWLightLock; // multi-read reentrant lock to protect Scope[]
     fScope: TDhcpScopes;
-    fFileFlushSeconds: cardinal;
-    fIdleTix, fFileFlushTix, fModifSequence, fModifSaved: cardinal;
+    fFileFlushSeconds, fMetricsCsvSeconds: cardinal;
+    fIdleTix, fFileFlushTix, fMetricsCsvTix, fModifSequence, fModifSaved: cardinal;
     fLog: TSynLogClass;
-    fFileName: TFileName;
+    fFileName, fMetricsFolder, fMetricsJson: TFileName;
     fOnComputeResponse: TOnComputeResponse;
     fState: (sNone, sSetup, sSetupFailed, sShutdown);
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
+    procedure SetMetricsFolder(const folder: TFileName);
     function ParseFrame(var Data: TDhcpProcessData): boolean; virtual;
     function RetrieveFrameIP(var Data: TDhcpProcessData; Lease: PDhcpLease): boolean; virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
@@ -797,6 +813,15 @@ type
     /// restore the internal entry list using SaveToText() format
     // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
+    /// aggregate all per-scope Total metrics into a single counter
+    procedure ConsolidateMetrics(var global: TDhcpMetrics); overload;
+    /// aggregate all per-scope metrics into a single set of counters
+    procedure ConsolidateMetrics(var global: TDhcpAllMetrics); overload;
+    /// persist the main metrics as JSON object
+    // - wrapper around ConsolidateMetrics() and MetricsToJson()
+    function SaveMetricsToJson: RawUtf8;
+    /// persist all scopes metrics as .json files and optional all .csv files
+    procedure SaveMetricsFolder(AndCsv: boolean = false);
     /// this is the main processing function of the DHCP server logic
     // - input should be stored in Data.Recv/RecvLen/RecvIp4 - and is untouched
     // - returns -1 if this input was invalid or unsupported
@@ -823,6 +848,11 @@ type
     // - it is easier and cleaner to use TDhcpServerSettings.FileName instead
     property FileName: TFileName
       read fFileName write SetFileName;
+    /// if set, OnIdle will persist the internal metrics on disk in this folder
+    // - as 'metrics.json', '192-168-1-0_24.json' and '202602-192-168-1-0_24.csv'
+    // - could be called after Setup() to refine the metrics process
+    property MetricsFolder: TFileName
+      read fMetricsFolder write SetMetricsFolder;
     /// the internal list modification sequence number
     // - increased at every update of the internal entry list
     // - used e.g. by OnIdle() to trigger SaveToFile() if FileName is defined
@@ -1779,6 +1809,7 @@ constructor TDhcpServerSettings.Create;
 begin
   inherited Create;
   fFileFlushSeconds := 30; // good tradeoff: low disk writes, still safe for PXE
+  fMetricsCsvMinutes := 5;
 end;
 
 function TDhcpServerSettings.Verify: string;
@@ -1889,10 +1920,14 @@ begin
       new[i] := s^;
     end;
     fScope := new; // replace
-    // support FileName background persistence
+    // support FileName/MetricsFolder background persistence
     if aSettings.FileName <> '' then
       SetFileName(aSettings.FileName); // LoadFromFile() once fScope[] are set
     fFileFlushSeconds := aSettings.FileFlushSeconds;
+    fMetricsCsvSeconds := aSettings.MetricsCsvMinutes * SecsPerMin;
+    fMetricsFolder := '';
+    if aSettings.MetricsFolder <> '' then
+      SetMetricsFolder(aSettings.MetricsFolder);
     // success
     fState := sSetup;
   finally
@@ -1981,10 +2016,12 @@ begin
   finally
     fScopeSafe.WriteUnLock;
   end;
-  // persist FileName for clean shutdown
+  // persist FileName and Metrics for clean shutdown
   if (fFileName <> '') and
      (fModifSaved <> fModifSequence) then
     SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
+  if fMetricsFolder <> '' then
+    SaveMetricsFolder({andCsv=}true);
   fLog.Add.Log(sllDebug, 'Shutdown: count=% seq=% saved=%',
     [GetCount, fModifSequence, fModifSaved], self);
   // don't Clear the entries: we may call Setup() and restart again
@@ -1995,6 +2032,7 @@ var
   tix32, n: cardinal;
   saved: integer;
   s: PDhcpScope;
+  csv: boolean;
 begin
   // make periodical process at most every second
   result := 0;
@@ -2019,18 +2057,29 @@ begin
     end;
     if result <> 0 then
       inc(fModifSequence); // trigger SaveToFile() below
-    // background persist into FileName if needed
+    // background persist into FileName and MetricsFolder if needed
     saved := 0;
     if (fFileName <> '') and
        (fFileFlushSeconds <> 0) and         // = 0 if disabled
        (fModifSaved <> fModifSequence) then // if something new to be written
       if tix32 >= fFileFlushTix then     // reached the next persistence time
       begin
+        fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
         saved := SaveToFile(fFileName);// make fScopeSafe.ReadLock/ReadUnLock
         // do not aggressively retry if saved<0 (write failed)
-        fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
         // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
         // recv(UDP packet) so we would need to create a background thread
+        if fMetricsFolder <> '' then
+        begin
+          csv := tix32 >= fMetricsCsvTix;
+          SaveMetricsFolder(csv);
+          if csv then
+          begin
+            AddMetrics(s^.Metrics.Total, s^.Metrics.Current);
+            FillZero(s^.Metrics.Current);
+            fMetricsCsvTix := tix32 + fMetricsCsvTix;
+          end;
+        end;
       end;
   finally
     fScopeSafe.ReadUnLock;
@@ -2176,6 +2225,158 @@ begin
     exit;
   LoadFromFile(name); // make fScopeSafe.WriteLock/WriteUnlock
   fFileName := name;
+end;
+
+procedure TDhcpProcess.ConsolidateMetrics(var global: TDhcpAllMetrics);
+var
+  n: integer;
+  s: PDhcpScope;
+begin
+  FillCharFast(global, SizeOf(global), 0);
+  fScopeSafe.ReadLock; // protect fScope[]
+  s := pointer(fScope);
+  if s <> nil then
+  begin
+    n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+    repeat
+      s^.Safe.Lock;
+      AddMetrics(global.Current, s^.Metrics.Current);
+      AddMetrics(global.Total,   s^.Metrics.Total);
+      s^.Safe.UnLock;
+      inc(s);
+      dec(n);
+    until n = 0;
+  end;
+  fScopeSafe.ReadUnLock;
+end;
+
+procedure TDhcpProcess.ConsolidateMetrics(var global: TDhcpMetrics);
+var
+  n: integer;
+  s: PDhcpScope;
+begin
+  FillZero(global);
+  fScopeSafe.ReadLock; // protect fScope[]
+  s := pointer(fScope);
+  if s <> nil then
+  begin
+    n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+    repeat
+      s^.Safe.Lock;
+      AddMetrics(global, s^.Metrics.Current);
+      AddMetrics(global, s^.Metrics.Total);
+      s^.Safe.UnLock;
+      inc(s);
+      dec(n);
+    until n = 0;
+  end;
+  fScopeSafe.ReadUnLock;
+end;
+
+function TDhcpProcess.SaveMetricsToJson: RawUtf8;
+var
+  global: TDhcpMetrics;
+begin
+  ConsolidateMetrics(global);
+  result := MetricsToJson(global);
+end;
+
+procedure TDhcpProcess.SaveMetricsFolder(AndCsv: boolean);
+var
+  s: PDhcpScope;
+  n: integer;
+  u: RawUtf8;
+  local: TDhcpMetrics;
+  T: TSynSystemTime;
+  now: TShort23;
+begin
+  // persist main 'metrics.json'
+  if fMetricsJson <> '' then
+    FileFromString(SaveMetricsToJson, fMetricsJson);
+  // persist all scope information
+  if AndCsv then
+  begin
+    T.FromNowUtc;
+    T.ToIsoDateTimeShort(now, ' ');
+    AppendShortChar(',', @now);
+  end;
+  fScopeSafe.ReadLock; // protect fScope[]
+  try
+    s := pointer(fScope);
+    if s <> nil then
+    begin
+      n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+      repeat
+        s^.Safe.Lock;
+        try
+          if s^.MetricsJsonFileName <> '' then
+          begin
+            // persist the main .json file of this scope in its current state
+            local := s^.Metrics.Current;
+            AddMetrics(local, s^.Metrics.Total);
+            u := MetricsToJson(local);
+            FileFromString(u, s^.MetricsJsonFileName);
+          end;
+          if AndCsv and
+             not IsZero(s^.Metrics.Current) then
+          begin
+            // persist the CSV and reset Current[]
+            u := MetricsToCsv(s^.Metrics.Current, s^.MetricsCsvFileNeedHeader, @now);
+            AppendToFile(u, s^.MetricsCsvFileName);
+            s^.MetricsCsvFileNeedHeader := false;
+            AddMetrics(s^.Metrics.Total, s^.Metrics.Current);
+            FillZero(s^.Metrics.Current);
+          end;
+        finally
+          s^.Safe.UnLock;
+        end;
+        inc(s);
+        dec(n);
+      until n = 0;
+    end;
+  finally
+    fScopeSafe.ReadUnLock;
+  end;
+end;
+
+procedure TDhcpProcess.SetMetricsFolder(const folder: TFileName);
+var
+  s: PDhcpScope;
+  u, json: RawUtf8;
+  n: integer;
+begin
+  fMetricsFolder := '';
+  if (folder = '') or
+     (fMetricsCsvSeconds = 0) or
+     not WritableFolder(folder, '', fMetricsFolder) then
+    exit;
+  fMetricsJson := fMetricsFolder + 'metrics.json';
+  fScopeSafe.ReadLock; // protect Scope[]
+  try
+    s := pointer(fScope);
+    if s <> nil then
+    begin
+      n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+      repeat
+        // compute the metrics file names for this scope
+        ShortStringToAnsi7String(s^.Subnet.ToShort, u);
+        u := StringReplaceChars(StringReplaceChars(u, '.', '-'), '/', '_');
+        s^.MetricsJsonFileName := MakeString([
+          fMetricsFolder, u, '.json']);
+        s^.MetricsCsvFileName := MakeString([
+          fMetricsFolder, NowToFileMonthShort, '_', u, '.csv']);
+        s^.MetricsCsvFileNeedHeader := not FileExists(s^.MetricsCsvFileName);
+        // retrieve the previous metrics totals for this scope
+        json := StringFromFile(s^.MetricsJsonFileName);
+        if json <> '' then
+          MetricsFromJson(json, s^.Metrics.Total);
+        inc(s);
+        dec(n);
+      until n = 0;
+    end;
+  finally
+    fScopeSafe.ReadUnLock;
+  end;
 end;
 
 function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
