@@ -489,6 +489,33 @@ type
 
 function ToText(st: TLeaseState): PShortString; overload;
 
+var
+  /// metrics fields identifier, e.g. "ack" or "static-hits"
+  // - as used by MetricsToJson/MetricsFromJson() JSON object serialization
+  METRIC_TXT: array[TDhcpScopeMetric] of RawUtf8;
+
+/// reset all dst[] values to 0
+procedure FillZero(var dst: TDhcpMetrics); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// efficiently compute inc(dst[], src[0]]) of TDhcpMetrics values
+procedure AddMetrics(var dst, src: TDhcpMetrics);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// check if all TDhcpMetrics values equals actually 0
+function IsZero(const m: TDhcpMetrics): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compare two sets of TDhcpMetrics values
+function IsEqual(const A, B: TDhcpMetrics): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// persist all DHCP metrics values as a JSON object
+function MetricsToJson(const m: TDhcpMetrics): RawUtf8; overload;
+
+/// unserialize all DHCP metrics from a MetricsToJson() JSON object
+function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
+
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
@@ -1087,6 +1114,40 @@ end;
 function ToText(st: TLeaseState): PShortString;
 begin
   result := GetEnumName(TypeInfo(TLeaseState), ord(st));
+end;
+
+procedure FillZero(var dst: TDhcpMetrics);
+begin
+  FillCharFast(dst, SizeOf(dst), 0);
+end;
+
+procedure AddMetrics(var dst, src: TDhcpMetrics);
+begin
+  AddInt64Array(@dst, @src, length(src));
+end;
+
+function IsZero(const m: TDhcpMetrics): boolean;
+begin
+  result := IsZero(@m, length(m));
+end;
+
+function IsEqual(const A, B: TDhcpMetrics): boolean;
+begin
+  result := CompareMem(@A, @B, SizeOf(A));
+end;
+
+function MetricsToJson(const m: TDhcpMetrics): RawUtf8;
+begin
+  JsonObjectFromQWordArray(@m, @METRIC_TXT, length(m), result, [woHumanReadable]);
+end;
+
+function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(json);
+  result := JsonObjectToQWordArray(tmp.buf, @m, @METRIC_TXT, length(m)) <> nil;
+  tmp.Done;
 end;
 
 
@@ -2542,6 +2603,7 @@ initialization
   assert(SizeOf(TDhcpLease) = 16);
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
 
