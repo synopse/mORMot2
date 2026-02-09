@@ -525,9 +525,9 @@ type
     LastDiscover, FreeListCount: integer;
     FreeList: TIntegerDynArray;
   public
-    /// where total counters are written e.g. '../192-168-1-0_24.json'
+    /// where total counters are written e.g. '.../192-168-1-0_24.json'
     MetricsJsonFileName: TFileName;
-    // where periodic values are appended e.g. '../202602_192-168-1-0_24.csv'
+    // where periodic values are appended e.g. '.../202602_192-168-1-0_24.csv'
     MetricsCsvFileName: TFileName;
     /// the 64-bit monotonic counters tracking this subnet/scope activity
     Metrics: TDhcpAllMetrics;
@@ -822,7 +822,7 @@ type
     /// persist the main metrics as JSON object
     // - wrapper around ConsolidateMetrics() and MetricsToJson()
     function SaveMetricsToJson: RawUtf8;
-    /// persist all scopes metrics as .json files and optional all .csv files
+    /// persist all scopes metrics as .json files and optionally all .csv files
     procedure SaveMetricsFolder(AndCsv: boolean = false);
     /// this is the main processing function of the DHCP server logic
     // - input should be stored in Data.Recv/RecvLen/RecvIp4 - and is untouched
@@ -2036,8 +2036,8 @@ function TDhcpProcess.OnIdle(tix64: Int64): integer;
 var
   tix32, n: cardinal;
   saved: integer;
-  s: PDhcpScope;
   csv: boolean;
+  s: PDhcpScope;
 begin
   // make periodical process at most every second
   result := 0;
@@ -2079,11 +2079,7 @@ begin
           csv := tix32 >= fMetricsCsvTix;
           SaveMetricsFolder(csv);
           if csv then
-          begin
-            AddMetrics(s^.Metrics.Total, s^.Metrics.Current);
-            FillZero(s^.Metrics.Current);
-            fMetricsCsvTix := tix32 + fMetricsCsvTix;
-          end;
+            fMetricsCsvTix := tix32 + fMetricsCsvSeconds; // append every 5 mins
         end;
       end;
   finally
