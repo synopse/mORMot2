@@ -2650,6 +2650,10 @@ procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
   out product: THash128Rec); inline;
 {$endif CPUINTEL}
 
+/// simply compute inc(d[], s[]) in a loop, up to a few elements
+// - is implemented using plain pascal - for a few elements, AVX2 is not worth it
+procedure AddInt64Array(d, s: PInt64Array; n: PtrInt);
+
 
 { ************ Low-level Functions Manipulating Bits }
 
@@ -9255,6 +9259,28 @@ begin
     until CompareMemSmall(@src, @dst, len);
 end;
 
+procedure AddInt64Array(d, s: PInt64Array; n: PtrInt);
+var
+  by4: PtrInt;
+begin
+  by4 := n shr 2;  // simple x4 unrolled scalar
+  if by4 <> 0 then
+    repeat
+      inc(d[0], s[0]);
+      inc(d[1], s[1]);
+      inc(d[2], s[2]);
+      inc(d[3], s[3]);
+      s := @s[4];
+      d := @d[4];
+      dec(by4);
+    until by4 = 0;
+  n := n and 3;
+  if n <> 0 then
+    repeat
+      dec(n);
+      inc(d[n], s[n]);
+    until n = 0;
+end;
 
 { ************ low-level functions manipulating bits }
 
