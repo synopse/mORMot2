@@ -496,13 +496,15 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 function JsonObjectAsJsonArrays(Json: PUtf8Char;
   out keys, values: RawUtf8): integer;
 
-/// unserialize some TJsonWriter.WriteObjectFromQWordArray() JSON object
-function JsonObjectToQWordArray(Json: PUtf8Char; Values: PQWordArray;
-  Names: PRawUtf8; ValuesCount: integer): PUtf8Char;
+/// unserialize some TJsonWriter.WriteObjectFromRttiArray() JSON object
+// - Values^ won't be zeroed first, so unknown or missing Names^ will be ignored
+function JsonObjectToRttiArray(Json: PUtf8Char; Values: pointer;
+  Names: PRawUtf8; ValuesCount: integer; Info: PRttiInfo): PUtf8Char;
 
-/// serialize some metrics as TJsonWriter.WriteObjectFromQWordArray() JSON object
-procedure JsonObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
-  ValuesCount: integer; var Result: RawUtf8; Options: TTextWriterWriteObjectOptions);
+/// serialize some values as TJsonWriter.WriteObjectFromRttiArray() JSON object
+procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+  ValuesCount: integer; Info: PRttiInfo; var Result: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
@@ -730,10 +732,10 @@ type
     // - this implementation will avoid most memory allocations
     procedure WriteObjectAsString(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
-    /// append some QWord values - e.g. some metrics - as a JSON object
+    /// append some raw RTTI values - e.g. some metrics - as a JSON object
     // - JSON properites come from GetEnumTrimmedNames() names
-    procedure WriteObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
-      ValuesCount: integer; Options: TTextWriterWriteObjectOptions);
+    procedure WriteObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+      ValuesCount: integer; Info: PRttiInfo; Options: TTextWriterWriteObjectOptions);
     /// same as AddDynArrayJson(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
@@ -4497,40 +4499,47 @@ begin
   end;
 end;
 
-function JsonObjectToQWordArray(Json: PUtf8Char; Values: PQWordArray;
-  Names: PRawUtf8; ValuesCount: integer): PUtf8Char;
+function JsonObjectToRttiArray(Json: PUtf8Char; Values: pointer;
+  Names: PRawUtf8; ValuesCount: integer; Info: PRttiInfo): PUtf8Char;
 var
   parser: TJsonParserContext;
   found: PtrInt;
 begin
   result := nil;
-  parser.InitParser(Json);
+  parser.InitParser(Json, Rtti.RegisterType(Info));
   if (ValuesCount = 0) or
+     not Assigned(parser.Info) or
+     not Assigned(parser.Info.JsonLoad) or
      not parser.ParseObject then
     exit; // invalid or {} or null
-  FillCharFast(Values^[0], ValuesCount * SizeOf(Values^[0]), 0);
   repeat
     if not parser.GetJsonFieldName then
       exit;
     found := FindNonVoidRawUtf8I(
       pointer(Names), parser.Value, parser.ValueLen, ValuesCount);
-    if not parser.ParseNext then
-      exit;
     if found >= 0 then
-      SetQWord(parser.Value, Values^[found]);
+    begin
+      TRttiJsonLoad(parser.Info.JsonLoad)(
+        PAnsiChar(Values) + found * parser.Info.Size, parser);
+      if not parser.Valid then
+        exit;
+    end
+    else if not parser.ParseNext then // just ignore unknown fields
+      exit;
   until parser.EndOfObject = '}';
   result := parser.Json;
 end;
 
-procedure JsonObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
-  ValuesCount: integer; var Result: RawUtf8; Options: TTextWriterWriteObjectOptions);
+procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+  ValuesCount: integer; Info: PRttiInfo; var Result: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
 var
   tmp: TTextWriterStackBuffer; // 8KB static is plain enough
   W: TJsonWriter;
 begin
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
-    W.WriteObjectFromQWordArray(Values, Names, ValuesCount, Options);
+    W.WriteObjectFromRttiArray(Values, Names, ValuesCount, Info, Options);
     W.SetText(Result);
   finally
     W.Free;
@@ -6223,20 +6232,25 @@ begin
   AddDirect('"');
 end;
 
-procedure TJsonWriter.WriteObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
-  ValuesCount: integer; Options: TTextWriterWriteObjectOptions);
+procedure TJsonWriter.WriteObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+  ValuesCount: integer; Info: PRttiInfo; Options: TTextWriterWriteObjectOptions);
+var
+  ctxt: TJsonSaveContext;
 begin
+  ctxt.Init(self, [], Rtti.RegisterType(Info));
   BlockBegin('{', Options);
-  repeat
-    WriteObjectPropNameHumanReadable(Names^);
-    AddQ(Values^);
-    dec(ValuesCount);
-    if ValuesCount = 0 then
-      break;
-    BlockAfterItem(Options);
-    inc(Names);
-    inc(Values);
-  until false;
+  if Assigned(ctxt.Info) and
+     Assigned(ctxt.Info.JsonSave) then
+    repeat
+      WriteObjectPropNameHumanReadable(Names^);
+      TRttiJsonSave(ctxt.Info.JsonSave)(Values, ctxt);
+      inc(PByte(Values), ctxt.Info.Size);
+      dec(ValuesCount);
+      if ValuesCount = 0 then
+        break;
+      BlockAfterItem(Options);
+      inc(Names);
+    until false;
   BlockEnd('}', Options);
 end;
 
