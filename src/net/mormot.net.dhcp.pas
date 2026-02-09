@@ -515,7 +515,7 @@ type
       localcopy: boolean): integer;
   private
     Options: TDhcpScopeOptions;
-    MetricsCsvFileNeedHeader: boolean;
+    MetricsCsvFileMonth: byte;
     // little-endian IP range values for NextIP
     LastIpLE, IpMinLE, IpMaxLE: TNetIP4;
     // match scope settings values in efficient actionable format
@@ -525,12 +525,14 @@ type
     LastDiscover, FreeListCount: integer;
     FreeList: TIntegerDynArray;
   public
-    /// where total counters are written e.g. '192-168-1-0_24.json'
+    /// where total counters are written e.g. '../192-168-1-0_24.json'
     MetricsJsonFileName: TFileName;
-    // where periodic values are appended e.g. '202602_192-168-1-0_24.csv'
+    // where periodic values are appended e.g. '../202602_192-168-1-0_24.csv'
     MetricsCsvFileName: TFileName;
     /// the 64-bit monotonic counters tracking this subnet/scope activity
     Metrics: TDhcpAllMetrics;
+    /// the subnet/scope file-compatible name, e.g. '192-168-1-0_24'
+    MetricsFileSubnet: TShort23;
   end;
 
   /// access to one scope/subnet definition
@@ -2289,8 +2291,9 @@ var
   s: PDhcpScope;
   n: integer;
   u: RawUtf8;
-  local: TDhcpMetrics;
+  needheader: boolean;
   T: TSynSystemTime;
+  local: TDhcpMetrics;
   now: TShort23;
 begin
   // persist main 'metrics.json'
@@ -2301,7 +2304,7 @@ begin
   begin
     T.FromNowUtc;
     T.ToIsoDateTimeShort(now, ' ');
-    AppendShortChar(',', @now);
+    AppendShortChar(',', @now); // e.g. now := '2026-02-09 20:09:53,'
   end;
   fScopeSafe.ReadLock; // protect fScope[]
   try
@@ -2324,9 +2327,17 @@ begin
              not IsZero(s^.Metrics.Current) then
           begin
             // persist the CSV and reset Current[]
-            u := MetricsToCsv(s^.Metrics.Current, s^.MetricsCsvFileNeedHeader, @now);
+            needheader := false;
+            if s^.MetricsCsvFileMonth <> T.Month then // first time or new month
+            begin
+              s^.MetricsCsvFileMonth := T.Month;
+              s^.MetricsCsvFileName := MakeString([fMetricsFolder,
+                UInt4DigitsToShort(T.Year), UInt2DigitsToShortFast(T.Month),
+                '_', s^.MetricsFileSubnet, '.csv']);
+              needheader := not FileExists(s^.MetricsCsvFileName);
+            end;
+            u := MetricsToCsv(s^.Metrics.Current, needheader, @now);
             AppendToFile(u, s^.MetricsCsvFileName);
-            s^.MetricsCsvFileNeedHeader := false;
             AddMetrics(s^.Metrics.Total, s^.Metrics.Current);
             FillZero(s^.Metrics.Current);
           end;
@@ -2345,8 +2356,10 @@ end;
 procedure TDhcpProcess.SetMetricsFolder(const folder: TFileName);
 var
   s: PDhcpScope;
-  u, json: RawUtf8;
+  json: RawUtf8;
   n: integer;
+  i: PtrInt;
+  p: PAnsiChar;
 begin
   fMetricsFolder := '';
   if (folder = '') or
@@ -2362,13 +2375,17 @@ begin
       n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
       repeat
         // compute the metrics file names for this scope
-        ShortStringToAnsi7String(s^.Subnet.ToShort, u);
-        u := StringReplaceChars(StringReplaceChars(u, '.', '-'), '/', '_');
+        s^.MetricsFileSubnet := s^.Subnet.ToShort;
+        p := @s^.MetricsFileSubnet;
+        for i := 1 to ord(p[0]) do // make it file-compatible
+          case p[i] of
+            '.':
+              p[i] := '-';
+            '/':
+              p[i] := '_';
+          end;
         s^.MetricsJsonFileName := MakeString([
-          fMetricsFolder, u, '.json']);
-        s^.MetricsCsvFileName := MakeString([
-          fMetricsFolder, NowToFileMonthShort, '_', u, '.csv']);
-        s^.MetricsCsvFileNeedHeader := not FileExists(s^.MetricsCsvFileName);
+          fMetricsFolder, s^.MetricsFileSubnet, '.json']);
         // retrieve the previous metrics totals for this scope
         json := StringFromFile(s^.MetricsJsonFileName);
         if json <> '' then
