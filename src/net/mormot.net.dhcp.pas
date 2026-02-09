@@ -1849,16 +1849,19 @@ var
   s: PDhcpScope;
 begin
   result := 0;
-  s := pointer(fScope);
-  if s = nil then
+  if fScope = nil then
     exit;
-  fScopeSafe.ReadLock;
-  n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
-  repeat
-    inc(result, s^.Count - s^.FreeListCount);
-    inc(s);
-    dec(n);
-  until n = 0;
+  fScopeSafe.ReadLock; // protect fScope[]
+  s := pointer(fScope);
+  if s <> nil then
+  begin
+    n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+    repeat
+      inc(result, s^.Count - s^.FreeListCount);
+      inc(s);
+      dec(n);
+    until n = 0;
+  end;
   fScopeSafe.ReadUnLock;
 end;
 
