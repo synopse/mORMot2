@@ -8308,7 +8308,7 @@ begin
   n := props.Count;
   repeat
     if woHumanReadable in Options then
-      W.WriteObjectPropNameHumanReadable(pointer(cur^.JsonName), length(cur^.JsonName))
+      W.WriteObjectPropNameHumanReadable(cur^.JsonName)
     else
       W.AddProp(pointer(cur^.JsonName), length(cur^.JsonName));
     cur^.GetJsonValues(Instance, W);
