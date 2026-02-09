@@ -20,10 +20,18 @@ type
     Question: RawUTF8;
   end;
 
+  TSampleInfo = packed record
+    ID: TID;
+    Name: RawUTF8;
+  end;
+  TSampleInfoDynArray = array of TSampleInfo;
+
   IExample = interface(IInvokable)
     ['{52A512A1-8A54-4A2E-BB24-F87501DBA396}']
     function Add(var ASample: TSample): Integer;
     function Find(var ASample: TSample): Integer;
+    function List(out ASamples: TSampleInfoDynArray): Integer;
+    function Delete(AID: TID): Integer;
   end;
 
   TOrmSample = class(TOrm)

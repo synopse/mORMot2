@@ -39,6 +39,9 @@ type
     destructor Destroy; override;
     function RetrieveSample(var ASample: TSample): TSampleRepositoryError;
     function SaveNewSample(var ASample: TSample): TSampleRepositoryError;
+    function UpdateSample(AID: TID; var ASample: TSample): TSampleRepositoryError;
+    function ListSamples(out ASamples: TSampleInfoDynArray): TSampleRepositoryError;
+    function DeleteSample(AID: TID): TSampleRepositoryError;
   end;
 
 
@@ -113,6 +116,58 @@ begin
   finally
     OrmSample.Free;
   end;
+end;
+
+function TSampleRepository.UpdateSample(AID: TID; var ASample: TSample):
+    TSampleRepositoryError;
+var
+  OrmSample: TOrmSample;
+begin
+  Result := srNotFound;
+  OrmSample := TOrmSample.Create(FRestOrm, AID);
+  try
+    if OrmSample.IDValue = 0 then
+      exit;
+    OrmSample.Name := ASample.Name;
+    OrmSample.Question := ASample.Question;
+    if FRestOrm.Update(OrmSample) then
+      Result := srSuccess
+    else
+      Result := srWriteFailure;
+  finally
+    OrmSample.Free;
+  end;
+end;
+
+function TSampleRepository.ListSamples(out ASamples: TSampleInfoDynArray):
+    TSampleRepositoryError;
+var
+  OrmSample: TOrmSample;
+  Count: Integer;
+begin
+  Result := srSuccess;
+  SetLength(ASamples, 0);
+  Count := 0;
+  OrmSample := TOrmSample.CreateAndFillPrepare(FRestOrm, '', []);
+  try
+    while OrmSample.FillOne do
+    begin
+      SetLength(ASamples, Count + 1);
+      ASamples[Count].ID := OrmSample.ID;
+      ASamples[Count].Name := OrmSample.Name;
+      Inc(Count);
+    end;
+  finally
+    OrmSample.Free;
+  end;
+end;
+
+function TSampleRepository.DeleteSample(AID: TID): TSampleRepositoryError;
+begin
+  if FRestOrm.Delete(TOrmSample, AID) then
+    Result := srSuccess
+  else
+    Result := srNotFound;
 end;
 
 

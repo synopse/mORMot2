@@ -1,0 +1,8 @@
+# Local Configuration Example
+# Copy to .claude.local and adjust paths for your system
+
+# Path to lazbuild executable
+LAZBUILD_PATH=~/fpcupdeluxe/lazarus/lazbuild
+
+# Path to mORMot2 source
+MORMOT2_PATH=~/mORMot2

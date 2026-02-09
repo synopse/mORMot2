@@ -7,6 +7,7 @@ uses
   mormot.core.base,
   mormot.core.data,
   mormot.core.os,
+  mormot.core.text,
   mormot.core.unicode,
   mormot.orm.core,
   mormot.orm.rest,
@@ -20,6 +21,7 @@ type
   TSampleServer = class(TRestServerDB)
   published
     procedure Example(Ctxt: TRestServerUriContext);
+    procedure ExampleList(Ctxt: TRestServerUriContext);
   end;
 
 implementation
@@ -76,9 +78,41 @@ begin
       end;
     end;
   mDELETE:
-    Ctxt.Error('Forbidden', HTTP_FORBIDDEN);
+    begin
+      if Self.Orm.Delete(TOrmSample, Ctxt.InputInt['ID']) then
+      begin
+        Writeln('Record deleted OK');
+        Ctxt.Success(HTTP_SUCCESS);
+      end
+      else
+      begin
+        Writeln('Error deleting Record');
+        Ctxt.Error('Not found', HTTP_NOTFOUND);
+      end;
+    end;
   end;
 end;
 
+procedure TSampleServer.ExampleList(Ctxt: TRestServerUriContext);
+var
+  OrmSample: TOrmSample;
+  Json: RawUTF8;
+begin
+  Json := '[';
+  OrmSample := TOrmSample.CreateAndFillPrepare(Self.Orm, '', []);
+  try
+    while OrmSample.FillOne do
+    begin
+      if Json <> '[' then
+        Json := Json + ',';
+      Json := Json + FormatUTF8('{"ID":%,"Name":"%"}',
+        [OrmSample.ID, OrmSample.Name]);
+    end;
+  finally
+    OrmSample.Free;
+  end;
+  Json := Json + ']';
+  Ctxt.Returns(Json, HTTP_SUCCESS, JSON_CONTENT_TYPE_HEADER);
+end;
 
 end.
