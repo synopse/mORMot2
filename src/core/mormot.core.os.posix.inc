@@ -2381,18 +2381,6 @@ begin
   result := folder <> '';
 end;
 
-function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
-begin
-  result := false;
-  folder := EnsureDirectoryExists(Join([parent, sub]));
-  if folder = '' then
-    exit;
-  if FileIsWritable(folder) then
-    result := true
-  else
-    folder := '';
-end;
-
 function IsExpandedPath(const FileName: TFileName): boolean;
 begin
   result := (FileName = '') or
