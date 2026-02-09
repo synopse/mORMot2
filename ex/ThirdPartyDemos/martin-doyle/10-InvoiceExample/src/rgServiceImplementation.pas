@@ -9,7 +9,7 @@
   Module : rgServiceImplementation.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -135,20 +135,20 @@ begin
     while Customer.FillOne do
     begin
       ACustomers[Count].CustomerID := Customer.ID;
-      ACustomers[Count].CustomerNo := Utf8ToString(Customer.CustomerNo);
-      ACustomers[Count].Company := Utf8ToString(Customer.Company);
+      ACustomers[Count].CustomerNo := Customer.CustomerNo;
+      ACustomers[Count].Company := Customer.Company;
       if Customer.Contacts.Count > 0 then
       begin
         Contact := Customer.Contacts[0];
-        ACustomers[Count].Phone := Utf8ToString(Contact.Phones[0]);
-        ACustomers[Count].Fax := Utf8ToString(Contact.Phones[1]);
+        ACustomers[Count].Phone := Contact.Phones[0];
+        ACustomers[Count].Fax := Contact.Phones[1];
         if Contact.Addresses.Count > 0 then
         begin
           Address := Contact.Addresses[0];
-          ACustomers[Count].Address := Utf8ToString(Address.Street1);
-          ACustomers[Count].Zip := Utf8ToString(Address.Code);
-          ACustomers[Count].City := Utf8ToString(Address.City);
-          ACustomers[Count].Country := Utf8ToString(Address.Country);
+          ACustomers[Count].Address := Address.Street1;
+          ACustomers[Count].Zip := Address.Code;
+          ACustomers[Count].City := Address.City;
+          ACustomers[Count].Country := Address.Country;
         end;
       end;
       Inc(Count);
@@ -175,20 +175,20 @@ begin
     end;
 
     ACustomer.CustomerID := Customer.ID;
-    ACustomer.CustomerNo := Utf8ToString(Customer.CustomerNo);
-    ACustomer.Company := Utf8ToString(Customer.Company);
+    ACustomer.CustomerNo := Customer.CustomerNo;
+    ACustomer.Company := Customer.Company;
     if Customer.Contacts.Count > 0 then
     begin
       Contact := Customer.Contacts[0];
-      ACustomer.Phone := Utf8ToString(Contact.Phones[0]);
-      ACustomer.Fax := Utf8ToString(Contact.Phones[1]);
+      ACustomer.Phone := Contact.Phones[0];
+      ACustomer.Fax := Contact.Phones[1];
       if Contact.Addresses.Count > 0 then
       begin
         Address := Contact.Addresses[0];
-        ACustomer.Address := Utf8ToString(Address.Street1);
-        ACustomer.Zip := Utf8ToString(Address.Code);
-        ACustomer.City := Utf8ToString(Address.City);
-        ACustomer.Country := Utf8ToString(Address.Country);
+        ACustomer.Address := Address.Street1;
+        ACustomer.Zip := Address.Code;
+        ACustomer.City := Address.City;
+        ACustomer.Country := Address.Country;
       end;
     end;
     Result := cerSuccess;
@@ -219,18 +219,18 @@ begin
 
   Customer := TOrmCustomer.Create;
   try
-    Customer.CustomerNo := StringToUtf8(ACustomer.CustomerNo);
-    Customer.Company := StringToUtf8(ACustomer.Company);
+    Customer.CustomerNo := ACustomer.CustomerNo;
+    Customer.Company := ACustomer.Company;
 
     // Build nested contact with phones and address
     Contact := TPersonItem(Customer.Contacts.Add);
-    Contact.Phones.Add(StringToUtf8(ACustomer.Phone));
-    Contact.Phones.Add(StringToUtf8(ACustomer.Fax));
+    Contact.Phones.Add(ACustomer.Phone);
+    Contact.Phones.Add(ACustomer.Fax);
     Address := TAddressItem(Contact.Addresses.Add);
-    Address.Street1 := StringToUtf8(ACustomer.Address);
-    Address.Code := StringToUtf8(ACustomer.Zip);
-    Address.City := StringToUtf8(ACustomer.City);
-    Address.Country := StringToUtf8(ACustomer.Country);
+    Address.Street1 := ACustomer.Address;
+    Address.Code := ACustomer.Zip;
+    Address.City := ACustomer.City;
+    Address.Country := ACustomer.Country;
 
     ANewID := Self.Server.Orm.Add(Customer, True);
     if ANewID > 0 then
@@ -267,8 +267,8 @@ begin
       Exit;
     end;
 
-    Customer.CustomerNo := StringToUtf8(ACustomer.CustomerNo);
-    Customer.Company := StringToUtf8(ACustomer.Company);
+    Customer.CustomerNo := ACustomer.CustomerNo;
+    Customer.Company := ACustomer.Company;
 
     // Ensure contact structure exists
     if Customer.Contacts.Count = 0 then
@@ -283,17 +283,17 @@ begin
 
     while Contact.Phones.Count < 2 do
       Contact.Phones.Add('');
-    Contact.Phones[0] := StringToUtf8(ACustomer.Phone);
-    Contact.Phones[1] := StringToUtf8(ACustomer.Fax);
+    Contact.Phones[0] := ACustomer.Phone;
+    Contact.Phones[1] := ACustomer.Fax;
 
     if Contact.Addresses.Count = 0 then
       Address := TAddressItem(Contact.Addresses.Add)
     else
       Address := Contact.Addresses[0];
-    Address.Street1 := StringToUtf8(ACustomer.Address);
-    Address.Code := StringToUtf8(ACustomer.Zip);
-    Address.City := StringToUtf8(ACustomer.City);
-    Address.Country := StringToUtf8(ACustomer.Country);
+    Address.Street1 := ACustomer.Address;
+    Address.Code := ACustomer.Zip;
+    Address.City := ACustomer.City;
+    Address.Country := ACustomer.Country;
 
     if Self.Server.Orm.Update(Customer) then
       Result := cerSuccess;
@@ -370,7 +370,7 @@ begin
     while Order.FillOne do
     begin
       AInvoices[Count].OrderID := Order.ID;
-      AInvoices[Count].OrderNo := Utf8ToString(Order.OrderNo);
+      AInvoices[Count].OrderNo := Order.OrderNo;
       AInvoices[Count].SaleDate := TimeLogToDateTime(Order.SaleDate);
 
       if Order.ShipDate > 0 then
@@ -422,7 +422,7 @@ begin
     end;
 
     AInvoice.OrderID := Order.ID;
-    AInvoice.OrderNo := Utf8ToString(Order.OrderNo);
+    AInvoice.OrderNo := Order.OrderNo;
     AInvoice.SaleDate := TimeLogToDateTime(Order.SaleDate);
 
     if Order.ShipDate > 0 then
@@ -432,7 +432,7 @@ begin
     AInvoice.ShipDate := ShipDateTime;
 
     AInvoice.CustomerID := Order.Customer.ID;
-    AInvoice.CustomerName := Utf8ToString(Order.Customer.Company);
+    AInvoice.CustomerName := Order.Customer.Company;
 
     AInvoice.ItemsTotal := Order.ItemsTotal;
     AInvoice.AmountPaid := Order.AmountPaid;
@@ -452,8 +452,8 @@ begin
     begin
       Item := Order.Items[i];
       AInvoice.Items[i].Position := Item.Position;
-      AInvoice.Items[i].PartNo := Utf8ToString(Item.PartNo);
-      AInvoice.Items[i].Description := Utf8ToString(Item.Description);
+      AInvoice.Items[i].PartNo := Item.PartNo;
+      AInvoice.Items[i].Description := Item.Description;
       AInvoice.Items[i].Quantity := Item.Quantity;
       AInvoice.Items[i].ListPrice := Item.ListPrice;
       AInvoice.Items[i].Discount := Item.Discount;
@@ -500,7 +500,7 @@ begin
     Order := TOrmCustomerOrder.Create;
     try
       Order.Customer := Customer.AsTOrm;
-      Order.OrderNo := StringToUtf8(AInvoice.OrderNo);
+      Order.OrderNo := AInvoice.OrderNo;
       Order.SaleDate := TimeLogFromDateTime(AInvoice.SaleDate);
       Order.ShipDate := TimeLogFromDateTime(AInvoice.ShipDate);
       Order.AmountPaid := 0;
@@ -511,8 +511,8 @@ begin
       begin
         Item := TItem(Order.Items.Add);
         Item.Position := i + 1;
-        Item.PartNo := StringToUtf8(AInvoice.Items[i].PartNo);
-        Item.Description := StringToUtf8(AInvoice.Items[i].Description);
+        Item.PartNo := AInvoice.Items[i].PartNo;
+        Item.Description := AInvoice.Items[i].Description;
         Item.Quantity := AInvoice.Items[i].Quantity;
         Item.ListPrice := AInvoice.Items[i].ListPrice;
         Item.Discount := AInvoice.Items[i].Discount;
@@ -559,7 +559,7 @@ begin
       Exit;
     end;
 
-    Order.OrderNo := StringToUtf8(AInvoice.OrderNo);
+    Order.OrderNo := AInvoice.OrderNo;
     Order.SaleDate := TimeLogFromDateTime(AInvoice.SaleDate);
     Order.ShipDate := TimeLogFromDateTime(AInvoice.ShipDate);
 
@@ -570,8 +570,8 @@ begin
     begin
       Item := TItem(Order.Items.Add);
       Item.Position := i + 1;
-      Item.PartNo := StringToUtf8(AInvoice.Items[i].PartNo);
-      Item.Description := StringToUtf8(AInvoice.Items[i].Description);
+      Item.PartNo := AInvoice.Items[i].PartNo;
+      Item.Description := AInvoice.Items[i].Description;
       Item.Quantity := AInvoice.Items[i].Quantity;
       Item.ListPrice := AInvoice.Items[i].ListPrice;
       Item.Discount := AInvoice.Items[i].Discount;
@@ -719,6 +719,7 @@ begin
     Table.Free;
   end;
 
+  AStats.Timestamp := NowUtcToString;
   Result := 0;
 end;
 
@@ -746,7 +747,7 @@ begin
       Exit;
     end;
     ASummary.CustomerID := Customer.ID;
-    ASummary.CustomerName := Utf8ToString(Customer.Company);
+    ASummary.CustomerName := Customer.Company;
   finally
     Customer.Free;
   end;
@@ -819,8 +820,8 @@ begin
     for i := 1 to Table.RowCount do
     begin
       AItems[i - 1].OrderID := Table.GetAsInteger(i, 0);
-      AItems[i - 1].Company := Utf8ToString(Table.GetU(i, 1));
-      AItems[i - 1].OrderNo := Utf8ToString(Table.GetU(i, 2));
+      AItems[i - 1].Company := Table.GetU(i, 1);
+      AItems[i - 1].OrderNo := Table.GetU(i, 2);
       SaleDateValue := Table.GetAsInt64(i, 3);
       if SaleDateValue > 0 then
         AItems[i - 1].SaleDate := TimeLogToDateTime(SaleDateValue)
@@ -876,8 +877,8 @@ begin
         AItems[i - 1].SaleDate := TimeLogToDateTime(SaleDateValue)
       else
         AItems[i - 1].SaleDate := 0;
-      AItems[i - 1].Company := Utf8ToString(Table.GetU(i, 2));
-      AItems[i - 1].OrderNo := Utf8ToString(Table.GetU(i, 3));
+      AItems[i - 1].Company := Table.GetU(i, 2);
+      AItems[i - 1].OrderNo := Table.GetU(i, 3);
       AItems[i - 1].AmountPaid := Table.GetAsCurrency(i, 4);
     end;
   finally
@@ -924,7 +925,7 @@ begin
     for i := 1 to Table.RowCount do
     begin
       AItems[i - 1].CustomerID := Table.GetAsInteger(i, 0);
-      AItems[i - 1].Company := Utf8ToString(Table.GetU(i, 1));
+      AItems[i - 1].Company := Table.GetU(i, 1);
       AItems[i - 1].InvoiceCount := Table.GetAsInteger(i, 2);
       AItems[i - 1].TotalRevenue := Table.GetAsCurrency(i, 3);
       AItems[i - 1].TotalPaid := Table.GetAsCurrency(i, 4);

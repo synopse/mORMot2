@@ -9,7 +9,7 @@
   Module : rgReportPayments.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -210,8 +210,8 @@ begin
       ListItem.Caption := AppDateToStr(Items[i].SaleDate)
     else
       ListItem.Caption := '';
-    ListItem.SubItems.Add(Items[i].Company);
-    ListItem.SubItems.Add(Items[i].OrderNo);
+    ListItem.SubItems.Add(Utf8ToString(Items[i].Company));
+    ListItem.SubItems.Add(Utf8ToString(Items[i].OrderNo));
     ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].AmountPaid)^));
     ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;

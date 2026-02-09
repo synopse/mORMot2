@@ -9,7 +9,7 @@
   Module : rgDtoTypes.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -39,7 +39,8 @@ interface
 {$I mormot.defines.inc}
 
 uses
-  Classes;
+  mormot.core.base,
+  mormot.core.rtti;
 
 type
   TInvoiceStatus = (isPaid, isOpen, isOverdue);
@@ -52,8 +53,8 @@ type
 
   TDtoInvoiceItem = packed record
     Position: integer;
-    PartNo: string;
-    Description: string;
+    PartNo: RawUtf8;
+    Description: RawUtf8;
     Quantity: double;
     ListPrice: currency;
     Discount: integer;
@@ -66,47 +67,47 @@ type
 
   TDtoCustomer = packed record
     CustomerID: longint;
-    CustomerNo: string;
-    Company: string;
-    Phone: string;
-    Fax: string;
-    Address: string;
-    Zip: string;
-    City: string;
-    Country: string;
+    CustomerNo: RawUtf8;
+    Company: RawUtf8;
+    Phone: RawUtf8;
+    Fax: RawUtf8;
+    Address: RawUtf8;
+    Zip: RawUtf8;
+    City: RawUtf8;
+    Country: RawUtf8;
   end;
 
   PDtoContact = ^TDtoContact;
 
   TDtoContact = packed record
-    FirstName: string;
-    MiddleName: string;
-    LastName: string;
-    Phone: string;
-    Fax: string;
-    Address: string;
-    Zip: string;
-    City: string;
-    Country: string;
+    FirstName: RawUtf8;
+    MiddleName: RawUtf8;
+    LastName: RawUtf8;
+    Phone: RawUtf8;
+    Fax: RawUtf8;
+    Address: RawUtf8;
+    Zip: RawUtf8;
+    City: RawUtf8;
+    Country: RawUtf8;
   end;
 
   PDtoOrder = ^TDtoOrder;
 
   TDtoOrder = packed record
     OrderID: longint;
-    OrderNo: string;
+    OrderNo: RawUtf8;
     SaleDate: TDateTime;
     ShipDate: TDateTime;
     ItemsTotal: currency;
     AmountPaid: currency;
     OpenAmount: currency;
     Status: TInvoiceStatus;
-    CustomerNo: string;
-    Company: string;
-    ShipAddress: string;
-    ShipZip: string;
-    ShipCity: string;
-    ShipCountry: string;
+    CustomerNo: RawUtf8;
+    Company: RawUtf8;
+    ShipAddress: RawUtf8;
+    ShipZip: RawUtf8;
+    ShipCity: RawUtf8;
+    ShipCountry: RawUtf8;
   end;
 
   // Report DTOs
@@ -115,8 +116,8 @@ type
 
   TDtoOpenItem = packed record
     OrderID: longint;
-    Company: string;
-    OrderNo: string;
+    Company: RawUtf8;
+    OrderNo: RawUtf8;
     SaleDate: TDateTime;
     ItemsTotal: currency;
     OpenAmount: currency;
@@ -130,8 +131,8 @@ type
   TDtoPaymentReceipt = packed record
     OrderID: longint;
     SaleDate: TDateTime;
-    Company: string;
-    OrderNo: string;
+    Company: RawUtf8;
+    OrderNo: RawUtf8;
     AmountPaid: currency;
   end;
 
@@ -141,7 +142,7 @@ type
 
   TDtoCustomerRevenue = packed record
     CustomerID: longint;
-    Company: string;
+    Company: RawUtf8;
     InvoiceCount: integer;
     TotalRevenue: currency;
     TotalPaid: currency;
@@ -154,7 +155,7 @@ type
 
   TDtoMonthlyOverview = packed record
     Month: integer;
-    MonthName: string;
+    MonthName: RawUtf8;
     InvoiceCount: integer;
     Revenue: currency;
     PaymentsReceived: currency;
@@ -177,11 +178,11 @@ type
 
   TDtoInvoiceDetail = packed record
     OrderID: longint;
-    OrderNo: string;
+    OrderNo: RawUtf8;
     SaleDate: TDateTime;
     ShipDate: TDateTime;
     CustomerID: longint;
-    CustomerName: string;
+    CustomerName: RawUtf8;
     ItemsTotal: currency;
     AmountPaid: currency;
     OpenAmount: currency;
@@ -192,7 +193,7 @@ type
   PDtoInvoiceSave = ^TDtoInvoiceSave;
 
   TDtoInvoiceSave = packed record
-    OrderNo: string;
+    OrderNo: RawUtf8;
     SaleDate: TDateTime;
     ShipDate: TDateTime;
     Items: TDtoInvoiceItemArray;
@@ -206,13 +207,14 @@ type
     OpenItemsAmount: currency;
     DueTodayCount: integer;
     OverdueCount: integer;
+    Timestamp: RawUtf8;
   end;
 
   PDtoCustomerSummary = ^TDtoCustomerSummary;
 
   TDtoCustomerSummary = packed record
     CustomerID: longint;
-    CustomerName: string;
+    CustomerName: RawUtf8;
     InvoiceCount: integer;
     TotalRevenue: currency;
     OpenCount: integer;
@@ -221,5 +223,53 @@ type
   end;
 
 implementation
+
+initialization
+  {$ifndef HASEXTRECORDRTTI}
+  Rtti.RegisterFromText(TypeInfo(TDtoInvoiceItem),
+    'Position: integer; PartNo: RawUtf8; Description: RawUtf8; ' +
+    'Quantity: double; ListPrice: currency; Discount: integer; Amount: currency');
+  Rtti.RegisterFromText(TypeInfo(TDtoCustomer),
+    'CustomerID: longint; CustomerNo: RawUtf8; Company: RawUtf8; ' +
+    'Phone: RawUtf8; Fax: RawUtf8; Address: RawUtf8; ' +
+    'Zip: RawUtf8; City: RawUtf8; Country: RawUtf8');
+  Rtti.RegisterFromText(TypeInfo(TDtoContact),
+    'FirstName: RawUtf8; MiddleName: RawUtf8; LastName: RawUtf8; ' +
+    'Phone: RawUtf8; Fax: RawUtf8; Address: RawUtf8; ' +
+    'Zip: RawUtf8; City: RawUtf8; Country: RawUtf8');
+  Rtti.RegisterFromText(TypeInfo(TDtoOrder),
+    'OrderID: longint; OrderNo: RawUtf8; SaleDate: TDateTime; ShipDate: TDateTime; ' +
+    'ItemsTotal: currency; AmountPaid: currency; OpenAmount: currency; ' +
+    'Status: byte; CustomerNo: RawUtf8; Company: RawUtf8; ' +
+    'ShipAddress: RawUtf8; ShipZip: RawUtf8; ShipCity: RawUtf8; ShipCountry: RawUtf8');
+  Rtti.RegisterFromText(TypeInfo(TDtoOpenItem),
+    'OrderID: longint; Company: RawUtf8; OrderNo: RawUtf8; ' +
+    'SaleDate: TDateTime; ItemsTotal: currency; OpenAmount: currency; DaysOverdue: integer');
+  Rtti.RegisterFromText(TypeInfo(TDtoPaymentReceipt),
+    'OrderID: longint; SaleDate: TDateTime; Company: RawUtf8; ' +
+    'OrderNo: RawUtf8; AmountPaid: currency');
+  Rtti.RegisterFromText(TypeInfo(TDtoCustomerRevenue),
+    'CustomerID: longint; Company: RawUtf8; InvoiceCount: integer; ' +
+    'TotalRevenue: currency; TotalPaid: currency; TotalOpen: currency');
+  Rtti.RegisterFromText(TypeInfo(TDtoMonthlyOverview),
+    'Month: integer; MonthName: RawUtf8; InvoiceCount: integer; ' +
+    'Revenue: currency; PaymentsReceived: currency; OpenAmount: currency');
+  Rtti.RegisterFromText(TypeInfo(TDtoInvoiceDetail),
+    'OrderID: longint; OrderNo: RawUtf8; SaleDate: TDateTime; ShipDate: TDateTime; ' +
+    'CustomerID: longint; CustomerName: RawUtf8; ItemsTotal: currency; ' +
+    'AmountPaid: currency; OpenAmount: currency; Status: byte; ' +
+    'Items: [Position: integer; PartNo: RawUtf8; Description: RawUtf8; ' +
+    'Quantity: double; ListPrice: currency; Discount: integer; Amount: currency]');
+  Rtti.RegisterFromText(TypeInfo(TDtoInvoiceSave),
+    'OrderNo: RawUtf8; SaleDate: TDateTime; ShipDate: TDateTime; ' +
+    'Items: [Position: integer; PartNo: RawUtf8; Description: RawUtf8; ' +
+    'Quantity: double; ListPrice: currency; Discount: integer; Amount: currency]');
+  Rtti.RegisterFromText(TypeInfo(TDtoDashboardStats),
+    'CustomerCount: integer; OpenItemsCount: integer; OpenItemsAmount: currency; ' +
+    'DueTodayCount: integer; OverdueCount: integer; Timestamp: RawUtf8');
+  Rtti.RegisterFromText(TypeInfo(TDtoCustomerSummary),
+    'CustomerID: longint; CustomerName: RawUtf8; InvoiceCount: integer; ' +
+    'TotalRevenue: currency; OpenCount: integer; OpenAmount: currency; PaidCount: integer');
+  {$endif HASEXTRECORDRTTI}
 
 end.

@@ -9,7 +9,7 @@
   Module : rgCustomerEdit.pas
 
   Last modified
-    Date : 28.01.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -97,7 +97,8 @@ var
 implementation
 
 uses
-  mormot.core.base;
+  mormot.core.base,
+  mormot.core.unicode;
 
 {$R *.dfm}
 
@@ -282,14 +283,14 @@ begin
     Res := RgServices.CustomerService.GetCustomer(FCustomerID, Customer);
     if Res = cerSuccess then
     begin
-      EditCustomerNo.Text := Customer.CustomerNo;
-      EditCompany.Text := Customer.Company;
-      EditPhone.Text := Customer.Phone;
-      EditFax.Text := Customer.Fax;
-      EditAddress.Text := Customer.Address;
-      EditZip.Text := Customer.Zip;
-      EditCity.Text := Customer.City;
-      EditCountry.Text := Customer.Country;
+      EditCustomerNo.Text := Utf8ToString(Customer.CustomerNo);
+      EditCompany.Text := Utf8ToString(Customer.Company);
+      EditPhone.Text := Utf8ToString(Customer.Phone);
+      EditFax.Text := Utf8ToString(Customer.Fax);
+      EditAddress.Text := Utf8ToString(Customer.Address);
+      EditZip.Text := Utf8ToString(Customer.Zip);
+      EditCity.Text := Utf8ToString(Customer.City);
+      EditCountry.Text := Utf8ToString(Customer.Country);
     end
     else
     begin
@@ -345,14 +346,14 @@ begin
   Finalize(Customer);
   FillChar(Customer, SizeOf(Customer), 0);
   Customer.CustomerID := FCustomerID;
-  Customer.CustomerNo := Trim(EditCustomerNo.Text);
-  Customer.Company := Trim(EditCompany.Text);
-  Customer.Phone := Trim(EditPhone.Text);
-  Customer.Fax := Trim(EditFax.Text);
-  Customer.Address := Trim(EditAddress.Text);
-  Customer.Zip := Trim(EditZip.Text);
-  Customer.City := Trim(EditCity.Text);
-  Customer.Country := Trim(EditCountry.Text);
+  Customer.CustomerNo := StringToUtf8(Trim(EditCustomerNo.Text));
+  Customer.Company := StringToUtf8(Trim(EditCompany.Text));
+  Customer.Phone := StringToUtf8(Trim(EditPhone.Text));
+  Customer.Fax := StringToUtf8(Trim(EditFax.Text));
+  Customer.Address := StringToUtf8(Trim(EditAddress.Text));
+  Customer.Zip := StringToUtf8(Trim(EditZip.Text));
+  Customer.City := StringToUtf8(Trim(EditCity.Text));
+  Customer.Country := StringToUtf8(Trim(EditCountry.Text));
 
   if FormMode = fmInsert then
     Res := RgServices.CustomerService.CreateCustomer(Customer, NewID)

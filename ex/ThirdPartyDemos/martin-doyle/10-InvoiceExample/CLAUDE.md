@@ -153,6 +153,39 @@ HttpHost = 'localhost';
 HttpPort = '11111';
 ```
 
+## String Types in DTOs
+
+- **DTO / SOA / ORM layer**: use `RawUtf8` (mORMot2 native; no conversion overhead)
+- **UI layer**: use `string` (VCL/LCL component properties expect `string`)
+- **Boundary conversion**: `Utf8ToString()` / `StringToUtf8()` at the UI edge only
+
+`string` varies by platform (AnsiString on Delphi 7, UnicodeString on modern Delphi/FPC).
+`RawUtf8` is consistent everywhere and matches mORMot2's internal JSON/UTF-8 processing.
+
+## Delphi 7 RTTI for Records
+
+Delphi 7 only generates `TypeInfo()` for records containing at least one managed-type field
+(`RawUtf8`, `string`, dynamic array, interface, Variant). Records with only value-type fields
+(integer, currency, double, TDateTime) have **no RTTI** and will fail with
+*"has no type information"* when used in SOA interface parameters.
+
+**Fix** (both steps required):
+
+1. Add a managed-type field to the record (e.g. `Timestamp: RawUtf8`)
+2. Register the field layout in the `initialization` section:
+
+```pascal
+initialization
+  {$ifndef HASEXTRECORDRTTI}
+  Rtti.RegisterFromText(TypeInfo(TMyRecord),
+    'Field1,Field2: integer; Field3: RawUtf8');
+  {$endif HASEXTRECORDRTTI}
+```
+
+Step 1 makes `TypeInfo()` compile. Step 2 tells mORMot the field names/types for JSON
+serialization on Delphi 7 (which lacks extended RTTI). See `ex/mvc-blog/MVCViewModel.pas`
+for a real example.
+
 ## DB Query Optimization
 
 - Minimize round-trips: combine multiple queries into one

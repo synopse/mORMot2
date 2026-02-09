@@ -9,7 +9,7 @@
   Module : rgInvoiceEdit.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -255,7 +255,7 @@ begin
     begin
       ListItem := FItemsListGrid.Items.Add;
       ListItem.Caption := IntToStr(FItems[i].Position);
-      ListItem.SubItems.Add(FItems[i].Description);
+      ListItem.SubItems.Add(Utf8ToString(FItems[i].Description));
       ListItem.SubItems.Add(Format('%.2f', [FItems[i].Quantity]));
       ListItem.SubItems.Add(Curr64ToString(PInt64(@FItems[i].ListPrice)^));
       ListItem.SubItems.Add(IntToStr(FItems[i].Discount));
@@ -442,7 +442,7 @@ begin
 
   Finalize(Invoice);
   FillChar(Invoice, SizeOf(Invoice), 0);
-  Invoice.OrderNo := Trim(EditOrderNo.Text);
+  Invoice.OrderNo := StringToUtf8(Trim(EditOrderNo.Text));
   Invoice.SaleDate := SaleDate;
   Invoice.ShipDate := ShipDate;
   Invoice.Items := FItems;
@@ -498,7 +498,7 @@ begin
   RgServices.InvoiceService.GenerateOrderNo(OrderNo);
 
   Caption := 'New Invoice';
-  LabelCustomerValue.Caption := Summary.CustomerName;
+  LabelCustomerValue.Caption := Utf8ToString(Summary.CustomerName);
   EditOrderNo.Text := Utf8ToString(OrderNo);
   EditSaleDate.Text := AppDateToStr(Date);
   EditShipDate.Text := AppDateToStr(Date + 14);
@@ -529,8 +529,8 @@ begin
   FItems := Detail.Items;
 
   Caption := 'Edit Invoice';
-  LabelCustomerValue.Caption := Detail.CustomerName;
-  EditOrderNo.Text := Detail.OrderNo;
+  LabelCustomerValue.Caption := Utf8ToString(Detail.CustomerName);
+  EditOrderNo.Text := Utf8ToString(Detail.OrderNo);
   EditSaleDate.Text := AppDateToStr(Detail.SaleDate);
   EditShipDate.Text := AppDateToStr(Detail.ShipDate);
 

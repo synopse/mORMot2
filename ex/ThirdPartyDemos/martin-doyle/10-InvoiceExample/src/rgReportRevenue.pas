@@ -9,7 +9,7 @@
   Module : rgReportRevenue.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -197,7 +197,7 @@ begin
   for i := 0 to High(Items) do
   begin
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Items[i].Company;
+    ListItem.Caption := Utf8ToString(Items[i].Company);
     ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
     ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalRevenue)^));
     ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalPaid)^));

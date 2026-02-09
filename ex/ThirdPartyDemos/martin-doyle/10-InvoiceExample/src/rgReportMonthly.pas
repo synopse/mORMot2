@@ -9,7 +9,7 @@
   Module : rgReportMonthly.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -69,6 +69,7 @@ implementation
 
 uses
   mdGrids, DateUtils,
+  mormot.core.base,
   mormot.core.text;
 
 type
@@ -198,7 +199,7 @@ begin
   for i := 0 to High(Items) do
   begin
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Items[i].MonthName;
+    ListItem.Caption := Utf8ToString(Items[i].MonthName);
     ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
     ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].Revenue)^));
     ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].PaymentsReceived)^));
@@ -207,7 +208,7 @@ begin
 
   // Add totals row
   ListItem := FResultGrid.Items.Add;
-  ListItem.Caption := '--- ' + Totals.MonthName + ' ---';
+  ListItem.Caption := '--- ' + Utf8ToString(Totals.MonthName) + ' ---';
   ListItem.SubItems.Add(IntToStr(Totals.InvoiceCount));
   ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.Revenue)^));
   ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.PaymentsReceived)^));

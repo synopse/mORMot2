@@ -44,7 +44,7 @@ type
 const
   ApplicationTitle = 'Rechnung';
   DatabaseFile = 'Project10.db';
-  RunMode: TRunMode = rmLocal;
+  RunMode: TRunMode = rmService;
   HttpHost = 'localhost';
   HttpPort = '11111';
   ConfigFileName = 'rechnung.config';

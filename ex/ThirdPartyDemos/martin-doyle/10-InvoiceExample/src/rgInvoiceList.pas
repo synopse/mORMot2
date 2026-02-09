@@ -9,7 +9,7 @@
   Module : rgInvoiceList.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -280,7 +280,7 @@ begin
     for i := 0 to High(Invoices) do
     begin
       Item := FInvoiceListGrid.Items.Add;
-      Item.Caption := Invoices[i].OrderNo;
+      Item.Caption := Utf8ToString(Invoices[i].OrderNo);
       Item.SubItems.Add(AppDateToStr(Invoices[i].SaleDate));
       Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].ItemsTotal)^));
       Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].AmountPaid)^));
@@ -450,7 +450,7 @@ begin
 
   PaymentForm := TPaymentEntryForm.Create(Application);
   try
-    if PaymentForm.ShowPaymentEntry(Invoice.OrderID, Invoice.OrderNo,
+    if PaymentForm.ShowPaymentEntry(Invoice.OrderID, Utf8ToString(Invoice.OrderNo),
       Invoice.OpenAmount) then
     begin
       RefreshList;

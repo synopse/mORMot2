@@ -9,7 +9,7 @@
   Module : rgMain.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -139,6 +139,7 @@ var
 implementation
 
 uses
+  mormot.core.base,
   rgAbout, rgConst, rgReportOpenItems, rgReportPayments, rgReportRevenue,
   rgReportMonthly;
 
@@ -271,7 +272,7 @@ begin
   if FCurrentCustomerID > 0 then
   begin
     RgServices.StatisticsService.GetCustomerSummary(FCurrentCustomerID, Summary);
-    CustomerSummaryName.Caption := Summary.CustomerName;
+    CustomerSummaryName.Caption := Utf8ToString(Summary.CustomerName);
     StatsText := Format('%d Invoices | Revenue: %.2n | %d open (%.2n) | %d paid',
       [Summary.InvoiceCount,
        Summary.TotalRevenue,

@@ -9,7 +9,7 @@
   Module : rgCustomerList.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -226,9 +226,9 @@ begin
     begin
       if FilterLower <> '' then
       begin
-        CompanyLower := LowerCaseUnicode(StringToUtf8(Customers[i].Company));
-        CityLower := LowerCaseUnicode(StringToUtf8(Customers[i].City));
-        CustomerNoLower := LowerCaseUnicode(StringToUtf8(Customers[i].CustomerNo));
+        CompanyLower := LowerCaseUnicode(Customers[i].Company);
+        CityLower := LowerCaseUnicode(Customers[i].City);
+        CustomerNoLower := LowerCaseUnicode(Customers[i].CustomerNo);
         MatchesFilter := (PosEx(FilterLower, CompanyLower) > 0) or
                          (PosEx(FilterLower, CityLower) > 0) or
                          (PosEx(FilterLower, CustomerNoLower) > 0);
@@ -239,8 +239,8 @@ begin
       if MatchesFilter then
       begin
         Item := FCustomerListGrid.Items.Add;
-        Item.Caption := Customers[i].Company;
-        Item.SubItems.Add(Customers[i].City);
+        Item.Caption := Utf8ToString(Customers[i].Company);
+        Item.SubItems.Add(Utf8ToString(Customers[i].City));
         Item.Data := Pointer(PtrInt(Customers[i].CustomerID));
       end;
     end;

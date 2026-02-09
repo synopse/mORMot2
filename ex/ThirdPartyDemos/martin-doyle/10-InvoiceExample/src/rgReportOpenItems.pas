@@ -9,7 +9,7 @@
   Module : rgReportOpenItems.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -260,8 +260,8 @@ begin
   for i := 0 to High(Items) do
   begin
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Items[i].Company;
-    ListItem.SubItems.Add(Items[i].OrderNo);
+    ListItem.Caption := Utf8ToString(Items[i].Company);
+    ListItem.SubItems.Add(Utf8ToString(Items[i].OrderNo));
     if Items[i].SaleDate > 0 then
       ListItem.SubItems.Add(AppDateToStr(Items[i].SaleDate))
     else

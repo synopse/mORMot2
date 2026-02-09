@@ -1,7 +1,7 @@
 object AboutForm: TAboutForm
-  Left = 316
+  Left = 342
   Height = 679
-  Top = 38
+  Top = 150
   Width = 463
   BorderStyle = bsDialog
   Caption = 'About Rechnung'

@@ -9,7 +9,7 @@
   Module : rgInvoiceItemEdit.pas
 
   Last modified
-    Date : 31.01.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -206,7 +206,7 @@ begin
     Exit;
   end;
 
-  FItem.Description := Trim(EditDescription.Text);
+  FItem.Description := StringToUtf8(Trim(EditDescription.Text));
   FItem.Quantity := TempQty;
   FItem.ListPrice := TempPrice;
   FItem.Discount := SpinDiscount.Value;
@@ -240,7 +240,7 @@ begin
   else
     Caption := 'Edit Invoice Item';
 
-  EditDescription.Text := AItem.Description;
+  EditDescription.Text := Utf8ToString(AItem.Description);
   EditQuantity.Text := Format('%.2f', [AItem.Quantity]);
   EditPrice.Text := Curr64ToString(PInt64(@AItem.ListPrice)^);
   SpinDiscount.Value := AItem.Discount;
