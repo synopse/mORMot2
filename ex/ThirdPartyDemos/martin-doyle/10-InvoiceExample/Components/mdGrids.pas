@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— © martindoyle 2017-2026 ——
+———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
  Project : mdComponents
 
   Module : mdGrids.pas - ListView-compatible Grid Component
