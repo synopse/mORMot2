@@ -62,7 +62,6 @@ uses
   rgData,
   rgDtoTypes,
   rgServiceInterfaces,
-  rgConfig,
   rgClient,
   rgCustomerList,
   rgCustomerEdit, MdForms;
