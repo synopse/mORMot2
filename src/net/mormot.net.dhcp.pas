@@ -1138,15 +1138,18 @@ end;
 
 function MetricsToJson(const m: TDhcpMetrics): RawUtf8;
 begin
-  JsonObjectFromQWordArray(@m, @METRIC_TXT, length(m), result, [woHumanReadable]);
+  JsonObjectFromRttiArray(@m, @METRIC_TXT, length(m), TypeInfo(QWord),
+    result, [woHumanReadable]);
 end;
 
 function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
 var
   tmp: TSynTempBuffer;
 begin
-  tmp.Init(json);
-  result := JsonObjectToQWordArray(tmp.buf, @m, @METRIC_TXT, length(m)) <> nil;
+  FillZero(m);
+  tmp.Init(json); // make temporary copy since input json is parsed in-place
+  result := JsonObjectToRttiArray(tmp.buf,
+    @m, @METRIC_TXT, length(m), TypeInfo(QWord)) <> nil;
   tmp.Done;
 end;
 
