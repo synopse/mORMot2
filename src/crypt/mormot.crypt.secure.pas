@@ -822,7 +822,7 @@ const
   /// which ModularCryptIdentify/ModularCryptVerify() results are correct
   mcfValid = [mcfMd5Crypt .. high(TModularCryptFormat)];
   /// the maximum number of PBKDF2 rounds which may trigger a DoS attack
-  // - 5 millions = 1–5 seconds with SHA-NI is noticeable to be painful
+  // - 5 millions = 1-5 seconds with SHA-NI is noticeable to be painful
   MAX_PBKDF2_ROUNDS = 5000000;
 var
   /// default number of rounds for PBKDF2 "Modular Crypt" functions

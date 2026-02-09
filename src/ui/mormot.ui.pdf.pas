@@ -2833,13 +2833,13 @@ type
 const
   /// a sample value which could be set to TPdfDocument.PdfAMetadaExtension
   // - see Factur-X specification 1.07.2 page 69f
-  // - specification wants 2p3 but validators rejects those
+  // - specification wants 2.3 but validators rejects those so we use Version=3
   // - taken from https://github.com/HaraldSimon/SynPDF 
   PdfMetadataZugferd =
     '<rdf:Description xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#" rdf:about="">' +
     '<fx:DocumentType>INVOICE</fx:DocumentType>' +
     '<fx:DocumentFileName>xrechnung.xml</fx:DocumentFileName>' +
-    '<fx:Version>2.3</fx:Version>' +
+    '<fx:Version>3</fx:Version>' + 
     '<fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>' +
     '</rdf:Description>' +
     '<rdf:Description xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" ' +
@@ -12251,7 +12251,7 @@ begin
       begin
         dx := pointer(PtrUInt(@R) + R.emrtext.offDx);
         w := DXTextWidth(dx, R.emrText.nChars);
-        if w < Trunc(R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
+        if w < Trunc((R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
           dx := nil; // offDX=0 or within box
       end
       else

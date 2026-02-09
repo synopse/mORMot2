@@ -1208,7 +1208,7 @@ begin
   inherited Create;
   fLog := aLog;
   if aAlgo = '' then
-    // Let’s Encrypt accepts RSA keys that are 2048, 3072, or 4096 bits in length
+    // Let's Encrypt accepts RSA keys that are 2048, 3072, or 4096 bits in length
     // and P-256 or P-384 ECDSA keys - we favor the later for their shortness
     fAlgo := 'x509-es256'
   else

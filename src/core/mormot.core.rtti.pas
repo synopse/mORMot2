@@ -1634,10 +1634,11 @@ function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 
 /// get the corresponding enumeration name, without the first lowercase chars
-// - e.g. otDone -> 'Done'
+// - e.g. otDone -> 'Done' or following any other TSetCase conversion
 // - this will return the code-based English text; use GetEnumCaption() to
 // retrieve the enumeration display text
-function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
+function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer;
+  aKind: TSetCase = scTrimLeft): RawUtf8;
 
 /// get the enumeration name, without the first lowercase chars, and uncamelcased
 // - e.g. otProcessDone -> 'Process done'
@@ -1647,16 +1648,20 @@ function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 // - may be used as cache for overloaded ToText() content
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
 
-/// helper to retrieve all trimmed texts of an enumerate
+/// helper to retrieve all trimmed texts of an enumerate into a RawUtf8 array
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
-// - can optionally generate the un-camelcased text of the enumerate values
+// - can optionally use another SetCase(), e.g. scUnCamelCase or scSnakeCase
 // - typical usage is the following:
 // ! var
 // !   TXT: array[TBenchmark] of RawUtf8;
 // ! ...
 // !   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
-  aUnCamelCase: boolean = false; aLowerCase: boolean = false;
+  aKind: TSetCase = scTrimLeft); overload;
+
+/// helper to retrieve all trimmed texts of an enumerate - compatibility function
+procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
+  aUnCamelCase: boolean; aLowerCase: boolean = false;
   aLowerCaseFirst: boolean = false); overload;
 
 /// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
@@ -1690,8 +1695,15 @@ function GetEnumNameValueTrimmedExact(aTypeInfo: PRttiInfo;
   aValue: PUtf8Char; aValueLen: PtrInt): integer;
 
 /// helper to retrieve the index of an enumerate item from its text
+// - AlsoTrimLowerCase = true will also trim  and search lowercase 'a'..'z' chars
+// - FallbackText could be set to search also from an 'array[TEnum] of RawUtf8'
+// constant as filled from GetEnumTrimmedNames()
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
-  AlsoTrimLowerCase: boolean = false): integer; overload;
+  AlsoTrimLowerCase: boolean = false; FallbackText: PRawUtf8Array = nil): integer; overload;
+
+/// helper to retrieve the index of an enumerate item from its text
+function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
+  out aEnum; FallbackText: PRawUtf8Array = nil): boolean; overload;
 
 /// store an enumeration value from its ordinal representation
 procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
@@ -1743,7 +1755,7 @@ procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);
 /// UnCamelCase and translate the enumeration item
 function GetCaptionFromEnum(aTypeInfo: PRttiInfo; aIndex: integer): string;
 
-/// low-level helper to retrieve a (translated) caption from a PShortString
+/// low-level helper to retrieve a (translated) caption from a RTTI PShortString
 // - as used e.g. by GetEnumCaptions or GetCaptionFromEnum
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
@@ -3660,9 +3672,7 @@ end;
 procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
   UsedValuesBits: pointer);
 var
-  i, L: PtrInt;
-  Line: TByteToAnsiChar;
-  P: PAnsiChar;
+  i: PtrInt;
   V: PShortString;
   s: string;
 begin
@@ -3676,23 +3686,7 @@ begin
       if (UsedValuesBits = nil) or
          GetBitPtr(UsedValuesBits, i) then
       begin
-        L := ord(V^[0]);
-        P := @V^[1];
-        while (L > 0) and
-              (P^ in ['a'..'z']) do
-        begin
-          // ignore left lowercase chars
-          inc(P);
-          dec(L);
-        end;
-        if L = 0 then
-        begin
-          L := ord(V^[0]);
-          P := @V^[1];
-        end;
-        Line[L] := #0; // GetCaptionFromPCharLen() expect it as ASCIIZ
-        MoveFast(P^, Line, L);
-        GetCaptionFromPCharLen(Line, s);
+        GetCaptionFromTrimmed(V, s);
         Strings.AddObject(s, pointer(i));
       end;
       inc(PByte(V), length(V^)+1);
@@ -6194,15 +6188,14 @@ begin
   end;
 end;
 
-function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
+function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer; aKind: TSetCase): RawUtf8;
 begin
-  TrimLeftLowerCaseShort(GetEnumName(aTypeInfo, aIndex), result);
+  ShortTrim(GetEnumName(aTypeInfo, aIndex), result, aKind);
 end;
 
 function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 begin
-  result := GetEnumNameTrimed(aTypeInfo, aIndex);
-  UnCamelCaseSelf(result);
+  TrimLeftLowerUncamelCaseShort(GetEnumName(aTypeInfo, aIndex), result);
 end;
 
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
@@ -6225,7 +6218,7 @@ begin
 end;
 
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
-  aUnCamelCase, aLowerCase, aLowerCaseFirst: boolean);
+  aKind: TSetCase);
 var
   info: PRttiEnumType;
   p: PShortString;
@@ -6237,17 +6230,26 @@ begin
     p := info^.NameList;
     for i := info^.MinValue to info^.MaxValue do
     begin
-      TrimLeftLowerCaseShort(p, aDest^);
-      if aUnCamelCase then
-        UnCamelCaseSelf(aDest^)
-      else if aLowerCase then
-        CaseNew(aDest^, @NormToLower)
-      else if aLowerCaseFirst then
-        PByte(aDest^)^ := NormToLowerByte[PByte(aDest^)^];
+      ShortTrim(p, aDest^, aKind);
       p := @PByteArray(p)^[ord(p^[0]) + 1];
       inc(aDest);
     end;
   end;
+end;
+
+procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
+  aUnCamelCase, aLowerCase, aLowerCaseFirst: boolean);
+var
+  sc: TSetCase; // just a backward compatibility wrapper function
+begin
+  sc := scTrimLeft;
+  if aUnCamelCase then
+    sc := scUnCamelCase
+  else if aLowerCase then
+    sc := scLowerCase
+  else if aLowerCaseFirst then
+    sc := scLowerCaseFirst;
+  GetEnumTrimmedNames(aTypeInfo, aDest, sc);
 end;
 
 function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray;
@@ -6283,10 +6285,27 @@ begin
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
-  AlsoTrimLowerCase: boolean): integer;
+  AlsoTrimLowerCase: boolean; FallbackText: PRawUtf8Array): integer;
+var
+  e: PRttiEnumType;
 begin
-  result := aTypeInfo^.BaseType^.
-    GetEnumNameValue(pointer(aValue), length(aValue), AlsoTrimLowerCase);
+  e := aTypeInfo^.BaseType;
+  result := e^.GetEnumNameValue(pointer(aValue), length(aValue), AlsoTrimLowerCase);
+  if (result < 0) and
+     (FallbackText <> nil) and
+     (e <> nil) then
+    result := FindPropName(FallbackText, aValue, e^.MaxValue - e^.MinValue + 1);
+end;
+
+function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
+  out aEnum; FallbackText: PRawUtf8Array = nil): boolean;
+var
+  i: integer;
+begin
+  i := GetEnumNameValue(aTypeInfo, aValue, {trim=}true, FallbackText);
+  result := i >= 0;
+  if result then
+    byte(aEnum) := i;
 end;
 
 procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
@@ -6460,21 +6479,11 @@ end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 var
-  tmp: TByteToAnsiChar;
-  L: integer;
+  p: PAnsiChar;
+  len: PtrInt;
 begin
-  L := ord(PS^[0]);
-  inc(PByte(PS));
-  while (L > 0) and
-        (PS^[0] in ['a'..'z']) do
-  begin
-    inc(PByte(PS));
-    dec(L);
-  end;
-  tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
-  if L > 0 then
-    MoveFast(PS^, tmp, L);
-  GetCaptionFromPCharLen(tmp, result);
+  len := TrimLeftLowerCaseP(PS, p);                // 'otDone' -> 'Done'
+  GetCaptionFromPCharLen(pointer(p), result, len); // UnCamelCase and translate
 end;
 
 procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);

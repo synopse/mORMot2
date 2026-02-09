@@ -710,6 +710,10 @@ procedure DateTimeToFileShortVar(const DateTime: TDateTime; out result: TShort16
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits
 function NowToFileShort(localtime: boolean = false): TShort16;
 
+/// get the current year/month a small text layout
+// - use 'YYYYMM' format, perfect e.g. for naming a per-month metrics file
+function NowToFileMonthShort(localtime: boolean = false): TShort7;
+
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUtf8;
@@ -3077,6 +3081,15 @@ var
 begin
   T.FromNow(localtime);
   T.ToFileShort(result);
+end;
+
+function NowToFileMonthShort(localtime: boolean): TShort7;
+var
+  T: TSynSystemTime;
+begin
+  T.FromNow(localtime);
+  result := UInt4DigitsToShort(T.Year);
+  AppendShort(UInt2DigitsToShortFast(T.Month), result);
 end;
 
 procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort23);

@@ -1156,7 +1156,11 @@ function ParseHex(p: PAnsiChar; b: PByte; n: integer): PAnsiChar;
 /// convert a binary into its human-friendly per-byte hexadecimal lowercase text
 // - returns e.g. '12:50:b6:1e:c6:aa', i.e. the DN/MAC format
 // - used e.g. in mormot.lib.openssl11 and mormot.net.sock
-procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer;
+procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: PtrInt;
+  reverse: boolean = false);
+
+/// convert a binary into its human-friendly per-byte hexadecimal lowercase text
+procedure ToHumanHexP(hex: PAnsiChar; bin: PByte; len: PtrInt;
   reverse: boolean = false);
 
 // backward compatibility types redirections
@@ -2645,6 +2649,10 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
   out product: THash128Rec); inline;
 {$endif CPUINTEL}
+
+/// simply compute inc(d[], s[]) in a loop, up to a few elements
+// - is implemented using plain pascal - for a few elements, AVX2 is not worth it
+procedure AddInt64Array(d, s: PInt64Array; n: PtrInt);
 
 
 { ************ Low-level Functions Manipulating Bits }
@@ -5818,30 +5826,33 @@ begin
   result := p;
 end;
 
-procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer; reverse: boolean);
-var
-  p: PAnsiChar;
-  c: PtrInt;
-  tab: PAnsichar;
+procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: PtrInt; reverse: boolean);
 begin
   result := '';
   if len <= 0 then
     exit;
   pointer(result) := FastNewString((len * 3) - 1, CP_UTF8);
+  ToHumanHexP(pointer(result), bin, len, reverse);
+end;
+
+procedure ToHumanHexP(hex: PAnsiChar; bin: PByte; len: PtrInt; reverse: boolean);
+var
+  c: PtrInt;
+  tab: PAnsichar;
+begin
   tab := @HexCharsLower;
-  p := pointer(result);
   if reverse then
     inc(bin, len - 1);
   repeat
     c := bin^;
-    p[0] := tab[c shr 4];
+    hex[0] := tab[c shr 4];
     c := c and 15;
-    p[1] := tab[c];
+    hex[1] := tab[c];
     dec(len);
     if len = 0 then
       break;
-    p[2] := ':'; // to please (most) human limited hexadecimal capabilities
-    inc(p, 3);
+    hex[2] := ':'; // to please (most) human limited hexadecimal capabilities
+    inc(hex, 3);
     if reverse then
       dec(bin)
     else
@@ -9248,6 +9259,28 @@ begin
     until CompareMemSmall(@src, @dst, len);
 end;
 
+procedure AddInt64Array(d, s: PInt64Array; n: PtrInt);
+var
+  by4: PtrInt;
+begin
+  by4 := n shr 2;  // simple x4 unrolled scalar
+  if by4 <> 0 then
+    repeat
+      inc(d[0], s[0]);
+      inc(d[1], s[1]);
+      inc(d[2], s[2]);
+      inc(d[3], s[3]);
+      s := @s[4];
+      d := @d[4];
+      dec(by4);
+    until by4 = 0;
+  n := n and 3;
+  if n <> 0 then
+    repeat
+      dec(n);
+      inc(d[n], s[n]);
+    until n = 0;
+end;
 
 { ************ low-level functions manipulating bits }
 
@@ -9814,7 +9847,7 @@ begin
       exit;
     end;
   end;
-  result := '';
+  FastAssignNew(result); // done last becase result could point to S
 end;
 
 function Split(const Str, SepStr: RawUtf8; StartPos: PtrInt): RawUtf8;
@@ -10085,7 +10118,7 @@ end;
 {$ifdef OSWINDOWS} // not defined in the Delphi RTL but in its Windows unit :(
 function GetCurrentThreadId: PtrUInt; stdcall; external 'kernel32';
 function CoCreateGuid(var h: THash128): PtrUInt; stdcall; external 'ole32.dll';
-{$ifndef CPUINTEL} // always available on WinARM
+{$ifndef CPUINTEL} // always available on WinARM on not defined on Delphi RTL
 function GetTickCount64: UInt64; stdcall; external 'kernel32';
 {$endif CPUINTEL}
 

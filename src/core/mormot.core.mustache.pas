@@ -393,7 +393,11 @@ type
     class procedure Lower(const Value: variant; out Result: variant);
     class procedure Upper(const Value: variant; out Result: variant);
     class procedure CamelCase(const Value: variant; out Result: variant);
+    class procedure UnCamelCase(const Value: variant; out Result: variant);
     class procedure SnakeCase(const Value: variant; out Result: variant);
+    class procedure KebabCase(const Value: variant; out Result: variant);
+    class procedure DotCase(const Value: variant; out Result: variant);
+    class procedure TitleCase(const Value: variant; out Result: variant);
     class procedure EnumTrim(const Value: variant; out Result: variant);
     class procedure EnumTrimRight(const Value: variant; out Result: variant);
     class procedure PowerOfTwo(const Value: variant; out Result: variant);
@@ -2069,9 +2073,9 @@ begin
     result := 0;
     n := PDALen(PAnsiChar(h) - _DALEN)^ + _DAOFF;
     repeat
-      P := pointer(h^.Name);
-      if (PStrLen(P - _STRLEN)^ = aNameLen) and
-         IdemPropNameUSameLenNotNull(P, aName, aNameLen) then
+      p := pointer(h^.Name);
+      if (PStrLen(p - _STRLEN)^ = aNameLen) and
+         IdemPropNameUSameLenNotNull(p, aName, aNameLen) then
         exit;
       inc(h);
       inc(result);
@@ -2115,7 +2119,10 @@ begin
       'Lower',
       'Upper',
       'CamelCase',
-      'SnakeCase'],
+      'UnCamelCase',
+      'SnakeCase',
+      'KebabCase',
+      'DotCase'],
      [DateTimeToText,
       DateToText,
       DateFmt,
@@ -2143,7 +2150,10 @@ begin
       Lower,
       Upper,
       CamelCase,
-      SnakeCase]);
+      UnCamelCase,
+      SnakeCase,
+      KebabCase,
+      DotCase]);
   result := HelpersStandardList;
 end;
 
@@ -2490,40 +2500,60 @@ begin
      DoMatch(dv, {caseinsens=}true, Result);
 end;
 
-class procedure TSynMustache.Lower(const Value: variant;
-  out Result: variant);
+procedure DoCase(const Value: variant; out Result: variant; Kind: TSetCase);
 var
   u: RawUtf8;
 begin
   if VariantToText(Value, u) then
-    RawUtf8ToVariant(LowerCaseUnicode(u), Result);
+    RawUtf8ToVariant(SetCase(u, Kind), Result);
+end;
+
+class procedure TSynMustache.Lower(const Value: variant;
+  out Result: variant);
+begin
+  DoCase(Value, Result, scLowerCase);
 end;
 
 class procedure TSynMustache.Upper(const Value: variant;
   out Result: variant);
-var
-  u: RawUtf8;
 begin
-  if VariantToText(Value, u) then
-    RawUtf8ToVariant(UpperCaseUnicode(u), Result);
+  DoCase(Value, Result, scUpperCase);
 end;
 
 class procedure TSynMustache.CamelCase(const Value: variant;
   out Result: variant);
-var
-  u: RawUtf8;
 begin
-  if VariantToText(Value, u) then
-    RawUtf8ToVariant(LowerCamelCase(u), Result);
+  DoCase(Value, Result, scCamelCase);
+end;
+
+class procedure TSynMustache.UnCamelCase(const Value: variant;
+  out Result: variant);
+begin
+  DoCase(Value, Result, scUnCamelCase);
 end;
 
 class procedure TSynMustache.SnakeCase(const Value: variant;
   out Result: variant);
-var
-  u: RawUtf8;
 begin
-  if VariantToText(Value, u) then
-    RawUtf8ToVariant(mormot.core.unicode.SnakeCase(u), Result);
+  DoCase(Value, Result, scSnakeCase);
+end;
+
+class procedure TSynMustache.KebabCase(const Value: variant;
+  out Result: variant);
+begin
+  DoCase(Value, Result, scKebabCase);
+end;
+
+class procedure TSynMustache.DotCase(const Value: variant;
+  out Result: variant);
+begin
+  DoCase(Value, Result, scDotCase);
+end;
+
+class procedure TSynMustache.TitleCase(const Value: variant;
+  out Result: variant);
+begin
+  DoCase(Value, Result, scTitleCase);
 end;
 
 

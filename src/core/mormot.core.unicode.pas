@@ -2366,6 +2366,9 @@ function TrimLeftLowerCaseShort(V: PShortString): RawUtf8; overload;
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 procedure TrimLeftLowerCaseShort(V: PShortString; var U: RawUtf8); overload;
 
+/// trim first lowercase chars ('otMadeIt' will return 'Made it' e.g.)
+procedure TrimLeftLowerUncamelCaseShort(V: PShortString; var U: RawUtf8);
+
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
@@ -2376,6 +2379,37 @@ function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
 // - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
+
+/// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
+function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
+
+/// capitalize the first letter of each word, as done with English titles
+// - e.g. TitleCase('Some text') = 'Some Text'
+procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
+
+/// capitalize the first letter of each word, as done with English titles
+procedure TitleCaseSelf(var Text: RawUtf8);
+
+type
+  /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
+  // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
+  // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lowerCaseFirst',
+  // 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case',
+  // 'dot.case', 'TitleCase', 'camelCase' and 'PascalCase'
+  TSetCase = (
+    scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle, scLowerCase,
+    scLowerCaseFirst, scUpperCase, scSnakeCase, scScreamingSnakeCase,
+    scKebabCase, scDotCase, scTitleCase, scCamelCase, scPascalCase);
+
+/// change the casing of an UTF-8 text buffer
+procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase); overload;
+
+/// change the casing of an UTF-8 text string
+function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compute a RawUtf8 from a shortstring RTTI identifier with custom casing
+procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TSetCase);
 
 /// fast append some UTF-8 text into a ShortString, with an ending ','
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
@@ -2395,24 +2429,18 @@ function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
 function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
   aValue: PUtf8Char; aValueLen: PtrInt): integer;
 
-/// convert a CamelCase string into a space separated one
-// - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
-// - will handle capital words at the beginning, middle or end of the text, e.g.
-// 'KLMFlightNumber' will return 'KLM flight number' and 'GoodBBCProgram' will
-// return 'Good BBC program'
-// - will handle a number at the beginning, middle or end of the text, e.g.
-// 'Email12' will return 'Email 12'
-// - '_' char is transformed into ' - '
-// - '__' chars are transformed into ': '
-// - return an RawUtf8 string: enumeration names are pure 7-bit ANSI with Delphi
-// up to 2007, and UTF-8 encoded with Delphi 2009+
+/// convert a 'CamelCase' string into a space-separated 'Camel case' human text
 function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert in-place a CamelCase string into a space separated one
+/// convert a 'CamelCase' string into a space-separated 'Camel case' human text
 procedure UnCamelCaseSelf(var S: RawUtf8);
 
-/// convert a CamelCase string into a space separated one
+/// convert a 'CamelCase' buffer into a space-separated 'Camel case' human text
+procedure UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt); overload;
+
+/// raw convert a 'CamelCase' buffer into a space-separated 'Camel case' buffer
+// - destination D should be at least Len * 2 bytes long
 // - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
 // - will handle capital words at the beginning, middle or end of the text, e.g.
 // 'KLMFlightNumber' will return 'KLM flight number' and 'GoodBBCProgram' will
@@ -2424,16 +2452,16 @@ procedure UnCamelCaseSelf(var S: RawUtf8);
 // are pure 7-bit ANSI with Delphi 7 to 2007, and UTF-8 encoded with Delphi 2009+
 // - '_' char is transformed into ' - '
 // - '__' chars are transformed into ': '
-function UnCamelCase(D, P: PUtf8Char): integer; overload;
+function UnCamelCase(D, P: PUtf8Char; PEnd: PUtf8Char = nil): integer; overload;
 
-/// convert a string into an human-friendly CamelCase identifier
+/// convert a string into human-friendly CamelCase/PascalCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 // - will convert up to the first 256 AnsiChar of the buffer
 procedure CamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
 
-/// convert a string into an human-friendly CamelCase identifier
+/// convert a string into human-friendly CamelCase/PascalCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 // - will convert up to the first 256 AnsiChar of text
@@ -2441,16 +2469,20 @@ procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a string into an human-friendly CamelCase identifier (as in Pascal)
+/// convert a string into human-friendly CamelCase/PascalCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 // - will convert up to the first 256 AnsiChar of text
 function CamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a string into an human-friendly lowerCamelCase identifier (as in Java)
-// - just like CamelCase() but with the first letter forced in lowercase
+/// convert a string into human-friendly camelCase identifier (as in Java)
+// - just like CamelCase/PascalCase but with the first letter forced in lowercase
 function LowerCamelCase(const text: RawUtf8): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+  /// convert a string into human-friendly camelCase identifier (as in Java)
+procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 
 /// convert a string with the first letter forced in lowercase
 function UriCase(const text: RawUtf8): RawUtf8;
@@ -2470,11 +2502,13 @@ var
 
 /// convert a text buffer into a snake_case identifier (as in Python)
 // - will convert up to the first 256 AnsiChar of the buffer
-procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
+// - you can set e.g. sep='-' to convert to kekab-case as used e.g. in RFC
+procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; sep: AnsiChar = '_'); overload;
 
 /// convert a string into a snake_case identifier (as in Python)
 // - will convert up to the first 256 AnsiChar of text
-function SnakeCase(const text: RawUtf8): RawUtf8; overload;
+// - you can set e.g. sep='-' to convert to kekab-case as used e.g. in RFC
+function SnakeCase(const text: RawUtf8; sep: AnsiChar = '_'): RawUtf8; overload;
 
 const
   // published for unit testing in TNetworkProtocols.OpenAPI (e.g. if sorted)
@@ -2506,9 +2540,9 @@ var
   LoadResStringTranslate: procedure(var Text: string) = nil;
 
 /// UnCamelCase and translate a char buffer
-// - P is expected to be #0 ended
+// - P is expected to be #0 ended, or we will use the supplied Len
 // - return "string" type, i.e. UnicodeString for Delphi 2009+
-procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
+procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string; Len: PtrUInt = 0);
 
 
 { ************ TRawUtf8DynArray Processing Functions }
@@ -9204,23 +9238,34 @@ begin
   TrimLeftLowerCaseToShort(V, result);
 end;
 
+function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
+var
+  p: PAnsiChar;
+begin
+  result := length(V^);
+  p := @V^[1];
+  if result <> 0 then
+    while p^ in ['a'..'z'] do
+    begin
+      inc(p);
+      dec(result);
+      if result = 0 then
+      begin
+        result := length(V^);
+        Trimmed := @V^[1]; // all lowercase: return initial V^ content
+        exit;
+      end;
+    end;
+  Trimmed := p;
+end;
+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString);
 var
   p: PAnsiChar;
   len: PtrInt;
 begin
-  len := length(V^);
-  p := @V^[1];
-  while (len > 0) and
-        (p^ in ['a'..'z']) do
-  begin
-    inc(p);
-    dec(len);
-  end;
-  if len = 0 then
-    result := V^
-  else
-    SetString(result, p, len);
+  len := TrimLeftLowerCaseP(V, p);
+  SetString(result, p, len);
 end;
 
 function TrimLeftLowerCaseShort(V: PShortString): RawUtf8;
@@ -9233,21 +9278,106 @@ var
   p: PAnsiChar;
   len: PtrInt;
 begin
-  len := length(V^);
-  p := @V^[1];
-  if len > 0 then
-    while p^ in ['a'..'z'] do
-    begin
-      inc(p);
-      dec(len);
-      if len = 0 then
-      begin
-        p := @V^[1]; // nothing to trim
-        len := length(V^);
-        break;
-      end;
-    end;
+  len := TrimLeftLowerCaseP(V, p);
   FastSetString(U, p, len);
+end;
+
+procedure TrimLeftLowerUncamelCaseShort(V: PShortString; var U: RawUtf8);
+var
+  p: PAnsiChar;
+  len: PtrInt;
+begin
+  len := TrimLeftLowerCaseP(V, p);
+  UnCamelCase(U, pointer(p), len);
+end;
+
+procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
+begin
+  FastSetString(Dest, Text, TextLen);
+  Text := pointer(Dest);
+  if Text = nil then
+    exit;
+  Text^ := NormToUpperAnsi7[Text^]; // do nothing if next char is not a..z
+  repeat
+    if Text^ = ' ' then
+      Text[1] := NormToUpperAnsi7[Text[1]];
+    inc(Text);
+  until Text^ = #0;
+end;
+
+procedure TitleCaseSelf(var Text: RawUtf8);
+begin
+  if (Text <> '') and
+     ((Text[1] in ['a' ..'z']) or
+      (PosExChar(' ', Text) <> 0)) then
+    TitleCase(Text, pointer(Text), length(Text));
+end;
+
+procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase);
+begin
+  if (Text = nil) or
+     (TextLen <= 0) then
+    FastAssignNew(Dest)
+  else
+    case aKind of
+      scUnCamelCase:        // 'Un camel case'
+        UnCamelCase(Dest, pointer(Text), TextLen);
+      scUnCamelTitle:       // 'Un Camel Title'
+        begin
+          UnCamelCase(Dest, pointer(Text), TextLen);
+          TitleCaseSelf(Dest);
+        end;
+      scLowerCase:          // 'lowercase'
+        CaseCopy(pointer(Text), TextLen, @NormToLowerAnsi7, Dest);
+      scLowerCaseFirst:     // 'lowerCaseFirst'
+        begin
+          FastSetString(Dest, Text, TextLen);
+          PByte(Dest)^ := NormToLowerAnsi7Byte[PByte(Dest)^];
+        end;
+      scUpperCase:          // 'UPPERCASE'
+        CaseCopy(pointer(Text), TextLen, @NormToUpperAnsi7, Dest);
+      scSnakeCase:          // 'snake_case'
+        SnakeCase(Text, TextLen, Dest);
+      scScreamingSnakeCase: // 'SCREAMING_SNAKE_CASE'
+        begin
+          SnakeCase(Text, TextLen, Dest);
+          CaseSelf(Dest, @NormToUpperAnsi7);
+        end;
+      scKebabCase:          // 'kebab-case'
+        SnakeCase(Text, TextLen, Dest, '-');
+      scDotCase:            // 'dot.case'
+        SnakeCase(Text, TextLen, Dest, '.');
+      scTitleCase:          // 'TitleCase'
+        TitleCase(Dest, Text, TextLen);
+      scCamelCase:          // 'camelCase'
+        LowerCamelCase(Text, TextLen, Dest);
+      scPascalCase:         // 'PascalCase'
+        CamelCase(Text, TextLen, Dest);
+    else // scNoTrim, scTrimLeft: 'stNoTrim', 'TrimLeft'
+      FastSetString(Dest, Text, TextLen);
+    end;
+end;
+
+function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8;
+begin
+  if aKind in [scNoTrim, scTrimLeft] then
+    result := Text // return by reference
+  else
+    SetCase(result, pointer(Text), length(Text), aKind);
+end;
+
+procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TSetCase);
+var
+  p: PAnsiChar;
+  len: PTrInt;
+begin
+  len := length(aShort^);
+  if (len = 0) or
+     (aKind = scNoTrim) then
+    p := @aShort^[1]
+  else
+    len := TrimLeftLowerCaseP(aShort, p);
+  SetCase(aDest, p, len, aKind);
 end;
 
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
@@ -9352,22 +9482,29 @@ end;
 
 function UnCamelCase(const S: RawUtf8): RawUtf8;
 begin
-  result := S;
-  UnCamelCaseSelf(result);
+  UnCamelCase(result, pointer(S), length(S));
 end;
 
 procedure UnCamelCaseSelf(var S: RawUtf8);
-var
-  tmp: TSynTempBuffer;
-  destlen: PtrInt;
 begin
-  if S = '' then
-    exit;
-  destlen := UnCamelCase(tmp.Init(length(S) * 2), pointer(S));
-  tmp.Done(PAnsiChar(tmp.buf) + destlen, S);
+  UnCamelCase(S, pointer(S), length(S));
 end;
 
-function UnCamelCase(D, P: PUtf8Char): integer;
+procedure UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt);
+var
+  tmp: TSynTempBuffer; // 4KB means no temporary memalloc from RTTI identifiers
+  destlen: PtrInt;
+begin
+  if P = nil then
+  begin
+    FastAssignNew(Dest);
+    exit;
+  end;
+  destlen := UnCamelCase(tmp.Init(Len * 2), P, P + Len);
+  tmp.Done(PAnsiChar(tmp.buf) + destlen, Dest);
+end;
+
+function UnCamelCase(D, P, PEnd: PUtf8Char): integer;
 var
   Space, SpaceBeg, DBeg: PUtf8Char;
   CapitalCount: integer;
@@ -9376,10 +9513,10 @@ label
   Next;
 begin
   DBeg := D;
-  if (D <> nil) and
-     (P <> nil) then
+  if (D <> nil) and  (P <> nil) then // avoid GPF
   begin
-    // avoid GPF
+    if PEnd = nil then
+      PEnd := P + StrLen(P);
     Space := D;
     SpaceBeg := D;
     repeat
@@ -9391,15 +9528,15 @@ begin
           D^ := P^;
           inc(P);
           inc(D);
-        until not (P^ in ['0'..'9'])
+        until (P = PEnd) or not (P^ in ['0'..'9'])
       else
         repeat
           inc(CapitalCount);
           D^ := P^;
           inc(P);
           inc(D);
-        until not (P^ in ['A'..'Z']);
-      if P^ = #0 then
+        until (P = PEnd) or not (P^ in ['A'..'Z']);
+      if P = PEnd then
         break; // no lowercase conversion of last fully uppercased word
       if (CapitalCount > 1) and
          not Number then
@@ -9407,14 +9544,14 @@ begin
         dec(P);
         dec(D);
       end;
-      while P^ in ['a'..'z'] do
+      while (P < PEnd) and (P^ in ['a'..'z']) do
       begin
         D^ := P^;
         inc(D);
         inc(P);
       end;
       if P^ = '_' then
-        if P[1] = '_' then
+        if (P < PEnd) and (P[1] = '_') then
         begin
           D^ := ':';
           inc(P);
@@ -9432,7 +9569,7 @@ Next:     if Space = SpaceBeg then
         end
       else
         Space := D;
-      if P^ = #0 then
+      if P >= PEnd then
         break;
       D^ := ' ';
       inc(D);
@@ -9501,19 +9638,24 @@ begin
   CamelCase(pointer(text), length(text), s, isWord);
 end;
 
-function CamelCase(const text: RawUtf8): RawUtf8; overload;
+function CamelCase(const text: RawUtf8): RawUtf8;
 begin
   CamelCase(pointer(text), length(text), result);
 end;
 
+procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8);
+begin
+  CamelCase(P, len, s);
+  if s <> '' then
+    if IsUpper(s) then
+      LowerCaseSelf(s)
+    else
+      PByte(s)^ := NormToLowerAnsi7Byte[PByte(s)^];
+end;
+
 function LowerCamelCase(const text: RawUtf8): RawUtf8;
 begin
-  CamelCase(pointer(text), length(text), result);
-  if result <> '' then
-    if IsUpper(result) then
-      LowerCaseSelf(result)
-    else
-      PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
+  LowerCamelCase(pointer(text), length(text), result);
 end;
 
 function UriCase(const text: RawUtf8): RawUtf8;
@@ -9528,7 +9670,7 @@ type // SnakeCase() state machine
 var
   SNAKE_CHARS: array[AnsiChar] of TSnakeCase;
 
-procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8);
+procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; sep: AnsiChar);
 var
   tmp: TByteToAnsiChar;
   d: PAnsiChar;
@@ -9555,7 +9697,7 @@ begin
           ((scUp in flags) and (not (scLow in last)) and (len > 0) and
            (P[1] in ['a' .. 'z'])))) then
       begin
-        d^ := '_';
+        d^ := sep;
         inc(d);
         include(flags, sc_);
       end;
@@ -9572,9 +9714,9 @@ begin
   FastSetString(s, @tmp, d - PAnsiChar(@tmp));
 end;
 
-function SnakeCase(const text: RawUtf8): RawUtf8;
+function SnakeCase(const text: RawUtf8; sep: AnsiChar): RawUtf8;
 begin
-  SnakeCase(pointer(text), length(text), result);
+  SnakeCase(pointer(text), length(text), result, sep);
 end;
 
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
@@ -9591,22 +9733,24 @@ begin
   CamelCase(aName, result);
   if result = '' then
     ESynUnicode.RaiseFmt(nil, 'Unexpected SanitizePascalName(%s)', [aName]);
-  result[1] := UpCase(result[1]);
+  result[1] := NormToUpperAnsi7[result[1]]; // ensure PascalCase
   if KeyWordCheck and
      IsReservedKeyWord(result) then
     result := '_' + result; // avoid identifier name collision
 end;
 
-procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
+procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string; Len: PtrUInt);
 var
   tmp: TByteToAnsiChar;
 begin
   if P = nil then
     exit;
+  if Len <> 0 then
+    inc(Len, PtrUInt(P)); // pointer(Len) = PEnd
   {$ifdef UNICODE}
-  Utf8DecodeToUnicodeString(tmp, UnCamelCase(@tmp, P), result);
+  Utf8DecodeToUnicodeString(tmp, UnCamelCase(@tmp, P, pointer(Len)), result);
   {$else}
-  SetString(result, PAnsiChar(@tmp), UnCamelCase(@tmp, P));
+  SetString(result, PAnsiChar(@tmp), UnCamelCase(@tmp, P, pointer(Len)));
   {$endif UNICODE}
   if Assigned(LoadResStringTranslate) then
     LoadResStringTranslate(result);

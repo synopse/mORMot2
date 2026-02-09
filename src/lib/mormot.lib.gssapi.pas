@@ -1084,7 +1084,7 @@ begin
   if p = '' then
     p := SplitRight(aSecKerberosSpn, '@'); // try to extract the SPN
   if p <> '' then
-    u := n + '@' + UpperCase(p); // force upcase to avoid enduser confusion
+    u := n + '@' + UpperCase(p); // force upper to avoid enduser confusion
   buf.length := Length(u);
   buf.value := pointer(u);
   maj := GssApi.gss_import_name(

@@ -2381,18 +2381,6 @@ begin
   result := folder <> '';
 end;
 
-function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
-begin
-  result := false;
-  folder := EnsureDirectoryExists(Join([parent, sub]));
-  if folder = '' then
-    exit;
-  if FileIsWritable(folder) then
-    result := true
-  else
-    folder := '';
-end;
-
 function IsExpandedPath(const FileName: TFileName): boolean;
 begin
   result := (FileName = '') or
@@ -3175,7 +3163,7 @@ function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 var
   h: THandle;
   pos, read: PtrInt;
-  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
+  tmp: TBuffer64K; // 64KB stack buffer - /proc/cpuinfo could be huge
 begin
   result := '';
   if FileName = '' then
@@ -3189,8 +3177,8 @@ begin
     if read <= 0 then
       break; // end of input
     inc(pos, read);
-    if pos < SizeOf(tmp) then // is likely to flush before 32KB of output
-      continue;
+    if pos < SizeOf(tmp) then // kernel-side may iterate on PAGE_SIZE (4KB)
+      continue;               // but is likely to flush before 64KB of output
     AppendBufferToUtf8(@tmp, pos, RawUtf8(result)); // in-place resize
     pos := 0;
   until false;
@@ -5150,12 +5138,12 @@ begin
     CpuCacheSize := _GetNextCardinal(cache);
     while cache^ = ' ' do
       inc(cache);
-    case upcase(cache^) of
-      'K':
+    case cache^ of
+      'k', 'K':
         cacheshr := 10;
-      'M':
+      'm', 'M':
         cacheshr := 20;
-      'G':
+      'g', 'G':
         cacheshr := 30;
     else
       cacheshr := 0;

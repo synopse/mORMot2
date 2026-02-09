@@ -3275,6 +3275,10 @@ function EnsureDirectoryExistsNoExpand(const Directory: TFileName): TFileName;
 function NormalizeDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
 
+/// wrap folder := parent+sub and EnsureDirectoryExists() with FileIsWritable()
+// - used e.g. on POSIX for GetSystemPath() folder names validation
+function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
+
 /// compute the size of all directory's files, optionally with nested folders
 // - basic implementation using FindFirst/FindNext so won't be the fastest
 // available, nor fully accurate when files are actually (hard) links
@@ -7823,6 +7827,18 @@ function NormalizeDirectoryExists(const Directory: TFileName;
 begin
   result := EnsureDirectoryExists(NormalizeFileName(Directory),
     RaiseExceptionOnCreationFailure);
+end;
+
+function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
+begin
+  result := false;
+  folder := EnsureDirectoryExists(parent + sub);
+  if folder = '' then
+    exit;
+  if FileIsWritable(folder) then
+    result := true
+  else
+    folder := '';
 end;
 
 type // state machine for DirectoryDeleteOlderFiles() / DirectoryDeleteAll()

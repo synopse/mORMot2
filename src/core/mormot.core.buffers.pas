@@ -1429,9 +1429,9 @@ function Base32ToBin(B32: PAnsiChar; B32Len: integer): RawByteString; overload;
 function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// internal raw function used to initialize Base32/58/64/64uri decoding lookup
+// internal raw functions used to initialize Base32/58/64/64uri decoding lookup
+procedure FillLookupTable(s, d: PByteArray; i: PtrUInt);
 procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
-
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -6445,11 +6445,10 @@ end;
 
 { ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
-procedure FillBaseDecoderChars(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
-  {$ifndef CPUX86} inline; {$endif}
+procedure FillLookupTable(s, d: PByteArray; i: PtrUInt);
 begin
   repeat
-    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful characters
+    d[s[i]] := i; // pre-compute O(1) lookup table for the meaningful chars
     dec(i);
   until i = 0;
   d[s[0]] := i
@@ -6458,7 +6457,7 @@ end;
 procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
 begin
   FillcharFast(d^, SizeOf(d^), 255); // fill with -1 = invalid by default
-  FillBaseDecoderChars(s, d, i);
+  FillLookupTable(pointer(s), pointer(d), i);
 end;
 
 
@@ -7591,7 +7590,7 @@ begin
     if ConvertBase32ToBin[#255] = 0 then // delayed thread-safe initialization
     begin
       FillBaseDecoder(@b32encUpper, @ConvertBase32ToBin, high(b32encUpper));
-      FillBaseDecoderChars(@b32encLower, @ConvertBase32ToBin, high(b32encLower));
+      FillLookupTable(@b32encLower, @ConvertBase32ToBin, high(b32encLower));
     end;
     p := Base32Decode(@ConvertBase32ToBin, B32,
       FastNewRawByteString(result, (B32Len shr 3) * 5), B32Len);
@@ -8916,7 +8915,7 @@ begin
             if (PtrInt(bswap32(PCardinal(Content)^)) <= Len) and
                (PCardinalArray(Content)^[1] = $70797466) then // 'ftyp'
               case PCardinalArray(Content)^[2] of // brand
-                $20207471, // qt   Apple’s QuickTime File Format
+                $20207471, // qt   Apple's QuickTime File Format
                 $3134706d, // mp41 old ISO/IEC 14496-1 MPEG-4 Version 1
                 $3234706d, // mp42 MPEG-4 Version 2 video/QuickTime file
                 $326f7369, // iso2 ISO Base Media file (MPEG-4) v2
@@ -8927,7 +8926,7 @@ begin
                 $6d6f7369: // isom ISO Base Media file (MPEG-4) v1
                   result := mtMp4;
                 $20763466, // f4v  Adobe Flash Video
-                $2076346d, // m4v  Apple’s iTunes and QuickTime
+                $2076346d, // m4v  Apple's iTunes and QuickTime
                 $31637661, // avc1 H.264/AVC codec
                 $35706733, // 3gp5 Mobile optimized 3GPP Release 5
                 $36706733: // 3gp6 Mobile optimized 3GPP Release 6
@@ -11830,7 +11829,7 @@ begin
   // HTML/Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
-  GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, false, {lower=}true);
+  GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, scLowerCase);
   FastAssignNew(EMOJI_TEXT[eNone]);
   for e := succ(low(e)) to high(e) do
   begin

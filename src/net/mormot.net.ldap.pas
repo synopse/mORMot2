@@ -439,6 +439,7 @@ var
   // - are the official text of all TLdapError identifiers as listed in
   // https://ldap.com/ldap-result-code-reference
   // e.g. LDAP_ERROR_TEXT[leEsyncRefreshRequired] = 'e-syncRefreshRequired'
+  // or LDAP_ERROR_TEXT[leAuthorizationDenied] = 'authorizationDenied'
   // - see RawLdapErrorString() to decode a LDAP result code into a full message
   LDAP_ERROR_TEXT: array[TLdapError] of RawUtf8;
 
@@ -3749,8 +3750,7 @@ var
   t: TLdapAttributeType;
   i, n, failed: PtrInt;
 begin
-  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, false, false,
-    {lowcasefirst=}true);
+  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, scLowerCaseFirst);
   LDAP_ERROR_TEXT[leEsyncRefreshRequired] := 'e-syncRefreshRequired';
   // register all our common Attribute Types names for quick search as pointer()
   _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);

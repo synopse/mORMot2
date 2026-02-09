@@ -26,7 +26,7 @@ Update: copyright year `2017-2026`, date `DD.MM.YYYY`, author `Martin Doyle`, em
 
 ```pascal
 {:
-———————————————————————————————————————————————— © martindoyle 2017-2026 ——
+———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
  Project : Rechnung
  Using mORMot2
      Synopse mORMot2 framework. Copyright (C) 2025 Arnaud Bouchez

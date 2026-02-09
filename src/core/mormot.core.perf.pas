@@ -1683,7 +1683,7 @@ type
     ProcessorType: TSmbiosProcessorType;
     /// 2.0+/2.6+ Processor family (f)
     // - we use an ordinal and not an enumerate because there are too much types
-    // - see "Table 23 – Processor Information: Processor Family field" in
+    // - see "Table 23 - Processor Information: Processor Family field" in
     // DSP0134 SMBIOS Reference Specification 3.6.0 page 49 to 55
     // - the Version (v) field gives much more intelligible information
     Family: word;

@@ -496,6 +496,16 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 function JsonObjectAsJsonArrays(Json: PUtf8Char;
   out keys, values: RawUtf8): integer;
 
+/// unserialize some TJsonWriter.WriteObjectFromRttiArray() JSON object
+// - Values^ won't be zeroed first, so unknown or missing Names^ will be ignored
+function JsonObjectToRttiArray(Json: PUtf8Char; Values: pointer;
+  Names: PRawUtf8; ValuesCount: integer; Info: PRttiInfo): PUtf8Char;
+
+/// serialize some values as TJsonWriter.WriteObjectFromRttiArray() JSON object
+procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+  ValuesCount: integer; Info: PRttiInfo; var Result: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
+
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -709,7 +719,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
-    procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt);
+    procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt); overload;
+    /// used internally by WriteObject() when serializing a published property
+    procedure WriteObjectPropNameHumanReadable(const PropName: RawUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameShort(const PropName: ShortString;
@@ -719,6 +732,10 @@ type
     // - this implementation will avoid most memory allocations
     procedure WriteObjectAsString(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+    /// append some raw RTTI values - e.g. some metrics - as a JSON object
+    // - JSON properites come from GetEnumTrimmedNames() names
+    procedure WriteObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+      ValuesCount: integer; Info: PRttiInfo; Options: TTextWriterWriteObjectOptions);
     /// same as AddDynArrayJson(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
@@ -4482,6 +4499,53 @@ begin
   end;
 end;
 
+function JsonObjectToRttiArray(Json: PUtf8Char; Values: pointer;
+  Names: PRawUtf8; ValuesCount: integer; Info: PRttiInfo): PUtf8Char;
+var
+  parser: TJsonParserContext;
+  found: PtrInt;
+begin
+  result := nil;
+  parser.InitParser(Json, Rtti.RegisterType(Info));
+  if (ValuesCount = 0) or
+     not Assigned(parser.Info) or
+     not Assigned(parser.Info.JsonLoad) or
+     not parser.ParseObject then
+    exit; // invalid or {} or null
+  repeat
+    if not parser.GetJsonFieldName then
+      exit;
+    found := FindNonVoidRawUtf8I(
+      pointer(Names), parser.Value, parser.ValueLen, ValuesCount);
+    if found >= 0 then
+    begin
+      TRttiJsonLoad(parser.Info.JsonLoad)(
+        PAnsiChar(Values) + found * parser.Info.Size, parser);
+      if not parser.Valid then
+        exit;
+    end
+    else if not parser.ParseNext then // just ignore unknown fields
+      exit;
+  until parser.EndOfObject = '}';
+  result := parser.Json;
+end;
+
+procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+  ValuesCount: integer; Info: PRttiInfo; var Result: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
+var
+  tmp: TTextWriterStackBuffer; // 8KB static is plain enough
+  W: TJsonWriter;
+begin
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.WriteObjectFromRttiArray(Values, Names, ValuesCount, Info, Options);
+    W.SetText(Result);
+  finally
+    W.Free;
+  end;
+end;
+
 function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): integer;
 var
   wk, wv: TTextWriter;
@@ -6142,6 +6206,11 @@ begin
   AddDirect(' ');
 end;
 
+procedure TJsonWriter.WriteObjectPropNameHumanReadable(const PropName: RawUtf8);
+begin
+  WriteObjectPropNameHumanReadable(pointer(PropName), length(PropName));
+end;
+
 procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
   Options: TTextWriterWriteObjectOptions);
 begin
@@ -6161,6 +6230,28 @@ begin
   W.WriteObject(Value, Options);
   AddJsonEscape(W);
   AddDirect('"');
+end;
+
+procedure TJsonWriter.WriteObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
+  ValuesCount: integer; Info: PRttiInfo; Options: TTextWriterWriteObjectOptions);
+var
+  ctxt: TJsonSaveContext;
+begin
+  ctxt.Init(self, [], Rtti.RegisterType(Info));
+  BlockBegin('{', Options);
+  if Assigned(ctxt.Info) and
+     Assigned(ctxt.Info.JsonSave) then
+    repeat
+      WriteObjectPropNameHumanReadable(Names^);
+      TRttiJsonSave(ctxt.Info.JsonSave)(Values, ctxt);
+      inc(PByte(Values), ctxt.Info.Size);
+      dec(ValuesCount);
+      if ValuesCount = 0 then
+        break;
+      BlockAfterItem(Options);
+      inc(Names);
+    until false;
+  BlockEnd('}', Options);
 end;
 
 procedure TJsonWriter.AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
