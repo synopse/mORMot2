@@ -1958,6 +1958,8 @@ begin
     CheckEqual(m1[dsmDiscover], m1[dsmOffer]);
     CheckEqual(m1[dsmAck], m1[dsmRequest]);
     CheckEqual(m1[dsmLeaseRenewed], m1[dsmRequest]);
+    CheckEqual(m1[dsmStaticHits] + m1[dsmDynamicHits],
+               m1[dsmDiscover]   + m1[dsmRequest], 'hits');
     Check(not IsEqual(m1, m2), 'm2');
     server.ConsolidateMetrics(m2);
     Check(IsEqual(m1, m2), 'ConsolidateMetrics12');
