@@ -496,6 +496,14 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 function JsonObjectAsJsonArrays(Json: PUtf8Char;
   out keys, values: RawUtf8): integer;
 
+/// unserialize some TJsonWriter.WriteObjectFromQWordArray() JSON object
+function JsonObjectToQWordArray(Json: PUtf8Char; Values: PQWordArray;
+  Names: PRawUtf8; ValuesCount: integer): PUtf8Char;
+
+/// serialize some metrics as TJsonWriter.WriteObjectFromQWordArray() JSON object
+procedure JsonObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
+  ValuesCount: integer; var Result: RawUtf8; Options: TTextWriterWriteObjectOptions);
+
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -709,7 +717,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
-    procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt);
+    procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt); overload;
+    /// used internally by WriteObject() when serializing a published property
+    procedure WriteObjectPropNameHumanReadable(const PropName: RawUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameShort(const PropName: ShortString;
@@ -719,6 +730,10 @@ type
     // - this implementation will avoid most memory allocations
     procedure WriteObjectAsString(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+    /// append some QWord values - e.g. some metrics - as a JSON object
+    // - JSON properites come from GetEnumTrimmedNames() names
+    procedure WriteObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
+      ValuesCount: integer; Options: TTextWriterWriteObjectOptions);
     /// same as AddDynArrayJson(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
@@ -4482,6 +4497,46 @@ begin
   end;
 end;
 
+function JsonObjectToQWordArray(Json: PUtf8Char; Values: PQWordArray;
+  Names: PRawUtf8; ValuesCount: integer): PUtf8Char;
+var
+  parser: TJsonParserContext;
+  found: PtrInt;
+begin
+  result := nil;
+  parser.InitParser(Json);
+  if (ValuesCount = 0) or
+     not parser.ParseObject then
+    exit; // invalid or {} or null
+  FillCharFast(Values^[0], ValuesCount * SizeOf(Values^[0]), 0);
+  repeat
+    if not parser.GetJsonFieldName then
+      exit;
+    found := FindNonVoidRawUtf8I(
+      pointer(Names), parser.Value, parser.ValueLen, ValuesCount);
+    if not parser.ParseNext then
+      exit;
+    if found >= 0 then
+      SetQWord(parser.Value, Values^[found]);
+  until parser.EndOfObject = '}';
+  result := parser.Json;
+end;
+
+procedure JsonObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
+  ValuesCount: integer; var Result: RawUtf8; Options: TTextWriterWriteObjectOptions);
+var
+  tmp: TTextWriterStackBuffer; // 8KB static is plain enough
+  W: TJsonWriter;
+begin
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.WriteObjectFromQWordArray(Values, Names, ValuesCount, Options);
+    W.SetText(Result);
+  finally
+    W.Free;
+  end;
+end;
+
 function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): integer;
 var
   wk, wv: TTextWriter;
@@ -6142,6 +6197,11 @@ begin
   AddDirect(' ');
 end;
 
+procedure TJsonWriter.WriteObjectPropNameHumanReadable(const PropName: RawUtf8);
+begin
+  WriteObjectPropNameHumanReadable(pointer(PropName), length(PropName));
+end;
+
 procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
   Options: TTextWriterWriteObjectOptions);
 begin
@@ -6161,6 +6221,23 @@ begin
   W.WriteObject(Value, Options);
   AddJsonEscape(W);
   AddDirect('"');
+end;
+
+procedure TJsonWriter.WriteObjectFromQWordArray(Values: PQWord; Names: PRawUtf8;
+  ValuesCount: integer; Options: TTextWriterWriteObjectOptions);
+begin
+  BlockBegin('{', Options);
+  repeat
+    WriteObjectPropNameHumanReadable(Names^);
+    AddQ(Values^);
+    dec(ValuesCount);
+    if ValuesCount = 0 then
+      break;
+    BlockAfterItem(Options);
+    inc(Names);
+    inc(Values);
+  until false;
+  BlockEnd('}', Options);
 end;
 
 procedure TJsonWriter.AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
