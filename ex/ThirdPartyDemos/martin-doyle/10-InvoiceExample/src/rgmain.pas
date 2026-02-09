@@ -140,6 +140,7 @@ implementation
 
 uses
   mormot.core.base,
+  mormot.core.unicode,
   rgAbout, rgConst, rgReportOpenItems, rgReportPayments, rgReportRevenue,
   rgReportMonthly;
 

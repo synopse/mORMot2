@@ -75,6 +75,7 @@ uses
   mdGrids,
   mormot.core.base,
   mormot.core.text,
+  mormot.core.unicode,
   mdDates;
 
 type

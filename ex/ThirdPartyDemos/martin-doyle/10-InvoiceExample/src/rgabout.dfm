@@ -5,12 +5,9 @@ object AboutForm: TAboutForm
   Width = 463
   BorderStyle = bsDialog
   Caption = 'About Rechnung'
-  ClientHeight = 679
-  ClientWidth = 463
   Color = clBtnFace
   ParentFont = True
   Position = poDesktopCenter
-  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnShow = FormShow
   object Copyright: TLabel

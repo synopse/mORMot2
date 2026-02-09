@@ -23,59 +23,59 @@ object MainForm: TMainForm
     TabOrder = 0
     object QuickInfoCustomerCount: TLabel
       Left = 16
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 83
+      Width = 106
       Caption = '0 Customers'
       Font.Style = [fsBold]
       ParentFont = False
     end
     object QuickInfoSeparator1: TLabel
       Left = 130
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 3
+      Width = 6
       Caption = '|'
       Font.Color = clGray
       ParentFont = False
     end
     object QuickInfoOpenItems: TLabel
       Left = 150
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 89
+      Width = 110
       Caption = 'Open: 0 (0.00)'
     end
     object QuickInfoSeparator2: TLabel
       Left = 340
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 3
+      Width = 6
       Caption = '|'
       Font.Color = clGray
       ParentFont = False
     end
     object QuickInfoDueToday: TLabel
       Left = 360
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 40
+      Width = 50
       Caption = 'Due: 0'
     end
     object QuickInfoSeparator3: TLabel
       Left = 450
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 3
+      Width = 6
       Caption = '|'
       Font.Color = clGray
       ParentFont = False
     end
     object QuickInfoOverdue: TLabel
       Left = 470
-      Height = 16
+      Height = 18
       Top = 15
-      Width = 67
+      Width = 84
       Caption = 'Overdue: 0'
       Font.Color = clRed
       ParentFont = False
@@ -163,9 +163,9 @@ object MainForm: TMainForm
     TabOrder = 2
     object StatusLabel: TLabel
       Left = 8
-      Height = 16
+      Height = 18
       Top = 5
-      Width = 72
+      Width = 89
       Caption = 'StatusLabel'
     end
   end

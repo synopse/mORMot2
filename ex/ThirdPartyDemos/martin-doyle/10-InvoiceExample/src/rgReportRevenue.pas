@@ -70,7 +70,8 @@ implementation
 uses
   mdGrids, DateUtils,
   mormot.core.base,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.unicode;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
