@@ -8,6 +8,7 @@ unit mormot.net.dhcp;
 
    Simple Dynamic Host Configuration Protocol (DHCP) Protocol Support
     - Low-Level DHCP Protocol Definitions
+    - Low-Level per-scope DHCP metrics
     - Middle-Level DHCP Scope and Lease Logic
     - High-Level Multi-Scope DHCP Server Processing Logic
 
@@ -260,54 +261,9 @@ type
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 
 
-{ **************** Middle-Level DHCP Scope and Lease Logic }
+{ **************** Low-Level per-scope DHCP metrics }
 
 type
-  /// the state of one DHCP TDhcpLease entry in memory
-  // - lsFree identify an lsOutdated slot which IP4 has been reused
-  // - lsReserved is used when an OFFER has been sent back to the client with IP4
-  // - lsAck is used when REQUEST has been received and ACK has been sent back
-  // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
-  // - lsOutdated is set once Expired timestamp has been reached, so that the
-  // IP4 address could be reused on the next DISCOVER for this MAC
-  // - lsStatic when the lease comes for Scope.StaticMac[] but not Scope.Entry[]
-  TLeaseState = (
-    lsFree,
-    lsReserved,
-    lsAck,
-    lsUnavailable,
-    lsOutdated,
-    lsStatic);
-
-  /// store one DHCP lease in memory with all its logical properties
-  // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
-  TDhcpLease = packed record
-    /// the MAC address of this entry - should be the first of this record
-    // - we only lookup clients by MAC: no DUID is supported (we found it error-
-    // prone in practice, when some VMs are duplicated with the same DUID)
-    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
-    Mac: TNetMac;
-    /// how this entry should be handled
-    State: TLeaseState;
-    /// how many lsUnavailable IPs have been marked since the last OnIdle
-    // - OnIdle() will reset it to 0, ComputeResponse() will increment it, and
-    // silently ignore any abusive DECLINE/INFORM requests as rate limitation
-    // - also align the whole structure to cpu-cache-friendly 16 bytes
-    RateLimit: byte;
-    /// the 32-bit reserved IP
-    IP4: TNetIP4;
-    /// GetTickSec monotonic value stored as 32-bit unsigned integer
-    // - TUnixTime is used on disk but not during server process (not monotonic)
-    // - for lsStatic as in Scope.StaticMac[], is the last seen timestamp
-    Expired: cardinal;
-  end;
-  /// points to one DHCP lease entry in memory
-  PDhcpLease = ^TDhcpLease;
-
-  /// a dynamic array of TDhcpLease entries, as stored within TDhcpProcess
-  // - 10,000 leases would consume 160KB which fits in L2 cache on modern CPU
-  TLeaseDynArray = array of TDhcpLease;
-
   /// all available per-scope DHCP metrics
   // -  - Protocol messages
   // - dsmDiscover: DISCOVER packet is successfully received and processed
@@ -375,6 +331,96 @@ type
 
   /// store per-scope DHCP metrics as 64-bit unsigned monotonic counters
   TDhcpMetrics = array[TDhcpScopeMetric] of QWord;
+
+  /// store three sets of per-scope DHCP metrics: current/last/total
+  TDhcpAllMetrics = record
+    /// the currently updated DHCP metrics
+    // - reset by TDhcpProcess.OnIdle every TDhcpServerSettings.MetricsCsvMinutes
+    Current: TDhcpMetrics;
+    /// absolute sum of all DHCP metrics, since the server start
+    // - excluses the Current[] pending counters
+    Total: TDhcpMetrics;
+  end;
+
+var
+  /// metrics fields identifier, e.g. "ack" or "static-hits"
+  // - as used by MetricsToJson/MetricsFromJson() JSON object serialization
+  METRIC_TXT: array[TDhcpScopeMetric] of RawUtf8;
+
+/// reset all dst[] values to 0
+procedure FillZero(var dst: TDhcpMetrics); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// efficiently compute inc(dst[], src[0]]) of TDhcpMetrics values
+procedure AddMetrics(var dst, src: TDhcpMetrics);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// check if all TDhcpMetrics values equals actually 0
+function IsZero(const m: TDhcpMetrics): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// compare two sets of TDhcpMetrics values
+function IsEqual(const A, B: TDhcpMetrics): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// persist all DHCP metrics values as a human-readable JSON object
+function MetricsToJson(const m: TDhcpMetrics): RawUtf8; overload;
+
+/// unserialize all DHCP metrics from a MetricsToJson() JSON object
+function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
+
+/// persist all DHCP metrics values as a CSV raw, potentially with header
+function MetricsToCsv(const metrics: TDhcpMetrics; withheader: boolean;
+  now: PShortString): RawUtf8;
+
+
+{ **************** Middle-Level DHCP Scope and Lease Logic }
+
+type
+  /// the state of one DHCP TDhcpLease entry in memory
+  // - lsFree identify an lsOutdated slot which IP4 has been reused
+  // - lsReserved is used when an OFFER has been sent back to the client with IP4
+  // - lsAck is used when REQUEST has been received and ACK has been sent back
+  // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
+  // - lsOutdated is set once Expired timestamp has been reached, so that the
+  // IP4 address could be reused on the next DISCOVER for this MAC
+  // - lsStatic when the lease comes for Scope.StaticMac[] but not Scope.Entry[]
+  TLeaseState = (
+    lsFree,
+    lsReserved,
+    lsAck,
+    lsUnavailable,
+    lsOutdated,
+    lsStatic);
+
+  /// store one DHCP lease in memory with all its logical properties
+  // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
+  TDhcpLease = packed record
+    /// the MAC address of this entry - should be the first of this record
+    // - we only lookup clients by MAC: no DUID is supported (we found it error-
+    // prone in practice, when some VMs are duplicated with the same DUID)
+    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
+    Mac: TNetMac;
+    /// how this entry should be handled
+    State: TLeaseState;
+    /// how many lsUnavailable IPs have been marked since the last OnIdle
+    // - OnIdle() will reset it to 0, ComputeResponse() will increment it, and
+    // silently ignore any abusive DECLINE/INFORM requests as rate limitation
+    // - also align the whole structure to cpu-cache-friendly 16 bytes
+    RateLimit: byte;
+    /// the 32-bit reserved IP
+    IP4: TNetIP4;
+    /// GetTickSec monotonic value stored as 32-bit unsigned integer
+    // - TUnixTime is used on disk but not during server process (not monotonic)
+    // - for lsStatic as in Scope.StaticMac[], is the last seen timestamp
+    Expired: cardinal;
+  end;
+  /// points to one DHCP lease entry in memory
+  PDhcpLease = ^TDhcpLease;
+
+  /// a dynamic array of TDhcpLease entries, as stored within TDhcpProcess
+  // - 10,000 leases would consume 160KB which fits in L2 cache on modern CPU
+  TLeaseDynArray = array of TDhcpLease;
 
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
@@ -488,33 +534,6 @@ type
   TDhcpScopes = array of TDhcpScope;
 
 function ToText(st: TLeaseState): PShortString; overload;
-
-var
-  /// metrics fields identifier, e.g. "ack" or "static-hits"
-  // - as used by MetricsToJson/MetricsFromJson() JSON object serialization
-  METRIC_TXT: array[TDhcpScopeMetric] of RawUtf8;
-
-/// reset all dst[] values to 0
-procedure FillZero(var dst: TDhcpMetrics); overload;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// efficiently compute inc(dst[], src[0]]) of TDhcpMetrics values
-procedure AddMetrics(var dst, src: TDhcpMetrics);
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// check if all TDhcpMetrics values equals actually 0
-function IsZero(const m: TDhcpMetrics): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// compare two sets of TDhcpMetrics values
-function IsEqual(const A, B: TDhcpMetrics): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// persist all DHCP metrics values as a JSON object
-function MetricsToJson(const m: TDhcpMetrics): RawUtf8; overload;
-
-/// unserialize all DHCP metrics from a MetricsToJson() JSON object
-function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
 
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
@@ -1109,12 +1128,7 @@ begin
 end;
 
 
-{ **************** Middle-Level DHCP Scope and Lease Logic }
-
-function ToText(st: TLeaseState): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TLeaseState), ord(st));
-end;
+{ **************** Low-Level per-scope DHCP metrics }
 
 procedure FillZero(var dst: TDhcpMetrics);
 begin
@@ -1153,6 +1167,46 @@ begin
   tmp.Done;
 end;
 
+function MetricsToCsv(const metrics: TDhcpMetrics; withheader: boolean;
+  now: PShortString): RawUtf8;
+var
+  tmp: TTextWriterStackBuffer; // 8KB static is enough
+  W: TTextWriter;
+  m: TDhcpScopeMetric;
+begin
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    if withheader then
+    begin
+      if now <> nil then
+        W.AddShorter('time,');
+      W.AddCsvStrings(@METRIC_TXT, ord(high(METRIC_TXT)));
+      W.AddDirectNewLine;
+    end;
+    if now <> nil then
+      W.AddShort(now^);
+    m := low(m);
+    repeat
+      W.AddQ(metrics[m]);
+      if m = high(m) then
+        break;
+      inc(m);
+      W.AddComma;
+    until false;
+    W.AddDirectNewLine;
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+
+{ **************** Middle-Level DHCP Scope and Lease Logic }
+
+function ToText(st: TLeaseState): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TLeaseState), ord(st));
+end;
 
 { TDhcpScope }
 
