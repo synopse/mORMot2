@@ -7832,7 +7832,7 @@ end;
 function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
 begin
   result := false;
-  folder := EnsureDirectoryExists(Join([parent, sub]));
+  folder := EnsureDirectoryExists(parent + sub);
   if folder = '' then
     exit;
   if FileIsWritable(folder) then

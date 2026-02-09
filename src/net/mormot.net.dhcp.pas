@@ -2243,7 +2243,8 @@ begin
   PInt64(@result^.Mac)^ := Data.Mac64; // also reset State+RateLimit
   result^.State := lsStatic;
   // write UUID in logs instead of MAC address (up to 32 bytes = 256-bit)
-  BinToHex(@opt61^[1], @data.Mac, MinPtrUInt(SizeOf(data.Mac) div 2, opt61^[0]));
+  mormot.core.text.BinToHex(@opt61^[1], @data.Mac,
+    MinPtrUInt(SizeOf(data.Mac) div 2, opt61^[0]));
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
