@@ -129,7 +129,7 @@ procedure TInvoiceEditForm.SetupLayout;
 var
   Layout: TLayoutHelper;
   Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
+  LabelWidth, EditWidth, GridWidth: Integer;
   BaseHeight: Integer;
 begin
   BaseHeight := LabelCustomer.Height;
@@ -140,6 +140,8 @@ begin
 
     LabelWidth := Round(8 * BaseHeight);
     EditWidth := Round(12 * BaseHeight);
+
+    GridWidth := Round(44 * BaseHeight);
 
     LabelCustomer.Width := LabelWidth;
     LabelOrderNo.Width := LabelWidth;
@@ -166,7 +168,7 @@ begin
 
     ItemsToolbarPanel.Top := EditSaleDate.Top + EditSaleDate.Height + (2 * BaseHeight);
     ItemsToolbarPanel.Left := Margins.Left;
-    ItemsToolbarPanel.Width := ClientWidth - 2 * Margins.Left;
+    ItemsToolbarPanel.Width := GridWidth;
     ItemsToolbarPanel.Height := Round(2.5 * BaseHeight);
 
     AddItemButton.Left := 0;
@@ -178,22 +180,24 @@ begin
 
     FItemsListGrid.Top := ItemsToolbarPanel.Top + ItemsToolbarPanel.Height + (BaseHeight div 2);
     FItemsListGrid.Left := Margins.Left;
-    FItemsListGrid.Width := ClientWidth - 2 * Margins.Left;
+    FItemsListGrid.Width := GridWidth;
     FItemsListGrid.Height := Round(12 * BaseHeight);
 
     LabelTotal.Top := FItemsListGrid.Top + FItemsListGrid.Height + BaseHeight;
     LabelTotalValue.Top := LabelTotal.Top;
+    LabelTotalValue.Width:= Round(7 * BaseHeight);
     LabelTotalValue.Left := FItemsListGrid.Left + FItemsListGrid.Width - LabelTotalValue.Width;
     LabelTotal.Left := LabelTotalValue.Left - LabelTotal.Width - BaseHeight;
+
+
+    // Auto-size form based on content
+    Layout.AutoSizeForm;
 
     SaveButton.Top := LabelTotal.Top + LabelTotal.Height + (2 * BaseHeight);
     CancelButton.Top := SaveButton.Top;
 
     CancelButton.Left := ClientWidth - Margins.Right - CancelButton.Width;
     SaveButton.Left := CancelButton.Left - Margins.Middle - SaveButton.Width;
-
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
-    ClientWidth := FItemsListGrid.Left + FItemsListGrid.Width + Margins.Right;
 
     Position := poMainFormCenter;
   finally
@@ -257,9 +261,9 @@ begin
       ListItem.Caption := IntToStr(FItems[i].Position);
       ListItem.SubItems.Add(Utf8ToString(FItems[i].Description));
       ListItem.SubItems.Add(Format('%.2f', [FItems[i].Quantity]));
-      ListItem.SubItems.Add(Curr64ToString(PInt64(@FItems[i].ListPrice)^));
+      ListItem.SubItems.Add(Format('%.2n', [FItems[i].ListPrice]));
       ListItem.SubItems.Add(IntToStr(FItems[i].Discount));
-      ListItem.SubItems.Add(Curr64ToString(PInt64(@FItems[i].Amount)^));
+      ListItem.SubItems.Add(Format('%.2n', [FItems[i].Amount]));
       ListItem.Data := Pointer(PtrInt(i));
     end;
   finally
@@ -287,7 +291,7 @@ begin
   Total := 0;
   for i := 0 to Length(FItems) - 1 do
     Total := Total + FItems[i].Amount;
-  LabelTotalValue.Caption := Curr64ToString(PInt64(@Total)^);
+  LabelTotalValue.Caption := Format('%.2n', [Total]);
 end;
 
 procedure TInvoiceEditForm.FormDestroy(Sender: TObject);

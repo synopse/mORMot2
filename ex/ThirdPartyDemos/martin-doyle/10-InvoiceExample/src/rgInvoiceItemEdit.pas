@@ -242,7 +242,7 @@ begin
 
   EditDescription.Text := Utf8ToString(AItem.Description);
   EditQuantity.Text := Format('%.2f', [AItem.Quantity]);
-  EditPrice.Text := Curr64ToString(PInt64(@AItem.ListPrice)^);
+  EditPrice.Text := Format('%.2n', [AItem.ListPrice]);
   SpinDiscount.Value := AItem.Discount;
 
   ActiveControl := EditDescription;

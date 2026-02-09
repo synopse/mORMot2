@@ -202,18 +202,18 @@ begin
     ListItem := FResultGrid.Items.Add;
     ListItem.Caption := Utf8ToString(Items[i].MonthName);
     ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].Revenue)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].PaymentsReceived)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].OpenAmount)^));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].Revenue]));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].PaymentsReceived]));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].OpenAmount]));
   end;
 
   // Add totals row
   ListItem := FResultGrid.Items.Add;
   ListItem.Caption := '--- ' + Utf8ToString(Totals.MonthName) + ' ---';
   ListItem.SubItems.Add(IntToStr(Totals.InvoiceCount));
-  ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.Revenue)^));
-  ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.PaymentsReceived)^));
-  ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.OpenAmount)^));
+  ListItem.SubItems.Add(Format('%.2n', [Totals.Revenue]));
+  ListItem.SubItems.Add(Format('%.2n', [Totals.PaymentsReceived]));
+  ListItem.SubItems.Add(Format('%.2n', [Totals.OpenAmount]));
 end;
 
 procedure TMonthlyOverviewReportForm.RefreshButtonClick(Sender: TObject);

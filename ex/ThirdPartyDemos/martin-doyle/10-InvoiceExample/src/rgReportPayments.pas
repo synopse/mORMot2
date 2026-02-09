@@ -213,7 +213,7 @@ begin
       ListItem.Caption := '';
     ListItem.SubItems.Add(Utf8ToString(Items[i].Company));
     ListItem.SubItems.Add(Utf8ToString(Items[i].OrderNo));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].AmountPaid)^));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].AmountPaid]));
     ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;
 end;

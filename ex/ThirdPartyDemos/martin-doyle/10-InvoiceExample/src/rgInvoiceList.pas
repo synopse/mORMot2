@@ -283,9 +283,9 @@ begin
       Item := FInvoiceListGrid.Items.Add;
       Item.Caption := Utf8ToString(Invoices[i].OrderNo);
       Item.SubItems.Add(AppDateToStr(Invoices[i].SaleDate));
-      Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].ItemsTotal)^));
-      Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].AmountPaid)^));
-      Item.SubItems.Add(Curr64ToString(PInt64(@Invoices[i].OpenAmount)^));
+      Item.SubItems.Add(Format('%.2n', [Invoices[i].ItemsTotal]));
+      Item.SubItems.Add(Format('%.2n', [Invoices[i].AmountPaid]));
+      Item.SubItems.Add(Format('%.2n', [Invoices[i].OpenAmount]));
       Item.SubItems.Add(StatusToIndicator(Invoices[i].Status));
       Item.Data := Pointer(PtrInt(Invoices[i].OrderID));
     end;

@@ -266,8 +266,8 @@ begin
       ListItem.SubItems.Add(AppDateToStr(Items[i].SaleDate))
     else
       ListItem.SubItems.Add('');
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].ItemsTotal)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].OpenAmount)^));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].ItemsTotal]));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].OpenAmount]));
     ListItem.SubItems.Add(IntToStr(Items[i].DaysOverdue));
     ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;

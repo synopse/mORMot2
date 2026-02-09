@@ -205,8 +205,8 @@ begin
 
   if Amount > FOpenAmount then
   begin
-    if MessageDlg('Amount ' + Curr64ToString(PInt64(@Amount)^) +
-        ' exceeds open amount ' + Curr64ToString(PInt64(@FOpenAmount)^) +
+    if MessageDlg('Amount ' + Format('%.2n', [Amount]) +
+        ' exceeds open amount ' + Format('%.2n', [FOpenAmount]) +
         '. Continue?',
       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
     begin
@@ -265,8 +265,8 @@ begin
   FPaymentSuccessful := False;
 
   LabelInvoiceNo.Caption := AInvoiceNo;
-  LabelOpenValue.Caption := Curr64ToString(PInt64(@AOpenAmount)^);
-  EditAmount.Text := Curr64ToString(PInt64(@AOpenAmount)^);
+  LabelOpenValue.Caption := Format('%.2n', [AOpenAmount]);
+  EditAmount.Text := Format('%.2n', [AOpenAmount]);
   EditDate.Text := AppDateToStr(Date);
 
   EditAmount.SelectAll;

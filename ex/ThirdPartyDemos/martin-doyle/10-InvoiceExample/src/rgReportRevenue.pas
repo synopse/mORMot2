@@ -200,9 +200,9 @@ begin
     ListItem := FResultGrid.Items.Add;
     ListItem.Caption := Utf8ToString(Items[i].Company);
     ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalRevenue)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalPaid)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Items[i].TotalOpen)^));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].TotalRevenue]));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].TotalPaid]));
+    ListItem.SubItems.Add(Format('%.2n', [Items[i].TotalOpen]));
     ListItem.Data := Pointer(PtrInt(Items[i].CustomerID));
   end;
 end;

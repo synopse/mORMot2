@@ -140,6 +140,7 @@ implementation
 
 uses
   mormot.core.base,
+  mormot.core.text,
   mormot.core.unicode,
   rgAbout, rgConst, rgReportOpenItems, rgReportPayments, rgReportRevenue,
   rgReportMonthly;
@@ -235,10 +236,10 @@ var
 begin
   RgServices.StatisticsService.GetDashboardStats(Stats);
 
-  QuickInfoCustomerCount.Caption := Format('%d Customers', [Stats.CustomerCount]);
+  QuickInfoCustomerCount.Caption := FormatString('% Customers', [Stats.CustomerCount]);
   QuickInfoOpenItems.Caption := Format('Open: %d (%.2n)', [Stats.OpenItemsCount, Stats.OpenItemsAmount]);
-  QuickInfoDueToday.Caption := Format('Due: %d', [Stats.DueTodayCount]);
-  QuickInfoOverdue.Caption := Format('Overdue: %d', [Stats.OverdueCount]);
+  QuickInfoDueToday.Caption := FormatString('Due: %', [Stats.DueTodayCount]);
+  QuickInfoOverdue.Caption := FormatString('Overdue: %', [Stats.OverdueCount]);
 
   // Highlight overdue if > 0
   if Stats.OverdueCount > 0 then
