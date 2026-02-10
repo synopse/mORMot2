@@ -8227,7 +8227,7 @@ begin
     end;
   end;
   while (len > 0) and
-        (P^ <= ' ') do // trim left spaces
+        (P^ <= ' ') do // trim left spaces (may be TSynLog indentation)
   begin
     inc(P);
     dec(len);
@@ -8235,7 +8235,7 @@ begin
   while (len > 0) and
         (P[len - 1] <= ' ') do // trim right spaces
     dec(len);
-  len := Utf8TruncatedLength(P, len, maxLen);
+  len := Utf8TruncatedLength(pointer(P), len, maxLen);
 end;
 
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
@@ -8301,13 +8301,13 @@ const
 function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
   TrimSynLogDate: boolean): boolean;
 var
-  jvec: array[0..1] of TIoVec;
+  v: array[0..1] of TIoVec;
   p: PUtf8Char;
   len: PtrInt;
   priority: TShort16;
-  tmp: array[0..1500] of AnsiChar; // systemd truncates to LINE_MAX=2048 anyway
+  tmp: array[0..1500] of AnsiChar; // mimics UDP/Ethernet frame truncation
 begin
-  // skip time "20200615 08003008  ." which should not be part of the jvec[]
+  // skip time and level e.g. '20200615 08003008  . '
   result := false;
   p := pointer(Text);
   len := Length(Text);
@@ -8317,15 +8317,15 @@ begin
     exit;
   // prepare and send the information to the journal
   FormatShort16('PRIORITY=%', [ord(LOG_TO_SYSLOG[Level])], priority);
-  jvec[0].iov_base := @priority[1];
-  jvec[0].iov_len := ord(priority[0]);
+  v[0].iov_base := @priority[1];
+  v[0].iov_len := ord(priority[0]);
   PInt64(@tmp)^ := PInt64(@_MESSAGE)^;
   MoveFast(p^, tmp[8], len);
-  jvec[1].iov_base := @tmp;
-  jvec[1].iov_len := len + 8;
-  result := sd.journal_sendv(jvec[0], 2) = 0; // return 0 on success
+  v[1].iov_base := @tmp;
+  v[1].iov_len := len + 8;
+  result := sd.journal_sendv(v[0], 2) = 0;
   // if systemd-journald is not running (the socket is not present), sendv()
-  // do nothing, and return 0 = success
+  // does nothing, and returns 0 = success
 end;
 {$endif OSLINUX}
 
