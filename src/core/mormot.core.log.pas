@@ -728,7 +728,6 @@ type
     procedure SetLevel(aLevel: TSynLogLevels);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogLevels);
-    procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
     function ArchiveAndDeleteFile(const aFileName: TFileName): boolean;
@@ -851,14 +850,17 @@ type
     // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogLevels
       read fEchoToConsole write SetEchoToConsole;
-    /// redirect all EchoToConsole logging into the Linux journald service
-    // - do nothing on Windows or BSD systems
+    /// redirect all EchoToConsole logging into the system journal service
+    // - redirect log output to our JournalSend() function
+    // - on Linux, will first try systemd journal, and fallback to syslog()
+    // - on BSD/MacOS, will call libc syslog()
+    // - on Windows, will call OutputDebugStringW() - TODO: support EWT
     // - such logs can be exported into a format which can be viewed by our
     // LogView tool using the following command (replacing UNIT with
     // your unit name and PROCESS with the executable name):
     // $ "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
     property EchoToConsoleUseJournal: boolean
-      read fEchoToConsoleUseJournal write SetEchoToConsoleUseJournal;
+      read fEchoToConsoleUseJournal write fEchoToConsoleUseJournal;
     /// EchoToConsole output is sent from the flush background thread
     // - enabled by default on Windows, since its console output is very slow
     property EchoToConsoleBackground: boolean
@@ -4177,18 +4179,6 @@ begin
   fEchoToConsole := aEnabled;
 end;
 
-procedure TSynLogFamily.SetEchoToConsoleUseJournal(aValue: boolean);
-begin
-  if self <> nil then
-    {$ifdef OSLINUX}
-    if aValue and
-       sd.IsAvailable then
-      fEchoToConsoleUseJournal := true
-    else
-    {$endif OSLINUX}
-      fEchoToConsoleUseJournal := false;
-end;
-
 function TSynLogFamily.GetSynLogClassName: string;
 begin
   if (self = nil) or
@@ -5258,12 +5248,9 @@ function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
 begin
   result := true;
   if Level in fFamily.fEchoToConsole then
-    {$ifdef OSLINUX}
     if Family.EchoToConsoleUseJournal then
-      SystemdEcho(Level, Text)
-    else
-    {$endif OSLINUX}
-    if fFamily.EchoToConsoleBackground and
+      JournalSend(Level, Text, {trimsynlog=}true)
+    else if fFamily.EchoToConsoleBackground and
        Assigned(AutoFlushThread) then
       AutoFlushThread.AddToConsole(Text, LOG_CONSOLE_COLORS[Level])
     else
