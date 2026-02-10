@@ -1985,7 +1985,7 @@ begin
         p^ := dlsym(systemd, SD_NAMES[i]);
         if p^ = nil then
         begin
-          p := @@listen_fds;
+          p := @@listen_fds; // missing entry: reset all other API functions
           for j := 0 to i do
           begin
             p^ := nil;

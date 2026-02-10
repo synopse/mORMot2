@@ -2227,7 +2227,7 @@ type
     listen_fds: function(unset_environment: integer): integer; cdecl;
     /// returns 1 if the file descriptor is an AF_UNIX socket of the specified type and path
     is_socket_unix: function(fd, typr, listening: integer;
-      var path: TFileName; pathLength: PtrUInt): integer; cdecl;
+      path: PAnsiChar; pathLength: PtrUInt): integer; cdecl;
     /// systemd: submit simple, plain text log entries to the system journal
     // - priority value can be obtained using integer(LOG_TO_SYSLOG[logLevel])
     journal_print: function(priority: integer; args: array of const): integer; cdecl;
@@ -2235,10 +2235,12 @@ type
     // - each structure should reference one field of the entry to submit
     // - the second argument specifies the number of structures in the array
     journal_sendv: function(var iov: TIoVec; n: integer): integer; cdecl;
-    /// sends notification to systemd
-    // - see https://www.freedesktop.org/software/systemd/man/notify.html
-    // status notification sample: sd.notify(0, 'READY=1');
-    // watchdog notification: sd.notify(0, 'WATCHDOG=1');
+    /// sends notification to systemd service manager about state changes
+    // - unset_environment should be kept to 0, unless further notify() calls
+    // would silently do nothing
+    // - see https://man.archlinux.org/man/sd_notify.3.en for some values, e.g.
+    // $ status notification sample: sd.notify(0, 'READY=1');
+    // $ watchdog notification: sd.notify(0, 'WATCHDOG=1');
     notify: function(unset_environment: integer; state: PUtf8Char): integer; cdecl;
     /// check whether the service manager expects watchdog keep-alive
     // notifications from a service
