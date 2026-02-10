@@ -3100,6 +3100,14 @@ begin
     Check(LoadJsonInPlace(h2, pointer(s), PT_INFO[pt]) <> nil);
     CheckUtf8(CompareMem(@h, @h2, PT_SIZE[pt]), '%', [PT_INFO[pt].RawName]);
   end;
+  DotNetIdentifierGuid('MyCompany.MyComponent', g);
+  ToUtf8(g, s, @TwoDigitsHexLower);
+  CheckEqual(s, 'ce5fa4ea-ab00-5402-8b76-9f76ac858fb5');
+  Check(not IsRandomGuid(@g), 'from identifier');
+  DotNetIdentifierGuid('YourProviderNameYourProviderName', g);
+  ToUtf8(g, s, @TwoDigitsHexLower);
+  CheckEqual(s, '6f8eac67-f87f-598a-71a0-67e48d8c468d');
+  Check(not IsRandomGuid(@g), 'from identifier');
 end;
 
 procedure TTestCoreBase._ParseCommandArgs;
@@ -9612,8 +9620,9 @@ begin
   Check(IdemPChar(PUtf8Char(@tmp), PAnsiChar('<165>1 ')));
   Check(PosEx(' proc msg - ++++', tmp) > 1);
   Check(len < 300, 'truncated to avoid buffer overflow');
-  Check(tmp[len - 1] = '+');
-  Check(tmp[len] = #1);
+  Check(tmp[len - 1] = '+', 'last+');
+  Check(tmp[len] = #0, 'ending #0');
+  Check(tmp[len + 1] = #1, 'buffer');
   // validate TSynLogFile
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
