@@ -648,6 +648,13 @@ type
   /// a dynamyc array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
 
+  /// how to refine DHCP server process globally for all scopes
+  // - dsoSystemLog would call JournalSend() in addition to default TSynLog
+  TDhcpServerOption = (
+    dsoSystemLog);
+  /// refine DHCP server process for all scopes
+  TDhcpServerOptions = set of TDhcpServerOption;
+
   /// main high-level options for defining our DHCP Server process
   TDhcpServerSettings = class(TSynAutoCreateFields)
   protected
@@ -655,6 +662,7 @@ type
     fMetricsFolder: TFileName;
     fFileFlushSeconds: cardinal;
     fMetricsCsvMinutes: cardinal;
+    fOptions: TDhcpServerOptions;
     fScope: TDhcpScopeSettingsObjArray;
   public
     /// setup this instance with default values
@@ -691,6 +699,9 @@ type
     // - default is every 5 minutes, which is convenient and not storage
     property MetricsCsvMinutes: cardinal
       read fMetricsCsvMinutes write fMetricsCsvMinutes default 5;
+    /// customize server-level options, when Scope[].Options are not enough
+    property Options: TDhcpServerOptions
+      read fOptions write fOptions;
     /// store the per subnet scope settings
     property Scope: TDhcpScopeSettingsObjArray
       read fScope;
@@ -761,6 +772,7 @@ type
     fLog: TSynLogClass;
     fFileName, fMetricsFolder, fMetricsJson: TFileName;
     fOnComputeResponse: TOnComputeResponse;
+    fOptions: TDhcpServerOptions;
     fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fMetricsDroppedPackets, fMetricsInvalidRequest: QWord; // no scope counters
     function GetCount: integer;
@@ -845,6 +857,9 @@ type
     /// the associated TSynLog class used to debug the execution context
     property Log: TSynLogClass
       read fLog write fLog;
+    /// customize server-level options, when Scope[].Options are not enough
+    property Options: TDhcpServerOptions
+      read fOptions write fOptions;
     /// how many leases are currently reserved in memory in all Scope[] subnets
     property Count: integer
       read GetCount;
@@ -1944,6 +1959,7 @@ begin
     fMetricsFolder := '';
     if aSettings.MetricsFolder <> '' then
       SetMetricsFolder(aSettings.MetricsFolder);
+    fOptions := aSettings.Options;
     // success
     fState := sSetup;
   finally
@@ -2464,17 +2480,30 @@ procedure TDhcpProcess.DoLog(Level: TSynLogLevel; const Context: ShortString;
 var
   fam: TSynLogFamily;
   send: PUtf8Char;
+  l: PtrInt;
+  tmp: ShortString;
 begin
   // this method could be overriden to extend or replace the default logging
   fam := fLog.Family;
   if (fam = nil) or
      not (Level in fam.Level) then
-    exit;
+    if not (dsoSystemLog in fOptions) then
+      exit
+    else
+      fam := nil;
   send := nil;
   if Data.SendType <> dmtUndefined then
     send := pointer(DHCP_TXT[Data.SendType]);
-  fam.Add.Log(Level, 'ComputeResponse: % % %% % %',
-    [DHCP_TXT[Data.RecvType], Data.Mac, Context, send, Data.Ip, Data.HostName^]);
+  FormatShort('ComputeResponse: % % %% % %',
+    [DHCP_TXT[Data.RecvType], Data.Mac, Context, send, Data.Ip, Data.HostName^],
+    tmp);
+  l := ord(tmp[0]);
+  if tmp[l] <> ' ' then // trim ending ' ' for Data.HostName^ = ''
+    inc(l);
+  tmp[l] := #0;         // make ASCIIZ
+  fam.Add.LogText(Level, PUtf8Char(@tmp[1]), nil); // this is the fastest API
+  if dsoSystemLog in fOptions then
+    JournalSend(Level, @tmp[18], l - 18); // send '% % %% % %' parameters
 end;
 
 function TDhcpProcess.ParseFrame(var Data: TDhcpProcessData): boolean;
