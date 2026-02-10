@@ -2043,17 +2043,25 @@ const
 
 /// append some information to a syslog message memory buffer
 // - following https://datatracker.ietf.org/doc/html/rfc5424
-// - ready to be sent via UDP to a syslog remote server
-// - returns the number of bytes written to destbuffer (which should have
-// destsize > 127)
+// - ready to be sent via UDP or TLS to a syslog remote server
+// - returns the number of bytes written to destbuffer (with destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
   trimmsgfromlog: boolean; const appname: RawUtf8 = ''): PtrInt;
 
+/// send an event to the Operating System journal
+// - use systemd library on Linux with fallback to syslog() on POSIX
+// - on Windows, calls OutputDebugStringW() - TODO: use ETW API
+// - as used e.g. for TSynLogFamily.EchoToConsoleUseJournal process
+// - input text would detect and trim "20200615 08003008 xxxx" TSynLog format,
+// unless TrimSynLogDate is forced to false
+function JournalSend(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate: boolean = true {$ifdef OSLINUX};
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean;
+
 {$ifdef OSLINUX}
-/// send a TSynLog formatted text to the systemd library
-// - expected input text should alread be in "20200615 08003008 xxxx" format
-// - as used e.g. during TSynLogFamily.EchoToConsoleUseJournal process
+/// send an event to the systemd library with no fallback to syslog()
+// - compatibility function with older mORMot - use JournalSend() instead
 function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
   TrimSynLogDate: boolean = true): boolean;
 {$endif OSLINUX}
@@ -8291,43 +8299,48 @@ begin
     inc(destbuffer, 3);
   end;
   MoveFast(P^, destbuffer^, len);
+  destbuffer[len] := #0; // for debugging - not included in result length
   result := (destbuffer - start) + len;
 end;
 
-{$ifdef OSLINUX}
 const
-  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
+  MAX_SYSLOG = 1500; // mimics UDP/Ethernet frame truncation
 
+{$ifdef OSLINUX} // compatibility function for old mORMot code
 function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
   TrimSynLogDate: boolean): boolean;
+begin
+  result := JournalSend(Level, Text, TrimSynLogDate, {nosyslog=}true);
+end;
+{$endif OSLINUX}
+
+function JournalSend(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate {$ifdef OSLINUX}, NoSysLogFallback{$endif}: boolean): boolean;
 var
-  v: array[0..1] of TIoVec;
   p: PUtf8Char;
-  len: PtrInt;
-  priority: TShort16;
-  tmp: array[0..1500] of AnsiChar; // mimics UDP/Ethernet frame truncation
+  len {$ifdef OSPOSIX}, priority {$endif}: PtrInt;
 begin
   // skip time and level e.g. '20200615 08003008  . '
   result := false;
   p := pointer(Text);
   len := Length(Text);
-  TrimSynLogMessage(p, Len, TrimSynLogDate, SizeOf(tmp) - SizeOf(_MESSAGE));
-  if (len < 2) or
-     not sd.IsAvailable then
-    exit;
-  // prepare and send the information to the journal
-  FormatShort16('PRIORITY=%', [ord(LOG_TO_SYSLOG[Level])], priority);
-  v[0].iov_base := @priority[1];
-  v[0].iov_len := ord(priority[0]);
-  PInt64(@tmp)^ := PInt64(@_MESSAGE)^;
-  MoveFast(p^, tmp[8], len);
-  v[1].iov_base := @tmp;
-  v[1].iov_len := len + 8;
-  result := sd.journal_sendv(v[0], 2) = 0;
-  // if systemd-journald is not running (the socket is not present), sendv()
-  // does nothing, and returns 0 = success
+  TrimSynLogMessage(p, Len, TrimSynLogDate, MAX_SYSLOG);
+  if len < 2 then
+    exit; // nothing to send
+  {$ifdef OSWINDOWS}
+  WinDebugOutput(p, len); // call OutputDebugStringW() API
+  result := true;
+  {$else}
+  priority := ord(LOG_TO_SYSLOG[Level]);
+  {$ifdef OSLINUX}
+  if sd.IsAvailable and
+     sd.Send(priority, p, len) then
+    result := true
+  else if not NoSysLogFallback then
+  {$endif OSLINUX}
+    result := SysLogSend(priority + ord(sfUser) shl 3, p, len);
+  {$endif OSWINDOWS}
 end;
-{$endif OSLINUX}
 
 
 procedure InitializeUnit;
