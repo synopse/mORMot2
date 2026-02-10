@@ -2015,7 +2015,7 @@ begin
     fMetricsDroppedPackets := 0;
     fMetricsInvalidRequest := 0;
   finally
-    if not keepWriteLock then
+    if not keepWriteLock then // e.g. LoadFromText() would continue locked
       fScopeSafe.WriteUnLock;
   end;
 end;
@@ -2025,9 +2025,10 @@ begin
   // disable ComputeResponse()
   if fState in [sNone, sShutdown] then
     exit; // no Setup(), or called twice
-  fScopeSafe.WriteLock;
+  fState := sShutdown;  // abort any ComputeResponse() ASAP
+  fScopeSafe.WriteLock; // wait for any pending process
   try
-    fState := sShutdown;
+    fState := sShutdown; // paranoid
   finally
     fScopeSafe.WriteUnLock;
   end;
