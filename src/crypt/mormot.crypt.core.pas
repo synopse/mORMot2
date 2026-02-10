@@ -2512,6 +2512,11 @@ function Md5Buf(const Buffer; Len: cardinal): TMd5Digest;
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
 function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 
+/// compute a GUID from an identifier, as does DotNet using SHA-1 hashing
+// - e.g. 'MyCompany.MyComponent' into {ce5fa4ea-ab00-5402-8b76-9f76ac858fb5}
+// - compatible with Windows ETW name-based Provider ID / Control GUID
+procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
+
 
 { ****************** HMAC Authentication over SHA-256 }
 
@@ -9918,6 +9923,32 @@ begin
   result := tmp;
   Append(tmp, pass);
   Append(result, Md5(tmp));
+end;
+
+const
+  DOTNET_SIGNATURE: TGuid = '{b22d2c48-90c3-c847-87f8-1a15bfc130fb}';
+
+procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
+var
+  sha1: TSha1;
+  dig: TSha1Digest;
+  up: RawUtf8;
+  n: PtrInt;
+  tmp: TSynTempBuffer;
+begin
+  FillZero(guid);
+  UpperCaseCopy(name, up);           // normalize identifier to uppercase
+  n := Utf8DecodeToUnicode(up, tmp); // UTF-16 little endian
+  if n = 0 then
+    exit;
+  RawUnicodeSwapEndian(tmp.buf, n);  // UTF-16 big endian conversion
+  sha1.Init;
+  sha1.Update(@DOTNET_SIGNATURE, SizeOf(DOTNET_SIGNATURE));
+  sha1.Update(tmp.buf, n * 2);
+  sha1.Final(dig, {noinit=}true);
+  tmp.Done; // unlikely
+  dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
+  guid := PGuid(@dig)^;
 end;
 
 
