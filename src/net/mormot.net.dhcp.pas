@@ -760,6 +760,7 @@ type
     fFileName, fMetricsFolder, fMetricsJson: TFileName;
     fOnComputeResponse: TOnComputeResponse;
     fState: (sNone, sSetup, sSetupFailed, sShutdown);
+    fMetricsDroppedPackets, fMetricsInvalidRequest: QWord; // no scope counters
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
@@ -1979,6 +1980,8 @@ begin
     fScope := nil;
     fModifSequence := 0;
     fModifSaved := 0;
+    fMetricsDroppedPackets := 0;
+    fMetricsInvalidRequest := 0;
   finally
     fScopeSafe.WriteUnLock;
   end;
@@ -2004,6 +2007,8 @@ begin
     end;
     fModifSequence := 0;
     fModifSaved := 0;
+    fMetricsDroppedPackets := 0;
+    fMetricsInvalidRequest := 0;
   finally
     if not keepWriteLock then
       fScopeSafe.WriteUnLock;
@@ -2234,6 +2239,8 @@ var
   s: PDhcpScope;
 begin
   FillCharFast(global, SizeOf(global), 0);
+  global.Total[dsmDroppedPackets] := fMetricsDroppedPackets; // no scope counter
+  global.Total[dsmInvalidRequest] := fMetricsInvalidRequest;
   fScopeSafe.ReadLock; // protect fScope[]
   s := pointer(fScope);
   if s <> nil then
@@ -2257,6 +2264,8 @@ var
   s: PDhcpScope;
 begin
   FillZero(global);
+  global[dsmDroppedPackets] := fMetricsDroppedPackets; // no scope counters
+  global[dsmInvalidRequest] := fMetricsInvalidRequest;
   fScopeSafe.ReadLock; // protect fScope[]
   s := pointer(fScope);
   if s <> nil then
@@ -2432,9 +2441,7 @@ begin
   else
     Data.Mac[0] := #0;
   Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
-  result := (Data.Mac64 <> 0) and
-            (Data.RecvType in
-              [dmtDiscover, dmtRequest, dmtDecline, dmtRelease, dmtInform]);
+  result := Data.Mac64 <> 0;
 end;
 
 function TDhcpProcess.RetrieveFrameIP(
@@ -2533,23 +2540,22 @@ begin
   result := -1; // error
   // do nothing on missing Setup() or after Shutdown
   if (self = nil) or
-     (fState <> sSetup) or
-     (fScope = nil) then
+     (fScope = nil) or
+     (fState <> sSetup) then
   begin
-    // TODO inc(Metrics.Current[dsmDroppedPackets]); // no Data.Scope yet: use global metrics
+    if self <> nil then
+      inc(fMetricsDroppedPackets); // no Scope yet
     exit;
   end;
   // parse and validate the request
   if not ParseFrame(Data) then
   begin
     if Assigned(fLog) then
-      fLog.Add.Log(sllTrace, 'ComputeResponse: % % unexpected %',
+      fLog.Add.Log(sllTrace, 'ComputeResponse: % % invalid %',
         [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
-    // TODO if Data.RecvType = dmtUndefined then
-    //  inc(Metrics.Current[dsmInvalidRequest])
-    //else
-    //  inc(Metrics.Current[dsmUnsupportedRequest]);
-    exit; // invalid or unsupported frame
+    inc(fMetricsInvalidRequest); // no Scope yet
+    exit;
+    // unsupported RecvType will continue and inc(Scope^.Metrics) below
   end;
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
   try
@@ -2848,7 +2854,15 @@ begin
             end;
           end
       else
-        exit; // paranoid
+        begin
+          // ParseFrame() was correct but this message type is not supported yet
+          inc(Data.Scope^.Metrics.Current[dsmUnsupportedRequest]);
+          if Assigned(fLog) then
+            fLog.Add.Log(sllTrace, 'ComputeResponse: % % unsupported %',
+              [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
+          result := -1; // error
+          exit;
+        end;
       end;
       // compute the dmtOffer/dmtAck response frame over the very same xid
       if Assigned(fLog) or
