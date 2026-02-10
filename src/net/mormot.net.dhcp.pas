@@ -426,8 +426,10 @@ type
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
   // (not included by default since seems overkill and KEA/Windows don't do it)
+  // - dsoCsvUnixTime will use Unix timestamp instead of ISO-8601 text in CSVs
   TDhcpScopeOption = (
-    dsoInformRateLimit
+    dsoInformRateLimit,
+    dsoCsvUnixTime
     );
   /// refine DHCP server process for one TDhcpScopeSettings
   TDhcpScopeOptions = set of TDhcpScopeOption;
@@ -1227,7 +1229,10 @@ begin
       W.AddDirectNewLine;
     end;
     if now <> nil then
+    begin
       W.AddShort(now^);
+      W.AddComma;
+    end;
     m := low(m);
     repeat
       W.AddQ(metrics[m]);
@@ -2302,10 +2307,11 @@ var
   s: PDhcpScope;
   n: integer;
   u: RawUtf8;
+  now: PShortString;
   needheader: boolean;
   T: TSynSystemTime;
   local: TDhcpMetrics;
-  now: TShort23;
+  nowIso, nowUnix: TShort23;
 begin
   // persist main 'metrics.json'
   if fMetricsJson <> '' then
@@ -2313,9 +2319,9 @@ begin
   // persist all scope information
   if AndCsv then
   begin
-    T.FromNowUtc;
-    T.ToIsoDateTimeShort(now, ' ');
-    AppendShortChar(',', @now); // e.g. now := '2026-02-09 20:09:53,'
+    T.FromNowUtc;     // needed for T.Month check anyway
+    nowIso[0] := #0;  // date/time texts computed on need below
+    nowUnix[0] := #0;
   end;
   fScopeSafe.ReadLock; // protect fScope[]
   try
@@ -2347,7 +2353,19 @@ begin
                 '_', s^.MetricsFileSubnet, '.csv']);
               needheader := not FileExists(s^.MetricsCsvFileName);
             end;
-            u := MetricsToCsv(s^.Metrics.Current, needheader, @now);
+            if dsoCsvUnixTime in s^.Options then
+            begin
+              if nowUnix[0] = #0 then
+                AppendShortQWord(UnixTimeUtc, nowUnix); // e.g. '1770715986'
+              now := @nowUnix;
+            end
+            else
+            begin
+              if nowIso[0] = #0 then
+                T.ToIsoDateTimeShort(nowIso, ' '); // e.g. '2026-02-09 20:09:53'
+              now := @nowIso;
+            end;
+            u := MetricsToCsv(s^.Metrics.Current, needheader, now);
             AppendToFile(u, s^.MetricsCsvFileName);
             AddMetrics(s^.Metrics.Total, s^.Metrics.Current);
             FillZero(s^.Metrics.Current);
