@@ -2059,7 +2059,12 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
 // unless TrimSynLogDate is forced to false
 function JournalSend(Level: TSynLogLevel; const Text: RawUtf8;
   TrimSynLogDate: boolean = true {$ifdef OSLINUX};
-  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean;
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean; overload;
+
+/// send an event to the Operating System journal from an UTF-8 buffer
+function JournalSend(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  TrimSynLogDate: boolean = true {$ifdef OSLINUX};
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean; overload;
 
 {$ifdef OSLINUX}
 /// send an event to the systemd library with no fallback to syslog()
@@ -8303,29 +8308,32 @@ end;
 
 function JournalSend(Level: TSynLogLevel; const Text: RawUtf8;
   TrimSynLogDate {$ifdef OSLINUX}, NoSysLogFallback{$endif}: boolean): boolean;
-var
-  p: PUtf8Char;
-  len {$ifdef OSPOSIX}, priority {$endif}: PtrInt;
+begin
+  result := JournalSend(Level, pointer(Text), length(Text), TrimSynLogDate
+    {$ifdef OSLINUX}, NoSysLogFallback{$endif});
+end;
+
+function JournalSend(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  TrimSynLogDate: boolean = true {$ifdef OSLINUX};
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean; overload;
 begin
   // skip time and level e.g. '20200615 08003008  . '
   result := false;
-  p := pointer(Text);
-  len := Length(Text);
-  TrimSynLogMessage(p, Len, TrimSynLogDate, MAX_SYSLOG);
+  TrimSynLogMessage(Text, Len, TrimSynLogDate, MAX_SYSLOG);
   if len < 2 then
     exit; // nothing to send
+  // call the proper System API - note that ETW is not yet supported since huge
   {$ifdef OSWINDOWS}
-  WinDebugOutput(p, len); // call OutputDebugStringW() API
+  WinDebugOutput(Text, len); // call OutputDebugStringW() API
   result := true;
   {$else}
-  priority := ord(LOG_TO_SYSLOG[Level]);
   {$ifdef OSLINUX}
   if sd.IsAvailable and
-     sd.Send(priority, p, len) then
+     sd.Send(ord(LOG_TO_SYSLOG[Level]), Text, len) then
     result := true
   else if not NoSysLogFallback then
   {$endif OSLINUX}
-    result := SysLogSend(priority + ord(sfUser) shl 3, p, len);
+    result := SysLogSend(ord(LOG_TO_SYSLOG[Level]) + ord(sfUser) shl 3, Text, len);
   {$endif OSWINDOWS}
 end;
 
