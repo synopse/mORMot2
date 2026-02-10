@@ -101,6 +101,7 @@ uses
   mormot.core.text,
   mormot.core.unicode,
   mdDates,
+  mdNumbers,
   rgClient;
 
 {$R *.dfm}
@@ -258,12 +259,12 @@ begin
     for i := 0 to Length(FItems) - 1 do
     begin
       ListItem := FItemsListGrid.Items.Add;
-      ListItem.Caption := IntToStr(FItems[i].Position);
+      ListItem.Caption := IntToThousandString(FItems[i].Position);
       ListItem.SubItems.Add(Utf8ToString(FItems[i].Description));
-      ListItem.SubItems.Add(Format('%.2f', [FItems[i].Quantity]));
-      ListItem.SubItems.Add(Format('%.2n', [FItems[i].ListPrice]));
-      ListItem.SubItems.Add(IntToStr(FItems[i].Discount));
-      ListItem.SubItems.Add(Format('%.2n', [FItems[i].Amount]));
+      ListItem.SubItems.Add(FormatFloat(FMT_QTY_DISPLAY, FItems[i].Quantity));
+      ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, FItems[i].ListPrice));
+      ListItem.SubItems.Add(IntToThousandString(FItems[i].Discount));
+      ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, FItems[i].Amount));
       ListItem.Data := Pointer(PtrInt(i));
     end;
   finally
@@ -291,7 +292,7 @@ begin
   Total := 0;
   for i := 0 to Length(FItems) - 1 do
     Total := Total + FItems[i].Amount;
-  LabelTotalValue.Caption := Format('%.2n', [Total]);
+  LabelTotalValue.Caption := FormatCurr(FMT_CURR_DISPLAY, Total);
 end;
 
 procedure TInvoiceEditForm.FormDestroy(Sender: TObject);
