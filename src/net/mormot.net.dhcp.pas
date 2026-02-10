@@ -2470,11 +2470,15 @@ begin
   begin
     Data.Mac[0] := #17;
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
+    Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
+    result := true;
   end
   else
+  begin
     Data.Mac[0] := #0;
-  Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
-  result := Data.Mac64 <> 0;
+    Data.HostName := @NULCHAR;
+    result := false;
+  end;
 end;
 
 function TDhcpProcess.RetrieveFrameIP(
@@ -2577,7 +2581,9 @@ begin
   // parse and validate the request
   if not ParseFrame(Data) then
   begin
-    DoLog(sllTrace, 'invalid', Data);
+    if Data.RecvIp4 <> 0 then
+      IP4Short(@Data.RecvIp4, Data.Ip); // bound server IP
+    DoLog(sllTrace, 'frame', Data);
     inc(fMetricsInvalidRequest); // no Scope yet
     exit;
     // unsupported RecvType will continue and inc(Scope^.Metrics) below
@@ -2890,7 +2896,7 @@ initialization
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
-  LowerCaseSelf(DHCP_TXT[dmtUndefined]);
+  DHCP_TXT[dmtUndefined] := 'invalid';
   GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
