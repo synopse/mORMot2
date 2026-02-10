@@ -764,6 +764,8 @@ type
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
+    procedure DoLog(Level: TSynLogLevel; const Context: ShortString;
+      const Data: TDhcpProcessData); virtual;
     function ParseFrame(var Data: TDhcpProcessData): boolean; virtual;
     function RetrieveFrameIP(var Data: TDhcpProcessData; Lease: PDhcpLease): boolean; virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
@@ -2425,15 +2427,32 @@ begin
     result := LoadFromText(txt); // make fScopeSafe.WriteLock/WriteUnlock
 end;
 
+procedure TDhcpProcess.DoLog(Level: TSynLogLevel; const Context: ShortString;
+  const Data: TDhcpProcessData);
+var
+  fam: TSynLogFamily;
+  send: PUtf8Char;
+begin
+  // this method could be overriden to extend or replace the default logging
+  fam := fLog.Family;
+  if (fam = nil) or
+     not (Level in fam.Level) then
+    exit;
+  send := nil;
+  if Data.SendType <> dmtUndefined then
+    send := pointer(DHCP_TXT[Data.SendType]);
+  fam.Add.Log(Level, 'ComputeResponse: % % %% % %',
+    [DHCP_TXT[Data.RecvType], Data.Mac, Context, send, Data.Ip, Data.HostName^]);
+end;
+
 function TDhcpProcess.ParseFrame(var Data: TDhcpProcessData): boolean;
 begin
-  Data.Ip4 := 0;
   Data.Mac64 := 0;
+  Data.Ip4 := 0;
+  Data.SendType := dmtUndefined;
   Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
   Data.Ip[0] := #0;
-  if (Data.Mac64 <> 0) and
-     (Assigned(fLog) or
-      Assigned(fOnComputeResponse)) then
+  if Data.Mac64 <> 0 then
   begin
     Data.Mac[0] := #17;
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
@@ -2461,12 +2480,8 @@ begin
        (Data.Scope^.FindIp4(ip4) <> nil) then
     begin
       // this IP seems already used by another MAC
-      if Assigned(fLog) then
-      begin
-        IP4Short(@ip4, Data.Ip);
-        fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignore requested=% %',
-          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^]);
-      end;
+      IP4Short(@ip4, Data.Ip);
+      DoLog(sllTrace, 'ignore requested', Data);
       inc(Data.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
       exit;
     end;
@@ -2483,9 +2498,7 @@ begin
     fOnComputeResponse(self, Data);
     if Data.SendEnd = nil then
     begin
-      if Assigned(fLog) then
-        fLog.Add.Log(sllTrace, 'ComputeResponse: % % ignored by callback',
-          [DHCP_TXT[Data.RecvType], Data.Mac]);
+      DoLog(sllTrace, 'ignored by callback ', Data);
       inc(Data.Scope^.Metrics.Current[dsmDroppedCallback]);
       result := 0;
       exit; // callback asked to silently ignore this frame
@@ -2550,9 +2563,7 @@ begin
   // parse and validate the request
   if not ParseFrame(Data) then
   begin
-    if Assigned(fLog) then
-      fLog.Add.Log(sllTrace, 'ComputeResponse: % % invalid %',
-        [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
+    DoLog(sllTrace, 'invalid', Data);
     inc(fMetricsInvalidRequest); // no Scope yet
     exit;
     // unsupported RecvType will continue and inc(Scope^.Metrics) below
@@ -2578,15 +2589,11 @@ begin
       Data.Scope := pointer(fScope);
     if Data.Scope = nil then
     begin
-      if Assigned(fLog) then
-      begin
-        if Data.Recv.giaddr <> 0 then
-          IP4Short(@Data.Recv.giaddr, Data.Ip)
-        else if Data.RecvIp4 <> 0 then
-          IP4Short(@Data.RecvIP4, Data.Ip);
-        fLog.Add.Log(sllDebug, 'ComputeResponse: % % no subnet for % %',
-          [DHCP_TXT[Data.RecvType], Data.Mac, Data.Ip, Data.HostName^]);
-      end;
+      if Data.Recv.giaddr <> 0 then
+        IP4Short(@Data.Recv.giaddr, Data.Ip)
+      else if Data.RecvIp4 <> 0 then
+        IP4Short(@Data.RecvIP4, Data.Ip);
+      DoLog(sllDebug, 'not subnet for', Data);
       inc(Data.Scope^.Metrics.Current[dsmDroppedNoSubnet]);
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
@@ -2620,9 +2627,7 @@ begin
                 begin
                   // IPv4 exhausted: don't return NAK, but silently ignore
                   // - client will retry after a small temporisation
-                  fLog.Add.Log(sllWarning,
-                    'ComputeResponse: DISCOVER % exhausted IPv4 %',
-                      [Data.Mac, Data.HostName^]);
+                  DoLog(sllWarning, 'exhausted IPv4', Data);
                   inc(Data.Scope^.Metrics.Current[dsmDroppedNoAvailableIP]);
                   exit;
                 end;
@@ -2680,9 +2685,7 @@ begin
               else
               begin
                 // no lease, and none or invalid Option 50 = send NAK response
-                fLog.Add.Log(sllDebug,
-                  'ComputeResponse: REQUEST % out-of-sync NAK %',
-                  [Data.Mac, Data.HostName^]);
+                DoLog(sllTrace, 'out-of-sync NAK', Data);
                 Data.SendType := dmtNak;
                 Data.SendEnd := DhcpNew(Data.Send, dmtNak, Data.Recv.xid,
                   PNetMac(@Data.Mac64)^, Data.Scope^.ServerIdentifier);
@@ -2717,9 +2720,7 @@ begin
             begin
               // ensure the server recently OFFERed one IP to that client
               // (match RFC intent and prevent blind poisoning of arbitrary IPs)
-              fLog.Add.Log(sllDebug,
-                'ComputeResponse: DECLINE % with no previous OFFER %',
-                [Data.Mac, Data.HostName^]);
+              DoLog(sllDebug, 'with no previous OFFER', Data);
               inc(Data.Scope^.Metrics.Current[dsmDroppedPackets]);
               exit;
             end;
@@ -2730,8 +2731,7 @@ begin
               else
               begin
                 // malicious client poisons the pool by sending repeated DECLINE
-                fLog.Add.Log(sllDebug,
-                  'ComputeResponse: DECLINE % overload', [Data.Mac]);
+                DoLog(sllDebug, 'overload', Data);
                 inc(Data.Scope^.Metrics.Current[dsmRateLimitHit]);
                 exit;
               end;
@@ -2752,12 +2752,8 @@ begin
             if Data.Ip4 <> 0 then
             begin
               // store internally this IP as unavailable for NextIP4
-              if Assigned(fLog) then
-              begin
-                IP4Short(@Data.Ip4, Data.Ip);
-                fLog.Add.Log(sllTrace, 'ComputeResponse: DECLINE % as %',
-                  [Data.Mac, Data.Ip]);
-              end;
+              IP4Short(@Data.Ip4, Data.Ip);
+              DoLog(sllTrace, 'as', Data);
               p := Data.Scope^.NewLease(0); // mac=0: sentinel to store this IP
               p^.State := lsUnavailable;
               p^.IP4 := Data.Ip4;
@@ -2775,18 +2771,13 @@ begin
                not (p^.State in [lsAck, lsOutdated]) then
             begin
               // detect and ignore out-of-synch or malicious client
-              fLog.Add.Log(sllDebug, 'ComputeResponse: RELEASE % unexpected',
-                [Data.Mac]);
+              DoLog(sllTrace, 'unexpected', Data);
               inc(Data.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
             end
             else
             begin
-              if Assigned(fLog) then
-              begin
-                IP4Short(@p^.IP4, Data.Ip);
-                fLog.Add.Log(sllTrace, 'ComputeResponse: RELEASE % as %',
-                  [Data.Mac, Data.Ip]);
-              end;
+              IP4Short(@p^.IP4, Data.Ip);
+              DoLog(sllTrace, 'as', Data);
               Data.Scope^.ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
               inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
               inc(Data.Scope^.Metrics.Current[dsmLeaseReleased]);
@@ -2803,8 +2794,7 @@ begin
                 not (p^.State in [lsUnavailable, lsOutdated, lsStatic])) then
             begin
               IP4Short(@Data.Ip4, Data.Ip);
-              fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % unexpected %',
-                [Data.Mac, Data.Ip]);
+              DoLog(sllDebug, 'unexpected', Data);
               inc(Data.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
               exit;
             end;
@@ -2829,8 +2819,7 @@ begin
                   p := Data.Scope^.NewLease(Data.Mac64)
                 else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
                 begin
-                  fLog.Add.Log(sllDebug, 'ComputeResponse: INFORM % overload',
-                    [Data.Mac]);
+                  DoLog(sllDebug, 'overload', Data);
                   inc(Data.Scope^.Metrics.Current[dsmInformRateLimitHit]);
                   exit;
                 end
@@ -2857,23 +2846,14 @@ begin
         begin
           // ParseFrame() was correct but this message type is not supported yet
           inc(Data.Scope^.Metrics.Current[dsmUnsupportedRequest]);
-          if Assigned(fLog) then
-            fLog.Add.Log(sllTrace, 'ComputeResponse: % % unsupported %',
-              [DHCP_TXT[Data.RecvType], Data.Mac, Data.HostName^]);
+          DoLog(sllTrace, 'unsupported', Data);
           result := -1; // error
           exit;
         end;
       end;
       // compute the dmtOffer/dmtAck response frame over the very same xid
-      if Assigned(fLog) or
-         Assigned(fOnComputeResponse) then
-        IP4Short(@Data.Ip4, Data.Ip);
-      if Assigned(fLog) then
-        with fLog.Family do
-          if sllTrace in Level then
-            Add.Log(sllTrace, 'ComputeResponse: % % into % % %',
-              [DHCP_TXT[Data.RecvType], Data.Mac, DHCP_TXT[Data.SendType],
-               Data.Ip, Data.HostName^]);
+      IP4Short(@Data.Ip4, Data.Ip);
+      DoLog(sllTrace, 'into ', Data);
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
@@ -2896,6 +2876,7 @@ initialization
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
+  LowerCaseSelf(DHCP_TXT[dmtUndefined]);
   GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
