@@ -2046,6 +2046,8 @@ begin
      not IsAvailable then
     exit;
   // prepare and send the information to the journal
+  if priority > 7 then
+    priority := 7;
   v0 := 'PRIORITY=';
   AppendShortCardinal(priority, v0);
   v[0].iov_base := @v0[1];

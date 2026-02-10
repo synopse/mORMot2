@@ -8272,7 +8272,7 @@ begin
      length(msgid) + (destbuffer - start) + 15 > destsize then
     // avoid buffer overflow
     exit;
-  destbuffer := PrintUSAscii(destbuffer, Executable.Host);  // HOST
+  destbuffer := PrintUSAscii(destbuffer, Executable.Host); // HOST
   destbuffer := PrintUSAscii(destbuffer, name^);           // APP-NAME
   destbuffer := PrintUSAscii(destbuffer, procid);          // PROCID
   destbuffer := PrintUSAscii(destbuffer, msgid);           // MSGID
@@ -8315,7 +8315,11 @@ end;
 
 function JournalSend(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
   TrimSynLogDate: boolean = true {$ifdef OSLINUX};
-  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean; overload;
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean;
+{$ifdef OSPOSIX}
+var
+  priority: integer;
+{$endif OSPOSIX}
 begin
   // skip time and level e.g. '20200615 08003008  . '
   result := false;
@@ -8327,13 +8331,14 @@ begin
   WinDebugOutput(Text, len); // call OutputDebugStringW() API
   result := true;
   {$else}
+  priority := ord(LOG_TO_SYSLOG[Level]);
   {$ifdef OSLINUX}
   if sd.IsAvailable and
-     sd.Send(ord(LOG_TO_SYSLOG[Level]), Text, len) then
+     sd.Send(priority, Text, len) then
     result := true
   else if not NoSysLogFallback then
   {$endif OSLINUX}
-    result := SysLogSend(ord(LOG_TO_SYSLOG[Level]) + ord(sfUser) shl 3, Text, len);
+    result := SysLogSend(priority, Text, len);
   {$endif OSWINDOWS}
 end;
 
