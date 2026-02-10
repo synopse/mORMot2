@@ -20,7 +20,7 @@ unit mormot.net.dhcp;
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
-   Meaningful logging of the actual process.
+   Meaningful and customizable logging of the actual process.
    Generate detailed JSON and CSV metrics as local files, global and per scope.
    Easy configuration via JSON or INI files.
    Expandable in code via callbacks or virtual methods.
@@ -1201,6 +1201,9 @@ var
   tmp: TSynTempBuffer;
 begin
   FillZero(m);
+  result := false;
+  if json = '' then
+    exit;
   tmp.Init(json); // make temporary copy since input json is parsed in-place
   result := JsonObjectToRttiArray(tmp.buf,
     @m, @METRIC_TXT, length(m), TypeInfo(QWord)) <> nil;
@@ -2367,13 +2370,23 @@ var
   n: integer;
   i: PtrInt;
   p: PAnsiChar;
+  local: TDhcpMetrics;
 begin
   fMetricsFolder := '';
   if (folder = '') or
      (fMetricsCsvSeconds = 0) or
      not WritableFolder(folder, '', fMetricsFolder) then
     exit;
+  // load non-scope metrics from main json file
   fMetricsJson := fMetricsFolder + 'metrics.json';
+  json := StringFromFile(fMetricsJson);
+  if (json <> '') and
+     MetricsFromJson(json, local) then
+  begin
+    fMetricsDroppedPackets := local[dsmDroppedPackets]; // not in scopes
+    fMetricsInvalidRequest := local[dsmInvalidRequest];
+  end;
+  // load scope metrics from their own json files
   fScopeSafe.ReadLock; // protect Scope[]
   try
     s := pointer(fScope);
