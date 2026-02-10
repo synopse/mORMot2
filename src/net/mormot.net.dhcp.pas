@@ -649,7 +649,8 @@ type
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
 
   /// how to refine DHCP server process globally for all scopes
-  // - dsoSystemLog would call JournalSend() in addition to default TSynLog
+  // - dsoSystemLog would call JournalSend() in addition to default TSynLog -
+  // but it will slowdown the process a lot, so should be used with caution
   TDhcpServerOption = (
     dsoSystemLog);
   /// refine DHCP server process for all scopes
@@ -2479,31 +2480,47 @@ procedure TDhcpProcess.DoLog(Level: TSynLogLevel; const Context: ShortString;
   const Data: TDhcpProcessData);
 var
   fam: TSynLogFamily;
-  send: PUtf8Char;
-  l: PtrInt;
-  tmp: ShortString;
+  one: TSynLog;
+  msg: ShortString;
 begin
   // this method could be overriden to extend or replace the default logging
   fam := fLog.Family;
-  if (fam = nil) or
-     not (Level in fam.Level) then
-    if not (dsoSystemLog in fOptions) then
-      exit
-    else
-      fam := nil;
-  send := nil;
+  if (fam <> nil) and
+     (Level in fam.Level) then
+    one := fam.Add
+  else if dsoSystemLog in fOptions then
+    one := nil // compute msg for JournalSend() but not for TSynLog.LogText()
+  else
+    exit;
+  // inlined 'ComputeResponse: % % %% % %' ouput generation
+  msg := 'ComputeResponse: ';
+  AppendShortAnsi7String(DHCP_TXT[Data.RecvType], msg);
+  AppendShortChar(' ', @msg);
+  if Data.Mac[0] <> #0 then
+  begin
+    AppendShort(Data.Mac, msg);
+    AppendShortChar(' ', @msg);
+  end;
+  AppendShort(Context, msg);
+  AppendShortChar(' ', @msg);
   if Data.SendType <> dmtUndefined then
-    send := pointer(DHCP_TXT[Data.SendType]);
-  FormatShort('ComputeResponse: % % %% % %',
-    [DHCP_TXT[Data.RecvType], Data.Mac, Context, send, Data.Ip, Data.HostName^],
-    tmp);
-  l := ord(tmp[0]);
-  if tmp[l] <> ' ' then // trim ending ' ' for Data.HostName^ = ''
-    inc(l);
-  tmp[l] := #0;         // make ASCIIZ
-  fam.Add.LogText(Level, PUtf8Char(@tmp[1]), nil); // this is the fastest API
-  if dsoSystemLog in fOptions then
-    JournalSend(Level, @tmp[18], l - 18); // send '% % %% % %' parameters
+  begin
+    AppendShortAnsi7String(DHCP_TXT[Data.SendType], msg);
+    AppendShortChar(' ', @msg);
+  end;
+  AppendShort(Data.Ip, msg);
+  if Data.HostName^[0] <> #0 then
+  begin
+    AppendShortChar(' ', @msg);
+    AppendShort(Data.HostName^, msg);
+  end;
+  msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
+  // efficiently send to TSynLog
+  if one <> nil then
+    one.LogText(Level, PUtf8Char(@msg[1]), nil); // this is the fastest API
+  // send to system logs (much slower)
+  if dsoSystemLog in fOptions then // send #0-ended parameters
+    JournalSend(Level, @msg[18], ord(msg[0]) - 17, {trimlogdate=}false);
 end;
 
 function TDhcpProcess.ParseFrame(var Data: TDhcpProcessData): boolean;
@@ -2920,7 +2937,7 @@ begin
       end;
       // compute the dmtOffer/dmtAck response frame over the very same xid
       IP4Short(@Data.Ip4, Data.Ip);
-      DoLog(sllTrace, 'into ', Data);
+      DoLog(sllTrace, 'into', Data);
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
