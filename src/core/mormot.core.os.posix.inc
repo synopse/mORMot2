@@ -428,6 +428,29 @@ begin
   PLightLock(@fSharedLock[ndx])^.UnLock;
 end;
 
+procedure syslog(priv: integer; fmt: PAnsiChar; arg: array of const);
+  cdecl; external clib name 'syslog';
+
+const
+  MAX_SYSLOG = 1500; // mimics UDP/Ethernet frame truncation
+
+function SysLogSend(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
+var
+  tmp: array[0 .. MAX_SYSLOG] of AnsiChar;
+begin
+  result := (len > 1) and
+            (len <= MAX_SYSLOG);
+  if not result then
+    exit;
+  if msg[len] <> #0 then
+  begin
+    MoveFast(msg^, tmp, len);
+    tmp[len] := #0; // make ASCIIZ for %s parameter
+    msg := @tmp;
+  end;
+  syslog(priority, '%s', [msg]);
+end;
+
 const
   // for CompareStringW() Windows-like call in Unicode_CompareString()
   LOCALE_USER_DEFAULT = $400; // ignored in practice

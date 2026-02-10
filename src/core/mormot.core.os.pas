@@ -2102,7 +2102,7 @@ function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 function IsValidPid(pid: cardinal): boolean;
 
 type
-  /// Low-level access to the ICU library installed on this system
+  /// Low-level access to the ICU library installed on this POSIX system
   // - "International Components for Unicode" (ICU) is an open-source set of
   // libraries for Unicode support, internationalization and globalization
   // - ICU seems more complete and standard than FPC RTL iconv/cwstrings
@@ -2195,6 +2195,8 @@ var
   // - e.g. on Linux, may equal $030d02 for 3.13.2, or $020620 for 2.6.32
   KernelRevision: cardinal;
 
+/// call the syslog() libc API to generate a log message from UTF-8 text buffer
+function SysLogSend(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
 
 {$ifdef OSLINUX} { some Linux-specific APIs (e.g. systemd or eventfd) }
 
