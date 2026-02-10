@@ -2042,7 +2042,7 @@ const
     ssDebug);  // sllMonitoring
 
 /// append some information to a syslog message memory buffer
-// - following https://tools.ietf.org/html/rfc5424 specifications
+// - following https://datatracker.ietf.org/doc/html/rfc5424
 // - ready to be sent via UDP to a syslog remote server
 // - returns the number of bytes written to destbuffer (which should have
 // destsize > 127)
@@ -2056,6 +2056,11 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
 // - as used e.g. during TSynLogFamily.EchoToConsoleUseJournal process
 procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
 {$endif OSLINUX}
+
+/// extract the meaningfull text from a raw TSynLog output line
+// - as used by SyslogMessage() and SystemdEcho()
+procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
+  trimSynLogDate: boolean; maxLen: PtrInt);
 
 
 implementation
@@ -8233,6 +8238,38 @@ begin
     inc(P);
   end;
   result := P;
+end;
+
+procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
+  trimSynLogDate: boolean; maxLen: PtrInt);
+begin
+  if trimSynLogDate and
+     (len > 27) then
+  begin
+    if (P[0] = '2') and
+       (P[8] = ' ') then
+    begin
+      // trim e.g. '20160607 06442255  ! trace '
+      inc(P, 27);
+      dec(len, 27);
+    end
+    else if mormot.core.text.HexToBin(pointer(P), nil, 8) then
+    begin
+      // trim e.g. '00000000089E5A13  " info '
+      inc(P, 25);
+      dec(len, 25);
+    end;
+  end;
+  while (len > 0) and
+        (P^ <= ' ') do // trim left spaces
+  begin
+    inc(P);
+    dec(len);
+  end;
+  while (len > 0) and
+        (P[len - 1] <= ' ') do // trim right spaces
+    dec(len);
+  len := Utf8TruncatedLength(P, len, maxLen);
 end;
 
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
