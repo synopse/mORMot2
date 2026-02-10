@@ -11581,10 +11581,10 @@ begin
         inc(Bin);
         dec(BinBytes);
       until BinBytes = 0
-    else
+    else // Bin=nil -> validate Hex^ input
     begin
       tab := @ConvertHexToBin;
-      repeat // Bin=nil -> validate Hex^ input
+      repeat
         if (tab[Ord(Hex[0])] > 15) or
            (tab[Ord(Hex[1])] > 15) then
           exit;

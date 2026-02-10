@@ -2054,7 +2054,8 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
 /// send a TSynLog formatted text to the systemd library
 // - expected input text should alread be in "20200615 08003008 xxxx" format
 // - as used e.g. during TSynLogFamily.EchoToConsoleUseJournal process
-procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
+function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate: boolean = true): boolean;
 {$endif OSLINUX}
 
 /// extract the meaningfull text from a raw TSynLog output line
@@ -5244,41 +5245,6 @@ begin
   result := self;
 end;
 
-{$ifdef OSLINUX}
-procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
-var
-  priority: TShort16;
-  mtmp: RawUtf8;
-  jvec: array[0..1] of TIoVec;
-const
-  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
-begin
-  if (length(Text) < 18) or
-     not sd.IsAvailable then
-    // should be at last "20200615 08003008  "
-    exit;
-  FormatShort16('PRIORITY=%', [LOG_TO_SYSLOG[Level]], priority);
-  jvec[0].iov_base := @priority[1];
-  jvec[0].iov_len := ord(priority[0]);
-  // skip time "20200615 08003008  ." which should not be part of the jvec[]
-  TrimCopy(Text, 18 - 8, Utf8TruncatedLength(Text, 1500) - (18 - 8 - 1), mtmp);
-  // systemd truncates to LINE_MAX = 2048 anyway and expects valid UTF-8
-  with jvec[1] do
-  begin
-    iov_base := pointer(mtmp);
-    iov_len := length(mtmp);
-    while (iov_len > 0) and
-          (iov_base[8] <= ' ') do // trim left spaces
-    begin
-      inc(iov_base);
-      dec(iov_len);
-    end;
-    PInt64(iov_base)^ := PInt64(@_MESSAGE)^;
-  end;
-  sd.journal_sendv(jvec[0], 2);
-end;
-{$endif OSLINUX}
-
 function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
   const Text: RawUtf8): boolean;
 begin
@@ -8327,6 +8293,41 @@ begin
   MoveFast(P^, destbuffer^, len);
   result := (destbuffer - start) + len;
 end;
+
+{$ifdef OSLINUX}
+const
+  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
+
+function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate: boolean): boolean;
+var
+  jvec: array[0..1] of TIoVec;
+  p: PUtf8Char;
+  len: PtrInt;
+  priority: TShort16;
+  tmp: array[0..1500] of AnsiChar; // systemd truncates to LINE_MAX=2048 anyway
+begin
+  // skip time "20200615 08003008  ." which should not be part of the jvec[]
+  result := false;
+  p := pointer(Text);
+  len := Length(Text);
+  TrimSynLogMessage(p, Len, TrimSynLogDate, SizeOf(tmp) - SizeOf(_MESSAGE));
+  if (len < 2) or
+     not sd.IsAvailable then
+    exit;
+  // prepare and send the information to the journal
+  FormatShort16('PRIORITY=%', [ord(LOG_TO_SYSLOG[Level])], priority);
+  jvec[0].iov_base := @priority[1];
+  jvec[0].iov_len := ord(priority[0]);
+  PInt64(@tmp)^ := PInt64(@_MESSAGE)^;
+  MoveFast(p^, tmp[8], len);
+  jvec[1].iov_base := @tmp;
+  jvec[1].iov_len := len + 8;
+  result := sd.journal_sendv(jvec[0], 2) = 0; // return 0 on success
+  // if systemd-journald is not running (the socket is not present), sendv()
+  // do nothing, and return 0 = success
+end;
+{$endif OSLINUX}
 
 
 procedure InitializeUnit;
