@@ -69,7 +69,6 @@ type
     FPaymentSuccessful: Boolean;
     procedure SetupLayout;
     function ValidateInput: Boolean;
-    function ParseAmount(const AText: string; out AAmount: currency): Boolean;
   public
     function GetFormMenu: TMainMenu; override;
     function ShowPaymentEntry(AInvoiceID: longint; const AInvoiceNo: string;
@@ -87,7 +86,8 @@ uses
   mormot.core.base,
   mormot.core.text,
   mormot.core.unicode,
-  mdDates;
+  mdDates,
+  mdNumbers;
 
 {$R *.dfm}
 
@@ -165,23 +165,6 @@ begin
     Key := #0;
 end;
 
-function TPaymentEntryForm.ParseAmount(const AText: string;
-  out AAmount: currency): Boolean;
-var
-  TempText: string;
-begin
-  Result := False;
-  AAmount := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-    Exit;
-
-  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
-  AAmount := StrToCurrency(pointer(StringToUtf8(TempText)));
-  Result := (AAmount <> 0);
-end;
-
 function TPaymentEntryForm.ValidateInput: Boolean;
 var
   Amount: currency;
@@ -189,7 +172,7 @@ var
 begin
   Result := False;
 
-  if not ParseAmount(EditAmount.Text, Amount) then
+  if not TryStrToCurr(EditAmount.Text, Amount) then
   begin
     ShowMessage('Please enter a valid amount.');
     EditAmount.SetFocus;
@@ -205,8 +188,8 @@ begin
 
   if Amount > FOpenAmount then
   begin
-    if MessageDlg('Amount ' + Format('%.2n', [Amount]) +
-        ' exceeds open amount ' + Format('%.2n', [FOpenAmount]) +
+    if MessageDlg('Amount ' + FormatCurr(FMT_CURR_EDIT, Amount) +
+        ' exceeds open amount ' + FormatCurr(FMT_CURR_EDIT, FOpenAmount) +
         '. Continue?',
       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
     begin
@@ -265,8 +248,8 @@ begin
   FPaymentSuccessful := False;
 
   LabelInvoiceNo.Caption := AInvoiceNo;
-  LabelOpenValue.Caption := Format('%.2n', [AOpenAmount]);
-  EditAmount.Text := Format('%.2n', [AOpenAmount]);
+  LabelOpenValue.Caption := FormatCurr(FMT_CURR_DISPLAY, AOpenAmount);
+  EditAmount.Text := FormatCurr(FMT_CURR_EDIT, AOpenAmount);
   EditDate.Text := AppDateToStr(Date);
 
   EditAmount.SelectAll;

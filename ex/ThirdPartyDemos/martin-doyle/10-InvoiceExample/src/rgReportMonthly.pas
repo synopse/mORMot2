@@ -71,7 +71,8 @@ uses
   mdGrids, DateUtils,
   mormot.core.base,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -201,19 +202,19 @@ begin
   begin
     ListItem := FResultGrid.Items.Add;
     ListItem.Caption := Utf8ToString(Items[i].MonthName);
-    ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].Revenue]));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].PaymentsReceived]));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].OpenAmount]));
+    ListItem.SubItems.Add(IntToThousandString(Items[i].InvoiceCount));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].Revenue));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].PaymentsReceived));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].OpenAmount));
   end;
 
   // Add totals row
   ListItem := FResultGrid.Items.Add;
   ListItem.Caption := '--- ' + Utf8ToString(Totals.MonthName) + ' ---';
-  ListItem.SubItems.Add(IntToStr(Totals.InvoiceCount));
-  ListItem.SubItems.Add(Format('%.2n', [Totals.Revenue]));
-  ListItem.SubItems.Add(Format('%.2n', [Totals.PaymentsReceived]));
-  ListItem.SubItems.Add(Format('%.2n', [Totals.OpenAmount]));
+  ListItem.SubItems.Add(IntToThousandString(Totals.InvoiceCount));
+  ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Totals.Revenue));
+  ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Totals.PaymentsReceived));
+  ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Totals.OpenAmount));
 end;
 
 procedure TMonthlyOverviewReportForm.RefreshButtonClick(Sender: TObject);

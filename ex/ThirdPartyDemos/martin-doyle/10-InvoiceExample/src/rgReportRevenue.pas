@@ -71,7 +71,8 @@ uses
   mdGrids, DateUtils,
   mormot.core.base,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -199,10 +200,10 @@ begin
   begin
     ListItem := FResultGrid.Items.Add;
     ListItem.Caption := Utf8ToString(Items[i].Company);
-    ListItem.SubItems.Add(IntToStr(Items[i].InvoiceCount));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].TotalRevenue]));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].TotalPaid]));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].TotalOpen]));
+    ListItem.SubItems.Add(IntToThousandString(Items[i].InvoiceCount));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].TotalRevenue));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].TotalPaid));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].TotalOpen));
     ListItem.Data := Pointer(PtrInt(Items[i].CustomerID));
   end;
 end;

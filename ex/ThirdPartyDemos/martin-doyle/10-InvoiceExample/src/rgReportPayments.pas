@@ -54,7 +54,6 @@ type
   private
     FFromDate: TDateTime;
     FToDate: TDateTime;
-    function ParseDate(const AText: string; out ADate: TDateTime): Boolean;
     function ValidateFilters: Boolean;
   protected
     procedure ConfigureColumns; override;
@@ -76,7 +75,8 @@ uses
   mormot.core.base,
   mormot.core.text,
   mormot.core.unicode,
-  mdDates;
+  mdDates,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -133,12 +133,6 @@ begin
   Height := 500;
 end;
 
-function TPaymentReceiptsReportForm.ParseDate(const AText: string;
-  out ADate: TDateTime): Boolean;
-begin
-  Result := AppTryStrToDate(AText, ADate);
-end;
-
 procedure TPaymentReceiptsReportForm.ConfigureColumns;
 var
   Col: TMDListColumn;
@@ -167,7 +161,7 @@ var
 begin
   Result := False;
 
-  if not ParseDate(EditFromDate.Text, TempDate) then
+  if not AppTryStrToDate(EditFromDate.Text, TempDate) then
   begin
     ShowMessage(Format('Please enter a valid From Date (%s).', [AppDateFormatHint]));
     EditFromDate.SetFocus;
@@ -175,7 +169,7 @@ begin
   end;
   FFromDate := TempDate;
 
-  if not ParseDate(EditToDate.Text, TempDate) then
+  if not AppTryStrToDate(EditToDate.Text, TempDate) then
   begin
     ShowMessage(Format('Please enter a valid To Date (%s).', [AppDateFormatHint]));
     EditToDate.SetFocus;
@@ -213,7 +207,7 @@ begin
       ListItem.Caption := '';
     ListItem.SubItems.Add(Utf8ToString(Items[i].Company));
     ListItem.SubItems.Add(Utf8ToString(Items[i].OrderNo));
-    ListItem.SubItems.Add(Format('%.2n', [Items[i].AmountPaid]));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].AmountPaid));
     ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;
 end;
