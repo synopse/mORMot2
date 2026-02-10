@@ -2048,7 +2048,7 @@ const
 // destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
-  trimmsgfromlog: boolean): PtrInt;
+  trimmsgfromlog: boolean; const appname: RawUtf8 = ''): PtrInt;
 
 {$ifdef OSLINUX}
 /// send a TSynLog formatted text to the systemd library
@@ -8225,7 +8225,7 @@ begin
   P^ := ' ';
   inc(P);
   for i := 1 to length(text) do
-    if ord(text[i]) in [33..126] then
+    if ord(text[i]) in [33 .. 126] then
     begin
       // only non-space printable ASCII chars
       P^ := text[i];
@@ -8274,10 +8274,11 @@ end;
 
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
-  trimmsgfromlog: boolean): PtrInt;
+  trimmsgfromlog: boolean; const appname: RawUtf8): PtrInt;
 var
   P: PAnsiChar;
   start: PUtf8Char;
+  name: PRawUtf8;
   len: PtrInt;
   st: TSynSystemTime;
 begin
@@ -8297,45 +8298,27 @@ begin
     true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', {withms=}true);
   destbuffer[23] := 'Z';
   inc(destbuffer, 24);
-  with Executable do
-  begin
-    if length(Host) + length(ProgramName) + length(procid) +
-       length(msgid) + (destbuffer - start) + 15 > destsize then
-      // avoid buffer overflow
-      exit;
-    destbuffer := PrintUSAscii(destbuffer, Host);         // HOST
-    destbuffer := PrintUSAscii(destbuffer, ProgramName);  // APP-NAME
-  end;
-  destbuffer := PrintUSAscii(destbuffer, procid);         // PROCID
-  destbuffer := PrintUSAscii(destbuffer, msgid);          // MSGID
-  destbuffer := PrintUSAscii(destbuffer, '');             // no STRUCTURED-DATA
+  if appname <> '' then
+    name := @appname
+  else
+    name := @Executable.ProgramName;
+  if length(Executable.Host) + length(name^) + length(procid) +
+     length(msgid) + (destbuffer - start) + 15 > destsize then
+    // avoid buffer overflow
+    exit;
+  destbuffer := PrintUSAscii(destbuffer, Executable.Host);  // HOST
+  destbuffer := PrintUSAscii(destbuffer, name^);           // APP-NAME
+  destbuffer := PrintUSAscii(destbuffer, procid);          // PROCID
+  destbuffer := PrintUSAscii(destbuffer, msgid);           // MSGID
+  destbuffer := PrintUSAscii(destbuffer, '');              // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
-  len := length(msg);
   P := pointer(msg);
-  if trimmsgfromlog and
-     (len > 27) then
-    if (P[0] = '2') and
-       (P[8] = ' ') then
-    begin
-      // trim e.g. '20160607 06442255  ! trace '
-      inc(P, 27);
-      dec(len, 27);
-    end
-    else if mormot.core.text.HexToBin(P, nil, 8) then
-    begin
-      // trim e.g. '00000000089E5A13  " info '
-      inc(P, 25);
-      dec(len, 25);
-    end;
-  while (len > 0) and
-        (P^ <= ' ') do
-  begin
-    // trim left spaces
-    inc(P);
-    dec(len);
-  end;
-  len := Utf8TruncatedLength(P, len, destsize - (destbuffer - start) - 3);
+  len := length(msg);
+  TrimSynLogMessage(PUtf8Char(P), len, trimmsgfromlog,
+    destsize - (destbuffer - start) - 3);
+  if len < 2 then
+    exit; // nothing to send
   if not IsAnsiCompatible(P, len) then
   begin
     PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior on POSIX :(
