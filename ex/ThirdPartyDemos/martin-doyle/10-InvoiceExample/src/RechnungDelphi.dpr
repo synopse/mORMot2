@@ -45,7 +45,7 @@ uses
   Classes,
   {$IFDEF FPC}
     Interfaces, // this includes the LCL widgetset
-    {$ENDIF FPC}
+  {$ENDIF FPC}
   SysUtils,
   mormot.core.base,
   mormot.core.os,
@@ -54,17 +54,10 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.log,
-  mormot.db.raw.sqlite3, // for the SQLite3 version below
-
+  mormot.db.raw.sqlite3,
   Forms,
   rgMain,
-  rgConst,
-  rgData,
-  rgDtoTypes,
-  rgServiceInterfaces,
-  rgClient,
-  rgCustomerList,
-  rgCustomerEdit, MdForms;
+  rgConst;
 
 {$R *.res}
 

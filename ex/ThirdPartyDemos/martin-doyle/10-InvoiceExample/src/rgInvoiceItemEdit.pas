@@ -67,7 +67,6 @@ type
     FSaveSuccessful: Boolean;
     procedure SetupLayout;
     function ValidateInput: Boolean;
-    function ParseDecimal(const AText: string; out AValue: Double): Boolean;
   public
     function GetFormMenu: TMainMenu; override;
     function ShowItemEdit(var AItem: TDtoInvoiceItem; AIsNew: Boolean): Boolean;
@@ -81,7 +80,8 @@ implementation
 uses
   mormot.core.base,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mdNumbers;
 
 {$R *.dfm}
 
@@ -161,27 +161,10 @@ begin
     Key := #0;
 end;
 
-function TInvoiceItemEditForm.ParseDecimal(const AText: string;
-  out AValue: Double): Boolean;
-var
-  TempText: string;
-  err: integer;
-begin
-  Result := False;
-  AValue := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-    Exit;
-
-  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
-  AValue := GetExtended(pointer(StringToUtf8(TempText)), err);
-  Result := (err = 0);
-end;
-
 function TInvoiceItemEditForm.ValidateInput: Boolean;
 var
-  TempQty, TempPrice: Double;
+  TempQty: Double;
+  TempPrice: Currency;
 begin
   Result := False;
 
@@ -192,14 +175,14 @@ begin
     Exit;
   end;
 
-  if not ParseDecimal(EditQuantity.Text, TempQty) then
+  if not TryStrToFloat(EditQuantity.Text, TempQty) then
   begin
     ShowMessage('Please enter a valid quantity.');
     EditQuantity.SetFocus;
     Exit;
   end;
 
-  if not ParseDecimal(EditPrice.Text, TempPrice) then
+  if not TryStrToCurr(EditPrice.Text, TempPrice) then
   begin
     ShowMessage('Please enter a valid price.');
     EditPrice.SetFocus;
@@ -241,8 +224,8 @@ begin
     Caption := 'Edit Invoice Item';
 
   EditDescription.Text := Utf8ToString(AItem.Description);
-  EditQuantity.Text := Format('%.2f', [AItem.Quantity]);
-  EditPrice.Text := Format('%.2n', [AItem.ListPrice]);
+  EditQuantity.Text := FormatFloat(FMT_QTY_EDIT, AItem.Quantity);
+  EditPrice.Text :=  FormatCurr(FMT_CURR_EDIT, AItem.ListPrice);
   SpinDiscount.Value := AItem.Discount;
 
   ActiveControl := EditDescription;
