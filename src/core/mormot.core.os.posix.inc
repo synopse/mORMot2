@@ -2031,11 +2031,41 @@ begin
   result := Assigned(listen_fds);
 end;
 
+const
+  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
+
+function TSystemD.Send(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
+var
+  v: array[0..1] of TIoVec;
+  v0: TShort16;
+  tmp: array[0 .. MAX_SYSLOG + 8] of AnsiChar;
+begin
+  result := false;
+  if (len < 2) or
+     (len > MAX_SYSLOG) or
+     not IsAvailable then
+    exit;
+  // prepare and send the information to the journal
+  v0 := 'PRIORITY=';
+  AppendShortCardinal(priority, v0);
+  v[0].iov_base := @v0[1];
+  v[0].iov_len := ord(v0[0]);
+  PInt64(@tmp)^ := PInt64(@_MESSAGE)^;
+  MoveFast(msg^, tmp[8], len);
+  v[1].iov_base := @tmp;
+  v[1].iov_len := len + 8;
+  result := sd.journal_sendv(v[0], 2) = 0;
+  // if systemd-journald is not running (the socket is not present), sendv()
+  // does nothing, and returns 0 = success
+end;
+
 function TSystemD.ProcessIsStartedBySystemd: boolean;
 begin
   result := IsAvailable and
-    (fpgetppid() = 1) and // e.g. under Docker or when started by init.d
-    (BaseUnix.fpGetenv(PAnsiChar('INVOCATION_ID')) <> nil); // as set e.g. on Ubuntu 20.04
+            // parent PID = 1 e.g. under Docker or when started by init.d
+            (fpgetppid() = 1) and
+            // INVOCATION_ID is set e.g. on Ubuntu 20.04
+            (BaseUnix.fpGetenv(PAnsiChar('INVOCATION_ID')) <> nil);
 end;
 
 procedure TSystemD.Done;

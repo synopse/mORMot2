@@ -2255,6 +2255,8 @@ type
     /// returns TRUE if a systemd library is available
     // - will thread-safely load and initialize it if necessary
     function IsAvailable: boolean; inline;
+    /// encapsulate journal_sendv() with PRIORITY= and MESSAGE= members
+    function Send(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
     /// release the systemd library
     procedure Done;
   end;
