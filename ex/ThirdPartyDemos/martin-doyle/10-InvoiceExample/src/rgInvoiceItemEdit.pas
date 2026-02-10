@@ -151,14 +151,12 @@ end;
 
 procedure TInvoiceItemEditForm.EditQuantityKeyPress(Sender: TObject; var Key: char);
 begin
-  if not (Key in ['0'..'9', ',', '.', '-', #8, #13]) then
-    Key := #0;
+  FilterNumericKey(Key);
 end;
 
 procedure TInvoiceItemEditForm.EditPriceKeyPress(Sender: TObject; var Key: char);
 begin
-  if not (Key in ['0'..'9', ',', '.', '-', #8, #13]) then
-    Key := #0;
+  FilterNumericKey(Key);
 end;
 
 function TInvoiceItemEditForm.ValidateInput: Boolean;

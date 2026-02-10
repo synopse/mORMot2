@@ -36,8 +36,24 @@ const
   FMT_CURR_DISPLAY = '#,##0.00';    // currency in grids/labels
   FMT_CURR_EDIT    = '0.00';        // currency in edit fields
   FMT_QTY_DISPLAY  = '#,##0.##';    // quantity in grids/labels
-  FMT_QTY_EDIT     = '0.##';        // quantity in edit fields  
+  FMT_QTY_EDIT     = '0.##';        // quantity in edit fields
+
+procedure FilterNumericKey(var Key: char; AllowNegative: Boolean = True);
 
 implementation
+
+procedure FilterNumericKey(var Key: char; AllowNegative: Boolean);
+begin
+  if AllowNegative then
+  begin
+    if not (Key in ['0'..'9', ',', '.', '-', #8, #13]) then
+      Key := #0;
+  end
+  else
+  begin
+    if not (Key in ['0'..'9', ',', '.', #8, #13]) then
+      Key := #0;
+  end;
+end;
 
 end.

@@ -161,8 +161,7 @@ end;
 
 procedure TPaymentEntryForm.EditAmountKeyPress(Sender: TObject; var Key: char);
 begin
-  if not (Key in ['0'..'9', ',', '.', #8, #13]) then
-    Key := #0;
+  FilterNumericKey(Key, False);
 end;
 
 function TPaymentEntryForm.ValidateInput: Boolean;
