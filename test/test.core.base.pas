@@ -9602,8 +9602,8 @@ begin
   end;
   // validate SyslogMessage()
   FillcharFast(tmp, SizeOf(tmp), 1);
-  len := SyslogMessage(sfAuth, ssCrit, 'test', '', '', tmp, SizeOf(tmp), false);
-  // Check(len=65); // <-- different for every PC, due to PC name differences
+  len := SyslogMessage(sfAuth, ssCrit, ' test  ', '', '', tmp, SizeOf(tmp), false);
+  Check(len > 50); // len different for every PC, due to PC name differences
   tmp[len] := #0;
   Check(IdemPChar(PUtf8Char(@tmp), PAnsiChar('<34>1 ')));
   Check(PosEx(' - - - test', tmp) = len - 10);
