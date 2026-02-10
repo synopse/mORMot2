@@ -1843,6 +1843,8 @@ begin
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'mac ip saved');
     Check(length(txt) < 1000, 'saved len');
     CheckSaveToTextMatch(txt);
+    d.Recv.cookie := 0;
+    Check(server.ComputeResponse(d) < 0, 'invalid frame');
     // make 200 concurrent requests - more than 2M handshakes per second ;)
     n := length(macs);
     SetLength(ips, n);
