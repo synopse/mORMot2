@@ -2607,6 +2607,9 @@ procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass = nil);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// wrap OutputDebugStringW() API with proper Unicode support
+procedure WinDebugOutput(p: PUtf8Char; len: PtrInt);
+
 /// raise an Exception from the last library error using WinApiErrorString()
 procedure RaiseLastModuleError(const Context: ShortString; Lib: HMODULE;
   ModuleException: ExceptClass);
