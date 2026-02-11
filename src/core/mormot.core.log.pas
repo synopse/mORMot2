@@ -2058,6 +2058,14 @@ function SyslogPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
   TrimSynLogDate: boolean = false; const AppName: RawUtf8 = '';
   const MsgId: RawUtf8 = ''): PtrInt;
 
+/// high-level computation of a RFC 3164 original BSD syslog message content
+// - as expected locally on /var/log unix socket dgram in most POSIX systems
+// but not on systemd Linux which is incompatible and favors sd_journal_send()
+// - returns the number of bytes written to Temp
+function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  var Temp: TBuffer2K; TrimSynLogDate: boolean = false;
+  const AppName: RawUtf8 = ''): PtrInt;
+
 /// send an event to the Operating System journal
 // - use systemd library on Linux with fallback to syslog() on POSIX
 // - on Windows, calls OutputDebugStringW() - TODO: use ETW API
@@ -8317,6 +8325,34 @@ begin
   Temp[7] := ' '; // return as <len>' '<sysmessage>
   Dest := pointer(StrUInt32(PAnsiChar(@Temp[7]), result));
   result := DestEnd - Dest;
+end;
+
+function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  var Temp: TBuffer2K; TrimSynLogDate: boolean; const AppName: RawUtf8): PtrInt;
+var
+  now: TSynSystemTime;
+  day: TShort3;
+  h, a: string[32]; // truncated to 32 chars for legacy compatibility reasons
+begin // <PRI>TIMESTAMP SP HOSTNAME SP TAG[: ]MESSAGE
+  now.FromNowLocal; // the RFC 4.1.2 states it is the local time :(
+  day[0] := #2;
+  PWord(@day[1])^ := TwoDigitLookupW[now.Day];
+  if day[1] = '0' then
+    day[1] := ' ';
+  h := Executable.Host;
+  if AppName <> '' then
+    a := AppName
+  else
+    a := Executable.ProgramName;
+  result := FormatBuffer('<%>% % %:%:% % %[%]: ',
+    [ord(LOG_TO_SYSLOG[Level]) + ord(sfUser) shl 3, HTML_MONTH_NAMES[now.Month],
+     day, UInt2DigitsToShortFast(now.Hour), UInt2DigitsToShortFast(now.Minute),
+     UInt2DigitsToShortFast(now.Second), h, a, GetCurrentProcessId],
+    @Temp, SizeOf(Temp));
+  TrimSynLogMessage(Text, Len, TrimSynLogDate, high(Temp) - result);
+  MoveFast(Text^, Temp[result], Len);
+  inc(result, Len);
+  Temp[result] := #0; // for debugging
 end;
 
 {$ifdef OSLINUX} // compatibility function for old mORMot code
