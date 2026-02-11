@@ -4909,9 +4909,11 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 {$endif PUREMORMOT2}
 
 /// compute a random UUid value from the RandomBytes() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
 procedure RandomGuid(out result: TGuid); overload;
 
 /// compute a random UUid value from the RandomBytes() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
 function RandomGuid: TGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
