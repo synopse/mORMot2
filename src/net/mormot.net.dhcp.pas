@@ -80,14 +80,16 @@ type
     ciaddr: TNetIP4;
     /// your IP address
     yiaddr: TNetIP4;
-    /// server IP address
+    /// server/next-server IP address
     siaddr: TNetIP4;
     /// gateway IP address
     giaddr: TNetIP4;
     /// client MAC address - only chaddr[0..5] for htype=1 and hlen=6
     chaddr: array[0..15] of byte;
+    /// server-hostname
     sname:  array[0..63] of byte;
-    file_:  array[0..127] of byte;
+    /// boot-file-name
+    bootfile:  array[0..127] of byte;
     /// magic cookie for DHCP encapsulated in BOOTP message
     cookie: cardinal;
     /// the raw DHCP options, as type/len/value triplets, ending with $ff
