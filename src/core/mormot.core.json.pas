@@ -717,17 +717,21 @@ type
     /// append ']' or '}' with proper indentation
     procedure BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
       {$ifdef HASINLINE}inline;{$endif}
-    /// used internally by WriteObject() when serializing a published property
-    // - will call AddCRAndIndent then append "PropName":
+    /// call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt); overload;
-    /// used internally by WriteObject() when serializing a published property
+    /// call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameHumanReadable(const PropName: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// used internally by WriteObject() when serializing a published property
-    // - will call AddCRAndIndent then append "PropName":
+    /// append a property name depending on Options e.g. "PropName":
+    procedure WriteObjectPropName(PropName: PUtf8Char; PropNameLen: PtrInt;
+      Options: TTextWriterWriteObjectOptions); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append a property name depending on Options e.g. "PropName":
+    procedure WriteObjectPropName(const PropName: RawUtf8;
+      Options: TTextWriterWriteObjectOptions); overload;
+    /// append a property name depending on Options e.g. "PropName":
     procedure WriteObjectPropNameShort(const PropName: ShortString;
       Options: TTextWriterWriteObjectOptions);
-      {$ifdef HASINLINE}inline;{$endif}
     /// same as WriteObject(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure WriteObjectAsString(Value: TObject;
@@ -6211,13 +6215,26 @@ begin
   WriteObjectPropNameHumanReadable(pointer(PropName), length(PropName));
 end;
 
-procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
+procedure TJsonWriter.WriteObjectPropName(PropName: PUtf8Char; PropNameLen: PtrInt;
   Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
-    WriteObjectPropNameHumanReadable(@PropName[1], ord(PropName[0]))
-  else
-    AddProp(@PropName[1], ord(PropName[0]));
+    AddCRAndIndent; // inlined WriteObjectPropNameHumanReadable()
+  AddProp(PropName, PropNameLen);
+  if woHumanReadable in Options then
+    AddDirect(' ');
+end;
+
+procedure TJsonWriter.WriteObjectPropName(const PropName: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  WriteObjectPropName(pointer(PropName), length(PropName), Options);
+end;
+
+procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  WriteObjectPropName(@PropName[1], ord(PropName[0]), Options);
 end;
 
 procedure TJsonWriter.WriteObjectAsString(Value: TObject;
