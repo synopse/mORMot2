@@ -1968,6 +1968,12 @@ begin
     server.SaveMetricsFolder({csv=}true);
     // clear all previous leases
     server.ClearLeases;
+    server.ConsolidateMetrics(m2);
+    Check(IsEqual(m1, m2), 'metrics after ClearLeases');
+    CheckEqual(m2[dsmDecline], 0);
+    server.ResetMetrics;
+    server.ConsolidateMetrics(m2);
+    Check(not IsEqual(m1, m2), 'metrics after ResetMetrics');
     CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');
     // validate DECLINE process - and option 82 Relay Agent
@@ -2004,6 +2010,15 @@ begin
     Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
+    server.ConsolidateMetrics(m2);
+    CheckEqual(m2[dsmDecline], 1);
+    CheckEqual(m2[dsmDiscover], 2);
+    CheckEqual(m2[dsmOffer], 2);
+    CheckEqual(m2[dsmOption82Hits], 1);
+    Check(not IsEqual(m1, m2), 'ConsolidateMetricsDeclined');
+    json := MetricsToJson(m2, [woDontStoreVoid]);
+    CheckEqual(json, '{"discover":2,"offer":2,"decline":1,"lease-allocated":2,' +
+      '"dynamic-hits":2,"option-82-hits":1}');
   finally
     server.Free;
   end;
