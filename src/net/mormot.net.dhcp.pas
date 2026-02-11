@@ -509,6 +509,8 @@ type
     // - return the number of leases marked as lsOutdated
     // - this method is thread safe and will call Safe.Lock/UnLock
     function CheckOutdated(tix32: cardinal): integer;
+    /// flush the internal Entry[] lease lists but keep subnet/scope definition
+    procedure ClearLeases;
     /// persist all leases with "<expiry> <MAC> <IP>" dnsmasq file pattern
     // - this method is thread safe and will call Safe.Lock/UnLock
     // - returns the number of entries/lines added to the text file
@@ -1511,6 +1513,16 @@ begin
   Rebinding   := bswap32(Rebinding);
 end;
 
+procedure TDhcpScope.ClearLeases;
+begin
+  Safe.Lock;
+  Entry := nil;
+  SetLength(Entry, PREALLOCATE_LEASES); // as in TDhcpScope.AfterFill
+  Count := 0;
+  FreeListCount := 0;
+  Safe.UnLock;
+end;
+
 const
   MIN_UUID_BYTES = 4; // < 4 bytes is too short to reliably identify a client
 
@@ -2024,18 +2036,11 @@ begin
     s := pointer(fScope);
     for i := 1 to length(fScope) do
     begin
-      s^.Safe.Lock;
-      s^.Entry := nil;
-      SetLength(s^.Entry, PREALLOCATE_LEASES); // as in TDhcpScope.AfterFill
-      s^.Count := 0;
-      s^.FreeListCount := 0;
-      s^.Safe.UnLock;
+      s^.ClearLeases;
       inc(s);
     end;
     fModifSequence := 0;
     fModifSaved := 0;
-    fMetricsDroppedPackets := 0;
-    fMetricsInvalidRequest := 0;
   finally
     if not keepWriteLock then // e.g. LoadFromText() would continue locked
       fScopeSafe.WriteUnLock;
