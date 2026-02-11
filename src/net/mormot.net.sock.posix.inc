@@ -638,7 +638,7 @@ end;
 function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket): TNetResult;
 var
   addr: TNetAddr;
-  sock: TNetSocket;
+  sock: PtrUInt;
   st: TStat;
 begin
   netsocket := nil;
@@ -648,20 +648,20 @@ begin
      (fpStat(pointer(path), st) <> 0) or
      not fpS_ISSOCK(st.st_mode) then
     exit;
-  // compute the proper TNetAddr and create a unix socket
+  // compute the proper TNetAddr and create a unix DGRAM socket
   result := addr.SetFrom(path, '', nlUnix);
   if result <> nrOk then
     exit;
-  sock := addr.NewSocket(nlUnix);
-  if sock = nil then
+  sock := socket(AF_UNIX, SOCK_DGRAM, 0);
+  if sock = 0 then
     result := NetLastError
   // try to connect to this unix socket
-  else if connect(sock.Socket, @addr, addr.Size) = NO_ERROR then
-    netsocket := sock
+  else if connect(sock, @addr, addr.Size) = NO_ERROR then
+    netsocket := TNetSocket(sock)
   else
   begin
     result := NetLastError;
-    closesocket(sock.Socket);
+    closesocket(sock);
   end;
 end;
 

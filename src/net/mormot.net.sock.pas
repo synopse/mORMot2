@@ -444,7 +444,7 @@ function NewRawSockets(family: TNetFamily; layer: TNetLayer;
   count: integer): TNetSocketDynArray;
 
 {$ifdef OSPOSIX}
-/// connect to a new raw Unix Domain TNetSocket instance from its path
+/// connect to a new DGRAM raw Unix Domain TNetSocket instance from its path
 // - when nrOk is returned, caller should make netsocket.Close once done
 function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket): TNetResult;
 {$endif OSPOSIX}
@@ -2398,6 +2398,9 @@ begin
       result := nrInvalidParameter;
     WSAEMFILE:
       result := nrTooManyConnections;
+    {$ifdef OSPOSIX}
+    ESysEPROTOTYPE, // e.g. SOCK_STREAM on a SOCK_DGRAM unix socket
+    {$endif OSPOSIX}
     WSAECONNREFUSED:
       result := nrRefused;
     {$ifdef OSPOSIX}
