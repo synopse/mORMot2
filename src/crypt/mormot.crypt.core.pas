@@ -2526,13 +2526,14 @@ const
 /// compute a GUID from an identifier, following RFC 4122 standard UUID v5
 // - use standard UUID_DNS/UUID_URL/UUID_OID/UUID_X500 or your own namespace
 // - the name is case-sensitive during this generation
+// - e.g. 'www.opentofu.org' DNS into {df1e675d-b743-5f6c-9952-6311d0f141df}
 procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
   const namespace: TGuid);
 
 /// compute a GUID from an identifier, as does DotNet using SHA-1 hashing
-// - e.g. 'MyCompany.MyComponent' into {ce5fa4ea-ab00-5402-8b76-9f76ac858fb5}
 // - the name is case-insensitive during this generation
 // - compatible with Windows ETW name-based Provider ID / Control GUID
+// - e.g. 'MyCompany.MyComponent' into {ce5fa4ea-ab00-5402-8b76-9f76ac858fb5}
 procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
 
 
@@ -9948,17 +9949,17 @@ procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
 var
   sha1: TSha1;
   dig: TSha1Digest;
-  be: TGuid absolute dig;
+  be: TGuid absolute dig; // hash over big endian values
 begin
-  sha1.Init;
   be := namespace;
-  SwapGuid(be);  // big endian hashing
+  SwapGuid(be);
+  sha1.Init;
   sha1.Update(@be, SizeOf(be));
   sha1.Update(name);
   sha1.Final(dig, {noinit=}true);
   SwapGuid(PGuid(@dig)^);
   dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
-  dig[8] := (dig[8] and $3f) or $80; // set variant = RFC 4122
+  dig[8] := (dig[8] and $3f) or $80; // set variant as per RFC 4122
   guid := PGuid(@dig)^;
 end;
 

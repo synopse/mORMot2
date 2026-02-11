@@ -3100,6 +3100,20 @@ begin
     Check(LoadJsonInPlace(h2, pointer(s), PT_INFO[pt]) <> nil);
     CheckUtf8(CompareMem(@h, @h2, PT_SIZE[pt]), '%', [PT_INFO[pt].RawName]);
   end;
+  // validate IdentifierGuid()/DotNetIdentifierGuid()
+  IdentifierGuid('www.opentofu.org', g, UUID_DNS);
+  ToUtf8(g, s, @TwoDigitsHexLower);
+  CheckEqual(s, 'df1e675d-b743-5f6c-9952-6311d0f141df');
+  Check(not IsRandomGuid(@g), 'from identifier');
+  IdentifierGuid('https://www.opentofu.org/', g, UUID_URL);
+  ToUtf8(g, s, @TwoDigitsHexLower);
+  CheckEqual(s, 'ace93eea-1a2c-5eed-b41b-718be15d2e50');
+  IdentifierGuid('1.3.6.1.4', g, UUID_OID);
+  ToUtf8(g, s, @TwoDigitsHexLower);
+  CheckEqual(s, 'af9d40a5-7a36-5c07-b23a-851cd99fbfa5');
+  IdentifierGuid('CN=Example,C=GB', g, UUID_X500);
+  ToUtf8(g, s, @TwoDigitsHexLower);
+  CheckEqual(s, '84e09961-4aa4-57f8-95b7-03edb1073253');
   DotNetIdentifierGuid('MyCompany.MyComponent', g);
   ToUtf8(g, s, @TwoDigitsHexLower);
   CheckEqual(s, 'ce5fa4ea-ab00-5402-8b76-9f76ac858fb5');
