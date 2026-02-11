@@ -58,7 +58,6 @@ type
     AddItemButton: TButton;
     EditItemButton: TButton;
     RemoveItemButton: TButton;
-    LabelTotal: TLabel;
     LabelTotalValue: TLabel;
     SaveButton: TButton;
     CancelButton: TButton;
@@ -69,6 +68,7 @@ type
     procedure RemoveItemButtonClick(Sender: TObject);
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
+    procedure FormShow(Sender: TObject);
   private
     FItems: TDtoInvoiceItemArray;
     FInvoiceID: longint;
@@ -121,20 +121,18 @@ begin
   FItemsListGrid.Parent := Self;
   FItemsListGrid.OnSelectItem := ItemsListGridSelectItem;
   FItemsListGrid.OnDblClick := ItemsListGridDblClick;
-
-  SetListGridColumns;
-  SetupLayout;
 end;
 
 procedure TInvoiceEditForm.SetupLayout;
 var
   Layout: TLayoutHelper;
   Margins: TLayoutMargins;
-  LabelWidth, EditWidth, GridWidth: Integer;
+  LabelWidth, EditWidth, GridWidth, ScrollbarWidth: Integer;
   BaseHeight: Integer;
 begin
   BaseHeight := LabelCustomer.Height;
   Margins := LayoutMargins(BaseHeight);
+  ScrollbarWidth := 16;
   Layout := TLayoutHelper.Create(Self, Margins);
   try
     Layout.AdjustForPlatform;
@@ -167,10 +165,10 @@ begin
     Layout.Place(EditSaleDate, LabelShipDate, ldRight, 2.0);
     Layout.Place(LabelShipDate, EditShipDate, ldRight, 0.5);
 
-    ItemsToolbarPanel.Top := EditSaleDate.Top + EditSaleDate.Height + (2 * BaseHeight);
-    ItemsToolbarPanel.Left := Margins.Left;
     ItemsToolbarPanel.Width := GridWidth;
     ItemsToolbarPanel.Height := Round(2.5 * BaseHeight);
+
+    Layout.Place(LabelSaleDate, ItemsToolbarPanel, ldBelow, 2.0);
 
     AddItemButton.Left := 0;
     AddItemButton.Top := (ItemsToolbarPanel.Height - AddItemButton.Height) div 2;
@@ -179,28 +177,31 @@ begin
     RemoveItemButton.Left := EditItemButton.Left + EditItemButton.Width + (BaseHeight div 2);
     RemoveItemButton.Top := AddItemButton.Top;
 
-    FItemsListGrid.Top := ItemsToolbarPanel.Top + ItemsToolbarPanel.Height + (BaseHeight div 2);
-    FItemsListGrid.Left := Margins.Left;
-    FItemsListGrid.Width := GridWidth;
-    FItemsListGrid.Height := Round(12 * BaseHeight);
 
-    LabelTotal.Top := FItemsListGrid.Top + FItemsListGrid.Height + BaseHeight;
-    LabelTotalValue.Top := LabelTotal.Top;
-    LabelTotalValue.Width:= Round(7 * BaseHeight);
-    LabelTotalValue.Left := FItemsListGrid.Left + FItemsListGrid.Width - LabelTotalValue.Width;
-    LabelTotal.Left := LabelTotalValue.Left - LabelTotal.Width - BaseHeight;
+    FItemsListGrid.ClientHeight := Round(12 * BaseHeight);
+    FItemsListGrid.ClientWidth := GridWidth;
+    ScrollbarWidth := FItemsListGrid.Width - GridWidth;
 
+    Layout.Place(ItemsToolbarPanel, FItemsListGrid, ldBelow, 0.2);
+
+    LabelTotalValue.Width:= GridWidth - ScrollbarWidth;
+    Layout.Place(FItemsListGrid, LabelTotalValue, ldBelow, 0.1);
 
     // Auto-size form based on content
     Layout.AutoSizeForm;
-
-    SaveButton.Top := LabelTotal.Top + LabelTotal.Height + (2 * BaseHeight);
-    CancelButton.Top := SaveButton.Top;
-
-    CancelButton.Left := ClientWidth - Margins.Right - CancelButton.Width;
-    SaveButton.Left := CancelButton.Left - Margins.Middle - SaveButton.Width;
-
     Position := poMainFormCenter;
+    ClientHeight := ClientHeight + CancelButton.Height + Margins.Bottom;
+
+    // Place OK button at bottom-right
+    CancelButton.SetBounds(
+      ClientWidth - Margins.Right - CancelButton.Width,
+      ClientHeight - Margins.Bottom - CancelButton.Height,
+      CancelButton.Width,
+      CancelButton.Height
+    );
+    Layout.Place(CancelButton, SaveButton, ldLeft, 0.5);
+
+
   finally
     Layout.Free;
   end;
@@ -211,9 +212,7 @@ var
   Col: TMDListColumn;
   BaseHeight: Integer;
 begin
-  BaseHeight := Canvas.TextHeight('Ag');
-  if BaseHeight < 16 then
-    BaseHeight := 16;
+  BaseHeight := LabelCustomer.Height;
 
   FItemsListGrid.RowSelect := True;
 
@@ -292,7 +291,7 @@ begin
   Total := 0;
   for i := 0 to Length(FItems) - 1 do
     Total := Total + FItems[i].Amount;
-  LabelTotalValue.Caption := FormatCurr(FMT_CURR_DISPLAY, Total);
+  LabelTotalValue.Caption := 'Total: ' + FormatCurr(FMT_CURR_DISPLAY, Total);
 end;
 
 procedure TInvoiceEditForm.FormDestroy(Sender: TObject);
@@ -475,6 +474,12 @@ end;
 procedure TInvoiceEditForm.CancelButtonClick(Sender: TObject);
 begin
   ModalResult := mrCancel;
+end;
+
+procedure TInvoiceEditForm.FormShow(Sender: TObject);
+begin
+  SetListGridColumns;
+  SetupLayout;
 end;
 
 function TInvoiceEditForm.ShowNewInvoice(ACustomerID: longint): Boolean;

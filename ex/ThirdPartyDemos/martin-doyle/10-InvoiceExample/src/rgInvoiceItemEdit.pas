@@ -134,14 +134,18 @@ begin
     Layout.Place(LabelDiscount, SpinDiscount, ldRight, 0.5);
     Layout.Place(SpinDiscount, LabelPercent, ldRight, 0.25);
 
-    OKButton.Top := SpinDiscount.Top + SpinDiscount.Height + (2 * BaseHeight);
-    CancelButton.Top := OKButton.Top;
+    Layout.AutoSizeForm;
+    Position := poMainFormCenter;
+    ClientHeight := ClientHeight + CancelButton.Height + Margins.Bottom;
 
-    CancelButton.Left := EditDescription.Left + EditDescription.Width - CancelButton.Width;
-    OKButton.Left := CancelButton.Left - Margins.Middle - OKButton.Width;
-
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
-    ClientWidth := EditDescription.Left + EditDescription.Width + Margins.Right;
+    // Place OK button at bottom-right
+    CancelButton.SetBounds(
+      ClientWidth - Margins.Right - CancelButton.Width,
+      ClientHeight - Margins.Bottom - CancelButton.Height,
+      CancelButton.Width,
+      CancelButton.Height
+    );
+    Layout.Place(CancelButton, OKButton, ldLeft, 0.5);
 
     Position := poMainFormCenter;
   finally

@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : mdComponents
 
   Module : mdGrids.pas - ListView-compatible Grid Component
@@ -31,14 +31,14 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit mdGrids;
 
 interface
 
 uses
-  Classes, SysUtils, Controls, Graphics, Grids, Forms,
+  Classes, SysUtils, Controls, Graphics, Grids, Forms, StdCtrls,
   {$IFDEF FPC}
   LCLType, LCLIntf, Themes
   {$ELSE}
@@ -513,6 +513,7 @@ begin
   FGrid.Parent := Self;
   FGrid.Align := alClient;
   FGrid.BorderStyle := bsSingle;
+  FGrid.ScrollBars := ssBoth;
   FGrid.DefaultDrawing := False;
   FGrid.FixedCols := 0;
   FGrid.RowCount := 2;

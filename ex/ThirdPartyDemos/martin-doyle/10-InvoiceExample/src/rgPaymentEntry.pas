@@ -139,14 +139,17 @@ begin
     Layout.Place(LabelDate, EditDate, ldRight, 0.5);
 
     Layout.AutoSizeForm;
+    Position := poMainFormCenter;
+    ClientHeight := ClientHeight + CancelButton.Height + Margins.Bottom;
 
-    SaveButton.Top := EditDate.Top + EditDate.Height + (2 * BaseHeight);
-    CancelButton.Top := SaveButton.Top;
-
-    CancelButton.Left := ClientWidth - Margins.Right - CancelButton.Width;
-    SaveButton.Left := CancelButton.Left - Margins.Middle - SaveButton.Width;
-
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
+    // Place OK button at bottom-right
+    CancelButton.SetBounds(
+      ClientWidth - Margins.Right - CancelButton.Width,
+      ClientHeight - Margins.Bottom - CancelButton.Height,
+      CancelButton.Width,
+      CancelButton.Height
+    );
+    Layout.Place(CancelButton, SaveButton, ldLeft, 0.5);
 
     Position := poMainFormCenter;
   finally

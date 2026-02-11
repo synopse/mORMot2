@@ -1,96 +1,104 @@
 object InvoiceItemEditForm: TInvoiceItemEditForm
   Left = 400
-  Height = 220
   Top = 250
-  Width = 400
   BorderStyle = bsDialog
   Caption = 'Invoice Item'
-  ClientHeight = 220
-  ClientWidth = 400
+  ClientHeight = 175
+  ClientWidth = 389
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'MS Sans Serif'
+  Font.Style = []
+  OldCreateOrder = True
   Position = poMainFormCenter
   OnCreate = FormCreate
+  PixelsPerInch = 96
+  TextHeight = 13
   object LabelDescription: TLabel
     Left = 16
-    Height = 16
     Top = 20
-    Width = 70
+    Width = 56
+    Height = 13
     Caption = 'Description:'
-  end
-  object EditDescription: TEdit
-    Left = 110
-    Height = 21
-    Top = 18
-    Width = 260
-    TabOrder = 0
   end
   object LabelQuantity: TLabel
     Left = 16
-    Height = 16
     Top = 52
-    Width = 55
+    Width = 42
+    Height = 13
     Caption = 'Quantity:'
-  end
-  object EditQuantity: TEdit
-    Left = 110
-    Height = 21
-    Top = 50
-    Width = 100
-    TabOrder = 1
-    OnKeyPress = EditQuantityKeyPress
   end
   object LabelPrice: TLabel
     Left = 16
-    Height = 16
     Top = 84
-    Width = 35
+    Width = 27
+    Height = 13
     Caption = 'Price:'
-  end
-  object EditPrice: TEdit
-    Left = 110
-    Height = 21
-    Top = 82
-    Width = 120
-    TabOrder = 2
-    OnKeyPress = EditPriceKeyPress
   end
   object LabelDiscount: TLabel
     Left = 16
-    Height = 16
     Top = 116
-    Width = 55
+    Width = 45
+    Height = 13
     Caption = 'Discount:'
-  end
-  object SpinDiscount: TSpinEdit
-    Left = 110
-    Height = 21
-    Top = 114
-    Width = 60
-    MaxValue = 100
-    MinValue = 0
-    TabOrder = 3
   end
   object LabelPercent: TLabel
     Left = 176
-    Height = 16
     Top = 116
-    Width = 15
+    Width = 8
+    Height = 13
     Caption = '%'
   end
+  object EditDescription: TEdit
+    Left = 30
+    Top = 26
+    Width = 260
+    Height = 21
+    TabOrder = 0
+  end
+  object EditQuantity: TEdit
+    Left = 110
+    Top = 50
+    Width = 100
+    Height = 21
+    TabOrder = 1
+    OnKeyPress = EditQuantityKeyPress
+  end
+  object EditPrice: TEdit
+    Left = 110
+    Top = 82
+    Width = 120
+    Height = 21
+    TabOrder = 2
+    OnKeyPress = EditPriceKeyPress
+  end
+  object SpinDiscount: TSpinEdit
+    Left = 110
+    Top = 114
+    Width = 60
+    Height = 22
+    MaxValue = 100
+    MinValue = 0
+    TabOrder = 3
+    Value = 0
+  end
   object OKButton: TButton
-    Left = 210
-    Height = 25
-    Top = 160
+    Left = 162
+    Top = 64
     Width = 75
+    Height = 25
     Caption = '&OK'
     Default = True
     TabOrder = 4
     OnClick = OKButtonClick
   end
   object CancelButton: TButton
-    Left = 295
-    Height = 25
-    Top = 160
+    Left = 247
+    Top = 64
     Width = 75
+    Height = 25
     Cancel = True
     Caption = '&Cancel'
     TabOrder = 5
