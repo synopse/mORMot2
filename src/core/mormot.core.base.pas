@@ -829,6 +829,9 @@ function IsEqualGuidArray({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
 function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// swap the endianness TGuid members, i.e. D1/D2/D2 with bswap32/bswap16/bswap16
+procedure SwapGuid(var result: TGuid);
+
 /// append one TGuid item to a TGuid dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGuid already exists
@@ -4900,6 +4903,13 @@ begin
             (a[2] = 0) and
             (a[3] = 0) {$endif CPU32};
 end;
+
+procedure SwapGuid(var result: TGuid);
+begin
+  result.D1 := bswap32(result.D1);
+  result.D2 := bswap16(result.D2);
+  result.D3 := bswap16(result.D3);
+end; // result.D4 bytes are kept as-is
 
 function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
   const{$endif} guid: TGuid; NoDuplicates: boolean): integer;
