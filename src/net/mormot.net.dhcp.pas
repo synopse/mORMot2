@@ -511,6 +511,8 @@ type
     function CheckOutdated(tix32: cardinal): integer;
     /// flush the internal Entry[] lease lists but keep subnet/scope definition
     procedure ClearLeases;
+    /// reset back those per-scope Metrics[] to their initial 0 counter value
+    procedure ResetMetrics;
     /// persist all leases with "<expiry> <MAC> <IP>" dnsmasq file pattern
     // - this method is thread safe and will call Safe.Lock/UnLock
     // - returns the number of entries/lines added to the text file
@@ -839,6 +841,8 @@ type
     procedure ConsolidateMetrics(var global: TDhcpMetrics); overload;
     /// aggregate all per-scope metrics into a single set of counters
     procedure ConsolidateMetrics(var global: TDhcpAllMetrics); overload;
+    /// reset back all per-scope metrics to their initial 0 counter value
+    procedure ResetMetrics;
     /// persist the main metrics as JSON object
     // - wrapper around ConsolidateMetrics() and MetricsToJson()
     function SaveMetricsToJson: RawUtf8;
@@ -1748,6 +1752,13 @@ begin
   end;
 end;
 
+procedure TDhcpScope.ResetMetrics;
+begin
+  Safe.Lock;
+  FillCharFast(Metrics, SizeOf(Metrics), 0); // set Current[] and Total[] := 0
+  Safe.UnLock;
+end;
+
 procedure TDhcpScope.AddOptions(var f: PAnsiChar; withLeaseTimes: boolean);
 begin
   DhcpAddOption(f, doSubnetMask, @Subnet.mask);
@@ -2309,6 +2320,27 @@ begin
       AddMetrics(global, s^.Metrics.Current);
       AddMetrics(global, s^.Metrics.Total);
       s^.Safe.UnLock;
+      inc(s);
+      dec(n);
+    until n = 0;
+  end;
+  fScopeSafe.ReadUnLock;
+end;
+
+procedure TDhcpProcess.ResetMetrics;
+var
+  n: integer;
+  s: PDhcpScope;
+begin
+  fMetricsDroppedPackets := 0;
+  fMetricsInvalidRequest := 0;
+  fScopeSafe.ReadLock; // protect fScope[]
+  s := pointer(fScope);
+  if s <> nil then
+  begin
+    n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
+    repeat
+      s^.ResetMetrics;
       inc(s);
       dec(n);
     until n = 0;
