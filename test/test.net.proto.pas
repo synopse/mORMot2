@@ -1969,10 +1969,12 @@ begin
     // clear all previous leases
     server.ClearLeases;
     server.ConsolidateMetrics(m2);
+    Check(not IsZero(m2));
     Check(IsEqual(m1, m2), 'metrics after ClearLeases');
     CheckEqual(m2[dsmDecline], 0);
     server.ResetMetrics;
     server.ConsolidateMetrics(m2);
+    Check(IsZero(m2));
     Check(not IsEqual(m1, m2), 'metrics after ResetMetrics');
     CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');

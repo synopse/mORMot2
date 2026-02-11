@@ -20,7 +20,7 @@ unit mormot.net.dhcp;
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
-   Meaningful and customizable logging of the actual process.
+   Meaningful and customizable logging of the actual process (e.g. into syslog).
    Generate detailed JSON and CSV metrics as local files, global and per scope.
    Easy configuration via JSON or INI files.
    Expandable in code via callbacks or virtual methods.
@@ -365,6 +365,7 @@ function IsEqual(const A, B: TDhcpMetrics): boolean; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// persist all DHCP metrics values as a human-readable JSON object
+// - set opt=[woDontStoreVoid] if you prefer the smallest possible JSON
 function MetricsToJson(const m: TDhcpMetrics;
   opt: TTextWriterWriteObjectOptions = [woHumanReadable]): RawUtf8; overload;
 
@@ -2552,7 +2553,7 @@ begin
     AppendShort(Data.HostName^, msg);
   end;
   msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
-  // efficiently send to TSynLog
+  // efficiently append to TSynLog
   if one <> nil then
     one.LogText(Level, PUtf8Char(@msg[1]), nil); // this is the fastest API
   // send to system logs (much slower)
