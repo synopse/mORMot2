@@ -446,7 +446,8 @@ function NewRawSockets(family: TNetFamily; layer: TNetLayer;
 {$ifdef OSPOSIX}
 /// connect to a new DGRAM raw Unix Domain TNetSocket instance from its path
 // - when nrOk is returned, caller should make netsocket.Close once done
-function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket): TNetResult;
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
+  asstream: boolean = false): TNetResult;
 {$endif OSPOSIX}
 
 /// delete a hostname from TNetAddr.SetFrom internal short-living cache

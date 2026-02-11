@@ -635,7 +635,8 @@ begin
     include(result, neClosed); // may return neClosed + neRead e.g. on HTTP/1.0
 end;
 
-function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket): TNetResult;
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
+  asstream: boolean): TNetResult;
 var
   addr: TNetAddr;
   sock: PtrUInt;
@@ -648,11 +649,14 @@ begin
      (fpStat(pointer(path), st) <> 0) or
      not fpS_ISSOCK(st.st_mode) then
     exit;
-  // compute the proper TNetAddr and create a unix DGRAM socket
+  // compute the proper TNetAddr and create a unix DGRAM/STREAM socket
   result := addr.SetFrom(path, '', nlUnix);
   if result <> nrOk then
     exit;
-  sock := socket(AF_UNIX, SOCK_DGRAM, 0);
+  sock := SOCK_DGRAM;
+  if asstream then
+    sock := SOCK_STREAM;
+  sock := socket(AF_UNIX, sock, 0);
   if sock = 0 then
     result := NetLastError
   // try to connect to this unix socket
