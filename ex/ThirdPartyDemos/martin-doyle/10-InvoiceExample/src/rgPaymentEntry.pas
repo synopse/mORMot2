@@ -113,7 +113,7 @@ begin
   try
     Layout.AdjustForPlatform;
 
-    LabelWidth := Round(8 * BaseHeight);
+    LabelWidth := LabelOpenAmount.Width;
     EditWidth := Round(10 * BaseHeight);
 
     LabelInvoice.Width := LabelWidth;

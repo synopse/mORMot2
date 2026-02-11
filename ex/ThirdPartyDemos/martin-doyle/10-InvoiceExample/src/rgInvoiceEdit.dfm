@@ -6,10 +6,7 @@ object InvoiceEditForm: TInvoiceEditForm
   ClientHeight = 319
   ClientWidth = 475
   Color = clBtnFace
-  Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'MS Sans Serif'
   Font.Style = []
   OldCreateOrder = True
   Position = poMainFormCenter
@@ -31,10 +28,7 @@ object InvoiceEditForm: TInvoiceEditForm
     Width = 13
     Height = 13
     Caption = '---'
-    Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
-    Font.Height = -11
-    Font.Name = 'MS Sans Serif'
     Font.Style = [fsBold]
     ParentFont = False
   end
@@ -66,10 +60,7 @@ object InvoiceEditForm: TInvoiceEditForm
     Height = 13
     Alignment = taRightJustify
     Caption = '0.00'
-    Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
-    Font.Height = -11
-    Font.Name = 'MS Sans Serif'
     Font.Style = [fsBold]
     ParentFont = False
   end

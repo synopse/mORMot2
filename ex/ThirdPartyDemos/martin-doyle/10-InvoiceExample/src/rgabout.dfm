@@ -387,13 +387,10 @@ object AboutForm: TAboutForm
   end
   object AppVersion: TLabel
     Left = 370
-    Height = 13
+    Height = 18
     Top = 49
-    Width = 97
+    Width = 133
     Caption = 'Version 2.0.489'
-    Font.Color = clWindowText
-    Font.Height = -11
-    Font.Name = 'MS Sans Serif'
     Font.Style = [fsBold]
     ParentFont = False
   end

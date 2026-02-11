@@ -1,94 +1,87 @@
 object InvoiceItemEditForm: TInvoiceItemEditForm
   Left = 400
+  Height = 175
   Top = 250
+  Width = 389
   BorderStyle = bsDialog
   Caption = 'Invoice Item'
   ClientHeight = 175
   ClientWidth = 389
   Color = clBtnFace
-  Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'MS Sans Serif'
-  Font.Style = []
-  OldCreateOrder = True
   Position = poMainFormCenter
   OnCreate = FormCreate
-  PixelsPerInch = 96
-  TextHeight = 13
   object LabelDescription: TLabel
     Left = 16
+    Height = 18
     Top = 20
-    Width = 56
-    Height = 13
+    Width = 91
     Caption = 'Description:'
   end
   object LabelQuantity: TLabel
     Left = 16
+    Height = 18
     Top = 52
-    Width = 42
-    Height = 13
+    Width = 69
     Caption = 'Quantity:'
   end
   object LabelPrice: TLabel
     Left = 16
+    Height = 18
     Top = 84
-    Width = 27
-    Height = 13
+    Width = 42
     Caption = 'Price:'
   end
   object LabelDiscount: TLabel
     Left = 16
+    Height = 18
     Top = 116
-    Width = 45
-    Height = 13
+    Width = 71
     Caption = 'Discount:'
   end
   object LabelPercent: TLabel
     Left = 176
+    Height = 18
     Top = 116
-    Width = 8
-    Height = 13
+    Width = 15
     Caption = '%'
   end
   object EditDescription: TEdit
-    Left = 30
-    Top = 26
+    Left = 112
+    Height = 26
+    Top = 16
     Width = 260
-    Height = 21
     TabOrder = 0
   end
   object EditQuantity: TEdit
     Left = 110
+    Height = 26
     Top = 50
     Width = 100
-    Height = 21
     TabOrder = 1
     OnKeyPress = EditQuantityKeyPress
   end
   object EditPrice: TEdit
     Left = 110
+    Height = 26
     Top = 82
     Width = 120
-    Height = 21
     TabOrder = 2
     OnKeyPress = EditPriceKeyPress
   end
   object SpinDiscount: TSpinEdit
     Left = 110
+    Height = 27
     Top = 114
     Width = 60
-    Height = 22
     MaxValue = 100
-    MinValue = 0
     TabOrder = 3
-    Value = 0
   end
   object OKButton: TButton
     Left = 162
+    Height = 25
     Top = 64
     Width = 75
-    Height = 25
     Caption = '&OK'
     Default = True
     TabOrder = 4
@@ -96,9 +89,9 @@ object InvoiceItemEditForm: TInvoiceItemEditForm
   end
   object CancelButton: TButton
     Left = 247
+    Height = 25
     Top = 64
     Width = 75
-    Height = 25
     Cancel = True
     Caption = '&Cancel'
     TabOrder = 5
