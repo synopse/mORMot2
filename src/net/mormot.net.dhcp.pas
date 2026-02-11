@@ -365,7 +365,8 @@ function IsEqual(const A, B: TDhcpMetrics): boolean; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// persist all DHCP metrics values as a human-readable JSON object
-function MetricsToJson(const m: TDhcpMetrics): RawUtf8; overload;
+function MetricsToJson(const m: TDhcpMetrics;
+  opt: TTextWriterWriteObjectOptions = [woHumanReadable]): RawUtf8; overload;
 
 /// unserialize all DHCP metrics from a MetricsToJson() JSON object
 function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
@@ -1214,10 +1215,9 @@ begin
   result := CompareMem(@A, @B, SizeOf(A));
 end;
 
-function MetricsToJson(const m: TDhcpMetrics): RawUtf8;
+function MetricsToJson(const m: TDhcpMetrics; opt: TTextWriterWriteObjectOptions): RawUtf8;
 begin
-  JsonObjectFromRttiArray(@m, @METRIC_TXT, length(m), TypeInfo(QWord),
-    result, [woHumanReadable]);
+  JsonObjectFromRttiArray(@m, @METRIC_TXT, length(m), TypeInfo(QWord), result, opt);
 end;
 
 function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
