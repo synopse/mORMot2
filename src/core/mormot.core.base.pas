@@ -3541,6 +3541,8 @@ function EventEquals(const eventA, eventB): boolean;
 type
   /// define a buffer of 1KB of data
   TBuffer1K = array[0..1023] of AnsiChar;
+  /// define a buffer of 2KB of data
+  TBuffer2K = array[0..2047] of AnsiChar;
   /// define a buffer of 4KB of data
   TBuffer4K = array[0..4095] of AnsiChar;
   /// define a buffer of 8KB of data

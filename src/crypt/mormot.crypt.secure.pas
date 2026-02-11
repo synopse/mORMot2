@@ -7531,7 +7531,7 @@ type
       issued: TUnixTimeMinimal;  // = iat claim (UnixTimeMinimalUtc)
       gmac: THash128;            // = 128-bit AES-GCM tag
     end;
-    data: array[0..2047] of byte; // optional AES-CTR record serialization
+    data: TBuffer2K;             // optional AES-CTR record serialization
   end;
 
 function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;

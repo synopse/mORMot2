@@ -9300,7 +9300,7 @@ end;
 
 function TDynArray.ItemLoadFind(Source, SourceMax: PAnsiChar): integer;
 var
-  tmp: array[0..2047] of byte;
+  tmp: TBuffer2K; // to store unserialized managed item
   data: pointer;
 begin
   result := -1;

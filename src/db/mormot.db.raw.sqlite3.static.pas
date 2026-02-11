@@ -782,14 +782,14 @@ end;
 
 function IsOldSqlEncryptTable(const FileName: TFileName): boolean;
 var
-  hdr: array[0..2047] of byte;
+  hdr: TBuffer2K;
 begin
   result := BufferFromFile(FileName, @hdr, SizeOf(hdr)) and
      IsEqual(PHash128(@hdr)^, SQLITE_FILE_HEADER128.b) and
      // see https://www.sqlite.org/fileformat.html (4 in bigendian = 1024 bytes)
      (PWord(@hdr[16])^ = 4) and
      // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
-     not (hdr[1024] in [5, 10, 13]);
+     not (ord(hdr[1024]) in [5, 10, 13]);
 end;
 
 const

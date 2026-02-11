@@ -4216,7 +4216,7 @@ end;
 function TSynAnsiConvert.Utf8ToAnsiBuffer2K(const S: RawUtf8;
   Dest: PAnsiChar; DestSize: integer): integer;
 var
-  tmp: array[0..2047] of AnsiChar; // truncated to 2KB as documented
+  tmp: TBuffer2K; // truncated to 2KB as documented
 begin
   if (DestSize <= 0) or
      (Dest = nil) then
