@@ -443,6 +443,12 @@ function NewRawSocket(family: TNetFamily; layer: TNetLayer): TNetSocket;
 function NewRawSockets(family: TNetFamily; layer: TNetLayer;
   count: integer): TNetSocketDynArray;
 
+{$ifdef OSPOSIX}
+/// connect to a new raw Unix Domain TNetSocket instance from its path
+// - when nrOk is returned, caller should make netsocket.Close once done
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket): TNetResult;
+{$endif OSPOSIX}
+
 /// delete a hostname from TNetAddr.SetFrom internal short-living cache
 procedure NetAddrFlush(const hostname: RawUtf8);
 
