@@ -2068,7 +2068,7 @@ function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
 
 /// send an event to the Operating System journal
 // - use systemd library on Linux with fallback to syslog() on POSIX
-// - on Windows, calls OutputDebugStringW() - TODO: use ETW API
+// - on Windows, calls OutputDebugStringW() - TODO: use bloated ETW API?
 // - as used e.g. for TSynLogFamily.EchoToConsoleUseJournal process
 // - input text would detect and trim "20200615 08003008 xxxx" TSynLog format,
 // unless TrimSynLogDate is forced to false
@@ -8383,7 +8383,7 @@ begin
   TrimSynLogMessage(Text, Len, TrimSynLogDate, MAX_SYSLOG);
   if len < 2 then
     exit; // nothing to send
-  // call the proper System API - note that ETW is not yet supported since huge
+  // call the proper OS API - note that bloated Windows ETW is not yet supported
   {$ifdef OSWINDOWS}
   WinDebugOutput(Text, len); // call OutputDebugStringW() API
   result := true;

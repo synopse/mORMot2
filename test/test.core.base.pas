@@ -9642,6 +9642,7 @@ begin
   FillcharFast(tmp, SizeOf(tmp), 1);
   len := SyslogMessage(sfAuth, ssCrit, pointer(msg), length(msg),
     '', '', tmp, SizeOf(tmp), false);
+  // e.g. <34>1 2026-02-11T15:01:23.552Z dev-ab mormot2tests - - - test
   Check(len > 50); // len different for every PC, due to PC name differences
   Check(IdemPChar(dst, PAnsiChar('<34>1 ')));
   up := ' - - - TEST';
