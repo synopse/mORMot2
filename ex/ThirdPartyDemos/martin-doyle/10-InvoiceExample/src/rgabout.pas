@@ -40,7 +40,7 @@ interface
 
 uses
   Classes, Graphics, Controls,
-  Forms, Dialogs, StdCtrls, Buttons, ExtCtrls, jpeg;
+  Forms, Dialogs, StdCtrls, Buttons, ExtCtrls;
 
 type
 
