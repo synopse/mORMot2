@@ -1620,14 +1620,14 @@ type
   public
     /// the associated stream writer for the JSON output
     W: TJsonWriter;
-    /// serialization options as specified for this process
-    // - as used by AddShort/Add64/AddDateTime methods
-    Options: TTextWriterWriteObjectOptions;
     /// the RTTI information of the current serialized type
     Info: TRttiCustom;
     /// the RTTI information of the current serialized property
     // - is likely to be nil outside of properties serialization
     Prop: PRttiCustomProp;
+    /// serialization options as specified for this process
+    // - as used by AddShort/Add64/AddDateTime methods
+    Options: TTextWriterWriteObjectOptions;
     /// initialize this low-level JSON serialization context
     procedure Init(WR: TJsonWriter;
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
@@ -6006,9 +6006,10 @@ begin
             // append ',' and proper indentation if a field was just appended
             c.W.BlockAfterItem(c.Options);
           if isHumanReadable in flags then
-            c.W.WriteObjectPropNameHumanReadable(pointer(p^.Name), length(p^.Name))
-          else
-            c.W.AddProp(pointer(p^.Name), length(p^.Name));
+            c.W.AddCRAndIndent; // inlined WriteObjectPropNameHumanReadable()
+          c.W.AddProp(pointer(p^.Name), length(p^.Name));
+          if isHumanReadable in flags then
+            c.W.AddDirect(' ');
           if (noHook in flags) or
              not TORHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, Data);
