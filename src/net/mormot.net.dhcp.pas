@@ -143,6 +143,8 @@ type
  // - doBootFileName is PXE option 67 (pxelinux.0)
  // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
  // - doDhcpAgentOptions is Relay Agent (RFC 3046) option 82 - last to appear
+ // - doClientArchitecture is PXE option 93 as uint16 (00:00)
+ // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOSUUID)
  // - doSubnetSelection is option 118 to override the giaddr value
  // - doEnd is "End Of Options" marker option 255 (not a true value)
  TDhcpOption = (
@@ -167,6 +169,8 @@ type
    doBootFileName,
    doUserClass,
    doDhcpAgentOptions,
+   doClientArchitecture,
+   doUuidClientIdentifier,
    doSubnetSelection,
    doEnd
  );
@@ -926,7 +930,7 @@ end;
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
-    58, 59, 60, 61, 66, 67, 77, 82, 118, 255);
+    58, 59, 60, 61, 66, 67, 77, 82, 93, 97, 118, 255);
 var
   DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption; // for fast O(1) lookup
 
