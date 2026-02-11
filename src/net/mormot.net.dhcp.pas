@@ -2649,7 +2649,8 @@ end;
 
 function ClientUuid(opt61: PByteArray; var data: TDhcpProcessData; uuid: pointer): PDhcpLease;
 var
-  found: integer;
+  found: TNetIP4;
+  len: PtrUInt;
 begin
   result := nil;
   case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8-16 bytes
@@ -2660,16 +2661,18 @@ begin
       if opt61^[1] = 1 then
         exit; // Eth=1 + MAC
   end;
-  found := DoFindUuid(uuid, @opt61[1], opt61[0]);
+  found := DoFindUuid(uuid, @opt61^[1], opt61^[0]);
   if found = 0 then
     exit;
   result := @data.Temp; // fake transient PDhcpLease for this StaticUuid[]
   result^.IP4 := found;
   PInt64(@result^.Mac)^ := Data.Mac64; // also reset State+RateLimit
   result^.State := lsStatic;
-  // write UUID in logs instead of MAC address (up to 32 bytes = 256-bit)
-  mormot.core.text.BinToHex(@opt61^[1], @data.Mac,
-    MinPtrUInt(SizeOf(data.Mac) div 2, opt61^[0]));
+  // append UUID in logs after the MAC address (up to 64 chars)
+  AppendShortChar('/', @data.Mac);
+  len := MinPtrUInt((SizeOf(data.Mac) - ord(data.Mac[0])) shr 1, ord(opt61^[0]));
+  mormot.core.text.BinToHex(@opt61^[1], @data.Mac[ord(data.Mac[0])], len);
+  inc(data.Mac[0], len * 2);
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
