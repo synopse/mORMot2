@@ -1984,7 +1984,7 @@ function RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture: cardinal;
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentThreadId: DWord; stdcall;
 
-/// retrieves the current process ID
+/// retrieves the current process ID in a cross-platform way
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcessId: DWord; stdcall;
 
@@ -2504,6 +2504,9 @@ var LeaveCriticalSection: procedure(var cs: TRTLCriticalSection);
 var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
 
 {$endif NODIRECTTHREADMANAGER}
+
+/// retrieves the current process ID in a cross-platform way
+function GetCurrentProcessId: TThreadIDInt;
 
 {$endif OSPOSIX}
 

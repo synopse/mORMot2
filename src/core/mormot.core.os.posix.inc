@@ -1887,6 +1887,11 @@ begin
   DoneCriticalSection(cs);
 end;
 
+function GetCurrentProcessId: TThreadIDInt;
+begin
+  result := FpGetpid;
+end;
+
 function GetFileOpenLimit(hard: boolean): integer;
 var
   limit: TRLIMIT;
