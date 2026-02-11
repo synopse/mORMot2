@@ -6254,19 +6254,27 @@ procedure TJsonWriter.WriteObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
   ValuesCount: integer; Info: PRttiInfo; Options: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
+  comma: boolean;
 begin
-  ctxt.Init(self, [], Rtti.RegisterType(Info));
+  ctxt.Init(self, Options, Rtti.RegisterType(Info));
   BlockBegin('{', Options);
+  comma := false;
   if Assigned(ctxt.Info) and
      Assigned(ctxt.Info.JsonSave) then
     repeat
-      WriteObjectPropNameHumanReadable(Names^);
-      TRttiJsonSave(ctxt.Info.JsonSave)(Values, ctxt);
-      inc(PByte(Values), ctxt.Info.Size);
+      if not ((woDontStoreVoid in Options) and
+              ctxt.Info.ValueIsVoid(Values)) then
+      begin
+        if comma then
+          BlockAfterItem(Options);
+        WriteObjectPropName(pointer(Names^), length(Names^), Options);
+        TRttiJsonSave(ctxt.Info.JsonSave)(Values, ctxt);
+        comma := true;
+      end;
       dec(ValuesCount);
       if ValuesCount = 0 then
         break;
-      BlockAfterItem(Options);
+      inc(PByte(Values), ctxt.Info.Size);
       inc(Names);
     until false;
   BlockEnd('}', Options);
