@@ -445,8 +445,8 @@ begin
     CheckEqual(v, v2, 'SetCase(self)');
     Append(all, v, ',');
   end;
-  CheckEqual(all, 'NoTrim,TrimLeft,Un camel case,Un Camel Title,lowercase,' +
-    'lower-case,lowerCaseFirst,UPPERCASE,snake_case,SCREAMING_SNAKE_CASE,' +
+  CheckEqual(all, 'NoTrim,TrimLeft,AnyRemoved,Un camel case,Un Camel Title,' +
+    'lowercase,lower-case,lowerCaseFirst,UPPERCASE,snake_case,SCREAMING_SNAKE_CASE,' +
     'kebab-case,dot.case,TitleCase,camelCase,PascalCase,');
 end;
 
@@ -5505,10 +5505,13 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
 
   procedure CheckTrimCopy(const S: RawUtf8; start, count: PtrInt);
   var
-    t: RawUtf8;
+    t, c, u: RawUtf8;
   begin
     trimcopy(S, start, count, t);
-    checkEqual(t, TrimU(copy(S, start, count)));
+    c := copy(S, start, count);
+    CheckEqual(t, TrimU(c));
+    TrimU(c, u);
+    CheckEqual(t, u);
   end;
 
 var
