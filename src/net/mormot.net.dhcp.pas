@@ -734,7 +734,7 @@ type
     SendEnd: PAnsiChar;
     /// 32-bit binary IP address allocated for Send
     Ip4: TNetIP4;
-    /// the GetTickSec current value
+    /// the GetTickSec current 32-bit value
     Tix32: cardinal;
     /// the network subnet information related to this request
     // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
@@ -2690,6 +2690,7 @@ function ClientUuid(opt: TDhcpOption; var data: TDhcpProcessData; uuid: pointer)
 var
   ip4: TNetIP4;
   v: PByte;
+  m: PByteArray;
   len: PtrUInt;
 begin // opt = doDhcpClientIdentifier or doUuidClientIdentifier
   result := nil;
@@ -2718,11 +2719,17 @@ begin // opt = doDhcpClientIdentifier or doUuidClientIdentifier
   result^.IP4 := ip4;
   PInt64(@result^.Mac)^ := Data.Mac64; // also reset State+RateLimit
   result^.State := lsStatic;
-  // append UUID in logs after the MAC address (up to 64 chars)
-  AppendShortChar('/', @data.Mac);
-  len := MinPtrUInt((SizeOf(data.Mac) - ord(data.Mac[0])) shr 1, len);
-  mormot.core.text.BinToHex(pointer(v), @data.Mac[ord(data.Mac[0])], len);
-  inc(data.Mac[0], len * 2);
+  // append /GUID or /UUID in logs after the MAC address (up to 63 chars)
+  m := @data.Mac;
+  AppendShortChar('/', pointer(m));
+  if len = SizeOf(TGuid) then
+    AppendShortUuid(PGuid(v)^, PShortString(m)^)
+  else
+  begin
+    len := MinPtrUInt((high(data.Mac) - m[0]) shr 1, len);
+    mormot.core.text.BinToHex(pointer(v), @m[m[0]], len);
+    inc(m[0], len * 2);
+  end;
 end;
 
 function TDhcpProcess.FindLease(var data: TDhcpProcessData): PDhcpLease;
