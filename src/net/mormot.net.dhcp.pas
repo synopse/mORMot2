@@ -2018,15 +2018,29 @@ begin
   bin := Base64ToBin(TrimU(base64));
   if bin = '' then
     EDhcp.RaiseUtf8('PrepareScope: Boot.Option% is no valid base-64',
-      [BOOT_TXT[dcb]]);
+      [BOOT_TXT[dcb]]);  // e.g. '.. Boot.OptionIpxeX64 ..'
 end;
 
+// about TLV (Type-Length-Value) encoding, see e.g.
 // https://www.ibm.com/docs/en/tpmfod/7.1.1.4?topic=configuration-dhcp-option-43
+
+procedure ConsolidateOption(var boot: TDhcpScopeBoot; ref, dst: TDhcpClientBoot);
+begin
+  if boot.Remote[dst] = '' then
+    boot.Remote[dst] := boot.Remote[ref];
+  if dst in [low(boot.Firmware) .. high(boot.Firmware)] then
+    if boot.Firmware[dst] = '' then
+      boot.Firmware[dst] := boot.Firmware[ref];
+  if dst in [low(boot.Ipxe) .. high(boot.Ipxe)] then
+    if boot.Ipxe[dst] = '' then
+      boot.Ipxe[dst] := boot.Ipxe[ref];
+end;
 
 procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot);
 var
-  dcb: TDhcpClientBoot;
+  dcb, ref: TDhcpClientBoot;
 begin
+  // copy the working parameters from the settings
   TrimU(fNextServer, Data.NextServer);
   for dcb := low(Data.Remote) to high(Data.Remote) do
     TrimU(fRemote[dcb], Data.Remote[dcb]);
@@ -2034,6 +2048,20 @@ begin
     TlcFromBase64(dcb, fFirmware[dcb], Data.Firmware[dcb]);
   for dcb := low(Data.Ipxe) to high(Data.Ipxe) do
     TlcFromBase64(dcb, fIpxe[dcb], Data.Ipxe[dcb]);
+  // complete configuration from sibling values
+  // 1. HTTP aware architecture fallback to their TFTP value
+  ConsolidateOption(Data, dcbX64,   dcbX64_Http);
+  ConsolidateOption(Data, dcbArm64, dcbArm64_Http);
+  // 2. assume we could share the main x64/x86 IPXE URI
+  ref := dcbDefault;
+  if Data.Remote[dcbIpxe_X64] <> '' then
+    ref := dcbIpxe_X64
+  else if Data.Remote[dcbIpxe_X86] <> '' then
+    ref := dcbIpxe_X86;
+  if ref <> dcbDefault then
+    for dcb := dcbIpxe_X86 to high(Data.Ipxe) do
+      if dcb <> ref then
+        ConsolidateOption(Data, ref, dcb);
 end;
 
 
