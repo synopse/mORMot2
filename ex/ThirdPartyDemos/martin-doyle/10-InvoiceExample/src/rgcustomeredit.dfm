@@ -10,6 +10,7 @@ object CustomerEditForm: TCustomerEditForm
   Position = poMainFormCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnShow = FormShow
   object LabelCustomerNo: TLabel
     Left = 16
     Height = 16

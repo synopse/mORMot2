@@ -38,7 +38,8 @@ uses
   LCLType
   {$ELSE FPC}
   Windows
-  {$ENDIF FPC};
+  {$ENDIF FPC},
+  mdLayout;
 
 type
   TFormMode = (fmBrowse, fmInsert, fmEdit);
@@ -49,14 +50,18 @@ type
   private
     FAsChild: boolean;
     FTempParent: TWinControl;
+    FLayout: TLayoutHelper;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
     procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); overload; override;
     constructor Create(AOwner: TComponent; AParent: TWinControl); reintroduce; overload;
+    destructor Destroy; override;
+    procedure InitLayout(ABaseHeight: Integer);
     function GetFormMenu: TMainMenu; virtual; abstract;
     function CanChange: boolean; virtual;
+    property Layout: TLayoutHelper read FLayout;
   end;
 
   { TMDDBModeForm }
@@ -124,6 +129,19 @@ begin
   FAsChild := True;
   FTempParent := aParent;
   inherited Create(AOwner);
+end;
+
+destructor TMDChildForm.Destroy;
+begin
+  FLayout.Free;
+  inherited Destroy;
+end;
+
+procedure TMDChildForm.InitLayout(ABaseHeight: Integer);
+begin
+  FreeAndNil(FLayout);
+  FLayout := TLayoutHelper.Create(Self, LayoutMargins(ABaseHeight));
+  FLayout.AdjustForPlatform;
 end;
 
 function TMDChildForm.CanChange: boolean;

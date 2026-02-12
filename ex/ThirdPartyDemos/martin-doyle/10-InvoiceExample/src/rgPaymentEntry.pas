@@ -150,8 +150,6 @@ begin
       CancelButton.Height
     );
     Layout.Place(CancelButton, SaveButton, ldLeft, 0.5);
-
-    Position := poMainFormCenter;
   finally
     Layout.Free;
   end;

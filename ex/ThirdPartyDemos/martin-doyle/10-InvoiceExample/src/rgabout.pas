@@ -39,14 +39,15 @@ interface
 {$I mormot.defines.inc}
 
 uses
-  Classes, Graphics, Controls,
-  Forms, Dialogs, StdCtrls, Buttons, ExtCtrls;
+  Classes, Graphics, Controls, Menus,
+  Forms, Dialogs, StdCtrls, Buttons, ExtCtrls,
+  MdForms;
 
 type
 
   { TAboutForm }
 
-  TAboutForm = class(TForm)
+  TAboutForm = class(TMDDBModeForm)
     AppVersion: TLabel;
     CPU: TLabel;
     BIOS: TLabel;
@@ -63,7 +64,7 @@ type
   private
 
   public
-
+    function GetFormMenu: TMainMenu; override;
   end;
 
 procedure ShowAboutBox;
@@ -175,6 +176,11 @@ begin
  {$ELSE FPC}
  Font.Handle := Screen.MenuFont.Handle;
  {$ENDIF FPC}
+end;
+
+function TAboutForm.GetFormMenu: TMainMenu;
+begin
+  Result := nil;
 end;
 
 end.
