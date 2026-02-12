@@ -746,8 +746,11 @@ type
     /// append a time period, specified in micro seconds, in 00.000.000 TSynLog format
     procedure AddMicroSec(MicroSec: cardinal);
     /// append an array of RawUtf8 as CSV
-    procedure AddCsvStrings(const Values: array of RawUtf8;
-      const Sep: RawUtf8 = ','; HighValues: PtrInt = -1; Reverse: boolean = false);
+    procedure AddCsvStrings(const Values: array of RawUtf8; const Sep: RawUtf8 = ',';
+      HighValues: PtrInt = -1; Reverse: boolean = false); overload;
+    /// append a memory array of RawUtf8 as CSV
+    procedure AddCsvStrings(Values: PRawUtf8Array; HighValues: PtrInt;
+      const Sep: RawUtf8 = ','; Reverse: boolean = false); overload;
     /// append an array of integers as CSV
     procedure AddCsvInteger(const Integers: array of integer);
     /// append an array of doubles as CSV
@@ -5133,11 +5136,18 @@ end;
 
 procedure TTextWriter.AddCsvStrings(const Values: array of RawUtf8;
   const Sep: RawUtf8; HighValues: PtrInt; Reverse: boolean);
-var
-  i: PtrInt;
 begin
   if HighValues < 0 then
     HighValues := high(Values);
+  if HighValues >= 0 then
+    AddCsvStrings(@Values[0], HighValues, Sep, Reverse);
+end;
+
+procedure TTextWriter.AddCsvStrings(Values: PRawUtf8Array; HighValues: PtrInt;
+  const Sep: RawUtf8; Reverse: boolean);
+var
+  i: PtrInt;
+begin
   if HighValues < 0 then
     exit;
   i := 0;
@@ -5147,7 +5157,7 @@ begin
     HighValues := 0;
   end;
   repeat
-    AddString(Values[i]); // fast enough
+    AddString(Values^[i]); // fast enough
     if i = HighValues then
       break;
     if Sep <> '' then
@@ -11571,10 +11581,10 @@ begin
         inc(Bin);
         dec(BinBytes);
       until BinBytes = 0
-    else
+    else // Bin=nil -> validate Hex^ input
     begin
       tab := @ConvertHexToBin;
-      repeat // Bin=nil -> validate Hex^ input
+      repeat
         if (tab[Ord(Hex[0])] > 15) or
            (tab[Ord(Hex[1])] > 15) then
           exit;

@@ -2791,13 +2791,13 @@ begin
   case PCardinal(Text)^ of // case-sensitive test in occurrence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Method := urmGet;
-    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
+    POST_32:
       Method := urmPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Method := urmPut;
     ord('P') + ord('A') shl 8 + ord('T') shl 16 + ord('C') shl 24:
       Method := urmPatch;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+    HEAD_32:
       Method := urmHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
       Method := urmDelete;
@@ -5383,9 +5383,9 @@ begin
     P := pointer(Http.CommandResp);
     if P = nil then
       exit; // connection is likely to be broken or closed
-    GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
-    if (PCardinal(P)^ = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24) and
-       (PCardinal(P + 4)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16) then
+    GetNextItem(P, ' ', Http.CommandMethod);           // 'GET'
+    if (PCardinal(P)^ = HTTP__32) and                  // 'http'
+       (PCardinal(P + 4)^ and $ffffff = HTTP__24) then // '://'
     begin
       // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
       B := P;
@@ -5396,8 +5396,7 @@ begin
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
     result := grRejected;
     if (P = nil) or
-       (PCardinal(P)^ <>
-         ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) then
+       (PCardinal(P)^ <> HTTP_32) then
       exit;
     http10 := P[7] = '0';
     fKeepAliveClient := ((fServer = nil) or

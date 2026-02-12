@@ -717,17 +717,21 @@ type
     /// append ']' or '}' with proper indentation
     procedure BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
       {$ifdef HASINLINE}inline;{$endif}
-    /// used internally by WriteObject() when serializing a published property
-    // - will call AddCRAndIndent then append "PropName":
+    /// call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt); overload;
-    /// used internally by WriteObject() when serializing a published property
+    /// call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameHumanReadable(const PropName: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// used internally by WriteObject() when serializing a published property
-    // - will call AddCRAndIndent then append "PropName":
+    /// append a property name depending on Options e.g. "PropName":
+    procedure WriteObjectPropName(PropName: PUtf8Char; PropNameLen: PtrInt;
+      Options: TTextWriterWriteObjectOptions); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append a property name depending on Options e.g. "PropName":
+    procedure WriteObjectPropName(const PropName: RawUtf8;
+      Options: TTextWriterWriteObjectOptions); overload;
+    /// append a property name depending on Options e.g. "PropName":
     procedure WriteObjectPropNameShort(const PropName: ShortString;
       Options: TTextWriterWriteObjectOptions);
-      {$ifdef HASINLINE}inline;{$endif}
     /// same as WriteObject(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure WriteObjectAsString(Value: TObject;
@@ -1616,14 +1620,14 @@ type
   public
     /// the associated stream writer for the JSON output
     W: TJsonWriter;
-    /// serialization options as specified for this process
-    // - as used by AddShort/Add64/AddDateTime methods
-    Options: TTextWriterWriteObjectOptions;
     /// the RTTI information of the current serialized type
     Info: TRttiCustom;
     /// the RTTI information of the current serialized property
     // - is likely to be nil outside of properties serialization
     Prop: PRttiCustomProp;
+    /// serialization options as specified for this process
+    // - as used by AddShort/Add64/AddDateTime methods
+    Options: TTextWriterWriteObjectOptions;
     /// initialize this low-level JSON serialization context
     procedure Init(WR: TJsonWriter;
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
@@ -6002,9 +6006,10 @@ begin
             // append ',' and proper indentation if a field was just appended
             c.W.BlockAfterItem(c.Options);
           if isHumanReadable in flags then
-            c.W.WriteObjectPropNameHumanReadable(pointer(p^.Name), length(p^.Name))
-          else
-            c.W.AddProp(pointer(p^.Name), length(p^.Name));
+            c.W.AddCRAndIndent; // inlined WriteObjectPropNameHumanReadable()
+          c.W.AddProp(pointer(p^.Name), length(p^.Name));
+          if isHumanReadable in flags then
+            c.W.AddDirect(' ');
           if (noHook in flags) or
              not TORHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, Data);
@@ -6211,13 +6216,26 @@ begin
   WriteObjectPropNameHumanReadable(pointer(PropName), length(PropName));
 end;
 
-procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
+procedure TJsonWriter.WriteObjectPropName(PropName: PUtf8Char; PropNameLen: PtrInt;
   Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
-    WriteObjectPropNameHumanReadable(@PropName[1], ord(PropName[0]))
-  else
-    AddProp(@PropName[1], ord(PropName[0]));
+    AddCRAndIndent; // inlined WriteObjectPropNameHumanReadable()
+  AddProp(PropName, PropNameLen);
+  if woHumanReadable in Options then
+    AddDirect(' ');
+end;
+
+procedure TJsonWriter.WriteObjectPropName(const PropName: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  WriteObjectPropName(pointer(PropName), length(PropName), Options);
+end;
+
+procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  WriteObjectPropName(@PropName[1], ord(PropName[0]), Options);
 end;
 
 procedure TJsonWriter.WriteObjectAsString(Value: TObject;
@@ -6236,19 +6254,27 @@ procedure TJsonWriter.WriteObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
   ValuesCount: integer; Info: PRttiInfo; Options: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
+  comma: boolean;
 begin
-  ctxt.Init(self, [], Rtti.RegisterType(Info));
+  ctxt.Init(self, Options, Rtti.RegisterType(Info));
   BlockBegin('{', Options);
+  comma := false;
   if Assigned(ctxt.Info) and
      Assigned(ctxt.Info.JsonSave) then
     repeat
-      WriteObjectPropNameHumanReadable(Names^);
-      TRttiJsonSave(ctxt.Info.JsonSave)(Values, ctxt);
-      inc(PByte(Values), ctxt.Info.Size);
+      if not ((woDontStoreVoid in Options) and
+              ctxt.Info.ValueIsVoid(Values)) then
+      begin
+        if comma then
+          BlockAfterItem(Options);
+        WriteObjectPropName(pointer(Names^), length(Names^), Options);
+        TRttiJsonSave(ctxt.Info.JsonSave)(Values, ctxt);
+        comma := true;
+      end;
       dec(ValuesCount);
       if ValuesCount = 0 then
         break;
-      BlockAfterItem(Options);
+      inc(PByte(Values), ctxt.Info.Size);
       inc(Names);
     until false;
   BlockEnd('}', Options);

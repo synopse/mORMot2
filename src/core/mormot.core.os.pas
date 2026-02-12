@@ -1984,7 +1984,7 @@ function RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture: cardinal;
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentThreadId: DWord; stdcall;
 
-/// retrieves the current process ID
+/// retrieves the current process ID in a cross-platform way
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcessId: DWord; stdcall;
 
@@ -2102,7 +2102,7 @@ function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 function IsValidPid(pid: cardinal): boolean;
 
 type
-  /// Low-level access to the ICU library installed on this system
+  /// Low-level access to the ICU library installed on this POSIX system
   // - "International Components for Unicode" (ICU) is an open-source set of
   // libraries for Unicode support, internationalization and globalization
   // - ICU seems more complete and standard than FPC RTL iconv/cwstrings
@@ -2195,6 +2195,8 @@ var
   // - e.g. on Linux, may equal $030d02 for 3.13.2, or $020620 for 2.6.32
   KernelRevision: cardinal;
 
+/// call the syslog() libc API to generate a log message from UTF-8 text buffer
+function SysLogSend(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
 
 {$ifdef OSLINUX} { some Linux-specific APIs (e.g. systemd or eventfd) }
 
@@ -2227,7 +2229,7 @@ type
     listen_fds: function(unset_environment: integer): integer; cdecl;
     /// returns 1 if the file descriptor is an AF_UNIX socket of the specified type and path
     is_socket_unix: function(fd, typr, listening: integer;
-      var path: TFileName; pathLength: PtrUInt): integer; cdecl;
+      path: PAnsiChar; pathLength: PtrUInt): integer; cdecl;
     /// systemd: submit simple, plain text log entries to the system journal
     // - priority value can be obtained using integer(LOG_TO_SYSLOG[logLevel])
     journal_print: function(priority: integer; args: array of const): integer; cdecl;
@@ -2235,10 +2237,12 @@ type
     // - each structure should reference one field of the entry to submit
     // - the second argument specifies the number of structures in the array
     journal_sendv: function(var iov: TIoVec; n: integer): integer; cdecl;
-    /// sends notification to systemd
-    // - see https://www.freedesktop.org/software/systemd/man/notify.html
-    // status notification sample: sd.notify(0, 'READY=1');
-    // watchdog notification: sd.notify(0, 'WATCHDOG=1');
+    /// sends notification to systemd service manager about state changes
+    // - unset_environment should be kept to 0, unless further notify() calls
+    // would silently do nothing
+    // - see https://man.archlinux.org/man/sd_notify.3.en for some values, e.g.
+    // $ status notification sample: sd.notify(0, 'READY=1');
+    // $ watchdog notification: sd.notify(0, 'WATCHDOG=1');
     notify: function(unset_environment: integer; state: PUtf8Char): integer; cdecl;
     /// check whether the service manager expects watchdog keep-alive
     // notifications from a service
@@ -2251,6 +2255,8 @@ type
     /// returns TRUE if a systemd library is available
     // - will thread-safely load and initialize it if necessary
     function IsAvailable: boolean; inline;
+    /// encapsulate journal_sendv() with PRIORITY= and MESSAGE= members
+    function Send(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
     /// release the systemd library
     procedure Done;
   end;
@@ -2499,6 +2505,9 @@ var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
 
 {$endif NODIRECTTHREADMANAGER}
 
+/// retrieves the current process ID in a cross-platform way
+function GetCurrentProcessId: TThreadIDInt;
+
 {$endif OSPOSIX}
 
 /// returns TRUE if the supplied mutex has been initialized
@@ -2600,6 +2609,9 @@ function WinLastError(const Context: ShortString; Code: integer = 0): string;
 procedure WinCheck(const Context: ShortString; Code: integer;
   RaisedException: ExceptClass = nil);
   {$ifdef HASINLINE} inline; {$endif}
+
+/// wrap OutputDebugStringW() API with proper Unicode support
+procedure WinDebugOutput(p: PUtf8Char; len: PtrInt);
 
 /// raise an Exception from the last library error using WinApiErrorString()
 procedure RaiseLastModuleError(const Context: ShortString; Lib: HMODULE;
@@ -4900,9 +4912,11 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 {$endif PUREMORMOT2}
 
 /// compute a random UUid value from the RandomBytes() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
 procedure RandomGuid(out result: TGuid); overload;
 
 /// compute a random UUid value from the RandomBytes() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
 function RandomGuid: TGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

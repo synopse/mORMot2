@@ -3386,7 +3386,7 @@ var
 
 begin
   result := '';
-  text := TrimU(Filter);
+  TrimU(Filter, text);
   if text = '' then
     exit;
   if text[1] = '(' then

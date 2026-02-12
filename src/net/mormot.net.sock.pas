@@ -443,6 +443,13 @@ function NewRawSocket(family: TNetFamily; layer: TNetLayer): TNetSocket;
 function NewRawSockets(family: TNetFamily; layer: TNetLayer;
   count: integer): TNetSocketDynArray;
 
+{$ifdef OSPOSIX}
+/// connect to a new DGRAM raw Unix Domain TNetSocket instance from its path
+// - when nrOk is returned, caller should make netsocket.Close once done
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
+  asstream: boolean = false): TNetResult;
+{$endif OSPOSIX}
+
 /// delete a hostname from TNetAddr.SetFrom internal short-living cache
 procedure NetAddrFlush(const hostname: RawUtf8);
 
@@ -2392,6 +2399,9 @@ begin
       result := nrInvalidParameter;
     WSAEMFILE:
       result := nrTooManyConnections;
+    {$ifdef OSPOSIX}
+    ESysEPROTOTYPE, // e.g. SOCK_STREAM on a SOCK_DGRAM unix socket
+    {$endif OSPOSIX}
     WSAECONNREFUSED:
       result := nrRefused;
     {$ifdef OSPOSIX}
@@ -5767,7 +5777,7 @@ begin
   while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
     inc(s);
   UriScheme := usHttp; // fallback to http:// if no scheme specified
-  if PInteger(s)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
+  if PInteger(s)^ and $ffffff = HTTP__24 then // '://'
   begin
     FastSetString(Scheme, p, s - p);
     UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));

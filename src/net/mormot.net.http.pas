@@ -2917,8 +2917,7 @@ end;
 
 function IsPost(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
+  result := PCardinal(method)^ = POST_32;
 end;
 
 function IsPut(const method: RawUtf8): boolean;
@@ -2941,8 +2940,7 @@ end;
 
 function IsHead(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-              ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+  result := PCardinal(method)^ = HEAD_32;
 end;
 
 function IsUrlFavIcon(P: PUtf8Char): boolean;
@@ -2960,8 +2958,7 @@ end;
 function IsHttp(const text: RawUtf8): boolean;
 begin
   result := (length(text) > 5) and
-            (PCardinal(text)^ and $dfdfdfdf =
-               ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) and
+            (PCardinal(text)^ and $dfdfdfdf = HTTP_32) and
             ((text[5] = ':') or
              ((text[5] in ['s', 'S']) and
               (text[6] = ':')));
@@ -3639,8 +3636,7 @@ end;
 function THttpRequestContext.ParseHttp(P: PUtf8Char): boolean;
 begin
   result := false;
-  if (PCardinal(P)^ <>
-       ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) or
+  if (PCardinal(P)^ <> HTTP_32) or
      (PCardinal(P + 4)^ and $ffffff <>
        ord('/') + ord('1') shl 8 + ord('.') shl 16) then
     exit;
@@ -3655,8 +3651,6 @@ end;
 
 var
   _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
-const // inlined IsHead() function
-  _HEAD32 = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 
 function THttpRequestContext.ParseCommand: boolean;
 var
@@ -3677,12 +3671,12 @@ begin
         CommandMethod := _GETVAR; // optimistic
         inc(P, 4);
       end;
-    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
+    POST_32:
       begin
         CommandMethod := _POSTVAR;
         inc(P, 5);
       end;
-    _HEAD32:
+    HEAD_32:
       begin
         CommandMethod := _HEADVAR;
         inc(P, 5);
@@ -3706,8 +3700,8 @@ begin
   end;
   // parse CommandUri and HTTP/1.x
   B := P;
-  if (PCardinal(P)^ = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24) and
-     (PCardinal(P + 4)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16) then
+  if (PCardinal(P)^ = HTTP__32) and
+     (PCardinal(P + 4)^ and $ffffff = HTTP__24) then
   begin
     // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
     P := PosChar(P + 7, '/'); // use fast SSE2 asm on x86_64
@@ -3985,7 +3979,7 @@ begin
   if ContentEncoding <> nil then
     AppendLine(Headers, ['Content-Encoding: ', ContentEncoding^.Name]);
   // compute response body
-  if (PCardinal(CommandMethod)^ = _HEAD32) or
+  if (PCardinal(CommandMethod)^ = HEAD_32) or
      (ContentLength = 0) then
     exit;
   if aOutStream <> nil then
@@ -4082,7 +4076,7 @@ begin
   end;
   // try to send both headers and body in a single socket syscall
   Process.Reset;
-  if PCardinal(CommandMethod)^ = _HEAD32 then
+  if PCardinal(CommandMethod)^ = HEAD_32 then
     // return only the headers
     State := hrsResponseDone
   else
@@ -4225,7 +4219,7 @@ begin
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
      (CompressList <> nil) and
-     (PCardinal(CommandMethod)^ <> _HEAD32) and
+     (PCardinal(CommandMethod)^ <> HEAD_32) and
      not (rfWantRange in ResponseFlags) then
   begin
     gz := FileName + '.gz';
@@ -4250,7 +4244,7 @@ begin
       exit;
     end;
   include(ResponseFlags, rfAcceptRange);
-  if PCardinal(CommandMethod)^ = _HEAD32 then // make FileOpen() only for GET
+  if PCardinal(CommandMethod)^ = HEAD_32 then // make FileOpen() only for GET
   begin
     result := HTTP_SUCCESS;
     ContentStream := TStreamWithPositionAndSize.Create; // <> nil
@@ -6190,11 +6184,11 @@ begin
   case Text^ of // case-sensitive test in occurrence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Scope := hasGet;
-    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
+    POST_32:
       Scope := hasPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Scope := hasPut;
-    _HEAD32:
+    HEAD_32:
       Scope := hasHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
       Scope := hasDelete;

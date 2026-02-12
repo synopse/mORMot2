@@ -8300,7 +8300,11 @@ begin
   end
   else
   begin
+    if woHumanReadable in Options then
+      W.AddCRAndIndent;
     W.AddProp(pointer(props.IDJsonName), length(props.IDJsonName));
+    if woHumanReadable in Options then
+      W.AddDirect(' ');
     W.Add(TOrm(Instance).fID);
     W.BlockAfterItem(Options);
   end;
@@ -8308,9 +8312,10 @@ begin
   n := props.Count;
   repeat
     if woHumanReadable in Options then
-      W.WriteObjectPropNameHumanReadable(cur^.JsonName)
-    else
-      W.AddProp(pointer(cur^.JsonName), length(cur^.JsonName));
+      W.AddCRAndIndent; // inlined WriteObjectPropNameHumanReadable()
+    W.AddProp(pointer(cur^.JsonName), length(cur^.JsonName));
+    if woHumanReadable in Options then
+      W.AddDirect(' ');
     cur^.GetJsonValues(Instance, W);
     inc(cur);
     dec(n);

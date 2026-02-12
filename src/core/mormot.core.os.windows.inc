@@ -698,6 +698,14 @@ begin
     RaiseLastError(Context, RaisedException, Code);
 end;
 
+procedure WinDebugOutput(p: PUtf8Char; len: PtrInt);
+var
+  u: TSynTempBuffer;
+begin
+  OutputDebugStringW(Unicode_FromUtf8(p, len, u));
+  u.Done;
+end;
+
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
 begin
   result := Windows.PostMessage(hWnd, Msg, wParam, lParam); // call either A or W API

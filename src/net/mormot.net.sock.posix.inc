@@ -439,7 +439,7 @@ begin
   result := nrNotFound;
   if address = '' then
     exit;
-  // handle domain socket name
+  // handle unix domain socket path from address (ignoring addrport)
   if layer = nlUnix then
   begin
     // socket file name is just copied to the address struct
@@ -633,6 +633,40 @@ begin
     include(result, neError);
   if p.revents and POLLHUP <> 0 then
     include(result, neClosed); // may return neClosed + neRead e.g. on HTTP/1.0
+end;
+
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
+  asstream: boolean): TNetResult;
+var
+  addr: TNetAddr;
+  sock: PtrUInt;
+  st: TStat;
+begin
+  netsocket := nil;
+  // first validate the address is an existing unix socket file
+  result := nrNotFound;
+  if (path = '') or
+     (fpStat(pointer(path), st) <> 0) or
+     not fpS_ISSOCK(st.st_mode) then
+    exit;
+  // compute the proper TNetAddr and create a unix DGRAM/STREAM socket
+  result := addr.SetFrom(path, '', nlUnix);
+  if result <> nrOk then
+    exit;
+  sock := SOCK_DGRAM;
+  if asstream then
+    sock := SOCK_STREAM;
+  sock := socket(AF_UNIX, sock, 0);
+  if sock = 0 then
+    result := NetLastError
+  // try to connect to this unix socket
+  else if connect(sock, @addr, addr.Size) = NO_ERROR then
+    netsocket := TNetSocket(sock)
+  else
+  begin
+    result := NetLastError;
+    closesocket(sock);
+  end;
 end;
 
 

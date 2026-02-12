@@ -1554,7 +1554,7 @@ const
 procedure TNetworkProtocols.DHCP;
 var
   refdisc, refoffer, refreq, refack: RawByteString;
-  mac, ip, txt: RawUtf8;
+  mac, ip, txt, json: RawUtf8;
   fn: TFileName;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
@@ -1572,6 +1572,7 @@ var
   hostname: TShort7;
   rnd: TLecuyer;
   nfo: TMacIP;
+  m1, m2: TDhcpMetrics;
 
   procedure DoRequest(ndx: PtrInt);
   begin
@@ -1758,6 +1759,11 @@ begin
     Check(not FileExists(fn), fn);
     Check(server.FileName = fn);
     server.Setup({settings=}nil); // fill with our default subnet
+    server.MetricsFolder := WorkDir;
+    json := server.SaveMetricsToJson;
+    CheckUtf8(IsValidJson(json, {strict=}true), json);
+    server.ConsolidateMetrics(m1);
+    CheckEqual(MetricsToJson(m1), json);
     // precompute some random MAC addresses and setup a few statics
     n := 200;
     SetLength(macs, n);
@@ -1837,6 +1843,8 @@ begin
     Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'mac ip saved');
     Check(length(txt) < 1000, 'saved len');
     CheckSaveToTextMatch(txt);
+    d.Recv.cookie := 0;
+    Check(server.ComputeResponse(d) < 0, 'invalid frame');
     // make 200 concurrent requests - more than 2M handshakes per second ;)
     n := length(macs);
     SetLength(ips, n);
@@ -1847,7 +1855,7 @@ begin
       hostname := 'HOST';
       AppendShortCardinal(i, hostname);
       f := DhcpClient(d.Recv, dmtDiscover, macs[i]);
-      DhcpAddOption(f, doHostName, @hostname[1], length(hostname));
+      DhcpAddOptionShort(f, doHostName, hostname);
       f^ := #255;
       d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
@@ -1913,10 +1921,14 @@ begin
       DoRequest(rnd.Next(n)); // in Random order
     NotifyTestSpeed('DHCP renewals', n, 0, @timer);
     CheckEqual(length(server.SaveToText), length(txt), 'no new offer');
-    // benchmark OnIdle() performance
+    // validate OnIdle() metrics and file persistence background process
+    Check(not IsZero(server.Scope[0].Metrics.Current));
     Check(not FileExists(fn), 'file before OnIdle');
     CheckEqual(server.OnIdle(2000), 0, 'onidle persist but no outdated');
+    Check(IsZero(server.Scope[0].Metrics.Current));
+    Check(not IsZero(server.Scope[0].Metrics.Total));
     Check(FileExists(fn), 'file after OnIdle');
+    // benchmark OnIdle() performance
     timer.Start;
     for i := 1 to n * 10 do // increasing tix32 to trigger CheckOutdated
       CheckEqual(server.OnIdle((i * 1000) mod 6000), 0, 'onidle');
@@ -1926,13 +1938,50 @@ begin
     Check(server.FileName = fn, fn);
     Check(FileExists(fn), 'file after OnIdle');
     CheckEqual(length(StringFromFile(fn)), length(txt));
+    // metrics check - including JSON serialization
+    rnd.Fill(@m1, SizeOf(m1));
+    Check(not IsZero(m1));
+    json := MetricsToJson(m1);
+    FillZero(m2);
+    Check(IsZero(m2));
+    Check(not IsEqual(m1, m2));
+    Check(MetricsFromJson(json, m2), 'MetricsFromJson0');
+    Check(IsEqual(m1, m2), 'MetricsFromJson1');
+    Check(not IsZero(m1));
+    json := server.SaveMetricsToJson;
+    Check(MetricsFromJson(json, m1), 'MetricsFromJson2');
+    CheckUtf8(IsValidJson(json, {strict=}true), json);
+    CheckEqual(MetricsToJson(m1), json, 'MetricsToJson2');
+    CheckNotEqual(m1[dsmDiscover], 0);
+    CheckNotEqual(m1[dsmOffer], 0);
+    CheckNotEqual(m1[dsmRequest], 0);
+    CheckNotEqual(m1[dsmAck], 0);
+    CheckNotEqual(m1[dsmLeaseRenewed], 0);
+    CheckEqual(m1[dsmDiscover], m1[dsmOffer]);
+    CheckEqual(m1[dsmAck], m1[dsmRequest]);
+    CheckEqual(m1[dsmLeaseRenewed], m1[dsmRequest]);
+    CheckEqual(m1[dsmStaticHits] + m1[dsmDynamicHits],
+               m1[dsmDiscover]   + m1[dsmRequest], 'hits');
+    Check(not IsEqual(m1, m2), 'm2');
+    server.ConsolidateMetrics(m2);
+    Check(IsEqual(m1, m2), 'ConsolidateMetrics12');
+    server.SaveMetricsFolder({csv=}true);
+    // clear all previous leases
     server.ClearLeases;
+    server.ConsolidateMetrics(m2);
+    Check(not IsZero(m2));
+    Check(IsEqual(m1, m2), 'metrics after ClearLeases');
+    CheckEqual(m2[dsmDecline], 0);
+    server.ResetMetrics;
+    server.ConsolidateMetrics(m2);
+    Check(IsZero(m2));
+    Check(not IsEqual(m1, m2), 'metrics after ResetMetrics');
     CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');
     // validate DECLINE process - and option 82 Relay Agent
     CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
     f := DhcpClient(d.Recv, dmtDiscover, macs[0]);
-    DhcpAddOption(f, doDhcpAgentOptions, @OPTION82[1], 7);
+    DhcpAddOptionShort(f, doDhcpAgentOptions, OPTION82);
     f^ := #255;
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
     Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
@@ -1947,7 +1996,9 @@ begin
     Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doDhcpAgentOptions]);
     CheckNotEqual(lens[doDhcpAgentOptions], 0, 'propagated relay agent');
-    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = OPTION82);
+    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = OPTION82, 'o82a');
+    Check(DhcpIdem(@d.Send, lens[doDhcpAgentOptions], OPTION82), 'o82b');
+    Check(not DhcpIdem(@d.Send, lens[doDhcpAgentOptions], 'totoro'), 'o82c');
     ips[0] := d.Send.ciaddr;
     f := DhcpClient(d.Recv, dmtDecline, macs[0]);
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
@@ -1963,6 +2014,15 @@ begin
     Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
+    server.ConsolidateMetrics(m2);
+    CheckEqual(m2[dsmDecline], 1);
+    CheckEqual(m2[dsmDiscover], 2);
+    CheckEqual(m2[dsmOffer], 2);
+    CheckEqual(m2[dsmOption82Hits], 1);
+    Check(not IsEqual(m1, m2), 'ConsolidateMetricsDeclined');
+    json := MetricsToJson(m2, [woDontStoreVoid]);
+    CheckEqual(json, '{"discover":2,"offer":2,"decline":1,"lease-allocated":2,' +
+      '"dynamic-hits":2,"option-82-hits":1}');
   finally
     server.Free;
   end;

@@ -728,7 +728,6 @@ type
     procedure SetLevel(aLevel: TSynLogLevels);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogLevels);
-    procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
     function ArchiveAndDeleteFile(const aFileName: TFileName): boolean;
@@ -851,14 +850,17 @@ type
     // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogLevels
       read fEchoToConsole write SetEchoToConsole;
-    /// redirect all EchoToConsole logging into the Linux journald service
-    // - do nothing on Windows or BSD systems
+    /// redirect all EchoToConsole logging into the system journal service
+    // - redirect log output to our JournalSend() function
+    // - on Linux, will first try systemd journal, and fallback to syslog()
+    // - on BSD/MacOS, will call libc syslog()
+    // - on Windows, will call OutputDebugStringW() - TODO: support EWT
     // - such logs can be exported into a format which can be viewed by our
     // LogView tool using the following command (replacing UNIT with
     // your unit name and PROCESS with the executable name):
     // $ "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
     property EchoToConsoleUseJournal: boolean
-      read fEchoToConsoleUseJournal write SetEchoToConsoleUseJournal;
+      read fEchoToConsoleUseJournal write fEchoToConsoleUseJournal;
     /// EchoToConsole output is sent from the flush background thread
     // - enabled by default on Windows, since its console output is very slow
     property EchoToConsoleBackground: boolean
@@ -2041,21 +2043,55 @@ const
     ssInfo,    // sllDDDInfo
     ssDebug);  // sllMonitoring
 
-/// append some information to a syslog message memory buffer
-// - following https://tools.ietf.org/html/rfc5424 specifications
-// - ready to be sent via UDP to a syslog remote server
-// - returns the number of bytes written to destbuffer (which should have
-// destsize > 127)
+/// raw computation of a RFC 5424 syslog message content into a memory buffer
+// - returns the number of bytes written to destbuffer (with destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
-  trimmsgfromlog: boolean): PtrInt;
+  P: PAnsiChar; Len: PtrInt; const procid, msgid: RawUtf8; destbuffer: PUtf8Char;
+  destsize: PtrInt; trimmsgfromlog: boolean; const appname: RawUtf8 = ''): PtrInt;
+
+/// high-level computation of a RFC 5424 syslog message content
+// - ready to be sent via UDP or TLS to a syslog remote server
+// - TlsTcpFormat will prepend <len><space><sysmessage> as per RFC
+// - use Temp as temporary storage, and return Dest/result bytes from it
+function SyslogPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  var Temp: TBuffer2K; out Dest: PUtf8Char; TlsTcpFormat: boolean = true;
+  TrimSynLogDate: boolean = false; const AppName: RawUtf8 = '';
+  const MsgId: RawUtf8 = ''): PtrInt;
+
+/// high-level computation of a RFC 3164 original BSD syslog message content
+// - as expected locally on /var/log unix socket dgram in most POSIX systems
+// but not on systemd Linux which is incompatible and favors sd_journal_send()
+// - returns the number of bytes written to Temp
+function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  var Temp: TBuffer2K; TrimSynLogDate: boolean = false;
+  const AppName: RawUtf8 = ''): PtrInt;
+
+/// send an event to the Operating System journal
+// - use systemd library on Linux with fallback to syslog() on POSIX
+// - on Windows, calls OutputDebugStringW() - TODO: use bloated ETW API?
+// - as used e.g. for TSynLogFamily.EchoToConsoleUseJournal process
+// - input text would detect and trim "20200615 08003008 xxxx" TSynLog format,
+// unless TrimSynLogDate is forced to false
+function JournalSend(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate: boolean = true {$ifdef OSLINUX};
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean; overload;
+
+/// send an event to the Operating System journal from an UTF-8 buffer
+function JournalSend(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  TrimSynLogDate: boolean = true {$ifdef OSLINUX};
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean; overload;
 
 {$ifdef OSLINUX}
-/// send a TSynLog formatted text to the systemd library
-// - expected input text should alread be in "20200615 08003008 xxxx" format
-// - as used e.g. during TSynLogFamily.EchoToConsoleUseJournal process
-procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
+/// send an event to the systemd library with no fallback to syslog()
+// - compatibility function with older mORMot - use JournalSend() instead
+function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate: boolean = true): boolean;
 {$endif OSLINUX}
+
+/// extract the meaningfull text from a raw TSynLog output line
+// - as used by SyslogMessage() and SystemdEcho()
+procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
+  trimSynLogDate: boolean; maxLen: PtrInt);
 
 
 implementation
@@ -2105,7 +2141,7 @@ end;
    Then this .mab file can be distributed along the executable, or just
    appended to it after build.
 
-   Code below is inspired - but highly rewritten - from RTL's linfodwrf.pp }
+   Code below was inspired - but highly rewritten - from RTL's linfodwrf.pp }
 
 type
   TDwarfLineInfoHeader64 = packed record
@@ -3413,7 +3449,7 @@ procedure TDebugFile.SaveToJson(W: TTextWriter);
 begin
   if Rtti.RegisterType(TypeInfo(TDebugSymbol)).Props.Count = 0 then
     Rtti.RegisterFromText([TypeInfo(TDebugSymbol), _TDebugSymbol,
-                           TypeInfo(TDebugUnit), _TDebugUnit]);
+                           TypeInfo(TDebugUnit),   _TDebugUnit]);
   W.AddShort('{"Symbols":');
   fSymbols.SaveToJson(W, []);
   W.AddShort(',"Units":');
@@ -4161,18 +4197,6 @@ begin
      (aEnabled = fEchoToConsole) then
     exit;
   fEchoToConsole := aEnabled;
-end;
-
-procedure TSynLogFamily.SetEchoToConsoleUseJournal(aValue: boolean);
-begin
-  if self <> nil then
-    {$ifdef OSLINUX}
-    if aValue and
-       sd.IsAvailable then
-      fEchoToConsoleUseJournal := true
-    else
-    {$endif OSLINUX}
-      fEchoToConsoleUseJournal := false;
 end;
 
 function TSynLogFamily.GetSynLogClassName: string;
@@ -5239,52 +5263,14 @@ begin
   result := self;
 end;
 
-{$ifdef OSLINUX}
-procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
-var
-  priority: TShort16;
-  mtmp: RawUtf8;
-  jvec: array[0..1] of TIoVec;
-const
-  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
-begin
-  if (length(Text) < 18) or
-     not sd.IsAvailable then
-    // should be at last "20200615 08003008  "
-    exit;
-  FormatShort16('PRIORITY=%', [LOG_TO_SYSLOG[Level]], priority);
-  jvec[0].iov_base := @priority[1];
-  jvec[0].iov_len := ord(priority[0]);
-  // skip time "20200615 08003008  ." which should not be part of the jvec[]
-  TrimCopy(Text, 18 - 8, Utf8TruncatedLength(Text, 1500) - (18 - 8 - 1), mtmp);
-  // systemd truncates to LINE_MAX = 2048 anyway and expects valid UTF-8
-  with jvec[1] do
-  begin
-    iov_base := pointer(mtmp);
-    iov_len := length(mtmp);
-    while (iov_len > 0) and
-          (iov_base[8] <= ' ') do // trim left spaces
-    begin
-      inc(iov_base);
-      dec(iov_len);
-    end;
-    PInt64(iov_base)^ := PInt64(@_MESSAGE)^;
-  end;
-  sd.journal_sendv(jvec[0], 2);
-end;
-{$endif OSLINUX}
-
 function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
   const Text: RawUtf8): boolean;
 begin
   result := true;
   if Level in fFamily.fEchoToConsole then
-    {$ifdef OSLINUX}
     if Family.EchoToConsoleUseJournal then
-      SystemdEcho(Level, Text)
-    else
-    {$endif OSLINUX}
-    if fFamily.EchoToConsoleBackground and
+      JournalSend(Level, Text, {trimsynlog=}true)
+    else if fFamily.EchoToConsoleBackground and
        Assigned(AutoFlushThread) then
       AutoFlushThread.AddToConsole(Text, LOG_CONSOLE_COLORS[Level])
     else
@@ -8220,7 +8206,7 @@ begin
   P^ := ' ';
   inc(P);
   for i := 1 to length(text) do
-    if ord(text[i]) in [33..126] then
+    if ord(text[i]) in [33 .. 126] then
     begin
       // only non-space printable ASCII chars
       P^ := text[i];
@@ -8235,13 +8221,47 @@ begin
   result := P;
 end;
 
+procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
+  trimSynLogDate: boolean; maxLen: PtrInt);
+begin
+  if trimSynLogDate and
+     (len > 27) then
+  begin
+    if (P[0] = '2') and
+       (P[8] = ' ') then
+    begin
+      // trim e.g. '20160607 06442255  ! trace '
+      inc(P, 27);
+      dec(len, 27);
+    end
+    else if mormot.core.text.HexToBin(pointer(P), nil, 8) then
+    begin
+      // trim e.g. '00000000089E5A13  " info '
+      inc(P, 25);
+      dec(len, 25);
+    end;
+  end;
+  while (len > 0) and
+        (P^ <= ' ') do // trim left spaces (may be TSynLog indentation)
+  begin
+    inc(P);
+    dec(len);
+  end;
+  while (len > 0) and
+        (P[len - 1] <= ' ') do // trim right spaces
+    dec(len);
+  len := Utf8TruncatedLength(pointer(P), len, maxLen);
+end;
+
+const
+  MAX_SYSLOG = 1500; // mimics UDP/Ethernet frame truncation
+
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
-  trimmsgfromlog: boolean): PtrInt;
+  P: PAnsiChar; Len: PtrInt; const procid, msgid: RawUtf8; destbuffer: PUtf8Char;
+  destsize: PtrInt; trimmsgfromlog: boolean; const appname: RawUtf8): PtrInt;
 var
-  P: PAnsiChar;
   start: PUtf8Char;
-  len: PtrInt;
+  name: PRawUtf8;
   st: TSynSystemTime;
 begin
   result := 0;
@@ -8260,52 +8280,123 @@ begin
     true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', {withms=}true);
   destbuffer[23] := 'Z';
   inc(destbuffer, 24);
-  with Executable do
-  begin
-    if length(Host) + length(ProgramName) + length(procid) +
-       length(msgid) + (destbuffer - start) + 15 > destsize then
-      // avoid buffer overflow
-      exit;
-    destbuffer := PrintUSAscii(destbuffer, Host);         // HOST
-    destbuffer := PrintUSAscii(destbuffer, ProgramName);  // APP-NAME
-  end;
-  destbuffer := PrintUSAscii(destbuffer, procid);         // PROCID
-  destbuffer := PrintUSAscii(destbuffer, msgid);          // MSGID
-  destbuffer := PrintUSAscii(destbuffer, '');             // no STRUCTURED-DATA
+  if appname <> '' then
+    name := @appname
+  else
+    name := @Executable.ProgramName;
+  if length(Executable.Host) + length(name^) + length(procid) +
+     length(msgid) + (destbuffer - start) + 15 > destsize then
+    // avoid buffer overflow
+    exit;
+  destbuffer := PrintUSAscii(destbuffer, Executable.Host); // HOST
+  destbuffer := PrintUSAscii(destbuffer, name^);           // APP-NAME
+  destbuffer := PrintUSAscii(destbuffer, procid);          // PROCID
+  destbuffer := PrintUSAscii(destbuffer, msgid);           // MSGID
+  destbuffer := PrintUSAscii(destbuffer, '');              // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
-  len := length(msg);
-  P := pointer(msg);
-  if trimmsgfromlog and
-     (len > 27) then
-    if (P[0] = '2') and
-       (P[8] = ' ') then
-    begin
-      // trim e.g. '20160607 06442255  ! trace '
-      inc(P, 27);
-      dec(len, 27);
-    end
-    else if mormot.core.text.HexToBin(P, nil, 8) then
-    begin
-      // trim e.g. '00000000089E5A13  " info '
-      inc(P, 25);
-      dec(len, 25);
-    end;
-  while (len > 0) and
-        (P^ <= ' ') do
-  begin
-    // trim left spaces
-    inc(P);
-    dec(len);
-  end;
-  len := Utf8TruncatedLength(P, len, destsize - (destbuffer - start) - 3);
+  TrimSynLogMessage(PUtf8Char(P), len, trimmsgfromlog,
+    destsize - (destbuffer - start) - 3);
+  if len < 2 then
+    exit; // nothing to send
   if not IsAnsiCompatible(P, len) then
   begin
     PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior on POSIX :(
     inc(destbuffer, 3);
   end;
   MoveFast(P^, destbuffer^, len);
+  destbuffer[len] := #0; // for debugging - not included in result length
   result := (destbuffer - start) + len;
+end;
+
+function SyslogPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  var Temp: TBuffer2K; out Dest: PUtf8Char; TlsTcpFormat, TrimSynLogDate: boolean;
+  const AppName, MsgId: RawUtf8): PtrInt;
+var
+  DestEnd: PAnsiChar;
+begin
+  Dest := @Temp[8];
+  result := SyslogMessage(sfUser, LOG_TO_SYSLOG[Level], pointer(Text), Len,
+    UInt32ToUtf8(GetCurrentProcessId), MsgId, Dest, MAX_SYSLOG, TrimSynLogDate, AppName);
+  if (result <= 0) or
+     not TlsTcpFormat then
+    exit;
+  DestEnd := @Temp[result + 8];
+  Temp[7] := ' '; // return as <len>' '<sysmessage>
+  Dest := pointer(StrUInt32(PAnsiChar(@Temp[7]), result));
+  result := DestEnd - Dest;
+end;
+
+function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  var Temp: TBuffer2K; TrimSynLogDate: boolean; const AppName: RawUtf8): PtrInt;
+var
+  now: TSynSystemTime;
+  day: TShort3;
+  h, a: string[32]; // truncated to 32 chars for legacy compatibility reasons
+begin // <PRI>TIMESTAMP SP HOSTNAME SP TAG[: ]MESSAGE
+  now.FromNowLocal; // the RFC 4.1.2 states it is the local time :(
+  day[0] := #2;
+  PWord(@day[1])^ := TwoDigitLookupW[now.Day];
+  if day[1] = '0' then
+    day[1] := ' ';
+  h := Executable.Host;
+  if AppName <> '' then
+    a := AppName
+  else
+    a := Executable.ProgramName;
+  result := FormatBuffer('<%>% % %:%:% % %[%]: ',
+    [ord(LOG_TO_SYSLOG[Level]) + ord(sfUser) shl 3, HTML_MONTH_NAMES[now.Month],
+     day, UInt2DigitsToShortFast(now.Hour), UInt2DigitsToShortFast(now.Minute),
+     UInt2DigitsToShortFast(now.Second), h, a, GetCurrentProcessId],
+    @Temp, SizeOf(Temp));
+  TrimSynLogMessage(Text, Len, TrimSynLogDate, high(Temp) - result);
+  MoveFast(Text^, Temp[result], Len);
+  inc(result, Len);
+  Temp[result] := #0; // for debugging
+end;
+
+{$ifdef OSLINUX} // compatibility function for old mORMot code
+function SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate: boolean): boolean;
+begin
+  result := JournalSend(Level, Text, TrimSynLogDate, {nosyslog=}true);
+end;
+{$endif OSLINUX}
+
+function JournalSend(Level: TSynLogLevel; const Text: RawUtf8;
+  TrimSynLogDate {$ifdef OSLINUX}, NoSysLogFallback{$endif}: boolean): boolean;
+begin
+  result := JournalSend(Level, pointer(Text), length(Text), TrimSynLogDate
+    {$ifdef OSLINUX}, NoSysLogFallback{$endif});
+end;
+
+function JournalSend(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
+  TrimSynLogDate: boolean = true {$ifdef OSLINUX};
+  NoSysLogFallback: boolean = false {$endif OSLINUX}): boolean;
+{$ifdef OSPOSIX}
+var
+  priority: integer;
+{$endif OSPOSIX}
+begin
+  // skip time and level e.g. '20200615 08003008  . '
+  result := false;
+  TrimSynLogMessage(Text, Len, TrimSynLogDate, MAX_SYSLOG);
+  if len < 2 then
+    exit; // nothing to send
+  // call the proper OS API - note that bloated Windows ETW is not yet supported
+  {$ifdef OSWINDOWS}
+  WinDebugOutput(Text, len); // call OutputDebugStringW() API
+  result := true;
+  {$else}
+  priority := ord(LOG_TO_SYSLOG[Level]);
+  {$ifdef OSLINUX}
+  if sd.IsAvailable and
+     sd.Send(priority, Text, len) then
+    result := true
+  else if not NoSysLogFallback then
+  {$endif OSLINUX}
+    result := SysLogSend(priority, Text, len);
+  {$endif OSWINDOWS}
 end;
 
 

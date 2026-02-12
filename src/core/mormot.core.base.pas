@@ -803,6 +803,11 @@ const
   YES_HI     = ord('Y') + ord('E') shl 8 + ord('S') shl 16;
   HOST_127   = ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24;
   HOST_127_4 = ord('0') + ord('.') shl 8 + ord('0') shl 16 + ord('.') shl 24;
+  HTTP_32    = ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24;
+  HTTP__32   = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24;
+  HTTP__24   = ord(':') + ord('/') shl 8 + ord('/') shl 16;
+  HEAD_32    = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+  POST_32    = ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;
@@ -828,6 +833,9 @@ function IsEqualGuidArray({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
 // - this version is faster than the one supplied by SysUtils
 function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// swap the endianness TGuid members, i.e. D1/D2/D2 with bswap32/bswap16/bswap16
+procedure SwapGuid(var result: TGuid);
 
 /// append one TGuid item to a TGuid dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
@@ -3244,7 +3252,10 @@ function Trim(const S: RawUtf8): RawUtf8;
 // - should be used for RawUtf8 instead of SysUtils' Trim() which is ambiguous
 // with the main String/UnicodeString type of Delphi 2009+
 // - in mORMot 1.18, there was a Trim() function but it was confusing
-function TrimU(const S: RawUtf8): RawUtf8;
+function TrimU(const S: RawUtf8): RawUtf8; overload;
+
+/// fast dedicated RawUtf8 version of Trim()
+procedure TrimU(const S: RawUtf8; var Dest: RawUtf8); overload;
 
 /// fast dedicated RawUtf8 version of s := Trim(s)
 procedure TrimSelf(var S: RawUtf8);
@@ -3538,6 +3549,8 @@ function EventEquals(const eventA, eventB): boolean;
 type
   /// define a buffer of 1KB of data
   TBuffer1K = array[0..1023] of AnsiChar;
+  /// define a buffer of 2KB of data
+  TBuffer2K = array[0..2047] of AnsiChar;
   /// define a buffer of 4KB of data
   TBuffer4K = array[0..4095] of AnsiChar;
   /// define a buffer of 8KB of data
@@ -4900,6 +4913,13 @@ begin
             (a[2] = 0) and
             (a[3] = 0) {$endif CPU32};
 end;
+
+procedure SwapGuid(var result: TGuid);
+begin
+  result.D1 := bswap32(result.D1);
+  result.D2 := bswap16(result.D2);
+  result.D3 := bswap16(result.D3);
+end; // result.D4 bytes are kept as-is
 
 function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
   const{$endif} guid: TGuid; NoDuplicates: boolean): integer;
@@ -9807,6 +9827,12 @@ begin
     else
       FastSetString(S, @PByteArray(S)[i], len); // allocate
   end;
+end;
+
+procedure TrimU(const S: RawUtf8; var Dest: RawUtf8);
+begin
+  Dest := S;
+  TrimSelf(Dest);
 end;
 
 {$ifndef PUREMORMOT2}
