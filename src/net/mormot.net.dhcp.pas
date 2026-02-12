@@ -791,10 +791,14 @@ type
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
+    // some methods defined as virtual to all proper customization
     procedure DoLog(Level: TSynLogLevel; const Context: ShortString;
       const Data: TDhcpProcessData); virtual;
     function ParseFrame(var Data: TDhcpProcessData): boolean; virtual;
-    function RetrieveFrameIP(var Data: TDhcpProcessData; Lease: PDhcpLease): boolean; virtual;
+    function FindScope(var data: TDhcpProcessData): boolean; virtual;
+    function FindLease(var data: TDhcpProcessData): PDhcpLease; virtual;
+    function RetrieveFrameIP(var Data: TDhcpProcessData;
+      Lease: PDhcpLease): boolean; virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
   public
     /// setup this DHCP process using the specified settings
@@ -2652,32 +2656,80 @@ begin
   result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
 end;
 
-function ClientUuid(opt61: PByteArray; var data: TDhcpProcessData; uuid: pointer): PDhcpLease;
-var
-  found: TNetIP4;
-  len: PtrUInt;
+function TDhcpProcess.FindScope(var data: TDhcpProcessData): boolean;
 begin
+  if Data.RecvLens[doSubnetSelection] <> 0 then
+  begin
+    // RFC 3011 defined option 118 which overrides giaddr
+    Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
+    if Data.Scope <> nil then
+      inc(Data.Scope^.Metrics.Current[dsmOption118Hits]);
+  end
+  else if Data.Recv.giaddr <> 0 then
+    // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
+    Data.Scope := GetScope(Data.Recv.giaddr)
+  else if Data.RecvIp4 <> 0 then
+    // no giaddr: check RecvIp4 bound server IP as set by the UDP server
+    Data.Scope := GetScope(Data.RecvIp4)
+  else
+    // no option 118 no giaddr nor RecvIp4: default to Scope[0]
+    Data.Scope := pointer(fScope);
+  result := Data.Scope <> nil;
+end;
+
+function ClientUuid(opt: TDhcpOption; var data: TDhcpProcessData; uuid: pointer): PDhcpLease;
+var
+  ip4: TNetIP4;
+  v: PByte;
+  len: PtrUInt;
+begin // opt = doDhcpClientIdentifier or doUuidClientIdentifier
   result := nil;
-  case opt61^[0] of // UUID/DUID/vendor-specific are usually >= 8-16 bytes
-    0 .. 3, // < MIN_UUID_BYTES
+  v := @data.Recv.options[data.RecvLens[opt]]; // v^[0] <> 0
+  len := v^;
+  inc(v); // v^ points to the data
+  case len of // UUID/DUID/vendor-specific are usually >= 8-16 bytes
+    0 .. 3,   // < MIN_UUID_BYTES
     6:
-      exit; // too short, or 6-bytes MAC
+      exit;   // too short, or 6-bytes MAC
     7:
-      if opt61^[1] = 1 then
-        exit; // Eth=1 + MAC
+      if v^ = 1 then
+        exit; // Eth=1 + MAC is searched by FindMac()
+    17:
+      if v^ = 0 then
+      begin
+        // e.g. doUuidClientIdentifier RFC 4578 send Type=0 + SMBIOS UUID
+        inc(v);
+        dec(len);
+      end;
   end;
-  found := DoFindUuid(uuid, @opt61^[1], opt61^[0]);
-  if found = 0 then
+  ip4 := DoFindUuid(uuid, pointer(v), len);
+  if ip4 = 0 then
     exit;
   result := @data.Temp; // fake transient PDhcpLease for this StaticUuid[]
-  result^.IP4 := found;
+  result^.IP4 := ip4;
   PInt64(@result^.Mac)^ := Data.Mac64; // also reset State+RateLimit
   result^.State := lsStatic;
   // append UUID in logs after the MAC address (up to 64 chars)
   AppendShortChar('/', @data.Mac);
-  len := MinPtrUInt((SizeOf(data.Mac) - ord(data.Mac[0])) shr 1, ord(opt61^[0]));
-  mormot.core.text.BinToHex(@opt61^[1], @data.Mac[ord(data.Mac[0])], len);
+  len := MinPtrUInt((SizeOf(data.Mac) - ord(data.Mac[0])) shr 1, len);
+  mormot.core.text.BinToHex(pointer(v), @data.Mac[ord(data.Mac[0])], len);
   inc(data.Mac[0], len * 2);
+end;
+
+function TDhcpProcess.FindLease(var data: TDhcpProcessData): PDhcpLease;
+begin
+  // from StaticUuid[]
+  result := pointer(Data.Scope^.StaticUuid);
+  if result <> nil then
+    if Data.RecvLens[doDhcpClientIdentifier] <> 0 then  // computer MAC/UUID
+      result := ClientUuid(doDhcpClientIdentifier, Data, pointer(result))
+    else if Data.RecvLens[doUuidClientIdentifier] <> 0 then  // IPXE/VM
+      result := ClientUuid(doUuidClientIdentifier, Data, pointer(result))
+    else
+      result := nil;
+  // from Entry[] and StaticMac[]
+  if result = nil then
+    result := Data.Scope^.FindMac(Data.Mac64);
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
@@ -2707,23 +2759,7 @@ begin
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and not-blocking
   try
     // detect the proper scope to use
-    if Data.RecvLens[doSubnetSelection] <> 0 then
-    begin
-      // RFC 3011 defined option 118 which overrides giaddr
-      Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
-      if Data.Scope <> nil then
-        inc(Data.Scope^.Metrics.Current[dsmOption118Hits]);
-    end
-    else if Data.Recv.giaddr <> 0 then
-      // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
-      Data.Scope := GetScope(Data.Recv.giaddr)
-    else if Data.RecvIp4 <> 0 then
-      // no giaddr: check RecvIp4 bound server IP as set by the UDP server
-      Data.Scope := GetScope(Data.RecvIp4)
-    else
-      // no option 118 no giaddr nor RecvIp4: default to Scope[0]
-      Data.Scope := pointer(fScope);
-    if Data.Scope = nil then
+    if not FindScope(Data) then
     begin
       if Data.Recv.giaddr <> 0 then
         IP4Short(@Data.Recv.giaddr, Data.Ip)
@@ -2739,13 +2775,7 @@ begin
     Data.Scope^.Safe.Lock; // blocking for this subnet
     try
       // find any existing lease - or StaticMac[] StaticUuid[] fake lease
-      p := nil;
-      if (Data.Scope^.StaticUuid <> nil) and
-         (Data.RecvLens[doDhcpClientIdentifier] <> 0) then
-        p := ClientUuid(@Data.Recv.options[Data.RecvLens[doDhcpClientIdentifier]],
-           Data, pointer(Data.Scope^.StaticUuid));
-      if p = nil then
-        p := Data.Scope^.FindMac(Data.Mac64); // from Entry[] and StaticMac[]
+      p := FindLease(Data);
       // process the received DHCP message
       case Data.RecvType of
         dmtDiscover:
