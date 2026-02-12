@@ -651,9 +651,13 @@ type
   TDhcpBootSettings = class(TSynPersistent)
   protected
     fNextServer: RawUtf8;
-    fRemote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
-    fFirmware: array[dcbBios .. dcbArm64] of RawUtf8;
-    fIpxe: array[dcbIpxe_Bios .. dcbIpxe_Arm64] of RawUtf8;
+    fRemote: array[TDhcpClientBoot] of RawUtf8;
+    fOption: array[TDhcpClientBoot] of RawUtf8;
+    { FPC is not able to generate RTTI for the following - Delphi has no issue
+      TODO: bugreport?
+        fRemote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
+        fFirmware: array[dcbBios .. dcbArm64] of RawUtf8;
+        fIpxe: array[dcbIpxe_Bios .. dcbIpxe_Arm64] of RawUtf8; }
   public
     /// compute the low-level TDhcpScope.Boot data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct, e.g.
@@ -701,34 +705,34 @@ type
       read fRemote[dcbIpxe_Arm64] write fRemote[dcbIpxe_Arm64];
     /// option 43 base-64 encoded TLV for BIOS PXE
     property OptionBios: RawUtf8
-      read fFirmware[dcbBios] write fFirmware[dcbBios];
+      read fOption[dcbBios] write fOption[dcbBios];
     /// option 43 base-64 encoded TLV for UEFI i386
     property OptionX86: RawUtf8
-      read fFirmware[dcbX86] write fFirmware[dcbX86];
+      read fOption[dcbX86] write fOption[dcbX86];
     /// option 43 base-64 encoded TLV for UEFI x64
     property OptionX64: RawUtf8
-      read fFirmware[dcbX64] write fFirmware[dcbX64];
+      read fOption[dcbX64] write fOption[dcbX64];
     /// option 43 base-64 encoded TLV for UEFI Arm32
     property OptionArm32: RawUtf8
-      read fFirmware[dcbArm32] write fFirmware[dcbArm32];
+      read fOption[dcbArm32] write fOption[dcbArm32];
     /// option 43 base-64 encoded TLV for UEFI Arm64
     property OptionArm64: RawUtf8
-      read fFirmware[dcbArm64] write fFirmware[dcbArm64];
+      read fOption[dcbArm64] write fOption[dcbArm64];
     /// option 175 base-64 encoded TLV for legacy BIOS iPXE
     property OptionIpxeBios: RawUtf8
-      read fIpxe[dcbIpxe_Bios] write fIpxe[dcbIpxe_Bios];
+      read fOption[dcbIpxe_Bios] write fOption[dcbIpxe_Bios];
     /// option 175 base-64 encoded TLV for iPXE i386
     property OptionIpxeX86: RawUtf8
-      read fIpxe[dcbIpxe_X86] write fIpxe[dcbIpxe_X86];
+      read fOption[dcbIpxe_X86] write fOption[dcbIpxe_X86];
     /// option 175 base-64 encoded TLV for iPXE x64
     property OptionIpxeX64: RawUtf8
-      read fIpxe[dcbIpxe_X64] write fIpxe[dcbIpxe_X64];
+      read fOption[dcbIpxe_X64] write fOption[dcbIpxe_X64];
     /// option 175 base-64 encoded TLV for iPXE Arm32
     property OptionIpxeArm32: RawUtf8
-      read fIpxe[dcbIpxe_Arm32] write fIpxe[dcbIpxe_Arm32];
+      read fOption[dcbIpxe_Arm32] write fOption[dcbIpxe_Arm32];
     /// option 175 base-64 encoded TLV for iPXE Arm64
     property OptionIpxeArm64: RawUtf8
-      read fIpxe[dcbIpxe_Arm64] write fIpxe[dcbIpxe_Arm64];
+      read fOption[dcbIpxe_Arm64] write fOption[dcbIpxe_Arm64];
   end;
 
   /// main high-level options for defining one scope/subnet for our DHCP Server
@@ -1032,7 +1036,7 @@ type
     function LoadFromFile(const FileName: TFileName): boolean;
     /// aggregate all per-scope Total metrics into a single counter
     procedure ConsolidateMetrics(var global: TDhcpMetrics); overload;
-    /// aggregate all per-scope metrics into a single set of counters
+    /// aggregate all per-scope metrics into a single set of Current/Total counters
     procedure ConsolidateMetrics(var global: TDhcpAllMetrics); overload;
     /// reset back all per-scope metrics to their initial 0 counter value
     procedure ResetMetrics;
@@ -2077,9 +2081,9 @@ begin
   for dcb := low(Data.Remote) to high(Data.Remote) do
     TrimU(fRemote[dcb], Data.Remote[dcb]);
   for dcb := low(Data.Firmware) to high(Data.Firmware) do
-    TlcFromBase64(dcb, fFirmware[dcb], Data.Firmware[dcb]);
+    TlcFromBase64(dcb, fOption[dcb], Data.Firmware[dcb]);
   for dcb := low(Data.Ipxe) to high(Data.Ipxe) do
-    TlcFromBase64(dcb, fIpxe[dcb], Data.Ipxe[dcb]);
+    TlcFromBase64(dcb, fOption[dcb], Data.Ipxe[dcb]);
   // complete configuration from sibling values
   if dsoNoPXEConsolidation in Options then
     exit;
