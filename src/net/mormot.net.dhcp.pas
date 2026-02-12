@@ -143,7 +143,7 @@ type
  // - doBootFileName is PXE option 67 (pxelinux.0)
  // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
  // - doDhcpAgentOptions is Relay Agent (RFC 3046) option 82 - last to appear
- // - doClientArchitecture is PXE option 93 as uint16 (00:00)
+ // - doClientArchitecture is RFC 4578 PXE option 93 as uint16 (00:00)
  // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOSUUID)
  // - doSubnetSelection is option 118 to override the giaddr value
  // - doEnd is "End Of Options" marker option 255 (not a true value)
@@ -487,7 +487,7 @@ type
     // - can be associated with a fixed MAC address or option 61 UUID
     function AddStatic(var nfo: TMacIP): boolean; overload;
     /// register another static IP address to the internal pool
-    // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuidhex=ip' text
+    // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuid=ip' text
     function AddStatic(const macip: RawUtf8): boolean; overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
@@ -598,7 +598,7 @@ type
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
     /// some static IP addresses potentially with their MAC, reserved on the network
-    // - supplied as "ip", "mac=ip" or "uuidhex=ip" string items
+    // - supplied as "ip", "mac=ip" or "uuid=ip" string items
     // - e.g. ["192.168.1.2","2f:af:9e:0f:b8:2a=192.168.1.100"]
     property Static: TRawUtf8DynArray
       read fStatic write fStatic;
@@ -802,7 +802,7 @@ type
     // TDhcpServerSettings.Verify() if you want to intercept such errors
     // - if aSettings = nil, will use TDhcpServerSettings default parameters
     procedure Setup(aSettings: TDhcpServerSettings = nil);
-    /// register another static 'ip', 'mac=ip' or 'uuidhex=ip' to the pool
+    /// register another static 'ip', 'mac=ip' or 'uuid=ip' to the pool
     // - in addition to aScopeSettings.Static array
     // - could be used at runtime depending on the network logic
     // - those static IPs are not persisted in FileName/SaveToFile
@@ -1177,23 +1177,28 @@ function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 var
   mac, ip: RawUtf8;
   p: PUtf8Char;
+  guid: TGuid;
 begin
   result := false;
   FillZero(nfo.mac);
   nfo.uuid := '';
-  if TrimSplit(macip, mac, ip, '=') then // 'mac=ip' or 'uuidhex=ip' format
+  if TrimSplit(macip, mac, ip, '=') then // 'mac=ip' or 'uuid=ip' format
     if ((length(mac) = 17) and
         (TextToMac(pointer(mac), @nfo.mac))) then
       // exact 'xx:xx:xx:xx:xx:xx' format
       p := pointer(ip)
-    else if HexToBin(pointer(mac), length(mac), nfo.uuid) then
+    else
     begin
-      // '0123456789abcdef'
-      FillZero(nfo.mac);
+      FillZero(nfo.mac); // ensure IsZero() after partial TextToMac()
+      // try '0123456789abcdef' plain hexadecimal UUID - not GUID order
+      if not HexToBin(pointer(mac), length(mac), nfo.uuid) then
+        // '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' or '3F2504E0-..0305E82C3301'
+        if RawUtf8ToGuid(mac, guid) then
+          FastSetRawByteString(nfo.uuid, @guid, SizeOf(guid))
+        else
+          exit; // invalid MAC or UUID
       p := pointer(ip);
     end
-    else
-      exit // invalid MAC or hexadecimal UUID
   else
     p := pointer(macip); // only 'ip'
   result := NetIsIP4(p, @nfo.ip); // valid IP
