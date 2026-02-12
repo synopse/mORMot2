@@ -5354,20 +5354,24 @@ begin
 end;
 
 procedure _JS_Ansi(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
+var
+  rec: PStrRec;
 begin
   Ctxt.W.Add('"');
   Data := PPointer(Data)^;
   if Data <> nil then
-    with PStrRec(Data - SizeOf(TStrRec))^ do
-      {$ifdef HASCODEPAGE}
-      if (codepage = CP_UTF8) {$ifdef FPC} or
-         ((codepage = CP_ACP) and (Unicode_CodePage = CP_UTF8)) {$endif} then
-        Ctxt.W.AddJsonEscape(Data, {len=}0) // optimized for RawUtf8 content
-      else
-        Ctxt.W.AddAnyAnsiBuffer(Data, length, twJsonEscape, codePage);
-      {$else} // Delphi 7/2007 will use the RTTI code page
-      Ctxt.W.AddAnyAnsiBuffer(Data, length, twJsonEscape, Ctxt.Info.Cache.CodePage);
-      {$endif HASCODEPAGE}
+  begin
+    rec := PStrRec(Data - SizeOf(TStrRec));
+    {$ifdef HASCODEPAGE}
+    if (rec^.codepage = CP_UTF8) {$ifdef FPC} or
+       ((rec^.codepage = CP_ACP) and (Unicode_CodePage = CP_UTF8)) {$endif} then
+      Ctxt.W.AddJsonEscape(Data, {len=}0) // optimized for RawUtf8 content
+    else
+      Ctxt.W.AddAnyAnsiBuffer(Data, rec^.length, twJsonEscape, rec^.codePage);
+    {$else} // Delphi 7/2007 will use the RTTI code page
+    Ctxt.W.AddAnyAnsiBuffer(Data, rec^.length, twJsonEscape, Ctxt.Info.Cache.CodePage);
+    {$endif HASCODEPAGE}
+  end;
   Ctxt.W.AddDirect('"');
 end;
 
