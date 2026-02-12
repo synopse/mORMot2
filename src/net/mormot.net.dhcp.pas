@@ -508,9 +508,13 @@ type
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
   // (not included by default since seems overkill and KEA/Windows don't do it)
   // - dsoCsvUnixTime will use Unix timestamp instead of ISO-8601 text in CSVs
+  // - dsoNoPXEConsolidation won't auto-fill the PXE boot-file-name from others
+  // - dsoDisablePXE disables the whole PXE configuration from "Boot" settings
   TDhcpScopeOption = (
     dsoInformRateLimit,
-    dsoCsvUnixTime
+    dsoCsvUnixTime,
+    dsoNoPXEConsolidation,
+    dsoDisablePXE
     );
   /// refine DHCP server process for one TDhcpScopeSettings
   TDhcpScopeOptions = set of TDhcpScopeOption;
@@ -650,7 +654,7 @@ type
     /// compute the low-level TDhcpScope.Boot data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct, e.g.
     // if Option* properties are not valid base-64 encoded values
-    procedure PrepareScope(var Data: TDhcpScopeBoot);
+    procedure PrepareScope(var Data: TDhcpScopeBoot; Options: TDhcpScopeOptions);
   published
     /// option 66 IP address or hostname
     property NextServer: RawUtf8
@@ -2046,10 +2050,16 @@ begin
       boot.Ipxe[dst] := boot.Ipxe[ref];
 end;
 
-procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot);
+procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot;
+  Options: TDhcpScopeOptions);
 var
   dcb, ref: TDhcpClientBoot;
 begin
+  if dsoDisablePXE in Options then
+  begin
+    Finalize(Data); // reset all RawUtf8/RawByteString to ''
+    exit;
+  end;
   // copy the working parameters from the settings
   TrimU(fNextServer, Data.NextServer);
   for dcb := low(Data.Remote) to high(Data.Remote) do
@@ -2059,6 +2069,8 @@ begin
   for dcb := low(Data.Ipxe) to high(Data.Ipxe) do
     TlcFromBase64(dcb, fIpxe[dcb], Data.Ipxe[dcb]);
   // complete configuration from sibling values
+  if dsoNoPXEConsolidation in Options then
+    exit;
   // 1. HTTP aware architecture fallback to their TFTP value
   ConsolidateOption(Data, dcbX64,   dcbX64_Http);
   ConsolidateOption(Data, dcbArm64, dcbArm64_Http);
@@ -2087,7 +2099,8 @@ begin
   fGraceFactor := 2;
 end;
 
-procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
+procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess;
+  var Data: TDhcpScope);
 var
   mask: TNetIP4;
   i: PtrInt;
@@ -2121,7 +2134,7 @@ begin
     Data.DeclineTime := Data.LeaseTime;
   Data.GraceFactor       := fGraceFactor;         // * 2
   Data.Options           := fOptions;
-  fBoot.PrepareScope(Data.Boot);
+  fBoot.PrepareScope(Data.Boot, Data.Options);
   // retrieve and adjust the subnet mask from settings
   if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
