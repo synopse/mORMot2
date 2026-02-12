@@ -112,64 +112,18 @@ begin
 end;
 
 procedure TCustomerEditForm.SetupLayout;
-var
-  LabelHeight, LabelWidth, EditHeight, EditWidth: Integer;
 begin
-  LabelHeight := LabelCustomerNo.Height;
-  EditHeight := EditCustomerNo.Height;
-  // Calculate widths based on base height (proportional sizing)
-  LabelWidth := Round(7 * LabelHeight);
-  EditWidth := Round(18.75 * LabelHeight);
+  InitLayout(LabelCustomerNo.Height, EditCustomerNo.Height, 7.0, 18.75);
 
-  InitLayout(LabelHeight);
-
-    // Set Label Autsize to false
-  LabelCustomerNo.AutoSize:=false;
-  LabelCompany.AutoSize:=false;
-  LabelPhone.AutoSize:=false;
-  LabelFax.AutoSize:=false;
-  LabelAddress.AutoSize:=false;
-  LabelZip.AutoSize:=false;
-  LabelCity.AutoSize:=false;
-  LabelCountry.AutoSize:=false;
-
-  // Set label widths for alignment
-  LabelCustomerNo.Width := LabelWidth;
-  LabelCompany.Width := LabelWidth;
-  LabelPhone.Width := LabelWidth;
-  LabelFax.Width := LabelWidth;
-  LabelAddress.Width := LabelWidth;
-  LabelZip.Width := LabelWidth;
-  LabelCity.Width := LabelWidth;
-  LabelCountry.Width := LabelWidth;
-
-  // Set all edit widths the same for consistency
-  EditCustomerNo.Width := EditWidth;
-  EditCompany.Width := EditWidth;
-  EditPhone.Width := EditWidth;
-  EditFax.Width := EditWidth;
-  EditAddress.Width := EditWidth;
-  EditZip.Width := EditWidth;
-  EditCity.Width := EditWidth;
-  EditCountry.Width := EditWidth;
-
-  // Match label heights to edit height and center text vertically
-  LabelCustomerNo.Height := EditHeight;
-  LabelCompany.Height := EditHeight;
-  LabelPhone.Height := EditHeight;
-  LabelFax.Height := EditHeight;
-  LabelAddress.Height := EditHeight;
-  LabelZip.Height := EditHeight;
-  LabelCity.Height := EditHeight;
-  LabelCountry.Height := EditHeight;
-  LabelCustomerNo.Layout := tlCenter;
-  LabelCompany.Layout := tlCenter;
-  LabelPhone.Layout := tlCenter;
-  LabelFax.Layout := tlCenter;
-  LabelAddress.Layout := tlCenter;
-  LabelZip.Layout := tlCenter;
-  LabelCity.Layout := tlCenter;
-  LabelCountry.Layout := tlCenter;
+  // Prepare label-edit pairs: AutoSize off, uniform sizes, text centered, FocusControl
+  PrepareLabelEdit(LabelCustomerNo, EditCustomerNo);
+  PrepareLabelEdit(LabelCompany, EditCompany);
+  PrepareLabelEdit(LabelPhone, EditPhone);
+  PrepareLabelEdit(LabelFax, EditFax);
+  PrepareLabelEdit(LabelAddress, EditAddress);
+  PrepareLabelEdit(LabelZip, EditZip);
+  PrepareLabelEdit(LabelCity, EditCity);
+  PrepareLabelEdit(LabelCountry, EditCountry);
 
   // Position first label
   LabelCustomerNo.SetBounds(Layout.Margins.Left, Layout.Margins.Top,

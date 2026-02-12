@@ -37,9 +37,20 @@ end;
 ```pascal
 procedure TMyForm.SetupLayout;
 begin
-  InitLayout(LabelFoo.Height);
-  Layout.Place(LabelFoo, EditFoo, ldRight, 0.5);
-  // ... layout calls directly on Layout property ...
+  InitLayout(LabelFoo.Height, EditFoo.Height, 7.0, 18.75);
+
+  // Prepare label-edit pairs (AutoSize off, uniform sizes, centered, FocusControl)
+  PrepareLabelEdit(LabelFoo, EditFoo);
+  PrepareLabelEdit(LabelBar, EditBar);
+
+  // Position first label
+  LabelFoo.SetBounds(Layout.Margins.Left, Layout.Margins.Top, LabelWidth, EditHeight);
+  Layout.Place(LabelFoo, EditFoo, ldRight, 1.0);
+
+  // Position remaining pairs
+  Layout.Place(LabelFoo, LabelBar, ldBelow, 0.5);
+  Layout.Place(LabelBar, EditBar, ldRight, 1.0);
+
   Layout.AutoSizeForm;
 end;
 ```
@@ -59,10 +70,11 @@ TMDChildForm              <-- FLayout lives here
 | # | Task | Status |
 |---|------|--------|
 | 1.1 | Add `mdLayout` to `mdforms.pas` uses clause (interface section) | done |
-| 1.2 | Add to `TMDChildForm`: field `FLayout: TLayoutHelper`, property `Layout: TLayoutHelper read FLayout`, method `procedure InitLayout(ABaseHeight: Integer)` | done |
-| 1.3 | Implement `InitLayout`: create `FLayout` with `LayoutMargins(ABaseHeight)`, call `AdjustForPlatform` | done |
+| 1.2 | Add to `TMDChildForm`: `FLayout`, `FLabelHeight`, `FEditHeight`, `FLabelWidth`, `FEditWidth` fields; `Layout`, `LabelHeight`, `EditHeight`, `LabelWidth`, `EditWidth` properties; `InitLayout(ALabelHeight, AEditHeight: Integer; ALabelWidthMult, AEditWidthMult: Single)` | done |
+| 1.3 | Implement `InitLayout`: store dimensions, create `FLayout` with `LayoutMargins(ALabelHeight)`, call `AdjustForPlatform` | done |
 | 1.4 | Add destructor `Destroy` override to `TMDChildForm`: free `FLayout` | done |
-| 1.5 | Compile both projects | done |
+| 1.5 | Add `PrepareLabel(ALabel)`, `PrepareEdit(AEdit)`, `PrepareLabelEdit(ALabel, AEdit)` helper methods to `TMDChildForm`. `PrepareLabel`: AutoSize off, uniform width/height, tlCenter. `PrepareEdit`: uniform width. `PrepareLabelEdit`: calls both + sets FocusControl. Preparation only, no placement. | done |
+| 1.6 | Compile both projects | done |
 
 ### Phase 2: Migrate modal dialog forms (TMDDBModeForm descendants)
 
@@ -98,7 +110,7 @@ TMDChildForm              <-- FLayout lives here
 ### Modified
 | File | Change |
 |------|--------|
-| `Components/mdforms.pas` | +`mdLayout` uses, +`FLayout` field, +`Layout` property, +`InitLayout`, +`Destroy` |
+| `Components/mdforms.pas` | +`mdLayout` uses, +`FLayout`/`FLabelHeight`/`FEditHeight`/`FLabelWidth`/`FEditWidth` fields, +properties, +`InitLayout(4 params)`, +`PrepareLabel`/`PrepareEdit`/`PrepareLabelEdit`, +`Destroy` |
 | `Components/mdlayout.pas` | Remove `LayoutAboutDialog` (dead code after migration) |
 | `src/rgCustomerEdit.pas` | Keep `mdLayout` uses, simplify `SetupLayout` |
 | `src/rgInvoiceEdit.pas` | Keep `mdLayout` uses, simplify `SetupLayout` |
@@ -117,13 +129,14 @@ TMDChildForm              <-- FLayout lives here
 
 ```
 1. Keep `mdLayout` in uses clause (forms reference TLayoutDirection values directly)
-2. Remove local var declarations: Layout, Margins, BaseHeight
+2. Remove local var declarations: Layout, Margins, BaseHeight, LabelHeight, EditHeight, LabelWidth, EditWidth
 3. Remove TLayoutHelper.Create + try/finally/Free wrapper
-4. Add `InitLayout(SomeLabel.Height)` as first line of SetupLayout
-5. Replace `Margins.*` with `Layout.Margins.*`, `BaseHeight` with the label height expression
-6. Set label heights to match edit height before placement (fixes vertical misalignment)
-7. `Layout.Place(...)` calls stay the same (property has same name as old local var)
-8. Verify compile
+4. Add `InitLayout(SomeLabel.Height, SomeEdit.Height, LabelMult, EditMult)` as first line
+5. Replace separate label/edit preparation with `PrepareLabelEdit(ALabel, AEdit)` calls
+6. Replace local vars with properties: `LabelHeight`, `EditHeight`, `LabelWidth`, `EditWidth`
+7. Replace `Margins.*` with `Layout.Margins.*`
+8. `Layout.Place(...)` calls stay the same (property has same name as old local var)
+9. Verify compile
 ```
 
 ## Verify

@@ -33,7 +33,7 @@ unit MdForms;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, Menus,
+  Classes, SysUtils, Controls, Forms, Graphics, Menus, StdCtrls,
   {$IFDEF FPC}
   LCLType
   {$ELSE FPC}
@@ -51,6 +51,10 @@ type
     FAsChild: boolean;
     FTempParent: TWinControl;
     FLayout: TLayoutHelper;
+    FLabelHeight: Integer;
+    FEditHeight: Integer;
+    FLabelWidth: Integer;
+    FEditWidth: Integer;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
     procedure Loaded; override;
@@ -58,10 +62,18 @@ type
     constructor Create(AOwner: TComponent); overload; override;
     constructor Create(AOwner: TComponent; AParent: TWinControl); reintroduce; overload;
     destructor Destroy; override;
-    procedure InitLayout(ABaseHeight: Integer);
+    procedure InitLayout(ALabelHeight, AEditHeight: Integer;
+      ALabelWidthMult, AEditWidthMult: Single);
+    procedure PrepareLabel(ALabel: TLabel);
+    procedure PrepareEdit(AEdit: TEdit);
+    procedure PrepareLabelEdit(ALabel: TLabel; AEdit: TEdit);
     function GetFormMenu: TMainMenu; virtual; abstract;
     function CanChange: boolean; virtual;
     property Layout: TLayoutHelper read FLayout;
+    property LabelHeight: Integer read FLabelHeight;
+    property EditHeight: Integer read FEditHeight;
+    property LabelWidth: Integer read FLabelWidth;
+    property EditWidth: Integer read FEditWidth;
   end;
 
   { TMDDBModeForm }
@@ -137,11 +149,36 @@ begin
   inherited Destroy;
 end;
 
-procedure TMDChildForm.InitLayout(ABaseHeight: Integer);
+procedure TMDChildForm.InitLayout(ALabelHeight, AEditHeight: Integer;
+  ALabelWidthMult, AEditWidthMult: Single);
 begin
+  FLabelHeight := ALabelHeight;
+  FEditHeight := AEditHeight;
+  FLabelWidth := Round(ALabelWidthMult * ALabelHeight);
+  FEditWidth := Round(AEditWidthMult * ALabelHeight);
   FreeAndNil(FLayout);
-  FLayout := TLayoutHelper.Create(Self, LayoutMargins(ABaseHeight));
+  FLayout := TLayoutHelper.Create(Self, LayoutMargins(ALabelHeight));
   FLayout.AdjustForPlatform;
+end;
+
+procedure TMDChildForm.PrepareLabel(ALabel: TLabel);
+begin
+  ALabel.AutoSize := False;
+  ALabel.Width := FLabelWidth;
+  ALabel.Height := FEditHeight;
+  ALabel.Layout := tlCenter;
+end;
+
+procedure TMDChildForm.PrepareEdit(AEdit: TEdit);
+begin
+  AEdit.Width := FEditWidth;
+end;
+
+procedure TMDChildForm.PrepareLabelEdit(ALabel: TLabel; AEdit: TEdit);
+begin
+  PrepareLabel(ALabel);
+  PrepareEdit(AEdit);
+  ALabel.FocusControl := AEdit;
 end;
 
 function TMDChildForm.CanChange: boolean;

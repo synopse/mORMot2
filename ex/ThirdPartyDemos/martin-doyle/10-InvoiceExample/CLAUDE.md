@@ -57,21 +57,37 @@ Use system locale for display/parse. Never hardcode formats.
 
 ## Form Architecture
 
+### Base class: `TMDChildForm` (`Components/mdforms.pas`)
+
+Layout support is built into `TMDChildForm`. All forms inherit it.
+
+```pascal
+// In SetupLayout (called from FormShow for GTK2 height finalization):
+InitLayout(LabelFoo.Height, EditFoo.Height, 7.0, 18.75);
+PrepareLabelEdit(LabelFoo, EditFoo);  // AutoSize off, uniform sizes, centered, FocusControl
+LabelFoo.SetBounds(Layout.Margins.Left, Layout.Margins.Top, LabelWidth, EditHeight);
+Layout.Place(LabelFoo, EditFoo, ldRight, 1.0);
+Layout.AutoSizeForm;
+```
+
+- `InitLayout(ALabelHeight, AEditHeight, ALabelWidthMult, AEditWidthMult)` — creates `TLayoutHelper`, stores dimensions as properties (`LabelHeight`, `EditHeight`, `LabelWidth`, `EditWidth`)
+- `PrepareLabel(ALabel)` — sets AutoSize off, uniform width/height, tlCenter
+- `PrepareEdit(AEdit)` — sets uniform width
+- `PrepareLabelEdit(ALabel, AEdit)` — calls both + sets FocusControl (preparation only, no placement)
+- `Layout` property — access `TLayoutHelper` for `Place`, `AutoSizeForm`, `Margins`
+
 ### Child Windows (main content)
 
 - Inherit from `TMDChildForm`
 - Use `Align` properties (`alClient`, `alBottom`, `alTop`)
 - Override `GetFormMenu` for form-specific menus
-- Do NOT use `mdLayout`
 
 ### Modal Dialogs
 
 - Inherit from `TMDDBModeForm` for data entry
 - Use `BorderStyle = bsDialog`
-- Use `mdLayout` for responsive layout
-- Layout code in `FormShow` or `FormCreate`
-- Call `AdjustForPlatform` early, `AutoSizeForm` at end
-- Always free `TLayoutHelper` in try/finally
+- Layout code in `FormShow` (not `FormCreate` — GTK2 adjusts control heights at runtime)
+- Call `InitLayout` first, `Layout.AutoSizeForm` at end
 
 See `Components/mdlayout_usage.md` for details.
 
