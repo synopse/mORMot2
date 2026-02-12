@@ -221,7 +221,11 @@ procedure DhcpAddOptionBuf(var p: PAnsiChar; const op: TDhcpOption;
 
 /// append a raw text or binary to TDhcpPacket.options[] - do nothing if v is ''
 procedure DhcpAddOptionU(var p: PAnsiChar; const op: TDhcpOption; const v: RawUtf8);
-  {$ifdef HASINLINE} inline; {$endif}
+  overload; {$ifdef HASINLINE} inline; {$endif}
+
+/// append a raw text or binary to TDhcpPacket.options[] - do nothing if v is ''
+procedure DhcpAddOptionU(var p: PAnsiChar; const op: cardinal; const v: RawUtf8);
+  overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// append a short raw text to TDhcpPacket.options[] - do nothing if v is ''
 procedure DhcpAddOptionShort(var p: PAnsiChar; const op: TDhcpOption; const v: ShortString);
@@ -473,6 +477,29 @@ type
   // - 10,000 leases would consume 160KB which fits in L2 cache on modern CPU
   TLeaseDynArray = array of TDhcpLease;
 
+  /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
+  // - used for TDhcpProcessData.PxeBoot: TDhcpClientBoot <> dcbDefault
+  // - those options are consolidated for proper fallback between boot options
+  TDhcpScopeBoot = record
+    /// IP address or hostname sent back as doTftpServerName option 66
+    NextServer: RawUtf8;
+    /// remote resource identifier sent back as doBootFileName option 67
+    // - could be a TFTP file name, or a HTTP URI, depending on the context
+    // - depending on the firmware level, e.g. 'undionly.kpxe' for dcbBios,
+    // 'bootx64.efi' for dcbX64, 'http://server/bootx64.efi' for dcbX64_Http,
+    // or 'http://server/script' for dcbIpxe_Bios .. dcbIpxe_Arm64
+    Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
+    /// custom DHCP firmware options sent back as option 43 to the client
+    // - as raw TLV binary structures, stored base-64 encoded in the settings
+    // - contain e.g. PXE menu text definition
+    // - dcbX64_Http .. dcbArm64_Http typically do not send option 43
+    Firmware: array[dcbBios .. dcbArm64] of RawByteString;
+    /// custom DHCP IPXE options sent back as option 175 to the client
+    // - as raw TLV binary structures, stored base-64 encoded in the settings
+    // - contain e.g. script URL or additional parameters
+    Ipxe: array[dcbIpxe_Bios .. dcbIpxe_Arm64] of RawByteString
+  end;
+
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
   // (not included by default since seems overkill and KEA/Windows don't do it)
@@ -522,6 +549,8 @@ type
     // - will be checked against not-"01+MAC" option 61 values - mainly UUID
     // - stored as RawByteString = doDhcpClientIdentifier-binary + 4-bytes-IP
     StaticUuid: TRawByteStringDynArray;
+    /// the PXE network boot settings for this scope/subnet
+    Boot: TDhcpScopeBoot;
     /// readjust all internal values according to to Subnet policy
     // - raise an EDhcp exception if the parameters are not correct
     procedure AfterFill(log: TSynLog);
@@ -844,6 +873,7 @@ type
     function RetrieveFrameIP(var Data: TDhcpProcessData;
       Lease: PDhcpLease): boolean; virtual;
     function SetBoot(var Data: TDhcpProcessData): TDhcpClientBoot; virtual;
+    procedure AddBootOptions(var Data: TDhcpProcessData); virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
   public
     /// setup this DHCP process using the specified settings
@@ -1020,6 +1050,12 @@ procedure DhcpAddOptionU(var p: PAnsiChar; const op: TDhcpOption; const v: RawUt
 begin
   if pointer(v) <> nil then
     DhcpAddOptionBuf(p, op, pointer(v), PStrLen(PAnsiChar(pointer(v)) - _STRLEN)^);
+end;
+
+procedure DhcpAddOptionU(var p: PAnsiChar; const op: cardinal; const v: RawUtf8);
+begin
+  if pointer(v) <> nil then
+    DhcpAddOptionRaw(p, op, pointer(v), PStrLen(PAnsiChar(pointer(v)) - _STRLEN)^);
 end;
 
 procedure DhcpAddOptionShort(var p: PAnsiChar; const op: TDhcpOption; const v: ShortString);
@@ -2872,8 +2908,22 @@ begin
         result := dcbArm64_Http;
     end;
   Data.PxeBoot := result;
-  if Assigned(fLog) then
-    fLog.Add.Log(sllTrace, 'SetBoot=% from %', [BOOT_TXT[result], vendor^], self);
+end;
+
+procedure TDhcpProcess.AddBootOptions(var Data: TDhcpProcessData);
+var
+  boot: ^TDhcpScopeBoot;
+begin
+  // we know that Data.PxeBoot <> dcbDefault: append PXE/iPXE specific options
+  boot := @Data.Scope^.Boot;
+  DhcpAddOptionU(Data.SendEnd, doTftpServerName, boot^.NextServer);
+  DhcpAddOptionU(Data.SendEnd, doBootFileName, boot^.Remote[Data.PxeBoot]);
+  case Data.PxeBoot of
+    low(boot^.Firmware) .. high(boot^.Firmware):
+      DhcpAddOptionU(Data.SendEnd, 43, boot^.Firmware[Data.PxeBoot]);
+    low(boot^.Ipxe) .. high(boot^.Ipxe):
+      DhcpAddOptionU(Data.SendEnd, 175, boot^.Ipxe[Data.PxeBoot]);
+  end;
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
@@ -3168,7 +3218,8 @@ begin
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
       Data.Scope^.AddOptions(Data.SendEnd, Data.RecvType <> dmtInform);
-      // TODO: IPXE host/file options
+      if SetBoot(Data) <> dcbDefault then
+        AddBootOptions(Data);
       result := FinalizeFrame(Data); // callback + option 82 + length
     finally
       Data.Scope^.Safe.UnLock;
