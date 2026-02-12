@@ -544,8 +544,12 @@ type
     Gateway: TNetIP4;
     /// the server IP of this scope for doDhcpServerIdentifier option 54
     ServerIdentifier: TNetIP4;
+    /// the Domain Name e.g. 'lan.local' for doDomainName option 15
+    DomainName: RawUtf8;
     /// the DNS IPs of this scope for doDomainNameServers option 6
     DnsServer: TIntegerDynArray;
+    /// the IP of the associated NTP servers, for doNtpServers option 42
+    NtpServers: TIntegerDynArray;
     /// list of static IPs of this scope
     // - sorted as 32-bit for efficient O(log(n)) branchless binary search
     // - also contain the StaticMac[].IP4 values for fast lookup
@@ -736,6 +740,7 @@ type
     fRangeMax: RawUtf8;
     fDefaultGateway: RawUtf8;
     fDnsServers: RawUtf8;
+    fNtpServers: RawUtf8;
     fDomainName: RawUtf8;
     fBroadCastAddress: RawUtf8;
     fLeaseTimeSeconds: cardinal;
@@ -755,14 +760,15 @@ type
     // - raise an EDhcp exception if the parameters are not correct
     procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
   published
-    /// Subnet Mask e.g. '192.168.1.1/24'
+    /// Subnet Mask (option 1) e.g. '192.168.1.1/24'
     // - the CIDR 'ip/mask' pattern will compute RangeMin/RangeMax and
     // ServerIdentifier directly from this pattern
     // - accept also plain '255.255.255.0' IP if you want to specify by hand the
     // raw value sent in DHCP headers, and fill RangeMin/RangeMax and others
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
-    /// some static IP addresses potentially with their MAC, reserved on the network
+    /// some static IP addresses potentially with their MAC or UUID, which
+    // will be reserved for those on the network
     // - supplied as "ip", "mac=ip" or "uuid=ip" string items
     // - e.g. ["192.168.1.2","2f:af:9e:0f:b8:2a=192.168.1.100"]
     property Static: TRawUtf8DynArray
@@ -775,19 +781,22 @@ type
     // - default is '' and will be filled by SubnetMask value as 10..254
     property RangeMax: RawUtf8
       read fRangeMax write fRangeMax;
-    /// Default Gateway e.g. '192.168.1.1' - default is ''
+    /// Default Gateway (option 3) e.g. '192.168.1.1' - default is ''
     property DefaultGateway: RawUtf8
       read fDefaultGateway write fDefaultGateway;
     /// DNS Servers as CSV (option 6) e.g. '8.8.8.8,8.8.4.4' - default is ''
     property DnsServers: RawUtf8
       read fDnsServers write fDnsServers;
-    /// Domain Name e.g. 'lan.local' - default is ''
+    /// NTP servers as CSV (option 42) e.g. '192.168.1.1' - default is ''
+    property NtpServers: RawUtf8
+      read fNtpServers write fNtpServers;
+    /// Domain Name (option 15) e.g. 'lan.local' - default is ''
     property DomainName: RawUtf8
       read fDomainName write fDomainName;
-    /// Broadcast Address e.g. '192.168.1.255' - default is ''
+    /// Broadcast Address (option 28) e.g. '192.168.1.255' - default is ''
     property BroadCastAddress: RawUtf8
       read fBroadCastAddress write fBroadCastAddress;
-    /// IP Lease Duration in seconds - default is 120 for 2 minutes
+    /// IP Lease Duration in seconds (option 51) - default is 120 for 2 minutes
     // - options 51/58/59 Lease/Renewal/Rebinding will use 100/50/87.5 percents
     // - default 120 secs seems fine for our minimal iPXE-oriented DHCP server
     property LeaseTimeSeconds: cardinal
@@ -818,7 +827,7 @@ type
     property GraceFactor: cardinal
       read fGraceFactor write fGraceFactor default 2;
     /// refine DHCP server process for this scope
-    // - default is [] but you may tune it for your actual network needs
+    // - default is [] but you may tune it for your actual (sub-)network needs
     property Options: TDhcpScopeOptions
       read fOptions write fOptions;
     /// optional PXE network book settings
@@ -2011,6 +2020,9 @@ begin
     DhcpAddOption32(f, doRouters, Gateway);
   if DnsServer <> nil then
     DhcpAddOptions(f, doDomainNameServers, pointer(DnsServer));
+  if NtpServers <> nil then
+    DhcpAddOptions(f, doNtpServers, pointer(NtpServers));
+  DhcpAddOptionU(f, doDomainName, DomainName);
   if not withLeaseTimes then // stateless INFORM don't need timeouts
     exit;
   DhcpAddOption32(f, doDhcpLeaseTime,     LeaseTime); // already big-endian
@@ -2113,6 +2125,8 @@ begin
   Data.IpMinLE           := ToIP4(fRangeMin);
   Data.IpMaxLE           := ToIP4(fRangeMax);
   Data.DnsServer         := TIntegerDynArray(ToIP4s(fDnsServers));
+  Data.NtpServers        := TIntegerDynArray(ToIP4s(fNtpServers));
+  Data.DomainName        := fDomainName;
   Data.StaticIP          := nil;
   Data.StaticMac         := nil;
   for i := 0 to high(fStatic) do
@@ -3419,7 +3433,7 @@ begin
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
-      Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,28
+      Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,15,28,42
         Data.RecvType <> dmtInform);       // [+51,58,59]
       if SetBoot(Data) <> dcbDefault then
         AddBootOptions(Data);              // options 43,66,67,174
