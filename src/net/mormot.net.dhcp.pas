@@ -1666,6 +1666,8 @@ procedure TDhcpScope.AfterFill(log: TSynLog);
 var
   i, n: PtrInt;
   p: PDhcpLease;
+  dcb: TDhcpClientBoot;
+  bootlog: RawUtf8;
 
   procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
   begin
@@ -1728,6 +1730,7 @@ begin
   end;
   // log the scope settings and the computed sub-network context
   if Assigned(log) then
+  begin
     log.Log(sllInfo, 'PrepareScope: scope=% subnet=% min=% max=% server=% ' +
       'broadcast=% gateway=% static=% dns=% lease=%s renew=%s rebind=%s ' +
       'offer=%s maxdecline=% declinetime=%s grace=%',
@@ -1737,6 +1740,12 @@ begin
        IP4sToText(TNetIP4s(StaticIP)),  IP4sToText(TNetIP4s(DnsServer)),
        LeaseTime, RenewalTime, Rebinding, OfferHolding,
        MaxDeclinePerSec, DeclineTime, GraceFactor]);
+    for dcb := low(Boot.Remote) to high(Boot.Remote) do
+      if Boot.Remote[dcb] <> '' then
+        Append(bootlog, [' ', BOOT_TXT[dcb], '=', Boot.Remote[dcb]]);
+    if bootlog <> '' then
+      log.Log(sllInfo, 'PrepareScope: nextserver=%%', [Boot.NextServer, bootlog]);
+  end;
   // store internal values in the more efficient endianess for direct usage
   IpMinLE     := bswap32(IpMinLE);      // little-endian
   IpMaxLE     := bswap32(IpMaxLE);
