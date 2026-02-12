@@ -3048,8 +3048,16 @@ procedure TDhcpProcess.AddBootOptions(var Data: TDhcpProcessData);
 var
   boot: ^TDhcpScopeBoot;
 begin
-  // we know that Data.PxeBoot <> dcbDefault: append PXE/iPXE specific options
+  // we know that Data.PxeBoot <> dcbDefault
   boot := @Data.Scope^.Boot;
+  if boot^.Remote[Data.PxeBoot] = '' then
+  begin
+    DoLog(sllDebug, 'missing Boot file', Data); // include 'boot=IpxeArm64'
+    Data.PxeBoot := dcbDefault;                 // no 'boot=...' any more
+    // will still send back an OFFER/ACK but with no PXE options
+    exit;
+  end;
+  // known configuration: append PXE/iPXE specific options
   DhcpAddOptionU(Data.SendEnd, doTftpServerName, boot^.NextServer);
   DhcpAddOptionU(Data.SendEnd, doBootFileName, boot^.Remote[Data.PxeBoot]);
   case Data.PxeBoot of
@@ -3350,7 +3358,6 @@ begin
       end;
       // compute the dmtOffer/dmtAck response frame over the very same xid
       IP4Short(@Data.Ip4, Data.Ip);
-      DoLog(sllTrace, 'into', Data);
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
@@ -3358,6 +3365,8 @@ begin
       if SetBoot(Data) <> dcbDefault then
         AddBootOptions(Data);
       result := FinalizeFrame(Data); // callback + option 82 + length
+      if result <> 0 then
+        DoLog(sllTrace, 'into', Data);
     finally
       Data.Scope^.Safe.UnLock;
     end;
