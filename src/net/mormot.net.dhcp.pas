@@ -600,7 +600,7 @@ type
     // - this method is thread safe and will call Safe.Lock/UnLock
     // - returns the number of entries/lines added to the text file
     // - localcopy=true would make a transient copy of Entry[] to reduce the lock
-    function TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime;
+    function TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime;
       localcopy: boolean): integer;
   private
     Options: TDhcpScopeOptions;
@@ -1916,7 +1916,7 @@ begin // dedicated sub-function for better codegen
   until n = 0;
 end;
 
-function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; boot: TUnixTime;
+function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime;
   localcopy: boolean): integer;
 var
   local: TLeaseDynArray; // 10,000 leases would use 160KB of temporary memory
@@ -1933,7 +1933,7 @@ begin
     if (Count < 1000) or
        not localcopy then
       // small output could be done within the lock
-      result := DoWrite(W, pointer(Entry), Count, tix32, grace, boot, @Subnet)
+      result := DoWrite(W, pointer(Entry), Count, tix32, grace, time, @Subnet)
     else
       // make a transient copy of all leases to keep the lock small for this subnet
       // - could eventually be done if OnIdle() made a background thread (not yet)
@@ -1943,7 +1943,7 @@ begin
   end;
   // append all text lines from the local copy (if any) - not used yet
   if local <> nil then
-    result := DoWrite(W, pointer(local), length(local), tix32, grace, boot, @Subnet)
+    result := DoWrite(W, pointer(local), length(local), tix32, grace, time, @Subnet)
 end;
 
 function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
