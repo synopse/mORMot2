@@ -6795,7 +6795,7 @@ begin
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
-    p^.CopyValue(aRecord, self); // copy all fields between sibbling classes
+    p^.CopyValue(aRecord, self); // copy all fields between sibling classes
     inc(p);
     dec(n);
   until n = 0;
@@ -6820,7 +6820,7 @@ begin
   end;
   if p = nil then
     exit;
-  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // two sibbling classes
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // two sibling classes
   repeat
     if FieldBitGet(aRecordFieldBits, p^.PropertyIndex) then
       p^.CopyValue(aRecord, self);

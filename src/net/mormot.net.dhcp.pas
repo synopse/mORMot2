@@ -1744,7 +1744,8 @@ begin
       if Boot.Remote[dcb] <> '' then
         Append(bootlog, [' ', BOOT_TXT[dcb], '=', Boot.Remote[dcb]]);
     if bootlog <> '' then
-      log.Log(sllInfo, 'PrepareScope: nextserver=%%', [Boot.NextServer, bootlog]);
+      log.Log(sllInfo, 'PrepareScope: PXE nextserver=%%',
+        [Boot.NextServer, bootlog]);
   end;
   // store internal values in the more efficient endianess for direct usage
   IpMinLE     := bswap32(IpMinLE);      // little-endian
@@ -1952,7 +1953,7 @@ begin
   end;
   // append all text lines from the local copy (if any) - not used yet
   if local <> nil then
-    result := DoWrite(W, pointer(local), length(local), tix32, grace, time, @Subnet)
+    result := DoWrite(W, pointer(local), length(local), tix32, grace, time, @Subnet);
 end;
 
 function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
@@ -3405,12 +3406,13 @@ begin
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
-      Data.Scope^.AddOptions(Data.SendEnd, Data.RecvType <> dmtInform);
+      Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,28
+        Data.RecvType <> dmtInform);       // [+51,58,59]
       if SetBoot(Data) <> dcbDefault then
-        AddBootOptions(Data);
-      result := FinalizeFrame(Data); // callback + option 82 + length
+        AddBootOptions(Data);              // options 43,66,67,174
+      result := FinalizeFrame(Data);       // callback + options 61,82 + length
       if result <> 0 then
-        DoLog(sllTrace, 'into', Data);
+        DoLog(sllTrace, 'into', Data);     // if not canceled by callback
     finally
       Data.Scope^.Safe.UnLock;
     end;
@@ -3430,9 +3432,9 @@ initialization
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
   DHCP_TXT[dmtUndefined] := 'invalid';
-  GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpOption),      @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
-  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot), @BOOT_TXT, scAny_Removed);
+  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT, scAny_Removed);
 
 end.
 
