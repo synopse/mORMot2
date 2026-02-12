@@ -345,12 +345,14 @@ type
   // - dsmOption61Hits: Option61 (client-identifier) is present and used to assign/lookup a lease
   // - dsmOption82Hits: Option82 (Relay Agent) is present and processed
   // - dsmOption118Hits: Option118 (subnet-selection) is present and valid
+  // - dsmPxeBoot: PXE/iPXE options have been returned for a given architecture
   // - - Drop / error reasons
   // - dsmDroppedPackets: incremented for any packet dropped silently (not matching a scope or giaddr)
   // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or Option118
   // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
   // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
   // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
+  // - dsmDroppedPxeBoot: there was no proper configuration for this PXE/iPXE
   TDhcpScopeMetric = (
     dsmDiscover,
     dsmOffer,
@@ -374,11 +376,13 @@ type
     dsmOption61Hits,
     dsmOption82Hits,
     dsmOption118Hits,
+    dsmPxeBoot,
     dsmDroppedPackets,
     dsmDroppedNoSubnet,
     dsmDroppedNoAvailableIP,
     dsmDroppedInvalidIP,
-    dsmDroppedCallback);
+    dsmDroppedCallback,
+    dsmDroppedPxeBoot);
   /// set of available per-scope DHCP metrics
   TDhcpScopeMetrics = set of TDhcpScopeMetric;
 
@@ -3048,15 +3052,18 @@ procedure TDhcpProcess.AddBootOptions(var Data: TDhcpProcessData);
 var
   boot: ^TDhcpScopeBoot;
 begin
-  // we know that Data.PxeBoot <> dcbDefault
+  // we know that Data.PxeBoot <> dcbDefault: validate the request
   boot := @Data.Scope^.Boot;
   if boot^.Remote[Data.PxeBoot] = '' then
   begin
     DoLog(sllDebug, 'missing Boot file', Data); // include 'boot=IpxeArm64'
     Data.PxeBoot := dcbDefault;                 // no 'boot=...' any more
+    inc(Data.Scope^.Metrics.Current[dsmDroppedPxeBoot]);
     // will still send back an OFFER/ACK but with no PXE options
+    // - this is what ISC DHCP, Kea, and dnsmasq do in practice
     exit;
   end;
+  inc(Data.Scope^.Metrics.Current[dsmPxeBoot]);
   // known configuration: append PXE/iPXE specific options
   DhcpAddOptionU(Data.SendEnd, doTftpServerName, boot^.NextServer);
   DhcpAddOptionU(Data.SendEnd, doBootFileName, boot^.Remote[Data.PxeBoot]);
