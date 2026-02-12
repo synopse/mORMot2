@@ -446,8 +446,8 @@ begin
     Append(all, v, ',');
   end;
   CheckEqual(all, 'NoTrim,TrimLeft,Un camel case,Un Camel Title,lowercase,' +
-    'lowerCaseFirst,UPPERCASE,snake_case,SCREAMING_SNAKE_CASE,kebab-case,dot.case,' +
-    'TitleCase,camelCase,PascalCase,');
+    'lower-case,lowerCaseFirst,UPPERCASE,snake_case,SCREAMING_SNAKE_CASE,' +
+    'kebab-case,dot.case,TitleCase,camelCase,PascalCase,');
 end;
 
 function GetBitsCount64(const Bits; Count: PtrInt): PtrInt;
