@@ -2396,11 +2396,11 @@ procedure TitleCaseSelf(var Text: RawUtf8);
 type
   /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
   // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
-  // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lower-case',
-  // 'lowerCaseFirst', 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE',
+  // 'TrimLeft', 'AnyRemoved', 'Un camel case', 'Un Camel Title', 'lowercase',
+  // 'lower-case', 'lowerCaseFirst', 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE',
   // 'kebab-case', 'dot.case', 'TitleCase', 'camelCase' and 'PascalCase'
   TSetCase = (
-    scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle,
+    scNoTrim, scTrimLeft, scAny_Removed, scUnCamelCase, scUnCamelTitle,
     scLowerCase, scLower_Case, scLowerCaseFirst, scUpperCase,
     scSnakeCase, scScreamingSnakeCase, scKebabCase, scDotCase,
     scTitleCase, scCamelCase, scPascalCase);
@@ -8300,7 +8300,7 @@ begin
     inc(d);
   until false;
   if d = pointer(S) then
-    S := ''
+    FastAssignNew(S)
   else
     FakeLength(S, d); // no SetLength needed
 end;
@@ -9317,6 +9317,26 @@ begin
     TitleCase(Text, pointer(Text), length(Text));
 end;
 
+procedure Any_Remove(var Dest: RawUtf8; Text: PUtf8Char; TextLen: PtrInt);
+var
+  d: PUtf8Char;
+begin
+  d := FastSetString(Dest, TextLen);
+  repeat
+    if not (Text^ in ['_', '-']) then
+    begin
+      d^ := Text^;
+      inc(d);
+    end;
+    inc(Text);
+    dec(TextLen);
+  until TextLen = 0;
+  if d = pointer(Dest) then
+    FastAssignNew(Dest)
+  else
+    FakeLength(Dest, d);
+end;
+
 var
   NormToLower_Ansi7: TNormTable; // = NormToLowerAnsi7 with '_' into '-'
 
@@ -9362,6 +9382,8 @@ begin
         LowerCamelCase(Text, TextLen, Dest);
       scPascalCase:         // 'PascalCase'
         CamelCase(Text, TextLen, Dest);
+      scAny_Removed:        // 'AnyRemoved'
+        Any_Remove(Dest, pointer(Text), TextLen);
     else // scNoTrim, scTrimLeft: 'stNoTrim', 'TrimLeft'
       FastSetString(Dest, Text, TextLen);
     end;
@@ -11161,7 +11183,7 @@ begin
     inc(u4);
     dec(L);
   until L = 0;
-  FakeLength(u, p - pointer(u)); // no realloc
+  FakeLength(u, p); // no realloc
 end;
 
 function RawUcs4ToUtf8(const ucs4: RawUcs4): RawUtf8;
