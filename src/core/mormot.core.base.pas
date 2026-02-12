@@ -3252,7 +3252,10 @@ function Trim(const S: RawUtf8): RawUtf8;
 // - should be used for RawUtf8 instead of SysUtils' Trim() which is ambiguous
 // with the main String/UnicodeString type of Delphi 2009+
 // - in mORMot 1.18, there was a Trim() function but it was confusing
-function TrimU(const S: RawUtf8): RawUtf8;
+function TrimU(const S: RawUtf8): RawUtf8; overload;
+
+/// fast dedicated RawUtf8 version of Trim()
+procedure TrimU(const S: RawUtf8; var Dest: RawUtf8); overload;
 
 /// fast dedicated RawUtf8 version of s := Trim(s)
 procedure TrimSelf(var S: RawUtf8);
@@ -9824,6 +9827,12 @@ begin
     else
       FastSetString(S, @PByteArray(S)[i], len); // allocate
   end;
+end;
+
+procedure TrimU(const S: RawUtf8; var Dest: RawUtf8);
+begin
+  Dest := S;
+  TrimSelf(Dest);
 end;
 
 {$ifndef PUREMORMOT2}

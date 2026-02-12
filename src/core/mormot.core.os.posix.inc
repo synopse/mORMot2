@@ -4859,8 +4859,8 @@ var
 {$endif OSLINUX}
 begin
   {$ifdef OSLINUX}
-  txt := TrimU(Join([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'), ' ',
-                     LoadProcFileTrim('/sys/class/dmi/id/product_name')]));
+  TrimU(Join([LoadProcFileTrim('/sys/class/dmi/id/sys_vendor'), ' ',
+              LoadProcFileTrim('/sys/class/dmi/id/product_name')]), txt);
   if txt <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
     LoadProcFileTrimed('/sys/class/dmi/id/product_version', prod);
@@ -4871,9 +4871,9 @@ begin
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
     LoadProcFileTrimed('/proc/device-tree/model', txt);
   {$else} // get this information the Android way
-  txt := TrimU(Join([GetSystemProperty('ro.product.brand'), ' ',
-                     GetSystemProperty('ro.product.name'), ' ',
-                     GetSystemProperty('ro.product.device')]));
+  TrimU(Join([GetSystemProperty('ro.product.brand'), ' ',
+              GetSystemProperty('ro.product.name'), ' ',
+              GetSystemProperty('ro.product.device')]), txt);
   {$endif OSLINUX}
   if __BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
@@ -5194,7 +5194,7 @@ begin
   {$endif CPUARM3264}
   if cache <> nil then
   begin
-    CpuCacheText := TrimU(cache);
+    TrimU(cache, CpuCacheText);
     CpuCacheSize := _GetNextCardinal(cache);
     while cache^ = ' ' do
       inc(cache);

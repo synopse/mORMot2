@@ -4019,7 +4019,7 @@ var
 begin
   if self = nil then
     exit;
-  c := TrimU(aOutSetCookie);
+  TrimU(aOutSetCookie, c);
   if not IsValidUtf8WithoutControlChars(c) then
     ERestException.RaiseUtf8('Unsafe %.SetOutSetCookie', [self]);
   if PosExChar('=', c) < 2 then

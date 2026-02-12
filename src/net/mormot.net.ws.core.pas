@@ -2815,7 +2815,7 @@ begin
   key := Http.HeaderGetValue('SEC-WEBSOCKET-KEY');
   if Base64ToBinLengthSafe(pointer(key), length(key)) <> 16 then
     exit; // WS nonce must be a Base64-encoded value of 16 bytes
-  uri := TrimU(Http.CommandUri);
+  TrimU(Http.CommandUri, uri);
   if (uri <> '') and
      (uri[1] = '/') then
     Delete(uri, 1, 1);

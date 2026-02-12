@@ -1375,7 +1375,7 @@ begin
   if (self = nil) or
      (Value = nil) then
     exit;
-  sql := TrimU(SqlWhere);
+  TrimU(SqlWhere, sql);
   if not EndWith(sql, ' LIMIT 1') then
     Append(sql, ' LIMIT 1'); // we keep a single record below
   T := MultiFieldValues(POrmClass(Value)^, FieldsCsv, sql);
