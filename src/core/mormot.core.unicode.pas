@@ -2396,13 +2396,14 @@ procedure TitleCaseSelf(var Text: RawUtf8);
 type
   /// how SetCase() ShortTrim() GetEnumTrimmedNames() process a text identifier
   // - e.g. if applied ShortTrim() to its own identifier, would return 'scNoTrim',
-  // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lowerCaseFirst',
-  // 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE', 'kebab-case',
-  // 'dot.case', 'TitleCase', 'camelCase' and 'PascalCase'
+  // 'TrimLeft', 'Un camel case', 'Un Camel Title', 'lowercase', 'lower-case',
+  // 'lowerCaseFirst', 'UPPERCASE', 'snake_case', 'SCREAMING_SNAKE_CASE',
+  // 'kebab-case', 'dot.case', 'TitleCase', 'camelCase' and 'PascalCase'
   TSetCase = (
-    scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle, scLowerCase,
-    scLowerCaseFirst, scUpperCase, scSnakeCase, scScreamingSnakeCase,
-    scKebabCase, scDotCase, scTitleCase, scCamelCase, scPascalCase);
+    scNoTrim, scTrimLeft, scUnCamelCase, scUnCamelTitle,
+    scLowerCase, scLower_Case, scLowerCaseFirst, scUpperCase,
+    scSnakeCase, scScreamingSnakeCase, scKebabCase, scDotCase,
+    scTitleCase, scCamelCase, scPascalCase);
 
 /// change the casing of an UTF-8 text buffer
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase); overload;
@@ -9316,6 +9317,9 @@ begin
     TitleCase(Text, pointer(Text), length(Text));
 end;
 
+var
+  NormToLower_Ansi7: TNormTable; // = NormToLowerAnsi7 + '_' into '-'
+
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase);
 begin
   if (Text = nil) or
@@ -9332,6 +9336,8 @@ begin
         end;
       scLowerCase:          // 'lowercase'
         CaseCopy(pointer(Text), TextLen, @NormToLowerAnsi7, Dest);
+      scLower_Case:         // 'lower-case'
+        CaseCopy(pointer(Text), TextLen, @NormToLower_Ansi7, Dest);
       scLowerCaseFirst:     // 'lowerCaseFirst'
         begin
           FastSetString(Dest, Text, TextLen);
@@ -11611,6 +11617,8 @@ begin
   p := @NormToLowerAnsi7Byte;
   for i := ord('A') to ord('Z') do
     inc(p[i], 32);
+  NormToLower_Ansi7 := NormToLowerAnsi7;
+  NormToLower_Ansi7['_'] := '-'; // for scLower_Case
   MoveFast(NormToUpperAnsi7, NormToUpper, 138);
   MoveFast(WinAnsiToUp, NormToUpperByte[138], SizeOf(WinAnsiToUp));
   MoveFast(NormToLowerAnsi7, NormToLower, 138);
