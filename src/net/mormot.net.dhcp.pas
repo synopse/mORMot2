@@ -305,8 +305,8 @@ type
 
 var
   /// contains PXE boot network identifiers used for JSON/INI settings fields
-  // - 'default', 'bios', 'x86', 'x64', 'arm32', 'arm64', 'x64-http', 'arm64-http',
-  // 'ipxe-bios', 'ipxe-x86', 'ipxe-x64', 'ipxe-arm32', 'ipxe-arm64'
+  // - i.e. 'Default', 'Bios', 'X86', 'X64', 'Arm32', 'Arm64', 'X64Http',
+  // 'Arm64Http', 'IpxeBios', 'IpxeX86', 'IpxeX64', 'IpxeArm32', 'IpxeArm64'
   BOOT_TXT: array[TDhcpClientBoot] of RawUtf8;
 
 /// parse a 'ip', 'mac=ip' or 'uuid=ip' text into binary TNetIP4/TNetMac
@@ -634,8 +634,93 @@ function ToText(st: TLeaseState): PShortString; overload;
 type
   TDhcpProcess = class;
 
+  /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
+  // - used to fill TDhcpScopeBoot low-level data tructure
+  TDhcpBootSettings = class(TSynPersistent)
+  protected
+    fNextServer: RawUtf8;
+    fRemote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
+    fFirmware: array[dcbBios .. dcbArm64] of RawUtf8;
+    fIpxe: array[dcbIpxe_Bios .. dcbIpxe_Arm64] of RawUtf8;
+  public
+    /// compute the low-level TDhcpScope.Boot data structure for current settings
+    // - raise an EDhcp exception if the parameters are not correct, e.g.
+    // if Option* properties are not valid base-64 encoded values
+    procedure PrepareScope(var Data: TDhcpScopeBoot);
+  published
+    /// option 66 IP address or hostname
+    property NextServer: RawUtf8
+      read fNextServer write fNextServer;
+    /// option 67 TFTP file name for legacy BIOS PXE
+    property Bios: RawUtf8
+      read fRemote[dcbBios] write fRemote[dcbBios];
+    /// option 67 TFTP file name for UEFI i386
+    property X86: RawUtf8
+      read fRemote[dcbX86] write fRemote[dcbX86];
+    /// option 67 TFTP file name for UEFI x64
+    property X64: RawUtf8
+      read fRemote[dcbX64] write fRemote[dcbX64];
+    /// option 67 TFTP file name for UEFI Arm32
+    property Arm32: RawUtf8
+      read fRemote[dcbArm32] write fRemote[dcbArm32];
+    /// option 67 TFTP file name for UEFI Arm64
+    property Arm64: RawUtf8
+      read fRemote[dcbArm64] write fRemote[dcbArm64];
+    /// option 67 remote HTTP URI for UEFI x64
+    property X64Http: RawUtf8
+      read fRemote[dcbX64_Http] write fRemote[dcbX64_Http];
+    /// option 67 remote HTTP URI for UEFI Arm64
+    property Arm64Http: RawUtf8
+      read fRemote[dcbArm64_Http] write fRemote[dcbArm64_Http];
+    /// option 67 TFTP file name or HTTP URI for legacy BIOS iPXE
+    property IpxeBios: RawUtf8
+      read fRemote[dcbIpxe_Bios] write fRemote[dcbIpxe_Bios];
+    /// option 67 TFTP file name or HTTP URI for iPXE i386
+    property IpxeX86: RawUtf8
+      read fRemote[dcbIpxe_X86] write fRemote[dcbIpxe_X86];
+    /// option 67 TFTP file name or HTTP URI for iPXE x64
+    property IpxeX64: RawUtf8
+      read fRemote[dcbIpxe_X64] write fRemote[dcbIpxe_X64];
+    /// option 67 TFTP file name or HTTP URI for iPXE Arm32
+    property IpxeArm32: RawUtf8
+      read fRemote[dcbIpxe_Arm32] write fRemote[dcbIpxe_Arm32];
+    /// option 67 TFTP file name or HTTP URI for iPXE Arm64
+    property IpxeArm64: RawUtf8
+      read fRemote[dcbIpxe_Arm64] write fRemote[dcbIpxe_Arm64];
+    /// option 43 base-64 encoded TLV for BIOS PXE
+    property OptionBios: RawUtf8
+      read fFirmware[dcbBios] write fFirmware[dcbBios];
+    /// option 43 base-64 encoded TLV for UEFI i386
+    property OptionX86: RawUtf8
+      read fFirmware[dcbX86] write fFirmware[dcbX86];
+    /// option 43 base-64 encoded TLV for UEFI x64
+    property OptionX64: RawUtf8
+      read fFirmware[dcbX64] write fFirmware[dcbX64];
+    /// option 43 base-64 encoded TLV for UEFI Arm32
+    property OptionArm32: RawUtf8
+      read fFirmware[dcbArm32] write fFirmware[dcbArm32];
+    /// option 43 base-64 encoded TLV for UEFI Arm64
+    property OptionArm64: RawUtf8
+      read fFirmware[dcbArm64] write fFirmware[dcbArm64];
+    /// option 175 base-64 encoded TLV for legacy BIOS iPXE
+    property OptionIpxeBios: RawUtf8
+      read fIpxe[dcbIpxe_Bios] write fIpxe[dcbIpxe_Bios];
+    /// option 175 base-64 encoded TLV for iPXE i386
+    property OptionIpxeX86: RawUtf8
+      read fIpxe[dcbIpxe_X86] write fIpxe[dcbIpxe_X86];
+    /// option 175 base-64 encoded TLV for iPXE x64
+    property OptionIpxeX64: RawUtf8
+      read fIpxe[dcbIpxe_X64] write fIpxe[dcbIpxe_X64];
+    /// option 175 base-64 encoded TLV for iPXE Arm32
+    property OptionIpxeArm32: RawUtf8
+      read fIpxe[dcbIpxe_Arm32] write fIpxe[dcbIpxe_Arm32];
+    /// option 175 base-64 encoded TLV for iPXE Arm64
+    property OptionIpxeArm64: RawUtf8
+      read fIpxe[dcbIpxe_Arm64] write fIpxe[dcbIpxe_Arm64];
+  end;
+
   /// main high-level options for defining one scope/subnet for our DHCP Server
-  TDhcpScopeSettings = class(TSynPersistent)
+  TDhcpScopeSettings = class(TSynAutoCreateFields)
   protected
     fSubnetMask: RawUtf8;
     fStatic: TRawUtf8DynArray;
@@ -652,6 +737,7 @@ type
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
     fOptions: TDhcpScopeOptions;
+    fBoot: TDhcpBootSettings;
   public
     /// setup this instance with default values
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
@@ -727,6 +813,9 @@ type
     // - default is [] but you may tune it for your actual network needs
     property Options: TDhcpScopeOptions
       read fOptions write fOptions;
+    /// optional PXE network book settings
+    property Boot: TDhcpBootSettings
+      read fBoot;
   end;
   /// a dynamyc array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
@@ -1904,6 +1993,36 @@ end;
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
+{ TDhcpBootSettings }
+
+procedure TlcFromBase64(dcb: TDhcpClientBoot; const base64: RawUtf8;
+  var bin: RawByteString);
+begin
+  bin := '';
+  if base64 = '' then
+    exit;
+  bin := Base64ToBin(TrimU(base64));
+  if bin = '' then
+    EDhcp.RaiseUtf8('PrepareScope: Boot.Option% is no valid base-64',
+      [BOOT_TXT[dcb]]);
+end;
+
+// https://www.ibm.com/docs/en/tpmfod/7.1.1.4?topic=configuration-dhcp-option-43
+
+procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot);
+var
+  dcb: TDhcpClientBoot;
+begin
+  TrimU(fNextServer, Data.NextServer);
+  for dcb := low(Data.Remote) to high(Data.Remote) do
+    TrimU(fRemote[dcb], Data.Remote[dcb]);
+  for dcb := low(Data.Firmware) to high(Data.Firmware) do
+    TlcFromBase64(dcb, fFirmware[dcb], Data.Firmware[dcb]);
+  for dcb := low(Data.Ipxe) to high(Data.Ipxe) do
+    TlcFromBase64(dcb, fIpxe[dcb], Data.Ipxe[dcb]);
+end;
+
+
 { TDhcpScopeSettings }
 
 constructor TDhcpScopeSettings.Create;
@@ -1950,6 +2069,7 @@ begin
     Data.DeclineTime := Data.LeaseTime;
   Data.GraceFactor       := fGraceFactor;         // * 2
   Data.Options           := fOptions;
+  fBoot.PrepareScope(Data.Boot);
   // retrieve and adjust the subnet mask from settings
   if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
@@ -2679,7 +2799,7 @@ begin
   end;
   if Data.PxeBoot <> dcbDefault then
   begin
-    AppendShort(' boot=', msg); // e.g. 'boot=ipxe-x64'
+    AppendShort(' boot=', msg); // e.g. 'boot=IpxeX64'
     AppendShortAnsi7String(BOOT_TXT[Data.PxeBoot], msg);
   end;
   msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
@@ -2819,7 +2939,7 @@ begin // opt = doDhcpClientIdentifier or doUuidClientIdentifier
         dec(len);
       end;
   end;
-  ip4 := DoFindUuid(uuid, pointer(v), len);
+  ip4 := DoFindUuid(uuid, pointer(v), len); // O(n) fast search
   if ip4 = 0 then
     exit;
   result := @data.Temp; // fake transient PDhcpLease for this StaticUuid[]
@@ -3242,7 +3362,7 @@ initialization
   DHCP_TXT[dmtUndefined] := 'invalid';
   GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
-  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot), @BOOT_TXT, scLower_Case);
+  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot), @BOOT_TXT, scAny_Removed);
 
 end.
 
