@@ -1167,6 +1167,16 @@ begin
   inc(p, ord(sourcelen^) + 2);
 end;
 
+procedure DhcpDataCopyOption(var Data: TDhcpProcessData; op: TDhcpOption);
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  b: PtrUInt;
+begin
+  b := Data.RecvLens[op];
+  if b <> 0 then
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
+end;
+
 function DhcpAddOptionRequestList(p: PAnsiChar; op: TDhcpOptions): PAnsiChar;
 var
   o: TDhcpOption;
@@ -2862,6 +2872,8 @@ begin
 end;
 
 function TDhcpProcess.FinalizeFrame(var Data: TDhcpProcessData): PtrInt;
+var
+  b: PtrUInt;
 begin
   // optional callback support
   if Assigned(fOnComputeResponse) then
@@ -2876,15 +2888,17 @@ begin
     end;
   end;
   // send back verbatim Option 61 if any
-  if Data.RecvLens[doDhcpClientIdentifier] <> 0 then
+  b := Data.RecvLens[doDhcpClientIdentifier];
+  if b <> 0 then
   begin
-    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpClientIdentifier]]);
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
     inc(Data.Scope^.Metrics.Current[dsmOption61Hits]);
   end;
   // support Option 82 Relay Agent by sending it back - should be the last option
-  if Data.RecvLens[doDhcpAgentOptions] <> 0 then
+  b := Data.RecvLens[doDhcpAgentOptions];
+  if b <> 0 then
   begin
-    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[Data.RecvLens[doDhcpAgentOptions]]);
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
     inc(Data.Scope^.Metrics.Current[dsmOption82Hits]);
   end;
   // add trailer to the Data.Send frame and returns its final size in bytes
@@ -3044,6 +3058,9 @@ begin
     low(boot^.Ipxe) .. high(boot^.Ipxe):
       DhcpAddOptionU(Data.SendEnd, 175, boot^.Ipxe[Data.PxeBoot]);
   end;
+  // copy back verbatim option 60 and 97 to PXE clients
+  DhcpDataCopyOption(Data, doVendorClassIdentifier);
+  DhcpDataCopyOption(Data, doUuidClientIdentifier);
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
