@@ -1996,7 +1996,9 @@ begin
     Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doDhcpAgentOptions]);
     CheckNotEqual(lens[doDhcpAgentOptions], 0, 'propagated relay agent');
-    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = OPTION82);
+    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = OPTION82, 'o82a');
+    Check(DhcpIdem(@d.Send, lens[doDhcpAgentOptions], OPTION82), 'o82b');
+    Check(not DhcpIdem(@d.Send, lens[doDhcpAgentOptions], 'totoro'), 'o82c');
     ips[0] := d.Send.ciaddr;
     f := DhcpClient(d.Recv, dmtDecline, macs[0]);
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;

@@ -237,18 +237,21 @@ type
 function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
   found: PDhcpOptions = nil; mac: PNetMac = nil): TDhcpMessageType;
 
-/// decode the pointer corresponding to lens[opt] within dhcp^.option[]
+/// result the text value stored at dhcp^.option[lens[opt]] or @NULCHAR = ''
 function DhcpData(dhcp: PDhcpPacket; len: PtrUInt): PShortString;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// decode the 32-bit IP address corresponding to lens[opt] within dhcp^.option[]
+/// case-insensitive compare the text value at dhcp^.option[lens[opt]]
+function DhcpIdem(dhcp: PDhcpPacket; len: PtrUInt; const P2: ShortString): boolean;
+
+/// decode the 32-bit IP address stored at dhcp^.option[lens[opt]]
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// decode the 32-bit big endian corresponding to lens[opt] within dhcp^.option[]
+/// decode the 32-bit big endian integer stored at dhcp^.option[lens[opt]]
 function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
 
-/// decode the MAC address corresponding to lens[opt] within dhcp^.option[]
+/// decode the MAC address stored at dhcp^.option[lens[opt]]
 // - no DUID decoding is supported yet: only MAC or Eth=1 + MAC values
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 
@@ -1120,6 +1123,12 @@ begin
     result := @NULCHAR
   else
     result := @dhcp^.options[len]; // len+data matches PShortString binary
+end;
+
+function DhcpIdem(dhcp: PDhcpPacket; len: PtrUInt; const P2: ShortString): boolean;
+begin
+  result := (len <> 0) and
+            PropNameEquals(PShortString(@dhcp^.options[len]), @P2);
 end;
 
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
