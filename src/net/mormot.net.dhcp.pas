@@ -3466,6 +3466,9 @@ initialization
   GetEnumTrimmedNames(TypeInfo(TDhcpOption),      @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT, scAny_Removed);
+  {$ifndef HASDYNARRAYTYPE}
+  Rtti.RegisterObjArray(TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings);
+  {$endif HASDYNARRAYTYPE}
 
 end.
 
