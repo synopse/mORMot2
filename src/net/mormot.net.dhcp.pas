@@ -259,6 +259,29 @@ function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
 
 type
+  /// decoded DHCP options for PXE network booting process and its chain load
+  // - as parsed by TDhcpProcess.SetBoot() and stored in TDhcpProcessData.PxeBoot
+  // - dcbDefault means regular OS DHCP request with no remote boot options
+  // - dcbBios is first-stage TFTP loader on legacy BIOS PXE
+  // - dcbX86,dcbX64,dcbArm32,dcbArm64 are first-stage TFTP loader with UEFI
+  // - dcbX64_Http,dcbArm64_Http are first-stage UEFI firmware allowing HTTP
+  // - dcbIpxe_Bios is iPXE second-stage on legacy BIOS
+  // - dcbIpxe_X86,dcbIpxe_X64,dcbIpxe_Arm32,dcbIpxe_Arm64 are iPXE second-stage
+  TDhcpClientBoot = (
+    dcbDefault,
+    dcbBios,
+    dcbX86,
+    dcbX64,
+    dcbArm32,
+    dcbArm64,
+    dcbX64_Http,
+    dcbArm64_Http,
+    dcbIpxe_Bios,
+    dcbIpxe_X86,
+    dcbIpxe_X64,
+    dcbIpxe_Arm32,
+    dcbIpxe_Arm64);
+
   /// internal resultset used by ParseMacIP()
   TMacIP = record
     ip: TNetIP4;
@@ -266,8 +289,14 @@ type
     uuid: RawByteString;
   end;
 
-/// parse a 'ip', 'mac=ip' or 'uuidhex=ip' text into binary TNetIP4/TNetMac
-// - recognize 'xx:xx:xx:xx:xx:xx' for MAC, and hexadecimal for UUID
+var
+  /// contains PXE boot network identifiers used for JSON/INI settings fields
+  // - 'default', 'bios', 'x86', 'x64', 'arm32', 'arm64', 'x64-http', 'arm64-http',
+  // 'ipxe-bios', 'ipxe-x86', 'ipxe-x64', 'ipxe-arm32', 'ipxe-arm64'
+  BOOT_TXT: array[TDhcpClientBoot] of RawUtf8;
+
+/// parse a 'ip', 'mac=ip' or 'uuid=ip' text into binary TNetIP4/TNetMac
+// - recognize 'xx:xx:xx:xx:xx:xx' for MAC, and hexadecimal/GUID for UUID
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 
 
@@ -755,6 +784,8 @@ type
     RecvType: TDhcpMessageType;
     /// the DHCP message type prepared into Send
     SendType: TDhcpMessageType;
+    /// PXE remote boot options as parsed by TDhcpProcess.SetBoot
+    PxeBoot: TDhcpClientBoot;
     /// UDP frame received from the client, parsed in RecvLens[]
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
@@ -802,6 +833,7 @@ type
     function FindLease(var data: TDhcpProcessData): PDhcpLease; virtual;
     function RetrieveFrameIP(var Data: TDhcpProcessData;
       Lease: PDhcpLease): boolean; virtual;
+    function SetBoot(var Data: TDhcpProcessData): TDhcpClientBoot; virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
   public
     /// setup this DHCP process using the specified settings
@@ -2590,6 +2622,7 @@ begin
   Data.Mac64 := 0;
   Data.Ip4 := 0;
   Data.SendType := dmtUndefined;
+  Data.PxeBoot := dcbDefault;
   Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
   Data.Ip[0] := #0;
   if Data.Mac64 <> 0 then
@@ -2746,6 +2779,60 @@ begin
   // from Entry[] and StaticMac[]
   if result = nil then
     result := Data.Scope^.FindMac(Data.Mac64);
+end;
+
+const
+  ARCH_DCB: array[0 .. 12] of TDhcpClientBoot = (
+    dcbBios, dcbDefault, dcbX86, dcbDefault, dcbDefault, dcbDefault, // 0..5
+    dcbX86, dcbX64, dcbX64, dcbX64, dcbArm32, dcbArm64, dcbArm64);   // 6..12
+  // 0 = BIOS x86 (Legacy), 1 = NEC/PC87, 2 = EFI x86, 3 = EFI bytecode,
+  // 4 = EFI XScale, 5 = EFI early x64, 6 = EFI x86 Microsoft, 7 = EFI x64,
+  // 8 = EFI x64 HTTP, 9 = EFI2 x64 HTTP, 10 = EFI arm32, 11 = EFI arm64,
+  // 12 = EFI arm64 HTTP - 8,9,12 mean HTTP boot capability, not selection
+
+function TDhcpProcess.SetBoot(var Data: TDhcpProcessData): TDhcpClientBoot;
+var
+  o: PByteArray;
+  vendor: PShortString;
+  a: PtrUInt;
+begin
+  result := dcbDefault;
+  // parse RFC 4578 PXE option 93 as uint16 (00:00)
+  o := @Data.RecvLens[doClientArchitecture];
+  if o[0] <> 0 then
+  begin
+    o := @Data.Recv.options[o[0]];
+    if (o[0] = 2) and
+       (o[1] = 0) and // stored as BigEndian
+       (o[2] <= high(ARCH_DCB)) then
+      result := ARCH_DCB[o[2]];
+  end;
+  vendor := DhcpData(@Data.Recv, Data.RecvLens[doVendorClassIdentifier]);
+  if result = dcbDefault then
+    // fallback to Option 60 parsing - e.g. 'PXEClient:Arch:00007:UNDI:003016'
+    if (vendor^[0] >= #17) and
+       IdemPChar(@vendor^[1], 'PXECLIENT:ARCH:0') then
+    begin
+      a := GetCardinal(@vendor^[17]);
+      if a <= high(ARCH_DCB) then
+        result := ARCH_DCB[a];
+    end;
+  if result = dcbDefault then
+    exit; // normal DHCP boot
+  // detect iPXE from RFC 3004 Option 77
+  if DhcpIdem(@Data.Recv, Data.RecvLens[doUserClass], 'iPXE') then
+    // change dcbBios..dcbArm64 into dcbIpxe_Bios..dcbIpxe_Arm64
+    inc(result, ord(dcbIpxe_Bios) - ord(dcbBios))
+  else if (vendor^[0] = #10) and
+          IdemPChar(@vendor^[1], 'HTTPCLIENT') then
+    // HTTPClient in Option 60 indicates native UEFI firmware HTTP boot
+    case result of
+      dcbX64:
+        result := dcbX64_Http;
+      dcbArm64:
+        result := dcbArm64_Http;
+    end;
+  Data.PxeBoot := result;
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
@@ -3057,12 +3144,13 @@ initialization
   assert(PtrUInt(@PDhcpPacket(nil)^.options) = 240);
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
+  FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
+  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
   DHCP_TXT[dmtUndefined] := 'invalid';
   GetEnumTrimmedNames(TypeInfo(TDhcpOption), @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
-  FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
-  assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
+  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot), @BOOT_TXT, scLower_Case);
 
 end.
 
