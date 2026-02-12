@@ -10675,10 +10675,8 @@ end;
 function IsHttpOrHttps(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (PCardinal(P)^ =
-             ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24) and
-            ((PCardinal(P + 4)^ and $ffffff =
-             ord(':') + ord('/') shl 8 + ord('/') shl 16) or
+  result := (PCardinal(P)^ = HTTP__32) and
+            ((PCardinal(P + 4)^ and $ffffff = HTTP__24) or
              (PCardinal(P + 4)^ =
              ord('s') + ord(':') shl 8 + ord('/') shl 16 + ord('/') shl 24));
 end;

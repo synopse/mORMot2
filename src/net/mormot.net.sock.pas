@@ -5777,7 +5777,7 @@ begin
   while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
     inc(s);
   UriScheme := usHttp; // fallback to http:// if no scheme specified
-  if PInteger(s)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
+  if PInteger(s)^ and $ffffff = HTTP__24 then // '://'
   begin
     FastSetString(Scheme, p, s - p);
     UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));

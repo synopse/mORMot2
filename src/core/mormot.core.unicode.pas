@@ -9318,7 +9318,7 @@ begin
 end;
 
 var
-  NormToLower_Ansi7: TNormTable; // = NormToLowerAnsi7 + '_' into '-'
+  NormToLower_Ansi7: TNormTable; // = NormToLowerAnsi7 with '_' into '-'
 
 procedure SetCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt; aKind: TSetCase);
 begin

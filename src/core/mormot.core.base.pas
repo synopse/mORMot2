@@ -803,6 +803,11 @@ const
   YES_HI     = ord('Y') + ord('E') shl 8 + ord('S') shl 16;
   HOST_127   = ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24;
   HOST_127_4 = ord('0') + ord('.') shl 8 + ord('0') shl 16 + ord('.') shl 24;
+  HTTP_32    = ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24;
+  HTTP__32   = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24;
+  HTTP__24   = ord(':') + ord('/') shl 8 + ord('/') shl 16;
+  HEAD_32    = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+  POST_32    = ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;
