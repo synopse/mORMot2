@@ -203,23 +203,33 @@ const
 function DhcpClient(var dhcp: TDhcpPacket; dmt: TDhcpMessageType;
   const addr: TNetMac; req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
 
-/// append a byte value to the TDhcpPacket.options packet
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte); overload;
-  {$ifdef FPC} inline; {$endif}
-
-/// append a raw binary value to the TDhcpPacket.options packet
-// - default length is 4 so that you could use just @SomeIP4
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pointer;
-  len: PtrUInt = 4); overload;
-
-/// append a non-TDhcpOption to the TDhcpPacket.options packet
-// - could be used to append some unsupported option to the response
-procedure DhcpAddOption(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt); overload;
+/// raw append a value to TDhcpPacket.options[] - maybe any non-TDhcpOption
+procedure DhcpAddOptionRaw(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// append a TNetIP4s dynamic array to the TDhcpPacket.options packet
+/// append a 8-bit byte value to TDhcpPacket.options[]
+procedure DhcpAddOptionByte(var p: PAnsiChar; const op, b: cardinal);
+  {$ifdef FPC} inline; {$endif}
+
+/// append a 32-bit big endian value (e.g. an IPv4) to TDhcpPacket.options[]
+procedure DhcpAddOption32(var p: PAnsiChar; const op: TDhcpOption; be: cardinal);
+  {$ifdef FPC} inline; {$endif}
+
+/// append a raw binary value to TDhcpPacket.options[]
+procedure DhcpAddOptionBuf(var p: PAnsiChar; const op: TDhcpOption;
+  b: pointer; len: PtrUInt);
+
+/// append a raw text or binary to TDhcpPacket.options[] - do nothing if v is ''
+procedure DhcpAddOptionU(var p: PAnsiChar; const op: TDhcpOption; const v: RawUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append a short raw text to TDhcpPacket.options[] - do nothing if v is ''
+procedure DhcpAddOptionShort(var p: PAnsiChar; const op: TDhcpOption; const v: ShortString);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append a TNetIP4s dynamic array to TDhcpPacket.options[]
 // -  here ips is a <> nil pointer(dynamicarray) of TNetIP4 = cardinal
-procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
+procedure DhcpAddOptions(var p: PAnsiChar; const op: TDhcpOption; ips: PAnsiChar);
 
 /// append a copy of an existing TDhcpPacket.options option for lens[opt]
 // - sourcelen should point to recv[lens[opt]] with lens[opt] <> 0
@@ -973,33 +983,56 @@ const
 var
   DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption; // for fast O(1) lookup
 
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: byte);
+procedure DhcpAddOptionByte(var p: PAnsiChar; const op, b: cardinal);
 begin
-  PCardinal(p)^ := cardinal(DHCP_OPTION_NUM[op]) + 1 shl 8 + cardinal(b) shl 16;
+  PCardinal(p)^ := op + 1 shl 8 + cardinal(b) shl 16;
   p := @p[3];
 end;
 
-procedure DhcpAddOption(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt);
+procedure DhcpAddOption32(var p: PAnsiChar; const op: TDhcpOption; be: cardinal);
+var
+  d: PAnsiChar;
+begin
+  d := p;
+  d[0] := AnsiChar(DHCP_OPTION_NUM[op]);
+  d[1] := #4;
+  PCardinal(d + 2)^ := be;
+  p := @d[6];
+end;
+
+procedure DhcpAddOptionRaw(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt);
 var
   d: PByteArray;
 begin
   d := pointer(p);
   d[0] := op;
   d[1] := len;
-  if len <> 0 then
-    MoveFast(b^, d[2], len);
+  MoveFast(b^, d[2], len);
   p := @d[len + 2];
 end;
 
-procedure DhcpAddOption(var p: PAnsiChar; op: TDhcpOption; b: pointer; len: PtrUInt);
+procedure DhcpAddOptionBuf(var p: PAnsiChar; const op: TDhcpOption; b: pointer; len: PtrUInt);
 begin
-  DhcpAddOption(p, DHCP_OPTION_NUM[op], b, len);
+  DhcpAddOptionRaw(p, DHCP_OPTION_NUM[op], b, len);
 end;
 
-procedure DhcpAddOptions(var p: PAnsiChar; op: TDhcpOption; ips: PAnsiChar);
+procedure DhcpAddOptionU(var p: PAnsiChar; const op: TDhcpOption; const v: RawUtf8);
+begin
+  if pointer(v) <> nil then
+    DhcpAddOptionBuf(p, op, pointer(v), PStrLen(PAnsiChar(pointer(v)) - _STRLEN)^);
+end;
+
+procedure DhcpAddOptionShort(var p: PAnsiChar; const op: TDhcpOption; const v: ShortString);
+begin
+  if v[0] <> #0 then
+    DhcpAddOptionBuf(p, op, @v[1], ord(v[0]));
+end;
+
+procedure DhcpAddOptions(var p: PAnsiChar; const op: TDhcpOption; ips: PAnsiChar);
 begin
   // ips is a <> nil dynamic array of TNetIP4 = cardinal
-  DhcpAddOption(p, op, pointer(ips), (PDALen(ips - _DALEN)^ + _DAOFF) * 4);
+  DhcpAddOptionRaw(p, DHCP_OPTION_NUM[op], pointer(ips),
+    (PDALen(ips - _DALEN)^ + _DAOFF) * 4);
 end;
 
 procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
@@ -1071,11 +1104,11 @@ begin
   PNetMac(@dhcp.chaddr)^ := addr;
   dhcp.cookie := DHCP_MAGIC_COOKIE;
   result := @dhcp.options;
-  DhcpAddOption(result, doDhcpMessageType, ord(dmt));
+  DhcpAddOptionByte(result, {doDhcpMessageType=} 53, ord(dmt));
   if serverid <> 0 then
   begin
     dhcp.siaddr := serverid;
-    DhcpAddOption(result, doDhcpServerIdentifier, @serverid);
+    DhcpAddOption32(result, doDhcpServerIdentifier, serverid);
   end;
   result^ := #255;
 end;
@@ -1818,18 +1851,18 @@ end;
 
 procedure TDhcpScope.AddOptions(var f: PAnsiChar; withLeaseTimes: boolean);
 begin
-  DhcpAddOption(f, doSubnetMask, @Subnet.mask);
+  DhcpAddOption32(f, doSubnetMask, Subnet.mask);
   if Broadcast <> 0 then
-    DhcpAddOption(f, doBroadcastAddress, @Broadcast);
+    DhcpAddOption32(f, doBroadcastAddress, Broadcast);
   if Gateway <> 0 then
-    DhcpAddOption(f, doRouters, @Gateway);
+    DhcpAddOption32(f, doRouters, Gateway);
   if DnsServer <> nil then
     DhcpAddOptions(f, doDomainNameServers, pointer(DnsServer));
   if not withLeaseTimes then // stateless INFORM don't need timeouts
     exit;
-  DhcpAddOption(f, doDhcpLeaseTime,     @LeaseTime); // big-endian
-  DhcpAddOption(f, doDhcpRenewalTime,   @RenewalTime);
-  DhcpAddOption(f, doDhcpRebindingTime, @Rebinding);
+  DhcpAddOption32(f, doDhcpLeaseTime,     LeaseTime); // already big-endian
+  DhcpAddOption32(f, doDhcpRenewalTime,   RenewalTime);
+  DhcpAddOption32(f, doDhcpRebindingTime, Rebinding);
 end;
 
 

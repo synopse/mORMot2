@@ -1855,7 +1855,7 @@ begin
       hostname := 'HOST';
       AppendShortCardinal(i, hostname);
       f := DhcpClient(d.Recv, dmtDiscover, macs[i]);
-      DhcpAddOption(f, doHostName, @hostname[1], length(hostname));
+      DhcpAddOptionShort(f, doHostName, hostname);
       f^ := #255;
       d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
@@ -1981,7 +1981,7 @@ begin
     // validate DECLINE process - and option 82 Relay Agent
     CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
     f := DhcpClient(d.Recv, dmtDiscover, macs[0]);
-    DhcpAddOption(f, doDhcpAgentOptions, @OPTION82[1], 7);
+    DhcpAddOptionShort(f, doDhcpAgentOptions, OPTION82);
     f^ := #255;
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
     Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
