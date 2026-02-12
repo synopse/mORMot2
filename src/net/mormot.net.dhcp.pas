@@ -2586,7 +2586,7 @@ begin
     one := nil // compute msg for JournalSend() but not for TSynLog.LogText()
   else
     exit;
-  // inlined 'ComputeResponse: % % %% % %' ouput generation
+  // generate 'ComputeResponse: REQUEST MAC context RESPONSE IP Host boot=..'
   msg := 'ComputeResponse: ';
   AppendShortAnsi7String(DHCP_TXT[Data.RecvType], msg);
   AppendShortChar(' ', @msg);
@@ -2608,12 +2608,17 @@ begin
     AppendShortChar(' ', @msg);
     AppendShort(Data.HostName^, msg);
   end;
+  if Data.PxeBoot <> dcbDefault then
+  begin
+    AppendShort(' boot=', msg); // e.g. 'boot=ipxe-x64'
+    AppendShortAnsi7String(BOOT_TXT[Data.PxeBoot], msg);
+  end;
   msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
-  // efficiently append to TSynLog
+  // efficiently append to local TSynLog
   if one <> nil then
     one.LogText(Level, PUtf8Char(@msg[1]), nil); // this is the fastest API
-  // send to system logs (much slower)
-  if dsoSystemLog in fOptions then // send #0-ended parameters
+  // optionnally send 'REQUEST MAC...' text to system logs (much slower)
+  if dsoSystemLog in fOptions then
     JournalSend(Level, @msg[18], ord(msg[0]) - 17, {trimlogdate=}false);
 end;
 
@@ -2823,9 +2828,10 @@ begin
   if DhcpIdem(@Data.Recv, Data.RecvLens[doUserClass], 'iPXE') then
     // change dcbBios..dcbArm64 into dcbIpxe_Bios..dcbIpxe_Arm64
     inc(result, ord(dcbIpxe_Bios) - ord(dcbBios))
-  else if (vendor^[0] = #10) and
+  else if (vendor^[0] >= #10) and
           IdemPChar(@vendor^[1], 'HTTPCLIENT') then
     // HTTPClient in Option 60 indicates native UEFI firmware HTTP boot
+    // - will fallback to TFTP is no HTTP URI is supplied
     case result of
       dcbX64:
         result := dcbX64_Http;
@@ -2833,6 +2839,8 @@ begin
         result := dcbArm64_Http;
     end;
   Data.PxeBoot := result;
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'SetBoot=% from %', [BOOT_TXT[result], vendor^], self);
 end;
 
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
