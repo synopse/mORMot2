@@ -343,6 +343,10 @@ var
 // - recognize 'xx:xx:xx:xx:xx:xx' for MAC, and hexadecimal/GUID for UUID
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 
+/// raw generation of a Type-Length-Value (TLV) binary from JSON
+function TlvFromJson(p: PUtf8Char; var v: RawByteString): boolean;
+
+
 
 { **************** Low-Level per-scope DHCP metrics }
 
@@ -525,6 +529,20 @@ type
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
   end;
 
+  /// store one DHCP "profile" entry in a ready-to-be-processed way
+  TDhcpScopeProfile = record
+    /// store AND matching fields
+    all: TProfileValues;
+    /// store OR matching fields
+    any: TProfileValues;
+    /// the "always" and "requested" data to be sent back to the client
+    // - "always" should be send[0] (if any, and with op=0)
+    send: TProfileValues;
+  end;
+  PDhcpScopeProfile = ^TDhcpScopeProfile;
+  /// store all DHCP "profile" ready-to-be-processed entries of a given scope
+  TDhcpScopeProfiles = array of TDhcpScopeProfile;
+
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
   // (not included by default since seems overkill and KEA/Windows don't do it)
@@ -582,8 +600,8 @@ type
     // - will be checked against not-"01+MAC" option 61 values - mainly UUID
     // - stored as RawByteString = doDhcpClientIdentifier-binary + 4-bytes-IP
     StaticUuid: TRawByteStringDynArray;
-    /// the PXE network boot settings for this scope/subnet
-    Boot: TDhcpScopeBoot;
+    /// store all DHCP "profiles" ready-to-be-processed entries for this scope
+    Profiles: TDhcpScopeProfiles;
     /// readjust all internal values according to to Subnet policy
     // - raise an EDhcp exception if the parameters are not correct
     procedure AfterFill(log: TSynLog);
@@ -643,6 +661,8 @@ type
     LastDiscover, FreeListCount: integer;
     FreeList: TIntegerDynArray;
   public
+    /// the PXE network boot settings for this scope/subnet
+    Boot: TDhcpScopeBoot;
     /// where total counters are written e.g. '.../192-168-1-0_24.json'
     MetricsJsonFileName: TFileName;
     // where periodic values are appended e.g. '.../202602_192-168-1-0_24.csv'
@@ -2387,9 +2407,6 @@ end;
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
 { TDhcpBootSettings }
-
-// about TLV (Type-Length-Value) encoding, see e.g.
-// https://www.ibm.com/docs/en/tpmfod/7.1.1.4?topic=configuration-dhcp-option-43
 
 procedure ConsolidateOption(var boot: TDhcpScopeBoot; ref, dst: TDhcpClientBoot);
 begin
