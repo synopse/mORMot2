@@ -1666,6 +1666,9 @@ begin
   CheckEqual(LogEscapeFull(TlvFromJson('{6:"uint16:7"}')), '$06$02$00$07');
   CheckEqual(LogEscapeFull(TlvFromJson('{6:7}')), '$06$04$00$00$00$07');
   CheckEqual(LogEscapeFull(TlvFromJson('{6:"hex:010203"}')), '$06$03$01$02$03');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{"6":"IP:10.0.0.5,1.2.3.4","9": "BASE64:Zm9vYmFy"}')),
+    '$06$08$0a$00$00$05$01$02$03$04$09$06foobar');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
