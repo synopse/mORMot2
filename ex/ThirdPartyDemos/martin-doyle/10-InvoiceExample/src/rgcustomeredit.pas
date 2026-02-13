@@ -129,46 +129,37 @@ begin
   LabelCustomerNo.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
     LabelWidth, EditHeight);
 
-  // Position first edit next to label with proportional spacing
-  Layout.Place(LabelCustomerNo, EditCustomerNo, ldRight, 1.0);
+  // Position first edit next to label
+  Layout.PlaceRight(LabelCustomerNo, EditCustomerNo, 1.0);
 
-  // Position remaining labels and edits in column with increased vertical spacing
-  Layout.Place(LabelCustomerNo, LabelCompany, ldBelow, 0.5);
-  Layout.Place(LabelCompany, EditCompany, ldRight, 1.0);
+  // Position remaining label-edit pairs in column
+  Layout.PlaceBelow(LabelCustomerNo, LabelCompany, 0.5);
+  Layout.PlaceRight(LabelCompany, EditCompany, 1.0);
 
-  Layout.Place(LabelCompany, LabelPhone, ldBelow, 0.5);
-  Layout.Place(LabelPhone, EditPhone, ldRight, 1.0);
+  Layout.PlaceBelow(LabelCompany, LabelPhone, 0.5);
+  Layout.PlaceRight(LabelPhone, EditPhone, 1.0);
 
-  Layout.Place(LabelPhone, LabelFax, ldBelow, 0.5);
-  Layout.Place(LabelFax, EditFax, ldRight, 1.0);
+  Layout.PlaceBelow(LabelPhone, LabelFax, 0.5);
+  Layout.PlaceRight(LabelFax, EditFax, 1.0);
 
-  Layout.Place(LabelFax, LabelAddress, ldBelow, 0.5);
-  Layout.Place(LabelAddress, EditAddress, ldRight, 1.0);
+  Layout.PlaceBelow(LabelFax, LabelAddress, 0.5);
+  Layout.PlaceRight(LabelAddress, EditAddress, 1.0);
 
-  Layout.Place(LabelAddress, LabelZip, ldBelow, 0.5);
-  Layout.Place(LabelZip, EditZip, ldRight, 1.0);
+  Layout.PlaceBelow(LabelAddress, LabelZip, 0.5);
+  Layout.PlaceRight(LabelZip, EditZip, 1.0);
 
-  Layout.Place(LabelZip, LabelCity, ldBelow, 0.5);
-  Layout.Place(LabelCity, EditCity, ldRight, 1.0);
+  Layout.PlaceBelow(LabelZip, LabelCity, 0.5);
+  Layout.PlaceRight(LabelCity, EditCity, 1.0);
 
-  Layout.Place(LabelCity, LabelCountry, ldBelow, 0.5);
-  Layout.Place(LabelCountry, EditCountry, ldRight, 1.0);
+  Layout.PlaceBelow(LabelCity, LabelCountry, 0.5);
+  Layout.PlaceRight(LabelCountry, EditCountry, 1.0);
 
-  // Auto-size the form based on all content except buttons
+  // Place buttons below last edit, right-aligned to edit's right edge
+  Layout.PlaceBelowRight(EditCountry, CancelButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
+
   Layout.AutoSizeForm;
   Position := poMainFormCenter;
-  ClientHeight := ClientHeight + CancelButton.Height + Layout.Margins.Bottom;
-
-  // Place OK button at bottom-right
-  CancelButton.SetBounds(
-    ClientWidth - Layout.Margins.Right - CancelButton.Width,
-    ClientHeight - Layout.Margins.Bottom - CancelButton.Height,
-    CancelButton.Width,
-    CancelButton.Height
-  );
-  Layout.Place(CancelButton, SaveButton, ldLeft, 0.5);
-
-
 end;
 
 procedure TCustomerEditForm.FormDestroy(Sender: TObject);
