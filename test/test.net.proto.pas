@@ -1661,11 +1661,22 @@ begin
   end;
   Check(not FromText('none', opt2));
   CheckEqual(TlvFromJson(''), '');
-  CheckEqual(LogEscapeFull(TlvFromJson('{6:"bcd"}')), '$06$03bcd');
-  CheckEqual(LogEscapeFull(TlvFromJson('{6:"uint8:7"}')), '$06$01$07');
-  CheckEqual(LogEscapeFull(TlvFromJson('{6:"uint16:7"}')), '$06$02$00$07');
-  CheckEqual(LogEscapeFull(TlvFromJson('{6:7}')), '$06$04$00$00$00$07');
-  CheckEqual(LogEscapeFull(TlvFromJson('{6:"hex:010203"}')), '$06$03$01$02$03');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:"bcd"}')), '$06$03bcd');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:"uint8:7"}')), '$06$01$07');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:"uint16:7"}')), '$06$02$00$07');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:7}')), '$06$04$00$00$00$07');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:"hex:010203"}')), '$06$03$01$02$03');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:false}')), '$06$01$00');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:true}')), '$06$01$01');
+  CheckEqual(LogEscapeFull(TlvFromJson(
+    '{6:"ip:4.3.2.1"}')), '$06$04$04$03$02$01');
   CheckEqual(LogEscapeFull(TlvFromJson(
     '{"6":"IP:10.0.0.5,1.2.3.4","9": "BASE64:Zm9vYmFy"}')),
     '$06$08$0a$00$00$05$01$02$03$04$09$06foobar');

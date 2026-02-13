@@ -1839,7 +1839,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// call inherited GetJsonFieldOrObjectOrArray() to retrieve the next JSON value
     // - on success, return true and set Value/ValueLen and WasString fields
-    function ParseNextAny: boolean;
+    function ParseNextAny(NormalizeBoolean: boolean = true): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the next JSON value as UTF-8 text
     function ParseUtf8: RawUtf8;
@@ -7882,9 +7882,10 @@ begin
   Valid := result;
 end;
 
-function TJsonParserContext.ParseNextAny: boolean;
+function TJsonParserContext.ParseNextAny(NormalizeBoolean: boolean): boolean;
 begin
-  {$ifdef USERECORDWITHMETHODS}Get.{$endif}GetJsonFieldOrObjectOrArray;
+  {$ifdef USERECORDWITHMETHODS}Get.{$endif}
+    GetJsonFieldOrObjectOrArray(false, NormalizeBoolean);
   result := Json <> nil;
   Valid := result;
 end;

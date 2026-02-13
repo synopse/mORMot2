@@ -1760,6 +1760,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
           // true/false boolean
           tmp.b[0] := ord(p.Value[0] = 't');
           FastSetRawByteString(v, @tmp.b, 1); // store 0/1 byte
+          result := true;
         end;
       '{':
         // try to parse a JSON object into a TLV value
@@ -1797,7 +1798,7 @@ begin
       v.op := DHCP_OPTION_NUM[v.opt]
     else
       exit;
-  if not parser.ParseNextAny then
+  if not parser.ParseNextAny({NormalizeBoolean=}false) then
     exit;
   if pp = ppTlv then
     result := SetProfileValue(parser, v.value, 0) // op is no option
