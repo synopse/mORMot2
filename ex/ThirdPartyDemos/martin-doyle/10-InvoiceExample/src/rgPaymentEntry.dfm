@@ -10,8 +10,10 @@ object PaymentEntryForm: TPaymentEntryForm
   Color = clBtnFace
   Font.Color = clWindowText
   Position = poMainFormCenter
+  LCLVersion = '4.5.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnShow = FormShow
   object LabelInvoice: TLabel
     Left = 16
     Height = 18

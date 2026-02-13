@@ -113,7 +113,8 @@ end;
 
 procedure TCustomerEditForm.SetupLayout;
 begin
-  InitLayout(LabelCustomerNo.Height, EditCustomerNo.Height, 7.0, 18.75);
+  InitLayout(LabelCustomerNo.Height, EditCustomerNo.Height,
+    7.0 * LabelCustomerNo.Height, 18.75 * LabelCustomerNo.Height);
 
   // Prepare label-edit pairs: AutoSize off, uniform sizes, text centered, FocusControl
   PrepareLabelEdit(LabelCustomerNo, EditCustomerNo);

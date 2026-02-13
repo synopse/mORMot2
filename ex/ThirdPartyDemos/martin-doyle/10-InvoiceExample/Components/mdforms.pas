@@ -63,7 +63,7 @@ type
     constructor Create(AOwner: TComponent; AParent: TWinControl); reintroduce; overload;
     destructor Destroy; override;
     procedure InitLayout(ALabelHeight, AEditHeight: Integer;
-      ALabelWidthMult, AEditWidthMult: Single);
+      ALabelWidth, AEditWidth: Single);
     procedure PrepareLabel(ALabel: TLabel);
     procedure PrepareEdit(AEdit: TEdit);
     procedure PrepareLabelEdit(ALabel: TLabel; AEdit: TEdit);
@@ -150,12 +150,12 @@ begin
 end;
 
 procedure TMDChildForm.InitLayout(ALabelHeight, AEditHeight: Integer;
-  ALabelWidthMult, AEditWidthMult: Single);
+  ALabelWidth, AEditWidth: Single);
 begin
   FLabelHeight := ALabelHeight;
   FEditHeight := AEditHeight;
-  FLabelWidth := Round(ALabelWidthMult * ALabelHeight);
-  FEditWidth := Round(AEditWidthMult * ALabelHeight);
+  FLabelWidth := Round(ALabelWidth);
+  FEditWidth := Round(AEditWidth);
   FreeAndNil(FLayout);
   FLayout := TLayoutHelper.Create(Self, LayoutMargins(ALabelHeight));
   FLayout.AdjustForPlatform;
