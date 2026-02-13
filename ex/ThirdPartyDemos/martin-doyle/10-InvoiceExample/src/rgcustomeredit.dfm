@@ -7,7 +7,7 @@ object CustomerEditForm: TCustomerEditForm
   Caption = 'Customer Details'
   ClientHeight = 487
   ClientWidth = 160
-  Position = poMainFormCenter
+  Position = poDesktopCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = FormShow

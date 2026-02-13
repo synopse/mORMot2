@@ -140,7 +140,6 @@ begin
   Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
   Layout.AutoSizeForm;
-  Position := poDesktopCenter;
 end;
 
 procedure TPaymentEntryForm.FormDestroy(Sender: TObject);
