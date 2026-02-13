@@ -9,7 +9,7 @@ object PaymentEntryForm: TPaymentEntryForm
   ClientWidth = 350
   Color = clBtnFace
   Font.Color = clWindowText
-  Position = poMainFormCenter
+  Position = poDesktopCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = FormShow

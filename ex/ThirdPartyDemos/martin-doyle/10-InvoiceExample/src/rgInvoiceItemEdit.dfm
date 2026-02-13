@@ -9,7 +9,7 @@ object InvoiceItemEditForm: TInvoiceItemEditForm
   ClientWidth = 389
   Color = clBtnFace
   Font.Color = clWindowText
-  Position = poMainFormCenter
+  Position = poDesktopCenter
   OnCreate = FormCreate
   OnShow = FormShow
   object LabelDescription: TLabel

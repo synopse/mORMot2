@@ -160,7 +160,6 @@ begin
   Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
   Layout.AutoSizeForm;
-  Position := poDesktopCenter;
 end;
 
 procedure TCustomerEditForm.FormDestroy(Sender: TObject);

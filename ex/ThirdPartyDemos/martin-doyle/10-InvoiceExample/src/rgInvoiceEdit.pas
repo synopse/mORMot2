@@ -189,19 +189,6 @@ begin
 
   // Auto-size form based on content
   Layout.AutoSizeForm;
-  // ClientHeight := ClientHeight + CancelButton.Height + Layout.Margins.Bottom;
-  Position := poDesktopCenter;
-
-  {
-  // Place Cancel button at bottom-right, Save to its left
-  CancelButton.SetBounds(
-    ClientWidth - Layout.Margins.Right - CancelButton.Width,
-    ClientHeight - Layout.Margins.Bottom - CancelButton.Height,
-    CancelButton.Width,
-    CancelButton.Height
-  );
-  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
-  }
 end;
 
 procedure TInvoiceEditForm.SetListGridColumns;

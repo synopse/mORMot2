@@ -9,7 +9,7 @@ object InvoiceEditForm: TInvoiceEditForm
   Font.Color = clWindowText
   Font.Style = []
   OldCreateOrder = True
-  Position = poMainFormCenter
+  Position = poDesktopCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = FormShow

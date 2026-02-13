@@ -133,18 +133,11 @@ begin
   Layout.PlaceRight(LabelDiscount, SpinDiscount, 1.0);
   Layout.PlaceRight(SpinDiscount, LabelPercent, 0.25);
 
-  Layout.AutoSizeForm;
-  Position := poDesktopCenter;
-  ClientHeight := ClientHeight + CancelButton.Height + Layout.Margins.Bottom;
-
-  // Place Cancel button at bottom-right
-  CancelButton.SetBounds(
-    ClientWidth - Layout.Margins.Right - CancelButton.Width,
-    ClientHeight - Layout.Margins.Bottom - CancelButton.Height,
-    CancelButton.Width,
-    CancelButton.Height
-  );
+  Layout.PlaceBelow(LabelDiscount, CancelButton, 1.0);
+  CancelButton.Left := EditDescription.Left + EditDescription.Width - CancelButton.Width;
   Layout.PlaceLeft(CancelButton, OKButton, 0.5);
+
+  Layout.AutoSizeForm;
 end;
 
 procedure TInvoiceItemEditForm.EditQuantityKeyPress(Sender: TObject; var Key: char);
