@@ -145,7 +145,7 @@ type
  // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
  // - doDhcpAgentOptions is Relay Agent (RFC 3046) option 82 - last to appear
  // - doClientArchitecture is RFC 4578 PXE option 93 as uint16 (00:00)
- // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOSUUID)
+ // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOS_UUID)
  // - doSubnetSelection is option 118 to override the giaddr value
  // - doEnd is "End Of Options" marker option 255 (not a true value)
  TDhcpOption = (
@@ -485,7 +485,7 @@ type
 
   /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
   // - used for TDhcpProcessData.PxeBoot: TDhcpClientBoot <> dcbDefault
-  // - those options are consolidated for proper fallback between boot options
+  // - Remote[] are consolidated for proper fallback between boot options
   TDhcpScopeBoot = record
     /// IP address or hostname sent back as doTftpServerName option 66
     NextServer: RawUtf8;
@@ -495,15 +495,6 @@ type
     // 'bootx64.efi' for dcbX64, 'http://server/bootx64.efi' for dcbX64_Http,
     // or 'http://server/script' for dcbIpxe_Bios .. dcbIpxe_Arm64
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
-    /// custom DHCP firmware options sent back as option 43 to the client
-    // - as raw TLV binary structures, stored base-64 encoded in the settings
-    // - contain e.g. PXE menu text definition
-    // - dcbX64_Http .. dcbArm64_Http typically do not send option 43
-    Firmware: array[dcbBios .. dcbArm64] of RawByteString;
-    /// custom DHCP IPXE options sent back as option 175 to the client
-    // - as raw TLV binary structures, stored base-64 encoded in the settings
-    // - contain e.g. script URL or additional parameters
-    Ipxe: array[dcbIpxe_Bios .. dcbIpxe_Arm64] of RawByteString
   end;
 
   /// how to refine DHCP server process for one TDhcpScopeSettings
@@ -648,25 +639,21 @@ function ToText(st: TLeaseState): PShortString; overload;
 type
   TDhcpProcess = class;
 
-  /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
+  /// define the PXE network boot 66/67 options for a given scope/subnet
   // - used to fill TDhcpScopeBoot low-level data tructure
   TDhcpBootSettings = class(TSynPersistent)
   protected
     fNextServer: RawUtf8;
     fRemote: array[TDhcpClientBoot] of RawUtf8;
-    fOption: array[TDhcpClientBoot] of RawUtf8;
     { FPC is not able to generate RTTI for the following - Delphi has no issue
       TODO: bugreport?
-        fRemote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
-        fFirmware: array[dcbBios .. dcbArm64] of RawUtf8;
-        fIpxe: array[dcbIpxe_Bios .. dcbIpxe_Arm64] of RawUtf8; }
+        fRemote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8; }
   public
     /// compute the low-level TDhcpScope.Boot data structure for current settings
-    // - raise an EDhcp exception if the parameters are not correct, e.g.
-    // if Option* properties are not valid base-64 encoded values
+    // - will also complete/consolidate configuration from sibling values
     procedure PrepareScope(var Data: TDhcpScopeBoot; Options: TDhcpScopeOptions);
   published
-    /// option 66 IP address or hostname
+    /// option 66 IP address or hostname of the associated TFTP server
     property NextServer: RawUtf8
       read fNextServer write fNextServer;
     /// option 67 TFTP file name for legacy BIOS PXE
@@ -705,36 +692,6 @@ type
     /// option 67 TFTP file name or HTTP URI for iPXE Arm64
     property IpxeArm64: RawUtf8
       read fRemote[dcbIpxe_Arm64] write fRemote[dcbIpxe_Arm64];
-    /// option 43 base-64 encoded TLV for BIOS PXE
-    property OptionBios: RawUtf8
-      read fOption[dcbBios] write fOption[dcbBios];
-    /// option 43 base-64 encoded TLV for UEFI i386
-    property OptionX86: RawUtf8
-      read fOption[dcbX86] write fOption[dcbX86];
-    /// option 43 base-64 encoded TLV for UEFI x64
-    property OptionX64: RawUtf8
-      read fOption[dcbX64] write fOption[dcbX64];
-    /// option 43 base-64 encoded TLV for UEFI Arm32
-    property OptionArm32: RawUtf8
-      read fOption[dcbArm32] write fOption[dcbArm32];
-    /// option 43 base-64 encoded TLV for UEFI Arm64
-    property OptionArm64: RawUtf8
-      read fOption[dcbArm64] write fOption[dcbArm64];
-    /// option 175 base-64 encoded TLV for legacy BIOS iPXE
-    property OptionIpxeBios: RawUtf8
-      read fOption[dcbIpxe_Bios] write fOption[dcbIpxe_Bios];
-    /// option 175 base-64 encoded TLV for iPXE i386
-    property OptionIpxeX86: RawUtf8
-      read fOption[dcbIpxe_X86] write fOption[dcbIpxe_X86];
-    /// option 175 base-64 encoded TLV for iPXE x64
-    property OptionIpxeX64: RawUtf8
-      read fOption[dcbIpxe_X64] write fOption[dcbIpxe_X64];
-    /// option 175 base-64 encoded TLV for iPXE Arm32
-    property OptionIpxeArm32: RawUtf8
-      read fOption[dcbIpxe_Arm32] write fOption[dcbIpxe_Arm32];
-    /// option 175 base-64 encoded TLV for iPXE Arm64
-    property OptionIpxeArm64: RawUtf8
-      read fOption[dcbIpxe_Arm64] write fOption[dcbIpxe_Arm64];
   end;
 
   /// main high-level options for defining one scope/subnet for our DHCP Server
@@ -840,7 +797,7 @@ type
     property Boot: TDhcpBootSettings
       read fBoot;
   end;
-  /// a dynamyc array of DHCP Server scope/subnet settings
+  /// a dynamic array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
 
   /// how to refine DHCP server process globally for all scopes
@@ -1304,10 +1261,11 @@ begin
   // parse DHCP options
   p := @dhcp^.options;
   repeat
+    // check len to avoid buffer overflow on malformatted input
     dec(len, ord(p[1]) + 2);
     if len < 1 then
-      exit; // avoid buffer overflow
-    // fast O(1) option number lookup and lens[] initialization
+      exit;
+    // fast O(1) option number lookup and lens[]/found^ filling
     opt := doPad;
     if ord(p[0]) <= high(DHCP_OPTION_INV) then
       opt := DHCP_OPTION_INV[ord(p[0])];
@@ -1408,6 +1366,7 @@ begin
       dec(n);
     until n = 0;
 end;
+
 
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 var
@@ -2041,18 +2000,6 @@ end;
 
 { TDhcpBootSettings }
 
-procedure TlcFromBase64(dcb: TDhcpClientBoot; const base64: RawUtf8;
-  var bin: RawByteString);
-begin
-  bin := '';
-  if base64 = '' then
-    exit;
-  bin := Base64ToBin(TrimU(base64));
-  if bin = '' then
-    EDhcp.RaiseUtf8('PrepareScope: Boot.Option% is no valid base-64',
-      [BOOT_TXT[dcb]]);  // e.g. '.. Boot.OptionIpxeX64 ..'
-end;
-
 // about TLV (Type-Length-Value) encoding, see e.g.
 // https://www.ibm.com/docs/en/tpmfod/7.1.1.4?topic=configuration-dhcp-option-43
 
@@ -2060,12 +2007,6 @@ procedure ConsolidateOption(var boot: TDhcpScopeBoot; ref, dst: TDhcpClientBoot)
 begin
   if boot.Remote[dst] = '' then
     boot.Remote[dst] := boot.Remote[ref];
-  if dst in [low(boot.Firmware) .. high(boot.Firmware)] then
-    if boot.Firmware[dst] = '' then
-      boot.Firmware[dst] := boot.Firmware[ref];
-  if dst in [low(boot.Ipxe) .. high(boot.Ipxe)] then
-    if boot.Ipxe[dst] = '' then
-      boot.Ipxe[dst] := boot.Ipxe[ref];
 end;
 
 procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot;
@@ -2082,10 +2023,6 @@ begin
   TrimU(fNextServer, Data.NextServer);
   for dcb := low(Data.Remote) to high(Data.Remote) do
     TrimU(fRemote[dcb], Data.Remote[dcb]);
-  for dcb := low(Data.Firmware) to high(Data.Firmware) do
-    TlcFromBase64(dcb, fOption[dcb], Data.Firmware[dcb]);
-  for dcb := low(Data.Ipxe) to high(Data.Ipxe) do
-    TlcFromBase64(dcb, fOption[dcb], Data.Ipxe[dcb]);
   // complete configuration from sibling values
   if dsoNoPXEConsolidation in Options then
     exit;
@@ -2099,7 +2036,7 @@ begin
   else if Data.Remote[dcbIpxe_X86] <> '' then
     ref := dcbIpxe_X86;
   if ref <> dcbDefault then
-    for dcb := dcbIpxe_X86 to high(Data.Ipxe) do
+    for dcb := dcbIpxe_X86 to high(Data.Remote) do
       if dcb <> ref then
         ConsolidateOption(Data, ref, dcb);
 end;
@@ -3137,13 +3074,7 @@ begin
   inc(Data.Scope^.Metrics.Current[dsmPxeBoot]);
   // known configuration: append PXE/iPXE specific options
   DhcpAddOptionU(Data.SendEnd, doTftpServerName, boot^.NextServer);
-  DhcpAddOptionU(Data.SendEnd, doBootFileName, boot^.Remote[Data.PxeBoot]);
-  case Data.PxeBoot of
-    low(boot^.Firmware) .. high(boot^.Firmware):
-      DhcpAddOptionU(Data.SendEnd, 43, boot^.Firmware[Data.PxeBoot]);
-    low(boot^.Ipxe) .. high(boot^.Ipxe):
-      DhcpAddOptionU(Data.SendEnd, 175, boot^.Ipxe[Data.PxeBoot]);
-  end;
+  DhcpAddOptionU(Data.SendEnd, doBootFileName,   boot^.Remote[Data.PxeBoot]);
   // copy back verbatim option 60 and 97 to PXE clients
   DhcpDataCopyOption(Data, doVendorClassIdentifier);
   DhcpDataCopyOption(Data, doUuidClientIdentifier);
