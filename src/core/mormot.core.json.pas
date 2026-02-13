@@ -1873,6 +1873,8 @@ type
     procedure ParsePropComplex(Data: pointer);
     /// make GetInteger(Value) and check against Ctxt.Options and Ctxt.Info
     procedure ValueEnumNotString(Data: PByte);
+    /// locate Value from an array[enum] of RawUtf8 and set Dest enumerate if true
+    function ValueEnumFromConst(Arr: PRawUtf8; ArrCount: PtrInt; var Dest): boolean;
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -8050,6 +8052,16 @@ begin // caller ensured Ctxt.WasString is false
   else
     Valid := jpoIgnoreUnknownEnum in Options; // keep existing Data^
 end;
+
+function TJsonParserContext.ValueEnumFromConst(Arr: PRawUtf8; ArrCount: PtrInt;
+  var Dest): boolean;
+begin
+  ArrCount := FindNonVoidRawUtf8I(pointer(Arr), Get.Value, Get.ValueLen, ArrCount);
+  result := ArrCount >= 0;
+  if result then
+    byte(Dest) := ArrCount;
+end;
+
 
 procedure _JL_Boolean(Data: PBoolean; var Ctxt: TJsonParserContext);
 begin
