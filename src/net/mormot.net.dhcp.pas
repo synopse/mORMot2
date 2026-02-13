@@ -1728,6 +1728,8 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
             end;
         end;
         // fallback to store as plain UTF-8 text
+        if len > 255 then
+          exit;
         FastSetString(RawUtf8(v), p.Value, len);
         result := true;
       end;
@@ -1804,6 +1806,9 @@ begin
     result := SetProfileValue(parser, v.value, 0) // op is no option
   else
     result := SetProfileValue(parser, v.value, v.op);
+  if result and
+     (length(v.value) > 255) then
+    result := false; // avoid TLV 8-bit length overflow
 end;
 
 procedure AddProfileValue(var a: TProfileValues; var v: TProfileValue);
