@@ -283,7 +283,7 @@ function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptio
 
 type
   /// decoded DHCP options for PXE network booting process and its chain load
-  // - as parsed by TDhcpProcess.SetBoot() and stored in TDhcpProcessData.PxeBoot
+  // - as parsed by TDhcpProcess.SetBoot() and stored in TDhcpProcessData.Boot
   // - dcbDefault means regular OS DHCP request with no remote boot options
   // - dcbBios is first-stage TFTP loader on legacy BIOS PXE
   // - dcbX86,dcbX64,dcbArm32,dcbArm64 are first-stage TFTP loader with UEFI
@@ -491,7 +491,7 @@ type
   TLeaseDynArray = array of TDhcpLease;
 
   /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
-  // - used for TDhcpProcessData.PxeBoot: TDhcpClientBoot <> dcbDefault
+  // - used for TDhcpProcessData.Boot: TDhcpClientBoot <> dcbDefault
   // - Remote[] are consolidated for proper fallback between boot options
   TDhcpScopeBoot = record
     /// IP address or hostname sent back as doTftpServerName option 66
@@ -899,8 +899,8 @@ type
     RecvType: TDhcpMessageType;
     /// the DHCP message type prepared into Send
     SendType: TDhcpMessageType;
-    /// PXE remote boot options as parsed by TDhcpProcess.SetBoot
-    PxeBoot: TDhcpClientBoot;
+    /// the PXE remote boot type as parsed by TDhcpProcess.SetBoot
+    Boot: TDhcpClientBoot;
     /// UDP frame received from the client, parsed in RecvLens[]
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
@@ -2837,10 +2837,10 @@ begin
     AppendShortChar(' ', @msg);
     AppendShort(Data.HostName^, msg);
   end;
-  if Data.PxeBoot <> dcbDefault then
+  if Data.Boot <> dcbDefault then
   begin
     AppendShort(' boot=', msg); // e.g. 'boot=IpxeX64'
-    AppendShortAnsi7String(BOOT_TXT[Data.PxeBoot], msg);
+    AppendShortAnsi7String(BOOT_TXT[Data.Boot], msg);
   end;
   msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
   // efficiently append to local TSynLog
@@ -2856,7 +2856,7 @@ begin
   Data.Mac64 := 0;
   Data.Ip4 := 0;
   Data.SendType := dmtUndefined;
-  Data.PxeBoot := dcbDefault;
+  Data.Boot := dcbDefault;
   Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
   Data.Ip[0] := #0;
   if Data.Mac64 <> 0 then
@@ -3071,28 +3071,28 @@ begin
       dcbArm64:
         result := dcbArm64_Http;
     end;
-  Data.PxeBoot := result;
+  Data.Boot := result;
 end;
 
 procedure TDhcpProcess.AddBootOptions(var Data: TDhcpProcessData);
 var
   boot: ^TDhcpScopeBoot;
 begin
-  // we know that Data.PxeBoot <> dcbDefault: validate the request
+  // we know that Data.Boot <> dcbDefault: validate the request
   boot := @Data.Scope^.Boot;
-  if boot^.Remote[Data.PxeBoot] = '' then
+  if boot^.Remote[Data.Boot] = '' then
   begin
-    DoLog(sllDebug, 'missing Boot file', Data); // include 'boot=IpxeArm64'
-    Data.PxeBoot := dcbDefault;                 // no 'boot=...' any more
+    DoLog(sllDebug, 'missing Boot file', Data); // including 'boot=IpxeArm64'
+    Data.Boot := dcbDefault;                    // no 'boot=...' any more
     inc(Data.Scope^.Metrics.Current[dsmDroppedPxeBoot]);
     // will still send back an OFFER/ACK but with no PXE options
     // - this is what ISC DHCP, Kea, and dnsmasq do in practice
     exit;
   end;
   inc(Data.Scope^.Metrics.Current[dsmPxeBoot]);
-  // known configuration: append PXE/iPXE specific options
+  // known configuration: append PXE/iPXE specific 66/67 options
   DhcpAddOptionU(Data.SendEnd, doTftpServerName, boot^.NextServer);
-  DhcpAddOptionU(Data.SendEnd, doBootFileName,   boot^.Remote[Data.PxeBoot]);
+  DhcpAddOptionU(Data.SendEnd, doBootFileName,   boot^.Remote[Data.Boot]);
   // copy back verbatim option 60 and 97 to PXE clients
   DhcpDataCopyOption(Data, doVendorClassIdentifier);
   DhcpDataCopyOption(Data, doUuidClientIdentifier);
@@ -3391,7 +3391,7 @@ begin
       Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,15,28,42
         Data.RecvType <> dmtInform);       // [+51,58,59]
       if SetBoot(Data) <> dcbDefault then
-        AddBootOptions(Data);              // options 43,66,67,174
+        AddBootOptions(Data);              // options 60,66,67,97
       result := FinalizeFrame(Data);       // callback + options 61,82 + length
       if result <> 0 then
         DoLog(sllTrace, 'into', Data);     // if not canceled by callback
