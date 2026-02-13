@@ -1849,7 +1849,14 @@ function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 function ToIP4(const text: RawUtf8): TNetIP4;
 
 /// decode one or several IP addresses from CSV text
-function ToIP4s(const text: RawUtf8): TNetIP4s;
+function ToIP4s(const text: RawUtf8): TNetIP4s; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// decode one or several IP addresses from CSV text
+function ToIP4s(text: PUtf8Char): TNetIP4s; overload;
+
+/// compute a raw binary content from an array of ip4 - as used e.g. for DHCP
+function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 
 /// parse a text input buffer until the end space or EOL - used for config files
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
@@ -5392,6 +5399,11 @@ begin
 end;
 
 function ToIP4s(const text: RawUtf8): TNetIP4s;
+begin
+  result := ToIP4s(pointer(text));
+end;
+
+function ToIP4s(text: PUtf8Char): TNetIP4s;
 var
   p: PUtf8Char;
   v: TNetIP4;
@@ -5412,6 +5424,11 @@ begin
           inc(p);
       inc(p); // jump ','
     until false;
+end;
+
+function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
+begin
+  FastSetRawByteString(result, pointer(ip4), length(ip4) * 4);
 end;
 
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
