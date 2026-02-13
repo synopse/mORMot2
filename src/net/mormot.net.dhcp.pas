@@ -742,6 +742,66 @@ type
       read fRemote[dcbIpxe_Arm64] write fRemote[dcbIpxe_Arm64];
   end;
 
+  /// define a profile to "match and send" options for a given scope/subnet
+  // - i.e. settings for vendor-specific or client-specific DHCP options
+  // - both "all" and "any" conditions should match to trigger the output
+  // - "always" and "requested" define the options sent with the response
+  TDhcpProfileSettings = class(TSynPersistent)
+  protected
+    fAll, fAny, fAlways, fRequested: RawJson;
+  public
+    /// compute the low-level TDhcpScope.Profiles[] entry from current settings
+    // - raise an EDhcp exception if the parameters are not correct
+    procedure PrepareScope(var Profile: TDhcpScopeProfile);
+  published
+    /// a JSON object defining AND fields lookup logic
+    // - all key/value pairs must match input client options
+    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
+    // or "boot" for BOOT_TXT[] '"
+    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    // - so those three definitions are the same:
+    // $ "all": { "77": "iPXE", "93": "HEX:0007" }
+    // $ "all": { "user-class": "iPXE", "client-architecture": "HEX:0007" }
+    // $ "all": { "boot": "IpxeX64" }
+    property All: RawJson
+      read fAll write fAll;
+    /// a JSON object defining OR fields lookup logic
+    // - a single key/value pairs match is enough to trigger this logic
+    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
+    // or "boot" for BOOT_TXT[] '"
+    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    // - so those two definitions are the same:
+    // $ "any": { "97": "UUID:815be81d-3da1-46e5-b679-5c682627ece5" }
+    // $ "any": { "uuid-client-identifier": "UUID:815be81d-3da1-46e5-b679-5c682627ece5" }
+    property Any: RawJson
+      read fAny write fAny;
+    /// a JSON object defining the output options regardless of Option 55
+    // - Option 55 won't be checked: those options will always be sent
+    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class")
+    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    // or a nested TLV object
+    // - so we could define for instance:
+    // $ "always": {
+    // $   "boot-file-name": "bootx64-special.efi",
+    // $   "vendor-encapsulated-options": {
+    // $     "6": "IP:10.0.0.5", "9": "BASE64:Zm9vYmFy" } }
+    property Always: RawJson
+      read fAlways write fAlways;
+    /// a JSON object defining the output options following Option 55
+    // - only options defined within Option 55 will be sent
+    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class")
+    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    // or a nested TLV object
+    // - so those two definitions are the same:
+    // $ "requested": { "42": "IP:10.0.0.5" }
+    // $ "requested": { "ntp-servers": "IP:10.0.0.5" }
+    property Requested: RawJson
+      read fRequested write fRequested;
+  end;
+  /// a dynamic array of "match and send" options profiles
+  // - store any number of vendor-specific or client-specific DHCP options
+  TDhcpProfileSettingsObjArray = array of TDhcpProfileSettings;
+
   /// main high-level options for defining one scope/subnet for our DHCP Server
   TDhcpScopeSettings = class(TSynAutoCreateFields)
   protected
@@ -762,6 +822,7 @@ type
     fGraceFactor: cardinal;
     fOptions: TDhcpScopeOptions;
     fBoot: TDhcpBootSettings;
+    fProfiles: TDhcpProfileSettingsObjArray;
   public
     /// setup this instance with default values
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
@@ -844,6 +905,9 @@ type
     /// optional PXE network book settings
     property Boot: TDhcpBootSettings
       read fBoot;
+    /// vendor-specific or client-specific DHCP options for this scope
+    property Profiles: TDhcpProfileSettingsObjArray
+      read fProfiles;
   end;
   /// a dynamic array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
@@ -2386,6 +2450,7 @@ end;
 
 procedure TDhcpScope.AddOptions(var f: PAnsiChar; withLeaseTimes: boolean);
 begin
+  // default options
   DhcpAddOption32(f, doSubnetMask, Subnet.mask);
   if Broadcast <> 0 then
     DhcpAddOption32(f, doBroadcastAddress, Broadcast);
@@ -2396,11 +2461,13 @@ begin
   if NtpServers <> nil then
     DhcpAddOptions(f, doNtpServers, pointer(NtpServers));
   DhcpAddOptionU(f, doDomainName, DomainName);
-  if not withLeaseTimes then // stateless INFORM don't need timeouts
-    exit;
-  DhcpAddOption32(f, doDhcpLeaseTime,     LeaseTime); // already big-endian
-  DhcpAddOption32(f, doDhcpRenewalTime,   RenewalTime);
-  DhcpAddOption32(f, doDhcpRebindingTime, Rebinding);
+  // append timeouts - unless from stateless INFORM
+  if withLeaseTimes then
+  begin
+    DhcpAddOption32(f, doDhcpLeaseTime,     LeaseTime); // already big-endian
+    DhcpAddOption32(f, doDhcpRenewalTime,   RenewalTime);
+    DhcpAddOption32(f, doDhcpRebindingTime, Rebinding);
+  end;
 end;
 
 
@@ -2447,6 +2514,41 @@ begin
 end;
 
 
+{ TDhcpProfileSettings }
+
+procedure TDhcpProfileSettings.PrepareScope(var Profile: TDhcpScopeProfile);
+var
+  alw, req: TProfileValues;
+  v: TProfileValue;
+  i: PtrInt;
+begin
+  // parse main "profiles" JSON object fields
+  if not ParseProfile(fAll, Profile.all, {match=}true) then
+    EDhcp.RaiseUtf8('PrepareScope: invalid All=%', [fAll]);
+  if not ParseProfile(fAny, Profile.any, {match=}true) then
+    EDhcp.RaiseUtf8('PrepareScope: invalid Any=%', [fAny]);
+  if not ParseProfile(fAlways, alw, {match=}false) then
+    EDhcp.RaiseUtf8('PrepareScope: invalid Always=%', [fAlways]);
+  if not ParseProfile(fRequested, req, {match=}false) then
+    EDhcp.RaiseUtf8('PrepareScope: invalid Requested=%', [fRequested]);
+  // Profile.send[0] is "always" and should be stored as binary blob with op=0
+  Profile.send := nil;
+  if alw <> nil then
+  begin
+    v.op := 0;
+    v.opt := doPad;
+    v.boot := dcbDefault;
+    for i := 0 to high(alw) do
+      with alw[i] do // prepare TLV-concatenated
+        Append(v.value, [AnsiChar(op), AnsiChar(length(value)), value]);
+    AddProfileValue(Profile.send, v);
+  end;
+  // append "requested" with their op, ready to be filtered against option 55
+  for i := 0 to high(req) do
+    AddProfileValue(Profile.send, req[i]);
+end;
+
+
 { TDhcpScopeSettings }
 
 constructor TDhcpScopeSettings.Create;
@@ -2465,7 +2567,7 @@ var
   mask: TNetIP4;
   i: PtrInt;
 begin
-  // convert the text settings into Data.* raw values
+  // convert the current settings into Data.* raw values - raise EDhcp on error
   Data.Gateway           := ToIP4(fDefaultGateway);
   Data.Broadcast         := ToIP4(fBroadCastAddress);
   Data.ServerIdentifier  := ToIP4(fServerIdentifier);
@@ -2497,6 +2599,10 @@ begin
   Data.GraceFactor       := fGraceFactor;         // * 2
   Data.Options           := fOptions;
   fBoot.PrepareScope(Data.Boot, Data.Options);
+  Data.Profiles := nil;
+  SetLength(Data.Profiles, length(fProfiles));
+  for i := 0 to high(fProfiles) do
+    fProfiles[i].PrepareScope(Data.Profiles[i]);
   // retrieve and adjust the subnet mask from settings
   if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
