@@ -11,6 +11,7 @@ object InvoiceItemEditForm: TInvoiceItemEditForm
   Font.Color = clWindowText
   Position = poMainFormCenter
   OnCreate = FormCreate
+  OnShow = FormShow
   object LabelDescription: TLabel
     Left = 16
     Height = 18
