@@ -134,7 +134,7 @@ begin
   Layout.PlaceRight(SpinDiscount, LabelPercent, 0.25);
 
   Layout.AutoSizeForm;
-  Position := poMainFormCenter;
+  Position := poDesktopCenter;
   ClientHeight := ClientHeight + CancelButton.Height + Layout.Margins.Bottom;
 
   // Place Cancel button at bottom-right

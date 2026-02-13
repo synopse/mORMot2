@@ -137,10 +137,10 @@ begin
 
   // Place buttons below last edit
   Layout.PlaceBelowRight(EditDate, CancelButton, 1.0);
-  Layout.PlaceLeft(CancelButton, SaveButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
   Layout.AutoSizeForm;
-  Position := poMainFormCenter;
+  Position := poDesktopCenter;
 end;
 
 procedure TPaymentEntryForm.FormDestroy(Sender: TObject);

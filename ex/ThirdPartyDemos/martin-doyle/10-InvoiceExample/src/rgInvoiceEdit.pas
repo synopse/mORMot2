@@ -9,7 +9,7 @@
   Module : rgInvoiceEdit.pas
 
   Last modified
-    Date : 09.02.2026
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -125,86 +125,83 @@ end;
 
 procedure TInvoiceEditForm.SetupLayout;
 var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth, GridWidth, ScrollbarWidth: Integer;
-  BaseHeight: Integer;
+  GridWidth, ScrollbarWidth: Integer;
 begin
-  BaseHeight := LabelCustomer.Height;
-  Margins := LayoutMargins(BaseHeight);
+  InitLayout(LabelCustomer.Height, EditOrderNo.Height,
+    5.0 * LabelCustomer.Height, 12.0 * LabelCustomer.Height);
+
   ScrollbarWidth := 16;
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  GridWidth := Round(44 * LabelHeight);
 
-    LabelWidth := Round(8 * BaseHeight);
-    EditWidth := Round(12 * BaseHeight);
+  // Prepare labels and edits
+  PrepareLabel(LabelCustomer);
+  PrepareLabel(LabelCustomerValue);
+  LabelCustomerValue.Width := EditWidth;
+  PrepareLabelEdit(LabelOrderNo, EditOrderNo);
+  PrepareLabelEdit(LabelSaleDate, EditSaleDate);
+  PrepareLabelEdit(LabelShipDate, EditShipDate);
 
-    GridWidth := Round(44 * BaseHeight);
+  // Date fields are narrower than standard edit width
+  EditSaleDate.Width := Round(8.0 * LabelHeight);
+  EditShipDate.Width := Round(8.0 * LabelHeight);
 
-    LabelCustomer.Width := LabelWidth;
-    LabelOrderNo.Width := LabelWidth;
-    LabelSaleDate.Width := LabelWidth;
-    LabelShipDate.Width := LabelWidth;
+  // Position first row: customer (read-only)
+  LabelCustomer.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
+  Layout.PlaceRight(LabelCustomer, LabelCustomerValue, 1.0);
 
-    EditOrderNo.Width := EditWidth;
-    EditSaleDate.Width := Round(8 * BaseHeight);
-    EditShipDate.Width := Round(8 * BaseHeight);
+  // Position order number row
+  Layout.PlaceBelow(LabelCustomer, LabelOrderNo, 0.5);
+  Layout.PlaceRight(LabelOrderNo, EditOrderNo, 1.0);
 
-    LabelCustomer.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelCustomer.Height);
+  // Position sale date row
+  Layout.PlaceBelow(LabelOrderNo, LabelSaleDate, 0.5);
+  Layout.PlaceRight(LabelSaleDate, EditSaleDate, 1.0);
 
-    Layout.Place(LabelCustomer, LabelCustomerValue, ldRight, 0.5);
+  // Position ship date on same row as sale date
+  Layout.PlaceRight(EditSaleDate, LabelShipDate, 1.0);
+  Layout.PlaceRight(LabelShipDate, EditShipDate, 1.0);
 
-    Layout.Place(LabelCustomer, LabelOrderNo, ldBelow, 1.0);
-    Layout.Place(LabelOrderNo, EditOrderNo, ldRight, 0.5);
+  // Items toolbar panel
+  ItemsToolbarPanel.Width := GridWidth;
+  ItemsToolbarPanel.Height := Round(2.5 * LabelHeight);
+  Layout.PlaceBelow(LabelSaleDate, ItemsToolbarPanel, 1.0);
 
-    Layout.Place(LabelOrderNo, LabelSaleDate, ldBelow, 1.0);
-    Layout.Place(LabelSaleDate, EditSaleDate, ldRight, 0.5);
+  // Position toolbar buttons within panel (manual positioning)
+  AddItemButton.Left := 0;
+  AddItemButton.Top := (ItemsToolbarPanel.Height - AddItemButton.Height) div 2;
+  Layout.PlaceRight(AddItemButton, EditItemButton, 0.5);
+  Layout.PlaceRight(EditItemButton, RemoveItemButton, 0.5);
 
-    Layout.Place(EditSaleDate, LabelShipDate, ldRight, 2.0);
-    Layout.Place(LabelShipDate, EditShipDate, ldRight, 0.5);
+  // Items grid
+  FItemsListGrid.ClientHeight := Round(12 * LabelHeight);
+  FItemsListGrid.ClientWidth := GridWidth;
+  ScrollbarWidth := FItemsListGrid.Width - GridWidth;
+  Layout.PlaceBelow(ItemsToolbarPanel, FItemsListGrid, 0.2);
 
-    ItemsToolbarPanel.Width := GridWidth;
-    ItemsToolbarPanel.Height := Round(2.5 * BaseHeight);
+  // Total label
+  LabelTotalValue.Width := GridWidth - ScrollbarWidth;
+  Layout.PlaceBelowRight(FItemsListGrid, LabelTotalValue, 0.1);
 
-    Layout.Place(LabelSaleDate, ItemsToolbarPanel, ldBelow, 2.0);
+  // Place buttons below last edit
+  Layout.PlaceBelowRight(LabelTotalValue, CancelButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
-    AddItemButton.Left := 0;
-    AddItemButton.Top := (ItemsToolbarPanel.Height - AddItemButton.Height) div 2;
-    EditItemButton.Left := AddItemButton.Left + AddItemButton.Width + (BaseHeight div 2);
-    EditItemButton.Top := AddItemButton.Top;
-    RemoveItemButton.Left := EditItemButton.Left + EditItemButton.Width + (BaseHeight div 2);
-    RemoveItemButton.Top := AddItemButton.Top;
+  // Auto-size form based on content
+  Layout.AutoSizeForm;
+  // ClientHeight := ClientHeight + CancelButton.Height + Layout.Margins.Bottom;
+  Position := poDesktopCenter;
 
-
-    FItemsListGrid.ClientHeight := Round(12 * BaseHeight);
-    FItemsListGrid.ClientWidth := GridWidth;
-    ScrollbarWidth := FItemsListGrid.Width - GridWidth;
-
-    Layout.Place(ItemsToolbarPanel, FItemsListGrid, ldBelow, 0.2);
-
-    LabelTotalValue.Width:= GridWidth - ScrollbarWidth;
-    Layout.Place(FItemsListGrid, LabelTotalValue, ldBelow, 0.1);
-
-    // Auto-size form based on content
-    Layout.AutoSizeForm;
-    Position := poMainFormCenter;
-    ClientHeight := ClientHeight + CancelButton.Height + Margins.Bottom;
-
-    // Place OK button at bottom-right
-    CancelButton.SetBounds(
-      ClientWidth - Margins.Right - CancelButton.Width,
-      ClientHeight - Margins.Bottom - CancelButton.Height,
-      CancelButton.Width,
-      CancelButton.Height
-    );
-    Layout.Place(CancelButton, SaveButton, ldLeft, 0.5);
-
-
-  finally
-    Layout.Free;
-  end;
+  {
+  // Place Cancel button at bottom-right, Save to its left
+  CancelButton.SetBounds(
+    ClientWidth - Layout.Margins.Right - CancelButton.Width,
+    ClientHeight - Layout.Margins.Bottom - CancelButton.Height,
+    CancelButton.Width,
+    CancelButton.Height
+  );
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
+  }
 end;
 
 procedure TInvoiceEditForm.SetListGridColumns;
