@@ -345,8 +345,8 @@ var
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 
 /// raw generation of a Type-Length-Value (TLV) binary from JSON
-function TlvFromJson(p: PUtf8Char; var v: RawByteString): boolean;
-
+function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean; overload;
+function TlvFromJson(const json: RawUtf8): RawByteString; overload;
 
 
 { **************** Low-Level per-scope DHCP metrics }
@@ -1642,6 +1642,9 @@ begin // caller ensured p <> nil
   result := default;
 end;
 
+type
+  TParseProfile = (ppMatch, ppValue, ppTlv);
+
 function SetProfileValue(var p: TJsonParserContext; var v: RawByteString;
   op: byte): boolean;
 var
@@ -1696,7 +1699,7 @@ begin
         end;
       7:    // uint16:
         begin
-          tmp.c0 := bswap16(GetCardinal(p.Value + 6));
+          tmp.c0 := bswap16(GetCardinal(p.Value + 7));
           FastSetRawByteString(v, @tmp.c0, 2);
           result := true;
         end;
@@ -1765,7 +1768,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
 end;
 
 function ParseProfileValue(var parser: TJsonParserContext; var v: TProfileValue;
-  match: boolean): boolean;
+  pp: TParseProfile): boolean;
 begin
   result := false;
   v.op := 0;
@@ -1775,25 +1778,30 @@ begin
   if not parser.GetJsonFieldName then
     exit;
   v.op := GetCardinal(parser.Value);
-  if v.op <> 0 then
-  begin
-    if v.op <= high(DHCP_OPTION_INV) then
-      v.opt := DHCP_OPTION_INV[v.op];
-  end
-  else if parser.ValueLen = 0 then
-    exit
-  else if match and
-          PropNameEquals('boot', PAnsiChar(parser.Value), parser.ValueLen) then
-  begin
-    result := parser.ParseNext and
-              parser.ValueEnumFromConst(@DHCP_BOOT, length(DHCP_BOOT), v.boot);
+  if pp <> ppTlv then // TlvFromJson() only accept numbers, not options
+    if v.op <> 0 then
+    begin
+      if v.op <= high(DHCP_OPTION_INV) then
+        v.opt := DHCP_OPTION_INV[v.op];
+    end
+    else if parser.ValueLen = 0 then
+      exit
+    else if (pp = ppMatch) and
+            PropNameEquals('boot', PAnsiChar(parser.Value), parser.ValueLen) then
+    begin
+      result := parser.ParseNext and
+                parser.ValueEnumFromConst(@DHCP_BOOT, length(DHCP_BOOT), v.boot);
+      exit;
+    end
+    else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
+      v.op := DHCP_OPTION_NUM[v.opt]
+    else
+      exit;
+  if not parser.ParseNextAny then
     exit;
-  end
-  else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
-    v.op := DHCP_OPTION_NUM[v.opt]
+  if pp = ppTlv then
+    result := SetProfileValue(parser, v.value, 0) // op is no option
   else
-    exit;
-  if parser.ParseNextAny then
     result := SetProfileValue(parser, v.value, v.op);
 end;
 
@@ -1809,14 +1817,39 @@ end;
 // about TLV (Type-Length-Value) encoding, see e.g.
 // https://www.ibm.com/docs/en/tpmfod/7.1.1.4?topic=configuration-dhcp-option-43
 
-function TlvFromJson(p: PUtf8Char; var v: RawByteString): boolean;
+function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean;
+var
+  one: TProfileValue;
+  parser: TJsonParserContext;
 begin
-  // TODO: TLV parsing from JSON object
   result := false;
+  if p = nil then
+    exit;
+  parser.InitParser(p);
+  if not parser.ParseObject then
+    exit;
+  repeat
+    if not ParseProfileValue(parser, one, ppTlv) then
+      exit;
+    Append(v, [AnsiChar(one.op), AnsiChar(length(one.value)), one.value])
+  until parser.EndOfObject = '}';
+  result := true;
+end;
+
+function TlvFromJson(const json: RawUtf8): RawByteString; // for debug
+var
+  tmp: TSynTempBuffer; // make a private local copy
+begin
+  tmp.Init(json);
+  try
+    TlvFromJson(tmp.buf, result);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function ParseProfile(const json: RawUtf8; out v: TProfileValues;
-  match: boolean): boolean;
+  pp: TParseProfile): boolean;
 var
   one: TProfileValue;
   parser: TJsonParserContext;
@@ -1830,11 +1863,11 @@ begin
     parser.InitParser(tmp.buf);
     if not parser.ParseObject then
       exit;
-    while parser.EndOfObject <> '}' do
-      if ParseProfileValue(parser, one, match) then
-        AddProfileValue(v, one)
-      else
+    repeat
+      if not ParseProfileValue(parser, one, pp) then
         exit;
+      AddProfileValue(v, one)
+    until parser.EndOfObject = '}';
     result := true;
   finally
     tmp.Done;
@@ -2524,13 +2557,13 @@ var
   i: PtrInt;
 begin
   // parse main "profiles" JSON object fields
-  if not ParseProfile(fAll, Profile.all, {match=}true) then
+  if not ParseProfile(fAll, Profile.all, ppMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid All=%', [fAll]);
-  if not ParseProfile(fAny, Profile.any, {match=}true) then
+  if not ParseProfile(fAny, Profile.any, ppMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid Any=%', [fAny]);
-  if not ParseProfile(fAlways, alw, {match=}false) then
+  if not ParseProfile(fAlways, alw, ppValue) then
     EDhcp.RaiseUtf8('PrepareScope: invalid Always=%', [fAlways]);
-  if not ParseProfile(fRequested, req, {match=}false) then
+  if not ParseProfile(fRequested, req, ppValue) then
     EDhcp.RaiseUtf8('PrepareScope: invalid Requested=%', [fRequested]);
   // Profile.send[0] is "always" and should be stored as binary blob with op=0
   Profile.send := nil;
