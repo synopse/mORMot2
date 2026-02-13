@@ -1553,7 +1553,7 @@ const
 
 procedure TNetworkProtocols.DHCP;
 var
-  refdisc, refoffer, refreq, refack: RawByteString;
+  refdisc, refoffer, refreq, refack, tlv: RawByteString;
   mac, ip, txt, json: RawUtf8;
   fn: TFileName;
   lens: TDhcpParsed;
@@ -1660,6 +1660,12 @@ begin
     Check(opt = opt2);
   end;
   Check(not FromText('none', opt2));
+  CheckEqual(TlvFromJson(''), '');
+  CheckEqual(LogEscapeFull(TlvFromJson('{6:"bcd"}')), '$06$03bcd');
+  CheckEqual(LogEscapeFull(TlvFromJson('{6:"uint8:7"}')), '$06$01$07');
+  CheckEqual(LogEscapeFull(TlvFromJson('{6:"uint16:7"}')), '$06$02$00$07');
+  CheckEqual(LogEscapeFull(TlvFromJson('{6:7}')), '$06$04$00$00$00$07');
+  CheckEqual(LogEscapeFull(TlvFromJson('{6:"hex:010203"}')), '$06$03$01$02$03');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
