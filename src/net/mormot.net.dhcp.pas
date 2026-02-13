@@ -312,6 +312,27 @@ type
     uuid: RawByteString;
   end;
 
+  /// store one DHCP option number associated to a binary value
+  // - used to match "all" and "any" against a value
+  // - used to store "always" and "requested" data to be sent back to the client
+  TProfileValue = record
+    /// the raw option number to match, or to be sent back
+    // - contains 0 for "always" options or "boot" match
+    op: byte;
+    /// the known option enum corresponding to the op integer
+    // - opt=doPad for an unknown option: slower manual O(n) lookup would happen
+    opt: TDhcpOption;
+    /// the "boot" matching value (with op=0 and opt=doPad)
+    boot: TDhcpClientBoot;
+    /// the associated raw binary value
+    value: RawByteString;
+  end;
+  PProfileValue = ^TProfileValue;
+
+  /// store one DHCP option number associated to a binary value
+  // - "always" options are just stored with op = 0
+  TProfileValues = array of TProfileValue;
+
 var
   /// contains PXE boot network identifiers used for JSON/INI settings fields
   // - i.e. 'Default', 'Bios', 'X86', 'X64', 'Arm32', 'Arm64', 'X64Http',
@@ -1106,7 +1127,7 @@ begin
   p := @d[6];
 end;
 
-procedure DhcpAddOptionRaw(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt);
+procedure DhcpAddOptionRaw(var p: PAnsiChar; const op: byte; b: pointer; len: PtrUInt);
 var
   d: PByteArray;
 begin
@@ -1128,7 +1149,7 @@ begin
     DhcpAddOptionBuf(p, op, pointer(v), PStrLen(PAnsiChar(pointer(v)) - _STRLEN)^);
 end;
 
-procedure DhcpAddOptionU(var p: PAnsiChar; const op: cardinal; const v: RawUtf8);
+procedure DhcpAddOptionU(var p: PAnsiChar; const op: byte; const v: RawUtf8);
 begin
   if pointer(v) <> nil then
     DhcpAddOptionRaw(p, op, pointer(v), PStrLen(PAnsiChar(pointer(v)) - _STRLEN)^);
@@ -1152,16 +1173,6 @@ begin
   // copy whole "DHCP_OPTION_NUM + len + data" binary block
   MoveFast(sourcelen[-1], p^, ord(sourcelen^) + 2);
   inc(p, ord(sourcelen^) + 2);
-end;
-
-procedure DhcpDataCopyOption(var Data: TDhcpProcessData; op: TDhcpOption);
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  b: PtrUInt;
-begin
-  b := Data.RecvLens[op];
-  if b <> 0 then
-    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
 end;
 
 function DhcpAddOptionRequestList(p: PAnsiChar; op: TDhcpOptions): PAnsiChar;
@@ -1265,7 +1276,7 @@ begin
      (dhcp^.xid = 0) or
      not (dhcp^.op in [BOOT_REQUEST, BOOT_REPLY]) then
     exit;
-  // parse DHCP options
+  // parse DHCP options store as Type-Length-Value (TLV)
   p := @dhcp^.options;
   repeat
     // check len to avoid buffer overflow on malformatted input
@@ -1385,6 +1396,365 @@ begin
     until n = 0;
 end;
 
+procedure DhcpDataCopyOption(var Data: TDhcpProcessData; op: TDhcpOption);
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  b: PtrUInt;
+begin
+  b := Data.RecvLens[op];
+  if b <> 0 then
+    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
+end;
+
+procedure DhcpDataAddOptionSafe(var Data: TDhcpProcessData; const op: byte;
+  v: PAnsiChar);
+var
+  len: PtrUInt;
+begin
+  if pointer(v) = nil then
+    exit;
+  len := PStrLen(v - _STRLEN)^;
+  if Data.SendEnd + len < @Data.Send.options[high(Data.Send.options)] then
+    // be paranoid with "profiles": avoid buffer overflow
+    DhcpAddOptionRaw(Data.SendEnd, op, v, len);
+end;
+
+procedure DhcpDataAddOptionProfile(var Data: TDhcpProcessData; p: PProfileValue);
+var
+  len, n: PtrUInt;
+  requested: PByteArray;
+begin
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  // append "always" - should be as send[0].op=0
+  if p^.op = 0 then
+  begin
+    len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
+    MoveFast(pointer(p^.value)^, Data.SendEnd^, len); // as a pre-computed blob
+    inc(Data.SendEnd, len);
+    inc(p);
+    dec(n);
+    if n = 0 then
+      exit;
+  end;
+  // access option 55 list
+  len := Data.RecvLens[doDhcpParameterRequestList];
+  if len = 0 then
+    exit;
+  requested := @Data.Recv.options[len + 1]; // len + [1,3,6,15,51,54]
+  // process "requested" options, filtering each op
+  repeat
+    if ByteScanIndex(@requested[1], requested[0], p^.op) >= 0 then // SSE2 asm
+      DhcpDataAddOptionSafe(Data, p^.op, pointer(p^.value)); // as individual TLV
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+function DhcpDataMatchOne(var Data: TDhcpProcessData; one: PProfileValue): boolean;
+var
+  len: PtrUInt;
+  option, value: PAnsiChar;
+begin
+  result := false;
+  // find the option in Data.Recv
+  if one^.opt <> doPad then
+  begin
+    len := Data.RecvLens[one^.opt]; // fast O(1) lookup of known option
+    if len = 0 then
+      exit;
+    option := @Data.Recv.options[len];
+  end
+  else if one^.op = 0 then // check one^.boot
+  begin
+    result := Data.Boot = one^.boot; // fastest path using SetBoot() logic
+    exit;
+  end
+  else
+  begin
+    option := @Data.Recv.options; // inlined DhcpFindOption()
+    repeat
+      if option[0] = AnsiChar(one^.op) then
+        break;
+      option := @option[ord(option[1]) + 2]; // O(n) lookup of raw op number
+      if option[0] = #255 then
+        exit;
+    until false;
+    inc(option); // option[0] = len
+  end;
+  // compare the one^.value with the option from Data.Recv
+  value := pointer(one^.value);
+  len := PStrLen(value - _STRLEN)^; // we know value<>nil and len>0
+  if len <> ord(option[0]) then
+    exit;
+  repeat
+    dec(len);                         // endings are more likely to change
+    if option[len] <> value[len] then // faster than CompareMem() here
+      exit;
+  until len = 0;
+  result := true; // exact case-sensitive match
+end;
+
+function DhcpDataMatchAll(var Data: TDhcpProcessData; all: PProfileValue): boolean;
+var
+  n: integer;
+begin // caller ensured all <> nil
+  result := false;
+  n := PDALen(PAnsiChar(all) - _DALEN)^ + _DAOFF;
+  repeat
+    if not DhcpDataMatchOne(Data, all) then
+      exit; // missing one
+    inc(all);
+    dec(n);
+  until n = 0;
+  result := true;
+end;
+
+function DhcpDataMatchAny(var Data: TDhcpProcessData; any: PProfileValue): boolean;
+var
+  n: integer;
+begin // caller ensured any <> nil
+  result := true;
+  n := PDALen(PAnsiChar(any) - _DALEN)^ + _DAOFF;
+  repeat
+    if DhcpDataMatchOne(Data, any) then
+      exit; // found one
+    inc(any);
+    dec(n);
+  until n = 0;
+  result := false;
+end;
+
+function DhcpDataMatchProfile(var Data: TDhcpProcessData;
+  p: PDhcpScopeProfile): PDhcpScopeProfile;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  n: integer;
+  default: PDhcpScopeProfile;
+begin // caller ensured p <> nil
+  result := p;
+  default := nil;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  repeat
+    if // AND conditions (all must match)
+       ((result^.all = nil) or
+        DhcpDataMatchAll(Data, pointer(result^.all))) and
+       // OR conditions (at least one must match)
+       ((result^.any = nil) or
+        DhcpDataMatchAny(Data, pointer(result^.any))) then
+      // both "all" and "any" conditions did match
+      if (result^.all = nil) and
+         (result^.any = nil) then
+        // all=any=nil as fallback if nothing more precise did apply
+        default := result
+      else
+        // return first matching profile (deterministic)
+        exit;
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := default;
+end;
+
+function SetProfileValue(var p: TJsonParserContext; var v: RawByteString;
+  op: byte): boolean;
+var
+  tmp: THash128Rec;
+  len: PtrInt;
+  d: PAnsiChar;
+label
+  uuid97;
+begin
+  result := false;
+  len := p.ValueLen;
+  if len = 0 then
+    exit;
+  if p.WasString then
+    // handle "..." string values
+    case IdemPCharArray(p.Value,
+           ['IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
+            'UINT8:', 'UINT16:']) of
+      0:    // ip:
+        begin
+          v := IP4sToBinary(ToIP4s(p.Value + 3)); // allow CSV of IPs
+          result := v <> '';
+        end;
+      1:    // mac:
+        begin
+          result := TextToMac(p.Value + 4, @tmp);
+          if result then
+            FastSetRawByteString(v, @tmp, 6);
+        end;
+      2:    // hex:
+        result := (len > 4) and
+                  (len < (255 * 2) + 4) and
+                  HexToBin(PAnsiChar(p.Value + 4), len - 4, v);
+      3:    // base64:
+        result := (len > 7) and
+                  (len < 340 + 7) and
+                  Base64ToBin(PAnsiChar(p.Value + 7), len - 7, v);
+      4, 5: // uuid: guid:
+        begin
+          result := RawUtf8ToGuid(p.Value + 5, len - 5, tmp.guid);
+          if not result then
+            exit;
+          if op = 97 then
+            goto uuid97; // special encoding as 17-bytes with initial #0
+          FastSetRawByteString(v, @tmp.guid, SizeOf(TGuid));
+        end;
+      6:    // uint8:
+        begin
+          tmp.c0 := GetCardinal(p.Value + 6);
+          FastSetRawByteString(v, @tmp.c0, 1);
+          result := true;
+        end;
+      7:    // uint16:
+        begin
+          tmp.c0 := bswap16(GetCardinal(p.Value + 6));
+          FastSetRawByteString(v, @tmp.c0, 2);
+          result := true;
+        end;
+    else
+      begin
+        // recognize configurable options
+        case op of
+          3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 54, 65,
+          68 .. 76, 85, 89, 112, 136, 138:
+            begin
+              v := IP4sToBinary(ToIP4s(p.Value)); // allow CSV of IP4
+              result := v <> '';
+              if result then
+                exit;
+            end;
+          97:
+            begin
+              result := RawUtf8ToGuid(p.Value, len, tmp.guid);
+              if result then
+              begin
+uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
+                d^ := #0;
+                PGuid(d + 1)^ := tmp.guid;
+                exit;
+              end;
+            end;
+        end;
+        // fallback to store as plain UTF-8 text
+        FastSetString(RawUtf8(v), p.Value, len);
+        result := true;
+      end;
+    end
+  else
+    case p.Value[0] of
+      '0' .. '9':
+        begin
+          // recognize most JSON number size from configurable options
+          tmp.c0 := GetCardinal(p.Value);
+          case op of
+            23, 37, 46, 52, 116:
+              len := 1; // uint8
+            13, 22, 25, 26, 57, 93, 117:
+              begin
+                tmp.c0 := bswap16(tmp.c0);
+                len := 2; // uint16
+              end;
+          else
+            begin
+              tmp.c0 := bswap32(tmp.c0);
+              len := 4; // default uint32
+            end;
+          end;
+          FastSetRawByteString(v, @tmp.c0, len);
+          result := true;
+        end;
+      't', 'f':
+        begin
+          // true/false boolean
+          tmp.b[0] := ord(p.Value[0] = 't');
+          FastSetRawByteString(v, @tmp.b, 1); // store 0/1 byte
+        end;
+      '{':
+        // try to parse a JSON object into a TLV value
+        result := TlvFromJson(p.Value, v);
+    end;
+end;
+
+function ParseProfileValue(var parser: TJsonParserContext; var v: TProfileValue;
+  match: boolean): boolean;
+begin
+  result := false;
+  v.op := 0;
+  v.opt := doPad;
+  v.boot := dcbDefault;
+  v.value := '';
+  if not parser.GetJsonFieldName then
+    exit;
+  v.op := GetCardinal(parser.Value);
+  if v.op <> 0 then
+  begin
+    if v.op <= high(DHCP_OPTION_INV) then
+      v.opt := DHCP_OPTION_INV[v.op];
+  end
+  else if parser.ValueLen = 0 then
+    exit
+  else if match and
+          PropNameEquals('boot', PAnsiChar(parser.Value), parser.ValueLen) then
+  begin
+    result := parser.ParseNext and
+              parser.ValueEnumFromConst(@DHCP_BOOT, length(DHCP_BOOT), v.boot);
+    exit;
+  end
+  else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
+    v.op := DHCP_OPTION_NUM[v.opt]
+  else
+    exit;
+  if parser.ParseNextAny then
+    result := SetProfileValue(parser, v.value, v.op);
+end;
+
+procedure AddProfileValue(var a: TProfileValues; var v: TProfileValue);
+var
+  n: PtrInt;
+begin
+  n := length(a);
+  SetLength(a, n + 1);
+  a[n] := v;
+end;
+
+// about TLV (Type-Length-Value) encoding, see e.g.
+// https://www.ibm.com/docs/en/tpmfod/7.1.1.4?topic=configuration-dhcp-option-43
+
+function TlvFromJson(p: PUtf8Char; var v: RawByteString): boolean;
+begin
+  // TODO: TLV parsing from JSON object
+  result := false;
+end;
+
+function ParseProfile(const json: RawUtf8; out v: TProfileValues;
+  match: boolean): boolean;
+var
+  one: TProfileValue;
+  parser: TJsonParserContext;
+  tmp: TSynTempBuffer; // make a private local copy
+begin
+  result := json = '';
+  if result then
+    exit;
+  tmp.Init(json);
+  try
+    parser.InitParser(tmp.buf);
+    if not parser.ParseObject then
+      exit;
+    while parser.EndOfObject <> '}' do
+      if ParseProfileValue(parser, one, match) then
+        AddProfileValue(v, one)
+      else
+        exit;
+    result := true;
+  finally
+    tmp.Done;
+  end;
+end;
 
 function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 var
