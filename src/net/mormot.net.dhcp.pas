@@ -16,6 +16,7 @@ unit mormot.net.dhcp;
    Background lease persistence using dnsmasq-compatible text files.
    Static IP reservation using MAC address or UUID Identifiers Option 61.
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
+   Convenient JSON profiles for vendor-specific or user-specific options.
    Scale up to 100k+ leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
@@ -3397,6 +3398,7 @@ end;
 function TDhcpProcess.FinalizeFrame(var Data: TDhcpProcessData): PtrInt;
 var
   b: PtrUInt;
+  options: pointer;
 begin
   // optional callback support
   if Assigned(fOnComputeResponse) then
@@ -3409,6 +3411,14 @@ begin
       result := 0;
       exit; // callback asked to silently ignore this frame
     end;
+  end;
+  // support "profiles" match and custom options
+  options := Data.Scope^.Profiles;
+  if options <> nil then
+  begin
+    options := DhcpDataMatchProfile(Data, options);
+    if options <> nil then
+      DhcpDataAddOptionProfile(Data, options);
   end;
   // send back verbatim Option 61 if any
   b := Data.RecvLens[doDhcpClientIdentifier];
@@ -3911,7 +3921,9 @@ initialization
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT, scAny_Removed);
   {$ifndef HASDYNARRAYTYPE}
-  Rtti.RegisterObjArray(TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings);
+  Rtti.RegisterObjArrays([
+    TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings,
+    TypeInfo(TDhcpProfileSettingsObjArray), TDhcpProfileSettings]);
   {$endif HASDYNARRAYTYPE}
 
 end.
