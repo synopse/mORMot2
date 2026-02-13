@@ -206,7 +206,7 @@ function DhcpClient(var dhcp: TDhcpPacket; dmt: TDhcpMessageType;
   const addr: TNetMac; req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
 
 /// raw append a value to TDhcpPacket.options[] - maybe any non-TDhcpOption
-procedure DhcpAddOptionRaw(var p: PAnsiChar; op: byte; b: pointer; len: PtrUInt);
+procedure DhcpAddOptionRaw(var p: PAnsiChar; const op: byte; b: pointer; len: PtrUInt);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// append a 8-bit byte value to TDhcpPacket.options[]
@@ -226,7 +226,7 @@ procedure DhcpAddOptionU(var p: PAnsiChar; const op: TDhcpOption; const v: RawUt
   overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// append a raw text or binary to TDhcpPacket.options[] - do nothing if v is ''
-procedure DhcpAddOptionU(var p: PAnsiChar; const op: cardinal; const v: RawUtf8);
+procedure DhcpAddOptionU(var p: PAnsiChar; const op: byte; const v: RawUtf8);
   overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// append a short raw text to TDhcpPacket.options[] - do nothing if v is ''
@@ -252,6 +252,13 @@ type
 // - returns dmtUndefined on invalid input DHCP frame
 function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
   found: PDhcpOptions = nil; mac: PNetMac = nil): TDhcpMessageType;
+
+/// locate an option by number in a DHCP packet
+// - assume dhcp^ contains a packet already validated by DhcpParse()
+// - returns nil if not found, or the location of op value in dhcp^.option[]
+// - brute force O(n) search - DhcpParse() would allow faster O(1) lens[] lookup
+function DhcpFindOption(dhcp: PDhcpPacket; op: byte): PAnsiChar;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// result the text value stored at dhcp^.option[lens[opt]] or @NULCHAR = ''
 function DhcpData(dhcp: PDhcpPacket; len: PtrUInt): PShortString;
@@ -1296,6 +1303,17 @@ begin
     mac^ := m^; // copy
   end;
   result := TDhcpMessageType(dmt);
+end;
+
+function DhcpFindOption(dhcp: PDhcpPacket; op: byte): PAnsiChar;
+begin
+  result := @dhcp^.options;
+  repeat
+    if result[0] = AnsiChar(op) then // quickly parse Type-Length-Value encoding
+      exit;
+    result := @result[ord(result[1]) + 2];
+  until result[0] = #255;
+  result := nil;
 end;
 
 function DhcpData(dhcp: PDhcpPacket; len: PtrUInt): PShortString;
