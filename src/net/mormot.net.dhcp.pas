@@ -130,6 +130,7 @@ type
  // - doDomainName is option 15 (example.local)
  // - doBroadcastAddress is option 28 (192.168.1.255)
  // - doNtpServers is option 42
+ // - doVendorEncapsulatedOptions is option 43
  // - doDhcpRequestedAddress is Requested IP Address option 50 (0.0.0.0)
  // - doDhcpLeaseTime is IP Lease Duration in seconds option 51 (86400 for 24h)
  // - doDhcpMessageType is option 53 (TDhcpMessageType) - first to appear
@@ -156,6 +157,7 @@ type
    doDomainName,
    doBroadcastAddress,
    doNtpServers,
+   doVendorEncapsulatedOptions,
    doDhcpRequestedAddress,
    doDhcpLeaseTime,
    doDhcpMessageType,
@@ -1118,7 +1120,7 @@ end;
 
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
-    0, 1, 3, 6, 12, 15, 28, 42, 50, 51, 53, 54, 55,
+    0, 1, 3, 6, 12, 15, 28, 42, 43, 50, 51, 53, 54, 55,
     58, 59, 60, 61, 66, 67, 77, 82, 93, 97, 118, 255);
 var
   DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption; // for fast O(1) lookup
