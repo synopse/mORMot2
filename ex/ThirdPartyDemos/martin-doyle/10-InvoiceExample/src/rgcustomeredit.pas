@@ -65,6 +65,7 @@ type
     CancelButton: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
   private
@@ -108,101 +109,68 @@ procedure TCustomerEditForm.FormCreate(Sender: TObject);
 begin
   FCustomerID := 0;
   FormMode := fmBrowse;
-  SetupLayout;
 end;
 
 procedure TCustomerEditForm.SetupLayout;
-var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
-  BaseHeight: Integer;
 begin
-  // Use label height as base unit for all calculations
-  BaseHeight := LabelCustomerNo.Height;
+  InitLayout(LabelCustomerNo.Height, EditCustomerNo.Height,
+    7.0 * LabelCustomerNo.Height, 18.75 * LabelCustomerNo.Height);
 
-  // Calculate margins based on base height
-  Margins := LayoutMargins(BaseHeight);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  // Prepare label-edit pairs: AutoSize off, uniform sizes, text centered, FocusControl
+  PrepareLabelEdit(LabelCustomerNo, EditCustomerNo);
+  PrepareLabelEdit(LabelCompany, EditCompany);
+  PrepareLabelEdit(LabelPhone, EditPhone);
+  PrepareLabelEdit(LabelFax, EditFax);
+  PrepareLabelEdit(LabelAddress, EditAddress);
+  PrepareLabelEdit(LabelZip, EditZip);
+  PrepareLabelEdit(LabelCity, EditCity);
+  PrepareLabelEdit(LabelCountry, EditCountry);
 
-    // Calculate widths based on base height (proportional sizing)
-    LabelWidth := Round(6.25 * BaseHeight);  // ~100px at 16px height
-    EditWidth := Round(18.75 * BaseHeight);  // ~300px at 16px height - uniform width
+  // Position first label
+  LabelCustomerNo.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
 
-    // Set label widths for alignment
-    LabelCustomerNo.Width := LabelWidth;
-    LabelCompany.Width := LabelWidth;
-    LabelPhone.Width := LabelWidth;
-    LabelFax.Width := LabelWidth;
-    LabelAddress.Width := LabelWidth;
-    LabelZip.Width := LabelWidth;
-    LabelCity.Width := LabelWidth;
-    LabelCountry.Width := LabelWidth;
+  // Position first edit next to label
+  Layout.PlaceRight(LabelCustomerNo, EditCustomerNo, 1.0);
 
-    // Set all edit widths the same for consistency
-    EditCustomerNo.Width := EditWidth;
-    EditCompany.Width := EditWidth;
-    EditPhone.Width := EditWidth;
-    EditFax.Width := EditWidth;
-    EditAddress.Width := EditWidth;
-    EditZip.Width := EditWidth;
-    EditCity.Width := EditWidth;
-    EditCountry.Width := EditWidth;
+  // Position remaining label-edit pairs in column
+  Layout.PlaceBelow(LabelCustomerNo, LabelCompany, 0.5);
+  Layout.PlaceRight(LabelCompany, EditCompany, 1.0);
 
-    // Position first label
-    LabelCustomerNo.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelCustomerNo.Height);
+  Layout.PlaceBelow(LabelCompany, LabelPhone, 0.5);
+  Layout.PlaceRight(LabelPhone, EditPhone, 1.0);
 
-    // Position first edit next to label with proportional spacing
-    Layout.Place(LabelCustomerNo, EditCustomerNo, ldRight, 1.0);
+  Layout.PlaceBelow(LabelPhone, LabelFax, 0.5);
+  Layout.PlaceRight(LabelFax, EditFax, 1.0);
 
-    // Position remaining labels and edits in column with increased vertical spacing
-    Layout.Place(LabelCustomerNo, LabelCompany, ldBelow, 1.0);
-    Layout.Place(LabelCompany, EditCompany, ldRight, 1.0);
+  Layout.PlaceBelow(LabelFax, LabelAddress, 0.5);
+  Layout.PlaceRight(LabelAddress, EditAddress, 1.0);
 
-    Layout.Place(LabelCompany, LabelPhone, ldBelow, 1.0);
-    Layout.Place(LabelPhone, EditPhone, ldRight, 1.0);
+  Layout.PlaceBelow(LabelAddress, LabelZip, 0.5);
+  Layout.PlaceRight(LabelZip, EditZip, 1.0);
 
-    Layout.Place(LabelPhone, LabelFax, ldBelow, 1.0);
-    Layout.Place(LabelFax, EditFax, ldRight, 1.0);
+  Layout.PlaceBelow(LabelZip, LabelCity, 0.5);
+  Layout.PlaceRight(LabelCity, EditCity, 1.0);
 
-    Layout.Place(LabelFax, LabelAddress, ldBelow, 1.0);
-    Layout.Place(LabelAddress, EditAddress, ldRight, 1.0);
+  Layout.PlaceBelow(LabelCity, LabelCountry, 0.5);
+  Layout.PlaceRight(LabelCountry, EditCountry, 1.0);
 
-    Layout.Place(LabelAddress, LabelZip, ldBelow, 1.0);
-    Layout.Place(LabelZip, EditZip, ldRight, 1.0);
+  // Place buttons below last edit, right-aligned to edit's right edge
+  Layout.PlaceBelowRight(EditCountry, CancelButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
-    Layout.Place(LabelZip, LabelCity, ldBelow, 1.0);
-    Layout.Place(LabelCity, EditCity, ldRight, 1.0);
-
-    Layout.Place(LabelCity, LabelCountry, ldBelow, 1.0);
-    Layout.Place(LabelCountry, EditCountry, ldRight, 1.0);
-
-    // Auto-size the form based on all content except buttons
-    Layout.AutoSizeForm;
-
-    // Position buttons below last edit control with section spacing (2x base height)
-    SaveButton.Top := EditCountry.Top + EditCountry.Height + (2 * BaseHeight);
-    CancelButton.Top := SaveButton.Top;
-
-    // Position buttons horizontally at bottom-right with proper margins
-    CancelButton.Left := ClientWidth - Margins.Right - CancelButton.Width;
-    SaveButton.Left := CancelButton.Left - Margins.Middle - SaveButton.Width;
-
-    // Adjust form height to include buttons
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
-
-    Position := poMainFormCenter;
-  finally
-    Layout.Free;
-  end;
+  Layout.AutoSizeForm;
+  Position := poDesktopCenter;
 end;
 
 procedure TCustomerEditForm.FormDestroy(Sender: TObject);
 begin
   // nothing to free - services accessed via RgServices global
+end;
+
+procedure TCustomerEditForm.FormShow(Sender: TObject);
+begin
+  SetupLayout;
 end;
 
 procedure TCustomerEditForm.SetFormMode(AValue: TFormMode);

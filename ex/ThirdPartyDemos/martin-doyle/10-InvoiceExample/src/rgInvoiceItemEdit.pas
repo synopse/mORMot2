@@ -9,7 +9,7 @@
   Module : rgInvoiceItemEdit.pas
 
   Last modified
-    Date : 09.02.2026
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -57,6 +57,7 @@ type
     OKButton: TButton;
     CancelButton: TButton;
     procedure FormCreate(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure OKButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
     procedure EditQuantityKeyPress(Sender: TObject; var Key: char);
@@ -90,67 +91,60 @@ uses
 procedure TInvoiceItemEditForm.FormCreate(Sender: TObject);
 begin
   FSaveSuccessful := False;
+end;
+
+procedure TInvoiceItemEditForm.FormShow(Sender: TObject);
+begin
   SetupLayout;
 end;
 
 procedure TInvoiceItemEditForm.SetupLayout;
-var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
-  BaseHeight: Integer;
 begin
-  BaseHeight := LabelDescription.Height;
-  Margins := LayoutMargins(BaseHeight);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  InitLayout(LabelDescription.Height, EditDescription.Height,
+    7.0 * LabelDescription.Height, 14.0 * LabelDescription.Height);
 
-    LabelWidth := Round(7 * BaseHeight);
-    EditWidth := Round(14 * BaseHeight);
+  // Prepare label-edit pairs
+  PrepareLabelEdit(LabelDescription, EditDescription);
+  PrepareLabel(LabelQuantity);
+  PrepareLabel(LabelPrice);
+  PrepareLabel(LabelDiscount);
+  PrepareLabel(LabelPercent);
 
-    LabelDescription.Width := LabelWidth;
-    LabelQuantity.Width := LabelWidth;
-    LabelPrice.Width := LabelWidth;
-    LabelDiscount.Width := LabelWidth;
+  // Custom edit widths (not uniform)
+  EditQuantity.Width := Round(6 * LabelHeight);
+  EditPrice.Width := Round(8 * LabelHeight);
+  SpinDiscount.Width := Round(4 * LabelHeight);
 
-    EditDescription.Width := EditWidth;
-    EditQuantity.Width := Round(6 * BaseHeight);
-    EditPrice.Width := Round(8 * BaseHeight);
-    SpinDiscount.Width := Round(4 * BaseHeight);
+  // Position first row
+  LabelDescription.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
+  Layout.PlaceRight(LabelDescription, EditDescription, 1.0);
 
-    LabelDescription.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelDescription.Height);
+  // Quantity row
+  Layout.PlaceBelow(LabelDescription, LabelQuantity, 0.5);
+  Layout.PlaceRight(LabelQuantity, EditQuantity, 1.0);
 
-    Layout.Place(LabelDescription, EditDescription, ldRight, 0.5);
+  // Price row
+  Layout.PlaceBelow(LabelQuantity, LabelPrice, 0.5);
+  Layout.PlaceRight(LabelPrice, EditPrice, 1.0);
 
-    Layout.Place(LabelDescription, LabelQuantity, ldBelow, 1.0);
-    Layout.Place(LabelQuantity, EditQuantity, ldRight, 0.5);
+  // Discount row
+  Layout.PlaceBelow(LabelPrice, LabelDiscount, 0.5);
+  Layout.PlaceRight(LabelDiscount, SpinDiscount, 1.0);
+  Layout.PlaceRight(SpinDiscount, LabelPercent, 0.25);
 
-    Layout.Place(LabelQuantity, LabelPrice, ldBelow, 1.0);
-    Layout.Place(LabelPrice, EditPrice, ldRight, 0.5);
+  Layout.AutoSizeForm;
+  Position := poDesktopCenter;
+  ClientHeight := ClientHeight + CancelButton.Height + Layout.Margins.Bottom;
 
-    Layout.Place(LabelPrice, LabelDiscount, ldBelow, 1.0);
-    Layout.Place(LabelDiscount, SpinDiscount, ldRight, 0.5);
-    Layout.Place(SpinDiscount, LabelPercent, ldRight, 0.25);
-
-    Layout.AutoSizeForm;
-    Position := poMainFormCenter;
-    ClientHeight := ClientHeight + CancelButton.Height + Margins.Bottom;
-
-    // Place OK button at bottom-right
-    CancelButton.SetBounds(
-      ClientWidth - Margins.Right - CancelButton.Width,
-      ClientHeight - Margins.Bottom - CancelButton.Height,
-      CancelButton.Width,
-      CancelButton.Height
-    );
-    Layout.Place(CancelButton, OKButton, ldLeft, 0.5);
-
-    Position := poMainFormCenter;
-  finally
-    Layout.Free;
-  end;
+  // Place Cancel button at bottom-right
+  CancelButton.SetBounds(
+    ClientWidth - Layout.Margins.Right - CancelButton.Width,
+    ClientHeight - Layout.Margins.Bottom - CancelButton.Height,
+    CancelButton.Width,
+    CancelButton.Height
+  );
+  Layout.PlaceLeft(CancelButton, OKButton, 0.5);
 end;
 
 procedure TInvoiceItemEditForm.EditQuantityKeyPress(Sender: TObject; var Key: char);

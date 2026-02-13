@@ -9,7 +9,7 @@
   Module : rgPaymentEntry.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -57,6 +57,7 @@ type
     CancelButton: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
     procedure EditAmountKeyPress(Sender: TObject; var Key: char);
@@ -97,64 +98,49 @@ procedure TPaymentEntryForm.FormCreate(Sender: TObject);
 begin
   FInvoiceID := 0;
   FPaymentSuccessful := False;
+end;
+
+procedure TPaymentEntryForm.FormShow(Sender: TObject);
+begin
   SetupLayout;
 end;
 
 procedure TPaymentEntryForm.SetupLayout;
-var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
-  BaseHeight: Integer;
 begin
-  BaseHeight := LabelInvoice.Height;
-  Margins := LayoutMargins(BaseHeight);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  InitLayout(LabelInvoice.Height, EditAmount.Height,
+    6.0 * LabelInvoice.Height, 10.0 * LabelInvoice.Height);
 
-    LabelWidth := LabelOpenAmount.Width;
-    EditWidth := Round(10 * BaseHeight);
+  // Prepare left-column labels
+  PrepareLabel(LabelInvoice);
+  PrepareLabel(LabelInvoiceNo);
+  PrepareLabel(LabelOpenAmount);
+  PrepareLabel(LabelOpenValue);
+  PrepareLabelEdit(LabelAmount, EditAmount);
+  PrepareLabelEdit(LabelDate, EditDate);
 
-    LabelInvoice.Width := LabelWidth;
-    LabelOpenAmount.Width := LabelWidth;
-    LabelAmount.Width := LabelWidth;
-    LabelDate.Width := LabelWidth;
+  // Position first row: invoice number (read-only)
+  LabelInvoice.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
+  Layout.PlaceRight(LabelInvoice, LabelInvoiceNo, 1.0);
 
-    EditAmount.Width := EditWidth;
-    EditDate.Width := EditWidth;
+  // Position open amount row (read-only)
+  Layout.PlaceBelow(LabelInvoice, LabelOpenAmount, 0.3);
+  Layout.PlaceRight(LabelOpenAmount, LabelOpenValue, 1.0);
 
-    LabelInvoice.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelInvoice.Height);
+  // Position amount entry (extra gap from read-only section)
+  Layout.PlaceBelow(LabelOpenAmount, LabelAmount, 1.0);
+  Layout.PlaceRight(LabelAmount, EditAmount, 1.0);
 
-    Layout.Place(LabelInvoice, LabelInvoiceNo, ldRight, 0.5);
+  // Position date entry
+  Layout.PlaceBelow(LabelAmount, LabelDate, 0.5);
+  Layout.PlaceRight(LabelDate, EditDate, 1.0);
 
-    Layout.Place(LabelInvoice, LabelOpenAmount, ldBelow, 1.0);
-    Layout.Place(LabelOpenAmount, LabelOpenValue, ldRight, 0.5);
+  // Place buttons below last edit
+  Layout.PlaceBelowRight(EditDate, CancelButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
-    Layout.Place(LabelOpenAmount, LabelAmount, ldBelow, 1.5);
-    Layout.Place(LabelAmount, EditAmount, ldRight, 0.5);
-
-    Layout.Place(LabelAmount, LabelDate, ldBelow, 1.0);
-    Layout.Place(LabelDate, EditDate, ldRight, 0.5);
-
-    Layout.AutoSizeForm;
-    Position := poMainFormCenter;
-    ClientHeight := ClientHeight + CancelButton.Height + Margins.Bottom;
-
-    // Place OK button at bottom-right
-    CancelButton.SetBounds(
-      ClientWidth - Margins.Right - CancelButton.Width,
-      ClientHeight - Margins.Bottom - CancelButton.Height,
-      CancelButton.Width,
-      CancelButton.Height
-    );
-    Layout.Place(CancelButton, SaveButton, ldLeft, 0.5);
-
-    Position := poMainFormCenter;
-  finally
-    Layout.Free;
-  end;
+  Layout.AutoSizeForm;
+  Position := poDesktopCenter;
 end;
 
 procedure TPaymentEntryForm.FormDestroy(Sender: TObject);

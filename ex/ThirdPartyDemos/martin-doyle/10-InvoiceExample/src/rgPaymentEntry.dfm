@@ -12,6 +12,7 @@ object PaymentEntryForm: TPaymentEntryForm
   Position = poMainFormCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnShow = FormShow
   object LabelInvoice: TLabel
     Left = 16
     Height = 18
