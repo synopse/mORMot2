@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgPaymentEntry.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgPaymentEntry;
 
@@ -38,7 +38,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, Menus, MdForms, mdLayout, rgClient;
+  ExtCtrls, Menus, MdForms, mdLayout, rgDtoTypes, rgClient;
 
 type
 
@@ -57,11 +57,11 @@ type
     CancelButton: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
     procedure EditAmountKeyPress(Sender: TObject; var Key: char);
   private
-    FPaymentService: IPaymentService;
     FInvoiceID: longint;
     FInvoiceNo: string;
     FOpenAmount: currency;
@@ -70,7 +70,6 @@ type
     FPaymentSuccessful: Boolean;
     procedure SetupLayout;
     function ValidateInput: Boolean;
-    function ParseAmount(const AText: string; out AAmount: currency): Boolean;
   public
     function GetFormMenu: TMainMenu; override;
     function ShowPaymentEntry(AInvoiceID: longint; const AInvoiceNo: string;
@@ -88,7 +87,8 @@ uses
   mormot.core.base,
   mormot.core.text,
   mormot.core.unicode,
-  mdDates;
+  mdDates,
+  mdNumbers;
 
 {$R *.dfm}
 
@@ -96,92 +96,60 @@ uses
 
 procedure TPaymentEntryForm.FormCreate(Sender: TObject);
 begin
-  FPaymentService := TPaymentService.Create;
   FInvoiceID := 0;
   FPaymentSuccessful := False;
+end;
+
+procedure TPaymentEntryForm.FormShow(Sender: TObject);
+begin
   SetupLayout;
 end;
 
 procedure TPaymentEntryForm.SetupLayout;
-var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
-  BaseHeight: Integer;
 begin
-  BaseHeight := LabelInvoice.Height;
-  Margins := LayoutMargins(BaseHeight);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  InitLayout(LabelInvoice.Height, EditAmount.Height,
+    6.0 * LabelInvoice.Height, 10.0 * LabelInvoice.Height);
 
-    LabelWidth := Round(8 * BaseHeight);
-    EditWidth := Round(10 * BaseHeight);
+  // Prepare left-column labels
+  PrepareLabel(LabelInvoice);
+  PrepareLabel(LabelInvoiceNo);
+  PrepareLabel(LabelOpenAmount);
+  PrepareLabel(LabelOpenValue);
+  PrepareLabelEdit(LabelAmount, EditAmount);
+  PrepareLabelEdit(LabelDate, EditDate);
 
-    LabelInvoice.Width := LabelWidth;
-    LabelOpenAmount.Width := LabelWidth;
-    LabelAmount.Width := LabelWidth;
-    LabelDate.Width := LabelWidth;
+  // Position first row: invoice number (read-only)
+  LabelInvoice.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
+  Layout.PlaceRight(LabelInvoice, LabelInvoiceNo, 1.0);
 
-    EditAmount.Width := EditWidth;
-    EditDate.Width := EditWidth;
+  // Position open amount row (read-only)
+  Layout.PlaceBelow(LabelInvoice, LabelOpenAmount, 0.3);
+  Layout.PlaceRight(LabelOpenAmount, LabelOpenValue, 1.0);
 
-    LabelInvoice.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelInvoice.Height);
+  // Position amount entry (extra gap from read-only section)
+  Layout.PlaceBelow(LabelOpenAmount, LabelAmount, 1.0);
+  Layout.PlaceRight(LabelAmount, EditAmount, 1.0);
 
-    Layout.Place(LabelInvoice, LabelInvoiceNo, ldRight, 0.5);
+  // Position date entry
+  Layout.PlaceBelow(LabelAmount, LabelDate, 0.5);
+  Layout.PlaceRight(LabelDate, EditDate, 1.0);
 
-    Layout.Place(LabelInvoice, LabelOpenAmount, ldBelow, 1.0);
-    Layout.Place(LabelOpenAmount, LabelOpenValue, ldRight, 0.5);
+  // Place buttons below last edit
+  Layout.PlaceBelowRight(EditDate, CancelButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
-    Layout.Place(LabelOpenAmount, LabelAmount, ldBelow, 1.5);
-    Layout.Place(LabelAmount, EditAmount, ldRight, 0.5);
-
-    Layout.Place(LabelAmount, LabelDate, ldBelow, 1.0);
-    Layout.Place(LabelDate, EditDate, ldRight, 0.5);
-
-    Layout.AutoSizeForm;
-
-    SaveButton.Top := EditDate.Top + EditDate.Height + (2 * BaseHeight);
-    CancelButton.Top := SaveButton.Top;
-
-    CancelButton.Left := ClientWidth - Margins.Right - CancelButton.Width;
-    SaveButton.Left := CancelButton.Left - Margins.Middle - SaveButton.Width;
-
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
-
-    Position := poMainFormCenter;
-  finally
-    Layout.Free;
-  end;
+  Layout.AutoSizeForm;
 end;
 
 procedure TPaymentEntryForm.FormDestroy(Sender: TObject);
 begin
-  FPaymentService := nil;
+  // nothing to free - services accessed via RgServices global
 end;
 
 procedure TPaymentEntryForm.EditAmountKeyPress(Sender: TObject; var Key: char);
 begin
-  if not (Key in ['0'..'9', ',', '.', #8, #13]) then
-    Key := #0;
-end;
-
-function TPaymentEntryForm.ParseAmount(const AText: string;
-  out AAmount: currency): Boolean;
-var
-  TempText: string;
-begin
-  Result := False;
-  AAmount := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-    Exit;
-
-  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
-  AAmount := StrToCurrency(pointer(StringToUtf8(TempText)));
-  Result := (AAmount <> 0);
+  FilterNumericKey(Key, False);
 end;
 
 function TPaymentEntryForm.ValidateInput: Boolean;
@@ -191,7 +159,7 @@ var
 begin
   Result := False;
 
-  if not ParseAmount(EditAmount.Text, Amount) then
+  if not TryStrToCurr(EditAmount.Text, Amount) then
   begin
     ShowMessage('Please enter a valid amount.');
     EditAmount.SetFocus;
@@ -207,8 +175,8 @@ begin
 
   if Amount > FOpenAmount then
   begin
-    if MessageDlg('Amount ' + Curr64ToString(PInt64(@Amount)^) +
-        ' exceeds open amount ' + Curr64ToString(PInt64(@FOpenAmount)^) +
+    if MessageDlg('Amount ' + FormatCurr(FMT_CURR_EDIT, Amount) +
+        ' exceeds open amount ' + FormatCurr(FMT_CURR_EDIT, FOpenAmount) +
         '. Continue?',
       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
     begin
@@ -236,7 +204,7 @@ begin
   if not ValidateInput then
     Exit;
 
-  PayResult := FPaymentService.AddPayment(FInvoiceID, FPaymentAmount, FPaymentDate);
+  PayResult := RgServices.PaymentService.AddPayment(FInvoiceID, FPaymentAmount, FPaymentDate);
 
   case PayResult of
     prSuccess:
@@ -267,8 +235,8 @@ begin
   FPaymentSuccessful := False;
 
   LabelInvoiceNo.Caption := AInvoiceNo;
-  LabelOpenValue.Caption := Curr64ToString(PInt64(@AOpenAmount)^);
-  EditAmount.Text := Curr64ToString(PInt64(@AOpenAmount)^);
+  LabelOpenValue.Caption := FormatCurr(FMT_CURR_DISPLAY, AOpenAmount);
+  EditAmount.Text := FormatCurr(FMT_CURR_EDIT, AOpenAmount);
   EditDate.Text := AppDateToStr(Date);
 
   EditAmount.SelectAll;

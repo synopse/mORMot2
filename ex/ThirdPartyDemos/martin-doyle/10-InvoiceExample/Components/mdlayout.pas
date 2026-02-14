@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2025 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : mdComponents
 
   Module : mdLayout.pas - Adaptive Layout Manager
@@ -31,7 +31,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit mdLayout;
 
@@ -86,6 +86,13 @@ type
       ADirection: TLayoutDirection; ASpacing: TLayoutSpacing); overload;
     procedure Place(const AReference: TControl; const ATarget: TControl;
       ADirection: TLayoutDirection; ADistance: Single = 0.5); overload;
+
+    // Direction-named placement (convenience wrappers)
+    procedure PlaceBelow(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+    procedure PlaceRight(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+    procedure PlaceLeft(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+    procedure PlaceAbove(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+    procedure PlaceBelowRight(const AReference, ATarget: TControl; ADistance: Single = 0.5);
 
     // Alignment helpers
     procedure AlignTo(const AReference: TControl; const ATarget: TControl;
@@ -270,6 +277,37 @@ procedure TLayoutHelper.Place(const AReference: TControl; const ATarget: TContro
   ADirection: TLayoutDirection; ADistance: Single = 0.5);
 begin
   Place(AReference, ATarget, ADirection, LayoutSpacingProportional(ADistance));
+end;
+
+procedure TLayoutHelper.PlaceBelow(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+begin
+  Place(AReference, ATarget, ldBelow, ADistance);
+end;
+
+procedure TLayoutHelper.PlaceRight(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+begin
+  Place(AReference, ATarget, ldRight, ADistance);
+end;
+
+procedure TLayoutHelper.PlaceLeft(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+begin
+  Place(AReference, ATarget, ldLeft, ADistance);
+end;
+
+procedure TLayoutHelper.PlaceAbove(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+begin
+  Place(AReference, ATarget, ldAbove, ADistance);
+end;
+
+procedure TLayoutHelper.PlaceBelowRight(const AReference, ATarget: TControl; ADistance: Single = 0.5);
+var
+  SpacingPixels: Integer;
+begin
+  SpacingPixels := Round(ADistance * AReference.Height);
+  ATarget.SetBounds(
+    AReference.Left + AReference.Width - ATarget.Width,
+    AReference.Top + AReference.Height + SpacingPixels,
+    ATarget.Width, ATarget.Height);
 end;
 
 procedure TLayoutHelper.AlignTo(const AReference: TControl; const ATarget: TControl;
