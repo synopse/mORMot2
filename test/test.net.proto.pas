@@ -1553,7 +1553,7 @@ const
 
 procedure TNetworkProtocols.DHCP;
 var
-  refdisc, refoffer, refreq, refack, tlv: RawByteString;
+  refdisc, refoffer, refreq, refack, bin: RawByteString;
   mac, ip, txt, json: RawUtf8;
   fn: TFileName;
   lens: TDhcpParsed;
@@ -1611,6 +1611,19 @@ var
     end;
   end;
 
+  procedure CheckTlv(const json, bin: RawUtf8);
+  begin
+    CheckEqual(EscapeHex(TlvFromJson(json), ESC_ASCII, '$'), bin);
+  end;
+
+  procedure CheckCidrRoute(const cidr, hex: RawUtf8);
+  var
+    bin: RawByteString;
+  begin
+    Check(CidrRoutes(pointer(cidr), bin));
+    CheckEqualHex(bin, hex, 'cidr');
+  end;
+
 begin
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
@@ -1660,26 +1673,42 @@ begin
     Check(opt = opt2);
   end;
   Check(not FromText('none', opt2));
+  // validate CIDR routes encoding following RFC 3442
+  CheckCidrRoute('', '');
+  CheckCidrRoute('192.168.1.0/24,10.0.0.5',     '18C0A8010A000005');
+  Check(not CidrRoutes('192.168.1.300/24,10.0.0.5', bin));
+  Check(not CidrRoutes('192.168.1.0/24,10.0.0.', bin));
+  CheckCidrRoute('10.0.0.0/8,192.168.1.1',      '080AC0A80101');
+  CheckCidrRoute('192.168.1.0/24,10.0.0.5;10.0.0.0/8,192.168.1.1',
+                 '18C0A8010A000005080AC0A80101');
+  CheckCidrRoute('10.0.0.1,192.168.0.1',        '200A000001C0A80001');
+  CheckCidrRoute('10.0.0.1/32,192.168.0.1',     '200A000001C0A80001');
+  CheckCidrRoute('10.0.0.1/33,192.168.0.1',     '200A000001C0A80001');
+  CheckCidrRoute('0.0.0.0/0,10.0.0.1',          '000A000001');
+  CheckCidrRoute('172.16.0.0/16,192.168.1.1',   '10AC10C0A80101');
+  CheckCidrRoute('192.168.1.0/24,10.0.0.5,10.0.0.1,192.168.1.1,',
+                 '18C0A8010A000005200A000001C0A80101');
+  // validate Type-Length-Value (TLV) encoding e.g. for DHCP option 43/82
   CheckEqual(TlvFromJson(''), '');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:"bcd"}')), '$06$03bcd');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:"uint8:7"}')), '$06$01$07');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:"uint16:7"}')), '$06$02$00$07');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:7}')), '$06$04$00$00$00$07');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:"hex:010203"}')), '$06$03$01$02$03');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:false}')), '$06$01$00');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:true}')), '$06$01$01');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{6:"ip:4.3.2.1"}')), '$06$04$04$03$02$01');
-  CheckEqual(LogEscapeFull(TlvFromJson(
-    '{"6":"IP:10.0.0.5,1.2.3.4","9": "BASE64:Zm9vYmFy"}')),
-    '$06$08$0a$00$00$05$01$02$03$04$09$06foobar');
+  CheckTlv('{6:"bcd"}',                   '$06$03bcd');
+  CheckTlv('{6:"uint8:7"}',               '$06$01$07');
+  CheckTlv('{6:"uint16:7"}',              '$06$02$00$07');
+  CheckTlv('{6:7}',                       '$06$04$00$00$00$07');
+  CheckTlv('{6:"hex:010203"}',            '$06$03$01$02$03');
+  CheckTlv('{6:false}',                   '$06$01$00');
+  CheckTlv('{6:true}',                    '$06$01$01');
+  CheckTlv('{6:"ip:4.3.2.1"}',            '$06$04$04$03$02$01');
+  CheckTlv('{6:"mac:06:05:04:03:02:01"}', '$06$06$06$05$04$03$02$01');
+  CheckTlv('{6:"mac:06:05:04:03:02:01,16:15:14:13:12:11"}',
+           '$06$0C$06$05$04$03$02$01$16$15$14$13$12$11');
+  CheckTlv('{6:"esc:ab$00c",7:"uuid:{8C36C986-F291-4DA0-B2D0-3A6F4468D6C3}"}',
+           '$06$04ab$00c$07$10$86$C96$8C$91$F2$A0M$B2$D0:oDh$D6$C3');
+  CheckTlv('{"6":"IP:10.0.0.5,1.2.3.4","9": "BASE64:Zm9vYmFy"}',
+           '$06$08$0A$00$00$05$01$02$03$04$09$06foobar');
+  CheckTlv('{6:true,7:{0:"a",1:"b"},8:"c"}',
+           '$06$01$01$07$06$00$01a$01$01b$08$01c');
+  CheckTlv('{6:"cidr:192.168.1.0/24,10.0.0.5"}',
+           '$06$08$18$C0$A8$01$0A$00$00$05');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +

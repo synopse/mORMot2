@@ -5161,7 +5161,7 @@ begin
   FillCharFast(b2, SizeOf(b2), 0);
   // mORMot 1 serialization with Delphi extended RTTI
   u2 := '{"Precision":1,"SignSpecialPlaces":0,"Fraction":' +
-    '"5000000000000000000000000000000000000000000000000000000000000000"}';
+        '"5000000000000000000000000000000000000000000000000000000000000000"}';
   Check(RecordLoadJson(b2, u2, TypeInfo(TBcd)));
   BcdToUtf8(b2, u2);
   CheckEqual(u2, '5');

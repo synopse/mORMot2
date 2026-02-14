@@ -1197,8 +1197,8 @@ function NeedsXmlEscape(text: PUtf8Char): boolean;
 function XmlEscape(const text: RawUtf8): RawUtf8;
 
 const
-  /// convenient parameter to EscapeHex() / UnescapeHex()
-  ESC_HEX: TSynAnsicharSet = [#0 .. #31, '$'];
+  /// convenient parameter to EscapeHex() / UnescapeHex() binary to ASCII 7-bit
+  ESC_ASCII: TSynAnsicharSet = [#0 .. #31, '$', #127 .. #255];
 
 /// quickly identify if any character appears in an UTF-8 string
 function NeedsEscape(text: PUtf8Char; const toescape: TSynAnsicharSet): boolean;
