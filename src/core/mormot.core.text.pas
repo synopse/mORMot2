@@ -1225,7 +1225,11 @@ function UnescapeHexBuffer(src, dest: PUtf8Char; escape: AnsiChar = '\'): PUtf8C
 
 /// un-escape \xx or \c encoded chars into a new RawUtf8 string
 // - any CR/LF after \ will also be ignored
-function UnescapeHex(const src: RawUtf8; escape: AnsiChar = '\'): RawUtf8;
+function UnescapeHex(const src: RawUtf8; escape: AnsiChar = '\'): RawUtf8; overload;
+
+/// un-escape \xx or \c encoded chars into a new RawUtf8 string (escape='\')
+// - any CR/LF after \ will also be ignored
+procedure UnescapeHex(var dst: RawUtf8; src: PUtf8Char; srclen: PtrInt; escape: AnsiChar); overload;
 
 /// escape as \char pair some chars from a set into a pre-allocated buffer
 // - dest^ should have at least srclen * 2 bytes, for \char pairs
@@ -6675,16 +6679,18 @@ begin
     end;
 end;
 
+procedure UnescapeHex(var dst: RawUtf8; src: PUtf8Char; srclen: PtrInt; escape: AnsiChar);
+begin
+  FastSetString(dst, srclen); // allocate maximum size
+  FakeSetLength(dst, UnescapeHexBuffer(src, pointer(dst), escape) - pointer(dst));
+end;
+
 function UnescapeHex(const src: RawUtf8; escape: AnsiChar): RawUtf8;
 begin
   if PosExChar(escape, src) = 0 then
     result := src // no unescape needed
   else
-  begin
-    FastSetString(result, length(src)); // allocate maximum size
-    FakeSetLength(result, UnescapeHexBuffer(
-      pointer(src), pointer(result), escape) - pointer(result));
-  end;
+    UnescapeHex(result, pointer(src), length(src), escape);
 end;
 
 function EscapeCharBuffer(src, dest: PUtf8Char; srclen: integer;
