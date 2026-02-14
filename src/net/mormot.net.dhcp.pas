@@ -760,6 +760,7 @@ type
     // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
     // or "boot" for BOOT_TXT[] '"
     // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
     // - so those three definitions are the same:
     // $ "all": { "77": "iPXE", "93": "HEX:0007" }
     // $ "all": { "user-class": "iPXE", "client-architecture": "HEX:0007" }
@@ -771,6 +772,7 @@ type
     // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
     // or "boot" for BOOT_TXT[] '"
     // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
     // - so those two definitions are the same:
     // $ "any": { "97": "UUID:815be81d-3da1-46e5-b679-5c682627ece5" }
     // $ "any": { "uuid-client-identifier": "UUID:815be81d-3da1-46e5-b679-5c682627ece5" }
@@ -780,6 +782,7 @@ type
     // - Option 55 won't be checked: those options will always be sent
     // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class")
     // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
     // or a nested TLV object
     // - so we could define for instance:
     // $ "always": {
@@ -792,6 +795,7 @@ type
     // - only options defined within Option 55 will be sent
     // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class")
     // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
     // or a nested TLV object
     // - so those two definitions are the same:
     // $ "requested": { "42": "IP:10.0.0.5" }
@@ -1670,9 +1674,8 @@ begin
         end;
       1:    // mac:
         begin
-          result := TextToMac(p.Value + 4, @tmp);
-          if result then
-            FastSetRawByteString(v, @tmp, 6);
+          v := MacsToBinary(ToMacs(p.Value + 4)); // allow CSV of MACs
+          result := v <> '';
         end;
       2:    // hex:
         result := (len > 4) and
