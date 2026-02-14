@@ -348,7 +348,7 @@ function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean; overload;
 function TlvFromJson(const json: RawUtf8): RawByteString; overload;
 
-/// parse a CIDR route(s) into a RFC 3442 compliant binary blob
+/// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
 function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
 
@@ -749,8 +749,16 @@ type
 
   /// define a profile to "match and send" options for a given scope/subnet
   // - i.e. settings for vendor-specific or client-specific DHCP options
+  // - each RawJson property contain a JSON object as key/value pairs,
+  // potentially in our enhanced format e.g. with unquote keys
   // - both "all" and "any" conditions should match to trigger the output
-  // - "always" and "requested" define the options sent with the response
+  // - "always" and "requested" define the options sent in the response
+  // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
+  // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+  //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy", "CIDR:xx"
+  // - values could also be integers, booleans, or nested TLV object
+  // - most values would have their default type guessed as UINT16, IP or UUID
+  // - "all" and "any" also support convenient "boot" key as BOOT_TXT[] values
   TDhcpProfileSettings = class(TSynPersistent)
   protected
     fAll, fAny, fAlways, fRequested: RawJson;
@@ -761,49 +769,39 @@ type
   published
     /// a JSON object defining AND fields lookup logic
     // - all key/value pairs must match input client options
-    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
-    // or "boot" for BOOT_TXT[] '"
-    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
-    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
-    // - so those three definitions are the same:
+    // - those definitions are the same:
     // $ "all": { "77": "iPXE", "93": "HEX:0007" }
-    // $ "all": { "user-class": "iPXE", "client-architecture": "HEX:0007" }
-    // $ "all": { "boot": "IpxeX64" }
+    // $ "all": { 77: "iPXE", 93: "UINT16:7" }
+    // $ "all": { "user-class": "iPXE", "client-architecture": 7 }
+    // $ "all": { user-class: "iPXE", client-architecture: 7 }
+    // $ "all": { boot: "IpxeX64" }
     property All: RawJson
       read fAll write fAll;
     /// a JSON object defining OR fields lookup logic
     // - a single key/value pairs match is enough to trigger this logic
-    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
-    // or "boot" for BOOT_TXT[] '"
-    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
-    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
-    // - so those two definitions are the same:
+    // - those definitions are the same:
     // $ "any": { "97": "UUID:815be81d-3da1-46e5-b679-5c682627ece5" }
-    // $ "any": { "uuid-client-identifier": "UUID:815be81d-3da1-46e5-b679-5c682627ece5" }
+    // $ "any": { 97: "815be81d-3da1-46e5-b679-5c682627ece5" }
+    // $ "any": { "uuid-client-identifier": "{815be81d-3da1-46e5-b679-5c682627ece5}" }
+    // $ "any": { uuid-client-identifier: "815be81d3da146e5b6795c682627ece5" }
     property Any: RawJson
       read fAny write fAny;
     /// a JSON object defining the output options regardless of Option 55
-    // - Option 55 won't be checked: those options will always be sent
-    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class")
-    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
-    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
-    // or a nested TLV object
-    // - so we could define for instance:
+    // - client Option 55 won't be checked: those options will always be sent
+    // - so we could define e.g. with proper Type-Length-Value (TLV) encoding:
     // $ "always": {
-    // $   "boot-file-name": "bootx64-special.efi",
-    // $   "vendor-encapsulated-options": {
-    // $     "6": "IP:10.0.0.5", "9": "BASE64:Zm9vYmFy" } }
+    // $   boot-file-name: "bootx64-special.efi",
+    // $   vendor-encapsulated-options:" {
+    // $     6: "IP:10.0.0.5", 9: "BASE64:Zm9vYmFy" } }
     property Always: RawJson
       read fAlways write fAlways;
     /// a JSON object defining the output options following Option 55
-    // - only options defined within Option 55 will be sent
-    // - key is a DHCP option number ("77") or DHCP_OPTION[] ("user-class")
-    // - value is "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
-    //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy"
-    // or a nested TLV object
-    // - so those two definitions are the same:
+    // - will send only the options requested within client Option 55 list
+    // - those definitions are the same:
     // $ "requested": { "42": "IP:10.0.0.5" }
-    // $ "requested": { "ntp-servers": "IP:10.0.0.5" }
+    // $ "requested": { 42: "10.0.0.5" }
+    // $ "requested": { "ntp-servers": "hex:0a000005" }
+    // $ "requested": { ntp-servers: "10.0.0.5" }
     property Requested: RawJson
       read fRequested write fRequested;
   end;

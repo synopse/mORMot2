@@ -2697,13 +2697,13 @@ function OctToBin(const Oct: RawUtf8): RawByteString; overload;
 function GuidToText(P: PUtf8Char; guid: PByteArray; tab: PWordArray = nil): PUtf8Char;
 
 /// convert a TGuid into 38 chars encoded { text } as RawUtf8
-// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with braces)
 // - if you do not need the embracing { }, use ToUtf8() overloaded function
 function GuidToRawUtf8(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): RawUtf8;
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8
-// - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
+// - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without braces)
 // - if you need the embracing { }, use GuidToRawUtf8() function instead
 function ToUtf8(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}guid: TGuid): RawUtf8; overload;
@@ -2714,7 +2714,7 @@ function NotNullGuidToUtf8(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): RawUtf8;
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8
-// - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
+// - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without braces)
 // - you can set tab = @TwoDigitsHexLower to force a lowercase output
 procedure ToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid;
   var text: RawUtf8; tab: PWordArray = nil); overload;
@@ -2727,12 +2727,12 @@ function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ',';
   tab: PWordArray = nil): RawUtf8;
 
 /// convert a TGuid into into 38 chars encoded { text } as RTL string
-// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with braces)
 // - this version is faster than the one supplied by SysUtils
 function GuidToString(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): string;
 
-/// convert a TGuid into its standard uppercase text representation with the {}
+/// convert a TGuid into its standard uppercase text representation with braces
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
@@ -2740,7 +2740,7 @@ function GuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid: TGuid): TShortGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a TGuid into its standard uppercase text representation with the {}
+/// convert a TGuid into its standard uppercase text representation with braces
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
 // - using a ShortString will allow fast allocation on the stack, so is
 // preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
@@ -2763,28 +2763,28 @@ function UuidToShort({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
 function TextToGuid(P: PUtf8Char; Guid: PByteArray): PUtf8Char;
 
 /// convert some GUID or UUID RTL string text into a TGuid binary variable
-// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with braces)
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
 // is not a valid TGuid
 function StringToGuid(const text: string): TGuid;
 
 /// convert some GUID or UUID UTF-8 encoded text into a TGuid binary variable
-// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
-// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {}) or even
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with braces)
+// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without braces) or even
 // '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
 // is not a valid TGuid
 function RawUtf8ToGuid(const text: RawByteString): TGuid; overload;
 
 /// convert some GUID or UUID UTF-8 encoded text into a TGuid binary variable
-// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
-// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {}) or even
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with braces)
+// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without braces) or even
 // '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
 function RawUtf8ToGuid(const text: RawByteString; out guid: TGuid): boolean; overload;
 
 /// convert some GUID or UUID UTF-8 encoded text into a TGuid binary variable
-// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
-// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {}) or even
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with braces)
+// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without braces) or even
 // '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
 function RawUtf8ToGuid(text: PUtf8Char; textlen: PtrInt; out guid: TGuid): boolean; overload;
 
