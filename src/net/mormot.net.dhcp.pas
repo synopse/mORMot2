@@ -348,6 +348,10 @@ function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean; overload;
 function TlvFromJson(const json: RawUtf8): RawByteString; overload;
 
+/// parse a CIDR route(s) into a RFC 3442 compliant binary blob
+// - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
+function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
+
 
 { **************** Low-Level per-scope DHCP metrics }
 
@@ -1873,6 +1877,47 @@ begin
   finally
     tmp.Done;
   end;
+end;
+
+function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
+var
+  dest, router: TNetIP4;
+  w: PtrUInt;
+  tmp: TShort15;
+begin
+  bin := '';
+  result := false;
+  if p <> nil then
+    repeat
+      if not NetIsIP4(p, @dest) then
+        exit;
+      while not (p^ in [#0, '/', ',']) do
+        inc(p);
+      w := 32; // default mask
+      if p^ = '/' then
+      begin
+        w := MinPtrUInt(32, GetCardinal(p + 1)); // clamp mask width
+        repeat
+          inc(p);
+        until p^ in [#0, ','];
+      end;
+      if p^ = #0 then
+        exit; // premature
+      inc(p); // jump ','
+      if not NetIsIP4(p, @router) then
+        exit;
+      tmp[0] := #1;
+      tmp[1] := AnsiChar(w);                         // mask width
+      AppendShortBuffer(@dest, (w + 7) shr 3, @tmp); // append only prefix
+      AppendShortBuffer(@router, 4, @tmp);           // router
+      Append(bin, @tmp[1], ord(tmp[0]));
+      while not (p^ in [#0, ';', ',']) do
+        inc(p);
+      if p^ = #0 then
+        break;
+      inc(p); // jump ',' or ';' between routes
+    until p^ = #0;
+  result := true;
 end;
 
 function ParseProfile(const json: RawUtf8; out v: TProfileValues;
