@@ -1196,6 +1196,10 @@ function NeedsXmlEscape(text: PUtf8Char): boolean;
 // - just a wrapper around TTextWriter.AddXmlEscape() process
 function XmlEscape(const text: RawUtf8): RawUtf8;
 
+const
+  /// convenient parameter to EscapeHex() / UnescapeHex()
+  ESC_HEX: TSynAnsicharSet = [#0 .. #31, '$'];
+
 /// quickly identify if any character appears in an UTF-8 string
 function NeedsEscape(text: PUtf8Char; const toescape: TSynAnsicharSet): boolean;
 
