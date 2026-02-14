@@ -1662,7 +1662,7 @@ begin
     // handle "..." string values
     case IdemPCharArray(p.Value,
            ['IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
-            'UINT8:', 'UINT16:', 'ESC:']) of
+            'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:']) of
       0:    // ip:
         begin
           v := IP4sToBinary(ToIP4s(p.Value + 3)); // allow CSV of IPs
@@ -1703,7 +1703,20 @@ begin
           FastSetRawByteString(v, @tmp.c0, 2);
           result := true;
         end;
-      8:   // esc:
+      8:    // uint32: is the default, but convenient to be specified
+        begin
+          tmp.c0 := bswap32(GetCardinal(p.Value + 7));
+          FastSetRawByteString(v, @tmp.c0, 4);
+          result := true;
+        end;
+      9:    // uint64:
+        begin
+          SetQWord(p.Value + 7, tmp.L);
+          tmp.L := bswap64(tmp.L);
+          FastSetRawByteString(v, @tmp.L, 8);
+          result := true;
+        end;
+      10:   // esc:
         begin
           UnescapeHex(RawUtf8(v), p.Value + 4, p.ValueLen - 4, '$');
           result := true;
