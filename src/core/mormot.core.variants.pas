@@ -10314,7 +10314,7 @@ begin
   tab := @JSON_CHARS;
   repeat
     inc(result);
-  until not (jcDigitFloatChar in tab[result^]);
+  until not (jcDigitFloatChar in tab[result^]); // -+.eE0..9
   PEndNum := result;
   while not (jcEndOfJsonFieldNotName in tab[result^]) do
     inc(result); // #0, ',', ']', '}'
@@ -10375,8 +10375,8 @@ begin
           // it may be a double value, but we didn't allow them -> store as text
           J := Info.Value;
           repeat
-            inc(J); // #0, ',', ']', '}'
-          until not (jcDigitFloatChar in JSON_CHARS[J^]);
+            inc(J);
+          until not (jcDigitFloatChar in JSON_CHARS[J^]); // -+.eE0..9
           Info.ValueLen := J - Info.Value;
           J := GotoNextNotSpace(J);
           Info.EndOfObject := J^;
@@ -10988,7 +10988,7 @@ begin
     exit;
   Expression := GotoNextNotSpace(Expression);
   KB := Expression;
-  while jcJsonIdentifier in JSON_CHARS[Expression^] do
+  while jcJsonIdentifier in JSON_CHARS[Expression^] do // _-.[]$0..9a..zA..Z
     inc(Expression);
   if Expression^ = #0 then
     exit;

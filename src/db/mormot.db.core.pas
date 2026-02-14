@@ -3241,7 +3241,7 @@ var
       B := P;
       repeat
         inc(P);
-      until not (jcJsonIdentifier in JSON_CHARS[P^]);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
       FastSetString(select.SubField, B, P - B);
       fHasSelectSubFields := true;
     end;
@@ -3373,7 +3373,7 @@ var
       B := P;
       repeat
         inc(P);
-      until not (jcJsonIdentifier in JSON_CHARS[P^]);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
       FastSetString(Where.SubField, B, P - B); // '.subfield1.subfield2'
       fWhereHasSubFields := true;
       P := GotoNextNotSpace(P);

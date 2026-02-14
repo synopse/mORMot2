@@ -2975,7 +2975,7 @@ begin
             (P^ > '9'); // check fractional digits
     if ((P^ = 'e') or
         (P^ = 'E')) and
-       (jcDigitFirstChar in tab[P[1]]) then
+       (jcDigitFirstChar in tab[P[1]]) then // ['-', '0'..'9']
     begin
       inc(P);
       c := P^;
@@ -3088,7 +3088,7 @@ begin
         begin
           repeat // inlined GotoEndOfJsonString2()
             inc(P);
-            if not (jcJsonStringMarker in JsonSet[P^]) then // [#0, '"', '\']
+            if not (jcJsonStringMarker in JsonSet[P^]) then // #0 " \
               continue; // very fast parsing of most UTF-8 chars
             if P^ = '"' then
               break
@@ -3112,8 +3112,7 @@ begin
           // '0123' excluded by JSON, but not here
           repeat
             inc(P);
-          until not (jcDigitFloatChar in JsonSet[P^]);
-          // not ['-', '+', '0'..'9', '.', 'E', 'e']
+          until not (jcDigitFloatChar in JsonSet[P^]); // -+.eE0..9
           if (StackCount <> 0) or
              (State = stObjectName) then
             continue;
@@ -3217,15 +3216,14 @@ assign:   if State <> stObjectName then
           exit
         else
           goto assign;
-      jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
+      jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
 prop:     if ExpectStandard then
             exit;
           repeat
             repeat
               inc(P);
-            until not (jcJsonIdentifier in JsonSet[P^]);
-            // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
+            until not (jcJsonIdentifier in JsonSet[P^]); // _-.[]$0..9a..zA..Z
             while (P^ <= ' ') and
                   (P^ <> #0) do
               inc(P);
@@ -3244,7 +3242,7 @@ prop:     if ExpectStandard then
             begin
               repeat
                 inc(P);
-              until jcJsonStringMarker in JsonSet[P^]; // [#0, '"', '\']
+              until jcJsonStringMarker in JsonSet[P^]; // #0 " \
               if P^ <> '"' then
                 exit;
               inc(P);
@@ -3414,13 +3412,11 @@ var
 begin
   tab := @JSON_CHARS;
   if (P <> nil) and
-     (jcJsonIdentifierFirstChar in tab[P^]) then
+     (jcJsonIdentifierFirstChar in tab[P^]) then // _$0..9a..zA..Z
   begin
-    // ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
     repeat
       inc(P);
-    until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
+    until not (jcJsonIdentifier in tab[P^]); // _-.[]$0..9a..zA..Z
     result := P^ = #0;
   end
   else
@@ -3523,9 +3519,9 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
              (P[1] <= '9') then
             // 0123 excluded by JSON!
             exit;
-        repeat // loop all '-', '+', '0'..'9', '.', 'E', 'e'
+        repeat
           inc(P);
-        until not (jcDigitFloatChar in tab[P^]);
+        until not (jcDigitFloatChar in tab[P^]); // -+.eE0..9
         if P^ = #0 then
           exit; // a JSON number value should be followed by , } or ]
         ValueLen := P - Value;
@@ -3542,15 +3538,14 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         inc(P);
         Value := P; // points to the unescaped JSON string
         WasString := true;
-        while not (jcJsonStringMarker in tab[P^]) do
-          // not [#0, '"', '\']
+        while not (jcJsonStringMarker in tab[P^]) do // #0 " \
           inc(P); // very fast parsing of most UTF-8 chars within "string"
         D := P;
         if P^ <> '"' then
         repeat
           // escape needed -> in-place unescape from P^ into D^
           c := P^;
-          if not (jcJsonStringMarker in tab[c]) then
+          if not (jcJsonStringMarker in tab[c]) then // #0 " \
           begin
             inc(P);
             D^ := c;
@@ -3902,7 +3897,7 @@ begin
     // handle very efficiently the most common case of unescaped double quotes
     repeat
       inc(P);
-    until jcJsonStringMarker in tab[P^]; // [#0, '"', '\']
+    until jcJsonStringMarker in tab[P^]; // #0 " \
     if P^ <> '"' then
       // we need to handle a complex property name (hardly encoutered)
       if P^ = #0 then
@@ -3935,12 +3930,11 @@ begin
   else
   begin
     // e.g. '{age:{$gt:18}}'
-    if not (jcJsonIdentifierFirstChar in tab[P^]) then
-      exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
+    if not (jcJsonIdentifierFirstChar in tab[P^]) then // _$0..9a..zA..Z
+      exit;
     repeat
       inc(P);
-    until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
+    until not (jcJsonIdentifier in tab[P^]); // _-.[]$0..9a..zA..Z
     if P^ = #0 then
       exit;
     dec(Name);
@@ -4004,7 +3998,7 @@ begin
     tab := @JSON_CHARS;
     repeat
       inc(P);
-    until jcJsonStringMarker in tab[P^]; // end at [#0, '"', '\']
+    until jcJsonStringMarker in tab[P^]; // #0 " \
     if P^ <> '"' then
       exit;
 ok: SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
@@ -4035,12 +4029,11 @@ ok: SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
   begin
     // e.g. '{age:{$gt:18}}'
     tab := @JSON_CHARS;
-    if not (jcJsonIdentifierFirstChar in tab[c]) then
-      exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
+    if not (jcJsonIdentifierFirstChar in tab[c]) then // _$0..9a..zA..Z
+      exit;
     repeat
       inc(P);
-    until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$']
+    until not (jcJsonIdentifier in tab[P^]); // _-.[]$0..9a..zA..Z
     SetString(PropName, Name, P - Name);
     while (P^ <= ' ') and
           (P^ <> #0) do
@@ -4073,8 +4066,7 @@ begin
   inc(P);
   Field := P;
   tab := @JSON_CHARS;
-  while not (jcJsonStringMarker in tab[P^]) do
-    // not [#0, '"', '\']
+  while not (jcJsonStringMarker in tab[P^]) do // #0 " \
     inc(P); // very fast parsing of most UTF-8 chars within "string"
   if P^ <> '"' then
     exit; // here P^ should be '"'
@@ -12603,7 +12595,7 @@ begin
       include(jc, jcDigitFloatChar);
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
       include(jc, jcJsonIdentifierFirstChar);
-    if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
+    if c in ['_', '-', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
       include(jc, jcJsonIdentifier);
     JSON_CHARS[c] := jc;
     if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
