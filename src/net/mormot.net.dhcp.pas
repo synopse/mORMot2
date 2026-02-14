@@ -1670,7 +1670,7 @@ begin
     // handle "..." string values
     case IdemPCharArray(p.Value,
            ['IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
-            'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:']) of
+            'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:']) of
       0:    // ip:
         begin
           v := IP4sToBinary(ToIP4s(p.Value + 3)); // allow CSV of IPs
@@ -1727,7 +1727,9 @@ begin
         begin
           UnescapeHex(RawUtf8(v), p.Value + 4, p.ValueLen - 4, '$');
           result := true;
-        end
+        end;
+      11:  // cidr:
+        result := CidrRoutes(p.Value + 5, v);
     else
       begin
         // recognize configurable options

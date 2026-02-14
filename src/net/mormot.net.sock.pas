@@ -5358,8 +5358,8 @@ begin
   while true do
     case text^ of
       #0 .. ' ',
-      ',', // allow 'ip1,ip2' CSV
-      '/': // allow CIDR '1.2.3.4/20' decoding
+      ',', ';', // allow 'ip1,ip2' CSV
+      '/':      // allow CIDR '1.2.3.4/20' decoding
         if (b < 0) or
            (n <> 3) then
           exit
@@ -5459,8 +5459,6 @@ begin
   p := pointer(text);
   if p <> nil then
     repeat
-      while p^ = ' ' do
-        inc(p);
       if not TextToMac(p, @v) then
         exit;
       AddMac(result, v);
