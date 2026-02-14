@@ -1858,6 +1858,15 @@ function ToIP4s(text: PUtf8Char): TNetIP4s; overload;
 /// compute a raw binary content from an array of ip4 - as used e.g. for DHCP
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 
+/// append one TNetMac instance to a dynamic array of such values
+procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
+
+/// decode one or several MAC addresses from CSV text
+function ToMacs(text: PUtf8Char): TNetMacs; overload;
+
+/// compute a raw binary content from an array of TNetMac - used e.g. for DHCP
+function MacsToBinary(const macs: TNetMacs): RawByteString;
+
 /// parse a text input buffer until the end space or EOL - used for config files
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
@@ -5429,7 +5438,44 @@ end;
 
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 begin
-  FastSetRawByteString(result, pointer(ip4), length(ip4) * 4);
+  FastSetRawByteString(result, pointer(ip4), length(ip4) * SizeOf(ip4[0]));
+end;
+
+procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
+var
+  n: PtrInt;
+begin
+  n := length(macs);
+  SetLength(macs, n + 1);
+  macs[n] := mac;
+end;
+
+function ToMacs(text: PUtf8Char): TNetMacs;
+var
+  p: PUtf8Char;
+  v: TNetMac;
+begin
+  result := nil;
+  p := pointer(text);
+  if p <> nil then
+    repeat
+      while p^ = ' ' do
+        inc(p);
+      if not TextToMac(p, @v) then
+        exit;
+      AddMac(result, v);
+      while p^ <> ',' do
+        if p^ = #0 then
+          exit
+        else
+          inc(p);
+      inc(p); // jump ','
+    until false;
+end;
+
+function MacsToBinary(const macs: TNetMacs): RawByteString;
+begin
+  FastSetRawByteString(result, pointer(macs), length(macs) * SizeOf(macs[0]));
 end;
 
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
