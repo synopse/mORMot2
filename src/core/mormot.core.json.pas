@@ -7885,7 +7885,7 @@ end;
 function TJsonParserContext.ParseNextAny(NormalizeBoolean: boolean): boolean;
 begin
   {$ifdef USERECORDWITHMETHODS}Get.{$endif}
-    GetJsonFieldOrObjectOrArray(false, NormalizeBoolean);
+    GetJsonFieldOrObjectOrArray({asobject=}true, NormalizeBoolean);
   result := Json <> nil;
   Valid := result;
 end;
