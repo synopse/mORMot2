@@ -49,6 +49,7 @@ type
   TJsonToken = (
     jtNone,
     jtDoubleQuote,
+    jtSingleQuote,
     jtFirstDigit,
     jtNullFirstChar,
     jtTrueFirstChar,
@@ -59,7 +60,6 @@ type
     jtArrayStop,
     jtAssign,
     jtComma,
-    jtSingleQuote,
     jtEqual,
     jtIdentifierFirstChar,
     jtSlash,

@@ -2556,6 +2556,13 @@ type
     // - Rtti.ByClass[TMyClass].Props.NameChanges() replaces deprecated
     // TJsonSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
     procedure NameChanges(const Old, New: array of RawUtf8);
+    /// customize all property/field names for JSON serialization
+    // - will recompute all names from RTTI using SetCase() transformation
+    // - most common are scLowerCaseFirst (aka camelCase, for API), scSnakeCase
+    // (POSIX/IT conventions) or even scKebabCase (RFC/networking)
+    // - NestedClasses will change the case of nested class/TObjArray properties
+    // - without argument, scNoTrim will restore the original names from RTTI
+    procedure NameChangeCase(NewCase: TSetCase = scNoTrim; NestedClasses: boolean = false);
     /// reset all properties
     procedure InternalClear;
     /// manual adding of a property/field definition
@@ -8711,6 +8718,24 @@ begin
     p^.Name := New[i];
   end;
   CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
+end;
+
+procedure TRttiCustomProps.NameChangeCase(NewCase: TSetCase; NestedClasses: boolean);
+var
+  i: integer;
+  p: PRttiCustomProp;
+begin
+  p := pointer(List);
+  for i := 1 to Count do
+  begin
+    SetCase(p^.Name, pointer(p^.fOrigName), length(p^.fOrigName), NewCase);
+    if NestedClasses then // recursive change case
+      if p^.Value.Props.Count <> 0 then // e.g. class/record
+        p^.Value.Props.NameChangeCase(NewCase)
+      else if p^.Value.ArrayRtti.PropsCount <> 0 then // e.g. TObjArray
+        p^.Value.ArrayRtti.Props.NameChangeCase(NewCase, NestedClasses);
+    inc(p);
+  end;
 end;
 
 procedure TRttiCustomProps.InternalAdd(Info: PRttiInfo; Offset: PtrInt;
