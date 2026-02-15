@@ -835,6 +835,10 @@ type
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
     // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
+    /// append at runtime a new scope/subnet "profiles" settings
+    // - call without any TDhcpProfileSettings parameter to create a default one
+    // - supplied one will be owned by this instance from now on
+    function AddProfile(one: TDhcpProfileSettings = nil): TDhcpProfileSettings;
     /// compute the low-level TDhcpScope data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct
     procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
@@ -948,7 +952,7 @@ type
     /// append at runtime a new scope/subnet settings
     // - call without any TDhcpScopeSettings parameter to create a default one
     // - supplied one will be owned by this instance from now on
-    procedure AddScope(one: TDhcpScopeSettings = nil);
+    function AddScope(one: TDhcpScopeSettings = nil): TDhcpScopeSettings;
   published
     /// if set, OnIdle will persist the internal list into this file when needed
     // - file on disk would be regular dnsmasq-compatible format
@@ -2667,6 +2671,15 @@ begin
   fGraceFactor := 2;
 end;
 
+function TDhcpScopeSettings.AddProfile(one: TDhcpProfileSettings): TDhcpProfileSettings;
+begin
+  if one = nil then
+    one := TDhcpProfileSettings.Create;
+  if self <> nil then
+    PtrArrayAdd(fProfiles, one); // will be owned by this instance
+  result := one;
+end;
+
 procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess;
   var Data: TDhcpScope);
 var
@@ -2768,13 +2781,13 @@ begin
     end;
 end;
 
-procedure TDhcpServerSettings.AddScope(one: TDhcpScopeSettings);
+function TDhcpServerSettings.AddScope(one: TDhcpScopeSettings): TDhcpScopeSettings;
 begin
-  if self = nil then
-    exit;
   if one = nil then
     one := TDhcpScopeSettings.Create; // default '192.168.1.1/24' subnet
-  PtrArrayAdd(fScope, one); // will be owned by this instance
+  if self <> nil then
+    PtrArrayAdd(fScope, one); // will be owned by this instance
+  result := one;
 end;
 
 
