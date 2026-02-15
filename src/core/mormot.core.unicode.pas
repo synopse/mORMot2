@@ -2485,7 +2485,7 @@ function CamelCase(const text: RawUtf8): RawUtf8; overload;
 function LowerCamelCase(const text: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-  /// convert a string into human-friendly camelCase identifier (as in Java)
+/// convert a string into human-friendly camelCase identifier (as in Java)
 procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 
 /// convert a string with the first letter forced in lowercase
@@ -9706,6 +9706,7 @@ var
   tmp: TByteToAnsiChar;
   d: PAnsiChar;
   flags, last: TSnakeCase;
+  c: AnsiChar;
 begin
   if len > SizeOf(tmp) then
     len := SizeOf(tmp);
@@ -9724,7 +9725,7 @@ begin
          ((scNext_ in last) or
           ((scUp in flags) and ((scLow in last) or (scDigit in last)) or
           ((scLow in flags) and (scDigit in last)) or
-          ((scDigit in flags) and not (scDigit in last)) or
+          ((scDigit in flags) and not ((scDigit in last) or (d = @tmp[1]))) or
           ((scUp in flags) and (not (scLow in last)) and (len > 0) and
            (P[1] in ['a' .. 'z'])))) then
       begin
@@ -9734,7 +9735,11 @@ begin
       end;
       if not ((sc_ in last) and (sc_ in flags)) then
       begin
-        d^ := NormToLowerAnsi7[P^];
+        c := P^;
+        if c = '_' then
+          d^ := sep
+        else
+          d^ := NormToLowerAnsi7[c];
         inc(d);
       end;
       exclude(flags, scNext_);
