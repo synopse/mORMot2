@@ -418,8 +418,15 @@ begin
   CheckEqual(SnakeCase('Abc_Def'), 'abc_def');
   CheckEqual(SnakeCase('AbcDef_'), 'abc_def_');
   CheckEqual(SnakeCase('Abc__Def'), 'abc_def');
+  CheckEqual(SnakeCase('Abc__Def', '-'), 'abc-def');
   CheckEqual(SnakeCase('AbcDef__'), 'abc_def_');
   CheckEqual(SnakeCase('Abc__Def__'), 'abc_def_');
+  CheckEqual(SnakeCase('Abc12Def'), 'abc_12_def');
+  CheckEqual(SnakeCase('X64Def', '-'), 'x64-def');
+  CheckEqual(SnakeCase('XY64Def', '-'), 'xy-64-def');
+  CheckEqual(SnakeCase('column1', '-'), 'column-1');
+  CheckEqual(SnakeCase('column100', '-'), 'column-100');
+  CheckEqual(SnakeCase('Column 1', '-'), 'column-1');
   CheckEqual(SnakeCase('variable name'), 'variable_name');
   CheckEqual(SnakeCase('Variable Name'), 'variable_name');
   CheckEqual(SnakeCase('VARIABLE NAME'), 'variable_name');
