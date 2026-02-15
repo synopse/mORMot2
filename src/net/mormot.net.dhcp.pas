@@ -287,24 +287,24 @@ type
   // - as parsed by TDhcpProcess.SetBoot() and stored in TDhcpProcessData.Boot
   // - dcbDefault means regular OS DHCP request with no remote boot options
   // - dcbBios is first-stage TFTP loader on legacy BIOS PXE
-  // - dcbX86,dcbX64,dcbArm32,dcbArm64 are first-stage TFTP loader with UEFI
-  // - dcbX64_Http,dcbArm64_Http are first-stage UEFI firmware allowing HTTP
-  // - dcbIpxe_Bios is iPXE second-stage on legacy BIOS
-  // - dcbIpxe_X86,dcbIpxe_X64,dcbIpxe_Arm32,dcbIpxe_Arm64 are iPXE second-stage
+  // - dcbX86,dcbX64,dcbA32,dcbA64 are first-stage TFTP loader with UEFI
+  // - dcbX64Http,dcbA64Http are first-stage UEFI firmware allowing HTTP
+  // - dcbIpxeBios is iPXE second-stage on legacy BIOS
+  // - dcbIpxeX86,dcbIpxeX64,dcbIpxeA32,dcbIpxeA64 are iPXE second-stage
   TDhcpClientBoot = (
     dcbDefault,
     dcbBios,
     dcbX86,
     dcbX64,
-    dcbArm32,
-    dcbArm64,
-    dcbX64_Http,
-    dcbArm64_Http,
-    dcbIpxe_Bios,
-    dcbIpxe_X86,
-    dcbIpxe_X64,
-    dcbIpxe_Arm32,
-    dcbIpxe_Arm64);
+    dcbA32,
+    dcbA64,
+    dcbX64Http,
+    dcbA64Http,
+    dcbIpxeBios,
+    dcbIpxeX86,
+    dcbIpxeX64,
+    dcbIpxeA32,
+    dcbIpxeA64);
 
   /// internal resultset used by ParseMacIP()
   TMacIP = record
@@ -336,8 +336,8 @@ type
 
 var
   /// contains PXE boot network identifiers used for JSON/INI settings fields
-  // - i.e. 'Default', 'Bios', 'X86', 'X64', 'Arm32', 'Arm64', 'X64Http',
-  // 'Arm64Http', 'IpxeBios', 'IpxeX86', 'IpxeX64', 'IpxeArm32', 'IpxeArm64'
+  // - i.e. 'default', 'bios', 'x86', 'x64', 'a32', 'a64', 'x64-http', 'a64-http',
+  // 'ipxe-bios', 'ipxe-x86', 'ipxe-x64', 'ipxe-a32', 'ipxe-a64'
   BOOT_TXT: array[TDhcpClientBoot] of RawUtf8;
 
 /// parse a 'ip', 'mac=ip' or 'uuid=ip' text into binary TNetIP4/TNetMac
@@ -529,8 +529,8 @@ type
     /// remote resource identifier sent back as doBootFileName option 67
     // - could be a TFTP file name, or a HTTP URI, depending on the context
     // - depending on the firmware level, e.g. 'undionly.kpxe' for dcbBios,
-    // 'bootx64.efi' for dcbX64, 'http://server/bootx64.efi' for dcbX64_Http,
-    // or 'http://server/script' for dcbIpxe_Bios .. dcbIpxe_Arm64
+    // 'bootx64.efi' for dcbX64, 'http://server/bootx64.efi' for dcbX64Http,
+    // or 'http://server/script' for dcbIpxeBios .. dcbIpxeA64
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
   end;
 
@@ -719,32 +719,32 @@ type
     property X64: RawUtf8
       read fRemote[dcbX64] write fRemote[dcbX64];
     /// option 67 TFTP file name for UEFI Arm32
-    property Arm32: RawUtf8
-      read fRemote[dcbArm32] write fRemote[dcbArm32];
+    property A32: RawUtf8
+      read fRemote[dcbA32] write fRemote[dcbA32];
     /// option 67 TFTP file name for UEFI Arm64
-    property Arm64: RawUtf8
-      read fRemote[dcbArm64] write fRemote[dcbArm64];
+    property A64: RawUtf8
+      read fRemote[dcbA64] write fRemote[dcbA64];
     /// option 67 remote HTTP URI for UEFI x64
     property X64Http: RawUtf8
-      read fRemote[dcbX64_Http] write fRemote[dcbX64_Http];
+      read fRemote[dcbX64Http] write fRemote[dcbX64Http];
     /// option 67 remote HTTP URI for UEFI Arm64
-    property Arm64Http: RawUtf8
-      read fRemote[dcbArm64_Http] write fRemote[dcbArm64_Http];
+    property A64Http: RawUtf8
+      read fRemote[dcbA64Http] write fRemote[dcbA64Http];
     /// option 67 TFTP file name or HTTP URI for legacy BIOS iPXE
     property IpxeBios: RawUtf8
-      read fRemote[dcbIpxe_Bios] write fRemote[dcbIpxe_Bios];
+      read fRemote[dcbIpxeBios] write fRemote[dcbIpxeBios];
     /// option 67 TFTP file name or HTTP URI for iPXE i386
     property IpxeX86: RawUtf8
-      read fRemote[dcbIpxe_X86] write fRemote[dcbIpxe_X86];
+      read fRemote[dcbIpxeX86] write fRemote[dcbIpxeX86];
     /// option 67 TFTP file name or HTTP URI for iPXE x64
     property IpxeX64: RawUtf8
-      read fRemote[dcbIpxe_X64] write fRemote[dcbIpxe_X64];
+      read fRemote[dcbIpxeX64] write fRemote[dcbIpxeX64];
     /// option 67 TFTP file name or HTTP URI for iPXE Arm32
-    property IpxeArm32: RawUtf8
-      read fRemote[dcbIpxe_Arm32] write fRemote[dcbIpxe_Arm32];
+    property IpxeA32: RawUtf8
+      read fRemote[dcbIpxeA32] write fRemote[dcbIpxeA32];
     /// option 67 TFTP file name or HTTP URI for iPXE Arm64
-    property IpxeArm64: RawUtf8
-      read fRemote[dcbIpxe_Arm64] write fRemote[dcbIpxe_Arm64];
+    property IpxeA64: RawUtf8
+      read fRemote[dcbIpxeA64] write fRemote[dcbIpxeA64];
   end;
 
   /// define a profile to "match and send" options for a given scope/subnet
@@ -2605,16 +2605,16 @@ begin
   if dsoNoPXEConsolidation in Options then
     exit;
   // 1. HTTP aware architecture fallback to their TFTP value
-  ConsolidateOption(Data, dcbX64,   dcbX64_Http);
-  ConsolidateOption(Data, dcbArm64, dcbArm64_Http);
+  ConsolidateOption(Data, dcbX64, dcbX64Http);
+  ConsolidateOption(Data, dcbA64, dcbA64Http);
   // 2. assume we could share the main x64/x86 IPXE URI
   ref := dcbDefault;
-  if Data.Remote[dcbIpxe_X64] <> '' then
-    ref := dcbIpxe_X64
-  else if Data.Remote[dcbIpxe_X86] <> '' then
-    ref := dcbIpxe_X86;
+  if Data.Remote[dcbIpxeX64] <> '' then
+    ref := dcbIpxeX64
+  else if Data.Remote[dcbIpxeX86] <> '' then
+    ref := dcbIpxeX86;
   if ref <> dcbDefault then
-    for dcb := dcbIpxe_X86 to high(Data.Remote) do
+    for dcb := dcbIpxeX86 to high(Data.Remote) do
       if dcb <> ref then
         ConsolidateOption(Data, ref, dcb);
 end;
@@ -3630,7 +3630,7 @@ end;
 const
   ARCH_DCB: array[0 .. 12] of TDhcpClientBoot = (
     dcbBios, dcbDefault, dcbX86, dcbDefault, dcbDefault, dcbDefault, // 0..5
-    dcbX86, dcbX64, dcbX64, dcbX64, dcbArm32, dcbArm64, dcbArm64);   // 6..12
+    dcbX86, dcbX64, dcbX64, dcbX64, dcbA32, dcbA64, dcbA64);   // 6..12
   // 0 = BIOS x86 (Legacy), 1 = NEC/PC87, 2 = EFI x86, 3 = EFI bytecode,
   // 4 = EFI XScale, 5 = EFI early x64, 6 = EFI x86 Microsoft, 7 = EFI x64,
   // 8 = EFI x64 HTTP, 9 = EFI2 x64 HTTP, 10 = EFI arm32, 11 = EFI arm64,
@@ -3667,17 +3667,17 @@ begin
     exit; // normal DHCP boot
   // detect iPXE from RFC 3004 Option 77
   if DhcpIdem(@Data.Recv, Data.RecvLens[doUserClass], 'iPXE') then
-    // change dcbBios..dcbArm64 into dcbIpxe_Bios..dcbIpxe_Arm64
-    inc(result, ord(dcbIpxe_Bios) - ord(dcbBios))
+    // change dcbBios..dcbA64 into dcbIpxeBios..dcbIpxeA64
+    inc(result, ord(dcbIpxeBios) - ord(dcbBios))
   else if (vendor^[0] >= #10) and
           IdemPChar(@vendor^[1], 'HTTPCLIENT') then
     // HTTPClient in Option 60 indicates native UEFI firmware HTTP boot
     // - will fallback to TFTP is no HTTP URI is supplied
     case result of
       dcbX64:
-        result := dcbX64_Http;
-      dcbArm64:
-        result := dcbArm64_Http;
+        result := dcbX64Http;
+      dcbA64:
+        result := dcbA64Http;
     end;
   Data.Boot := result;
 end;
@@ -3690,7 +3690,7 @@ begin
   boot := @Data.Scope^.Boot;
   if boot^.Remote[Data.Boot] = '' then
   begin
-    DoLog(sllDebug, 'missing Boot file', Data); // including 'boot=IpxeArm64'
+    DoLog(sllDebug, 'missing Boot file', Data); // including 'boot=IpxeX64'
     Data.Boot := dcbDefault;                    // no 'boot=...' any more
     inc(Data.Scope^.Metrics.Current[dsmDroppedPxeBoot]);
     // will still send back an OFFER/ACK but with no PXE options
@@ -4024,7 +4024,8 @@ initialization
   DHCP_TXT[dmtUndefined] := 'invalid';
   GetEnumTrimmedNames(TypeInfo(TDhcpOption),      @DHCP_OPTION, scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
-  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT, scAny_Removed);
+  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT, scKebabCase);
+  Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, {nest=}true);
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArrays([
     TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings,
