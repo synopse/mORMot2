@@ -403,7 +403,7 @@ type
   // - dsmLeaseExpired: lease expires (OnIdle cleanup)
   // - dsmLeaseReleased: lease is freed due to RELEASE
   // -  - Static vs dynamic hits
-  // - dsmStaticHits: static reservation (MAC or Option 61) is used to assign an IP
+  // - dsmStaticHits: static reservation (MAC or option 61) is used to assign an IP
   // - dsmDynamicHits: dynamic lease (from the pool) is used
   // -  Rate limiting / abuse
   // - dsmRateLimitHit: DECLINE packet is ignored due to rate limiting
@@ -411,15 +411,15 @@ type
   // - dsmInvalidRequest: received packet is malformed or cannot be processed
   // - dsmUnsupportedRequest: only DISCOVER/REQUEST/DECLINE/RELEASE/INFORM are handled
   // -  - Option usage counters
-  // - dsmOption50Hits: Option 50 (requested-address) is present and used to setup IP
-  // - dsmOption61Hits: Option 61 (client-identifier) is present and used to assign/lookup a lease
-  // - dsmOption82Hits: Option 82 (relay-agent-information) is present and processed
-  // - dsmOption82SubnetHits
-  // - dsmOption118Hits: Option 118 (subnet-selection) is present and valid
+  // - dsmOption50Hits: option 50 dhcp-requested-address is present and used to setup IP
+  // - dsmOption61Hits: option 61 dhcp-client-identifier is present and used to assign/lookup a lease
+  // - dsmOption82Hits: option 82 relay-agent-information is present and processed
+  // - dsmOption82SubnetHits: option 82 link-selection sub-option is present and processed
+  // - dsmOption118Hits: option 118 subnet-selection is present and valid
   // - dsmPxeBoot: PXE/iPXE options have been returned for a given architecture
   // - - Drop / error reasons
   // - dsmDroppedPackets: incremented for any packet dropped silently (not matching a scope or giaddr)
-  // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or Option 82/118
+  // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or option 82/118
   // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
   // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
   // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
@@ -446,6 +446,7 @@ type
     dsmOption50Hits,
     dsmOption61Hits,
     dsmOption82Hits,
+    dsmOption82SubnetHits,
     dsmOption118Hits,
     dsmPxeBoot,
     dsmDroppedPackets,
@@ -3681,10 +3682,13 @@ begin
   result := true;
   Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLensRai[dorLinkSelection]));
   if Data.Scope <> nil then
+  begin
     // RFC 3527 sub-option in relay-agent-information 82, on complex relay
     // environments where giaddr is already meaningful for routing and cannot
     // be overloaded for subnet selection
+    inc(Data.Scope^.Metrics.Current[dsmOption82SubnetHits]);
     exit;
+  end;
   // fallback to option 118 or giaddr if link-selection was set but invalid
   Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
   if Data.Scope <> nil then
