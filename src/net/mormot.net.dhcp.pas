@@ -902,7 +902,7 @@ type
     // - raise an EDhcp exception if the parameters are not correct
     procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
   published
-    /// Subnet Mask (option 1) e.g. '192.168.1.1/24'
+    /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
     // - the CIDR 'ip/mask' pattern will compute RangeMin/RangeMax and
     // ServerIdentifier directly from this pattern
     // - accept also plain '255.255.255.0' IP if you want to specify by hand the
@@ -912,70 +912,75 @@ type
     /// some static IP addresses potentially with their MAC or UUID, which
     // will be reserved for those on the network
     // - supplied as "ip", "mac=ip" or "uuid=ip" string items
-    // - e.g. ["192.168.1.2","2f:af:9e:0f:b8:2a=192.168.1.100"]
+    // - e.g. "static": ["192.168.1.2","2f:af:9e:0f:b8:2a=192.168.1.100"]
     property Static: TRawUtf8DynArray
       read fStatic write fStatic;
-    /// minimal IP range e.g. '192.168.1.10'
-    // - default is '' and will be filled by SubnetMask value as 10..254
+    /// minimal IP range e.g. "range-min": "192.168.1.10"
+    // - default is '' and will be filled by "subnet-mask" value as 10
     property RangeMin: RawUtf8
       read fRangeMin write fRangeMin;
-    /// maximal IP range e.g. '192.168.1.254'
-    // - default is '' and will be filled by SubnetMask value as 10..254
+    /// maximal IP range e.g. "range-max": 192.168.1.254"
+    // - default is '' and will be filled by "subnet-mask" value as 254
     property RangeMax: RawUtf8
       read fRangeMax write fRangeMax;
-    /// Default Gateway (option 3) e.g. '192.168.1.1' - default is ''
+    /// Default Gateway (option 3) e.g. "default-gateway":"192.168.1.1"
     property DefaultGateway: RawUtf8
       read fDefaultGateway write fDefaultGateway;
-    /// DNS Servers as CSV (option 6) e.g. '8.8.8.8,8.8.4.4' - default is ''
+    /// DNS Servers as CSV (option 6) e.g. "dns-servers":"8.8.8.8,8.8.4.4"
     property DnsServers: RawUtf8
       read fDnsServers write fDnsServers;
-    /// NTP servers as CSV (option 42) e.g. '192.168.1.1' - default is ''
+    /// NTP servers as CSV (option 42) e.g. 'ntp-servers:":"192.168.1.1"
     property NtpServers: RawUtf8
       read fNtpServers write fNtpServers;
-    /// Domain Name (option 15) e.g. 'lan.local' - default is ''
+    /// Domain Name (option 15) e.g. "domain-name": "lan.local"
     property DomainName: RawUtf8
       read fDomainName write fDomainName;
-    /// Broadcast Address (option 28) e.g. '192.168.1.255' - default is ''
+    /// Broadcast Address (option 28) e.g. "broadcast-address":"192.168.1.255"
     property BroadCastAddress: RawUtf8
       read fBroadCastAddress write fBroadCastAddress;
-    /// IP Lease Duration in seconds (option 51) - default is 120 for 2 minutes
+    /// IP Lease Duration in seconds (option 51) e.g. "lease-time-seconds":120
+    // - default is 120 for 2 minutes
     // - options 51/58/59 Lease/Renewal/Rebinding will use 100/50/87.5 percents
     // - default 120 secs seems fine for our minimal iPXE-oriented DHCP server
     property LeaseTimeSeconds: cardinal
       read fLeaseTimeSeconds write fLeaseTimeSeconds;
     /// how many DECLINE requests are allowed per second before ignoring them
+    // - e.g. "max-decline-per-second":5
     // - a malicious client can poison the pool by sending repeated DECLINEs
     // - default is 5 which seems reasonable and conservative
     // - note that INFORM rate limitation is hardcoded to 3 per second per MAC
     property MaxDeclinePerSecond: cardinal
       read fMaxDeclinePerSecond write fMaxDeclinePerSecond default 5;
-    /// IP Decline Duration in seconds
+    /// IP Decline Duration in seconds e.g. "decline-time-seconds":240
     // - default to 0, to reuse the same value than LeaseTimeSeconds
     // - if LeaseTimeSeconds is small, you could set a bigger value here to be
     // more conservative about the static IP persistence in the network
     property DeclineTimeSeconds: cardinal
       read fDeclineTimeSeconds write fDeclineTimeSeconds;
-    /// DHCP Server Identifier e.g. '192.168.1.1'
-    // - default is '' and will be filled by SubnetMask value
+    /// DHCP Server Identifier e.g. "server-identifier":"192.168.1.1"
+    // - default is '' and will be filled by "subnet-mask" IP value
     property ServerIdentifier: RawUtf8
       read fServerIdentifier write fServerIdentifier;
-    /// how many seconds a DHCP dmtOffer would stay available - default is 5
+    /// how many seconds a DHCP dmtOffer would stay available
+    // - default is "offer-holding-secs":5
     property OfferHoldingSecs: cardinal
       read fOfferHoldingSecs write fOfferHoldingSecs;
     /// if lease time is < 1 hour, allow relaxed lease expansion after expiry
-    // - default is 2, meaning that for PXE with LeaseTimeSeconds = 120 < 1 hour,
-    // a grace period of 240 seconds
+    // - default is "grace-factor":2, meaning that for PXE with LeaseTimeSeconds
+    // of 120 (< 1 hour), a grace period of 240 seconds
     // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
     property GraceFactor: cardinal
       read fGraceFactor write fGraceFactor default 2;
     /// refine DHCP server process for this scope
     // - default is [] but you may tune it for your actual (sub-)network needs
+    // using informRateLimit, csvUnixTime, pxeNoInherit, pxeDisable in "options"
     property Options: TDhcpScopeOptions
       read fOptions write fOptions;
-    /// optional PXE network book settings
+    /// optional PXE network book settings as "boot" sub-object
     property Boot: TDhcpBootSettings
       read fBoot;
-    /// vendor-specific or client-specific DHCP options for this scope
+    /// vendor-specific or client-specific DHCP options for this scope as
+    // "profiles" array of JSON objects
     // - order in this array defines "first profile wins" deterministic behavior
     property Profiles: TDhcpProfileSettingsObjArray
       read fProfiles;
