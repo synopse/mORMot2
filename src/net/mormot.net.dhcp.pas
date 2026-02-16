@@ -795,8 +795,10 @@ type
   // - "always" and "requested" define the options sent in the response
   // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
   // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
-  //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy", "CIDR:xx"
+  //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy", "CIDR:xx" with
+  // CSV support for IP: MAC: or CIDR: to encode arrays of values
   // - values could also be integers, booleans, or nested TLV object
+  // - array values would be internally converted into CSV for processing
   // - most values would have their default type guessed as UINT16, IP or UUID
   // - "all" "any" "not-all" "not-any" also support convenient "boot" key as
   // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
@@ -851,10 +853,12 @@ type
     /// a JSON object defining the output options following Option 55
     // - will send only the options requested within client Option 55 list
     // - those definitions are the same:
-    // $ "requested": { "42": "IP:10.0.0.5" }
-    // $ "requested": { 42: "10.0.0.5" }
+    // $ "requested": { "42": "IP:10.0.0.5,10.0.0.6" }
+    // $ "requested": { 42: "10.0.0.5,10.0.0.6" }
+    // $ "requested": { 42: ["10.0.0.5", "10.0.0.6"] }
     // $ "requested": { "ntp-servers": "hex:0a000005" }
-    // $ "requested": { ntp-servers: "10.0.0.5" }
+    // $ "requested": { ntp-servers: "10.0.0.5,10.0.0.6" }
+    // $ "requested": { ntp-servers: ["10.0.0.5", "10.0.0.6"] }
     property Requested: RawJson
       read fRequested write fRequested;
   end;
@@ -1715,6 +1719,8 @@ var
   tmp: THash128Rec;
   len: PtrInt;
   d: PAnsiChar;
+  arr: TRawUtf8DynArray;
+  csv: RawUtf8;
 label
   uuid97;
 begin
@@ -1722,6 +1728,18 @@ begin
   len := p.ValueLen;
   if len = 0 then
     exit;
+  if not p.WasString and
+     (p.Value^ = '[') then
+  begin
+    // e.g. "ntp-servers": ["ip:1.2.3.4", "1.2.3.5"] -> "ip:1.2.3.4,1.2.3.5"
+    DynArrayLoadJsonInPlace(arr, p.Value, TypeInfo(TRawUtf8DynArray));
+    if arr = nil then
+      exit;
+    RawUtf8ArrayToCsvVar(arr, csv);
+    p.Get.WasString := true;
+    p.Get.Value := pointer(csv);
+    p.Get.ValueLen := length(csv);
+  end;
   if p.WasString then
     // handle "..." string values
     case IdemPCharArray(p.Value,
