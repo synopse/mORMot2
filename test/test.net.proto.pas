@@ -1895,7 +1895,7 @@ begin
     d.Recv := d.Send;
     d.RecvLen := n;
     Check(server.ComputeResponse(d) < 0, 'ack');
-    Check(d.HostName^ = '', 'no hostname');
+    Check(d.RecvHostName^ = '', 'no hostname');
     CheckEqual(server.Count, 1);
     txt := server.SaveToText;
     CheckNotEqual(txt, CRLF, 'offer not saved');
@@ -1924,7 +1924,7 @@ begin
       Check(server.ComputeResponse(d) > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
       CheckEqual(Int64(d.RecvLensRai), 0, 'rai');
-      Check(d.HostName^ = hostname, 'hostname');
+      Check(d.RecvHostName^ = hostname, 'hostname');
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       Check(IsEqual(macs[i], PNetMac(@d.Send.chaddr)^));
       ips[i] := d.Send.ciaddr; // OFFERed IP
