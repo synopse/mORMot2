@@ -144,7 +144,7 @@ type
  // - doTftpServerName is PXE option 66 (192.168.10.10 or host name)
  // - doBootFileName is PXE option 67 (pxelinux.0)
  // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
- // - doDhcpAgentOptions is Relay Agent (RFC 3046) option 82 - last to appear
+ // - doRelayAgentInformation is Relay Agent (RFC 3046) option 82 - appear last
  // - doClientArchitecture is RFC 4578 PXE option 93 as uint16 (00:00)
  // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOS_UUID)
  // - doSubnetSelection is option 118 to override the giaddr value
@@ -171,7 +171,7 @@ type
    doTftpServerName,
    doBootFileName,
    doUserClass,
-   doDhcpAgentOptions,
+   doRelayAgentInformation,
    doClientArchitecture,
    doUuidClientIdentifier,
    doSubnetSelection,
@@ -182,7 +182,7 @@ type
  /// pointer to a set of supported DHCP options
  PDhcpOptions = ^TDhcpOptions;
 
- /// decoded DHCP Option 82 "Relay Agent Information" sub-options - see RFC 3046
+ /// decoded DHCP Option 82 relay-agent-information sub-options - see RFC 3046
  // - fixed as 8 items for TDhcpParsedRai to fit in 64-bit
  TDhcpOptionRai = (
    dorUndefined,
@@ -193,7 +193,7 @@ type
    dorServerIdOverride,
    dorRelayId,
    dorRelayPort);
- /// set of supported DHCP "Relay Agent Information" sub-options
+ /// set of supported DHCP relay-agent-information sub-options
  TDhcpOptionRais = set of TDhcpOptionRai;
 
 var
@@ -207,7 +207,7 @@ var
   // 'dhcp-requested-address', 'dhcp-lease-time', 'dhcp-message-type',
   // 'dhcp-server-identifier', 'dhcp-parameter-request-list', 'dhcp-renewal-time',
   // 'dhcp-rebinding-time', 'vendor-class-identifier', 'dhcp-client-identifier',
-  // 'tftp-server-name', 'boot-file-name', 'user-class', 'dhcp-agent-options',
+  // 'tftp-server-name', 'boot-file-name', 'user-class', 'relay-agent-information',
   // 'client-architecture', 'uuid-client-identifier' and 'subnet-selection'
   DHCP_OPTION: array[TDhcpOption] of RawUtf8;
   /// KEA-like identifier of each DHCP RAI sub-option
@@ -354,7 +354,7 @@ type
     opt: TDhcpOption;
     /// the "boot" matching value (with op=0 and opt=doPad)
     boot: TDhcpClientBoot;
-    /// the DHCP Option 82 "Relay Agent Information" sub-option matching value
+    /// the DHCP Option 82 relay-agent-information sub-option matching value
     rai: TDhcpOptionRai;
     /// the associated raw binary value
     value: RawByteString;
@@ -403,7 +403,7 @@ type
   // - dsmLeaseExpired: lease expires (OnIdle cleanup)
   // - dsmLeaseReleased: lease is freed due to RELEASE
   // -  - Static vs dynamic hits
-  // - dsmStaticHits: static reservation (MAC or Option61) is used to assign an IP
+  // - dsmStaticHits: static reservation (MAC or Option 61) is used to assign an IP
   // - dsmDynamicHits: dynamic lease (from the pool) is used
   // -  Rate limiting / abuse
   // - dsmRateLimitHit: DECLINE packet is ignored due to rate limiting
@@ -411,14 +411,15 @@ type
   // - dsmInvalidRequest: received packet is malformed or cannot be processed
   // - dsmUnsupportedRequest: only DISCOVER/REQUEST/DECLINE/RELEASE/INFORM are handled
   // -  - Option usage counters
-  // - dsmOption50Hits: Option50 (requested-address) is present and used to setup IP
-  // - dsmOption61Hits: Option61 (client-identifier) is present and used to assign/lookup a lease
-  // - dsmOption82Hits: Option82 (Relay Agent) is present and processed
-  // - dsmOption118Hits: Option118 (subnet-selection) is present and valid
+  // - dsmOption50Hits: Option 50 (requested-address) is present and used to setup IP
+  // - dsmOption61Hits: Option 61 (client-identifier) is present and used to assign/lookup a lease
+  // - dsmOption82Hits: Option 82 (relay-agent-information) is present and processed
+  // - dsmOption82SubnetHits
+  // - dsmOption118Hits: Option 118 (subnet-selection) is present and valid
   // - dsmPxeBoot: PXE/iPXE options have been returned for a given architecture
   // - - Drop / error reasons
   // - dsmDroppedPackets: incremented for any packet dropped silently (not matching a scope or giaddr)
-  // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or Option118
+  // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or Option 82/118
   // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
   // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
   // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
@@ -1903,7 +1904,7 @@ begin
       v.op := DHCP_OPTION_NUM[v.opt]
     else if (pp = ppMatch) and
             parser.ValueEnumFromConst(@RAI_OPTION, length(RAI_OPTION), v.rai) then
-      // e.g. 'circuit-id' from within doDhcpAgentOptions sub-options
+      // e.g. 'circuit-id' from within doRelayAgentInformation sub-options
     else
       exit;
   if not parser.ParseNextAny({NormalizeBoolean=}false) then
@@ -3559,7 +3560,7 @@ var
   p: PAnsiChar;
   len: PtrInt;
 begin
-  p := @Data.Recv.options[Data.RecvLens[doDhcpAgentOptions]]; // <> 0 by caller
+  p := @Data.Recv.options[Data.RecvLens[doRelayAgentInformation]]; // <> 0 by caller
   len := ord(p[0]);          // whole Option 82 length
   inc(p);
   repeat
@@ -3592,7 +3593,7 @@ begin
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
     Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
     Int64(Data.RecvLensRai) := 0;
-    if Data.RecvLens[doDhcpAgentOptions] <> 0 then
+    if Data.RecvLens[doRelayAgentInformation] <> 0 then
       ParseRecvLensRai(Data);
     result := true;
   end
@@ -3663,8 +3664,8 @@ begin
     DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
     inc(Data.Scope^.Metrics.Current[dsmOption61Hits]);
   end;
-  // support Option 82 Relay Agent by sending it back - should be the last option
-  b := Data.RecvLens[doDhcpAgentOptions];
+  // send back Option 82 if any - should be the very last option by RFC 3046
+  b := Data.RecvLens[doRelayAgentInformation];
   if b <> 0 then
   begin
     DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
@@ -3680,7 +3681,7 @@ begin
   result := true;
   Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLensRai[dorLinkSelection]));
   if Data.Scope <> nil then
-    // RFC 3527 sub-option in Relay Agent Information 82, on complex relay
+    // RFC 3527 sub-option in relay-agent-information 82, on complex relay
     // environments where giaddr is already meaningful for routing and cannot
     // be overloaded for subnet selection
     exit;
