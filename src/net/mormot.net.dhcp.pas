@@ -536,6 +536,8 @@ type
 
   /// store one DHCP "profile" entry in a ready-to-be-processed way
   TDhcpScopeProfile = record
+    /// optional identifier used in the logs (not in the internal logic itself)
+    name: RawUtf8;
     /// store AND matching fields
     all: TProfileValues;
     /// store OR matching fields
@@ -768,12 +770,16 @@ type
   // BOOT_TXT[] values
   TDhcpProfileSettings = class(TSynPersistent)
   protected
+    fName: RawUtf8;
     fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
   public
     /// compute the low-level TDhcpScope.Profiles[] entry from current settings
     // - raise an EDhcp exception if the parameters are not correct
     procedure PrepareScope(var Profile: TDhcpScopeProfile);
   published
+    /// human-friendly identifier, only used in the logs as " profile=<name>"
+    property Name: RawUtf8
+      read fName write fName;
     /// a JSON object defining AND fields lookup logic
     // - all key/value pairs must match input client options
     // - those definitions are the same:
@@ -781,7 +787,7 @@ type
     // $ "all": { 77: "iPXE", 93: "UINT16:7" }
     // $ "all": { "user-class": "iPXE", "client-architecture": 7 }
     // $ "all": { user-class: "iPXE", client-architecture: 7 }
-    // $ "all": { boot: "IpxeX64" }
+    // $ "all": { boot: "ipxe-x64" }
     property All: RawJson
       read fAll write fAll;
     /// a JSON object defining OR fields lookup logic
@@ -2623,6 +2629,7 @@ var
   i: PtrInt;
 begin
   // parse main "profiles" JSON object fields
+  Profile.name := fName;
   if not ParseProfile(fAll, Profile.all, ppMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid all:%', [fAll]);
   if not ParseProfile(fAny, Profile.any, ppMatch) then
@@ -3445,8 +3452,16 @@ begin
   end;
   if Data.Boot <> dcbDefault then
   begin
-    AppendShort(' boot=', msg); // e.g. 'boot=IpxeX64'
+    AppendShort(' boot=', msg); // e.g. 'boot=ipxe-x64'
     AppendShortAnsi7String(BOOT_TXT[Data.Boot], msg);
+  end;
+  if (Data.Profile <> nil) and
+     (Data.Profile.name <> '') then
+  begin
+    AppendShort(' profile=', msg);
+    AppendShortAnsi7String(Data.Profile.name, msg);
+    if msg[0] = #255 then
+      dec(msg[0]); // avoid buffer overflow writing ASCIIZ
   end;
   msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
   // efficiently append to local TSynLog
@@ -3698,7 +3713,7 @@ begin
   boot := @Data.Scope^.Boot;
   if boot^.Remote[Data.Boot] = '' then
   begin
-    DoLog(sllDebug, 'missing Boot file', Data); // including 'boot=IpxeX64'
+    DoLog(sllDebug, 'missing boot file', Data); // including 'boot=ipxe-x64'
     Data.Boot := dcbDefault;                    // no 'boot=...' any more
     inc(Data.Scope^.Metrics.Current[dsmDroppedPxeBoot]);
     // will still send back an OFFER/ACK but with no PXE options
