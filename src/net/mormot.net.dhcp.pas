@@ -182,19 +182,35 @@ type
  /// pointer to a set of supported DHCP options
  PDhcpOptions = ^TDhcpOptions;
 
+ /// decoded DHCP Option 82 "Relay Agent Information" sub-options - see RFC 3046
+ TDhcpOptionRai = (
+   dorCircuitId,
+   dorRemoteId,
+   dorLinkSelection,
+   dorSubscriberId,
+   dorServerIdOverride,
+   dorRelayId,
+   dorRelayPort);
+ /// set of supported DHCP "Relay Agent Information" sub-options
+ TDhcpOptionRais = set of TDhcpOptionRai;
+
 var
   /// uppercase identifier of each DHCP message type, e.g. 'DISCOVER' or 'ACK'
   DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
 
-  /// KEA identifier of each DHCP option, e.g. 'subnet-mask' or 'routers'
+  /// KEA-like identifier of each DHCP option, e.g. 'subnet-mask' or 'routers'
   // - https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#standard-dhcpv4-options
   DHCP_OPTION: array[TDhcpOption] of RawUtf8;
+  /// KEA-like identifier of each DHCP RAI sub-option, e.g. 'circuit-id'
+  RAI_OPTION: array[TDhcpOptionRai] of RawUtf8;
 
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
 function ToText(opt: TDhcpOption): PShortString; overload;
+function ToText(opt: TDhcpOptionRai): PShortString; overload;
 
 function FromText(const V: RawUtf8; out dmt: TDhcpMessageType): boolean; overload;
 function FromText(const V: RawUtf8; out opt: TDhcpOption): boolean; overload;
+function FromText(const V: RawUtf8; out opt: TDhcpOptionRai): boolean; overload;
 
 const
   /// 1,3,6,15,28 options as used by default for DhcpClient()
@@ -1214,6 +1230,11 @@ begin
   result := GetEnumName(TypeInfo(TDhcpOption), ord(opt));
 end;
 
+function ToText(opt: TDhcpOptionRai): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDhcpOptionRai), ord(opt));
+end;
+
 function FromText(const V: RawUtf8; out dmt: TDhcpMessageType): boolean;
 begin
   result := GetEnumNameValue(TypeInfo(TDhcpMessageType), V, dmt, @DHCP_TXT);
@@ -1224,12 +1245,20 @@ begin
   result := GetEnumNameValue(TypeInfo(TDhcpOption), V, opt, @DHCP_OPTION);
 end;
 
+function FromText(const V: RawUtf8; out opt: TDhcpOptionRai): boolean;
+begin
+  result := GetEnumNameValue(TypeInfo(TDhcpOptionRai), V, opt, @RAI_OPTION);
+end;
+
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 43, 50, 51, 53, 54, 55,
     58, 59, 60, 61, 66, 67, 77, 82, 93, 97, 118, 255);
-var
-  DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption; // for fast O(1) lookup
+  RAI_OPTION_NUM: array[TDhcpOptionRai] of byte = (
+    1, 2, 5, 6, 11, 12, 19);
+var // for fast O(1) lookup
+  DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption;
+  RAI_OPTION_INV:  array[0 .. 19]  of TDhcpOptionRai;
 
 procedure DhcpAddOptionByte(var p: PAnsiChar; const op, b: cardinal);
 begin
@@ -3718,7 +3747,7 @@ begin
     Data.Boot := dcbDefault;                    // no 'boot=...' any more
     inc(Data.Scope^.Metrics.Current[dsmDroppedPxeBoot]);
     // will still send back an OFFER/ACK but with no PXE options
-    // - this is what ISC DHCP, Kea, and dnsmasq do in practice
+    // - this is what ISC DHCP, KEA, and dnsmasq do in practice
     exit;
   end;
   inc(Data.Scope^.Metrics.Current[dsmPxeBoot]);
@@ -4078,12 +4107,15 @@ initialization
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
+  FillCharFast(RAI_OPTION_INV, SizeOf(RAI_OPTION_INV), 255);
+  FillLookupTable(@RAI_OPTION_NUM,  @RAI_OPTION_INV,  ord(high(RAI_OPTION_NUM)));
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
-  GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT, scUpperCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT,    scUpperCase);
   DHCP_TXT[dmtUndefined] := 'invalid';
   GetEnumTrimmedNames(TypeInfo(TDhcpOption),      @DHCP_OPTION, scKebabCase);
-  GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT, scKebabCase);
-  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT, scKebabCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpOptionRai),   @RAI_OPTION,  scKebabCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT,  scKebabCase);
+  GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT,    scKebabCase);
   Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, {nest=}true);
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArrays([
