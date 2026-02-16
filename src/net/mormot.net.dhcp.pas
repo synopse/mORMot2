@@ -242,7 +242,7 @@ procedure DhcpAddOptionByte(var p: PAnsiChar; const op, b: cardinal);
   {$ifdef FPC} inline; {$endif}
 
 /// append a 32-bit big endian value (e.g. an IPv4) to TDhcpPacket.options[]
-procedure DhcpAddOption32(var p: PAnsiChar; const op: TDhcpOption; be: cardinal);
+procedure DhcpAddOption32(var p: PAnsiChar; const op: TDhcpOption; const be: cardinal);
   {$ifdef FPC} inline; {$endif}
 
 /// append a raw binary value to TDhcpPacket.options[]
@@ -1298,7 +1298,7 @@ begin
   p := @p[3];
 end;
 
-procedure DhcpAddOption32(var p: PAnsiChar; const op: TDhcpOption; be: cardinal);
+procedure DhcpAddOption32(var p: PAnsiChar; const op: TDhcpOption; const be: cardinal);
 var
   d: PAnsiChar;
 begin
@@ -1584,21 +1584,54 @@ var
   b: PtrUInt;
 begin
   b := Data.RecvLens[op];
-  if b <> 0 then
-    DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
+  if b = 0 then
+    exit;
+  include(Data.SendOptions, op);
+  DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
 end;
 
-procedure DhcpDataAddOptionSafe(var Data: TDhcpProcessData; const op: byte;
-  v: PAnsiChar);
+procedure DhcpDataAddProfileOption(var Data: TDhcpProcessData; p: PProfileValue);
+  {$ifdef HASINLINE} inline; {$endif}
 var
   len: PtrUInt;
 begin
-  if pointer(v) = nil then
+  if pointer(p^.value) = nil then
     exit;
-  len := PStrLen(v - _STRLEN)^;
-  if Data.SendEnd + len < @Data.Send.options[high(Data.Send.options)] then
-    // be paranoid with "profiles": avoid buffer overflow
-    DhcpAddOptionRaw(Data.SendEnd, op, v, len);
+  // be paranoid with "profiles": avoid buffer overflow
+  len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
+  if Data.SendEnd + len >= @Data.Send.options[high(Data.Send.options)] then
+    exit;
+  // actually append the value and mark it in SendOptions
+  DhcpAddOptionRaw(Data.SendEnd, p^.op, pointer(p^.value), len);
+  include(Data.SendOptions, p^.opt);
+end;
+
+procedure DhcpDataAddOptionOnce32(var Data: TDhcpProcessData;
+  const opt: TDhcpOption; const be: cardinal); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if (be = 0) or
+     (opt in Data.SendOptions) or
+     (Data.SendEnd + SizeOf(be) >= @Data.Send.options[high(Data.Send.options)]) then
+    exit;
+  DhcpAddOption32(Data.SendEnd, opt, be);
+  include(Data.SendOptions, opt);
+end;
+
+procedure DhcpDataAddOptionOnceA32(var Data: TDhcpProcessData;
+  const opt: TDhcpOption; const v: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  len: PtrUInt;
+begin
+  if (v = nil) or
+     (opt in Data.SendOptions) then
+    exit;
+  len := (PDALen(v - _DALEN)^ + _DAOFF) shl 2; // as bytes
+  if Data.SendEnd + len >= @Data.Send.options[high(Data.Send.options)] then
+    exit;
+  DhcpAddOptionRaw(Data.SendEnd, DHCP_OPTION_NUM[opt], v, len);
+  include(Data.SendOptions, opt);
 end;
 
 procedure DhcpDataAddOptionProfile(var Data: TDhcpProcessData);
@@ -1607,13 +1640,14 @@ var
   len, n: PtrUInt;
   requested: PByteArray;
 begin
-  p := pointer(Data.Profile.send);
+  p := pointer(Data.RecvProfile.send);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   // append "always" - should be as send[0].op=0
   if p^.op = 0 then
   begin
+    Data.SendOptions := Data.SendOptions + Data.RecvProfile.always;
     len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
     MoveFast(pointer(p^.value)^, Data.SendEnd^, len); // as a pre-computed blob
     inc(Data.SendEnd, len);
@@ -1630,7 +1664,7 @@ begin
   // process "requested" options, filtering each op
   repeat
     if ByteScanIndex(@requested[1], requested[0], p^.op) >= 0 then // SSE2 asm
-      DhcpDataAddOptionSafe(Data, p^.op, pointer(p^.value)); // as individual TLV
+      DhcpDataAddProfileOption(Data, p); // as individual TLV
     inc(p);
     dec(n);
   until n = 0;
