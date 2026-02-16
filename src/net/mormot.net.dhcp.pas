@@ -314,7 +314,7 @@ type
   end;
 
   /// store one DHCP option number associated to a binary value
-  // - used to match "all" and "any" against a value
+  // - used to match "all" "any" "not-all" "not-any" against a value
   // - used to store "always" and "requested" data to be sent back to the client
   TProfileValue = record
     /// the raw option number to match, or to be sent back
@@ -540,6 +540,10 @@ type
     all: TProfileValues;
     /// store OR matching fields
     any: TProfileValues;
+    /// store NOT AND matching fields
+    notall: TProfileValues;
+    /// store NOT OR matching fields
+    notany: TProfileValues;
     /// the "always" and "requested" data to be sent back to the client
     // - "always" should be send[0] (if any, and with op=0)
     send: TProfileValues;
@@ -751,17 +755,20 @@ type
   // - i.e. settings for vendor-specific or client-specific DHCP options
   // - each RawJson property contain a JSON object as key/value pairs,
   // potentially in our enhanced format e.g. with unquote keys
-  // - both "all" and "any" conditions should match to trigger the output
+  // - "all" "any" "not-all" "not-any" should all match to trigger the output,
+  // defining a "first precise profile wins" deterministic behavior in the order
+  // in the array of "profiles"
   // - "always" and "requested" define the options sent in the response
   // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
   // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
   //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy", "CIDR:xx"
   // - values could also be integers, booleans, or nested TLV object
   // - most values would have their default type guessed as UINT16, IP or UUID
-  // - "all" and "any" also support convenient "boot" key as BOOT_TXT[] values
+  // - "all" "any" "not-all" "not-any" also support convenient "boot" key as
+  // BOOT_TXT[] values
   TDhcpProfileSettings = class(TSynPersistent)
   protected
-    fAll, fAny, fAlways, fRequested: RawJson;
+    fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
   public
     /// compute the low-level TDhcpScope.Profiles[] entry from current settings
     // - raise an EDhcp exception if the parameters are not correct
@@ -786,6 +793,14 @@ type
     // $ "any": { uuid-client-identifier: "815be81d3da146e5b6795c682627ece5" }
     property Any: RawJson
       read fAny write fAny;
+    /// a JSON object defining AND NOT fields lookup logic
+    // - all key/value pairs must NOT match input client options
+    property NotAll: RawJson
+      read fNotAll write fNotAll;
+    /// a JSON object defining OR NOT fields lookup logic
+    // - a single key/value pairs match is enough to NOT trigger this logic
+    property NotAny: RawJson
+      read fNotAny write fNotAny;
     /// a JSON object defining the output options regardless of Option 55
     // - client Option 55 won't be checked: those options will always be sent
     // - so we could define e.g. with proper Type-Length-Value (TLV) encoding:
@@ -917,6 +932,7 @@ type
     property Boot: TDhcpBootSettings
       read fBoot;
     /// vendor-specific or client-specific DHCP options for this scope
+    // - order in this array defines "first profile wins" deterministic behavior
     property Profiles: TDhcpProfileSettingsObjArray
       read fProfiles;
   end;
@@ -2608,13 +2624,17 @@ var
 begin
   // parse main "profiles" JSON object fields
   if not ParseProfile(fAll, Profile.all, ppMatch) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid All=%', [fAll]);
+    EDhcp.RaiseUtf8('PrepareScope: invalid all:%', [fAll]);
   if not ParseProfile(fAny, Profile.any, ppMatch) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid Any=%', [fAny]);
+    EDhcp.RaiseUtf8('PrepareScope: invalid any:%', [fAny]);
+  if not ParseProfile(fNotAll, Profile.notall, ppMatch) then
+    EDhcp.RaiseUtf8('PrepareScope: invalid not-all:%', [fNotAll]);
+  if not ParseProfile(fNotAny, Profile.notany, ppMatch) then
+    EDhcp.RaiseUtf8('PrepareScope: invalid not-any:%', [fNotAny]);
   if not ParseProfile(fAlways, alw, ppValue) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid Always=%', [fAlways]);
+    EDhcp.RaiseUtf8('PrepareScope: invalid always:%', [fAlways]);
   if not ParseProfile(fRequested, req, ppValue) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid Requested=%', [fRequested]);
+    EDhcp.RaiseUtf8('PrepareScope: invalid requested:%', [fRequested]);
   // Profile.send[0] is "always" and should be stored as binary blob with op=0
   Profile.send := nil;
   if alw <> nil then
@@ -3699,23 +3719,31 @@ var
   n: integer;
   p: PDhcpScopeProfile;
 begin
+  // implement "first precise profile wins" deterministic behavior
   p := pointer(Data.Scope^.Profiles); // caller ensured <> nil
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
-    if // AND conditions (all must match)
+    if // AND conditions (all must match) = "all"
        ((p^.all = nil) or
         DhcpDataMatchAll(Data, pointer(p^.all))) and
-       // OR conditions (at least one must match)
+       // OR conditions (at least one must match) = "any"
        ((p^.any = nil) or
-        DhcpDataMatchAny(Data, pointer(p^.any))) then
+        DhcpDataMatchAny(Data, pointer(p^.any))) and
+       // NOT AND conditions (all must NOT match) = "not-all"
+       ((p^.notall = nil) or
+        not DhcpDataMatchAll(Data, pointer(p^.notall))) and
+       // NOT OR conditions (at least one must NOT match) = "not-any"
+       ((p^.notany = nil) or
+        not DhcpDataMatchAny(Data, pointer(p^.notany))) then
     begin
-      // both "all" and "any" conditions did match
       Data.Profile := p;
+      // all=any=nil as fallback if nothing more precise did apply
+      // "not-all"/"not-any" without any "all"/"any" are just ignored
+      // unless they are the eventual default
       if (p^.all <> nil) or
          (p^.any <> nil) then
-         // return first matching profile (deterministic)
+        // return first exact matching profile (deterministic)
         exit;
-      // all=any=nil as fallback if nothing more precise did apply
     end;
     inc(p);
     dec(n);
