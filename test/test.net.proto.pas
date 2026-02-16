@@ -1633,7 +1633,7 @@ begin
   CheckEqual(DHCP_OPTION[doSubnetMask], 'subnet-mask');
   CheckEqual(DHCP_OPTION[doRouters], 'routers');
   CheckEqual(DHCP_OPTION[doTftpServerName], 'tftp-server-name');
-  CheckEqual(DHCP_OPTION[doDhcpAgentOptions], 'dhcp-agent-options');
+  CheckEqual(DHCP_OPTION[doRelayAgentInformation], 'relay-agent-information');
   RandomLecuyer(rnd);
   for dmt := low(dmt) to high(dmt) do
   begin
@@ -1696,15 +1696,17 @@ begin
                  '18C0A8010A000005200A000001C0A80101');
   // validate Type-Length-Value (TLV) encoding e.g. for DHCP option 43/82
   CheckEqual(TlvFromJson(''), '');
-  CheckTlv('{6:"bcd"}',                   '$06$03bcd');
-  CheckTlv('{6:"uint8:7"}',               '$06$01$07');
-  CheckTlv('{6:"uint16:7"}',              '$06$02$00$07');
-  CheckTlv('{6:7}',                       '$06$04$00$00$00$07');
-  CheckTlv('{6:"hex:010203"}',            '$06$03$01$02$03');
-  CheckTlv('{6:false}',                   '$06$01$00');
-  CheckTlv('{6:true}',                    '$06$01$01');
-  CheckTlv('{6:"ip:4.3.2.1"}',            '$06$04$04$03$02$01');
-  CheckTlv('{6:"mac:06:05:04:03:02:01"}', '$06$06$06$05$04$03$02$01');
+  CheckTlv('{6:"bcd"}',                    '$06$03bcd');
+  CheckTlv('{6:"uint8:7"}',                '$06$01$07');
+  CheckTlv('{6:"uint16:7"}',               '$06$02$00$07');
+  CheckTlv('{6:7}',                        '$06$04$00$00$00$07');
+  CheckTlv('{6:"hex:010203"}',             '$06$03$01$02$03');
+  CheckTlv('{6:false}',                    '$06$01$00');
+  CheckTlv('{6:true}',                     '$06$01$01');
+  CheckTlv('{6:"ip:4.3.2.1"}',             '$06$04$04$03$02$01');
+  CheckTlv('{6:"ip:8.7.6.5,4.3.2.1"}',     '$06$08$08$07$06$05$04$03$02$01');
+  CheckTlv('{6:["ip:8.7.6.5","4.3.2.1"]}', '$06$08$08$07$06$05$04$03$02$01');
+  CheckTlv('{6:"mac:06:05:04:03:02:01"}',  '$06$06$06$05$04$03$02$01');
   CheckTlv('{6:"mac:06:05:04:03:02:01,16:15:14:13:12:11"}',
            '$06$0C$06$05$04$03$02$01$16$15$14$13$12$11');
   CheckTlv('{6:"esc:ab$00c",7:"uuid:{8C36C986-F291-4DA0-B2D0-3A6F4468D6C3}"}',
@@ -1714,6 +1716,8 @@ begin
   CheckTlv('{6:true,7:{0:"a",1:"b"},8:"c"}',
            '$06$01$01$07$06$00$01a$01$01b$08$01c');
   CheckTlv('{6:"cidr:192.168.1.0/24,10.0.0.5"}',
+           '$06$08$18$C0$A8$01$0A$00$00$05');
+  CheckTlv('{6:["cidr:192.168.1.0/24", "10.0.0.5"]}',
            '$06$08$18$C0$A8$01$0A$00$00$05');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
@@ -2043,7 +2047,7 @@ begin
     opt82[2] := #4;                     // L = 4
     PCardinal(@opt82[3])^ := $41424344; // V = DCBA
     Check(PShortString(@opt82[2])^ = 'DCBA', 'DCBA');
-    DhcpAddOptionShort(f, doDhcpAgentOptions, opt82);
+    DhcpAddOptionShort(f, doRelayAgentInformation, opt82);
     f^ := #255;
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
     Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
@@ -2059,13 +2063,13 @@ begin
     Check(DhcpData(@d.Recv, d.RecvLensRai[dorCircuitId])^ = 'DCBA');
     Check(DhcpData(@d.Recv, d.RecvLensRai[dorRemoteId])^[0] = #0);
     Check(server.GetScope(d.Send.ciaddr) <> nil);
-    CheckEqual(lens[doDhcpAgentOptions], 0, 'no relay agent');
+    CheckEqual(lens[doRelayAgentInformation], 0, 'no relay agent');
     Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
-    Check(fnd = FND_RESP + [doDhcpAgentOptions]);
-    CheckNotEqual(lens[doDhcpAgentOptions], 0, 'propagated relay agent');
-    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = opt82, 'o82a');
-    Check(DhcpIdem(@d.Send, lens[doDhcpAgentOptions], opt82), 'o82b');
-    Check(not DhcpIdem(@d.Send, lens[doDhcpAgentOptions], 'totoro'), 'o82c');
+    Check(fnd = FND_RESP + [doRelayAgentInformation]);
+    CheckNotEqual(lens[doRelayAgentInformation], 0, 'propagated relay agent');
+    Check(DhcpData(@d.Send, lens[doRelayAgentInformation])^ = opt82, 'o82a');
+    Check(DhcpIdem(@d.Send, lens[doRelayAgentInformation], opt82), 'o82b');
+    Check(not DhcpIdem(@d.Send, lens[doRelayAgentInformation], 'totoro'), 'o82c');
     ips[0] := d.Send.ciaddr;
     f := DhcpClient(d.Recv, dmtDecline, macs[0]);
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
