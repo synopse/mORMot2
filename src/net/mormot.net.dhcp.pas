@@ -1152,6 +1152,7 @@ type
     // - can be used e.g. to check if IP address match the DHCP server subnets
     // - this method is not thread-safe by design
     function GetScope(ip: TNetIP4): PDhcpScope; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the Scope[] entry matching its subnet mask
     // - can be used e.g. to check if IP address match the DHCP server subnets
     // - this method is not thread-safe by design
@@ -3676,18 +3677,29 @@ end;
 
 function TDhcpProcess.FindScope(var data: TDhcpProcessData): boolean;
 begin
-  if Data.RecvLens[doSubnetSelection] <> 0 then
+  result := true;
+  Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLensRai[dorLinkSelection]));
+  if Data.Scope <> nil then
+    // RFC 3527 sub-option in Relay Agent Information 82, on complex relay
+    // environments where giaddr is already meaningful for routing and cannot
+    // be overloaded for subnet selection
+    exit;
+  // fallback to option 118 or giaddr if link-selection was set but invalid
+  Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
+  if Data.Scope <> nil then
   begin
-    // RFC 3011 defined option 118 which overrides giaddr
-    Data.Scope := GetScope(DhcpIP4(@Data.Recv, Data.RecvLens[doSubnetSelection]));
-    if Data.Scope <> nil then
-      inc(Data.Scope^.Metrics.Current[dsmOption118Hits]);
-  end
-  else if Data.Recv.giaddr <> 0 then
+    // RFC 3011 defines option 118 which overrides giaddr, e.g. on centralized
+    // DHCP server serving multiple logical subnets behind the same relay IP
+    inc(Data.Scope^.Metrics.Current[dsmOption118Hits]);
+    exit;
+  end;
+  // fallback to giaddr if subnet-selection was set but invalid
+  if Data.Recv.giaddr <> 0 then
     // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
+    // - giaddr from RFC 2131 is authoritative so we should not fallback
     Data.Scope := GetScope(Data.Recv.giaddr)
   else if Data.RecvIp4 <> 0 then
-    // no giaddr: check RecvIp4 bound server IP as set by the UDP server
+    // no giaddr: check RecvIp4 bound local server IP as set by the UDP server
     Data.Scope := GetScope(Data.RecvIp4)
   else
     // no option 118 no giaddr nor RecvIp4: default to Scope[0]
