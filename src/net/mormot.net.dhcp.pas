@@ -583,6 +583,8 @@ type
     /// the "always" and "requested" data to be sent back to the client
     // - "always" should be send[0] (if any, and with op=0)
     send: TProfileValues;
+    /// the set of options part of "always"
+    always: TDhcpOptions;
   end;
   PDhcpScopeProfile = ^TDhcpScopeProfile;
   /// store all DHCP "profile" ready-to-be-processed entries of a given scope
@@ -2713,6 +2715,7 @@ end;
 procedure TDhcpProfileSettings.PrepareScope(var Profile: TDhcpScopeProfile);
 var
   alw, req: TProfileValues;
+  p: PProfileValue;
   v: TProfileValue;
   i: PtrInt;
 begin
@@ -2732,20 +2735,39 @@ begin
     EDhcp.RaiseUtf8('PrepareScope: invalid requested:%', [fRequested]);
   // Profile.send[0] is "always" and should be stored as binary blob with op=0
   Profile.send := nil;
+  Profile.always := [];
   if alw <> nil then
   begin
     v.op := 0;
     v.opt := doPad;
     v.boot := dcbDefault;
     v.rai := dorUndefined;
-    for i := 0 to high(alw) do
-      with alw[i] do // prepare raw TLV-concatenated binary buffer
-        Append(v.value, [AnsiChar(op), AnsiChar(length(value)), value]);
+    p := pointer(alw);
+    for i := 1 to length(alw) do
+    // prepare raw TLV-concatenated binary buffer
+    begin
+      Append(v.value, [AnsiChar(p^.op), AnsiChar(length(p^.value)), p^.value]);
+      if p^.opt <> doPad then
+        if p^.opt in Profile.always then
+          EDhcp.RaiseUtf8('PrepareScope: duplicated % in always:%',
+            [DHCP_OPTION[p^.opt], fAlways])
+        else
+          include(Profile.always, p^.opt);
+      inc(p);
+    end;
     AddProfileValue(Profile.send, v);
   end;
   // append "requested" with their op, ready to be filtered against option 55
-  for i := 0 to high(req) do
-    AddProfileValue(Profile.send, req[i]);
+  p := pointer(req);
+  for i := 1 to length(req) do
+  begin
+    if (p^.opt <> doPad) and
+       (p^.opt in Profile.always) then
+      EDhcp.RaiseUtf8('PrepareScope: duplicated % in requested:%',
+        [DHCP_OPTION[p^.opt], fRequested]);
+    AddProfileValue(Profile.send, p^);
+    inc(p);
+  end;
 end;
 
 
