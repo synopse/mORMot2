@@ -522,7 +522,8 @@ type
 
   /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
   // - used for TDhcpProcessData.Boot: TDhcpClientBoot <> dcbDefault
-  // - Remote[] are consolidated for proper fallback between boot options
+  // - Remote[] are consolidated for proper fallback between boot options,
+  // unless dsoPxeNoInherit/"pxe-no-inherit" is set for the scope
   TDhcpScopeBoot = record
     /// IP address or hostname sent back as doTftpServerName option 66
     NextServer: RawUtf8;
@@ -558,13 +559,13 @@ type
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
   // (not included by default since seems overkill and KEA/Windows don't do it)
   // - dsoCsvUnixTime will use Unix timestamp instead of ISO-8601 text in CSVs
-  // - dsoNoPXEConsolidation won't auto-fill the PXE boot-file-name from others
-  // - dsoDisablePXE disables the whole PXE configuration from "Boot" settings
+  // - dsoPxeNoInherit won't auto-fill the PXE boot-file-name from others
+  // - dsoPxeDisable disables the whole PXE configuration from "Boot" settings
   TDhcpScopeOption = (
     dsoInformRateLimit,
     dsoCsvUnixTime,
-    dsoNoPXEConsolidation,
-    dsoDisablePXE
+    dsoPxeNoInherit,
+    dsoPxeDisable
     );
   /// refine DHCP server process for one TDhcpScopeSettings
   TDhcpScopeOptions = set of TDhcpScopeOption;
@@ -2592,7 +2593,7 @@ procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot;
 var
   dcb, ref: TDhcpClientBoot;
 begin
-  if dsoDisablePXE in Options then
+  if dsoPxeDisable in Options then
   begin
     Finalize(Data); // reset all RawUtf8/RawByteString to ''
     exit;
@@ -2602,7 +2603,7 @@ begin
   for dcb := low(Data.Remote) to high(Data.Remote) do
     TrimU(fRemote[dcb], Data.Remote[dcb]);
   // complete configuration from sibling values
-  if dsoNoPXEConsolidation in Options then
+  if dsoPxeNoInherit in Options then
     exit;
   // 1. HTTP aware architecture fallback to their TFTP value
   ConsolidateOption(Data, dcbX64, dcbX64Http);
