@@ -183,7 +183,9 @@ type
  PDhcpOptions = ^TDhcpOptions;
 
  /// decoded DHCP Option 82 "Relay Agent Information" sub-options - see RFC 3046
+ // - fixed as 8 items for TDhcpParsedRai to fit in 64-bit
  TDhcpOptionRai = (
+   dorUndefined,
    dorCircuitId,
    dorRemoteId,
    dorLinkSelection,
@@ -264,6 +266,8 @@ type
  // - 0 means that this TDhcpOption was not transmitted
  // - or store the position of an option length in TDhcpPacket.options[]
  TDhcpParsed = array[TDhcpOption] of byte;
+ /// efficient O(1) lookup of DHCP Option 82 recognized RAI sub-options
+ TDhcpParsedRai = array[TDhcpOptionRai] of byte;
 
 /// parse a raw DHCP binary frame and return the length of all recognized options
 // - returns dmtUndefined on invalid input DHCP frame
@@ -1038,8 +1042,6 @@ type
     /// the network subnet information related to this request
     // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
     Scope: PDhcpScope;
-    /// some pointer value set by the UDP server for its internal process
-    Opaque: pointer;
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     HostName: PShortString;
@@ -1052,6 +1054,8 @@ type
     RecvIp4: TNetIP4;
     /// parsed options length position in Recv.option[]
     RecvLens: TDhcpParsed;
+    /// option-82 RAI parsed sub-options length position in Recv.option[]
+    RecvLensRai: TDhcpParsedRai;
     /// the DHCP message type parsed from Recv
     RecvType: TDhcpMessageType;
     /// the DHCP message type prepared into Send
@@ -1062,18 +1066,21 @@ type
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
     Send: TDhcpPacket;
+    /// some pointer value set by the UDP server for its internal process
+    Opaque: pointer;
     /// IP address allocated for Send (raw Ip4) as human readable text
     Ip: TShort16;
     /// contains the client MAC address (raw Mac64) as human readable text
     // - ready for logging, with no memory allocation during the process
-    // - may contain hexadecimal UUID of static Option 61 client-identifier
+    // - may also contain hexadecimal UUID of static Option 61 client-identifier
     Mac: string[63];
     /// some temporary storage for a StaticUuid[] fake DHCP lease
     Temp: TDhcpLease;
   end;
+  PDhcpProcessData = ^TDhcpProcessData;
 
   /// optional callback signature for TDhcpProcess.ComputeResponse
-  // - input frame is parsed in Data.Recv/RecvLen/RecvLens
+  // - input frame is parsed in Data.Recv/RecvLen/RecvLens/RecvLensRai
   // - could update SendEnd with DhcpAddOption() or set SendEnd=nil for no response
   TOnComputeResponse = procedure(Sender: TDhcpProcess; var Data: TDhcpProcessData);
 
@@ -1255,7 +1262,7 @@ const
     0, 1, 3, 6, 12, 15, 28, 42, 43, 50, 51, 53, 54, 55,
     58, 59, 60, 61, 66, 67, 77, 82, 93, 97, 118, 255);
   RAI_OPTION_NUM: array[TDhcpOptionRai] of byte = (
-    1, 2, 5, 6, 11, 12, 19);
+    0, 1, 2, 5, 6, 11, 12, 19);
 var // for fast O(1) lookup
   DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption;
   RAI_OPTION_INV:  array[0 .. 19]  of TDhcpOptionRai;
@@ -3502,6 +3509,28 @@ begin
     JournalSend(Level, @msg[18], ord(msg[0]) - 17, {trimlogdate=}false);
 end;
 
+procedure ParseRecvLensRai(var Data: TDhcpProcessData);
+var
+  p: PAnsiChar;
+  len: PtrInt;
+begin
+  p := @Data.Recv.options[Data.RecvLens[doDhcpAgentOptions]]; // <> 0 by caller
+  len := ord(p[0]);          // whole Option 82 length
+  inc(p);
+  repeat
+    dec(len, ord(p[1]) + 2); // O(1) decode sub-option binary as TLV
+    if len < 0 then          // avoid buffer overdloas
+    begin
+      Int64(Data.RecvLensRai) := 0; // ignore any previously decoded sub-options
+      exit;
+    end;
+    if ord(p[0]) <= high(RAI_OPTION_INV) then
+      Data.RecvLensRai[RAI_OPTION_INV[ord(p[0])]] :=
+        PAnsiChar(@p[1]) - PAnsiChar(@Data.Recv.options);
+    p := @p[ord(p[1]) + 2];
+  until len = 0;
+end;
+
 function TDhcpProcess.ParseFrame(var Data: TDhcpProcessData): boolean;
 begin
   Data.Mac64 := 0;
@@ -3513,15 +3542,19 @@ begin
   Data.Ip[0] := #0;
   if Data.Mac64 <> 0 then
   begin
+    // valid DHCP frame with RecvType <> dmtUndefined
     Data.Mac[0] := #17;
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
     Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
+    Int64(Data.RecvLensRai) := 0;
+    if Data.RecvLens[doDhcpAgentOptions] <> 0 then
+      ParseRecvLensRai(Data);
     result := true;
   end
   else
   begin
     Data.Mac[0] := #0;
-    Data.HostName := @NULCHAR;
+    Data.HostName := @Data.Mac;
     result := false;
   end;
 end;
@@ -4107,7 +4140,6 @@ initialization
   assert(SizeOf(TDhcpPacket) = 548);
   assert(SizeOf(TDhcpLease) = 16);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(high(DHCP_OPTION_NUM)));
-  FillCharFast(RAI_OPTION_INV, SizeOf(RAI_OPTION_INV), 255);
   FillLookupTable(@RAI_OPTION_NUM,  @RAI_OPTION_INV,  ord(high(RAI_OPTION_NUM)));
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));
   GetEnumTrimmedNames(TypeInfo(TDhcpMessageType), @DHCP_TXT,    scUpperCase);
