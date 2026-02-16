@@ -1549,7 +1549,6 @@ end;
 const
   FND_RESP = [doSubnetMask, doDhcpLeaseTime, doDhcpMessageType,
     doDhcpServerIdentifier, doDhcpRenewalTime, doDhcpRebindingTime];
-  OPTION82: string[7] = 'OPT__82';
 
 procedure TNetworkProtocols.DHCP;
 var
@@ -1559,6 +1558,7 @@ var
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
   opt, opt2: TDhcpOption;
+  dor, dor2: TDhcpOptionRai;
   dmt, dmt2: TDhcpMessageType;
   ip4, sip4: TNetIP4;
   xid: cardinal;
@@ -1569,7 +1569,7 @@ var
   ips: TNetIP4s;
   timer: TPrecisionTimer;
   f: PAnsiChar;
-  hostname: TShort7;
+  hostname, opt82: TShort7;
   rnd: TLecuyer;
   nfo: TMacIP;
   m1, m2: TDhcpMetrics;
@@ -1673,6 +1673,12 @@ begin
     Check(opt = opt2);
   end;
   Check(not FromText('none', opt2));
+  for dor := low(dor) to high(dor) do
+  begin
+    dor2 := pred(dor);
+    Check(FromText(RAI_OPTION[dor], dor2));
+    Check(dor = dor2);
+  end;
   // validate CIDR routes encoding following RFC 3442
   CheckCidrRoute('', '');
   CheckCidrRoute('192.168.1.0/24,10.0.0.5',     '18C0A8010A000005');
@@ -1910,8 +1916,10 @@ begin
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       CheckNotEqual(xid, d.Recv.xid);
       xid := d.Recv.xid;
+      Int64(d.RecvLensRai) := -1;
       Check(server.ComputeResponse(d) > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
+      CheckEqual(Int64(d.RecvLensRai), 0, 'rai');
       Check(d.HostName^ = hostname, 'hostname');
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       Check(IsEqual(macs[i], PNetMac(@d.Send.chaddr)^));
@@ -2030,7 +2038,12 @@ begin
     // validate DECLINE process - and option 82 Relay Agent
     CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
     f := DhcpClient(d.Recv, dmtDiscover, macs[0]);
-    DhcpAddOptionShort(f, doDhcpAgentOptions, OPTION82);
+    opt82[0] := #6;
+    opt82[1] := #1;                     // T = circuit-id
+    opt82[2] := #4;                     // L = 4
+    PCardinal(@opt82[3])^ := $41424344; // V = DCBA
+    Check(PShortString(@opt82[2])^ = 'DCBA', 'DCBA');
+    DhcpAddOptionShort(f, doDhcpAgentOptions, opt82);
     f^ := #255;
     d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
     Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
@@ -2040,13 +2053,18 @@ begin
     Check(l > 0, 'request1');
     CheckEqual(d.Send.xid, xid);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
+    CheckNotEqual(Int64(d.RecvLensRai), 0, 'rai_opt82');
+    for dor := low(dor) to high(dor) do
+      Check((d.RecvLensRai[dor] <> 0) = (dor = dorCircuitId));
+    Check(DhcpData(@d.Recv, d.RecvLensRai[dorCircuitId])^ = 'DCBA');
+    Check(DhcpData(@d.Recv, d.RecvLensRai[dorRemoteId])^[0] = #0);
     Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckEqual(lens[doDhcpAgentOptions], 0, 'no relay agent');
     Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doDhcpAgentOptions]);
     CheckNotEqual(lens[doDhcpAgentOptions], 0, 'propagated relay agent');
-    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = OPTION82, 'o82a');
-    Check(DhcpIdem(@d.Send, lens[doDhcpAgentOptions], OPTION82), 'o82b');
+    Check(DhcpData(@d.Send, lens[doDhcpAgentOptions])^ = opt82, 'o82a');
+    Check(DhcpIdem(@d.Send, lens[doDhcpAgentOptions], opt82), 'o82b');
     Check(not DhcpIdem(@d.Send, lens[doDhcpAgentOptions], 'totoro'), 'o82c');
     ips[0] := d.Send.ciaddr;
     f := DhcpClient(d.Recv, dmtDecline, macs[0]);
