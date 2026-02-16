@@ -1004,6 +1004,8 @@ type
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     HostName: PShortString;
+    /// the "profile" entry matched by this request
+    Profile: PDhcpScopeProfile;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
     /// the server IP socket which received the UDP frame
@@ -1066,6 +1068,7 @@ type
       Lease: PDhcpLease): boolean; virtual;
     function SetBoot(var Data: TDhcpProcessData): TDhcpClientBoot; virtual;
     procedure AddBootOptions(var Data: TDhcpProcessData); virtual;
+    procedure SetProfile(var Data: TDhcpProcessData); virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
   public
     /// setup this DHCP process using the specified settings
@@ -1514,11 +1517,13 @@ begin
     DhcpAddOptionRaw(Data.SendEnd, op, v, len);
 end;
 
-procedure DhcpDataAddOptionProfile(var Data: TDhcpProcessData; p: PProfileValue);
+procedure DhcpDataAddOptionProfile(var Data: TDhcpProcessData);
 var
+  p: PProfileValue;
   len, n: PtrUInt;
   requested: PByteArray;
 begin
+  p := pointer(Data.Profile.send);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
@@ -1619,37 +1624,6 @@ begin // caller ensured any <> nil
     dec(n);
   until n = 0;
   result := false;
-end;
-
-function DhcpDataMatchProfile(var Data: TDhcpProcessData;
-  p: PDhcpScopeProfile): PDhcpScopeProfile;
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  n: integer;
-  default: PDhcpScopeProfile;
-begin // caller ensured p <> nil
-  result := p;
-  default := nil;
-  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
-  repeat
-    if // AND conditions (all must match)
-       ((result^.all = nil) or
-        DhcpDataMatchAll(Data, pointer(result^.all))) and
-       // OR conditions (at least one must match)
-       ((result^.any = nil) or
-        DhcpDataMatchAny(Data, pointer(result^.any))) then
-      // both "all" and "any" conditions did match
-      if (result^.all = nil) and
-         (result^.any = nil) then
-        // all=any=nil as fallback if nothing more precise did apply
-        default := result
-      else
-        // return first matching profile (deterministic)
-        exit;
-    inc(result);
-    dec(n);
-  until n = 0;
-  result := default;
 end;
 
 type
@@ -3469,6 +3443,7 @@ begin
   Data.Ip4 := 0;
   Data.SendType := dmtUndefined;
   Data.Boot := dcbDefault;
+  Data.Profile := nil;
   Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
   Data.Ip[0] := #0;
   if Data.Mac64 <> 0 then
@@ -3516,8 +3491,16 @@ end;
 function TDhcpProcess.FinalizeFrame(var Data: TDhcpProcessData): PtrInt;
 var
   b: PtrUInt;
-  options: pointer;
 begin
+  // append "boot" specific options 60,66,67,97
+  if SetBoot(Data) <> dcbDefault then
+    AddBootOptions(Data);
+  // append "profiles" custom options
+  if Data.Profile <> nil then
+    DhcpDataAddOptionProfile(Data);
+  // append regular DHCP options
+  Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,15,28,42
+    Data.RecvType <> dmtInform);       // [+51,58,59]
   // optional callback support
   if Assigned(fOnComputeResponse) then
   begin
@@ -3529,14 +3512,6 @@ begin
       result := 0;
       exit; // callback asked to silently ignore this frame
     end;
-  end;
-  // support "profiles" match and custom options
-  options := Data.Scope^.Profiles;
-  if options <> nil then
-  begin
-    options := DhcpDataMatchProfile(Data, options);
-    if options <> nil then
-      DhcpDataAddOptionProfile(Data, options);
   end;
   // send back verbatim Option 61 if any
   b := Data.RecvLens[doDhcpClientIdentifier];
@@ -3719,6 +3694,34 @@ begin
   DhcpDataCopyOption(Data, doUuidClientIdentifier);
 end;
 
+procedure TDhcpProcess.SetProfile(var Data: TDhcpProcessData);
+var
+  n: integer;
+  p: PDhcpScopeProfile;
+begin
+  p := pointer(Data.Scope^.Profiles); // caller ensured <> nil
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  repeat
+    if // AND conditions (all must match)
+       ((p^.all = nil) or
+        DhcpDataMatchAll(Data, pointer(p^.all))) and
+       // OR conditions (at least one must match)
+       ((p^.any = nil) or
+        DhcpDataMatchAny(Data, pointer(p^.any))) then
+    begin
+      // both "all" and "any" conditions did match
+      Data.Profile := p;
+      if (p^.all <> nil) or
+         (p^.any <> nil) then
+         // return first matching profile (deterministic)
+        exit;
+      // all=any=nil as fallback if nothing more precise did apply
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
 function TDhcpProcess.ComputeResponse(var Data: TDhcpProcessData): PtrInt;
 var
   p: PDhcpLease;
@@ -3756,6 +3759,9 @@ begin
       inc(Data.Scope^.Metrics.Current[dsmDroppedNoSubnet]);
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
+    // identify any matching input from this scope "profiles" definition
+    if Data.Scope^.Profiles <> nil then
+      SetProfile(Data);
     // compute the corresponding IPv4 according to the internal lease list
     result := 0; // no response, but no error
     Data.Tix32 := GetTickSec;
@@ -4009,13 +4015,9 @@ begin
       Data.SendEnd := DhcpNew(Data.Send, Data.SendType, Data.Recv.xid,
         PNetMac(@Data.Recv.chaddr)^, Data.Scope^.ServerIdentifier);
       Data.Send.ciaddr := Data.Ip4;
-      Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,15,28,42
-        Data.RecvType <> dmtInform);       // [+51,58,59]
-      if SetBoot(Data) <> dcbDefault then
-        AddBootOptions(Data);              // options 60,66,67,97
-      result := FinalizeFrame(Data);       // callback + options 61,82 + length
+      result := FinalizeFrame(Data);   // callback + options
       if result <> 0 then
-        DoLog(sllTrace, 'into', Data);     // if not canceled by callback
+        DoLog(sllTrace, 'into', Data); // if not canceled by callback
     finally
       Data.Scope^.Safe.UnLock;
     end;
