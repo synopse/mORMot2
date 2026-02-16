@@ -11148,59 +11148,64 @@ end;
 
 
 procedure InitializeUnit;
-var
-  k: TRttiKind;
-  t: TRttiParserType;
 begin
-  RTTI_FROM_ORD[roSByte] := @FromRttiOrdSByte;
-  RTTI_FROM_ORD[roSWord] := @FromRttiOrdSWord;
-  RTTI_FROM_ORD[roSLong] := @FromRttiOrdSLong;
-  RTTI_FROM_ORD[roUByte] := @FromRttiOrdUByte;
-  RTTI_FROM_ORD[roUWord] := @FromRttiOrdUWord;
-  RTTI_FROM_ORD[roULong] := @FromRttiOrdULong;
-  RTTI_TO_ORD[roSByte] := @ToRttiOrd1;
-  RTTI_TO_ORD[roSWord] := @ToRttiOrd2;
-  RTTI_TO_ORD[roSLong] := @ToRttiOrd4;
-  RTTI_TO_ORD[roUByte] := @ToRttiOrd1;
-  RTTI_TO_ORD[roUWord] := @ToRttiOrd2;
-  RTTI_TO_ORD[roULong] := @ToRttiOrd4;
+  RTTI_FROM_ORD[roSByte]         := @FromRttiOrdSByte;
+  RTTI_FROM_ORD[roSWord]         := @FromRttiOrdSWord;
+  RTTI_FROM_ORD[roSLong]         := @FromRttiOrdSLong;
+  RTTI_FROM_ORD[roUByte]         := @FromRttiOrdUByte;
+  RTTI_FROM_ORD[roUWord]         := @FromRttiOrdUWord;
+  RTTI_FROM_ORD[roULong]         := @FromRttiOrdULong;
+  RTTI_TO_ORD[roSByte]           := @ToRttiOrd1;
+  RTTI_TO_ORD[roSWord]           := @ToRttiOrd2;
+  RTTI_TO_ORD[roSLong]           := @ToRttiOrd4;
+  RTTI_TO_ORD[roUByte]           := @ToRttiOrd1;
+  RTTI_TO_ORD[roUWord]           := @ToRttiOrd2;
+  RTTI_TO_ORD[roULong]           := @ToRttiOrd4;
   {$ifdef FPC_NEWRTTI}
-  RTTI_FROM_ORD[roSQWord] := @FromRttiOrdInt64;
-  RTTI_FROM_ORD[roUQWord] := @FromRttiOrdInt64;
-  RTTI_TO_ORD[roSQWord]   := @ToRttiOrd8;
-  RTTI_TO_ORD[roUQWord]   := @ToRttiOrd8;
+  RTTI_FROM_ORD[roSQWord]        := @FromRttiOrdInt64;
+  RTTI_FROM_ORD[roUQWord]        := @FromRttiOrdInt64;
+  RTTI_TO_ORD[roSQWord]          := @ToRttiOrd8;
+  RTTI_TO_ORD[roUQWord]          := @ToRttiOrd8;
   {$endif FPC_NEWRTTI}
-  RTTI_TO_FLOAT[rfSingle]   := @ToRttiFloat32;
-  RTTI_TO_FLOAT[rfDouble]   := @ToRttiFloat64;
-  RTTI_TO_FLOAT[rfExtended] := @ToRttiFloat80;
-  RTTI_TO_FLOAT[rfCurr]     := @ToRttiFloatCurr;
-  RTTI_FINALIZE[rkLString]   := @_StringClear;
-  RTTI_FINALIZE[rkWString]   := @_WStringClear;
-  RTTI_FINALIZE[rkVariant]   := @_VariantClear;
-  RTTI_FINALIZE[rkArray]     := @_ArrayClear;
-  RTTI_FINALIZE[rkRecord]    := @FastRecordClear;
-  RTTI_FINALIZE[rkInterface] := @_InterfaceClear;
-  RTTI_FINALIZE[rkDynArray]  := @_DynArrayClear;
-  RTTI_TO_VARTYPE[rkInteger] := varInt64;
-  RTTI_TO_VARTYPE[rkInt64]   := varWord64;
-  RTTI_TO_VARTYPE[rkFloat]   := varDouble;
-  RTTI_TO_VARTYPE[rkLString] := varString;
-  RTTI_TO_VARTYPE[rkWString] := varOleStr;
-  RTTI_TO_VARTYPE[rkVariant] := varVariant;
-  RTTI_TO_VARTYPE[rkChar]    := varUnknown; // to use temp RawUtf8 -> varString
-  RTTI_TO_VARTYPE[rkWChar]   := varUnknown;
-  RTTI_TO_VARTYPE[rkSString] := varUnknown;
-  RTTI_MANAGEDCOPY[rkLString]   := @_LStringCopy;
-  RTTI_MANAGEDCOPY[rkWString]   := @_WStringCopy;
-  RTTI_MANAGEDCOPY[rkVariant]   := @_VariantCopy;
-  RTTI_MANAGEDCOPY[rkArray]     := @_ArrayCopy;
-  RTTI_MANAGEDCOPY[rkRecord]    := @_RecordCopy;
-  RTTI_MANAGEDCOPY[rkInterface] := @_InterfaceCopy;
-  RTTI_MANAGEDCOPY[rkDynArray]  := @_DynArrayCopy;
+  RTTI_TO_FLOAT[rfSingle]        := @ToRttiFloat32;
+  RTTI_TO_FLOAT[rfDouble]        := @ToRttiFloat64;
+  RTTI_TO_FLOAT[rfExtended]      := @ToRttiFloat80;
+  RTTI_TO_FLOAT[rfCurr]          := @ToRttiFloatCurr;
+  RTTI_FINALIZE[rkLString]       := @_StringClear;
+  RTTI_FINALIZE[rkWString]       := @_WStringClear;
+  RTTI_FINALIZE[rkVariant]       := @_VariantClear;
+  RTTI_FINALIZE[rkArray]         := @_ArrayClear;
+  RTTI_FINALIZE[rkRecord]        := @FastRecordClear;
+  RTTI_FINALIZE[rkInterface]     := @_InterfaceClear;
+  RTTI_FINALIZE[rkDynArray]      := @_DynArrayClear;
+  RTTI_FINALIZE[rkClass]         := @_ObjClear;
+  RTTI_TO_VARTYPE[rkInteger]     := varInt64;
+  RTTI_TO_VARTYPE[rkInt64]       := varWord64;
+  RTTI_TO_VARTYPE[rkFloat]       := varDouble;
+  RTTI_TO_VARTYPE[rkLString]     := varString;
+  RTTI_TO_VARTYPE[rkWString]     := varOleStr;
+  RTTI_TO_VARTYPE[rkVariant]     := varVariant;
+  RTTI_TO_VARTYPE[rkChar]        := varUnknown; // to use temp RawUtf8/varString
+  RTTI_TO_VARTYPE[rkWChar]       := varUnknown;
+  RTTI_TO_VARTYPE[rkSString]     := varUnknown;
+  RTTI_TO_VARTYPE[rkEnumeration] := varAny; // TVarData.VAny pointing to value
+  RTTI_TO_VARTYPE[rkSet]         := varAny;
+  RTTI_TO_VARTYPE[rkDynArray]    := varAny;
+  RTTI_TO_VARTYPE[rkClass]       := varAny;
+  RTTI_TO_VARTYPE[rkInterface]   := varAny;
+  RTTI_TO_VARTYPE[rkRecord]      := varAny;
+  RTTI_TO_VARTYPE[rkArray]       := varAny;
+  RTTI_MANAGEDCOPY[rkLString]    := @_LStringCopy;
+  RTTI_MANAGEDCOPY[rkWString]    := @_WStringCopy;
+  RTTI_MANAGEDCOPY[rkVariant]    := @_VariantCopy;
+  RTTI_MANAGEDCOPY[rkArray]      := @_ArrayCopy;
+  RTTI_MANAGEDCOPY[rkRecord]     := @_RecordCopy;
+  RTTI_MANAGEDCOPY[rkInterface]  := @_InterfaceCopy;
+  RTTI_MANAGEDCOPY[rkDynArray]   := @_DynArrayCopy;
   {$ifdef HASVARUSTRING}
-  RTTI_FINALIZE[rkUString]      := @_StringClear; // share same PStrRec layout
-  RTTI_TO_VARTYPE[rkUString]    := varUString;
-  RTTI_MANAGEDCOPY[rkUString]   := @_UStringCopy;
+  RTTI_FINALIZE[rkUString]       := @_StringClear; // share same PStrRec layout
+  RTTI_TO_VARTYPE[rkUString]     := varUString;
+  RTTI_MANAGEDCOPY[rkUString]    := @_UStringCopy;
   {$endif HASVARUSTRING}
   {$ifdef FPC}
   RTTI_FINALIZE[rkLStringOld]    := @_StringClear;
@@ -11218,110 +11223,94 @@ begin
   RTTI_MANAGEDCOPY[rkMRecord]    := @_RecordCopy;
   {$endif UNICODE}
   {$endif FPC}
-  for k := low(k) to high(k) do
-  begin
-    // paranoid checks
-    assert(Assigned(RTTI_FINALIZE[k]) = (k in rkManagedTypes));
-    assert(Assigned(RTTI_MANAGEDCOPY[k]) = (k in rkManagedTypes));
-    // TJsonWriter.AddRttiVarData for TRttiCustomProp.GetRttiVarData
-    case k of
-      rkEnumeration,
-      rkSet,
-      rkDynArray,
-      rkClass,
-      rkInterface,
-      {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
-      rkRecord,
-      rkArray:
-        RTTI_TO_VARTYPE[k] := varAny; // TVarData.VAny pointing to the value
-    end;
-  end;
-  RTTI_FINALIZE[rkClass]   := @_ObjClear;
-  PT_INFO[ptBoolean]       := TypeInfo(boolean);
-  PT_INFO[ptByte]          := TypeInfo(byte);
-  PT_INFO[ptCardinal]      := TypeInfo(cardinal);
-  PT_INFO[ptCurrency]      := TypeInfo(Currency);
-  PT_INFO[ptDouble]        := TypeInfo(Double);
-  PT_INFO[ptExtended]      := TypeInfo(Extended);
-  PT_INFO[ptInt64]         := TypeInfo(Int64);
-  PT_INFO[ptInteger]       := TypeInfo(integer);
-  PT_INFO[ptQWord]         := TypeInfo(QWord);
-  PT_INFO[ptRawByteString] := TypeInfo(RawByteString);
-  PT_INFO[ptRawJson]       := TypeInfo(RawJson);
-  PT_INFO[ptRawUtf8]       := TypeInfo(RawUtf8);
-  PT_INFO[ptSingle]        := TypeInfo(Single);
-  PT_INFO[ptString]        := TypeInfo(String);
-  PT_INFO[ptSynUnicode]    := TypeInfo(SynUnicode);
-  PT_INFO[ptDateTime]      := TypeInfo(TDateTime);
-  PT_INFO[ptDateTimeMS]    := TypeInfo(TDateTimeMS);
+  PT_INFO[ptBoolean]             := TypeInfo(boolean);
+  PT_INFO[ptByte]                := TypeInfo(byte);
+  PT_INFO[ptCardinal]            := TypeInfo(cardinal);
+  PT_INFO[ptCurrency]            := TypeInfo(Currency);
+  PT_INFO[ptDouble]              := TypeInfo(Double);
+  PT_INFO[ptExtended]            := TypeInfo(Extended);
+  PT_INFO[ptInt64]               := TypeInfo(Int64);
+  PT_INFO[ptInteger]             := TypeInfo(integer);
+  PT_INFO[ptQWord]               := TypeInfo(QWord);
+  PT_INFO[ptRawByteString]       := TypeInfo(RawByteString);
+  PT_INFO[ptRawJson]             := TypeInfo(RawJson);
+  PT_INFO[ptRawUtf8]             := TypeInfo(RawUtf8);
+  PT_INFO[ptSingle]              := TypeInfo(Single);
+  PT_INFO[ptString]              := TypeInfo(String);
+  PT_INFO[ptSynUnicode]          := TypeInfo(SynUnicode);
+  PT_INFO[ptDateTime]            := TypeInfo(TDateTime);
+  PT_INFO[ptDateTimeMS]          := TypeInfo(TDateTimeMS);
   {$ifdef HASNOSTATICRTTI} // for Delphi 7/2007: use fake TypeInfo()
-  PT_INFO[ptGuid]          := @_TGUID;
-  PT_INFO[ptHash128]       := @_THASH128;
-  PT_INFO[ptHash256]       := @_THASH256;
-  PT_INFO[ptHash512]       := @_THASH512;
-  PT_INFO[ptPUtf8Char]     := @_PUTF8CHAR;
+  PT_INFO[ptGuid]                := @_TGUID;
+  PT_INFO[ptHash128]             := @_THASH128;
+  PT_INFO[ptHash256]             := @_THASH256;
+  PT_INFO[ptHash512]             := @_THASH512;
+  PT_INFO[ptPUtf8Char]           := @_PUTF8CHAR;
   {$else}
-  PT_INFO[ptGuid]          := TypeInfo(TGuid);
-  PT_INFO[ptHash128]       := TypeInfo(THash128);
-  PT_INFO[ptHash256]       := TypeInfo(THash256);
-  PT_INFO[ptHash512]       := TypeInfo(THash512);
-  PT_INFO[ptPUtf8Char]     := TypeInfo(PUtf8Char);
+  PT_INFO[ptGuid]                := TypeInfo(TGuid);
+  PT_INFO[ptHash128]             := TypeInfo(THash128);
+  PT_INFO[ptHash256]             := TypeInfo(THash256);
+  PT_INFO[ptHash512]             := TypeInfo(THash512);
+  PT_INFO[ptPUtf8Char]           := TypeInfo(PUtf8Char);
   {$endif HASNOSTATICRTTI}
   {$ifdef HASVARUSTRING}
-  PT_INFO[ptUnicodeString]     := TypeInfo(UnicodeString);
-  PT_DYNARRAY[ptUnicodeString] := TypeInfo(TUnicodeStringDynArray);
+  PT_INFO[ptUnicodeString]       := TypeInfo(UnicodeString);
+  PT_DYNARRAY[ptUnicodeString]   := TypeInfo(TUnicodeStringDynArray);
   {$else}
-  PT_INFO[ptUnicodeString]     := TypeInfo(SynUnicode);
-  PT_DYNARRAY[ptUnicodeString] := TypeInfo(TSynUnicodeDynArray);
+  PT_INFO[ptUnicodeString]       := TypeInfo(SynUnicode);
+  PT_DYNARRAY[ptUnicodeString]   := TypeInfo(TSynUnicodeDynArray);
   {$endif HASVARUSTRING}
-  PT_INFO[ptUnixTime]      := TypeInfo(TUnixTime);
-  PT_INFO[ptUnixMSTime]    := TypeInfo(TUnixMSTime);
-  PT_INFO[ptVariant]       := TypeInfo(Variant);
-  PT_INFO[ptWideString]    := TypeInfo(WideString);
-  PT_INFO[ptWinAnsi]       := TypeInfo(WinAnsiString);
-  PT_INFO[ptWord]          := TypeInfo(Word);
+  PT_INFO[ptUnixTime]            := TypeInfo(TUnixTime);
+  PT_INFO[ptUnixMSTime]          := TypeInfo(TUnixMSTime);
+  PT_INFO[ptVariant]             := TypeInfo(Variant);
+  PT_INFO[ptWideString]          := TypeInfo(WideString);
+  PT_INFO[ptWinAnsi]             := TypeInfo(WinAnsiString);
+  PT_INFO[ptWord]                := TypeInfo(Word);
   // ptComplexTypes may have several matching TypeInfo() -> put generic
-  PT_INFO[ptOrm]           := TypeInfo(TID);
-  PT_INFO[ptTimeLog]       := TypeInfo(TTimeLog);
-  PTC_INFO[pctTimeLog]     := TypeInfo(TTimeLog);
-  PTC_INFO[pctID]          := TypeInfo(TID);
-  PTC_INFO[pctCreateTime]  := TypeInfo(TTimeLog);
-  PTC_INFO[pctModTime]     := TypeInfo(TTimeLog);
+  PT_INFO[ptOrm]                 := TypeInfo(TID);
+  PT_INFO[ptTimeLog]             := TypeInfo(TTimeLog);
+  PTC_INFO[pctTimeLog]           := TypeInfo(TTimeLog);
+  PTC_INFO[pctID]                := TypeInfo(TID);
+  PTC_INFO[pctCreateTime]        := TypeInfo(TTimeLog);
+  PTC_INFO[pctModTime]           := TypeInfo(TTimeLog);
   // may be overriden to the exact TRecordReference/TRecordVersion TypeInfo()
-  PTC_INFO[pctSpecificClassID] := TypeInfo(QWord);
-  PTC_INFO[pctRecordReference] := TypeInfo(QWord);
-  PTC_INFO[pctRecordVersion]   := TypeInfo(QWord);
+  PTC_INFO[pctSpecificClassID]   := TypeInfo(QWord);
+  PTC_INFO[pctRecordReference]   := TypeInfo(QWord);
+  PTC_INFO[pctRecordVersion]     := TypeInfo(QWord);
   PTC_INFO[pctRecordReferenceToBeDeleted] := TypeInfo(QWord);
-  PT_DYNARRAY[ptBoolean]       := TypeInfo(TBooleanDynArray);
-  PT_DYNARRAY[ptByte]          := TypeInfo(TByteDynArray); // = TBytes
-  PT_DYNARRAY[ptCardinal]      := TypeInfo(TCardinalDynArray);
-  PT_DYNARRAY[ptCurrency]      := TypeInfo(TCurrencyDynArray);
-  PT_DYNARRAY[ptDouble]        := TypeInfo(TDoubleDynArray);
-  PT_DYNARRAY[ptExtended]      := TypeInfo(TExtendedDynArray);
-  PT_DYNARRAY[ptInt64]         := TypeInfo(TInt64DynArray);
-  PT_DYNARRAY[ptInteger]       := TypeInfo(TIntegerDynArray);
-  PT_DYNARRAY[ptQWord]         := TypeInfo(TQWordDynArray);
-  PT_DYNARRAY[ptRawByteString] := TypeInfo(TRawByteStringDynArray);
-  PT_DYNARRAY[ptRawJson]       := TypeInfo(TRawJsonDynArray);
-  PT_DYNARRAY[ptRawUtf8]       := TypeInfo(TRawUtf8DynArray);
-  PT_DYNARRAY[ptSingle]        := TypeInfo(TSingleDynArray);
-  PT_DYNARRAY[ptString]        := TypeInfo(TStringDynArray);
-  PT_DYNARRAY[ptSynUnicode]    := TypeInfo(TSynUnicodeDynArray);
-  PT_DYNARRAY[ptDateTime]      := TypeInfo(TDateTimeDynArray);
-  PT_DYNARRAY[ptDateTimeMS]    := TypeInfo(TDateTimeMSDynArray);
-  PT_DYNARRAY[ptGuid]          := TypeInfo(TGuidDynArray);
-  PT_DYNARRAY[ptHash128]       := TypeInfo(THash128DynArray);
-  PT_DYNARRAY[ptHash256]       := TypeInfo(THash256DynArray);
-  PT_DYNARRAY[ptHash512]       := TypeInfo(THash512DynArray);
-  PT_DYNARRAY[ptOrm]           := TypeInfo(TIDDynArray);
-  PT_DYNARRAY[ptTimeLog]       := TypeInfo(TTimeLogDynArray);
-  PT_DYNARRAY[ptUnixTime]      := TypeInfo(TUnixTimeDynArray);
-  PT_DYNARRAY[ptUnixMSTime]    := TypeInfo(TUnixMSTimeDynArray);
-  PT_DYNARRAY[ptVariant]       := TypeInfo(TVariantDynArray);
-  PT_DYNARRAY[ptWideString]    := TypeInfo(TWideStringDynArray);
-  PT_DYNARRAY[ptWinAnsi]       := TypeInfo(TWinAnsiDynArray);
-  PT_DYNARRAY[ptWord]          := TypeInfo(TWordDynArray);
-  PT_DYNARRAY[ptPUtf8Char]     := TypeInfo(TPUtf8CharDynArray);
+  PT_DYNARRAY[ptBoolean]         := TypeInfo(TBooleanDynArray);
+  PT_DYNARRAY[ptByte]            := TypeInfo(TByteDynArray); // = TBytes
+  PT_DYNARRAY[ptCardinal]        := TypeInfo(TCardinalDynArray);
+  PT_DYNARRAY[ptCurrency]        := TypeInfo(TCurrencyDynArray);
+  PT_DYNARRAY[ptDouble]          := TypeInfo(TDoubleDynArray);
+  PT_DYNARRAY[ptExtended]        := TypeInfo(TExtendedDynArray);
+  PT_DYNARRAY[ptInt64]           := TypeInfo(TInt64DynArray);
+  PT_DYNARRAY[ptInteger]         := TypeInfo(TIntegerDynArray);
+  PT_DYNARRAY[ptQWord]           := TypeInfo(TQWordDynArray);
+  PT_DYNARRAY[ptRawByteString]   := TypeInfo(TRawByteStringDynArray);
+  PT_DYNARRAY[ptRawJson]         := TypeInfo(TRawJsonDynArray);
+  PT_DYNARRAY[ptRawUtf8]         := TypeInfo(TRawUtf8DynArray);
+  PT_DYNARRAY[ptSingle]          := TypeInfo(TSingleDynArray);
+  PT_DYNARRAY[ptString]          := TypeInfo(TStringDynArray);
+  PT_DYNARRAY[ptSynUnicode]      := TypeInfo(TSynUnicodeDynArray);
+  PT_DYNARRAY[ptDateTime]        := TypeInfo(TDateTimeDynArray);
+  PT_DYNARRAY[ptDateTimeMS]      := TypeInfo(TDateTimeMSDynArray);
+  PT_DYNARRAY[ptGuid]            := TypeInfo(TGuidDynArray);
+  PT_DYNARRAY[ptHash128]         := TypeInfo(THash128DynArray);
+  PT_DYNARRAY[ptHash256]         := TypeInfo(THash256DynArray);
+  PT_DYNARRAY[ptHash512]         := TypeInfo(THash512DynArray);
+  PT_DYNARRAY[ptOrm]             := TypeInfo(TIDDynArray);
+  PT_DYNARRAY[ptTimeLog]         := TypeInfo(TTimeLogDynArray);
+  PT_DYNARRAY[ptUnixTime]        := TypeInfo(TUnixTimeDynArray);
+  PT_DYNARRAY[ptUnixMSTime]      := TypeInfo(TUnixMSTimeDynArray);
+  PT_DYNARRAY[ptVariant]         := TypeInfo(TVariantDynArray);
+  PT_DYNARRAY[ptWideString]      := TypeInfo(TWideStringDynArray);
+  PT_DYNARRAY[ptWinAnsi]         := TypeInfo(TWinAnsiDynArray);
+  PT_DYNARRAY[ptWord]            := TypeInfo(TWordDynArray);
+  PT_DYNARRAY[ptPUtf8Char]       := TypeInfo(TPUtf8CharDynArray);
+  {$ifdef FPC_OR_UNICODE}
+  assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));
+  {$endif FPC_OR_UNICODE}
   // prepare global thread-safe TRttiCustomList
   Rtti := RegisterGlobalShutdownRelease(TRttiCustomList.Create);
   // replace mormot.core.base/mormot.core.os limited implementation
@@ -11332,15 +11321,6 @@ begin
   {$ifdef FPC_CPUX64}
   RedirectRtl;
   {$endif FPC_CPUX64}
-  // validate some redefined RTTI structures with compiler definitions
-  for t := succ(low(t)) to high(t) do
-    assert(Assigned(PT_INFO[t]) <> (t in (ptComplexTypes - [ptOrm, ptTimeLog])));
-  assert(SizeOf(TRttiVarData) = SizeOf(TVarData));
-  assert(SizeOf(TSynVarData) = SizeOf(TVarData));
-  assert(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
-  {$ifdef FPC_OR_UNICODE}
-  assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));
-  {$endif FPC_OR_UNICODE}
 end;
 
 

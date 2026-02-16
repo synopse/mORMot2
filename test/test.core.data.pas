@@ -2790,7 +2790,7 @@ begin
   J := JsonEncode('{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}',
     [], []);
   CheckEqual(J, '{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}');
-  // below only works if unit mormot.db.nosql.bson is included in uses
+  // below line only works if unit mormot.db.nosql.bson is included in uses
   CheckEqual(JsonEncode('{name:?,field:/%/i}', ['acme.*corp'], ['John']), J);
   peop := TOrmPeople.Create;
   try
@@ -5428,6 +5428,10 @@ var
   end;
 
 begin
+  if CheckFailed(BsonVariantType <> nil, 'no BsonVariantType') then
+    exit;
+  if CheckFailed(BsonVariantVType <> 0, 'no BsonVariantVType') then
+    exit;
   CheckEqual(SizeOf(TDecimal128), 16);
   CheckEqual(ord(betEof), $00);
   CheckEqual(ord(betInt64), $12);
@@ -6877,8 +6881,10 @@ var
   ps: TEnumPetStore1;
   pss, pss2: TEnumPetStore1Set;
   psa: array of TEnumPetStore1;
-  astext: boolean;
   P: PUtf8Char;
+  astext: boolean;
+  k: TRttiKind;
+  t: TRttiParserType;
   eoo: AnsiChar;
   e: TEmoji;
   ep: TSetMyEnumPart;
@@ -6889,7 +6895,19 @@ var
   d: TTest;
   {$endif HASEXTRECORDRTTI}
 begin
+  // some paranoid checks
+  for k := low(k) to high(k) do
+  begin
+    Check(Assigned(RTTI_FINALIZE[k]) = (k in rkManagedTypes + [rkClass]));
+    Check(Assigned(RTTI_MANAGEDCOPY[k]) = (k in rkManagedTypes));
+  end;
+  CheckEqual(SizeOf(TRttiVarData), SizeOf(TVarData));
+  CheckEqual(SizeOf(TSynVarData), SizeOf(TVarData));
+  Check(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
+  for t := succ(low(t)) to high(t) do
+    Check(Assigned(PT_INFO[t]) <> (t in (ptComplexTypes - [ptOrm, ptTimeLog])));
   {$ifdef HASEXTRECORDRTTI}
+  // quickly validate Delphi 2010+ exxtended RTTI
   r := Rtti.RegisterType(TypeInfo(TPeople));
   check(r <> nil);
   checkEqual(r.Props.Count, 4);
@@ -6902,9 +6920,6 @@ begin
   Check(RecordLoadJson(d, u, TypeInfo(TTest)));
   check(d.d <> 0);
   {$endif HASEXTRECORDRTTI}
-  CheckEqual(SizeOf(TRttiVarData), SizeOf(TVarData));
-  CheckEqual(SizeOf(TSynVarData), SizeOf(TVarData));
-  Check(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
   // CSV (or JSON array) to set
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'none'), 0, 'TSetMyEnum?');
