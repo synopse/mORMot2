@@ -680,8 +680,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// compute the next IPv4 address available in this scope
     function NextIp4: TNetIP4;
-    /// call DhcpAddOptions() with the settings of this scope
-    procedure AddOptions(var f: PAnsiChar; withLeaseTimes: boolean);
     /// check all TDhcpLease.Expired against tix32
     // - return the number of leases marked as lsOutdated
     // - this method is thread safe and will call Safe.Lock/UnLock
@@ -1068,9 +1066,9 @@ type
     Scope: PDhcpScope;
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
-    HostName: PShortString;
+    RecvHostName: PShortString;
     /// the "profile" entry matched by this request
-    Profile: PDhcpScopeProfile;
+    RecvProfile: PDhcpScopeProfile;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
     /// the server IP socket which received the UDP frame
@@ -1082,10 +1080,12 @@ type
     RecvLensRai: TDhcpParsedRai;
     /// the DHCP message type parsed from Recv
     RecvType: TDhcpMessageType;
-    /// the DHCP message type prepared into Send
-    SendType: TDhcpMessageType;
     /// the PXE remote boot type as parsed by TDhcpProcess.SetBoot
-    Boot: TDhcpClientBoot;
+    RecvBoot: TDhcpClientBoot;
+    /// the DHCP message type prepared into the Send buffer
+    SendType: TDhcpMessageType;
+    /// options set into the Send buffer by TDhcpProcess.FinalizeFrame
+    SendOptions: TDhcpOptions;
     /// UDP frame received from the client, parsed in RecvLens[]
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
@@ -1136,9 +1136,10 @@ type
     function FindLease(var data: TDhcpProcessData): PDhcpLease; virtual;
     function RetrieveFrameIP(var Data: TDhcpProcessData;
       Lease: PDhcpLease): boolean; virtual;
-    function SetBoot(var Data: TDhcpProcessData): TDhcpClientBoot; virtual;
+    procedure SetBoot(var Data: TDhcpProcessData); virtual;
     procedure AddBootOptions(var Data: TDhcpProcessData); virtual;
     procedure SetProfile(var Data: TDhcpProcessData); virtual;
+    function CallbackAborted(var Data: TDhcpProcessData): boolean; virtual;
     function FinalizeFrame(var Data: TDhcpProcessData): PtrInt; virtual;
   public
     /// setup this DHCP process using the specified settings
@@ -1687,7 +1688,7 @@ begin
   else if one^.op = 0 then               // check one^.boot and one^.rai
     if one^.boot <> dcbDefault then
     begin
-      result := Data.Boot = one^.boot;   // fastest path using SetBoot() logic
+      result := Data.RecvBoot = one^.boot;   // fastest path using SetBoot()
       exit;
     end
     else
@@ -2678,28 +2679,6 @@ begin
   Safe.UnLock;
 end;
 
-procedure TDhcpScope.AddOptions(var f: PAnsiChar; withLeaseTimes: boolean);
-begin
-  // default options
-  DhcpAddOption32(f, doSubnetMask, Subnet.mask);
-  if Broadcast <> 0 then
-    DhcpAddOption32(f, doBroadcastAddress, Broadcast);
-  if Gateway <> 0 then
-    DhcpAddOption32(f, doRouters, Gateway);
-  if DnsServer <> nil then
-    DhcpAddOptions(f, doDomainNameServers, pointer(DnsServer));
-  if NtpServers <> nil then
-    DhcpAddOptions(f, doNtpServers, pointer(NtpServers));
-  DhcpAddOptionU(f, doDomainName, DomainName);
-  // append timeouts - unless from stateless INFORM
-  if withLeaseTimes then
-  begin
-    DhcpAddOption32(f, doDhcpLeaseTime,     LeaseTime); // already big-endian
-    DhcpAddOption32(f, doDhcpRenewalTime,   RenewalTime);
-    DhcpAddOption32(f, doDhcpRebindingTime, Rebinding);
-  end;
-end;
-
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
@@ -3590,21 +3569,21 @@ begin
     AppendShortChar(' ', @msg);
   end;
   AppendShort(Data.Ip, msg);
-  if Data.HostName^[0] <> #0 then
+  if Data.RecvHostName^[0] <> #0 then
   begin
     AppendShortChar(' ', @msg);
-    AppendShort(Data.HostName^, msg);
+    AppendShort(Data.RecvHostName^, msg);
   end;
-  if Data.Boot <> dcbDefault then
+  if Data.RecvBoot <> dcbDefault then
   begin
     AppendShort(' boot=', msg); // e.g. 'boot=ipxe-x64'
-    AppendShortAnsi7String(BOOT_TXT[Data.Boot], msg);
+    AppendShortAnsi7String(BOOT_TXT[Data.RecvBoot], msg);
   end;
-  if (Data.Profile <> nil) and
-     (Data.Profile.name <> '') then
+  if (Data.RecvProfile <> nil) and
+     (Data.RecvProfile.name <> '') then
   begin
     AppendShort(' profile=', msg);
-    AppendShortAnsi7String(Data.Profile.name, msg);
+    AppendShortAnsi7String(Data.RecvProfile.name, msg);
     if msg[0] = #255 then
       dec(msg[0]); // avoid buffer overflow writing ASCIIZ
   end;
@@ -3644,8 +3623,8 @@ begin
   Data.Mac64 := 0;
   Data.Ip4 := 0;
   Data.SendType := dmtUndefined;
-  Data.Boot := dcbDefault;
-  Data.Profile := nil;
+  Data.RecvBoot := dcbDefault;
+  Data.RecvProfile := nil;
   Data.RecvType := DhcpParse(@Data.Recv, Data.RecvLen, Data.RecvLens, nil, @Data.Mac64);
   Data.Ip[0] := #0;
   if Data.Mac64 <> 0 then
@@ -3653,7 +3632,7 @@ begin
     // valid DHCP frame with RecvType <> dmtUndefined
     Data.Mac[0] := #17;
     ToHumanHexP(@Data.Mac[1], @Data.Mac64, 6);
-    Data.HostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
+    Data.RecvHostName := DhcpData(@Data.Recv, Data.RecvLens[doHostName]);
     Int64(Data.RecvLensRai) := 0;
     if Data.RecvLens[doRelayAgentInformation] <> 0 then
       ParseRecvLensRai(Data);
@@ -3662,7 +3641,7 @@ begin
   else
   begin
     Data.Mac[0] := #0;
-    Data.HostName := @Data.Mac;
+    Data.RecvHostName := @Data.Mac;
     result := false;
   end;
 end;
@@ -3694,31 +3673,26 @@ begin
   result := true;
 end;
 
-function TDhcpProcess.FinalizeFrame(var Data: TDhcpProcessData): PtrInt;
+procedure DhcpDataAddRegularOptions(var Data: TDhcpProcessData);
+begin
+  DhcpDataAddOptionOnce32(Data, doSubnetMask, Data.Scope^.Subnet.mask);
+  DhcpDataAddOptionOnce32(Data, doBroadcastAddress, Data.Scope^.Broadcast);
+  DhcpDataAddOptionOnce32(Data, doRouters, Data.Scope^.Gateway);
+  DhcpDataAddOptionOnceA32(Data, doDomainNameServers, pointer(Data.Scope^.DnsServer));
+  DhcpDataAddOptionOnceA32(Data, doNtpServers, pointer(Data.Scope^.NtpServers));
+  if (Data.RecvType <> dmtInform) and
+     not (doDhcpLeaseTime in Data.SendOptions) then // + big-endian 51,58,59
+  begin
+    DhcpDataAddOptionOnce32(Data, doDhcpLeaseTime, Data.Scope^.LeaseTime);
+    DhcpDataAddOptionOnce32(Data, doDhcpRenewalTime, Data.Scope^.RenewalTime);
+    DhcpDataAddOptionOnce32(Data, doDhcpRebindingTime, Data.Scope^.Rebinding);
+  end;
+end;
+
+function DhcpDataEnd(var Data: TDhcpProcessData): PtrUInt;
 var
   b: PtrUInt;
 begin
-  // append "boot" specific options 60,66,67,97
-  if SetBoot(Data) <> dcbDefault then
-    AddBootOptions(Data);
-  // append "profiles" custom options
-  if Data.Profile <> nil then
-    DhcpDataAddOptionProfile(Data);
-  // append regular DHCP options
-  Data.Scope^.AddOptions(Data.SendEnd, // options 1,3,6,15,28,42
-    Data.RecvType <> dmtInform);       // [+51,58,59]
-  // optional callback support
-  if Assigned(fOnComputeResponse) then
-  begin
-    fOnComputeResponse(self, Data);
-    if Data.SendEnd = nil then
-    begin
-      DoLog(sllTrace, 'ignored by callback ', Data);
-      inc(Data.Scope^.Metrics.Current[dsmDroppedCallback]);
-      result := 0;
-      exit; // callback asked to silently ignore this frame
-    end;
-  end;
   // send back verbatim Option 61 if any
   b := Data.RecvLens[doDhcpClientIdentifier];
   if b <> 0 then
@@ -3736,6 +3710,44 @@ begin
   // add trailer to the Data.Send frame and returns its final size in bytes
   Data.SendEnd^ := #255;
   result := Data.SendEnd - PAnsiChar(@Data.Send) + 1;
+end;
+
+function TDhcpProcess.CallbackAborted(var Data: TDhcpProcessData): boolean;
+begin
+  // caller ensured fOnComputeResponse <> nil
+  try
+    fOnComputeResponse(self, Data);
+  except
+    Data.SendEnd := nil; // intercept any callback issue and abort
+  end;
+  result := Data.SendEnd = nil; // callback asked to silently ignore this frame
+  if not result then
+    exit; // continue
+  DoLog(sllTrace, 'ignored by callback ', Data);
+  inc(Data.Scope^.Metrics.Current[dsmDroppedCallback]);
+end;
+
+function TDhcpProcess.FinalizeFrame(var Data: TDhcpProcessData): PtrInt;
+begin
+  integer(Data.SendOptions) := 0;
+  // check input and set Data.RecvBoot
+  SetBoot(Data);
+  // append "profiles" custom options - always first since have precedence
+  if Data.RecvProfile <> nil then
+    DhcpDataAddOptionProfile(Data);
+  // append "boot" specific options 60,66,67,97
+  if Data.RecvBoot <> dcbDefault then
+    AddBootOptions(Data);
+  // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
+  DhcpDataAddRegularOptions(Data);
+  // optional callback support
+  if Assigned(fOnComputeResponse) and
+     CallbackAborted(Data) then
+    // aborted by callback: nothing to send
+    result := 0
+  else
+    // final options 61/82 verbatim retransmission + end Send buffer stream
+    result := DhcpDataEnd(Data);
 end;
 
 function TDhcpProcess.FindScope(var data: TDhcpProcessData): boolean;
@@ -3844,13 +3856,14 @@ const
   // 8 = EFI x64 HTTP, 9 = EFI2 x64 HTTP, 10 = EFI arm32, 11 = EFI arm64,
   // 12 = EFI arm64 HTTP - 8,9,12 mean HTTP boot capability, not selection
 
-function TDhcpProcess.SetBoot(var Data: TDhcpProcessData): TDhcpClientBoot;
+procedure TDhcpProcess.SetBoot(var Data: TDhcpProcessData);
 var
+  b: TDhcpClientBoot;
   o: PByteArray;
   vendor: PShortString;
   a: PtrUInt;
 begin
-  result := dcbDefault;
+  b := dcbDefault;
   // parse RFC 4578 PXE option 93 as uint16 (00:00)
   o := @Data.RecvLens[doClientArchitecture];
   if o[0] <> 0 then
@@ -3859,35 +3872,35 @@ begin
     if (o[0] = 2) and
        (o[1] = 0) and // stored as BigEndian
        (o[2] <= high(ARCH_DCB)) then
-      result := ARCH_DCB[o[2]];
+      b := ARCH_DCB[o[2]];
   end;
   vendor := DhcpData(@Data.Recv, Data.RecvLens[doVendorClassIdentifier]);
-  if result = dcbDefault then
+  if b = dcbDefault then
     // fallback to Option 60 parsing - e.g. 'PXEClient:Arch:00007:UNDI:003016'
     if (vendor^[0] >= #17) and
        IdemPChar(@vendor^[1], 'PXECLIENT:ARCH:0') then
     begin
       a := GetCardinal(@vendor^[17]);
       if a <= high(ARCH_DCB) then
-        result := ARCH_DCB[a];
+        b := ARCH_DCB[a];
     end;
-  if result = dcbDefault then
+  if b = dcbDefault then
     exit; // normal DHCP boot
   // detect iPXE from RFC 3004 Option 77
   if DhcpIdem(@Data.Recv, Data.RecvLens[doUserClass], 'iPXE') then
     // change dcbBios..dcbA64 into dcbIpxeBios..dcbIpxeA64
-    inc(result, ord(dcbIpxeBios) - ord(dcbBios))
+    inc(b, ord(dcbIpxeBios) - ord(dcbBios))
   else if (vendor^[0] >= #10) and
           IdemPChar(@vendor^[1], 'HTTPCLIENT') then
     // HTTPClient in Option 60 indicates native UEFI firmware HTTP boot
     // - will fallback to TFTP is no HTTP URI is supplied
-    case result of
+    case b of
       dcbX64:
-        result := dcbX64Http;
+        b := dcbX64Http;
       dcbA64:
-        result := dcbA64Http;
+        b := dcbA64Http;
     end;
-  Data.Boot := result;
+  Data.RecvBoot := b;
 end;
 
 procedure TDhcpProcess.AddBootOptions(var Data: TDhcpProcessData);
@@ -3896,10 +3909,10 @@ var
 begin
   // we know that Data.Boot <> dcbDefault: validate the request
   boot := @Data.Scope^.Boot;
-  if boot^.Remote[Data.Boot] = '' then
+  if boot^.Remote[Data.RecvBoot] = '' then
   begin
     DoLog(sllDebug, 'missing boot file', Data); // including 'boot=ipxe-x64'
-    Data.Boot := dcbDefault;                    // no 'boot=...' any more
+    Data.RecvBoot := dcbDefault;                // no 'boot=...' any more
     inc(Data.Scope^.Metrics.Current[dsmDroppedPxeBoot]);
     // will still send back an OFFER/ACK but with no PXE options
     // - this is what ISC DHCP, KEA, and dnsmasq do in practice
@@ -3908,7 +3921,7 @@ begin
   inc(Data.Scope^.Metrics.Current[dsmPxeBoot]);
   // known configuration: append PXE/iPXE specific 66/67 options
   DhcpAddOptionU(Data.SendEnd, doTftpServerName, boot^.NextServer);
-  DhcpAddOptionU(Data.SendEnd, doBootFileName,   boot^.Remote[Data.Boot]);
+  DhcpAddOptionU(Data.SendEnd, doBootFileName,   boot^.Remote[Data.RecvBoot]);
   // copy back verbatim option 60 and 97 to PXE clients
   DhcpDataCopyOption(Data, doVendorClassIdentifier);
   DhcpDataCopyOption(Data, doUuidClientIdentifier);
@@ -3936,7 +3949,7 @@ begin
        ((p^.notany = nil) or
         not DhcpDataMatchAny(Data, pointer(p^.notany))) then
     begin
-      Data.Profile := p;
+      Data.RecvProfile := p;
       // all=any=nil as fallback if nothing more precise did apply
       // "not-all"/"not-any" without any "all"/"any" are just ignored
       // unless they are the eventual default
