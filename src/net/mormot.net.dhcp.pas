@@ -4174,12 +4174,12 @@ initialization
   GetEnumTrimmedNames(TypeInfo(TDhcpOptionRai),   @RAI_OPTION,  scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpScopeMetric), @METRIC_TXT,  scKebabCase);
   GetEnumTrimmedNames(TypeInfo(TDhcpClientBoot),  @BOOT_TXT,    scKebabCase);
-  Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, {nest=}true);
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArrays([
     TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings,
     TypeInfo(TDhcpProfileSettingsObjArray), TDhcpProfileSettings]);
   {$endif HASDYNARRAYTYPE}
+  Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, {nest=}true);
 
 end.
 
