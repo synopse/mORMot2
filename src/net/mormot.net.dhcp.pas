@@ -200,10 +200,19 @@ var
   /// uppercase identifier of each DHCP message type, e.g. 'DISCOVER' or 'ACK'
   DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
 
-  /// KEA-like identifier of each DHCP option, e.g. 'subnet-mask' or 'routers'
+  /// KEA-like identifier of each DHCP option
   // - https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#standard-dhcpv4-options
+  // - i.e. 'subnet-mask', 'routers', 'domain-name-servers', 'host-name',
+  // 'domain-name', 'broadcast-address', 'ntp-servers', 'vendor-encapsulated-options',
+  // 'dhcp-requested-address', 'dhcp-lease-time', 'dhcp-message-type',
+  // 'dhcp-server-identifier', 'dhcp-parameter-request-list', 'dhcp-renewal-time',
+  // 'dhcp-rebinding-time', 'vendor-class-identifier', 'dhcp-client-identifier',
+  // 'tftp-server-name', 'boot-file-name', 'user-class', 'dhcp-agent-options',
+  // 'client-architecture', 'uuid-client-identifier' and 'subnet-selection'
   DHCP_OPTION: array[TDhcpOption] of RawUtf8;
-  /// KEA-like identifier of each DHCP RAI sub-option, e.g. 'circuit-id'
+  /// KEA-like identifier of each DHCP RAI sub-option
+  // - i.e. 'circuit-id', 'remote-id', 'link-selection', 'subscriber-id',
+  // 'server-id-override', 'relay-id' and 'relay-port'
   RAI_OPTION: array[TDhcpOptionRai] of RawUtf8;
 
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
@@ -338,13 +347,15 @@ type
   // - used to store "always" and "requested" data to be sent back to the client
   TProfileValue = record
     /// the raw option number to match, or to be sent back
-    // - contains 0 for "always" options or "boot" match
+    // - contains 0 for "always" options or "boot"/RAI match
     op: byte;
     /// the known option enum corresponding to the op integer
     // - opt=doPad for an unknown option: slower manual O(n) lookup would happen
     opt: TDhcpOption;
     /// the "boot" matching value (with op=0 and opt=doPad)
     boot: TDhcpClientBoot;
+    /// the DHCP Option 82 "Relay Agent Information" sub-option matching value
+    rai: TDhcpOptionRai;
     /// the associated raw binary value
     value: RawByteString;
   end;
@@ -788,7 +799,7 @@ type
   // - values could also be integers, booleans, or nested TLV object
   // - most values would have their default type guessed as UINT16, IP or UUID
   // - "all" "any" "not-all" "not-any" also support convenient "boot" key as
-  // BOOT_TXT[] values
+  // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
   TDhcpProfileSettings = class(TSynPersistent)
   protected
     fName: RawUtf8;
@@ -1617,22 +1628,32 @@ var
   option, value: PAnsiChar;
 begin
   result := false;
-  // find the option in Data.Recv
-  if one^.opt <> doPad then
+  // locate the option value in Data.Recv[]
+  if one^.opt <> doPad then              // most common case
   begin
-    len := Data.RecvLens[one^.opt]; // fast O(1) lookup of known option
+    len := Data.RecvLens[one^.opt];      // fast O(1) lookup of known option
     if len = 0 then
       exit;
     option := @Data.Recv.options[len];
   end
-  else if one^.op = 0 then // check one^.boot
+  else if one^.op = 0 then               // check one^.boot and one^.rai
+    if one^.boot <> dcbDefault then
+    begin
+      result := Data.Boot = one^.boot;   // fastest path using SetBoot() logic
+      exit;
+    end
+    else
+    begin
+      if one^.rai = dorUndefined then
+        exit;
+      len := Data.RecvLensRai[one^.rai]; // O(1) lookup of sub-option
+      if len = 0 then
+        exit;
+      option := @Data.Recv.options[len];
+    end
+  else                                   // one^.op <> 0
   begin
-    result := Data.Boot = one^.boot; // fastest path using SetBoot() logic
-    exit;
-  end
-  else
-  begin
-    option := @Data.Recv.options; // inlined DhcpFindOption()
+    option := @Data.Recv.options;        // inlined DhcpFindOption()
     repeat
       if option[0] = AnsiChar(one^.op) then
         break;
@@ -1839,6 +1860,7 @@ begin
   v.op := 0;
   v.opt := doPad;
   v.boot := dcbDefault;
+  v.rai := dorUndefined;
   v.value := '';
   if not parser.GetJsonFieldName then
     exit;
@@ -1860,6 +1882,9 @@ begin
     end
     else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
       v.op := DHCP_OPTION_NUM[v.opt]
+    else if (pp = ppMatch) and
+            parser.ValueEnumFromConst(@RAI_OPTION, length(RAI_OPTION), v.rai) then
+      // e.g. 'circuit-id' from within doDhcpAgentOptions sub-options
     else
       exit;
   if not parser.ParseNextAny({NormalizeBoolean=}false) then
@@ -2686,8 +2711,9 @@ begin
     v.op := 0;
     v.opt := doPad;
     v.boot := dcbDefault;
+    v.rai := dorUndefined;
     for i := 0 to high(alw) do
-      with alw[i] do // prepare TLV-concatenated
+      with alw[i] do // prepare raw TLV-concatenated binary buffer
         Append(v.value, [AnsiChar(op), AnsiChar(length(value)), value]);
     AddProfileValue(Profile.send, v);
   end;
