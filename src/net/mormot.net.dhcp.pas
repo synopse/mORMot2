@@ -4378,7 +4378,7 @@ initialization
     TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings,
     TypeInfo(TDhcpProfileSettingsObjArray), TDhcpProfileSettings]);
   {$endif HASDYNARRAYTYPE}
-  Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, {nest=}true);
+  Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, true, true);
 
 end.
 

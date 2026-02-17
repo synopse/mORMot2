@@ -9721,8 +9721,10 @@ begin
      not (Kind in [rkEnumeration, rkSet]) then
     exit;
   fCustomNames := nil;
-  if (NewCase > scTrimLeft) and
-     (Cache.EnumMin = 0)then
+  if (NewCase <> scNoTrim) and
+     (Cache.EnumMin = 0) and
+     ((Kind = rkEnumeration) and (Cache.Size in [1, 2])) or // up to 65536 items
+     ((Kind = rkSet) and (Cache.Size <> 0)) then            // up to 64-bit
     Cache.EnumInfo.GetEnumNames(fCustomNames, NewCase);
   fCache.EnumCustomText := pointer(fCustomNames);
 end;
