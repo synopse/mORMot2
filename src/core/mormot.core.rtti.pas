@@ -773,7 +773,8 @@ type
         EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
         EnumList: PShortString;
-        EnumCustomText: PRawUtf8Array); // TRttiJson.RegisterCustomEnumValues
+        // from RegisterCustomEnumValues/EnumSetNameChangeCase
+        EnumCustomText: PRawUtf8Array);
       rkDynArray,
       rkArray: (
         ItemInfoManaged: PRttiInfo; // = nil for unmanaged types
@@ -784,7 +785,7 @@ type
       );
       rkClass: (
         NewInstance: pointer; // TRttiCustomNewInstance - set by mormot.core.json
-        ValueClass: TClass; // = Info.RttiClass.RttiClass
+        ValueClass: TClass;   // = Info.RttiClass.RttiClass
         SerializableInterface: pointer; // = TRttiCustom of the rkInterface
         ValueRtlClass: TRttiValueClass;
       );
@@ -2646,7 +2647,8 @@ type
     fAutoCreateObjArrays,
     fAutoResolveInterfaces: PRttiCustomPropDynArray;
     fPrivateSlots: TObjectDynArray;
-    fNoRttiInfo: TByteDynArray; // used by NoRttiSetAndRegister()
+    fNoRttiInfo: TByteDynArray;     // used by NoRttiSetAndRegister()
+    fCustomNames: TRawUtf8DynArray; // used by EnumSetNameChangeCase()
     // used to customize the class process
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
@@ -2780,6 +2782,10 @@ type
     /// search an enumeration/set value from its UTF-8 text representation
     // - first search by Cache.EnumCustomText, then by (trimmed) RTTI names
     function GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
+    /// change the identifiers of enumerate/set type using a proper casing
+    // - most common are scLowerCaseFirst (aka camelCase, for API), scSnakeCase
+    // (POSIX/IT conventions) or even scKebabCase (RFC/networking)
+    procedure EnumSetNameChangeCase(NewCase: TSetCase);
     /// register once an instance of a given class per RTTI
     // - thread-safe returns aObject, or an existing object (freeing aObject)
     // - just like PrivateSlot property, but for as many class as needed
@@ -3134,8 +3140,9 @@ type
     function RegisterFromText(const TypeName: RawUtf8;
       const RttiDefinition: RawUtf8): TRttiCustom; overload;
     /// default property to access a given RTTI TypeInfo() customization
-    // - you can access or register one type by using this default property:
+    // - you can access or register one type by using this default property e.g.
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
+    // ! Rtti[TypeInfo(TMyEnum)].EnumSetNameChangeCase(scKebabCase)
     property ByTypeInfo[P: PRttiInfo]: TRttiCustom
       read RegisterType; default;
     /// default property to access a given RTTI customization of a class
@@ -9697,6 +9704,18 @@ begin
   result := FindShortStringListExact(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
   if result < 0 then
     result := FindShortStringListTrimLowerCase(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
+end;
+
+procedure TRttiCustom.EnumSetNameChangeCase(NewCase: TSetCase);
+begin
+  if (self = nil) or
+     not (Kind in [rkEnumeration, rkSet]) then
+    exit;
+  fCustomNames := nil;
+  if (NewCase > scTrimLeft) and
+     (Cache.EnumMin = 0)then
+    Cache.EnumInfo.GetEnumNames(fCustomNames, NewCase);
+  fCache.EnumCustomText := pointer(fCustomNames);
 end;
 
 function TRttiCustom.SetObjArray(Item: TClass): TRttiCustom;
