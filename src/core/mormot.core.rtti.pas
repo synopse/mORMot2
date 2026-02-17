@@ -541,10 +541,10 @@ type
     procedure AddCaptionStrings(Strings: TStrings;
       UsedValuesBits: pointer = nil);
     /// retrieve all element names as a dynamic array of RawUtf8
-    // - names could be optionally trimmed left from their initial lower chars
+    // - names could be optionally with a custom casing, e.g. scTrimLeft
     // - optionally return the corresponding ordinal values in a TIntegerDynArray
-    procedure GetEnumNameAll(var result: TRawUtf8DynArray;
-      TrimLeftLowerCase: boolean; resOrd: PIntegerDynArray = nil); overload;
+    procedure GetEnumNames(var result: TRawUtf8DynArray;
+      newCase: TSetCase; resOrd: PIntegerDynArray = nil);
     /// retrieve all element names as CSV, with optional quotes
     procedure GetEnumNameAll(out result: RawUtf8; const Prefix: RawUtf8 = '';
       quotedValues: boolean = false; const Suffix: RawUtf8 = '';
@@ -1665,13 +1665,14 @@ procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
   aLowerCaseFirst: boolean = false); overload;
 
 /// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
-function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray; overload;
+function GetEnumTrimmedNames(aTypeInfo: PRttiInfo;
+  aNewCase: TSetCase = scTrimLeft): TRawUtf8DynArray; overload;
 
 /// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
-// - names could be optionally trimmed left from their initial lower chars
+// - names could be optionally change their casing, e.g. using scTrimLeft
 // - optionally return the corresponding ordinal values in a TIntegerDynArray
-function GetEnumNameAll(aTypeInfo: PRttiInfo;
-  TrimLeftLowerCase: boolean; resOrd: PIntegerDynArray = nil): TRawUtf8DynArray;
+function GetEnumNameAll(aTypeInfo: PRttiInfo; aNewCase: TSetCase = scNoTrim;
+  resOrd: PIntegerDynArray = nil): TRawUtf8DynArray;
 
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
@@ -3719,8 +3720,8 @@ begin
   end;
 end;
 
-procedure TRttiEnumType.GetEnumNameAll(var result: TRawUtf8DynArray;
-  TrimLeftLowerCase: boolean; resOrd: PIntegerDynArray);
+procedure TRttiEnumType.GetEnumNames(var result: TRawUtf8DynArray;
+  newCase: TSetCase; resOrd: PIntegerDynArray);
 var
   min, n, i: PtrInt;
   V: PShortString;
@@ -3740,10 +3741,7 @@ begin
   begin
     if resOrd <> nil then
       resOrd^[i] := min + i;
-    if TrimLeftLowerCase then
-      TrimLeftLowerCaseShort(V, result[i])
-    else
-      ShortStringToAnsi7String(V^, result[i]);
+    ShortTrim(V, result[i], newCase);
     inc(PByte(V), length(V^) + 1);
   end;
 end;
@@ -6262,15 +6260,15 @@ begin
   GetEnumTrimmedNames(aTypeInfo, aDest, sc);
 end;
 
-function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray;
+function GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aNewCase: TSetCase): TRawUtf8DynArray;
 begin
-  aTypeInfo^.BaseType^.GetEnumNameAll(result{%H-}, {trim=}true);
+  aTypeInfo^.BaseType^.GetEnumNames(result{%H-}, aNewCase);
 end;
 
-function GetEnumNameAll(aTypeInfo: PRttiInfo;
-  TrimLeftLowerCase: boolean; resOrd: PIntegerDynArray): TRawUtf8DynArray;
+function GetEnumNameAll(aTypeInfo: PRttiInfo; aNewCase: TSetCase;
+  resOrd: PIntegerDynArray): TRawUtf8DynArray;
 begin
-  aTypeInfo^.BaseType^.GetEnumNameAll(result, TrimLeftLowerCase, resOrd);
+  aTypeInfo^.BaseType^.GetEnumNames(result, aNewCase, resOrd);
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
