@@ -800,9 +800,9 @@ type
     function Flush: PtrUInt;
   public
     /// raw append the options of a given "profiles" entry into Send
-    procedure AddProfileOptions(p: PProfileValue);
+    procedure AddOptionProfile(p: PProfileValue);
     /// raw append of a 32-bit big-endian/IPv4 option value into Send
-    procedure AddOptionOnce32(const opt: TDhcpOption; const be: cardinal); overload;
+    procedure AddOptionOnce32(const opt: TDhcpOption; const be: cardinal);
     /// raw append of a RawByteString/RawUtf8 option into Send
     procedure AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
     /// raw append of a dynamic array of 32-bit big-endian/IPv4 options into Send
@@ -820,7 +820,7 @@ type
     // methods for internal use
     procedure ParseRecvLensRai;
     function ClientUuid(opt: TDhcpOption): PDhcpLease;
-    procedure AppendToMac(recvlen: PtrUInt; const ident: ShortString);
+    procedure AppendToMac(ip4len: PtrUInt; const ident: ShortString);
   end;
   {$ifdef CPUINTEL} {$A+} {$endif CPUINTEL}
 
@@ -1071,7 +1071,8 @@ type
       read fGraceFactor write fGraceFactor default 2;
     /// refine DHCP server process for this scope
     // - default is [] but you may tune it for your actual (sub-)network needs
-    // using informRateLimit, csvUnixTime, pxeNoInherit, pxeDisable in "options"
+    // using "inform-rate-limit", "csv-unix-time", "pxe-no-inherit" and
+    // "pxe-disable" in this "options" array
     property Options: TDhcpScopeOptions
       read fOptions write fOptions;
     /// optional PXE network book settings as "boot" sub-object
@@ -2553,7 +2554,7 @@ end;
 
 { TDhcpState }
 
-procedure TDhcpState.AddProfileOptions(p: PProfileValue);
+procedure TDhcpState.AddOptionProfile(p: PProfileValue);
 var
   len: PtrUInt;
 begin
@@ -2650,7 +2651,7 @@ begin
   // process "requested" options, filtering each op
   repeat
     if ByteScanIndex(@requested[1], requested[0], p^.op) >= 0 then // SSE2 asm
-      AddProfileOptions(p); // as individual TLV
+      AddOptionProfile(p); // as individual TLV
     inc(p);
     dec(n);
   until n = 0;
@@ -2837,13 +2838,13 @@ begin
   end;
 end;
 
-procedure TDhcpState.AppendToMac(recvlen: PtrUInt; const ident: ShortString);
+procedure TDhcpState.AppendToMac(ip4len: PtrUInt; const ident: ShortString);
 var
   selection: TNetIP4;
 begin
-  if recvlen = 0 then
+  if ip4len = 0 then
     exit;
-  selection := DhcpIP4(@Recv, recvlen);
+  selection := DhcpIP4(@Recv, ip4len);
   if selection = 0 then
     exit;
   AppendShort(ident, Mac);
