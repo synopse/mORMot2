@@ -10,6 +10,7 @@ unit mormot.net.dhcp;
     - Low-Level DHCP Protocol Definitions
     - Low-Level per-scope DHCP metrics
     - Middle-Level DHCP Scope and Lease Logic
+    - Middle-Level DHCP State Machine
     - High-Level Multi-Scope DHCP Server Processing Logic
 
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
@@ -268,6 +269,7 @@ procedure DhcpAddOptions(var p: PAnsiChar; const op: TDhcpOption; ips: PAnsiChar
 /// append a copy of an existing TDhcpPacket.options option for lens[opt]
 // - sourcelen should point to recv[lens[opt]] with lens[opt] <> 0
 procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 type
@@ -554,7 +556,7 @@ type
   TLeaseDynArray = array of TDhcpLease;
 
   /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
-  // - used for TDhcpProcessData.Boot: TDhcpClientBoot <> dcbDefault
+  // - used for TDhcpState.Boot: TDhcpClientBoot <> dcbDefault
   // - Remote[] are consolidated for proper fallback between boot options,
   // unless dsoPxeNoInherit/"pxe-no-inherit" is set for the scope
   TDhcpScopeBoot = record
@@ -725,6 +727,100 @@ type
   TDhcpScopes = array of TDhcpScope;
 
 function ToText(st: TLeaseState): PShortString; overload;
+
+
+{ **************** Middle-Level DHCP State Machine }
+
+type
+  {$ifdef CPUINTEL} {$A-} {$endif CPUINTEL}
+  /// state machine used by TDhcpProcess.ComputeResponse to process a request
+  // - allow stack allocation of all memory needed during the frame processing
+  // - also supplied to TOnComputeResponse callback as thread-safe context
+  {$ifdef USERECORDWITHMETHODS}
+  TDhcpState = record
+  {$else}
+  TDhcpState = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// binary MAC address from the Recv frame, zero-extended to 64-bit/8-bytes
+    Mac64: Int64;
+    /// points to the last option of Send buffer
+    // - callback could use this to call DhcpAddOption() overloads
+    SendEnd: PAnsiChar;
+    /// 32-bit binary IP address allocated for Send
+    Ip4: TNetIP4;
+    /// the GetTickSec current 32-bit value
+    Tix32: cardinal;
+    /// the network subnet information related to this request
+    // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
+    Scope: PDhcpScope;
+    /// points to the raw value of doHostName option 12 in Recv.option[]
+    // - points to @NULCHAR so HostName^='' if there is no such option
+    RecvHostName: PShortString;
+    /// the "profile" entry matched by this request
+    RecvProfile: PDhcpScopeProfile;
+    /// length of the Recv UDP frame received from the client
+    RecvLen: integer;
+    /// the server IP socket which received the UDP frame
+    // - allow several UDP bound server sockets to share a single TDhcpProcess
+    RecvIp4: TNetIP4;
+    /// parsed options length position in Recv.option[]
+    RecvLens: TDhcpParsed;
+    /// option-82 RAI parsed sub-options length position in Recv.option[]
+    RecvLensRai: TDhcpParsedRai;
+    /// the DHCP message type parsed from Recv
+    RecvType: TDhcpMessageType;
+    /// the PXE remote boot type as parsed by TDhcpProcess.SetRecvBoot
+    RecvBoot: TDhcpClientBoot;
+    /// the DHCP message type prepared into the Send buffer
+    SendType: TDhcpMessageType;
+    /// options set into the Send buffer by TDhcpProcess.Flush
+    SendOptions: TDhcpOptions;
+    /// UDP frame received from the client, parsed in RecvLens[]
+    Recv: TDhcpPacket;
+    /// UDP frame to be sent back to the client, after processing
+    Send: TDhcpPacket;
+    /// some pointer value set by the UDP server for its internal process
+    Opaque: pointer;
+    /// IP address allocated for Send (raw Ip4) as human readable text
+    Ip: TShort16;
+    /// contains the client MAC address (raw Mac64) as human readable text
+    // - ready for logging, with no memory allocation during the process
+    // - may also contain hexadecimal UUID of static Option 61 client-identifier
+    Mac: string[63];
+    /// some temporary storage for a StaticUuid[] fake DHCP lease
+    Temp: TDhcpLease;
+    /// high-level 'match and append' of all "profile" entries into Send
+    procedure AddProfileOptions;
+    // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
+    procedure AddRegularOptions;
+    /// append verbatim options 61/82 copy + end Send buffer stream
+    // - returns the number of bytes of response in Send[]
+    function Flush: PtrUInt;
+  public
+    /// raw append the options of a given "profiles" entry into Send
+    procedure AddProfileOptions(p: PProfileValue);
+    /// raw append of a 32-bit big-endian/IPv4 option value into Send
+    procedure AddOptionOnce32(const opt: TDhcpOption; const be: cardinal); overload;
+    /// raw append of a RawByteString/RawUtf8 option into Send
+    procedure AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
+    /// raw append of a dynamic array of 32-bit big-endian/IPv4 options into Send
+    procedure AddOptionOnceA32(const opt: TDhcpOption; const v: PAnsiChar);
+    /// raw append a verbatim copy of a Recv option into Send
+    procedure AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric = dsmDiscover);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// raw search of one "profile" value in State.Recv[]
+    function MatchOne(one: PProfileValue): boolean;
+    /// raw search of all "profile" values in State.Recv[] - true for all match
+    function MatchAll(all: PProfileValue): boolean;
+    /// raw search of any "profile" values in State.Recv[] - true on first match
+    function MatchAny(any: PProfileValue): boolean;
+  private
+    // methods for internal use
+    procedure ParseRecvLensRai;
+    function ClientUuid(opt: TDhcpOption): PDhcpLease;
+  end;
+  {$ifdef CPUINTEL} {$A+} {$endif CPUINTEL}
 
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
@@ -1048,65 +1144,10 @@ type
       read fScope;
   end;
 
-  /// data context used by TDhcpProcess.ComputeResponse to process a request
-  // - allow stack allocation of all memory needed during the frame processing
-  // - also supplied to TOnComputeResponse callback as thread-safe context
-  TDhcpProcessData = {$ifdef CPUINTEL} packed {$endif} record
-    /// binary MAC address from the Recv frame, zero-extended to 64-bit/8-bytes
-    Mac64: Int64;
-    /// points to the last option of Send buffer
-    // - callback could use this to call DhcpAddOption() overloads
-    SendEnd: PAnsiChar;
-    /// 32-bit binary IP address allocated for Send
-    Ip4: TNetIP4;
-    /// the GetTickSec current 32-bit value
-    Tix32: cardinal;
-    /// the network subnet information related to this request
-    // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
-    Scope: PDhcpScope;
-    /// points to the raw value of doHostName option 12 in Recv.option[]
-    // - points to @NULCHAR so HostName^='' if there is no such option
-    RecvHostName: PShortString;
-    /// the "profile" entry matched by this request
-    RecvProfile: PDhcpScopeProfile;
-    /// length of the Recv UDP frame received from the client
-    RecvLen: integer;
-    /// the server IP socket which received the UDP frame
-    // - allow several UDP bound server sockets to share a single TDhcpProcess
-    RecvIp4: TNetIP4;
-    /// parsed options length position in Recv.option[]
-    RecvLens: TDhcpParsed;
-    /// option-82 RAI parsed sub-options length position in Recv.option[]
-    RecvLensRai: TDhcpParsedRai;
-    /// the DHCP message type parsed from Recv
-    RecvType: TDhcpMessageType;
-    /// the PXE remote boot type as parsed by TDhcpProcess.SetBoot
-    RecvBoot: TDhcpClientBoot;
-    /// the DHCP message type prepared into the Send buffer
-    SendType: TDhcpMessageType;
-    /// options set into the Send buffer by TDhcpProcess.FinalizeFrame
-    SendOptions: TDhcpOptions;
-    /// UDP frame received from the client, parsed in RecvLens[]
-    Recv: TDhcpPacket;
-    /// UDP frame to be sent back to the client, after processing
-    Send: TDhcpPacket;
-    /// some pointer value set by the UDP server for its internal process
-    Opaque: pointer;
-    /// IP address allocated for Send (raw Ip4) as human readable text
-    Ip: TShort16;
-    /// contains the client MAC address (raw Mac64) as human readable text
-    // - ready for logging, with no memory allocation during the process
-    // - may also contain hexadecimal UUID of static Option 61 client-identifier
-    Mac: string[63];
-    /// some temporary storage for a StaticUuid[] fake DHCP lease
-    Temp: TDhcpLease;
-  end;
-  PDhcpProcessData = ^TDhcpProcessData;
-
   /// optional callback signature for TDhcpProcess.ComputeResponse
   // - input frame is parsed in Data.Recv/RecvLen/RecvLens/RecvLensRai
   // - could update SendEnd with DhcpAddOption() or set SendEnd=nil for no response
-  TOnComputeResponse = procedure(Sender: TDhcpProcess; var Data: TDhcpProcessData);
+  TOnComputeResponse = procedure(Sender: TDhcpProcess; var State: TDhcpState);
 
   /// implements our DHCP server logic, abstracted from UDP/Socket reference
   // - main methods are Setup() and ComputeResponse() from TDhcpServer
@@ -1577,182 +1618,6 @@ begin
         include(result, opt);
       dec(n);
     until n = 0;
-end;
-
-procedure DhcpDataCopyOption(var Data: TDhcpProcessData; op: TDhcpOption);
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  b: PtrUInt;
-begin
-  b := Data.RecvLens[op];
-  if b = 0 then
-    exit;
-  include(Data.SendOptions, op);
-  DhcpCopyOption(Data.SendEnd, @Data.Recv.options[b]);
-end;
-
-procedure DhcpDataAddProfileOption(var Data: TDhcpProcessData; p: PProfileValue);
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  len: PtrUInt;
-begin
-  if pointer(p^.value) = nil then
-    exit;
-  // be paranoid with "profiles": avoid buffer overflow
-  len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
-  if Data.SendEnd + len >= @Data.Send.options[high(Data.Send.options)] then
-    exit;
-  // actually append the value and mark it in SendOptions
-  DhcpAddOptionRaw(Data.SendEnd, p^.op, pointer(p^.value), len);
-  include(Data.SendOptions, p^.opt);
-end;
-
-procedure DhcpDataAddOptionOnce32(var Data: TDhcpProcessData;
-  const opt: TDhcpOption; const be: cardinal); overload;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if (be = 0) or
-     (opt in Data.SendOptions) or
-     (Data.SendEnd + SizeOf(be) >= @Data.Send.options[high(Data.Send.options)]) then
-    exit;
-  DhcpAddOption32(Data.SendEnd, opt, be);
-  include(Data.SendOptions, opt);
-end;
-
-procedure DhcpDataAddOptionOnceA32(var Data: TDhcpProcessData;
-  const opt: TDhcpOption; const v: PAnsiChar);
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  len: PtrUInt;
-begin
-  if (v = nil) or
-     (opt in Data.SendOptions) then
-    exit;
-  len := (PDALen(v - _DALEN)^ + _DAOFF) shl 2; // as bytes
-  if Data.SendEnd + len >= @Data.Send.options[high(Data.Send.options)] then
-    exit;
-  DhcpAddOptionRaw(Data.SendEnd, DHCP_OPTION_NUM[opt], v, len);
-  include(Data.SendOptions, opt);
-end;
-
-procedure DhcpDataAddOptionProfile(var Data: TDhcpProcessData);
-var
-  p: PProfileValue;
-  len, n: PtrUInt;
-  requested: PByteArray;
-begin
-  p := pointer(Data.RecvProfile.send);
-  if p = nil then
-    exit;
-  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-  // append "always" - should be as send[0].op=0
-  if p^.op = 0 then
-  begin
-    Data.SendOptions := Data.SendOptions + Data.RecvProfile.always;
-    len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
-    MoveFast(pointer(p^.value)^, Data.SendEnd^, len); // as a pre-computed blob
-    inc(Data.SendEnd, len);
-    inc(p);
-    dec(n);
-    if n = 0 then
-      exit;
-  end;
-  // access option 55 list
-  len := Data.RecvLens[doDhcpParameterRequestList];
-  if len = 0 then
-    exit;
-  requested := @Data.Recv.options[len + 1]; // len + [1,3,6,15,51,54]
-  // process "requested" options, filtering each op
-  repeat
-    if ByteScanIndex(@requested[1], requested[0], p^.op) >= 0 then // SSE2 asm
-      DhcpDataAddProfileOption(Data, p); // as individual TLV
-    inc(p);
-    dec(n);
-  until n = 0;
-end;
-
-function DhcpDataMatchOne(var Data: TDhcpProcessData; one: PProfileValue): boolean;
-var
-  len: PtrUInt;
-  option, value: PAnsiChar;
-begin
-  result := false;
-  // locate the option value in Data.Recv[]
-  if one^.opt <> doPad then              // most common case
-  begin
-    len := Data.RecvLens[one^.opt];      // fast O(1) lookup of known option
-    if len = 0 then
-      exit;
-    option := @Data.Recv.options[len];
-  end
-  else if one^.op = 0 then               // check one^.boot and one^.rai
-    if one^.boot <> dcbDefault then
-    begin
-      result := Data.RecvBoot = one^.boot;   // fastest path using SetBoot()
-      exit;
-    end
-    else
-    begin
-      if one^.rai = dorUndefined then
-        exit;
-      len := Data.RecvLensRai[one^.rai]; // O(1) lookup of sub-option
-      if len = 0 then
-        exit;
-      option := @Data.Recv.options[len];
-    end
-  else                                   // one^.op <> 0
-  begin
-    option := @Data.Recv.options;        // inlined DhcpFindOption()
-    repeat
-      if option[0] = AnsiChar(one^.op) then
-        break;
-      option := @option[ord(option[1]) + 2]; // O(n) lookup of raw op number
-      if option[0] = #255 then
-        exit;
-    until false;
-    inc(option); // option[0] = len
-  end;
-  // compare the one^.value with the option from Data.Recv
-  value := pointer(one^.value);
-  len := PStrLen(value - _STRLEN)^; // we know value<>nil and len>0
-  if len <> ord(option[0]) then
-    exit;
-  repeat
-    dec(len);                         // endings are more likely to change
-    if option[len] <> value[len] then // faster than CompareMem() here
-      exit;
-  until len = 0;
-  result := true; // exact case-sensitive match
-end;
-
-function DhcpDataMatchAll(var Data: TDhcpProcessData; all: PProfileValue): boolean;
-var
-  n: integer;
-begin // caller ensured all <> nil
-  result := false;
-  n := PDALen(PAnsiChar(all) - _DALEN)^ + _DAOFF;
-  repeat
-    if not DhcpDataMatchOne(Data, all) then
-      exit; // missing one
-    inc(all);
-    dec(n);
-  until n = 0;
-  result := true;
-end;
-
-function DhcpDataMatchAny(var Data: TDhcpProcessData; any: PProfileValue): boolean;
-var
-  n: integer;
-begin // caller ensured any <> nil
-  result := true;
-  n := PDALen(PAnsiChar(any) - _DALEN)^ + _DAOFF;
-  repeat
-    if DhcpDataMatchOne(Data, any) then
-      exit; // found one
-    inc(any);
-    dec(n);
-  until n = 0;
-  result := false;
 end;
 
 type
@@ -2677,6 +2542,295 @@ begin
   Safe.Lock;
   FillCharFast(Metrics, SizeOf(Metrics), 0); // set Current[] and Total[] := 0
   Safe.UnLock;
+end;
+
+
+{ **************** Middle-Level DHCP State Machine }
+
+{ TDhcpState }
+
+procedure TDhcpState.AddProfileOptions(p: PProfileValue);
+var
+  len: PtrUInt;
+begin
+  if pointer(p^.value) = nil then
+    exit;
+  // be paranoid with "profiles": avoid buffer overflow
+  len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
+  if SendEnd + len >= @Send.options[high(Send.options)] then
+    exit;
+  // actually append the value and mark it in SendOptions
+  include(SendOptions, p^.opt);
+  DhcpAddOptionRaw(SendEnd, p^.op, pointer(p^.value), len);
+end;
+
+procedure TDhcpState.AddOptionOnce32(const opt: TDhcpOption; const be: cardinal);
+begin
+  if (be = 0) or
+     (opt in SendOptions) or
+     (SendEnd + SizeOf(be) >= @Send.options[high(Send.options)]) then
+    exit;
+  include(SendOptions, opt);
+  DhcpAddOption32(SendEnd, opt, be);
+end;
+
+procedure TDhcpState.AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
+begin
+  if (v = nil) or
+     (opt in SendOptions) or
+     (SendEnd + PStrLen(v - _STRLEN)^ >= @Send.options[high(Send.options)]) then
+    exit;
+  include(SendOptions, opt);
+  DhcpAddOptionRaw(SendEnd, DHCP_OPTION_NUM[opt], v, PStrLen(v - _STRLEN)^);
+end;
+
+procedure TDhcpState.AddOptionOnceA32(const opt: TDhcpOption; const v: PAnsiChar);
+var
+  len: PtrUInt;
+begin
+  if (v = nil) or
+     (opt in SendOptions) then
+    exit;
+  len := (PDALen(v - _DALEN)^ + _DAOFF) shl 2; // as bytes
+  if SendEnd + len >= @Send.options[high(Send.options)] then
+    exit;
+  DhcpAddOptionRaw(SendEnd, DHCP_OPTION_NUM[opt], v, len);
+  include(SendOptions, opt);
+end;
+
+procedure TDhcpState.AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric);
+var
+  b: PtrUInt;
+  src: PAnsiChar;
+begin
+  b := RecvLens[opt];
+  if (b = 0) or
+     (opt in SendOptions) then
+    exit;
+  include(SendOptions, opt);
+  if dsm <> dsmDiscover then
+    inc(Scope^.Metrics.Current[dsm]);
+  // copy whole "DHCP_OPTION_NUM + len + data" binary block
+  src := @Recv.options[b];
+  MoveFast(src[-1], SendEnd^, ord(src^) + 2);
+  inc(SendEnd, ord(src^) + 2);
+end;
+
+procedure TDhcpState.AddProfileOptions;
+var
+  p: PProfileValue;
+  len, n: PtrUInt;
+  requested: PByteArray;
+begin
+  p := pointer(RecvProfile.send);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  // append "always" - should be as send[0].op=0
+  if p^.op = 0 then
+  begin
+    SendOptions := SendOptions + RecvProfile.always;
+    len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
+    MoveFast(pointer(p^.value)^, SendEnd^, len); // as a pre-computed blob
+    inc(SendEnd, len);
+    inc(p);
+    dec(n);
+    if n = 0 then
+      exit;
+  end;
+  // access option 55 list
+  len := RecvLens[doDhcpParameterRequestList];
+  if len = 0 then
+    exit;
+  requested := @Recv.options[len + 1]; // len + [1,3,6,15,51,54]
+  // process "requested" options, filtering each op
+  repeat
+    if ByteScanIndex(@requested[1], requested[0], p^.op) >= 0 then // SSE2 asm
+      AddProfileOptions(p); // as individual TLV
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+function TDhcpState.MatchOne(one: PProfileValue): boolean;
+var
+  len: PtrUInt;
+  option, value: PAnsiChar;
+begin
+  result := false;
+  // locate the option value in Recv[]
+  if one^.opt <> doPad then              // most common case
+  begin
+    len := RecvLens[one^.opt];           // fast O(1) lookup of known option
+    if len = 0 then
+      exit;
+    option := @Recv.options[len];
+  end
+  else if one^.op = 0 then               // check one^.boot and one^.rai
+    if one^.boot <> dcbDefault then
+    begin
+      result := RecvBoot = one^.boot;    // fastest path using SetRecvBoot()
+      exit;
+    end
+    else
+    begin
+      if one^.rai = dorUndefined then
+        exit;
+      len := RecvLensRai[one^.rai];      // O(1) lookup of sub-option
+      if len = 0 then
+        exit;
+      option := @Recv.options[len];
+    end
+  else                                   // one^.op <> 0
+  begin
+    option := @Recv.options;             // inlined DhcpFindOption()
+    repeat
+      if option[0] = AnsiChar(one^.op) then
+        break;
+      option := @option[ord(option[1]) + 2]; // O(n) lookup of raw op number
+      if option[0] = #255 then
+        exit;
+    until false;
+    inc(option); // option[0] = len
+  end;
+  // compare the one^.value with the option from Recv
+  value := pointer(one^.value);
+  len := PStrLen(value - _STRLEN)^;      // we know value<>nil and len>0
+  if len <> ord(option[0]) then
+    exit;
+  repeat
+    dec(len);                            // endings are more likely to change
+    if option[len] <> value[len] then    // faster than CompareMem() here
+      exit;
+  until len = 0;
+  result := true;                        // exact case-sensitive match
+end;
+
+function TDhcpState.MatchAll(all: PProfileValue): boolean;
+var
+  n: integer;
+begin // caller ensured all <> nil
+  result := false;
+  n := PDALen(PAnsiChar(all) - _DALEN)^ + _DAOFF;
+  repeat
+    if not MatchOne(all) then
+      exit; // missing one
+    inc(all);
+    dec(n);
+  until n = 0;
+  result := true;
+end;
+
+function TDhcpState.MatchAny(any: PProfileValue): boolean;
+var
+  n: integer;
+begin // caller ensured any <> nil
+  result := true;
+  n := PDALen(PAnsiChar(any) - _DALEN)^ + _DAOFF;
+  repeat
+    if MatchOne(any) then
+      exit; // found one
+    inc(any);
+    dec(n);
+  until n = 0;
+  result := false;
+end;
+
+procedure TDhcpState.AddRegularOptions;
+begin
+  AddOptionOnce32(doSubnetMask,         Scope^.Subnet.mask);
+  AddOptionOnce32(doBroadcastAddress,   Scope^.Broadcast);
+  AddOptionOnce32(doRouters,            Scope^.Gateway);
+  AddOptionOnceA32(doDomainNameServers, pointer(Scope^.DnsServer));
+  AddOptionOnceA32(doNtpServers,        pointer(Scope^.NtpServers));
+  if (RecvType <> dmtInform) and
+     not (doDhcpLeaseTime in SendOptions) then // + big-endian 51,58,59
+  begin
+    AddOptionOnce32(doDhcpLeaseTime,     Scope^.LeaseTime);
+    AddOptionOnce32(doDhcpRenewalTime,   Scope^.RenewalTime);
+    AddOptionOnce32(doDhcpRebindingTime, Scope^.Rebinding);
+  end;
+end;
+
+function TDhcpState.Flush: PtrUInt;
+begin
+  // send back verbatim Option 61 if any
+  AddOptionCopy(doDhcpClientIdentifier, dsmOption61Hits);
+  // send back Option 82 if any - should be the very last option by RFC 3046
+  AddOptionCopy(doRelayAgentInformation, dsmOption82Hits);
+  // add trailer to the Send frame and returns its final size in bytes
+  SendEnd^ := #255;
+  result := SendEnd - PAnsiChar(@Send) + 1;
+end;
+
+procedure TDhcpState.ParseRecvLensRai;
+var
+  p: PAnsiChar;
+  len: PtrInt;
+begin
+  p := @Recv.options[RecvLens[doRelayAgentInformation]]; // <> 0 by caller
+  len := ord(p[0]);            // whole Option 82 length
+  inc(p);
+  repeat
+    dec(len, ord(p[1]) + 2)  ; // O(1) decode sub-option binary as TLV
+    if len < 0 then            // avoid buffer overdloas
+    begin
+      Int64(RecvLensRai) := 0; // ignore any previously decoded sub-options
+      exit;
+    end;
+    if ord(p[0]) <= high(RAI_OPTION_INV) then
+      RecvLensRai[RAI_OPTION_INV[ord(p[0])]] :=
+        PAnsiChar(@p[1]) - PAnsiChar(@Recv.options);
+    p := @p[ord(p[1]) + 2];
+  until len = 0;
+end;
+
+function TDhcpState.ClientUuid(opt: TDhcpOption): PDhcpLease;
+var
+  fnd: TNetIP4;
+  v: PByte;
+  m: PByteArray;
+  len: PtrUInt;
+begin
+  result := nil;
+  // locate opt = doDhcpClientIdentifier or doUuidClientIdentifier value
+  v := @Recv.options[RecvLens[opt]]; // v^[0] <> 0
+  len := v^;
+  inc(v);     // v^ points to the specified binary value
+  case len of // UUID/DUID/vendor-specific are usually >= 8-16 bytes
+    0 .. 3,   // < MIN_UUID_BYTES
+    6:
+      exit;   // too short, or 6-bytes MAC
+    7:
+      if v^ = 1 then
+        exit; // Eth=1 + MAC is searched by FindMac()
+    17:
+      if v^ = 0 then
+      begin
+        // e.g. doUuidClientIdentifier RFC 4578 send Type=0 + SMBIOS UUID
+        inc(v);
+        dec(len);
+      end;
+  end;
+  // O(n) fast search
+  fnd := DoFindUuid(pointer(Scope^.StaticUuid), pointer(v), len);
+  if fnd = 0 then
+    exit;
+  result := @Temp; // fake transient PDhcpLease for this StaticUuid[]
+  result^.IP4 := fnd;
+  PInt64(@result^.Mac)^ := Mac64; // also reset State+RateLimit
+  result^.State := lsStatic;
+  // append /GUID or /UUID in logs after the MAC address (up to 63 chars)
+  m := @Mac;
+  AppendShortChar('/', pointer(m));
+  if len = SizeOf(TGuid) then
+    AppendShortUuid(PGuid(v)^, PShortString(m)^)
+  else
+  begin
+    len := MinPtrUInt((high(Mac) - m[0]) shr 1, len);
+    mormot.core.text.BinToHex(pointer(v), @m[m[0]], len);
+    inc(m[0], len * 2);
+  end;
 end;
 
 
