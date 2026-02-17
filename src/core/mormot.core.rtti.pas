@@ -797,7 +797,6 @@ type
         SerializableInterfaceEntryOffset: integer; // resolve once
       );
   end;
-
   /// map extended PRttiInfo content
   PRttiCache = ^TRttiCache;
 
@@ -2787,6 +2786,10 @@ type
     /// change the identifiers of enumerate/set type using a proper casing
     // - most common are scLowerCaseFirst (aka camelCase, for API), scSnakeCase
     // (POSIX/IT conventions) or even scKebabCase (RFC/networking)
+    // - scNoTrim would disable any custom text and fallback to regular RTTI
+    // - see also TRttiJson.RegisterCustomEnumValues() for any custom values
+    // - may be called from TRttiCustomProps.NameChangeCase(NestedEnums=true)
+    // - do nothing if this type is no rkEnumeration/rkSet or if is too big
     procedure EnumSetNameChangeCase(NewCase: TSetCase);
     /// register once an instance of a given class per RTTI
     // - thread-safe returns aObject, or an existing object (freeing aObject)
@@ -8742,9 +8745,9 @@ begin
     SetCase(p^.Name, pointer(p^.fOrigName), length(p^.fOrigName), NewCase);
     if NestedClasses then // recursive change case
       if p^.Value.Props.Count <> 0 then // e.g. class/record
-        p^.Value.Props.NameChangeCase(NewCase)
+        p^.Value.Props.NameChangeCase(NewCase, NestedEnums)
       else if p^.Value.ArrayRtti.PropsCount <> 0 then // e.g. TObjArray
-        p^.Value.ArrayRtti.Props.NameChangeCase(NewCase, NestedClasses);
+        p^.Value.ArrayRtti.Props.NameChangeCase(NewCase, NestedClasses, NestedEnums);
     if NestedEnums and
        (p^.Value.Kind in [rkEnumeration, rkSet]) then
       p^.Value.EnumSetNameChangeCase(NewCase);
