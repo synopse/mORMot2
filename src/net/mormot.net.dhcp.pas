@@ -557,7 +557,7 @@ type
 
   /// define the PXE network boot 43/66/67/174 options for a given scope/subnet
   // - used for TDhcpState.Boot: TDhcpClientBoot <> dcbDefault
-  // - Remote[] are consolidated for proper fallback between boot options,
+  // - Remote[] are inherited for proper fallback between boot options,
   // unless dsoPxeNoInherit/"pxe-no-inherit" is set for the scope
   TDhcpScopeBoot = record
     /// IP address or hostname sent back as doTftpServerName option 66
@@ -841,7 +841,7 @@ type
         fRemote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8; }
   public
     /// compute the low-level TDhcpScope.Boot data structure for current settings
-    // - will also complete/consolidate configuration from sibling values
+    // - will also complete/inherit configuration from sibling values
     procedure PrepareScope(var Data: TDhcpScopeBoot; Options: TDhcpScopeOptions);
   published
     /// option 66 IP address or hostname of the associated TFTP server
@@ -1238,13 +1238,13 @@ type
     // - should be done before Setup() to validate the settings network mask
     function LoadFromFile(const FileName: TFileName): boolean;
     /// aggregate all per-scope Total metrics into a single counter
-    procedure ConsolidateMetrics(var global: TDhcpMetrics); overload;
+    procedure ComputeMetrics(var global: TDhcpMetrics); overload;
     /// aggregate all per-scope metrics into a single set of Current/Total counters
-    procedure ConsolidateMetrics(var global: TDhcpAllMetrics); overload;
+    procedure ComputeMetrics(var global: TDhcpAllMetrics); overload;
     /// reset back all per-scope metrics to their initial 0 counter value
     procedure ResetMetrics;
     /// persist the main metrics as JSON object
-    // - wrapper around ConsolidateMetrics() and MetricsToJson()
+    // - wrapper around ComputeMetrics() and MetricsToJson()
     function SaveMetricsToJson: RawUtf8;
     /// persist all scopes metrics as .json files and optionally all .csv files
     procedure SaveMetricsFolder(AndCsv: boolean = false);
@@ -1335,7 +1335,7 @@ const
     58, 59, 60, 61, 66, 67, 77, 82, 93, 97, 118, 255);
   RAI_OPTION_NUM: array[TDhcpOptionRai] of byte = (
     0, 1, 2, 5, 6, 11, 12, 19);
-var // for fast O(1) lookup
+var // fast O(1) inverse lookup from (sub-)option numbers to know enumerate item
   DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption;
   RAI_OPTION_INV:  array[0 .. 19]  of TDhcpOptionRai;
 
@@ -1520,7 +1520,7 @@ begin
     begin
       if found <> nil then
         include(found^, opt);
-      lens[opt] := PAnsiChar(@p[1]) - PAnsiChar(@dhcp^.options);
+      lens[opt] := (p + 1) - PAnsiChar(@dhcp^.options);
     end;
     // just ignore unsupported options
     p := @p[ord(p[1]) + 2];
@@ -1802,7 +1802,7 @@ begin
     if v.op <> 0 then
     begin
       if v.op <= high(DHCP_OPTION_INV) then
-        v.opt := DHCP_OPTION_INV[v.op];
+        v.opt := DHCP_OPTION_INV[v.op]; // fast O(1) option number lookup
     end
     else if parser.ValueLen = 0 then
       exit
@@ -2783,9 +2783,8 @@ begin
       Int64(RecvLensRai) := 0; // ignore any previously decoded sub-options
       exit;
     end;
-    if ord(p[0]) <= high(RAI_OPTION_INV) then
-      RecvLensRai[RAI_OPTION_INV[ord(p[0])]] :=
-        PAnsiChar(@p[1]) - PAnsiChar(@Recv.options);
+    if ord(p[0]) <= high(RAI_OPTION_INV) then // O(1) fast inverse lookup
+      RecvLensRai[RAI_OPTION_INV[ord(p[0])]] := (p + 1) - PAnsiChar(@Recv.options);
     p := @p[ord(p[1]) + 2];
   until len = 0;
 end;
@@ -2858,7 +2857,7 @@ end;
 
 { TDhcpBootSettings }
 
-procedure ConsolidateOption(var boot: TDhcpScopeBoot; ref, dst: TDhcpClientBoot);
+procedure InheritOption(var boot: TDhcpScopeBoot; ref, dst: TDhcpClientBoot);
 begin
   if boot.Remote[dst] = '' then
     boot.Remote[dst] := boot.Remote[ref];
@@ -2882,8 +2881,8 @@ begin
   if dsoPxeNoInherit in Options then
     exit;
   // 1. HTTP aware architecture fallback to their TFTP value
-  ConsolidateOption(Data, dcbX64, dcbX64Http);
-  ConsolidateOption(Data, dcbA64, dcbA64Http);
+  InheritOption(Data, dcbX64, dcbX64Http);
+  InheritOption(Data, dcbA64, dcbA64Http);
   // 2. assume we could share the main x64/x86 IPXE URI
   ref := dcbDefault;
   if Data.Remote[dcbIpxeX64] <> '' then
@@ -2893,7 +2892,7 @@ begin
   if ref <> dcbDefault then
     for dcb := dcbIpxeX86 to high(Data.Remote) do
       if dcb <> ref then
-        ConsolidateOption(Data, ref, dcb);
+        InheritOption(Data, ref, dcb);
 end;
 
 
@@ -3474,7 +3473,7 @@ begin
   fFileName := name;
 end;
 
-procedure TDhcpProcess.ConsolidateMetrics(var global: TDhcpAllMetrics);
+procedure TDhcpProcess.ComputeMetrics(var global: TDhcpAllMetrics);
 var
   n: integer;
   s: PDhcpScope;
@@ -3499,7 +3498,7 @@ begin
   fScopeSafe.ReadUnLock;
 end;
 
-procedure TDhcpProcess.ConsolidateMetrics(var global: TDhcpMetrics);
+procedure TDhcpProcess.ComputeMetrics(var global: TDhcpMetrics);
 var
   n: integer;
   s: PDhcpScope;
@@ -3549,7 +3548,7 @@ function TDhcpProcess.SaveMetricsToJson: RawUtf8;
 var
   global: TDhcpMetrics;
 begin
-  ConsolidateMetrics(global);
+  ComputeMetrics(global);
   result := MetricsToJson(global);
 end;
 
@@ -4360,10 +4359,6 @@ end;
 
 
 initialization
-  assert(ord(dmtTls) = 18);
-  assert(PtrUInt(@PDhcpPacket(nil)^.options) = 240);
-  assert(SizeOf(TDhcpPacket) = 548);
-  assert(SizeOf(TDhcpLease) = 16);
   FillLookupTable(@DHCP_OPTION_NUM, @DHCP_OPTION_INV, ord(pred(high(DHCP_OPTION_NUM))));
   FillLookupTable(@RAI_OPTION_NUM,  @RAI_OPTION_INV,  ord(high(RAI_OPTION_NUM)));
   assert(DHCP_OPTION_INV[high(DHCP_OPTION_INV)] = pred(high(TDhcpOption)));

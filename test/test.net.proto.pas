@@ -1821,7 +1821,7 @@ begin
     server.MetricsFolder := WorkDir;
     json := server.SaveMetricsToJson;
     CheckUtf8(IsValidJson(json, {strict=}true), json);
-    server.ConsolidateMetrics(m1);
+    server.ComputeMetrics(m1);
     CheckEqual(MetricsToJson(m1), json);
     // precompute some random MAC addresses and setup a few statics
     n := 200;
@@ -2024,17 +2024,17 @@ begin
     CheckEqual(m1[dsmStaticHits] + m1[dsmDynamicHits],
                m1[dsmDiscover]   + m1[dsmRequest], 'hits');
     Check(not IsEqual(m1, m2), 'm2');
-    server.ConsolidateMetrics(m2);
-    Check(IsEqual(m1, m2), 'ConsolidateMetrics12');
+    server.ComputeMetrics(m2);
+    Check(IsEqual(m1, m2), 'ComputeMetrics12');
     server.SaveMetricsFolder({csv=}true);
     // clear all previous leases
     server.ClearLeases;
-    server.ConsolidateMetrics(m2);
+    server.ComputeMetrics(m2);
     Check(not IsZero(m2));
     Check(IsEqual(m1, m2), 'metrics after ClearLeases');
     CheckEqual(m2[dsmDecline], 0);
     server.ResetMetrics;
-    server.ConsolidateMetrics(m2);
+    server.ComputeMetrics(m2);
     Check(IsZero(m2));
     Check(not IsEqual(m1, m2), 'metrics after ResetMetrics');
     CheckEqual(server.Count, 0, 'after clear');
@@ -2085,12 +2085,12 @@ begin
     Check(server.GetScope(d.Send.ciaddr) <> nil);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
-    server.ConsolidateMetrics(m2);
+    server.ComputeMetrics(m2);
     CheckEqual(m2[dsmDecline], 1);
     CheckEqual(m2[dsmDiscover], 2);
     CheckEqual(m2[dsmOffer], 2);
     CheckEqual(m2[dsmOption82Hits], 1);
-    Check(not IsEqual(m1, m2), 'ConsolidateMetricsDeclined');
+    Check(not IsEqual(m1, m2), 'ComputeMetrics Declined');
     json := MetricsToJson(m2, [woDontStoreVoid]);
     CheckEqual(json, '{"discover":2,"offer":2,"decline":1,"lease-allocated":2,' +
       '"dynamic-hits":2,"option-82-hits":1}');
