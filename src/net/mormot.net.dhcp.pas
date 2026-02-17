@@ -820,6 +820,7 @@ type
     // methods for internal use
     procedure ParseRecvLensRai;
     function ClientUuid(opt: TDhcpOption): PDhcpLease;
+    procedure AppendToMac(recvlen: PtrUInt; const ident: ShortString);
   end;
   {$ifdef CPUINTEL} {$A+} {$endif CPUINTEL}
 
@@ -2832,6 +2833,21 @@ begin
     mormot.core.text.BinToHex(pointer(v), @m[m[0]], len);
     inc(m[0], len * 2);
   end;
+end;
+
+procedure TDhcpState.AppendToMac(recvlen: PtrUInt; const ident: ShortString);
+var
+  selection: TNetIP4;
+begin
+  if recvlen = 0 then
+    exit;
+  selection := DhcpIP4(@Recv, recvlen);
+  if selection = 0 then
+    exit;
+  AppendShort(ident, Mac);
+  IP4Short(@selection, Ip);
+  AppendShort(Ip, Mac);
+  Ip[0] := #0;
 end;
 
 
