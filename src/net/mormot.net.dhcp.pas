@@ -351,6 +351,7 @@ type
   // - pvkAlways to store a binary blob from "always" JSON definition
   // - pvkBoot to match "boot" value
   // - pvkRai to match Relay-Agent-Information sub-option like "circuit-id"
+  // - pvkMac to match "mac" value(s)
   TProfileValueKind = (
     pvkUndefined,
     pvkOpt,
@@ -358,7 +359,8 @@ type
     pvkTlv,
     pvkAlways,
     pvkBoot,
-    pvkRai);
+    pvkRai,
+    pvkMac);
 
   /// store one DHCP "profiles" entry and its associated value
   // - used to match "all" "any" "not-all" "not-any" against a value
@@ -371,7 +373,7 @@ type
     // - is the TLV sub-option number for kind=pckTlv
     // - is a TDhcpClientBoot ordinal for pvkBoot match
     // - is a TDhcpOptionRai ordinal for pvkRai match
-    // - not used (contains 0) for pckAlways
+    // - not used (contains 0) for pckAlways and pvkMac
     num: byte;
     /// the pvkOpt known option enum corresponding to the num integer
     // - opt=doPad if kind <> pvkOpt
@@ -1643,8 +1645,22 @@ begin
     until n = 0;
 end;
 
+function Ip4sFromText(p: PUtf8Char; var v: RawByteString): boolean;
+begin
+  v := IP4sToBinary(ToIP4s(p)); // allow CSV of IPs
+  result := v <> '';
+end;
+
+function MacsFromText(p: PUtf8Char; var v: RawByteString): boolean;
+begin
+  v := MacsToBinary(ToMacs(p)); // allow CSV of MACs
+  result := v <> '';
+end;
+
 type
   TParseProfile = (ppMatch, ppValue, ppTlv);
+const
+  FAKE_OP_MAC = 255;
 
 function SetProfileValue(var p: TJsonParserContext; var v: RawByteString;
   op: byte): boolean;
@@ -1679,15 +1695,9 @@ begin
            ['IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
             'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:']) of
       0:    // ip:
-        begin
-          v := IP4sToBinary(ToIP4s(p.Value + 3)); // allow CSV of IPs
-          result := v <> '';
-        end;
+        result := Ip4sFromText(p.Value + 3, v); // allow CSV of IPs
       1:    // mac:
-        begin
-          v := MacsToBinary(ToMacs(p.Value + 4)); // allow CSV of MACs
-          result := v <> '';
-        end;
+        result := MacsFromText(p.Value + 4, v); // allow CSV of MACs
       2:    // hex:
         result := (len > 4) and
                   (len < (255 * 2) + 4) and
@@ -1744,8 +1754,7 @@ begin
           3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 54, 65,
           68 .. 76, 85, 89, 112, 136, 138:
             begin
-              v := IP4sToBinary(ToIP4s(p.Value)); // allow CSV of IP4
-              result := v <> '';
+              result := Ip4sFromText(p.Value, v); // allow CSV of IP4
               if result then
                 exit;
             end;
@@ -1759,6 +1768,11 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
                 PGuid(d + 1)^ := tmp.guid;
                 exit;
               end;
+            end;
+          FAKE_OP_MAC: // fake call with op=255 to parse "mac": content
+            begin
+              result := MacsFromText(p.Value, v); // allow CSV of MACs
+              exit;
             end;
         end;
         // fallback to store as plain UTF-8 text
@@ -1805,7 +1819,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
 end;
 
 const
-  DHCP_PROFILES: array[0..0] of RawUtf8 = ('boot');
+  DHCP_PROFILES: array[0..1] of RawUtf8 = ('boot', 'mac');
 
 function ParseProfileValue(var parser: TJsonParserContext; var v: TProfileValue;
   pp: TParseProfile): boolean;
@@ -1846,6 +1860,15 @@ begin
                     parser.ValueEnumFromConst(@BOOT_TXT, length(BOOT_TXT), v.num) and
                     (v.num <> 0);
           exit; // we won't check v.value
+        end;
+      1:
+        begin
+          // "mac": "00:11:22:33:44:55" - also accepts CSV or arrays
+          v.kind := pvkMac;
+          result := parser.ParseNextAny(false) and
+                    SetProfileValue(parser, v.value, FAKE_OP_MAC) and
+                    (v.value <> '');
+          exit;
         end;
     else
       if parser.ValueEnumFromConst(@RAI_OPTION, length(RAI_OPTION), v.num) and
@@ -2733,6 +2756,16 @@ begin
            exit;
          option := @Recv.options[len];      // option[0] = len in Recv[]
        end;
+     pvkMac:
+       begin
+         value := pointer(one^.value);      // direct Mac64: TNetMac lookup
+         len := PtrUInt(PStrLen(value - _STRLEN)^);
+         if len = 6 then
+           result := PInt64(value)^ and MAC_MASK = Mac64 // single value
+         else
+           result := MacIndex(pointer(value), @Mac64, len div 6) >= 0; // array
+         exit;
+       end
   else
     exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
   end;
