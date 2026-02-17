@@ -344,27 +344,45 @@ type
     uuid: RawByteString;
   end;
 
-  /// store one DHCP option number associated to a binary value
+  /// define which TProfileValue field should be used during process
+  // - pvkOpt is a known DHCP TDhcpOption as num=DHCP_OPTION_NUM[opt]
+  // - pvkRaw is DHCP option outside of TDhcpOption set as plain num
+  // - pvkTlv stores raw Type-Length-Value (TLV) with num = sub-option
+  // - pvkAlways to store a binary blob from "always" JSON definition
+  // - pvkBoot to match "boot" value
+  // - pvkRai to match Relay-Agent-Information sub-option like "circuit-id"
+  TProfileValueKind = (
+    pvkUndefined,
+    pvkOpt,
+    pvkRaw,
+    pvkTlv,
+    pvkAlways,
+    pvkBoot,
+    pvkRai);
+
+  /// store one DHCP "profiles" entry and its associated value
   // - used to match "all" "any" "not-all" "not-any" against a value
   // - used to store "always" and "requested" data to be sent back to the client
   TProfileValue = record
-    /// the raw option number to match, or to be sent back
-    // - contains 0 for "always" options or "boot"/RAI match
-    op: byte;
-    /// the known option enum corresponding to the op integer
-    // - opt=doPad for an unknown option: slower manual O(n) lookup would happen
+    /// define which kind of value is stored in this entry
+    kind: TProfileValueKind;
+    /// the raw (sub-)option number to match, or to be sent back
+    // - is the DHCP option number for kind=pvkRaw/pvkOpt
+    // - is the TLV sub-option number for kind=pckTlv
+    // - is a TDhcpClientBoot ordinal for pvkBoot match
+    // - is a TDhcpOptionRai ordinal for pvkRai match
+    // - not used (contains 0) for pckAlways
+    num: byte;
+    /// the pvkOpt known option enum corresponding to the num integer
+    // - opt=doPad if kind <> pvkOpt
     opt: TDhcpOption;
-    /// the "boot" matching value (with op=0 and opt=doPad)
-    boot: TDhcpClientBoot;
-    /// the DHCP Option 82 relay-agent-information sub-option matching value
-    rai: TDhcpOptionRai;
     /// the associated raw binary value
     value: RawByteString;
   end;
+  /// points to one DHCP "profiles" entry and its associated value
   PProfileValue = ^TProfileValue;
 
-  /// store one DHCP option number associated to a binary value
-  // - "always" options are just stored with op = 0
+  /// store one DHCP "profiles" entry and its associated value
   TProfileValues = array of TProfileValue;
 
 var
@@ -570,7 +588,7 @@ type
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
   end;
 
-  /// store one DHCP "profile" entry in a ready-to-be-processed way
+  /// store one DHCP "profiles" object in a ready-to-be-processed way
   // - pre-compiled at runtime from TDhcpProfileSettings JSON fields
   TDhcpScopeProfile = record
     /// optional identifier used in the logs (not in the internal logic itself)
@@ -584,13 +602,13 @@ type
     /// store NOT OR matching fields
     notany: TProfileValues;
     /// the "always" and "requested" data to be sent back to the client
-    // - "always" would be in send[0] (if any, and with op=0)
+    // - "always" would be stored as send[0].kind=pvkAlways
     send: TProfileValues;
     /// the set of options part of "always"
     always: TDhcpOptions;
   end;
   PDhcpScopeProfile = ^TDhcpScopeProfile;
-  /// store all DHCP "profile" ready-to-be-processed entries of a given scope
+  /// ready-to-be-processed DHCP "profiles" objects of a given scope
   TDhcpScopeProfiles = array of TDhcpScopeProfile;
 
   /// how to refine DHCP server process for one TDhcpScopeSettings
@@ -650,7 +668,7 @@ type
     // - will be checked against not-"01+MAC" option 61 values - mainly UUID
     // - stored as RawByteString = doDhcpClientIdentifier-binary + 4-bytes-IP
     StaticUuid: TRawByteStringDynArray;
-    /// store all DHCP "profiles" ready-to-be-processed entries for this scope
+    /// store all DHCP "profiles" ready-to-be-processed objects for this scope
     Profiles: TDhcpScopeProfiles;
     /// readjust all internal values according to to Subnet policy
     // - raise an EDhcp exception if the parameters are not correct
@@ -758,7 +776,7 @@ type
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     RecvHostName: PShortString;
-    /// the "profile" entry matched by this request
+    /// the "profiles" entry matched by this request
     RecvProfile: PDhcpScopeProfile;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
@@ -791,7 +809,7 @@ type
     Mac: string[63];
     /// some temporary storage for a StaticUuid[] fake DHCP lease
     Temp: TDhcpLease;
-    /// high-level 'match and append' of all "profile" entries into Send
+    /// high-level 'match and append' of all "profiles" entries into Send
     procedure AddProfileOptions;
     // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
     procedure AddRegularOptions;
@@ -810,11 +828,11 @@ type
     /// raw append a verbatim copy of a Recv option into Send
     procedure AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric = dsmDiscover);
       {$ifdef HASINLINE} inline; {$endif}
-    /// raw search of one "profile" value in State.Recv[]
+    /// raw search of one "profiles" value in State.Recv[]
     function MatchOne(one: PProfileValue): boolean;
-    /// raw search of all "profile" values in State.Recv[] - true for all match
+    /// raw search of all "profiles" values in State.Recv[] - true for all match
     function MatchAll(all: PProfileValue): boolean;
-    /// raw search of any "profile" values in State.Recv[] - true on first match
+    /// raw search of any "profiles" values in State.Recv[] - true on first match
     function MatchAny(any: PProfileValue): boolean;
   private
     // methods for internal use
@@ -1539,7 +1557,7 @@ begin
   begin
     m := DhcpMac(dhcp, lens[doDhcpClientIdentifier]);
     if m = nil then
-      m := @dhcp^.chaddr; // no option 61: fallback to BOOTP value
+      m := @dhcp^.chaddr; // option 61 is no MAC: fallback to BOOTP value
     mac^ := m^; // copy
   end;
   result := TDhcpMessageType(dmt);
@@ -1786,46 +1804,65 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
     end;
 end;
 
+const
+  DHCP_PROFILES: array[0..0] of RawUtf8 = ('boot');
+
 function ParseProfileValue(var parser: TJsonParserContext; var v: TProfileValue;
   pp: TParseProfile): boolean;
 begin
   result := false;
-  v.op := 0;
-  v.opt := doPad;
-  v.boot := dcbDefault;
-  v.rai := dorUndefined;
-  v.value := '';
-  if not parser.GetJsonFieldName then
+  RecordZero(@v, TypeInfo(TProfileValue));
+  // parse and recognize "77": "user-class": "boot": "circuit-id": keys
+  if not parser.GetJsonFieldName or
+     (parser.ValueLen = 0) then
     exit;
-  v.op := GetCardinal(parser.Value);
-  if pp <> ppTlv then // TlvFromJson() only accept numbers, not options
-    if v.op <> 0 then
+  v.num := GetCardinal(parser.Value); // for pvkTlv and pvkOpt/pvkRaw
+  if pp = ppTlv then
+    v.kind := pvkTlv // TlvFromJson() accept only numbers, not DHCP options
+  else if v.num <> 0 then
+    // "77": "iPXE"  or  77: "iPXE"
+    if v.num <= high(DHCP_OPTION_INV) then
     begin
-      if v.op <= high(DHCP_OPTION_INV) then
-        v.opt := DHCP_OPTION_INV[v.op]; // fast O(1) option number lookup
+      v.opt := DHCP_OPTION_INV[v.num]; // fast O(1) option number lookup
+      v.kind := pvkOpt;
     end
-    else if parser.ValueLen = 0 then
-      exit
-    else if (pp = ppMatch) and
-            PropNameEquals('boot', PAnsiChar(parser.Value), parser.ValueLen) then
-    begin
-      result := parser.ParseNext and
-                parser.ValueEnumFromConst(@DHCP_BOOT, length(DHCP_BOOT), v.boot);
-      exit;
-    end
-    else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
-      v.op := DHCP_OPTION_NUM[v.opt]
-    else if (pp = ppMatch) and
-            parser.ValueEnumFromConst(@RAI_OPTION, length(RAI_OPTION), v.rai) then
-      // e.g. 'circuit-id' from within doRelayAgentInformation sub-options
     else
-      exit;
-  if not parser.ParseNextAny({NormalizeBoolean=}false) then
+      v.kind := pvkRaw
+  else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
+  begin
+    // "dhcp-lease-time": 7200
+    v.num := DHCP_OPTION_NUM[v.opt];
+    v.kind := pvkOpt;
+  end
+  else if pp <> ppMatch then
+    exit
+  else
+    case FindNonVoidRawUtf8I(@DHCP_PROFILES, parser.Value, parser.ValueLen, 1) of
+      0:
+        begin
+          // "boot": "ipxe-x64"
+          v.kind := pvkBoot;
+          result := parser.ParseNext and
+                    parser.ValueEnumFromConst(@BOOT_TXT, length(BOOT_TXT), v.num) and
+                    (v.num <> 0);
+          exit; // we won't check v.value
+        end;
+    else
+      if parser.ValueEnumFromConst(@RAI_OPTION, length(RAI_OPTION), v.num) and
+         (v.num <> 0) then
+          // "circuit-id": "pon1/1/3"
+          v.kind := pvkRai
+        else
+          exit;
+    end;
+  // parse and recognize the associated value
+  if (v.kind = pvkUndefined) or
+     not parser.ParseNextAny({NormalizeBoolean=}false) then
     exit;
   if pp = ppTlv then
-    result := SetProfileValue(parser, v.value, 0) // op is no option
+    result := SetProfileValue(parser, v.value, 0) // v.num is no option
   else
-    result := SetProfileValue(parser, v.value, v.op);
+    result := SetProfileValue(parser, v.value, v.num);
   if result and
      (length(v.value) > 255) then
     result := false; // avoid TLV 8-bit length overflow
@@ -1857,7 +1894,7 @@ begin
   repeat
     if not ParseProfileValue(parser, one, ppTlv) then
       exit;
-    Append(v, [AnsiChar(one.op), AnsiChar(length(one.value)), one.value])
+    Append(v, [AnsiChar(one.num), AnsiChar(length(one.value)), one.value])
   until parser.EndOfObject = '}';
   result := true;
 end;
@@ -2566,7 +2603,7 @@ begin
     exit;
   // actually append the value and mark it in SendOptions
   include(SendOptions, p^.opt);
-  DhcpAddOptionRaw(SendEnd, p^.op, pointer(p^.value), len);
+  DhcpAddOptionRaw(SendEnd, p^.num, pointer(p^.value), len);
 end;
 
 procedure TDhcpState.AddOptionOnce32(const opt: TDhcpOption; const be: cardinal);
@@ -2631,8 +2668,8 @@ begin
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-  // append "always" - should be as send[0].op=0
-  if p^.op = 0 then
+  // append "always" - should be as send[0].kind=pvkAlways
+  if p^.kind = pvkAlways then
   begin
     SendOptions := SendOptions + RecvProfile.always;
     len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
@@ -2650,7 +2687,7 @@ begin
   requested := @Recv.options[len + 1]; // len + [1,3,6,15,51,54]
   // process "requested" options, filtering each op
   repeat
-    if ByteScanIndex(@requested[1], requested[0], p^.op) >= 0 then // SSE2 asm
+    if ByteScanIndex(@requested[1], requested[0], p^.num) >= 0 then // SSE2 asm
       AddOptionProfile(p); // as individual TLV
     inc(p);
     dec(n);
@@ -2664,41 +2701,42 @@ var
 begin
   result := false;
   // locate the option value in Recv[]
-  if one^.opt <> doPad then              // most common case
-  begin
-    len := RecvLens[one^.opt];           // fast O(1) lookup of known option
-    if len = 0 then
-      exit;
-    option := @Recv.options[len];
-  end
-  else if one^.op = 0 then               // check one^.boot and one^.rai
-    if one^.boot <> dcbDefault then
-    begin
-      result := RecvBoot = one^.boot;    // fastest path using SetRecvBoot()
-      exit;
-    end
-    else
-    begin
-      if one^.rai = dorUndefined then
-        exit;
-      len := RecvLensRai[one^.rai];      // O(1) lookup of sub-option
-      if len = 0 then
-        exit;
-      option := @Recv.options[len];
-    end
-  else                                   // one^.op <> 0
-  begin
-    option := @Recv.options;             // inlined DhcpFindOption()
-    repeat
-      if option[0] = AnsiChar(one^.op) then
-        break;
-      option := @option[ord(option[1]) + 2]; // O(n) lookup of raw op number
-      if option[0] = #255 then
-        exit;
-    until false;
-    inc(option); // option[0] = len
+  case one^.kind of
+     pvkOpt:                                 // most common case
+       begin
+         len := RecvLens[one^.opt];          // fast O(1) lookup of known option
+         if len = 0 then
+           exit;
+         option := @Recv.options[len];      // option[0] = len in Recv[]
+       end;
+     pvkRaw:
+       begin
+         option := @Recv.options;             // inlined DhcpFindOption()
+         repeat
+           if option[0] = AnsiChar(one^.num) then
+             break;
+           option := @option[ord(option[1]) + 2]; // O(n) lookup of raw number
+           if option[0] = #255 then
+             exit;
+         until false;
+         inc(option);                       // option[0] = len in Recv[]
+       end;
+     pvkBoot:
+       begin                                // compare with SetRecvBoot() item
+         result := RecvBoot = TDhcpClientBoot(one^.num);
+         exit;                              // no need to check one^.value
+       end;
+     pvkRai:
+       begin                                // O(1) lookup of sub-option
+         len := RecvLensRai[TDhcpOptionRai(one^.num)];
+         if len = 0 then
+           exit;
+         option := @Recv.options[len];      // option[0] = len in Recv[]
+       end;
+  else
+    exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
   end;
-  // compare the one^.value with the option from Recv
+  // compare the one^.value with the option in Recv[]
   value := pointer(one^.value);
   len := PStrLen(value - _STRLEN)^;      // we know value<>nil and len>0
   if len <> ord(option[0]) then
@@ -2919,20 +2957,18 @@ begin
     EDhcp.RaiseUtf8('PrepareScope: invalid always:%', [fAlways]);
   if not ParseProfile(fRequested, req, ppValue) then
     EDhcp.RaiseUtf8('PrepareScope: invalid requested:%', [fRequested]);
-  // Profile.send[0] is "always" and should be stored as binary blob with op=0
+  // Profile.send[0] is "always" and should be stored as pvkAlways binary blob
   Profile.send := nil;
   Profile.always := [];
   if alw <> nil then
   begin
-    v.op := 0;
-    v.opt := doPad;
-    v.boot := dcbDefault;
-    v.rai := dorUndefined;
+    RecordZero(@v, TypeInfo(TProfileValue));
+    v.kind := pvkAlways;
     p := pointer(alw);
     for i := 1 to length(alw) do
     // prepare raw TLV-concatenated binary buffer
     begin
-      Append(v.value, [AnsiChar(p^.op), AnsiChar(length(p^.value)), p^.value]);
+      Append(v.value, [AnsiChar(p^.num), AnsiChar(length(p^.value)), p^.value]);
       if p^.opt <> doPad then
         if p^.opt in Profile.always then
           EDhcp.RaiseUtf8('PrepareScope: duplicated % in always:%',
@@ -4110,14 +4146,13 @@ begin
       result := DoError(State, dsmDroppedNoSubnet);
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
-    // identify any matching input from this scope "profiles" definition
-    if State.Scope^.Profiles <> nil then
-      SetProfile(State);
-    // compute the corresponding IPv4 according to the internal lease list
-    result := 0; // no response, but no error
+    // work on this scope/subnet from now on
     State.Tix32 := GetTickSec;
     State.Scope^.Safe.Lock; // blocking for this subnet
     try
+      // identify any matching input from this scope "profiles" definition
+      if State.Scope^.Profiles <> nil then
+        SetProfile(State);
       // find any existing lease - or StaticMac[] StaticUuid[] fake lease
       p := FindLease(State);
       // process the received DHCP message
@@ -4262,6 +4297,7 @@ begin
               p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
             end;
             inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+            result := 0;         // no response, but not an error
             exit; // server MUST NOT respond to a DECLINE message
           end;
         dmtRelease:
