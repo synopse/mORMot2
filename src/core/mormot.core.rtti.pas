@@ -2563,8 +2563,10 @@ type
     // - most common are scLowerCaseFirst (aka camelCase, for API), scSnakeCase
     // (POSIX/IT conventions) or even scKebabCase (RFC/networking)
     // - NestedClasses will change the case of nested class/TObjArray properties
+    // and NestedEnums the case of nested enumerates/sets properties
     // - without argument, scNoTrim will restore the original names from RTTI
-    procedure NameChangeCase(NewCase: TSetCase = scNoTrim; NestedClasses: boolean = false);
+    procedure NameChangeCase(NewCase: TSetCase = scNoTrim;
+      NestedClasses: boolean = false; NestedEnums: boolean = false);
     /// reset all properties
     procedure InternalClear;
     /// manual adding of a property/field definition
@@ -8728,7 +8730,8 @@ begin
   CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
 end;
 
-procedure TRttiCustomProps.NameChangeCase(NewCase: TSetCase; NestedClasses: boolean);
+procedure TRttiCustomProps.NameChangeCase(NewCase: TSetCase;
+  NestedClasses, NestedEnums: boolean);
 var
   i: integer;
   p: PRttiCustomProp;
@@ -8742,6 +8745,9 @@ begin
         p^.Value.Props.NameChangeCase(NewCase)
       else if p^.Value.ArrayRtti.PropsCount <> 0 then // e.g. TObjArray
         p^.Value.ArrayRtti.Props.NameChangeCase(NewCase, NestedClasses);
+    if NestedEnums and
+       (p^.Value.Kind in [rkEnumeration, rkSet]) then
+      p^.Value.EnumSetNameChangeCase(NewCase);
     inc(p);
   end;
 end;
