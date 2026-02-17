@@ -2776,6 +2776,9 @@ type
     // rkClass or rkRecord/rkObject owner
     function PropFindByPath(var Data: pointer; FullName: PUtf8Char;
       PathDelim: AnsiChar = '.'): PRttiCustomProp;
+    /// search an enumeration/set value from its UTF-8 text representation
+    // - first search by Cache.EnumCustomText, then by (trimmed) RTTI names
+    function GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
     /// register once an instance of a given class per RTTI
     // - thread-safe returns aObject, or an existing object (freeing aObject)
     // - just like PrivateSlot property, but for as many class as needed
@@ -9655,6 +9658,47 @@ begin
     else
       Data := nil;
   until false;
+end;
+
+function EnumFind(List: PPUtf8Char; Max: PtrInt; Value: pointer; ValueLen: TStrLen): PtrInt;
+var
+  v: PUtf8Char;
+begin
+  result := 0;
+  repeat
+    v := List^;
+    if v <> nil then
+    begin
+      if (PStrLen(v - _STRLEN)^ = ValueLen) and   // same length
+         (v^ = PUtf8Char(Value)^) and             // same first char
+         CompareMemFixed(v, Value, ValueLen) then // efficiently inlined on FPC
+      exit;
+    end else if ValueLen = 0 then
+      exit;
+    if result = Max then
+      break;
+    inc(List);
+    inc(result);
+  until false;
+  result := -1;
+end;
+
+function TRttiCustom.GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
+begin
+  result := -1;
+  if (self = nil) or
+     (ValueLen = 0) or
+     not (Kind in [rkEnumeration, rkSet]) then
+    exit;
+  if Cache.EnumCustomText <> nil then
+  begin
+    result := EnumFind(pointer(Cache.EnumCustomText), Cache.EnumMax, Value, ValueLen);
+    if result >= 0 then
+      exit;
+  end;
+  result := FindShortStringListExact(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
+  if result < 0 then
+    result := FindShortStringListTrimLowerCase(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
 end;
 
 function TRttiCustom.SetObjArray(Item: TClass): TRttiCustom;

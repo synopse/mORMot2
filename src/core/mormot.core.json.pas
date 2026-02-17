@@ -1962,7 +1962,6 @@ type
     fCompare: array[{CaseInsens:}boolean] of TRttiCompare; // for ValueCompare
     fIncludeReadOptions: TJsonParserOptions;
     fIncludeWriteOptions: TTextWriterWriteObjectOptions;
-    function GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; override;
@@ -8325,7 +8324,7 @@ begin
   if not Ctxt.ParseNext then
     exit;
   if Ctxt.WasString then
-    v := TRttiJson(Ctxt.Info).GetEnumFromText(Ctxt.Value, Ctxt.ValueLen)
+    v := Ctxt.Info.GetEnumFromText(Ctxt.Value, Ctxt.ValueLen)
   else
   begin
     v := GetInteger(Ctxt.Value, err);
@@ -8357,7 +8356,7 @@ begin
   repeat
     if Ctxt.ParseNext then
     begin
-      i := TRttiJson(Ctxt.Info).GetEnumFromText(Ctxt.Value, Ctxt.ValueLen);
+      i := Ctxt.Info.GetEnumFromText(Ctxt.Value, Ctxt.ValueLen);
       if (i < ENUM_MAX) and // mormot.core.rtti/json is limited to 64-bit sets
          (i >= PtrInt(Ctxt.Info.Cache.EnumMin)) then
         SetBit64(V^, i);
@@ -11146,45 +11145,6 @@ begin
     end;
 end;
 
-function EnumFind(List: PPUtf8Char; Max: PtrInt; Value: pointer; ValueLen: TStrLen): PtrInt;
-var
-  v: PUtf8Char;
-begin
-  result := 0;
-  repeat
-    v := List^;
-    if v <> nil then
-    begin
-      if (PStrLen(v - _STRLEN)^ = ValueLen) and   // same length
-         (v^ = PUtf8Char(Value)^) and             // same first char
-         CompareMemFixed(v, Value, ValueLen) then // efficiently inlined on FPC
-      exit;
-    end else if ValueLen = 0 then
-      exit;
-    if result = Max then
-      break;
-    inc(List);
-    inc(result);
-  until false;
-  result := -1;
-end;
-
-function TRttiJson.GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
-begin
-  result := -1;
-  if ValueLen = 0 then
-    exit;
-  if Cache.EnumCustomText <> nil then
-  begin
-    result := EnumFind(pointer(Cache.EnumCustomText), Cache.EnumMax, Value, ValueLen);
-    if result >= 0 then
-      exit;
-  end;
-  result := FindShortStringListExact(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
-  if result < 0 then
-    result := FindShortStringListTrimLowerCase(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
-end;
-
 function StrEquA(n, str: PByte): boolean;
 var
   c: byte;
@@ -11277,7 +11237,7 @@ begin
         // check enumeration/set name against the stored value
         if Path = nil then // last path only
         begin
-          i := TRttiJson(result).GetEnumFromText(@n[1], ord(n[0]));
+          i := result.GetEnumFromText(@n[1], ord(n[0]));
           if i < 0 then
             break;
           // enum name match: return a boolean to stop searching
