@@ -1171,9 +1171,11 @@ type
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
-    // ComputeResponse() virtual sub-methods for proper customization
+    // ComputeResponse() virtual sub-methods for proper logic customization
     procedure DoLog(Level: TSynLogLevel; const Context: ShortString;
       const State: TDhcpState); virtual;
+    function DoError(var State: TDhcpState; Context: TDhcpScopeMetric;
+      Lease: PDhcpLease = nil): PtrInt; virtual;
     function ParseFrame(var State: TDhcpState): boolean; virtual;
     function FindScope(var State: TDhcpState): boolean; virtual;
     function FindLease(var State: TDhcpState): PDhcpLease; virtual;
@@ -3767,6 +3769,57 @@ begin
     JournalSend(Level, @msg[18], ord(msg[0]) - 17, {trimlogdate=}false);
 end;
 
+function TDhcpProcess.DoError(var State: TDhcpState; Context: TDhcpScopeMetric;
+  Lease: PDhcpLease): PtrInt;
+begin
+  result := 0; // no response, but no error
+  case Context of
+    dsmDroppedNoSubnet:
+      begin
+        // log context following FindScope() logic
+        State.AppendToMac(State.RecvLensRai[dorLinkSelection], ' opt82=');
+        State.AppendToMac(State.RecvLens[doSubnetSelection],   ' opt118=');
+        if State.Recv.giaddr <> 0 then
+          IP4Short(@State.Recv.giaddr, State.Ip)
+        else if State.RecvIp4 <> 0 then
+          IP4Short(@State.RecvIP4, State.Ip);
+        DoLog(sllDebug, 'not subnet for', State);
+      end;
+    dsmDroppedNoAvailableIP:
+      DoLog(sllWarning, 'exhausted IPv4', State);
+    dsmNak:
+      begin
+        DoLog(sllTrace, 'out-of-sync NAK', State);
+        State.SendType := dmtNak;
+        State.SendEnd := DhcpNew(State.Send, dmtNak, State.Recv.xid,
+          PNetMac(@State.Mac64)^, State.Scope^.ServerIdentifier);
+        result := Flush(State);
+      end;
+    dsmDroppedPackets:
+      DoLog(sllDebug, 'with no previous OFFER', State);
+    dsmRateLimitHit,
+    dsmInformRateLimitHit:
+      DoLog(sllDebug, 'overload', State);
+    dsmDroppedInvalidIP:
+      DoLog(sllTrace, 'unexpected', State);
+    dsmLeaseReleased:
+      begin
+        IP4Short(@Lease^.IP4, State.Ip);
+        DoLog(sllTrace, 'as', State);
+        State.Scope^.ReuseIp4(Lease); // set MAC=0 IP=0 State=lsFree
+        inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+      end;
+    dsmUnsupportedRequest:
+      begin
+        DoLog(sllTrace, 'unsupported', State);
+        result := -1; // error
+      end;
+    dsmDroppedCallback:
+      DoLog(sllTrace, 'ignored by callback ', State);
+  end;
+  inc(State.Scope^.Metrics.Current[Context]);
+end;
+
 function TDhcpProcess.ParseFrame(var State: TDhcpState): boolean;
 begin
   State.Mac64 := 0;
@@ -3813,7 +3866,7 @@ begin
     begin
       // this IP seems already used by another MAC
       IP4Short(@ip4, State.Ip);
-      DoLog(sllTrace, 'ignore requested', State);
+      DoLog(sllTrace, 'ignore requested', State); // transient info: no DoError
       inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
       exit;
     end;
@@ -3843,7 +3896,7 @@ begin
     inc(State.Scope^.Metrics.Current[dsmOption118Hits]);
     exit;
   end;
-  // fallback to giaddr if subnet-selection was set but invalid
+  // fallback to giaddr if link-selection/subnet-selection was set but invalid
   if State.Recv.giaddr <> 0 then
     // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
     // - giaddr from RFC 2131 is authoritative so we should not fallback
@@ -3998,10 +4051,8 @@ begin
     State.SendEnd := nil; // intercept any callback issue and abort
   end;
   result := State.SendEnd = nil; // callback asked to silently ignore this frame
-  if not result then
-    exit; // continue
-  DoLog(sllTrace, 'ignored by callback ', State);
-  inc(State.Scope^.Metrics.Current[dsmDroppedCallback]);
+  if result then
+    DoError(State, dsmDroppedCallback);
 end;
 
 function TDhcpProcess.Flush(var State: TDhcpState): PtrInt;
@@ -4056,12 +4107,7 @@ begin
     // detect the proper scope to use
     if not FindScope(State) then
     begin
-      if State.Recv.giaddr <> 0 then
-        IP4Short(@State.Recv.giaddr, State.Ip)
-      else if State.RecvIp4 <> 0 then
-        IP4Short(@State.RecvIP4, State.Ip);
-      DoLog(sllDebug, 'not subnet for', State);
-      inc(State.Scope^.Metrics.Current[dsmDroppedNoSubnet]);
+      result := DoError(State, dsmDroppedNoSubnet);
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
     // identify any matching input from this scope "profiles" definition
@@ -4091,8 +4137,7 @@ begin
                 begin
                   // IPv4 exhausted: don't return NAK, but silently ignore
                   // - client will retry after a small temporisation
-                  DoLog(sllWarning, 'exhausted IPv4', State);
-                  inc(State.Scope^.Metrics.Current[dsmDroppedNoAvailableIP]);
+                  result := DoError(State, dsmDroppedNoAvailableIP);
                   exit;
                 end;
               end;
@@ -4149,12 +4194,7 @@ begin
               else
               begin
                 // no lease, and none or invalid Option 50 = send NAK response
-                DoLog(sllTrace, 'out-of-sync NAK', State);
-                State.SendType := dmtNak;
-                State.SendEnd := DhcpNew(State.Send, dmtNak, State.Recv.xid,
-                  PNetMac(@State.Mac64)^, State.Scope^.ServerIdentifier);
-                result := Flush(State);
-                inc(State.Scope^.Metrics.Current[dsmNak]);
+                result := DoError(State, dsmNak);
                 exit;
               end;
             // update the lease information
@@ -4184,8 +4224,7 @@ begin
             begin
               // ensure the server recently OFFERed one IP to that client
               // (match RFC intent and prevent blind poisoning of arbitrary IPs)
-              DoLog(sllDebug, 'with no previous OFFER', State);
-              inc(State.Scope^.Metrics.Current[dsmDroppedPackets]);
+              result := DoError(State, dsmDroppedPackets);
               exit;
             end;
             if (State.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
@@ -4195,8 +4234,7 @@ begin
               else
               begin
                 // malicious client poisons the pool by sending repeated DECLINE
-                DoLog(sllDebug, 'overload', State);
-                inc(State.Scope^.Metrics.Current[dsmRateLimitHit]);
+                result := DoError(State, dsmRateLimitHit);
                 exit;
               end;
             // invalidate OFFERed IP
@@ -4217,7 +4255,7 @@ begin
             begin
               // store internally this IP as unavailable for NextIP4
               IP4Short(@State.Ip4, State.Ip);
-              DoLog(sllTrace, 'as', State);
+              DoLog(sllTrace, 'as', State);  // success: no DoError()
               p := State.Scope^.NewLease(0); // mac=0: sentinel to store this IP
               p^.State := lsUnavailable;
               p^.IP4 := State.Ip4;
@@ -4233,19 +4271,10 @@ begin
             if (p = nil) or
                (p^.IP4 <> State.Recv.ciaddr) or
                not (p^.State in [lsAck, lsOutdated]) then
-            begin
               // detect and ignore out-of-synch or malicious client
-              DoLog(sllTrace, 'unexpected', State);
-              inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
-            end
+              result := DoError(State, dsmDroppedInvalidIP)
             else
-            begin
-              IP4Short(@p^.IP4, State.Ip);
-              DoLog(sllTrace, 'as', State);
-              State.Scope^.ReuseIp4(p); // set MAC=0 IP=0 State=lsFree
-              inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-              inc(State.Scope^.Metrics.Current[dsmLeaseReleased]);
-            end;
+              result := DoError(State, dsmLeaseReleased, p);
             exit; // server MUST NOT respond to a RELEASE message
           end;
         dmtInform:
@@ -4258,8 +4287,7 @@ begin
                 not (p^.State in [lsUnavailable, lsOutdated, lsStatic])) then
             begin
               IP4Short(@State.Ip4, State.Ip);
-              DoLog(sllDebug, 'unexpected', State);
-              inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
+              result := DoError(State, dsmDroppedInvalidIP);
               exit;
             end;
             if (p <> nil) and
@@ -4283,8 +4311,7 @@ begin
                   p := State.Scope^.NewLease(State.Mac64)
                 else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
                 begin
-                  DoLog(sllDebug, 'overload', State);
-                  inc(State.Scope^.Metrics.Current[dsmInformRateLimitHit]);
+                  result := DoError(State, dsmInformRateLimitHit);
                   exit;
                 end
                 else
@@ -4309,9 +4336,7 @@ begin
       else
         begin
           // ParseFrame() was correct but this message type is not supported yet
-          inc(State.Scope^.Metrics.Current[dsmUnsupportedRequest]);
-          DoLog(sllTrace, 'unsupported', State);
-          result := -1; // error
+          result := DoError(State, dsmUnsupportedRequest);
           exit;
         end;
       end;
