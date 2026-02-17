@@ -5506,96 +5506,113 @@ end;
 
 procedure _JS_Enumeration(Data: PByte; const Ctxt: TJsonSaveContext);
 var
-  o: TTextWriterOptions;
+  c: PRttiCache;
   PS: PShortString;
+  v: cardinal;
 begin
-  o := Ctxt.W.CustomOptions;
-  if (Ctxt.Options * [woFullExpand, woHumanReadable, woEnumSetsAsText] <> []) or
-     (o * [twoEnumSetsAsBooleanInRecord, twoEnumSetsAsTextInRecord] <> []) then
+  c := @Ctxt.Info.Cache;
+  if c^.EnumCustomText <> nil then // as custom JSON string
   begin
-    PS := Ctxt.Info.Cache.EnumInfo^.GetEnumNameOrd(Data^);
-    if twoEnumSetsAsBooleanInRecord in o then
+    if c^.Size = 1 then
+      v := Data^
+    else
+      v := PWord(Data)^; // support up to 65536 items
+    if (v >= c^.EnumMin) and
+       (v <= c^.EnumMax) then
+    begin
+      Ctxt.W.Add('"');
+      Ctxt.W.AddJsonEscape(pointer(c^.EnumCustomText^[v]), {len=}0);
+      Ctxt.W.AddDirect('"');
+    end
+    else
+      Ctxt.W.AddU(v); // paranoid
+  end
+  else if (Ctxt.Options * [woFullExpand, woHumanReadable, woEnumSetsAsText] <> []) or
+          (Ctxt.W.CustomOptions * [twoEnumSetsAsBooleanInRecord, twoEnumSetsAsTextInRecord] <> []) then
+  begin
+    PS := c^.EnumInfo^.GetEnumNameOrd(Data^);
+    if twoEnumSetsAsBooleanInRecord in Ctxt.W.CustomOptions then
       Ctxt.AddShortBoolean(PS, true)
     else
       Ctxt.AddShort(PS);
     if woHumanReadableEnumSetAsComment in Ctxt.Options then
-      Ctxt.Info.Cache.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', true);
+      c^.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', true);
   end
   else
     Ctxt.W.AddB(Data^);
 end;
 
-procedure _JS_EnumerationCustom(Data: PByte; const Ctxt: TJsonSaveContext);
-var
-  v: cardinal;
-begin
-   Ctxt.W.Add('"');
-   with Ctxt.Info.Cache do
-   begin
-     if Size = 1 then
-       v := Data^
-     else
-       v := PWord(Data)^; // support up to 65536 items
-     if (v >= EnumMin) and
-        (v <= EnumMax) then
-       Ctxt.W.AddJsonEscape(pointer(EnumCustomText^[v]), {len=}0);
-   end;
-   Ctxt.W.AddDirect('"');
-end;
-
 procedure _JS_Set(Data: PInt64; const Ctxt: TJsonSaveContext);
 var
-  PS: PShortString;
+  c: PRttiCache;
+  p: PShortString;
   i: cardinal;
   v: QWord;
-  o: TTextWriterOptions;
 begin
-  o := Ctxt.W.CustomOptions;
-  if twoEnumSetsAsBooleanInRecord in o then
+  c := @Ctxt.Info.Cache;
+  if c^.EnumCustomText <> nil then // as custom JSON array of JSON strings
+  begin
+    Ctxt.W.Add('[');
+    p := pointer(c^.EnumCustomText);
+    for i := 0 to c^.EnumMax do
+    begin
+      if (PPUtf8Char(p)^ <> nil) and
+         (i >= c^.EnumMin) and
+         GetBitPtr(Data, i) then // GetBit64() is slower on FPC: bts [Data]
+      begin
+        Ctxt.W.AddDirect('"');
+        Ctxt.W.AddJsonEscape(PPUtf8Char(p)^, {len=}0);
+        Ctxt.W.AddDirect('"', ',');
+      end;
+      inc(PPUtf8Char(p)); // next PRawUtf8
+    end;
+    Ctxt.W.CancelLastComma;
+    Ctxt.W.AddDirect(']');
+  end
+  else if twoEnumSetsAsBooleanInRecord in Ctxt.W.CustomOptions then
   begin
     // { "set1": true/false, .... } with proper indentation
-    PS := Ctxt.Info.Cache.EnumList;
+    p := c^.EnumList;
     Ctxt.W.BlockBegin('{', Ctxt.Options);
     i := 0;
     repeat
-      if i >= Ctxt.Info.Cache.EnumMin then
-        Ctxt.AddShortBoolean(PS, GetBitPtr(Data, i));
-      if i = Ctxt.Info.Cache.EnumMax then
+      if i >= c^.EnumMin then
+        Ctxt.AddShortBoolean(p, GetBitPtr(Data, i));
+      if i = c^.EnumMax then
         break;
       inc(i);
       Ctxt.W.BlockAfterItem(Ctxt.Options);
-      inc(PByte(PS), PByte(PS)^ + 1); // next
+      inc(PByte(p), PByte(p)^ + 1); // next
     until false;
     Ctxt.W.BlockEnd('}', Ctxt.Options);
   end
   else if (Ctxt.Options * [woFullExpand, woHumanReadable, woEnumSetsAsText] <> []) or
-          (twoEnumSetsAsTextInRecord in o) then
+          (twoEnumSetsAsTextInRecord in Ctxt.W.CustomOptions) then
   begin
     // [ "set1", "set4", .... } on same line
     Ctxt.W.Add('[');
-    if ((twoFullSetsAsStar in o) or
+    if ((twoFullSetsAsStar in Ctxt.W.CustomOptions) or
         (woHumanReadableFullSetsAsStar in Ctxt.Options)) and
-       GetAllBits(Data^, Ctxt.Info.Cache.EnumMax + 1) then
+       GetAllBits(Data^, c^.EnumMax + 1) then
       Ctxt.W.AddDirect('"', '*', '"')
     else
-    with Ctxt.Info.Cache do
     begin
-      PS := EnumList;
-      for i := 0 to EnumMax do
+      p := c^.EnumList;
+      for i := 0 to c^.EnumMax do
       begin
-        if (i >= EnumMin) and
+        if (i >= c^.EnumMin) and
            GetBitPtr(Data, i) then
         begin
-          Ctxt.AddShort(PS);
+          Ctxt.AddShort(p);
           Ctxt.W.AddComma;
         end;
-        inc(PByte(PS), PByte(PS)^ + 1); // next
+        inc(PByte(p), PByte(p)^ + 1); // next
       end;
       Ctxt.W.CancelLastComma;
     end;
     Ctxt.W.AddDirect(']');
     if woHumanReadableEnumSetAsComment in Ctxt.Options then
-      Ctxt.Info.Cache.EnumInfo^.GetEnumNameAll(
+      c^.EnumInfo^.GetEnumNameAll(
         Ctxt.W.fBlockComment, '"*" or a set of ', true);
   end
   else
@@ -5607,33 +5624,6 @@ begin
     MoveFast(Data^, v, Ctxt.Info.Size);
     Ctxt.W.AddQ(v);
   end;
-end;
-
-procedure _JS_SetCustom(Data: PInt64; const Ctxt: TJsonSaveContext);
-var
-  i: cardinal;
-  p: PPUtf8Char;
-begin
-  Ctxt.W.Add('[');
-  with Ctxt.Info.Cache do
-  begin
-    p := pointer(EnumCustomText);
-    if p <> nil then
-      for i := 0 to EnumMax do
-      begin
-        if (p^ <> nil) and
-           (i >= EnumMin) and
-           GetBit64(Data^, i) then
-        begin
-          Ctxt.W.AddDirect('"');
-          Ctxt.W.AddJsonEscape(p^, {len=}0);
-          Ctxt.W.AddDirect('"', ',');
-        end;
-        inc(p); // next
-      end;
-    Ctxt.W.CancelLastComma;
-  end;
-  Ctxt.W.AddDirect(']');
 end;
 
 procedure _JS_Array(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
@@ -8370,17 +8360,18 @@ end;
 
 procedure _JL_Set(Data: pointer; var Ctxt: TJsonParserContext);
 var
+  c: PRttiCache;
   v: QWord;
 begin
-  with Ctxt.Info.Cache do
-    if Size <> 0  then
-      if EnumCustomText = nil then
-        v := GetSetNameValue(EnumList, EnumMin, EnumMax,
-                             Ctxt.Get.Json, Ctxt.Get.EndOfObject)
-      else
-        FindCustomSet(Ctxt, @v)
+  c := @Ctxt.Info.Cache;
+  if c^.Size <> 0  then
+    if c^.EnumCustomText = nil then
+      v := GetSetNameValue(c^.EnumList, c^.EnumMin, c^.EnumMax,
+                           Ctxt.Get.Json, Ctxt.Get.EndOfObject)
     else
-      TRttiJson(Ctxt.Info).RaiseMissingRtti; // support sets up to v: QWord
+      FindCustomSet(Ctxt, @v)
+  else
+    TRttiJson(Ctxt.Info).RaiseMissingRtti; // support sets up to v: QWord
   Ctxt.Valid := Ctxt.Json <> nil;
   MoveFast(v, Data^, Ctxt.Info.Size);
 end;
@@ -11462,20 +11453,18 @@ begin
    begin
      r := Rtti.RegisterType(EnumInfo) as TRttiJson;
      r.fCache.EnumCustomText := CustomText;
-     if r.fCache.Size in [1, 2] then
-       r.fJsonSave := @_JS_EnumerationCustom // up to 65536 items
-     else
+     if not (r.fCache.Size in [1, 2]) then
        r.RaiseMissingRtti; // unsupported size - 65536 items seems fair enough
-     // keep fJsonLoad := _JL_Enumeration (will also work with setters)
+     // _JL_Enumeration/_JS_Enumeration will handle Cache.EnumCustomText
    end;
   if (SetInfo <> nil) and
      (SetInfo^.Kind = rkSet) then
   begin
     r := Rtti.RegisterType(SetInfo) as TRttiJson;
     r.fCache.EnumCustomText := CustomText;
-    r.fJsonSave := @_JS_SetCustom; // keep fJsonLoad := _JL_Set
     if r.fCache.Size = 0 then
       r.RaiseMissingRtti; // sets are supported up to 64-bit: use dynamic array
+    // _JL_Set/_JS_Set will handle Cache.EnumCustomText
   end;
 end;
 
