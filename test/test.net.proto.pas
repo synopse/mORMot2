@@ -1562,7 +1562,7 @@ var
   dmt, dmt2: TDhcpMessageType;
   ip4, sip4: TNetIP4;
   xid: cardinal;
-  d: TDhcpProcessData;
+  d: TDhcpState;
   i, n, l: PtrInt;
   server: TDhcpProcess;
   macs: TNetMacs;
