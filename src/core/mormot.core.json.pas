@@ -509,7 +509,8 @@ procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
 /// parse in-place a JSON array into CSV of unescaped values
 // - returns the length of the CSV in Json, 0 on parsing error
 // - e.g. JsonArrayAsCsv('["ip:1.2.3.4", "1.2.3.5"]') = 'ip:1.2.3.4,1.2.3.5'
-function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar = ','): PtrInt;
+function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar = ',';
+  WasString: PBoolean = nil): PtrInt;
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
@@ -4549,7 +4550,7 @@ begin
   end;
 end;
 
-function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar): PtrInt;
+function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar; WasString: PBoolean): PtrInt;
 var
   d: PUtf8Char;
   info: TGetJsonField;
@@ -4576,6 +4577,8 @@ begin
       d^ := Sep; // make as CSV
       inc(d);
     until false;
+  if WasString <> nil then
+    WasString^ := info.WasString; // copy last flag
   d^ := #0;
   result := d - Json;
 end;

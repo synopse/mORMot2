@@ -1660,7 +1660,10 @@ end;
 type
   TParseProfile = (ppMatch, ppValue, ppTlv);
 const
-  FAKE_OP_MAC = 255;
+  PROFILE_PREFIX: array[0..12] of PAnsiChar = (
+    'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
+    'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:', nil);
+  FAKE_OP_MAC = 255; // to parse "mac": content
 
 function SetProfileValue(var p: TJsonParserContext; var v: RawByteString;
   op: byte): boolean;
@@ -1672,23 +1675,19 @@ label
   uuid97;
 begin
   result := false;
+  // in-place conversion of JSON array into CSV
+  if not p.WasString and
+     (p.ValueLen <> 0) and
+     (p.Value^ = '[') then
+    // e.g. "ntp-servers": ["ip:1.2.3.4", "1.2.3.5"] -> 'ip:1.2.3.4,1.2.3.5'
+    p.Get.ValueLen := JsonArrayAsCsv(p.Value, ',', @p.Get.WasString);
+  // actually decode the value
   len := p.ValueLen;
   if len = 0 then
     exit;
-  if not p.WasString and
-     (p.Value^ = '[') then
-  begin
-    // e.g. "ntp-servers": ["ip:1.2.3.4", "1.2.3.5"] -> 'ip:1.2.3.4,1.2.3.5'
-    p.Get.ValueLen := JsonArrayAsCsv(p.Value); // fast in-place convert
-    if p.ValueLen = 0 then
-      exit;
-    p.Get.WasString := true; // in-place convert into CSV string
-  end;
   if p.WasString then
-    // handle "..." string values
-    case IdemPCharArray(p.Value,
-           ['IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
-            'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:']) of
+    // handle "ip:..." .. "cidr:..." prefixes in string values
+    case IdemPPChar(p.Value, @PROFILE_PREFIX) of
       0:    // ip:
         result := Ip4sFromText(p.Value + 3, v); // allow CSV of IPs
       1:    // mac:
@@ -1744,7 +1743,7 @@ begin
         result := CidrRoutes(p.Value + 5, v);
     else
       begin
-        // recognize configurable options
+        // recognize configurable options in string value
         case op of
           3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 54, 65,
           68 .. 76, 85, 89, 112, 136, 138:
@@ -1778,6 +1777,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
       end;
     end
   else
+    // handle wasString = false: number, boolean or nested TLV object
     case p.Value[0] of
       '0' .. '9':
         begin
@@ -1804,7 +1804,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
         begin
           // true/false boolean
           tmp.b[0] := ord(p.Value[0] = 't');
-          FastSetRawByteString(v, @tmp.b, 1); // store 0/1 byte
+          FastSetRawByteString(v, @tmp.b, 1); // stored 0/1 byte
           result := true;
         end;
       '{':
@@ -1846,7 +1846,8 @@ begin
   else if pp <> ppMatch then
     exit
   else
-    case FindNonVoidRawUtf8I(@DHCP_PROFILES, parser.Value, parser.ValueLen, 1) of
+    case FindNonVoidRawUtf8I(@DHCP_PROFILES, parser.Value, parser.ValueLen,
+           length(DHCP_PROFILES)) of
       0:
         begin
           // "boot": "ipxe-x64"
@@ -1890,6 +1891,8 @@ procedure AddProfileValue(var a: TProfileValues; var v: TProfileValue);
 var
   n: PtrInt;
 begin
+  if v.kind = pvkUndefined then
+    EDhcp.RaiseU('Unexpected AddProfileValue(pvkUndefined)'); // paranoid
   n := length(a);
   SetLength(a, n + 1);
   a[n] := v;
@@ -1917,9 +1920,9 @@ begin
   result := true;
 end;
 
-function TlvFromJson(const json: RawUtf8): RawByteString; // for debug
+function TlvFromJson(const json: RawUtf8): RawByteString; // for debug/testing
 var
-  tmp: TSynTempBuffer; // make a private local copy
+  tmp: TSynTempBuffer; // make a private local copy for in-place JSON parsing
 begin
   tmp.Init(json);
   try
@@ -1975,7 +1978,7 @@ function ParseProfile(const json: RawUtf8; out v: TProfileValues;
 var
   one: TProfileValue;
   parser: TJsonParserContext;
-  tmp: TSynTempBuffer; // make a private local copy
+  tmp: TSynTempBuffer; // make a private local copy for in-place JSON parsing
 begin
   result := json = '';
   if result then
@@ -2057,13 +2060,13 @@ end;
 
 function MetricsFromJson(const json: RawUtf8; var m: TDhcpMetrics): boolean;
 var
-  tmp: TSynTempBuffer;
+  tmp: TSynTempBuffer; // for in-place JSON parsing
 begin
   FillZero(m);
   result := false;
   if json = '' then
     exit;
-  tmp.Init(json); // make temporary copy since input json is parsed in-place
+  tmp.Init(json);
   result := JsonObjectToRttiArray(tmp.buf,
     @m, @METRIC_TXT, length(m), TypeInfo(QWord)) <> nil;
   tmp.Done;
