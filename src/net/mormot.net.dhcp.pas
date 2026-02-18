@@ -852,6 +852,8 @@ type
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
       {$ifdef HASINLINE} inline; {$endif}
     procedure ParseRecvLensRai;
+    function FakeLease(found: TNetIP4): PDhcpLease;
+      {$ifdef HASINLINE} inline; {$endif}
     function ClientUuid(opt: TDhcpOption): PDhcpLease;
     procedure AppendToMac(ip4len: PtrUInt; const ident: ShortString);
   end;
@@ -2888,6 +2890,14 @@ begin
   until len = 0;
 end;
 
+function TDhcpState.FakeLease(found: TNetIP4): PDhcpLease;
+begin
+  result := @Temp; // fake transient PDhcpLease for this StaticUuid[]
+  result^.IP4 := found;
+  PInt64(@result^.Mac)^ := Mac64; // also reset State+RateLimit
+  result^.State := lsStatic;
+end;
+
 function TDhcpState.ClientUuid(opt: TDhcpOption): PDhcpLease;
 var
   fnd: TNetIP4;
@@ -2919,11 +2929,8 @@ begin
   fnd := DoFindUuid(pointer(Scope^.StaticUuid), pointer(v), len);
   if fnd = 0 then
     exit;
-  result := @Temp; // fake transient PDhcpLease for this StaticUuid[]
-  result^.IP4 := fnd;
-  PInt64(@result^.Mac)^ := Mac64; // also reset State+RateLimit
-  result^.State := lsStatic;
   // append /GUID or /UUID in logs after the MAC address (up to 63 chars)
+  result := FakeLease(fnd);
   m := @Mac;
   AppendShortChar('/', pointer(m));
   if len = SizeOf(TGuid) then
