@@ -4446,11 +4446,11 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
   const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
 begin
   InitNetTlsContext(TLS);
-  TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
-  TLS.CertificateFile := RawUtf8(CertificateFile); // RTL TFileName to RawUtf8
-  TLS.PrivateKeyFile  := RawUtf8(PrivateKeyFile);
+  TLS.IgnoreCertificateErrors := Server;     // needed if no mutual auth is done
+  _toutf8(CertificateFile, TLS.CertificateFile);
+  _toutf8(PrivateKeyFile, TLS.PrivateKeyFile);
   TLS.PrivatePassword := PrivateKeyPassword;
-  TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
+  _toutf8(CACertificatesFile, TLS.CACertificatesFile);
 end;
 
 procedure ResetNetTlsContext(var TLS: TNetTlsContext);

@@ -7997,14 +7997,14 @@ var
               if GetManyField(P + 6) then
               begin
                 aManyField[1] := AnsiChar(i * 2 + 67);
-                result := RawUtf8(aManyField);
+                ShortStringToAnsi7String(aManyField, result);
                 exit; // Categories.Dest.Name=? -> C.Name=?
               end;
             end
             else if (P^ = '.') and GetManyField(P + 1) then
             begin
               aManyField[1] := AnsiChar(i * 2 + 66);
-              result := RawUtf8(aManyField);
+              ShortStringToAnsi7String(aManyField, result);
               exit;  // Categories.Kind=? -> CC.Kind=?
             end;
           end;

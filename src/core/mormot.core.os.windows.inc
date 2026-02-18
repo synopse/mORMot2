@@ -5105,7 +5105,7 @@ begin
   if prodver <> '' then
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
-    cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
+    _toutf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'), cpu);
   if Assigned(GetLogicalProcessorInformation) then
   begin
     SetLength(proc, 1024);

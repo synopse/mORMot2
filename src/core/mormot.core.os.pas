@@ -7791,7 +7791,7 @@ end;
 
 function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 begin
-  result := RawUtf8(GetFileNameWithoutExt(ExtractFileName(FileName)));
+  _toutf8(GetFileNameWithoutExt(ExtractFileName(FileName)), result);
 end;
 
 function PosExtString(Str: PChar): PChar; // work on AnsiString + UnicodeString
@@ -9346,7 +9346,7 @@ function TExecutableCommandLine.Get(const name: array of RawUtf8;
 var
   def, tmp: RawUtf8; // RTL conversion is fast enough in this unit
 begin
-  def := RawUtf8(tmp);
+  _toutf8(default, def);
   result := Get(name, tmp, description, def);
   if result then
     value := string(tmp)
@@ -9575,7 +9575,7 @@ begin
       exit; // may equal -1 e.g. from a .so on MacOS
     SetLength(fRawParams, n);
     for i := 0 to n - 1 do
-      fRawParams[i] := RawUtf8(ParamStr(i + 1));
+      _toutf8(ParamStr(i + 1), fRawParams[i]);
   end;
   Finalize(fNames);
   Finalize(fValues);
