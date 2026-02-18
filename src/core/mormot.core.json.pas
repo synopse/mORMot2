@@ -506,6 +506,11 @@ procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
   ValuesCount: integer; Info: PRttiInfo; var Result: RawUtf8;
   Options: TTextWriterWriteObjectOptions);
 
+/// parse in-place a JSON array into CSV of unescaped values
+// - returns the length of the CSV in Json, 0 on parsing error
+// - e.g. JsonArrayStringAsCsv('["ip:1.2.3.4", "1.2.3.5"]') = 'ip:1.2.3.4,1.2.3.5'
+function JsonArrayStringAsCsv(Json: PUtf8Char; Sep: AnsiChar = ','): PtrInt;
+
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -4542,6 +4547,37 @@ begin
   finally
     W.Free;
   end;
+end;
+
+function JsonArrayStringAsCsv(Json: PUtf8Char; Sep: AnsiChar): PtrInt;
+var
+  d: PUtf8Char;
+  info: TGetJsonField;
+begin
+  result := 0;
+  if Json = nil then
+    exit;
+  Json := GotoNextNotSpace(Json);
+  if Json^ <> '[' then
+    exit;
+  d := Json;
+  info.Json := GotoNextNotSpace(Json + 1);
+  if info.Json^ <> ']' then
+    repeat
+      info.GetJsonField;
+      if info.Json = nil then // invalid
+        exit;
+      MoveFast(info.Value^, d^, info.ValueLen);
+      inc(d, info.ValueLen);
+      if info.EndOfObject = ']' then       // all done
+        break
+      else if info.EndOfObject <> ',' then // error
+        exit;
+      d^ := Sep; // make as CSV
+      inc(d);
+    until false;
+  d^ := #0;
+  result := d - Json;
 end;
 
 function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): integer;
