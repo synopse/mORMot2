@@ -1633,18 +1633,6 @@ begin
   CheckEqual(PtrUInt(@PRuleValue(nil)^.value), SizeOf(Int64), 'TRuleValue');
   CheckEqual(SizeOf(TRuleValue), 8 + SizeOf(pointer));
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
-  PInt64(@rv)^ := -1;
-  CheckEqual(rv.num, 255);
-  Check(not IsZero(rv.mac));;
-  rv.value := 'rv.value';
-  CheckEqual(PInt64(@rv)^, -1, 'rv');
-  CheckEqual(rv.value, 'rv.value');
-  PInt64(@rv)^ := 0;
-  CheckEqual(rv.num, 0);
-  CheckEqual(ord(rv.kind), 0, 'rv.kind');
-  CheckEqual(PInt64(@rv)^, 0, 'rv');
-  Check(IsZero(rv.mac));
-  CheckEqual(rv.value, 'rv.value');
   CheckEqual(DHCP_OPTION[doSubnetMask], 'subnet-mask');
   CheckEqual(DHCP_OPTION[doRouters], 'routers');
   CheckEqual(DHCP_OPTION[doTftpServerName], 'tftp-server-name');
@@ -1694,6 +1682,26 @@ begin
     Check(FromText(RAI_OPTION[dor], dor2));
     Check(dor = dor2);
   end;
+  // validate TRuleValue binary layout against TDhcpState.MatchOne expectations
+  PInt64(@rv)^ := -1;
+  CheckEqual(rv.num, 255);
+  Check(not IsZero(rv.mac));;
+  rv.value := 'rv.value';
+  CheckEqual(PInt64(@rv)^, -1, 'rv');
+  CheckEqual(rv.value, 'rv.value');
+  PInt64(@rv)^ := 0;
+  CheckEqual(rv.num, 0);
+  CheckEqual(ord(rv.kind), 0, 'rv.kind');
+  CheckEqual(PInt64(@rv)^, 0, 'rv');
+  Check(IsZero(rv.mac));
+  Check(TextToMac('ff:ff:ff:ff:ff:ff', @rv.mac));
+  Check(not IsZero(rv.mac));
+  CheckEqual(PInt64(@rv)^, -65536, 'rv');
+  CheckEqual(PInt64(@rv)^ shr 16, $FFFFFFFFFFFF, 'rv');
+  rv.num := 255;
+  PByte(@rv.kind)^ := 255;
+  CheckEqual(PInt64(@rv)^, -1, 'rv2');
+  CheckEqual(rv.value, 'rv.value');
   // validate CIDR routes encoding following RFC 3442
   CheckCidrRoute('', '');
   CheckCidrRoute('192.168.1.0/24,10.0.0.5',     '18C0A8010A000005');

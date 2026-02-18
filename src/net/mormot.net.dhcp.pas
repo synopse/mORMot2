@@ -357,7 +357,7 @@ type
   // - pvkMac as "mac" value condition in the mac inlined field
   // - pvkOpt is a known option as DHCP_OPTION_NUM[TDhcpOption(mac[0])] = num
   // - pvkRai as Relay-Agent-Information sub-option condition like "circuit-id"
-  // - pvkMacs as array of "mac" values condition in the value field
+  // - pvkMacs as array of "mac" values condition in the TNetMacs value field
   // - pvkBoot as "boot" value condition
   // - pvkRaw is DHCP option outside of TDhcpOption - stored as plain num
   // - pvkTlv stores raw Type-Length-Value (TLV) with num = sub-option
@@ -1901,14 +1901,17 @@ begin
       1:
         begin
           // "mac": "00:11:22:33:44:55" - also accepts CSV or arrays
-          v.kind := pvkMac;
+          v.kind := pvkMacs;          // v.value contains TNetMacs binary
           result := parser.ParseNextAny(false) and
                     SetRuleValue(parser, v.value, FAKE_OP_MAC) and
-                    (v.value <> '');
+                    (v.value <> '') and
+                    (length(v.value) mod SizeOf(TNetMac) = 0);
           if length(v.value) = SizeOf(TNetMac) then
-            v.mac := PNetMac(v.value)^
-          else
-            v.kind := pvkMacs;
+          begin
+            v.kind := pvkMac;
+            v.mac := PNetMac(v.value)^; // inlined single mac
+            v.value := '';              // not needed any more
+          end;
           exit;
         end;
     else
@@ -2787,50 +2790,50 @@ begin
         result := PInt64(one)^ shr 16 = Mac64; // inlined single TNetMac value
         exit;
       end;
-     pvkOpt:                                 // most common case: known option
+     pvkOpt:                                   // most common case: known option
        begin
          len := RecvLens[TDhcpOption(one^.mac[0])];
          if len = 0 then
-           exit;
-         option := @Recv.options[len];      // option[0] = len in Recv[]
+           exit;                               // no such option
+         option := @Recv.options[len];         // option[0] = len in Recv[]
        end;
      pvkRai:
-       begin                                // O(1) lookup of sub-option
+       begin                                   // O(1) lookup of sub-option
          len := RecvLensRai[TDhcpOptionRai(one^.num)];
          if len = 0 then
-           exit;
-         option := @Recv.options[len];      // option[0] = len in Recv[]
+           exit;                               // no such sub-option
+         option := @Recv.options[len];         // option[0] = len in Recv[]
        end;
      pvkMacs:
        begin
-         value := pointer(one^.value);      // TNetMacs lookup (value<>nil)
+         value := pointer(one^.value);         // TNetMacs lookup (value<>nil)
          len := PtrUInt(PStrLen(value - _STRLEN)^);
          result := true;
          repeat
            if PInt64(value)^ and MAC_MASK = Mac64 then
-             exit;                          // found one
-           inc(PNetMac(Value));             // search next
+             exit;                             // found one
+           inc(PNetMac(Value));                // search next
            dec(len, SizeOf(TNetMac));
          until len = 0;
          result := false;
          exit;
        end;
      pvkBoot:
-       begin                                // compare with SetRecvBoot() item
+       begin                                   // compare with SetRecvBoot() item
          result := RecvBoot = TDhcpClientBoot(one^.num);
-         exit;                              // no need to check one^.value
+         exit;                                 // no need to check one^.value
        end;
      pvkRaw:
        begin
-         option := @Recv.options;             // inlined DhcpFindOption()
+         option := @Recv.options;              // inlined DhcpFindOption()
          repeat
            if option[0] = AnsiChar(one^.num) then
-             break;
-           option := @option[ord(option[1]) + 2]; // O(n) lookup of raw number
+             break;                            // found this num
+           option := @option[ord(option[1]) + 2];
            if option[0] = #255 then
-             exit;
+             exit;                             // no such option
          until false;
-         inc(option);                       // option[0] = len in Recv[]
+         inc(option);                          // option[0] = len in Recv[]
        end;
   else
     exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
@@ -3038,21 +3041,20 @@ begin
     EDhcp.RaiseUtf8('PrepareRule: invalid requested:%', [fRequested]);
   // parse optional "mac" alias
   if fMac <> '' then
-    if not TextToMac(pointer(fMac), @nfo.mac) then
-      EDhcp.RaiseUtf8('PrepareRule: invalid mac:%', [fMac])
-    else if (Rule.all <> nil) or
-            (Rule.any <> nil) or
-            (Rule.notall <> nil) or
-            (Rule.notany <> nil) then
-      EDhcp.RaiseUtf8('PrepareRule: mac:% is exclusive', [fMac])
-    else
-    begin
-      // generate the corresponding {"all":{"mac":"xxxxx"}} entry
-      v.num := 0;
-      v.kind := pvkMac;
-      v.mac := nfo.mac;
-      AddRuleValue(Rule.all, v);
-    end;
+  begin
+    if (Rule.all <> nil) or
+       (Rule.any <> nil) or
+       (Rule.notall <> nil) or
+       (Rule.notany <> nil) then
+      EDhcp.RaiseUtf8('PrepareRule: mac:% is exclusive', [fMac]);
+    if (length(fMac) <> 17) or
+       not TextToMac(pointer(fMac), @v.mac) then
+      EDhcp.RaiseUtf8('PrepareRule: invalid mac:%', [fMac]);
+    // generate the corresponding {"all":{"mac":"xxxxx"}} entry
+    v.num := 0;
+    v.kind := pvkMac;
+    AddRuleValue(Rule.all, v);
+  end;
   // parse specific static "ip" reservation
   Rule.ip := 0;
   if fIP <> '' then
@@ -3092,7 +3094,6 @@ begin
   begin
     PInt64(@v)^ := 0; // set kind+num+mac=0
     v.kind := pvkAlways;
-    v.value := '';
     p := pointer(alw);
     for i := 1 to length(alw) do
     // prepare raw TLV-concatenated binary buffer
