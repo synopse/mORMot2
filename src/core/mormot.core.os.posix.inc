@@ -47,11 +47,6 @@ uses
 
 // define some raw text functions, to avoid linking mormot.core.text
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
-  overload; forward;
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload; forward;
-procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
 function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
 function PosExtString(Str: PChar): PChar; forward; // to extract extension
@@ -117,6 +112,11 @@ begin // file extension, then file name case-sensitive comparison on POSIX
               PosExtString(pointer(A)), PosExtString(pointer(B)));
   if result = 0 then
     result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(pointer(A), pointer(B));
+end;
+
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Utf8 := Str; // assumed both AnsiString on POSIX - or use RTL
 end;
 
 function TDirectoryBrowser.Make(const fn: TFileName): TFileName;
@@ -1957,15 +1957,15 @@ begin
        (s <> 'nodev') and
        (s <> 'squashfs') and
        (s <> 'nullfs') then
-      _AddRawUtf8(_ProcFileSystems, s);
+      _addutf8(_ProcFileSystems, s);
     p := GotoNextLine(p);
   until p = nil;
   if _ProcFileSystems = nil then
     exit;
   // add some FS which may be marked as nodev but could be considered as "real"
-  _AddRawUtf8(_ProcFileSystems, 'zfs');
-  _AddRawUtf8(_ProcFileSystems, 'cifs');
-  _AddRawUtf8(_ProcFileSystems, 'drvfs');
+  _addutf8(_ProcFileSystems, 'zfs');
+  _addutf8(_ProcFileSystems, 'cifs');
+  _addutf8(_ProcFileSystems, 'drvfs');
   result := true;
 end;
 
@@ -4835,7 +4835,7 @@ begin
         AppendShort('/address'#0, fn);
         LoadProcFileTrimed(@fn[1], f);
         if f <> '' then
-          _AddRawUtf8(result, f);
+          _addutf8(result, f);
       end;
     end;
   until FindNext(SR) <> 0;

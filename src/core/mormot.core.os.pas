@@ -349,6 +349,12 @@ function UriTruncLen(const Address: RawUtf8): PtrInt;
 function UriTruncAnchorLen(const Address: RawUtf8): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 
+// define some raw text functions, to avoid linking mormot.core.text
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
+procedure _fmt(const Fmt: string; const Args: array of const; var result: RawUtf8); overload;
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8); {$ifdef OSPOSIX} inline; {$endif}
+procedure _addutf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
+
 
 { ****************** Gather Operating System Information }
 
@@ -5937,18 +5943,18 @@ implementation
 
 { ****************** Some Cross-System Type and Constant Definitions }
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
 begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+  _toutf8(Format(Fmt, Args), result); // good enough (seldom called)
 end;
 
 procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload;
+  var result: RawUtf8);
 begin
-  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+  _toutf8(Format(Fmt, Args), result); // good enough (seldom called)
 end;
 
-procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
+procedure _addutf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
 var
   n: PtrInt;
 begin
@@ -9301,7 +9307,7 @@ begin
       break; // no more occurence
     if fValues[i] <> '' then
     begin
-      _AddRawUtf8(value, fValues[i]);
+      _addutf8(value, fValues[i]);
       result := true;
     end;
     first := i + 1;
@@ -9608,22 +9614,22 @@ begin
           if j <> 1 then
             if j <> 0 then
             begin
-              _AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
-              _AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
+              _addutf8(fNames[clkParam], copy(s, 1, j - 1));
+              _addutf8(fValues, copy(s, j + 1, MaxInt));
             end
             else if (i + 1 = n) or
                     (swlen[i + 1] <> 0) then
-              _AddRawUtf8(fNames[clkOption], s)
+              _addutf8(fNames[clkOption], s)
             else
             begin
-              _AddRawUtf8(fNames[clkParam], s);
+              _addutf8(fNames[clkParam], s);
               inc(i);
-              _AddRawUtf8(fValues, fRawParams[i]);
+              _addutf8(fValues, fRawParams[i]);
             end;
           end;
       end
       else
-        _AddRawUtf8(fNames[clkArg], s);
+        _addutf8(fNames[clkArg], s);
     inc(i);
   until i = n;
   SetLength(fRetrieved[clkArg],    length(fNames[clkArg]));

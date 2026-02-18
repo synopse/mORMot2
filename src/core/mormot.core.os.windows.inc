@@ -10,10 +10,6 @@
 
 {$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
-  overload; forward;
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
 procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
@@ -75,6 +71,22 @@ begin
     Temp[0] := #0; // GetFullPathNameW() failure or W32_MAX overflow
 end;
 
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
+var
+  i: PtrInt;
+  R: PByteArray;
+begin
+  if Len > 0 then
+    if IsAnsiCompatibleW(P, Len) then
+    begin
+      R := FastSetString(res, Len);
+      for i := 0 to Len - 1 do
+        R[i] := PWordArray(P)[i]; // fast direct ASCII 7-bit conversion
+    end
+    else
+      DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode
+end;
+
 {$ifdef UNICODE}
 
 function IsExtendedPathName(const Name: TFileName): boolean;
@@ -113,6 +125,11 @@ begin
       dec(l);
       dst[l] := cardinal(s[l]); // fast direct 7-bit conversion
     until l = 0;
+end;
+
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Win32PWideCharToUtf8(pointer(Str), length(Str), Utf8);
 end;
 
 {$else}
@@ -187,27 +204,20 @@ begin
   SetString(d, s, l);
 end;
 
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  if {$ifdef FPC} (DefaultRTLFileSystemCodePage = CP_UTF8) or {$endif}
+     IsAnsiCompatible(Str) then
+    Utf8 := Str // assign
+  else
+    Utf8 := UTF8Encode(Str); // use RTL
+end;
+
 {$endif UNICODE}
 
 procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
 begin
   Win32PWideCharToString(P, StrLenW(P), string(fn));
-end;
-
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
-var
-  i: PtrInt;
-  R: PByteArray;
-begin
-  if Len > 0 then
-    if IsAnsiCompatibleW(P, Len) then
-    begin
-      R := FastSetString(res, Len);
-      for i := 0 to Len - 1 do
-        R[i] := PWordArray(P)[i]; // fast direct ASCII 7-bit conversion
-    end
-    else
-      DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode
 end;
 
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
