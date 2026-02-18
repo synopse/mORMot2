@@ -1627,8 +1627,8 @@ var
 begin
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
-  CheckEqual(SizeOf(TDhcpPacket), 548, 'TDhcpPacket');
-  CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), 240, 'options');
+  CheckEqual(SizeOf(TDhcpPacket), 1468, 'TDhcpPacket');
+  CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), DHCP_PACKET_HEADER, 'options');
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
   CheckEqual(DHCP_OPTION[doSubnetMask], 'subnet-mask');
   CheckEqual(DHCP_OPTION[doRouters], 'routers');

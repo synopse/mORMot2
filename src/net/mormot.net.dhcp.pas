@@ -58,6 +58,12 @@ const
   /// regular UDP port of DHCP client
   DHCP_CLIENT_PORT = 68;
 
+  /// the number of bytes in BOOTP header before TDhcpPacket.options[]
+  DHCP_PACKET_HEADER = 240;
+  /// the maximum decoded/encoded size of TDhcpPacket.options[] with MTU=1500
+  // - makes SizeOf(TDhcpPacket) = 1468 which seems a legitimate high limit
+  DHCP_HIGH_OPTIONS = 1228 - 1;
+
   BOOT_REQUEST = 1;
   BOOT_REPLY   = 2;
 
@@ -95,7 +101,7 @@ type
     /// magic cookie for DHCP encapsulated in BOOTP message
     cookie: cardinal;
     /// the raw DHCP options, as type/len/value triplets, ending with $ff
-    options: array[0..307] of byte;
+    options: array[0 .. DHCP_HIGH_OPTIONS] of byte;
   end;
   /// points to a DHCP raw UDP packet message
   PDhcpPacket = ^TDhcpPacket;
