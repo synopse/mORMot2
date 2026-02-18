@@ -7663,8 +7663,8 @@ begin
   result := (res = X509_V_OK); // not yet verified, or peer verification failed
   if (msg <> nil) and
      not result then // append '(text #error)' to msg^
-    msg^ := RawUtf8(format('%s (%s #%d)',
-              [msg^, X509_verify_cert_error_string(res), res]));
+    msg^ := _fmt('%s (%s #%d)',
+              [msg^, X509_verify_cert_error_string(res), res]);
 end;
 
 procedure SSL.Free;
@@ -9334,7 +9334,7 @@ begin
     result := OBJ_nid2sn(nid);
     if X509_get_signature_info(@self, @md, nil, @bits, nil) = OPENSSLSUCCESS then
     begin
-      result := RawUtf8(format('%d %s', [bits, result]));
+      result := _fmt('%d %s', [bits, result]);
       if nid = NID_rsassaPss then // only PS256/PS384/PS512 don't supply the MD
         result := Join([result, '-', RawUtf8(OBJ_nid2sn(md))]);
     end;

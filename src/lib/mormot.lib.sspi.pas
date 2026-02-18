@@ -1235,8 +1235,8 @@ begin
     xch := 'ECDSA'
   else
     str(aiExch, xch);
-  result := RawUtf8(format('%s%d-%s%d-%s%d TLSv1.%d ',
-    [xch, dwExchStrength, alg, dwCipherStrength, hsh, dwHashStrength, dwProtocol]));
+  _fmt('%s%d-%s%d-%s%d TLSv1.%d ', [xch, dwExchStrength, alg,
+    dwCipherStrength, hsh, dwHashStrength, dwProtocol], result);
 end;
 
 
@@ -1399,8 +1399,8 @@ begin
      (cip.szCipherSuite[0] <> #0) then
   begin
     FixProtocol(nfo.dwProtocol); // cip.dwProtocol seems incorrect :(
-    result := RawUtf8(format('%s TLSv1.%d ',
-      [PWideChar(@cip.szCipherSuite), nfo.dwProtocol]));
+    _fmt('%s TLSv1.%d ',
+      [PWideChar(@cip.szCipherSuite), nfo.dwProtocol], result);
   end
   else
     result := nfo.ToText; // fallback on XP

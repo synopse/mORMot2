@@ -2913,7 +2913,7 @@ begin
     JS_FreeRuntime(@self);
   except
     on E: Exception do
-      result := Format('%s %s', [ClassNameShort(E)^, E.Message]);
+      FormatString('% %', [E, E.Message], result);
   end;
 end;
 

@@ -2649,8 +2649,7 @@ var
 begin
   // the Windows Sockets API (WSA) needs explicit initialization
   WSAStartup($0202, WsaDataOnce);
-  SocketAPIVersion := RawUtf8(Format('%s.%d',
-    [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
+  _fmt('%s.%d', [WsaDataOnce.szDescription, WsaDataOnce.wVersion], SocketAPIVersion);
   // get some low-level extended functions for IOCP
   sock := socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
   acceptex := GetExtensionFunc(sock, WSAID_ACCEPTEX);
