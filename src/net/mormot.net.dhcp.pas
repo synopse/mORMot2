@@ -62,7 +62,7 @@ const
   DHCP_PACKET_HEADER = 240;
   /// the maximum decoded/encoded size of TDhcpPacket.options[] with MTU=1500
   // - makes SizeOf(TDhcpPacket) = 1468 which seems a legitimate high limit
-  DHCP_HIGH_OPTIONS = 1228 - 1;
+  DHCP_MAX_OPTIONS = 1228;
 
   BOOT_REQUEST = 1;
   BOOT_REPLY   = 2;
@@ -101,7 +101,7 @@ type
     /// magic cookie for DHCP encapsulated in BOOTP message
     cookie: cardinal;
     /// the raw DHCP options, as type/len/value triplets, ending with $ff
-    options: array[0 .. DHCP_HIGH_OPTIONS] of byte;
+    options: array[0 .. DHCP_MAX_OPTIONS - 1] of byte;
   end;
   /// points to a DHCP raw UDP packet message
   PDhcpPacket = ^TDhcpPacket;
@@ -315,8 +315,7 @@ function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
 /// decode the 32-bit big endian integer stored at dhcp^.option[lens[opt]]
 function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
 
-/// decode the MAC address stored at dhcp^.option[lens[opt]]
-// - no DUID decoding is supported yet: only MAC or Eth=1 + MAC values
+/// decode MAC or Eth=1 + MAC values stored at dhcp^.option[lens[opt]]
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
 
 /// decode the lens[doDhcpParameterRequestList] within dhcp^.option[]
@@ -832,7 +831,7 @@ type
   public
     /// raw append of a 32-bit big-endian/IPv4 option value into Send
     procedure AddOptionOnce32(const opt: TDhcpOption; be: cardinal);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// raw append of a RawByteString/RawUtf8 option into Send
     procedure AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
     /// raw append of a dynamic array of 32-bit big-endian/IPv4 options into Send
@@ -1674,12 +1673,12 @@ end;
 type
   TParseRule = (prMatch, prValue, prTlv);
 const
-  RULE_VALUE_PREFIX: array[0..12] of PAnsiChar = (
+  RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
     'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
     'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:', nil);
   FAKE_OP_MAC = 255; // to parse "mac": content
 
-function SeTRuleValue(var p: TJsonParserContext; var v: RawByteString;
+function SetRuleValue(var p: TJsonParserContext; var v: RawByteString;
   op: byte): boolean;
 var
   tmp: THash128Rec;
@@ -1689,7 +1688,7 @@ label
   uuid97;
 begin
   result := false;
-  // in-place conversion of JSON array into CSV
+  // optional in-place conversion of JSON array into CSV
   if not p.WasString and
      (p.ValueLen <> 0) and
      (p.Value^ = '[') then
@@ -1876,7 +1875,7 @@ begin
           // "mac": "00:11:22:33:44:55" - also accepts CSV or arrays
           v.kind := pvkMac;
           result := parser.ParseNextAny(false) and
-                    SeTRuleValue(parser, v.value, FAKE_OP_MAC) and
+                    SetRuleValue(parser, v.value, FAKE_OP_MAC) and
                     (v.value <> '');
           exit;
         end;
@@ -1893,9 +1892,9 @@ begin
      not parser.ParseNextAny({NormalizeBoolean=}false) then
     exit;
   if pp = prTlv then
-    result := SeTRuleValue(parser, v.value, 0) // v.num is no option
+    result := SetRuleValue(parser, v.value, 0) // v.num is no option
   else
-    result := SeTRuleValue(parser, v.value, v.num);
+    result := SetRuleValue(parser, v.value, v.num);
   if result and
      (length(v.value) > 255) then
     result := false; // avoid TLV 8-bit length overflow
@@ -2862,7 +2861,7 @@ begin
   AddOptionCopy(doRelayAgentInformation, dsmOption82Hits);
   // append #255 trailer in the Send frame and returns its final size in bytes
   result := SendEnd - PAnsiChar(@Send) + 1;
-  if result >= DHCP_HIGH_OPTIONS then
+  if result >= high(Send.options) then
     result := 0 // too many options: do not send anything
   else
     SendEnd^ := #255; // end this valid frame
