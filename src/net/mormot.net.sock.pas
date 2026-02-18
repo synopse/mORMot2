@@ -4089,15 +4089,6 @@ begin
   until false;
 end;
 
-procedure NetAddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
-var
-  n: PtrInt;
-begin
-  n := length(Values);
-  SetLength(Values, n + 1);
-  Values[n] := Value;
-end;
-
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
   IPAddresses: array[TIPAddress] of record
@@ -4321,7 +4312,7 @@ begin
       begin
         Value := _GetDnsAddresses(usePosixEnv, false); // from OS
         for i := 0 to length(Custom) - 1 do
-          NetAddRawUtf8(Value, Custom[i]);          // from RegisterDnsAddress()
+          _addutf8(Value, Custom[i]);          // from RegisterDnsAddress()
         Tix := tix32;
       end;
       result := Value;
@@ -4337,7 +4328,7 @@ begin
   begin
     Safe.Lock;
     try
-      NetAddRawUtf8(Custom, DnsResolver);
+      _addutf8(Custom, DnsResolver);
       Tix := 0; // flush cache
     finally
       Safe.UnLock;

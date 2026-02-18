@@ -1230,8 +1230,6 @@ begin
     end;
 end;
 
-procedure NetAddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
-
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;
@@ -1266,7 +1264,7 @@ begin
         one := NetGetNextSpaced(p);
         if one = '' then
           break;
-        NetAddRawUtf8(result, one);
+        _addutf8(result, one);
       until false;
     end;
     p := GotoNextLine(p);

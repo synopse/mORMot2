@@ -3811,7 +3811,7 @@ end;
 
 procedure AttributeNameNormalize(var AttrName: RawUtf8);
 var
-  existing: pointer;
+  existing: pointer; // interned value with no RefCnt / try..finally
 begin
   if AttrName = '' then
     exit;
