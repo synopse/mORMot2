@@ -455,6 +455,7 @@ type
   // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
   // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
   // - dsmDroppedPxeBoot: there was no proper configuration for this PXE/iPXE
+  // - dsmDroppedTooManyOptions: avoid a buffer overflow with too many options
   TDhcpScopeMetric = (
     dsmDiscover,
     dsmOffer,
@@ -485,7 +486,8 @@ type
     dsmDroppedNoAvailableIP,
     dsmDroppedInvalidIP,
     dsmDroppedCallback,
-    dsmDroppedPxeBoot);
+    dsmDroppedPxeBoot,
+    dsmDroppedTooManyOptions);
   /// set of available per-scope DHCP metrics
   TDhcpScopeMetrics = set of TDhcpScopeMetric;
 
@@ -764,7 +766,7 @@ function ToText(st: TLeaseState): PShortString; overload;
 type
   {$ifdef CPUINTEL} {$A-} {$endif CPUINTEL}
   /// state machine used by TDhcpProcess.ComputeResponse to process a request
-  // - allow stack allocation of all memory needed during the frame processing
+  // - stack allocation of around 3KB memory needed for the frame processing
   // - also supplied to TOnComputeResponse callback as thread-safe context
   {$ifdef USERECORDWITHMETHODS}
   TDhcpState = record
@@ -829,7 +831,8 @@ type
     function Flush: PtrUInt;
   public
     /// raw append of a 32-bit big-endian/IPv4 option value into Send
-    procedure AddOptionOnce32(const opt: TDhcpOption; const be: cardinal);
+    procedure AddOptionOnce32(const opt: TDhcpOption; be: cardinal);
+      {$ifdef HASINLINE} inline; {$endif}
     /// raw append of a RawByteString/RawUtf8 option into Send
     procedure AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
     /// raw append of a dynamic array of 32-bit big-endian/IPv4 options into Send
@@ -847,6 +850,8 @@ type
     function MatchAny(any: PRuleValue): boolean;
   private
     // methods for internal use
+    procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure ParseRecvLensRai;
     function ClientUuid(opt: TDhcpOption): PDhcpLease;
     procedure AppendToMac(ip4len: PtrUInt; const ident: ShortString);
@@ -2621,71 +2626,85 @@ end;
 
 { TDhcpState }
 
+procedure TDhcpState.AddOptionOnce32(const opt: TDhcpOption; be: cardinal);
+var
+  d: PAnsiChar;
+begin
+  if (be = 0) or
+     (opt in SendOptions) then
+    exit;
+  include(SendOptions, opt);
+  d := pointer(SendEnd);
+  SendEnd := d + 6;
+  if SendEnd >= @Send.options[high(Send.options)] then
+    exit; // move output pointer, but avoid buffer overflow
+  d[0] := AnsiChar(DHCP_OPTION_NUM[opt]);
+  d[1] := #4;
+  PCardinal(d + 2)^ := be;
+end;
+
+procedure TDhcpState.AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
+var
+  d: PByteArray;
+begin
+  d := pointer(SendEnd);
+  SendEnd := @d[len + 2];
+  if SendEnd >= @Send.options[high(Send.options)] then
+    exit; // move output pointer, but avoid buffer overflow
+  d[0] := op;
+  d[1] := len;
+  MoveFast(b^, d[2], len);
+end;
+
 procedure TDhcpState.AddOptionFromRule(p: PRuleValue);
 var
-  len: PtrUInt;
+  v: PAnsiChar;
 begin
-  if pointer(p^.value) = nil then
-    exit;
-  // be paranoid with "rules": avoid buffer overflow
-  len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
-  if SendEnd + len >= @Send.options[high(Send.options)] then
+  v := pointer(p^.value);
+  if v = nil then
     exit;
   // actually append the value and mark it in SendOptions
   include(SendOptions, p^.opt);
-  DhcpAddOptionRaw(SendEnd, p^.num, pointer(p^.value), len);
-end;
-
-procedure TDhcpState.AddOptionOnce32(const opt: TDhcpOption; const be: cardinal);
-begin
-  if (be = 0) or
-     (opt in SendOptions) or
-     (SendEnd + SizeOf(be) >= @Send.options[high(Send.options)]) then
-    exit;
-  include(SendOptions, opt);
-  DhcpAddOption32(SendEnd, opt, be);
+  AddOptionSafe(p^.num, v, PStrLen(v - _STRLEN)^);
 end;
 
 procedure TDhcpState.AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
 begin
   if (v = nil) or
-     (opt in SendOptions) or
-     (SendEnd + PStrLen(v - _STRLEN)^ >= @Send.options[high(Send.options)]) then
+     (opt in SendOptions) then
     exit;
   include(SendOptions, opt);
-  DhcpAddOptionRaw(SendEnd, DHCP_OPTION_NUM[opt], v, PStrLen(v - _STRLEN)^);
+  AddOptionSafe(DHCP_OPTION_NUM[opt], v, PStrLen(v - _STRLEN)^);
 end;
 
 procedure TDhcpState.AddOptionOnceA32(const opt: TDhcpOption; const v: PAnsiChar);
-var
-  len: PtrUInt;
 begin
   if (v = nil) or
      (opt in SendOptions) then
     exit;
-  len := (PDALen(v - _DALEN)^ + _DAOFF) shl 2; // as bytes
-  if SendEnd + len >= @Send.options[high(Send.options)] then
-    exit;
-  DhcpAddOptionRaw(SendEnd, DHCP_OPTION_NUM[opt], v, len);
   include(SendOptions, opt);
+  AddOptionSafe(DHCP_OPTION_NUM[opt], v, (PDALen(v - _DALEN)^ + _DAOFF) shl 2);
 end;
 
 procedure TDhcpState.AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric);
 var
-  b: PtrUInt;
-  src: PAnsiChar;
+  len: PtrUInt;
+  src, d: PAnsiChar;
 begin
-  b := RecvLens[opt];
-  if (b = 0) or
+  len := RecvLens[opt];
+  if (len = 0) or
      (opt in SendOptions) then
     exit;
   include(SendOptions, opt);
   if dsm <> dsmDiscover then
     inc(Scope^.Metrics.Current[dsm]);
   // copy whole "DHCP_OPTION_NUM + len + data" binary block
-  src := @Recv.options[b];
-  MoveFast(src[-1], SendEnd^, ord(src^) + 2);
-  inc(SendEnd, ord(src^) + 2);
+  src := @Recv.options[len];
+  d := SendEnd;
+  len := ord(src^) + 2;
+  SendEnd := d + len;
+  if SendEnd < @Send.options[high(Send.options)] then // safe: no overflow
+    MoveFast(src[-1], d^, len);
 end;
 
 procedure TDhcpState.AddRulesOptions;
@@ -2841,9 +2860,12 @@ begin
   AddOptionCopy(doDhcpClientIdentifier, dsmOption61Hits);
   // send back Option 82 if any - should be the very last option by RFC 3046
   AddOptionCopy(doRelayAgentInformation, dsmOption82Hits);
-  // add trailer to the Send frame and returns its final size in bytes
-  SendEnd^ := #255;
+  // append #255 trailer in the Send frame and returns its final size in bytes
   result := SendEnd - PAnsiChar(@Send) + 1;
+  if result >= DHCP_HIGH_OPTIONS then
+    result := 0 // too many options: do not send anything
+  else
+    SendEnd^ := #255; // end this valid frame
 end;
 
 procedure TDhcpState.ParseRecvLensRai;
@@ -3891,7 +3913,9 @@ begin
         result := -1; // error
       end;
     dsmDroppedCallback:
-      DoLog(sllTrace, 'ignored by callback ', State);
+      DoLog(sllTrace, 'dropped by callback', State);
+    dsmDroppedTooManyOptions:
+      DoLog(sllWarning, 'dropped to avoid overflow', State);
   end;
   inc(State.Scope^.Metrics.Current[Context]);
 end;
@@ -4150,8 +4174,12 @@ begin
     // aborted by callback: nothing to send
     result := 0
   else
+  begin
     // append verbatim options 61/82 copy + end Send buffer stream
     result := State.Flush;
+    if result = 0 then
+      result := DoError(State, dsmDroppedTooManyOptions);
+  end;
 end;
 
 function TDhcpProcess.ComputeResponse(var State: TDhcpState): PtrInt;
