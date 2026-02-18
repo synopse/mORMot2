@@ -273,12 +273,15 @@ procedure DhcpCopyOption(var p: PAnsiChar; sourcelen: PAnsiChar);
 
 
 type
+ /// TDhcpPacket.options[] is 312 bytes in RFC 2131, and even more up to the MTU
+ // - e.g. maximum-message-size option 57 could advertise up to 1260 bytes
+ TDhcpParseLen = word;
  /// efficient DhcpParse() results as O(1) lookup of recognized options
  // - 0 means that this TDhcpOption was not transmitted
  // - or store the position of an option length in TDhcpPacket.options[]
- TDhcpParsed = array[TDhcpOption] of byte;
+ TDhcpParsed = array[TDhcpOption] of TDhcpParseLen;
  /// efficient O(1) lookup of DHCP Option 82 recognized RAI sub-options
- TDhcpParsedRai = array[TDhcpOptionRai] of byte;
+ TDhcpParsedRai = array[TDhcpOptionRai] of TDhcpParseLen;
 
 /// parse a raw DHCP binary frame and return the length of all recognized options
 // - returns dmtUndefined on invalid input DHCP frame
@@ -763,32 +766,26 @@ type
   TDhcpState = object
   {$endif USERECORDWITHMETHODS}
   public
+    /// the network subnet information related to this request
+    // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
+    Scope: PDhcpScope;
+    /// length of the Recv UDP frame received from the client
+    RecvLen: integer;
+    /// 32-bit binary IP address allocated for Send
+    Ip4: TNetIP4;
     /// binary MAC address from the Recv frame, zero-extended to 64-bit/8-bytes
     Mac64: Int64;
     /// points to the last option of Send buffer
     // - callback could use this to call DhcpAddOption() overloads
     SendEnd: PAnsiChar;
-    /// 32-bit binary IP address allocated for Send
-    Ip4: TNetIP4;
-    /// the GetTickSec current 32-bit value
-    Tix32: cardinal;
-    /// the network subnet information related to this request
-    // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
-    Scope: PDhcpScope;
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     RecvHostName: PShortString;
     /// the "rules" entry matched by this request
     RecvRule: PDhcpScopeRule;
-    /// length of the Recv UDP frame received from the client
-    RecvLen: integer;
     /// the server IP socket which received the UDP frame
     // - allow several UDP bound server sockets to share a single TDhcpProcess
     RecvIp4: TNetIP4;
-    /// parsed options length position in Recv.option[]
-    RecvLens: TDhcpParsed;
-    /// option-82 RAI parsed sub-options length position in Recv.option[]
-    RecvLensRai: TDhcpParsedRai;
     /// the DHCP message type parsed from Recv
     RecvType: TDhcpMessageType;
     /// the PXE remote boot type as parsed by TDhcpProcess.SetRecvBoot
@@ -797,10 +794,16 @@ type
     SendType: TDhcpMessageType;
     /// options set into the Send buffer by TDhcpProcess.Flush
     SendOptions: TDhcpOptions;
+    /// parsed options length position in Recv.option[]
+    RecvLens: TDhcpParsed;
+    /// option-82 RAI parsed sub-options length position in Recv.option[]
+    RecvLensRai: TDhcpParsedRai;
     /// UDP frame received from the client, parsed in RecvLens[]
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
     Send: TDhcpPacket;
+    /// the GetTickSec current 32-bit value
+    Tix32: cardinal;
     /// some pointer value set by the UDP server for its internal process
     Opaque: pointer;
     /// IP address allocated for Send (raw Ip4) as human readable text
@@ -2849,7 +2852,7 @@ begin
     dec(len, ord(p[1]) + 2)  ; // O(1) decode sub-option binary as TLV
     if len < 0 then            // avoid buffer overdloas
     begin
-      Int64(RecvLensRai) := 0; // ignore any previously decoded sub-options
+      FillZero(THash128(RecvLensRai)); // ignore any previously decoded sub-options
       exit;
     end;
     if ord(p[0]) <= high(RAI_OPTION_INV) then // O(1) fast inverse lookup
@@ -3902,7 +3905,7 @@ begin
     State.Mac[0] := #17;
     ToHumanHexP(@State.Mac[1], @State.Mac64, 6);
     State.RecvHostName := DhcpData(@State.Recv, State.RecvLens[doHostName]);
-    Int64(State.RecvLensRai) := 0;
+    FillZero(THash128(State.RecvLensRai));
     if State.RecvLens[doRelayAgentInformation] <> 0 then
       State.ParseRecvLensRai;
     result := true;
@@ -3910,7 +3913,7 @@ begin
   else
   begin
     State.Mac[0] := #0;
-    State.RecvHostName := @State.Mac;
+    State.RecvHostName := @NULCHAR;
     result := false;
   end;
 end;

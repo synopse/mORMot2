@@ -1920,10 +1920,10 @@ begin
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       CheckNotEqual(xid, d.Recv.xid);
       xid := d.Recv.xid;
-      Int64(d.RecvLensRai) := -1;
+      PInt64(@d.RecvLensRai)^ := -1;
       Check(server.ComputeResponse(d) > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
-      CheckEqual(Int64(d.RecvLensRai), 0, 'rai');
+      Check(IsZero(THash128(d.RecvLensRai)), 'rai');
       Check(d.RecvHostName^ = hostname, 'hostname');
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       Check(IsEqual(macs[i], PNetMac(@d.Send.chaddr)^));
@@ -2057,7 +2057,7 @@ begin
     Check(l > 0, 'request1');
     CheckEqual(d.Send.xid, xid);
     CheckNotEqual(d.Send.ciaddr, ips[0]);
-    CheckNotEqual(Int64(d.RecvLensRai), 0, 'rai_opt82');
+    Check(not IsZero(THash128(d.RecvLensRai)), 'rai_opt82');
     for dor := low(dor) to high(dor) do
       Check((d.RecvLensRai[dor] <> 0) = (dor = dorCircuitId));
     Check(DhcpData(@d.Recv, d.RecvLensRai[dorCircuitId])^ = 'DCBA');
