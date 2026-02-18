@@ -613,14 +613,14 @@ type
     notall: TRuleValues;
     /// store NOT OR matching fields
     notany: TRuleValues;
-    /// the "always" and "requested" data to be sent back to the client
-    // - "always" would be stored as send[0].kind=pvkAlways
-    send: TRuleValues;
-    /// if this rule should reserve a static IPv4 for its conditions
-    // - usually, there is a "mac": in "all" fields
+    /// if this rule should reserve a static "ip" for these conditions
+    // - usually, there is a "mac": in "all" fields with an associated IPv4
     ip: TNetIP4;
     /// the set of options part of "always"
     always: TDhcpOptions;
+    /// the "always" and "requested" data to be sent back to the client
+    // - "always" would be stored as send[0].kind=pvkAlways
+    send: TRuleValues;
   end;
   PDhcpScopeRule = ^TDhcpScopeRule;
   /// ready-to-be-processed DHCP "rules" objects of a given scope
@@ -942,11 +942,12 @@ type
   // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
   TDhcpRuleSettings = class(TSynPersistent)
   protected
-    fName, fIP: RawUtf8;
+    fName, fIP, fMac: RawUtf8;
     fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
   public
     /// compute the low-level TDhcpScope.Rules[] entry from current settings
     // - raise an EDhcp exception if the parameters are not correct
+    // - return true if the Rule can be added to the scope
     function PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
   published
     /// human-friendly identifier, only used in the logs as " rule=<name>"
@@ -999,6 +1000,20 @@ type
     // $ "requested": { ntp-servers: ["10.0.0.5", "10.0.0.6"] }
     property Requested: RawJson
       read fRequested write fRequested;
+    /// root "mac" as convenient alternative to {"all":{"mac":"xxxxx"}} entry
+    // - so that you could write meaningful registration like:
+    // $ {
+    // $   "name": "printer-2",
+    // $   "mac": "00:11:22:33:44:56",
+    // $   "ip": "192.168.1.51",
+    // $   "always": {
+    // $     "domain-name": "printers.local"
+    // $   }
+    // $ }
+    // - would work also to customize options, without any "ip" reservation
+    // - exclusive to "all" "any" "not-all" "not-any" member - would raise EDhcp
+    property Mac: RawUtf8
+      read fMac write fMac;
     /// reserve this static IP for a given MAC or client-specific options
     // - could be used as an alternative to the main "static" array of TMacIP,
     // especially if you expect "always"/"requested" custom options sent back
@@ -3035,7 +3050,24 @@ begin
     EDhcp.RaiseUtf8('PrepareRule: invalid always:%', [fAlways]);
   if not ParseRule(fRequested, req, prValue) then
     EDhcp.RaiseUtf8('PrepareRule: invalid requested:%', [fRequested]);
-  // handle specific static "ip" reservation
+  // parse optional "mac" alias
+  if fMac <> '' then
+    if not TextToMac(pointer(fMac), @nfo.mac) then
+      EDhcp.RaiseUtf8('PrepareRule: invalid mac:%', [fMac])
+    else if (Rule.all <> nil) or
+            (Rule.any <> nil) or
+            (Rule.notall <> nil) or
+            (Rule.notany <> nil) then
+      EDhcp.RaiseUtf8('PrepareRule: mac:% is exclusive', [fMac])
+    else
+    begin
+      // generate the corresponding {"all":{"mac":"xxxxx"}} entry
+      v.num := 0;
+      v.kind := pvkMac;
+      FastSetRawByteString(v.value, @nfo.mac, SizeOf(nfo.mac));
+      AddRuleValue(Rule.all, v);
+    end;
+  // parse specific static "ip" reservation
   Rule.ip := 0;
   if fIP <> '' then
   begin
@@ -3052,24 +3084,27 @@ begin
        (length(Rule.all) = 1) and
        (Rule.all[0].kind = pvkMac) then
     begin
-      // plain {"all":{"mac":...}},"ip":...} entry = regular static
-      if length(Rule.all[0].value) <> 6 then
-        EDhcp.RaiseUtf8('PrepareRule: ip=% with incorrect mac', [fIp]);
-      nfo.mac := PNetMac(Rule.all[0].value)^; // register in StaticMac[]
-      result := false; // don't create a rule
+      // plain {"all":{"mac":...}},"ip":...} entry = regular 'mac=ip' static
+      if length(Rule.all[0].value) <> SizeOf(nfo.mac) then
+        EDhcp.RaiseUtf8('PrepareRule: ip=% requires a single mac', [fIp]);
+      nfo.mac := PNetMac(Rule.all[0].value)^; // to register in StaticMac[]
+      if not Data.AddStatic(nfo) then // add in main statics mac/ip list
+        EDhcp.RaiseUtf8('PrepareRule: duplicated ip=% mac=%',
+          [fIp, MacToShort(@nfo.mac)]);
+      result := false; // no rule
+      exit;
     end;
-    if not Data.AddStatic(nfo) then // add sorted in main statics list
+    if not Data.AddStatic(nfo) then // add in main statics ip list
       EDhcp.RaiseUtf8('PrepareRule: duplicated ip=%', [fIp]);
-    if not result then
-      exit; // no rule
   end;
   // Rule.send[0] is "always" and should be stored as pvkAlways binary blob
   Rule.send := nil;
   Rule.always := [];
   if alw <> nil then
   begin
-    RecordZero(@v, TypeInfo(TRuleValue));
+    v.num := 0;
     v.kind := pvkAlways;
+    v.value := '';
     p := pointer(alw);
     for i := 1 to length(alw) do
     // prepare raw TLV-concatenated binary buffer
