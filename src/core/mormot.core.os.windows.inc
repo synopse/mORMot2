@@ -3547,20 +3547,20 @@ begin
 end;
 
 constructor TServiceController.CreateOpenService(
-  const TargetComputer, DataBaseName, Name: RawUtf8; DesiredAccess: cardinal);
+  const TargetComputer, DataBaseName, ServiceName: RawUtf8; DesiredAccess: cardinal);
 begin
   inherited Create;
-  fName := RawUtf8(Name);
+  fName := ServiceName;
   fSCHandle := OpenServiceManager(TargetComputer, DataBaseName, GENERIC_READ);
   if fSCHandle = 0 then
   begin
     TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-      [TargetComputer, DataBaseName, fName], self);
+      [TargetComputer, DataBaseName, ServiceName], self);
     exit;
   end;
-  fHandle := OpenServiceInstance(fSCHandle, Name, DesiredAccess);
+  fHandle := OpenServiceInstance(fSCHandle, ServiceName, DesiredAccess);
   if fHandle = 0 then
-    TService.DoLog(sllLastError, 'OpenService(%)', [Name], self);
+    TService.DoLog(sllLastError, 'OpenService(%)', [ServiceName], self);
 end;
 
 function TServiceController.Delete: boolean;

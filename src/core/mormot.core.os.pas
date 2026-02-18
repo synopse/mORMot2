@@ -5391,7 +5391,7 @@ type
     // SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE, SERVICE_QUERY_CONFIG,
     // SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP, SERVICE_USER_DEFINED_CONTROL
     constructor CreateOpenService(
-      const TargetComputer, DataBaseName, Name: RawUtf8;
+      const TargetComputer, DataBaseName, ServiceName: RawUtf8;
       DesiredAccess: cardinal = SERVICE_ALL_ACCESS);
     /// release memory and handles
     destructor Destroy; override;
