@@ -936,6 +936,9 @@ type
     /// input: if deprecated TLS 1.0 or TLS 1.1 are allowed
     // - default is TLS 1.2+ only, and deprecated SSL 2/3 are always disabled
     AllowDeprecatedTls: boolean;
+    /// input: if TLS 1.3 should be avoided and fallback to TLS 1.2
+    // - could be useful if the server has some trouble with TLS 1.3
+    DisableTls13: boolean;
     /// input: enable two-way TLS for the server
     // - to be used with OnEachPeerVerify callback
     // - on OpenSSL client or server, set SSL_VERIFY_FAIL_IF_NO_PEER_CERT mode

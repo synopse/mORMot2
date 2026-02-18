@@ -11248,6 +11248,8 @@ begin
   if Context.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL
   SSL_CTX_set_min_proto_version(fCtx, v);
+  if Context.DisableTls13 then
+    SSL_CTX_set_max_proto_version(fCtx, TLS1_2_VERSION); // stick to TLS 1.2
 end;
 
 function AfterAcceptSNI(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;

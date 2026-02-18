@@ -2090,13 +2090,14 @@ begin
   buf.buf[4].BufferType := SECBUFFER_EMPTY;
 end;
 
-procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS: boolean;
+procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS, DisableTls13: boolean;
   dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
   if SChannelEnableTls13 and // should be explicitly enabled
      ((OSVersion in [wEleven, wEleven_64]) or
-      (OSVersion >= wServer2022_64)) then
+      (OSVersion >= wServer2022_64)) and
+     not DisableTls13 then
   // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
   // Enabling TLS 1.3 on earlier versions of Windows is possible through the
   // registry, but is explictly documented as unsafe by Microsoft.
@@ -2160,7 +2161,7 @@ begin
       else
         f := SCH_CRED_REVOCATION_CHECK_CHAIN or
              SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-      CredInit(cred, Context.AllowDeprecatedTLS, f, nil);
+      CredInit(cred, Context.AllowDeprecatedTLS, Context.DisableTls13, f, nil);
       CheckSEC_E_OK('AcquireCredentialsHandleW', AcquireCredentialsHandleW(
         nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
       fDataPos := 0;
@@ -2283,7 +2284,8 @@ begin
   // prepare TLS connection properties from AfterBind() global certificate
   if BoundContext.AcceptCert = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
-  CredInit(cred, BoundContext.AllowDeprecatedTls, 0, @BoundContext.AcceptCert);
+  CredInit(cred, BoundContext.AllowDeprecatedTls, BoundContext.DisableTls13,
+    0, @BoundContext.AcceptCert);
   CheckSEC_E_OK('AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));

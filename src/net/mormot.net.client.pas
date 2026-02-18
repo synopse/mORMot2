@@ -4302,6 +4302,7 @@ begin
     'te', TLS.Enabled,
     'ti', TLS.IgnoreCertificateErrors,
     'ta', TLS.AllowDeprecatedTls,
+    'td', TLS.DisableTls13,
     'tu', TLS.ClientAllowUnsafeRenegotation,
     'cf', TLS.CertificateFile,
     'ca', TLS.CACertificatesFile,
@@ -4319,6 +4320,7 @@ begin
   V.GetAsBoolean('te', TLS.Enabled);
   V.GetAsBoolean('ti', TLS.IgnoreCertificateErrors);
   V.GetAsBoolean('ta', TLS.AllowDeprecatedTls);
+  V.GetAsBoolean('td', TLS.DisableTls13);
   V.GetAsBoolean('tu', TLS.ClientAllowUnsafeRenegotation);
   V.GetAsRawUtf8('cf', TLS.CertificateFile);
   V.GetAsRawUtf8('ca', TLS.CACertificatesFile);
