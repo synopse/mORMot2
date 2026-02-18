@@ -1668,8 +1668,6 @@ var
   tmp: THash128Rec;
   len: PtrInt;
   d: PAnsiChar;
-  arr: TRawUtf8DynArray;
-  csv: RawUtf8;
 label
   uuid97;
 begin
@@ -1680,14 +1678,11 @@ begin
   if not p.WasString and
      (p.Value^ = '[') then
   begin
-    // e.g. "ntp-servers": ["ip:1.2.3.4", "1.2.3.5"] -> "ip:1.2.3.4,1.2.3.5"
-    DynArrayLoadJsonInPlace(arr, p.Value, TypeInfo(TRawUtf8DynArray));
-    if arr = nil then
+    // e.g. "ntp-servers": ["ip:1.2.3.4", "1.2.3.5"] -> 'ip:1.2.3.4,1.2.3.5'
+    p.Get.ValueLen := JsonArrayStringAsCsv(p.Value);
+    if p.ValueLen = 0 then
       exit;
-    RawUtf8ArrayToCsvVar(arr, csv);
-    p.Get.WasString := true;
-    p.Get.Value := pointer(csv);
-    p.Get.ValueLen := length(csv);
+    p.Get.WasString := true; // in-place convert into CSV string
   end;
   if p.WasString then
     // handle "..." string values
@@ -2765,7 +2760,7 @@ begin
          else
            result := MacIndex(pointer(value), @Mac64, len div 6) >= 0; // array
          exit;
-       end
+       end;
   else
     exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
   end;
