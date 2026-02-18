@@ -947,7 +947,7 @@ type
   public
     /// compute the low-level TDhcpScope.Rules[] entry from current settings
     // - raise an EDhcp exception if the parameters are not correct
-    procedure PrepareScope(var Rule: TDhcpScopeRule);
+    function PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
   published
     /// human-friendly identifier, only used in the logs as " rule=<name>"
     property Name: RawUtf8
@@ -3012,27 +3012,57 @@ end;
 
 { TDhcpRuleSettings }
 
-procedure TDhcpRuleSettings.PrepareScope(var Rule: TDhcpScopeRule);
+function TDhcpRuleSettings.PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
 var
   alw, req: TRuleValues;
   p: PRuleValue;
   v: TRuleValue;
   i: PtrInt;
+  nfo: TMacIP;
 begin
+  result := true; // parsing OK and need to add a rule (e.g. not static mac+ip)
   // parse main "rules" JSON object fields
   Rule.name := fName;
   if not ParseRule(fAll, Rule.all, prMatch) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid all:%', [fAll]);
+    EDhcp.RaiseUtf8('PrepareRule: invalid all:%', [fAll]);
   if not ParseRule(fAny, Rule.any, prMatch) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid any:%', [fAny]);
+    EDhcp.RaiseUtf8('PrepareRule: invalid any:%', [fAny]);
   if not ParseRule(fNotAll, Rule.notall, prMatch) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid not-all:%', [fNotAll]);
+    EDhcp.RaiseUtf8('PrepareRule: invalid not-all:%', [fNotAll]);
   if not ParseRule(fNotAny, Rule.notany, prMatch) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid not-any:%', [fNotAny]);
+    EDhcp.RaiseUtf8('PrepareRule: invalid not-any:%', [fNotAny]);
   if not ParseRule(fAlways, alw, prValue) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid always:%', [fAlways]);
+    EDhcp.RaiseUtf8('PrepareRule: invalid always:%', [fAlways]);
   if not ParseRule(fRequested, req, prValue) then
-    EDhcp.RaiseUtf8('PrepareScope: invalid requested:%', [fRequested]);
+    EDhcp.RaiseUtf8('PrepareRule: invalid requested:%', [fRequested]);
+  // handle specific static "ip" reservation
+  Rule.ip := 0;
+  if fIP <> '' then
+  begin
+    if not NetIsIP4(pointer(fIp), @Rule.ip) then
+      EDhcp.RaiseUtf8('PrepareRule: invalid ip:%', [fIp]);
+    if (Rule.all = nil) and
+       (Rule.any = nil) then
+      EDhcp.RaiseUtf8('PrepareRule: missing any/all for ip=%', [fIp]);
+    nfo.ip := Rule.ip;
+    FillZero(nfo.mac);
+    if (Rule.any = nil) and
+       (alw = nil) and
+       (req = nil) and
+       (length(Rule.all) = 1) and
+       (Rule.all[0].kind = pvkMac) then
+    begin
+      // plain {"all":{"mac":...}},"ip":...} entry = regular static
+      if length(Rule.all[0].value) <> 6 then
+        EDhcp.RaiseUtf8('PrepareRule: ip=% with incorrect mac', [fIp]);
+      nfo.mac := PNetMac(Rule.all[0].value)^; // register in StaticMac[]
+      result := false; // don't create a rule
+    end;
+    if not Data.AddStatic(nfo) then // add sorted in main statics list
+      EDhcp.RaiseUtf8('PrepareRule: duplicated ip=%', [fIp]);
+    if not result then
+      exit; // no rule
+  end;
   // Rule.send[0] is "always" and should be stored as pvkAlways binary blob
   Rule.send := nil;
   Rule.always := [];
@@ -3047,7 +3077,7 @@ begin
       Append(v.value, [AnsiChar(p^.num), AnsiChar(length(p^.value)), p^.value]);
       if p^.opt <> doPad then
         if p^.opt in Rule.always then
-          EDhcp.RaiseUtf8('PrepareScope: duplicated % in always:%',
+          EDhcp.RaiseUtf8('PrepareRule: duplicated % in always:%',
             [DHCP_OPTION[p^.opt], fAlways])
         else
           include(Rule.always, p^.opt);
@@ -3061,7 +3091,7 @@ begin
   begin
     if (p^.opt <> doPad) and
        (p^.opt in Rule.always) then
-      EDhcp.RaiseUtf8('PrepareScope: duplicated % in requested:%',
+      EDhcp.RaiseUtf8('PrepareRule: duplicated % in requested:%',
         [DHCP_OPTION[p^.opt], fRequested]);
     AddRuleValue(Rule.send, p^);
     inc(p);
@@ -3094,7 +3124,7 @@ procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess;
   var Data: TDhcpScope);
 var
   mask: TNetIP4;
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   // convert the main settings into Data.* fields - raise EDhcp on error
   Data.Gateway           := ToIP4(fDefaultGateway);
@@ -3131,8 +3161,12 @@ begin
   // convert "rules" into ready-to-be-processed objects
   Data.Rules := nil;
   SetLength(Data.Rules, length(fRules));
+  n := 0;
   for i := 0 to high(fRules) do
-    fRules[i].PrepareScope(Data.Rules[i]);
+    if fRules[i].PrepareRule(Data, Data.Rules[n]) then
+      inc(n);
+  if n <> length(fRules) then
+    SetLength(Data.Rules, n); // some "rules" were TMacIP static in disguise
   // retrieve and adjust the subnet mask from settings
   if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
