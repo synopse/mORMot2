@@ -847,10 +847,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// raw search of one "rules" value in State.Recv[]
     function MatchOne(one: PRuleValue): boolean;
-    /// raw search of all "rules" values in State.Recv[] - true for all match
-    function MatchAll(all: PRuleValue): boolean;
-    /// raw search of any "rules" values in State.Recv[] - true on first match
-    function MatchAny(any: PRuleValue): boolean;
   private
     // methods for internal use
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
@@ -2835,36 +2831,6 @@ begin
   result := true;                        // exact case-sensitive match
 end;
 
-function TDhcpState.MatchAll(all: PRuleValue): boolean;
-var
-  n: integer;
-begin // caller ensured all <> nil
-  result := false;
-  n := PDALen(PAnsiChar(all) - _DALEN)^ + _DAOFF;
-  repeat
-    if not MatchOne(all) then
-      exit; // missing one
-    inc(all);
-    dec(n);
-  until n = 0;
-  result := true;
-end;
-
-function TDhcpState.MatchAny(any: PRuleValue): boolean;
-var
-  n: integer;
-begin // caller ensured any <> nil
-  result := true;
-  n := PDALen(PAnsiChar(any) - _DALEN)^ + _DAOFF;
-  repeat
-    if MatchOne(any) then
-      exit; // found one
-    inc(any);
-    dec(n);
-  until n = 0;
-  result := false;
-end;
-
 procedure TDhcpState.AddRegularOptions;
 begin
   AddOptionOnce32(doSubnetMask,         Scope^.Subnet.mask);
@@ -4202,38 +4168,85 @@ end;
 
 procedure TDhcpProcess.SetRule(var State: TDhcpState);
 var
-  n: integer;
-  p: PDhcpScopeRule;
+  rule: PDhcpScopeRule;
+  rules, hi: TDALen; // use hi=high() to optimize for FPC
+  r: PRuleValue;
+label
+  ko;
 begin
   // implement "first precise rule wins" deterministic behavior
-  p := pointer(State.Scope^.Rules); // caller ensured <> nil
-  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  rule := pointer(State.Scope^.Rules); // caller ensured <> nil
+  rules := PDALen(PAnsiChar(rule) - _DALEN)^ + _DAOFF;
   repeat
-    if // AND conditions (all must match) = "all"
-       ((p^.all = nil) or
-        State.MatchAll(pointer(p^.all))) and
-       // OR conditions (at least one must match) = "any"
-       ((p^.any = nil) or
-        State.MatchAny(pointer(p^.any))) and
-       // NOT AND conditions (all must NOT match) = "not-all"
-       ((p^.notall = nil) or
-        not State.MatchAll(pointer(p^.notall))) and
-       // NOT OR conditions (at least one must NOT match) = "not-any"
-       ((p^.notany = nil) or
-        not State.MatchAny(pointer(p^.notany))) then
+    // AND conditions (all must match) = "all"
+    r := pointer(rule^.all);
+    if r <> nil then
     begin
-      State.RecvRule := p;
-      // all=any=nil as fallback if nothing more precise did apply
-      // "not-all"/"not-any" without any "all"/"any" are just ignored
-      // unless they are the eventual default
-      if (p^.all <> nil) or
-         (p^.any <> nil) then
-        // return first exact matching rule (deterministic)
-        exit;
+      hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
+      repeat
+        if not State.MatchOne(r) then
+          goto ko; // missing one
+        if hi = 0 then
+          break;
+        dec(hi);
+        inc(r);
+      until false;
+      // all did match
     end;
-    inc(p);
-    dec(n);
-  until n = 0;
+    // OR conditions (at least one must match) = "any"
+    r := pointer(rule^.any);
+    if r <> nil then
+    begin
+      hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
+      repeat
+        if State.MatchOne(r) then
+          break; // at least one match
+        if hi = 0 then
+          goto ko; // none did match
+        dec(hi);
+        inc(r);
+      until false;
+    end;
+    // NOT AND conditions (all must NOT match) = "not-all"
+    r := pointer(rule^.notall);
+    if r <> nil then
+    begin
+      hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
+      repeat
+        if State.MatchOne(r) then
+          goto ko; // one did match
+        if hi = 0 then
+          break;
+        dec(hi);
+        inc(r);
+      until false;
+    end;
+    // NOT OR conditions (at least one must NOT match) = "not-any"
+    r := pointer(rule^.notany);
+    if r <> nil then
+    begin
+      hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
+      repeat
+        if not State.MatchOne(r) then
+          break; // one did not match
+        if hi = 0 then
+          goto ko; // all did match
+        dec(hi);
+        inc(r);
+      until false;
+    end;
+    // if we reached here, all conditions did apply
+    State.RecvRule := rule;
+    // all=any=nil as fallback if nothing more precise did apply
+    // "not-all"/"not-any" without any "all"/"any" are just ignored
+    // unless they are the eventual default
+    if (rule^.all <> nil) or
+       (rule^.any <> nil) then
+      // return first exact matching rule (deterministic)
+      exit;
+ko: inc(rule);
+    dec(rules);
+  until rules = 0;
 end;
 
 function TDhcpProcess.RunCallbackAborted(var State: TDhcpState): boolean;
