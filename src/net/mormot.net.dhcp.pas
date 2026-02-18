@@ -353,22 +353,23 @@ type
   end;
 
   /// define TRuleValue content as DHCP "rules" condition or action
+  // - those items are ordered by the most used at runtime first
+  // - pvkMac as "mac" value(s) condition
   // - pvkOpt is a known DHCP TDhcpOption as num=DHCP_OPTION_NUM[opt]
+  // - pvkRai as Relay-Agent-Information sub-option condition like "circuit-id"
+  // - pvkBoot as "boot" value condition
   // - pvkRaw is DHCP option outside of TDhcpOption - stored as plain num
   // - pvkTlv stores raw Type-Length-Value (TLV) with num = sub-option
   // - pvkAlways to store a binary blob from "always" JSON definition
-  // - pvkBoot as "boot" value condition
-  // - pvkRai as Relay-Agent-Information sub-option condition like "circuit-id"
-  // - pvkMac as "mac" value(s) condition
   TRuleValueKind = (
-    pvkUndefined,
+    pvkMac,
     pvkOpt,
+    pvkRai,
+    pvkBoot,
     pvkRaw,
     pvkTlv,
     pvkAlways,
-    pvkBoot,
-    pvkRai,
-    pvkMac);
+    pvkUndefined);
 
   /// store one DHCP "rules" condition or action
   // - used for "all" "any" "not-all" "not-any" conditions against a value
@@ -1858,7 +1859,9 @@ function ParseRuleValue(var parser: TJsonParserContext; var v: TRuleValue;
   pp: TParseRule): boolean;
 begin
   result := false;
-  RecordZero(@v, TypeInfo(TRuleValue));
+  v.kind := pvkUndefined;
+  v.num := 0;
+  v.value := '';
   // parse and recognize "77": "user-class": "boot": "circuit-id": keys
   if not parser.GetJsonFieldName or
      (parser.ValueLen = 0) then
@@ -1930,7 +1933,7 @@ var
   n: PtrInt;
 begin
   if v.kind = pvkUndefined then
-    EDhcp.RaiseU('Unexpected AddRuleValue(pvkUndefined)'); // paranoid
+    EDhcp.RaiseU('Unexpected AddRuleValue()'); // paranoid
   n := length(a);
   SetLength(a, n + 1);
   a[n] := v;
@@ -2775,12 +2778,34 @@ begin
   result := false;
   // locate the option value in Recv[]
   case one^.kind of
+    pvkMac:
+      begin
+        value := pointer(one^.value);        // direct Mac64:TNetMac lookup
+        len := PtrUInt(PStrLen(value - _STRLEN)^);
+        if len = 6 then
+          result := PInt64(value)^ and MAC_MASK = Mac64 // single value
+        else
+          result := MacIndex(pointer(value), @Mac64, len div 6) >= 0; // any
+        exit;                                // no need to check one^.value
+      end;
      pvkOpt:                                 // most common case
        begin
          len := RecvLens[one^.opt];          // fast O(1) lookup of known option
          if len = 0 then
            exit;
          option := @Recv.options[len];      // option[0] = len in Recv[]
+       end;
+     pvkRai:
+       begin                                // O(1) lookup of sub-option
+         len := RecvLensRai[TDhcpOptionRai(one^.num)];
+         if len = 0 then
+           exit;
+         option := @Recv.options[len];      // option[0] = len in Recv[]
+       end;
+     pvkBoot:
+       begin                                // compare with SetRecvBoot() item
+         result := RecvBoot = TDhcpClientBoot(one^.num);
+         exit;                              // no need to check one^.value
        end;
      pvkRaw:
        begin
@@ -2793,28 +2818,6 @@ begin
              exit;
          until false;
          inc(option);                       // option[0] = len in Recv[]
-       end;
-     pvkBoot:
-       begin                                // compare with SetRecvBoot() item
-         result := RecvBoot = TDhcpClientBoot(one^.num);
-         exit;                              // no need to check one^.value
-       end;
-     pvkRai:
-       begin                                // O(1) lookup of sub-option
-         len := RecvLensRai[TDhcpOptionRai(one^.num)];
-         if len = 0 then
-           exit;
-         option := @Recv.options[len];      // option[0] = len in Recv[]
-       end;
-     pvkMac:
-       begin
-         value := pointer(one^.value);      // direct Mac64: TNetMac lookup
-         len := PtrUInt(PStrLen(value - _STRLEN)^);
-         if len = 6 then
-           result := PInt64(value)^ and MAC_MASK = Mac64 // single value
-         else
-           result := MacIndex(pointer(value), @Mac64, len div 6) >= 0; // array
-         exit;
        end;
   else
     exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
