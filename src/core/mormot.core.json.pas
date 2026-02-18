@@ -508,8 +508,8 @@ procedure JsonObjectFromRttiArray(Values: pointer; Names: PRawUtf8;
 
 /// parse in-place a JSON array into CSV of unescaped values
 // - returns the length of the CSV in Json, 0 on parsing error
-// - e.g. JsonArrayStringAsCsv('["ip:1.2.3.4", "1.2.3.5"]') = 'ip:1.2.3.4,1.2.3.5'
-function JsonArrayStringAsCsv(Json: PUtf8Char; Sep: AnsiChar = ','): PtrInt;
+// - e.g. JsonArrayAsCsv('["ip:1.2.3.4", "1.2.3.5"]') = 'ip:1.2.3.4,1.2.3.5'
+function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar = ','): PtrInt;
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
@@ -4549,7 +4549,7 @@ begin
   end;
 end;
 
-function JsonArrayStringAsCsv(Json: PUtf8Char; Sep: AnsiChar): PtrInt;
+function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar): PtrInt;
 var
   d: PUtf8Char;
   info: TGetJsonField;

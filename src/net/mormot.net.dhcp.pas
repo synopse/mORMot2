@@ -1679,7 +1679,7 @@ begin
      (p.Value^ = '[') then
   begin
     // e.g. "ntp-servers": ["ip:1.2.3.4", "1.2.3.5"] -> 'ip:1.2.3.4,1.2.3.5'
-    p.Get.ValueLen := JsonArrayStringAsCsv(p.Value);
+    p.Get.ValueLen := JsonArrayAsCsv(p.Value); // fast in-place convert
     if p.ValueLen = 0 then
       exit;
     p.Get.WasString := true; // in-place convert into CSV string

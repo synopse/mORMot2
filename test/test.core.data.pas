@@ -2597,13 +2597,13 @@ var
     check(CompareBuf(v, info.Value, info.ValueLen) = 0);
   end;
 
-  procedure TestJsonArrayStringAsCsv(const json, expected: RawUtf8);
+  procedure TestJsonArrayAsCsv(const json, expected: RawUtf8);
   var
     tmp: RawUtf8;
     len: PtrInt;
   begin
     FastSetString(tmp, pointer(json), length(json));
-    len := JsonArrayStringAsCsv(pointer(tmp));
+    len := JsonArrayAsCsv(pointer(tmp));
     if len = 0 then
     begin
       Check(expected = '');
@@ -2616,16 +2616,16 @@ var
 
 begin
   TestSimpleEnum;
-  TestJsonArrayStringAsCsv('', '');
-  TestJsonArrayStringAsCsv('123', '');
-  TestJsonArrayStringAsCsv('[1]', '1');
-  TestJsonArrayStringAsCsv('[ "1" ]', '1');
-  TestJsonArrayStringAsCsv('[ "1 " ]  ', '1 ');
-  TestJsonArrayStringAsCsv('[1 , 2  ]', '1,2');
-  TestJsonArrayStringAsCsv('["1 "," 2  "]', '1 , 2  ');
-  TestJsonArrayStringAsCsv('["1 "," 2  "', '');
-  TestJsonArrayStringAsCsv('["1 ":" 2  "]', '');
-  TestJsonArrayStringAsCsv('["ip:1.2.3.4", "1.2.3.5"]', 'ip:1.2.3.4,1.2.3.5');
+  TestJsonArrayAsCsv('', '');
+  TestJsonArrayAsCsv('123', '');
+  TestJsonArrayAsCsv('[1]', '1');
+  TestJsonArrayAsCsv('[ "1" ]', '1');
+  TestJsonArrayAsCsv('[ "1 " ]  ', '1 ');
+  TestJsonArrayAsCsv('[1 , 2  ]', '1,2');
+  TestJsonArrayAsCsv('["1 "," 2  "]', '1 , 2  ');
+  TestJsonArrayAsCsv('["1 "," 2  "', '');
+  TestJsonArrayAsCsv('["1 ":" 2  "]', '');
+  TestJsonArrayAsCsv('["ip:1.2.3.4", "1.2.3.5"]', 'ip:1.2.3.4,1.2.3.5');
   FillcharFast(F, SizeOf(F), 0); // initialize all fields before DA.Add(F)
   TestGetJsonField('', '', false, true, #0, #0);
   TestGetJsonField('true,false', 'true', false, false, ',', 'f');
