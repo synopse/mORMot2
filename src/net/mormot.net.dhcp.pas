@@ -345,7 +345,7 @@ type
     dcbIpxeA32,
     dcbIpxeA64);
 
-  /// internal resultset used by ParseMacIP()
+  /// internal resultset used by ParseMacIP() for storing "static" values
   TMacIP = record
     ip: TNetIP4;
     mac: TNetMac;
@@ -418,7 +418,7 @@ function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
 
 type
   /// all available per-scope DHCP metrics
-  // -  - Protocol messages
+  // -  - Protocol Messages
   // - dsmDiscover: DISCOVER packet is successfully received and processed
   // - dsmOffer: OFFER is sent in response to a DISCOVER
   // - dsmRequest: REQUEST is received and valid
@@ -427,12 +427,12 @@ type
   // - dsmInform: INFORM is received and processed
   // - dsmRelease: RELEASE is received and a lease is freed
   // - dsmDecline: DECLINE is received and IP is marked declined/unavailable
-  // -  - Lease lifecycle
+  // -  - Lease Lifecycle
   // - dsmLeaseAllocated: new dynamic lease is allocated to a client
   // - dsmLeaseRenewed: existing lease is renewed via REQUEST
   // - dsmLeaseExpired: lease expires (OnIdle cleanup)
   // - dsmLeaseReleased: lease is freed due to RELEASE
-  // -  - Static vs dynamic hits
+  // -  - Static vs Dynamic Hits
   // - dsmStaticHits: static reservation (MAC or option 61) is used to assign an IP
   // - dsmDynamicHits: dynamic lease (from the pool) is used
   // -  Rate limiting / abuse
@@ -440,14 +440,14 @@ type
   // - dsmInformRateLimitHit: INFORM packet is ignored due to rate limiting
   // - dsmInvalidRequest: received packet is malformed or cannot be processed
   // - dsmUnsupportedRequest: only DISCOVER/REQUEST/DECLINE/RELEASE/INFORM are handled
-  // -  - Option usage counters
+  // -  - Option Usage Counters
   // - dsmOption50Hits: option 50 dhcp-requested-address is present and used to setup IP
   // - dsmOption61Hits: option 61 dhcp-client-identifier is present and used to assign/lookup a lease
   // - dsmOption82Hits: option 82 relay-agent-information is present and processed
   // - dsmOption82SubnetHits: option 82 link-selection sub-option is present and processed
   // - dsmOption118Hits: option 118 subnet-selection is present and valid
   // - dsmPxeBoot: PXE/iPXE options have been returned for a given architecture
-  // - - Drop / error reasons
+  // - - Drop / Error Reasons
   // - dsmDroppedPackets: incremented for any packet dropped silently (not matching a scope or giaddr)
   // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or option 82/118
   // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
@@ -1022,7 +1022,7 @@ type
     fRules: TDhcpRuleSettingsObjArray;
   public
     /// setup this instance with default values
-    // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
+    // - default are subnet-mask = '192.168.1.1/24', lease-time-seconds = 120
     // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
     /// append at runtime a new scope/subnet "rules" settings
@@ -1034,10 +1034,10 @@ type
     procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
   published
     /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
-    // - the CIDR 'ip/mask' pattern will compute RangeMin/RangeMax and
-    // ServerIdentifier directly from this pattern
+    // - the CIDR 'ip/mask' pattern will compute range-min/range-max and
+    // server-identifier directly from this pattern
     // - accept also plain '255.255.255.0' IP if you want to specify by hand the
-    // raw value sent in DHCP headers, and fill RangeMin/RangeMax and others
+    // raw value sent in DHCP headers, and fill range-min/range-max and others
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
     /// some static IP addresses potentially with their MAC or UUID, which
@@ -1083,8 +1083,8 @@ type
     property MaxDeclinePerSecond: cardinal
       read fMaxDeclinePerSecond write fMaxDeclinePerSecond default 5;
     /// IP Decline Duration in seconds e.g. "decline-time-seconds":240
-    // - default to 0, to reuse the same value than LeaseTimeSeconds
-    // - if LeaseTimeSeconds is small, you could set a bigger value here to be
+    // - default to 0, to reuse the same value than lease-time-seconds
+    // - if lease-time-seconds is small, you could set a bigger value here to be
     // more conservative about the static IP persistence in the network
     property DeclineTimeSeconds: cardinal
       read fDeclineTimeSeconds write fDeclineTimeSeconds;
@@ -1097,7 +1097,7 @@ type
     property OfferHoldingSecs: cardinal
       read fOfferHoldingSecs write fOfferHoldingSecs;
     /// if lease time is < 1 hour, allow relaxed lease expansion after expiry
-    // - default is "grace-factor":2, meaning that for PXE with LeaseTimeSeconds
+    // - default is "grace-factor":2, meaning that for PXE with lease-time-seconds
     // of 120 (< 1 hour), a grace period of 240 seconds
     // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
     property GraceFactor: cardinal
@@ -2295,32 +2295,32 @@ var
   begin
     if not Subnet.Match(ip) then
       EDhcp.RaiseUtf8(
-        'PrepareScope: SubNetMask=% does not match %=%',
+        'PrepareScope: subnet-mask=% does not match %=%',
         [Subnet.Mask, ident, IP4ToShort(@ip)]);
   end;
 
 begin
   // validate all settings values from the actual subnet
   if Gateway <> 0 then
-    CheckSubnet('DefaultGateway', Gateway);
-  CheckSubnet('ServerIdentifier', ServerIdentifier);
+    CheckSubnet('default-gateway', Gateway);
+  CheckSubnet('server-identifier', ServerIdentifier);
   if IpMinLE = 0 then
     IpMinLE := Subnet.ip + $0a000000; // e.g. 192.168.0.10
-  CheckSubnet('RangeMin', IpMinLE);
+  CheckSubnet('range-min', IpMinLE);
   if IpMaxLE = 0 then
     // e.g. 192.168.0.0 + pred(not(255.255.255.0)) = 192.168.0.254
     IpMaxLE := bswap32(bswap32(Subnet.ip) +
                     pred(not(bswap32(Subnet.mask))));
-  CheckSubnet('RangeMax', IpMaxLE);
+  CheckSubnet('range-max', IpMaxLE);
   if bswap32(IpMaxLE) <= bswap32(IpMinLE) then
     EDhcp.RaiseUtf8('PrepareScope: unexpected %..% range',
       [IP4ToShort(@IpMinLE), IP4ToShort(@IpMaxLE)]);
   if Broadcast <> 0 then
-    CheckSubNet('BroadCastAddress', Broadcast);
+    CheckSubNet('broadcast-address', Broadcast);
   for i := 0 to high(StaticIP) do
-    CheckSubnet('Static', StaticIP[i]);
+    CheckSubnet('static', StaticIP[i]);
   for i := 0 to high(StaticMac) do
-    CheckSubnet('Static', StaticMac[i].IP4);
+    CheckSubnet('static', StaticMac[i].IP4);
   AddStatic(IP4ToText(@ServerIdentifier));
   // prepare the leases in-memory database
   if Entry = nil then
@@ -2344,7 +2344,7 @@ begin
     if n <> Count then
     begin
       if Assigned(log) then
-        log.Log(sllTrace, 'PrepareScope: subnet adjust count=% from %',
+        log.Log(sllTrace, 'PrepareScope: subnet-mask adjust count=% from %',
           [n, Count]);
       Count := n;
     end;
@@ -2366,7 +2366,7 @@ begin
       if Boot.Remote[dcb] <> '' then
         Append(bootlog, [' ', BOOT_TXT[dcb], '=', Boot.Remote[dcb]]);
     if bootlog <> '' then
-      log.Log(sllInfo, 'PrepareScope: PXE nextserver=%%',
+      log.Log(sllInfo, 'PrepareScope: PXE next-server=%%',
         [Boot.NextServer, bootlog]);
   end;
   // store internal values in the more efficient endianess for direct usage
@@ -3081,7 +3081,7 @@ var
   mask: TNetIP4;
   i: PtrInt;
 begin
-  // convert the current settings into Data.* raw values - raise EDhcp on error
+  // convert the main settings into Data.* fields - raise EDhcp on error
   Data.Gateway           := ToIP4(fDefaultGateway);
   Data.Broadcast         := ToIP4(fBroadCastAddress);
   Data.ServerIdentifier  := ToIP4(fServerIdentifier);
@@ -3095,7 +3095,7 @@ begin
   Data.StaticMac         := nil;
   for i := 0 to high(fStatic) do
     if not Data.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
-      EDhcp.RaiseUtf8('PrepareScope: invalid Static=%', [fStatic[i]]);
+      EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
   Data.LeaseTime         := fLeaseTimeSeconds; // 100%
   if Data.LeaseTime < 30 then
     Data.LeaseTime := 30;                      // 30 seconds minimum lease
@@ -3120,26 +3120,26 @@ begin
   // retrieve and adjust the subnet mask from settings
   if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
-      'PrepareScope: unexpected SubNetMask=% (should be mask ip or ip/sub)',
+      'PrepareScope: unexpected subnet-mask=% (should be mask ip or ip/sub)',
       [fSubnetMask]);
   if Data.Subnet.mask = cAnyHost32 then
   begin
-    // SubNetMask was not '192.168.0.1/24': is expected to be '255.255.255.0'
+    // subnet-mask was not '192.168.0.1/24': is expected to be '255.255.255.0'
     if IP4Prefix(Data.Subnet.ip) = 0 then
-      EDhcp.RaiseUtf8('PrepareScope: SubNetMask=% is not a valid IPv4 mask',
+      EDhcp.RaiseUtf8('PrepareScope: subnet-mask=% is not a valid IPv4 mask',
         [fSubnetMask]);
     mask := Data.Subnet.ip;
     // we expect other parameters to be set specifically: compute final Subnet
     if Data.ServerIdentifier = 0 then
-      EDhcp.RaiseUtf8('PrepareScope: SubNetMask=% but without ServerIdentifier',
-        [SubnetMask]);
+      EDhcp.RaiseUtf8('PrepareScope: subnet-mask=% but without server-identifier',
+        [fSubnetMask]);
     Data.Subnet.mask := mask;
     Data.Subnet.ip := Data.ServerIdentifier and mask; // normalize as in From()
   end
   else
-    // SubNetMask was e.g. '192.168.0.1/24'
+    // subnet-mask was e.g. '192.168.0.1/24'
     if Data.ServerIdentifier = 0 then
-      // extract from exact SubNetMask text, since Subnet.ip = 192.168.0.0
+      // extract from exact subnet-mask text, since Subnet.ip = 192.168.0.0
       Data.ServerIdentifier := ToIP4(SubnetMask);
   // validate all settings values from the actual subnet
   Data.AfterFill(Sender.Log.Add); // may raise an EDhcp exception
