@@ -880,7 +880,7 @@ type
   public
     /// compute the low-level TDhcpScope.Boot data structure for current settings
     // - will also complete/inherit configuration from sibling values
-    procedure PrepareScope(var Data: TDhcpScopeBoot; Options: TDhcpScopeOptions);
+    procedure PrepareBoot(var Data: TDhcpScopeBoot; Options: TDhcpScopeOptions);
   published
     /// option 66 IP address or hostname of the associated TFTP server
     property NextServer: RawUtf8
@@ -2977,7 +2977,7 @@ begin
     boot.Remote[dst] := boot.Remote[ref];
 end;
 
-procedure TDhcpBootSettings.PrepareScope(var Data: TDhcpScopeBoot;
+procedure TDhcpBootSettings.PrepareBoot(var Data: TDhcpScopeBoot;
   Options: TDhcpScopeOptions);
 var
   dcb, ref: TDhcpClientBoot;
@@ -3127,7 +3127,8 @@ begin
     Data.DeclineTime := Data.LeaseTime;
   Data.GraceFactor       := fGraceFactor;         // * 2
   Data.Options           := fOptions;
-  fBoot.PrepareScope(Data.Boot, Data.Options);
+  fBoot.PrepareBoot(Data.Boot, Data.Options);
+  // convert "rules" into ready-to-be-processed objects
   Data.Rules := nil;
   SetLength(Data.Rules, length(fRules));
   for i := 0 to high(fRules) do
