@@ -17,7 +17,7 @@ unit mormot.net.dhcp;
    Background lease persistence using dnsmasq-compatible text files.
    Static IP reservation using MAC address or UUID Identifiers Option 61.
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
-   Convenient JSON profiles for vendor-specific or user-specific options.
+   Convenient JSON rules for vendor-specific or user-specific options.
    Scale up to 100k+ leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
@@ -344,15 +344,15 @@ type
     uuid: RawByteString;
   end;
 
-  /// define which TProfileValue field should be used during process
+  /// define TRuleValue content as DHCP "rules" condition or action
   // - pvkOpt is a known DHCP TDhcpOption as num=DHCP_OPTION_NUM[opt]
-  // - pvkRaw is DHCP option outside of TDhcpOption set as plain num
+  // - pvkRaw is DHCP option outside of TDhcpOption - stored as plain num
   // - pvkTlv stores raw Type-Length-Value (TLV) with num = sub-option
   // - pvkAlways to store a binary blob from "always" JSON definition
-  // - pvkBoot to match "boot" value
-  // - pvkRai to match Relay-Agent-Information sub-option like "circuit-id"
-  // - pvkMac to match "mac" value(s)
-  TProfileValueKind = (
+  // - pvkBoot as "boot" value condition
+  // - pvkRai as Relay-Agent-Information sub-option condition like "circuit-id"
+  // - pvkMac as "mac" value(s) condition
+  TRuleValueKind = (
     pvkUndefined,
     pvkOpt,
     pvkRaw,
@@ -362,13 +362,13 @@ type
     pvkRai,
     pvkMac);
 
-  /// store one DHCP "profiles" entry and its associated value
-  // - used to match "all" "any" "not-all" "not-any" against a value
-  // - used to store "always" and "requested" data to be sent back to the client
-  TProfileValue = record
+  /// store one DHCP "rules" condition or action
+  // - used for "all" "any" "not-all" "not-any" conditions against a value
+  // - used as "always" and "requested" data to be sent back to the client
+  TRuleValue = record
     /// define which kind of value is stored in this entry
-    kind: TProfileValueKind;
-    /// the raw (sub-)option number to match, or to be sent back
+    kind: TRuleValueKind;
+    /// the raw (sub-)option number/ordinal to match, or to be sent back
     // - is the DHCP option number for kind=pvkRaw/pvkOpt
     // - is the TLV sub-option number for kind=pckTlv
     // - is a TDhcpClientBoot ordinal for pvkBoot match
@@ -381,11 +381,11 @@ type
     /// the associated raw binary value
     value: RawByteString;
   end;
-  /// points to one DHCP "profiles" entry and its associated value
-  PProfileValue = ^TProfileValue;
+  /// points to one DHCP "rules" entry and its associated value
+  PRuleValue = ^TRuleValue;
 
-  /// store one DHCP "profiles" entry and its associated value
-  TProfileValues = array of TProfileValue;
+  /// store one DHCP "rules" entry and its associated value
+  TRuleValues = array of TRuleValue;
 
 var
   /// contains PXE boot network identifiers used for JSON/INI settings fields
@@ -590,28 +590,28 @@ type
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
   end;
 
-  /// store one DHCP "profiles" object in a ready-to-be-processed way
-  // - pre-compiled at runtime from TDhcpProfileSettings JSON fields
-  TDhcpScopeProfile = record
+  /// store one DHCP "rules" object in a ready-to-be-processed way
+  // - pre-compiled at runtime from TDhcpRuleSettings JSON fields
+  TDhcpScopeRule = record
     /// optional identifier used in the logs (not in the internal logic itself)
     name: RawUtf8;
     /// store AND matching fields
-    all: TProfileValues;
+    all: TRuleValues;
     /// store OR matching fields
-    any: TProfileValues;
+    any: TRuleValues;
     /// store NOT AND matching fields
-    notall: TProfileValues;
+    notall: TRuleValues;
     /// store NOT OR matching fields
-    notany: TProfileValues;
+    notany: TRuleValues;
     /// the "always" and "requested" data to be sent back to the client
     // - "always" would be stored as send[0].kind=pvkAlways
-    send: TProfileValues;
+    send: TRuleValues;
     /// the set of options part of "always"
     always: TDhcpOptions;
   end;
-  PDhcpScopeProfile = ^TDhcpScopeProfile;
-  /// ready-to-be-processed DHCP "profiles" objects of a given scope
-  TDhcpScopeProfiles = array of TDhcpScopeProfile;
+  PDhcpScopeRule = ^TDhcpScopeRule;
+  /// ready-to-be-processed DHCP "rules" objects of a given scope
+  TDhcpScopeRules = array of TDhcpScopeRule;
 
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
@@ -670,8 +670,8 @@ type
     // - will be checked against not-"01+MAC" option 61 values - mainly UUID
     // - stored as RawByteString = doDhcpClientIdentifier-binary + 4-bytes-IP
     StaticUuid: TRawByteStringDynArray;
-    /// store all DHCP "profiles" ready-to-be-processed objects for this scope
-    Profiles: TDhcpScopeProfiles;
+    /// store all DHCP "rules" ready-to-be-processed objects for this scope
+    Rules: TDhcpScopeRules;
     /// readjust all internal values according to to Subnet policy
     // - raise an EDhcp exception if the parameters are not correct
     procedure AfterFill(log: TSynLog);
@@ -778,8 +778,8 @@ type
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     RecvHostName: PShortString;
-    /// the "profiles" entry matched by this request
-    RecvProfile: PDhcpScopeProfile;
+    /// the "rules" entry matched by this request
+    RecvRule: PDhcpScopeRule;
     /// length of the Recv UDP frame received from the client
     RecvLen: integer;
     /// the server IP socket which received the UDP frame
@@ -811,31 +811,31 @@ type
     Mac: string[63];
     /// some temporary storage for a StaticUuid[] fake DHCP lease
     Temp: TDhcpLease;
-    /// high-level 'match and append' of all "profiles" entries into Send
-    procedure AddProfileOptions;
+    /// high-level 'match and append' of all "rules" entries into Send
+    procedure AddRulesOptions;
     // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
     procedure AddRegularOptions;
     /// append verbatim options 61/82 copy + end Send buffer stream
     // - returns the number of bytes of response in Send[]
     function Flush: PtrUInt;
   public
-    /// raw append the options of a given "profiles" entry into Send
-    procedure AddOptionProfile(p: PProfileValue);
     /// raw append of a 32-bit big-endian/IPv4 option value into Send
     procedure AddOptionOnce32(const opt: TDhcpOption; const be: cardinal);
     /// raw append of a RawByteString/RawUtf8 option into Send
     procedure AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
     /// raw append of a dynamic array of 32-bit big-endian/IPv4 options into Send
     procedure AddOptionOnceA32(const opt: TDhcpOption; const v: PAnsiChar);
+    /// raw append the options of a given "rules" entry into Send
+    procedure AddOptionFromRule(p: PRuleValue);
     /// raw append a verbatim copy of a Recv option into Send
     procedure AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric = dsmDiscover);
       {$ifdef HASINLINE} inline; {$endif}
-    /// raw search of one "profiles" value in State.Recv[]
-    function MatchOne(one: PProfileValue): boolean;
-    /// raw search of all "profiles" values in State.Recv[] - true for all match
-    function MatchAll(all: PProfileValue): boolean;
-    /// raw search of any "profiles" values in State.Recv[] - true on first match
-    function MatchAny(any: PProfileValue): boolean;
+    /// raw search of one "rules" value in State.Recv[]
+    function MatchOne(one: PRuleValue): boolean;
+    /// raw search of all "rules" values in State.Recv[] - true for all match
+    function MatchAll(all: PRuleValue): boolean;
+    /// raw search of any "rules" values in State.Recv[] - true on first match
+    function MatchAny(any: PRuleValue): boolean;
   private
     // methods for internal use
     procedure ParseRecvLensRai;
@@ -905,13 +905,13 @@ type
       read fRemote[dcbIpxeA64] write fRemote[dcbIpxeA64];
   end;
 
-  /// define a profile to "match and send" options for a given scope/subnet
+  /// define a rule to "match and send" options for a given scope/subnet
   // - i.e. settings for vendor-specific or client-specific DHCP options
   // - each RawJson property contain a JSON object as key/value pairs,
   // potentially in our enhanced format e.g. with unquote keys
   // - "all" "any" "not-all" "not-any" should all match to trigger the output,
-  // defining a "first precise profile wins" deterministic behavior in the order
-  // in the array of "profiles"
+  // defining a "first precise rule wins" deterministic behavior in the order
+  // in the array of "rules"
   // - "always" and "requested" define the options sent in the response
   // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
   // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
@@ -922,16 +922,16 @@ type
   // - most values would have their default type guessed as UINT16, IP or UUID
   // - "all" "any" "not-all" "not-any" also support convenient "boot" key as
   // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
-  TDhcpProfileSettings = class(TSynPersistent)
+  TDhcpRuleSettings = class(TSynPersistent)
   protected
     fName: RawUtf8;
     fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
   public
-    /// compute the low-level TDhcpScope.Profiles[] entry from current settings
+    /// compute the low-level TDhcpScope.Rules[] entry from current settings
     // - raise an EDhcp exception if the parameters are not correct
-    procedure PrepareScope(var Profile: TDhcpScopeProfile);
+    procedure PrepareScope(var Rule: TDhcpScopeRule);
   published
-    /// human-friendly identifier, only used in the logs as " profile=<name>"
+    /// human-friendly identifier, only used in the logs as " rule=<name>"
     property Name: RawUtf8
       read fName write fName;
     /// a JSON object defining AND fields lookup logic
@@ -982,9 +982,9 @@ type
     property Requested: RawJson
       read fRequested write fRequested;
   end;
-  /// a dynamic array of "match and send" options profiles
+  /// a dynamic array of "match and send" options Rules
   // - store any number of vendor-specific or client-specific DHCP options
-  TDhcpProfileSettingsObjArray = array of TDhcpProfileSettings;
+  TDhcpRuleSettingsObjArray = array of TDhcpRuleSettings;
 
   /// main high-level options for defining one scope/subnet for our DHCP Server
   TDhcpScopeSettings = class(TSynAutoCreateFields)
@@ -1006,16 +1006,16 @@ type
     fGraceFactor: cardinal;
     fOptions: TDhcpScopeOptions;
     fBoot: TDhcpBootSettings;
-    fProfiles: TDhcpProfileSettingsObjArray;
+    fRules: TDhcpRuleSettingsObjArray;
   public
     /// setup this instance with default values
     // - default are just SubnetMask = '192.168.1.1/24', LeaseTimeSeconds = 120
     // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
-    /// append at runtime a new scope/subnet "profiles" settings
-    // - call without any TDhcpProfileSettings parameter to create a default one
+    /// append at runtime a new scope/subnet "rules" settings
+    // - call without any TDhcpRuleSettings parameter to create a default one
     // - supplied one will be owned by this instance from now on
-    function AddProfile(one: TDhcpProfileSettings = nil): TDhcpProfileSettings;
+    function AddRule(one: TDhcpRuleSettings = nil): TDhcpRuleSettings;
     /// compute the low-level TDhcpScope data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct
     procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
@@ -1099,10 +1099,10 @@ type
     property Boot: TDhcpBootSettings
       read fBoot;
     /// vendor-specific or client-specific DHCP options for this scope as
-    // "profiles" array of JSON objects
-    // - order in this array defines "first profile wins" deterministic behavior
-    property Profiles: TDhcpProfileSettingsObjArray
-      read fProfiles;
+    // "rules" array of JSON objects
+    // - order in this array defines "first rule wins" deterministic behavior
+    property Rules: TDhcpRuleSettingsObjArray
+      read fRules;
   end;
   /// a dynamic array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
@@ -1204,7 +1204,7 @@ type
       Lease: PDhcpLease): boolean; virtual;
     procedure SetRecvBoot(var State: TDhcpState); virtual;
     procedure AddBootOptions(var State: TDhcpState); virtual;
-    procedure SetProfile(var State: TDhcpState); virtual;
+    procedure SetRule(var State: TDhcpState); virtual;
     function RunCallbackAborted(var State: TDhcpState): boolean; virtual;
     function Flush(var State: TDhcpState): PtrInt; virtual;
   public
@@ -1658,14 +1658,14 @@ begin
 end;
 
 type
-  TParseProfile = (ppMatch, ppValue, ppTlv);
+  TParseRule = (prMatch, prValue, prTlv);
 const
-  PROFILE_PREFIX: array[0..12] of PAnsiChar = (
+  RULE_VALUE_PREFIX: array[0..12] of PAnsiChar = (
     'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
     'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:', nil);
   FAKE_OP_MAC = 255; // to parse "mac": content
 
-function SetProfileValue(var p: TJsonParserContext; var v: RawByteString;
+function SeTRuleValue(var p: TJsonParserContext; var v: RawByteString;
   op: byte): boolean;
 var
   tmp: THash128Rec;
@@ -1687,7 +1687,7 @@ begin
     exit;
   if p.WasString then
     // handle "ip:..." .. "cidr:..." prefixes in string values
-    case IdemPPChar(p.Value, @PROFILE_PREFIX) of
+    case IdemPPChar(p.Value, @RULE_VALUE_PREFIX) of
       0:    // ip:
         result := Ip4sFromText(p.Value + 3, v); // allow CSV of IPs
       1:    // mac:
@@ -1814,19 +1814,19 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
 end;
 
 const
-  DHCP_PROFILES: array[0..1] of RawUtf8 = ('boot', 'mac');
+  MAIN_RULE_VALUE: array[0..1] of RawUtf8 = ('boot', 'mac');
 
-function ParseProfileValue(var parser: TJsonParserContext; var v: TProfileValue;
-  pp: TParseProfile): boolean;
+function ParseRuleValue(var parser: TJsonParserContext; var v: TRuleValue;
+  pp: TParseRule): boolean;
 begin
   result := false;
-  RecordZero(@v, TypeInfo(TProfileValue));
+  RecordZero(@v, TypeInfo(TRuleValue));
   // parse and recognize "77": "user-class": "boot": "circuit-id": keys
   if not parser.GetJsonFieldName or
      (parser.ValueLen = 0) then
     exit;
   v.num := GetCardinal(parser.Value); // for pvkTlv and pvkOpt/pvkRaw
-  if pp = ppTlv then
+  if pp = prTlv then
     v.kind := pvkTlv // TlvFromJson() accept only numbers, not DHCP options
   else if v.num <> 0 then
     // "77": "iPXE"  or  77: "iPXE"
@@ -1843,11 +1843,11 @@ begin
     v.num := DHCP_OPTION_NUM[v.opt];
     v.kind := pvkOpt;
   end
-  else if pp <> ppMatch then
+  else if pp <> prMatch then
     exit
   else
-    case FindNonVoidRawUtf8I(@DHCP_PROFILES, parser.Value, parser.ValueLen,
-           length(DHCP_PROFILES)) of
+    case FindNonVoidRawUtf8I(@MAIN_RULE_VALUE, parser.Value, parser.ValueLen,
+           length(MAIN_RULE_VALUE)) of
       0:
         begin
           // "boot": "ipxe-x64"
@@ -1862,7 +1862,7 @@ begin
           // "mac": "00:11:22:33:44:55" - also accepts CSV or arrays
           v.kind := pvkMac;
           result := parser.ParseNextAny(false) and
-                    SetProfileValue(parser, v.value, FAKE_OP_MAC) and
+                    SeTRuleValue(parser, v.value, FAKE_OP_MAC) and
                     (v.value <> '');
           exit;
         end;
@@ -1878,21 +1878,21 @@ begin
   if (v.kind = pvkUndefined) or
      not parser.ParseNextAny({NormalizeBoolean=}false) then
     exit;
-  if pp = ppTlv then
-    result := SetProfileValue(parser, v.value, 0) // v.num is no option
+  if pp = prTlv then
+    result := SeTRuleValue(parser, v.value, 0) // v.num is no option
   else
-    result := SetProfileValue(parser, v.value, v.num);
+    result := SeTRuleValue(parser, v.value, v.num);
   if result and
      (length(v.value) > 255) then
     result := false; // avoid TLV 8-bit length overflow
 end;
 
-procedure AddProfileValue(var a: TProfileValues; var v: TProfileValue);
+procedure AddRuleValue(var a: TRuleValues; var v: TRuleValue);
 var
   n: PtrInt;
 begin
   if v.kind = pvkUndefined then
-    EDhcp.RaiseU('Unexpected AddProfileValue(pvkUndefined)'); // paranoid
+    EDhcp.RaiseU('Unexpected AddRuleValue(pvkUndefined)'); // paranoid
   n := length(a);
   SetLength(a, n + 1);
   a[n] := v;
@@ -1903,7 +1903,7 @@ end;
 
 function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean;
 var
-  one: TProfileValue;
+  one: TRuleValue;
   parser: TJsonParserContext;
 begin
   result := false;
@@ -1913,7 +1913,7 @@ begin
   if not parser.ParseObject then
     exit;
   repeat
-    if not ParseProfileValue(parser, one, ppTlv) then
+    if not ParseRuleValue(parser, one, prTlv) then
       exit;
     Append(v, [AnsiChar(one.num), AnsiChar(length(one.value)), one.value])
   until parser.EndOfObject = '}';
@@ -1973,10 +1973,10 @@ begin
   result := true;
 end;
 
-function ParseProfile(const json: RawUtf8; out v: TProfileValues;
-  pp: TParseProfile): boolean;
+function ParseRule(const json: RawUtf8; out v: TRuleValues;
+  pr: TParseRule): boolean;
 var
-  one: TProfileValue;
+  one: TRuleValue;
   parser: TJsonParserContext;
   tmp: TSynTempBuffer; // make a private local copy for in-place JSON parsing
 begin
@@ -1989,9 +1989,9 @@ begin
     if not parser.ParseObject then
       exit;
     repeat
-      if not ParseProfileValue(parser, one, pp) then
+      if not ParseRuleValue(parser, one, pr) then
         exit;
-      AddProfileValue(v, one)
+      AddRuleValue(v, one)
     until parser.EndOfObject = '}';
     result := true;
   finally
@@ -2612,13 +2612,13 @@ end;
 
 { TDhcpState }
 
-procedure TDhcpState.AddOptionProfile(p: PProfileValue);
+procedure TDhcpState.AddOptionFromRule(p: PRuleValue);
 var
   len: PtrUInt;
 begin
   if pointer(p^.value) = nil then
     exit;
-  // be paranoid with "profiles": avoid buffer overflow
+  // be paranoid with "rules": avoid buffer overflow
   len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
   if SendEnd + len >= @Send.options[high(Send.options)] then
     exit;
@@ -2679,20 +2679,20 @@ begin
   inc(SendEnd, ord(src^) + 2);
 end;
 
-procedure TDhcpState.AddProfileOptions;
+procedure TDhcpState.AddRulesOptions;
 var
-  p: PProfileValue;
+  p: PRuleValue;
   len, n: PtrUInt;
   requested: PByteArray;
 begin
-  p := pointer(RecvProfile.send);
+  p := pointer(RecvRule.send);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   // append "always" - should be as send[0].kind=pvkAlways
   if p^.kind = pvkAlways then
   begin
-    SendOptions := SendOptions + RecvProfile.always;
+    SendOptions := SendOptions + RecvRule.always;
     len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
     MoveFast(pointer(p^.value)^, SendEnd^, len); // as a pre-computed blob
     inc(SendEnd, len);
@@ -2709,13 +2709,13 @@ begin
   // process "requested" options, filtering each op
   repeat
     if ByteScanIndex(@requested[1], requested[0], p^.num) >= 0 then // SSE2 asm
-      AddOptionProfile(p); // as individual TLV
+      AddOptionFromRule(p); // as individual TLV
     inc(p);
     dec(n);
   until n = 0;
 end;
 
-function TDhcpState.MatchOne(one: PProfileValue): boolean;
+function TDhcpState.MatchOne(one: PRuleValue): boolean;
 var
   len: PtrUInt;
   option, value: PAnsiChar;
@@ -2780,7 +2780,7 @@ begin
   result := true;                        // exact case-sensitive match
 end;
 
-function TDhcpState.MatchAll(all: PProfileValue): boolean;
+function TDhcpState.MatchAll(all: PRuleValue): boolean;
 var
   n: integer;
 begin // caller ensured all <> nil
@@ -2795,7 +2795,7 @@ begin // caller ensured all <> nil
   result := true;
 end;
 
-function TDhcpState.MatchAny(any: PProfileValue): boolean;
+function TDhcpState.MatchAny(any: PRuleValue): boolean;
 var
   n: integer;
 begin // caller ensured any <> nil
@@ -2965,35 +2965,35 @@ begin
 end;
 
 
-{ TDhcpProfileSettings }
+{ TDhcpRuleSettings }
 
-procedure TDhcpProfileSettings.PrepareScope(var Profile: TDhcpScopeProfile);
+procedure TDhcpRuleSettings.PrepareScope(var Rule: TDhcpScopeRule);
 var
-  alw, req: TProfileValues;
-  p: PProfileValue;
-  v: TProfileValue;
+  alw, req: TRuleValues;
+  p: PRuleValue;
+  v: TRuleValue;
   i: PtrInt;
 begin
-  // parse main "profiles" JSON object fields
-  Profile.name := fName;
-  if not ParseProfile(fAll, Profile.all, ppMatch) then
+  // parse main "rules" JSON object fields
+  Rule.name := fName;
+  if not ParseRule(fAll, Rule.all, prMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid all:%', [fAll]);
-  if not ParseProfile(fAny, Profile.any, ppMatch) then
+  if not ParseRule(fAny, Rule.any, prMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid any:%', [fAny]);
-  if not ParseProfile(fNotAll, Profile.notall, ppMatch) then
+  if not ParseRule(fNotAll, Rule.notall, prMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid not-all:%', [fNotAll]);
-  if not ParseProfile(fNotAny, Profile.notany, ppMatch) then
+  if not ParseRule(fNotAny, Rule.notany, prMatch) then
     EDhcp.RaiseUtf8('PrepareScope: invalid not-any:%', [fNotAny]);
-  if not ParseProfile(fAlways, alw, ppValue) then
+  if not ParseRule(fAlways, alw, prValue) then
     EDhcp.RaiseUtf8('PrepareScope: invalid always:%', [fAlways]);
-  if not ParseProfile(fRequested, req, ppValue) then
+  if not ParseRule(fRequested, req, prValue) then
     EDhcp.RaiseUtf8('PrepareScope: invalid requested:%', [fRequested]);
-  // Profile.send[0] is "always" and should be stored as pvkAlways binary blob
-  Profile.send := nil;
-  Profile.always := [];
+  // Rule.send[0] is "always" and should be stored as pvkAlways binary blob
+  Rule.send := nil;
+  Rule.always := [];
   if alw <> nil then
   begin
-    RecordZero(@v, TypeInfo(TProfileValue));
+    RecordZero(@v, TypeInfo(TRuleValue));
     v.kind := pvkAlways;
     p := pointer(alw);
     for i := 1 to length(alw) do
@@ -3001,24 +3001,24 @@ begin
     begin
       Append(v.value, [AnsiChar(p^.num), AnsiChar(length(p^.value)), p^.value]);
       if p^.opt <> doPad then
-        if p^.opt in Profile.always then
+        if p^.opt in Rule.always then
           EDhcp.RaiseUtf8('PrepareScope: duplicated % in always:%',
             [DHCP_OPTION[p^.opt], fAlways])
         else
-          include(Profile.always, p^.opt);
+          include(Rule.always, p^.opt);
       inc(p);
     end;
-    AddProfileValue(Profile.send, v);
+    AddRuleValue(Rule.send, v);
   end;
   // append "requested" with their op, ready to be filtered against option 55
   p := pointer(req);
   for i := 1 to length(req) do
   begin
     if (p^.opt <> doPad) and
-       (p^.opt in Profile.always) then
+       (p^.opt in Rule.always) then
       EDhcp.RaiseUtf8('PrepareScope: duplicated % in requested:%',
         [DHCP_OPTION[p^.opt], fRequested]);
-    AddProfileValue(Profile.send, p^);
+    AddRuleValue(Rule.send, p^);
     inc(p);
   end;
 end;
@@ -3036,12 +3036,12 @@ begin
   fGraceFactor := 2;
 end;
 
-function TDhcpScopeSettings.AddProfile(one: TDhcpProfileSettings): TDhcpProfileSettings;
+function TDhcpScopeSettings.AddRule(one: TDhcpRuleSettings): TDhcpRuleSettings;
 begin
   if one = nil then
-    one := TDhcpProfileSettings.Create;
+    one := TDhcpRuleSettings.Create;
   if self <> nil then
-    PtrArrayAdd(fProfiles, one); // will be owned by this instance
+    PtrArrayAdd(fRules, one); // will be owned by this instance
   result := one;
 end;
 
@@ -3083,10 +3083,10 @@ begin
   Data.GraceFactor       := fGraceFactor;         // * 2
   Data.Options           := fOptions;
   fBoot.PrepareScope(Data.Boot, Data.Options);
-  Data.Profiles := nil;
-  SetLength(Data.Profiles, length(fProfiles));
-  for i := 0 to high(fProfiles) do
-    fProfiles[i].PrepareScope(Data.Profiles[i]);
+  Data.Rules := nil;
+  SetLength(Data.Rules, length(fRules));
+  for i := 0 to high(fRules) do
+    fRules[i].PrepareScope(Data.Rules[i]);
   // retrieve and adjust the subnet mask from settings
   if not Data.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
@@ -3819,11 +3819,11 @@ begin
     AppendShort(' boot=', msg); // e.g. 'boot=ipxe-x64'
     AppendShortAnsi7String(BOOT_TXT[State.RecvBoot], msg);
   end;
-  if (State.RecvProfile <> nil) and
-     (State.RecvProfile.name <> '') then
+  if (State.RecvRule <> nil) and
+     (State.RecvRule.name <> '') then
   begin
-    AppendShort(' profile=', msg);
-    AppendShortAnsi7String(State.RecvProfile.name, msg);
+    AppendShort(' rule=', msg);
+    AppendShortAnsi7String(State.RecvRule.name, msg);
     if msg[0] = #255 then
       dec(msg[0]); // avoid buffer overflow on next line
   end;
@@ -3893,7 +3893,7 @@ begin
   State.Ip4 := 0;
   State.SendType := dmtUndefined;
   State.RecvBoot := dcbDefault;
-  State.RecvProfile := nil;
+  State.RecvRule := nil;
   State.RecvType := DhcpParse(@State.Recv, State.RecvLen, State.RecvLens, nil, @State.Mac64);
   State.Ip[0] := #0;
   if State.Mac64 <> 0 then
@@ -4073,13 +4073,13 @@ begin
   State.AddOptionCopy(doUuidClientIdentifier);
 end;
 
-procedure TDhcpProcess.SetProfile(var State: TDhcpState);
+procedure TDhcpProcess.SetRule(var State: TDhcpState);
 var
   n: integer;
-  p: PDhcpScopeProfile;
+  p: PDhcpScopeRule;
 begin
-  // implement "first precise profile wins" deterministic behavior
-  p := pointer(State.Scope^.Profiles); // caller ensured <> nil
+  // implement "first precise rule wins" deterministic behavior
+  p := pointer(State.Scope^.Rules); // caller ensured <> nil
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
     if // AND conditions (all must match) = "all"
@@ -4095,13 +4095,13 @@ begin
        ((p^.notany = nil) or
         not State.MatchAny(pointer(p^.notany))) then
     begin
-      State.RecvProfile := p;
+      State.RecvRule := p;
       // all=any=nil as fallback if nothing more precise did apply
       // "not-all"/"not-any" without any "all"/"any" are just ignored
       // unless they are the eventual default
       if (p^.all <> nil) or
          (p^.any <> nil) then
-        // return first exact matching profile (deterministic)
+        // return first exact matching rule (deterministic)
         exit;
     end;
     inc(p);
@@ -4126,10 +4126,10 @@ function TDhcpProcess.Flush(var State: TDhcpState): PtrInt;
 begin
   // recognize State.RecvBoot from options 60/77/93
   SetRecvBoot(State);
-  // append "profiles" custom options - always first since have precedence
+  // append "rules" custom options - always first since have precedence
   integer(State.SendOptions) := 0;
-  if State.RecvProfile <> nil then
-    State.AddProfileOptions;
+  if State.RecvRule <> nil then
+    State.AddRulesOptions;
   // append "boot" specific options 60,66,67,97
   if State.RecvBoot <> dcbDefault then
     AddBootOptions(State);
@@ -4181,9 +4181,9 @@ begin
     State.Tix32 := GetTickSec;
     State.Scope^.Safe.Lock; // blocking for this subnet
     try
-      // identify any matching input from this scope "profiles" definition
-      if State.Scope^.Profiles <> nil then
-        SetProfile(State);
+      // identify any matching input from this scope "rules" definition
+      if State.Scope^.Rules <> nil then
+        SetRule(State);
       // find any existing lease - or StaticMac[] StaticUuid[] fake lease
       p := FindLease(State);
       // process the received DHCP message
@@ -4438,7 +4438,7 @@ initialization
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArrays([
     TypeInfo(TDhcpScopeSettingsObjArray), TDhcpScopeSettings,
-    TypeInfo(TDhcpProfileSettingsObjArray), TDhcpProfileSettings]);
+    TypeInfo(TDhcpRuleSettingsObjArray),  TDhcpRuleSettings]);
   {$endif HASDYNARRAYTYPE}
   Rtti.ByClass[TDhcpServerSettings].Props.NameChangeCase(scKebabCase, true, true);
 
