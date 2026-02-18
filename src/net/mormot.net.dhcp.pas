@@ -616,6 +616,9 @@ type
     /// the "always" and "requested" data to be sent back to the client
     // - "always" would be stored as send[0].kind=pvkAlways
     send: TRuleValues;
+    /// if this rule should reserve a static IPv4 for its conditions
+    // - usually, there is a "mac": in "all" fields
+    ip: TNetIP4;
     /// the set of options part of "always"
     always: TDhcpOptions;
   end;
@@ -939,7 +942,7 @@ type
   // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
   TDhcpRuleSettings = class(TSynPersistent)
   protected
-    fName: RawUtf8;
+    fName, fIP: RawUtf8;
     fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
   public
     /// compute the low-level TDhcpScope.Rules[] entry from current settings
@@ -996,6 +999,11 @@ type
     // $ "requested": { ntp-servers: ["10.0.0.5", "10.0.0.6"] }
     property Requested: RawJson
       read fRequested write fRequested;
+    /// reserve this static IP for a given MAC or client-specific options
+    // - could be used as an alternative to the main "static" array of TMacIP,
+    // especially if you expect "always"/"requested" custom options sent back
+    property IP: RawUtf8
+      read fIP write fIP;
   end;
   /// a dynamic array of "match and send" options Rules
   // - store any number of vendor-specific or client-specific DHCP options
@@ -4018,6 +4026,13 @@ end;
 
 function TDhcpProcess.FindLease(var State: TDhcpState): PDhcpLease;
 begin
+  // from reserved static "ip" in "rules"
+  if (State.RecvRule <> nil) and
+     (State.RecvRule.ip <> 0) then
+  begin
+    result := State.FakeLease(State.RecvRule.ip);
+    exit;
+  end;
   // from StaticUuid[]
   result := pointer(State.Scope^.StaticUuid);
   if result <> nil then
