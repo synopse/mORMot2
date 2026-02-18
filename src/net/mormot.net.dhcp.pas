@@ -604,8 +604,6 @@ type
   /// store one DHCP "rules" object in a ready-to-be-processed way
   // - pre-compiled at runtime from TDhcpRuleSettings JSON fields
   TDhcpScopeRule = record
-    /// optional identifier used in the logs (not in the internal logic itself)
-    name: RawUtf8;
     /// store AND matching fields
     all: TRuleValues;
     /// store OR matching fields
@@ -620,8 +618,10 @@ type
     /// the set of options part of "always"
     always: TDhcpOptions;
     /// the "always" and "requested" data to be sent back to the client
-    // - "always" would be stored as send[0].kind=pvkAlways
+    // - "always" is stored as send[0].kind=pvkAlways
     send: TRuleValues;
+    /// optional identifier used in the logs (not in the internal logic itself)
+    name: RawUtf8;
   end;
   PDhcpScopeRule = ^TDhcpScopeRule;
   /// ready-to-be-processed DHCP "rules" objects of a given scope
@@ -947,7 +947,8 @@ type
     // - return true if the Rule can be added to the scope
     function PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
   published
-    /// human-friendly identifier, only used in the logs as " rule=<name>"
+    /// human-friendly identifier, not used in the internal logic
+    // - added in the logs as "rule=<name>", or as useful comment in settings
     property Name: RawUtf8
       read fName write fName;
     /// a JSON object defining AND fields lookup logic
@@ -1011,7 +1012,7 @@ type
     // - exclusive to "all" "any" "not-all" "not-any" member - would raise EDhcp
     property Mac: RawUtf8
       read fMac write fMac;
-    /// reserve this static IP for a given MAC or client-specific options
+    /// reserve this static "ip" for a given MAC or client-specific options
     // - could be used as an alternative to the main "static" array of TMacIP,
     // especially if you expect "always"/"requested" custom options sent back
     property IP: RawUtf8
