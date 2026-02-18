@@ -1573,6 +1573,7 @@ var
   rnd: TLecuyer;
   nfo: TMacIP;
   m1, m2: TDhcpMetrics;
+  rv: TRuleValue;
 
   procedure DoRequest(ndx: PtrInt);
   begin
@@ -1629,7 +1630,21 @@ begin
   CheckEqual(ord(dmtTls), 18, 'dmt');
   CheckEqual(SizeOf(TDhcpPacket), 1468, 'TDhcpPacket');
   CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), DHCP_PACKET_HEADER, 'options');
+  CheckEqual(PtrUInt(@PRuleValue(nil)^.value), SizeOf(Int64), 'TRuleValue');
+  CheckEqual(SizeOf(TRuleValue), 8 + SizeOf(pointer));
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
+  PInt64(@rv)^ := -1;
+  CheckEqual(rv.num, 255);
+  Check(not IsZero(rv.mac));;
+  rv.value := 'rv.value';
+  CheckEqual(PInt64(@rv)^, -1, 'rv');
+  CheckEqual(rv.value, 'rv.value');
+  PInt64(@rv)^ := 0;
+  CheckEqual(rv.num, 0);
+  CheckEqual(ord(rv.kind), 0, 'rv.kind');
+  CheckEqual(PInt64(@rv)^, 0, 'rv');
+  Check(IsZero(rv.mac));
+  CheckEqual(rv.value, 'rv.value');
   CheckEqual(DHCP_OPTION[doSubnetMask], 'subnet-mask');
   CheckEqual(DHCP_OPTION[doRouters], 'routers');
   CheckEqual(DHCP_OPTION[doTftpServerName], 'tftp-server-name');

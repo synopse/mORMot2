@@ -354,9 +354,10 @@ type
 
   /// define TRuleValue content as DHCP "rules" condition or action
   // - those items are ordered by the most used at runtime first
-  // - pvkMac as "mac" value(s) condition
-  // - pvkOpt is a known DHCP TDhcpOption as num=DHCP_OPTION_NUM[opt]
+  // - pvkMac as "mac" value condition in the mac inlined field
+  // - pvkOpt is a known option as DHCP_OPTION_NUM[TDhcpOption(mac[0])] = num
   // - pvkRai as Relay-Agent-Information sub-option condition like "circuit-id"
+  // - pvkMacs as array of "mac" values condition in the value field
   // - pvkBoot as "boot" value condition
   // - pvkRaw is DHCP option outside of TDhcpOption - stored as plain num
   // - pvkTlv stores raw Type-Length-Value (TLV) with num = sub-option
@@ -365,6 +366,7 @@ type
     pvkMac,
     pvkOpt,
     pvkRai,
+    pvkMacs,
     pvkBoot,
     pvkRaw,
     pvkTlv,
@@ -374,7 +376,7 @@ type
   /// store one DHCP "rules" condition or action
   // - used for "all" "any" "not-all" "not-any" conditions against a value
   // - used as "always" and "requested" data to be sent back to the client
-  TRuleValue = record
+  TRuleValue = packed record
     /// define which kind of value is stored in this entry
     kind: TRuleValueKind;
     /// the raw (sub-)option number/ordinal to match, or to be sent back
@@ -382,11 +384,11 @@ type
     // - is the TLV sub-option number for kind=pckTlv
     // - is a TDhcpClientBoot ordinal for pvkBoot match
     // - is a TDhcpOptionRai ordinal for pvkRai match
-    // - not used (contains 0) for pckAlways and pvkMac
+    // - not used (contains 0) for pckAlways and pvkMac/pvkMacs
     num: byte;
-    /// the pvkOpt known option enum corresponding to the num integer
-    // - opt=doPad if kind <> pvkOpt
-    opt: TDhcpOption;
+    /// the CPU-cache-friendly inlined pvkMac value
+    // - for pvkOpt, TDhcpOption(mac[0]) store the known option
+    mac: TNetMac;
     /// the associated raw binary value
     value: RawByteString;
   end;
@@ -1856,8 +1858,8 @@ function ParseRuleValue(var parser: TJsonParserContext; var v: TRuleValue;
   pp: TParseRule): boolean;
 begin
   result := false;
+  PInt64(@v)^ := 0; // set kind+num+mac=0
   v.kind := pvkUndefined;
-  v.num := 0;
   v.value := '';
   // parse and recognize "77": "user-class": "boot": "circuit-id": keys
   if not parser.GetJsonFieldName or
@@ -1870,20 +1872,21 @@ begin
     // "77": "iPXE"  or  77: "iPXE"
     if v.num <= high(DHCP_OPTION_INV) then
     begin
-      v.opt := DHCP_OPTION_INV[v.num]; // fast O(1) option number lookup
+      TDhcpOption(v.mac[0]) := DHCP_OPTION_INV[v.num]; // known option
       v.kind := pvkOpt;
     end
     else
       v.kind := pvkRaw
-  else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.opt) then
+  else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.mac[0]) then
   begin
     // "dhcp-lease-time": 7200
-    v.num := DHCP_OPTION_NUM[v.opt];
+    v.num := DHCP_OPTION_NUM[TDhcpOption(v.mac[0])];
     v.kind := pvkOpt;
   end
   else if pp <> prMatch then
     exit
   else
+    // prMatch e.g. as "boot" "mac" "circuit-id" "remote-id"
     case FindNonVoidRawUtf8I(@MAIN_RULE_VALUE, parser.Value, parser.ValueLen,
            length(MAIN_RULE_VALUE)) of
       0:
@@ -1902,6 +1905,10 @@ begin
           result := parser.ParseNextAny(false) and
                     SetRuleValue(parser, v.value, FAKE_OP_MAC) and
                     (v.value <> '');
+          if length(v.value) = SizeOf(TNetMac) then
+            v.mac := PNetMac(v.value)^
+          else
+            v.kind := pvkMacs;
           exit;
         end;
     else
@@ -2688,7 +2695,7 @@ begin
   if v = nil then
     exit;
   // actually append the value and mark it in SendOptions
-  include(SendOptions, p^.opt);
+  include(SendOptions, TDhcpOption(p^.mac[0]));
   AddOptionSafe(p^.num, v, PStrLen(v - _STRLEN)^);
 end;
 
@@ -2777,17 +2784,12 @@ begin
   case one^.kind of
     pvkMac:
       begin
-        value := pointer(one^.value);        // direct Mac64:TNetMac lookup
-        len := PtrUInt(PStrLen(value - _STRLEN)^);
-        if len = 6 then
-          result := PInt64(value)^ and MAC_MASK = Mac64 // single value
-        else
-          result := MacIndex(pointer(value), @Mac64, len div 6) >= 0; // any
-        exit;                                // no need to check one^.value
+        result := PInt64(one)^ shr 16 = Mac64; // inlined single TNetMac value
+        exit;
       end;
-     pvkOpt:                                 // most common case
+     pvkOpt:                                 // most common case: known option
        begin
-         len := RecvLens[one^.opt];          // fast O(1) lookup of known option
+         len := RecvLens[TDhcpOption(one^.mac[0])];
          if len = 0 then
            exit;
          option := @Recv.options[len];      // option[0] = len in Recv[]
@@ -2798,6 +2800,20 @@ begin
          if len = 0 then
            exit;
          option := @Recv.options[len];      // option[0] = len in Recv[]
+       end;
+     pvkMacs:
+       begin
+         value := pointer(one^.value);      // TNetMacs lookup (value<>nil)
+         len := PtrUInt(PStrLen(value - _STRLEN)^);
+         result := true;
+         repeat
+           if PInt64(value)^ and MAC_MASK = Mac64 then
+             exit;                          // found one
+           inc(PNetMac(Value));             // search next
+           dec(len, SizeOf(TNetMac));
+         until len = 0;
+         result := false;
+         exit;
        end;
      pvkBoot:
        begin                                // compare with SetRecvBoot() item
@@ -3034,7 +3050,7 @@ begin
       // generate the corresponding {"all":{"mac":"xxxxx"}} entry
       v.num := 0;
       v.kind := pvkMac;
-      FastSetRawByteString(v.value, @nfo.mac, SizeOf(nfo.mac));
+      v.mac := nfo.mac;
       AddRuleValue(Rule.all, v);
     end;
   // parse specific static "ip" reservation
@@ -3051,19 +3067,21 @@ begin
     if (Rule.any = nil) and
        (alw = nil) and
        (req = nil) and
-       (length(Rule.all) = 1) and
-       (Rule.all[0].kind = pvkMac) then
-    begin
-      // plain {"all":{"mac":...}},"ip":...} entry = regular 'mac=ip' static
-      if length(Rule.all[0].value) <> SizeOf(nfo.mac) then
-        EDhcp.RaiseUtf8('PrepareRule: ip=% requires a single mac', [fIp]);
-      nfo.mac := PNetMac(Rule.all[0].value)^; // to register in StaticMac[]
-      if not Data.AddStatic(nfo) then // add in main statics mac/ip list
-        EDhcp.RaiseUtf8('PrepareRule: duplicated ip=% mac=%',
-          [fIp, MacToShort(@nfo.mac)]);
-      result := false; // no rule
-      exit;
-    end;
+       (length(Rule.all) = 1) then
+      case Rule.all[0].kind of
+        pvkMac:
+          begin
+            // plain {"all":{"mac":...}},"ip":...} entry = regular 'mac=ip'
+            nfo.mac := Rule.all[0].mac;     // to register in StaticMac[]
+            if not Data.AddStatic(nfo) then // add in main statics mac/ip list
+              EDhcp.RaiseUtf8('PrepareRule: duplicated ip=% mac=%',
+                [fIp, MacToShort(@nfo.mac)]);
+            result := false; // no rule
+            exit;
+          end;
+        pvkMacs:
+          EDhcp.RaiseUtf8('PrepareRule: ip=% requires a single mac', [fIp]);
+      end;
     if not Data.AddStatic(nfo) then // add in main statics ip list
       EDhcp.RaiseUtf8('PrepareRule: duplicated ip=%', [fIp]);
   end;
@@ -3072,7 +3090,7 @@ begin
   Rule.always := [];
   if alw <> nil then
   begin
-    v.num := 0;
+    PInt64(@v)^ := 0; // set kind+num+mac=0
     v.kind := pvkAlways;
     v.value := '';
     p := pointer(alw);
@@ -3080,12 +3098,12 @@ begin
     // prepare raw TLV-concatenated binary buffer
     begin
       Append(v.value, [AnsiChar(p^.num), AnsiChar(length(p^.value)), p^.value]);
-      if p^.opt <> doPad then
-        if p^.opt in Rule.always then
+      if p^.kind = pvkOpt then
+        if TDhcpOption(p^.mac[0]) in Rule.always then
           EDhcp.RaiseUtf8('PrepareRule: duplicated % in always:%',
-            [DHCP_OPTION[p^.opt], fAlways])
+            [DHCP_OPTION[TDhcpOption(p^.mac[0])], fAlways])
         else
-          include(Rule.always, p^.opt);
+          include(Rule.always, TDhcpOption(p^.mac[0]));
       inc(p);
     end;
     AddRuleValue(Rule.send, v);
@@ -3094,10 +3112,10 @@ begin
   p := pointer(req);
   for i := 1 to length(req) do
   begin
-    if (p^.opt <> doPad) and
-       (p^.opt in Rule.always) then
+    if (p^.kind = pvkOpt) and
+       (TDhcpOption(p^.mac[0]) in Rule.always) then
       EDhcp.RaiseUtf8('PrepareRule: duplicated % in requested:%',
-        [DHCP_OPTION[p^.opt], fRequested]);
+        [DHCP_OPTION[TDhcpOption(p^.mac[0])], fRequested]);
     AddRuleValue(Rule.send, p^);
     inc(p);
   end;
