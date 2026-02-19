@@ -2575,7 +2575,7 @@ procedure SetLastError(error: integer);
 function GetErrorText(error: integer = 0): RawUtf8;
 
 /// returns a given error code as plain text ShortString
-function GetErrorShort(error: integer = 0): ShortString;
+function GetErrorShort(error: integer = 0): TShort63;
 
 /// returns a given error code as plain text ShortString
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
@@ -6592,7 +6592,7 @@ begin
   AppendShort(os, Dest);
 end;
 
-function GetErrorShort(error: integer): ShortString;
+function GetErrorShort(error: integer): TShort63;
 begin
   if error = 0 then
     error := GetLastError;

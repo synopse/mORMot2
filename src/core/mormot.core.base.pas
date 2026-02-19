@@ -1034,7 +1034,7 @@ procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
 
 /// simple concatenation of a #0 ending text into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
-procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
+procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// simple concatenation of hexadecimal binary buffer into a shorstring
@@ -5402,11 +5402,9 @@ begin
   inc(dest[0], 2);
 end;
 
-procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
-var
-  max: PtrInt;
+procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
 begin
-  max := 255 - ord(dest[0]);
+  dec(max, ord(dest[0]));
   if max = 0 then
     exit;
   if len > max then
@@ -5416,20 +5414,17 @@ begin
 end;
 
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
+var
+  p: PAnsiChar; // for better code generation on FPC
 begin
-  if pointer(buf) <> nil then
-    AppendShortBuffer(pointer(buf), PStrLen(PtrUInt(pointer(buf)) - _STRLEN)^, @dest);
+  p := pointer(buf);
+  if p <> nil then
+    AppendShortBuffer(p, PStrLen(p - _STRLEN)^, high(dest), @dest);
 end;
 
 procedure AppendShort(const src: ShortString; var dest: ShortString);
 begin
-  AppendShortBuffer(@src[1], ord(src[0]), @dest);
-end;
-
-procedure AppendShortTemp(value, temp: PAnsiChar; dest: PAnsiChar);
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  AppendShortBuffer(value, temp - value, dest);
+  AppendShortBuffer(@src[1], ord(src[0]), high(dest), @dest);
 end;
 
 const
@@ -5473,6 +5468,12 @@ begin
   dest[0] := AnsiChar(dlen);
 end;
 
+procedure AppendShortTemp(value, temp, dest: PAnsiChar; max: PtrInt);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  AppendShortBuffer(value, temp - value, max, dest);
+end;
+
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 var
   tmp: TTemp24; // output in display/reversed order
@@ -5490,28 +5491,28 @@ begin
       break;
     value := value shr 4;
   until value = 0; // truncate to significant digits
-  AppendShortTemp(@tmp[i], @tmp[SizeOf(value) * 2], @dest);
+  AppendShortTemp(@tmp[i], @tmp[SizeOf(value) * 2], @dest, high(dest));
 end;
 
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 var
   tmp: TTemp24;
 begin
-  AppendShortTemp(StrUInt32(@tmp[23], value), @tmp[23], @dest);
+  AppendShortTemp(StrUInt32(@tmp[23], value), @tmp[23], @dest, high(dest));
 end;
 
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 var
   tmp: TTemp24;
 begin
-  AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest);
+  AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest, high(dest));
 end;
 
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 var
   tmp: TTemp24;
 begin
-  AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest);
+  AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest, high(dest));
 end;
 
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
@@ -5540,7 +5541,7 @@ begin
       else
         dec(l, 4 - fixeddecimals); // keep x.00 x.000
       end;
-  AppendShortBuffer(p, l, @dest);
+  AppendShortBuffer(p, l, high(dest), @dest);
 end;
 
 procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);

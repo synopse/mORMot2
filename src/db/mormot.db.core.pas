@@ -867,6 +867,7 @@ type
 
 /// returns a 64-bit value as inlined ':(1234):' text
 function InlineParameter(ID: Int64): TShort31; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// returns a string value as inlined ':("value"):' text
 function InlineParameter(const value: RawUtf8): RawUtf8; overload;
