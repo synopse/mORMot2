@@ -4143,10 +4143,7 @@ begin
             AppendShortByteHex(ord(utf8[i]), s);
           end
           else
-          begin
-            inc(s[0]);
-            s[ord(s[0])] := utf8[i];
-          end;
+            AppendShortChar(utf8[i], @s);
       end;
     sctOctetString:
       begin

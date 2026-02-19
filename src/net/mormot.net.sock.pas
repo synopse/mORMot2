@@ -4605,14 +4605,17 @@ end;
 function ToText(ev: TPollSocketEvents): TShort8;
 var
   e: TPollSocketEvent;
+  c, p: PAnsiChar;
 begin
-  result[0] := #0;
+  p := @result;
+  c := @POLL_SOCKET_EVENT;
   for e := low(e) to high(e) do
     if e in ev then
     begin
-      inc(result[0]);
-      result[ord(result[0])] := POLL_SOCKET_EVENT[e];
+      inc(p);
+      p^ := c[ord(e)];
     end;
+  result[0] := AnsiChar(p - PAnsiChar(@result));
 end;
 
 

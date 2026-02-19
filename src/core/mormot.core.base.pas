@@ -570,6 +570,10 @@ type
   {$M-}
 
 type
+  /// 128-bytes used e.g. by TNetAddr.IPShort() as output buffer
+  TShort127 = string[127];
+  PShort127 = ^TShort127;
+
   /// used e.g. to serialize up to 256-bit binary as hexadecimal
   TShort64 = string[64];
   PShort64 = ^TShort64;
@@ -614,12 +618,12 @@ type
   // - when used as an array value type, will generate efficient 32-bit lookup
   TShort3 = string[3];
 
-  /// could be used e.g. by StrInt32() or StrInt64()
-  TTemp24 = array[0..23] of AnsiChar;
-
   /// stack-allocated ASCII string, for mormot.core.text GuidToShort() function
   TShortGuid = string[38];
   PShortGuid = ^TShortGuid;
+
+  /// could be used e.g. by StrInt32() or StrInt64()
+  TTemp24 = array[0..23] of AnsiChar;
 
   /// cross-compiler type used for string length
   // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit integer even on CPU64 (!)
@@ -1038,7 +1042,7 @@ procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// simple concatenation of hexadecimal binary buffer into a shorstring
-procedure AppendShortHex(value: PByte; len: PtrUInt; var dest: ShortString);
+procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
 /// simple concatenation of an integer as lowercase hexadecimal into a shorstring
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
@@ -3381,7 +3385,7 @@ type
     // method or Random128() function to initialize a secret key, nonce or IV
     procedure Fill(dest: pointer; bytes: integer);
     /// fill some string[0..size] with 7-bit ASCII pseudo-random text
-    procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
+    procedure FillShort(var dest: ShortString; size: PtrInt = 255);
     /// fill some string[0..31] with 7-bit ASCII pseudo-random text
     procedure FillShort31(var dest: TShort31);
     /// fill some RawUtf8 with 7-bit ASCII pseudo-random text
@@ -5451,38 +5455,40 @@ const
 procedure AppendShortByteHex(value: byte; var dest: ShortString);
 var
   len: PtrInt;
+  d: PAnsiChar;
 begin
-  len := ord(dest[0]);
-  if len >= 254 then
+  d := @dest;
+  len := ord(d[0]);
+  if len + 2 > high(dest) then
     exit;
-  dest[len + 1] := HexCharsUpper[value shr 4];
+  d[len + 1] := HexCharsUpper[value shr 4];
   inc(len, 2);
   value := value and $0f;
-  dest[len] := HexCharsUpper[value];
-  dest[0] := AnsiChar(len);
+  d[len] := HexCharsUpper[value];
+  d[0] := AnsiChar(len);
 end;
 
-procedure AppendShortHex(value: PByte; len: PtrUInt; var dest: ShortString);
+procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 var
-  dlen, v: PtrUInt;
-  tab: PAnsiChar;
+  dlen, v: PtrInt;
+  d, tab: PAnsiChar;
 begin
-  dlen := ord(dest[0]);
-  if (len > 0) and
-     (dlen + len * 2 < 254) then
-  begin
-    tab := @HexCharsLower;
-    repeat
-      v := value^;
-      inc(value);
-      dest[dlen + 1] := tab[v shr 4]; // hexadecimal output in natural order
-      inc(dlen, 2);
-      v := v and $0f;
-      dest[dlen] := tab[v];
-      dec(len);
-    until len = 0;
-  end;
-  dest[0] := AnsiChar(dlen);
+  d := @dest;
+  dlen := ord(d[0]);
+  if (len <= 0) or
+     (dlen + len * 2 > high(dest)) then
+    exit;
+  tab := @HexCharsLower;
+  repeat
+    v := value^;
+    inc(value);
+    d[dlen + 1] := tab[v shr 4]; // hexadecimal output in natural order
+    inc(dlen, 2);
+    v := v and $0f;
+    d[dlen] := tab[v];
+    dec(len);
+  until len = 0;
+  d[0] := AnsiChar(dlen);
 end;
 
 procedure AppendShortTemp(value, temp, dest: PAnsiChar; max: PtrInt);
@@ -10338,17 +10344,16 @@ begin
   until bytes = 0;
 end;
 
-procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
+procedure TLecuyer.FillShort(var dest: ShortString; size: PtrInt);
 begin
   if size = 0 then
   begin
     dest[0] := #0;
     exit;
   end;
-  if size > 255 then
-    size := 256
-  else
-    inc(size);
+  if size > high(dest) then
+    size := high(dest);
+  inc(size); // also fill dest[0] = size
   Fill(@dest, size);
   AdjustShortStringFromRandom(@dest, size);
 end;

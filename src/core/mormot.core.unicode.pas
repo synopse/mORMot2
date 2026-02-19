@@ -9415,6 +9415,7 @@ procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString
   trimlowercase: boolean);
 var
   textlen: PtrInt;
+  res: PByteArray;
 begin
   if trimlowercase then
     while text^ in ['a'..'z'] do
@@ -9424,13 +9425,14 @@ begin
       if len = 0 then
         exit;
     end;
-  textlen := ord(result[0]);
-  if textlen + len >= 255 then
+  res := @result;
+  textlen := res[0];
+  if textlen + len >= high(result) then
     exit;
   if len > 0 then
-    MoveByOne(text, @result[textlen + 1], len);
-  inc(result[0], len + 1);
-  result[ord(result[0])] := ',';
+    MoveByOne(text, @res[textlen + 1], len);
+  inc(res[0], len + 1);
+  res[res[0]] := ord(',');
 end;
 
 function IdemPropNameUSmallNotVoid(P1, P2, P1P2Len: PtrInt): boolean;

@@ -2873,7 +2873,7 @@ begin
            if option[0] = AnsiChar(one^.num) then
              break;                            // found this num
            option := @option[ord(option[1]) + 2];
-           if option[0] = #255 then
+           if option[0] = #255 then            // reached end of list
              exit;                             // no such option
          until false;
          inc(option);                          // option[0] = len in Recv[]

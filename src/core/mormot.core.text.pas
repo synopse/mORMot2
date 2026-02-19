@@ -9889,9 +9889,11 @@ end;
 
 procedure FormatShort(const Format: RawUtf8; const Args: array of const;
   var result: ShortString);
+var
+  f: TFormatUtf8;
 begin
-  result[0] := AnsiChar(FormatBufferRaw(
-    Format, @Args[0], length(Args), @result[1], high(result)) - @result[1]);
+  f.Parse(Format, @Args[0], length(Args));
+  result[0] := AnsiChar(f.WriteMax(@result[1], high(result)) - @result[1]);
 end;
 
 function FormatToShort(const Format: RawUtf8;
@@ -12002,7 +12004,7 @@ end;
 
 procedure _AppendShortUuid(const u: TGuid; var s: ShortString);
 begin // much more efficient than default GUIDToString() in mormot.core.os
-  if ord(s[0]) > 255 - 36 then
+  if ord(s[0]) > high(s) - 36 then
     exit;
   GuidToText(@s[ord(s[0]) + 1], @u, @TwoDigitsHexLower);
   inc(s[0], 36);

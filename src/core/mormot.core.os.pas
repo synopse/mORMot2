@@ -3648,7 +3648,7 @@ function RetrieveLoadAvg: TShort23;
 /// a shorter version of GetSystemInfoText, used e.g. by TSynLogFamily.LevelSysInfo
 // - 'ncores avg1 avg5 avg15 [updays] used/totalram [used/totalswap] osint32' on POSIX,
 // or 'ncores user kern [updays] used/totalram [used/totalswap] osint32' on Windows
-procedure RetrieveSysInfoText(out text: ShortString);
+procedure RetrieveSysInfoText(var text: ShortString);
 
 /// retrieve low-level information about current memory usage
 // - as used e.g. by TSynMonitorMemory or GetMemoryInfoText
@@ -6142,7 +6142,7 @@ begin
   if osv.os <> osWindows then
     exit;
   txt4 := osv.winbuild;
-  case  osv.win of
+  case osv.win of
     wTen, wTen_64, wEleven, wEleven_64: // desktop versions
       txt4 := FindOsBuild(txt4, high(DESKTOP_INT), @DESKTOP_INT, @DESKTOP_TXT);
     wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64:
@@ -6164,7 +6164,7 @@ begin
   AppendOsBuild(osv, @result, sep);
 end;
 
-procedure AppendOsv(const osv: TOperatingSystemVersion; var dest: Shortstring);
+procedure AppendOsv(const osv: TOperatingSystemVersion; var dest: TShort47);
 begin
   case osv.os of
     osWindows:
@@ -6237,11 +6237,11 @@ begin
     if osv.os in (OS_LINUX - [osAndroid]) then
       AppendShort(' Linux ', result) // e.g. 'Ubuntu Linux 5.4.0'
     else
-      AppendShortChar(' ', @result);
+      AppendShortCharSafe(' ', result);
     AppendShortCardinal(osv.utsrelease[2], result);
-    AppendShortChar('.', @result);
+    AppendShortCharSafe('.', result);
     AppendShortCardinal(osv.utsrelease[1], result);
-    AppendShortChar('.', @result);
+    AppendShortCharSafe('.', result);
     AppendShortCardinal(osv.utsrelease[0], result);
   end;
 end;
@@ -6588,7 +6588,7 @@ var
 begin
   OsErrorShort(Code, @os, NoInt); // redirect to Win/Linux/BsdErrorShort()
   if Sep <> #0 then
-    AppendShortChar(Sep, @Dest);
+    AppendShortCharSafe(Sep, Dest);
   AppendShort(os, Dest);
 end;
 
@@ -6855,8 +6855,8 @@ begin
   else if IsAnsiCompatibleW(W, LW) then
   begin
     // fast handling of pure ASCII-7 content (very common case)
-    if LW > 255 then
-      LW := 255;
+    if LW > high(res) then
+      LW := high(res);
     res[0] := AnsiChar(LW);
     i := 1;
     repeat
@@ -8011,12 +8011,12 @@ begin
   until u = high(_u);
   Size := (Size * 10000) shr (u * 10);
   SimpleRoundTo2DigitsCurr64(Size);
-  AppendShortCurr64(Size, Dest, 1);
+  AppendShortCurr64(Size, Dest, {fixeddecimals=}1);
   if WithSpace then
-    AppendShortChar(' ', @Dest);
+    AppendShortCharSafe(' ', Dest);
   if u <> 0 then
-    AppendShortChar(_U[u], @Dest);
-  AppendShortChar('B', @Dest);
+    AppendShortCharSafe(_U[u], Dest);
+  AppendShortCharSafe('B', Dest);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -8435,9 +8435,9 @@ end;
 procedure AppendFreeTotalKB(free, total: QWord; var dest: ShortString);
 begin
   AppendKb(free, dest);
-  AppendShortChar('/', @dest);
+  AppendShortCharSafe('/', dest);
   AppendKb(total, dest);
-  AppendShortChar(' ', @dest);
+  AppendShortCharSafe(' ', dest);
 end;
 
 function GetMemoryInfoText: TShort31;
@@ -8475,7 +8475,7 @@ begin
      result);
 end;
 
-procedure RetrieveSysInfoText(out text: ShortString);
+procedure RetrieveSysInfoText(var text: ShortString);
 var
   si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Mac/BSD
 begin
