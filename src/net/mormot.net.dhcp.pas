@@ -378,6 +378,7 @@ type
   /// store one DHCP "rules" condition or action
   // - used for "all" "any" "not-all" "not-any" conditions against a value
   // - used as "always" and "requested" data to be sent back to the client
+  // - kind/num/mac fields order matters to access PInt64(one)^ shr 16 = Mac64
   TRuleValue = packed record
     /// define which kind of value is stored in this entry
     kind: TRuleValueKind;
@@ -2026,9 +2027,9 @@ begin
       if not NetIsIP4(p, @router) then
         exit;
       tmp[0] := #1;
-      tmp[1] := AnsiChar(w);                         // mask width
-      AppendShortBuffer(@dest, (w + 7) shr 3, @tmp); // append only prefix
-      AppendShortBuffer(@router, 4, @tmp);           // router
+      tmp[1] := AnsiChar(w);                                    // mask width
+      AppendShortBuffer(@dest, (w + 7) shr 3, high(tmp), @tmp); // only prefix
+      AppendShortBuffer(@router, 4, high(tmp), @tmp);           // router
       Append(bin, @tmp[1], ord(tmp[0]));
       while not (p^ in [#0, ';', ',']) do
         inc(p);
@@ -2659,6 +2660,7 @@ begin
     else
       // make a transient copy of all leases to keep the lock small for this subnet
       // - could eventually be done if OnIdle() made a background thread (not yet)
+      // - in practice, SaveToFile(40000)=2.66ms so would be premature optimization
       local := copy(Entry, 0, Count); // allocate Count * 16 bytes
   finally
     Safe.UnLock;
@@ -2705,7 +2707,7 @@ begin
   include(SendOptions, opt);
   d := pointer(SendEnd);
   SendEnd := d + 6;
-  if SendEnd >= @Send.options[high(Send.options)] then
+  if d >= @Send.options[high(Send.options) - 6] then
     exit; // move output pointer, but avoid buffer overflow
   d[0] := AnsiChar(DHCP_OPTION_NUM[opt]);
   d[1] := #4;
@@ -2826,12 +2828,12 @@ begin
   // locate the option value in Recv[]
   case one^.kind of
     pvkMac:
-      begin
-        result := PInt64(one)^ shr 16 = Mac64; // inlined single TNetMac value
-        exit;
+      begin                                    // single inlined one^.mac value
+        result := PInt64(one)^ shr 16 = Mac64;
+        exit;                                  // no need to check one^.value
       end;
-     pvkOpt:                                   // most common case: known option
-       begin
+     pvkOpt:
+       begin                                   // O(1) lookup of known option
          len := RecvLens[TDhcpOption(one^.mac[0])];
          if len = 0 then
            exit;                               // no such option
@@ -2845,20 +2847,20 @@ begin
          option := @Recv.options[len];         // option[0] = len in Recv[]
        end;
      pvkMacs:
-       begin
-         value := pointer(one^.value);         // TNetMacs lookup (value<>nil)
+       begin                                   // specific TNetMacs lookup
+         value := pointer(one^.value);         // we know value<>nil
          len := PtrUInt(value) + PtrUInt(PStrLen(value - _STRLEN)^);
          result := true;
          repeat
            if PInt64(value)^ and MAC_MASK = Mac64 then
              exit;                             // found one
-           inc(PNetMac(Value));                // search next
+           inc(PNetMac(value));                // search next
          until PtrUInt(value) >= len;
          result := false;
-         exit;
+         exit;                                 // we did check one^.value
        end;
      pvkBoot:
-       begin                                   // compare with SetRecvBoot() item
+       begin                                   // compare with SetRecvBoot()
          result := RecvBoot = TDhcpClientBoot(one^.num);
          exit;                                 // no need to check one^.value
        end;
@@ -2877,7 +2879,7 @@ begin
   else
     exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
   end;
-  // compare the one^.value with the option in Recv[]
+  // compare the one^.value with the option located in Recv[]
   value := pointer(one^.value);
   len := PStrLen(value - _STRLEN)^;      // we know value<>nil and len>0
   if len <> ord(option[0]) then
@@ -2896,15 +2898,17 @@ end;
 
 procedure TDhcpState.AddRegularOptions;
 begin
+  // append 1,3,6,15,28,42 network options - if not already from "rules"
   AddOptionOnce32(doSubnetMask,         Scope^.Subnet.mask);
   AddOptionOnce32(doBroadcastAddress,   Scope^.Broadcast);
   AddOptionOnce32(doRouters,            Scope^.Gateway);
   AddOptionOnceA32(doDomainNameServers, pointer(Scope^.DnsServer));
   AddOptionOnceA32(doNtpServers,        pointer(Scope^.NtpServers));
+  // optional 51,58,59 lease timing options
   if (RecvType <> dmtInform) and
-     not (doDhcpLeaseTime in SendOptions) then // + big-endian 51,58,59
+     not (doDhcpLeaseTime in SendOptions) then
   begin
-    AddOptionOnce32(doDhcpLeaseTime,     Scope^.LeaseTime);
+    AddOptionOnce32(doDhcpLeaseTime,     Scope^.LeaseTime); // big-endian
     AddOptionOnce32(doDhcpRenewalTime,   Scope^.RenewalTime);
     AddOptionOnce32(doDhcpRebindingTime, Scope^.Rebinding);
   end;
@@ -3542,10 +3546,11 @@ begin
         fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
         QueryPerformanceMicroSeconds(start);         // saved=40000 in 2.66ms
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
-        FormatShort31(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
+        FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
         // do not aggressively retry if saved<0 (write failed)
         // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
-        // recv(UDP packet) so we would need to create a background thread
+        // recv(UDP packet) so we would need to create a background thread and
+        // SaveToFile() takes 2.66ms with 40K leases so it is not worth it
         if fMetricsFolder <> '' then
         begin
           csv := tix32 >= fMetricsCsvTix;
