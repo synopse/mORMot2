@@ -1017,6 +1017,11 @@ type
     // - return the position to write text
     // - but WON'T increase the instance position: caller should do inc(B, ...)
     function AddPrepare(Len: PtrInt): pointer;
+    /// prepare direct access to the internal output buffer
+    // - return the position to write text
+    // - but WON'T increase the instance position: caller should do inc(B, ...)
+    function AddPrepareShort(Len: PtrInt): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// write some data Base64 encoded
     // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); virtual;
@@ -4453,6 +4458,13 @@ begin
   result := nil;
   if Len >= fTempBufSize - 16 then
     exit;
+  if BEnd - B <= Len then // note: PtrInt(BEnd - B) could be < 0
+    FlushToStream;
+  result := B + 1;
+end;
+
+function TTextWriter.AddPrepareShort(Len: PtrInt): pointer;
+begin
   if BEnd - B <= Len then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   result := B + 1;
