@@ -15,9 +15,9 @@ unit mormot.net.dhcp;
 
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
    Background lease persistence using dnsmasq-compatible text files.
-   Static IP reservation using MAC address or UUID Identifiers Option 61.
+   Static IP reservation using MAC address or any other set of options (e.g. 61).
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
-   Convenient JSON rules for vendor-specific or user-specific options.
+   Versatile JSON rules for vendor-specific or user-specific options.
    Scale up to 100k+ leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
@@ -25,10 +25,12 @@ unit mormot.net.dhcp;
    Meaningful and customizable logging of the actual process (e.g. into syslog).
    Generate detailed JSON and CSV metrics as local files, global and per scope.
    Easy configuration via JSON or INI files.
-   Expandable in code via callbacks or virtual methods.
+   Expandable in code via callbacks or virtual methods as plugins.
    e.g. as full local PXE environment with our mormot.net.tftp.server.pas unit
 
   *****************************************************************************
+  TODO:  - "range" reservation in "rules"
+         - DHCPv6 support (much more complex, and mostly not required)
 }
 
 interface
@@ -562,6 +564,16 @@ type
   /// store one DHCP lease in memory with all its logical properties
   // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
   // - State/RateLimit/Mac fields should be in this order to match expectations
+  // - Benchmark of O(n) single core logic shows it depends only on CPU cache:
+  // $   200 DHCP renewals in 31us i.e. 6.1M/s, aver. 155ns
+  // $  1000 DHCP renewals in 275us i.e. 3.4M/s, aver. 275ns
+  // $  2000 DHCP renewals in 854us i.e. 2.2M/s, aver. 427ns
+  // $  5000 DHCP renewals in 4.55ms i.e. 1M/s, aver. 910ns
+  // $ 10000 DHCP renewals in 16.87ms i.e. 578.7K/s, aver. 1.68us
+  // $ 20000 DHCP renewals in 65.01ms i.e. 300.4K/s, aver. 3.25us
+  // $ 40000 DHCP renewals in 179.98ms i.e. 217K/s, aver. 4.49us
+  // $ 60000 DHCP renewals in 573.57ms i.e. 102.1K/s, aver. 9.55us
+  // in all case, it exceeds actual network capatibility
   TDhcpLease = packed record
     /// how this entry should be handled
     State: TLeaseState;
@@ -575,7 +587,7 @@ type
     Mac: TNetMac;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
-    /// GetTickSec monotonic value stored as 32-bit unsigned integer
+    /// the GetTickSec monotonic value stored as 32-bit unsigned integer
     // - TUnixTime is used on disk but not during server process (not monotonic)
     // - for lsStatic as in Scope.StaticMac[], is the last seen timestamp
     Expired: cardinal;
@@ -4249,13 +4261,13 @@ end;
 procedure TDhcpProcess.SetRule(var State: TDhcpState);
 var
   rule: PDhcpScopeRule;
-  rules, hi: TDALen; // use hi=high() to optimize for FPC
+  rules, hi: TDALen; // use hi=high(TRuleValues) to favor FPC
   r: PRuleValue;
 label
-  ko;
+  ko; // unrolled logic for very efficient runtime execution
 begin
   // implement "first precise rule wins" deterministic behavior
-  rule := pointer(State.Scope^.Rules); // caller ensured <> nil
+  rule := pointer(State.Scope^.Rules); // caller ensured rule <> nil
   rules := PDALen(PAnsiChar(rule) - _DALEN)^ + _DAOFF;
   repeat
     // AND conditions (all must match) = "all"
@@ -4265,9 +4277,9 @@ begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
       repeat
         if not State.MatchOne(r) then
-          goto ko; // missing one
+          goto ko;  // missing one
         if hi = 0 then
-          break;
+          break;    // "all" condition passed
         dec(hi);
         inc(r);
       until false;
@@ -4280,9 +4292,9 @@ begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
       repeat
         if State.MatchOne(r) then
-          break; // at least one match
+          break;    // at least one match - "any" condition passed
         if hi = 0 then
-          goto ko; // none did match
+          goto ko;  // none did match
         dec(hi);
         inc(r);
       until false;
@@ -4294,9 +4306,9 @@ begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
       repeat
         if State.MatchOne(r) then
-          goto ko; // one did match
+          goto ko;  // one did match
         if hi = 0 then
-          break;
+          break;    // "not-all" condition passed
         dec(hi);
         inc(r);
       until false;
@@ -4308,9 +4320,9 @@ begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
       repeat
         if not State.MatchOne(r) then
-          break; // one did not match
+          break;    // one did not match - "not-any" condition passed
         if hi = 0 then
-          goto ko; // all did match
+          goto ko;  // all did match
         dec(hi);
         inc(r);
       until false;
@@ -4319,12 +4331,12 @@ begin
     State.RecvRule := rule;
     // all=any=nil as fallback if nothing more precise did apply
     // "not-all"/"not-any" without any "all"/"any" are just ignored
-    // unless they are the eventual default
+    // unless they are the eventual default - last default wins
     if (rule^.all <> nil) or
        (rule^.any <> nil) then
-      // return first exact matching rule (deterministic)
+      // first exact matching rule wins (deterministic)
       exit;
-ko: inc(rule);
+ko: inc(rule);      // next "rules" object
     dec(rules);
   until rules = 0;
 end;
