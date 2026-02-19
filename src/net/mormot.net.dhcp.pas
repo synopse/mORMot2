@@ -3451,9 +3451,11 @@ end;
 function TDhcpProcess.OnIdle(tix64: Int64): integer;
 var
   tix32, n: cardinal;
-  saved: integer;
+  total, saved: integer;
   csv: boolean;
   s: PDhcpScope;
+  start: Int64;
+  tmp: TShort31;
 begin
   // make periodical process at most every second
   result := 0;
@@ -3462,6 +3464,7 @@ begin
      (fScope = nil) or
      (fState <> sSetup) then // e.g. after Shutdown
     exit;
+  total := 0;
   fIdleTix := tix32;
   fScopeSafe.ReadLock;
   try
@@ -3471,7 +3474,8 @@ begin
     begin
       n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
       repeat
-        inc(result, s^.CheckOutdated(tix32)); // 5us for 100k leases ;)
+        inc(result, s^.CheckOutdated(tix32)); // 5us for 20k leases
+        inc(total, s^.Count);
         inc(s);
         dec(n);
       until n = 0;
@@ -3479,14 +3483,16 @@ begin
     if result <> 0 then
       inc(fModifSequence); // trigger SaveToFile() below
     // background persist into FileName and MetricsFolder if needed
-    saved := 0;
+    tmp[0] := #0;
     if (fFileName <> '') and
        (fFileFlushSeconds <> 0) and         // = 0 if disabled
        (fModifSaved <> fModifSequence) then // if something new to be written
       if tix32 >= fFileFlushTix then     // reached the next persistence time
       begin
         fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
-        saved := SaveToFile(fFileName);// make fScopeSafe.ReadLock/ReadUnLock
+        QueryPerformanceMicroSeconds(start);         // saved=20000 in 1.46ms
+        saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
+        FormatShort31(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
         // do not aggressively retry if saved<0 (write failed)
         // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
         // recv(UDP packet) so we would need to create a background thread
@@ -3507,7 +3513,7 @@ begin
   // - we mitigate aggressive clients via the RateLimit counter anyway
   if Assigned(fLog) and
      ((result or saved) <> 0) then
-    fLog.Add.Log(sllTrace, 'OnIdle: outdated=% saved=%', [result, saved], self);
+    fLog.Add.Log(sllTrace, 'OnIdle: outdated=%/%%', [result, total, tmp], self);
 end;
 
 function TDhcpProcess.SaveToText(SavedCount: PInteger): RawUtf8;
