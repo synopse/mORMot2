@@ -3497,6 +3497,7 @@ begin
      (fScope = nil) or
      (fState <> sSetup) then // e.g. after Shutdown
     exit;
+  saved := 0;
   total := 0;
   fIdleTix := tix32;
   fScopeSafe.ReadLock;
@@ -3520,10 +3521,10 @@ begin
     if (fFileName <> '') and
        (fFileFlushSeconds <> 0) and         // = 0 if disabled
        (fModifSaved <> fModifSequence) then // if something new to be written
-      if tix32 >= fFileFlushTix then     // reached the next persistence time
+      if tix32 >= fFileFlushTix then        // reached the next persistence time
       begin
         fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
-        QueryPerformanceMicroSeconds(start);         // saved=20000 in 1.46ms
+        QueryPerformanceMicroSeconds(start);         // saved=40000 in 2.66ms
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort31(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
         // do not aggressively retry if saved<0 (write failed)
