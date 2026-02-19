@@ -561,12 +561,8 @@ type
 
   /// store one DHCP lease in memory with all its logical properties
   // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
+  // - State/RateLimit/Mac fields should be in this order to match expectations
   TDhcpLease = packed record
-    /// the MAC address of this entry - should be the first of this record
-    // - we only lookup clients by MAC: no DUID is supported (we found it error-
-    // prone in practice, when some VMs are duplicated with the same DUID)
-    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
-    Mac: TNetMac;
     /// how this entry should be handled
     State: TLeaseState;
     /// how many lsUnavailable IPs have been marked since the last OnIdle
@@ -574,6 +570,9 @@ type
     // silently ignore any abusive DECLINE/INFORM requests as rate limitation
     // - also align the whole structure to cpu-cache-friendly 16 bytes
     RateLimit: byte;
+    /// the MAC address of this entry - access as PInt64(lease)^ shr 16 = Mac64
+    // - may contain 0 for a lsFree or lsUnavailable sentinel entry
+    Mac: TNetMac;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
     /// GetTickSec monotonic value stored as 32-bit unsigned integer
@@ -2181,7 +2180,7 @@ begin // dedicated sub-function for better codegen
   result := p;
   if n <> 0 then
     repeat
-      if PInt64(result)^ and MAC_MASK = mac then
+      if PInt64(result)^ shr 16 = mac then // fast ignore State/RateLimit fields
         exit;
       inc(result);
       dec(n);
@@ -2196,7 +2195,7 @@ begin
   if cardinal(LastDiscover) < cardinal(Count) then
   begin
     result := @Entry[LastDiscover];
-    if PInt64(result)^ and MAC_MASK = mac then
+    if PInt64(result)^ shr 16 = mac then
       exit;
   end;
   // search if this MAC has a static IP allocated
@@ -2236,8 +2235,8 @@ begin
   begin
     dec(FreeListCount);
     result := @Entry[FreeList[FreeListCount]]; // LIFO is the fastest
-    PInt64(result)^ := mac64; // also reset State+RateLimit
-    if result^.State = lsFree then // paranoid
+    PInt64(result)^ := mac64 shl 16; // also reset State+RateLimit
+    if result^.State = lsFree then   // paranoid
       exit;
   end;
   // we need to add a new entry - maybe with reallocation
@@ -2245,7 +2244,7 @@ begin
   if n = length(Entry) then
     SetLength(Entry, NextGrow(n));
   result := @Entry[n];
-  PInt64(result)^ := mac64; // also reset State+RateLimit
+  PInt64(result)^ := mac64 shl 16; // also reset State+RateLimit
   inc(Count);
 end;
 
@@ -2554,7 +2553,7 @@ begin // dedicated sub-function for better codegen
   repeat
     // OFFERed leases are temporary; the client hasn't accepted this IP
     // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
-    if (PInt64(@p^.Mac)^ and MAC_MASK <> 0) and
+    if (PInt64(p)^ shr 16 <> 0) and  // Mac64 <> 0
        (p^.IP4 <> 0) and
        (((p^.State = lsAck) or
         ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
@@ -2906,7 +2905,7 @@ function TDhcpState.FakeLease(found: TNetIP4): PDhcpLease;
 begin
   result := @Temp; // fake transient PDhcpLease for this StaticUuid[]
   result^.IP4 := found;
-  PInt64(@result^.Mac)^ := Mac64; // also reset State+RateLimit
+  PInt64(result)^ := Mac64 shl 16; // also reset State+RateLimit
   result^.State := lsStatic;
 end;
 
@@ -3567,7 +3566,7 @@ function TDhcpProcess.LoadFromText(const Text: RawUtf8): boolean;
 var
   tix32, entries: cardinal;
   boot, expiry: TUnixTime;
-  mac: TNetMac;
+  mac64: Int64;
   ip4: TNetIP4;
   p, b: PUtf8Char;
   new: PDhcpLease;
@@ -3578,6 +3577,7 @@ begin
   boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
   if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
     exit;
+  mac64 := 0;
   entries := 0;
   last := nil;
   ClearLeases({keepWriteLock=}true); // easier than complex s^.Lock/UnLock
@@ -3598,8 +3598,8 @@ begin
           p := GotoNextSpace(b);
           if (p - b = 17) and
              (p^ = ' ') and
-             TextToMac(b, @mac) and
-             (PInt64(@mac)^ and MAC_MASK <> 0) and
+             TextToMac(b, @mac64) and
+             (mac64 <> 0) and
              NetIsIP4(p + 1, @ip4) and
              (ip4 <> 0) then
           begin
@@ -3610,7 +3610,7 @@ begin
             begin
               s := GetScope(ip4); // called once per sub-net or incorrect IP
               if s <> nil then
-                last := s; // is likely not to change for the next line
+                last := s;        // is likely not to change for the next line
             end;
             if s <> nil then
             begin
@@ -3619,7 +3619,7 @@ begin
                 SetLength(s^.Entry, NextGrow(s^.Count));
               new := @s^.Entry[s^.Count];
               inc(s^.Count);
-              PInt64(@new^.Mac)^ := PInt64(@mac)^; // also reset State+RateLimit
+              PInt64(new)^ := mac64; // also reset State+RateLimit
               new^.IP4 := ip4;
               new^.Expired := expiry - boot;
               if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
