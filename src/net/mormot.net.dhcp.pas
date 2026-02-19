@@ -2170,8 +2170,6 @@ begin
   result := GetEnumName(TypeInfo(TLeaseState), ord(st));
 end;
 
-{ TDhcpScope }
-
 const
   // truncate 64-bit integer to 6-bytes TNetMac - efficient on Intel and aarch64
   MAC_MASK = $0000ffffffffffff;
@@ -2179,6 +2177,14 @@ const
   MAX_INFORM = 3;
   // pre-allocate 4KB of working entries e.g. in TDhcpScope.AfterFill
   PREALLOCATE_LEASES = 250;
+
+// some sensitive O(n) functions which could favor specific alignment
+
+{$ifdef FPC_CODEALIGN}
+  {$PUSH}
+  {$CODEALIGN PROC=32} // keep small function size aligned for opcode cache
+  {$CODEALIGN LOOP=1}  // keep prolog as small as possible in next 2 functions
+{$endif FPC_CODEALIGN}
 
 // code below expects PDhcpLease^.Mac to be the first field
 
@@ -2194,6 +2200,76 @@ begin // dedicated sub-function for better codegen
     until n = 0;
   result := nil;
 end;
+
+function DoFindIp(p: PDhcpLease; ip4: TNetIP4; n: cardinal): PDhcpLease;
+begin // dedicated sub-function for better codegen
+  result := p;
+  if n <> 0 then
+    repeat
+      if result^.IP4 = ip4 then
+        exit;
+      inc(result);
+      dec(n);
+    until n = 0;
+  result := nil;
+end;
+
+{$ifdef FPC_CODEALIGN}
+  {$CODEALIGN LOOP=16}  // may favor bigger loops in the next 2 functions
+{$endif FPC_CODEALIGN}
+
+function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
+begin // dedicated sub-function for better codegen (100ns for 200 entries)
+  result := 0;
+  if n <> 0 then
+    repeat
+      if (p^.Expired < tix32) and
+         (p^.State in [lsReserved, lsAck, lsUnavailable]) then
+      begin
+        inc(result);
+        p^.State := lsOutdated;
+      end;
+      {$ifndef CPUINTEL}        // seems actually slower on modern Intel/AMD
+      if p^.RateLimit <> 0 then // don't invalidate L1 cache
+      {$endif CPUINTEL}
+        p^.RateLimit := 0;      // reset the rate limiter every second
+      inc(p);
+      dec(n);
+    until n = 0;
+end;
+
+const
+  MIN_UUID_BYTES = 4; // < 4 bytes is too short to reliably identify a client
+
+function DoFindUuid(u: PPAnsiChar; bin: PCardinalArray; binlen: TStrLen): TNetIP4;
+var
+  n: cardinal;
+begin
+  result := 0;
+  if (u = nil) or
+     (binlen < MIN_UUID_BYTES) then
+    exit;
+  n := PDALen(PAnsiChar(u) - _DALEN)^ + _DAOFF; // = length(StaticUuid)
+  inc(binlen, 4); // StaticUuid[] stores raw BIN+IP
+  repeat
+    if (PStrLen(u^ - _STRLEN)^ = binlen) and
+       (PCardinal(u^)^ = bin[0]) and // efficient 32-bit check < MIN_UUID_BYTES
+       CompareMemSmall(@bin[1], u^ + 4, binlen - 8) then
+    begin
+      result := PCardinal(u^ + binlen - 4)^; // get IP from BIN+IP layout
+      exit;
+    end;
+    inc(u);
+    dec(n);
+  until n = 0;
+end;
+
+{$ifdef FPC_CODEALIGN}
+  {$POP}
+{$endif FPC_CODEALIGN}
+
+
+{ TDhcpScope }
 
 function TDhcpScope.FindMac(mac: Int64): PDhcpLease;
 begin
@@ -2212,19 +2288,6 @@ begin
   else
     // O(n) brute force search in L1/L2 cache is fine up to 100,000 items
     result := DoFindMac(pointer(Entry), mac, Count);
-end;
-
-function DoFindIp(p: PDhcpLease; ip4: TNetIP4; n: cardinal): PDhcpLease;
-begin // dedicated sub-function for better codegen
-  result := p;
-  if n <> 0 then
-    repeat
-      if result^.IP4 = ip4 then
-        exit;
-      inc(result);
-      dec(n);
-    until n = 0;
-  result := nil;
 end;
 
 function TDhcpScope.FindIp4(ip4: TNetIP4): PDhcpLease;
@@ -2429,32 +2492,6 @@ begin
   Safe.UnLock;
 end;
 
-const
-  MIN_UUID_BYTES = 4; // < 4 bytes is too short to reliably identify a client
-
-function DoFindUuid(u: PPAnsiChar; bin: PCardinalArray; binlen: TStrLen): TNetIP4;
-var
-  n: cardinal;
-begin
-  result := 0;
-  if (u = nil) or
-     (binlen < MIN_UUID_BYTES) then
-    exit;
-  n := PDALen(PAnsiChar(u) - _DALEN)^ + _DAOFF; // = length(StaticUuid)
-  inc(binlen, 4); // StaticUuid[] stores raw BIN+IP
-  repeat
-    if (PStrLen(u^ - _STRLEN)^ = binlen) and
-       (PCardinal(u^)^ = bin[0]) and // efficient 32-bit check < MIN_UUID_BYTES
-       CompareMemSmall(@bin[1], u^ + 4, binlen - 8) then
-    begin
-      result := PCardinal(u^ + binlen - 4)^; // get IP from BIN+IP layout
-      exit;
-    end;
-    inc(u);
-    dec(n);
-  until n = 0;
-end;
-
 function TDhcpScope.AddStatic(var nfo: TMacIP): boolean;
 var
   n: PtrInt;
@@ -2619,26 +2656,6 @@ begin
     result := DoWrite(W, pointer(local), length(local), tix32, grace, time, @Subnet);
 end;
 
-function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
-begin // dedicated sub-function for better codegen (100ns for 200 entries)
-  result := 0;
-  if n <> 0 then
-    repeat
-      if (p^.Expired < tix32) and
-         (p^.State in [lsReserved, lsAck, lsUnavailable]) then
-      begin
-        inc(result);
-        p^.State := lsOutdated;
-      end;
-      {$ifndef CPUINTEL}        // seems actually slower on modern Intel/AMD
-      if p^.RateLimit <> 0 then // don't invalidate L1 cache
-      {$endif CPUINTEL}
-        p^.RateLimit := 0;      // reset the rate limiter every second
-      inc(p);
-      dec(n);
-    until n = 0;
-end;
-
 function TDhcpScope.CheckOutdated(tix32: cardinal): integer;
 begin
   result := 0;
@@ -2783,6 +2800,11 @@ begin
   until n = 0;
 end;
 
+{$ifdef FPC_CODEALIGN}
+  {$PUSH}
+  {$CODEALIGN LOOP=16} // worth it on this very sensitive function
+{$endif FPC_CODEALIGN}
+
 function TDhcpState.MatchOne(one: PRuleValue): boolean;
 var
   len: PtrUInt;
@@ -2813,14 +2835,13 @@ begin
      pvkMacs:
        begin
          value := pointer(one^.value);         // TNetMacs lookup (value<>nil)
-         len := PtrUInt(PStrLen(value - _STRLEN)^);
+         len := PtrUInt(value) + PtrUInt(PStrLen(value - _STRLEN)^);
          result := true;
          repeat
            if PInt64(value)^ and MAC_MASK = Mac64 then
              exit;                             // found one
            inc(PNetMac(Value));                // search next
-           dec(len, SizeOf(TNetMac));
-         until len = 0;
+         until PtrUInt(value) >= len;
          result := false;
          exit;
        end;
@@ -2856,6 +2877,10 @@ begin
   until len = 0;
   result := true;                        // exact case-sensitive match
 end;
+
+{$ifdef FPC_CODEALIGN}
+  {$POP}
+{$endif FPC_CODEALIGN}
 
 procedure TDhcpState.AddRegularOptions;
 begin
