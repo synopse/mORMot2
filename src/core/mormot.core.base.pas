@@ -5336,24 +5336,28 @@ end;
 procedure Join(const Args: array of RawByteString; var Text: RawUtf8);
 var
   l, i: PtrInt;
-  p: PUtf8Char;
+  d, s, new: PUtf8Char;
 begin
   if high(Args) = 0 then
   begin
-    text := Args[0];
-    EnsureRawUtf8(text);
+    Text := Args[0];
+    EnsureRawUtf8(Text);
     exit;
   end;
   l := 0;
   for i := 0 to high(Args) do
     inc(l, length(Args[i]));
-  p := FastSetString(Text, l);
+  new := FastNewString(l, CP_UTF8);
+  d := new;
   for i := 0 to high(Args) do
   begin
-    l := length(Args[i]);
-    MoveFast(pointer(Args[i])^, p^, l);
-    inc(p, l);
+    s := pointer(Args[i]);
+    if s = nil then
+      continue;
+    MoveFast(s^, d^, PStrLen(s - _STRLEN)^);
+    inc(d, PStrLen(s - _STRLEN)^);
   end;
+  FastAssignNew(Text, new); // eventually assign: Text may be in Args[]
 end;
 
 function ShortStringToAnsi7String(const source: ShortString): RawByteString;
