@@ -2607,6 +2607,8 @@ end;
 
 function DoWrite(W: TTextWriter; p: PDhcpLease; n, tix32, grace: cardinal;
   boot: TUnixTime; subnet: PIp4SubNet): integer;
+var
+  d, e: PAnsiChar;
 begin // dedicated sub-function for better codegen
   result := 0;
   repeat
@@ -2620,20 +2622,21 @@ begin // dedicated sub-function for better codegen
     begin
       if subnet <> nil then
       begin
-        // first add the subnet mask as '# 192.168.0.1/24' comment line
+        // first add the subnet mask as '# 192.168.0.1/24 subnet' comment line
         W.AddDirect('#', ' ');
         W.AddShort(subnet^.ToShort);
-        W.AddShorter(' subnet');
-        W.AddDirectNewLine;
+        W.AddShorter(' subnet'#10);
         subnet := nil; // append once, and only if necessary
       end;
-      // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207"
+      // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207" + LF
       W.AddQ(boot + Int64(p^.Expired));
-      W.AddDirect(' ');
-      W.AddShort(MacToShort(@p^.Mac));
-      W.AddDirect(' ');
-      W.AddShort(IP4ToShort(@p^.IP4));
-      W.AddDirectNewLine;
+      d := W.AddPrepareShort(47); // directly write to the output buffer
+      d[0] := ' ';
+      ToHumanHexP(d + 1, @p^.mac, 6);
+      d[18] := ' ';
+      e := IP4TextAppend(@p^.IP4, d + 19);
+      e[0] := #10;
+      inc(W.B, e - d + 1);
       inc(result);
     end;
     inc(p);
@@ -2662,7 +2665,7 @@ begin
     else
       // make a transient copy of all leases to keep the lock small for this subnet
       // - could eventually be done if OnIdle() made a background thread (not yet)
-      // - in practice, SaveToFile(100K)=7ms so would be premature optimization
+      // - in practice, SaveToFile(100K)=5.65ms so would be premature optimization
       local := copy(Entry, 0, Count); // allocate Count * 16 bytes
   finally
     Safe.UnLock;
@@ -3546,13 +3549,12 @@ begin
       if tix32 >= fFileFlushTix then        // reached the next persistence time
       begin
         fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
-        QueryPerformanceMicroSeconds(start);         // saved=100000 in 7.04ms
+        QueryPerformanceMicroSeconds(start);         // saved=100000 in 5.65ms
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
-        // do not aggressively retry if saved<0 (write failed)
-        // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
-        // recv(UDP packet) so we would need to create a background thread and
-        // SaveToFile() takes 7ms with 100K leases so it is not worth it
+        // notes: 1) do not aggressively retry if saved<0 (write failed)
+        //        2) no localcopy/background thread needed - SaveToFile() takes
+        //           only 5.65ms with 100K leases on a 4.2MB text file
         if fMetricsFolder <> '' then
         begin
           csv := tix32 >= fMetricsCsvTix;
@@ -3927,7 +3929,7 @@ function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
 var
   txt: RawUtf8;
   bak: TFileName;
-begin
+begin // for 100K leases: SaveToText=4.21ms FileFromString=1.46ms
   txt := SaveToText(@result);     // make fScopeSafe.ReadLock/ReadUnLock
   if not (dsoNoFileBak in fOptions) then
   begin
