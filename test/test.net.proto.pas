@@ -1849,6 +1849,7 @@ begin
     Check(not FileExists(fn), fn);
     Check(server.FileName = fn);
     server.Setup(settings);
+    // validate metrics persistence
     server.MetricsFolder := WorkDir;
     json := server.SaveMetricsToJson;
     CheckUtf8(IsValidJson(json, {strict=}true), json);
@@ -1879,6 +1880,7 @@ begin
     Check(not server.RemoveStatic('192.168.0.111'));
     Check(server.FileName = fn);
     Check(server.GetScope('192.168.0.1') <> nil);
+    Check(server.GetScope('192.168.1.1') <> nil);
     Check(server.GetScope('8.8.8.8') = nil);
     CheckEqual(server.SaveToText, CRLF);
     // DISCOVER -> OFFER
