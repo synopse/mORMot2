@@ -228,10 +228,10 @@ type
     function IP4Short: TShort16;
       {$ifdef FPC} inline; {$endif}
     /// convert this address into its shortstring IPv4/IPv6 textual representation
-    function IPShort(withport: boolean = false): ShortString; overload;
+    function IPShort(withport: boolean = false): TShort127; overload;
       {$ifdef HASINLINE}inline;{$endif}
       /// convert this address into its shortstring IPv4/IPv6 textual representation
-    procedure IPShort(out result: ShortString; withport: boolean = false); overload;
+    procedure IPShort(var result: TShort127; withport: boolean = false); overload;
     /// convert this address into its 'IPv4/IPv6:port' textual representation
     function IPWithPort: RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -420,7 +420,7 @@ function NetLastError(AnotherNonFatal: integer = NO_ERROR;
   Error: PNetErrorInt = nil): TNetResult;
 
 /// internal low-level function retrieving the latest socket error message
-function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
+function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): TShort127;
 
 /// internal low-level function using known operating system error
 function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
@@ -622,10 +622,14 @@ function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
 procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an IPv4 raw value into a ShortString text
 function IP4ToShort(ip4addr: PByteArray): TShort16;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// append an IPv4 raw value into a text memory buffer
+function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
 
 /// convert an IPv4 raw value into a RawUtf8 text
 // - zero 0.0.0.0 address  (i.e. bound to any host) is returned as ''
@@ -644,7 +648,7 @@ function IP4sToText(const ip4: array of TNetIP4): RawUtf8;
 // - zero is returned as '::' and loopback as '::1'
 // - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
 // - won't use the Operating System network layer API so is fast and consistent
-procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
+procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
 
 /// convert an IPv6 raw value into a RawUtf8 text
 // - zero '::' address  (i.e. bound to any host) is returned as ''
@@ -2462,7 +2466,7 @@ begin
   result := NetErrorFromSystem(err, AnotherNonFatal);
 end;
 
-function NetLastErrorMsg(AnotherNonFatal: integer): ShortString;
+function NetLastErrorMsg(AnotherNonFatal: integer): TShort127;
 var
   err: integer;
 begin
@@ -2820,12 +2824,12 @@ begin
     result[0] := #0; // AF_INET6 or AF_UNIX return ''
 end;
 
-function TNetAddr.IPShort(withport: boolean): ShortString;
+function TNetAddr.IPShort(withport: boolean): TShort127;
 begin
   IPShort(result, withport);
 end;
 
-procedure TNetAddr.IPShort(out result: ShortString; withport: boolean);
+procedure TNetAddr.IPShort(var result: TShort127; withport: boolean);
 var
   ad4: sockaddr absolute Addr;
 begin
@@ -2840,7 +2844,7 @@ begin
       with psockaddr_un(@Addr)^ do
       begin
         SetString(result, PAnsiChar(@sun_path), mormot.core.base.StrLen(@sun_path));
-        exit; // no port
+        exit; // no port - up to 127 bytes
       end;
     {$endif OSPOSIX}
   else
@@ -2854,7 +2858,7 @@ end;
 
 procedure TNetAddr.IPWithPort(var Text: RawUtf8);
 var
-  tmp: ShortString;
+  tmp: TShort127;
 begin
   IPShort(tmp, {withport=}true);
   ShortStringToAnsi7String(tmp, Text);
@@ -3784,17 +3788,31 @@ begin
     end;
 end;
 
+function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
+var
+  tmp: TTemp24;
+  n: PAnsiChar;
+  l, c: PtrInt;
+begin
+  c := 0;
+  result := dest;
+  repeat
+    n := StrUInt32(@tmp[23], ip4addr[c]);
+    l := @tmp[23] - n;
+    MoveFast(n^, result^, l);
+    inc(result, l);
+    if c = 3 then
+      break;
+    inc(c);
+    result^ := '.';
+    inc(result);
+  until false;
+  result^ := #0; // make #0 terminated (won't hurt)
+end;
+
 procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
 begin
-  s[0] := #0;
-  AppendShortCardinal(ip4addr[0], s);
-  AppendShortChar('.', @s);
-  AppendShortCardinal(ip4addr[1], s);
-  AppendShortChar('.', @s);
-  AppendShortCardinal(ip4addr[2], s);
-  AppendShortChar('.', @s);
-  AppendShortCardinal(ip4addr[3], s);
-  PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
+  s[0] := AnsiChar(IP4TextAppend(ip4addr, @s[1]) - @s[1]);
 end;
 
 function IP4ToShort(ip4addr: PByteArray): TShort16;
@@ -3804,7 +3822,7 @@ end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 var
-  s: ShortString;
+  s: TShort16;
 begin
   if PCardinal(ip4addr)^ = 0 then
     // '0.0.0.0' bound to any host -> ''
@@ -3839,7 +3857,7 @@ begin
   end;
 end;
 
-procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
+procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
 // this code is faster than any other inet_ntop6() I could find around
 var
   i: PtrInt;
@@ -3942,7 +3960,7 @@ end;
 
 procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 var
-  s: ShortString;
+  s: TShort47;
 begin
   if (PInt64(ip6addr)^ = 0) and
      (PInt64(@ip6addr[7])^ = 0) then // start with 15 zeros?
