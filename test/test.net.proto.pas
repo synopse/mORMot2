@@ -1565,6 +1565,7 @@ var
   d: TDhcpState;
   i, n, l: PtrInt;
   server: TDhcpProcess;
+  settings: TDhcpServerSettings;
   macs: TNetMacs;
   ips: TNetIP4s;
   timer: TPrecisionTimer;
@@ -1597,7 +1598,7 @@ var
   begin
     s := TDhcpProcess.Create;
     try
-      s.Setup(nil); // needed here to fill s.Scope[] with the default subnet
+      s.Setup(settings); // fill s.Scope[] with good subnet
       Check(s.LoadFromText(saved), 'loadfromtext1');
       new := s.SaveToText;
       if new <> saved then // allow one (unlikely) GetTickSec slip
@@ -1829,8 +1830,15 @@ begin
   ip4 := DhcpIP4(pointer(refack), lens[doDhcpServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   // validate TDhcpProcess logic (without any actual UDP transmission)
+  settings := TDhcpServerSettings.Create;
   server := TDhcpProcess.Create;
   try
+    // custom settings for our tests
+    settings.AddScope; // with default subnet
+    CheckEqual(settings.Scope[0].SubnetMask, '192.168.1.1/24');
+    settings.Scope[0].SubnetMask := '192.168.0.1/16'; // allow 65,536 IPs
+    //ConsoleObject(settings);
+    //ConsoleWrite(ObjectToIni(settings, 'Dhcp'));
     // setup the DHCP server logic
     server.Log := TSynLog;
     Check(server.FileName = '');
@@ -1840,37 +1848,37 @@ begin
     server.FileName := fn;
     Check(not FileExists(fn), fn);
     Check(server.FileName = fn);
-    server.Setup({settings=}nil); // fill with our default subnet
+    server.Setup(settings);
     server.MetricsFolder := WorkDir;
     json := server.SaveMetricsToJson;
     CheckUtf8(IsValidJson(json, {strict=}true), json);
     server.ComputeMetrics(m1);
     CheckEqual(MetricsToJson(m1), json);
     // precompute some random MAC addresses and setup a few statics
-    n := 200;
+    n := 2000;
     SetLength(macs, n);
     for i := 0 to n - 1 do
       Check(IsZero(macs[i]));
     rnd.Fill(pointer(macs), SizeOf(macs[0]) * n);
-    Check(server.AddStatic('192.168.1.100'));
-    Check(server.AddStatic(Join([MacToText(@macs[10]), '=192.168.1.110'])));
-    Join([MacToText(@macs[1]), '=192.168.1.110'], txt);
+    Check(server.AddStatic('192.168.0.100'));
+    Check(server.AddStatic(Join([MacToText(@macs[10]), '=192.168.0.110'])));
+    Join([MacToText(@macs[1]), '=192.168.0.110'], txt);
     Check(not server.AddStatic(txt));
-    Check(server.RemoveStatic('192.168.1.110'));
+    Check(server.RemoveStatic('192.168.0.110'));
     Check(server.AddStatic(txt));
-    Check(not server.AddStatic('192.168.0.100'));
-    Check(not server.RemoveStatic('192.168.1.111'));
-    Check(server.AddStatic('414243444546474849=192.168.1.111'));
-    Check(not server.AddStatic('414243444546474849=192.168.1.111'));
-    Check(not server.AddStatic('514243444546474849=192.168.1.111'));
-    Check(not server.AddStatic('414243444546474849=192.168.1.112'));
-    Check(server.AddStatic('616263666566676869=192.168.1.112'));
-    Check(server.RemoveStatic('192.168.1.112'));
-    Check(not server.RemoveStatic('192.168.1.112'));
-    Check(server.RemoveStatic('192.168.1.111'));
-    Check(not server.RemoveStatic('192.168.1.111'));
+    Check(not server.AddStatic('2.167.1.100'));
+    Check(not server.RemoveStatic('192.168.0.111'));
+    Check(server.AddStatic('414243444546474849=192.168.0.111'));
+    Check(not server.AddStatic('414243444546474849=192.168.0.111'));
+    Check(not server.AddStatic('514243444546474849=192.168.0.111'));
+    Check(not server.AddStatic('414243444546474849=192.168.0.112'));
+    Check(server.AddStatic('616263666566676869=192.168.0.112'));
+    Check(server.RemoveStatic('192.168.0.112'));
+    Check(not server.RemoveStatic('192.168.0.112'));
+    Check(server.RemoveStatic('192.168.0.111'));
+    Check(not server.RemoveStatic('192.168.0.111'));
     Check(server.FileName = fn);
-    Check(server.GetScope('192.168.1.1') <> nil);
+    Check(server.GetScope('192.168.0.1') <> nil);
     Check(server.GetScope('8.8.8.8') = nil);
     CheckEqual(server.SaveToText, CRLF);
     // DISCOVER -> OFFER
@@ -1884,9 +1892,9 @@ begin
     Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
     sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
-    CheckEqual(IP4ToText(@sip4), '192.168.1.1');
+    CheckEqual(IP4ToText(@sip4), '192.168.0.1');
     CheckEqual(d.Send.siaddr, sip4);
-    CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(24));
+    CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(16));
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
@@ -1904,13 +1912,13 @@ begin
       Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtAck);
       Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
       sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
-      CheckEqual(IP4ToText(@sip4), '192.168.1.1');
+      CheckEqual(IP4ToText(@sip4), '192.168.0.1');
       CheckEqual(d.Send.siaddr, sip4);
       if ip4 = 0 then
         ip4 := d.Send.ciaddr
       else
         CheckEqual(d.Send.ciaddr, ip4, 'consecutive ips');
-      CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(24));
+      CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(16));
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
@@ -1922,7 +1930,7 @@ begin
     CheckEqual(server.Count, 1);
     txt := server.SaveToText;
     CheckNotEqual(txt, CRLF, 'offer not saved');
-    Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'mac ip saved');
+    Check(PosEx(' 00:0b:82:01:fc:42 192.168.0.10', txt) <> 0, 'mac ip saved');
     Check(length(txt) < 1000, 'saved len');
     CheckSaveToTextMatch(txt);
     d.Recv.cookie := 0;
@@ -1962,12 +1970,12 @@ begin
     txt := server.SaveToText;
     CheckSaveToTextMatch(txt);
     CheckNotEqual(txt, CRLF, 'offer not saved');
-    Check(PosEx(' 00:0b:82:01:fc:42 192.168.1.10', txt) <> 0, 'saved 2');
-    CheckEqual(PosEx(' 192.168.1.100', txt), 0, 'no static ip');
-    Check(PosEx(' 192.168.1.101', txt) <> 0, 'saved 3');
-    Check(PosEx(' 192.168.1.109', txt) <> 0, 'saved 4');
-    CheckEqual(PosEx(' 192.168.1.110', txt), 0, 'no static mac=ip');
-    Check(PosEx(' 192.168.1.111', txt) <> 0, 'saved 5');
+    Check(PosEx(' 00:0b:82:01:fc:42 192.168.0.10', txt) <> 0, 'saved 2');
+    CheckEqual(PosEx(' 192.168.0.100', txt), 0, 'no static ip');
+    Check(PosEx(' 192.168.0.101', txt) <> 0, 'saved 3');
+    Check(PosEx(' 192.168.0.109', txt) <> 0, 'saved 4');
+    CheckEqual(PosEx(' 192.168.0.110', txt), 0, 'no static mac=ip');
+    Check(PosEx(' 192.168.0.111', txt) <> 0, 'saved 5');
     CheckEqual(PosEx(MacToText(@macs[1]), txt), 0, 'no static mac=ip');
     CheckNotEqual(PosEx(MacToText(@macs[10]), txt), 0, 'saved 6');
     Check(length(txt) > 2000, 'saved len2');
@@ -2014,9 +2022,9 @@ begin
     Check(FileExists(fn), 'file after OnIdle');
     // benchmark OnIdle() performance
     timer.Start;
-    for i := 1 to n * 10 do // increasing tix32 to trigger CheckOutdated
+    for i := 1 to 2000 do // increasing tix32 to trigger CheckOutdated
       CheckEqual(server.OnIdle((i * 1000) mod 6000), 0, 'onidle');
-    NotifyTestSpeed('DHCP OnIdle', n * 10, 0, @timer);
+    NotifyTestSpeed('DHCP OnIdle', 2000, 0, @timer);
     // ensure OnIdle() did persist the file on disk
     CheckEqual(server.Count, n, 'count');
     Check(server.FileName = fn, fn);
@@ -2119,6 +2127,7 @@ begin
       '"dynamic-hits":2,"option-82-hits":1}');
   finally
     server.Free;
+    settings.Free;
   end;
 end;
 
