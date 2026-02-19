@@ -3007,9 +3007,13 @@ end;
 { TDhcpBootSettings }
 
 procedure InheritOption(var boot: TDhcpScopeBoot; ref, dst: TDhcpClientBoot);
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  p: PRawUtf8;
 begin
-  if boot.Remote[dst] = '' then
-    boot.Remote[dst] := boot.Remote[ref];
+  p := @boot.Remote[dst];
+  if p^ = '' then
+    p^ := boot.Remote[ref];
 end;
 
 procedure TDhcpBootSettings.PrepareBoot(var Data: TDhcpScopeBoot;
@@ -4010,6 +4014,7 @@ begin
         else if State.RecvIp4 <> 0 then
           IP4Short(@State.RecvIP4, State.Ip);
         DoLog(sllDebug, 'not subnet for', State);
+        exit; // State.Scope = nil
       end;
     dsmDroppedNoAvailableIP:
       DoLog(sllWarning, 'exhausted IPv4', State);
