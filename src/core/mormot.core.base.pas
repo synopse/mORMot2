@@ -1014,8 +1014,8 @@ procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 
 /// simple concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
-procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar = #255);
-  {$ifdef HASINLINE} inline; {$endif}
+procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
+  {$ifdef FPC} inline; {$endif}
 
 /// simple concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
@@ -5371,12 +5371,15 @@ begin
   SetString(result, PAnsiChar(pointer(source)), length(source));
 end;
 
-procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar);
+procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
+var
+  l: PtrInt;
 begin
-  if dest[0] = max then
+  l := ord(dest[0]);
+  if l = high(dest) then
     exit;
   inc(dest[0]);
-  dest[ord(dest[0])] := chr;
+  PAnsiChar(@dest)[l + 1] := chr;
 end;
 
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
