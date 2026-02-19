@@ -1723,7 +1723,7 @@ begin
           DeleteTransient(i);
           inc(gc);
         end;
-      FormatShort16('gc=%, ', [gc], gctxt);
+      FormatShort('gc=%, ', [gc], gctxt);
     finally
       fSafe.WriteUnLock;
     end;

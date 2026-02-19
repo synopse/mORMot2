@@ -9933,7 +9933,7 @@ begin
     Ansi7StringToShortString(Context, ctx);
   persec[0] := #0;
   if PerSecond <> 0 then
-    FormatShort16(' %/s', [KBNoSpace(PerSecond)], persec);
+    FormatShort(' %/s', [KBNoSpace(PerSecond)], persec);
   curr[0] := #0;
   AppendKB(CurrentSize, curr, {withspace=}false);
   if ExpectedSize = 0 then

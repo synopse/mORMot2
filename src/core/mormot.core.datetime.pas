@@ -2680,9 +2680,9 @@ end;
 
 procedure TSynSystemTime.ToTextDateShort(var text: TShort15);
 begin
-  FormatShort16('% % %', [SmallUInt32Utf8[Day],
-                          HTML_MONTH_NAMES[Month],
-                          UInt4DigitsToShort(Year)], text);
+  FormatShort('% % %', [SmallUInt32Utf8[Day],
+                        HTML_MONTH_NAMES[Month],
+                        UInt4DigitsToShort(Year)], text);
 end;
 
 procedure TSynSystemTime.ToIsoDateTime(out text: RawUtf8; FirstTimeChar: AnsiChar);

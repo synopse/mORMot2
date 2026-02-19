@@ -2265,7 +2265,7 @@ begin
   // header to enable advanced behavior e.g. about JSON transmission
   vers[0] := #0;
   if Executable.Version.Major <> 0 then
-    FormatShort16('/%', [Executable.Version.Major], vers);
+    FormatShort('/%', [Executable.Version.Major], vers);
   FormatUtf8('Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/' +
     SYNOPSE_FRAMEWORK_BRANCH + ' %%',
     [name, Executable.ProgramName, vers], result);

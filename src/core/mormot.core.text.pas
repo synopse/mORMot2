@@ -1893,7 +1893,7 @@ function FormatBufferRaw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt
 /// fast Format() function replacement, for UTF-8 content stored in ShortString
 // - use the same single token % (and implementation) than FormatUtf8()
 // - ShortString allows fast stack allocation, so is perfect for small content
-// - truncate result if the text size exceeds 255 bytes
+// - truncate result if the text size exceeds high(result) e.g. 255 bytes
 procedure FormatShort(const Format: RawUtf8; const Args: array of const;
   var result: ShortString);
 
@@ -1910,16 +1910,6 @@ procedure FormatString(const Format: RawUtf8; const Args: array of const;
 // - use the same single token % (and implementation) than FormatUtf8()
 function FormatString(const Format: RawUtf8; const Args: array of const): string; overload;
   {$ifdef FPC}inline;{$endif} // Delphi don't inline "array of const" parameters
-
-/// fast Format() function replacement, for UTF-8 content stored in TShort16
-// - truncate result if the text size exceeds 16 chars (17 bytes)
-procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
-  var result: TShort16);
-
-/// fast Format() function replacement, for UTF-8 content stored in TShort31
-// - truncate result if the text size exceeds 31 chars (32 bytes)
-procedure FormatShort31(const Format: RawUtf8; const Args: array of const;
-  var result: TShort31);
 
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
@@ -9901,28 +9891,14 @@ procedure FormatShort(const Format: RawUtf8; const Args: array of const;
   var result: ShortString);
 begin
   result[0] := AnsiChar(FormatBufferRaw(
-    Format, @Args[0], length(Args), @result[1], 255) - @result[1]);
+    Format, @Args[0], length(Args), @result[1], high(result)) - @result[1]);
 end;
 
 function FormatToShort(const Format: RawUtf8;
   const Args: array of const): ShortString;
 begin
   result[0] := AnsiChar(FormatBufferRaw(
-    Format, @Args[0], length(Args), @result[1], 255) - @result[1]);
-end;
-
-procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
-  var result: TShort16);
-begin
-  result[0] := AnsiChar(FormatBufferRaw(
-    Format, @Args[0], length(Args), @result[1], 16) - @result[1]);
-end;
-
-procedure FormatShort31(const Format: RawUtf8; const Args: array of const;
-  var result: TShort31);
-begin
-  result[0] := AnsiChar(FormatBufferRaw(
-    Format, @Args[0], length(Args), @result[1], 31) - @result[1]);
+    Format, @Args[0], length(Args), @result[1], high(result)) - @result[1]);
 end;
 
 procedure FormatString(const Format: RawUtf8; const Args: array of const;

@@ -590,7 +590,7 @@ type
   TShort23 = string[23];
   PShort23 = ^TShort23;
 
-  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
+  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
   // - such result type would avoid a string allocation on heap, so are highly
   // recommended e.g. when logging tiny pieces of information
   TShort16 = string[16];

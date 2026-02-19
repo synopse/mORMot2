@@ -1504,7 +1504,7 @@ begin
   if aType <= high(aType) then
     result := TrimLeftLowerCaseToShort(ToText(aType))
   else
-    FormatShort16('#%', [ord(aType)], result);
+    FormatShort('#%', [ord(aType)], result);
 end;
 
 function IsZero(const Fields: TFieldBits): boolean;
@@ -2394,7 +2394,7 @@ end;
 
 function InlineParameter(ID: Int64): TShort31;
 begin
-  FormatShort31(':(%):', [ID], result);
+  FormatShort(':(%):', [ID], result);
 end;
 
 function InlineParameter(const value: RawUtf8): RawUtf8;
