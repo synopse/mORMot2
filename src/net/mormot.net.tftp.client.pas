@@ -292,6 +292,8 @@ function ToOpcode(const frame: TTftpFrame): TTftpOpcode;
 
 /// convert TFTP frame Opcode + Sequence to text, ready for logging
 function ToText(const frame: TTftpFrame; len: integer = 0): ShortString; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+procedure ToTextVar(const frame: TTftpFrame; len: integer; var res: ShortString);
 
 function ToText(e: TTftpError): PShortString; overload;
 
@@ -312,6 +314,11 @@ begin
 end;
 
 function ToText(const frame: TTftpFrame; len: integer): ShortString;
+begin
+  ToTextVar(frame, len, result);
+end;
+
+procedure ToTextVar(const frame: TTftpFrame; len: integer; var res: ShortString);
 var
   c: TTftpOpcode;
   seq: integer;
@@ -319,22 +326,22 @@ begin
   if len <= 0 then
   begin
     if len < 0 then
-      result := 'error' // -1
+      res := 'error' // -1
     else
-      result := 'ICMP unreachable'; // 0
+      res := 'ICMP unreachable'; // 0
     exit;
   end;
   dec(len, SizeOf(Frame.Opcode));
   if len < 0 then
   begin
-    result := 'no opcode';
+    res := 'no opcode';
     exit;
   end;
   c := ToOpcode(frame);
-  result := TFTP_OPCODE[c];
+  res := TFTP_OPCODE[c];
   if c = toUndefined then
   begin
-    AppendShortCardinal(frame.Opcode, result);
+    AppendShortCardinal(frame.Opcode, res);
     exit;
   end;
   seq := bswap16(frame.Sequence);
@@ -344,37 +351,37 @@ begin
     toOck:
       if len <= 0 then
         // 'RRQ filename' / 'WRQ filename' / 'OACK option'
-        AppendShortBuffer(@frame.Header, StrLen(@frame.Header), @result)
+        AppendShortBuffer(@frame.Header, StrLen(@frame.Header), high(res), @res)
       else
       begin
         // all options will be included with #0 terminated (logged as space)
         if len > 240 then
           len := 240; // ensure at least beginning of frame is logged
-        AppendShortBuffer(@frame.Header, len, @result);
+        AppendShortBuffer(@frame.Header, len, high(res), @res);
       end;
     toDat,
     toAck:
       begin
         /// 'DAT #123,len' / 'ACK #123'
-        AppendShortChar('#', @result);
-        AppendShortCardinal(seq, result);
+        AppendShortChar('#', @res);
+        AppendShortCardinal(seq, res);
         dec(len, SizeOf(Frame.Sequence));
         if (len >= 0) and
            (c = toDat) then
         begin
-          AppendShortChar(',', @result);
-          AppendShortCardinal(len, result);
+          AppendShortChar(',', @res);
+          AppendShortCardinal(len, res);
         end;
       end;
     toErr:
       begin
-        AppendShortCardinal(seq, result);
+        AppendShortCardinal(seq, res);
         if seq <= ord(teLast) then
         begin
-          AppendShortTwoChars(ord(' ') + ord('(') shl 8, @result);
-          AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, result);
-          AppendShortTwoChars(ord(')') + ord(' ') shl 8, @result);
-          AppendShortBuffer(@frame.Header, StrLen(@frame.Header), @result)
+          AppendShortTwoChars(ord(' ') + ord('(') shl 8, @res);
+          AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, res);
+          AppendShortTwoChars(ord(')') + ord(' ') shl 8, @res);
+          AppendShortBuffer(@frame.Header, StrLen(@frame.Header), high(res), @res);
         end;
       end;
   end;
@@ -728,10 +735,13 @@ end;
 
 procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
   obj: TObject; const caller: ShortString);
+var
+  frametext: ShortString;
 begin
   GenerateErrorFrame(err, '');
+  ToTextVar(Frame^, FrameLen, frametext);
   log.Log(sllTrace, '%: % % failed as %',
-    [caller, TFTP_OPCODE[OpCode], FileName, ToText(Frame^, FrameLen)], obj);
+    [caller, TFTP_OPCODE[OpCode], FileName, frametext], obj);
   SendFrame;
   Shutdown;
 end;
