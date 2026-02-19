@@ -3929,19 +3929,21 @@ function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
 var
   txt: RawUtf8;
   bak: TFileName;
+  hasbak: boolean;
 begin // for 100K leases: SaveToText=4.21ms FileFromString=1.46ms
   txt := SaveToText(@result);     // make fScopeSafe.ReadLock/ReadUnLock
+  hasbak := false;
   if not (dsoNoFileBak in fOptions) then
   begin
     bak := ChangeFileExt(FileName, '.bak');
     DeleteFile(bak);
-    RenameFile(FileName, bak);    // atomic backup
+    hasbak := RenameFile(FileName, bak);    // atomic backup
   end;
   if FileFromString(txt, FileName) then
     fModifSaved := fModifSequence // success: won't retry on next OnIdle()
   else
   begin
-    if bak <> '' then
+    if hasbak then
       RenameFile(bak, FileName);  // restore the previous file (if any)
     result := -1;                 // indicates error writing to disk
   end;
