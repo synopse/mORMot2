@@ -744,9 +744,7 @@ type
     /// persist all leases with "<expiry> <MAC> <IP>" dnsmasq file pattern
     // - this method is thread safe and will call Safe.Lock/UnLock
     // - returns the number of entries/lines added to the text file
-    // - localcopy=true would make a transient copy of Entry[] to reduce the lock
-    function TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime;
-      localcopy: boolean): integer;
+    function TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime): integer;
   private
     Options: TDhcpScopeOptions;
     MetricsCsvFileMonth: byte;
@@ -2606,7 +2604,7 @@ begin
 end;
 
 function DoWrite(W: TTextWriter; p: PDhcpLease; n, tix32, grace: cardinal;
-  boot: TUnixTime; subnet: PIp4SubNet): integer;
+  boot: TUnixTime; subnet: PShortString): integer;
 var
   d, e: PAnsiChar;
 begin // dedicated sub-function for better codegen
@@ -2622,15 +2620,13 @@ begin // dedicated sub-function for better codegen
     begin
       if subnet <> nil then
       begin
-        // first add the subnet mask as '# 192.168.0.1/24 subnet' comment line
-        W.AddDirect('#', ' ');
-        W.AddShort(subnet^.ToShort);
-        W.AddShorter(' subnet'#10);
+        // add once the subnet mask as '# 192.168.0.1/24 subnet' comment line
+        W.AddShort(subnet^);
         subnet := nil; // append once, and only if necessary
       end;
       // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207" + LF
-      W.AddQ(boot + Int64(p^.Expired));
-      d := W.AddPrepareShort(47); // directly write to the output buffer
+      W.AddQ(boot + Int64(p^.Expired), {reserve=}48);
+      d := PAnsiChar(W.B) + 1; // directly write to the output buffer
       d[0] := ' ';
       ToHumanHexP(d + 1, @p^.mac, 6);
       d[18] := ' ';
@@ -2644,35 +2640,29 @@ begin // dedicated sub-function for better codegen
   until n = 0;
 end;
 
-function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime;
-  localcopy: boolean): integer;
+function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime): integer;
 var
-  local: TLeaseDynArray; // 10,000 leases would use 160KB of temporary memory
   grace: cardinal;
+  subtxt: TShort47;
 begin
   result := 0;
   if Count = 0 then
     exit;
+  subtxt := '# ';
   Safe.Lock;
   try
     if Count = 0 then
       exit;
+    // prepare the subnet mask as '# 192.168.0.1/24 subnet' comment line
+    subtxt[0] := #2;
+    AppendShort(SubNet.ToShort, subtxt);
+    AppendShort(' subnet'#10, subtxt);
+    // persist all leases of this subnet as text
     grace := LeaseTimeLE * MaxPtrUInt(GraceFactor, 2); // not too deprecated
-    if (Count < 1000) or
-       not localcopy then
-      // small output could be done within the lock
-      result := DoWrite(W, pointer(Entry), Count, tix32, grace, time, @Subnet)
-    else
-      // make a transient copy of all leases to keep the lock small for this subnet
-      // - could eventually be done if OnIdle() made a background thread (not yet)
-      // - in practice, SaveToFile(100K)=5.65ms so would be premature optimization
-      local := copy(Entry, 0, Count); // allocate Count * 16 bytes
+    result := DoWrite(W, pointer(Entry), Count, tix32, grace, time, @subtxt);
   finally
     Safe.UnLock;
   end;
-  // append all text lines from the local copy (if any) - not used yet
-  if local <> nil then
-    result := DoWrite(W, pointer(local), length(local), tix32, grace, time, @Subnet);
 end;
 
 function TDhcpScope.CheckOutdated(tix32: cardinal): integer;
@@ -3553,8 +3543,8 @@ begin
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
         // notes: 1) do not aggressively retry if saved<0 (write failed)
-        //        2) no localcopy/background thread needed - SaveToFile() takes
-        //           only 5.65ms with 100K leases on a 4.2MB text file
+        //        2) no background thread needed - SaveToFile() takes only
+        //           5.65ms with 100K leases for a 4.2MB text file
         if fMetricsFolder <> '' then
         begin
           csv := tix32 >= fMetricsCsvTix;
@@ -3605,7 +3595,7 @@ begin
       begin
         n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
         repeat
-          inc(saved, s^.TextWrite(W, tix32, boot, {localcopy=}false));
+          inc(saved, s^.TextWrite(W, tix32, boot));
           inc(s);
           dec(n);
         until n = 0;
@@ -3930,7 +3920,7 @@ var
   txt: RawUtf8;
   bak: TFileName;
   hasbak: boolean;
-begin // for 100K leases: SaveToText=4.21ms FileFromString=1.46ms
+begin // for 100K leases: SaveToText=4.21ms FileFromString=1.44ms (4.2MB)
   txt := SaveToText(@result);     // make fScopeSafe.ReadLock/ReadUnLock
   hasbak := false;
   if not (dsoNoFileBak in fOptions) then
