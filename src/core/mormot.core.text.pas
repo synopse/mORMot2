@@ -695,7 +695,7 @@ type
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
-    procedure AddQ(Value: QWord);
+    procedure AddQ(Value: QWord; Reserve: PtrInt = 32);
       {$ifdef FPC_CPUX64}inline;{$endif} // URW1147 on Delphi XE2
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
@@ -4896,13 +4896,13 @@ begin
   AddBinToHexDisplayLower(@Value, SizeOf(Value), QuotedChar);
 end;
 
-procedure TTextWriter.AddQ(Value: QWord);
+procedure TTextWriter.AddQ(Value: QWord; Reserve: PtrInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
   Len: PtrInt;
 begin
-  if BEnd - B <= 32 then
+  if BEnd - B <= Reserve then
     FlushToStream;
   {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   if Value <= high(SmallUInt32Utf8) then

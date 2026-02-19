@@ -1689,8 +1689,6 @@ begin
 end;
 
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
-var
-  tmp: ShortString;
 begin
   OsErrorShort(error, @dest, {noint=}true); // known 'E###' on Linux + BSD
   if dest[0] = #0 then
