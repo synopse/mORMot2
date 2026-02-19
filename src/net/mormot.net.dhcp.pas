@@ -3654,7 +3654,7 @@ begin
                 SetLength(s^.Entry, NextGrow(s^.Count));
               new := @s^.Entry[s^.Count];
               inc(s^.Count);
-              PInt64(new)^ := mac64; // also reset State+RateLimit
+              PInt64(new)^ := mac64 shl 16; // also set State+RateLimit
               new^.IP4 := ip4;
               new^.Expired := expiry - boot;
               if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
