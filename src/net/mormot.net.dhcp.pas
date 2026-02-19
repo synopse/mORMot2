@@ -1147,8 +1147,10 @@ type
   /// how to refine DHCP server process globally for all scopes
   // - dsoSystemLog would call JournalSend() in addition to default TSynLog -
   // but it will slowdown the process a lot, so should be used with caution
+  // - dsoNoFileBak would disable the '.bak' renaming during SaveToFile()
   TDhcpServerOption = (
-    dsoSystemLog);
+    dsoSystemLog,
+    dsoNoFileBak);
   /// refine DHCP server process for all scopes
   TDhcpServerOptions = set of TDhcpServerOption;
 
@@ -1290,6 +1292,7 @@ type
     function LoadFromText(const Text: RawUtf8): boolean;
     /// persist the internal entry list using SaveToText() format
     // - returns the number of entries stored in the file, or -1 on write error
+    // - will maintain a .bak atomic copy unless dsoNoFileBak option is set
     function SaveToFile(const FileName: TFileName): integer;
     /// restore the internal entry list using SaveToText() format
     // - should be done before Setup() to validate the settings network mask
@@ -3428,7 +3431,7 @@ procedure TDhcpProcess.Shutdown;
 begin
   // disable ComputeResponse()
   if fState in [sNone, sShutdown] then
-    exit; // no Setup(), or called twice
+    exit; // no valid Setup(), or called twice
   fState := sShutdown;  // abort any ComputeResponse() ASAP
   fScopeSafe.WriteLock; // wait for any pending process
   try
@@ -3868,12 +3871,23 @@ end;
 function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
 var
   txt: RawUtf8;
+  bak: TFileName;
 begin
-  txt := SaveToText(@result); // make fScopeSafe.ReadLock/ReadUnLock
+  txt := SaveToText(@result);     // make fScopeSafe.ReadLock/ReadUnLock
+  if not (dsoNoFileBak in fOptions) then
+  begin
+    bak := ChangeFileExt(FileName, '.bak');
+    DeleteFile(bak);
+    RenameFile(FileName, bak);    // atomic backup
+  end;
   if FileFromString(txt, FileName) then
     fModifSaved := fModifSequence // success: won't retry on next OnIdle()
   else
-    result := -1; // indicates error writing to disk
+  begin
+    if bak <> '' then
+      RenameFile(bak, FileName);  // restore the previous file (if any)
+    result := -1;                 // indicates error writing to disk
+  end;
 end;
 
 function TDhcpProcess.LoadFromFile(const FileName: TFileName): boolean;
