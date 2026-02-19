@@ -18,7 +18,7 @@ unit mormot.net.dhcp;
    Static IP reservation using MAC address or any other set of options (e.g. 61).
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
-   Scale up to 100k+ leases per subnet with minimal RAM/CPU consumption.
+   Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
@@ -566,15 +566,17 @@ type
   // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
   // - State/RateLimit/Mac fields should be in this order to match expectations
   // - Benchmark of O(n) single core logic shows it depends only on CPU cache:
-  // $   200 DHCP renewals in 31us i.e. 6.1M/s, aver. 155ns
-  // $  1000 DHCP renewals in 275us i.e. 3.4M/s, aver. 275ns
-  // $  2000 DHCP renewals in 854us i.e. 2.2M/s, aver. 427ns
-  // $  5000 DHCP renewals in 4.55ms i.e. 1M/s, aver. 910ns
-  // $ 10000 DHCP renewals in 16.87ms i.e. 578.7K/s, aver. 1.68us
-  // $ 20000 DHCP renewals in 65.01ms i.e. 300.4K/s, aver. 3.25us
-  // $ 40000 DHCP renewals in 179.98ms i.e. 217K/s, aver. 4.49us
-  // $ 60000 DHCP renewals in 573.57ms i.e. 102.1K/s, aver. 9.55us
-  // in all case, it exceeds actual network capatibility
+  // $    200 DHCP renewals in 31us i.e. 6.1M/s, aver. 155ns
+  // $   1000 DHCP renewals in 275us i.e. 3.4M/s, aver. 275ns
+  // $   2000 DHCP renewals in 854us i.e. 2.2M/s, aver. 427ns
+  // $   5000 DHCP renewals in 4.55ms i.e. 1M/s, aver. 910ns
+  // $  10000 DHCP renewals in 16.87ms i.e. 578.7K/s, aver. 1.68us
+  // $  20000 DHCP renewals in 65.01ms i.e. 300.4K/s, aver. 3.25us
+  // $  40000 DHCP renewals in 179.98ms i.e. 217K/s, aver. 4.49us
+  // $  60000 DHCP renewals in 573.57ms i.e. 102.1K/s, aver. 9.55us
+  // $ 100000 DHCP renewals in 1.61s i.e. 60.5K/s, aver. 16.12us
+  // which exceeds actual network capatibility up to 100k leases - we could add
+  // a TDynArrayHasher index but it seems not worth it yet
   TDhcpLease = packed record
     /// how this entry should be handled
     State: TLeaseState;
@@ -2660,7 +2662,7 @@ begin
     else
       // make a transient copy of all leases to keep the lock small for this subnet
       // - could eventually be done if OnIdle() made a background thread (not yet)
-      // - in practice, SaveToFile(40000)=2.66ms so would be premature optimization
+      // - in practice, SaveToFile(100K)=7ms so would be premature optimization
       local := copy(Entry, 0, Count); // allocate Count * 16 bytes
   finally
     Safe.UnLock;
@@ -3544,13 +3546,13 @@ begin
       if tix32 >= fFileFlushTix then        // reached the next persistence time
       begin
         fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
-        QueryPerformanceMicroSeconds(start);         // saved=40000 in 2.66ms
+        QueryPerformanceMicroSeconds(start);         // saved=100000 in 7.04ms
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
         // do not aggressively retry if saved<0 (write failed)
         // note: no localcopy made yet - TUdpServerThread.OnIdle would block any
         // recv(UDP packet) so we would need to create a background thread and
-        // SaveToFile() takes 2.66ms with 40K leases so it is not worth it
+        // SaveToFile() takes 7ms with 100K leases so it is not worth it
         if fMetricsFolder <> '' then
         begin
           csv := tix32 >= fMetricsCsvTix;

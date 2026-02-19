@@ -1570,7 +1570,7 @@ var
   ips: TNetIP4s;
   timer: TPrecisionTimer;
   f: PAnsiChar;
-  hostname, opt82: TShort7;
+  hostname, opt82: TShort15;
   rnd: TLecuyer;
   nfo: TMacIP;
   m1, m2: TDhcpMetrics;
@@ -1836,7 +1836,7 @@ begin
     // custom settings for our tests
     settings.AddScope; // with default subnet
     CheckEqual(settings.Scope[0].SubnetMask, '192.168.1.1/24');
-    settings.Scope[0].SubnetMask := '192.168.0.1/16'; // allow 65,536 IPs
+    settings.Scope[0].SubnetMask := '192.168.0.1/14'; // allow 262,144 IPs
     //ConsoleObject(settings);
     //ConsoleWrite(ObjectToIni(settings, 'Dhcp'));
     // setup the DHCP server logic
@@ -1894,7 +1894,7 @@ begin
     sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
     CheckEqual(IP4ToText(@sip4), '192.168.0.1');
     CheckEqual(d.Send.siaddr, sip4);
-    CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(16));
+    CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(14));
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
@@ -1918,7 +1918,7 @@ begin
         ip4 := d.Send.ciaddr
       else
         CheckEqual(d.Send.ciaddr, ip4, 'consecutive ips');
-      CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(16));
+      CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(14));
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
@@ -1935,7 +1935,7 @@ begin
     CheckSaveToTextMatch(txt);
     d.Recv.cookie := 0;
     Check(server.ComputeResponse(d) < 0, 'invalid frame');
-    // make 200 concurrent requests - more than 2M handshakes per second ;)
+    // make N concurrent requests
     n := length(macs);
     SetLength(ips, n);
     timer.Start;
@@ -1974,10 +1974,11 @@ begin
     CheckEqual(PosEx(' 192.168.0.100', txt), 0, 'no static ip');
     Check(PosEx(' 192.168.0.101', txt) <> 0, 'saved 3');
     Check(PosEx(' 192.168.0.109', txt) <> 0, 'saved 4');
-    CheckEqual(PosEx(' 192.168.0.110', txt), 0, 'no static mac=ip');
+    CheckEqual(PosEx(' 192.168.0.110', txt), 0, 'static ip');
     Check(PosEx(' 192.168.0.111', txt) <> 0, 'saved 5');
-    CheckEqual(PosEx(MacToText(@macs[1]), txt), 0, 'no static mac=ip');
-    CheckNotEqual(PosEx(MacToText(@macs[10]), txt), 0, 'saved 6');
+    CheckEqual(PosEx(MacToText(@macs[1]), txt), 0, 'static mac1');
+    for i := 2 to 100 do
+      CheckNotEqual(PosEx(MacToText(@macs[i]), txt), 0, 'no static macs');
     Check(length(txt) > 2000, 'saved len2');
     // validate ParseMacIP()
     for i := 0 to n - 1 do
