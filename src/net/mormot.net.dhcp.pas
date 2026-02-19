@@ -1228,6 +1228,7 @@ type
     fOptions: TDhcpServerOptions;
     fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fMetricsDroppedPackets, fMetricsInvalidRequest: QWord; // no scope counters
+    fLogPrefix: RawUtf8;
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
@@ -1342,6 +1343,9 @@ type
     // - could be called after Setup() to refine the metrics process
     property MetricsFolder: TFileName
       read fMetricsFolder write SetMetricsFolder;
+    /// can replace 'ComputeResponse: ' default header for DoLog() events
+    property LogPrefix: RawUtf8
+      read fLogPrefix write fLogPrefix;
     /// the internal list modification sequence number
     // - increased at every update of the internal entry list
     // - used e.g. by OnIdle() to trigger SaveToFile() if FileName is defined
@@ -3332,6 +3336,8 @@ begin
   fScopeSafe.WriteLock;
   try
     fState := sSetupFailed; // keep on EDhcp exception
+    if fLogPrefix = '' then
+      fLogPrefix := 'Compute Response: ';
     // assign aSettings.Scope[] subnet definitions
     SetLength(new, length(aSettings.Scope));
     for i := 0 to high(new) do
@@ -3906,6 +3912,7 @@ var
   fam: TSynLogFamily;
   one: TSynLog;
   msg: ShortString;
+  prefixlen: PtrInt;
 begin
   // this method could be overriden to extend or replace the default logging
   fam := fLog.Family;
@@ -3917,7 +3924,9 @@ begin
   else
     exit;
   // generate 'ComputeResponse: REQUEST MAC context RESPONSE IP Host boot=..'
-  msg := 'ComputeResponse: ';
+  prefixlen := length(fLogPrefix); // 'ComputeResponse: ' by default
+  msg[0] := AnsiChar(prefixlen);
+  MoveFast(pointer(fLogPrefix)^, msg[1], prefixlen);
   AppendShortAnsi7String(DHCP_TXT[State.RecvType], msg);
   AppendShortChar(' ', @msg);
   if State.Mac[0] <> #0 then
@@ -3957,7 +3966,7 @@ begin
     one.LogText(Level, PUtf8Char(@msg[1]), nil); // this is the fastest API
   // optionnally send 'REQUEST MAC...' text to system logs (much slower)
   if dsoSystemLog in fOptions then
-    JournalSend(Level, @msg[18], ord(msg[0]) - 17, {trimlogdate=}false);
+    JournalSend(Level, @msg[prefixlen + 1], ord(msg[0]) - prefixlen, false);
 end;
 
 function TDhcpProcess.DoError(var State: TDhcpState; Context: TDhcpScopeMetric;
