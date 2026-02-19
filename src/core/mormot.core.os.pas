@@ -2065,11 +2065,6 @@ function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 procedure FileClose(F: THandle); stdcall;
 
-/// redefined here to avoid warning to include "Windows" in uses clause
-// and support FileName longer than MAX_PATH
-// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
-function RenameFile(const OldName, NewName: TFileName): boolean;
-
 /// redirection to Windows SetFileTime() of a file name from Int64(TFileTime)
 // - if any Int64 is 0, the proper value will be guess from the non-0 values
 function FileSetTime(const FileName: TFileName;
@@ -2955,6 +2950,10 @@ function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 // and support FileName longer than MAX_PATH
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function DeleteFile(const aFileName: TFileName): boolean;
+
+/// redefined here to avoid warning to include "Windows" in uses clause
+// and support FileName longer than MAX_PATH
+function RenameFile(const aOld, aNew: TFileName): boolean;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
 // and support FileName longer than MAX_PATH

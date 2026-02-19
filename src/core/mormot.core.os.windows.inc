@@ -1149,6 +1149,15 @@ begin
             DeleteFileW(W32(aFileName, tmp));
 end;
 
+function RenameFile(const aOld, aNew: TFileName): boolean;
+var
+  o, n: TW32Temp;
+begin
+  result := (aOld <> '') and
+            (aNew <> '') and
+            MoveFileW(W32(aOld, o), W32(aNew, n));
+end;
+
 function RemoveDir(const aDirName: TFileName): boolean;
 var
   tmp: TW32Temp;
@@ -1262,17 +1271,6 @@ end;
 procedure FileSetSticky(const FileName: TFileName);
 begin
   FileSetAttr(FileName, FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_SYSTEM);
-end;
-
-function RenameFile(const OldName, NewName: TFileName): boolean;
-var
-  o, n: TW32Temp;
-begin
-  if (OldName = '') or
-     (NewName = '') then
-    result := false
-  else
-    result := MoveFileW(W32(OldName, o), W32(NewName, n));
 end;
 
 function FileSetTime(const FileName: TFileName;

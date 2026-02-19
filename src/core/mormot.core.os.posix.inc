@@ -1345,6 +1345,13 @@ begin
             (FpUnlink(pointer(aFileName)) >= 0);
 end;
 
+function RenameFile(const aOld, aNew: TFileName): boolean;
+begin
+  result := (aOld <> '') and
+            (aNew <> '') and
+            (FpRename(pointer(aOld), pointer(aNew)) >= 0);
+end;
+
 function RemoveDir(const aDirName: TFileName): boolean;
 begin
   result := (aDirName <> '') and
