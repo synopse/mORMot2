@@ -5367,8 +5367,21 @@ begin
 end;
 
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
+var
+  p: PAnsiChar;
+  l: PtrInt;
 begin
-  SetString(result, PAnsiChar(pointer(source)), length(source));
+  p := pointer(source);
+  if p = nil then
+    result[0] := #0
+  else
+  begin
+    l := PStrLen(p - _STRLEN)^;
+    if l > high(result) then
+      l := high(result);
+    result[0] := AnsiChar(l);
+    MoveFast(p^, result[1], l);
+  end;
 end;
 
 procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
