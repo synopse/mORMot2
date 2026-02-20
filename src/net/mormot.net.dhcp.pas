@@ -23,6 +23,7 @@ unit mormot.net.dhcp;
    Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
    Meaningful and customizable logging of the actual process (e.g. into syslog).
+   Optional verbose debug of all input/output frames as meaninful JSON objects.
    Generate detailed JSON and CSV metrics as local files, global and per scope.
    Easy configuration via JSON or INI files.
    Expandable in code via callbacks or virtual methods as plugins.
@@ -1186,9 +1187,11 @@ type
   // - dsoSystemLog would call JournalSend() in addition to default TSynLog -
   // but it will slowdown the process a lot, so should be used with caution
   // - dsoNoFileBak would disable the '.bak' renaming during SaveToFile()
+  // - dsoVerboseLog will include input/output frames to the log as JSON
   TDhcpServerOption = (
     dsoSystemLog,
-    dsoNoFileBak);
+    dsoNoFileBak,
+    dsoVerboseLog);
   /// refine DHCP server process for all scopes
   TDhcpServerOptions = set of TDhcpServerOption;
 
@@ -1275,6 +1278,8 @@ type
       const State: TDhcpState); virtual;
     function DoError(var State: TDhcpState; Context: TDhcpScopeMetric;
       Lease: PDhcpLease = nil): PtrInt; virtual;
+    procedure OnLogFrame(Sender: TSynLog; Level: TSynLogLevel; Opaque: pointer;
+      Value: PtrInt; Instance: TObject); virtual;
     function ParseFrame(var State: TDhcpState): boolean; virtual;
     function FindScope(var State: TDhcpState): boolean; virtual;
     function FindLease(var State: TDhcpState): PDhcpLease; virtual;
@@ -4511,6 +4516,21 @@ begin
     JournalSend(Level, @msg[prefixlen + 1], ord(msg[0]) - prefixlen, false);
 end;
 
+procedure TDhcpProcess.OnLogFrame(Sender: TSynLog; Level: TSynLogLevel;
+  Opaque: pointer; Value: PtrInt; Instance: TObject);
+var
+  s: PDhcpState absolute Opaque;
+begin
+  case Level of
+    sllClient:
+      DoDhcpToJson(Sender.Writer, @s^.Recv, s^.RecvLen, {state=}nil);
+    sllServer:
+      DoDhcpToJson(Sender.Writer, @s^.Send, s^.SendLen, s);
+  else
+    Sender.Writer.AddShorter('LogFrame'); // paranoid
+  end;
+end;
+
 function TDhcpProcess.DoError(var State: TDhcpState; Context: TDhcpScopeMetric;
   Lease: PDhcpLease): PtrInt;
 begin
@@ -4568,6 +4588,10 @@ end;
 function TDhcpProcess.ParseFrame(var State: TDhcpState): boolean;
 begin
   result := State.Parse;
+  if result and
+     (dsoVerboseLog in fOptions) and
+     Assigned(fLog) then
+    fLog.Add.RawLog(sllClient, OnLogFrame, @State);
 end;
 
 function TDhcpProcess.RetrieveFrameIP(
@@ -4854,7 +4878,10 @@ begin
     // append verbatim options 61/82 copy + end Send buffer stream
     result := State.Flush;
     if result = 0 then
-      result := DoError(State, dsmDroppedTooManyOptions);
+      result := DoError(State, dsmDroppedTooManyOptions)
+    else if (dsoVerboseLog in fOptions) and
+            Assigned(fLog) then
+      fLog.Add.RawLog(sllServer, OnLogFrame, @State);
   end;
 end;
 
