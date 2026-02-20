@@ -1083,6 +1083,13 @@ type
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
 
+  /// low-level callback triggered within the raw logging context
+  // - allow TSynLog.RawLog() to ouput directly some data to Sender.Writer
+  // - is called between LogHeader/LogTrailer methods, in the global lock
+  // - the implementation should be stable and don't break the same-line output
+  TOnRawLog = procedure(Sender: TSynLog; Level: TSynLogLevel;
+    Opaque: pointer; Value: PtrInt; Instance: TObject) of object;
+
   /// a per-family and/or per-thread log file content
   // - you should create a sub class per kind of log file
   // ! TSynLogDB = class(TSynLog);
@@ -1402,6 +1409,11 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char; aInstance: TObject = nil;
       const IgnoreWhenStartWith: PAnsiChar = nil);
+    /// call this method to execute a callback within custom TJsonWriter
+    // - can be used to output directly e.g. JSON content into Sender.Writer
+    // - Opaque/Value will be passed to Event, together with Instance
+    procedure RawLog(Level: TSynLogLevel; const Event: TOnRawLog;
+      Opaque: pointer = nil; Value: PtrInt = 0; Instance: TObject = nil);
     /// manual low-level TSynLog.Enter execution without the ISynLog overhead
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
@@ -5622,6 +5634,24 @@ begin
   AppendShortChar(' ', @tmps);
   ContentAppend(Data, DataLen, ord(tmp[0]), MinPtrInt(high(tmp), TruncateLen), @tmp[1]);
   LogText(Level, @tmp[1], Instance); // this method with ending #0 is the fastest
+end;
+
+procedure TSynLog.RawLog(Level: TSynLogLevel; const Event: TOnRawLog;
+  Opaque: pointer; Value: PtrInt; Instance: TObject);
+begin
+  if (self = nil) or
+     not (Level in fFamily.fLevel) or
+     not Assigned(Event) then
+    exit;
+  if LockAndDisableExceptions then
+  try
+    LogHeader(Level, Instance);
+    Event(self, Level, Opaque, Value, Instance);
+    fWriterEcho.AddEndOfLine(Level); // LogTrailer(Level) is not needed here
+  finally
+    fThreadInfo^.Flags := fThreadInfoBackup;
+    GlobalThreadLock.UnLock;
+  end;
 end;
 
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
