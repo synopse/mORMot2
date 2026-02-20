@@ -876,6 +876,8 @@ type
     function MatchOne(one: PRuleValue): boolean;
     /// serialize the Recv/RecvType/RecvLens/RecvLensRai fields as a JSON object
     function RecvToJson(extended: boolean = false): RawJson;
+    /// serialize the Send/SendLen fields as a JSON object
+    function SendToJson(extended: boolean = false): RawJson;
     /// for testing: wrapper to DhcpClient() on the State.Recv[] buffer
     // - then call e.g. DhcpAddOption32/Raw/Buf/U/Short() functions
     function ClientNew(dmt: TDhcpMessageType; const addr: TNetMac;
@@ -1551,7 +1553,7 @@ var
 function DhcpNew(var dhcp: TDhcpPacket; dmt: TDhcpMessageType; xid: cardinal;
   const addr: TNetMac; serverid: TNetIP4 = 0): PAnsiChar;
 begin
-  FillCharFast(dhcp, SizeOf(dhcp) - SizeOf(dhcp.options), 0);
+  FillCharFast(dhcp, DHCP_PACKET_HEADER, 0);
   dhcp.op := DHCP_BOOT[dmt];
   dhcp.htype := ARPHRD_ETHER;
   dhcp.hlen := SizeOf(addr);
@@ -3454,7 +3456,7 @@ end;
 
 function TDhcpState.RecvToJson(extended: boolean): RawJson;
 var
-  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
+  tmp: TTextWriterStackBuffer; // 8KB static
   W: TJsonWriter;
 begin
   result := '';
@@ -3464,7 +3466,26 @@ begin
   try
     if extended then
       W.CustomOptions := [twoForceJsonExtended];
-    DoDhcpToJson(W, @Recv, RecvLen, @self); // as a single JSON object
+    DoDhcpToJson(W, @Recv, RecvLen, {state=}nil); // as a single JSON object
+    W.SetText(RawUtf8(result));
+  finally
+    W.Free;
+  end;
+end;
+
+function TDhcpState.SendToJson(extended: boolean): RawJson;
+var
+  tmp: TTextWriterStackBuffer; // 8KB static
+  W: TJsonWriter;
+begin
+  result := '';
+  if SendLen = 0 then
+    exit;
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    if extended then
+      W.CustomOptions := [twoForceJsonExtended];
+    DoDhcpToJson(W, @Send, SendLen, {state=}nil); // as a single JSON object
     W.SetText(RawUtf8(result));
   finally
     W.Free;
