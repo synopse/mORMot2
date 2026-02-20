@@ -300,7 +300,8 @@ function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
 function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
 
 /// parse a raw DHCP binary frame and encode it as a JSON object
-function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt): RawJson;
+function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt;
+  extended: boolean = false): RawJson;
 
 /// locate an option by number in a DHCP packet
 // - assume dhcp^ contains a packet already validated by DhcpParse()
@@ -871,7 +872,7 @@ type
     /// raw search of one "rules" value in State.Recv[]
     function MatchOne(one: PRuleValue): boolean;
     /// serialize the Recv/RecvType/RecvLens/RecvLensRai fields as a JSON object
-    function RecvToJson: RawJson;
+    function RecvToJson(extended: boolean = false): RawJson;
   private
     // methods for internal use
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
@@ -2202,8 +2203,12 @@ begin
     W.AddPropJsonShort('ciaddr', IP4ToShort(@p^.ciaddr));
   if p^.siaddr <> 0 then
     W.AddPropJsonShort('siaddr', IP4ToShort(@p^.siaddr));
-  if not IsZero(PNetMac(@p^.giaddr)^) then
-    W.AddPropJsonShort('giaddr', MacToShort(@p^.giaddr));
+  if p^.yiaddr <> 0 then
+    W.AddPropJsonShort('yiaddr', IP4ToShort(@p^.yiaddr));
+  if p^.giaddr <> 0 then
+    W.AddPropJsonShort('giaddr', IP4ToShort(@p^.giaddr));
+  if not IsZero(PNetMac(@p^.chaddr)^) then
+    W.AddPropJsonShort('chaddr', MacToShort(@p^.chaddr));
   // main decoded/parsed state fields in fields
   if s <> nil then
   begin
@@ -2232,7 +2237,7 @@ begin
   W.CancelLastComma('}');
 end;
 
-function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt): RawJson;
+function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt; extended: boolean): RawJson;
 var
   tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
   W: TJsonWriter;
@@ -2242,6 +2247,8 @@ begin
     exit;
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
+    if extended then
+      W.CustomOptions := [twoForceJsonExtended];
     DoDhcpToJson(W, dhcp, len, {state=}nil); // as a single JSON object
     W.SetText(RawUtf8(result));
   finally
@@ -3433,16 +3440,18 @@ begin
   end;
 end;
 
-function TDhcpState.RecvToJson: RawJson;
+function TDhcpState.RecvToJson(extended: boolean): RawJson;
 var
   tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
   W: TJsonWriter;
 begin
-  result := 'null';
+  result := '';
   if Mac64 = 0 then
     exit;
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
+    if extended then
+      W.CustomOptions := [twoForceJsonExtended];
     DoDhcpToJson(W, @Recv, RecvLen, @self); // as a single JSON object
     W.SetText(RawUtf8(result));
   finally
