@@ -2276,6 +2276,27 @@ begin
     CheckEqual(json, '{"discover":3,"offer":3,"decline":3,"lease-allocated":4,' +
       '"dynamic-hits":3,"option-50-hits":1,"option-82-hits":1,' +
       '"dropped-packets":1}');
+    // validate INFORM with no ciaddr
+    d.ClientFlush(d.ClientNew(dmtInform, macs[10], []));
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:"INFORM"}');
+    CheckEqual(server.ComputeResponse(d), 0, 'wrong inform has no resp');
+    CheckEqual(server.Scope[0].Metrics.Current[dsmInform], 1);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmDroppedInvalidIP], 1);
+    // validate INFORM with proper ciaddr
+    d.ClientFlush(d.ClientNew(dmtInform, macs[11]));
+    d.Recv.ciaddr := ip4;
+    CheckNotEqual(server.ComputeResponse(d), 0, 'inform');
+    mac := MacToText(@macs[11]);
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",ciaddr:"' + ip + '",chaddr:"' + mac +
+       '",dhcp-message-type:"INFORM",dhcp-parameter-request-list:' +
+       '["subnet-mask","routers","domain-name-servers","domain-name",' +
+       '"broadcast-address"]}');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0"}');
   finally
     server.Free;
     settings.Free;
