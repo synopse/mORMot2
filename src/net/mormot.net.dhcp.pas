@@ -5060,13 +5060,11 @@ begin
         dmtInform:
           begin
             inc(State.Scope^.Metrics.Current[dsmInform]);
-            // client requests configuration options for its static IP
+            // client requests configuration options for its given IP
             State.Ip4 := State.Recv.ciaddr;
-            if not State.Scope^.Subnet.Match(State.Ip4) or
-               ((p <> nil) and
-                not (p^.State in [lsUnavailable, lsOutdated, lsStatic])) then
+            if not State.Scope^.Subnet.Match(State.Ip4) then
             begin
-              IP4Short(@State.Ip4, State.Ip);
+              IP4Short(@State.Ip4, State.Ip); // no ciaddr or wrong subnet
               result := DoError(State, dsmDroppedInvalidIP);
               exit;
             end;
@@ -5108,11 +5106,11 @@ begin
                 p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
                 p^.IP4 := State.Ip4;
               end;
-              // respond with an ACK and the standard options
-              inc(State.Scope^.Metrics.Current[dsmAck]);
-              State.SendType := dmtAck;
             end;
-          end
+            // respond with an ACK and the standard options
+            inc(State.Scope^.Metrics.Current[dsmAck]);
+            State.SendType := dmtAck;
+          end;
       else
         begin
           // ParseFrame() was correct but this message type is not supported yet
