@@ -207,6 +207,7 @@ type
 
 var
   /// uppercase identifier of each DHCP message type, e.g. 'DISCOVER' or 'ACK'
+  // - DHCP_TXT[dmtUndefined] = 'invalid' as expected by DoLog()
   DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
 
   /// KEA-like identifier of each DHCP option
@@ -239,6 +240,7 @@ const
 
 /// initialize a DHCP client discover/request packet
 // - returns pointer to @dhcp.options for additional DhcpAddOption() fluent calls
+// - use rather TDhcpState.ClientNew/ClientFlush wrapper methods
 function DhcpClient(var dhcp: TDhcpPacket; dmt: TDhcpMessageType;
   const addr: TNetMac; req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
 
@@ -661,8 +663,7 @@ type
     dsoInformRateLimit,
     dsoCsvUnixTime,
     dsoPxeNoInherit,
-    dsoPxeDisable
-    );
+    dsoPxeDisable);
   /// refine DHCP server process for one TDhcpScopeSettings
   TDhcpScopeOptions = set of TDhcpScopeOption;
 
@@ -873,6 +874,12 @@ type
     function MatchOne(one: PRuleValue): boolean;
     /// serialize the Recv/RecvType/RecvLens/RecvLensRai fields as a JSON object
     function RecvToJson(extended: boolean = false): RawJson;
+    /// for testing: wrapper to DhcpClient() on the State.Recv[] buffer
+    // - then call e.g. DhcpAddOption32/Raw/Buf/U/Short() functions
+    function ClientNew(dmt: TDhcpMessageType; const addr: TNetMac;
+      req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
+    /// for testing: properly end ClientNew() buffer with #255 and compute RecvLen
+    procedure ClientFlush(current: PAnsiChar);
   private
     // methods for internal use
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
@@ -1570,7 +1577,8 @@ function DhcpClient(var dhcp: TDhcpPacket; dmt: TDhcpMessageType;
   const addr: TNetMac; req: TDhcpOptions): PAnsiChar;
 begin
   result := DhcpNew(dhcp, dmt, {xid=}0, addr);
-  result := DhcpAddOptionRequestList(result, req);
+  if req <> [] then
+    result := DhcpAddOptionRequestList(result, req);
   result^ := #255; // only for internal/debug use
 end;
 
@@ -3457,6 +3465,24 @@ begin
   finally
     W.Free;
   end;
+end;
+
+function TDhcpState.ClientNew(dmt: TDhcpMessageType; const addr: TNetMac;
+  req: TDhcpOptions): PAnsiChar;
+begin
+  result := DhcpClient(Recv, dmt, addr, req);
+end;
+
+procedure TDhcpState.ClientFlush(current: PAnsiChar);
+var
+  size: PtrUInt;
+begin
+  size := current - PAnsiChar(@Recv) + 1;
+  RecvLen := 0; // avoid GPF
+  if size > SizeOf(Recv) then
+    exit;
+  RecvLen := size;
+  current^ := #255;
 end;
 
 
