@@ -296,6 +296,9 @@ type
 function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
   found: PDhcpOptions = nil; mac: PNetMac = nil): TDhcpMessageType;
 
+/// quickly validate a DHCP binary frame header
+function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
+
 /// locate an option by number in a DHCP packet
 // - assume dhcp^ contains a packet already validated by DhcpParse()
 // - returns nil if not found, or the location of op value in dhcp^.option[]
@@ -1560,6 +1563,18 @@ begin
   result^ := #255; // only for internal/debug use
 end;
 
+function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
+begin
+  result := (dhcp <> nil) and
+            (len >= DHCP_PACKET_HEADER) and
+            (len <= SizeOf(dhcp^)) and
+            (dhcp^.cookie = DHCP_MAGIC_COOKIE) and
+            (dhcp^.htype = ARPHRD_ETHER) and
+            (dhcp^.hlen = SizeOf(TNetMac)) and
+            (dhcp^.xid <> 0) and
+            (dhcp^.op in [BOOT_REQUEST, BOOT_REPLY]);
+end;
+
 function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
   found: PDhcpOptions; mac: PNetMac): TDhcpMessageType;
 var
@@ -1573,16 +1588,10 @@ begin
     found^ := [];
   FillCharFast(lens, SizeOf(lens), 0);
   // validate header
-  dec(len, PtrInt(PtrUInt(@PDhcpPacket(nil)^.options)));
-  if (len <= 0) or
-     (dhcp = nil) or
-     (dhcp^.cookie <> DHCP_MAGIC_COOKIE) or
-     (dhcp^.htype <> ARPHRD_ETHER) or
-     (dhcp^.hlen <> SizeOf(TNetMac)) or
-     (dhcp^.xid = 0) or
-     not (dhcp^.op in [BOOT_REQUEST, BOOT_REPLY]) then
+  if not DhcpParseHeader(dhcp, len) then
     exit;
   // parse DHCP options store as Type-Length-Value (TLV)
+  dec(len, DHCP_PACKET_HEADER);
   p := @dhcp^.options;
   repeat
     // check len to avoid buffer overflow on malformatted input
