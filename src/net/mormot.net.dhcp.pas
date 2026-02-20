@@ -5043,20 +5043,23 @@ begin
                 result := DoError(State, dsmRateLimitHit);
                 exit;
               end;
-            // invalidate OFFERed IP
+            // retrieve and check requested IP
             State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doDhcpRequestedAddress]);
-            if (State.Ip4 <> 0) and // authoritative IP
-               not State.Scope^.SubNet.Match(State.Ip4) then // need clean IP
-            begin
-              inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
-              State.Ip4 := 0;
-            end;
-            if State.Ip4 = 0 then
-              State.Ip4 := p^.IP4 // option 50 was not set (or not in our subnet)
+            if State.Ip4 <> 0 then // authoritative IP is option 50
+              inc(State.Scope^.Metrics.Current[dsmOption50Hits])
             else
-              inc(State.Scope^.Metrics.Current[dsmOption50Hits]);
+              State.Ip4 := State.Recv.ciaddr; // fallback to ciaddr
+            if State.Ip4 = 0 then
+              State.Ip4 := p^.IP4 // last reserved IP would be invalidated below
+            else if not State.Scope^.SubNet.Match(State.Ip4) then
+            begin
+              // option 50 or ciaddr is not for this subnet -> do nothing
+              result := DoError(State, dsmDroppedInvalidIP);
+              exit;
+            end;
+            // always invalidate any previous offered IP
             p^.State := lsUnavailable;
-            p^.IP4 := 0; // invalidate the previous offered IP
+            p^.IP4 := 0;
             if State.Ip4 <> 0 then
             begin
               // store internally this IP as unavailable for NextIP4
