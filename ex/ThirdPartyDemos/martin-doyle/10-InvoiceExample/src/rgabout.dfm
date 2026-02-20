@@ -1,12 +1,12 @@
 object AboutForm: TAboutForm
-  Left = 316
-  Height = 679
-  Top = 38
-  Width = 463
+  Left = 342
+  Height = 397
+  Top = 150
+  Width = 676
   BorderStyle = bsDialog
   Caption = 'About Rechnung'
-  ClientHeight = 679
-  ClientWidth = 463
+  ClientHeight = 397
+  ClientWidth = 676
   Color = clBtnFace
   ParentFont = True
   Position = poDesktopCenter
@@ -14,9 +14,9 @@ object AboutForm: TAboutForm
   OnShow = FormShow
   object Copyright: TLabel
     Left = 370
-    Height = 16
+    Height = 18
     Top = 97
-    Width = 252
+    Width = 310
     Caption = 'Copyright 1983 - 2024  Borland, Synopse'
   end
   object Line: TBevel
@@ -27,24 +27,24 @@ object AboutForm: TAboutForm
   end
   object SKUName: TLabel
     Left = 370
-    Height = 16
+    Height = 18
     Top = 73
-    Width = 77
+    Width = 95
     Caption = 'Using Delphi'
   end
   object Memory: TLabel
-    Left = 386
-    Height = 16
+    Left = 410
+    Height = 18
     Top = 248
-    Width = 49
+    Width = 61
     Alignment = taRightJustify
     Caption = 'Memory'
   end
   object OS: TLabel
     Left = 374
-    Height = 16
+    Height = 18
     Top = 175
-    Width = 18
+    Width = 22
     Caption = 'OS'
   end
   object ImageMain: TImage
@@ -375,42 +375,42 @@ object AboutForm: TAboutForm
       4CA56E5642984ADDAC843095BA59FF03127451BCC7C39DC60000000049454E44
       AE426082
     }
-    Stretch = True
+    Transparent = True
   end
   object LabelmORMot: TLabel
     Left = 368
-    Height = 16
+    Height = 18
     Top = 24
-    Width = 61
+    Width = 75
     Caption = 'mORMot2'
   end
   object AppVersion: TLabel
     Left = 370
-    Height = 16
+    Height = 18
     Top = 49
-    Width = 103
+    Width = 133
     Caption = 'Version 2.0.489'
     Font.Style = [fsBold]
     ParentFont = False
   end
   object CPU: TLabel
     Left = 374
-    Height = 16
+    Height = 18
     Top = 200
-    Width = 27
+    Width = 31
     Caption = 'CPU'
   end
   object BIOS: TLabel
     Left = 376
-    Height = 16
+    Height = 18
     Top = 224
-    Width = 30
+    Width = 37
     Caption = 'BIOS'
   end
   object OKButton: TButton
-    Left = 448
+    Left = 368
     Height = 25
-    Top = 319
+    Top = 191
     Width = 75
     Cancel = True
     Caption = 'OK'
