@@ -140,6 +140,7 @@ type
 
   /// store the 4 bytes of a typical IP address as 32-bit unsigned integer
   TNetIP4 = cardinal;
+  PNetIP4 = ^TNetIP4;
   /// store several 4 bytes of a typical IP address as 32-bit unsigned integers
   TNetIP4s = array of TNetIP4;
   /// store the 16-bit IP port to connect/bind a socket

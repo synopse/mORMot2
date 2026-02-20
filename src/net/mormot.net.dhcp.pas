@@ -2034,27 +2034,27 @@ begin
             dec(len);
             if len = 0 then
               break;
-            inc(v, 4);
+            inc(PNetIP4(v));
             W.AddComma;
           until false;
           W.AddDirect(']');
           exit;
         end;
       ptMac:
-        if len = 6 then
+        if len = SizeOf(TNetMac) then              // as JSON string "xx:xx:.."
         begin
-          W.AddBinToHumanHex(v, 6, '"');           // as JSON string "xx:xx:.."
+          W.AddBinToHumanHex(v, SizeOf(TNetMac), '"');
           exit;
         end
-        else if len mod 6 = 0 then                 // as JSON array
+        else if len mod SizeOf(TNetMac) = 0 then   // as JSON array
         begin
           W.AddDirect('[');
           repeat
-            W.AddBinToHumanHex(v, 6, '"');
-            dec(len, 6);
+            W.AddBinToHumanHex(v, SizeOf(TNetMac), '"');
+            dec(len, SizeOf(TNetMac));
             if len = 0 then
               break;
-            inc(v, 6);
+            inc(PNetMac(v));
             W.AddComma;
           until false;
           W.AddDirect(']');
@@ -2209,10 +2209,10 @@ begin
     W.AddPropJsonShort('op', 'reply');
   if p^.ciaddr <> 0 then
     W.AddPropJsonShort('ciaddr', IP4ToShort(@p^.ciaddr));
-  if p^.siaddr <> 0 then
-    W.AddPropJsonShort('siaddr', IP4ToShort(@p^.siaddr));
   if p^.yiaddr <> 0 then
     W.AddPropJsonShort('yiaddr', IP4ToShort(@p^.yiaddr));
+  if p^.siaddr <> 0 then
+    W.AddPropJsonShort('siaddr', IP4ToShort(@p^.siaddr));
   if p^.giaddr <> 0 then
     W.AddPropJsonShort('giaddr', IP4ToShort(@p^.giaddr));
   if not IsZero(PNetMac(@p^.chaddr)^) then
@@ -2247,7 +2247,7 @@ end;
 
 function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt; extended: boolean): RawJson;
 var
-  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
+  tmp: TTextWriterStackBuffer; // 8KB static
   W: TJsonWriter;
 begin
   result := '';
@@ -3037,7 +3037,7 @@ begin // dedicated sub-function for better codegen
       W.AddQ(boot + Int64(p^.Expired), {reserve=}48);
       d := PAnsiChar(W.B) + 1; // directly write to the output buffer
       d[0] := ' ';
-      ToHumanHexP(d + 1, @p^.mac, 6);
+      ToHumanHexP(d + 1, @p^.mac, SizeOf(p^.mac));
       d[18] := ' ';
       e := IP4TextAppend(@p^.IP4, d + 19);
       e[0] := #10;
@@ -4444,7 +4444,7 @@ begin
   prefixlen := length(fLogPrefix); // 'ComputeResponse: ' by default
   msg[0] := AnsiChar(prefixlen);
   MoveFast(pointer(fLogPrefix)^, msg[1], prefixlen);
-  AppendShortAnsi7String(DHCP_TXT[State.RecvType], msg);
+  AppendShortAnsi7String(DHCP_TXT[State.RecvType], msg); // Undefined='invalid'
   AppendShortChar(' ', @msg);
   if State.Mac[0] <> #0 then
   begin
