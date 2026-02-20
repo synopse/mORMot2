@@ -850,6 +850,8 @@ type
     // - returns the number of bytes of response in Send[]
     function Flush: PtrUInt;
   public
+    /// parse Recv/RecvLen input fields into Mac/Mac64/RecvLens/RecvLensRai
+    function Parse: boolean;
     /// raw append of a 32-bit big-endian/IPv4 option value into Send
     procedure AddOptionOnce32(const opt: TDhcpOption; be: cardinal);
       {$ifdef FPC} inline; {$endif}
@@ -2625,7 +2627,7 @@ begin // dedicated sub-function for better codegen
        (p^.IP4 <> 0) and
        (((p^.State = lsAck) or
         ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
-         (cardinal(tix32 - p^.Expired) < grace)))) then // still realistic
+         (cardinal(tix32 - p^.Expired) < grace)))) then // still reusable
     begin
       if subnet <> nil then
       begin
@@ -2660,15 +2662,14 @@ begin
   subtxt := '# ';
   Safe.Lock;
   try
-    if Count = 0 then
-      exit;
     // prepare the subnet mask as '# 192.168.0.1/24 subnet' comment line
     subtxt[0] := #2;
     AppendShort(SubNet.ToShort, subtxt);
     AppendShort(' subnet'#10, subtxt);
     // persist all leases of this subnet as text
     grace := LeaseTimeLE * MaxPtrUInt(GraceFactor, 2); // not too deprecated
-    result := DoWrite(W, pointer(Entry), Count, tix32, grace, time, @subtxt);
+    if Count <> 0 then
+      result := DoWrite(W, pointer(Entry), Count, tix32, grace, time, @subtxt);
   finally
     Safe.UnLock;
   end;
@@ -3621,13 +3622,14 @@ end;
 
 function TDhcpProcess.SaveToText(SavedCount: PInteger): RawUtf8;
 var
-  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
+  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer (20K leases)
   W: TTextWriter;
   tix32, saved, n: cardinal;
   boot: TUnixTime;
   s: PDhcpScope;
 begin
   result := CRLF; // returns something not void
+  // prepare the export context
   if SavedCount <> nil then
     SavedCount^ := 0;
   n := GetCount;
@@ -3635,7 +3637,7 @@ begin
     exit;
   tix32 := GetTickSec;
   boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
-  if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
+  if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016 :)
     exit;
   // save all leases in all scopes in dnsmasq format
   saved := 0;
