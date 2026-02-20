@@ -804,7 +804,9 @@ type
     // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
     Scope: PDhcpScope;
     /// length of the Recv UDP frame received from the client
-    RecvLen: integer;
+    RecvLen: {$ifdef CPUINTEL} word {$else} cardinal {$endif};
+    // length of the Send UDP frame after Flush
+    SendLen: {$ifdef CPUINTEL} word {$else} cardinal {$endif};
     /// 32-bit binary IP address allocated for Send
     Ip4: TNetIP4;
     /// binary MAC address from the Recv frame, zero-extended to 64-bit/8-bytes
@@ -3319,7 +3321,7 @@ end;
 
 function TDhcpState.Flush: PtrUInt;
 begin
-  // send back verbatim Option 61 if any
+  // send back verbatim Option 61 if any - by RFC 6842
   AddOptionCopy(doDhcpClientIdentifier, dsmOption61Hits);
   // send back Option 82 if any - should be the very last option by RFC 3046
   AddOptionCopy(doRelayAgentInformation, dsmOption82Hits);
@@ -3329,6 +3331,7 @@ begin
     result := 0 // too many options: do not send anything
   else
     SendEnd^ := #255; // end this valid frame
+  SendLen := result;
 end;
 
 procedure TDhcpState.ParseRecvLensRai;
@@ -3424,16 +3427,17 @@ function TDhcpState.Parse: boolean;
 begin
   Mac64 := 0;
   Ip4 := 0;
-  SendType := dmtUndefined;
-  RecvBoot := dcbDefault;
+  SendLen := 0;
   RecvRule := nil;
+  RecvBoot := dcbDefault;
+  SendType := dmtUndefined;
   RecvType := DhcpParse(@Recv, RecvLen, RecvLens, nil, @Mac64);
   Ip[0] := #0;
   if Mac64 <> 0 then
   begin
     // valid DHCP frame with RecvType <> dmtUndefined
     Mac[0] := #17;
-    ToHumanHexP(@Mac[1], @Mac64, 6);
+    ToHumanHexP(@Mac[1], @Mac64, SizeOf(TNetMac));
     RecvHostName := DhcpData(@Recv, RecvLens[doHostName]);
     FillZero(THash128(RecvLensRai));
     if RecvLens[doRelayAgentInformation] <> 0 then
