@@ -915,6 +915,9 @@ type
     // - is a wrapper around AddProp()
     procedure AddPropName(const PropName: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
+    /// append a RawUtf8 property name, as '"PropName":'
+    procedure AddPropNameU(const PropName: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a JSON field name, followed by a number value and a comma (',')
     procedure AddPropInt64(const PropName: ShortString; Value: Int64;
       WithQuote: AnsiChar = #0);
@@ -5438,6 +5441,11 @@ end;
 procedure TTextWriter.AddPropName(const PropName: ShortString);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
+end;
+
+procedure TTextWriter.AddPropNameU(const PropName: RawUtf8);
+begin
+  AddProp(pointer(PropName), length(PropName));
 end;
 
 procedure TTextWriter.AddPropInt64(const PropName: ShortString;
