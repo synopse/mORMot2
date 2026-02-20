@@ -3817,12 +3817,12 @@ end;
 
 function IP4ToShort(ip4addr: PByteArray): TShort16;
 begin
-  IP4Short(ip4addr, result);
+  result[0] := AnsiChar(IP4TextAppend(ip4addr, @result[1]) - @result[1]);
 end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 var
-  s: TShort16;
+  p: PAnsiChar;
 begin
   if PCardinal(ip4addr)^ = 0 then
     // '0.0.0.0' bound to any host -> ''
@@ -3832,8 +3832,8 @@ begin
     result := IP4local
   else
   begin
-    IP4Short(ip4addr, s);
-    FastSetString(result, @s[1], ord(s[0]));
+    p := IP4TextAppend(ip4addr, FastSetString(result, 16));
+    PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := p - pointer(result);
   end;
 end;
 
