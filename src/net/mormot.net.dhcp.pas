@@ -1727,11 +1727,47 @@ end;
 
 type
   TParseRule = (prMatch, prValue, prTlv);
+  TParseType = (ptText, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
+                ptUInt8, ptUInt16, ptUInt32, ptUInt64,
+                ptVendor43, ptMsg53, ptParam55, ptRelay82, ptCidr121, ptVendor125);
 const
   RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
     'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
     'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:', nil);
   FAKE_OP_MAC = 255; // to parse "mac": content
+
+function ParseType(op: byte): TParseType;
+begin
+  case op of
+    1, 3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 50, 54, 65,
+    68 .. 76, 85, 89, 92, 118, 112, 136, 138:
+      result := ptIp4;
+    23, 37, 46, 52, 116, 156, 157:
+      result := ptUInt8;
+    13, 22, 25, 26, 57, 93, 117:
+      result := ptUInt16;
+    2, 24, 35, 38, 51, 58, 59, 91, 108, 125, 152 .. 155:
+      result := ptUInt32;
+    19, 20, 27, 29, 30, 31, 34, 36, 39:
+      result := ptBool;
+    43:
+      result := ptVendor43;
+    53:
+      result := ptMsg53;
+    55:
+      result := ptParam55; // array of bytes
+    82:
+      result := ptRelay82;
+    97:
+      result := ptUuid97;
+    121:
+      result := ptCidr121;
+    FAKE_OP_MAC: // fake call with op=255 to parse "mac": content
+      result := ptMac;
+  else
+    result := ptText;
+  end;
+end;
 
 function SetRuleValue(var p: TJsonParserContext; var v: RawByteString;
   op: byte): boolean;
@@ -1812,15 +1848,14 @@ begin
     else
       begin
         // recognize configurable options in string value
-        case op of
-          3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 54, 65,
-          68 .. 76, 85, 89, 112, 136, 138:
+        case ParseType(op) of
+          ptIp4:
             begin
               result := Ip4sFromText(p.Value, v); // allow CSV of IP4
               if result then
                 exit;
             end;
-          97:
+          ptUuid97:
             begin
               result := RawUtf8ToGuid(p.Value, len, tmp.guid);
               if result then
@@ -1831,7 +1866,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
                 exit;
               end;
             end;
-          FAKE_OP_MAC: // fake call with op=255 to parse "mac": content
+          ptMac: // fake call with op=255 to parse "mac": content
             begin
               result := MacsFromText(p.Value, v); // allow CSV of MACs
               exit;
@@ -1851,13 +1886,13 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
         begin
           // recognize most JSON number size from configurable options
           tmp.c0 := GetCardinal(p.Value);
-          case op of
-            23, 37, 46, 52, 116:
-              len := 1; // uint8
-            13, 22, 25, 26, 57, 93, 117:
+          case ParseType(op) of
+            ptUInt8:
+              len := 1;
+            ptUInt16:
               begin
                 tmp.c0 := bswap16(tmp.c0);
-                len := 2; // uint16
+                len := 2;
               end;
           else
             begin
