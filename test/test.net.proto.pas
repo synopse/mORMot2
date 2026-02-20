@@ -2230,6 +2230,52 @@ begin
     json := MetricsToJson(m2, [woDontStoreVoid]);
     CheckEqual(json, '{"discover":2,"offer":2,"decline":1,"lease-allocated":2,' +
       '"dynamic-hits":2,"option-82-hits":1}');
+    // validate DECLINE process with a given IP which is not in OFFER state
+    f := d.ClientNew(dmtDecline, macs[10]);
+    DhcpAddOption32(f, doDhcpRequestedAddress, ips[10]);
+    d.ClientFlush(f);
+    CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
+    mac := MacToText(@macs[10]);
+    ip := IP4ToText(@ips[10]);
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
+      '"DECLINE",dhcp-parameter-request-list:["subnet-mask","routers",' +
+      '"domain-name-servers","domain-name","broadcast-address"],' +
+      'dhcp-requested-address:"' + ip + '"}');
+    server.ComputeMetrics(m2);
+    json := MetricsToJson(m2, [woDontStoreVoid]);
+    CheckEqual(json, '{"discover":2,"offer":2,"decline":2,"lease-allocated":2,' +
+      '"dynamic-hits":2,"option-82-hits":1,"dropped-packets":1}');
+    // validate DISCOVER + DECLINE with the specific IP
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[10]));
+    xid := d.Recv.xid;
+    Check(server.ComputeResponse(d) > 0, 'requestDecline');
+    CheckEqual(d.Recv.xid, xid);
+    CheckEqual(d.Send.xid, xid);
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
+      '"DISCOVER",dhcp-parameter-request-list:["subnet-mask","routers",' +
+      '"domain-name-servers","domain-name","broadcast-address"]}');
+    ip4 := d.Send.yiaddr;
+    ip := IP4ToText(@ip4);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
+      'dhcp-rebinding-time:105}');
+    CheckEqual(server.Scope[0].Metrics.Current[dsmDecline], 2);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmDiscover], 3);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmOffer], 3);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmOption82Hits], 1);
+    f := d.ClientNew(dmtDecline, macs[10]);
+    DhcpAddOption32(f, doDhcpRequestedAddress, ip4);
+    d.ClientFlush(f);
+    CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
+    server.ComputeMetrics(m2);
+    json := MetricsToJson(m2, [woDontStoreVoid]);
+    CheckEqual(json, '{"discover":3,"offer":3,"decline":3,"lease-allocated":4,' +
+      '"dynamic-hits":3,"option-50-hits":1,"option-82-hits":1,' +
+      '"dropped-packets":1}');
   finally
     server.Free;
     settings.Free;
