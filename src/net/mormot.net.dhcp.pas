@@ -299,6 +299,9 @@ function DhcpParse(dhcp: PDhcpPacket; len: PtrInt; var lens: TDhcpParsed;
 /// quickly validate a DHCP binary frame header
 function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
 
+/// parse a raw DHCP binary frame and encode it as a JSON object
+function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt): RawJson;
+
 /// locate an option by number in a DHCP packet
 // - assume dhcp^ contains a packet already validated by DhcpParse()
 // - returns nil if not found, or the location of op value in dhcp^.option[]
@@ -866,6 +869,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// raw search of one "rules" value in State.Recv[]
     function MatchOne(one: PRuleValue): boolean;
+    /// serialize the Recv/RecvType/RecvLens/RecvLensRai fields as a JSON object
+    function RecvToJson: RawJson;
   private
     // methods for internal use
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
@@ -877,6 +882,8 @@ type
     procedure AppendToMac(ip4len: PtrUInt; const ident: ShortString);
   end;
   {$ifdef CPUINTEL} {$A+} {$endif CPUINTEL}
+  /// pointer to one TDhcpProcess.ComputeResponse state machine
+  PDhcpState = ^TDhcpState;
 
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
@@ -1914,6 +1921,223 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
         // try to parse a JSON object into a TLV value
         result := TlvFromJson(p.Value, v);
     end;
+end;
+
+procedure ParseTypeJson(tlv: PByteArray; W: TJsonWriter; recognize: boolean);
+var
+  len: integer;
+  v: PAnsiChar;
+begin
+  len := tlv[1];
+  if len = 0 then
+  begin
+    W.AddNull;
+    exit;
+  end;
+  v := @tlv[2];
+  // recognize and handle most common option types
+  if recognize then
+    case ParseType(tlv[0]) of
+      ptIp4:
+        if len and 3 = 0 then
+        begin
+          len := len shr 2;
+          if len = 1 then
+          begin
+            W.AddJsonShort(IP4ToShort(pointer(v)));
+            exit;
+          end;
+          W.AddDirect('[');
+          repeat
+            W.AddJsonShort(IP4ToShort(pointer(v)));
+            dec(len);
+            if len = 0 then
+              break;
+            inc(v, 4);
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptMac:
+        if len = 6 then
+        begin
+          W.AddBinToHumanHex(v, 6, '"');
+          exit;
+        end
+        else if len mod 6 = 0 then
+        begin
+          W.AddDirect('[');
+          repeat
+            W.AddBinToHumanHex(v, 6, '"');
+            dec(len, 6);
+            if len = 0 then
+              break;
+            inc(v, 6);
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptParam55,
+      ptUInt8:
+        begin
+          if len = 1 then
+          begin
+            W.AddB(PByte(v)^);
+            exit;
+          end;
+          W.AddDirect('[');
+          repeat
+            W.AddB(PByte(v)^);
+            dec(len);
+            if len = 0 then
+              break;
+            inc(PByte(v));
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptUInt16:
+        if len and 1 = 0 then
+        begin
+          len := len shr 1;
+          if len = 1 then
+          begin
+            W.AddU(bswap16(PWord(v)^));
+            exit;
+          end;
+          W.AddDirect('[');
+          repeat
+            W.AddU(bswap16(PWord(v)^));
+            dec(len);
+            if len = 0 then
+              break;
+            inc(PWord(v));
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptUInt32:
+        if len and 3 = 0 then
+        begin
+          len := len shr 2;
+          if len = 1 then
+          begin
+            W.AddU(bswap32(PCardinal(v)^));
+            exit;
+          end;
+          W.AddDirect('[');
+          repeat
+            W.AddU(bswap32(PCardinal(v)^));
+            dec(len);
+            if len = 0 then
+              break;
+            inc(PCardinal(v));
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptBool:
+        if len = 1 then
+        begin
+          W.Add(PBoolean(v)^); // will normalize value byte
+          exit;
+        end;
+      ptUuid97:
+        if len in [16, 17] then
+        begin
+          if len = 17 then
+            inc(v);
+          W.AddJsonShort(UuidToShort(PGuid(v)^));
+          exit;
+        end;
+    end;
+  // if we reached here, we have either binary or plain text
+  W.AddDirect('"');
+  if IsValidUtf8WithoutControlChars(pointer(v), len) then
+    W.AddJsonEscape(v, len)    // ASCII/UTF-8
+  else if len <= 32 then
+    W.AddBinToHumanHex(v, len) // e.g. for MAC or UUID
+  else
+  begin
+    W.AddDirect('h', 'e', 'x', ':');
+    W.AddBinToHex(v, len, {lower=}true);
+  end;
+  W.AddDirect('"');
+end;
+
+procedure DoDhcpToJson(W: TJsonWriter; p: PDhcpPacket; len: PtrInt; s: PDhcpState);
+var
+  o: PAnsiChar;
+  opt: TDhcpOption;
+  name: TShort31;
+begin
+  W.AddDirect('{');
+  // main DHCP packet fields
+  if p^.op = BOOT_REQUEST then
+    W.AddPropJsonShort('op', 'request')
+  else
+    W.AddPropJsonShort('op', 'reply');
+  if p^.ciaddr <> 0 then
+    W.AddPropJsonShort('ciaddr', IP4ToShort(@p^.ciaddr));
+  if p^.siaddr <> 0 then
+    W.AddPropJsonShort('siaddr', IP4ToShort(@p^.siaddr));
+  if not IsZero(PNetMac(@p^.giaddr)^) then
+    W.AddPropJsonShort('giaddr', MacToShort(@p^.giaddr));
+  // main decoded/parsed state fields in fields
+  if s <> nil then
+  begin
+    if s^.RecvIp4 <> 0 then
+      W.AddPropJsonShort('from', IP4ToShort(@s^.RecvIp4));
+    if (s^.RecvHostName <> nil) and
+       (s^.RecvHostName^[0] <> #0) then
+      W.AddPropJsonShort('host', s^.RecvHostName^);
+    if s^.RecvBoot <> dcbDefault then
+      W.AddPropJsonString('boot', BOOT_TXT[s^.RecvBoot]);
+    if s^.Ip[0] <> #0 then
+      W.AddPropJsonShort('ip', s^.Ip);
+  end;
+  // parse and serialize all option fields in packet order
+  dec(len, DHCP_PACKET_HEADER);
+  o := @p^.options;
+  repeat
+    dec(len, ord(o[1]) + 2);
+    if len < 1 then
+      break; // avoid buffer overflow
+    opt := doPad;
+    if ord(o[0]) <= high(DHCP_OPTION_INV) then
+      opt := DHCP_OPTION_INV[ord(o[0])];
+    if opt = doPad then
+      ToShortU(ord(o[0]), @name)
+    else
+      Ansi7StringToShortString(DHCP_OPTION[opt], name);
+    W.AddPropName(name);
+    ParseTypeJson(pointer(o), W, true);
+    W.AddComma;
+    o := @o[ord(o[1]) + 2];
+  until o^ = #255;
+  W.CancelLastComma('}');
+end;
+
+function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt): RawJson;
+var
+  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
+  W: TJsonWriter;
+begin
+  result := '';
+  if not DhcpParseHeader(dhcp, len) then
+    exit;
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    DoDhcpToJson(W, dhcp, len, {state=}nil); // as a single JSON object
+    W.SetText(RawUtf8(result));
+  finally
+    W.Free;
+  end;
 end;
 
 const
