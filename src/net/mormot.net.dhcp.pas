@@ -3021,6 +3021,51 @@ begin
   Ip[0] := #0;
 end;
 
+function TDhcpState.Parse: boolean;
+begin
+  Mac64 := 0;
+  Ip4 := 0;
+  SendType := dmtUndefined;
+  RecvBoot := dcbDefault;
+  RecvRule := nil;
+  RecvType := DhcpParse(@Recv, RecvLen, RecvLens, nil, @Mac64);
+  Ip[0] := #0;
+  if Mac64 <> 0 then
+  begin
+    // valid DHCP frame with RecvType <> dmtUndefined
+    Mac[0] := #17;
+    ToHumanHexP(@Mac[1], @Mac64, 6);
+    RecvHostName := DhcpData(@Recv, RecvLens[doHostName]);
+    FillZero(THash128(RecvLensRai));
+    if RecvLens[doRelayAgentInformation] <> 0 then
+      ParseRecvLensRai;
+    result := true;
+  end
+  else
+  begin
+    Mac[0] := #0;
+    RecvHostName := @NULCHAR;
+    result := false;
+  end;
+end;
+
+function TDhcpState.RecvToJson: RawJson;
+var
+  tmp: TTextWriterStackBuffer; // 8KB static, then up to 1MB buffer
+  W: TJsonWriter;
+begin
+  result := 'null';
+  if Mac64 = 0 then
+    exit;
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    DoDhcpToJson(W, @Recv, RecvLen, @self); // as a single JSON object
+    W.SetText(RawUtf8(result));
+  finally
+    W.Free;
+  end;
+end;
+
 
 { **************** High-Level Multi-Scope DHCP Server Processing Logic }
 
@@ -3551,7 +3596,7 @@ begin
         QueryPerformanceMicroSeconds(start);         // saved=100000 in 5.65ms
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
-        // notes: 1) do not aggressively retry if saved<0 (write failed)
+        // notes: 1) do not aggressively retry if saved < 0 (write failed)
         //        2) no background thread needed - SaveToFile() takes only
         //           5.65ms with 100K leases for a 4.2MB text file
         if fMetricsFolder <> '' then
@@ -4077,30 +4122,7 @@ end;
 
 function TDhcpProcess.ParseFrame(var State: TDhcpState): boolean;
 begin
-  State.Mac64 := 0;
-  State.Ip4 := 0;
-  State.SendType := dmtUndefined;
-  State.RecvBoot := dcbDefault;
-  State.RecvRule := nil;
-  State.RecvType := DhcpParse(@State.Recv, State.RecvLen, State.RecvLens, nil, @State.Mac64);
-  State.Ip[0] := #0;
-  if State.Mac64 <> 0 then
-  begin
-    // valid DHCP frame with RecvType <> dmtUndefined
-    State.Mac[0] := #17;
-    ToHumanHexP(@State.Mac[1], @State.Mac64, 6);
-    State.RecvHostName := DhcpData(@State.Recv, State.RecvLens[doHostName]);
-    FillZero(THash128(State.RecvLensRai));
-    if State.RecvLens[doRelayAgentInformation] <> 0 then
-      State.ParseRecvLensRai;
-    result := true;
-  end
-  else
-  begin
-    State.Mac[0] := #0;
-    State.RecvHostName := @NULCHAR;
-    result := false;
-  end;
+  result := State.Parse;
 end;
 
 function TDhcpProcess.RetrieveFrameIP(
