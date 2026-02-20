@@ -1577,9 +1577,12 @@ var
   rv: TRuleValue;
 
   procedure DoRequest(ndx: PtrInt);
+  var
+    f: PAnsiChar;
   begin
-    d.RecvLen := DhcpClient(d.Recv, dmtRequest, macs[ndx], [])
-      - PAnsiChar(@d.Recv) + 1;
+    f := d.ClientNew(dmtRequest, macs[ndx]);
+    DhcpAddOption32(f, doDhcpServerIdentifier, sip4);
+    d.ClientFlush(f);
     Check(IsEqual(macs[ndx], PNetMac(@d.Recv.chaddr)^));
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
@@ -1587,8 +1590,8 @@ var
     Check(d.SendType = dmtAck, 'ack');
     CheckEqual(d.Send.xid, xid);
     Check(IsEqual(macs[ndx], PNetMac(@d.Send.chaddr)^));
-    Check(server.GetScope(d.Send.ciaddr) <> nil);
-    CheckEqual(ips[ndx], d.Send.ciaddr);
+    Check(server.GetScope(d.Send.yiaddr) <> nil);
+    CheckEqual(ips[ndx], d.Send.yiaddr);
   end;
 
   procedure CheckSaveToTextMatch(const saved: RawUtf8);
@@ -1634,7 +1637,8 @@ begin
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
   CheckEqual(SizeOf(TDhcpPacket), 1468, 'TDhcpPacket');
-  CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), DHCP_PACKET_HEADER, 'options');
+  CheckEqual(PtrUInt(@PDhcpPacket(nil)^.options), DHCP_PACKET_HEADER, 'optionA');
+  CheckEqual(SizeOf(d.Recv) - SizeOf(d.Recv.options), DHCP_PACKET_HEADER, 'optionB');
   CheckEqual(PtrUInt(@PRuleValue(nil)^.value), SizeOf(Int64), 'TRuleValue');
   CheckEqual(SizeOf(TRuleValue), 8 + SizeOf(pointer));
   CheckEqual(SizeOf(TDhcpLease), 16, 'TDhcpLease');
@@ -1891,15 +1895,17 @@ begin
     d.RecvLen := length(refdisc);
     d.RecvIp4 := 0; // use the default server.Scope[]
     MoveFast(pointer(refdisc)^, d.Recv, d.RecvLen);
-    n := server.ComputeResponse(d);
-    Check(n > 0, 'discover');
+    i := server.ComputeResponse(d);
+    CheckEqual(i, d.SendLen);
+    Check(d.SendLen > 0, 'discover');
     CheckEqual(d.Send.xid, $1d3d0000);
     CheckEqual(MacToText(@d.Send.chaddr), mac);
-    Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtOffer);
+    Check(DhcpParse(@d.Send, d.SendLen, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
     sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
     CheckEqual(IP4ToText(@sip4), '192.168.0.1');
     CheckEqual(d.Send.siaddr, sip4);
+    CheckEqual(IP4ToText(@d.Send.yiaddr), '192.168.0.10');
     CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(14));
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
     CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
@@ -1912,25 +1918,26 @@ begin
     for i := 1 to 3 do // validate offer + renewal
     begin
       n := server.ComputeResponse(d);
-      Check(n > 0, 'request');
+      CheckEqual(n, d.SendLen);
+      Check(d.SendLen > 0, 'request');
       CheckEqual(d.Send.xid, $1e3d0000);
       CheckEqual(MacToText(@d.Send.chaddr), mac);
-      Check(DhcpParse(@d.Send, n, lens, @fnd) = dmtAck);
+      Check(DhcpParse(@d.Send, d.SendLen, lens, @fnd) = dmtAck);
       Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
       sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
       CheckEqual(IP4ToText(@sip4), '192.168.0.1');
       CheckEqual(d.Send.siaddr, sip4);
       if ip4 = 0 then
-        ip4 := d.Send.ciaddr
+        ip4 := d.Send.yiaddr
       else
-        CheckEqual(d.Send.ciaddr, ip4, 'consecutive ips');
+        CheckEqual(d.Send.yiaddr, ip4, 'consecutive ips');
       CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(14));
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
       CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
     end;
     d.Recv := d.Send;
-    d.RecvLen := n;
+    d.RecvLen := d.SendLen;
     Check(server.ComputeResponse(d) < 0, 'ack');
     Check(d.RecvHostName^ = '', 'no hostname');
     CheckEqual(server.Count, 1);
@@ -1950,21 +1957,21 @@ begin
     begin
       hostname := 'HOST';
       AppendShortCardinal(i, hostname);
-      f := DhcpClient(d.Recv, dmtDiscover, macs[i]);
+      f := d.ClientNew(dmtDiscover, macs[i]);
       DhcpAddOptionShort(f, doHostName, hostname);
-      f^ := #255;
-      d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
+      d.ClientFlush(f);
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       CheckNotEqual(xid, d.Recv.xid);
       xid := d.Recv.xid;
       PInt64(@d.RecvLensRai)^ := -1;
-      Check(server.ComputeResponse(d) > 0, 'request#');
+      l := server.ComputeResponse(d);
+      Check(l > 0, 'request#');
       CheckEqual(d.Send.xid, xid);
       Check(IsZero(THash128(d.RecvLensRai)), 'rai');
       Check(d.RecvHostName^ = hostname, 'hostname');
       Check(IsEqual(macs[i], PNetMac(@d.Recv.chaddr)^));
       Check(IsEqual(macs[i], PNetMac(@d.Send.chaddr)^));
-      ips[i] := d.Send.ciaddr; // OFFERed IP
+      ips[i] := d.Send.yiaddr; // OFFERed IP
       Check(server.GetScope(ips[i]) <> nil);
     end;
     CheckEqual(length(server.SaveToText), length(txt), 'only offer');
@@ -1986,7 +1993,7 @@ begin
     for i := 2 to 100 do
       CheckNotEqual(PosEx(MacToText(@macs[i]), txt), 0, 'no static macs');
     Check(length(txt) > 2000, 'saved len2');
-    // validate ParseMacIP()
+    // validate ParseMacIP() with our random macs[] and assigned ip[]
     for i := 0 to n - 1 do
     begin
       CheckNotEqual(ips[i], 0, 'ips');
@@ -2014,7 +2021,7 @@ begin
       CheckEqual(length(nfo.uuid), 5);
       Check(CompareMem(pointer(nfo.uuid), @macs[i], 5));
     end;
-    // twice with the requests to validate efficient renewal
+    // twice with the requests to validate efficient renewal after INIT-REBOOT
     timer.Start;
     for i := 1 to n do
       DoRequest(rnd.Next(n)); // in Random order
