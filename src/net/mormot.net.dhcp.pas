@@ -1735,9 +1735,10 @@ end;
 
 type
   TParseRule = (prMatch, prValue, prTlv);
-  TParseType = (ptText, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
+  TParseType = (ptTextBin, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
                 ptUInt8, ptUInt16, ptUInt32, ptUInt64,
-                ptVendor43, ptMsg53, ptParam55, ptRelay82, ptCidr121, ptVendor125);
+                ptVendor43, ptMsg53, ptParam55, ptClient61, ptRelay82,
+                ptCidr121, ptVendor12x);
 const
   RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
     'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
@@ -1746,35 +1747,40 @@ const
 
 function ParseType(op: byte): TParseType;
 begin
-  case op of
-    1, 3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 50, 54, 65,
-    68 .. 76, 85, 89, 92, 118, 112, 136, 138:
-      result := ptIp4;
-    23, 37, 46, 52, 116, 156, 157:
-      result := ptUInt8;
-    13, 22, 25, 26, 57, 93, 117:
-      result := ptUInt16;
-    2, 24, 35, 38, 51, 58, 59, 91, 108, 125, 152 .. 155:
-      result := ptUInt32;
-    19, 20, 27, 29, 30, 31, 34, 36, 39:
-      result := ptBool;
-    43:
-      result := ptVendor43;
-    53:
-      result := ptMsg53;
-    55:
-      result := ptParam55; // array of bytes
-    82:
-      result := ptRelay82;
-    97:
-      result := ptUuid97;
-    121:
-      result := ptCidr121;
-    FAKE_OP_MAC: // fake call with op=255 to parse "mac": content
-      result := ptMac;
-  else
-    result := ptText;
-  end;
+  result := ptTextBin;
+  if op <> 0 then
+    case op of // FPC and Delphi use a jump table here
+      1, 3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 50, 54, 65,
+      68 .. 76, 85, 89, 92, 118, 112, 136, 138:
+        result := ptIp4;
+      23, 37, 46, 52, 116, 156, 157:
+        result := ptUInt8;
+      13, 22, 25, 26, 57, 93, 117:
+        result := ptUInt16;
+      2, 24, 35, 38, 51, 58, 59, 91, 108, 152 .. 155:
+        result := ptUInt32;
+      19, 20, 27, 29, 30, 31, 34, 36, 39:
+        result := ptBool;
+      43:
+        result := ptVendor43;
+      53:
+        result := ptMsg53;   // single TDhcpMessageType byte
+      55:
+        result := ptParam55; // array of bytes
+      61:
+        result := ptClient61;
+      82:
+        result := ptRelay82;
+      97:
+        result := ptUuid97;
+      121:
+        result := ptCidr121;
+      124, 125:
+        result := ptVendor12x;
+    else
+      if op = FAKE_OP_MAC then
+        result := ptMac;
+    end;
 end;
 
 function SetRuleValue(var p: TJsonParserContext; var v: RawByteString;
@@ -1924,9 +1930,74 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
     end;
 end;
 
+function DhcpOptName(op: byte): TShort31;
+var
+  opt: TDhcpOption;
+begin
+  opt := doPad;
+  if op <= high(DHCP_OPTION_INV) then
+    opt := DHCP_OPTION_INV[op];
+  if opt = doPad then
+    ToShortU(op, @result)
+  else
+    Ansi7StringToShortString(DHCP_OPTION[opt], result);
+end;
+
+procedure AddTextBinJson(v: PAnsiChar; len: integer; W: TJsonWriter);
+begin
+  W.AddDirect('"');
+  if IsValidUtf8WithoutControlChars(pointer(v), len) then
+    W.AddJsonEscape(v, len)    // ASCII/UTF-8
+  else if len <= 32 then
+    W.AddBinToHumanHex(v, len) // e.g. for MAC or UUID
+  else
+  begin
+    W.AddDirect('h', 'e', 'x', ':');
+    W.AddBinToHex(v, len, {lower=}true);
+  end;
+  W.AddDirect('"');
+end;
+
+procedure AddTlvJson(v: PAnsiChar; len: integer; W: TJsonWriter; rai: boolean);
+var
+  l: PtrInt;
+begin
+  W.AddDirect('{');
+  repeat
+    if rai and
+       (ord(v[0]) <= high(RAI_OPTION_INV)) then
+      W.AddPropNameU(RAI_OPTION[RAI_OPTION_INV[ord(v[0])]])
+    else
+      W.AddPropName(ToShort(ord(v[0])));
+    AddTextBinJson(@v[2], ord(v[1]), W);
+    l := ord(v[1]) + 2;
+    dec(len, l);
+    if len = 0 then
+      break;
+    inc(v, l);
+    W.AddComma;
+  until false;
+  W.AddDirect('}');
+end;
+
+function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
+begin
+  result := false;
+  repeat
+    dec(len, 5);          // entreprise-number + data-len
+    if len <= 0 then
+      exit;
+    dec(len, ord(op[4])); // jump vendor-data
+    if len = 0 then
+      break;
+    op := @op[ord(op[4]) + 5];
+  until false;
+  result := true;
+end;
+
 procedure ParseTypeJson(tlv: PByteArray; W: TJsonWriter; recognize: boolean);
 var
-  len: integer;
+  len: cardinal;
   v: PAnsiChar;
 begin
   len := tlv[1];
@@ -1943,12 +2014,12 @@ begin
         if len and 3 = 0 then
         begin
           len := len shr 2;
-          if len = 1 then
+          if len = 1 then                          // as JSON "1.2.3.4"
           begin
             W.AddJsonShort(IP4ToShort(pointer(v)));
             exit;
           end;
-          W.AddDirect('[');
+          W.AddDirect('[');                        // as JSON array
           repeat
             W.AddJsonShort(IP4ToShort(pointer(v)));
             dec(len);
@@ -1963,10 +2034,10 @@ begin
       ptMac:
         if len = 6 then
         begin
-          W.AddBinToHumanHex(v, 6, '"');
+          W.AddBinToHumanHex(v, 6, '"');           // as JSON string "xx:xx:.."
           exit;
         end
-        else if len mod 6 = 0 then
+        else if len mod 6 = 0 then                 // as JSON array
         begin
           W.AddDirect('[');
           repeat
@@ -1980,7 +2051,63 @@ begin
           W.AddDirect(']');
           exit;
         end;
-      ptParam55,
+      ptVendor43, // most vendor-encapsulated-options use nested TLV
+      ptRelay82:  // relay-agent-information sub-options are always TLV encoded
+        if IsValidTlv(v, len) then
+        begin
+          AddTlvJson(v, len, W, tlv[0] = 82);      // as JSON object
+          exit;
+        end;
+      ptMsg53:
+        if len = 1 then
+        begin
+          W.AddJsonString(DHCP_TXT[TDhcpMessageType(v^)]);
+          exit;
+        end;
+      ptParam55:
+        begin
+          W.AddDirect('[');                        // as JSON array of "names"
+          repeat
+            W.AddJsonShort(DhcpOptName(PByte(v)^));
+            dec(len);
+            if len = 0 then
+              break;
+            inc(PByte(v));
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptClient61:
+        if (len = 6) or
+           ((len = 7) and
+            (ord(v[0]) = ARPHRD_ETHER)) then
+        begin
+          if len = 7 then
+            inc(v);
+          W.AddBinToHumanHex(v, 6, '"');           // as JSON string "xx:xx:.."
+          exit;
+        end;
+      ptVendor12x:
+        if IsValidRfc3925(v, len) then             // 124/125
+        begin
+          W.AddDirect('{');                        // as JSON object
+          repeat
+            W.AddPropName(ToShort(PCardinal(v)^)); // entreprise-number
+            inc(PCardinal(v));                     // data-len + vendor-data
+            if IsValidTlv(v + 1, ord(v[0])) then
+              AddTlvJson(v + 1, ord(v[0]), W, {rai=}false)
+            else
+              AddTextBinJson(v + 1, ord(v[0]), W);
+            dec(len, ord(v[0]) + 5);
+            if len = 0 then
+              break;
+            v := @v[ord(v[0]) + 5];
+            W.AddComma;
+          until false;
+          W.AddDirect('}');
+          exit;
+        end;
       ptUInt8:
         begin
           if len = 1 then
@@ -1988,7 +2115,7 @@ begin
             W.AddB(PByte(v)^);
             exit;
           end;
-          W.AddDirect('[');
+          W.AddDirect('[');                        // as JSON array
           repeat
             W.AddB(PByte(v)^);
             dec(len);
@@ -2009,7 +2136,7 @@ begin
             W.AddU(bswap16(PWord(v)^));
             exit;
           end;
-          W.AddDirect('[');
+          W.AddDirect('[');                        // as JSON array
           repeat
             W.AddU(bswap16(PWord(v)^));
             dec(len);
@@ -2030,7 +2157,7 @@ begin
             W.AddU(bswap32(PCardinal(v)^));
             exit;
           end;
-          W.AddDirect('[');
+          W.AddDirect('[');                        // as JSON array
           repeat
             W.AddU(bswap32(PCardinal(v)^));
             dec(len);
@@ -2045,7 +2172,7 @@ begin
       ptBool:
         if len = 1 then
         begin
-          W.Add(PBoolean(v)^); // will normalize value byte
+          W.Add(PBoolean(v)^);                     // will normalize value byte
           exit;
         end;
       ptUuid97:
@@ -2053,29 +2180,17 @@ begin
         begin
           if len = 17 then
             inc(v);
-          W.AddJsonShort(UuidToShort(PGuid(v)^));
+          W.AddJsonShort(UuidToShort(PGuid(v)^));  // as "uuid-xxx-xxx"
           exit;
         end;
-    end;
-  // if we reached here, we have either binary or plain text
-  W.AddDirect('"');
-  if IsValidUtf8WithoutControlChars(pointer(v), len) then
-    W.AddJsonEscape(v, len)    // ASCII/UTF-8
-  else if len <= 32 then
-    W.AddBinToHumanHex(v, len) // e.g. for MAC or UUID
-  else
-  begin
-    W.AddDirect('h', 'e', 'x', ':');
-    W.AddBinToHex(v, len, {lower=}true);
   end;
-  W.AddDirect('"');
+  // if we reached here, we have either binary or plain text
+  AddTextBinJson(v, len, w);
 end;
 
 procedure DoDhcpToJson(W: TJsonWriter; p: PDhcpPacket; len: PtrInt; s: PDhcpState);
 var
   o: PAnsiChar;
-  opt: TDhcpOption;
-  name: TShort31;
 begin
   W.AddDirect('{');
   // main DHCP packet fields
@@ -2109,14 +2224,7 @@ begin
     dec(len, ord(o[1]) + 2);
     if len < 1 then
       break; // avoid buffer overflow
-    opt := doPad;
-    if ord(o[0]) <= high(DHCP_OPTION_INV) then
-      opt := DHCP_OPTION_INV[ord(o[0])];
-    if opt = doPad then
-      ToShortU(ord(o[0]), @name)
-    else
-      Ansi7StringToShortString(DHCP_OPTION[opt], name);
-    W.AddPropName(name);
+    W.AddPropName(DhcpOptName(ord(o[0])));
     ParseTypeJson(pointer(o), W, true);
     W.AddComma;
     o := @o[ord(o[1]) + 2];
@@ -2274,10 +2382,10 @@ function IsValidTlv(op: PAnsiChar; len: integer): boolean;
 begin
   result := false;
   repeat
-    dec(len, 2);
+    dec(len, 2);          // type + len
     if len < 0 then
       exit;
-    dec(len, ord(op[1]));
+    dec(len, ord(op[1])); // value
     if len = 0 then
       break;
     op := @op[ord(op[1]) + 2];
