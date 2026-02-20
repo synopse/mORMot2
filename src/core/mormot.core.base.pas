@@ -590,7 +590,7 @@ type
   TShort31 = string[31];
   PShort31 = ^TShort31;
 
-  /// used e.g. by TwoDigits(), ToShort(Int64) or Int64ToHttpEtag()
+  /// used e.g. by TwoDigits, ToShort/ToShortU or Int64ToHttpEtag
   TShort23 = string[23];
   PShort23 = ^TShort23;
 
@@ -1577,7 +1577,9 @@ function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 
 /// fast convert an Int64 value into a temporary shortstring on stack
 function ToShort(const val: Int64): TShort23;
-  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast convert an unsigned value into a string[>=23] variable
+procedure ToShortU(const val: PtrUInt; Dest: PShort23);
 
 /// add the 4 digits of integer Y to P^ as '0000'..'9999'
 procedure YearToPChar(Y: PtrUInt; P: PUtf8Char);
@@ -6725,6 +6727,15 @@ begin
   p := {%H-}StrInt64(@result[23], val); // use result as TTemp24
   result[0] := AnsiChar(@result[23] - p);
   MoveFast(p^, result[1], ord(result[0]));
+end;
+
+procedure ToShortU(const val: PtrUInt; Dest: PShort23);
+var
+  p: PAnsiChar;
+begin
+  p := {%H-}StrUInt32(@Dest^[23], val); // use Dest^ as TTemp24
+  Dest^[0] := AnsiChar(@Dest^[23] - p);
+  MoveFast(p^, Dest^[1], ord(Dest^[0]));
 end;
 
 function GetExtended(P: PUtf8Char): TSynExtended;

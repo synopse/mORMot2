@@ -1184,7 +1184,7 @@ end;
 function TSecPkgConnectionInfo.ToText: RawUtf8;  // fallback on XP
 var
   h: byte;
-  alg, hsh, xch: string[5];
+  alg, hsh, xch: TShort23;
 begin
   // see https://learn.microsoft.com/en-us/windows/win32/seccrypto/alg-id                       
   FixProtocol(dwProtocol);
@@ -1195,7 +1195,7 @@ begin
   else if aiCipher = $6603 then
     alg := '3DES-'
   else
-    str(aiCipher and $1f, alg);
+    ToShortU(aiCipher and $1f, @alg);
   h := aiHash and $1f;
   case h of
     1..2:
@@ -1220,7 +1220,7 @@ begin
     9:
       hsh := 'HMAC';
   else
-    str(h, hsh);
+    ToShortU(h, @hsh);
   end;
   if (aiExch = $a400) or
      (aiExch = $2400) then
@@ -1234,7 +1234,7 @@ begin
   else if aiExch = $2203 then
     xch := 'ECDSA'
   else
-    str(aiExch, xch);
+    ToShortU(aiExch, @xch);
   _fmt('%s%d-%s%d-%s%d TLSv1.%d ', [xch, dwExchStrength, alg,
     dwCipherStrength, hsh, dwHashStrength, dwProtocol], result);
 end;
