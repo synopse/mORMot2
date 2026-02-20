@@ -2152,10 +2152,9 @@ procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
   var result: ShortString);
 
 /// convert an integer value into its textual representation with thousands marked
-// - ThousandSep is the character used to separate thousands in numbers with
-// more than three digits to the left of the decimal separator
-function IntToThousandString(Value: integer;
-  const ThousandSep: ShortString = ','): ShortString;
+// - Sep is the character used to separate thousands in numbers with more than
+// three digits to the left of the decimal separator e.g. '100' '1,000' '10,000'
+function IntToThousandString(Value: PtrInt; const Sep: ShortString = ','): TShort31;
 
 
 { ************ ESynException class }
@@ -10460,21 +10459,17 @@ begin
   K(Value, result);
 end;
 
-function IntToThousandString(Value: integer;
-  const ThousandSep: ShortString): ShortString;
+function IntToThousandString(Value: PtrInt; const Sep: ShortString): TShort31;
 var
   i, L, Len: cardinal;
 begin
-  str(Value, result);
-  L := length(result);
+  ToShortU(abs(Value), @result);
+  L := ord(result[0]);
+  if L < 4 then
+    exit;
   Len := L + 1;
-  if Value < 0 then
-    // ignore '-' sign
-    dec(L, 2)
-  else
-    dec(L);
-  for i := 1 to L div 3 do
-    insert(ThousandSep, result, Len - i * 3);
+  for i := 1 to (L - 1) div 3 do
+    insert(Sep, result, Len - i * 3);
 end;
 
 function SecToString(S: QWord): TShort16;
@@ -10507,8 +10502,8 @@ var
 begin
   if value < 100 then
   begin
-    PCardinal(PAnsiChar(@result) + ord(result[0]) + 1)^ := ord('0') + ord('.') shl 8 +
-      cardinal(TwoDigitLookupW[value]) shl 16;
+    PCardinal(PAnsiChar(@result) + ord(result[0]) + 1)^ :=
+      ord('0') + ord('.') shl 8 + cardinal(TwoDigitLookupW[value]) shl 16;
     inc(result[0], 4);
   end
   else
