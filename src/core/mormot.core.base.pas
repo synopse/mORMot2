@@ -6720,11 +6720,10 @@ end;
 
 function ToShort(const val: Int64): TShort23;
 var
-  tmp: TTemp24;
   p: PAnsiChar;
 begin
-  p := {%H-}StrInt64(@tmp[23], val);
-  result[0] := AnsiChar(@tmp[23] - p);
+  p := {%H-}StrInt64(@result[23], val); // use result as TTemp24
+  result[0] := AnsiChar(@result[23] - p);
   MoveFast(p^, result[1], ord(result[0]));
 end;
 
