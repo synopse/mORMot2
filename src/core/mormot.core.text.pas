@@ -970,6 +970,9 @@ type
     // - use GetNextItemHexa() to decode such a text value
     procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
       QuotedChar: AnsiChar = #0);
+    /// append a short Value as '12:50:b6:1e:c6:aa' hexadecimal text
+    procedure AddBinToHumanHex(Bin: pointer; BinBytes: PtrInt;
+      QuotedChar: AnsiChar = #0; Reverse: boolean = false);
     /// add the pointer into significant hexa chars, ready to be displayed
     // - append its minimal chars i.e. excluding highest bytes containing 0
     procedure AddPointer(P: PtrUInt; QuotedChar: AnsiChar = #0);
@@ -5900,6 +5903,25 @@ end;
 procedure TTextWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
 begin
   AddBinToHexDisplayLower(@P, DisplayMinChars(@P, SizeOf(P)), QuotedChar);
+end;
+
+procedure TTextWriter.AddBinToHumanHex(Bin: pointer; BinBytes: PtrInt;
+  QuotedChar: AnsiChar; Reverse: boolean);
+var
+  P: PAnsiChar;
+begin
+  P := AddPrepare(BinBytes * 3);
+  if P = nil then
+    exit; // too big
+  P^ := QuotedChar;
+  if QuotedChar <> #0 then
+    inc(P);
+  ToHumanHexP(P, Bin, BinBytes, Reverse);
+  inc(P, BinBytes * 3 - 1);
+  P^ := QuotedChar;
+  if QuotedChar = #0 then
+    dec(P);
+  B := pointer(P);
 end;
 
 procedure TTextWriter.AddBinToHex(Bin: pointer; BinBytes: PtrInt;
