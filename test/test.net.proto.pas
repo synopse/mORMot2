@@ -1614,8 +1614,12 @@ var
   end;
 
   procedure CheckTlv(const json, bin: RawUtf8);
+  var
+    tlv: RawByteString;
   begin
-    CheckEqual(EscapeHex(TlvFromJson(json), ESC_ASCII, '$'), bin);
+    tlv := TlvFromJson(json);
+    CheckEqual(EscapeHex(tlv, ESC_ASCII, '$'), bin);
+    CheckUtf8(IsValidTlv(pointer(tlv), length(tlv)), json);
   end;
 
   procedure CheckCidrRoute(const cidr, hex: RawUtf8);

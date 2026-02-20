@@ -420,6 +420,7 @@ function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 /// raw generation of a Type-Length-Value (TLV) binary from JSON
 function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean; overload;
 function TlvFromJson(const json: RawUtf8): RawByteString; overload;
+function IsValidTlv(op: PAnsiChar; len: integer): boolean;
 
 /// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
@@ -2267,6 +2268,21 @@ begin
   finally
     tmp.Done;
   end;
+end;
+
+function IsValidTlv(op: PAnsiChar; len: integer): boolean;
+begin
+  result := false;
+  repeat
+    dec(len, 2);
+    if len < 0 then
+      exit;
+    dec(len, ord(op[1]));
+    if len = 0 then
+      break;
+    op := @op[ord(op[1]) + 2];
+  until false;
+  result := true;
 end;
 
 function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
