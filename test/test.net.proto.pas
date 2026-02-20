@@ -2150,51 +2150,76 @@ begin
     Check(not IsEqual(m1, m2), 'metrics after ResetMetrics');
     CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');
-    // validate DECLINE process - and option 82 Relay Agent
-    CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
-    f := DhcpClient(d.Recv, dmtDiscover, macs[0]);
+    // validate OFFER process - and option 82 Relay Agent
     opt82[0] := #6;
     opt82[1] := #1;                     // T = circuit-id
     opt82[2] := #4;                     // L = 4
     PCardinal(@opt82[3])^ := $41424344; // V = DCBA
     Check(PShortString(@opt82[2])^ = 'DCBA', 'DCBA');
+    CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
+    f := d.ClientNew(dmtDiscover, macs[0]);
     DhcpAddOptionShort(f, doRelayAgentInformation, opt82);
-    f^ := #255;
-    d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
+    d.ClientFlush(f);
     Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
     CheckNotEqual(xid, d.Recv.xid);
     xid := d.Recv.xid;
-    l := server.ComputeResponse(d);
-    Check(l > 0, 'request1');
+    Check(server.ComputeResponse(d) > 0, 'request1');
     CheckEqual(d.Send.xid, xid);
-    CheckNotEqual(d.Send.ciaddr, ips[0]);
+    CheckNotEqual(d.Send.yiaddr, ips[0]);
     Check(not IsZero(THash128(d.RecvLensRai)), 'rai_opt82');
     for dor := low(dor) to high(dor) do
       Check((d.RecvLensRai[dor] <> 0) = (dor = dorCircuitId));
     Check(DhcpData(@d.Recv, d.RecvLensRai[dorCircuitId])^ = 'DCBA');
     Check(DhcpData(@d.Recv, d.RecvLensRai[dorRemoteId])^[0] = #0);
-    Check(server.GetScope(d.Send.ciaddr) <> nil);
+    Check(server.GetScope(d.Send.yiaddr) <> nil);
     CheckEqual(lens[doRelayAgentInformation], 0, 'no relay agent');
-    Check(DhcpParse(@d.Send, l, lens, @fnd) = dmtOffer);
+    Check(DhcpParse(@d.Send, d.SendLen, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doRelayAgentInformation]);
     CheckNotEqual(lens[doRelayAgentInformation], 0, 'propagated relay agent');
     Check(DhcpData(@d.Send, lens[doRelayAgentInformation])^ = opt82, 'o82a');
     Check(DhcpIdem(@d.Send, lens[doRelayAgentInformation], opt82), 'o82b');
     Check(not DhcpIdem(@d.Send, lens[doRelayAgentInformation], 'totoro'), 'o82c');
-    ips[0] := d.Send.ciaddr;
-    f := DhcpClient(d.Recv, dmtDecline, macs[0]);
-    d.RecvLen := f - PAnsiChar(@d.Recv) + 1;
+    ips[0] := d.Send.yiaddr;
+    mac := MacToText(@macs[0]);
+    ip := IP4ToText(@ips[0]);
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
+      '"DISCOVER",dhcp-parameter-request-list:["subnet-mask","routers",' +
+      '"domain-name-servers","domain-name","broadcast-address"],' +
+      'relay-agent-information:{circuit-id:"DCBA"}}');
+    CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
+      'dhcp-rebinding-time:105,relay-agent-information:{circuit-id:"DCBA"}}');
+    // validate DECLINE process with no specified IP: should flush last
+    d.ClientFlush(d.ClientNew(dmtDecline, macs[0]));
     xid := d.Recv.xid;
     CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
+      '"DECLINE",dhcp-parameter-request-list:["subnet-mask","routers",' +
+      '"domain-name-servers","domain-name","broadcast-address"]}');
     CheckEqual(server.SaveToText, CRLF, 'declined not saved');
-    d.RecvLen := DhcpClient(d.Recv, dmtDiscover, macs[0]) - PAnsiChar(@d.Recv) + 1;
+    // validate DISCOVER process after DECLINE
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[0]));
     xid := d.Recv.xid;
     Check(server.ComputeResponse(d) > 0, 'request3');
     CheckEqual(d.Recv.xid, xid);
     CheckEqual(d.Send.xid, xid);
     Check(IsEqual(macs[0], PNetMac(@d.Send.chaddr)^));
-    Check(server.GetScope(d.Send.ciaddr) <> nil);
-    CheckNotEqual(d.Send.ciaddr, ips[0]);
+    Check(server.GetScope(d.Send.yiaddr) <> nil);
+    CheckNotEqual(d.Send.yiaddr, ips[0]);
+    CheckEqual(DhcpParseToJson(@d.Recv, d.RecvLen, true),
+      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
+      '"DISCOVER",dhcp-parameter-request-list:["subnet-mask","routers",' +
+      '"domain-name-servers","domain-name","broadcast-address"]}');
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
+      'dhcp-rebinding-time:105}');
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
     server.ComputeMetrics(m2);
     CheckEqual(m2[dsmDecline], 1);
