@@ -5103,7 +5103,7 @@ begin
       IP4Short(@State.Ip4, State.Ip);
       State.SendEnd := DhcpNew(State.Send, State.SendType, State.Recv.xid,
         PNetMac(@State.Recv.chaddr)^, State.Scope^.ServerIdentifier);
-      State.Send.ciaddr := State.Ip4;
+      State.Send.yiaddr := State.Ip4;
       result := Flush(State);   // callback + options
       if result <> 0 then
         DoLog(sllTrace, 'into', State); // if not canceled by callback
