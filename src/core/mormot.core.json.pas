@@ -750,9 +750,10 @@ type
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
       WriteOptions: TTextWriterWriteObjectOptions = []);
-    /// append a JSON field name, followed by an escaped UTF-8 JSON String and
-    // a comma (',')
+    /// append a JSON field name, an escaped UTF-8 JSON String and a comma (',')
     procedure AddPropJsonString(const PropName: ShortString; const Text: RawUtf8);
+    /// append a JSON field name, an escaped UTF-8 JSON String and a comma (',')
+    procedure AddPropJsonShort(const PropName, Text: ShortString);
     /// append CR+LF (#13#10) chars and #9 indentation
     // - will also flush any fBlockComment
     procedure AddCRAndIndent; override;
@@ -923,6 +924,9 @@ type
     /// append some RawUtf8 variable, with proper JSON double quotes escaping
     // - "" will always be added, before calling AddJsonEscape()
     procedure AddJsonString(const Text: RawUtf8);
+    /// append some RawUtf8 variable, with proper JSON double quotes escaping
+    // - "" will always be added, before calling AddJsonEscape()
+    procedure AddJsonShort(const Text: ShortString);
     /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
     // ! AddJsonEscape(pointer(fInternalJsonWriter.Text),0);
@@ -6340,6 +6344,13 @@ begin
   AddComma;
 end;
 
+procedure TJsonWriter.AddPropJsonShort(const PropName, Text: ShortString);
+begin
+  AddProp(@PropName[1], ord(PropName[0]));
+  AddJsonShort(Text); // " + AddJsonEscape(Text) + "
+  AddComma;
+end;
+
 destructor TJsonWriter.Destroy;
 begin
   inherited Destroy;
@@ -7561,6 +7572,13 @@ procedure TJsonWriter.AddJsonString(const Text: RawUtf8);
 begin
   Add('"');
   AddJsonEscape(pointer(Text));
+  AddDirect('"');
+end;
+
+procedure TJsonWriter.AddJsonShort(const Text: ShortString);
+begin
+  Add('"');
+  AddJsonEscape(@Text[1], ord(Text[0]));
   AddDirect('"');
 end;
 
