@@ -285,15 +285,17 @@ function IsValidUtf8Ptr(source: PUtf8Char): boolean;
 procedure DetectRawUtf8(var source: RawByteString);
   {$ifndef HASCODEPAGE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
-// control characters
+/// returns TRUE if buffer is valid UTF-8 encoding with no #1..#31 characters
 // - supplied input is a pointer to a #0 ended text buffer
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean; overload;
 
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #0..#31
-// control characters
-// - supplied input is a RawUtf8 variable
+/// returns TRUE if buffer is valid UTF-8 encoding with no #1..#31 characters
+// - supplied input is a pointer to a #0 ended text buffer
+function IsValidUtf8WithoutControlChars(source: PByte; len: PtrInt): boolean; overload;
+
+/// returns TRUE if buffer is valid UTF-8 encoding with no #1..#31 characters
 function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// check if any forbidden 7-bit char appears in the supplied text
 // - is a wrapper around strcspn()
@@ -3516,9 +3518,8 @@ begin
   result := true;
 end;
 
-function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean;
+function IsValidUtf8WithoutControlChars(source: PByte; len: PtrInt): boolean;
 var
-  s, len: PtrInt;
   c: byte;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
@@ -3530,29 +3531,36 @@ begin
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
   result := false;
-  s := 1;
-  len := Length(source);
-  while s <= len do
-  begin
-    c := byte(source[s]);
-    inc(s);
+  repeat
+    if len = 0 then
+      break;
+    c := source^;
+    inc(source);
+    dec(len);
     if c < 32 then
       exit // disallow #0..#31 control char within len
-    else if c > $7f then
-    begin
-      c := utf8.Lookup[c];
-      if c > UTF8_MAX then // follow RFC 3629 expectations
+    else if c <= $7f then
+      continue;
+    c := utf8.Lookup[c];
+    if c > UTF8_MAX then // follow RFC 3629 expectations
+      exit;
+    dec(len, c);
+    if len < 0 then
+      exit;
+    // check valid UTF-8 content
+    repeat
+      if source^ and $c0 <> $80 then
         exit;
-      // check valid UTF-8 content
-      repeat
-        if byte(source[s]) and $c0 <> $80 then
-          exit;
-        inc(s);
-        dec(c);
-      until c = 0;
-    end;
-  end;
+      inc(source);
+      dec(c);
+    until c = 0;
+  until false;
   result := true;
+end;
+
+function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean;
+begin
+  result := IsValidUtf8WithoutControlChars(pointer(source), length(source));
 end;
 
 function ContainsChars(const text, forbidden: RawUtf8): boolean;
