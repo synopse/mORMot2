@@ -915,6 +915,8 @@ type
     // - is a wrapper around AddProp()
     procedure AddPropName(const PropName: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
+    /// append an usigned integer as property name, as '"123":'
+    procedure AddPropName(PropName: PtrUInt); overload;
     /// append a RawUtf8 property name, as '"PropName":'
     procedure AddPropNameU(const PropName: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
@@ -5443,9 +5445,13 @@ begin
   AddProp(@PropName[1], ord(PropName[0]));
 end;
 
-procedure TTextWriter.AddPropNameU(const PropName: RawUtf8);
+procedure TTextWriter.AddPropName(PropName: PtrUInt);
+var
+  tmp: TTemp24;
+  P: PAnsiChar;
 begin
-  AddProp(pointer(PropName), length(PropName));
+  P := StrUInt32(@tmp[23], PropName);
+  AddProp(P, @tmp[23] - P);
 end;
 
 procedure TTextWriter.AddPropInt64(const PropName: ShortString;
