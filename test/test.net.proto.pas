@@ -1778,8 +1778,7 @@ begin
   CheckEqual(DhcpParseToJson(PDhcpPacket(refdisc), length(refdisc)),
     '{"op":"request","chaddr":"00:0b:82:01:fc:42","dhcp-message-type":"DISCOVER",' +
      '"dhcp-client-identifier":"00:0b:82:01:fc:42","dhcp-requested-address":' +
-     '"0.0.0.0","dhcp-parameter-request-list":["subnet-mask","routers",' +
-     '"domain-name-servers","ntp-servers"]}');
+     '"0.0.0.0","dhcp-parameter-request-list":[1,3,6,42]}');
   // validate server OFFER frame from WireShark
   refoffer := Base64ToBin(
     'AgEGAAAAPR0AAAAAAAAAAMCoAArAqAABAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1832,8 +1831,7 @@ begin
     '{"op":"request","chaddr":"00:0b:82:01:fc:42","dhcp-message-type":' +
     '"REQUEST","dhcp-client-identifier":"00:0b:82:01:fc:42",' +
     '"dhcp-requested-address":"192.168.0.10","dhcp-server-identifier":' +
-    '"192.168.0.1","dhcp-parameter-request-list":["subnet-mask","routers",' +
-    '"domain-name-servers","ntp-servers"]}');
+    '"192.168.0.1","dhcp-parameter-request-list":[1,3,6,42]}');
   // validate server ACK frame from WireShark
   refack := Base64ToBin(
     'AgEGAAAAPR4AAAAAAAAAAMCoAAoAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -2012,9 +2010,7 @@ begin
       mac := MacToText(@macs[0]);
       CheckEqual(d.RecvToJson(true),
         '{op:"request",chaddr:"' + mac + '",dhcp-message-type:"DISCOVER",' +
-        'dhcp-parameter-request-list:["subnet-mask","routers",' +
-        '"domain-name-servers","domain-name","broadcast-address"],' +
-        'host-name:"HOST0"}');
+        'dhcp-parameter-request-list:[1,3,6,15,28],host-name:"HOST0"}');
       CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
         '{op:"reply",yiaddr:"192.168.0.11",siaddr:"192.168.0.1",chaddr:"' +
         mac + '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
@@ -2028,8 +2024,7 @@ begin
     NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:"REQUEST",' +
-      'dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"],' +
+      'dhcp-parameter-request-list:[1,3,6,15,28],' +
       'dhcp-server-identifier:"192.168.0.1"}');
     CheckEqual(server.Count, n);
     txt := server.SaveToText;
@@ -2085,8 +2080,7 @@ begin
     ip := IP4ToText(@ips[77]);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"REQUEST",dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"],' +
+      '"REQUEST",dhcp-parameter-request-list:[1,3,6,15,28],' +
       'dhcp-server-identifier:"192.168.0.1"}');
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
@@ -2184,8 +2178,7 @@ begin
     ip := IP4ToText(@ips[0]);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DISCOVER",dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"],' +
+      '"DISCOVER",dhcp-parameter-request-list:[1,3,6,15,28],' +
       'relay-agent-information:{circuit-id:"DCBA"}}');
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
@@ -2198,8 +2191,7 @@ begin
     CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
     CheckEqual(d.RecvToJson(true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DECLINE",dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"]}');
+      '"DECLINE",dhcp-parameter-request-list:[1,3,6,15,28]}');
     CheckEqual(server.SaveToText, CRLF, 'declined not saved');
     // validate DISCOVER process after DECLINE
     d.ClientFlush(d.ClientNew(dmtDiscover, macs[0]));
@@ -2212,8 +2204,7 @@ begin
     CheckNotEqual(d.Send.yiaddr, ips[0]);
     CheckEqual(DhcpParseToJson(@d.Recv, d.RecvLen, true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DISCOVER",dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"]}');
+      '"DISCOVER",dhcp-parameter-request-list:[1,3,6,15,28]}');
     ip := IP4ToText(@d.Send.yiaddr);
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
@@ -2239,8 +2230,7 @@ begin
     ip := IP4ToText(@ips[10]);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DECLINE",dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"],' +
+      '"DECLINE",dhcp-parameter-request-list:[1,3,6,15,28],' +
       'dhcp-requested-address:"' + ip + '"}');
     server.ComputeMetrics(m2);
     json := MetricsToJson(m2, [woDontStoreVoid]);
@@ -2254,8 +2244,7 @@ begin
     CheckEqual(d.Send.xid, xid);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DISCOVER",dhcp-parameter-request-list:["subnet-mask","routers",' +
-      '"domain-name-servers","domain-name","broadcast-address"]}');
+      '"DISCOVER",dhcp-parameter-request-list:[1,3,6,15,28]}');
     ip4 := d.Send.yiaddr;
     ip := IP4ToText(@ip4);
     CheckEqual(d.SendToJson(true),
@@ -2291,8 +2280,7 @@ begin
     CheckEqual(d.RecvToJson(true),
       '{op:"request",ciaddr:"' + ip + '",chaddr:"' + mac +
        '",dhcp-message-type:"INFORM",dhcp-parameter-request-list:' +
-       '["subnet-mask","routers","domain-name-servers","domain-name",' +
-       '"broadcast-address"]}');
+       '[1,3,6,15,28]}');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
       '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +

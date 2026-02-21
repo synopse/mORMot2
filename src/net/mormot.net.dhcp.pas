@@ -2095,7 +2095,10 @@ begin
         begin
           W.AddDirect('[');                        // as JSON array of "names"
           repeat
-            W.AddJsonShort(DhcpOptName(PByte(v)^));
+            if twoForceJsonStandard in W.CustomOptions then
+              W.AddJsonShort(DhcpOptName(PByte(v)^))
+            else
+              W.AddB(PByte(v)^); // shorter and simple enough as extended/log
             dec(len);
             if len = 0 then
               break;
