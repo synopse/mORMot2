@@ -10473,11 +10473,14 @@ var
 begin
   ToShortU(abs(Value), @result);
   L := ord(result[0]);
-  if L < 4 then
-    exit;
-  Len := L + 1;
-  for i := 1 to (L - 1) div 3 do
-    insert(Sep, result, Len - i * 3);
+  if L >= 4 then
+  begin
+    Len := L + 1;
+    for i := 1 to (L - 1) div 3 do
+      insert(Sep, result, Len - i * 3);
+  end;
+  if value < 0 then
+    insert('-', result, 1);
 end;
 
 function SecToString(S: QWord): TShort16;
