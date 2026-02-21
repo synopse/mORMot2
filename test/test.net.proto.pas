@@ -1799,10 +1799,11 @@ begin
   ip4 := DhcpIP4(pointer(refoffer), lens[doDhcpServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   CheckEqual(DhcpParseToJson(PDhcpPacket(refoffer), length(refoffer)),
-    '{"op":"reply","yiaddr":"192.168.0.10","siaddr":"192.168.0.1","chaddr":"00:0b:82:01:fc:42",' +
-    '"dhcp-message-type":"OFFER","subnet-mask":"255.255.255.0",' +
-    '"dhcp-renewal-time":1800,"dhcp-rebinding-time":3150,"dhcp-lease-time":' +
-    '3600,"dhcp-server-identifier":"192.168.0.1"}');
+    '{"op":"reply","yiaddr":"192.168.0.10","siaddr":"192.168.0.1",' +
+     '"chaddr":"00:0b:82:01:fc:42",' +
+     '"dhcp-message-type":"OFFER","subnet-mask":"255.255.255.0",' +
+     '"dhcp-renewal-time":1800,"dhcp-rebinding-time":3150,' +
+     '"dhcp-lease-time":3600,"dhcp-server-identifier":"192.168.0.1"}');
   // validate client REQUEST frame from WireShark
   refreq := Base64ToBin(
     'AQEGAAAAPR4AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAA' +

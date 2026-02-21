@@ -1941,7 +1941,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
     end;
 end;
 
-function DhcpOptName(op: byte): TShort31;
+function DhcpOptName(op: byte): PRawUtf8; // PRawUtf8 to avoid try..finally
   {$ifdef HASINLINE} inline; {$endif}
 var
   opt: TDhcpOption;
@@ -1950,9 +1950,9 @@ begin
   if op <= high(DHCP_OPTION_INV) then
     opt := DHCP_OPTION_INV[op];
   if opt = doPad then
-    ToShortU(op, @result)
+    result := @SmallUInt32Utf8[op]
   else
-    Ansi7StringToShortString(DHCP_OPTION[opt], result);
+    result := @DHCP_OPTION[opt];
 end;
 
 procedure AddTextBinJson(v: PAnsiChar; len: integer; W: TJsonWriter);
@@ -2096,7 +2096,7 @@ begin
           W.AddDirect('[');                        // as JSON array of "names"
           repeat
             if twoForceJsonStandard in W.CustomOptions then
-              W.AddJsonShort(DhcpOptName(PByte(v)^))
+              W.AddJsonString(DhcpOptName(PByte(v)^)^)
             else
               W.AddB(PByte(v)^); // shorter and simple enough as extended/log
             dec(len);
@@ -2238,11 +2238,11 @@ begin
     W.AddPropJsonShort('giaddr', IP4ToShort(@p^.giaddr));
   if not IsZero(PNetMac(@p^.chaddr)^) then
     W.AddPropJsonShort('chaddr', MacToShort(@p^.chaddr));
-  // main decoded/parsed state fields in fields
+  // main decoded/parsed state fields in fields - for Send[]
   if s <> nil then
   begin
     if s^.RecvIp4 <> 0 then
-      W.AddPropJsonShort('from', IP4ToShort(@s^.RecvIp4));
+      W.AddPropJsonShort('via', IP4ToShort(@s^.RecvIp4));
     if (s^.RecvHostName <> nil) and
        (s^.RecvHostName^[0] <> #0) then
       W.AddPropJsonShort('host', s^.RecvHostName^);
@@ -2258,7 +2258,7 @@ begin
     dec(len, ord(o[1]) + 2);
     if len < 1 then
       break; // avoid buffer overflow
-    W.AddPropName(DhcpOptName(ord(o[0])));
+    W.AddFieldName(DhcpOptName(ord(o[0]))^);
     ParseTypeJson(pointer(o), W, true);
     W.AddComma;
     o := @o[ord(o[1]) + 2];
