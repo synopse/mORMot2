@@ -912,13 +912,10 @@ type
     // and only ASCII 7-bit characters)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
-    // - is a wrapper around AddProp()
-    procedure AddPropName(const PropName: ShortString);
-      {$ifdef HASINLINE}inline;{$endif}
+    // - is a wrapper around AddProp() - see AddFieldName() for RawUtf8 name
+    procedure AddPropName(const PropName: ShortString); overload;
     /// append an usigned integer as property name, as '"123":'
     procedure AddPropName(PropName: PtrUInt); overload;
-    /// append a RawUtf8 property name, as '"PropName":'
-    procedure AddPropNameU(const PropName: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a JSON field name, followed by a number value and a comma (',')
     procedure AddPropInt64(const PropName: ShortString; Value: Int64;
@@ -927,7 +924,7 @@ type
     // - FieldName content should not need any JSON escape (e.g. no " within)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
-    // - is a wrapper around AddProp()
+    // - is a wrapper around AddProp() for RawUtf8
     procedure AddFieldName(const FieldName: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a RawUtf8 property name, as '"FieldName"
@@ -10486,7 +10483,7 @@ begin
       insert(Sep, result, Len - i * 3);
   end;
   if value < 0 then
-    insert('-', result, 1);
+    insert('-', result, 1); // seldom called
 end;
 
 function SecToString(S: QWord): TShort16;

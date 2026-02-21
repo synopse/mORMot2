@@ -1978,7 +1978,7 @@ begin
   repeat
     if rai and
        (ord(v[0]) <= high(RAI_OPTION_INV)) then
-      W.AddPropNameU(RAI_OPTION[RAI_OPTION_INV[ord(v[0])]])
+      W.AddFieldName(RAI_OPTION[RAI_OPTION_INV[ord(v[0])]])
     else
       W.AddPropName(ord(v[0]));
     AddTextBinJson(@v[2], ord(v[1]), W);
