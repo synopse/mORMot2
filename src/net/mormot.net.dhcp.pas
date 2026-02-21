@@ -1980,7 +1980,7 @@ begin
        (ord(v[0]) <= high(RAI_OPTION_INV)) then
       W.AddPropNameU(RAI_OPTION[RAI_OPTION_INV[ord(v[0])]])
     else
-      W.AddPropName(ToShort(ord(v[0])));
+      W.AddPropName(ord(v[0]));
     AddTextBinJson(@v[2], ord(v[1]), W);
     l := ord(v[1]) + 2;
     dec(len, l);
@@ -2120,7 +2120,7 @@ begin
         begin
           W.AddDirect('{');                        // as JSON object
           repeat
-            W.AddPropName(ToShort(PCardinal(v)^)); // entreprise-number
+            W.AddPropName(PCardinal(v)^);          // entreprise-number
             inc(PCardinal(v));                     // data-len + vendor-data
             if IsValidTlv(v + 1, ord(v[0])) then
               AddTlvJson(v + 1, ord(v[0]), W, {rai=}false)
