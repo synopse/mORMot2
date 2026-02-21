@@ -1761,44 +1761,37 @@ const
   RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
     'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
     'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:', nil);
+  // O(1) lookup of raw DHCP option number to its value type
+  PARSE_TYPE: array[0 .. 125] of TParseType = (
+    ptTextBin, ptIp4, ptUInt32, ptIp4, ptIp4, ptIp4, ptIp4, ptIp4, ptIp4,
+    ptIp4, ptIp4, ptIp4, ptTextBin, ptUInt16, ptTextBin, ptTextBin, ptIp4, // 16
+    ptTextBin, ptTextBin, ptBool, ptBool, ptIp4, ptUInt16, ptUInt8, ptUInt32,
+    ptUInt16, ptUInt16, ptBool, ptIp4, ptBool, ptBool, ptBool, ptIp4, ptIp4,
+    ptBool, ptUInt32, ptBool, ptUInt8, ptUInt32, ptBool, ptTextBin, ptIp4, // 41
+    ptIp4, ptVendor43, ptIp4, ptIp4, ptUInt8, ptTextBin, ptIp4, ptIp4,
+    ptIp4, ptUInt32, ptUInt8, ptMsg53, ptIp4, ptParam55, ptTextBin,        // 56
+    ptUInt16, ptUInt32, ptUInt32, ptTextBin, ptClient61, ptTextBin,
+    ptTextBin, ptTextBin, ptIp4, ptTextBin, ptTextBin, ptIp4, ptIp4, ptIp4,
+    ptIp4, ptIp4, ptIp4, ptIp4, ptIp4, ptIp4, ptTextBin, ptTextBin,        // 78
+    ptTextBin, ptTextBin, ptTextBin, ptRelay82, ptTextBin, ptTextBin, ptIp4,
+    ptTextBin, ptTextBin, ptTextBin, ptIp4, ptTextBin, ptUInt32, ptIp4,    // 92
+    ptUInt16, ptTextBin, ptTextBin, ptTextBin, ptUuid97, ptTextBin,
+    ptTextBin, ptTextBin, ptTextBin, ptTextBin, ptTextBin, ptTextBin,     // 104
+    ptTextBin, ptTextBin, ptTextBin, ptUInt32, ptTextBin, ptTextBin,
+    ptTextBin, ptIp4, ptTextBin, ptTextBin, ptTextBin, ptUInt8, ptUInt16, // 117
+    ptIp4, ptTextBin, ptTextBin, ptCidr121, ptTextBin, ptTextBin,
+    ptVendor12x, ptVendor12x);
   FAKE_OP_MAC = 255; // to parse "mac": content
 
 function ParseType(op: byte): TParseType;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := ptTextBin;
-  if op <> 0 then
-    case op of // FPC and Delphi use a jump table here
-      1, 3 .. 11, 16, 21, 28, 32, 33, 41, 42, 44, 45, 48, 49, 50, 54, 65,
-      68 .. 76, 85, 89, 92, 118, 112, 136, 138:
-        result := ptIp4;
-      23, 37, 46, 52, 116, 156, 157:
-        result := ptUInt8;
-      13, 22, 25, 26, 57, 93, 117:
-        result := ptUInt16;
-      2, 24, 35, 38, 51, 58, 59, 91, 108, 152 .. 155:
-        result := ptUInt32;
-      19, 20, 27, 29, 30, 31, 34, 36, 39:
-        result := ptBool;
-      43:
-        result := ptVendor43;
-      53:
-        result := ptMsg53;   // single TDhcpMessageType byte
-      55:
-        result := ptParam55; // array of bytes
-      61:
-        result := ptClient61;
-      82:
-        result := ptRelay82;
-      97:
-        result := ptUuid97;
-      121:
-        result := ptCidr121;
-      124, 125:
-        result := ptVendor12x;
-    else
-      if op = FAKE_OP_MAC then
-        result := ptMac;
-    end;
+  if op <= high(PARSE_TYPE) then
+    result := PARSE_TYPE[op]
+  else if op = FAKE_OP_MAC then
+    result := ptMac
+  else
+    result := ptTextBin;
 end;
 
 function SetRuleValue(var p: TJsonParserContext; var v: RawByteString;
@@ -1949,6 +1942,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
 end;
 
 function DhcpOptName(op: byte): TShort31;
+  {$ifdef HASINLINE} inline; {$endif}
 var
   opt: TDhcpOption;
 begin
@@ -1996,6 +1990,21 @@ begin
     W.AddComma;
   until false;
   W.AddDirect('}');
+end;
+
+function IsValidTlv(op: PAnsiChar; len: integer): boolean;
+begin
+  result := false;
+  repeat
+    dec(len, 2);          // type + len
+    if len < 0 then
+      exit;
+    dec(len, ord(op[1])); // value
+    if len = 0 then
+      break;
+    op := @op[ord(op[1]) + 2];
+  until false;
+  result := true;
 end;
 
 function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
@@ -2400,21 +2409,6 @@ begin
   finally
     tmp.Done;
   end;
-end;
-
-function IsValidTlv(op: PAnsiChar; len: integer): boolean;
-begin
-  result := false;
-  repeat
-    dec(len, 2);          // type + len
-    if len < 0 then
-      exit;
-    dec(len, ord(op[1])); // value
-    if len = 0 then
-      break;
-    op := @op[ord(op[1]) + 2];
-  until false;
-  result := true;
 end;
 
 function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
@@ -5163,7 +5157,6 @@ begin
     fScopeSafe.ReadUnLock;
   end;
 end;
-
 
 
 initialization
