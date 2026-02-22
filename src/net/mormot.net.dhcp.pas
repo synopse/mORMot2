@@ -841,6 +841,9 @@ type
     Send: TDhcpPacket;
     /// the GetTickSec current 32-bit value
     Tix32: cardinal;
+    /// the QueryPerformanceMicroSeconds() start value
+    // - only set if dsoVerboseLog is defined in server Options
+    StartMicroSec: Int64;
     /// some pointer value set by the UDP server for its internal process
     Opaque: pointer;
     /// IP address allocated for Send (raw Ip4) as human readable text
@@ -2238,19 +2241,6 @@ begin
     W.AddPropJsonShort('giaddr', IP4ToShort(@p^.giaddr));
   if not IsZero(PNetMac(@p^.chaddr)^) then
     W.AddPropJsonShort('chaddr', MacToShort(@p^.chaddr));
-  // main decoded/parsed state fields in fields - for Send[]
-  if s <> nil then
-  begin
-    if s^.RecvIp4 <> 0 then
-      W.AddPropJsonShort('via', IP4ToShort(@s^.RecvIp4));
-    if (s^.RecvHostName <> nil) and
-       (s^.RecvHostName^[0] <> #0) then
-      W.AddPropJsonShort('host', s^.RecvHostName^);
-    if s^.RecvBoot <> dcbDefault then
-      W.AddPropJsonString('boot', BOOT_TXT[s^.RecvBoot]);
-    if s^.Ip[0] <> #0 then
-      W.AddPropJsonShort('ip', s^.Ip);
-  end;
   // parse and serialize all option fields in packet order
   dec(len, DHCP_PACKET_HEADER);
   o := @p^.options;
@@ -2263,6 +2253,19 @@ begin
     W.AddComma;
     o := @o[ord(o[1]) + 2];
   until o^ = #255;
+  // end with main sllServer decoded/parsed state fields in fields
+  if s <> nil then
+  begin
+    if s^.RecvIp4 <> 0 then
+      W.AddPropJsonShort('via', IP4ToShort(@s^.RecvIp4));
+    if (s^.RecvHostName <> nil) and
+       (s^.RecvHostName^[0] <> #0) then
+      W.AddPropJsonShort('host', s^.RecvHostName^);
+    if s^.RecvBoot <> dcbDefault then
+      W.AddPropJsonString('boot', BOOT_TXT[s^.RecvBoot]);
+    if s^.Ip[0] <> #0 then
+      W.AddPropJsonShort('ip', s^.Ip);
+  end;
   W.CancelLastComma('}');
 end;
 
@@ -4517,14 +4520,28 @@ procedure TDhcpProcess.OnLogFrame(Sender: TSynLog; Level: TSynLogLevel;
   Opaque: pointer; Value: PtrInt; Instance: TObject);
 var
   s: PDhcpState absolute Opaque;
+  us: Int64;
+  W: TJsonWriter;
 begin
+  W := Sender.Writer;
   case Level of
     sllClient:
-      DoDhcpToJson(Sender.Writer, @s^.Recv, s^.RecvLen, {state=}nil);
+      DoDhcpToJson(W, @s^.Recv, s^.RecvLen, {state=}nil);
     sllServer:
-      DoDhcpToJson(Sender.Writer, @s^.Send, s^.SendLen, s);
+      begin
+        QueryPerformanceMicroSeconds(us);
+        dec(us, s^.StartMicroSec);
+        DoDhcpToJson(W, @s^.Send, s^.SendLen, s);
+        if us > 9 then // only log if >= 10 microsecs
+        begin
+          W.CancelLastChar('}');
+          W.AddShorter(',us:');
+          W.AddQ(us);
+          W.AddDirect('}');
+        end;
+      end
   else
-    Sender.Writer.AddShorter('LogFrame'); // paranoid
+    W.AddShorter('LogFrame'); // paranoid
   end;
 end;
 
@@ -4916,6 +4933,8 @@ begin
     end;
     // work on this scope/subnet from now on
     State.Tix32 := GetTickSec;
+    if dsoVerboseLog in Options then
+      QueryPerformanceMicroSeconds(State.StartMicroSec);
     State.Scope^.Safe.Lock; // blocking for this subnet
     try
       // identify any matching input from this scope "rules" definition
