@@ -3791,23 +3791,30 @@ end;
 
 function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
 var
-  tmp: TTemp24;
-  n: PAnsiChar;
-  l, c: PtrInt;
-begin
-  c := 0;
-  result := dest;
-  repeat
-    n := StrUInt32(@tmp[23], ip4addr[c]);
-    l := @tmp[23] - n;
-    MoveFast(n^, result^, l);
-    inc(result, l);
-    if c = 3 then
-      break;
-    inc(c);
-    result^ := '.';
-    inc(result);
-  until false;
+  p: PAnsiChar;
+begin // weird but efficient unrolled code on FPC
+  p := StrUInt32(@dest[3], ip4addr[0]);
+  PCardinal(dest)^ := PCardinal(p)^; // 1..255
+  dest := @dest[PtrUInt(dest) + 3];
+  dec(dest, PtrUInt(p));
+  dest^ := '.';
+  inc(dest);
+  p := StrUInt32(@dest[3], ip4addr[1]);
+  PCardinal(dest)^ := PCardinal(p)^; // 1..255
+  dest := @dest[PtrUInt(dest) + 3];
+  dec(dest, PtrUInt(p));
+  dest^ := '.';
+  inc(dest);
+  p := StrUInt32(@dest[3], ip4addr[2]);
+  PCardinal(dest)^ := PCardinal(p)^; // 1..255
+  dest := @dest[PtrUInt(dest) + 3];
+  dec(dest, PtrUInt(p));
+  dest^ := '.';
+  inc(dest);
+  p := StrUInt32(@dest[3], ip4addr[3]);
+  PCardinal(dest)^ := PCardinal(p)^; // 1..255
+  result := @dest[PtrUInt(dest) + 3];
+  dec(result, PtrUInt(p));
   result^ := #0; // make #0 terminated (won't hurt)
 end;
 
