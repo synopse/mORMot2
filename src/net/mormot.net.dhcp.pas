@@ -1290,6 +1290,7 @@ type
     procedure OnLogFrame(Sender: TSynLog; Level: TSynLogLevel; Opaque: pointer;
       Value: PtrInt; Instance: TObject); virtual;
     function ParseFrame(var State: TDhcpState): boolean; virtual;
+    function LockedResponse(var State: TDhcpState): PtrInt; virtual;
     function FindScope(var State: TDhcpState): boolean; virtual;
     function FindLease(var State: TDhcpState): PDhcpLease; virtual;
     function RetrieveFrameIP(var State: TDhcpState;
@@ -4914,9 +4915,248 @@ begin
   end;
 end;
 
-function TDhcpProcess.ComputeResponse(var State: TDhcpState): PtrInt;
+function TDhcpProcess.LockedResponse(var State: TDhcpState): PtrInt;
 var
   p: PDhcpLease;
+begin
+  // identify any matching input from this scope "rules" definition
+  if State.Scope^.Rules <> nil then
+    SetRule(State);
+  // find any existing lease - or StaticMac[] StaticUuid[] fake lease
+  p := FindLease(State);
+  // process the received DHCP message
+  case State.RecvType of
+    dmtDiscover:
+      begin
+        inc(State.Scope^.Metrics.Current[dsmDiscover]);
+        if (p = nil) or    // first time this MAC is seen
+           (p^.IP4 = 0) or // may happen after DECLINE
+           (p^.State = lsReserved) then // reserved = client refused this IP
+        begin
+          // first time seen (most common case), or renewal
+          if not RetrieveFrameIP(State, p) then // IP from option 50
+          begin
+            State.Ip4 := State.Scope^.NextIp4; // guess a free IP from pool
+            if State.Ip4 = 0 then
+            begin
+              // IPv4 exhausted: don't return NAK, but silently ignore
+              // - client will retry after a small temporisation
+              result := DoError(State, dsmDroppedNoAvailableIP);
+              exit;
+            end;
+          end;
+          if p = nil then
+          begin
+            p := State.Scope^.NewLease(State.Mac64);
+            State.Scope^.LastDiscover := State.Scope^.Index(p);
+          end;
+          p^.IP4 := State.Ip4;
+        end
+        else
+          // keep existing/previous/static IP4
+          State.Ip4 := p^.IP4;
+        // update the lease information
+        if p^.State = lsStatic then
+        begin
+          p^.Expired := State.Tix32;
+          inc(State.Scope^.Metrics.Current[dsmStaticHits]);
+        end
+        else
+        begin
+          inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+          p^.State := lsReserved;
+          p^.Expired := State.Tix32 + State.Scope^.OfferHolding;
+          inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
+        end;
+        // respond with an OFFER
+        inc(State.Scope^.Metrics.Current[dsmOffer]);
+        State.SendType := dmtOffer;
+      end;
+    dmtRequest:
+      begin
+        inc(State.Scope^.Metrics.Current[dsmRequest]);
+        if (p <> nil) and
+           (p^.IP4 <> 0) and
+           ((p^.State in [lsReserved, lsAck, lsStatic]) or
+            ((p^.State = lsOutdated) and
+             (State.Scope^.GraceFactor > 1) and
+             (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
+             (State.Tix32 - p^.Expired <
+                State.Scope^.LeaseTimeLE * State.Scope^.GraceFactor))) then
+          // RFC 2131: lease is Reserved after OFFER = SELECTING
+          //           lease is Ack/Static/Outdated = RENEWING/REBINDING
+          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed])
+        else if RetrieveFrameIP(State, p) then
+          begin
+            // no lease, but Option 50 = INIT-REBOOT
+            if p = nil then
+              p := State.Scope^.NewLease(State.Mac64)
+            else
+              inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
+            p^.IP4 := State.Ip4;
+          end
+          else
+          begin
+            // no lease, and none or invalid Option 50 = send NAK response
+            result := DoError(State, dsmNak);
+            exit;
+          end;
+        // update the lease information
+        if p^.State = lsStatic then
+        begin
+          p^.Expired := State.Tix32;
+          inc(State.Scope^.Metrics.Current[dsmStaticHits]);
+        end
+        else
+        begin
+          inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+          p^.State := lsAck;
+          p^.Expired := State.Tix32 + State.Scope^.LeaseTimeLE;
+          inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
+        end;
+        // respond with an ACK on the known IP
+        inc(State.Scope^.Metrics.Current[dsmAck]);
+        State.Ip4 := p^.IP4;
+        State.SendType := dmtAck;
+      end;
+    dmtDecline:
+      begin
+        inc(State.Scope^.Metrics.Current[dsmDecline]);
+        // client ARPed the OFFERed IP and detected conflict, so DECLINE it
+        if (p = nil) or
+           (p^.State <> lsReserved) then
+        begin
+          // ensure the server recently OFFERed one IP to that client
+          // (match RFC intent and prevent blind poisoning of arbitrary IPs)
+          result := DoError(State, dsmDroppedPackets);
+          exit;
+        end;
+        if (State.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
+           (fIdleTix <> 0) then  // OnIdle() would reset RateLimit := 0
+          if p^.RateLimit < State.Scope^.MaxDeclinePerSec then
+            inc(p^.RateLimit)
+          else
+          begin
+            // malicious client poisons the pool by sending repeated DECLINE
+            result := DoError(State, dsmRateLimitHit);
+            exit;
+          end;
+        // retrieve and check requested IP
+        State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doDhcpRequestedAddress]);
+        if State.Ip4 <> 0 then // authoritative IP is option 50
+          inc(State.Scope^.Metrics.Current[dsmOption50Hits])
+        else
+          State.Ip4 := State.Recv.ciaddr; // fallback to ciaddr
+        if State.Ip4 = 0 then
+          State.Ip4 := p^.IP4 // last reserved IP would be invalidated below
+        else if not State.Scope^.SubNet.Match(State.Ip4) then
+        begin
+          // option 50 or ciaddr is not for this subnet -> do nothing
+          result := DoError(State, dsmDroppedInvalidIP);
+          exit;
+        end;
+        // always invalidate any previous offered IP
+        p^.State := lsUnavailable;
+        p^.IP4 := 0;
+        if State.Ip4 <> 0 then
+        begin
+          // store internally this IP as unavailable for NextIP4
+          IP4Short(@State.Ip4, State.Ip);
+          DoLog(sllTrace, 'as', State);  // success: no DoError()
+          p := State.Scope^.NewLease(0); // mac=0: sentinel to store this IP
+          p^.State := lsUnavailable;
+          p^.IP4 := State.Ip4;
+          p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
+        end;
+        inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+        result := 0;         // no response, but not an error
+        exit; // server MUST NOT respond to a DECLINE message
+      end;
+    dmtRelease:
+      begin
+        inc(State.Scope^.Metrics.Current[dsmRelease]);
+        // client informs the DHCP server that it no longer needs the lease
+        if (p = nil) or
+           (p^.IP4 <> State.Recv.ciaddr) or
+           not (p^.State in [lsAck, lsOutdated]) then
+          // detect and ignore out-of-synch or malicious client
+          result := DoError(State, dsmDroppedInvalidIP)
+        else
+          result := DoError(State, dsmLeaseReleased, p);
+        exit; // server MUST NOT respond to a RELEASE message
+      end;
+    dmtInform:
+      begin
+        inc(State.Scope^.Metrics.Current[dsmInform]);
+        // client requests configuration options for its given IP
+        State.Ip4 := State.Recv.ciaddr;
+        if not State.Scope^.Subnet.Match(State.Ip4) then
+        begin
+          IP4Short(@State.Ip4, State.Ip); // no ciaddr or wrong subnet
+          result := DoError(State, dsmDroppedInvalidIP);
+          exit;
+        end;
+        if (p <> nil) and
+           (p^.State = lsStatic) then
+        begin
+          p^.Expired := State.Tix32;
+          inc(State.Scope^.Metrics.Current[dsmStaticHits]);
+        end
+        else
+        begin
+          if p <> nil then
+            inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
+          if (dsoInformRateLimit in State.Scope^.Options) and
+             (fIdleTix <> 0) and // OnIdle() would reset RateLimit := 0
+             not State.Scope^.IsStaticIP(State.Ip4) then
+          begin
+            // temporarily marks client IP as unavailable to avoid conflicts
+            // (not set by default: stronger than the RFC requires, and no
+            // other DHCP server like KEA, dnsmasq or Windows implements it)
+            if p = nil then
+              p := State.Scope^.NewLease(State.Mac64)
+            else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
+            begin
+              result := DoError(State, dsmInformRateLimitHit);
+              exit;
+            end
+            else
+            begin
+              inc(p^.RateLimit);
+              // mark this IP as temporary unavailable
+              if p^.IP4 <> State.Ip4 then
+                // create a new MAC-free lease for this other IP
+                p := State.Scope^.NewLease(0); // mac=0: sentinel for this IP
+            end;
+            // update the lease information
+            inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
+            p^.State := lsUnavailable;
+            p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
+            p^.IP4 := State.Ip4;
+          end;
+        end;
+        // respond with an ACK and the standard options
+        inc(State.Scope^.Metrics.Current[dsmAck]);
+        State.SendType := dmtAck;
+      end;
+  else
+    begin
+      // ParseFrame() was correct but this message type is not supported yet
+      result := DoError(State, dsmUnsupportedRequest);
+      exit;
+    end;
+  end;
+  // compute the dmtOffer/dmtAck response frame over the very same xid
+  IP4Short(@State.Ip4, State.Ip);
+  State.SendEnd := DhcpNew(State.Send, State.SendType, State.Recv.xid,
+    PNetMac(@State.Recv.chaddr)^, State.Scope^.ServerIdentifier);
+  State.Send.yiaddr := State.Ip4;
+  result := Flush(State);   // callback + options
+  if result <> 0 then
+    DoLog(sllTrace, 'into', State); // if not canceled by callback
+end;
+
+function TDhcpProcess.ComputeResponse(var State: TDhcpState): PtrInt;
 begin
   result := -1; // error
   // do nothing on missing Setup() or after Shutdown
@@ -4949,245 +5189,13 @@ begin
     // syscalls before locking this scope
     if State.Tix32 = 0 then
       State.Tix32 := GetTickSec; // caller should have set this field
-    if dsoVerboseLog in Options then
+    if (dsoVerboseLog in Options) and
+       Assigned(fLog) then
       QueryPerformanceMicroSeconds(State.StartMicroSec);
-    State.Scope^.Safe.Lock; // blocking for this subnet
+    // blocking for this scope/subnet from now on
+    State.Scope^.Safe.Lock;
     try
-      // identify any matching input from this scope "rules" definition
-      if State.Scope^.Rules <> nil then
-        SetRule(State);
-      // find any existing lease - or StaticMac[] StaticUuid[] fake lease
-      p := FindLease(State);
-      // process the received DHCP message
-      case State.RecvType of
-        dmtDiscover:
-          begin
-            inc(State.Scope^.Metrics.Current[dsmDiscover]);
-            if (p = nil) or    // first time this MAC is seen
-               (p^.IP4 = 0) or // may happen after DECLINE
-               (p^.State = lsReserved) then // reserved = client refused this IP
-            begin
-              // first time seen (most common case), or renewal
-              if not RetrieveFrameIP(State, p) then // IP from option 50
-              begin
-                State.Ip4 := State.Scope^.NextIp4; // guess a free IP from pool
-                if State.Ip4 = 0 then
-                begin
-                  // IPv4 exhausted: don't return NAK, but silently ignore
-                  // - client will retry after a small temporisation
-                  result := DoError(State, dsmDroppedNoAvailableIP);
-                  exit;
-                end;
-              end;
-              if p = nil then
-              begin
-                p := State.Scope^.NewLease(State.Mac64);
-                State.Scope^.LastDiscover := State.Scope^.Index(p);
-              end;
-              p^.IP4 := State.Ip4;
-            end
-            else
-              // keep existing/previous/static IP4
-              State.Ip4 := p^.IP4;
-            // update the lease information
-            if p^.State = lsStatic then
-            begin
-              p^.Expired := State.Tix32;
-              inc(State.Scope^.Metrics.Current[dsmStaticHits]);
-            end
-            else
-            begin
-              inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-              p^.State := lsReserved;
-              p^.Expired := State.Tix32 + State.Scope^.OfferHolding;
-              inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
-            end;
-            // respond with an OFFER
-            inc(State.Scope^.Metrics.Current[dsmOffer]);
-            State.SendType := dmtOffer;
-          end;
-        dmtRequest:
-          begin
-            inc(State.Scope^.Metrics.Current[dsmRequest]);
-            if (p <> nil) and
-               (p^.IP4 <> 0) and
-               ((p^.State in [lsReserved, lsAck, lsStatic]) or
-                ((p^.State = lsOutdated) and
-                 (State.Scope^.GraceFactor > 1) and
-                 (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
-                 (State.Tix32 - p^.Expired <
-                    State.Scope^.LeaseTimeLE * State.Scope^.GraceFactor))) then
-              // RFC 2131: lease is Reserved after OFFER = SELECTING
-              //           lease is Ack/Static/Outdated = RENEWING/REBINDING
-              inc(State.Scope^.Metrics.Current[dsmLeaseRenewed])
-            else if RetrieveFrameIP(State, p) then
-              begin
-                // no lease, but Option 50 = INIT-REBOOT
-                if p = nil then
-                  p := State.Scope^.NewLease(State.Mac64)
-                else
-                  inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
-                p^.IP4 := State.Ip4;
-              end
-              else
-              begin
-                // no lease, and none or invalid Option 50 = send NAK response
-                result := DoError(State, dsmNak);
-                exit;
-              end;
-            // update the lease information
-            if p^.State = lsStatic then
-            begin
-              p^.Expired := State.Tix32;
-              inc(State.Scope^.Metrics.Current[dsmStaticHits]);
-            end
-            else
-            begin
-              inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-              p^.State := lsAck;
-              p^.Expired := State.Tix32 + State.Scope^.LeaseTimeLE;
-              inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
-            end;
-            // respond with an ACK on the known IP
-            inc(State.Scope^.Metrics.Current[dsmAck]);
-            State.Ip4 := p^.IP4;
-            State.SendType := dmtAck;
-          end;
-        dmtDecline:
-          begin
-            inc(State.Scope^.Metrics.Current[dsmDecline]);
-            // client ARPed the OFFERed IP and detected conflict, so DECLINE it
-            if (p = nil) or
-               (p^.State <> lsReserved) then
-            begin
-              // ensure the server recently OFFERed one IP to that client
-              // (match RFC intent and prevent blind poisoning of arbitrary IPs)
-              result := DoError(State, dsmDroppedPackets);
-              exit;
-            end;
-            if (State.Scope^.MaxDeclinePerSec <> 0) and // = 5 by default
-               (fIdleTix <> 0) then  // OnIdle() would reset RateLimit := 0
-              if p^.RateLimit < State.Scope^.MaxDeclinePerSec then
-                inc(p^.RateLimit)
-              else
-              begin
-                // malicious client poisons the pool by sending repeated DECLINE
-                result := DoError(State, dsmRateLimitHit);
-                exit;
-              end;
-            // retrieve and check requested IP
-            State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doDhcpRequestedAddress]);
-            if State.Ip4 <> 0 then // authoritative IP is option 50
-              inc(State.Scope^.Metrics.Current[dsmOption50Hits])
-            else
-              State.Ip4 := State.Recv.ciaddr; // fallback to ciaddr
-            if State.Ip4 = 0 then
-              State.Ip4 := p^.IP4 // last reserved IP would be invalidated below
-            else if not State.Scope^.SubNet.Match(State.Ip4) then
-            begin
-              // option 50 or ciaddr is not for this subnet -> do nothing
-              result := DoError(State, dsmDroppedInvalidIP);
-              exit;
-            end;
-            // always invalidate any previous offered IP
-            p^.State := lsUnavailable;
-            p^.IP4 := 0;
-            if State.Ip4 <> 0 then
-            begin
-              // store internally this IP as unavailable for NextIP4
-              IP4Short(@State.Ip4, State.Ip);
-              DoLog(sllTrace, 'as', State);  // success: no DoError()
-              p := State.Scope^.NewLease(0); // mac=0: sentinel to store this IP
-              p^.State := lsUnavailable;
-              p^.IP4 := State.Ip4;
-              p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
-            end;
-            inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-            result := 0;         // no response, but not an error
-            exit; // server MUST NOT respond to a DECLINE message
-          end;
-        dmtRelease:
-          begin
-            inc(State.Scope^.Metrics.Current[dsmRelease]);
-            // client informs the DHCP server that it no longer needs the lease
-            if (p = nil) or
-               (p^.IP4 <> State.Recv.ciaddr) or
-               not (p^.State in [lsAck, lsOutdated]) then
-              // detect and ignore out-of-synch or malicious client
-              result := DoError(State, dsmDroppedInvalidIP)
-            else
-              result := DoError(State, dsmLeaseReleased, p);
-            exit; // server MUST NOT respond to a RELEASE message
-          end;
-        dmtInform:
-          begin
-            inc(State.Scope^.Metrics.Current[dsmInform]);
-            // client requests configuration options for its given IP
-            State.Ip4 := State.Recv.ciaddr;
-            if not State.Scope^.Subnet.Match(State.Ip4) then
-            begin
-              IP4Short(@State.Ip4, State.Ip); // no ciaddr or wrong subnet
-              result := DoError(State, dsmDroppedInvalidIP);
-              exit;
-            end;
-            if (p <> nil) and
-               (p^.State = lsStatic) then
-            begin
-              p^.Expired := State.Tix32;
-              inc(State.Scope^.Metrics.Current[dsmStaticHits]);
-            end
-            else
-            begin
-              if p <> nil then
-                inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
-              if (dsoInformRateLimit in State.Scope^.Options) and
-                 (fIdleTix <> 0) and // OnIdle() would reset RateLimit := 0
-                 not State.Scope^.IsStaticIP(State.Ip4) then
-              begin
-                // temporarily marks client IP as unavailable to avoid conflicts
-                // (not set by default: stronger than the RFC requires, and no
-                // other DHCP server like KEA, dnsmasq or Windows implements it)
-                if p = nil then
-                  p := State.Scope^.NewLease(State.Mac64)
-                else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
-                begin
-                  result := DoError(State, dsmInformRateLimitHit);
-                  exit;
-                end
-                else
-                begin
-                  inc(p^.RateLimit);
-                  // mark this IP as temporary unavailable
-                  if p^.IP4 <> State.Ip4 then
-                    // create a new MAC-free lease for this other IP
-                    p := State.Scope^.NewLease(0); // mac=0: sentinel for this IP
-                end;
-                // update the lease information
-                inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-                p^.State := lsUnavailable;
-                p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
-                p^.IP4 := State.Ip4;
-              end;
-            end;
-            // respond with an ACK and the standard options
-            inc(State.Scope^.Metrics.Current[dsmAck]);
-            State.SendType := dmtAck;
-          end;
-      else
-        begin
-          // ParseFrame() was correct but this message type is not supported yet
-          result := DoError(State, dsmUnsupportedRequest);
-          exit;
-        end;
-      end;
-      // compute the dmtOffer/dmtAck response frame over the very same xid
-      IP4Short(@State.Ip4, State.Ip);
-      State.SendEnd := DhcpNew(State.Send, State.SendType, State.Recv.xid,
-        PNetMac(@State.Recv.chaddr)^, State.Scope^.ServerIdentifier);
-      State.Send.yiaddr := State.Ip4;
-      result := Flush(State);   // callback + options
-      if result <> 0 then
-        DoLog(sllTrace, 'into', State); // if not canceled by callback
+      result := LockedResponse(State);
     finally
       State.Scope^.Safe.UnLock;
     end;
