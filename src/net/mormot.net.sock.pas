@@ -3791,30 +3791,19 @@ end;
 
 function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
 var
-  p: PAnsiChar;
-begin // weird but efficient unrolled code on FPC
-  p := StrUInt32(@dest[3], ip4addr[0]);
-  PCardinal(dest)^ := PCardinal(p)^; // 1..255
-  dest := @dest[PtrUInt(dest) + 3];
-  dec(dest, PtrUInt(p));
-  dest^ := '.';
-  inc(dest);
-  p := StrUInt32(@dest[3], ip4addr[1]);
-  PCardinal(dest)^ := PCardinal(p)^; // 1..255
-  dest := @dest[PtrUInt(dest) + 3];
-  dec(dest, PtrUInt(p));
-  dest^ := '.';
-  inc(dest);
-  p := StrUInt32(@dest[3], ip4addr[2]);
-  PCardinal(dest)^ := PCardinal(p)^; // 1..255
-  dest := @dest[PtrUInt(dest) + 3];
-  dec(dest, PtrUInt(p));
-  dest^ := '.';
-  inc(dest);
-  p := StrUInt32(@dest[3], ip4addr[3]);
-  PCardinal(dest)^ := PCardinal(p)^; // 1..255
-  result := @dest[PtrUInt(dest) + 3];
-  dec(result, PtrUInt(p));
+  tab: PWordArray;
+begin // weird but efficient unrolled code thanks to proper inlining
+  tab := @TwoDigitLookupW;
+  result := UInt8ToPChar(dest, ip4addr[0], tab);
+  result^ := '.';
+  inc(result);
+  result := UInt8ToPChar(result, ip4addr[1], tab);
+  result^ := '.';
+  inc(result);
+  result := UInt8ToPChar(result, ip4addr[2], tab);
+  result^ := '.';
+  inc(result);
+  result := UInt8ToPChar(result, ip4addr[3], tab);
   result^ := #0; // make #0 terminated (won't hurt)
 end;
 
