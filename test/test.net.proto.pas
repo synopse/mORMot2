@@ -1782,6 +1782,15 @@ begin
   CheckRfc3925(
     '000000090849502070686F6E6500000DE910726F757465722D6D6F64656C2D616263',
     '{9:"IP phone",3561:"router-model-abc"}');
+  CheckRfc3925(
+    '0000000900',         // enterprise 9, data-len=0
+    '{9:""}');
+  CheckRfc3925(
+    '00000009020400',     // enterprise 9, data-len=3, sub=4 len=0
+    '{9:{4:""}}');
+  CheckRfc3925(
+    '000000090401000000', // enterprise 9, data-len=4, sub=1 len=0, sub=0 len=0
+    '{9:{1:"",0:""}}' );
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +

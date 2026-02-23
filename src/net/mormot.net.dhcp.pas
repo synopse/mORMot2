@@ -2019,7 +2019,7 @@ begin
   result := false;
   repeat
     dec(len, 5);          // entreprise-number + data-len
-    if len <= 0 then
+    if len < 0 then
       exit;
     dec(len, ord(op[4])); // jump vendor-data
     if len = 0 then
