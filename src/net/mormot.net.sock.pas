@@ -1860,10 +1860,14 @@ function ToIP4(const text: RawUtf8): TNetIP4;
 function ToIP4s(const text: RawUtf8): TNetIP4s; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// decode one or several IP addresses from CSV text
+/// decode one or several IP addresses from CSV text into an array of TNetIP4
 function ToIP4s(text: PUtf8Char): TNetIP4s; overload;
 
-/// compute a raw binary content from an array of ip4 - as used e.g. for DHCP
+/// decode one or several IP addresses from CSV text into a binary buffer
+// - returns the number of 32-bit IPv4 stored in bin, or -1 on parsing error
+function ToIP4Binary(text: PUtf8Char; var bin: RawByteString): PtrInt;
+
+/// compute a raw binary content from an array of ip4
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 
 /// append one TNetMac instance to a dynamic array of such values
@@ -5424,25 +5428,49 @@ end;
 
 function ToIP4s(text: PUtf8Char): TNetIP4s;
 var
-  p: PUtf8Char;
   v: TNetIP4;
 begin
   result := nil;
-  p := pointer(text);
-  if p <> nil then
+  if text <> nil then
     repeat
-      while p^ = ' ' do
-        inc(p);
-      if not NetIsIP4(p, @v) then
+      while text^ = ' ' do
+        inc(text);
+      if not NetIsIP4(text, @v) then
         exit;
       AddInteger(TIntegerDynArray(result), v);
-      while p^ <> ',' do
-        if p^ = #0 then
+      while text^ <> ',' do
+        if text^ = #0 then
           exit
         else
-          inc(p);
-      inc(p); // jump ','
+          inc(text);
+      inc(text); // jump ','
     until false;
+end;
+
+function ToIP4Binary(text: PUtf8Char; var bin: RawByteString): PtrInt;
+var
+  v: TNetIP4;
+begin
+  result := 0;
+  FastAssignNew(bin);
+  if text = nil then
+    exit;
+  repeat
+    while text^ = ' ' do
+      inc(text);
+    if not NetIsIP4(text, @v) then
+      break;
+    SetLength(bin, (result + 1) shl 2);
+    PCardinalArray(bin)^[result] := v;
+    inc(result);
+    while text^ <> ',' do
+      if text^ = #0 then
+        exit
+      else
+        inc(text);
+    inc(text); // jump ','
+  until false;
+  result := -1;
 end;
 
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
