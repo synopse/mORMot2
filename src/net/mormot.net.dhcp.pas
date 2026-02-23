@@ -4753,7 +4753,8 @@ begin
     // change dcbBios..dcbA64 into dcbIpxeBios..dcbIpxeA64
     inc(b, ord(dcbIpxeBios) - ord(dcbBios))
   else if (vendor^[0] >= #10) and
-          IdemPChar(@vendor^[1], 'HTTPCLIENT') then
+          (PCardinal(@vendor^[1])^ = HTTP_32) and
+          IdemPChar(@vendor^[5], 'CLIENT') then
     // HTTPClient* in Option 60 indicates native UEFI firmware HTTP boot
     // - will fallback to TFTP is no HTTP URI is supplied
     case b of

@@ -2331,13 +2331,14 @@ begin
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
       '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
       'subnet-mask:"255.252.0.0"}');
-    // validate PXE selection
+    // validate PXE selection with missing response boot file in settings
     f := d.ClientNew(dmtDiscover, macs[8]);
     DhcpAddOptionShort(f, doVendorClassIdentifier, 'PXEClient:Arch:00006');
     d.ClientFlush(f);
     d.RecvBoot := dcbBios;
     CheckNotEqual(server.ComputeResponse(d), 0, 'pxe 0006');
     Check(d.RecvBoot = dcbDefault, 'missing boot file');
+    // validate PXE selection with proper settings
     Check(Assigned(d.Scope), 'scope');
     d.Scope^.Boot.Remote[dcbX86] := 'ipxe.efi';
     d.Scope^.Boot.Remote[dcbX64] := 'x86-64-efi/ipxe.efi';
@@ -2351,6 +2352,7 @@ begin
       'boot-file-name:"ipxe.efi",vendor-class-identifier:' +
       '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
       'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    // validate PXE selection with next-server information in settings
     d.RecvBoot := dcbBios;
     d.Scope^.Boot.NextServer := '192.168.0.254';
     CheckNotEqual(server.ComputeResponse(d), 0, 'nextserver');
@@ -2362,6 +2364,7 @@ begin
       'boot-file-name:"ipxe.efi",vendor-class-identifier:' +
       '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
       'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    // validate PXE selection with another architecture
     f := d.ClientNew(dmtRequest, macs[8]);
     DhcpAddOptionShort(f, doVendorClassIdentifier, 'PXEClient:Arch:00007');
     d.ClientFlush(f);
