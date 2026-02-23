@@ -3796,14 +3796,11 @@ begin // weird but efficient unrolled code thanks to proper inlining
   tab := @TwoDigitLookupW;
   result := UInt8ToPChar(dest, ip4addr[0], tab);
   result^ := '.';
-  inc(result);
-  result := UInt8ToPChar(result, ip4addr[1], tab);
+  result := UInt8ToPChar(result + 1, ip4addr[1], tab);
   result^ := '.';
-  inc(result);
-  result := UInt8ToPChar(result, ip4addr[2], tab);
+  result := UInt8ToPChar(result + 1, ip4addr[2], tab);
   result^ := '.';
-  inc(result);
-  result := UInt8ToPChar(result, ip4addr[3], tab);
+  result := UInt8ToPChar(result + 1, ip4addr[3], tab);
   result^ := #0; // make #0 terminated (won't hurt)
 end;
 
