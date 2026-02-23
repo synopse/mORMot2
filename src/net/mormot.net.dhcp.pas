@@ -50,7 +50,9 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.log,
-  mormot.net.sock;
+  mormot.net.sock,
+  mormot.net.http,
+  mormot.net.server;
 
 
 { **************** Low-Level DHCP Protocol Definitions }
@@ -2046,12 +2048,12 @@ begin
           len := len shr 2;
           if len = 1 then                          // as JSON "1.2.3.4"
           begin
-            W.AddJsonShort(IP4ToShort(pointer(v)));
+            AddJsonWriterIP4(W, v);
             exit;
           end;
           W.AddDirect('[');                        // as JSON array
           repeat
-            W.AddJsonShort(IP4ToShort(pointer(v)));
+            AddJsonWriterIP4(W, v);
             dec(len);
             if len = 0 then
               break;
@@ -4523,7 +4525,7 @@ var
   us: Int64;
   W: TJsonWriter;
 begin
-  W := Sender.Writer;
+  W := Sender.Writer; // called within TSynLog global lock
   case Level of
     sllClient:
       DoDhcpToJson(W, @s^.Recv, s^.RecvLen, {state=}nil);
@@ -4534,8 +4536,8 @@ begin
         DoDhcpToJson(W, @s^.Send, s^.SendLen, s);
         if us > 9 then // only log if >= 10 microsecs
         begin
-          W.CancelLastChar('}');
-          W.AddShorter(',us:');
+          W.CancelLastChar;
+          W.AddShorter(',us:'); // twoForceJsonExtended from within logs
           W.AddQ(us);
           W.AddDirect('}');
         end;
