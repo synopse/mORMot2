@@ -3759,7 +3759,7 @@ begin
   ip4 := ip4 and netmask4;
   IP4Short(@ip4, result);
   AppendShortChar('/', @result);
-  AppendShortCardinal(w, result);
+  AppendShortByte(w, @result); // in range '0'..'32'
 end;
 
 function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8;
@@ -5638,7 +5638,7 @@ begin
   if prefix = 0 then
     exit;
   AppendShortChar('/', @result);
-  AppendShortCardinal(prefix, result);
+  AppendShortByte(prefix, @result); // in range '0'..'32'
 end;
 
 

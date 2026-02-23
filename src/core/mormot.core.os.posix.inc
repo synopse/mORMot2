@@ -2060,8 +2060,8 @@ begin
   // prepare and send the information to the journal
   if priority > 7 then
     priority := 7;
-  v0 := 'PRIORITY=';
-  AppendShortCardinal(priority, v0);
+  v0 := 'PRIORITY=#';
+  v0[10] := AnsiChar(priority + ord('0'));
   v[0].iov_base := @v0[1];
   v[0].iov_len := ord(v0[0]);
   PInt64(@tmp)^ := PInt64(@_MESSAGE)^;

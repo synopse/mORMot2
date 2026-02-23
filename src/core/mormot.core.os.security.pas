@@ -6560,7 +6560,7 @@ begin
     begin
       y := x div 40; // first byte = two first numbers modulo 40
       dec(x, y * 40);
-      AppendShortCardinal(y, tmp);
+      AppendShortByte(y, @tmp); // in range '0'..'39'
     end;
     {%H-}AppendShortCharSafe('.', tmp);
     AppendShortCardinal(x, tmp);

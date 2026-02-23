@@ -6237,12 +6237,12 @@ begin
     if osv.os in (OS_LINUX - [osAndroid]) then
       AppendShort(' Linux ', result) // e.g. 'Ubuntu Linux 5.4.0'
     else
-      AppendShortCharSafe(' ', result);
-    AppendShortCardinal(osv.utsrelease[2], result);
-    AppendShortCharSafe('.', result);
-    AppendShortCardinal(osv.utsrelease[1], result);
-    AppendShortCharSafe('.', result);
-    AppendShortCardinal(osv.utsrelease[0], result);
+      AppendShortChar(' ', @result);
+    AppendShortByte(osv.utsrelease[2], @result);
+    AppendShortChar('.', @result);
+    AppendShortByte(osv.utsrelease[1], @result);
+    AppendShortChar('.', @result);
+    AppendShortByte(osv.utsrelease[0], @result);
   end;
 end;
 
@@ -6928,7 +6928,7 @@ begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
     28591 .. 28606:
       begin
         Name := 'ISO-8859-';
-        AppendShortCardinal(codepage - 28590, Name);
+        AppendShortByte(codepage - 28590, @Name); // append '0'..'16'
       end;
     50220, 50222:
       Name := 'ISO-2022-JP';
@@ -8449,7 +8449,7 @@ begin
     exit;
   AppendFreeTotalKB(info.memtotal - info.memfree, info.memtotal, result);
   AppendShortChar('(', @result);
-  AppendShortCardinal(info.percent, result);
+  AppendShortByte(info.percent, @result); // append '0'..'99' range
   AppendShortTwoChars(ord('%') + ord(')') shl 8, @result);
 end;
 
