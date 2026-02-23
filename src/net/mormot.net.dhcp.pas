@@ -2402,6 +2402,7 @@ function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean;
 var
   one: TRuleValue;
   parser: TJsonParserContext;
+  tmp: TSynTempAdder; // no transient memory allocation
 begin
   result := false;
   if p = nil then
@@ -2409,11 +2410,14 @@ begin
   parser.InitParser(p);
   if not parser.ParseObject then
     exit;
+  tmp.Init;
   repeat
     if not ParseRuleValue(parser, one, prTlv) then
       exit;
-    Append(v, [AnsiChar(one.num), AnsiChar(length(one.value)), one.value])
+    tmp.AddDirect(AnsiChar(one.num), AnsiChar(length(one.value)));
+    tmp.Add(one.value)
   until parser.EndOfObject = '}';
+  tmp.Done(v, CP_RAWBYTESTRING);
   result := true;
 end;
 
@@ -2433,10 +2437,11 @@ function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
 var
   dest, router: TNetIP4;
   w: PtrUInt;
-  tmp: TShort15;
+  tmp: TSynTempAdder;
 begin
   bin := '';
   result := false;
+  tmp.Init;
   if p <> nil then
     repeat
       if not NetIsIP4(p, @dest) then
@@ -2456,17 +2461,16 @@ begin
       inc(p); // jump ','
       if not NetIsIP4(p, @router) then
         exit;
-      tmp[0] := #1;
-      tmp[1] := AnsiChar(w);                                    // mask width
-      AppendShortBuffer(@dest, (w + 7) shr 3, high(tmp), @tmp); // only prefix
-      AppendShortBuffer(@router, 4, high(tmp), @tmp);           // router
-      Append(bin, @tmp[1], ord(tmp[0]));
+      tmp.AddDirect(AnsiChar(w));    // width
+      tmp.Add(@dest, (w + 7) shr 3); // only prefix
+      tmp.Add(@router, 4);           // router
       while not (p^ in [#0, ';', ',']) do
         inc(p);
       if p^ = #0 then
         break;
       inc(p); // jump ',' or ';' between routes
     until p^ = #0;
+  tmp.Done(bin, CP_RAWBYTESTRING);
   result := true;
 end;
 
@@ -3577,6 +3581,13 @@ end;
 
 { TDhcpRuleSettings }
 
+procedure DoParseRule(const json: RawUtf8; var v: TRuleValues; pr: TParseRule;
+  ctx: PUtf8Char);
+begin
+  if not ParseRule(json, v, pr) then
+    EDhcp.RaiseUtf8('PrepareRule: invalid %:%', [ctx, json]);
+end;
+
 function TDhcpRuleSettings.PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
 var
   alw, req: TRuleValues;
@@ -3588,18 +3599,12 @@ begin
   result := true; // parsing OK and need to add a rule (e.g. not static mac+ip)
   // parse main "rules" JSON object fields
   Rule.name := fName;
-  if not ParseRule(fAll, Rule.all, prMatch) then
-    EDhcp.RaiseUtf8('PrepareRule: invalid all:%', [fAll]);
-  if not ParseRule(fAny, Rule.any, prMatch) then
-    EDhcp.RaiseUtf8('PrepareRule: invalid any:%', [fAny]);
-  if not ParseRule(fNotAll, Rule.notall, prMatch) then
-    EDhcp.RaiseUtf8('PrepareRule: invalid not-all:%', [fNotAll]);
-  if not ParseRule(fNotAny, Rule.notany, prMatch) then
-    EDhcp.RaiseUtf8('PrepareRule: invalid not-any:%', [fNotAny]);
-  if not ParseRule(fAlways, alw, prValue) then
-    EDhcp.RaiseUtf8('PrepareRule: invalid always:%', [fAlways]);
-  if not ParseRule(fRequested, req, prValue) then
-    EDhcp.RaiseUtf8('PrepareRule: invalid requested:%', [fRequested]);
+  DoParseRule(fAll, Rule.all, prMatch, 'all');
+  DoParseRule(fAny, Rule.any, prMatch, 'any');
+  DoParseRule(fNotAll, Rule.notall, prMatch, 'not-all');
+  DoParseRule(fNotAny, Rule.notany, prMatch, 'not-any');
+  DoParseRule(fAlways, alw, prValue, 'always');
+  DoParseRule(fRequested, req, prValue, 'requested');
   // parse optional "mac" alias
   if fMac <> '' then
   begin
