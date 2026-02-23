@@ -980,6 +980,7 @@ function UniqueRawUtf8(var u: RawUtf8): pointer;
 
 /// concatenate several string arguments into an UTF-8 string
 function Join(const Args: array of RawByteString): RawUtf8; overload;
+ {$ifdef FPC}inline;{$endif}
 
 /// concatenate several string arguments into an UTF-8 string
 procedure Join(const Args: array of RawByteString; var Text: RawUtf8); overload;
@@ -1051,7 +1052,7 @@ procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 
 /// simple concatenation of a byte as uppercase hexadecimal into a shorstring
-procedure AppendShortByteHex(value: byte; var dest: ShortString);
+procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 
 /// simple concatenation of a ShortString text into a shorstring
 procedure AppendShort(const src: ShortString; var dest: ShortString);
@@ -5462,19 +5463,20 @@ const
   HexCharsUpper: array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
-procedure AppendShortByteHex(value: byte; var dest: ShortString);
+procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 var
   len: PtrInt;
-  d: PAnsiChar;
+  d, hex: PAnsiChar;
 begin
   d := @dest;
   len := ord(d[0]);
   if len + 2 > high(dest) then
     exit;
-  d[len + 1] := HexCharsUpper[value shr 4];
+  hex := @HexCharsUpper;
+  d[len + 1] := hex[value shr 4];
   inc(len, 2);
   value := value and $0f;
-  d[len] := HexCharsUpper[value];
+  d[len] := hex[value];
   d[0] := AnsiChar(len);
 end;
 
