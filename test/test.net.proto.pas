@@ -2319,7 +2319,9 @@ begin
     // validate INFORM with proper ciaddr
     d.ClientFlush(d.ClientNew(dmtInform, macs[11]));
     d.Recv.ciaddr := ip4;
+    d.RecvBoot := dcbBios;
     CheckNotEqual(server.ComputeResponse(d), 0, 'inform');
+    Check(d.RecvBoot = dcbDefault, 'noboot');
     mac := MacToText(@macs[11]);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",ciaddr:"' + ip + '",chaddr:"' + mac +
@@ -2329,6 +2331,49 @@ begin
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
       '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
       'subnet-mask:"255.252.0.0"}');
+    // validate PXE selection
+    f := d.ClientNew(dmtDiscover, macs[8]);
+    DhcpAddOptionShort(f, doVendorClassIdentifier, 'PXEClient:Arch:00006');
+    d.ClientFlush(f);
+    d.RecvBoot := dcbBios;
+    CheckNotEqual(server.ComputeResponse(d), 0, 'pxe 0006');
+    Check(d.RecvBoot = dcbDefault, 'missing boot file');
+    Check(Assigned(d.Scope), 'scope');
+    d.Scope^.Boot.Remote[dcbX86] := 'ipxe.efi';
+    d.Scope^.Boot.Remote[dcbX64] := 'x86-64-efi/ipxe.efi';
+    CheckNotEqual(server.ComputeResponse(d), 0, 'pxe 0006');
+    Check(d.RecvBoot = dcbX86, 'with boot file');
+    mac := MacToText(@macs[8]);
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      'boot-file-name:"ipxe.efi",vendor-class-identifier:' +
+      '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
+      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    d.RecvBoot := dcbBios;
+    d.Scope^.Boot.NextServer := '192.168.0.254';
+    CheckNotEqual(server.ComputeResponse(d), 0, 'nextserver');
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      'tftp-server-name:"192.168.0.254",' +
+      'boot-file-name:"ipxe.efi",vendor-class-identifier:' +
+      '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
+      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    f := d.ClientNew(dmtRequest, macs[8]);
+    DhcpAddOptionShort(f, doVendorClassIdentifier, 'PXEClient:Arch:00007');
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'Arch007');
+    Check(d.RecvBoot = dcbX64, 'boot file and nextserver');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'tftp-server-name:"192.168.0.254",' +
+      'boot-file-name:"x86-64-efi/ipxe.efi",vendor-class-identifier:' +
+      '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
+      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
   finally
     server.Free;
     settings.Free;
