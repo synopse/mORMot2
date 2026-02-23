@@ -5448,7 +5448,7 @@ var
   P: PAnsiChar;
 begin
   P := StrUInt32(@tmp[23], PropName);
-  AddProp(P, @tmp[23] - P);
+  AddProp(PUtf8Char(P), @tmp[23] - P);
 end;
 
 procedure TTextWriter.AddPropInt64(const PropName: ShortString;
