@@ -1873,7 +1873,7 @@ function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 /// append one TNetMac instance to a dynamic array of such values
 procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
 
-/// decode one or several MAC addresses from CSV text
+/// decode one or several MAC addresses from CSV text into an array of TNetMac
 function ToMacs(text: PUtf8Char): TNetMacs; overload;
 
 /// compute a raw binary content from an array of TNetMac - used e.g. for DHCP
@@ -5489,22 +5489,21 @@ end;
 
 function ToMacs(text: PUtf8Char): TNetMacs;
 var
-  p: PUtf8Char;
   v: TNetMac;
 begin
   result := nil;
-  p := pointer(text);
-  if p <> nil then
+  if text <> nil then
     repeat
-      if not TextToMac(p, @v) then
+      if not TextToMac(text, @v) then
         exit;
       AddMac(result, v);
-      while p^ <> ',' do
-        if p^ = #0 then
+      inc(text, 12); // minimum size is 12 pure hexa chars with no ':'
+      while text^ <> ',' do
+        if text^ = #0 then
           exit
         else
-          inc(p);
-      inc(p); // jump ','
+          inc(text);
+      inc(text); // jump ','
     until false;
 end;
 
