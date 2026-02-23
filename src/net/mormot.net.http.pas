@@ -260,6 +260,10 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 // - returned P^ points to the first non digit char - not as GetNextItemQWord()
 function GetNextRange(var P: PUtf8Char): Qword;
 
+/// append an IPv4 as '"1.2.3.4"' JSON string
+procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
+  {$ifdef HASINLINE} inline; {$endif}
+
 const
   /// pseudo-header containing the current Synopse mORMot framework version
   XPOWEREDNAME = 'X-Powered-By';
@@ -3143,6 +3147,18 @@ begin
         result := result * 10 + Qword(c);
       inc(P);
     until false;
+end;
+
+procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
+var
+  P: PUtf8Char;
+begin
+  if W.BEnd - W.B <= 16 then // note: PtrInt(BEnd - B) could be < 0
+    W.FlushToStream;
+  P := W.B + 1;
+  P^ := '"';
+  W.B := IP4TextAppend(ip4, P + 1);
+  W.B^ := '"';
 end;
 
 
