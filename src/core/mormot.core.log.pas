@@ -4850,7 +4850,7 @@ begin // caller just made GlobalThreadLock.Lock
   p := pointer(log.fThreadNameLogged); // threads bit-set of this TSynLog
   if p <> nil then
   begin
-    ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants
+    ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants (favor FPC)
     if ndx <= PtrUInt(PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1)) then
       if p[ndx] and nfo^.ThreadBitLo <> 0 then // fast "if GetBitPtr() then"
         exit; // already done (most common case)

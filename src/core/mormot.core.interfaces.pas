@@ -3398,7 +3398,7 @@ var
 begin
   FillCharFast(ctxt.I64s, ctxt.Method^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
   a := pointer(ctxt.Method^.Args); // always <> nil
-  for arg := 1 to PDALen(PAnsiChar(a) - _DALEN)^ + (_DAOFF - 1) do
+  for arg := 1 to PDALen(PAnsiChar(a) - _DALEN)^ + (_DAOFF - 1) do // = high()
   begin
     inc(a); // increase first, to ignore self
     V := nil;
@@ -7303,7 +7303,7 @@ begin
   // assign content from fValues[] into the stack
   pv := pointer(fValues);
   arg := pointer(fMethod^.Args);
-  for i := 1 to PDALen(PAnsiChar(arg) - _DALEN)^ + (_DAOFF - 1) do
+  for i := 1 to PDALen(PAnsiChar(arg) - _DALEN)^ + (_DAOFF - 1) do // = high()
   begin
     inc(arg);
     inc(pv);
@@ -7798,7 +7798,7 @@ begin
      (fields <> nil) then
   begin
     // zeroing of weak references in object fields
-    for i := 0 to PDALen(PAnsiChar(fields) - _DALEN)^ + (_DAOFF - 1) do
+    for i := 0 to PDALen(PAnsiChar(fields) - _DALEN)^ + (_DAOFF - 1) do // =high
       PPointer(fields[i])^ := nil;
     FastDynArrayClear(@fields, nil);
   end;

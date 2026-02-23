@@ -2776,7 +2776,7 @@ begin
     max := fCount;
     void := -1;
     p := pointer(fItems);
-    for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
+    for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do // = high()
     begin
       if p^.LastAccess = 0 then
       begin
@@ -2840,7 +2840,7 @@ begin
   try
     p := pointer(fItems);
     if p <> nil then
-      for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do
+      for ndx := 0 to PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1) do // = high
         if CacheEqual(@h, @p^.Hash) then
         begin
           FillZero(THash256(p^));

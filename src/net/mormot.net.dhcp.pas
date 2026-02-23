@@ -1366,7 +1366,7 @@ type
     // - caller should have set Data.Recv/RecvLen/RecvIp4/Tix32 - kept untouched
     // - returns -1 if this input was invalid or unsupported
     // - returns 0 if input was valid, but no response is needed (e.g. decline)
-    // - return > 0 the number of Data.Send bytes to broadcast back as UDP
+    // - return > 0 the number of Data.Send[] bytes to broadcast back as UDP
     function ComputeResponse(var State: TDhcpState): PtrInt;
     /// raw access to the internal scope/subnet lists
     // - this property is not thread-safe by design
@@ -5176,15 +5176,15 @@ begin
     DoLog(sllTrace, 'frame', State);
     inc(fMetricsInvalidRequest); // no Scope yet
     exit;
-    // unsupported RecvType will continue and inc(Scope^.Metrics) below
+    // wrong RecvType calls DoError(dsmUnsupportedRequest) in LockedResponse
   end;
   fScopeSafe.ReadLock; // protect Scope[] but is reentrant and non-blocking
   try
-    // detect the proper scope to use
+    // detect the proper scope to use from option 118/82 or giaddr
     if not FindScope(State) then
     begin
       result := DoError(State, dsmDroppedNoSubnet);
-      exit; // MUST NOT respond if no subnet matches giaddr
+      exit; // MUST NOT respond if no subnet matches
     end;
     // syscalls before locking this scope
     if State.Tix32 = 0 then
@@ -5192,7 +5192,7 @@ begin
     if (dsoVerboseLog in Options) and
        Assigned(fLog) then
       QueryPerformanceMicroSeconds(State.StartMicroSec);
-    // blocking for this scope/subnet from now on
+    // evaluate the request in this blocked scope/subnet context
     State.Scope^.Safe.Lock;
     try
       result := LockedResponse(State);

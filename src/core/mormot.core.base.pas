@@ -8637,7 +8637,7 @@ begin
   a := pointer(aPtrArray);
   if a = nil then
     exit;
-  n := PDALen(a - _DALEN)^ + (_DAOFF - 1);
+  n := PDALen(a - _DALEN)^ + (_DAOFF - 1);  // = high()
   result := PPointerArray(a)[n];
   if n = 0 then
     TPointerDynArray(aPtrArray) := nil

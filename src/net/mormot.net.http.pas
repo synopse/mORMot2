@@ -5460,7 +5460,7 @@ begin
            (ffHadDefineHost in fFlags) and
            (PCardinal(Host)^ <> HOST_127) then
         begin
-          n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
+          n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1); // = high()
           inc(p); // ignore both WriterHost[0/1]
           repeat
             inc(p);
