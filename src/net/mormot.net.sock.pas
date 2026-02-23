@@ -1876,7 +1876,11 @@ procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
 /// decode one or several MAC addresses from CSV text into an array of TNetMac
 function ToMacs(text: PUtf8Char): TNetMacs; overload;
 
-/// compute a raw binary content from an array of TNetMac - used e.g. for DHCP
+/// decode one or several MAC addresses from CSV text into a binary buffer
+// - returns the number of 6-byte TNetMac stored in bin, or -1 on parsing error
+function ToMacBinary(text: PUtf8Char; var bin: RawByteString): PtrInt;
+
+/// compute a raw binary content from an array of TNetMac
 function MacsToBinary(const macs: TNetMacs): RawByteString;
 
 /// parse a text input buffer until the end space or EOL - used for config files
@@ -5505,6 +5509,33 @@ begin
           inc(text);
       inc(text); // jump ','
     until false;
+end;
+
+function ToMacBinary(text: PUtf8Char; var bin: RawByteString): PtrInt;
+var
+  v: TNetMac;
+begin
+  result := 0;
+  FastAssignNew(bin);
+  if text = nil then
+    exit;
+  repeat
+    while text^ = ' ' do
+      inc(text);
+    if not TextToMac(text, @v) then
+      break;
+    SetLength(bin, (result + 1) * SizeOf(v));
+    PNetMacArray(bin)^[result] := v;
+    inc(result);
+    inc(text, 12); // minimum size is 12 pure hexa chars with no ':'
+    while text^ <> ',' do
+      if text^ = #0 then
+        exit
+      else
+        inc(text);
+    inc(text); // jump ','
+  until false;
+  result := -1;
 end;
 
 function MacsToBinary(const macs: TNetMacs): RawByteString;
