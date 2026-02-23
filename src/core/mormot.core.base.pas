@@ -1581,6 +1581,11 @@ function ToShort(const val: Int64): TShort23;
 /// fast convert an unsigned value into a string[>=23] variable
 procedure ToShortU(const val: PtrUInt; Dest: PShort23);
 
+/// internal fast unsigned 8-bit 0..255 value to '0'..'255' text conversion
+// - write into P^ and return the position after the last char written
+function UInt8ToPChar(P: PAnsiChar; val: PtrUInt; tab: PWordArray): PAnsiChar;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// add the 4 digits of integer Y to P^ as '0000'..'9999'
 procedure YearToPChar(Y: PtrUInt; P: PUtf8Char);
   {$ifndef ASMX86} {$ifdef HASINLINE}inline;{$endif} {$endif}
@@ -12779,6 +12784,32 @@ begin
 end;
 
 {$endif ASMX86}
+
+function UInt8ToPChar(P: PAnsiChar; val: PtrUInt; tab: PWordArray): PAnsiChar;
+begin
+  result := P;
+  if val >= 10 then      // 0..9 branch below
+  begin
+    if val >= 100 then
+    begin
+      dec(val, 100);     // 100..199 is the most common pattern (40-60% for IP4)
+      result^ := '1';
+      if val >= 100 then // branch not taken is lighter than a div/mod
+      begin
+        dec(val, 100);
+        result^ := '2';
+      end;
+      inc(result);
+    end;
+    PWord(result)^ := tab[val]; // append remaining '00'..'99'
+    inc(PWord(result));
+  end
+  else
+  begin
+    result^ := AnsiChar(val + ord('0')); // '0'..'9'
+    inc(result);
+  end;
+end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 var
