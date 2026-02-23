@@ -1002,6 +1002,9 @@ procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortStrin
 /// simple concatenation of a 32-bit unsigned integer as text into a shorstring
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
+/// simple concatenation of a 8-bit unsigned integer as text into a shorstring
+procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
+
 /// simple concatenation of a signed 64-bit integer as text into a shorstring
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 
@@ -12809,6 +12812,12 @@ begin
     result^ := AnsiChar(val + ord('0')); // '0'..'9'
     inc(result);
   end;
+end;
+
+procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
+begin
+  dest[0] := AnsiChar(UInt8ToPChar(dest + ord(dest[0]) + 1, value,
+    @TwoDigitLookupW) - (dest + 1));
 end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;

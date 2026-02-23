@@ -4623,9 +4623,20 @@ begin
   for i := 1 to 10 do
     AppendShortCardinal(i, a);
   check(a = '012345678910');
-  for i := 11 to 150 do
+  for i := 11 to 120 do
     AppendShortCardinal(i, a);
-  CheckHash(a, $6C291F09, 'AppendShortCardinal');
+  CheckEqual(length(a), 253);
+  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortCardinal');
+  a := '';
+  AppendShortByte(0, @a);
+  check(a = '0');
+  for i := 1 to 10 do
+    AppendShortByte(i, @a);
+  check(a = '012345678910');
+  for i := 11 to 120 do
+    AppendShortByte(i, @a);
+  CheckEqual(length(a), 253);
+  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortByte');
   Check(TwoDigits(0) = '0');
   Check(TwoDigits(1) = '1');
   Check(TwoDigits(10) = '10');
