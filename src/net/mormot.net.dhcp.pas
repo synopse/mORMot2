@@ -1225,7 +1225,7 @@ type
     // - supplied one will be owned by this instance from now on
     function AddScope(one: TDhcpScopeSettings = nil): TDhcpScopeSettings;
   published
-    /// if set, OnIdle will persist the internal list into this file when needed
+    /// if set, OnIdle will persist the leases list into this file when needed
     // - file on disk would be regular dnsmasq-compatible format
     property FileName: TFileName
       read fFileName write fFileName;
@@ -1746,18 +1746,6 @@ begin
     until n = 0;
 end;
 
-function Ip4sFromText(p: PUtf8Char; var v: RawByteString): boolean;
-begin
-  v := IP4sToBinary(ToIP4s(p)); // allow CSV of IPs
-  result := v <> '';
-end;
-
-function MacsFromText(p: PUtf8Char; var v: RawByteString): boolean;
-begin
-  v := MacsToBinary(ToMacs(p)); // allow CSV of MACs
-  result := v <> '';
-end;
-
 type
   TParseRule = (prMatch, prValue, prTlv);
   TParseType = (ptTextBin, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
@@ -1820,14 +1808,18 @@ begin
   // actually decode the value
   len := p.ValueLen;
   if len = 0 then
+  begin
+    FastAssignNew(v);
+    result := true;
     exit;
+  end;
   if p.WasString then
     // handle "ip:..." .. "cidr:..." prefixes in string values
     case IdemPPChar(p.Value, @RULE_VALUE_PREFIX) of
       0:    // ip:
-        result := Ip4sFromText(p.Value + 3, v); // allow CSV of IPs
+        result := ToIP4Binary(p.Value + 3, v) >= 0; // allow CSV of IPs
       1:    // mac:
-        result := MacsFromText(p.Value + 4, v); // allow CSV of MACs
+        result := ToMacBinary(p.Value + 4, v) >= 0; // allow CSV of MACs
       2:    // hex:
         result := (len > 4) and
                   (len < (255 * 2) + 4) and
@@ -1883,7 +1875,7 @@ begin
         case ParseType(op) of
           ptIp4:
             begin
-              result := Ip4sFromText(p.Value, v); // allow CSV of IP4
+              result := ToIP4Binary(p.Value, v) >= 0; // allow CSV of IP4
               if result then
                 exit;
             end;
@@ -1900,7 +1892,7 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
             end;
           ptMac: // fake call with op=255 to parse "mac": content
             begin
-              result := MacsFromText(p.Value, v); // allow CSV of MACs
+              result := ToMacBinary(p.Value, v) >= 0; // allow CSV of MACs
               exit;
             end;
         end;
@@ -2343,7 +2335,7 @@ begin
   else if pp <> prMatch then
     exit
   else
-    // prMatch e.g. as "boot" "mac" "circuit-id" "remote-id"
+    // prMatch-only identifiers e.g. "boot" "mac" "circuit-id" "remote-id"
     case FindNonVoidRawUtf8I(@MAIN_RULE_VALUE, parser.Value, parser.ValueLen,
            length(MAIN_RULE_VALUE)) of
       0:
