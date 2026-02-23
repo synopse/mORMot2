@@ -1625,6 +1625,16 @@ var
     CheckUtf8(IsValidTlv(pointer(tlv), length(tlv)), json);
   end;
 
+  procedure CheckRfc3925(const hex, json: RawUtf8);
+  var
+    bin: RawByteString;
+  begin
+    bin := HexToBin(hex);
+    Check(IsValidRfc3925(pointer(bin), length(bin)));
+    Prepend(bin, [AnsiChar($7c), AnsiChar(length(bin))]); // make as option
+    CheckEqual(TlvOptionToJson(pointer(bin), true), json);
+  end;
+
   procedure CheckCidrRoute(const cidr, hex: RawUtf8);
   var
     bin: RawByteString;
@@ -1751,6 +1761,27 @@ begin
            '$06$08$18$C0$A8$01$0A$00$00$05');
   CheckTlv('{6:["cidr:192.168.1.0/24", "10.0.0.5"]}',
            '$06$08$18$C0$A8$01$0A$00$00$05');
+  // validate RFC 3925 options decoding
+  CheckRfc3925(
+    '000000090849502070686F6E6500000DE910726F757465722D6D6F64656C2D616263',
+    '{9:"IP phone",3561:"router-model-abc"}');
+  CheckRfc3925(
+    '0000621F0601040A001405',
+    '{25119:{1:"0a:00:14:05"}}');
+  CheckRfc3925(
+    '000000090E050666772E62696E0604C0A8010A',
+    '{9:{5:"fw.bin",6:"c0:a8:01:0a"}}');
+  CheckRfc3925(
+    '000004034869643A697070686F6E652E6D6974656C2E636F6D3B73775F746674703D' +
+    '3139322E3136382E31302E353B63616C6C5F7372763D3139322E3136382E31302E35' +
+    '3B766C616E3D31303B',
+    '{1027:"id:ipphone.mitel.com;sw_tftp=192.168.10.5;call_srv=192.168.10.5;vlan=10;"}');
+  CheckRfc3925(
+    '00007ED9134578616D706C65436F72702D44657669636558',
+    '{32473:"ExampleCorp-DeviceX"}');
+  CheckRfc3925(
+    '000000090849502070686F6E6500000DE910726F757465722D6D6F64656C2D616263',
+    '{9:"IP phone",3561:"router-model-abc"}');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
