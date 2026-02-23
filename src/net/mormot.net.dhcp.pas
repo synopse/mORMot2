@@ -427,6 +427,8 @@ function ParseMacIP(var nfo: TMacIP; const macip: RawUtf8): boolean;
 function TlvFromJson(p: PUtf8Char; out v: RawByteString): boolean; overload;
 function TlvFromJson(const json: RawUtf8): RawByteString; overload;
 function IsValidTlv(op: PAnsiChar; len: integer): boolean;
+function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
+function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
 
 /// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
@@ -2128,16 +2130,16 @@ begin
         begin
           W.AddDirect('{');                        // as JSON object
           repeat
-            W.AddPropName(PCardinal(v)^);          // entreprise-number
+            W.AddPropName(bswap32(PCardinal(v)^)); // entreprise-number
             inc(PCardinal(v));                     // data-len + vendor-data
             if IsValidTlv(v + 1, ord(v[0])) then
               AddTlvJson(v + 1, ord(v[0]), W, {rai=}false)
             else
               AddTextBinJson(v + 1, ord(v[0]), W);
             dec(len, ord(v[0]) + 5);
-            if len = 0 then
+            if len <= 0 then
               break;
-            v := @v[ord(v[0]) + 5];
+            v := @v[ord(v[0]) + 1];
             W.AddComma;
           until false;
           W.AddDirect('}');
@@ -2289,6 +2291,22 @@ begin
     W.Free;
   end;
 end;
+
+function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
+var
+  tmp: TTextWriterStackBuffer; // 8KB static
+  W: TJsonWriter;
+begin
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.CustomOptions := [twoForceJsonExtended];
+    ParseTypeJson(opt, W, recognize);
+    W.SetText(RawUtf8(result));
+  finally
+    W.Free;
+  end;
+end;
+
 
 const
   MAIN_RULE_VALUE: array[0..1] of RawUtf8 = ('boot', 'mac');
