@@ -4542,16 +4542,12 @@ begin
     sllServer:
       begin
         QueryPerformanceMicroSeconds(us);
-        dec(us, s^.StartMicroSec);
         DoDhcpToJson(W, @s^.Send, s^.SendLen, s);
-        if us > 9 then // only log if >= 10 microsecs
-        begin
-          W.CancelLastChar;
-          W.AddShorter(',us:'); // twoForceJsonExtended from within logs
-          W.AddQ(us);
-          W.AddDirect('}');
-        end;
-      end
+        W.CancelLastChar;
+        W.AddShorter(',us:'); // twoForceJsonExtended from within logs
+        W.AddQ(us - s^.StartMicroSec);
+        W.AddDirect('}');
+      end;
   else
     W.AddShorter('LogFrame'); // paranoid
   end;
