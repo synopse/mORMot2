@@ -5444,7 +5444,7 @@ begin
       AddInteger(TIntegerDynArray(result), v);
       while text^ <> ',' do
         if text^ = #0 then
-          exit
+          exit   // successfully parsed
         else
           inc(text);
       inc(text); // jump ','
@@ -5469,12 +5469,12 @@ begin
     inc(result);
     while text^ <> ',' do
       if text^ = #0 then
-        exit
+        exit    // successfully parsed
       else
         inc(text);
-    inc(text); // jump ','
+    inc(text);  // jump ','
   until false;
-  result := -1;
+  result := -1; // NetIsIP4() parsing error
 end;
 
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
@@ -5504,10 +5504,10 @@ begin
       inc(text, 12); // minimum size is 12 pure hexa chars with no ':'
       while text^ <> ',' do
         if text^ = #0 then
-          exit
+          exit       // successfully parsed
         else
           inc(text);
-      inc(text); // jump ','
+      inc(text);     // jump ','
     until false;
 end;
 
@@ -5530,12 +5530,12 @@ begin
     inc(text, 12); // minimum size is 12 pure hexa chars with no ':'
     while text^ <> ',' do
       if text^ = #0 then
-        exit
+        exit       // successfully parsed
       else
         inc(text);
-    inc(text); // jump ','
+    inc(text);     // jump ','
   until false;
-  result := -1;
+  result := -1;    // TextToMac() parsing error
 end;
 
 function MacsToBinary(const macs: TNetMacs): RawByteString;

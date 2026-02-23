@@ -1627,12 +1627,14 @@ var
 
   procedure CheckRfc3925(const hex, json: RawUtf8);
   var
-    bin: RawByteString;
+    bin, tlv: RawByteString;
   begin
     bin := HexToBin(hex);
     Check(IsValidRfc3925(pointer(bin), length(bin)));
     Prepend(bin, [AnsiChar($7c), AnsiChar(length(bin))]); // make as option
     CheckEqual(TlvOptionToJson(pointer(bin), true), json);
+    tlv := TlvFromJson(Join(['{124:', json, '}']));
+    CheckUtf8(IsValidTlv(pointer(tlv), length(tlv)), json);
   end;
 
   procedure CheckCidrRoute(const cidr, hex: RawUtf8);
