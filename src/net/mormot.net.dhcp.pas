@@ -799,6 +799,7 @@ type
   /// state machine used by TDhcpProcess.ComputeResponse to process a request
   // - stack allocation of around 3KB memory needed for the frame processing
   // - also supplied to TOnComputeResponse callback as thread-safe context
+  // - caller should set Data.Recv/RecvLen/RecvIp4/Tix32 at input
   {$ifdef USERECORDWITHMETHODS}
   TDhcpState = record
   {$else}
@@ -843,7 +844,7 @@ type
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
     Send: TDhcpPacket;
-    /// the GetTickSec current 32-bit value
+    /// the GetTickSec current 32-bit value - as set by ComputeResponse() caller
     Tix32: cardinal;
     /// the QueryPerformanceMicroSeconds() start value
     // - only set if dsoVerboseLog is defined in server Options
@@ -888,6 +889,7 @@ type
     function SendToJson(extended: boolean = false): RawJson;
     /// for testing: wrapper to DhcpClient() on the State.Recv[] buffer
     // - then call e.g. DhcpAddOption32/Raw/Buf/U/Short() functions
+    // - warning: won't make Tix32 := GetTickSec
     function ClientNew(dmt: TDhcpMessageType; const addr: TNetMac;
       req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
     /// for testing: properly end ClientNew() buffer with #255 and compute RecvLen
@@ -1360,7 +1362,7 @@ type
     /// persist all scopes metrics as .json files and optionally all .csv files
     procedure SaveMetricsFolder(AndCsv: boolean = false);
     /// this is the main processing function of the DHCP server logic
-    // - input should be stored in Data.Recv/RecvLen/RecvIp4 - and is untouched
+    // - caller should have set Data.Recv/RecvLen/RecvIp4/Tix32 - kept untouched
     // - returns -1 if this input was invalid or unsupported
     // - returns 0 if input was valid, but no response is needed (e.g. decline)
     // - return > 0 the number of Data.Send bytes to broadcast back as UDP
@@ -4944,8 +4946,9 @@ begin
       result := DoError(State, dsmDroppedNoSubnet);
       exit; // MUST NOT respond if no subnet matches giaddr
     end;
-    // work on this scope/subnet from now on
-    State.Tix32 := GetTickSec;
+    // syscalls before locking this scope
+    if State.Tix32 = 0 then
+      State.Tix32 := GetTickSec; // caller should have set this field
     if dsoVerboseLog in Options then
       QueryPerformanceMicroSeconds(State.StartMicroSec);
     State.Scope^.Safe.Lock; // blocking for this subnet
