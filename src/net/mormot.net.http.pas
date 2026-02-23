@@ -3157,7 +3157,7 @@ begin
     W.FlushToStream;
   P := W.B + 1;
   P^ := '"';
-  W.B := IP4TextAppend(ip4, P + 1);
+  W.B := pointer(IP4TextAppend(ip4, pointer(P + 1)));
   W.B^ := '"';
 end;
 
