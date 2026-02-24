@@ -3326,6 +3326,7 @@ optval: value := pointer(one^.value);
         len := PStrLen(value - _STRLEN)^;      // we know value<>nil and len>0
         if len <> ord(option[0]) then
           exit;                                // length mismatch
+        inc(option);
         repeat
           dec(len);                            // endings are more likely to change
           if option[len] <> value[len] then    // faster than CompareMem() here
