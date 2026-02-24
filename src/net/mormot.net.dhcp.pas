@@ -331,7 +331,7 @@ function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
 
 /// decode MAC or Eth=1 + MAC values stored at dhcp^.option[lens[opt]]
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 /// decode the lens[doDhcpParameterRequestList] within dhcp^.option[]
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
@@ -1664,7 +1664,7 @@ begin
 end;
 
 function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 begin
   result := (dhcp <> nil) and
             (len >= DHCP_PACKET_HEADER) and
