@@ -2409,6 +2409,46 @@ begin
       'aarch64/ipxe.efi",vendor-class-identifier:' +
       '"HTTPClient",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
       'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    // add some custom "rules"
+    CheckEqual(length(server.Scope[0].Rules), 0, 'no rule yet');
+    server.Scope[0].AddRule([
+      '{all:{user-class: "iPXE", client-architecture: 5},' +
+       'always:{tftp-server-name:"192.168.0.254"}, '+
+       'requested:{boot-file-name:"ipxe.5"}}']);
+    CheckEqual(length(server.Scope[0].Rules), 1, 'one rule');
+    // incomplete "all":
+    f := d.ClientNew(dmtRequest, macs[8]);
+    option[2] := #5;  // option 93 as uint16 (00:05)
+    DhcpAddOptionShort(f, doClientArchitecture, option);
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'not all');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:' +
+      '60,dhcp-rebinding-time:105}');
+    // complete "all": into "always" but not "requested"
+    DhcpAddOptionShort(f, doUserClass, 'iPXE');
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'all');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'tftp-server-name:"192.168.0.254",' +
+      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:' +
+      '60,dhcp-rebinding-time:105}');
+    // complete "all": into "always" and "requested"
+    f := d.ClientNew(dmtRequest, macs[8], DHCP_REQUEST + [doBootFileName]);
+    DhcpAddOptionShort(f, doUserClass, 'iPXE');
+    DhcpAddOptionShort(f, doClientArchitecture, option);
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'all');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'tftp-server-name:"192.168.0.254",boot-file-name:"ipxe.5",' +
+      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:' +
+      '60,dhcp-rebinding-time:105}');
   finally
     server.Free;
     settings.Free;
