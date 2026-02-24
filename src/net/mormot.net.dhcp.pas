@@ -4494,7 +4494,7 @@ procedure TDhcpProcess.DoLog(Level: TSynLogLevel; const Context: ShortString;
 var
   fam: TSynLogFamily;
   one: TSynLog;
-  msg: ShortString;
+  msg: ShortString; // shared by TSynLog and JournalSend()
   prefixlen: PtrInt;
 begin
   // this method could be overriden to extend or replace the default logging
@@ -4738,7 +4738,7 @@ procedure TDhcpProcess.SetRecvBoot(var State: TDhcpState);
 var
   b: TDhcpClientBoot;
   o: PByteArray;
-  vendor: PShortString;
+  vendor, user: PAnsiChar;
   a: PtrUInt;
 begin
   b := dcbDefault;
@@ -4752,26 +4752,31 @@ begin
        (o[2] <= high(ARCH_DCB)) then
       b := ARCH_DCB[o[2]];
   end;
-  vendor := DhcpData(@State.Recv, State.RecvLens[doVendorClassIdentifier]);
+  vendor := State.Data(doVendorClassIdentifier);
   if b = dcbDefault then
     // fallback to Option 60 parsing - e.g. 'PXEClient:Arch:00007:UNDI:003016'
-    if (vendor^[0] >= #17) and
-       IdemPChar(@vendor^[1], 'PXECLIENT:ARCH:0') then
+    if (vendor[0] >= #17) and
+       (PCardinal(vendor + 1)^ = // fast case-sensitive 'PXEC' exact check
+         ord('P') + ord('X') shl 8 + ord('E') shl 16 + ord('C') shl 24) and
+       CompareShort(vendor + 5, 'lient:Arch:0') then
     begin
-      a := GetCardinal(@vendor^[17]);
+      a := GetCardinal(vendor + 17);
       if a <= high(ARCH_DCB) then
         b := ARCH_DCB[a];
     end;
   if b = dcbDefault then
     exit; // normal DHCP boot
   // detect iPXE from RFC 3004 Option 77
-  if DhcpIdem(@State.Recv, State.RecvLens[doUserClass], 'iPXE') then
+  user := State.Data(doUserClass);
+  if (user[0] = #4) and
+     (PCardinal(user + 1)^ = // fast case-sensitive 'iPXE' exact check
+       ord('i') + ord('P') shl 8 + ord('X') shl 16 + ord('E') shl 24) then
     // change dcbBios..dcbA64 into dcbIpxeBios..dcbIpxeA64
     inc(b, ord(dcbIpxeBios) - ord(dcbBios))
-  else if (vendor^[0] >= #10) and
-          (PCardinal(@vendor^[1])^ = HTTP_32) and
-          IdemPChar(@vendor^[5], 'CLIENT') then
-    // HTTPClient* in Option 60 indicates native UEFI firmware HTTP boot
+  else if (vendor[0] >= #10) and
+          (PCardinal(vendor + 1)^ = HTTP_32) and
+          CompareShort(vendor + 5, 'Client') then
+    // HTTPClient in Option 60 indicates native UEFI firmware HTTP boot
     // - will fallback to TFTP is no HTTP URI is supplied
     case b of
       dcbX64:
