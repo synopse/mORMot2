@@ -3214,6 +3214,10 @@ function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
 function CompareMemSmall(P1, P2: pointer; Length: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// a CompareMem()-like function designed for comparison with a small shortstring
+function CompareShort(P1: pointer; const P2: ShortString): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 {$ifndef CPUX86}
 /// low-level efficient pure pascal function used when inlining PosEx()
 // - not to be called directly
@@ -12872,6 +12876,11 @@ end;
 function EqualBuf(const P1, P2: RawByteString): boolean;
 begin
   result := SortDynArrayRawByteString(P1, P2) = 0;
+end;
+
+function CompareShort(P1: pointer; const P2: ShortString): boolean;
+begin
+  result := CompareMemSmall(P1, @P2[1], ord(P2[0]));
 end;
 
 function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
