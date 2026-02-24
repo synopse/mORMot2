@@ -394,12 +394,14 @@ type
   // - kind/num/mac fields order matters to access PInt64(one)^ shr 16 = Mac64
   TRuleValue = packed record
     /// define which kind of value is stored in this entry
+    // - is used by TDhcpState.MatchOne as byte-code-like efficient runtime
     kind: TRuleValueKind;
     /// the raw (sub-)option number/ordinal to match, or to be sent back
     // - is the DHCP option number for kind=pvkRaw/pvkOpt
     // - is the TLV sub-option number for kind=pckTlv
     // - is a TDhcpClientBoot ordinal for pvkBoot match
     // - is a TDhcpOptionRai ordinal for pvkRai match
+    // - is the DHCP option number to be checked and included as "requested"
     // - not used (contains 0) for pckAlways and pvkMac/pvkMacs
     num: byte;
     /// the CPU-cache-friendly inlined pvkMac value
@@ -882,6 +884,7 @@ type
     procedure AddOptionOnceA32(const opt: TDhcpOption; const v: PAnsiChar);
     /// raw append the options of a given "rules" entry into Send
     procedure AddOptionFromRule(p: PRuleValue);
+      {$ifdef HASINLINE} inline; {$endif}
     /// raw append a verbatim copy of a Recv option into Send
     procedure AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric = dsmDiscover);
       {$ifdef HASINLINE} inline; {$endif}
@@ -1270,6 +1273,7 @@ type
   // - store and redirect all process to TDhcpScopes in-memory per-subnet lists
   // - several sockets could be bound in TDhcpServer, each with its own IP, and
   // on its own interface, all sharing this single TDhcpProcess subnets
+  // - easily extensible by overriding its core protected virtual methods
   TDhcpProcess = class(TSynPersistent)
   protected
     fScopeSafe: TRWLightLock; // multi-read reentrant lock to protect Scope[]
@@ -1293,8 +1297,8 @@ type
       Lease: PDhcpLease = nil): PtrInt; virtual;
     procedure OnLogFrame(Sender: TSynLog; Level: TSynLogLevel; Opaque: pointer;
       Value: PtrInt; Instance: TObject); virtual;
-    function ParseFrame(var State: TDhcpState): boolean; virtual;
     function LockedResponse(var State: TDhcpState): PtrInt; virtual;
+    function ParseFrame(var State: TDhcpState): boolean; virtual;
     function FindScope(var State: TDhcpState): boolean; virtual;
     function FindLease(var State: TDhcpState): PDhcpLease; virtual;
     function RetrieveFrameIP(var State: TDhcpState;
@@ -2308,7 +2312,6 @@ begin
   end;
 end;
 
-
 const
   MAIN_RULE_VALUE: array[0..1] of RawUtf8 = ('boot', 'mac');
 
@@ -2342,7 +2345,7 @@ begin
     v.kind := pvkOpt;
   end
   else if pp <> prMatch then
-    exit
+    exit // prValue requires a v.num to be sent back as "always" or "requested"
   else
     // prMatch-only identifiers e.g. "boot" "mac" "circuit-id" "remote-id"
     case FindNonVoidRawUtf8I(@MAIN_RULE_VALUE, parser.Value, parser.ValueLen,
@@ -3251,7 +3254,7 @@ begin
   len := RecvLens[doDhcpParameterRequestList];
   if len = 0 then
     exit;
-  requested := @Recv.options[len + 1]; // len + [1,3,6,15,51,54]
+  requested := @Recv.options[len]; // len + [1,3,6,15,51,54]
   // process "requested" options, filtering each op
   repeat
     if ByteScanIndex(@requested[1], requested[0], p^.num) >= 0 then // SSE2 asm
@@ -3261,9 +3264,9 @@ begin
   until n = 0;
 end;
 
-{$ifdef FPC_CODEALIGN}
+{$ifdef FPC_CODEALIGN} // manually tuned for FPC x86_64
   {$PUSH}
-  {$CODEALIGN LOOP=2} // worth it on this very sensitive function
+  {$CODEALIGN LOOP=2}  // worth it on this very sensitive function
 {$endif FPC_CODEALIGN}
 
 function TDhcpState.MatchOne(one: PRuleValue): boolean;
@@ -3271,7 +3274,7 @@ var
   len: PtrUInt;
   option, value: PAnsiChar;
 label
-  optlen, optval; // optimized for 64-bit CPU like x86_64 and aarch64
+  optlen, optval; // optimized for FPC 64-bit CPU like x86_64 and aarch64
 begin
   result := false;
   case one^.kind of // locate the option value in Recv[]
@@ -4807,13 +4810,13 @@ end;
 
 procedure TDhcpProcess.SetRule(var State: TDhcpState);
 var
-  rule: PDhcpScopeRule;
-  rules, hi: TDALen; // use hi=high(TRuleValues) to favor FPC
+  rule: PDhcpScopeRule;  // runtime bytecode of each "rules"
+  rules, hi: TDALen;     // use hi=high(TRuleValues) to favor FPC
   r: PRuleValue;
 label
   ko; // unrolled logic for very efficient runtime execution
 begin
-  // implement "first precise rule wins" deterministic behavior
+  // implements a "first precise rule wins" deterministic Virtual Machine
   rule := pointer(State.Scope^.Rules); // caller ensured rule <> nil
   rules := PDALen(PAnsiChar(rule) - _DALEN)^ + _DAOFF;
   repeat
