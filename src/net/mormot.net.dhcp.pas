@@ -728,6 +728,13 @@ type
     /// register another static IP address to the internal pool
     // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuid=ip' text
     function AddStatic(const macip: RawUtf8): boolean; overload;
+    /// add one entry in "rules" JSON object format
+    // - supplied as a concatenation of strings, to create a JSON object
+    // - will create a transient TDhcpRuleSettings instance and inject it
+    // to Rules[] in a thread-safe way, or raise EDhcp on error
+    procedure AddRule(const json: array of RawUtf8); overload;
+    /// add one entry in Rules[] array within Safe.Lock/UnLock
+    procedure AddRule(one: TDhcpScopeRule); overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
     /// efficient L1-cache friendly O(n) search of a MAC address in Entry[]
@@ -3004,6 +3011,34 @@ begin
             AddStatic(nfo);
 end;
 
+procedure TDhcpScope.AddRule(const json: array of RawUtf8);
+var
+  s: TDhcpRuleSettings;
+  rule: TDhcpScopeRule;
+begin
+  s := TDhcpRuleSettings.Create;
+  try
+    // JSON is parsed outside of the lock
+    if not JsonSettingsToObject(Join(json), s) then
+      EDhcp.RaiseU('AddRule: incorrect JSON');
+    if s.PrepareRule(self, rule) then // not inserted via AddStatic()
+      AddRule(rule);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TDhcpScope.AddRule(one: TDhcpScopeRule);
+begin
+  Safe.Lock;
+  try
+    SetLength(Rules, length(Rules) + 1);
+    Rules[high(Rules)] := one;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
 function TDhcpScope.RemoveStatic(ip4: TNetIP4): boolean;
 var
   i, n: PtrInt;
@@ -3702,6 +3737,8 @@ begin
     AddRuleValue(Rule.send, p^);
     inc(p);
   end;
+  // return true if there is some condition to append: void entries are skipped
+  result := Rule.send <> nil;
 end;
 
 
