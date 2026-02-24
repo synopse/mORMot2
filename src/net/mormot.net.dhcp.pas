@@ -331,6 +331,7 @@ function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
 
 /// decode MAC or Eth=1 + MAC values stored at dhcp^.option[lens[opt]]
 function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// decode the lens[doDhcpParameterRequestList] within dhcp^.option[]
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
@@ -869,6 +870,9 @@ type
   public
     /// parse Recv/RecvLen input fields into Mac/Mac64/RecvLens/RecvLensRai
     function Parse: boolean;
+    /// return a pointer to one Recv.option[] value length
+    function Data(const opt: TDhcpOption): pointer;
+      {$ifdef HASINLINE} inline; {$endif}
     /// raw append of a 32-bit big-endian/IPv4 option value into Send
     procedure AddOptionOnce32(const opt: TDhcpOption; be: cardinal);
       {$ifdef FPC} inline; {$endif}
@@ -1601,6 +1605,64 @@ begin
   result^ := #255; // only for internal/debug use
 end;
 
+function DhcpFindOption(dhcp: PDhcpPacket; op: byte): PAnsiChar;
+begin
+  result := @dhcp^.options;
+  repeat
+    if result[0] = AnsiChar(op) then // quickly parse Type-Length-Value encoding
+      exit;
+    result := @result[ord(result[1]) + 2];
+  until result[0] = #255;
+  result := nil;
+end;
+
+function DhcpData(dhcp: PDhcpPacket; len: PtrUInt): PShortString;
+begin
+  if len = 0 then
+    result := @NULCHAR
+  else
+    result := @dhcp^.options[len]; // len+data matches PShortString binary
+end;
+
+function DhcpIdem(dhcp: PDhcpPacket; len: PtrUInt; const P2: ShortString): boolean;
+begin
+  result := false;
+  if len <> 0 then
+    result := IdemPropName(PShortString(@dhcp^.options[len])^, P2);
+end;
+
+function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
+begin
+  result := len;
+  if len = 0 then
+    exit;
+  len := PtrUInt(@dhcp.options[len]);
+  if PByte(len)^ = SizeOf(result) then
+    result := PCardinal(len + 1)^;
+end;
+
+function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
+begin
+  result := bswap32(DhcpIP4(dhcp, len));
+end;
+
+function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
+begin
+  result := nil;
+  if len = 0 then
+    exit;
+  len := PtrUInt(@dhcp.options[len]);
+  case PByte(len)^ of // e.g. client identifier
+    SizeOf(TNetMac):
+      // PXE clients often use MAC-only (6 bytes)
+      result := pointer(len + 1);
+    SizeOf(TNetMac) + 1:
+      // Windows PE or iPXE may use 1-byte type + MAC (7 bytes)
+      if PByte(len + 1)^ = ARPHRD_ETHER then
+        result := pointer(len + 2);
+  end;
+end;
+
 function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
 begin
   result := (dhcp <> nil) and
@@ -1667,63 +1729,6 @@ begin
     mac^ := m^; // copy
   end;
   result := TDhcpMessageType(dmt);
-end;
-
-function DhcpFindOption(dhcp: PDhcpPacket; op: byte): PAnsiChar;
-begin
-  result := @dhcp^.options;
-  repeat
-    if result[0] = AnsiChar(op) then // quickly parse Type-Length-Value encoding
-      exit;
-    result := @result[ord(result[1]) + 2];
-  until result[0] = #255;
-  result := nil;
-end;
-
-function DhcpData(dhcp: PDhcpPacket; len: PtrUInt): PShortString;
-begin
-  if len = 0 then
-    result := @NULCHAR
-  else
-    result := @dhcp^.options[len]; // len+data matches PShortString binary
-end;
-
-function DhcpIdem(dhcp: PDhcpPacket; len: PtrUInt; const P2: ShortString): boolean;
-begin
-  result := (len <> 0) and
-            PropNameEquals(PShortString(@dhcp^.options[len]), @P2);
-end;
-
-function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
-begin
-  result := 0;
-  if len = 0 then
-    exit;
-  inc(len, PtrUInt(@dhcp.options));
-  if PByte(len)^ = SizeOf(result) then
-    result := PCardinal(len + 1)^;
-end;
-
-function DhcpInt(dhcp: PDhcpPacket; len: PtrUInt): cardinal;
-begin
-  result := bswap32(DhcpIP4(dhcp, len));
-end;
-
-function DhcpMac(dhcp: PDhcpPacket; len: PtrUInt): PNetMac;
-begin
-  result := nil;
-  if len = 0 then
-    exit;
-  inc(len, PtrUInt(@dhcp.options));
-  case PByte(len)^ of // e.g. client identifier
-    SizeOf(TNetMac):
-      // PXE clients often use MAC-only (6 bytes)
-      result := pointer(len + 1);
-    SizeOf(TNetMac) + 1:
-      // Windows PE or iPXE may use 1-byte type + MAC (7 bytes)
-      if PByte(len + 1)^ = ARPHRD_ETHER then
-        result := pointer(len + 2);
-  end;
 end;
 
 function DhcpRequestList(dhcp: PDhcpPacket; const lens: TDhcpParsed): TDhcpOptions;
@@ -3127,6 +3132,16 @@ end;
 { **************** Middle-Level DHCP State Machine }
 
 { TDhcpState }
+
+function TDhcpState.Data(const opt: TDhcpOption): pointer;
+var
+  len: PtrUInt;
+begin
+  result := @RecvLens[opt];
+  len := PWord(result)^;
+  if len <> 0 then
+    result := @Recv.options[len];
+end;
 
 procedure TDhcpState.AddOptionOnce32(const opt: TDhcpOption; be: cardinal);
 var

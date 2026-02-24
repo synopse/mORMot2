@@ -679,6 +679,7 @@ function IsEqual(const A, B: TNetMac): boolean; overload;
 
 /// returns TRUE if all 6 bytes of this MAC address buffer equal zero
 function IsZero(const Mac: TNetMac): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// search a MAC address from an array of TNetMac items using O(n) scan
 function MacIndex(first, mac: PNetMac48; n: PtrInt): PtrInt;
