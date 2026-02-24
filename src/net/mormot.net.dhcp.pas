@@ -372,18 +372,18 @@ type
   // - pvkMac as "mac" value condition in the mac inlined field
   // - pvkOpt is a known option as DHCP_OPTION_NUM[TDhcpOption(mac[0])] = num
   // - pvkRai as Relay-Agent-Information sub-option condition like "circuit-id"
-  // - pvkMacs as array of "mac" values condition in the TNetMacs value field
   // - pvkBoot as "boot" value condition
   // - pvkRaw is DHCP option outside of TDhcpOption - stored as plain num
+  // - pvkMacs as array of "mac" values condition in the TNetMacs value field
   // - pvkTlv stores raw Type-Length-Value (TLV) with num = sub-option
   // - pvkAlways to store a binary blob from "always" JSON definition
   TRuleValueKind = (
     pvkMac,
     pvkOpt,
     pvkRai,
-    pvkMacs,
     pvkBoot,
     pvkRaw,
+    pvkMacs,
     pvkTlv,
     pvkAlways,
     pvkUndefined);
@@ -3263,80 +3263,74 @@ end;
 
 {$ifdef FPC_CODEALIGN}
   {$PUSH}
-  {$CODEALIGN LOOP=16} // worth it on this very sensitive function
+  {$CODEALIGN LOOP=2} // worth it on this very sensitive function
 {$endif FPC_CODEALIGN}
 
 function TDhcpState.MatchOne(one: PRuleValue): boolean;
 var
   len: PtrUInt;
   option, value: PAnsiChar;
+label
+  optlen, optval; // optimized for 64-bit CPU like x86_64 and aarch64
 begin
   result := false;
-  // locate the option value in Recv[]
-  case one^.kind of
+  case one^.kind of // locate the option value in Recv[]
     pvkMac:
-      begin                                    // single inlined one^.mac value
-        result := PInt64(one)^ shr 16 = Mac64;
-        exit;                                  // no need to check one^.value
+      result := PInt64(one)^ shr 16 = Mac64;
+    pvkOpt:
+      begin                                    // O(1) lookup of known option
+        len := RecvLens[TDhcpOption(one^.mac[0])];
+        if len = 0 then
+          exit;                                // no such option
+optlen: option := @Recv.options[len];          // option[0] = len in Recv[]
+        // compare the one^.value with the option located in Recv[]
+optval: value := pointer(one^.value);
+        len := PStrLen(value - _STRLEN)^;      // we know value<>nil and len>0
+        if len <> ord(option[0]) then
+          exit;                                // length mismatch
+        repeat
+          dec(len);                            // endings are more likely to change
+          if option[len] <> value[len] then    // faster than CompareMem() here
+            exit;
+        until len = 0;
+        result := true;                        // exact case-sensitive match
+       end;
+    pvkRai:
+      begin                                    // O(1) lookup of sub-option
+        len := RecvLensRai[TDhcpOptionRai(one^.num)];
+        if len <> 0 then
+          goto optlen;
       end;
-     pvkOpt:
-       begin                                   // O(1) lookup of known option
-         len := RecvLens[TDhcpOption(one^.mac[0])];
-         if len = 0 then
-           exit;                               // no such option
-         option := @Recv.options[len];         // option[0] = len in Recv[]
-       end;
-     pvkRai:
-       begin                                   // O(1) lookup of sub-option
-         len := RecvLensRai[TDhcpOptionRai(one^.num)];
-         if len = 0 then
-           exit;                               // no such sub-option
-         option := @Recv.options[len];         // option[0] = len in Recv[]
-       end;
-     pvkMacs:
-       begin                                   // specific TNetMacs lookup
-         value := pointer(one^.value);         // we know value<>nil
-         len := PtrUInt(value) + PtrUInt(PStrLen(value - _STRLEN)^);
-         result := true;
-         repeat
-           if PInt64(value)^ and MAC_MASK = Mac64 then
-             exit;                             // found one
-           inc(PNetMac(value));                // search next
-         until PtrUInt(value) >= len;
-         result := false;
-         exit;                                 // we did check one^.value
-       end;
-     pvkBoot:
-       begin                                   // compare with SetRecvBoot()
-         result := RecvBoot = TDhcpClientBoot(one^.num);
-         exit;                                 // no need to check one^.value
-       end;
-     pvkRaw:
-       begin
-         option := @Recv.options;              // inlined DhcpFindOption()
-         repeat
-           if option[0] = AnsiChar(one^.num) then
-             break;                            // found this num
-           option := @option[ord(option[1]) + 2];
-           if option[0] = #255 then            // reached end of list
-             exit;                             // no such option
-         until false;
-         inc(option);                          // option[0] = len in Recv[]
-       end;
-  else
-    exit; // pvkUndefined/pvkTlv/pvkAlways should not appear here
+    pvkBoot:
+      result := RecvBoot = TDhcpClientBoot(one^.num);
+    pvkRaw:
+      begin
+        option := @Recv.options;               // inlined DhcpFindOption()
+        repeat
+          if option[0] = AnsiChar(one^.num) then
+            break;                             // found this num
+          option := @option[ord(option[1]) + 2];
+          if option[0] = #255 then             // reached end of list
+            exit;                              // no such option
+        until false;
+        inc(option);                           // option[0] = len in Recv[]
+        goto optval;
+      end;
+    pvkMacs:
+      begin                                    // specific TNetMacs lookup
+        value := pointer(one^.value);          // we know value<>nil
+        len := PtrUInt(@value[PStrLen(value - _STRLEN)^ - 2]);
+        dec(PWord(value));                     // for "PInt64() shr 16" below
+        repeat
+          if PInt64(value)^ shr 16 = Mac64 then
+            break;                             // found one
+          inc(PNetMac(value));                 // search next
+          if PtrUInt(value) >= len then
+            exit;                              // no match
+        until false;
+        result := true;
+      end;
   end;
-  // compare the one^.value with the option located in Recv[]
-  value := pointer(one^.value);
-  len := PStrLen(value - _STRLEN)^;      // we know value<>nil and len>0
-  if len <> ord(option[0]) then
-    exit;
-  repeat
-    dec(len);                            // endings are more likely to change
-    if option[len] <> value[len] then    // faster than CompareMem() here
-      exit;
-  until len = 0;
-  result := true;                        // exact case-sensitive match
 end;
 
 {$ifdef FPC_CODEALIGN}
@@ -4760,7 +4754,7 @@ begin
          ord('P') + ord('X') shl 8 + ord('E') shl 16 + ord('C') shl 24) and
        CompareShort(vendor + 5, 'lient:Arch:0') then
     begin
-      a := GetCardinal(vendor + 17);
+      a := GetCardinal(PUtf8Char(vendor + 17));
       if a <= high(ARCH_DCB) then
         b := ARCH_DCB[a];
     end;
