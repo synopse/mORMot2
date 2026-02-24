@@ -1664,6 +1664,7 @@ begin
 end;
 
 function DhcpParseHeader(dhcp: PDhcpPacket; len: PtrInt): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   result := (dhcp <> nil) and
             (len >= DHCP_PACKET_HEADER) and
@@ -3466,9 +3467,9 @@ end;
 
 function TDhcpState.Parse: boolean;
 begin
-  Mac64 := 0;
-  Ip4 := 0;
   SendLen := 0;
+  Ip4 := 0;
+  Mac64 := 0;
   RecvRule := nil;
   RecvBoot := dcbDefault;
   SendType := dmtUndefined;
@@ -3479,7 +3480,7 @@ begin
     // valid DHCP frame with RecvType <> dmtUndefined
     Mac[0] := #17;
     ToHumanHexP(@Mac[1], @Mac64, SizeOf(TNetMac));
-    RecvHostName := DhcpData(@Recv, RecvLens[doHostName]);
+    RecvHostName := Data(doHostName);
     FillZero(THash128(RecvLensRai));
     if RecvLens[doRelayAgentInformation] <> 0 then
       ParseRecvLensRai;
