@@ -1570,7 +1570,7 @@ var
   ips: TNetIP4s;
   timer: TPrecisionTimer;
   f: PAnsiChar;
-  hostname, opt82: TShort15;
+  hostname, option: TShort15;
   rnd: TLecuyer;
   nfo: TMacIP;
   m1, m2: TDhcpMetrics;
@@ -2189,14 +2189,14 @@ begin
     CheckEqual(server.Count, 0, 'after clear');
     CheckEqual(server.SaveToText, CRLF, 'after clear');
     // validate OFFER process - and option 82 Relay Agent
-    opt82[0] := #6;
-    opt82[1] := #1;                     // T = circuit-id
-    opt82[2] := #4;                     // L = 4
-    PCardinal(@opt82[3])^ := $41424344; // V = DCBA
-    Check(PShortString(@opt82[2])^ = 'DCBA', 'DCBA');
+    option[0] := #6;
+    option[1] := #1;                     // T = circuit-id
+    option[2] := #4;                     // L = 4
+    PCardinal(@option[3])^ := $41424344; // V = DCBA
+    Check(PShortString(@option[2])^ = 'DCBA', 'DCBA');
     CheckEqual(server.OnIdle(1), 0, 'onidle'); // trigger MaxDeclinePerSec process
     f := d.ClientNew(dmtDiscover, macs[0]);
-    DhcpAddOptionShort(f, doRelayAgentInformation, opt82);
+    DhcpAddOptionShort(f, doRelayAgentInformation, option);
     d.ClientFlush(f);
     Check(IsEqual(macs[0], PNetMac(@d.Recv.chaddr)^));
     CheckNotEqual(xid, d.Recv.xid);
@@ -2214,8 +2214,8 @@ begin
     Check(DhcpParse(@d.Send, d.SendLen, lens, @fnd) = dmtOffer);
     Check(fnd = FND_RESP + [doRelayAgentInformation]);
     CheckNotEqual(lens[doRelayAgentInformation], 0, 'propagated relay agent');
-    Check(DhcpData(@d.Send, lens[doRelayAgentInformation])^ = opt82, 'o82a');
-    Check(DhcpIdem(@d.Send, lens[doRelayAgentInformation], opt82), 'o82b');
+    Check(DhcpData(@d.Send, lens[doRelayAgentInformation])^ = option, 'o82a');
+    Check(DhcpIdem(@d.Send, lens[doRelayAgentInformation], option), 'o82b');
     Check(not DhcpIdem(@d.Send, lens[doRelayAgentInformation], 'totoro'), 'o82c');
     ips[0] := d.Send.yiaddr;
     mac := MacToText(@macs[0]);
@@ -2342,6 +2342,9 @@ begin
     Check(Assigned(d.Scope), 'scope');
     d.Scope^.Boot.Remote[dcbX86] := 'ipxe.efi';
     d.Scope^.Boot.Remote[dcbX64] := 'x86-64-efi/ipxe.efi';
+    d.Scope^.Boot.Remote[dcbIpxeX64] :=
+      'http://mydomain.lan/api/v3/baseipxe?uefi=false&keymap=fr';
+    d.Scope^.Boot.Remote[dcbA64Http] := 'http://mydomain.lan/aarch64/ipxe.efi';
     CheckNotEqual(server.ComputeResponse(d), 0, 'pxe 0006');
     Check(d.RecvBoot = dcbX86, 'with boot file');
     mac := MacToText(@macs[8]);
@@ -2376,6 +2379,35 @@ begin
       'tftp-server-name:"192.168.0.254",' +
       'boot-file-name:"x86-64-efi/ipxe.efi",vendor-class-identifier:' +
       '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
+      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    // validate PXE selection in iPXE mode
+    DhcpAddOptionShort(f, doUserClass, 'iPXE');
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'iPXE007');
+    Check(d.RecvBoot = dcbIpxeX64, 'ipxe7');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'tftp-server-name:"192.168.0.254",boot-file-name:"http://mydomain.lan' +
+      '/api/v3/baseipxe?uefi=false&keymap=fr",vendor-class-identifier:' +
+      '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
+      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+    // validate PXE selection with option 93 and HTTPClient mode
+    option[0] := #2;
+    option[1] := #0;
+    option[2] := #12; // option 93 as uint16 (00:0c) for aarch64 architecture
+    f := d.ClientNew(dmtRequest, macs[8]);
+    DhcpAddOptionShort(f, doClientArchitecture, option);
+    DhcpAddOptionShort(f, doVendorClassIdentifier, 'HTTPClient');
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'aarch64');
+    Check(d.RecvBoot = dcbA64Http, 'HTTPClient');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      'tftp-server-name:"192.168.0.254",boot-file-name:"http://mydomain.lan/' +
+      'aarch64/ipxe.efi",vendor-class-identifier:' +
+      '"HTTPClient",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
       'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
   finally
     server.Free;
