@@ -2610,12 +2610,13 @@ begin
   tmp.Init;
   if p <> nil then
     repeat
-      if not NetIsIP4(p, @dest) then
+      if not NetIsIP4(p, @dest) then             // parse destination IP
         exit;
+      inc(p, 7);                                 // minimal '1.2.3.4' length
       while not (p^ in [#0, '/', ',']) do
         inc(p);
-      w := 32; // default mask
-      if p^ = '/' then
+      w := 32;                                   // default mask
+      if p^ = '/' then                           // parse /mask value
       begin
         w := MinPtrUInt(32, GetCardinal(p + 1)); // clamp mask width
         repeat
@@ -2623,18 +2624,20 @@ begin
         until p^ in [#0, ','];
       end;
       if p^ = #0 then
-        exit; // premature
-      inc(p); // jump ','
-      if not NetIsIP4(p, @router) then
+        exit;                                    // premature
+      inc(p);                                    // jump ','
+      if not NetIsIP4(p, @router) or             // parse router/next-hop IP
+         (router = 0) then                       // should not be void
         exit;
-      tmp.AddDirect(AnsiChar(w));    // width
-      tmp.Add(@dest, (w + 7) shr 3); // only prefix
-      tmp.Add(@router, 4);           // router
+      tmp.AddDirect(AnsiChar(w));                // prefix length (1 byte)
+      tmp.Add(@dest, (w + 7) shr 3);             // significant prefix bytes
+      tmp.Add(@router, 4);                       // router IP (4 bytes)
+      inc(p, 7);                                 // minimal '1.2.3.4' length
       while not (p^ in [#0, ';', ',']) do
         inc(p);
       if p^ = #0 then
         break;
-      inc(p); // jump ',' or ';' between routes
+      inc(p);                                    // skip ',' ';' between routes
     until p^ = #0;
   tmp.Done(bin, CP_RAWBYTESTRING);
   result := true;
@@ -4442,6 +4445,7 @@ begin
                 new^.State := lsAck;
               inc(entries);
             end;
+            inc(p, 8); // minimal '1.2.3.4' text length after (p + 1) = <ip4>
           end;
         end;
       end;
