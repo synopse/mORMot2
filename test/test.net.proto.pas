@@ -1649,6 +1649,28 @@ var
     CheckEqualHex(bin, hex, 'cidr');
   end;
 
+  procedure CheckDns(dns: ShortString);
+  var
+    bin, txt: ShortString;
+    v: PByteArray;
+    l: PtrInt;
+  begin
+    dns[ord(dns[0]) + 1] := #0; // make local copy ASCIIZ
+    bin[0] := #0;
+    if CheckFailed(DnsLabelAppendBin(@dns[1], bin)) then
+      exit;
+    Check(bin[0] > dns[0], 'bin>dns');
+    txt[0] := #0;
+    v := @bin[1];
+    l := ord(bin[0]);
+    Check(DnsLabelAppendText(v, l, txt));
+    CheckEqual(l, 0);
+    CheckEqualShort(txt, dns);
+    Check(not DnsLabelAppendText(v, l, txt));
+    txt[0] := #0;
+    CheckEqualShort(txt, '');
+  end;
+
 begin
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
@@ -1807,6 +1829,10 @@ begin
   CheckRfc3925(
     '000000090401000000', // enterprise 9, data-len=4, sub=1 len=0, sub=0 len=0
     '{9:{1:"",0:""}}' );
+  // validate DNS label encoding/decoding from text
+  CheckDns('toto');
+  CheckDns('toto.com');
+  CheckDns('example.toto.com');
   // validate client DISCOVER disc from WireShark
   refdisc := Base64ToBin(
     'AQEGAAAAPR0AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -2509,7 +2535,7 @@ begin
     mac := MacToText(@macs[8]);
     f := d.ClientNew(dmtDiscover, macs[8]);
     DhcpAddOptionU(f, doFqdn, UnescapeHex(
-      '\05\00\00\0fDESKTOP-ABC123.\05corp.\07example\03com\00'));
+      '\05\00\00\0eDESKTOP-ABC123\04corp\07example\03com\00'));
     d.ClientFlush(f);
     CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn win');
     json := d.RecvToJson(true);
@@ -2523,7 +2549,7 @@ begin
       '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105,fqdn:{client:"DESKTOP-ABC123.corp.example.com"}}');
-    // validate ASCII option 81 with custom simple rule
+    // validate ASCII option 81 with custom "fqdn" simple rule value
     ndx := server.Scope[0].AddRule([
       '{mac:"', mac, '",' +
        'always:{81:"mydomain"}}']);
@@ -2537,12 +2563,13 @@ begin
       'fqdn:{client:"mydomain"},' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
-    // validate ASCII option 81 with custom complex rule
+    // replace the last rule with an explicit {server:"fqdn"} for flags S=1
     Check(server.Scope[0].DeleteRule(ndx), 'del1');
     Check(not server.Scope[0].DeleteRule(ndx), 'del2');
     CheckEqual(ndx, server.Scope[0].AddRule([
       '{mac:"', mac, '",' +
        'always:{fqdn:{server:"mydomain.com"}}}']));
+    // validate ASCII option 81 with the new {server:"fqdn"} rule
     CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn server');
     CheckEqual(d.RecvToJson(true), json);
     ip := IP4ToText(@d.Send.yiaddr); // OFFER twice returns the next IP
