@@ -1837,7 +1837,7 @@ type
   TParseRule = (prMatch, prValue, prTlv);
   TParseType = (ptTextBin, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
                 ptUInt8, ptUInt16, ptUInt32, ptUInt64,
-                ptVendor43, ptMsg53, ptParam55, ptClient61, ptRelay82,
+                ptVendor43, ptMsg53, ptParam55, ptClient61, ptFqdn81, ptRelay82,
                 ptCidr121, ptVendor12x);
 const
   RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
@@ -1855,7 +1855,7 @@ const
     ptUInt16, ptUInt32, ptUInt32, ptTextBin, ptClient61, ptTextBin,
     ptTextBin, ptTextBin, ptIp4, ptTextBin, ptTextBin, ptIp4, ptIp4, ptIp4,
     ptIp4, ptIp4, ptIp4, ptIp4, ptIp4, ptIp4, ptTextBin, ptTextBin,        // 78
-    ptTextBin, ptTextBin, ptTextBin, ptRelay82, ptTextBin, ptTextBin, ptIp4,
+    ptTextBin, ptTextBin, ptFqdn81, ptRelay82, ptTextBin, ptTextBin, ptIp4,
     ptTextBin, ptTextBin, ptTextBin, ptIp4, ptTextBin, ptUInt32, ptIp4,    // 92
     ptUInt16, ptTextBin, ptTextBin, ptTextBin, ptUuid97, ptTextBin,
     ptTextBin, ptTextBin, ptTextBin, ptTextBin, ptTextBin, ptTextBin,     // 104
@@ -1958,13 +1958,22 @@ begin
         result := CidrRoutes(p.Value + 5, v);
     else
       begin
-        // recognize configurable options in string value
+        // recognize configurable options in "string" value
         case ParseType(op) of
           ptIp4:
             begin
               result := ToIP4Binary(p.Value, v) >= 0; // allow CSV of IP4
               if result then
                 exit;
+            end;
+          ptFqdn81:
+            begin
+              // set a RFC 4702 "fqdn" response value with flags=0 (E=0=ASCII)
+              d := FastNewRawByteString(v, p.ValueLen + 3);
+              PCardinal(d)^ := 0; // flags=rcode1=rcode2=0
+              MoveFast(p.Value^, d[3], p.ValueLen);
+              result := true;
+              exit;
             end;
           ptUuid97:
             begin
@@ -2114,6 +2123,7 @@ begin
   result := true;
 end;
 
+
 procedure DnsLabelToText(v: PByteArray; len: PtrInt; var dest: shortstring);
 var
   vlen: PtrInt;
@@ -2131,6 +2141,30 @@ begin
     AppendShortBuffer(PAnsiChar(v) + 1, v[0], high(dest), @dest);
     inc(PByte(v), vlen);
   end;
+end;
+
+procedure AddJsonWriterRfc4702(W: TJsonWriter; v: PAnsiChar; len: PtrInt);
+var
+  tmp: ShortString;
+begin
+  // https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#ddns-for-dhcpv4
+  // we support S+E flags; O=0 from a client; N is ignored (no DDNS anyway here)
+  W.AddDirect('{'); // {client/server:"fqdn"}
+  W.AddFieldName(CLIENT_SERVER[ord(v[0]) and RFC4702_FLAG_S]);
+  W.AddDirect('"');
+  dec(len, 3);
+  if ord(v[0]) and RFC4702_FLAG_E = 0 then
+    // E=0: plain ASCII
+    inc(v, 3)
+  else
+  begin
+    // E=1: wire format aka "canonical form"
+    DnsLabelToText(@v[3], len, tmp);
+    v := @tmp[1];
+    len := ord(tmp[0]);
+  end;
+  W.AddJsonEscape(v, len);
+  W.AddDirect('"', '}');
 end;
 
 procedure ParseTypeJson(tlv: PByteArray; W: TJsonWriter; recognize: boolean);
@@ -2227,6 +2261,14 @@ begin
           if len = 7 then
             inc(v);
           W.AddBinToHumanHex(v, 6, '"');           // as JSON string "xx:xx:.."
+          exit;
+        end;
+      ptFqdn81:
+        if (len > 3) and                           // RFC 4702
+           (v[1] = #0) and                         // rcode1 = 0
+           (v[2] = #0) then                        // rcode2 = 0
+        begin
+          AddJsonWriterRfc4702(W, v, len);         // {client/server:"fqdn"}
           exit;
         end;
       ptVendor12x:
