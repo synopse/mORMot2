@@ -754,9 +754,13 @@ type
     // - supplied as a concatenation of strings, to create a JSON object
     // - will create a transient TDhcpRuleSettings instance and inject it
     // to Rules[] in a thread-safe way, or raise EDhcp on error
-    procedure AddRule(const json: array of RawByteString); overload;
+    // - return the index of the newly created entry in Rules[]
+    function AddRule(const json: array of RawByteString): PtrInt; overload;
     /// add one entry in Rules[] array within Safe.Lock/UnLock
-    procedure AddRule(one: TDhcpScopeRule); overload;
+    // - return the index of the newly created entry in Rules[]
+    function AddRule(one: TDhcpScopeRule): PtrInt; overload;
+    /// remove a given entry in Rules[] by index - for testing: not thread-safe
+    function DeleteRule(index: PtrInt): boolean;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
     /// efficient L1-cache friendly O(n) search of a MAC address in Entry[]
@@ -3071,7 +3075,7 @@ begin
             AddStatic(nfo);
 end;
 
-procedure TDhcpScope.AddRule(const json: array of RawByteString);
+function TDhcpScope.AddRule(const json: array of RawByteString): PtrInt;
 var
   s: TDhcpRuleSettings;
   rule: TDhcpScopeRule;
@@ -3083,18 +3087,42 @@ begin
       EDhcp.RaiseU('AddRule: incorrect JSON');
     if s.PrepareRule(self, rule) then // not inserted via AddStatic()
       // append to Rules[] within Safe.Lock
-      AddRule(rule);
+      result := AddRule(rule)
+    else
+      result := -1;
   finally
     s.Free;
   end;
 end;
 
-procedure TDhcpScope.AddRule(one: TDhcpScopeRule);
+function TDhcpScope.AddRule(one: TDhcpScopeRule): PtrInt;
 begin
   Safe.Lock;
   try
-    SetLength(Rules, length(Rules) + 1);
-    Rules[high(Rules)] := one;
+    result := length(Rules);
+    SetLength(Rules, result + 1);
+    Rules[result] := one;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TDhcpScope.DeleteRule(index: PtrInt): boolean;
+var
+  n: PtrUInt;
+begin
+  Safe.Lock;
+  try
+    n := length(Rules);
+    result := PtrUInt(index) < n;
+    if not result then
+      exit;
+    Finalize(Rules[index]);
+    dec(n);
+    if n = 0 then
+      Rules := nil
+    else
+      DynArrayFakeDelete(Rules, index, n, SizeOf(Rules[0]));
   finally
     Safe.UnLock;
   end;
