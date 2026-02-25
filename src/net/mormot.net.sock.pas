@@ -5443,6 +5443,7 @@ begin
       if not NetIsIP4(text, @v) then
         exit;
       AddInteger(TIntegerDynArray(result), v);
+      inc(text, 7); // minimal '1.2.3.4' text length
       while text^ <> ',' do
         if text^ = #0 then
           exit   // successfully parsed
@@ -5468,6 +5469,7 @@ begin
     SetLength(bin, (result + 1) shl 2);
     PCardinalArray(bin)^[result] := v;
     inc(result);
+    inc(text, 7); // minimal '1.2.3.4' text length
     while text^ <> ',' do
       if text^ = #0 then
         exit    // successfully parsed
@@ -5799,6 +5801,7 @@ begin
       inc(p);
     if NetIsIP4(p, @ip) then // ignore any line starting e.g. with # or ;
     begin
+      inc(p, 7); // minimal '1.2.3.4' text length
       while p^ in ['0' .. '9', '.', ' '] do
         inc(p);
       if p^ <> '/' then
