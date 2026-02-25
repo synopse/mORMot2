@@ -221,11 +221,29 @@ var
   // 'vendor-class-identifier', 'client-identifier', 'tftp-server-name',
   // 'boot-file-name', 'user-class', 'relay-agent-information',
   // 'client-architecture', 'uuid-client-identifier' and 'subnet-selection'
+  // - those were designed for simple/obvious semantic and shorter JSON
+  // - alternate KEA-like identifiers will also be recognized in "rules" as
+  // defined in the DHCP_OPTION_ALTERNATE[] constant
   DHCP_OPTION: array[TDhcpOption] of RawUtf8;
   /// KEA-like identifier of each DHCP RAI sub-option
   // - i.e. 'circuit-id', 'remote-id', 'link-selection', 'subscriber-id',
   // 'server-id-override', 'relay-id' and 'relay-port'
   RAI_OPTION: array[TDhcpOptionRai] of RawUtf8;
+
+const
+  /// alternate DHCP option "rules" identifiers, especially for KEA compatibility
+  // - will be recognized in "rules" for less-astonishment principle
+  // - https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#standard-dhcpv4-options
+  // - KEA expects a verbose "dhcp-*" prefix for the main options
+  // - also relaxed some other identifiers, like router/dns/hostname/domain...
+  DHCP_OPTION_ALTERNATE: array[doRouters .. doUuidClientIdentifier] of RawUtf8 = (
+    'router', 'dns', 'hostname', 'domain', 'broadcast-address', 'ntp-server',
+    'vendor-options', 'dhcp-requested-address', 'dhcp-lease-time',
+    'dhcp-message-type', 'dhcp-server-identifier', 'dhcp-parameter-request-list',
+    'dhcp-renewal-time', 'dhcp-rebinding-time', 'vendor-class',
+    'dhcp-client-identifier', 'tftp-server', 'boot-filename', 'user-class',
+    'relay-agent', 'client-arch', 'client-uuid');
+
 
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
 function ToText(opt: TDhcpOption): PShortString; overload;
@@ -1451,8 +1469,19 @@ begin
 end;
 
 function FromText(const V: RawUtf8; out opt: TDhcpOption): boolean;
+var
+  i: PtrInt;
 begin
   result := GetEnumNameValue(TypeInfo(TDhcpOption), V, opt, @DHCP_OPTION);
+  if result and                           // e.g. 'leasetime' or 'lease-time'
+     (V <> '') then
+    exit;
+  i := FindNonVoidRawUtf8I(@DHCP_OPTION_ALTERNATE, pointer(V), length(V),
+         length(DHCP_OPTION_ALTERNATE)); // e.g. 'dhcp-lease-time'
+  if i < 0 then
+    exit;
+  opt := TDhcpOption(i + ord(low(DHCP_OPTION_ALTERNATE))); // adjust
+  result := true;
 end;
 
 function FromText(const V: RawUtf8; out opt: TDhcpOptionRai): boolean;
@@ -2346,7 +2375,15 @@ begin
       v.kind := pvkRaw
   else if parser.ValueEnumFromConst(@DHCP_OPTION, length(DHCP_OPTION), v.mac[0]) then
   begin
+    // "lease-time": 7200
+    v.num := DHCP_OPTION_NUM[TDhcpOption(v.mac[0])];
+    v.kind := pvkOpt;
+  end
+  else if parser.ValueEnumFromConst(@DHCP_OPTION_ALTERNATE,
+            length(DHCP_OPTION_ALTERNATE), v.mac[0]) then
+  begin
     // "dhcp-lease-time": 7200
+    inc(v.mac[0], ord(low(DHCP_OPTION_ALTERNATE))); // adjust
     v.num := DHCP_OPTION_NUM[TDhcpOption(v.mac[0])];
     v.kind := pvkOpt;
   end
