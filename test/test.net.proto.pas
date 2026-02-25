@@ -1567,7 +1567,7 @@ var
   ip4, sip4: TNetIP4;
   xid: cardinal;
   d: TDhcpState;
-  i, n, l: PtrInt;
+  i, n, l, ndx: PtrInt;
   server: TDhcpProcess;
   settings: TDhcpServerSettings;
   macs: TNetMacs;
@@ -2503,6 +2503,53 @@ begin
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
       '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'ntp-servers:["1.1.1.1","4.4.4.4"],domain-name:"mydomain",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
+    // validate option 81 from a Windows DHCP client with no associated DDNS
+    mac := MacToText(@macs[8]);
+    f := d.ClientNew(dmtDiscover, macs[8]);
+    DhcpAddOptionU(f, doFqdn, UnescapeHex(
+      '\05\00\00\0fDESKTOP-ABC123.\05corp.\07example\03com\00'));
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn win');
+    json := d.RecvToJson(true);
+    CheckEqual(json,
+      '{op:"request",chaddr:"' + mac +
+       '",message-type:"DISCOVER",parameter-request-list:' +
+       '[1,3,6,15,28],fqdn:{server:"DESKTOP-ABC123.corp.example.com"}}');
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105,fqdn:{client:"DESKTOP-ABC123.corp.example.com"}}');
+    // validate ASCII option 81 with custom simple rule
+    ndx := server.Scope[0].AddRule([
+      '{mac:"', mac, '",' +
+       'always:{81:"mydomain"}}']);
+    CheckEqual(ndx, high(server.Scope[0].Rules));
+    CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn ascii');
+    CheckEqual(d.RecvToJson(true), json);
+    ip := IP4ToText(@d.Send.yiaddr); // OFFER twice returns the next IP
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'fqdn:{client:"mydomain"},' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
+    // validate ASCII option 81 with custom complex rule
+    Check(server.Scope[0].DeleteRule(ndx), 'del1');
+    Check(not server.Scope[0].DeleteRule(ndx), 'del2');
+    CheckEqual(ndx, server.Scope[0].AddRule([
+      '{mac:"', mac, '",' +
+       'always:{fqdn:{server:"mydomain.com"}}}']));
+    CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn server');
+    CheckEqual(d.RecvToJson(true), json);
+    ip := IP4ToText(@d.Send.yiaddr); // OFFER twice returns the next IP
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'fqdn:{server:"mydomain.com"},' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
   finally
