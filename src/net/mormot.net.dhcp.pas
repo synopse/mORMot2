@@ -156,6 +156,7 @@ type
  // - doTftpServerName is PXE option 66 (192.168.10.10 or host name)
  // - doBootFileName is PXE option 67 (pxelinux.0)
  // - doUserClass is PXE RFC 3004 option 77 (PXEClient:Arch:00000)
+ // - doFqdn is RFC 4702 option 81 (device.example.com)
  // - doRelayAgentInformation is Relay Agent (RFC 3046) option 82 - appear last
  // - doClientArchitecture is RFC 4578 PXE option 93 as uint16 (00:00)
  // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOS_UUID)
@@ -183,6 +184,7 @@ type
    doTftpServerName,
    doBootFileName,
    doUserClass,
+   doFqdn,
    doRelayAgentInformation,
    doClientArchitecture,
    doUuidClientIdentifier,
@@ -219,7 +221,7 @@ var
   // 'requested-address', 'lease-time', 'message-type', 'server-identifier',
   // 'parameter-request-list', 'renewal-time', 'rebinding-time',
   // 'vendor-class-identifier', 'client-identifier', 'tftp-server-name',
-  // 'boot-file-name', 'user-class', 'relay-agent-information',
+  // 'boot-file-name', 'user-class', 'fqdn', 'relay-agent-information',
   // 'client-architecture', 'uuid-client-identifier' and 'subnet-selection'
   // - those were designed for simple/obvious semantic and shorter JSON
   // - alternate KEA-like identifiers will also be recognized in "rules" as
@@ -242,7 +244,7 @@ const
     'dhcp-message-type', 'dhcp-server-identifier', 'dhcp-parameter-request-list',
     'dhcp-renewal-time', 'dhcp-rebinding-time', 'vendor-class',
     'dhcp-client-identifier', 'tftp-server', 'boot-filename', 'user-class',
-    'relay-agent', 'client-arch', 'client-uuid');
+    'fqdn', 'relay-agent', 'client-arch', 'client-uuid');
 
 
 function ToText(dmt: TDhcpMessageType): PShortString; overload;
@@ -1492,7 +1494,7 @@ end;
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 43, 50, 51, 53, 54, 55,
-    58, 59, 60, 61, 66, 67, 77, 82, 93, 97, 118, 255);
+    58, 59, 60, 61, 66, 67, 77, 81, 82, 93, 97, 118, 255);
   RAI_OPTION_NUM: array[TDhcpOptionRai] of byte = (
     0, 1, 2, 5, 6, 11, 12, 19);
 var // fast O(1) inverse lookup from (sub-)option numbers to know enumerate item

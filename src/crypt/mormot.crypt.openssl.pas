@@ -3682,7 +3682,7 @@ begin
      (bits = 7680) then // reject weak/unrealistic RSA key size
     for caa := caaRS256 to caaPS512 do
     begin
-      // global variable
+      // global variable for any new instances
       CAA_BITSORCURVE[caa] := bits;
       // existing TCryptAsymOsl/TCryptCertAlgoOpenSsl instances
       if (CryptAsymOpenSsl[caa] <> nil) and
