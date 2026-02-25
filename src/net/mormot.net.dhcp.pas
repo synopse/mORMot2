@@ -452,6 +452,9 @@ function IsValidTlv(op: PAnsiChar; len: integer): boolean;
 function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
 function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
 
+/// convert a DNS wire format aka binary "canonical form" into plain ASCII text
+procedure DnsLabelToText(v: PByteArray; len: PtrInt; var dest: shortstring);
+
 /// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
 function CidrRoutes(p: PUtf8Char; var bin: RawByteString): boolean;
@@ -2069,6 +2072,25 @@ begin
     op := @op[ord(op[4]) + 5];
   until false;
   result := true;
+end;
+
+procedure DnsLabelToText(v: PByteArray; len: PtrInt; var dest: shortstring);
+var
+  vlen: PtrInt;
+begin
+  // decode DNS label format: [len + part] + ending len=0
+  dest[0] := #0;
+  while len > 1 do // end with a final #0 length
+  begin
+    if v[0] > len then
+      break; // avoid buffer overflow
+    vlen := v[0] + 1;
+    dec(len, vlen);
+    if len <= 1 then
+      AppendShortCharSafe('.', dest); // last item is domain extension ('com')
+    AppendShortBuffer(PAnsiChar(v) + 1, v[0], high(dest), @dest);
+    inc(PByte(v), vlen);
+  end;
 end;
 
 procedure ParseTypeJson(tlv: PByteArray; W: TJsonWriter; recognize: boolean);
