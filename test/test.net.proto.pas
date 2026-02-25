@@ -1549,10 +1549,10 @@ end;
 const
   FND_RESP = [doSubnetMask, doLeaseTime, doMessageType,
     doServerIdentifier, doRenewalTime, doRebindingTime];
-  UUID_: packed record
-    kind: byte;
+  UUID_97: packed record
+    kind: byte; // $00 + SMBIOS_UUID for option 97
     uuid: TGuid;
-  end = (uuid: '{5D52D772-0CCA-461D-A22D-90D892F7EBA2}');
+  end = (kind: 0; uuid: '{5D52D772-0CCA-461D-A22D-90D892F7EBA2}');
 
 procedure TNetworkProtocols.DHCP;
 var
@@ -2475,15 +2475,15 @@ begin
     // "rule" with "mac" and "ip" and custom options
     mac := MacToText(@macs[7]);
     ip := IP4ToText(@ips[7]);
-    uuid :=  ToUtf8(UUID_.uuid);
+    uuid :=  ToUtf8(UUID_97.uuid);
     server.Scope[0].AddRule([
-      '{all:{mac:["', MacToText(@macs[6]), '","', mac,
+      '{all:{mac:["', MacToText(@macs[6]), '","', mac,  // validate pvkMacs
       '"],client-uuid:"', uuid, '"},' +
       'always:{ntp-server:["1.1.1.1", "4.4.4.4"]},' +
       'requested:{domain:"mydomain"}}']);
     server.Scope[0].AddRule([
       '{mac:"', mac, '",ip:"' + ip + '",' +
-       'requested:{domain:"mydomain"}}']);
+       'requested:{domain-name:"mydomain"}}']);
     CheckEqual(length(server.Scope[0].Rules), 3, 'rule2');
     // deterministic first matching "rules" wins - static
     f := d.ClientNew(dmtRequest, macs[7]);
@@ -2496,7 +2496,7 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
     // deterministic first matching "rules" wins - macs+uuid but no IP
-    DhcpAddOptionBuf(f, doUuidClientIdentifier, @UUID_, SizeOf(UUID_));
+    DhcpAddOptionBuf(f, doUuidClientIdentifier, @UUID_97, SizeOf(UUID_97));
     d.ClientFlush(f);
     CheckNotEqual(server.ComputeResponse(d), 0, 'uuid7');
     CheckEqual(d.SendToJson(true),

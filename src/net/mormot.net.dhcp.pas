@@ -3351,7 +3351,7 @@ begin
   result := false;
   case one^.kind of // locate the option value in Recv[]
     pvkMac:
-      result := PInt64(one)^ shr 16 = Mac64;
+      result := PInt64(one)^ shr 16 = Mac64;   // fast inlined TNetMac compare
     pvkOpt:
       begin                                    // O(1) lookup of known option
         len := RecvLens[TDhcpOption(one^.mac[0])];
@@ -3365,7 +3365,7 @@ optval: value := pointer(one^.value);
           exit;                                // length mismatch
         inc(option);
         repeat
-          dec(len);                            // endings are more likely to change
+          dec(len);                            // endings mismatch more likely
           if option[len] <> value[len] then    // faster than CompareMem() here
             exit;
         until len = 0;
