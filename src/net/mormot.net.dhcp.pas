@@ -1804,6 +1804,35 @@ begin
     until n = 0;
 end;
 
+const
+  CLIENT_SERVER: array[0..1] of RawUtf8 = ('client', 'server');
+  RFC4702_FLAG_S = 1;
+  RFC4702_FLAG_E = 4;
+
+function Rfc4702FromJson(p: PUtf8Char; out v: RawByteString): boolean;
+var
+  d: PAnsiChar;
+  parser: TJsonParserContext;
+  s: byte;
+begin
+  // encode a RFC 4702 client/server:"fqdn" response value with E=0=ASCII
+  result := false;
+  if p = nil then
+    exit;
+  parser.InitParser(p);
+  if not parser.ParseObject or
+     not parser.GetJsonFieldName or
+     not parser.ValueEnumFromConst(@CLIENT_SERVER, 2, s) or // s=0/1
+     not parser.ParseNext or
+     not parser.WasString or
+     (parser.ValueLen = 0) then
+    exit;
+  d := FastNewRawByteString(v, parser.ValueLen + 3);
+  PCardinal(d)^ := s * RFC4702_FLAG_S;    // flags=S=0/1 + rcode1=rcode2=0
+  MoveFast(parser.Value^, d[3], parser.ValueLen); // append as ASCII (E=0)
+  result := true;
+end;
+
 type
   TParseRule = (prMatch, prValue, prTlv);
   TParseType = (ptTextBin, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
@@ -1993,8 +2022,14 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
           result := true;
         end;
       '{':
-        // try to parse a JSON object into a TLV value
-        result := TlvFromJson(p.Value, v);
+        case op of
+          81:
+            // support {client:"fqdn"} or {server:"fqdn"} format
+            result := Rfc4702FromJson(p.Value, v);
+        else
+         // try to parse a JSON object into a TLV value
+          result := TlvFromJson(p.Value, v);
+        end;
     end;
 end;
 
