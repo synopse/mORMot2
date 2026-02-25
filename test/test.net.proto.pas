@@ -1549,11 +1549,15 @@ end;
 const
   FND_RESP = [doSubnetMask, doLeaseTime, doMessageType,
     doServerIdentifier, doRenewalTime, doRebindingTime];
+  UUID_: packed record
+    kind: byte;
+    uuid: TGuid;
+  end = (uuid: '{5D52D772-0CCA-461D-A22D-90D892F7EBA2}');
 
 procedure TNetworkProtocols.DHCP;
 var
   refdisc, refoffer, refreq, refack, bin: RawByteString;
-  mac, ip, txt, json: RawUtf8;
+  mac, ip, uuid, txt, json: RawUtf8;
   fn: TFileName;
   lens: TDhcpParsed;
   fnd: TDhcpOptions;
@@ -2458,6 +2462,47 @@ begin
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
       '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",boot-file-name:"ipxe.5",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
+    // "rules" with "mac" and "ip" should go to static list
+    Check(not server.Scope[0].IsStaticIP(ips[8]), 'none8');
+    mac := MacToText(@macs[8]);
+    ip := IP4ToText(@ips[8]);
+    server.Scope[0].AddRule([
+      '{mac:"', mac, '",ip:"' + ip + '"}']);
+    CheckEqual(length(server.Scope[0].Rules), 1, 'static not rule');
+    Check(server.Scope[0].IsStaticIP(ips[8]), 'static8');
+    // "rule" with "mac" and "ip" and custom options
+    mac := MacToText(@macs[7]);
+    ip := IP4ToText(@ips[7]);
+    uuid :=  ToUtf8(UUID_.uuid);
+    server.Scope[0].AddRule([
+      '{all:{mac:["', MacToText(@macs[6]), '","', mac,
+      '"],client-uuid:"', uuid, '"},' +
+      'always:{ntp-server:["1.1.1.1", "4.4.4.4"]},' +
+      'requested:{domain:"mydomain"}}']);
+    server.Scope[0].AddRule([
+      '{mac:"', mac, '",ip:"' + ip + '",' +
+       'requested:{domain:"mydomain"}}']);
+    CheckEqual(length(server.Scope[0].Rules), 3, 'rule2');
+    // deterministic first matching "rules" wins - static
+    f := d.ClientNew(dmtRequest, macs[7]);
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'static7');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
+      'domain-name:"mydomain",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
+    // deterministic first matching "rules" wins - macs+uuid but no IP
+    DhcpAddOptionBuf(f, doUuidClientIdentifier, @UUID_, SizeOf(UUID_));
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'uuid7');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
+      'ntp-servers:["1.1.1.1","4.4.4.4"],domain-name:"mydomain",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
   finally
