@@ -16,7 +16,7 @@ unit mormot.net.dhcp;
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
    Background lease persistence using dnsmasq-compatible text files.
    Static IP reservation using MAC address or any other set of options (e.g. 61).
-   Try to adapt to Windows environments (e.g. options 81/249 support).
+   Try to adapt to Windows environments (e.g. options 81/119/249 support).
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
@@ -163,6 +163,7 @@ type
  // - doClientArchitecture is RFC 4578 PXE option 93 as uint16 (00:00)
  // - doUuidClientIdentifier is RFC 4578 PXE option 97 ($00 + SMBIOS_UUID)
  // - doSubnetSelection is option 118 to override the giaddr value
+ // - doDomainSearch is RFC 3397 option 119 (mycompany.com)
  // - doEnd is "End Of Options" marker option 255 (not a true value)
  TDhcpOption = (
    doPad,
@@ -191,6 +192,7 @@ type
    doClientArchitecture,
    doUuidClientIdentifier,
    doSubnetSelection,
+   doDomainSearch,
    doEnd
  );
  /// set of supported DHCP options
@@ -458,7 +460,7 @@ function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
 function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
 
 /// convert plain ASCII text as DNS wire format aka binary "canonical form"
-function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): boolean;
+function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): PUtf8Char;
 
 /// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
@@ -1507,11 +1509,11 @@ end;
 const
   DHCP_OPTION_NUM: array[TDhcpOption] of byte = (
     0, 1, 3, 6, 12, 15, 28, 42, 43, 50, 51, 53, 54, 55,
-    58, 59, 60, 61, 66, 67, 77, 81, 82, 93, 97, 118, 255);
+    58, 59, 60, 61, 66, 67, 77, 81, 82, 93, 97, 118, 119, 255);
   RAI_OPTION_NUM: array[TDhcpOptionRai] of byte = (
     0, 1, 2, 5, 6, 11, 12, 19);
 var // fast O(1) inverse lookup from (sub-)option numbers to know enumerate item
-  DHCP_OPTION_INV: array[0 .. 118] of TDhcpOption;
+  DHCP_OPTION_INV: array[0 .. 119] of TDhcpOption;
   RAI_OPTION_INV:  array[0 .. 19]  of TDhcpOptionRai;
 
 procedure DhcpAddOptionByte(var p: PAnsiChar; const op, b: cardinal);
@@ -1810,6 +1812,82 @@ begin
     until n = 0;
 end;
 
+// uncompressed DNS label format: [len + part] + ending len=0
+
+function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
+var
+  vlen: PtrInt;
+begin
+  result := false;
+  if len = 0 then
+    exit;
+  if v[0] <> 0 then
+    repeat
+      if v[0] > len then
+        exit;                          // avoid buffer overflow
+      vlen := v[0] + 1;
+      dec(len, vlen);
+      AppendShortBuffer(PAnsiChar(v) + 1, v[0], high(txt), @txt);
+      inc(PByte(v), vlen);
+      if v[0] = 0 then
+        break;
+      AppendShortCharSafe('.', txt);  // '.' between parts
+      if ord(txt[0]) = high(txt) then
+        exit;                          // output overflow
+    until false;
+  // reached final #0 marker = uncompressed buffer
+  inc(PByte(v));
+  dec(len);
+  result := true;
+end;
+
+function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): PUtf8Char;
+var
+  len: PtrInt;
+begin
+  result := nil; // error parsing
+  if p = nil then
+    exit;
+  repeat
+    p := GotoNextNotSpace(p);
+    len := 0;
+    while not (p[len] in [#0, '.', ',', ';']) do
+      inc(len);
+    if (len = 0) or
+       (len > high(bin)) then
+      exit;
+    AppendShortCharSafe(AnsiChar(len), bin);
+    AppendShortBuffer(pointer(p), len, high(bin), @bin);
+    if ord(bin[0]) >= high(bin) then
+      exit;
+    inc(p, len);
+    if p^ <> '.' then             // end of value
+      break;
+    inc(p);                       // skip '.'
+  until false;
+  AppendShortCharSafe(#0, bin);   // final #0
+  if p^ <> #0 then
+    inc(p);                       // skip CSV ',' and ';' delimiters
+  result := p;
+end;
+
+function SetDnsSearch(p: PUtf8Char; var v: RawByteString): boolean;
+var
+  bin: ShortString;
+begin
+  result := false;
+  bin[0] := #0;
+  repeat
+    p := DnsLabelAppendBin(p, bin);
+    if (p = nil) or           // invalid input
+       (bin[0] > #250) then   // avoid TLV overflow - TODO: concatenate TLV?
+      exit;
+    p := GotoNextNotSpace(p);
+  until p^ = #0;
+  FastSetRawByteString(v, @bin[1], ord(bin[0]));
+  result := true;
+end;
+
 const
   CLIENT_SERVER: array[0..1] of RawUtf8 = ('client', 'server');
   RFC4702_FLAG_S = 1;
@@ -1844,7 +1922,7 @@ type
   TParseType = (ptTextBin, ptIp4, ptMac, ptUuid, ptUuid97, ptBool,
                 ptUInt8, ptUInt16, ptUInt32, ptUInt64,
                 ptVendor43, ptMsg53, ptParam55, ptClient61, ptFqdn81, ptRelay82,
-                ptCidr121, ptVendor12x);
+                ptDom119, ptCidr121, ptVendor12x);
 const
   RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
     'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
@@ -1867,7 +1945,7 @@ const
     ptTextBin, ptTextBin, ptTextBin, ptTextBin, ptTextBin, ptTextBin,     // 104
     ptTextBin, ptTextBin, ptTextBin, ptUInt32, ptTextBin, ptTextBin,
     ptTextBin, ptIp4, ptTextBin, ptTextBin, ptTextBin, ptUInt8, ptUInt16, // 117
-    ptIp4, ptTextBin, ptTextBin, ptCidr121, ptTextBin, ptTextBin,
+    ptIp4, ptDom119, ptTextBin, ptCidr121, ptTextBin, ptTextBin,
     ptVendor12x, ptVendor12x);                                            // 125
   FAKE_OP_MAC = 255; // to parse "mac": content
 
@@ -1993,6 +2071,12 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
                 PGuid(d + 1)^ := tmp.guid;
                 exit;
               end;
+            end;
+          ptDom119:
+            begin
+              result := SetDnsSearch(p.Value, v);
+              if result then
+                exit;
             end;
           ptCidr121:
             begin
@@ -2137,66 +2221,11 @@ begin
   result := true;
 end;
 
-// uncompressed DNS label format: [len + part] + ending len=0
-
-function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
-var
-  vlen: PtrInt;
-begin
-  result := false;
-  if len = 0 then
-    exit;
-  if v[0] <> 0 then
-    repeat
-      if v[0] > len then
-        exit;                          // avoid buffer overflow
-      vlen := v[0] + 1;
-      dec(len, vlen);
-      AppendShortBuffer(PAnsiChar(v) + 1, v[0], high(txt), @txt);
-      inc(PByte(v), vlen);
-      if v[0] = 0 then
-        break;
-      AppendShortCharSafe('.', txt);  // '.' between parts
-      if ord(txt[0]) = high(txt) then
-        exit;                          // output overflow
-    until false;
-  // reached final #0 marker = uncompressed buffer
-  inc(PByte(v));
-  dec(len);
-  result := true;
-end;
-
-function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): boolean;
-var
-  len: PtrInt;
-begin
-  result := false;
-  if p = nil then
-    exit;
-  repeat
-    len := 0;
-    while not (p[len] in [#0, '.']) do
-      inc(len);
-    if (len = 0) or
-       (len > high(bin)) then
-      exit;
-    AppendShortCharSafe(AnsiChar(len), bin);
-    AppendShortBuffer(pointer(p), len, high(bin), @bin);
-    if ord(bin[0]) >= high(bin) then
-      exit;
-    inc(p, len);
-    if p^ = #0 then
-      break;
-    inc(p); // skip '.'
-  until false;
-  AppendShortCharSafe(#0, bin); // final #0
-  result := true;
-end;
-
-procedure AddJsonWriterDns(W: TJsonWriter; v: PAnsiChar; len: PtrInt; csv: boolean);
+function AddJsonWriterDns(W: TJsonWriter; v: PAnsiChar; len: PtrInt; csv: boolean): boolean;
 var
   tmp: ShortString;
 begin
+  result := false;
   tmp[0] := #0;
   repeat
     if not DnsLabelAppendText(pointer(v), len, tmp) then
@@ -2204,9 +2233,14 @@ begin
     if (len = 0) or                                       // last item
        not csv then                                       // single item
       break;
-    AppendShortCharSafe('.', tmp);
+    AppendShortCharSafe(',', tmp);
   until false;
+  if csv then
+    W.AddDirect('"');
   W.AddJsonEscape(@tmp[1], ord(tmp[0]));                  // send at once
+  if csv then
+    W.AddDirect('"');
+  result := true;
 end;
 
 procedure AddJsonWriterRfc4702(W: TJsonWriter; v: PAnsiChar; len: PtrInt);
@@ -2425,6 +2459,9 @@ begin
           W.AddJsonShort(UuidToShort(PGuid(v)^));  // as "uuid-xxx-xxx"
           exit;
         end;
+      ptDom119:
+         if AddJsonWriterDns(W, v, len, {csv=}true) then
+           exit;
   end;
   // if we reached here, we have either binary or plain text
   AddTextBinJson(v, len, w);
