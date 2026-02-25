@@ -1547,8 +1547,8 @@ begin
 end;
 
 const
-  FND_RESP = [doSubnetMask, doDhcpLeaseTime, doDhcpMessageType,
-    doDhcpServerIdentifier, doDhcpRenewalTime, doDhcpRebindingTime];
+  FND_RESP = [doSubnetMask, doLeaseTime, doMessageType,
+    doServerIdentifier, doRenewalTime, doRebindingTime];
 
 procedure TNetworkProtocols.DHCP;
 var
@@ -1581,7 +1581,7 @@ var
     f: PAnsiChar;
   begin
     f := d.ClientNew(dmtRequest, macs[ndx]);
-    DhcpAddOption32(f, doDhcpServerIdentifier, sip4);
+    DhcpAddOption32(f, doServerIdentifier, sip4);
     d.ClientFlush(f);
     Check(IsEqual(macs[ndx], PNetMac(@d.Recv.chaddr)^));
     CheckNotEqual(xid, d.Recv.xid);
@@ -1806,21 +1806,21 @@ begin
   CheckEqual(MacToText(@PDhcpPacket(refdisc)^.chaddr), mac);
   fnd := [doPad, doEnd];
   Check(DhcpParse(pointer(refdisc), length(refdisc), lens, @fnd) = dmtDiscover);
-  Check(fnd = [doDhcpMessageType, doDhcpClientIdentifier, doDhcpRequestedAddress,
-    doDhcpParameterRequestList]);
+  Check(fnd = [doMessageType, doClientIdentifier, doRequestedAddress,
+    doParameterRequestList]);
   CheckEqual(lens[doPad], 0);
-  CheckEqual(lens[doDhcpMessageType], 1);
-  CheckNotEqual(lens[doDhcpClientIdentifier], 0);
-  CheckEqual(MacToText(DhcpMac(pointer(refdisc), lens[doDhcpClientIdentifier])), mac);
-  CheckNotEqual(lens[doDhcpRequestedAddress], 0);
-  CheckEqual(DhcpIP4(pointer(refdisc), lens[doDhcpRequestedAddress]), 0);
+  CheckEqual(lens[doMessageType], 1);
+  CheckNotEqual(lens[doClientIdentifier], 0);
+  CheckEqual(MacToText(DhcpMac(pointer(refdisc), lens[doClientIdentifier])), mac);
+  CheckNotEqual(lens[doRequestedAddress], 0);
+  CheckEqual(DhcpIP4(pointer(refdisc), lens[doRequestedAddress]), 0);
   Check(DhcpRequestList(pointer(refdisc), lens) =
     [doSubnetMask, doRouters, doDomainNameServers, doNtpServers]);
   CheckHash(refdisc, $79ADDD50, 'no modif');
   CheckEqual(DhcpParseToJson(PDhcpPacket(refdisc), length(refdisc)),
-    '{"op":"request","chaddr":"00:0b:82:01:fc:42","dhcp-message-type":"DISCOVER",' +
-     '"dhcp-client-identifier":"00:0b:82:01:fc:42","dhcp-requested-address":' +
-     '"0.0.0.0","dhcp-parameter-request-list":[1,3,6,42]}');
+    '{"op":"request","chaddr":"00:0b:82:01:fc:42","message-type":"DISCOVER",' +
+     '"client-identifier":"00:0b:82:01:fc:42","requested-address":' +
+     '"0.0.0.0","parameter-request-list":[1,3,6,42]}');
   // validate server OFFER frame from WireShark
   refoffer := Base64ToBin(
     'AgEGAAAAPR0AAAAAAAAAAMCoAArAqAABAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1835,17 +1835,17 @@ begin
   Check(DhcpParse(pointer(refoffer), length(refoffer), lens, @fnd) = dmtOffer);
   Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(refoffer), lens[doSubnetMask]), IP4Netmask(24));
-  CheckEqual(DhcpInt(pointer(refoffer), lens[doDhcpRenewalTime]), 1800);
-  CheckEqual(DhcpInt(pointer(refoffer), lens[doDhcpRebindingTime]), 3150);
-  CheckEqual(DhcpInt(pointer(refoffer), lens[doDhcpLeaseTime]), 3600);
-  ip4 := DhcpIP4(pointer(refoffer), lens[doDhcpServerIdentifier]);
+  CheckEqual(DhcpInt(pointer(refoffer), lens[doRenewalTime]), 1800);
+  CheckEqual(DhcpInt(pointer(refoffer), lens[doRebindingTime]), 3150);
+  CheckEqual(DhcpInt(pointer(refoffer), lens[doLeaseTime]), 3600);
+  ip4 := DhcpIP4(pointer(refoffer), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   CheckEqual(DhcpParseToJson(PDhcpPacket(refoffer), length(refoffer)),
     '{"op":"reply","yiaddr":"192.168.0.10","siaddr":"192.168.0.1",' +
      '"chaddr":"00:0b:82:01:fc:42",' +
-     '"dhcp-message-type":"OFFER","subnet-mask":"255.255.255.0",' +
-     '"dhcp-renewal-time":1800,"dhcp-rebinding-time":3150,' +
-     '"dhcp-lease-time":3600,"dhcp-server-identifier":"192.168.0.1"}');
+     '"message-type":"OFFER","subnet-mask":"255.255.255.0",' +
+     '"renewal-time":1800,"rebinding-time":3150,' +
+     '"lease-time":3600,"server-identifier":"192.168.0.1"}');
   // validate client REQUEST frame from WireShark
   refreq := Base64ToBin(
     'AQEGAAAAPR4AAAAAAAAAAAAAAAAAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1859,22 +1859,22 @@ begin
   CheckEqual(MacToText(@PDhcpPacket(refreq)^.chaddr), mac);
   fnd := [];
   Check(DhcpParse(pointer(refreq), length(refreq), lens, @fnd) = dmtRequest);
-  Check(fnd = [doDhcpRequestedAddress, doDhcpMessageType, doDhcpServerIdentifier,
-    doDhcpParameterRequestList, doDhcpClientIdentifier]);
-  CheckEqual(lens[doDhcpMessageType], 1);
-  CheckNotEqual(lens[doDhcpClientIdentifier], 0);
-  CheckEqual(MacToText(DhcpMac(pointer(refreq), lens[doDhcpClientIdentifier])), mac);
-  ip4 := DhcpIP4(pointer(refreq), lens[doDhcpServerIdentifier]);
+  Check(fnd = [doRequestedAddress, doMessageType, doServerIdentifier,
+    doParameterRequestList, doClientIdentifier]);
+  CheckEqual(lens[doMessageType], 1);
+  CheckNotEqual(lens[doClientIdentifier], 0);
+  CheckEqual(MacToText(DhcpMac(pointer(refreq), lens[doClientIdentifier])), mac);
+  ip4 := DhcpIP4(pointer(refreq), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
-  ip4 := DhcpIP4(pointer(refreq), lens[doDhcpRequestedAddress]);
+  ip4 := DhcpIP4(pointer(refreq), lens[doRequestedAddress]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.10');
   Check(DhcpRequestList(pointer(refreq), lens) =
     [doSubnetMask, doRouters, doDomainNameServers, doNtpServers]);
   CheckEqual(DhcpParseToJson(PDhcpPacket(refreq), length(refreq)),
-    '{"op":"request","chaddr":"00:0b:82:01:fc:42","dhcp-message-type":' +
-    '"REQUEST","dhcp-client-identifier":"00:0b:82:01:fc:42",' +
-    '"dhcp-requested-address":"192.168.0.10","dhcp-server-identifier":' +
-    '"192.168.0.1","dhcp-parameter-request-list":[1,3,6,42]}');
+    '{"op":"request","chaddr":"00:0b:82:01:fc:42","message-type":' +
+    '"REQUEST","client-identifier":"00:0b:82:01:fc:42",' +
+    '"requested-address":"192.168.0.10","server-identifier":' +
+    '"192.168.0.1","parameter-request-list":[1,3,6,42]}');
   // validate server ACK frame from WireShark
   refack := Base64ToBin(
     'AgEGAAAAPR4AAAAAAAAAAMCoAAoAAAAAAAAAAAALggH8QgAAAAAAAAAAAAAAAAAAAAAAAAAA' +
@@ -1889,15 +1889,15 @@ begin
   Check(DhcpParse(pointer(refack), length(refack), lens, @fnd) = dmtAck);
   Check(fnd = FND_RESP);
   CheckEqual(DhcpIP4(pointer(refack), lens[doSubnetMask]), IP4Netmask(24));
-  CheckEqual(DhcpInt(pointer(refack), lens[doDhcpRenewalTime]),   1800);
-  CheckEqual(DhcpInt(pointer(refack), lens[doDhcpRebindingTime]), 3150);
-  CheckEqual(DhcpInt(pointer(refack), lens[doDhcpLeaseTime]),     3600);
-  ip4 := DhcpIP4(pointer(refack), lens[doDhcpServerIdentifier]);
+  CheckEqual(DhcpInt(pointer(refack), lens[doRenewalTime]),   1800);
+  CheckEqual(DhcpInt(pointer(refack), lens[doRebindingTime]), 3150);
+  CheckEqual(DhcpInt(pointer(refack), lens[doLeaseTime]),     3600);
+  ip4 := DhcpIP4(pointer(refack), lens[doServerIdentifier]);
   CheckEqual(IP4ToText(@ip4), '192.168.0.1');
   CheckEqual(DhcpParseToJson(PDhcpPacket(refack), length(refack), true),
-    '{op:"reply",yiaddr:"192.168.0.10",chaddr:"00:0b:82:01:fc:42",dhcp-message-type:"ACK",' +
-    'dhcp-renewal-time:1800,dhcp-rebinding-time:3150,dhcp-lease-time:3600,' +
-    'dhcp-server-identifier:"192.168.0.1",subnet-mask:"255.255.255.0"}');
+    '{op:"reply",yiaddr:"192.168.0.10",chaddr:"00:0b:82:01:fc:42",message-type:"ACK",' +
+    'renewal-time:1800,rebinding-time:3150,lease-time:3600,' +
+    'server-identifier:"192.168.0.1",subnet-mask:"255.255.255.0"}');
   // validate TDhcpProcess logic (without any actual UDP transmission)
   settings := TDhcpServerSettings.Create;
   server := TDhcpProcess.Create;
@@ -1963,21 +1963,21 @@ begin
     CheckEqual(d.Send.xid, $1d3d0000);
     CheckEqual(MacToText(@d.Send.chaddr), mac);
     Check(DhcpParse(@d.Send, d.SendLen, lens, @fnd) = dmtOffer);
-    Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
-    sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
+    Check(fnd = FND_RESP + [doClientIdentifier]);
+    sip4 := DhcpIP4(@d.Send, lens[doServerIdentifier]);
     CheckEqual(IP4ToText(@sip4), '192.168.0.1');
     CheckEqual(d.Send.siaddr, sip4);
     CheckEqual(IP4ToText(@d.Send.yiaddr), '192.168.0.10');
     CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(14));
-    CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
-    CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
-    CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
+    CheckEqual(DhcpInt(@d.Send, lens[doRenewalTime]),   60);
+    CheckEqual(DhcpInt(@d.Send, lens[doRebindingTime]), 105);
+    CheckEqual(DhcpInt(@d.Send, lens[doLeaseTime]),     120);
     CheckEqual(server.SaveToText, CRLF, 'offer not saved');
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"192.168.0.10",siaddr:"192.168.0.1",chaddr:' +
-      '"00:0b:82:01:fc:42",dhcp-message-type:"OFFER",dhcp-server-identifier:' +
-      '"192.168.0.1",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-      'dhcp-renewal-time:60,dhcp-rebinding-time:105,dhcp-client-identifier:' +
+      '"00:0b:82:01:fc:42",message-type:"OFFER",server-identifier:' +
+      '"192.168.0.1",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105,client-identifier:' +
       '"00:0b:82:01:fc:42"}');
     // REQUEST -> ACK
     d.RecvLen := length(refreq);
@@ -1991,8 +1991,8 @@ begin
       CheckEqual(d.Send.xid, $1e3d0000);
       CheckEqual(MacToText(@d.Send.chaddr), mac);
       Check(DhcpParse(@d.Send, d.SendLen, lens, @fnd) = dmtAck);
-      Check(fnd = FND_RESP + [doDhcpClientIdentifier]);
-      sip4 := DhcpIP4(@d.Send, lens[doDhcpServerIdentifier]);
+      Check(fnd = FND_RESP + [doClientIdentifier]);
+      sip4 := DhcpIP4(@d.Send, lens[doServerIdentifier]);
       CheckEqual(IP4ToText(@sip4), '192.168.0.1');
       CheckEqual(d.Send.siaddr, sip4);
       if ip4 = 0 then
@@ -2000,14 +2000,14 @@ begin
       else
         CheckEqual(d.Send.yiaddr, ip4, 'consecutive ips');
       CheckEqual(DhcpIP4(@d.Send, lens[doSubnetMask]), IP4Netmask(14));
-      CheckEqual(DhcpInt(@d.Send, lens[doDhcpRenewalTime]),   60);
-      CheckEqual(DhcpInt(@d.Send, lens[doDhcpRebindingTime]), 105);
-      CheckEqual(DhcpInt(@d.Send, lens[doDhcpLeaseTime]),     120);
+      CheckEqual(DhcpInt(@d.Send, lens[doRenewalTime]),   60);
+      CheckEqual(DhcpInt(@d.Send, lens[doRebindingTime]), 105);
+      CheckEqual(DhcpInt(@d.Send, lens[doLeaseTime]),     120);
       CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
         '{op:"reply",yiaddr:"192.168.0.10",siaddr:"192.168.0.1",chaddr:' +
-        '"00:0b:82:01:fc:42",dhcp-message-type:"ACK",dhcp-server-identifier:' +
-        '"192.168.0.1",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-        'dhcp-renewal-time:60,dhcp-rebinding-time:105,dhcp-client-identifier:' +
+        '"00:0b:82:01:fc:42",message-type:"ACK",server-identifier:' +
+        '"192.168.0.1",subnet-mask:"255.252.0.0",lease-time:120,' +
+        'renewal-time:60,rebinding-time:105,client-identifier:' +
         '"00:0b:82:01:fc:42"}');
     end;
     d.Recv := d.Send;
@@ -2053,13 +2053,13 @@ begin
         continue;
       mac := MacToText(@macs[0]);
       CheckEqual(d.RecvToJson(true),
-        '{op:"request",chaddr:"' + mac + '",dhcp-message-type:"DISCOVER",' +
-        'dhcp-parameter-request-list:[1,3,6,15,28],host-name:"HOST0"}');
+        '{op:"request",chaddr:"' + mac + '",message-type:"DISCOVER",' +
+        'parameter-request-list:[1,3,6,15,28],host-name:"HOST0"}');
       CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
         '{op:"reply",yiaddr:"192.168.0.11",siaddr:"192.168.0.1",chaddr:"' +
-        mac + '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
-        'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
-        'dhcp-rebinding-time:105}');
+        mac + '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+        'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
+        'rebinding-time:105}');
     end;
     CheckEqual(length(server.SaveToText), length(txt), 'only offer');
     CheckEqual(server.Count, n, 'one is static');
@@ -2067,9 +2067,9 @@ begin
       DoRequest(i);
     NotifyTestSpeed('DHCP handshakes', n, 0, @timer);
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:"REQUEST",' +
-      'dhcp-parameter-request-list:[1,3,6,15,28],' +
-      'dhcp-server-identifier:"192.168.0.1"}');
+      '{op:"request",chaddr:"' + mac + '",message-type:"REQUEST",' +
+      'parameter-request-list:[1,3,6,15,28],' +
+      'server-identifier:"192.168.0.1"}');
     CheckEqual(server.Count, n);
     txt := server.SaveToText;
     CheckSaveToTextMatch(txt);
@@ -2123,14 +2123,14 @@ begin
     mac := MacToText(@macs[77]);
     ip := IP4ToText(@ips[77]);
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"REQUEST",dhcp-parameter-request-list:[1,3,6,15,28],' +
-      'dhcp-server-identifier:"192.168.0.1"}');
+      '{op:"request",chaddr:"' + mac + '",message-type:' +
+      '"REQUEST",parameter-request-list:[1,3,6,15,28],' +
+      'server-identifier:"192.168.0.1"}');
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
-      'dhcp-rebinding-time:105}');
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
+      'rebinding-time:105}');
     // validate OnIdle() metrics and file persistence background process
     Check(not IsZero(server.Scope[0].Metrics.Current));
     Check(not FileExists(fn), 'file before OnIdle');
@@ -2221,21 +2221,21 @@ begin
     mac := MacToText(@macs[0]);
     ip := IP4ToText(@ips[0]);
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DISCOVER",dhcp-parameter-request-list:[1,3,6,15,28],' +
+      '{op:"request",chaddr:"' + mac + '",message-type:' +
+      '"DISCOVER",parameter-request-list:[1,3,6,15,28],' +
       'relay-agent-information:{circuit-id:"DCBA"}}');
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
-      'dhcp-rebinding-time:105,relay-agent-information:{circuit-id:"DCBA"}}');
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
+      'rebinding-time:105,relay-agent-information:{circuit-id:"DCBA"}}');
     // validate DECLINE process with no specified IP: should flush last
     d.ClientFlush(d.ClientNew(dmtDecline, macs[0]));
     xid := d.Recv.xid;
     CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DECLINE",dhcp-parameter-request-list:[1,3,6,15,28]}');
+      '{op:"request",chaddr:"' + mac + '",message-type:' +
+      '"DECLINE",parameter-request-list:[1,3,6,15,28]}');
     CheckEqual(server.SaveToText, CRLF, 'declined not saved');
     // validate DISCOVER process after DECLINE
     d.ClientFlush(d.ClientNew(dmtDiscover, macs[0]));
@@ -2247,14 +2247,14 @@ begin
     Check(server.GetScope(d.Send.yiaddr) <> nil);
     CheckNotEqual(d.Send.yiaddr, ips[0]);
     CheckEqual(DhcpParseToJson(@d.Recv, d.RecvLen, true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DISCOVER",dhcp-parameter-request-list:[1,3,6,15,28]}');
+      '{op:"request",chaddr:"' + mac + '",message-type:' +
+      '"DISCOVER",parameter-request-list:[1,3,6,15,28]}');
     ip := IP4ToText(@d.Send.yiaddr);
     CheckEqual(DhcpParseToJson(@d.Send, d.SendLen, true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
-      'dhcp-rebinding-time:105}');
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
+      'rebinding-time:105}');
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
     server.ComputeMetrics(m2);
     CheckEqual(m2[dsmDecline], 1);
@@ -2267,15 +2267,15 @@ begin
       '"dynamic-hits":2,"option-82-hits":1}');
     // validate DECLINE process with a given IP which is not in OFFER state
     f := d.ClientNew(dmtDecline, macs[10]);
-    DhcpAddOption32(f, doDhcpRequestedAddress, ips[10]);
+    DhcpAddOption32(f, doRequestedAddress, ips[10]);
     d.ClientFlush(f);
     CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
     mac := MacToText(@macs[10]);
     ip := IP4ToText(@ips[10]);
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DECLINE",dhcp-parameter-request-list:[1,3,6,15,28],' +
-      'dhcp-requested-address:"' + ip + '"}');
+      '{op:"request",chaddr:"' + mac + '",message-type:' +
+      '"DECLINE",parameter-request-list:[1,3,6,15,28],' +
+      'requested-address:"' + ip + '"}');
     server.ComputeMetrics(m2);
     json := MetricsToJson(m2, [woDontStoreVoid]);
     CheckEqual(json, '{"discover":2,"offer":2,"decline":2,"lease-allocated":2,' +
@@ -2287,21 +2287,21 @@ begin
     CheckEqual(d.Recv.xid, xid);
     CheckEqual(d.Send.xid, xid);
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:' +
-      '"DISCOVER",dhcp-parameter-request-list:[1,3,6,15,28]}');
+      '{op:"request",chaddr:"' + mac + '",message-type:' +
+      '"DISCOVER",parameter-request-list:[1,3,6,15,28]}');
     ip4 := d.Send.yiaddr;
     ip := IP4ToText(@ip4);
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:60,' +
-      'dhcp-rebinding-time:105}');
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
+      'rebinding-time:105}');
     CheckEqual(server.Scope[0].Metrics.Current[dsmDecline], 2);
     CheckEqual(server.Scope[0].Metrics.Current[dsmDiscover], 3);
     CheckEqual(server.Scope[0].Metrics.Current[dsmOffer], 3);
     CheckEqual(server.Scope[0].Metrics.Current[dsmOption82Hits], 1);
     f := d.ClientNew(dmtDecline, macs[10]);
-    DhcpAddOption32(f, doDhcpRequestedAddress, ip4);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
     d.ClientFlush(f);
     CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
     server.ComputeMetrics(m2);
@@ -2312,7 +2312,7 @@ begin
     // validate INFORM with no ciaddr
     d.ClientFlush(d.ClientNew(dmtInform, macs[10], []));
     CheckEqual(d.RecvToJson(true),
-      '{op:"request",chaddr:"' + mac + '",dhcp-message-type:"INFORM"}');
+      '{op:"request",chaddr:"' + mac + '",message-type:"INFORM"}');
     CheckEqual(server.ComputeResponse(d), 0, 'wrong inform has no resp');
     CheckEqual(server.Scope[0].Metrics.Current[dsmInform], 1);
     CheckEqual(server.Scope[0].Metrics.Current[dsmDroppedInvalidIP], 1);
@@ -2325,11 +2325,11 @@ begin
     mac := MacToText(@macs[11]);
     CheckEqual(d.RecvToJson(true),
       '{op:"request",ciaddr:"' + ip + '",chaddr:"' + mac +
-       '",dhcp-message-type:"INFORM",dhcp-parameter-request-list:' +
+       '",message-type:"INFORM",parameter-request-list:' +
        '[1,3,6,15,28]}');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'subnet-mask:"255.252.0.0"}');
     // validate PXE selection with missing response boot file in settings
     f := d.ClientNew(dmtDiscover, macs[8]);
@@ -2349,12 +2349,13 @@ begin
     Check(d.RecvBoot = dcbX86, 'with boot file');
     mac := MacToText(@macs[8]);
     ip := IP4ToText(@d.Send.yiaddr);
+    Check(not server.Scope[0].IsStaticIP(d.Send.yiaddr), 'dynamic');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
       'boot-file-name:"ipxe.efi",vendor-class-identifier:' +
-      '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+      '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105}');
     // validate PXE selection with next-server information in settings
     d.RecvBoot := dcbBios;
     d.Scope^.Boot.NextServer := '192.168.0.254';
@@ -2362,11 +2363,11 @@ begin
     ip := IP4ToText(@d.Send.yiaddr);
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"OFFER",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",' +
       'boot-file-name:"ipxe.efi",vendor-class-identifier:' +
-      '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+      '"PXEClient:Arch:00006",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105}');
     // validate PXE selection with another architecture
     f := d.ClientNew(dmtRequest, macs[8]);
     DhcpAddOptionShort(f, doVendorClassIdentifier, 'PXEClient:Arch:00007');
@@ -2375,11 +2376,11 @@ begin
     Check(d.RecvBoot = dcbX64, 'boot file and nextserver');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",' +
       'boot-file-name:"x86-64-efi/ipxe.efi",vendor-class-identifier:' +
-      '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+      '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105}');
     // validate PXE selection in iPXE mode
     DhcpAddOptionShort(f, doUserClass, 'iPXE');
     d.ClientFlush(f);
@@ -2387,11 +2388,11 @@ begin
     Check(d.RecvBoot = dcbIpxeX64, 'ipxe7');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",boot-file-name:"http://mydomain.lan' +
       '/api/v3/baseipxe?uefi=false&keymap=fr",vendor-class-identifier:' +
-      '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+      '"PXEClient:Arch:00007",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105}');
     // validate PXE selection with option 93 and HTTPClient mode
     option[0] := #2;
     option[1] := #0;
@@ -2404,11 +2405,11 @@ begin
     Check(d.RecvBoot = dcbA64Http, 'HTTPClient');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",boot-file-name:"http://mydomain.lan/' +
       'aarch64/ipxe.efi",vendor-class-identifier:' +
-      '"HTTPClient",subnet-mask:"255.252.0.0",dhcp-lease-time:120,' +
-      'dhcp-renewal-time:60,dhcp-rebinding-time:105}');
+      '"HTTPClient",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105}');
     // add some custom "rules"
     CheckEqual(length(server.Scope[0].Rules), 0, 'no rule yet');
     server.Scope[0].AddRule([
@@ -2424,31 +2425,31 @@ begin
     CheckNotEqual(server.ComputeResponse(d), 0, 'not all');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:' +
-      '60,dhcp-rebinding-time:105}');
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
     // complete "all": into "always" but not "requested"
     DhcpAddOptionShort(f, doUserClass, 'iPXE');
     d.ClientFlush(f);
     CheckNotEqual(server.ComputeResponse(d), 0, 'all');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:' +
-      '60,dhcp-rebinding-time:105}');
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
     // complete "all": into "always" and "requested"
     f := d.ClientNew(dmtRequest, macs[8], DHCP_REQUEST + [doBootFileName]);
     DhcpAddOptionShort(f, doUserClass, 'iPXE');
     DhcpAddOptionShort(f, doClientArchitecture, option);
     d.ClientFlush(f);
-    CheckNotEqual(server.ComputeResponse(d), 0, 'all');
+    CheckNotEqual(server.ComputeResponse(d), 0, 'requested');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
-      '",dhcp-message-type:"ACK",dhcp-server-identifier:"192.168.0.1",' +
+      '",message-type:"ACK",server-identifier:"192.168.0.1",' +
       'tftp-server-name:"192.168.0.254",boot-file-name:"ipxe.5",' +
-      'subnet-mask:"255.252.0.0",dhcp-lease-time:120,dhcp-renewal-time:' +
-      '60,dhcp-rebinding-time:105}');
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
   finally
     server.Free;
     settings.Free;
