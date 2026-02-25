@@ -539,6 +539,9 @@ const
     EVP_PKEY_RSA_PSS,     // caaPS512
     EVP_PKEY_ED25519);    // caaEdDSA
 
+var
+  /// the default parameters used for keys generation
+  // - could be overriden e.g. for RSA if default 2048-bit is not enough
   CAA_BITSORCURVE: array[TCryptAsymAlgo] of integer = (
     NID_X9_62_prime256v1,        // caaES256
     NID_secp384r1,               // caaES384
