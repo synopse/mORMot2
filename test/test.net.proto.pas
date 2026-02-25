@@ -1695,6 +1695,16 @@ begin
     opt2 := pred(opt);
     Check(FromText(txt, opt2));
     Check(opt = opt2);
+    if opt in [low(DHCP_OPTION_ALTERNATE)..high(DHCP_OPTION_ALTERNATE)] then
+    begin
+      opt2 := pred(opt);
+      Check(FromText(DHCP_OPTION_ALTERNATE[opt], opt2));
+      Check(opt = opt2);
+      txt := UpperCase(DHCP_OPTION_ALTERNATE[opt]);
+      opt2 := pred(opt);
+      Check(FromText(txt, opt2));
+      Check(opt = opt2);
+    end;
   end;
   Check(not FromText('none', opt2));
   for dor := low(dor) to high(dor) do
