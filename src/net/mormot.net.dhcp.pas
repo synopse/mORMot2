@@ -2221,14 +2221,14 @@ begin
   result := true;
 end;
 
-function AddJsonWriterDns(W: TJsonWriter; v: PAnsiChar; len: PtrInt; csv: boolean): boolean;
+function AddJsonWriterDns(W: TJsonWriter; v: pointer; len: PtrInt; csv: boolean): boolean;
 var
   tmp: ShortString;
 begin
   result := false;
   tmp[0] := #0;
   repeat
-    if not DnsLabelAppendText(pointer(v), len, tmp) then
+    if not DnsLabelAppendText(PByteArray(v), len, tmp) then
       exit;                                               // invalid input
     if (len = 0) or                                       // last item
        not csv then                                       // single item
