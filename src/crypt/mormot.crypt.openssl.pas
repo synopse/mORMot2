@@ -3684,10 +3684,13 @@ begin
     begin
       // global variable
       CAA_BITSORCURVE[caa] := bits;
-      // existing TCryptAsymOsl instances
+      // existing TCryptAsymOsl/TCryptCertAlgoOpenSsl instances
       if (CryptAsymOpenSsl[caa] <> nil) and
          CryptAsymOpenSsl[caa].InheritsFrom(TCryptAsymOsl) then
-        TCryptAsymOsl(CryptAsymOpenSsl[caa]).fBitsOrCurve := bits; // protected
+        TCryptAsymOsl(CryptAsymOpenSsl[caa]).fBitsOrCurve := bits;
+      if (CryptCertOpenSsl[caa] <> nil) and
+         CryptCertOpenSsl[caa].InheritsFrom(TCryptCertAlgoOpenSsl) then
+        TCryptCertAlgoOpenSsl(CryptCertOpenSsl[caa]).fBitsOrCurve := bits;
     end;
 end;
 
@@ -3741,11 +3744,12 @@ begin
       CryptAsymOpenSsl[caa] := TCryptAsymOsl.Create(caa);
       CryptCertOpenSsl[caa] := TCryptCertAlgoOpenSsl.Create(caa);
       CryptCert[caa] := CryptCertOpenSsl[caa]; // favor OpenSSL for X.509 work
-      if caa = caaES256 then
+      if caa <> caaES256 then
+      begin
         // mormot.crypt.ecc has less overhead (at least with OpenSSL 3.0)
-        continue;
-      CryptPublicKey[CAA_CKA[caa]]  := TCryptPublicKeyOpenSsl;
-      CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
+        CryptPublicKey[CAA_CKA[caa]]  := TCryptPublicKeyOpenSsl;
+        CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
+      end;
     end;
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // OpenSSL is slower than our SSE2 mormot.crypt.other.pas RawSCrypt() :)
