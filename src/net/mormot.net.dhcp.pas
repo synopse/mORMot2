@@ -749,7 +749,7 @@ type
     // - supplied as a concatenation of strings, to create a JSON object
     // - will create a transient TDhcpRuleSettings instance and inject it
     // to Rules[] in a thread-safe way, or raise EDhcp on error
-    procedure AddRule(const json: array of RawUtf8); overload;
+    procedure AddRule(const json: array of RawByteString); overload;
     /// add one entry in Rules[] array within Safe.Lock/UnLock
     procedure AddRule(one: TDhcpScopeRule); overload;
     /// remove one static IP address which was registered by AddStatic()
@@ -3047,7 +3047,7 @@ begin
             AddStatic(nfo);
 end;
 
-procedure TDhcpScope.AddRule(const json: array of RawUtf8);
+procedure TDhcpScope.AddRule(const json: array of RawByteString);
 var
   s: TDhcpRuleSettings;
   rule: TDhcpScopeRule;
@@ -3384,7 +3384,7 @@ optval: value := pointer(one^.value);
         option := @Recv.options;               // inlined DhcpFindOption()
         repeat
           if option[0] = AnsiChar(one^.num) then
-            break;                             // found this num
+            break;                             // found this TLV num
           option := @option[ord(option[1]) + 2];
           if option[0] = #255 then             // reached end of list
             exit;                              // no such option
@@ -3685,7 +3685,6 @@ var
   i: PtrInt;
   nfo: TMacIP;
 begin
-  result := true; // parsing OK and need to add a rule (e.g. not static mac+ip)
   // parse main "rules" JSON object fields
   Rule.name := fName;
   DoParseRule(fAll, Rule.all, prMatch, 'all');
