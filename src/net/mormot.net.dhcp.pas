@@ -3713,7 +3713,8 @@ begin
   Rule.ip := 0;
   if fIP <> '' then
   begin
-    if not NetIsIP4(pointer(fIp), @Rule.ip) then
+    if not NetIsIP4(pointer(fIp), @Rule.ip) or
+       not Data.Subnet.Match(Rule.Ip) then
       EDhcp.RaiseUtf8('PrepareRule: invalid ip:%', [fIp]);
     if (Rule.all = nil) and
        (Rule.any = nil) then
@@ -3721,19 +3722,22 @@ begin
     nfo.ip := Rule.ip;
     FillZero(nfo.mac);
     if (Rule.any = nil) and
-       (alw = nil) and
-       (req = nil) and
        (length(Rule.all) = 1) then
       case Rule.all[0].kind of
         pvkMac:
           begin
             // plain {"all":{"mac":...}},"ip":...} entry = regular 'mac=ip'
             nfo.mac := Rule.all[0].mac;     // to register in StaticMac[]
-            if not Data.AddStatic(nfo) then // add in main statics mac/ip list
-              EDhcp.RaiseUtf8('PrepareRule: duplicated ip=% mac=%',
-                [fIp, MacToShort(@nfo.mac)]);
-            result := false; // no rule
-            exit;
+            if (alw = nil) and
+               (req = nil) then
+            begin
+              // the main statics mac/ip list is enough for this definition
+              if not Data.AddStatic(nfo) then
+                EDhcp.RaiseUtf8('PrepareRule: duplicated ip=% mac=%',
+                  [fIp, MacToShort(@nfo.mac)]);
+              result := false; // no rule needed
+              exit;
+            end;
           end;
         pvkMacs:
           EDhcp.RaiseUtf8('PrepareRule: ip=% requires a single mac', [fIp]);
