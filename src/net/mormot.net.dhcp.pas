@@ -1991,6 +1991,12 @@ uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
                 exit;
               end;
             end;
+          ptCidr121:
+            begin
+              result := CidrRoutes(p.Value, v);
+              if result then
+                exit;
+            end;
           ptMac: // fake call with op=255 to parse "mac": content
             begin
               result := ToMacBinary(p.Value, v) >= 0; // allow CSV of MACs
