@@ -1751,14 +1751,15 @@ begin
     opt := doPad;
     if ord(p[0]) <= high(DHCP_OPTION_INV) then
       opt := DHCP_OPTION_INV[ord(p[0])];
+    inc(p);
     if opt <> doPad then
     begin
       if found <> nil then
         include(found^, opt);
-      lens[opt] := (p + 1) - PAnsiChar(@dhcp^.options);
+      lens[opt] := p - PAnsiChar(@dhcp^.options); // p[0]=len p[1]=value
     end;
     // just ignore unsupported options
-    p := @p[ord(p[1]) + 2];
+    p := @p[ord(p^) + 1];
   until p^ = #255;
   // validate message consistency
   dmt := lens[doMessageType];
