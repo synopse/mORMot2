@@ -455,7 +455,10 @@ function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
 function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
 
 /// convert a DNS wire format aka binary "canonical form" into plain ASCII text
-procedure DnsLabelToText(v: PByteArray; len: PtrInt; var dest: shortstring);
+function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
+
+/// convert plain ASCII text as DNS wire format aka binary "canonical form"
+function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): boolean;
 
 /// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
@@ -2134,29 +2137,79 @@ begin
   result := true;
 end;
 
+// uncompressed DNS label format: [len + part] + ending len=0
 
-procedure DnsLabelToText(v: PByteArray; len: PtrInt; var dest: shortstring);
+function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
 var
   vlen: PtrInt;
 begin
-  // decode DNS label format: [len + part] + ending len=0
-  dest[0] := #0;
-  while len > 1 do // end with a final #0 length
-  begin
-    if v[0] > len then
-      break; // avoid buffer overflow
-    vlen := v[0] + 1;
-    dec(len, vlen);
-    if len <= 1 then
-      AppendShortCharSafe('.', dest); // last item is domain extension ('com')
-    AppendShortBuffer(PAnsiChar(v) + 1, v[0], high(dest), @dest);
-    inc(PByte(v), vlen);
-  end;
+  result := false;
+  if len = 0 then
+    exit;
+  if v[0] <> 0 then
+    repeat
+      if v[0] > len then
+        exit;                          // avoid buffer overflow
+      vlen := v[0] + 1;
+      dec(len, vlen);
+      AppendShortBuffer(PAnsiChar(v) + 1, v[0], high(txt), @txt);
+      inc(PByte(v), vlen);
+      if v[0] = 0 then
+        break;
+      AppendShortCharSafe('.', txt);  // '.' between parts
+      if ord(txt[0]) = high(txt) then
+        exit;                          // output overflow
+    until false;
+  // reached final #0 marker = uncompressed buffer
+  inc(PByte(v));
+  dec(len);
+  result := true;
+end;
+
+function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): boolean;
+var
+  len: PtrInt;
+begin
+  result := false;
+  if p = nil then
+    exit;
+  repeat
+    len := 0;
+    while not (p[len] in [#0, '.']) do
+      inc(len);
+    if (len = 0) or
+       (len > high(bin)) then
+      exit;
+    AppendShortCharSafe(AnsiChar(len), bin);
+    AppendShortBuffer(pointer(p), len, high(bin), @bin);
+    if ord(bin[0]) >= high(bin) then
+      exit;
+    inc(p, len);
+    if p^ = #0 then
+      break;
+    inc(p); // skip '.'
+  until false;
+  AppendShortCharSafe(#0, bin); // final #0
+  result := true;
+end;
+
+procedure AddJsonWriterDns(W: TJsonWriter; v: PAnsiChar; len: PtrInt; csv: boolean);
+var
+  tmp: ShortString;
+begin
+  tmp[0] := #0;
+  repeat
+    if not DnsLabelAppendText(pointer(v), len, tmp) then
+      exit;                                               // invalid input
+    if (len = 0) or                                       // last item
+       not csv then                                       // single item
+      break;
+    AppendShortCharSafe('.', tmp);
+  until false;
+  W.AddJsonEscape(@tmp[1], ord(tmp[0]));                  // send at once
 end;
 
 procedure AddJsonWriterRfc4702(W: TJsonWriter; v: PAnsiChar; len: PtrInt);
-var
-  tmp: ShortString;
 begin
   // https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#ddns-for-dhcpv4
   // we support S+E flags; O=0 from a client; N is ignored (no DDNS anyway here)
@@ -2166,15 +2219,10 @@ begin
   dec(len, 3);
   if ord(v[0]) and RFC4702_FLAG_E = 0 then
     // E=0: plain ASCII
-    inc(v, 3)
+    W.AddJsonEscape(v + 3, len)
   else
-  begin
     // E=1: wire format aka "canonical form"
-    DnsLabelToText(@v[3], len, tmp);
-    v := @tmp[1];
-    len := ord(tmp[0]);
-  end;
-  W.AddJsonEscape(v, len);
+    AddJsonWriterDns(W, v + 3, len, {csv=}false);
   W.AddDirect('"', '}');
 end;
 
