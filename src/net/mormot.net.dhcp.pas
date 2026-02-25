@@ -16,7 +16,7 @@ unit mormot.net.dhcp;
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
    Background lease persistence using dnsmasq-compatible text files.
    Static IP reservation using MAC address or any other set of options (e.g. 61).
-   Try to adapt to Windows environments (e.g. proper fqdn Option 81 echoing).
+   Try to adapt to Windows environments (e.g. options 81/249 support).
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
@@ -1865,7 +1865,7 @@ const
     ptTextBin, ptTextBin, ptTextBin, ptUInt32, ptTextBin, ptTextBin,
     ptTextBin, ptIp4, ptTextBin, ptTextBin, ptTextBin, ptUInt8, ptUInt16, // 117
     ptIp4, ptTextBin, ptTextBin, ptCidr121, ptTextBin, ptTextBin,
-    ptVendor12x, ptVendor12x);
+    ptVendor12x, ptVendor12x);                                            // 125
   FAKE_OP_MAC = 255; // to parse "mac": content
 
 function ParseType(op: byte): TParseType;
@@ -1873,6 +1873,8 @@ function ParseType(op: byte): TParseType;
 begin
   if op <= high(PARSE_TYPE) then
     result := PARSE_TYPE[op]
+  else if op = 249 then
+    result := ptCidr121 // Windows specific alias introduced for compatibility
   else if op = FAKE_OP_MAC then
     result := ptMac
   else
@@ -1924,7 +1926,7 @@ begin
           if not result then
             exit;
           if op = 97 then
-            goto uuid97; // special encoding as 17-bytes with initial #0
+            goto uuid97; // special encoding as 17-bytes with type=#0 prefix
           FastSetRawByteString(v, @tmp.guid, SizeOf(TGuid));
         end;
       6:    // uint8:
@@ -1971,10 +1973,10 @@ begin
             end;
           ptFqdn81:
             begin
-              // set a RFC 4702 "fqdn" response value with flags=0 (E=0=ASCII)
+              // set a RFC 4702 {client:"fqdn"} response value with flags=0
               d := FastNewRawByteString(v, p.ValueLen + 3);
               PCardinal(d)^ := 0; // flags=rcode1=rcode2=0
-              MoveFast(p.Value^, d[3], p.ValueLen);
+              MoveFast(p.Value^, d[3], p.ValueLen); // E=0=ASCII
               result := true;
               exit;
             end;
@@ -1984,7 +1986,7 @@ begin
               if result then
               begin
 uuid97:         d := FastNewRawByteString(v, 17); // specific to RFC 4578 (PXE)
-                d^ := #0;
+                d^ := #0;                         // type=#0 prefix
                 PGuid(d + 1)^ := tmp.guid;
                 exit;
               end;
