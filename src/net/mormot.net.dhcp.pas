@@ -50,6 +50,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.data,
   mormot.core.log,
   mormot.net.sock,
   mormot.net.http,
@@ -760,7 +761,7 @@ type
     /// add one entry in Rules[] array within Safe.Lock/UnLock
     // - return the index of the newly created entry in Rules[]
     function AddRule(one: TDhcpScopeRule): PtrInt; overload;
-    /// remove a given entry in Rules[] by index - for testing: not thread-safe
+    /// remove a given entry in Rules[] by index - for testing (not thread-safe)
     function DeleteRule(index: PtrInt): boolean;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
@@ -3188,21 +3189,10 @@ begin
 end;
 
 function TDhcpScope.DeleteRule(index: PtrInt): boolean;
-var
-  n: PtrUInt;
 begin
   Safe.Lock;
   try
-    n := length(Rules);
-    result := PtrUInt(index) < n;
-    if not result then
-      exit;
-    Finalize(Rules[index]);
-    dec(n);
-    if n = 0 then
-      Rules := nil
-    else
-      DynArrayFakeDelete(Rules, index, n, SizeOf(Rules[0]));
+    result := DynArrayDelete(TypeInfo(TDhcpScopeRules), Rules, index);
   finally
     Safe.UnLock;
   end;
