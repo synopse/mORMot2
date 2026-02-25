@@ -16,6 +16,7 @@ unit mormot.net.dhcp;
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
    Background lease persistence using dnsmasq-compatible text files.
    Static IP reservation using MAC address or any other set of options (e.g. 61).
+   Try to adapt to Windows environments (e.g. proper fqdn Option 81 echoing).
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
@@ -938,6 +939,7 @@ type
     // methods for internal use
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
       {$ifdef HASINLINE} inline; {$endif}
+    procedure AddOption81;
     procedure ParseRecvLensRai;
     function FakeLease(found: TNetIP4): PDhcpLease;
       {$ifdef HASINLINE} inline; {$endif}
@@ -3543,6 +3545,27 @@ end;
   {$POP}
 {$endif FPC_CODEALIGN}
 
+procedure TDhcpState.AddOption81;
+var
+  p: PAnsiChar;
+  len: PtrInt;
+  bak: AnsiChar; // keep Recv[] untouched
+begin
+  p := @Recv.options[RecvLens[doFqdn]]; // caller ensure <> 0
+  if (p[0] < #3) or
+     (PWord(p + 2)^ <> 0) then // rcode1=rcode2=0
+    exit;
+  include(SendOptions, doFqdn);
+  len := ord(p[0]);
+  inc(p);
+  // Windows client send typically 0x05 (E=1 for wire format + S=1 to ask
+  // server for updates) -> reset all flags but E since we have no DDNS yet
+  bak := p[0];
+  p[0] := AnsiChar(byte(bak) and RFC4702_FLAG_E);
+  AddOptionSafe(81, p, len);  // preserve E flag and return raw fqdn encoding
+  p[0] := bak;
+end;
+
 procedure TDhcpState.AddRegularOptions;
 begin
   // append 1,3,6,15,28,42 network options - if not already from "rules"
@@ -3559,6 +3582,10 @@ begin
     AddOptionOnce32(doRenewalTime,   Scope^.RenewalTime);
     AddOptionOnce32(doRebindingTime, Scope^.Rebinding);
   end;
+  // append back option 81 with no associated DDNS flags
+  if (RecvLens[doFqdn] <> 0) and
+     not (doFqdn in SendOptions) then
+    AddOption81;
 end;
 
 function TDhcpState.Flush: PtrUInt;
