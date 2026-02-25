@@ -1654,11 +1654,14 @@ var
     bin, txt: ShortString;
     v: PByteArray;
     l: PtrInt;
+    p: PUtf8Char;
   begin
     dns[ord(dns[0]) + 1] := #0; // make local copy ASCIIZ
     bin[0] := #0;
-    if CheckFailed(DnsLabelAppendBin(@dns[1], bin)) then
+    p := DnsLabelAppendBin(@dns[1], bin);
+    if CheckFailed(p <> nil) then
       exit;
+    Check(p^ = #0);
     Check(bin[0] > dns[0], 'bin>dns');
     txt[0] := #0;
     v := @bin[1];
@@ -2583,6 +2586,20 @@ begin
       'fqdn:{server:"mydomain.com"},' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
+    // validate domain-search option 119 with multiple DNS domains
+    Check(server.Scope[0].DeleteRule(ndx), 'del2');
+    CheckEqual(ndx, server.Scope[0].AddRule([
+      '{mac:"', mac, '",' +
+       'always:{domain-search:"mydomain.com,another.domain.net"}}']));
+    CheckNotEqual(server.ComputeResponse(d), 0, 'domainsearch');
+    CheckEqual(d.RecvToJson(true), json);
+    ip := IP4ToText(@d.Send.yiaddr); // OFFER twice returns the next IP
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'domain-search:"mydomain.com,another.domain.net",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105,fqdn:{client:"DESKTOP-ABC123.corp.example.com"}}');
   finally
     server.Free;
     settings.Free;
