@@ -541,7 +541,7 @@ const
 
 var
   /// the default parameters used for keys generation
-  // - could be overriden e.g. for RSA if default 2048-bit is not enough
+  // - use OpenSslDefaultRsaBits() to change RSA keysize globally for OpenSSL
   CAA_BITSORCURVE: array[TCryptAsymAlgo] of integer = (
     NID_X9_62_prime256v1,        // caaES256
     NID_secp384r1,               // caaES384
@@ -738,6 +738,10 @@ function ToText(u: TX509Usages): ShortString; overload;
 // - assigned to mormot.core.secure X509Parse() redirection by RegisterOpenSsl
 function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
+/// globally override default RSA_DEFAULT_GENERATION_BITS = 2048 for OpenSSL
+// - works at runtime after RegisterOpenSsl - expects bits = 2048/3072/4096/7680
+// - updates global CAA_BITSORCURVE[] and existing CryptAsymOpenSsl[] classes
+procedure OpenSslDefaultRsaBits(bits: integer);
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - to be typically called after function OpenSslInitialize() by your project
@@ -3668,6 +3672,24 @@ begin
     end;
 end;
 
+procedure OpenSslDefaultRsaBits(bits: integer);
+var
+  caa: TCryptAsymAlgo;
+begin
+  if (bits = 2048) or
+     (bits = 3072) or
+     (bits = 4096) or
+     (bits = 7680) then // reject weak/unrealistic RSA key size
+    for caa := caaRS256 to caaPS512 do
+    begin
+      // global variable
+      CAA_BITSORCURVE[caa] := bits;
+      // existing TCryptAsymOsl instances
+      if (CryptAsymOpenSsl[caa] <> nil) and
+         CryptAsymOpenSsl[caa].InheritsFrom(TCryptAsymOsl) then
+        TCryptAsymOsl(CryptAsymOpenSsl[caa]).fBitsOrCurve := bits; // protected
+    end;
+end;
 
 procedure RegisterOpenSsl;
 var
