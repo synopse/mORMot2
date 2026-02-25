@@ -678,6 +678,10 @@ const
     nil,      // ckaEcc256k
     nil);     // ckaEdDSA
 
+var
+  /// the RSA key size used by TCryptPrivateKeyRsa.Generate()
+  RSA_INTERNAL_DEFAULT_GENERATION_BITS: integer = RSA_DEFAULT_GENERATION_BITS;
+
 type
   /// store a RSA public key in ICryptPublicKey format
   // - using our pure pascal TRsa/TRsaPss engines of this unit
@@ -1994,7 +1998,7 @@ begin
 end;
 
 const
-  // fair enough overallocation
+  // fair enough over-allocation
   RSA_DEFAULT_ALLOCATE = RSA_DEFAULT_GENERATION_BITS shr HALF_SHR;
 
 function TRsaContext.Allocate(n: integer; opt: TRsaAllocate): PBigint;
@@ -3492,7 +3496,7 @@ begin
     if fRsa = nil then
     begin
       fKeyAlgo := CAA_CKA[Algorithm];
-      fRsa := CKA_TO_RSA[fKeyAlgo].GenerateNew(RSA_DEFAULT_GENERATION_BITS);
+      fRsa := CKA_TO_RSA[fKeyAlgo].GenerateNew(RSA_INTERNAL_DEFAULT_GENERATION_BITS);
       if fRsa = nil then
         exit;
       result := fRsa.SavePublicKey.ToSubjectPublicKey;
