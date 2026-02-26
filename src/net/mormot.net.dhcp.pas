@@ -707,6 +707,8 @@ type
 
   /// access to one scope/subnet definition
   PDhcpScope = ^TDhcpScope;
+  /// access to one IP range pool definition
+  PDhcpPool = ^TDhcpPool;
 
   /// define one IP range pool within a TDhcpScope scope/subnet
   // - access is protected by owner TDhcpScope.Safe.Lock/Unlock
@@ -788,12 +790,13 @@ type
     procedure AfterFill(log: TSynLog);
   private
     // little-endian IP range values for NextIP
-    LastIpLE, IpMinLE, IpMaxLE: cardinal;
+    LastIpLE, IpMinLE, IpMaxLE, IpMaxLEPlusOne: cardinal;
     // some internal values for fast lookup and efficient Entry[] process
     LastDiscover, FreeListCount: integer;
     FreeList: TIntegerDynArray;
+    // on TDhcpScope.Main, redirect to pointer(TDhcpScope.Pools)
+    SubPools: PDhcpPool;
   end;
-  PDhcpPool = ^TDhcpPool;
   /// store all IP range pools of a given TDhcpScope scope/subnet
   TDhcpPools = array of TDhcpPool;
 
@@ -3107,11 +3110,33 @@ begin // use branchless asm on x86_64
   result := FastFindIntegerSorted(TIntegerDynArray(StaticIP), ip4) >= 0;
 end;
 
+function SkipSubPools(p: PDhcpPool; ip: TNetIP4): TNetIP4;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  hi: TDALen;
+  max: TNetIP4;
+begin
+  result := ip;
+  hi := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
+  repeat
+    if result < p^.IpMinLE then // increasing little-endian order in SubPools[]
+      exit;                     // not in any sub for sure
+    max := p^.IpMaxLEPlusOne;
+    if result < max then        // FPC compiles this as branchless cmovnbe
+      result := max;            // continue searching after this pool
+    if hi = 0 then
+      exit;
+    inc(p);
+    dec(hi);
+  until false;
+end;
+
 function TDhcpPool.NextIp4: TNetIP4;
 var
   le: TNetIP4;
   looped: boolean;
   existing, outdated: PDhcpLease;
+  p: PDhcpPool;
 begin
   result := LastIpLE; // all those f*LE variables are in little-endian order
   if (result < IpMinLE) or
@@ -3121,6 +3146,10 @@ begin
   looped := false;
   repeat
     inc(result);
+    p := SubPools;
+    if p <> nil then
+      // Main: ensure result is not in any SubPools[].IpMin/IpMax
+      result := SkipSubPools(p, result);
     if result > IpMaxLE then
       // we reached the end of IP range
       if looped then
@@ -3386,6 +3415,7 @@ begin
   // store internal values in the more efficient endianess for direct usage
   IpMinLE := bswap32(IpMin);
   IpMaxLE := bswap32(IpMax);
+  IpMaxLEPlusOne := IpMaxLE + 1; // for branchless SkipSubPools()
   LastIpLE := 0;
   // log the IP range settings and the computed sub-network context
   if Assigned(log) then
@@ -3506,6 +3536,7 @@ begin
   for i := 0 to length(Pools) - 1 do
     Pools[i].AfterFill(log);
   Main.AfterFill(log);
+  Main.SubPools := pointer(Pools); // for NextIp4
   // log the scope settings and the computed sub-network context
   if Assigned(log) then
   begin
