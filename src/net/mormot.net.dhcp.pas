@@ -3417,6 +3417,11 @@ begin
     Scope^.CheckSubnet('static', StaticIP[i]);
   for i := 0 to high(StaticMac) do
     Scope^.CheckSubnet('static', StaticMac[i].IP4);
+  // store internal values in the more efficient endianess for direct usage
+  IpMinLE := bswap32(IpMin);
+  IpMaxLE := bswap32(IpMax);
+  IpMaxLEPlusOne := IpMaxLE + 1; // for branchless SkipSubPools()
+  LastIpLE := 0;
   // prepare the leases in-memory database
   if Entry = nil then
     SetLength(Entry, PREALLOCATE_LEASES)
@@ -3428,6 +3433,7 @@ begin
     for i := 0 to Count - 1 do
     begin
       if Scope^.Subnet.Match(p^.IP4) and
+         Match(p^.IP4) and
          not IsStaticIP(p^.IP4) then
       begin
         if n <> i then
@@ -3445,11 +3451,6 @@ begin
     end;
     FreeListCount := 0;
   end;
-  // store internal values in the more efficient endianess for direct usage
-  IpMinLE := bswap32(IpMin);
-  IpMaxLE := bswap32(IpMax);
-  IpMaxLEPlusOne := IpMaxLE + 1; // for branchless SkipSubPools()
-  LastIpLE := 0;
   // log the IP range settings and the computed sub-network context
   if Assigned(log) then
     log.Log(sllInfo, 'PrepareScope: pool range min=% max=% static=%',
