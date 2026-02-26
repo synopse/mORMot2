@@ -841,6 +841,7 @@ type
     /// the "rules" defining an IP range reservation
     PoolRules: TDhcpRules;
     /// the custom IP range pools corresponding to PoolRules[]
+    // - Pools[].IpMinLE/IpMaxLE won't overlap and stored in increasing order
     Pools: TDhcpPools;
     /// the main/fallback IP range pool if not in Pools[] / PoolRules[]
     Main: TDhcpPool;
@@ -850,6 +851,7 @@ type
     /// retrieve the IP range pool corresponding to a given IPv4
     // - the supplied ip should be in this subnet mask, and within Safe.Lock
     function FindPool(ip: TNetIP4): PDhcpPool;
+      {$ifdef FPC} inline; {$endif}
     /// quickly check if an IP is already registered as static or lease
     function Exists(ip: TNetIP4): boolean;
       {$ifdef FPC} inline; {$endif}
@@ -3069,8 +3071,9 @@ end;
 
 function TDhcpPool.Match(ip4: TNetIP4): boolean;
 begin
-  result := (ip4 >= IpMin) and
-            (ip4 <= IpMax);
+  ip4 := bswap32(ip4);
+  result := (ip4 >= IpMinLE) and
+            (ip4 <= IpMaxLE);
 end;
 
 function TDhcpPool.FindMac(mac64: Int64): PDhcpLease;
@@ -3393,21 +3396,31 @@ end;
 
 { TDhcpScope }
 
-function TDhcpScope.FindPool(ip: TNetIP4): PDhcpPool;
+function DoFindPool(iple: cardinal; sub: PDhcpPool): PDhcpPool;
 var
   n: integer;
+begin // increasing little-endian order in Pools[]
+  result := sub;
+  n := PDALen(PAnsiChar(sub) - _DALEN)^ + _DAOFF;
+  repeat // brute force O(n) search seems fast enough
+    if iple < result^.IpMinLE then
+      break; // not in any sub for sure
+    if iple <= result^.IpMaxLE then
+      exit;  // found in this inclusive min..max range
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := nil;
+end;
+
+function TDhcpScope.FindPool(ip: TNetIP4): PDhcpPool;
 begin
   result := pointer(Pools);
   if result <> nil then
   begin
-    n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
-    repeat // brute force O(n) search seems fast enough
-      if (ip >= result^.IpMin) and
-         (ip <= result^.IpMax) then
-        exit; // found in this inclusive min..max range
-      inc(result);
-      dec(n);
-    until n = 0;
+    result := DoFindPool(bswap32(ip), result);
+    if result <> nil then
+      exit;
   end;
   result := @Main; // fallback
 end;
@@ -5254,7 +5267,7 @@ begin
       begin
         IP4Short(@Lease^.IP4, State.Ip);
         DoLog(sllTrace, 'as', State);
-        State.Pool^.ReuseIp4(Lease); // set MAC=0 IP=0 State=lsFree
+        State.Pool^.ReuseLease(Lease); // set MAC=0 IP=0 State=lsFree
         inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
       end;
     dsmUnsupportedRequest:
