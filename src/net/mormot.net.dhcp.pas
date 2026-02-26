@@ -749,7 +749,7 @@ type
     /// efficient L1-cache friendly O(n) search of a MAC address in Entry[]
     // - will also search in StaticMac[] entries
     function FindMac(mac64: Int64): PDhcpLease;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// efficient L1-cache friendly O(n) search of an IPv4 address in Entry[]
     // - won't search in StaticIP[] and StaticMac[]
     function FindIp4(ip4: TNetIP4): PDhcpLease;
