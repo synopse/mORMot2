@@ -780,7 +780,7 @@ type
     // - return the index of the newly created entry in Rules[]/Policies[]
     function AddRule(rule: TDhcpRule; policy: TDhcpPolicy): PtrInt; overload;
     /// remove a given entry in Rules[]/Policies[] by index - mostly for testing
-    function DeleteRule(index: PtrInt): boolean;
+    function DeleteRule(ndx: PtrInt): boolean;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
     /// efficient L1-cache friendly O(n) search of a MAC address in Entry[]
@@ -3302,12 +3302,12 @@ begin
   end;
 end;
 
-function TDhcpScope.DeleteRule(index: PtrInt): boolean;
+function TDhcpScope.DeleteRule(ndx: PtrInt): boolean;
 begin
   Safe.Lock;
   try
-    result := DynArrayDelete(TypeInfo(TDhcpRules), Rules, index) and
-              DynArrayDelete(TypeInfo(TDhcpPolicies), Policies, index);
+    result := DynArrayDelete(TypeInfo(TDhcpRules), Rules, ndx) and
+              DynArrayDelete(TypeInfo(TDhcpPolicies), Policies, ndx);
   finally
     Safe.UnLock;
   end;
