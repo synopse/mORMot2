@@ -226,7 +226,8 @@ var
   // 'parameter-request-list', 'renewal-time', 'rebinding-time',
   // 'vendor-class-identifier', 'client-identifier', 'tftp-server-name',
   // 'boot-file-name', 'user-class', 'fqdn', 'relay-agent-information',
-  // 'client-architecture', 'uuid-client-identifier' and 'subnet-selection'
+  // 'client-architecture', 'uuid-client-identifier', 'subnet-selection'
+  // and 'domain-search'
   // - those were designed for simple/obvious semantic and shorter JSON
   // - alternate KEA-like identifiers will also be recognized in "rules" as
   // defined in the DHCP_OPTION_ALTERNATE[] constant
@@ -5156,8 +5157,7 @@ begin
   State.AddOptionCopy(doUuidClientIdentifier);
 end;
 
-function TDhcpProcess.GetRule(var State: TDhcpState;
-  Rule: PDhcpRule): PDhcpRule;
+function TDhcpProcess.GetRule(var State: TDhcpState; Rule: PDhcpRule): PDhcpRule;
 var
   n, hi: TDALen; // use hi=high(TRuleValues) to favor FPC
   r: PRuleValue;

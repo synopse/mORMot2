@@ -2267,7 +2267,8 @@ begin
     ips[0] := d.Send.yiaddr;
     mac := MacToText(@macs[0]);
     ip := IP4ToText(@ips[0]);
-    CheckEqual(d.RecvToJson(true),
+    json := d.RecvToJson(true);
+    CheckEqual(json,
       '{op:"request",chaddr:"' + mac + '",message-type:' +
       '"DISCOVER",parameter-request-list:[1,3,6,15,28],' +
       'relay-agent-information:{circuit-id:"DCBA"}}');
@@ -2276,6 +2277,21 @@ begin
       '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
       'rebinding-time:105,relay-agent-information:{circuit-id:"DCBA"}}');
+    // validate Relay Agent rules
+    ndx := server.Scope[0].AddRule([
+      '{any:{"circuit-id":"1234","circuit-id":"DCBA"},' +
+       'always:{202:"titi"}}']);
+    ips[0] := d.Send.yiaddr;
+    CheckEqual(d.RecvToJson(true), json);
+    Check(server.ComputeResponse(d) > 0, 'rai rule');
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      '202:"titi",subnet-mask:"255.252.0.0",lease-time:120,' +
+      'renewal-time:60,rebinding-time:105,' +
+      'relay-agent-information:{circuit-id:"DCBA"}}');
+    server.Scope[0].DeleteRule(ndx);
     // validate DECLINE process with no specified IP: should flush last
     d.ClientFlush(d.ClientNew(dmtDecline, macs[0]));
     xid := d.Recv.xid;
@@ -2305,13 +2321,13 @@ begin
     CheckEqual(server.SaveToText, CRLF, 'declined no offer');
     server.ComputeMetrics(m2);
     CheckEqual(m2[dsmDecline], 1);
-    CheckEqual(m2[dsmDiscover], 2);
-    CheckEqual(m2[dsmOffer], 2);
-    CheckEqual(m2[dsmOption82Hits], 1);
+    CheckEqual(m2[dsmDiscover], 3);
+    CheckEqual(m2[dsmOffer], 3);
+    CheckEqual(m2[dsmOption82Hits], 2);
     Check(not IsEqual(m1, m2), 'ComputeMetrics Declined');
     json := MetricsToJson(m2, [woDontStoreVoid]);
-    CheckEqual(json, '{"discover":2,"offer":2,"decline":1,"lease-allocated":2,' +
-      '"dynamic-hits":2,"option-82-hits":1}');
+    CheckEqual(json, '{"discover":3,"offer":3,"decline":1,"lease-allocated":2,' +
+      '"dynamic-hits":3,"option-82-hits":2}');
     // validate DECLINE process with a given IP which is not in OFFER state
     f := d.ClientNew(dmtDecline, macs[10]);
     DhcpAddOption32(f, doRequestedAddress, ips[10]);
@@ -2325,8 +2341,8 @@ begin
       'requested-address:"' + ip + '"}');
     server.ComputeMetrics(m2);
     json := MetricsToJson(m2, [woDontStoreVoid]);
-    CheckEqual(json, '{"discover":2,"offer":2,"decline":2,"lease-allocated":2,' +
-      '"dynamic-hits":2,"option-82-hits":1,"dropped-packets":1}');
+    CheckEqual(json, '{"discover":3,"offer":3,"decline":2,"lease-allocated":2,' +
+      '"dynamic-hits":3,"option-82-hits":2,"dropped-packets":1}');
     // validate DISCOVER + DECLINE with the specific IP
     d.ClientFlush(d.ClientNew(dmtDiscover, macs[10]));
     xid := d.Recv.xid;
@@ -2344,17 +2360,17 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
       'rebinding-time:105}');
     CheckEqual(server.Scope[0].Metrics.Current[dsmDecline], 2);
-    CheckEqual(server.Scope[0].Metrics.Current[dsmDiscover], 3);
-    CheckEqual(server.Scope[0].Metrics.Current[dsmOffer], 3);
-    CheckEqual(server.Scope[0].Metrics.Current[dsmOption82Hits], 1);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmDiscover], 4);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmOffer], 4);
+    CheckEqual(server.Scope[0].Metrics.Current[dsmOption82Hits], 2);
     f := d.ClientNew(dmtDecline, macs[10]);
     DhcpAddOption32(f, doRequestedAddress, ip4);
     d.ClientFlush(f);
     CheckEqual(server.ComputeResponse(d), 0, 'decline has no resp');
     server.ComputeMetrics(m2);
     json := MetricsToJson(m2, [woDontStoreVoid]);
-    CheckEqual(json, '{"discover":3,"offer":3,"decline":3,"lease-allocated":4,' +
-      '"dynamic-hits":3,"option-50-hits":1,"option-82-hits":1,' +
+    CheckEqual(json, '{"discover":4,"offer":4,"decline":3,"lease-allocated":4,' +
+      '"dynamic-hits":4,"option-50-hits":1,"option-82-hits":2,' +
       '"dropped-packets":1}');
     // validate INFORM with no ciaddr
     d.ClientFlush(d.ClientNew(dmtInform, macs[10], []));
