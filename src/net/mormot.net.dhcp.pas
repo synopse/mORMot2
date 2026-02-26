@@ -1346,7 +1346,7 @@ type
       Lease: PDhcpLease): boolean; virtual;
     procedure SetRecvBoot(var State: TDhcpState); virtual;
     procedure AddBootOptions(var State: TDhcpState); virtual;
-    procedure SetRule(var State: TDhcpState); virtual;
+    function SetRule(var State: TDhcpState; Rule: PDhcpScopeRule): PDhcpScopeRule; virtual;
     function RunCallbackAborted(var State: TDhcpState): boolean; virtual;
     function Flush(var State: TDhcpState): PtrInt; virtual;
   public
@@ -5130,20 +5130,20 @@ begin
   State.AddOptionCopy(doUuidClientIdentifier);
 end;
 
-procedure TDhcpProcess.SetRule(var State: TDhcpState);
+function TDhcpProcess.SetRule(var State: TDhcpState;
+  Rule: PDhcpScopeRule): PDhcpScopeRule;
 var
-  rule: PDhcpScopeRule;  // runtime bytecode of each "rules"
   rules, hi: TDALen;     // use hi=high(TRuleValues) to favor FPC
   r: PRuleValue;
 label
   ko; // unrolled logic for very efficient runtime execution
 begin
   // implements a "first precise rule wins" deterministic Virtual Machine
-  rule := pointer(State.Scope^.Rules); // caller ensured rule <> nil
-  rules := PDALen(PAnsiChar(rule) - _DALEN)^ + _DAOFF;
+  result := nil;
+  rules := PDALen(PAnsiChar(Rule) - _DALEN)^ + _DAOFF; // Rule <> nil by caller
   repeat
     // AND conditions (all must match) = "all"
-    r := pointer(rule^.all);
+    r := pointer(Rule^.all);
     if r <> nil then
     begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
@@ -5158,7 +5158,7 @@ begin
       // all did match
     end;
     // OR conditions (at least one must match) = "any"
-    r := pointer(rule^.any);
+    r := pointer(Rule^.any);
     if r <> nil then
     begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
@@ -5172,7 +5172,7 @@ begin
       until false;
     end;
     // NOT AND conditions (all must NOT match) = "not-all"
-    r := pointer(rule^.notall);
+    r := pointer(Rule^.notall);
     if r <> nil then
     begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
@@ -5186,7 +5186,7 @@ begin
       until false;
     end;
     // NOT OR conditions (at least one must NOT match) = "not-any"
-    r := pointer(rule^.notany);
+    r := pointer(Rule^.notany);
     if r <> nil then
     begin
       hi := PDALen(PAnsiChar(r) - _DALEN)^ + (_DAOFF - 1);
@@ -5200,15 +5200,15 @@ begin
       until false;
     end;
     // if we reached here, all conditions did apply
-    State.RecvRule := rule;
+    result := Rule;
     // all=any=nil as fallback if nothing more precise did apply
     // "not-all"/"not-any" without any "all"/"any" are just ignored
     // unless they are the eventual default - last default wins
-    if (rule^.all <> nil) or
-       (rule^.any <> nil) then
-      // first exact matching rule wins (deterministic)
+    if (Rule^.all <> nil) or
+       (Rule^.any <> nil) then
+      // first exact matching Rule wins (deterministic)
       exit;
-ko: inc(rule);      // next "rules" object
+ko: inc(Rule);      // next "rules" object
     dec(rules);
   until rules = 0;
 end;
@@ -5258,11 +5258,13 @@ end;
 
 function TDhcpProcess.LockedResponse(var State: TDhcpState): PtrInt;
 var
+  r: PDhcpScopeRule;
   p: PDhcpLease;
 begin
   // identify any matching input from this scope "rules" definition
-  if State.Scope^.Rules <> nil then
-    SetRule(State);
+  r := pointer(State.Scope^.Rules);
+  if r <> nil then
+    State.RecvRule := SetRule(State, r);
   // find any existing lease - or StaticMac[] StaticUuid[] fake lease
   p := FindLease(State);
   // process the received DHCP message
