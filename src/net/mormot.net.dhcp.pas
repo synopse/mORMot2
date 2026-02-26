@@ -16,23 +16,23 @@ unit mormot.net.dhcp;
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
    Background lease persistence using dnsmasq-compatible text files.
    Static IP reservation using MAC address or any other set of options (e.g. 61).
-   Try to adapt to Windows environments (e.g. options 81/119/249 support).
+   Properly adapt to Windows environments (e.g. options 81/119/249 support).
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
+   IP ranges reservation with each subnet/scope from custom JSON rules.
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
    Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
-   Meaningful and customizable logging of the actual process (e.g. into syslog).
-   Optional verbose debug of all input/output frames as meaninful JSON objects.
+   Meaningful and customizable logging of the actual process (as text or syslog).
+   Optional verbose debug of all input/output frames as usable JSON objects.
    Generate detailed JSON and CSV metrics as local files, global and per scope.
-   Easy configuration via JSON or INI files.
+   Easy configuration via JSON files, with hot reloading of rules at runtime.
    Expandable in code via callbacks or virtual methods as plugins.
-   e.g. as full local PXE environment with our mormot.net.tftp.server.pas unit
+   Perfect for local PXE environment with our mormot.net.tftp.server.pas unit.
 
   *****************************************************************************
-  TODO:  - "range" reservation in "rules"
-         - DHCPv6 support (much more complex, and mostly not required)
+    TODO:  - DHCPv6 support (much more complex, and mostly not required)
 }
 
 interface
@@ -844,7 +844,7 @@ type
     DnsServers: TNetIP4s;
     /// the IP of the associated NTP servers, for doNtpServers option 42
     NtpServers: TNetIP4s;
-    /// the "rules" defining an IP range reservation
+    /// the "rules" defining an IP range reservation in Pools[]
     PoolRules: TDhcpRules;
     /// the custom IP range pools corresponding to PoolRules[]
     // - Pools[].IpMinLE/IpMaxLE won't overlap and stored in increasing order
@@ -3408,13 +3408,7 @@ var
   p: PDhcpLease;
 begin
   // validate IpMin/IpMax values from the actual owner scope subnet
-  if IpMin = 0 then
-    IpMin := Scope^.Subnet.ip + $0a000000; // e.g. 192.168.0.10
   Scope^.CheckSubnet('range-min', IpMin);
-  if IpMax = 0 then
-    // e.g. 192.168.0.0 + pred(not(255.255.255.0)) = 192.168.0.254
-    IpMax := bswap32(bswap32(Scope^.Subnet.ip) +
-                     pred(not(bswap32(Scope^.Subnet.mask))));
   Scope^.CheckSubnet('range-max', IpMax);
   if bswap32(IpMax) <= bswap32(IpMin) then
     EDhcp.RaiseUtf8('PrepareScope: unexpected %..% range',
@@ -3554,16 +3548,29 @@ end;
 procedure TDhcpScope.CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
 begin
   if not Subnet.Match(ip) then
-    EDhcp.RaiseUtf8(
-      'PrepareScope: subnet-mask=% does not match %=%',
+    EDhcp.RaiseUtf8('PrepareScope: subnet-mask=% does not match %=%',
       [IP4ToShort(@Subnet.mask), ident, IP4ToShort(@ip)]);
+end;
+
+procedure InvalidRange(ident: PUtf8Char; ip: TNetIP4);
+begin
+  EDhcp.RaiseUtf8('PrepareScope: %:%', [ident, IP4ToShort(@ip)]);
+end;
+
+function SortPoolByIpMin(const A, B): integer;
+begin // ensure p[i].IpMinLE <= p[i + 1].IpMinLE
+  result := CompareCardinal(TDhcpPool(A).IpMinLE, TDhcpPool(B).IpMinLE);
 end;
 
 procedure TDhcpScope.AfterFill(log: TSynLog);
 var
-  i: PtrInt;
+  i, n: PtrInt;
   dcb: TDhcpClientBoot;
   bootlog: RawUtf8;
+  ndx: TIntegerDynArray;
+  dp: PDhcpPool;
+  p: TDhcpPools;
+  r: TDhcpRules;
 begin
   // validate all settings values from the actual subnet
   if Gateway <> 0 then
@@ -3572,10 +3579,48 @@ begin
   if Broadcast <> 0 then
     CheckSubNet('broadcast-address', Broadcast);
   AddStatic(IP4ToText(@ServerIdentifier));
-  for i := 0 to length(Pools) - 1 do
-    Pools[i].AfterFill(log);
-  Main.AfterFill(log);
+  // validate IP range pools settings
+  if Main.IpMin = 0 then
+    Main.IpMin := Subnet.ip + $0a000000; // e.g. 192.168.0.10
+  if Main.IpMax = 0 then
+    // e.g. 192.168.0.0 + pred(not(255.255.255.0)) = 192.168.0.254
+    Main.IpMax := bswap32(bswap32(Subnet.ip) + pred(not(bswap32(Subnet.mask))));
   Main.SubPools := pointer(Pools); // for NextIp4
+  Main.AfterFill(log);
+  n := length(Pools);
+  if n <> 0 then
+  begin
+    // validate IP range pools
+    dp := pointer(Pools);
+    for i := 1 to n do
+    begin
+      dp^.AfterFill(log);
+      if dp^.IpMinLE < Main.IpMinLE then
+        InvalidRange('too small range-min', dp^.IpMin)
+      else if dp^.IpMaxLE > Main.IpMaxLE then
+        InvalidRange('too big range-max', dp^.IpMax)
+      else if dp^.StaticIP <> nil then
+        if bswap32(dp^.StaticIP[0]) < dp^.IpMinLE then
+          InvalidRange('too small static', dp^.StaticIP[0])
+        else if bswap32(dp^.StaticIP[high(dp^.StaticIP)]) > dp^.IpMaxLE then
+          InvalidRange('too big static', dp^.StaticIP[high(dp^.StaticIP)]);
+      inc(dp);
+    end;
+    // ensure Pools[] and PoolRules[] stored in little-endian increasing order
+    DynArray(TypeInfo(TDhcpPools), Pools).CreateOrderedIndex(ndx, SortPoolByIpMin);
+    SetLength(p, n);
+    SetLength(r, n);
+    dec(n);
+    for i := 0 to n do
+      p[i] := Pools[ndx[i]];
+    for i := 0 to n do
+      r[i] := PoolRules[ndx[i]];
+    for i := 0 to n - 1 do
+      if p[i].IpMaxLE <= p[i + 1].IpMinLE then
+        InvalidRange('"pools" overlap in range-max', p[i].IpMax);
+    Pools := p;
+    PoolRules := r;
+  end;
   // log the scope settings and the computed sub-network context
   if Assigned(log) then
   begin
@@ -4413,6 +4458,48 @@ begin
 end;
 
 
+{ TDhcpPoolSettings }
+
+function TDhcpPoolSettings.AddRule(one: TDhcpRuleSettings): TDhcpRuleSettings;
+begin
+  if one = nil then
+    one := TDhcpRuleSettings.Create;
+  if self <> nil then
+    PtrArrayAdd(fRules, one); // will be owned by this instance
+  result := one;
+end;
+
+procedure TDhcpPoolSettings.PreparePool(var Scope: TDhcpScope; var Pool: TDhcpPool);
+var
+  i, n: PtrInt;
+begin
+  // define main fields from settings
+  Pool.Scope        := @Scope;
+  Pool.IpMin        := ToIP4(fRangeMin);
+  Pool.IpMax        := ToIP4(fRangeMax);
+  Pool.StaticIP     := nil;
+  Pool.StaticMac    := nil;
+  for i := 0 to high(fStatic) do
+    if not Pool.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
+      EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
+  // convert "rules" into ready-to-be-processed objects
+  n := length(fRules);
+  Pool.Rules := nil;
+  Pool.Policies := nil;
+  SetLength(Pool.Rules, n);
+  SetLength(Pool.Policies, n);
+  n := 0;
+  for i := 0 to high(fRules) do
+    if fRules[i].PrepareRule(Scope, Pool.Rules[n], Pool.Policies[n]) then
+      inc(n);
+  if n <> length(fRules) then
+  begin
+    SetLength(Pool.Rules, n); // some "rules" were statics in disguise
+    SetLength(Pool.Policies, n);
+  end;
+end;
+
+
 { TDhcpScopeSettings }
 
 constructor TDhcpScopeSettings.Create;
@@ -4425,12 +4512,12 @@ begin
   fGraceFactor := 2;
 end;
 
-function TDhcpScopeSettings.AddRule(one: TDhcpRuleSettings): TDhcpRuleSettings;
+function TDhcpScopeSettings.AddPool(one: TDhcpPoolSettings): TDhcpPoolSettings;
 begin
   if one = nil then
-    one := TDhcpRuleSettings.Create;
+    one := TDhcpPoolSettings.Create;
   if self <> nil then
-    PtrArrayAdd(fRules, one); // will be owned by this instance
+    PtrArrayAdd(fPools, one); // will be owned by this instance
   result := one;
 end;
 
@@ -4447,14 +4534,6 @@ begin
   Scope.DnsServers        := ToIP4s(fDnsServers);
   Scope.NtpServers        := ToIP4s(fNtpServers);
   Scope.DomainName        := fDomainName;
-  Scope.Main.Scope        := @Scope;
-  Scope.Main.IpMin        := ToIP4(fRangeMin);
-  Scope.Main.IpMax        := ToIP4(fRangeMax);
-  Scope.Main.StaticIP     := nil;
-  Scope.Main.StaticMac    := nil;
-  for i := 0 to high(fStatic) do
-    if not Scope.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
-      EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
   Scope.LeaseTimeLE       := fLeaseTimeSeconds; // 100%
   if Scope.LeaseTimeLE < 30 then
     Scope.LeaseTimeLE     := 30;                // 30 seconds minimum lease
@@ -4471,22 +4550,17 @@ begin
     Scope.DeclineTime     := Scope.LeaseTimeLE;
   Scope.GraceFactor       := fGraceFactor;         // * 2
   Scope.Options           := fOptions;
+  // prepare complex "boot" "pools" "main" sub-properties
   fBoot.PrepareBoot(Scope.Boot, Scope.Options);
-  // convert "rules" into ready-to-be-processed objects
-  n := length(fRules);
-  Scope.Main.Rules := nil;
-  Scope.Main.Policies := nil;
-  SetLength(Scope.Main.Rules, n);
-  SetLength(Scope.Main.Policies, n);
-  n := 0;
-  for i := 0 to high(fRules) do
-    if fRules[i].PrepareRule(Scope, Scope.Main.Rules[n], Scope.Main.Policies[n]) then
-      inc(n);
-  if n <> length(fRules) then
+  n := length(fPools);
+  SetLength(Scope.PoolRules, n);
+  SetLength(Scope.Pools, n);
+  for i := 0 to n - 1 do
   begin
-    SetLength(Scope.Main.Rules, n); // some "rules" were statics in disguise
-    SetLength(Scope.Main.Policies, n);
+    fPools[i].PrepareRule(Scope.PoolRules[i]);
+    fPools[i].PreparePool(Scope, Scope.Pools[i]);
   end;
+  fMain.PreparePool(Scope, Scope.Main);
   // retrieve and adjust the subnet mask from settings
   if not Scope.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
