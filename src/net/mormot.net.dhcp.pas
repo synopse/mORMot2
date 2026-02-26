@@ -1218,47 +1218,24 @@ type
   // - store any number of vendor-specific or client-specific DHCP options
   TDhcpRuleSettingsObjArray = array of TDhcpRuleSettings;
 
-  /// main high-level options for defining one scope/subnet for our DHCP Server
-  TDhcpScopeSettings = class(TSynAutoCreateFields)
+  /// define a rule to define a pool of IP sub-range for a given scope/subnet
+  // - i.e. vendor-specific or client-specific DHCP options could define some
+  // IP ranges within the subnet, e.g. for HW devices or Virtual Machines
+  TDhcpPoolSettings = class(TDhcpRuleAbstractSettings)
   protected
-    fSubnetMask: RawUtf8;
     fStatic: TRawUtf8DynArray;
     fRangeMin: RawUtf8;
     fRangeMax: RawUtf8;
-    fDefaultGateway: RawUtf8;
-    fDnsServers: RawUtf8;
-    fNtpServers: RawUtf8;
-    fDomainName: RawUtf8;
-    fBroadCastAddress: RawUtf8;
-    fLeaseTimeSeconds: cardinal;
-    fMaxDeclinePerSecond: cardinal;
-    fDeclineTimeSeconds: cardinal;
-    fServerIdentifier: RawUtf8;
-    fOfferHoldingSecs: cardinal;
-    fGraceFactor: cardinal;
-    fOptions: TDhcpScopeOptions;
-    fBoot: TDhcpBootSettings;
     fRules: TDhcpRuleSettingsObjArray;
   public
-    /// setup this instance with default values
-    // - default are subnet-mask = '192.168.1.1/24', lease-time-seconds = 120
-    // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
-    constructor Create; override;
-    /// append at runtime a new scope/subnet "rules" settings
+    /// append at runtime a new "rules" settings for this IP pool
     // - call without any TDhcpRuleSettings parameter to create a default one
     // - supplied one will be owned by this instance from now on
     function AddRule(one: TDhcpRuleSettings = nil): TDhcpRuleSettings;
-    /// compute the low-level TDhcpScope data structure for current settings
+    /// compute the low-level TDhcpPool data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct
-    procedure PrepareScope(Sender: TDhcpProcess; var Scope: TDhcpScope);
+    procedure PreparePool(var Scope: TDhcpScope; var Pool: TDhcpPool);
   published
-    /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
-    // - the CIDR 'ip/mask' pattern will compute range-min/range-max and
-    // server-identifier directly from this pattern
-    // - accept also plain '255.255.255.0' IP if you want to specify by hand the
-    // raw value sent in DHCP headers, and fill range-min/range-max and others
-    property SubnetMask: RawUtf8
-      read fSubnetMask write fSubnetMask;
     /// some static IP addresses potentially with their MAC or UUID, which
     // will be reserved for those on the network
     // - supplied as "ip", "mac=ip" or "uuid=ip" string items
@@ -1273,6 +1250,54 @@ type
     // - default is '' and will be filled by "subnet-mask" value as 254
     property RangeMax: RawUtf8
       read fRangeMax write fRangeMax;
+    /// vendor-specific or client-specific DHCP options for this scope as
+    // "rules" array of JSON objects
+    // - order in this array defines "first rule wins" deterministic behavior
+    property Rules: TDhcpRuleSettingsObjArray
+      read fRules;
+  end;
+  /// a dynamic array of rules to define pools of IP sub-range
+  TDhcpPoolSettingsObjArray = array of TDhcpPoolSettings;
+
+  /// main high-level options for defining one scope/subnet for our DHCP Server
+  TDhcpScopeSettings = class(TSynAutoCreateFields)
+  protected
+    fSubnetMask: RawUtf8;
+    fDefaultGateway: RawUtf8;
+    fDnsServers: RawUtf8;
+    fNtpServers: RawUtf8;
+    fDomainName: RawUtf8;
+    fBroadCastAddress: RawUtf8;
+    fLeaseTimeSeconds: cardinal;
+    fMaxDeclinePerSecond: cardinal;
+    fDeclineTimeSeconds: cardinal;
+    fServerIdentifier: RawUtf8;
+    fOfferHoldingSecs: cardinal;
+    fGraceFactor: cardinal;
+    fOptions: TDhcpScopeOptions;
+    fBoot: TDhcpBootSettings;
+    fPools: TDhcpPoolSettingsObjArray;
+    fMain: TDhcpPoolSettings;
+  public
+    /// setup this instance with default values
+    // - default are subnet-mask = '192.168.1.1/24', lease-time-seconds = 120
+    // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
+    constructor Create; override;
+    /// append at runtime a new "pools" settings for this scope/subnet
+    // - call without any TDhcpPoolSettings parameter to create a default one
+    // - supplied one will be owned by this instance from now on
+    function AddPool(one: TDhcpPoolSettings = nil): TDhcpPoolSettings;
+    /// compute the low-level TDhcpScope data structure for current settings
+    // - raise an EDhcp exception if the parameters are not correct
+    procedure PrepareScope(Sender: TDhcpProcess; var Scope: TDhcpScope);
+  published
+    /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
+    // - the CIDR 'ip/mask' pattern will compute range-min/range-max and
+    // server-identifier directly from this pattern
+    // - accept also plain '255.255.255.0' IP if you want to specify by hand the
+    // raw value sent in DHCP headers, and fill range-min/range-max and others
+    property SubnetMask: RawUtf8
+      read fSubnetMask write fSubnetMask;
     /// Default Gateway (option 3) e.g. "default-gateway":"192.168.1.1"
     property DefaultGateway: RawUtf8
       read fDefaultGateway write fDefaultGateway;
@@ -1330,11 +1355,14 @@ type
     /// optional PXE network book settings as "boot" sub-object
     property Boot: TDhcpBootSettings
       read fBoot;
-    /// vendor-specific or client-specific DHCP options for this scope as
-    // "rules" array of JSON objects
-    // - order in this array defines "first rule wins" deterministic behavior
-    property Rules: TDhcpRuleSettingsObjArray
-      read fRules;
+    /// custom IP range pools in this scope
+    // - "range-min"/"range-max" shouldn't overlap between "pools" and "main"
+    property Pools: TDhcpPoolSettingsObjArray
+      read fPools;
+    /// fallback IP range pool when an IP isn't in any "pools" for this scope
+    // - "range-min"/"range-max" shouldn't overlap between "pools" and "main"
+    property Main: TDhcpPoolSettings
+      read fMain;
   end;
   /// a dynamic array of DHCP Server scope/subnet settings
   TDhcpScopeSettingsObjArray = array of TDhcpScopeSettings;
