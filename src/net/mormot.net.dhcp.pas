@@ -1100,7 +1100,7 @@ type
   public
     /// compute low-level TDhcpScope.Rules[]/Policies[] from current settings
     // - raise an EDhcp exception if any parameter is not correct
-    procedure PrepareRule(var Scope: TDhcpScope; var Rule: TDhcpRule);
+    procedure PrepareRule(var Rule: TDhcpRule);
   published
     /// human-friendly identifier, not used in the internal logic
     // - added in the logs as "rule=<name>", or as useful comment in settings
@@ -4210,8 +4210,7 @@ begin
     EDhcp.RaiseUtf8('PrepareRule: invalid %:%', [ctx, json]);
 end;
 
-procedure TDhcpRuleAbstractSettings.PrepareRule(var Scope: TDhcpScope;
-  var Rule: TDhcpRule);
+procedure TDhcpRuleAbstractSettings.PrepareRule(var Rule: TDhcpRule);
 var
   v: TRuleValue;
 begin
@@ -4251,7 +4250,7 @@ var
   nfo: TMacIP;
 begin
   // parse main "rules" JSON array of objects fields
-  inherited PrepareRule(Scope, Rule);
+  inherited PrepareRule(Rule);
   DoParseRule(fAlways, alw, prValue, 'always');
   DoParseRule(fRequested, req, prValue, 'requested');
   // parse specific static "ip" reservation
@@ -4360,48 +4359,48 @@ begin
   Scope.Gateway           := ToIP4(fDefaultGateway);
   Scope.Broadcast         := ToIP4(fBroadCastAddress);
   Scope.ServerIdentifier  := ToIP4(fServerIdentifier);
-  Scope.LastIpLE          := 0;
-  Scope.IpMinLE           := ToIP4(fRangeMin);
-  Scope.IpMaxLE           := ToIP4(fRangeMax);
   Scope.DnsServers        := ToIP4s(fDnsServers);
   Scope.NtpServers        := ToIP4s(fNtpServers);
   Scope.DomainName        := fDomainName;
-  Scope.StaticIP          := nil;
-  Scope.StaticMac         := nil;
+  Scope.Main.Scope        := @Scope;
+  Scope.Main.IpMin        := ToIP4(fRangeMin);
+  Scope.Main.IpMax        := ToIP4(fRangeMax);
+  Scope.Main.StaticIP     := nil;
+  Scope.Main.StaticMac    := nil;
   for i := 0 to high(fStatic) do
     if not Scope.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
       EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
-  Scope.LeaseTime         := fLeaseTimeSeconds; // 100%
-  if Scope.LeaseTime < 30 then
-    Scope.LeaseTime := 30;                      // 30 seconds minimum lease
-  Scope.RenewalTime       := Scope.LeaseTime shr 1;       // 50%
-  Scope.Rebinding         := (Scope.LeaseTime * 7) shr 3; // 87.5%
+  Scope.LeaseTimeLE       := fLeaseTimeSeconds; // 100%
+  if Scope.LeaseTimeLE < 30 then
+    Scope.LeaseTimeLE     := 30;                // 30 seconds minimum lease
+  Scope.RenewalTimeLE     := Scope.LeaseTimeLE shr 1;       // 50%
+  Scope.RebindingLE       := (Scope.LeaseTimeLE * 7) shr 3; // 87.5%
   Scope.OfferHolding      := fOfferHoldingSecs; // 5 seconds
   if Scope.OfferHolding < 1 then
-    Scope.OfferHolding := 1
-  else if Scope.OfferHolding > Scope.RenewalTime then
-    Scope.OfferHolding := Scope.RenewalTime;
+    Scope.OfferHolding    := 1
+  else if Scope.OfferHolding > Scope.RenewalTimeLE then
+    Scope.OfferHolding    := Scope.RenewalTimeLE;
   Scope.MaxDeclinePerSec  := fMaxDeclinePerSecond; // max 5 DECLINE per sec
   Scope.DeclineTime       := fDeclineTimeSeconds;
   if Scope.DeclineTime = 0 then
-    Scope.DeclineTime := Scope.LeaseTime;
+    Scope.DeclineTime     := Scope.LeaseTimeLE;
   Scope.GraceFactor       := fGraceFactor;         // * 2
   Scope.Options           := fOptions;
   fBoot.PrepareBoot(Scope.Boot, Scope.Options);
   // convert "rules" into ready-to-be-processed objects
   n := length(fRules);
-  Scope.Rules := nil;
-  Scope.Policies := nil;
-  SetLength(Scope.Rules, n);
-  SetLength(Scope.Policies, n);
+  Scope.Main.Rules := nil;
+  Scope.Main.Policies := nil;
+  SetLength(Scope.Main.Rules, n);
+  SetLength(Scope.Main.Policies, n);
   n := 0;
   for i := 0 to high(fRules) do
-    if fRules[i].PrepareRule(Scope, Scope.Rules[n], Scope.Policies[n]) then
+    if fRules[i].PrepareRule(Scope, Scope.Main.Rules[n], Scope.Main.Policies[n]) then
       inc(n);
   if n <> length(fRules) then
   begin
-    SetLength(Scope.Rules, n); // some "rules" were TMacIP static in disguise
-    SetLength(Scope.Policies, n);
+    SetLength(Scope.Main.Rules, n); // some "rules" were statics in disguise
+    SetLength(Scope.Main.Policies, n);
   end;
   // retrieve and adjust the subnet mask from settings
   if not Scope.Subnet.From(fSubnetMask) then
