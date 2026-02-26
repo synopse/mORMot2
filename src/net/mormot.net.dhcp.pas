@@ -411,13 +411,13 @@ type
     pvkAlways,
     pvkUndefined);
 
-  /// store one DHCP "rules" condition or action
+  /// store one DHCP "rules" condition or action in optimized 12/16 bytes
   // - used for "all" "any" "not-all" "not-any" conditions against a value
   // - used as "always" and "requested" data to be sent back to the client
   // - kind/num/mac fields order matters to access PInt64(one)^ shr 16 = Mac64
   TRuleValue = packed record
     /// define which kind of value is stored in this entry
-    // - is used by TDhcpState.MatchOne as byte-code-like efficient runtime
+    // - is evaluated by TDhcpState.MatchOne as byte-code-like efficient runtime
     kind: TRuleValueKind;
     /// the raw (sub-)option number/ordinal to match, or to be sent back
     // - is the DHCP option number for kind=pvkRaw/pvkOpt
@@ -428,7 +428,7 @@ type
     // - not used (contains 0) for pckAlways and pvkMac/pvkMacs
     num: byte;
     /// the CPU-cache-friendly inlined pvkMac value
-    // - for pvkOpt, TDhcpOption(mac[0]) store the known option
+    // - for pvkOpt, TDhcpOption(mac[0]) store the known/decoded option
     mac: TNetMac;
     /// the associated raw binary value
     value: RawByteString;
@@ -988,7 +988,7 @@ type
   public
     /// compute the low-level TDhcpScope.Boot data structure for current settings
     // - will also complete/inherit configuration from sibling values
-    procedure PrepareBoot(var Data: TDhcpScopeBoot; Options: TDhcpScopeOptions);
+    procedure PrepareBoot(var Boot: TDhcpScopeBoot; Options: TDhcpScopeOptions);
   published
     /// option 66 IP address or hostname of the associated TFTP server
     property NextServer: RawUtf8
@@ -1166,7 +1166,7 @@ type
     function AddRule(one: TDhcpRuleSettings = nil): TDhcpRuleSettings;
     /// compute the low-level TDhcpScope data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct
-    procedure PrepareScope(Sender: TDhcpProcess; var Data: TDhcpScope);
+    procedure PrepareScope(Sender: TDhcpProcess; var Scope: TDhcpScope);
   published
     /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
     // - the CIDR 'ip/mask' pattern will compute range-min/range-max and
@@ -3897,36 +3897,36 @@ begin
     p^ := boot.Remote[ref];
 end;
 
-procedure TDhcpBootSettings.PrepareBoot(var Data: TDhcpScopeBoot;
+procedure TDhcpBootSettings.PrepareBoot(var Boot: TDhcpScopeBoot;
   Options: TDhcpScopeOptions);
 var
   dcb, ref: TDhcpClientBoot;
 begin
   if dsoPxeDisable in Options then
   begin
-    Finalize(Data); // reset all RawUtf8/RawByteString to ''
+    Finalize(Boot); // reset all RawUtf8/RawByteString to ''
     exit;
   end;
   // copy the working parameters from the settings
-  TrimU(fNextServer, Data.NextServer);
-  for dcb := low(Data.Remote) to high(Data.Remote) do
-    TrimU(fRemote[dcb], Data.Remote[dcb]);
+  TrimU(fNextServer, Boot.NextServer);
+  for dcb := low(Boot.Remote) to high(Boot.Remote) do
+    TrimU(fRemote[dcb], Boot.Remote[dcb]);
   // complete configuration from sibling values
   if dsoPxeNoInherit in Options then
     exit;
   // 1. HTTP aware architecture fallback to their TFTP value
-  InheritOption(Data, dcbX64, dcbX64Http);
-  InheritOption(Data, dcbA64, dcbA64Http);
+  InheritOption(Boot, dcbX64, dcbX64Http);
+  InheritOption(Boot, dcbA64, dcbA64Http);
   // 2. assume we could share the main x64/x86 IPXE URI
   ref := dcbDefault;
-  if Data.Remote[dcbIpxeX64] <> '' then
+  if Boot.Remote[dcbIpxeX64] <> '' then
     ref := dcbIpxeX64
-  else if Data.Remote[dcbIpxeX86] <> '' then
+  else if Boot.Remote[dcbIpxeX86] <> '' then
     ref := dcbIpxeX86;
   if ref <> dcbDefault then
-    for dcb := dcbIpxeX86 to high(Data.Remote) do
+    for dcb := dcbIpxeX86 to high(Boot.Remote) do
       if dcb <> ref then
-        InheritOption(Data, ref, dcb);
+        InheritOption(Boot, ref, dcb);
 end;
 
 
@@ -4068,78 +4068,84 @@ begin
 end;
 
 procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess;
-  var Data: TDhcpScope);
+  var Scope: TDhcpScope);
 var
   mask: TNetIP4;
   i, n: PtrInt;
 begin
-  // convert the main settings into Data.* fields - raise EDhcp on error
-  Data.Gateway           := ToIP4(fDefaultGateway);
-  Data.Broadcast         := ToIP4(fBroadCastAddress);
-  Data.ServerIdentifier  := ToIP4(fServerIdentifier);
-  Data.LastIpLE          := 0;
-  Data.IpMinLE           := ToIP4(fRangeMin);
-  Data.IpMaxLE           := ToIP4(fRangeMax);
-  Data.DnsServer         := TIntegerDynArray(ToIP4s(fDnsServers));
-  Data.NtpServers        := TIntegerDynArray(ToIP4s(fNtpServers));
-  Data.DomainName        := fDomainName;
-  Data.StaticIP          := nil;
-  Data.StaticMac         := nil;
+  // convert the main settings into Scope.* fields - raise EDhcp on error
+  Scope.Gateway           := ToIP4(fDefaultGateway);
+  Scope.Broadcast         := ToIP4(fBroadCastAddress);
+  Scope.ServerIdentifier  := ToIP4(fServerIdentifier);
+  Scope.LastIpLE          := 0;
+  Scope.IpMinLE           := ToIP4(fRangeMin);
+  Scope.IpMaxLE           := ToIP4(fRangeMax);
+  Scope.DnsServer         := TIntegerDynArray(ToIP4s(fDnsServers));
+  Scope.NtpServers        := TIntegerDynArray(ToIP4s(fNtpServers));
+  Scope.DomainName        := fDomainName;
+  Scope.StaticIP          := nil;
+  Scope.StaticMac         := nil;
   for i := 0 to high(fStatic) do
-    if not Data.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
+    if not Scope.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
       EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
-  Data.LeaseTime         := fLeaseTimeSeconds; // 100%
-  if Data.LeaseTime < 30 then
-    Data.LeaseTime := 30;                      // 30 seconds minimum lease
-  Data.RenewalTime       := Data.LeaseTime shr 1;       // 50%
-  Data.Rebinding         := (Data.LeaseTime * 7) shr 3; // 87.5%
-  Data.OfferHolding      := fOfferHoldingSecs; // 5 seconds
-  if Data.OfferHolding < 1 then
-    Data.OfferHolding := 1
-  else if Data.OfferHolding > Data.RenewalTime then
-    Data.OfferHolding := Data.RenewalTime;
-  Data.MaxDeclinePerSec  := fMaxDeclinePerSecond; // max 5 DECLINE per sec
-  Data.DeclineTime       := fDeclineTimeSeconds;
-  if Data.DeclineTime = 0 then
-    Data.DeclineTime := Data.LeaseTime;
-  Data.GraceFactor       := fGraceFactor;         // * 2
-  Data.Options           := fOptions;
-  fBoot.PrepareBoot(Data.Boot, Data.Options);
+  Scope.LeaseTime         := fLeaseTimeSeconds; // 100%
+  if Scope.LeaseTime < 30 then
+    Scope.LeaseTime := 30;                      // 30 seconds minimum lease
+  Scope.RenewalTime       := Scope.LeaseTime shr 1;       // 50%
+  Scope.Rebinding         := (Scope.LeaseTime * 7) shr 3; // 87.5%
+  Scope.OfferHolding      := fOfferHoldingSecs; // 5 seconds
+  if Scope.OfferHolding < 1 then
+    Scope.OfferHolding := 1
+  else if Scope.OfferHolding > Scope.RenewalTime then
+    Scope.OfferHolding := Scope.RenewalTime;
+  Scope.MaxDeclinePerSec  := fMaxDeclinePerSecond; // max 5 DECLINE per sec
+  Scope.DeclineTime       := fDeclineTimeSeconds;
+  if Scope.DeclineTime = 0 then
+    Scope.DeclineTime := Scope.LeaseTime;
+  Scope.GraceFactor       := fGraceFactor;         // * 2
+  Scope.Options           := fOptions;
+  fBoot.PrepareBoot(Scope.Boot, Scope.Options);
   // convert "rules" into ready-to-be-processed objects
-  Data.Rules := nil;
-  SetLength(Data.Rules, length(fRules));
+  n := length(fRules);
+  Scope.Rules := nil;
+  Scope.Policies := nil;
+  SetLength(Scope.Rules, n);
+  SetLength(Scope.Policies, n);
   n := 0;
   for i := 0 to high(fRules) do
-    if fRules[i].PrepareRule(Data, Data.Rules[n]) then
+    if fRules[i].PrepareRule(Scope, Scope.Rules[n], Scope.Policies[n]) then
       inc(n);
   if n <> length(fRules) then
-    SetLength(Data.Rules, n); // some "rules" were TMacIP static in disguise
+  begin
+    SetLength(Scope.Rules, n); // some "rules" were TMacIP static in disguise
+    SetLength(Scope.Policies, n);
+  end;
   // retrieve and adjust the subnet mask from settings
-  if not Data.Subnet.From(fSubnetMask) then
+  if not Scope.Subnet.From(fSubnetMask) then
     EDhcp.RaiseUtf8(
       'PrepareScope: unexpected subnet-mask=% (should be mask ip or ip/sub)',
       [fSubnetMask]);
-  if Data.Subnet.mask = cAnyHost32 then
+  if Scope.Subnet.mask = cAnyHost32 then
   begin
     // subnet-mask was not '192.168.0.1/24': is expected to be '255.255.255.0'
-    if IP4Prefix(Data.Subnet.ip) = 0 then
+    if IP4Prefix(Scope.Subnet.ip) = 0 then
       EDhcp.RaiseUtf8('PrepareScope: subnet-mask=% is not a valid IPv4 mask',
         [fSubnetMask]);
-    mask := Data.Subnet.ip;
+    mask := Scope.Subnet.ip;
     // we expect other parameters to be set specifically: compute final Subnet
-    if Data.ServerIdentifier = 0 then
+    if Scope.ServerIdentifier = 0 then
       EDhcp.RaiseUtf8('PrepareScope: subnet-mask=% but without server-identifier',
         [fSubnetMask]);
-    Data.Subnet.mask := mask;
-    Data.Subnet.ip := Data.ServerIdentifier and mask; // normalize as in From()
+    Scope.Subnet.mask := mask;
+    Scope.Subnet.ip := Scope.ServerIdentifier and mask; // normalize as in From()
   end
   else
     // subnet-mask was e.g. '192.168.0.1/24'
-    if Data.ServerIdentifier = 0 then
+    if Scope.ServerIdentifier = 0 then
       // extract from exact subnet-mask text, since Subnet.ip = 192.168.0.0
-      Data.ServerIdentifier := ToIP4(SubnetMask);
+      Scope.ServerIdentifier := ToIP4(SubnetMask);
   // validate all settings values from the actual subnet
-  Data.AfterFill(Sender.Log.Add); // may raise an EDhcp exception
+  Scope.AfterFill(Sender.Log.Add); // may raise an EDhcp exception
   // trigger SaveToFile() in next OnIdle()
   inc(Sender.fModifSequence);
 end;
