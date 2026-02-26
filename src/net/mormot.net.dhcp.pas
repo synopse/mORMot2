@@ -201,7 +201,7 @@ type
  PDhcpOptions = ^TDhcpOptions;
 
  /// decoded DHCP Option 82 relay-agent-information sub-options - see RFC 3046
- // - fixed as 8 items for TDhcpParsedRai to fit in 64-bit
+ // - fixed as 8 items for TDhcpParsedRai to fit in 128-bit
  TDhcpOptionRai = (
    dorUndefined,
    dorCircuitId,
@@ -666,7 +666,7 @@ type
   end;
 
   /// store one DHCP "rules" evaluation object in a ready-to-be-processed way
-  // - pre-compiled at runtime from TDhcpRuleSettings JSON fields into 8/16 bytes
+  // - 8/16 bytes pre-compiled at runtime from TDhcpRuleAbstractSettings JSON
   // - efficiently evaluated by TDhcpProcess.GetRule() from request state
   TDhcpRule = record
     /// store AND matching fields
@@ -1032,33 +1032,16 @@ type
       read fRemote[dcbIpxeA64] write fRemote[dcbIpxeA64];
   end;
 
-  /// define a rule to "match and send" options for a given scope/subnet
-  // - i.e. settings for vendor-specific or client-specific DHCP options
-  // - each RawJson property contain a JSON object as key/value pairs,
-  // potentially in our enhanced format e.g. with unquote keys
-  // - "all" "any" "not-all" "not-any" should all match to trigger the output,
-  // defining a "first precise rule wins" deterministic behavior in the order
-  // in the array of "rules"
-  // - "always" and "requested" define the options sent in the response
-  // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
-  // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
-  //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy", "CIDR:xx" with
-  // CSV support for IP: MAC: or CIDR: to encode arrays of values
-  // - values could also be integers, booleans, or nested TLV object
-  // - array values would be internally converted into CSV for processing
-  // - most values would have their default type guessed as UINT16, IP or UUID
-  // - "all" "any" "not-all" "not-any" also support convenient "boot" key as
-  // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
-  TDhcpRuleSettings = class(TSynPersistent)
+  /// define an abstract evaluation rule with all/any/notall/notany array fields
+  // - parent of TDhcpRuleSettings class
+  TDhcpRuleAbstractSettings = class(TSynPersistent)
   protected
-    fName, fIP, fMac: RawUtf8;
-    fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
+    fName, fMac: RawUtf8;
+    fAll, fAny, fNotAll, fNotAny: RawJson;
   public
     /// compute low-level TDhcpScope.Rules[]/Policies[] from current settings
-    // - raise an EDhcp exception if the parameters are not correct
-    // - return true if the Rule can be added to the scope
-    function PrepareRule(var Scope: TDhcpScope; var Rule: TDhcpRule;
-      var Policy: TDhcpPolicy): boolean;
+    // - raise an EDhcp exception if any parameter is not correct
+    procedure PrepareRule(var Scope: TDhcpScope; var Rule: TDhcpRule);
   published
     /// human-friendly identifier, not used in the internal logic
     // - added in the logs as "rule=<name>", or as useful comment in settings
@@ -1091,6 +1074,51 @@ type
     // - a single key/value pairs match is enough to NOT trigger this logic
     property NotAny: RawJson
       read fNotAny write fNotAny;
+    /// root "mac" as convenient alternative to {"all":{"mac":"xxxxx"}} entry
+    // - so that you could write meaningful registration like:
+    // $ {
+    // $   "name": "printer-2",
+    // $   "mac": "00:11:22:33:44:56",
+    // $   "ip": "192.168.1.51",
+    // $   "always": {
+    // $     "domain-name": "printers.local"
+    // $   }
+    // $ }
+    // - would work also to customize options, without any "ip" reservation
+    // - exclusive to "all" "any" "not-all" "not-any" member - would raise EDhcp
+    property Mac: RawUtf8
+      read fMac write fMac;
+  end;
+
+  /// define a rule to "match and send" options for a given scope/subnet
+  // - i.e. settings for vendor-specific or client-specific DHCP options
+  // - each RawJson property contain a JSON object as key/value pairs,
+  // potentially in our enhanced format e.g. with unquote keys
+  // - "all" "any" "not-all" "not-any" should all match to trigger the output,
+  // defining a "first precise rule wins" deterministic behavior in the order
+  // in the array of "rules"
+  // - "always" and "requested" define the options sent in the response
+  // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
+  // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
+  //  "UINT8:x" "UINT16:x", "UINT32:x", "UINT64:x", "ESC:x$yy", "CIDR:xx" with
+  // CSV support for IP: MAC: or CIDR: to encode arrays of values
+  // - values could also be integers, booleans, or nested TLV object
+  // - array values would be internally converted into CSV for processing
+  // - most values would have their default type guessed as UINT16, IP or UUID
+  // - "all" "any" "not-all" "not-any" also support convenient "boot" key as
+  // BOOT_TXT[] values, or RAI_OPTION[] keys like "circuit-id"
+  TDhcpRuleSettings = class(TDhcpRuleAbstractSettings)
+  protected
+    fIP: RawUtf8;
+    fAlways, fRequested: RawJson;
+  public
+    /// compute low-level TDhcpScope.Rules[]/Policies[] from current settings
+    // - raise an EDhcp exception if any parameter is not correct
+    // - return true if the Rule can be added to the scope, i.e. if not a
+    // static definition in disguise
+    function PrepareRule(var Scope: TDhcpScope; var Rule: TDhcpRule;
+      var Policy: TDhcpPolicy): boolean; reintroduce;
+  published
     /// a JSON object defining the output options regardless of Option 55
     // - client Option 55 won't be checked: those options will always be sent
     // - so we could define e.g. with proper Type-Length-Value (TLV) encoding:
@@ -1111,20 +1139,6 @@ type
     // $ "requested": { ntp-servers: ["10.0.0.5", "10.0.0.6"] }
     property Requested: RawJson
       read fRequested write fRequested;
-    /// root "mac" as convenient alternative to {"all":{"mac":"xxxxx"}} entry
-    // - so that you could write meaningful registration like:
-    // $ {
-    // $   "name": "printer-2",
-    // $   "mac": "00:11:22:33:44:56",
-    // $   "ip": "192.168.1.51",
-    // $   "always": {
-    // $     "domain-name": "printers.local"
-    // $   }
-    // $ }
-    // - would work also to customize options, without any "ip" reservation
-    // - exclusive to "all" "any" "not-all" "not-any" member - would raise EDhcp
-    property Mac: RawUtf8
-      read fMac write fMac;
     /// reserve this static "ip" for a given MAC or client-specific options
     // - could be used as an alternative to the main "static" array of TMacIP,
     // especially if you expect "always"/"requested" custom options sent back
@@ -3657,7 +3671,7 @@ var
   len: PtrInt;
   bak: AnsiChar; // keep Recv[] untouched
 begin
-  p := @Recv.options[RecvLens[doFqdn]]; // caller ensure <> 0
+  p := @Recv.options[RecvLens[doFqdn]]; // caller ensured <> 0
   if (p[0] < #3) or
      (PWord(p + 2)^ <> 0) then // rcode1=rcode2=0
     exit;
@@ -3667,8 +3681,8 @@ begin
   // Windows client send typically 0x05 (E=1 for wire format + S=1 to ask
   // server for updates) -> reset all flags but E since we have no DDNS yet
   bak := p[0];
-  p[0] := AnsiChar(byte(bak) and RFC4702_FLAG_E);
-  AddOptionSafe(81, p, len);  // preserve E flag and return raw fqdn encoding
+  p[0] := AnsiChar(byte(bak) and RFC4702_FLAG_E); // preserve E/encoding flag
+  AddOptionSafe(81, p, len);                      // echo raw encoded fqdn value
   p[0] := bak;
 end;
 
@@ -3721,7 +3735,7 @@ begin
     dec(len, ord(p[1]) + 2)  ; // O(1) decode sub-option binary as TLV
     if len < 0 then            // avoid buffer overdloas
     begin
-      FillZero(THash128(RecvLensRai)); // ignore any previously decoded sub-options
+      FillZero(THash128(RecvLensRai)); // ignore previously decoded sub-options
       exit;
     end;
     if ord(p[0]) <= high(RAI_OPTION_INV) then // O(1) fast inverse lookup
@@ -3931,7 +3945,7 @@ begin
 end;
 
 
-{ TDhcpRuleSettings }
+{ TDhcpRuleAbstractSettings}
 
 procedure DoParseRule(const json: RawUtf8; var v: TRuleValues; pr: TParseRule;
   ctx: PUtf8Char);
@@ -3940,22 +3954,16 @@ begin
     EDhcp.RaiseUtf8('PrepareRule: invalid %:%', [ctx, json]);
 end;
 
-function TDhcpRuleSettings.PrepareRule(var Scope: TDhcpScope;
-  var Rule: TDhcpRule; var Policy: TDhcpPolicy): boolean;
+procedure TDhcpRuleAbstractSettings.PrepareRule(var Scope: TDhcpScope;
+  var Rule: TDhcpRule);
 var
-  alw, req: TRuleValues;
-  p: PRuleValue;
   v: TRuleValue;
-  i: PtrInt;
-  nfo: TMacIP;
 begin
   // parse main "rules" JSON array of objects fields
   DoParseRule(fAll, Rule.all, prMatch, 'all');
   DoParseRule(fAny, Rule.any, prMatch, 'any');
   DoParseRule(fNotAll, Rule.notall, prMatch, 'not-all');
   DoParseRule(fNotAny, Rule.notany, prMatch, 'not-any');
-  DoParseRule(fAlways, alw, prValue, 'always');
-  DoParseRule(fRequested, req, prValue, 'requested');
   // parse optional "mac" alias
   if fMac <> '' then
   begin
@@ -3972,6 +3980,24 @@ begin
     v.kind := pvkMac;
     AddRuleValue(Rule.all, v);
   end;
+end;
+
+
+{ TDhcpRuleSettings }
+
+function TDhcpRuleSettings.PrepareRule(var Scope: TDhcpScope;
+  var Rule: TDhcpRule; var Policy: TDhcpPolicy): boolean;
+var
+  alw, req: TRuleValues;
+  p: PRuleValue;
+  v: TRuleValue;
+  i: PtrInt;
+  nfo: TMacIP;
+begin
+  // parse main "rules" JSON array of objects fields
+  inherited PrepareRule(Scope, Rule);
+  DoParseRule(fAlways, alw, prValue, 'always');
+  DoParseRule(fRequested, req, prValue, 'requested');
   // parse specific static "ip" reservation
   Policy.ip := 0;
   if fIP <> '' then
