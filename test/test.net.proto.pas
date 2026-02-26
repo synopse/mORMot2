@@ -2616,6 +2616,25 @@ begin
       'domain-search:"mydomain.com,another.domain.net",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105,fqdn:{client:"DESKTOP-ABC123.corp.example.com"}}');
+    // validate pvkRaw non standard options "any" match and also in response
+    Check(server.Scope[0].DeleteRule(ndx), 'del2');
+    CheckEqual(ndx, server.Scope[0].AddRule([
+      '{any:{fqdn:"",200:"none",200:"trigger"},' +
+       'always:{201:"toto"}}']));
+    f := d.ClientNew(dmtDiscover, macs[8]);
+    option := 'trigger';
+    DhcpAddOptionRaw(f, 200, @option[1], ord(option[0]));
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'pvkRaw');
+    CheckEqual(d.RecvToJson(true),
+      '{op:"request",chaddr:"' + mac + '",message-type:"DISCOVER",' +
+      'parameter-request-list:[1,3,6,15,28],200:"trigger"}');
+    ip := IP4ToText(@d.Send.yiaddr); // OFFER twice returns the next IP
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      '201:"toto",subnet-mask:"255.252.0.0",' +
+      'lease-time:120,renewal-time:60,rebinding-time:105}');
   finally
     server.Free;
     settings.Free;
