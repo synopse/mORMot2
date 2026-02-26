@@ -743,13 +743,13 @@ type
     /// the Domain Name e.g. 'lan.local' for doDomainName option 15
     DomainName: RawUtf8;
     /// the DNS IPs of this scope for doDomainNameServers option 6
-    DnsServer: TIntegerDynArray;
+    DnsServers: TNetIP4s;
     /// the IP of the associated NTP servers, for doNtpServers option 42
-    NtpServers: TIntegerDynArray;
+    NtpServers: TNetIP4s;
     /// list of static IPs of this scope
     // - sorted as 32-bit for efficient O(log(n)) branchless binary search
     // - also contain the StaticMac[].IP4 values for fast lookup
-    StaticIP: TIntegerDynArray;
+    StaticIP: TNetIP4s;
     /// list of MAC addresses with their static IP for this scope
     // - will be checked against plain chaddr or "01+MAC" option 61 values
     StaticMac: TLeaseDynArray;
@@ -3047,7 +3047,7 @@ end;
 
 function TDhcpScope.IsStaticIP(ip4: TNetIP4): boolean;
 begin // use branchless asm on x86_64
-  result := FastFindIntegerSorted(StaticIP, ip4) >= 0;
+  result := FastFindIntegerSorted(TIntegerDynArray(StaticIP), ip4) >= 0;
 end;
 
 function TDhcpScope.ReuseIp4(p: PDhcpLease): TNetIP4;
@@ -3181,13 +3181,13 @@ begin
   begin
     log.Log(sllInfo, 'PrepareScope: scope=% subnet=% min=% max=% server=% ' +
       'broadcast=% gateway=% static=% dns=% lease=%s renew=%s rebind=%s ' +
-      'offer=%s maxdecline=% declinetime=%s grace=%',
+      'offer=%s maxdecline=% declinetime=%s grace=% rules=%',
       [Subnet.ToShort, IP4ToShort(@Subnet.mask), IP4ToShort(@IpMinLE),
        IP4ToShort(@IpMaxLE), IP4ToShort(@ServerIdentifier),
        IP4ToShort(@Broadcast), IP4ToShort(@Gateway),
-       IP4sToText(TNetIP4s(StaticIP)),  IP4sToText(TNetIP4s(DnsServer)),
+       IP4sToText(StaticIP),   IP4sToText(DnsServers),
        LeaseTime, RenewalTime, Rebinding, OfferHolding,
-       MaxDeclinePerSec, DeclineTime, GraceFactor]);
+       MaxDeclinePerSec, DeclineTime, GraceFactor, length(Rules)]);
     for dcb := low(Boot.Remote) to high(Boot.Remote) do
       if Boot.Remote[dcb] <> '' then
         Append(bootlog, [' ', BOOT_TXT[dcb], '=', Boot.Remote[dcb]]);
@@ -3237,7 +3237,7 @@ begin
          (DoFindUuid(pointer(StaticUuid), pointer(nfo.uuid), n) <> 0) then
         exit;
     // register IP, properly sorted, and rejecting any duplicate
-    if AddSortedInteger(StaticIP, nfo.ip) < 0 then
+    if AddSortedInteger(TIntegerDynArray(StaticIP), nfo.ip) < 0 then
       exit;
     // register the MAC or UUID value
     if not IsZero(nfo.mac) then
@@ -3326,10 +3326,10 @@ begin
   Safe.Lock;
   try
     // remove this IP from the main sorted StaticIP[] list
-    i := FastFindIntegerSorted(StaticIP, ip4);
+    i := FastFindIntegerSorted(TIntegerDynArray(StaticIP), ip4);
     if i < 0 then
       exit; // no previous AddStatic(ip4)
-    DeleteInteger(StaticIP, i);
+    DeleteInteger(TIntegerDynArray(StaticIP), i);
     result := true;
     // remove this IP from StaticMac[]
     n := length(StaticMac) - 1;
@@ -3677,7 +3677,7 @@ begin
   AddOptionOnce32(doSubnetMask,         Scope^.Subnet.mask);
   AddOptionOnce32(doBroadcastAddress,   Scope^.Broadcast);
   AddOptionOnce32(doRouters,            Scope^.Gateway);
-  AddOptionOnceA32(doDomainNameServers, pointer(Scope^.DnsServer));
+  AddOptionOnceA32(doDomainNameServers, pointer(Scope^.DnsServers));
   AddOptionOnceA32(doNtpServers,        pointer(Scope^.NtpServers));
   // optional 51,58,59 lease timing options
   if (RecvType <> dmtInform) and
@@ -4080,8 +4080,8 @@ begin
   Scope.LastIpLE          := 0;
   Scope.IpMinLE           := ToIP4(fRangeMin);
   Scope.IpMaxLE           := ToIP4(fRangeMax);
-  Scope.DnsServer         := TIntegerDynArray(ToIP4s(fDnsServers));
-  Scope.NtpServers        := TIntegerDynArray(ToIP4s(fNtpServers));
+  Scope.DnsServers        := ToIP4s(fDnsServers);
+  Scope.NtpServers        := ToIP4s(fNtpServers);
   Scope.DomainName        := fDomainName;
   Scope.StaticIP          := nil;
   Scope.StaticMac         := nil;
