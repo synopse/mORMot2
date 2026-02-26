@@ -771,7 +771,10 @@ type
     procedure ClearLeases;
     /// register a static IP address to the internal pool
     // - can be associated with a fixed MAC address or option 61 UUID
-    function AddStatic(var nfo: TMacIP): boolean;
+    function AddStatic(var nfo: TMacIP): boolean; overload;
+    /// register another static IP address to the internal pool
+    // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuid=ip' text
+    function AddStatic(const macip: RawUtf8): boolean; overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
     /// add one entry in "rules" JSON object format
@@ -3278,6 +3281,14 @@ begin
     AddRawUtf8(TRawUtf8DynArray(StaticUuid), nfo.uuid);
   end;
   result := true;
+end;
+
+function TDhcpPool.AddStatic(const macip: RawUtf8): boolean;
+var
+  nfo: TMacIP;
+begin
+  result := ParseMacIP(nfo, macip) and
+            AddStatic(nfo);
 end;
 
 function TDhcpPool.RemoveStatic(ip4: TNetIP4): boolean;
