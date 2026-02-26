@@ -764,7 +764,7 @@ type
     function LeaseIndex(p: PDhcpLease): cardinal;
       {$ifdef HASINLINE} inline; {$endif}
     /// release a lease in Entry[] - add it to the recycled FreeList[]
-    function ReuseIp4(p: PDhcpLease): TNetIP4;
+    function ReuseLease(p: PDhcpLease): TNetIP4;
     /// flush the internal Entry[] lease lists but keep subnet/scope definition
     procedure ClearLeases;
     /// register a static IP address to the internal pool
@@ -3125,7 +3125,7 @@ begin
         // all IPs are already used in the internal list
         if outdated <> nil then
           // reuse the oldest outdated slot
-          result := ReuseIP4(outdated) // set MAC=0 IP=0 State=lsFree
+          result := ReuseLease(outdated) // set MAC=0 IP=0 State=lsFree
         else
           // pool exhausted: consider shorten the lease duration to 60-300 secs
           result := 0;
@@ -3185,7 +3185,7 @@ begin
   result := cardinal(PtrUInt(p) - PtrUInt(Entry)) div SizeOf(p^);
 end;
 
-function TDhcpPool.ReuseIp4(p: PDhcpLease): TNetIP4;
+function TDhcpPool.ReuseLease(p: PDhcpLease): TNetIP4;
 var
   ndx: cardinal;
 begin
@@ -3195,7 +3195,7 @@ begin
     exit;
   end;
   ndx := LeaseIndex(p);
-  if ndx < cardinal(Count) then
+  if ndx < cardinal(Count) then // paranoid
     AddInteger(FreeList, FreeListCount, ndx);
   result := p^.IP4;       // return this IP4
   FillZero(THash128(p^)); // set MAC=0 IP=0 State=lsFree
