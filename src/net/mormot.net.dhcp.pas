@@ -664,9 +664,10 @@ type
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
   end;
 
-  /// store one DHCP "rules" object in a ready-to-be-processed way
-  // - pre-compiled at runtime from TDhcpRuleSettings JSON fields
-  TDhcpScopeRule = record
+  /// store one DHCP "rules" evaluation object in a ready-to-be-processed way
+  // - pre-compiled at runtime from TDhcpRuleSettings JSON fields into 8/16 bytes
+  // - efficiently evaluated by TDhcpProcess.GetRule() from request state
+  TDhcpRule = record
     /// store AND matching fields
     all: TRuleValues;
     /// store OR matching fields
@@ -675,6 +676,15 @@ type
     notall: TRuleValues;
     /// store NOT OR matching fields
     notany: TRuleValues;
+  end;
+  PDhcpRule = ^TDhcpRule;
+  /// ready-to-be-processed DHCP "rules" evaluation objects of a given scope
+  TDhcpRules = array of TDhcpRule;
+
+  /// store one DHCP "rules" policy in a ready-to-be-processed way
+  // - pre-compiled at runtime from TDhcpRuleSettings JSON fields
+  // - to be applied when the associated TDhcpRule did match
+  TDhcpPolicy = record
     /// if this rule should reserve a static "ip" for these conditions
     // - usually, there is a "mac": in "all" fields with an associated IPv4
     ip: TNetIP4;
@@ -686,9 +696,10 @@ type
     /// optional identifier used in the logs (not in the internal logic itself)
     name: RawUtf8;
   end;
-  PDhcpScopeRule = ^TDhcpScopeRule;
-  /// ready-to-be-processed DHCP "rules" objects of a given scope
-  TDhcpScopeRules = array of TDhcpScopeRule;
+  PDhcpPolicy = ^TDhcpPolicy;
+  /// ready-to-be-processed DHCP "rules" policies of a given scope
+  TDhcpPolicies = array of TDhcpPolicy;
+
 
   /// how to refine DHCP server process for one TDhcpScopeSettings
   // - dsoInformRateLimit will track INFORM per MAC and limit to 3 per second
@@ -746,8 +757,10 @@ type
     // - will be checked against not-"01+MAC" option 61 values - mainly UUID
     // - stored as RawByteString = doClientIdentifier-binary + 4-bytes-IP
     StaticUuid: TRawByteStringDynArray;
-    /// store all DHCP "rules" ready-to-be-processed objects for this scope
-    Rules: TDhcpScopeRules;
+    /// store all DHCP "rules" ready-to-be-processed evaluations for this scope
+    Rules: TDhcpRules;
+    /// store all DHCP "rules" ready-to-be-processed responses for this scope
+    Policies: TDhcpPolicies;
     /// readjust all internal values according to to Subnet policy
     // - raise an EDhcp exception if the parameters are not correct
     procedure AfterFill(log: TSynLog);
@@ -760,13 +773,13 @@ type
     /// add one entry in "rules" JSON object format
     // - supplied as a concatenation of strings, to create a JSON object
     // - will create a transient TDhcpRuleSettings instance and inject it
-    // to Rules[] in a thread-safe way, or raise EDhcp on error
-    // - return the index of the newly created entry in Rules[]
+    // to Rules[]/Policies[] in a thread-safe way, or raise EDhcp on error
+    // - return the index of the newly created entry in Rules[]/Policies[]
     function AddRule(const json: array of RawByteString): PtrInt; overload;
-    /// add one entry in Rules[] array within Safe.Lock/UnLock
-    // - return the index of the newly created entry in Rules[]
-    function AddRule(one: TDhcpScopeRule): PtrInt; overload;
-    /// remove a given entry in Rules[] by index - for testing (not thread-safe)
+    /// add one entry in Rules[]/Policies[] arrays within Safe.Lock/UnLock
+    // - return the index of the newly created entry in Rules[]/Policies[]
+    function AddRule(rule: TDhcpRule; policy: TDhcpPolicy): PtrInt; overload;
+    /// remove a given entry in Rules[]/Policies[] by index - mostly for testing
     function DeleteRule(index: PtrInt): boolean;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
@@ -866,8 +879,8 @@ type
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     RecvHostName: PShortString;
-    /// the "rules" entry matched by this request
-    RecvRule: PDhcpScopeRule;
+    /// the policy of the "rules" entry matched by this request
+    RecvRule: PDhcpPolicy;
     /// the server IP socket which received the UDP frame
     // - allow several UDP bound server sockets to share a single TDhcpProcess
     RecvIp4: TNetIP4;
@@ -929,6 +942,7 @@ type
     procedure AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric = dsmDiscover);
       {$ifdef HASINLINE} inline; {$endif}
     /// raw search of one "rules" value in State.Recv[]
+    // - this is the main processing method of TDhcpProcess.GetRule() evaluation
     function MatchOne(one: PRuleValue): boolean;
     /// serialize the Recv/RecvType/RecvLens/RecvLensRai fields as a JSON object
     function RecvToJson(extended: boolean = false): RawJson;
@@ -1039,10 +1053,11 @@ type
     fName, fIP, fMac: RawUtf8;
     fAll, fAny, fNotAll, fNotAny, fAlways, fRequested: RawJson;
   public
-    /// compute the low-level TDhcpScope.Rules[] entry from current settings
+    /// compute low-level TDhcpScope.Rules[]/Policies[] from current settings
     // - raise an EDhcp exception if the parameters are not correct
     // - return true if the Rule can be added to the scope
-    function PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
+    function PrepareRule(var Scope: TDhcpScope; var Rule: TDhcpRule;
+      var Policy: TDhcpPolicy): boolean;
   published
     /// human-friendly identifier, not used in the internal logic
     // - added in the logs as "rule=<name>", or as useful comment in settings
@@ -1115,7 +1130,7 @@ type
     property IP: RawUtf8
       read fIP write fIP;
   end;
-  /// a dynamic array of "match and send" options Rules
+  /// a dynamic array of "match and send" options rule definitions
   // - store any number of vendor-specific or client-specific DHCP options
   TDhcpRuleSettingsObjArray = array of TDhcpRuleSettings;
 
@@ -1346,7 +1361,7 @@ type
       Lease: PDhcpLease): boolean; virtual;
     procedure SetRecvBoot(var State: TDhcpState); virtual;
     procedure AddBootOptions(var State: TDhcpState); virtual;
-    function SetRule(var State: TDhcpState; Rule: PDhcpScopeRule): PDhcpScopeRule; virtual;
+    function GetRule(var State: TDhcpState; Rule: PDhcpRule): PDhcpRule; virtual;
     function RunCallbackAborted(var State: TDhcpState): boolean; virtual;
     function Flush(var State: TDhcpState): PtrInt; virtual;
   public
@@ -3255,16 +3270,17 @@ end;
 function TDhcpScope.AddRule(const json: array of RawByteString): PtrInt;
 var
   s: TDhcpRuleSettings;
-  rule: TDhcpScopeRule;
+  rule: TDhcpRule;
+  policy: TDhcpPolicy;
 begin
   s := TDhcpRuleSettings.Create;
   try
     // JSON is parsed outside of the lock
     if not JsonSettingsToObject(Join(json), s) then
       EDhcp.RaiseU('AddRule: incorrect JSON');
-    if s.PrepareRule(self, rule) then // not inserted via AddStatic()
-      // append to Rules[] within Safe.Lock
-      result := AddRule(rule)
+    if s.PrepareRule(self, rule, policy) then // not inserted via AddStatic()
+      // append to Rules[]/Policies[] within Safe.Lock
+      result := AddRule(rule, policy)
     else
       result := -1;
   finally
@@ -3272,13 +3288,15 @@ begin
   end;
 end;
 
-function TDhcpScope.AddRule(one: TDhcpScopeRule): PtrInt;
+function TDhcpScope.AddRule(rule: TDhcpRule; policy: TDhcpPolicy): PtrInt;
 begin
   Safe.Lock;
   try
     result := length(Rules);
     SetLength(Rules, result + 1);
-    Rules[result] := one;
+    SetLength(Policies, result + 1);
+    Rules[result] := rule;
+    Policies[result] := policy;
   finally
     Safe.UnLock;
   end;
@@ -3288,7 +3306,8 @@ function TDhcpScope.DeleteRule(index: PtrInt): boolean;
 begin
   Safe.Lock;
   try
-    result := DynArrayDelete(TypeInfo(TDhcpScopeRules), Rules, index);
+    result := DynArrayDelete(TypeInfo(TDhcpRules), Rules, index) and
+              DynArrayDelete(TypeInfo(TDhcpPolicies), Policies, index);
   finally
     Safe.UnLock;
   end;
@@ -3524,14 +3543,14 @@ var
   len, n: PtrUInt;
   requested: PByteArray;
 begin
-  p := pointer(RecvRule.send);
+  p := pointer(RecvRule^.send);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   // append "always" - should be as send[0].kind=pvkAlways
   if p^.kind = pvkAlways then
   begin
-    SendOptions := SendOptions + RecvRule.always;
+    SendOptions := SendOptions + RecvRule^.always;
     len := PStrLen(PAnsiChar(pointer(p^.value)) - _STRLEN)^;
     MoveFast(pointer(p^.value)^, SendEnd^, len); // as a pre-computed blob
     inc(SendEnd, len);
@@ -3920,7 +3939,8 @@ begin
     EDhcp.RaiseUtf8('PrepareRule: invalid %:%', [ctx, json]);
 end;
 
-function TDhcpRuleSettings.PrepareRule(var Data: TDhcpScope; var Rule: TDhcpScopeRule): boolean;
+function TDhcpRuleSettings.PrepareRule(var Scope: TDhcpScope;
+  var Rule: TDhcpRule; var Policy: TDhcpPolicy): boolean;
 var
   alw, req: TRuleValues;
   p: PRuleValue;
@@ -3928,8 +3948,7 @@ var
   i: PtrInt;
   nfo: TMacIP;
 begin
-  // parse main "rules" JSON object fields
-  Rule.name := fName;
+  // parse main "rules" JSON array of objects fields
   DoParseRule(fAll, Rule.all, prMatch, 'all');
   DoParseRule(fAny, Rule.any, prMatch, 'any');
   DoParseRule(fNotAll, Rule.notall, prMatch, 'not-all');
@@ -3953,16 +3972,16 @@ begin
     AddRuleValue(Rule.all, v);
   end;
   // parse specific static "ip" reservation
-  Rule.ip := 0;
+  Policy.ip := 0;
   if fIP <> '' then
   begin
-    if not NetIsIP4(pointer(fIp), @Rule.ip) or
-       not Data.Subnet.Match(Rule.Ip) then
+    if not NetIsIP4(pointer(fIp), @Policy.ip) or
+       not Scope.Subnet.Match(Policy.ip) then
       EDhcp.RaiseUtf8('PrepareRule: invalid ip:%', [fIp]);
     if (Rule.all = nil) and
        (Rule.any = nil) then
       EDhcp.RaiseUtf8('PrepareRule: missing any/all for ip=%', [fIp]);
-    nfo.ip := Rule.ip;
+    nfo.ip := Policy.ip;
     FillZero(nfo.mac);
     if (Rule.any = nil) and
        (length(Rule.all) = 1) then
@@ -3975,7 +3994,7 @@ begin
                (req = nil) then
             begin
               // the main statics mac/ip list is enough for this definition
-              if not Data.AddStatic(nfo) then
+              if not Scope.AddStatic(nfo) then
                 EDhcp.RaiseUtf8('PrepareRule: duplicated ip=% mac=%',
                   [fIp, MacToShort(@nfo.mac)]);
               result := false; // no rule needed
@@ -3985,12 +4004,12 @@ begin
         pvkMacs:
           EDhcp.RaiseUtf8('PrepareRule: ip=% requires a single mac', [fIp]);
       end;
-    if not Data.AddStatic(nfo) then // add in main statics ip list
+    if not Scope.AddStatic(nfo) then // add in main statics ip list
       EDhcp.RaiseUtf8('PrepareRule: duplicated ip=%', [fIp]);
   end;
   // Rule.send[0] is "always" and should be stored as pvkAlways binary blob
-  Rule.send := nil;
-  Rule.always := [];
+  Policy.send := nil;
+  Policy.always := [];
   if alw <> nil then
   begin
     PInt64(@v)^ := 0; // set kind+num+mac=0
@@ -4001,28 +4020,29 @@ begin
     begin
       Append(v.value, [AnsiChar(p^.num), AnsiChar(length(p^.value)), p^.value]);
       if p^.kind = pvkOpt then
-        if TDhcpOption(p^.mac[0]) in Rule.always then
+        if TDhcpOption(p^.mac[0]) in Policy.always then
           EDhcp.RaiseUtf8('PrepareRule: duplicated % in always:%',
             [DHCP_OPTION[TDhcpOption(p^.mac[0])], fAlways])
         else
-          include(Rule.always, TDhcpOption(p^.mac[0]));
+          include(Policy.always, TDhcpOption(p^.mac[0]));
       inc(p);
     end;
-    AddRuleValue(Rule.send, v);
+    AddRuleValue(Policy.send, v);
   end;
   // append "requested" with their op, ready to be filtered against option 55
   p := pointer(req);
   for i := 1 to length(req) do
   begin
     if (p^.kind = pvkOpt) and
-       (TDhcpOption(p^.mac[0]) in Rule.always) then
+       (TDhcpOption(p^.mac[0]) in Policy.always) then
       EDhcp.RaiseUtf8('PrepareRule: duplicated % in requested:%',
         [DHCP_OPTION[TDhcpOption(p^.mac[0])], fRequested]);
-    AddRuleValue(Rule.send, p^);
+    AddRuleValue(Policy.send, p^);
     inc(p);
   end;
   // return true if there is some condition to append: void entries are skipped
-  result := Rule.send <> nil;
+  Policy.name := fName;
+  result := Policy.send <> nil;
 end;
 
 
@@ -4855,10 +4875,10 @@ begin
     AppendShortAnsi7String(BOOT_TXT[State.RecvBoot], msg);
   end;
   if (State.RecvRule <> nil) and
-     (State.RecvRule.name <> '') then
+     (State.RecvRule^.name <> '') then
   begin
     AppendShort(' rule=', msg);
-    AppendShortAnsi7String(State.RecvRule.name, msg);
+    AppendShortAnsi7String(State.RecvRule^.name, msg);
     if msg[0] = #255 then
       dec(msg[0]); // avoid buffer overflow on next line
   end;
@@ -5025,9 +5045,9 @@ function TDhcpProcess.FindLease(var State: TDhcpState): PDhcpLease;
 begin
   // from reserved static "ip" in "rules"
   if (State.RecvRule <> nil) and
-     (State.RecvRule.ip <> 0) then
+     (State.RecvRule^.ip <> 0) then
   begin
-    result := State.FakeLease(State.RecvRule.ip);
+    result := State.FakeLease(State.RecvRule^.ip);
     exit;
   end;
   // from StaticUuid[]
@@ -5130,17 +5150,17 @@ begin
   State.AddOptionCopy(doUuidClientIdentifier);
 end;
 
-function TDhcpProcess.SetRule(var State: TDhcpState;
-  Rule: PDhcpScopeRule): PDhcpScopeRule;
+function TDhcpProcess.GetRule(var State: TDhcpState;
+  Rule: PDhcpRule): PDhcpRule;
 var
-  rules, hi: TDALen;     // use hi=high(TRuleValues) to favor FPC
+  n, hi: TDALen; // use hi=high(TRuleValues) to favor FPC
   r: PRuleValue;
 label
   ko; // unrolled logic for very efficient runtime execution
 begin
   // implements a "first precise rule wins" deterministic Virtual Machine
   result := nil;
-  rules := PDALen(PAnsiChar(Rule) - _DALEN)^ + _DAOFF; // Rule <> nil by caller
+  n := PDALen(PAnsiChar(Rule) - _DALEN)^ + _DAOFF; // Rule <> nil by caller
   repeat
     // AND conditions (all must match) = "all"
     r := pointer(Rule^.all);
@@ -5209,8 +5229,8 @@ begin
       // first exact matching Rule wins (deterministic)
       exit;
 ko: inc(Rule);      // next "rules" object
-    dec(rules);
-  until rules = 0;
+    dec(n);
+  until n = 0;
 end;
 
 function TDhcpProcess.RunCallbackAborted(var State: TDhcpState): boolean;
@@ -5258,13 +5278,18 @@ end;
 
 function TDhcpProcess.LockedResponse(var State: TDhcpState): PtrInt;
 var
-  r: PDhcpScopeRule;
+  r: PDhcpRule;
   p: PDhcpLease;
 begin
   // identify any matching input from this scope "rules" definition
   r := pointer(State.Scope^.Rules);
   if r <> nil then
-    State.RecvRule := SetRule(State, r);
+  begin
+    r := GetRule(State, r);
+    if r <> nil then // will apply the corresponding policy
+      State.RecvRule := @State.Scope^.Policies[
+        (PtrUInt(r) - PtrUInt(State.Scope^.Rules)) div SizeOf(r^)];
+  end;
   // find any existing lease - or StaticMac[] StaticUuid[] fake lease
   p := FindLease(State);
   // process the received DHCP message
