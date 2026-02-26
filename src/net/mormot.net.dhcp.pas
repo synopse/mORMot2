@@ -4795,9 +4795,9 @@ end;
 function TDhcpProcess.LoadFromText(const Text: RawUtf8): boolean;
 var
   tix32, entries: cardinal;
+  ip4, ip4le: TNetIP4;
   boot, expiry: TUnixTime;
   mac64: Int64;
-  ip4: TNetIP4;
   u, b: PUtf8Char;
   new: PDhcpLease;
   s, lasts: PDhcpScope;
@@ -4836,10 +4836,11 @@ begin
              (ip4 <> 0) then
           begin
             // we parsed a valid lease into expiry/mac/ip4: locate its range
+            ip4le := bswap32(ip4);
             p := lastp;
             if (p = nil) or
-               not ((ip4 >= p^.IpMin) and
-                    (ip4 <= p^.IpMax)) then
+               (ip4le < p^.IpMinLE) or
+               (ip4le > p^.IpMaxLE) then
             begin
               p := nil;
               s := lasts;
@@ -4848,7 +4849,12 @@ begin
                 s := GetScope(ip4); // called once per sub-net or incorrect IP
               if s <> nil then
               begin
-                p := s^.FindPool(ip4);
+                // inlined p := s^.FindPool
+                p := pointer(s^.Pools);
+                if p <> nil then
+                  p := DoFindPool(ip4le, p);
+                if p = nil then
+                  p := @s^.Main; // fallback
                 lasts := s; // is likely not to change for the next line
                 lastp := p;
               end;
