@@ -925,6 +925,8 @@ type
     /// the network subnet information related to this request
     // - Scope^.Safe.Lock has been done by TOnComputeResponse callback caller
     Scope: PDhcpScope;
+    /// the IP range pool as set by TDhcpProcess.FindLease()
+    Pool: PDhcpPool;
     /// length of the Recv UDP frame received from the client
     RecvLen: {$ifdef CPUINTEL} word {$else} cardinal {$endif};
     // length of the Send UDP frame after Flush
@@ -3954,9 +3956,9 @@ begin
   if (RecvType <> dmtInform) and
      not (doLeaseTime in SendOptions) then
   begin
-    AddOptionOnce32(doLeaseTime,     Scope^.LeaseTime); // big-endian
-    AddOptionOnce32(doRenewalTime,   Scope^.RenewalTime);
-    AddOptionOnce32(doRebindingTime, Scope^.Rebinding);
+    AddOptionOnce32(doLeaseTime,     Scope^.LeaseTimeBE);
+    AddOptionOnce32(doRenewalTime,   Scope^.RenewalTimeBE);
+    AddOptionOnce32(doRebindingTime, Scope^.RebindingBE);
   end;
   // append back option 81 with no associated DDNS flags
   if (RecvLens[doFqdn] <> 0) and
@@ -4035,8 +4037,8 @@ begin
         dec(len);
       end;
   end;
-  // O(n) fast search
-  fnd := DoFindUuid(pointer(Scope^.StaticUuid), pointer(v), len);
+  // O(n) fast search in all IP ranges static reservations
+  fnd := Scope^.FindStaticUuid(pointer(v), len, Pool);
   if fnd = 0 then
     exit;
   // append /GUID or /UUID in logs after the MAC address (up to 63 chars)
@@ -4487,7 +4489,7 @@ begin
   begin
     n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
     repeat
-      inc(result, s^.Count - s^.FreeListCount);
+      inc(result, s^.GetCount);
       inc(s);
       dec(n);
     until n = 0;
@@ -4688,8 +4690,7 @@ begin
     begin
       n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
       repeat
-        inc(result, s^.CheckOutdated(tix32)); // 5us for 20k leases
-        inc(total, s^.Count);
+        inc(result, s^.CheckOutdated(tix32, total)); // 5us for 20k leases
         inc(s);
         dec(n);
       until n = 0;
@@ -4784,9 +4785,10 @@ var
   boot, expiry: TUnixTime;
   mac64: Int64;
   ip4: TNetIP4;
-  p, b: PUtf8Char;
+  u, b: PUtf8Char;
   new: PDhcpLease;
-  s, last: PDhcpScope;
+  s, lasts: PDhcpScope;
+  p, lastp: PDhcpPool;
 begin
   result := false;
   tix32 := GetTickSec;
@@ -4795,63 +4797,73 @@ begin
     exit;
   mac64 := 0;
   entries := 0;
-  last := nil;
+  lasts := nil;
+  lastp := nil;
   ClearLeases({keepWriteLock=}true); // easier than complex s^.Lock/UnLock
   try
-    p := pointer(Text);
-    if (p <> nil) and
+    u := pointer(Text);
+    if (u <> nil) and
        (fScope <> nil) then
     repeat
       // line format is "<expiry> <mac> <ip4>" as for dnsmasq leases
-      p := GotoNextNotSpace(p);
-      if p^ in ['0' .. '9'] then // parse <expiry> but ignore e.g. '# 1.2.3.4/24'
+      u := GotoNextNotSpace(u);
+      if u^ in ['0' .. '9'] then // parse <expiry> but ignore e.g. '# 1.2.3.4/24'
       begin
-        b := p;
+        b := u;
         expiry := GetNextItemQWord(b, ' ');
         if (expiry >= boot - SecsPerMonth) and  // not too old
            (expiry < TUnixTime(UNIXTIME_MINIMAL) * 2) then // range in seconds
         begin
-          p := GotoNextSpace(b);
-          if (p - b = 17) and
-             (p^ = ' ') and
+          u := GotoNextSpace(b);
+          if (u - b = 17) and
+             (u^ = ' ') and
              TextToMac(b, @mac64) and
              (mac64 <> 0) and
-             NetIsIP4(p + 1, @ip4) and
+             NetIsIP4(u + 1, @ip4) and
              (ip4 <> 0) then
           begin
-            // we parsed a valid lease into expiry/mac/ip4: locate its scope
-            s := last;
-            if (s = nil) or
-               not s^.Subnet.Match(ip4) then
+            // we parsed a valid lease into expiry/mac/ip4: locate its range
+            p := lastp;
+            if (p = nil) or
+               not ((ip4 >= p^.IpMin) and
+                    (ip4 <= p^.IpMax)) then
             begin
-              s := GetScope(ip4); // called once per sub-net or incorrect IP
+              p := nil;
+              s := lasts;
+              if (s = nil) or
+                 not s^.Subnet.Match(ip4) then
+                s := GetScope(ip4); // called once per sub-net or incorrect IP
               if s <> nil then
-                last := s;        // is likely not to change for the next line
+              begin
+                p := s^.FindPool(ip4);
+                lasts := s; // is likely not to change for the next line
+                lastp := p;
+              end;
             end;
-            if s <> nil then
+            if p <> nil then
             begin
-              // add this lease to the internal list of this scope
-              if s^.Count = length(s^.Entry) then
-                SetLength(s^.Entry, NextGrow(s^.Count));
-              new := @s^.Entry[s^.Count];
-              inc(s^.Count);
+              // add this lease to the corresponding IP range list of this scope
+              if p^.Count = length(p^.Entry) then
+                SetLength(p^.Entry, NextGrow(p^.Count));
+              new := @p^.Entry[p^.Count];
+              inc(p^.Count);
               PInt64(new)^ := mac64 shl 16; // also set State+RateLimit
               new^.IP4 := ip4;
               new^.Expired := expiry - boot;
-              if new^.Expired < tix32 then // same logic than s^.CheckOutdated()
+              if new^.Expired < tix32 then // see s^.CheckOutdated()
                 new^.State := lsOutdated
               else
                 new^.State := lsAck;
               inc(entries);
             end;
-            inc(p, 8); // minimal '1.2.3.4' text length after (p + 1) = <ip4>
+            inc(u, 8); // minimal '1.2.3.4' text length after (u + 1) = <ip4>
           end;
         end;
       end;
       // invalid lines are just skipped
-      p := GotoNextLine(p);
-    until (p = nil) or
-          (p^ = #0);
+      u := GotoNextLine(u);
+    until (u = nil) or
+          (u^ = #0);
   finally
     fScopeSafe.WriteUnLock;
   end;
@@ -5242,7 +5254,7 @@ begin
       begin
         IP4Short(@Lease^.IP4, State.Ip);
         DoLog(sllTrace, 'as', State);
-        State.Scope^.ReuseIp4(Lease); // set MAC=0 IP=0 State=lsFree
+        State.Pool^.ReuseIp4(Lease); // set MAC=0 IP=0 State=lsFree
         inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
       end;
     dsmUnsupportedRequest:
@@ -5272,7 +5284,7 @@ function TDhcpProcess.RetrieveFrameIP(
 var
   ip4: TNetIP4;
 begin
-  // called from DISCOVER and REQUEST
+  // from DISCOVER or REQUEST to validate option 50 hint (not authoritative)
   result := false;
   ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]); // opt 50
   if ip4 = 0 then
@@ -5280,10 +5292,10 @@ begin
   if (Lease = nil) or
      (Lease^.IP4 <> ip4) then
     if (not State.Scope^.SubNet.Match(ip4)) or
-       State.Scope^.IsStaticIP(ip4) or
-       (State.Scope^.FindIp4(ip4) <> nil) then
+       (not State.Pool^.Match(ip4)) or
+       State.Scope^.Exists(ip4) then
     begin
-      // this IP seems already used by another MAC
+      // this IP seems already used by another MAC, or in another subnet/pool
       IP4Short(@ip4, State.Ip);
       DoLog(sllTrace, 'ignore requested', State); // transient info: no DoError
       inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
@@ -5297,6 +5309,7 @@ end;
 function TDhcpProcess.FindScope(var State: TDhcpState): boolean;
 begin
   result := true;
+  State.Pool := nil; // all those are about subnet selection, not IP range pools
   State.Scope := GetScope(DhcpIP4(@State.Recv, State.RecvLensRai[dorLinkSelection]));
   if State.Scope <> nil then
   begin
@@ -5331,25 +5344,16 @@ end;
 
 function TDhcpProcess.FindLease(var State: TDhcpState): PDhcpLease;
 begin
-  // from reserved static "ip" in "rules"
-  if (State.RecvRule <> nil) and
-     (State.RecvRule^.ip <> 0) then
-  begin
-    result := State.FakeLease(State.RecvRule^.ip);
-    exit;
-  end;
-  // from StaticUuid[]
-  result := pointer(State.Scope^.StaticUuid);
-  if result <> nil then
-    if State.RecvLens[doClientIdentifier] <> 0 then  // computer MAC/UUID
-      result := State.ClientUuid(doClientIdentifier)
-    else if State.RecvLens[doUuidClientIdentifier] <> 0 then  // IPXE/VM
-      result := State.ClientUuid(doUuidClientIdentifier)
-    else
-      result := nil;
-  // from Entry[] and StaticMac[]
+  // from StaticUuid[] reservations
+  if State.RecvLens[doClientIdentifier] <> 0 then  // computer MAC/UUID
+    result := State.ClientUuid(doClientIdentifier)
+  else if State.RecvLens[doUuidClientIdentifier] <> 0 then  // IPXE/VM
+    result := State.ClientUuid(doUuidClientIdentifier)
+  else
+    result := nil;
+  // from Entry[] dynamic list and StaticMac[] reservations in all pools
   if result = nil then
-    result := State.Scope^.FindMac(State.Mac64);
+    result := State.Scope^.FindMac(State.Mac64, State.Pool);
 end;
 
 const
@@ -5568,17 +5572,37 @@ var
   r: PDhcpRule;
   p: PDhcpLease;
 begin
-  // identify any matching input from this scope "rules" definition
-  r := pointer(State.Scope^.Rules);
+  // find any existing dynamic lease - or StaticMac[] StaticUuid[] fake lease
+  p := FindLease(State);
+  // identify the IP range pool within this scope (if not known from the lease)
+  if State.Pool = nil then
+  begin
+    r := pointer(State.Scope^.PoolRules);
+    if r <> nil then
+    begin
+      r := GetRule(State, r);
+      if r <> nil then
+        State.Pool := @State.Scope.Pools[
+           (PtrUInt(r) - PtrUInt(State.Scope^.PoolRules)) div SizeOf(r^)];
+    end;
+    if State.Pool = nil then
+      State.Pool := @State.Scope^.Main; // default
+  end;
+  // identify any matching input from this pool "rules" definition
+  r := pointer(State.Pool^.Rules);
   if r <> nil then
   begin
     r := GetRule(State, r);
-    if r <> nil then // will apply the corresponding policy
-      State.RecvRule := @State.Scope^.Policies[
-        (PtrUInt(r) - PtrUInt(State.Scope^.Rules)) div SizeOf(r^)];
+    if r <> nil then // found a matching entry in "rules": apply the policy
+    begin
+      State.RecvRule := @State.Pool^.Policies[
+        (PtrUInt(r) - PtrUInt(State.Pool^.Rules)) div SizeOf(r^)];
+      // there may be a reserved static "ip" for this rule
+      if (p = nil) and
+         (State.RecvRule^.ip <> 0) then
+        p := State.FakeLease(State.RecvRule^.ip);
+    end;
   end;
-  // find any existing lease - or StaticMac[] StaticUuid[] fake lease
-  p := FindLease(State);
   // process the received DHCP message
   case State.RecvType of
     dmtDiscover:
@@ -5591,7 +5615,7 @@ begin
           // first time seen (most common case), or renewal
           if not RetrieveFrameIP(State, p) then // IP from option 50
           begin
-            State.Ip4 := State.Scope^.NextIp4; // guess a free IP from pool
+            State.Ip4 := State.Pool^.NextIp4; // guess a free IP from pool
             if State.Ip4 = 0 then
             begin
               // IPv4 exhausted: don't return NAK, but silently ignore
@@ -5602,8 +5626,8 @@ begin
           end;
           if p = nil then
           begin
-            p := State.Scope^.NewLease(State.Mac64);
-            State.Scope^.LastDiscover := State.Scope^.Index(p);
+            p := State.Pool^.NewLease(State.Mac64);
+            State.Pool^.LastDiscover := State.Pool^.LeaseIndex(p);
           end;
           p^.IP4 := State.Ip4;
         end
@@ -5641,21 +5665,21 @@ begin
           // RFC 2131: lease is Reserved after OFFER = SELECTING
           //           lease is Ack/Static/Outdated = RENEWING/REBINDING
           inc(State.Scope^.Metrics.Current[dsmLeaseRenewed])
-        else if RetrieveFrameIP(State, p) then
-          begin
-            // no lease, but Option 50 = INIT-REBOOT
-            if p = nil then
-              p := State.Scope^.NewLease(State.Mac64)
-            else
-              inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
-            p^.IP4 := State.Ip4;
-          end
+        else if RetrieveFrameIP(State, p) then // IP from option 50
+        begin
+          // no lease, but Option 50 = INIT-REBOOT
+          if p = nil then
+            p := State.Pool^.NewLease(State.Mac64)
           else
-          begin
-            // no lease, and none or invalid Option 50 = send NAK response
-            result := DoError(State, dsmNak);
-            exit;
-          end;
+            inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
+          p^.IP4 := State.Ip4;
+        end
+        else
+        begin
+          // no lease, and none or invalid Option 50 = send NAK response
+          result := DoError(State, dsmNak);
+          exit;
+        end;
         // update the lease information
         if p^.State = lsStatic then
         begin
@@ -5718,7 +5742,7 @@ begin
           // store internally this IP as unavailable for NextIP4
           IP4Short(@State.Ip4, State.Ip);
           DoLog(sllTrace, 'as', State);  // success: no DoError()
-          p := State.Scope^.NewLease(0); // mac=0: sentinel to store this IP
+          p := State.Pool^.NewLease(0); // mac=0: sentinel to store this IP
           p^.State := lsUnavailable;
           p^.IP4 := State.Ip4;
           p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
@@ -5763,13 +5787,13 @@ begin
             inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
           if (dsoInformRateLimit in State.Scope^.Options) and
              (fIdleTix <> 0) and // OnIdle() would reset RateLimit := 0
-             not State.Scope^.IsStaticIP(State.Ip4) then
+             not State.Pool^.IsStaticIP(State.Ip4) then
           begin
             // temporarily marks client IP as unavailable to avoid conflicts
             // (not set by default: stronger than the RFC requires, and no
             // other DHCP server like KEA, dnsmasq or Windows implements it)
             if p = nil then
-              p := State.Scope^.NewLease(State.Mac64)
+              p := State.Pool^.NewLease(State.Mac64)
             else if p^.RateLimit >= 2 then // up to 3 INFORM per MAC per sec
             begin
               result := DoError(State, dsmInformRateLimitHit);
@@ -5781,7 +5805,7 @@ begin
               // mark this IP as temporary unavailable
               if p^.IP4 <> State.Ip4 then
                 // create a new MAC-free lease for this other IP
-                p := State.Scope^.NewLease(0); // mac=0: sentinel for this IP
+                p := State.Pool^.NewLease(0); // mac=0: sentinel for this IP
             end;
             // update the lease information
             inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
