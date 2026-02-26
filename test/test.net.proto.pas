@@ -1569,6 +1569,7 @@ var
   d: TDhcpState;
   i, n, l, ndx: PtrInt;
   server: TDhcpProcess;
+  pool: PDhcpPool;
   settings: TDhcpServerSettings;
   macs: TNetMacs;
   ips: TNetIP4s;
@@ -2278,7 +2279,8 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:60,' +
       'rebinding-time:105,relay-agent-information:{circuit-id:"DCBA"}}');
     // validate Relay Agent rules
-    ndx := server.Scope[0].AddRule([
+    pool := @server.Scope[0].Main;
+    ndx := pool.AddRule([
       '{any:{"circuit-id":"1234","circuit-id":"DCBA"},' +
        'always:{202:"titi"}}']);
     ips[0] := d.Send.yiaddr;
@@ -2291,7 +2293,7 @@ begin
       '202:"titi",subnet-mask:"255.252.0.0",lease-time:120,' +
       'renewal-time:60,rebinding-time:105,' +
       'relay-agent-information:{circuit-id:"DCBA"}}');
-    server.Scope[0].DeleteRule(ndx);
+    pool.DeleteRule(ndx);
     // validate DECLINE process with no specified IP: should flush last
     d.ClientFlush(d.ClientNew(dmtDecline, macs[0]));
     xid := d.Recv.xid;
@@ -2412,7 +2414,7 @@ begin
     Check(d.RecvBoot = dcbX86, 'with boot file');
     mac := MacToText(@macs[8]);
     ip := IP4ToText(@d.Send.yiaddr);
-    Check(not server.Scope[0].IsStaticIP(d.Send.yiaddr), 'dynamic');
+    Check(not pool.IsStaticIP(d.Send.yiaddr), 'dynamic');
     CheckEqual(d.SendToJson(true),
       '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
       '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
@@ -2474,12 +2476,12 @@ begin
       '"HTTPClient",subnet-mask:"255.252.0.0",lease-time:120,' +
       'renewal-time:60,rebinding-time:105}');
     // add some custom "rules"
-    CheckEqual(length(server.Scope[0].Rules), 0, 'no rule yet');
-    server.Scope[0].AddRule([
+    CheckEqual(length(pool.Rules), 0, 'no rule yet');
+    pool.AddRule([
       '{all:{user-class: "iPXE", client-architecture: 5},' +
        'always:{tftp-server-name:"192.168.0.254"}, '+
        'requested:{boot-file-name:"ipxe.5"}}']);
-    CheckEqual(length(server.Scope[0].Rules), 1, 'one rule');
+    CheckEqual(length(pool.Rules), 1, 'one rule');
     // incomplete "all":
     f := d.ClientNew(dmtRequest, macs[8]);
     option[2] := #5;  // option 93 as uint16 (00:05)
@@ -2514,26 +2516,26 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
     // "rules" with "mac" and "ip" should go to static list
-    Check(not server.Scope[0].IsStaticIP(ips[8]), 'none8');
+    Check(not pool.IsStaticIP(ips[8]), 'none8');
     mac := MacToText(@macs[8]);
     ip := IP4ToText(@ips[8]);
-    server.Scope[0].AddRule([
+    pool.AddRule([
       '{mac:"', mac, '",ip:"' + ip + '"}']);
-    CheckEqual(length(server.Scope[0].Rules), 1, 'static not rule');
-    Check(server.Scope[0].IsStaticIP(ips[8]), 'static8');
+    CheckEqual(length(pool.Rules), 1, 'static not rule');
+    Check(pool.IsStaticIP(ips[8]), 'static8');
     // "rule" with "mac" and "ip" and custom options
     mac := MacToText(@macs[7]);
     ip := IP4ToText(@ips[7]);
     uuid :=  ToUtf8(UUID_97.uuid);
-    server.Scope[0].AddRule([
+    pool.AddRule([
       '{all:{mac:["', MacToText(@macs[6]), '","', mac,  // validate pvkMacs
       '"],client-uuid:"', uuid, '"},' +
       'always:{ntp-server:["1.1.1.1", "4.4.4.4"]},' +
       'requested:{domain:"mydomain"}}']);
-    server.Scope[0].AddRule([
+    pool.AddRule([
       '{mac:"', mac, '",ip:"' + ip + '",' +
        'requested:{domain-name:"mydomain"}}']);
-    CheckEqual(length(server.Scope[0].Rules), 3, 'rule2');
+    CheckEqual(length(pool.Rules), 3, 'rule2');
     // deterministic first matching "rules" wins - static
     f := d.ClientNew(dmtRequest, macs[7]);
     d.ClientFlush(f);
@@ -2573,10 +2575,10 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105,fqdn:{client:"DESKTOP-ABC123.corp.example.com"}}');
     // validate ASCII option 81 with custom "fqdn" simple rule value
-    ndx := server.Scope[0].AddRule([
+    ndx := pool.AddRule([
       '{mac:"', mac, '",' +
        'always:{81:"mydomain"}}']);
-    CheckEqual(ndx, high(server.Scope[0].Rules));
+    CheckEqual(ndx, high(pool.Rules));
     CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn ascii');
     CheckEqual(d.RecvToJson(true), json);
     ip := IP4ToText(@d.Send.yiaddr); // OFFER twice returns the next IP
@@ -2587,9 +2589,9 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
     // replace the last rule with an explicit {server:"fqdn"} for flags S=1
-    Check(server.Scope[0].DeleteRule(ndx), 'del1');
-    Check(not server.Scope[0].DeleteRule(ndx), 'del2');
-    CheckEqual(ndx, server.Scope[0].AddRule([
+    Check(pool.DeleteRule(ndx), 'del1');
+    Check(not pool.DeleteRule(ndx), 'del2');
+    CheckEqual(ndx, pool.AddRule([
       '{mac:"', mac, '",' +
        'always:{fqdn:{server:"mydomain.com"}}}']));
     // validate ASCII option 81 with the new {server:"fqdn"} rule
@@ -2603,8 +2605,8 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
     // validate domain-search option 119 with multiple DNS domains
-    Check(server.Scope[0].DeleteRule(ndx), 'del2');
-    CheckEqual(ndx, server.Scope[0].AddRule([
+    Check(pool.DeleteRule(ndx), 'del2');
+    CheckEqual(ndx, pool.AddRule([
       '{mac:"', mac, '",' +
        'always:{domain-search:"mydomain.com,another.domain.net"}}']));
     CheckNotEqual(server.ComputeResponse(d), 0, 'domainsearch');
@@ -2617,8 +2619,8 @@ begin
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105,fqdn:{client:"DESKTOP-ABC123.corp.example.com"}}');
     // validate pvkRaw non standard options "any" match and also in response
-    Check(server.Scope[0].DeleteRule(ndx), 'del2');
-    CheckEqual(ndx, server.Scope[0].AddRule([
+    Check(pool.DeleteRule(ndx), 'del2');
+    CheckEqual(ndx, pool.AddRule([
       '{any:{fqdn:"",200:"none",200:"trigger"},' +
        'always:{201:"toto"}}']));
     f := d.ClientNew(dmtDiscover, macs[8]);
