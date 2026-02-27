@@ -30,6 +30,7 @@ uses
   mormot.core.rtti,
   mormot.core.data,
   mormot.core.variants,
+  mormot.core.json,
   mormot.db.core,
   mormot.db.rad,
   {$ifdef ISDELPHIXE2}
