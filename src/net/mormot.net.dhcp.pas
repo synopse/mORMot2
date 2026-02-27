@@ -2330,7 +2330,7 @@ function IsValidTlv(op: PAnsiChar; len: integer): boolean;
 begin
   result := false;
   repeat
-    dec(len, 2);          // type + len
+    dec(len, 2);          // type + len=op[1]
     if len < 0 then
       exit;
     dec(len, ord(op[1])); // value
@@ -2345,7 +2345,7 @@ function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
 begin
   result := false;
   repeat
-    dec(len, 5);          // entreprise-number + data-len
+    dec(len, 5);          // entreprise-number + data-len=op[4]
     if len < 0 then
       exit;
     dec(len, ord(op[4])); // jump vendor-data
@@ -2451,74 +2451,6 @@ begin
           W.AddDirect(']');
           exit;
         end;
-      ptVendor43, // most vendor-encapsulated-options use nested TLV
-      ptRelay82:  // relay-agent-information sub-options are always TLV encoded
-        if IsValidTlv(v, len) then
-        begin
-          AddTlvJson(v, len, W, tlv[0] = 82);      // as JSON object
-          exit;
-        end;
-      ptMsg53:
-        if len = 1 then
-        begin
-          W.AddJsonString(DHCP_TXT[TDhcpMessageType(v^)]);
-          exit;
-        end;
-      ptParam55:
-        begin
-          W.AddDirect('[');                        // as JSON array of "names"
-          repeat
-            if twoForceJsonStandard in W.CustomOptions then
-              W.AddJsonString(DhcpOptName(PByte(v)^)^)
-            else
-              W.AddB(PByte(v)^); // shorter and simple enough as extended/log
-            dec(len);
-            if len = 0 then
-              break;
-            inc(PByte(v));
-            W.AddComma;
-          until false;
-          W.AddDirect(']');
-          exit;
-        end;
-      ptClient61:
-        if (len = 6) or
-           ((len = 7) and
-            (ord(v[0]) = ARPHRD_ETHER)) then
-        begin
-          if len = 7 then
-            inc(v);
-          W.AddBinToHumanHex(v, 6, '"');           // as JSON string "xx:xx:.."
-          exit;
-        end;
-      ptFqdn81:
-        if (len > 3) and                           // RFC 4702
-           (v[1] = #0) and                         // rcode1 = 0
-           (v[2] = #0) then                        // rcode2 = 0
-        begin
-          AddJsonWriterRfc4702(W, v, len);         // {client/server:"fqdn"}
-          exit;
-        end;
-      ptVendor12x:
-        if IsValidRfc3925(v, len) then             // 124/125
-        begin
-          W.AddDirect('{');                        // as JSON object
-          repeat
-            W.AddPropName(bswap32(PCardinal(v)^)); // entreprise-number
-            inc(PCardinal(v));                     // data-len + vendor-data
-            if IsValidTlv(v + 1, ord(v[0])) then
-              AddTlvJson(v + 1, ord(v[0]), W, {rai=}false)
-            else
-              AddTextBinJson(v + 1, ord(v[0]), W);
-            dec(len, ord(v[0]) + 5);
-            if len <= 0 then
-              break;
-            v := @v[ord(v[0]) + 1];
-            W.AddComma;
-          until false;
-          W.AddDirect('}');
-          exit;
-        end;
       ptUInt8:
         begin
           if len = 1 then
@@ -2586,6 +2518,54 @@ begin
           W.Add(PBoolean(v)^);                     // will normalize value byte
           exit;
         end;
+      ptVendor43, // most vendor-encapsulated-options use nested TLV
+      ptRelay82:  // relay-agent-information sub-options are always TLV encoded
+        if IsValidTlv(v, len) then
+        begin
+          AddTlvJson(v, len, W, tlv[0] = 82);      // as JSON object
+          exit;
+        end;
+      ptMsg53:
+        if len = 1 then
+        begin
+          W.AddJsonString(DHCP_TXT[TDhcpMessageType(v^)]);
+          exit;
+        end;
+      ptParam55:
+        begin
+          W.AddDirect('[');                        // as JSON array of "names"
+          repeat
+            if twoForceJsonStandard in W.CustomOptions then
+              W.AddJsonString(DhcpOptName(PByte(v)^)^)
+            else
+              W.AddB(PByte(v)^); // shorter and simple enough in extended/log
+            dec(len);
+            if len = 0 then
+              break;
+            inc(PByte(v));
+            W.AddComma;
+          until false;
+          W.AddDirect(']');
+          exit;
+        end;
+      ptClient61:
+        if (len = 6) or
+           ((len = 7) and
+            (ord(v[0]) = ARPHRD_ETHER)) then
+        begin
+          if len = 7 then
+            inc(v);
+          W.AddBinToHumanHex(v, 6, '"');           // as JSON string "xx:xx:.."
+          exit;
+        end;
+      ptFqdn81:
+        if (len > 3) and                           // RFC 4702
+           (v[1] = #0) and                         // rcode1 = 0
+           (v[2] = #0) then                        // rcode2 = 0
+        begin
+          AddJsonWriterRfc4702(W, v, len);         // {client/server:"fqdn"}
+          exit;
+        end;
       ptUuid97:
         if len in [16, 17] then
         begin
@@ -2597,6 +2577,26 @@ begin
       ptDom119:
          if AddJsonWriterDns(W, v, len, {csv=}true) then
            exit;
+      ptVendor12x:
+        if IsValidRfc3925(v, len) then             // 124/125
+        begin
+          W.AddDirect('{');                        // as JSON object
+          repeat
+            W.AddPropName(bswap32(PCardinal(v)^)); // entreprise-number
+            inc(PCardinal(v));                     // data-len + vendor-data
+            if IsValidTlv(v + 1, ord(v[0])) then
+              AddTlvJson(v + 1, ord(v[0]), W, {rai=}false)
+            else
+              AddTextBinJson(v + 1, ord(v[0]), W);
+            dec(len, ord(v[0]) + 5);
+            if len <= 0 then
+              break;
+            v := @v[ord(v[0]) + 1];
+            W.AddComma;
+          until false;
+          W.AddDirect('}');
+          exit;
+        end;
   end;
   // if we reached here, we have either binary or plain text
   AddTextBinJson(v, len, w);
