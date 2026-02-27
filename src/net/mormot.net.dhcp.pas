@@ -2896,7 +2896,8 @@ begin
   result := false;
   FillZero(nfo.mac);
   nfo.uuid := '';
-  if TrimSplit(macip, mac, ip, '=') then // 'mac=ip' or 'uuid=ip' format
+  if TrimSplit(macip, mac, ip, '=') or   // 'mac=ip' or 'uuid=ip' format
+     TrimSplit(macip, mac, ip, ' ') then // 'mac ip' or 'uuid ip' format
     if ((length(mac) = 17) and
         (TextToMac(pointer(mac), @nfo.mac))) then
       // exact 'xx:xx:xx:xx:xx:xx' format
