@@ -698,6 +698,43 @@ type
       read fStats;
   end;
 
+  TSynBackgroundQueue = class;
+
+  /// event callback executed periodically by TSynBackgroundQueue
+  // - Event is a pointer to an unqueued aQueueTypeInfo item
+  TOnSynBackgroundQueueProcess = procedure(Sender: TSynBackgroundQueue;
+    Event: pointer) of object;
+
+  /// TThread able to run events from a queue at a given periodic pace
+  TSynBackgroundQueue = class(TSynBackgroundThreadAbstract)
+  protected
+    fQueue: TSynQueue;
+    fOnProcess: TOnSynBackgroundQueueProcess;
+    fOnProcessMS: cardinal;
+    procedure ExecuteLoop; override;
+  public
+    /// initialize the thread and queue for a periodic task processing
+    constructor Create(const aThreadName: RawUtf8; aQueueTypeInfo: PRttiInfo;
+      aOnProcessMS: cardinal; const aOnProcess: TOnSynBackgroundQueueProcess = nil); reintroduce;
+    /// finalize and wait for the thread ending
+    destructor Destroy; override;
+    /// add an event message to the internal processing queue
+    // - event parameter should be one aQueueTypeInfo item
+    procedure EnQueue(const Event; ExecuteNow: boolean = false);
+    /// access to the associated thread-safe queue
+    property RawQueue: TSynQueue
+      read fQueue;
+    /// access to the associated event handler
+    property OnProcess: TOnSynBackgroundQueueProcess
+      read fOnProcess write fOnProcess;
+    /// access to the delay, in milliseconds, of the periodic task processing
+    property OnProcessMS: cardinal
+      read fOnProcessMS write fOnProcessMS;
+    /// returns TRUE if there is currenly some queued event running in OnProcess
+    property Processing: boolean
+      read fProcessing;
+  end;
+
   TSynBackgroundTimer = class;
 
   /// event callback executed periodically by TSynBackgroundThreadProcess
@@ -2561,6 +2598,59 @@ begin
     end;
   end;
 end;
+
+
+{ TSynBackgroundQueue }
+
+constructor TSynBackgroundQueue.Create(const aThreadName: RawUtf8;
+  aQueueTypeInfo: PRttiInfo; aOnProcessMS: cardinal;
+  const aOnProcess: TOnSynBackgroundQueueProcess);
+begin
+  fQueue := TSynQueue.Create(aQueueTypeInfo, aThreadName);
+  fOnProcess := aOnProcess;
+  fOnProcessMS := aOnProcessMS;
+  inherited Create(aThreadName, nil, TSynLogFamily.OnThreadEnded);
+end;
+
+destructor TSynBackgroundQueue.Destroy;
+begin
+  inherited Destroy;
+  fQueue.Free;
+end;
+
+procedure TSynBackgroundQueue.ExecuteLoop;
+var
+  tmp: TSynTempBuffer;
+begin
+  fProcessEvent.WaitFor(fOnProcessMS);
+  if not fQueue.Pending then
+    exit;
+  fProcessing := true;
+  tmp.InitZero(fQueue.fValues.ItemSize); // temporary value item on stack
+  try
+    while fQueue.Pop(tmp.buf^) do        // next pending item
+    begin
+      if Assigned(fOnProcess) then
+        try
+          fOnProcess(self, tmp.buf);
+        except
+          ;
+        end;
+      fQueue.fValues.ItemClear(tmp.buf); // reset between Pop() iterations
+    end;
+  finally
+    tmp.Done;                            // likely to be stack-allocated
+    fProcessing := false;
+  end;
+end;
+
+procedure TSynBackgroundQueue.EnQueue(const Event; ExecuteNow: boolean);
+begin
+  fQueue.Push(Event);
+  if ExecuteNow then
+    fProcessEvent.SetEvent;
+end;
+
 
 
 { TSynBackgroundTimer }
