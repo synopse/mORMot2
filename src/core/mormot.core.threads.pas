@@ -459,7 +459,7 @@ type
     fOnAfterExecute: TOnNotifyThread;
     fThreadName: RawUtf8;
     fExecute: (exCreated, exRun, exFinished);
-    fExecuteLoopPause: boolean;
+    fExecuteLoopPause, fProcessing: boolean;
     procedure SetExecuteLoopPause(dopause: boolean);
     /// where the main process takes place
     procedure Execute; override;
@@ -663,6 +663,7 @@ type
     fOnProcess: TOnSynBackgroundThreadProcess;
     fOnException: TNotifyEvent;
     fOnProcessMS: cardinal;
+    fProcessingCounter: integer;
     fStats: TSynMonitor;
     procedure ExecuteLoop; override;
   public
@@ -730,8 +731,6 @@ type
   protected
     fTask: TSynBackgroundTimerTaskDynArray;
     fTasks: TDynArrayLocked;
-    fProcessing: boolean;
-    fProcessingCounter: integer;
     procedure EverySecond(Sender: TSynBackgroundThreadProcess);
     function Find(const aProcess: TMethod): PtrInt;
     function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
