@@ -928,8 +928,11 @@ begin
   fDynArray.InitRtti(aDynArray, fValue, @fCount);
   aSortAs := fDynArray.SetParserType(aSortAs, // aSortAs=ptNone->RTTI
     loCaseInsensitive in fOptions);
-  if (fDynArray.Info.ArrayRtti = nil) or
-     (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind)  then
+  if fDynArray.Info.ArrayRtti = nil then
+    EIList.RaiseUtf8('%.Create<%> (%) has % ArrayRtti=nil',
+      [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
+       aDynArray.Info^.RawName]);
+  if fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind  then
     EIList.RaiseUtf8('%.Create<%> (%) does not match % (%)',
       [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
        aDynArray.Info^.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
