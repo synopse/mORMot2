@@ -701,7 +701,7 @@ type
   TSynBackgroundQueue = class;
 
   /// event callback executed periodically by TSynBackgroundQueue
-  // - Event is a pointer to an unqueued aQueueTypeInfo item
+  // - Event is a pointer to an aQueueTypeInfo item supplied to EnQueue()
   TOnSynBackgroundQueueProcess = procedure(Sender: TSynBackgroundQueue;
     Event: pointer) of object;
 
@@ -714,13 +714,14 @@ type
     procedure ExecuteLoop; override;
   public
     /// initialize the thread and queue for a periodic task processing
+    // - aQueueTypeInfo should be TypeInfo() of a dynamic array of event items
     constructor Create(const aThreadName: RawUtf8; aQueueTypeInfo: PRttiInfo;
       aOnProcessMS: cardinal; const aOnProcess: TOnSynBackgroundQueueProcess = nil); reintroduce;
     /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// add an event message to the internal processing queue
-    // - event parameter should be one aQueueTypeInfo item
-    procedure EnQueue(const Event; ExecuteNow: boolean = false);
+    // - event parameter should point to one aQueueTypeInfo item
+    procedure EnQueue(Event: pointer; ExecuteNow: boolean = false);
     /// access to the associated thread-safe queue
     property RawQueue: TSynQueue
       read fQueue;
@@ -2644,9 +2645,9 @@ begin
   end;
 end;
 
-procedure TSynBackgroundQueue.EnQueue(const Event; ExecuteNow: boolean);
+procedure TSynBackgroundQueue.EnQueue(Event: pointer; ExecuteNow: boolean);
 begin
-  fQueue.Push(Event);
+  fQueue.Push(Event^);
   if ExecuteNow then
     fProcessEvent.SetEvent;
 end;
