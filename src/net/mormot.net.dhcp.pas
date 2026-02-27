@@ -3146,7 +3146,7 @@ var
   max: TNetIP4;
 begin
   result := ip;
-  hi := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
+  hi := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1); // optimized for FPC
   repeat
     if result < p^.IpMinLE then // increasing little-endian order in SubPools[]
       exit;                     // not in any sub for sure
@@ -3445,7 +3445,7 @@ begin
     p := pointer(Entry);
     for i := 0 to Count - 1 do
     begin
-      if Scope^.Subnet.Match(p^.IP4) and
+      if (p^.IP4 <> 0) and
          Match(p^.IP4) and
          not IsStaticIP(p^.IP4) then
       begin
@@ -3458,11 +3458,11 @@ begin
     if n <> Count then
     begin
       if Assigned(log) then
-        log.Log(sllTrace, 'PrepareScope: subnet-mask adjust count=% from %',
-          [n, Count]);
+        log.Log(sllTrace, 'PrepareScope: compacted % leases into count=%',
+          [n - Count, n]);
       Count := n;
     end;
-    FreeListCount := 0;
+    FreeListCount := 0; // lsFree have p^.IP4=0 so would be just trimmed
   end;
   // log the IP range settings and the computed sub-network context
   if Assigned(log) then
