@@ -600,19 +600,20 @@ function MetricsToCsv(const metrics: TDhcpMetrics; withheader: boolean;
 type
   /// the state of one DHCP TDhcpLease entry in memory
   // - lsFree identify an lsOutdated slot which IP4 has been reused
+  // - lsStatic when the lease comes for Scope.StaticMac[] but not Scope.Entry[]
+  // - lsOutdated is set once Expired timestamp has been reached, so that the
+  // IP4 address could be reused on the next DISCOVER for this MAC
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
   // - lsAck is used when REQUEST has been received and ACK has been sent back
   // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
-  // - lsOutdated is set once Expired timestamp has been reached, so that the
-  // IP4 address could be reused on the next DISCOVER for this MAC
-  // - lsStatic when the lease comes for Scope.StaticMac[] but not Scope.Entry[]
+  // - TDhcpScope.DoOutdated requires to end with lsReserved,lsAck,lsUnavailable
   TLeaseState = (
     lsFree,
+    lsStatic,
+    lsOutdated,
     lsReserved,
     lsAck,
-    lsUnavailable,
-    lsOutdated,
-    lsStatic);
+    lsUnavailable);
 
   /// store one DHCP lease in memory with all its logical properties
   // - efficiently padded to 16 bytes (128-bit), so 1,000 leases would use 16KB
@@ -891,6 +892,7 @@ type
     /// persist all leases with "<expiry> <MAC> <IP>" dnsmasq file pattern
     // - this method is thread safe and will call Safe.Lock/UnLock
     // - returns the number of entries/lines added to the text file
+    // - will also compact in-place the internal leases storage, if needed
     function TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime): integer;
   private
     Options: TDhcpScopeOptions;
@@ -1521,11 +1523,13 @@ type
     // $ 1770034159 c2:07:2c:9d:eb:71 192.168.1.207
     // - we skip <hostname> and <client id> values since we don't handle them
     // - by design, only lsAck and recently lsOutdated entries are included
+    // - will also compact in-place the internal leases storage, if needed
     function SaveToText(SavedCount: PInteger = nil): RawUtf8;
     /// restore the internal entry list using SaveToText() format
     function LoadFromText(const Text: RawUtf8): boolean;
     /// persist the internal entry list using SaveToText() format
     // - returns the number of entries stored in the file, or -1 on write error
+    // - will also compact in-place the internal leases storage, if needed
     // - will maintain a .bak atomic copy unless dsoNoFileBak option is set
     function SaveToFile(const FileName: TFileName): integer;
     /// restore the internal entry list using SaveToText() format
@@ -3053,26 +3057,6 @@ end;
   {$CODEALIGN LOOP=16}  // may favor bigger loops in the next 2 functions
 {$endif FPC_CODEALIGN}
 
-function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
-begin // dedicated sub-function for better codegen (100ns for 200 entries)
-  result := 0;
-  if n <> 0 then
-    repeat
-      if (p^.Expired < tix32) and
-         (p^.State in [lsReserved, lsAck, lsUnavailable]) then
-      begin
-        inc(result);
-        p^.State := lsOutdated;
-      end;
-      {$ifndef CPUINTEL}        // seems actually slower on modern Intel/AMD
-      if p^.RateLimit <> 0 then // don't invalidate L1 cache
-      {$endif CPUINTEL}
-        p^.RateLimit := 0;      // reset the rate limiter every second
-      inc(p);
-      dec(n);
-    until n = 0;
-end;
-
 const
   MIN_UUID_BYTES = 4; // < 4 bytes is too short to reliably identify a client
 
@@ -3721,84 +3705,124 @@ type
     tix32, grace: cardinal;
     boot: TUnixTime;
     subnet: PShortString;
-    total: integer;
+    compacted: PDhcpLease;
+    remain, total: integer;
   end;
 
-procedure DoWrite(var c: TDoWrite; p: PDhcpLease; n: cardinal);
+procedure DoWriteAndCompact(var ctx: TDoWrite; p: PDhcpLease);
 var
   d, e: PAnsiChar;
 begin // dedicated sub-function for better codegen
-  if n <> 0 then
-    repeat
-      // OFFERed leases are temporary; the client hasn't accepted this IP
-      // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
-      if (PInt64(p)^ shr 16 <> 0) and  // Mac64 <> 0
-         (p^.IP4 <> 0) and
-         (((p^.State = lsAck) or
-          ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
-           (cardinal(c.tix32 - p^.Expired) < c.grace)))) then // still reusable
+  repeat
+    dec(ctx.remain);
+    // OFFERed leases are temporary; the client hasn't accepted this IP
+    // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
+    if (PInt64(p)^ shr 16 <> 0) and  // Mac64 <> 0
+       (p^.IP4 <> 0) and
+       (((p^.State = lsAck) or
+        ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
+         (cardinal(ctx.tix32 - p^.Expired) < ctx.grace)))) then // reusable
+    begin
+      if ctx.subnet <> nil then
       begin
-        if c.subnet <> nil then
-        begin
-          // add once the subnet mask as '# 192.168.0.1/24 subnet' comment line
-          c.W.AddShort(c.subnet^);
-          c.subnet := nil; // append once, and only if necessary
-        end;
-        // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207" + LF
-        c.W.AddQ(c.boot + Int64(p^.Expired), {reserve=}48);
-        d := PAnsiChar(c.W.B) + 1; // directly write to the output buffer
-        d[0] := ' ';
-        ToHumanHexP(d + 1, @p^.mac, SizeOf(p^.mac));
-        d[18] := ' ';
-        e := IP4TextAppend(@p^.IP4, d + 19);
-        e[0] := #10;
-        inc(c.W.B, e - d + 1);
-        inc(c.total);
+        // add once the subnet mask as '# 192.168.0.1/24 subnet' comment line
+        ctx.W.AddShort(ctx.subnet^);
+        ctx.subnet := nil; // append once, and only if necessary
       end;
-      inc(p);
-      dec(n);
-    until n = 0;
+      // format is "1770034159 c2:07:2c:9d:eb:71 192.168.1.207" + LF
+      ctx.W.AddQ(ctx.boot + Int64(p^.Expired), {reserve=}48);
+      d := PAnsiChar(ctx.W.B) + 1; // directly write to the output buffer
+      d[0] := ' ';
+      ToHumanHexP(d + 1, @p^.mac, SizeOf(p^.mac));
+      d[18] := ' ';
+      e := IP4TextAppend(@p^.IP4, d + 19);
+      e[0] := #10;
+      inc(ctx.W.B, e - d + 1);
+      inc(ctx.total);
+      if ctx.compacted <> nil then
+      begin
+        ctx.compacted^ := p^; // compact the leases array in-place
+        inc(ctx.compacted);
+      end;
+    end
+    else if (ctx.compacted = nil) and // keep pending OFFER and DECLINE entries
+            not (p^.State in [lsReserved, lsUnavailable]) then
+      ctx.compacted := p; // start compacting the array in-place
+    inc(p);
+  until ctx.remain = 0;
+end;
+
+procedure WriteAndCompact(var ctx: TDoWrite; var pool: TDhcpPool);
+begin
+  if pool.Count = 0 then
+    exit;
+  ctx.remain := pool.Count;
+  ctx.compacted := nil;
+  DoWriteAndCompact(ctx, pointer(pool.Entry));
+  if ctx.compacted = nil then
+    exit;
+  pool.Count := pool.LeaseIndex(ctx.compacted);
+  pool.FreeListCount := 0;
 end;
 
 function TDhcpScope.TextWrite(W: TTextWriter; tix32: cardinal; time: TUnixTime): integer;
 var
   n: integer;
   p: PDhcpPool;
+  ctx: TDoWrite;
   subtxt: TShort47;
-  c: TDoWrite;
 begin
   result := 0;
   if (Pools = nil) and
      (Main.Count = 0) then
     exit;
   subtxt := '# ';
-  c.W := W;
-  c.tix32 := tix32;
-  c.boot := time;
-  c.subnet := @subtxt;
-  c.total := 0;
+  ctx.W := W;
+  ctx.tix32 := tix32;
+  ctx.boot := time;
+  ctx.subnet := @subtxt;
+  ctx.total := 0;
   Safe.Lock;
   try
     // prepare the subnet mask as '# 192.168.0.1/24 subnet' comment line
     AppendShort(SubNet.ToShort, subtxt);
     AppendShort(' subnet'#10, subtxt);
-    // persist all leases of this subnet as text
-    c.grace := LeaseTimeLE * MaxPtrUInt(GraceFactor, 2); // not too deprecated
+    // persist (and compact) all leases of this subnet as text
+    ctx.grace := LeaseTimeLE * MaxPtrUInt(GraceFactor, 2); // not too deprecated
     p := pointer(Pools);
     if p <> nil then
     begin
       n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
       repeat
-        DoWrite(c, pointer(p^.Entry), p^.Count);
+        WriteAndCompact(ctx, p^);
         inc(p);
         dec(n);
       until n = 0;
     end;
-    DoWrite(c, pointer(Main.Entry), Main.Count);
+    WriteAndCompact(ctx, Main);
   finally
     Safe.UnLock;
   end;
-  result := c.total;
+  result := ctx.total;
+end;
+
+function TDhcpScope.DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
+begin
+  result := 0;
+  if n <> 0 then
+    repeat
+      if (p^.Expired < tix32) and
+         (p^.State >= lsReserved) then // [lsReserved, lsAck, lsUnavailable]
+      begin
+        if DnsScript <> '' then
+          ExecuteDnsScript(p^.IP4, @p^.Mac, nil, tix32);
+        inc(result);
+        p^.State := lsOutdated;
+      end;
+      p^.RateLimit := 0;      // reset the rate limiter every second
+      inc(p);
+      dec(n);
+    until n = 0;
 end;
 
 function TDhcpScope.CheckOutdated(tix32: cardinal; var total: integer): integer;
