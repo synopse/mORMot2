@@ -219,7 +219,7 @@ var
   // - DHCP_TXT[dmtUndefined] = 'invalid' as expected by DoLog()
   DHCP_TXT: array[TDhcpMessageType] of RawUtf8;
 
-  /// the JSON identifier of each DHCP option, used e.g. in "rules" JSON
+  /// the JSON identifier of each DHCP option, used e.g. in "rule" JSON
   // - i.e. 'subnet-mask', 'routers', 'domain-name-servers', 'host-name',
   // 'domain-name', 'broadcast-address', 'ntp-servers', 'vendor-encapsulated-options',
   // 'requested-address', 'lease-time', 'message-type', 'server-identifier',
@@ -229,7 +229,7 @@ var
   // 'client-architecture', 'uuid-client-identifier', 'subnet-selection'
   // and 'domain-search'
   // - those were designed for simple/obvious semantic and shorter JSON
-  // - alternate KEA-like identifiers will also be recognized in "rules" as
+  // - alternate KEA-like identifiers will also be recognized in "rule" as
   // defined in the DHCP_OPTION_ALTERNATE[] constant
   DHCP_OPTION: array[TDhcpOption] of RawUtf8;
   /// KEA-like identifier of each DHCP RAI sub-option
@@ -238,8 +238,8 @@ var
   RAI_OPTION: array[TDhcpOptionRai] of RawUtf8;
 
 const
-  /// alternate DHCP option "rules" identifiers, especially for KEA compatibility
-  // - will be recognized in "rules" for less-astonishment principle
+  /// alternate DHCP option "rule" identifiers, especially for KEA compatibility
+  // - will be recognized in "rule" for less-astonishment principle
   // - https://kea.readthedocs.io/en/kea-3.1.4/arm/dhcp4-srv.html#standard-dhcpv4-options
   // - KEA expects a verbose "dhcp-*" prefix for the main options
   // - also relaxed some other identifiers, like router/dns/hostname/domain...
@@ -391,7 +391,7 @@ type
     uuid: RawByteString;
   end;
 
-  /// define TRuleValue content as DHCP "rules" condition or action
+  /// define TRuleValue content as DHCP "rule" condition or action
   // - those items are ordered by the most used at runtime first
   // - pvkMac as "mac" value condition in the mac inlined field
   // - pvkOpt is a known option as DHCP_OPTION_NUM[TDhcpOption(mac[0])] = num
@@ -412,7 +412,7 @@ type
     pvkAlways,
     pvkUndefined);
 
-  /// store one DHCP "rules" condition or action in optimized 12/16 bytes
+  /// store one DHCP "rule" condition or action in optimized 12/16 bytes
   // - used for "all" "any" "not-all" "not-any" conditions against a value
   // - used as "always" and "requested" data to be sent back to the client
   // - kind/num/mac fields order matters to access PInt64(one)^ shr 16 = Mac64
@@ -434,10 +434,10 @@ type
     /// the associated raw binary value
     value: RawByteString;
   end;
-  /// points to one DHCP "rules" entry and its associated value
+  /// points to one DHCP "rule" entry and its associated value
   PRuleValue = ^TRuleValue;
 
-  /// store one DHCP "rules" entry and its associated value
+  /// store one DHCP "rule" entry and its associated value
   TRuleValues = array of TRuleValue;
 
 const
@@ -669,7 +669,7 @@ type
     Remote: array[dcbBios .. high(TDhcpClientBoot)] of RawUtf8;
   end;
 
-  /// store one DHCP "rules" evaluation object in a ready-to-be-processed way
+  /// store one DHCP "rule" evaluation object in a ready-to-be-processed way
   // - 8/16 bytes pre-compiled at runtime from TDhcpRuleAbstractSettings JSON
   // - efficiently evaluated by TDhcpProcess.GetRule() from request state
   TDhcpRule = record
@@ -683,10 +683,10 @@ type
     notany: TRuleValues;
   end;
   PDhcpRule = ^TDhcpRule;
-  /// ready-to-be-processed DHCP "rules" evaluation objects of a given scope
+  /// ready-to-be-processed DHCP "rule" evaluation objects of a given scope
   TDhcpRules = array of TDhcpRule;
 
-  /// store one DHCP "rules" policy in a ready-to-be-processed way
+  /// store one DHCP "rule" policy in a ready-to-be-processed way
   // - pre-compiled at runtime from TDhcpRuleSettings always/requested JSON
   // - to be applied when the associated TDhcpRule did match
   TDhcpPolicy = record
@@ -702,7 +702,7 @@ type
     name: RawUtf8;
   end;
   PDhcpPolicy = ^TDhcpPolicy;
-  /// ready-to-be-processed DHCP "rules" policies of a given scope
+  /// ready-to-be-processed DHCP "rule" policies of a given scope
   TDhcpPolicies = array of TDhcpPolicy;
 
   /// access to one scope/subnet definition
@@ -739,9 +739,9 @@ type
     // - will be checked against not-"01+MAC" option 61 values - mainly UUID
     // - stored as RawByteString = doClientIdentifier-binary + 4-bytes-IP
     StaticUuid: TRawByteStringDynArray;
-    /// store all DHCP "rules" ready-to-be-processed evaluations for this pool
+    /// store all DHCP "rule" ready-to-be-processed evaluations for this pool
     Rules: TDhcpRules;
-    /// store all DHCP "rules" ready-to-be-processed responses for this pool
+    /// store all DHCP "rule" ready-to-be-processed responses for this pool
     Policies: TDhcpPolicies;
     /// quickly check if IpMin <= ip4 <= IpMax
     function Match(ip4: TNetIP4): boolean;
@@ -777,7 +777,7 @@ type
     function AddStatic(const macip: RawUtf8): boolean; overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
-    /// add one entry in "rules" JSON object format
+    /// add one entry in "rule" JSON object format
     // - supplied as a concatenation of strings, to create a JSON object
     // - will create a transient TDhcpRuleSettings instance and inject it
     // to Rules[]/Policies[] in a thread-safe way, or raise EDhcp on error
@@ -844,7 +844,7 @@ type
     DnsServers: TNetIP4s;
     /// the IP of the associated NTP servers, for doNtpServers option 42
     NtpServers: TNetIP4s;
-    /// the "rules" defining an IP range reservation in Pools[]
+    /// the "rule" defining an IP range reservation in Pools[]
     PoolRules: TDhcpRules;
     /// the custom IP range pools corresponding to PoolRules[]
     // - Pools[].IpMinLE/IpMaxLE won't overlap and stored in increasing order
@@ -949,7 +949,7 @@ type
     /// points to the raw value of doHostName option 12 in Recv.option[]
     // - points to @NULCHAR so HostName^='' if there is no such option
     RecvHostName: PShortString;
-    /// the policy of the "rules" entry matched by this request
+    /// the policy of the "rule" entry matched by this request
     RecvRule: PDhcpPolicy;
     /// the server IP socket which received the UDP frame
     // - allow several UDP bound server sockets to share a single TDhcpProcess
@@ -985,7 +985,7 @@ type
     Mac: string[63];
     /// some temporary storage for a StaticUuid[] fake DHCP lease
     Temp: TDhcpLease;
-    /// high-level 'match and append' of all "rules" entries into Send
+    /// high-level 'match and append' of all "rule" entries into Send
     procedure AddRulesOptions;
     // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
     procedure AddRegularOptions;
@@ -1005,13 +1005,13 @@ type
     procedure AddOptionOnceU(const opt: TDhcpOption; const v: PAnsiChar);
     /// raw append of a dynamic array of 32-bit big-endian/IPv4 options into Send
     procedure AddOptionOnceA32(const opt: TDhcpOption; const v: PAnsiChar);
-    /// raw append the options of a given "rules" entry into Send
+    /// raw append the options of a given "rule" entry into Send
     procedure AddOptionFromRule(p: PRuleValue);
       {$ifdef HASINLINE} inline; {$endif}
     /// raw append a verbatim copy of a Recv option into Send
     procedure AddOptionCopy(opt: TDhcpOption; dsm: TDhcpScopeMetric = dsmDiscover);
       {$ifdef HASINLINE} inline; {$endif}
-    /// raw search of one "rules" value in State.Recv[]
+    /// raw search of one "rule" value in State.Recv[]
     // - this is the main processing method of TDhcpProcess.GetRule() evaluation
     function MatchOne(one: PRuleValue): boolean;
     /// serialize the Recv/RecvType/RecvLens/RecvLensRai fields as a JSON object
@@ -1165,7 +1165,7 @@ type
   // potentially in our enhanced format e.g. with unquote keys
   // - "all" "any" "not-all" "not-any" should all match to trigger the output,
   // defining a "first precise rule wins" deterministic behavior in the order
-  // in the array of "rules"
+  // in the array of "rule"
   // - "always" and "requested" define the options sent in the response
   // - keys are a DHCP option number ("77") or DHCP_OPTION[] ("user-class"),
   // - values are "text" "IP:x.x.x.x" "MAC:xx" "HEX:xx" "BASE64:xx" "UUID:xx"
@@ -1220,15 +1220,15 @@ type
 
   /// define a rule to define a pool of IP sub-range for a given scope/subnet
   // - i.e. vendor-specific or client-specific DHCP options could define some
-  // IP ranges within the subnet, e.g. for HW devices or Virtual Machines
+  // IP ranges within the subnet, e.g. for VoIP/IoT devices or VMs
   TDhcpPoolSettings = class(TDhcpRuleAbstractSettings)
   protected
     fStatic: TRawUtf8DynArray;
-    fRangeMin: RawUtf8;
-    fRangeMax: RawUtf8;
-    fRules: TDhcpRuleSettingsObjArray;
+    fMin: RawUtf8;
+    fMax: RawUtf8;
+    fRule: TDhcpRuleSettingsObjArray;
   public
-    /// append at runtime a new "rules" settings for this IP pool
+    /// append at runtime a new "rule" settings for this IP pool
     // - call without any TDhcpRuleSettings parameter to create a default one
     // - supplied one will be owned by this instance from now on
     function AddRule(one: TDhcpRuleSettings = nil): TDhcpRuleSettings;
@@ -1242,19 +1242,19 @@ type
     // - e.g. "static": ["192.168.1.2","2f:af:9e:0f:b8:2a=192.168.1.100"]
     property Static: TRawUtf8DynArray
       read fStatic write fStatic;
-    /// minimal IP range e.g. "range-min": "192.168.1.10"
+    /// minimal IP range e.g. "min": "192.168.1.10"
     // - default is '' and will be filled by "subnet-mask" value as 10
-    property RangeMin: RawUtf8
-      read fRangeMin write fRangeMin;
-    /// maximal IP range e.g. "range-max": 192.168.1.254"
+    property Min: RawUtf8
+      read fMin write fMin;
+    /// maximal IP range e.g. "max": 192.168.1.254"
     // - default is '' and will be filled by "subnet-mask" value as 254
-    property RangeMax: RawUtf8
-      read fRangeMax write fRangeMax;
+    property Max: RawUtf8
+      read fMax write fMax;
     /// vendor-specific or client-specific DHCP options for this scope as
-    // "rules" array of JSON objects
+    // "rule" array of JSON objects
     // - order in this array defines "first rule wins" deterministic behavior
-    property Rules: TDhcpRuleSettingsObjArray
-      read fRules;
+    property Rule: TDhcpRuleSettingsObjArray
+      read fRule;
   end;
   /// a dynamic array of rules to define pools of IP sub-range
   TDhcpPoolSettingsObjArray = array of TDhcpPoolSettings;
@@ -1276,14 +1276,14 @@ type
     fGraceFactor: cardinal;
     fOptions: TDhcpScopeOptions;
     fBoot: TDhcpBootSettings;
-    fPools: TDhcpPoolSettingsObjArray;
+    fPool: TDhcpPoolSettingsObjArray;
     fMain: TDhcpPoolSettings;
   public
     /// setup this instance with default values
     // - default are subnet-mask = '192.168.1.1/24', lease-time-seconds = 120
     // and OfferHoldingSecs = 5, consistent with a simple local iPXE network
     constructor Create; override;
-    /// append at runtime a new "pools" settings for this scope/subnet
+    /// append at runtime a new "pool" settings for this scope/subnet
     // - call without any TDhcpPoolSettings parameter to create a default one
     // - supplied one will be owned by this instance from now on
     function AddPool(one: TDhcpPoolSettings = nil): TDhcpPoolSettings;
@@ -1292,10 +1292,10 @@ type
     procedure PrepareScope(Sender: TDhcpProcess; var Scope: TDhcpScope);
   published
     /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
-    // - the CIDR 'ip/mask' pattern will compute range-min/range-max and
+    // - the CIDR 'ip/mask' pattern will compute min/max and
     // server-identifier directly from this pattern
     // - accept also plain '255.255.255.0' IP if you want to specify by hand the
-    // raw value sent in DHCP headers, and fill range-min/range-max and others
+    // raw value sent in DHCP headers, and fill min/max and others
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
     /// Default Gateway (option 3) e.g. "default-gateway":"192.168.1.1"
@@ -1356,11 +1356,12 @@ type
     property Boot: TDhcpBootSettings
       read fBoot;
     /// custom IP range pools in this scope
-    // - "range-min"/"range-max" shouldn't overlap between "pools" and "main"
-    property Pools: TDhcpPoolSettingsObjArray
-      read fPools;
-    /// fallback IP range pool when an IP isn't in any "pools" for this scope
-    // - "range-min"/"range-max" shouldn't overlap between "pools" and "main"
+    // - "min"/"max" should be within "main" "min"/"max" fields, and
+    // shouldn't overlap between "pool" items
+    property Pool: TDhcpPoolSettingsObjArray
+      read fPool;
+    /// fallback IP range pool when an IP isn't in any "pool" for this scope
+    // - "pool" items "min"/"max" should be within this "main" range
     property Main: TDhcpPoolSettings
       read fMain;
   end;
@@ -3279,7 +3280,8 @@ var
   p: PDhcpLease;
 begin
   result := false;
-  if @self = nil then
+  if (@self = nil) or
+     not Match(nfo.ip) then
     exit;
   // duplicated static MAC or UUID (check first) - but allow leases override
   if not IsZero(nfo.mac) then
@@ -3409,8 +3411,8 @@ var
   p: PDhcpLease;
 begin
   // validate IpMin/IpMax values from the actual owner scope subnet
-  Scope^.CheckSubnet('range-min', IpMin);
-  Scope^.CheckSubnet('range-max', IpMax);
+  Scope^.CheckSubnet('min', IpMin);
+  Scope^.CheckSubnet('max', IpMax);
   if bswap32(IpMax) <= bswap32(IpMin) then
     EDhcp.RaiseUtf8('PrepareScope: unexpected %..% range',
       [IP4ToShort(@IpMin), IP4ToShort(@IpMax)]);
@@ -3598,14 +3600,9 @@ begin
     begin
       dp^.AfterFill(log);
       if dp^.IpMinLE < Main.IpMinLE then
-        InvalidRange('too small range-min', dp^.IpMin)
+        InvalidRange('too small min', dp^.IpMin)
       else if dp^.IpMaxLE > Main.IpMaxLE then
-        InvalidRange('too big range-max', dp^.IpMax)
-      else if dp^.StaticIP <> nil then
-        if bswap32(dp^.StaticIP[0]) < dp^.IpMinLE then
-          InvalidRange('too small static', dp^.StaticIP[0])
-        else if bswap32(dp^.StaticIP[high(dp^.StaticIP)]) > dp^.IpMaxLE then
-          InvalidRange('too big static', dp^.StaticIP[high(dp^.StaticIP)]);
+        InvalidRange('too big max', dp^.IpMax);
       inc(dp);
     end;
     // ensure Pools[] and PoolRules[] stored in little-endian increasing order
@@ -3619,7 +3616,7 @@ begin
       r[i] := PoolRules[ndx[i]];
     for i := 0 to n - 1 do
       if p[i].IpMaxLE <= p[i + 1].IpMinLE then
-        InvalidRange('"pools" overlap in range-max', p[i].IpMax);
+        InvalidRange('"pool" overlap in max', p[i].IpMax);
     Pools := p;
     PoolRules := r;
   end;
@@ -4076,7 +4073,7 @@ end;
 
 procedure TDhcpState.AddRegularOptions;
 begin
-  // append 1,3,6,15,28,42 network options - if not already from "rules"
+  // append 1,3,6,15,28,42 network options - if not already from "rule"
   AddOptionOnce32(doSubnetMask,         Scope^.Subnet.mask);
   AddOptionOnce32(doBroadcastAddress,   Scope^.Broadcast);
   AddOptionOnce32(doRouters,            Scope^.Gateway);
@@ -4346,7 +4343,7 @@ procedure TDhcpRuleAbstractSettings.PrepareRule(var Rule: TDhcpRule);
 var
   v: TRuleValue;
 begin
-  // parse main "rules" JSON array of objects fields
+  // parse main "rule" JSON array of objects fields
   DoParseRule(fAll, Rule.all, prMatch, 'all');
   DoParseRule(fAny, Rule.any, prMatch, 'any');
   DoParseRule(fNotAll, Rule.notall, prMatch, 'not-all');
@@ -4381,7 +4378,7 @@ var
   i: PtrInt;
   nfo: TMacIP;
 begin
-  // parse main "rules" JSON array of objects fields
+  // parse main "rule" JSON array of objects fields
   inherited PrepareRule(Rule);
   DoParseRule(fAlways, alw, prValue, 'always');
   DoParseRule(fRequested, req, prValue, 'requested');
@@ -4467,7 +4464,7 @@ begin
   if one = nil then
     one := TDhcpRuleSettings.Create;
   if self <> nil then
-    PtrArrayAdd(fRules, one); // will be owned by this instance
+    PtrArrayAdd(fRule, one); // will be owned by this instance
   result := one;
 end;
 
@@ -4477,26 +4474,26 @@ var
 begin
   // define main fields from settings
   Pool.Scope        := @Scope;
-  Pool.IpMin        := ToIP4(fRangeMin);
-  Pool.IpMax        := ToIP4(fRangeMax);
+  Pool.IpMin        := ToIP4(fMin);
+  Pool.IpMax        := ToIP4(fMax);
   Pool.StaticIP     := nil;
   Pool.StaticMac    := nil;
   for i := 0 to high(fStatic) do
     if not Pool.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
       EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
-  // convert "rules" into ready-to-be-processed objects
-  n := length(fRules);
+  // convert "rule" into ready-to-be-processed objects
+  n := length(fRule);
   Pool.Rules := nil;
   Pool.Policies := nil;
   SetLength(Pool.Rules, n);
   SetLength(Pool.Policies, n);
   n := 0;
-  for i := 0 to high(fRules) do
-    if fRules[i].PrepareRule(Scope, Pool.Rules[n], Pool.Policies[n]) then
+  for i := 0 to high(fRule) do
+    if fRule[i].PrepareRule(Scope, Pool.Rules[n], Pool.Policies[n]) then
       inc(n);
-  if n <> length(fRules) then
+  if n <> length(fRule) then
   begin
-    SetLength(Pool.Rules, n); // some "rules" were statics in disguise
+    SetLength(Pool.Rules, n); // some "rule" were statics in disguise
     SetLength(Pool.Policies, n);
   end;
 end;
@@ -4519,7 +4516,7 @@ begin
   if one = nil then
     one := TDhcpPoolSettings.Create;
   if self <> nil then
-    PtrArrayAdd(fPools, one); // will be owned by this instance
+    PtrArrayAdd(fPool, one); // will be owned by this instance
   result := one;
 end;
 
@@ -4552,15 +4549,15 @@ begin
     Scope.DeclineTime     := Scope.LeaseTimeLE;
   Scope.GraceFactor       := fGraceFactor;         // * 2
   Scope.Options           := fOptions;
-  // prepare complex "boot" "pools" "main" sub-properties
+  // prepare complex "boot" "pool" "main" sub-properties
   fBoot.PrepareBoot(Scope.Boot, Scope.Options);
-  n := length(fPools);
+  n := length(fPool);
   SetLength(Scope.PoolRules, n);
   SetLength(Scope.Pools, n);
   for i := 0 to n - 1 do
   begin
-    fPools[i].PrepareRule(Scope.PoolRules[i]);
-    fPools[i].PreparePool(Scope, Scope.Pools[i]);
+    fPool[i].PrepareRule(Scope.PoolRules[i]);
+    fPool[i].PreparePool(Scope, Scope.Pools[i]);
   end;
   fMain.PreparePool(Scope, Scope.Main);
   // retrieve and adjust the subnet mask from settings
@@ -5684,7 +5681,7 @@ begin
        (Rule^.any <> nil) then
       // first exact matching Rule wins (deterministic)
       exit;
-ko: inc(Rule);      // next "rules" object
+ko: inc(Rule);      // next "rule" object
     dec(n);
   until n = 0;
 end;
@@ -5706,7 +5703,7 @@ function TDhcpProcess.Flush(var State: TDhcpState): PtrInt;
 begin
   // recognize State.RecvBoot from options 60/77/93
   SetRecvBoot(State);
-  // append "rules" custom options - always first since have precedence
+  // append "rule" custom options - always first since have precedence
   integer(State.SendOptions) := 0;
   if State.RecvRule <> nil then
     State.AddRulesOptions;
@@ -5753,12 +5750,12 @@ begin
     if State.Pool = nil then
       State.Pool := @State.Scope^.Main; // default
   end;
-  // identify any matching input from this pool "rules" definition
+  // identify any matching input from this pool "rule" definition
   r := pointer(State.Pool^.Rules);
   if r <> nil then
   begin
     r := GetRule(State, r);
-    if r <> nil then // found a matching entry in "rules": apply the policy
+    if r <> nil then // found a matching entry in "rule": apply the policy
     begin
       State.RecvRule := @State.Pool^.Policies[
         (PtrUInt(r) - PtrUInt(State.Pool^.Rules)) div SizeOf(r^)];

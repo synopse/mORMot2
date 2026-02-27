@@ -2475,7 +2475,7 @@ begin
       'aarch64/ipxe.efi",vendor-class-identifier:' +
       '"HTTPClient",subnet-mask:"255.252.0.0",lease-time:120,' +
       'renewal-time:60,rebinding-time:105}');
-    // add some custom "rules"
+    // add some custom "rule"
     CheckEqual(length(pool.Rules), 0, 'no rule yet');
     pool.AddRule([
       '{all:{user-class: "iPXE", client-architecture: 5},' +
@@ -2515,7 +2515,7 @@ begin
       'tftp-server-name:"192.168.0.254",boot-file-name:"ipxe.5",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
-    // "rules" with "mac" and "ip" should go to static list
+    // "rule" with "mac" and "ip" should go to static list
     Check(not pool.IsStaticIP(ips[8]), 'none8');
     mac := MacToText(@macs[8]);
     ip := IP4ToText(@ips[8]);
@@ -2536,7 +2536,7 @@ begin
       '{mac:"', mac, '",ip:"' + ip + '",' +
        'requested:{domain-name:"mydomain"}}']);
     CheckEqual(length(pool.Rules), 3, 'rule2');
-    // deterministic first matching "rules" wins - static
+    // deterministic first matching "rule" wins - static
     f := d.ClientNew(dmtRequest, macs[7]);
     d.ClientFlush(f);
     CheckNotEqual(server.ComputeResponse(d), 0, 'static7');
@@ -2546,7 +2546,7 @@ begin
       'domain-name:"mydomain",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
-    // deterministic first matching "rules" wins - macs+uuid but no IP
+    // deterministic first matching "rule" wins - macs+uuid but no IP
     DhcpAddOptionBuf(f, doUuidClientIdentifier, @UUID_97, SizeOf(UUID_97));
     d.ClientFlush(f);
     CheckNotEqual(server.ComputeResponse(d), 0, 'uuid7');
