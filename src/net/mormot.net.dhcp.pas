@@ -493,6 +493,7 @@ type
   // -  - Static vs Dynamic Hits
   // - dsmStaticHits: static reservation (MAC or option 61) is used to assign an IP
   // - dsmDynamicHits: dynamic lease (from the pool) is used
+  // - dsmPoolRuleHits: an IP was assigned from a "pool" sub-range "rule"
   // -  Rate limiting / abuse
   // - dsmRateLimitHit: DECLINE packet is ignored due to rate limiting
   // - dsmInformRateLimitHit: INFORM packet is ignored due to rate limiting
@@ -501,10 +502,13 @@ type
   // -  - Option Usage Counters
   // - dsmOption50Hits: option 50 requested-address is present and used to setup IP
   // - dsmOption61Hits: option 61 client-identifier is present and used to assign/lookup a lease
+  // - dsmOption81Hits: option 81 fqdn is present and has been echoed back
   // - dsmOption82Hits: option 82 relay-agent-information is present and processed
   // - dsmOption82SubnetHits: option 82 link-selection sub-option is present and processed
   // - dsmOption118Hits: option 118 subnet-selection is present and valid
+  // - dsmRule: some options have been returned according to a given rule
   // - dsmPxeBoot: PXE/iPXE options have been returned for a given architecture
+  // - dsmDdnsNotified and dsmDdnsFailed: follow option 81 DDNS notifications
   // - - Drop / Error Reasons
   // - dsmDroppedPackets: incremented for any packet dropped silently (not matching a scope or giaddr)
   // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or option 82/118
@@ -528,16 +532,21 @@ type
     dsmLeaseReleased,
     dsmStaticHits,
     dsmDynamicHits,
+    dsmPoolRuleHits,
     dsmRateLimitHit,
     dsmInformRateLimitHit,
     dsmInvalidRequest,
     dsmUnsupportedRequest,
     dsmOption50Hits,
     dsmOption61Hits,
+    dsmOption81Hits,
     dsmOption82Hits,
     dsmOption82SubnetHits,
     dsmOption118Hits,
+    dsmRule,
     dsmPxeBoot,
+    dsmDdnsNotified,
+    dsmDdnsFailed,
     dsmDroppedPackets,
     dsmDroppedNoSubnet,
     dsmDroppedNoAvailableIP,
@@ -3994,6 +4003,7 @@ begin
   p := pointer(RecvRule^.send);
   if p = nil then
     exit;
+  inc(Scope^.Metrics.Current[dsmRule]);
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   // append "always" - should be as send[0].kind=pvkAlways
   if p^.kind = pvkAlways then
@@ -4109,6 +4119,7 @@ begin
      (PWord(p + 2)^ <> 0) then // rcode1=rcode2=0
     exit;
   include(SendOptions, doFqdn);
+  inc(Scope^.Metrics.Current[dsmOption81Hits]);
   len := ord(p[0]);
   inc(p);
   // Windows client send typically 0x05 (E=1 for wire format + S=1 to ask
@@ -5792,8 +5803,11 @@ begin
     begin
       r := GetRule(State, r);
       if r <> nil then
+      begin
         State.Pool := @State.Scope.Pools[
            (PtrUInt(r) - PtrUInt(State.Scope^.PoolRules)) div SizeOf(r^)];
+        inc(State.Scope^.Metrics.Current[dsmPoolRuleHits]);
+      end;
     end;
     if State.Pool = nil then
       State.Pool := @State.Scope^.Main; // default

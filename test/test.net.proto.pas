@@ -2329,7 +2329,7 @@ begin
     Check(not IsEqual(m1, m2), 'ComputeMetrics Declined');
     json := MetricsToJson(m2, [woDontStoreVoid]);
     CheckEqual(json, '{"discover":3,"offer":3,"decline":1,"lease-allocated":2,' +
-      '"dynamic-hits":3,"option-82-hits":2}');
+      '"dynamic-hits":3,"option-82-hits":2,"rule":1}');
     // validate DECLINE process with a given IP which is not in OFFER state
     f := d.ClientNew(dmtDecline, macs[10]);
     DhcpAddOption32(f, doRequestedAddress, ips[10]);
@@ -2344,7 +2344,7 @@ begin
     server.ComputeMetrics(m2);
     json := MetricsToJson(m2, [woDontStoreVoid]);
     CheckEqual(json, '{"discover":3,"offer":3,"decline":2,"lease-allocated":2,' +
-      '"dynamic-hits":3,"option-82-hits":2,"dropped-packets":1}');
+      '"dynamic-hits":3,"option-82-hits":2,"rule":1,"dropped-packets":1}');
     // validate DISCOVER + DECLINE with the specific IP
     d.ClientFlush(d.ClientNew(dmtDiscover, macs[10]));
     xid := d.Recv.xid;
@@ -2373,7 +2373,7 @@ begin
     json := MetricsToJson(m2, [woDontStoreVoid]);
     CheckEqual(json, '{"discover":4,"offer":4,"decline":3,"lease-allocated":4,' +
       '"dynamic-hits":4,"option-50-hits":1,"option-82-hits":2,' +
-      '"dropped-packets":1}');
+      '"rule":1,"dropped-packets":1}');
     // validate INFORM with no ciaddr
     d.ClientFlush(d.ClientNew(dmtInform, macs[10], []));
     CheckEqual(d.RecvToJson(true),
