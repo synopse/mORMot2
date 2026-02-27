@@ -2545,6 +2545,15 @@ function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt
 function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
+/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
+// 'Content-Type: application/json' or 'Content-Type: application/xml'
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// search if the WebSocketUpgrade() header is present
+// - consider checking the hsrConnectionUpgrade flag instead
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
+
 type
   /// define IniToObject() and ObjectToIni() extended features
   // - nested objects and multi-line text (if ifMultiLineSections is set) are
@@ -2579,15 +2588,6 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main
     [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment];
     Level: integer = 0; Features: TIniFeatures =
       [ifClassSection, ifMultiLineSections, ifArraySection]): RawUtf8;
-
-/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
-// 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// search if the WebSocketUpgrade() header is present
-// - consider checking the hsrConnectionUpgrade flag instead
-function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
 
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }

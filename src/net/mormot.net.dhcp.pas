@@ -774,6 +774,7 @@ type
     function AddStatic(var nfo: TMacIP): boolean; overload;
     /// register another static IP address to the internal pool
     // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuid=ip' text
+    // - CSV values are also allowed like 'mac1=ip1,mac2=ip2,uuid1=ip3'
     function AddStatic(const macip: RawUtf8): boolean; overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
@@ -866,6 +867,7 @@ type
     function AddStatic(var nfo: TMacIP): boolean; overload;
     /// register another static IP address to the internal pool
     // - value is expected to be supplied as 'ip', 'mac=ip' or 'uuid=ip' text
+    // - CSV values are also allowed like 'mac1=ip1,mac2=ip2,uuid1=ip3'
     function AddStatic(const macip: RawUtf8): boolean; overload;
     /// remove one static IP address which was registered by AddStatic()
     function RemoveStatic(ip4: TNetIP4): boolean;
@@ -3108,7 +3110,7 @@ end;
 function TDhcpPool.Match(ip4: TNetIP4): boolean;
 begin
   ip4 := bswap32(ip4);
-  result := (ip4 >= IpMinLE) and
+  result := (ip4 >= IpMinLE) and // should be within inclusive range
             (ip4 <= IpMaxLE);
 end;
 
@@ -3317,8 +3319,17 @@ end;
 function TDhcpPool.AddStatic(const macip: RawUtf8): boolean;
 var
   nfo: TMacIP;
+  l, r: RawUtf8;
 begin
-  result := ParseMacIP(nfo, macip) and
+  result := false;
+  l := macip;
+  while TrimSplit(l, l, r, ',') do
+    if ParseMacIP(nfo, l) and
+       AddStatic(nfo) then
+      l := r
+    else
+      exit;
+  result := ParseMacIP(nfo, l) and
             AddStatic(nfo);
 end;
 
@@ -3671,8 +3682,17 @@ end;
 function TDhcpScope.AddStatic(const macip: RawUtf8): boolean;
 var
   nfo: TMacIP;
+  l, r: RawUtf8;
 begin
-  result := ParseMacIP(nfo, macip) and
+  result := false;
+  l := macip;
+  while TrimSplit(l, l, r, ',') do
+    if ParseMacIP(nfo, l) and
+       AddStatic(nfo) then
+      l := r
+    else
+      exit;
+  result := ParseMacIP(nfo, l) and
             AddStatic(nfo);
 end;
 
