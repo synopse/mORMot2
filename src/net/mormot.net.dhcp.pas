@@ -20,6 +20,7 @@ unit mormot.net.dhcp;
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
    IP ranges reservation with each subnet/scope from custom JSON rules.
+   Optional DDNS propagation of fadn options 81 registrations.
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
@@ -52,6 +53,7 @@ uses
   mormot.core.json,
   mormot.core.data,
   mormot.core.log,
+  mormot.core.threads,
   mormot.net.sock,
   mormot.net.http,
   mormot.net.server;
@@ -831,6 +833,14 @@ type
   /// refine DHCP server process for one TDhcpScopeSettings
   TDhcpScopeOptions = set of TDhcpScopeOption;
 
+  TOnDhcpBackgroundExecute = record
+    expiredtix32: cardinal;
+    ip4: TNetIP4;
+    cmd: TFileName;
+    { TODO: support concatenations for efficient kinit + nsupdate -g }
+  end;
+  TOnDhcpBackgroundExecutes = array of TOnDhcpBackgroundExecute;
+
   /// define one scope/subnet processing context from TDhcpServerSettings
   // - fields and methods are optimized to efficiently map TDhcpProcess logic
   // - most methods are not thread-safe: the caller should make Safe.Lock/UnLock
@@ -912,8 +922,15 @@ type
     LeaseTimeLE, RenewalTimeLE, RebindingLE: cardinal;
     LeaseTimeBE, RenewalTimeBE, RebindingBE: cardinal;
     MaxDeclinePerSec, DeclineTime, GraceFactor, OfferHolding: cardinal;
+    DnsScriptSecs, DnsScriptLastTix32: cardinal;
+    OnBackgroundExecute: function(const ctxt: TOnDhcpBackgroundExecute): boolean of object;
     procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
+    function ExecuteDnsScript(ip4: TNetIP4; m: PNetMac; host: PShortString;
+      tix32: cardinal): boolean;
+    function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
   public
+    /// DDNS script location e.g. '/usr/local/bin/dhcp-dyndns.sh'
+    DnsScript: TFileName;
     /// the PXE network boot settings for this scope/subnet
     Boot: TDhcpScopeBoot;
     /// where total counters are written e.g. '.../192-168-1-0_24.json'
@@ -1284,10 +1301,12 @@ type
     fNtpServers: RawUtf8;
     fDomainName: RawUtf8;
     fBroadCastAddress: RawUtf8;
+    fDynDnsScript: TFileName;
+    fServerIdentifier: RawUtf8;
     fLeaseTimeSeconds: cardinal;
     fMaxDeclinePerSecond: cardinal;
     fDeclineTimeSeconds: cardinal;
-    fServerIdentifier: RawUtf8;
+    fDynDnsTrustSecs: cardinal;
     fOfferHoldingSecs: cardinal;
     fGraceFactor: cardinal;
     fOptions: TDhcpScopeOptions;
@@ -1362,6 +1381,17 @@ type
     // - this grace delay is disabled if GraceFactor = 0 or for long leases > 1h
     property GraceFactor: cardinal
       read fGraceFactor write fGraceFactor default 2;
+    /// DDNS script location - e.g. "dyn-dns-script":"/usr/local/bin/dhcp-dyndns.sh"
+    // - from https://wiki.samba.org/index.php/Configure_DHCP_to_update_DNS_records
+    // - would enable proper doFqdn Option 81 DDNS server-side support with Samba
+    property DynDnsScript: TFileName
+      read fDynDnsScript write fDynDnsScript;
+    /// during many seconds a previous successful "dyn-dns-script" execution
+    // should return S=1 flag for the doFqdn option 81
+    // - default is "dyn-dns-trust-secs":300 i.e. 5 minutes
+    // - would assume DDNS success if the script worked in the last 5 minutes
+    property DynDnsTrustSecs: cardinal
+      read fDynDnsTrustSecs write fDynDnsTrustSecs default 300;
     /// refine DHCP server process for this scope
     // - default is [] but you may tune it for your actual (sub-)network needs
     // using "inform-rate-limit", "csv-unix-time", "pxe-no-inherit" and
@@ -1472,9 +1502,12 @@ type
     fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fMetricsDroppedPackets, fMetricsInvalidRequest: QWord; // no scope counters
     fLogPrefix: RawUtf8;
+    fBackgroundExecute: TSynBackgroundQueue;
     function GetCount: integer;
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
+    function OnBackgroundExecute(const ctx: TOnDhcpBackgroundExecute): boolean;
+    procedure OnBackgroundExecuted(Sender: TSynBackgroundQueue; Event: pointer);
     // ComputeResponse() virtual sub-methods for proper logic customization
     procedure DoLog(Level: TSynLogLevel; const Context: ShortString;
       const State: TDhcpState); virtual;
@@ -1494,6 +1527,8 @@ type
     function RunCallbackAborted(var State: TDhcpState): boolean; virtual;
     function Flush(var State: TDhcpState): PtrInt; virtual;
   public
+    /// finalize this instance
+    destructor Destroy; override;
     /// setup this DHCP process using the specified settings
     // - raise an EDhcp exception if the parameters are not correct - see
     // TDhcpServerSettings.Verify() if you want to intercept such errors
@@ -3900,6 +3935,34 @@ begin
   end;
 end;
 
+function TDhcpScope.ExecuteDnsScript(ip4: TNetIP4; m: PNetMac;
+  host: PShortString; tix32: cardinal): boolean;
+var
+  ctx: TOnDhcpBackgroundExecute;
+  ip, mac: TShort16;
+begin
+  result := false;
+  if (DnsScript = '') or
+     (ip4 = 0) or
+     (m = nil) or
+     not Assigned(OnBackgroundExecute) then
+    exit;
+  // prepare the command to be executed
+  IP4Short(@ip4, ip);
+  mac[0] := #17;
+  ToHumanHexP(@mac, @m, 6);
+  if host <> nil then
+    // from TDhcpState.AddOption81 -> add A/PTR
+    ctx.cmd := MakeString([DnsScript, ' IPV4 add ', ip, ' ', mac, ' ', host^])
+  else
+    // from TDhcpProcess.DoError(dsmLeaseReleased) or OnExpiry -> delete
+    ctx.cmd := MakeString([DnsScript, ' IPV4 delete', ip, ' ', mac]);
+  // trigger the execution in a background thread
+  ctx.ip4 := ip4;
+  ctx.expiredtix32 := tix32 + DnsScriptSecs;
+  result := OnBackgroundExecute(ctx);
+end;
+
 
 { **************** Middle-Level DHCP State Machine }
 
@@ -4114,7 +4177,7 @@ procedure TDhcpState.AddOption81;
 var
   p: PAnsiChar;
   len: PtrInt;
-  bak: AnsiChar; // keep Recv[] untouched
+  bak, flags: byte; // keep Recv[] untouched
 begin
   p := @Recv.options[RecvLens[doFqdn]]; // caller ensured <> 0
   if (p[0] < #3) or
@@ -4126,10 +4189,18 @@ begin
   inc(p);
   // Windows client send typically 0x05 (E=1 for wire format + S=1 to ask
   // server for updates) -> reset all flags but E since we have no DDNS yet
-  bak := p[0];
-  p[0] := AnsiChar(byte(bak) and RFC4702_FLAG_E); // preserve E/encoding flag
+  bak := ord(p[0]);
+  flags := bak and RFC4702_FLAG_E;                // preserve E/encoding flag
+  if (RecvType = dmtRequest) and
+     (SendType = dmtAck) and
+     (RecvHostName^[0] <> #0) then
+    if Scope^.ExecuteDnsScript(Ip4, @Mac64, RecvHostName, Tix32) then
+      if (Scope^.DnsScriptLastTix32 <> 0) and
+         (cardinal(Tix32 - Scope^.DnsScriptLastTix32) < Scope^.DnsScriptSecs) then
+        flags := flags or RFC4702_FLAG_S;         // S=1 if DnsScript succeeded
+  p[0] := AnsiChar(flags);
   AddOptionSafe(81, p, len);                      // echo raw encoded fqdn value
-  p[0] := bak;
+  p[0] := AnsiChar(bak);
 end;
 
 procedure TDhcpState.AddRegularOptions;
@@ -4611,6 +4682,15 @@ begin
     Scope.DeclineTime     := Scope.LeaseTimeLE;
   Scope.GraceFactor       := fGraceFactor;         // * 2
   Scope.Options           := fOptions;
+  Scope.DnsScript         := '';
+  Scope.OnBackgroundExecute := nil;
+  if (Scope.DnsScriptSecs <> 0) and
+     FileExists(fDynDnsScript) then
+  begin
+    Scope.DnsScript := fDynDnsScript;
+    Scope.DnsScriptLastTix32 := 0;
+    Scope.OnBackgroundExecute := Sender.OnBackgroundExecute;
+  end;
   // prepare complex "boot" "pool" "main" sub-properties
   fBoot.PrepareBoot(Scope.Boot, Scope.Options);
   n := length(fPool);
@@ -4692,6 +4772,16 @@ end;
 
 
 { TDhcpProcess }
+
+destructor TDhcpProcess.Destroy;
+begin
+  if Assigned(fBackgroundExecute) then
+  begin
+    fBackgroundExecute.Terminate;
+    fBackgroundExecute := nil;
+  end;
+  inherited Destroy;
+end;
 
 function TDhcpProcess.GetCount: integer;
 var
@@ -5352,6 +5442,76 @@ begin
     result := LoadFromText(txt); // make fScopeSafe.WriteLock/WriteUnlock
 end;
 
+procedure TDhcpProcess.OnBackgroundExecuted(Sender: TSynBackgroundQueue; Event: pointer);
+var
+  ctx: ^TOnDhcpBackgroundExecute absolute Event;
+  res: integer; // not PtrInt
+  scope: PDhcpScope;
+  msg: RawUtf8;
+begin
+  // ensure this notification is not expired (may happen if script is broken)
+  if ctx^.expiredtix32 < GetTickSec then
+    exit;
+  // execute the notification script in this background thread
+  res := 0;
+  try
+    // safer to use a timeout at 20s - even if typical around 100ms
+    msg := RunRedirect(ctx^.cmd, @res, nil, {ms=}20 * MilliSecsPerSec);
+    // todo: use direct Samba AD connection via GSS-TSIG
+  except
+    res := -1;
+  end;
+  // notify the scope
+  fScopeSafe.ReadLock;
+  try
+    scope := GetScope(ctx^.ip4); // safer to make a quick lookup
+    if scope <> nil then
+      if res = 0 then
+      begin
+        scope^.DnsScriptLastTix32 := GetTickSec; // notify success for option 81
+        inc(scope^.Metrics.Current[dsmDdnsNotified]);
+      end
+      else
+        inc(scope^.Metrics.Current[dsmDdnsFailed]);
+  finally
+    fScopeSafe.ReadUnLock;
+  end;
+  // log and cleanup
+  if res = 0 then
+  begin
+    Sender.OnProcessMS := 1000; // back to normal retry pace
+    fLog.Add.Log(sllTrace, 'Background %', [ctx^.cmd]);
+  end
+  else
+  begin
+    // error execution or timeout: retry with an increasing delay up to 1 minute
+    Sender.EnQueue(ctx, {now=}false);
+    Sender.OnProcessMS := MinPtrUInt(MilliSecsPerMin, NextGrow(Sender.OnProcessMS));
+    fLog.Add.Log(sllWarning, 'Background % = % [%]', [ctx^.cmd, res, msg]);
+  end;
+end;
+
+function TDhcpProcess.OnBackgroundExecute(const ctx: TOnDhcpBackgroundExecute): boolean;
+begin
+  try
+    if fBackgroundExecute = nil then
+    begin
+      GlobalLock;
+      try
+        if fBackgroundExecute = nil then
+          fBackgroundExecute := TSynBackgroundQueue.Create('dhcp ddns',
+            TypeInfo(TOnDhcpBackgroundExecutes), 1000, OnBackgroundExecuted);
+      finally
+        GlobalUnLock;
+      end;
+    end;
+    fBackgroundExecute.EnQueue(@ctx, {now=}not fBackgroundExecute.Processing);
+    result := true;
+  except
+    result := false;
+  end;
+end;
+
 procedure TDhcpProcess.DoLog(Level: TSynLogLevel; const Context: ShortString;
   const State: TDhcpState);
 var
@@ -5484,6 +5644,7 @@ begin
       begin
         IP4Short(@Lease^.IP4, State.Ip);
         DoLog(sllTrace, 'as', State);
+        State.Scope^.ExecuteDnsScript(Lease^.IP4, @Lease^.Mac, nil, State.Tix32);
         State.Pool^.ReuseLease(Lease); // set MAC=0 IP=0 State=lsFree
         inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
       end;
