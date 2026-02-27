@@ -917,8 +917,8 @@ begin
   fOptions := aOptions;
   if (aDynArrayTypeInfo = nil) or
      (aDynArrayTypeInfo^.Kind <> rkDynArray) then
-     EIList.RaiseUtf8('%.Create: % should be a dynamic array of T',
-       [self, aDynArrayTypeInfo^.Name^]);
+    EIList.RaiseUtf8('%.Create: % should be a dynamic array of T',
+      [self, aDynArrayTypeInfo^.Name^]);
   CreateRtti(Rtti.RegisterType(aDynArrayTypeInfo), aItemTypeInfo, aOptions, aSortAs);
 end;
 
@@ -930,17 +930,17 @@ begin
     loCaseInsensitive in fOptions);
   if fDynArray.Info.ArrayRtti = nil then
     EIList.RaiseUtf8('%.Create<%> (%) has % ArrayRtti=nil',
-      [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
-       aDynArray.Info^.RawName]);
+      [self, aItemTypeInfo^.Name^, ToText(aItemTypeInfo^.Kind)^,
+       aDynArray.Info^.Name^]);
   if fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind  then
     EIList.RaiseUtf8('%.Create<%> (%) does not match % (%)',
-      [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
-       aDynArray.Info^.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
+      [self, aItemTypeInfo^.Name^, ToText(aItemTypeInfo^.Kind)^,
+       aDynArray.Info^.Name^, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
     fDynArray.NoFinalize := true; // force weak references
   if loCreateUniqueIndex in fOptions then
   begin
-    fHasher := AllocMem(SizeOf(fHasher^));
+    fHasher := AllocMem(SizeOf(fHasher^)); // on-demand hashing
     fHasher^.InitSpecific(@fDynArray, aSortAs, loCaseInsensitive in fOptions, nil);
   end;
 end;
@@ -1407,11 +1407,11 @@ begin
   if (fData.Keys.Info.ArrayRtti = nil) or
      (fData.Keys.Info.ArrayRtti.Kind <> aContext.KeyItemTypeInfo^.Kind) then
     EIKeyValue.RaiseUtf8('%.Create: TKey does not match %',
-      [self, aContext.KeyArrayTypeInfo^.RawName]);
+      [self, aContext.KeyArrayTypeInfo^.Name^]);
   if (fData.Values.Info.ArrayRtti = nil) or
      (fData.Values.Info.ArrayRtti.Kind <> aContext.ValueItemTypeInfo^.Kind) then
     EIKeyValue.RaiseUtf8('%.Create: TValue does not match %',
-      [self, aContext.ValueArrayTypeInfo^.RawName]);
+      [self, aContext.ValueArrayTypeInfo^.Name^]);
 end;
 
 destructor TIKeyValueParent.Destroy;
