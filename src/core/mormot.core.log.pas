@@ -769,7 +769,7 @@ type
     // TSynBackgroundThreadAbstract.OnAfterExecute
     // - is called e.g. by TRest.EndCurrentThread
     // - just a wrapper around TSynLog.NotifyThreadEnded
-    procedure OnThreadEnded(Sender: TThread);
+    class procedure OnThreadEnded(Sender: TThread);
     /// clean up *.log file by running OnArchive() on deprecated files
     // - will find and archive DestinationPath\*.log (or sourcePath\*.log)
     // files older than ArchiveAfterDays (or archiveDays), into the ArchivePath
@@ -4572,7 +4572,7 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
+class procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
 begin
   TSynLog.NotifyThreadEnded;
 end;
