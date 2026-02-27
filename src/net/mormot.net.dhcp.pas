@@ -800,6 +800,7 @@ type
     FreeList: TIntegerDynArray;
     // on TDhcpScope.Main, redirect to pointer(TDhcpScope.Pools)
     SubPools: PDhcpPool;
+    procedure EntryPreallocate;
   end;
   /// store all IP range pools of a given TDhcpScope scope/subnet
   TDhcpPools = array of TDhcpPool;
@@ -3011,8 +3012,6 @@ end;
 const
   // hardcore limit of dmtInform to 3 IPs per second
   MAX_INFORM = 3;
-  // pre-allocate 4KB of working entries e.g. in TDhcpScope.AfterFill
-  PREALLOCATE_LEASES = 250;
 
 // some sensitive O(n) functions which could favor specific alignment
 
@@ -3234,8 +3233,8 @@ begin
   begin
     dec(FreeListCount);
     result := @Entry[FreeList[FreeListCount]]; // LIFO is the fastest
-    PInt64(result)^ := mac64 shl 16; // also reset State+RateLimit
-    if result^.State = lsFree then   // paranoid
+    PInt64(result)^ := mac64 shl 16;           // also reset State+RateLimit
+    if result^.State = lsFree then             // paranoid
       exit;
   end;
   // we need to add a new entry - maybe with reallocation
@@ -3264,14 +3263,19 @@ begin
   ndx := LeaseIndex(p);
   if ndx < cardinal(Count) then // paranoid
     AddInteger(FreeList, FreeListCount, ndx);
-  result := p^.IP4;       // return this IP4
-  FillZero(THash128(p^)); // set MAC=0 IP=0 State=lsFree
+  result := p^.IP4;             // return this IP4
+  FillZero(THash128(p^));       // set MAC=0 IP=0 State=lsFree
+end;
+
+procedure TDhcpPool.EntryPreallocate;
+begin // default to 75% of full range, up to 250 entries = 4KB
+  SetLength(Entry, MinPtrUInt(250, ((IpMaxLE - IpMinLE) * 3) shr 2));
 end;
 
 procedure TDhcpPool.ClearLeases;
 begin
   Entry := nil;
-  SetLength(Entry, PREALLOCATE_LEASES); // as in TDhcpScope.AfterFill
+  EntryPreallocate;
   Count := 0;
   FreeListCount := 0;
 end;
@@ -3290,7 +3294,7 @@ begin
     if (nfo.uuid <> '') or
        (DoFindMac(pointer(StaticMac), PInt64(@nfo.mac)^ and MAC_MASK,
           length(StaticMac)) <> nil) then
-    exit;
+      exit;
   n := length(nfo.uuid);
   if n <> 0 then
     if (n < MIN_UUID_BYTES) or
@@ -3438,7 +3442,7 @@ begin
   LastIpLE := 0;
   // prepare the leases in-memory database
   if Entry = nil then
-    SetLength(Entry, PREALLOCATE_LEASES)
+    EntryPreallocate
   else
   begin
     // filter/validate all current leases from the actual subnet and statics
