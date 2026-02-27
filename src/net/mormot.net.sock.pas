@@ -643,6 +643,9 @@ function IP4ToText(ip4addr: PByteArray): RawUtf8;
 /// convert an array of IPv4 raw value into a RawUtf8 CSV text
 function IP4sToText(const ip4: array of TNetIP4): RawUtf8;
 
+/// compute the reverse '4.3.2.1.in-addr.arpa' from '1.2.3.4' raw IP
+function ReverseIP4(const ip4: RawUtf8; out reverse: RawUtf8): boolean;
+
 /// convert an IPv6 raw value into a ShortString text
 // - will shorten the address using the regular 0 removal scheme, e.g.
 // 2001:00b8:0a0b:12f0:0000:0000:0000:0001 returns '2001:b8:a0b:12f0::1'
@@ -3860,6 +3863,17 @@ begin
   end;
 end;
 
+function ReverseIP4(const ip4: RawUtf8; out reverse: RawUtf8): boolean;
+var
+  ip32: cardinal;
+begin
+  result := NetIsIP4(pointer(IP4), @ip32);
+  if not result then
+    exit;
+  ip32 := bswap32(ip32); // to be asked in inverse byte order
+  Join([IP4ToText(@ip32), '.in-addr.arpa'], reverse);
+end;
+
 procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
 // this code is faster than any other inet_ntop6() I could find around
 var
@@ -5376,7 +5390,7 @@ begin
   while true do
     case text^ of
       #0 .. ' ',
-      ',', ';', // allow 'ip1,ip2' CSV
+      ',', ';', // allow 'ip1,ip2' or 'ip1;ip2' CSV
       '/':      // allow CIDR '1.2.3.4/20' decoding
         if (b < 0) or
            (n <> 3) then
