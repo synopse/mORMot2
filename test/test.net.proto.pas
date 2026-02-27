@@ -2282,7 +2282,7 @@ begin
     pool := @server.Scope[0].Main;
     ndx := pool.AddRule([
       '{any:{"circuit-id":"1234","circuit-id":"DCBA"},' +
-       'always:{202:"titi"}}']);
+       'always:{202:"titi"},name:"circuit-id"}']);
     ips[0] := d.Send.yiaddr;
     CheckEqual(d.RecvToJson(true), json);
     Check(server.ComputeResponse(d) > 0, 'rai rule');
@@ -2480,7 +2480,7 @@ begin
     pool.AddRule([
       '{all:{user-class: "iPXE", client-architecture: 5},' +
        'always:{tftp-server-name:"192.168.0.254"}, '+
-       'requested:{boot-file-name:"ipxe.5"}}']);
+       'requested:{boot-file-name:"ipxe.5"},name:"ipxe5"}']);
     CheckEqual(length(pool.Rules), 1, 'one rule');
     // incomplete "all":
     f := d.ClientNew(dmtRequest, macs[8]);
@@ -2531,7 +2531,7 @@ begin
       '{all:{mac:["', MacToText(@macs[6]), '","', mac,  // validate pvkMacs
       '"],client-uuid:"', uuid, '"},' +
       'always:{ntp-server:["1.1.1.1", "4.4.4.4"]},' +
-      'requested:{domain:"mydomain"}}']);
+      'requested:{domain:"mydomain"},name:"macs"}']);
     pool.AddRule([
       '{mac:"', mac, '",ip:"' + ip + '",' +
        'requested:{domain-name:"mydomain"}}']);
@@ -2577,7 +2577,7 @@ begin
     // validate ASCII option 81 with custom "fqdn" simple rule value
     ndx := pool.AddRule([
       '{mac:"', mac, '",' +
-       'always:{81:"mydomain"}}']);
+       'always:{81:"mydomain"},name:"mydomain"}']);
     CheckEqual(ndx, high(pool.Rules));
     CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn ascii');
     CheckEqual(d.RecvToJson(true), json);
@@ -2593,7 +2593,7 @@ begin
     Check(not pool.DeleteRule(ndx), 'del2');
     CheckEqual(ndx, pool.AddRule([
       '{mac:"', mac, '",' +
-       'always:{fqdn:{server:"mydomain.com"}}}']));
+       'always:{fqdn:{server:"mydomain.com"}},name:"fqdn"}']));
     // validate ASCII option 81 with the new {server:"fqdn"} rule
     CheckNotEqual(server.ComputeResponse(d), 0, 'fqdn server');
     CheckEqual(d.RecvToJson(true), json);
@@ -2622,7 +2622,7 @@ begin
     Check(pool.DeleteRule(ndx), 'del2');
     CheckEqual(ndx, pool.AddRule([
       '{any:{fqdn:"",200:"none",200:"trigger"},' +
-       'always:{201:"toto"}}']));
+       'always:{201:"toto"},name:"200/201"}']));
     f := d.ClientNew(dmtDiscover, macs[8]);
     option := 'trigger';
     DhcpAddOptionRaw(f, 200, @option[1], ord(option[0]));

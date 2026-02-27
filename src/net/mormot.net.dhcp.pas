@@ -728,6 +728,8 @@ type
   TDhcpPool = object
   {$endif USERECORDWITHMETHODS}
   public
+    /// the custom "name" property associated with this pool
+    Name: RawUtf8;
     /// the owner scope/subnet of this IP range pool
     Scope: PDhcpScope;
     /// big-endian/network order of inclusive minimal IP range value
@@ -4511,7 +4513,7 @@ begin
     inc(p);
   end;
   // return true if there is some condition to append: void entries are skipped
-  Policy.name := fName;
+  TrimU(fName, Policy.name);
   result := Policy.send <> nil;
 end;
 
@@ -4537,6 +4539,7 @@ begin
   Pool.IpMax        := ToIP4(fMax);
   Pool.StaticIP     := nil;
   Pool.StaticMac    := nil;
+  TrimU(fName, Pool.name);
   for i := 0 to high(fStatic) do
     if not Pool.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
       EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
@@ -5355,7 +5358,7 @@ var
   fam: TSynLogFamily;
   one: TSynLog;
   msg: ShortString; // shared by TSynLog and JournalSend()
-  prefixlen: PtrInt;
+  prefixlen, msglen: PtrInt;
 begin
   // this method could be overriden to extend or replace the default logging
   fam := fLog.Family;
@@ -5390,6 +5393,12 @@ begin
     AppendShortChar(' ', @msg);
     AppendShort(State.RecvHostName^, msg);
   end;
+  if (State.Pool <> nil) and
+     (State.Pool^.Name <> '') then
+  begin
+    AppendShort(' pool=', msg); // e.g. 'pool=printers'
+    AppendShortAnsi7String(State.Pool^.Name, msg);
+  end;
   if State.RecvBoot <> dcbDefault then
   begin
     AppendShort(' boot=', msg); // e.g. 'boot=ipxe-x64'
@@ -5398,18 +5407,18 @@ begin
   if (State.RecvRule <> nil) and
      (State.RecvRule^.name <> '') then
   begin
-    AppendShort(' rule=', msg);
+    AppendShort(' rule=', msg); // e.g. 'rule=guest-wifi'
     AppendShortAnsi7String(State.RecvRule^.name, msg);
-    if msg[0] = #255 then
-      dec(msg[0]); // avoid buffer overflow on next line
   end;
-  msg[ord(msg[0]) + 1] := #0; // ensure ASCIIZ
+  msglen := ord(msg[0]);
+  inc(msglen, ord(msglen < high(msg))); // avoid buffer overflow on next line
+  PByteArray(@msg)[msglen] := 0;        // ensure ASCIIZ
   // efficiently append to local TSynLog
   if one <> nil then
     one.LogText(Level, PUtf8Char(@msg[1]), nil); // this is the fastest API
   // optionnally send 'REQUEST MAC...' text to system logs (much slower)
   if dsoSystemLog in fOptions then
-    JournalSend(Level, @msg[prefixlen + 1], ord(msg[0]) - prefixlen, false);
+    JournalSend(Level, @msg[prefixlen + 1], msglen - prefixlen, false);
 end;
 
 procedure TDhcpProcess.OnLogFrame(Sender: TSynLog; Level: TSynLogLevel;
