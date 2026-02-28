@@ -20,7 +20,7 @@ unit mormot.net.dhcp;
    Support VLAN via SubNets / Scopes, giaddr and Relay Agent Option 82.
    Versatile JSON rules for vendor-specific or user-specific options.
    IP ranges reservation with each subnet/scope from custom JSON rules.
-   Optional DDNS propagation of fadn options 81 registrations.
+   Optional DDNS propagation e.g. to Samba of fadn options 81 registrations.
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
@@ -464,6 +464,7 @@ function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
 function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
 
 /// convert a DNS wire format aka binary "canonical form" into plain ASCII text
+function DnsLabelToText(v: pointer; len: PtrInt; var txt: shortstring): boolean;
 function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
 
 /// convert plain ASCII text as DNS wire format aka binary "canonical form"
@@ -618,7 +619,7 @@ type
   // - lsAck is used when REQUEST has been received and ACK has been sent back,
   // and lsAckDdns if there was a HostName for DDNS registration
   // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
-  // - TDhcpScope.DoOutdated requires to end with lsReserved,lsAck*,lsUnavailable
+  // - should end with lsReserved,lsAck*,lsUnavailable for TDhcpScope.DoOutdated
   TLeaseState = (
     lsFree,
     lsStatic,
@@ -2022,6 +2023,12 @@ begin
   inc(PByte(v));
   dec(len);
   result := true;
+end;
+
+function DnsLabelToText(v: pointer; len: PtrInt; var txt: shortstring): boolean;
+begin
+  txt[0] := #0;
+  result := DnsLabelAppendText(PByteArray(v), len, txt);
 end;
 
 function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): PUtf8Char;

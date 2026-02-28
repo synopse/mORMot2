@@ -1673,6 +1673,8 @@ var
     Check(not DnsLabelAppendText(v, l, txt));
     txt[0] := #0;
     CheckEqualShort(txt, '');
+    Check(DnsLabelToText(@bin[1], ord(bin[0]), txt));
+    CheckEqualShort(txt, dns);
   end;
 
 begin
