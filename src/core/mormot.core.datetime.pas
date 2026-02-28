@@ -1192,8 +1192,8 @@ end;
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
   var result: TDateTime);
 var
-  b: cardinal;
-  y, m, d, h, mi, ss, ms: cardinal;
+  b, y, m, d, h, mi, ss, ms: cardinal;
+  time: TDateTime;
   d100: TDiv100Rec;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
@@ -1330,12 +1330,18 @@ begin
   end
   else
     ms := 0;
-  if (h < 24) and
-     (mi < 60) and
-     (ss < 60) then // inlined EncodeTime()
-    result := result + (h * MilliSecsPerHour +
-                        mi * MilliSecsPerMin +
-                        ss * MilliSecsPerSec + ms) / MilliSecsPerDay;
+  if (h >= 24) or
+     (mi >= 60) or
+     (ss >= 60) then
+    exit;
+  // inlined EncodeTime()
+  time := integer(cardinal(h * MilliSecsPerHour) +
+                  cardinal(mi * MilliSecsPerMin) +
+                  cardinal(ss * MilliSecsPerSec) + ms) * MilliSecsPerDate;
+  if result < 0 then
+    result := result - time
+  else
+    result := result + time;
 end;
 
 procedure Iso8601ToDatePUtf8CharVar(P: PUtf8Char; L: PtrInt;
