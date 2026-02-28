@@ -5908,7 +5908,7 @@ end;
 
 function THttpAnalyzerToSave.DateTime: TDateTime;
 begin
-  result := (Int64(Date) + UNIXTIME_MINIMAL) / SecsPerDay + UnixDateDelta;
+  result := (Int64(Date) + UNIXTIME_MINIMAL) * SecsPerDate + UnixDateDelta;
 end;
 
 

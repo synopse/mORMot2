@@ -7565,7 +7565,7 @@ begin
     d1 := maxFloat + d1 + 1;
   d1 := d1 / maxFloat;
   d1 := Trunc(d1 * 10000) / 10000;
-  result := (d + d1) / SecsPerDay;
+  result := (d + d1) * SecsPerDate;
   result := result + 2;
 end;
 

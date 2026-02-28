@@ -3180,7 +3180,7 @@ begin
     (SS < 60) then // inlined EncodeTime()
     AValue := AValue + (H * MilliSecsPerHour +
                         MI * MilliSecsPerMin +
-                        SS * MilliSecsPerSec) / MilliSecsPerDay
+                        SS * MilliSecsPerSec) * MilliSecsPerDate
   else
     exit;
   result := true;

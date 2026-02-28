@@ -484,7 +484,7 @@ begin
   if PInt64(@FT)^ = 0 then
     result := 0
   else // inlined UnixTimeToDateTime()
-    result := FileTimeToUnixMSTime(FT) / MilliSecsPerDay + UnixDateDelta;
+    result := FileTimeToUnixMSTime(FT) * MilliSecsPerDate + UnixDateDelta;
 end;
 
 procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);

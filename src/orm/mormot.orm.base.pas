@@ -5371,7 +5371,7 @@ end;
 function TOrmPropInfoRttiDateTime.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 const
-  PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MilliSecsPerDay);
+  PRECISION: array[boolean] of double = (SecsPerDate, MilliSecsPerDate);
 var
   V1, V2: double;
 begin
