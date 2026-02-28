@@ -3791,8 +3791,15 @@ begin // dedicated sub-function for better codegen
         inc(ctx.compacted);
       end;
     end
-    else if (ctx.compacted = nil) and // keep pending OFFER and DECLINE entries
-            not (p^.State in [lsReserved, lsUnavailable]) then
+    else if p^.State in [lsReserved, lsUnavailable] then
+    begin
+      if ctx.compacted <> nil then
+      begin
+        ctx.compacted^ := p^; // keep pending OFFER and DECLINE entries
+        inc(ctx.compacted);
+      end;
+    end
+    else if ctx.compacted = nil then // lsFree or really lsOutdated
       ctx.compacted := p; // start compacting the array in-place
     inc(p);
   until ctx.remain = 0;
