@@ -615,15 +615,17 @@ type
   // - lsOutdated is set once Expired timestamp has been reached, so that the
   // IP4 address could be reused on the next DISCOVER for this MAC
   // - lsReserved is used when an OFFER has been sent back to the client with IP4
-  // - lsAck is used when REQUEST has been received and ACK has been sent back
+  // - lsAck is used when REQUEST has been received and ACK has been sent back,
+  // and lsAckDdns if there was a HostName for DDNS registration
   // - lsUnavailable is set when a DECLINE/INFORM message is received with an IP
-  // - TDhcpScope.DoOutdated requires to end with lsReserved,lsAck,lsUnavailable
+  // - TDhcpScope.DoOutdated requires to end with lsReserved,lsAck*,lsUnavailable
   TLeaseState = (
     lsFree,
     lsStatic,
     lsOutdated,
     lsReserved,
     lsAck,
+    lsAckDdns,
     lsUnavailable);
 
   /// store one DHCP lease in memory with all its logical properties
@@ -1568,7 +1570,7 @@ type
     // standard seconds since epoch (Unix time) for the <expiry> value, e.g.
     // $ 1770034159 c2:07:2c:9d:eb:71 192.168.1.207
     // - we skip <hostname> and <client id> values since we don't handle them
-    // - by design, only lsAck and recently lsOutdated entries are included
+    // - by design, only lsAck* and recently lsOutdated entries are included
     // - will also compact in-place the internal leases storage, if needed
     function SaveToText(SavedCount: PInteger = nil): RawUtf8;
     /// restore the internal entry list using SaveToText() format
@@ -3765,7 +3767,7 @@ begin // dedicated sub-function for better codegen
     // DECLINE/INFORM IPs (with MAC = 0) are ephemeral internal-only markers
     if (PInt64(p)^ shr 16 <> 0) and  // Mac64 <> 0
        (p^.IP4 <> 0) and
-       (((p^.State = lsAck) or
+       (((p^.State in [lsAck, lsAckDdns]) or
         ((p^.State = lsOutdated) and // detected as p^.Expired < tix32
          (cardinal(ctx.tix32 - p^.Expired) < ctx.grace)))) then // reusable
     begin
@@ -3865,10 +3867,11 @@ begin
   if n <> 0 then
     repeat
       if (p^.Expired < tix32) and
-         (p^.State >= lsReserved) then // [lsReserved, lsAck, lsUnavailable]
+         (p^.State >= lsReserved) then // [lsReserved, lsAck*, lsUnavailable]
       begin
-        if DnsScript <> '' then
-          ExecuteDnsScript(p^.IP4, @p^.Mac, nil, tix32);
+        if (p^.State = lsAckDdns) and
+           (DnsScript <> '') then
+          ExecuteDnsScript(p^.IP4, @p^.Mac, {host/add=}nil, tix32);
         inc(result);
         p^.State := lsOutdated;
       end;
@@ -3962,7 +3965,7 @@ begin
     // from TDhcpState.AddOption81 -> add A/PTR
     ctx.cmd := MakeString([DnsScript, ' IPV4 add ', ip, ' ', mac, ' ', host^])
   else
-    // from TDhcpProcess.DoError(dsmLeaseReleased) or OnExpiry -> delete
+    // from TDhcpProcess.DoError(dsmLeaseReleased) or DoOutdated -> delete
     ctx.cmd := MakeString([DnsScript, ' IPV4 delete', ip, ' ', mac]);
   // trigger the execution in a background thread
   ctx.ip4 := ip4;
@@ -5651,7 +5654,8 @@ begin
       begin
         IP4Short(@Lease^.IP4, State.Ip);
         DoLog(sllTrace, 'as', State);
-        State.Scope^.ExecuteDnsScript(Lease^.IP4, @Lease^.Mac, nil, State.Tix32);
+        if Lease^.State = lsAckDdns then // unregister to DDNS
+          State.Scope^.ExecuteDnsScript(Lease^.IP4, @Lease^.Mac, nil, State.Tix32);
         State.Pool^.ReuseLease(Lease); // set MAC=0 IP=0 State=lsFree
         inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
       end;
@@ -6057,7 +6061,7 @@ begin
         inc(State.Scope^.Metrics.Current[dsmRequest]);
         if (p <> nil) and
            (p^.IP4 <> 0) and
-           ((p^.State in [lsReserved, lsAck, lsStatic]) or
+           ((p^.State in [lsReserved, lsAck, lsAckDdns, lsStatic]) or
             ((p^.State = lsOutdated) and
              (State.Scope^.GraceFactor > 1) and
              (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
@@ -6090,7 +6094,12 @@ begin
         else
         begin
           inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
-          p^.State := lsAck;
+          if (State.RecvHostName^[0] <> #0) and
+             (State.Scope^.DnsScript <> '') and
+             (State.Recv.options[State.RecvLens[doFqdn]] <> 0) then
+            p^.State := lsAckDdns
+          else
+            p^.State := lsAck;
           p^.Expired := State.Tix32 + State.Scope^.LeaseTimeLE;
           inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
         end;
@@ -6158,7 +6167,7 @@ begin
         // client informs the DHCP server that it no longer needs the lease
         if (p = nil) or
            (p^.IP4 <> State.Recv.ciaddr) or
-           not (p^.State in [lsAck, lsOutdated]) then
+           not (p^.State in [lsAck, lsAckDdns, lsOutdated]) then
           // detect and ignore out-of-synch or malicious client
           result := DoError(State, dsmDroppedInvalidIP)
         else
