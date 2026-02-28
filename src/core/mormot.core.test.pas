@@ -996,7 +996,7 @@ end;
 function TSynTestCase.CheckSameTime(const Value1, Value2: TDateTime;
   const msg: string): boolean;
 begin
-  result := CheckSame(Value1, Value2, 1 / SecsPerDay);
+  result := CheckSame(Value1, Value2, SecsPerDate);
 end;
 
 function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
