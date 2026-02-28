@@ -4748,10 +4748,11 @@ begin
   Scope.Options           := fOptions;
   Scope.DnsScript         := '';
   Scope.OnBackgroundExecute := nil;
-  if (Scope.DnsScriptSecs <> 0) and
+  if (fDynDnsTrustSecs <> 0) and
      FileExists(fDynDnsScript) then
   begin
     Scope.DnsScript := fDynDnsScript;
+    Scope.DnsScriptSecs := fDynDnsTrustSecs;
     Scope.DnsScriptLastTix32 := 0;
     Scope.OnBackgroundExecute := Sender.OnBackgroundExecute;
   end;
