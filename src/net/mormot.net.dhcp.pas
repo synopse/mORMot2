@@ -4209,7 +4209,7 @@ begin
   end
   else
   begin
-    // compute fqdn as option 15 RecvHostName + '.' + DomainName
+    // compute fqdn from option 12 + 15 = RecvHostName + '.' + DomainName
     if RecvHostName^[0] = #0 then
       exit;
     fqdn := RecvHostName^;
@@ -4280,7 +4280,13 @@ begin
   end;
   // append back option 81 with no associated DDNS flags
   if RecvLens[doFqdn] <> 0 then
-    AddOption81;
+    AddOption81
+  else if (RecvType = dmtRequest) and
+          (SendType = dmtAck) and
+          (Scope^.DnsScript <> '') and
+          (RecvHostName^[0] <> #0) then
+    // register option 12 + 15 to DNS
+    NotifyDnsScript(nil, 0, false);
 end;
 
 function TDhcpState.Flush: PtrUInt;
