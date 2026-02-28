@@ -1065,6 +1065,7 @@ type
     // methods for internal use
     procedure AddOptionSafe(const op: byte; b: pointer; len: PtrUInt);
       {$ifdef HASINLINE} inline; {$endif}
+    function NotifyDnsScript(opt81: PAnsiChar; len: PtrInt; plain: boolean): boolean;
     procedure AddOption81;
     procedure ParseRecvLensRai;
     function FakeLease(found: TNetIP4): PDhcpLease;
@@ -1387,6 +1388,9 @@ type
     /// DDNS script location - e.g. "dyn-dns-script":"/usr/local/bin/dhcp-dyndns.sh"
     // - from https://wiki.samba.org/index.php/Configure_DHCP_to_update_DNS_records
     // - would enable proper doFqdn Option 81 DDNS server-side support with Samba
+    // - we could manually compute and apply changes via faster 'nsupdate -g',
+    // but this official samba script switch to samba-tool on purpose in 2020, for
+    // stability and robustness - our DHCP server should run on the DNS server
     property DynDnsScript: TFileName
       read fDynDnsScript write fDynDnsScript;
     /// during many seconds a previous successful "dyn-dns-script" execution
@@ -2080,8 +2084,8 @@ end;
 
 const
   CLIENT_SERVER: array[0..1] of RawUtf8 = ('client', 'server');
-  RFC4702_FLAG_S = 1;
-  RFC4702_FLAG_E = 4;
+  RFC4702_FLAG_S = 1; // server SHOULD or SHOULD NOT perform DNS updates
+  RFC4702_FLAG_E = 4; // FQDN canonical wire format of Domain Name field
 
 function Rfc4702FromJson(p: PUtf8Char; out v: RawByteString): boolean;
 var
@@ -4190,34 +4194,72 @@ end;
   {$POP}
 {$endif FPC_CODEALIGN}
 
+function TDhcpState.NotifyDnsScript(opt81: PAnsiChar; len: PtrInt; plain: boolean): boolean;
+var
+  fqdn: ShortString;
+begin
+  result := false;
+  if opt81 <> nil then
+  begin
+    // get full fqdn directly from option 81 doFqdn content
+    if plain then
+      SetString(fqdn, opt81, len)  // copy E=0 plain
+    else if not DnsLabelToText(opt81, len, fqdn) then
+      exit;                        // failed E=1 decoding
+  end
+  else
+  begin
+    // compute fqdn as option 15 RecvHostName + '.' + DomainName
+    if RecvHostName^[0] = #0 then
+      exit;
+    fqdn := RecvHostName^;
+    if Scope^.DomainName <> '' then
+    begin
+      AppendShortCharSafe('.', fqdn);
+      AppendShortAnsi7String(Scope^.DomainName, fqdn);
+    end;
+  end;
+  // notify DNS server e.g. as "dns add fqdn A ip" via a custom script
+  result := Scope^.ExecuteDnsScript(Ip4, @Mac64, @fqdn, Tix32);
+end;
+
 procedure TDhcpState.AddOption81;
 var
   p: PAnsiChar;
   len: PtrInt;
-  bak, flags: byte; // keep Recv[] untouched
+  flags, flagsbak: set of (S, O, E, N); // match RFC4702_FLAG_* constants
 begin
-  p := @Recv.options[RecvLens[doFqdn]]; // caller ensured <> 0
-  if (p[0] < #3) or
-     (PWord(p + 2)^ <> 0) then // rcode1=rcode2=0
-    exit;
-  include(SendOptions, doFqdn);
-  inc(Scope^.Metrics.Current[dsmOption81Hits]);
+  // see https://www.rfc-editor.org/rfc/rfc4702.html#section-2
+  p := @Recv.options[RecvLens[doFqdn]];   // caller ensured <> 0
   len := ord(p[0]);
   inc(p);
+  if (len < 3) or
+     (PWord(p + 1)^ <> 0) then            // rcode1=rcode2=0
+    exit;
+  inc(Scope^.Metrics.Current[dsmOption81Hits]);
   // Windows client send typically 0x05 (E=1 for wire format + S=1 to ask
-  // server for updates) -> reset all flags but E since we have no DDNS yet
-  bak := ord(p[0]);
-  flags := bak and RFC4702_FLAG_E;                // preserve E/encoding flag
+  // server for updates) -> reset all flags but E+N and set S=1 on active DDNS
+  byte(flags) := ord(p[0]);
+  flags := flags * [E, N];
   if (RecvType = dmtRequest) and
      (SendType = dmtAck) and
-     (RecvHostName^[0] <> #0) then
-    if Scope^.ExecuteDnsScript(Ip4, @Mac64, RecvHostName, Tix32) then
+     (not (N in flags)) and // not disabled by client
+     (Scope^.DnsScript <> '') then
+    if NotifyDnsScript(p + 3, len - 3, {plain=}not(E in flags)) then
       if (Scope^.DnsScriptLastTix32 <> 0) and
          (cardinal(Tix32 - Scope^.DnsScriptLastTix32) < Scope^.DnsScriptSecs) then
-        flags := flags or RFC4702_FLAG_S;         // S=1 if DnsScript succeeded
+        // return S=1 if DnsScript succeeded recently enough (in last 300 secs)
+        include(flags, S);
+  // echo raw encoded fqdn value
+  if doFqdn in SendOptions then
+    exit;
+  include(SendOptions, doFqdn);
+  byte(flagsbak) := ord(p[0]);
+  if (S in flags) <> (S in flagsbak) then
+    include(flags, O);        // server has overridden the client's S preference
   p[0] := AnsiChar(flags);
-  AddOptionSafe(81, p, len);                      // echo raw encoded fqdn value
-  p[0] := AnsiChar(bak);
+  AddOptionSafe(81, p, len);
+  p[0] := AnsiChar(flagsbak); // keep Recv[] untouched
 end;
 
 procedure TDhcpState.AddRegularOptions;
@@ -4237,8 +4279,7 @@ begin
     AddOptionOnce32(doRebindingTime, Scope^.RebindingBE);
   end;
   // append back option 81 with no associated DDNS flags
-  if (RecvLens[doFqdn] <> 0) and
-     not (doFqdn in SendOptions) then
+  if RecvLens[doFqdn] <> 0 then
     AddOption81;
 end;
 
