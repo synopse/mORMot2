@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgReportMonthly.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgReportMonthly;
 
@@ -50,7 +50,6 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: IMonthlyOverviewReportService;
     FSelectedYear: integer;
     procedure PopulateYearCombo;
   protected
@@ -70,7 +69,10 @@ implementation
 
 uses
   mdGrids, DateUtils,
-  mormot.core.text;
+  mormot.core.base,
+  mormot.core.text,
+  mormot.core.unicode,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -83,7 +85,6 @@ type
 constructor TMonthlyOverviewReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TMonthlyOverviewReportService.Create;
 
   PopulateYearCombo;
 
@@ -96,7 +97,6 @@ end;
 
 destructor TMonthlyOverviewReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -171,8 +171,9 @@ end;
 
 procedure TMonthlyOverviewReportForm.LoadData;
 var
+  Items: TDtoMonthlyOverviewDynArray;
+  Totals: TDtoMonthlyOverview;
   i: integer;
-  Item, Totals: TDtoMonthlyOverview;
   ListItem: TMDListItem;
   YearText: string;
   TempYear: integer;
@@ -194,28 +195,26 @@ begin
   end;
 
   FSelectedYear := TempYear;
-  FReportService.LoadMonthlyOverview(FSelectedYear);
+  RgServices.ReportService.GetMonthlyOverviewReport(FSelectedYear, Items, Totals);
 
   // Add monthly rows
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Item.MonthName;
-    ListItem.SubItems.Add(IntToStr(Item.InvoiceCount));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.Revenue)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.PaymentsReceived)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.OpenAmount)^));
+    ListItem.Caption := Utf8ToString(Items[i].MonthName);
+    ListItem.SubItems.Add(IntToThousandString(Items[i].InvoiceCount));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].Revenue));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].PaymentsReceived));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].OpenAmount));
   end;
 
   // Add totals row
-  Totals := FReportService.GetTotals;
   ListItem := FResultGrid.Items.Add;
-  ListItem.Caption := '--- ' + Totals.MonthName + ' ---';
-  ListItem.SubItems.Add(IntToStr(Totals.InvoiceCount));
-  ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.Revenue)^));
-  ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.PaymentsReceived)^));
-  ListItem.SubItems.Add(Curr64ToString(PInt64(@Totals.OpenAmount)^));
+  ListItem.Caption := '--- ' + Utf8ToString(Totals.MonthName) + ' ---';
+  ListItem.SubItems.Add(IntToThousandString(Totals.InvoiceCount));
+  ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Totals.Revenue));
+  ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Totals.PaymentsReceived));
+  ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Totals.OpenAmount));
 end;
 
 procedure TMonthlyOverviewReportForm.RefreshButtonClick(Sender: TObject);

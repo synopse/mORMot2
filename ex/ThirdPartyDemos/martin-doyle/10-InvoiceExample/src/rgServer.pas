@@ -1,8 +1,12 @@
 {:
 ---------------------------------------------------(C) martindoyle 2017-2026 --
- Project : mdComponents
+ Project : Rechnung
 
-  Module : mdDates.pas
+ Using mORMot2
+     Synopse mORMot2 framework. Copyright (C) 2025 Arnaud Bouchez
+     Synopse Informatique - http://synopse.info
+
+  Module : rgServer.pas
 
   Last modified
     Date : 07.02.2026
@@ -28,33 +32,49 @@
     IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 }
-unit mdDates;
+unit rgServer;
 
 interface
 
-{ Date formatting helpers - use system locale, never hardcoded formats }
-function AppDateToStr(const ADate: TDateTime): string;
-function AppTryStrToDate(const AText: string; out ADate: TDateTime): Boolean;
-function AppDateFormatHint: string;
+{$I mormot.defines.inc}
+
+uses
+  SysUtils,
+  mormot.core.base,
+  mormot.core.os,
+  mormot.orm.core,
+  mormot.rest.server,
+  mormot.soa.core,
+  mormot.soa.server,
+  mormot.rest.sqlite3,
+  mormot.db.raw.sqlite3.static,
+  rgData,
+  rgServiceInterfaces,
+  rgServiceImplementation;
+
+type
+
+  { TRgServer }
+
+  TRgServer = class(TRestServerDB)
+  public
+    constructor Create(aModel: TOrmModel; const aDBFileName: TFileName);
+        reintroduce;
+  end;
 
 implementation
 
-uses
-  SysUtils;
+{ TRgServer }
 
-function AppDateToStr(const ADate: TDateTime): string;
+constructor TRgServer.Create(aModel: TOrmModel; const aDBFileName: TFileName);
 begin
-  Result := SysUtils.DateToStr(ADate);
-end;
-
-function AppTryStrToDate(const AText: string; out ADate: TDateTime): Boolean;
-begin
-  Result := SysUtils.TryStrToDate(Trim(AText), ADate);
-end;
-
-function AppDateFormatHint: string;
-begin
-  Result := {$IFDEF FPC}FormatSettings.{$ENDIF}ShortDateFormat;
+  inherited Create(aModel, aDBFileName);
+  CreateMissingTables;
+  ServiceDefine(TRgCustomerService, [IRgCustomerService], sicShared);
+  ServiceDefine(TRgInvoiceService, [IRgInvoiceService], sicShared);
+  ServiceDefine(TRgPaymentService, [IRgPaymentService], sicShared);
+  ServiceDefine(TRgStatisticsService, [IRgStatisticsService], sicShared);
+  ServiceDefine(TRgReportService, [IRgReportService], sicShared);
 end;
 
 end.

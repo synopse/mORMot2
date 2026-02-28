@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgReportPayments.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgReportPayments;
 
@@ -52,10 +52,8 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: IPaymentReceiptsReportService;
     FFromDate: TDateTime;
     FToDate: TDateTime;
-    function ParseDate(const AText: string; out ADate: TDateTime): Boolean;
     function ValidateFilters: Boolean;
   protected
     procedure ConfigureColumns; override;
@@ -76,7 +74,9 @@ uses
   mdGrids,
   mormot.core.base,
   mormot.core.text,
-  mdDates;
+  mormot.core.unicode,
+  mdDates,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -89,7 +89,6 @@ type
 constructor TPaymentReceiptsReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TPaymentReceiptsReportService.Create;
 
   // Default filter values: last 30 days
   FToDate := Date;
@@ -101,7 +100,6 @@ end;
 
 destructor TPaymentReceiptsReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -135,12 +133,6 @@ begin
   Height := 500;
 end;
 
-function TPaymentReceiptsReportForm.ParseDate(const AText: string;
-  out ADate: TDateTime): Boolean;
-begin
-  Result := AppTryStrToDate(AText, ADate);
-end;
-
 procedure TPaymentReceiptsReportForm.ConfigureColumns;
 var
   Col: TMDListColumn;
@@ -169,7 +161,7 @@ var
 begin
   Result := False;
 
-  if not ParseDate(EditFromDate.Text, TempDate) then
+  if not AppTryStrToDate(EditFromDate.Text, TempDate) then
   begin
     ShowMessage(Format('Please enter a valid From Date (%s).', [AppDateFormatHint]));
     EditFromDate.SetFocus;
@@ -177,7 +169,7 @@ begin
   end;
   FFromDate := TempDate;
 
-  if not ParseDate(EditToDate.Text, TempDate) then
+  if not AppTryStrToDate(EditToDate.Text, TempDate) then
   begin
     ShowMessage(Format('Please enter a valid To Date (%s).', [AppDateFormatHint]));
     EditToDate.SetFocus;
@@ -197,27 +189,26 @@ end;
 
 procedure TPaymentReceiptsReportForm.LoadData;
 var
+  Items: TDtoPaymentReceiptDynArray;
   i: integer;
-  Item: TDtoPaymentReceipt;
   ListItem: TMDListItem;
 begin
   if not ValidateFilters then
     Exit;
 
-  FReportService.LoadPaymentReceipts(FFromDate, FToDate);
+  RgServices.ReportService.GetPaymentReceiptsReport(FFromDate, FToDate, Items);
 
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    if Item.SaleDate > 0 then
-      ListItem.Caption := AppDateToStr(Item.SaleDate)
+    if Items[i].SaleDate > 0 then
+      ListItem.Caption := AppDateToStr(Items[i].SaleDate)
     else
       ListItem.Caption := '';
-    ListItem.SubItems.Add(Item.Company);
-    ListItem.SubItems.Add(Item.OrderNo);
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.AmountPaid)^));
-    ListItem.Data := Pointer(PtrInt(Item.OrderID));
+    ListItem.SubItems.Add(Utf8ToString(Items[i].Company));
+    ListItem.SubItems.Add(Utf8ToString(Items[i].OrderNo));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].AmountPaid));
+    ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;
 end;
 

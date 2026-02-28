@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgInvoiceItemEdit.pas
 
   Last modified
-    Date : 31.01.2026
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgInvoiceItemEdit;
 
@@ -57,6 +57,7 @@ type
     OKButton: TButton;
     CancelButton: TButton;
     procedure FormCreate(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure OKButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
     procedure EditQuantityKeyPress(Sender: TObject; var Key: char);
@@ -67,7 +68,6 @@ type
     FSaveSuccessful: Boolean;
     procedure SetupLayout;
     function ValidateInput: Boolean;
-    function ParseDecimal(const AText: string; out AValue: Double): Boolean;
   public
     function GetFormMenu: TMainMenu; override;
     function ShowItemEdit(var AItem: TDtoInvoiceItem; AIsNew: Boolean): Boolean;
@@ -81,7 +81,8 @@ implementation
 uses
   mormot.core.base,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mdNumbers;
 
 {$R *.dfm}
 
@@ -90,98 +91,69 @@ uses
 procedure TInvoiceItemEditForm.FormCreate(Sender: TObject);
 begin
   FSaveSuccessful := False;
+end;
+
+procedure TInvoiceItemEditForm.FormShow(Sender: TObject);
+begin
   SetupLayout;
 end;
 
 procedure TInvoiceItemEditForm.SetupLayout;
-var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
-  BaseHeight: Integer;
 begin
-  BaseHeight := LabelDescription.Height;
-  Margins := LayoutMargins(BaseHeight);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  InitLayout(LabelDescription.Height, EditDescription.Height,
+    7.0 * LabelDescription.Height, 14.0 * LabelDescription.Height);
 
-    LabelWidth := Round(7 * BaseHeight);
-    EditWidth := Round(14 * BaseHeight);
+  // Prepare label-edit pairs
+  PrepareLabelEdit(LabelDescription, EditDescription);
+  PrepareLabel(LabelQuantity);
+  PrepareLabel(LabelPrice);
+  PrepareLabel(LabelDiscount);
+  PrepareLabel(LabelPercent);
 
-    LabelDescription.Width := LabelWidth;
-    LabelQuantity.Width := LabelWidth;
-    LabelPrice.Width := LabelWidth;
-    LabelDiscount.Width := LabelWidth;
+  // Custom edit widths (not uniform)
+  EditQuantity.Width := Round(6 * LabelHeight);
+  EditPrice.Width := Round(8 * LabelHeight);
+  SpinDiscount.Width := Round(4 * LabelHeight);
 
-    EditDescription.Width := EditWidth;
-    EditQuantity.Width := Round(6 * BaseHeight);
-    EditPrice.Width := Round(8 * BaseHeight);
-    SpinDiscount.Width := Round(4 * BaseHeight);
+  // Position first row
+  LabelDescription.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
+  Layout.PlaceRight(LabelDescription, EditDescription, 1.0);
 
-    LabelDescription.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelDescription.Height);
+  // Quantity row
+  Layout.PlaceBelow(LabelDescription, LabelQuantity, 0.5);
+  Layout.PlaceRight(LabelQuantity, EditQuantity, 1.0);
 
-    Layout.Place(LabelDescription, EditDescription, ldRight, 0.5);
+  // Price row
+  Layout.PlaceBelow(LabelQuantity, LabelPrice, 0.5);
+  Layout.PlaceRight(LabelPrice, EditPrice, 1.0);
 
-    Layout.Place(LabelDescription, LabelQuantity, ldBelow, 1.0);
-    Layout.Place(LabelQuantity, EditQuantity, ldRight, 0.5);
+  // Discount row
+  Layout.PlaceBelow(LabelPrice, LabelDiscount, 0.5);
+  Layout.PlaceRight(LabelDiscount, SpinDiscount, 1.0);
+  Layout.PlaceRight(SpinDiscount, LabelPercent, 0.25);
 
-    Layout.Place(LabelQuantity, LabelPrice, ldBelow, 1.0);
-    Layout.Place(LabelPrice, EditPrice, ldRight, 0.5);
+  Layout.PlaceBelow(LabelDiscount, CancelButton, 1.0);
+  CancelButton.Left := EditDescription.Left + EditDescription.Width - CancelButton.Width;
+  Layout.PlaceLeft(CancelButton, OKButton, 0.5);
 
-    Layout.Place(LabelPrice, LabelDiscount, ldBelow, 1.0);
-    Layout.Place(LabelDiscount, SpinDiscount, ldRight, 0.5);
-    Layout.Place(SpinDiscount, LabelPercent, ldRight, 0.25);
-
-    OKButton.Top := SpinDiscount.Top + SpinDiscount.Height + (2 * BaseHeight);
-    CancelButton.Top := OKButton.Top;
-
-    CancelButton.Left := EditDescription.Left + EditDescription.Width - CancelButton.Width;
-    OKButton.Left := CancelButton.Left - Margins.Middle - OKButton.Width;
-
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
-    ClientWidth := EditDescription.Left + EditDescription.Width + Margins.Right;
-
-    Position := poMainFormCenter;
-  finally
-    Layout.Free;
-  end;
+  Layout.AutoSizeForm;
 end;
 
 procedure TInvoiceItemEditForm.EditQuantityKeyPress(Sender: TObject; var Key: char);
 begin
-  if not (Key in ['0'..'9', ',', '.', '-', #8, #13]) then
-    Key := #0;
+  FilterNumericKey(Key);
 end;
 
 procedure TInvoiceItemEditForm.EditPriceKeyPress(Sender: TObject; var Key: char);
 begin
-  if not (Key in ['0'..'9', ',', '.', '-', #8, #13]) then
-    Key := #0;
-end;
-
-function TInvoiceItemEditForm.ParseDecimal(const AText: string;
-  out AValue: Double): Boolean;
-var
-  TempText: string;
-  err: integer;
-begin
-  Result := False;
-  AValue := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-    Exit;
-
-  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
-  AValue := GetExtended(pointer(StringToUtf8(TempText)), err);
-  Result := (err = 0);
+  FilterNumericKey(Key);
 end;
 
 function TInvoiceItemEditForm.ValidateInput: Boolean;
 var
-  TempQty, TempPrice: Double;
+  TempQty: Double;
+  TempPrice: Currency;
 begin
   Result := False;
 
@@ -192,21 +164,21 @@ begin
     Exit;
   end;
 
-  if not ParseDecimal(EditQuantity.Text, TempQty) then
+  if not TryStrToFloat(EditQuantity.Text, TempQty) then
   begin
     ShowMessage('Please enter a valid quantity.');
     EditQuantity.SetFocus;
     Exit;
   end;
 
-  if not ParseDecimal(EditPrice.Text, TempPrice) then
+  if not TryStrToCurr(EditPrice.Text, TempPrice) then
   begin
     ShowMessage('Please enter a valid price.');
     EditPrice.SetFocus;
     Exit;
   end;
 
-  FItem.Description := Trim(EditDescription.Text);
+  FItem.Description := StringToUtf8(Trim(EditDescription.Text));
   FItem.Quantity := TempQty;
   FItem.ListPrice := TempPrice;
   FItem.Discount := SpinDiscount.Value;
@@ -240,9 +212,9 @@ begin
   else
     Caption := 'Edit Invoice Item';
 
-  EditDescription.Text := AItem.Description;
-  EditQuantity.Text := Format('%.2f', [AItem.Quantity]);
-  EditPrice.Text := Curr64ToString(PInt64(@AItem.ListPrice)^);
+  EditDescription.Text := Utf8ToString(AItem.Description);
+  EditQuantity.Text := FormatFloat(FMT_QTY_EDIT, AItem.Quantity);
+  EditPrice.Text :=  FormatCurr(FMT_CURR_EDIT, AItem.ListPrice);
   SpinDiscount.Value := AItem.Discount;
 
   ActiveControl := EditDescription;

@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2025 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgAbout.pas
 
   Last modified
-    Date : 26.12.2025
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -39,14 +39,15 @@ interface
 {$I mormot.defines.inc}
 
 uses
-  Classes, Graphics, Controls,
-  Forms, Dialogs, StdCtrls, Buttons, ExtCtrls;
+  Classes, Graphics, Controls, Menus,
+  Forms, Dialogs, StdCtrls, Buttons, ExtCtrls,
+  MdForms, mdLayout;
 
 type
 
   { TAboutForm }
 
-  TAboutForm = class(TForm)
+  TAboutForm = class(TMDDBModeForm)
     AppVersion: TLabel;
     CPU: TLabel;
     BIOS: TLabel;
@@ -63,7 +64,7 @@ type
   private
 
   public
-
+    function GetFormMenu: TMainMenu; override;
   end;
 
 procedure ShowAboutBox;
@@ -75,7 +76,6 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
-  mdLayout,
   rgConst;
 
 {$R *.dfm}
@@ -95,14 +95,13 @@ end;
 
 procedure TAboutForm.FormShow(Sender: TObject);
 var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
   MS: TMemoryInfo;
   MaxLabelWidth: Integer;
 begin
   // Set Label text
-  AppVersion.Caption := FormatString('Version %.%.% (Build: %)',
-    [AppVersionMajor, AppVersionMinor, AppVersionBuild, AppBuildDate]);
+  LabelmORMot.Caption := 'Rechnung using mORMot2';
+  AppVersion.Caption := FormatString('Version % (Build: %)',
+    [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
   SKUName.Caption := 'Generated with: ' + COMPILER_VERSION;
   Copyright.Caption := 'Using mORMot' + SYNOPSE_FRAMEWORK_FULLVERSION;
   OS.Caption := OSVersionText;
@@ -111,59 +110,51 @@ begin
   GetMemoryInfo(MS, True);
   Memory.Caption := GetMemoryInfoText;
 
-  // Calculate margins based on label height
-  Margins := LayoutMargins(SKUName.Height);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    // Apply platform-specific fixes (macOS transparency, button heights)
-    Layout.AdjustForPlatform;
+  InitLayout(SKUName.Height, SKUName.Height, 0, 0);
 
-    // Place image
-    ImageMain.SetBounds(Margins.Left, Margins.Top,
-      ImageMain.Width, ImageMain.Height);
+  // Place image
+  ImageMain.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    ImageMain.Width, ImageMain.Height);
 
-    // Place header label with larger font
-    LabelmORMot.Font.Size := Round(1.7 * SKUName.Height);
-    LabelmORMot.Font.Style := [fsBold];
-    LabelmORMot.SetBounds(
-      Margins.Left + ImageMain.Width + Margins.Middle,
-      Margins.Top,
-      LabelmORMot.Width,
-      LabelmORMot.Height
-    );
+  // Place header label with larger font
+  LabelmORMot.Font.Size := Round(1.2 * SKUName.Height);
+  LabelmORMot.Font.Style := [fsBold];
+  LabelmORMot.SetBounds(
+    Layout.Margins.Left + ImageMain.Width + Layout.Margins.Middle,
+    Layout.Margins.Top,
+    LabelmORMot.Width,
+    LabelmORMot.Height
+  );
 
-    // Place version below header
-    Layout.Place(LabelmORMot, AppVersion, ldBelow, 0.2);
+  // Place version below header
+  Layout.PlaceBelow(LabelmORMot, AppVersion, 0.2);
 
-    // Place info labels in column below version
-    Layout.Place(AppVersion, SKUName, ldBelow, 0.5);
-    Layout.Place(SKUName, Copyright, ldBelow, 0.5);
+  // Place info labels in column below version
+  Layout.PlaceBelow(AppVersion, SKUName, 0.5);
+  Layout.PlaceBelow(SKUName, Copyright, 0.5);
 
-    // Calculate and set line width
-    MaxLabelWidth := Layout.CalculateMaxWidth([AppVersion, SKUName, Copyright, OS, CPU, BIOS, Memory]);
-    Line.Width := MaxLabelWidth;
+  // Calculate and set line width
+  MaxLabelWidth := Layout.CalculateMaxWidth([AppVersion, SKUName, Copyright, OS, CPU, BIOS, Memory]);
+  Line.Width := MaxLabelWidth;
 
-    // Place separator line with asymmetric spacing (small before, larger after)
-    Layout.PlaceSeparator(Copyright, Line, OS);
+  // Place separator line with asymmetric spacing (small before, larger after)
+  Layout.PlaceSeparator(Copyright, Line, OS);
 
-    // Place remaining system info labels
-    Layout.PlaceColumn(OS, [CPU, BIOS, Memory], LayoutSpacingProportional(0.5));
+  // Place remaining system info labels
+  Layout.PlaceColumn(OS, [CPU, BIOS, Memory], LayoutSpacingProportional(0.5));
 
-    // Auto-size form based on content
-    Layout.AutoSizeForm;
+  // Auto-size form based on content
+  Layout.AutoSizeForm;
 
-    // Place OK button at bottom-right
-    OKButton.SetBounds(
-      ClientWidth - Margins.Right - OKButton.Width,
-      ClientHeight - Margins.Bottom - OKButton.Height,
-      OKButton.Width,
-      OKButton.Height
-    );
+  // Place OK button at bottom-right
+  OKButton.SetBounds(
+    ClientWidth - Layout.Margins.Right - OKButton.Width,
+    ClientHeight - Layout.Margins.Bottom - OKButton.Height,
+    OKButton.Width,
+    OKButton.Height
+  );
 
-    Position := poDesktopCenter;
-  finally
-    Layout.Free;
-  end;
+  Position := poDesktopCenter;
 end;
 
 
@@ -174,6 +165,11 @@ begin
  {$ELSE FPC}
  Font.Handle := Screen.MenuFont.Handle;
  {$ENDIF FPC}
+end;
+
+function TAboutForm.GetFormMenu: TMainMenu;
+begin
+  Result := nil;
 end;
 
 end.

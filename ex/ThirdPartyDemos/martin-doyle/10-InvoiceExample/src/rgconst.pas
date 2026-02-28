@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgConst;
 
@@ -38,14 +38,16 @@ interface
 
 {$I mormot.defines.inc}
 
+type
+  TRunMode = (rmLocal, rmService);
 
 const
   ApplicationTitle = 'Rechnung';
-  AppVersionMajor = 2;
-  AppVersionMinor = 0;
-  AppVersionBuild = 489;
-  AppBuildDate = '26.12.2025';
   DatabaseFile = 'Project10.db';
+  RunMode: TRunMode = rmService;
+  HttpHost = 'localhost';
+  HttpPort = '11111';
+  ConfigFileName = 'rechnung.config';
   { Path }
   IniDataPath = 'Data';
 
@@ -66,17 +68,58 @@ implementation
 
 uses
   SysUtils,
+  {$ifdef OSPOSIX}
+  fileinfo,
+  {$ifdef OSDARWIN}
+  machoreader,
+  {$else}
+  elfreader,
+  {$endif OSDARWIN}
+  {$endif OSPOSIX}
   mormot.core.base,
   mormot.core.log,
   mormot.core.os;
 
+{$ifdef OSPOSIX}
+procedure InitVersionFromResources;
+var
+  Info: TVersionInfo;
 begin
+  Info := TVersionInfo.Create;
+  try
+    try
+      Info.Load(HInstance);
+      SetExecutableVersion(
+        Info.FixedInfo.FileVersion[0],
+        Info.FixedInfo.FileVersion[1],
+        Info.FixedInfo.FileVersion[2],
+        Info.FixedInfo.FileVersion[3]);
+    except
+      // no version resource embedded
+    end;
+  finally
+    Info.Free;
+  end;
+end;
+{$endif OSPOSIX}
+
+begin
+  {$ifdef OSWINDOWS}
+  GetExecutableVersion;
+  {$else}
+  InitVersionFromResources;
+  {$endif OSWINDOWS}
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := ExpandFileName(IncludeTrailingPathDelimiter(ApplicationPath) +
     '..\' + IniDataPath + '\');
+  TSynLog.Family.DestinationPath:='log';
+  TSynLog.Family.ArchivePath:='log';
+  TSynLog.Family.RotateFileDailyAtHour:=0;
   TSynLog.Family.Level := LOG_VERBOSE;
+  TSynLog.Family.PerThreadLog := ptIdentifiedInOnFile;
   TSynLog.Family.OnArchive := EventArchiveSynLZ;
   TSynLog.Family.ArchiveAfterDays := 1;
+  TSynLog.Family.EchoToConsole:= LOG_NFO;
   DataFile := DataPath + DatabaseFile;
   TSynLog.Add.Log(sllInfo, 'ApplicationPath: ' + ApplicationPath);
   TSynLog.Add.Log(sllInfo, 'DataPath: ' + DataPath);

@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgInvoiceEdit.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 13.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgInvoiceEdit;
 
@@ -38,7 +38,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, Menus, MdForms, mdLayout, mdGrids, rgClient, rgDtoTypes,
+  ExtCtrls, Menus, MdForms, mdLayout, mdGrids, rgDtoTypes,
   rgInvoiceItemEdit;
 
 type
@@ -58,7 +58,6 @@ type
     AddItemButton: TButton;
     EditItemButton: TButton;
     RemoveItemButton: TButton;
-    LabelTotal: TLabel;
     LabelTotalValue: TLabel;
     SaveButton: TButton;
     CancelButton: TButton;
@@ -69,10 +68,12 @@ type
     procedure RemoveItemButtonClick(Sender: TObject);
     procedure SaveButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
+    procedure FormShow(Sender: TObject);
   private
-    FInvoiceService: IInvoiceEditService;
+    FItems: TDtoInvoiceItemArray;
     FInvoiceID: longint;
     FCustomerID: longint;
+    FIsNew: Boolean;
     FSaveSuccessful: Boolean;
     FItemsListGrid: TMDListGrid;
     procedure SetupLayout;
@@ -98,7 +99,10 @@ implementation
 uses
   mormot.core.base,
   mormot.core.text,
-  mdDates;
+  mormot.core.unicode,
+  mdDates,
+  mdNumbers,
+  rgClient;
 
 {$R *.dfm}
 
@@ -106,95 +110,85 @@ uses
 
 procedure TInvoiceEditForm.FormCreate(Sender: TObject);
 begin
-  FInvoiceService := TInvoiceEditService.Create;
   FInvoiceID := 0;
   FCustomerID := 0;
+  FIsNew := False;
   FSaveSuccessful := False;
+  SetLength(FItems, 0);
 
   // Create TMDListGrid (replaces TListView to fix BUG-004)
   FItemsListGrid := TMDListGrid.Create(Self);
   FItemsListGrid.Parent := Self;
   FItemsListGrid.OnSelectItem := ItemsListGridSelectItem;
   FItemsListGrid.OnDblClick := ItemsListGridDblClick;
-
-  SetListGridColumns;
-  SetupLayout;
 end;
 
 procedure TInvoiceEditForm.SetupLayout;
 var
-  Layout: TLayoutHelper;
-  Margins: TLayoutMargins;
-  LabelWidth, EditWidth: Integer;
-  BaseHeight: Integer;
+  GridWidth, ScrollbarWidth: Integer;
 begin
-  BaseHeight := LabelCustomer.Height;
-  Margins := LayoutMargins(BaseHeight);
-  Layout := TLayoutHelper.Create(Self, Margins);
-  try
-    Layout.AdjustForPlatform;
+  InitLayout(LabelCustomer.Height, EditOrderNo.Height,
+    5.0 * LabelCustomer.Height, 12.0 * LabelCustomer.Height);
 
-    LabelWidth := Round(8 * BaseHeight);
-    EditWidth := Round(12 * BaseHeight);
+  ScrollbarWidth := 16;
+  GridWidth := Round(44 * LabelHeight);
 
-    LabelCustomer.Width := LabelWidth;
-    LabelOrderNo.Width := LabelWidth;
-    LabelSaleDate.Width := LabelWidth;
-    LabelShipDate.Width := LabelWidth;
+  // Prepare labels and edits
+  PrepareLabel(LabelCustomer);
+  PrepareLabel(LabelCustomerValue);
+  LabelCustomerValue.Width := EditWidth;
+  PrepareLabelEdit(LabelOrderNo, EditOrderNo);
+  PrepareLabelEdit(LabelSaleDate, EditSaleDate);
+  PrepareLabelEdit(LabelShipDate, EditShipDate);
 
-    EditOrderNo.Width := EditWidth;
-    EditSaleDate.Width := Round(8 * BaseHeight);
-    EditShipDate.Width := Round(8 * BaseHeight);
+  // Date fields are narrower than standard edit width
+  EditSaleDate.Width := Round(8.0 * LabelHeight);
+  EditShipDate.Width := Round(8.0 * LabelHeight);
 
-    LabelCustomer.SetBounds(Margins.Left, Margins.Top,
-      LabelWidth, LabelCustomer.Height);
+  // Position first row: customer (read-only)
+  LabelCustomer.SetBounds(Layout.Margins.Left, Layout.Margins.Top,
+    LabelWidth, EditHeight);
+  Layout.PlaceRight(LabelCustomer, LabelCustomerValue, 1.0);
 
-    Layout.Place(LabelCustomer, LabelCustomerValue, ldRight, 0.5);
+  // Position order number row
+  Layout.PlaceBelow(LabelCustomer, LabelOrderNo, 0.5);
+  Layout.PlaceRight(LabelOrderNo, EditOrderNo, 1.0);
 
-    Layout.Place(LabelCustomer, LabelOrderNo, ldBelow, 1.0);
-    Layout.Place(LabelOrderNo, EditOrderNo, ldRight, 0.5);
+  // Position sale date row
+  Layout.PlaceBelow(LabelOrderNo, LabelSaleDate, 0.5);
+  Layout.PlaceRight(LabelSaleDate, EditSaleDate, 1.0);
 
-    Layout.Place(LabelOrderNo, LabelSaleDate, ldBelow, 1.0);
-    Layout.Place(LabelSaleDate, EditSaleDate, ldRight, 0.5);
+  // Position ship date on same row as sale date
+  Layout.PlaceRight(EditSaleDate, LabelShipDate, 1.0);
+  Layout.PlaceRight(LabelShipDate, EditShipDate, 1.0);
 
-    Layout.Place(EditSaleDate, LabelShipDate, ldRight, 2.0);
-    Layout.Place(LabelShipDate, EditShipDate, ldRight, 0.5);
+  // Items toolbar panel
+  ItemsToolbarPanel.Width := GridWidth;
+  ItemsToolbarPanel.Height := Round(2.5 * LabelHeight);
+  Layout.PlaceBelow(LabelSaleDate, ItemsToolbarPanel, 1.0);
 
-    ItemsToolbarPanel.Top := EditSaleDate.Top + EditSaleDate.Height + (2 * BaseHeight);
-    ItemsToolbarPanel.Left := Margins.Left;
-    ItemsToolbarPanel.Width := ClientWidth - 2 * Margins.Left;
-    ItemsToolbarPanel.Height := Round(2.5 * BaseHeight);
+  // Position toolbar buttons within panel (manual positioning)
+  AddItemButton.Left := 0;
+  AddItemButton.Top := (ItemsToolbarPanel.Height - AddItemButton.Height) div 2;
+  Layout.PlaceRight(AddItemButton, EditItemButton, 0.5);
+  Layout.PlaceRight(EditItemButton, RemoveItemButton, 0.5);
 
-    AddItemButton.Left := 0;
-    AddItemButton.Top := (ItemsToolbarPanel.Height - AddItemButton.Height) div 2;
-    EditItemButton.Left := AddItemButton.Left + AddItemButton.Width + (BaseHeight div 2);
-    EditItemButton.Top := AddItemButton.Top;
-    RemoveItemButton.Left := EditItemButton.Left + EditItemButton.Width + (BaseHeight div 2);
-    RemoveItemButton.Top := AddItemButton.Top;
+  // Items grid
+  FItemsListGrid.ClientHeight := Round(12 * LabelHeight);
+  FItemsListGrid.ClientWidth := GridWidth;
+  ScrollbarWidth := FItemsListGrid.Width - GridWidth;
+  Layout.PlaceBelow(ItemsToolbarPanel, FItemsListGrid, 0.2);
 
-    FItemsListGrid.Top := ItemsToolbarPanel.Top + ItemsToolbarPanel.Height + (BaseHeight div 2);
-    FItemsListGrid.Left := Margins.Left;
-    FItemsListGrid.Width := ClientWidth - 2 * Margins.Left;
-    FItemsListGrid.Height := Round(12 * BaseHeight);
+  // Total label
+  LabelTotalValue.Width := GridWidth - ScrollbarWidth;
+  Layout.PlaceBelowRight(FItemsListGrid, LabelTotalValue, 0.1);
 
-    LabelTotal.Top := FItemsListGrid.Top + FItemsListGrid.Height + BaseHeight;
-    LabelTotalValue.Top := LabelTotal.Top;
-    LabelTotalValue.Left := FItemsListGrid.Left + FItemsListGrid.Width - LabelTotalValue.Width;
-    LabelTotal.Left := LabelTotalValue.Left - LabelTotal.Width - BaseHeight;
+  // Place buttons below last edit
+  Layout.PlaceBelowRight(LabelTotalValue, CancelButton, 1.0);
+  Layout.PlaceLeft(CancelButton, SaveButton, 0.5);
 
-    SaveButton.Top := LabelTotal.Top + LabelTotal.Height + (2 * BaseHeight);
-    CancelButton.Top := SaveButton.Top;
-
-    CancelButton.Left := ClientWidth - Margins.Right - CancelButton.Width;
-    SaveButton.Left := CancelButton.Left - Margins.Middle - SaveButton.Width;
-
-    ClientHeight := CancelButton.Top + CancelButton.Height + Margins.Bottom;
-    ClientWidth := FItemsListGrid.Left + FItemsListGrid.Width + Margins.Right;
-
-    Position := poMainFormCenter;
-  finally
-    Layout.Free;
-  end;
+  // Auto-size form based on content
+  Layout.AutoSizeForm;
 end;
 
 procedure TInvoiceEditForm.SetListGridColumns;
@@ -202,9 +196,7 @@ var
   Col: TMDListColumn;
   BaseHeight: Integer;
 begin
-  BaseHeight := Canvas.TextHeight('Ag');
-  if BaseHeight < 16 then
-    BaseHeight := 16;
+  BaseHeight := LabelCustomer.Height;
 
   FItemsListGrid.RowSelect := True;
 
@@ -241,24 +233,21 @@ end;
 procedure TInvoiceEditForm.LoadItemsToListGrid;
 var
   i: Integer;
-  Item: TDtoInvoiceItem;
   ListItem: TMDListItem;
 begin
   FItemsListGrid.Items.BeginUpdate;
   try
     FItemsListGrid.Items.Clear;
 
-    for i := 0 to FInvoiceService.GetItemCount - 1 do
+    for i := 0 to Length(FItems) - 1 do
     begin
-      Item := FInvoiceService.GetItem(i);
-
       ListItem := FItemsListGrid.Items.Add;
-      ListItem.Caption := IntToStr(Item.Position);
-      ListItem.SubItems.Add(Item.Description);
-      ListItem.SubItems.Add(Format('%.2f', [Item.Quantity]));
-      ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.ListPrice)^));
-      ListItem.SubItems.Add(IntToStr(Item.Discount));
-      ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.Amount)^));
+      ListItem.Caption := IntToThousandString(FItems[i].Position);
+      ListItem.SubItems.Add(Utf8ToString(FItems[i].Description));
+      ListItem.SubItems.Add(FormatFloat(FMT_QTY_DISPLAY, FItems[i].Quantity));
+      ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, FItems[i].ListPrice));
+      ListItem.SubItems.Add(IntToThousandString(FItems[i].Discount));
+      ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, FItems[i].Amount));
       ListItem.Data := Pointer(PtrInt(i));
     end;
   finally
@@ -281,14 +270,17 @@ end;
 procedure TInvoiceEditForm.UpdateTotal;
 var
   Total: currency;
+  i: Integer;
 begin
-  Total := FInvoiceService.GetItemsTotal;
-  LabelTotalValue.Caption := Curr64ToString(PInt64(@Total)^);
+  Total := 0;
+  for i := 0 to Length(FItems) - 1 do
+    Total := Total + FItems[i].Amount;
+  LabelTotalValue.Caption := 'Total: ' + FormatCurr(FMT_CURR_DISPLAY, Total);
 end;
 
 procedure TInvoiceEditForm.FormDestroy(Sender: TObject);
 begin
-  FInvoiceService := nil;
+  SetLength(FItems, 0);
 end;
 
 procedure TInvoiceEditForm.ItemsListGridSelectItem(Sender: TObject;
@@ -307,6 +299,7 @@ procedure TInvoiceEditForm.AddItemButtonClick(Sender: TObject);
 var
   NewItem: TDtoInvoiceItem;
   ItemEditForm: TInvoiceItemEditForm;
+  Len: Integer;
 begin
   FillChar(NewItem, SizeOf(NewItem), 0);
   NewItem.Quantity := 1;
@@ -317,7 +310,13 @@ begin
   try
     if ItemEditForm.ShowItemEdit(NewItem, True) then
     begin
-      FInvoiceService.AddItem(NewItem);
+      Len := Length(FItems);
+      SetLength(FItems, Len + 1);
+      NewItem.Position := Len + 1;
+      NewItem.Amount := NewItem.ListPrice * NewItem.Quantity;
+      if NewItem.Discount > 0 then
+        NewItem.Amount := NewItem.Amount * (100 - NewItem.Discount) / 100;
+      FItems[Len] := NewItem;
       LoadItemsToListGrid;
     end;
   finally
@@ -335,13 +334,20 @@ begin
     Exit;
 
   Index := Integer(PtrInt(FItemsListGrid.Selected.Data));
-  Item := FInvoiceService.GetItem(Index);
+  if (Index < 0) or (Index >= Length(FItems)) then
+    Exit;
+
+  Item := FItems[Index];
 
   ItemEditForm := TInvoiceItemEditForm.Create(Self);
   try
     if ItemEditForm.ShowItemEdit(Item, False) then
     begin
-      FInvoiceService.UpdateItem(Index, Item);
+      Item.Position := Index + 1;
+      Item.Amount := Item.ListPrice * Item.Quantity;
+      if Item.Discount > 0 then
+        Item.Amount := Item.Amount * (100 - Item.Discount) / 100;
+      FItems[Index] := Item;
       LoadItemsToListGrid;
     end;
   finally
@@ -351,7 +357,7 @@ end;
 
 procedure TInvoiceEditForm.RemoveItemButtonClick(Sender: TObject);
 var
-  Index: Integer;
+  Index, i: Integer;
 begin
   if FItemsListGrid.Selected = nil then
     Exit;
@@ -361,8 +367,16 @@ begin
     Exit;
 
   Index := Integer(PtrInt(FItemsListGrid.Selected.Data));
-  FInvoiceService.DeleteItem(Index);
-  LoadItemsToListGrid;
+  if (Index >= 0) and (Index < Length(FItems)) then
+  begin
+    for i := Index to Length(FItems) - 2 do
+    begin
+      FItems[i] := FItems[i + 1];
+      FItems[i].Position := i + 1;
+    end;
+    SetLength(FItems, Length(FItems) - 1);
+    LoadItemsToListGrid;
+  end;
 end;
 
 function TInvoiceEditForm.ValidateInput: Boolean;
@@ -392,27 +406,39 @@ begin
     Exit;
   end;
 
-  if FInvoiceService.GetItemCount = 0 then
+  if Length(FItems) = 0 then
   begin
     ShowMessage('Invoice must have at least one item.');
     Exit;
   end;
-
-  FInvoiceService.SetOrderNo(Trim(EditOrderNo.Text));
-  FInvoiceService.SetSaleDate(SaleDate);
-  FInvoiceService.SetShipDate(ShipDate);
 
   Result := True;
 end;
 
 procedure TInvoiceEditForm.SaveButtonClick(Sender: TObject);
 var
+  Invoice: TDtoInvoiceSave;
+  SaleDate, ShipDate: TDateTime;
+  NewID: longint;
   SaveResult: TInvoiceEditResult;
 begin
   if not ValidateInput then
     Exit;
 
-  SaveResult := FInvoiceService.Save;
+  AppTryStrToDate(EditSaleDate.Text, SaleDate);
+  AppTryStrToDate(EditShipDate.Text, ShipDate);
+
+  Finalize(Invoice);
+  FillChar(Invoice, SizeOf(Invoice), 0);
+  Invoice.OrderNo := StringToUtf8(Trim(EditOrderNo.Text));
+  Invoice.SaleDate := SaleDate;
+  Invoice.ShipDate := ShipDate;
+  Invoice.Items := FItems;
+
+  if FIsNew then
+    SaveResult := RgServices.InvoiceService.CreateInvoice(FCustomerID, Invoice, NewID)
+  else
+    SaveResult := RgServices.InvoiceService.UpdateInvoice(FInvoiceID, Invoice);
 
   case SaveResult of
     ierSuccess:
@@ -434,12 +460,21 @@ begin
   ModalResult := mrCancel;
 end;
 
+procedure TInvoiceEditForm.FormShow(Sender: TObject);
+begin
+  SetListGridColumns;
+  SetupLayout;
+end;
+
 function TInvoiceEditForm.ShowNewInvoice(ACustomerID: longint): Boolean;
+var
+  OrderNo: RawUtf8;
+  Summary: TDtoCustomerSummary;
 begin
   Result := False;
   FSaveSuccessful := False;
 
-  if not FInvoiceService.CreateNewInvoice(ACustomerID) then
+  if ACustomerID <= 0 then
   begin
     ShowMessage('Could not create new invoice. Customer not found.');
     Exit;
@@ -447,12 +482,20 @@ begin
 
   FCustomerID := ACustomerID;
   FInvoiceID := 0;
+  FIsNew := True;
+  SetLength(FItems, 0);
+
+  // Get customer name via statistics service
+  RgServices.StatisticsService.GetCustomerSummary(ACustomerID, Summary);
+
+  // Generate order number
+  RgServices.InvoiceService.GenerateOrderNo(OrderNo);
 
   Caption := 'New Invoice';
-  LabelCustomerValue.Caption := FInvoiceService.GetCustomerName;
-  EditOrderNo.Text := FInvoiceService.GetOrderNo;
-  EditSaleDate.Text := AppDateToStr(FInvoiceService.GetSaleDate);
-  EditShipDate.Text := AppDateToStr(FInvoiceService.GetShipDate);
+  LabelCustomerValue.Caption := Utf8ToString(Summary.CustomerName);
+  EditOrderNo.Text := Utf8ToString(OrderNo);
+  EditSaleDate.Text := AppDateToStr(Date);
+  EditShipDate.Text := AppDateToStr(Date + 14);
 
   LoadItemsToListGrid;
 
@@ -460,24 +503,30 @@ begin
 end;
 
 function TInvoiceEditForm.ShowEditInvoice(AInvoiceID: longint): Boolean;
+var
+  Detail: TDtoInvoiceDetail;
+  Res: TInvoiceEditResult;
 begin
   Result := False;
   FSaveSuccessful := False;
 
-  if not FInvoiceService.LoadInvoice(AInvoiceID) then
+  Res := RgServices.InvoiceService.GetInvoice(AInvoiceID, Detail);
+  if Res <> ierSuccess then
   begin
     ShowMessage('Invoice not found.');
     Exit;
   end;
 
   FInvoiceID := AInvoiceID;
-  FCustomerID := FInvoiceService.GetCustomerID;
+  FCustomerID := Detail.CustomerID;
+  FIsNew := False;
+  FItems := Detail.Items;
 
   Caption := 'Edit Invoice';
-  LabelCustomerValue.Caption := FInvoiceService.GetCustomerName;
-  EditOrderNo.Text := FInvoiceService.GetOrderNo;
-  EditSaleDate.Text := AppDateToStr(FInvoiceService.GetSaleDate);
-  EditShipDate.Text := AppDateToStr(FInvoiceService.GetShipDate);
+  LabelCustomerValue.Caption := Utf8ToString(Detail.CustomerName);
+  EditOrderNo.Text := Utf8ToString(Detail.OrderNo);
+  EditSaleDate.Text := AppDateToStr(Detail.SaleDate);
+  EditShipDate.Text := AppDateToStr(Detail.ShipDate);
 
   LoadItemsToListGrid;
 

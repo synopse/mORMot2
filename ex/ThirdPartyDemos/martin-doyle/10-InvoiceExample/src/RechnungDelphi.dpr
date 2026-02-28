@@ -1,5 +1,5 @@
 {:
-������������������������������������������������ � martindoyle 2017-2025 ��
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-����������������������������������������������������������������������������
+--------------------------------------------------------------------------------
 }   
 program RechnungDelphi;
 {$I mormot.defines.inc}
@@ -45,7 +45,7 @@ uses
   Classes,
   {$IFDEF FPC}
     Interfaces, // this includes the LCL widgetset
-    {$ENDIF FPC}
+  {$ENDIF FPC}
   SysUtils,
   mormot.core.base,
   mormot.core.os,
@@ -54,8 +54,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.log,
-  mormot.db.raw.sqlite3, // for the SQLite3 version below
-
+  mormot.db.raw.sqlite3,
   Forms,
   rgMain,
   rgConst;
