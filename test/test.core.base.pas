@@ -7635,6 +7635,8 @@ begin
   CheckEqual(tmp, '0001-00-01');
   tmp := UnixTimePeriodToString(SecsPerDay * 365 * 2);
   CheckEqual(tmp, '0002-00-00');
+  CheckEqual(DateTimeToIso8601Text(Iso8601ToDateTime('1492-10-12T16:00:00')),
+    '1492-10-12T16:00:00');
 end;
 
 function LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;

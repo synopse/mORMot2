@@ -1297,8 +1297,9 @@ begin
     if y > 9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
     Div100(y, d100{%H-});
-    unaligned(result) := (146097 * d100.d) shr 2 + (1461 * d100.m) shr 2 +
-      (153 * m + 2) div 5 + d;
+    unaligned(result) := cardinal(cardinal(146097 * d100.d) shr 2) +
+                         cardinal(cardinal(1461 * d100.m) shr 2) +
+                         cardinal(cardinal(153 * m + 2) div 5) + d;
     unaligned(result) := unaligned(result) - 693900; // avoid sign issue
     if L < 15 then
       exit; // not enough space to retrieve the time
@@ -1339,9 +1340,9 @@ begin
                   cardinal(mi * MilliSecsPerMin) +
                   cardinal(ss * MilliSecsPerSec) + ms) * MilliSecsPerDate;
   if result < 0 then
-    result := result - time
+    unaligned(result) := unaligned(result) - time
   else
-    result := result + time;
+    unaligned(result) := unaligned(result) + time;
 end;
 
 procedure Iso8601ToDatePUtf8CharVar(P: PUtf8Char; L: PtrInt;
@@ -1394,11 +1395,11 @@ var
   H, MI, SS, MS: cardinal;
 begin
   if Iso8601ToTimePUtf8Char(P, L, H, MI, SS, MS) then
-    result := integer(cardinal(H * MilliSecsPerHour) +
-                      cardinal(MI * MilliSecsPerMin) +
-                      cardinal(SS * MilliSecsPerSec + MS)) * MilliSecsPerDate
+    unaligned(result) := integer(cardinal(H * MilliSecsPerHour) +
+                         cardinal(MI * MilliSecsPerMin) +
+                         cardinal(SS * MilliSecsPerSec + MS)) * MilliSecsPerDate
   else
-    result := 0;
+    PInt64(@result)^ := 0;
 end;
 
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: PtrInt;
@@ -1496,24 +1497,27 @@ procedure IntervalTextToDateTimeVar(Text: PUtf8Char;
   var result: TDateTime);
 var
   negative: boolean;
-  time: TDateTime;
+  date, time: TDateTime;
 begin
   // e.g. IntervalTextToDateTime('+0 06:03:20')
-  result := 0;
+  PInt64(@result)^ := 0;
   if Text = nil then
     exit;
   if Text^ in ['+', '-'] then
   begin
     negative := (Text^ = '-');
-    result := GetNextItemDouble(Text, ' ');
+    date := GetNextItemDouble(Text, ' ');
   end
   else
+  begin
     negative := false;
+    date := 0;
+  end;
   Iso8601ToTimePUtf8CharVar(Text, 0, time);
   if negative then
-    result := result - time
+    unaligned(result) := date - time
   else
-    result := result + Time;
+    unaligned(result) := date + Time;
 end;
 
 {$ifndef CPUX86NOTPIC}
@@ -2064,7 +2068,7 @@ begin
   end;
   d := (146097 * y100.D) shr 2 + (1461 * y100.M) shr 2 +
        (153 * Month + 2) div 5 + Day;
-  Date := d - 693900; // separated to avoid sign issue
+  unaligned(Date) := d - 693900; // separated to avoid sign issue
   result := true;
 end;
 
@@ -2079,7 +2083,7 @@ begin
      (MSec > 999) then
     exit;
   d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
-  Time := d / MSecsPerDay;
+  unaligned(Time) := d / MSecsPerDay;
   result := true;
 end;
 
