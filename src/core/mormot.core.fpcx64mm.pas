@@ -68,7 +68,7 @@ unit mormot.core.fpcx64mm;
 // - will enable FPCMM_SMALLNOTWITHMEDIUM to reduce medium sleeps.
 {.$define FPCMM_BOOST}
 
-// target high-end CPU when FPCMM_SERVER/FPCMM_BOOST are not enough
+// target high-end CPU/process when FPCMM_SERVER/FPCMM_BOOST are not enough
 // - will use 128 arenas for <= 256B blocks to scale on high number of cores;
 // - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM to reduce small pools locks;
 // - enable FPCMM_TINYPERTHREAD to assign threads to the 128 arenas.
@@ -81,7 +81,7 @@ unit mormot.core.fpcx64mm;
 {.$define FPCMM_DEBUG}
 
 // on thread contention, don't spin executing "pause" but directly call Sleep()
-// - may help on a single core CPU, or for very specific workloads
+// - may help on specific workloads, together with the FPCMM_OSYIELD conditional
 {.$define FPCMM_NOPAUSE}
 
 {.$define FPCMM_OSYIELD}
@@ -1001,6 +1001,7 @@ type
     {$ifdef FPCMM_MEDIUMPREFETCH}
     PrefetchLocked: boolean;
     {$endif FPCMM_MEDIUMPREFETCH}
+    LastFreeLocked: boolean;
     PoolsCircularList: TMediumBlockPoolHeader;
     LastSequentiallyFed: pointer;
     SequentialFeedBytesLeft: cardinal;
@@ -1011,7 +1012,7 @@ type
     {$ifndef FPCMM_ASSUMEMULTITHREAD}
     IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
     {$endif FPCMM_ASSUMEMULTITHREAD}
-    LockLessFree: pointer;
+    LastFree: pointer;
     BinBitmaps: array[0..MediumBlockBinGroupCount - 1] of cardinal;
     Bins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
   end;
@@ -1061,27 +1062,18 @@ var
 procedure GetSmallLockLessFreeBlock; nostackframe; assembler;
 asm
         // input: rbx=TSmallBlockType
-        mov     r11, rcx
-        xor     ecx, ecx
-        xchg    [rbx].TSmallBlockType.LockLessFree, rcx // atomic rcx = to free
+        mov     r11, rcx   // preserver rcx for caller
+@s:     mov     rcx, [rbx].TSmallBlockType.LockLessFree
+        test    rcx, rcx   // rcx=head
+        jz      @ok
+        mov     r10, [rcx] // r10=next
+        mov     rax, rcx   // cmpxchg compares with rax
+  lock  cmpxchg [rbx].TSmallBlockType.LockLessFree, r10
+        jne     @s         // retry on contention
         test    rcx, rcx
-        jz      @Done2     // slot used by another thread in-between
-        mov     r10, [rcx]
-        test    r10, r10   // r10 = new head = the one following rcx
-        jz      @Done
-        mov     rax, rcx
-@Last:  mov     r9, rax    // r9 = last with nil = where to move the current
-        mov     rax, [rax]
-        test    rax, rax
-        jnz     @Last
-@BackToBin:
-        mov     [r9], rax // use freed buffer as next linked list slot
-   lock cmpxchg [rbx].TSmallBlockType.LockLessFree, r10 // back in list
-        jne     @BackToBin
-@Done:  test    rcx, rcx
-@Done2: mov     rax, rcx
+@ok:    mov     rax, rcx
         mov     rcx, r11
-        // nz = rax=to be freed or z = nothing found - modifies r9,r10,r11
+        // nz = rax=rcx=to be freed or z = nothing found - modifies r10,r11
 end;
 
 procedure LockMediumBlocks(dummy: cardinal);
@@ -2201,11 +2193,15 @@ asm
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
         je      @MediumBlocksLocked
-        // Locked: add r11=P in TMediumBlockInfo.LockLessFree and Quit
-        mov     rax, [rcx].TMediumBlockInfo.LockLessFree
-@Atom1: mov     [r11], rax // use freed buffer as next linked list slot
-   lock cmpxchg [rcx].TMediumBlockInfo.LockLessFree, r11 // in list
-        jne     @Atom1
+        // Locked: add r11=P in TMediumBlockInfo.LastFree and Quit
+@Atom0: mov     eax, $100
+        pause
+  lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.LastFreeLocked, ah
+        jne     @Atom0
+        mov     rax, [rcx].TMediumBlockInfo.LastFree
+        mov     [r11], rax // use freed buffer as next linked list slot
+        mov     [rcx].TMediumBlockInfo.LastFree, r11 // in list
+        mov     byte ptr [rcx + TMediumBlockInfo.LastFreeLocked], false
         jmp     @Quit
 @MediumBlocksLocked:
         // We acquired the lock: get rcx = next block size and flags
@@ -2231,31 +2227,26 @@ asm
         mov     rcx, r11
         mov     rdx, rbx
         call    InsertMediumBlockIntoBin // rcx=P edx=blocksize r10=Info
-        // Check if some LockLessFree is pending
-        cmp     qword ptr [r10].TMediumBlockInfo.LockLessFree, 0
-        jnz     @LockLessFree
+        // Check if some LastFree is pending
+        cmp     qword ptr [r10].TMediumBlockInfo.LastFree, 0
+        jnz     @LastFree
 @Done:  // Unlock medium blocks and leave
         mov     byte ptr [r10 + TMediumBlockInfo.Locked], false
         jmp     @Quit
-@LockLessFree:
-        // Release the next LockLessFree list block while we own the lock
-        xor     r11, r11
-        xchg    [r10].TMediumBlockInfo.LockLessFree, r11 // atomic r11 = to free
+@LastFree:
+        // Release the next LastFree list block while we own the lock
+@Atom1: mov     rcx, r10
+        mov     eax, $100
+        pause
+  lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.LastFreeLocked, ah
+        jne     @Atom1
+        mov     r11, [rcx].TMediumBlockInfo.LastFree
         test    r11, r11
-        jz      @Done       // paranoid
-        mov     rcx, [r11]
-        test    rcx, rcx    // rcx = new head = the one following r11
-        jz      @OneBin
-        mov     rax, r11
-@Last:  mov     rdx, rax    // rdx = last with nil = where to move the current
-        mov     rax, [rax]
-        test    rax, rax
-        jnz     @Last
-        // r11=to be freed, rdx=last in list, rcx=new head, rax=nil
-@Atom2: mov     [rdx], rax // use freed buffer as next linked list slot
-   lock cmpxchg [r10].TMediumBlockInfo.LockLessFree, rcx // back in list
-        jne     @Atom2
-@OneBin:// Compute rbx=blocksize of r11 pointer retrieved from LockLessFree list
+        jz      @Done
+        mov     rax, [r11]
+        mov     [rcx].TMediumBlockInfo.LastFree, rax
+        mov     byte ptr [r10 + TMediumBlockInfo.LastFreeLocked], false
+@OneBin:// Compute rbx=blocksize of r11 pointer retrieved from LastFree list
         mov     rbx, qword ptr [r11 - BlockHeaderSize]
         and     rbx, DropMediumAndLargeFlagsMask
         jmp     @MediumBlocksLocked
@@ -2427,23 +2418,13 @@ asm
 @ProcessPendingBin:
         // Release the next LockLessFree list block while we own the lock
         // (inlined GetSmallLockLessFreeBlock logic)
-        xor     ecx, ecx
-        xchg    [rbx].TSmallBlockType.LockLessFree, rcx // atomic rcx = to free
-        test    rcx, rcx
-        jz      @NoBin      // may be nil if was intercepted by _GetMem()
-        mov     r10, [rcx]
-        test    r10, r10    // r10 = new head = the one following rcx
-        jz      @SingleBin
-        mov     rax, rcx
-@Last:  mov     rdx, rax    // rdx = last with nil = where to move the current
-        mov     rax, [rax]
-        test    rax, rax
-        jnz     @Last
-        // rcx=to be freed, rdx=last in list, r10=new head, rax=nil
-@Atom1: mov     [rdx], rax // use freed buffer as next linked list slot
-   lock cmpxchg [rbx].TSmallBlockType.LockLessFree, r10 // back in list
-        jne     @Atom1
-@SingleBin:
+@Atom1: mov     rcx, [rbx].TSmallBlockType.LockLessFree
+        test    rcx, rcx   // rcx=head
+        jz      @NoBin
+        mov     r10, [rcx] // r10=next
+        mov     rax, rcx   // cmpxchg compares with rax
+  lock  cmpxchg [rbx].TSmallBlockType.LockLessFree, r10
+        jne     @Atom1     // retry on contention
         mov     rdx, [rcx - BlockHeaderSize]
         // rbx=TSmallBlockType rcx=P rdx=TSmallBlockPoolHeader
         jmp     @FreeAndUnlock // loop until LockLessFree=nil
@@ -3592,7 +3573,7 @@ var
   i: PtrInt;
   list, next: PPointer;
 begin
-  list := Info.LockLessFree;
+  list := Info.LastFree;
   while list <> nil do
   begin
     next := list^;
