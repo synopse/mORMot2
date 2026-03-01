@@ -934,7 +934,7 @@ type
   PSmallBlockPoolHeader = ^TSmallBlockPoolHeader;
 
   // information for each small block size - 64 bytes long = CPU cache line
-  TSmallBlockType = record
+  TSmallBlockType = packed record
     Locked: boolean;
     AllowedGroupsForBlockPoolBitmap: byte;
     BlockSize: Word;
@@ -947,13 +947,14 @@ type
     CurrentSequentialFeedPool: PSmallBlockPoolHeader;
     GetmemCount: cardinal;
     FreememCount: cardinal;
-    LockLessFree: pointer;
+    LastFreeLocked: boolean;
+    Padding: array[1 .. 3] of byte;
+    LastFreeCount: cardinal;
   end;
   PSmallBlockType = ^TSmallBlockType;
 
   TSmallBlockTypes = array[0..NumSmallBlockTypes - 1] of TSmallBlockType;
   TTinyBlockTypes  = array[0..NumTinyBlockTypes - 1]  of TSmallBlockType;
-
   TSmallBlockInfo = record
     Small: TSmallBlockTypes;
     Tiny: array[0..NumTinyBlockArenas - 1] of TTinyBlockTypes;
@@ -965,10 +966,11 @@ type
     TinyCurrentArena: integer;
     {$endif FPCMM_TINYPERTHREAD}
     GetmemSleepCount: array[0..NumSmallBlockTypesUnique - 1] of cardinal;
+    // some fiedls here because there was no room in TSmallBlockType
     {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM} // PMediumBlockInfo lookup
     SmallMediumBlockInfo: array[0..NumSmallInfoBlock - 1] of pointer;
-    // here because there was no room for a new field in TSmallBlockType
     {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+    SmallLastFree: array[0 .. NumSmallInfoBlock - 1] of pointer;
   end;
 
   TSmallBlockPoolHeader = record
@@ -1059,21 +1061,31 @@ var
 
 { ********* Shared Routines }
 
-procedure GetSmallLockLessFreeBlock; nostackframe; assembler;
+// small/tiny blocks maintain a separated locked list of last freed items
+
+procedure GetSmallLastFreeBlock; nostackframe; assembler;
 asm
         // input: rbx=TSmallBlockType
-        mov     r11, rcx   // preserver rcx for caller
-@s:     mov     rcx, [rbx].TSmallBlockType.LockLessFree
-        test    rcx, rcx   // rcx=head
-        jz      @ok
-        mov     r10, [rcx] // r10=next
-        mov     rax, rcx   // cmpxchg compares with rax
-  lock  cmpxchg [rbx].TSmallBlockType.LockLessFree, r10
-        jne     @s         // retry on contention
-        test    rcx, rcx
-@ok:    mov     rax, rcx
-        mov     rcx, r11
-        // nz = rax=rcx=to be freed or z = nothing found - modifies r10,r11
+        mov     rax, rbx
+        lea     r10, [rip + SmallBlockInfo]
+        sub     rax, r10
+        shr     eax, SmallBlockTypePO2 - 3 // 1 shl 3 = SizeOf(pointer)
+        lea     r10, [r10 + rax].TSmallBlockInfo.SmallLastFree
+        // r10 = @SmallLastFree[] of this rbx
+        mov     eax, $100
+  lock  cmpxchg byte ptr [rbx].TSmallBlockType.LastFreeLocked, ah
+        je      @ok
+        xor     rax, rax // just try once to acquire the lock
+        ret
+@ok:    mov     rax, [r10]
+        test    rax, rax
+        jz      @done
+        mov     r11, [rax] // very simple (and quick) linked list pattern
+        mov     [r10], r11
+        dec     dword ptr [rbx].TSmallBlockType.LastFreeCount
+        test    rax, rax
+@done:  mov     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+        // nz = rax=to be freed or z = nothing found - modifies r10+r11
 end;
 
 procedure LockMediumBlocks(dummy: cardinal);
@@ -1661,18 +1673,20 @@ asm
         jz      @TinySmall // Arena 0 = TSmallBlockInfo.Small[]
 	lea	rbx, [rax + rbx + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
 @TinySmall:
-        // Can we get a Tiny block from its LockLessFree list?
-        cmp     qword ptr [rbx].TSmallBlockType.LockLessFree, 0
-        jz      @NoLockLessFree
-        call    GetSmallLockLessFreeBlock
-        jz      @NoLockLessFree
+        // Can we get a Tiny block from its LastFree list?
+        cmp     dword ptr [rbx].TSmallBlockType.LastFreeCount, 0
+        je      @NoLastFree
+        cmp     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+        jne     @NoLastFree
+        call    GetSmallLastFreeBlock
+        jz      @NoLastFree
         {$ifdef NOSFRAME}
         pop     rbx
         ret
         {$else}
         jmp     @Done // on Win64, a stack frame is required
         {$endif NOSFRAME}
-@NoLockLessFree:
+@NoLastFree:
         // Try to lock this Tiny block
         mov     eax, $100
         {$ifdef FPCMM_CMPBEFORELOCK}
@@ -1705,21 +1719,27 @@ asm
         jmp     @LockTinyBlockTypeLoop
         // ---------- SMALL (size<2600) block lock ----------
 @NotTinyBlockType:
-        // Try to get a Small block from its LockLessFree list or the next two
+        // Try to get a Small block from its SmallLastFree list or the next two
         lea     rbx, [r8 + rcx].TSmallBlockInfo.Small
-        cmp     qword ptr [rbx].TSmallBlockType.LockLessFree, 0
-        jnz     @SmallLockLess0
-@SLL0:  cmp     qword ptr [rbx + SmallBlockTypeSize].TSmallBlockType.LockLessFree, 0
-        jnz     @SmallLockLess1
-@SLL1:  cmp     qword ptr [rbx + SmallBlockTypeSize * 2].TSmallBlockType.LockLessFree, 0
-        jz      @LockBlockTypeLoopRetry
+        cmp     dword ptr [rbx].TSmallBlockType.LastFreeCount, 0
+        je      @SLL0
+        cmp     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+        je      @SmallLockLess0
+@SLL0:  cmp     dword ptr [rbx + SmallBlockTypeSize].TSmallBlockType.LastFreeCount, 0
+        je      @SLL1
+        cmp     byte ptr [rbx + SmallBlockTypeSize].TSmallBlockType.LastFreeLocked, false
+        je      @SmallLockLess1
+@SLL1:  cmp     dword ptr [rbx + SmallBlockTypeSize * 2].TSmallBlockType.LastFreeCount, 0
+        je      @LockBlockTypeLoopRetry
+        cmp     byte ptr [rbx + SmallBlockTypeSize * 2].TSmallBlockType.LastFreeLocked, false
+        je      @LockBlockTypeLoopRetry
         add     rbx, SizeOf(TSmallBlockType) * 2
-        call    GetSmallLockLessFreeBlock
+        call    GetSmallLastFreeBlock
         jnz     {$ifdef NOSFRAME} @SLL {$else} @Done {$endif}
         sub     rbx, SizeOf(TSmallBlockType) * 2
         jmp     @LockBlockTypeLoopRetry
 @SmallLockLess0:
-        call    GetSmallLockLessFreeBlock
+        call    GetSmallLastFreeBlock
         jz      @SLL0
 @SLL:   {$ifdef NOSFRAME}
         pop     rbx
@@ -1729,7 +1749,7 @@ asm
         {$endif NOSFRAME}
 @SmallLockLess1:
         add     rbx, SizeOf(TSmallBlockType)
-        call    GetSmallLockLessFreeBlock
+        call    GetSmallLastFreeBlock
         jnz     {$ifdef NOSFRAME} @SLL {$else} @Done {$endif}
         sub     rbx, SizeOf(TSmallBlockType)
         jmp     @SLL1
@@ -2363,8 +2383,8 @@ asm
         mov     [rbx].TSmallBlockType.NextPartiallyFreePool, rdx
 @SmallPoolWasNotFull:
         // Try to release all pending bin from this block while we have the lock
-        cmp     qword ptr [rbx].TSmallBlockType.LockLessFree, 0
-        jnz     @ProcessPendingBin
+        cmp     dword ptr [rbx].TSmallBlockType.LastFreeCount, 0
+        jne     @ProcessPendingBin
         // Release the lock and return the block size as FPC RTL MM
 @NoBin: mov     byte ptr [rbx].TSmallBlockType.Locked, false
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
@@ -2416,18 +2436,15 @@ asm
         jmp     @Done // on Win64, a stack frame is required
         {$endif NOSFRAME}
 @ProcessPendingBin:
-        // Release the next LockLessFree list block while we own the lock
-        // (inlined GetSmallLockLessFreeBlock logic)
-@Atom1: mov     rcx, [rbx].TSmallBlockType.LockLessFree
-        test    rcx, rcx   // rcx=head
+        // Release the next SmallLastFree list block while we own the lock
+        cmp     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+        jne     @NoBin
+        call    GetSmallLastFreeBlock
         jz      @NoBin
-        mov     r10, [rcx] // r10=next
-        mov     rax, rcx   // cmpxchg compares with rax
-  lock  cmpxchg [rbx].TSmallBlockType.LockLessFree, r10
-        jne     @Atom1     // retry on contention
-        mov     rdx, [rcx - BlockHeaderSize]
+        mov     rcx, rax
+        mov     rdx, [rax - BlockHeaderSize]
         // rbx=TSmallBlockType rcx=P rdx=TSmallBlockPoolHeader
-        jmp     @FreeAndUnlock // loop until LockLessFree=nil
+        jmp     @FreeAndUnlock // will loop until LastFreeCount=0
 @NotSmallBlockInUse:
         lea     r10, [rip + MediumBlockInfo]
         test    dl, IsFreeBlockFlag + IsLargeBlockFlag
@@ -2443,11 +2460,23 @@ asm
         jmp     @Quit
         {$endif NOSFRAME}
 @TinySmallLocked:
-        // This small block is locked: add rcx=P to the LockLessFree list block
-        mov     rax, [rbx].TSmallBlockType.LockLessFree
-@Atom2: mov     [rcx], rax // use freed buffer as next linked list slot
-   lock cmpxchg [rbx].TSmallBlockType.LockLessFree, rcx // in list
-        jne     @Atom2
+        // This small block is locked: add rcx=P to the LastFree list block
+        mov     rax, rbx
+        lea     r10, [rip + SmallBlockInfo]
+        sub     rax, r10
+        shr     eax, SmallBlockTypePO2 - 3 // 1 shl 3 = SizeOf(pointer)
+        lea     r10, [r10 + rax].TSmallBlockInfo.SmallLastFree
+        // r10 = @SmallLastFree[] of this rbx
+@Atom2: mov     eax, $100
+  lock  cmpxchg byte ptr [rbx].TSmallBlockType.LastFreeLocked, ah
+        je      @Atom3
+        pause
+        jmp     @Atom2
+@Atom3: mov     rax, [r10]
+        mov     [rcx], rax
+        mov     [r10], rcx
+        inc     dword ptr [rbx].TSmallBlockType.LastFreeCount
+        mov     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize
 @Done:  // restore rbx and the stack frame before ret
         pop     rbx
@@ -3621,27 +3650,19 @@ begin
   {$ifdef FPCMM_REPORTMEMORYLEAKS}
   leaks := 0;
   {$endif FPCMM_REPORTMEMORYLEAKS}
+  for i := 0 to high(SmallBlockInfo.SmallLastFree) do
+  begin
+    list := SmallBlockInfo.SmallLastFree[i];
+    while list <> nil do
+    begin
+      next := list^;
+      _FreeMem(list); // not a leak, just an unexpected context
+      list := next;
+    end;
+  end;
   p := @SmallBlockInfo;
   for i := 1 to NumSmallInfoBlock do
   begin
-    list := p^.LockLessFree;
-    if list <> nil then
-    begin
-      {$ifdef FPCMM_REPORTMEMORYLEAKS}
-      leak := 0;
-      {$endif FPCMM_REPORTMEMORYLEAKS}
-      repeat
-        next := list^;
-        _FreeMem(list); // not a leak, just an unexpected context
-        list := next;
-        {$ifdef FPCMM_REPORTMEMORYLEAKS}
-        inc(leak);
-        {$endif FPCMM_REPORTMEMORYLEAKS}
-      until list = nil;
-      {$ifdef FPCMM_REPORTMEMORYLEAKS}
-      writeln('Notice: Unexpected LockLessFree for small=', leak, 'x', p^.BlockSize);
-      {$endif FPCMM_REPORTMEMORYLEAKS}
-    end;
     p^.PreviousPartiallyFreePool := pointer(p);
     p^.NextPartiallyFreePool := pointer(p);
     p^.NextSequentialFeedBlockAddress := pointer(1);
