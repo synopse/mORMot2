@@ -2677,45 +2677,36 @@ end;
 destructor TSynBackgroundQueue.Destroy;
 begin
   inherited Destroy; // calls WaitForNotExecuting()
+  fQueue.Values.ItemClear(pointer(fExecuteLoopValue)); // avoid memory leak
   FreeAndNil(fQueue);
 end;
 
 procedure TSynBackgroundQueue.ExecuteLoop;
 var
-  clean: boolean;
   tix32: cardinal;
 begin
   // follow the proper execution period
   fProcessEvent.WaitFor(fOnProcessMS);
-  if Terminated then
+  if Terminated or
+     not Assigned(fOnProcess) then
     exit;
   // process all pending events
   if fQueue.Pending then
   begin
     fProcessing := true;
-    clean := true;
-    try
-      while fQueue.Pop(pointer(fExecuteLoopValue)^) do // next pending event
-      begin
-        clean := false;
-        if Assigned(fOnProcess) then
-          try
-            if not fOnProcess(self, pointer(fExecuteLoopValue)) then
-              break; // callback=false -> don't Pop() any more until next loop
-          except
-            break;   // wait a little bit before retry
-          end;
-        fQueue.Values.ItemClear(pointer(fExecuteLoopValue)); // finalize + 0
-        clean := true;
+    while fQueue.Pop(pointer(fExecuteLoopValue)^) do // next pending event
+      try
+        if not fOnProcess(self, pointer(fExecuteLoopValue)) or
+           Terminated then
+          break; // callback=false -> don't Pop() any more until next loop
+      except
+        break;   // wait a little bit before retry
       end;
-    finally
-      if not clean then
-        fQueue.Values.ItemClear(pointer(fExecuteLoopValue));
-      fProcessing := false;
-    end;
+    fProcessing := false;
   end;
   // process OnIdle optional callback
-  if not Assigned(fOnIdle) then
+  if Terminated or
+     not Assigned(fOnIdle) then
     exit;
   tix32 := GetTickSec;
   if tix32 = fLastIdleTix32 then // at most once per second - may be less often
