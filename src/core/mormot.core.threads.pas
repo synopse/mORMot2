@@ -475,8 +475,8 @@ type
     fOnAfterExecute: TOnNotifyThread;
     fThreadName: RawUtf8;
     fExecute: (exCreated, exRun, exFinished);
-    fExecuteLoopPause, fProcessing: boolean;
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
+    fExecuteLoopPause, fProcessing: boolean;
     procedure SetExecuteLoopPause(dopause: boolean);
     /// where the main process takes place
     procedure Execute; override;
@@ -490,7 +490,7 @@ type
       const OnBeforeExecute: TOnNotifyThread = nil;
       const OnAfterExecute: TOnNotifyThread = nil;
       CreateSuspended: boolean = false); reintroduce;
-    /// properly terminate the thread
+    /// properly terminate the thread by triggering the internal ProcessEvent
     // - called by reintroduced Terminate
     procedure TerminatedSet; override;
     /// finalize and wait for the thread ending
@@ -707,6 +707,7 @@ type
   end;
 
   TSynBackgroundQueue = class;
+  TSynBackgroundQueues = array of TSynBackgroundQueue;
 
   /// event callback executed periodically by TSynBackgroundQueue
   // - Event is a pointer to an aArrayTypeInfo item supplied to EnQueue()
@@ -727,14 +728,22 @@ type
     fOnProcessMS, fLastIdleTix32: cardinal;
     fOnIdle: TOnSynBackgroundQueueIdle;
     fExecuteLoopValue: TBytes;
+    fOwner: TSynBackgroundQueue;
+    fSubThreads: TSynBackgroundQueues;
     procedure ExecuteLoop; override;
+    procedure SetOnProcess(const Event: TOnSynBackgroundQueueProcess);
+    procedure SetOnProcessMS(ms: cardinal);
   public
     /// initialize the thread and queue for a periodic task processing
     // - aArrayTypeInfo should be TypeInfo() of a dynamic array of event items
+    // - you can specify aThreadCount > 1 to consume the queue in several threads
     constructor Create(const aThreadName: RawUtf8; aArrayTypeInfo: PRttiInfo;
-      aOnProcessMS: cardinal; const aOnProcess: TOnSynBackgroundQueueProcess = nil); reintroduce;
+      aOnProcessMS: cardinal; const aOnProcess: TOnSynBackgroundQueueProcess = nil;
+      aThreadCount: cardinal = 1; aOwner: TSynBackgroundQueue = nil); reintroduce;
     /// finalize and wait for the thread ending
     destructor Destroy; override;
+    /// properly terminate the thread and its associated sub-threads
+    procedure TerminatedSet; override;
     /// add an event message to the internal processing queue
     // - event parameter should point to one aArrayTypeInfo item
     procedure EnQueue(Event: pointer; ExecuteNow: boolean = false);
@@ -745,15 +754,17 @@ type
     property RawQueue: TSynQueue
       read fQueue;
     /// access to the associated event handler
+    // - if set, will also replicate to all sub-threads sibblings if needed
     property OnProcess: TOnSynBackgroundQueueProcess
-      read fOnProcess write fOnProcess;
+      read fOnProcess write SetOnProcess;
     /// event handler which will be called by ExecuteLoop at most every second
     property OnIdle: TOnSynBackgroundQueueIdle
       read fOnIdle write fOnIdle;
     /// access to the delay, in milliseconds, of the periodic task processing
     // - see also DelayProcess() to adjust the pace at runtime
+    // - if set, will also replicate to all sub-threads sibblings if needed
     property OnProcessMS: cardinal
-      read fOnProcessMS write fOnProcessMS;
+      read fOnProcessMS write SetOnProcessMS;
     /// true if there is currenly some event running in OnProcess/ExecuteLoop
     property Processing: boolean
       read fProcessing;
@@ -761,6 +772,9 @@ type
     // - have e.g. Pending=false but Processing=true if the last event is running
     function Pending: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// access to the associated raw sub-threads with aThreadCount > 1
+    property SubThreads: TSynBackgroundQueues
+      read fSubThreads;
   end;
 
   {$ifdef HASGENERICS}
@@ -2680,20 +2694,51 @@ end;
 
 constructor TSynBackgroundQueue.Create(const aThreadName: RawUtf8;
   aArrayTypeInfo: PRttiInfo; aOnProcessMS: cardinal;
-  const aOnProcess: TOnSynBackgroundQueueProcess);
+  const aOnProcess: TOnSynBackgroundQueueProcess; aThreadCount: cardinal;
+  aOwner: TSynBackgroundQueue);
+var
+  i: PtrInt;
 begin
-  fQueue := TSynQueue.Create(aArrayTypeInfo, aThreadName);
+  fOwner := aOwner;
+  if fOwner <> nil then
+    fQueue := fOwner.fQueue // single shared queue, owned by the main thread
+  else
+    fQueue := TSynQueue.Create(aArrayTypeInfo, aThreadName);
   fOnProcess := aOnProcess;
   fOnProcessMS := aOnProcessMS;
   SetLength(fExecuteLoopValue, fQueue.Values.ItemSize); // temp fQueue.Pop()
-  inherited Create(aThreadName, nil, TSynLogFamily.OnThreadEnded);
+  if aThreadCount > 1 then
+  begin
+    if aOwner <> nil then // paranoid
+      ESynThread.RaiseUtf8('%.Create with aThreadCount=% and aOwner=%',
+        [self, aThreadCount, aOwner]);
+    inherited Create(Join(['1', aThreadName]), nil, TSynLogFamily.OnThreadEnded);
+    SetLength(fSubThreads, aThreadCount - 1);
+    for i := 0 to high(fSubThreads) do
+      fSubThreads[i] := TSynBackgroundQueue.Create(Make([i + 2, aThreadName]),
+        aArrayTypeInfo, aOnProcessMS, aOnProcess, 1, {owner=}self);
+  end
+  else
+    inherited Create(aThreadName, nil, TSynLogFamily.OnThreadEnded);
 end;
 
 destructor TSynBackgroundQueue.Destroy;
 begin
-  inherited Destroy; // calls WaitForNotExecuting()
+  inherited Destroy; // calls Terminate + WaitForNotExecuting()
   fQueue.Values.ItemClear(pointer(fExecuteLoopValue)); // avoid memory leak
-  FreeAndNil(fQueue);
+  if fOwner = nil then
+    fQueue.Free; // owned by the main thread
+  fQueue := nil;
+end;
+
+procedure TSynBackgroundQueue.TerminatedSet;
+var
+  i: PtrInt;
+begin
+  if not Terminated then        // propagate once
+    for i := 0 to high(fSubThreads) do
+      fSubThreads[i].Terminate; // trigger each ProcessEvent
+  inherited TerminatedSet;
 end;
 
 procedure TSynBackgroundQueue.ExecuteLoop;
@@ -2744,16 +2789,43 @@ begin
   if self = nil then
     exit;
   ms := fOnProcessMS;
-  inc(ms, ms shl 2); // increase by 25% each time
+  inc(ms, ms shl 2);    // increase by 25% each time
   if ms > MaxDelay then
-    ms := MaxDelay;  // branchless cmovc on FPC
-  fOnProcessMS := ms;
+    ms := MaxDelay;     // branchless cmovc on FPC
+  if ms <> fOnProcessMS then
+    SetOnProcessMS(ms); // replicate to all sub-threads sibblings if needed
 end;
 
 function TSynBackgroundQueue.Pending: boolean;
 begin
   result := (self <> nil) and
             (fQueue.Pending);
+end;
+
+procedure TSynBackgroundQueue.SetOnProcess(const Event: TOnSynBackgroundQueueProcess);
+var
+  i: PtrInt;
+  main: TSynBackgroundQueue;
+begin
+  main := fOwner;
+  if main = nil then
+    main := self;
+  main.fOnProcess := Event;
+  for i := 0 to length(main.fSubThreads) - 1 do
+    main.fSubThreads[i].OnProcess := Event;
+end;
+
+procedure TSynBackgroundQueue.SetOnProcessMS(ms: cardinal);
+var
+  i: PtrInt;
+  main: TSynBackgroundQueue;
+begin
+  main := fOwner;
+  if main = nil then
+    main := self;
+  main.fOnProcessMS := ms;
+  for i := 0 to length(main.fSubThreads) - 1 do
+    main.fSubThreads[i].OnProcessMS := ms;
 end;
 
 
