@@ -9152,11 +9152,10 @@ end;
 
 procedure TDynArray.SetCompare(const aCompare: TDynArraySortCompare);
 begin
-  if @aCompare <> @fCompare then
-  begin
-    @fCompare := @aCompare;
-    fSorted := false;
-  end;
+  if @aCompare = @fCompare then
+    exit;
+  @fCompare := @aCompare;
+  fSorted := false;
 end;
 
 procedure TDynArray.SetNoFinalize(aValue: boolean);
