@@ -5183,21 +5183,19 @@ begin
   // see more complete list in feature request [f024266c0839]
   case fDbms of
     dOracle:
-      result := IdemPCharArray(PosErrorNumber(aMessage, '-'),
-        ['00028', '01012', '01017', '01033', '01089', '02396', '03113', '03114',
-        '03135', '12152', '12154', '12157', '12514', '12520', '12537', '12545',
-        '12560', '12571']) >= 0;
+      result := IdemPCharSep(PosErrorNumber(aMessage, '-'),
+        '00028|01012|01017|01033|01089|02396|03113|03114|03135|12152|12154|' +
+        '12157|12514|12520|12537|12545|12560|12571|') >= 0;
     dInformix:
       // error codes based on {IBM INFORMIX ODBC DRIVER} on wrong data connection
-      result := IdemPCharArray(PosErrorNumber(aMessage, '-'),
-        ['329', '761', '902', '908', '930', '931', '951', '11017', '23101',
-         '23104', '25567', '25582', '27002']) >= 0;
+      result := IdemPCharSep(PosErrorNumber(aMessage, '-'),
+        '329|761|902|908|930|931|951|11017|23101|23104|25567|25582|27002|') >= 0;
     dMSSQL:
       // error codes based on {SQL Server Native Client 11.0} tested with wrong
       // data connection using general error codes because MS SQL SERVER has
       // multiple error codes in the error message
-      result := IdemPCharArray(PosErrorNumber(aMessage, '['),
-        ['08001', '08S01', '08007', '28000', '42000']) >= 0;
+      result := IdemPCharSep(PosErrorNumber(aMessage, '['),
+        '08001|08S01|08007|28000|42000|') >= 0;
     dMySQL,
     dMariaDB:
       result := (PosEx('Lost connection to', aMessage) > 0) or

@@ -1597,7 +1597,7 @@ function IdemPCharWithoutWhiteSpace(p: PUtf8Char; up: PAnsiChar): boolean;
 // - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 // - warning: this function expects upArray[] items to have AT LEAST TWO
 // CHARS (it will use a fast 16-bit comparison of initial 2 bytes)
-// - consider IdemPPChar() which is faster but a bit more verbose
+// - consider IdemPPChar() or IdemPCharSep() which are faster
 function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): integer;
 
 /// returns the index of a matching beginning of p^ in nil-terminated up^ array
