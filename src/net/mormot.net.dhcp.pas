@@ -2118,9 +2118,6 @@ type
                 ptVendor43, ptMsg53, ptParam55, ptClient61, ptFqdn81, ptRelay82,
                 ptDom119, ptCidr121, ptVendor12x);
 const
-  RULE_VALUE_PREFIX: array[0 .. 12] of PAnsiChar = (
-    'IP:', 'MAC:', 'HEX:', 'BASE64:', 'UUID:', 'GUID:',
-    'UINT8:', 'UINT16:', 'UINT32:', 'UINT64:', 'ESC:', 'CIDR:', nil);
   // O(1) lookup of raw DHCP option number to its value type
   PARSE_TYPE: array[0 .. 125] of TParseType = (
     ptTextBin, ptIp4, ptUInt32, ptIp4, ptIp4, ptIp4, ptIp4, ptIp4, ptIp4,
@@ -2182,7 +2179,8 @@ begin
   end;
   if p.WasString then
     // handle "ip:..." .. "cidr:..." prefixes in string values
-    case IdemPPChar(p.Value, @RULE_VALUE_PREFIX) of
+    case IdemPCharSep(p.Value,
+      'IP:|MAC:|HEX:|BASE64:|UUID:|GUID:|UINT8:|UINT16:|UINT32:|UINT64:|ESC:|CIDR:|') of
       0:    // ip:
         result := ToIP4Binary(p.Value + 3, v) >= 0; // allow CSV of IPs
       1:    // mac:
