@@ -738,6 +738,9 @@ type
     /// add an event message to the internal processing queue
     // - event parameter should point to one aArrayTypeInfo item
     procedure EnQueue(Event: pointer; ExecuteNow: boolean = false);
+    /// adjust OnProcessMS using NextGrow() up to MaxDelay
+    // - could be called at runtime to adjust ExecuteLoop pace on errors
+    procedure DelayProcess(MaxDelay: cardinal);
     /// access to the associated thread-safe queue
     property RawQueue: TSynQueue
       read fQueue;
@@ -748,6 +751,7 @@ type
     property OnIdle: TOnSynBackgroundQueueIdle
       read fOnIdle write fOnIdle;
     /// access to the delay, in milliseconds, of the periodic task processing
+    // - see also DelayProcess() to adjust the pace at runtime
     property OnProcessMS: cardinal
       read fOnProcessMS write fOnProcessMS;
     /// true if there is currenly some event running in OnProcess/ExecuteLoop
@@ -2701,6 +2705,24 @@ begin
     fProcessEvent.SetEvent;
 end;
 
+procedure TSynBackgroundQueue.DelayProcess(MaxDelay: cardinal);
+var
+  ms: cardinal;
+begin
+  if self = nil then
+    exit;
+  ms := fOnProcessMS;
+  inc(ms, ms shl 2); // increase by 25% each time
+  if ms > MaxDelay then
+    ms := MaxDelay;  // branchless cmovc on FPC
+  fOnProcessMS := ms;
+end;
+
+function TSynBackgroundQueue.Pending: boolean;
+begin
+  result := (self <> nil) and
+            (fQueue.Pending);
+end;
 
 
 { TSynBackgroundTimer }
