@@ -715,12 +715,17 @@ type
   TOnSynBackgroundQueueProcess = function(Sender: TSynBackgroundQueue;
     Event: pointer): boolean of object;
 
+  /// event callback executed by TSynBackgroundQueue at most every second
+  TOnSynBackgroundQueueIdle = procedure(Sender: TSynBackgroundQueue;
+    Tix32: cardinal) of object;
+
   /// TThread able to run events from a RTTI queue at a given periodic pace
   TSynBackgroundQueue = class(TSynBackgroundThreadAbstract)
   protected
     fQueue: TSynQueue;
     fOnProcess: TOnSynBackgroundQueueProcess;
     fOnProcessMS, fLastIdleTix32: cardinal;
+    fOnIdle: TOnSynBackgroundQueueIdle;
     fExecuteLoopValue: TBytes;
     procedure ExecuteLoop; override;
   public
@@ -739,6 +744,9 @@ type
     /// access to the associated event handler
     property OnProcess: TOnSynBackgroundQueueProcess
       read fOnProcess write fOnProcess;
+    /// event handler which will be called by ExecuteLoop at most every second
+    property OnIdle: TOnSynBackgroundQueueIdle
+      read fOnIdle write fOnIdle;
     /// access to the delay, in milliseconds, of the periodic task processing
     property OnProcessMS: cardinal
       read fOnProcessMS write fOnProcessMS;
@@ -2676,6 +2684,14 @@ begin
       fProcessing := false;
     end;
   end;
+  // process OnIdle optional callback
+  if not Assigned(fOnIdle) then
+    exit;
+  tix32 := GetTickSec;
+  if tix32 = fLastIdleTix32 then // at most once per second - may be less often
+    exit;
+  fLastIdleTix32 := tix32;
+  fOnIdle(self, tix32);
 end;
 
 procedure TSynBackgroundQueue.EnQueue(Event: pointer; ExecuteNow: boolean);
