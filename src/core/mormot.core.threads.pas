@@ -93,7 +93,13 @@ type
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynQueue instance
     // - a name can optionally be assigned to this instance
-    constructor Create(aTypeInfo: PRttiInfo; const aName: RawUtf8 = ''); reintroduce; virtual;
+    constructor Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8 = ''); reintroduce; virtual;
+    {$ifdef HASGENERICS}
+    /// initialize a queue storage, specifying event as generic type
+    // - just a convenient wrapper around TSynQueue.Create()
+    class function New<TEvent>(const aName: RawUtf8 = ''): TSynQueue;
+        static; {$ifdef FPC} inline; {$endif}
+    {$endif HASGENERICS}
     /// finalize the storage
     // - would release all internal stored values, and call WaitPopFinalize
     destructor Destroy; override;
@@ -165,6 +171,10 @@ type
     // - this method is not thread-safe, so returned value is indicative only
     function Pending: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// raw access to the associated dynamic array storage
+    // - do not use to access the values, but e.g. for ItemSize/ItemClear()
+    property Values: TDynArray
+      read fValues;
   end;
 
 
@@ -392,7 +402,6 @@ type
     property Value[const Name: RawUtf8]: variant
       read GetValue write SetValue; default;
   end;
-
 
 
 
@@ -1430,13 +1439,20 @@ implementation
 
 { TSynQueue }
 
-constructor TSynQueue.Create(aTypeInfo: PRttiInfo; const aName: RawUtf8);
+constructor TSynQueue.Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8);
 begin
   inherited Create(aName);
   fFirst := -1;
   fLast := -2;
-  fValues.Init(aTypeInfo, fValueVar, @fCount);
+  fValues.Init(aArrayTypeInfo, fValueVar, @fCount);
 end;
+
+{$ifdef HASGENERICS}
+class function TSynQueue.New<TEvent>(const aName: RawUtf8): TSynQueue;
+begin
+  result := TSynQueue.Create(TypeInfo(TArray<TEvent>), aName);
+end;
+{$endif HASGENERICS}
 
 destructor TSynQueue.Destroy;
 begin
