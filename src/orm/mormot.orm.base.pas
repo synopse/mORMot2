@@ -3360,8 +3360,7 @@ end;
 function Utf8ContentNumberType(P: PUtf8Char): TOrmFieldType;
 begin
   if (P = nil) or
-     ((PInteger(P)^ = ord('n') + ord('u') shl 8 + ord('l') shl 16 +
-       ord('l') shl 24) and
+     ((PInteger(P)^ = NULL_LOW) and
       (P[4] = #0)) then
     result := oftUnknown
   else
@@ -7907,8 +7906,7 @@ begin
         result := oftRecordVersion
       else if (ord(Info^.RawName[1]) and $df = ord('T')) and
         // T...ID pattern in type name -> TID
-        (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf =
-           ord('I') + ord('D') shl 8) then
+        (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = _ID16) then
         result := oftTID
       else
         result := oftInteger;

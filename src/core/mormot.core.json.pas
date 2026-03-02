@@ -105,6 +105,10 @@ const
   JSON_UNESCAPE_UTF16 = #1;
   /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
   JSON_UHEXC = ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+  // some other constants used for fast ID/ROWID pattern recognition
+  _ID16   = ord('I') + ord('D') shl 8;
+  _ROW24  = ord('R') + ord('O') shl 8 + ord('W') shl 16;
+  _ROWI32 = _ROW24 + ord('I') shl 24;
 
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
@@ -8457,6 +8461,10 @@ begin
   result := Ctxt.Valid;
 end;
 
+const
+  _CLAS32 = ord('C') + ord('l') shl 8 + ord('a') shl 16 + ord('s') shl 24;
+  _SNAM32 = ord('s') + ord('N') shl 8 + ord('a') shl 16 + ord('m') shl 24;
+
 procedure _JL_RttiCustomProps(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
   j: PUtf8Char;
@@ -8470,7 +8478,7 @@ begin
   j := GotoNextNotSpace(Ctxt.Json);
   if j^ <> '{' then
     if Ctxt.ParseNull then
-      exit // allow 'null' as void entry
+      exit // allow 'null' as void rkRecord - rkClass is handled by caller
     else
     begin
 no:   Ctxt.Valid := false;
@@ -8499,10 +8507,8 @@ nxt:  if not Ctxt.GetJsonFieldName then
           break
       else if (Ctxt.Info.Kind = rkClass) and
               (Ctxt.ValueLen = 9) and // fast "ClassName" case sensitive match
-              (PIntegerArray(Ctxt.Value)[0] =
-                ord('C') + ord('l') shl 8 + ord('a') shl 16 + ord('s') shl 24) and
-              (PIntegerArray(Ctxt.Value)[1] =
-                ord('s') + ord('N') shl 8 + ord('a') shl 16 + ord('m') shl 24) and
+              (PIntegerArray(Ctxt.Value)[0] = _CLAS32) and
+              (PIntegerArray(Ctxt.Value)[1] = _SNAM32) and
               (Ctxt.Value[8] = 'e') then
       // woStoreClassName was used -> just ignore the class name
       begin
@@ -8617,15 +8623,13 @@ begin
       until (P^ > ' ') or
             (P^ = #0);
       if PInt64(P)^ and $00ffdfdfdfdfdfff = // case insensitive search
-        ord('"') + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24 +
-        Int64(ord('I')) shl 32 + Int64(ord('D')) shl 40 + Int64(ord('"')) shl 48 then
+        ord('"') + Int64(_ROWI32) shl 8 + Int64(ord('D')) shl 40 + Int64(ord('"')) shl 48 then
       begin // "RowID" -> __{"ID"
         PCardinal(P)^ := $2020 + ord('{') shl 16 + ord('"') shl 24;
         Ctxt.Json := P + 2;
       end
       else if PInt64(P)^ and $0000ffdfdfdfdfdf =
-        ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24 +
-        Int64(ord('D')) shl 32 + Int64(ord(':')) shl 40 then
+         _ROWI32 + Int64(ord('D')) shl 32 + Int64(ord(':')) shl 40 then
       begin // RowID: -> __{ID:
         PCardinal(P)^ := $2020 + ord('{') shl 16 + ord('I') shl 24;
         Ctxt.Json := P + 2;
@@ -8734,8 +8738,7 @@ begin
         Ctxt.Value, Ctxt.ValueLen, iteminfo.Props.Count);
       if (prop = nil) and
          (itemInfo.ValueRtlClass = vcObjectWithID) and
-         (PInteger(Ctxt.Value)^ and $dfdfdfdf =
-           ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+         (PInteger(Ctxt.Value)^ and $dfdfdfdf = _ROWI32) and
          (PWord(Ctxt.Value + 4)^ and $ffdf = ord('D')) then
         prop := @iteminfo.Props.List[0]; // 'RowID' = first TObjectWithID field
     end;
