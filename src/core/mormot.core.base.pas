@@ -811,7 +811,12 @@ const
   HTTP__32   = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24;
   HTTP__24   = ord(':') + ord('/') shl 8 + ord('/') shl 16;
   HEAD_32    = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+  GET_24     = ord('G') + ord('E') shl 8 + ord('T') shl 16;
+  PUT_24     = ord('P') + ord('U') shl 8 + ord('T') shl 16;
   POST_32    = ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
+  DELE_32    = ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
+  OPTI_32    = ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
+  NONE_32    = ord('N') + ord('O') shl 8 + ord('N') shl 16 + ord('E') shl 24;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;

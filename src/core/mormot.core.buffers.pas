@@ -8854,6 +8854,7 @@ const
      mtGif,     mtFont,   mtWebm,   mtTiff,
      mtTiff,    mtTiff,   mtWebp{=riff}, mtDoc,
      mtOgg,     mtDicom,  mtZstd);
+  _HTML32 = ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24;
 
 function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 var
@@ -8867,14 +8868,13 @@ begin
   case PAnsiChar(Content)^ of
     '<':
       case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
-        ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+        _HTML32:
           result := mtHtml; // legacy HTML document
         ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
           if (PCardinal(PAnsiChar(Content) + 5)^ or $20202020 =
              ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24) and
              (PAnsiChar(Content)[9] = ' ') then
-            if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 =
-               ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24) then
+            if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 = _HTML32) then
               result := mtHtml // HTML5 markup
             else
               result := mtXml // malformed XML document

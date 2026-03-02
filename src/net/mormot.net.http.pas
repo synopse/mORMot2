@@ -2908,15 +2908,13 @@ var
   c: cardinal;
 begin
   c := PCardinal(method)^;
-  result := (((c xor cardinal(ord('H') + ord('E') shl 8 + ord('A') shl 16 +
-                     ord('D') shl 24)) and $dfdfdfdf) = 0) or
-            (((c xor cardinal(ord('O') + ord('P') shl 8 + ord('T') shl 16 +
-                     ord('I') shl 24)) and $dfdfdfdf) = 0);
+  result := (((c xor cardinal(HEAD_32)) and $dfdfdfdf) = 0) or
+            (((c xor cardinal(OPTI_32)) and $dfdfdfdf) = 0);
 end;
 
 function IsGet(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ = ord('G') + ord('E') shl 8 + ord('T') shl 16;
+  result := PCardinal(method)^ = GET_24;
 end;
 
 function IsPost(const method: RawUtf8): boolean;
@@ -2926,20 +2924,17 @@ end;
 
 function IsPut(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('P') + ord('U') shl 8 + ord('T') shl 16;
+  result := PCardinal(method)^ = PUT_24;
 end;
 
 function IsDelete(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
+  result := PCardinal(method)^ = DELE_32;
 end;
 
 function IsOptions(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
+  result := PCardinal(method)^ = OPTI_32;
 end;
 
 function IsHead(const method: RawUtf8): boolean;
@@ -2971,8 +2966,7 @@ end;
 function IsNone(const text: RawUtf8): boolean;
 begin
   result := (length(text) = 4) and
-            (PCardinal(text)^ and $dfdfdfdf =
-              ord('N') + ord('O') shl 8 + ord('N') shl 16 + ord('E') shl 24);
+            (PCardinal(text)^ and $dfdfdfdf = NONE_32);
 end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
@@ -3653,8 +3647,7 @@ function THttpRequestContext.ParseHttp(P: PUtf8Char): boolean;
 begin
   result := false;
   if (PCardinal(P)^ <> HTTP_32) or
-     (PCardinal(P + 4)^ and $ffffff <>
-       ord('/') + ord('1') shl 8 + ord('.') shl 16) then
+     (PCardinal(P + 4)^ and $ffffff <> ord('/') + ord('1') shl 8 + ord('.') shl 16) then
     exit;
   if P[7] <> '1' then
     include(ResponseFlags, rfHttp10);
@@ -3682,7 +3675,7 @@ begin
     exit;
   // parse CommandMethod
   case PCardinal(P)^ of
-    ord('G') + ord('E') shl 8 + ord('T') shl 16 + ord(' ') shl 24:
+    GET_24 + ord(' ') shl 24:
       begin
         CommandMethod := _GETVAR; // optimistic
         inc(P, 4);
@@ -6198,17 +6191,17 @@ function ToScope(Text: PCardinal; out Scope: THttpAnalyzerScope): boolean;
 begin
   result := false;
   case Text^ of // case-sensitive test in occurrence order
-    ord('G') + ord('E') shl 8 + ord('T') shl 16:
+    GET_24:
       Scope := hasGet;
     POST_32:
       Scope := hasPost;
-    ord('P') + ord('U') shl 8 + ord('T') shl 16:
+    PUT_24:
       Scope := hasPut;
     HEAD_32:
       Scope := hasHead;
-    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
+    DELE_32:
       Scope := hasDelete;
-    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24:
+    OPTI_32:
       Scope := hasOptions;
   else
     exit;
