@@ -152,8 +152,9 @@ function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 /// will remove most usual HTTP headers which are to be recomputed on sending
 // - trim=true would remove any space or CR/LF at the end of the result
 // - as used e.g. during TPublicRelay process from mormot.net.relay
+// - upIgnore is in IdemPCharSet() format, e.g. 'CONTENT-|CONNECTION:|'
 function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
-  upIgnore: PPAnsiChar = nil): RawUtf8;
+  upIgnore: PUtf8Char = nil): RawUtf8;
 
 /// search, copy and remove a given HTTP header as text or Int64
 // - FindNameValue() makes search + copy, but this function also REMOVES the header
@@ -2655,20 +2656,11 @@ begin
 end;
 
 const
-  TOBEPURGED: array[0..10] of PAnsiChar = (
-    'CONTENT-',
-    'CONNECTION:',
-    'KEEP-ALIVE:',
-    'TRANSFER-',
-    'X-POWERED',
-    'USER-AGENT',
-    'REMOTEIP:',
-    'HOST:',
-    'ACCEPT:',
-    'DATE:',
-    nil);
+  TOBEPURGED: PUtf8Char =
+    'CONTENT-|CONNECTION:|KEEP-ALIVE:|TRANSFER-|X-POWERED|USER-AGENT|' +
+    'REMOTEIP:|HOST:|ACCEPT:|DATE:|';
 
-function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PPAnsiChar): RawUtf8;
+function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PUtf8Char): RawUtf8;
 var
   pos, len: array[byte] of word; // delete up to 255 entries
   n, purged, i, l, tot: PtrInt;
@@ -2684,13 +2676,13 @@ begin
   begin
     last := nil;
     if upIgnore = nil then
-      upIgnore := @TOBEPURGED;
+      upIgnore := TOBEPURGED;
     if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
       while (P <> nil) and
             (P^ <> #0) do
       begin
         next := GotoNextLine(P);
-        if IdemPPChar(P, upIgnore) < 0 then // append this entry
+        if IdemPCharSep(P, upIgnore) < 0 then // append this entry
         begin
           l := next - P;
           if next = nil then
@@ -2880,7 +2872,6 @@ end;
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 var
   up: TByteToAnsiChar;
-  u: array[0..1] of PAnsiChar; // IdemPPChar() format
 begin
   if (Headers = '') or
      (length(Name) < 2) then
@@ -2888,10 +2879,9 @@ begin
     result := Headers;
     exit;
   end;
-  PWord(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ := ord(':');
-  u[0] := @up;
-  u[1] := nil;
-  result := PurgeHeaders(Headers, false, @u);
+  PCardinal(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ :=
+    ord(':') + ord('|') shl 8; // 'UPPER:|' IdemPCharSep() format
+  result := PurgeHeaders(Headers, false, @up);
 end;
 
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;

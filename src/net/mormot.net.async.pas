@@ -5687,14 +5687,9 @@ type
   end;
 
 const
-  TOBEPURGEDPROXY: array[0..6] of PAnsiChar = (
-    'CONTENT-LENGTH:',
-    'CONTENT-RANGE:',
-    'CONTENT-ENCODING:',
-    'CONNECTION:',
-    'KEEP-ALIVE:',
-    'DATE:',
-    nil);
+  TOBEPURGEDPROXY: PUtf8Char =
+    'CONTENT-LENGTH:|CONTENT-RANGE:|CONTENT-ENCODING:|CONNECTION:|' +
+    'KEEP-ALIVE:|DATE:|';
 
 function TStartProxyRequest.AskRemoteServer(const path: TUriMatchName): cardinal;
 var
@@ -5728,7 +5723,7 @@ begin // this method is protected by proxy.fSafe.Lock
       exit;
     end;
   // check the header against the local cached file (headlastmod may be 0)
-  ctxt.OutCustomHeaders := PurgeHeaders(remotehead, false, @TOBEPURGEDPROXY);
+  ctxt.OutCustomHeaders := PurgeHeaders(remotehead, false, TOBEPURGEDPROXY);
   if (lastmod <> 0) and
      (size >= 0) then // check the local file
     if ((headsiz < 0) or
