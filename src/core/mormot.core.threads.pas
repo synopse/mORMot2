@@ -738,12 +738,12 @@ type
     procedure SetOnProcess(const Event: TOnSynBackgroundQueueProcess);
     procedure SetOnProcessMS(ms: cardinal);
   public
-    /// initialize the thread and queue for a periodic task processing
+    /// initialize the thread(s) and queue for a periodic task processing
     // - aArrayTypeInfo should be TypeInfo() of a dynamic array of event items
     // - you can specify aThreadCount > 1 to consume the queue in several threads
     constructor Create(const aThreadName: RawUtf8; aArrayTypeInfo: PRttiInfo;
       aOnProcessMS: cardinal; const aOnProcess: TOnSynBackgroundQueueProcess = nil;
-      aThreadCount: cardinal = 1; aOwner: TSynBackgroundQueue = nil); reintroduce;
+      aThreadCount: integer = 1; aOwner: TSynBackgroundQueue = nil); reintroduce;
     /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// properly terminate the thread and its associated sub-threads
@@ -792,9 +792,9 @@ type
       // the next Sender.ExecuteLoop iteration, following Sender.OnProcessMS pace
       TOnProcess = function(Sender: TBackgroundQueue<TEvent>;
         var Event: TEvent): boolean of object;
-    /// initialize the thread and queue for a periodic task TEvent processing
+    /// initialize the thread(s) and queue for a periodic task TEvent processing
     constructor Create(const aThreadName: RawUtf8; aOnProcessMS: cardinal;
-      const aOnProcess: TOnProcess); reintroduce;
+      const aOnProcess: TOnProcess; aThreadCount: integer = 1); reintroduce;
     /// add an event message to the internal processing queue
     // - event parameter should point to one aArrayTypeInfo item
     procedure Add(const Event: TEvent; ExecuteNow: boolean = false);
@@ -2706,7 +2706,7 @@ end;
 
 constructor TSynBackgroundQueue.Create(const aThreadName: RawUtf8;
   aArrayTypeInfo: PRttiInfo; aOnProcessMS: cardinal;
-  const aOnProcess: TOnSynBackgroundQueueProcess; aThreadCount: cardinal;
+  const aOnProcess: TOnSynBackgroundQueueProcess; aThreadCount: integer;
   aOwner: TSynBackgroundQueue);
 var
   i: PtrInt;
@@ -2724,9 +2724,10 @@ begin
     if aOwner <> nil then // paranoid
       ESynThread.RaiseUtf8('%.Create with aThreadCount=% and aOwner=%',
         [self, aThreadCount, aOwner]);
+    ThreadCountAdjust(aThreadCount); // e.g. WinARM PRISM
     inherited Create(Join(['1', aThreadName]), nil, TSynLogFamily.OnThreadEnded);
     SetLength(fSubThreads, aThreadCount - 1);
-    for i := 0 to high(fSubThreads) do
+    for i := 0 to aThreadCount - 2 do
       fSubThreads[i] := TSynBackgroundQueue.Create(Make([i + 2, aThreadName]),
         aArrayTypeInfo, aOnProcessMS, aOnProcess, 1, {owner=}self);
   end
@@ -2846,10 +2847,10 @@ end;
 { TBackgroundQueue<T> }
 
 constructor TBackgroundQueue<TEvent>.Create(const aThreadName: RawUtf8;
-  aOnProcessMS: cardinal; const aOnProcess: TOnProcess);
+  aOnProcessMS: cardinal; const aOnProcess: TOnProcess; aThreadCount: integer);
 begin
   inherited Create(aThreadName, TypeInfo(TArray<TEvent>), aOnProcessMS,
-    TOnSynBackgroundQueueProcess(aOnProcess));
+    TOnSynBackgroundQueueProcess(aOnProcess), aThreadCount);
 end;
 
 procedure TBackgroundQueue<TEvent>.Add(const Event: TEvent; ExecuteNow: boolean);
