@@ -763,6 +763,29 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
+  {$ifdef HASGENERICS}
+  /// TThread able to run events from a generics queue at a given periodic pace
+  TBackgroundQueue<TEvent> = class(TSynBackgroundQueue)
+  public
+    type
+      /// the callback signature called with each queued event from this thread
+      // - the event is supplied as var to match TOnSynBackgroundQueueProcess
+      // - should return true to continue de-queing events, or false to wait for
+      // the next Sender.ExecuteLoop iteration, following Sender.OnProcessMS pace
+      TOnProcess = function(Sender: TBackgroundQueue<TEvent>;
+        var Event: TEvent): boolean of object;
+    /// initialize the thread and queue for a periodic task TEvent processing
+    constructor Create(const aThreadName: RawUtf8; aOnProcessMS: cardinal;
+      const aOnProcess: TOnProcess); reintroduce;
+    /// add an event message to the internal processing queue
+    // - event parameter should point to one aArrayTypeInfo item
+    procedure Add(const Event: TEvent; ExecuteNow: boolean = false);
+      {$ifdef FPC} inline; {$endif}
+    /// retrieve a thread-safe copy of all pending events
+    function Save: TArray<TEvent>;
+  end;
+  {$endif HASGENERICS}
+
   TSynBackgroundTimer = class;
 
   /// event callback executed periodically by TSynBackgroundThreadProcess
@@ -2723,6 +2746,30 @@ begin
   result := (self <> nil) and
             (fQueue.Pending);
 end;
+
+
+{$ifdef HASGENERICS}
+
+{ TBackgroundQueue<T> }
+
+constructor TBackgroundQueue<TEvent>.Create(const aThreadName: RawUtf8;
+  aOnProcessMS: cardinal; const aOnProcess: TOnProcess);
+begin
+  inherited Create(aThreadName, TypeInfo(TArray<TEvent>), aOnProcessMS,
+    TOnSynBackgroundQueueProcess(aOnProcess));
+end;
+
+procedure TBackgroundQueue<TEvent>.Add(const Event: TEvent; ExecuteNow: boolean);
+begin
+  EnQueue(@Event, ExecuteNow);
+end;
+
+function TBackgroundQueue<TEvent>.Save: TArray<TEvent>;
+begin
+  fQueue.Save(result);
+end;
+
+{$endif HASGENERICS}
 
 
 { TSynBackgroundTimer }
