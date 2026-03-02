@@ -93,11 +93,14 @@ type
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynQueue instance
     // - a name can optionally be assigned to this instance
-    constructor Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8 = ''); reintroduce; virtual;
+    // - you can specify some information to select the PopEquals/WaitPop comparer
+    constructor Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8 = '';
+      aKind: TRttiParserType = ptNone; aCaseInsensitive: boolean = false); reintroduce; virtual;
     {$ifdef HASGENERICS}
     /// initialize a queue storage, specifying event as generic type
     // - just a convenient wrapper around TSynQueue.Create()
-    class function New<TEvent>(const aName: RawUtf8 = ''): TSynQueue;
+    class function New<TEvent>(const aName: RawUtf8 = '';
+      aKind: TRttiParserType = ptNone; aCaseInsensitive: boolean = false): TSynQueue;
         static; {$ifdef FPC} inline; {$endif}
     {$endif HASGENERICS}
     /// finalize the storage
@@ -113,9 +116,10 @@ type
     // - this method is thread-safe, since it will lock the instance
     function Pop(out aValue): boolean;
     /// extract one matching item from the queue, as FIFO (First-In-First-Out)
-    // - the current pending item is compared with aAnother value
-    function PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
-      out aValue): boolean;
+    // - the current pending item is compared with aAnother value using
+    // the main Values.Compare() or a custom comparer function
+    function PopEquals(aAnother: pointer; out aValue;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// lookup one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item, without
     // removing it from the queue (as Pop method does)
@@ -132,8 +136,7 @@ type
     // be used e.g. when several threads are putting items into the queue)
     // - this method is thread-safe, but will lock the instance only if needed
     function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
-      out aValue; aCompared: pointer = nil;
-      aCompare: TDynArraySortCompare = nil): boolean;
+      out aValue; aCompared: pointer = nil; aCompare: TDynArraySortCompare = nil): boolean;
     /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
     // - returns a pointer to a pending item within aTimeoutMS time
     // - Safe.ReadWriteLock is kept, so caller could check its content, then
@@ -172,7 +175,8 @@ type
     function Pending: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// raw access to the associated dynamic array storage
-    // - do not use to access the values, but e.g. for ItemSize/ItemClear()
+    // - do not use to access the values, but e.g. for ItemSize/ItemClear(),
+    // or change default PopEquals() comparer via Values.SetParserType()
     property Values: TDynArray
       read fValues;
   end;
@@ -1494,18 +1498,24 @@ implementation
 
 { TSynQueue }
 
-constructor TSynQueue.Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8);
+constructor TSynQueue.Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8;
+  aKind: TRttiParserType; aCaseInsensitive: boolean);
 begin
   inherited Create(aName);
   fFirst := -1;
   fLast := -2;
   fValues.Init(aArrayTypeInfo, fValueVar, @fCount);
+  if aKind = ptNone then
+    aKind := fValues.Info.ArrayFirstField;
+  if aKind <> ptNone then
+    fValues.SetParserType(aKind, aCaseInsensitive); // set fValues.fCompare()
 end;
 
 {$ifdef HASGENERICS}
-class function TSynQueue.New<TEvent>(const aName: RawUtf8): TSynQueue;
+class function TSynQueue.New<TEvent>(const aName: RawUtf8;
+  aKind: TRttiParserType; aCaseInsensitive: boolean): TSynQueue;
 begin
-  result := TSynQueue.Create(TypeInfo(TArray<TEvent>), aName);
+  result := TSynQueue.Create(TypeInfo(TArray<TEvent>), aName, aKind, aCaseInsensitive);
 end;
 {$endif HASGENERICS}
 
@@ -1688,14 +1698,17 @@ begin
   end;
 end;
 
-function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
-  out aValue): boolean;
+function TSynQueue.PopEquals(aAnother: pointer; out aValue;
+  aCompare: TDynArraySortCompare): boolean;
 begin
   result := false;
   if (self = nil) or
-     (not Assigned(aCompare)) or
-     (not Assigned(aAnother)) or
-     (fFirst < 0) then
+     (fFirst < 0) or
+     (aAnother = nil) then
+    exit;
+  if not Assigned(aCompare) then
+    aCompare := fValues.Compare;
+  if not Assigned(aCompare) then
     exit;
   fSafe.ReadWriteLock;
   try
@@ -1752,9 +1765,8 @@ begin
     starttix := mormot.core.os.GetTickCount64;
     endtix := starttix + aTimeoutMS;
     repeat
-      if Assigned(aCompared) and
-         Assigned(aCompare) then
-        result := PopEquals(aCompared, aCompare, aValue)
+      if Assigned(aCompared) then
+        result := PopEquals(aCompared, aValue, aCompare)
       else
         result := Pop(aValue);
     until result or
