@@ -266,8 +266,8 @@ function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 // - on match, returns true and the time zone minutes offset in respect to UTC
 // - if P is not a time zone, returns false and leave Zone to its supplied value
 // - will recognize only the most used text values using a fixed table (RFC 822
-// with some extensions like -0000 as current system timezone) - using
-// numerical zones is the preferred way in recent RFC anyway
+// with some extensions like -0000 as current system timezone) - using numerical
+// zones is the preferred way in recent RFC anyway - accept xxxx xx:xx xx values
 function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean; overload;
 
 /// decode most used HTML TimeZone text values (CEST, GMT, +0200, -0800...)
@@ -1846,7 +1846,7 @@ const
 
 function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean;
 var
-  z: integer;
+  z, sign: integer;
   s: PUtf8Char;
 begin
   result := false;
@@ -1854,34 +1854,49 @@ begin
     exit;
   P := GotoNextNotSpace(P);
   s := P;
-  if PCardinal(s)^ and $ffffff =
-       ord('G') + ord('M') shl 8 + ord('T') shl 16 then
+  if (s^ = 'Z') or // Zulu is de-facto default in most public APIs
+     (PCardinal(s)^ and $ffffff =
+       ord('G') + ord('M') shl 8 + ord('T') shl 16) then // HTTP default
   begin
-    // GMT is the most common case (always for HTTP dates)
-    P := GotoNextNotSpace(s + 3);
+    inc(s);
+    if s^ <> 'Z' then
+      inc(s, 2);
+    P := GotoNextNotSpace(s);
     Zone := 0;
     result := true;
   end
   else if (s^ = '+') or
           (s^ = '-') then
   begin
-    // +xxx -xxx numbers
+    sign := 1;
+    if s^ = '-' then
+      sign := -1;
+    // +xxxx -xxxx +xx:xx -xx:xx +xx -xx numbers
     if not (s[1] in ['0'..'9']) or
-       not (s[2] in ['0'..'9']) or
-       not (s[3] in ['0'..'9']) or
-       not (s[4] in ['0'..'9']) then
+       not (s[2] in ['0'..'9']) then
       exit;
-    if (s^ = '-') and
-       (PCardinal(s + 1)^ = $30303030) then // '-0000' for current local
+    z := integer(ord(s[1]) * 10 + ord(s[2]) - (48 + 480)) * 60;
+    if s[3] in ['0'..'9', ':'] then
+    begin
+      if s[3] = ':' then
+      begin
+        inc(s);
+        inc(P);
+      end;
+      if not (s[3] in ['0'..'9']) or
+         not (s[4] in ['0'..'9']) then
+        exit;
+      inc(z, (ord(s[3]) * 10 + ord(s[4]) - (48 + 480)));
+      inc(P, 5);
+    end
+    else
+      inc(P, 3);
+    if (z = 0) and
+       (sign < 0) then          // '-0000' for current local
       Zone := TimeZoneLocalBias // retrieved once at startup
     else
-    begin
-      Zone := (ord(s[1]) * 10 + ord(s[2]) - (48 + 480)) * 60 +
-              (ord(s[3]) * 10 + ord(s[4]) - (48 + 480));
-      if P^ = '-' then
-        Zone := -Zone;
-    end;
-    P := GotoNextNotSpace(s + 5);
+      Zone := z * sign;
+    P := GotoNextNotSpace(P);
     result := true;
   end
   else
