@@ -1514,7 +1514,7 @@ type
     procedure SetFileName(const name: TFileName);
     procedure SetMetricsFolder(const folder: TFileName);
     function OnBackgroundExecute(const ctx: TOnDhcpBackgroundExecute): boolean;
-    procedure OnBackgroundExecuted(Sender: TSynBackgroundQueue; Event: pointer);
+    function OnBackgroundScript(Sender: TSynBackgroundQueue; Event: pointer): boolean;
     // ComputeResponse() virtual sub-methods for proper logic customization
     procedure DoLog(Level: TSynLogLevel; const Context: ShortString;
       const State: TDhcpState); virtual;
@@ -5505,24 +5505,42 @@ begin
     result := LoadFromText(txt); // make fScopeSafe.WriteLock/WriteUnlock
 end;
 
-procedure TDhcpProcess.OnBackgroundExecuted(Sender: TSynBackgroundQueue; Event: pointer);
+function TDhcpProcess.OnBackgroundScript(Sender: TSynBackgroundQueue;
+  Event: pointer): boolean;
 var
   ctx: ^TOnDhcpBackgroundExecute absolute Event;
   res: integer; // not PtrInt
   scope: PDhcpScope;
+  start, stop: Int64;
   msg: RawUtf8;
+  us: TShort16;
 begin
+  result := true; // continue de-queuing as much as possible
   // ensure this notification is not expired (may happen if script is broken)
   if ctx^.expiredtix32 < GetTickSec then
-    exit;
-  // execute the notification script in this background thread
-  res := 0;
-  try
-    // safer to use a timeout at 20s - even if typical around 100ms
-    msg := RunRedirect(ctx^.cmd, @res, nil, {ms=}20 * MilliSecsPerSec);
-    // todo: use direct Samba AD connection via GSS-TSIG
-  except
-    res := -1;
+  begin
+    msg := 'deprecated';
+    res := -2;
+    us[0] := #0;
+  end
+  else
+  begin
+    QueryPerformanceMicroSeconds(start);
+    try
+      // execute the notification script in this background thread
+      res := 0;
+      // safer to use a timeout at 20s - even if typically < 100ms
+      msg := RunRedirect(ctx^.cmd, @res, nil, {ms=}20 * MilliSecsPerSec);
+    except
+      on E: Exception do
+      begin
+        Make([PClass(E)^, ': ', E.Message], msg);
+        res := -3;
+      end;
+    end;
+    QueryPerformanceMicroSeconds(stop);
+    MicroSecToString(stop - start, us);
+    AppendShortCharSafe(' ', us);
   end;
   // notify the scope
   fScopeSafe.ReadLock;
@@ -5535,7 +5553,10 @@ begin
         inc(scope^.Metrics.Current[dsmDdnsNotified]);
       end
       else
+      begin
+        scope^.DnsScriptLastTix32 := 0;          // force S=0 for option 81
         inc(scope^.Metrics.Current[dsmDdnsFailed]);
+      end;
   finally
     fScopeSafe.ReadUnLock;
   end;
@@ -5543,14 +5564,18 @@ begin
   if res = 0 then
   begin
     Sender.OnProcessMS := 1000; // back to normal retry pace
-    fLog.Add.Log(sllTrace, 'Background %', [ctx^.cmd]);
+    fLog.Add.Log(sllTrace, 'Background %%', [us, ctx^.cmd]);
   end
   else
   begin
-    // error execution or timeout: retry with an increasing delay up to 1 minute
-    Sender.EnQueue(ctx, {now=}false);
-    Sender.OnProcessMS := MinPtrUInt(MilliSecsPerMin, NextGrow(Sender.OnProcessMS));
-    fLog.Add.Log(sllWarning, 'Background % = % [%]', [ctx^.cmd, res, msg]);
+    if msg <> 'deprecated' then
+    begin
+      // error execution or timeout: retry with an increasing delay up to 1 min
+      Sender.EnQueue(ctx, {now=}false);
+      Sender.DelayProcess(MilliSecsPerMin);
+      result := false; // stop de-queeing until next delayed OnProcessMS
+    end;
+    fLog.Add.Log(sllWarning, 'Background %% = % [%]', [us, ctx^.cmd, res, msg]);
   end;
 end;
 
@@ -5563,7 +5588,7 @@ begin
       try
         if fBackgroundExecute = nil then
           fBackgroundExecute := TSynBackgroundQueue.Create('dhcp ddns',
-            TypeInfo(TOnDhcpBackgroundExecutes), 1000, OnBackgroundExecuted);
+            TypeInfo(TOnDhcpBackgroundExecutes), 1000, OnBackgroundScript);
       finally
         GlobalUnLock;
       end;
