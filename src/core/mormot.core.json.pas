@@ -8469,10 +8469,13 @@ begin
   // regular JSON unserialization using nested fields/properties
   j := GotoNextNotSpace(Ctxt.Json);
   if j^ <> '{' then
-  begin
-no: Ctxt.Valid := false;
-    exit;
-  end;
+    if Ctxt.ParseNull then
+      exit // allow 'null' as void entry
+    else
+    begin
+no:   Ctxt.Valid := false;
+      exit;
+    end;
   repeat
     inc(j);
   until not (j^ in [#1..' ']);
