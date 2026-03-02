@@ -810,6 +810,7 @@ const
   HTTP_32    = ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24;
   HTTP__32   = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24;
   HTTP__24   = ord(':') + ord('/') shl 8 + ord('/') shl 16;
+  NTLM_LOW   = ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24;
   HEAD_32    = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
   GET_24     = ord('G') + ord('E') shl 8 + ord('T') shl 16;
   PUT_24     = ord('P') + ord('U') shl 8 + ord('T') shl 16;
