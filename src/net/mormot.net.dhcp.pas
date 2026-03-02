@@ -840,7 +840,6 @@ type
     expiredtix32: cardinal;
     ip4: TNetIP4;
     cmd: TFileName;
-    { TODO: support concatenations for efficient kinit + nsupdate -g }
   end;
   TOnDhcpBackgroundExecutes = array of TOnDhcpBackgroundExecute;
 
@@ -1440,6 +1439,7 @@ type
     fMetricsFolder: TFileName;
     fFileFlushSeconds: cardinal;
     fMetricsCsvMinutes: cardinal;
+    fDnsScriptThreads: cardinal;
     fOptions: TDhcpServerOptions;
     fScope: TDhcpScopeSettingsObjArray;
   public
@@ -1480,6 +1480,10 @@ type
     /// customize server-level options, when Scope[].Options are not enough
     property Options: TDhcpServerOptions
       read fOptions write fOptions;
+    /// how many threads the DNS scripts should be running from
+    // - default 1 should be enough, but it would help scaling if needed
+    property DnsScriptThreads: cardinal
+      read fDnsScriptThreads write fDnsScriptThreads default 1;
     /// store the per subnet scope settings
     property Scope: TDhcpScopeSettingsObjArray
       read fScope;
@@ -1500,7 +1504,7 @@ type
   protected
     fScopeSafe: TRWLightLock; // multi-read reentrant lock to protect Scope[]
     fScope: TDhcpScopes;
-    fFileFlushSeconds, fMetricsCsvSeconds: cardinal;
+    fFileFlushSeconds, fMetricsCsvSeconds, fDnsScriptThreads: cardinal;
     fIdleTix, fFileFlushTix, fMetricsCsvTix, fModifSequence, fModifSaved: cardinal;
     fLog: TSynLogClass;
     fFileName, fMetricsFolder, fMetricsJson: TFileName;
@@ -4803,6 +4807,7 @@ begin
   inherited Create;
   fFileFlushSeconds := 30; // good tradeoff: low disk writes, still safe for PXE
   fMetricsCsvMinutes := 5;
+  fDnsScriptThreads := 1;
 end;
 
 function TDhcpServerSettings.Verify: string;
@@ -4932,6 +4937,7 @@ begin
     if aSettings.FileName <> '' then
       SetFileName(aSettings.FileName); // LoadFromFile() once fScope[] are set
     fFileFlushSeconds := aSettings.FileFlushSeconds;
+    fDnsScriptThreads := aSettings.DnsScriptThreads;
     fMetricsCsvSeconds := aSettings.MetricsCsvMinutes * SecsPerMin;
     fMetricsFolder := '';
     if aSettings.MetricsFolder <> '' then
@@ -5587,8 +5593,9 @@ begin
       GlobalLock;
       try
         if fBackgroundExecute = nil then
-          fBackgroundExecute := TSynBackgroundQueue.Create('dhcp ddns',
-            TypeInfo(TOnDhcpBackgroundExecutes), 1000, OnBackgroundScript);
+          fBackgroundExecute := TSynBackgroundQueue.Create(
+            'dhcp ddns', TypeInfo(TOnDhcpBackgroundExecutes), 1000,
+            OnBackgroundScript, fDnsScriptThreads);
       finally
         GlobalUnLock;
       end;
