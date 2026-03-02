@@ -2319,11 +2319,14 @@ begin
   fProcessEvent.SetEvent; // notify Execute main loop
 end;
 
+var
+  thrd_num: integer;
+
 procedure TSynBackgroundThreadAbstract.Execute;
 begin
   try
     if fThreadName = '' then
-      SetCurrentThreadName('%(%)', [self, pointer(self)])
+      SetCurrentThreadName('%(%)', [self, InterlockedIncrement(thrd_num)])
     else
       SetCurrentThreadName('%', [fThreadName]);
     if Assigned(fOnBeforeExecute) then
