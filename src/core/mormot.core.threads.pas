@@ -709,26 +709,29 @@ type
   TSynBackgroundQueue = class;
 
   /// event callback executed periodically by TSynBackgroundQueue
-  // - Event is a pointer to an aQueueTypeInfo item supplied to EnQueue()
-  TOnSynBackgroundQueueProcess = procedure(Sender: TSynBackgroundQueue;
-    Event: pointer) of object;
+  // - Event is a pointer to an aArrayTypeInfo item supplied to EnQueue()
+  // - should return true to continue de-queing events, or false to wait for
+  // the next Sender.ExecuteLoop iteration, following Sender.OnProcessMS pace
+  TOnSynBackgroundQueueProcess = function(Sender: TSynBackgroundQueue;
+    Event: pointer): boolean of object;
 
-  /// TThread able to run events from a queue at a given periodic pace
+  /// TThread able to run events from a RTTI queue at a given periodic pace
   TSynBackgroundQueue = class(TSynBackgroundThreadAbstract)
   protected
     fQueue: TSynQueue;
     fOnProcess: TOnSynBackgroundQueueProcess;
-    fOnProcessMS: cardinal;
+    fOnProcessMS, fLastIdleTix32: cardinal;
+    fExecuteLoopValue: TBytes;
     procedure ExecuteLoop; override;
   public
     /// initialize the thread and queue for a periodic task processing
-    // - aQueueTypeInfo should be TypeInfo() of a dynamic array of event items
-    constructor Create(const aThreadName: RawUtf8; aQueueTypeInfo: PRttiInfo;
+    // - aArrayTypeInfo should be TypeInfo() of a dynamic array of event items
+    constructor Create(const aThreadName: RawUtf8; aArrayTypeInfo: PRttiInfo;
       aOnProcessMS: cardinal; const aOnProcess: TOnSynBackgroundQueueProcess = nil); reintroduce;
     /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// add an event message to the internal processing queue
-    // - event parameter should point to one aQueueTypeInfo item
+    // - event parameter should point to one aArrayTypeInfo item
     procedure EnQueue(Event: pointer; ExecuteNow: boolean = false);
     /// access to the associated thread-safe queue
     property RawQueue: TSynQueue
@@ -739,9 +742,13 @@ type
     /// access to the delay, in milliseconds, of the periodic task processing
     property OnProcessMS: cardinal
       read fOnProcessMS write fOnProcessMS;
-    /// returns TRUE if there is currenly some queued event running in OnProcess
+    /// true if there is currenly some event running in OnProcess/ExecuteLoop
     property Processing: boolean
       read fProcessing;
+    /// true if there are some events in the internal queue
+    // - have e.g. Pending=false but Processing=true if the last event is running
+    function Pending: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
   TSynBackgroundTimer = class;
@@ -2619,44 +2626,55 @@ end;
 { TSynBackgroundQueue }
 
 constructor TSynBackgroundQueue.Create(const aThreadName: RawUtf8;
-  aQueueTypeInfo: PRttiInfo; aOnProcessMS: cardinal;
+  aArrayTypeInfo: PRttiInfo; aOnProcessMS: cardinal;
   const aOnProcess: TOnSynBackgroundQueueProcess);
 begin
-  fQueue := TSynQueue.Create(aQueueTypeInfo, aThreadName);
+  fQueue := TSynQueue.Create(aArrayTypeInfo, aThreadName);
   fOnProcess := aOnProcess;
   fOnProcessMS := aOnProcessMS;
+  SetLength(fExecuteLoopValue, fQueue.Values.ItemSize); // temp fQueue.Pop()
   inherited Create(aThreadName, nil, TSynLogFamily.OnThreadEnded);
 end;
 
 destructor TSynBackgroundQueue.Destroy;
 begin
-  inherited Destroy;
-  fQueue.Free;
+  inherited Destroy; // calls WaitForNotExecuting()
+  FreeAndNil(fQueue);
 end;
 
 procedure TSynBackgroundQueue.ExecuteLoop;
 var
-  tmp: TSynTempBuffer;
+  clean: boolean;
+  tix32: cardinal;
 begin
+  // follow the proper execution period
   fProcessEvent.WaitFor(fOnProcessMS);
-  if not fQueue.Pending then
+  if Terminated then
     exit;
-  fProcessing := true;
-  tmp.InitZero(fQueue.fValues.ItemSize); // temporary value item on stack
-  try
-    while fQueue.Pop(tmp.buf^) do        // next pending item
-    begin
-      if Assigned(fOnProcess) then
-        try
-          fOnProcess(self, tmp.buf);
-        except
-          ;
-        end;
-      fQueue.fValues.ItemClear(tmp.buf); // reset between Pop() iterations
+  // process all pending events
+  if fQueue.Pending then
+  begin
+    fProcessing := true;
+    clean := true;
+    try
+      while fQueue.Pop(pointer(fExecuteLoopValue)^) do // next pending event
+      begin
+        clean := false;
+        if Assigned(fOnProcess) then
+          try
+            if not fOnProcess(self, pointer(fExecuteLoopValue)) then
+              break; // callback=false -> don't Pop() any more until next loop
+          except
+            break;   // wait a little bit before retry
+          end;
+        fQueue.Values.ItemClear(pointer(fExecuteLoopValue)); // finalize + 0
+        clean := true;
+      end;
+    finally
+      if not clean then
+        fQueue.Values.ItemClear(pointer(fExecuteLoopValue));
+      fProcessing := false;
     end;
-  finally
-    tmp.Done;                            // likely to be stack-allocated
-    fProcessing := false;
   end;
 end;
 
