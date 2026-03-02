@@ -253,15 +253,15 @@ type
     function GetValue(const Name: RawUtf8): Variant;
     procedure SetValue(const Name: RawUtf8; const Value: Variant);
     /// check and return a given property by name
-    // - returns TRUE and fill Value with the value associated with the supplied
+    // - returns true and fill Value with the value associated with the supplied
     // Name, using an internal R/W lock for thread-safety
-    // - returns FALSE if the Name was not found, releasing the internal lock:
+    // - returns false if the Name was not found, releasing the internal lock:
     // use ExistsOrLock() if you want to add the missing value
     function Exists(const Name: RawUtf8; out Value: Variant): boolean;
     /// check and return a given property by name
-    // - returns TRUE and fill Value with the value associated with the supplied
+    // - returns true and fill Value with the value associated with the supplied
     // Name, using an internal R/W lock for thread-safety
-    // - returns FALSE and set the internal lock if Name does not exist:
+    // - returns false and set the internal lock if Name does not exist:
     // caller should then release the lock via ReplaceAndUnlock() or UnLock
     function ExistsOrLock(const Name: RawUtf8; out Value: Variant): boolean;
     /// set a value by property name, and set a local copy
@@ -273,9 +273,9 @@ type
     procedure ReplaceAndUnlock(const Name: RawUtf8; const Value: Variant;
       out LocalValue: Variant);
     /// add an existing property value to the given TDocVariant document object
-    // - returns TRUE and add the Name/Value pair to Obj if Name is existing,
+    // - returns true and add the Name/Value pair to Obj if Name is existing,
     // using an internal R/W lock for thread-safety
-    // - returns FALSE if Name is not existing in the stored document, and
+    // - returns false if Name is not existing in the stored document, and
     // lock the internal storage: caller should eventually release the lock
     // via AddNewPropAndUnlock() or UnLock
     // - could be used as such, for implementing a thread-safe cache:
@@ -295,10 +295,10 @@ type
     // AddNewPropAndUnlock()
     procedure UnLock;
     /// add an existing property value to the given TDocVariant document object
-    // - returns TRUE and add the Name/Value pair to Obj if Name is existing
-    // - returns FALSE if Name is not existing in the stored document
+    // - returns true and add the Name/Value pair to Obj if Name is existing
+    // - returns false if Name is not existing in the stored document
     // - this method would use a R/W lock during the Name lookup, but would always
-    // release the lock, even if returning FALSE (see AddExistingPropOrLock)
+    // release the lock, even if returning false (see AddExistingPropOrLock)
     function AddExistingProp(const Name: RawUtf8; var Obj: variant): boolean;
     /// add a property value to the given TDocVariant document object
     // - this method would not expect the resource to be locked when called,
@@ -457,6 +457,13 @@ type
   /// event prototype used e.g. by TSynBackgroundThreadAbstract and TSynThread callbacks
   TOnNotifyThread = procedure(Sender: TThread) of object;
 
+  /// state machine status of the TSynBackgroundThreadAbstract process
+  TSynBackgroundThreadProcessStep = (
+    flagIdle,
+    flagStarted,
+    flagFinished,
+    flagDestroying);
+
   /// abstract TThread with its own execution content
   // - you should not use this class directly, but use either
   // TSynBackgroundThreadMethodAbstract / TSynBackgroundThreadEvent /
@@ -469,6 +476,7 @@ type
     fThreadName: RawUtf8;
     fExecute: (exCreated, exRun, exFinished);
     fExecuteLoopPause, fProcessing: boolean;
+    fPendingProcessFlag: TSynBackgroundThreadProcessStep;
     procedure SetExecuteLoopPause(dopause: boolean);
     /// where the main process takes place
     procedure Execute; override;
@@ -485,16 +493,15 @@ type
     /// properly terminate the thread
     // - called by reintroduced Terminate
     procedure TerminatedSet; override;
-    /// release used resources
-    // - calls WaitForNotExecuting(100) for proper finalization
+    /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// wait for Execute/ExecuteLoop to be ended (i.e. fExecute<>exRun)
     // - call Sleep() in a loop until the timeout is reached
     // - used e.g. in Destroy to avoid any GPF and ensure clean finalization
     procedure WaitForNotExecuting(maxMS: integer = 500);
     /// safe version of Sleep() which won't break the thread process
-    // - returns TRUE if the thread was Terminated
-    // - returns FALSE if successfully waited up to MS milliseconds
+    // - returns true if the thread was Terminated
+    // - returns false if successfully waited up to MS milliseconds
     function SleepOrTerminated(MS: cardinal): boolean;
     /// temporary stop the execution of ExecuteLoop, until set back to false
     // - may be used e.g. by TSynBackgroundTimer to delay the process of
@@ -507,13 +514,6 @@ type
     property ProcessEvent: TSynEvent
       read fProcessEvent;
   end;
-
-  /// state machine status of the TSynBackgroundThreadAbstract process
-  TSynBackgroundThreadProcessStep = (
-    flagIdle,
-    flagStarted,
-    flagFinished,
-    flagDestroying);
 
   /// state machine statuses of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
@@ -535,7 +535,6 @@ type
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnBeforeProcess: TOnNotifyThread;
     fOnAfterProcess: TOnNotifyThread;
-    fPendingProcessFlag: TSynBackgroundThreadProcessStep;
     procedure ExecuteLoop; override;
     function OnIdleProcessNotify(var start: Int64): Int64; // return elapsed ms
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -556,7 +555,7 @@ type
     constructor Create(const aOnIdle: TOnIdleSynBackgroundThread;
       const aThreadName: RawUtf8; const OnBeforeExecute: TOnNotifyThread = nil;
       const OnAfterExecute: TOnNotifyThread = nil); reintroduce;
-    /// finalize the thread
+    /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
     // - wait until process is finished, calling OnIdle() callback in
@@ -584,7 +583,7 @@ type
     // the background process to finish until RunAndWait() will return
     property OnIdle: TOnIdleSynBackgroundThread
       read fOnIdle write fOnIdle;
-    /// TRUE if the background thread is active, and OnIdle event is called
+    /// true if the background thread is active, and OnIdle event is called
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
     property OnIdleBackgroundThreadActive: boolean
@@ -792,7 +791,7 @@ type
       aOnAfterExecute: TOnNotifyThread = nil;
       aStats: TSynMonitorClass = nil;
       aLogClass: TSynLogClass = nil); reintroduce; virtual;
-    /// finalize the thread
+    /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// define a process method for a task running on a periodic number of seconds
     // - for background process on a mORMot service, consider using TRest
@@ -844,7 +843,7 @@ type
     /// low-level access to the internal task list wrapper and safe
     property Tasks: TDynArrayLocked
       read fTasks;
-    /// returns TRUE if there is currenly some tasks processed
+    /// returns true if there is currenly some tasks processed
     property Processing: boolean
       read fProcessing;
   end;
@@ -891,16 +890,16 @@ type
     function WaitFor(TimeOutMS: integer): TBlockingEvent; reintroduce; overload;
     /// should be called by the background process when it is finished
     // - the caller would then let its WaitFor method return
-    // - returns TRUE on success (i.e. status was not evRaised or evTimeout)
+    // - returns true on success (i.e. status was not evRaised or evTimeout)
     // - if the instance is already locked (e.g. when retrieved from
-    // TBlockingProcessPool.FromCallLocked), you may set alreadyLocked=TRUE
+    // TBlockingProcessPool.FromCallLocked), you may set alreadyLocked=true
     function NotifyFinished(alreadyLocked: boolean = false): boolean; virtual;
     /// just a wrapper to reset the internal Event state to evNone
     // - may be used to re-use the same TBlockingProcess instance, after
     // a successful WaitFor/NotifyFinished process
-    // - returns TRUE on success (i.e. status was not evWaiting), setting
+    // - returns true on success (i.e. status was not evWaiting), setting
     // the current state to evNone, and the Call property to 0
-    // - if there is a WaitFor currently in progress, returns FALSE
+    // - if there is a WaitFor currently in progress, returns false
     function Reset: boolean; virtual;
     /// just a wrapper around fSafe^.Lock
     procedure Lock;
@@ -963,7 +962,7 @@ type
     // - may be used e.g. from the callback of the asynchronous process
     // to set some additional parameters to the inherited TBlockingProcess,
     // then call NotifyFinished to release the caller WaitFor
-    // - if leavelocked is TRUE, the returned instance would be locked: caller
+    // - if leavelocked is true, the returned instance would be locked: caller
     // should execute result.Unlock or NotifyFinished(true) after use
     function FromCall(call: TBlockingProcessPoolCall;
       locked: boolean = false): TBlockingProcessPoolItem; virtual;
@@ -1063,8 +1062,8 @@ type
     /// initialize the thread instance, in non suspended state
     constructor Create(CreateSuspended: boolean); reintroduce; virtual;
     /// safe version of Sleep() which won't break the thread process
-    // - returns TRUE if the thread was Terminated
-    // - returns FALSE if successfully waited up to MS milliseconds
+    // - returns true if the thread was Terminated
+    // - returns false if successfully waited up to MS milliseconds
     function SleepOrTerminated(MS: cardinal): boolean;
     /// ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
     property StartNotified: TObject
@@ -2321,7 +2320,7 @@ begin
   fProcessEvent.SetEvent;   // notify terminated
   fCallerEvent.WaitForEver; // wait for actual termination
   FreeAndNilSafe(fCallerEvent);
-  inherited Destroy;
+  inherited Destroy;        // calling WaitForNotExecuting() if needed
 end;
 
 function TSynBackgroundThreadMethodAbstract.GetPendingProcess:
@@ -4102,7 +4101,7 @@ begin
   {$ifdef OSWINDOWS}
   if IsWow64Emulation then
     if aThreadPoolCount > 4 then
-      aThreadPoolCount := 4; // Windows PRISM does not like too much threads
+      aThreadPoolCount := 4; // Windows PRISM does not like too many threads
   {$endif OSWINDOWS}
 end;
 
