@@ -4998,6 +4998,13 @@ procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 function ObjArrayAdd(var aObjArray; aItem: TObject;
   var aSafe: TLightLock; aCount: PInteger = nil): PtrInt; overload;
 
+/// wrapper to implement a thread-safe T*ObjArray dynamic array copy
+// - will make aCopyArray := aObjArray; and aCopyArray := nil; within the lock
+// - returns the length of aCopyArray local copy - may be = aCount^
+// - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
+function ObjArrayLocalCopy(var aObjArray, aCopyArray;
+  var aSafe: TLightLock; aCount: PInteger = nil): PtrInt;
+
 /// wrapper to implement a thread-safe pointer dynamic array storage
 // - warning: aCount^ should be a 32-bit "integer" variable, not a PtrInt
 function PtrArrayDelete(var aPtrArray; aItem: pointer; var aSafe: TLightLock;
@@ -11548,6 +11555,25 @@ begin
   else
     result := PtrArrayAdd(aObjArray, aItem);
   aSafe.UnLock;
+end;
+
+function ObjArrayLocalCopy(var aObjArray, aCopyArray;
+  var aSafe: TLightLock; aCount: PInteger): PtrInt;
+begin
+  TObjectDynArray(aCopyArray) := nil; // release dest outside of the lock
+  aSafe.Lock;
+  pointer(aCopyArray) := pointer(aObjArray); // no refcount involved
+  pointer(aObjArray) := nil;
+  aSafe.UnLock;
+  result := length(TObjectDynArray(aCopyArray));
+  if (aCount = nil) or
+     (aCount^ = result) then
+    exit;
+  result := aCount^;
+  if result = 0 then
+    TObjectDynArray(aCopyArray) := nil
+  else
+    DynArrayFakeLength(pointer(aCopyArray), result); // just truncate
 end;
 
 function PtrArrayDelete(var aPtrArray; aItem: pointer; var aSafe: TLightLock;

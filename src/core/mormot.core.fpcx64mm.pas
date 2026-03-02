@@ -1083,7 +1083,7 @@ asm
         mov     r11, [rax] // very simple (and quick) linked list pattern
         mov     [r10], r11
         dec     dword ptr [rbx].TSmallBlockType.LastFreeCount
-        test    rax, rax
+        test    rax, rax   // dec above did change the z flag
 @done:  mov     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
         // nz = rax=to be freed or z = nothing found - modifies r10+r11
 end;
@@ -2473,7 +2473,7 @@ asm
         pause
         jmp     @Atom2
 @Atom3: mov     rax, [r10]
-        mov     [rcx], rax
+        mov     [rcx], rax  // very simple linked list
         mov     [r10], rcx
         inc     dword ptr [rbx].TSmallBlockType.LastFreeCount
         mov     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
@@ -3367,7 +3367,7 @@ begin
   {$endif FPCMM_SMALLNOTWITHMEDIUM}
   SmallBlockInfo.IsMultiThreadPtr := @IsMultiThread; // call GOT if needed
   small := @SmallBlockInfo;
-  assert(SizeOf(small^) = 1 shl SmallBlockTypePO2);
+  assert(SizeOf(small^) = 1 shl SmallBlockTypePO2);  // exactly 64 bytes
   for a := 0 to NumTinyBlockArenas do
     for i := 0 to NumSmallBlockTypes - 1 do
     begin
