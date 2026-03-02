@@ -2738,7 +2738,7 @@ end;
 destructor TSynBackgroundQueue.Destroy;
 begin
   inherited Destroy; // calls Terminate + WaitForNotExecuting()
-  fQueue.Values.ItemClear(pointer(fExecuteLoopValue)); // avoid memory leak
+  fQueue.Values.ItemClear(pointer(fExecuteLoopValue)); // eventual cleaning
   if fOwner = nil then
     fQueue.Free; // owned by the main thread
   fQueue := nil;
@@ -2748,9 +2748,12 @@ procedure TSynBackgroundQueue.TerminatedSet;
 var
   i: PtrInt;
 begin
-  if not Terminated then        // propagate once
+  if fSubThreads <> nil then    // propagate once
+  begin
     for i := 0 to high(fSubThreads) do
       fSubThreads[i].Terminate; // trigger each ProcessEvent
+    fSubThreads := nil;         // don't access any more to avoid GPF
+  end;
   inherited TerminatedSet;
 end;
 
