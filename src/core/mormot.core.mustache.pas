@@ -888,6 +888,9 @@ begin
     end;
 end;
 
+const
+  _IND32 = (ord('-') and $df) + ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24;
+
 function TSynMustacheContextVariant.GetVarDataFromContext(ValueSpace: integer;
   const ValueName: RawUtf8; var Value: TVarData): TSynMustacheSectionType;
 var
@@ -916,8 +919,7 @@ begin
           if Value.VType >= varNull then
             exit;
         end
-        else if PCardinal(ValueName)^ and $dfdfdfdf = (ord('-') and $df) +
-               ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24 then
+        else if PCardinal(ValueName)^ and $dfdfdfdf = _IND32 then
         begin
           // {{-index}}
           Value.VType := varInteger;
@@ -1113,8 +1115,7 @@ begin
       if (d <> nil) and
          (ListCount >= 0) then
         // within a list
-        if PCardinal(ValueName)^ and $dfdfdfdf = (ord('-') and $df) +
-             ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24 then
+        if PCardinal(ValueName)^ and $dfdfdfdf = _IND32 then
         begin
           // {{-index}} pseudo name
           Temp.VInteger := ListCurrent;
