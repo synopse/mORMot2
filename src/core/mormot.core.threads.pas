@@ -80,8 +80,8 @@ type
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
-    procedure InternalPop(aValue: pointer);
     procedure InternalGrow;
+    function InternalPop(aValue: pointer): boolean;
     function InternalDestroying(incPopCounter: integer): boolean;
     function InternalWaitDone(starttix, endtix: Int64; const OnIdle: TThreadMethod): boolean;
     function ReadOnlyLockedCount: integer;
@@ -1616,11 +1616,17 @@ begin
      (fFirst >= 0) then
   begin
     fSafe.ReadOnlyLock;
+    {$ifdef HASFASTTRYFINALLY}
     try
+    {$else}
+    begin
+    {$endif HASFASTTRYFINALLY}
       result := fFirst >= 0;
       if result then
         fValues.ItemCopyAt(fFirst, @aValue);
+    {$ifdef HASFASTTRYFINALLY}
     finally
+    {$endif HASFASTTRYFINALLY}
       fSafe.ReadOnlyUnLock;
     end;
   end
@@ -1628,10 +1634,10 @@ begin
     result := false;
 end;
 
-procedure TSynQueue.InternalPop(aValue: pointer);
+function TSynQueue.InternalPop(aValue: pointer): boolean;
 begin
-  fValues.ItemMoveTo(fFirst, aValue); // caller made ReadWriteLock
-  fSafe.WriteLock;
+  // caller should have made fSafe.WriteLock + ensured fFirst >= 0
+  fValues.ItemMoveTo(fFirst, aValue);
   if fFirst = fLast then
   begin
     fFirst := -1; // reset whole store (keeping current capacity)
@@ -1644,25 +1650,28 @@ begin
       // will retrieve from leading items
       fFirst := 0;
   end;
-  fSafe.WriteUnLock;
+  result := true; // for Pop/PopEquals code simplificity
 end;
 
 function TSynQueue.Pop(out aValue): boolean;
 begin
-  if (self <> nil) and
-     (fFirst >= 0) then
+  result := false;
+  if (self = nil) or
+     (fFirst < 0) then
+    exit;
+  fSafe.WriteLock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
   begin
-    fSafe.ReadWriteLock;
-    try
-      result := fFirst >= 0;
-      if result then
-        InternalPop(@aValue);
-    finally
-      fSafe.ReadWriteUnLock;
-    end;
-  end
-  else
-    result := false;
+  {$endif HASFASTTRYFINALLY}
+    if fFirst >= 0 then
+      result := InternalPop(@aValue);
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fSafe.WriteUnLock;
+  end;
 end;
 
 function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
@@ -1679,8 +1688,14 @@ begin
     if (fFirst >= 0) and
        (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) then
     begin
-      InternalPop(@aValue);
-      result := true;
+      fSafe.WriteLock; // upgrade to write, but need compare again
+      try
+        if (fFirst >= 0) and
+           (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) then
+          result := InternalPop(@aValue);
+      finally
+        fSafe.WriteUnLock;
+      end;
     end;
   finally
     fSafe.ReadWriteUnLock;
