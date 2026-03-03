@@ -96,7 +96,7 @@ type
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynQueue instance
     // - a name can optionally be assigned to this instance
-    // - you can specify some information to select the PopEquals/WaitPop comparer
+    // - you can customize the PopEquals/PeekCompare/Contains/WaitPop comparer
     constructor Create(aArrayTypeInfo: PRttiInfo; const aName: RawUtf8 = '';
       aKind: TRttiParserType = ptNone; aCaseInsensitive: boolean = false); reintroduce; virtual;
     {$ifdef HASGENERICS}
@@ -134,6 +134,9 @@ type
     // - returns false if the queue is empty
     // - this method is thread-safe, since it will read-lock the instance
     function Peek(out aValue): boolean;
+    /// compare the Peek() value with no transient copy
+    // - this method is thread-safe, since it will read-lock the instance
+    function PeekCompare(aAnother: pointer; aCompare: TDynArraySortCompare = nil): integer;
     /// wait and extract one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item within the
     // specified aTimeoutMS time
@@ -1669,6 +1672,36 @@ begin
   end
   else
     result := false;
+end;
+
+function TSynQueue.PeekCompare(aAnother: pointer; aCompare: TDynArraySortCompare): integer;
+begin
+  result := 0;
+  if self = nil then
+    exit;
+  result := 1;
+  if aAnother = nil then
+    exit; // aCompare(fFirst, aAnother = nil) = +1
+  result := -1;
+  if fFirst < 0 then
+    exit; // aCompare(fFirst = nil, aAnother) = -1
+  if not Assigned(aCompare) then
+    aCompare := fValues.Compare;
+  if not Assigned(aCompare) then
+    aCompare := @SortDynArrayByte;
+  fSafe.ReadOnlyLock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    if fFirst >= 0 then
+      result := aCompare(LockedNextPtr^, aAnother^);
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fSafe.ReadOnlyUnLock;
+  end;
 end;
 
 procedure TSynQueue.InternalPop(aValue: pointer);
