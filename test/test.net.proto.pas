@@ -138,7 +138,11 @@ var
   m: TSocketIOMessage;
   abc, event: RawUtf8;
   d: TDocVariantData;
+  ws: TSha1Digest;
 begin
+  // from https://datatracker.ietf.org/doc/html/rfc6455#section-1.3
+  ComputeChallenge('dGhlIHNhbXBsZSBub25jZQ==', ws);
+  CheckEqual(Sha1DigestToString(ws), 'b37a4f2cc0624f1690f64606cf385945b2bec4ea');
   // validate low-level Socket.IO message decoder
   Check(not m.Init(''));
   Check(not m.Init('z'));
