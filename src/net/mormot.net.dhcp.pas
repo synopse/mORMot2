@@ -815,7 +815,7 @@ type
     // some internal values for fast lookup and efficient Entry[] process
     LastDiscover, FreeListCount: integer;
     FreeList: TIntegerDynArray;
-    // on TDhcpScope.Main, redirect to pointer(TDhcpScope.Pools)
+    // on TDhcpScope.Main, redirect to IpMinLE-ordered pointer(TDhcpScope.Pools)
     SubPools: PDhcpPool;
     procedure EntryPreallocate;
   end;
@@ -1017,7 +1017,7 @@ type
     /// contains the client MAC address (raw Mac64) as human readable text
     // - ready for logging, with no memory allocation during the process
     // - may also contain hexadecimal UUID of static Option 61 client-identifier
-    Mac: string[63];
+    Mac: TShort63;
     /// some temporary storage for a StaticUuid[] fake DHCP lease
     Temp: TDhcpLease;
     /// high-level 'match and append' of all "rule" entries into Send
@@ -3618,7 +3618,7 @@ end;
 
 procedure InvalidRange(ident: PUtf8Char; ip: TNetIP4);
 begin
-  EDhcp.RaiseUtf8('PrepareScope: %:%', [ident, IP4ToShort(@ip)]);
+  EDhcp.RaiseUtf8('PrepareScope: %:% in "pool"', [ident, IP4ToShort(@ip)]);
 end;
 
 function SortPoolByIpMin(const A, B): integer;
@@ -3676,7 +3676,7 @@ begin
       r[i] := PoolRules[ndx[i]];
     for i := 0 to n - 1 do
       if p[i].IpMaxLE <= p[i + 1].IpMinLE then
-        InvalidRange('"pool" overlap in max', p[i].IpMax);
+        InvalidRange('overlap in max', p[i].IpMax);
     Pools := p;
     PoolRules := r;
   end;
