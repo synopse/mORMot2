@@ -76,10 +76,14 @@ type
   TSynQueue = class(TObjectStore)
   protected
     fValues: TDynArray;
-    fValueVar: pointer;
+    fValueVar: PAnsiChar;
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
+    function ReadOnlyLockedCount: integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    function LockedNextPtr: pointer;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure InternalGrow;
     function InternalPop(aValue: pointer): boolean;
     function InternalDestroying(incPopCounter: integer): boolean;
@@ -1634,6 +1638,11 @@ begin
     fCount := cap;
 end;
 
+function TSynQueue.LockedNextPtr: pointer;
+begin // slightly faster than TDynArray.ItemPtr()
+  result := fValueVar + PtrUInt(fFirst) * PtrUInt(fValues.Info.Cache.ItemSize);
+end;
+
 function TSynQueue.Peek(out aValue): boolean;
 begin
   if (self <> nil) and
@@ -1713,12 +1722,12 @@ begin
   fSafe.ReadWriteLock;
   try
     if (fFirst >= 0) and
-       (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) then
+       (aCompare(LockedNextPtr^, aAnother^) = 0) then
     begin
       fSafe.WriteLock; // upgrade to write, but need compare again
       try
         if (fFirst >= 0) and
-           (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) then
+           (aCompare(LockedNextPtr^, aAnother^) = 0) then
           result := InternalPop(@aValue);
       finally
         fSafe.WriteUnLock;
@@ -1792,7 +1801,7 @@ begin
         fSafe.ReadWriteLock;
         try
           if fFirst >= 0 then
-            result := fValues.ItemPtr(fFirst);
+            result := LockedNextPtr;
         finally
           if result = nil then
             fSafe.ReadWriteUnLock;
