@@ -1968,7 +1968,7 @@ begin
       exit;
     fFirst := 0;
     fLast := n - 1;
-    fValues.Count := n;
+    fValues.Count := NextGrow(n);
     p := fValues.Value^;
     info := fValues.Info.Cache.ItemInfoManaged;
     if info <> nil then // nil for unmanaged items
