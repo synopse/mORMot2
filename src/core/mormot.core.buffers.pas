@@ -6652,7 +6652,7 @@ begin
   if BinBytes = 0 then
     exit;
   destlen := BinToBase64Length(BinBytes);
-  if destlen > 255 then
+  if destlen > high(result) then
     exit; // avoid buffer overflow
   result[0] := AnsiChar(destlen);
   Base64Encode(@result[1], Bin, BinBytes);
@@ -7031,7 +7031,7 @@ begin
   if BinBytes <= 0 then
     exit;
   len := BinToBase64uriLength(BinBytes);
-  if len > 255 then
+  if len > high(result) then
     exit;
   byte(result[0]) := len;
   Base64uriEncode(@result[1], Bin, BinBytes, enc);
@@ -9678,13 +9678,13 @@ end;
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString;
 begin
   result[0] := AnsiChar(
-    EscapeBuffer(source, sourcelen, @result[1], 255) - @result[1]);
+    EscapeBuffer(source, sourcelen, @result[1], high(result)) - @result[1]);
 end;
 
 function EscapeToShort(const source: RawByteString): ShortString;
 begin
   result[0] := AnsiChar(
-    EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
+    EscapeBuffer(pointer(source), length(source), @result[1], high(result)) - @result[1]);
 end;
 
 function ContentAppend(source: PAnsiChar; len, pos, max: PtrInt; txt: PUtf8Char): integer;
@@ -9726,7 +9726,7 @@ end;
 
 procedure ContentToShortAppend(source: PAnsiChar; len: PtrInt; var txt: ShortString);
 begin
-  txt[0] := AnsiChar(ContentAppend(source, len, ord(txt[0]), 255, @txt[1]));
+  txt[0] := AnsiChar(ContentAppend(source, len, ord(txt[0]), high(txt), @txt[1]));
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
