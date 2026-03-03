@@ -10745,7 +10745,7 @@ end;
 
 procedure TTextWriterEscape.Toggle(style: TTextWriterEscapeStyle);
 const
-  HTML: array[tweBold..tweCode] of string[7] = (
+  HTML: array[tweBold..tweCode] of TShort7 = (
     'strong>', 'em>', 'code>');
 begin
   W.Add('<');
@@ -10774,9 +10774,9 @@ end;
 
 procedure TTextWriterEscape.SetLine(style: TTextWriterEscapeLineStyle);
 const
-  HTML: array[twlParagraph..twlCode3] of string[5] = (
+  HTML: array[twlParagraph..twlCode3] of TShort7 = (
     'p>', 'li>', 'li>', 'p>', 'code>', 'code>');
-  HTML2: array[twlOrderedList..twlCode3] of string[11] = (
+  HTML2: array[twlOrderedList..twlCode3] of TShort15 = (
     'ol>', 'ul>', 'blockquote>', 'pre>', 'pre>');
 begin
   if lst >= low(HTML) then

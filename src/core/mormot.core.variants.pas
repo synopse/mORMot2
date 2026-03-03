@@ -4368,7 +4368,7 @@ begin
 end;
 
 const
-  _VARDATATEXT: array[0.. varWord64 + 5] of string[10] = (
+  _VARDATATEXT: array[0.. varWord64 + 5] of TShort15 = (
     'Empty', 'Null', 'SmallInt', 'Integer', 'Single', 'Double', 'Currency',
     'Date', 'OleStr', 'Dispatch', 'Error', 'Boolean', 'Variant', 'Unknown',
     'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',

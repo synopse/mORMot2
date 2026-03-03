@@ -286,14 +286,14 @@ const
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a ShortString
-  BOOL_STR: array[boolean] of string[7] = (
+  BOOL_STR: array[boolean] of TShort7 = (
     'false', 'true');
 
   /// the JavaScript-like values of non-number IEEE constants
   // - as recognized by ShortToFloatNan, and used by TTextWriter.Add()
   // when serializing such single/double/extended floating-point values
   // - GetExtended() should also detect those values
-  JSON_NAN: array[TFloatNan] of string[11] = (
+  JSON_NAN: array[TFloatNan] of TShort15 = (
     '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
 var
@@ -6042,7 +6042,7 @@ end;
 
 function TextToUuid(const text: RawUtf8; out uuid: TGuid): boolean;
 var
-  tmp: string[36];
+  tmp: TShortGuid;
 begin
   result := false;
   if length(text) <> 36 then
@@ -6295,7 +6295,7 @@ end;
 // - all errors are cross-platform, e.g. when used in centralized servers
 
 const
-  NULL_STR: string[1] = '';
+  NULL_STR: TShort1 = '';
 
 function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
 begin
@@ -6489,7 +6489,7 @@ begin
 end;
 
 const
-  _PREFIX: array[0..5] of string[15] = (
+  _PREFIX: array[0..5] of TShort15 = (
     'WSA', 'ERROR_WINHTTP_', '', 'EXCEPTION_', 'SEC_', 'ERROR_');
 
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
@@ -6722,7 +6722,7 @@ const
     $70,  // aciPhytium
     $c0); // aciAmpere
 
-  ARMCPU_ID_TXT: array[TArmCpuType] of string[15] = (
+  ARMCPU_ID_TXT: array[TArmCpuType] of TShort15 = (
      '',
      'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
      'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
@@ -9241,7 +9241,7 @@ begin
 end;
 
 const
-  FD: array[boolean] of string[7] = ('File', 'Folder');
+  FD: array[boolean] of TShort7 = ('File', 'Folder');
 
 function TExecutableCommandLine.CheckFileName(const name: TFileName;
   isFolder: boolean): TFileName;
@@ -11678,7 +11678,7 @@ end;
 
 const
   // hardcoded to avoid linking mormot.core.rtti for GetEnumName()
-  _SERVICESTATE: array[TServiceState] of string[12] = (
+  _SERVICESTATE: array[TServiceState] of TShort15 = (
     'NotInstalled',
     'Stopped',
     'Starting',

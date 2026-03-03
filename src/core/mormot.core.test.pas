@@ -1093,7 +1093,7 @@ const
   endKind = [dot, paragraph, question];
 var
   n: integer;
-  s: TShort4;
+  s: TShort7;
   last: TKind;
   rnd: cardinal;
 begin

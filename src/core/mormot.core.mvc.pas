@@ -1027,7 +1027,7 @@ end;
 class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TTextWriter;
   const text: string; kind: THtmlTableStyleLabel);
 const
-  SETLABEL: array[THtmlTableStyleLabel] of string[7] = (
+  SETLABEL: array[THtmlTableStyleLabel] of TShort7 = (
     'danger', 'success', 'danger', 'success', 'primary');
 begin
   WR.AddShort('<span class="label label-');

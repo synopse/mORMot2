@@ -1504,7 +1504,7 @@ const
     'KX'); //  sarKeyExecute
 
   /// define how a sctAttribute is stored as SDDL
-  ATTR_SDDL: array[sctLocalAttribute .. sctDeviceAttribute] of string[10] = (
+  ATTR_SDDL: array[sctLocalAttribute .. sctDeviceAttribute] of TShort15 = (
    '',            // sctLocalAttribute
    '@User.',      // sctUserAttribute
    '@Resource.',  // sctResourceAttribute
@@ -3117,7 +3117,7 @@ procedure SddlInitialize; forward;
 var
   SddlInitialized: boolean; // delayed initialization of those lookup constants
   KNOWN_SID: array[TWellKnownSid] of RawSid;
-  KNOWN_SID_TEXT: array[TWellKnownSid] of string[23];
+  KNOWN_SID_TEXT: array[TWellKnownSid] of TShort23;
 
 const
   INTEGRITY_SID:
@@ -6938,7 +6938,7 @@ end;
 
 
 const
-  _WSP: array[TWinSystemPrivilege] of string[32] = (
+  _WSP: array[TWinSystemPrivilege] of TShort32 = (
     // note: string[32] to ensure there is a #0 terminator for all items
     'SeCreateTokenPrivilege',          // wspCreateToken
     'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
@@ -7129,7 +7129,7 @@ end;
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
   buf: TSynTempBuffer;
-  name: string[127];
+  name: TShort127;
   tp: PTOKEN_PRIVILEGES;
   i: PtrInt;
   len: cardinal;

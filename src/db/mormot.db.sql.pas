@@ -6437,9 +6437,9 @@ end;
 function TSqlDBStatement.FetchAllToCsvValues(Dest: TStream; Tab: boolean;
   CommaSep: AnsiChar; AddBOM: boolean): PtrInt;
 const
-  NULL: array[boolean] of string[7] = (
+  NULL: array[boolean] of TShort7 = (
     '"null"', 'null');
-  BLOB: array[boolean] of string[7] = (
+  BLOB: array[boolean] of TShort7 = (
     '"blob"', 'blob');
 var
   F, FMax: integer;

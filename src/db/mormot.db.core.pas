@@ -395,7 +395,7 @@ const
     'RawBlob');   // ftBlob
 
   /// return either 'ID' or RowID'
-  ID_SHORT: array[{RowID=}boolean] of string[7] = ('ID', 'RowID');
+  ID_SHORT: array[{RowID=}boolean] of TShort7 = ('ID', 'RowID');
 
 var
   /// contains 'ID' as UTF-8 text with positive RefCnt (avoid const realloc)
@@ -2982,7 +2982,7 @@ end;
 { TResultsWriter }
 
 const
-  VOID_ARRAYFIELD: array[boolean] of string[16] = (
+  VOID_ARRAYFIELD: array[boolean] of TShort16 = (
     '[]'#10, '{"FieldCount":0}'); // same as sqlite3_get_table()
 
 procedure TResultsWriter.CancelAllVoid;

@@ -9304,9 +9304,9 @@ var
 begin
   result := -1;
   if (Source = nil) or
-     (fInfo.Cache.ItemSize > SizeOf(tmp)) then
+     (fInfo.Cache.ItemSize > SizeOf(tmp)) then // no record should be > 2KB
     exit;
-  if fInfo.Cache.ItemInfoManaged = nil then // nil for unmanaged items
+  if fInfo.Cache.ItemInfoManaged = nil then    // nil for unmanaged items
     data := Source
   else
   begin

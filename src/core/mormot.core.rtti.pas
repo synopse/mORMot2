@@ -1871,8 +1871,8 @@ function ObjectFromInterfaceImplements(const aValue: IInterface;
   const aInterface: TGuid): boolean;
 
 const
-  PSEUDO_RESULT_NAME: string[6] = 'Result';
-  PSEUDO_SELF_NAME:   string[4] = 'Self';
+  PSEUDO_RESULT_NAME: TShort7 = 'Result';
+  PSEUDO_SELF_NAME:   TShort7 = 'Self';
 
 
 

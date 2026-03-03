@@ -570,37 +570,41 @@ type
   {$M-}
 
 type
-  /// 128-bytes used e.g. by TNetAddr.IPShort() as output buffer
+  /// 128-bytes aligned shortstring - e.g. for TNetAddr.IPShort()
   TShort127 = string[127];
   PShort127 = ^TShort127;
 
-  /// used e.g. to serialize up to 256-bit binary as hexadecimal
+  /// used to serialize up to 256-bit binary as hexadecimal
   TShort64 = string[64];
   PShort64 = ^TShort64;
 
-  /// a shortstring which takes 64 bytes of memory
+  /// 64-bytes aligned shortstring - e.g. for GetCurrentThreadInfo
   TShort63 = string[63];
   PShort63 = ^TShort63;
 
-  /// a shortstring which takes 48 bytes of memory - e.g. for StatusCodeToShort
+  /// 48-bytes aligned shortstring - e.g. for StatusCodeToShort
   TShort47 = string[47];
   PShort47 = ^TShort47;
 
-  /// a shortstring which takes 32 bytes of memory - e.g. for SetThreadName
+  /// 40-bytes aligned shortstring - e.g. for THttpDateNowUtc/TShortGuid
+  TShort39 = string[39];
+
+  /// used to serialize up to 128-bit binary as hexadecimal
+  TShort32 = string[32];
+
+  /// 32-bytes aligned shortstring - e.g. for SetThreadName
   TShort31 = string[31];
   PShort31 = ^TShort31;
 
-  /// used e.g. by TwoDigits, ToShort/ToShortU or Int64ToHttpEtag
+  /// 24-bytes aligned shortstring - e.g. for TwoDigits/ToShort/Int64ToHttpEtag
   TShort23 = string[23];
   PShort23 = ^TShort23;
 
-  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
-  // - such result type would avoid a string allocation on heap, so are highly
-  // recommended e.g. when logging tiny pieces of information
+  /// used to serialize up to 64-bit binary (a pointer) as hexadecimal
   TShort16 = string[16];
   PShort16 = ^TShort16;
 
-  /// used e.g. for TSynSystemTime.ToTextDateShort
+  /// 16-bytes aligned shortstring - e.g. for TSynSystemTime.ToTextDateShort
   TShort15 = string[15];
   PShort15 = ^TShort15;
 
@@ -608,21 +612,20 @@ type
   TShort8 = string[8];
   PShort8 = ^TShort8;
 
-  /// used e.g; for WinOsBuild() to avoid heap allocation
+  /// 8-bytes aligned shortstring - e.g. for WinOsBuild()
   TShort7 = string[7];
 
-  /// used e.g. by UInt4DigitsToShort to avoid heap allocation
-  TShort4 = string[4];
-
-  /// used e.g. by UInt3DigitsToShort/UInt2DigitsToShort functions
-  // - when used as an array value type, will generate efficient 32-bit lookup
+  /// 4-bytes aligned shortstring - e.g. as efficient array[] constants
   TShort3 = string[3];
 
+  /// shortstring used to store none or one character
+  TShort1 = string[1];
+
   /// stack-allocated ASCII string, for mormot.core.text GuidToShort() function
-  TShortGuid = string[38];
+  TShortGuid = TShort39;
   PShortGuid = ^TShortGuid;
 
-  /// could be used e.g. by StrInt32() or StrInt64()
+  /// internal temporary buffer on stack used e.g. by StrInt32() or StrInt64()
   TTemp24 = array[0..23] of AnsiChar;
 
   /// cross-compiler type used for string length

@@ -3436,7 +3436,7 @@ begin
 end;
 
 const
-  PG_FT: array[TSqlDBFieldType] of string[9] = ( // UNNEST(?::###[]) field type
+  PG_FT: array[TSqlDBFieldType] of TShort15 = ( // UNNEST(?::###[]) field type
     'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
 
 function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;

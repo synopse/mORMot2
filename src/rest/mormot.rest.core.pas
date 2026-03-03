@@ -1920,7 +1920,7 @@ var
   ndx: integer;
   new: TInterfacedObjectMultiDest;
 const
-  NAM: array[boolean] of string[11] = ('Unsubscribe', 'Subscribe');
+  NAM: array[boolean] of TShort15 = ('Unsubscribe', 'Subscribe');
 begin
   if (self = nil) or
      (fFakeCallback = nil) then

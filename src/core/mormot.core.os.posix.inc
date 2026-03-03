@@ -3529,7 +3529,7 @@ const
   // read some of the /sys/class/dmi/id/* files (may require root access)
   _KNOWN: array[0..15] of record
     id: TSmbiosBasicInfo;
-    fn: string[15];
+    fn: TShort15;
   end = (
     (id: sbiBiosVendor;        fn: 'bios_vendor'),
     (id: sbiBiosVersion;       fn: 'bios_version'),
@@ -4213,7 +4213,7 @@ procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
   level: TSynLogLevel;
   si_code: integer;
-  text: string[4]; // code below has no memory allocation
+  text: TShort7; // code below has no memory allocation
 begin
   if Assigned(SynDaemonInterceptLog) then
   begin
@@ -4452,7 +4452,7 @@ var
   pidfilename: TFileName;
   s: AnsiString;
 const
-  TXT: array[boolean] of string[4] = ('run', 'fork');
+  TXT: array[boolean] of TShort7 = ('run', 'fork');
 begin
   SynDaemonIntercept(onlog);
   if dofork then

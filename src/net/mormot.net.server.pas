@@ -3313,12 +3313,12 @@ begin
 end;
 
 const
-  _CMD_200: array[boolean, boolean] of string[31] = (
+  _CMD_200: array[boolean, boolean] of TShort31 = (
    ('HTTP/1.1 200 OK'#13#10,
     'HTTP/1.0 200 OK'#13#10),
    ('HTTP/1.1 206 Partial Content'#13#10,
     'HTTP/1.0 206 Partial Content'#13#10));
-  _CMD_XXX: array[boolean] of string[15] = (
+  _CMD_XXX: array[boolean] of TShort15 = (
     'HTTP/1.1 ',
     'HTTP/1.0 ');
 
@@ -6354,7 +6354,7 @@ begin
 end;
 
 const
-  _LATE: array[boolean] of string[7] = ('', 'late ');
+  _LATE: array[boolean] of TShort7 = ('', 'late ');
 
 procedure THttpPeerCacheThread.OnFrameReceived(len: integer;
   var remote: TNetAddr);

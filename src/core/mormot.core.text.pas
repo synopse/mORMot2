@@ -1732,7 +1732,7 @@ function UInt4DigitsToUtf8(Value: cardinal): RawUtf8;
 
 /// creates a 4 digits short string from a 0..9999 value
 // - could be used e.g. as parameter to FormatUtf8() with no memory allocation
-function UInt4DigitsToShort(Value: cardinal): TShort4;
+function UInt4DigitsToShort(Value: cardinal): TShort7;
 
 /// creates a 3 digits short string from a 0..999 value
 // - could be used e.g. as parameter to FormatUtf8() with no memory allocation
@@ -6091,7 +6091,7 @@ end;
 var
   HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
 const
-  HTML_ESCAPED: array[1 .. 4] of string[7] = (
+  HTML_ESCAPED: array[1 .. 4] of TShort7 = (
     '&lt;', '&gt;', '&amp;', '&quot;');
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
@@ -6317,7 +6317,7 @@ end;
 var
   XML_ESC: TAnsiCharToByte;
 const
-  XML_ESCAPED: array[1..9] of string[7] = (
+  XML_ESCAPED: array[1..9] of TShort7 = (
     '&#x09;', '&#x0a;', '&#x0d;', '&lt;', '&gt;', '&amp;', '&quot;', '&apos;', '');
 
 procedure TTextWriter.AddXmlEscape(Text: PUtf8Char);
@@ -8977,7 +8977,7 @@ begin
   YearToPChar(Value, FastSetString(result, 4));
 end;
 
-function UInt4DigitsToShort(Value: cardinal): TShort4;
+function UInt4DigitsToShort(Value: cardinal): TShort7;
 begin
   result[0] := #4;
   if Value > 9999 then

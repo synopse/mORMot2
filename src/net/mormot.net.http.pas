@@ -2469,7 +2469,7 @@ const
   /// low level magic marker in THttpMetrics .mhm binary files
   // - may not be at the beginning of the file, if compression was enabled: use
   // rather THttpMetrics.LoadHeader if you want to identify .mhm files
-  HTTPMETRICS_MAGIC: string[23] = 'mORMotAnalyzerV1'#26;
+  HTTPMETRICS_MAGIC: TShort23 = 'mORMotAnalyzerV1'#26;
 
 var // filled from RTTI enum trimmed text during unit initialization
   HTTP_SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
@@ -5636,8 +5636,8 @@ var
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
 const
-  _SCHEME: array[boolean] of string[7]  = ('http', 'https');
-  _HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
+  _SCHEME: array[boolean] of TShort7  = ('http', 'https');
+  _HTTP:   array[boolean] of TShort15 = ('HTTP/1.1', 'HTTP/1.0');
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then

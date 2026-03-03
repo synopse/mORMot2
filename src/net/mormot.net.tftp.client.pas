@@ -75,7 +75,7 @@ const
   teLast = teInvalidOptionNegotiation;
 
   /// the TFTP frame content, as text
-  TFTP_OPCODE: array[TTftpOpcode] of string[4] = (
+  TFTP_OPCODE: array[TTftpOpcode] of TShort7 = (
     '??? ',
     'RRQ ',
     'WRQ ',

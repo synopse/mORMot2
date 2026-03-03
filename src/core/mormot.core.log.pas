@@ -254,7 +254,7 @@ const
   /// the text equivalency of each logging level, as written in the log file
   // - PCardinal(@LOG_LEVEL_TEXT[L][3])^ will be used for fast level matching
   // so text must be unique for characters [3..6] -> e.g. 'ust4'
-  LOG_LEVEL_TEXT: array[TSynLogLevel] of string[7] = (
+  LOG_LEVEL_TEXT: array[TSynLogLevel] of TShort7 = (
     '       ',  // sllNone
     ' info  ',  // sllInfo
     ' debug ',  // sllDebug
@@ -4328,7 +4328,7 @@ end;
 function TSynLogFamily.GetArchiveDestPath(age: TDateTime): TFileName;
 var
   dt: TSynSystemTime;
-  tmp: string[7];
+  tmp: TShort7;
 begin
   // returns 'ArchivePath\log\YYYYMM\'
   result := EnsureDirectoryExists([ArchivePath, 'log']);
@@ -8362,7 +8362,7 @@ function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
 var
   now: TSynSystemTime;
   day: TShort3;
-  h, a: string[32]; // truncated to 32 chars for legacy compatibility reasons
+  h, a: TShort32; // truncated to 32 chars for legacy compatibility reasons
 begin // <PRI>TIMESTAMP SP HOSTNAME SP TAG[: ]MESSAGE
   now.FromNowLocal; // the RFC 4.1.2 states it is the local time :(
   day[0] := #2;

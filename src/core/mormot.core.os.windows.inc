@@ -3806,7 +3806,7 @@ begin
 end;
 
 const
-  _CMD: array[0.. 5] of string[11] = (
+  _CMD: array[0.. 5] of TShort15 = (
     'UNKNOWN', 'STOP', 'PAUSE', 'CONTINUE', 'INTERROGATE', 'SHUTDOWN');
 
 procedure TService.DoCtrlHandle(Code: cardinal);

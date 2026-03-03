@@ -5005,7 +5005,7 @@ begin
 end;
 
 const
-  ED: array[boolean] of string[7] = (
+  ED: array[boolean] of TShort7 = (
     'Decrypt', 'Encrypt');
 
 procedure TEcdheProtocol.SetIVAndMacNonce(aEncrypt: boolean);

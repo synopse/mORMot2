@@ -703,7 +703,7 @@ const
     '', ':1.2.840.113556.1.4.1941:');
 
   // traditionally, computer sAMAccountName ends with $
-  MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
+  MACHINE_CHAR: array[boolean] of TShort1 = ('', '$');
 
 
 { **************** LDAP Attributes Definitions }

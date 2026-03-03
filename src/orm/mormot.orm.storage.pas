@@ -3425,7 +3425,7 @@ end;
 procedure TRestStorageInMemory.ComputeStateAfterLoad(
   loadstart: Int64; binary: boolean);
 const
-  _CALLER: array[boolean] of string[7] = (
+  _CALLER: array[boolean] of TShort7 = (
     'Json', 'Binary');
 var
   f: PtrInt;

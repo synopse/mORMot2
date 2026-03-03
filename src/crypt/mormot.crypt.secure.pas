@@ -6151,7 +6151,7 @@ function DigestServerInit(Algo: TDigestAlgo;
   const QuotedRealm, Prefix, Suffix: RawUtf8; Opaque, Tix64: Int64): RawUtf8;
 var
   h: THash128Rec;
-  noncehex, opaquehex: string[32];
+  noncehex, opaquehex: TShort32;
 begin
   result := '';
   if (Algo = daUndefined) or

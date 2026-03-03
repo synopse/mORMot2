@@ -1844,7 +1844,7 @@ const
   DEFAULT_PORT_INT: array[boolean] of TNetPort = (
     80, 443);
   /// can be used to generate e.g. http:// ws:// or https:// wss:// constants
-  TLS_TEXT: array[boolean] of string[1] = (
+  TLS_TEXT: array[boolean] of TShort1 = (
     '', 's');
   /// quick access to http:// or https:// constants
   HTTPS_TEXT: array[boolean] of RawUtf8 = (
@@ -6192,7 +6192,7 @@ begin
 end;
 
 const
-  BINDTXT: array[boolean] of string[7] = (
+  BINDTXT: array[boolean] of TShort7 = (
     'open', 'bind');
   BINDMSG: array[boolean] of string = (
     'Is a server available on this address:port?',

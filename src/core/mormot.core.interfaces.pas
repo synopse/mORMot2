@@ -2713,11 +2713,11 @@ implementation
 
 const
   // convert into generic in/out direction (assume result is out)
-  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
+  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of TShort7 = (
     'in', 'both', 'out', 'out');
   // normalize simple type names e.g. int64=qword or all strings to "utf8"
   // - note: AnsiString (Delphi <2009) may loose data depending on the client
-  ARGTYPETOJSON: array[TInterfaceMethodValueType] of string[8] = (
+  ARGTYPETOJSON: array[TInterfaceMethodValueType] of TShort8 = (
     '??',       // imvNone
     'self',     // imvSelf
     'boolean',  // imvBoolean
@@ -7873,7 +7873,7 @@ end;
 { ************ Code/Documentation Generation Logic Extraction from RTTI }
 
 const
-  SIZETODELPHI: array[0..8] of string[7] = (
+  SIZETODELPHI: array[0..8] of TShort7 = (
     'integer', 'byte', 'word', 'integer',
     'integer', 'int64', 'int64', 'int64', 'int64');
 
@@ -8280,9 +8280,9 @@ end;
 function TWrapperContext.ContextArgsFromMethod(
   const meth: TInterfaceMethod): variant;
 const
-  DIRTODELPHI: array[TInterfaceMethodValueDirection] of string[7] = (
+  DIRTODELPHI: array[TInterfaceMethodValueDirection] of TShort7 = (
     'const', 'var', 'out', 'result');
-  DIRTOSMS: array[TInterfaceMethodValueDirection] of string[7] = (
+  DIRTOSMS: array[TInterfaceMethodValueDirection] of TShort7 = (
     // no OUT in DWS/SMS -> VAR instead
     'const', 'var', 'var', 'result');
 var
@@ -8339,7 +8339,7 @@ end;
 function TWrapperContext.ContextFromMethod(
   const meth: TInterfaceMethod): variant;
 const
-  VERB_DELPHI: array[boolean] of string[9] = (
+  VERB_DELPHI: array[boolean] of TShort15 = (
     'procedure', 'function');
 var
   d: variant;

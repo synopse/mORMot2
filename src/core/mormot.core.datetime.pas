@@ -683,7 +683,7 @@ function HttpDateToUnixTimeBuffer(httpdate: PUtf8Char): TUnixTime;
 
 type
   // HttpDateNowUtc consumes 37 chars, aligned to 40 bytes
-  THttpDateNowUtc = string[39];
+  THttpDateNowUtc = TShort39;
 
 /// returns the current UTC timestamp as the full 'Date' HTTP header line
 // - e.g. as 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10

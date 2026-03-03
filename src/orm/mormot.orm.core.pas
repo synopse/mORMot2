@@ -7212,7 +7212,7 @@ begin
 end;
 
 const
-  ID_STR: array[{owoLowCaseID=}boolean] of string[15] = (
+  ID_STR: array[{owoLowCaseID=}boolean] of TShort15 = (
     '"ID_str":"', '"idStr":"');
 
 procedure TOrm.GetJsonValues(W: TOrmWriter);
@@ -7947,7 +7947,7 @@ var
     field: TOrmPropInfo;
     i: PtrInt;
     M: TOrmMany;
-    aManyField: string[63];
+    aManyField: TShort63;
 
     function GetManyField(F: PUtf8Char): boolean;
     var
