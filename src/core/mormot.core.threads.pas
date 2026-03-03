@@ -1510,7 +1510,7 @@ begin
   fLast := -2;
   fValues.Init(aArrayTypeInfo, fValueVar, @fCount);
   if aKind = ptNone then
-    aKind := fValues.Info.ArrayFirstField;
+    aKind := fValues.Info.ArrayFirstFieldSort;      // compare by first field
   if aKind <> ptNone then
     fValues.SetParserType(aKind, aCaseInsensitive); // set fValues.fCompare()
 end;
