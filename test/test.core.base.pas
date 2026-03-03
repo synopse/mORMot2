@@ -10422,7 +10422,7 @@ end;
 
 procedure TTestCoreBase._TSynQueue;
 var
-  o, i, j, k, n: integer;
+  o, i, j, k, n: integer; // not PtrInt
   f: TSynQueue;
   u, v: RawUtf8;
   savedint: TIntegerDynArray;
@@ -10432,34 +10432,43 @@ begin
   try
     for o := 1 to 1000 do
     begin
-      check(f.Count = 0);
+      checkEqual(f.Count, 0);
       check(not f.Pending);
       for i := 1 to o do
         f.Push(i);
       check(f.Pending);
-      check(f.Count = o);
+      checkEqual(f.Count, o);
       check(f.Capacity >= o);
       f.Save(savedint);
       check(Length(savedint) = o);
+      check(f.Contains(@o), 'cont0'); // O(n) since queue is a FIFO
       for i := 1 to o do
       begin
         j := -1;
-        check(f.Peek(j));
-        check(j = i);
+        check(f.Peek(j), 'peek');
+        checkEqual(j, i);
+        check(f.Contains(@i), 'cont1'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(nil), 1);
+        checkEqual(f.PeekCompare(@j), 0);
         j := -1;
-        check(f.Pop(j));
-        check(j = i);
+        checkEqual(f.PeekCompare(@j), 1);
+        check(not f.PopEquals(@j, j), 'popeq');
+        check(f.Pop(j), 'pop');
+        checkEqual(j, i);
+        if i < 10 then // is O(n) after Pop()
+          check(not f.Contains(@i), 'cont2');
       end;
       check(not f.Pending);
-      check(f.Count = 0);
+      checkEqual(f.Count, 0);
+      checkEqual(f.PeekCompare(@j), -1);
       check(f.Capacity > 0);
       f.Clear; // ensure f.Pop(j) will use leading storage
       check(not f.Pending);
-      check(f.Count = 0);
-      check(f.Capacity = 0);
-      check(Length(savedint) = o);
+      checkEqual(f.Count, 0);
+      checkEqual(f.Capacity, 0);
+      checkEqual(Length(savedint), o);
       for i := 1 to o do
-        check(savedint[i - 1] = i);
+        checkEqual(savedint[i - 1], i);
       n := 0;
       for i := 1 to o do
         if i and 7 = 0 then
@@ -10474,10 +10483,11 @@ begin
           f.Push(i);
           inc(n);
         end;
-      check(f.Count = n);
+      checkEqual(f.Count, n);
       check(f.Pending);
+      check(f.Contains(@o) = (o and 7 <> 0), 'cont3');
       f.Save(savedint);
-      check(Length(savedint) = n);
+      checkEqual(Length(savedint), n);
       for i := 1 to n do
         check(savedint[i - 1] and 7 <> 0);
       for i := 1 to n do
@@ -10486,10 +10496,10 @@ begin
         check(f.Peek(j));
         k := -1;
         check(f.Pop(k));
-        check(j = k);
+        checkEqual(j, k);
         check(j and 7 <> 0);
       end;
-      check(f.Count = 0);
+      checkEqual(f.Count, 0);
       check(f.Capacity > 0);
     end;
   finally
@@ -10529,7 +10539,10 @@ begin
       begin
         u := '';
         check(f.Peek(u));
+        check(f.Contains(@u), 'cont4'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(@u), 0);
         v := '';
+        checkEqual(f.PeekCompare(@v), 1);
         check(f.Pop(v));
         check(u = v);
         check(GetInteger(pointer(u)) and 7 <> 0);
