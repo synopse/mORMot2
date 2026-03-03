@@ -124,6 +124,10 @@ type
     // - this method is thread-safe, since it will read/write-lock the instance
     function PopEquals(aAnother: pointer; out aValue;
       aCompare: TDynArraySortCompare = nil): boolean;
+    /// search one pending item from the queue, without extracting it
+    // - the queue is O(n) browsed in FIFO order for aAnother value (with aCompare)
+    // - this method is thread-safe, since it will read-lock the instance
+    function Contains(aAnother: pointer; aCompare: TDynArraySortCompare = nil): boolean;
     /// lookup one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item, without
     // removing it from the queue (as Pop method does)
@@ -1744,6 +1748,52 @@ begin
       InternalPop(@aValue);
   finally
     fSafe.WriteUnLock;
+  end;
+end;
+
+function FoundInQueue(p, v: PAnsiChar; cmp: TDynArraySortCompare; i, n, s: PtrUInt): boolean;
+begin
+  if n > 0 then
+  begin
+    result := true;
+    inc(p, i * s);
+    repeat
+      if cmp(p^, v^) = 0 then
+        exit;
+      inc(p, s);
+      dec(n);
+    until n = 0;
+  end;
+  result := false;
+end;
+
+function TSynQueue.Contains(aAnother: pointer; aCompare: TDynArraySortCompare): boolean;
+begin
+  result := false;
+  if fFirst < 0 then
+    exit;
+  if not Assigned(aCompare) then
+    aCompare := fValues.Compare;
+  if not Assigned(aCompare) then
+    exit;
+  fSafe.ReadOnlyLock;
+  try
+    result := true;
+    if fFirst >= 0 then
+      if fFirst <= fLast then
+      begin
+        if FoundInQueue(fValueVar, aAnother, aCompare,
+             fFirst, fLast - fFirst + 1, fValues.Info.Cache.ItemSize) then
+          exit;
+      end
+      else if FoundInQueue(fValueVar, aAnother, aCompare,
+                fFirst, fCount - fFirst, fValues.Info.Cache.ItemSize) or
+              FoundInQueue(fValueVar, aAnother, aCompare,
+                0, fLast + 1, fValues.Info.Cache.ItemSize) then
+          exit;
+      result := false;
+  finally
+    fSafe.ReadOnlyUnLock;
   end;
 end;
 
