@@ -85,10 +85,9 @@ type
     function LockedNextPtr: pointer;
       {$ifdef HASINLINE} inline; {$endif}
     procedure InternalGrow;
-    function InternalPop(aValue: pointer): boolean;
+    procedure InternalPop(aValue: pointer);
     function InternalDestroying(incPopCounter: integer): boolean;
     function InternalWaitDone(starttix, endtix: Int64; const OnIdle: TThreadMethod): boolean;
-    function ReadOnlyLockedCount: integer;
     /// low-level TObjectStore methods implementing the persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
@@ -111,24 +110,25 @@ type
     // - would release all internal stored values, and call WaitPopFinalize
     destructor Destroy; override;
     /// store one item into the queue
-    // - this method is thread-safe, since it will lock the instance
+    // - this method is thread-safe, since it will write-lock the instance
     procedure Push(const aValue);
     /// extract one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item, which
     // is removed from the queue (use Peek if you don't want to remove it)
     // - returns false if the queue is empty
-    // - this method is thread-safe, since it will lock the instance
+    // - this method is thread-safe, since it will write-lock the instance
     function Pop(out aValue): boolean;
     /// extract one matching item from the queue, as FIFO (First-In-First-Out)
     // - the current pending item is compared with aAnother value using
     // the main Values.Compare() or a custom comparer function
+    // - this method is thread-safe, since it will read/write-lock the instance
     function PopEquals(aAnother: pointer; out aValue;
       aCompare: TDynArraySortCompare = nil): boolean;
     /// lookup one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item, without
     // removing it from the queue (as Pop method does)
     // - returns false if the queue is empty
-    // - this method is thread-safe, since it will lock the instance
+    // - this method is thread-safe, since it will read-lock the instance
     function Peek(out aValue): boolean;
     /// wait and extract one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item within the
@@ -1667,7 +1667,7 @@ begin
     result := false;
 end;
 
-function TSynQueue.InternalPop(aValue: pointer): boolean;
+procedure TSynQueue.InternalPop(aValue: pointer);
 begin
   // caller should have made fSafe.WriteLock + ensured fFirst >= 0
   fValues.ItemMoveTo(fFirst, aValue);
@@ -1683,7 +1683,6 @@ begin
       // will retrieve from leading items
       fFirst := 0;
   end;
-  result := true; // for Pop/PopEquals code simplificity
 end;
 
 function TSynQueue.Pop(out aValue): boolean;
@@ -1699,7 +1698,10 @@ begin
   begin
   {$endif HASFASTTRYFINALLY}
     if fFirst >= 0 then
-      result := InternalPop(@aValue);
+    begin
+      InternalPop(@aValue);
+      result := true;
+    end;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -1719,22 +1721,29 @@ begin
     aCompare := fValues.Compare;
   if not Assigned(aCompare) then
     exit;
-  fSafe.ReadWriteLock;
+  fSafe.ReadOnlyLock; // since we have to compare again, ReadOnlyLock is enough
+  {$ifdef HASFASTTRYFINALLY}
   try
-    if (fFirst >= 0) and
-       (aCompare(LockedNextPtr^, aAnother^) = 0) then
-    begin
-      fSafe.WriteLock; // upgrade to write, but need compare again
-      try
-        if (fFirst >= 0) and
-           (aCompare(LockedNextPtr^, aAnother^) = 0) then
-          result := InternalPop(@aValue);
-      finally
-        fSafe.WriteUnLock;
-      end;
-    end;
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    result := (fFirst >= 0) and
+              (aCompare(LockedNextPtr^, aAnother^) = 0);
+  {$ifdef HASFASTTRYFINALLY}
   finally
-    fSafe.ReadWriteUnLock;
+  {$endif HASFASTTRYFINALLY}
+    fSafe.ReadOnlyUnLock;
+  end;
+  if not result then
+    exit;
+  fSafe.WriteLock; // upgrade to write, but need to compare again
+  try
+    result := (fFirst >= 0) and
+              (aCompare(LockedNextPtr^, aAnother^) = 0);
+    if result then
+      InternalPop(@aValue);
+  finally
+    fSafe.WriteUnLock;
   end;
 end;
 
