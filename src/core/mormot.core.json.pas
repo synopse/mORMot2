@@ -3519,7 +3519,7 @@ var
   tab: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
-  ident;
+  ident, ident2;
 begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
   P := Json;
   Json := nil; // Json=nil indicates error or unexpected end (#0)
@@ -3548,9 +3548,14 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
             exit; // 0123 value is excluded by JSON - we don't relax it here
         repeat
           inc(P);
-        until not (jcDigitFloatChar in tab[P^]); // -+.eE0123456789
-        if P^ = #0 then
+          c := P^;
+          if c = '.' then
+            inc(ValueLen);
+        until not (jcDigitFloatChar in tab[c]); // -+.eE0123456789
+        if c = #0 then
           exit; // a JSON number value should be followed by , } or ]
+        if ValueLen > 1 then
+          goto ident2; // e.g. 192.168.0.0
         ValueLen := P - Value;
         if (P^ <= ' ') and
            (P^ <> #0) then
@@ -3718,10 +3723,11 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
 ident:  Value := P;
         repeat
           inc(P);
-          if P^ < ' ' then
+ident2:   c := P^;
+          if c < ' ' then
             exit; // premature string ending
-        until jcEndOfJsonFieldOr0 in tab[P^]; // #0 , ] } :
-        EndOfObject := P^;
+        until jcEndOfJsonFieldOr0 in tab[c]; // #0 , ] } :
+        EndOfObject := c;
         Json := P + 1;
         while P[-1] = ' ' do
           dec(P); // trim right
