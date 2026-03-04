@@ -522,8 +522,7 @@ function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar = ',';
 // it to a JSON parser
 // - handle two types of comments: starting from // till end of line
 // or /* ..... */ blocks anywhere in the text content
-// - trailing commas is replaced by ' ', so resulting JSON is valid for parsers
-// what not allows trailing commas (browsers for example)
+// - trailing commas are also replaced by ' ' to allow JSON5 parsing
 // - may be used to prepare configuration files before loading;
 // for example we store server configuration in file config.json and
 // put some comments in this file then code for loading is:
@@ -3950,7 +3949,8 @@ begin
         inc(P);
         if P^ = #0 then
           exit;
-      until P^ in [':', '='];
+      until (P^ = ':') or
+            (P^ = '=');
     Json := P + 1;
     result := Name;
     exit;
@@ -4661,7 +4661,7 @@ begin
           inc(result);
           if cardinal(PWord(result)^) = ord('*') + ord('/') shl 8 then
           begin
-            PWord(result)^ := $2020;
+            PWord(result)^ := $2020; // end of multi-line comments block
             inc(result, 2);
             break;
           end;
@@ -4673,40 +4673,44 @@ end;
 procedure RemoveCommentsFromJson(P: PUtf8Char);
 var
   PComma: PUtf8Char;
-begin // replace comments by ' ' characters which will be ignored by parser
+begin // replace comments text by spaces which will be ignored by parser
   if P <> nil then
-    while P^ <> #0 do
-    begin
+    while true do
       case P^ of
-        '"':
+        #0:
+          break;
+        '"': // ignore // /* and , within JSON "strings"
           begin
             P := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
             if P^ <> '"' then
               exit;
             inc(P);
           end;
+        '''': // ignore // /* and , within single quoted 'strings'
+          begin
+            repeat
+              inc(P);
+              if P^ = #0 then
+                exit;
+            until P^ = '''';
+            inc(P);
+          end;
         '/':
           P := DoRemoveComment(P);
         ',':
           begin
-            // replace trailing comma by space for strict JSON parsers
+            // replace JSON5 trailing comma by space for strict JSON parsing
             PComma := P;
-            repeat
-              inc(P)
-            until (P^ > ' ') or
-                  (P^ = #0);
+            P := IgnoreAndGotoNextNotSpace(P);
             if P^ = '/' then
               P := DoRemoveComment(P);
-            while (P^ <= ' ') and
-                  (P^ <> #0) do
-              inc(P);
+            P := GotoNextNotSpace(P);
             if P^ in ['}', ']'] then
               PComma^ := ' '; // see https://github.com/synopse/mORMot/pull/349
           end;
       else
         inc(P);
       end;
-    end;
 end;
 
 function RemoveCommentsFromJson(const s: RawUtf8): RawUtf8;
