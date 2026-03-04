@@ -645,7 +645,7 @@ begin
     DataBase.DB, TRestServerTest);
   ClientTest;
   Client.CallBackGet('stat', ['withall', true], stats);
-  FileFromString(JSONReformat(stats), WorkDir + 'statsClientServer.json');
+  FileFromString(JsonReformat(stats), WorkDir + 'statsClientServer.json');
   FreeAndNil(Client);
 end;
 
