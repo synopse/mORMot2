@@ -2076,10 +2076,19 @@ var
     Check(RecordLoadJson(agg2, U, TypeInfo(TAggregate)));
     CheckEqual(RecordSaveJson(agg2, TypeInfo(TAggregate)), J);
     Finalize(agg2);
-    U := '{abArr = [ { a = AB0, b = 0}, { a = AB1, b = 1 }],' +
+    U := '{abArr: [{a:AB0,b:0,},{a:AB1,b:1,},],' +
+          'cdArr: [{c:0,d:CD0,},{c:1,d:CD1,},{c:2,d:CD2,},],}';
+    check(IsValidJson(U), 'json5 comma valid');
+    check(not IsValidJson(U, {strict=}true), 'strict3');
+    Check(not RecordLoadJson(agg2, U, TypeInfo(TAggregate)), 'no json5 comma');
+    U := RemoveCommentsFromJson(U);
+    Check(RecordLoadJson(agg2, U, TypeInfo(TAggregate)), 'json5 removecomments');
+    CheckEqual(RecordSaveJson(agg2, TypeInfo(TAggregate)), J);
+    Finalize(agg2); 
+    U := '{abArr = [ { a = AB0, b = 0 }, { a = AB1, b = 1 }],' +
       'cdArr = [ { c = 0, d = CD0 },  { c = 1, d = CD1 }, { c = 2, d = CD2 }]}';
     check(IsValidJson(U), '= relaxed JSON');
-    check(not IsValidJson(U, {strict=}true), 'strict3');
+    check(not IsValidJson(U, {strict=}true), 'strict4');
     Check(RecordLoadJson(agg2, U, TypeInfo(TAggregate)), 'relaxed =');
     CheckEqual(RecordSaveJson(agg2, TypeInfo(TAggregate)), J);
     Finalize(agg);
@@ -2138,7 +2147,7 @@ var
     U := RecordSaveJson(JAS, TypeInfo(TTestCustomJsonArraySimple));
     CheckEqual(U, '{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
     check(IsValidJson(U));
-    check(IsValidJson(U, {strict=}true), 'strict4');
+    check(IsValidJson(U, {strict=}true), 'strictA');
     U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",' +
       '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
     J := U;
@@ -3013,11 +3022,43 @@ begin
     '"sendFileLocationRoot": "snake-ukrpatent-local"'#10'}*/'#10'} //eol'#10'}';
   check(IsValidJson(J, {strict=}false));
   check(not IsValidJson(J, {strict=}true));
-  RemoveCommentsFromJson(UniqueRawUTF8(J));
+  RemoveCommentsFromJson(UniqueRawUtf8(J));
   check(IsValidJson(J, {strict=}false));
   check(IsValidJson(J, {strict=}true));
   J := JsonReformat(J, jsonCompact);
   CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
+  J := JsonReformat(J, jsonUnquotedPropNameCompact);
+  CheckEqual(J,'{httpServer:{host:"*",port:"8881",serverType:"Socket"}}');
+  CheckEqual(JsonReformat(
+    '{httpServer:{host:"*",port:"8881",serverType:"Socket"}}',
+    jsonUnquotedPropNameCompact), J);
+  CheckEqual(JsonReformat(
+    '{ httpServer = { host = "*", port = "8881", serverType = "Socket" } }',
+    jsonUnquotedPropNameCompact), J, 'json =');
+  CheckEqual(JsonReformat(
+    '{httpServer:{host:"*",port:"8881",serverType:"Socket",},}',
+    jsonUnquotedPropNameCompact), J, 'json5 object1 reformat');
+  CheckEqual(JsonReformat(
+   '{one:{a:1,b:2,},two:2,}', jsonUnquotedPropNameCompact),
+   '{one:{a:1,b:2},two:2}', 'json5 object2 reformat');
+  CheckEqual(JsonReformat(
+    '{httpServer:[ one, two ]}', jsonUnquotedPropNameCompact),
+    '{httpServer:[one,two]}', 'unquote value array');
+  CheckEqual(JsonReformat(
+   '{httpServer:["one", "two" ] }', jsonUnquotedPropNameCompact),
+   '{httpServer:["one","two"]}', 'array reformat');
+  CheckEqual(JsonReformat(
+   '{httpServer:["one", "two" ], }', jsonUnquotedPropNameCompact),
+   '{httpServer:["one","two"]}', 'json5 object3 reformat');
+  CheckEqual(JsonReformat(
+   '{httpServer:["one", "two", ] }', jsonUnquotedPropNameCompact),
+   '{httpServer:["one","two"]}', 'json5 array reformat');
+  CheckEqual(JsonReformat(
+   '{a = [ "one", "two", ], b = 2, }', jsonUnquotedPropNameCompact),
+   '{a:["one","two"],b:2}', 'json5 array+object reformat');
+  CheckEqual(JsonReformat(
+   '{a = [ ''one'', ''two'', ], b = 2, }', jsonUnquotedPropNameCompact),
+   '{a:["one","two"],b:2}', 'json5 array+object+singlequote reformat');
   J := JsonReformat(J, json5);
   CheckEqual(J,'{'#$0D#$0A#$09'httpServer: {'#$0D#$0A#$09#$09'host: "*",' +
     #$0D#$0A#$09#$09'port: "8881",'#$0D#$0A#$09#$09'serverType: "Socket",' +
