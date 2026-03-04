@@ -469,6 +469,7 @@ function JsonObjectPropCount(P: PUtf8Char; PMax: PUtf8Char = nil;
 // - incoming P^ should point to the first initial '{' char
 function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
   PropNameFound: PRawUtf8 = nil): PUtf8Char; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// go to a buffer-named property of a JSON object
 // - as called by overloaded JsonObjectItem()
@@ -4293,7 +4294,7 @@ end;
 function JsonObjectPropCount(P, PMax: PUtf8Char; Strict: boolean): PtrInt;
 var
   parser: TJsonGotoEndParser;
-begin // is very efficiently inlined on FPC
+begin
   {%H-}parser.InitCount(Strict, PMax, stObjectName);
   P := parser.GotoEnd(P);
   result := parser.RootCount;
@@ -4312,59 +4313,53 @@ end;
 function JsonObjectItem(P, PropName: PUtf8Char; PropNameLen: PtrInt;
   PropNameFound: PRawUtf8): PUtf8Char;
 var
-  name: ShortString; // no memory allocation nor P^ modification
-  up: TByteToAnsiChar;
+  name: PUtf8Char;
+  namelen: integer; // not PtrInt
+  bystart: boolean; // mark 'PropName*' search
   parser: TJsonGotoEndParser;
 begin
-  if P <> nil then
-  begin
-    P := GotoNextNotSpace(P);
-    if PropNameLen > 0 then
-    begin
-      if PropName[PropNameLen - 1] = '*' then
-      begin
-        UpperCopy255Buf(@up, PropName, PropNameLen - 1)^ := #0;
-        PropNameLen := 0; // mark 'PropName*' search
-      end;
-      if P^ = '{' then
-        repeat
-          inc(P);
-        until not (P^ in [#1..' ']);
-      if P^ <> '}' then
-        repeat
-          GetJsonPropNameShort(P, name);
-          if (name[0] = #0) or
-             (name[0] > #200) then
-            break;
-          while (P^ <= ' ') and
-                (P^ <> #0) do
-            inc(P);
-          if PropNameLen = 0 then // 'PropName*'
-          begin
-            name[ord(name[0]) + 1] := #0; // make ASCIIZ
-            if IdemPChar(@name[1], up) then
-            begin
-              if PropNameFound <> nil then
-                FastSetString(PropNameFound^, @name[1], ord(name[0]));
-              result := P;
-              exit;
-            end;
-          end
-          else if IdemPropName(name, PropName, PropNameLen) then
-          begin
-            result := P;
-            exit;
-          end;
-          {%H-}parser.Init({strict=}false, nil);
-          P := parser.GotoEnd(P);
-          if (P = nil) or
-             (P^ <> ',') then
-            break; // invalid content, or #0 reached
-          inc(P);
-        until false;
-    end;
-  end;
   result := nil;
+  if (P = nil) or
+     (PropNameLen = 0) then
+    exit;
+  P := GotoNextNotSpace(P);
+  bystart := false;
+  if PropName[PropNameLen - 1] = '*' then
+  begin
+    dec(PropNameLen);
+    bystart := true;
+  end;
+  if P^ = '{' then
+    repeat
+      inc(P);
+    until not (P^ in [#1..' ']);
+  if P^ = '}' then
+    exit;
+  repeat
+    name := GetJsonPropName(P, @namelen, {NoJsonUnescapeNorEnding0=}true);
+    if name = nil then
+      exit;
+    while (P^ <= ' ') and
+          (P^ <> #0) do
+      inc(P);
+    if (namelen >= PropNameLen) and
+       (bystart or
+        (namelen = PropNameLen)) then
+      if IdemPropName(name, PropName, PropNameLen, PropNameLen) then
+      begin
+        if bystart and
+           (PropNameFound <> nil) then
+          FastSetString(PropNameFound^, name, namelen);
+        result := P;
+        exit;
+      end;
+    {%H-}parser.Init({strict=}false, nil);
+    P := parser.GotoEnd(P);
+    if (P = nil) or
+       (P^ <> ',') then
+      break; // invalid content, or #0 reached
+    inc(P);
+  until false;
 end;
 
 function JsonObjectByPath(JsonObject, PropPath: PUtf8Char): PUtf8Char;
