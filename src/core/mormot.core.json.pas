@@ -6948,7 +6948,7 @@ function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFor
  EndOfObject: PUtf8Char): PUtf8Char;
 var
   objEnd: AnsiChar;
-  Name, Value: PUtf8Char;
+  Name, Value, P: PUtf8Char;
   NameLen: integer; // not PtrInt for GetJsonPropName()
   ValueLen: PtrInt;
   tab: PJsonCharSet;
@@ -6958,9 +6958,8 @@ begin
     exit;
   Json := GotoNextNotSpace(Json);
   case Json^ of
-    '[':
+    '[': // array
       begin
-        // array
         Json := IgnoreAndGotoNextNotSpace(Json);
         if Json^ = ']' then
         begin
@@ -6981,7 +6980,13 @@ begin
             Json := AddJsonReformat(Json, Format, @objEnd);
             if objEnd = ']' then
               break;
-            AddDirect(objEnd);
+            if (objEnd = ',') and
+               (Json^ = ']') then // json5 trailing comma
+            begin
+              inc(Json);
+              break;
+            end;
+            AddDirect(',');
           until false;
           if Format = json5 then
             AddDirect(',');
@@ -6991,9 +6996,8 @@ begin
         end;
         AddDirect(']');
       end;
-    '{':
+    '{': // object
       begin
-        // object
         Add('{');
         Json := IgnoreAndGotoNextNotSpace(Json);
         if Json^ = '}' then
@@ -7005,9 +7009,11 @@ begin
             AddCRAndIndent;
           repeat
             // processs property name
-            Name := GetJsonPropName(Json, @NameLen, {nounescape=}true);
+            P := Json; // to ensure Json is a register
+            Name := GetJsonPropName(P, @NameLen, {nounescape=}true);
             if Name = nil then
               exit;
+            Json := P;
             if (Format in [jsonUnquotedPropName, jsonUnquotedPropNameCompact, json5]) and
                JsonPropNameValid(Name) then
               AddNoJsonEscape(Name, NameLen)
@@ -7033,7 +7039,13 @@ begin
             Json := AddJsonReformat(Json, Format, @objEnd);
             if objEnd = '}' then
               break;
-            AddDirect(objEnd);
+            if (objEnd = ',') and
+               (Json^ = '}') then // json5 trailing comma
+            begin
+              inc(Json);
+              break;
+            end;
+            AddDirect(',');
             if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
               AddCRAndIndent;
           until false;
