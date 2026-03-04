@@ -3084,12 +3084,12 @@ var
 label
   ident, stop, assign;
 begin
-  result := nil; // to notify unexpected end
-  if P = nil then
-    exit;
   {$ifndef CPUX86}
   JsonSet := @JSON_CHARS;
   {$endif CPUX86}
+  result := nil; // to notify unexpected end
+  if P = nil then
+    exit;
   repeat
     {$ifdef FPC}
     while (P^ <= ' ') and
@@ -3252,7 +3252,7 @@ ident:    if ExpectStandard then
               else
                 exit;
           until (jcEndOfJsonFieldOr0 in JsonSet[P^]) or // #0 , ] } :
-                ((P^ <> '=') and ((State = stPropName) or (State = stObjectName)));
+                ((P^ = '=') and ((State = stPropName) or (State = stObjectName)));
           if State = stPropName then
             State := stPropNameUnquoted;
           dec(P); // for inc(P); just below
@@ -3276,9 +3276,12 @@ ident:    if ExpectStandard then
           end
           else if P^ = '/' then // ignore // comment
           begin
-            P := GotoNextLine(P + 1);
-            if P = nil then
-              exit;
+            repeat
+              inc(P);
+              if P^ = #0 then
+                exit;
+            until P^ = #10;
+            inc(P);
             continue;
           end
           else

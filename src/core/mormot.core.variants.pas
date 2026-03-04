@@ -6939,7 +6939,7 @@ begin
                 info.Json := @NULCHAR
               else
                 break; // invalid input
-            if NameLen <> 0 then // we just ignore void "":xxx field names
+            if NameLen <> 0 then // TDocVariant doesn't support void "" names
             begin
               if intnames <> nil then
                 intnames.Unique(VName[n], Name, NameLen)
