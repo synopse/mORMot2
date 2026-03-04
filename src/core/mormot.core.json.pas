@@ -3746,7 +3746,7 @@ ident:  Value := P;
     Json := P;
 end;
 
-function TryGotoEndOfComment(P: PUtf8Char): PUtf8Char;
+function TryGotoEndOfComment(P: PUtf8Char): PUtf8Char; // seldom called
 begin
   repeat
     result := P; // return input P^ = '/' if no comment was found
@@ -3758,18 +3758,21 @@ begin
         if P^ = #0 then
           exit;
       until PWord(P)^ = ord('*') + ord('/') shl 8;
-      result := GotoNextNotSpace(P + 2);
+      P := GotoNextNotSpace(P + 2);
     end
     else if P^ = '/' then // ignore // comment
     begin
-      P := GotoNextLine(P + 1);
-      if P = nil then
-        exit;
-      result := GotoNextNotSpace(P);
+      repeat
+        inc(P);
+        if P^ = #0 then
+          exit;
+      until P^ = #10;    // till the end of the line
+      P := IgnoreAndGotoNextNotSpace(P);
     end
     else
       exit;
   until P^ <> '/'; // there may be other subsequent comments ;)
+  result := P;
 end;
 
 procedure TGetJsonField.GetJsonFieldOrObjectOrArray(
