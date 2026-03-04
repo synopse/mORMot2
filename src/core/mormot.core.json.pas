@@ -6676,13 +6676,14 @@ var
 begin
   if high(Values) < 0 then
     exit;
-  for i := 0 to high(Values) do
-  begin
-    Add('"');
-    AddJsonEscape(pointer(Values[i]));
-    AddDirect('"', ',');
-  end;
-  CancelLastComma;
+  i := 0;
+  repeat
+    AddJsonString(Values[i]);
+    if i = high(Values) then
+      exit;
+    AddDirect(',');
+    inc(i);
+  until false;
 end;
 
 procedure TJsonWriter.AddCsvConst(const Values: array of const);
