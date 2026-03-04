@@ -2842,7 +2842,8 @@ end;
 procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter;
   const Value: RawUtf8);
 begin
-  if rcfJsonString in ArgRtti.Flags then
+  if (rcfJsonString in ArgRtti.Flags) or
+     IsStringJson(pointer(Value)) then // from URI-decoded: always check
   begin
     WR.Add('"');
     WR.AddJsonEscape(pointer(Value));
