@@ -6901,8 +6901,8 @@ begin
     AddDirect('"');
 end;
 
-function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
- EndOfObject: PUtf8Char): PUtf8Char;
+function TJsonWriter.AddJsonReformat(Json: PUtf8Char;
+  Format: TTextWriterJsonFormat; EndOfObject: PUtf8Char): PUtf8Char;
 var
   objEnd: AnsiChar;
   Name, Value, P: PUtf8Char;
@@ -6938,7 +6938,7 @@ begin
             if objEnd = ']' then
               break;
             if (objEnd = ',') and
-               (Json^ = ']') then // json5 trailing comma
+               (Json^ = ']') then // aborb json5 trailing comma
             begin
               inc(Json);
               break;
@@ -6967,12 +6967,12 @@ begin
           repeat
             // processs property name
             P := Json; // to ensure Json is a register
-            Name := GetJsonPropName(P, @NameLen, {nounescape=}true);
+            Name := GetJsonPropName(P, @NameLen, {nounescapenorending0=}true);
             if Name = nil then
               exit;
             Json := P;
             if (Format in [jsonUnquotedPropName, jsonUnquotedPropNameCompact, json5]) and
-               JsonPropNameValid(Name) then
+               JsonPropNameValid(Name, NameLen) then
               AddNoJsonEscape(Name, NameLen)
             else
             begin
@@ -6997,7 +6997,7 @@ begin
             if objEnd = '}' then
               break;
             if (objEnd = ',') and
-               (Json^ = '}') then // json5 trailing comma
+               (Json^ = '}') then // aborb json5 trailing comma
             begin
               inc(Json);
               break;
