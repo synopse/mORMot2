@@ -10277,17 +10277,17 @@ begin
     Json := GotoNextNotSpace(Json);
   if (Json = nil) or
      ((PInteger(Json)^ = NULL_LOW) and
-      (jcEndOfJsonValueField in JSON_CHARS[Json[4]])) then
+      (jcEndOfJsonValueField in JSON_CHARS[Json[4]])) then    // #0#10#13 ,}]
     TSynVarData(Value).VType := varNull
   else if (PInteger(Json)^ = FALSE_LOW) and
           (Json[4] = 'e') and
-          (jcEndOfJsonValueField in JSON_CHARS[Json[5]]) then
+          (jcEndOfJsonValueField in JSON_CHARS[Json[5]]) then // #0#10#13 ,}]
   begin
     TSynVarData(Value).VType := varBoolean;
     Value.VInteger := ord(false);
   end
   else if (PInteger(Json)^ = TRUE_LOW) and
-          (jcEndOfJsonValueField in JSON_CHARS[Json[4]]) then
+          (jcEndOfJsonValueField in JSON_CHARS[Json[4]]) then // #0#10#13 ,}]
   begin
     TSynVarData(Value).VType := varBoolean;
     Value.VInteger := ord(true);
@@ -10422,7 +10422,7 @@ astext:     V.VType := varString;
       end;
     jtNullFirstChar:
       if (PInteger(J)^ = NULL_LOW) and
-         (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
+         (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then // #0#10#13 ,}]
       begin
         Info.Value := J;
         V.VType := varNull;
@@ -10431,7 +10431,7 @@ astext:     V.VType := varString;
       end;
     jtFalseFirstChar:
       if (PInteger(J + 1)^ = FALSE_LOW2) and
-         (jcEndOfJsonValueField in JSON_CHARS[J[5]]) then
+         (jcEndOfJsonValueField in JSON_CHARS[J[5]]) then // #0#10#13 ,}]
       begin
         Info.Value := J;
         V.VType := varBoolean;
@@ -10441,7 +10441,7 @@ astext:     V.VType := varString;
       end;
     jtTrueFirstChar:
       if (PInteger(J)^ = TRUE_LOW) and
-         (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
+         (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then // #0#10#13 ,}]
       begin
         Info.Value := J;
         V.VType := varBoolean;

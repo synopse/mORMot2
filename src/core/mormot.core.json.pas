@@ -77,14 +77,14 @@ type
   // during the parsing of complex JSON input
   // - TTestCoreProcess.JSONBenchmark shows around 900MB/s on my i5 notebook
   TJsonChar = set of (
-    jcJsonIdentifierFirstChar,
-    jcJsonIdentifier,
-    jcEndOfJsonFieldOr0,
-    jcEndOfJsonFieldNotName,
-    jcEndOfJsonValueField,
-    jcJsonStringMarker,
-    jcDigitFirstChar,
-    jcDigitFloatChar);
+    jcJsonIdentifierFirstChar,   // _$0..9a..zA..Z
+    jcJsonIdentifier,            // _-.[]$0..9a..zA..Z
+    jcEndOfJsonFieldOr0,         // #0,]}:
+    jcEndOfJsonFieldNotName,     // #0,]}
+    jcEndOfJsonValueField,       // #0#9#10#13 ,}]
+    jcJsonStringMarker,          // #0"\
+    jcDigitFirstChar,            // -0123456789
+    jcDigitFloatChar);           // -+.eE0123456789
 
   /// defines a lookup table used for branch-less JSON parsing
   TJsonCharSet = array[AnsiChar] of TJsonChar;
@@ -2960,10 +2960,10 @@ begin
   c4 := PInteger(P)^;
   if (((c4 = NULL_LOW) or
        (c4 = TRUE_LOW)) and
-      (jcEndOfJsonValueField in tab[P[4]])) or
+      (jcEndOfJsonValueField in tab[P[4]])) or   // #0#9#10#13 ,}]
      ((c4 = FALSE_LOW) and
       (P[4] = 'e') and
-      (jcEndOfJsonValueField in tab[P[5]])) then
+      (jcEndOfJsonValueField in tab[P[5]])) then // #0#9#10#13 ,}]
   begin
     result := false; // constants are no string
     exit;
@@ -3126,7 +3126,7 @@ begin
           // '0123' excluded by JSON, but not here
           repeat
             inc(P);
-          until not (jcDigitFloatChar in JsonSet[P^]); // -+.eE0..9
+          until not (jcDigitFloatChar in JsonSet[P^]); // -+.eE0123456789
           if (StackCount <> 0) or
              (State = stObjectName) then
             continue;
@@ -3134,19 +3134,19 @@ begin
         end;
       jtNullFirstChar: // 'n'
         if (PInteger(P)^ = NULL_LOW) and
-           (jcEndOfJsonValueField in JsonSet[P[4]]) then
+           (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]
           inc(P, 3)
         else
           goto prop;
       jtTrueFirstChar: // 't'
         if (PInteger(P)^ = TRUE_LOW) and
-           (jcEndOfJsonValueField in JsonSet[P[4]]) then
+           (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]
           inc(P, 3)
         else
           goto prop;
       jtFalseFirstChar: // 'f'
         if (PInteger(P + 1)^ = FALSE_LOW2) and
-           (jcEndOfJsonValueField in JsonSet[P[5]]) then
+           (jcEndOfJsonValueField in JsonSet[P[5]]) then // #0#9#10#13 ,}]
           inc(P, 4)
         else
           goto prop;
@@ -3309,7 +3309,7 @@ prop:     if ExpectStandard then
                 exit;
             until P^ = '/';
             while not (jcEndOfJsonFieldNotName in JsonSet[P[1]]) do
-              inc(P);
+              inc(P); // #0,]}
           end;
         end;
       jtEndOfBuffer: // #0
@@ -3535,7 +3535,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
             exit;
         repeat
           inc(P);
-        until not (jcDigitFloatChar in tab[P^]); // -+.eE0..9
+        until not (jcDigitFloatChar in tab[P^]); // -+.eE0123456789
         if P^ = #0 then
           exit; // a JSON number value should be followed by , } or ]
         ValueLen := P - Value;
@@ -3568,11 +3568,9 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
           end;
           // P^ is either #0, '"' or '\'
           if c = '"' then
-            // end of string
-            break;
+            break; // end of string
           if c = #0 then
-            // premature ending (leaving Json=nil)
-            exit;
+            exit; // premature string ending (leaving Json=nil)
           // unescape JSON text: process char after \
           inc(P); // P^ was '\' here
           c := JSON_UNESCAPE[P^];
@@ -3674,16 +3672,14 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
       end;
     jtNullFirstChar: // 'n'
       if (PInteger(P)^ = NULL_LOW) and
-         (jcEndOfJsonValueField in tab[P[4]]) then
-         // [#0, #9, #10, #13, ' ',  ',', '}', ']']
+         (jcEndOfJsonValueField in tab[P[4]]) then // #0#9#10#13 ,}]
         // null -> returns nil and WasString=false
         inc(P, 4)
       else
         exit;
     jtFalseFirstChar: // 'f'
       if (PInteger(P + 1)^ = FALSE_LOW2) and
-         (jcEndOfJsonValueField in tab[P[5]]) then
-         // [#0, #9, #10, #13, ' ',  ',', '}', ']']
+         (jcEndOfJsonValueField in tab[P[5]]) then // #0#9#10#13 ,}]
       begin
         // false -> returns 'false' and WasString=false
         Value := P;
@@ -3694,8 +3690,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         exit;
     jtTrueFirstChar: // 't'
       if (PInteger(P)^ = TRUE_LOW) and
-         (jcEndOfJsonValueField in tab[P[4]]) then
-         // [#0, #9, #10, #13, ' ',  ',', '}', ']']
+         (jcEndOfJsonValueField in tab[P[4]]) then // #0#9#10#13 ,}]
       begin
         // true -> returns 'true' and WasString=false
         Value := P;
@@ -3709,8 +3704,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
     exit;
   end;
   while not (jcEndOfJsonFieldOr0 in tab[P^]) do
-    // loop until #0 , ] } : delimiter
-    inc(P);
+    inc(P); // not #0 , ] } :
   EndOfObject := P^;
   // ensure JSON value is zero-terminated, and continue after it
   if P^ <> #0 then
@@ -12582,24 +12576,24 @@ begin
   begin
     jc := [];
     if c in [#0, ',', ']', '}', ':'] then
-      include(jc, jcEndOfJsonFieldOr0);
+      include(jc, jcEndOfJsonFieldOr0);        // #0,]}:
     if c in [#0, ',', ']', '}'] then
-      include(jc, jcEndOfJsonFieldNotName);
+      include(jc, jcEndOfJsonFieldNotName);    // #0,]}
     if c in [#0, #9, #10, #13, ' ',  ',', '}', ']'] then
-      include(jc, jcEndOfJsonValueField);
+      include(jc, jcEndOfJsonValueField);      // #0#9#10#13 ,}]
     if c in [#0, '"', '\'] then
-      include(jc, jcJsonStringMarker);
+      include(jc, jcJsonStringMarker);         // #0"\
     if c in ['-', '0'..'9'] then
     begin
-      include(jc, jcDigitFirstChar);
+      include(jc, jcDigitFirstChar);           // -0123456789
       JSON_TOKENS[c] := jtFirstDigit;
     end;
     if c in ['-', '+', '0'..'9', '.', 'E', 'e'] then
-      include(jc, jcDigitFloatChar);
+      include(jc, jcDigitFloatChar);           // -+.eE0123456789
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
-      include(jc, jcJsonIdentifierFirstChar);
+      include(jc, jcJsonIdentifierFirstChar);  // _$0..9a..zA..Z
     if c in ['_', '-', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
-      include(jc, jcJsonIdentifier);
+      include(jc, jcJsonIdentifier);           // _-.[]$0..9a..zA..Z
     JSON_CHARS[c] := jc;
     if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
       // exclude '0'..'9' as already in jtFirstDigit
