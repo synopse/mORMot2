@@ -3053,6 +3053,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure InitCount(Strict: boolean; PMax: PUtf8Char;
       First: TJsonGotoEndParserState);
+      {$ifdef HASINLINE} inline; {$endif}
     // reusable method able to jump over any JSON value (up to Max)
     function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
     function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
@@ -3194,9 +3195,10 @@ stop:     n := StackCount;
           if n = 0 then
             exit; // invalid input
           dec(n);
-          inc(RootCount, ord(n = 0));
           StackCount := n;
           State := Stack[n];
+          if n = 0 then
+            inc(RootCount);
         end;
       jtArrayStop: // ]
         if State <> stValue then
@@ -3216,8 +3218,9 @@ assign:   if State <> stObjectName then
           if State = stObjectName then
             exit;
           dec(State, ord(State = stObjectValue)); // branchless update
+          if StackCount = 1 then
+            inc(RootCount);
           inc(P);
-          inc(RootCount, ord(StackCount = 1));
           if (Max = nil) or // checking Max after each comma is good enough
              (P < Max) then
             continue;
@@ -3249,7 +3252,7 @@ ident:    if ExpectStandard then
           repeat     // very relaxed unquoted names and values support
             inc(P);
             if P^ < ' ' then
-              exit  // premature string ending (leaving Json=nil)
+              exit  // premature string ending
             else if P^ = '"' then
               if State = stObjectValue then
                 repeat // e.g. date:ISODate("2012-10-17T20:46:22")}
@@ -3286,7 +3289,7 @@ ident:    if ExpectStandard then
               inc(P);
               if P^ = #0 then
                 exit;
-            until P^ = #10;
+            until P^ = #10;    // till the end of the line
             inc(P);
             continue;
           end
