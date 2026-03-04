@@ -929,6 +929,11 @@ type
     /// append some RawUtf8 variable, with proper JSON double quotes escaping
     // - "" will always be added, before calling AddJsonEscape()
     procedure AddJsonString(const Text: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append Len > 0 UTF-8 content, with proper JSON double quotes escaping
+    // - "" will always be added, before calling AddJsonEscape()
+    procedure AddJsonStringBuffer(Text: PUtf8Char; Len: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some RawUtf8 variable, with proper JSON double quotes escaping
     // - "" will always be added, before calling AddJsonEscape()
     procedure AddJsonShort(const Text: ShortString);
@@ -5209,6 +5214,22 @@ end;
 { ********** Low-Level JSON Serialization for all TRttiParserType }
 
 // some methods defined here for proper inlining
+
+procedure TJsonWriter.AddJsonString(const Text: RawUtf8);
+begin
+  Add('"');
+  AddJsonEscape(pointer(Text), {len=}0); // faster with Len=0
+  AddDirect('"');
+end;
+
+procedure TJsonWriter.AddJsonStringBuffer(Text: PUtf8Char; Len: PtrInt);
+begin
+  Add('"');
+  if Len > 0 then // Len=0 means "use StrLen" which we don't want here
+    AddJsonEscape(Text, Len);
+  AddDirect('"');
+end;
+
 procedure TJsonWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
   AddComma;
@@ -5559,11 +5580,7 @@ begin
       v := PWord(Data)^; // support up to 65536 items
     if (v >= c^.EnumMin) and
        (v <= c^.EnumMax) then
-    begin
-      Ctxt.W.Add('"');
-      Ctxt.W.AddJsonEscape(pointer(c^.EnumCustomText^[v]), {len=}0);
-      Ctxt.W.AddDirect('"');
-    end
+      Ctxt.W.AddJsonString(c^.EnumCustomText^[v])
     else
       Ctxt.W.AddU(v); // paranoid
   end
@@ -5905,9 +5922,7 @@ end;
 
 procedure AppendExceptionLocation(w: TJsonWriter; e: ESynException);
 begin // call TDebugFile.FindLocationShort if mormot.core.log is used
-  w.Add('"');
-  w.AddShort(GetExecutableLocation(e.RaisedAt));
-  w.AddDirect('"');
+  w.AddJsonShort(GetExecutableLocation(e.RaisedAt));
 end;
 
 // serialization of properties for both records and classes
@@ -6192,9 +6207,7 @@ begin
   last := Data^.Count - 1;
   if last >= 0 then
     repeat
-      Ctxt.W.Add('"');
-      Ctxt.W.AddJsonEscape(u[i]);
-      Ctxt.W.AddDirect('"');
+      Ctxt.W.AddJsonString(u[i]);
       if i = last then
         break;
       Ctxt.W.BlockAfterItem(Ctxt.Options);
@@ -6661,7 +6674,7 @@ procedure TJsonWriter.AddCsvUtf8(const Values: array of RawUtf8);
 var
   i: PtrInt;
 begin
-  if length(Values) = 0 then
+  if high(Values) < 0 then
     exit;
   for i := 0 to high(Values) do
   begin
@@ -7386,30 +7399,21 @@ begin
     vtBoolean:
       Add(V^.VBoolean); // 'true'/'false' - AddVarRec() would store 1/0
     vtString:
-      begin
-        Add('"');
-        if V^.VString^[0] <> #0 then
-          AddJsonEscape(@V^.VString^[1], ord(V^.VString^[0]));
-        AddDirect('"');
-      end;
+      AddJsonStringBuffer(@V^.VString^[1], ord(V^.VString^[0]));
     vtAnsiString:
       begin
         Add('"');
-        AddJsonEscape(V^.VAnsiString);
+        AddJsonEscape(V^.VAnsiString, {len=}0); // assume CP_UTF8
         AddDirect('"');
       end;
     vtPChar:
       begin
         Add('"');
-        AddJsonEscape(V^.VPChar);
+        AddJsonEscape(V^.VPChar, {len=}0);
         AddDirect('"');
       end;
     vtChar:
-      begin
-        Add('"');
-        AddJsonEscape(@V^.VChar, 1);
-        AddDirect('"');
-      end;
+      AddJsonStringBuffer(@V^.VChar, 1);
     vtWideChar:
       begin
         Add('"');
@@ -7555,18 +7559,9 @@ begin
   until Len <= 0;
 end;
 
-procedure TJsonWriter.AddJsonString(const Text: RawUtf8);
-begin
-  Add('"');
-  AddJsonEscape(pointer(Text));
-  AddDirect('"');
-end;
-
 procedure TJsonWriter.AddJsonShort(const Text: ShortString);
 begin
-  Add('"');
-  AddJsonEscape(@Text[1], ord(Text[0]));
-  AddDirect('"');
+  AddJsonStringBuffer(@Text[1], ord(Text[0]));
 end;
 
 procedure TJsonWriter.AddVarRec(V: PVarRec; Escape: TTextWriterKind;
