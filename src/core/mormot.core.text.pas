@@ -511,6 +511,7 @@ type
   // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
   // - jsonNoEscapeUnicode will search for any \u#### pattern and generate pure
   // UTF-8 output instead
+  // - json5 will emit jsonUnquotedPropName, but with a trailing , before } or ]
   // - those features are not implemented in this unit, but in mormot.core.json
   TTextWriterJsonFormat = (
     jsonCompact,
@@ -518,7 +519,8 @@ type
     jsonUnquotedPropName,
     jsonUnquotedPropNameCompact,
     jsonEscapeUnicode,
-    jsonNoEscapeUnicode);
+    jsonNoEscapeUnicode,
+    json5);
 
   /// parent to T*Writer text processing classes, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string

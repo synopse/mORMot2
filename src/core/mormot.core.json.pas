@@ -6942,24 +6942,19 @@ function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFor
 var
   objEnd: AnsiChar;
   Name, Value: PUtf8Char;
-  NameLen: integer;
+  NameLen: integer; // not PtrInt for GetJsonPropName()
   ValueLen: PtrInt;
   tab: PJsonCharSet;
 begin
   result := nil;
   if Json = nil then
     exit;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
-    inc(Json);
+  Json := GotoNextNotSpace(Json);
   case Json^ of
     '[':
       begin
         // array
-        repeat
-          inc(Json)
-        until (Json^ = #0) or
-              (Json^ > ' ');
+        Json := IgnoreAndGotoNextNotSpace(Json);
         if Json^ = ']' then
         begin
           Add('[');
@@ -6967,22 +6962,24 @@ begin
         end
         else
         begin
-          if Format in [jsonHumanReadable, jsonUnquotedPropName] then
+          if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
             AddCRAndIndent;
           inc(fHumanReadableLevel);
           Add('[');
           repeat
             if Json = nil then
               exit;
-            if Format in [jsonHumanReadable, jsonUnquotedPropName] then
+            if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
               AddCRAndIndent;
             Json := AddJsonReformat(Json, Format, @objEnd);
             if objEnd = ']' then
               break;
             AddDirect(objEnd);
           until false;
+          if Format = json5 then
+            AddDirect(',');
           dec(fHumanReadableLevel);
-          if Format in [jsonHumanReadable, jsonUnquotedPropName] then
+          if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
             AddCRAndIndent;
         end;
         AddDirect(']');
@@ -6990,26 +6987,21 @@ begin
     '{':
       begin
         // object
-        repeat
-          inc(Json)
-        until (Json^ = #0) or
-              (Json^ > ' ');
         Add('{');
-        inc(fHumanReadableLevel);
-        if Format in [jsonHumanReadable, jsonUnquotedPropName] then
-          AddCRAndIndent;
+        Json := IgnoreAndGotoNextNotSpace(Json);
         if Json^ = '}' then
-          repeat
-            inc(Json)
-          until (Json^ = #0) or
-                (Json^ > ' ')
+          inc(Json)
         else
+        begin
+          inc(fHumanReadableLevel);
+          if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
+            AddCRAndIndent;
           repeat
             // processs property name
             Name := GetJsonPropName(Json, @NameLen, {nounescape=}true);
             if Name = nil then
               exit;
-            if (Format in [jsonUnquotedPropName, jsonUnquotedPropNameCompact]) and
+            if (Format in [jsonUnquotedPropName, jsonUnquotedPropNameCompact, json5]) and
                JsonPropNameValid(Name) then
               AddNoJsonEscape(Name, NameLen)
             else
@@ -7023,7 +7015,7 @@ begin
                 AddNoJsonEscapeForcedUnicode(Name, NameLen);
               AddDirect('"');
             end;
-            if Format in [jsonHumanReadable, jsonUnquotedPropName] then
+            if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
               AddDirect(':', ' ')
             else
               AddDirect(':');
@@ -7035,12 +7027,15 @@ begin
             if objEnd = '}' then
               break;
             AddDirect(objEnd);
-            if Format in [jsonHumanReadable, jsonUnquotedPropName] then
+            if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
               AddCRAndIndent;
           until false;
-        dec(fHumanReadableLevel);
-        if Format in [jsonHumanReadable, jsonUnquotedPropName] then
-          AddCRAndIndent;
+          if Format = json5 then
+            AddDirect(',');
+          dec(fHumanReadableLevel);
+          if Format in [jsonHumanReadable, jsonUnquotedPropName, json5] then
+            AddCRAndIndent;
+        end;
         AddDirect('}');
       end;
     '"':
@@ -7068,7 +7063,7 @@ begin
       ValueLen := 0;
       repeat
         inc(ValueLen);
-      until jcEndOfJsonFieldOr0 in tab[Json[ValueLen]];
+      until jcEndOfJsonFieldOr0 in tab[Json[ValueLen]]; // #0 , ] } :
       inc(Json, ValueLen);
       while (ValueLen > 0) and
             (Value[ValueLen - 1] <= ' ') do
@@ -7078,16 +7073,11 @@ begin
   end;
   if Json = nil then
     exit;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
-    inc(Json);
+  Json := GotoNextNotSpace(Json);
   if EndOfObject <> nil then
     EndOfObject^ := Json^;
   if Json^ <> #0 then
-    repeat
-      inc(Json)
-    until (Json^ = #0) or
-          (Json^ > ' ');
+    Json := IgnoreAndGotoNextNotSpace(Json);
   result := Json;
 end;
 
