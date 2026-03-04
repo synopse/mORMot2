@@ -4682,13 +4682,8 @@ end;
 
 function RemoveCommentsFromJson(const s: RawUtf8): RawUtf8;
 begin
-  if PosExChar('/', s) = 0 then
-    result := s
-  else
-  begin
-    FastSetString(result, pointer(s), length(s));
-    RemoveCommentsFromJson(pointer(s)); // remove in-place
-  end;
+  FastSetString(result, pointer(s), length(s));
+  RemoveCommentsFromJson(pointer(result)); // remove in-place // /* and trailing ,
 end;
 
 function ParseEndOfObject(P: PUtf8Char; out EndOfObject: AnsiChar): PUtf8Char;
