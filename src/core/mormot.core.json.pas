@@ -316,14 +316,14 @@ function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char;
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
 // - it will return the property name, with an ending #0, and "..." content
-// properly unescaped unless NoJsonUnescape is set to true
+// properly unescaped unless NoJsonUnescapeNorEnding0 is set to true
 // - returns nil on error
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
 // - warning: Len^ should be a 32-bit "integer" variable, not a PtrInt
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
-  NoJsonUnescape: boolean = false): PUtf8Char;
+  NoJsonUnescapeNorEnding0: boolean = false): PUtf8Char;
 
 /// decode a JSON field name in an UTF-8 encoded ShortString variable
 // - this function would left the P^ buffer memory untouched, so may be safer
@@ -3582,7 +3582,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
           if c = '"' then
             break; // end of string
           if c = #0 then
-            exit; // premature string ending (leaving Json=nil)
+            exit; // premature string ending
           // unescape JSON text: process char after \
           inc(P); // P^ was '\' here
           c := JSON_UNESCAPE[P^];
@@ -3671,7 +3671,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
             exit
           else if c = '''' then
             if P[1] = '''' then
-              inc(P) // unquote double quotes
+              inc(P) // unquote single quotes pair
             else
               break;
           D^ := c;
@@ -3718,7 +3718,7 @@ ident:  Value := P;
         repeat
           inc(P);
           if P^ < ' ' then
-            exit; // premature string ending (leaving Json=nil)
+            exit; // premature string ending
         until jcEndOfJsonFieldOr0 in tab[P^]; // #0 , ] } :
         EndOfObject := P^;
         Json := P + 1;
@@ -3906,7 +3906,7 @@ begin
 end;
 
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger;
-  NoJsonUnescape: boolean): PUtf8Char;
+  NoJsonUnescapeNorEnding0: boolean): PUtf8Char;
 var
   P, Name: PUtf8Char;
   tab: PJsonCharSet;
@@ -3940,10 +3940,10 @@ begin
       // we need to handle a complex property name (hardly encoutered)
       if P^ = #0 then
         exit
-      else if NoJsonUnescape then
+      else if NoJsonUnescapeNorEnding0 then
         P := GotoEndOfJsonString2(P, tab)
       else
-      begin // should be unescaped
+      begin // should be unescaped in-place
         info.Json := Name - 1;
         info.GetJsonField;
         if (info.Value <> nil) and
@@ -3979,7 +3979,8 @@ begin
     if Len <> nil then
       Len^ := P - Name;
     info.EndOfObject := P^;
-    P^ := #0; // Name should end with #0
+    if not NoJsonUnescapeNorEnding0 then
+      P^ := #0; // end with #0
     if not (info.EndOfObject in [':', '=']) then // relaxed {age=10} syntax
       repeat
         inc(P);
@@ -3993,12 +3994,13 @@ begin
   end;
   if Len <> nil then
     Len^ := P - Name;
-  P^ := #0; // ensure Name is #0 terminated
+  if not NoJsonUnescapeNorEnding0 then
+    P^ := #0; // ensure Name is #0 terminated
   repeat
     inc(P);
     if P^ = #0 then
       exit;
-  until P^ = ':';
+  until P^ in  [':', '='];
   Json := P + 1;
   result := Name;
 end;
