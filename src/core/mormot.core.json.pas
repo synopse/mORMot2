@@ -230,6 +230,8 @@ function JsonPropNameValid(P: PUtf8Char): boolean;
 type
   /// efficient JSON value parser / in-place decoder
   // - as used by JsonDecode() and all internal JSON functions
+  // - in respect to standard JSON, it is more relaxed with unquoted names,
+  // single quotes, and even unquoted values e.g. {name1:some value,name2:'10'}
   {$ifdef USERECORDWITHMETHODS}
   TGetJsonField = record
   {$else}
@@ -3480,7 +3482,9 @@ var
   {$else}
   tab: PJsonCharSet;
   {$endif CPUX86NOTPIC}
-begin // see http://www.ietf.org/rfc/rfc4627.txt
+label
+  ident;
+begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
   P := Json;
   Json := nil; // Json=nil indicates error or unexpected end (#0)
   Value := nil;
@@ -3505,8 +3509,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         if P^ = '0' then
           if (P[1] >= '0') and
              (P[1] <= '9') then
-            // 0123 excluded by JSON!
-            exit;
+            exit; // 0123 value is excluded by JSON - we don't relax it here
         repeat
           inc(P);
         until not (jcDigitFloatChar in tab[P^]); // -+.eE0123456789
@@ -3650,7 +3653,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         // null -> returns nil and WasString=false
         inc(P, 4)
       else
-        exit;
+        goto ident;
     jtFalseFirstChar: // 'f'
       if (PInteger(P + 1)^ = FALSE_LOW2) and
          (jcEndOfJsonValueField in tab[P[5]]) then // #0#9#10#13 ,}]
@@ -3661,7 +3664,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         inc(P, 5);
       end
       else
-        exit;
+        goto ident;
     jtTrueFirstChar: // 't'
       if (PInteger(P)^ = TRUE_LOW) and
          (jcEndOfJsonValueField in tab[P[4]]) then // #0#9#10#13 ,}]
@@ -3672,7 +3675,25 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         inc(P, 4);
       end
       else
+        goto ident;
+    jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
+      begin
+        // return simple identifiers as JSON strings
+ident:  Value := P;
+        repeat
+          inc(P);
+          if P^ < ' ' then
+            exit; // premature string ending (leaving Json=nil)
+        until jcEndOfJsonFieldOr0 in tab[P^]; // #0 , ] } :
+        EndOfObject := P^;
+        Json := P + 1;
+        while P[-1] = ' ' do
+          dec(P); // trim right
+        P^ := #0; // make zero-terminated - may overwrite EndOfObject char
+        ValueLen := P - Value;
+        WasString := true;
         exit;
+      end;
   else
     // leave Json=nil on error (e.g. if a {...} or [...] was supplied)
     exit;
