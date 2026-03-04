@@ -224,7 +224,13 @@ procedure IgnoreComma(var P: PUtf8Char);
 /// returns TRUE if the given text buffer contains simple characters as
 // recognized by JSON extended syntax
 // - follow GetJsonPropName and GotoNextJsonObjectOrArray expectations
-function JsonPropNameValid(P: PUtf8Char): boolean;
+function JsonPropNameValid(P: PUtf8Char): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if the given text buffer contains simple characters as
+// recognized by JSON extended syntax
+// - follow GetJsonPropName and GotoNextJsonObjectOrArray expectations
+function JsonPropNameValid(P: PUtf8Char; Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
@@ -3418,6 +3424,25 @@ begin
   end
   else
     result := false;
+end;
+
+function JsonPropNameValid(P: PUtf8Char; Len: integer): boolean;
+var
+  tab: PJsonCharSet;
+begin
+  tab := @JSON_CHARS;
+  if (P <> nil) and
+     (jcJsonIdentifierFirstChar in tab[P^]) then // _$0..9a..zA..Z
+  begin
+    result := true;
+    repeat
+      inc(P);
+      dec(Len);
+      if Len = 0 then
+        exit;
+    until not (jcJsonIdentifier in tab[P^]); // _-.[]$0..9a..zA..Z
+  end;
+  result := false;
 end;
 
 {$ifndef PUREMORMOT2}
