@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgReportOpenItems.pas
 
   Last modified
-    Date : 07.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgReportOpenItems;
 
@@ -54,12 +54,9 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: IOpenItemsReportService;
     FFromDate: TDateTime;
     FToDate: TDateTime;
     FMinAmount: currency;
-    function ParseDate(const AText: string; out ADate: TDateTime): Boolean;
-    function ParseAmount(const AText: string; out AAmount: currency): Boolean;
     function ValidateFilters: Boolean;
   protected
     procedure ConfigureColumns; override;
@@ -81,7 +78,8 @@ uses
   mormot.core.base,
   mormot.core.text,
   mormot.core.unicode,
-  mdDates;
+  mdDates,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -94,7 +92,6 @@ type
 constructor TOpenItemsReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TOpenItemsReportService.Create;
 
   // Default filter values: last 90 days
   FToDate := Date;
@@ -108,7 +105,6 @@ end;
 
 destructor TOpenItemsReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -144,12 +140,6 @@ begin
   Height := 550;
 end;
 
-function TOpenItemsReportForm.ParseDate(const AText: string;
-  out ADate: TDateTime): Boolean;
-begin
-  Result := AppTryStrToDate(AText, ADate);
-end;
-
 procedure TOpenItemsReportForm.ConfigureColumns;
 var
   Col: TMDListColumn;
@@ -182,32 +172,6 @@ begin
   Col.Alignment := taRightJustify;
 end;
 
-function TOpenItemsReportForm.ParseAmount(const AText: string;
-  out AAmount: currency): Boolean;
-var
-  TempText: string;
-  TempValue: extended;
-  err: integer;
-begin
-  Result := False;
-  AAmount := 0;
-
-  TempText := Trim(AText);
-  if TempText = '' then
-  begin
-    AAmount := 0;
-    Result := True;
-    Exit;
-  end;
-
-  TempText := StringReplace(TempText, ',', '.', [rfReplaceAll]);
-  TempValue := GetExtended(pointer(StringToUtf8(TempText)), err);
-  if err <> 0 then
-    Exit;
-  AAmount := TempValue;
-  Result := True;
-end;
-
 function TOpenItemsReportForm.ValidateFilters: Boolean;
 var
   TempDate: TDateTime;
@@ -215,7 +179,7 @@ var
 begin
   Result := False;
 
-  if not ParseDate(EditFromDate.Text, TempDate) then
+  if not AppTryStrToDate(EditFromDate.Text, TempDate) then
   begin
     ShowMessage(Format('Please enter a valid From Date (%s).', [AppDateFormatHint]));
     EditFromDate.SetFocus;
@@ -223,7 +187,7 @@ begin
   end;
   FFromDate := TempDate;
 
-  if not ParseDate(EditToDate.Text, TempDate) then
+  if not AppTryStrToDate(EditToDate.Text, TempDate) then
   begin
     ShowMessage(Format('Please enter a valid To Date (%s).', [AppDateFormatHint]));
     EditToDate.SetFocus;
@@ -238,7 +202,7 @@ begin
     Exit;
   end;
 
-  if not ParseAmount(EditMinAmount.Text, TempAmount) then
+  if not TryStrToCurr(EditMinAmount.Text, TempAmount) then
   begin
     ShowMessage('Please enter a valid minimum amount.');
     EditMinAmount.SetFocus;
@@ -251,29 +215,28 @@ end;
 
 procedure TOpenItemsReportForm.LoadData;
 var
+  Items: TDtoOpenItemDynArray;
   i: integer;
-  Item: TDtoOpenItem;
   ListItem: TMDListItem;
 begin
   if not ValidateFilters then
     Exit;
 
-  FReportService.LoadOpenItems(FFromDate, FToDate, FMinAmount);
+  RgServices.ReportService.GetOpenItemsReport(FFromDate, FToDate, FMinAmount, Items);
 
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Item.Company;
-    ListItem.SubItems.Add(Item.OrderNo);
-    if Item.SaleDate > 0 then
-      ListItem.SubItems.Add(AppDateToStr(Item.SaleDate))
+    ListItem.Caption := Utf8ToString(Items[i].Company);
+    ListItem.SubItems.Add(Utf8ToString(Items[i].OrderNo));
+    if Items[i].SaleDate > 0 then
+      ListItem.SubItems.Add(AppDateToStr(Items[i].SaleDate))
     else
       ListItem.SubItems.Add('');
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.ItemsTotal)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.OpenAmount)^));
-    ListItem.SubItems.Add(IntToStr(Item.DaysOverdue));
-    ListItem.Data := Pointer(PtrInt(Item.OrderID));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].ItemsTotal));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].OpenAmount));
+    ListItem.SubItems.Add(IntToThousandString(Items[i].DaysOverdue));
+    ListItem.Data := Pointer(PtrInt(Items[i].OrderID));
   end;
 end;
 
