@@ -329,11 +329,11 @@ function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
 // - this function would left the P^ buffer memory untouched, so may be safer
 // than the overloaded GetJsonPropName() function in some cases
 // - it will return the property name as a local UTF-8 encoded ShortString,
-// or PropName='' on error
+// ending with an out-of-length #0, or PropName='' on error
 // - this function won't unescape the property name, as strict JSON (i.e. a "st\"ring")
 // - but it will handle MongoDB syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-procedure GetJsonPropNameShort(var P: PUtf8Char; out PropName: ShortString);
+procedure GetJsonPropNameShort(var P: PUtf8Char; var PropName: ShortString);
 
 /// decode a JSON object or array from an UTF-8 encoded buffer
 // - as called by GetJsonFieldOrObjectOrArray() for HandleValuesAsObjectOrArray
@@ -4005,88 +4005,19 @@ begin
   result := Name;
 end;
 
-procedure GetJsonPropNameShort(var P: PUtf8Char; out PropName: ShortString);
+procedure GetJsonPropNameShort(var P: PUtf8Char; var PropName: ShortString);
 var
-  Name: PAnsiChar;
-  c: AnsiChar;
-  tab: PJsonCharSet;
-label
-  ok;
+  Name: PUtf8Char;
+  NameLen: integer; // not PtrInt
 begin
-  // match GotoNextJsonObjectOrArray() and overloaded GetJsonPropName()
-  PropName[0] := #0;
-  if P = nil then
-    exit;
-  while P^ <= ' ' do
-  begin
-    if P^ = #0 then
-    begin
-      P := nil;
-      exit;
-    end;
-    inc(P);
-  end;
-  Name := pointer(P);
-  c := P^;
-  if c = '/' then
-  begin
-    P := TryGotoEndOfComment(P);
-    c := P^;
-  end;
-  if c = '"' then
-  begin
-    inc(Name);
-    tab := @JSON_CHARS;
-    repeat
-      inc(P);
-    until jcJsonStringMarker in tab[P^]; // #0 " \
-    if P^ <> '"' then
-      exit;
-ok: SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
-    repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
-    if P^ <> ':' then
-    begin
-      PropName[0] := #0;
-      exit;
-    end;
-    inc(P);
-  end
-  else if c = '''' then
-  begin
-    // single quotes won't handle nested quote character
-    inc(P);
-    inc(Name);
-    while P^ <> '''' do
-      if P^ < ' ' then
-        exit
-      else
-        inc(P);
-    goto ok;
-  end
+  Name := GetJsonPropName(P, @NameLen, {NoJsonUnescapeNorEnding0=}true);
+  if (Name = nil) or
+     (NameLen >= high(PropName)) then
+    PropName[0] := #0
   else
   begin
-    // e.g. '{age:{$gt:18}}'
-    tab := @JSON_CHARS;
-    if not (jcJsonIdentifierFirstChar in tab[c]) then // _$0..9a..zA..Z
-      exit;
-    repeat
-      inc(P);
-    until not (jcJsonIdentifier in tab[P^]); // _-.[]$0..9a..zA..Z
-    SetString(PropName, Name, P - Name);
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    if (P^ <> ':') and
-       (P^ <> '=') then
-    begin
-      // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
-      PropName[0] := #0;
-      exit;
-    end;
-    inc(P);
+    SetString(PropName, PAnsiChar(Name), NameLen);
+    PAnsiChar(@PropName)[NameLen + 1] := #0;
   end;
 end;
 
