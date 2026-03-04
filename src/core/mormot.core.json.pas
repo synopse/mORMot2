@@ -7057,9 +7057,8 @@ begin
         end;
         AddDirect('}');
       end;
-    '"':
+    '"': // "string"
       begin
-        // string
         Value := Json;
         Json := GotoEndOfJsonString2(Json + 1, @JSON_CHARS);
         if Json^ <> '"' then
@@ -7071,6 +7070,18 @@ begin
           AddNoJsonEscapeForcedNoUnicode(Value, Json - Value)
         else
           AddNoJsonEscapeForcedUnicode(Value, Json - Value);
+      end;
+    '''': // 'string' non-strict format
+      begin
+        inc(Json);
+        Value := Json;
+        while Json^ <> '''' do
+          if Json^ < ' ' then
+            exit
+          else
+            inc(Json);
+        AddJsonStringBuffer(Value, Json - Value);
+        inc(Json);
       end;
   else
     begin
