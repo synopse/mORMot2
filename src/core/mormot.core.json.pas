@@ -3076,7 +3076,7 @@ var
   JsonSet: PJsonCharSet; // will use a register for this lookup table
   {$endif CPUX86}
 label
-  prop, stop, assign;
+  ident, stop, assign;
 begin
   result := nil; // to notify unexpected end
   if P = nil then
@@ -3137,19 +3137,19 @@ begin
            (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]
           inc(P, 3)
         else
-          goto prop;
+          goto ident;
       jtTrueFirstChar: // 't'
         if (PInteger(P)^ = TRUE_LOW) and
            (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]
           inc(P, 3)
         else
-          goto prop;
+          goto ident;
       jtFalseFirstChar: // 'f'
         if (PInteger(P + 1)^ = FALSE_LOW2) and
            (jcEndOfJsonValueField in JsonSet[P[5]]) then // #0#9#10#13 ,}]
           inc(P, 4)
         else
-          goto prop;
+          goto ident;
       jtObjectStart: // {
         begin
           n := StackCount;
@@ -3232,50 +3232,24 @@ assign:   if State <> stObjectName then
           goto assign;
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
-prop:     if ExpectStandard then
+ident:    if ExpectStandard then
             exit;
-          repeat
-            repeat
-              inc(P);
-            until not (jcJsonIdentifier in JsonSet[P^]); // _-.[]$0..9a..zA..Z
-            while (P^ <= ' ') and
-                  (P^ <> #0) do
-              inc(P);
-          until not (jcJsonIdentifierFirstChar in JsonSet[P^]); // new date(...
-          while (P^ <= ' ') and
-                (P^ <> #0) do
+          repeat     // very relaxed unquoted names and values support
             inc(P);
-          if P^ = '(' then
-          begin
-            // handle e.g. "born":isodate("1969-12-31")
-            repeat
-              inc(P);
-            until (P^ > ' ') or
-                  (P^ = #0);
-            if P^ = '"' then
-            begin
-              repeat
-                inc(P);
-              until jcJsonStringMarker in JsonSet[P^]; // #0 " \
-              if P^ <> '"' then
+            if P^ < ' ' then
+              exit  // premature string ending (leaving Json=nil)
+            else if P^ = '"' then
+              if State = stObjectValue then
+                repeat // e.g. date:ISODate("2012-10-17T20:46:22")}
+                  inc(P);
+                until (P^ = #0) or (P^ = '"')
+              else
                 exit;
-              inc(P);
-            end;
-            while (P^ <> ')') and
-                  (P^ <> #0) do
-              inc(P);
-            if P^ <> #0 then
-              inc(P);
-          end
-          else if State <> stObjectName then
-            if State = stPropName then
-            begin
-              State := stPropNameUnquoted;
-              break;
-            end
-            else
-              exit; // identifier values are functions like isodate() objectid()
-          continue;
+          until (jcEndOfJsonFieldOr0 in JsonSet[P^]) or // #0 , ] } :
+                ((P^ <> '=') and ((State = stPropName) or (State = stObjectName)));
+          if State = stPropName then
+            State := stPropNameUnquoted;
+          dec(P); // for inc(P); just below
         end;
       jtSlash: // '/' extended /regex/i or /*comment*/ or //comment
         begin
