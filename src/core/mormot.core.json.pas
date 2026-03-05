@@ -3548,7 +3548,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
         if c = #0 then
           exit; // a JSON number value should be followed by , } or ]
         if ValueLen > 1 then
-          goto ident2; // e.g. 192.168.0.0
+          goto ident2; // e.g. 192.168.0.0/24
         ValueLen := P - Value;
         if (P^ <= ' ') and
            (P^ <> #0) then

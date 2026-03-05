@@ -2001,6 +2001,8 @@ var
         Prepend(RawByteString(AA[i, a]), 'a'); // ["a0","a1",..]
         check(not IsValidJson(AA[i, a]));
       end;
+      if AA[i] <> nil then
+        Make(['192.168.0.', i, '/24'], AA[i, Random32(length(AA[i]))]);
     end;
     binary := DynArraySave(AA, TypeInfo(TRawUtf8DynArrayDynArray));
     Check(DynArrayLoad(AB, pointer(binary), TypeInfo(TRawUtf8DynArrayDynArray),
@@ -5866,6 +5868,12 @@ begin
   o := _Json('{ hello = [ one = 1 , two = 10 ] }');
   u := VariantSaveJson(o);
   CheckEqual(u, '{"hello":["one = 1","two = 10"]}', 'relaxed json = array');
+  o := _Json('{ static = [ 192168, 192169 ] }');
+  u := VariantSaveJson(o);
+  CheckEqual(u, '{"static":[192168,192169]}', 'numbers');
+  o := _Json('{ static = [ 192.168.0.1, 192.168.0.20 ] }');
+  u := VariantSaveJson(o);
+  CheckEqual(u, '{"static":["192.168.0.1","192.168.0.20"]}', 'relaxed ip');
   CheckRegEx(_Json(
     '{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
   CheckRegEx(_Json(
