@@ -9930,7 +9930,7 @@ begin
     PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
   end
   else
-    Ansi7StringToShortString(Context, ctx);
+    Ansi7StringToShortString(Context, ctx{%H-});
   persec[0] := #0;
   if PerSecond <> 0 then
     FormatShort(' %/s', [KBNoSpace(PerSecond)], persec);

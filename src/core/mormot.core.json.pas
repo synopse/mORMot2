@@ -527,18 +527,11 @@ function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar = ',';
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
-// - handle two types of comments: starting from // till end of line
+// - handle three types of comments: starting from // or # till end of line,
 // or /* ..... */ blocks anywhere in the text content
 // - trailing commas are also replaced by ' ' to allow JSON5 parsing
 // - may be used to prepare configuration files before loading;
-// for example we store server configuration in file config.json and
-// put some comments in this file then code for loading is:
-// !var
-// !  cfg: RawUtf8;
-// ! ...
-// !  cfg := StringFromFile(Executable.ProgramFilePath + 'config.json');
-// !  RemoveCommentsFromJson(@cfg[1]);
-// !  pLastChar := JsonToObject(obj, pointer(cfg), isvalid);
+// see e.g. JsonSettingsToObject() and JsonFileToObject() functions
 procedure RemoveCommentsFromJson(P: PUtf8Char); overload;
 
 /// remove comments from a text buffer before passing it to JSON parser
@@ -4617,13 +4610,11 @@ begin
   case result^ of
     '/':
       begin // this is // comment - replace by ' '
-        dec(result);
+        result[-1] := ' ';
         repeat
           result^ := ' ';
           inc(result)
         until result^ in [#0, #10, #13];
-        if result^ <> #0 then
-          inc(result);
       end;
     '*':
       begin // this is /* comment - replace by ' ' but keep CRLF
@@ -4652,14 +4643,14 @@ begin // replace comments text by spaces which will be ignored by parser
       case P^ of
         #0:
           break;
-        '"': // ignore // /* and , within JSON "strings"
+        '"': // ignore // /* # and , within JSON "strings"
           begin
             P := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
             if P^ <> '"' then
               exit;
             inc(P);
           end;
-        '''': // ignore // /* and , within single quoted 'strings'
+        '''': // ignore // /* # and , within single quoted 'strings'
           begin
             repeat
               inc(P);
@@ -4670,13 +4661,23 @@ begin // replace comments text by spaces which will be ignored by parser
           end;
         '/':
           P := DoRemoveComment(P);
+        '#':
+          repeat
+            P^ := ' ';
+            inc(P)
+          until P^ in [#0, #10, #13];
         ',':
           begin
             // replace JSON5 trailing comma by space for strict JSON parsing
             PComma := P;
             P := IgnoreAndGotoNextNotSpace(P);
             if P^ = '/' then
-              P := DoRemoveComment(P);
+              P := DoRemoveComment(P)
+            else if P^ = '#' then
+              repeat
+                P^ := ' ';
+                inc(P)
+              until P^ in [#0, #10, #13];
             P := GotoNextNotSpace(P);
             if P^ in ['}', ']'] then
               PComma^ := ' '; // see https://github.com/synopse/mORMot/pull/349
