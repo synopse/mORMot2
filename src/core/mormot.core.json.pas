@@ -4671,14 +4671,17 @@ begin // replace comments text by spaces which will be ignored by parser
             // replace JSON5 trailing comma by space for strict JSON parsing
             PComma := P;
             P := IgnoreAndGotoNextNotSpace(P);
-            if P^ = '/' then
-              P := DoRemoveComment(P)
-            else if P^ = '#' then
-              repeat
-                P^ := ' ';
-                inc(P)
-              until P^ in [#0, #10, #13];
-            P := GotoNextNotSpace(P);
+            while P^ in ['/', '#'] do
+            begin
+              if P^ = '/' then
+                P := DoRemoveComment(P)
+              else
+                repeat
+                  P^ := ' ';
+                  inc(P)
+                until P^ in [#0, #10, #13];
+              P := GotoNextNotSpace(P);
+            end;
             if P^ in ['}', ']'] then
               PComma^ := ' '; // see https://github.com/synopse/mORMot/pull/349
           end;
