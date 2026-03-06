@@ -1991,7 +1991,7 @@ begin
       MoveFast(Request.Headers.KnownHeaders[H].pRawValue^,
         D^, Request.Headers.KnownHeaders[H].RawValueLength);
       inc(D, Request.Headers.KnownHeaders[H].RawValueLength);
-      PWord(D)^ := 13 + 10 shl 8;
+      PWord(D)^ := EOLW;
       inc(D, 2);
     end;
   P := Request.Headers.pUnknownHeaders;
@@ -2010,7 +2010,7 @@ begin
         MoveFast(P^.pRawValue^, D^, P^.RawValueLength);
         inc(D, P^.RawValueLength);
         inc(P);
-        PWord(D)^ := 13 + 10 shl 8;
+        PWord(D)^ := EOLW;
         inc(D, 2);
       end;
   if Lip <> 0 then
@@ -2019,7 +2019,7 @@ begin
     inc(D, REMOTEIP_HEADERLEN);
     MoveFast(pointer(RemoteIP)^, D^, Lip);
     inc(D, Lip);
-    PWord(D)^ := 13 + 10 shl 8;
+    PWord(D)^ := EOLW;
     inc(D, 2);
   end;
   Lip := D - pointer(result);
@@ -2585,7 +2585,7 @@ begin
       inc(d, 2);
       MoveFast(h^.pcValue^, d^, h^.ulValueLength);
       inc(d, h^.ulValueLength);
-      PWord(d)^ := 13 + 10 shl 8;
+      PWord(d)^ := EOLW;
       inc(d, 2);
     end;
     inc(h);

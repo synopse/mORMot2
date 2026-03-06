@@ -5032,7 +5032,7 @@ procedure TTextWriter.AddCR;
 begin
   if B >= BEnd then
     FlushToStream;
-  PCardinal(B + 1)^ := 13 + 10 shl 8; // CR + LF
+  PCardinal(B + 1)^ := EOLW; // CR + LF
   inc(B, 2);
 end;
 
@@ -5604,7 +5604,7 @@ begin
     MoveFast(Text[1], B^, L);
     inc(B, L);
   end;
-  PCardinal(B)^ := 13 + 10 shl 8; // CR + LF
+  PCardinal(B)^ := EOLW; // CR + LF
   inc(B);
 end;
 

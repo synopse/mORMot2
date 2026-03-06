@@ -2851,7 +2851,7 @@ begin
   end
   else
   begin
-    WR.AddString(Value);
+    WR.AddString(Value); // constant or number
     WR.AddComma;
   end;
 end;

@@ -7832,7 +7832,7 @@ begin
         P := GotoNextLine(P);
         if P = nil then
           exit;
-      until PWord(P)^ = 13 + 10 shl 8;
+      until PWord(P)^ = EOLW;
       // decode section content
       i := P - PUtf8Char(pointer(Body)) + 3; // i = just after header
       j := PosEx(boundary, Body, i);
@@ -9445,7 +9445,7 @@ begin
       {$endif CPUX64}
       Map.ProcessOneLine(PBeg, P);
       if P + 1 < PEnd then
-        if PWord(P)^ = 13 + 10 shl 8 then
+        if PWord(P)^ = EOLW then
         begin
           inc(P, 2); // ignore #13#10
           if P < PEnd then

@@ -9099,7 +9099,7 @@ str:          W.AddDirect('"');
         else
           if IsStringJson(U) then // fast and safe enough to guess from value
             goto str
-          else
+          else // constant or number
             W.AddNoJsonEscape(U, {$ifdef NOTORMTABLELEN}StrLen(U){$else}fLen[o]{$endif});
         end;
       W.AddComma;
