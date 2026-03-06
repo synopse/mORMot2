@@ -495,20 +495,22 @@ type
     hfOutsideAttributes,
     hfWithinAttributes);
 
-  /// the available JSON/JSON-like formats, for TTextWriter.AddJsonReformat()
-  // and its JsonBufferReformat() and JsonReformat() wrappers
-  // - jsonCompact is the default machine-friendly single-line layout
+  /// the JSON/JSON-like known formats supported by JsonReformat()
+  // - all those formats are inter-operable within the JSON data model
+  // - jsonCompact is the default standard machine-friendly single-line JSON
   // - jsonHumanReadable will add line feeds and indentation, for a more
-  // human-friendly result
+  // human-friendly result of a standard JSON content
   // - jsonUnquotedPropName will emit the jsonHumanReadable layout, but
   // with all property names being quoted only if necessary: this format
   // could be used e.g. for configuration files - this format, similar to the
-  // one used in the MongoDB extended syntax, is not JSON compatible: do not
+  // one used in the MongoDB extended syntax, is NOT JSON compatible: do not
   // use it e.g. with AJAX clients, but is would be handled as expected by all
   // our units as valid JSON input, without previous correction
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
   // property names, which is the smallest data output within mORMot instances
   // - json5 will emit jsonUnquotedPropName, but with a trailing , before } or ]
+  // - jsonHjson for indented unquoted values - i.e. the "Human JSON" config format
+  // - jsonMinimal is as unquoted, unindented and small as possible - aka .morml
   // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
   // but you can use jsonEscapeUnicode to produce pure 7-bit ASCII output,
   // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
@@ -521,6 +523,8 @@ type
     jsonUnquotedPropName,
     jsonUnquotedPropNameCompact,
     json5,
+    jsonHjson,
+    jsonMinimal,
     jsonEscapeUnicode,
     jsonNoEscapeUnicode);
 
@@ -535,12 +539,12 @@ type
   TTextWriter = class
   protected
     fStream: TStream;
-    fWrittenBytes: Int64;
-    fInitialStreamPosition: Int64;
     fHumanReadableLevel: integer;
-    fTempBufSize: integer; // internal temporary buffer
+    fTempBufSize: integer;
     fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
+    fWrittenBytes: Int64;
+    fInitialStreamPosition: Int64;
     fCustomOptions: TTextWriterOptions;
     fFlags: TTextWriterFlags;
     function GetTextLength: Int64;
@@ -1131,6 +1135,19 @@ type
 
   /// class of our simple TEXT format writer to a Stream
   TBaseWriterClass = class of TTextWriter;
+
+const
+  /// the file extensions suitable for each JsonReformat() function
+  JSON_FMT_EXT: array[TTextWriterJsonFormat] of TFileName = (
+    '.json',  // jsonCompact
+    '.json',  // jsonHumanReadable
+    '.json5', // jsonUnquotedPropName
+    '.json5', // jsonUnquotedPropNameCompact
+    '.json5', // json5
+    '.hjson', // jsonHjson
+    '.morml', // jsonMinimal
+    '.json',  // jsonEscapeUnicode
+    '.json'); // jsonNoEscapeUnicode
 
 var
   /// contains the default JSON serialization class for the framework
