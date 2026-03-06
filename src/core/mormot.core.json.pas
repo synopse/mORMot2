@@ -3079,15 +3079,15 @@ type
     procedure InitCount(Strict: boolean; PMax: PUtf8Char;
       First: TJsonParserState);
       {$ifdef HASINLINE} inline; {$endif}
+    // reusable method able to jump over any JSON value (up to Max)
+    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
+    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     // some methods used by TJsonWriter.DoJsonReformat()
     function Reformat(P: PUtf8Char): boolean;
     procedure ReformatBeginValue;
     procedure ReformatEndValue;
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
-    // reusable method able to jump over any JSON value (up to Max)
-    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
-    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
-      {$ifdef HASINLINE} inline; {$endif}
  end;
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
@@ -3462,7 +3462,7 @@ begin
         begin
           inc(P);
           Value := P;
-          while not (P^ in [#0, #10]) do
+          while (P^ <> #0) and (P^ <> #10) do
             inc(P);
           if jrfComments in Fmt then
             goto comment;
@@ -3565,12 +3565,12 @@ ident:    Value := P;
             repeat
               inc(P);
             until (jcEndOfJsonFieldOr0 in JsonSet[P^]) or // #0 , ] } :
-                  (P^ in [#10, '='])
+                  (P^ = #10) or (P^ = '=')
           else // stValue/stObjectValue
             repeat
               inc(P);
             until (jcEndOfJsonFieldNotName in JsonSet[P^]) or // #0 , ] }
-                  (P^ in [#10, '#']) or (PWord(P)^ = SLASH_16);
+                  (P^ = #10) or (P^ = '#') or (PWord(P)^ = SLASH_16);
           if P^ = #0 then
              exit; // unquoted values should not appear stand-alone
           ValueLen := P - Value;
@@ -4372,7 +4372,7 @@ begin
     inc(P);
     if P^ = #0 then
       exit;
-  until P^ in  [':', '='];
+  until (P^ = ':') or (P^ = '=');
   Json := P + 1;
   result := Name;
 end;
