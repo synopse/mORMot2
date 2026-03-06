@@ -2593,13 +2593,13 @@ begin
         repeat
           inc(result)
         until result^ in [#0, #10]
-      else if c = ord('/') + ord('*') shl 8 then
+      else if c = SLBEG_16 then
       begin
         // C comments
         inc(result);
         repeat
           inc(result);
-          if cardinal(PWord(result)^) = ord('*') + ord('/') shl 8 then
+          if cardinal(PWord(result)^) = SLEND_16 then
           begin
             inc(result, 2);
             break;

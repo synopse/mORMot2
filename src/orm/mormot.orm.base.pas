@@ -9190,7 +9190,7 @@ begin
           begin
             len := GetResultsLen(o, U);
             if Tab or not IsStringJson(U) then
-              W.AddNoJsonEscape(U, len)
+              W.AddNoJsonEscape(U, len) // constant or number
             else
               W.AddQuotedStr(U, len, '"');
           end;

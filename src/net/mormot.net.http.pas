@@ -3000,7 +3000,7 @@ begin
       inc(i);
       inc(p, i);
       dec(l, i);
-    until PWord(p)^ = ord('/') + ord('/') shl 8; // found http://xxxxx
+    until cardinal(PWord(p)^) = SLASH_16; // found http://xxxxx
     i := ByteScanIndex(pointer(p + 2), l - 2, ord('/'));
     if i < 0 then
       exit;

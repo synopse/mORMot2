@@ -103,8 +103,11 @@ const
   JSON_UNESCAPE_UNEXPECTED = #0;
   /// JSON_UNESCAPE[] lookup value: indicates '\u0123' UTF-16 pattern
   JSON_UNESCAPE_UTF16 = #1;
+  /// used internally to encode '\uxxxx' JSON_ESCAPE_UNICODEHEX pattern
+  JSON_UHEX = ord('\') + ord('u') shl 8;
   /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
-  JSON_UHEXC = ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+  JSON_UHEXC = JSON_UHEX + ord('0') shl 16 + ord('0') shl 24;
+
   // some other constants used for fast ID/ROWID pattern recognition
   _ID16   = ord('I') + ord('D') shl 8;
   _ROW24  = ord('R') + ord('O') shl 8 + ord('W') shl 16;
@@ -2892,7 +2895,7 @@ var
   P: PUtf8Char;
 begin
   P := B;
-  PWord(P + 1)^ := ord('\') + ord('u') shl 8;
+  PWord(P + 1)^ := JSON_UHEX;
   PWord(P + 3)^ := tab[c shr 8];
   PWord(P + 5)^ := tab[c and $ff];
   inc(B, 6);
@@ -3273,7 +3276,7 @@ ident:    if ExpectStandard then
               inc(P);
               if P^ = #0 then
                 exit;
-            until PWord(P)^ = ord('*') + ord('/') shl 8;
+            until cardinal(PWord(P)^) = SLEND_16;
             inc(P, 2);
             continue;
           end
@@ -3626,7 +3629,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
           end
           else
           begin
-            if cardinal(PWord(P)^) = ord('\') + ord('u') shl 8 then
+            if cardinal(PWord(P)^) = JSON_UHEX then
             begin
               c2 := (ConvertHexToBin[P[2]] shl 12) or // 2nd UTF-16 surrogate
                     (ConvertHexToBin[P[3]] shl 8) or
@@ -4623,7 +4626,7 @@ begin
           if not (result^ in [#10, #13]) then
             result^ := ' '; // keep CRLF for line numbering (e.g. for error)
           inc(result);
-          if cardinal(PWord(result)^) = ord('*') + ord('/') shl 8 then
+          if cardinal(PWord(result)^) = SLEND_16 then
           begin
             PWord(result)^ := $2020; // end of multi-line comments block
             inc(result, 2);
@@ -4665,7 +4668,7 @@ begin // replace comments text by spaces which will be ignored by parser
           repeat
             P^ := ' ';
             inc(P)
-          until P^ in [#0, #10, #13];
+          until P^ in [#0, #10];
         ',':
           begin
             // replace JSON5 trailing comma by space for strict JSON parsing
@@ -4679,7 +4682,7 @@ begin // replace comments text by spaces which will be ignored by parser
                 repeat
                   P^ := ' ';
                   inc(P)
-                until P^ in [#0, #10, #13];
+                until P^ in [#0, #10];
               P := GotoNextNotSpace(P);
             end;
             if P^ in ['}', ']'] then

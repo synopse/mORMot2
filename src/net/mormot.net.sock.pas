@@ -5935,7 +5935,7 @@ begin
       usUdp:  // 'udp://server:port'
         Layer := nlUdp;
       usFile: // https://en.wikipedia.org/wiki/File_URI_scheme#Number_of_slash_characters
-        if PWord(s + 3)^ = ord('/') + ord('/') shl 8 then
+        if cardinal(PWord(s + 3)^) = SLASH_16 then
           inc(s, 2); // support 'file:////server/folder/data.xml' form
     end;
     p := s + 3;

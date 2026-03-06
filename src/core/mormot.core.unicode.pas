@@ -8933,12 +8933,12 @@ function GotoNextSqlIdentifier(P: PUtf8Char; tab: PTextCharSet): PUtf8Char;
 begin
   while tcCtrlNot0Comma in tab[P^] do // in [#1..' ', ';']
     inc(P);
-  if PWord(P)^ = ord('/') + ord('*') shl 8 then
+  if PWord(P)^ = SLBEG_16 then
   begin
     // detect and ignore e.g. '/*nocache*/'
     repeat
       inc(P);
-      if PWord(P)^ = ord('*') + ord('/') shl 8 then
+      if PWord(P)^ = SLEND_16 then
       begin
         inc(P, 2);
         break;

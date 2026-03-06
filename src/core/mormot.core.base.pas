@@ -821,6 +821,9 @@ const
   DELE_32    = ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
   OPTI_32    = ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
   NONE_32    = ord('N') + ord('O') shl 8 + ord('N') shl 16 + ord('E') shl 24;
+  SLASH_16   = ord('/') + ord('/') shl 8;
+  SLBEG_16   = ord('/') + ord('*') shl 8;
+  SLEND_16   = ord('*') + ord('/') shl 8;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;
