@@ -2663,9 +2663,9 @@ var
     for s := low(s) to high(s) do
     begin
       j := JsonReformat(src, s);
-      if not (s in [json5, jsonHjson, jsonMinimal]) then // too much relaxed
+      if not (s in [json5, jsonH, jsonMorml]) then // too much relaxed
         Check(IsValidJson(j));
-      //if s in [jsonCompact, jsonHjson] then ConsoleWrite(j);
+      //if s in [jsonCompact, jsonH] then ConsoleWrite(j);
       if s = f then
         CheckEqual(j, exp, 'expected reformat');
       for d := low(d) to high(d) do
@@ -3138,11 +3138,11 @@ begin
    '{'#10'  one: {'#10'    true: "true"'#10 +
    '    b: be'#10'    c: true'#10'    d: "null"' +
    #10'    null: null'#10'    e: nulle'#10 +
-   '  }'#10'  two: 2'#10'}', jsonHjson);
+   '  }'#10'  two: 2'#10'}', jsonH);
   TestReformat(
     '{ip:[192.168.0.1/24,192.168.0.254]}',
     '{'#10'  ip: ['#10'    192.168.0.1/24'#10 +
-    '    192.168.0.254'#10'  ]'#10'}', jsonHjson);
+    '    192.168.0.254'#10'  ]'#10'}', jsonH);
   TestReformat(
     '{a = [o n e , " t w o ", ], b = 2, }',
     '{a:["o n e"," t w o "],b:2}');
@@ -4113,7 +4113,7 @@ begin
   NotifyTestSpeed('Reformat JSON5', 0, length(j0) * ITER, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
-    j0 := JsonReformat(people, jsonHjson);
+    j0 := JsonReformat(people, jsonH);
   NotifyTestSpeed('Reformat Hjson', 0, length(j0) * ITER, @timer, ONLYLOG);
   dv.InitJson(people);
   peoplehash := Hash32(dv.ToJson);

@@ -498,8 +498,8 @@ type
   /// the JSON/JSON-like known formats supported by JsonReformat()
   // - all those formats are inter-operable within the JSON data model
   // - jsonCompact is the default standard machine-friendly single-line JSON
-  // - jsonHumanReadable will add line feeds and indentation, for a more
-  // human-friendly result of a standard JSON content
+  // - jsonHumanReadable will add line feeds and #9 (tab) indentation, for a
+  // more human-friendly result of a standard JSON content
   // - jsonUnquotedPropName will emit the jsonHumanReadable layout, but
   // with all property names being quoted only if necessary: this format
   // could be used e.g. for configuration files - this format, similar to the
@@ -508,9 +508,10 @@ type
   // our units as valid JSON input, without previous correction
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
   // property names, which is the smallest data output within mORMot instances
-  // - json5 will emit jsonUnquotedPropName, but with a trailing , before } or ]
-  // - jsonHjson for indented unquoted values - i.e. the "Human JSON" config format
-  // - jsonMinimal is as unquoted, unindented and small as possible - aka .morml
+  // - json5 will emit unquoted names, but with a trailing , before } or ]
+  // - jsonH for indented unquoted names and values, using LF as delimiter -
+  // i.e. the .hjson "Human JSON" format, very suitable for config files
+  // - jsonMorml is as unquoted, unindented and small as possible - aka .morml
   // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
   // but you can use jsonEscapeUnicode to produce pure 7-bit ASCII output,
   // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
@@ -523,8 +524,8 @@ type
     jsonUnquotedPropName,
     jsonUnquotedPropNameCompact,
     json5,
-    jsonHjson,
-    jsonMinimal,
+    jsonH,
+    jsonMorml,
     jsonEscapeUnicode,
     jsonNoEscapeUnicode);
 
@@ -1144,8 +1145,8 @@ const
     '.json5', // jsonUnquotedPropName
     '.json5', // jsonUnquotedPropNameCompact
     '.json5', // json5
-    '.hjson', // jsonHjson
-    '.morml', // jsonMinimal
+    '.hjson', // jsonH
+    '.morml', // jsonMorml
     '.json',  // jsonEscapeUnicode
     '.json'); // jsonNoEscapeUnicode
 

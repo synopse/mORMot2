@@ -621,8 +621,8 @@ procedure JsonBufferReformat(P: PUtf8Char; out result: RawUtf8;
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 // - all those formats are inter-operable within the JSON data model, i.e. you
 // can call JsonReformat() between any of them and keep all information
-// - in practice, jsonCompact is standard JSON and jsonHjson is nice for configs
-// - note that json5/jsonHjson would preserve and normalize the comments, and
+// - in practice, jsonCompact is standard JSON and jsonH is nice for configs
+// - note that json5/jsonH would preserve and normalize the comments, and
 // others will remove them for better interaction
 function JsonReformat(const Json: RawUtf8;
   Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
@@ -3033,10 +3033,8 @@ begin // caller ensured was not a constant nor a number
 end;
 
 type
-  TJsonReformatFlags = set of (
-    jrfIndent, jrfTrailingComma, jrfNoTrailingComma, jrfComments,
-    jrfCommentHash, jrfUnquoteName, jrfUnquoteValue, jrfUnquoteEcmaName);
-  TJsonGotoEndParserState = (
+  // the different states of the TJsonParser logic
+  TJsonParserState = (
     stObjectName,
     stObjectValue,
     stValue,
@@ -3044,21 +3042,28 @@ type
     stValueFirst,
     stPropName,
     stPropNameUnquoted);
-  TJsonGotoEndToken = (
-    tokValue,   // "string" 3.14 true/false/null
-    tokPush,   // { [
-    tokPop);   // } ]
+  // 8-bit individual TTextWriterJsonFormat features for TJsonParser.Reformat
+  TJsonReformatFlags = set of (
+    jrfIndent,
+    jrfTrailingComma,
+    jrfNoTrailingComma,
+    jrfComments,
+    jrfCommentHash,
+    jrfUnquoteName,
+    jrfUnquoteValue,
+    jrfUnquoteEcmaName);
+
   /// state machine for fast (GB/s) parsing of (extended) JSON input
   {$ifdef USERECORDWITHMETHODS}
-  TJsonGotoEndParser = record
+  TJsonParser = record
   {$else}
-  TJsonGotoEndParser = object
+  TJsonParser = object
   {$endif USERECORDWITHMETHODS}
   public
     {$ifdef CPUX86}
     JsonSet: PJsonCharSet; // not enough registers in i386 mode
     {$endif CPUX86}
-    State: TJsonGotoEndParserState;
+    State: TJsonParserState;
     ExpectStandard: boolean;
     Fmt: TJsonReformatFlags;
     FmtUnicode: (uNoConversion, uForcedUnicode, uForcedNoUnicode);
@@ -3068,13 +3073,14 @@ type
     W: TJsonWriter;
     RootCount: integer;
     // 500 nested documents seem enough in practice (SQLite3 uses 1000)
-    Stack: array[0..500] of TJsonGotoEndParserState;
+    Stack: array[0..500] of TJsonParserState;
     procedure Init(Strict: boolean; PMax: PUtf8Char);
       {$ifdef HASINLINE} inline; {$endif}
     procedure InitCount(Strict: boolean; PMax: PUtf8Char;
-      First: TJsonGotoEndParserState);
+      First: TJsonParserState);
       {$ifdef HASINLINE} inline; {$endif}
-    function Reformat(P: PUtf8Char): boolean; // as used by DoJsonReformat
+    // some methods used by TJsonWriter.DoJsonReformat()
+    function Reformat(P: PUtf8Char): boolean;
     procedure ReformatBeginValue;
     procedure ReformatEndValue;
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
@@ -3084,7 +3090,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
  end;
 
-procedure TJsonGotoEndParser.Init(Strict: boolean; PMax: PUtf8Char);
+procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
 begin
   {$ifdef CPUX86}
   JsonSet := @JSON_CHARS;
@@ -3096,8 +3102,8 @@ begin
   Max := PMax;
 end; // RootCount is not initialized by default unless InitCount() is called
 
-procedure TJsonGotoEndParser.InitCount(Strict: boolean; PMax: PUtf8Char;
-  First: TJsonGotoEndParserState);
+procedure TJsonParser.InitCount(Strict: boolean; PMax: PUtf8Char;
+  First: TJsonParserState);
 begin
   Init(Strict, PMax);
   RootCount := 0;
@@ -3106,7 +3112,7 @@ begin
   State := First;
 end;
 
-function TJsonGotoEndParser.GotoEnd(P: PUtf8Char): PUtf8Char;
+function TJsonParser.GotoEnd(P: PUtf8Char): PUtf8Char;
 var
   n: PtrInt;
   {$ifndef CPUX86}
@@ -3346,7 +3352,7 @@ ident:    if ExpectStandard then
   result := P; // points to the next meaningful char
 end;
 
-function TJsonGotoEndParser.GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char;
+function TJsonParser.GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char;
 var
   c: AnsiChar;
 begin
@@ -3359,7 +3365,7 @@ begin
     inc(result);
 end;
 
-procedure TJsonGotoEndParser.ReformatBeginValue;
+procedure TJsonParser.ReformatBeginValue;
 begin
   // we don't follow the JSON layout, but the natural value/object/array flow
   case State of
@@ -3376,7 +3382,7 @@ begin
     W.AddCRAndIndent;
 end;
 
-procedure TJsonGotoEndParser.ReformatEndValue;
+procedure TJsonParser.ReformatEndValue;
 begin
   if State = stObjectName then
   begin
@@ -3395,7 +3401,7 @@ begin
   end;
 end;
 
-function TJsonGotoEndParser.AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
+function TJsonParser.AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
 begin
   result := false;
   if (Len <= 0) or
@@ -3432,7 +3438,7 @@ begin
   result := true;
 end;
 
-function TJsonGotoEndParser.Reformat(P: PUtf8Char): boolean;
+function TJsonParser.Reformat(P: PUtf8Char): boolean;
 var
   {$ifndef CPUX86}
   JsonSet: PJsonCharSet; // will use a register for this lookup table
@@ -3662,7 +3668,7 @@ end;
 function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean): boolean;
 var
   B: PUtf8Char;
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   result := false;
   if (P = nil) or
@@ -3768,7 +3774,7 @@ end;
 
 function GetNextJsonToken(var P: PUtf8Char; strict: boolean; DocCount: PInteger): TJsonToken;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   result := jtNone;
   if DocCount <> nil then
@@ -3794,7 +3800,7 @@ end;
 
 function IsValidJsonBuffer(P: PUtf8Char; strict: boolean): boolean;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.Init(strict, nil);
   result := parser.GotoEnd(P) <> nil;
@@ -4163,7 +4169,7 @@ procedure TGetJsonField.GetJsonFieldOrObjectOrArray(
   HandleValuesAsObjectOrArray, NormalizeBoolean: boolean);
 var
   P: PUtf8Char;
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
   c: integer;
 begin
   P := Json;
@@ -4467,7 +4473,7 @@ procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
   EndOfObject: PAnsiChar);
 var
   B: PUtf8Char;
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   result := '';
   if P = nil then
@@ -4507,7 +4513,7 @@ end;
 
 function GotoEndJsonItemStrict(P, PMax: PUtf8Char): PUtf8Char;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.Init({strict=}true, PMax);
   result := parser.GotoEnd(P);
@@ -4515,7 +4521,7 @@ end;
 
 function GotoEndJsonItem(P, PMax: PUtf8Char): PUtf8Char;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.Init({strict=}false, PMax);
   result := parser.GotoEnd(P);
@@ -4524,7 +4530,7 @@ end;
 function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal;
   EndOfObject: PAnsiChar; PMax: PUtf8Char; Strict: boolean): PUtf8Char;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.Init(Strict, PMax);
   result := nil; // to notify unexpected end
@@ -4544,7 +4550,7 @@ end;
 
 function GotoNextJsonItem(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.Init(false, nil);
   result := parser.GotoEnd(P, EndOfObject);
@@ -4553,7 +4559,7 @@ end;
 function GetJsonObjectOrArray(P: PUtf8Char;
   EndOfObject: PUtf8Char; Len: PInteger): PUtf8Char;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.Init({strict=}false, nil);
   result := parser.GotoEnd(P);
@@ -4575,7 +4581,7 @@ end;
 
 function JsonArrayCount(P, PMax: PUtf8Char; Strict: boolean): integer;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.InitCount(Strict, PMax, stValue);
   if (parser.GotoEnd(P) = nil) and
@@ -4588,7 +4594,7 @@ end;
 function JsonArrayDecode(P: PUtf8Char; out Values: TPUtf8CharDynArray): boolean;
 var
   n, max: PtrInt;
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   result := false;
   max := 0;
@@ -4623,7 +4629,7 @@ end;
 
 function JsonArrayItem(P: PUtf8Char; Index: integer): PUtf8Char;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   if P <> nil then
   begin
@@ -4655,7 +4661,7 @@ end;
 
 function JsonObjectPropCount(P, PMax: PUtf8Char; Strict: boolean): PtrInt;
 var
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   {%H-}parser.InitCount(Strict, PMax, stObjectName);
   P := parser.GotoEnd(P);
@@ -4678,7 +4684,7 @@ var
   name: PUtf8Char;
   namelen: integer; // not PtrInt
   bystart: boolean; // mark 'PropName*' search
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   result := nil;
   if (P = nil) or
@@ -4914,8 +4920,8 @@ var
   wk, wv: TTextWriter;
   kb, ke, vb, ve: PUtf8Char;
   n: integer;
-  aftername: TJsonGotoEndParserState;
-  parser: TJsonGotoEndParser;
+  aftername: TJsonParserState;
+  parser: TJsonParser;
   temp1, temp2: TTextWriterStackBuffer;
 begin
   result := -1;
@@ -5420,7 +5426,7 @@ end;
 function GetFieldCountExpanded(P: PUtf8Char): integer;
 var
   EndOfObject: AnsiChar;
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
 begin
   result := 0;
   {%H-}parser.Init(false, nil);
@@ -7268,15 +7274,15 @@ const
     [jrfUnquoteName, jrfUnquoteEcmaName],            // jsonUnquotedPropNameCompact
     [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName,  // json5
      jrfTrailingComma, jrfComments],
-    [jrfIndent, jrfUnquoteName, jrfUnquoteValue,     // jsonHjson
+    [jrfIndent, jrfUnquoteName, jrfUnquoteValue,     // jsonH
      jrfNoTrailingComma, jrfComments, jrfCommentHash],
-    [jrfUnquoteName, jrfUnquoteValue],               // jsonMinimal
+    [jrfUnquoteName, jrfUnquoteValue],               // jsonMorml
     [],                                              // jsonEscapeUnicode
     []);                                             // jsonNoEscapeUnicode
 
 function TJsonWriter.DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat): boolean;
 var
-  parser: TJsonGotoEndParser; // reuse the GotoEnd state machine
+  parser: TJsonParser; // reuse the GotoEnd state machine
 begin
   result := false;
   if P = nil then
@@ -7833,7 +7839,7 @@ end;
 procedure TJsonWriter.AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
 var
   k, v: PUtf8Char;
-  parser: TJsonGotoEndParser;
+  parser: TJsonParser;
   needquotes: boolean;
 begin
   if (keys = nil) or
