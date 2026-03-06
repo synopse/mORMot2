@@ -368,7 +368,7 @@ begin
         dummy := TSynMustache.Parse(
           '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').
           Render(Client.Orm.RetrieveDocVariantArray(TOrmTest, 'items', 'Int,Test'));
-        check(IdemPChar(pointer(dummy), '1=1'#$D#$A'2=2'#$D#$A'3=3'#$D#$A'4=4'));
+        check(IdemPChar(pointer(dummy), '1=1'#13#10'2=2'#13#10'3=3'#13#10'4=4'));
         CheckHash(dummy, $BC89CA72);
         // validate ORM write methods
         Check(Client.Orm.UpdateField(TOrmTest, 100, 'ValWord', [100 + 10]),

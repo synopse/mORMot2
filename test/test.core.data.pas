@@ -695,7 +695,7 @@ begin
   v := VariantLoadJson(' "toto\r\ntoto"');
   CheckEqual(vd.VType, varString);
   Check(VariantTypeName(v)^ = 'String');
-  Check(v = 'toto'#$D#$A'toto');
+  Check(v = 'toto'#13#10'toto');
 end;
 
 type
@@ -734,9 +734,9 @@ const
     '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},' +
     '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,' +
     '"link":true,"url":"#Blue"}],"empty":true}';
-  RES_COLORS = '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A +
-    '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A +
-    '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>';
+  RES_COLORS = '<h1>Colors</h1>'#13#10'<li><strong>red</strong></li>'#13#10 +
+    '<li><a href="#Green">green</a></li>'#13#10'<li><strong>blue</strong></li>'#13#10 +
+    '<li><a href="#Blue">blue</a></li>'#13#10#13#10'<p>The list is empty.</p>';
   JSON_LOR: RawUtf8 = '{"users":[' +
     '{"RowID":1,"Login":"safr","Firstname":"Frodon","Name":"Sacquet",' +
       '"Alias":"safr","Connected":true,"Resto":0},'#13#10 +
@@ -746,7 +746,7 @@ const
       '"Alias":"peto","Connected":false,"Resto":0},'#13#10 +
     '{"RowID":4,"Login":"mebr","Firstname":"Meriadoc","Name":"Brandebouc",' +
       '"Alias":"mebr","Connected":true,"Resto":0}]}';
-  RES_LOR = '- Gamegie Samsagace (false)<BR>'#$D#$A'- Touque Peregrin (false)<BR>'#$D#$A;
+  RES_LOR = '- Gamegie Samsagace (false)<BR>'#13#10'- Touque Peregrin (false)<BR>'#13#10;
 
 procedure TTestCoreProcess.MustacheRenderer;
 var
@@ -868,29 +868,29 @@ begin
   html := mustache.RenderJson('', nil, helpers);
   CheckEqual(html, 'a=1,b=10}toto');
   mustache := TSynMustache.Parse(
-    '{{#a}}'#$A'{{one}}'#$A'{{/a}}'#$A);
+    '{{#a}}'#10'{{one}}'#10'{{/a}}'#10);
   html := mustache.RenderJson('{a:{one:1}}');
-  CheckEqual(html, '1'#$A);
+  CheckEqual(html, '1'#10);
   mustache := TSynMustache.Parse(
     '{{#a}}{{one}}{{#b}}{{one}}{{two}}{{/b}}{{/a}}');
   html := mustache.RenderJson('{a:{one:1},b:{two:2}}');
   CheckEqual(html, '112');
   mustache := TSynMustache.Parse(
-    '{{>partial}}'#$A'3');
+    '{{>partial}}'#10'3');
   html := mustache.RenderJson('{}', TSynMustachePartials.CreateOwned(['partial',
-    '1'#$A'2']));
-  CheckEqual(html, '1'#$A'23', 'external partials');
+    '1'#10'2']));
+  CheckEqual(html, '1'#10'23', 'external partials');
   mustache := TSynMustache.Parse(
-    '{{<partial}}1'#$A'2{{name}}{{/partial}}{{>partial}}4');
+    '{{<partial}}1'#10'2{{name}}{{/partial}}{{>partial}}4');
   html := mustache.RenderJson('{name:3}');
-  CheckEqual(html, '1'#$A'234', 'internal partials');
+  CheckEqual(html, '1'#10'234', 'internal partials');
   mustache := TSynMustache.Parse(
-    'My favorite things:'#$A'{{#things}}{{-index}}. {{.}}'#$A'{{/things}}');
+    'My favorite things:'#10'{{#things}}{{-index}}. {{.}}'#10'{{/things}}');
   CheckEqual(mustache.SectionMaxCount, 1);
   html := mustache.RenderJson(
     '{things:["Peanut butter", "Pen spinning", "Handstands"]}');
-  CheckEqual(html, 'My favorite things:'#$A'1. Peanut butter'#$A'2. Pen spinning'#$A
-    + '3. Handstands'#$A, '-index pseudo variable');
+  CheckEqual(html, 'My favorite things:'#10'1. Peanut butter'#10'2. Pen spinning'#10
+    + '3. Handstands'#10, '-index pseudo variable');
   mustache := TSynMustache.Parse('{{#things}}{{.}}{{/things}}');
   html := mustache.RenderJson('{things:["one", "two", "three"]}');
   CheckEqual(html, 'onetwothree');
@@ -922,7 +922,7 @@ begin
   CheckEqual(mustache.SectionMaxCount, 0);
   html := mustache.RenderJson('{name:?,value:?}', [], ['Chris', 10000], nil, nil,
     MustacheTranslate);
-  CheckEqual(html, 'Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!');
+  CheckEqual(html, 'Bonjour Chris'#13#10'Vous venez de gagner 10000 dollars!');
   mustache := TSynMustache.Parse(
     '1+3={{tval}} - is it 4?{{#if tval=4}} yes!{{/if}}');
   html := mustache.RenderJson('{tval:4}', nil, TSynMustache.HelpersGetStandardList);
@@ -938,10 +938,10 @@ begin
     TypeInfo(TMustacheColors), __TMustacheColors,
     TypeInfo(TMustacheLOR), __TMustacheLOR]);
   mustache := TSynMustache.Parse(
-    '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A +
-    '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A +
-    '{{#link}}'#$D#$A'<li><a href="{{url}}">{{name}}</a></li>'#$D#$A'{{/link}}'#$D#$A +
-    '{{/items}}'#$D#$A#$D#$A'{{#empty}}'#$D#$A'<p>The list is empty.</p>'#$D#$A'{{/empty}}');
+    '<h1>{{header}}</h1>'#13#10'{{#items}}'#13#10'{{#first}}'#13#10 +
+    '<li><strong>{{name}}</strong></li>'#13#10'{{/first}}'#13#10 +
+    '{{#link}}'#13#10'<li><a href="{{url}}">{{name}}</a></li>'#13#10'{{/link}}'#13#10 +
+    '{{/items}}'#13#10#13#10'{{#empty}}'#13#10'<p>The list is empty.</p>'#13#10'{{/empty}}');
   CheckEqual(mustache.SectionMaxCount, 2);
   html := mustache.RenderJson(JSON_COLORS);
   CheckEqual(TrimU(html), RES_COLORS, 'RenderJson');
@@ -949,18 +949,18 @@ begin
   html := mustache.RenderData(colors, TypeInfo(TMustacheColors));
   CheckEqual(TrimU(html), RES_COLORS, 'RenderData1');
   mustache := TSynMustache.Parse(
-    '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A +
-    '<li><strong>{{name}}</strong></li>'#$D#$A'{{/}}'#$D#$A +
-    '{{#link}}'#$D#$A'<li><a href="{{url}}">{{name}}</a></li>'#$D#$A'{{/}}'#$D#$A +
-    '{{/}}'#$D#$A#$D#$A'{{#empty}}'#$D#$A'<p>The list is empty.</p>'#$D#$A'{{/}}');
+    '<h1>{{header}}</h1>'#13#10'{{#items}}'#13#10'{{#first}}'#13#10 +
+    '<li><strong>{{name}}</strong></li>'#13#10'{{/}}'#13#10 +
+    '{{#link}}'#13#10'<li><a href="{{url}}">{{name}}</a></li>'#13#10'{{/}}'#13#10 +
+    '{{/}}'#13#10#13#10'{{#empty}}'#13#10'<p>The list is empty.</p>'#13#10'{{/}}');
   CheckEqual(mustache.SectionMaxCount, 2, 'empty');
   html := mustache.RenderJson(JSON_COLORS);
   CheckEqual(TrimU(html), RES_COLORS, 'RenderJson1Empty');
   html := mustache.RenderData(colors, TypeInfo(TMustacheColors));
   CheckEqual(TrimU(html), RES_COLORS, 'RenderData1Empty');
   mustache := TSynMustache.Parse(
-    '{{#users}}'#$D#$A'{{^Connected}}'#$D#$A +
-    '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#$D#$A'{{/Connected}}'#$D#$A'{{/users}}');
+    '{{#users}}'#13#10'{{^Connected}}'#13#10 +
+    '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#13#10'{{/Connected}}'#13#10'{{/users}}');
   CheckEqual(mustache.SectionMaxCount, 2);
   html := mustache.RenderJson(JSON_LOR);
   checkEqual(html, RES_LOR);
@@ -968,8 +968,8 @@ begin
   html := mustache.RenderData(lor, TypeInfo(TMustacheLOR));
   checkEqual(html, RES_LOR, 'RenderData2');
   mustache := TSynMustache.Parse(
-    '{{#users}}'#$D#$A'{{^Connected}}'#$D#$A +
-    '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#$D#$A'{{/}}'#$D#$A'{{/}}');
+    '{{#users}}'#13#10'{{^Connected}}'#13#10 +
+    '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#13#10'{{/}}'#13#10'{{/}}');
   CheckEqual(mustache.SectionMaxCount, 2, 'empty');
   html := mustache.RenderJson(JSON_LOR);
   checkEqual(html, RES_LOR, 'RenderJson2Empty');
@@ -1986,7 +1986,7 @@ var
     Check(X = '<A>0</A><B>0</B><C>0</C><D></D><E><E1>2</E1><E2>3</E2></E><F></F>');
     X := JsonToXML('[1,2,"three"]');
     CheckEqual(X,
-      '<?xml version="1.0" encoding="UTF-8"?>'#$D#$A'<0>1</0><1>2</1><2>three</2>');
+      '<?xml version="1.0" encoding="UTF-8"?>'#13#10'<0>1</0><1>2</1><2>three</2>');
 
     SetLength(AA, 100);
     for i := 0 to high(AA) do
@@ -2256,8 +2256,8 @@ var
 
     ClearObject(G2);
     U := ObjectToIni(G2);
-    CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
-      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckEqual(U, '[Main]'#10'SomeField='#10#10'[NestedObject]'#10 +
+      'FieldString='#10'FieldInteger=0'#10'FieldVariant=null'#10#10);
     CheckHash(U, $79F2E094);
     Check(not IniToObject('[main2]'#10'somefield=toto', G2));
     CheckEqual(G2.SomeField, '');
@@ -2273,13 +2273,13 @@ var
     CheckEqual(G2.NestedObject.FieldInteger, 7);
     CheckEqual(G2.NestedObject.FieldString, 'c:\abc');
     U := ObjectToIni(G2);
-    CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
-      'FieldString=c:\abc'#$0A'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckEqual(U, '[Main]'#10'SomeField=titi'#10#10'[NestedObject]'#10 +
+      'FieldString=c:\abc'#10'FieldInteger=7'#10'FieldVariant=null'#10#10);
     G2.NestedObject.FieldString := 'line1'#13#10'line2'#10'line3'#13#10#10#10;
     U := ObjectToIni(G2);
-    CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
-      'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A +
-      '[NestedObject.FieldString]'#$0A'line1'#$0A'line2'#$0A'line3'#$0A#$0A);
+    CheckEqual(U, '[Main]'#10'SomeField=titi'#10#10'[NestedObject]'#10 +
+      'FieldInteger=7'#10'FieldVariant=null'#10#10 +
+      '[NestedObject.FieldString]'#10'line1'#10'line2'#10'line3'#10#10);
     CheckHash(U, $B16E54F1);
     ClearObject(G2);
     Check(IsObjectDefaultOrVoid(G2));
@@ -2291,16 +2291,16 @@ var
     Check(not IsObjectDefaultOrVoid(G2));
     CheckEqual(G2.SomeField, 'titi');
     CheckEqual(G2.NestedObject.FieldInteger, 7);
-    CheckEqual(G2.NestedObject.FieldString, 'line1'#$0A'line2'#$0A'line3'#$0A#$0A);
+    CheckEqual(G2.NestedObject.FieldString, 'line1'#10'line2'#10'line3'#10#10);
     CheckHash(ObjectToIni(G2), $B16E54F1);
     GNest := TDtoObject3.Create;
     U := ObjectToIni(GNest);
-    CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
-      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A +
-      '[NestedObject2]'#$0A +
-      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A +
-      '[NestedObject2.NestedObject]'#$0A +
-      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckEqual(U, '[Main]'#10'SomeField='#10#10'[NestedObject]'#10 +
+      'FieldString='#10'FieldInteger=0'#10'FieldVariant=null'#10#10 +
+      '[NestedObject2]'#10 +
+      'FieldString='#10'FieldInteger=0'#10'FieldVariant=null'#10#10 +
+      '[NestedObject2.NestedObject]'#10 +
+      'FieldString='#10'FieldInteger=0'#10'FieldVariant=null'#10#10);
     CheckHash(U, $9AFB5BD6);
     GNest.SomeField := 'toto';
     GNest.NestedObject2.FieldString := 'nested1';
@@ -3096,7 +3096,7 @@ begin
     J := ObjectToJson(O, [woHumanReadable]);
     check(IsValidJson(J));
     CheckEqual(J,
-      #$D#$A'{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+      #10'{'#10#9'"Name": "",'#10#9'"Enum": "flagIdle",'#10#9'"Sets": []'#10'}');
     with PRttiInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
       for E := low(E) to high(E) do
       begin
@@ -3115,7 +3115,7 @@ begin
         J := ObjectToJson(O, [woHumanReadable]);
         check(IsValidJson(J));
         U := FormatUtf8(
-          #13#10'{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["FLAGIDLE"',
+          #10'{'#10#9'"NAME": "%",'#10#9'"ENUM": "%",'#10#9'"SETS": ["FLAGIDLE"',
           [ord(E), UpperCaseU(RawUtf8(GetEnumName(E)^))]);
         Check(IdemPChar(pointer(J), pointer(U)));
         JsonToObject(O2, pointer(J), Valid);
@@ -3130,15 +3130,15 @@ begin
     J := ObjectToJson(O, [woHumanReadable, woHumanReadableFullSetsAsStar]);
     check(IsValidJson(J));
     CheckEqual(J,
-      #13#10'{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",' +
-      #$D#$A#9'"Sets": ["*"]'#$D#$A'}');
+      #10'{'#10#9'"Name": "3",'#10#9'"Enum": "flagDestroying",' +
+      #10#9'"Sets": ["*"]'#10'}');
     J := ObjectToJson(O, [woHumanReadable, woHumanReadableFullSetsAsStar,
       woHumanReadableEnumSetAsComment]);
     CheckEqual(J,
-      #13#10'{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", ' +
+      #10'{'#10#9'"Name": "3",'#10#9'"Enum": "flagDestroying", ' +
       '// "flagIdle","flagStarted","flagFinished","flagDestroying"' +
-      #$D#$A#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted",' +
-      '"flagFinished","flagDestroying"'#$D#$A'}');
+      #10#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted",' +
+      '"flagFinished","flagDestroying"'#10'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -3268,23 +3268,20 @@ begin
       '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
     J := ObjectToJson(Coll, [woHumanReadable]);
     check(IsValidJson(U));
-    CheckHash(J, $7694E4C1);
+    CheckHash(J, $0AF4D135);
     CheckEqual(JsonReformat(J, jsonCompact), U);
-    CheckEqual(JsonReformat(J, json5), '{'#$0D#$0A#$09'One: {' +
-      #$0D#$0A#$09#$09'Color: 1,'#$0D#$0A#$09#$09'Length: 0,' +
-      #$0D#$0A#$09#$09'Name: "test\"\\2",'#$0D#$0A#$09'},'#$0D#$0A#$09 +
-      'Coll: '#$0D#$0A#$09'['#$0D#$0A#$09#$09'{'#$0D#$0A#$09#$09#$09 +
-      'Color: 10,'#$0D#$0A#$09#$09#$09'Length: 0,'#$0D#$0A#$09#$09#$09 +
-      'Name: "",'#$0D#$0A#$09#$09'},'#$0D#$0A#$09#$09'{'#$0D#$0A#$09#$09#$09 +
-      'Color: 0,'#$0D#$0A#$09#$09#$09'Length: 0,'#$0D#$0A#$09#$09#$09 +
-      'Name: "name",'#$0D#$0A#$09#$09'},'#$0D#$0A#$09'],'#$0D#$0A#$09 +
-      'Str: null,'#$0D#$0A'}');
+    CheckEqual(JsonReformat(J, json5),
+      '{'#10'  One: {'#10'    Color: 1,'#10'    Length: 0,'#10 +
+      '    Name: "test\"\\2",'#10'  },'#10'  Coll: ['#10'    {'#10 +
+      '      Color: 10,'#10'      Length: 0,'#10'      Name: "",'#10 +
+      '    },'#10'    {'#10'      Color: 0,'#10'      Length: 0,'#10 +
+      '      Name: "name",'#10'    },'#10'  ],'#10'  Str: null,'#10'}');
     CheckEqual(JsonReformat('{ "empty": {} }'),
-      '{'#$D#$A#9'"empty": {}'#$D#$A'}');
+      '{'#10#9'"empty": {}'#10'}');
     CheckEqual(JsonReformat('{ "empty": {} }', json5),
-      '{'#$D#$A#9'empty: {},'#$D#$A'}');
+      '{'#10'  empty: {},'#10'}');
     CheckEqual(JsonReformat('{ "empty": [] }', json5),
-      '{'#$D#$A#9'empty: [],'#$D#$A'}');
+      '{'#10'  empty: [],'#10'}');
     U := ObjectToJson(Coll, [woStoreClassName]);
     check(IsValidJson(U));
     CheckEqual(U,
@@ -3695,7 +3692,7 @@ begin
   FillCharFast(Trans, SizeOf(Trans), 0);
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
   Check(IsValidJson(U));
-  CheckEqual(U,  #13#10'{'#13#10#9'"Transactions": '#13#10#9'['#13#10#9']'#13#10'}');
+  CheckEqual(U, #10'{'#10#9'"Transactions": '#10#9'['#10#9']'#10'}');
   for i := 1 to 10 do
   begin
     U :=
@@ -4486,9 +4483,9 @@ begin
   CheckEqual(HtmlEscapeMarkdown('blabla ![img](static/img.jpg) blibli'),
     '<p>blabla <img alt="img" src="static/img.jpg"> blibli</p>');
   CheckEqual(HtmlEscapeMarkdown('test'#13#10'    a*=10*2'#10'    b=20'#13#10'ended'),
-    '<p>test</p><pre><code>a*=10*2'#$D#$A'b=20'#$D#$A'</code></pre><p>ended</p>');
+    '<p>test</p><pre><code>a*=10*2'#13#10'b=20'#13#10'</code></pre><p>ended</p>');
   CheckEqual(HtmlEscapeMarkdown('test'#13#10'``` a*=10*2'#10'  b=20'#13#10'```ended'),
-    '<p>test</p><pre><code> a*=10*2'#$D#$A'  b=20'#$D#$A'</code></pre><p>ended</p>');
+    '<p>test</p><pre><code> a*=10*2'#13#10'  b=20'#13#10'</code></pre><p>ended</p>');
   CheckEqual(HtmlEscapeMarkdown('*te*st'#13#10'* one'#13#10'* two'#13#10'end'),
     '<p><em>te</em>st</p><ul><li>one</li><li>two</li></ul><p>end</p>');
   CheckEqual(HtmlEscapeMarkdown('+test'#13#10'+ one'#13#10'- two'#13#10'end'),
