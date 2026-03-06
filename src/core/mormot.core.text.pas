@@ -5626,15 +5626,19 @@ begin // mostly used for TSynLog RawUtf8 append
         if P^ = #0 then
           exit; // most common case
       end;
-      Add(' '); // properly inlined
-      inc(P);
-    until P^ = #0;
+      repeat
+        inc(P);
+        if P^ = #0 then
+          exit;
+      until P^ > ' ';
+      AddOnce(' ');
+    until false;
 end;
 
 procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
 var
   i, s: PtrInt;
-begin // mostly used for TSynLog shortstring append
+begin // mostly used for TSynLog shortstring append or Reformat() comments
   i := 0;
   if (P <> nil) and
      (i < Len) then
@@ -5650,9 +5654,13 @@ begin // mostly used for TSynLog shortstring append
         if i = Len then
           exit; // most common case
       end;
-      Add(' ');
-      inc(i);
-    until i = Len;
+      repeat
+        inc(i);
+        if i = Len then
+          exit;
+      until P[i] > ' ';
+      AddOnce(' ');
+    until false;
 end;
 
 procedure TTextWriter.AddOnSameLineW(P: PWord);
