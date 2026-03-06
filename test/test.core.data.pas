@@ -2654,6 +2654,40 @@ var
     CheckEqual(tmp, expected);
   end;
 
+  procedure TestReformat(const src, exp: RawUtf8;
+    f: TTextWriterJsonFormat = jsonUnquotedPropNameCompact);
+  var
+    j, k: RawUtf8;
+    s, d: TTextWriterJsonFormat;
+  begin
+    for s := low(s) to high(s) do
+    begin
+      j := JsonReformat(src, s);
+      if not (s in [json5, jsonHjson, jsonMinimal]) then // too much relaxed
+        Check(IsValidJson(j));
+      //if s in [jsonCompact, jsonHjson] then ConsoleWrite(j);
+      if s = f then
+        CheckEqual(j, exp, 'expected reformat');
+      for d := low(d) to high(d) do
+      begin
+        k := JsonReformat(j, d);
+        CheckEqual(JsonReformat(k, d), k);
+        CheckEqual(JsonReformat(k, s), j);
+        CheckEqual(JsonReformat(src, d), k);
+      end;
+      if s = json5 then // validate JSON5 variant without jrfTrailingComma
+      begin
+        j := StringReplaceAll(j, ','#10, #10); // no trailing ',' at all
+        for d := low(d) to high(d) do
+        begin
+          k := JsonReformat(j, d);
+          CheckEqual(JsonReformat(k, d), k);
+          CheckEqual(JsonReformat(src, d), k);
+        end;
+      end;
+    end;
+  end;
+
 begin
   TestSimpleEnum;
   TestJsonArrayAsCsv('', '');
@@ -3027,44 +3061,87 @@ begin
   RemoveCommentsFromJson(UniqueRawUtf8(J));
   check(IsValidJson(J, {strict=}false));
   check(IsValidJson(J, {strict=}true));
-  J := JsonReformat(J, jsonCompact);
-  CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
+  TestReformat(J,
+    '{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}',
+    jsonCompact);
   J := JsonReformat(J, jsonUnquotedPropNameCompact);
   CheckEqual(J,'{httpServer:{host:"*",port:"8881",serverType:"Socket"}}');
-  CheckEqual(JsonReformat(
-    '{httpServer:{host:"*",port:"8881",serverType:"Socket"}}',
-    jsonUnquotedPropNameCompact), J);
-  CheckEqual(JsonReformat(
-    '{ httpServer = { host = "*", port = "8881", serverType = "Socket" } }',
-    jsonUnquotedPropNameCompact), J, 'json =');
-  CheckEqual(JsonReformat(
-    '{httpServer:{host:"*",port:"8881",serverType:"Socket",},}',
-    jsonUnquotedPropNameCompact), J, 'json5 object1 reformat');
-  CheckEqual(JsonReformat(
-   '{one:{a:1,b:2,},two:2,}', jsonUnquotedPropNameCompact),
-   '{one:{a:1,b:2},two:2}', 'json5 object2 reformat');
-  CheckEqual(JsonReformat(
-    '{httpServer:[ one, two ]}', jsonUnquotedPropNameCompact),
-    '{httpServer:[one,two]}', 'unquote value array');
-  CheckEqual(JsonReformat(
-   '{httpServer:["one", "two" ] }', jsonUnquotedPropNameCompact),
-   '{httpServer:["one","two"]}', 'array reformat');
-  CheckEqual(JsonReformat(
-   '{httpServer:["one", "two" ], }', jsonUnquotedPropNameCompact),
-   '{httpServer:["one","two"]}', 'json5 object3 reformat');
-  CheckEqual(JsonReformat(
-   '{httpServer:["one", "two", ] }', jsonUnquotedPropNameCompact),
-   '{httpServer:["one","two"]}', 'json5 array reformat');
-  CheckEqual(JsonReformat(
-   '{a = [ "one", "two", ], b = 2, }', jsonUnquotedPropNameCompact),
-   '{a:["one","two"],b:2}', 'json5 array+object reformat');
-  CheckEqual(JsonReformat(
-   '{a = [ ''one'', ''two'', ], b = 2, }', jsonUnquotedPropNameCompact),
-   '{a:["one","two"],b:2}', 'json5 array+object+singlequote reformat');
-  J := JsonReformat(J, json5);
-  CheckEqual(J,'{'#$0D#$0A#$09'httpServer: {'#$0D#$0A#$09#$09'host: "*",' +
-    #$0D#$0A#$09#$09'port: "8881",'#$0D#$0A#$09#$09'serverType: "Socket",' +
-    #$0D#$0A#$09'},'#$0D#$0A'}');
+  TestReformat(
+    '{httpServer:{host:"*",port:"8881",serverType:"Socket"}}', J);
+  TestReformat(
+    '{ httpServer = { host = "*", port = "8881", serverType = "Socket" } }', J);
+  TestReformat(
+    '{httpServer:{host:"*",port:"8881",serverType:"Socket",},}', J);
+  TestReformat(
+    '{one:{a:1,b:2,},two:2,}',
+    '{one:{a:1,b:2},two:2}');
+  TestReformat(
+    '{httpServer:[ a ]}',
+    '{httpServer:["a"]}');
+  TestReformat(
+    '{httpServer:[ one, two ]}',
+    '{httpServer:["one","two"]}');
+  TestReformat(
+   '{httpServer:["one", "two" ] }',
+   '{httpServer:["one","two"]}');
+  TestReformat(
+   '{httpServer:["one", "two" ], }',
+   '{httpServer:["one","two"]}');
+  TestReformat(
+   '{httpServer:["one", "two", ] }',
+   '{httpServer:["one","two"]}');
+  TestReformat(
+   '{a = [ "one", "two", ], b = 2, }',
+   '{a:["one","two"],b:2}');
+  TestReformat(
+   '{a = [ ''one'', ''two'', ], b = 2, }',
+   '{a:["one","two"],b:2}');
+  TestReformat(
+   '{a = [ '' one'', ''two'', ], b = 2, }',
+   '{a:[" one","two"],b:2}');
+  TestReformat(
+   '{a = [ one , ''two '', ], b = 2, }',
+   '{a:["one","two "],b:2}');
+  TestReformat(J,
+    '{'#10'  httpServer: {'#10'    host: "*",' +
+    #10'    port: "8881",'#10'    serverType: "Socket",' +
+    #10'  },'#10'}', json5);
+  TestReformat(
+   '{"one":{true:"true",b:be,c:true,d:"null",null:null,e:nulle},two:2}',
+   '{'#10'  one: {'#10'    true: "true"'#10 +
+   '    b: be'#10'    c: true'#10'    d: "null"' +
+   #10'    null: null'#10'    e: nulle'#10 +
+   '  }'#10'  two: 2'#10'}', jsonHjson);
+  TestReformat(
+    '{ip:[192.168.0.1/24,192.168.0.254]}',
+    '{'#10'  ip: ['#10'    192.168.0.1/24'#10 +
+    '    192.168.0.254'#10'  ]'#10'}', jsonHjson);
+  TestReformat(
+    '{a = [o n e , " t w o ", ], b = 2, }',
+    '{a:["o n e"," t w o "],b:2}');
+  TestReformat(
+    '{a = [ x=1,y=2 ], b = 2, }',
+    '{a:["x=1","y=2"],b:2}');
+  TestReformat(
+    '{a : [ x:1 ,y:2], b : 2, }',
+    '{a:["x:1","y:2"],b:2}');
+  TestReformat(
+    '{a = [ x = 1, y = 2 ], b = 2, }',
+    '{a:["x = 1","y = 2"],b:2}');
+  TestReformat(
+    '{ a = [ 9b:75:b6:05:27:6f = 192.168.0.34 , ' +
+    '34E5A73D-DBDB-4172-93E4-D7C0D5A98D9C = 192.168.0.36 ], b = 2, }',
+    '{a:["9b:75:b6:05:27:6f = 192.168.0.34","' +
+    '34E5A73D-DBDB-4172-93E4-D7C0D5A98D9C = 192.168.0.36"],b:2}');
+  TestReformat(
+    '{"folder":"c:\\program files\\toto"}',
+    '{folder:"c:\\program files\\toto"}');
+  TestReformat(
+    '{folder:c:\program files\toto}',
+    '{folder:"c:\\program files\\toto"}');
+  TestReformat(
+    '{id:ObjectId("1234"),name:"John",date:ISODate("20261225")}',
+    '{id:"ObjectId(\"1234\")",name:"John",date:"ISODate(\"20261225\")"}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
@@ -3277,11 +3354,11 @@ begin
       '    },'#10'    {'#10'      Color: 0,'#10'      Length: 0,'#10 +
       '      Name: "name",'#10'    },'#10'  ],'#10'  Str: null,'#10'}');
     CheckEqual(JsonReformat('{ "empty": {} }'),
-      '{'#10#9'"empty": {}'#10'}');
+      '{'#10#9'"empty": {'#10#9'}'#10'}');
     CheckEqual(JsonReformat('{ "empty": {} }', json5),
-      '{'#10'  empty: {},'#10'}');
+      '{'#10'  empty: {'#10'  },'#10'}');
     CheckEqual(JsonReformat('{ "empty": [] }', json5),
-      '{'#10'  empty: [],'#10'}');
+      '{'#10'  empty: ['#10'  ],'#10'}');
     U := ObjectToJson(Coll, [woStoreClassName]);
     check(IsValidJson(U));
     CheckEqual(U,
@@ -3997,12 +4074,20 @@ begin
   timer.Start;
   for i := 1 to ITER do
     j0 := JsonReformat(people, jsonUnquotedPropNameCompact);
-  NotifyTestSpeed('jsonUnquotedPropNameCompact', 0,
+  NotifyTestSpeed('Reformat jsonUnquotedPropNameCompact', 0,
     length(j0) * ITER, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
     j0 := JsonReformat(people, jsonHumanReadable);
-  NotifyTestSpeed('jsonHumanReadable', 0, length(j0) * ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('Reformat jsonHumanReadable', 0, length(j0) * ITER, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    j0 := JsonReformat(people, json5);
+  NotifyTestSpeed('Reformat JSON5', 0, length(j0) * ITER, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    j0 := JsonReformat(people, jsonHjson);
+  NotifyTestSpeed('Reformat Hjson', 0, length(j0) * ITER, @timer, ONLYLOG);
   dv.InitJson(people);
   peoplehash := Hash32(dv.ToJson);
   dv.Clear; // to reuse dv
