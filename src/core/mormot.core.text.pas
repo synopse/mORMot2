@@ -359,6 +359,7 @@ type
   // - twoNonExpandedArrays will force the 'non expanded' optimized JSON layout
   // for array of records or classes, ignoring other formatting options:
   // $ {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
+  // - twoIndentSpaces will indent with two spaces instead of two tabs
   TTextWriterOption = (
     twoEnumSetsAsTextInRecord,
     twoEnumSetsAsBooleanInRecord,
@@ -369,7 +370,8 @@ type
     twoEndOfLineCRLF,
     twoIgnoreDefaultInRecord,
     twoDateTimeWithZ,
-    twoNonExpandedArrays);
+    twoNonExpandedArrays,
+    twoIndentSpaces);
 
   /// available internal flags defining TTextWriter / TJsonWriter process
   // - twfStreamIsOwned is set if the associated TStream is owned by the
@@ -733,7 +735,7 @@ type
     // only LF (#10) depending on its internal options
     procedure AddCR;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append CR+LF (#13#10) chars and #9 indentation
+    /// append CR+LF (#13#10) chars and #9/#32 indentation
     // - indentation depth is defined by the HumanReadableLevel value
     procedure AddCRAndIndent; virtual;
     /// write the same character multiple times (up to the internal buffer size)
@@ -5038,12 +5040,19 @@ procedure TTextWriter.AddCRAndIndent;
 var
   ntabs: PtrUInt;
   p: PUtf8Char;
+  c32: cardinal;
 begin
+  ntabs := fHumanReadableLevel;
+  c32 := $09090909;
+  if twoIndentSpaces in fCustomOptions then
+  begin
+    c32 := $20202020;
+    ntabs := ntabs * 2; // indent by two spaces instead of a single #9 tab
+  end;
   p := B;
   if (p >= fTempBuf) and
-     (p^ = #9) then
+     (ord(p^) = ToByte(c32)) then
     exit; // we just already added an indentation level - do it once
-  ntabs := fHumanReadableLevel;
   if ntabs >= PtrUInt(fTempBufSize) then
     ntabs := 0; // fHumanReadableLevel=-1 after the last level of a document
   if PtrInt(BEnd - p) <= PtrInt(ntabs) then // note: PtrInt(BEnd - B) could be < 0
@@ -5051,10 +5060,18 @@ begin
     FlushToStream;
     p := B;
   end;
-  PCardinal(p + 1)^ := $09090a0d; // CR + LF [ + #9 + #9 ]
-  if ntabs > 2 then
-    FillCharFast(p[3], ntabs, 9); // #9=tab
-  B := @p[ntabs + 2];
+  inc(p);
+  if twoEndOfLineCRLF in fCustomOptions then
+  begin
+    PCardinal(p)^ := EOLW;
+    inc(p);
+  end
+  else
+    p^ := #10;
+  PCardinal(p + 1)^ := c32; // #9#9#9#9 or #32#32#32#32
+  if ntabs > 4 then
+    FillCharFast(p[5], ntabs - 4, ToByte(c32)); // #9 or #32
+  B := @p[ntabs];
 end;
 
 procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
