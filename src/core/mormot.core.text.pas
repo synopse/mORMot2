@@ -549,6 +549,7 @@ type
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
+    function DoJsonReformat(Json: PUtf8Char; Fmt: TTextWriterJsonFormat): boolean; virtual;
     class procedure RaiseUnimplemented(const Method: ShortString);
     function GetFlag(one: TTextWriterFlag): boolean;
     procedure SetFlag(one: TTextWriterFlag; value: boolean);
@@ -996,10 +997,9 @@ type
     procedure Add(const Format: RawUtf8; const Values: array of const;
       Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
-    /// this class implementation will raise an exception
+    /// append a JSON value, array or document, in a specified format
     // - this method will raise an ESynException: use inherited TJsonWriter instead
-    function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
-      EndOfObject: PUtf8Char): PUtf8Char; virtual;
+    function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat): boolean;
     /// this class implementation will raise an exception
     // - this method will raise an ESynException: use inherited TJsonWriter instead
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
@@ -4382,11 +4382,15 @@ begin
       exclude(fFlags, one);
 end;
 
-function TTextWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
-  Format: TTextWriterJsonFormat; EndOfObject: PUtf8Char): PUtf8Char;
+function TTextWriter.DoJsonReformat(Json: PUtf8Char; Fmt: TTextWriterJsonFormat): boolean;
 begin
   RaiseUnimplemented('AddJsonReformat');
-  result := nil; // make compiler happy
+  result := false; // make compiler happy
+end;
+
+function TTextWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat): boolean;
+begin
+  result := DoJsonReformat(Json, Format);
 end;
 
 procedure TTextWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
@@ -4653,7 +4657,7 @@ begin
     // reformat using the very same temp buffer but not the same RawUtf8
     temp := DefaultJsonWriter.CreateOwnedStream(fTempBuf, fTempBufSize);
     try
-      temp.AddJsonReformat(pointer(result), reformat, nil);
+      temp.AddJsonReformat(pointer(result), reformat);
       temp.SetText(result);
     finally
       temp.Free;
