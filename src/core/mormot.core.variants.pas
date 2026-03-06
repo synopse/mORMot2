@@ -10305,21 +10305,6 @@ begin
   result := true;
 end;
 
-function GotoEndOfJsonNumber(P: PUtf8Char; var PEndNum: PUtf8Char): PUtf8Char;
-  {$ifdef HASINLINE} inline; {$endif} // inlined for better code generation
-var
-  tab: PJsonCharSet;
-begin
-  result := P;
-  tab := @JSON_CHARS;
-  repeat
-    inc(result);
-  until not (jcDigitFloatChar in tab[result^]); // -+.eE0..9
-  PEndNum := result;
-  while not (jcEndOfJsonFieldNotName in tab[result^]) do
-    inc(result); // #0, ',', ']', '}'
-end;
-
 {$ifndef PUREMORMOT2}
 procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean);

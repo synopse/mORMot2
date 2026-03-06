@@ -75,7 +75,7 @@ type
   // than a regular set of AnsiChar which generates much slower BT [MEM], IMM
   // - the same 256-byte memory will also be reused from L1 CPU cache
   // during the parsing of complex JSON input
-  // - TTestCoreProcess.JSONBenchmark shows around 900MB/s on my i5 notebook
+  // - TTestCoreProcess.JSONBenchmark shows GB/s parsing on recent computers
   TJsonChar = set of (
     jcJsonIdentifierFirstChar,   // _$0..9a..zA..Z
     jcJsonIdentifier,            // _-.[]$0..9a..zA..Z
@@ -176,18 +176,27 @@ procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint; tab: PByteToWor
 
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating point or integer), according to the characters within
-// - this version will recognize null/false/true as strings
+// - this version won't recognize null/false/true as constants
 // - e.g. IsString('0')=false, IsString('abc')=true, IsString('null')=true
 function IsString(P: PUtf8Char): boolean;
 
-/// test if the supplied buffer is a "string" value or a numerical value
-// (floating or integer), according to the JSON encoding schema
-// - this version will NOT recognize JSON null/false/true as strings
+/// test if the supplied buffer contain null/true/false constants
+function IsConstantJson(P: PUtf8Char; len: PtrInt): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// test if the supplied buffer is NOT a valid JSON constant or number
+// - this version will recognize null/false/true as constants
 // - e.g. IsStringJson('0')=false, IsStringJson('abc')=true,
-// but IsStringJson('null')=false
+// but IsStringJson('null')=false and IsStringJson('0 ')=true
 // - will follow the JSON definition of number, i.e. '0123' is a string (since
 // '0' is excluded at the beginning of a number) and '123' or '12.3' are no string
-function IsStringJson(P: PUtf8Char): boolean;
+function IsStringJson(P: PUtf8Char): boolean; overload;
+
+/// test if the supplied buffer is NOT a valid JSON constant or number
+function IsStringJson(P: PUtf8Char; len: PtrInt): boolean; overload;
+
+/// test if the supplied buffer is a valid JSON constant or number
+function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
 
 /// test if the supplied text buffer seems to be a correct (extended) JSON value
 // - will allow comments and extended MongoDB JSON syntax unless Strict=true
@@ -224,17 +233,17 @@ function GetNextJsonToken(var P: PUtf8Char; strict: boolean = false;
 procedure IgnoreComma(var P: PUtf8Char);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns TRUE if the given text buffer contains simple characters as
-// recognized by JSON extended syntax
-// - follow GetJsonPropName and GotoNextJsonObjectOrArray expectations
+/// check if the given #0-ended property name could be serialized without quotes
+// - e.g. JsonPropNameValid('name')=true and JsonPropNameValid('na me')=false
 function JsonPropNameValid(P: PUtf8Char): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns TRUE if the given text buffer contains simple characters as
-// recognized by JSON extended syntax
-// - follow GetJsonPropName and GotoNextJsonObjectOrArray expectations
-function JsonPropNameValid(P: PUtf8Char; Len: integer): boolean; overload;
+/// check if the given property name could be serialized without quotes
+function JsonPropNameValid(P: PUtf8Char; len: integer; tab: PJsonCharSet): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// recognize potential JSON unquoted value, i.e. not constant/number - for testing
+function JsonUnquotedValueValid(P: PUtf8Char; len: PtrUInt): boolean;
 
 type
   /// efficient JSON value parser / in-place decoder
@@ -372,7 +381,16 @@ function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 
 /// reach position just after the current JSON string in the supplied UTF-8 buffer
 // - will first ensure that P^='"' then process like GotoEndJsonItem()
+// - return nil if the buffer is not a valid JSON "string"
 function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
+
+/// reach position after a number where P^ is a valid first digit (after +-)
+function GotoEndRawNumber(P: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// reach position after the current JSON number in the supplied UTF-8 buffer
+// - return nil if the buffer is not a valid number like 0, 1, 3.14 or 1.2E-34
+function GotoEndJsonItemNumber(P: PUtf8Char): PUtf8Char;
 
 /// reach position just after the current JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -2846,7 +2864,7 @@ begin // inlined version of Utf16HiCharToUtf8() with proper \uxxxx hexa decoding
                      ((c and $3f) shl 16) or UTF8_FFFF;
     inc(D, 2);
   end
-  else if cardinal(PWord(P + 5)^) = ord('\') + ord('u') shl 8 then
+  else if cardinal(PWord(P + 5)^) = JSON_UHEX then
   begin
     s := HexToWideChar(P + 7); // 2nd UTF-16 surrogate
     if s = 0 then
@@ -2901,123 +2919,114 @@ begin
   inc(B, 6);
 end;
 
-function IsString(P: PUtf8Char): boolean;  // test if P^ is a "string" value
-begin
-  if P = nil then
-  begin
-    result := false;
-    exit;
-  end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+function TryGotoEndOfSlashComment(P: PUtf8Char): PUtf8Char; // seldom called
+begin // see jtSlash support in GotoEnd()
+  repeat
+    result := P; // return input P^ = '/' if no comment was found
     inc(P);
-  if (P[0] in ['0'..'9']) or // is first char numeric?
-     ((P[0] in ['-', '+']) and
-      (P[1] in ['0'..'9'])) then
-  begin
-    // check if P^ is a true numerical value
-    repeat
-      inc(P);
-    until not (P^ in ['0'..'9']); // check digits
-    if P^ = '.' then
+    if P^ = '*' then // ignore /* comment */
+    begin
       repeat
         inc(P);
-      until not (P^ in ['0'..'9']); // check fractional digits
-    if ((P^ = 'e') or
-        (P^ = 'E')) and
-       (P[1] in ['0'..'9', '+', '-']) then
+        if P^ = #0 then
+          exit;
+      until cardinal(PWord(P)^) = SLEND_16;
+      P := GotoNextNotSpace(P + 2);
+    end
+    else if P^ = '/' then // ignore // comment
     begin
-      inc(P);
-      if P^ = '+' then
-        inc(P)
-      else if P^ = '-' then
+      repeat
         inc(P);
-      while (P^ >= '0') and
-            (P^ <= '9') do
-        inc(P);
-    end;
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    result := (P^ <> #0);
-    exit;
-  end
-  else
-    result := true; // don't begin with a numerical value -> must be a string
-end;
-
-function IsStringJson(P: PUtf8Char): boolean;  // test if P^ is a "string" value
-var
-  c4: integer;
-  c: AnsiChar;
-  tab: PJsonCharSet;
-begin
-  if P = nil then
-  begin
-    result := false;
-    exit;
-  end;
-  while P^ <= ' ' do
-    if P^ = #0 then
-    begin
-      result := true;
-      exit;
+        if P^ = #0 then
+          exit;
+      until P^ = #10;    // till the end of the line
+      P := IgnoreAndGotoNextNotSpace(P);
     end
     else
-      inc(P);
-  tab := @JSON_CHARS;
-  c4 := PInteger(P)^;
-  if (((c4 = NULL_LOW) or
-       (c4 = TRUE_LOW)) and
-      (jcEndOfJsonValueField in tab[P[4]])) or   // #0#9#10#13 ,}]
-     ((c4 = FALSE_LOW) and
-      (P[4] = 'e') and
-      (jcEndOfJsonValueField in tab[P[5]])) then // #0#9#10#13 ,}]
+      exit;
+  until P^ <> '/'; // there may be other subsequent comments ;)
+  result := P;
+end;
+
+function GotoEndRawNumber(P: PUtf8Char): PUtf8Char; // here for inlining
+begin // caller ensure P^ is a valid first (json) digit
+  result := P;
+  repeat
+    inc(result);
+  until (result^ < '0') or
+        (result^ > '9'); // check digits
+  if result^ = '.' then
   begin
-    result := false; // constants are no string
-    exit;
-  end;
-  c := P^;
-  if c = '-' then
-  begin
-    inc(P);
-    c := P^;
-  end;
-  if ((c >= '1') and (c <= '9')) or // is first char numeric?
-     ((c = '0') and ((P[1] < '0') or (P[1] > '9'))) then // '012' not JSON
-  begin
-    // check if c is a true numerical value
+    if (result[1] < '0') or
+       (result[1] > '9') then
+      exit; // at least one digit after '.' or return '.' position
     repeat
-      inc(P);
-    until (P^ < '0') or
-          (P^ > '9'); // check digits
-    if P^ = '.' then
-      repeat
-        inc(P);
-      until (P^ < '0') or
-            (P^ > '9'); // check fractional digits
-    if ((P^ = 'e') or
-        (P^ = 'E')) and
-       (jcDigitFirstChar in tab[P[1]]) then // ['-', '0'..'9']
-    begin
-      inc(P);
-      c := P^;
-      if c = '+' then
-        inc(P)
-      else if c = '-' then
-        inc(P);
-      while (P^ >= '0') and
-            (P^ <= '9') do
-        inc(P);
-    end;
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    result := (P^ <> #0);
+      inc(result);
+    until (result^ < '0') or
+          (result^ > '9'); // check fractional digits
+  end;
+  if (result^ <> 'e') and
+     (result^ <> 'E') then
     exit;
-  end
+  P := result + 1; // validate E123 E+123 E-123
+  if (P^ = '+') or
+     (P^ = '-') then
+    inc(P);
+  if (P^ < '0') or
+     (P^ > '9') then
+    exit; // at least one digit after E E+ E-
+  result := P;
+  while (result^ >= '0') and
+        (result^ <= '9') do
+    inc(result);
+end;
+
+function GotoEndJsonItemNumber(P: PUtf8Char): PUtf8Char; // here for inlining
+begin
+  result := P;
+  if P = nil then
+    exit;
+  if result^ = '-' then
+    inc(result);
+  if ((result^ >= '1') and (result^ <= '9')) or // is first char numeric?
+     ((result^ = '0') and ((result[1] < '0') or (result[1] > '9'))) then // no '012'
+    result := GotoEndRawNumber(result)
   else
-    result := true; // don't begin with a numerical value -> must be a string
+    result := nil; // don't begin with a numerical value -> must be a string
+end;
+
+function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  // P[-1]='"' at function call
+  repeat
+    if not (jcJsonStringMarker in tab[P^]) then
+    begin
+      inc(P);   // not [#0, '"', '\']
+      continue; // very fast parsing of most UTF-8 chars
+    end;
+    if (P^ = '"') or
+       (P^ = #0) or
+       (P[1] = #0) then
+      // end of string/buffer, or buffer overflow detected as \#0
+      break;
+    inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
+  until false;
+  result := P;
+  // P^='"' at function return (if input was correct)
+end;
+
+function JsonUnquotedStringValid(P, PMax: PUtf8Char; tab: PJsonCharSet): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin // caller ensured was not a constant nor a number
+  result := false;
+  if P < PMax then
+    repeat
+      if tab[P^] * [jcJsonStringMarker, jcEndOfJsonFieldNotName] <> [] then
+        exit; // #0 , ] } " \
+      inc(P);
+    until P = PMax;
+  result := true; // not a constant, nor a number, until the end
 end;
 
 type
@@ -3355,6 +3364,89 @@ begin
             (P - B = len);
 end;
 
+function IsString(P: PUtf8Char): boolean;
+begin
+  result := true;
+  if P = nil then
+    exit;
+  if (P^ = '+') or
+     (P^ = '-') then
+    inc(P);
+  if (P^ < '0') or
+     (P^ > '9') then
+    exit;
+  P := GotoEndRawNumber(P);
+  if (P <> nil) and
+     (P^ = #0) then
+    result := false; // was a number until end of input
+end;
+
+function IsStringJson(P: PUtf8Char): boolean;
+var
+  c4: integer;
+begin
+  result := true;
+  if P = nil then
+    exit;
+  c4 := PInteger(P)^; // constants are no string
+  if (c4 = NULL_LOW) or
+     (c4 = TRUE_LOW) then
+    inc(P, 4)
+  else if (c4 = FALSE_LOW) and
+          (P[4] = 'e') then
+    inc(P, 5)
+  else
+    P := GotoEndJsonItemNumber(P);
+  if (P <> nil) and
+     (P^ = #0) then
+    result := false; // was a constant or a number until end of input
+end;
+
+function IsConstantJson(P: PUtf8Char; len: PtrInt): boolean;
+begin
+  result := ((len = 4) and
+             ((PInteger(P)^ = NULL_LOW) or
+              (PInteger(P)^ = TRUE_LOW))) or
+            ((len = 5) and
+              ((PInteger(P)^ = FALSE_LOW) and
+               (P[4] = 'e')));
+end;
+
+function IsStringJson(P: PUtf8Char; len: PtrInt): boolean;
+begin
+  result := (P = nil) or
+            (len = 0) or
+            ((not IsConstantJson(P, len)) and
+             (GotoEndJsonItemNumber(P) - P = len));
+end;
+
+function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
+begin
+  result := false;
+  if (P = nil) or
+     (len = 0) then
+    exit;
+  result := true;
+  if IsConstantJson(P, len) then // true/false/null
+    exit;
+  inc(len, PtrUInt(P)); // len = PtrUInt(PMax)
+  if P^ = '-' then
+    inc(P);
+  if ((P^ >= '1') and (P^ <= '9')) or // is first char numeric?
+     ((P^ = '0') and ((P[1] < '0') or (P[1] > '9'))) then // no '012'
+  begin
+    P := GotoEndRawNumber(P); // inlined P := GotoEndJsonItemNumber(P);
+    while true do
+      if PtrUInt(P) >= len then
+        exit  // was a number till the end
+      else if P^ > ' ' then
+        break // not a number (e.g. 192.168.0.1)
+      else
+        inc(P);
+  end;
+  result := false;
+end;
+
 function GetFirstJsonToken(P: PUtf8Char): TJsonToken;
 begin
   if P <> nil then
@@ -3426,11 +3518,8 @@ begin
     result := false;
 end;
 
-function JsonPropNameValid(P: PUtf8Char; Len: integer): boolean;
-var
-  tab: PJsonCharSet;
+function JsonPropNameValid(P: PUtf8Char; len: integer; tab: PJsonCharSet): boolean;
 begin
-  tab := @JSON_CHARS;
   if (P <> nil) and
      (jcJsonIdentifierFirstChar in tab[P^]) then // _$0..9a..zA..Z
   begin
@@ -3443,6 +3532,16 @@ begin
     until not (jcJsonIdentifier in tab[P^]); // _-.[]$0..9a..zA..Z
   end;
   result := false;
+end;
+
+function JsonUnquotedValueValid(P: PUtf8Char; len: PtrUInt): boolean;
+begin
+  result := (P <> nil) and
+            (len > 0) and
+            (P^ > ' ') and
+            (P[len - 1] > ' ') and
+            (not IsConstantOrNumberJson(P, len)) and
+            JsonUnquotedStringValid(P, pointer(len), @JSON_CHARS);
 end;
 
 {$ifndef PUREMORMOT2}
@@ -3794,7 +3893,7 @@ begin
         (P^ <> #0) do
     inc(P);
   if P^ = '/' then
-    P := TryGotoEndOfComment(P);
+    P := TryGotoEndOfSlashComment(P);
   if HandleValuesAsObjectOrArray and
      (P^ in ['{', '[']) then
   begin
@@ -3839,27 +3938,6 @@ begin
   end;
 end;
 
-function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  // P[-1]='"' at function call
-  repeat
-    if not (jcJsonStringMarker in tab[P^]) then
-    begin
-      inc(P);   // not [#0, '"', '\']
-      continue; // very fast parsing of most UTF-8 chars
-    end;
-    if (P^ = '"') or
-       (P^ = #0) or
-       (P[1] = #0) then
-      // end of string/buffer, or buffer overflow detected as \#0
-      break;
-    inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
-  until false;
-  result := P;
-  // P^='"' at function return (if input was correct)
-end;
-
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 begin
   // P^='"' at function call and at successful function return
@@ -3888,7 +3966,7 @@ begin
             repeat
               inc(P);
             until not (P^ in [#1..' ']);
-            result := P;
+            result := P; // success
             exit;
           end
           else if (P^ = #0) or
@@ -3933,9 +4011,9 @@ begin
     inc(P);
   end;
   if P^ = '/' then
-    P := TryGotoEndOfComment(P);
-  Name := P + 1;
+    P := TryGotoEndOfSlashComment(P);
   tab := @JSON_CHARS;
+  Name := P + 1;
   if P^ = '"' then
   begin
     // handle very efficiently the most common case of unescaped double quotes
@@ -5027,7 +5105,7 @@ begin
   if result and
      (RowCount < 0) then
   begin
-    RowCount := JsonArrayCount(P, PEnd) div FieldCount; // 900MB/s browse
+    RowCount := JsonArrayCount(P, PEnd) div FieldCount; // GB/s browse
     if RowCount <= 0 then
       RowCount := -1; // bad format -> no data
   end;
@@ -7095,7 +7173,7 @@ begin
         (Json^ <> #0) do
     inc(Json);
   if Json^ = '/' then
-    Json := TryGotoEndOfComment(Json);
+    Json := TryGotoEndOfSlashComment(Json);
   case Json^ of
   '[':
     begin
@@ -9384,7 +9462,7 @@ begin
   until (Json^ = #0) or
         (Json^ > ' ');
   info.Json := Json;
-  c := JsonObjectPropCount(Json); // fast 900MB/s parsing
+  c := JsonObjectPropCount(Json); // fast GB/s parsing
   if c <= 0 then
     exit;
   DynArray.Capacity := c;
