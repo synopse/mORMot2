@@ -748,8 +748,9 @@ begin
   if procnetroute = '' then // get routes list once
     procnetroute := StringFromFileNoSize('/proc/net/route');
   p := pointer(procnetroute);
-  while p <> nil do
-  begin
+  if p = nil then
+    exit;
+  repeat
     if (MemCmp(pointer(p), pointer(a.Name), l) = 0) and
        (p[l] in [#9, ' ']) then
     begin
@@ -763,8 +764,8 @@ begin
         break;
       end;
     end;
-    p := GotoNextLine(p);
-  end;
+    p := GotoNextLineSmall(p);
+  until p^ = #0;
 end;
 
 {$endif OSLINUX}
@@ -1244,8 +1245,9 @@ begin
     // - even the libc seems to read it when implementing gethostname()
     resolv := StringFromFile('/etc/resolv.conf');
   p := pointer(resolv);
-  while p <> nil do
-  begin
+  if p = nil then
+    exit;
+  repeat
     while p^ in [#9, ' '] do
       inc(p);
     if p^ in [#0, '#'] then
@@ -1267,8 +1269,8 @@ begin
         _addutf8(result, one);
       until false;
     end;
-    p := GotoNextLine(p);
-  end;
+    p := GotoNextLineSmall(p);
+  until p^ = #0;
 end;
 
 

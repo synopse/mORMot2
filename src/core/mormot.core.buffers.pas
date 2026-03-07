@@ -7829,8 +7829,8 @@ begin
         end
         else
           IdemPCharAndGetNextItem(P, 'CONTENT-TRANSFER-ENCODING: ', part.Encoding);
-        P := GotoNextLine(P);
-        if P = nil then
+        P := GotoNextLineSmall(P);
+        if P^ = #0 then
           exit;
       until PWord(P)^ = EOLW;
       // decode section content

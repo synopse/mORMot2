@@ -1965,8 +1965,8 @@ begin
        (s <> 'squashfs') and
        (s <> 'nullfs') then
       _addutf8(_ProcFileSystems, s);
-    p := GotoNextLine(p);
-  until p = nil;
+    p := GotoNextLineSmall(p);
+  until p^ = #0;
   if _ProcFileSystems = nil then
     exit;
   // add some FS which may be marked as nodev but could be considered as "real"
@@ -3925,8 +3925,8 @@ begin
   repeat
     AddDiskPartition(
       _GetNextSpaced(p), _GetNextSpaced(p), _GetNextSpaced(p), result, n);
-    p := GotoNextLine(p);
-  until p = nil;
+    p := GotoNextLineSmall(p);
+  until p^ = #0;
   SetLength(result, n);
 end;
 

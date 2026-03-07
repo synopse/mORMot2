@@ -2678,10 +2678,9 @@ begin
     if upIgnore = nil then
       upIgnore := TOBEPURGED;
     if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
-      while (P <> nil) and
-            (P^ <> #0) do
+      while P^ <> #0 do
       begin
-        next := GotoNextLine(P);
+        next := GotoNextLineSmall(P);
         if IdemPCharSep(P, upIgnore) < 0 then // append this entry
         begin
           l := next - P;
