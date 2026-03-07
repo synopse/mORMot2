@@ -695,22 +695,22 @@ begin
     Content := Call.InBody;
     ContentType := JSON_CONTENT_TYPE_VAR; // consider JSON by default
     P := pointer(Head);
-    while P <> nil do
-    begin
-      PBeg := P;
-      if IdemPChar(PBeg, 'CONTENT-TYPE:') then
-      begin
-        ContentType := GetNextLine(PBeg + 14, P); // retrieve customized type
-        if P = nil then
-          // last entry in header
-          SetLength(Head, PBeg - pointer(Head))
-        else
-          system.delete(Head, PBeg - pointer(Head) + 1, P - PBeg);
-        TrimSelf(Head);
-        break;
-      end;
-      P := GotoNextLine(P);
-    end;
+    if P <> nil then
+      repeat
+        PBeg := P;
+        if IdemPChar(PBeg, 'CONTENT-TYPE:') then
+        begin
+          ContentType := GetNextLine(PBeg + 14, P); // retrieve customized type
+          if P = nil then
+            // last entry in header
+            SetLength(Head, PBeg - pointer(Head))
+          else
+            system.delete(Head, PBeg - pointer(Head) + 1, P - PBeg);
+          TrimSelf(Head);
+          break;
+        end;
+        P := GotoNextLineSmall(P);
+      until P^ = #0;
     if Content <> '' then // always favor content type from binary
       GetMimeContentTypeFromBuffer(Content, ContentType);
     if fUriPrefix <> '' then

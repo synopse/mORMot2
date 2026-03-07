@@ -10071,7 +10071,9 @@ begin
     else if result^ = #0 then
       exit
     else if result^ = #10 then
-      break;
+      break
+    else
+      inc(result);
   inc(result); // points just after #10
 end;
 
