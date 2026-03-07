@@ -3339,6 +3339,11 @@ function StrLenW(S: PWideChar): PtrInt;
 function GotoNextLine(source: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// go to next text line, ended by #10 or #13#10 - smaller version
+// - returns the beginning of next line, or #0 (not nil) if source^=#0 was reached
+function GotoNextLineSmall(source: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast go to the first char <= #13
 // - source is expected to be not nil
 function GotoNextControlChar(source: PUtf8Char): PUtf8Char;
@@ -10052,9 +10057,22 @@ _0: if source[0] = #0 then
       inc(source);
       continue; // e.g. #9
     end;
-    result := source + 1;
+    result := source + 1; // points just after #10
     exit;
   until false;
+end;
+
+function GotoNextLineSmall(source: PUtf8Char): PUtf8Char;
+begin
+  result := source;
+  while true do
+    if result^ > #10 then
+      inc(result)
+    else if result^ = #0 then
+      exit
+    else if result^ = #10 then
+      break;
+  inc(result); // points just after #10
 end;
 
 function IsAnsiCompatible(PC: PAnsiChar): boolean;
