@@ -1672,7 +1672,7 @@ type
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
       {$ifdef HASINLINE}inline;{$endif}
     /// some basic function to append a shorstring JSON value according to Options
-    procedure AddShort(PS: PShortString);
+    procedure AddShortEnum(PS: PShortString);
     /// some basic function to append an Int64 JSON value according to Options
     procedure Add64(Value: PInt64; UnSigned: boolean);
       {$ifdef HASINLINE}inline;{$endif}
@@ -5644,7 +5644,7 @@ end;
 
 procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);
 begin
-  AddShort(PS);
+  AddShortEnum(PS);
   W.AddDirect(':');
   W.Add(Value);
 end;
@@ -5913,9 +5913,10 @@ begin
     if twoEnumSetsAsBooleanInRecord in Ctxt.W.CustomOptions then
       Ctxt.AddShortBoolean(PS, true)
     else
-      Ctxt.AddShort(PS);
+      Ctxt.AddShortEnum(PS); // may trim left
     if woHumanReadableEnumSetAsComment in Ctxt.Options then
-      c^.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', true);
+      c^.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', '', {quoted=}false,
+        twoTrimLeftEnumSets in Ctxt.W.CustomOptions, {sep=}'/');
   end
   else
     Ctxt.W.AddB(Data^);
@@ -5982,7 +5983,7 @@ begin
         if (i >= c^.EnumMin) and
            GetBitPtr(Data, i) then
         begin
-          Ctxt.AddShort(p);
+          Ctxt.AddShortEnum(p); // may trim left
           Ctxt.W.AddComma;
         end;
         inc(PByte(p), PByte(p)^ + 1); // next
@@ -5991,8 +5992,8 @@ begin
     end;
     Ctxt.W.AddDirect(']');
     if woHumanReadableEnumSetAsComment in Ctxt.Options then
-      c^.EnumInfo^.GetEnumNameAll(
-        Ctxt.W.fBlockComment, '"*" or a set of ', true);
+      c^.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '*/', '',
+        {quoted=}false, twoTrimLeftEnumSets in Ctxt.W.CustomOptions, {sep=}'/');
   end
   else
   begin
@@ -6663,7 +6664,7 @@ begin
   begin
     AddDirect(' ', '/', '/', ' ');
     AddString(fBlockComment);
-    fBlockComment := '';
+    Finalize(fBlockComment);
   end;
   inherited AddCRAndIndent;
 end;

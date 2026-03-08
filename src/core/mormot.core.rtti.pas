@@ -547,14 +547,13 @@ type
       newCase: TSetCase; resOrd: PIntegerDynArray = nil);
     /// retrieve all element names as CSV, with optional quotes
     procedure GetEnumNameAll(out result: RawUtf8; const Prefix: RawUtf8 = '';
-      quotedValues: boolean = false; const Suffix: RawUtf8 = '';
-      trimedValues: boolean = false; unCamelCased: boolean = false); overload;
+      const Suffix: RawUtf8 = ''; quotedValues: boolean = false;
+      trimedValues: boolean = false; separator: AnsiChar = ','); overload;
     /// retrieve all trimed element names as CSV
     procedure GetEnumNameTrimedAll(var result: RawUtf8; const Prefix: RawUtf8 = '';
       quotedValues: boolean = false; const Suffix: RawUtf8 = '');
     /// get all enumeration names as a JSON array of strings
-    function GetEnumNameAllAsJsonArray(TrimLeftLowerCase: boolean;
-      UnCamelCased: boolean = false): RawUtf8;
+    function GetEnumNameAllAsJsonArray(TrimLeftLowerCase: boolean): RawUtf8;
     /// get the corresponding enumeration ordinal value, from its name
     // - if EnumName does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -3758,12 +3757,11 @@ begin
   end;
 end;
 
-procedure TRttiEnumType.GetEnumNameAll(out result: RawUtf8; const Prefix: RawUtf8;
-  quotedValues: boolean; const Suffix: RawUtf8; trimedValues, unCamelCased: boolean);
+procedure TRttiEnumType.GetEnumNameAll(out result: RawUtf8; const Prefix,
+    Suffix: RawUtf8; quotedValues, trimedValues: boolean; separator: AnsiChar);
 var
   i: integer;
   V: PShortString;
-  uncamel: ShortString;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if @self <> nil then
@@ -3775,21 +3773,16 @@ begin
       begin
         if quotedValues then
           AddDirect('"');
-        if unCamelCased then
-        begin
-          TrimLeftLowerCaseToShort(V, uncamel);
-          AddShort(uncamel);
-        end
-        else if trimedValues then
+        if trimedValues then
           AddTrimLeftLowerCase(V)
         else
           AddShort(V^);
         if quotedValues then
           AddDirect('"');
-        AddComma;
+        AddDirect(separator);
         inc(PByte(V), length(V^) + 1);
       end;
-      CancelLastComma;
+      CancelLastChar(separator);
       AddString(Suffix);
       SetText(result);
     finally
@@ -3800,13 +3793,12 @@ end;
 procedure TRttiEnumType.GetEnumNameTrimedAll(var result: RawUtf8;
   const Prefix: RawUtf8; quotedValues: boolean; const Suffix: RawUtf8);
 begin
-  GetEnumNameAll(result, Prefix, quotedValues, Suffix, {trimed=}true);
+  GetEnumNameAll(result, Prefix, Suffix, quotedValues, {trimed=}true);
 end;
 
-function TRttiEnumType.GetEnumNameAllAsJsonArray(TrimLeftLowerCase: boolean;
-  UnCamelCased: boolean): RawUtf8;
+function TRttiEnumType.GetEnumNameAllAsJsonArray(TrimLeftLowerCase: boolean): RawUtf8;
 begin
-  GetEnumNameAll(result, '[', {quoted=}true, ']', TrimLeftLowerCase, UnCamelCased);
+  GetEnumNameAll(result, '[', ']', {quoted=}true, TrimLeftLowerCase);
 end;
 
 function TRttiEnumType.GetEnumNameValue(const EnumName: ShortString): integer;
