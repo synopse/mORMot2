@@ -1573,7 +1573,7 @@ begin
     Join([fApplication.fFactory.InterfaceName, ' ', NowToString,
       ' ', fRemoteIP, ' ', fRemoteUserAgent], details)
   else
-    details := JsonReformat(VariantSaveJson(context));
+    details := JsonReformat(VariantSaveJson(context), jsonHumanReadable);
   _ObjAddPropU('originalErrorContext', details, context);
 end;
 
@@ -1736,7 +1736,7 @@ var
   json: RawUtf8;
 begin
   VariantToUtf8(outContext, json);
-  JsonBufferReformat(pointer(json), RawUtf8(fOutput.Content));
+  JsonBufferReformat(pointer(json), RawUtf8(fOutput.Content), jsonHumanReadable);
   fOutput.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   fOutput.Status := status;
 end;

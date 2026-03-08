@@ -459,7 +459,7 @@ begin
   auth := TEccCertificateSecret.CreateFromSecureFile(
     AuthPrivKey, AuthPassword, AuthPasswordRounds);
   try
-    result := JsonReformat(VariantSaveJson(auth.ToVariant))
+    result := JsonReformat(VariantSaveJson(auth.ToVariant), jsonHumanReadable)
   finally
     auth.Free;
   end;
@@ -482,7 +482,7 @@ begin
     FileFromString(priv, CHEAT_FILEMASTER + ECCCERTIFICATESECRET_FILEEXT);
     // save public key as mastercheat.public JSON file
     result := CHEAT_FILEMASTER + ECCCERTIFICATEPUBLIC_FILEEXT;
-    JsonReformatToFile(VariantSaveJson(new.ToVariant), result);
+    JsonReformatToFile(VariantSaveJson(new.ToVariant), result, jsonHumanReadable);
   finally
     new.Free;
     FillZero(priv);

@@ -2636,7 +2636,7 @@ procedure GetProcessInfo(const aPidList: TCardinalDynArray;
 
 /// set the current system time as UTC timestamp
 // - we define two functions with diverse signature to circumvent the FPC RTL
-// TSystemTime field order inconsistency - POSIX version is in momrot.core.os
+// TSystemTime field order inconsistency - POSIX version is in mormot.core.os
 // - warning: do not call this function directly, but rather mormot.core.datetime
 // TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
 function SetSystemTime(const utctime: TSystemTime): boolean;

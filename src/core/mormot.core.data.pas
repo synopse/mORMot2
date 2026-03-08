@@ -4430,7 +4430,7 @@ var
             end;
           end;
         end;
-        nested := GotoNextLine(nested)
+        nested := GotoNextLine(nested);
       until nested = nil;
     end;
   end;

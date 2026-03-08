@@ -4344,7 +4344,7 @@ begin
   else
   begin
     json := RawUtf8FromFile(fFileName);
-    result := LoadFromJson(pointer(json), length(json)); // buffer parsed in-place
+    result := LoadFromJson(pointer(json), length(json)); // parsed in-place
   end;
 end;
 

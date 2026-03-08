@@ -8098,7 +8098,7 @@ begin
     end;
     if Ctxt.InputExists['format'] or
        PropNameEquals(Ctxt.fUriMethodPath, 'json') then
-      json := JsonReformat(json)
+      json := JsonReformat(json, jsonHumanReadable)
     else if PropNameEquals(Ctxt.fUriMethodPath, 'xml') then
     begin
       if name = '' then

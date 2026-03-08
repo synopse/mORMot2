@@ -2235,7 +2235,7 @@ begin
     QuotedStrJson(u, r)
   else if (u <> '') and
           (GotoNextNotSpace(pointer(u))^ in ['[', '{']) then
-    r := JsonReformat(u) // e.g. from TDocVariantData
+    r := JsonReformat(u, jsonHumanReadable) // e.g. from TDocVariantData
   else
     r := u; // false, true, number
   RawUtf8ToVariant(r, Result);

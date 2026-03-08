@@ -3113,8 +3113,8 @@ type
     // retrieve the column exact type information
     // - the JSON data is parsed and formatted in-place, after copied
     // in the protected fPrivateCopy variable (by reference if aJsonOwned=true)
-    constructor CreateFromTables(const Tables: array of TOrmClass; const
-      aSql, aJson: RawUtf8; aJsonOwned: boolean = false); reintroduce; overload;
+    constructor CreateFromTables(const Tables: array of TOrmClass;
+      const aSql, aJson: RawUtf8; aJsonOwned: boolean = false); reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place
