@@ -1409,7 +1409,7 @@ type
     /// create a THttpProxyUrlSettings definition for using a callback
     function AddEvent(const request: TOnHttpProxyServerRequest;
       const uri: RawUtf8 = ''): THttpProxyUrlSettings;
-    /// load URI definitions from local *.json files
+    /// load URI definitions from local *.json files (also supports JSON5 or HJson)
     // - returns the number of added THttpProxyUrl instances into Url[]
     function AddFromFiles(const settingsfolder: TFileName;
       const mask: TFileName = '*.json'): integer;

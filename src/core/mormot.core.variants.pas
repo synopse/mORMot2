@@ -7007,8 +7007,8 @@ end;
 
 function TDocVariantData.InitJsonFromFile(const FileName: TFileName;
   aOptions: TDocVariantOptions): boolean;
-begin
-  result := InitJsonInPlace(pointer(RawUtf8FromFile(FileName)), aOptions) <> nil;
+begin // detect BOM and JSON5/HJson
+  result := InitJsonInPlace(pointer(JsonNormalizeFromFile(FileName)), aOptions) <> nil;
 end;
 
 procedure TDocVariantData.InitFromPairs(aPairs: PUtf8Char;

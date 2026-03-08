@@ -2287,9 +2287,11 @@ function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TOb
 /// persist a class instance into a JSON file
 // - returns TRUE on success, false on error (e.g. the file name is invalid
 // or the file is existing and could not be overwritten)
-// - see ObjectToJson() as defined in momrot.core.text.pas
+// - see ObjectToJson() as defined in mormot.core.text.pas
+// - for settings, you may use SETTINGS_WRITEOPTIONS and Format = jsonH or json5
 function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
-  Options: TTextWriterWriteObjectOptions = [woHumanReadable]): boolean;
+  Options: TTextWriterWriteObjectOptions = [];
+  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
 
 /// get any (potentially nested) object property by path
 // - complex values (e.g. dynamic array properties) will be returned as
@@ -12074,26 +12076,13 @@ begin
 end;
 
 function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
-  Options: TTextWriterWriteObjectOptions): boolean;
+  Options: TTextWriterWriteObjectOptions; Format: TTextWriterJsonFormat): boolean;
 var
-  humanread: boolean;
   json: RawUtf8;
 begin
-  humanread := woHumanReadable in Options;
-  if humanread and
-     (woHumanReadableEnumSetAsComment in Options) then
-    // JsonReformat() erases comments - use plain woHumanReadable only
-    humanread := false
-  else
-    // JsonBufferReformatToFile() below will do the actual (re)formatting
-    exclude(Options, woHumanReadable);
+  Options := Options - [woHumanReadable]; // JsonBufferReformatToFile() below
   json := ObjectToJson(Value, Options);
-  if humanread then
-    // woHumanReadable not working with custom JSON serializers, e.g. T*ObjArray
-    // TODO: check if this is always the case with our mORMot2 new serialization
-    result := JsonBufferReformatToFile(pointer(json), JsonFile)
-  else
-    result := FileFromString(json, JsonFile);
+  result := JsonBufferReformatToFile(pointer(json), JsonFile, Format);
 end;
 
 function GetValueObject(Instance: TObject; const Path: RawUtf8;
