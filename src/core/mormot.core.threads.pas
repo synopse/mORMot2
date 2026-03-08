@@ -335,7 +335,7 @@ type
     /// delete all stored properties
     procedure Clear;
     /// save the stored values as UTF-8 encoded JSON Object
-    function ToJson(HumanReadable: boolean = false): RawUtf8;
+    function ToJson(Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// low-level access to the internal TDocVariant instance and all its features
     // - warning: the returned result is not thread-safe so you should use Safe^
     function Data: PDocVariantData;
@@ -405,7 +405,7 @@ type
     procedure Clear;
     /// save the stored value as UTF-8 encoded JSON Object
     // - implemented as just a wrapper around VariantSaveJson()
-    function ToJson(HumanReadable: boolean = false): RawUtf8;
+    function ToJson(Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// low-level access to the internal TDocVariant instance and all its features
     function Data: PDocVariantData;
     /// low-level access to the associated thread-safe Read/Write lock
@@ -2341,7 +2341,7 @@ begin
   end;
 end;
 
-function TLockedDocVariant.ToJson(HumanReadable: boolean): RawUtf8;
+function TLockedDocVariant.ToJson(Format: TTextWriterJsonFormat): RawUtf8;
 var
   tmp: RawUtf8;
 begin
@@ -2351,8 +2351,8 @@ begin
   finally
     fSafe.ReadOnlyUnLock;
   end;
-  if HumanReadable then
-    JsonBufferReformat(pointer(tmp), result)
+  if Format <> jsonCompact then
+    JsonBufferReformat(pointer(tmp), result, Format)
   else
     result := tmp;
 end;
