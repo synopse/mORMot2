@@ -2742,12 +2742,13 @@ type
   /// customize TSynJsonFileSettings process
   // - fsoDisableSaveIfNeeded will disable SaveIfNeeded method process
   // - fsoReadIni will disable JSON loading, and expect INI file format
-  // - fsoWriteIni will force SaveIfNeeded to use the INI layout
+  // - fsoWriteIni/fsoWriteHjson will force SaveIfNeeded to use INI/HJson format
   // - fsoNoEnumsComment will customize SaveIfNeeded output
   TSynJsonFileSettingsOption = (
     fsoDisableSaveIfNeeded,
     fsoReadIni,
     fsoWriteIni,
+    fsoWriteHjson,
     fsoNoEnumsComment);
   TSynJsonFileSettingsOptions = set of TSynJsonFileSettingsOption;
 
@@ -12821,7 +12822,11 @@ begin
   if fsoWriteIni in fSettingsOptions then
     saved := ObjectToIni(self, fSectionName, opt, 0, fIniOptions)
   else
+  begin
     saved := ObjectToJson(self, opt);
+    if fsoWriteHjson in fSettingsOptions then
+      saved := JsonReformat(saved, jsonH); // very human friendly
+  end;
   if saved = fInitialJsonContent then
     exit;
   result := FileFromString(saved, fFileName);
