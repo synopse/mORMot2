@@ -3415,7 +3415,9 @@ begin
     stValueFirst:
       State := stValue;
   else if Fmt * [jrfTrailingComma, jrfNoTrailingComma] = [] then
-    W.AddDirect(',');
+         if (FmtJson <> jsonMorml) or  // no need of },value or ],value
+            not (W.B^ in ['}', ']']) then
+           W.AddDirect(',');
   end;
   if jrfIndent in Fmt then
     W.AddCRAndIndent;
@@ -3453,12 +3455,12 @@ begin
         exit
       else if jrfUnquoteEcmaName in Fmt then
       begin
-        if not PropNameValid(P, Len) then
+        if not PropNameValid(P, Len) then // _0..9a..zA..Z
           exit // e.g. JSON5 requires ECMA Script identifiers, as mORMot 1
       end
-      else if not JsonPropNameValid(P, Len,
-                {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS{$endif}) then
-        exit; // much more relaxed
+      else if not JsonPropNameValid(P, Len, // _-.[]$0..9a..zA..Z
+                {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS_RELAXED{$endif}) then
+        exit; // more relaxed
     stObjectValue, stValue:
       begin
         if not (jrfUnquoteValue in Fmt) then
@@ -3467,7 +3469,7 @@ begin
           if IsConstantOrNumberJson(P, len) then
             exit;
         if not JsonUnquotedStringValid(P, P + Len,
-            {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS{$endif}) then
+            {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS_RELAXED{$endif}) then
           exit;
       end;
   else
@@ -3523,7 +3525,7 @@ label
 begin
   result := false;
   {$ifndef CPUX86}
-  JsonSet := @JSON_CHARS;
+  JsonSet := @JSON_CHARS_RELAXED;
   {$endif CPUX86}
   repeat // reuse GotoEnd state machine for the purpose of reformatting
     while (P^ <= ' ') and
@@ -3540,14 +3542,12 @@ begin
           inc(P);
           ValueLen := P - Value;
           if not AddUnquoted(Value + 1, ValueLen - 2, {ident=}false) then
-            case FmtUnicode of
-              uNoConversion:
-                W.AddNoJsonEscape(Value, ValueLen); // as "string"
-              uForcedUnicode:
-                W.AddNoJsonEscapeForcedUnicode(Value, ValueLen);
-            else // uForcedNoUnicode:
-              W.AddNoJsonEscapeForcedNoUnicode(Value, ValueLen)
-            end;
+            if FmtJson < jsonEscapeUnicode then
+              W.AddNoJsonEscape(Value, ValueLen) // echo same "string"
+            else if FmtJson = jsonEscapeUnicode then
+              W.AddNoJsonEscapeForcedUnicode(Value, ValueLen) // all \u####
+            else // jsonEscapeNoUnicode:
+              W.AddNoJsonEscapeForcedNoUnicode(Value, ValueLen); // pure UTF-8
           ReformatEndValue;
         end;
       jtSingleQuote: // 'string'
@@ -3579,7 +3579,7 @@ begin
           ReformatBeginValue;
           Value := GotoEndJsonItemNumber(P);
           if (Value <> nil) and
-             (jcEndOfJsonValueField in JsonSet[Value^]) then // #0#9#10#13 ,}]
+             (jcEndOfJsonValueField in JsonSet[Value^]) then // #0#9#10#13 ,}]{[
           begin
             W.AddNoJsonEscape(P, Value - P); // true number
             P := Value;
@@ -3592,7 +3592,7 @@ begin
         begin
           ReformatBeginValue;
           if (PInteger(P)^ = NULL_LOW) and
-             (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]
+             (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]{[
           begin
             W.AddShort4(NULL_LOW);
             inc(P, 4);
@@ -3605,7 +3605,7 @@ begin
         begin
           ReformatBeginValue;
           if (PInteger(P)^ = TRUE_LOW) and
-             (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]
+             (jcEndOfJsonValueField in JsonSet[P[4]]) then // #0#9#10#13 ,}]{[
           begin
             W.AddShort4(TRUE_LOW, 4);
             inc(P, 4);
@@ -3618,7 +3618,7 @@ begin
         begin
           ReformatBeginValue;
           if (PInteger(P + 1)^ = FALSE_LOW2) and
-             (jcEndOfJsonValueField in JsonSet[P[5]]) then // #0#9#10#13 ,}]
+             (jcEndOfJsonValueField in JsonSet[P[5]]) then // #0#9#10#13 ,}]{[
           begin
             W.AddShorter(BOOL_STR[false]);
             inc(P, 5);
@@ -3646,13 +3646,12 @@ ident:    Value := P;
           if State = stObjectName then
             repeat
               inc(P);
-            until (jcEndOfJsonFieldOr0 in JsonSet[P^]) or // #0 , ] } :
-                  (P^ = #10) or (P^ = '=')
+            until (jcEndOfJsonFieldOr0 in JsonSet[P^]) // #0 , ] } : { [ = #10
           else // stValue/stObjectValue
             repeat
               inc(P);
-            until (jcEndOfJsonFieldNotName in JsonSet[P^]) or // #0 , ] }
-                  (P^ = #10) or (P^ = '#') or (PWord(P)^ = SLASH_16);
+            until (jcEndOfJsonFieldNotName in JsonSet[P^]) or // #0 , ] } { [ #10 #
+                  (PCardinal(P)^ = $202f2f20); // detect ' // xx' not 'http://xx'
           if P^ = #0 then
              exit; // unquoted values should not appear stand-alone
           ValueLen := P - Value;
@@ -3678,6 +3677,9 @@ ident:    Value := P;
           Stack[StackCount] := State;
           inc(StackCount);
           inc(W.fHumanReadableLevel);
+          if FmtJson = jsonMorml then // no need of ,{ ,[ :{ or :[
+            if W.B^ in [':', ','] then
+              W.CancelLastChar;
           W.AddDirect(P^);
           if P^ = '{' then
             State := stObjectNameFirst
@@ -3710,7 +3712,7 @@ ident:    Value := P;
             goto ident0; // not a true comment
           if jrfComments in Fmt then
           begin
-            inc(Value, 2);
+            inc(Value, 2); // was // or /*
 comment:    if jrfIndent in Fmt then
               W.AddCRAndIndent;
             if jrfCommentHash in Fmt then
@@ -12822,6 +12824,7 @@ var
   c: AnsiChar;
   jc: TJsonChar;
   p: PByteArray;
+  r: PJsonCharSet;
   {$ifdef FPC} dummy: RawUtf8; {$endif}
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
@@ -12874,6 +12877,13 @@ begin
       // exclude '0'..'9' as already in jtFirstDigit
       JSON_TOKENS[c] := jtIdentifierFirstChar;
   end;
+  r := @JSON_CHARS_RELAXED; // extended to support minimalistic .morml
+  r^ := JSON_CHARS;
+  r^['{'] := r^['{'] + [jcEndOfJsonValueField, jcEndOfJsonFieldOr0, jcEndOfJsonFieldNotName];
+  r^['['] := r^['['] + [jcEndOfJsonValueField, jcEndOfJsonFieldOr0, jcEndOfJsonFieldNotName];
+  include(r^['='], jcEndOfJsonFieldOr0);
+  include(r^['#'], jcEndOfJsonFieldNotName);
+  r^[#10] := r^[#10] + [jcEndOfJsonFieldOr0, jcEndOfJsonFieldNotName];
   p := @JSON_TOKENS;
   p[ord(#0 )]  := ord(jtEndOfBuffer);
   p[ord('{')]  := ord(jtObjectStart);
