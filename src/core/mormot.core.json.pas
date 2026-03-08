@@ -7287,6 +7287,7 @@ const
     [jrfIndent],                                     // jsonHumanReadable
     [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName], // jsonUnquotedPropName
     [jrfUnquoteName, jrfUnquoteEcmaName],            // jsonUnquotedPropNameCompact
+    [jrfIndent, jrfComments],                        // jsonC
     [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName,  // json5
      jrfTrailingComma, jrfComments],
     [jrfIndent, jrfUnquoteName, jrfUnquoteValue,     // jsonH

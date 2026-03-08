@@ -508,10 +508,13 @@ type
   // our units as valid JSON input, without previous correction
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
   // property names, which is the smallest data output within mORMot instances
+  // - jsonC will keep and normalize comments whereas jsonHumanReadable won't
   // - json5 will emit unquoted names, but with a trailing , before } or ]
   // - jsonH for indented unquoted names and values, using LF as delimiter -
   // i.e. the .hjson "Human JSON" format, very suitable for config files
-  // - jsonMorml is as unquoted, unindented and small as possible - aka .morml
+  // - jsonMorml is as unquoted, unindented and as small as possible - resulting
+  // "mORMot Markup Language" - aka .morml - is actually 100% UTF-8 so much more
+  // human readable and editable than binary alternatives
   // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
   // but you can use jsonEscapeUnicode to produce pure 7-bit ASCII output,
   // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
@@ -523,6 +526,7 @@ type
     jsonHumanReadable,
     jsonUnquotedPropName,
     jsonUnquotedPropNameCompact,
+    jsonC,
     json5,
     jsonH,
     jsonMorml,
@@ -1144,6 +1148,7 @@ const
     '.json',  // jsonHumanReadable
     '.json5', // jsonUnquotedPropName
     '.json5', // jsonUnquotedPropNameCompact
+    '.jsonc', // jsonC
     '.json5', // json5
     '.hjson', // jsonH
     '.morml', // jsonMorml
