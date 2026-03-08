@@ -112,6 +112,7 @@ const
   _ID16   = ord('I') + ord('D') shl 8;
   _ROW24  = ord('R') + ord('O') shl 8 + ord('W') shl 16;
   _ROWI32 = _ROW24 + ord('I') shl 24;
+  SQUOT_16 = ord('''') + ord('''') shl 8;
 
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
@@ -3094,6 +3095,7 @@ type
     procedure ReformatBeginValue;
     procedure ReformatEndValue;
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
+    function AddMultiLine(P:PUtf8Char): PUtf8Char;
  end;
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
@@ -3444,6 +3446,40 @@ begin
   result := true;
 end;
 
+function TJsonParser.AddMultiLine(P: PUtf8Char): PUtf8Char;
+var
+  ind, l: PtrInt;
+begin
+  result := P;
+  W.Add('"');
+  repeat // first non-empty content line defines the indentation baseline
+    result := GotoNextLineSmall(result); // ignore what is after initial '''
+    P := result;
+    result := GotoNextNotSpaceSameLine(result);
+    if result^ = #0 then
+      exit;
+  until result^ > ' ';
+  ind := result - P;
+  repeat
+    if PCardinal(result)^ and $ffffff = SQUOT_16 + ord('''') shl 16 then
+      break;
+    inc(P, ind);
+    if (result^ > ' ') and
+       (result > P) then
+      result := P; // keep indentation when possible
+    P := result;
+    result := GotoNextLineSmall(result);
+    if result^ = #0 then
+      exit;
+    l := result - P;
+    if l <> 0 then // paranoid
+      W.AddJsonEscape(P, l); // including original LF or CRLF
+    P := result;
+    result := GotoNextNotSpaceSameLine(result);
+  until result^ = #0;
+  result := GotoNextLineSmall(result); // ignore trailing '''
+end;
+
 function TJsonParser.Reformat(P: PUtf8Char): boolean;
 var
   {$ifndef CPUX86}
@@ -3463,18 +3499,6 @@ begin
           (P^ <> #0) do
       inc(P);
     case JsonFirst[P^] of
-      jtNone:
-        if P^ = '#' then // # comment until end of line
-        begin
-          inc(P);
-          Value := P;
-          while (P^ <> #0) and (P^ <> #10) do
-            inc(P);
-          if jrfComments in Fmt then
-            goto comment;
-        end
-        else // handle unexpected chars - full UTF-8 - as potential value
-          goto ident0;
       jtDoubleQuote: // "string"
         begin
           ReformatBeginValue;
@@ -3498,16 +3522,25 @@ begin
       jtSingleQuote: // 'string'
         begin
           ReformatBeginValue;
-          Value := P + 1;
-          repeat
-            inc(P);
-            if P^ < ' ' then
-              exit;
-          until P^ = '''';
-          ValueLen := P - Value;
           inc(P);
-          if not AddUnquoted(Value, ValueLen, {ident=}false) then
-            W.AddJsonStringBuffer(Value, ValueLen); // as "string"
+          if PWord(P)^ = SQUOT_16 then // Hjson ''' multi-line
+          begin
+            P := AddMultiLine(P + 2);
+            W.AddDirect('"');
+          end
+          else
+          begin
+            Value := P; // no nested quote support
+            repeat
+              inc(P);
+              if P^ < ' ' then
+                exit;
+            until P^ = '''';
+            ValueLen := P - Value;
+            inc(P);
+            if not AddUnquoted(Value, ValueLen, {ident=}false) then
+              W.AddJsonStringBuffer(Value, ValueLen); // as "string"
+          end;
           ReformatEndValue;
         end;
       jtFirstDigit: // '-', '0'..'9'
@@ -3563,6 +3596,18 @@ begin
           else
             goto ident;
         end;
+      jtNone:
+        if P^ = '#' then // # comment until end of line
+        begin
+          inc(P);
+          Value := P;
+          while (P^ <> #0) and (P^ <> #10) do
+            inc(P);
+          if jrfComments in Fmt then
+            goto comment;
+        end
+        else // handle unexpected chars - full UTF-8 range - as potential value
+          goto ident0;
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
 ident0:   ReformatBeginValue;
