@@ -3073,7 +3073,7 @@ type
     State: TJsonParserState;
     ExpectStandard: boolean;
     Fmt: TJsonReformatFlags;
-    FmtUnicode: (uNoConversion, uForcedUnicode, uForcedNoUnicode);
+    FmtJson: TTextWriterJsonFormat;
     StackCount: integer;
     JsonFirst: PJsonTokens;
     Max: PUtf8Char; // checking Max after each comma is good enough
@@ -3081,16 +3081,17 @@ type
     RootCount: integer;
     // 500 nested documents seem enough in practice (SQLite3 uses 1000)
     Stack: array[0..500] of TJsonParserState;
+    // methods able to jump/count over any JSON value (up to Max)
     procedure Init(Strict: boolean; PMax: PUtf8Char);
       {$ifdef HASINLINE} inline; {$endif}
     procedure InitCount(Strict: boolean; PMax: PUtf8Char;
       First: TJsonParserState);
       {$ifdef HASINLINE} inline; {$endif}
-    // reusable method able to jump over any JSON value (up to Max)
     function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
     function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    // some methods used by TJsonWriter.DoJsonReformat()
+    // methods used by TJsonWriter.DoJsonReformat()
+    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter);
     function Reformat(P: PUtf8Char): boolean;
     procedure ReformatBeginValue;
     procedure ReformatEndValue;
@@ -3372,6 +3373,36 @@ begin
   if c <> #0 then
     inc(result);
 end;
+
+const
+  FMT2FLAGS: array[TTextWriterJsonFormat] of TJsonReformatFlags = (
+    [],                                              // jsonCompact
+    [jrfIndent],                                     // jsonHumanReadable
+    [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName], // jsonUnquotedPropName
+    [jrfUnquoteName, jrfUnquoteEcmaName],            // jsonUnquotedPropNameCompact
+    [jrfIndent, jrfComments],                        // jsonC
+    [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName,  // json5
+     jrfTrailingComma, jrfComments],
+    [jrfIndent, jrfUnquoteName, jrfUnquoteValue,     // jsonH
+     jrfNoTrailingComma, jrfComments, jrfCommentHash],
+    [jrfUnquoteName, jrfUnquoteValue],               // jsonMorml
+    [],                                              // jsonEscapeUnicode
+    []);                                             // jsonNoEscapeUnicode
+var
+  JSON_CHARS_RELAXED: TJsonCharSet; // to support minimalistic .morml
+
+procedure TJsonParser.InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter);
+begin
+  {$ifdef CPUX86}
+  JsonSet := @JSON_CHARS_RELAXED;
+  {$endif CPUX86}
+  State := stObjectValue; // to trigger no leading #10
+  StackCount := 0;
+  JsonFirst := @JSON_TOKENS;
+  Fmt := FMT2FLAGS[JsonFmt];
+  FmtJson := JsonFmt;
+  W := Writer;
+end; // Max/ExpectedStandard/RootCount are not used
 
 procedure TJsonParser.ReformatBeginValue;
 begin
@@ -7326,37 +7357,30 @@ begin
     AddDirect('"');
 end;
 
-const
-  FMT2FLAGS: array[TTextWriterJsonFormat] of TJsonReformatFlags = (
-    [],                                              // jsonCompact
-    [jrfIndent],                                     // jsonHumanReadable
-    [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName], // jsonUnquotedPropName
-    [jrfUnquoteName, jrfUnquoteEcmaName],            // jsonUnquotedPropNameCompact
-    [jrfIndent, jrfComments],                        // jsonC
-    [jrfIndent, jrfUnquoteName, jrfUnquoteEcmaName,  // json5
-     jrfTrailingComma, jrfComments],
-    [jrfIndent, jrfUnquoteName, jrfUnquoteValue,     // jsonH
-     jrfNoTrailingComma, jrfComments, jrfCommentHash],
-    [jrfUnquoteName, jrfUnquoteValue],               // jsonMorml
-    [],                                              // jsonEscapeUnicode
-    []);                                             // jsonNoEscapeUnicode
+function GotoNextWithoutComment(P: PUtf8Char): PUtf8Char;
+begin
+  result := P;
+  repeat
+    result := GotoNextNotSpace(result);
+    if result^ = '#' then
+      result := GotoNextLineSmall(result + 1)
+    else if (result^ = '/') and
+            (result[1] in ['/', '*']) then
+      result := TryGotoEndOfSlashComment(result)
+    else
+      break;
+  until result^ = #0;
+end;
 
 function TJsonWriter.DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat): boolean;
 var
   parser: TJsonParser; // reuse the GotoEnd state machine
+  start: PUtf8Char;    // Hjson assume an implicit object
 begin
   result := false;
   if P = nil then
     exit;
-  parser.Init({strict=}false, nil);
-  parser.State := stObjectValue;
-  parser.Fmt := FMT2FLAGS[Fmt];
-  parser.FmtUnicode := uNoConversion;
-  if Fmt = jsonEscapeUnicode then
-    parser.FmtUnicode := uForcedUnicode
-  else if Fmt = jsonNoEscapeUnicode then
-    parser.FmtUnicode := uForcedNoUnicode;
-  parser.W := self;
+  parser.InitReformat(Fmt, self);
   if Fmt <> jsonHumanReadable then // #9 only for standard human-readable JSON
     CustomOptions := CustomOptions + [twoIndentSpaces];
   result := parser.Reformat(P);
