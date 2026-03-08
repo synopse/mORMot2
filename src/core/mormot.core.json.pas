@@ -7385,7 +7385,31 @@ begin
   parser.InitReformat(Fmt, self);
   if Fmt <> jsonHumanReadable then // #9 only for standard human-readable JSON
     CustomOptions := CustomOptions + [twoIndentSpaces];
+  P := GotoNextNotSpace(P);
+  if P = #0 then
+    exit;
+  start := P;
+  if not (start^ in ['{', '[']) then
+    start := GotoNextWithoutComment(start);
+  if not (start^ in ['{', '[']) then
+  begin
+    AddDirect('{'); // Hjson may start with an implicit object
+    inc(fHumanReadableLevel);
+    parser.State := stObjectNameFirst;
+  end
+  else
+    start := nil;
   result := parser.Reformat(P);
+  if start <> nil then
+  begin
+    if (jrfTrailingComma in parser.Fmt) and
+       not (parser.State in [stObjectNameFirst, stValueFirst]) then
+      AddDirect(',');
+    dec(fHumanReadableLevel);
+    if jrfIndent in parser.Fmt then
+      AddCRAndIndent;
+    AddDirect('}');
+  end;
 end;
 
 function TJsonWriter.AddJsonToXML(Json: PUtf8Char;
