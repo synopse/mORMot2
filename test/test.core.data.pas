@@ -2318,10 +2318,10 @@ var
     GNest.Free;
     G3 := TDtoObject2.Create;
     U := ObjectToIni(G3);
-    CheckHash(U, $CDBF8A87);
+    CheckHash(U, $CDC5999F);
     TDtoObject2(G3).fLevel := sllTrace;
     U := ObjectToIni(G3);
-    CheckHash(U, $E54B4E82);
+    CheckHash(U, $2D2D5D9A);
     G3.Free;
     ClearObject(G2);
     ClearObject(GDtoObject);
@@ -3169,6 +3169,12 @@ begin
   TestReformat(
     '{id:ObjectId("1234"),name:"John",date:ISODate("20261225")}',
     '{id:"ObjectId(\"1234\")",name:"John",date:"ISODate(\"20261225\")"}');
+  TestReformat(
+    'one:{a:1,b:2}'#10'two:2',
+    '{one:{a:1,b:2},two:2}');
+  CheckEqual(JsonReformat(
+    #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
+    '{"one":1,"two":2}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
@@ -3239,10 +3245,9 @@ begin
     J := ObjectToJson(O, [woHumanReadable, woHumanReadableFullSetsAsStar,
       woHumanReadableEnumSetAsComment]);
     CheckEqual(J,
-      #10'{'#10#9'"Name": "3",'#10#9'"Enum": "flagDestroying", ' +
-      '// "flagIdle","flagStarted","flagFinished","flagDestroying"' +
-      #10#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted",' +
-      '"flagFinished","flagDestroying"'#10'}');
+      #10'{'#10#9'"Name": "3",'#10#9'"Enum": "flagDestroying", // ' +
+      'flagIdle/flagStarted/flagFinished/flagDestroying'#10#9'"Sets": ' +
+      '["*"] // */flagIdle/flagStarted/flagFinished/flagDestroying'#10'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -4101,20 +4106,28 @@ begin
   timer.Start;
   for i := 1 to ITER do
     j0 := JsonReformat(people, jsonUnquotedPropNameCompact);
-  NotifyTestSpeed('Reformat jsonUnquotedPropNameCompact', 0,
-    length(j0) * ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('Reformat jsonUnquotedPropNameCompact', 0, len, @timer, ONLYLOG);
+  Check(length(j0) <> 0);
   timer.Start;
   for i := 1 to ITER do
     j0 := JsonReformat(people, jsonHumanReadable);
-  NotifyTestSpeed('Reformat jsonHumanReadable', 0, length(j0) * ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('Reformat jsonHumanReadable', 0, len, @timer, ONLYLOG);
+  Check(length(j0) > length(people));
   timer.Start;
   for i := 1 to ITER do
     j0 := JsonReformat(people, json5);
-  NotifyTestSpeed('Reformat JSON5', 0, length(j0) * ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('Reformat JSON5', 0, len, @timer, ONLYLOG);
+  Check(length(j0) > length(people));
   timer.Start;
   for i := 1 to ITER do
     j0 := JsonReformat(people, jsonH);
-  NotifyTestSpeed('Reformat Hjson', 0, length(j0) * ITER, @timer, ONLYLOG);
+  NotifyTestSpeed('Reformat Hjson', 0, len, @timer, ONLYLOG);
+  Check(length(j0) > length(people));
+  timer.Start;
+  for i := 1 to ITER do
+    j0 := JsonReformat(people, jsonMorml);
+  NotifyTestSpeed('Reformat morml', 0, len, @timer, ONLYLOG);
+  Check(length(j0) < length(people));
   dv.InitJson(people);
   peoplehash := Hash32(dv.ToJson);
   dv.Clear; // to reuse dv
