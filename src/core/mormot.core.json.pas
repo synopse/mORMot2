@@ -627,6 +627,10 @@ procedure JsonBufferReformat(P: PUtf8Char; out result: RawUtf8;
 function JsonReformat(const Json: RawUtf8;
   Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
 
+/// read a file content, and apply JsonReformat() to normalize it
+function JsonNormalizeFromFile(const FileName: TFileName;
+  Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+
 /// formats and indents a JSON array or document as a file
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
@@ -1931,7 +1935,8 @@ var
   /// some open-minded options for the JSON parser
   // - as supplied to LoadJson() with Tolerant=true
   // - won't block JSON unserialization due to some minor unexpected values
-  // - as used e.g. by TInterfacedObjectFake and TServiceMethodExecute
+  // - as used e.g. during TInterfacedObjectFake/TServiceMethodExecute process
+  // or by JsonSettingsToObject()
   // - defined as var, not as const, to allow process-wide override
   JSONPARSER_TOLERANTOPTIONS: TJsonParserOptions =
     [jpoHandleCustomVariants, jpoIgnoreUnknownEnum,
@@ -2395,15 +2400,14 @@ function JsonToObject(var ObjectInstance; From: PUtf8Char;
   Options: TJsonParserOptions = []; Interning: TRawUtf8Interning = nil): PUtf8Char;
 
 /// read an object properties, with comments removal and JSON normalization
-// - regular JsonToObject() may fail on some JSON5 or Hjson content - not this
+// - supports standard JSON, but also JSON5, JSONC or HJson variations
+// - returns true if the supplied JSON was successfully retrieved, false on error
 function JsonNormalizeToObject(var ObjectInstance; const From: RawUtf8;
   TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = [];
   Interning: TRawUtf8Interning = nil): boolean;
 
-/// parse the supplied JSON with some tolerance about Settings format
-// - will make a TSynTempBuffer copy for parsing, and un-comment it
-// - returns true if the supplied JSON was successfully retrieved
-// - returns false on error
+/// parse the supplied JSON with high tolerance about Settings format
+// - alias to JsonNormalizeToObject() with JSONPARSER_TOLERANTOPTIONS
 function JsonSettingsToObject(const JsonContent: RawUtf8; Instance: TObject): boolean;
 
 /// read an object properties, as saved by ObjectToJson function
@@ -5297,6 +5301,12 @@ begin
   JsonBufferReformat(pointer(Json), result, Format); // no need of temp copy
 end;
 
+function JsonNormalizeFromFile(const FileName: TFileName;
+  Format: TTextWriterJsonFormat): RawUtf8;
+begin
+  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format);
+end;
+
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
   Format: TTextWriterJsonFormat): boolean;
 var
@@ -5595,7 +5605,7 @@ begin
   Prop := nil;
 end;
 
-procedure TJsonSaveContext.AddShort(PS: PShortString);
+procedure TJsonSaveContext.AddShortEnum(PS: PShortString);
 begin
   W.Add('"');
   if twoTrimLeftEnumSets in W.CustomOptions then
@@ -12673,7 +12683,7 @@ begin
     result := false;
   end
   else
-    result := JsonSettingsToObject(aJson, self);
+    result := JsonSettingsToObject(aJson, self); // supports also json5/jsonH
   if not result then
   begin
     result := IniToObject(aJson, self, aSectionName, @JSON_[mFastFloat], 0, fIniOptions);

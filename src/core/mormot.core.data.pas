@@ -4597,7 +4597,7 @@ var
               if woHumanReadableEnumSetAsComment in Options then
               begin
                 p^.Value.Cache.EnumInfo^.GetEnumNameAll(
-                  s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
+                  s, '; values=', #10, {quoted=}false, {trimmed=}true, {sep=}'/');
                 W.AddString(s);
               end;
               // AddValueJson() would have written "quotes" or ["a","b"]
