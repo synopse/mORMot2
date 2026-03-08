@@ -10562,7 +10562,7 @@ end;
 
 function SameFileContent(const One, Another: TFileName): boolean;
 var
-  b1, b2: array[word] of word; // 2 * 128KB of buffers
+  b1, b2: TBuffer128K;
   r1, r2: integer;
   f1, f2: THandle;
 begin

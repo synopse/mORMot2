@@ -8074,7 +8074,7 @@ end;
 
 function TCryptHash.UpdateStream(stream: TStream): Int64;
 var
-  temp: array[word] of word; // 128KB temporary buffer
+  temp: TBuffer128K;
   read: integer;
 begin
   result := 0;

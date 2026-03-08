@@ -7417,7 +7417,7 @@ end;
 
 function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
 var
-  tmp: array[word] of word; // 128KB stack buffer
+  tmp: TBuffer128K;
   read: integer;
 begin
   result := 0;

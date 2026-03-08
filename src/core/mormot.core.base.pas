@@ -3584,17 +3584,19 @@ function EventEquals(const eventA, eventB): boolean;
 
 type
   /// define a buffer of 1KB of data
-  TBuffer1K = array[0..1023] of AnsiChar;
+  TBuffer1K = array[0 .. pred(1 shl 10)] of AnsiChar;
   /// define a buffer of 2KB of data
-  TBuffer2K = array[0..2047] of AnsiChar;
+  TBuffer2K = array[0 .. pred(2 shl 10)] of AnsiChar;
   /// define a buffer of 4KB of data
-  TBuffer4K = array[0..4095] of AnsiChar;
+  TBuffer4K = array[0 .. pred(4 shl 10)] of AnsiChar;
   /// define a buffer of 8KB of data
-  TBuffer8K = array[0..8191] of AnsiChar;
+  TBuffer8K = array[0 .. pred(8 shl 10)] of AnsiChar;
   /// define a buffer of 16KB of data
-  TBuffer16K = array[0..16383] of AnsiChar;
+  TBuffer16K = array[0 .. pred(16 shl 10)] of AnsiChar;
   /// define a buffer of 64KB of data
   TBuffer64K = array[word] of AnsiChar;
+  /// define a buffer of 128KB of data
+  TBuffer128K = array[0 .. pred(128 shl 10)] of AnsiChar;
 
   /// implements a 4KB stack-based storage of some (UTF-8 or binary) content
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place

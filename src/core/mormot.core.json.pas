@@ -5301,7 +5301,7 @@ function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
   Format: TTextWriterJsonFormat): boolean;
 var
   F: TStream;
-  temp: array[word] of word; // 128KB temporary file writing buffer
+  temp: TBuffer128K;
 begin
   try
     F := TFileStreamEx.Create(Dest, fmCreate);
