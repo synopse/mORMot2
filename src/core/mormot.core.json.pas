@@ -551,8 +551,8 @@ function JsonArrayAsCsv(Json: PUtf8Char; Sep: AnsiChar = ',';
 // - handle three types of comments: starting from // or # till end of line,
 // or /* ..... */ blocks anywhere in the text content
 // - trailing commas are also replaced by ' ' to allow JSON5 parsing
-// - may be used to prepare configuration files before loading;
-// see e.g. JsonSettingsToObject() and JsonFileToObject() functions
+// - note that JsonReformat() already identifies and sanitizes such comments,
+// and support JSON5 trailing commas (and much more json variants)
 procedure RemoveCommentsFromJson(P: PUtf8Char); overload;
 
 /// remove comments from a text buffer before passing it to JSON parser
@@ -614,8 +614,8 @@ function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
 /// formats and indents a JSON array or document to the specified layout
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 // - note that input P buffer won't be modified in-place during conversion
-procedure JsonBufferReformat(P: PUtf8Char; out result: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable);
+function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
+  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
 
 /// formats and indents a JSON array or document to the specified layout
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
@@ -5281,16 +5281,18 @@ begin
   QuotedStrJson(pointer(aText), Length(aText), result, '', '');
 end;
 
-procedure JsonBufferReformat(P: PUtf8Char; out result: RawUtf8;
-  Format: TTextWriterJsonFormat);
+function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
+  Format: TTextWriterJsonFormat): boolean;
 var
   temp: TBuffer64K;
 begin
-  if P <> nil then
+  if P = nil then
+    result := false
+  else
     with TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
     try
-      AddJsonReformat(P, Format);
-      SetText(result);
+      result := AddJsonReformat(P, Format);
+      SetText(Dest);
     finally
       Free;
     end;
