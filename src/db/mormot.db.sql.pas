@@ -1457,7 +1457,8 @@ type
     // - you could use TSqlDBConnectionPropertiesDescription.CreateFromFile()
     // later on to instantiate the proper TSqlDBConnectionProperties class
     // - you can specify a custom Key, if the default is not enough for you
-    procedure DefinitionToFile(const aJsonFile: TFileName; Key: cardinal = 0);
+    procedure DefinitionToFile(const aJsonFile: TFileName; Key: cardinal = 0;
+      Fmt: TTextWriterJsonFormat = jsonHumanReadable);
     /// create a new TSqlDBConnectionProperties instance from the stored values
     class function CreateFrom(
       aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties; virtual;
@@ -5677,9 +5678,9 @@ begin
 end;
 
 procedure TSqlDBConnectionProperties.DefinitionToFile(
-  const aJsonFile: TFileName; Key: cardinal);
+  const aJsonFile: TFileName; Key: cardinal; Fmt: TTextWriterJsonFormat);
 begin
-  FileFromString(JsonReformat(DefinitionToJson(Key)), aJsonFile);
+  FileFromString(JsonReformat(DefinitionToJson(Key), Fmt), aJsonFile);
 end;
 
 class function TSqlDBConnectionProperties.ClassFrom(
@@ -5725,7 +5726,7 @@ end;
 class function TSqlDBConnectionProperties.CreateFromFile(
   const aJsonFile: TFileName; aKey: cardinal): TSqlDBConnectionProperties;
 begin
-  result := CreateFromJson(RawUtf8FromFile(aJsonFile), aKey);
+  result := CreateFromJson(JsonNormalizeFromFile(aJsonFile), aKey);
 end;
 
 
