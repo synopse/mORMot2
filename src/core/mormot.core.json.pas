@@ -618,30 +618,36 @@ function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 // - note that input P buffer won't be modified in-place during conversion
 function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
 
 /// formats and indents a JSON array or document to the specified layout
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
+// - PreProcessor will trigger $".." ${..} $[..] and $ident$/${ident} expansion
 // - all those formats are inter-operable within the JSON data model, i.e. you
 // can call JsonReformat() between any of them and keep all information
 // - in practice, jsonCompact is standard JSON and jsonH is nice for configs
 // - note that json5/jsonH would preserve and normalize the comments, and
 // others will remove them for better interaction
 function JsonReformat(const Json: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  PreProcessor: TTextWriterJsonPreProcessor = []): RawUtf8;
 
 /// read a file content, and apply JsonReformat() to normalize it
 function JsonNormalizeFromFile(const FileName: TFileName;
-  Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+  Format: TTextWriterJsonFormat = jsonCompact;
+  PreProcessor: TTextWriterJsonPreProcessor = []): RawUtf8;
 
 /// formats and indents a JSON array or document as a file
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
-  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
 
 /// formats and indents a JSON array or document as a file
 function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
-  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
 
 
 /// convert UTF-8 content into a JSON string
@@ -739,7 +745,8 @@ type
     // called for varAny after TRttiCustomProp.GetRttiVarData
     procedure AddRttiVarData(Value: PRttiVarData; Escape: TTextWriterKind;
       WriteOptions: TTextWriterWriteObjectOptions);
-    function DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat): boolean; override;
+    function DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat;
+      Dsl: TTextWriterJsonPreProcessor): boolean; override;
   public
     /// release all internal structures
     destructor Destroy; override;
@@ -5450,7 +5457,7 @@ begin
 end;
 
 function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
-  Format: TTextWriterJsonFormat): boolean;
+  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
 var
   temp: TBuffer64K;
 begin
@@ -5459,26 +5466,27 @@ begin
   else
     with TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
     try
-      result := AddJsonReformat(P, Format);
+      result := AddJsonReformat(P, Format, PreProcessor);
       SetText(Dest);
     finally
       Free;
     end;
 end;
 
-function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat): RawUtf8;
-begin
-  JsonBufferReformat(pointer(Json), result, Format); // no need of temp copy
+function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat;
+  PreProcessor: TTextWriterJsonPreProcessor): RawUtf8;
+begin // no need of temp copy: AddJsonReformat() won't change input Json
+  JsonBufferReformat(pointer(Json), result, Format, PreProcessor);
 end;
 
 function JsonNormalizeFromFile(const FileName: TFileName;
-  Format: TTextWriterJsonFormat): RawUtf8;
+  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): RawUtf8;
 begin
-  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format);
+  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format, PreProcessor);
 end;
 
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
-  Format: TTextWriterJsonFormat): boolean;
+  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
 var
   F: TStream;
   temp: TBuffer128K;
@@ -5488,7 +5496,7 @@ begin
     try
       with TJsonWriter.Create(F, @temp, SizeOf(temp)) do
       try
-        AddJsonReformat(P, Format);
+        AddJsonReformat(P, Format, PreProcessor);
         FlushFinal;
       finally
         Free;
@@ -5504,9 +5512,9 @@ begin
 end;
 
 function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
-  Format: TTextWriterJsonFormat): boolean;
+  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
 begin // no need of temp copy
-  result := JsonBufferReformatToFile(pointer(Json), Dest, Format);
+  result := JsonBufferReformatToFile(pointer(Json), Dest, Format, PreProcessor);
 end;
 
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
@@ -7462,7 +7470,8 @@ begin
   until result^ = #0;
 end;
 
-function TJsonWriter.DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat): boolean;
+function TJsonWriter.DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat;
+  Dsl: TTextWriterJsonPreProcessor): boolean;
 var
   parser: TJsonParser; // reuse the GotoEnd state machine
   start: PUtf8Char;    // Hjson assume an implicit object
