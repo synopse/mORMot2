@@ -3137,9 +3137,12 @@ begin
   if result^ <= ' ' then
     exit;
   if PCardinal(key)^ = ord('e') + ord('n') shl 8 + ord('v') shl 16 + ord(':') shl 24 then
-    Value := nil
+  begin
+    inc(key, 4); // retrieve ${env:HOSTNAME}
+    Value := GetSystemEnv(key, result - key); // cached in mormot.core.os.pas
+  end
   else
-    Value := Find(key, result - key, Len);
+    Value := Find(key, result - key, Len);    // from known variables/templates
   if result^ = '|' then // or $ident|default} or ${ident|default}
   begin
     inc(result);
