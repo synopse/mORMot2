@@ -2432,7 +2432,7 @@ begin
   e := pointer(system.envp);
   if e = nil then
     exit;
-  n := 0;
+  n := 0; // pre-compute the number of entries
   while e^ <> nil do
   begin
     if e^^ <> '=' then
@@ -2450,8 +2450,9 @@ begin
     if p^ <> '=' then
     begin
       b := p;
-      while p^ <> '=' do
+      repeat
         inc(p);
+      until p^ = '=';
       FastSetString(_SystemEnvNames[n], b, p - b);
       inc(p);
       b := p;

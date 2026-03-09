@@ -2961,45 +2961,46 @@ var
 
 procedure _GetSystemEnv;
 var
-  w, e, env: PWideChar;
+  p, e, env: PWideChar;
   i, n: PtrInt;
 begin
   env := GetEnvironmentStringsW;
-  if env = nil then
+  p := env;
+  if p = nil then
     exit;
-  n := 0;
-  w := env;
-  while w^ <> #0 do
+  n := 0; // pre-compute the number of entries
+  while p^ <> #0 do
   begin
-    if w^ <> '=' then
+    if p^ <> '=' then
       inc(n);
-    inc(w, StrLenW(w) + 1);
+    inc(p, StrLenW(p) + 1);
   end;
   if n = 0 then
     exit; // should never happen
-  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(w) - PtrUInt(env)) shr 1);
+  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(p) - PtrUInt(env)) shr 1);
   SetLength(_SystemEnvNames, n);
   SetLength(_SystemEnvValues, n);
-  w := env;
+  p := env;
   i := 0;
   repeat
-    if w^ = '=' then
-      inc(w, StrLenW(w)) // no void string in _SystemEnvNames[]
+    if p^ = '=' then
+      inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
     else
     begin
-      e := w;
-      while w^ <> '=' do
-        inc(w);
-      Win32PWideCharToUtf8(e, w - e, _SystemEnvNames[i]);
-      inc(w);
-      e := w;
-      inc(w, StrLenW(w));
-      Win32PWideCharToUtf8(e, w - e, _SystemEnvValues[i]);
+      e := p;
+      repeat
+        inc(p);
+      until p^ = '=';
+      Win32PWideCharToUtf8(e, p - e, _SystemEnvNames[i]);
+      inc(p);
+      e := p;
+      inc(p, StrLenW(p));
+      Win32PWideCharToUtf8(e, p - e, _SystemEnvValues[i]);
       inc(i);
     end;
-    inc(w);
-  until w^ = #0;
-  FreeEnvironmentStringsW(w);
+    inc(p);
+  until p^ = #0;
+  FreeEnvironmentStringsW(env);
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;

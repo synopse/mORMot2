@@ -9693,7 +9693,10 @@ begin
     exit;
   if _SystemEnvNames = nil then
   begin
-    _GetSystemEnv;
+    OSSafe.Lock;
+    if _SystemEnvNames = nil then
+      _GetSystemEnv;
+    OSSafe.UnLock;
     if _SystemEnvNames = nil then
       exit;
   end;
