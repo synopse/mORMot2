@@ -5755,11 +5755,6 @@ procedure TSynLog.LogFileHeader;
 var
   w: TJsonWriter;
   i: PtrInt;
-  {$ifdef OSWINDOWS}
-  Env: PWideChar;
-  P: PWideChar;
-  L: integer;
-  {$endif OSWINDOWS}
 begin
   include(fFlags, logFileHeaderWritten);
   w := fWriter;
@@ -5830,25 +5825,18 @@ begin
       w.AddShort(' Instance=');
       w.AddNoJsonEscapeString(Executable.InstanceFileName);
     end;
-    {$ifdef OSWINDOWS}
+    {$ifdef OSWINDOWS} // too verbose on POSIX - even including some scripts :(
     if not fFamily.fNoEnvironmentVariable then
     begin
       w.AddDirect(#10);
       w.AddShort('Environment variables=');
-      Env := GetEnvironmentStringsW;
-      P := pointer(Env);
-      while P^ <> #0 do
+      for i := 0 to length(_SystemEnvNames) - 1 do
       begin
-        L := StrLenW(P);
-        if (L > 0) and
-           (P^ <> '=') then
-        begin
-          w.AddNoJsonEscapeW(pointer(P));
-          w.AddDirect(#9);
-        end;
-        inc(P, L + 1);
+        w.AddOnSameLine(pointer(_SystemEnvNames[i]));
+        w.AddDirect('=');
+        w.AddOnSameLine(pointer(_SystemEnvValues[i]));
+        w.AddDirect(#9);
       end;
-      FreeEnvironmentStringsW(Env);
       w.CancelLastChar(#9);
     end;
     {$endif OSWINDOWS}
