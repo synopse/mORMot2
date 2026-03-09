@@ -12,6 +12,7 @@ unit mormot.net.dhcp;
     - Middle-Level DHCP Scope, Pool and Lease Logic
     - Middle-Level DHCP State Machine
     - High-Level Multi-Scope DHCP Server Processing Logic
+    - High-Level DHCP Server over UDP
 
    Implement DISCOVER, OFFER, REQUEST, DECLINE, ACK, NAK, RELEASE, INFORM.
    Background lease persistence using dnsmasq-compatible text files.
@@ -1619,6 +1620,19 @@ type
     /// the associated TSynLog class used to debug the execution context
     property Log: TSynLogClass
       read fLog write fLog;
+    /// can replace 'ComputeResponse: ' default header for DoLog() events
+    property LogPrefix: RawUtf8
+      read fLogPrefix write fLogPrefix;
+    /// the internal list modification sequence number
+    // - increased at every update of the internal entry list
+    // - used e.g. by OnIdle() to trigger SaveToFile() if FileName is defined
+    property ModifSequence: cardinal
+      read fModifSequence;
+    /// optional callback for TDhcpProcess.ComputeResponse customization
+    // - is called after parsing, when Data.Send is about to be returned
+    property OnComputeResponse: TOnComputeResponse
+      read fOnComputeResponse write fOnComputeResponse;
+  published
     /// customize server-level options, when Scope[].Options are not enough
     property Options: TDhcpServerOptions
       read fOptions write fOptions;
@@ -1637,18 +1651,23 @@ type
     // - could be called after Setup() to refine the metrics process
     property MetricsFolder: TFileName
       read fMetricsFolder write SetMetricsFolder;
-    /// can replace 'ComputeResponse: ' default header for DoLog() events
-    property LogPrefix: RawUtf8
-      read fLogPrefix write fLogPrefix;
-    /// the internal list modification sequence number
-    // - increased at every update of the internal entry list
-    // - used e.g. by OnIdle() to trigger SaveToFile() if FileName is defined
-    property ModifSequence: cardinal
-      read fModifSequence;
-    /// optional callback for TDhcpProcess.ComputeResponse customization
-    // - is called after parsing, when Data.Send is about to be returned
-    property OnComputeResponse: TOnComputeResponse
-      read fOnComputeResponse write fOnComputeResponse;
+  end;
+
+
+{ **************** High-Level DHCP Server over UDP }
+
+type
+  TDhcpServerThread = class(TUdpServerThread)
+  protected
+  published
+  end;
+
+  TDhcpServer = class(TSynPersistent)
+  protected
+    fProcess: TDhcpProcess;
+    fThreads: array of TDhcpServerThread;
+  public
+  published
   end;
 
 
@@ -6377,6 +6396,9 @@ begin
     fScopeSafe.ReadUnLock;
   end;
 end;
+
+
+{ **************** High-Level DHCP Server over UDP }
 
 
 initialization

@@ -1471,10 +1471,10 @@ type
     tc1013,
     tcCtrlNotLF,
     tcCtrlNot0Comma,
-    tcWord,
-    tcIdentifierFirstChar,
-    tcIdentifier,
-    tcUriUnreserved);
+    tcWord,                 // 0..9 a..z A..Z
+    tcIdentifierFirstChar,  // _ a..z A..Z
+    tcIdentifier,           // _ 0..9 a..z A..Z
+    tcUriUnreserved);       // _ - . 0..9 a..z A..Z
 
   /// defines an AnsiChar lookup table used for branch-less text parsing
   TTextCharSet = array[AnsiChar] of TTextChar;
