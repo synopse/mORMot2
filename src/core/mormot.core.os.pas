@@ -9693,7 +9693,11 @@ begin
      (len <= 0) then
     exit;
   if _SystemEnvNames = nil then
+  begin
     _GetSystemEnv;
+    if _SystemEnvNames = nil then
+      exit;
+  end;
   ndx := {$ifdef OSPOSIX}FindNonVoidRawUtf8{$else}FindNonVoidRawUtf8I{$endif}(
     pointer(_SystemEnvNames), name, len, length(_SystemEnvNames));
   if ndx >= 0 then
