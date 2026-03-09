@@ -1067,82 +1067,108 @@ end;
 procedure TTestCoreBase.TRawUtf8ListSlow(Context: TObject);
 const
   MAX = 20000;
+  ONLYLOG = true;
 var
-  i, n: integer;
+  i, n: PtrInt;
   L: TRawUtf8List;
-  C: TComponent;
-  Rec: TSynFilterOrValidate;
-  s: RawUtf8;
+  O: TSynMonitorTime;
+  v: TRawUtf8DynArray;
+  timer: TPrecisionTimer;
 begin
+  SetLength(v, MAX + 1); // allocate once the strings
+  for i := 0 to MAX do
+    UInt32ToUtf8(i, v[i]);
   L := TRawUtf8List.CreateEx([fObjectsOwned]);
   try // no hash table involved
+    timer.Start;
     for i := 0 to MAX do
     begin
-      C := TComponent.Create(nil);
-      C.Tag := i;
-      Check(L.AddObject(UInt32ToUtf8(i), C) = i);
+      O := TSynMonitorTime.Create; // any TObject would fit
+      O.MicroSec := i;
+      Check(L.AddObject(v[i], O) = i);
     end;
+    NotifyTestSpeed('TRawUtf8List.Add no hash', MAX + 1, 0, @timer, ONLYLOG);
     Check(L.Count = MAX + 1);
     for i := 0 to MAX do
       Check(GetInteger(Pointer(L[i])) = i);
     for i := 0 to MAX do
-      Check(TComponent(L.Objects[i]).Tag = i);
+      Check(TSynMonitorTime(L.Objects[i]).MicroSec = i);
+    timer.Start;
     Check(L.IndexOf('') < 0);
+    for i := MAX downto MAX - 99 do // O(n) worst case: appear at the end
+      Check(L.IndexOf(v[i]) = i);
+    NotifyTestSpeed('TRawUtf8List.IndexOf no hash', 100, 0, @timer, ONLYLOG);
     Check(L.IndexOf('5') = 5);
-    Check(L.IndexOf('999') = 999);
+    if MAX {%H-}>= 999 then
+      Check(L.IndexOf('999') = 999);
     for i := MAX downto 0 do
       if i and 1 = 0 then
         L.Delete(i); // delete half the array
     Check(L.Count = MAX div 2);
     for i := 0 to L.Count - 1 do
-      Check(GetInteger(Pointer(L[i])) = TComponent(L.Objects[i]).Tag);
+      Check(GetInteger(Pointer(L[i])) = TSynMonitorTime(L.Objects[i]).MicroSec);
     Check(L.IndexOf('5') = 2);
     Check(L.IndexOf('6') < 0);
     Check(L.Exists('5'));
     Check(not L.Exists('6'));
+    L.Clear;
+    Check(L.Count = 0);
+    Check(L.Add('toto') = 0);
+    Check(L.Count = 1);
+    Check(L.IndexOf('titi') < 0);
+    Check(L.IndexOf('toto') = 0);
   finally
     L.Free;
   end;
   L := TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
   try // with hash table
+    timer.Start;
     for i := 1 to MAX do
     begin
-      Rec := TSynFilterLowerCase.Create; // any TSynPersistent would have done
-      Rec.Parameters := Int32ToUtf8(i);
-      CheckEqual(L.AddObject(Rec.Parameters, Rec), i - 1);
-      CheckEqual(L.IndexOf(Rec.Parameters), i - 1);
+      O := TSynMonitorTime.Create; // any TSynPersistent would fit
+      O.MicroSec := i;
+      Check(L.AddObject(v[i], O) = i - 1);
     end;
+    NotifyTestSpeed('TRawUtf8List.Add hashed', MAX, 0, @timer, ONLYLOG);
+    timer.Start;
+    for i := 1 to MAX do
+      Check(L.IndexOf(v[i]) = i - 1);
+    NotifyTestSpeed('TRawUtf8List.IndexOf hashed', MAX, 0, @timer, ONLYLOG);
     Check(not L.Exists(''));
     Check(L.IndexOf('abcd') < 0);
     Check(L.Count = MAX);
     n := 0;
     for i := 1 to MAX do
     begin
-      UInt32ToUtf8(i, s);
-      CheckEqual(L.IndexOf(s), n);
-      CheckEqual(TSynFilterOrValidate(L.Objects[n]).Parameters, s);
+      Check(L.IndexOf(v[i]) = n);
+      Check(TSynMonitorTime(L.Objects[n]).MicroSec = i);
       if i and 127 = 0 then
-        CheckEqual(L.Delete(s), n)
+        CheckEqual(L.Delete(v[i]), n, 'delete')
       else
         inc(n);
     end;
     CheckEqual(L.Count, n);
     for i := 1 to MAX do
-    begin
-      UInt32ToUtf8(i, s);
-      Check((L.IndexOf(s) >= 0) = (i and 127 <> 0));
-    end;
+      Check((L.IndexOf(v[i]) >= 0) = (i and 127 <> 0));
     L.SaveToFile(WorkDir + 'utf8list.txt');
     L.Clear;
     CheckEqual(L.Count, 0);
     L.LoadFromFile(WorkDir + 'utf8list.txt');
     CheckEqual(L.Count, n);
     for i := 1 to MAX do
-    begin
-      UInt32ToUtf8(i, s);
-      Check((L.IndexOf(s) >= 0) = (i and 127 <> 0));
-    end;
+      Check((L.IndexOf(v[i]) >= 0) = (i and 127 <> 0));
     DeleteFile(WorkDir + 'utf8list.txt');
+    L.Clear;
+    Check(L.Count = 0);
+    Check(L.Add('toto') = 0);
+    Check(L.Count = 1);
+    Check(L.IndexOf('titi') < 0);
+    Check(L.IndexOf('toto') = 0);
+    Check(L.IndexOf('') < 0);
+    Check(L.Add('') = 1);
+    Check(L.Count = 2);
+    Check(L.IndexOf('') = 1);
+    Check(L.IndexOf('toto') = 0);
   finally
     L.Free;
   end;
