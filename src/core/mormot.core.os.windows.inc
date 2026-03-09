@@ -4470,27 +4470,6 @@ begin
     [path, arg1, arg2, arg3, arg4, arg5]), waitfor, env, options);
 end;
 
-var
-  EnvironmentCache: SynUnicode;
-  EnvironmentCacheLock: TLightLock; // just set once
-
-procedure GetEnvironmentCache;
-var
-  e, p: PWideChar;
-begin
-  EnvironmentCacheLock.Lock;
-  if EnvironmentCache = '' then
-  begin
-    e := GetEnvironmentStringsW;
-    p := e;
-    while p^ <> #0 do
-      inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-    FastSynUnicode(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
-    FreeEnvironmentStringsW(e);
-  end;
-  EnvironmentCacheLock.UnLock;
-end;
-
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   options: TRunOptions; processhandle: PHandle): integer;
 var
@@ -4696,9 +4675,9 @@ begin
     wenv := SynUnicode(env);
     if roEnvAddExisting in options then
     begin
-      if EnvironmentCache = '' then
-        GetEnvironmentCache;
-      wenv := EnvironmentCache + wenv;
+      if _SystemEnvUnicode = '' then
+        _GetSystemEnv;
+      wenv := _SystemEnvUnicode + wenv;
     end
     else
       UniqueString(wenv);
