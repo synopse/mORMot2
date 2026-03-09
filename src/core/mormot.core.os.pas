@@ -8322,7 +8322,6 @@ type
 var
   CurrentFakeStubBuffer: TFakeStubBuffer;
   CurrentFakeStubBuffers: array of TFakeStubBuffer;
-  CurrentFakeStubBufferLock: TLightLock;
 
 constructor TFakeStubBuffer.Create;
 begin
@@ -8352,7 +8351,7 @@ begin
   if size > STUB_SIZE then
     raise EOSException.CreateFmt('ReserveExecutableMemory(size=%d>%d)',
       [size, STUB_SIZE]);
-  CurrentFakeStubBufferLock.Lock;
+  OSSafe.Lock;
   try
     {$ifdef CPUARM}
     StubCallFakeStubAddr := ArmFakeStubAddr; // for StubCallAllocMem()
@@ -8362,7 +8361,7 @@ begin
       CurrentFakeStubBuffer := TFakeStubBuffer.Create;
     result := CurrentFakeStubBuffer.Reserve(size);
   finally
-    CurrentFakeStubBufferLock.UnLock;
+    OSSafe.UnLock;
   end;
 end;
 
@@ -9733,7 +9732,6 @@ begin // return the address as hexadecimal - hexstr() is not available on Delphi
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
 var
-  _SystemStoreAsPemSafe: TLightLock;
   _OneSystemStoreAsPem: array[TSystemCertificateStore] of record
     Tix: cardinal;
     Pem: RawUtf8;
@@ -9749,7 +9747,7 @@ function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
 begin
   if now = 0 then
     now := GetTickCount64 shr 18 + 1; // div 262.144 seconds = every 4.4 min
-  _SystemStoreAsPemSafe.Lock;
+  OSSafe.Lock;
   try
     // first search if not already in cache
     with _OneSystemStoreAsPem[CertStore] do
@@ -9766,7 +9764,7 @@ begin
       Pem := result;
     end;
   finally
-    _SystemStoreAsPemSafe.UnLock;
+    OSSafe.UnLock;
   end;
 end;
 
@@ -9779,7 +9777,7 @@ var
 begin
   result := '';
   now := GetTickCount64 shr 18 + 1;
-  _SystemStoreAsPemSafe.Lock;
+  OSSafe.Lock;
   try
     // first search if not already in cache
     if not FlushCache then
@@ -9808,7 +9806,7 @@ begin
         result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
     end;
   finally
-    _SystemStoreAsPemSafe.UnLock; // GetOneSystemStoreAsPem() blocks
+    OSSafe.UnLock; // GetOneSystemStoreAsPem() blocks
   end;
   // fallback to search depending on the POSIX / Windows specific OS stores
   if result = '' then
@@ -9821,7 +9819,7 @@ begin
       end;
   if result = '' then
     exit;
-  _SystemStoreAsPemSafe.Lock;
+  OSSafe.Lock;
   try
     with _SystemStoreAsPem do
     begin
@@ -9830,7 +9828,7 @@ begin
       Pem := result;
     end;
   finally
-    _SystemStoreAsPemSafe.UnLock;
+    OSSafe.UnLock;
   end;
 end;
 
@@ -10082,9 +10080,9 @@ begin
   UuidToText(u, result);
   if disable <> [] then
     exit; // cache fully-qualified UUID only
-  GlobalLock;
+  OSSafe.Lock;
   _GetComputerUuid := result;
-  GlobalUnLock;
+  OSSafe.UnLock;
 end;
 
 procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);

@@ -2036,6 +2036,7 @@ const
   PROCESS_QUERY_LIMITED_INFORMATION = $1000;
 
 var
+  OSSafe: TLightLock; // when GlobalLock is overkill
   // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
   OpenProcessAccess: DWord;
 
@@ -2058,7 +2059,7 @@ begin
   if pointer(api) = nil then
   begin
     proc := nil;
-    GlobalLock; // avoid race condition
+    OSSafe.Lock; // avoid race condition
     if lib = 0 then
       lib := Windows.LoadLibrary(libname);
     if lib >= 32 then
@@ -2068,7 +2069,7 @@ begin
     if proc = nil then
       proc := pointer(1); // mark non available
     pointer(api) := proc; // set it last
-    GlobalUnLock;
+    OSSafe.UnLock;
   end;
   result := pointer(api) <> pointer(1);
 end;

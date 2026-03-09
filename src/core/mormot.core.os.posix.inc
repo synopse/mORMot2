@@ -1784,6 +1784,8 @@ begin
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
 end;
 
+var
+  OSSafe: TLightLock; // when GlobalLock is overkill
 
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
@@ -2008,9 +2010,10 @@ var
   p: PPointer;
   i, j: PtrInt;
 begin
-  GlobalLock;
-  if not tested then
-  begin
+  OSSafe.Lock;
+  try
+    if tested then
+      exit;
     systemd := dlopen(LIBSYSTEMD_PATH, RTLD_LAZY);
     if systemd <> nil then
     begin
@@ -2032,8 +2035,9 @@ begin
       end;
     end;
     tested := true;
+  finally
+    OSSafe.UnLock;
   end;
-  GlobalUnLock;
 end;
 
 function TSystemD.IsAvailable: boolean;
@@ -4285,7 +4289,7 @@ begin
   // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
   if fSynDaemonIntercepted in _F1 then
     exit;
-  GlobalLock;
+  OSSafe.Lock;
   try
     if fSynDaemonIntercepted in _F1 then
       exit;
@@ -4299,7 +4303,7 @@ begin
     fpSigaction(SIGABRT, @sa, nil);
     include(_F1, fSynDaemonIntercepted); // set AFTER interception
   finally
-    GlobalUnLock;
+    OSSafe.UnLock;
   end;
 end;
 
@@ -4316,7 +4320,7 @@ var
 begin
   if fSigPipeDisabled in _F1 then
     exit; // quickly return if already done
-  GlobalLock;
+  OSSafe.Lock;
   try
     if fSigPipeDisabled in _F1 then
       exit;
@@ -4325,7 +4329,7 @@ begin
     fpSigaction(SIGPIPE, @sa, nil);
     include(_F1, fSigPipeDisabled); // set AFTER disabling it
   finally
-    GlobalUnLock;
+    OSSafe.UnLock;
   end;
 end;
 
