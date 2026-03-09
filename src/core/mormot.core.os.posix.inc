@@ -2463,15 +2463,15 @@ procedure GetUserHost(out User, Host: RawUtf8);
 begin
   Host := SystemInfo.uts.nodename;
   if Host = '' then
-    GetEnv('HOSTNAME', Host);
-  if not GetEnv('LOGNAME', User) then // POSIX
-    GetEnv('USER', User);
+    GetSystemEnv('HOSTNAME', Host);
+  if not GetSystemEnv('LOGNAME', User) then // POSIX
+    GetSystemEnv('USER', User);
 end;
 
 function GetEnvFolder(name: PAnsiChar; var folder: TFileName;
   writable: boolean): boolean;
 begin
-  if GetEnv(name, RawUtf8(folder)) then
+  if GetSystemEnv(name, RawUtf8(folder)) then
     if writable and
        not FileIsWritable(folder) then
       folder := ''
@@ -3613,7 +3613,7 @@ begin
     include(_F0, fIsDebuggerPresent);
   if (not (fIsDebuggerPresent in _F0)) and
      (IsATTY(StdOut) = 1) and
-     GetEnv('TERM', term) and
+     GetSystemEnv('TERM', term) and
      IdemPChars(term, ['XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']) then
     include(_F0, fStdOutIsTTY);
 end;

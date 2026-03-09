@@ -9801,7 +9801,7 @@ begin
           result := StringFromFile(
             Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
       if result = '' then
-        result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
+        result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
     end;
   finally
     _SystemStoreAsPemSafe.UnLock; // GetOneSystemStoreAsPem() blocks

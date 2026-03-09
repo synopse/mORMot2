@@ -2956,9 +2956,8 @@ begin
   if not _PROXYSETFROMENV then
   begin
     _PROXYSAFE.Lock;
-    StringToUtf8(GetEnvironmentVariable('HTTP_PROXY'),  _PROXY[false]);
-    StringToUtf8(GetEnvironmentVariable('HTTPS_PROXY'), _PROXY[true]);
-    if _PROXY[true] = '' then
+    _PROXY[false] := GetSystemEnv('HTTP_PROXY');
+    if not GetSystemEnv('HTTPS_PROXY', _PROXY[true]) then
       _PROXY[true] := _PROXY[false];
     _PROXYSETFROMENV := true;
     _PROXYSAFE.UnLock;

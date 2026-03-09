@@ -6045,7 +6045,7 @@ begin
     // read and validate OPENSSL_LIBPATH environment variable
     libenv := OpenSslDefaultPath; // priority to the global variable
     if libenv = '' then
-      libenv := GetEnvironmentVariable('OPENSSL_LIBPATH');
+      libenv := GetSystemEnvString('OPENSSL_LIBPATH');
     if libenv <> '' then
       if DirectoryExists(libenv) then
         libenv := IncludeTrailingPathDelimiter(libenv)

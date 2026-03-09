@@ -2897,7 +2897,7 @@ const
 
 procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 const
-  _ENV: array[TSystemPath] of TFileName = (
+  _ENV: array[TSystemPath] of RawUtf8 = (
     'ALLUSERSAPPDATA', // spCommonData
     'LOCALAPPDATA',    // spUserData
     '',                // spCommonDocuments
@@ -2930,7 +2930,7 @@ begin
         if GetTempPathW(MAX_PATH, @tmp) <> 0 then // first try Windows API
           Win32PWideCharToFileName(tmp, result);
         if result = '' then
-          result := GetEnvironmentVariable(_ENV[spTemp]); // fallback
+          result := GetSystemEnvString(_ENV[spTemp]); // fallback
       end;
   else
     if (CSIDL[kind] <> 0) and
@@ -2942,10 +2942,10 @@ begin
     else
     begin
       // fallback to environment variables (very unlikely)
-      result := GetEnvironmentVariable(_ENV[kind]);
+      result := GetSystemEnvString(_ENV[kind]);
       if result = '' then
       begin
-        result := GetEnvironmentVariable('APPDATA');
+        result := GetSystemEnvString('APPDATA');
         if result = '' then
           result := Executable.ProgramFilePath;
       end;
@@ -5149,7 +5149,7 @@ begin
   if prodver <> '' then
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
-    _toutf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'), cpu);
+   cpu := GetSystemEnv('PROCESSOR_IDENTIFIER');
   if Assigned(GetLogicalProcessorInformation) then
   begin
     SetLength(proc, 1024);

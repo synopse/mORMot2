@@ -1239,7 +1239,7 @@ var
 begin
   result := nil;
   if usePosixEnv then
-    resolv := StringFromFile(GetEnvironmentVariable('ETC'));
+    resolv := StringFromFile(GetSystemEnvString('ETC'));
   if resolv = '' then
     // all systems are likely to have or generate this file
     // - even the libc seems to read it when implementing gethostname()
