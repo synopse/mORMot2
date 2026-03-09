@@ -3094,8 +3094,10 @@ type
     StackCount: integer;
     JsonFirst: PJsonTokens;
     Max: PUtf8Char; // checking Max after each comma is good enough
+    RootCount: integer; // for InitCount or as DSL include depth
+    FmtDsl: TTextWriterJsonPreProcessor;
+    FmtVars: TJsonDsl;
     W: TJsonWriter;
-    RootCount: integer;
     // 500 nested documents seem enough in practice (SQLite3 uses 1000)
     Stack: array[0..500] of TJsonParserState;
     // methods able to jump/count over any JSON value (up to Max)
@@ -3108,12 +3110,16 @@ type
     function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
       {$ifdef HASINLINE} inline; {$endif}
     // methods used by TJsonWriter.DoJsonReformat()
-    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter);
+    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
+      Dsl: TTextWriterJsonPreProcessor);
     function Reformat(P: PUtf8Char): boolean;
     procedure ReformatBeginValue;
     procedure ReformatEndValue;
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
-    function AddMultiLine(P:PUtf8Char): PUtf8Char;
+    function AddMultiLine(P: PUtf8Char): PUtf8Char;
+    procedure AddIndentAndCommentToken(const args: array of const);
+    function DslSection(P: PUtf8Char): PUtf8Char;
+    procedure DslInclude(P: PUtf8Char);
  end;
 
 function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
@@ -3477,6 +3483,7 @@ begin
 end;
 
 const
+  DSL_INCLUDE_DEPTH = 4; // avoid infinite include <filename>
   FMT2FLAGS: array[TTextWriterJsonFormat] of TJsonReformatFlags = (
     [],                                              // jsonCompact
     [jrfIndent],                                     // jsonHumanReadable
@@ -3493,18 +3500,27 @@ const
 var
   JSON_CHARS_RELAXED: TJsonCharSet; // to support minimalistic .morml
 
-procedure TJsonParser.InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter);
+procedure TJsonParser.InitReformat(JsonFmt: TTextWriterJsonFormat;
+  Writer: TJsonWriter; Dsl: TTextWriterJsonPreProcessor);
 begin
   {$ifdef CPUX86}
   JsonSet := @JSON_CHARS_RELAXED;
   {$endif CPUX86}
   State := stObjectValue; // to trigger no leading #10
   StackCount := 0;
+  RootCount := 0; // used for DSL depth
   JsonFirst := @JSON_TOKENS;
   Fmt := FMT2FLAGS[JsonFmt];
   FmtJson := JsonFmt;
+  FmtDsl := Dsl;
   W := Writer;
-end; // Max/ExpectedStandard/RootCount are not used
+  FmtVars := nil;
+  if (FmtDsl = [jppDebugComment]) or
+     not (jrfComments in Fmt) then
+    exclude(FmtDsl, jppDebugComment);
+  if jppTemplate in Dsl then
+    FmtVars := TJsonDsl.Create;
+end; // Max/ExpectedStandard are not used
 
 procedure TJsonParser.ReformatBeginValue;
 begin
@@ -3613,6 +3629,175 @@ begin
     result := GotoNextNotSpaceSameLine(result);
   until result^ = #0;
   result := GotoNextLineSmall(result); // ignore trailing '''
+end;
+
+function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
+var
+  key, value: PUtf8Char;
+  keylen, valuelen: PtrInt;
+  needexpand: boolean;
+  beforecount, level: integer;
+begin // handle P = '$$'
+  beforecount := 0;
+  if jppDebugComment in FmtDsl then
+    beforecount := FmtVars.Count;
+  result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
+  repeat
+    result := GotoNextNotSpace(GotoNextLineSmall(result));
+    if result^ = #0 then
+      exit;
+    if result^ = '$' then
+      if result[1] = '$' then
+        break // end of DSL section
+      else
+        continue; // $ is not allowed in identifiers
+    if IdemPChar(result, 'INCLUDE ') then
+    begin
+      if jppInclude in FmtDsl then
+        DslInclude(GotoNextNotSpace(result + 8));
+      continue; // this is a reserved keyword, never an identifier
+    end;
+    if FmtVars = nil then
+      continue; // only include is enabled
+    key := result;
+    repeat
+      inc(result);
+    until result^ in [#0 .. ' ', '=', ':', '$', '|'];
+    if not (result^ in ['=', ':']) then
+      continue; // $ and | are not allowed in identifiers
+    keylen := result - key;
+    while result^ in ['=', ':', ' '] do
+      inc(result); // allow := or == syntax
+    needexpand := false;
+    case result^ of
+      #0:
+        exit;
+      '{', '[':
+        begin
+          value := result + 1;               // exclude starting { [
+          level := 0;
+          repeat                             // value = whole {..}/[..] inside
+            result := GotoNextNotSpace(result);
+            case result^ of
+              #0:
+                exit;
+              '{', '[':
+                inc(level);
+              '}', ']':
+                if level = 1 then
+                  break
+                else
+                  dec(level);
+              '"':
+                result := GotoEndOfJsonString2(result + 1,
+                  {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS_RELAXED{$endif});
+            end;
+            inc(result);
+          until false;
+          valuelen := result - value - 1;    // exclude ending } ]
+          needexpand := true;   // always need a 2nd pass, at least for comments
+        end;
+      '"', '''':
+        begin
+          value := result + 1;
+          while (result^ >= ' ') and
+                (result^ <> value^) do // quoted value, not supporting \" nor ''
+          begin
+            if result^ = '$' then
+              needexpand := true;
+            inc(result);
+          end;
+          valuelen := result - value;
+        end;
+    else
+      begin
+        value := result;
+        while result^ >= ' ' do // unquoted value = till end of line
+        begin
+          if result^ = '$' then
+            needexpand := true;
+          inc(result);
+        end;
+        valuelen := result - value;
+        while (valuelen > 0) and
+              (value[valuelen] = ' ') do
+          dec(valuelen); // trim right
+      end;
+    end;
+    if needexpand then
+      FmtVars.AddExpanded(key, value, result, keylen)
+    else
+      FmtVars.Add(key, value, keylen, valuelen);
+  until false;
+  result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
+  if FmtVars <> nil then
+    while beforecount < FmtVars.Count do
+    begin
+      AddIndentAndCommentToken([' defined $',
+        PShortString(FmtVars.Value[beforecount])^, '$=',
+        PUtf8Char(FmtVars.Values(beforecount))]);
+      inc(beforecount);
+    end;
+end;
+
+procedure TJsonParser.AddIndentAndCommentToken(const args: array of const);
+begin
+  if jrfIndent in Fmt then
+    W.AddCRAndIndent;
+  if jrfCommentHash in Fmt then
+    W.AddDirect('#')
+  else
+    W.AddDirect('/', '/');
+  if high(args) >= 0 then
+    W.Add(args, twOnSameLine);
+end;
+
+procedure TJsonParser.DslInclude(P: PUtf8Char);
+var
+  tmp: ShortString; // to compute the expanded filename
+  v: PUtf8Char;
+  vlen: integer; // not PtrInt
+  c: AnsiChar;
+  txt: RawUtf8;
+  fn: TFileName;
+begin
+  tmp[0] := #0;
+  if P^ = '"' then
+    inc(P);
+  while not (P^ in [#0, '"', #13, #10]) do
+  begin
+    if P^ = '$' then
+    begin
+      P := FmtVars.Expand(P, v, @vlen); // include "config/general-$mode$.json"
+      if v <> nil then
+        AppendShortBuffer(pointer(v), vlen, high(tmp), @tmp);
+    end
+    else
+    begin
+      c := P^;
+      if c = InvertedPathDelim then
+        c := PathDelim; // normalize for direct cross-platform support
+      AppendShortCharSafe(c, tmp);
+    end;
+  end;
+  if RootCount >= DSL_INCLUDE_DEPTH then
+  begin
+    if jppDebugComment in FmtDsl then
+      AddIndentAndCommentToken([' include ', tmp,' too deep: rejected']);
+    exit;
+  end;
+  fn := MakeString([tmp]);
+  if not (jppIncludeAbsolute in FmtDsl) and
+     not SafeFileName(fn) then
+    exit;
+  txt := RawUtf8FromFile(fn);
+  if jppDebugComment in FmtDsl then
+    AddIndentAndCommentToken([' include ', fn,' size=', length(txt)]);
+  if txt = '' then
+    exit;
+  inc(RootCount);
+  Reformat(pointer(txt));
+  dec(RootCount);
 end;
 
 function TJsonParser.Reformat(P: PUtf8Char): boolean;
@@ -3813,12 +3998,7 @@ ident:    Value := P;
           if jrfComments in Fmt then
           begin
             inc(Value, 2); // was // or /*
-comment:    if jrfIndent in Fmt then
-              W.AddCRAndIndent;
-            if jrfCommentHash in Fmt then
-              W.AddDirect('#')
-            else
-              W.AddDirect('/', '/');
+comment:    AddIndentAndCommentToken([]);
             ValueLen := P - Value;
             repeat
               while (ValueLen > 0) and
@@ -3831,6 +4011,47 @@ comment:    if jrfIndent in Fmt then
             until false;
             W.AddOnSameLine(Value, ValueLen); // normalize
           end;
+        end;
+      jtDollar:
+        if P[1] = '$' then
+          if FmtDsl = [] then
+            goto ident0
+          else
+            P := DslSection(P)   // $$ ... $$ DSL section: include + vars
+        else if FmtVars = nil then
+          goto ident0
+        else if P[1] = '"' then  // $"..." substitution
+        begin
+          inc(P, 2);
+          W.AddDirect('"');
+          repeat
+            case P^ of
+              #0:
+                exit;
+              '\':
+                begin
+                  inc(P);
+                  if P^ = #0 then
+                    exit;
+                  W.AddDirect('\'); // ignore \" within quotes
+                end;
+              '$':
+                begin
+                  P := FmtVars.Expand(P, Value, nil);
+                  if Value <> nil then
+                    Reformat(Value);
+                  continue;
+                end;
+            end;
+            W.Add(P^); // fast enough
+          until P^ = '"';
+          inc(P);
+        end
+        else
+        begin // $ident$ or ${ident} substitution
+          P := FmtVars.Expand(P, Value, nil);
+          if Value <> nil then
+            Reformat(Value); // single recursive call
         end;
       jtEndOfBuffer:
         break;
@@ -7485,33 +7706,37 @@ begin
   result := false;
   if P = nil then
     exit;
-  parser.InitReformat(Fmt, self);
-  if Fmt <> jsonHumanReadable then // #9 only for standard human-readable JSON
-    CustomOptions := CustomOptions + [twoIndentSpaces];
   P := GotoNextNotSpace(P);
   if P = #0 then
     exit;
-  start := P;
-  if not (start^ in ['{', '[']) then
-    start := GotoNextWithoutComment(start);
-  if not (start^ in ['{', '[']) then
-  begin
-    AddDirect('{'); // Hjson may start with an implicit object
-    inc(fHumanReadableLevel);
-    parser.State := stObjectNameFirst;
-  end
-  else
-    start := nil;
-  result := parser.Reformat(P);
-  if start <> nil then
-  begin
-    if (jrfTrailingComma in parser.Fmt) and
-       not (parser.State in [stObjectNameFirst, stValueFirst]) then
-      AddDirect(',');
-    dec(fHumanReadableLevel);
-    if jrfIndent in parser.Fmt then
-      AddCRAndIndent;
-    AddDirect('}');
+  if Fmt <> jsonHumanReadable then // #9 only for standard human-readable JSON
+    CustomOptions := CustomOptions + [twoIndentSpaces];
+  parser.InitReformat(Fmt, self, Dsl);
+  try
+    start := P;
+    if not (start^ in ['{', '[']) then
+      start := GotoNextWithoutComment(start);
+    if not (start^ in ['{', '[']) then
+    begin
+      AddDirect('{'); // Hjson may start with an implicit object
+      inc(fHumanReadableLevel);
+      parser.State := stObjectNameFirst;
+    end
+    else
+      start := nil;
+    result := parser.Reformat(P);
+    if start <> nil then // manual ending } of HJson implicit object
+    begin
+      if (jrfTrailingComma in parser.Fmt) and
+         not (parser.State in [stObjectNameFirst, stValueFirst]) then
+        AddDirect(',');
+      dec(fHumanReadableLevel);
+      if jrfIndent in parser.Fmt then
+        AddCRAndIndent;
+      AddDirect('}');
+    end;
+  finally
+    parser.FmtVars.Free;
   end;
 end;
 
