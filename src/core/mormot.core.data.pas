@@ -2010,19 +2010,14 @@ type
 
 type
   /// used to access any dynamic arrray items using fast hash
-  // - by default, binary sort could be used for searching items for TDynArray:
-  // using a hash is faster on huge arrays for implementing a dictionary
-  // - in this current implementation, modification (update or delete) of an
-  // element is not handled yet: you should rehash all content - only
-  // TDynArrayHashed.FindHashedForAdding / FindHashedAndUpdate /
-  // FindHashedAndDelete will refresh the internal hash
-  // - this object extends the TDynArray type, since presence of Hashs[] dynamic
-  // array will increase code size if using TDynArrayHashed instead of TDynArray
-  // - in order to have the better performance, you should use an external Count
-  // variable, AND set the Capacity property to the expected maximum count (this
-  // will avoid most re-hashing for FindHashedForAdding+FindHashedAndUpdate)
-  // - consider using TSynDictionary from mormot.core.json for a thread-safe
-  // stand-alone storage of key/value pairs
+  // - this object extends the TDynArray type, adding the TDynArrayHasher logic
+  // - call FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete to
+  // set the values, and maintain the hash table accurate - not plain Add/Delete
+  // - call FindHashed for fast O(1) lookup - not plain Find O(n) method
+  // - for best performance, use an external Count and set the Capacity property
+  // to the expected maximum count: this would avoid most rehashing at adding
+  // - consider TSynDictionary from mormot.core.json.pas, the modern TKeyValue<>
+  // from mormot.core.collections.pas, or the smaller TBinDictionary below
   {$ifdef UNDIRECTDYNARRAY}
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
@@ -4719,7 +4714,6 @@ const
   COMP_PUTF8CHAR: array[{CaseInsensitive:}boolean] of TDynArraySortCompare = (
     SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI);
 
-
 { TRawUtf8Hashed }
 
 procedure TRawUtf8Hashed.Init(CaseInsensitive: boolean);
@@ -7255,8 +7249,7 @@ end;
 
 { TDynArray }
 
-procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue;
-  aCountPointer: PInteger);
+procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger);
 begin
   fInfo := aInfo;
   fValue := @aValue;
@@ -7278,8 +7271,7 @@ begin
   fNoFinalize := false;
 end;
 
-procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
-  aCountPointer: PInteger);
+procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger);
 begin
   if aTypeInfo^.Kind <> rkDynArray then
     EDynArray.RaiseUtf8('TDynArray.Init: % is %, expected rkDynArray',

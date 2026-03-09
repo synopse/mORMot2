@@ -9619,27 +9619,15 @@ end;
 
 { TSynNameValue }
 
-procedure TSynNameValue.Add(const aName, aValue: RawUtf8; aTag: PtrInt);
-var
-  added: boolean;
-  i: PtrInt;
+procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
-  i := DynArray.FindHashedForAdding(aName, added);
-  with List[i] do
-  begin
-    if added then
-      Name := aName;
-    Value := aValue;
-    Tag := aTag;
-  end;
-  if Assigned(fOnAdd) then
-    fOnAdd(List[i], i);
-end;
-
-procedure TSynNameValue.AddJoined(const aName: RawUtf8;
-  const aValue: array of RawByteString; aTag: PtrInt);
-begin
-  Add(aName, Join(aValue));
+  // release dynamic arrays memory before FillCharFast()
+  List := nil;
+  Finalize(PDynArrayHasher(@DynArray.Hasher)^); // fHashTableStore := nil
+  // initialize hashed storage
+  FillCharFast(self, SizeOf(self), 0);
+  DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray), List,
+    ptRawUtf8, @Count, not aCaseSensitive);
 end;
 
 procedure TSynNameValue.InitFromIniSection(Section: PUtf8Char;
@@ -9734,20 +9722,32 @@ begin
   result := true;
 end;
 
-procedure TSynNameValue.Init(aCaseSensitive: boolean);
-begin
-  // release dynamic arrays memory before FillCharFast()
-  List := nil;
-  Finalize(PDynArrayHasher(@DynArray.Hasher)^); // fHashTableStore := nil
-  // initialize hashed storage
-  FillCharFast(self, SizeOf(self), 0);
-  DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray), List,
-    ptRawUtf8, @Count, not aCaseSensitive);
-end;
-
 function TSynNameValue.Find(const aName: RawUtf8): PtrInt;
 begin
   result := DynArray.FindHashed(aName);
+end;
+
+procedure TSynNameValue.Add(const aName, aValue: RawUtf8; aTag: PtrInt);
+var
+  added: boolean;
+  i: PtrInt;
+begin
+  i := DynArray.FindHashedForAdding(aName, added);
+  with List[i] do
+  begin
+    if added then
+      Name := aName;
+    Value := aValue;
+    Tag := aTag;
+  end;
+  if Assigned(fOnAdd) then
+    fOnAdd(List[i], i);
+end;
+
+procedure TSynNameValue.AddJoined(const aName: RawUtf8;
+  const aValue: array of RawByteString; aTag: PtrInt);
+begin
+  Add(aName, Join(aValue));
 end;
 
 function TSynNameValue.FindItem(const aName: RawUtf8): PSynNameValueItem;
