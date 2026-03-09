@@ -2737,6 +2737,48 @@ type
     function Count: integer;
   end;
 
+  /// store binary key/value pairs with an efficient O(1) hash table
+  // - works with pointers on text or binary, when TSynDictionary is overkill
+  TBinDictionary = class(TSynPersistent)
+  protected
+    fValue: TRawByteStringDynArray;
+    fCount: integer;
+    fHash: TDynArrayHashed;
+  public
+    /// initialize the data structure
+    constructor Create; override;
+    /// add a key/value pair in the storage directly from memory buffers
+    // - returns -1 if the key was already existing, or if KeyLen > 255
+    function Add(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+    /// add or replace a key/value pair in the storage
+    function Update(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+    /// case-sensitive search for a key index in Value[], using the internal hash
+    // - can optionally delete any matching item
+    function IndexOf(Key: pointer; KeyLen: PtrInt;
+      AndDelete: boolean = false): PtrInt; overload;
+    /// case-sensitive search and return a value, using the internal hash
+    // - returns nil or the found Value (#0 terminated) - with optional ValueLen
+    // - warning: @ValueLen should be a 32-bit integer, not a PtrInt
+    function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PInteger = nil): pointer; overload;
+    /// raw access to each key buffer as encoded in Value[] - not #0 terminated
+    // - warning: @Len should be a 32-bit integer, not a PtrInt
+    function Keys(Index: PtrInt; Len: PInteger = nil): pointer;
+    /// raw access to each value buffer as encoded in Value[] - #0 terminated
+    // - warning: @Len should be a 32-bit integer, not a PtrInt
+    function Values(Index: PtrInt; Len: PInteger = nil): pointer;
+    /// erase the whole storage
+    procedure Clear;
+    /// raw storage, encoded as B[keysize]+key+value so value is #0 terminated
+    property Value: TRawByteStringDynArray
+      read fValue;
+    /// maintain the efficient hash table of the raw storage Value[]/Count
+    property Hash: TDynArrayHashed
+      read fHash;
+    /// number of key/value pairs in Value[]
+    property Count: integer
+      read fCount;
+  end;
+
   /// possible values used by TRawUtf8List.Flags
   TRawUtf8ListFlags = set of (
     fObjectsOwned,
@@ -5058,6 +5100,136 @@ begin
     UniqueText(PRawUtf8(vd.VPointer)^);
 end;
 
+{ TBinDictionary }
+
+function Hash255(Item: PAnsiChar; Hasher: THasher): cardinal;
+begin
+  Item := PPointer(Item)^;
+  result := Hasher(HashSeed, Item + 1, ord(Item^));
+end;
+
+function Sort255(const A, B): integer;
+var
+  pa, pb: PByteArray;
+begin
+  pa := pointer(A);
+  pb := pointer(B);
+  result := pa[0] - pb[0];
+  if result = 0 then // same key length: compare binary
+    result := MemCmp(@pa[1], @pb[1], pa[0]);
+end;
+
+constructor TBinDictionary.Create;
+begin
+  fHash.Init(TypeInfo(TRawByteStringDynArray), fValue, @Hash255, @Sort255, nil, @fCount);
+end;
+
+function PrepareKeyValue(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PByteArray;
+begin
+  result := nil;
+  if KeyLen > 255 then // Add(nil, nil, 0, 0) is a valid request
+    exit;
+  result := FastNewString(KeyLen + ValueLen + 1);
+  result[0] := KeyLen;
+  MoveFast(Key^, result[1], KeyLen);
+  MoveFast(Value^, result[KeyLen + 1], ValueLen);
+end;
+
+function TBinDictionary.Add(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+var
+  tmp: pointer; // transient RawByteString
+  added: boolean;
+begin
+  tmp := PrepareKeyValue(Key, Value, KeyLen, ValueLen);
+  if tmp <> nil then
+  begin
+    result := fHash.FindHashedForAdding(tmp, added);
+    if added then
+    begin
+      pointer(fValue[result]) := tmp; // direct assign with refcnt=1
+      exit;
+    end;
+    FastAssignNew(tmp);
+  end;
+  result := -1;
+end;
+
+function TBinDictionary.Update(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+var
+  tmp: pointer; // transient RawByteString
+begin
+  tmp := PrepareKeyValue(Key, Value, KeyLen, ValueLen);
+  if tmp <> nil then
+  begin
+    result := fHash.FindHashedAndUpdate(tmp, {add=}true);
+    FastAssignNew(tmp);
+  end
+  else
+    result := -1;
+end;
+
+function TBinDictionary.IndexOf(Key: pointer; KeyLen: PtrInt; AndDelete: boolean): PtrInt;
+var
+  tmp: TByteToByte; // local copy in B[keysize]+key layout for hashing
+  pk: pointer;      // fake RawByteString for Hash255/Sort255
+begin
+  result := -1;
+  if KeyLen > 255 then // IndexOf(nil, 0) is a valid request
+    exit;
+  tmp[0] := KeyLen;
+  MoveFast(Key^, tmp[1], KeyLen);
+  pk := @tmp;
+  if AndDelete then
+    result := fHash.FindHashedAndDelete(pk)
+  else
+    result := fHash.FindHashed(pk);
+end;
+
+function TBinDictionary.Find(Key: pointer; KeyLen: PtrInt; ValueLen: PInteger): pointer;
+var
+  ndx: PtrInt;
+begin
+  result := nil;
+  ndx := IndexOf(Key, KeyLen);
+  if ndx < 0 then
+    exit;
+  result := pointer(fValue[ndx]);
+  inc(KeyLen);
+  if ValueLen <> nil then
+    ValueLen^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - KeyLen;
+  inc(PByte(result), KeyLen);
+end;
+
+function TBinDictionary.Keys(Index: PtrInt; Len: PInteger): pointer;
+begin
+  result := nil;
+  if PtrUInt(Index) >= PtrUInt(fCount) then
+    exit;
+  result := pointer(fValue[Index]);
+  if Len <> nil then
+    Len^ := PByte(result)^;
+  inc(PByte(result));
+end;
+
+function TBinDictionary.Values(Index: PtrInt; Len: PInteger): pointer;
+var
+  keylen: PtrInt;
+begin
+  result := nil;
+  if PtrUInt(Index) >= PtrUInt(fCount) then
+    exit;
+  result := pointer(fValue[Index]);
+  keylen := PByte(result)^ + 1;
+  if Len <> nil then
+    Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
+  inc(PByte(result), keylen);
+end;
+
+procedure TBinDictionary.Clear;
+begin
+  fHash.Clear;
+  fHash.ForceReHash;
+end;
 
 { TRawUtf8List }
 
