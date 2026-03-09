@@ -3023,7 +3023,7 @@ begin
        (P[1] = #0) then
       // end of string/buffer, or buffer overflow detected as \#0
       break;
-    inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
+    inc(P, 2); // P^ was '\' -> ignore \# or \u0123
   until false;
   result := P;
   // P^='"' at function return (if input was correct)
@@ -3043,6 +3043,13 @@ begin // caller ensured was not a constant nor a number
 end;
 
 type
+  // implement $ident$ variables for TJsonParser.Reformat pre-processing
+  TJsonDsl = class(TBinDictionary)
+  public
+    function Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
+    procedure AddExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
+  end;
+
   // the different states of the TJsonParser logic
   TJsonParserState = (
     stObjectName,
@@ -3101,6 +3108,83 @@ type
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
     function AddMultiLine(P:PUtf8Char): PUtf8Char;
  end;
+
+function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
+var
+  key: PUtf8Char;
+begin
+  result := P;
+  inc(result); // called with result^ = '$'
+  if result^ = '{' then // ${ident} format, not $ident$
+    inc(result);
+  key := result;
+  while not (result^ in [#0 .. ' ', '$', '}', '|']) do
+    inc(result);
+  Value := nil;
+  if result^ <= ' ' then
+    exit;
+  if PCardinal(key)^ = ord('e') + ord('n') shl 8 + ord('v') shl 16 + ord(':') shl 24 then
+    Value := nil
+  else
+    Value := Find(key, result - key, Len);
+  if result^ = '|' then // or $ident|default} or ${ident|default}
+  begin
+    inc(result);
+    key := result;
+    while not (result^ in [#0 .. #31, '$', '}', '|']) do
+      inc(result);
+    if result^ < ' ' then
+      exit;
+    if Value = nil then
+    begin
+      Value := key; // return default
+      if Len <> nil then
+        Len^ := result - key;
+    end;
+  end;
+  inc(result); // skip trailing $ or }
+end;
+
+procedure TJsonDsl.AddExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
+var
+  tmp: TSynTempAdder;
+  beg, v: PUtf8Char;
+  vlen: integer; // not PtrInt
+  l: PtrInt;
+begin
+  tmp.Init;
+  repeat
+    beg := Value;
+    while (Value < ValueEnd) and
+          (PWord(Value)^ <> SLASH_16) and
+          not (Value^ in ['$', '#']) do
+      inc(Value);
+    tmp.Add(beg, Value - beg);
+    if Value >= ValueEnd then
+      break;
+    if Value^ = '$' then // $ident$ or ${ident}
+    begin
+      Value := Expand(Value, v, @vlen);
+      if v <> nil then
+        tmp.Add(v, vlen);
+    end
+    else
+    begin // # comment or // comment
+      l := Value - beg;
+      while (l <> 0) and
+            (Value[l - 1] = ' ') do
+        dec(l); // trim right
+      if l > 0 then
+      begin
+        tmp.Add(beg, l);
+        tmp.AddDirect(#10);
+      end;
+      Value := GotoNextLineSmall(Value);
+    end;
+  until false;
+  Add(Key, tmp.Buffer, KeyLen, tmp.Size);
+  tmp.Store.Done; // free memory - unlikely from heap
+end;
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
 begin
