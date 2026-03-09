@@ -3398,6 +3398,13 @@ ident:    if ExpectStandard then
             State := stPropNameUnquoted;
           dec(P); // for inc(P); just below
         end;
+      jtHash: // # comment until end of line
+        if ExpectStandard then
+          exit
+        else
+          repeat
+            inc(P);
+          until (P^ = #0) or (P^ = #10);
       jtSlash: // '/' extended /regex/i or /*comment*/ or //comment
         begin
           if ExpectStandard then
@@ -3616,7 +3623,7 @@ var
   Value: PUtf8Char;
   ValueLen: PtrInt;
 label
-  ident, ident0, comment;
+  dquote, ident, ident0, comment;
 begin
   result := false;
   {$ifndef CPUX86}
@@ -3629,7 +3636,7 @@ begin
     case JsonFirst[P^] of
       jtDoubleQuote: // "string"
         begin
-          ReformatBeginValue;
+dquote:   ReformatBeginValue;
           Value := P;
           P := GotoEndOfJsonString2(P + 1, JsonSet);
           if P^ <> '"' then
@@ -3722,17 +3729,7 @@ begin
           else
             goto ident;
         end;
-      jtHash: // # comment until end of line
-        begin
-          inc(P);
-          Value := P;
-          while (P^ <> #0) and (P^ <> #10) do
-            inc(P);
-          if jrfComments in Fmt then
-            goto comment;
-        end;
       jtNone, // handle unexpected chars - full UTF-8 range - as potential value
-      jtDollar,
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
 ident0:   ReformatBeginValue;
@@ -3798,7 +3795,16 @@ ident:    Value := P;
           if State = stObjectValue then
             State := stObjectName;
         end;
-      jtSlash:
+      jtHash: // # comment until end of line
+        begin
+          inc(P);
+          Value := P;
+          while (P^ <> #0) and (P^ <> #10) do
+            inc(P);
+          if jrfComments in Fmt then
+            goto comment;
+        end;
+      jtSlash: // /*...*/ or // comment
         begin
           Value := P;
           P := TryGotoEndOfSlashComment(P); // see GetJson/GotoEnd
@@ -3823,7 +3829,7 @@ comment:    if jrfIndent in Fmt then
                 break;
               dec(ValueLen, 2);
             until false;
-            W.AddOnSameLine(Value, ValueLen); // indent and normalize
+            W.AddOnSameLine(Value, ValueLen); // normalize
           end;
         end;
       jtEndOfBuffer:
