@@ -5105,7 +5105,7 @@ end;
 function Hash255(Item: PAnsiChar; Hasher: THasher): cardinal;
 begin
   Item := PPointer(Item)^;
-  result := Hasher(HashSeed, Item + 1, ord(Item^));
+  result := Hasher(HashSeed, Item + 1, ord(Item^)); // format is B[keysize]+key
 end;
 
 function Sort255(const A, B): integer;
@@ -5114,8 +5114,8 @@ var
 begin
   pa := pointer(A);
   pb := pointer(B);
-  result := pa[0] - pb[0];
-  if result = 0 then // same key length: compare binary
+  result := pa[0] - pb[0]; // format is B[keysize]+key
+  if result = 0 then       // same key length: compare binary
     result := MemCmp(@pa[1], @pb[1], pa[0]);
 end;
 
@@ -5129,7 +5129,7 @@ begin
   result := nil;
   if KeyLen > 255 then // Add(nil, nil, 0, 0) is a valid request
     exit;
-  result := FastNewString(KeyLen + ValueLen + 1);
+  result := FastNewString(KeyLen + ValueLen + 1); // B[keysize]+key+value
   result[0] := KeyLen;
   MoveFast(Key^, result[1], KeyLen);
   MoveFast(Value^, result[KeyLen + 1], ValueLen);
@@ -5193,7 +5193,7 @@ begin
   ndx := IndexOf(Key, KeyLen);
   if ndx < 0 then
     exit;
-  result := pointer(fValue[ndx]);
+  result := pointer(fValue[ndx]); // format is B[keysize]+key+value
   inc(KeyLen);
   if ValueLen <> nil then
     ValueLen^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - KeyLen;

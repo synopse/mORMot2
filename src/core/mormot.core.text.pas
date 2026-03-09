@@ -1007,28 +1007,28 @@ type
       Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
     /// append a JSON value, array or document, in a specified format
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat): boolean;
     /// this class implementation will raise an exception
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
     /// append a variant content as UTF-8 text
     // - with optional HTML escape (via a TTempUtf8) but no JSON serialization
     procedure AddVarData(Value: PVarData; HtmlEscape: boolean);
-    /// this class implementation will raise an exception
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    /// append some JSON value using RTTI
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
     function AddTypedJson(Value: pointer; TypeInfo: pointer;
       WriteOptions: TTextWriterWriteObjectOptions = []): pointer; virtual;
     /// write some #0 ended UTF-8 text, according to the specified format
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload; virtual;
     /// write some #0 ended UTF-8 text, according to the specified format
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
     /// append an open array constant value as UTF-8 text
-    // - this method may raise an ESynException e.g. on vtVariant: use TJsonWriter
+    // - this class may raise an ESynException e.g. on vtVariant: use TJsonWriter
     procedure AddVarRec(V: PVarRec); overload;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
@@ -1041,10 +1041,10 @@ type
     function AddPrepareShort(Len: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// write some data Base64 encoded
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); virtual;
     /// serialize as JSON the given object
-    // - this method will raise an ESynException: use inherited TJsonWriter instead
+    // - this class will raise an ESynException: use inherited TJsonWriter instead
     procedure WriteObject(Value: TObject;
       WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
     /// append a T*ObjArray dynamic array as a JSON array
