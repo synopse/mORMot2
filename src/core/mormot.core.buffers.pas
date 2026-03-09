@@ -9645,7 +9645,7 @@ begin
     exit;
   until false;
   result := d;
-  PWord(result - 2)^ := ord('.') + ord('.') shl 8;
+  PWord(result - 2)^ := DOT_16;
   result^ := #0;
 end;
 
@@ -9927,7 +9927,7 @@ begin
   begin
     ctx[0] := #32; // truncate to keep information on a single line
     MoveFast(pointer(Context)^, ctx[1], 29);
-    PCardinal(@ctx[30])^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
+    PCardinal(@ctx[30])^ := DOT_24;
   end
   else
     Ansi7StringToShortString(Context, ctx{%H-});

@@ -824,6 +824,8 @@ const
   SLASH_16   = ord('/') + ord('/') shl 8;
   SLBEG_16   = ord('/') + ord('*') shl 8;
   SLEND_16   = ord('*') + ord('/') shl 8;
+  DOT_16     = ord('.') + ord('.') shl 8;
+  DOT_24     = ord('.') + ord('.') shl 8 + ord('.') shl 16;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;
@@ -3671,7 +3673,7 @@ type
   private
     procedure AddRealloc(new: PtrInt);
   public
-    /// direct access to the internal temporary buffer
+    /// direct access to the internal 4KB temporary buffer
     Store: TSynTempBuffer;
     /// initialize a local buffer from stack, as Temp.InitOnStack
     procedure Init; overload;

@@ -3485,7 +3485,6 @@ type
     procedure Close;
   end;
 
-
 type
   /// store CPU and RAM usage for a given process
   // - as used by TSystemUse class

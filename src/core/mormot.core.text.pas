@@ -6280,7 +6280,7 @@ begin
         if c = $00a0 then // &nbsp;
           Add(' ')
         else if c = $2026 then
-          AddShort4(ord('.') + ord('.') shl 8 + ord('.') shl 16, 3) // &hellip;
+          AddShort4(DOT_24, 3) // &hellip;
         else
           AddWideChar(WideChar(c));
         inc(p, l + 1);
