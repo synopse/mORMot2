@@ -63,6 +63,8 @@ type
     jtEqual,
     jtIdentifierFirstChar,
     jtSlash,
+    jtHash,
+    jtDollar,
     jtEndOfBuffer);
 
   /// defines a lookup table used for branch-less first char JSON parsing
@@ -3285,6 +3287,7 @@ assign:   if State <> stObjectName then
           exit
         else
           goto assign;
+      jtDollar,
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
 ident:    if ExpectStandard then
@@ -3628,8 +3631,7 @@ begin
           else
             goto ident;
         end;
-      jtNone:
-        if P^ = '#' then // # comment until end of line
+      jtHash: // # comment until end of line
         begin
           inc(P);
           Value := P;
@@ -3637,9 +3639,9 @@ begin
             inc(P);
           if jrfComments in Fmt then
             goto comment;
-        end
-        else // handle unexpected chars - full UTF-8 range - as potential value
-          goto ident0;
+        end;
+      jtNone, // handle unexpected chars - full UTF-8 range - as potential value
+      jtDollar,
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
 ident0:   ReformatBeginValue;
@@ -4214,6 +4216,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
       end
       else
         goto ident;
+    jtDollar,
     jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
       begin
         // return simple identifiers as JSON strings
@@ -12902,8 +12905,8 @@ begin
     if c in ['_', '-', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
       include(jc, jcJsonIdentifier);           // _-.[]$0..9a..zA..Z
     JSON_CHARS[c] := jc;
-    if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
-      // exclude '0'..'9' as already in jtFirstDigit
+    if c in ['_', 'a'..'z', 'A'..'Z'] then
+      // exclude '0'..'9' as already in jtFirstDigit - jtDollar is distinct
       JSON_TOKENS[c] := jtIdentifierFirstChar;
   end;
   r := @JSON_CHARS_RELAXED; // extended to support minimalistic .morml
@@ -12928,6 +12931,8 @@ begin
   p[ord('f')]  := ord(jtFalseFirstChar);
   p[ord('n')]  := ord(jtNullFirstChar);
   p[ord('/')]  := ord(jtSlash);
+  p[ord('#')]  := ord(jtHash);
+  p[ord('$')]  := ord(jtDollar);
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   // now we can register some local type alias to be found by name or ASAP
