@@ -2760,6 +2760,7 @@ type
     // - returns nil or the found Value (#0 terminated) - with optional ValueLen
     // - warning: @ValueLen should be a 32-bit integer, not a PtrInt
     function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PInteger = nil): pointer; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// raw access to each key buffer as encoded in Value[] - not #0 terminated
     // - warning: @Len should be a 32-bit integer, not a PtrInt
     function Keys(Index: PtrInt; Len: PInteger = nil): pointer;
@@ -5124,6 +5125,32 @@ begin
   fHash.Init(TypeInfo(TRawByteStringDynArray), fValue, @Hash255, @Sort255, nil, @fCount);
 end;
 
+function TBinDictionary.Keys(Index: PtrInt; Len: PInteger): pointer;
+begin
+  result := nil;
+  if PtrUInt(Index) >= PtrUInt(fCount) then
+    exit;
+  result := pointer(fValue[Index]);
+  if Len <> nil then
+    Len^ := PByte(result)^;
+  inc(PByte(result));
+end;
+
+function TBinDictionary.Values(Index: PtrInt; Len: PInteger): pointer;
+var
+  keylen: PtrInt;
+begin
+  result := nil;
+  if (self = nil) or
+     (PtrUInt(Index) >= PtrUInt(fCount)) then
+    exit;
+  result := pointer(fValue[Index]);
+  keylen := PByte(result)^ + 1;
+  if Len <> nil then
+    Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
+  inc(PByte(result), keylen);
+end;
+
 function PrepareKeyValue(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PByteArray;
 begin
   result := nil;
@@ -5174,7 +5201,8 @@ var
   pk: pointer;      // fake RawByteString for Hash255/Sort255
 begin
   result := -1;
-  if KeyLen > 255 then // IndexOf(nil, 0) is a valid request
+  if (self = nil) or
+     (KeyLen > 255) then // IndexOf(nil, 0) is a valid request
     exit;
   tmp[0] := KeyLen;
   MoveFast(Key^, tmp[1], KeyLen);
@@ -5186,43 +5214,8 @@ begin
 end;
 
 function TBinDictionary.Find(Key: pointer; KeyLen: PtrInt; ValueLen: PInteger): pointer;
-var
-  ndx: PtrInt;
 begin
-  result := nil;
-  ndx := IndexOf(Key, KeyLen);
-  if ndx < 0 then
-    exit;
-  result := pointer(fValue[ndx]); // format is B[keysize]+key+value
-  inc(KeyLen);
-  if ValueLen <> nil then
-    ValueLen^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - KeyLen;
-  inc(PByte(result), KeyLen);
-end;
-
-function TBinDictionary.Keys(Index: PtrInt; Len: PInteger): pointer;
-begin
-  result := nil;
-  if PtrUInt(Index) >= PtrUInt(fCount) then
-    exit;
-  result := pointer(fValue[Index]);
-  if Len <> nil then
-    Len^ := PByte(result)^;
-  inc(PByte(result));
-end;
-
-function TBinDictionary.Values(Index: PtrInt; Len: PInteger): pointer;
-var
-  keylen: PtrInt;
-begin
-  result := nil;
-  if PtrUInt(Index) >= PtrUInt(fCount) then
-    exit;
-  result := pointer(fValue[Index]);
-  keylen := PByte(result)^ + 1;
-  if Len <> nil then
-    Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
-  inc(PByte(result), keylen);
+  result := Values(IndexOf(Key, KeyLen), ValueLen);
 end;
 
 procedure TBinDictionary.Clear;
