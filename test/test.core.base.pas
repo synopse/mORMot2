@@ -1070,10 +1070,28 @@ const
   ONLYLOG = true;
 var
   i, n: PtrInt;
+  l32: integer;
   L: TRawUtf8List;
+  B: TBinDictionary;
   O: TSynMonitorTime;
   v: TRawUtf8DynArray;
   timer: TPrecisionTimer;
+
+  procedure TestBinDictionary;
+  var
+    i: PtrInt;
+    l32: integer;
+  begin
+    CheckEqual(B.Count, MAX + 1);
+    Check(B.IndexOf(nil, 0) < 0);
+    for i := MAX downto 0 do
+    begin
+      l32 := 0;
+      Check(PInteger(B.Find(pointer(v[i]), length(v[i]), @l32))^ = i);
+      Check(l32 = SizeOf(l32));
+    end;
+  end;
+
 begin
   SetLength(v, MAX + 1); // allocate once the strings
   for i := 0 to MAX do
@@ -1171,6 +1189,51 @@ begin
     Check(L.IndexOf('toto') = 0);
   finally
     L.Free;
+  end;
+  B := TBinDictionary.Create;
+  try // with hash table
+    timer.Start;
+    for i := 0 to MAX do
+    begin
+      CheckEqual(B.Count, i);
+      Check(B.Add(pointer(v[i]), @i, length(v[i]), 4) = i);
+    end;
+    NotifyTestSpeed('TBinDictionary.Add', MAX + 1, 0, @timer, ONLYLOG);
+    timer.Start;
+    TestBinDictionary;
+    NotifyTestSpeed('TBinDictionary.Find', MAX + 1, 0, @timer, ONLYLOG);
+    B.Clear;
+    for i := 0 to MAX do
+    begin
+      CheckEqual(B.Count, i);
+      Check(B.Update(pointer(v[i]), @i, length(v[i]), 4) = i);
+    end;
+    for i := 0 to MAX do
+      if i and 127 = 0 then
+        Check(B.Update(pointer(v[i]), @i, length(v[i]), 4) = i)
+      else if i and 255 = 0 then
+        Check(B.Add(pointer(v[i]), @i, length(v[i]), 4) < 0);
+    for i := 0 to MAX do
+    begin
+      l32 := 0;
+      Check(MemCmp(B.Keys(i, @l32), pointer(v[i]), length(v[i])) = 0);
+      Check(l32 = length(v[i]));
+      l32 := 0;
+      Check(PInteger(B.Values(i, @l32))^ = i);
+      Check(l32 = 4);
+    end;
+    TestBinDictionary;
+    B.Clear;
+    Check(B.Count = 0);
+    Check(B.IndexOf(nil, 0) < 0);
+    Check(B.Add(nil, nil, 0, 0) = 0);
+    Check(B.Count = 1);
+    Check(B.IndexOf(nil, 0) = 0);
+    l32 := 1;
+    Check(PInteger(B.Find(nil, 0, @l32))^ = 0);
+    Check(l32 = 0);
+finally
+    B.Free;
   end;
 end;
 
