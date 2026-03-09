@@ -2419,12 +2419,44 @@ begin
 end;
 {$endif FPCUSEVERSIONINFO}
 
-function GetEnv(name: PAnsiChar; var env: RawUtf8): boolean;
+procedure _GetSystemEnv;
+var
+  e: PPUtf8Char;
+  b, p: PUtf8Char;
+  n: PtrInt;
 begin
-  name := BaseUnix.FPGetenv(name); // local GetEnvironmentVariable()
-  result := name <> nil;
-  if result then
-    FastSetString(env, name, StrLen(name));
+  e := pointer(system.envp);
+  if e = nil then
+    exit;
+  n := 0;
+  while e^ <> nil do
+  begin
+    if e^^ <> '=' then
+      inc(n);
+    inc(e);
+  end;
+  if n = 0 then
+    exit; // should never happen
+  SetLength(_SystemEnvNames, n);
+  SetLength(_SystemEnvValues, n);
+  e := pointer(system.envp);
+  n := 0;
+  repeat
+    p := e^;
+    if p^ <> '=' then
+    begin
+      b := p;
+      while p^ <> '=' do
+        inc(p);
+      FastSetString(_SystemEnvNames[n], b, p - b);
+      inc(p);
+      b := p;
+      inc(p, StrLen(p));
+      FastSetString(_SystemEnvValues[n], b, p - b);
+      inc(n);
+    end;
+    inc(e);
+  until e^ = nil;
 end;
 
 procedure GetUserHost(out User, Host: RawUtf8);

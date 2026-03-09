@@ -1552,6 +1552,12 @@ procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
 var
   GetExecutableLocation: function(aAddress: pointer): ShortString;
+var
+  /// retrieve the MAC addresses of all hardware network adapters
+  // - mormot.net.sock.pas will inject here its own cross-platform version
+  // - this unit will include a simple parser of /sys/class/net/* for Linux only
+  // - as used e.g. by GetComputerUuid() fallback if SMBIOS is not available
+  GetSystemMacAddress: function: TRawUtf8DynArray;
 
 /// try to retrieve the file name of the executable/library holding a function
 // - calls dladdr() on POSIX, or GetModuleFileName() on Windows
@@ -1560,13 +1566,6 @@ function GetExecutableName(aAddress: pointer): TFileName;
 /// check if a function address is known within the main executable module
 // - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
 function IsMainExecutable(aAddress: pointer): boolean;
-
-var
-  /// retrieve the MAC addresses of all hardware network adapters
-  // - mormot.net.sock.pas will inject here its own cross-platform version
-  // - this unit will include a simple parser of /sys/class/net/* for Linux only
-  // - as used e.g. by GetComputerUuid() fallback if SMBIOS is not available
-  GetSystemMacAddress: function: TRawUtf8DynArray;
 
 type
   /// identify an operating system folder for GetSystemPath()
@@ -1610,6 +1609,23 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 // - if the default location is not good enough for your project
 // - will just check that the directory exists, not that it is writable
 function SetSystemPath(kind: TSystemPath; const path: TFileName): boolean;
+
+var // raw UTF-8 cache storage for GetSystemEnv()
+  _SystemEnvNames, _SystemEnvValues: TRawUtf8DynArray;
+
+/// efficiently return a system environment variable as UTF-8
+// - will maintain a cross-platform cache of allocated environment variables
+function GetSystemEnv(const name: RawUtf8): RawUtf8; overload;
+
+/// efficiently return a system environment variable as string/TFileName
+// - faster cross-platform implementation of RTL GetEnvironmentVariable()
+function GetSystemEnvString(const name: RawUtf8): string;
+
+/// search a system environment variable as UTF-8 from the internal cache
+function GetSystemEnv(const name: RawUtf8; var res: RawUtf8): boolean; overload;
+
+/// search a system environment variable as UTF-8 from the internal cache
+function GetSystemEnv(name: PUtf8Char; len: TStrLen): pointer; overload;
 
 type
   /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
@@ -9666,6 +9682,44 @@ begin
   result := DirectoryExists(full);
   if result then
     _SystemPath[kind] := IncludeTrailingPathDelimiter(full);
+end;
+
+function GetSystemEnv(name: PUtf8Char; len: TStrLen): pointer;
+var
+  ndx: PtrInt;
+begin
+  result := nil;
+  if (name = nil) or
+     (len <= 0) then
+    exit;
+  if _SystemEnvNames = nil then
+    _GetSystemEnv;
+  ndx := {$ifdef OSPOSIX}FindNonVoidRawUtf8{$else}FindNonVoidRawUtf8I{$endif}(
+    pointer(_SystemEnvNames), name, len, length(_SystemEnvNames));
+  if ndx >= 0 then
+    result := pointer(_SystemEnvValues[ndx]);
+end;
+
+function GetSystemEnv(const name: RawUtf8): RawUtf8;
+begin
+  result := RawUtf8(GetSystemEnv(pointer(name), length(name)));
+end;
+
+function GetSystemEnvString(const name: RawUtf8): string;
+begin
+  result := string(GetSystemEnv(name)); // use the RTL
+end;
+
+function GetSystemEnv(const name: RawUtf8; var res: RawUtf8): boolean;
+var
+  p: pointer;
+begin
+  p := GetSystemEnv(pointer(name), length(name));
+  result := false;
+  if p = nil then
+    exit;
+  result := true;
+  res := RawUtf8(p);
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;

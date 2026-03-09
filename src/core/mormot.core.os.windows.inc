@@ -2955,6 +2955,52 @@ begin
     result := IncludeTrailingPathDelimiter(result); // no EnsureDirectoryExists
 end;
 
+var
+  _SystemEnvUnicode: SynUnicode; // for RunCommandWin() below
+
+procedure _GetSystemEnv;
+var
+  w, e, env: PWideChar;
+  i, n: PtrInt;
+begin
+  env := GetEnvironmentStringsW;
+  if env = nil then
+    exit;
+  n := 0;
+  w := env;
+  while w^ <> #0 do
+  begin
+    if w^ <> '=' then
+      inc(n);
+    inc(w, StrLenW(w) + 1);
+  end;
+  if n = 0 then
+    exit; // should never happen
+  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(w) - PtrUInt(env)) shr 1);
+  SetLength(_SystemEnvNames, n);
+  SetLength(_SystemEnvValues, n);
+  w := env;
+  i := 0;
+  repeat
+    if w^ = '=' then
+      inc(w, StrLenW(w)) // no void string in _SystemEnvNames[]
+    else
+    begin
+      e := w;
+      while w^ <> '=' do
+        inc(w);
+      Win32PWideCharToUtf8(e, w - e, _SystemEnvNames[i]);
+      inc(w);
+      e := w;
+      inc(w, StrLenW(w));
+      Win32PWideCharToUtf8(e, w - e, _SystemEnvValues[i]);
+      inc(i);
+    end;
+    inc(w);
+  until w^ = #0;
+  FreeEnvironmentStringsW(w);
+end;
+
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
