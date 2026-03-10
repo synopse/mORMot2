@@ -3051,13 +3051,13 @@ begin // caller ensured was not a constant nor a number
 end;
 
 type
+  TJsonDslMarker = (jdmTemplate, jdmConstNum, jdmEscapedString, jdmPlainString);
   // implement $ident$ variables for TJsonParser.Reformat pre-processing
   TJsonDsl = class(TBinDictionary)
-  protected
-    fDefaultTemp: TBuffer1K;
   public
-    function Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
-    procedure UpdateExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
+    function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
+      KeepMarker: boolean): PUtf8Char;
+    procedure Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
   end;
 
   // the different states of the TJsonParser logic
@@ -3125,10 +3125,10 @@ type
     procedure DslInclude(P: PUtf8Char);
  end;
 
-function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
+function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
+  KeepMarker: boolean): PUtf8Char;
 var
   key: PUtf8Char;
-  l: PtrUInt;
 begin
   result := P;
   inc(result); // called with result^ = '$'
@@ -3144,9 +3144,11 @@ begin
   begin
     inc(key, 4);        // retrieve $env:NAME$ or ${env:NAME}
     Value := GetSystemEnv(key, result - key); // cached in mormot.core.os.pas
+    if Value <> nil then
+      Len := PStrLen(Value - _STRLEN)^; // GetSystemEnv() returns a RawUtf8
   end
   else
-    Value := Find(key, result - key, Len);    // from known variables/templates
+    Value := Find(key, result - key, @Len);    // from known variables/templates
   if result^ = '|' then // $ident|default$ or ${ident|default}
   begin
     inc(result);
@@ -3155,57 +3157,58 @@ begin
       inc(result);
     if result^ < ' ' then
       exit;
-    if Value = nil then // fallback to this specific value
+    if Value = nil then // fallback to the specified default
     begin
-      l := MinPtrUInt(SizeOf(fDefaultTemp) - 1, result - key);
-      MoveFast(key^, fDefaultTemp, l);
-      fDefaultTemp[l] := #0; // need an ending #0 for Reformat()
-      Value := @fDefaultTemp;
-      if Len <> nil then
-        Len^ := l;
+      Value := key;
+      Len := result - key;
     end;
   end;
   inc(result); // skip trailing $ or }
+  if KeepMarker or
+     (TJsonDslMarker(Value^) > high(TJsonDslMarker)) then
+    exit;
+  inc(Value); // trim marker
+  dec(Len);
 end;
 
-procedure TJsonDsl.UpdateExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
+procedure TJsonDsl.Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
 var
   tmp: TSynTempAdder;
-  beg, v: PUtf8Char;
-  vlen: integer; // not PtrInt
-  l: PtrInt;
+  beg, val: PUtf8Char;
+  l, vallen: PtrInt; // @vallen = PPtrInt
 begin
   tmp.Init;
+  tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
   repeat
-    beg := Value;
-    while (Value < ValueEnd) and
-          (PWord(Value)^ <> SLASH_16) and
-          not (Value^ in ['$', '#']) do
-      inc(Value);
-    tmp.Add(beg, Value - beg);
-    if Value >= ValueEnd then
+    beg := v;
+    while (v < ve) and
+          (PWord(v)^ <> SLASH_16) and
+          not (v^ in ['$', '#']) do
+      inc(v);
+    tmp.Add(beg, v - beg);
+    if v >= ve then
       break;
-    if Value^ = '$' then // $ident$ ${ident} $env:NAME$ ${env:NAME}
+    if v^ = '$' then // $ident$ ${ident} $env:NAME$ ${env:NAME}
     begin
-      Value := Expand(Value, v, @vlen);
-      if v <> nil then
-        tmp.Add(v, vlen);
+      v := Expand(v, val, vallen, {KeepMarker=}false);
+      if val <> nil then
+        tmp.Add(val, vallen);
     end
     else
     begin // # comment or // comment
-      l := Value - beg;
+      l := v - beg;
       while (l <> 0) and
-            (Value[l - 1] = ' ') do
+            (v[l - 1] = ' ') do
         dec(l); // trim right
       if l > 0 then
       begin
         tmp.Add(beg, l);
         tmp.AddDirect(#10);
       end;
-      Value := GotoNextLineSmall(Value);
+      v := GotoNextLineSmall(v);
     end;
-  until Value >= ValueEnd;
-  Update(Key, tmp.Buffer, KeyLen, tmp.Size);
+  until v >= ve;
+  Update(k, tmp.Buffer, kl, tmp.Size);
   tmp.Store.Done; // free memory - unlikely from heap
 end;
 
@@ -3771,10 +3774,10 @@ procedure TJsonParser.DslInclude(P: PUtf8Char);
 var
   tmp: ShortString; // to compute the expanded filename
   v: PUtf8Char;
-  vlen: integer; // not PtrInt
+  vlen: PtrInt;     // @vlen = PPtrInt
   c: AnsiChar;
-  txt: RawUtf8;  // UTF-8 file name
-  fn: TFileName; // RTL file name
+  txt: RawUtf8;     // UTF-8 file name
+  fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
   if P^ = '"' then
@@ -3783,8 +3786,8 @@ begin
   begin
     if P^ = '$' then
     begin
-      P := FmtVars.Expand(P, v, @vlen); // include "config/general-$mode$.json"
-      if v <> nil then
+      P := FmtVars.Expand(P, v, vlen, {KeepMarker=}false);
+      if v <> nil then // include "config/general-$mode$.json"
         AppendShortBuffer(pointer(v), vlen, high(tmp), @tmp);
     end
     else
