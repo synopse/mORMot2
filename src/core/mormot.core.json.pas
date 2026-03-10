@@ -4014,6 +4014,18 @@ dquote:   ReformatBeginValue;
           else
             goto ident;
         end;
+      jtDollar:
+        if P[1] = '$' then
+          if FmtDsl = [] then
+            goto ident0
+          else
+            P := DslSection(P)   // $$ ... $$ DSL section: include + vars
+        else if FmtVars = nil then
+          goto ident0
+        else if P[1] = '"' then  // $"..." substitution
+          P := DslString(P)
+        else
+          P := DslVar(P);        // $ident$ or ${ident} substitution
       jtNone, // handle unexpected chars - full UTF-8 range - as potential value
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
@@ -4111,50 +4123,6 @@ comment:    AddIndentAndCommentToken([]);
             until false;
             W.AddOnSameLine(Value, ValueLen); // normalize
           end;
-        end;
-      jtDollar:
-        if P[1] = '$' then
-          if FmtDsl = [] then
-            goto ident0
-          else
-            P := DslSection(P)   // $$ ... $$ DSL section: include + vars
-        else if FmtVars = nil then
-          goto ident0
-        else if P[1] = '"' then  // $"..." substitution
-        begin
-          inc(P, 2);
-          W.AddDirect('"');
-          repeat
-            case P^ of
-              #0:
-                exit;
-              '\':
-                begin
-                  inc(P);
-                  if P^ = #0 then
-                    exit;
-                  W.AddDirect('\'); // ignore \" within quotes
-                end;
-              '$':
-                begin
-                  P := FmtVars.Expand(P, Value, nil);
-                  if Value <> nil then
-                    Reformat(Value);
-                  continue;
-                end;
-            end;
-            W.Add(P^); // fast enough
-            if P^ = '"' then
-              break;
-            inc(P);
-          until false;
-          inc(P);
-        end
-        else
-        begin // $ident$ or ${ident} substitution
-          P := FmtVars.Expand(P, Value, nil);
-          if Value <> nil then
-            Reformat(Value); // single recursive call
         end;
       jtEndOfBuffer:
         break;
