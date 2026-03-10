@@ -84,16 +84,18 @@ begin
   result := true;
 end;
 
-function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
-var
-  i: PtrInt;
+function IdemPChars(const s: RawUtf8; up: PUtf8Char): PtrInt;
 begin
-  result := true;
+  result := 0;
   if s <> '' then
-    for i := 0 to high(up) do
-      if IdemPChar(pointer(s), up[i]) then
+    while up^ <> #0 do
+    begin
+      if IdemPChar(pointer(s), up) then
         exit;
-  result := false;
+      inc(up, StrLen(up) + 1);
+      inc(result);
+    end;
+  result := -1;
 end;
 
 
@@ -3660,7 +3662,8 @@ begin
   if (not (fIsDebuggerPresent in _F0)) and
      (IsATTY(StdOut) = 1) and
      GetSystemEnv('TERM', term) and
-     IdemPChars(term, ['XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']) then
+     (IdemPChars(term, 'XTERM'#0'SCREEN'#0'TMUX'#0'RXVT'#0 +
+       'LINUX'#0'CYGWIN'#0) >= 0) then
     include(_F0, fStdOutIsTTY);
 end;
 
@@ -3890,10 +3893,10 @@ begin
   else
   {$endif OSLINUXANDROID}
     // generic / best guess fallback list
-    result := not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS',
-      'DEVPTS', 'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
-      'PTY', 'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS',
-      'DEVTMPFS', 'HUGETLBFS', 'ISO9660']);
+    result := IdemPChars(typ, 'AUTOFS'#0'PROC'#0'SUBFS'#0'DEBUGFS'#0 +
+      'DEVPTS'#0'FUSECTL'#0'MQUEUE'#0'RPC-PIPEFS'#0'SYSFS'#0'DEVFS'#0 +
+      'KERNFS'#0'PTY'#0'IGNORE'#0'NONE'#0'TMPFS'#0'SECURITYFS'#0'RAMFS'#0 +
+      'ROOTFS'#0'DEVTMPFS'#0'HUGETLBFS'#0'ISO9660'#0) >= 0;
 end;
 
 procedure AddDiskPartition(const typ, mnt, fs: RawUtf8;
@@ -3909,7 +3912,7 @@ begin
      (fs = 'rootfs') or
      (mnt = '/mnt') or
      IdemPChar(pointer(fs), '/DEV/LOOP') or
-     IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) or
+     (IdemPChars(mnt, '/PROC/'#0'/SYS/'#0'/RUN/'#0) >= 0) or
      not IsRealFileSystem(typ) then
     exit;
   fn := mnt;
