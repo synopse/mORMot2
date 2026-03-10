@@ -5083,7 +5083,7 @@ var
   {$else}
   cache, cpuinfo: PUtf8Char;
   release: RawUtf8;
-  procid, phyid, phyndx, cacheshr: integer;
+  procid, phyid, phyndx, cacheshr, threads: integer;
   phy: TIntegerDynArray;
   auxv: PPtrUInt;
   {$ifdef OSLINUX}
@@ -5221,10 +5221,10 @@ begin
   begin
     beg := cpuinfo;
     cpuinfo := GotoNextLine(cpuinfo);
-    if IdemPChar(beg, 'PROCESSOR') then
-      if beg^ = 'P' then
-        modname := ParseLine(beg) // Processor : ARMv7
-      else
+    case IdemPChars(beg, 'PROCESSOR'#0'MODEL'#0'FEATURES'#0'FLAGS'#0 +
+      'HARDWARE'#0'SERIAL'#0'CACHE SIZE'#0'CPU CORES'#0'PHYSICAL ID'#0) of
+    0:
+      if beg^ <> 'P' then
       begin
         // loop over all "processor : 0 .. 1 .. 2" lines to count the CPUs
         inc(SystemInfo.dwNumberOfProcessors);
@@ -5232,38 +5232,52 @@ begin
         if procid >= integer(SystemInfo.dwNumberOfProcessors) then
           procid := -1; // paranoid
       end
-    else if IdemPChar(beg, 'MODEL') then
-      modname := ParseLine(beg)
-    else if IdemPChar(beg, 'FEATURES') or
-            IdemPChar(beg, 'FLAGS') then
-      CpuInfoFeatures := ParseLine(beg)
-    else if IdemPChar(beg, 'HARDWARE') then
-      __BiosInfoHardwareFromCpuInfo := ParseLine(beg)
-    else if IdemPChar(beg, 'SERIAL') then
-      _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)))
-    else if IdemPChar(beg, 'CACHE SIZE') then
-      cache := ParseLine(beg)
+      else if modname = nil then
+        modname := ParseLine(beg); // Processor : ARMv7
+    1:
+      if modname = nil then
+        modname := ParseLine(beg);
+    2, 3:
+      if CpuInfoFeatures = '' then
+        CpuInfoFeatures := ParseLine(beg);
+    4:
+      if __BiosInfoHardwareFromCpuInfo = '' then
+        __BiosInfoHardwareFromCpuInfo := ParseLine(beg);
+    5:
+      if _Smbios[sbiSerial] = '' then
+        _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)));
+    6:
+      if cache = nil then
+        cache := ParseLine(beg);
+    7:
+      if CpuCores = 0 then
+      begin
+        threads := ParseInt(beg);
+        if threads > 0 then
+          CpuCores := threads;
+      end;
+    8:
+      begin
+        phyid := ParseInt(beg); // in practice, may be 0,3,... and not 0,1,...
+        if phyid < 0 then
+          continue;
+        phyndx := IntegerScanIndex(pointer(phy), CpuSockets, phyid);
+        if phyndx < 0 then
+        begin
+          AddInteger(phy, CpuSockets, phyid);
+          SetLength(CpuSocketsMask, CpuSockets);
+          phyndx := CpuSockets - 1;
+        end;
+        if (procid >= 0) and
+           (procid < SizeOf(TCpuSet) shl 3) then
+          SetBitPtr(@CpuSocketsMask[phyndx], procid);
+      end;
     {$ifdef CPUARM3264}
     else if IdemPChar(beg, 'CPU IMPLEMENTER') then
       ParseHex32Add(beg, aci)
     else if IdemPChar(beg, 'CPU PART') then
-      ParseHex32Add(beg, act)
+      ParseHex32Add(beg, act);
     {$endif CPUARM3264}
-    else if IdemPChar(beg, 'PHYSICAL ID') then
-    begin
-      phyid := ParseInt(beg); // in practice, may be 0,3,... and not 0,1,...
-      if phyid < 0 then
-        continue;
-      phyndx := IntegerScanIndex(pointer(phy), CpuSockets, phyid);
-      if phyndx < 0 then
-      begin
-        AddInteger(phy, CpuSockets, phyid);
-        SetLength(CpuSocketsMask, CpuSockets);
-        phyndx := CpuSockets - 1;
-      end;
-      if (procid >= 0) and
-         (procid < SizeOf(TCpuSet) shl 3) then
-        SetBitPtr(@CpuSocketsMask[phyndx], procid);
     end;
   end;
   {$ifdef CPUARM3264}
@@ -5341,6 +5355,8 @@ begin
   {$endif OSANDROID}
   if SystemInfo.dwNumberOfProcessors = 0 then
     SystemInfo.dwNumberOfProcessors := 1;
+  if CpuCores = 0 then
+    CpuCores := SystemInfo.dwNumberOfProcessors;
   if modname = nil then
     CpuInfoText := _fmt('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
       [SystemInfo.dwNumberOfProcessors, CpuInfoText])

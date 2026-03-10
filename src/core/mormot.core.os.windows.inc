@@ -4891,8 +4891,7 @@ var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   IsWow64Process2: function(Handle: THandle; var Process, Machine: word): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
-  GetLogicalProcessorInformation: function(
-   var Info: TSystemLogicalProcessorInformation; Len: PDWord): BOOL; stdcall;
+  GetLogicalProcessorInformation: function(Info: pointer; var Len: DWord): BOOL; stdcall;
   wine_get_version: function: PAnsiChar; stdcall;
   mem: TMemoryStatusEx;
   res: BOOL;
@@ -4903,7 +4902,8 @@ var
   reg: TWinRegistry;
   rnd: PHash128;
   proc: array of TSystemLogicalProcessorInformation;
-  i: integer;
+  pi: ^TSystemLogicalProcessorInformation;
+  i, n: PtrInt;
   siz: DWord;
 begin
   // 1. minimal fallback to support of very old 32-bit CPU without SSE2
@@ -5131,53 +5131,64 @@ begin
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
    cpu := GetSystemEnv('PROCESSOR_IDENTIFIER');
-  if Assigned(GetLogicalProcessorInformation) then
-  begin
-    SetLength(proc, 1024);
-    siz := SizeOf(proc[0]) * length(proc);
-    if GetLogicalProcessorInformation(proc[0], @siz) then
-    begin
-      for i := 0 to (siz div SizeOf(proc[0])) - 1 do
-        with proc[i] do
-          case Relationship of
-            RelationProcessorPackage: // physical processor socket
-              AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), CpuSockets, ProcessorMask);
-            RelationCache:            // raw cache information
-              if Cache.CacheType in [CacheUnified, CacheData] then
-                if (Cache.Level >= low(CpuCache)) and
-                   (Cache.Level <= high(CpuCache)) then
-                  with CpuCache[Cache.Level] do
-                    if (Count = 0) or
-                       (Cache.CacheType <> CacheUnified) then
-                    begin
-                      inc(Count);
-                      Size := Cache.Size;
-                      LineSize := Cache.LineSize;
-                    end;
-          end;
-      for i := high(CpuCache) downto low(CpuCache) do
-      begin
-        CpuCacheSize := CpuCache[i].Size;
-        if CpuCacheSize <> 0 then // append the biggest level Cache size
-        begin
-          cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
-          break;
-        end;
+  siz := 0;
+  if Assigned(GetLogicalProcessorInformation) and
+     not GetLogicalProcessorInformation(nil, siz) and
+     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
+  repeat
+    n := siz div SizeOf(proc[0]);
+    if n > 2048 then
+      break;
+    SetLength(proc, n);
+    if not GetLogicalProcessorInformation(pointer(proc), siz) then
+      break;
+    pi := pointer(proc);
+    repeat
+      case pi^.Relationship of
+        RelationProcessorCore:
+          inc(CpuCores);
+        RelationProcessorPackage: // physical processor socket
+          AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), CpuSockets, pi^.ProcessorMask);
+        RelationCache:            // raw cache information
+          if pi^.Cache.CacheType in [CacheUnified, CacheData] then
+            if (pi^.Cache.Level >= low(CpuCache)) and
+               (pi^.Cache.Level <= high(CpuCache)) then
+              with CpuCache[pi^.Cache.Level] do
+                if (Count = 0) or
+                   (pi^.Cache.CacheType <> CacheUnified) then
+                begin
+                  inc(Count);
+                  Size := pi^.Cache.Size;
+                  LineSize := pi^.Cache.LineSize;
+                end;
       end;
-      for i := low(CpuCache) to high(CpuCache) do
-        with CpuCache[i] do
-          if Count <> 0 then
-            if Count = 1 then
-              CpuCacheText :=
-                _fmt('%s L%d=%s ', [CpuCacheText, i, KBNoSpace(Size)])
-            else
-              CpuCacheText :=
-                _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
-      TrimSelf(CpuCacheText);
+      inc(pi);
+      dec(n);
+    until n = 0;
+    for i := high(CpuCache) downto low(CpuCache) do
+    begin
+      CpuCacheSize := CpuCache[i].Size;
+      if CpuCacheSize <> 0 then // append the biggest level Cache size
+      begin
+        cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
+        break;
+      end;
     end;
-  end;
+    for i := low(CpuCache) to high(CpuCache) do
+      with CpuCache[i] do
+        if Count <> 0 then
+          if Count = 1 then
+            CpuCacheText :=
+              _fmt('%s L%d=%s ', [CpuCacheText, i, KBNoSpace(Size)])
+          else
+            CpuCacheText :=
+              _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
+    TrimSelf(CpuCacheText);
+  until true;
   if CpuSockets = 0 then
     CpuSockets := 1; // e.g. on XP prior to SP3
+  if CpuCores = 0 then
+    CpuCores := SystemInfo.dwNumberOfProcessors;
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info

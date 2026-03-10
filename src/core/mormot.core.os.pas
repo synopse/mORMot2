@@ -755,10 +755,14 @@ var
   // CpuCache[3/4].Size (from GetLogicalProcessorInformation) on Windows
   CpuCacheSize: cardinal;
   /// how many hardware CPU sockets are defined on this system
-  // - i.e. the number of physical CPU slots, not the number of logical CPU
-  // cores as returned by SystemInfo.dwNumberOfProcessors
+  // - i.e. the number of physical CPU slots
+  // - SystemInfo.dwNumberOfProcessors is the number of logical CPU threads
   // - as used e.g. by SetThreadAffinity()
   CpuSockets: integer;
+  /// how many hardware CPU cores are defined on this system
+  // - i.e. the number of physical CPU cores
+  // - SystemInfo.dwNumberOfProcessors is the number of logical CPU threads
+  CpuCores: integer;
 
   /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
   // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
