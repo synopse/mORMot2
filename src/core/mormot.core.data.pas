@@ -5278,9 +5278,7 @@ var
 function FillOsInfoDictionary: TBinDictionary;
 var
   i: PtrInt;
-  {$ifdef OSWINDOWS}
   u: RawUtf8;
-  {$endif OSWINDOWS}
 begin
    GlobalLock;
    try
@@ -5294,9 +5292,11 @@ begin
      result.UpdateText( 'os:arch',      CPU_ARCH_TEXT);
      result.UpdateText( 'os:hostname',  Executable.Host);
      result.UpdateText(['os:pid'],     [GetCurrentProcessId]);
+     result.UpdateText(['os:ppid'],    [GetParentProcess]);
      result.UpdateText(['os:temp'],    [GetSystemPath(spTemp)]);
      result.UpdateText(['os:cwd'],     [GetCurrentDir]);
      result.UpdateText( 'os:pathsep',   PathDelim);
+     result.UpdateText(['os:tzoff'],   [TimeZoneLocalBias * SecsPerMin]);
      result.UpdateText( 'exe:name',     Executable.ProgramName);
      result.UpdateText(['exe:cmd'],    [Executable.ProgramFileName]);
      result.UpdateText(['exe:path'],   [Executable.ProgramFilePath]);
@@ -5310,10 +5310,17 @@ begin
        result.UpdateText(['exe:version'], [Executable.Version.Detailed]);
      end;
      result.UpdateText( 'hw:cpu',       CpuInfoText);
-     result.UpdateText(['hw:threads'], [SystemInfo.dwNumberOfProcessors]);
+     result.UpdateText(['hw:threads'], [CpuCores]);
      result.UpdateText(['hw:cores'],   [SystemInfo.dwNumberOfProcessors]);
      result.UpdateText(['hw:sockets'], [CpuSockets]);
      result.UpdateText(['hw:ram'],     [SystemMemorySize]);
+     result.UpdateText(['hw:aes'],     [HasHWAes]);
+     {$ifdef CPUINTEL}
+     result.UpdateText( 'hw:cpuid',     IntelManufacturer);
+     u := IntelHypervisor;
+     if u <> '' then
+       result.UpdateText( 'hw:hyp',     u);
+     {$endif CPUINTEL}
      result.UpdateText( 'user:name',    Executable.User);
      result.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
      result.UpdateText(['user:data'],  [GetSystemPath(spUserData)]);
@@ -5323,7 +5330,11 @@ begin
      result.UpdateText( 'bios:version', _Smbios[sbiBiosVersion]);
      result.UpdateText( 'bios:serial',  _Smbios[sbiSerial]);
      result.UpdateText( 'bios:uuid',    _Smbios[sbiUuid]);
+     result.UpdateText( 'bios:sku',     _Smbios[sbiSku]);
+     result.UpdateText( 'bios:family',  _Smbios[sbiFamily]);
+     result.UpdateText( 'bios:manufacturer',  _Smbios[sbiManufacturer]);
      result.UpdateText( 'bios:board',   _Smbios[sbiBoardProductName]);
+     result.UpdateText( 'bios:cpu',     _Smbios[sbiCpuVersion]);
      {$ifdef OSPOSIX}
      result.UpdateText( 'os:product',   LowerCaseU(OS_NAME[OS_KIND]));
      if OS_DISTRI > ldUndefined then
