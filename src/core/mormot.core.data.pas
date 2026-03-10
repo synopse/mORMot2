@@ -3129,6 +3129,8 @@ var
     EndOfObject: PUtf8Char; Rtti: TRttiCustom;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
     Interning: TRawUtf8InterningAbstract);
+  /// delayed functions call when OsInfoDictionary creates its shared instance
+  OsInfoDictionaryAppend: array of procedure(Sender: TBinDictionary);
 
 /// return a global instance of os:* hw:* user:* bios:* constants
 // - populated from mormot.core.os.pas, and used e.g. by MorJSON pre-processor
@@ -5275,6 +5277,7 @@ var
 
 function FillOsInfoDictionary: TBinDictionary;
 var
+  i: PtrInt;
   {$ifdef OSWINDOWS}
   u: RawUtf8;
   {$endif OSWINDOWS}
@@ -5345,6 +5348,8 @@ begin
          u := 'c:\windows\system32\cmd.exe';
      result.UpdateText( 'user:shell', u);
      {$endif OSPOSIX}
+     for i := 0 to high(OsInfoDictionaryAppend) do
+       OsInfoDictionaryAppend[i](result); // on-deman retrieval of other info
      _OsInfoDictionary := RegisterGlobalShutdownRelease(result);
    finally
      GlobalLock;

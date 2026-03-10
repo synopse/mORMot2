@@ -7637,6 +7637,7 @@ initialization
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
   GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
+  PtrArrayAdd(OsInfoDictionaryAppend, @_OsInfoDictionaryAppend);
 
 finalization
 
