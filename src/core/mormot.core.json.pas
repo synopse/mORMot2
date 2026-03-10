@@ -3123,6 +3123,8 @@ type
     procedure AddIndentAndCommentToken(const args: array of const);
     function DslSection(P: PUtf8Char): PUtf8Char;
     procedure DslInclude(P: PUtf8Char);
+    function DslString(P: PUtf8Char): PUtf8Char;
+    function DslVar(P: PUtf8Char): PUtf8Char;
  end;
 
 function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
@@ -3644,12 +3646,102 @@ begin
   result := GotoNextLineSmall(result); // ignore trailing '''
 end;
 
+function TJsonParser.DslString(P: PUtf8Char): PUtf8Char;
+var
+  v: PUtf8Char;
+  l: PtrInt;
+  m: TJsonDslMarker;
+begin
+  result := P + 2;
+  ReformatBeginValue;
+  W.AddDirect('"');
+  repeat
+    case result^ of
+      #0:
+        exit;
+      '\':
+        begin
+          inc(result);
+          if result^ = #0 then
+            exit;
+          W.AddDirect('\'); // ignore \" within quotes
+        end;
+      '$':
+        begin
+          result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
+          if v <> nil then // { } [] template are not expanded in "string"
+          begin
+            m := TJsonDslMarker(v^);
+            if m = jdmTemplate then
+              continue // { } [] not expanded in "string"
+            else if m <= high(m) then // skip marker
+            begin
+              inc(v);
+              dec(l);
+            end;
+            W.AddNoJsonEscape(v, l);
+          end;
+          continue;
+        end;
+    end;
+    W.Add(result^); // fast enough
+    if result^ = '"' then
+      break;
+    inc(result);
+  until false;
+  inc(result);
+  ReformatEndValue;
+end;
+
+function TJsonParser.DslVar(P: PUtf8Char): PUtf8Char;
+var
+  v: PUtf8Char;
+  l: PtrInt;
+  m: TJsonDslMarker;
+begin
+  result := FmtVars.Expand(P, v, l, {KeepMarker=}true);
+  if v = nil then
+  begin
+    W.AddNull; // nothing found: append null value
+    exit;
+  end;
+  m := TJsonDslMarker(v^);
+  if m <= high(m) then
+  begin
+    inc(v); // ignore DslSection() marker
+    dec(l);
+    if m = jdmTemplate then
+    begin
+      Reformat(v); // template as recursive blocks (once)
+      exit;
+    end;
+  end
+  else if (v^ = '"') or  // $val|"12"$ to force default string
+          IsConstantOrNumberJson(v, l) then
+    m := jdmConstNum     // AddNoJsonEscape
+  else
+    m := jdmPlainString; // AddJsonEscape
+  ReformatBeginValue;
+  if m = jdmConstNum then
+    W.AddNoJsonEscape(v, l)
+  else
+  begin
+    W.AddDirect('"');
+    if l <> 0 then
+      if m = jdmPlainString then
+        W.AddJsonEscape(v, l)    // |default or enc:NAME
+      else
+        W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "already \r quoted"
+    W.AddDirect('"');
+  end;
+  ReformatEndValue;
+end;
+
 function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
 var
   key, value: PUtf8Char;
-  keylen, valuelen: PtrInt;
-  needexpand: boolean;
-  beforecount, level: integer;
+  keylen, beforecount, level: PtrInt;
+  marker: TJsonDslMarker;
 begin // handle P = '$$'
   beforecount := 0;
   if jppDebugComment in FmtDsl then
@@ -3686,13 +3778,13 @@ begin // handle P = '$$'
     keylen := result - key;
     while result^ in ['=', ':', ' '] do
       inc(result); // allow := or == syntax
-    needexpand := false;
+    marker := jdmEscapedString;
+    value := result + 1; // early to make Delphi happy - exclude starting { [ "
     case result^ of
       #0:
         exit;
       '{', '[':
         begin
-          value := result + 1;               // exclude starting { [
           level := 0;
           repeat                             // value = whole {..}/[..] inside
             result := GotoNextNotSpace(result);
@@ -3712,47 +3804,37 @@ begin // handle P = '$$'
             end;
             inc(result);
           until false;
-          valuelen := result - value - 1;    // exclude ending } ]
-          needexpand := true;   // always need a 2nd pass, at least for comments
+          FmtVars.Register(jdmTemplate, key, value, result - 1, keylen);
+          continue;
         end;
       '"', '''':
-        begin
-          value := result + 1;
-          while (result^ >= ' ') and
-                (result^ <> value^) do // quoted value, not supporting \" nor ''
-          begin
-            if result^ = '$' then
-              needexpand := true;
-            inc(result);
-          end;
-          valuelen := result - value;
-        end;
+        while (result^ >= ' ') and
+              (result^ <> value^) do // quoted value, not supporting \" nor ''
+          inc(result);
     else
       begin
         value := result;
         while not (result^ in [#0 .. #31, '#', '/']) do
-        begin // unquoted value = till end of line or comment
-          if result^ = '$' then
-            needexpand := true;
+        begin
+          // unquoted value in $$ DSL section = till end of line or comment
+          if result^ in ['\', '"'] then
+            marker := jdmPlainString; // would need W.AddJsonEscape()
           inc(result);
         end;
-        valuelen := result - value;
-        while (valuelen > 0) and
-              (value[valuelen] = ' ') do
-          dec(valuelen); // trim right
+        while result[-1] = ' ' do
+          dec(result); // trim right
+        if IsConstantOrNumberJson(value, result - value) then
+          marker := jdmConstNum;
       end;
     end;
-    if needexpand then
-      FmtVars.UpdateExpanded(key, value, result, keylen)
-    else
-      FmtVars.Update(key, value, keylen, valuelen);
+    FmtVars.Register(marker, key, value, result, keylen);
   until false;
   result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
   if jppDebugComment in FmtDsl then
     while beforecount < FmtVars.Count do
     begin
       AddIndentAndCommentToken([' defined $',
-        PShortString(FmtVars.Value[beforecount])^, '$=',
+        PShortString(FmtVars.Value[beforecount])^, '$ = ',
         PUtf8Char(FmtVars.Values(beforecount))]);
       inc(beforecount);
     end;
