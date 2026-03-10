@@ -5065,7 +5065,7 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 procedure InitializeSpecificUnit;
 var
   P: PAnsiChar;
-  modname, beg: PUtf8Char;
+  modname, modnum, beg: PUtf8Char;
   uts: UtsName;
   {$ifndef NODIRECTTHREADMANAGER}
   tm: TThreadManager;
@@ -5121,6 +5121,7 @@ begin
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
   modname := nil;
+  modnum := nil;
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -5221,7 +5222,7 @@ begin
   begin
     beg := cpuinfo;
     cpuinfo := GotoNextLine(cpuinfo);
-    case IdemPChars(beg, 'PROCESSOR'#0'MODEL'#0'FEATURES'#0'FLAGS'#0 +
+    case IdemPChars(beg, 'PROCESSOR'#0'MODEL NAME'#0'MODEL'#0'FEATURES'#0'FLAGS'#0 +
       'HARDWARE'#0'SERIAL'#0'CACHE SIZE'#0'CPU CORES'#0'PHYSICAL ID'#0) of
     0:
       if beg^ <> 'P' then
@@ -5237,26 +5238,29 @@ begin
     1:
       if modname = nil then
         modname := ParseLine(beg);
-    2, 3:
+    2:
+      if modnum = nil then
+        modnum := ParseLine(beg);
+    3, 4:
       if CpuInfoFeatures = '' then
         CpuInfoFeatures := ParseLine(beg);
-    4:
+    5:
       if __BiosInfoHardwareFromCpuInfo = '' then
         __BiosInfoHardwareFromCpuInfo := ParseLine(beg);
-    5:
+    6:
       if _Smbios[sbiSerial] = '' then
         _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)));
-    6:
+    7:
       if cache = nil then
         cache := ParseLine(beg);
-    7:
+    8:
       if CpuCores = 0 then
       begin
         threads := ParseInt(beg);
         if threads > 0 then
           CpuCores := threads;
       end;
-    8:
+    9:
       begin
         phyid := ParseInt(beg); // in practice, may be 0,3,... and not 0,1,...
         if phyid < 0 then
@@ -5357,6 +5361,8 @@ begin
     SystemInfo.dwNumberOfProcessors := 1;
   if CpuCores = 0 then
     CpuCores := SystemInfo.dwNumberOfProcessors;
+  if modname = nil then
+    modname := modnum;
   if modname = nil then
     CpuInfoText := _fmt('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
       [SystemInfo.dwNumberOfProcessors, CpuInfoText])
