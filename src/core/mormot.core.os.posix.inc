@@ -4703,7 +4703,7 @@ begin
   else
   begin
     // execute complex commands via the shell
-    a[0] := '/bin/sh';
+    a[0] := pointer(PosixShell);
     a[1] := '-c';
     a[2] := pointer(cmd);
     a[3] := nil;
