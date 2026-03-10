@@ -12,6 +12,7 @@ unit mormot.net.http;
    - THttpSocket Implementing HTTP over plain sockets
    - Abstract Server-Side Types used e.g. for Client-Server Protocol
    - HTTP Server Logging/Monitoring Processors
+   - Additional High-Level Socket Functions
 
   *****************************************************************************
 
@@ -2489,6 +2490,50 @@ function FromText(const Text: RawUtf8; out Period: THttpAnalyzerPeriod): boolean
 // - as called by THttpMetrics.GetAsText() overloaded methods
 procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
   NoPeriod, NoScope: boolean; out Result: RawUtf8);
+
+
+{ ******************** Additional High-Level Socket Functions }
+
+type
+  /// define how GetMacAddress() makes its sorting choices
+  // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
+  // - mafEthernetOnly will only select TMacAddress.Kind = makEthernet
+  // - mafLocalOnly will only select makEthernet or makWifi adapters
+  // - mafRequireBroadcast won't return any TMacAddress with Broadcast = ''
+  // - mafIgnoreGateway won't put the TMacAddress.Gateway <> '' first
+  // - mafIgnoreKind and mafIgnoreSpeed will ignore Kind or Speed properties
+  TMacAddressFilter = set of (
+    mafEthernetOnly,
+    mafLocalOnly,
+    mafRequireBroadcast,
+    mafIgnoreGateway,
+    mafIgnoreKind,
+    mafIgnoreSpeed);
+
+const
+  /// TMacAddress.Kind sort priority for GetMacAddress()
+  NETHW_ORDER: array[TMacAddressKind] of byte = (
+    2,  // makUndefined
+    0,  // makEthernet
+    1,  // makWifi
+    4,  // makTunnel
+    3,  // makPpp
+    5,  // makCellular
+    6); // makSoftware
+
+/// pickup the most suitable network according to some preferences
+// - will sort GetMacAddresses() results according to its Kind and Speed
+// to select the most suitable local interface e.g. for THttpPeerCache
+function GetMainMacAddress(out Mac: TMacAddress;
+  Filter: TMacAddressFilter = []): boolean; overload;
+
+/// get a network interface from its TMacAddress main fields
+// - search is case insensitive for TMacAddress.Name and Address fields or as
+// exact IP, and eventually as CIDR pattern (e.g. '192.168.1.0/24')
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceNameAddressOrIP: RawUtf8;
+  UpAndDown: boolean = false): boolean; overload;
+
 
 
 implementation
@@ -7407,6 +7452,180 @@ begin
   finally
     w.Free;
   end;
+end;
+
+
+{ ******************** Additional High-Level Socket Functions }
+
+type
+  TSortByMacAddress = class // a fake class to propagate TMacAddressFilter
+    function Compare(const A, B): integer;
+  end;
+
+function TSortByMacAddress.Compare(const A, B): integer;
+var
+  ma: TMacAddress absolute A;
+  mb: TMacAddress absolute B;
+  filter: TMacAddressFilter;
+begin
+  result := 0;
+  if @ma = @mb then
+    exit;
+  // was called as arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare)
+  byte(filter) := PtrInt(self);
+  // sort with gateway first
+  if not (mafIgnoreGateway in filter) then
+  begin
+    result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
+    if result <> 0 then
+      exit;
+  end;
+  // sort by kind
+  if not (mafIgnoreKind in filter) then
+  begin
+    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
+    if result <> 0 then
+      exit;
+  end;
+  // sort by speed within this kind and gateway
+  if not (mafIgnoreSpeed in filter) then
+  begin
+    result := CompareCardinal(mb.Speed, ma.Speed);
+    if result <> 0 then
+      exit;
+  end;
+  // fallback to sort by IfIndex or plain MAC address
+  result := CompareCardinal(ma.IfIndex, mb.IfIndex);
+  if result = 0 then
+    result := SortDynArrayAnsiStringI(ma.Address, mb.Address);
+  if result = 0 then
+    result := ComparePointer(@ma, @mb);
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+var
+  allowed, available: TMacAddressKinds;
+  all: TMacAddressDynArray;
+  arr: TDynArray;
+  i, bct: PtrInt;
+begin
+  result := false;
+  all := copy(GetMacAddresses({upanddown=}false)); // using a 65-seconds cache
+  if all = nil then
+    exit;
+  arr.Init(TypeInfo(TMacAddressDynArray), all);
+  bct := 0;
+  available := [];
+  for i := 0 to high(all) do
+    with all[i] do
+    begin
+      include(available, Kind);
+      if Broadcast <> '' then
+        inc(bct);
+      {writeln(Kind, ' ', Address,' name=',Name,' ifindex=',IfIndex,
+         ' ip=',ip,' netmask=',netmask,' broadcast=',broadcast);}
+    end;
+  allowed := [];
+  if mafLocalOnly in Filter then
+    allowed := [makEthernet, makWifi]
+  else if mafEthernetOnly in Filter then
+    include(allowed, makEthernet);
+  if (available * allowed) <> [] then // e.g. if all makUndefined
+    for i := high(all) downto 0 do
+      if not (all[i].Kind in allowed) then
+        arr.Delete(i);
+  if (mafRequireBroadcast in Filter) and
+     (bct <> 0) then
+    for i := high(all) downto 0 do
+      if all[i].Broadcast = '' then
+        arr.Delete(i);
+  if all = nil then
+    exit;
+  if length(all) > 1 then
+    arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare);
+  Mac := all[0];
+  result := true;
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceNameAddressOrIP: RawUtf8; UpAndDown: boolean): boolean;
+var
+  n: integer;
+  all: TMacAddressDynArray;
+  mask: TIp4SubNet;
+  m, fnd: ^TMacAddress;
+begin
+  // retrieve the current network interfaces
+  result := false;
+  if InterfaceNameAddressOrIP = '' then
+    exit;
+  all := GetMacAddresses(UpAndDown); // from cache
+  n := length(all);
+  if n = 0 then
+    exit;
+  m := pointer(all);
+  fnd := nil;
+  if mask.From(InterfaceNameAddressOrIP) then
+    // search as IP bitmask pattern e.g. '192.168.1.0/24' or '192.168.1.13'
+    repeat
+      if mask.Match(m^.IP) then // e.g. 192.168.1.2 against '192.168.1.0/24'
+        if (fnd = nil) or
+           (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind]) then
+          fnd := m; // pickup the interface with the best hardware (paranoid)
+      inc(m);
+      dec(n);
+    until n = 0
+  else
+    // search for interface Name or MAC Address
+    repeat
+      if IdemPropNameU(m^.Name,    InterfaceNameAddressOrIP) or
+         IdemPropNameU(m^.Address, InterfaceNameAddressOrIP) then
+      begin
+        fnd := m;
+        break;
+      end;
+      inc(m);
+      dec(n);
+    until n = 0;
+  if fnd = nil then
+    exit;
+  Mac := fnd^;
+  result := true;
+end;
+
+procedure _OsInfoDictionaryAppend(Sender: TBinDictionary);
+var
+  dns: RawUtf8;
+  u: TRawUtf8DynArray;
+  mac: TMacAddress;
+begin
+  if GetMainMacAddress(mac) then
+  begin
+    Sender.UpdateText( 'net:mac',       mac.Address);
+    Sender.UpdateText( 'net:if',        mac.Name);
+    Sender.UpdateText(['net:ifindex'], [mac.IfIndex]);
+    if mac.FriendlyName <> '' then
+      Sender.UpdateText( 'net:ifname',    mac.FriendlyName);
+    Sender.UpdateText( 'net:ip',        mac.IP);
+    Sender.UpdateText( 'net:mask',      mac.NetMask);
+    if mac.Gateway <> '' then
+      Sender.UpdateText('net:gateway',  mac.Gateway);
+    if mac.Broadcast <> '' then
+      Sender.UpdateText('net:broadcast', mac.Broadcast);
+    {$ifdef OSWINDOWS}
+    dns := mac.Dns;
+    {$endif OSWINDOWS}
+  end
+  else
+  begin
+    u := GetIPAddresses;
+    if u <> nil then
+      Sender.UpdateText('net:ip', u[0]);
+  end;
+  if dns = '' then
+    dns := RawUtf8ArrayToCsv(GetDomainNames);
+  if dns <> '' then
+    Sender.UpdateText('net:dns', dns);
 end;
 
 
