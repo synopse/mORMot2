@@ -34,6 +34,7 @@ HTTP/HTTPS Abstract Process Classes and Definitions
 - `THttpSocket` Implementing HTTP over plain sockets
 - Abstract Server-Side Types used e.g. for Client-Server Protocol
 - HTTP Server Logging/Monitoring Processors
+- Additional High-Level Socket Functions
 
 ### mormot.net.client
 

@@ -2949,7 +2949,7 @@ var
 {$endif USEWININET}
 begin
   if not IdemPChar(pointer(uri), 'HTTPS://') or
-     not GetSystemEnv('HTTPS_PROXY', result) then // from cache
+     not GetSystemEnv('HTTPS_PROXY', result{%H-}) then // from cache
     result := GetSystemEnv('HTTP_PROXY');
   {$ifdef USEWININET}
   if (result = '') and
