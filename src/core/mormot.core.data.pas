@@ -35,6 +35,7 @@ uses
   {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.rtti,
   mormot.core.datetime,
   mormot.core.unicode,
@@ -3129,6 +3130,10 @@ var
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
     Interning: TRawUtf8InterningAbstract);
 
+/// return a global instance of os:* hw:* user:* bios:* constants
+// - populated from mormot.core.os.pas, and used e.g. by MorJSON pre-processor
+function OsInfoDictionary: TBinDictionary;
+
 
 { ************ Abstract Radix Tree Classes }
 
@@ -5265,6 +5270,93 @@ begin
   PRawUtf8ToCsv(pointer(u), fCount, Feed, false, result);
 end;
 
+var
+  _OsInfoDictionary: TBinDictionary;
+
+function FillOsInfoDictionary: TBinDictionary;
+var
+  {$ifdef OSWINDOWS}
+  u: RawUtf8;
+  {$endif OSWINDOWS}
+begin
+   GlobalLock;
+   try
+     result := _OsInfoDictionary;
+     if result <> nil then
+       exit;
+     result := TBinDictionary.Create;
+     result.UpdateText( 'os:name',      OSVersionShort);
+     result.UpdateText( 'os:family',    LowerCaseU(OS_TEXT));
+     result.UpdateText( 'os:version',   OSVersionText);
+     result.UpdateText( 'os:arch',      CPU_ARCH_TEXT);
+     result.UpdateText( 'os:hostname',  Executable.Host);
+     result.UpdateText(['os:pid'],     [GetCurrentProcessId]);
+     result.UpdateText(['os:temp'],    [GetSystemPath(spTemp)]);
+     result.UpdateText(['os:cwd'],     [GetCurrentDir]);
+     result.UpdateText( 'os:pathsep',   PathDelim);
+     result.UpdateText( 'exe:name',     Executable.ProgramName);
+     result.UpdateText(['exe:cmd'],    [Executable.ProgramFileName]);
+     result.UpdateText(['exe:path'],   [Executable.ProgramFilePath]);
+     result.UpdateText( 'exe:agent',    Executable.Version.UserAgent);
+     result.UpdateText(['exe:log'],    [GetSystemPath(spLog)]);
+     if Assigned(Executable.Version) and
+        (Executable.Version.Major <> 0) then
+     begin
+       result.UpdateText(['exe:major'],   [Executable.Version.Major]);
+       result.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
+       result.UpdateText(['exe:version'], [Executable.Version.Detailed]);
+     end;
+     result.UpdateText( 'hw:cpu',       CpuInfoText);
+     result.UpdateText(['hw:threads'], [SystemInfo.dwNumberOfProcessors]);
+     result.UpdateText(['hw:cores'],   [SystemInfo.dwNumberOfProcessors]);
+     result.UpdateText(['hw:sockets'], [CpuSockets]);
+     result.UpdateText(['hw:ram'],     [SystemMemorySize]);
+     result.UpdateText( 'user:name',    Executable.User);
+     result.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
+     result.UpdateText(['user:data'],  [GetSystemPath(spUserData)]);
+     result.UpdateText( 'bios:info',    BiosInfoText);
+     result.UpdateText( 'bios:vendor',  GetSmbios(sbiBiosVendor)); // set _Smbios
+     result.UpdateText( 'bios:product', _Smbios[sbiBiosVendor]);
+     result.UpdateText( 'bios:version', _Smbios[sbiBiosVersion]);
+     result.UpdateText( 'bios:serial',  _Smbios[sbiSerial]);
+     result.UpdateText( 'bios:uuid',    _Smbios[sbiUuid]);
+     result.UpdateText( 'bios:board',   _Smbios[sbiBoardProductName]);
+     {$ifdef OSPOSIX}
+     result.UpdateText( 'os:product',   LowerCaseU(OS_NAME[OS_KIND]));
+     if OS_DISTRI > ldUndefined then
+       result.UpdateText(['os:dist'],  [DISTRI_NAME[OS_DISTRI]]);
+     result.UpdateText( 'os:build',     SystemInfo.uts.release);
+     result.UpdateText( 'os:release',   SystemInfo.release);
+     result.UpdateText(['user:uid'],   [PosixUid]);
+     result.UpdateText(['user:gid'],   [PosixGid]);
+     result.UpdateText( 'user:shell',   PosixShell);
+     {$else}
+     result.UpdateText( 'os:product',   WindowsProductName);
+     if WindowsUbr <> 0 then
+       result.UpdateText(['os:build'], [WindowsUbr]);
+     if WindowsDisplayVersion <> '' then
+       result.UpdateText( 'os:winver',  WindowsDisplayVersion);
+     result.UpdateText( 'user:uid',     CurrentSid(wttProcess, nil, @u));
+     result.UpdateText( 'user:domain',  u);
+     if not GetSystemEnv('COMSPEC', u) then
+       if GetSystemEnv('WINDIR', u) then
+         Append(u, '\system32\cmd.exe')
+       else
+         u := 'c:\windows\system32\cmd.exe';
+     result.UpdateText( 'user:shell', u);
+     {$endif OSPOSIX}
+     _OsInfoDictionary := RegisterGlobalShutdownRelease(result);
+   finally
+     GlobalLock;
+   end;
+end;
+
+function OsInfoDictionary: TBinDictionary;
+begin
+  result := _OsInfoDictionary;
+  if result = nil then
+    result := FillOsInfoDictionary; // initialize once
+end;
 
 { TRawUtf8List }
 
