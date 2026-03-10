@@ -3056,7 +3056,7 @@ type
     fDefaultTemp: TBuffer1K;
   public
     function Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
-    procedure AddExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
+    procedure UpdateExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
   end;
 
   // the different states of the TJsonParser logic
@@ -3167,7 +3167,7 @@ begin
   inc(result); // skip trailing $ or }
 end;
 
-procedure TJsonDsl.AddExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
+procedure TJsonDsl.UpdateExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
 var
   tmp: TSynTempAdder;
   beg, v: PUtf8Char;
@@ -3184,7 +3184,7 @@ begin
     tmp.Add(beg, Value - beg);
     if Value >= ValueEnd then
       break;
-    if Value^ = '$' then // $ident$ or ${ident}
+    if Value^ = '$' then // $ident$ ${ident} $env:NAME$ ${env:NAME}
     begin
       Value := Expand(Value, v, @vlen);
       if v <> nil then
@@ -3203,8 +3203,8 @@ begin
       end;
       Value := GotoNextLineSmall(Value);
     end;
-  until false;
-  Add(Key, tmp.Buffer, KeyLen, tmp.Size);
+  until Value >= ValueEnd;
+  Update(Key, tmp.Buffer, KeyLen, tmp.Size);
   tmp.Store.Done; // free memory - unlikely from heap
 end;
 
@@ -3734,9 +3734,9 @@ begin // handle P = '$$'
       end;
     end;
     if needexpand then
-      FmtVars.AddExpanded(key, value, result, keylen)
+      FmtVars.UpdateExpanded(key, value, result, keylen)
     else
-      FmtVars.Add(key, value, keylen, valuelen);
+      FmtVars.Update(key, value, keylen, valuelen);
   until false;
   result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
   if FmtVars <> nil then
