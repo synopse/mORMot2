@@ -3885,6 +3885,8 @@ function PosixUid: cardinal;
 /// return the GID of the current POSIX User
 function PosixGid: cardinal;
 
+/// return the system shell of the current POSIX User from getpwuid() pw_shell
+function PosixShell: RawUtf8;
 
 {$ifdef OSLINUXANDROID}
 /// read a File content into a string, without using FileSize()

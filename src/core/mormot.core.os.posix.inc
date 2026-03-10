@@ -18,6 +18,9 @@ uses
   {$else}
   linux,
   syscall,
+  {$ifdef OSLINUX}
+  pwd,   // seems not available on Android
+  {$endif OSLINUX}
   {$endif OSBSDDARWIN}
   {$ifdef FPCUSEVERSIONINFO} // to be enabled in mormot.defines.inc
     fileinfo,        // FPC 3.0 and up
@@ -1646,6 +1649,34 @@ end;
 function PosixGid: cardinal;
 begin
   result := FpGetgid;
+end;
+
+{$ifdef OSLINUX}
+function GetLinuxShell(var shell: RawUtf8): boolean;
+var
+  pw: PPasswd; // from the pwd.pp unit
+begin
+  pw := fpgetpwuid(FpGetuid);
+  result := pw <> nil;
+  if result then
+    shell := pw^.pw_shell;
+end;
+{$endif OSLINUX}
+
+var
+  _PosixShell: RawUtf8;
+
+function PosixShell: RawUtf8;
+begin
+  result := _PosixShell;
+  if result <> '' then
+    exit;
+  {$ifdef OSLINUX}
+  if not GetLinuxShell(result) then
+  {$endif OSLINUX}
+    if not GetSystemEnv('SHELL', result) then
+      result := '/bin/sh'; // fallback
+  _PosixShell := result;
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
