@@ -15,7 +15,7 @@ unit mormot.core.data;
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray and TDynArrayHashed Wrappers
     - Integer Arrays Extended Process
-    - RawUtf8 String Values Interning and TRawUtf8List
+    - RawUtf8 String Values Interning and TRawUtf8List/TBinDictionary
     - Abstract Radix Tree Classes
 
   *****************************************************************************
@@ -2585,7 +2585,7 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main
       [ifClassSection, ifMultiLineSections, ifArraySection]): RawUtf8;
 
 
-{ ************ RawUtf8 String Values Interning and TRawUtf8List }
+{ ************ RawUtf8 String Values Interning and TRawUtf8List/TBinDictionary }
 
 type
   /// store a TRawUtf8DynArray with its efficient hash table
@@ -2735,49 +2735,6 @@ type
     function Clean(aMaxRefCount: TStrCnt = 1): integer;
     /// how many items are currently stored in this instance
     function Count: integer;
-  end;
-
-  /// store binary key/value pairs with an efficient O(1) hash table
-  // - works with pointers on text or binary, when TSynDictionary is overkill
-  TBinDictionary = class(TSynPersistent)
-  protected
-    fValue: TRawByteStringDynArray;
-    fCount: integer;
-    fHash: TDynArrayHashed;
-  public
-    /// initialize the data structure
-    constructor Create; override;
-    /// add a key/value pair in the storage directly from memory buffers
-    // - returns -1 if the key was already existing, or if KeyLen > 255
-    function Add(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
-    /// add or replace a key/value pair in the storage
-    function Update(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
-    /// case-sensitive search for a key index in Value[], using the internal hash
-    // - can optionally delete any matching item
-    function IndexOf(Key: pointer; KeyLen: PtrInt;
-      AndDelete: boolean = false): PtrInt; overload;
-    /// case-sensitive search and return a value, using the internal hash
-    // - returns nil or the found Value (#0 terminated) - with optional ValueLen
-    // - warning: @ValueLen should be a 32-bit integer, not a PtrInt
-    function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PInteger = nil): pointer; overload;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// raw access to each key buffer as encoded in Value[] - not #0 terminated
-    // - warning: @Len should be a 32-bit integer, not a PtrInt
-    function Keys(Index: PtrInt; Len: PInteger = nil): pointer;
-    /// raw access to each value buffer as encoded in Value[] - #0 terminated
-    // - warning: @Len should be a 32-bit integer, not a PtrInt
-    function Values(Index: PtrInt; Len: PInteger = nil): pointer;
-    /// erase the whole storage
-    procedure Clear;
-    /// raw storage, encoded as B[keysize]+key+value so value is #0 terminated
-    property Value: TRawByteStringDynArray
-      read fValue;
-    /// maintain the efficient hash table of the raw storage Value[]/Count
-    property Hash: TDynArrayHashed
-      read fHash;
-    /// number of key/value pairs in Value[]
-    property Count: integer
-      read fCount;
   end;
 
   /// possible values used by TRawUtf8List.Flags
@@ -3106,6 +3063,59 @@ procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
 // - you can use FastFindIndexedPUtf8Char() for fast O(log(n)) binary search
 procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
+
+type
+  /// store binary key/value pairs with an efficient O(1) hash table
+  // - works with pointers on text or binary, when TSynDictionary is overkill
+  TBinDictionary = class(TSynPersistent)
+  protected
+    fValue: TRawByteStringDynArray;
+    fCount: integer;
+    fHash: TDynArrayHashed;
+  public
+    /// initialize the data structure
+    constructor Create; override;
+    /// add a key/value pair in the storage directly from memory buffers
+    // - returns -1 if the key was already existing, or if KeyLen > 255
+    function Add(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+    /// add or replace a binary key/value pair in the storage
+    function Update(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+    /// add or replace a text key/value pair in the storage
+    function UpdateText(const Key, Value: RawUtf8): PtrInt; overload;
+    /// add or replace a text key/value pair in the storage
+    function UpdateText(const Key, Value: array of const): TBinDictionary; overload;
+    /// case-sensitive search for a key index in Value[], using the internal hash
+    // - can optionally delete any matching item
+    function IndexOf(Key: pointer; KeyLen: PtrInt;
+      AndDelete: boolean = false): PtrInt; overload;
+    /// case-sensitive search and return a value, using the internal hash
+    // - returns nil or the found Value (#0 terminated) - with optional ValueLen
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt = nil): pointer; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// case-sensitive search and return a value, using the internal hash
+    // - overload to Find() using a ShortString as Key
+    function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
+    /// raw access to each key buffer as encoded in Value[] - not #0 terminated
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Keys(Index: PtrInt; Len: PPtrInt = nil): pointer;
+    /// raw access to each value buffer as encoded in Value[] - #0 terminated
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Values(Index: PtrInt; Len: PPtrInt = nil): pointer;
+    /// erase the whole storage
+    procedure Clear;
+    /// write all key = value pairs as human-readable text
+    function AsText(const Sep: RawUtf8 = ' = '; const Feed: RawUtf8 = #10): RawUtf8;
+    /// raw storage, encoded as B[keysize]+key+value so value is #0 terminated
+    property Value: TRawByteStringDynArray
+      read fValue;
+    /// maintain the efficient hash table of the raw storage Value[]/Count
+    property Hash: TDynArrayHashed
+      read fHash;
+    /// number of key/value pairs in Value[]
+    property Count: integer
+      read fCount;
+  end;
 
 var
   /// low-level JSON unserialization function
@@ -4717,7 +4727,7 @@ begin
 end;
 
 
-{ ************ RawUtf8 String Values Interning and TRawUtf8List }
+{ ************ RawUtf8 String Values Interning and TRawUtf8List/TBinDictionary }
 
 var // filled at startup with a 32-bit random value to avoid hash flooding
   HashSeed: cardinal; // defined locally in this unit to avoid symbol export
@@ -5125,7 +5135,7 @@ begin
   fHash.Init(TypeInfo(TRawByteStringDynArray), fValue, @Hash255, @Sort255, nil, @fCount);
 end;
 
-function TBinDictionary.Keys(Index: PtrInt; Len: PInteger): pointer;
+function TBinDictionary.Keys(Index: PtrInt; Len: PPtrInt): pointer;
 begin
   result := nil;
   if PtrUInt(Index) >= PtrUInt(fCount) then
@@ -5136,7 +5146,7 @@ begin
   inc(PByte(result));
 end;
 
-function TBinDictionary.Values(Index: PtrInt; Len: PInteger): pointer;
+function TBinDictionary.Values(Index: PtrInt; Len: PPtrInt): pointer;
 var
   keylen: PtrInt;
 begin
@@ -5195,6 +5205,17 @@ begin
     result := -1;
 end;
 
+function TBinDictionary.UpdateText(const Key, Value: RawUtf8): PtrInt;
+begin
+  result := Update(pointer(Key), pointer(Value), length(Key), length(Value));
+end;
+
+function TBinDictionary.UpdateText(const Key, Value: array of const): TBinDictionary;
+begin
+  UpdateText(Make(Key), Make(Value));
+  result := self; // for a fluent interface call
+end;
+
 function TBinDictionary.IndexOf(Key: pointer; KeyLen: PtrInt; AndDelete: boolean): PtrInt;
 var
   tmp: TByteToByte; // local copy in B[keysize]+key layout for hashing
@@ -5213,9 +5234,17 @@ begin
     result := fHash.FindHashed(pk);
 end;
 
-function TBinDictionary.Find(Key: pointer; KeyLen: PtrInt; ValueLen: PInteger): pointer;
+function TBinDictionary.Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt): pointer;
 begin
   result := Values(IndexOf(Key, KeyLen), ValueLen);
+end;
+
+function TBinDictionary.Find(const Key: ShortString; ValueLen: PPtrInt): pointer;
+var
+  pk: pointer; // fake RawByteString for Hash255/Sort255
+begin
+  pk := @Key;
+  result := Values(fHash.FindHashed(pk));
 end;
 
 procedure TBinDictionary.Clear;
@@ -5223,6 +5252,19 @@ begin
   fHash.Clear;
   fHash.ForceReHash;
 end;
+
+function TBinDictionary.AsText(const Sep, Feed: RawUtf8): RawUtf8;
+var
+  u: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  SetLength(u, fCount);
+  for i := 0 to fCount - 1 do
+    Make([PShortString(fValue[i])^, Sep, PUtf8Char(Values(i))], u[i]);
+  QuickSortRawUtf8(u, fCount);
+  PRawUtf8ToCsv(pointer(u), fCount, Feed, false, result);
+end;
+
 
 { TRawUtf8List }
 
