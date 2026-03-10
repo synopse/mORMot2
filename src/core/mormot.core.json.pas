@@ -3052,6 +3052,8 @@ end;
 type
   // implement $ident$ variables for TJsonParser.Reformat pre-processing
   TJsonDsl = class(TBinDictionary)
+  protected
+    fDefaultTemp: TBuffer1K;
   public
     function Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
     procedure AddExpanded(Key, Value, ValueEnd: PUtf8Char; KeyLen: PtrInt);
@@ -3125,6 +3127,7 @@ type
 function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; Len: PInteger): PUtf8Char;
 var
   key: PUtf8Char;
+  l: PtrUInt;
 begin
   result := P;
   inc(result); // called with result^ = '$'
@@ -3138,12 +3141,12 @@ begin
     exit;
   if PCardinal(key)^ = ord('e') + ord('n') shl 8 + ord('v') shl 16 + ord(':') shl 24 then
   begin
-    inc(key, 4); // retrieve ${env:HOSTNAME}
+    inc(key, 4);        // retrieve $env:NAME$ or ${env:NAME}
     Value := GetSystemEnv(key, result - key); // cached in mormot.core.os.pas
   end
   else
     Value := Find(key, result - key, Len);    // from known variables/templates
-  if result^ = '|' then // or $ident|default} or ${ident|default}
+  if result^ = '|' then // $ident|default$ or ${ident|default}
   begin
     inc(result);
     key := result;
@@ -3151,11 +3154,14 @@ begin
       inc(result);
     if result^ < ' ' then
       exit;
-    if Value = nil then
+    if Value = nil then // fallback to this specific value
     begin
-      Value := key; // return default
+      l := MinPtrUInt(SizeOf(fDefaultTemp) - 1, result - key);
+      MoveFast(key^, fDefaultTemp, l);
+      fDefaultTemp[l] := #0; // need an ending #0 for Reformat()
+      Value := @fDefaultTemp;
       if Len <> nil then
-        Len^ := result - key;
+        Len^ := l;
     end;
   end;
   inc(result); // skip trailing $ or }
