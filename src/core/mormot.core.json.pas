@@ -115,6 +115,7 @@ const
   _ROW24  = ord('R') + ord('O') shl 8 + ord('W') shl 16;
   _ROWI32 = _ROW24 + ord('I') shl 24;
   SQUOT_16 = ord('''') + ord('''') shl 8;
+  DOLLAR_16 = ord('$') + ord('$') shl 8;
 
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
@@ -3653,18 +3654,23 @@ begin // handle P = '$$'
   result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
   repeat
     result := GotoNextNotSpace(GotoNextLineSmall(result));
-    if result^ = #0 then
-      exit;
-    if result^ = '$' then
-      if result[1] = '$' then
-        break // end of DSL section
-      else
-        continue; // $ is not allowed in identifiers
-    if IdemPChar(result, 'INCLUDE ') then
-    begin
-      if jppInclude in FmtDsl then
-        DslInclude(GotoNextNotSpace(result + 8));
-      continue; // this is a reserved keyword, never an identifier
+    case result^ of
+      #0:
+        exit;
+      '$':
+        if result[1] = '$' then
+          break     // end of DSL section
+        else
+          continue; // $ is not allowed in identifiers
+      '#', '/':
+        continue;   // comment line
+      'i', 'I':
+        if IdemPChar(result + 1, 'NCLUDE ') then
+        begin
+          if jppInclude in FmtDsl then
+            DslInclude(GotoNextNotSpace(result + 8));
+          continue; // this is a reserved keyword, never an identifier
+        end;
     end;
     if FmtVars = nil then
       continue; // only include is enabled
@@ -3721,8 +3727,8 @@ begin // handle P = '$$'
     else
       begin
         value := result;
-        while result^ >= ' ' do // unquoted value = till end of line
-        begin
+        while not (result^ in [#0 .. #31, '#', '/']) do
+        begin // unquoted value = till end of line or comment
           if result^ = '$' then
             needexpand := true;
           inc(result);
@@ -3739,7 +3745,7 @@ begin // handle P = '$$'
       FmtVars.Update(key, value, keylen, valuelen);
   until false;
   result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
-  if FmtVars <> nil then
+  if jppDebugComment in FmtDsl then
     while beforecount < FmtVars.Count do
     begin
       AddIndentAndCommentToken([' defined $',
@@ -7701,6 +7707,15 @@ begin
     else if (result^ = '/') and
             (result[1] in ['/', '*']) then
       result := TryGotoEndOfSlashComment(result)
+    else if PWord(result)^ = DOLLAR_16 then
+    begin
+      repeat
+        inc(result);
+        if result^ = #0 then
+          exit;
+      until PWord(result)^ = DOLLAR_16; // goto end of $$ DSL section $$
+      result := GotoNextLineSmall(result + 2)
+    end
     else
       break;
   until result^ = #0;
