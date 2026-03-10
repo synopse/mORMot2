@@ -3706,7 +3706,9 @@ begin
   result := FmtVars.Expand(P, v, l, {KeepMarker=}true);
   if v = nil then
   begin
+    ReformatBeginValue;
     W.AddNull; // nothing found: append null value
+    ReformatEndValue;
     exit;
   end;
   m := TJsonDslMarker(v^);
