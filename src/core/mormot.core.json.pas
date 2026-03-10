@@ -3773,8 +3773,8 @@ var
   v: PUtf8Char;
   vlen: integer; // not PtrInt
   c: AnsiChar;
-  txt: RawUtf8;
-  fn: TFileName;
+  txt: RawUtf8;  // UTF-8 file name
+  fn: TFileName; // RTL file name
 begin
   tmp[0] := #0;
   if P^ = '"' then
@@ -4059,7 +4059,10 @@ comment:    AddIndentAndCommentToken([]);
                 end;
             end;
             W.Add(P^); // fast enough
-          until P^ = '"';
+            if P^ = '"' then
+              break;
+            inc(P);
+          until false;
           inc(P);
         end
         else
