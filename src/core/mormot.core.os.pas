@@ -631,12 +631,16 @@ const
   LINUX_DIST: array[TLinuxDistribution] of TOperatingSystems = (
     [osUnknown, osWindows, osOSX, osBSD, osPOSIX, osSolaris, osSynology],  // ldNotLinux
     [osLinux, osSlackware, osClear, osLFS, osXen, osAlpine],               // ldUndefined
-    [osDebian, osKnoppix, osMint, osUbuntu, osApt],                          // ldApt
+    [osDebian, osKnoppix, osMint, osUbuntu, osApt],                        // ldApt
     [osAurox, osFedora, osMandrake, osMandriva, osNovell, osSuse, osTrustix, // ldRpm
      osUnited, osRedHat, osOracle, osMageia, osCentOS, osCloud, osAmazon, osRpm],
     [osArch],                                                              // ldPacman
     [osGentoo, osCoreOs],                                                  // ldPortage
     [osAndroid]);                                                          // ldAndroid
+
+  /// the recobnized Linux package management systems, as plain text
+  DISTRI_NAME: array[TLinuxDistribution] of TShort7 = (
+    '', '', 'apt', 'rpm', 'pacman', 'portage', 'android');
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
@@ -3874,6 +3878,13 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 // directly in the process memory - which is somehow supported by some tools
 // - Windows does not allow to change the process name at all
 function PosixSetProcessName(const Name: RawUtf8): boolean;
+
+/// return the UID of the current POSIX User
+function PosixUid: cardinal;
+
+/// return the GID of the current POSIX User
+function PosixGid: cardinal;
+
 
 {$ifdef OSLINUXANDROID}
 /// read a File content into a string, without using FileSize()

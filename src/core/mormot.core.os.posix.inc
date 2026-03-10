@@ -1638,6 +1638,16 @@ begin
   result := FpPoll(@p, 1, timeout) > 0;
 end;
 
+function PosixUid: cardinal;
+begin
+  result := FpGetuid;
+end;
+
+function PosixGid: cardinal;
+begin
+  result := FpGetgid;
+end;
+
 procedure ConsoleErrorWrite(const text: RawUtf8);
 begin
   FileWriteAll(StdErrorHandle, pointer(Text), length(Text)); // assume UTF-8
