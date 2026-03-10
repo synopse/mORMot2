@@ -1067,10 +1067,9 @@ end;
 procedure TTestCoreBase.TRawUtf8ListSlow(Context: TObject);
 const
   MAX = 20000;
-  ONLYLOG = true;
+  ONLYLOG = false;
 var
-  i, n: PtrInt;
-  l32: integer;
+  i, n, len: PtrInt; // @len = PPtrInt
   L: TRawUtf8List;
   B: TBinDictionary;
   O: TSynMonitorTime;
@@ -1079,16 +1078,15 @@ var
 
   procedure TestBinDictionary;
   var
-    i: PtrInt;
-    l32: integer;
+    i, len: PtrInt; // @len = PPtrInt
   begin
     CheckEqual(B.Count, MAX + 1);
     Check(B.IndexOf(nil, 0) < 0);
     for i := MAX downto 0 do
     begin
-      l32 := 0;
-      Check(PInteger(B.Find(pointer(v[i]), length(v[i]), @l32))^ = i);
-      Check(l32 = SizeOf(l32));
+      len := 0;
+      Check(PInteger(B.Find(pointer(v[i]), length(v[i]), @len))^ = i);
+      Check(len = 4);
     end;
   end;
 
@@ -1215,12 +1213,12 @@ begin
         Check(B.Add(pointer(v[i]), @i, length(v[i]), 4) < 0);
     for i := 0 to MAX do
     begin
-      l32 := 0;
-      Check(MemCmp(B.Keys(i, @l32), pointer(v[i]), length(v[i])) = 0);
-      Check(l32 = length(v[i]));
-      l32 := 0;
-      Check(PInteger(B.Values(i, @l32))^ = i);
-      Check(l32 = 4);
+      len := 0;
+      Check(MemCmp(B.Keys(i, @len), pointer(v[i]), length(v[i])) = 0);
+      Check(len = length(v[i]));
+      len := 0;
+      Check(PInteger(B.Values(i, @len))^ = i);
+      Check(len = 4);
     end;
     TestBinDictionary;
     B.Clear;
@@ -1229,9 +1227,9 @@ begin
     Check(B.Add(nil, nil, 0, 0) = 0);
     Check(B.Count = 1);
     Check(B.IndexOf(nil, 0) = 0);
-    l32 := 1;
-    Check(PInteger(B.Find(nil, 0, @l32))^ = 0);
-    Check(l32 = 0);
+    len := 1;
+    Check(PInteger(B.Find(nil, 0, @len))^ = 0);
+    Check(len = 0);
 finally
     B.Free;
   end;
