@@ -2688,6 +2688,27 @@ var
     end;
   end;
 
+  procedure TestMorJson(const src, exp: RawUtf8;
+    PreProcessor: TTextWriterJsonPreProcessor = [jppTemplate]);
+  var
+    j, k: RawUtf8;
+    s: TTextWriterJsonFormat;
+  begin
+    j := JsonReformat(src, jsonUnquotedPropNameCompact, PreProcessor);
+    Check(j <> '');
+    CheckEqual(j, exp);
+    for s := low(s) to high(s) do
+    begin
+      k := JsonReformat(src, s, PreProcessor);
+      if s = jsonCompact then
+        Check(IsValidJson(k, {strict=}true), 'valid');
+      if s = jsonUnquotedPropNameCompact then
+        CheckEqual(k, j)
+      else
+        CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
+    end;
+  end;
+
 begin
   TestSimpleEnum;
   TestJsonArrayAsCsv('', '');
@@ -3175,6 +3196,26 @@ begin
   CheckEqual(JsonReformat(
     #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
     '{"one":1,"two":2}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
+    '{a:1,b:2}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$a}}}',
+    '{a:1,b:"$a$",c:{d:1}}');
+  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
+  TestMorJson(
+    J + '{a:$a$,b:$"$a$",c:$var$,d:$"$var$",e:"$var$",f:$"5432$var$0"}',
+    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
+  TestMorJson(
+    J + '{a:$a$,b:$os:arch$,c:$"http://toto/$os:arch$",d:$os:none$,e:$"a$os:no$s"}',
+    '{a:"number 1",b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
+     '",d:null,e:"as"}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
