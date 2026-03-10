@@ -3150,7 +3150,11 @@ begin
       Len := PStrLen(Value - _STRLEN)^; // GetSystemEnv() returns a RawUtf8
   end
   else
+  begin
     Value := Find(key, result - key, @Len);    // from known variables/templates
+    if Value = nil then
+      Value := OsInfoDictionary.Find(key, result - key, @Len);  // $os:arch$
+  end;
   if result^ = '|' then // $ident|default$ or ${ident|default}
   begin
     inc(result);
