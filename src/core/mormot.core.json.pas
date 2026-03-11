@@ -3132,6 +3132,7 @@ function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
   KeepMarker: boolean): PUtf8Char;
 var
   key: PUtf8Char;
+  keylen: PtrInt;
 begin
   result := P;
   inc(result); // called with result^ = '$'
@@ -3143,22 +3144,35 @@ begin
   Value := nil;
   if result^ <= ' ' then
     exit;
+  keylen := result - key;
   if PCardinal(key)^ = ord('e') + ord('n') shl 8 + ord('v') shl 16 + ord(':') shl 24 then
-  begin
-    inc(key, 4);        // retrieve $env:NAME$ or ${env:NAME}
-    Value := GetSystemEnv(key, result - key); // cached in mormot.core.os.pas
+  begin // retrieve $env:NAME$ or ${env:NAME}
+    Value := GetSystemEnv(key + 4, keylen - 4); // cached in mormot.core.os.pas
     if Value <> nil then
       Len := PStrLen(Value - _STRLEN)^; // GetSystemEnv() returns a RawUtf8
   end
   else
   begin
-    Value := Find(key, result - key, @Len);    // from known variables/templates
+    Value := Find(key, keylen, @Len);    // from known variables/templates
     if Value = nil then
-      Value := OsInfoDictionary.Find(key, result - key, @Len);  // $os:arch$
+      Value := OsInfoDictionary.Find(key, keylen, @Len);  // $os:arch$
   end;
   if result^ = '|' then // $ident|default$ or ${ident|default}
   begin
     inc(result);
+    if result^ = '$' then // $ident|$default$$ or ${ident|$default1|$default2$$}
+    begin
+      result := Expand(result, key, keylen, KeepMarker); // cascaded defaults
+      if Value = nil then // fallback to the nested $default$
+      begin
+        Value := key;
+        Len := keylen;
+      end;
+      while not (result^ in [#0 .. #31, '$', '}']) do
+        inc(result);
+      inc(result); // skip trailing $ or }
+      exit;
+    end;
     key := result;
     while not (result^ in [#0 .. #31, '$', '}', '|']) do
       inc(result);
