@@ -3202,9 +3202,14 @@ begin
   TestMorJson(
     '$$'#10'a=1'#10'$$'#10'{a:$os:name$}',
     Join(['{a:"', OSVersionShort,'"}']));
+  J := GlobalInfoFind('net:mac');
+  if J <> '' then
+    TestMorJson(
+      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
+      Join(['{a:"', J,'"}']));
   TestMorJson(
-    '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
-    Join(['{a:"', GlobalInfoFind('net:mac'),'"}']));
+    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
+    '{a:"b",b:null,c:"b b+"}');
   TestMorJson(
     '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
     '{a:1,b:2}');

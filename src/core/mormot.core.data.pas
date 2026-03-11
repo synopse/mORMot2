@@ -3145,7 +3145,7 @@ function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): poi
 /// search for an entry in GlobalInfoRegister() resolvers e.g. 'os:arch'
 function GlobalInfoFind(const Key: RawUtf8): RawUtf8; overload;
 
-/// can be used for delayed resolution of e.g. 'net:' or 'ldap:' prefixes
+/// can be used for delayed resolution of e.g. 'net:' or 'ldap:' namespaces
 procedure GlobalInfoRegister(Prefix: PUtf8Char; OnAdd: TOnBinDictionaryExecute);
 
 /// trigger all pending GlobalInfoRegister() delayed resolution
@@ -5256,8 +5256,8 @@ end;
 
 function TBinDictionary.IndexOf(Key: pointer; KeyLen: PtrInt; AndDelete: boolean): PtrInt;
 var
-  tmp: TByteToByte; // local copy in B[keysize]+key layout for hashing
   pk: pointer;      // fake RawByteString for Hash255/Sort255
+  tmp: TByteToByte; // local copy in B[keysize]+key layout for hashing
 begin
   result := -1;
   if (self = nil) or
@@ -5330,7 +5330,7 @@ begin
     repeat
       i := StrStartArray(Key, pointer(_GlobalInfoPre));
       if i < 0 then
-        break; // allow several GlobalInfoRegister() on the same prefix
+        break; // allow several GlobalInfoRegister() on the same namespace
       _GlobalInfoAdd[i](_GlobalInfo); // may take some time
       PtrArrayDelete(_GlobalInfoPre, i);
       PtrArrayDelete(_GlobalInfoAdd, i);
@@ -5356,7 +5356,7 @@ var
 begin
   _GlobalInfoSafe.Lock;
   if _GlobalInfo = nil then
-    _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create, true);
+    _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
   result := _GlobalInfo;
   for i := 0 to length(_GlobalInfoAdd) - 1 do
     _GlobalInfoAdd[i](result); // may take some time
@@ -5448,6 +5448,8 @@ begin
   Sender.UpdateTextNotVoid( 'bios:manufacturer', _Smbios[sbiManufacturer]);
   Sender.UpdateTextNotVoid( 'bios:board',        _Smbios[sbiBoardProductName]);
   Sender.UpdateTextNotVoid( 'bios:cpu',          _Smbios[sbiCpuVersion]);
+  if PosExI('virtual ', _Smbios[sbiFamily]) <> 0 then
+    Sender.UpdateText('bios:vm', 'true');
 end;
 
 procedure _GlobalInfoExe(Sender: TBinDictionary);
