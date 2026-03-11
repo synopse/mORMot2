@@ -40,6 +40,7 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.variants,
   mormot.core.data,
   mormot.core.log,
@@ -3675,6 +3676,32 @@ end;
 
 { **************** LDAP Attributes Definitions }
 
+procedure _GlobalInfoLdap(Sender: TBinDictionary);
+var
+  server, dn, spn: RawUtf8;
+  nfo: TCldapDomainInfo;
+begin // late discovery of the LDAP server using CLDAP
+  server := CldapGetDefaultLdapController(@dn, @spn, @nfo, {timeout=}500);
+  if server = '' then
+    exit;
+  Sender.UpdateTextNotVoid( 'ldap:server',        server);
+  Sender.UpdateTextNotVoid( 'ldap:dn',            dn);
+  Sender.UpdateTextNotVoid( 'ldap:spn',           spn);
+  Sender.UpdateTextNotVoid( 'ldap:domain',        nfo.Domain);
+  Sender.UpdateTextNotVoid( 'ldap:flags',         ToText(nfo.Flags));
+  Sender.UpdateTextNotVoid( 'ldap:forest',        nfo.Forest);
+  Sender.UpdateTextNotVoid( 'ldap:guid',          GuidToRawUtf8(nfo.Guid));
+  Sender.UpdateTextNotVoid( 'ldap:host',          nfo.HostName);
+  Sender.UpdateTextNotVoid( 'ldap:ip',            nfo.IP);
+  Sender.UpdateTextNotVoid( 'ldap:logon',         LowerCaseU(ToText(nfo.LogonType)));
+  Sender.UpdateTextNotVoid( 'ldap:netbiosdomain', nfo.NetbiosDomain);
+  Sender.UpdateTextNotVoid( 'ldap:netbioshost',   nfo.NetbiosHostname);
+  Sender.UpdateTextNotVoid( 'ldap:unk',           nfo.Unk);
+  Sender.UpdateTextNotVoid( 'ldap:user',          nfo.User);
+  Sender.UpdateTextNotVoid( 'ldap:clientsite',    nfo.ClientSite);
+  Sender.UpdateTextNotVoid( 'ldap:serversite',    nfo.ServerSite);
+end;
+
 // private copy from constant to global variables because of Delphi which makes
 // a new RefCnt > 0 copy when assigning a RefCnt = -1 constant to a variable :(
 const
@@ -3799,6 +3826,7 @@ begin
     ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapIntern32[failed]]);
   _LdapIntern.Unique(sObjectName, 'objectName');
   _LdapIntern.Unique(sCanonicalName, 'canonicalName');
+  GlobalInfoRegister('ldap:', @_GlobalInfoLdap);
 end;
 
 // internal function: O(n) search of AttrName 32-bit-truncated interned pointer
