@@ -3100,7 +3100,7 @@ type
     function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt = nil): pointer; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// case-sensitive search and return a value, using the internal hash
-    // - overload to Find() using a ShortString as Key
+    // - overload to Find() using a ShortString as convenient constant Key
     function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
     /// raw access to each key buffer as encoded in Value[] - not #0 terminated
     // - warning: @ValueLen should be a PtrInt, not 32-bit integer
@@ -3122,6 +3122,8 @@ type
     property Count: integer
       read fCount;
   end;
+  /// callback used e.g. to registry GlobalInfoRegister() delayed entries
+  TOnBinDictionaryExecute = procedure(Sender: TBinDictionary);
 
 var
   /// low-level JSON unserialization function
@@ -3134,12 +3136,21 @@ var
     EndOfObject: PUtf8Char; Rtti: TRttiCustom;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
     Interning: TRawUtf8InterningAbstract);
-  /// delayed functions call when OsInfoDictionary creates its shared instance
-  OsInfoDictionaryAppend: array of procedure(Sender: TBinDictionary);
 
-/// return a global instance of os:* hw:* user:* bios:* constants
-// - populated from mormot.core.os.pas, and used e.g. by MorJSON pre-processor
-function OsInfoDictionary: TBinDictionary;
+/// search for an entry in GlobalInfoRegister() resolvers e.g. 'os:arch'
+// - this unit registers os: hw: exe: env: user: bios: main namespaces
+// - mormot.net.http.pas/mormot.net.ldap.pas register net: and ldap: namespaces
+function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer; overload;
+
+/// search for an entry in GlobalInfoRegister() resolvers e.g. 'os:arch'
+function GlobalInfoFind(const Key: RawUtf8): RawUtf8; overload;
+
+/// can be used for delayed resolution of e.g. 'net:' or 'ldap:' prefixes
+procedure GlobalInfoRegister(Prefix: PUtf8Char; OnAdd: TOnBinDictionaryExecute);
+
+/// trigger all pending GlobalInfoRegister() delayed resolution
+// - may take some time, e.g. for 'ldap:' entries from mormot.net.ldap.pas
+function GlobalInfoRegisterAll: TBinDictionary;
 
 
 { ************ Abstract Radix Tree Classes }
@@ -5292,106 +5303,66 @@ begin
   PRawUtf8ToCsv(pointer(u), fCount, Feed, false, result);
 end;
 
-var
-  _OsInfoDictionary: TBinDictionary;
+var // late resolution e.g. of ldap: macros by GlobalInfoRegister()
+  _GlobalInfoSafe: TLightLock;
+  _GlobalInfoPre: TPUtf8CharDynArray;
+  _GlobalInfoAdd: array of TOnBinDictionaryExecute;
+  _GlobalInfo: TBinDictionary;
 
-function FillOsInfoDictionary: TBinDictionary;
-var
-  i: PtrInt;
-  u: RawUtf8;
+procedure GlobalInfoRegister(Prefix: PUtf8Char; OnAdd: TOnBinDictionaryExecute);
 begin
-   GlobalLock;
-   try
-     result := _OsInfoDictionary;
-     if result <> nil then
-       exit;
-     result := TBinDictionary.Create;
-     result.UpdateText( 'os:name',      OSVersionShort);
-     result.UpdateText( 'os:family',    LowerCaseU(OS_TEXT));
-     result.UpdateText( 'os:version',   OSVersionText);
-     result.UpdateText( 'os:arch',      CPU_ARCH_TEXT);
-     result.UpdateText( 'os:hostname',  Executable.Host);
-     result.UpdateText(['os:pid'],     [GetCurrentProcessId]);
-     result.UpdateText(['os:ppid'],    [GetParentProcess]);
-     result.UpdateText(['os:temp'],    [GetSystemPath(spTemp)]);
-     result.UpdateText(['os:cwd'],     [GetCurrentDir]);
-     result.UpdateText( 'os:pathsep',   PathDelim);
-     result.UpdateText(['os:tzoff'],   [TimeZoneLocalBias * SecsPerMin]);
-     result.UpdateText( 'exe:name',     Executable.ProgramName);
-     result.UpdateText(['exe:cmd'],    [Executable.ProgramFileName]);
-     result.UpdateText(['exe:path'],   [Executable.ProgramFilePath]);
-     result.UpdateText( 'exe:agent',    Executable.Version.UserAgent);
-     result.UpdateText(['exe:log'],    [GetSystemPath(spLog)]);
-     if Assigned(Executable.Version) and
-        (Executable.Version.Major <> 0) then
-     begin
-       result.UpdateText(['exe:major'],   [Executable.Version.Major]);
-       result.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
-       result.UpdateText(['exe:version'], [Executable.Version.Detailed]);
-     end;
-     result.UpdateText( 'hw:cpu',       CpuInfoText);
-     result.UpdateText(['hw:threads'], [CpuCores]);
-     result.UpdateText(['hw:cores'],   [SystemInfo.dwNumberOfProcessors]);
-     result.UpdateText(['hw:sockets'], [CpuSockets]);
-     result.UpdateText(['hw:ram'],     [SystemMemorySize]);
-     result.UpdateText(['hw:aes'],     [HasHWAes]);
-     {$ifdef CPUINTEL}
-     result.UpdateText( 'hw:cpuid',     IntelManufacturer);
-     u := IntelHypervisor;
-     if u <> '' then
-       result.UpdateText( 'hw:hyp',     u);
-     {$endif CPUINTEL}
-     result.UpdateText( 'user:name',    Executable.User);
-     result.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
-     result.UpdateText(['user:data'],  [GetSystemPath(spUserData)]);
-     result.UpdateText( 'bios:info',    BiosInfoText);
-     result.UpdateText( 'bios:vendor',  GetSmbios(sbiBiosVendor)); // set _Smbios
-     result.UpdateText( 'bios:product', _Smbios[sbiBiosVendor]);
-     result.UpdateText( 'bios:version', _Smbios[sbiBiosVersion]);
-     result.UpdateText( 'bios:serial',  _Smbios[sbiSerial]);
-     result.UpdateText( 'bios:uuid',    _Smbios[sbiUuid]);
-     result.UpdateText( 'bios:sku',     _Smbios[sbiSku]);
-     result.UpdateText( 'bios:family',  _Smbios[sbiFamily]);
-     result.UpdateText( 'bios:manufacturer',  _Smbios[sbiManufacturer]);
-     result.UpdateText( 'bios:board',   _Smbios[sbiBoardProductName]);
-     result.UpdateText( 'bios:cpu',     _Smbios[sbiCpuVersion]);
-     {$ifdef OSPOSIX}
-     result.UpdateText( 'os:product',   LowerCaseU(OS_NAME[OS_KIND]));
-     if OS_DISTRI > ldUndefined then
-       result.UpdateText(['os:dist'],  [DISTRI_NAME[OS_DISTRI]]);
-     result.UpdateText( 'os:build',     SystemInfo.uts.release);
-     result.UpdateText( 'os:release',   SystemInfo.release);
-     result.UpdateText(['user:uid'],   [PosixUid]);
-     result.UpdateText(['user:gid'],   [PosixGid]);
-     result.UpdateText( 'user:shell',   PosixShell);
-     {$else}
-     result.UpdateText( 'os:product',   WindowsProductName);
-     if WindowsUbr <> 0 then
-       result.UpdateText(['os:build'], [WindowsUbr]);
-     if WindowsDisplayVersion <> '' then
-       result.UpdateText( 'os:winver',  WindowsDisplayVersion);
-     result.UpdateText( 'user:uid',     CurrentSid(wttProcess, nil, @u));
-     result.UpdateText( 'user:domain',  u);
-     if not GetSystemEnv('COMSPEC', u) then
-       if GetSystemEnv('WINDIR', u) then
-         Append(u, '\system32\cmd.exe')
-       else
-         u := 'c:\windows\system32\cmd.exe';
-     result.UpdateText( 'user:shell', u);
-     {$endif OSPOSIX}
-     for i := 0 to high(OsInfoDictionaryAppend) do
-       OsInfoDictionaryAppend[i](result); // on-deman retrieval of other info
-     _OsInfoDictionary := RegisterGlobalShutdownRelease(result);
-   finally
-     GlobalLock;
-   end;
+  _GlobalInfoSafe.Lock;
+  PtrArrayAdd(_GlobalInfoPre, Prefix);
+  PtrArrayAdd(_GlobalInfoAdd, @OnAdd);
+  _GlobalInfoSafe.UnLock;
 end;
 
-function OsInfoDictionary: TBinDictionary;
+function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
+var
+  i: PtrInt;
 begin
-  result := _OsInfoDictionary;
+  _GlobalInfoSafe.Lock;
+  if _GlobalInfo = nil then
+    _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
+  result := _GlobalInfo.Find(Key, KeyLen, @ValueLen);
   if result = nil then
-    result := FillOsInfoDictionary; // initialize once
+  begin
+    repeat
+      i := StrStartArray(Key, pointer(_GlobalInfoPre));
+      if i < 0 then
+        break; // allow several GlobalInfoRegister() on the same prefix
+      _GlobalInfoAdd[i](_GlobalInfo); // may take some time
+      PtrArrayDelete(_GlobalInfoPre, i);
+      PtrArrayDelete(_GlobalInfoAdd, i);
+      if result = nil then
+        result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
+    until false;
+  end;
+  _GlobalInfoSafe.UnLock;
+end;
+
+function GlobalInfoFind(const Key: RawUtf8): RawUtf8;
+var
+  v: pointer;
+  l: PtrInt;
+begin
+  v := GlobalInfoFind(pointer(Key), length(Key), l);
+  FastSetString(result, v, l);
+end;
+
+function GlobalInfoRegisterAll: TBinDictionary;
+var
+  i: PtrInt;
+begin
+  _GlobalInfoSafe.Lock;
+  if _GlobalInfo = nil then
+    _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create, true);
+  result := _GlobalInfo;
+  for i := 0 to length(_GlobalInfoAdd) - 1 do
+    _GlobalInfoAdd[i](result); // may take some time
+  _GlobalInfoPre := nil;
+  _GlobalInfoAdd := nil;
+  _GlobalInfoSafe.UnLock;
 end;
 
 { TRawUtf8List }
