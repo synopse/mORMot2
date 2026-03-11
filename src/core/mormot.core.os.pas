@@ -3690,6 +3690,9 @@ function GetMemoryInfoText: TShort31;
 // - includes UTC timestamp, memory and disk availability, and exe/OS/CPU info
 function GetSystemInfoText: RawUtf8;
 
+/// return the system shell of the current User e.g. from getpwuid/pw_shell
+function GetSystemShell: RawUtf8;
+
 /// retrieve low-level information about a given disk partition
 // - as used e.g. by TSynMonitorDisk and GetDiskPartitionsText()
 // - aDriveFolderOrFile is a directory on disk (no need to specify a raw drive
@@ -3888,9 +3891,6 @@ function PosixUid: cardinal;
 
 /// return the GID of the current POSIX User
 function PosixGid: cardinal;
-
-/// return the system shell of the current POSIX User from getpwuid() pw_shell
-function PosixShell: RawUtf8;
 
 {$ifdef OSLINUXANDROID}
 /// read a File content into a string, without using FileSize()
@@ -8514,6 +8514,16 @@ begin
      GetMemoryInfoText, KB(avail), KB(total), RetrieveLoadAvg,
      Executable.Version.VersionInfo, OSVersionText, CpuInfoText, BiosInfoText],
      result);
+end;
+
+var
+  _Shell: RawUtf8;
+
+function GetSystemShell: RawUtf8;
+begin
+  result := _Shell;
+  if result = '' then
+    _SetShell(_Shell, result);
 end;
 
 procedure RetrieveSysInfoText(var text: ShortString);

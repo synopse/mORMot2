@@ -1041,15 +1041,36 @@ function pthread_mutex_unlock(mutex: pointer): integer;      cdecl; external;
 {$endif OSDARWIN}
 {$endif OSPTHREADSSTATIC}
 
+{$ifdef OSLINUX}
+procedure _SetShell(var a, b: RawUtf8);
+var
+  pw: PPasswd; // from the pwd.pp unit
+begin
+  pw := fpgetpwuid(FpGetuid);
+  if pw <> nil then
+    a := pw^.pw_shell
+  else if not GetSystemEnv('SHELL', a) then
+    a := '/bin/sh'; // fallback
+  b := a;
+end;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
-  {$ifdef OSLINUX}
   result := cs.__m_kind <> 0;
-  {$else}
-  result := not IsZero(@cs, SizeOf(cs));
-  {$endif OSLINUX}
 end;
+{$else}
+procedure _SetShell(var a, b: RawUtf8);
+begin
+  if not GetSystemEnv('SHELL', a) then
+    a := '/bin/sh';
+  b := a;
+end;
+
+function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
+begin
+  result := not IsZero(@cs, SizeOf(cs));
+end;
+{$endif OSLINUX}
 
 {$ifdef HAS_OSPTHREADS}
 
@@ -1651,34 +1672,6 @@ end;
 function PosixGid: cardinal;
 begin
   result := FpGetgid;
-end;
-
-{$ifdef OSLINUX}
-function GetLinuxShell(var shell: RawUtf8): boolean;
-var
-  pw: PPasswd; // from the pwd.pp unit
-begin
-  pw := fpgetpwuid(FpGetuid);
-  result := pw <> nil;
-  if result then
-    shell := pw^.pw_shell;
-end;
-{$endif OSLINUX}
-
-var
-  _PosixShell: RawUtf8;
-
-function PosixShell: RawUtf8;
-begin
-  result := _PosixShell;
-  if result <> '' then
-    exit;
-  {$ifdef OSLINUX}
-  if not GetLinuxShell(result) then
-  {$endif OSLINUX}
-    if not GetSystemEnv('SHELL', result) then
-      result := '/bin/sh'; // fallback
-  _PosixShell := result;
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
@@ -4703,7 +4696,7 @@ begin
   else
   begin
     // execute complex commands via the shell
-    a[0] := pointer(PosixShell);
+    a[0] := pointer(GetSystemShell);
     a[1] := '-c';
     a[2] := pointer(cmd);
     a[3] := nil;

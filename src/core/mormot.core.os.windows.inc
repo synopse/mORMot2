@@ -2956,6 +2956,16 @@ begin
     result := IncludeTrailingPathDelimiter(result); // no EnsureDirectoryExists
 end;
 
+procedure _SetShell(var a, b: RawUtf8);
+begin
+  if not GetSystemEnv('COMSPEC', a) then
+    if GetSystemEnv('WINDIR', b) then
+      a := Join([b, '\system32\cmd.exe'])
+    else
+      a := 'c:\windows\system32\cmd.exe';
+  b := a;
+end;
+
 var
   _SystemEnvUnicode: SynUnicode; // for RunCommandWin() below
 
