@@ -3057,8 +3057,16 @@ type
     function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
       KeepMarker: boolean): PUtf8Char;
     function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char;
+    function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
     procedure Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
   end;
+
+function TJsonDsl.DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
+begin
+  result := Find(Key, KeyLen, @ValueLen); // from known variables/templates
+  if result = nil then
+    result := GlobalInfoFind(Key, KeyLen, ValueLen); // global macros
+end;
 
 function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
   KeepMarker: boolean): PUtf8Char;
@@ -3067,7 +3075,7 @@ var
   keylen: PtrInt;
 begin
   result := P;
-  inc(result); // called with result^ = '$'
+  inc(result); // called with P^ = '$'
   if result^ = '{' then // ${ident} format, not $ident$
     inc(result);
   key := result;
@@ -3076,10 +3084,7 @@ begin
   Value := nil;
   if result^ <= ' ' then
     exit;
-  keylen := result - key;
-  Value := Find(key, keylen, @Len); // from known variables/templates
-  if Value = nil then
-    Value := GlobalInfoFind(key, keylen, Len); // global macros
+  Value := DoFind(key, result - key, Len); // resolve
   if result^ = '|' then // $ident|default$ or ${ident|default}
   begin
     inc(result);
@@ -3108,7 +3113,8 @@ begin
     end;
   end;
   inc(result); // skip trailing $ or }
-  if KeepMarker or
+  if (Value = nil) or
+     KeepMarker or
      (TJsonDslMarker(Value^) > high(TJsonDslMarker)) then
     exit;
   inc(Value); // trim marker
