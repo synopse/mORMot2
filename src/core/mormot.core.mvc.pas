@@ -1193,32 +1193,27 @@ begin
                                       [ md5,   sha1,   sha256,   sha512 ]);
 end;
 
-class procedure TMvcViewsMustache.md5(const Value: variant;
-  out Result: variant);
+class procedure TMvcViewsMustache.md5(const Value: variant; out Result: variant);
 begin
   RawUtf8ToVariant(mormot.crypt.core.Md5(ToUtf8(Value)), Result);
 end;
 
-class procedure TMvcViewsMustache.sha1(const Value: variant;
-  out Result: variant);
+class procedure TMvcViewsMustache.sha1(const Value: variant; out Result: variant);
 begin
   RawUtf8ToVariant(mormot.crypt.core.Sha1(ToUtf8(Value)), Result);
 end;
 
-class procedure TMvcViewsMustache.sha256(const Value: variant;
-  out Result: variant);
+class procedure TMvcViewsMustache.sha256(const Value: variant; out Result: variant);
 begin
   RawUtf8ToVariant(mormot.crypt.core.Sha256(ToUtf8(Value)), Result);
 end;
 
-class procedure TMvcViewsMustache.sha512(const Value: variant;
-  out Result: variant);
+class procedure TMvcViewsMustache.sha512(const Value: variant; out Result: variant);
 begin
   RawUtf8ToVariant(mormot.crypt.core.Sha512(ToUtf8(Value)), Result);
 end;
 
-function TMvcViewsMustache.FindTemplateFileNames(
-  const Mask: TFileName): TFileNameDynArray;
+function TMvcViewsMustache.FindTemplateFileNames(const Mask: TFileName): TFileNameDynArray;
 begin
   result := FileNames(fViewTemplateFolder, Mask);
 end;
