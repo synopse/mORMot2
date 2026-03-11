@@ -3085,6 +3085,11 @@ type
     function UpdateText(const Key, Value: RawUtf8): PtrInt; overload;
     /// add or replace a text key/value pair in the storage
     function UpdateText(const Key, Value: array of const): TBinDictionary; overload;
+    /// add or replace a text key/value pair in the storage if Value <> ''
+    procedure UpdateTextNotVoid(const Key, Value: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// merge some additional key/value pairs
+    procedure UpdateFrom(Another: TBinDictionary);
     /// case-sensitive search for a key index in Value[], using the internal hash
     // - can optionally delete any matching item
     function IndexOf(Key: pointer; KeyLen: PtrInt;
@@ -5161,7 +5166,7 @@ begin
   if (self = nil) or
      (PtrUInt(Index) >= PtrUInt(fCount)) then
     exit;
-  result := pointer(fValue[Index]);
+  result := pointer(fValue[Index]); // never nil
   keylen := PByte(result)^ + 1;
   if Len <> nil then
     Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
@@ -5221,6 +5226,21 @@ function TBinDictionary.UpdateText(const Key, Value: array of const): TBinDictio
 begin
   UpdateText(Make(Key), Make(Value));
   result := self; // for a fluent interface call
+end;
+
+procedure TBinDictionary.UpdateTextNotVoid(const Key, Value: RawUtf8);
+begin
+  if Value <> '' then
+    UpdateText(Key, Value);
+end;
+
+procedure TBinDictionary.UpdateFrom(Another: TBinDictionary);
+var
+  i: PtrInt;
+begin
+  if Another <> nil then
+    for i := 0 to Another.Count - 1 do
+      fHash.FindHashedAndUpdate(Another.Value[i], {add=}true);
 end;
 
 function TBinDictionary.IndexOf(Key: pointer; KeyLen: PtrInt; AndDelete: boolean): PtrInt;
