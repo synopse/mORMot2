@@ -3200,6 +3200,9 @@ begin
     '$$'#10'a=1'#10'$$'#10'{a:$a$}',
     '{a:1}');
   TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$os:name$}',
+    Join(['{a:"', OSVersionShort,'"}']));
+  TestMorJson(
     '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
     '{a:1,b:2}');
   TestMorJson(
@@ -3208,13 +3211,25 @@ begin
   TestMorJson(
     '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$a}}}',
     '{a:1,b:"$a$",c:{d:1}}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
+    '{a:"1",b:"1"}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
+    '{a:1,b:"1"}');
   J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
   TestMorJson(
-    J + '{a:$a$,b:$"$a$",c:$var$,d:$"$var$",e:"$var$",f:$"5432$var$0"}',
+    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
     '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
   TestMorJson(
-    J + '{a:$a$,b:$os:arch$,c:$"http://toto/$os:arch$",d:$os:none$,e:$"a$os:no$s"}',
-    '{a:"number 1",b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
+    J + '{$a$:0,b:$os:arch$,c:$"http://toto/$os:arch$",d:$os:none$,e:$"a$os:no$s"}',
+    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
      '",d:null,e:"as"}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
