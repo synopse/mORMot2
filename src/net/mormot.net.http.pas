@@ -7601,14 +7601,20 @@ var
 begin
   if GetMainMacAddress(mac) then
   begin
-    Sender.UpdateTextNotVoid( 'net:mac',      mac.Address);
-    Sender.UpdateTextNotVoid( 'net:if',       mac.Name);
-    Sender.UpdateText(['net:ifindex'],       [mac.IfIndex]);
-    Sender.UpdateTextNotVoid( 'net:ifname',   mac.FriendlyName);
-    Sender.UpdateTextNotVoid( 'net:ip',       mac.IP);
-    Sender.UpdateTextNotVoid( 'net:mask',     mac.NetMask);
-    Sender.UpdateTextNotVoid('net:gateway',   mac.Gateway);
-    Sender.UpdateTextNotVoid('net:broadcast', mac.Broadcast);
+    Sender.UpdateTextNotVoid( 'net:mac',       mac.Address);
+    Sender.UpdateTextNotVoid( 'net:if',        mac.Name);
+    if mac.Mtu <> 0 then
+      Sender.UpdateText(     ['net:mtu'],     [mac.Mtu]);
+    if mac.Speed <> 0 then
+      Sender.UpdateText(     ['net:speed'],   [mac.Speed]);
+    Sender.UpdateText(       ['net:ifindex'], [mac.IfIndex]);
+    Sender.UpdateTextNotVoid( 'net:ifname',    mac.FriendlyName);
+    Sender.UpdateTextNotVoid( 'net:ip',        mac.IP);
+    Sender.UpdateTextNotVoid( 'net:mask',      mac.NetMask);
+    Sender.UpdateTextNotVoid('net:gateway',    mac.Gateway);
+    Sender.UpdateTextNotVoid('net:broadcast',  mac.Broadcast);
+    if mac.Kind > makUndefined then
+      Sender.UpdateText('net:kind', ShortTrim(ToText(mac.Kind), scLowerCase));
     {$ifdef OSWINDOWS}
     dns := mac.Dns;
     {$endif OSWINDOWS}
