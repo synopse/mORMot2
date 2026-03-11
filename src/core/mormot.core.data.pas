@@ -5365,6 +5365,115 @@ begin
   _GlobalInfoSafe.UnLock;
 end;
 
+procedure _GlobalInfoOs(Sender: TBinDictionary);
+begin
+  Sender.UpdateText( 'os:name',           OSVersionShort);
+  Sender.UpdateText( 'os:family',         LowerCaseU(OS_TEXT));
+  Sender.UpdateText( 'os:version',        OSVersionText);
+  Sender.UpdateText( 'os:arch',           CPU_ARCH_TEXT);
+  Sender.UpdateText( 'os:hostname',       Executable.Host);
+  Sender.UpdateText(['os:pid'],          [GetCurrentProcessId]);
+  Sender.UpdateText(['os:ppid'],         [GetParentProcess]);
+  Sender.UpdateText(['os:temp'],         [GetSystemPath(spTemp)]);
+  Sender.UpdateText(['os:cwd'],          [GetCurrentDir]);
+  Sender.UpdateText( 'os:pathsep',        PathDelim);
+  Sender.UpdateText(['os:tzoff'],        [TimeZoneLocalBias * SecsPerMin]);
+  {$ifdef OSPOSIX}
+  Sender.UpdateText( 'os:product',        LowerCaseU(OS_NAME[OS_KIND]));
+  if OS_DISTRI > ldUndefined then
+    Sender.UpdateText(['os:dist'],       [DISTRI_NAME[OS_DISTRI]]);
+  Sender.UpdateTextNotVoid( 'os:build',   SystemInfo.uts.release);
+  Sender.UpdateTextNotVoid( 'os:release', SystemInfo.release);
+  {$else}
+  Sender.UpdateTextNotVoid( 'os:product', WindowsProductName);
+  if WindowsUbr <> 0 then
+    Sender.UpdateText(['os:build'], [WindowsUbr]);
+  Sender.UpdateTextNotVoid( 'os:winver',  WindowsDisplayVersion);
+  {$endif OSPOSIX}
+end;
+
+procedure _GlobalInfoHw(Sender: TBinDictionary);
+begin
+  Sender.UpdateText( 'hw:cpu',          CpuInfoText);
+  Sender.UpdateText(['hw:threads'],    [CpuCores]);
+  Sender.UpdateText(['hw:cores'],      [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['hw:sockets'],    [CpuSockets]);
+  Sender.UpdateText(['hw:ram'],        [SystemMemorySize]);
+  if HasHWAes then
+    Sender.UpdateText('hw:aes',        'true');
+  {$ifdef CPUINTEL}
+  if cfAVX2 in CpuFeatures then
+    Sender.UpdateText('hw:avx2',       'true');
+  if IntelAvx10 > 0 then
+    Sender.UpdateText(['hw:avx10'],    [IntelAvx10]);
+  Sender.UpdateText(['hw:cpufamily'],  [CpuFamily]);
+  Sender.UpdateText(['hw:cpumodel'],   [CpuModel]);
+  Sender.UpdateTextNotVoid( 'hw:cpuid', IntelManufacturer);
+  Sender.UpdateTextNotVoid( 'hw:hyp',   IntelHypervisor);
+  {$endif CPUINTEL}
+  {$ifdef CPUARM3264}
+  Sender.UpdateTextNotVoid( 'hw:model', CpuArmModel);
+  {$endif CPUARM3264}
+end;
+
+procedure _GlobalInfoUser(Sender: TBinDictionary);
+{$ifndef OSPOSIX}
+var
+  u: RawUtf8;
+{$endif OSPOSIX}
+begin
+  Sender.UpdateText( 'user:name',    Executable.User);
+  Sender.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
+  Sender.UpdateText(['user:data'],  [GetSystemPath(spUserData)]);
+  Sender.UpdateText( 'user:shell',   GetSystemShell);
+  {$ifdef OSPOSIX}
+  Sender.UpdateText(['user:uid'],   [PosixUid]);
+  Sender.UpdateText(['user:gid'],   [PosixGid]);
+  {$else}
+  Sender.UpdateTextNotVoid( 'user:uid', CurrentSid(wttProcess, nil, @u));
+  Sender.UpdateTextNotVoid( 'user:domain', u);
+  {$endif OSPOSIX}
+end;
+
+procedure _GlobalInfoBios(Sender: TBinDictionary);
+begin
+  Sender.UpdateTextNotVoid( 'bios:info',         BiosInfoText);
+  Sender.UpdateTextNotVoid( 'bios:vendor',       GetSmbios(sbiBiosVendor));
+  Sender.UpdateTextNotVoid( 'bios:product',      _Smbios[sbiBiosVendor]);
+  Sender.UpdateTextNotVoid( 'bios:version',      _Smbios[sbiBiosVersion]);
+  Sender.UpdateTextNotVoid( 'bios:serial',       _Smbios[sbiSerial]);
+  Sender.UpdateTextNotVoid( 'bios:uuid',         _Smbios[sbiUuid]);
+  Sender.UpdateTextNotVoid( 'bios:sku',          _Smbios[sbiSku]);
+  Sender.UpdateTextNotVoid( 'bios:family',       _Smbios[sbiFamily]);
+  Sender.UpdateTextNotVoid( 'bios:manufacturer', _Smbios[sbiManufacturer]);
+  Sender.UpdateTextNotVoid( 'bios:board',        _Smbios[sbiBoardProductName]);
+  Sender.UpdateTextNotVoid( 'bios:cpu',          _Smbios[sbiCpuVersion]);
+end;
+
+procedure _GlobalInfoExe(Sender: TBinDictionary);
+begin
+  Sender.UpdateText( 'exe:name',   Executable.ProgramName);
+  Sender.UpdateText(['exe:cmd'],  [Executable.ProgramFileName]);
+  Sender.UpdateText(['exe:path'], [Executable.ProgramFilePath]);
+  Sender.UpdateText( 'exe:agent',  Executable.Version.UserAgent);
+  Sender.UpdateText(['exe:log'],  [GetSystemPath(spLog)]);
+  if Assigned(Executable.Version) and
+     (Executable.Version.Major <> 0) then
+  begin
+    Sender.UpdateText(['exe:major'],   [Executable.Version.Major]);
+    Sender.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
+    Sender.UpdateText(['exe:version'], [Executable.Version.Detailed]);
+  end;
+end;
+
+procedure _GlobalInfoEnv(Sender: TBinDictionary);
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(_SystemEnvNames) - 1 do
+    Sender.UpdateText(['env:', _SystemEnvNames[i]], [_SystemEnvValues[i]]);
+end;
+
 { TRawUtf8List }
 
 {$ifdef PUREMORMOT2}
@@ -12089,11 +12198,16 @@ begin
         // unsupported types will contain nil
     end;
   // setup internal function wrappers
-  GetDataFromJson := _GetDataFromJson;
+  GetDataFromJson :=  _GetDataFromJson;
+  GlobalInfoRegister('os:',   _GlobalInfoOs);
+  GlobalInfoRegister('hw:',   _GlobalInfoHw);
+  GlobalInfoRegister('exe:',  _GlobalInfoExe);
+  GlobalInfoRegister('env:',  _GlobalInfoEnv);
+  GlobalInfoRegister('user:', _GlobalInfoUser);
+  GlobalInfoRegister('bios:', _GlobalInfoBios);
   // in-memory hashing are seeded from random to avoid hash flooding
   HashSeed := SystemEntropy.Startup.c0;
 end;
-
 
 initialization
   InitializeUnit;
