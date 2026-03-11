@@ -10244,6 +10244,8 @@ begin
                   (s[trimright - 1] <= ord(' ')) do
               dec(trimright);
             FastSetString(info[cur^], s, trimright);
+            if info[cur^] = 'Default string' then
+              FastAssignNew(info[cur^]);
           end;
           cur^ := sbiUndefined; // reset slot in lines[]
         end;
