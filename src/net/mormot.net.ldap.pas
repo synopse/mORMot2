@@ -110,6 +110,9 @@ type
   /// pointer to domain information as returned by CldapGetDomainInfo()
   PCldapDomainInfo = ^TCldapDomainInfo;
 
+function ToText(lt: TCldapDomainLogonType): RawUtf8; overload;
+function ToText(f: TCldapDomainFlags): RawUtf8; overload;
+
 /// send a CLDAP NetLogon message to a LDAP server over UDP to retrieve all
 // information of the domain
 function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
@@ -2789,13 +2792,23 @@ implementation
 
 { **************** CLDAP Client Functions }
 
+function ToText(lt: TCldapDomainLogonType): RawUtf8;
+begin
+  result := GetEnumNameTrimed(TypeInfo(TCldapDomainLogonType), ord(lt));
+end;
+
+function ToText(f: TCldapDomainFlags): RawUtf8;
+begin
+  result := GetSetName(TypeInfo(TCldapDomainFlags), f, {trimmed=}true);
+end;
+
 function TCldapDomainInfo.ToVariant: variant;
 begin
   VarClear(result);
   TDocVariantData(result).InitObject([
     'nt_version',       NTVersion,
-    'logon_type',       GetEnumNameTrimed(TypeInfo(TCldapDomainLogonType), ord(LogonType)),
-    'flags',            GetSetName(TypeInfo(TCldapDomainFlags), Flags, {trimmed=}true),
+    'logon_type',       ToText(LogonType),
+    'flags',            ToText(Flags),
     'guid',             GuidToRawUtf8(Guid),
     'forest',           Forest,
     'domain',           Domain,
