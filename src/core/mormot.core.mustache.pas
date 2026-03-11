@@ -428,6 +428,9 @@ type
     // - returns FALSE if the template is not correct
     class function TryRenderJson(const aTemplate, aJson: RawUtf8;
       out aContent: RawUtf8): boolean;
+    /// define a helper to GlobalInfoFind() e.g. {{info os:name}}
+    // - not defined with standard helpers for safety
+    class procedure Info(const Value: variant; out Result: variant);
   public
     /// initialize and parse a pre-rendered {{mustache}} template
     // - you should better use the Parse() class function instead, which
@@ -2478,6 +2481,19 @@ var
 begin
   if _SafeArray(Value, 2, dv) then
      DoMatch(dv, {caseinsens=}true, Result);
+end;
+
+class procedure TSynMustache.Info(const Value: variant; out Result: variant);
+var
+  u: RawUtf8;
+  v: PUtf8Char;
+  l: PtrInt;
+begin
+  if not VariantToText(Value, u) then
+    exit;
+  v := GlobalInfoFind(pointer(u), length(u), l);
+  if v <> nil then
+    RawUtf8ToVariant(v, l, Result);
 end;
 
 procedure DoCase(const Value: variant; out Result: variant; Kind: TSetCase);
