@@ -1716,6 +1716,15 @@ function strcspn(s, reject: pointer): integer;
 function StrCompL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// true if all Start^ is in P^ until Start^ = #0
+function StrStart(P, Start: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// search Start^[result] is in P^ until Start^[result] = #0, -1 not found
+// - here Start should be a pointer(SomePUtf8CharDynArray) value
+function StrStartArray(P: PUtf8Char; Start: PPUtf8Char): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// our fast version of StrCompIL(), to be used with PUtf8Char
 // - i.e. make a case-insensitive comparison of two memory buffers, using
 // supplied length
@@ -6705,6 +6714,42 @@ begin
     until false;
     inc(result);
   until false;
+end;
+
+function StrStart(P, Start: PUtf8Char): boolean;
+var
+  c: AnsiChar;
+begin
+  result := false;
+  if Start <> nil then
+    repeat
+      c := Start^;
+      if c = #0 then
+        break;
+      if P^ <> c then
+        exit;
+      inc(P);
+      inc(Start);
+    until false;
+  result := true;
+end;
+
+function StrStartArray(P: PUtf8Char; Start: PPUtf8Char): PtrInt;
+var
+  hi: PtrInt;
+begin
+  if Start <> nil then
+  begin
+    result := 0;
+    hi := PDALen(PAnsiChar(Start) - _DALEN)^ + (_DAOFF - 1);
+    repeat
+      if StrStart(P, Start^) then
+        exit;
+      inc(Start);
+      inc(result);
+    until result > hi;
+  end;
+  result := -1;
 end;
 
 function StrCompL(P1, P2: pointer; L, Default: PtrInt): PtrInt;
