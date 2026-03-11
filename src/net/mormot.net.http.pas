@@ -30,8 +30,8 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.rtti,
-  mormot.core.buffers,
   mormot.core.datetime,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.zip,
   mormot.net.sock;
@@ -7593,7 +7593,7 @@ begin
   result := true;
 end;
 
-procedure _OsInfoDictionaryAppend(Sender: TBinDictionary);
+procedure _GlobalInfoNet(Sender: TBinDictionary);
 var
   dns: RawUtf8;
   u: TRawUtf8DynArray;
@@ -7601,17 +7601,14 @@ var
 begin
   if GetMainMacAddress(mac) then
   begin
-    Sender.UpdateText( 'net:mac',       mac.Address);
-    Sender.UpdateText( 'net:if',        mac.Name);
-    Sender.UpdateText(['net:ifindex'], [mac.IfIndex]);
-    if mac.FriendlyName <> '' then
-      Sender.UpdateText( 'net:ifname',    mac.FriendlyName);
-    Sender.UpdateText( 'net:ip',        mac.IP);
-    Sender.UpdateText( 'net:mask',      mac.NetMask);
-    if mac.Gateway <> '' then
-      Sender.UpdateText('net:gateway',  mac.Gateway);
-    if mac.Broadcast <> '' then
-      Sender.UpdateText('net:broadcast', mac.Broadcast);
+    Sender.UpdateTextNotVoid( 'net:mac',      mac.Address);
+    Sender.UpdateTextNotVoid( 'net:if',       mac.Name);
+    Sender.UpdateText(['net:ifindex'],       [mac.IfIndex]);
+    Sender.UpdateTextNotVoid( 'net:ifname',   mac.FriendlyName);
+    Sender.UpdateTextNotVoid( 'net:ip',       mac.IP);
+    Sender.UpdateTextNotVoid( 'net:mask',     mac.NetMask);
+    Sender.UpdateTextNotVoid('net:gateway',   mac.Gateway);
+    Sender.UpdateTextNotVoid('net:broadcast', mac.Broadcast);
     {$ifdef OSWINDOWS}
     dns := mac.Dns;
     {$endif OSWINDOWS}
@@ -7624,8 +7621,7 @@ begin
   end;
   if dns = '' then
     dns := RawUtf8ArrayToCsv(GetDomainNames);
-  if dns <> '' then
-    Sender.UpdateText('net:dns', dns);
+  Sender.UpdateTextNotVoid('net:dns', dns);
 end;
 
 
@@ -7637,7 +7633,7 @@ initialization
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
   GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
-  PtrArrayAdd(OsInfoDictionaryAppend, @_OsInfoDictionaryAppend);
+  GlobalInfoRegister('net:', @_GlobalInfoNet);
 
 finalization
 
