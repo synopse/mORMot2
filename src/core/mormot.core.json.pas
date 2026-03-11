@@ -650,7 +650,6 @@ function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
   Format: TTextWriterJsonFormat = jsonHumanReadable;
   PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
 
-
 /// convert UTF-8 content into a JSON string
 // - with proper escaping of the content, and surounding " characters
 procedure QuotedStrJson(const aText: RawUtf8; var result: RawUtf8;
@@ -3061,73 +3060,6 @@ type
     procedure Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
   end;
 
-  // the different states of the TJsonParser logic
-  TJsonParserState = (
-    stObjectName,
-    stObjectValue,
-    stValue,
-    stObjectNameFirst,
-    stValueFirst,
-    stPropName,
-    stPropNameUnquoted);
-  // 8-bit individual TTextWriterJsonFormat features for TJsonParser.Reformat
-  TJsonReformatFlags = set of (
-    jrfIndent,
-    jrfTrailingComma,
-    jrfNoTrailingComma,
-    jrfComments,
-    jrfCommentHash,
-    jrfUnquoteName,
-    jrfUnquoteValue,
-    jrfUnquoteEcmaName);
-
-  /// state machine for fast (GB/s) parsing of (extended) JSON input
-  {$ifdef USERECORDWITHMETHODS}
-  TJsonParser = record
-  {$else}
-  TJsonParser = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    {$ifdef CPUX86}
-    JsonSet: PJsonCharSet; // not enough registers in i386 mode
-    {$endif CPUX86}
-    State: TJsonParserState;
-    ExpectStandard: boolean;
-    Fmt: TJsonReformatFlags;
-    FmtJson: TTextWriterJsonFormat;
-    StackCount: integer;
-    JsonFirst: PJsonTokens;
-    Max: PUtf8Char; // checking Max after each comma is good enough
-    RootCount: integer; // for InitCount or as DSL include depth
-    FmtDsl: TTextWriterJsonPreProcessor;
-    FmtVars: TJsonDsl;
-    W: TJsonWriter;
-    // 500 nested documents seem enough in practice (SQLite3 uses 1000)
-    Stack: array[0..500] of TJsonParserState;
-    // methods able to jump/count over any JSON value (up to Max)
-    procedure Init(Strict: boolean; PMax: PUtf8Char);
-      {$ifdef HASINLINE} inline; {$endif}
-    procedure InitCount(Strict: boolean; PMax: PUtf8Char;
-      First: TJsonParserState);
-      {$ifdef HASINLINE} inline; {$endif}
-    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
-    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
-      {$ifdef HASINLINE} inline; {$endif}
-    // methods used by TJsonWriter.DoJsonReformat()
-    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
-      Dsl: TTextWriterJsonPreProcessor);
-    function Reformat(P: PUtf8Char): boolean;
-    procedure ReformatBeginValue;
-    procedure ReformatEndValue;
-    function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
-    function AddMultiLine(P: PUtf8Char): PUtf8Char;
-    procedure AddIndentAndCommentToken(const args: array of const);
-    function DslSection(P: PUtf8Char): PUtf8Char;
-    procedure DslInclude(P: PUtf8Char);
-    function DslString(P: PUtf8Char): PUtf8Char;
-    function DslVar(P: PUtf8Char): PUtf8Char;
- end;
-
 function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
   KeepMarker: boolean): PUtf8Char;
 var
@@ -3145,18 +3077,9 @@ begin
   if result^ <= ' ' then
     exit;
   keylen := result - key;
-  if PCardinal(key)^ = ord('e') + ord('n') shl 8 + ord('v') shl 16 + ord(':') shl 24 then
-  begin // retrieve $env:NAME$ or ${env:NAME}
-    Value := GetSystemEnv(key + 4, keylen - 4); // cached in mormot.core.os.pas
-    if Value <> nil then
-      Len := PStrLen(Value - _STRLEN)^; // GetSystemEnv() returns a RawUtf8
-  end
-  else
-  begin
-    Value := Find(key, keylen, @Len);    // from known variables/templates
-    if Value = nil then
-      Value := OsInfoDictionary.Find(key, keylen, @Len);  // $os:arch$
-  end;
+  Value := Find(key, keylen, @Len); // from known variables/templates
+  if Value = nil then
+    Value := GlobalInfoFind(key, keylen, Len); // global macros
   if result^ = '|' then // $ident|default$ or ${ident|default}
   begin
     inc(result);
@@ -3252,6 +3175,74 @@ begin
   Update(k, tmp.Buffer, kl, tmp.Size);
   tmp.Store.Done; // free memory - unlikely from heap
 end;
+
+type
+  // the different states of the TJsonParser logic
+  TJsonParserState = (
+    stObjectName,
+    stObjectValue,
+    stValue,
+    stObjectNameFirst,
+    stValueFirst,
+    stPropName,
+    stPropNameUnquoted);
+  // 8-bit individual TTextWriterJsonFormat features for TJsonParser.Reformat
+  TJsonReformatFlags = set of (
+    jrfIndent,
+    jrfTrailingComma,
+    jrfNoTrailingComma,
+    jrfComments,
+    jrfCommentHash,
+    jrfUnquoteName,
+    jrfUnquoteValue,
+    jrfUnquoteEcmaName);
+
+  /// state machine for fast (GB/s) parsing of (extended) JSON input
+  {$ifdef USERECORDWITHMETHODS}
+  TJsonParser = record
+  {$else}
+  TJsonParser = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    {$ifdef CPUX86}
+    JsonSet: PJsonCharSet; // not enough registers in i386 mode
+    {$endif CPUX86}
+    State: TJsonParserState;
+    ExpectStandard: boolean;
+    Fmt: TJsonReformatFlags;
+    FmtJson: TTextWriterJsonFormat;
+    StackCount: integer;
+    JsonFirst: PJsonTokens;
+    Max: PUtf8Char; // checking Max after each comma is good enough
+    RootCount: integer; // for InitCount or as DSL include depth
+    FmtDsl: TTextWriterJsonPreProcessor;
+    FmtVars: TJsonDsl;
+    W: TJsonWriter;
+    // 500 nested documents seem enough in practice (SQLite3 uses 1000)
+    Stack: array[0..500] of TJsonParserState;
+    // methods able to jump/count over any JSON value (up to Max)
+    procedure Init(Strict: boolean; PMax: PUtf8Char);
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure InitCount(Strict: boolean; PMax: PUtf8Char;
+      First: TJsonParserState);
+      {$ifdef HASINLINE} inline; {$endif}
+    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
+    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    // methods used by TJsonWriter.DoJsonReformat()
+    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
+      Dsl: TTextWriterJsonPreProcessor);
+    function Reformat(P: PUtf8Char): boolean;
+    procedure ReformatBeginValue;
+    procedure ReformatEndValue;
+    function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
+    function AddMultiLine(P: PUtf8Char): PUtf8Char;
+    procedure AddIndentAndCommentToken(const args: array of const);
+    function DslSection(P: PUtf8Char): PUtf8Char;
+    procedure DslInclude(P: PUtf8Char);
+    function DslString(P: PUtf8Char): PUtf8Char;
+    function DslVar(P: PUtf8Char): PUtf8Char;
+ end;
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
 begin
