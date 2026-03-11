@@ -3057,6 +3057,7 @@ type
   public
     function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
       KeepMarker: boolean): PUtf8Char;
+    function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char;
     procedure Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
   end;
 
@@ -3175,6 +3176,26 @@ begin
     exit;
   inc(Value); // trim marker
   dec(Len);
+end;
+
+function TJsonDsl.ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char;
+var
+  v: PUtf8Char;
+  l: PtrInt;
+  m: TJsonDslMarker;
+begin
+  result := Expand(P, v, l, {KeepMarker=}true);
+  if v = nil then // { } [] template are not expanded in "string"
+    exit;
+  m := TJsonDslMarker(v^);
+  if m = jdmTemplate then
+    exit;// { } [] not expanded in "string"
+  if m <= high(m) then // skip marker
+  begin
+    inc(v);
+    dec(l);
+  end;
+  W.AddNoJsonEscape(v, l);
 end;
 
 procedure TJsonDsl.Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
@@ -3651,10 +3672,6 @@ begin
 end;
 
 function TJsonParser.DslString(P: PUtf8Char): PUtf8Char;
-var
-  v: PUtf8Char;
-  l: PtrInt;
-  m: TJsonDslMarker;
 begin
   result := P + 2;
   ReformatBeginValue;
@@ -3672,19 +3689,7 @@ begin
         end;
       '$':
         begin
-          result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
-          if v <> nil then // { } [] template are not expanded in "string"
-          begin
-            m := TJsonDslMarker(v^);
-            if m = jdmTemplate then
-              continue // { } [] not expanded in "string"
-            else if m <= high(m) then // skip marker
-            begin
-              inc(v);
-              dec(l);
-            end;
-            W.AddNoJsonEscape(v, l);
-          end;
+          result := FmtVars.ExpandTo(result, W);
           continue;
         end;
     end;
@@ -3722,7 +3727,7 @@ begin
       exit;
     end;
   end
-  else if (v^ = '"') or  // $val|"12"$ to force default string
+  else if (v^ = '"') or  // $val|"12"$ to force "string" value
           IsConstantOrNumberJson(v, l) then
     m := jdmConstNum     // AddNoJsonEscape
   else
