@@ -6759,16 +6759,10 @@ begin
   i := 0;
   repeat
     result := PByteArray(P1)[i] - PByteArray(P2)[i];
-    if result = 0 then
-    begin
-      inc(i);
-      if i < L then
-        continue
-      else
-        break;
-    end;
-    exit;
-  until false;
+    if result <> 0 then
+      exit;
+    inc(i);
+  until i >= L;
   result := Default;
 end;
 
