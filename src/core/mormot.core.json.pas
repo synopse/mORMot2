@@ -110,12 +110,17 @@ const
   /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
   JSON_UHEXC = JSON_UHEX + ord('0') shl 16 + ord('0') shl 24;
 
-  // some other constants used for fast ID/ROWID pattern recognition
-  _ID16   = ord('I') + ord('D') shl 8;
-  _ROW24  = ord('R') + ord('O') shl 8 + ord('W') shl 16;
-  _ROWI32 = _ROW24 + ord('I') shl 24;
-  SQUOT_16 = ord('''') + ord('''') shl 8;
+  // some other constants used e.g. for fast ID/ROWID pattern recognition
+  _ID16     = ord('I') + ord('D') shl 8;
+  _ROW24    = ord('R') + ord('O') shl 8 + ord('W') shl 16;
+  _ROWI32   = _ROW24 + ord('I') shl 24;
+  SQUOT_16  = ord('''') + ord('''') shl 8;
   DOLLAR_16 = ord('$') + ord('$') shl 8;
+  IF_32     = ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord(' ') shl 24;
+  ELSE_32   = ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24;
+  ELSE_16   = ord('e') + ord('$') shl 8;
+  ENDIF_32  = ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24;
+  ENDIF_24  = ord('i') + ord('f') shl 8 + ord('$') shl 16;
 
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
@@ -3202,6 +3207,8 @@ type
     jrfUnquoteName,
     jrfUnquoteValue,
     jrfUnquoteEcmaName);
+  TJsonParserIf = (ifNone, if0, ifIf, ifElse, ifEnd);
+  TJsonParserIfs = set of TJsonParserIf;
 
   /// state machine for fast (GB/s) parsing of (extended) JSON input
   {$ifdef USERECORDWITHMETHODS}
@@ -3222,6 +3229,7 @@ type
     Max: PUtf8Char; // checking Max after each comma is good enough
     RootCount: integer; // for InitCount or as DSL include depth
     FmtDsl: TTextWriterJsonPreProcessor;
+    FmtIf: (ifNormal, ifUntilElseEnd, ifUntilEnd);
     FmtVars: TJsonDsl;
     W: TJsonWriter;
     // 500 nested documents seem enough in practice (SQLite3 uses 1000)
@@ -3247,6 +3255,7 @@ type
     function DslSection(P: PUtf8Char): PUtf8Char;
     procedure DslInclude(P: PUtf8Char);
     function DslString(P: PUtf8Char): PUtf8Char;
+    function DslIf(P: PUtf8Char): PUtf8Char;
     function DslVar(P: PUtf8Char): PUtf8Char;
  end;
 
@@ -3564,6 +3573,7 @@ begin
   Fmt := FMT2FLAGS[JsonFmt];
   FmtJson := JsonFmt;
   FmtDsl := Dsl;
+  FmtIf := ifNormal;
   W := Writer;
   FmtVars := nil;
   if (FmtDsl = [jppDebugComment]) or
@@ -3713,50 +3723,172 @@ begin
   ReformatEndValue;
 end;
 
+function ParserIf(var P: PUtf8Char): TJsonParserIf;
+begin
+  if P^ = #0 then
+    result := if0
+  else
+    case PCardinal(P)^ of
+      IF_32:
+        begin
+          result := ifIf; // '$if '
+          inc(P, 4);
+        end;
+      ELSE_32:
+        if PWord(P + 4)^ = ELSE_16 then // '$else$'
+        begin
+          inc(P, 6);
+          result := ifElse;
+        end
+        else
+          result := ifNone;
+      ENDIF_32:
+        if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endif$'
+        begin
+          inc(P, 7);
+          result := ifEnd;
+        end
+        else
+          result := ifNone;
+    else
+      result := ifNone;
+    end;
+end;
+
+function ParserIfGoto(var P: PUtf8Char; EndAt: TJsonParserIfs): TJsonParserIf;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  repeat
+    result := ParserIf(P);
+  until result in EndAt;
+end;
+
+function TJsonParser.DslIf(P: PUtf8Char): PUtf8Char;
+var
+  a, b: PUtf8Char;
+  al, bl: PtrInt;
+  match: boolean;
+begin
+  result := P; // P^ = 'a $' or 'a = b$' from '$if a $' or '$if a = b $'
+  a := result;
+  while not (result^ in ['=', '$']) do
+    if result^ < ' ' then
+      exit
+    else
+      inc(result);
+  al := result - a;
+  while (al > 0) and
+        (result[al - 1] = ' ') do
+    dec(al);
+  b := nil;
+  bl := 0;
+  if result^ = '=' then // parse '$if a = b $'
+  begin
+    result := IgnoreAndGotoNextNotSpace(result);
+    if result^ = '$' then
+      result := FmtVars.Expand(result, b, bl, {keepmarker=}false)
+    else
+    begin
+      b := result;
+      while result^ <> '$' do
+        if result^ < ' ' then
+          exit
+        else
+          inc(result);
+      bl := result - b;
+    end;
+  end;
+  if FmtIf = ifNormal then
+  begin
+    a := FmtVars.DoFind(a, al, al);
+    if (a = nil) or (al = 0) then
+      match := (b = nil) or (bl = 0)
+    else
+      match := (al = bl) and (MemCmp(pointer(a), pointer(b), al) = 0);
+    if match then
+      FmtIf := ifUntilElseEnd // $if$ include [$else$ skip] $endif$
+    else if ParserIfGoto(result, [if0, ifElse, ifEnd]) = ifElse then
+      FmtIf := ifUntilEnd;    // $if$ skip $else$ include $endif$
+  end
+  else if jppDebugComment in FmtDsl then
+    AddIndentAndCommentToken([' nested $if$ are not allowed']);
+  if result^ <> #0 then
+    inc(result);
+end;
+
 function TJsonParser.DslVar(P: PUtf8Char): PUtf8Char;
 var
   v: PUtf8Char;
   l: PtrInt;
   m: TJsonDslMarker;
-begin
-  result := FmtVars.Expand(P, v, l, {KeepMarker=}true);
-  if v = nil then
-  begin
-    ReformatBeginValue;
-    W.AddNull; // nothing found: append null value
-    ReformatEndValue;
-    exit;
-  end;
-  m := TJsonDslMarker(v^);
-  if m <= high(m) then
-  begin
-    inc(v); // ignore DslSection() marker
-    dec(l);
-    if m = jdmTemplate then
-    begin
-      Reformat(v); // template as recursive blocks (once)
+begin // called with P^ = '$'
+  result := P;
+  case ParserIf(result) of
+    ifIf:   // $if
+      result := DslIf(GotoNextNotSpace(result)); // complex $if ...$ evaluation
+    ifElse: // $else$
+      begin
+        if FmtIf = ifUntilElseEnd then
+        begin
+          if ParserIfGoto(result, [if0, ifElse, ifEnd]) <> ifEnd then
+            if jppDebugComment in FmtDsl then
+              AddIndentAndCommentToken(['  $else$ with no $endif']);
+        end
+        else if jppDebugComment in FmtDsl then
+          AddIndentAndCommentToken([' $else$ with no prior $if']);
+        FmtIf := ifNormal;
+      end;
+    ifEnd: // $endif$
+      begin
+        if FmtIf = ifNormal then
+          if jppDebugComment in FmtDsl then
+            AddIndentAndCommentToken(['  $endif$ with no prior $if']);
+        FmtIf := ifNormal;
+      end;
+    if0:
       exit;
-    end;
-  end
-  else if (v^ = '"') or  // $val|"12"$ to force "string" value
-          IsConstantOrNumberJson(v, l) then
-    m := jdmConstNum     // AddNoJsonEscape
   else
-    m := jdmPlainString; // AddJsonEscape
-  ReformatBeginValue;
-  if m = jdmConstNum then
-    W.AddNoJsonEscape(v, l)
-  else
-  begin
-    W.AddDirect('"');
-    if l <> 0 then
-      if m = jdmPlainString then
-        W.AddJsonEscape(v, l)    // |default or enc:NAME
+    begin
+      result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
+      if v = nil then
+      begin
+        ReformatBeginValue;
+        W.AddNull; // nothing found: append null value
+        ReformatEndValue;
+        exit;
+      end;
+      m := TJsonDslMarker(v^);
+      if m <= high(m) then
+      begin
+        inc(v); // ignore DslSection() marker
+        dec(l);
+        if m = jdmTemplate then
+        begin
+          Reformat(v); // template as recursive blocks (once)
+          exit;
+        end;
+      end
+      else if (v^ = '"') or  // $val|"12"$ to force "string" value
+              IsConstantOrNumberJson(v, l) then
+        m := jdmConstNum     // AddNoJsonEscape
       else
-        W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "already \r quoted"
-    W.AddDirect('"');
+        m := jdmPlainString; // AddJsonEscape
+      ReformatBeginValue;
+      if m = jdmConstNum then
+        W.AddNoJsonEscape(v, l)
+      else
+      begin
+        W.AddDirect('"');
+        if l <> 0 then
+          if m = jdmPlainString then
+            W.AddJsonEscape(v, l)    // |default or enc:NAME
+          else
+            W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "was \r quoted"
+        W.AddDirect('"');
+      end;
+      ReformatEndValue;
+    end;
   end;
-  ReformatEndValue;
 end;
 
 function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
@@ -4047,7 +4179,7 @@ dquote:   ReformatBeginValue;
         else if P[1] = '"' then  // $"..." substitution
           P := DslString(P)
         else
-          P := DslVar(P);        // $ident$ or ${ident} substitution
+          P := DslVar(P); // substitute $ident$ ${ident} or $if$ $else$ $endif$
       jtNone, // handle unexpected chars - full UTF-8 range - as potential value
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
