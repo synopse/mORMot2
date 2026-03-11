@@ -3094,20 +3094,20 @@ type
     // - can optionally delete any matching item
     function IndexOf(Key: pointer; KeyLen: PtrInt;
       AndDelete: boolean = false): PtrInt; overload;
-    /// case-sensitive search and return a value, using the internal hash
-    // - returns nil or the found Value (#0 terminated) - with optional ValueLen
-    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
-    function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt = nil): pointer; overload;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// case-sensitive search and return a value, using the internal hash
-    // - overload to Find() using a ShortString as convenient constant Key
-    function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
     /// raw access to each key buffer as encoded in Value[] - not #0 terminated
     // - warning: @ValueLen should be a PtrInt, not 32-bit integer
     function Keys(Index: PtrInt; Len: PPtrInt = nil): pointer;
     /// raw access to each value buffer as encoded in Value[] - #0 terminated
     // - warning: @ValueLen should be a PtrInt, not 32-bit integer
     function Values(Index: PtrInt; Len: PPtrInt = nil): pointer;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// case-sensitive search and return a value, using the internal hash
+    // - returns nil or the found Value (#0 terminated) - with optional ValueLen
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt = nil): pointer; overload;
+    /// case-sensitive search and return a value, using the internal hash
+    // - overload to Find() using a ShortString as convenient constant Key
+    function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
     /// erase the whole storage
     procedure Clear;
     /// write all key = value pairs as human-readable text
