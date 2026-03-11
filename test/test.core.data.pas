@@ -3203,6 +3203,9 @@ begin
     '$$'#10'a=1'#10'$$'#10'{a:$os:name$}',
     Join(['{a:"', OSVersionShort,'"}']));
   TestMorJson(
+    '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
+    Join(['{a:"', GlobalInfoFind('net:mac'),'"}']));
+  TestMorJson(
     '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
     '{a:1,b:2}');
   TestMorJson(
@@ -3231,6 +3234,7 @@ begin
     J + '{$a$:0,b:$os:arch$,c:$"http://toto/$os:arch$",d:$os:none$,e:$"a$os:no$s"}',
     '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
      '",d:null,e:"as"}');
+  //ConsoleWrite(GlobalInfoRegisterAll.AsText);
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
