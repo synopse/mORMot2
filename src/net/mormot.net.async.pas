@@ -5402,7 +5402,7 @@ begin
       fSock := fAsync.fServer;
       fAsync.DoLog(sllTrace, 'Execute: main loop', [], self);
       IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
-      tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
+      tix := GetTickSec shr 6; // delay=500 after 64s idle
       lasttix := tix;
       mscallbacks := 0;
       if fCallbackSendDelay <> nil then
@@ -5452,7 +5452,7 @@ begin
             fAsync.fSockets.ProcessWrite(notif, 0);
           if mscallbacks <> 0 then
           begin
-            tix := mormot.core.os.GetTickCount64 shr 16;
+            tix := GetTickSec shr 6;
             lasttix := tix;
           end;
         {$endif USE_WINIOCP}

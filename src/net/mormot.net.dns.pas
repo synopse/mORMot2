@@ -592,7 +592,7 @@ end;
 var
   NoTcpSafe: TLightLock;
   NoTcpServers: TRawUtf8DynArray;
-  NoTcpTix16: cardinal; // cache flushed after 65,536 seconds
+  NoTcpTix16: cardinal; // cache flushed after 64 seconds
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
@@ -656,7 +656,7 @@ begin
   begin
     // UDP frame was too small: try with a TCP connection
     // ensure was not marked in NoTcpServers (avoid unneeded timeout)
-    tix16 := GetTickCount64 shr 16;
+    tix16 := GetTickSec shr 6;
     NoTcpSafe.Lock;
     if NoTcpTix16 <> tix16 then
       NoTcpServers := nil; // flush after 1 minute

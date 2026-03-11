@@ -789,11 +789,11 @@ const
   MAK_TXT: array[TMacAddressKind] of AnsiChar = '?EWTPCS';
 
 /// enumerate all network MAC addresses and their associated IP information
-// - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
+// - an internal 64-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
 
 /// enumerate all MAC addresses of the current computer as 'name1=addr1 name2=addr2'
-// - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
+// - an internal 64-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddressesText(WithoutName: boolean = true;
   UpAndDown: boolean = false): RawUtf8;
 
@@ -4138,7 +4138,7 @@ var
   // GetMacAddresses / GetMacAddressesText cache - refreshed every 65 seconds
   MacAddresses: array[{UpAndDown=}boolean] of record
     Safe: TLightLock;
-    Tix: integer; // = GetTickCount64 shr 16 + 1
+    Tix: integer; // = GetTickSec shr 6 + 1
     Addresses: TMacAddressDynArray;
     Text: array[{WithoutName=}boolean] of RawUtf8;
   end;
@@ -4195,7 +4195,7 @@ begin
   if Sep = ' ' then
     with IPAddresses[Kind] do
     begin
-      now := mormot.core.os.GetTickCount64 shr 15 + 1; // refresh every 32768 ms
+      now := GetTickSec shr 5 + 1; // refresh every 32s
       Safe.Lock;
       try
         if now <> Tix then
@@ -4221,7 +4221,7 @@ function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
   now: integer;
 begin
-  now := mormot.core.os.GetTickCount64 shr 16 + 1; // refresh every 65536 ms
+  now := GetTickSec shr 6 + 1; // refresh every 64s
   with MacAddresses[UpAndDown] do
   begin
     Safe.Lock;
@@ -4246,7 +4246,7 @@ var
   now: integer;
   ok: boolean;
 begin
-  now := mormot.core.os.GetTickCount64 shr 16 + 1; // refresh every 65536 ms
+  now := GetTickSec shr 6 + 1; // refresh every 64s
   with MacAddresses[UpAndDown] do
   begin
     Safe.Lock; // to avoid memory leak
@@ -4341,7 +4341,7 @@ var
   tix32: cardinal;
   i: PtrInt;
 begin
-  tix32 := mormot.core.os.GetTickCount64 shr 13 + 1; // refresh every 8192 ms
+  tix32 := mormot.core.os.GetTickSec shr 3 + 1; // refresh every 8s
   with DnsCache do
   begin
     Safe.Lock;

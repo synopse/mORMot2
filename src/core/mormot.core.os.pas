@@ -9776,7 +9776,7 @@ function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean; now: cardinal): RawUtf8;
 begin
   if now = 0 then
-    now := GetTickCount64 shr 18 + 1; // div 262.144 seconds = every 4.4 min
+    now := GetTickSec shr 8 + 1; // every 256s = 4 min
   OSSafe.Lock;
   try
     // first search if not already in cache
@@ -9806,7 +9806,7 @@ var
   v: RawUtf8;
 begin
   result := '';
-  now := GetTickCount64 shr 18 + 1;
+  now := GetTickSec shr 8 + 1;
   OSSafe.Lock;
   try
     // first search if not already in cache

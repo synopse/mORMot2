@@ -5291,7 +5291,7 @@ begin
         end
         else
         begin
-          tix32 := mormot.core.os.GetTickCount64 shr 12;
+          tix32 := GetTickSec shr 2;
           if fAuthTix32 = tix32 then
           begin
             // 403 HTTP error if not authorized (and close connection)
