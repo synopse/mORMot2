@@ -3940,9 +3940,10 @@ begin // handle P = '$$'
     repeat
       inc(result);
     until result^ in [#0 .. ' ', '=', ':', '$', '|'];
+    keylen := result - key;
+    result := GotoNextNotSpace(result);
     if not (result^ in ['=', ':']) then
       continue; // $ and | are not allowed in identifiers
-    keylen := result - key;
     while result^ in ['=', ':', ' '] do
       inc(result); // allow := or == syntax
     marker := jdmEscapedString;
