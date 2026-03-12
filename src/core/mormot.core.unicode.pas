@@ -2579,6 +2579,13 @@ function GetCharKinds(P: PUtf8Char; len: PtrUInt): TCharKindSet; overload;
 function GetCharKinds(const text: RawUtf8): TCharKindSet; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// retrieve the set of character categories of a given UTF-8 text buffer
+function IsCharKinds(P: PUtf8Char; len: PtrUInt; const kinds: TCharKindSet): boolean; overload;
+
+/// retrieve the set of character categories of a given UTF-8 string
+function IsCharKinds(const text: RawUtf8; kinds: TCharKindSet): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// convert a text buffer into a snake_case identifier (as in Python)
 // - will convert up to the first 256 AnsiChar of the buffer
 // - you can set e.g. sep='-' to convert to kekab-case as used e.g. in RFC
@@ -9973,6 +9980,27 @@ begin
     byte(result) := 0
   else
     result := GetCharKinds(pointer(text), PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^);
+end;
+
+function IsCharKinds(P: PUtf8Char; len: PtrUInt; const kinds: TCharKindSet): boolean;
+var
+  tab: PCharKinds;
+begin
+  result := false;
+  tab := @IDENT_CHARS;
+  inc(len, PtrUInt(P)); // len = PtrUInt(PEnd)
+  while PtrUInt(P) < len do
+    if tab[P^] in kinds then
+      inc(P)
+    else
+      exit;
+  result := true;
+end;
+
+function IsCharKinds(const text: RawUtf8; kinds: TCharKindSet): boolean;
+begin
+  result := (pointer(text) <> nil) and
+    IsCharKinds(pointer(text), PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^, kinds);
 end;
 
 type // SnakeCase() state machine

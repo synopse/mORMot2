@@ -10743,9 +10743,8 @@ begin
     v64 := -v64;
   // 2. now v64, frac, digit, exp contain number parsed from Json
   if (frac = 0) and
-     (remdigit >= 0) then
+     (remdigit >= 0) then // return an integer or Int64 value
   begin
-    // return an integer or Int64 value
     Value.VInt64 := v64;
     if remdigit <= 9 then
       TSynVarData(Value).VType := varInt64
@@ -10753,16 +10752,14 @@ begin
       TSynVarData(Value).VType := varInteger;
   end
   else if (frac < 0) and
-          (frac >= -4) then
+          (frac >= -4) then // currency as ###.0123
   begin
-    // currency as ###.0123
     TSynVarData(Value).VType := varCurrency;
     Value.VInt64 := v64 * CURRENCY_FACTOR[frac]; // as round(CurrValue*10000)
   end
   else if AllowVarDouble and
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
-  begin
-    // converted into a double value
+  begin // convert into a double value
     d64 := v64;
     {$ifdef CPUX86NOTPIC}
     f := frac;
