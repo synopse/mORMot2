@@ -2335,8 +2335,6 @@ type
   THttpCookie = TTextBufferPair;
   /// refers to one HTTP input cookie
   PHttpCookie = ^THttpCookie;
-  /// a dynamic array of THttpCookie name/value pairs
-  THttpCookieDynArray = array of THttpCookie;
 
   /// parse and store HTTP cookies received on server side
   // - shared by framework server classes, both at HTTP or REST levels
@@ -2347,7 +2345,7 @@ type
   THttpCookies = object
   {$endif USERECORDWITHMETHODS}
   private
-    fCookies: THttpCookieDynArray; // only if InCookie[] is used
+    fCookies: TTextBufferPairDynArray; // only if InCookie[] is used
   public
     /// reset the internal list
     procedure Clear;
@@ -2376,12 +2374,9 @@ type
       read GetCookie; default;
     {$endif HASINLINE}
     /// direct access to the internal name/value pairs list
-    property Cookies: THttpCookieDynArray
+    // - you may use NameTextBufferPair/ValueTextBufferPair() to have RawUtf8
+    property Cookies: TTextBufferPairDynArray
       read fCookies;
-    /// low-level access to the Cookie[ndx] name content - for testing
-    function Name(ndx: PtrInt): RawUtf8;
-    /// low-level access to the Cookie[ndx] value content - for testing
-    function Value(ndx: PtrInt): RawUtf8;
   end;
   PHttpCookies = ^THttpCookies;
 
@@ -11034,29 +11029,10 @@ begin
 end;
 
 function THttpCookies.FindCookie(const CookieName: RawUtf8): PHttpCookie;
-var
-  n, l: integer;
 begin
-  if @self <> nil then
-  begin
-    result := pointer(fCookies);
-    if result = nil then
-      exit;
-    l := length(CookieName);
-    if l <> 0 then
-    begin
-      n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
-      repeat
-        if (result^.NameLen = l) and
-           mormot.core.base.CompareMem(result^.NameStart, pointer(CookieName), l) then
-          exit // cookies are case-sensitive
-        else
-          inc(result);
-        dec(n);
-      until n = 0;
-    end;
-  end;
   result := nil;
+  if @self <> nil then
+    result := FindTextBufferPair(CookieName, fCookies);
 end;
 
 function THttpCookies.GetCookie(const CookieName: RawUtf8): RawUtf8;
@@ -11072,24 +11048,6 @@ begin
   c := FindCookie(CookieName);
   if c <> nil then
     FastSetString(DestValue, c^.ValueStart, c^.ValueLen);
-end;
-
-function THttpCookies.Name(ndx: PtrInt): RawUtf8;
-begin
-  if PtrUInt(ndx) < PtrUInt(length(fCookies)) then
-    with fCookies[ndx] do
-      FastSetString(result, NameStart, NameLen)
-  else
-    FastAssignNew(result);
-end;
-
-function THttpCookies.Value(ndx: PtrInt): RawUtf8;
-begin
-  if PtrUInt(ndx) < PtrUInt(length(fCookies)) then
-    with fCookies[ndx] do
-      FastSetString(result, ValueStart, ValueLen)
-  else
-    FastAssignNew(result);
 end;
 
 function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
