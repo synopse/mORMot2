@@ -1553,6 +1553,9 @@ function ToInt64(const text: RawUtf8; out value: Int64): boolean;
 function ToDouble(const text: RawUtf8; out value: double): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get the signed 64-bit integer value stored in an UTF-8 text buffer
+function IsInt64(P: PUtf8Char; len: PtrInt; value: PInt64 = nil): boolean;
+
 /// internal fast integer value to text conversion
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
@@ -6930,6 +6933,43 @@ begin
      (result < min) or
      (result > max) then
     result := default;
+end;
+
+function IsInt64(P: PUtf8Char; len: PtrInt; value: PInt64): boolean;
+var
+  v: QWord;
+  min: boolean;
+  c: byte;
+begin
+  result := false;
+  if (P = nil) or
+     (len <= 0) then
+    exit;
+  inc(len, PtrUInt(P)); // PUtf8Char(len) = PEnd
+  min := false;
+  v := 0;
+  if P^ = '-' then
+  begin
+    min := true;
+    inc(P);
+    if P >= PUtf8Char(len) then
+      exit;
+  end;
+  repeat
+    c := byte(P^);
+    inc(P);
+    dec(c, 48);
+    if c > 9 then
+      exit;
+    if value <> nil then
+      v := v * 10 + c;
+  until P >= PUtf8Char(len);
+  result := true;
+  if value = nil then
+    exit;
+  if min then
+    v := -v;
+  value^ := v;
 end;
 
 function ToInteger(const text: RawUtf8; out value: integer): boolean;

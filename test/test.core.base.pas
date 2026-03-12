@@ -1074,6 +1074,7 @@ var
   B: TBinDictionary;
   O: TSynMonitorTime;
   v: TRawUtf8DynArray;
+  v64: Int64;
   timer: TPrecisionTimer;
 
   procedure TestBinDictionary;
@@ -1106,7 +1107,10 @@ begin
     NotifyTestSpeed('TRawUtf8List.Add no hash', MAX + 1, 0, @timer, ONLYLOG);
     Check(L.Count = MAX + 1);
     for i := 0 to MAX do
-      Check(GetInteger(Pointer(L[i])) = i);
+    begin
+      Check(IsInt64(Pointer(L[i]), length(L[i]), @v64));
+      Check(v64 = i);
+    end;
     for i := 0 to MAX do
       Check(TSynMonitorTime(L.Objects[i]).MicroSec = i);
     timer.Start;

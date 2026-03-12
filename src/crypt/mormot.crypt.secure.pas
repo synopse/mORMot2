@@ -387,7 +387,7 @@ type
     /// convert this identifier as an explicit TDocVariant JSON object
     // - returns e.g.
     // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
-    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
+    // !  "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
     function AsVariant: variant;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert this identifier to an explicit TDocVariant JSON object
