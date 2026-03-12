@@ -3201,6 +3201,15 @@ begin
     '$$'#10'a=1'#10'$$'#10'{a:$a$}',
     '{a:1}');
   TestJop(
+    '$$'#10'a= 1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$os:name$}',
     Join(['{a:"', OSVersionShort,'"}']));
   J := GlobalInfoFind('net:mac');
@@ -3274,7 +3283,7 @@ begin
     '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
     '{a:"xy","xy":"xy"}', {nest=}false);
   TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
+    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
     '{a:1,b:"1"}');
   TestJop(
     '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
@@ -3294,6 +3303,20 @@ begin
   TestJop(
     '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
     '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
+  TestJop(
+    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
