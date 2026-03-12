@@ -2524,6 +2524,17 @@ type
     ValueLen: integer;
   end;
 
+  /// all parsed filled from ParseSortMatch()
+  TParseSortExpression = object(TTextBufferPair)
+    /// the recognized operator
+    Match: TCompareOperator;
+  end;
+
+/// parse a "key<value" or "key<" expression for SortMatch() comparison
+function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
+  const EndName, EndExpr: TSynAnsicharSet): PUtf8Char; overload;
+
+type
   /// character categories e.g. for ASCII-7 identifier parsing
   TCharKind = (
     ckOther, ckLowerAlpha, ckUpperAlpha, ckDigit, ckUnderscore, ckPoint);
@@ -9786,6 +9797,67 @@ begin
   FastSetString(result, pointer(text), length(text));
   if result <> '' then
     PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
+end;
+
+function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
+  const EndName, EndExpr: TSynAnsicharSet): PUtf8Char;
+var
+  B: PUtf8Char;
+begin
+  result := nil; // invalid input
+  if P = nil then
+    exit;
+  P := GotoNextNotSpace(P);
+  Expression.NameStart := P;
+  Expression.ValueStart := nil;
+  Expression.ValueLen := 0;
+  while not (P^ in EndName) do // e.g. [#0 .. ' ', '<', '=', '>', '!', '$']
+    inc(P);
+  Expression.NameLen := P - Expression.NameStart;
+  P := GotoNextNotSpace(P);
+  if P^ in EndExpr then
+  begin
+    result := P; // e.g. $if var$ with EndExpr = [#0 .. #31, '$']
+    exit;
+  end;
+  B := P;
+  while P^ in ['<', '>', '='] do
+    inc(P);
+  case P - B of
+    1:
+      case B^ of
+        '=':
+          Expression.Match := coEqualTo;
+        '<':
+          Expression.Match := coLessThan;
+        '>':
+          Expression.Match := coGreaterThan
+      else
+        exit;
+      end;
+    2:
+      case cardinal(PWord(B)^) of
+        ord('=') + ord('=') shl 8: // c-style
+          Expression.Match := coEqualTo;
+        ord('!') + ord('=') shl 8, // c-style
+        ord('<') + ord('>') shl 8:
+          Expression.Match := coNotEqualTo;
+        ord('>') + ord('=') shl 8:
+          Expression.Match := coGreaterThanOrEqualTo;
+        ord('<') + ord('=') shl 8:
+          Expression.Match := coLessThanOrEqualTo;
+      else
+        exit;
+      end;
+  else
+    exit;
+  end;
+  P := GotoNextNotSpace(P);
+  Expression.ValueStart := P;
+  while not (P^ in EndExpr) do // e.g. [#0 .. #31, '$']
+    inc(P);
+  Expression.ValueLen := P - Expression.NameStart;
+  result := P;
 end;
 
 type // SnakeCase() state machine
