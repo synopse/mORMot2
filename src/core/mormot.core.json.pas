@@ -3766,58 +3766,49 @@ end;
 
 function TJsonParser.DslIf(P: PUtf8Char): PUtf8Char;
 var
-  a, b: PUtf8Char;
-  al, bl: PtrInt;
+  exp: TParseSortExpression;
+  len: PtrInt;
   match: boolean;
-begin
-  result := P; // P^ = 'a $' or 'a = b$' from '$if a $' or '$if a = b $'
-  a := result;
-  while not (result^ in ['=', '$']) do
-    if result^ < ' ' then
-      exit
-    else
-      inc(result);
-  al := result - a;
-  while (al > 0) and
-        (result[al - 1] = ' ') do
-    dec(al);
-  b := nil;
-  bl := -1; // mark $if a$
-  if result^ = '=' then // parse $if a = b $
+begin // P^ = 'n $' or 'n = v$' from '$if n $' or '$if n = v $'
+  result := ParseSortMatch(P, exp,
+    [#0 .. ' ', '<', '=', '>', '!', '$'], [#0 .. #31, '$']);
+  if result = nil then
   begin
-    result := IgnoreAndGotoNextNotSpace(result);
+    result := IgnoreAndGotoNextNotSpace(P);
+    exit;
+  end;
+  while (exp.ValueLen > 0) and
+        (exp.ValueStart[exp.ValueLen - 1] = ' ') do
+    dec(exp.ValueLen);
+  if exp.ValueLen = 0 then
     if result^ = '$' then
     begin
-      result := FmtVars.Expand(result, b, bl, {keepmarker=}false);
-      if b = nil then
-        bl := 0; // $if a = b $ with b=''
+      result := FmtVars.Expand(result, exp.ValueStart, len, {keepmarker=}false);
+      if exp.ValueStart <> nil then
+        exp.ValueLen := len;
+      result := GotoNextNotSpace(result);
+      if result^ <> '$' then
+        exit;
     end
     else
-    begin
-      b := result;
-      while result^ <> '$' do
-        if result^ < ' ' then
-          exit
-        else
-          inc(result);
-      bl := result - b;
-    end;
-  end;
+      exit;
   if FmtIf = ifNormal then
   begin
-    a := FmtVars.DoFind(a, al, al);
-    if (a <> nil) and
-       (TJsonDslMarker(a^) <= high(TJsonDslMarker)) then
+    len := 0; // need a PtrInt, not an integer
+    exp.NameStart := FmtVars.DoFind(exp.NameStart, exp.NameLen, len);
+    exp.NameLen := len;
+    if (exp.NameStart <> nil) and
+       (TJsonDslMarker(exp.NameStart^) <= high(TJsonDslMarker)) then
     begin
-     inc(a); // trim marker
-     dec(al);
+     inc(exp.NameStart); // trim marker
+     dec(exp.NameLen);
     end;
-    if bl < 0 then // $if a$ = if defined a
-      match := a <> nil
-    else if (b = nil) or (bl = 0) then
-      match := (a = nil) or (al = 0)  // $if a = $
+    if exp.ValueLen < 0 then // $if a$ = if defined exp.NameStart
+      match := exp.NameStart <> nil
+    else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
+      match := (exp.NameStart = nil) or (exp.NameLen = 0)  // $if exp.NameStart = $
     else
-      match := (al = bl) and (MemCmp(pointer(a), pointer(b), al) = 0);
+      match := EvaluateSortMatch(exp); // = < > <= >= evaluation
     if match then
       FmtIf := ifUntilElseEnd // $if$ include [$else$ skip] $endif$
     else
@@ -3833,7 +3824,7 @@ begin
   end
   else if jppDebugComment in FmtDsl then
     AddIndentAndCommentToken([' nested $if$ are not allowed']);
-  if result^ <> #0 then
+  if result^ = '$' then
     inc(result);
 end;
 
