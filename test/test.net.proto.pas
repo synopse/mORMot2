@@ -3730,14 +3730,14 @@ var
 
   procedure Check4;
   begin
-    CheckEqual(hc.Name(0), 'name');
-    CheckEqual(hc.Value(0), 'value');
-    CheckEqual(hc.Name(1), 'name 1');
-    CheckEqual(hc.Value(1), 'value1');
-    CheckEqual(hc.Name(2), 'name 2');
-    CheckEqual(hc.Value(2), 'value 2');
-    CheckEqual(hc.Name(3), 'name3');
-    CheckEqual(hc.Value(3), 'value3');
+    CheckEqual(NameTextBufferPair(hc.Cookies, 0), 'name');
+    CheckEqual(ValueTextBufferPair(hc.Cookies, 0), 'value');
+    CheckEqual(NameTextBufferPair(hc.Cookies, 1), 'name 1');
+    CheckEqual(ValueTextBufferPair(hc.Cookies, 1), 'value1');
+    CheckEqual(NameTextBufferPair(hc.Cookies, 2), 'name 2');
+    CheckEqual(ValueTextBufferPair(hc.Cookies, 2), 'value 2');
+    CheckEqual(NameTextBufferPair(hc.Cookies, 3), 'name3');
+    CheckEqual(ValueTextBufferPair(hc.Cookies, 3), 'value3');
     {$ifdef HASINLINE}
     CheckEqual(hc.Cookie['name'], 'value');
     CheckEqual(hc.Cookie['name 1'], 'value1');
@@ -3902,8 +3902,8 @@ begin
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
   hc.ParseServer(HDR1);
-  CheckEqual(hc.Name(0), 'name');
-  CheckEqual(hc.Value(0), 'value');
+  CheckEqual(NameTextBufferPair(hc.Cookies, 0), 'name');
+  CheckEqual(ValueTextBufferPair(hc.Cookies, 0), 'value');
   CheckEqual(length(hc.Cookies), 1);
   CheckEqual(hc.GetCookie('name'), 'value');
   CheckEqual(hc.Cookies[0].NameLen, 4);
@@ -3912,8 +3912,8 @@ begin
   hc.Clear;
   CheckEqual(length(hc.Cookies), 0);
   hc.ParseServer(HDR2);
-  CheckEqual(hc.Name(0), 'name');
-  CheckEqual(hc.Value(0), 'value');
+  CheckEqual(NameTextBufferPair(hc.Cookies, 0), 'name');
+  CheckEqual(ValueTextBufferPair(hc.Cookies, 0), 'value');
   CheckEqual(length(hc.Cookies), 1);
   CheckEqual(hc.GetCookie('name'), 'value');
   CheckEqual(hc.Cookies[0].NameLen, 4);
