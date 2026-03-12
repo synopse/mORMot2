@@ -9896,7 +9896,7 @@ begin
   P := GotoNextNotSpace(P);
   Expression.NameStart := P;
   Expression.ValueStart := nil;
-  Expression.ValueLen := 0;
+  Expression.ValueLen := -1; // with result <> nil: means no value was specified
   while not (P^ in EndName) do // e.g. [#0 .. ' ', '<', '=', '>', '!', '$']
     inc(P);
   Expression.NameLen := P - Expression.NameStart;
@@ -9942,7 +9942,7 @@ begin
   Expression.ValueStart := P;
   while not (P^ in EndExpr) do // e.g. [#0 .. #31, '$']
     inc(P);
-  Expression.ValueLen := P - Expression.NameStart;
+  Expression.ValueLen := P - Expression.ValueStart;
   result := P;
 end;
 
