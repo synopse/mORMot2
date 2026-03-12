@@ -2556,7 +2556,9 @@ function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
 type
   /// character categories e.g. for ASCII-7 identifier parsing
   TCharKind = (
-    ckOther, ckLowerAlpha, ckUpperAlpha, ckDigit, ckUnderscore, ckPoint);
+    ckOther, ckLowerAlpha, ckUpperAlpha, ckDigit, ckSign, ckUnderscore, ckPoint);
+  /// set of character categories e.g. for ASCII-7 identifier parsing
+  TCharKindSet = set of TCharKind;
   /// efficient text-to-character lookup table for identifier parsing
   TCharKinds = array[AnsiChar] of TCharKind;
   /// pointer to a text-to-character lookup table for identifier parsing
@@ -2565,6 +2567,13 @@ type
 var
   /// text-to-character lookup table for ASCII-7 identifier parsing
   IDENT_CHARS: TCharKinds;
+
+/// retrieve the set of character categories of a given UTF-8 text buffer
+function GetCharKinds(P: PUtf8Char; len: PtrUInt): TCharKindSet; overload;
+
+/// retrieve the set of character categories of a given UTF-8 string
+function GetCharKinds(const text: RawUtf8): TCharKindSet; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a text buffer into a snake_case identifier (as in Python)
 // - will convert up to the first 256 AnsiChar of the buffer
@@ -9926,6 +9935,28 @@ begin
   result := P;
 end;
 
+function GetCharKinds(P: PUtf8Char; len: PtrUInt): TCharKindSet;
+var
+  tab: PCharKinds;
+begin
+  tab := @IDENT_CHARS;
+  byte(result) := 0;
+  inc(len, PtrUInt(P)); // len = PtrUInt(PEnd)
+  while PtrUInt(P) < len do
+  begin
+    include(result, tab[P^]);
+    inc(P);
+  end;
+end;
+
+function GetCharKinds(const text: RawUtf8): TCharKindSet;
+begin
+  if pointer(text) = nil then
+    byte(result) := 0
+  else
+    result := GetCharKinds(pointer(text), PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^);
+end;
+
 type // SnakeCase() state machine
   TSnakeCase = set of (scDigit, scUp, scLow, sc_, scNext_);
 var
@@ -11914,6 +11945,8 @@ begin
         ck := ckUpperAlpha;
       '0'..'9':
         ck := ckDigit;
+      '-', '+':
+        ck := ckSign;
       '_':
         ck := ckUnderscore;
       '.', ',', ';':
