@@ -3017,7 +3017,7 @@ procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
 
 /// parse a "key<value" or "key<" expression for SortMatch() comparison
 function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
-  out Match: TCompareOperator; Value: PVariant): boolean;
+  out Match: TCompareOperator; Value: PVariant): boolean; overload;
 
 
 { ************** Variant Binary Serialization }
@@ -10966,54 +10966,17 @@ end;
 function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
   out Match: TCompareOperator; Value: PVariant): boolean;
 var
-  KB, KE, B: PUtf8Char;
+  exp: TParseSortExpression;
 begin
   result := false;
-  if Expression = nil then
+  if (Expression = nil) or
+     (ParseSortMatch(Expression, exp,
+       {EndName=}[#0 .. ' ', '<', '=', '>', '!'], {EndExpr=}[#0]) = nil) then
     exit;
-  Expression := GotoNextNotSpace(Expression);
-  KB := Expression;
-  while jcJsonIdentifier in JSON_CHARS[Expression^] do // _-.[]$0..9a..zA..Z
-    inc(Expression);
-  if Expression^ = #0 then
-    exit;
-  KE := Expression;
-  Expression := GotoNextNotSpace(Expression);
-  B := Expression;
-  while Expression^ in ['<', '>', '='] do
-    inc(Expression);
-  case Expression - B of
-    1:
-      case B^ of
-        '=':
-          Match := coEqualTo;
-        '<':
-          Match := coLessThan;
-        '>':
-          Match := coGreaterThan
-      else
-        exit;
-      end;
-    2:
-      case cardinal(PWord(B)^) of
-        ord('=') + ord('=') shl 8: // c-style
-          Match := coEqualTo;
-        ord('!') + ord('=') shl 8, // c-style
-        ord('<') + ord('>') shl 8:
-          Match := coNotEqualTo;
-        ord('>') + ord('=') shl 8:
-          Match := coGreaterThanOrEqualTo;
-        ord('<') + ord('=') shl 8:
-          Match := coLessThanOrEqualTo;
-      else
-        exit;
-      end;
-  else
-    exit;
-  end;
-  FastSetString(Key, KB, KE - KB);
+  FastSetString(Key, exp.NameStart, exp.NameLen);
   if Value <> nil then
-    TextBufferToVariant(GotoNextNotSpace(Expression), {allowdouble=}true, Value^);
+    TextBufferToVariant(exp.ValueStart, {allowdouble=}true, Value^);
+  Match := exp.Match;
   result := true;
 end;
 
