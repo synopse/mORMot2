@@ -3772,7 +3772,7 @@ var
   exp: TParseSortExpression;
   len: PtrInt;
   match: boolean;
-begin // P^ = 'n $' or 'n = v$' from '$if n $' or '$if n = v $'
+begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
   result := ParseSortMatch(P, exp,
     [#0 .. ' ', '<', '=', '>', '!', '$'], [#0 .. #31, '$']);
   if result = nil then
@@ -3784,7 +3784,7 @@ begin // P^ = 'n $' or 'n = v$' from '$if n $' or '$if n = v $'
         (exp.ValueStart[exp.ValueLen - 1] = ' ') do
     dec(exp.ValueLen);
   if exp.ValueLen = 0 then
-    if result^ = '$' then
+    if result^ = '$' then // resolve $val$
     begin
       result := FmtVars.Expand(result, exp.ValueStart, len, {keepmarker=}false);
       if exp.ValueStart <> nil then
@@ -3794,7 +3794,7 @@ begin // P^ = 'n $' or 'n = v$' from '$if n $' or '$if n = v $'
         exit;
     end
     else
-      exit;
+      exit; // '$if id =$' is invalid syntax (ValueLen=-1 for $ifdef id$)
   if FmtIf = ifNormal then
   begin
     len := 0; // need a PtrInt, not an integer
@@ -3803,15 +3803,15 @@ begin // P^ = 'n $' or 'n = v$' from '$if n $' or '$if n = v $'
     if (exp.NameStart <> nil) and
        (TJsonDslMarker(exp.NameStart^) <= high(TJsonDslMarker)) then
     begin
-     inc(exp.NameStart); // trim marker
+     inc(exp.NameStart); // trim marker after raw DoFind()
      dec(exp.NameLen);
     end;
-    if exp.ValueLen < 0 then // $if a$ = if defined exp.NameStart
-      match := exp.NameStart <> nil
+    if exp.ValueLen < 0 then
+      match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
     else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
-      match := (exp.NameStart = nil) or (exp.NameLen = 0)  // $if exp.NameStart = $
+      match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
     else
-      match := EvaluateSortMatch(exp); // = < > <= >= evaluation
+      match := EvaluateSortMatch(exp); // = < > <= >= non-void evaluation
     if match then
       FmtIf := ifUntilElseEnd // $if$ include [$else$ skip] $endif$
     else
