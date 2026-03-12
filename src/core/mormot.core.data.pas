@@ -5370,7 +5370,6 @@ begin
   Sender.UpdateText( 'os:name',           OSVersionShort);
   Sender.UpdateText( 'os:family',         LowerCaseU(OS_TEXT));
   Sender.UpdateText( 'os:version',        OSVersionText);
-  Sender.UpdateText( 'os:arch',           CPU_ARCH_TEXT);
   Sender.UpdateText(['os:ram'],          [SystemMemorySize]);
   Sender.UpdateText( 'os:hostname',       Executable.Host);
   Sender.UpdateText(['os:temp'],         [GetSystemPath(spTemp)]);
@@ -5390,22 +5389,20 @@ begin
   if WindowsUbr <> 0 then
     Sender.UpdateText(['os:build'], [WindowsUbr]);
   Sender.UpdateTextNotVoid('os:winver',   WindowsDisplayVersion);
-  if IsWow64 then
-    Sender.UpdateText('os:wow64', 'true');
-  if IsWow64Emulation then
-    Sender.UpdateText('os:prism', 'true');
   {$endif OSPOSIX}
 end;
 
 procedure _GlobalInfoCpu(Sender: TBinDictionary);
 begin
   Sender.UpdateText( 'cpu:name',         CpuInfoText);
-  Sender.UpdateText(['cpu:threads'],    [CpuCores]);
-  Sender.UpdateText(['cpu:cores'],      [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['cpu:threads'],    [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['cpu:cores'],      [CpuCores]);
   Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
   if HasHWAes then
     Sender.UpdateText('cpu:aes',        'true');
   {$ifdef CPUINTEL}
+  if cfAVX in CpuFeatures then
+    Sender.UpdateText('cpu:avx',        'true');
   if cfAVX2 in CpuFeatures then
     Sender.UpdateText('cpu:avx2',       'true');
   if IntelAvx10 > 0 then
@@ -5419,7 +5416,8 @@ begin
   Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
   {$endif CPUINTEL}
   {$ifdef CPUARM3264}
-  Sender.UpdateTextNotVoid('cpu:model',  CpuArmModel);
+  Sender.UpdateTextNotVoid('cpu:model',        CpuArmModel);
+  Sender.UpdateTextNotVoid('cpu:manufacturer', CpuArmImplementer);
   {$endif CPUARM3264}
 end;
 
@@ -5445,7 +5443,8 @@ end;
 procedure _GlobalInfoBios(Sender: TBinDictionary);
 begin
   Sender.UpdateTextNotVoid( 'bios:info',         BiosInfoText);
-  Sender.UpdateTextNotVoid( 'bios:vendor',       GetSmbios(sbiBiosVendor));
+  GetRawSmbios; // may return false but some _Smbios[] are still populated by OS
+  Sender.UpdateTextNotVoid( 'bios:vendor',       _Smbios[sbiBiosVendor]);
   Sender.UpdateTextNotVoid( 'bios:product',      _Smbios[sbiProductName]);
   Sender.UpdateTextNotVoid( 'bios:version',      _Smbios[sbiBiosVersion]);
   Sender.UpdateTextNotVoid( 'bios:serial',       _Smbios[sbiSerial]);
@@ -5462,6 +5461,7 @@ end;
 
 procedure _GlobalInfoExe(Sender: TBinDictionary);
 begin
+  Sender.UpdateText( 'exe:arch',   CPU_ARCH_TEXT);
   Sender.UpdateText( 'exe:name',   Executable.ProgramName);
   Sender.UpdateText(['exe:cmd'],  [Executable.ProgramFileName]);
   Sender.UpdateText(['exe:path'], [Executable.ProgramFilePath]);
@@ -5476,6 +5476,12 @@ begin
     Sender.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
     Sender.UpdateText(['exe:version'], [Executable.Version.Detailed]);
   end;
+  {$ifdef OSWINDOWS}
+  if IsWow64 then
+    Sender.UpdateText('exe:wow64', 'true');
+  if IsWow64Emulation then
+    Sender.UpdateText('exe:prism', 'true');
+  {$endif OSWINDOWS}
 end;
 
 procedure _GlobalInfoEnv(Sender: TBinDictionary);

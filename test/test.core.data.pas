@@ -3246,7 +3246,7 @@ begin
     J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
     '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
   TestJop(
-    J + '{$a$:0,b:$os:arch$,c:$"http://toto/$os:arch$",d:$os:none$,e:$"a$os:no$s"}',
+    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
     '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
      '",d:null,e:"as"}');
   TestJop(
