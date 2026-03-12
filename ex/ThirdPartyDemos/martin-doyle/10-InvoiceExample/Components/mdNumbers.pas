@@ -1,15 +1,11 @@
 {:
 ---------------------------------------------------(C) martindoyle 2017-2026 --
- Project : Rechnung
+ Project : mdComponents
 
- Using mORMot2
-     Synopse mORMot2 framework. Copyright (C) 2025 Arnaud Bouchez
-     Synopse Informatique - http://synopse.info
-
-  Module : Rechnung.dpr
+  Module : mdNumbers.pas
 
   Last modified
-    Date : 26.12.2025
+    Date : 10.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -32,41 +28,32 @@
     IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 }
+unit mdNumbers;
 
-program Rechnung;
-{$I mormot.defines.inc}
-{$define PUREMORMOT2}
-{$define NEWRTTINOTUSED}
+interface
 
-uses
-  {$I mormot.uses.inc}// follow FPC_X64MM or FPC_LIBCMM conditionals
-  {$ifdef UNIX}
-  cwstring, // needed as fallback if ICU is not available
-  {$endif UNIX}
-  Classes,
-  {$IFDEF FPC}
-    Interfaces, // this includes the LCL widgetset
-  {$ENDIF FPC}
-  SysUtils,
-  mormot.core.base,
-  mormot.core.os,
-  mormot.core.os.mac,
-  mormot.core.unicode,
-  mormot.core.Text,
-  mormot.core.datetime,
-  mormot.core.log,
-  mormot.db.raw.sqlite3, // for the SQLite3 version below
+const
+  FMT_CURR_DISPLAY = '#,##0.00';    // currency in grids/labels
+  FMT_CURR_EDIT    = '0.00';        // currency in edit fields
+  FMT_QTY_DISPLAY  = '#,##0.##';    // quantity in grids/labels
+  FMT_QTY_EDIT     = '0.##';        // quantity in edit fields
 
-  Forms,
-  rgConst,
-  rgMain;
+procedure FilterNumericKey(var Key: char; AllowNegative: Boolean = True);
 
-  {$R *.res}
+implementation
 
+procedure FilterNumericKey(var Key: char; AllowNegative: Boolean);
 begin
-  RequireDerivedFormResource := True;
-  Application.Scaled := True;
-  Application.Initialize;
-  Application.CreateForm(TMainForm, MainForm);
-  Application.Run;
+  if AllowNegative then
+  begin
+    if not (Key in ['0'..'9', ',', '.', '-', #8, #13]) then
+      Key := #0;
+  end
+  else
+  begin
+    if not (Key in ['0'..'9', ',', '.', #8, #13]) then
+      Key := #0;
+  end;
+end;
+
 end.

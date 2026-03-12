@@ -7,74 +7,79 @@ object PaymentEntryForm: TPaymentEntryForm
   Caption = 'Record Payment'
   ClientHeight = 250
   ClientWidth = 350
-  Position = poMainFormCenter
+  Color = clBtnFace
+  Font.Color = clWindowText
+  Position = poDesktopCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnShow = FormShow
   object LabelInvoice: TLabel
     Left = 16
-    Height = 16
+    Height = 18
     Top = 20
-    Width = 50
+    Width = 59
     Caption = 'Invoice:'
   end
   object LabelInvoiceNo: TLabel
     Left = 130
-    Height = 16
+    Height = 18
     Top = 20
-    Width = 50
+    Width = 19
     Caption = '---'
+    Font.Color = clWindowText
     Font.Style = [fsBold]
     ParentFont = False
   end
   object LabelOpenAmount: TLabel
     Left = 16
-    Height = 16
+    Height = 18
     Top = 52
-    Width = 80
+    Width = 109
     Caption = 'Open Amount:'
   end
   object LabelOpenValue: TLabel
     Left = 130
-    Height = 16
+    Height = 18
     Top = 52
-    Width = 50
+    Width = 37
     Caption = '0.00'
+    Font.Color = clWindowText
     Font.Style = [fsBold]
     ParentFont = False
   end
   object LabelAmount: TLabel
     Left = 16
-    Height = 16
+    Height = 18
     Top = 100
-    Width = 55
+    Width = 64
     Caption = 'Amount:'
   end
+  object LabelDate: TLabel
+    Left = 16
+    Height = 18
+    Top = 132
+    Width = 41
+    Caption = 'Date:'
+  end
   object EditAmount: TEdit
-    Left = 130
-    Height = 21
-    Top = 96
+    Left = 66
+    Height = 26
+    Top = 40
     Width = 150
     TabOrder = 0
     OnKeyPress = EditAmountKeyPress
   end
-  object LabelDate: TLabel
-    Left = 16
-    Height = 16
-    Top = 132
-    Width = 32
-    Caption = 'Date:'
-  end
   object EditDate: TEdit
-    Left = 130
-    Height = 21
-    Top = 128
+    Left = 50
+    Height = 26
+    Top = 80
     Width = 150
     TabOrder = 1
   end
   object SaveButton: TButton
-    Left = 160
+    Left = 112
     Height = 25
-    Top = 180
+    Top = 76
     Width = 75
     Caption = '&Save'
     Default = True
@@ -82,9 +87,9 @@ object PaymentEntryForm: TPaymentEntryForm
     OnClick = SaveButtonClick
   end
   object CancelButton: TButton
-    Left = 250
+    Left = 194
     Height = 25
-    Top = 180
+    Top = 76
     Width = 75
     Cancel = True
     Caption = '&Cancel'

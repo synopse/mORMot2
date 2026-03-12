@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgCustomerList.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgCustomerList;
 
@@ -60,7 +60,6 @@ type
     procedure DeleteButtonClick(Sender: TObject);
     procedure SearchEditChange(Sender: TObject);
   private
-    FCustomerService: ICustomerService;
     FOnCustomerSelected: TCustomerSelectedEvent;
     FSearchFilter: string;
     FBaseHeight: Integer;
@@ -99,7 +98,6 @@ uses
 
 procedure TCustomerListForm.FormCreate(Sender: TObject);
 begin
-  FCustomerService := TCustomerService.Create;
   FSearchFilter := '';
   FBaseHeight := GetBaseHeight;
 
@@ -115,7 +113,7 @@ end;
 
 procedure TCustomerListForm.FormDestroy(Sender: TObject);
 begin
-  FCustomerService := nil;
+  // nothing to free - services accessed via RgServices global
 end;
 
 procedure TCustomerListForm.FormShow(Sender: TObject);
@@ -209,9 +207,8 @@ end;
 
 procedure TCustomerListForm.LoadCustomers;
 var
-  Customer: TDtoCustomer;
+  Customers: TDtoCustomerDynArray;
   Item: TMDListItem;
-  Count: integer;
   i: integer;
   FilterLower: RawUtf8;
   CompanyLower: RawUtf8;
@@ -222,35 +219,29 @@ begin
   FCustomerListGrid.Items.BeginUpdate;
   try
     FCustomerListGrid.Items.Clear;
-    FCustomerService.LoadCustomers;
-    Count := FCustomerService.GetCustomerCount(False);
+    RgServices.CustomerService.ListCustomers(Customers);
     FilterLower := LowerCaseUnicode(StringToUtf8(FSearchFilter));
 
-    for i := 0 to Count - 1 do
+    for i := 0 to High(Customers) do
     begin
-      if FCustomerService.NextCustomer then
+      if FilterLower <> '' then
       begin
-        Customer := FCustomerService.GetCustomer;
+        CompanyLower := LowerCaseUnicode(Customers[i].Company);
+        CityLower := LowerCaseUnicode(Customers[i].City);
+        CustomerNoLower := LowerCaseUnicode(Customers[i].CustomerNo);
+        MatchesFilter := (PosEx(FilterLower, CompanyLower) > 0) or
+                         (PosEx(FilterLower, CityLower) > 0) or
+                         (PosEx(FilterLower, CustomerNoLower) > 0);
+      end
+      else
+        MatchesFilter := True;
 
-        if FilterLower <> '' then
-        begin
-          CompanyLower := LowerCaseUnicode(StringToUtf8(Customer.Company));
-          CityLower := LowerCaseUnicode(StringToUtf8(Customer.City));
-          CustomerNoLower := LowerCaseUnicode(StringToUtf8(Customer.CustomerNo));
-          MatchesFilter := (PosEx(FilterLower, CompanyLower) > 0) or
-                           (PosEx(FilterLower, CityLower) > 0) or
-                           (PosEx(FilterLower, CustomerNoLower) > 0);
-        end
-        else
-          MatchesFilter := True;
-
-        if MatchesFilter then
-        begin
-          Item := FCustomerListGrid.Items.Add;
-          Item.Caption := Customer.Company;
-          Item.SubItems.Add(Customer.City);
-          Item.Data := Pointer(PtrInt(Customer.CustomerID));
-        end;
+      if MatchesFilter then
+      begin
+        Item := FCustomerListGrid.Items.Add;
+        Item.Caption := Utf8ToString(Customers[i].Company);
+        Item.SubItems.Add(Utf8ToString(Customers[i].City));
+        Item.Data := Pointer(PtrInt(Customers[i].CustomerID));
       end;
     end;
   finally
@@ -332,7 +323,6 @@ end;
 procedure TCustomerListForm.DeleteButtonClick(Sender: TObject);
 var
   CustomerID: longint;
-  Service: ICustomerEditService;
   Res: TCustomerEditResult;
 begin
   CustomerID := GetSelectedCustomerID;
@@ -341,8 +331,7 @@ begin
     if MessageDlg('Are you sure you want to delete this customer?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     begin
-      Service := TCustomerEditService.Create;
-      Res := Service.DeleteCustomer(CustomerID);
+      Res := RgServices.CustomerService.DeleteCustomer(CustomerID);
       case Res of
         cerSuccess:
           RefreshList;
