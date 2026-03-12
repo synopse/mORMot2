@@ -986,16 +986,15 @@ type
 /// recognize a given ARM/AARCH64 CPU from its 12-bit hardware ID
 function ArmCpuType(id: word): TArmCpuType;
 
-/// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
-function ArmCpuTypeName(act: TArmCpuType; id: word;
-  const before: ShortString = ''): ShortString;
-
 /// recognize a given ARM/AARCH64 CPU implementer from its 8-bit hardware ID
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
 
+/// recognize a given ARM/AARCH64 CPU type name from its 12-bit hardware ID
+procedure ArmCpuTypeNameAppend(act: TArmCpuType; id: word; var txt: ShortString);
+
 /// recognize a given ARM/AARCH64 CPU implementer name from its 8-bit hardware ID
-function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word;
-  const after: ShortString = ''): ShortString;
+procedure ArmCpuImplementerNameAppend(aci: TArmCpuImplementer; id: word;
+  var txt: ShortString);
 
 
 const
@@ -1508,9 +1507,9 @@ var
   SystemInfo: record
     /// retrieved from libc's getpagesize() - is expected to not be 0
     dwPageSize: cardinal;
-    /// the number of available logical CPUs
+    /// the number of available logical CPUs threads
     // - retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
-    // - see CpuSockets for the number of physical CPU sockets
+    // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
     uts: record
@@ -6786,16 +6785,16 @@ begin
   result := actUnknown;
 end;
 
-function ArmCpuTypeName(act: TArmCpuType; id: word; const before: ShortString): ShortString;
+procedure ArmCpuTypeNameAppend(act: TArmCpuType; id: word; var txt: ShortString);
 begin
-  result := before;
   if act = actUnknown then
   begin
-    AppendShort('ARM 0x', result);;
-    AppendShortIntHex(id, result);
+    AppendShort('ARM 0x', txt);
+    AppendShortIntHex(id, txt);
   end
   else
-    AppendShort(ARMCPU_ID_TXT[act], result);
+    AppendShort(ARMCPU_ID_TXT[act], txt);
+  AppendShortCharSafe(' ', txt); // with an ending space
 end;
 
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
@@ -6806,17 +6805,17 @@ begin
   result := aciUnknown;
 end;
 
-function ArmCpuImplementerName(aci: TArmCpuImplementer; id: word;
-  const after: ShortString): ShortString;
+procedure ArmCpuImplementerNameAppend(aci: TArmCpuImplementer; id: word;
+  var txt: ShortString);
 begin
   if aci = aciUnknown then
   begin
-    result := 'HW 0x';
-    AppendShortIntHex(id, result);
+    AppendShort('HW 0x', txt);
+    AppendShortIntHex(id, txt);
   end
   else
-    result := ARMCPU_IMPL_TXT[aci];
-  AppendShort(after, result);
+    AppendShort(ARMCPU_IMPL_TXT[aci], txt);
+  AppendShortCharSafe(' ', txt); // with an ending space
 end;
 
 

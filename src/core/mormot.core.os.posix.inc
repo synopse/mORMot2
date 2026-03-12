@@ -5013,28 +5013,6 @@ begin
     libc_memset(@dest, value, count);
 end;
 
-{$ifdef OSLINUXANDROID}
-
-procedure RetrieveCpuInfoArm;
-begin
-  if CpuFeatures = [] then
-  begin
-    // fallback to /proc/cpuinfo "Features:" text
-    if PosEx(' aes', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcAes);
-    if PosEx(' pmull', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcPmull);
-    if PosEx(' sha1', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcSha1);
-    if PosEx(' sha2', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcSha2);
-    if PosEx(' crc32', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcCrc32);
-  end;
-end;
-
-{$endif OSLINUXANDROID}
-
 {$endif CPUARM3264}
 
 {$undef ARMV8STATIC}
@@ -5066,6 +5044,7 @@ var
   {$ifndef OSDARWIN}
   {$ifdef CPUARM3264}
   act, aci: TIntegerDynArray;
+  temparm: ShortString;
   i: PtrInt;
   {$endif CPUARM3264}
   tpfail: integer;
@@ -5278,18 +5257,30 @@ begin
     end;
   end;
   {$ifdef CPUARM3264}
-  if act <> nil then // CPU part/implementer are more detailed than model name
+  if act <> nil then // decode CPU part/implementer hexadecimal numbers
   begin
-    for i := 0 to high(aci) do // there should be a single implementer
-      AppendShortToUtf8(ArmCpuImplementerName(
-        ArmCpuImplementer(aci[i]), aci[i], ' '), CpuArmModel);
-    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), CpuArmModel);
-    for i := 1 to high(act) do // but there may be several parts/models
-      AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[i]),
-        act[i], ' / '), CpuArmModel);
-    modname := pointer(CpuArmModel);
+    temparm[0] := #0;
+    for i := 0 to high(aci) do
+      ArmCpuImplementerNameAppend(ArmCpuImplementer(aci[i]), aci[i], temparm);
+    FastSetString(CpuArmImplementer, @temparm[1], ord(temparm[0]) - 1);
+    for i := 0 to high(act) do
+      ArmCpuTypeNameAppend(ArmCpuType(act[i]), act[i], temparm);
+    FastSetString(CpuArmModel, @temparm[1], ord(temparm[0]) - 1);
+    modname := pointer(CpuArmModel); // more detailed
   end;
-  RetrieveCpuInfoArm;
+  if CpuFeatures = [] then // fallback to /proc/cpuinfo "Features:" text
+  begin
+    if PosEx(' aes', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcAes);
+    if PosEx(' pmull', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcPmull);
+    if PosEx(' sha1', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcSha1);
+    if PosEx(' sha2', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcSha2);
+    if PosEx(' crc32', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcCrc32);
+  end;
   {$endif CPUARM3264}
   if cache <> nil then
   begin
