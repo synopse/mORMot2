@@ -127,7 +127,7 @@ var
   JSON_TOKENS: TJsonTokens;
   /// 256-byte lookup table for fast branchless JSON parsing
   // - to be used e.g. as:
-  // ! if jvJsonIdentifier in JSON_CHARS[P^] then ...
+  // ! if jcJsonIdentifier in JSON_CHARS[P^] then ...
   JSON_CHARS: TJsonCharSet;
   /// 256-byte lookup table for fast branchless JSON text escaping
   // - 0 = JSON_ESCAPE_NONE indicates no escape needed
@@ -3756,10 +3756,11 @@ begin
 end;
 
 function ParserIfGoto(var P: PUtf8Char; EndAt: TJsonParserIfs): TJsonParserIf;
-  {$ifdef HASINLINE} inline; {$endif}
 begin
   repeat
     result := ParserIf(P);
+    if result = ifNone then
+      inc(P);
   until result in EndAt;
 end;
 
@@ -3781,12 +3782,16 @@ begin
         (result[al - 1] = ' ') do
     dec(al);
   b := nil;
-  bl := 0;
-  if result^ = '=' then // parse '$if a = b $'
+  bl := -1; // mark $if a$
+  if result^ = '=' then // parse $if a = b $
   begin
     result := IgnoreAndGotoNextNotSpace(result);
     if result^ = '$' then
-      result := FmtVars.Expand(result, b, bl, {keepmarker=}false)
+    begin
+      result := FmtVars.Expand(result, b, bl, {keepmarker=}false);
+      if b = nil then
+        bl := 0; // $if a = b $ with b=''
+    end
     else
     begin
       b := result;
@@ -3801,14 +3806,30 @@ begin
   if FmtIf = ifNormal then
   begin
     a := FmtVars.DoFind(a, al, al);
-    if (a = nil) or (al = 0) then
-      match := (b = nil) or (bl = 0)
+    if (a <> nil) and
+       (TJsonDslMarker(a^) <= high(TJsonDslMarker)) then
+    begin
+     inc(a); // trim marker
+     dec(al);
+    end;
+    if bl < 0 then // $if a$ = if defined a
+      match := a <> nil
+    else if (b = nil) or (bl = 0) then
+      match := (a = nil) or (al = 0)  // $if a = $
     else
       match := (al = bl) and (MemCmp(pointer(a), pointer(b), al) = 0);
     if match then
       FmtIf := ifUntilElseEnd // $if$ include [$else$ skip] $endif$
-    else if ParserIfGoto(result, [if0, ifElse, ifEnd]) = ifElse then
-      FmtIf := ifUntilEnd;    // $if$ skip $else$ include $endif$
+    else
+    begin
+      case ParserIfGoto(result, [if0, ifElse, ifEnd]) of
+        ifElse:
+          FmtIf := ifUntilEnd;    // $if$ skip $else$ include $endif$
+        ifEnd:
+          FmtIf := ifNormal;      // $if$ skip $endif$
+      end;
+      exit; // no inc(result)
+    end;
   end
   else if jppDebugComment in FmtDsl then
     AddIndentAndCommentToken([' nested $if$ are not allowed']);
@@ -3845,49 +3866,47 @@ begin // called with P^ = '$'
             AddIndentAndCommentToken(['  $endif$ with no prior $if']);
         FmtIf := ifNormal;
       end;
-    if0:
-      exit;
-  else
-    begin
-      result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
-      if v = nil then
+    ifNone:
       begin
-        ReformatBeginValue;
-        W.AddNull; // nothing found: append null value
-        ReformatEndValue;
-        exit;
-      end;
-      m := TJsonDslMarker(v^);
-      if m <= high(m) then
-      begin
-        inc(v); // ignore DslSection() marker
-        dec(l);
-        if m = jdmTemplate then
+        result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
+        if v = nil then
         begin
-          Reformat(v); // template as recursive blocks (once)
+          ReformatBeginValue;
+          W.AddNull; // nothing found: append null value
+          ReformatEndValue;
           exit;
         end;
-      end
-      else if (v^ = '"') or  // $val|"12"$ to force "string" value
-              IsConstantOrNumberJson(v, l) then
-        m := jdmConstNum     // AddNoJsonEscape
-      else
-        m := jdmPlainString; // AddJsonEscape
-      ReformatBeginValue;
-      if m = jdmConstNum then
-        W.AddNoJsonEscape(v, l)
-      else
-      begin
-        W.AddDirect('"');
-        if l <> 0 then
-          if m = jdmPlainString then
-            W.AddJsonEscape(v, l)    // |default or enc:NAME
-          else
-            W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "was \r quoted"
-        W.AddDirect('"');
+        m := TJsonDslMarker(v^);
+        if m <= high(m) then
+        begin
+          inc(v); // ignore DslSection() marker
+          dec(l);
+          if m = jdmTemplate then
+          begin
+            Reformat(v); // template as recursive blocks (once)
+            exit;
+          end;
+        end
+        else if (v^ = '"') or  // $val|"12"$ to force "string" value
+                IsConstantOrNumberJson(v, l) then
+          m := jdmConstNum     // AddNoJsonEscape
+        else
+          m := jdmPlainString; // AddJsonEscape
+        ReformatBeginValue;
+        if m = jdmConstNum then
+          W.AddNoJsonEscape(v, l)
+        else
+        begin
+          W.AddDirect('"');
+          if l <> 0 then
+            if m = jdmPlainString then
+              W.AddJsonEscape(v, l)    // |default or enc:NAME
+            else
+              W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "was \r quoted"
+          W.AddDirect('"');
+        end;
+        ReformatEndValue;
       end;
-      ReformatEndValue;
-    end;
   end;
 end;
 
