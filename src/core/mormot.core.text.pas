@@ -2330,21 +2330,10 @@ function ToText(m: TUriMethod): PUtf8Char; overload;
 type
   /// store one HTTP input cookie name/value pair
   /// - cookies are still stored untouched in the headers raw buffer
-  THttpCookie = record
-    /// start of the cookie name in the headers
-    // - e.g. 'sessionId' for
-    // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
-    NameStart: PUtf8Char;
-    /// start of the cookie value in the headers, excluding its attributes
-    // - e.g. 'e8bb43229de9' for
-    // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
-    ValueStart: PUtf8Char;
-    /// the number of UTF-8 chars stored in Name - which is not #0 ended
-    NameLen: integer;
-    /// the number of UTF-8 chars stored in Value - which is not #0 ended
-    ValueLen: integer;
-  end;
-  /// referes to one HTTP input cookie
+  // - e.g. NameStart='sessionId' and ValueStart='e8bb43229de9' for
+  // $ Set-Cookie: sessionId=e8bb43229de9; Domain=foo.example.com
+  THttpCookie = TTextBufferPair;
+  /// refers to one HTTP input cookie
   PHttpCookie = ^THttpCookie;
   /// a dynamic array of THttpCookie name/value pairs
   THttpCookieDynArray = array of THttpCookie;

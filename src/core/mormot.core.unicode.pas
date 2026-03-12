@@ -2511,6 +2511,19 @@ procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 function UriCase(const text: RawUtf8): RawUtf8;
 
 type
+  /// store pointer references to a name/value pair in a text buffer
+  // - used e.g. for TParseSortExpression or as THttpCookie
+  TTextBufferPair = object
+    /// start of the name identifier - not #0 ended, but of NameLen length
+    NameStart: PUtf8Char;
+    /// start of the value identifier - not #0 ended, but of ValueLen length
+    ValueStart: PUtf8Char;
+    /// the number of UTF-8 chars stored in NameStart
+    NameLen: integer;
+    /// the number of UTF-8 chars stored in ValueStart
+    ValueLen: integer;
+  end;
+
   /// character categories e.g. for ASCII-7 identifier parsing
   TCharKind = (
     ckOther, ckLowerAlpha, ckUpperAlpha, ckDigit, ckUnderscore, ckPoint);
