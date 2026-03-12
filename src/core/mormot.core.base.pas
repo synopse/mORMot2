@@ -3202,8 +3202,11 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
   {$ifdef CPUX64}inline;{$endif}
 
+/// overload wrapper of MemCmp() to compare memory buffers with length
+function CompareBuf(P1, P2: pointer; P1Len, P2Len: PtrInt): integer;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// overload wrapper of MemCmp() to compare a RawByteString vs a memory buffer
-// - will first check length(P1)=P2Len then call MemCmp()
 function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
@@ -12897,11 +12900,16 @@ begin
   end;
 end;
 
+function CompareBuf(P1, P2: pointer; P1Len, P2Len: PtrInt): integer;
+begin
+  result := MemCmp(P1, P2, MinPtrInt(P1Len, P2Len)); // natural string order
+  if result = 0 then
+    result := ComparePtrInt(P1Len, P2Len);
+end;
+
 function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
 begin
-  result := ComparePtrInt(length(P1), P2Len);
-  if result = 0 then
-    result := MemCmp(pointer(P1), P2, P2Len);
+  result := CompareBuf(pointer(P1), P2, length(P1), P2Len);
 end;
 
 function CompareBuf(const P1, P2: RawByteString): integer;
