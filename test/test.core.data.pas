@@ -2688,7 +2688,7 @@ var
     end;
   end;
 
-  procedure TestMorJson(const src, exp: RawUtf8;
+  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true;
     PreProcessor: TTextWriterJsonPreProcessor = [jppTemplate]);
   var
     j, k: RawUtf8;
@@ -2697,16 +2697,17 @@ var
     j := JsonReformat(src, jsonUnquotedPropNameCompact, PreProcessor);
     Check(j <> '');
     CheckEqual(j, exp);
-    for s := low(s) to high(s) do
-    begin
-      k := JsonReformat(src, s, PreProcessor);
-      if s = jsonCompact then
-        Check(IsValidJson(k, {strict=}true), 'valid');
-      if s = jsonUnquotedPropNameCompact then
-        CheckEqual(k, j)
-      else
-        CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
-    end;
+    if nest then
+      for s := low(s) to high(s) do
+      begin
+        k := JsonReformat(src, s, PreProcessor);
+        if s = jsonCompact then
+          Check(IsValidJson(k, {strict=}true), 'valid');
+        if s = jsonUnquotedPropNameCompact then
+          CheckEqual(k, j)
+        else
+          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
+      end;
   end;
 
 begin
@@ -3196,50 +3197,103 @@ begin
   CheckEqual(JsonReformat(
     #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
     '{"one":1,"two":2}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$a$}',
     '{a:1}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$os:name$}',
     Join(['{a:"', OSVersionShort,'"}']));
   J := GlobalInfoFind('net:mac');
   if J <> '' then
-    TestMorJson(
+    TestJop(
       '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
       Join(['{a:"', J,'"}']));
-  TestMorJson(
+  TestJop(
     '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
     '{a:"b",b:null,c:"b b+"}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
     '{a:1,b:2}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
     '{a:1,b:"1"}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$a}}}',
     '{a:1,b:"$a$",c:{d:1}}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
     '{a:1,b:"1"}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
     '{a:"1",b:"1"}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
     '{a:1,b:"1"}');
-  TestMorJson(
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
     '{a:1,b:"1"}');
   J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
-  TestMorJson(
+  TestJop(
     J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
     '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
-  TestMorJson(
+  TestJop(
     J + '{$a$:0,b:$os:arch$,c:$"http://toto/$os:arch$",d:$os:none$,e:$"a$os:no$s"}',
     '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
      '",d:null,e:"as"}');
-  //ConsoleWrite(GlobalInfoRegisterAll.AsText);
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:"x",b:"x"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{"xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
