@@ -2553,6 +2553,10 @@ function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
   const EndName: TSynAnsicharSet = [#0 .. ' ', '<', '=', '>', '!'];
   const EndExpr: TSynAnsicharSet = [#0]): PUtf8Char; overload;
 
+/// compare NameStart/NameLen against ValueStart/ValueLen as text or integer
+// - will recognize integers to apply natural < > comparison between fields
+function EvaluateSortMatch(const exp: TParseSortExpression): boolean;
+
 type
   /// character categories e.g. for ASCII-7 identifier parsing
   TCharKind = (
@@ -9933,6 +9937,20 @@ begin
     inc(P);
   Expression.ValueLen := P - Expression.NameStart;
   result := P;
+end;
+
+function EvaluateSortMatch(const exp: TParseSortExpression): boolean;
+var
+  n64, v64: Int64;
+  cmp: integer;
+begin
+  if (exp.Match in [coEqualTo, coNotEqualTo]) or
+     not IsInt64(exp.NameStart, exp.NameLen, @n64) or
+     not IsInt64(exp.ValueStart, exp.ValueLen, @v64) then
+    cmp := CompareBuf(exp.NameStart, exp.ValueStart, exp.NameLen, exp.ValueLen)
+  else // evaluate n<v n>v as integers when case-sensitive text would not apply
+    cmp := CompareInt64(n64, v64);
+  result := SortMatch(cmp, exp.Match);
 end;
 
 function GetCharKinds(P: PUtf8Char; len: PtrUInt): TCharKindSet;
