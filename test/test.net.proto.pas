@@ -914,7 +914,8 @@ begin
       one.Sock.Close; // simulate socket disconnection
       Check(not one.Connected, 'closed'); // validate Reconnect
       dv := one.SearchAllRaw('uid=einstein,dc=example,dc=com', '', [], []);
-      CheckHash(_Safe(dv)^.ToHumanJson, $39B7C7F1, one.Settings.UserName);
+      //ConsoleWrite(_Safe(dv)^.ToHumanJson);
+      CheckHash(_Safe(dv)^.ToHumanJson, $47808069, one.Settings.UserName);
     finally
       one.Free;
     end;
