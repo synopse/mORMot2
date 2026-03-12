@@ -117,6 +117,8 @@ const
   SQUOT_16  = ord('''') + ord('''') shl 8;
   DOLLAR_16 = ord('$') + ord('$') shl 8;
   IF_32     = ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord(' ') shl 24;
+  IFDEF_32  = ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord('d') shl 24;
+  IFDEF_24  = ord('e') + ord('f') shl 8 + ord(' ') shl 16;
   ELSE_32   = ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24;
   ELSE_16   = ord('e') + ord('$') shl 8;
   ENDIF_32  = ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24;
@@ -3725,6 +3727,7 @@ end;
 
 function ParserIf(var P: PUtf8Char): TJsonParserIf;
 begin
+  result := ifNone;
   if P^ = #0 then
     result := if0
   else
@@ -3734,24 +3737,24 @@ begin
           result := ifIf; // '$if '
           inc(P, 4);
         end;
+      IFDEF_32:
+        if PCardinal(P + 4)^ and $ffffff = IFDEF_24 then // '$ifdef '
+        begin
+          inc(P, 7);
+          result := ifIf;
+        end;
       ELSE_32:
         if PWord(P + 4)^ = ELSE_16 then // '$else$'
         begin
           inc(P, 6);
           result := ifElse;
-        end
-        else
-          result := ifNone;
+        end;
       ENDIF_32:
         if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endif$'
         begin
           inc(P, 7);
           result := ifEnd;
-        end
-        else
-          result := ifNone;
-    else
-      result := ifNone;
+        end;
     end;
 end;
 
