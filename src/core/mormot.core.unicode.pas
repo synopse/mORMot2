@@ -2550,7 +2550,8 @@ function ValueTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt):
 
 /// parse a "key<value" or "key<" expression for SortMatch() comparison
 function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
-  const EndName, EndExpr: TSynAnsicharSet): PUtf8Char; overload;
+  const EndName: TSynAnsicharSet = [#0 .. ' ', '<', '=', '>', '!'];
+  const EndExpr: TSynAnsicharSet = [#0]): PUtf8Char; overload;
 
 type
   /// character categories e.g. for ASCII-7 identifier parsing

@@ -29,7 +29,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.data, // already included in mormot.core.json
+  mormot.core.data, // already included in mormot.core.json anyway
   mormot.core.buffers,
   mormot.core.rtti,
   mormot.core.json;
@@ -10970,8 +10970,7 @@ var
 begin
   result := false;
   if (Expression = nil) or
-     (ParseSortMatch(Expression, exp,
-       {EndName=}[#0 .. ' ', '<', '=', '>', '!'], {EndExpr=}[#0]) = nil) then
+     (ParseSortMatch(Expression, exp) = nil) then
     exit;
   FastSetString(Key, exp.NameStart, exp.NameLen);
   if Value <> nil then
