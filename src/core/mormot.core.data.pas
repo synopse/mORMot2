@@ -5371,48 +5371,55 @@ begin
   Sender.UpdateText( 'os:family',         LowerCaseU(OS_TEXT));
   Sender.UpdateText( 'os:version',        OSVersionText);
   Sender.UpdateText( 'os:arch',           CPU_ARCH_TEXT);
+  Sender.UpdateText(['os:ram'],          [SystemMemorySize]);
   Sender.UpdateText( 'os:hostname',       Executable.Host);
-  Sender.UpdateText(['os:pid'],          [GetCurrentProcessId]);
-  Sender.UpdateText(['os:ppid'],         [GetParentProcess]);
   Sender.UpdateText(['os:temp'],         [GetSystemPath(spTemp)]);
   Sender.UpdateText(['os:cwd'],          [GetCurrentDir]);
   Sender.UpdateText( 'os:pathsep',        PathDelim);
   Sender.UpdateText(['os:tzoff'],        [TimeZoneLocalBias * SecsPerMin]);
+  if SystemInfo.dwPageSize <> 0 then
+    Sender.UpdateText(['os:pagesize'],   [SystemInfo.dwPageSize]);
   {$ifdef OSPOSIX}
   Sender.UpdateText( 'os:product',        LowerCaseU(OS_NAME[OS_KIND]));
   if OS_DISTRI > ldUndefined then
     Sender.UpdateText(['os:dist'],       [DISTRI_NAME[OS_DISTRI]]);
-  Sender.UpdateTextNotVoid( 'os:build',   SystemInfo.uts.release);
-  Sender.UpdateTextNotVoid( 'os:release', SystemInfo.release);
+  Sender.UpdateTextNotVoid('os:build',    SystemInfo.uts.release);
+  Sender.UpdateTextNotVoid('os:release',  SystemInfo.release);
   {$else}
-  Sender.UpdateTextNotVoid( 'os:product', WindowsProductName);
+  Sender.UpdateTextNotVoid('os:product',  WindowsProductName);
   if WindowsUbr <> 0 then
     Sender.UpdateText(['os:build'], [WindowsUbr]);
-  Sender.UpdateTextNotVoid( 'os:winver',  WindowsDisplayVersion);
+  Sender.UpdateTextNotVoid('os:winver',   WindowsDisplayVersion);
+  if IsWow64 then
+    Sender.UpdateText('os:wow64', 'true');
+  if IsWow64Emulation then
+    Sender.UpdateText('os:prism', 'true');
   {$endif OSPOSIX}
 end;
 
-procedure _GlobalInfoHw(Sender: TBinDictionary);
+procedure _GlobalInfoCpu(Sender: TBinDictionary);
 begin
-  Sender.UpdateText( 'hw:cpu',          CpuInfoText);
-  Sender.UpdateText(['hw:threads'],    [CpuCores]);
-  Sender.UpdateText(['hw:cores'],      [SystemInfo.dwNumberOfProcessors]);
-  Sender.UpdateText(['hw:sockets'],    [CpuSockets]);
-  Sender.UpdateText(['hw:ram'],        [SystemMemorySize]);
+  Sender.UpdateText( 'cpu:name',         CpuInfoText);
+  Sender.UpdateText(['cpu:threads'],    [CpuCores]);
+  Sender.UpdateText(['cpu:cores'],      [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
   if HasHWAes then
-    Sender.UpdateText('hw:aes',        'true');
+    Sender.UpdateText('cpu:aes',        'true');
   {$ifdef CPUINTEL}
   if cfAVX2 in CpuFeatures then
-    Sender.UpdateText('hw:avx2',       'true');
+    Sender.UpdateText('cpu:avx2',       'true');
   if IntelAvx10 > 0 then
-    Sender.UpdateText(['hw:avx10'],    [IntelAvx10]);
-  Sender.UpdateText(['hw:cpufamily'],  [CpuFamily]);
-  Sender.UpdateText(['hw:cpumodel'],   [CpuModel]);
-  Sender.UpdateTextNotVoid( 'hw:cpuid', IntelManufacturer);
-  Sender.UpdateTextNotVoid( 'hw:hyp',   IntelHypervisor);
+    Sender.UpdateText(['cpu:avx10'],    [IntelAvx10]);
+  Sender.UpdateText(['cpu:family'],     [CpuFamily]);
+  Sender.UpdateText(['cpu:model'],      [CpuModel]);
+  Sender.UpdateText(['cpu:cachesize'],  [CpuCacheSize]);
+  Sender.UpdateTextNotVoid('cpu:caches', CpuCacheText);
+  Sender.UpdateTextNotVoid('cpu:id',     IntelManufacturer);
+  Sender.UpdateTextNotVoid('cpu:hyp',    IntelHypervisor);
+  Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
   {$endif CPUINTEL}
   {$ifdef CPUARM3264}
-  Sender.UpdateTextNotVoid( 'hw:model', CpuArmModel);
+  Sender.UpdateTextNotVoid('cpu:model',  CpuArmModel);
   {$endif CPUARM3264}
 end;
 
@@ -5439,7 +5446,7 @@ procedure _GlobalInfoBios(Sender: TBinDictionary);
 begin
   Sender.UpdateTextNotVoid( 'bios:info',         BiosInfoText);
   Sender.UpdateTextNotVoid( 'bios:vendor',       GetSmbios(sbiBiosVendor));
-  Sender.UpdateTextNotVoid( 'bios:product',      _Smbios[sbiBiosVendor]);
+  Sender.UpdateTextNotVoid( 'bios:product',      _Smbios[sbiProductName]);
   Sender.UpdateTextNotVoid( 'bios:version',      _Smbios[sbiBiosVersion]);
   Sender.UpdateTextNotVoid( 'bios:serial',       _Smbios[sbiSerial]);
   Sender.UpdateTextNotVoid( 'bios:uuid',         _Smbios[sbiUuid]);
@@ -5447,6 +5454,7 @@ begin
   Sender.UpdateTextNotVoid( 'bios:family',       _Smbios[sbiFamily]);
   Sender.UpdateTextNotVoid( 'bios:manufacturer', _Smbios[sbiManufacturer]);
   Sender.UpdateTextNotVoid( 'bios:board',        _Smbios[sbiBoardProductName]);
+  Sender.UpdateTextNotVoid( 'bios:boardserial',  _Smbios[sbiBoardSerial]);
   Sender.UpdateTextNotVoid( 'bios:cpu',          _Smbios[sbiCpuVersion]);
   if PosExI('virtual ', _Smbios[sbiFamily]) <> 0 then
     Sender.UpdateText('bios:vm', 'true');
@@ -5459,6 +5467,8 @@ begin
   Sender.UpdateText(['exe:path'], [Executable.ProgramFilePath]);
   Sender.UpdateText( 'exe:agent',  Executable.Version.UserAgent);
   Sender.UpdateText(['exe:log'],  [GetSystemPath(spLog)]);
+  Sender.UpdateText(['exe:pid'],  [GetCurrentProcessId]);
+  Sender.UpdateText(['exe:ppid'], [GetParentProcess]);
   if Assigned(Executable.Version) and
      (Executable.Version.Major <> 0) then
   begin
@@ -12202,7 +12212,7 @@ begin
   // setup internal function wrappers
   GetDataFromJson :=  _GetDataFromJson;
   GlobalInfoRegister('os:',   _GlobalInfoOs);
-  GlobalInfoRegister('hw:',   _GlobalInfoHw);
+  GlobalInfoRegister('cpu:',  _GlobalInfoCpu);
   GlobalInfoRegister('exe:',  _GlobalInfoExe);
   GlobalInfoRegister('env:',  _GlobalInfoEnv);
   GlobalInfoRegister('user:', _GlobalInfoUser);
