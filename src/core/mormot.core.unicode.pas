@@ -2511,7 +2511,7 @@ procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 function UriCase(const text: RawUtf8): RawUtf8;
 
 type
-  /// store pointer references to a name/value pair in a text buffer
+  /// store pointer references to a name/value pair as UTF-8 text buffers
   // - used e.g. for TParseSortExpression or as THttpCookie
   TTextBufferPair = object
     /// start of the name identifier - not #0 ended, but of NameLen length
@@ -2523,12 +2523,30 @@ type
     /// the number of UTF-8 chars stored in ValueStart
     ValueLen: integer;
   end;
+  /// points to an UTF-8 text-buffer name/value pair reference
+  PTextBufferPair = ^TTextBufferPair;
+  /// a dynamic array of UTF-8 text-buffer name/value pairs
+  TTextBufferPairDynArray = array of TTextBufferPair;
 
   /// all parsed filled from ParseSortMatch()
   TParseSortExpression = object(TTextBufferPair)
     /// the recognized operator
     Match: TCompareOperator;
   end;
+
+/// low-level search of NameStart/NameLen in pairs = pointer(TTextBufferPairDynArray)
+function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
+  pairs: PTextBufferPair): PTextBufferPair; overload;
+
+/// low-level search of NameStart/NameLen in a TTextBufferPairDynArray
+function FindTextBufferPair(const name: RawUtf8;
+  const pairs: TTextBufferPairDynArray): PTextBufferPair; overload;
+
+/// compute a RawUtf8 from pairs[ndx].NameStart/NameLen or '' if ndx is out of range
+function NameTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
+
+/// compute a RawUtf8 from pairs[ndx].ValueStart/ValueLen or '' if ndx is out of range
+function ValueTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
 
 /// parse a "key<value" or "key<" expression for SortMatch() comparison
 function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
@@ -9797,6 +9815,53 @@ begin
   FastSetString(result, pointer(text), length(text));
   if result <> '' then
     PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
+end;
+
+function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
+  pairs: PTextBufferPair): PTextBufferPair;
+var
+  n: PtrInt;
+begin
+  result := nil;
+  if (name = nil) or
+     (len <= 0) or
+     (pairs = nil) then
+    exit;
+  result := pairs;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  repeat
+    if (result^.NameLen = len) and
+       mormot.core.base.CompareMem(result^.NameStart, name, len) then
+      exit // cookies are case-sensitive
+    else
+      inc(result);
+    dec(n);
+  until n = 0;
+  result := nil;
+end;
+
+function FindTextBufferPair(const name: RawUtf8;
+  const pairs: TTextBufferPairDynArray): PTextBufferPair;
+begin
+  result := FindTextBufferPair(pointer(name), length(name), pointer(pairs));
+end;
+
+function NameTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
+begin
+  if PtrUInt(ndx) < PtrUInt(length(pairs)) then
+    with pairs[ndx] do
+      FastSetString(result, NameStart, NameLen)
+  else
+    FastAssignNew(result);
+end;
+
+function ValueTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
+begin
+  if PtrUInt(ndx) < PtrUInt(length(pairs)) then
+    with pairs[ndx] do
+      FastSetString(result, ValueStart, ValueLen)
+  else
+    FastAssignNew(result);
 end;
 
 function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
