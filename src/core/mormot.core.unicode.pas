@@ -6667,7 +6667,10 @@ begin
      (sublen > 0) and
      (strlen > 0) then
     if sublen = 1 then
-      result := PosChar(str, strlen, sub^) // use SSE2
+    begin
+      result := PosChar(str, strlen, sub^); // use SSE2
+      exit;
+    end
     else
     begin
       c := sub^;
@@ -6678,7 +6681,7 @@ begin
            (MemCmp(pointer(result), pointer(sub), sublen) = 0) then
           exit;
         inc(result);
-      until result = PUtf8Char(strlen);
+      until result >= PUtf8Char(strlen);
     end;
   result := nil;
 end;
@@ -6720,7 +6723,7 @@ begin
         until false;
       end;
       inc(result);
-    until result = PUtf8Char(strlen);
+    until result >= PUtf8Char(strlen);
   end;
   result := nil;
 end;
