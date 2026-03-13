@@ -5114,6 +5114,30 @@ begin
   for d in l2.Objects('D.E.F=fe') do
     inc(n);
   CheckEqual(n, 0);
+  for d in l2.Objects('D.E.F=Ff') do
+    inc(n);
+  CheckEqual(n, 0);
+  for d in l2.Objects('D.E.F=~Ff') do
+    inc(n);
+  CheckEqual(n, 1);
+  for d in l2.Objects('D.E.F~f') do
+    dec(n);
+  CheckEqual(n, 0);
+  for d in l2.Objects('D.E.F~F') do
+    inc(n);
+  CheckEqual(n, 0);
+  for d in l2.Objects('D.E.F~~F') do
+    inc(n);
+  CheckEqual(n, 1);
+  for d in l2.Objects('D.E.F~fF') do
+    dec(n);
+  CheckEqual(n, 1);
+  for d in l2.Objects('D.E.F~ff') do
+    dec(n);
+  CheckEqual(n, 0);
+  for d in l2.Objects('D.E.F~~Ff') do
+    inc(n);
+  CheckEqual(n, 1);
   l2.Del(0);
   CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
     '[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');

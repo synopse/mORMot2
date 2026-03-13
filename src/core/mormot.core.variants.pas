@@ -3145,7 +3145,7 @@ type
 
   /// low-level Enumerator as returned by IDocList.Objects
   // - warning: weak reference to the main IDocList/IDocDict, so you need to
-  // explicitly call IDocDict.Copy to use any returned value outside of the loop
+  // explicitly call Current.Copy to use any returned value outside of the loop
   TDocObjectEnumerator = record
   private
     CurrDict: IDocDict; // a single instance reused during whole iteration
