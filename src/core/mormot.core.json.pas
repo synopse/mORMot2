@@ -3254,7 +3254,7 @@ type
     procedure ReformatEndValue;
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
     function AddMultiLine(P: PUtf8Char): PUtf8Char;
-    procedure AddIndentAndStartComment;
+    procedure AddStartComment;
     procedure AddDebugComment(const args: array of const);
     function DslSection(P: PUtf8Char): PUtf8Char;
     procedure DslInclude(P: PUtf8Char);
@@ -3699,7 +3699,7 @@ begin
   result := GotoNextLineSmall(result); // ignore trailing '''
 end;
 
-procedure TJsonParser.AddIndentAndStartComment;
+procedure TJsonParser.AddStartComment;
 begin
   if jrfIndent in Fmt then
     W.AddCRAndIndent;
@@ -3713,7 +3713,7 @@ procedure TJsonParser.AddDebugComment(const args: array of const);
 begin
   if not (jppDebugComment in FmtDsl) then
     exit;
-  AddIndentAndStartComment;
+  AddStartComment;
   W.AddShorter(' debug: ');
   W.Add(args, twOnSameLine);
   W.AddDirect(#10);
@@ -4350,7 +4350,7 @@ ident:    Value := P;
           if jrfComments in Fmt then
           begin
             inc(Value, 2); // was // or /*
-comment:    AddIndentAndStartComment;
+comment:    AddStartComment;
             ValueLen := P - Value;
             repeat
               while (ValueLen > 0) and
