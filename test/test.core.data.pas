@@ -5138,6 +5138,15 @@ begin
   for d in l2.Objects('D.E.F~~Ff') do
     inc(n);
   CheckEqual(n, 1);
+  for d in l2.Objects('same(D.E.F,Ff)') do
+    dec(n);
+  CheckEqual(n, 0);
+  for d in l2.Objects('same(D.E.F, Ff)') do
+    inc(n);
+  CheckEqual(n, 1);
+  for d in l2.Objects('iglob(D.E.F,F?)') do
+    dec(n);
+  CheckEqual(n, 0);
   l2.Del(0);
   CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
     '[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
