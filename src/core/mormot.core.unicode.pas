@@ -2517,6 +2517,21 @@ procedure LowerCamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8); overload;
 function UriCase(const text: RawUtf8): RawUtf8;
 
 type
+  /// the recognized operators for TTextExpression / SortMatch() evaluation
+  TCompareOperator = (
+    coEqualTo,                // = ==
+    coNotEqualTo,             // <> !=
+    coLessThan,               // <
+    coLessThanOrEqualTo,      // <=
+    coGreaterThan,            // >
+    coGreaterThanOrEqualTo,   // >=
+    coEqualCaseInsens,        // =~ ~=
+    coNotEqualCaseInsens,     // !=~ !~=
+    coContains,               // ~
+    coNotContains,            // !~
+    coContainsCaseInsens,     // ~~
+    coNotContainsCaseInsens); // !~~
+
   /// store pointer references to a name/value pair as UTF-8 text buffers
   // - used e.g. for TParseSortExpression or as THttpCookie
   TTextBufferPair = object
@@ -2539,6 +2554,13 @@ type
     /// the recognized operator for EvaluateTextExpression()
     Match: TCompareOperator;
   end;
+
+/// recognize < <= = > >= <> != =~ ~= !=~ !~= ~ !~ ~~ !~~ operators
+function ParseOperator(P: PUtf8Char; Len: PtrUInt; out Match: TCompareOperator): boolean;
+
+/// fast check if a comparison function result (<0,0,>0) matches an operator
+function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// low-level search of NameStart/NameLen in pairs = pointer(TTextBufferPairDynArray)
 function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
@@ -9895,6 +9917,25 @@ begin
     PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
 end;
 
+function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
+begin
+  case CompareOperator of
+    coEqualTo:
+      result := CompareResult = 0;
+    coNotEqualTo:
+      result := CompareResult <> 0;
+    coLessThan:
+      result := CompareResult < 0;
+    coLessThanOrEqualTo:
+      result := CompareResult <= 0;
+    coGreaterThan:
+      result := CompareResult > 0;
+  // coGreaterThanOrEqualTo and paranoid coEqualCaseInsens... fallback
+  else
+    result := CompareResult >= 0;
+  end;
+end;
+
 function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
   pairs: PTextBufferPair): PTextBufferPair;
 var
@@ -9942,6 +9983,60 @@ begin
     FastAssignNew(result);
 end;
 
+function ParseOperator(P: PUtf8Char; Len: PtrUInt; out Match: TCompareOperator): boolean;
+begin
+  result := false;
+  case Len of
+    1:
+      case P^ of
+        '=':
+          Match := coEqualTo;
+        '<':
+          Match := coLessThan;
+        '>':
+          Match := coGreaterThan;
+        '~':
+          Match := coContains;
+      else
+        exit;
+      end;
+    2:
+      case cardinal(PWord(P)^) of
+        ord('=') + ord('=') shl 8: // c-style
+          Match := coEqualTo;
+        ord('!') + ord('=') shl 8, // c-style
+        ord('<') + ord('>') shl 8:
+          Match := coNotEqualTo;
+        ord('>') + ord('=') shl 8:
+          Match := coGreaterThanOrEqualTo;
+        ord('<') + ord('=') shl 8:
+          Match := coLessThanOrEqualTo;
+        ord('~') + ord('=') shl 8,
+        ord('=') + ord('~') shl 8:
+          Match := coEqualCaseInsens;
+        ord('~') + ord('~') shl 8:
+          Match := coContainsCaseInsens;
+        ord('!') + ord('~') shl 8:
+          Match := coNotContains;
+      else
+        exit;
+      end;
+    3:
+      case PCardinal(P)^ and $ffffff of
+        ord('!') + ord('~') shl 8 + ord('='),
+        ord('!') + ord('=') shl 8 + ord('~'):
+          Match := coNotEqualCaseInsens;
+        ord('!') + ord('~') shl 8 + ord('~'):
+          Match := coNotContainsCaseInsens;
+      else
+        exit;
+      end
+  else
+    exit;
+  end;
+  result := true;
+end;
+
 function ParseTextExpression(P: PUtf8Char; out Expression: TTextExpression;
   const EndName, EndExpr: TSynAnsicharSet): PUtf8Char;
 var
@@ -9966,54 +10061,8 @@ begin
   B := P;
   while P^ in ['<', '>', '=', '~'] do
     inc(P);
-  case P - B of
-    1:
-      case B^ of
-        '=':
-          Expression.Match := coEqualTo;
-        '<':
-          Expression.Match := coLessThan;
-        '>':
-          Expression.Match := coGreaterThan;
-        '~':
-          Expression.Match := coContains;
-      else
-        exit;
-      end;
-    2:
-      case cardinal(PWord(B)^) of
-        ord('=') + ord('=') shl 8: // c-style
-          Expression.Match := coEqualTo;
-        ord('!') + ord('=') shl 8, // c-style
-        ord('<') + ord('>') shl 8:
-          Expression.Match := coNotEqualTo;
-        ord('>') + ord('=') shl 8:
-          Expression.Match := coGreaterThanOrEqualTo;
-        ord('<') + ord('=') shl 8:
-          Expression.Match := coLessThanOrEqualTo;
-        ord('~') + ord('=') shl 8,
-        ord('=') + ord('~') shl 8:
-          Expression.Match := coEqualCaseInsens;
-        ord('~') + ord('~') shl 8:
-          Expression.Match := coContainsCaseInsens;
-        ord('!') + ord('~') shl 8:
-          Expression.Match := coNotContains;
-      else
-        exit;
-      end;
-    3:
-      case PCardinal(B)^ and $ffffff of
-        ord('!') + ord('~') shl 8 + ord('='),
-        ord('!') + ord('=') shl 8 + ord('~'):
-          Expression.Match := coNotEqualCaseInsens;
-        ord('!') + ord('~') shl 8 + ord('~'):
-          Expression.Match := coNotContainsCaseInsens;
-      else
-        exit;
-      end
-  else
+  if not ParseOperator(B, P - B, Expression.Match) then
     exit;
-  end;
   P := GotoNextNotSpace(P);
   Expression.ValueStart := P;
   while not (P^ in EndExpr) do // e.g. [#0 .. #31, '$']

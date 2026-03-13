@@ -4368,25 +4368,6 @@ type
   // and SortDynArrayPUtf8CharI/SortDynArrayStringI in mormot.core.text
   TDynArraySortCompare = function(const A, B): integer;
 
-  /// the recognized operators for TTextExpression / SortMatch() evaluation
-  TCompareOperator = (
-    coEqualTo,                // = ==
-    coNotEqualTo,             // <> !=
-    coLessThan,               // <
-    coLessThanOrEqualTo,      // <=
-    coGreaterThan,            // >
-    coGreaterThanOrEqualTo,   // >=
-    coEqualCaseInsens,        // =~ ~=
-    coNotEqualCaseInsens,     // !=~ !~=
-    coContains,               // ~
-    coNotContains,            // !~
-    coContainsCaseInsens,     // ~~
-    coNotContainsCaseInsens); // !~~
-
-/// fast check if a comparison function result (<0,0,>0) matches an operator
-function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
-
 /// compare two "array of boolean" 8-bit elements
 function SortDynArrayBoolean(const A, B): integer;
 
@@ -13530,25 +13511,6 @@ end;
 
 
 { ************ Sorting/Comparison Functions }
-
-function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
-begin
-  case CompareOperator of
-    coEqualTo:
-      result := CompareResult = 0;
-    coNotEqualTo:
-      result := CompareResult <> 0;
-    coLessThan:
-      result := CompareResult < 0;
-    coLessThanOrEqualTo:
-      result := CompareResult <= 0;
-    coGreaterThan:
-      result := CompareResult > 0;
-  // coGreaterThanOrEqualTo and paranoid coEqualCaseInsens... fallback
-  else
-    result := CompareResult >= 0;
-  end;
-end;
 
 function SortDynArrayVariant(const A, B): integer;
 begin
