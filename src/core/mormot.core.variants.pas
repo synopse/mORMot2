@@ -10968,6 +10968,7 @@ function ParseVariantExpression(Expression: PUtf8Char; out Key: RawUtf8;
   out Match: TCompareOperator; Value: PVariant): boolean;
 var
   exp: TTextExpression;
+  tmp: TChar64;
 begin
   result := false;
   if (Expression = nil) or
@@ -10975,7 +10976,15 @@ begin
     exit;
   FastSetString(Key, exp.NameStart, exp.NameLen);
   if Value <> nil then
-    TextBufferToVariant(exp.ValueStart, {allowdouble=}true, Value^);
+    if (exp.ValueStart = nil) or
+       (exp.ValueLen >= SizeOf(tmp)) then // maybe ')' terminated
+      RawUtf8ToVariant(exp.ValueStart, exp.ValueLen, Value^)
+    else
+    begin
+      MoveFast(exp.ValueStart^, tmp, exp.ValueLen);
+      tmp[exp.ValueLen] := #0;
+      TextBufferToVariant(@tmp, {allowdouble=}true, Value^);
+    end;
   Match := exp.Match;
   result := true;
 end;
@@ -10983,7 +10992,7 @@ end;
 function EvaluateVariantExpression(Comp: TVariantCompare;
   const A, B: variant; Match: TCompareOperator): boolean;
 var
-  au, bu: TTempUtf8;
+  au, bu: TTempUtf8; // almost never allocated
   dummy: boolean;
 begin // same logic than EvaluateTextExpression() in mormot.core.unicode
   if Match < coEqualCaseInsens then
@@ -10999,11 +11008,19 @@ begin // same logic than EvaluateTextExpression() in mormot.core.unicode
       coContains, coNotContains:
         result := (Match = coContains) =
                   (StrPosL(bu.Text, au.Text, bu.Len, au.Len) <> nil);
-    else // coContainsCaseInsens, coNotContainsCaseInsens:
-      result := (Match = coContainsCaseInsens) =
-                (StrPosIL(bu.Text, au.Text, bu.Len, au.Len) <> nil);
+      coContainsCaseInsens, coNotContainsCaseInsens:
+        result := (Match = coContainsCaseInsens) =
+                  (StrPosIL(bu.Text, au.Text, bu.Len, au.Len) <> nil);
+      coGlob, coNotGlob:
+        result := Assigned(GlobBuffer) and ((Match = coGlob) =
+                  GlobBuffer(bu.Text, au.Text, bu.Len, au.Len, {ci=}false));
+      coGlobCaseInsens, coNotGlobCaseInsens:
+        result := Assigned(GlobBuffer) and ((Match = coGlobCaseInsens) =
+                  GlobBuffer(bu.Text, au.Text, bu.Len, au.Len, {ci=}true));
+    else
+      result := false; // paranoid
     end;
-    TempUtf8Done(au); // almost never allocated
+    TempUtf8Done(au);
     TempUtf8Done(bu);
   end;
 end;
