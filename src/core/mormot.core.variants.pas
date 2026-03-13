@@ -3015,9 +3015,13 @@ function JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
 procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
   var Doc: TDocVariantData; Options: PDocVariantOptions = nil);
 
-/// parse a "key<value" or "key<" expression for SortMatch() comparison
-function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
-  out Match: TCompareOperator; Value: PVariant): boolean; overload;
+/// parse a "key<value" or "key<" expression for EvaluateVariantExpression()
+function ParseVariantExpression(Expression: PUtf8Char; out Key: RawUtf8;
+  out Match: TCompareOperator; Value: PVariant): boolean;
+
+/// evaluate if a ParseVariantExpression() operator match two variant values
+function EvaluateVariantExpression(Comp: TVariantCompare;
+  const A, B: variant; Match: TCompareOperator): boolean;
 
 
 { ************** Variant Binary Serialization }
@@ -8463,7 +8467,7 @@ begin
     else
       dv^.GetObjectProp(aKey, obj, @prev);
     if (obj <> nil) and
-       SortMatch(aCompare({%H-}obj^, aValue), aMatch) then
+       EvaluateVariantExpression(aCompare, {%H-}obj^, aValue, aMatch) then
     begin
       if result.VCount = 0 then
         SetLength(result.VValue, n); // prepare for maximum capacity
@@ -8485,7 +8489,7 @@ var
   v: variant;
   m: TCompareOperator;
 begin
-  ParseSortMatch(pointer(aExpression), k, m, @v);
+  ParseVariantExpression(pointer(aExpression), k, m, @v);
   ReduceFilter(k, v, m, aCompare, aLimit, aPathDelim, result);
 end;
 
@@ -8515,7 +8519,7 @@ var
   k: RawUtf8;
   m: TCompareOperator;
 begin
-  ParseSortMatch(pointer(aExpression), k, m, nil);
+  ParseVariantExpression(pointer(aExpression), k, m, nil);
   ReduceFilter(k, aValue, m, aCompare, aLimit, aPathDelim, result);
 end;
 
@@ -10960,20 +10964,26 @@ begin
           'contenttype', ContentType]));
 end;
 
-function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
+function ParseVariantExpression(Expression: PUtf8Char; out Key: RawUtf8;
   out Match: TCompareOperator; Value: PVariant): boolean;
 var
-  exp: TParseSortExpression;
+  exp: TTextExpression;
 begin
   result := false;
   if (Expression = nil) or
-     (ParseSortMatch(Expression, exp) = nil) then
+     (ParseTextExpression(Expression, exp) = nil) then
     exit;
   FastSetString(Key, exp.NameStart, exp.NameLen);
   if Value <> nil then
     TextBufferToVariant(exp.ValueStart, {allowdouble=}true, Value^);
   Match := exp.Match;
   result := true;
+end;
+
+function EvaluateVariantExpression(Comp: TVariantCompare;
+  const A, B: variant; Match: TCompareOperator): boolean;
+begin
+  result := SortMatch(Comp(A, B), Match)
 end;
 
 
@@ -11318,7 +11328,7 @@ begin
       end
       else if not dv^.GetObjectProp(CompKey, o, @CompKeyPrev) then
         continue;
-      if not SortMatch(CompFunc({%H-}o^, CompValue), CompMatch) then
+      if not EvaluateVariantExpression(CompFunc, {%H-}o^, CompValue, CompMatch) then
         continue;
     end;
     if CurrDict = nil then
@@ -12263,7 +12273,7 @@ var
   v: variant;
   m: TCompareOperator;
 begin
-  ParseSortMatch(pointer(expression), k, m, @v);
+  ParseVariantExpression(pointer(expression), k, m, @v);
   result := Objects(k, v, m, nil);
 end;
 
@@ -12273,7 +12283,7 @@ var
   k: RawUtf8;
   m: TCompareOperator;
 begin
-  ParseSortMatch(pointer(expression), k, m, nil);
+  ParseVariantExpression(pointer(expression), k, m, nil);
   result := Objects(k, value, m, nil);
 end;
 
