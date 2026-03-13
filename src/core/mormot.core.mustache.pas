@@ -25,7 +25,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.search, // for TSynMustache.Match helper
+  mormot.core.search, // for TSynMustache.Match/Glob helpers
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.rtti,
@@ -390,6 +390,8 @@ type
     class procedure SimpleToHtml(const Value: variant; out Result: variant);
     class procedure Match(const Value: variant; out Result: variant);
     class procedure MatchI(const Value: variant; out Result: variant);
+    class procedure Glob(const Value: variant; out Result: variant);
+    class procedure GlobI(const Value: variant; out Result: variant);
     class procedure Lower(const Value: variant; out Result: variant);
     class procedure Upper(const Value: variant; out Result: variant);
     class procedure CamelCase(const Value: variant; out Result: variant);
@@ -479,8 +481,8 @@ type
     // (expecting two parameters), NewGuid, ExtractFileName, HumanBytes (calling
     // KB function), Sub (as {{Sub AString,12,3}}), MarkdownToHtml, SimpleToHtml
     // (Markdown with no HTML pass-through), WikiToHtml (calling
-    // TJsonWriter.AddHtmlEscapeWiki), Match / MatchI (as {{Match AString,startwith*}}),
-    // and Values / Keys (over a data object)
+    // TJsonWriter.AddHtmlEscapeWiki), Match / MatchI / Glob / GlobI (as {{Match
+    // AString,startwith*}}), and Values / Keys (over a data object)
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -2120,6 +2122,8 @@ begin
       'Keys',
       'Match',
       'MatchI',
+      'Glob',
+      'GlobI',
       'Lower',
       'Upper',
       'CamelCase',
@@ -2151,6 +2155,8 @@ begin
       Keys,
       Match,
       MatchI,
+      Glob,
+      GlobI,
       Lower,
       Upper,
       CamelCase,
@@ -2461,6 +2467,33 @@ var
 begin
   if _SafeArray(Value, 2, dv) then
      DoMatch(dv, {caseinsens=}true, Result);
+end;
+
+procedure DoGlob(const Value: variant; ci: boolean; var res: variant);
+var
+  dv: PDocVariantData; // almost never any memory allocation
+  s, p: TTempUtf8;
+  dummy: boolean;
+begin
+  // {{Glob AString,APattern}}
+  if not _SafeArray(Value, 2, dv) then
+    exit;
+  VariantToTempUtf8(dv^.Values[0], s, dummy);
+  VariantToTempUtf8(dv^.Values[1], p, dummy);
+  if GlobBuffer(p.Text, s.Text, p.Len, s.Len, ci) then
+    res := VarTrue;
+  TempUtf8Done(s);
+  TempUtf8Done(p);
+end;
+
+class procedure TSynMustache.Glob(const Value: variant; out Result: variant);
+begin
+  DoGlob(Value, {caseinsens=}false, Result);
+end;
+
+class procedure TSynMustache.GlobI(const Value: variant; out Result: variant);
+begin
+  DoGlob(Value, {caseinsens=}true, Result);
 end;
 
 class procedure TSynMustache.Info(const Value: variant; out Result: variant);
