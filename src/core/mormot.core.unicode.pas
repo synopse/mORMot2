@@ -2556,7 +2556,7 @@ function ValueTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt):
 
 /// parse a "name<value" or "name<" expression for EvaluateTextExpression() comparison
 function ParseTextExpression(P: PUtf8Char; out Expression: TTextExpression;
-  const EndName: TSynAnsicharSet = [#0 .. ' ', '<', '=', '>', '!'];
+  const EndName: TSynAnsicharSet = [#0 .. ' ', '<', '=', '>', '!', '~'];
   const EndExpr: TSynAnsicharSet = [#0]): PUtf8Char; overload;
 
 /// compare NameStart/NameLen against ValueStart/ValueLen as text or integer
@@ -9961,7 +9961,7 @@ begin
     exit;
   end;
   B := P;
-  while P^ in ['<', '>', '='] do
+  while P^ in ['<', '>', '=', '~'] do
     inc(P);
   case P - B of
     1:
@@ -9971,7 +9971,9 @@ begin
         '<':
           Expression.Match := coLessThan;
         '>':
-          Expression.Match := coGreaterThan
+          Expression.Match := coGreaterThan;
+        '~':
+          Expression.Match := coContains;
       else
         exit;
       end;
@@ -9986,9 +9988,26 @@ begin
           Expression.Match := coGreaterThanOrEqualTo;
         ord('<') + ord('=') shl 8:
           Expression.Match := coLessThanOrEqualTo;
+        ord('~') + ord('=') shl 8,
+        ord('=') + ord('~') shl 8:
+          Expression.Match := coEqualCaseInsens;
+        ord('~') + ord('~') shl 8:
+          Expression.Match := coContainsCaseInsens;
+        ord('!') + ord('~') shl 8:
+          Expression.Match := coNotContains;
       else
         exit;
       end;
+    3:
+      case PCardinal(B)^ and $ffffff of
+        ord('!') + ord('~') shl 8 + ord('='),
+        ord('!') + ord('=') shl 8 + ord('~'):
+          Expression.Match := coNotEqualCaseInsens;
+        ord('!') + ord('~') shl 8 + ord('~'):
+          Expression.Match := coNotContainsCaseInsens;
+      else
+        exit;
+      end
   else
     exit;
   end;
@@ -10004,14 +10023,28 @@ function EvaluateTextExpression(const exp: TTextExpression): boolean;
 var
   n64, v64: Int64;
   cmp: integer;
-begin
-  if (exp.Match in [coEqualTo, coNotEqualTo]) or
-     not IsInt64(exp.NameStart, exp.NameLen, @n64) or
-     not IsInt64(exp.ValueStart, exp.ValueLen, @v64) then
-    cmp := CompareBuf(exp.NameStart, exp.ValueStart, exp.NameLen, exp.ValueLen)
-  else // evaluate n<v n>v as integers when case-sensitive text would not apply
-    cmp := CompareInt64(n64, v64);
-  result := SortMatch(cmp, exp.Match);
+begin // same logic than EvaluateVariantExpression() in mormot.core.variants
+  case exp.Match of
+    coEqualCaseInsens, coNotEqualCaseInsens:
+      result := (exp.Match = coEqualCaseInsens) =
+        (Utf8ILComp(exp.NameStart, exp.ValueStart, exp.NameLen, exp.ValueLen) = 0);
+    coContains, coNotContains:
+      result := (exp.Match = coContains) =
+        (StrPosL(exp.ValueStart, exp.NameStart, exp.ValueLen, exp.NameLen) <> nil);
+    coContainsCaseInsens, coNotContainsCaseInsens:
+      result := (exp.Match = coContainsCaseInsens) =
+        (StrPosIL(exp.ValueStart, exp.NameStart, exp.ValueLen, exp.NameLen) <> nil);
+  else
+    begin
+      if (exp.Match in [coEqualTo, coNotEqualTo]) or
+         not IsInt64(exp.NameStart, exp.NameLen, @n64) or
+         not IsInt64(exp.ValueStart, exp.ValueLen, @v64) then
+        cmp := CompareBuf(exp.NameStart, exp.ValueStart, exp.NameLen, exp.ValueLen)
+      else // evaluate n<v n>v as integers when case-sensitive text would not apply
+        cmp := CompareInt64(n64, v64);
+      result := SortMatch(cmp, exp.Match);
+    end;
+  end;
 end;
 
 function GetCharKinds(P: PUtf8Char; len: PtrUInt): TCharKindSet;

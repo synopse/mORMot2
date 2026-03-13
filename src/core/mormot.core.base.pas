@@ -4370,14 +4370,20 @@ type
 
   /// the recognized operators for TTextExpression / SortMatch() evaluation
   TCompareOperator = (
-    coEqualTo,
-    coNotEqualTo,
-    coLessThan,
-    coLessThanOrEqualTo,
-    coGreaterThan,
-    coGreaterThanOrEqualTo);
+    coEqualTo,                // = ==
+    coNotEqualTo,             // <> !=
+    coLessThan,               // <
+    coLessThanOrEqualTo,      // <=
+    coGreaterThan,            // >
+    coGreaterThanOrEqualTo,   // >=
+    coEqualCaseInsens,        // =~ ~=
+    coNotEqualCaseInsens,     // !=~ !~=
+    coContains,               // ~
+    coNotContains,            // !~
+    coContainsCaseInsens,     // ~~
+    coNotContainsCaseInsens); // !~~
 
-/// fast search if a comparison function result (<0,0,>0) match an operator
+/// fast check if a comparison function result (<0,0,>0) matches an operator
 function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -13538,7 +13544,7 @@ begin
       result := CompareResult <= 0;
     coGreaterThan:
       result := CompareResult > 0;
-  // coGreaterThanOrEqualTo:
+  // coGreaterThanOrEqualTo and paranoid coEqualCaseInsens... fallback
   else
     result := CompareResult >= 0;
   end;
