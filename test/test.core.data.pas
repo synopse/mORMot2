@@ -3243,6 +3243,24 @@ begin
     '{a:1,b:"1"}');
   J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
   TestJop(
+    J + '[ 1 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $endif$ 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
+    '[1,2,3]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
+    '[1,2,5]');
+  TestJop(
+    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[1,3,5]');
+  TestJop(
+    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[4,5]');
+  TestJop(
     J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
     '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
   TestJop(
@@ -3317,6 +3335,26 @@ begin
     '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
   TestJop(
     '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,3,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
+    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
+    '[1,4,6,7]');
+  TestJop(
+    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';

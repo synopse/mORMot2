@@ -3716,8 +3716,7 @@ begin
   AddIndentAndStartComment;
   W.AddShorter(' debug: ');
   W.Add(args, twOnSameLine);
-  if not (jrfIndent in Fmt) then
-    W.AddDirect(#10);
+  W.AddDirect(#10);
 end;
 
 function TJsonParser.DslString(P: PUtf8Char): PUtf8Char;
@@ -3773,7 +3772,7 @@ begin
         result := piElse;
       end;
     ENDIF_32:
-      if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endpi$'
+      if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endif$'
       begin
         inc(P, 7);
         result := piEnd;
@@ -4363,8 +4362,7 @@ comment:    AddIndentAndStartComment;
               dec(ValueLen, 2);
             until false;
             W.AddOnSameLine(Value, ValueLen); // normalize
-            if not (jrfIndent in Fmt) then
-              W.AddDirect(#10);
+            W.AddDirect(#10);
           end;
         end;
       jtEndOfBuffer:
