@@ -2555,6 +2555,15 @@ type
     Match: TCompareOperator;
   end;
 
+var
+  /// raw GLOB function, as implemented by mormot.core.search.pas with TMatch
+  GlobBuffer: function(Pattern, Text: PUtf8Char; PatternLen, TextLen: PtrInt;
+    CaseInsensitive: boolean): boolean;
+
+/// quick GLOB pattern matching with * ? placeholders on the supplied text
+// - implemented in mormot.core.search: returns false if the unit is not in uses
+function Glob(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
+
 /// recognize < <= = > >= <> != =~ ~= !=~ !~= ~ !~ ~~ !~~ operators
 function ParseOperator(P: PUtf8Char; Len: PtrUInt; out Match: TCompareOperator): boolean;
 
@@ -9915,6 +9924,12 @@ begin
   FastSetString(result, pointer(text), length(text));
   if result <> '' then
     PByte(result)^ := NormToLowerAnsi7Byte[PByte(result)^];
+end;
+
+function Glob(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
+begin
+  result := Assigned(GlobBuffer) and GlobBuffer(pointer(Pattern), pointer(Text),
+    length(Pattern), length(Text), CaseInsensitive);
 end;
 
 function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
