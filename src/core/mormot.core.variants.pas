@@ -10982,8 +10982,30 @@ end;
 
 function EvaluateVariantExpression(Comp: TVariantCompare;
   const A, B: variant; Match: TCompareOperator): boolean;
-begin
-  result := SortMatch(Comp(A, B), Match)
+var
+  au, bu: TTempUtf8;
+  dummy: boolean;
+begin // same logic than EvaluateTextExpression() in mormot.core.unicode
+  if Match < coEqualCaseInsens then
+    result := SortMatch(Comp(A, B), Match)
+  else
+  begin
+    VariantToTempUtf8(A, au, dummy);
+    VariantToTempUtf8(B, bu, dummy);
+    case Match of
+      coEqualCaseInsens, coNotEqualCaseInsens:
+        result := (Match = coEqualCaseInsens) =
+                  (Utf8ILComp(au.Text, bu.Text, au.Len, bu.Len) = 0);
+      coContains, coNotContains:
+        result := (Match = coContains) =
+                  (StrPosL(bu.Text, au.Text, bu.Len, au.Len) <> nil);
+    else // coContainsCaseInsens, coNotContainsCaseInsens:
+      result := (Match = coContainsCaseInsens) =
+                (StrPosIL(bu.Text, au.Text, bu.Len, au.Len) <> nil);
+    end;
+    TempUtf8Done(au); // almost never allocated
+    TempUtf8Done(bu);
+  end;
 end;
 
 
