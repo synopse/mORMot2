@@ -4017,8 +4017,7 @@ begin
         else
           dec(level);
       '"':
-        result := GotoEndOfJsonString2(result + 1,
-          {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS_RELAXED{$endif});
+        result := GotoEndOfJsonString2(result + 1, @JSON_CHARS_RELAXED);
     end;
     inc(result);
   until false;
