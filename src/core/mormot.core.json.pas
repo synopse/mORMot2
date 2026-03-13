@@ -3159,7 +3159,7 @@ begin
   repeat
     beg := v;
     while (v < ve) and
-          (PWord(v)^ <> SLASH_16) and
+          (cardinal(PWord(v)^) <> SLASH_16) and
           not (v^ in ['$', '#']) do
       inc(v);
     tmp.Add(beg, v - beg);
@@ -3260,6 +3260,7 @@ type
     procedure DslInclude(P: PUtf8Char);
     function DslString(P: PUtf8Char): PUtf8Char;
     function DslIf(P: PUtf8Char): PUtf8Char;
+    function DslWasIf(var P: PUtf8Char): boolean;
     function DslVar(P: PUtf8Char): PUtf8Char;
     procedure DslSkip(var P: PUtf8Char);
     procedure DslEndif(var P: PUtf8Char);
@@ -3766,7 +3767,7 @@ begin
         result := piIfDef;
       end;
     ELSE_32:
-      if PWord(P + 4)^ = ELSE_16 then // '$else$'
+      if cardinal(PWord(P + 4)^) = ELSE_16 then // '$else$'
       begin
         inc(P, 6);
         result := piElse;
@@ -3920,16 +3921,12 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
     inc(result);
 end;
 
-function TJsonParser.DslVar(P: PUtf8Char): PUtf8Char;
-var
-  v: PUtf8Char;
-  l: PtrInt;
-  m: TJsonDslMarker;
+function TJsonParser.DslWasIf(var P: PUtf8Char): boolean;
 begin
-  result := P;
-  case ParseIfDollar(result) of // called with P^ = '$'
+  result := true;
+  case ParseIfDollar(P) of // called with P^ = '$'
     piIf, piIfDef: // complex $if $ifdef evaluation
-      result := DslIf(result);
+      P := DslIf(P);
     piElse:        // $else$ just toggles skip flag
       if FmtIfLevel > 0 then
         if FmtIfLevel in FmtSkip then
@@ -3937,57 +3934,69 @@ begin
         else
         begin
           include(FmtSkip, FmtIfLevel); // skip until $end$
-          DslSkip(result);
+          DslSkip(P);
         end
       else
         AddDebugComment(['$else$ with no prior $if']);
     piEnd:         // $endif$
-      DslEndif(result);
-    piNone:        // regular content
-      begin
-        if (FmtIfLevel > 0) and
-           (FmtIfLevel in FmtSkip) then
-          AddDebugComment(['wrong $ifdef$ skip logic']);
-        result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
-        if v = nil then
-        begin
-          ReformatBeginValue;
-          W.AddNull; // nothing found: append null value
-          ReformatEndValue;
-          exit;
-        end;
-        m := TJsonDslMarker(v^);
-        if m <= high(m) then
-        begin
-          inc(v); // ignore DslSection() marker
-          dec(l);
-          if m = jdmTemplate then
-          begin
-            Reformat(v); // template as recursive blocks (once)
-            exit;
-          end;
-        end
-        else if (v^ = '"') or  // $val|"12"$ to force "string" value
-                IsConstantOrNumberJson(v, l) then
-          m := jdmConstNum     // AddNoJsonEscape
-        else
-          m := jdmPlainString; // AddJsonEscape
-        ReformatBeginValue;
-        if m = jdmConstNum then
-          W.AddNoJsonEscape(v, l)
-        else
-        begin
-          W.AddDirect('"');
-          if l <> 0 then
-            if m = jdmPlainString then
-              W.AddJsonEscape(v, l)    // |default or enc:NAME
-            else
-              W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "was \r quoted"
-          W.AddDirect('"');
-        end;
-        ReformatEndValue;
-      end;
+      DslEndif(P);
+  else
+    begin
+      if (FmtIfLevel > 0) and
+         (FmtIfLevel in FmtSkip) then
+        AddDebugComment(['wrong $ifdef$ skip logic']);
+      result := false;
+    end;
   end;
+end;
+
+function TJsonParser.DslVar(P: PUtf8Char): PUtf8Char;
+var
+  v: PUtf8Char;
+  l: PtrInt;
+  m: TJsonDslMarker;
+begin
+  result := P;
+  if DslWasIf(result) then // called with result^ = '$'
+    exit;
+  result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
+  if v = nil then
+  begin
+    ReformatBeginValue;
+    W.AddNull; // nothing found: append null value
+    ReformatEndValue;
+    exit;
+  end;
+  m := TJsonDslMarker(v^);
+  if m <= high(m) then
+  begin
+    inc(v); // ignore DslSection() marker
+    dec(l);
+    if m = jdmTemplate then
+    begin
+      Reformat(v); // template as recursive blocks (once) with late evaluation
+      exit;
+    end;
+  end
+  else if (v^ = '"') or  // $val|"12"$ to force "string" value
+          IsConstantOrNumberJson(v, l) then
+    m := jdmConstNum     // AddNoJsonEscape
+  else
+    m := jdmPlainString; // AddJsonEscape
+  ReformatBeginValue;
+  if m = jdmConstNum then
+    W.AddNoJsonEscape(v, l)
+  else
+  begin
+    W.AddDirect('"');
+    if l <> 0 then
+      if m = jdmPlainString then
+        W.AddJsonEscape(v, l)    // |default or enc:NAME
+      else
+        W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "was \r quoted"
+    W.AddDirect('"');
+  end;
+  ReformatEndValue;
 end;
 
 function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
@@ -4181,7 +4190,7 @@ dquote:   ReformatBeginValue;
         begin
           ReformatBeginValue;
           inc(P);
-          if PWord(P)^ = SQUOT_16 then // Hjson ''' multi-line
+          if cardinal(PWord(P)^) = SQUOT_16 then // Hjson ''' multi-line
           begin
             P := AddMultiLine(P + 2);
             W.AddDirect('"');
@@ -4357,7 +4366,7 @@ comment:    AddStartComment;
                     (Value[ValueLen - 1] <= ' ') do // trim right
                 dec(ValueLen);
               if (ValueLen <= 2) or
-                 (PWord(Value + ValueLen - 2)^ <> SLEND_16) then
+                 (cardinal(PWord(Value + ValueLen - 2)^) <> SLEND_16) then
                 break;
               dec(ValueLen, 2);
             until false;
@@ -8004,13 +8013,13 @@ begin
     else if (result^ = '/') and
             (result[1] in ['/', '*']) then
       result := TryGotoEndOfSlashComment(result)
-    else if PWord(result)^ = DOLLAR_16 then
+    else if cardinal(PWord(result)^) = DOLLAR_16 then
     begin
       repeat
         inc(result);
         if result^ = #0 then
           exit;
-      until PWord(result)^ = DOLLAR_16; // goto end of $$ DSL section $$
+      until cardinal(PWord(result)^) = DOLLAR_16; // goto end of $$ section $$
       result := GotoNextLineSmall(result + 2)
     end
     else
@@ -9691,7 +9700,7 @@ begin
       if (prop = nil) and
          (itemInfo.ValueRtlClass = vcObjectWithID) and
          (PInteger(Ctxt.Value)^ and $dfdfdfdf = _ROWI32) and
-         (PWord(Ctxt.Value + 4)^ and $ffdf = ord('D')) then
+         (cardinal(PWord(Ctxt.Value + 4)^) and $ffdf = ord('D')) then
         prop := @iteminfo.Props.List[0]; // 'RowID' = first TObjectWithID field
     end;
     if (prop = nil) and
