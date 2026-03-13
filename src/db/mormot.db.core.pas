@@ -365,17 +365,17 @@ type
   /// SQL Query comparison operators
   // - used e.g. by CompareOperator() functions in mormot.orm.storage.pas
   TSqlCompareOperator = (
-     soEqualTo,
-     soNotEqualTo,
-     soLessThan,
-     soLessThanOrEqualTo,
-     soGreaterThan,
-     soGreaterThanOrEqualTo,
-     soBeginWith,
-     soContains,
-     soSoundsLikeEnglish,
-     soSoundsLikeFrench,
-     soSoundsLikeSpanish);
+    soEqualTo,
+    soNotEqualTo,
+    soLessThan,
+    soLessThanOrEqualTo,
+    soGreaterThan,
+    soGreaterThanOrEqualTo,
+    soBeginWith,
+    soContains,
+    soSoundsLikeEnglish,
+    soSoundsLikeFrench,
+    soSoundsLikeSpanish);
 
 const
   /// special TFieldBits value containing all field bits set to 1

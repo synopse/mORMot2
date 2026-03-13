@@ -2696,7 +2696,7 @@ var
   begin
     j := JsonReformat(src, jsonUnquotedPropNameCompact, PreProcessor);
     Check(j <> '');
-    CheckEqual(j, exp);
+    CheckEqual(j, exp, src);
     if nest then
       for s := low(s) to high(s) do
       begin
