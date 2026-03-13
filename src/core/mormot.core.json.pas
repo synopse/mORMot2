@@ -3999,26 +3999,56 @@ begin
   ReformatEndValue;
 end;
 
+function GotoTemplateEnding(P: PUtf8Char): PUtf8Char;
+var
+  level: integer;
+begin
+  result := P + 1; // skip { [
+  level := 0;
+  repeat
+    case result^ of
+      #0:
+        exit;
+      '{', '[':
+        inc(level);
+      '}', ']':
+        if level = 0 then
+          break
+        else
+          dec(level);
+      '"':
+        result := GotoEndOfJsonString2(result + 1,
+          {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS_RELAXED{$endif});
+    end;
+    inc(result);
+  until false;
+end;
+
 function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
 var
   key, value: PUtf8Char;
-  keylen, beforecount, level: PtrInt;
+  keylen, beforecount: PtrInt;
   marker: TJsonDslMarker;
+label
+  ok;
 begin // handle P = '$$'
   beforecount := 0;
   if jppDebugComment in FmtDsl then
     beforecount := FmtVars.Count;
   result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
   repeat
-    result := GotoNextNotSpace(GotoNextLineSmall(result));
+    result := GotoNextLineSmall(result);
+ok: result := GotoNextNotSpace(result);
     case result^ of
       #0:
         exit;
       '$':
         if result[1] = '$' then
           break     // end of DSL section
+        else if DslWasIf(result) then
+          goto ok   // $if$ $else$ $endif$ conditional logic
         else
-          continue; // $ is not allowed in identifiers
+          continue; // $ is not allowed in identifiers anyway
       '#', '/':
         continue;   // comment line
       'i', 'I':
@@ -4046,29 +4076,11 @@ begin // handle P = '$$'
     case result^ of
       #0:
         exit;
-      '{', '[':
+      '{', '[': // value = whole {..}/[..] text block - with late evaluation
         begin
-          level := 0;
-          repeat                             // value = whole {..}/[..] inside
-            result := GotoNextNotSpace(result);
-            case result^ of
-              #0:
-                exit;
-              '{', '[':
-                inc(level);
-              '}', ']':
-                if level = 1 then
-                  break
-                else
-                  dec(level);
-              '"':
-                result := GotoEndOfJsonString2(result + 1,
-                  {$ifdef CPUX86}JsonSet{$else}@JSON_CHARS_RELAXED{$endif});
-            end;
-            inc(result);
-          until false;
+          result := GotoTemplateEnding(result);
           FmtVars.Register(jdmTemplate, key, value, result - 1, keylen);
-          continue;
+          continue; // will be inserted and evaluated later with AddReformat()
         end;
       '"', '''':
         while (result^ >= ' ') and
