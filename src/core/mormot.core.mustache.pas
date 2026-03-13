@@ -2372,8 +2372,8 @@ end;
 
 class procedure TSynMustache.If_(const Value: variant; out Result: variant);
 var
-  cmp: integer;
-  oper: RawUtf8;
+  oper: TTempUtf8;
+  co: TCompareOperator;
   dv: PDocVariantData;
   wasString: boolean;
 begin
@@ -2381,31 +2381,11 @@ begin
   SetVariantNull(result{%H-});
   if not _SafeArray(Value, 3, dv) then
     exit;
-  VariantToUtf8(dv^.Values[1], oper, wasString);
-  if (oper = '') or
-     not wasString then
-    exit;
-  cmp := FastVarDataComp(@dv^.Values[0], @dv^.Values[2], false);
-  case cardinal(PWord(oper)^) of
-    ord('='):
-      if cmp = 0 then
-        result := VarTrue;
-    ord('>'):
-      if cmp > 0 then
-        result := VarTrue;
-    ord('<'):
-      if cmp < 0 then
-        result := VarTrue;
-    ord('>') + ord('=') shl 8:
-      if cmp >= 0 then
-        result := VarTrue;
-    ord('<') + ord('=') shl 8:
-      if cmp <= 0 then
-        result := VarTrue;
-    ord('<') + ord('>') shl 8:
-      if cmp <> 0 then
-        result := VarTrue;
-  end;
+  VariantToTempUtf8(dv^.Values[1], oper, wasString);
+  if ParseOperator(oper.Text, oper.Len, co) and
+     EvaluateVariantExpression(VariantCompare, dv^.Values[0], dv^.Values[2], co) then
+    result := VarTrue;
+  TempUtf8Done(oper);
 end;
 
 class procedure TSynMustache.NewGuid(const Value: variant; out Result: variant);
