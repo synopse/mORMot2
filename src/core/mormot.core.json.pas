@@ -3796,8 +3796,6 @@ begin
 end;
 
 procedure TJsonParser.DslSkip(var P: PUtf8Char);
-var
-  pi: TParseIf;
 begin
   while true do
     if P^ = #0 then
@@ -3805,34 +3803,35 @@ begin
     else if P^ <> '$' then
       inc(P) // most common case
     else
-    begin
-      pi := ParseIfDollar(P);
-      if pi = piNone then
-        inc(P)
-      else if pi = piElse then
-        if FmtIfLevel = 0 then // paranoid
-        begin
-          AddDebugComment(['unexpected else$']);
-          exit;
-        end
-        else if FmtIfLevel in FmtSkip then
-        begin
-          exclude(FmtSkip, FmtIfLevel); // include until $end$
-          exit;
-        end
-        else
-          include(FmtSkip, FmtIfLevel)  // and continue skip loop
-      else
-        break;
-    end;
-  case pi of // caller should get and manage any nested $if $ifdef
-    piIf:
-      dec(P, 4);
-    piIfDef:
-      dec(P, 7);
-    piEnd:
-      DslEndif(P);
-  end;
+      case ParseIfDollar(P) of
+        piNone:
+          inc(P);
+        piIf:
+          begin
+            dec(P, 4);
+            exit;
+          end;
+        piIfDef:
+          begin
+            dec(P, 7);
+            exit;
+          end;
+        piEnd:
+          begin
+            DslEndif(P);
+            exit;
+          end;
+        piElse:
+          if FmtIfLevel = 0 then // paranoid
+            exit
+          else if FmtIfLevel in FmtSkip then
+          begin
+            exclude(FmtSkip, FmtIfLevel); // include until $end$
+            exit;
+          end
+          else
+            include(FmtSkip, FmtIfLevel);  // and continue skip loop
+      end;
 end;
 
 function TJsonParser.DslIf(P: PUtf8Char): PUtf8Char;
