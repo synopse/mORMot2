@@ -3253,7 +3253,8 @@ type
     procedure ReformatEndValue;
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
     function AddMultiLine(P: PUtf8Char): PUtf8Char;
-    procedure AddIndentAndCommentToken(const args: array of const);
+    procedure AddIndentAndStartComment;
+    procedure AddDebugComment(const args: array of const);
     function DslSection(P: PUtf8Char): PUtf8Char;
     procedure DslInclude(P: PUtf8Char);
     function DslString(P: PUtf8Char): PUtf8Char;
@@ -3694,6 +3695,27 @@ begin
   result := GotoNextLineSmall(result); // ignore trailing '''
 end;
 
+procedure TJsonParser.AddIndentAndStartComment;
+begin
+  if jrfIndent in Fmt then
+    W.AddCRAndIndent;
+  if jrfCommentHash in Fmt then
+    W.AddDirect('#')
+  else
+    W.AddDirect('/', '/');
+end;
+
+procedure TJsonParser.AddDebugComment(const args: array of const);
+begin
+  if not (jppDebugComment in FmtDsl) then
+    exit;
+  AddIndentAndStartComment;
+  W.AddShorter(' debug: ');
+  W.Add(args, twOnSameLine);
+  if not (jrfIndent in Fmt) then
+    W.AddDirect(#10);
+end;
+
 function TJsonParser.DslString(P: PUtf8Char): PUtf8Char;
 begin
   result := P + 2;
@@ -3826,7 +3848,7 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
     end;
   end
   else if jppDebugComment in FmtDsl then
-    AddIndentAndCommentToken([' nested $if$ are not allowed']);
+    AddIndentAndCommentToken(['nested $if$ are not allowed']);
   if result^ = '$' then
     inc(result);
 end;
@@ -3846,18 +3868,16 @@ begin // called with P^ = '$'
         if FmtIf = ifUntilElseEnd then
         begin
           if ParserIfGoto(result, [if0, ifElse, ifEnd]) <> ifEnd then
-            if jppDebugComment in FmtDsl then
-              AddIndentAndCommentToken(['  $else$ with no $endif']);
+             AddDebugComment(['$else$ with no $endif']);
         end
-        else if jppDebugComment in FmtDsl then
-          AddIndentAndCommentToken([' $else$ with no prior $if']);
+        else
+          AddDebugComment(['$else$ with no prior $if']);
         FmtIf := ifNormal;
       end;
     ifEnd: // $endif$
       begin
         if FmtIf = ifNormal then
-          if jppDebugComment in FmtDsl then
-            AddIndentAndCommentToken(['  $endif$ with no prior $if']);
+          AddDebugComment(['$endif$ with no prior $if']);
         FmtIf := ifNormal;
       end;
     ifNone:
@@ -4001,23 +4021,11 @@ begin // handle P = '$$'
   if jppDebugComment in FmtDsl then
     while beforecount < FmtVars.Count do
     begin
-      AddIndentAndCommentToken([' defined $',
+      AddDebugComment(['defined $',
         PShortString(FmtVars.Value[beforecount])^, '$ = ',
         PUtf8Char(FmtVars.Values(beforecount))]);
       inc(beforecount);
     end;
-end;
-
-procedure TJsonParser.AddIndentAndCommentToken(const args: array of const);
-begin
-  if jrfIndent in Fmt then
-    W.AddCRAndIndent;
-  if jrfCommentHash in Fmt then
-    W.AddDirect('#')
-  else
-    W.AddDirect('/', '/');
-  if high(args) >= 0 then
-    W.Add(args, twOnSameLine);
 end;
 
 procedure TJsonParser.DslInclude(P: PUtf8Char);
@@ -4050,8 +4058,7 @@ begin
   end;
   if RootCount >= DSL_INCLUDE_DEPTH then
   begin
-    if jppDebugComment in FmtDsl then
-      AddIndentAndCommentToken([' include ', tmp,' too deep: rejected']);
+    AddDebugComment(['include ', tmp,' too deep: rejected']);
     exit;
   end;
   fn := MakeString([tmp]);
@@ -4059,8 +4066,7 @@ begin
      not SafeFileName(fn) then
     exit;
   txt := RawUtf8FromFile(fn);
-  if jppDebugComment in FmtDsl then
-    AddIndentAndCommentToken([' include ', fn,' size=', length(txt)]);
+  AddDebugComment(['include ', fn,' size=', length(txt)]);
   if txt = '' then
     exit;
   inc(RootCount);
@@ -4278,7 +4284,7 @@ ident:    Value := P;
           if jrfComments in Fmt then
           begin
             inc(Value, 2); // was // or /*
-comment:    AddIndentAndCommentToken([]);
+comment:    AddIndentAndStartComment;
             ValueLen := P - Value;
             repeat
               while (ValueLen > 0) and
@@ -4290,6 +4296,8 @@ comment:    AddIndentAndCommentToken([]);
               dec(ValueLen, 2);
             until false;
             W.AddOnSameLine(Value, ValueLen); // normalize
+            if not (jrfIndent in Fmt) then
+              W.AddDirect(#10);
           end;
         end;
       jtEndOfBuffer:
