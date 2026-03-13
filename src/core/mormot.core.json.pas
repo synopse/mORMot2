@@ -3842,7 +3842,7 @@ var
   match: boolean;
 begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
   result := ParseTextExpression(P, exp,
-    [#0 .. ' ', '<', '=', '>', '!', '$'], [#0 .. #31, '$']);
+    [#0 .. ' ', '<', '=', '>', '!', '$', '~'], [#0 .. #31, '$']);
   if result = nil then
   begin
     result := @NULCHAR; // force <> nil but #0
@@ -3904,7 +3904,7 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
       else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
         match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
       else
-        match := EvaluateTextExpression(exp); // non-void = < > <= >=
+        match := EvaluateTextExpression(exp); // non-void = < > <= >= ~ ~~
       inc(FmtIfLevel);
       if match then // $if$ include [$else$ skip] $endif$
         exclude(FmtSkip, FmtIfLevel)
