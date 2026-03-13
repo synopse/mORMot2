@@ -1678,6 +1678,12 @@ function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar;
 // - see also strspn() function which is likely to be faster
 function PosCharAny(Str: PUtf8Char; Characters: PAnsiChar): PUtf8Char;
 
+/// a pure text-buffer oriented version of Pos()
+function StrPosL(sub, str: PUtf8Char; sublen, strlen: PtrInt): PUtf8Char;
+
+/// a pure text-buffer oriented version of case-insensitive PosI()
+function StrPosIL(sub, str: PUtf8Char; sublen, strlen: PtrInt): PUtf8Char;
+
 /// a non case-sensitive RawUtf8 version of Pos()
 // - uppersubstr is expected to be already in upper case
 // - this version handle only 7-bit ASCII (no accentuated characters)
@@ -6650,6 +6656,73 @@ begin
           exit;
   end;
   result := 0;
+end;
+
+function StrPosL(sub, str: PUtf8Char; sublen, strlen: PtrInt): PUtf8Char;
+var
+  c: AnsiChar;
+begin
+  if (sub <> nil) and
+     (str <> nil) and
+     (sublen > 0) and
+     (strlen > 0) then
+    if sublen = 1 then
+      result := PosChar(str, strlen, sub^) // use SSE2
+    else
+    begin
+      c := sub^;
+      result := str;
+      inc(strlen, PtrUInt(str - sublen)); // PUtf8Char(strlen) = strend
+      repeat
+        if (result^ = c) and
+           (MemCmp(pointer(result), pointer(sub), sublen) = 0) then
+          exit;
+        inc(result);
+      until result = PUtf8Char(strlen);
+    end;
+  result := nil;
+end;
+
+function StrPosIL(sub, str: PUtf8Char; sublen, strlen: PtrInt): PUtf8Char;
+var
+  u: AnsiChar;
+  i: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTable absolute NormToUpperAnsi7;
+  {$else}
+  table: PNormTable;
+  {$endif CPUX86NOTPIC}
+begin
+  if (sub <> nil) and
+     (str <> nil) and
+     (sublen > 0) and
+     (strlen > 0) then
+  begin
+    result := str;
+    inc(strlen, PtrUInt(str - sublen)); // PUtf8Char(strlen) = strend
+    dec(sublen);
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
+    u := table[sub^];
+    repeat
+      if table[result^] = u then
+      begin
+        if sublen = 0 then
+          exit; // sub had a single char
+        i := 0;
+        repeat
+          inc(i);
+          if table[result[i]] <> table[sub[i]] then
+            break;
+          if i = sublen then
+            exit; // all sub^ was found at result^
+        until false;
+      end;
+      inc(result);
+    until result = PUtf8Char(strlen);
+  end;
+  result := nil;
 end;
 
 function StrPosI(uppersubstr, str: PUtf8Char): PUtf8Char;
