@@ -2567,6 +2567,9 @@ function Glob(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
 /// recognize < <= = > >= <> != =~ ~= !=~ !~= ~ !~ ~~ !~~ operators
 function ParseOperator(P: PUtf8Char; Len: PtrUInt; out Match: TCompareOperator): boolean;
 
+/// recognize [NOT] SAME CONTAINS ICONTAINS GLOB IGLOB text e.g. for {{#if }} helper
+function ParseOperatorText(P: PUtf8Char; out Match: TCompareOperator): PUtf8Char;
+
 /// fast check if a comparison function result (<0,0,>0) matches an operator
 function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -9996,6 +9999,24 @@ begin
       FastSetString(result, ValueStart, ValueLen)
   else
     FastAssignNew(result);
+end;
+
+function ParseOperatorText(P: PUtf8Char; out Match: TCompareOperator): PUtf8Char;
+var
+  neg: boolean;
+  i: PtrInt;
+begin // [NOT] SAME CONTAINS ICONTAINS GLOB IGLOB text
+  result := nil;
+  if P = nil then
+    exit;
+  neg := PCardinal(P)^ and $ffdfdfdf = NOT_32;
+  if neg then
+    P := GotoNextNotSpace(P + 4);
+  i := IdemPCharSep(P, 'SAME|CONTAIN|ICONTAIN|GLOB|IGLOB|');
+  if i < 0 then
+    exit;
+  Match := TCompareOperator(ord(coEqualCaseInsens) + (i * 2) + ord(neg));
+  result := P + 4;
 end;
 
 function ParseOperator(P: PUtf8Char; Len: PtrUInt; out Match: TCompareOperator): boolean;
