@@ -2388,7 +2388,8 @@ begin
   if not _SafeArray(Value, 3, dv) then
     exit;
   VariantToTempUtf8(dv^.Values[1], oper, wasString);
-  if ParseOperator(oper.Text, oper.Len, co) and
+  if (ParseOperator(oper.Text, oper.Len, co) or
+      (ParseOperatorText(oper.Text, co) <> nil)) and // [not] same/contains/glob
      EvaluateVariantExpression(VariantCompare, dv^.Values[0], dv^.Values[2], co) then
     result := VarTrue;
   TempUtf8Done(oper);
