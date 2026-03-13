@@ -2525,12 +2525,16 @@ type
     coLessThanOrEqualTo,      // <=
     coGreaterThan,            // >
     coGreaterThanOrEqualTo,   // >=
-    coEqualCaseInsens,        // =~ ~=
-    coNotEqualCaseInsens,     // !=~ !~=
-    coContains,               // ~
-    coNotContains,            // !~
-    coContainsCaseInsens,     // ~~
-    coNotContainsCaseInsens); // !~~
+    coEqualCaseInsens,        // =~ ~= same()
+    coNotEqualCaseInsens,     // !=~ !~= not same()
+    coContains,               // ~ contains()
+    coNotContains,            // !~ not contains()
+    coContainsCaseInsens,     // ~~ icontains()
+    coNotContainsCaseInsens,  // !~~ not icontains()
+    coGlob,                   // * glob()
+    coNotGlob,                // !* not glob()
+    coGlobCaseInsens,         // ** iglob()
+    coNotGlobCaseInsens);     // !** not iglob()
 
   /// store pointer references to a name/value pair as UTF-8 text buffers
   // - used e.g. for TParseSortExpression or as THttpCookie
@@ -2564,7 +2568,7 @@ var
 // - implemented in mormot.core.search: returns false if the unit is not in uses
 function Glob(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
 
-/// recognize < <= = > >= <> != =~ ~= !=~ !~= ~ !~ ~~ !~~ operators
+/// recognize < <= = > >= <> != =~ ~= !=~ !~= ~ !~ ~~ !~~ * !* ** !** operators
 function ParseOperator(P: PUtf8Char; Len: PtrUInt; out Match: TCompareOperator): boolean;
 
 /// recognize [NOT] SAME CONTAINS ICONTAINS GLOB IGLOB text e.g. for {{#if }} helper
@@ -2588,10 +2592,10 @@ function NameTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): 
 /// compute a RawUtf8 from pairs[ndx].ValueStart/ValueLen or '' if ndx is out of range
 function ValueTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
 
-/// parse a "name<value" or "name<" expression for EvaluateTextExpression() comparison
+/// parse a "name op value" or "name op" expression for EvaluateTextExpression()
+// - will also recognize "[not] same() contains() glob()" function syntax
 function ParseTextExpression(P: PUtf8Char; out Expression: TTextExpression;
-  const EndName: TSynAnsicharSet = [#0 .. ' ', '<', '=', '>', '!', '~'];
-  const EndExpr: TSynAnsicharSet = [#0]): PUtf8Char; overload;
+  AltStopChar: AnsiChar = #0): PUtf8Char; overload;
 
 /// compare NameStart/NameLen against ValueStart/ValueLen as text or integer
 // - will recognize integers to apply natural < > comparison between fields
@@ -10033,6 +10037,8 @@ begin
           Match := coGreaterThan;
         '~':
           Match := coContains;
+        '*':
+          Match := coGlob;
       else
         exit;
       end;
@@ -10054,6 +10060,10 @@ begin
           Match := coContainsCaseInsens;
         ord('!') + ord('~') shl 8:
           Match := coNotContains;
+        ord('*') + ord('*') shl 8:
+          Match := coGlobCaseInsens;
+        ord('!') + ord('*') shl 8:
+          Match := coNotGlob;
       else
         exit;
       end;
@@ -10064,6 +10074,8 @@ begin
           Match := coNotEqualCaseInsens;
         ord('!') + ord('~') shl 8 + ord('~'):
           Match := coNotContainsCaseInsens;
+        ord('!') + ord('*') shl 8 + ord('*'):
+          Match := coNotGlobCaseInsens;
       else
         exit;
       end
@@ -10074,9 +10086,10 @@ begin
 end;
 
 function ParseTextExpression(P: PUtf8Char; out Expression: TTextExpression;
-  const EndName, EndExpr: TSynAnsicharSet): PUtf8Char;
+  AltStopChar: AnsiChar): PUtf8Char;
 var
   B: PUtf8Char;
+  ending: AnsiChar;
 begin
   result := nil; // invalid input
   if P = nil then
@@ -10085,25 +10098,46 @@ begin
   Expression.NameStart := P;
   Expression.ValueStart := nil;
   Expression.ValueLen := -1; // with result <> nil: means no value was specified
-  while not (P^ in EndName) do // e.g. [#0 .. ' ', '<', '=', '>', '!', '$']
+  ending := #0;
+  while (P^ <> AltStopChar) and
+        not (P^ in [#0 .. ' ', '<', '=', '>', '!', '*', '~', '(']) do
     inc(P);
   Expression.NameLen := P - Expression.NameStart;
   P := GotoNextNotSpace(P);
-  if P^ in EndExpr then
+  if P^ = AltStopChar then
   begin
-    result := P; // e.g. $if var$ with EndExpr = [#0 .. #31, '$']
+    result := P; // e.g. $if var$
     exit;
   end;
   B := P;
-  while P^ in ['<', '>', '=', '~'] do
+  while P^ in ['<', '>', '=', '~', '*'] do
     inc(P);
-  if not ParseOperator(B, P - B, Expression.Match) then
-    exit;
+  if not ParseOperator(B, P - B, Expression.Match) then // not "name op value"
+  begin
+    P := ParseOperatorText(Expression.NameStart, Expression.Match);
+    if P = nil then
+      exit;
+    while P^ <> '(' do // expect "function(name, value)"
+      if P^ < ' ' then
+        exit
+      else
+        inc(P);
+    P := IgnoreAndGotoNextNotSpace(P); // skip (
+    Expression.NameStart := P;
+    while (P^ > ' ') and (P^ <> ',') do
+      inc(P);
+    Expression.NameLen := P - Expression.NameStart;
+    if P^ = ',' then
+      inc(P); // just ignore comma
+    ending := ')';
+  end;
   P := GotoNextNotSpace(P);
   Expression.ValueStart := P;
-  while not (P^ in EndExpr) do // e.g. [#0 .. #31, '$']
+  while (P^ <> #0) and (P^ <> AltStopChar) and (P^ <> ending) do
     inc(P);
   Expression.ValueLen := P - Expression.ValueStart;
+  if P^ = ')' then
+    P := IgnoreAndGotoNextNotSpace(P);
   result := P;
 end;
 
@@ -10122,6 +10156,12 @@ begin // same logic than EvaluateVariantExpression() in mormot.core.variants
     coContainsCaseInsens, coNotContainsCaseInsens:
       result := (exp.Match = coContainsCaseInsens) =
         (StrPosIL(exp.ValueStart, exp.NameStart, exp.ValueLen, exp.NameLen) <> nil);
+    coGlob, coNotGlob:
+      result := Assigned(GlobBuffer) and ((exp.Match = coGlob) =
+        GlobBuffer(exp.ValueStart, exp.NameStart, exp.ValueLen, exp.NameLen, {ci=}false));
+    coGlobCaseInsens, coNotGlobCaseInsens:
+      result := Assigned(GlobBuffer) and ((exp.Match = coGlobCaseInsens) =
+        GlobBuffer(exp.ValueStart, exp.NameStart, exp.ValueLen, exp.NameLen, {ci=}true));
   else
     begin
       if (exp.Match in [coEqualTo, coNotEqualTo]) or
