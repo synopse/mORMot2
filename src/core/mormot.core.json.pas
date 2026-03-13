@@ -3837,11 +3837,11 @@ end;
 
 function TJsonParser.DslIf(P: PUtf8Char): PUtf8Char;
 var
-  exp: TParseSortExpression;
+  exp: TTextExpression;
   len, level: PtrInt;
   match: boolean;
 begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
-  result := ParseSortMatch(P, exp,
+  result := ParseTextExpression(P, exp,
     [#0 .. ' ', '<', '=', '>', '!', '$'], [#0 .. #31, '$']);
   if result = nil then
   begin
@@ -3904,7 +3904,7 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
       else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
         match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
       else
-        match := EvaluateSortMatch(exp); // = < > <= >= non-void evaluation
+        match := EvaluateTextExpression(exp); // non-void = < > <= >=
       inc(FmtIfLevel);
       if match then // $if$ include [$else$ skip] $endif$
         exclude(FmtSkip, FmtIfLevel)

@@ -4368,7 +4368,7 @@ type
   // and SortDynArrayPUtf8CharI/SortDynArrayStringI in mormot.core.text
   TDynArraySortCompare = function(const A, B): integer;
 
-  /// the recognized operators for comparison functions results match
+  /// the recognized operators for TTextExpression / SortMatch() evaluation
   TCompareOperator = (
     coEqualTo,
     coNotEqualTo,

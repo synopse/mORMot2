@@ -2534,9 +2534,9 @@ type
   /// a dynamic array of UTF-8 text-buffer name/value pairs
   TTextBufferPairDynArray = array of TTextBufferPair;
 
-  /// all parsed filled from ParseSortMatch()
-  TParseSortExpression = object(TTextBufferPair)
-    /// the recognized operator
+  /// all parsed filled from ParseTextExpression()
+  TTextExpression = object(TTextBufferPair)
+    /// the recognized operator for EvaluateTextExpression()
     Match: TCompareOperator;
   end;
 
@@ -2554,14 +2554,14 @@ function NameTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): 
 /// compute a RawUtf8 from pairs[ndx].ValueStart/ValueLen or '' if ndx is out of range
 function ValueTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
 
-/// parse a "key<value" or "key<" expression for SortMatch() comparison
-function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
+/// parse a "name<value" or "name<" expression for EvaluateTextExpression() comparison
+function ParseTextExpression(P: PUtf8Char; out Expression: TTextExpression;
   const EndName: TSynAnsicharSet = [#0 .. ' ', '<', '=', '>', '!'];
   const EndExpr: TSynAnsicharSet = [#0]): PUtf8Char; overload;
 
 /// compare NameStart/NameLen against ValueStart/ValueLen as text or integer
 // - will recognize integers to apply natural < > comparison between fields
-function EvaluateSortMatch(const exp: TParseSortExpression): boolean;
+function EvaluateTextExpression(const exp: TTextExpression): boolean;
 
 type
   /// character categories e.g. for ASCII-7 identifier parsing
@@ -9939,7 +9939,7 @@ begin
     FastAssignNew(result);
 end;
 
-function ParseSortMatch(P: PUtf8Char; out Expression: TParseSortExpression;
+function ParseTextExpression(P: PUtf8Char; out Expression: TTextExpression;
   const EndName, EndExpr: TSynAnsicharSet): PUtf8Char;
 var
   B: PUtf8Char;
@@ -10000,7 +10000,7 @@ begin
   result := P;
 end;
 
-function EvaluateSortMatch(const exp: TParseSortExpression): boolean;
+function EvaluateTextExpression(const exp: TTextExpression): boolean;
 var
   n64, v64: Int64;
   cmp: integer;
