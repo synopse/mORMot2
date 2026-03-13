@@ -3209,8 +3209,8 @@ type
     jrfUnquoteName,
     jrfUnquoteValue,
     jrfUnquoteEcmaName);
-  TJsonParserIf = (ifNone, if0, ifIf, ifElse, ifEnd);
-  TJsonParserIfs = set of TJsonParserIf;
+  TParseIf = (piNone, piIf, piIfDef, piElse, piEnd);
+  TParseIfLevel = 0 .. 15; // 0=outer level, 1..15=nested levels
 
   /// state machine for fast (GB/s) parsing of (extended) JSON input
   {$ifdef USERECORDWITHMETHODS}
@@ -3231,7 +3231,8 @@ type
     Max: PUtf8Char; // checking Max after each comma is good enough
     RootCount: integer; // for InitCount or as DSL include depth
     FmtDsl: TTextWriterJsonPreProcessor;
-    FmtIf: (ifNormal, ifUntilElseEnd, ifUntilEnd);
+    FmtIfLevel: TParseIfLevel;
+    FmtSkip: set of TParseIfLevel;
     FmtVars: TJsonDsl;
     W: TJsonWriter;
     // 500 nested documents seem enough in practice (SQLite3 uses 1000)
@@ -3260,6 +3261,8 @@ type
     function DslString(P: PUtf8Char): PUtf8Char;
     function DslIf(P: PUtf8Char): PUtf8Char;
     function DslVar(P: PUtf8Char): PUtf8Char;
+    procedure DslSkip(var P: PUtf8Char);
+    procedure DslEndif(var P: PUtf8Char);
  end;
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
@@ -3576,7 +3579,8 @@ begin
   Fmt := FMT2FLAGS[JsonFmt];
   FmtJson := JsonFmt;
   FmtDsl := Dsl;
-  FmtIf := ifNormal;
+  FmtIfLevel := 0;
+  word(FmtSkip) := 0;
   W := Writer;
   FmtVars := nil;
   if (FmtDsl = [jppDebugComment]) or
@@ -3747,59 +3751,101 @@ begin
   ReformatEndValue;
 end;
 
-function ParserIf(var P: PUtf8Char): TJsonParserIf;
+function ParseIfDollar(var P: PUtf8Char): TParseIf; // caller ensured P^='$'
 begin
-  result := ifNone;
-  if P^ = #0 then
-    result := if0
-  else
-    case PCardinal(P)^ of
-      IF_32:
-        begin
-          result := ifIf; // '$if '
-          inc(P, 4);
-        end;
-      IFDEF_32:
-        if PCardinal(P + 4)^ and $ffffff = IFDEF_24 then // '$ifdef '
-        begin
-          inc(P, 7);
-          result := ifIf;
-        end;
-      ELSE_32:
-        if PWord(P + 4)^ = ELSE_16 then // '$else$'
-        begin
-          inc(P, 6);
-          result := ifElse;
-        end;
-      ENDIF_32:
-        if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endif$'
-        begin
-          inc(P, 7);
-          result := ifEnd;
-        end;
-    end;
+  result := piNone;
+  case PCardinal(P)^ of
+    IF_32:
+      begin
+        result := piIf; // '$if '
+        inc(P, 4);
+      end;
+    IFDEF_32:
+      if PCardinal(P + 4)^ and $ffffff = IFDEF_24 then // '$ifdef '
+      begin
+        inc(P, 7);
+        result := piIfDef;
+      end;
+    ELSE_32:
+      if PWord(P + 4)^ = ELSE_16 then // '$else$'
+      begin
+        inc(P, 6);
+        result := piElse;
+      end;
+    ENDIF_32:
+      if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endpi$'
+      begin
+        inc(P, 7);
+        result := piEnd;
+      end;
+  end;
 end;
 
-function ParserIfGoto(var P: PUtf8Char; EndAt: TJsonParserIfs): TJsonParserIf;
+procedure TJsonParser.DslEndif(var P: PUtf8Char);
 begin
-  repeat
-    result := ParserIf(P);
-    if result = ifNone then
-      inc(P);
-  until result in EndAt;
+  if FmtIfLevel = 0 then
+  begin
+    AddDebugComment(['$endif$ with no prior $if']);
+    exit;
+  end;
+  exclude(FmtSkip, FmtIfLevel); // cleanup for debugging
+  dec(FmtIfLevel);
+  if (FmtIfLevel <> 0) and
+     (FmtIfLevel in FmtSkip) then
+    DslSkip(P); // continue skip as in DslIf()
+end;
+
+procedure TJsonParser.DslSkip(var P: PUtf8Char);
+var
+  pi: TParseIf;
+begin
+  while true do
+    if P^ = #0 then
+      exit
+    else if P^ <> '$' then
+      inc(P) // most common case
+    else
+    begin
+      pi := ParseIfDollar(P);
+      if pi = piNone then
+        inc(P)
+      else if pi = piElse then
+        if FmtIfLevel = 0 then // paranoid
+        begin
+          AddDebugComment(['unexpected else$']);
+          exit;
+        end
+        else if FmtIfLevel in FmtSkip then
+        begin
+          exclude(FmtSkip, FmtIfLevel); // include until $end$
+          exit;
+        end
+        else
+          include(FmtSkip, FmtIfLevel)  // and continue skip loop
+      else
+        break;
+    end;
+  case pi of // caller should get and manage any nested $if $ifdef
+    piIf:
+      dec(P, 4);
+    piIfDef:
+      dec(P, 7);
+    piEnd:
+      DslEndif(P);
+  end;
 end;
 
 function TJsonParser.DslIf(P: PUtf8Char): PUtf8Char;
 var
   exp: TParseSortExpression;
-  len: PtrInt;
+  len, level: PtrInt;
   match: boolean;
 begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
   result := ParseSortMatch(P, exp,
     [#0 .. ' ', '<', '=', '>', '!', '$'], [#0 .. #31, '$']);
   if result = nil then
   begin
-    result := IgnoreAndGotoNextNotSpace(P);
+    result := @NULCHAR; // force <> nil but #0
     exit;
   end;
   while (exp.ValueLen > 0) and
@@ -3817,38 +3863,60 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
     end
     else
       exit; // '$if id =$' is invalid syntax (ValueLen=-1 for $ifdef id$)
-  if FmtIf = ifNormal then
-  begin
-    len := 0; // need a PtrInt, not an integer
-    exp.NameStart := FmtVars.DoFind(exp.NameStart, exp.NameLen, len);
-    exp.NameLen := len;
-    if (exp.NameStart <> nil) and
-       (TJsonDslMarker(exp.NameStart^) <= high(TJsonDslMarker)) then
+  if FmtIfLevel < high(FmtIfLevel) then
+    if (FmtIfLevel > 0) and
+       (FmtIfLevel in FmtSkip) then // quickly skip all nested $if$ $endif$
     begin
-     inc(exp.NameStart); // trim marker after raw DoFind()
-     dec(exp.NameLen);
-    end;
-    if exp.ValueLen < 0 then
-      match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
-    else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
-      match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
-    else
-      match := EvaluateSortMatch(exp); // = < > <= >= non-void evaluation
-    if match then
-      FmtIf := ifUntilElseEnd // $if$ include [$else$ skip] $endif$
+      level := 0;
+      while true do
+        if result^ = #0 then
+          exit
+        else if result^ <> '$' then
+          inc(result)
+        else
+          case ParseIfDollar(result) of
+            piNone:
+              inc(result);
+            piIf, piIfDef:
+              inc(level);
+            piEnd:
+              if level = 0 then
+                break
+              else
+                dec(level);
+          end;
+      DslSkip(result);
+      exit; // no inc(result) after DslSkip()
+    end
     else
     begin
-      case ParserIfGoto(result, [if0, ifElse, ifEnd]) of
-        ifElse:
-          FmtIf := ifUntilEnd;    // $if$ skip $else$ include $endif$
-        ifEnd:
-          FmtIf := ifNormal;      // $if$ skip $endif$
+      len := 0; // need a PtrInt, not an integer
+      exp.NameStart := FmtVars.DoFind(exp.NameStart, exp.NameLen, len);
+      exp.NameLen := len;
+      if (exp.NameStart <> nil) and
+         (TJsonDslMarker(exp.NameStart^) <= high(TJsonDslMarker)) then
+      begin
+       inc(exp.NameStart); // trim marker after raw DoFind()
+       dec(exp.NameLen);
       end;
-      exit; // no inc(result)
-    end;
-  end
-  else if jppDebugComment in FmtDsl then
-    AddIndentAndCommentToken(['nested $if$ are not allowed']);
+      if exp.ValueLen < 0 then
+        match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
+      else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
+        match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
+      else
+        match := EvaluateSortMatch(exp); // = < > <= >= non-void evaluation
+      inc(FmtIfLevel);
+      if match then // $if$ include [$else$ skip] $endif$
+        exclude(FmtSkip, FmtIfLevel)
+      else
+      begin
+        include(FmtSkip, FmtIfLevel);
+        DslSkip(result);
+        exit; // no inc(result) after DslSkip()
+      end;
+    end
+  else
+    AddDebugComment(['too many nested $if$ (', high(FmtIfLevel), ' allowed)']);
   if result^ = '$' then
     inc(result);
 end;
@@ -3858,30 +3926,29 @@ var
   v: PUtf8Char;
   l: PtrInt;
   m: TJsonDslMarker;
-begin // called with P^ = '$'
+begin
   result := P;
-  case ParserIf(result) of
-    ifIf:   // $if
-      result := DslIf(GotoNextNotSpace(result)); // complex $if ...$ evaluation
-    ifElse: // $else$
-      begin
-        if FmtIf = ifUntilElseEnd then
-        begin
-          if ParserIfGoto(result, [if0, ifElse, ifEnd]) <> ifEnd then
-             AddDebugComment(['$else$ with no $endif']);
-        end
+  case ParseIfDollar(result) of // called with P^ = '$'
+    piIf, piIfDef: // complex $if $ifdef evaluation
+      result := DslIf(result);
+    piElse:        // $else$ just toggles skip flag
+      if FmtIfLevel > 0 then
+        if FmtIfLevel in FmtSkip then
+          exclude(FmtSkip, FmtIfLevel) // include until $end$
         else
-          AddDebugComment(['$else$ with no prior $if']);
-        FmtIf := ifNormal;
-      end;
-    ifEnd: // $endif$
+        begin
+          include(FmtSkip, FmtIfLevel); // skip until $end$
+          DslSkip(result);
+        end
+      else
+        AddDebugComment(['$else$ with no prior $if']);
+    piEnd:         // $endif$
+      DslEndif(result);
+    piNone:        // regular content
       begin
-        if FmtIf = ifNormal then
-          AddDebugComment(['$endif$ with no prior $if']);
-        FmtIf := ifNormal;
-      end;
-    ifNone:
-      begin
+        if (FmtIfLevel > 0) and
+           (FmtIfLevel in FmtSkip) then
+          AddDebugComment(['wrong $ifdef$ skip logic']);
         result := FmtVars.Expand(result, v, l, {KeepMarker=}true);
         if v = nil then
         begin
