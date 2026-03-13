@@ -7525,34 +7525,27 @@ begin
           if result <= $7f then
           begin
             result := table[result];
-            if c2 <= $7f then
+            if c2 <= $7f then // 'a'..'z' / 'A'..'Z' case insensitive comparison
             begin
-              // 'a'..'z' / 'A'..'Z' case insensitive comparison
               dec(result, table[c2]);
               dec(L2);
               inc(u2);
               if result <> 0 then
-                // found unmatching char
-                exit
+                exit                // found unmatching char
               else if L1 <> 0 then
                 if L2 <> 0 then
-                  // L1>0 and L2>0 -> next char
-                  continue
+                  continue          // L1>0 and L2>0 -> next char
                 else
-                  // L1>0 and L2=0 -> u1>u2
-                  goto pos
+                  goto pos          // L1>0 and L2=0 -> u1>u2
               else
               if L2 <> 0 then
-                // L1=0 and L2>0 -> u1<u2
-                goto neg
+                goto neg            // L1=0 and L2>0 -> u1<u2
               else
-                // L1=0 and L2=0 -> u1=u2 -> returns 0
-                exit;
+                exit;               // L1=0 and L2=0 -> u1=u2 -> returns 0
             end;
           end
           else
-          begin
-            // Win-1252 case insensitive comparison
+          begin // Win-1252 case insensitive comparison
             extra := utf8.Lookup[result];
             if extra = UTF8_INVALID then
               goto neg; // invalid leading byte (allow full UTF-8/UCS-4 range)
@@ -7567,8 +7560,7 @@ begin
             until i = extra;
             inc(u1, extra);
             dec(result, utf8.Extra[extra].offset);
-            if result and $ffffff00 = 0 then
-              // 8-bit to upper conversion, 32-bit as is
+            if result and $ffffff00 = 0 then // 8-bit to 32-bit upper conversion
               result := table[result];
           end;
           // here result=NormToUpper[u1^]
@@ -7578,8 +7570,7 @@ begin
           begin
             dec(result, table[c2]);
             if result <> 0 then
-              // found unmatching char
-              exit;
+              exit; // found unmatching char
           end
           else
           begin
@@ -7598,38 +7589,28 @@ begin
             inc(u2, extra);
             dec(c2, utf8.Extra[extra].offset);
             if c2 and $ffffff00 = 0 then
-              // 8-bit to upper
-              dec(result, table[c2])
+              dec(result, table[c2])  // 8-bit to upper
             else
-              // returns 32-bit diff
-              dec(result, c2);
+              dec(result, c2);        // returns 32-bit diff
             if result <> 0 then
-              // found unmatching char
-              exit;
+              exit;                   // found unmatching char
           end;
           // here we have result=NormToUpper[u2^]-NormToUpper[u1^]=0
-          if L1 = 0 then
-            // test if we reached end of u1 or end of u2
+          if L1 = 0 then // test if we reached end of u1 or end of u2
             if L2 = 0 then
-              // u1=u2
-              exit
+              exit       // u1=u2
             else
-              // u1<u2
-              goto neg
+              goto neg   // u1<u2
           else
-          if L2 = 0 then
-            // u1>u2
+          if L2 = 0 then // u1>u2
             goto pos;
         until false
       else
-pos:    // u2='' or u1>u2
-        result := 1
+pos:    result := 1      // u2='' or u1>u2
     else
-neg:  // u1='' or u1<u2
-      result := -1
+neg:  result := -1       // u1='' or u1<u2
   else
-    // u1=u2
-    result := 0;
+    result := 0;         // u1=u2
 end;
 
 function SameTextU(const S1, S2: RawUtf8): boolean;
@@ -11718,23 +11699,18 @@ begin
               dec(L2);
               inc(u2);
               dec(result, c2);
-              if result <> 0 then
-                // found unmatching char
+              if result <> 0 then // found unmatching char
                 exit
               else if L1 <> 0 then
                 if L2 <> 0 then
-                  // L1>0 and L2>0 -> next char
-                  continue
+                  continue        // L1>0 and L2>0 -> next char
                 else
-                  // L1>0 and L2=0 -> u1>u2
-                  goto pos
+                  goto pos        // L1>0 and L2=0 -> u1>u2
               else
               if L2 <> 0 then
-                // L1=0 and L2>0 -> u1<u2
-                goto neg
+                goto neg          // L1=0 and L2>0 -> u1<u2
               else
-                // L1=0 and L2=0 -> u1=u2 -> returns 0
-                exit;
+                exit;             // L1=0 and L2=0 -> u1=u2 -> returns 0
             end;
           end
           else
@@ -11763,8 +11739,7 @@ begin
             inc(c2, tab.Block[0, c2]);
             dec(result, c2);
             if result <> 0 then
-              // found unmatching codepoint
-              exit;
+              exit; // found unmatching codepoint
           end
           else
           begin
@@ -11784,32 +11759,24 @@ begin
             c2 := tab.UnicodeUpper(c2 - utf8.Extra[extra].offset);
             dec(result, PtrInt(c2));
             if result <> 0 then
-              // found unmatching codepoint
-              exit;
+              exit; // found unmatching codepoint
           end;
           // here we have result=0
-          if L1 = 0 then
-            // test if we reached end of u1 or end of u2
+          if L1 = 0 then // test if we reached end of u1 or end of u2
             if L2 = 0 then
-              // u1=u2
-              exit
+              exit       // u1=u2
             else
-              // u1<u2
-              goto neg
+              goto neg   // u1<u2
           else
           if L2 = 0 then
-            // u1>u2
-            goto pos;
+            goto pos;    // u1>u2
         until false
       else
-pos:    // u2='' or u1>u2
-        result := 1
+pos:    result := 1      // u2='' or u1>u2
     else
-neg:  // u1='' or u1<u2
-      result := -1
+neg:  result := -1       // u1='' or u1<u2
   else
-    // u1=u2
-    result := 0;
+    result := 0;         // u1=u2
 end;
 
 function StrPosIReference(U: PUtf8Char; const Up: RawUcs4): PUtf8Char;
