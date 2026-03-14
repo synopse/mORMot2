@@ -28,9 +28,9 @@ uses
   mormot.core.search, // for TSynMustache.Match/Glob helpers
   mormot.core.buffers,
   mormot.core.datetime,
+  mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.data,
   mormot.core.variants;
 
 

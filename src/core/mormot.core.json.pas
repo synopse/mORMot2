@@ -110,19 +110,12 @@ const
   /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
   JSON_UHEXC = JSON_UHEX + ord('0') shl 16 + ord('0') shl 24;
 
-  // some other constants used e.g. for fast ID/ROWID pattern recognition
+  // some other constants used for fast pattern recognition
   _ID16     = ord('I') + ord('D') shl 8;
   _ROW24    = ord('R') + ord('O') shl 8 + ord('W') shl 16;
   _ROWI32   = _ROW24 + ord('I') shl 24;
   SQUOT_16  = ord('''') + ord('''') shl 8;
   DOLLAR_16 = ord('$') + ord('$') shl 8;
-  IF_32     = ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord(' ') shl 24;
-  IFDEF_32  = ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord('d') shl 24;
-  IFDEF_24  = ord('e') + ord('f') shl 8 + ord(' ') shl 16;
-  ELSE_32   = ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24;
-  ELSE_16   = ord('e') + ord('$') shl 8;
-  ENDIF_32  = ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24;
-  ENDIF_24  = ord('i') + ord('f') shl 8 + ord('$') shl 16;
 
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
@@ -3715,25 +3708,27 @@ function ParseIfDollar(var P: PUtf8Char): TParseIf; // caller ensured P^='$'
 begin
   result := piNone;
   case PCardinal(P)^ of
-    IF_32:
+    ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord(' ') shl 24:  // '$if '
       begin
-        result := piIf; // '$if '
+        result := piIf;
         inc(P, 4);
       end;
-    IFDEF_32:
-      if PCardinal(P + 4)^ and $ffffff = IFDEF_24 then // '$ifdef '
+    ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord('d') shl 24:
+      if PCardinal(P + 4)^ and $ffffff =
+           ord('e') + ord('f') shl 8 + ord(' ') shl 16 then         // '$ifdef '
       begin
         inc(P, 7);
         result := piIfDef;
       end;
-    ELSE_32:
-      if cardinal(PWord(P + 4)^) = ELSE_16 then // '$else$'
+    ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24:
+      if cardinal(PWord(P + 4)^) = ord('e') + ord('$') shl 8 then   // '$else$'
       begin
         inc(P, 6);
         result := piElse;
       end;
-    ENDIF_32:
-      if PCardinal(P + 4)^ and $ffffff = ENDIF_24 then // '$endif$'
+    ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24:
+      if PCardinal(P + 4)^ and $ffffff =
+           ord('i') + ord('f') shl 8 + ord('$') shl 16 then         // '$endif$'
       begin
         inc(P, 7);
         result := piEnd;
@@ -3768,7 +3763,7 @@ begin
           inc(P);
         piIf:
           begin
-            dec(P, 4);
+            dec(P, 4); // caller should detect and execute DslIf()
             exit;
           end;
         piIfDef:
