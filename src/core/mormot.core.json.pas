@@ -624,7 +624,7 @@ function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
 
 /// formats and indents a JSON array or document to the specified layout
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
-// - PreProcessor will trigger $".." ${..} $[..] and $ident$/${ident} expansion
+// - PreProcessor will trigger $".." and $(ident) ${ident} $ident$ JOP expansion
 // - all those formats are inter-operable within the JSON data model, i.e. you
 // can call JsonReformat() between any of them and keep all information
 // - in practice, jsonCompact is standard JSON and jsonH is nice for configs
@@ -3075,19 +3075,19 @@ var
 begin
   result := P;
   inc(result); // called with P^ = '$'
-  if result^ = '{' then // ${ident} format, not $ident$
+  if result^ in ['(', '{'] then // $(ident) ${ident} format, not $ident$
     inc(result);
   key := result;
-  while not (result^ in [#0 .. ' ', '$', '}', '|']) do
+  while not (result^ in [#0 .. ' ', '$', '}', ')', '|']) do
     inc(result);
   Value := nil;
   if result^ <= ' ' then
     exit;
   Value := DoFind(key, result - key, Len); // resolve
-  if result^ = '|' then // $ident|default$ or ${ident|default}
+  if result^ = '|' then   // $(ident|default) or $ident|default$
   begin
     inc(result);
-    if result^ = '$' then // $ident|$default$$ or ${ident|$default1|$default2$$}
+    if result^ = '$' then // $ident|$default$$ or $(ident|$(def1)|$(def2))}
     begin
       result := Expand(result, key, keylen, KeepMarker); // cascaded defaults
       if Value = nil then // fallback to the nested $default$
@@ -3095,13 +3095,13 @@ begin
         Value := key;
         Len := keylen;
       end;
-      while not (result^ in [#0 .. #31, '$', '}']) do
+      while not (result^ in [#0 .. #31, '$', '}', ')']) do
         inc(result);
       inc(result); // skip trailing $ or }
       exit;
     end;
     key := result;
-    while not (result^ in [#0 .. #31, '$', '}', '|']) do
+    while not (result^ in [#0 .. #31, '$', '}', ')', '|']) do
       inc(result);
     if result^ < ' ' then
       exit;
@@ -3111,7 +3111,7 @@ begin
       Len := result - key;
     end;
   end;
-  inc(result); // skip trailing $ or }
+  inc(result); // skip trailing $ } )
   if (Value = nil) or
      KeepMarker or
      (TJsonDslMarker(Value^) > high(TJsonDslMarker)) then

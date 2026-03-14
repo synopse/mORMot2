@@ -533,7 +533,7 @@ type
     jsonEscapeUnicode,
     jsonNoEscapeUnicode);
   /// enable JsonReformat() pre-processor features - defined in a $$..$$ section
-  // - jppTemplate will enable $".." ${..} $[..] and $ident$/${ident} expansion
+  // - jppTemplate will enable $".." and $(ident) ${ident} $ident$ expansion
   // - jppInclude will enable "include <filename>" keyword within $$..$$
   // - jppDebugComment will emit verbose debugging comments during pre-processing
   TTextWriterJsonPreProcessor = set of (
