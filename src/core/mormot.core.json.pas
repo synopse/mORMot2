@@ -3255,7 +3255,7 @@ type
     function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
     function AddMultiLine(P: PUtf8Char): PUtf8Char;
     procedure AddStartComment;
-    procedure AddDebugComment(const args: array of const);
+    procedure AddDebugComment(const info: ShortString);
     function DslSection(P: PUtf8Char): PUtf8Char;
     procedure DslInclude(P: PUtf8Char);
     function DslString(P: PUtf8Char): PUtf8Char;
@@ -3264,6 +3264,7 @@ type
     function DslVar(P: PUtf8Char): PUtf8Char;
     procedure DslSkip(var P: PUtf8Char);
     procedure DslEndif(var P: PUtf8Char);
+      {$ifdef HASINLINE} inline; {$endif}
  end;
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
@@ -3710,13 +3711,13 @@ begin
     W.AddDirect('/', '/');
 end;
 
-procedure TJsonParser.AddDebugComment(const args: array of const);
+procedure TJsonParser.AddDebugComment(const info: ShortString);
 begin
   if not (jppDebugComment in FmtDsl) then
     exit;
   AddStartComment;
   W.AddShorter(' debug: ');
-  W.Add(args, twOnSameLine);
+  W.AddOnSameLine(@info[1], ord(info[0]));
   W.AddDirect(#10);
 end;
 
@@ -3784,15 +3785,15 @@ end;
 procedure TJsonParser.DslEndif(var P: PUtf8Char);
 begin
   if FmtIfLevel = 0 then
+    AddDebugComment('$endif$ with no prior $if')
+  else
   begin
-    AddDebugComment(['$endif$ with no prior $if']);
-    exit;
+    exclude(FmtSkip, FmtIfLevel); // cleanup for debugging
+    dec(FmtIfLevel);
+    if (FmtIfLevel <> 0) and
+       (FmtIfLevel in FmtSkip) then
+      DslSkip(P); // continue skip as in DslIf()
   end;
-  exclude(FmtSkip, FmtIfLevel); // cleanup for debugging
-  dec(FmtIfLevel);
-  if (FmtIfLevel <> 0) and
-     (FmtIfLevel in FmtSkip) then
-    DslSkip(P); // continue skip as in DslIf()
 end;
 
 procedure TJsonParser.DslSkip(var P: PUtf8Char);
@@ -3914,7 +3915,7 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
       end;
     end
   else
-    AddDebugComment(['too many nested $if$ (', high(FmtIfLevel), ' allowed)']);
+    AddDebugComment('too many nested $if$ (15 allowed)');
   if result^ = '$' then
     inc(result);
 end;
@@ -3935,16 +3936,11 @@ begin
           DslSkip(P);
         end
       else
-        AddDebugComment(['$else$ with no prior $if']);
+        AddDebugComment('$else$ with no prior $if');
     piEnd:         // $endif$
       DslEndif(P);
   else
-    begin
-      if (FmtIfLevel > 0) and
-         (FmtIfLevel in FmtSkip) then
-        AddDebugComment(['wrong $ifdef$ skip logic']);
-      result := false;
-    end;
+    result := false;
   end;
 end;
 
@@ -4024,14 +4020,11 @@ end;
 function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
 var
   key, value: PUtf8Char;
-  keylen, beforecount: PtrInt;
+  keylen: PtrInt;
   marker: TJsonDslMarker;
 label
   ok;
 begin // handle P = '$$'
-  beforecount := 0;
-  if jppDebugComment in FmtDsl then
-    beforecount := FmtVars.Count;
   result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
   repeat
     result := GotoNextLineSmall(result);
@@ -4102,15 +4095,7 @@ ok: result := GotoNextNotSpace(result);
     FmtVars.Register(marker, key, value, result, keylen);
   until false;
   result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
-  if jppDebugComment in FmtDsl then
-    while beforecount < FmtVars.Count do
-    begin
-      AddDebugComment(['defined $',
-        PShortString(FmtVars.Value[beforecount])^, '$ = ',
-        PUtf8Char(FmtVars.Values(beforecount))]);
-      inc(beforecount);
-    end;
-end;
+ end;
 
 procedure TJsonParser.DslInclude(P: PUtf8Char);
 var
@@ -4142,7 +4127,7 @@ begin
   end;
   if RootCount >= DSL_INCLUDE_DEPTH then
   begin
-    AddDebugComment(['include ', tmp,' too deep: rejected']);
+    AddDebugComment('include too deep: rejected');
     exit;
   end;
   fn := MakeString([tmp]);
@@ -4150,7 +4135,9 @@ begin
      not SafeFileName(fn) then
     exit;
   txt := RawUtf8FromFile(fn);
-  AddDebugComment(['include ', fn,' size=', length(txt)]);
+  AppendShort(' included: size=', tmp);
+  AppendShortCardinal(length(txt), tmp);
+  AddDebugComment(tmp);
   if txt = '' then
     exit;
   inc(RootCount);
