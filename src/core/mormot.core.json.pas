@@ -3978,9 +3978,9 @@ end;
 
 procedure TJsonParser.DslRegister(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
 var
-  tmp: TSynTempAdder;
   beg, val: PUtf8Char;
   l, vallen: PtrInt; // @vallen = PPtrInt
+  tmp: TSynTempAdder;
 begin
   tmp.Init;
   tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
@@ -4018,6 +4018,23 @@ begin
     end;
   until v >= ve;
   FmtVars.Update(k, tmp.Buffer, kl, tmp.Size);
+  if jppDebugComment in FmtDsl then
+  begin
+    AddStartComment;
+    W.AddShort(' defined: $');
+    W.AddOnSameLine(k, kl);
+    if m = jdmTemplate then
+    begin
+      W.AddShort('$ template size=');
+      W.AddU(tmp.Size);
+    end
+    else
+    begin
+      W.AddDirect('$', '=', ' ');
+      W.AddOnSameLine(PUtf8Char(tmp.Buffer) + 1, tmp.Size - 1);
+    end;
+    W.AddDirect(#10);
+  end;
   tmp.Store.Done; // free memory - unlikely from heap
 end;
 
