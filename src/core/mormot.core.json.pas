@@ -3065,7 +3065,6 @@ type
       KeepMarker: boolean): PUtf8Char;
     function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char;
     function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
-    procedure Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
   end;
 
 function TJsonDsl.DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
@@ -3148,47 +3147,6 @@ begin
   W.AddNoJsonEscape(v, l);
 end;
 
-procedure TJsonDsl.Register(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
-var
-  tmp: TSynTempAdder;
-  beg, val: PUtf8Char;
-  l, vallen: PtrInt; // @vallen = PPtrInt
-begin
-  tmp.Init;
-  tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
-  repeat
-    beg := v;
-    while (v < ve) and
-          (cardinal(PWord(v)^) <> SLASH_16) and
-          not (v^ in ['$', '#']) do
-      inc(v);
-    tmp.Add(beg, v - beg);
-    if v >= ve then
-      break;
-    if v^ = '$' then // $ident$ ${ident} $env:NAME$ ${env:NAME}
-    begin
-      v := Expand(v, val, vallen, {KeepMarker=}false);
-      if val <> nil then
-        tmp.Add(val, vallen);
-    end
-    else
-    begin // # comment or // comment
-      l := v - beg;
-      while (l <> 0) and
-            (v[l - 1] = ' ') do
-        dec(l); // trim right
-      if l > 0 then
-      begin
-        tmp.Add(beg, l);
-        tmp.AddDirect(#10);
-      end;
-      v := GotoNextLineSmall(v);
-    end;
-  until v >= ve;
-  Update(k, tmp.Buffer, kl, tmp.Size);
-  tmp.Store.Done; // free memory - unlikely from heap
-end;
-
 type
   // the different states of the TJsonParser logic
   TJsonParserState = (
@@ -3258,6 +3216,7 @@ type
     procedure AddDebugComment(const info: ShortString);
     function DslSection(P: PUtf8Char): PUtf8Char;
     procedure DslInclude(P: PUtf8Char);
+    procedure DslRegister(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
     function DslString(P: PUtf8Char): PUtf8Char;
     function DslIf(P: PUtf8Char): PUtf8Char;
     function DslWasIf(var P: PUtf8Char): boolean;
@@ -4017,6 +3976,51 @@ begin
   until false;
 end;
 
+procedure TJsonParser.DslRegister(m: TJsonDslMarker; k, v, ve: PUtf8Char; kl: PtrInt);
+var
+  tmp: TSynTempAdder;
+  beg, val: PUtf8Char;
+  l, vallen: PtrInt; // @vallen = PPtrInt
+begin
+  tmp.Init;
+  tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
+  repeat
+    beg := v;
+    while (v < ve) and
+          (cardinal(PWord(v)^) <> SLASH_16) and
+          not (v^ in ['$', '#']) do
+      inc(v);
+    tmp.Add(beg, v - beg);
+    if v >= ve then
+      break;
+    if v^ = '$' then
+      if (m = jdmTemplate) and
+         DslWasIf(v) then // $if$ $endif$
+        continue
+      else // $ident$ ${ident} $env:NAME$ ${env:NAME}
+      begin
+        v := FmtVars.Expand(v, val, vallen, {KeepMarker=}false);
+        if val <> nil then
+          tmp.Add(val, vallen);
+      end
+    else
+    begin // # comment or // comment
+      l := v - beg;
+      while (l <> 0) and
+            (v[l - 1] = ' ') do
+        dec(l); // trim right
+      if l > 0 then
+      begin
+        tmp.Add(beg, l);
+        tmp.AddDirect(#10);
+      end;
+      v := GotoNextLineSmall(v);
+    end;
+  until v >= ve;
+  FmtVars.Update(k, tmp.Buffer, kl, tmp.Size);
+  tmp.Store.Done; // free memory - unlikely from heap
+end;
+
 function TJsonParser.DslSection(P: PUtf8Char): PUtf8Char;
 var
   key, value: PUtf8Char;
@@ -4066,11 +4070,11 @@ ok: result := GotoNextNotSpace(result);
     case result^ of
       #0:
         exit;
-      '{', '[': // value = whole {..}/[..] text block - with late evaluation
+      '{', '[': // value = whole {..}/[..] text block
         begin
           result := GotoTemplateEnding(result);
-          FmtVars.Register(jdmTemplate, key, value, result - 1, keylen);
-          continue; // will be inserted and evaluated later with AddReformat()
+          DslRegister(jdmTemplate, key, value, result - 1, keylen);
+          continue; // has been expanded and processed for $if$
         end;
       '"', '''':
         while (result^ >= ' ') and
@@ -4092,7 +4096,7 @@ ok: result := GotoNextNotSpace(result);
           marker := jdmConstNum;
       end;
     end;
-    FmtVars.Register(marker, key, value, result, keylen);
+    DslRegister(marker, key, value, result, keylen);
   until false;
   result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
  end;
