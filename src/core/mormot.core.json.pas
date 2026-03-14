@@ -3137,7 +3137,7 @@ begin
     inc(v);
     dec(l);
   end;
-  W.AddNoJsonEscape(v, l);
+  W.AddShort(v, l);
 end;
 
 type
@@ -3928,12 +3928,12 @@ begin
   end
   else if (v^ = '"') or  // $val|"12"$ to force "string" value
           IsConstantOrNumberJson(v, l) then
-    m := jdmConstNum     // AddNoJsonEscape
+    m := jdmConstNum     // AddShort
   else
     m := jdmPlainString; // AddJsonEscape
   ReformatBeginValue;
   if m = jdmConstNum then
-    W.AddNoJsonEscape(v, l)
+    W.AddShort(v, l)
   else
   begin
     W.AddDirect('"');
@@ -3941,7 +3941,7 @@ begin
       if m = jdmPlainString then
         W.AddJsonEscape(v, l)    // |default or enc:NAME
       else
-        W.AddNoJsonEscape(v, l); // jdmEscapedString: val = "was \r quoted"
+        W.AddShort(v, l); // jdmEscapedString: val = "was \r quoted"
     W.AddDirect('"');
   end;
   ReformatEndValue;
@@ -4017,7 +4017,7 @@ begin
   begin
     AddStartComment;
     W.AddShort(' defined: $');
-    W.AddOnSameLine(k, kl);
+    W.AddShort(k, kl);
     if m = jdmTemplate then
     begin
       W.AddShort('$ template size=');
@@ -4025,7 +4025,7 @@ begin
     end
     else
     begin
-      W.AddDirect('$', '=', ' ');
+      W.AddDirect('$', ' ', '=', ' ');
       W.AddOnSameLine(PUtf8Char(tmp.Buffer) + 1, tmp.Size - 1);
     end;
     W.AddDirect(#10);
@@ -4151,8 +4151,13 @@ begin
      not SafeFileName(fn) then
     exit;
   txt := RawUtf8FromFile(fn);
-  AppendShort(' included: size=', tmp);
-  AppendShortCardinal(length(txt), tmp);
+  if txt = '' then
+    AppendShort(' not found: skipped', tmp)
+  else
+  begin
+    AppendShort(' included: size=', tmp);
+    AppendShortCardinal(length(txt), tmp);
+  end;
   AddDebugComment(tmp);
   if txt = '' then
     exit;
@@ -4229,7 +4234,7 @@ dquote:   ReformatBeginValue;
           if (Value <> nil) and
              (jcEndOfJsonValueField in JsonSet[Value^]) then // #0#9#10#13 ,}]{[
           begin
-            W.AddNoJsonEscape(P, Value - P); // true number
+            W.AddShort(P, Value - P); // true number
             P := Value;
             ReformatEndValue;
           end
@@ -5690,7 +5695,7 @@ begin
         exit;
       if aftername = stPropNameUnquoted then // was 'a:' -> append '"a",'
         wk.AddDirect('"');
-      wk.AddNoJsonEscape(kb, ke - kb);
+      wk.AddShort(kb, ke - kb);
       if aftername = stPropNameUnquoted then
         wk.AddDirect('"', ',')
       else
