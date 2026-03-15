@@ -416,6 +416,7 @@ procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
 // - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
 // match 'this as a test' nor 'this is a zest'
 // - consider using TMatch or TMatchs if you expect to reuse the pattern
+// - consider using Glob() if the pattern expects no [range] but only ? and *
 function IsMatch(const Pattern, Text: RawUtf8;
   CaseInsensitive: boolean = false): boolean;
 
@@ -2143,7 +2144,7 @@ end;
 procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
   out Html: RawUtf8; NoSubFolder: boolean);
 const
-  _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
+  _DIR: array[boolean] of TShort7 = ('[dir]', '&nbsp;');
 var
   w: TTextDateWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
@@ -3382,6 +3383,28 @@ begin
              MatchAnyP(pointer(Paths), uri.Path.Text, uri.Path.Len));
 end;
 
+function _Glob(Pattern, Text: PUtf8Char; PatternLen, TextLen: PtrInt;
+  CaseInsensitive: boolean): boolean;
+var
+  match: TMatch;
+begin // GLOB has no [range] -> dedicated inlined Prepare() + Match()
+  if Pattern = nil then
+    result := TextLen = 0 // most simple case for sure
+  else if TextLen = 0 then
+    result := false       // as in match.Match()
+  else
+  begin
+    match.Pattern := Pattern;
+    match.PMax := PatternLen - 1;
+    if CaseInsensitive then
+    begin
+      match.Upper := @NormToUpperAnsi7;
+      result := SearchNoRangeU(@match, Text, TextLen);
+    end
+    else
+      result := SearchNoRange(@match, Text, TextLen);
+  end;
+end;
 
 function IsMatch(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
 var
@@ -6994,5 +7017,9 @@ begin
   result := TSynTimeZone.Default.LocalToUtc(LocalDateTime, TzId);
 end;
 
+
+initialization
+  // setup proper GLOB function redirection
+  GlobBuffer := @_Glob;
 
 end.

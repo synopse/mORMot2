@@ -1457,7 +1457,8 @@ type
     // - you could use TSqlDBConnectionPropertiesDescription.CreateFromFile()
     // later on to instantiate the proper TSqlDBConnectionProperties class
     // - you can specify a custom Key, if the default is not enough for you
-    procedure DefinitionToFile(const aJsonFile: TFileName; Key: cardinal = 0);
+    procedure DefinitionToFile(const aJsonFile: TFileName; Key: cardinal = 0;
+      Fmt: TTextWriterJsonFormat = jsonHumanReadable);
     /// create a new TSqlDBConnectionProperties instance from the stored values
     class function CreateFrom(
       aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties; virtual;
@@ -5183,21 +5184,19 @@ begin
   // see more complete list in feature request [f024266c0839]
   case fDbms of
     dOracle:
-      result := IdemPCharArray(PosErrorNumber(aMessage, '-'),
-        ['00028', '01012', '01017', '01033', '01089', '02396', '03113', '03114',
-        '03135', '12152', '12154', '12157', '12514', '12520', '12537', '12545',
-        '12560', '12571']) >= 0;
+      result := IdemPCharSep(PosErrorNumber(aMessage, '-'),
+        '00028|01012|01017|01033|01089|02396|03113|03114|03135|12152|12154|' +
+        '12157|12514|12520|12537|12545|12560|12571|') >= 0;
     dInformix:
       // error codes based on {IBM INFORMIX ODBC DRIVER} on wrong data connection
-      result := IdemPCharArray(PosErrorNumber(aMessage, '-'),
-        ['329', '761', '902', '908', '930', '931', '951', '11017', '23101',
-         '23104', '25567', '25582', '27002']) >= 0;
+      result := IdemPCharSep(PosErrorNumber(aMessage, '-'),
+        '329|761|902|908|930|931|951|11017|23101|23104|25567|25582|27002|') >= 0;
     dMSSQL:
       // error codes based on {SQL Server Native Client 11.0} tested with wrong
       // data connection using general error codes because MS SQL SERVER has
       // multiple error codes in the error message
-      result := IdemPCharArray(PosErrorNumber(aMessage, '['),
-        ['08001', '08S01', '08007', '28000', '42000']) >= 0;
+      result := IdemPCharSep(PosErrorNumber(aMessage, '['),
+        '08001|08S01|08007|28000|42000|') >= 0;
     dMySQL,
     dMariaDB:
       result := (PosEx('Lost connection to', aMessage) > 0) or
@@ -5679,9 +5678,9 @@ begin
 end;
 
 procedure TSqlDBConnectionProperties.DefinitionToFile(
-  const aJsonFile: TFileName; Key: cardinal);
+  const aJsonFile: TFileName; Key: cardinal; Fmt: TTextWriterJsonFormat);
 begin
-  FileFromString(JsonReformat(DefinitionToJson(Key)), aJsonFile);
+  FileFromString(JsonReformat(DefinitionToJson(Key), Fmt), aJsonFile);
 end;
 
 class function TSqlDBConnectionProperties.ClassFrom(
@@ -5727,7 +5726,7 @@ end;
 class function TSqlDBConnectionProperties.CreateFromFile(
   const aJsonFile: TFileName; aKey: cardinal): TSqlDBConnectionProperties;
 begin
-  result := CreateFromJson(RawUtf8FromFile(aJsonFile), aKey);
+  result := CreateFromJson(JsonNormalizeFromFile(aJsonFile), aKey);
 end;
 
 
@@ -6439,9 +6438,9 @@ end;
 function TSqlDBStatement.FetchAllToCsvValues(Dest: TStream; Tab: boolean;
   CommaSep: AnsiChar; AddBOM: boolean): PtrInt;
 const
-  NULL: array[boolean] of string[7] = (
+  NULL: array[boolean] of TShort7 = (
     '"null"', 'null');
-  BLOB: array[boolean] of string[7] = (
+  BLOB: array[boolean] of TShort7 = (
     '"blob"', 'blob');
 var
   F, FMax: integer;

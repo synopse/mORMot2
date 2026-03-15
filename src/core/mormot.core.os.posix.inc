@@ -18,6 +18,9 @@ uses
   {$else}
   linux,
   syscall,
+  {$ifdef OSLINUX}
+  pwd,   // seems not available on Android
+  {$endif OSLINUX}
   {$endif OSBSDDARWIN}
   {$ifdef FPCUSEVERSIONINFO} // to be enabled in mormot.defines.inc
     fileinfo,        // FPC 3.0 and up
@@ -47,11 +50,6 @@ uses
 
 // define some raw text functions, to avoid linking mormot.core.text
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
-  overload; forward;
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload; forward;
-procedure _AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
 function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
 function PosExtString(Str: PChar): PChar; forward; // to extract extension
@@ -86,16 +84,18 @@ begin
   result := true;
 end;
 
-function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
-var
-  i: PtrInt;
+function IdemPChars(const s: RawUtf8; up: PUtf8Char): PtrInt;
 begin
-  result := true;
+  result := 0;
   if s <> '' then
-    for i := 0 to high(up) do
-      if IdemPChar(pointer(s), up[i]) then
+    while up^ <> #0 do
+    begin
+      if IdemPChar(pointer(s), up) then
         exit;
-  result := false;
+      inc(up, StrLen(up) + 1);
+      inc(result);
+    end;
+  result := -1;
 end;
 
 
@@ -117,6 +117,11 @@ begin // file extension, then file name case-sensitive comparison on POSIX
               PosExtString(pointer(A)), PosExtString(pointer(B)));
   if result = 0 then
     result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(pointer(A), pointer(B));
+end;
+
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Utf8 := Str; // assumed both AnsiString on POSIX - or use RTL
 end;
 
 function TDirectoryBrowser.Make(const fn: TFileName): TFileName;
@@ -1036,15 +1041,36 @@ function pthread_mutex_unlock(mutex: pointer): integer;      cdecl; external;
 {$endif OSDARWIN}
 {$endif OSPTHREADSSTATIC}
 
+{$ifdef OSLINUX}
+procedure _SetShell(var a, b: RawUtf8);
+var
+  pw: PPasswd; // from the pwd.pp unit
+begin
+  pw := fpgetpwuid(FpGetuid);
+  if pw <> nil then
+    a := pw^.pw_shell
+  else if not GetSystemEnv('SHELL', a) then
+    a := '/bin/sh'; // fallback
+  b := a;
+end;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
-  {$ifdef OSLINUX}
   result := cs.__m_kind <> 0;
-  {$else}
-  result := not IsZero(@cs, SizeOf(cs));
-  {$endif OSLINUX}
 end;
+{$else}
+procedure _SetShell(var a, b: RawUtf8);
+begin
+  if not GetSystemEnv('SHELL', a) then
+    a := '/bin/sh';
+  b := a;
+end;
+
+function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
+begin
+  result := not IsZero(@cs, SizeOf(cs));
+end;
+{$endif OSLINUX}
 
 {$ifdef HAS_OSPTHREADS}
 
@@ -1345,6 +1371,13 @@ begin
             (FpUnlink(pointer(aFileName)) >= 0);
 end;
 
+function RenameFile(const aOld, aNew: TFileName): boolean;
+begin
+  result := (aOld <> '') and
+            (aNew <> '') and
+            (FpRename(pointer(aOld), pointer(aNew)) >= 0);
+end;
+
 function RemoveDir(const aDirName: TFileName): boolean;
 begin
   result := (aDirName <> '') and
@@ -1631,6 +1664,16 @@ begin
   result := FpPoll(@p, 1, timeout) > 0;
 end;
 
+function PosixUid: cardinal;
+begin
+  result := FpGetuid;
+end;
+
+function PosixGid: cardinal;
+begin
+  result := FpGetgid;
+end;
+
 procedure ConsoleErrorWrite(const text: RawUtf8);
 begin
   FileWriteAll(StdErrorHandle, pointer(Text), length(Text)); // assume UTF-8
@@ -1690,7 +1733,7 @@ begin
   begin
     AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
     AppendShort(StrError(error), dest); // e.g. 'ECHILD (No child processes)'
-    AppendShortChar(')', @dest);
+    AppendShortCharSafe(')', dest);
   end;
 end;
 
@@ -1777,6 +1820,8 @@ begin
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
 end;
 
+var
+  OSSafe: TLightLock; // when GlobalLock is overkill
 
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
@@ -1957,15 +2002,15 @@ begin
        (s <> 'nodev') and
        (s <> 'squashfs') and
        (s <> 'nullfs') then
-      _AddRawUtf8(_ProcFileSystems, s);
-    p := GotoNextLine(p);
-  until p = nil;
+      _addutf8(_ProcFileSystems, s);
+    p := GotoNextLineSmall(p);
+  until p^ = #0;
   if _ProcFileSystems = nil then
     exit;
   // add some FS which may be marked as nodev but could be considered as "real"
-  _AddRawUtf8(_ProcFileSystems, 'zfs');
-  _AddRawUtf8(_ProcFileSystems, 'cifs');
-  _AddRawUtf8(_ProcFileSystems, 'drvfs');
+  _addutf8(_ProcFileSystems, 'zfs');
+  _addutf8(_ProcFileSystems, 'cifs');
+  _addutf8(_ProcFileSystems, 'drvfs');
   result := true;
 end;
 
@@ -2001,9 +2046,10 @@ var
   p: PPointer;
   i, j: PtrInt;
 begin
-  GlobalLock;
-  if not tested then
-  begin
+  OSSafe.Lock;
+  try
+    if tested then
+      exit;
     systemd := dlopen(LIBSYSTEMD_PATH, RTLD_LAZY);
     if systemd <> nil then
     begin
@@ -2025,8 +2071,9 @@ begin
       end;
     end;
     tested := true;
+  finally
+    OSSafe.UnLock;
   end;
-  GlobalUnLock;
 end;
 
 function TSystemD.IsAvailable: boolean;
@@ -2053,8 +2100,8 @@ begin
   // prepare and send the information to the journal
   if priority > 7 then
     priority := 7;
-  v0 := 'PRIORITY=';
-  AppendShortCardinal(priority, v0);
+  v0 := 'PRIORITY=#';
+  v0[10] := AnsiChar(priority + ord('0'));
   v[0].iov_base := @v0[1];
   v[0].iov_len := ord(v0[0]);
   PInt64(@tmp)^ := PInt64(@_MESSAGE)^;
@@ -2412,27 +2459,60 @@ begin
 end;
 {$endif FPCUSEVERSIONINFO}
 
-function GetEnv(name: PAnsiChar; var env: RawUtf8): boolean;
+procedure _GetSystemEnv;
+var
+  e: PPUtf8Char;
+  b, p: PUtf8Char;
+  n: PtrInt;
 begin
-  name := BaseUnix.FPGetenv(name); // local GetEnvironmentVariable()
-  result := name <> nil;
-  if result then
-    FastSetString(env, name, StrLen(name));
+  e := pointer(system.envp);
+  if e = nil then
+    exit;
+  n := 0; // pre-compute the number of entries
+  while e^ <> nil do
+  begin
+    if e^^ <> '=' then
+      inc(n);
+    inc(e);
+  end;
+  if n = 0 then
+    exit; // should never happen
+  SetLength(_SystemEnvNames, n);
+  SetLength(_SystemEnvValues, n);
+  e := pointer(system.envp);
+  n := 0;
+  repeat
+    p := e^;
+    if p^ <> '=' then
+    begin
+      b := p;
+      repeat
+        inc(p);
+      until p^ = '=';
+      FastSetString(_SystemEnvNames[n], b, p - b);
+      inc(p);
+      b := p;
+      inc(p, StrLen(p));
+      FastSetString(_SystemEnvValues[n], b, p - b);
+      inc(n);
+    end;
+    inc(e);
+  until e^ = nil;
 end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
 begin
   Host := SystemInfo.uts.nodename;
   if Host = '' then
-    GetEnv('HOSTNAME', Host);
-  if not GetEnv('LOGNAME', User) then // POSIX
-    GetEnv('USER', User);
+    GetSystemEnv('HOSTNAME', Host);
+  if not GetSystemEnv('LOGNAME', User) then // POSIX
+    GetSystemEnv('USER', User);
 end;
 
 function GetEnvFolder(name: PAnsiChar; var folder: TFileName;
   writable: boolean): boolean;
 begin
-  if GetEnv(name, RawUtf8(folder)) then
+  if GetSystemEnv(name, RawUtf8(folder)) then
     if writable and
        not FileIsWritable(folder) then
       folder := ''
@@ -3522,7 +3602,7 @@ const
   // read some of the /sys/class/dmi/id/* files (may require root access)
   _KNOWN: array[0..15] of record
     id: TSmbiosBasicInfo;
-    fn: string[15];
+    fn: TShort15;
   end = (
     (id: sbiBiosVendor;        fn: 'bios_vendor'),
     (id: sbiBiosVersion;       fn: 'bios_version'),
@@ -3574,8 +3654,9 @@ begin
     include(_F0, fIsDebuggerPresent);
   if (not (fIsDebuggerPresent in _F0)) and
      (IsATTY(StdOut) = 1) and
-     GetEnv('TERM', term) and
-     IdemPChars(term, ['XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']) then
+     GetSystemEnv('TERM', term) and
+     (IdemPChars(term, 'XTERM'#0'SCREEN'#0'TMUX'#0'RXVT'#0 +
+       'LINUX'#0'CYGWIN'#0) >= 0) then
     include(_F0, fStdOutIsTTY);
 end;
 
@@ -3805,10 +3886,10 @@ begin
   else
   {$endif OSLINUXANDROID}
     // generic / best guess fallback list
-    result := not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS',
-      'DEVPTS', 'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
-      'PTY', 'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS',
-      'DEVTMPFS', 'HUGETLBFS', 'ISO9660']);
+    result := IdemPChars(typ, 'AUTOFS'#0'PROC'#0'SUBFS'#0'DEBUGFS'#0 +
+      'DEVPTS'#0'FUSECTL'#0'MQUEUE'#0'RPC-PIPEFS'#0'SYSFS'#0'DEVFS'#0 +
+      'KERNFS'#0'PTY'#0'IGNORE'#0'NONE'#0'TMPFS'#0'SECURITYFS'#0'RAMFS'#0 +
+      'ROOTFS'#0'DEVTMPFS'#0'HUGETLBFS'#0'ISO9660'#0) >= 0;
 end;
 
 procedure AddDiskPartition(const typ, mnt, fs: RawUtf8;
@@ -3824,7 +3905,7 @@ begin
      (fs = 'rootfs') or
      (mnt = '/mnt') or
      IdemPChar(pointer(fs), '/DEV/LOOP') or
-     IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) or
+     (IdemPChars(mnt, '/PROC/'#0'/SYS/'#0'/RUN/'#0) >= 0) or
      not IsRealFileSystem(typ) then
     exit;
   fn := mnt;
@@ -3918,8 +3999,8 @@ begin
   repeat
     AddDiskPartition(
       _GetNextSpaced(p), _GetNextSpaced(p), _GetNextSpaced(p), result, n);
-    p := GotoNextLine(p);
-  until p = nil;
+    p := GotoNextLineSmall(p);
+  until p^ = #0;
   SetLength(result, n);
 end;
 
@@ -4206,7 +4287,7 @@ procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
   level: TSynLogLevel;
   si_code: integer;
-  text: string[4]; // code below has no memory allocation
+  text: TShort7; // code below has no memory allocation
 begin
   if Assigned(SynDaemonInterceptLog) then
   begin
@@ -4246,7 +4327,7 @@ begin
   // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
   if fSynDaemonIntercepted in _F1 then
     exit;
-  GlobalLock;
+  OSSafe.Lock;
   try
     if fSynDaemonIntercepted in _F1 then
       exit;
@@ -4260,7 +4341,7 @@ begin
     fpSigaction(SIGABRT, @sa, nil);
     include(_F1, fSynDaemonIntercepted); // set AFTER interception
   finally
-    GlobalUnLock;
+    OSSafe.UnLock;
   end;
 end;
 
@@ -4277,7 +4358,7 @@ var
 begin
   if fSigPipeDisabled in _F1 then
     exit; // quickly return if already done
-  GlobalLock;
+  OSSafe.Lock;
   try
     if fSigPipeDisabled in _F1 then
       exit;
@@ -4286,7 +4367,7 @@ begin
     fpSigaction(SIGPIPE, @sa, nil);
     include(_F1, fSigPipeDisabled); // set AFTER disabling it
   finally
-    GlobalUnLock;
+    OSSafe.UnLock;
   end;
 end;
 
@@ -4445,7 +4526,7 @@ var
   pidfilename: TFileName;
   s: AnsiString;
 const
-  TXT: array[boolean] of string[4] = ('run', 'fork');
+  TXT: array[boolean] of TShort7 = ('run', 'fork');
 begin
   SynDaemonIntercept(onlog);
   if dofork then
@@ -4615,7 +4696,7 @@ begin
   else
   begin
     // execute complex commands via the shell
-    a[0] := '/bin/sh';
+    a[0] := pointer(GetSystemShell);
     a[1] := '-c';
     a[2] := pointer(cmd);
     a[3] := nil;
@@ -4835,7 +4916,7 @@ begin
         AppendShort('/address'#0, fn);
         LoadProcFileTrimed(@fn[1], f);
         if f <> '' then
-          _AddRawUtf8(result, f);
+          _addutf8(result, f);
       end;
     end;
   until FindNext(SR) <> 0;
@@ -4932,28 +5013,6 @@ begin
     libc_memset(@dest, value, count);
 end;
 
-{$ifdef OSLINUXANDROID}
-
-procedure RetrieveCpuInfoArm;
-begin
-  if CpuFeatures = [] then
-  begin
-    // fallback to /proc/cpuinfo "Features:" text
-    if PosEx(' aes', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcAes);
-    if PosEx(' pmull', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcPmull);
-    if PosEx(' sha1', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcSha1);
-    if PosEx(' sha2', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcSha2);
-    if PosEx(' crc32', CpuInfoFeatures) >= 0 then
-      include(CpuFeatures, ahcCrc32);
-  end;
-end;
-
-{$endif OSLINUXANDROID}
-
 {$endif CPUARM3264}
 
 {$undef ARMV8STATIC}
@@ -4977,7 +5036,7 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 procedure InitializeSpecificUnit;
 var
   P: PAnsiChar;
-  modname, beg: PUtf8Char;
+  modname, modnum, beg: PUtf8Char;
   uts: UtsName;
   {$ifndef NODIRECTTHREADMANAGER}
   tm: TThreadManager;
@@ -4985,6 +5044,7 @@ var
   {$ifndef OSDARWIN}
   {$ifdef CPUARM3264}
   act, aci: TIntegerDynArray;
+  temparm: ShortString;
   i: PtrInt;
   {$endif CPUARM3264}
   tpfail: integer;
@@ -4995,7 +5055,7 @@ var
   {$else}
   cache, cpuinfo: PUtf8Char;
   release: RawUtf8;
-  procid, phyid, phyndx, cacheshr: integer;
+  procid, phyid, phyndx, cacheshr, threads: integer;
   phy: TIntegerDynArray;
   auxv: PPtrUInt;
   {$ifdef OSLINUX}
@@ -5033,6 +5093,7 @@ begin
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
   modname := nil;
+  modnum := nil;
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -5133,10 +5194,10 @@ begin
   begin
     beg := cpuinfo;
     cpuinfo := GotoNextLine(cpuinfo);
-    if IdemPChar(beg, 'PROCESSOR') then
-      if beg^ = 'P' then
-        modname := ParseLine(beg) // Processor : ARMv7
-      else
+    case IdemPChars(beg, 'PROCESSOR'#0'MODEL NAME'#0'MODEL'#0'FEATURES'#0'FLAGS'#0 +
+      'HARDWARE'#0'SERIAL'#0'CACHE SIZE'#0'CPU CORES'#0'PHYSICAL ID'#0) of
+    0:
+      if beg^ <> 'P' then
       begin
         // loop over all "processor : 0 .. 1 .. 2" lines to count the CPUs
         inc(SystemInfo.dwNumberOfProcessors);
@@ -5144,53 +5205,82 @@ begin
         if procid >= integer(SystemInfo.dwNumberOfProcessors) then
           procid := -1; // paranoid
       end
-    else if IdemPChar(beg, 'MODEL') then
-      modname := ParseLine(beg)
-    else if IdemPChar(beg, 'FEATURES') or
-            IdemPChar(beg, 'FLAGS') then
-      CpuInfoFeatures := ParseLine(beg)
-    else if IdemPChar(beg, 'HARDWARE') then
-      __BiosInfoHardwareFromCpuInfo := ParseLine(beg)
-    else if IdemPChar(beg, 'SERIAL') then
-      _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)))
-    else if IdemPChar(beg, 'CACHE SIZE') then
-      cache := ParseLine(beg)
+      else if modname = nil then
+        modname := ParseLine(beg); // Processor : ARMv7
+    1:
+      if modname = nil then
+        modname := ParseLine(beg);
+    2:
+      if modnum = nil then
+        modnum := ParseLine(beg);
+    3, 4:
+      if CpuInfoFeatures = '' then
+        CpuInfoFeatures := ParseLine(beg);
+    5:
+      if __BiosInfoHardwareFromCpuInfo = '' then
+        __BiosInfoHardwareFromCpuInfo := ParseLine(beg);
+    6:
+      if _Smbios[sbiSerial] = '' then
+        _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)));
+    7:
+      if cache = nil then
+        cache := ParseLine(beg);
+    8:
+      if CpuCores = 0 then
+      begin
+        threads := ParseInt(beg);
+        if threads > 0 then
+          CpuCores := threads;
+      end;
+    9:
+      begin
+        phyid := ParseInt(beg); // in practice, may be 0,3,... and not 0,1,...
+        if phyid < 0 then
+          continue;
+        phyndx := IntegerScanIndex(pointer(phy), CpuSockets, phyid);
+        if phyndx < 0 then
+        begin
+          AddInteger(phy, CpuSockets, phyid);
+          SetLength(CpuSocketsMask, CpuSockets);
+          phyndx := CpuSockets - 1;
+        end;
+        if (procid >= 0) and
+           (procid < SizeOf(TCpuSet) shl 3) then
+          SetBitPtr(@CpuSocketsMask[phyndx], procid);
+      end;
     {$ifdef CPUARM3264}
     else if IdemPChar(beg, 'CPU IMPLEMENTER') then
       ParseHex32Add(beg, aci)
     else if IdemPChar(beg, 'CPU PART') then
-      ParseHex32Add(beg, act)
+      ParseHex32Add(beg, act);
     {$endif CPUARM3264}
-    else if IdemPChar(beg, 'PHYSICAL ID') then
-    begin
-      phyid := ParseInt(beg); // in practice, may be 0,3,... and not 0,1,...
-      if phyid < 0 then
-        continue;
-      phyndx := IntegerScanIndex(pointer(phy), CpuSockets, phyid);
-      if phyndx < 0 then
-      begin
-        AddInteger(phy, CpuSockets, phyid);
-        SetLength(CpuSocketsMask, CpuSockets);
-        phyndx := CpuSockets - 1;
-      end;
-      if (procid >= 0) and
-         (procid < SizeOf(TCpuSet) shl 3) then
-        SetBitPtr(@CpuSocketsMask[phyndx], procid);
     end;
   end;
   {$ifdef CPUARM3264}
-  if act <> nil then // CPU part/implementer are more detailed than model name
+  if act <> nil then // decode CPU part/implementer hexadecimal numbers
   begin
-    for i := 0 to high(aci) do // there should be a single implementer
-      AppendShortToUtf8(ArmCpuImplementerName(
-        ArmCpuImplementer(aci[i]), aci[i], ' '), CpuArmModel);
-    AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[0]), act[0]), CpuArmModel);
-    for i := 1 to high(act) do // but there may be several parts/models
-      AppendShortToUtf8(ArmCpuTypeName(ArmCpuType(act[i]),
-        act[i], ' / '), CpuArmModel);
-    modname := pointer(CpuArmModel);
+    temparm[0] := #0;
+    for i := 0 to high(aci) do
+      ArmCpuImplementerNameAppend(ArmCpuImplementer(aci[i]), aci[i], temparm);
+    FastSetString(CpuArmImplementer, @temparm[1], ord(temparm[0]) - 1);
+    for i := 0 to high(act) do
+      ArmCpuTypeNameAppend(ArmCpuType(act[i]), act[i], temparm);
+    FastSetString(CpuArmModel, @temparm[1], ord(temparm[0]) - 1);
+    modname := pointer(CpuArmModel); // more detailed
   end;
-  RetrieveCpuInfoArm;
+  if CpuFeatures = [] then // fallback to /proc/cpuinfo "Features:" text
+  begin
+    if PosEx(' aes', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcAes);
+    if PosEx(' pmull', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcPmull);
+    if PosEx(' sha1', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcSha1);
+    if PosEx(' sha2', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcSha2);
+    if PosEx(' crc32', CpuInfoFeatures) >= 0 then
+      include(CpuFeatures, ahcCrc32);
+  end;
   {$endif CPUARM3264}
   if cache <> nil then
   begin
@@ -5253,6 +5343,10 @@ begin
   {$endif OSANDROID}
   if SystemInfo.dwNumberOfProcessors = 0 then
     SystemInfo.dwNumberOfProcessors := 1;
+  if CpuCores = 0 then
+    CpuCores := SystemInfo.dwNumberOfProcessors;
+  if modname = nil then
+    modname := modnum;
   if modname = nil then
     CpuInfoText := _fmt('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
       [SystemInfo.dwNumberOfProcessors, CpuInfoText])

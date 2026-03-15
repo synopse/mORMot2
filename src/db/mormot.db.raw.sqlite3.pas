@@ -6367,7 +6367,7 @@ begin
        (V2 = 0) then
       // any invalid date -> compare as UTF-8 strings
       result := Utf8ILComp(s1, s2, s1Len, s2Len)
-    else if SameValue(V1, V2, 1 / MilliSecsPerDay) then
+    else if SameValue(V1, V2, MilliSecsPerDate) then
       result := 0
     else if V1 < V2 then
       result := -1

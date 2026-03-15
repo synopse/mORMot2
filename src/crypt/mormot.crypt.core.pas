@@ -2658,18 +2658,14 @@ const
   SHA256DIGESTSTRLEN = SizeOf(TSha256Digest) * 2;
   MD5DIGESTSTRLEN = SizeOf(TMd5Digest) * 2;
 
-type
-  /// 32-characters ASCII string, e.g. as returned by AesBlockToShortString()
-  Short32 = string[32];
-
 /// compute the hexadecial representation of an AES 16-byte block
 // - returns a stack-allocated short string
-function AesBlockToShortString(const block: TAesBlock): short32; overload;
+function AesBlockToShortString(const block: TAesBlock): TShort32; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
 // - fill a stack-allocated short string
-procedure AesBlockToShortString(const block: TAesBlock; out result: short32); overload;
+procedure AesBlockToShortString(const block: TAesBlock; out result: TShort32); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
@@ -10313,13 +10309,13 @@ end;
 
 { ****************** Digest/Hash to Hexadecimal Text Conversion }
 
-procedure AesBlockToShortString(const block: TAesBlock; out result: short32);
+procedure AesBlockToShortString(const block: TAesBlock; out result: TShort32);
 begin
   result[0] := #32;
   mormot.core.text.BinToHex(@block, @result[1], 16);
 end;
 
-function AesBlockToShortString(const block: TAesBlock): short32;
+function AesBlockToShortString(const block: TAesBlock): TShort32;
 begin
   AesBlockToShortString(block, result);
 end;

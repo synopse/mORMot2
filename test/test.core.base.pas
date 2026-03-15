@@ -418,8 +418,15 @@ begin
   CheckEqual(SnakeCase('Abc_Def'), 'abc_def');
   CheckEqual(SnakeCase('AbcDef_'), 'abc_def_');
   CheckEqual(SnakeCase('Abc__Def'), 'abc_def');
+  CheckEqual(SnakeCase('Abc__Def', '-'), 'abc-def');
   CheckEqual(SnakeCase('AbcDef__'), 'abc_def_');
   CheckEqual(SnakeCase('Abc__Def__'), 'abc_def_');
+  CheckEqual(SnakeCase('Abc12Def'), 'abc_12_def');
+  CheckEqual(SnakeCase('X64Def', '-'), 'x64-def');
+  CheckEqual(SnakeCase('XY64Def', '-'), 'xy-64-def');
+  CheckEqual(SnakeCase('column1', '-'), 'column-1');
+  CheckEqual(SnakeCase('column100', '-'), 'column-100');
+  CheckEqual(SnakeCase('Column 1', '-'), 'column-1');
   CheckEqual(SnakeCase('variable name'), 'variable_name');
   CheckEqual(SnakeCase('Variable Name'), 'variable_name');
   CheckEqual(SnakeCase('VARIABLE NAME'), 'variable_name');
@@ -1060,84 +1067,175 @@ end;
 procedure TTestCoreBase.TRawUtf8ListSlow(Context: TObject);
 const
   MAX = 20000;
+  ONLYLOG = false;
 var
-  i, n: integer;
+  i, n, len: PtrInt; // @len = PPtrInt
   L: TRawUtf8List;
-  C: TComponent;
-  Rec: TSynFilterOrValidate;
-  s: RawUtf8;
+  B: TBinDictionary;
+  O: TSynMonitorTime;
+  v: TRawUtf8DynArray;
+  v64: Int64;
+  timer: TPrecisionTimer;
+
+  procedure TestBinDictionary;
+  var
+    i, len: PtrInt; // @len = PPtrInt
+  begin
+    CheckEqual(B.Count, MAX + 1);
+    Check(B.IndexOf(nil, 0) < 0);
+    for i := MAX downto 0 do
+    begin
+      len := 0;
+      Check(PInteger(B.Find(pointer(v[i]), length(v[i]), @len))^ = i);
+      Check(len = 4);
+    end;
+  end;
+
 begin
+  SetLength(v, MAX + 1); // allocate once the strings
+  for i := 0 to MAX do
+    UInt32ToUtf8(i, v[i]);
   L := TRawUtf8List.CreateEx([fObjectsOwned]);
   try // no hash table involved
+    timer.Start;
     for i := 0 to MAX do
     begin
-      C := TComponent.Create(nil);
-      C.Tag := i;
-      Check(L.AddObject(UInt32ToUtf8(i), C) = i);
+      O := TSynMonitorTime.Create; // any TObject would fit
+      O.MicroSec := i;
+      Check(L.AddObject(v[i], O) = i);
     end;
+    NotifyTestSpeed('TRawUtf8List.Add no hash', MAX + 1, 0, @timer, ONLYLOG);
     Check(L.Count = MAX + 1);
     for i := 0 to MAX do
-      Check(GetInteger(Pointer(L[i])) = i);
+    begin
+      Check(IsInt64(Pointer(L[i]), length(L[i]), @v64));
+      Check(v64 = i);
+    end;
     for i := 0 to MAX do
-      Check(TComponent(L.Objects[i]).Tag = i);
+      Check(TSynMonitorTime(L.Objects[i]).MicroSec = i);
+    timer.Start;
     Check(L.IndexOf('') < 0);
+    for i := MAX downto MAX - 99 do // O(n) worst case: appear at the end
+      Check(L.IndexOf(v[i]) = i);
+    NotifyTestSpeed('TRawUtf8List.IndexOf no hash', 100, 0, @timer, ONLYLOG);
     Check(L.IndexOf('5') = 5);
-    Check(L.IndexOf('999') = 999);
+    if MAX {%H-}>= 999 then
+      Check(L.IndexOf('999') = 999);
     for i := MAX downto 0 do
       if i and 1 = 0 then
         L.Delete(i); // delete half the array
     Check(L.Count = MAX div 2);
     for i := 0 to L.Count - 1 do
-      Check(GetInteger(Pointer(L[i])) = TComponent(L.Objects[i]).Tag);
+      Check(GetInteger(Pointer(L[i])) = TSynMonitorTime(L.Objects[i]).MicroSec);
     Check(L.IndexOf('5') = 2);
     Check(L.IndexOf('6') < 0);
     Check(L.Exists('5'));
     Check(not L.Exists('6'));
+    L.Clear;
+    Check(L.Count = 0);
+    Check(L.Add('toto') = 0);
+    Check(L.Count = 1);
+    Check(L.IndexOf('titi') < 0);
+    Check(L.IndexOf('toto') = 0);
   finally
     L.Free;
   end;
   L := TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
   try // with hash table
+    timer.Start;
     for i := 1 to MAX do
     begin
-      Rec := TSynFilterLowerCase.Create; // any TSynPersistent would have done
-      Rec.Parameters := Int32ToUtf8(i);
-      CheckEqual(L.AddObject(Rec.Parameters, Rec), i - 1);
-      CheckEqual(L.IndexOf(Rec.Parameters), i - 1);
+      O := TSynMonitorTime.Create; // any TSynPersistent would fit
+      O.MicroSec := i;
+      Check(L.AddObject(v[i], O) = i - 1);
     end;
+    NotifyTestSpeed('TRawUtf8List.Add hashed', MAX, 0, @timer, ONLYLOG);
+    timer.Start;
+    for i := 1 to MAX do
+      Check(L.IndexOf(v[i]) = i - 1);
+    NotifyTestSpeed('TRawUtf8List.IndexOf hashed', MAX, 0, @timer, ONLYLOG);
     Check(not L.Exists(''));
     Check(L.IndexOf('abcd') < 0);
     Check(L.Count = MAX);
     n := 0;
     for i := 1 to MAX do
     begin
-      UInt32ToUtf8(i, s);
-      CheckEqual(L.IndexOf(s), n);
-      CheckEqual(TSynFilterOrValidate(L.Objects[n]).Parameters, s);
+      Check(L.IndexOf(v[i]) = n);
+      Check(TSynMonitorTime(L.Objects[n]).MicroSec = i);
       if i and 127 = 0 then
-        CheckEqual(L.Delete(s), n)
+        CheckEqual(L.Delete(v[i]), n, 'delete')
       else
         inc(n);
     end;
     CheckEqual(L.Count, n);
     for i := 1 to MAX do
-    begin
-      UInt32ToUtf8(i, s);
-      Check((L.IndexOf(s) >= 0) = (i and 127 <> 0));
-    end;
+      Check((L.IndexOf(v[i]) >= 0) = (i and 127 <> 0));
     L.SaveToFile(WorkDir + 'utf8list.txt');
     L.Clear;
     CheckEqual(L.Count, 0);
     L.LoadFromFile(WorkDir + 'utf8list.txt');
     CheckEqual(L.Count, n);
     for i := 1 to MAX do
-    begin
-      UInt32ToUtf8(i, s);
-      Check((L.IndexOf(s) >= 0) = (i and 127 <> 0));
-    end;
+      Check((L.IndexOf(v[i]) >= 0) = (i and 127 <> 0));
     DeleteFile(WorkDir + 'utf8list.txt');
+    L.Clear;
+    Check(L.Count = 0);
+    Check(L.Add('toto') = 0);
+    Check(L.Count = 1);
+    Check(L.IndexOf('titi') < 0);
+    Check(L.IndexOf('toto') = 0);
+    Check(L.IndexOf('') < 0);
+    Check(L.Add('') = 1);
+    Check(L.Count = 2);
+    Check(L.IndexOf('') = 1);
+    Check(L.IndexOf('toto') = 0);
   finally
     L.Free;
+  end;
+  B := TBinDictionary.Create;
+  try // with hash table
+    timer.Start;
+    for i := 0 to MAX do
+    begin
+      CheckEqual(B.Count, i);
+      Check(B.Add(pointer(v[i]), @i, length(v[i]), 4) = i);
+    end;
+    NotifyTestSpeed('TBinDictionary.Add', MAX + 1, 0, @timer, ONLYLOG);
+    timer.Start;
+    TestBinDictionary;
+    NotifyTestSpeed('TBinDictionary.Find', MAX + 1, 0, @timer, ONLYLOG);
+    B.Clear;
+    for i := 0 to MAX do
+    begin
+      CheckEqual(B.Count, i);
+      Check(B.Update(pointer(v[i]), @i, length(v[i]), 4) = i);
+    end;
+    for i := 0 to MAX do
+      if i and 127 = 0 then
+        Check(B.Update(pointer(v[i]), @i, length(v[i]), 4) = i)
+      else if i and 255 = 0 then
+        Check(B.Add(pointer(v[i]), @i, length(v[i]), 4) < 0);
+    for i := 0 to MAX do
+    begin
+      len := 0;
+      Check(MemCmp(B.Keys(i, @len), pointer(v[i]), length(v[i])) = 0);
+      Check(len = length(v[i]));
+      len := 0;
+      Check(PInteger(B.Values(i, @len))^ = i);
+      Check(len = 4);
+    end;
+    TestBinDictionary;
+    B.Clear;
+    Check(B.Count = 0);
+    Check(B.IndexOf(nil, 0) < 0);
+    Check(B.Add(nil, nil, 0, 0) = 0);
+    Check(B.Count = 1);
+    Check(B.IndexOf(nil, 0) = 0);
+    len := 1;
+    Check(PInteger(B.Find(nil, 0, @len))^ = 0);
+    Check(len = 0);
+finally
+    B.Free;
   end;
 end;
 
@@ -4616,9 +4714,20 @@ begin
   for i := 1 to 10 do
     AppendShortCardinal(i, a);
   check(a = '012345678910');
-  for i := 11 to 150 do
+  for i := 11 to 120 do
     AppendShortCardinal(i, a);
-  CheckHash(a, $6C291F09, 'AppendShortCardinal');
+  CheckEqual(length(a), 253);
+  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortCardinal');
+  a := '';
+  AppendShortByte(0, @a);
+  check(a = '0');
+  for i := 1 to 10 do
+    AppendShortByte(i, @a);
+  check(a = '012345678910');
+  for i := 11 to 120 do
+    AppendShortByte(i, @a);
+  CheckEqual(length(a), 253);
+  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortByte');
   Check(TwoDigits(0) = '0');
   Check(TwoDigits(1) = '1');
   Check(TwoDigits(10) = '10');
@@ -4744,15 +4853,20 @@ begin
   Check(not SameValue(386.0, 700, 2));
   Check(IntToThousandString(0) = '0');
   Check(IntToThousandString(1) = '1');
+  Check(IntToThousandString(9) = '9');
   Check(IntToThousandString(10) = '10');
   Check(IntToThousandString(100) = '100');
+  Check(IntToThousandString(999) = '999');
   Check(IntToThousandString(1000) = '1,000');
   Check(IntToThousandString(10000) = '10,000');
   Check(IntToThousandString(100000) = '100,000');
   Check(IntToThousandString(1000000) = '1,000,000');
+  Check(IntToThousandString(10000000) = '10,000,000');
   Check(IntToThousandString(-1) = '-1');
+  Check(IntToThousandString(-9) = '-9');
   Check(IntToThousandString(-10) = '-10');
   Check(IntToThousandString(-100) = '-100');
+  Check(IntToThousandString(-999) = '-999');
   Check(IntToThousandString(-1000) = '-1,000');
   Check(IntToThousandString(-10000) = '-10,000');
   Check(IntToThousandString(-100000) = '-100,000');
@@ -7612,6 +7726,8 @@ begin
   CheckEqual(tmp, '0001-00-01');
   tmp := UnixTimePeriodToString(SecsPerDay * 365 * 2);
   CheckEqual(tmp, '0002-00-00');
+  CheckEqual(DateTimeToIso8601Text(Iso8601ToDateTime('1492-10-12T16:00:00')),
+    '1492-10-12T16:00:00');
 end;
 
 function LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;
@@ -7656,9 +7772,31 @@ begin
   CheckEqual(bias, 0);
   Check(ParseTimeZone('+0100', bias));
   CheckEqual(bias, 60);
+  Check(ParseTimeZone('+02', bias));
+  CheckEqual(bias, 120);
   Check(ParseTimeZone('+1005', bias));
   CheckEqual(bias, 605);
   Check(ParseTimeZone('-1005', bias));
+  CheckEqual(bias, -605);
+  Check(ParseTimeZone('Z', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone('+10', bias));
+  CheckEqual(bias, 600);
+  Check(ParseTimeZone('GMT', bias));
+  CheckEqual(bias, 0);
+  Check(not ParseTimeZone('-1', bias));
+  Check(not ParseTimeZone('-100', bias));
+  Check(ParseTimeZone('-10', bias));
+  CheckEqual(bias, -600);
+  Check(ParseTimeZone('-00:00', bias));
+  CheckEqual(bias, TimeZoneLocalBias);
+  Check(ParseTimeZone('+00:00', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone('+01:00', bias));
+  CheckEqual(bias, 60);
+  Check(ParseTimeZone('+10:05', bias));
+  CheckEqual(bias, 605);
+  Check(ParseTimeZone('-10:05', bias));
   CheckEqual(bias, -605);
   Check(not ParseTimeZone('+1O05', bias));
   CheckEqual(bias, -605);
@@ -10375,7 +10513,7 @@ end;
 
 procedure TTestCoreBase._TSynQueue;
 var
-  o, i, j, k, n: integer;
+  o, i, j, k, n: integer; // not PtrInt
   f: TSynQueue;
   u, v: RawUtf8;
   savedint: TIntegerDynArray;
@@ -10385,34 +10523,43 @@ begin
   try
     for o := 1 to 1000 do
     begin
-      check(f.Count = 0);
+      checkEqual(f.Count, 0);
       check(not f.Pending);
       for i := 1 to o do
         f.Push(i);
       check(f.Pending);
-      check(f.Count = o);
+      checkEqual(f.Count, o);
       check(f.Capacity >= o);
       f.Save(savedint);
       check(Length(savedint) = o);
+      check(f.Contains(@o), 'cont0'); // O(n) since queue is a FIFO
       for i := 1 to o do
       begin
         j := -1;
-        check(f.Peek(j));
-        check(j = i);
+        check(f.Peek(j), 'peek');
+        checkEqual(j, i);
+        check(f.Contains(@i), 'cont1'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(nil), 1);
+        checkEqual(f.PeekCompare(@j), 0);
         j := -1;
-        check(f.Pop(j));
-        check(j = i);
+        checkEqual(f.PeekCompare(@j), 1);
+        check(not f.PopEquals(@j, j), 'popeq');
+        check(f.Pop(j), 'pop');
+        checkEqual(j, i);
+        if i < 10 then // is O(n) after Pop()
+          check(not f.Contains(@i), 'cont2');
       end;
       check(not f.Pending);
-      check(f.Count = 0);
+      checkEqual(f.Count, 0);
+      checkEqual(f.PeekCompare(@j), -1);
       check(f.Capacity > 0);
       f.Clear; // ensure f.Pop(j) will use leading storage
       check(not f.Pending);
-      check(f.Count = 0);
-      check(f.Capacity = 0);
-      check(Length(savedint) = o);
+      checkEqual(f.Count, 0);
+      checkEqual(f.Capacity, 0);
+      checkEqual(Length(savedint), o);
       for i := 1 to o do
-        check(savedint[i - 1] = i);
+        checkEqual(savedint[i - 1], i);
       n := 0;
       for i := 1 to o do
         if i and 7 = 0 then
@@ -10427,10 +10574,11 @@ begin
           f.Push(i);
           inc(n);
         end;
-      check(f.Count = n);
+      checkEqual(f.Count, n);
       check(f.Pending);
+      check(f.Contains(@o) = (o and 7 <> 0), 'cont3');
       f.Save(savedint);
-      check(Length(savedint) = n);
+      checkEqual(Length(savedint), n);
       for i := 1 to n do
         check(savedint[i - 1] and 7 <> 0);
       for i := 1 to n do
@@ -10439,10 +10587,10 @@ begin
         check(f.Peek(j));
         k := -1;
         check(f.Pop(k));
-        check(j = k);
+        checkEqual(j, k);
         check(j and 7 <> 0);
       end;
-      check(f.Count = 0);
+      checkEqual(f.Count, 0);
       check(f.Capacity > 0);
     end;
   finally
@@ -10482,7 +10630,10 @@ begin
       begin
         u := '';
         check(f.Peek(u));
+        check(f.Contains(@u), 'cont4'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(@u), 0);
         v := '';
+        checkEqual(f.PeekCompare(@v), 1);
         check(f.Pop(v));
         check(u = v);
         check(GetInteger(pointer(u)) and 7 <> 0);

@@ -351,6 +351,7 @@
       {$ASMMODE INTEL}         // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_CODEALIGN}  // we can use {$CODEALIGN LOOP=16} conditional
       {$define FPC_CPUX64}
       {$ifndef OSDARWIN}       // MachOS has troubles with our asm
         {$define FPC_ASMX64}
@@ -379,6 +380,7 @@
       {$ASMMODE INTEL}         // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {.$define FPC_CODEALIGN} // no need of {$CODEALIGN LOOP=16} conditional
       {$define FPC_X86}
       {$ifndef FPC_PIC}        // MachOS/OpenBSD/Android require PIC on i386
         {$define ASMX86}       // supports asm with globals

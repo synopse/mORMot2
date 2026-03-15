@@ -1566,7 +1566,7 @@ begin
 end;
 
 const
-  _CONST: array[boolean] of string[7] = ('const ', '');
+  _CONST: array[boolean] of TShort7 = ('const ', '');
 
 procedure TPascalOperation.Declaration(W: TTextWriter; const ClassName: RawUtf8;
   InImplementation: boolean);

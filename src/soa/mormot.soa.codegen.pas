@@ -1147,7 +1147,7 @@ begin
           not call.OutBodyTypeIsJson then
     result := call.OutBody
   else
-    JsonBufferReformat(pointer(call.OutBody), result);
+    JsonBufferReformat(pointer(call.OutBody), result, jsonHumanReadable);
   cc := ccWhite;
   if not StatusCodeIsSuccess(call.OutStatus) then
     cc := ccLightRed;

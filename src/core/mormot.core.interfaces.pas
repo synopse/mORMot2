@@ -2713,11 +2713,11 @@ implementation
 
 const
   // convert into generic in/out direction (assume result is out)
-  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
+  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of TShort7 = (
     'in', 'both', 'out', 'out');
   // normalize simple type names e.g. int64=qword or all strings to "utf8"
   // - note: AnsiString (Delphi <2009) may loose data depending on the client
-  ARGTYPETOJSON: array[TInterfaceMethodValueType] of string[8] = (
+  ARGTYPETOJSON: array[TInterfaceMethodValueType] of TShort8 = (
     '??',       // imvNone
     'self',     // imvSelf
     'boolean',  // imvBoolean
@@ -2842,7 +2842,8 @@ end;
 procedure TInterfaceMethodArgument.AddValueJson(WR: TJsonWriter;
   const Value: RawUtf8);
 begin
-  if rcfJsonString in ArgRtti.Flags then
+  if (rcfJsonString in ArgRtti.Flags) or
+     IsStringJson(pointer(Value)) then // from URI-decoded: always check
   begin
     WR.Add('"');
     WR.AddJsonEscape(pointer(Value));
@@ -2850,7 +2851,7 @@ begin
   end
   else
   begin
-    WR.AddString(Value);
+    WR.AddString(Value); // constant or number
     WR.AddComma;
   end;
 end;
@@ -3398,7 +3399,7 @@ var
 begin
   FillCharFast(ctxt.I64s, ctxt.Method^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
   a := pointer(ctxt.Method^.Args); // always <> nil
-  for arg := 1 to PDALen(PAnsiChar(a) - _DALEN)^ + (_DAOFF - 1) do
+  for arg := 1 to PDALen(PAnsiChar(a) - _DALEN)^ + (_DAOFF - 1) do // = high()
   begin
     inc(a); // increase first, to ignore self
     V := nil;
@@ -7303,7 +7304,7 @@ begin
   // assign content from fValues[] into the stack
   pv := pointer(fValues);
   arg := pointer(fMethod^.Args);
-  for i := 1 to PDALen(PAnsiChar(arg) - _DALEN)^ + (_DAOFF - 1) do
+  for i := 1 to PDALen(PAnsiChar(arg) - _DALEN)^ + (_DAOFF - 1) do // = high()
   begin
     inc(arg);
     inc(pv);
@@ -7798,7 +7799,7 @@ begin
      (fields <> nil) then
   begin
     // zeroing of weak references in object fields
-    for i := 0 to PDALen(PAnsiChar(fields) - _DALEN)^ + (_DAOFF - 1) do
+    for i := 0 to PDALen(PAnsiChar(fields) - _DALEN)^ + (_DAOFF - 1) do // =high
       PPointer(fields[i])^ := nil;
     FastDynArrayClear(@fields, nil);
   end;
@@ -7873,7 +7874,7 @@ end;
 { ************ Code/Documentation Generation Logic Extraction from RTTI }
 
 const
-  SIZETODELPHI: array[0..8] of string[7] = (
+  SIZETODELPHI: array[0..8] of TShort7 = (
     'integer', 'byte', 'word', 'integer',
     'integer', 'int64', 'int64', 'int64', 'int64');
 
@@ -8280,9 +8281,9 @@ end;
 function TWrapperContext.ContextArgsFromMethod(
   const meth: TInterfaceMethod): variant;
 const
-  DIRTODELPHI: array[TInterfaceMethodValueDirection] of string[7] = (
+  DIRTODELPHI: array[TInterfaceMethodValueDirection] of TShort7 = (
     'const', 'var', 'out', 'result');
-  DIRTOSMS: array[TInterfaceMethodValueDirection] of string[7] = (
+  DIRTOSMS: array[TInterfaceMethodValueDirection] of TShort7 = (
     // no OUT in DWS/SMS -> VAR instead
     'const', 'var', 'var', 'result');
 var
@@ -8339,7 +8340,7 @@ end;
 function TWrapperContext.ContextFromMethod(
   const meth: TInterfaceMethod): variant;
 const
-  VERB_DELPHI: array[boolean] of string[9] = (
+  VERB_DELPHI: array[boolean] of TShort15 = (
     'procedure', 'function');
 var
   d: variant;
@@ -8577,11 +8578,10 @@ var
   begin
     // ignore any $ifdef ... $endif lines (should be at the line beginning)
     repeat
-      P := GotoNextLine(P);
-      if P = nil then
-        exit;
-    until IdemPChar(GotoNextNotSpace(P), '{$ENDIF');
-    P := GotoNextLine(P);
+      P := GotoNextLineSmall(P);
+    until (P^ = #0) or
+          IdemPChar(GotoNextNotSpace(P), '{$ENDIF');
+    P := GotoNextLineSmall(P);
   end;
 
 begin
@@ -8673,8 +8673,8 @@ begin
                 RawUtf8ToVariant(desc));
     end
     else
-      P := GotoNextLine(P);
-  until (P = nil);
+      P := GotoNextLineSmall(P);
+  until P^ = #0;
 end;
 
 

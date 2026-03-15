@@ -47,11 +47,11 @@ uses
 
 type
   /// Exception type associated to the direct BDE connection
-  ESqlDBBDE = class(ESqlDBDataset);
+  ESqlDBBde = class(ESqlDBDataset);
 
 
   /// implement properties shared by BDE connections
-  TSqlDBBDEConnectionProperties = class(TSqlDBDatasetConnectionProperties)
+  TSqlDBBdeConnectionProperties = class(TSqlDBDatasetConnectionProperties)
   protected
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - do nothing by now (BDE metadata may be used in the future)
@@ -65,13 +65,13 @@ type
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overridden method will create an TSqlDBBDEConnection instance
+    // - this overridden method will create an TSqlDBBdeConnection instance
     function NewConnection: TSqlDBConnection; override;
   end;
 
 
   /// implements a direct connection via the BDE access layer
-  TSqlDBBDEConnection = class(TSqlDBConnectionThreadSafe)
+  TSqlDBBdeConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fDatabase: TDatabase;
     fSession: TSession;
@@ -83,10 +83,10 @@ type
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the specified BDE server
-    // - should raise an ESqlDBBDE on error
+    // - should raise an ESqlDBBde on error
     procedure Connect; override;
     /// stop connection to the specified BDE database server
-    // - should raise an ESqlDBBDE on error
+    // - should raise an ESqlDBBde on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
@@ -113,7 +113,7 @@ type
   end;
 
   /// implements a statement via a BDE connection
-  TSqlDBBDEStatement = class(TSqlDBDatasetStatement)
+  TSqlDBBdeStatement = class(TSqlDBDatasetStatement)
   protected
     /// initialize and set fQuery internal field as expected
     procedure DatasetCreate; override;
@@ -130,9 +130,9 @@ implementation
 { ************ BDE Database Engine Connection }
 
 
-{ TSqlDBBDEConnectionProperties }
+{ TSqlDBBdeConnectionProperties }
 
-constructor TSqlDBBDEConnectionProperties.Create(const aServerName,
+constructor TSqlDBBdeConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -141,29 +141,29 @@ begin
   {$endif UNICODE}
 end;
 
-procedure TSqlDBBDEConnectionProperties.GetForeignKeys;
+procedure TSqlDBBdeConnectionProperties.GetForeignKeys;
 begin
   { TODO : get FOREIGN KEYS from BDE metadata ? }
 end;
 
-function TSqlDBBDEConnectionProperties.NewConnection: TSqlDBConnection;
+function TSqlDBBdeConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSqlDBBDEConnection.Create(self);
-  TSqlDBBDEConnection(result).InternalProcess(speCreated);
+  result := TSqlDBBdeConnection.Create(self);
+  TSqlDBBdeConnection(result).InternalProcess(speCreated);
 end;
 
-function TSqlDBBDEConnectionProperties.GetDbms: TSqlDBDefinition;
+function TSqlDBBdeConnectionProperties.GetDbms: TSqlDBDefinition;
 begin
   if fDbms = dUnknown then
     // retrieve DBMS type from alias driver name
-    fDbms := (MainConnection as TSqlDBBDEConnection).Dbms;
+    fDbms := (MainConnection as TSqlDBBdeConnection).Dbms;
   result := fDbms;
 end;
 
 
-{ TSqlDBBDEConnection }
+{ TSqlDBBdeConnection }
 
-procedure TSqlDBBDEConnection.Commit;
+procedure TSqlDBBdeConnection.Commit;
 begin
   inherited Commit;
   try
@@ -177,13 +177,15 @@ end;
 var
   BDEConnectionCount: integer = 0;
 
-constructor TSqlDBBDEConnection.Create(aProperties: TSqlDBConnectionProperties);
 const
   PCHARS: array[0 .. 3] of PAnsiChar = (
     'ORACLE', 'MSSQL', 'MSACCESS', nil);
   TYPES: array[-1 .. high(PCHARS) - 1] of TSqlDBDefinition = (
     dDefault, dOracle, dMSSQL, dJet);
-var alias: string;
+
+constructor TSqlDBBdeConnection.Create(aProperties: TSqlDBConnectionProperties);
+var
+  alias: string;
 begin
   inherited Create(aProperties);
   fDatabase := TDatabase.Create(nil);
@@ -195,19 +197,19 @@ begin
   alias := Utf8ToString(fProperties.ServerName);
   fDatabase.DatabaseName := 'SynDB' + alias + IntToStr(BDEConnectionCount);
   fDatabase.AliasName := alias;
-  fDatabase.Params.Text := Format('USER NAME=%s'#13#10'PASSWORD=%s',
-    [Utf8ToString(fProperties.UserID), Utf8ToString(fProperties.PassWord)]);
+  fDatabase.Params.Text := FormatString('USER NAME=%'#13#10'PASSWORD=%',
+    [fProperties.UserID, fProperties.PassWord]);
   fDbmsName := StringToUtf8(fSession.GetAliasDriverName(alias));
   fDbms := TYPES[IdemPPChar(pointer(fDbmsName), @PCHARS)];
 end;
 
-procedure TSqlDBBDEConnection.Connect;
+procedure TSqlDBBdeConnection.Connect;
 var
   {%H-}log: ISynLog;
 begin
   if (fSession = nil) or
      (fDatabase = nil) then
-    ESqlDBBDE.RaiseUtf8('%.Connect() on % failed: Database=nil',
+    ESqlDBBde.RaiseUtf8('%.Connect() on % failed: Database=nil',
       [self, fProperties.ServerName]);
   SynDBLog.EnterLocal(log, 'Connect to Alias=%', [fDatabase.AliasName], self);
   try
@@ -223,7 +225,7 @@ begin
   end;
 end;
 
-destructor TSqlDBBDEConnection.Destroy;
+destructor TSqlDBBdeConnection.Destroy;
 begin
   try
    Disconnect;
@@ -235,7 +237,7 @@ begin
   FreeAndNil(fSession);
 end;
 
-procedure TSqlDBBDEConnection.Disconnect;
+procedure TSqlDBBdeConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statements
@@ -247,57 +249,57 @@ begin
   end;
 end;
 
-function TSqlDBBDEConnection.IsConnected: boolean;
+function TSqlDBBdeConnection.IsConnected: boolean;
 begin
   result := Assigned(fDatabase) and
             fDatabase.Connected;
 end;
 
-function TSqlDBBDEConnection.NewStatement: TSqlDBStatement;
+function TSqlDBBdeConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSqlDBBDEStatement.Create(self);
+  result := TSqlDBBdeStatement.Create(self);
 end;
 
-procedure TSqlDBBDEConnection.Rollback;
+procedure TSqlDBBdeConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
 end;
 
-procedure TSqlDBBDEConnection.StartTransaction;
+procedure TSqlDBBdeConnection.StartTransaction;
 begin
   inherited StartTransaction;
   fDatabase.StartTransaction;
 end;
 
 
-{ TSqlDBBDEStatement }
+{ TSqlDBBdeStatement }
 
-procedure TSqlDBBDEStatement.DatasetCreate;
+procedure TSqlDBBdeStatement.DatasetCreate;
 begin
   fQuery := DBTables.TQuery.Create(nil);
   with DBTables.TQuery(fQuery) do
   begin
-    DatabaseName := (fConnection as TSqlDBBDEConnection).Database.DatabaseName;
-    SessionName := TSqlDBBDEConnection(fConnection).Database.Session.SessionName;
+    DatabaseName := (fConnection as TSqlDBBdeConnection).Database.DatabaseName;
+    SessionName := TSqlDBBdeConnection(fConnection).Database.Session.SessionName;
   end;
 end;
 
-function TSqlDBBDEStatement.DatasetPrepare(const aSQL: string): boolean;
+function TSqlDBBdeStatement.DatasetPrepare(const aSQL: string): boolean;
 begin
   (fQuery as DBTables.TQuery).SQL.Text := aSQL;
   fQueryParams := DBTables.TQuery(fQuery).Params;
   result := fQueryParams <> nil;
 end;
 
-procedure TSqlDBBDEStatement.DatasetExecSQL;
+procedure TSqlDBBdeStatement.DatasetExecSQL;
 begin
   (fQuery as DBTables.TQuery).ExecSQL;
 end;
 
 
 initialization
-  TSqlDBBDEConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBBdeConnectionProperties.RegisterClassNameForDefinition;
   
 {$endif FPC} // the old and deprecated BDE is a Delphi-specific "feature"
 

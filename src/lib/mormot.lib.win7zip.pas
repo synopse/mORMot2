@@ -1430,7 +1430,7 @@ begin
       exit;
   end;
   // fallback to guess from file extension
-  ext := RawUtf8(ExtractFileExt(FileName));
+  StringToUtf8(ExtractFileExt(FileName), ext);
   delete(ext, 1, 1);
   l := length(ext);
   if l = 1 then

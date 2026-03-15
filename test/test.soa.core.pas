@@ -1149,8 +1149,8 @@ begin
       '{result:"abc",value=777}', HTTP_SUCCESS), '777');
     if rout = 0 then
       CheckEqual(result.URI(
-        'root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe', 'POST',
-          @resp, nil, nil), 406, 'incorrect input');
+        'root/ComplexCalculator.GetCustomer?buggy=dum]my&CustomerId=John%20Doe',
+        'POST', @resp, nil, nil), HTTP_SUCCESS);
   end;
   result.ServicesRouting := TRestServerRoutingRest.ClientRouting; // back to default
   result.Server.ServicesRouting := TRestServerRoutingRest;

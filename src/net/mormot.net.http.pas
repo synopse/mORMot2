@@ -12,6 +12,7 @@ unit mormot.net.http;
    - THttpSocket Implementing HTTP over plain sockets
    - Abstract Server-Side Types used e.g. for Client-Server Protocol
    - HTTP Server Logging/Monitoring Processors
+   - Additional High-Level Socket Functions
 
   *****************************************************************************
 
@@ -29,8 +30,8 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.rtti,
-  mormot.core.buffers,
   mormot.core.datetime,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.zip,
   mormot.net.sock;
@@ -152,8 +153,9 @@ function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 /// will remove most usual HTTP headers which are to be recomputed on sending
 // - trim=true would remove any space or CR/LF at the end of the result
 // - as used e.g. during TPublicRelay process from mormot.net.relay
+// - upIgnore is in IdemPCharSet() format, e.g. 'CONTENT-|CONNECTION:|'
 function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
-  upIgnore: PPAnsiChar = nil): RawUtf8;
+  upIgnore: PUtf8Char = nil): RawUtf8;
 
 /// search, copy and remove a given HTTP header as text or Int64
 // - FindNameValue() makes search + copy, but this function also REMOVES the header
@@ -259,6 +261,10 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 /// extract a 64-bit value from a 'Range: xxx-xxx ' input
 // - returned P^ points to the first non digit char - not as GetNextItemQWord()
 function GetNextRange(var P: PUtf8Char): Qword;
+
+/// append an IPv4 as '"1.2.3.4"' JSON string
+procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
+  {$ifdef HASINLINE} inline; {$endif}
 
 const
   /// pseudo-header containing the current Synopse mORMot framework version
@@ -2464,7 +2470,7 @@ const
   /// low level magic marker in THttpMetrics .mhm binary files
   // - may not be at the beginning of the file, if compression was enabled: use
   // rather THttpMetrics.LoadHeader if you want to identify .mhm files
-  HTTPMETRICS_MAGIC: string[23] = 'mORMotAnalyzerV1'#26;
+  HTTPMETRICS_MAGIC: TShort23 = 'mORMotAnalyzerV1'#26;
 
 var // filled from RTTI enum trimmed text during unit initialization
   HTTP_SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
@@ -2484,6 +2490,50 @@ function FromText(const Text: RawUtf8; out Period: THttpAnalyzerPeriod): boolean
 // - as called by THttpMetrics.GetAsText() overloaded methods
 procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
   NoPeriod, NoScope: boolean; out Result: RawUtf8);
+
+
+{ ******************** Additional High-Level Socket Functions }
+
+type
+  /// define how GetMacAddress() makes its sorting choices
+  // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
+  // - mafEthernetOnly will only select TMacAddress.Kind = makEthernet
+  // - mafLocalOnly will only select makEthernet or makWifi adapters
+  // - mafRequireBroadcast won't return any TMacAddress with Broadcast = ''
+  // - mafIgnoreGateway won't put the TMacAddress.Gateway <> '' first
+  // - mafIgnoreKind and mafIgnoreSpeed will ignore Kind or Speed properties
+  TMacAddressFilter = set of (
+    mafEthernetOnly,
+    mafLocalOnly,
+    mafRequireBroadcast,
+    mafIgnoreGateway,
+    mafIgnoreKind,
+    mafIgnoreSpeed);
+
+const
+  /// TMacAddress.Kind sort priority for GetMacAddress()
+  NETHW_ORDER: array[TMacAddressKind] of byte = (
+    2,  // makUndefined
+    0,  // makEthernet
+    1,  // makWifi
+    4,  // makTunnel
+    3,  // makPpp
+    5,  // makCellular
+    6); // makSoftware
+
+/// pickup the most suitable network according to some preferences
+// - will sort GetMacAddresses() results according to its Kind and Speed
+// to select the most suitable local interface e.g. for THttpPeerCache
+function GetMainMacAddress(out Mac: TMacAddress;
+  Filter: TMacAddressFilter = []): boolean; overload;
+
+/// get a network interface from its TMacAddress main fields
+// - search is case insensitive for TMacAddress.Name and Address fields or as
+// exact IP, and eventually as CIDR pattern (e.g. '192.168.1.0/24')
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceNameAddressOrIP: RawUtf8;
+  UpAndDown: boolean = false): boolean; overload;
+
 
 
 implementation
@@ -2651,20 +2701,11 @@ begin
 end;
 
 const
-  TOBEPURGED: array[0..10] of PAnsiChar = (
-    'CONTENT-',
-    'CONNECTION:',
-    'KEEP-ALIVE:',
-    'TRANSFER-',
-    'X-POWERED',
-    'USER-AGENT',
-    'REMOTEIP:',
-    'HOST:',
-    'ACCEPT:',
-    'DATE:',
-    nil);
+  TOBEPURGED: PUtf8Char =
+    'CONTENT-|CONNECTION:|KEEP-ALIVE:|TRANSFER-|X-POWERED|USER-AGENT|' +
+    'REMOTEIP:|HOST:|ACCEPT:|DATE:|';
 
-function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PPAnsiChar): RawUtf8;
+function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PUtf8Char): RawUtf8;
 var
   pos, len: array[byte] of word; // delete up to 255 entries
   n, purged, i, l, tot: PtrInt;
@@ -2680,13 +2721,12 @@ begin
   begin
     last := nil;
     if upIgnore = nil then
-      upIgnore := @TOBEPURGED;
+      upIgnore := TOBEPURGED;
     if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
-      while (P <> nil) and
-            (P^ <> #0) do
+      while P^ <> #0 do
       begin
-        next := GotoNextLine(P);
-        if IdemPPChar(P, upIgnore) < 0 then // append this entry
+        next := GotoNextLineSmall(P);
+        if IdemPCharSep(P, upIgnore) < 0 then // append this entry
         begin
           l := next - P;
           if next = nil then
@@ -2876,7 +2916,6 @@ end;
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 var
   up: TByteToAnsiChar;
-  u: array[0..1] of PAnsiChar; // IdemPPChar() format
 begin
   if (Headers = '') or
      (length(Name) < 2) then
@@ -2884,10 +2923,9 @@ begin
     result := Headers;
     exit;
   end;
-  PWord(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ := ord(':');
-  u[0] := @up;
-  u[1] := nil;
-  result := PurgeHeaders(Headers, false, @u);
+  PCardinal(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ :=
+    ord(':') + ord('|') shl 8; // 'UPPER:|' IdemPCharSep() format
+  result := PurgeHeaders(Headers, false, @up);
 end;
 
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
@@ -2904,15 +2942,13 @@ var
   c: cardinal;
 begin
   c := PCardinal(method)^;
-  result := (((c xor cardinal(ord('H') + ord('E') shl 8 + ord('A') shl 16 +
-                     ord('D') shl 24)) and $dfdfdfdf) = 0) or
-            (((c xor cardinal(ord('O') + ord('P') shl 8 + ord('T') shl 16 +
-                     ord('I') shl 24)) and $dfdfdfdf) = 0);
+  result := (((c xor cardinal(HEAD_32)) and $dfdfdfdf) = 0) or
+            (((c xor cardinal(OPTI_32)) and $dfdfdfdf) = 0);
 end;
 
 function IsGet(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ = ord('G') + ord('E') shl 8 + ord('T') shl 16;
+  result := PCardinal(method)^ = GET_24;
 end;
 
 function IsPost(const method: RawUtf8): boolean;
@@ -2922,20 +2958,17 @@ end;
 
 function IsPut(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('P') + ord('U') shl 8 + ord('T') shl 16;
+  result := PCardinal(method)^ = PUT_24;
 end;
 
 function IsDelete(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
+  result := PCardinal(method)^ = DELE_32;
 end;
 
 function IsOptions(const method: RawUtf8): boolean;
 begin
-  result := PCardinal(method)^ =
-    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
+  result := PCardinal(method)^ = OPTI_32;
 end;
 
 function IsHead(const method: RawUtf8): boolean;
@@ -2967,8 +3000,7 @@ end;
 function IsNone(const text: RawUtf8): boolean;
 begin
   result := (length(text) = 4) and
-            (PCardinal(text)^ and $dfdfdfdf =
-              ord('N') + ord('O') shl 8 + ord('N') shl 16 + ord('E') shl 24);
+            (PCardinal(text)^ and $dfdfdfdf = NONE_32);
 end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
@@ -3012,7 +3044,7 @@ begin
       inc(i);
       inc(p, i);
       dec(l, i);
-    until PWord(p)^ = ord('/') + ord('/') shl 8; // found http://xxxxx
+    until cardinal(PWord(p)^) = SLASH_16; // found http://xxxxx
     i := ByteScanIndex(pointer(p + 2), l - 2, ord('/'));
     if i < 0 then
       exit;
@@ -3143,6 +3175,18 @@ begin
         result := result * 10 + Qword(c);
       inc(P);
     until false;
+end;
+
+procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
+var
+  P: PUtf8Char;
+begin
+  if W.BEnd - W.B <= 16 then // note: PtrInt(BEnd - B) could be < 0
+    W.FlushToStream;
+  P := W.B + 1;
+  P^ := '"';
+  W.B := pointer(IP4TextAppend(ip4, pointer(P + 1)));
+  W.B^ := '"';
 end;
 
 
@@ -3637,8 +3681,7 @@ function THttpRequestContext.ParseHttp(P: PUtf8Char): boolean;
 begin
   result := false;
   if (PCardinal(P)^ <> HTTP_32) or
-     (PCardinal(P + 4)^ and $ffffff <>
-       ord('/') + ord('1') shl 8 + ord('.') shl 16) then
+     (PCardinal(P + 4)^ and $ffffff <> ord('/') + ord('1') shl 8 + ord('.') shl 16) then
     exit;
   if P[7] <> '1' then
     include(ResponseFlags, rfHttp10);
@@ -3666,7 +3709,7 @@ begin
     exit;
   // parse CommandMethod
   case PCardinal(P)^ of
-    ord('G') + ord('E') shl 8 + ord('T') shl 16 + ord(' ') shl 24:
+    GET_24 + ord(' ') shl 24:
       begin
         CommandMethod := _GETVAR; // optimistic
         inc(P, 4);
@@ -5444,7 +5487,7 @@ begin
            (ffHadDefineHost in fFlags) and
            (PCardinal(Host)^ <> HOST_127) then
         begin
-          n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
+          n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1); // = high()
           inc(p); // ignore both WriterHost[0/1]
           repeat
             inc(p);
@@ -5637,8 +5680,8 @@ var
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
 const
-  _SCHEME: array[boolean] of string[7]  = ('http', 'https');
-  _HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
+  _SCHEME: array[boolean] of TShort7  = ('http', 'https');
+  _HTTP:   array[boolean] of TShort15 = ('HTTP/1.1', 'HTTP/1.0');
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
@@ -5892,7 +5935,7 @@ end;
 
 function THttpAnalyzerToSave.DateTime: TDateTime;
 begin
-  result := (Int64(Date) + UNIXTIME_MINIMAL) / SecsPerDay + UnixDateDelta;
+  result := (Int64(Date) + UNIXTIME_MINIMAL) * SecsPerDate + UnixDateDelta;
 end;
 
 
@@ -6182,17 +6225,17 @@ function ToScope(Text: PCardinal; out Scope: THttpAnalyzerScope): boolean;
 begin
   result := false;
   case Text^ of // case-sensitive test in occurrence order
-    ord('G') + ord('E') shl 8 + ord('T') shl 16:
+    GET_24:
       Scope := hasGet;
     POST_32:
       Scope := hasPost;
-    ord('P') + ord('U') shl 8 + ord('T') shl 16:
+    PUT_24:
       Scope := hasPut;
     HEAD_32:
       Scope := hasHead;
-    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
+    DELE_32:
       Scope := hasDelete;
-    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24:
+    OPTI_32:
       Scope := hasOptions;
   else
     exit;
@@ -7412,6 +7455,182 @@ begin
 end;
 
 
+{ ******************** Additional High-Level Socket Functions }
+
+type
+  TSortByMacAddress = class // a fake class to propagate TMacAddressFilter
+    function Compare(const A, B): integer;
+  end;
+
+function TSortByMacAddress.Compare(const A, B): integer;
+var
+  ma: TMacAddress absolute A;
+  mb: TMacAddress absolute B;
+  filter: TMacAddressFilter;
+begin
+  result := 0;
+  if @ma = @mb then
+    exit;
+  // was called as arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare)
+  byte(filter) := PtrInt(self);
+  // sort with gateway first
+  if not (mafIgnoreGateway in filter) then
+  begin
+    result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
+    if result <> 0 then
+      exit;
+  end;
+  // sort by kind
+  if not (mafIgnoreKind in filter) then
+  begin
+    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
+    if result <> 0 then
+      exit;
+  end;
+  // sort by speed within this kind and gateway
+  if not (mafIgnoreSpeed in filter) then
+  begin
+    result := CompareCardinal(mb.Speed, ma.Speed);
+    if result <> 0 then
+      exit;
+  end;
+  // fallback to sort by IfIndex or plain MAC address
+  result := CompareCardinal(ma.IfIndex, mb.IfIndex);
+  if result = 0 then
+    result := SortDynArrayAnsiStringI(ma.Address, mb.Address);
+  if result = 0 then
+    result := ComparePointer(@ma, @mb);
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+var
+  allowed, available: TMacAddressKinds;
+  all: TMacAddressDynArray;
+  arr: TDynArray;
+  i, bct: PtrInt;
+begin
+  result := false;
+  all := copy(GetMacAddresses({upanddown=}false)); // using a 65-seconds cache
+  if all = nil then
+    exit;
+  arr.Init(TypeInfo(TMacAddressDynArray), all);
+  bct := 0;
+  available := [];
+  for i := 0 to high(all) do
+    with all[i] do
+    begin
+      include(available, Kind);
+      if Broadcast <> '' then
+        inc(bct);
+      {writeln(Kind, ' ', Address,' name=',Name,' ifindex=',IfIndex,
+         ' ip=',ip,' netmask=',netmask,' broadcast=',broadcast);}
+    end;
+  allowed := [];
+  if mafLocalOnly in Filter then
+    allowed := [makEthernet, makWifi]
+  else if mafEthernetOnly in Filter then
+    include(allowed, makEthernet);
+  if (available * allowed) <> [] then // e.g. if all makUndefined
+    for i := high(all) downto 0 do
+      if not (all[i].Kind in allowed) then
+        arr.Delete(i);
+  if (mafRequireBroadcast in Filter) and
+     (bct <> 0) then
+    for i := high(all) downto 0 do
+      if all[i].Broadcast = '' then
+        arr.Delete(i);
+  if all = nil then
+    exit;
+  if length(all) > 1 then
+    arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare);
+  Mac := all[0];
+  result := true;
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceNameAddressOrIP: RawUtf8; UpAndDown: boolean): boolean;
+var
+  n: integer;
+  all: TMacAddressDynArray;
+  mask: TIp4SubNet;
+  m, fnd: ^TMacAddress;
+begin
+  // retrieve the current network interfaces
+  result := false;
+  if InterfaceNameAddressOrIP = '' then
+    exit;
+  all := GetMacAddresses(UpAndDown); // from cache
+  n := length(all);
+  if n = 0 then
+    exit;
+  m := pointer(all);
+  fnd := nil;
+  if mask.From(InterfaceNameAddressOrIP) then
+    // search as IP bitmask pattern e.g. '192.168.1.0/24' or '192.168.1.13'
+    repeat
+      if mask.Match(m^.IP) then // e.g. 192.168.1.2 against '192.168.1.0/24'
+        if (fnd = nil) or
+           (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind]) then
+          fnd := m; // pickup the interface with the best hardware (paranoid)
+      inc(m);
+      dec(n);
+    until n = 0
+  else
+    // search for interface Name or MAC Address
+    repeat
+      if IdemPropNameU(m^.Name,    InterfaceNameAddressOrIP) or
+         IdemPropNameU(m^.Address, InterfaceNameAddressOrIP) then
+      begin
+        fnd := m;
+        break;
+      end;
+      inc(m);
+      dec(n);
+    until n = 0;
+  if fnd = nil then
+    exit;
+  Mac := fnd^;
+  result := true;
+end;
+
+procedure _GlobalInfoNet(Sender: TBinDictionary);
+var
+  dns: RawUtf8;
+  u: TRawUtf8DynArray;
+  mac: TMacAddress;
+begin
+  if GetMainMacAddress(mac) then
+  begin
+    Sender.UpdateTextNotVoid( 'net:mac',       mac.Address);
+    Sender.UpdateTextNotVoid( 'net:if',        mac.Name);
+    if mac.Mtu <> 0 then
+      Sender.UpdateText(     ['net:mtu'],     [mac.Mtu]);
+    if mac.Speed <> 0 then
+      Sender.UpdateText(     ['net:speed'],   [mac.Speed]);
+    Sender.UpdateText(       ['net:ifindex'], [mac.IfIndex]);
+    Sender.UpdateTextNotVoid( 'net:ifname',    mac.FriendlyName);
+    Sender.UpdateTextNotVoid( 'net:ip',        mac.IP);
+    Sender.UpdateTextNotVoid( 'net:mask',      mac.NetMask);
+    Sender.UpdateTextNotVoid('net:gateway',    mac.Gateway);
+    Sender.UpdateTextNotVoid('net:broadcast',  mac.Broadcast);
+    if mac.Kind > makUndefined then
+      Sender.UpdateText('net:kind', ShortTrim(ToText(mac.Kind), scLowerCase));
+    {$ifdef OSWINDOWS}
+    dns := mac.Dns;
+    {$endif OSWINDOWS}
+  end
+  else
+  begin
+    u := GetIPAddresses;
+    if u <> nil then
+      Sender.UpdateText('net:ip', u[0]);
+  end;
+  if dns = '' then
+    dns := RawUtf8ArrayToCsv(GetDomainNames);
+  Sender.UpdateTextNotVoid('net:dns', dns);
+end;
+
+
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
   _GETVAR :=  'GET';
@@ -7420,6 +7639,7 @@ initialization
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
   GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
+  GlobalInfoRegister('net:', @_GlobalInfoNet);
 
 finalization
 

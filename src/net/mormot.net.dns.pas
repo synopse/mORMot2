@@ -480,8 +480,8 @@ begin
       break;
     if Pos + len > max then
       exit;
-    AppendShortBuffer(pointer(@p[Pos]), len, @tmp);
-    AppendShortCharSafe('.', @tmp);
+    AppendShortBuffer(pointer(@p[Pos]), len, high(tmp), @tmp);
+    AppendShortCharSafe('.', tmp);
     inc(Pos, len);
   until false;
   if tmp[ord(tmp[0])] = '.' then
@@ -592,7 +592,7 @@ end;
 var
   NoTcpSafe: TLightLock;
   NoTcpServers: TRawUtf8DynArray;
-  NoTcpTix16: cardinal; // cache flushed after 65,536 seconds
+  NoTcpTix16: cardinal; // cache flushed after 64 seconds
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
@@ -656,7 +656,7 @@ begin
   begin
     // UDP frame was too small: try with a TCP connection
     // ensure was not marked in NoTcpServers (avoid unneeded timeout)
-    tix16 := GetTickCount64 shr 16;
+    tix16 := GetTickSec shr 6;
     NoTcpSafe.Lock;
     if NoTcpTix16 <> tix16 then
       NoTcpServers := nil; // flush after 1 minute
@@ -845,15 +845,13 @@ end;
 
 function DnsReverseLookup(const IP4, NameServers: RawUtf8; TimeoutMS: integer): RawUtf8;
 var
-  b: array[0..3] of byte; // to be asked in inverse byte order
+  rev: RawUtf8;
   res: TDnsResult;
   i: PtrInt;
 begin
   result := '';
-  PCardinal(@b)^ := 0;
-  if NetIsIP4(pointer(IP4), @b) and
-     DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa', [b[3], b[2], b[1], b[0]]),
-       res, drrPTR, NameServers, TimeoutMS) then
+  if ReverseIP4(IP4, rev) and
+     DnsQuery(rev, res, drrPTR, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrPTR then
       begin

@@ -340,7 +340,8 @@ type
     /// save the public key as a .public json file
     // - i.e. a json containing all published properties of this instance
     // - persist ToVariant() as an human-readable JSON file
-    function ToFile(const filename: TFileName): boolean;
+    function ToFile(const filename: TFileName;
+      fmt: TTextWriterJsonFormat = jsonHumanReadable): boolean;
     /// compute the hexadecimal fingerprint of this Certificate
     // - is the hash of its certificate and public key binary serialization
     function GetDigest(Algo: THashAlgo): RawUtf8;
@@ -1118,7 +1119,8 @@ type
     // high-level published properties of all stored certificates (e.g. Serial)
     // - as such, this file format is more verbose than CreateFromJson/SaveToJson
     // and may be convenient for managing certificates with a text/json editor
-    function SaveToFile(const jsonfile: TFileName): boolean;
+    function SaveToFile(const jsonfile: TFileName;
+      fmt: TTextWriterJsonFormat = jsonHumanReadable): boolean;
     /// load a certificates chain from some JSON-serialized .ca file
     // - you may use SaveToFile() method to create such JSON file
     // - would create only TEccCertificate instances with their public keys,
@@ -2806,10 +2808,11 @@ begin
   _VariantSaveJson(ToVariant(withBase64), twJsonEscape, result{%H-});
 end;
 
-function TEccCertificate.ToFile(const filename: TFileName): boolean;
+function TEccCertificate.ToFile(const filename: TFileName;
+  fmt: TTextWriterJsonFormat): boolean;
 begin
   if CheckCRC then
-    result := JsonReformatToFile(ToJson, filename)
+    result := JsonReformatToFile(ToJson, filename, fmt)
   else
     result := false;
 end;
@@ -4480,7 +4483,7 @@ begin
     crl := 0;
     for i := 0 to high(values) do
       if values[i] <> '' then
-        if PWord(values[i])^ = ord('/') + ord('/') shl 8 then
+        if cardinal(PWord(values[i])^) = SLASH_16 then
         begin
           // this is a base64-encoded TEccCertificateRevocation entry
           if crl = length(fCrl) then
@@ -4622,18 +4625,15 @@ begin
     result := jsonfile;
 end;
 
-function TEccCertificateChain.SaveToFile(const jsonfile: TFileName): boolean;
-var
-  json: RawUtf8;
+function TEccCertificateChain.SaveToFile(const jsonfile: TFileName;
+  fmt: TTextWriterJsonFormat): boolean;
 begin
   if (Count = 0) or
      (jsonfile = '') then
     result := false
   else
-  begin
-    json := SaveToFileContent;
-    result := JsonBufferReformatToFile(pointer(json), GetChainFileName(jsonfile));
-  end;
+    result := JsonBufferReformatToFile(
+      pointer(SaveToFileContent), GetChainFileName(jsonfile), fmt);
 end;
 
 function TEccCertificateChain.LoadFromFile(const jsonfile: TFileName): boolean;
@@ -5005,7 +5005,7 @@ begin
 end;
 
 const
-  ED: array[boolean] of string[7] = (
+  ED: array[boolean] of TShort7 = (
     'Decrypt', 'Encrypt');
 
 procedure TEcdheProtocol.SetIVAndMacNonce(aEncrypt: boolean);
@@ -6044,8 +6044,8 @@ end;
 
 function TCryptCertInternal.GetPeerInfo: RawUtf8;
 begin
-  if fEcc <> nil then
-    JsonBufferReformat(pointer(fEcc.ToJson({withbase64=}false)), result)
+  if fEcc <> nil then // in Hjson readable format - close enough to X509_print()
+    JsonBufferReformat(pointer(fEcc.ToJson({withbase64=}false)), result, jsonH)
   else
     result := '';
 end;

@@ -3425,7 +3425,7 @@ end;
 procedure TRestStorageInMemory.ComputeStateAfterLoad(
   loadstart: Int64; binary: boolean);
 const
-  _CALLER: array[boolean] of string[7] = (
+  _CALLER: array[boolean] of TShort7 = (
     'Json', 'Binary');
 var
   f: PtrInt;
@@ -4344,7 +4344,7 @@ begin
   else
   begin
     json := RawUtf8FromFile(fFileName);
-    result := LoadFromJson(pointer(json), length(json)); // buffer parsed in-place
+    result := LoadFromJson(pointer(json), length(json)); // parsed in-place
   end;
 end;
 

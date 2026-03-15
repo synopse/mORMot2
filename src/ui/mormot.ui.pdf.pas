@@ -3180,7 +3180,7 @@ begin
     (SS < 60) then // inlined EncodeTime()
     AValue := AValue + (H * MilliSecsPerHour +
                         MI * MilliSecsPerMin +
-                        SS * MilliSecsPerSec) / MilliSecsPerDay
+                        SS * MilliSecsPerSec) * MilliSecsPerDate
   else
     exit;
   result := true;
@@ -6054,15 +6054,15 @@ end;
 const
   { collection of flags defining various characteristics of the font
     see PDF Reference 1.3 #5.7.1 }
-  PDF_FONT_FIXED_WIDTH = 1;
-  PDF_FONT_SERIF = 2;
-  PDF_FONT_SYMBOLIC = 4;
-  PDF_FONT_SCRIPT = 8;
-  PDF_FONT_STD_CHARSET = 32;
-  PDF_FONT_ITALIC = 64;
-  PDF_FONT_ALL_CAP = 65536;
-  PDF_FONT_SMALL_CAP = 131072;
-  PDF_FONT_FORCE_BOLD = 262144;
+  PDF_FONT_FIXED_WIDTH = 1 shl 0;
+  PDF_FONT_SERIF       = 1 shl 1;
+  PDF_FONT_SYMBOLIC    = 1 shl 2;
+  PDF_FONT_SCRIPT      = 1 shl 3;
+  PDF_FONT_STD_CHARSET = 1 shl 5;
+  PDF_FONT_ITALIC      = 1 shl 6;
+  PDF_FONT_ALL_CAP     = 1 shl 16;
+  PDF_FONT_SMALL_CAP   = 1 shl 17;
+  PDF_FONT_FORCE_BOLD  = 1 shl 18;
 
 type
   /// a Ttf name record used for the 'name' Format 4 table

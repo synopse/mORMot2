@@ -1104,7 +1104,7 @@ function CompressStream(src: pointer; srcLen: integer; tmp: TStream;
 var
   z: TZLib;
   code: integer;
-  temp: array[word] of word; // 128KB is good enough (fine for IIS e.g.)
+  temp: TBuffer128K; // seems good enough (fine for IIS e.g.)
 begin
   z.Init(src, srcLen, tmp, nil, @temp, SizeOf(temp), TempBufSize);
   if z.CompressInit(CompressionLevel, ZlibFormat) then
@@ -1125,7 +1125,7 @@ function UncompressStream(src: pointer; srcLen: integer; tmp: TStream;
 var
   z: TZLib;
   code: integer;
-  temp: array[word] of word; // 128KB
+  temp: TBuffer128K;
 begin
   z.Init(src, srcLen, tmp, checkCRC, @temp, SizeOf(temp), TempBufSize);
   if z.UncompressInit(ZlibFormat) then

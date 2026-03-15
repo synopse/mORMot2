@@ -365,17 +365,17 @@ type
   /// SQL Query comparison operators
   // - used e.g. by CompareOperator() functions in mormot.orm.storage.pas
   TSqlCompareOperator = (
-     soEqualTo,
-     soNotEqualTo,
-     soLessThan,
-     soLessThanOrEqualTo,
-     soGreaterThan,
-     soGreaterThanOrEqualTo,
-     soBeginWith,
-     soContains,
-     soSoundsLikeEnglish,
-     soSoundsLikeFrench,
-     soSoundsLikeSpanish);
+    soEqualTo,
+    soNotEqualTo,
+    soLessThan,
+    soLessThanOrEqualTo,
+    soGreaterThan,
+    soGreaterThanOrEqualTo,
+    soBeginWith,
+    soContains,
+    soSoundsLikeEnglish,
+    soSoundsLikeFrench,
+    soSoundsLikeSpanish);
 
 const
   /// special TFieldBits value containing all field bits set to 1
@@ -395,7 +395,7 @@ const
     'RawBlob');   // ftBlob
 
   /// return either 'ID' or RowID'
-  ID_SHORT: array[{RowID=}boolean] of string[7] = ('ID', 'RowID');
+  ID_SHORT: array[{RowID=}boolean] of TShort7 = ('ID', 'RowID');
 
 var
   /// contains 'ID' as UTF-8 text with positive RefCnt (avoid const realloc)
@@ -867,6 +867,7 @@ type
 
 /// returns a 64-bit value as inlined ':(1234):' text
 function InlineParameter(ID: Int64): TShort31; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// returns a string value as inlined ':("value"):' text
 function InlineParameter(const value: RawUtf8): RawUtf8; overload;
@@ -1504,7 +1505,7 @@ begin
   if aType <= high(aType) then
     result := TrimLeftLowerCaseToShort(ToText(aType))
   else
-    FormatShort16('#%', [ord(aType)], result);
+    FormatShort('#%', [ord(aType)], result);
 end;
 
 function IsZero(const Fields: TFieldBits): boolean;
@@ -1787,9 +1788,8 @@ begin
   if FieldName <> nil then
   begin
     f := PInt64(FieldName)^;
-    result := (cardinal(f) and $ffdfdf = (ord('I') + ord('D') shl 8)) or
-        (f and $ffdfdfdfdfdf = (ord('R') + ord('O') shl 8 + ord('W') shl 16 +
-          ord('I') shl 24 + Int64(ord('D')) shl 32))
+    result := (cardinal(f) and $ffdfdf = (_ID16)) or
+              (f and $ffdfdfdfdfdf = (_ROWI32 + Int64(ord('D')) shl 32))
   end
   else
     result := false;
@@ -1798,9 +1798,8 @@ end;
 function IsRowID(FieldName: PUtf8Char): boolean;
 begin
   if FieldName <> nil then
-    result := (PInteger(FieldName)^ and $ffdfdf = ord('I') + ord('D') shl 8) or
-      ((PIntegerArray(FieldName)^[0] and $dfdfdfdf =
-       ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+    result := (PInteger(FieldName)^ and $ffdfdf = _ID16) or
+      ((PIntegerArray(FieldName)^[0] and $dfdfdfdf = _ROWI32) and
        (PIntegerArray(FieldName)^[1] and $ffdf = ord('D')))
   else
     result := false;
@@ -1810,10 +1809,9 @@ end;
 function IsRowID(FieldName: PUtf8Char; FieldLen: integer): boolean;
 begin
   if FieldLen = 2 then
-    result := PInteger(FieldName)^ and $dfdf = ord('I') + ord('D') shl 8
+    result := PInteger(FieldName)^ and $dfdf = _ID16
   else if FieldLen = 5 then
-    result := (PInteger(FieldName)^ and $dfdfdfdf =
-               ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+    result := (PInteger(FieldName)^ and $dfdfdfdf = _ROWI32) and
               (ord(FieldName[4]) and $df = ord('D'))
   else
     result := false;
@@ -1821,11 +1819,9 @@ end;
 
 function IsRowIDShort(const FieldName: ShortString): boolean;
 begin
-  result := ((PIntegerArray(@FieldName)^[0] and $dfdfff =
-              2 + ord('I') shl 8 + ord('D') shl 16) or
-            ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
-              5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
-             (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8)));
+  result := ((PIntegerArray(@FieldName)^[0] and $dfdfff = 2 + _ID16 shl 8) or
+            ((PIntegerArray(@FieldName)^[0] and $dfdfdfff = 5 + _ROW24 shl 8) and
+             (PIntegerArray(@FieldName)^[1] and $dfdf = _ID16)));
 end;
 
 function IsSqlReservedByTwo(TwoChars: PUtf8Char): boolean;
@@ -2394,13 +2390,18 @@ end;
 
 function InlineParameter(ID: Int64): TShort31;
 begin
-  FormatShort31(':(%):', [ID], result);
+  FormatShort(':(%):', [ID], result);
 end;
 
 function InlineParameter(const value: RawUtf8): RawUtf8;
 begin
   QuotedStrJson(value, result, ':(', '):');
 end;
+
+const
+  _FROM32 = ord('F') + ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24;
+  _WHER32 = ord('W') + ord('H') shl 8 + ord('E') shl 16 + ord('R') shl 24;
+  _NULL32 = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
 
 function PosSelectTable(Sql: PUtf8Char): PUtf8Char;
 begin
@@ -2416,8 +2417,7 @@ begin
               if Sql^ = #0 then
                 break;
             until Sql^ > ' ';
-            if (PCardinal(Sql)^ and $dfdfdfdf = ord('F') +
-                 ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
+            if (PCardinal(Sql)^ and $dfdfdfdf = _FROM32) and
                (Sql[4] <= ' ') then // found 'FROM table1,table2'
             begin
               result := GotoNextNotSpace(Sql + 5); // return 'table1,table2'
@@ -2467,8 +2467,7 @@ begin
                     if Sql^ = #0 then
                       exit;
                   until Sql^ > ' ';
-                  if (PCardinal(Sql)^ and $dfdfdfdf = ord('F') +
-                       ord('R') shl 8 + ord('O') shl 16 + ord('M') shl 24) and
+                  if (PCardinal(Sql)^ and $dfdfdfdf = _FROM32) and
                      (Sql[4] <= ' ') then
                   begin
                     FastSetString(SelectFields^, beg, len);
@@ -2560,8 +2559,7 @@ begin
         until Sql^ = ''''; // double quotes will reuse this loop
       #9 .. ' ':
         if result and
-           (PCardinal(Sql + 1)^ and $dfdfdfdf = ord('W') +
-              ord('H') shl 8 + ord('E') shl 16 + ord('R') shl 24) and
+           (PCardinal(Sql + 1)^ and $dfdfdfdf = _WHER32) and
            (PCardinal(Sql + 5)^ and $ffdf = ord('E') + ord(' ') shl 8) then
           result := false; // don't cache SELECT with WHERE and no ?
       '?':
@@ -2595,13 +2593,13 @@ begin
         repeat
           inc(result)
         until result^ in [#0, #10]
-      else if c = ord('/') + ord('*') shl 8 then
+      else if c = SLBEG_16 then
       begin
         // C comments
         inc(result);
         repeat
           inc(result);
-          if cardinal(PWord(result)^) = ord('*') + ord('/') shl 8 then
+          if cardinal(PWord(result)^) = SLEND_16 then
           begin
             inc(result, 2);
             break;
@@ -2984,7 +2982,7 @@ end;
 { TResultsWriter }
 
 const
-  VOID_ARRAYFIELD: array[boolean] of string[16] = (
+  VOID_ARRAYFIELD: array[boolean] of TShort16 = (
     '[]'#10, '{"FieldCount":0}'); // same as sqlite3_get_table()
 
 procedure TResultsWriter.CancelAllVoid;
@@ -3172,9 +3170,6 @@ end;
 
 { TSelectStatement }
 
-const
-  NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
-
 constructor TSelectStatement.Create(const SQL: RawUtf8;
   const GetFieldIndex: TOnGetFieldIndex;
   const SimpleFields: TSelectStatementSelectDynArray);
@@ -3241,7 +3236,7 @@ var
       B := P;
       repeat
         inc(P);
-      until not (jcJsonIdentifier in JSON_CHARS[P^]);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
       FastSetString(select.SubField, B, P - B);
       fHasSelectSubFields := true;
     end;
@@ -3281,7 +3276,7 @@ var
         exit; // end of string before end quote -> incorrect
       RawUtf8ToVariant(Where.Value, Where.ValueVariant);
     end
-    else if (PInteger(P)^ and $DFDFDFDF = NULL_UPP) and
+    else if (PInteger(P)^ and $DFDFDFDF = _NULL32) and
             (P[4] in [#0..' ', ';']) then
     begin
       // NULL statement
@@ -3373,7 +3368,7 @@ var
       B := P;
       repeat
         inc(P);
-      until not (jcJsonIdentifier in JSON_CHARS[P^]);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
       FastSetString(Where.SubField, B, P - B); // '.subfield1.subfield2'
       fWhereHasSubFields := true;
       P := GotoNextNotSpace(P);
@@ -4243,14 +4238,13 @@ function StartWithQuotedID(P: PUtf8Char; out ID: TID): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 begin
   if PCardinal(P)^ and $ffffdfdf =
-       ord('I') + ord('D') shl 8 + ord('"') shl 16 + ord(':') shl 24 then
+       _ID16 + ord('"') shl 16 + ord(':') shl 24 then
   begin
     SetID(P + 4, ID{%H-});
     result := ID > 0;
     exit;
   end
-  else if (PCardinalArray(P)^[0] and $dfdfdfdf =
-           ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+  else if (PCardinalArray(P)^[0] and $dfdfdfdf = _ROWI32) and
          (PCardinalArray(P)^[1] and $ffffdf =
            ord('D') + ord('"') shl 8 + ord(':') shl 16) then
   begin
@@ -4265,17 +4259,14 @@ end;
 function StartWithID(P: PUtf8Char; out ID: TID): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  if PCardinal(P)^ and $ffdfdf =
-       ord('I') + ord('D') shl 8 + ord(':') shl 16 then
+  if PCardinal(P)^ and $ffdfdf = _ID16 + ord(':') shl 16 then
   begin
     SetID(P + 3, ID{%H-});
     result := ID > 0;
     exit;
   end
-  else if (PCardinalArray(P)^[0] and $dfdfdfdf =
-           ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
-          (PCardinalArray(P)^[1] and $ffdf =
-           ord('D') + ord(':') shl 8) then
+  else if (PCardinalArray(P)^[0] and $dfdfdfdf = _ROWI32) and
+          (PCardinalArray(P)^[1] and $ffdf = ord('D') + ord(':') shl 8) then
   begin
     SetID(P + 6, ID);
     result := ID > 0;

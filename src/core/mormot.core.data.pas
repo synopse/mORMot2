@@ -15,7 +15,7 @@ unit mormot.core.data;
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray and TDynArrayHashed Wrappers
     - Integer Arrays Extended Process
-    - RawUtf8 String Values Interning and TRawUtf8List
+    - RawUtf8 String Values Interning and TRawUtf8List/TBinDictionary
     - Abstract Radix Tree Classes
 
   *****************************************************************************
@@ -35,6 +35,7 @@ uses
   {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.rtti,
   mormot.core.datetime,
   mormot.core.unicode,
@@ -2010,19 +2011,14 @@ type
 
 type
   /// used to access any dynamic arrray items using fast hash
-  // - by default, binary sort could be used for searching items for TDynArray:
-  // using a hash is faster on huge arrays for implementing a dictionary
-  // - in this current implementation, modification (update or delete) of an
-  // element is not handled yet: you should rehash all content - only
-  // TDynArrayHashed.FindHashedForAdding / FindHashedAndUpdate /
-  // FindHashedAndDelete will refresh the internal hash
-  // - this object extends the TDynArray type, since presence of Hashs[] dynamic
-  // array will increase code size if using TDynArrayHashed instead of TDynArray
-  // - in order to have the better performance, you should use an external Count
-  // variable, AND set the Capacity property to the expected maximum count (this
-  // will avoid most re-hashing for FindHashedForAdding+FindHashedAndUpdate)
-  // - consider using TSynDictionary from mormot.core.json for a thread-safe
-  // stand-alone storage of key/value pairs
+  // - this object extends the TDynArray type, adding the TDynArrayHasher logic
+  // - call FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete to
+  // set the values, and maintain the hash table accurate - not plain Add/Delete
+  // - call FindHashed for fast O(1) lookup - not plain Find O(n) method
+  // - for best performance, use an external Count and set the Capacity property
+  // to the expected maximum count: this would avoid most rehashing at adding
+  // - consider TSynDictionary from mormot.core.json.pas, the modern TKeyValue<>
+  // from mormot.core.collections.pas, or the smaller TBinDictionary below
   {$ifdef UNDIRECTDYNARRAY}
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
@@ -2545,6 +2541,15 @@ function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt
 function UpdateNameValue(var Content: RawUtf8;
   const Name, UpperName, NewValue: RawUtf8): boolean;
 
+/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
+// 'Content-Type: application/json' or 'Content-Type: application/xml'
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// search if the WebSocketUpgrade() header is present
+// - consider checking the hsrConnectionUpgrade flag instead
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
+
 type
   /// define IniToObject() and ObjectToIni() extended features
   // - nested objects and multi-line text (if ifMultiLineSections is set) are
@@ -2580,17 +2585,8 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main
     Level: integer = 0; Features: TIniFeatures =
       [ifClassSection, ifMultiLineSections, ifArraySection]): RawUtf8;
 
-/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
-// 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
-/// search if the WebSocketUpgrade() header is present
-// - consider checking the hsrConnectionUpgrade flag instead
-function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
-
-
-{ ************ RawUtf8 String Values Interning and TRawUtf8List }
+{ ************ RawUtf8 String Values Interning and TRawUtf8List/TBinDictionary }
 
 type
   /// store a TRawUtf8DynArray with its efficient hash table
@@ -3069,6 +3065,66 @@ procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
 procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
 
+type
+  /// store binary key/value pairs with an efficient O(1) hash table
+  // - works with pointers on text or binary, when TSynDictionary is overkill
+  TBinDictionary = class(TSynPersistent)
+  protected
+    fValue: TRawByteStringDynArray;
+    fCount: integer;
+    fHash: TDynArrayHashed;
+  public
+    /// initialize the data structure
+    constructor Create; override;
+    /// add a key/value pair in the storage directly from memory buffers
+    // - returns -1 if the key was already existing, or if KeyLen > 255
+    function Add(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+    /// add or replace a binary key/value pair in the storage
+    function Update(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+    /// add or replace a text key/value pair in the storage
+    function UpdateText(const Key, Value: RawUtf8): PtrInt; overload;
+    /// add or replace a text key/value pair in the storage
+    function UpdateText(const Key, Value: array of const): TBinDictionary; overload;
+    /// add or replace a text key/value pair in the storage if Value <> ''
+    procedure UpdateTextNotVoid(const Key, Value: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// merge some additional key/value pairs
+    procedure UpdateFrom(Another: TBinDictionary);
+    /// case-sensitive search for a key index in Value[], using the internal hash
+    // - can optionally delete any matching item
+    function IndexOf(Key: pointer; KeyLen: PtrInt;
+      AndDelete: boolean = false): PtrInt; overload;
+    /// raw access to each key buffer as encoded in Value[] - not #0 terminated
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Keys(Index: PtrInt; Len: PPtrInt = nil): pointer;
+    /// raw access to each value buffer as encoded in Value[] - #0 terminated
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Values(Index: PtrInt; Len: PPtrInt = nil): pointer;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// case-sensitive search and return a value, using the internal hash
+    // - returns nil or the found Value (#0 terminated) - with optional ValueLen
+    // - warning: @ValueLen should be a PtrInt, not 32-bit integer
+    function Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt = nil): pointer; overload;
+    /// case-sensitive search and return a value, using the internal hash
+    // - overload to Find() using a ShortString as convenient constant Key
+    function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
+    /// erase the whole storage
+    procedure Clear;
+    /// write all key = value pairs as human-readable text
+    function AsText(const Sep: RawUtf8 = ' = '; const Feed: RawUtf8 = #10): RawUtf8;
+    /// raw storage, encoded as B[keysize]+key+value so value is #0 terminated
+    property Value: TRawByteStringDynArray
+      read fValue;
+    /// maintain the efficient hash table of the raw storage Value[]/Count
+    property Hash: TDynArrayHashed
+      read fHash;
+    /// number of key/value pairs in Value[]
+    property Count: integer
+      read fCount;
+  end;
+  /// callback used e.g. to registry GlobalInfoRegister() delayed entries
+  TOnBinDictionaryExecute = procedure(Sender: TBinDictionary);
+
 var
   /// low-level JSON unserialization function
   // - defined in this unit to avoid circular reference with mormot.core.json,
@@ -3080,6 +3136,21 @@ var
     EndOfObject: PUtf8Char; Rtti: TRttiCustom;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
     Interning: TRawUtf8InterningAbstract);
+
+/// search for an entry in GlobalInfoRegister() resolvers e.g. 'os:arch'
+// - this unit registers os: hw: exe: env: user: bios: main namespaces
+// - mormot.net.http.pas/mormot.net.ldap.pas register net: and ldap: namespaces
+function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer; overload;
+
+/// search for an entry in GlobalInfoRegister() resolvers e.g. 'os:arch'
+function GlobalInfoFind(const Key: RawUtf8): RawUtf8; overload;
+
+/// can be used for delayed resolution of e.g. 'net:' or 'ldap:' namespaces
+procedure GlobalInfoRegister(Prefix: PUtf8Char; OnAdd: TOnBinDictionaryExecute);
+
+/// trigger all pending GlobalInfoRegister() delayed resolution
+// - may take some time, e.g. for 'ldap:' entries from mormot.net.ldap.pas
+function GlobalInfoRegisterAll: TBinDictionary;
 
 
 { ************ Abstract Radix Tree Classes }
@@ -4430,7 +4501,7 @@ var
             end;
           end;
         end;
-        nested := GotoNextLine(nested)
+        nested := GotoNextLine(nested);
       until nested = nil;
     end;
   end;
@@ -4597,7 +4668,7 @@ var
               if woHumanReadableEnumSetAsComment in Options then
               begin
                 p^.Value.Cache.EnumInfo^.GetEnumNameAll(
-                  s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
+                  s, '; values=', #10, {quoted=}false, {trimmed=}true, {sep=}'/');
                 W.AddString(s);
               end;
               // AddValueJson() would have written "quotes" or ["a","b"]
@@ -4679,7 +4750,7 @@ begin
 end;
 
 
-{ ************ RawUtf8 String Values Interning and TRawUtf8List }
+{ ************ RawUtf8 String Values Interning and TRawUtf8List/TBinDictionary }
 
 var // filled at startup with a 32-bit random value to avoid hash flooding
   HashSeed: cardinal; // defined locally in this unit to avoid symbol export
@@ -4718,7 +4789,6 @@ const
     HashIntern, HashInternI);
   COMP_PUTF8CHAR: array[{CaseInsensitive:}boolean] of TDynArraySortCompare = (
     SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI);
-
 
 { TRawUtf8Hashed }
 
@@ -5064,6 +5134,363 @@ begin
     UniqueText(PRawUtf8(vd.VPointer)^);
 end;
 
+{ TBinDictionary }
+
+function Hash255(Item: PAnsiChar; Hasher: THasher): cardinal;
+begin
+  Item := PPointer(Item)^;
+  result := Hasher(HashSeed, Item + 1, ord(Item^)); // format is B[keysize]+key
+end;
+
+function Sort255(const A, B): integer;
+var
+  pa, pb: PByteArray;
+begin
+  pa := pointer(A);
+  pb := pointer(B);
+  result := pa[0] - pb[0]; // format is B[keysize]+key
+  if result = 0 then       // same key length: compare binary
+    result := MemCmp(@pa[1], @pb[1], pa[0]);
+end;
+
+constructor TBinDictionary.Create;
+begin
+  fHash.Init(TypeInfo(TRawByteStringDynArray), fValue, @Hash255, @Sort255, nil, @fCount);
+end;
+
+function TBinDictionary.Keys(Index: PtrInt; Len: PPtrInt): pointer;
+begin
+  result := nil;
+  if PtrUInt(Index) >= PtrUInt(fCount) then
+    exit;
+  result := pointer(fValue[Index]);
+  if Len <> nil then
+    Len^ := PByte(result)^;
+  inc(PByte(result));
+end;
+
+function TBinDictionary.Values(Index: PtrInt; Len: PPtrInt): pointer;
+var
+  keylen: PtrInt;
+begin
+  result := nil;
+  if (self = nil) or
+     (PtrUInt(Index) >= PtrUInt(fCount)) then
+    exit;
+  result := pointer(fValue[Index]); // never nil
+  keylen := PByte(result)^ + 1;
+  if Len <> nil then
+    Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
+  inc(PByte(result), keylen);
+end;
+
+function PrepareKeyValue(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PByteArray;
+begin
+  result := nil;
+  if KeyLen > 255 then // Add(nil, nil, 0, 0) is a valid request
+    exit;
+  result := FastNewString(KeyLen + ValueLen + 1); // B[keysize]+key+value
+  result[0] := KeyLen;
+  MoveFast(Key^, result[1], KeyLen);
+  MoveFast(Value^, result[KeyLen + 1], ValueLen);
+end;
+
+function TBinDictionary.Add(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+var
+  tmp: pointer; // transient RawByteString
+  added: boolean;
+begin
+  tmp := PrepareKeyValue(Key, Value, KeyLen, ValueLen);
+  if tmp <> nil then
+  begin
+    result := fHash.FindHashedForAdding(tmp, added);
+    if added then
+    begin
+      pointer(fValue[result]) := tmp; // direct assign with refcnt=1
+      exit;
+    end;
+    FastAssignNew(tmp);
+  end;
+  result := -1;
+end;
+
+function TBinDictionary.Update(Key, Value: pointer; KeyLen, ValueLen: PtrInt): PtrInt;
+var
+  tmp: pointer; // transient RawByteString
+begin
+  tmp := PrepareKeyValue(Key, Value, KeyLen, ValueLen);
+  if tmp <> nil then
+  begin
+    result := fHash.FindHashedAndUpdate(tmp, {add=}true);
+    FastAssignNew(tmp);
+  end
+  else
+    result := -1;
+end;
+
+function TBinDictionary.UpdateText(const Key, Value: RawUtf8): PtrInt;
+begin
+  result := Update(pointer(Key), pointer(Value), length(Key), length(Value));
+end;
+
+function TBinDictionary.UpdateText(const Key, Value: array of const): TBinDictionary;
+begin
+  UpdateText(Make(Key), Make(Value));
+  result := self; // for a fluent interface call
+end;
+
+procedure TBinDictionary.UpdateTextNotVoid(const Key, Value: RawUtf8);
+begin
+  if Value <> '' then
+    UpdateText(Key, Value);
+end;
+
+procedure TBinDictionary.UpdateFrom(Another: TBinDictionary);
+var
+  i: PtrInt;
+begin
+  if Another <> nil then
+    for i := 0 to Another.Count - 1 do
+      fHash.FindHashedAndUpdate(Another.Value[i], {add=}true);
+end;
+
+function TBinDictionary.IndexOf(Key: pointer; KeyLen: PtrInt; AndDelete: boolean): PtrInt;
+var
+  pk: pointer;      // fake RawByteString for Hash255/Sort255
+  tmp: TByteToByte; // local copy in B[keysize]+key layout for hashing
+begin
+  result := -1;
+  if (self = nil) or
+     (KeyLen > 255) then // IndexOf(nil, 0) is a valid request
+    exit;
+  tmp[0] := KeyLen;
+  MoveFast(Key^, tmp[1], KeyLen);
+  pk := @tmp;
+  if AndDelete then
+    result := fHash.FindHashedAndDelete(pk)
+  else
+    result := fHash.FindHashed(pk);
+end;
+
+function TBinDictionary.Find(Key: pointer; KeyLen: PtrInt; ValueLen: PPtrInt): pointer;
+begin
+  result := Values(IndexOf(Key, KeyLen), ValueLen);
+end;
+
+function TBinDictionary.Find(const Key: ShortString; ValueLen: PPtrInt): pointer;
+var
+  pk: pointer; // fake RawByteString for Hash255/Sort255
+begin
+  pk := @Key;
+  result := Values(fHash.FindHashed(pk));
+end;
+
+procedure TBinDictionary.Clear;
+begin
+  fHash.Clear;
+  fHash.ForceReHash;
+end;
+
+function TBinDictionary.AsText(const Sep, Feed: RawUtf8): RawUtf8;
+var
+  u: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  SetLength(u, fCount);
+  for i := 0 to fCount - 1 do
+    Make([PShortString(fValue[i])^, Sep, PUtf8Char(Values(i))], u[i]);
+  QuickSortRawUtf8(u, fCount);
+  PRawUtf8ToCsv(pointer(u), fCount, Feed, false, result);
+end;
+
+var // late resolution e.g. of ldap: macros by GlobalInfoRegister()
+  _GlobalInfoSafe: TLightLock;
+  _GlobalInfoPre: TPUtf8CharDynArray;
+  _GlobalInfoAdd: array of TOnBinDictionaryExecute;
+  _GlobalInfo: TBinDictionary;
+
+procedure GlobalInfoRegister(Prefix: PUtf8Char; OnAdd: TOnBinDictionaryExecute);
+begin
+  _GlobalInfoSafe.Lock;
+  PtrArrayAdd(_GlobalInfoPre, Prefix);
+  PtrArrayAdd(_GlobalInfoAdd, @OnAdd);
+  _GlobalInfoSafe.UnLock;
+end;
+
+function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
+var
+  i: PtrInt;
+begin
+  _GlobalInfoSafe.Lock;
+  if _GlobalInfo = nil then
+    _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
+  result := _GlobalInfo.Find(Key, KeyLen, @ValueLen);
+  if result = nil then
+  begin
+    repeat
+      i := StrStartArray(Key, pointer(_GlobalInfoPre));
+      if i < 0 then
+        break; // allow several GlobalInfoRegister() on the same namespace
+      _GlobalInfoAdd[i](_GlobalInfo); // may take some time
+      PtrArrayDelete(_GlobalInfoPre, i);
+      PtrArrayDelete(_GlobalInfoAdd, i);
+      if result = nil then
+        result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
+    until false;
+  end;
+  _GlobalInfoSafe.UnLock;
+end;
+
+function GlobalInfoFind(const Key: RawUtf8): RawUtf8;
+var
+  v: pointer;
+  l: PtrInt;
+begin
+  v := GlobalInfoFind(pointer(Key), length(Key), l);
+  FastSetString(result, v, l);
+end;
+
+function GlobalInfoRegisterAll: TBinDictionary;
+var
+  i: PtrInt;
+begin
+  _GlobalInfoSafe.Lock;
+  if _GlobalInfo = nil then
+    _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
+  result := _GlobalInfo;
+  for i := 0 to length(_GlobalInfoAdd) - 1 do
+    _GlobalInfoAdd[i](result); // may take some time
+  _GlobalInfoPre := nil;
+  _GlobalInfoAdd := nil;
+  _GlobalInfoSafe.UnLock;
+end;
+
+procedure _GlobalInfoOs(Sender: TBinDictionary);
+begin
+  Sender.UpdateText( 'os:name',           OSVersionShort);
+  Sender.UpdateText( 'os:family',         LowerCaseU(OS_TEXT));
+  Sender.UpdateText( 'os:version',        OSVersionText);
+  Sender.UpdateText(['os:ram'],          [SystemMemorySize]);
+  Sender.UpdateText( 'os:hostname',       Executable.Host);
+  Sender.UpdateText(['os:temp'],         [GetSystemPath(spTemp)]);
+  Sender.UpdateText(['os:cwd'],          [GetCurrentDir]);
+  Sender.UpdateText( 'os:pathsep',        PathDelim);
+  Sender.UpdateText(['os:tzoff'],        [TimeZoneLocalBias * SecsPerMin]);
+  if SystemInfo.dwPageSize <> 0 then
+    Sender.UpdateText(['os:pagesize'],   [SystemInfo.dwPageSize]);
+  {$ifdef OSPOSIX}
+  Sender.UpdateText( 'os:product',        LowerCaseU(OS_NAME[OS_KIND]));
+  if OS_DISTRI > ldUndefined then
+    Sender.UpdateText(['os:dist'],       [DISTRI_NAME[OS_DISTRI]]);
+  Sender.UpdateTextNotVoid('os:build',    SystemInfo.uts.release);
+  Sender.UpdateTextNotVoid('os:release',  SystemInfo.release);
+  {$else}
+  Sender.UpdateTextNotVoid('os:product',  WindowsProductName);
+  if WindowsUbr <> 0 then
+    Sender.UpdateText(['os:build'], [WindowsUbr]);
+  Sender.UpdateTextNotVoid('os:winver',   WindowsDisplayVersion);
+  {$endif OSPOSIX}
+end;
+
+procedure _GlobalInfoCpu(Sender: TBinDictionary);
+begin
+  Sender.UpdateText( 'cpu:name',         CpuInfoText);
+  Sender.UpdateText(['cpu:threads'],    [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['cpu:cores'],      [CpuCores]);
+  Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
+  if HasHWAes then
+    Sender.UpdateText('cpu:aes',        'true');
+  {$ifdef CPUINTEL}
+  if cfAVX in CpuFeatures then
+    Sender.UpdateText('cpu:avx',        'true');
+  if cfAVX2 in CpuFeatures then
+    Sender.UpdateText('cpu:avx2',       'true');
+  if IntelAvx10 > 0 then
+    Sender.UpdateText(['cpu:avx10'],    [IntelAvx10]);
+  Sender.UpdateText(['cpu:family'],     [CpuFamily]);
+  Sender.UpdateText(['cpu:model'],      [CpuModel]);
+  Sender.UpdateText(['cpu:cachesize'],  [CpuCacheSize]);
+  Sender.UpdateTextNotVoid('cpu:caches', CpuCacheText);
+  Sender.UpdateTextNotVoid('cpu:id',     IntelManufacturer);
+  Sender.UpdateTextNotVoid('cpu:hyp',    IntelHypervisor);
+  Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
+  {$endif CPUINTEL}
+  {$ifdef CPUARM3264}
+  Sender.UpdateTextNotVoid('cpu:model',        CpuArmModel);
+  Sender.UpdateTextNotVoid('cpu:manufacturer', CpuArmImplementer);
+  {$endif CPUARM3264}
+end;
+
+procedure _GlobalInfoUser(Sender: TBinDictionary);
+{$ifndef OSPOSIX}
+var
+  u: RawUtf8;
+{$endif OSPOSIX}
+begin
+  Sender.UpdateText( 'user:name',    Executable.User);
+  Sender.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
+  Sender.UpdateText(['user:data'],  [GetSystemPath(spUserData)]);
+  Sender.UpdateText( 'user:shell',   GetSystemShell);
+  {$ifdef OSPOSIX}
+  Sender.UpdateText(['user:uid'],   [PosixUid]);
+  Sender.UpdateText(['user:gid'],   [PosixGid]);
+  {$else}
+  Sender.UpdateTextNotVoid( 'user:uid', CurrentSid(wttProcess, nil, @u));
+  Sender.UpdateTextNotVoid( 'user:domain', u);
+  {$endif OSPOSIX}
+end;
+
+procedure _GlobalInfoBios(Sender: TBinDictionary);
+begin
+  Sender.UpdateTextNotVoid( 'bios:info',         BiosInfoText);
+  GetRawSmbios; // may return false but some _Smbios[] are still populated by OS
+  Sender.UpdateTextNotVoid( 'bios:vendor',       _Smbios[sbiBiosVendor]);
+  Sender.UpdateTextNotVoid( 'bios:product',      _Smbios[sbiProductName]);
+  Sender.UpdateTextNotVoid( 'bios:version',      _Smbios[sbiBiosVersion]);
+  Sender.UpdateTextNotVoid( 'bios:serial',       _Smbios[sbiSerial]);
+  Sender.UpdateTextNotVoid( 'bios:uuid',         _Smbios[sbiUuid]);
+  Sender.UpdateTextNotVoid( 'bios:sku',          _Smbios[sbiSku]);
+  Sender.UpdateTextNotVoid( 'bios:family',       _Smbios[sbiFamily]);
+  Sender.UpdateTextNotVoid( 'bios:manufacturer', _Smbios[sbiManufacturer]);
+  Sender.UpdateTextNotVoid( 'bios:board',        _Smbios[sbiBoardProductName]);
+  Sender.UpdateTextNotVoid( 'bios:boardserial',  _Smbios[sbiBoardSerial]);
+  Sender.UpdateTextNotVoid( 'bios:cpu',          _Smbios[sbiCpuVersion]);
+  if PosExI('virtual ', _Smbios[sbiFamily]) <> 0 then
+    Sender.UpdateText('bios:vm', 'true');
+end;
+
+procedure _GlobalInfoExe(Sender: TBinDictionary);
+begin
+  Sender.UpdateText( 'exe:arch',   CPU_ARCH_TEXT);
+  Sender.UpdateText( 'exe:name',   Executable.ProgramName);
+  Sender.UpdateText(['exe:cmd'],  [Executable.ProgramFileName]);
+  Sender.UpdateText(['exe:path'], [Executable.ProgramFilePath]);
+  Sender.UpdateText( 'exe:agent',  Executable.Version.UserAgent);
+  Sender.UpdateText(['exe:log'],  [GetSystemPath(spLog)]);
+  Sender.UpdateText(['exe:pid'],  [GetCurrentProcessId]);
+  Sender.UpdateText(['exe:ppid'], [GetParentProcess]);
+  if Assigned(Executable.Version) and
+     (Executable.Version.Major <> 0) then
+  begin
+    Sender.UpdateText(['exe:major'],   [Executable.Version.Major]);
+    Sender.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
+    Sender.UpdateText(['exe:version'], [Executable.Version.Detailed]);
+  end;
+  {$ifdef OSWINDOWS}
+  if IsWow64 then
+    Sender.UpdateText('exe:wow64', 'true');
+  if IsWow64Emulation then
+    Sender.UpdateText('exe:prism', 'true');
+  {$endif OSWINDOWS}
+end;
+
+procedure _GlobalInfoEnv(Sender: TBinDictionary);
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(_SystemEnvNames) - 1 do
+    Sender.UpdateText(['env:', _SystemEnvNames[i]], [_SystemEnvValues[i]]);
+end;
 
 { TRawUtf8List }
 
@@ -7255,8 +7682,7 @@ end;
 
 { TDynArray }
 
-procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue;
-  aCountPointer: PInteger);
+procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger);
 begin
   fInfo := aInfo;
   fValue := @aValue;
@@ -7278,8 +7704,7 @@ begin
   fNoFinalize := false;
 end;
 
-procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
-  aCountPointer: PInteger);
+procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger);
 begin
   if aTypeInfo^.Kind <> rkDynArray then
     EDynArray.RaiseUtf8('TDynArray.Init: % is %, expected rkDynArray',
@@ -9152,11 +9577,10 @@ end;
 
 procedure TDynArray.SetCompare(const aCompare: TDynArraySortCompare);
 begin
-  if @aCompare <> @fCompare then
-  begin
-    @fCompare := @aCompare;
-    fSorted := false;
-  end;
+  if @aCompare = @fCompare then
+    exit;
+  @fCompare := @aCompare;
+  fSorted := false;
 end;
 
 procedure TDynArray.SetNoFinalize(aValue: boolean);
@@ -9305,9 +9729,9 @@ var
 begin
   result := -1;
   if (Source = nil) or
-     (fInfo.Cache.ItemSize > SizeOf(tmp)) then
+     (fInfo.Cache.ItemSize > SizeOf(tmp)) then // no record should be > 2KB
     exit;
-  if fInfo.Cache.ItemInfoManaged = nil then // nil for unmanaged items
+  if fInfo.Cache.ItemInfoManaged = nil then    // nil for unmanaged items
     data := Source
   else
   begin
@@ -11792,11 +12216,16 @@ begin
         // unsupported types will contain nil
     end;
   // setup internal function wrappers
-  GetDataFromJson := _GetDataFromJson;
+  GetDataFromJson :=  _GetDataFromJson;
+  GlobalInfoRegister('os:',   _GlobalInfoOs);
+  GlobalInfoRegister('cpu:',  _GlobalInfoCpu);
+  GlobalInfoRegister('exe:',  _GlobalInfoExe);
+  GlobalInfoRegister('env:',  _GlobalInfoEnv);
+  GlobalInfoRegister('user:', _GlobalInfoUser);
+  GlobalInfoRegister('bios:', _GlobalInfoBios);
   // in-memory hashing are seeded from random to avoid hash flooding
   HashSeed := SystemEntropy.Startup.c0;
 end;
-
 
 initialization
   InitializeUnit;

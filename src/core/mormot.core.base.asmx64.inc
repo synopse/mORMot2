@@ -862,9 +862,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rcx, rdi
         mov     rdx, rsi
 {$endif WIN64ABI}
-        xor     eax, eax    // reset eax high bits for setg al below
-        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
-        pshufd  xmm0, xmm0, 0
+        xor     eax, eax               // reset eax high bits for setg al below
+        movd    xmm0, edx              // xmm0 = 128-bit of deleted integer
+        pshufd  xmm0, xmm0, 0          // broadcast to all 4 dwords in xmm0
         test    cl, 3
         jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
         // ensure P is 256-bit aligned (for avx2)
@@ -879,8 +879,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 @ok:    {$ifdef ASMX64AVXNOCONST}
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX2 // also for PIC
         jz      @sse2
-        vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane
-        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to ymm0 128-bit high lane
+        vpbroadcastd ymm0, xmm0        // broadcast to all 8 dwords in ymm0
         // avx process of 128 bytes (32 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @avx2:  sub      r8, 32

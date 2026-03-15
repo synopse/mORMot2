@@ -28,8 +28,8 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
-  mormot.core.data,
   mormot.core.rtti,
+  mormot.core.data,
   mormot.core.json,
   mormot.core.unicode,
   mormot.core.text,
@@ -254,7 +254,7 @@ const
   /// the text equivalency of each logging level, as written in the log file
   // - PCardinal(@LOG_LEVEL_TEXT[L][3])^ will be used for fast level matching
   // so text must be unique for characters [3..6] -> e.g. 'ust4'
-  LOG_LEVEL_TEXT: array[TSynLogLevel] of string[7] = (
+  LOG_LEVEL_TEXT: array[TSynLogLevel] of TShort7 = (
     '       ',  // sllNone
     ' info  ',  // sllInfo
     ' debug ',  // sllDebug
@@ -769,7 +769,7 @@ type
     // TSynBackgroundThreadAbstract.OnAfterExecute
     // - is called e.g. by TRest.EndCurrentThread
     // - just a wrapper around TSynLog.NotifyThreadEnded
-    procedure OnThreadEnded(Sender: TThread);
+    class procedure OnThreadEnded(Sender: TThread);
     /// clean up *.log file by running OnArchive() on deprecated files
     // - will find and archive DestinationPath\*.log (or sourcePath\*.log)
     // files older than ArchiveAfterDays (or archiveDays), into the ArchivePath
@@ -1082,6 +1082,13 @@ type
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
+
+  /// low-level callback triggered within the raw logging context
+  // - allow TSynLog.RawLog() to ouput directly some data to Sender.Writer
+  // - is called between LogHeader/LogTrailer methods, in the global lock
+  // - the implementation should be stable and don't break the same-line output
+  TOnRawLog = procedure(Sender: TSynLog; Level: TSynLogLevel;
+    Opaque: pointer; Value: PtrInt; Instance: TObject) of object;
 
   /// a per-family and/or per-thread log file content
   // - you should create a sub class per kind of log file
@@ -1402,6 +1409,11 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char; aInstance: TObject = nil;
       const IgnoreWhenStartWith: PAnsiChar = nil);
+    /// call this method to execute a callback within custom TJsonWriter
+    // - can be used to output directly e.g. JSON content into Sender.Writer
+    // - Opaque/Value will be passed to Event, together with Instance
+    procedure RawLog(Level: TSynLogLevel; const Event: TOnRawLog;
+      Opaque: pointer = nil; Value: PtrInt = 0; Instance: TObject = nil);
     /// manual low-level TSynLog.Enter execution without the ISynLog overhead
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
@@ -2334,7 +2346,7 @@ begin
   s[0] := #0;
   while read.NextByteSafe(@c) and
         ({%H-}c <> #0) do
-    AppendShortCharSafe(c, @s);
+    AppendShortCharSafe(c, s);
 end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2581,7 +2593,7 @@ begin
     else if Pos('\', s) > 0 then
       c := '\';
     if s[ord(s[0])] <> c then
-      AppendShortCharSafe(c, @s);
+      AppendShortCharSafe(c, s);
     AddRawUtf8(dirs, dirsn, ShortStringToUtf8(s));
   until false;
   filesn := 0;
@@ -2797,7 +2809,7 @@ begin
           s := debug.fSymbols.NewPtr;
           if (typname[0] <> #0) and
              (typname[ord(typname[0])] <> '.') then
-            AppendShortCharSafe('.', @typname);
+            AppendShortCharSafe('.', typname);
           // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
           if header64.version < 3 then
             ShortStringToAnsi7String(lowercase(typname + name), s^.name);
@@ -3722,7 +3734,7 @@ begin
   if u >= 0 then
   begin
     AppendShortAnsi7String(Units[u].FileName, result);
-    AppendShortCharSafe(' ', @result);
+    AppendShortCharSafe(' ', result);
   end
   else
     result[0] := #0;
@@ -3732,7 +3744,7 @@ begin
   begin
     AppendShortTwoChars(ord(' ') + ord('(') shl 8, @result);
     AppendShortCardinal(line, result);
-    AppendShortCharSafe(')', @result);
+    AppendShortCharSafe(')', result);
   end;
 end;
 
@@ -4316,7 +4328,7 @@ end;
 function TSynLogFamily.GetArchiveDestPath(age: TDateTime): TFileName;
 var
   dt: TSynSystemTime;
-  tmp: string[7];
+  tmp: TShort7;
 begin
   // returns 'ArchivePath\log\YYYYMM\'
   result := EnsureDirectoryExists([ArchivePath, 'log']);
@@ -4560,7 +4572,7 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
+class procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
 begin
   TSynLog.NotifyThreadEnded;
 end;
@@ -4838,7 +4850,7 @@ begin // caller just made GlobalThreadLock.Lock
   p := pointer(log.fThreadNameLogged); // threads bit-set of this TSynLog
   if p <> nil then
   begin
-    ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants
+    ndx := nfo^.ThreadBitHi; // use pre-computed runtime constants (favor FPC)
     if ndx <= PtrUInt(PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1)) then
       if p[ndx] and nfo^.ThreadBitLo <> 0 then // fast "if GetBitPtr() then"
         exit; // already done (most common case)
@@ -5624,6 +5636,24 @@ begin
   LogText(Level, @tmp[1], Instance); // this method with ending #0 is the fastest
 end;
 
+procedure TSynLog.RawLog(Level: TSynLogLevel; const Event: TOnRawLog;
+  Opaque: pointer; Value: PtrInt; Instance: TObject);
+begin
+  if (self = nil) or
+     not (Level in fFamily.fLevel) or
+     not Assigned(Event) then
+    exit;
+  if LockAndDisableExceptions then
+  try
+    LogHeader(Level, Instance);
+    Event(self, Level, Opaque, Value, Instance);
+    fWriterEcho.AddEndOfLine(Level); // LogTrailer(Level) is not needed here
+  finally
+    fThreadInfo^.Flags := fThreadInfoBackup;
+    GlobalThreadLock.UnLock;
+  end;
+end;
+
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 {$ifdef WIN64DELPHI} // Delphi Win64 has no 64-bit inline assembler
@@ -5725,11 +5755,6 @@ procedure TSynLog.LogFileHeader;
 var
   w: TJsonWriter;
   i: PtrInt;
-  {$ifdef OSWINDOWS}
-  Env: PWideChar;
-  P: PWideChar;
-  L: integer;
-  {$endif OSWINDOWS}
 begin
   include(fFlags, logFileHeaderWritten);
   w := fWriter;
@@ -5800,25 +5825,18 @@ begin
       w.AddShort(' Instance=');
       w.AddNoJsonEscapeString(Executable.InstanceFileName);
     end;
-    {$ifdef OSWINDOWS}
+    {$ifdef OSWINDOWS} // too verbose on POSIX - even including some scripts :(
     if not fFamily.fNoEnvironmentVariable then
     begin
       w.AddDirect(#10);
       w.AddShort('Environment variables=');
-      Env := GetEnvironmentStringsW;
-      P := pointer(Env);
-      while P^ <> #0 do
+      for i := 0 to length(_SystemEnvNames) - 1 do
       begin
-        L := StrLenW(P);
-        if (L > 0) and
-           (P^ <> '=') then
-        begin
-          w.AddNoJsonEscapeW(pointer(P));
-          w.AddDirect(#9);
-        end;
-        inc(P, L + 1);
+        w.AddOnSameLine(pointer(_SystemEnvNames[i]));
+        w.AddDirect('=');
+        w.AddOnSameLine(pointer(_SystemEnvValues[i]));
+        w.AddDirect(#9);
       end;
-      FreeEnvironmentStringsW(Env);
       w.CancelLastChar(#9);
     end;
     {$endif OSWINDOWS}
@@ -8332,7 +8350,7 @@ function SyslogBsdPrepare(Level: TSynLogLevel; Text: PUtf8Char; Len: PtrInt;
 var
   now: TSynSystemTime;
   day: TShort3;
-  h, a: string[32]; // truncated to 32 chars for legacy compatibility reasons
+  h, a: TShort32; // truncated to 32 chars for legacy compatibility reasons
 begin // <PRI>TIMESTAMP SP HOSTNAME SP TAG[: ]MESSAGE
   now.FromNowLocal; // the RFC 4.1.2 states it is the local time :(
   day[0] := #2;

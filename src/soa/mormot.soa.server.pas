@@ -2152,20 +2152,6 @@ begin
   FakeCallbackAdd(instance);
 end;
 
-procedure AppendWithSpace(var dest: ShortString; const source: ShortString);
-var
-  d, s: PtrInt;
-begin
-  d := ord(dest[0]);
-  s := ord(source[0]);
-  if d + s < 254 then
-  begin
-    dest[d + 1] := ' ';
-    MoveFast(source[1], dest[d + 2], s);
-    inc(dest[0], s + 1);
-  end;
-end;
-
 class function TServiceContainerServer.CallbackReleasedOnClientSide(
   const callback: IInterface; callbacktext: PShortString): boolean;
 var
@@ -2177,7 +2163,10 @@ begin
   else
   begin
     if callbacktext <> nil then
-      AppendWithSpace(callbacktext^, ClassNameShort(instance)^);
+    begin
+      AppendShortCharSafe(' ', callbacktext^);
+      AppendShort(ClassNameShort(PClass(instance)^)^, callbacktext^);
+    end;
     result := (PClass(instance)^ = TInterfacedObjectFakeServer) and
               TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
   end;

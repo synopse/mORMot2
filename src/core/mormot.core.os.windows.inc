@@ -10,10 +10,6 @@
 
 {$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
-  overload; forward;
-procedure _fmt(const Fmt: string; const Args: array of const;
-  var result: RawUtf8); overload; forward;
 function PosExtString(Str: PChar): PChar; forward;
 
 procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
@@ -75,6 +71,22 @@ begin
     Temp[0] := #0; // GetFullPathNameW() failure or W32_MAX overflow
 end;
 
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
+var
+  i: PtrInt;
+  R: PByteArray;
+begin
+  if Len > 0 then
+    if IsAnsiCompatibleW(P, Len) then
+    begin
+      R := FastSetString(res, Len);
+      for i := 0 to Len - 1 do
+        R[i] := PWordArray(P)[i]; // fast direct ASCII 7-bit conversion
+    end
+    else
+      DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode
+end;
+
 {$ifdef UNICODE}
 
 function IsExtendedPathName(const Name: TFileName): boolean;
@@ -113,6 +125,11 @@ begin
       dec(l);
       dst[l] := cardinal(s[l]); // fast direct 7-bit conversion
     until l = 0;
+end;
+
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Win32PWideCharToUtf8(pointer(Str), length(Str), Utf8);
 end;
 
 {$else}
@@ -187,27 +204,20 @@ begin
   SetString(d, s, l);
 end;
 
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  if {$ifdef FPC} (DefaultRTLFileSystemCodePage = CP_UTF8) or {$endif}
+     IsAnsiCompatible(Str) then
+    Utf8 := Str // assign
+  else
+    Utf8 := UTF8Encode(Str); // use RTL
+end;
+
 {$endif UNICODE}
 
 procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
 begin
   Win32PWideCharToString(P, StrLenW(P), string(fn));
-end;
-
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
-var
-  i: PtrInt;
-  R: PByteArray;
-begin
-  if Len > 0 then
-    if IsAnsiCompatibleW(P, Len) then
-    begin
-      R := FastSetString(res, Len);
-      for i := 0 to Len - 1 do
-        R[i] := PWordArray(P)[i]; // fast direct ASCII 7-bit conversion
-    end
-    else
-      DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode
 end;
 
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
@@ -474,7 +484,7 @@ begin
   if PInt64(@FT)^ = 0 then
     result := 0
   else // inlined UnixTimeToDateTime()
-    result := FileTimeToUnixMSTime(FT) / MilliSecsPerDay + UnixDateDelta;
+    result := FileTimeToUnixMSTime(FT) * MilliSecsPerDate + UnixDateDelta;
 end;
 
 procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
@@ -1139,6 +1149,15 @@ begin
             DeleteFileW(W32(aFileName, tmp));
 end;
 
+function RenameFile(const aOld, aNew: TFileName): boolean;
+var
+  o, n: TW32Temp;
+begin
+  result := (aOld <> '') and
+            (aNew <> '') and
+            MoveFileW(W32(aOld, o), W32(aNew, n));
+end;
+
 function RemoveDir(const aDirName: TFileName): boolean;
 var
   tmp: TW32Temp;
@@ -1252,17 +1271,6 @@ end;
 procedure FileSetSticky(const FileName: TFileName);
 begin
   FileSetAttr(FileName, FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_SYSTEM);
-end;
-
-function RenameFile(const OldName, NewName: TFileName): boolean;
-var
-  o, n: TW32Temp;
-begin
-  if (OldName = '') or
-     (NewName = '') then
-    result := false
-  else
-    result := MoveFileW(W32(OldName, o), W32(NewName, n));
 end;
 
 function FileSetTime(const FileName: TFileName;
@@ -2028,6 +2036,7 @@ const
   PROCESS_QUERY_LIMITED_INFORMATION = $1000;
 
 var
+  OSSafe: TLightLock; // when GlobalLock is overkill
   // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
   OpenProcessAccess: DWord;
 
@@ -2050,7 +2059,7 @@ begin
   if pointer(api) = nil then
   begin
     proc := nil;
-    GlobalLock; // avoid race condition
+    OSSafe.Lock; // avoid race condition
     if lib = 0 then
       lib := Windows.LoadLibrary(libname);
     if lib >= 32 then
@@ -2060,7 +2069,7 @@ begin
     if proc = nil then
       proc := pointer(1); // mark non available
     pointer(api) := proc; // set it last
-    GlobalUnLock;
+    OSSafe.UnLock;
   end;
   result := pointer(api) <> pointer(1);
 end;
@@ -2889,7 +2898,7 @@ const
 
 procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 const
-  _ENV: array[TSystemPath] of TFileName = (
+  _ENV: array[TSystemPath] of RawUtf8 = (
     'ALLUSERSAPPDATA', // spCommonData
     'LOCALAPPDATA',    // spUserData
     '',                // spCommonDocuments
@@ -2922,7 +2931,7 @@ begin
         if GetTempPathW(MAX_PATH, @tmp) <> 0 then // first try Windows API
           Win32PWideCharToFileName(tmp, result);
         if result = '' then
-          result := GetEnvironmentVariable(_ENV[spTemp]); // fallback
+          result := GetSystemEnvString(_ENV[spTemp]); // fallback
       end;
   else
     if (CSIDL[kind] <> 0) and
@@ -2934,10 +2943,10 @@ begin
     else
     begin
       // fallback to environment variables (very unlikely)
-      result := GetEnvironmentVariable(_ENV[kind]);
+      result := GetSystemEnvString(_ENV[kind]);
       if result = '' then
       begin
-        result := GetEnvironmentVariable('APPDATA');
+        result := GetSystemEnvString('APPDATA');
         if result = '' then
           result := Executable.ProgramFilePath;
       end;
@@ -2945,6 +2954,63 @@ begin
   end;
   if result <> '' then
     result := IncludeTrailingPathDelimiter(result); // no EnsureDirectoryExists
+end;
+
+procedure _SetShell(var a, b: RawUtf8);
+begin
+  if not GetSystemEnv('COMSPEC', a) then
+    if GetSystemEnv('WINDIR', b) then
+      a := Join([b, '\system32\cmd.exe'])
+    else
+      a := 'c:\windows\system32\cmd.exe';
+  b := a;
+end;
+
+var
+  _SystemEnvUnicode: SynUnicode; // for RunCommandWin() below
+
+procedure _GetSystemEnv;
+var
+  p, e, env: PWideChar;
+  i, n: PtrInt;
+begin
+  env := GetEnvironmentStringsW;
+  p := env;
+  if p = nil then
+    exit;
+  n := 0; // pre-compute the number of entries
+  while p^ <> #0 do
+  begin
+    if p^ <> '=' then
+      inc(n);
+    inc(p, StrLenW(p) + 1);
+  end;
+  if n = 0 then
+    exit; // should never happen
+  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(p) - PtrUInt(env)) shr 1);
+  SetLength(_SystemEnvNames, n);
+  SetLength(_SystemEnvValues, n);
+  p := env;
+  i := 0;
+  repeat
+    if p^ = '=' then
+      inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
+    else
+    begin
+      e := p;
+      repeat
+        inc(p);
+      until p^ = '=';
+      Win32PWideCharToUtf8(e, p - e, _SystemEnvNames[i]);
+      inc(p);
+      e := p;
+      inc(p, StrLenW(p));
+      Win32PWideCharToUtf8(e, p - e, _SystemEnvValues[i]);
+      inc(i);
+    end;
+    inc(p);
+  until p^ = #0;
+  FreeEnvironmentStringsW(env);
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
@@ -3537,20 +3603,20 @@ begin
 end;
 
 constructor TServiceController.CreateOpenService(
-  const TargetComputer, DataBaseName, Name: RawUtf8; DesiredAccess: cardinal);
+  const TargetComputer, DataBaseName, ServiceName: RawUtf8; DesiredAccess: cardinal);
 begin
   inherited Create;
-  fName := RawUtf8(Name);
+  fName := ServiceName;
   fSCHandle := OpenServiceManager(TargetComputer, DataBaseName, GENERIC_READ);
   if fSCHandle = 0 then
   begin
     TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-      [TargetComputer, DataBaseName, fName], self);
+      [TargetComputer, DataBaseName, ServiceName], self);
     exit;
   end;
-  fHandle := OpenServiceInstance(fSCHandle, Name, DesiredAccess);
+  fHandle := OpenServiceInstance(fSCHandle, ServiceName, DesiredAccess);
   if fHandle = 0 then
-    TService.DoLog(sllLastError, 'OpenService(%)', [Name], self);
+    TService.DoLog(sllLastError, 'OpenService(%)', [ServiceName], self);
 end;
 
 function TServiceController.Delete: boolean;
@@ -3798,7 +3864,7 @@ begin
 end;
 
 const
-  _CMD: array[0.. 5] of string[11] = (
+  _CMD: array[0.. 5] of TShort15 = (
     'UNKNOWN', 'STOP', 'PAUSE', 'CONTINUE', 'INTERROGATE', 'SHUTDOWN');
 
 procedure TService.DoCtrlHandle(Code: cardinal);
@@ -4416,27 +4482,6 @@ begin
     [path, arg1, arg2, arg3, arg4, arg5]), waitfor, env, options);
 end;
 
-var
-  EnvironmentCache: SynUnicode;
-  EnvironmentCacheLock: TLightLock; // just set once
-
-procedure GetEnvironmentCache;
-var
-  e, p: PWideChar;
-begin
-  EnvironmentCacheLock.Lock;
-  if EnvironmentCache = '' then
-  begin
-    e := GetEnvironmentStringsW;
-    p := e;
-    while p^ <> #0 do
-      inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-    FastSynUnicode(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
-    FreeEnvironmentStringsW(e);
-  end;
-  EnvironmentCacheLock.UnLock;
-end;
-
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   options: TRunOptions; processhandle: PHandle): integer;
 var
@@ -4642,9 +4687,9 @@ begin
     wenv := SynUnicode(env);
     if roEnvAddExisting in options then
     begin
-      if EnvironmentCache = '' then
-        GetEnvironmentCache;
-      wenv := EnvironmentCache + wenv;
+      if _SystemEnvUnicode = '' then
+        _GetSystemEnv;
+      wenv := _SystemEnvUnicode + wenv;
     end
     else
       UniqueString(wenv);
@@ -4856,8 +4901,7 @@ var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   IsWow64Process2: function(Handle: THandle; var Process, Machine: word): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
-  GetLogicalProcessorInformation: function(
-   var Info: TSystemLogicalProcessorInformation; Len: PDWord): BOOL; stdcall;
+  GetLogicalProcessorInformation: function(Info: pointer; var Len: DWord): BOOL; stdcall;
   wine_get_version: function: PAnsiChar; stdcall;
   mem: TMemoryStatusEx;
   res: BOOL;
@@ -4868,7 +4912,8 @@ var
   reg: TWinRegistry;
   rnd: PHash128;
   proc: array of TSystemLogicalProcessorInformation;
-  i: integer;
+  pi: ^TSystemLogicalProcessorInformation;
+  i, n: PtrInt;
   siz: DWord;
 begin
   // 1. minimal fallback to support of very old 32-bit CPU without SSE2
@@ -5095,54 +5140,65 @@ begin
   if prodver <> '' then
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
-    cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
-  if Assigned(GetLogicalProcessorInformation) then
-  begin
-    SetLength(proc, 1024);
-    siz := SizeOf(proc[0]) * length(proc);
-    if GetLogicalProcessorInformation(proc[0], @siz) then
-    begin
-      for i := 0 to (siz div SizeOf(proc[0])) - 1 do
-        with proc[i] do
-          case Relationship of
-            RelationProcessorPackage: // physical processor socket
-              AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), CpuSockets, ProcessorMask);
-            RelationCache:            // raw cache information
-              if Cache.CacheType in [CacheUnified, CacheData] then
-                if (Cache.Level >= low(CpuCache)) and
-                   (Cache.Level <= high(CpuCache)) then
-                  with CpuCache[Cache.Level] do
-                    if (Count = 0) or
-                       (Cache.CacheType <> CacheUnified) then
-                    begin
-                      inc(Count);
-                      Size := Cache.Size;
-                      LineSize := Cache.LineSize;
-                    end;
-          end;
-      for i := high(CpuCache) downto low(CpuCache) do
-      begin
-        CpuCacheSize := CpuCache[i].Size;
-        if CpuCacheSize <> 0 then // append the biggest level Cache size
-        begin
-          cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
-          break;
-        end;
+   cpu := GetSystemEnv('PROCESSOR_IDENTIFIER');
+  siz := 0;
+  if Assigned(GetLogicalProcessorInformation) and
+     not GetLogicalProcessorInformation(nil, siz) and
+     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
+  repeat
+    n := siz div SizeOf(proc[0]);
+    if n > 2048 then
+      break;
+    SetLength(proc, n);
+    if not GetLogicalProcessorInformation(pointer(proc), siz) then
+      break;
+    pi := pointer(proc);
+    repeat
+      case pi^.Relationship of
+        RelationProcessorCore:
+          inc(CpuCores);
+        RelationProcessorPackage: // physical processor socket
+          AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), CpuSockets, pi^.ProcessorMask);
+        RelationCache:            // raw cache information
+          if pi^.Cache.CacheType in [CacheUnified, CacheData] then
+            if (pi^.Cache.Level >= low(CpuCache)) and
+               (pi^.Cache.Level <= high(CpuCache)) then
+              with CpuCache[pi^.Cache.Level] do
+                if (Count = 0) or
+                   (pi^.Cache.CacheType <> CacheUnified) then
+                begin
+                  inc(Count);
+                  Size := pi^.Cache.Size;
+                  LineSize := pi^.Cache.LineSize;
+                end;
       end;
-      for i := low(CpuCache) to high(CpuCache) do
-        with CpuCache[i] do
-          if Count <> 0 then
-            if Count = 1 then
-              CpuCacheText :=
-                _fmt('%s L%d=%s ', [CpuCacheText, i, KBNoSpace(Size)])
-            else
-              CpuCacheText :=
-                _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
-      TrimSelf(CpuCacheText);
+      inc(pi);
+      dec(n);
+    until n = 0;
+    for i := high(CpuCache) downto low(CpuCache) do
+    begin
+      CpuCacheSize := CpuCache[i].Size;
+      if CpuCacheSize <> 0 then // append the biggest level Cache size
+      begin
+        cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
+        break;
+      end;
     end;
-  end;
+    for i := low(CpuCache) to high(CpuCache) do
+      with CpuCache[i] do
+        if Count <> 0 then
+          if Count = 1 then
+            CpuCacheText :=
+              _fmt('%s L%d=%s ', [CpuCacheText, i, KBNoSpace(Size)])
+          else
+            CpuCacheText :=
+              _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
+    TrimSelf(CpuCacheText);
+  until true;
   if CpuSockets = 0 then
     CpuSockets := 1; // e.g. on XP prior to SP3
+  if CpuCores = 0 then
+    CpuCores := SystemInfo.dwNumberOfProcessors;
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info

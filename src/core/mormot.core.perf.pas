@@ -4802,7 +4802,8 @@ begin
                  (i < length(info.Oem)) then
               begin
                 FastSetString(info.Oem[i], s, len);
-                inc(i);
+                if info.Oem[i] <> 'Default string' then // see mormot.core.os
+                  inc(i);
               end;
               s := @s[len + 1]; // next string
             until s[0] = 0;

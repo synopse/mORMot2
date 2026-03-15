@@ -3360,8 +3360,7 @@ end;
 function Utf8ContentNumberType(P: PUtf8Char): TOrmFieldType;
 begin
   if (P = nil) or
-     ((PInteger(P)^ = ord('n') + ord('u') shl 8 + ord('l') shl 16 +
-       ord('l') shl 24) and
+     ((PInteger(P)^ = NULL_LOW) and
       (P[4] = #0)) then
     result := oftUnknown
   else
@@ -3437,7 +3436,7 @@ begin
 end;
 
 const
-  PG_FT: array[TSqlDBFieldType] of string[9] = ( // UNNEST(?::###[]) field type
+  PG_FT: array[TSqlDBFieldType] of TShort15 = ( // UNNEST(?::###[]) field type
     'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
 
 function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
@@ -5371,7 +5370,7 @@ end;
 function TOrmPropInfoRttiDateTime.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 const
-  PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MilliSecsPerDay);
+  PRECISION: array[boolean] of double = (SecsPerDate, MilliSecsPerDate);
 var
   V1, V2: double;
 begin
@@ -7907,8 +7906,7 @@ begin
         result := oftRecordVersion
       else if (ord(Info^.RawName[1]) and $df = ord('T')) and
         // T...ID pattern in type name -> TID
-        (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf =
-           ord('I') + ord('D') shl 8) then
+        (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = _ID16) then
         result := oftTID
       else
         result := oftInteger;
@@ -9101,7 +9099,7 @@ str:          W.AddDirect('"');
         else
           if IsStringJson(U) then // fast and safe enough to guess from value
             goto str
-          else
+          else // constant or number
             W.AddNoJsonEscape(U, {$ifdef NOTORMTABLELEN}StrLen(U){$else}fLen[o]{$endif});
         end;
       W.AddComma;
@@ -9192,7 +9190,7 @@ begin
           begin
             len := GetResultsLen(o, U);
             if Tab or not IsStringJson(U) then
-              W.AddNoJsonEscape(U, len)
+              W.AddNoJsonEscape(U, len) // constant or number
             else
               W.AddQuotedStr(U, len, '"');
           end;

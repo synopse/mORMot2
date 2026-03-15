@@ -570,33 +570,41 @@ type
   {$M-}
 
 type
-  /// used e.g. to serialize up to 256-bit binary as hexadecimal
+  /// 128-bytes aligned shortstring - e.g. for TNetAddr.IPShort()
+  TShort127 = string[127];
+  PShort127 = ^TShort127;
+
+  /// used to serialize up to 256-bit binary as hexadecimal
   TShort64 = string[64];
   PShort64 = ^TShort64;
 
-  /// a shortstring which takes 64 bytes of memory
+  /// 64-bytes aligned shortstring - e.g. for GetCurrentThreadInfo
   TShort63 = string[63];
   PShort63 = ^TShort63;
 
-  /// a shortstring which takes 48 bytes of memory - e.g. for StatusCodeToShort
+  /// 48-bytes aligned shortstring - e.g. for StatusCodeToShort
   TShort47 = string[47];
   PShort47 = ^TShort47;
 
-  /// a shortstring which takes 32 bytes of memory - e.g. for SetThreadName
+  /// 40-bytes aligned shortstring - e.g. for THttpDateNowUtc/TShortGuid
+  TShort39 = string[39];
+
+  /// used to serialize up to 128-bit binary as hexadecimal
+  TShort32 = string[32];
+
+  /// 32-bytes aligned shortstring - e.g. for SetThreadName
   TShort31 = string[31];
   PShort31 = ^TShort31;
 
-  /// used e.g. by TwoDigits(), ToShort(Int64) or Int64ToHttpEtag()
+  /// 24-bytes aligned shortstring - e.g. for TwoDigits/ToShort/Int64ToHttpEtag
   TShort23 = string[23];
   PShort23 = ^TShort23;
 
-  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
-  // - such result type would avoid a string allocation on heap, so are highly
-  // recommended e.g. when logging tiny pieces of information
+  /// used to serialize up to 64-bit binary (a pointer) as hexadecimal
   TShort16 = string[16];
   PShort16 = ^TShort16;
 
-  /// used e.g. for TSynSystemTime.ToTextDateShort
+  /// 16-bytes aligned shortstring - e.g. for TSynSystemTime.ToTextDateShort
   TShort15 = string[15];
   PShort15 = ^TShort15;
 
@@ -604,22 +612,21 @@ type
   TShort8 = string[8];
   PShort8 = ^TShort8;
 
-  /// used e.g; for WinOsBuild() to avoid heap allocation
+  /// 8-bytes aligned shortstring - e.g. for WinOsBuild()
   TShort7 = string[7];
 
-  /// used e.g. by UInt4DigitsToShort to avoid heap allocation
-  TShort4 = string[4];
-
-  /// used e.g. by UInt3DigitsToShort/UInt2DigitsToShort functions
-  // - when used as an array value type, will generate efficient 32-bit lookup
+  /// 4-bytes aligned shortstring - e.g. as efficient array[] constants
   TShort3 = string[3];
 
-  /// could be used e.g. by StrInt32() or StrInt64()
-  TTemp24 = array[0..23] of AnsiChar;
+  /// shortstring used to store none or one character
+  TShort1 = string[1];
 
   /// stack-allocated ASCII string, for mormot.core.text GuidToShort() function
-  TShortGuid = string[38];
+  TShortGuid = TShort39;
   PShortGuid = ^TShortGuid;
+
+  /// internal temporary buffer on stack used e.g. by StrInt32() or StrInt64()
+  TTemp24 = array[0..23] of AnsiChar;
 
   /// cross-compiler type used for string length
   // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit integer even on CPU64 (!)
@@ -806,8 +813,20 @@ const
   HTTP_32    = ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24;
   HTTP__32   = ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24;
   HTTP__24   = ord(':') + ord('/') shl 8 + ord('/') shl 16;
+  NTLM_LOW   = ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24;
   HEAD_32    = ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+  GET_24     = ord('G') + ord('E') shl 8 + ord('T') shl 16;
+  PUT_24     = ord('P') + ord('U') shl 8 + ord('T') shl 16;
   POST_32    = ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
+  DELE_32    = ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
+  OPTI_32    = ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
+  NONE_32    = ord('N') + ord('O') shl 8 + ord('N') shl 16 + ord('E') shl 24;
+  NOT_32     = ord('N') + ord('O') shl 8 + ord('T') shl 16 + ord(' ') shl 24;
+  SLASH_16   = ord('/') + ord('/') shl 8;
+  SLBEG_16   = ord('/') + ord('*') shl 8;
+  SLEND_16   = ord('*') + ord('/') shl 8;
+  DOT_16     = ord('.') + ord('.') shl 8;
+  DOT_24     = ord('.') + ord('.') shl 8 + ord('.') shl 16;
 
 /// fill a TGuid with 0
 procedure FillZero(var result: TGuid); overload;
@@ -976,6 +995,7 @@ function UniqueRawUtf8(var u: RawUtf8): pointer;
 
 /// concatenate several string arguments into an UTF-8 string
 function Join(const Args: array of RawByteString): RawUtf8; overload;
+ {$ifdef FPC}inline;{$endif}
 
 /// concatenate several string arguments into an UTF-8 string
 procedure Join(const Args: array of RawByteString; var Text: RawUtf8); overload;
@@ -998,6 +1018,9 @@ procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortStrin
 /// simple concatenation of a 32-bit unsigned integer as text into a shorstring
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
+/// simple concatenation of a 8-bit unsigned integer as text into a shorstring
+procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
+
 /// simple concatenation of a signed 64-bit integer as text into a shorstring
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 
@@ -1014,8 +1037,8 @@ procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 
 /// simple concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
-procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar = #255);
-  {$ifdef HASINLINE} inline; {$endif}
+procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
+  {$ifdef FPC} inline; {$endif}
 
 /// simple concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
@@ -1034,17 +1057,17 @@ procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
 
 /// simple concatenation of a #0 ending text into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
-procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
+procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// simple concatenation of hexadecimal binary buffer into a shorstring
-procedure AppendShortHex(value: PByte; len: PtrUInt; var dest: ShortString);
+procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
 /// simple concatenation of an integer as lowercase hexadecimal into a shorstring
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 
 /// simple concatenation of a byte as uppercase hexadecimal into a shorstring
-procedure AppendShortByteHex(value: byte; var dest: ShortString);
+procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 
 /// simple concatenation of a ShortString text into a shorstring
 procedure AppendShort(const src: ShortString; var dest: ShortString);
@@ -1531,6 +1554,9 @@ function ToInt64(const text: RawUtf8; out value: Int64): boolean;
 function ToDouble(const text: RawUtf8; out value: double): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get the signed 64-bit integer value stored in an UTF-8 text buffer
+function IsInt64(P: PUtf8Char; len: PtrInt; value: PInt64 = nil): boolean;
+
 /// internal fast integer value to text conversion
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
@@ -1573,6 +1599,13 @@ function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 
 /// fast convert an Int64 value into a temporary shortstring on stack
 function ToShort(const val: Int64): TShort23;
+
+/// fast convert an unsigned value into a string[>=23] variable
+procedure ToShortU(const val: PtrUInt; Dest: PShort23);
+
+/// internal fast unsigned 8-bit 0..255 value to '0'..'255' text conversion
+// - write into P^ and return the position after the last char written
+function UInt8ToPChar(P: PAnsiChar; val: PtrUInt; tab: PWordArray): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// add the 4 digits of integer Y to P^ as '0000'..'9999'
@@ -2895,10 +2928,11 @@ const
 {$ifdef CPUARM3264}
 var
   /// the low-level ARM/AARCH64 CPU features retrieved from system.envp
-  // - text from CpuInfoFeatures may not be accurate on oldest kernels
+  // - text from /proc/cpuinfo may not be accurate on oldest kernels
   CpuFeatures: TArmHwCaps;
   /// the low-level ARM/AARCH64 CPU model text as retrieved by mormot.core.os
   CpuArmModel: RawUtf8;
+  CpuArmImplementer: RawUtf8;
 {$endif CPUARM3264}
 
 /// cross-platform wrapper function to check AES HW support on Intel or ARM
@@ -3173,8 +3207,11 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
   {$ifdef CPUX64}inline;{$endif}
 
+/// overload wrapper of MemCmp() to compare memory buffers with length
+function CompareBuf(P1, P2: pointer; P1Len, P2Len: PtrInt): integer;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// overload wrapper of MemCmp() to compare a RawByteString vs a memory buffer
-// - will first check length(P1)=P2Len then call MemCmp()
 function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
@@ -3197,6 +3234,10 @@ function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
 /// a CompareMem()-like function designed for small (a few bytes) content
 // - to be efficiently inlined in processing code
 function CompareMemSmall(P1, P2: pointer; Length: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a CompareMem()-like function designed for comparison with a small shortstring
+function CompareShort(P1: pointer; const P2: ShortString): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef CPUX86}
@@ -3308,6 +3349,11 @@ function StrLenW(S: PWideChar): PtrInt;
 function GotoNextLine(source: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// go to next text line, ended by #10 or #13#10 - smaller version
+// - returns the beginning of next line, or #0 (not nil) if source^=#0 was reached
+function GotoNextLineSmall(source: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast go to the first char <= #13
 // - source is expected to be not nil
 function GotoNextControlChar(source: PUtf8Char): PUtf8Char;
@@ -3381,7 +3427,7 @@ type
     // method or Random128() function to initialize a secret key, nonce or IV
     procedure Fill(dest: pointer; bytes: integer);
     /// fill some string[0..size] with 7-bit ASCII pseudo-random text
-    procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
+    procedure FillShort(var dest: ShortString; size: PtrInt = 255);
     /// fill some string[0..31] with 7-bit ASCII pseudo-random text
     procedure FillShort31(var dest: TShort31);
     /// fill some RawUtf8 with 7-bit ASCII pseudo-random text
@@ -3548,17 +3594,19 @@ function EventEquals(const eventA, eventB): boolean;
 
 type
   /// define a buffer of 1KB of data
-  TBuffer1K = array[0..1023] of AnsiChar;
+  TBuffer1K = array[0 .. pred(1 shl 10)] of AnsiChar;
   /// define a buffer of 2KB of data
-  TBuffer2K = array[0..2047] of AnsiChar;
+  TBuffer2K = array[0 .. pred(2 shl 10)] of AnsiChar;
   /// define a buffer of 4KB of data
-  TBuffer4K = array[0..4095] of AnsiChar;
+  TBuffer4K = array[0 .. pred(4 shl 10)] of AnsiChar;
   /// define a buffer of 8KB of data
-  TBuffer8K = array[0..8191] of AnsiChar;
+  TBuffer8K = array[0 .. pred(8 shl 10)] of AnsiChar;
   /// define a buffer of 16KB of data
-  TBuffer16K = array[0..16383] of AnsiChar;
+  TBuffer16K = array[0 .. pred(16 shl 10)] of AnsiChar;
   /// define a buffer of 64KB of data
   TBuffer64K = array[word] of AnsiChar;
+  /// define a buffer of 128KB of data
+  TBuffer128K = array[0 .. pred(128 shl 10)] of AnsiChar;
 
   /// implements a 4KB stack-based storage of some (UTF-8 or binary) content
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
@@ -3633,7 +3681,7 @@ type
   private
     procedure AddRealloc(new: PtrInt);
   public
-    /// direct access to the internal temporary buffer
+    /// direct access to the internal 4KB temporary buffer
     Store: TSynTempBuffer;
     /// initialize a local buffer from stack, as Temp.InitOnStack
     procedure Init; overload;
@@ -4320,19 +4368,6 @@ type
   // e.g. SortDynArrayVariant/SortDynArrayVariantI are in mormot.core.variants
   // and SortDynArrayPUtf8CharI/SortDynArrayStringI in mormot.core.text
   TDynArraySortCompare = function(const A, B): integer;
-
-  /// the recognized operators for comparison functions results match
-  TCompareOperator = (
-    coEqualTo,
-    coNotEqualTo,
-    coLessThan,
-    coLessThanOrEqualTo,
-    coGreaterThan,
-    coGreaterThanOrEqualTo);
-
-/// fast search if a comparison function result (<0,0,>0) match an operator
-function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// compare two "array of boolean" 8-bit elements
 function SortDynArrayBoolean(const A, B): integer;
@@ -5336,24 +5371,28 @@ end;
 procedure Join(const Args: array of RawByteString; var Text: RawUtf8);
 var
   l, i: PtrInt;
-  p: PUtf8Char;
+  d, s, new: PUtf8Char;
 begin
   if high(Args) = 0 then
   begin
-    text := Args[0];
-    EnsureRawUtf8(text);
+    Text := Args[0];
+    EnsureRawUtf8(Text);
     exit;
   end;
   l := 0;
   for i := 0 to high(Args) do
     inc(l, length(Args[i]));
-  p := FastSetString(Text, l);
+  new := FastNewString(l, CP_UTF8);
+  d := new;
   for i := 0 to high(Args) do
   begin
-    l := length(Args[i]);
-    MoveFast(pointer(Args[i])^, p^, l);
-    inc(p, l);
+    s := pointer(Args[i]);
+    if s = nil then
+      continue;
+    MoveFast(s^, d^, PStrLen(s - _STRLEN)^);
+    inc(d, PStrLen(s - _STRLEN)^);
   end;
+  FastAssignNew(Text, new); // eventually assign: Text may be in Args[]
 end;
 
 function ShortStringToAnsi7String(const source: ShortString): RawByteString;
@@ -5367,16 +5406,32 @@ begin
 end;
 
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
+var
+  p: PAnsiChar;
+  l: PtrInt;
 begin
-  SetString(result, PAnsiChar(pointer(source)), length(source));
+  p := pointer(source);
+  if p = nil then
+    result[0] := #0
+  else
+  begin
+    l := PStrLen(p - _STRLEN)^;
+    if l > high(result) then
+      l := high(result);
+    result[0] := AnsiChar(l);
+    MoveFast(p^, result[1], l);
+  end;
 end;
 
-procedure AppendShortCharSafe(chr: AnsiChar; dest: PAnsiChar; const max: AnsiChar);
+procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
+var
+  l: PtrInt;
 begin
-  if dest[0] = max then
+  l := ord(dest[0]);
+  if l = high(dest) then
     exit;
   inc(dest[0]);
-  dest[ord(dest[0])] := chr;
+  PAnsiChar(@dest)[l + 1] := chr;
 end;
 
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
@@ -5399,11 +5454,9 @@ begin
   inc(dest[0], 2);
 end;
 
-procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
-var
-  max: PtrInt;
+procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
 begin
-  max := 255 - ord(dest[0]);
+  dec(max, ord(dest[0]));
   if max = 0 then
     exit;
   if len > max then
@@ -5413,61 +5466,67 @@ begin
 end;
 
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
+var
+  p: PAnsiChar; // for better code generation on FPC
 begin
-  if pointer(buf) <> nil then
-    AppendShortBuffer(pointer(buf), PStrLen(PtrUInt(pointer(buf)) - _STRLEN)^, @dest);
+  p := pointer(buf);
+  if p <> nil then
+    AppendShortBuffer(p, PStrLen(p - _STRLEN)^, high(dest), @dest);
 end;
 
 procedure AppendShort(const src: ShortString; var dest: ShortString);
 begin
-  AppendShortBuffer(@src[1], ord(src[0]), @dest);
-end;
-
-procedure AppendShortTemp(value, temp: PAnsiChar; dest: PAnsiChar);
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  AppendShortBuffer(value, temp - value, dest);
+  AppendShortBuffer(@src[1], ord(src[0]), high(dest), @dest);
 end;
 
 const
   HexCharsUpper: array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
-procedure AppendShortByteHex(value: byte; var dest: ShortString);
+procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 var
   len: PtrInt;
+  d, hex: PAnsiChar;
 begin
-  len := ord(dest[0]);
-  if len >= 254 then
+  d := @dest;
+  len := ord(d[0]);
+  if len + 2 > high(dest) then
     exit;
-  dest[len + 1] := HexCharsUpper[value shr 4];
+  hex := @HexCharsUpper;
+  d[len + 1] := hex[value shr 4];
   inc(len, 2);
   value := value and $0f;
-  dest[len] := HexCharsUpper[value];
-  dest[0] := AnsiChar(len);
+  d[len] := hex[value];
+  d[0] := AnsiChar(len);
 end;
 
-procedure AppendShortHex(value: PByte; len: PtrUInt; var dest: ShortString);
+procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 var
-  dlen, v: PtrUInt;
-  tab: PAnsiChar;
+  dlen, v: PtrInt;
+  d, tab: PAnsiChar;
 begin
-  dlen := ord(dest[0]);
-  if (len > 0) and
-     (dlen + len * 2 < 254) then
-  begin
-    tab := @HexCharsLower;
-    repeat
-      v := value^;
-      inc(value);
-      dest[dlen + 1] := tab[v shr 4]; // hexadecimal output in natural order
-      inc(dlen, 2);
-      v := v and $0f;
-      dest[dlen] := tab[v];
-      dec(len);
-    until len = 0;
-  end;
-  dest[0] := AnsiChar(dlen);
+  d := @dest;
+  dlen := ord(d[0]);
+  if (len <= 0) or
+     (dlen + len * 2 > high(dest)) then
+    exit;
+  tab := @HexCharsLower;
+  repeat
+    v := value^;
+    inc(value);
+    d[dlen + 1] := tab[v shr 4]; // hexadecimal output in natural order
+    inc(dlen, 2);
+    v := v and $0f;
+    d[dlen] := tab[v];
+    dec(len);
+  until len = 0;
+  d[0] := AnsiChar(dlen);
+end;
+
+procedure AppendShortTemp(value, temp, dest: PAnsiChar; max: PtrInt);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  AppendShortBuffer(value, temp - value, max, dest);
 end;
 
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
@@ -5487,28 +5546,28 @@ begin
       break;
     value := value shr 4;
   until value = 0; // truncate to significant digits
-  AppendShortTemp(@tmp[i], @tmp[SizeOf(value) * 2], @dest);
+  AppendShortTemp(@tmp[i], @tmp[SizeOf(value) * 2], @dest, high(dest));
 end;
 
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 var
   tmp: TTemp24;
 begin
-  AppendShortTemp(StrUInt32(@tmp[23], value), @tmp[23], @dest);
+  AppendShortTemp(StrUInt32(@tmp[23], value), @tmp[23], @dest, high(dest));
 end;
 
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 var
   tmp: TTemp24;
 begin
-  AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest);
+  AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest, high(dest));
 end;
 
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 var
   tmp: TTemp24;
 begin
-  AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest);
+  AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest, high(dest));
 end;
 
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
@@ -5537,7 +5596,7 @@ begin
       else
         dec(l, 4 - fixeddecimals); // keep x.00 x.000
       end;
-  AppendShortBuffer(p, l, @dest);
+  AppendShortBuffer(p, l, high(dest), @dest);
 end;
 
 procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
@@ -6693,12 +6752,20 @@ end;
 
 function ToShort(const val: Int64): TShort23;
 var
-  tmp: TTemp24;
   p: PAnsiChar;
 begin
-  p := {%H-}StrInt64(@tmp[23], val);
-  result[0] := AnsiChar(@tmp[23] - p);
+  p := {%H-}StrInt64(@result[23], val); // use result as TTemp24
+  result[0] := AnsiChar(@result[23] - p);
   MoveFast(p^, result[1], ord(result[0]));
+end;
+
+procedure ToShortU(const val: PtrUInt; Dest: PShort23);
+var
+  p: PAnsiChar;
+begin
+  p := {%H-}StrUInt32(@Dest^[23], val); // use Dest^ as TTemp24
+  Dest^[0] := AnsiChar(@Dest^[23] - p);
+  MoveFast(p^, Dest^[1], ord(Dest^[0]));
 end;
 
 function GetExtended(P: PUtf8Char): TSynExtended;
@@ -6855,6 +6922,43 @@ begin
      (result < min) or
      (result > max) then
     result := default;
+end;
+
+function IsInt64(P: PUtf8Char; len: PtrInt; value: PInt64): boolean;
+var
+  v: QWord;
+  min: boolean;
+  c: byte;
+begin
+  result := false;
+  if (P = nil) or
+     (len <= 0) then
+    exit;
+  inc(len, PtrUInt(P)); // PUtf8Char(len) = PEnd
+  min := false;
+  v := 0;
+  if P^ = '-' then
+  begin
+    min := true;
+    inc(P);
+    if P >= PUtf8Char(len) then
+      exit;
+  end;
+  repeat
+    c := byte(P^);
+    inc(P);
+    dec(c, 48);
+    if c > 9 then
+      exit;
+    if value <> nil then
+      v := v * 10 + c;
+  until P >= PUtf8Char(len);
+  result := true;
+  if value = nil then
+    exit;
+  if min then
+    v := -v;
+  value^ := v;
 end;
 
 function ToInteger(const text: RawUtf8; out value: integer): boolean;
@@ -8590,7 +8694,7 @@ begin
   a := pointer(aPtrArray);
   if a = nil then
     exit;
-  n := PDALen(a - _DALEN)^ + (_DAOFF - 1);
+  n := PDALen(a - _DALEN)^ + (_DAOFF - 1);  // = high()
   result := PPointerArray(a)[n];
   if n = 0 then
     TPointerDynArray(aPtrArray) := nil
@@ -8754,7 +8858,7 @@ begin
   if a = nil then
     exit;
   // release all owned TObject instances
-  RawObjectsClear(pointer(aObjArray), PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF);
+  RawObjectsClear(pointer(a), PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF);
   // release the dynamic array itself
   a := nil;
 end;
@@ -9989,9 +10093,24 @@ _0: if source[0] = #0 then
       inc(source);
       continue; // e.g. #9
     end;
-    result := source + 1;
+    result := source + 1; // points just after #10
     exit;
   until false;
+end;
+
+function GotoNextLineSmall(source: PUtf8Char): PUtf8Char;
+begin
+  result := source;
+  while true do
+    if result^ > #10 then
+      inc(result)
+    else if result^ = #10 then
+      break
+    else if result^ = #0 then
+      exit
+    else
+      inc(result);
+  inc(result); // points just after #10
 end;
 
 function IsAnsiCompatible(PC: PAnsiChar): boolean;
@@ -10317,17 +10436,16 @@ begin
   until bytes = 0;
 end;
 
-procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
+procedure TLecuyer.FillShort(var dest: ShortString; size: PtrInt);
 begin
   if size = 0 then
   begin
     dest[0] := #0;
     exit;
   end;
-  if size > 255 then
-    size := 256
-  else
-    inc(size);
+  if size > high(dest) then
+    size := high(dest);
+  inc(size); // also fill dest[0] = size
   Fill(@dest, size);
   AdjustShortStringFromRandom(@dest, size);
 end;
@@ -12744,6 +12862,38 @@ end;
 
 {$endif ASMX86}
 
+function UInt8ToPChar(P: PAnsiChar; val: PtrUInt; tab: PWordArray): PAnsiChar;
+begin
+  result := P;
+  if val >= 10 then      // 0..9 branch below
+  begin
+    if val >= 100 then
+    begin
+      dec(val, 100);     // 100..199 is the most common pattern (40-60% for IP4)
+      result^ := '1';
+      if val >= 100 then // branch not taken is lighter than a div/mod
+      begin
+        dec(val, 100);
+        result^ := '2';
+      end;
+      inc(result);
+    end;
+    PWord(result)^ := tab[val]; // append remaining '00'..'99'
+    inc(PWord(result));
+  end
+  else
+  begin
+    result^ := AnsiChar(val + ord('0')); // '0'..'9'
+    inc(result);
+  end;
+end;
+
+procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
+begin
+  dest[0] := AnsiChar(UInt8ToPChar(dest + ord(dest[0]) + 1, value,
+    @TwoDigitLookupW) - (dest + 1));
+end;
+
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 var
   c: QWord;
@@ -12779,11 +12929,16 @@ begin
   end;
 end;
 
+function CompareBuf(P1, P2: pointer; P1Len, P2Len: PtrInt): integer;
+begin
+  result := MemCmp(P1, P2, MinPtrInt(P1Len, P2Len)); // natural string order
+  if result = 0 then
+    result := ComparePtrInt(P1Len, P2Len);
+end;
+
 function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
 begin
-  result := ComparePtrInt(length(P1), P2Len);
-  if result = 0 then
-    result := MemCmp(pointer(P1), P2, P2Len);
+  result := CompareBuf(pointer(P1), P2, length(P1), P2Len);
 end;
 
 function CompareBuf(const P1, P2: RawByteString): integer;
@@ -12794,6 +12949,11 @@ end;
 function EqualBuf(const P1, P2: RawByteString): boolean;
 begin
   result := SortDynArrayRawByteString(P1, P2) = 0;
+end;
+
+function CompareShort(P1: pointer; const P2: ShortString): boolean;
+begin
+  result := CompareMemSmall(P1, @P2[1], ord(P2[0]));
 end;
 
 function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
@@ -13352,25 +13512,6 @@ end;
 
 
 { ************ Sorting/Comparison Functions }
-
-function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
-begin
-  case CompareOperator of
-    coEqualTo:
-      result := CompareResult = 0;
-    coNotEqualTo:
-      result := CompareResult <> 0;
-    coLessThan:
-      result := CompareResult < 0;
-    coLessThanOrEqualTo:
-      result := CompareResult <= 0;
-    coGreaterThan:
-      result := CompareResult > 0;
-  // coGreaterThanOrEqualTo:
-  else
-    result := CompareResult >= 0;
-  end;
-end;
 
 function SortDynArrayVariant(const A, B): integer;
 begin

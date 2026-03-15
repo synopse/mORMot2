@@ -1504,7 +1504,7 @@ const
     'KX'); //  sarKeyExecute
 
   /// define how a sctAttribute is stored as SDDL
-  ATTR_SDDL: array[sctLocalAttribute .. sctDeviceAttribute] of string[10] = (
+  ATTR_SDDL: array[sctLocalAttribute .. sctDeviceAttribute] of TShort15 = (
    '',            // sctLocalAttribute
    '@User.',      // sctUserAttribute
    '@Resource.',  // sctResourceAttribute
@@ -2636,7 +2636,7 @@ procedure GetProcessInfo(const aPidList: TCardinalDynArray;
 
 /// set the current system time as UTC timestamp
 // - we define two functions with diverse signature to circumvent the FPC RTL
-// TSystemTime field order inconsistency - POSIX version is in momrot.core.os
+// TSystemTime field order inconsistency - POSIX version is in mormot.core.os
 // - warning: do not call this function directly, but rather mormot.core.datetime
 // TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
 function SetSystemTime(const utctime: TSystemTime): boolean;
@@ -2875,7 +2875,7 @@ begin // faster than ConvertSidToStringSidA(), and cross-platform
   end;
   for i := 0 to PtrInt(sid^.SubAuthorityCount) - 1 do
   begin
-    AppendShortCharSafe('-', @s);
+    AppendShortCharSafe('-', s);
     AppendShortCardinal(sid^.SubAuthority[i], s);
   end;
 end;
@@ -3117,7 +3117,7 @@ procedure SddlInitialize; forward;
 var
   SddlInitialized: boolean; // delayed initialization of those lookup constants
   KNOWN_SID: array[TWellKnownSid] of RawSid;
-  KNOWN_SID_TEXT: array[TWellKnownSid] of string[23];
+  KNOWN_SID_TEXT: array[TWellKnownSid] of TShort23;
 
 const
   INTEGRITY_SID:
@@ -4119,13 +4119,13 @@ begin
         AppendShortQWord(v^.Int.Value, s);
     sctUnicode:
       begin
-        AppendShortCharSafe('"', @s);
+        AppendShortCharSafe('"', s);
         Unicode_WideToShort(@v^.Unicode, v^.UnicodeBytes shr 1, CP_UTF8, utf8);
         if ord(s[0]) + ord(utf8[0]) > 250 then
           result := false // we don't like to be truncated
         else
           AppendShort(utf8, s);
-        AppendShortCharSafe('"', @s);
+        AppendShortCharSafe('"', s);
       end;
     sctLocalAttribute,
     sctUserAttribute,
@@ -4143,14 +4143,11 @@ begin
             AppendShortByteHex(ord(utf8[i]), s);
           end
           else
-          begin
-            inc(s[0]);
-            s[ord(s[0])] := utf8[i];
-          end;
+            AppendShortChar(utf8[i], @s);
       end;
     sctOctetString:
       begin
-        AppendShortCharSafe('#', @s);
+        AppendShortCharSafe('#', s);
         if ord(s[0]) + v^.OctetBytes shl 1 > 250 then
           result := false // we don't like to be truncated
         else
@@ -4170,9 +4167,9 @@ begin
             singleComposite := false
           else
             // e.g. '(@User.Project Any_of 1)'
-            AppendShortCharSafe(' ', @s);
+            AppendShortCharSafe(' ', s);
         if not singleComposite then
-          AppendShortCharSafe('{', @s);
+          AppendShortCharSafe('{', s);
         repeat
           clen := AceTokenLength(c);
           if clen > comp then
@@ -4184,10 +4181,10 @@ begin
           if comp = 0 then
             break;
           inc(PByte(c), clen);
-          AppendShortCharSafe(',', @s);
+          AppendShortCharSafe(',', s);
         until false;
         if not singleComposite then
-          AppendShortCharSafe('}', @s);
+          AppendShortCharSafe('}', s);
         result := true;
       end;
     sctSid:
@@ -4195,7 +4192,7 @@ begin
       begin
         AppendShort('SID(', s);
         SddlAppendSid(s, @v^.Sid, dom);
-        AppendShortCharSafe(')', @s);
+        AppendShortCharSafe(')', s);
       end
       else
         exit; // should not be void
@@ -4508,7 +4505,7 @@ procedure TSecAce.AppendAsText(var s: ShortString; var sddl: TSynTempAdder;
 var
   f: TSecAceFlag;
 begin
-  AppendShortCharSafe('(', @s);
+  AppendShortCharSafe('(', s);
   if SAT_SDDL[AceType][0] <> #0 then
     AppendShort(SAT_SDDL[AceType], s)
   else
@@ -4516,34 +4513,34 @@ begin
     AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);
     AppendShortIntHex(RawType, s); // fallback to lower hex - paranoid
   end;
-  AppendShortCharSafe(';', @s);
+  AppendShortCharSafe(';', s);
   if Flags <> [] then
     for f := low(f) to high(f) do
       if f in Flags then
         AppendShort(SAF_SDDL[f], s);
-  AppendShortCharSafe(';', @s);
+  AppendShortCharSafe(';', s);
   SddlAppendMask(s, Mask);
   if AceType in satObject then
   begin
-    AppendShortCharSafe(';', @s);
+    AppendShortCharSafe(';', s);
     if not IsNullGuid(ObjectType) then
       uuid(ObjectType, s); // RTL or mormot.core.text
-    AppendShortCharSafe(';', @s);
+    AppendShortCharSafe(';', s);
     if not IsNullGuid(InheritedObjectType) then
       uuid(InheritedObjectType, s);
-    AppendShortCharSafe(';', @s);
+    AppendShortCharSafe(';', s);
   end
   else
     AppendShort(';;;', s);
   SddlAppendSid(s, pointer(Sid), dom);
   if Opaque <> '' then
   begin
-    AppendShortCharSafe(';', @s);
+    AppendShortCharSafe(';', s);
     sddl.AddShort(s);
     s[0] := #0;
     SddlAppendOpaque(sddl, self, dom); // direct expression write in sddl
   end;
-  AppendShortCharSafe(')', @s);
+  AppendShortCharSafe(')', s);
   sddl.AddShort(s);
   s[0] := #0;
 end;
@@ -6563,9 +6560,9 @@ begin
     begin
       y := x div 40; // first byte = two first numbers modulo 40
       dec(x, y * 40);
-      AppendShortCardinal(y, tmp);
+      AppendShortByte(y, @tmp); // in range '0'..'39'
     end;
-    {%H-}AppendShortCharSafe('.', @tmp);
+    {%H-}AppendShortCharSafe('.', tmp);
     AppendShortCardinal(x, tmp);
   end;
   FastSetString(result, @tmp[1], ord(tmp[0]));
@@ -6941,7 +6938,7 @@ end;
 
 
 const
-  _WSP: array[TWinSystemPrivilege] of string[32] = (
+  _WSP: array[TWinSystemPrivilege] of TShort32 = (
     // note: string[32] to ensure there is a #0 terminator for all items
     'SeCreateTokenPrivilege',          // wspCreateToken
     'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
@@ -7132,7 +7129,7 @@ end;
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
   buf: TSynTempBuffer;
-  name: string[127];
+  name: TShort127;
   tp: PTOKEN_PRIVILEGES;
   i: PtrInt;
   len: cardinal;

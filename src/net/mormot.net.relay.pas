@@ -1105,7 +1105,7 @@ begin
         'frames',    fRestFrameCount,
         'pending',   fRestPending, '}',
       'connected',   fClients.ServerConnectionActive,
-      'clients',     fClients.WebSocketConnections]));
+      'clients',     fClients.WebSocketConnections]), jsonHumanReadable);
   end;
   result := fStatCache;
 end;
