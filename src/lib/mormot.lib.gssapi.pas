@@ -384,6 +384,8 @@ type
     // the usual spnego-http-auth-nginx-module
     krb5_gss_register_acceptor_identity: function (
       path: PAnsiChar): cardinal; cdecl;
+    /// a simple way to identify that the GSS-API library is MIT (at least 1.11)
+    function IsMit: boolean;
   end;
 
   /// Exception raised during libgssapi process
@@ -874,6 +876,14 @@ begin
   inherited Create(Utf8ToString(Msg));
   fMajorStatus := aMajor;
   fMinorStatus := aMinor;
+end;
+
+{ TGssApi }
+
+function TGssApi.IsMit: boolean;
+begin
+  result := (self <> nil) and
+            Assigned(gss_acquire_cred_from);
 end;
 
 
