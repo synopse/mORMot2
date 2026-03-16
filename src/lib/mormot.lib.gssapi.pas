@@ -33,7 +33,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.os.security, // for FileIsKeyTab()
+  mormot.core.os.security, // for TKerberosKeyTab support
   mormot.core.unicode,     // e.g. for Split/SplitRight/IdemPChar
   mormot.core.buffers;     // for base-64 encoding
 
@@ -657,6 +657,11 @@ const
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '@';
 
+  /// traditional/generic name for the environment variable of a keytab file
+  GSSAPI_ENV_CLIENT_KT_HEIMDAL = 'KRB5_KTNAME';
+  // MIT-specific extension for the environment variable of a keytab file
+  GSSAPI_ENV_CLIENT_KT_MIT = 'KRB5_CLIENT_KTNAME';
+
 var
   /// ServerSspiAuthUser() won't return NT4-style NetBIOS name but the realm
   // - the GSS API only returns the realm (mydomain.tld) whereas Windows SSPI
@@ -676,6 +681,11 @@ var
   // - on any GSS_ERROR on this memory ccache, this unit will force this global
   // flag to true to avoid any further issue
   ClientSspiAuthWithPasswordNoMemCcache: boolean = false;
+
+  /// disable MIT 1.11+ gss_acquire_cred_from() from ClientSspiAuthWithPassword()
+  // with aPassword = 'FILE:/path/to/my.keytab'
+  // - fallback to default Heimdal/old-MIT compatible SetSystemEnv/ResetSystemEnv
+  ClientSspiAuthWithPasswordKerberosNoCredFrom: boolean = false;
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
 // - to use the same value for TAuthUser.LogonName on all platforms, user name
@@ -1106,57 +1116,128 @@ var
   maj, min, min2: cardinal;
   buf: gss_buffer_desc;
   user: gss_name_t;
-  n , p, u: RawUtf8;
+  fn: TFileName;
+  n , p, spn, u: RawUtf8;
   orig: PAnsiChar;
-  memCcache: TShort31;
-begin
-  // 1) retrieve the user information in the proper gss_name_t format
-  user := nil;
-  u := aUserName;
-  Split(u, '@', n, p);
-  if p = '' then
-    p := SplitRight(aSecKerberosSpn, '@'); // try to extract the SPN
-  if p <> '' then
-    u := n + '@' + UpperCase(p); // force upper to avoid enduser confusion
-  buf.length := Length(u);
-  buf.value := pointer(u);
-  maj := GssApi.gss_import_name(
-    min, @buf, GSS_KRB5_NT_PRINCIPAL_NAME, user);
-  GssCheck(maj, min, 'Failed to import UserName');
-  // 2) acquire this credential
-  orig := nil;
-  p := aPassword;
-  if StartWithExact(p, 'FILE:') and // e.g. 'FILE:/full/path/to/my.keytab'
-     FileExists(TFileName(copy(p, 6, 1023))) then // no file: keep as password
-  begin
-    if not Assigned(GssApi.gss_krb5_ccache_name) then
-      raise EGssApi.CreateFmt(
-        'ClientSspiAuthWithPassword(%s): missing gss_krb5_ccache_name', [p]);
-    // use the explicit 'FILE:/tmp/krb5cc_custom' param for this authentication
-    maj := GssApi.gss_krb5_ccache_name(min, pointer(p), @orig);
-    if GSS_ERROR(maj) then
-      orig := nil;
-    p := ''; // we now should use the plain gss_acquire_cred()
+  keytab: TKerberosKeyTab;
+  useCredFrom, envReset, fromEnv: boolean;
+  credStore: record
+    key0: PUtf8Char;
+    val0: RawUtf8;
+    key1: PUtf8Char;
+    val1: PUtf8Char;
   end;
-  if p = '' then
-    // recover an existing session with the supplied user
-    maj := GssApi.gss_acquire_cred(min, user,
-      GSS_C_INDEFINITE, aMech, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil)
-  else
+  credSet: gss_key_value_set_desc;
+  envKey, envValue: RawUtf8;
+  memCcache: TShort31;
+
+  function SetMemCcache: pointer;
   begin
-    if not Assigned(GssApi.gss_acquire_cred_with_password) then
+    // setup a thread-specific temporary memory ccache for this credential
+    // as done by mag_auth_basic() in NGINX's mod_auth_gssapi.c
+    memCcache := 'MEMORY:tmp_'; // threadid seems cleaner than random here
+    AppendShortIntHex(PtrUInt(GetCurrentThreadId), memCcache);
+    memCcache[ord(memCcache[0]) + 1] := #0; // make ASCIIZ
+    result := @memCcache[1];
+  end;
+
+begin
+  // 1) setup execution context
+  envReset := false;
+  fromEnv := false;
+  if GssApi.IsMit then
+    envKey := GSSAPI_ENV_CLIENT_KT_MIT      // KRB5_CLIENT_KTNAME
+  else
+    envKey := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // KRB5_KTNAME
+  GetSystemEnv(envKey, envValue);
+  useCredFrom := Assigned(GssApi.gss_acquire_cred_from) and
+                 not ClientSspiAuthWithPasswordKerberosNoCredFrom;
+  keytab := nil;
+  user := nil;
+  orig := nil;
+  u := aUserName;
+  p := aPassword;
+  try
+    // 2) support KRB5_CLIENT_KTNAME or keytab/ccache as FILE: in password
+    if (p = '') and
+       (envValue <> '') then
+    begin
+      fn := TFileName(envValue); // RTL conversion to TFileName
+      fromEnv := true;           // the env variable(s) were set
+      useCredFrom := false;      // respect pure env path
+    end
+    else if StartWithExact(p, 'FILE:') then
+      fn := TFileName(copy(p, 6, 1023)); // e.g. 'FILE:/full/path/to/my.keytab'
+    if fn <> '' then
+      if not FileExists(fn) then
+        fn := ''
+      else
+      begin
+        // try to load KRB5_CLIENT_KTNAME or FILE:keytab
+        keytab := TKerberosKeyTab.Create;
+        if not keytab.LoadFromFile(fn) then
+        begin
+          FreeAndNil(keytab); // no valid keytab: fn contains FILE:ccache
+          if fromEnv then
+            fn := '';         // those env variable are for keytabs, not ccache
+        end
+        else if u = '' then
+          // try to locate the proper User in this keytab
+          u := keytab.MachineAccountPrincipal;
+      end;
+    // 3) retrieve the user information in the proper gss_name_t format
+    Split(u, '@', n, spn);
+    if spn = '' then
+      spn := SplitRight(aSecKerberosSpn, '@'); // try to extract the SPN
+    if spn <> '' then
+      u := n + '@' + UpperCase(spn); // force upper to avoid enduser confusion
+    buf.length := Length(u);
+    buf.value := pointer(u);
+    maj := GssApi.gss_import_name(
+      min, @buf, GSS_KRB5_NT_PRINCIPAL_NAME, user);
+    GssCheck(maj, min, 'Failed to import UserName');
+    // 4) acquire this credential
+    if useCredFrom and
+       (keytab <> nil) then
+    begin
+      // use MIT 1.11+ gss_acquire_cred_from() with this keytab
+      credSet.count := 1;
+      credStore.key0 := 'client_keytab';
+      credStore.val0 := RawUtf8(fn); // let the RTL convert to PUtf8Char
+      if not ClientSspiAuthWithPasswordNoMemCcache then
+      begin
+        credSet.count := 2;
+        credStore.key1 := 'ccache';
+        credStore.val1 := SetMemCcache;
+      end;
+      credSet.elements := @credStore;
+      maj := GssApi.gss_acquire_cred_from(min, user, GSS_C_INDEFINITE, aMech,
+        GSS_C_INITIATE, @credSet, aSecContext.CredHandle, nil, nil);
+      GssCheck(maj, min, 'Failed to acquire credentials for keytab');
+      exit; // all done in a single call
+    end;
+    if (fn <> '') and
+       (keytab = nil) then
+    begin
+      // the supplied FILE: should be a ccache
+      if not Assigned(GssApi.gss_krb5_ccache_name) then
         raise EGssApi.CreateFmt(
-          'ClientSspiAuthWithPassword(%s): missing in GSSAPI', [aUserName]);
+          'ClientSspiAuthWithPassword(%s): missing gss_krb5_ccache_name', [p]);
+      // use the explicit 'FILE:/tmp/krb5cc_custom' param for this authentication
+      maj := GssApi.gss_krb5_ccache_name(min, pointer(p), @orig);
+      if GSS_ERROR(maj) then
+        orig := nil;
+      maj := GssApi.gss_acquire_cred(min, user, GSS_C_INDEFINITE, aMech,
+        GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+      GssCheck(maj, min, 'Failed to acquire credentials for ccache');
+      exit; // all done in a single call
+    end;
+    // if we reached here, we would need a transient memory ccache for safety
     if Assigned(GssApi.gss_krb5_ccache_name) and
        not ClientSspiAuthWithPasswordNoMemCcache then
     begin
-      // setup a thread-specific temporary memory ccache for this credential
-      // as done by mag_auth_basic() in NGINX's mod_auth_gssapi.c
-      memCcache := 'MEMORY:tmp_'; // threadid seems cleaner than random here
-      AppendShortIntHex(PtrUInt(GetCurrentThreadId), memCcache);
-      memCcache[ord(memCcache[0]) + 1] := #0; // make ASCIIZ
       // note: this memCcache is released at final FreeSecContext(aSecContext)
-      maj := GssApi.gss_krb5_ccache_name(min, @memCcache[1], @orig);
+      maj := GssApi.gss_krb5_ccache_name(min, SetMemCcache, @orig);
       // note: old Heimdal implementation may not properly return orig
       //       see https://github.com/heimdal/heimdal/commit/fc9f9b322a88
       if GSS_ERROR(maj) then
@@ -1169,24 +1250,54 @@ begin
         //          libgssapi_krb5.dylib in GssLib_Custom
       end;
     end;
-    // actually authenticate with the supplied credentials
-    buf.length := Length(p);
-    buf.value := pointer(p);
-    maj := GssApi.gss_acquire_cred_with_password(
-      min, user, @buf, GSS_C_INDEFINITE, aMech,
-      GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-  end;
-  // release gss_name_t resource
-  if user <> nil then
-    GssApi.gss_release_name(min, user);
-  // restore the previous memCcache for this thread (before GssCheck)
-  if orig <> nil then // orig = e.g. 'FILE:/tmp/krb5cc_1000'
-    GssApi.gss_krb5_ccache_name(min2, orig, nil);  // ignore any error
+    if keytab <> nil then
+    begin
+      // use environment variables pointing to keytab file
+      if not fromEnv then // force temporarly if not already set
+      begin
+        envReset := true;
+        SetSystemEnv(envKey, RawUtf8(fn));
+      end;
+      maj := GssApi.gss_acquire_cred(min, user, GSS_C_INDEFINITE, aMech,
+        GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+      GssCheck(maj, min, 'Failed to acquire credentials for env keytab');
+    end
+    else if p = '' then
+    begin
+      // recover an existing session with the supplied user or keytab
+      maj := GssApi.gss_acquire_cred(min, user,
+        GSS_C_INDEFINITE, aMech, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+      GssCheck(maj, min, 'Failed to acquire credentials for current logged user');
+    end
+    else
+    begin
+      // actually authenticate with the supplied user/password credentials
+      if not Assigned(GssApi.gss_acquire_cred_with_password) then
+          raise EGssApi.CreateFmt(
+            'ClientSspiAuthWithPassword(%s): missing in GSSAPI', [aUserName]);
+      buf.length := Length(p);
+      buf.value := pointer(p);
+      maj := GssApi.gss_acquire_cred_with_password(
+        min, user, @buf, GSS_C_INDEFINITE, aMech,
+        GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+      GssCheck(maj, min, 'Failed to acquire credentials for user and password');
+    end;
+  finally
+    // 5) eventual cleanup
+    // release keytab instance
+    keytab.Free;
+    // release gss_name_t resource
+    if user <> nil then
+      GssApi.gss_release_name(min, user);
+    // restore the previous memCcache for this thread (before GssCheck)
+    if orig <> nil then // orig = e.g. 'FILE:/tmp/krb5cc_1000'
+      GssApi.gss_krb5_ccache_name(min2, orig, nil);  // ignore any error
     // note: IBM doc states that krb5_free_string(orig) should be done
     //       but Debian doc and mod_auth_gssapi.c don't: so we won't either
-  // 3) eventually raise EGssApi on authentication error
-  GssCheck(maj, min,
-    'Failed to acquire credentials for specified user');
+    if envReset then
+      // restore env variables - do nothing if not overriden
+      ResetSystemEnv(envKey);
+  end;
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
