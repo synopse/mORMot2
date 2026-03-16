@@ -3224,10 +3224,22 @@ begin
     '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
     '{a:1,b:2}');
   TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
+    '{a:1,b:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
+    '{a:1,b:"a"}');
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
     '{a:1,b:"1"}');
   TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$a}}}',
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
     '{a:1,b:"$a$",c:{d:1}}');
   TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
@@ -3267,6 +3279,14 @@ begin
     J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
     '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
      '",d:null,e:"as"}');
+  TestJop(
+    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
+    '[99,10,"number 1",100]');
+  TestJop(
+    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
+    '[1,1,2,10]');
   TestJop(
     '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
     '{a:1,b:"1"}');
