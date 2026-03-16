@@ -1939,8 +1939,9 @@ type
     /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
-    // - as an alternative, on POSIX you can specify a keytab associated with
-    // UserName as 'FILE:/full/path/to/my.keytab' into this property
+    // - as an alternative, on POSIX you can specify a keytab as
+    // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
+    // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
     property Password: SpiUtf8
       read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
@@ -6713,7 +6714,7 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if fSettings.UserName <> '' then
+          if fSettings.Password <> '' then // UserName may be '' for FILE:keytab
             ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
               fSettings.Password, fSettings.KerberosSpn, dataout)
           else
