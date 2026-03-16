@@ -1980,6 +1980,10 @@ function FileIsKeyTab(const aKeytab: TFileName): boolean;
 /// returns the first Principal in the form HOSTNAME$@REALM of a given keytab file
 function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName): RawUtf8;
 
+/// check if a file is a valid Kerberos keytab, and return its entries
+// - so that you could write e.g. for entry in FileIsKeyTabEntries() do ...
+function FileIsKeyTabEntries(const aKeytab: TFileName): TKerberosKeyEntries;
+
 
 { **************** Basic ASN.1 Support }
 
@@ -5858,6 +5862,20 @@ begin
   try
     if kt.LoadFromFile(aKeyTab) then
       result := kt.MachineAccountPrincipal;
+  finally
+    kt.Free;
+  end;
+end;
+
+function FileIsKeyTabEntries(const aKeytab: TFileName): TKerberosKeyEntries;
+var
+  kt: TKerberosKeyTab;
+begin
+  result := nil;
+  kt := TKerberosKeyTab.Create;
+  try
+    if kt.LoadFromFile(aKeyTab) then
+      result := kt.fEntry;
   finally
     kt.Free;
   end;
