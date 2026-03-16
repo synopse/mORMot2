@@ -1953,6 +1953,8 @@ type
       const Principals: array of RawUtf8): integer;
     /// remove an entry in the internal KeyTab list
     function Delete(aIndex: PtrUInt): boolean;
+    /// returns the first Entry[].Principal in the form HOSTNAME$@REALM
+    function MachineAccountPrincipal: RawUtf8;
     /// persist this KeyTab list as a memory buffer
     function SaveToBinary: RawByteString;
     /// persist this KeyTab list as a local file
@@ -6098,6 +6100,20 @@ begin
     Clear
   else
     DynArrayFakeDelete(fEntry, aIndex, n, SizeOf(fEntry[n]));
+end;
+
+function TKerberosKeyTab.MachineAccountPrincipal: RawUtf8;
+var
+  i: PtrInt;
+begin
+  if self <> nil then
+    for i := 0 to length(fEntry) - 1 do
+      if PosEx('$@', fEntry[i].Principal) <> 0 then
+      begin
+        result := fEntry[i].Principal;
+        exit;
+      end;
+  result := '';
 end;
 
 function TKerberosKeyTab.SaveToBinary: RawByteString;
