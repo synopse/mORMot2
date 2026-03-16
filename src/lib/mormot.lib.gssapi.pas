@@ -353,6 +353,17 @@ type
       mech_type: gss_OID;
       out message_context: cardinal;
       out status_string: gss_buffer_desc): cardinal; cdecl;
+    /// obtain a credential handle for pre-existing credentials - MIT 1.11+ only
+    gss_acquire_cred_from: function (
+      out minor_status: cardinal;
+      desired_name: gss_name_t;
+      time_req: cardinal;
+      desired_mechs: gss_OID_set;
+      cred_usage: integer;
+      cred_store: gss_const_key_value_set_t;
+      out output_cred_handle: gss_cred_id_t;
+      actual_mechs: gss_OID_set_ptr;
+      time_rec: PCardinal): cardinal; cdecl;
     /// set the default credentials cache name for use by Kerberos
     // - returned old_name must not be freed, but passed back upon a next call
     // to this function
@@ -728,7 +739,7 @@ begin
 end;
 
 const
-  GSS_ENTRIES: array[0 .. 19] of PAnsiChar = (
+  GSS_ENTRIES: array[0 .. 20] of PAnsiChar = (
     // GSSAPI entries
     'gss_import_name',
     'gss_display_name',
@@ -747,6 +758,8 @@ const
     'gss_indicate_mechs',
     'gss_release_oid_set',
     'gss_display_status',
+    // MIT-only definitions
+    'gss_acquire_cred_from',
     // Kerberos specific entries - potentially with Heimdal alternative name
     'gss_krb5_ccache_name',
     'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
@@ -765,7 +778,7 @@ begin
     exit;
   tried := LibraryName + GssLib_Custom + GssLib_MIT + GssLib_Heimdal + GssLib_OS;
   if GssApiTried = tried then
-    // try LoadLibrary() only if any of the .so names changed
+    // retry LoadLibrary() only if any of the .so names changed
     exit;
   GssApiTried := tried;
   api := TGssApi.Create;
