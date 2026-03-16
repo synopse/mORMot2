@@ -1970,12 +1970,15 @@ type
 /// internal comparison of two KeyTab entries as in a TKerberosKeyTab storage
 function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
 
-/// check if a file is readable and is a valid Kerberos keytab
-function FileIsKeyTab(const aKeytab: TFileName): boolean;
-
 /// check if a buffer contains a valid Kerberos keytab
 // - redirect to TKerberosKeyTab.LoadFromBuffer() from this unit
 function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
+
+/// check if a file is readable and is a valid Kerberos keytab
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+
+/// returns the first Principal in the form HOSTNAME$@REALM of a given keytab file
+function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName): RawUtf8;
 
 
 { **************** Basic ASN.1 Support }
@@ -5846,9 +5849,18 @@ begin
   result := TKerberosKeyTab(nil).LoadFromFile(aKeyTab); // fast with self=nil
 end;
 
-function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
+function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName): RawUtf8;
+var
+  kt: TKerberosKeyTab;
 begin
-  result := TKerberosKeyTab(nil).LoadFromBinary(aKeyTab); // fast with self=nil
+  result := '';
+  kt := TKerberosKeyTab.Create;
+  try
+    if kt.LoadFromFile(aKeyTab) then
+      result := kt.MachineAccountPrincipal;
+  finally
+    kt.Free;
+  end;
 end;
 
 
