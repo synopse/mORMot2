@@ -542,8 +542,9 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // 'username@MYDOMAIN.TLD' if aSecKerberosSpn is not set or if
 // ClientForceSpn() has not been called ahead
 // - aPassword is the user clear text password - you may set '' if you did a
-// previous kinit for aUserName on the system and want to recover this token,
-// or force a local keytab file e.g. as aPassword = 'FILE:/full/path/to/my.keytab'
+// previous kinit for aUserName on the system and want to recover this token, or
+// force a local keytab/ccache file e.g. as aPassword = 'FILE:/path/to/my.keytab'
+// and if aUserName is '' it will try TKerberosKeyTab.MachineAccountPrincipal
 // - aOutData contains data that must be sent back to the server
 // - you can specify an optional Mechanism OID - default is SPNEGO / Kerberos
 // - if the function returns True, client must send aOutData to server
@@ -554,6 +555,10 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString; aMech: gss_OID = nil): boolean;
+
+/// check if the password is a local keytab/ccache file with a FILE: prefix
+// - e.g. as 'FILE:/path/to/my.keytab'
+function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
 
 /// check if a binary request packet from a client is using NTLM
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
@@ -683,7 +688,6 @@ var
   ClientSspiAuthWithPasswordNoMemCcache: boolean = false;
 
   /// disable MIT 1.11+ gss_acquire_cred_from() from ClientSspiAuthWithPassword()
-  // with aPassword = 'FILE:/path/to/my.keytab'
   // - fallback to default Heimdal/old-MIT compatible SetSystemEnv/ResetSystemEnv
   ClientSspiAuthWithPasswordKerberosNoCredFrom: boolean = false;
 
@@ -1110,6 +1114,11 @@ begin
   result := ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
 end;
 
+function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
+begin
+  result := StartWithExact(aPassword, 'FILE:');
+end;
+
 procedure ClientSspiCreateCredHandle(var aSecContext: TSecContext;
   const aUserName, aPassword, aSecKerberosSpn: RawUtf8; aMech: gss_OID_set);
 var
@@ -1166,7 +1175,7 @@ begin
       fromEnv := true;           // the env variable(s) were set
       useCredFrom := false;      // respect pure env path
     end
-    else if StartWithExact(p, 'FILE:') then
+    else if ClientSspiPasswordIsFile(p) then
       fn := TFileName(copy(p, 6, 1023)); // e.g. 'FILE:/full/path/to/my.keytab'
     if fn <> '' then
       if not FileExists(fn) then
