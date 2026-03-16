@@ -2357,6 +2357,7 @@ type
     procedure ParseServer(Head: PUtf8Char);
     /// retrieve a cookie name/value pair in the internal storage
     function FindCookie(const CookieName: RawUtf8): PHttpCookie;
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
     function GetCookie(const CookieName: RawUtf8): RawUtf8;
@@ -11032,7 +11033,8 @@ function THttpCookies.FindCookie(const CookieName: RawUtf8): PHttpCookie;
 begin
   result := nil;
   if @self <> nil then
-    result := FindTextBufferPair(CookieName, fCookies);
+    result := pointer(FindTextBufferPair(
+                pointer(CookieName), length(CookieName), pointer(fCookies)));
 end;
 
 function THttpCookies.GetCookie(const CookieName: RawUtf8): RawUtf8;

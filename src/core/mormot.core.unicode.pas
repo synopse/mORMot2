@@ -2538,7 +2538,7 @@ type
 
   /// store pointer references to a name/value pair as UTF-8 text buffers
   // - used e.g. for TParseSortExpression or as THttpCookie
-  TTextBufferPair = object
+  TTextBufferPair = record
     /// start of the name identifier - not #0 ended, but of NameLen length
     NameStart: PUtf8Char;
     /// start of the value identifier - not #0 ended, but of ValueLen length
@@ -2554,7 +2554,15 @@ type
   TTextBufferPairDynArray = array of TTextBufferPair;
 
   /// all parsed filled from ParseTextExpression()
-  TTextExpression = object(TTextBufferPair)
+  TTextExpression = record
+    /// start of the name identifier - not #0 ended, but of NameLen length
+    NameStart: PUtf8Char;
+    /// start of the value identifier - not #0 ended, but of ValueLen length
+    ValueStart: PUtf8Char;
+    /// the number of UTF-8 chars stored in NameStart
+    NameLen: integer;
+    /// the number of UTF-8 chars stored in ValueStart
+    ValueLen: integer;
     /// the recognized operator for EvaluateTextExpression()
     Match: TCompareOperator;
   end;
@@ -2585,6 +2593,7 @@ function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
 /// low-level search of NameStart/NameLen in a TTextBufferPairDynArray
 function FindTextBufferPair(const name: RawUtf8;
   const pairs: TTextBufferPairDynArray): PTextBufferPair; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute a RawUtf8 from pairs[ndx].NameStart/NameLen or '' if ndx is out of range
 function NameTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
