@@ -5836,9 +5836,14 @@ begin
             (SortDynArrayRawByteString(A.Key, B.Key) = 0);
 end;
 
+function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
+begin
+  result := TKerberosKeyTab(nil).LoadFromBinary(aKeyTab); // fast with self=nil
+end;
+
 function FileIsKeyTab(const aKeytab: TFileName): boolean;
 begin
-  result := BufferIsKeyTab(StringFromFile(aKeyTab));
+  result := TKerberosKeyTab(nil).LoadFromFile(aKeyTab); // fast with self=nil
 end;
 
 function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
@@ -6002,7 +6007,8 @@ function TKerberosKeyTab.LoadFromFile(const aFile: TFileName): boolean;
 var
   bin: RawByteString;
 begin
-  fFileName := aFile;
+  if self <> nil then // may be called with self = nil from FileIsKeyTab()
+    fFileName := aFile;
   bin := StringFromFile(aFile);
   result := LoadFromBinary(bin);
   FillZero(bin); // anti-forensic
