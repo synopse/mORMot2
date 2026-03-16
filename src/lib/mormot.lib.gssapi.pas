@@ -89,6 +89,12 @@ type
   end;
   gss_channel_bindings_t = ^gss_channel_bindings_struct;
 
+  gss_key_value_set_desc = record
+    count: cardinal; // should be OM_uint32 per RFC 2744
+    elements: pointer;
+  end;
+  gss_const_key_value_set_t = ^gss_key_value_set_desc;
+
   {$A+} // back to usual class/record alignment
 
 
@@ -119,6 +125,8 @@ const
   GSS_C_INTEG_FLAG    = 32;
   // Do not reveal the initiator's identity to the acceptor
   GSS_C_ANON_FLAG     = 64;
+
+  GSS_S_COMPLETE = 0;
 
   GSS_C_CALLING_ERROR_OFFSET = 24;
   GSS_C_ROUTINE_ERROR_OFFSET = 16;
@@ -708,6 +716,8 @@ begin
             CompareMemSmall(oid1^.elements, oid2^.elements, oid1^.length);
 end;
 
+// see https://www.gnu.org/software/gss/manual/html_node/Error-Handling.html
+
 function GSS_CALLING_ERROR(x: cardinal): boolean;
 begin
   result := (x and
@@ -845,7 +855,7 @@ begin
     FastSetString(Str, MsgBuf.value, MsgBuf.length);
     GssApi.gss_release_buffer(MinSt, MsgBuf);
     if Msg <> '' then
-      Msg := Msg + ' - ' + Str
+      Msg := Join([Msg, ' - ', Str])
     else
       Msg := Str;
   until GSS_ERROR(MajSt) or
