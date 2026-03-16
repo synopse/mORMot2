@@ -3072,13 +3072,21 @@ function TJsonDsl.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
 var
   key: PUtf8Char;
   keylen: PtrInt;
+  ending: AnsiChar;
 begin
   result := P;
   inc(result); // called with P^ = '$'
+  ending := '$';
   if result^ in ['(', '{'] then // $(ident) ${ident} format, not $ident$
+  begin
+    if result^ = '(' then
+      ending := ')'
+    else
+      ending := '}';
     inc(result);
+  end;
   key := result;
-  while not (result^ in [#0 .. ' ', '$', '}', ')', '|']) do
+  while (result^ <> ending) and not (result^ in [#0 .. ' ', '|']) do
     inc(result);
   Value := nil;
   if result^ <= ' ' then
@@ -3095,13 +3103,13 @@ begin
         Value := key;
         Len := keylen;
       end;
-      while not (result^ in [#0 .. #31, '$', '}', ')']) do
+      while (result^ <> ending) and (result^ in [#0 .. #31]) do
         inc(result);
       inc(result); // skip trailing $ or }
       exit;
     end;
     key := result;
-    while not (result^ in [#0 .. #31, '$', '}', ')', '|']) do
+    while (result^ <> ending) and not (result^ in [#0 .. #31, '|']) do
       inc(result);
     if result^ < ' ' then
       exit;
