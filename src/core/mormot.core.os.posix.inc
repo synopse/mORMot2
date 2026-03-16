@@ -2500,6 +2500,14 @@ begin
   until e^ = nil;
 end;
 
+function setenv(name, value: PUtf8Char; replace: integer): integer;
+  cdecl external clib name 'setenv';
+
+function _SetSystemEnv(const name, value: RawUtf8): boolean;
+begin
+  result := setenv(pointer(name), pointer(value), {replace=}1) = 0;
+end;
+
 procedure GetUserHost(out User, Host: RawUtf8);
 begin
   Host := SystemInfo.uts.nodename;

@@ -1634,6 +1634,17 @@ function GetSystemEnv(const name: RawUtf8; var res: RawUtf8): boolean; overload;
 /// search a system environment variable as UTF-8 from the internal cache
 function GetSystemEnv(name: PUtf8Char; len: TStrLen): pointer; overload;
 
+/// override system environment variable for the current process
+// - calls SetEnvironmentVariable() on Windows, or libc setenv() on POSIX
+// - warning: won't change the GetSystemEnv() cached value - this function is
+// for a temporary change before some API call, with "finally ResetSystemEnv()"
+function SetSystemEnv(const name, value: RawUtf8): boolean;
+
+/// reset a system environment variable for the current process to its initial value
+// - calls SetEnvironmentVariable() on Windows, or libc setenv() on POSIX with
+// the internal cached value as used by GetSystemEnv()
+procedure ResetSystemEnv(const name: RawUtf8);
+
 type
   /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
   // - ignored on POSIX systems, in which the main cacert.pem file is used
@@ -9752,6 +9763,17 @@ begin
     exit;
   result := true;
   res := RawUtf8(p);
+end;
+
+function SetSystemEnv(const name, value: RawUtf8): boolean;
+begin
+  result := (GetSystemEnv(name) = value) or
+            _SetSystemEnv(name, value);
+end;
+
+procedure ResetSystemEnv(const name: RawUtf8);
+begin
+  SetSystemEnv(name, GetSystemEnv(name));
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;

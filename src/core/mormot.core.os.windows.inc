@@ -3013,6 +3013,16 @@ begin
   FreeEnvironmentStringsW(env);
 end;
 
+function _SetSystemEnv(const name, value: RawUtf8): boolean;
+var
+  n, v: TSynTempBuffer;
+begin
+  result := SetEnvironmentVariableW(Utf8ToWin32PWideChar(name, n),
+                                    Utf8ToWin32PWideChar(value, v));
+  n.Done;
+  v.Done;
+end;
+
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
