@@ -159,7 +159,6 @@ Low-Level Data Processing Functions shared by all framework units
 JSON functions shared by all framework units
 - Low-Level JSON Processing Functions
 - `TTextWriter` class with proper JSON escaping and `WriteObject()` support
-- JSON-aware `TSynNameValue` `TObjectStoreJson`
 - JSON-aware `TSynDictionary` Storage
 - JSON Unserialization for any kind of Values
 - JSON Serialization Wrapper Functions
@@ -199,6 +198,7 @@ Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factori
 ### mormot.core.search
 
 Several Indexing and Search Engines, as used by other parts of the framework
+- JSON-aware `TSynNameValue` `TSynCache` `TObjectStoreJson`
 - Files Search in Folders
 - ScanUtf8, GLOB and SOUNDEX Text Search
 - Efficient CSV Parsing using RTTI
