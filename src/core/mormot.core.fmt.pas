@@ -8,6 +8,7 @@ unit mormot.core.fmt;
 
    Binary, JSON and Text Advanced Formatting Functions
     - Markup (e.g. HTML or Emoji) process
+    - TSynJsonFileSettings parent class
     - JSON and Text Preprocessor
 
   *****************************************************************************
@@ -207,6 +208,68 @@ procedure EmojiFromDots(P: PUtf8Char; W: TTextWriter); overload;
 function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
 
 
+{ ************* TSynJsonFileSettings parent class }
+
+type
+  /// customize TSynJsonFileSettings process
+  // - fsoDisableSaveIfNeeded will disable SaveIfNeeded method process
+  // - fsoReadIni will disable JSON loading, and expect INI file format
+  // - fsoWriteIni/fsoWriteHjson will force SaveIfNeeded to use INI/HJson format
+  // - fsoNoEnumsComment will customize SaveIfNeeded output
+  TSynJsonFileSettingsOption = (
+    fsoDisableSaveIfNeeded,
+    fsoReadIni,
+    fsoWriteIni,
+    fsoWriteHjson,
+    fsoNoEnumsComment);
+  TSynJsonFileSettingsOptions = set of TSynJsonFileSettingsOption;
+
+  /// abstract parent class able to store settings as JSON file
+  // - would fallback and try to read as INI file if no valid JSON is found
+  TSynJsonFileSettings = class(TSynAutoCreateFields)
+  protected
+    fInitialJsonContent, fSectionName: RawUtf8;
+    fFileName: TFileName;
+    fLoadedAsIni: boolean;
+    fSettingsOptions: TSynJsonFileSettingsOptions;
+    fIniOptions: TIniFeatures;
+    fInitialFileHash: cardinal;
+    // could be overriden to validate the content coherency and/or clean fields
+    function AfterLoad: boolean; virtual;
+  public
+    /// initialize this instance and all its published fields
+    constructor Create; override;
+    /// read existing settings from a JSON content
+    // - if the input is no JSON object, then a .INI structure is tried
+    function LoadFromJson(const aJson: RawUtf8;
+      const aSectionName: RawUtf8 = 'Main'): boolean;
+    /// read existing settings from a JSON or INI file file
+    function LoadFromFile(const aFileName: TFileName;
+      const aSectionName: RawUtf8 = 'Main'): boolean; virtual;
+    /// just a wrapper around ExtractFilePath(FileName);
+    function FolderName: TFileName;
+    /// persist the settings as a JSON file, named from LoadFromFile() parameter
+    // - will use the INI format if it was used at loading, or fsoWriteIni is set
+    // - return TRUE if file has been modified, FALSE if was not needed or failed
+    function SaveIfNeeded: boolean; virtual;
+    /// optional persistence file name, as set by LoadFromFile()
+    property FileName: TFileName
+      read fFileName write fFileName;
+    /// allow to customize the storing process
+    property SettingsOptions: TSynJsonFileSettingsOptions
+      read fSettingsOptions write fSettingsOptions;
+    /// allow to customize fsoReadIni/fsoWriteIni storing process
+    property IniOptions: TIniFeatures
+      read fIniOptions write fIniOptions;
+    /// can be used to compare two instances original file content
+    // - will use DefaultHasher, so hash could change after process restart
+    property InitialFileHash: cardinal
+      read fInitialFileHash write fInitialFileHash;
+  end;
+  /// meta-class definition of TSynJsonFileSettings
+  TSynJsonFileSettingsClass = class of TSynJsonFileSettings;
+
+
 { ********** JSON and Text Preprocessor }
 
 type
@@ -229,6 +292,10 @@ function JsonPreprocessToFile(const Json: RawUtf8; const Dest: TFileName;
 
 
 implementation
+
+uses
+  mormot.core.variants;
+
 
 { ************* Markup (e.g. HTML or Emoji) process }
 
@@ -820,6 +887,98 @@ begin
     W.Free;
   end;
 end;
+
+
+{ ************* TSynJsonFileSettings parent class }
+
+
+{ TSynJsonFileSettings }
+
+constructor TSynJsonFileSettings.Create;
+begin
+  inherited Create;
+  fIniOptions := [ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection];
+end;
+
+function TSynJsonFileSettings.AfterLoad: boolean;
+begin
+  result := true; // success
+end;
+
+function TSynJsonFileSettings.LoadFromJson(const aJson: RawUtf8;
+  const aSectionName: RawUtf8): boolean;
+begin
+  if fsoReadIni in fSettingsOptions then
+  begin
+    fSectionName := aSectionName;
+    result := false;
+  end
+  else
+    result := JsonSettingsToObject(aJson, self); // supports also json5/jsonH
+  if not result then
+  begin
+    result := IniToObject(aJson, self, aSectionName, @JSON_[mFastFloat], 0, fIniOptions);
+    if result then
+    begin
+      fSectionName := aSectionName;
+      include(fSettingsOptions, fsoWriteIni); // save back as INI
+    end;
+  end;
+  if result then
+    result := AfterLoad;
+end;
+
+function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName;
+  const aSectionName: RawUtf8): boolean;
+begin
+  fFileName := aFileName;
+  fInitialJsonContent := RawUtf8FromFile(aFileName); // may detect BOM
+  fInitialFileHash := DefaultHash(fInitialJsonContent);
+  result := LoadFromJson(fInitialJsonContent, aSectionName);
+  if result then
+    exit; // success
+  fInitialJsonContent := ''; // file was neither valid JSON nor INI: ignore
+  fInitialFileHash := 0;
+end;
+
+function TSynJsonFileSettings.FolderName: TFileName;
+begin
+  if self = nil then
+    result := ''
+  else
+    result := ExtractFilePath(fFileName);
+end;
+
+function TSynJsonFileSettings.SaveIfNeeded: boolean;
+var
+  saved: RawUtf8;
+  opt: TTextWriterWriteObjectOptions;
+begin
+  result := false;
+  if (self = nil) or
+     (fFileName = '') or
+     (fsoDisableSaveIfNeeded in fSettingsOptions) then
+    exit;
+  opt := SETTINGS_WRITEOPTIONS;
+  if fsoNoEnumsComment in fSettingsOptions then
+    exclude(opt, woHumanReadableEnumSetAsComment);
+  if fsoWriteIni in fSettingsOptions then
+    saved := ObjectToIni(self, fSectionName, opt, 0, fIniOptions)
+  else
+  begin
+    saved := ObjectToJson(self, opt);
+    if fsoWriteHjson in fSettingsOptions then
+      saved := JsonReformat(saved, jsonH); // very human friendly
+  end;
+  if saved = fInitialJsonContent then
+    exit;
+  result := FileFromString(saved, fFileName);
+  if not result then
+    exit;
+  fInitialJsonContent := saved;
+  fInitialFileHash := DefaultHash(saved);
+end;
+
 
 
 { ********** JSON and Text Preprocessor }
