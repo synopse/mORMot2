@@ -2317,7 +2317,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
     procedure DoInclude(P: PUtf8Char; const Append: TOnPreprocAppend);
-    function DoVerbatim(P: PUtf8Char): PUtf8Char;
   public
     /// initialize this pre-processor engine
     constructor Create(flags: TPreprocFlags; const folder: TFileName); reintroduce;
@@ -2717,24 +2716,6 @@ begin
   tmp.Store.Done; // free memory - unlikely from heap
 end;
 
-function TPreproc.DoVerbatim(P: PUtf8Char): PUtf8Char;
-var
-  tmp: TSynTempBuffer; // OnAppend() requires a #0 terminated buffer
-begin
-  P := GotoNextLineSmall(P); // P^ = line just after '$$$' = start of verbatim
-  result := P;
-  repeat
-    result := GotoNextNotSpace(GotoNextLineSmall(result));
-    if result^ = #0 then
-      exit;
-  until (result^ = '$') and
-        (cardinal(PWord(result + 1)^) = DOLLAR_16);
-  tmp.Init(P, result - P); // make #0 terminated
-  OnAppend(tmp.buf);
-  tmp.Done;
-  result := GotoNextLineSmall(result); // ignore trailing '$$$' line
-end;
-
 function TPreproc.ParseSection(P: PUtf8Char): PUtf8Char;
 var
   key, value: PUtf8Char;
@@ -2742,11 +2723,21 @@ var
   marker: TPreprocMarker;
 label
   ok;
-begin // handle P = '$$'
-  result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
+begin // called with P^ = '$$'
+  result := P + 2; // allow '$$' or '$$ some text' markers
   if result^ = '$' then
   begin
-    result := DoVerbatim(result + 1); // $$$ verbatim section $$$
+    result := GotoNextLineSmall(result + 1);
+    P := result; // P^ = line just after '$$$' = verbatim start
+    repeat
+      result := GotoNextNotSpace(GotoNextLineSmall(result));
+      if result^ = #0 then
+        exit;
+    until (result^ = '$') and
+          (cardinal(PWord(result + 1)^) = DOLLAR_16);
+    if Assigned(OnVerbatim) then
+      OnVerbatim(P, result - P);
+    result := GotoNextLineSmall(result); // ignore trailing '$$$' line
     exit;
   end;
   repeat
@@ -2756,20 +2747,23 @@ ok: result := GotoNextNotSpace(result);
       #0:
         exit;
       '$':
-        if result[1] = '$' then
-          break     // end of DSL section
-        else if WasIf(result) then
-          goto ok   // $if$ $else$ $endif$ conditional logic
-        else
-          continue; // $ is not allowed in identifiers anyway
+        begin
+          if result[1] = '$' then
+            break;    // end of DSL section
+          P := result;
+          if not WasIf(P) then
+            continue; // $ is not allowed in identifiers anyway
+          result := P;
+          goto ok;    // $if$ $else$ $endif$ conditional logic
+        end;
       '#', '/':
-        continue;   // comment line
+        continue;     // comment line
       'i', 'I':
         if IdemPChar(result + 1, 'NCLUDE ') then
         begin
           if IncludeFolder <> '' then
             DoInclude(GotoNextNotSpace(result + 8), OnAppend);
-          continue; // this is a reserved keyword, never an identifier
+          continue;   // this is a reserved keyword, never an identifier
         end;
     end;
     key := result;
@@ -2779,9 +2773,9 @@ ok: result := GotoNextNotSpace(result);
     keylen := result - key;
     result := GotoNextNotSpace(result);
     if not (result^ in ['=', ':']) then
-      continue; // $ and | are not allowed in identifiers
+      continue;       // $ and | are not allowed in identifiers
     while result^ in ['=', ':', ' '] do
-      inc(result); // allow := or == syntax
+      inc(result);    // allow := or == syntax
     marker := pmEscapedString;
     value := result + 1; // early to make Delphi happy - exclude starting { [ "
     case result^ of

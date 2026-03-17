@@ -251,6 +251,8 @@ function JsonUnquotedValueValid(P: PUtf8Char; len: PtrUInt): boolean;
 type
   /// event signature for TPreprocAbstract.OnAppend callback - e.g. Reformat()
   TOnPreprocAppend = function(P: PUtf8Char): boolean of object;
+  /// event signature for TPreprocAbstract.OnVerbatim callback - for $$$ ... $$$
+  TOnPreprocVerbatim = procedure(P: PUtf8Char; Len: PtrInt) of object;
   /// event signature for TPreprocAbstract.OnAddDebugComment callback
   TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
   /// flags used to identify the $(ident) variables stored by TPreprocAbstract
@@ -260,6 +262,7 @@ type
   TPreprocAbstract = class(TSynPersistent)
   protected
     OnAppend: TOnPreprocAppend;
+    OnVerbatim: TOnPreprocVerbatim;
     OnAddDebugComment: TOnPreprocAddDebugComment;
   public
     /// called with P^=$$ to integrate DSL sections
@@ -2756,8 +2759,8 @@ type
     StackCount: integer;
     JsonFirst: PJsonTokens;
     Max: PUtf8Char; // checking Max after each comma is good enough
-    FmtPreproc: TPreprocAbstract;
     W: TJsonWriter;
+    FmtPreproc: TPreprocAbstract;
     RootCount: integer; // for InitCount or as DSL include depth
     // 500 nested documents seem enough in practice (SQLite3 uses 1000)
     Stack: array[0..500] of TJsonParserState;
@@ -2780,6 +2783,7 @@ type
     function AddMultiLine(P: PUtf8Char): PUtf8Char;
     procedure AddStartComment;
     procedure AddDebugComment(const info: ShortString);
+    procedure AddVerbatim(P: PUtf8Char; Len: PtrInt);
     function PreprocString(P: PUtf8Char): PUtf8Char;
     function PreprocVar(P: PUtf8Char): PUtf8Char;
  end;
@@ -3199,6 +3203,22 @@ begin // called only if jppDebugComment was defined
   W.AddDirect(#10);
 end;
 
+procedure TJsonParser.AddVerbatim(P: PUtf8Char; Len: PtrInt);
+var
+  tmp: TSynTempBuffer; // Reformat() requires a #0 terminated buffer
+  bak: TPreprocAbstract;
+begin
+  tmp.Init(P, Len);    // make #0 terminated
+  bak := FmtPreproc;
+  try
+    FmtPreproc := nil; // no pre-processing, only plain JsonReformat()
+    Reformat(tmp.buf);
+  finally
+    FmtPreproc := bak; // the pre-processor is back
+    tmp.Done;          // unlikely transient memory allocation
+  end;
+end;
+
 function TJsonParser.PreprocString(P: PUtf8Char): PUtf8Char;
 begin
   result := P + 2;
@@ -3543,6 +3563,7 @@ begin
   if Preproc <> nil then
   begin
     Preproc.OnAppend := Reformat;
+    Preproc.OnVerbatim := AddVerbatim;
     Preproc.OnAddDebugComment := AddDebugComment;
   end;
 end; // Max/RootCount/ExpectedStandard are not used
