@@ -753,8 +753,7 @@ var
 /// client-side authentication procedure
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
-// - aSecKerberosSpn is the optional SPN domain name, e.g.
-// 'mymormotservice/myserver.mydomain.tld'
+// - aSecKerberosSpn is the plain Service Principal Name, e.g. 'HTTP/webserver@REALM'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again with the data returned from servsr
@@ -821,7 +820,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// force using a Kerberos SPN for server identification
 // - aSecKerberosSpn is the Service Principal Name, as registered in domain,
-// e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+// e.g. 'HTTP/webserver@REALM'
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
 /// return the value set by ClientForceSpn()
@@ -1833,7 +1832,7 @@ begin
   begin
     if spn <> nil then
     begin
-      // extract from 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+      // extract from 'HTTP/webserver@REALM'
       u := RawUtf8(spn);
       j := PosExChar('@', u);
       if j <> 0 then

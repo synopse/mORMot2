@@ -4071,10 +4071,11 @@ begin
   fOnAuthorize := nil;
   fExtendedOptions.AuthorizeSspiUser(UserName, Password);
   fOnAuthorize := OnAuthorizeSspi;
-  // prepare a SPN - maybe partial
+  // prepare a Service Principal Name (SPN) - maybe partial
   if KerberosSpn <> '' then
-    if PosExChar('@', KerberosSpn) <> 0 then
-      // full 'HTTP/server@TLD' form
+    if (PosExChar('@', KerberosSpn) <> 0) or
+       (PosExChar('/', KerberosSpn) <> 0) then
+      // full 'HTTP/server@TLD' form - 'HTTP/server' is enough on Windows/SSPI
       fAuthorizeSspiSpn := KerberosSpn
     else
       // here KerberosSpn is likely to be only the TLD
