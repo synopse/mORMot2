@@ -385,7 +385,11 @@ type
     krb5_gss_register_acceptor_identity: function (
       path: PAnsiChar): cardinal; cdecl;
     /// a simple way to identify that the GSS-API library is MIT (at least 1.11)
-    function IsMit: boolean;
+    IsMit: boolean;
+    /// either GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL
+    ClientEnvName: RawUtf8;
+    /// the value of ClientEnvName at process startup
+    ClientEnvValue: RawUtf8;
   end;
 
   /// Exception raised during libgssapi process
@@ -821,6 +825,12 @@ begin
        Assigned(api.gss_release_name) then
     begin
       // minimal API to work on server side -> thread safe setup into GSSAPI
+      api.IsMit := Assigned(api.gss_acquire_cred_from);
+      if api.IsMit then
+        api.ClientEnvName := GSSAPI_ENV_CLIENT_KT_MIT      // KRB5_CLIENT_KTNAME
+      else
+        api.ClientEnvName := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // KRB5_KTNAME
+      GetSystemEnv(api.ClientEnvName, api.ClientEnvValue); // retrieve once
       GlobalLock;
       try
         if GssApi = nil then
@@ -1137,7 +1147,6 @@ var
     val1: PUtf8Char;
   end;
   credSet: gss_key_value_set_desc;
-  envKey, envValue: RawUtf8;
   memCcache: TShort31;
 
   function SetMemCcache: pointer;
@@ -1154,11 +1163,6 @@ begin
   // 1) setup execution context
   envReset := false;
   fromEnv := false;
-  if GssApi.IsMit then
-    envKey := GSSAPI_ENV_CLIENT_KT_MIT      // KRB5_CLIENT_KTNAME
-  else
-    envKey := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // KRB5_KTNAME
-  GetSystemEnv(envKey, envValue);
   useCredFrom := Assigned(GssApi.gss_acquire_cred_from) and
                  not ClientSspiAuthWithPasswordKerberosNoCredFrom;
   keytab := nil;
@@ -1169,11 +1173,10 @@ begin
   try
     // 2) support KRB5_CLIENT_KTNAME or keytab/ccache as FILE: in password
     if (p = '') and
-       (envValue <> '') then
+       (GssApi.ClientEnvValue <> '') then
     begin
-      fn := TFileName(envValue); // RTL conversion to TFileName
-      fromEnv := true;           // the env variable(s) were set
-      useCredFrom := false;      // respect pure env path
+      fn := TFileName(GssApi.ClientEnvValue); // RTL conversion to TFileName
+      fromEnv := true;                        // the env variable(s) were set
     end
     else if ClientSspiPasswordIsFile(p) then
       fn := TFileName(copy(p, 6, 1023)); // e.g. 'FILE:/full/path/to/my.keytab'
@@ -1265,7 +1268,7 @@ begin
       if not fromEnv then // force temporarly if not already set
       begin
         envReset := true;
-        SetSystemEnv(envKey, RawUtf8(fn));
+        SetSystemEnv(GssApi.ClientEnvName, RawUtf8(fn));
       end;
       maj := GssApi.gss_acquire_cred(min, user, GSS_C_INDEFINITE, aMech,
         GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
@@ -1305,7 +1308,7 @@ begin
     //       but Debian doc and mod_auth_gssapi.c don't: so we won't either
     if envReset then
       // restore env variables - do nothing if not overriden
-      ResetSystemEnv(envKey);
+      ResetSystemEnv(GssApi.ClientEnvName);
   end;
 end;
 
