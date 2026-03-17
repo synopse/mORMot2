@@ -1,4 +1,4 @@
-/// Framework Core High-Level JSON and Text Processing
+/// Framework Core High-Level Content Processing
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.fmt;
@@ -6,8 +6,9 @@ unit mormot.core.fmt;
 {
   *****************************************************************************
 
-   JSON and Text Advanced Formatting Functions
-    -  JSON and Text Preprocessor
+   Binary, JSON and Text Advanced Formatting Functions
+    - Markup (e.g. HTML or Emoji) process
+    - JSON and Text Preprocessor
 
   *****************************************************************************
 }
@@ -29,6 +30,182 @@ uses
   mormot.core.buffers,
   mormot.core.data,
   mormot.core.json;
+
+
+{ ************* Markup (e.g. HTML or Emoji) process }
+
+type
+  /// tune AddHtmlEscapeWiki/AddHtmlEscapeMarkdown wrapper functions process
+  // - heHtmlEscape will escape any HTML special chars, e.g. & into &amp;
+  // - heEmojiToUtf8 will convert any Emoji text into UTF-8 Unicode character,
+  // recognizing e.g. :joy: or :) in the text
+  TTextWriterHtmlEscape = set of (
+    heHtmlEscape,
+    heEmojiToUtf8);
+
+/// convert some wiki-like text into proper HTML
+// - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, +..+ into
+// <strong>..</strong>, `..` into <code>..</code>, and http://... as
+// <a href=http://...>
+// - escape any HTML special chars, and Emoji tags as specified with esc
+procedure AddHtmlEscapeWiki(W: TTextWriter; P: PUtf8Char;
+  esc: TTextWriterHtmlEscape = [heHtmlEscape, heEmojiToUtf8]);
+
+/// convert minimal Markdown text into proper HTML
+// - see https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf
+// - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, **..** into
+// <strong>..</strong>, `...` into <code>...</code>, backslash espaces \\
+// \* \_ and so on, [title](http://...) and detect plain http:// as
+// <a href=...>
+// - create unordered lists from trailing * + - chars, blockquotes from
+// trailing > char, and code line from 4 initial spaces
+// - as with default Markdown, won't escape HTML special chars (i.e. you can
+// write plain HTML in the supplied text) unless esc is set otherwise
+// - only inline-style links and images are supported yet (not reference-style);
+// tables aren't supported either
+procedure AddHtmlEscapeMarkdown(W: TTextWriter; P: PUtf8Char;
+  esc: TTextWriterHtmlEscape = [heEmojiToUtf8]);
+
+/// escape some wiki-marked text into HTML
+// - just a wrapper around AddHtmlEscapeWiki() process
+function HtmlEscapeWiki(const wiki: RawUtf8;
+  esc: TTextWriterHtmlEscape = [heHtmlEscape, heEmojiToUtf8]): RawUtf8;
+
+/// escape some Markdown-marked text into HTML
+// - just a wrapper around AddHtmlEscapeMarkdown() process
+function HtmlEscapeMarkdown(const md: RawUtf8;
+  esc: TTextWriterHtmlEscape = [heEmojiToUtf8]): RawUtf8;
+
+type
+  /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
+  // - naming comes from github/Markdown :identifiers:
+  TEmoji = (
+    eNone,
+    eGrinning,
+    eGrin,
+    eJoy,
+    eSmiley,
+    eSmile,
+    eSweat_smile,
+    eLaughing,
+    eInnocent,
+    eSmiling_imp,
+    eWink,
+    eBlush,
+    eYum,
+    eRelieved,
+    eHeart_eyes,
+    eSunglasses,
+    eSmirk,
+    eNeutral_face,
+    eExpressionless,
+    eUnamused,
+    eSweat,
+    ePensive,
+    eConfused,
+    eConfounded,
+    eKissing,
+    eKissing_heart,
+    eKissing_smiling_eyes,
+    eKissing_closed_eyes,
+    eStuck_out_tongue,
+    eStuck_out_tongue_winking_eye,
+    eStuck_out_tongue_closed_eyes,
+    eDisappointed,
+    eWorried,
+    eAngry,
+    ePout,
+    eCry,
+    ePersevere,
+    eTriumph,
+    eDisappointed_relieved,
+    eFrowning,
+    eAnguished,
+    eFearful,
+    eWeary,
+    eSleepy,
+    eTired_face,
+    eGrimacing,
+    eSob,
+    eOpen_mouth,
+    eHushed,
+    eCold_sweat,
+    eScream,
+    eAstonished,
+    eFlushed,
+    eSleeping,
+    eDizzy_face,
+    eNo_mouth,
+    eMask,
+    eSmile_cat,
+    eJoy_cat,
+    eSmiley_cat,
+    eHeart_eyes_cat,
+    eSmirk_cat,
+    eKissing_cat,
+    ePouting_cat,
+    eCrying_cat_face,
+    eScream_cat,
+    eSlightly_frowning_face,
+    eSlightly_smiling_face,
+    eUpside_down_face,
+    eRoll_eyes,
+    eNo_good,
+    oOk_woman,
+    eBow,
+    eSee_no_evil,
+    eHear_no_evil,
+    eSpeak_no_evil,
+    eRaising_hand,
+    eRaised_hands,
+    eFrowning_woman,
+    ePerson_with_pouting_face,
+    ePray);
+
+var
+  /// github/Markdown compatible text of Emojis
+  // - e.g. 'grinning' or 'person_with_pouting_face'
+  EMOJI_TEXT: array[TEmoji] of RawUtf8;
+
+  /// github/Markdown compatible tag of Emojis, including trailing and ending :
+  // - e.g. ':grinning:' or ':person_with_pouting_face:'
+  EMOJI_TAG: array[TEmoji] of RawUtf8;
+
+  /// the Unicode character matching a given Emoji, after UTF-8 encoding
+  EMOJI_UTF8: array[TEmoji] of RawUtf8;
+
+  /// low-level access to TEmoji RTTI - used when inlining EmojiFromText()
+  EMOJI_RTTI: PShortString;
+
+  /// to recognize simple :) :( :| :/ :D :o :p :s characters as smilleys
+  EMOJI_AFTERDOTS: array['('..'|'] of TEmoji;
+
+/// recognize github/Markdown compatible text of Emojis
+// - for instance 'sunglasses' text buffer will return eSunglasses
+// - returns eNone if no case-insensitive match was found
+function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level parser of github/Markdown compatible text of Emojis
+// - supplied P^ should point to ':'
+// - will append the recognized UTF-8 Emoji if P contains e.g. :joy: or :)
+// - will append ':' if no Emoji text is recognized, and return eNone
+// - will try both EMOJI_AFTERDOTS[] and EMOJI_RTTI[] reference set
+// - if W is nil, won't append anything, but just return the recognized TEmoji
+function EmojiParseDots(var P: PUtf8Char; W: TTextWriter = nil): TEmoji;
+
+/// low-level conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
+procedure EmojiToDots(P: PUtf8Char; W: TTextWriter); overload;
+
+/// conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
+function EmojiToDots(const text: RawUtf8): RawUtf8; overload;
+
+/// low-level conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
+procedure EmojiFromDots(P: PUtf8Char; W: TTextWriter); overload;
+
+/// conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
+function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
+
 
 { ********** JSON and Text Preprocessor }
 
@@ -52,6 +229,597 @@ function JsonPreprocessToFile(const Json: RawUtf8; const Dest: TFileName;
 
 
 implementation
+
+{ ************* Markup (e.g. HTML or Emoji) process }
+
+{ internal TTextWriterEscape class }
+
+type
+  TTextWriterEscapeStyle = (
+    tweBold,
+    tweItalic,
+    tweCode);
+
+  TTextWriterEscapeLineStyle = (
+    twlNone,
+    twlParagraph,
+    twlOrderedList,
+    twlUnorderedList,
+    twlBlockquote,
+    twlCode4,
+    twlCode3);
+
+  {$ifdef USERECORDWITHMETHODS}
+  TTextWriterEscape = record
+  {$else}
+  TTextWriterEscape = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    P, B, P2, B2: PUtf8Char;
+    W: TTextWriter;
+    st: set of TTextWriterEscapeStyle;
+    fmt: TTextWriterHtmlFormat;
+    esc: TTextWriterHtmlEscape;
+    lst: TTextWriterEscapeLineStyle;
+    procedure Start(dest: TTextWriter; src: PUtf8Char; escape: TTextWriterHtmlEscape);
+    function ProcessText(const stopchars: TSynByteSet): AnsiChar;
+    procedure ProcessHRef;
+    function ProcessLink: boolean;
+    procedure ProcessEmoji;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure Toggle(style: TTextWriterEscapeStyle);
+    procedure SetLine(style: TTextWriterEscapeLineStyle);
+    procedure EndOfParagraph;
+    procedure NewMarkdownLine;
+    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUtf8Char;
+      escape: TTextWriterHtmlEscape);
+    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUtf8Char;
+      escape: TTextWriterHtmlEscape);
+  end;
+
+procedure TTextWriterEscape.Start(dest: TTextWriter; src: PUtf8Char;
+  escape: TTextWriterHtmlEscape);
+begin
+  P := src;
+  W := dest;
+  st := [];
+  if heHtmlEscape in escape then
+    fmt := hfOutsideAttributes
+  else
+    fmt := hfNone;
+  esc := escape;
+  lst := twlNone;
+end;
+
+function IsHttpOrHttps(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (PCardinal(P)^ = HTTP__32) and
+            ((PCardinal(P + 4)^ and $ffffff = HTTP__24) or
+             (PCardinal(P + 4)^ =
+             ord('s') + ord(':') shl 8 + ord('/') shl 16 + ord('/') shl 24));
+end;
+
+function TTextWriterEscape.ProcessText(const stopchars: TSynByteSet): AnsiChar;
+begin
+  if P = nil then
+  begin
+    result := #0;
+    exit;
+  end;
+  B := P;
+  while not (ord(P^) in stopchars) and
+        not IsHttpOrHttps(P) do
+    inc(P);
+  W.AddHtmlEscape(B, P - B, fmt);
+  result := P^;
+end;
+
+procedure TTextWriterEscape.ProcessHRef;
+begin
+  B := P;
+  while P^ > ' ' do
+    inc(P);
+  W.AddShort('<a href="');
+  W.AddHtmlEscape(B, P - B, hfWithinAttributes);
+  W.AddShort('" rel="nofollow">');
+  W.AddHtmlEscape(B, P - B);
+  W.AddDirect('<', '/', 'a', '>');
+end;
+
+function TTextWriterEscape.ProcessLink: boolean;
+begin
+  inc(P);
+  B2 := P;
+  while not (P^ in [#0, ']']) do
+    inc(P);
+  P2 := P;
+  if PWord(P)^ = ord(']') + ord('(') shl 8 then
+  begin
+    inc(P, 2);
+    B := P;
+    while not (P^ in [#0, ')']) do
+      inc(P);
+    if P^ = ')' then
+    begin
+      // [GitHub](https://github.com)
+      result := true;
+      exit;
+    end;
+  end;
+  P := B2; // rollback
+  result := false;
+end;
+
+procedure TTextWriterEscape.ProcessEmoji;
+begin
+  if heEmojiToUtf8 in esc then
+    EmojiParseDots(P, W)
+  else
+  begin
+    W.Add(':');
+    inc(P);
+  end;
+end;
+
+procedure TTextWriterEscape.Toggle(style: TTextWriterEscapeStyle);
+const
+  HTML: array[tweBold..tweCode] of TShort7 = (
+    'strong>', 'em>', 'code>');
+begin
+  W.Add('<');
+  if style in st then
+  begin
+    W.Add('/');
+    exclude(st, style);
+  end
+  else
+    include(st, style);
+  W.AddShorter(HTML[style]);
+end;
+
+procedure TTextWriterEscape.EndOfParagraph;
+begin
+  if tweBold in st then
+    Toggle(tweBold);
+  if tweItalic in st then
+    Toggle(tweItalic);
+  if P <> nil then
+    if PWord(P)^ = EOLW then
+      inc(P, 2)
+    else
+      inc(P);
+end;
+
+procedure TTextWriterEscape.SetLine(style: TTextWriterEscapeLineStyle);
+const
+  HTML: array[twlParagraph..twlCode3] of TShort7 = (
+    'p>', 'li>', 'li>', 'p>', 'code>', 'code>');
+  HTML2: array[twlOrderedList..twlCode3] of TShort15 = (
+    'ol>', 'ul>', 'blockquote>', 'pre>', 'pre>');
+begin
+  if lst >= low(HTML) then
+  begin
+    if (lst < twlCode4) or
+       (lst <> style) then
+    begin
+      W.Add('<', '/');
+      W.AddShorter(HTML[lst]);
+    end;
+    if (lst >= low(HTML2)) and
+       (lst <> style) then
+    begin
+      W.Add('<', '/');
+      W.AddShort(HTML2[lst]);
+    end;
+  end;
+  if style >= low(HTML) then
+  begin
+    if (style >= low(HTML2)) and
+       (lst <> style) then
+    begin
+      W.Add('<');
+      W.AddShort(HTML2[style]);
+    end;
+    if (style < twlCode4) or
+       (lst <> style) then
+    begin
+      W.Add('<');
+      W.AddShorter(HTML[style]);
+    end;
+  end;
+  lst := style;
+end;
+
+procedure TTextWriterEscape.NewMarkdownLine;
+label
+  none;
+var
+  c: cardinal;
+begin
+  if P = nil then
+    exit;
+  c := PCardinal(P)^;
+  if c and $ffffff = ord('`') + ord('`') shl 8 + ord('`') shl 16 then
+  begin
+    inc(P, 3);
+    if lst = twlCode3 then
+    begin
+      lst := twlCode4; // to close </code></pre>
+      NewMarkdownLine;
+      exit;
+    end;
+    SetLine(twlCode3);
+  end;
+  if lst = twlCode3 then
+    exit; // no prefix process within ``` code blocks
+  if c = $20202020 then
+  begin
+    SetLine(twlCode4);
+    inc(P, 4);
+    exit;
+  end;
+  P := GotoNextNotSpaceSameLine(P); // don't implement nested levels yet
+  case P^ of
+    '*',
+    '+',
+    '-':
+      if P[1] = ' ' then
+        SetLine(twlUnorderedList)
+      else
+        goto none;
+    '1'..'9':
+      begin
+        // first should be 1. then any ##. number to continue
+        B := P;
+        repeat
+          inc(P)
+        until not (P^ in ['0'..'9']);
+        if (P^ = '.') and
+           ((lst = twlOrderedList) or
+            (PWord(B)^ = ord('1') + ord('.') shl 8)) then
+          SetLine(twlOrderedList)
+        else
+        begin
+          P := B;
+none:     if lst = twlParagraph then
+          begin
+            c := PWord(P)^; // detect blank line to separate paragraphs
+            if c = EOLW then
+              inc(P, 2)
+            else if c and $ff = $0a then
+              inc(P)
+            else
+            begin
+              W.AddOnce(' ');
+              exit;
+            end;
+          end;
+          SetLine(twlParagraph);
+          exit;
+        end;
+      end;
+    '>':
+      if P[1] = ' ' then
+        SetLine(twlBlockquote)
+      else
+        goto none;
+  else
+    goto none;
+  end;
+  P := GotoNextNotSpaceSameLine(P + 1);
+end;
+
+procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TTextWriter;
+  src: PUtf8Char; escape: TTextWriterHtmlEscape);
+begin
+  Start(dest, src, escape);
+  SetLine(twlParagraph);
+  repeat
+    case ProcessText([0, 10, 13,
+                      ord('*'), ord('+'), ord('`'), ord('\'), ord(':')]) of
+      #0:
+        break;
+      #10,
+      #13:
+        begin
+          EndOfParagraph;
+          SetLine(twlParagraph);
+          continue;
+        end;
+      '\':
+        if P[1] in ['\', '`', '*', '+'] then
+        begin
+          inc(P);
+          W.Add(P^);
+        end
+        else
+          W.Add('\');
+      '*':
+        Toggle(tweItalic);
+      '+':
+        Toggle(tweBold);
+      '`':
+        Toggle(tweCode);
+      'h':
+        begin
+          ProcessHRef;
+          continue;
+        end;
+      ':':
+        begin
+          ProcessEmoji;
+          continue;
+        end;
+    end;
+    inc(P);
+  until false;
+  EndOfParagraph;
+  SetLine(twlNone);
+end;
+
+procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TTextWriter;
+  src: PUtf8Char; escape: TTextWriterHtmlEscape);
+begin
+  Start(dest, src, escape);
+  NewMarkDownLine;
+  repeat
+    if lst >= twlCode4 then // no Markdown tags within code blocks
+      if ProcessText([0, 10, 13]) = #0 then
+        break
+      else
+      begin
+        if PWord(P)^ = EOLW then
+          inc(P, 2)
+        else
+          inc(P);
+        W.AddCR; // keep LF within <pre>
+        NewMarkdownLine;
+        continue;
+      end
+    else
+      case ProcessText([0, 10, 13, ord('*'), ord('_'), ord('`'),
+                        ord('\'), ord('['), ord('!'), ord(':')]) of
+        #0:
+          break;
+        #10,
+        #13:
+          begin
+            EndOfParagraph;
+            NewMarkdownLine;
+            continue;
+          end;
+        '\':
+          if P[1] in ['\', '`', '*', '_', '[', ']', '{', '}',
+                      '(', ')', '#', '+', '-', '.', '!'] then
+          begin
+            // backslash escape
+            inc(P);
+            W.Add(P^);
+          end
+          else
+            W.Add('\');
+        '*',
+        '_':
+          if P[1] = P[0] then
+          begin
+            // **This text will be bold** or __This text will be bold__
+            inc(P);
+            Toggle(tweBold);
+          end
+          else
+            // *This text will be italic* or _This text will be italic_
+            Toggle(tweItalic);
+        '`':
+          // `This text will be code`
+          Toggle(tweCode);
+        '[':
+          if ProcessLink then
+          begin
+            // [GitHub](https://github.com)
+            W.AddShort('<a href="');
+            W.AddHtmlEscape(B, P - B, hfWithinAttributes);
+            if IsHttpOrHttps(B) then
+              W.AddShort('" rel="nofollow">')
+            else
+              W.Add('"', '>');
+            W.AddHtmlEscape(B2, P2 - B2, fmt);
+            W.AddDirect('<', '/', 'a', '>'); // no inc(P) needed here
+          end
+          else
+            // not a true link -> just append
+            W.Add('[');
+        '!':
+          begin
+            if P[1] = '[' then
+            begin
+              inc(P);
+              if ProcessLink then
+              begin
+                W.AddShort('<img alt="');
+                W.AddHtmlEscape(B2, P2 - B2, hfWithinAttributes);
+                W.AddShorter('" src="');
+                W.AddNoJsonEscape(B, P - B);
+                W.AddDirect('"', '>');
+                inc(P);
+                continue;
+              end;
+              dec(P);
+            end;
+            W.Add('!'); // not a true image
+          end;
+        'h':
+          begin
+            ProcessHRef;
+            continue;
+          end;
+        ':':
+          begin
+            ProcessEmoji;
+            continue;
+          end;
+      end;
+    inc(P);
+  until false;
+  EndOfParagraph;
+  SetLine(twlNone);
+end;
+
+function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
+var
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
+  W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    AddHtmlEscapeWiki(W, pointer(wiki), esc);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function HtmlEscapeMarkdown(const md: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    AddHtmlEscapeMarkdown(W, pointer(md), esc);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure AddHtmlEscapeWiki(W: TTextWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
+var
+  doesc: TTextWriterEscape;
+begin
+  doesc.AddHtmlEscapeWiki(W, P, esc);
+end;
+
+procedure AddHtmlEscapeMarkdown(W: TTextWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
+var
+  doesc: TTextWriterEscape;
+begin
+  doesc.AddHtmlEscapeMarkdown(W, P, esc);
+end;
+
+function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
+begin
+  // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
+  result := TEmoji(FindShortStringListTrimLowerCase(
+                     EMOJI_RTTI, ord(high(TEmoji)) - 1, P, len) + 1);
+  // note: we may enhance performance by using FastFindPUtf8CharSorted()
+end;
+
+function EmojiParseDots(var P: PUtf8Char; W: TTextWriter): TEmoji;
+var
+  c: PUtf8Char;
+begin
+  result := eNone;
+  inc(P); // ignore trailing ':'
+  c := P;
+  if c[-2] <= ' ' then
+  begin
+    if (c[1] <= ' ') and
+       (c^ in ['('..'|']) then
+      result := EMOJI_AFTERDOTS[c^]; // e.g. :)
+    if result = eNone then
+    begin
+      while c^ in ['a'..'z', 'A'..'Z', '_'] do
+        inc(c);
+      if (c^ = ':') and
+         (c[1] <= ' ') then // try e.g. :joy_cat:
+        result := EmojiFromText(P, c - P);
+    end;
+    if result <> eNone then
+    begin
+      P := c + 1; // continue parsing after the Emoji text
+      if W <> nil then
+        W.AddShort(pointer(EMOJI_UTF8[result]), 4);
+      exit;
+    end;
+  end;
+  if W <> nil then
+    W.Add(':');
+end;
+
+procedure EmojiToDots(P: PUtf8Char; W: TTextWriter);
+var
+  B: PUtf8Char;
+  c: cardinal;
+begin
+  if (P <> nil) and
+     (W <> nil) then
+    repeat
+      B := P;
+      while (P^ <> #0) and
+            (PWord(P)^ <> $9ff0) do
+        inc(P);
+      W.AddNoJsonEscape(B, P - B);
+      if P^ = #0 then
+        break;
+      B := P;
+      c := NextUtf8Ucs4(P) - $1f5ff;
+      if c <= cardinal(high(TEmoji)) then
+        W.AddString(EMOJI_TAG[TEmoji(c)])
+      else
+        W.AddNoJsonEscape(B, P - B);
+    until P^ = #0;
+end;
+
+function EmojiToDots(const text: RawUtf8): RawUtf8;
+var
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  if PosExChar(#$f0, text) = 0 then
+  begin
+    result := text; // no UTF-8 smiley for sure
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    EmojiToDots(pointer(text), W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure EmojiFromDots(P: PUtf8Char; W: TTextWriter);
+var
+  B: PUtf8Char;
+begin
+  if (P <> nil) and
+     (W <> nil) then
+    repeat
+      B := P;
+      while not (P^ in [#0, ':']) do
+        inc(P);
+      W.AddNoJsonEscape(B, P - B);
+      if P^ = #0 then
+        break;
+      EmojiParseDots(P, W);
+    until P^ = #0;
+end;
+
+function EmojiFromDots(const text: RawUtf8): RawUtf8;
+var
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    EmojiFromDots(pointer(text), W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
 
 
 { ********** JSON and Text Preprocessor }
@@ -640,5 +1408,36 @@ begin
 end;
 
 
+procedure InitializeUnit;
+var
+  e: TEmoji;
+begin
+  // HTML/Emoji Efficient Parsing
+  Assert(ord(high(TEmoji)) = $4f + 1);
+  EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
+  GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, scLowerCase);
+  FastAssignNew(EMOJI_TEXT[eNone]);
+  for e := succ(low(e)) to high(e) do
+  begin
+    Join([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
+    // order matches U+1F600 to U+1F64F codepoints
+    Ucs4ToUtf8(ord(e) + $1f5ff, FastSetString(EMOJI_UTF8[e], 4));
+  end;
+  EMOJI_AFTERDOTS[')'] := eSmiley;
+  EMOJI_AFTERDOTS['('] := eFrowning;
+  EMOJI_AFTERDOTS['|'] := eExpressionless;
+  EMOJI_AFTERDOTS['/'] := eConfused;
+  EMOJI_AFTERDOTS['D'] := eLaughing;
+  EMOJI_AFTERDOTS['o'] := eOpen_mouth;
+  EMOJI_AFTERDOTS['O'] := eOpen_mouth;
+  EMOJI_AFTERDOTS['p'] := eYum;
+  EMOJI_AFTERDOTS['P'] := eYum;
+  EMOJI_AFTERDOTS['s'] := eScream;
+  EMOJI_AFTERDOTS['S'] := eScream;
+end;
+
+
+initialization
+  InitializeUnit;
 
 end.

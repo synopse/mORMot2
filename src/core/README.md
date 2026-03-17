@@ -139,7 +139,6 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files
 - `TStreamRedirect` and other Hash process
-- Markup (e.g. HTML or Emoji) process
 - `RawByteString` Buffers Aggregation via `TRawByteStringGroup`
 
 ### mormot.core.data
@@ -169,7 +168,8 @@ JSON functions shared by all framework units
 
 ### mormot.core.fmt
 
-JSON and Text Advanced Formatting Functions
+Binary, JSON and Text Advanced Formatting Functions
+- Markup (e.g. HTML or Emoji) process
 - JSON and Text Preprocessor
 
 ### mormot.core.collections
