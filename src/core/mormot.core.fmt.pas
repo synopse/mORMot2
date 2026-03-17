@@ -2829,10 +2829,9 @@ ok: result := GotoNextNotSpace(result);
           DoRegister(pmTemplate, key, value, result - 1, keylen);
           continue; // has been expanded and processed for any nested $if$
         end;
-      '"', '''':
-        while (result^ >= ' ') and
-              (result^ <> value^) do // quoted value, not supporting \" nor ''
-          inc(result);
+      '"',
+      '''':
+        result := GotoEndOfQuotedString(result); // ignore double quotes within
     else
       begin
         value := result;
