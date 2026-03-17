@@ -776,7 +776,12 @@ type
     /// setup web authentication using Kerberos via SSPI/GSSAPI for this instance
     // - will store the user/paswword credentials, and set OnAuthorizeSspi callback
     // - if Password is '', will search for an existing Kerberos token on UserName
+    // - set UserName='' and Password='FILE:/path/to/my.keytab' to use a keytab
     // - an in-memory token will be used to authenticate the connection
+    // - KerberosSpn could be only a 'MYDOMAIN.TLD' domain name - this method
+    // will compute the full 'HTTP/server@MYDOMAIN.TLD' SPN
+    // - if KerberosSpn is not set, 'HTTP/server@MYDOMAIN.TLD' will be used,
+    // trying to extract MYDOMAIN.TLD either from UserName of Password's keytab
     // - WARNING: on MacOS, the default system GSSAPI stack seems to create a
     // session-wide token (like kinit), not a transient token in memory - you
     // may prefer to load a proper libgssapi_krb5.dylib instead
@@ -799,7 +804,8 @@ type
     /// the Kerberos Service Principal Name, as registered in domain
     // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
     // - used by class procedure OnAuthorizeSspi/OnProxyAuthorizeSspi callbacks
-    // - on Linux/GSSAPI either this property or ClientForceSpn() is mandatory
+    // - on Linux/GSSAPI either this property or ClientForceSpn() is mandatory,
+    // unless you use a user@TLD or a keytab and the domain is extracted from it
     property AuthorizeSspiSpn: RawUtf8
       read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
     {$endif DOMAINRESTAUTH}
@@ -4064,11 +4070,22 @@ begin
       [self, SECPKGNAMEAPI]);
   fOnAuthorize := nil;
   fExtendedOptions.AuthorizeSspiUser(UserName, Password);
-  if UserName = '' then
-    exit;
   fOnAuthorize := OnAuthorizeSspi;
+  // prepare a SPN - maybe partial
   if KerberosSpn <> '' then
-    fAuthorizeSspiSpn := KerberosSpn;
+    if PosExChar('@', KerberosSpn) <> 0 then
+      // full 'HTTP/server@TLD' form
+      fAuthorizeSspiSpn := KerberosSpn
+    else
+      // here KerberosSpn is likely to be only the TLD
+      Join(['HTTP/', fServer, '@', UpperCase(KerberosSpn)], fAuthorizeSspiSpn)
+  else
+  begin
+    fAuthorizeSspiSpn := ClientForcedSpn;
+    if fAuthorizeSspiSpn = '' then
+      // set at least service name - @TLD extracted later from UserName or keytab
+      Join(['HTTP/', fServer], fAuthorizeSspiSpn);
+  end;
 end;
 
 class function THttpClientSocket.OnProxyAuthorizeSspi(Sender: THttpClientSocket;
@@ -4168,7 +4185,8 @@ begin
   Auth.UserName := UserName;
   Auth.Password := Password;
   Auth.Token := '';
-  if UserName = '' then
+  if (UserName = '') and
+     not (Scheme in [wraNegotiate, wraNegotiateChannelBinding]) then
     Scheme := wraNone;
   Auth.Scheme := Scheme;
 end;
