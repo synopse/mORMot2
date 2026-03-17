@@ -4079,13 +4079,13 @@ begin
       fAuthorizeSspiSpn := KerberosSpn
     else
       // here KerberosSpn is likely to be only the TLD
-      Join(['HTTP/', fServer, '@', UpperCase(KerberosSpn)], fAuthorizeSspiSpn)
+      Join(['HTTP/', LowerCase(fServer), '@', UpperCase(KerberosSpn)], fAuthorizeSspiSpn)
   else
   begin
     fAuthorizeSspiSpn := ClientForcedSpn;
     if fAuthorizeSspiSpn = '' then
       // set at least service name - @TLD extracted later from UserName or keytab
-      Join(['HTTP/', fServer], fAuthorizeSspiSpn);
+      Join(['HTTP/', LowerCase(fServer)], fAuthorizeSspiSpn);
   end;
 end;
 
