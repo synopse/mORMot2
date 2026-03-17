@@ -8,6 +8,7 @@ unit mormot.core.fmt;
 
    Binary, JSON and Text Advanced Formatting Functions
     - Markup (e.g. HTML or Emoji) process
+    - INI Files In-memory Access
     - TSynJsonFileSettings parent class
     - JSON and Text Preprocessor
 
@@ -30,7 +31,8 @@ uses
   mormot.core.rtti,
   mormot.core.buffers,
   mormot.core.data,
-  mormot.core.json;
+  mormot.core.json,
+  mormot.core.variants;
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -208,6 +210,179 @@ procedure EmojiFromDots(P: PUtf8Char; W: TTextWriter); overload;
 function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
 
 
+{ ************ INI Files In-memory Access }
+
+/// find a Name= Value in a [Section] of a INI RawUtf8 Content
+// - this function scans the Content memory buffer, and is
+// therefore very fast (no temporary TMemIniFile is created)
+// - if Section equals '', find the Name= value before any [Section]
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
+// the '=' or ':' sign, and at the end of each input text line
+function FindIniEntry(const Content, Section, Name: RawUtf8;
+  const DefaultValue: RawUtf8 = ''): RawUtf8;
+
+/// find a Name= Value in a [Section] of a INI WinAnsi Content
+// - same as FindIniEntry(), but the value is converted from WinAnsi into UTF-8
+function FindWinAnsiIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
+
+/// find a Name= numeric Value in a [Section] of a INI RawUtf8 Content and
+// return it as an integer, or 0 if not found
+// - this function scans the Content memory buffer, and is
+// therefore very fast (no temporary TMemIniFile is created)
+// - if Section equals '', find the Name= value before any [Section]
+function FindIniEntryInteger(const Content, Section, Name: RawUtf8): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// find a Name= Value in a [Section] of a .INI file
+// - if Section equals '', find the Name= value before any [Section]
+// - use internally fast FindIniEntry() function above
+function FindIniEntryFile(const FileName: TFileName;
+  const Section, Name: RawUtf8; const DefaultValue: RawUtf8 = ''): RawUtf8;
+
+/// update a Name= Value in a [Section] of a INI RawUtf8 Content
+// - this function scans and update the Content memory buffer, and is
+// therefore very fast (no temporary TMemIniFile is created)
+// - if Section equals '', update the Name= value before any [Section]
+procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
+
+/// update a Name= Value in a [Section] of a .INI file
+// - if Section equals '', update the Name= value before any [Section]
+// - use internally fast UpdateIniEntry() function above
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
+
+/// find the position of the [SEARCH] section in source
+// - return true if [SEARCH] was found, and store pointer to the line after it in source
+function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar;
+  sourceend: PPUtf8Char = nil): boolean;
+
+/// find the position of the [SEARCH] section in source
+// - return true if [SEARCH] was found, and store pointer to the line after it in source
+// - this version expects source^ to point to an Unicode char array
+function FindSectionFirstLineW(var source: PWideChar; search: PUtf8Char): boolean;
+
+/// retrieve the whole content of a section as a string
+function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
+
+/// delete a whole [Section]
+// - if EraseSectionHeader is TRUE (default), then the [Section] line is also
+// deleted together with its content lines
+// - return TRUE if something was changed in Content
+// - return FALSE if [Section] doesn't exist or is already void
+function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
+  EraseSectionHeader: boolean = true): boolean; overload;
+
+/// delete a whole [Section]
+// - if EraseSectionHeader is TRUE (default), then the [Section] line is also
+// deleted together with its content lines
+// - return TRUE if something was changed in Content
+// - return FALSE if [Section] doesn't exist or is already void
+// - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
+function DeleteSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
+  EraseSectionHeader: boolean = true): boolean; overload;
+
+/// replace a whole [Section] content by a new content
+// - create a new [Section] if none was existing
+procedure ReplaceSection(var Content: RawUtf8; const SectionName,
+  NewSectionContent: RawUtf8); overload;
+
+/// replace a whole [Section] content by a new content
+// - create a new [Section] if none was existing
+// - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
+procedure ReplaceSection(SectionFirstLine: PUtf8Char;
+  var Content: RawUtf8; const NewSectionContent: RawUtf8); overload;
+
+/// return TRUE if Value of UpperName does exist in P, till end of current section
+// - expects UpperName as 'NAME=' or 'HTTPHEADERNAME:'
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around '='/':'
+function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// find the Value of UpperName in P, till end of current INI section
+// - expect UpperName already as 'NAME=' for efficient INI key=value lookup
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
+// the '=' or ':' sign, and at the end of each input text line
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
+  const DefaultValue: RawUtf8 = ''; PEnd: PUtf8Char = nil): RawUtf8;
+
+/// raw internal function used by FindIniNameValue() with no result allocation
+// - Value=nil if not found, or Value<>nil and return length (may be 0 for '')
+function FindIniNameValueP(P, PEnd: PUtf8Char; UpperName: PAnsiChar;
+  out Value: PUtf8Char): PtrInt;
+
+/// find the Value of UpperName in Content, wrapping FindIniNameValue()
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around
+// the '=' or ':' sign, and at the end of each input text line
+function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// return TRUE if one of the leftmost Value of UpperName exists in P
+// - expect UpperName e.g. as 'CONTENT-TYPE: ' (i.e. HEADER_CONTENT_TYPE_UPPER)
+// - expect UpperValues to be an array of upper values with left side matching,
+// and ending with nil - as expected by IdemPPChar(), i.e. with at least 2 chars
+// - note: won't ignore spaces/tabs around the '=' sign
+function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
+  UpperValues: PPAnsiChar): boolean;
+
+/// find the integer Value of UpperName in P, till end of current section
+// - expect UpperName as 'NAME=' or 'CONTENT-LENGTH:'
+// - return 0 if no NAME= entry was found
+// - will follow INI relaxed expectations, i.e. ignore spaces/tabs around '='/':'
+function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
+
+/// replace a value from a given set of name=value lines
+// - expect UpperName as 'UPPERNAME=', otherwise returns false
+// - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
+// - a typical use may be:
+// ! UpdateNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
+// - note: won't ignore spaces/tabs around the '=' sign
+function UpdateNameValue(var Content: RawUtf8;
+  const Name, UpperName, NewValue: RawUtf8): boolean;
+
+/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
+// 'Content-Type: application/json' or 'Content-Type: application/xml'
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// search if the WebSocketUpgrade() header is present
+// - consider checking the hsrConnectionUpgrade flag instead
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
+
+type
+  /// define IniToObject() and ObjectToIni() extended features
+  // - nested objects and multi-line text (if ifMultiLineSections is set) are
+  // stored in their own section, named from their section level and property
+  // (e.g. [mainprop.nested]) with ifClassSection feature, and/or as
+  // mainprop.nested.field = value with ifClassValue
+  // - nested arrays (with ifArraySection) are stored as inlined JSON or within
+  // prefixed sections like [nested-xxx] with any not azAZ_09 as xxx separator
+  // - ifMultiLineJsonArray would parse multi-line field=[val1,... JSON arrays
+  // - ifClearValues will let IniToObject() call TRttiCustomProp.ClearValue()
+  // on each property
+  TIniFeatures = set of (
+    ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection,
+    ifMultiLineJsonArray, ifClearValues);
+
+/// fill a class Instance properties from an .ini content
+// - the class property fields are searched in the supplied main SectionName
+// (if SectionName='' then nested objects or arrays will be parsed from their
+// own section)
+// - returns true if at least one property has been identified
+function IniToObject(const Ini: RawUtf8; Instance: TObject;
+  const SectionName: RawUtf8 = 'Main'; DocVariantOptions: PDocVariantOptions = nil;
+  Level: integer = 0; Features: TIniFeatures =
+    [ifClassSection, ifClassValue, ifMultiLineSections, ifArraySection]): boolean;
+
+/// serialize a class Instance properties into an .ini content
+// - the class property fields are written in the supplied main SectionName
+// - nested objects and multi-line text values are written in their own section,
+// named from their section level and property (e.g. [mainprop.nested1.nested2])
+function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main';
+  Options: TTextWriterWriteObjectOptions =
+    [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment];
+    Level: integer = 0; Features: TIniFeatures =
+      [ifClassSection, ifMultiLineSections, ifArraySection]): RawUtf8;
+
+
 { ************* TSynJsonFileSettings parent class }
 
 type
@@ -292,9 +467,6 @@ function JsonPreprocessToFile(const Json: RawUtf8; const Dest: TFileName;
 
 
 implementation
-
-uses
-  mormot.core.variants;
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -889,8 +1061,863 @@ begin
 end;
 
 
-{ ************* TSynJsonFileSettings parent class }
+{ ************ INI Files In-memory Access }
 
+function IdemPChar2(table: PNormTable; p: PUtf8Char; up: PAnsiChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var
+  u: AnsiChar;
+begin
+  // here p and up are expected to be <> nil
+  result := false;
+  dec(PtrUInt(p), PtrUInt(up));
+  repeat
+    u := up^;
+    if u = #0 then
+      break;
+    if table^[up[PtrUInt(p)]] <> u then
+      exit;
+    inc(up);
+  until false;
+  result := true;
+end;
+
+function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar;
+  sourceend: PPUtf8Char): boolean;
+var
+  p: PUtf8Char;
+  table: PNormTable;
+  charset: PTextCharSet;
+begin
+  result := false;
+  p := source;
+  if (p = nil) or
+     (search = nil) then
+    exit;
+  table := @NormToUpperAnsi7;
+  charset := @TEXT_CHARS;
+  repeat
+    if p^ = '[' then
+    begin
+      inc(p);
+      result := IdemPChar2(table, p, search);
+    end;
+    while tcNot01013 in charset[p^] do
+      inc(p);
+    while tc1013 in charset[p^] do
+      inc(p);
+    if result then
+    begin
+      source := p;
+      if sourceend <> nil then
+      begin
+        repeat
+          while tcNot01013 in charset[p^] do
+            inc(p);
+          while tc1013 in charset[p^] do
+            inc(p);
+        until p^ in [#0, '['];
+        sourceend^ := p;
+      end;
+      exit;
+    end;
+  until p^ = #0;
+  source := nil;
+end;
+
+function FindSectionFirstLineW(var source: PWideChar; search: PUtf8Char): boolean;
+begin
+  result := false;
+  if source = nil then
+    exit;
+  repeat
+    if source^ = '[' then
+    begin
+      inc(source);
+      result := IdemPCharW(source, search);
+    end;
+    while not (cardinal(source^) in [0, 10, 13]) do
+      inc(source);
+    while cardinal(source^) in [10, 13] do
+      inc(source);
+    if result then
+      exit; // found
+  until source^ = #0;
+  source := nil;
+end;
+
+function FindIniNameValueU(const Content: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+var
+  p: PUtf8Char absolute Content;
+begin
+  result := FindIniNameValue(p, UpperName, '', p + length(Content));
+end;
+
+function FindIniNameValueP(P, PEnd: PUtf8Char; UpperName: PAnsiChar;
+  out Value: PUtf8Char): PtrInt;
+var // note: won't use "out Len: PtrInt" which is confusing with integer vars
+  u, PBeg: PUtf8Char;
+  first: AnsiChar;
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTable absolute NormToUpperAnsi7;
+  {$else}
+  table: PNormTable;
+  {$endif CPUX86NOTPIC}
+label
+  fnd;
+begin // expects UpperName as 'NAME=' and P^ at the beginning of section content
+  u := P;
+  if (u <> nil) and
+     (u^ <> '[') and
+     (UpperName <> nil) then
+  begin
+    first := UpperName[0];
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
+    PBeg := nil;
+    repeat
+      while u^ in [#9, ' '] do
+        inc(u); // trim left ' '
+      if u^ = #0 then
+        break;
+      if table[u^] = first then
+        PBeg := u; // check for UpperName=... line below - ignore ; comment
+      {$ifdef CPUX64}
+      if PEnd <> nil then
+        inc(u, BufferLineLength(u, PEnd)) // we can use SSE2
+      else
+      {$endif CPUX64}
+        while true do
+          if u^ > #13 then
+            inc(u)
+          else if u^ in [#0, #10, #13] then
+            break
+          else
+            inc(u);
+      if PBeg <> nil then
+      begin
+        inc(PBeg);
+        P := u;
+        u := pointer(UpperName + 1);
+        repeat
+          if u^ <> #0 then
+            if table[PBeg^] = u^ then
+            begin
+              inc(u);
+              inc(PBeg);
+            end
+            else
+            begin
+              if u^ <> '=' then
+                break;
+              if PBeg^ <> ' ' then
+                if PBeg^ = ':' then // allow ':' within INI (as WinAPI)
+                  goto fnd
+                else
+                  break;
+              repeat // ignore spaces/tabs around the '=' or ':' separator
+                inc(PBeg);
+                case PBeg^ of
+                  #9, ' ':
+                    continue;
+                  '=', ':':
+                    goto fnd;
+                else
+                  break;
+                end;
+              until false;
+              break;
+            end
+          else
+          begin
+            if PBeg^ in [#9, ' '] then
+              repeat
+fnd:            inc(PBeg); // should ignore spaces/tabs after the '=' sign
+              until not (PBeg^ in [#9, ' ']);
+            result := P - PBeg;
+            while (result > 0) and
+                  (PBeg[result - 1] in [#9, ' ']) do
+              dec(result); // should trim spaces/tabs at the end of the line
+            Value := PBeg; // <> nil but maybe with result=len=0
+            exit;
+          end;
+        until false;
+        PBeg := nil;
+        u := P;
+      end;
+      while u^ in [#10, #13] do
+        inc(u);
+    until u^ in [#0, '['];
+  end;
+  Value := nil; // not found
+  result := 0;  // value length
+end;
+
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
+  const DefaultValue: RawUtf8; PEnd: PUtf8Char): RawUtf8;
+var
+  v: PUtf8Char;
+  l: PtrInt;
+begin // expects UpperName as 'NAME=' and P^ at the beginning of section content
+  l := FindIniNameValueP(P, PEnd, UpperName, v);
+  if v = nil then
+    result := DefaultValue
+  else
+    FastSetString(result, v, l); // return '' for l=0 (existing void value)
+end;
+
+function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
+var
+  v: PUtf8Char;
+begin
+  FindIniNameValueP(P, {PEnd=}nil, pointer(UpperName), v);
+  result := v <> nil; // found, but maybe with result length = 0
+end;
+
+function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
+  UpperValues: PPAnsiChar): boolean;
+var
+  table: PNormTable;
+begin
+  if (UpperValues <> nil) and
+     (UpperValues^ <> nil) and
+     (UpperName <> '') then
+  begin
+    result := true;
+    table := @NormToUpperAnsi7;
+    while (P <> nil) and
+          (P^ <> '[') do
+    begin
+      if P^ = ' ' then
+        repeat
+          inc(P)
+        until P^ <> ' '; // trim left ' '
+      if IdemPChar2(table, P, pointer(UpperName)) then
+        if IdemPPChar(GotoNextNotSpace(P + length(UpperName)), UpperValues) >= 0 then
+          exit // found one value
+        else
+          break;
+      P := GotoNextLine(P);
+    end;
+  end;
+  result := false;
+end;
+
+function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
+var
+  P, PEnd: PUtf8Char;
+  up: TByteToAnsiChar;
+begin
+  P := pointer(Content);
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+  if FindSectionFirstLine(P, @up, @PEnd) then
+    FastSetString(result, P, PEnd - P)
+  else
+    result := '';
+end;
+
+function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
+  EraseSectionHeader: boolean): boolean;
+var
+  P: PUtf8Char;
+  up: TByteToAnsiChar;
+begin
+  result := false; // no modification
+  P := pointer(Content);
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+  if FindSectionFirstLine(P, @up) then
+    result := DeleteSection(P, Content, EraseSectionHeader);
+end;
+
+function DeleteSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
+  EraseSectionHeader: boolean): boolean;
+var
+  PEnd: PUtf8Char;
+  IndexBegin: PtrInt;
+begin
+  result := false;
+  PEnd := SectionFirstLine;
+  if EraseSectionHeader then // erase [Section] header line
+    while (PtrUInt(SectionFirstLine) > PtrUInt(Content)) and
+          (SectionFirstLine^ <> '[') do
+      dec(SectionFirstLine);
+  while (PEnd <> nil) and
+        (PEnd^ <> '[') do
+    PEnd := GotoNextLine(PEnd);
+  IndexBegin := SectionFirstLine - pointer(Content);
+  if IndexBegin = 0 then
+    exit; // no modification
+  if PEnd = nil then
+    SetLength(Content, IndexBegin)
+  else
+    delete(Content, IndexBegin + 1, PEnd - SectionFirstLine);
+  result := true; // Content was modified
+end;
+
+procedure ReplaceSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
+  const NewSectionContent: RawUtf8);
+var
+  PEnd: PUtf8Char;
+  IndexBegin: PtrInt;
+begin
+  if SectionFirstLine = nil then
+    exit;
+  // delete existing [Section] content
+  PEnd := SectionFirstLine;
+  while (PEnd <> nil) and
+        (PEnd^ <> '[') do
+    PEnd := GotoNextLine(PEnd);
+  IndexBegin := SectionFirstLine - pointer(Content);
+  if PEnd = nil then
+    SetLength(Content, IndexBegin)
+  else
+    delete(Content, IndexBegin + 1, PEnd - SectionFirstLine);
+  // insert section content
+  insert(NewSectionContent, Content, IndexBegin + 1);
+end;
+
+procedure ReplaceSection(var Content: RawUtf8; const SectionName, NewSectionContent: RawUtf8);
+var
+  up: TByteToAnsiChar;
+  P: PUtf8Char;
+begin
+  P := pointer(Content);
+  PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+  if FindSectionFirstLine(P, @up) then
+    ReplaceSection(P, Content, NewSectionContent)
+  else
+    Append(Content, ['[', SectionName, ']'#13#10, NewSectionContent]);
+end;
+
+function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
+var
+  v: PUtf8Char;
+begin
+  FindIniNameValueP(P, {PEnd=}nil, pointer(UpperName), v);
+  result := GetInteger(v);
+end;
+
+function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
+var
+  P, PEnd: PUtf8Char;
+  n, s: TByteToAnsiChar;
+begin
+  result := DefaultValue;
+  P := pointer(Content);
+  if P = nil then
+    exit;
+  // fast n := UpperCase(Name)+'='
+  PWord(UpperCopy255(@n, Name))^ := ord('=');
+  if Section = '' then
+    // find the Name= entry before any [Section]
+    result := FindIniNameValue(P, @n, DefaultValue, P + length(Content))
+  else
+  begin
+    // find the Name= entry in the specified [Section]
+    PWord(UpperCopy255(@s, Section))^ := ord(']');
+    if FindSectionFirstLine(P, @s, @PEnd) then
+      result := FindIniNameValue(P, @n, DefaultValue, PEnd);
+  end;
+end;
+
+function FindWinAnsiIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
+begin
+  result := WinAnsiToUtf8(WinAnsiString(FindIniEntry(Content, Section, Name)));
+end;
+
+function FindIniEntryInteger(const Content, Section, Name: RawUtf8): integer;
+begin
+  result := GetInteger(pointer(FindIniEntry(Content, Section, Name)));
+end;
+
+function FindIniEntryFile(const FileName: TFileName;
+  const Section, Name, DefaultValue: RawUtf8): RawUtf8;
+var
+  Content: RawUtf8;
+begin
+  Content := StringFromFile(FileName);
+  if Content = '' then
+    result := DefaultValue
+  else
+    result := FindIniEntry(Content, Section, Name, DefaultValue);
+end;
+
+function UpdateNameValueInternal(var Content: RawUtf8;
+  const NewValue, NewValueCRLF: RawUtf8;
+  var P: PUtf8Char; UpperName: PAnsiChar; UpperNameLength: integer): boolean;
+var
+  next: PUtf8Char;
+  i: PtrInt;
+begin
+  if UpperName <> nil then
+    while (P <> nil) and
+          (P^ <> '[') do
+    begin
+      while P^ = ' ' do
+        inc(P);   // trim left ' '
+      next := GotoNextLine(P);
+      if IdemPChar2(@NormToUpperAnsi7, P, UpperName) then
+      begin // update Name=Value entry
+        result := true;
+        inc(P, UpperNameLength);
+        i := (P - pointer(Content)) + 1;
+        if (i = length(NewValue)) and
+           mormot.core.base.CompareMem(P, pointer(NewValue), i) then
+          exit; // new Value is identical to the old one -> no change
+        if next = nil then // avoid last line (P-PBeg) calculation error
+          SetLength(Content, i - 1)
+        else
+          delete(Content, i, next - P);   // delete old Value
+        insert(NewValueCRLF, Content, i); // set new value
+        exit;
+      end;
+      P := next;
+    end;
+  result := false;
+end;
+
+function UpdateNameValue(var Content: RawUtf8;
+  const Name, UpperName, NewValue: RawUtf8): boolean;
+var
+  P: PUtf8Char;
+begin
+  result := false;
+  if UpperName = '' then
+    exit;
+  P := pointer(Content);
+  result := UpdateNameValueInternal(Content, NewValue, NewValue + #13#10,
+    P, pointer(UpperName), length(UpperName));
+  if result or
+     (Name = '') then
+    exit;
+  AppendLine(Content, [Name, NewValue]);
+  result := true;
+end;
+
+procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
+var
+  P: PUtf8Char;
+  SectionFound: boolean;
+  i, len: PtrInt;
+  V: RawUtf8;
+  up: TByteToAnsiChar;
+begin
+  Join([Value, EOL], V);
+  P := pointer(Content);
+  // 1. find Section, and try update within it
+  if Section = '' then
+    SectionFound := true // find the Name= entry before any [Section]
+  else
+  begin
+    PWord(UpperCopy255(@up, Section))^ := ord(']');
+    SectionFound := FindSectionFirstLine(P, @up);
+  end;
+  len := length(Name);
+  PWord(UpperCopy255Buf(@up, pointer(Name), len))^ := ord('=');
+  inc(len);
+  if SectionFound and
+     UpdateNameValueInternal(Content, Value, V, P, @up, len) then
+      exit;
+  // 2. section or Name= entry not found: add Name=Value
+  V := Join([Name, '=', V]);
+  if not SectionFound then
+    // create not existing [Section]
+    V := Join(['[', Section, (']' + EOL), V]);
+  // insert Name=Value at P^ (end of file or end of [Section])
+  if P = nil then
+    // insert at end of file
+    Append(Content, V)
+  else
+  begin
+    // insert at end of [Section]
+    i := (P - pointer(Content)) + 1;
+    insert(V, Content, i);
+  end;
+end;
+
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
+var
+  Content: RawUtf8;
+begin
+  Content := StringFromFile(FileName);
+  UpdateIniEntry(Content, Section, Name, Value);
+  FileFromString(Content, FileName);
+end;
+
+function IsHttpHeadersContentTypeText(Headers: PUtf8Char): boolean;
+var
+  ct: PUtf8Char;
+  len: PtrInt;
+begin
+  ct := FindNameValuePointer(Headers, HEADER_CONTENT_TYPE_UPPER, len);
+  result := (ct <> nil) and
+            IsContentTypeCompressible(ct, len, {onlytext=}true);
+end;
+
+const
+  WS_UPGRADE: array[0..2] of PAnsiChar = (
+    'UPGRADE',
+    'KEEP-ALIVE, UPGRADE',
+    nil);
+
+function IsHttpHeadersTextWebSocketUpgrade(headers: PUtf8Char): boolean;
+begin
+  result := ExistsIniNameValue(pointer(headers), 'CONNECTION: ', @WS_UPGRADE);
+end;
+
+function IniToObject(const Ini: RawUtf8; Instance: TObject;
+  const SectionName: RawUtf8; DocVariantOptions: PDocVariantOptions;
+  Level: integer; Features: TIniFeatures): boolean;
+var
+  r: TRttiCustom;
+  i, uplen: PtrInt;
+  p: PRttiCustomProp;
+  section, sectionend, nested, nestedend: PUtf8Char;
+  obj: TObject;
+  n: RawUtf8;
+  up: TByteToAnsiChar;
+
+  function FillUp(p: PRttiCustomProp): PAnsiChar;
+  begin
+    result := @up;
+    if Level <> 0 then
+    begin
+      result := UpperCopy255(result, SectionName); // recursive name
+      result^ := '.';
+      inc(result);
+    end;
+    result := UpperCopy255(result, p^.Name);
+    uplen := result - PAnsiChar(@up);
+    nested := pointer(Ini);
+  end;
+
+  function FillProp(obj: TObject; p: PRttiCustomProp): boolean;
+  var
+    v: RawUtf8;
+    json: PUtf8Char;
+    item: TObject;
+  begin
+    result := false;
+    v := FindIniNameValue(section, @up, #0, sectionend);
+    if (ifMultiLineSections in Features) and
+       (v = #0) and
+       (rcfMultiLineStrings in p^.Value.Flags) then // strings or array of RawUtf8
+    begin
+      PWord(FillUp(p))^ := ord(']');
+      if FindSectionFirstLine(nested, @up, @nestedend) then
+      begin
+        // multi-line text value has been stored in its own section
+        FastSetString(v, nested, nestedend - nested);
+        if p^.Prop^.SetValueText(obj, v) then
+          result := true;
+      end;
+    end
+    else if v <> #0 then // we found this propname=value in section..sectionend
+      if (p^.OffsetSet <= 0) or // setter does not support JSON
+         (rcfBoolean in p^.Value.Cache.Flags) or // simple value from text
+         (p^.Value.Kind in (rkIntegerPropTypes + rkStringTypes +
+                            [rkEnumeration, rkSet, rkFloat])) then
+      begin
+        if p^.Prop^.SetValueText(obj, v) then // RTTI conversion from JSON/CSV
+          result := true;
+      end
+      else // e.g. rkVariant, rkDynArray complex values from JSON array/object
+      begin
+        json := pointer(v);
+        GetDataFromJson(@PByteArray(obj)[p^.OffsetSet], json,
+          nil, p^.Value, DocVariantOptions, true, nil);
+        if (json = nil) and
+           (v <> '') and
+           (ifMultiLineJsonArray in Features) and // try multi line JSON
+           (v[1] = '[') and
+           (PosExChar(']', v) = 0) and
+           (FindIniNameValueP(section, sectionend, @up, json) <> 0) then
+          GetDataFromJson(@PByteArray(obj)[p^.OffsetSet], json,
+            nil, p^.Value, DocVariantOptions, true, nil);
+        if json <> nil then
+          result := true;
+      end
+    else // v=#0 i.e. no propname=value in this section
+    if (rcfObjArray in p^.Value.Flags) and
+       (p^.OffsetSet >= 0) and
+       (ifArraySection in Features) then // recognize e.g. [name-xxx] or [name xxx]
+    begin
+      FillUp(p)^ := #0;
+      repeat
+        if nested^ = '[' then
+        begin
+          inc(nested);
+          if IdemPChar2(@NormToUpperAnsi7, nested, @up) and
+             not (tcIdentifier in TEXT_CHARS[nested[uplen]]) then // not azAZ_09
+          begin
+            nestedend := PosChar(nested, ']');
+            if nestedend <> nil then
+            begin
+              FastSetString(n, nested, nestedend - nested);
+              item := p^.Value.ArrayRtti.ClassNewInstance;
+              if item <> nil then
+                if IniToObject(Ini, item, n, DocVariantOptions, Level + 1,
+                     Features - [ifClassSection] + [ifClassValue]) then
+                begin
+                  PtrArrayAdd(PPointer(@PByteArray(obj)[p^.OffsetSet])^, item);
+                  result := true;
+                end
+                else
+                  item.Free;
+            end;
+          end;
+        end;
+        nested := GotoNextLine(nested);
+      until nested = nil;
+    end;
+  end;
+
+  function FillObj: boolean;
+  var
+    i: integer;
+    pp: PRttiCustomProp;
+    r: TRttiCustom;
+    u: PAnsiChar;
+  begin
+    result := false;
+    r := Rtti.RegisterClass(obj);
+    pp := pointer(r.Props.List);
+    for i := 1 to r.Props.Count do
+    begin
+      if pp^.Prop <> nil then
+      begin
+        u := UpperCopy255(@up, p^.Name);
+        u^ := '.';
+        inc(u);
+        PWord(UpperCopy255(u, pp^.Name))^ := ord('='); // [p.Name].[pp.Field]=
+        if FillProp(obj, pp) then
+          result := true;
+      end;
+      inc(pp);
+    end;
+  end;
+
+begin
+  result := false; // true when at least one property has been read
+  if (Ini = '') or
+     (Instance = nil) then
+    exit;
+  section := nil; // SectionName='' if only nested rkClass/rkDynArray
+  if SectionName <> '' then
+  begin
+    PWord(UpperCopy255(@up, SectionName))^ := ord(']');
+    section := pointer(Ini);
+    if not FindSectionFirstLine(section, @up, @sectionend) then
+      exit; // section not found
+  end;
+  r := Rtti.RegisterClass(Instance);
+  p := pointer(r.Props.List);
+  for i := 1 to r.Props.Count do
+  begin
+    if p^.Prop <> nil then
+    begin
+      if ifClearValues in Features then
+        p^.ClearValue(Instance, {freeandnil=}false);
+      if p^.Value.Kind = rkClass then
+      begin
+        obj := p^.Prop^.GetObjProp(Instance);
+        if obj <> nil then
+          if (ifClassValue in Features) and // check PropName.Field= entries
+             FillObj then
+            result := true
+          else if ifClassSection in Features then
+          begin // recursive load from another per-property section
+            if Level = 0 then
+              n := p^.Name
+            else
+              Join([SectionName, '.', p^.Name], n);
+            if IniToObject(Ini, obj, n, DocVariantOptions, Level + 1, Features) then
+              result := true;
+          end;
+      end
+      else
+      begin
+        PWord(UpperCopy255(@up, p^.Name))^ := ord('=');
+        if FillProp(Instance, p) then
+          result := true;
+      end;
+    end;
+    inc(p);
+  end;
+end;
+
+function TrimAndIsMultiLine(var U: RawUtf8): boolean;
+var
+  L: PtrInt;
+  P: PUtf8Char absolute U;
+begin
+  result := false;
+  L := length(U);
+  if L = 0 then
+    exit;
+  while P[L - 1] in [#13, #10] do
+  begin
+    dec(L);
+    if L = 0 then
+    begin
+      FastAssignNew(U); // no meaningful text
+      exit;
+    end;
+  end;
+  if L <> length(U) then
+    SetLength(U, L); // trim right
+  if BufferLineLength(P, P + L) = L then // may use x86_64 SSE2 asm
+    exit; // no line feed
+  result := true; // there are line feeds within this text
+  U := TrimChar(U, [#13]); // normalize #13#10 into #10 as ObjectToIni()
+end;
+
+function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
+  Options: TTextWriterWriteObjectOptions; Level: integer; Features: TIniFeatures): RawUtf8;
+var
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
+  nested: TRawUtf8DynArray;
+  nestedcount, i: integer;
+
+  procedure WriteClassInMainSection(obj: TObject; feat: TIniFeatures;
+    const prefix: RawUtf8);
+  var
+    i, a: PtrInt;
+    v64: Int64;
+    arr: PPointer;
+    o: TObject;
+    r: TRttiCustom;
+    p: PRttiCustomProp;
+    s: RawUtf8;
+
+    function FullSectionName: RawUtf8;
+    begin
+      if Level = 0 then
+        result := p^.Name
+      else
+        Join([SectionName, '.', p^.Name], result);
+    end;
+
+    procedure WriteNameEqual;
+    begin
+      if prefix <> '' then
+        W.AddString(prefix);
+      W.AddString(p^.Name);
+      W.Add('=');
+    end;
+
+  begin
+    r := Rtti.RegisterClass(obj);
+    p := pointer(r.Props.List);
+    for i := 1 to r.Props.Count do
+    begin
+      if p^.Prop <> nil then
+        case p^.Value.Kind of
+          rkClass:
+            begin
+              o := p^.Prop^.GetObjProp(obj);
+              if o <> nil then
+                if ((Level = 0) and
+                    (prefix = '')) or
+                   (ifClassSection in feat) then // priority over ifClassValue
+                begin
+                  s := ObjectToIni(o, FullSectionName, Options, Level + 1, feat);
+                  if s <> '' then
+                    AddRawUtf8(nested, nestedcount, s);
+                end
+                else
+                  WriteClassInMainSection(o, feat, Join([prefix, p^.Name, '.']));
+            end;
+          rkEnumeration, rkSet:
+            begin
+              if woHumanReadableEnumSetAsComment in Options then
+              begin
+                p^.Value.Cache.EnumInfo^.GetEnumNameAll(
+                  s, '; values=', #10, {quoted=}false, {trimmed=}true, {sep=}'/');
+                W.AddString(s);
+              end;
+              // AddValueJson() would have written "quotes" or ["a","b"]
+              WriteNameEqual;
+              v64 := p^.Prop^.GetOrdProp(obj);
+              if p^.Value.Kind = rkEnumeration then
+                W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(v64))
+              else
+                p^.Value.Cache.EnumInfo^.GetSetNameJsonArray(
+                  W, v64, ',', {quote=}#0, {star=}true, {trim=}true);
+              W.Add(#10);
+            end;
+          else
+            if (ifMultiLineSections in feat) and
+               (rcfMultiLineStrings in p^.Value.Flags) then
+            begin
+              p^.Prop^.GetAsString(obj, s); // strings or array of RawUtf8
+              if TrimAndIsMultiLine(s) then
+                // store multi-line text values in their own section
+                AddRawUtf8(nested, nestedcount,
+                  FormatUtf8('[%]'#10'%'#10#10, [FullSectionName, s]))
+              else
+              begin
+                WriteNameEqual;
+                W.AddString(s); // single line text
+                W.Add(#10);
+              end;
+            end
+            else if (rcfObjArray in p^.Value.Flags) and
+                    (ifArraySection in feat) and
+                    (p^.OffsetGet >= 0) then
+            begin
+              arr := PPointer(PAnsiChar(obj) + p^.OffsetGet)^;
+              if arr <> nil then
+                for a := 0 to PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1) do
+                begin
+                  s := SectionName;  // e.g. [section.propnam#0]
+                  if s <> '' then
+                    Append(s, '.');
+                  s := ObjectToIni(arr^, Make([s, p.Name, '#', a]),
+                    Options - [woHumanReadableEnumSetAsComment],
+                    Level + 1, feat - [ifClassSection] + [ifClassValue]);
+                  if s <> '' then
+                    AddRawUtf8(nested, nestedcount, s);
+                  inc(arr);
+                end;
+            end
+            else
+            begin
+              WriteNameEqual;
+              p^.AddValueJson(W, obj, // simple and complex types
+                Options - [woHumanReadableEnumSetAsComment, woInt64AsHex],
+                twOnSameLine);
+              W.Add(#10);
+            end;
+        end;
+      inc(p);
+    end;
+  end;
+
+begin
+  result := '';
+  if Instance = nil then
+    exit;
+  nestedcount := 0;
+  W := DefaultJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.CustomOptions := [twoTrimLeftEnumSets];
+    if SectionName <> '' then
+      W.Add('[%]'#10, [SectionName]);
+    WriteClassInMainSection(Instance, Features, '');
+    W.Add(#10);
+    for i := 0 to nestedcount - 1 do
+      W.AddString(nested[i]); // eventually write other sections
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+
+{ ************* TSynJsonFileSettings parent class }
 
 { TSynJsonFileSettings }
 

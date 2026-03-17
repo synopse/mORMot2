@@ -22,6 +22,7 @@ uses
   mormot.core.data,
   mormot.core.json,
   mormot.core.variants,
+  mormot.core.fmt,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.crypt.ecc,

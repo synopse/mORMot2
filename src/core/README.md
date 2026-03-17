@@ -170,6 +170,7 @@ JSON functions shared by all framework units
 
 Binary, JSON and Text Advanced Formatting Functions
 - Markup (e.g. HTML or Emoji) process
+- INI Files In-memory Access
 - `TSynJsonFileSettings` Parent Class
 - JSON and Text Preprocessor
 
