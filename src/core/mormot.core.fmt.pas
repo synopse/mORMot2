@@ -523,6 +523,18 @@ function JsonPreprocessToStream(const Json: RawUtf8; Dest: TStream;
   Format: TTextWriterJsonFormat = jsonHumanReadable;
   Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): boolean;
 
+/// pre-process any text with $".." and $(ident) expansion
+function TextPreprocess(const Text: RawUtf8;
+  Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): RawUtf8;
+
+/// pre-process any text with $".." and $(ident) expansion into a file
+function TextPreprocessToFile(const Text: RawUtf8; const Dest: TFileName;
+  Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): boolean;
+
+/// pre-process any text with $".." and $(ident) expansion into a stream
+function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
+  Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): boolean;
+
 
 implementation
 
@@ -2944,6 +2956,164 @@ begin
     result := JsonBufferReformatToStream(pointer(Json), Dest, Format, preproc);
   finally
     preproc.Free;
+  end;
+end;
+
+
+{ TPreprocText }
+
+type
+  /// called from TextPreprocess/TextPreprocessToFile
+  TPreprocText = class(TPreproc)
+  protected
+    W: TTextWriter;
+    LineFeed: cardinal;    // e.g. #13#10
+    LineFeedLen: cardinal; // e.g. 2
+    // TPreprocAbstract OnAppend/OnVerbatim/OnAddDebugComment callbacks
+    function TextAppend(P: PUtf8Char): boolean;
+    procedure TextVerbatim(P: PUtf8Char; Len: PtrInt);
+    procedure TextComment(const info: ShortString);
+  public
+    function TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+  end;
+
+function TPreprocText.TextAppend(P: PUtf8Char): boolean;
+begin
+  W.AddNoJsonEscape(P, StrLen(P));
+  result := true; // not used anyway
+end;
+
+procedure TPreprocText.TextVerbatim(P: PUtf8Char; Len: PtrInt);
+begin
+  W.AddNoJsonEscape(P, Len);
+end;
+
+procedure TPreprocText.TextComment(const info: ShortString);
+begin
+  PCardinal(W.B + 1)^ := LineFeed;
+  inc(W.B, LineFeedLen);
+  W.AddShort('# debug: ');
+  W.AddShort(info);
+  PCardinal(W.B + 1)^ := LineFeed;
+  inc(W.B, LineFeedLen);
+end;
+
+function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+var
+  B, v: PUtf8Char;
+  l: PtrInt;
+begin
+  result := false;
+  if (P = nil) or
+     (Dest = nil) then
+    exit;
+  // setup the callbacks
+  W := Dest;
+  OnAppend := TextAppend;
+  OnVerbatim := TextVerbatim;
+  if jppDebugComment in Options then
+  begin
+    OnAddDebugComment := TextComment;
+    // preserve line feed for TextComment()
+    B := P;
+    while not (P ^ in [#0, #10, #13]) do
+      inc(P);
+    if P^ = #13 then
+    begin
+      LineFeed := EOLW;
+      LineFeedLen := 2;
+    end
+    else
+    begin
+      LineFeed := 10;
+      LineFeedLen := 1;
+    end;
+    P := B;
+  end;
+  // main loop
+  repeat
+    while (P^ <> #0) and
+          (P^ <> '$') do
+      inc(P);
+    W.AddNoJsonEscape(B, P - B);
+    if P^ = #0 then
+      break;
+    if P[1] = '$' then
+    begin
+      B := ParseSection(P);    // $$ ... $$ DSL section: include + vars
+      continue;
+    end;
+    B := P;
+    if WasIf(B) then           // $if$ $else$ $endif$
+      continue;
+    if P[1] in ['(', '{'] then // only $(ident) ${ident} - not $ident$
+    begin
+      P := Expand(P, v, l, {keepmarker=}false);
+      if v <> nil then
+        W.AddShort(v, l);
+    end
+    else
+      inc(P); // this was not $(ident) -> write verbatim and continue
+  until false;
+  result := true;
+end;
+
+
+function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
+  Flags: TPreprocFlags; const IncludeRoot: TFileName): boolean;
+var
+  preproc: TPreprocText;
+  W: TTextWriter;
+  temp: TBuffer128K;
+begin
+  result := false;
+  if (Text = '') or
+     (Dest = nil) then
+    exit;
+  preproc := TPreprocText.Create(Flags, IncludeRoot);
+  try
+    W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
+    try
+      result := preproc.TextPreprocessToWriter(pointer(Text), W);
+      W.FlushFinal;
+    finally
+      W.Free;
+    end;
+  finally
+    preproc.Free;
+  end;
+end;
+
+function TextPreprocess(const Text: RawUtf8; Flags: TPreprocFlags;
+  const IncludeRoot: TFileName): RawUtf8;
+var
+  S: TRawByteStringStream;
+begin
+  S := TRawByteStringStream.Create;
+  try
+    TextPreprocessToStream(Text, S, Flags, IncludeRoot);
+    result := S.DataString;
+  finally
+    S.Free;
+  end;
+end;
+
+function TextPreprocessToFile(const Text: RawUtf8; const Dest: TFileName;
+  Flags: TPreprocFlags; const IncludeRoot: TFileName): boolean;
+var
+  F: TStream;
+begin
+  try
+    F := TFileStreamEx.Create(Dest, fmCreate);
+    try
+      TextPreprocessToStream(Text, F, Flags, IncludeRoot);
+      result := true;
+    finally
+      F.Free;
+    end;
+  except
+    on Exception do
+      result := false;
   end;
 end;
 
