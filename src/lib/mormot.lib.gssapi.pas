@@ -1037,9 +1037,8 @@ begin
   result := @Bind;
 end;
 
-function ClientSspiAuthWorker(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
-  out aOutData: RawByteString; aMech: gss_OID): boolean;
+function ClientSspiAuthWorker(var aSecContext: TSecContext; aMech: gss_OID;
+  const aSpn: RawUtf8; const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
   MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
@@ -1122,7 +1121,7 @@ begin
   if spn = '' then
     spn := ForceSecKerberosSpn;
   // compute the first/next client-server roundtrip
-  result := ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
+  result := ClientSspiAuthWorker(aSecContext, aMech, spn, aInData, aOutData);
 end;
 
 function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
@@ -1131,7 +1130,8 @@ begin
 end;
 
 procedure ClientSspiCreateCredHandle(var aSecContext: TSecContext;
-  const aUserName, aPassword, aSecKerberosSpn: RawUtf8; aMech: gss_OID_set);
+  const aUserName, aPassword: RawUtf8; var aTargetSpn: RawUtf8;
+  aMech: gss_OID_set);
 var
   maj, min, min2: cardinal;
   buf: gss_buffer_desc;
@@ -1200,10 +1200,17 @@ begin
       end;
     // 3) retrieve the user information in the proper gss_name_t format
     Split(u, '@', n, spn);
-    if spn = '' then
-      spn := SplitRight(aSecKerberosSpn, '@'); // try to extract the SPN
+    if spn = '' then // try to extract the SPN from the user
+      spn := UpperCase(SplitRight(aTargetSpn, '@'))
+    else
+    begin
+      UpperCaseSelf(spn); // force upper to avoid enduser confusion
+      if (aTargetSpn <> '') and
+         (PosExChar('@', aTargetSpn) = 0) then // e.g. 'HTTP/hostname' without @
+        aTargetSpn := Join([aTargetSpn, '@', spn]); // API needs SPN
+    end;
     if spn <> '' then
-      u := n + '@' + UpperCase(spn); // force upper to avoid enduser confusion
+      u := n + '@' + spn;
     buf.length := Length(u);
     buf.value := pointer(u);
     maj := GssApi.gss_import_name(
@@ -1327,11 +1334,11 @@ begin
   if spn = '' then
     spn := ForceSecKerberosSpn;
   if aSecContext.CredHandle = nil then
-    // first call: create the needed context for those credentials
+    // first call: create the needed context for those credentials and set spn
     ClientSspiCreateCredHandle(aSecContext, aUserName, aPassword, spn, m);
   // compute the first/next client-server roundtrip
   result := (aInData = 'onlypass') or // magic from TBasicAuthServerKerberos
-            ClientSspiAuthWorker(aSecContext, aInData, spn, aOutData, aMech);
+            ClientSspiAuthWorker(aSecContext, aMech, spn, aInData, aOutData);
 end;
 
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
