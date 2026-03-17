@@ -38,6 +38,7 @@ uses
   mormot.core.json,
   mormot.core.search,  // for FileNames()
   mormot.crypt.secure, // for TBinaryCookieGenerator
+  mormot.core.threads,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.mustache;

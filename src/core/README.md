@@ -145,7 +145,6 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 
 Low-Level Data Processing Functions shared by all framework units
 - RTL `TPersistent` or Root Classes with Custom Constructor
-- `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - `TSynList` `TSynObjectList` `TSynLocker` classes
 - `TObjectStore` with proper Binary Serialization
 - INI Files and In-memory Access
@@ -232,6 +231,7 @@ Performance Monitoring functions shared by all framework units
 ### mormot.core.threads
 
 High-Level Multi-Threading features shared by all framework units
+- `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - Thread-Safe `TSynQueue` and `TPendingTaskList`
 - Thread-Safe `ILockedDocVariant` Storage
 - Background Thread Processing
