@@ -250,6 +250,29 @@ function JsonPropNameValid(P: PUtf8Char; len: integer; tab: PJsonCharSet): boole
 function JsonUnquotedValueValid(P: PUtf8Char; len: PtrUInt): boolean;
 
 type
+  /// event signature for TPreprocAbstract.OnAppend callback - e.g. Reformat()
+  TOnPreprocAppend = function(P: PUtf8Char): boolean of object;
+  /// event signature for TPreprocAbstract.OnAddDebugComment callback
+  TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
+  /// flags used to identify the $(ident) variables stored by TPreprocAbstract
+  TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
+  /// abstract class used for JSON or Text $(ident) and $ifdef$ pre-processing
+  TPreprocAbstract = class(TBinDictionary)
+  protected
+    OnAppend: TOnPreprocAppend;
+    OnAddDebugComment: TOnPreprocAddDebugComment;
+  public
+    /// called with P^=$$ to integrate DSL sections
+    function ParseSection(P: PUtf8Char): PUtf8Char; virtual; abstract;
+    /// called with P^=$ for conditional process
+    function WasIf(var P: PUtf8Char): boolean; virtual; abstract;
+    /// called with P^=$ to recognize $(ident) into Value/Len
+    function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
+      KeepMarker: boolean): PUtf8Char; virtual; abstract;
+    /// called with P^=$ to recognize and append $(ident) as plain unescaped text
+    function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char; virtual; abstract;
+  end;
+
   /// efficient JSON value parser / in-place decoder
   // - as used by JsonDecode() and all internal JSON functions
   // - in respect to standard JSON, it is more relaxed with unquoted names,
@@ -619,36 +642,30 @@ function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 // - note that input P buffer won't be modified in-place during conversion
 function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
+  Format: TTextWriterJsonFormat = jsonHumanReadable; Preproc: TObject = nil): boolean;
 
 /// formats and indents a JSON array or document to the specified layout
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
-// - PreProcessor will trigger $".." and $(ident) ${ident} $ident$ JOP expansion
 // - all those formats are inter-operable within the JSON data model, i.e. you
 // can call JsonReformat() between any of them and keep all information
 // - in practice, jsonCompact is standard JSON and jsonH is nice for configs
 // - note that json5/jsonH would preserve and normalize the comments, and
 // others will remove them for better interaction
 function JsonReformat(const Json: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  PreProcessor: TTextWriterJsonPreProcessor = []): RawUtf8;
+  Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
 
 /// read a file content, and apply JsonReformat() to normalize it
 function JsonNormalizeFromFile(const FileName: TFileName;
-  Format: TTextWriterJsonFormat = jsonCompact;
-  PreProcessor: TTextWriterJsonPreProcessor = []): RawUtf8;
+  Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
 
-/// formats and indents a JSON array or document as a file
+/// formats and indents a JSON array or document info a file
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
+  Format: TTextWriterJsonFormat = jsonHumanReadable; Preproc: TObject = nil): boolean;
 
-/// formats and indents a JSON array or document as a file
+/// formats and indents a JSON array or document into a file
 function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
+  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
 
 /// convert UTF-8 content into a JSON string
 // - with proper escaping of the content, and surounding " characters
@@ -745,8 +762,6 @@ type
     // called for varAny after TRttiCustomProp.GetRttiVarData
     procedure AddRttiVarData(Value: PRttiVarData; Escape: TTextWriterKind;
       WriteOptions: TTextWriterWriteObjectOptions);
-    function DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat;
-      Dsl: TTextWriterJsonPreProcessor): boolean; override;
   public
     /// release all internal structures
     destructor Destroy; override;
@@ -891,6 +906,9 @@ type
     // - called e.g. by TJsonWriter.AddVariant() for varAny / TRttiVarData
     procedure AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
       Escape: TTextWriterKind; WriteOptions: TTextWriterWriteObjectOptions);
+    /// append a JSON value, array or document, in a specified format
+    function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
+      Preproc: TObject = nil): boolean; override;
     /// append a JSON value, array or document as simple XML content
     // - you can use JsonBufferToXML() and JsonToXML() functions as wrappers
     // - this method is called recursively to handle all kind of JSON values
@@ -3050,45 +3068,6 @@ begin // caller ensured was not a constant nor a number
 end;
 
 type
-  TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
-  TOnPreprocAppend = function(P: PUtf8Char): boolean of object; // e.g. Reformat()
-  TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
-  /// abstract class used by internal TJsonParser.Reformat pre-processing
-  TPreprocAbstract = class(TBinDictionary)
-  protected
-    Options: TTextWriterJsonPreProcessor;
-    IncludeFolder: TFileName;
-    OnAddDebugComment: TOnPreprocAddDebugComment;
-    OnAppend: TOnPreprocAppend;
-  public
-    /// factory method of this pre-processing engine
-    constructor Create(opt: TTextWriterJsonPreProcessor;
-      const includeroot: TFileName; const append: TOnPreprocAppend;
-      const debug: TOnPreprocAddDebugComment);
-    /// called with P^=$$ to integrate DSL sections
-    function ParseSection(P: PUtf8Char): PUtf8Char; virtual; abstract;
-    /// called with P^=$ for conditional process
-    function WasIf(var P: PUtf8Char): boolean; virtual; abstract;
-    /// called with P^=$ to recognize $(ident) into Value/Len
-    function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
-      KeepMarker: boolean): PUtf8Char; virtual; abstract;
-    /// called with P^=$ to recognize and append $(ident) as plain unescaped text
-    function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char; virtual; abstract;
-  end;
-
-constructor TPreprocAbstract.Create(opt: TTextWriterJsonPreProcessor;
-  const includeroot: TFileName; const append: TOnPreprocAppend;
-  const debug: TOnPreprocAddDebugComment);
-begin
-  inherited Create; // TBinDictionary
-  Options := opt;
-  IncludeFolder := includeroot;
-  OnAppend := append;
-  if jppDebugComment in Options then
-    OnAddDebugComment := debug;
-end;
-
-type
   // the different states of the TJsonParser logic
   TJsonParserState = (
     stObjectName,
@@ -3142,7 +3121,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     // methods used by TJsonWriter.DoJsonReformat()
     procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
-      Dsl: TTextWriterJsonPreProcessor);
+      Preproc: TPreprocAbstract);
     function Reformat(P: PUtf8Char): boolean;
     procedure ReformatBeginValue;
     procedure ReformatEndValue;
@@ -3882,540 +3861,6 @@ comment:    AddStartComment;
   result := true;
 end;
 
-// TODO: move TPreproc in mormot.core.fmt.pas with JsonPreprocess() TextPreprocessor()
-const
-  DSL_INCLUDE_DEPTH = 4; // avoid infinite include <filename>
-type
-  TPreprocIfLevel = 0 .. 15; // 0=outer level, 1..15=nested levels
-  TPreprocIf = (piNone, piIf, piIfDef, piElse, piEnd);
-
-  TPreproc = class(TPreprocAbstract)
-  protected
-    IfLevel: TPreprocIfLevel;
-    IfSkip: set of TPreprocIfLevel;
-    IncludeDepth: byte;
-    procedure DoSkip(var P: PUtf8Char);
-    function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
-    function DoIf(P: PUtf8Char): PUtf8Char;
-    procedure DoEndif(var P: PUtf8Char);
-      {$ifdef HASINLINE} inline; {$endif}
-    procedure DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
-    procedure DoInclude(P: PUtf8Char; const Append: TOnPreprocAppend);
-  public
-    /// called with P^=$$ to integrate DSL sections
-    function ParseSection(P: PUtf8Char): PUtf8Char; override;
-    /// called with P^=$ for conditional process
-    function WasIf(var P: PUtf8Char): boolean; override;
-    /// called with P^=$ to recognize $(ident) into Value/Len
-    function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
-      KeepMarker: boolean): PUtf8Char; override;
-    /// called with P^=$ to recognize $(ident) and append as plain unescaped text
-    function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char; override;
-  end;
-
-function TPreproc.DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
-begin
-  result := Find(Key, KeyLen, @ValueLen); // from known variables/templates
-  if result = nil then
-    result := GlobalInfoFind(Key, KeyLen, ValueLen); // global macros
-end;
-
-function TPreproc.Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
-  KeepMarker: boolean): PUtf8Char;
-var
-  key: PUtf8Char;
-  keylen: PtrInt;
-  ending: AnsiChar;
-begin
-  result := P;
-  inc(result); // called with P^ = '$'
-  ending := '$';
-  if result^ in ['(', '{'] then // $(ident) ${ident} format, not $ident$
-  begin
-    if result^ = '(' then
-      ending := ')'
-    else
-      ending := '}';
-    inc(result);
-  end;
-  key := result;
-  while (result^ <> ending) and not (result^ in [#0 .. ' ', '|']) do
-    inc(result);
-  Value := nil;
-  if result^ <= ' ' then
-    exit;
-  Value := DoFind(key, result - key, Len); // resolve
-  if result^ = '|' then   // $(ident|default) or $ident|default$
-  begin
-    inc(result);
-    if result^ = '$' then // $ident|$default$$ or $(ident|$(def1)|$(def2))}
-    begin
-      result := Expand(result, key, keylen, KeepMarker); // cascaded defaults
-      if Value = nil then // fallback to the nested $default$
-      begin
-        Value := key;
-        Len := keylen;
-      end;
-      while (result^ <> ending) and (result^ in [#0 .. #31]) do
-        inc(result);
-      inc(result); // skip trailing $ or }
-      exit;
-    end;
-    key := result;
-    while (result^ <> ending) and not (result^ in [#0 .. #31, '|']) do
-      inc(result);
-    if result^ < ' ' then
-      exit;
-    if Value = nil then // fallback to the specified default
-    begin
-      Value := key;
-      Len := result - key;
-    end;
-  end;
-  inc(result); // skip trailing $ } )
-  if (Value = nil) or
-     KeepMarker or
-     (TPreprocMarker(Value^) > high(TPreprocMarker)) then
-    exit;
-  inc(Value); // trim marker
-  dec(Len);
-end;
-
-function TPreproc.ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char;
-var
-  v: PUtf8Char;
-  l: PtrInt;
-  m: TPreprocMarker;
-begin
-  result := Expand(P, v, l, {KeepMarker=}true);
-  if v = nil then // this $(ident) was not found
-    exit;
-  m := TPreprocMarker(v^);
-  if m = pmTemplate then
-    exit;// { } [] not expanded in "string"
-  if m <= high(m) then // skip marker
-  begin
-    inc(v);
-    dec(l);
-  end;
-  W.AddShort(v, l);
-end;
-
-procedure TPreproc.DoEndif(var P: PUtf8Char);
-begin
-  if IfLevel <> 0 then
-  begin
-    exclude(IfSkip, IfLevel); // cleanup for debugging
-    dec(IfLevel);
-    if (IfLevel <> 0) and
-       (IfLevel in IfSkip) then
-      DoSkip(P); // continue skip as in DoIf()
-  end
-  else if Assigned(OnAddDebugComment) then
-    OnAddDebugComment('$endif$ with no prior $if')
-end;
-
-function ParseIfDollar(var P: PUtf8Char): TPreprocIf; // caller ensured P^='$'
-begin
-  result := piNone;
-  case PCardinal(P)^ of
-    ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord(' ') shl 24:  // '$if '
-      begin
-        result := piIf;
-        inc(P, 4);
-      end;
-    ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord('d') shl 24:
-      if PCardinal(P + 4)^ and $ffffff =
-           ord('e') + ord('f') shl 8 + ord(' ') shl 16 then         // '$ifdef '
-      begin
-        inc(P, 7);
-        result := piIfDef;
-      end;
-    ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24:
-      if cardinal(PWord(P + 4)^) = ord('e') + ord('$') shl 8 then   // '$else$'
-      begin
-        inc(P, 6);
-        result := piElse;
-      end;
-    ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24:
-      if PCardinal(P + 4)^ and $ffffff =
-           ord('i') + ord('f') shl 8 + ord('$') shl 16 then         // '$endif$'
-      begin
-        inc(P, 7);
-        result := piEnd;
-      end;
-  end;
-end;
-
-procedure TPreproc.DoSkip(var P: PUtf8Char);
-begin
-  while true do
-    if P^ = #0 then
-      exit
-    else if P^ <> '$' then
-      inc(P) // most common case
-    else
-      case ParseIfDollar(P) of
-        piNone:
-          inc(P);
-        piIf:
-          begin
-            dec(P, 4); // caller should detect and execute DslIf()
-            exit;
-          end;
-        piIfDef:
-          begin
-            dec(P, 7);
-            exit;
-          end;
-        piEnd:
-          begin
-            DoEndif(P);
-            exit;
-          end;
-        piElse:
-          if IfLevel = 0 then // paranoid
-            exit
-          else if IfLevel in IfSkip then
-          begin
-            exclude(IfSkip, IfLevel); // include until $end$
-            exit;
-          end
-          else
-            include(IfSkip, IfLevel);  // and continue skip loop
-      end;
-end;
-
-function TPreproc.DoIf(P: PUtf8Char): PUtf8Char;
-var
-  exp: TTextExpression;
-  len, level: PtrInt;
-  match: boolean;
-begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
-  result := ParseTextExpression(P, exp, {altstopchar=}'$');
-  if result = nil then
-  begin
-    result := @NULCHAR; // force <> nil but #0
-    exit;
-  end;
-  while (exp.ValueLen > 0) and
-        (exp.ValueStart[exp.ValueLen - 1] = ' ') do
-    dec(exp.ValueLen);
-  if exp.ValueLen = 0 then
-    if result^ = '$' then // resolve $val$
-    begin
-      result := Expand(result, exp.ValueStart, len, {keepmarker=}false);
-      if exp.ValueStart <> nil then
-        exp.ValueLen := len;
-      result := GotoNextNotSpace(result);
-      if result^ <> '$' then
-        exit;
-    end
-    else
-      exit; // '$if id =$' is invalid syntax (ValueLen=-1 for $ifdef id$)
-  if IfLevel < high(IfLevel) then
-    if (IfLevel > 0) and
-       (IfLevel in IfSkip) then // quickly skip all nested $if$ $endif$
-    begin
-      level := 0;
-      while true do
-        if result^ = #0 then
-          exit
-        else if result^ <> '$' then
-          inc(result)
-        else
-          case ParseIfDollar(result) of
-            piNone:
-              inc(result);
-            piIf, piIfDef:
-              inc(level);
-            piEnd:
-              if level = 0 then
-                break
-              else
-                dec(level);
-          end;
-      DoSkip(result);
-      exit; // no inc(result) after DslSkip()
-    end
-    else
-    begin
-      len := 0; // need a PtrInt, not an integer
-      exp.NameStart := DoFind(exp.NameStart, exp.NameLen, len);
-      exp.NameLen := len;
-      if (exp.NameStart <> nil) and
-         (TPreprocMarker(exp.NameStart^) <= high(TPreprocMarker)) then
-      begin
-       inc(exp.NameStart); // trim marker after raw DoFind()
-       dec(exp.NameLen);
-      end;
-      if exp.ValueLen < 0 then
-        match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
-      else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
-        match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
-      else
-        match := EvaluateTextExpression(exp); // non-void = < > <= >= ~ ~~ * **
-      inc(IfLevel);
-      if match then // $if$ include [$else$ skip] $endif$
-        exclude(IfSkip, IfLevel)
-      else
-      begin
-        include(IfSkip, IfLevel);
-        DoSkip(result);
-        exit; // no inc(result) after DslSkip()
-      end;
-    end
-  else if Assigned(OnAddDebugComment) then
-    OnAddDebugComment('too many nested $if$ (15 allowed)');
-  if result^ = '$' then
-    inc(result);
-end;
-
-function TPreproc.WasIf(var P: PUtf8Char): boolean;
-begin
-  result := true;
-  case ParseIfDollar(P) of // called with P^ = '$'
-    piIf, piIfDef: // complex $if $ifdef evaluation
-      P := DoIf(P);
-    piElse:        // $else$ just toggles skip flag
-      if IfLevel > 0 then
-        if IfLevel in IfSkip then
-          exclude(IfSkip, IfLevel) // include until $end$
-        else
-        begin
-          include(IfSkip, IfLevel); // skip until $end$
-          DoSkip(P);
-        end
-      else if Assigned(OnAddDebugComment) then
-        OnAddDebugComment('$else$ with no prior $if');
-    piEnd:         // $endif$
-      DoEndif(P);
-  else
-    result := false;
-  end;
-end;
-
-function GotoTemplateEnding(P: PUtf8Char): PUtf8Char;
-var
-  level: integer;
-begin
-  result := P + 1; // skip { [
-  level := 0;
-  repeat
-    case result^ of
-      #0:
-        exit;
-      '{', '[':
-        inc(level);
-      '}', ']':
-        if level = 0 then
-          break
-        else
-          dec(level);
-      '"':
-        result := GotoEndOfJsonString2(result + 1, @JSON_CHARS);
-    end;
-    inc(result);
-  until false;
-end;
-
-procedure TPreproc.DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
-var
-  beg, val: PUtf8Char;
-  l, vallen: PtrInt; // @vallen = PPtrInt
-  tmp: TSynTempAdder;
-  comment: PShortString;
-begin
-  tmp.Init;
-  tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
-  repeat
-    beg := v;
-    while (v < ve) and
-          (cardinal(PWord(v)^) <> SLASH_16) and
-          not (v^ in ['$', '#']) do
-      inc(v);
-    tmp.Add(beg, v - beg);
-    if v >= ve then
-      break;
-    if v^ = '$' then
-      if (m = pmTemplate) and
-         WasIf(v) then // $if$ $endif$
-        continue
-      else // $ident$ ${ident} $env:NAME$ ${env:NAME}
-      begin
-        v := Expand(v, val, vallen, {KeepMarker=}false);
-        if val <> nil then
-          tmp.Add(val, vallen);
-      end
-    else
-    begin // # comment or // comment
-      l := v - beg;
-      while (l <> 0) and
-            (v[l - 1] = ' ') do
-        dec(l); // trim right
-      if l > 0 then
-      begin
-        tmp.Add(beg, l);
-        tmp.AddDirect(#10);
-      end;
-      v := GotoNextLineSmall(v);
-    end;
-  until v >= ve;
-  Update(k, tmp.Buffer, kl, tmp.Size);
-  if Assigned(OnAddDebugComment) then
-  begin
-    comment := tmp.Buffer;
-    if tmp.Size > 100 then
-    begin
-      comment^[0] := #100; // truncate to 100 chars seems enough for a comment
-      AppendShort('... size=', comment^);
-      AppendShortCardinal(tmp.Size, comment^);
-    end
-    else
-      comment^[0] := AnsiChar(tmp.Size - 1); // we can append a small value
-    AppendShort(' as $(', comment^);
-    AppendShortBuffer(pointer(k), kl, high(comment^), pointer(comment));
-    AppendShortCharSafe(')', comment^);
-    OnAddDebugComment(comment^);
-  end;
-  tmp.Store.Done; // free memory - unlikely from heap
-end;
-
-function TPreproc.ParseSection(P: PUtf8Char): PUtf8Char;
-var
-  key, value: PUtf8Char;
-  keylen: PtrInt;
-  marker: TPreprocMarker;
-label
-  ok;
-begin // handle P = '$$'
-  result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
-  repeat
-    result := GotoNextLineSmall(result);
-ok: result := GotoNextNotSpace(result);
-    case result^ of
-      #0:
-        exit;
-      '$':
-        if result[1] = '$' then
-          break     // end of DSL section
-        else if WasIf(result) then
-          goto ok   // $if$ $else$ $endif$ conditional logic
-        else
-          continue; // $ is not allowed in identifiers anyway
-      '#', '/':
-        continue;   // comment line
-      'i', 'I':
-        if IdemPChar(result + 1, 'NCLUDE ') then
-        begin
-          if IncludeFolder <> '' then
-            DoInclude(GotoNextNotSpace(result + 8), OnAppend);
-          continue; // this is a reserved keyword, never an identifier
-        end;
-    end;
-    key := result;
-    repeat
-      inc(result);
-    until result^ in [#0 .. ' ', '=', ':', '$', '|'];
-    keylen := result - key;
-    result := GotoNextNotSpace(result);
-    if not (result^ in ['=', ':']) then
-      continue; // $ and | are not allowed in identifiers
-    while result^ in ['=', ':', ' '] do
-      inc(result); // allow := or == syntax
-    marker := pmEscapedString;
-    value := result + 1; // early to make Delphi happy - exclude starting { [ "
-    case result^ of
-      #0:
-        exit;
-      '{', '[': // value = whole {..}/[..] text block
-        begin
-          result := GotoTemplateEnding(result);
-          DoRegister(pmTemplate, key, value, result - 1, keylen);
-          continue; // has been expanded and processed for $if$
-        end;
-      '"', '''':
-        while (result^ >= ' ') and
-              (result^ <> value^) do // quoted value, not supporting \" nor ''
-          inc(result);
-    else
-      begin
-        value := result;
-        while not (result^ in [#0 .. #31, '#', '/']) do
-        begin
-          // unquoted value in $$ DSL section = till end of line or comment
-          if result^ in ['\', '"'] then
-            marker := pmPlainString; // would need W.AddJsonEscape()
-          inc(result);
-        end;
-        while result[-1] = ' ' do
-          dec(result); // trim right
-        if IsConstantOrNumberJson(value, result - value) then
-          marker := pmConstNum;
-      end;
-    end;
-    DoRegister(marker, key, value, result, keylen);
-  until false;
-  result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
-end;
-
-procedure TPreproc.DoInclude(P: PUtf8Char; const Append: TOnPreprocAppend);
-var
-  tmp: ShortString; // to compute the expanded filename
-  v: PUtf8Char;
-  vlen: PtrInt;     // @vlen = PPtrInt
-  c: AnsiChar;
-  txt: RawUtf8;     // UTF-8 file name
-  fn: TFileName;    // RTL file name
-begin
-  tmp[0] := #0;
-  if P^ = '"' then
-    inc(P);
-  while not (P^ in [#0, '"', #13, #10]) do
-  begin
-    if P^ = '$' then
-    begin
-      P := Expand(P, v, vlen, {KeepMarker=}false);
-      if v <> nil then // include "config/general-$mode$.json"
-        AppendShortBuffer(pointer(v), vlen, high(tmp), @tmp);
-    end
-    else
-    begin
-      c := P^;
-      if c = InvertedPathDelim then
-        c := PathDelim; // normalize for direct cross-platform support
-      AppendShortCharSafe(c, tmp);
-    end;
-  end;
-  if IncludeDepth >= DSL_INCLUDE_DEPTH then
-  begin
-    if Assigned(OnAddDebugComment) then
-      OnAddDebugComment('include too deep: rejected');
-    exit;
-  end;
-  fn := MakeString([tmp]);
-  if not (jppIncludeAbsolute in Options) and
-     not SafeFileName(fn) then
-    exit;
-  txt := RawUtf8FromFile(fn);
-  if Assigned(OnAddDebugComment) then
-  begin
-    if txt = '' then
-      AppendShort(' not found: skipped', tmp)
-    else
-    begin
-      AppendShort(' included: size=', tmp);
-      AppendShortCardinal(length(txt), tmp);
-    end;
-    OnAddDebugComment(tmp);
-  end;
-  if txt = '' then
-    exit;
-  inc(IncludeDepth);
-  Append(pointer(txt));
-  dec(IncludeDepth);
-end;
-
 const
   FMT2FLAGS: array[TTextWriterJsonFormat] of TJsonReformatFlags = (
     [],                                              // jsonCompact
@@ -4432,7 +3877,7 @@ const
     []);                                             // jsonNoEscapeUnicode
 
 procedure TJsonParser.InitReformat(JsonFmt: TTextWriterJsonFormat;
-  Writer: TJsonWriter; Dsl: TTextWriterJsonPreProcessor);
+  Writer: TJsonWriter; Preproc: TPreprocAbstract);
 begin
   {$ifdef CPUX86}
   JsonSet := @JSON_CHARS_RELAXED;
@@ -4443,9 +3888,12 @@ begin
   Fmt := FMT2FLAGS[JsonFmt];
   FmtJson := JsonFmt;
   W := Writer;
-  FmtPreproc := nil;
-  if jppTemplate in Dsl then // will eventually be in mormot.core.fmt.pas
-    FmtPreproc := TPreproc.Create(Dsl, '', Reformat, AddDebugComment);
+  FmtPreproc := Preproc;
+  if Preproc <> nil then
+  begin
+    Preproc.OnAppend := Reformat;
+    Preproc.OnAddDebugComment := AddDebugComment;
+  end;
 end; // Max/RootCount/ExpectedStandard are not used
 
 
@@ -6068,7 +5516,7 @@ begin
 end;
 
 function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
-  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
+  Format: TTextWriterJsonFormat; Preproc: TObject): boolean;
 var
   temp: TBuffer64K;
 begin
@@ -6077,27 +5525,26 @@ begin
   else
     with TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
     try
-      result := AddJsonReformat(P, Format, PreProcessor);
+      result := AddJsonReformat(P, Format, Preproc);
       SetText(Dest);
     finally
       Free;
     end;
 end;
 
-function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat;
-  PreProcessor: TTextWriterJsonPreProcessor): RawUtf8;
+function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat): RawUtf8;
 begin // no need of temp copy: AddJsonReformat() won't change input Json
-  JsonBufferReformat(pointer(Json), result, Format, PreProcessor);
+  JsonBufferReformat(pointer(Json), result, Format);
 end;
 
 function JsonNormalizeFromFile(const FileName: TFileName;
-  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): RawUtf8;
+  Format: TTextWriterJsonFormat): RawUtf8;
 begin
-  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format, PreProcessor);
+  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format);
 end;
 
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
-  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
+  Format: TTextWriterJsonFormat; Preproc: TObject): boolean;
 var
   F: TStream;
   temp: TBuffer128K;
@@ -6107,7 +5554,7 @@ begin
     try
       with TJsonWriter.Create(F, @temp, SizeOf(temp)) do
       try
-        AddJsonReformat(P, Format, PreProcessor);
+        AddJsonReformat(P, Format);
         FlushFinal;
       finally
         Free;
@@ -6123,9 +5570,9 @@ begin
 end;
 
 function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
-  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
+  Format: TTextWriterJsonFormat): boolean;
 begin // no need of temp copy
-  result := JsonBufferReformatToFile(pointer(Json), Dest, Format, PreProcessor);
+  result := JsonBufferReformatToFile(pointer(Json), Dest, Format);
 end;
 
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
@@ -8090,46 +7537,45 @@ begin
   until result^ = #0;
 end;
 
-function TJsonWriter.DoJsonReformat(P: PUtf8Char; Fmt: TTextWriterJsonFormat;
-  Dsl: TTextWriterJsonPreProcessor): boolean;
+function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
+  Preproc: TObject): boolean;
 var
   parser: TJsonParser; // reuse the GotoEnd state machine
   start: PUtf8Char;    // Hjson assume an implicit object
 begin
   result := false;
-  if P = nil then
+  if Json = nil then
     exit;
-  P := GotoNextNotSpace(P);
-  if P = #0 then
+  Json := GotoNextNotSpace(Json);
+  if Json = #0 then
     exit;
-  if Fmt <> jsonHumanReadable then // #9 only for standard human-readable JSON
+  if Format <> jsonHumanReadable then // #9 only for standard human-readable JSON
     CustomOptions := CustomOptions + [twoIndentSpaces];
-  parser.InitReformat(Fmt, self, Dsl);
-  try
-    start := P;
-    if not (start^ in ['{', '[']) then
-      start := GotoNextWithoutComment(start);
-    if not (start^ in ['{', '[']) then
-    begin
-      AddDirect('{'); // Hjson may start with an implicit object
-      inc(fHumanReadableLevel);
-      parser.State := stObjectNameFirst;
-    end
-    else
-      start := nil;
-    result := parser.Reformat(P);
-    if start <> nil then // manual ending } of HJson implicit object
-    begin
-      if (jrfTrailingComma in parser.Fmt) and
-         not (parser.State in [stObjectNameFirst, stValueFirst]) then
-        AddDirect(',');
-      dec(fHumanReadableLevel);
-      if jrfIndent in parser.Fmt then
-        AddCRAndIndent;
-      AddDirect('}');
-    end;
-  finally
-    parser.FmtPreproc.Free;
+  if (Preproc <> nil) and
+     not Preproc.InheritsFrom(TPreprocAbstract) then
+    Preproc := nil;
+  parser.InitReformat(Format, self, TPreprocAbstract(Preproc));
+  start := Json;
+  if not (start^ in ['{', '[']) then
+    start := GotoNextWithoutComment(start);
+  if not (start^ in ['{', '[']) then
+  begin
+    AddDirect('{'); // Hjson may start with an implicit object
+    inc(fHumanReadableLevel);
+    parser.State := stObjectNameFirst;
+  end
+  else
+    start := nil;
+  result := parser.Reformat(Json);
+  if start <> nil then // manual ending } of HJson implicit object
+  begin
+    if (jrfTrailingComma in parser.Fmt) and
+       not (parser.State in [stObjectNameFirst, stValueFirst]) then
+      AddDirect(',');
+    dec(fHumanReadableLevel);
+    if jrfIndent in parser.Fmt then
+      AddCRAndIndent;
+    AddDirect('}');
   end;
 end;
 

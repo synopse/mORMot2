@@ -532,15 +532,6 @@ type
     jsonMorml,
     jsonEscapeUnicode,
     jsonNoEscapeUnicode);
-  /// enable JsonReformat() pre-processor features - defined in a $$..$$ section
-  // - jppTemplate will enable $".." and $(ident) ${ident} $ident$ expansion
-  // - jppInclude will enable "include <filename>" keyword within $$..$$
-  // - jppDebugComment will emit verbose debugging comments during pre-processing
-  TTextWriterJsonPreProcessor = set of (
-    jppTemplate,
-    jppInclude,
-    jppIncludeAbsolute,
-    jppDebugComment);
 
   /// parent to T*Writer text processing classes, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string
@@ -567,8 +558,6 @@ type
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
-    function DoJsonReformat(Json: PUtf8Char; Fmt: TTextWriterJsonFormat;
-      Dsl: TTextWriterJsonPreProcessor): boolean; virtual;
     class procedure RaiseUnimplemented(const Method: ShortString);
     function GetFlag(one: TTextWriterFlag): boolean;
     procedure SetFlag(one: TTextWriterFlag; value: boolean);
@@ -1019,7 +1008,7 @@ type
     /// append a JSON value, array or document, in a specified format
     // - this class will raise an ESynException: use inherited TJsonWriter instead
     function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
-      PreProcessor: TTextWriterJsonPreProcessor = []): boolean;
+      Preproc: TObject = nil): boolean; virtual;
     /// this class implementation will raise an exception
     // - this class will raise an ESynException: use inherited TJsonWriter instead
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
@@ -4401,17 +4390,11 @@ begin
       exclude(fFlags, one);
 end;
 
-function TTextWriter.DoJsonReformat(Json: PUtf8Char; Fmt: TTextWriterJsonFormat;
-  Dsl: TTextWriterJsonPreProcessor): boolean;
+function TTextWriter.AddJsonReformat(Json: PUtf8Char;
+  Format: TTextWriterJsonFormat; Preproc: TObject): boolean;
 begin
   RaiseUnimplemented('AddJsonReformat');
   result := false; // make compiler happy
-end;
-
-function TTextWriter.AddJsonReformat(Json: PUtf8Char;
-  Format: TTextWriterJsonFormat; PreProcessor: TTextWriterJsonPreProcessor): boolean;
-begin
-  result := DoJsonReformat(Json, Format, PreProcessor);
 end;
 
 procedure TTextWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
