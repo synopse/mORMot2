@@ -824,6 +824,9 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
+/// return the value set by ClientForceSpn()
+function ClientForcedSpn: RawUtf8;
+
 /// high-level cross-platform initialization function
 // - e.g. by mormot.rest.client/server.pas or mormot.net.client/ldap/server
 function InitializeDomainAuth: boolean;
@@ -1957,6 +1960,11 @@ end;
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
   ForceSecKerberosSpn := SynUnicode(aSecKerberosSpn);
+end;
+
+function ClientForcedSpn: RawUtf8;
+begin
+  result := RawUtf8(ForceSecKerberosSpn); // from SynUnicode
 end;
 
 procedure GetPackageNames;

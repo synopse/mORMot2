@@ -596,6 +596,9 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
+/// return the value set by ClientForceSpn()
+function ClientForcedSpn: RawUtf8;
+
 type
   /// allow to track keytab files and their changes at runtime
   // - calling ServerForceKeytab() on each thread, only when needed
@@ -721,6 +724,7 @@ procedure ServerDomainMapUnRegisterAll;
 // - in this unit, will just call LoadGssApi('')
 // - you can set GssLib_Custom global variable to load a specific .so library
 function InitializeDomainAuth: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 implementation
@@ -902,14 +906,6 @@ begin
   fMinorStatus := aMinor;
 end;
 
-{ TGssApi }
-
-function TGssApi.IsMit: boolean;
-begin
-  result := (self <> nil) and
-            Assigned(gss_acquire_cred_from);
-end;
-
 
 { ****************** Middle-Level GSSAPI Wrappers }
 
@@ -1008,7 +1004,7 @@ end;
 
 { ****************** High-Level Client and Server Authentication using GSSAPI }
 
-var
+var // e.g. 'HTTP/httpserver@MYDOMAIN.TLD'
   ForceSecKerberosSpn: RawUtf8;
 
 type
@@ -1543,6 +1539,11 @@ end;
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
   ForceSecKerberosSpn := aSecKerberosSpn;
+end;
+
+function ClientForcedSpn: RawUtf8;
+begin
+  result := ForceSecKerberosSpn;
 end;
 
 function ServerForceKeytab(const aKeytab: TFileName): boolean;
