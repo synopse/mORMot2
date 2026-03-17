@@ -518,6 +518,11 @@ function JsonPreprocessToFile(const Json: RawUtf8; const Dest: TFileName;
   Format: TTextWriterJsonFormat = jsonHumanReadable;
   Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): boolean;
 
+/// pre-process and format JSON with $".." and $(ident) expansion into a stream
+function JsonPreprocessToStream(const Json: RawUtf8; Dest: TStream;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): boolean;
+
 
 implementation
 
@@ -2924,6 +2929,19 @@ begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
     result := JsonBufferReformatToFile(pointer(Json), Dest, Format, preproc);
+  finally
+    preproc.Free;
+  end;
+end;
+
+function JsonPreprocessToStream(const Json: RawUtf8; Dest: TStream;
+  Format: TTextWriterJsonFormat; Flags: TPreprocFlags; const IncludeRoot: TFileName): boolean;
+var
+  preproc: TPreproc;
+begin
+  preproc := TPreProc.Create(Flags, IncludeRoot);
+  try
+    result := JsonBufferReformatToStream(pointer(Json), Dest, Format, preproc);
   finally
     preproc.Free;
   end;
