@@ -1104,6 +1104,13 @@ var
   m: gss_OID_set;
   tmp: gss_OID_set_desc;
 begin
+  if GssApi.ClientEnvValue <> '' then
+  begin
+    // GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL specific path
+    ClientSspiAuthWithPassword(aSecContext, aInData, '', '',
+      aSecKerberosSpn, aOutData, aMech);
+    exit;
+  end;
   m := SetCredMech(aMech, tmp);
   if aSecContext.CredHandle = nil then
   begin
