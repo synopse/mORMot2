@@ -3208,11 +3208,17 @@ var
   tmp: TSynTempBuffer; // Reformat() requires a #0 terminated buffer
   bak: TPreprocAbstract;
 begin
-  tmp.Init(P, Len);    // make #0 terminated
+  if P[Len] <> #0 then
+  begin
+    tmp.Init(P, Len);  // make #0 terminated
+    P := tmp.buf;
+  end
+  else
+    tmp.buf := nil;    // P^ is already #0 terminated - no tmp.Done needed
   bak := FmtPreproc;
   try
     FmtPreproc := nil; // no pre-processing, only plain JsonReformat()
-    Reformat(tmp.buf);
+    Reformat(P);
   finally
     FmtPreproc := bak; // the pre-processor is back
     tmp.Done;          // unlikely transient memory allocation
