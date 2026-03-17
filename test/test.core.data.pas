@@ -2688,19 +2688,18 @@ var
     end;
   end;
 
-  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true;
-    PreProcessor: TTextWriterJsonPreProcessor = [jppTemplate]);
+  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
   var
     j, k: RawUtf8;
     s: TTextWriterJsonFormat;
   begin
-    j := JsonReformat(src, jsonUnquotedPropNameCompact, PreProcessor);
+    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
     Check(j <> '');
     CheckEqual(j, exp, src);
     if nest then
       for s := low(s) to high(s) do
       begin
-        k := JsonReformat(src, s, PreProcessor);
+        k := JsonPreprocess(src, s);
         if s = jsonCompact then
           Check(IsValidJson(k, {strict=}true), 'valid');
         if s = jsonUnquotedPropNameCompact then
