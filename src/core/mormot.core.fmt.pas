@@ -2847,8 +2847,13 @@ begin
     exit;
   end;
   fn := MakeString([tmp]);
-  if not (jppIncludeAbsolute in Options) and
-     not SafeFileName(fn) then
+  if IsExpandedPath(fn) then
+  begin
+    if not (jppIncludeAbsolute in Options) then
+      exit;
+  end else if SafeFileName(fn) then
+    fn := IncludeFolder + fn
+  else
     exit;
   txt := RawUtf8FromFile(fn);
   if Assigned(OnAddDebugComment) then
