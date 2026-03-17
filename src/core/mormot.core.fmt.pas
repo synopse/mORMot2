@@ -2322,7 +2322,7 @@ type
     procedure DoEndif(var P: PUtf8Char);
       {$ifdef HASINLINE} inline; {$endif}
     procedure DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
-    procedure DoInclude(P: PUtf8Char; const Append: TOnPreprocAppend);
+    procedure DoInclude(P: PUtf8Char; Verbatim: boolean);
   public
     /// initialize this pre-processor engine
     constructor Create(flags: TPreprocFlags; const folder: TFileName); reintroduce;
@@ -2773,13 +2773,22 @@ ok: result := GotoNextNotSpace(result);
       '#',
       '/':
         continue;     // comment line
-      'i', 'I':
-        if IdemPChar(result + 1, 'NCLUDE ') then
-        begin
-          if IncludeFolder <> '' then
-            DoInclude(GotoNextNotSpace(result + 8), OnAppend);
-          continue;   // this is a reserved keyword, never an identifier
-        end;
+      'i',
+      'I':
+        if (IncludeFolder <> '') and
+           (result[1] in ['n', 'N']) then
+          case IdemPCharSep(result + 2, 'CLUDE |SERT |') of
+            0:
+              begin
+                DoInclude(GotoNextNotSpace(result + 8), {verbatim=}false);
+                continue; // this is a reserved keyword, never an identifier
+              end;
+            1:
+              begin
+                DoInclude(GotoNextNotSpace(result + 8), {verbatim=}true);
+                continue; // this is a reserved keyword, never an identifier
+              end;
+          end;
     end;
     key := result;
     repeat
@@ -2828,7 +2837,7 @@ ok: result := GotoNextNotSpace(result);
   result := GotoNextLineSmall(result); // ignore ending '$$...' marker line
 end;
 
-procedure TPreproc.DoInclude(P: PUtf8Char; const Append: TOnPreprocAppend);
+procedure TPreproc.DoInclude(P: PUtf8Char; Verbatim: boolean);
 var
   tmp: ShortString; // to compute the expanded filename
   v: PUtf8Char;
@@ -2838,9 +2847,9 @@ var
   fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
-  if P^ = '"' then
-    inc(P);
-  while not (P^ in [#0, '"', #13, #10]) do
+  if P^ in ['"', ''''] then
+    inc(P); // allow quoted "<filename>", but with no quotes support
+  while not (P^ in [#0, '"', '''', #13, #10]) do
   begin
     if P^ = '$' then
     begin
@@ -2886,9 +2895,13 @@ begin
   if txt = '' then
     exit;
   inc(IncludeDepth);
-  Append(pointer(txt));
+  if Verbatim then
+    OnVerbatim(pointer(txt), length(txt)) // insert <filename>
+  else
+    OnAppend(pointer(txt));               // include <filename>
   dec(IncludeDepth);
 end;
+
 
 function JsonPreprocess(const Json: RawUtf8; Format: TTextWriterJsonFormat;
   Flags: TPreprocFlags; const IncludeRoot: TFileName): RawUtf8;
