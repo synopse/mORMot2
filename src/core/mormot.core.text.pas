@@ -905,11 +905,6 @@ type
     procedure AddHtmlUnescape(p, amp: PUtf8Char; plen: PtrUInt);
     /// low-level function removing all HTML <tag> and &entities;
     procedure AddHtmlAsText(p, tag: PUtf8Char; plen: PtrUInt);
-    /// append some chars, escaping all XML special chars as expected
-    // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
-    // - and all control chars (i.e. #1..#31) as &#..;
-    // - see @http://www.w3.org/TR/xml/#syntax
-    procedure AddXmlEscape(Text: PUtf8Char);
     /// append a property name, as '"PropName":'
     // - PropName content should not need any JSON escape (e.g. no " within,
     // and only ASCII 7-bit characters)
@@ -1225,13 +1220,6 @@ function HtmlUnescape(const text: RawUtf8): RawUtf8;
 /// minimal HTML-to-text conversion function
 // - trim all HTML <tag></tag> and &entities; - with minimal CRLF formatting
 function HtmlToText(const text: RawUtf8): RawUtf8;
-
-/// check if some UTF-8 text would need XML escaping
-function NeedsXmlEscape(text: PUtf8Char): boolean;
-
-/// escape some UTF-8 text into XML
-// - just a wrapper around TTextWriter.AddXmlEscape() process
-function XmlEscape(const text: RawUtf8): RawUtf8;
 
 const
   /// convenient parameter to EscapeHex() / UnescapeHex() binary to ASCII 7-bit
@@ -6349,33 +6337,6 @@ begin
   until plen = 0;
 end;
 
-var
-  XML_ESC: TAnsiCharToByte;
-const
-  XML_ESCAPED: array[1..9] of TShort7 = (
-    '&#x09;', '&#x0a;', '&#x0d;', '&lt;', '&gt;', '&amp;', '&quot;', '&apos;', '');
-
-procedure TTextWriter.AddXmlEscape(Text: PUtf8Char);
-var
-  beg: PUtf8Char;
-  esc: PAnsiCharToByte;
-begin
-  if (Text = nil) or
-     (Text^ = #0) then
-    exit;
-  esc := @XML_ESC;
-  repeat
-    beg := Text;
-    while esc[Text^] = 0 do
-      inc(Text);
-    AddNoJsonEscape(beg, Text - beg);
-    if Text^ = #0 then
-      exit;
-    AddShorter(XML_ESCAPED[esc[Text^]]);
-    inc(Text);
-  until Text^ = #0;
-end;
-
 
 function ObjectToJson(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUtf8;
 begin
@@ -6573,42 +6534,6 @@ begin
   finally
     W.Free;
   end;
-end;
-
-function XmlEscape(const text: RawUtf8): RawUtf8;
-var
-  temp: TTextWriterStackBuffer;
-  W: TTextWriter;
-begin
-  if NeedsXmlEscape(pointer(text)) then
-  begin
-    W := TTextWriter.CreateOwnedStream(temp);
-    try
-      W.AddXmlEscape(pointer(text));
-      W.SetText(result);
-    finally
-      W.Free;
-    end;
-  end
-  else
-    result := text;
-end;
-
-function NeedsXmlEscape(text: PUtf8Char): boolean;
-var
-  esc: PAnsiCharToByte;
-begin
-  result := true;
-  esc := @XML_ESC;
-  if Text <> nil then
-    while true do
-      if esc[Text^] = 0 then
-        inc(Text) // fast process of unescaped plain text
-      else if Text^ = #0 then
-        break     // no escape needed
-      else
-        exit;     // needs XML escape
-  result := false;
 end;
 
 function NeedsEscape(text: PUtf8Char; const toescape: TSynAnsicharSet): boolean;
@@ -12198,29 +12123,6 @@ begin
   end;
   for c := #0 to #127 do
   begin
-    case c of // follow XML_ESCAPED[] content
-      #0, #9:
-        v := 1;
-      #10:
-        v := 2;
-      #13:
-        v := 3;
-      '<':
-        v := 4;
-      '>':
-        v := 5;
-      '&':
-        v := 6;
-      '"':
-        v := 7;
-      '''':
-        v := 8;
-      #1..#8, #11, #12, #14..#31:
-        v := 9; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
-    else
-      v := 0;
-    end;
-    XML_ESC[c] := v;
     case c of // HTML_ESCAPED: array[1..4] = '&lt;', '&gt;', '&amp;', '&quot;'
       #0,
       '<':

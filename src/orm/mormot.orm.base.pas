@@ -41,6 +41,7 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.threads,
   mormot.core.perf,
   mormot.core.zip,     // for ODS export
@@ -9280,7 +9281,7 @@ begin
             W.Add('f');
             W.AddU(f);
             W.AddDirect('=', '"');
-            W.AddXmlEscape(U);
+            AddXmlEscape(W, U);
             W.AddDirect('"', ' ');
           end;
           inc(o); // points to next value
@@ -9390,20 +9391,20 @@ begin
                   ftCurrency:
                     begin
                       W.AddShort('float" office:value="');
-                      W.AddXmlEscape(U);
+                      AddXmlEscape(W, U);
                       W.AddDirect('"', ' ', '/', '>');
                     end;
                   ftDate:
                     begin
                       W.AddShort('date" office:date-value="');
-                      W.AddXmlEscape(U);
+                      AddXmlEscape(W, U);
                       W.AddDirect('"', ' ', '/', '>');
                     end;
                 else
                   begin
                     //ftUnknown,ftNull,ftUtf8,ftBlob:
                     W.AddShort('string"><text:p>');
-                    W.AddXmlEscape(U);
+                    AddXmlEscape(W, U);
                     W.AddShort('</text:p></table:table-cell>');
                   end;
                 end;
@@ -9414,7 +9415,7 @@ begin
               for f := 0 to FieldCount - 1 do
               begin
                 W.AddShort('<table:table-cell office:value-type="string"><text:p>');
-                W.AddXmlEscape(GetResults(o));
+                AddXmlEscape(W, GetResults(o));
                 W.AddShort('</text:p></table:table-cell>');
                 inc(o);
               end;

@@ -22,6 +22,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.log,
   mormot.core.perf,
   mormot.core.search,

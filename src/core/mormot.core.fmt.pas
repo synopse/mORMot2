@@ -7,7 +7,8 @@ unit mormot.core.fmt;
   *****************************************************************************
 
    Binary, JSON and Text Advanced Formatting Functions
-    - Markup (e.g. HTML or Emoji) process
+    - Basic XML Conversions
+    - Markup (e.g. Markdown or Emoji) Process
     - INI Files In-memory Access
     - TSynJsonFileSettings parent class
     - JSON and Text Preprocessor
@@ -35,7 +36,59 @@ uses
   mormot.core.variants;
 
 
-{ ************* Markup (e.g. HTML or Emoji) process }
+{ ************* Basic XML Conversions }
+
+const
+  /// standard header for an UTF-8 encoded XML file
+  XMLUTF8_HEADER = '<?xml version="1.0" encoding="UTF-8"?>'#13#10;
+
+  /// standard namespace for a generic XML File
+  XMLUTF8_NAMESPACE = '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">';
+
+/// check if some UTF-8 text would need XML escaping
+function NeedsXmlEscape(text: PUtf8Char): boolean;
+
+/// escape some UTF-8 text into XML
+// - just a wrapper around the AddXmlEscape() function
+function XmlEscape(const text: RawUtf8): RawUtf8;
+
+/// convert a JSON array or document into a simple XML content
+// - just a wrapper around AddJsonToXml() function, with an optional
+// header before the XML converted data (e.g. XMLUTF8_HEADER), and an optional
+// name space content node which will nest the generated XML data (e.g.
+// '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">') - the
+// corresponding ending token will be appended after (e.g. '</contents>')
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
+procedure JsonBufferToXml(P: PUtf8Char; const Header, NameSpace: RawUtf8;
+  out result: RawUtf8);
+
+/// convert a JSON array or document into a simple XML content
+// - just a wrapper around AddJsonToXml() function, making a private copy
+// of the supplied JSON buffer using TSynTempBuffer (so that JSON content
+// would stay untouched)
+// - the optional header is added at the beginning of the resulting string
+// - an optional name space content node could be added around the generated XML,
+// e.g. '<content>'
+function JsonToXml(const Json: RawUtf8; const Header: RawUtf8 = XMLUTF8_HEADER;
+  const NameSpace: RawUtf8 = ''): RawUtf8;
+
+/// append some chars, escaping all XML special chars as expected
+// - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
+// - and all control chars (i.e. #1..#31) as &#..;
+// - see @http://www.w3.org/TR/xml/#syntax
+procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
+
+/// append a JSON value, array or document as simple XML content
+// - as called by JsonBufferToXml() and JsonToXml() wrappers
+// - this method is called recursively to handle all kind of JSON values
+// - WARNING: the JSON buffer is decoded in-place, so will be changed
+// - returns the end of the current JSON converted level, or nil if the
+// supplied content was not correct JSON
+function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = nil;
+  EndOfObject: PUtf8Char = nil): PUtf8Char;
+
+
+{ ************* Markup (e.g. Markdown or Emoji) process }
 
 type
   /// tune AddHtmlEscapeWiki/AddHtmlEscapeMarkdown wrapper functions process
@@ -469,7 +522,238 @@ function JsonPreprocessToFile(const Json: RawUtf8; const Dest: TFileName;
 implementation
 
 
-{ ************* Markup (e.g. HTML or Emoji) process }
+{ ************* Basic XML Conversions }
+
+var
+  XML_ESC: TAnsiCharToByte;
+const
+  XML_ESCAPED: array[1..9] of TShort7 = (
+    '&#x09;', '&#x0a;', '&#x0d;', '&lt;', '&gt;', '&amp;', '&quot;', '&apos;', '');
+
+procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
+var
+  beg: PUtf8Char;
+  esc: PAnsiCharToByte;
+begin
+  if (W = nil) or
+     (Text = nil) or
+     (Text^ = #0) then
+    exit;
+  esc := @XML_ESC;
+  repeat
+    beg := Text;
+    while esc[Text^] = 0 do
+      inc(Text);
+    W.AddNoJsonEscape(beg, Text - beg);
+    if Text^ = #0 then
+      exit;
+    W.AddShorter(XML_ESCAPED[esc[Text^]]);
+    inc(Text);
+  until Text^ = #0;
+end;
+
+function AddJsonToXml(W: TTextWriter; Json: PUtf8Char;
+  ArrayName, EndOfObject: PUtf8Char): PUtf8Char;
+var
+  info: TGetJsonField;
+  Name: PUtf8Char;
+  n, c: integer;
+begin
+  result := nil;
+  if Json = nil then
+    exit;
+  while (Json^ <= ' ') and
+        (Json^ <> #0) do
+    inc(Json);
+  if Json^ = '/' then
+    Json := GotoEndOfSlashComment(Json);
+  case Json^ of
+  '[':
+    begin
+      repeat
+        inc(Json);
+      until (Json^ = #0) or
+            (Json^ > ' ');
+      if Json^ = ']' then
+        Json := GotoNextNotSpace(Json + 1)
+      else
+      begin
+        n := 0;
+        repeat
+          if Json = nil then
+            exit;
+          W.Add('<');
+          if ArrayName = nil then
+            W.AddU(n)
+          else
+            AddXmlEscape(W, ArrayName);
+          W.AddDirect('>');
+          Json := AddJsonToXml(W, Json, nil, @info.EndOfObject);
+          W.AddDirect('<', '/');
+          if ArrayName = nil then
+            W.AddU(n)
+          else
+            AddXmlEscape(W, ArrayName);
+          W.AddDirect('>');
+          inc(n);
+        until info.EndOfObject = ']';
+      end;
+    end;
+  '{':
+    begin
+      repeat
+        inc(Json);
+      until (Json^ = #0) or
+            (Json^ > ' ');
+      if Json^ = '}' then
+        Json := GotoNextNotSpace(Json + 1)
+      else
+      begin
+        repeat
+          Name := GetJsonPropName(Json);
+          if Name = nil then
+            exit;
+          while (Json^ <= ' ') and
+                (Json^ <> #0) do
+            inc(Json);
+          if Json^ = '[' then // arrays are written as list of items, without root
+            Json := AddJsonToXml(W, Json, Name, @info.EndOfObject)
+          else
+          begin
+            W.Add('<');
+            AddXmlEscape(W, Name);
+            W.AddDirect('>');
+            Json := AddJsonToXml(W, Json, Name, @info.EndOfObject);
+            W.AddDirect('<', '/');
+            AddXmlEscape(W, Name);
+            W.AddDirect('>');
+          end;
+        until info.EndOfObject = '}';
+      end;
+    end;
+  else
+    begin // unescape the JSON content and write as UTF-8 escaped XML
+      info.Json := Json;
+      info.GetJsonField;
+      if info.Value <> nil then // null or "" would store a void entry
+      begin
+        c := PInteger(info.Value)^ and $ffffff;
+        if (c = JSON_BASE64_MAGIC_C) or
+           (c = JSON_SQLDATE_MAGIC_C) then
+          inc(info.Value, 3); // ignore the Magic codepoint encoded as UTF-8
+        AddXmlEscape(W, info.Value);
+      end;
+      if EndOfObject <> nil then
+        EndOfObject^ := info.EndOfObject;
+      result := info.Json;
+      exit;
+    end;
+  end;
+  if Json <> nil then
+  begin
+    while (Json^ <= ' ') and
+          (Json^ <> #0) do
+      inc(Json);
+    if EndOfObject <> nil then
+      EndOfObject^ := Json^;
+    if Json^ <> #0 then
+      repeat
+        inc(Json);
+      until (Json^ = #0) or
+            (Json^ > ' ');
+  end;
+  result := Json;
+end;
+
+function XmlEscape(const text: RawUtf8): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  W: TTextWriter;
+begin
+  if NeedsXmlEscape(pointer(text)) then
+  begin
+    W := TTextWriter.CreateOwnedStream(temp);
+    try
+      AddXmlEscape(W, pointer(text));
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end
+  else
+    result := text;
+end;
+
+function NeedsXmlEscape(text: PUtf8Char): boolean;
+var
+  esc: PAnsiCharToByte;
+begin
+  result := true;
+  esc := @XML_ESC;
+  if Text <> nil then
+    while true do
+      if esc[Text^] = 0 then
+        inc(Text) // fast process of unescaped plain text
+      else if Text^ = #0 then
+        break     // no escape needed
+      else
+        exit;     // needs XML escape
+  result := false;
+end;
+
+procedure JsonBufferToXml(P: PUtf8Char; const Header, NameSpace: RawUtf8;
+  out result: RawUtf8);
+var
+  i, j, namespaceLen: PtrInt;
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  if P = nil then
+    result := Header
+  else
+  begin
+    W := TTextWriter.CreateOwnedStream(temp);
+    try
+      W.AddString(Header);
+      namespaceLen := length(NameSpace);
+      if namespaceLen <> 0 then
+        W.AddString(NameSpace);
+      AddJsonToXml(W, P);
+      if namespaceLen <> 0 then
+        for i := 1 to namespaceLen do
+          if NameSpace[i] = '<' then
+          begin
+            for j := i + 1 to namespaceLen do
+              if NameSpace[j] in [' ', '>'] then
+              begin
+                W.AddDirect('<', '/');
+                W.AddStringCopy(NameSpace, i + 1, j - i - 1);
+                W.AddDirect('>');
+                break;
+              end;
+            break;
+          end;
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
+function JsonToXml(const Json, Header, NameSpace: RawUtf8): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Json);
+  try
+    JsonBufferToXml(tmp.buf, Header, NameSpace, result);
+  finally
+    tmp.Done;
+  end;
+end;
+
+
+{ ************* Markup (e.g. Markdown or Emoji) process }
 
 { internal TTextWriterEscape class }
 
@@ -2596,8 +2880,37 @@ end;
 
 procedure InitializeUnit;
 var
+  v: byte;
+  c: AnsiChar;
   e: TEmoji;
 begin
+  // XML Efficient Parsing
+  for c := #0 to #127 do
+  begin
+    case c of // follow XML_ESCAPED[] content
+      #0, #9:
+        v := 1;
+      #10:
+        v := 2;
+      #13:
+        v := 3;
+      '<':
+        v := 4;
+      '>':
+        v := 5;
+      '&':
+        v := 6;
+      '"':
+        v := 7;
+      '''':
+        v := 8;
+      #1..#8, #11, #12, #14..#31:
+        v := 9; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
+    else
+      v := 0;
+    end;
+    XML_ESC[c] := v;
+  end;
   // HTML/Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0

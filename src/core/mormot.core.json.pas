@@ -910,14 +910,6 @@ type
     /// append a JSON value, array or document, in a specified format
     function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
       Preproc: TObject = nil): boolean; override;
-    /// append a JSON value, array or document as simple XML content
-    // - you can use JsonBufferToXML() and JsonToXML() functions as wrappers
-    // - this method is called recursively to handle all kind of JSON values
-    // - WARNING: the JSON buffer is decoded in-place, so will be changed
-    // - returns the end of the current JSON converted level, or nil if the
-    // supplied content was not correct JSON
-    function AddJsonToXML(Json: PUtf8Char; ArrayName: PUtf8Char = nil;
-      EndOfObject: PUtf8Char = nil): PUtf8Char;
 
     /// append a record content as UTF-8 encoded JSON or custom serialization
     // - default serialization will use Base64 encoded binary stream, or
@@ -2232,34 +2224,6 @@ function UrlDecodeObject(U: PUtf8Char; Upper: PAnsiChar;
 function JsonFileToObject(const JsonFile: TFileName; var ObjectInstance;
   TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = [];
   Interning: TRawUtf8Interning = nil): boolean;
-
-
-const
-  /// standard header for an UTF-8 encoded XML file
-  XMLUTF8_HEADER = '<?xml version="1.0" encoding="UTF-8"?>'#13#10;
-
-  /// standard namespace for a generic XML File
-  XMLUTF8_NAMESPACE = '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">';
-
-/// convert a JSON array or document into a simple XML content
-// - just a wrapper around TJsonWriter.AddJsonToXML, with an optional
-// header before the XML converted data (e.g. XMLUTF8_HEADER), and an optional
-// name space content node which will nest the generated XML data (e.g.
-// '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">') - the
-// corresponding ending token will be appended after (e.g. '</contents>')
-// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
-procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
-  out result: RawUtf8);
-
-/// convert a JSON array or document into a simple XML content
-// - just a wrapper around TJsonWriter.AddJsonToXML, making a private copy
-// of the supplied JSON buffer using TSynTempBuffer (so that JSON content
-// would stay untouched)
-// - the optional header is added at the beginning of the resulting string
-// - an optional name space content node could be added around the generated XML,
-// e.g. '<content>'
-function JsonToXML(const Json: RawUtf8; const Header: RawUtf8 = XMLUTF8_HEADER;
-  const NameSpace: RawUtf8 = ''): RawUtf8;
 
 
 { ********************* Abstract Classes with Auto-Create-Fields }
@@ -7262,119 +7226,6 @@ begin
   end;
 end;
 
-function TJsonWriter.AddJsonToXML(Json: PUtf8Char;
-  ArrayName, EndOfObject: PUtf8Char): PUtf8Char;
-var
-  info: TGetJsonField;
-  Name: PUtf8Char;
-  n, c: integer;
-begin
-  result := nil;
-  if Json = nil then
-    exit;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
-    inc(Json);
-  if Json^ = '/' then
-    Json := TryGotoEndOfSlashComment(Json);
-  case Json^ of
-  '[':
-    begin
-      repeat
-        inc(Json);
-      until (Json^ = #0) or
-            (Json^ > ' ');
-      if Json^ = ']' then
-        Json := GotoNextNotSpace(Json + 1)
-      else
-      begin
-        n := 0;
-        repeat
-          if Json = nil then
-            exit;
-          Add('<');
-          if ArrayName = nil then
-            AddU(n)
-          else
-            AddXmlEscape(ArrayName);
-          AddDirect('>');
-          Json := AddJsonToXML(Json, nil, @info.EndOfObject);
-          AddDirect('<', '/');
-          if ArrayName = nil then
-            AddU(n)
-          else
-            AddXmlEscape(ArrayName);
-          AddDirect('>');
-          inc(n);
-        until info.EndOfObject = ']';
-      end;
-    end;
-  '{':
-    begin
-      repeat
-        inc(Json);
-      until (Json^ = #0) or
-            (Json^ > ' ');
-      if Json^ = '}' then
-        Json := GotoNextNotSpace(Json + 1)
-      else
-      begin
-        repeat
-          Name := GetJsonPropName(Json);
-          if Name = nil then
-            exit;
-          while (Json^ <= ' ') and
-                (Json^ <> #0) do
-            inc(Json);
-          if Json^ = '[' then // arrays are written as list of items, without root
-            Json := AddJsonToXML(Json, Name, @info.EndOfObject)
-          else
-          begin
-            Add('<');
-            AddXmlEscape(Name);
-            AddDirect('>');
-            Json := AddJsonToXML(Json, Name, @info.EndOfObject);
-            AddDirect('<', '/');
-            AddXmlEscape(Name);
-            AddDirect('>');
-          end;
-        until info.EndOfObject = '}';
-      end;
-    end;
-  else
-    begin // unescape the JSON content and write as UTF-8 escaped XML
-      info.Json := Json;
-      info.GetJsonField;
-      if info.Value <> nil then // null or "" would store a void entry
-      begin
-        c := PInteger(info.Value)^ and $ffffff;
-        if (c = JSON_BASE64_MAGIC_C) or
-           (c = JSON_SQLDATE_MAGIC_C) then
-          inc(info.Value, 3); // ignore the Magic codepoint encoded as UTF-8
-        AddXmlEscape(info.Value);
-      end;
-      if EndOfObject <> nil then
-        EndOfObject^ := info.EndOfObject;
-      result := info.Json;
-      exit;
-    end;
-  end;
-  if Json <> nil then
-  begin
-    while (Json^ <= ' ') and
-          (Json^ <> #0) do
-      inc(Json);
-    if EndOfObject <> nil then
-      EndOfObject^ := Json^;
-    if Json^ <> #0 then
-      repeat
-        inc(Json);
-      until (Json^ = #0) or
-            (Json^ > ' ');
-  end;
-  result := Json;
-end;
-
 procedure TJsonWriter.AddJsonEscape(P: pointer; Len: PtrInt);
 var
   c: PByte;
@@ -11681,54 +11532,6 @@ begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
   if result then
     JsonToObject(ObjectInstance, pointer(tmp), result, nil, Options);
-end;
-
-procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
-  out result: RawUtf8);
-var
-  i, j, namespaceLen: PtrInt;
-  temp: TTextWriterStackBuffer;
-begin
-  if P = nil then
-    result := Header
-  else
-    with TJsonWriter.CreateOwnedStream(temp) do
-    try
-      AddString(Header);
-      namespaceLen := length(NameSpace);
-      if namespaceLen <> 0 then
-        AddString(NameSpace);
-      AddJsonToXML(P);
-      if namespaceLen <> 0 then
-        for i := 1 to namespaceLen do
-          if NameSpace[i] = '<' then
-          begin
-            for j := i + 1 to namespaceLen do
-              if NameSpace[j] in [' ', '>'] then
-              begin
-                AddDirect('<', '/');
-                AddStringCopy(NameSpace, i + 1, j - i - 1);
-                AddDirect('>');
-                break;
-              end;
-            break;
-          end;
-      SetText(result);
-    finally
-      Free;
-    end;
-end;
-
-function JsonToXML(const Json, Header, NameSpace: RawUtf8): RawUtf8;
-var
-  tmp: TSynTempBuffer;
-begin
-  tmp.Init(Json);
-  try
-    JsonBufferToXML(tmp.buf, Header, NameSpace, result);
-  finally
-    tmp.Done;
-  end;
 end;
 
 
