@@ -3272,6 +3272,7 @@ begin
   TestJop(
     J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
     '[4,5]');
+  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
   TestJop(
     J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
     '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
