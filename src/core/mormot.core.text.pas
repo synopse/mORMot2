@@ -12082,9 +12082,9 @@ procedure InitializeUnit;
 var
   i: PtrInt;
   v: byte;
-  c: AnsiChar;
   P: PAnsiChar;
   B, B4: PByteArray;
+  esc: PAnsiCharToByte;
   pc: PCardinalArray;
   tmp: array[0..15] of AnsiChar;
 begin
@@ -12116,32 +12116,26 @@ begin
     B4[i + (ord('a') - ord('A'))] := v shl 4;
     inc(v);
   end;
-  for i := 0 to high(SmallUInt32Utf8) do
+  for i := 0 to high(SmallUInt32Utf8) do // 0..999 into '0'..'999'
   begin
     P := StrUInt32(@tmp[15], i);
     FastSetString(SmallUInt32Utf8[i], P, @tmp[15] - P);
   end;
-  for c := #0 to #127 do
-  begin
-    case c of // HTML_ESCAPED: array[1..4] = '&lt;', '&gt;', '&amp;', '&quot;'
-      #0,
-      '<':
-        v := 1;
-      '>':
-        v := 2;
-      '&':
-        v := 3;
-      '"':
-        v := 4;
-    else
-      v := 0;
-    end;
-    HTML_ESC[hfAnyWhere, c] := v;
-    if c in [#0, '&', '<', '>'] then
-      HTML_ESC[hfOutsideAttributes, c] := v;
-    if c in [#0, '&', '"'] then
-      HTML_ESC[hfWithinAttributes, c] := v;
-  end;
+  esc := @HTML_ESC[hfAnyWhere]; // HTML_ESCAPED[1..4] = &lt; &gt; &amp; &quot;
+  esc[#0]  := 1;
+  esc['<'] := 1;
+  esc['>'] := 2;
+  esc['&'] := 3;
+  esc['"'] := 4;
+  esc := @HTML_ESC[hfOutsideAttributes];
+  esc[#0]  := 1;
+  esc['<'] := 1;
+  esc['>'] := 2;
+  esc['&'] := 3;
+  esc := @HTML_ESC[hfWithinAttributes];
+  esc[#0]  := 1;
+  esc['&'] := 3;
+  esc['"'] := 4;
   pc := @METHODNAME32;
   i := length(METHODNAME32);
   repeat
@@ -12154,7 +12148,6 @@ begin
   _VariantSaveJson := __VariantSaveJson;
   TextWriterSharedStream := TRawByteStringStream.Create;
 end;
-
 
 
 initialization
