@@ -2880,37 +2880,23 @@ end;
 
 procedure InitializeUnit;
 var
-  v: byte;
   c: AnsiChar;
   e: TEmoji;
+  esc: PAnsiCharToByte;
 begin
   // XML Efficient Parsing
-  for c := #0 to #127 do
-  begin
-    case c of // follow XML_ESCAPED[] content
-      #0, #9:
-        v := 1;
-      #10:
-        v := 2;
-      #13:
-        v := 3;
-      '<':
-        v := 4;
-      '>':
-        v := 5;
-      '&':
-        v := 6;
-      '"':
-        v := 7;
-      '''':
-        v := 8;
-      #1..#8, #11, #12, #14..#31:
-        v := 9; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
-    else
-      v := 0;
-    end;
-    XML_ESC[c] := v;
-  end;
+  esc := @XML_ESC; // XML_ESCAPED[] = &#x09 &#x0a &#x0d &lt &gt &amp &quot &apos
+  for c := #1 to #31 do
+    esc[c] := 9; // ignore invalid control char
+  esc[#0]  := 1; // go out of loop to abort
+  esc[#9]  := 1;
+  esc[#10] := 2;
+  esc[#13] := 3;
+  esc['<'] := 4;
+  esc['>'] := 5;
+  esc['&'] := 6;
+  esc['"'] := 7;
+  esc[''''] := 8;
   // HTML/Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
