@@ -481,6 +481,7 @@ type
   TSecContext = record
     CredHandle: pointer;
     CtxHandle: pointer;
+    ClientTargetName: gss_name_t;
     ChannelBindingsHash: pointer;
     ChannelBindingsHashLen: cardinal;
   end;
@@ -916,12 +917,14 @@ end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
 var
-  MinStatus: cardinal;
+  minstatus: cardinal;
 begin
   if aSecContext.CtxHandle <> nil then
-    GssApi.gss_delete_sec_context(MinStatus, aSecContext.CtxHandle, nil);
+    GssApi.gss_delete_sec_context(minstatus, aSecContext.CtxHandle, nil);
   if aSecContext.CredHandle <> nil then
-    GssApi.gss_release_cred(MinStatus, aSecContext.CredHandle);
+    GssApi.gss_release_cred(minstatus, aSecContext.CredHandle);
+  if aSecContext.ClientTargetName <> nil then
+    GssApi.gss_release_name(minstatus, aSecContext.ClientTargetName);
   InvalidateSecContext(aSecContext);
 end;
 
@@ -1038,7 +1041,6 @@ function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString; aMech: gss_OID): boolean;
 var
-  TargetName: gss_name_t;
   MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
@@ -1046,36 +1048,32 @@ var
   CtxAttr: cardinal;
   Bind: TGssBind;
 begin
-  TargetName := nil;
-  if aSecKerberosSpn <> '' then
+  if (aSecContext.ClientTargetName = nil) and
+     (PosExChar('@', aSpn) <> 0) then
   begin
-    InBuf.length := Length(aSecKerberosSpn);
-    InBuf.value := pointer(aSecKerberosSpn);
-    MajStatus := GssApi.gss_import_name(
-      MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, TargetName);
+    InBuf.length := Length(aSpn);
+    InBuf.value := pointer(aSpn);
+    MajStatus := GssApi.gss_import_name(MinStatus,
+      @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, aSecContext.ClientTargetName);
     GssCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to import server SPN');
   end;
-  try
-    CtxReqAttr := GSS_C_INTEG_FLAG or GSS_C_CONF_FLAG;
-    if TargetName <> nil then
-      CtxReqAttr := CtxReqAttr or GSS_C_MUTUAL_FLAG;
-    InBuf.length := Length(aInData);
-    InBuf.value := pointer(aInData);
-    OutBuf.length := 0;
-    OutBuf.value := nil;
-    MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
-      aSecContext.CtxHandle, TargetName, aMech, CtxReqAttr, GSS_C_INDEFINITE,
-        SetBind(aSecContext, Bind), @InBuf, nil, @OutBuf, @CtxAttr, nil);
-    GssCheck(MajStatus, MinStatus,
-      'ClientSspiAuthWorker: Failed to initialize security context');
-    result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
-    FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
-    GssApi.gss_release_buffer(MinStatus, OutBuf);
-  finally
-    if TargetName <> nil then
-      GssApi.gss_release_name(MinStatus, TargetName);
-  end;
+  CtxReqAttr := GSS_C_INTEG_FLAG or GSS_C_CONF_FLAG;
+  if aSecContext.ClientTargetName <> nil then
+    CtxReqAttr := CtxReqAttr or GSS_C_MUTUAL_FLAG;
+  InBuf.length := Length(aInData);
+  InBuf.value := pointer(aInData);
+  OutBuf.length := 0;
+  OutBuf.value := nil;
+  MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
+    aSecContext.CtxHandle, aSecContext.ClientTargetName, aMech, CtxReqAttr,
+    GSS_C_INDEFINITE, SetBind(aSecContext, Bind),
+    @InBuf, nil, @OutBuf, @CtxAttr, nil);
+  GssCheck(MajStatus, MinStatus,
+    'ClientSspiAuthWorker: Failed to initialize security context');
+  result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
+  FastSetRawByteString(aOutData, OutBuf.value, OutBuf.length);
+  GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 
 function SetCredMech(var mech: gss_OID; var mechs: gss_OID_set_desc): gss_OID_set;
