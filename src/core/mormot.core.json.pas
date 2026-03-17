@@ -665,6 +665,12 @@ function JsonReformat(const Json: RawUtf8;
 function JsonNormalizeFromFile(const FileName: TFileName;
   Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
 
+/// formats and indents a JSON array or document info a TStream
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
+function JsonBufferReformatToStream(P: PUtf8Char; Dest: TStream;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  Preproc: TPreprocAbstract = nil): boolean;
+
 /// formats and indents a JSON array or document info a file
 // - just a wrapper around TJsonWriter.AddJsonReformat() method
 function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
@@ -3269,7 +3275,7 @@ begin
   if v = nil then
   begin
     ReformatBeginValue;
-    W.AddNull; // nothing found: append null value
+    W.AddNull; // nothing found: append null JSON value (not "" or 0)
     ReformatEndValue;
     exit;
   end;
@@ -3280,7 +3286,7 @@ begin
     dec(l);
     if m = pmTemplate then
     begin
-      Reformat(v); // template as recursive blocks (once) with late evaluation
+      Reformat(v); // format templates as already-evaluated blocks
       exit;
     end;
   end
@@ -3422,12 +3428,12 @@ dquote:   ReformatBeginValue;
       jtDollar:
         if FmtPreproc = nil then
           goto ident0
-        else if P[1] = '$' then  // $$ ... $$ DSL section: include + vars
-          P := FmtPreproc.ParseSection(P)
-        else if P[1] = '"' then  // $"..." substitution
-          P := PreprocString(P)
-        else                     // $(ident) or $if$ $else$ $endif$
-          P := PreprocVar(P);
+        else if P[1] = '$' then
+          P := FmtPreproc.ParseSection(P) // $$ ... $$ section: include + vars
+        else if P[1] = '"' then
+          P := PreprocString(P)           // $"..." substitution
+        else
+          P := PreprocVar(P);             // $(ident) or $if$ $else$ $endif$
       jtNone, // handle unexpected chars - full UTF-8 range - as potential value
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
@@ -5193,21 +5199,37 @@ begin
   QuotedStrJson(pointer(aText), Length(aText), result, '', '');
 end;
 
+function JsonBufferReformatToStream(P: PUtf8Char; Dest: TStream;
+  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
+var
+  temp: TBuffer128K;
+  W: TJsonWriter;
+begin
+  result := false;
+  if (P = nil) or
+     (Dest = nil) then
+    exit;
+  W := TJsonWriter.Create(Dest, @temp, SizeOf(temp));
+  try
+    result := W.AddJsonReformat(P, Format, PreProc);
+    W.FlushFinal;
+  finally
+    W.Free;
+  end;
+end;
+
 function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
   Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
 var
-  temp: TBuffer64K;
+  S: TRawByteStringStream;
 begin
-  if P = nil then
-    result := false
-  else
-    with TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
-    try
-      result := AddJsonReformat(P, Format, Preproc);
-      SetText(Dest);
-    finally
-      Free;
-    end;
+  S := TRawByteStringStream.Create;
+  try
+    result := JsonBufferReformatToStream(P, S, Format, Preproc);
+    Dest := S.DataString;
+  finally
+    S.Free;
+  end;
 end;
 
 function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat): RawUtf8;
@@ -5225,19 +5247,11 @@ function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
   Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
 var
   F: TStream;
-  temp: TBuffer128K;
 begin
   try
     F := TFileStreamEx.Create(Dest, fmCreate);
     try
-      with TJsonWriter.Create(F, @temp, SizeOf(temp)) do
-      try
-        AddJsonReformat(P, Format, PreProc);
-        FlushFinal;
-      finally
-        Free;
-      end;
-      result := true;
+      result := JsonBufferReformatToStream(P, F, Format, Preproc);
     finally
       F.Free;
     end;
