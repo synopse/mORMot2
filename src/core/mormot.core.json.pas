@@ -435,6 +435,9 @@ function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 // - numbers and escaped strings are not fully validated, just their charset
 function GotoEndJsonItemStrict(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
+/// called with P^ = '/' to skip /* comment */ or // comment
+function GotoEndOfSlashComment(P: PUtf8Char): PUtf8Char;
+
 /// reach the position of the next JSON item(s) in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
@@ -2604,7 +2607,7 @@ begin
   inc(B, 6);
 end;
 
-function TryGotoEndOfSlashComment(P: PUtf8Char): PUtf8Char; // seldom called
+function GotoEndOfSlashComment(P: PUtf8Char): PUtf8Char;
 begin // see jtSlash support in GotoEnd()
   repeat
     result := P; // return input P^ = '/' if no comment was found
@@ -3476,7 +3479,7 @@ ident:    Value := P;
       jtSlash: // /*...*/ or // comment
         begin
           Value := P;
-          P := TryGotoEndOfSlashComment(P); // see GetJson/GotoEnd
+          P := GotoEndOfSlashComment(P); // see GetJson/GotoEnd
           if P = Value then
             goto ident0; // not a true comment
           if jrfComments in Fmt then
@@ -4066,7 +4069,7 @@ begin
         (P^ <> #0) do
     inc(P);
   if P^ = '/' then
-    P := TryGotoEndOfSlashComment(P);
+    P := GotoEndOfSlashComment(P);
   if HandleValuesAsObjectOrArray and
      (P^ in ['{', '[']) then
   begin
@@ -4184,7 +4187,7 @@ begin
     inc(P);
   end;
   if P^ = '/' then
-    P := TryGotoEndOfSlashComment(P);
+    P := GotoEndOfSlashComment(P);
   tab := @JSON_CHARS;
   Name := P + 1;
   if P^ = '"' then
@@ -7169,7 +7172,7 @@ begin
       result := GotoNextLineSmall(result + 1)
     else if (result^ = '/') and
             (result[1] in ['/', '*']) then
-      result := TryGotoEndOfSlashComment(result)
+      result := GotoEndOfSlashComment(result)
     else if cardinal(PWord(result)^) = DOLLAR_16 then
     begin
       repeat
