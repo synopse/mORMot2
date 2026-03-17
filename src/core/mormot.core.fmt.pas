@@ -2317,6 +2317,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
     procedure DoInclude(P: PUtf8Char; const Append: TOnPreprocAppend);
+    function DoVerbatim(P: PUtf8Char): PUtf8Char;
   public
     /// initialize this pre-processor engine
     constructor Create(flags: TPreprocFlags; const folder: TFileName); reintroduce;
@@ -2716,6 +2717,24 @@ begin
   tmp.Store.Done; // free memory - unlikely from heap
 end;
 
+function TPreproc.DoVerbatim(P: PUtf8Char): PUtf8Char;
+var
+  tmp: TSynTempBuffer; // OnAppend() requires a #0 terminated buffer
+begin
+  P := GotoNextLineSmall(P); // P^ = line just after '$$$' = start of verbatim
+  result := P;
+  repeat
+    result := GotoNextNotSpace(GotoNextLineSmall(result));
+    if result^ = #0 then
+      exit;
+  until (result^ = '$') and
+        (cardinal(PWord(result + 1)^) = DOLLAR_16);
+  tmp.Init(P, result - P); // make #0 terminated
+  OnAppend(tmp.buf);
+  tmp.Done;
+  result := GotoNextLineSmall(result); // ignore trailing '$$$' line
+end;
+
 function TPreproc.ParseSection(P: PUtf8Char): PUtf8Char;
 var
   key, value: PUtf8Char;
@@ -2725,6 +2744,11 @@ label
   ok;
 begin // handle P = '$$'
   result := P + 2; // allow '$$' or '$$$' or '$$ some text' markers
+  if result^ = '$' then
+  begin
+    result := DoVerbatim(result + 1); // $$$ verbatim section $$$
+    exit;
+  end;
   repeat
     result := GotoNextLineSmall(result);
 ok: result := GotoNextNotSpace(result);

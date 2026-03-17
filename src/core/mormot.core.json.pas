@@ -255,7 +255,8 @@ type
   TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
   /// flags used to identify the $(ident) variables stored by TPreprocAbstract
   TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
-  /// abstract class used for JSON or Text $(ident) and $ifdef$ pre-processing
+
+  /// abstract class used for JSON or Text pre-processing as $(ident) and $if$
   TPreprocAbstract = class(TSynPersistent)
   protected
     OnAppend: TOnPreprocAppend;
@@ -3399,8 +3400,8 @@ dquote:   ReformatBeginValue;
           P := FmtPreproc.ParseSection(P)
         else if P[1] = '"' then  // $"..." substitution
           P := PreprocString(P)
-        else
-          P := PreprocVar(P);      // $(ident) or $if$ $else$ $endif$
+        else                     // $(ident) or $if$ $else$ $endif$
+          P := PreprocVar(P);
       jtNone, // handle unexpected chars - full UTF-8 range - as potential value
       jtIdentifierFirstChar: // _$a..zA..Z (exclude digits)
         begin
@@ -7187,8 +7188,8 @@ begin
   until result^ = #0;
 end;
 
-function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
-  Preproc: TObject): boolean;
+function TJsonWriter.AddJsonReformat(Json: PUtf8Char;
+  Format: TTextWriterJsonFormat; Preproc: TObject): boolean;
 var
   parser: TJsonParser; // reuse the GotoEnd state machine
   start: PUtf8Char;    // Hjson assume an implicit object
