@@ -2291,15 +2291,21 @@ begin
 end;
 
 
-
 { ********** JSON and Text Preprocessor }
 
 const
   DSL_INCLUDE_DEPTH = 4; // avoid infinite include <filename>
 
+{ TPreProc }
+
 type
-  TPreprocIfLevel = 0 .. 15; // 0=outer level, 1..15=nested levels
-  TPreprocIf = (piNone, piIf, piIfDef, piElse, piEnd);
+  TPreprocIfLevel = 0 .. 15; // 0 = outer level, 1..15 = nested levels
+  TPreprocIf = (
+    piNone,
+    piIf,
+    piIfDef,
+    piElse,
+    piEnd);
 
   /// implement pre-processing to JSON or text input
   TPreproc = class(TPreprocAbstract)
@@ -2374,7 +2380,8 @@ begin
     inc(result);
   end;
   key := result;
-  while (result^ <> ending) and not (result^ in [#0 .. ' ', '|']) do
+  while (result^ <> ending) and
+        not (result^ in [#0 .. ' ', '|']) do
     inc(result);
   Value := nil;
   if result^ <= ' ' then
@@ -2391,13 +2398,15 @@ begin
         Value := key;
         Len := keylen;
       end;
-      while (result^ <> ending) and (result^ in [#0 .. #31]) do
+      while (result^ <> ending) and
+            (result^ in [#0 .. #31]) do
         inc(result);
       inc(result); // skip trailing $ or }
       exit;
     end;
     key := result;
-    while (result^ <> ending) and not (result^ in [#0 .. #31, '|']) do
+    while (result^ <> ending) and
+          not (result^ in [#0 .. #31, '|']) do
       inc(result);
     if result^ < ' ' then
       exit;
@@ -2562,7 +2571,8 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
           case ParseIfDollar(result) of
             piNone:
               inc(result);
-            piIf, piIfDef:
+            piIf,
+            piIfDef:
               inc(level);
             piEnd:
               if level = 0 then
@@ -2586,7 +2596,8 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
       end;
       if exp.ValueLen < 0 then
         match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
-      else if (exp.ValueStart = nil) or (exp.ValueLen = 0) then
+      else if (exp.ValueStart = nil) or
+              (exp.ValueLen = 0) then
         match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
       else
         match := EvaluateTextExpression(exp); // non-void = < > <= >= ~ ~~ * **
@@ -2610,7 +2621,8 @@ function TPreproc.WasIf(var P: PUtf8Char): boolean;
 begin
   result := true;
   case ParseIfDollar(P) of // called with P^ = '$'
-    piIf, piIfDef: // complex $if $ifdef evaluation
+    piIf,
+    piIfDef: // complex $if $ifdef evaluation
       P := DoIf(P);
     piElse:        // $else$ just toggles skip flag
       if IfLevel > 0 then
@@ -2640,9 +2652,11 @@ begin
     case result^ of
       #0:
         exit;
-      '{', '[':
+      '{',
+      '[':
         inc(level);
-      '}', ']':
+      '}',
+      ']':
         if level = 0 then
           break
         else
@@ -2676,14 +2690,16 @@ begin
       if (m = pmTemplate) and
          WasIf(v) then // $if$ $endif$
         continue
-      else // $ident$ ${ident} $env:NAME$ ${env:NAME}
+      else
       begin
+        // $ident$ ${ident} $env:NAME$ ${env:NAME}
         v := Expand(v, val, vallen, {KeepMarker=}false);
         if val <> nil then
-          tmp.Add(val, vallen);
+          tmp.Add(val, vallen); // early evaluation of $(ident) within templates
       end
     else
-    begin // # comment or // comment
+    begin
+      // # comment or // comment
       l := v - beg;
       while (l <> 0) and
             (v[l - 1] = ' ') do
@@ -2731,8 +2747,6 @@ begin // called with P^ = '$$'
     P := result; // P^ = line just after '$$$' = verbatim start
     repeat
       result := GotoNextNotSpace(GotoNextLineSmall(result));
-      if result^ = #0 then
-        exit;
     until (result^ = '$') and
           (cardinal(PWord(result + 1)^) = DOLLAR_16);
     if Assigned(OnVerbatim) then
@@ -2756,7 +2770,8 @@ ok: result := GotoNextNotSpace(result);
           result := P;
           goto ok;    // $if$ $else$ $endif$ conditional logic
         end;
-      '#', '/':
+      '#',
+      '/':
         continue;     // comment line
       'i', 'I':
         if IdemPChar(result + 1, 'NCLUDE ') then
@@ -2781,11 +2796,12 @@ ok: result := GotoNextNotSpace(result);
     case result^ of
       #0:
         exit;
-      '{', '[': // value = whole {..}/[..] text block
+      '{',
+      '[': // value = whole {..}/[..] text block
         begin
           result := GotoTemplateEnding(result);
           DoRegister(pmTemplate, key, value, result - 1, keylen);
-          continue; // has been expanded and processed for $if$
+          continue; // has been expanded and processed for any nested $if$
         end;
       '"', '''':
         while (result^ >= ' ') and
