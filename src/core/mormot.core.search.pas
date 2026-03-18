@@ -7,6 +7,7 @@ unit mormot.core.search;
   *****************************************************************************
 
    Several Indexing and Search Engines, as used by other parts of the framework
+    - SAX-oriented JSON buffers access
     - JSON-aware TSynNameValue TSynCache TObjectStoreJson
     - Files Search in Folders
     - ScanUtf8, GLOB and SOUNDEX Text Search
@@ -39,6 +40,71 @@ uses
   mormot.core.data,
   mormot.core.json,
   mormot.core.variants;
+
+
+{ ************ SAX-oriented JSON buffers access }
+
+{ those functions are used e.g. to implement our SQLite3 JSON SQL functions }
+
+/// go to the #nth item of a JSON array
+// - implemented via a fast SAX-like approach: the input buffer is not changed,
+// nor no memory buffer allocated neither content copied
+// - returns nil if the supplied index is out of range
+// - returns a pointer to the index-nth item in the JSON array (first index=0)
+// - this will handle any kind of arrays, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '[' char
+function JsonArrayItem(P: PUtf8Char; Index: integer): PUtf8Char;
+
+/// retrieve the positions of all elements of a JSON array
+// - this will handle any kind of arrays, including those with nested
+// JSON objects or arrays
+// - warning: incoming P^ should point to the first char AFTER the initial '['
+// (which may be a closing ']') - calling e.g. NextNotSpaceCharIs()
+// - returns false if the supplied input is invalid
+// - returns true on success, with Values[] pointing to each unescaped value,
+// may be a JSON string, object, array of constant
+function JsonArrayDecode(P: PUtf8Char;
+  out Values: TPUtf8CharDynArray): boolean;
+
+/// go to a named property of a JSON object
+// - implemented via a fast SAX-like approach: the input buffer is not changed,
+// nor no memory buffer allocated neither content copied
+// - PropName is search case-insensitively  as 'propertyname' or 'property*'
+// - returns nil if the supplied property name does not exist
+// - returns a pointer to the matching item value in the JSON object
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '{' char
+function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
+  PropNameFound: PRawUtf8 = nil): PUtf8Char; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// go to a buffer-named property of a JSON object
+// - as called by overloaded JsonObjectItem()
+function JsonObjectItem(P, PropName: PUtf8Char; PropNameLen: PtrInt;
+  PropNameFound: PRawUtf8): PUtf8Char; overload;
+
+/// go to a property of a JSON object, by its full path, e.g. 'parent.child'
+// - implemented via a fast SAX-like approach: the input buffer is not changed,
+// nor no memory buffer allocated neither content copied
+// - PropPath is search case-insensitively as 'parent.child' or 'parent.ch*'
+// - returns nil if the supplied property path does not exist
+// - returns a pointer to the matching item value in the JSON object
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '{' char
+function JsonObjectByPath(JsonObject, PropPath: PUtf8Char): PUtf8Char;
+
+/// return all matching properties of a JSON object
+// - here the PropPath could be a comma-separated list of case-insensitive full
+// paths, e.g. 'Prop1,Prop2' or 'Obj1.Obj2.Prop*,Obj1.Prop1'
+// - returns '' if no property did match
+// - returns a JSON object of all matching properties
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '{' char
+function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 
 
 { ************ JSON-aware TSynNameValue TSynCache TObjectStoreJson }
@@ -1983,6 +2049,240 @@ function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TD
 
 
 implementation
+
+
+{ ************ SAX-oriented JSON buffers access }
+
+function JsonArrayDecode(P: PUtf8Char; out Values: TPUtf8CharDynArray): boolean;
+var
+  n, max: PtrInt;
+  parser: TJsonParser;
+begin
+  result := false;
+  max := 0;
+  n := 0;
+  {%H-}parser.Init({strict=}false, nil);
+  P := GotoNextNotSpace(P);
+  if P^ <> ']' then
+    repeat
+      if max = n then
+      begin
+        max := NextGrow(max);
+        SetLength(Values, max);
+      end;
+      Values[n] := P;
+      inc(n);
+      P := parser.GotoEnd(P);
+      if P = nil then
+        exit; // invalid content, or #0 reached
+      if P^ <> ',' then
+        break;
+      inc(P);
+    until false;
+  if P^ = ']' then
+  begin
+    if n <> 0 then
+      DynArrayFakeLength(Values{%H-}, n);
+    result := true;
+  end
+  else
+    Values := nil;
+end;
+
+function JsonArrayItem(P: PUtf8Char; Index: integer): PUtf8Char;
+var
+  parser: TJsonParser;
+begin
+  if P <> nil then
+  begin
+    P := GotoNextNotSpace(P);
+    if P^ = '[' then
+    begin
+      {%H-}parser.Init({strict=}false, nil);
+      repeat
+        inc(P);
+      until not (P^ in [#1..' ']);
+      if P^ <> ']' then
+        repeat
+          if Index <= 0 then
+          begin
+            result := P;
+            exit;
+          end;
+          P := parser.GotoEnd(P);
+          if (P = nil) or
+             (P^ <> ',') then
+            break; // invalid content or #0 reached
+          inc(P);
+          dec(Index);
+        until false;
+    end;
+  end;
+  result := nil;
+end;
+
+function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
+  PropNameFound: PRawUtf8): PUtf8Char;
+begin
+  result := JsonObjectItem(P, pointer(PropName), length(PropName), PropNameFound);
+end;
+
+function JsonObjectItem(P, PropName: PUtf8Char; PropNameLen: PtrInt;
+  PropNameFound: PRawUtf8): PUtf8Char;
+var
+  name: PUtf8Char;
+  namelen: integer; // not PtrInt
+  bystart: boolean; // mark 'PropName*' search
+  parser: TJsonParser;
+begin
+  result := nil;
+  if (P = nil) or
+     (PropNameLen = 0) then
+    exit;
+  P := GotoNextNotSpace(P);
+  bystart := false;
+  if PropName[PropNameLen - 1] = '*' then
+  begin
+    dec(PropNameLen);
+    bystart := true;
+  end;
+  if P^ = '{' then
+    repeat
+      inc(P);
+    until not (P^ in [#1..' ']);
+  if P^ = '}' then
+    exit;
+  repeat
+    name := GetJsonPropName(P, @namelen, {NoJsonUnescapeNorEnding0=}true);
+    if name = nil then
+      exit;
+    while (P^ <= ' ') and
+          (P^ <> #0) do
+      inc(P);
+    if (namelen >= PropNameLen) and
+       (bystart or
+        (namelen = PropNameLen)) then
+      if IdemPropName(name, PropName, PropNameLen, PropNameLen) then
+      begin
+        if bystart and
+           (PropNameFound <> nil) then
+          FastSetString(PropNameFound^, name, namelen);
+        result := P;
+        exit;
+      end;
+    {%H-}parser.Init({strict=}false, nil);
+    P := parser.GotoEnd(P);
+    if (P = nil) or
+       (P^ <> ',') then
+      break; // invalid content, or #0 reached
+    inc(P);
+  until false;
+end;
+
+function JsonObjectByPath(JsonObject, PropPath: PUtf8Char): PUtf8Char;
+var
+  objName: ShortString;
+begin
+  result := nil;
+  if (JsonObject = nil) or
+     (PropPath = nil) then
+    exit;
+  repeat
+    GetNextItemShortString(PropPath, @objName, '.');
+    if objName[0] = #0 then
+      exit;
+    JsonObject := JsonObjectItem(JsonObject, @objName[1], ord(objName[0]), nil);
+    if JsonObject = nil then
+      exit;
+  until PropPath = nil; // found full name scope
+  result := JsonObject;
+end;
+
+function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
+var
+  itemName, objName, propNameFound, objPath: RawUtf8;
+  start, ending, obj: PUtf8Char;
+  WR: TTextWriter;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
+
+  procedure AddFromStart(const name: RawUtf8);
+  begin
+    start := GotoNextNotSpace(start);
+    ending := GotoEndJsonItem(start);
+    if ending = nil then
+      exit;
+    if WR = nil then
+    begin
+      WR := TTextWriter.CreateOwnedStream(temp);
+      WR.AddDirect('{');
+    end
+    else
+      WR.AddComma;
+    WR.AddFieldName(name);
+    while (ending > start) and
+          (ending[-1] <= ' ') do
+      dec(ending); // trim right
+    WR.AddNoJsonEscapeBig(start, ending - start);
+  end;
+
+begin
+  result := '';
+  if (JsonObject = nil) or
+     (PropPath = nil) then
+    exit;
+  WR := nil;
+  try
+    repeat
+      GetNextItem(PropPath, ',', itemName);
+      if itemName = '' then
+        break;
+      if itemName[length(itemName)] <> '*' then // single property lookup
+      begin
+        start := JsonObjectByPath(JsonObject, pointer(itemName));
+        if start <> nil then
+          AddFromStart(itemName);
+      end
+      else // 'propname*' may append several properties
+      begin
+        objPath := '';
+        obj := pointer(itemName);
+        repeat
+          GetNextItem(obj, '.', objName);
+          if objName = '' then
+            exit;
+          propNameFound := '';
+          JsonObject := JsonObjectItem(JsonObject, objName, @propNameFound);
+          if JsonObject = nil then
+            exit;
+          if obj = nil then
+          begin
+            // found full name scope
+            start := JsonObject;
+            repeat
+              AddFromStart(objPath + propNameFound);
+              ending := GotoNextNotSpace(ending);
+              if ending^ <> ',' then
+                break;
+              propNameFound := '';
+              start := JsonObjectItem(
+                GotoNextNotSpace(ending + 1), objName, @propNameFound);
+            until start = nil;
+            break;
+          end
+          else
+            Append(objPath, objName, '.');
+        until false;
+      end;
+    until PropPath = nil;
+    if WR <> nil then
+    begin
+      WR.AddDirect('}');
+      WR.SetText(result);
+    end;
+  finally
+    WR.Free;
+  end;
+end;
 
 
 { ************ JSON-aware TSynNameValue TSynCache TObjectStoreJson }

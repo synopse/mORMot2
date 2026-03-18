@@ -199,6 +199,7 @@ Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factori
 ### mormot.core.search
 
 Several Indexing and Search Engines, as used by other parts of the framework
+- SAX-oriented JSON buffers access
 - JSON-aware `TSynNameValue` `TSynCache` `TObjectStoreJson`
 - Files Search in Folders
 - ScanUtf8, GLOB and SOUNDEX Text Search
