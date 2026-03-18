@@ -90,7 +90,7 @@ type
   gss_channel_bindings_t = ^gss_channel_bindings_struct;
 
   gss_key_value_set_desc = record
-    count: cardinal; // should be OM_uint32 per RFC 2744
+    count: PtrUInt; // should be OM_uint32 per RFC 2744 but GPF on MacOS
     elements: pointer;
   end;
   gss_const_key_value_set_t = ^gss_key_value_set_desc;
