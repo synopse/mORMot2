@@ -3065,8 +3065,6 @@ function BSRqword(const q: Qword): cardinal;
 
 {$endif ISDELPHI}
 
-{$ifdef ASMINTEL}
-
 {$ifdef ASMX64} // will define its own self-dispatched SSE2/AVX functions
 
 type
@@ -3124,6 +3122,8 @@ procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt = 1);
 /// low-level dynarray reference counter process
 procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt = 1);
   {$ifdef HASINLINE} inline; {$endif}
+
+{$ifdef ASMINTEL}
 
 /// our fast version of FillChar() on Intel/AMD
 // - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available)
