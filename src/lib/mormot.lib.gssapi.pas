@@ -447,7 +447,7 @@ var
   /// library name of the system implementation of GSSAPI
   // - only used on MacOS by default (GSS is available since 10.7 Lion in 2011)
   // - you can overwrite with a custom value, make FreeAndNil(GssApi) and call
-  // LoadGssApi again
+  // LoadGssApi() again
   GssLib_OS: TFileName = GssOSDef;
 
 
@@ -794,10 +794,10 @@ const
     'gss_release_oid_set',
     'gss_display_status',
     // MIT-only definitions
-    'gss_acquire_cred_from',
+    '?gss_acquire_cred_from',
     // Kerberos specific entries - potentially with Heimdal alternative name
-    'gss_krb5_ccache_name',
-    'krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
+    '?gss_krb5_ccache_name',
+    '?krb5_gss_register_acceptor_identity gsskrb5_register_acceptor_identity',
     nil);
 
 var
