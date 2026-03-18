@@ -5220,7 +5220,8 @@ begin
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
     result := grRejected;
     if (P = nil) or
-       (PCardinal(P)^ <> HTTP_32) then
+       (PCardinal(P)^ <> HTTP_32) or
+       (Http.CommandMethod = '') then
       exit;
     http10 := P[7] = '0';
     fKeepAliveClient := ((fServer = nil) or
@@ -7018,7 +7019,8 @@ begin
     include(err, eShutdown); // avoid GPF at shutdown
   if length(aBearerToken) < PEER_CACHE_BEARERLEN then // base64uri length
     include(err, eBearer);
-  if not (IsGet(aMethod) or
+  if (aMethod = '') or
+     not (IsGet(aMethod) or
           IsHead(aMethod)) then
     include(err, eNoGetHead);
   if aUrl = '' then // URI is just ignored but something should be specified

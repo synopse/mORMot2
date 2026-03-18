@@ -278,7 +278,8 @@ begin
           log.Log(sllTrace, 'ConnectionCreate received % % %',
             [sock.Method, sock.URL, sock.Http.Headers], self);
         cookie := sock.HeaderGetValue('X-SESSIONCOOKIE');
-        if cookie = '' then
+        if (cookie = '') or
+           (sock.Method = '') then
           exit;
         now := GetTickSec;
         fPendingGet.Safe.WriteLock;

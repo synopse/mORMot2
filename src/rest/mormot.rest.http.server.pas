@@ -1150,6 +1150,7 @@ begin
   // validate non-REST kind of requests
   if (self = nil) or
      (pointer(fRestServers) = nil) or
+     (Ctxt.Method = '') or // IsGet/IsOptions require method <> ''
      fShutdownInProgress then
   begin
     result := HTTP_NOTFOUND;
