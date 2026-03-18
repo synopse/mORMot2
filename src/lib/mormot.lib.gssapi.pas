@@ -1181,6 +1181,7 @@ begin
     begin
       fn := TFileName(GssApi.ClientEnvValue); // RTL conversion to TFileName
       fromEnv := true;                        // the env variable(s) were set
+      useCredFrom := false;                   // better continue with env var
     end
     else if ClientSspiPasswordIsFile(p) then
       fn := TFileName(copy(p, 6, 1023)); // e.g. 'FILE:/full/path/to/my.keytab'
