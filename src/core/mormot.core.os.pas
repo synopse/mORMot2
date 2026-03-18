@@ -1494,7 +1494,7 @@ var
     /// retrieved from libc's getpagesize() - is expected to not be 0
     dwPageSize: cardinal;
     /// the number of available logical CPUs threads
-    // - retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    // - from HW_NCPU (BSD), hw.logicalcpu (macOS) or /proc/cpuinfo (Linux)
     // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()

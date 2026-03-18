@@ -2957,6 +2957,12 @@ begin
   bsdsysctl(CTL_HW, hwid, @result, SizeOf(result));
 end;
 
+function fpsysctlbynameint(name: PAnsiChar): Int64;
+begin
+  result := 0;
+  bsdsysctl(name, @result, SizeOf(result));
+end;
+
 function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
@@ -2969,8 +2975,8 @@ end;
 
 function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
 begin
-  FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
-  if (bsdsysctl(name, @temp, SizeOf(temp)) <> 0) and
+  FillCharFast(temp, high(temp) + 1, 0); // ShortString as 0-terminated buffer
+  if (bsdsysctl(name, @temp, high(temp) + 1) <> 0) and
      (temp[0] <> #0) then
     result := @temp
   else
@@ -5104,14 +5110,17 @@ begin
   modnum := nil;
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
-  SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp1);
   {$ifdef OSDARWIN}
+  SystemInfo.dwNumberOfProcessors := fpsysctlbynameint('hw.logicalcpu');
+  CpuCores := fpsysctlbynameint('hw.physicalcpu');
   if strscan(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
   modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
   {$endif OSDARWIN}
   FastSetString(BiosInfoText, beg, StrLen(beg));
+  if SystemInfo.dwNumberOfProcessors = 0 then
+    SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   if modname = nil then
     modname := fpsysctlhwstr(HW_MODEL, temp2);
   {$ifdef OSDARWIN}
