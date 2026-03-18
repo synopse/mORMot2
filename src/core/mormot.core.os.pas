@@ -2976,7 +2976,10 @@ function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 /// convert a Windows API File 64-bit TimeStamp into a regular TUnixMSTime
 // - i.e. a FILETIME value as returned by GetFileTime() Win32 API
 // - some binary formats (e.g. ISO 9660 or LDAP) have such FILETIME fields
-function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
+function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
+
+/// convert a TUnixMSTime into a Windows FILETIME value
+function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
@@ -7044,9 +7047,14 @@ end;
 const
   FileTimePerMs = 10000; // a tick is 100ns
 
-function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
+function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
 begin
-  result := (Int64(WinTime) - UnixFileTimeDelta) div FileTimePerMs;
+  result := (Int64(WinTime64) - UnixFileTimeDelta) div FileTimePerMs;
+end;
+
+function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
+begin
+  result := (TimeMS * FileTimePerMs) + UnixFileTimeDelta;
 end;
 
 function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;

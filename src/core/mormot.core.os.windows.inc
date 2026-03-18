@@ -401,7 +401,7 @@ begin
 end;
 
 const
-  MilliSecsPerFileTime = 10000;
+  MilliSecsPerFileTime = 10000; // a tick is 100ns
   SecsPerFileTime      = 10000000;
 
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
