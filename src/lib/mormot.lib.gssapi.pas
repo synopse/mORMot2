@@ -450,6 +450,9 @@ var
   // LoadGssApi() again
   GssLib_OS: TFileName = GssOSDef;
 
+  /// global information filled by LoadGssApi() on failure
+  GssApi_LastError: string;
+
 
 /// dynamically load GSSAPI library
 // - do nothing if the library is already loaded
@@ -820,7 +823,7 @@ begin
   api.TryFromExecutableFolder := true; // good idea to check local first
   if api.TryLoadResolve(
       [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS],
-      '', @GSS_ENTRIES, @@api.gss_import_name) then
+      '', @GSS_ENTRIES, @@api.gss_import_name, nil, @GssApi_LastError) then
   begin
     if Assigned(api.gss_acquire_cred) and
        Assigned(api.gss_accept_sec_context) and
