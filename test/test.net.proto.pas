@@ -2100,7 +2100,7 @@ begin
     d.Recv := d.Send;
     d.RecvLen := d.SendLen;
     Check(server.ComputeResponse(d) < 0, 'ack');
-    Check(d.RecvHostName^ = '', 'no hostname');
+    Check(d.RecvHostName^[0] = #0, 'no hostname');
     CheckEqual(server.Count, 1);
     txt := server.SaveToText;
     CheckNotEqual(txt, CRLF, 'offer not saved');

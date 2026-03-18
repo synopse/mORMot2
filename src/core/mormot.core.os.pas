@@ -6254,7 +6254,7 @@ begin
         result := @MACOS_NAME[osv.utsrelease[2]];
   end;
   if (result = nil) or
-     (result^ = '') then
+     (result^[0] = #0) then
     result := @OS_NAME[osv.os];
 end;
 

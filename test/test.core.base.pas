@@ -8120,7 +8120,7 @@ begin
   Check(WinErrorConstant(12002)^ = 'TIMEOUT', 'wecf');
   Check(WinErrorConstant($800b010a)^ = 'CERT_E_CHAINING', 'wecg');
   Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecG');
-  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant($800b010d)^[0] = #0, 'wech');
   Check(WinErrorConstant($80092002)^ = 'CRYPT_E_BAD_ENCODE', 'wecH');
   Check(WinErrorConstant(1229)^  = 'CONNECTION_INVALID', 'weci');
   Check(WinErrorConstant(122)^ = 'INSUFFICIENT_BUFFER', 'wecj');
