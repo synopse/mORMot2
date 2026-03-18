@@ -464,29 +464,19 @@ type
     ldAndroid);
 
 const
-  /// the recognized MacOS versions, as plain text
-  // - indexed from OSVersion32.utsrelease[2] kernel revision
+  /// OSVersion32.utsrelease[2] indexed MacOS versions, as number
+  MACOS_NUM: array[8 .. 26] of TShort7 = (
+    '10.4',  '10.5',  '10.6',  '10.7',  '10.8',  '10.9',  '10.10', '10.11',
+    '10.12', '10.13', '10.14', '10.15', '11',    '12',    '13',    '14',
+    '15',    '26',    '27'); // MacOS 27 expected in 2026, ARM-only
+
+  /// OSVersion32.utsrelease[2] indexed MacOS versions, as plain text
   // - see https://en.wikipedia.org/wiki/MacOS_version_history#Releases
-  MACOS_NAME: array[8 .. 26] of TShort23 = (
-    '10.4 Tiger',
-    '10.5 Leopard',
-    '10.6 Snow Leopard',
-    '10.7 Lion',
-    '10.8 Mountain Lion',
-    '10.9 Mavericks',
-    '10.10 Yosemite',
-    '10.11 El Capitan',
-    '10.12 Sierra',
-    '10.13 High Sierra',
-    '10.14 Mojave',
-    '10.15 Catalina',
-    '11 Big Sur',
-    '12 Monterey',
-    '13 Ventura',
-    '14 Sonoma',
-    '15 Sequoia',
-    '26 Tahoe', // last ARM+Intel suport
-    '27 Next'); // expected in 2026, ARM-only
+  MACOS_NAME: array[8 .. 26] of TShort15 = (
+    'Tiger', 'Leopard', 'Snow Leopard', 'Lion', 'Mountain Lion', 'Mavericks',
+    'Yosemite', 'El Capitan', 'Sierra', 'High Sierra', 'Mojave', 'Catalina',
+    'Big Sur', 'Monterey', 'Ventura', 'Sonoma', 'Sequoia', 'Tahoe',
+    'Next'); // expected in 2026, ARM-only
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
@@ -718,7 +708,7 @@ var
 
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 'Windows XP SP3 (5.1.2600)' or
-  // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 13 Ventura (Darwin 22.3.0)' or
+  // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 15.7.3 Sequoia (Darwin 24.6.0)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUtf8;
   /// some addition system information as text, e.g. 'Wine 1.1.5' or 'Prism'
@@ -727,21 +717,8 @@ var
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
   // and computed by ToTextOSU(OSVersionInt32)
-  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or
-  // 'macOS 13 Ventura 22.3.0'
+  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or 'macOS 15.7.3 Sequoia'
   OSVersionShort: RawUtf8;
-
-  {$ifdef OSWINDOWS}
-  /// on Windows, the Update Build Revision as shown with the "ver/winver" command
-  // - to track the current update state of the system
-  WindowsUbr: integer;
-  /// on Windows, the ready-to-be-displayed text version of the system
-  // - e.g. 'Windows 10 Entreprise N'
-  WindowsProductName: RawUtf8;
-  /// on Windows, the ready-to-be-displayed text version of the system
-  // - e.g. '22H2'
-  WindowsDisplayVersion: RawUtf8;
-  {$endif OSWINDOWS}
 
   /// some textual information about the current CPU and its known cache
   // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz [3MB]'
@@ -809,7 +786,7 @@ function WinOsBuild(const osv: TOperatingSystemVersion; sep: AnsiChar): TShort7;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an Operating System type into its one-word text representation
-// - returns e.g. 'Vista' or 'Ubuntu' or 'OSX'
+// - returns e.g. 'Vista' or 'Ubuntu' or 'Sequoia'
 function OsvToShort(const osv: TOperatingSystemVersion): PShortString;
 
 /// convert a 32-bit Operating System type into its full text representation
@@ -1481,6 +1458,9 @@ var
 
 {$ifdef OSWINDOWS}
 
+  /// on Windows, the Update Build Revision as shown with the "ver/winver" command
+  // - to track the current update state of the system
+  WindowsUbr: integer;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
   // to retrieve the real top-most system information
@@ -1500,6 +1480,12 @@ var
   IsWow64Emulation: boolean;
   /// low-level Operating System information, as retrieved for the current process
   OSVersionInfo: TOSVersionInfoEx;
+  /// on Windows, the ready-to-be-displayed text version of the system
+  // - e.g. 'Windows 10 Entreprise N'
+  WindowsProductName: RawUtf8;
+  /// on Windows, the ready-to-be-displayed text version of the system
+  // - e.g. '22H2'
+  WindowsDisplayVersion: RawUtf8;
 
 {$else OSWINDOWS}
 
@@ -6233,6 +6219,8 @@ begin
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
       begin
         AppendShort('macOS ', dest);
+        AppendShort(MACOS_NUM[osv.utsrelease[2]], dest);
+        AppendShortChar(' ', @dest);
         AppendShort(MACOS_NAME[osv.utsrelease[2]], dest);
         exit;
       end;
@@ -9042,7 +9030,8 @@ begin
   TrimDualSpaces(OSVersionInfoEx);
   {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
   TrimDualSpaces(CpuInfoText);
-  OSVersionShort := ToTextOSU(OSVersionInt32);
+  if OSVersionShort = '' then
+    OSVersionShort := ToTextOSU(OSVersionInt32);
   with Executable do            // retrieve Executable + Host/User info
   begin
     {$ifdef OSWINDOWS}

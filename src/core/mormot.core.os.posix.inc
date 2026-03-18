@@ -5387,7 +5387,19 @@ begin
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif NODIRECTTHREADMANAGER}
   {$ifdef OSDARWIN}
-  OSVersionText := Join([ToTextU(OSVersion32), ' (', OSVersionText, ')']);
+  temp1 := 'macOS ';
+  modname := fpsysctlbynamestr('kern.osproductversion', temp2); // '15.7.3'
+  if OSVersion32.utsrelease[2] in [low(MACOS_NUM) .. high(MACOS_NUM)] then
+  begin
+    if modname = nil then // '15' number from kernel revision
+      AppendShort(MACOS_NUM[OSVersion32.utsrelease[2]], temp1)
+    else                  // '15.7.3'
+      AppendShortBuffer(modname, StrLen(modname), high(temp1), @temp1);
+    AppendShortCharSafe(' ', temp1);
+    AppendShort(MACOS_NAME[OSVersion32.utsrelease[2]], temp1);
+  end;
+  ShortStringToAnsi7String(temp1, OSVersionShort); // 'macOS 15.7.3 Sequoia'
+  OSVersionText := Join([OSVersionShort, ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   if (mach_timeinfo.Numer = 1) and
