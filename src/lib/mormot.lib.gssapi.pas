@@ -1203,7 +1203,7 @@ begin
         end
         else if u = '' then
           // try to locate the proper User in this keytab
-          u := keytab.MachineAccountPrincipal;
+          u := keytab.MachineAccountPrincipal({fallbacktofirst=}true);
       end;
     // 3) retrieve the user information in the proper gss_name_t format
     Split(u, '@', n, spn);
