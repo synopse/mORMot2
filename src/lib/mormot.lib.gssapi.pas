@@ -387,9 +387,9 @@ type
     /// a simple way to identify that the GSS-API library is MIT (at least 1.11)
     IsMit: boolean;
     /// either GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL
-    ClientEnvName: RawUtf8;
-    /// the value of ClientEnvName at process startup
-    ClientEnvValue: RawUtf8;
+    EnvClientKtName: RawUtf8;
+    /// the value of EnvClientKtName at process startup
+    EnvClientKtValue: RawUtf8;
   end;
 
   /// Exception raised during libgssapi process
@@ -487,6 +487,7 @@ type
     ClientTargetName: gss_name_t;
     ChannelBindingsHash: pointer;
     ChannelBindingsHashLen: cardinal;
+    ResetEnv: boolean;
   end;
   PSecContext = ^TSecContext;
 
@@ -835,10 +836,10 @@ begin
       // minimal API to work on server side -> thread safe setup into GSSAPI
       api.IsMit := Assigned(api.gss_acquire_cred_from);
       if api.IsMit then
-        api.ClientEnvName := GSSAPI_ENV_CLIENT_KT_MIT      // KRB5_CLIENT_KTNAME
+        api.EnvClientKtName := GSSAPI_ENV_CLIENT_KT_MIT      // KRB5_CLIENT_KTNAME
       else
-        api.ClientEnvName := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // KRB5_KTNAME
-      GetSystemEnv(api.ClientEnvName, api.ClientEnvValue); // retrieve once
+        api.EnvClientKtName := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // KRB5_KTNAME
+      GetSystemEnv(api.EnvClientKtName, api.EnvClientKtValue); // retrieve once
       GlobalLock;
       try
         if GssApi = nil then
@@ -928,6 +929,9 @@ begin
     GssApi.gss_release_cred(minstatus, aSecContext.CredHandle);
   if aSecContext.ClientTargetName <> nil then
     GssApi.gss_release_name(minstatus, aSecContext.ClientTargetName);
+  if aSecContext.ResetEnv and
+     Assigned(GssApi) then
+    ResetSystemEnv(GssApi.EnvClientKtName); // env should remain until the end
   InvalidateSecContext(aSecContext);
 end;
 
@@ -1104,7 +1108,7 @@ var
   m: gss_OID_set;
   tmp: gss_OID_set_desc;
 begin
-  if GssApi.ClientEnvValue <> '' then
+  if GssApi.EnvClientKtValue <> '' then
   begin
     // GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL specific path
     ClientSspiAuthWithPassword(aSecContext, aInData, '', '',
@@ -1143,7 +1147,7 @@ var
   n , p, spn, u: RawUtf8;
   orig: PAnsiChar;
   keytab: TKerberosKeyTab;
-  useCredFrom, envReset, fromEnv: boolean;
+  useCredFrom, fromEnv: boolean;
   credStore: record
     key0: PUtf8Char;
     val0: RawUtf8;
@@ -1165,7 +1169,6 @@ var
 
 begin
   // 1) setup execution context
-  envReset := false;
   fromEnv := false;
   useCredFrom := Assigned(GssApi.gss_acquire_cred_from) and
                  not ClientSspiAuthWithPasswordKerberosNoCredFrom;
@@ -1177,11 +1180,11 @@ begin
   try
     // 2) support KRB5_CLIENT_KTNAME or keytab/ccache as FILE: in password
     if (p = '') and
-       (GssApi.ClientEnvValue <> '') then
+       (GssApi.EnvClientKtValue <> '') then
     begin
-      fn := TFileName(GssApi.ClientEnvValue); // RTL conversion to TFileName
-      fromEnv := true;                        // the env variable(s) were set
-      useCredFrom := false;                   // better continue with env var
+      fn := TFileName(GssApi.EnvClientKtValue); // RTL conversion to TFileName
+      fromEnv := true;                          // the env variable(s) were set
+      useCredFrom := false;                     // better continue with env var
     end
     else if ClientSspiPasswordIsFile(p) then
       fn := TFileName(copy(p, 6, 1023)); // e.g. 'FILE:/full/path/to/my.keytab'
@@ -1215,6 +1218,13 @@ begin
     end;
     if spn <> '' then
       u := n + '@' + spn;
+    if (keytab <> nil) and
+       not useCredFrom and
+       not fromEnv then // should be set before gss_import_name() for Heimdal :(
+    begin
+      aSecContext.ResetEnv := true;
+      SetSystemEnv(GssApi.EnvClientKtName, RawUtf8(fn));
+    end;
     buf.length := Length(u);
     buf.value := pointer(u);
     maj := GssApi.gss_import_name(
@@ -1276,12 +1286,7 @@ begin
     end;
     if keytab <> nil then
     begin
-      // use environment variables pointing to keytab file
-      if not fromEnv then // force temporarly if not already set
-      begin
-        envReset := true;
-        SetSystemEnv(GssApi.ClientEnvName, RawUtf8(fn));
-      end;
+      // use environment variables pointing to keytab file (maybe set above)
       maj := GssApi.gss_acquire_cred(min, user, GSS_C_INDEFINITE, aMech,
         GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
       GssCheck(maj, min, 'Failed to acquire credentials for env keytab');
@@ -1318,9 +1323,6 @@ begin
       GssApi.gss_krb5_ccache_name(min2, orig, nil);  // ignore any error
     // note: IBM doc states that krb5_free_string(orig) should be done
     //       but Debian doc and mod_auth_gssapi.c don't: so we won't either
-    if envReset then
-      // restore env variables - do nothing if not overriden
-      ResetSystemEnv(GssApi.ClientEnvName);
   end;
 end;
 
