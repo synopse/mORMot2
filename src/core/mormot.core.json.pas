@@ -9,6 +9,7 @@ unit mormot.core.json;
    JSON functions shared by all framework units
     - Low-Level JSON Processing Functions
     - TJsonWriter class with proper JSON escaping and WriteObject() support
+    - JSON Formats Conversion
     - JSON-aware TSynDictionary Storage
     - JSON Unserialization for any kind of Values
     - JSON Serialization Wrapper Functions
@@ -249,33 +250,6 @@ function JsonPropNameValid(P: PUtf8Char; len: integer; tab: PJsonCharSet): boole
 function JsonUnquotedValueValid(P: PUtf8Char; len: PtrUInt): boolean;
 
 type
-  /// event signature for TPreprocAbstract.OnAppend callback - e.g. Reformat()
-  TOnPreprocAppend = function(P: PUtf8Char): boolean of object;
-  /// event signature for TPreprocAbstract.OnVerbatim callback - for $$$ ... $$$
-  TOnPreprocVerbatim = procedure(P: PUtf8Char; Len: PtrInt) of object;
-  /// event signature for TPreprocAbstract.OnAddDebugComment callback
-  TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
-  /// flags used to identify the $(ident) variables stored by TPreprocAbstract
-  TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
-
-  /// abstract class used for JSON or Text pre-processing as $(ident) and $if$
-  TPreprocAbstract = class(TSynPersistent)
-  protected
-    OnAppend: TOnPreprocAppend;
-    OnVerbatim: TOnPreprocVerbatim;
-    OnAddDebugComment: TOnPreprocAddDebugComment;
-  public
-    /// called with P^=$$ to integrate DSL sections
-    function ParseSection(P: PUtf8Char): PUtf8Char; virtual; abstract;
-    /// called with P^=$ for conditional process
-    function WasIf(var P: PUtf8Char): boolean; virtual; abstract;
-    /// called with P^=$ to recognize $(ident) into Value/Len
-    function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
-      KeepMarker: boolean): PUtf8Char; virtual; abstract;
-    /// called with P^=$ to recognize and append $(ident) as plain unescaped text
-    function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char; virtual; abstract;
-  end;
-
   /// efficient JSON value parser / in-place decoder
   // - as used by JsonDecode() and all internal JSON functions
   // - in respect to standard JSON, it is more relaxed with unquoted names,
@@ -582,44 +556,6 @@ function UrlEncodeJsonObjectBuffer(const UriName: RawUtf8;
 function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
   const PropNamesToIgnore: array of RawUtf8;
   IncludeQueryDelimiter: boolean = true): RawUtf8;
-
-
-/// formats and indents a JSON array or document to the specified layout
-// - just a wrapper around TJsonWriter.AddJsonReformat() method
-// - note that input P buffer won't be modified in-place during conversion
-function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  Preproc: TPreprocAbstract = nil): boolean;
-
-/// formats and indents a JSON array or document to the specified layout
-// - just a wrapper around TJsonWriter.AddJsonReformat() method
-// - all those formats are inter-operable within the JSON data model, i.e. you
-// can call JsonReformat() between any of them and keep all information
-// - in practice, jsonCompact is standard JSON and jsonH is nice for configs
-// - note that json5/jsonH would preserve and normalize the comments, and
-// others will remove them for better interaction
-function JsonReformat(const Json: RawUtf8;
-  Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
-
-/// read a file content, and apply JsonReformat() to normalize it
-function JsonNormalizeFromFile(const FileName: TFileName;
-  Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
-
-/// formats and indents a JSON array or document info a TStream
-// - just a wrapper around TJsonWriter.AddJsonReformat() method
-function JsonBufferReformatToStream(P: PUtf8Char; Dest: TStream;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  Preproc: TPreprocAbstract = nil): boolean;
-
-/// formats and indents a JSON array or document info a file
-// - just a wrapper around TJsonWriter.AddJsonReformat() method
-function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
-  Format: TTextWriterJsonFormat = jsonHumanReadable;
-  Preproc: TPreprocAbstract = nil): boolean;
-
-/// formats and indents a JSON array or document into a file
-function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
-  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
 
 /// convert UTF-8 content into a JSON string
 // - with proper escaping of the content, and surounding " characters
@@ -1005,6 +941,141 @@ type
   end;
   /// meta-class of TJsonWriter
   TJsonWriterClass = class of TJsonWriter;
+
+
+{ ************ JSON Formats Conversion }
+
+type
+  /// event signature for TPreprocAbstract.OnAppend callback - e.g. Reformat()
+  TOnPreprocAppend = function(P: PUtf8Char): boolean of object;
+  /// event signature for TPreprocAbstract.OnVerbatim callback - for $$$ ... $$$
+  TOnPreprocVerbatim = procedure(P: PUtf8Char; Len: PtrInt) of object;
+  /// event signature for TPreprocAbstract.OnAddDebugComment callback
+  TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
+  /// flags used to identify the $(ident) variables stored by TPreprocAbstract
+  TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
+
+  /// abstract class used for JSON or Text pre-processing as $(ident) and $if$
+  // - pre-processing logic is properly implemented in mormot.core.fmt.pas
+  TPreprocAbstract = class(TSynPersistent)
+  protected
+    OnAppend: TOnPreprocAppend;
+    OnVerbatim: TOnPreprocVerbatim;
+    OnAddDebugComment: TOnPreprocAddDebugComment;
+  public
+    /// called with P^=$$ to integrate DSL sections
+    function ParseSection(P: PUtf8Char): PUtf8Char; virtual; abstract;
+    /// called with P^=$ for conditional process
+    function WasIf(var P: PUtf8Char): boolean; virtual; abstract;
+    /// called with P^=$ to recognize $(ident) into Value/Len
+    function Expand(P: PUtf8Char; var Value: PUtf8Char; var Len: PtrInt;
+      KeepMarker: boolean): PUtf8Char; virtual; abstract;
+    /// called with P^=$ to recognize and append $(ident) as plain unescaped text
+    function ExpandTo(P: PUtf8Char; W: TTextWriter): PUtf8Char; virtual; abstract;
+  end;
+
+  // the different states of the TJsonParser logic
+  TJsonParserState = (
+    stObjectName,
+    stObjectValue,
+    stValue,
+    stObjectNameFirst,
+    stValueFirst,
+    stPropName,
+    stPropNameUnquoted);
+  // 8-bit individual TTextWriterJsonFormat features for TJsonParser.Reformat
+  TJsonReformatFlags = set of (
+    jrfIndent,
+    jrfTrailingComma,
+    jrfNoTrailingComma,
+    jrfComments,
+    jrfCommentHash,
+    jrfUnquoteName,
+    jrfUnquoteValue,
+    jrfUnquoteEcmaName);
+
+  /// internal state machine for fast (GB/s) parsing of (extended) JSON input
+  {$ifdef USERECORDWITHMETHODS}
+  TJsonParser = record
+  {$else}
+  TJsonParser = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    {$ifdef CPUX86}
+    JsonSet: PJsonCharSet; // not enough registers in i386 mode
+    {$endif CPUX86}
+    State: TJsonParserState;
+    ExpectStandard: boolean;
+    Fmt: TJsonReformatFlags;
+    FmtJson: TTextWriterJsonFormat;
+    StackCount: integer;
+    JsonFirst: PJsonTokens;
+    Max: PUtf8Char; // checking Max after each comma is good enough
+    W: TJsonWriter;
+    FmtPreproc: TPreprocAbstract;
+    RootCount: integer; // for InitCount or as DSL include depth
+    // 500 nested documents seem enough in practice (SQLite3 uses 1000)
+    Stack: array[0..500] of TJsonParserState;
+    // methods able to jump/count over any JSON value (up to Max)
+    procedure Init(Strict: boolean; PMax: PUtf8Char);
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure InitCount(Strict: boolean; PMax: PUtf8Char;
+      First: TJsonParserState);
+      {$ifdef HASINLINE} inline; {$endif}
+    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
+    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    // methods used by TJsonWriter.DoJsonReformat()
+    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
+      Preproc: TPreprocAbstract);
+    function Reformat(P: PUtf8Char): boolean;
+    procedure ReformatBeginValue;
+    procedure ReformatEndValue;
+    function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
+    function AddMultiLine(P: PUtf8Char): PUtf8Char;
+    procedure AddStartComment;
+    procedure AddDebugComment(const info: ShortString);
+    procedure AddVerbatim(P: PUtf8Char; Len: PtrInt);
+    function PreprocString(P: PUtf8Char): PUtf8Char;
+    function PreprocVar(P: PUtf8Char): PUtf8Char;
+ end;
+
+/// formats and indents a JSON array or document to the specified layout
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
+// - note that input P buffer won't be modified in-place during conversion
+function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  Preproc: TPreprocAbstract = nil): boolean;
+
+/// formats and indents a JSON array or document to the specified layout
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
+// - all those formats are inter-operable within the JSON data model, i.e. you
+// can call JsonReformat() between any of them and keep all information
+// - in practice, jsonCompact is standard JSON and jsonH is nice for configs
+// - note that json5/jsonH would preserve and normalize the comments, and
+// others will remove them for better interaction
+function JsonReformat(const Json: RawUtf8;
+  Format: TTextWriterJsonFormat = jsonHumanReadable): RawUtf8;
+
+/// read a file content, and apply JsonReformat() to normalize it
+function JsonNormalizeFromFile(const FileName: TFileName;
+  Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+
+/// formats and indents a JSON array or document info a TStream
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
+function JsonBufferReformatToStream(P: PUtf8Char; Dest: TStream;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  Preproc: TPreprocAbstract = nil): boolean;
+
+/// formats and indents a JSON array or document info a file
+// - just a wrapper around TJsonWriter.AddJsonReformat() method
+function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
+  Format: TTextWriterJsonFormat = jsonHumanReadable;
+  Preproc: TPreprocAbstract = nil): boolean;
+
+/// formats and indents a JSON array or document into a file
+function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
+  Format: TTextWriterJsonFormat = jsonHumanReadable): boolean;
 
 
 { *********** JSON-aware TSynDictionary Storage }
@@ -2663,72 +2734,8 @@ begin // caller ensured was not a constant nor a number
   result := true; // not a constant, nor a number, until the end
 end;
 
-type
-  // the different states of the TJsonParser logic
-  TJsonParserState = (
-    stObjectName,
-    stObjectValue,
-    stValue,
-    stObjectNameFirst,
-    stValueFirst,
-    stPropName,
-    stPropNameUnquoted);
-  // 8-bit individual TTextWriterJsonFormat features for TJsonParser.Reformat
-  TJsonReformatFlags = set of (
-    jrfIndent,
-    jrfTrailingComma,
-    jrfNoTrailingComma,
-    jrfComments,
-    jrfCommentHash,
-    jrfUnquoteName,
-    jrfUnquoteValue,
-    jrfUnquoteEcmaName);
 
-  /// state machine for fast (GB/s) parsing of (extended) JSON input
-  {$ifdef USERECORDWITHMETHODS}
-  TJsonParser = record
-  {$else}
-  TJsonParser = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    {$ifdef CPUX86}
-    JsonSet: PJsonCharSet; // not enough registers in i386 mode
-    {$endif CPUX86}
-    State: TJsonParserState;
-    ExpectStandard: boolean;
-    Fmt: TJsonReformatFlags;
-    FmtJson: TTextWriterJsonFormat;
-    StackCount: integer;
-    JsonFirst: PJsonTokens;
-    Max: PUtf8Char; // checking Max after each comma is good enough
-    W: TJsonWriter;
-    FmtPreproc: TPreprocAbstract;
-    RootCount: integer; // for InitCount or as DSL include depth
-    // 500 nested documents seem enough in practice (SQLite3 uses 1000)
-    Stack: array[0..500] of TJsonParserState;
-    // methods able to jump/count over any JSON value (up to Max)
-    procedure Init(Strict: boolean; PMax: PUtf8Char);
-      {$ifdef HASINLINE} inline; {$endif}
-    procedure InitCount(Strict: boolean; PMax: PUtf8Char;
-      First: TJsonParserState);
-      {$ifdef HASINLINE} inline; {$endif}
-    function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
-    function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
-      {$ifdef HASINLINE} inline; {$endif}
-    // methods used by TJsonWriter.DoJsonReformat()
-    procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
-      Preproc: TPreprocAbstract);
-    function Reformat(P: PUtf8Char): boolean;
-    procedure ReformatBeginValue;
-    procedure ReformatEndValue;
-    function AddUnquoted(P: PUtf8Char; Len: PtrInt; Ident: boolean): boolean;
-    function AddMultiLine(P: PUtf8Char): PUtf8Char;
-    procedure AddStartComment;
-    procedure AddDebugComment(const info: ShortString);
-    procedure AddVerbatim(P: PUtf8Char; Len: PtrInt);
-    function PreprocString(P: PUtf8Char): PUtf8Char;
-    function PreprocVar(P: PUtf8Char): PUtf8Char;
- end;
+{ TJsonParser - defined here for proper inlining }
 
 procedure TJsonParser.Init(Strict: boolean; PMax: PUtf8Char);
 begin
@@ -4904,74 +4911,6 @@ begin
   QuotedStrJson(pointer(aText), Length(aText), result, '', '');
 end;
 
-function JsonBufferReformatToStream(P: PUtf8Char; Dest: TStream;
-  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
-var
-  temp: TBuffer128K;
-  W: TJsonWriter;
-begin
-  result := false;
-  if (P = nil) or
-     (Dest = nil) then
-    exit;
-  W := TJsonWriter.Create(Dest, @temp, SizeOf(temp));
-  try
-    result := W.AddJsonReformat(P, Format, PreProc);
-    W.FlushFinal;
-  finally
-    W.Free;
-  end;
-end;
-
-function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
-  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
-var
-  S: TRawByteStringStream;
-begin
-  S := TRawByteStringStream.Create;
-  try
-    result := JsonBufferReformatToStream(P, S, Format, Preproc);
-    Dest := S.DataString;
-  finally
-    S.Free;
-  end;
-end;
-
-function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat): RawUtf8;
-begin // no need of temp copy: AddJsonReformat() won't change input Json
-  JsonBufferReformat(pointer(Json), result, Format);
-end;
-
-function JsonNormalizeFromFile(const FileName: TFileName;
-  Format: TTextWriterJsonFormat): RawUtf8;
-begin
-  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format);
-end;
-
-function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
-  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
-var
-  F: TStream;
-begin
-  try
-    F := TFileStreamEx.Create(Dest, fmCreate);
-    try
-      result := JsonBufferReformatToStream(P, F, Format, Preproc);
-    finally
-      F.Free;
-    end;
-  except
-    on Exception do
-      result := false;
-  end;
-end;
-
-function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
-  Format: TTextWriterJsonFormat): boolean;
-begin // no need of temp copy
-  result := JsonBufferReformatToFile(pointer(Json), Dest, Format);
-end;
-
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
 var
   i: PtrInt;
@@ -5174,6 +5113,77 @@ begin
   FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), JsonFormat, result);
 end;
 {$endif PUREMORMOT2}
+
+
+{ ************ JSON Formats Conversion }
+
+function JsonBufferReformatToStream(P: PUtf8Char; Dest: TStream;
+  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
+var
+  temp: TBuffer128K;
+  W: TJsonWriter;
+begin
+  result := false;
+  if (P = nil) or
+     (Dest = nil) then
+    exit;
+  W := TJsonWriter.Create(Dest, @temp, SizeOf(temp));
+  try
+    result := W.AddJsonReformat(P, Format, PreProc);
+    W.FlushFinal;
+  finally
+    W.Free;
+  end;
+end;
+
+function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
+  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
+var
+  S: TRawByteStringStream;
+begin
+  S := TRawByteStringStream.Create;
+  try
+    result := JsonBufferReformatToStream(P, S, Format, Preproc);
+    Dest := S.DataString;
+  finally
+    S.Free;
+  end;
+end;
+
+function JsonReformat(const Json: RawUtf8; Format: TTextWriterJsonFormat): RawUtf8;
+begin // no need of temp copy: AddJsonReformat() won't change input Json
+  JsonBufferReformat(pointer(Json), result, Format);
+end;
+
+function JsonNormalizeFromFile(const FileName: TFileName;
+  Format: TTextWriterJsonFormat): RawUtf8;
+begin
+  JsonBufferReformat(pointer(RawUtf8FromFile(FileName)), result, Format);
+end;
+
+function JsonBufferReformatToFile(P: PUtf8Char; const Dest: TFileName;
+  Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
+var
+  F: TStream;
+begin
+  try
+    F := TFileStreamEx.Create(Dest, fmCreate);
+    try
+      result := JsonBufferReformatToStream(P, F, Format, Preproc);
+    finally
+      F.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
+function JsonReformatToFile(const Json: RawUtf8; const Dest: TFileName;
+  Format: TTextWriterJsonFormat): boolean;
+begin // no need of temp copy
+  result := JsonBufferReformatToFile(pointer(Json), Dest, Format);
+end;
 
 
 { ********** Low-Level JSON Serialization for all TRttiParserType }

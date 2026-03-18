@@ -158,7 +158,8 @@ Low-Level Data Processing Functions shared by all framework units
 
 JSON functions shared by all framework units
 - Low-Level JSON Processing Functions
-- `TTextWriter` class with proper JSON escaping and `WriteObject()` support
+- `TJsonWriter` class with proper JSON escaping and `WriteObject()` support
+- JSON Formats Conversion
 - JSON-aware `TSynDictionary` Storage
 - JSON Unserialization for any kind of Values
 - JSON Serialization Wrapper Functions
