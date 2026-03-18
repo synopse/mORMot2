@@ -943,7 +943,7 @@ var
   ip, rev, u, v, json, sid: RawUtf8;
   o: TAsnObject;
   c: cardinal;
-  withntp: boolean;
+  withntp, kerberosusrpwd: boolean;
   guid: TGuid;
   i, j, k, n: PtrInt;
   dns, clients, a: TRawUtf8DynArray;
@@ -961,6 +961,8 @@ var
   sfs: TSystemFlags;
   l: TLdapClientSettings;
   one: TLdapClient;
+  keytab: RawByteString;
+  keytabfile: TFileName;
   res: TLdapResult;
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
@@ -1469,6 +1471,7 @@ begin
         txt := '';
         if clients[j] = main then
           txt := ' (main)';
+        kerberosusrpwd := false;
         one := TLdapClient.Create;
         try
           one.Settings.TargetUri := clients[j];
@@ -1477,6 +1480,8 @@ begin
             if Executable.Command.Get('ldapusr', usr) and
                Executable.Command.Get('ldappwd', pwd) then
             begin
+              if keytab = '' then
+                keytab := TKerberosKeyTabGenerator.Generate(usr, pwd);
               one.Settings.UserName := usr;
               one.Settings.Password := pwd;
               if Executable.Command.Option('ldaps') then
@@ -1496,8 +1501,11 @@ begin
               else
                 // Windows/SSPI and POSIX/GSSAPI with no prior loggued user
                 if one.BindSaslKerberos('', @ku) then
+                begin
                   AddConsole('connected to % with specific user % = %',
-                    [one.Settings.TargetUri, usr, ku])
+                    [one.Settings.TargetUri, usr, ku]);
+                  kerberosusrpwd := true;
+                end
                 else
                 begin
                   CheckUtf8(false, '% on ldap:% [%]%',
@@ -1546,6 +1554,30 @@ begin
           end;
         finally
           one.Free;
+        end;
+        if kerberosusrpwd then
+        begin
+          Check(keytab <> '', 'keytab?');
+          Check(BufferIsKeyTab(keytab), 'keytab!');
+          keytabfile := TemporaryFileName;
+          FileFromString(keytab, keytabfile);
+          CheckEqual(FileIsKeyTabMachineAccountPrincipal(keytabfile, true), usr);
+          {$ifdef OSPOSIX}
+          one := TLdapClient.Create;
+          try
+            one.Settings.TargetUri := clients[j];
+            //one.Settings.UserName := usr;        // user from keytab
+            //one.Settings.KerberosDN := dns[i];   // DN from keytab
+            one.Settings.Password := Make(['FILE:', keytabfile]);
+            ku := '';
+            Check(one.BindSaslKerberos('', @ku), 'Bind keytab');
+            AddConsole('connected via keytab to % with specific user % = %',
+              [one.Settings.TargetUri, usr, ku]);
+          finally
+            one.Free;
+          end;
+          {$endif OSPOSIX}
+          DeleteFile(keytabfile);
         end;
       end;
     end;
