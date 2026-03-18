@@ -1954,7 +1954,7 @@ type
     /// remove an entry in the internal KeyTab list
     function Delete(aIndex: PtrUInt): boolean;
     /// returns the first Entry[].Principal in the form HOSTNAME$@REALM
-    function MachineAccountPrincipal: RawUtf8;
+    function MachineAccountPrincipal(FallbackToFirst: boolean = false): RawUtf8;
     /// persist this KeyTab list as a memory buffer
     function SaveToBinary: RawByteString;
     /// persist this KeyTab list as a local file
@@ -1978,7 +1978,8 @@ function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
 function FileIsKeyTab(const aKeytab: TFileName): boolean;
 
 /// returns the first Principal in the form HOSTNAME$@REALM of a given keytab file
-function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName): RawUtf8;
+function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
+  aFallbackToFirst: boolean = false): RawUtf8;
 
 /// check if a file is a valid Kerberos keytab, and return its entries
 // - so that you could write e.g. for entry in FileIsKeyTabEntries() do ...
@@ -5853,7 +5854,8 @@ begin
   result := TKerberosKeyTab(nil).LoadFromFile(aKeyTab); // fast with self=nil
 end;
 
-function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName): RawUtf8;
+function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
+  aFallbackToFirst: boolean): RawUtf8;
 var
   kt: TKerberosKeyTab;
 begin
@@ -5861,7 +5863,7 @@ begin
   kt := TKerberosKeyTab.Create;
   try
     if kt.LoadFromFile(aKeyTab) then
-      result := kt.MachineAccountPrincipal;
+      result := kt.MachineAccountPrincipal(aFallbackToFirst);
   finally
     kt.Free;
   end;
@@ -6138,18 +6140,29 @@ begin
     DynArrayFakeDelete(fEntry, aIndex, n, SizeOf(fEntry[n]));
 end;
 
-function TKerberosKeyTab.MachineAccountPrincipal: RawUtf8;
+function TKerberosKeyTab.MachineAccountPrincipal(FallbackToFirst: boolean): RawUtf8;
 var
-  i: PtrInt;
+  n: integer;
+  e: ^TKerberosKeyEntry;
 begin
-  if self <> nil then
-    for i := 0 to length(fEntry) - 1 do
-      if PosEx('$@', fEntry[i].Principal) <> 0 then
-      begin
-        result := fEntry[i].Principal;
-        exit;
-      end;
   result := '';
+  if self = nil then
+    exit;
+  e := pointer(fEntry);
+  if e = nil then
+    exit;
+  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+  repeat
+    if PosEx('$@', e^.Principal) <> 0 then
+    begin
+      result := e^.Principal;
+      exit;
+    end;
+    inc(e);
+    dec(n);
+  until n = 0;
+  if FallbackToFirst then
+    result := fEntry[0].Principal;
 end;
 
 function TKerberosKeyTab.SaveToBinary: RawByteString;
