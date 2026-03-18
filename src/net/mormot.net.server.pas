@@ -7721,29 +7721,41 @@ begin
 end;
 
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
-var
-  algoext: PUtf8Char;
-  algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
 begin
   result[0] := #0;
   if msg.Kind > high(msg.Kind) then
     exit; // clearly invalid message
-  algoext := nil;
-  algohex[0] := #0;
-  if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
+  result := ToText(msg.Kind)^;
+  AppendShortTwoChars(ord(' ') + ord('#') shl 8, @result);
+  AppendShortIntHex(msg.Seq, result);
+  AppendShortChar(' ', @result);
+  AppendShortChar(OS_INITIAL[msg.Os.os], @result);
+  AppendShortChar(' ', @result);
+  AppendShort(OsvToShort(msg.Os)^, result);
+  AppendOsBuild(msg.Os, @result, ' ');
+  AppendShortChar(' ', @result);
+  AppendShortChar(MAK_TXT[msg.Hardware], @result);
+  AppendShortChar(' ', @result);
+  AppendShortIp4(@msg.IP4, @result, ' ');
+  AppendShort('to ', result);
+  AppendShortIp4(@msg.DestIP4, @result, ' ');
+  AppendShortIp4(@msg.MaskIP4, @result, ' ');
+  AppendShortIp4(@msg.BroadcastIP4, @result, ' ');
+  AppendShortCardinal(msg.Speed, result);
+  AppendShort('Mb/s ', result);
+  AppendShort(UnixTimeToFileShort(QWord(msg.Timestamp) + UNIXTIME_MINIMAL), result);
+  if (msg.Hash.Algo <= high(msg.Hash.Algo)) and
+     not IsZero(@msg.Hash.Bin.b, HASH_SIZE[msg.Hash.Algo]) then
   begin
-    BinToHexLower(@msg.Hash.Bin, @algohex[1], HASH_SIZE[msg.Hash.Algo]);
-    algohex[0] := AnsiChar(HASH_SIZE[msg.Hash.Algo] * 2);
-    algoext := pointer(HASH_EXT[msg.Hash.Algo]);
+    AppendShortChar(' ', @result); // append e.g. ' xxxHexaHashxxx.sha256'
+    AppendShortHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo], result);
+    AppendShortAnsi7String(HASH_EXT[msg.Hash.Algo], result);
   end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
-  with msg do
-    FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
-      [ToText(Kind)^, CardinalToHexShort(Seq), OS_INITIAL[Os.os],
-       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
-       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
-       IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
-       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
-       algohex, algoext, Size, Connections], result);
+  AppendShort(' siz=', result);
+  AppendShortCardinal(msg.Size, result);
+  AppendShort(' con=', result);
+  AppendShortCardinal(msg.Connections, result);
+  AppendShortCharSafe(' ', result);
   AppendShortUuid(msg.Uuid, result);
 end;
 
