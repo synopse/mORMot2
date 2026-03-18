@@ -94,8 +94,8 @@ Text Processing functions shared by all framework units
 - CSV-like Iterations over Text Buffers
 - `TTextWriter` parent class for Text Generation
 - Numbers (integers or floats) and Variants to Text Conversion
-- Text Formatting functions
-- Resource and Time Functions
+- Text Formatting Functions
+- Size and Elapsed Time to Text Conversion
 - HTTP/REST Common Headers Parsing (e.g. cookies)
 - `ESynException` class
 - Hexadecimal Text And Binary Conversion

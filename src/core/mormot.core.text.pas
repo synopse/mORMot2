@@ -10,8 +10,8 @@ unit mormot.core.text;
     - CSV-like Iterations over Text Buffers
     - TTextWriter parent class for Text Generation
     - Numbers (integers or floats) and Variants to Text Conversion
-    - Text Formatting functions
-    - Resource and Time Functions
+    - Text Formatting Functions
+    - Size and Elapsed Time to Text Conversion
     - ESynException class
     - HTTP/REST Common Headers Parsing (e.g. cookies)
     - Hexadecimal Text And Binary Conversion
@@ -2095,7 +2095,7 @@ function RandomIdentifier(CharCount: integer): RawUtf8;
 function RandomUri(CharCount: integer): RawUtf8;
 
 
-{ ************ Resource and Time Functions }
+{ ************ Size and Elapsed Time to Text Conversion }
 
 /// convert a size to a human readable value
 // - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
@@ -10394,7 +10394,7 @@ begin
 end;
 
 
-{ ************ Resource and Time Functions }
+{ ************ Size and Elapsed Time to Text Conversion }
 
 function KB(bytes: Int64; nospace: boolean): TShort16;
 begin
