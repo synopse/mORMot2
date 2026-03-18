@@ -23,11 +23,12 @@ Basic types and reusable stand-alone functions shared by all framework units
 - Integer Arrays Manipulation
 - `ObjArray` `PtrArray` `InterfaceArray` Wrapper Functions
 - Low-level Types Mapping Binary or Bits Structures
+- Low-level CPU Detection and Intrinsics
+- Faster Alternative to RTL Standard Functions
 - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
 - Efficient `Variant` Values Conversion
 - Sorting/Comparison Functions
 - Some Convenient `TStream` descendants and File access functions
-- Faster Alternative to RTL Standard Functions
 - Raw Shared Types Definitions
 
 Aim of those types and functions is to be cross-platform and cross-compiler, without any dependency but the main FPC/Delphi RTL. It also detects the kind of Intel/AMD it runs on, to adapt to the fastest asm version available. It is the main unit where x86_64 or i386 asm stubs are included.
