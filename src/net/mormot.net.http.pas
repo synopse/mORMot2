@@ -181,7 +181,7 @@ procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 
 /// 'HEAD' and 'OPTIONS' methods would be detected and return true
-// - will check only the first four chars for efficiency
+// - will check only the first four chars for efficiency  - requires method <> ''
 function HttpMethodWithNoBody(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -189,29 +189,29 @@ function HttpMethodWithNoBody(const method: RawUtf8): boolean;
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
-/// quick check for case-sensitive 'GET' HTTP method name
+/// quick check for case-sensitive 'GET' HTTP method name - requires method <> ''
 // - see also HttpMethodWithNoBody()
 function IsGet(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'HEAD' HTTP method name
+/// quick check for case-sensitive 'HEAD' HTTP method name - requires method <> ''
 // - see also HttpMethodWithNoBody()
 function IsHead(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'POST' HTTP method name
+/// quick check for case-sensitive 'POST' HTTP method name - requires method <> ''
 function IsPost(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'PUT' HTTP method name
+/// quick check for case-sensitive 'PUT' HTTP method name - requires method <> ''
 function IsPut(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'DELETE' HTTP method name
+/// quick check for case-sensitive 'DELETE' HTTP method name - requires method <> ''
 function IsDelete(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'OPTIONS' HTTP method name
+/// quick check for case-sensitive 'OPTIONS' HTTP method name - requires method <> ''
 function IsOptions(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 

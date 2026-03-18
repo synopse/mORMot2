@@ -1025,7 +1025,7 @@ type
     function GotoEnd(P: PUtf8Char): PUtf8Char; overload;
     function GotoEnd(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    // methods used by TJsonWriter.DoJsonReformat()
+    // methods used by TJsonWriter.AddJsonReformat()
     procedure InitReformat(JsonFmt: TTextWriterJsonFormat; Writer: TJsonWriter;
       Preproc: TPreprocAbstract);
     function Reformat(P: PUtf8Char): boolean;
@@ -3166,11 +3166,11 @@ begin
     tmp.buf := nil;    // P^ is already #0 terminated - no tmp.Done needed
   bak := FmtPreproc;
   try
-    FmtPreproc := nil; // no pre-processing, only plain JsonReformat()
+    FmtPreproc := nil; // no pre-processing, only plain Reformat()
     Reformat(P);
   finally
     FmtPreproc := bak; // the pre-processor is back
-    tmp.Done;          // unlikely transient memory allocation
+    tmp.Done;          // clean (unlikely) transient memory allocation
   end;
 end;
 
@@ -3370,7 +3370,7 @@ dquote:   ReformatBeginValue;
         end;
       jtDollar:
         if FmtPreproc = nil then
-          goto ident0
+          goto ident0                     // pure Reformat() - no pre-processing
         else if P[1] = '$' then
           P := FmtPreproc.ParseSection(P) // $$ ... $$ section: include + vars
         else if P[1] = '"' then
@@ -3413,7 +3413,7 @@ ident:    Value := P;
             W.AddCRAndIndent;
           if State = stValueFirst then
             State := stValue;
-          Stack[StackCount] := State;
+          Stack[StackCount] := State; // a Stack[] is faster than recursion
           inc(StackCount);
           inc(W.fHumanReadableLevel);
           if FmtJson = jsonMorml then // no need of ,{ ,[ :{ or :[
@@ -6947,7 +6947,7 @@ end;
 function TJsonWriter.AddJsonReformat(Json: PUtf8Char;
   Format: TTextWriterJsonFormat; Preproc: TObject): boolean;
 var
-  parser: TJsonParser; // reuse the GotoEnd state machine
+  parser: TJsonParser; // reuse the GotoEnd very efficient state machine
   start: PUtf8Char;    // Hjson assume an implicit object
 begin
   result := false;
