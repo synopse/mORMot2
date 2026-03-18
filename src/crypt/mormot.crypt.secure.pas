@@ -3873,6 +3873,10 @@ type
       aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
       aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
       aIterations: integer = 0): boolean;
+    /// compute a binary KeyTab with one entry with supplied credentials
+    class function Generate(const aPrincipal: RawUtf8; const aPassword: SpiUtf8;
+      aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
+      aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96): RawByteString;
   end;
 
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
@@ -10739,6 +10743,22 @@ begin
               aIsComputer, aEncType, aIterations) and
             Add(e);
   FillZero(e.Key); // anti-forensic
+end;
+
+class function TKerberosKeyTabGenerator.Generate(const aPrincipal: RawUtf8;
+  const aPassword: SpiUtf8; aIsComputer: boolean; const aSalt: RawUtf8;
+  aEncType: integer): RawByteString;
+var
+  gen: TKerberosKeyTabGenerator;
+begin
+  result := '';
+  gen := TKerberosKeyTabGenerator.Create;
+  try
+    if gen.AddNew(aPrincipal, aPassword, aIsComputer, aSalt, aEncType) then
+      result := gen.SaveToBinary;
+  finally
+    gen.Free;
+  end;
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
