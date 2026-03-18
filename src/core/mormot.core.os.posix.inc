@@ -4832,16 +4832,18 @@ end;
 const getpagesize = 4096; // ARM32/i386 have no getpagesize in clib :(
 {$else}
 // we used to hardcode this to 4096 on Android, but Android 15 uses 16KB
-function getpagesize: integer; cdecl external clib name 'getpagesize';
+function getpagesize: integer;
+  cdecl external clib name 'getpagesize';
 {$endif CPU32}
 
-{$else}
-function getpagesize: integer; cdecl external clib name 'getpagesize';
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
 
-function get_nprocs: integer;
+function getpagesize: integer;
+  cdecl external clib name 'getpagesize';
+
+function get_nprocs: integer; // fallback on limited /proc/cpuinfo content
   cdecl external clib name 'get_nprocs';
 
 procedure SetLinuxDistrib(const release: RawUtf8);
@@ -5110,6 +5112,7 @@ begin
   modnum := nil;
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
+  SystemInfo.dwPageSize := fpsysctlhwint(HW_PAGESIZE);
   beg := fpsysctlhwstr(HW_MACHINE, temp1);
   {$ifdef OSDARWIN}
   SystemInfo.dwNumberOfProcessors := fpsysctlbynameint('hw.logicalcpu');
@@ -5318,8 +5321,8 @@ begin
     CpuCacheSize := CpuCacheSize shl cacheshr;
   end;
   SystemInfo.release := release;
+  SystemInfo.dwPageSize := getpagesize; // call libc API on Linux/Android
   {$endif OSBSDDARWIN}
-  SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
   begin
     _fmt('[%s]', [KBNoSpace(CpuCacheSize)], CpuInfoText);
