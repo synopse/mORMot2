@@ -266,6 +266,9 @@ function GetNextRange(var P: PUtf8Char): Qword;
 procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// append an IPv4 as '"name":"1.2.3.4"' JSON string
+procedure AddJsonWriterPropIP4(W: TTextWriter; const name: ShortString; ip4: pointer);
+
 const
   /// pseudo-header containing the current Synopse mORMot framework version
   XPOWEREDNAME = 'X-Powered-By';
@@ -3187,6 +3190,15 @@ begin
   P^ := '"';
   W.B := pointer(IP4TextAppend(ip4, pointer(P + 1)));
   W.B^ := '"';
+end;
+
+procedure AddJsonWriterPropIP4(W: TTextWriter; const name: ShortString; ip4: pointer);
+begin
+  if PCardinal(ip4)^ = 0 then
+    exit;
+  W.AddProp(@name[1], ord(name[0]));
+  AddJsonWriterIP4(W, ip4);
+  W.AddComma;
 end;
 
 
