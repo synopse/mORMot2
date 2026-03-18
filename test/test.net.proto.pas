@@ -3553,6 +3553,35 @@ begin
   end;
 end;
 
+function MsgToText(const msg: THttpPeerCacheMessage): RawUtf8; // reference code
+var
+  algoext: PUtf8Char;
+  algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
+  tmp: ShortString;
+begin
+  tmp[0] := #0;
+  if msg.Kind > high(msg.Kind) then
+    exit; // clearly invalid message
+  algoext := nil;
+  algohex[0] := #0;
+  if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
+  begin
+    BinToHexLower(@msg.Hash.Bin, @algohex[1], HASH_SIZE[msg.Hash.Algo]);
+    algohex[0] := AnsiChar(HASH_SIZE[msg.Hash.Algo] * 2);
+    algoext := pointer(HASH_EXT[msg.Hash.Algo]);
+  end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
+  with msg do
+    FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
+      [ToText(Kind)^, CardinalToHexLower(Seq), OS_INITIAL[Os.os],
+       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
+       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
+       IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
+       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
+       algohex, algoext, Size, Connections], tmp);
+  AppendShortUuid(msg.Uuid, tmp);
+  result := ShortStringToUtf8(tmp);
+end;
+
 procedure TNetworkProtocols._THttpPeerCache;
 var
   hpc: THttpPeerCacheHook;
@@ -3650,6 +3679,7 @@ begin
           m := RawUtf8(ToText(msg));
           m2 := RawUtf8(ToText(msg2));
           CheckEqual(m, m2);
+          CheckEqual(m, MsgToText(msg));
           // validate UDP messages alteration (quick CRC identification)
           timer.Start;
           n := 10000;
