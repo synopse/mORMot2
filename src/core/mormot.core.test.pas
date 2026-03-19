@@ -30,6 +30,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.perf,
   mormot.core.log,
   mormot.core.threads,
@@ -176,7 +177,7 @@ type
     procedure AddLog(condition: boolean; const msg: string);
     procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const);
-    procedure DoFailedEqual(const a, b, msg: RawUtf8);
+    procedure FailedCheckEqual(const a, b, msg: RawUtf8);
     procedure OnBeforeEachBackgroundTask(Sender: TObject);
   public
     /// create the test case instance
@@ -889,13 +890,35 @@ begin
     TestFailed(str{%H-});
 end;
 
-procedure TSynTestCase.DoFailedEqual(const a, b, msg: RawUtf8);
+procedure TSynTestCase.FailedCheckEqual(const a, b, msg: RawUtf8);
 var
-  str: string;
+  tmp: RawUtf8;
+  pa, pb: PAnsiChar;
+  start: PtrInt;
 begin
   if HasConsole then
   begin
-    ConsoleWrite(EQUAL_MSG, [a, b, msg], LOG_CONSOLE_COLORS[sllFail]);
+    tmp := Make(['CheckEqual ', msg, ' len a=', length(a), ' b=', length(b), CRLF]);
+    if length(a) > 200 then
+    begin
+      // big strings should move to the first diff location, and escape output
+      start := 0;
+      pa := pointer(a);
+      pb := pointer(b);
+      while pa[start] = pb[start] do
+        inc(start);
+      dec(start, 20);
+      if start < 50 then
+        start := 0
+      else
+        Append(tmp, ['truncated first=', start, CRLF]);
+      Append(tmp, [EscapeToShort(pa + start, length(a) - start), CRLF,
+                   EscapeToShort(pb + start, length(b) - start), CRLF]);
+    end
+    else
+      // small strings could be written as pascal constants for copy & paste
+      Append(tmp, [TextToSource(a), TextToSource(b)]);
+    ConsoleWrite(tmp, LOG_CONSOLE_COLORS[sllFail], {nolf=}true);
   end;
   TestFailed(EQUAL_MSG, [a, b, msg], {notify=}false);
 end;
@@ -931,7 +954,7 @@ begin
   inc(fAssertions);
   result := SortDynArrayRawByteString(a, b) = 0;
   if not result then
-    DoFailedEqual(a, b, msg)
+    FailedCheckEqual(a, b, msg)
   else if tcoLogEachCheck in fOptions then
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
