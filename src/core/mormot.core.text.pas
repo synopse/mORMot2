@@ -554,7 +554,7 @@ type
     fFlags: TTextWriterFlags;
     function GetTextLength: Int64;
     procedure SetStream(aStream: TStream);
-    procedure SetBuffer(aBuf: pointer; aBufSize: integer);
+    procedure SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
@@ -575,25 +575,25 @@ type
     // - aStream may be nil: in this case, it MUST be set before using any
     // Add*() method
     // - default internal buffer size if 8192
-    constructor Create(aStream: TStream; aBufSize: integer = 8192); overload;
+    constructor Create(aStream: TStream; aBufSize: PtrUInt = 8192); overload;
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
     // Add*() method
     // - will use an external buffer (which may be allocated on stack)
-    constructor Create(aStream: TStream; aBuf: pointer; aBufSize: integer); overload;
+    constructor Create(aStream: TStream; aBuf: pointer; aBufSize: PtrUInt); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - default internal buffer size if 4096 (enough for most JSON objects)
     // - consider using a stack-allocated buffer and the overloaded method
-    constructor CreateOwnedStream(aBufSize: integer = 4096;
+    constructor CreateOwnedStream(aBufSize: PtrUInt = 4096;
       NoSharedStream: boolean = false); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use an external buffer (which may be allocated on stack)
-    constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer;
+    constructor CreateOwnedStream(aBuf: pointer; aBufSize: PtrUInt;
       NoSharedStream: boolean = false); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer if possible
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-      aBufSize: integer; NoSharedStream: boolean = false); overload;
+      aBufSize: PtrUInt; NoSharedStream: boolean = false); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
@@ -602,7 +602,7 @@ type
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
     constructor CreateOwnedFileStream(const aFileName: TFileName;
-      aBufSize: integer = 16384);
+      aBufSize: PtrUInt = 16384);
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
@@ -4101,16 +4101,19 @@ end;
 
 { TTextWriter }
 
+const
+  TRAIL_BYTES = 16; // TTextWriter.BEnd before actual buffer ending
+
 procedure TTextWriter.InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
 begin
   fTempBufSize := aBufSize;
   fTempBuf := aBuf;
   dec(aBuf);
   B := aBuf;   // Add() methods will append at B+1
-  BEnd := @aBuf[aBufSize - 15]; // BEnd := B+size-16 to avoid overwrite/overread
+  BEnd := @aBuf[aBufSize - (TRAIL_BYTES - 1)]; // to avoid overwrite/overread
 end;
 
-constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
+constructor TTextWriter.Create(aStream: TStream; aBufSize: PtrUInt);
 begin
   SetStream(aStream);
   if aBufSize < 256 then
@@ -4118,7 +4121,7 @@ begin
   SetBuffer(nil, aBufSize);
 end;
 
-constructor TTextWriter.Create(aStream: TStream; aBuf: pointer; aBufSize: integer);
+constructor TTextWriter.Create(aStream: TStream; aBuf: pointer; aBufSize: PtrUInt);
 begin
   SetStream(aStream);
   SetBuffer(aBuf, aBufSize);
@@ -4129,7 +4132,7 @@ var
   TextWriterSharedStream: TRawByteStringStream;
 
 constructor TTextWriter.CreateOwnedStream(
-  aBuf: pointer; aBufSize: integer; NoSharedStream: boolean);
+  aBuf: pointer; aBufSize: PtrUInt; NoSharedStream: boolean);
 begin
   if (not NoSharedStream) and TextWriterSharedStreamSafe.TryLock then
     fStream := TextWriterSharedStream
@@ -4139,13 +4142,13 @@ begin
   SetBuffer(aBuf, aBufSize); // aBuf may be nil
 end;
 
-constructor TTextWriter.CreateOwnedStream(aBufSize: integer; NoSharedStream: boolean);
+constructor TTextWriter.CreateOwnedStream(aBufSize: PtrUInt; NoSharedStream: boolean);
 begin
   CreateOwnedStream(nil, aBufSize, NoSharedStream);
 end;
 
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-  aBufSize: integer; NoSharedStream: boolean);
+  aBufSize: PtrUInt; NoSharedStream: boolean);
 begin
   if aBufSize > SizeOf(aStackBuf) then // temp too small -> allocate on heap
     CreateOwnedStream(nil, aBufSize, NoSharedStream)
@@ -4165,7 +4168,7 @@ begin
 end;
 
 constructor TTextWriter.CreateOwnedFileStream(
-  const aFileName: TFileName; aBufSize: integer);
+  const aFileName: TFileName; aBufSize: PtrUInt);
 begin
   DeleteFile(aFileName);
   fStream := TFileStreamEx.Create(aFileName, fmCreate or fmShareRead);
@@ -4427,7 +4430,7 @@ end;
 function TTextWriter.AddPrepare(Len: PtrInt): pointer;
 begin
   result := nil;
-  if Len >= fTempBufSize - 16 then
+  if Len >= fTempBufSize - TRAIL_BYTES then
     exit;
   if BEnd - B <= Len then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
@@ -4492,9 +4495,9 @@ begin
     result := PtrInt(B - fTempBuf + 1) + fWrittenBytes - fInitialStreamPosition;
 end;
 
-procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
+procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
 begin
-  if aBufSize <= 16 then
+  if aBufSize <= TRAIL_BYTES then
     ESynException.RaiseUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
   if aBuf = nil then
     GetMem(aBuf, aBufSize)
@@ -4565,7 +4568,7 @@ begin
   else
     FreeMem(fTempBuf); // no need to realloc/move the previous (written) buffer
   GetMem(fTempBuf, fTempBufSize);
-  BEnd := fTempBuf + (fTempBufSize - 16); // as in SetBuffer()
+  BEnd := fTempBuf + (fTempBufSize - TRAIL_BYTES); // as in SetBuffer()
   B := fTempBuf - 1;
 end;
 
@@ -5205,7 +5208,7 @@ begin
       repeat
         D := B + 1;
         direct := BEnd - D; // guess biggest size available in fTempBuf at once
-        if direct > 0 then  // 0..-15 may happen because Add up to BEnd + 16
+        if direct > 0 then  // 0..-15 may happen because Add up to TRAIL_BYTES
         begin
           if Len < direct then
             direct := Len;
