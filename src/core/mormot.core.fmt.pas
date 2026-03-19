@@ -621,6 +621,9 @@ procedure TextToSource(Dest: TTextWriter; P: PUtf8Char; const LF: ShortString); 
 /// generate some pascal source code string constant from UTF-8 text
 function TextToSource(const Text: RawUtf8; LF: TLineFeed = lfSystem): RawUtf8; overload;
 
+/// generate some pascal source code string constant from UTF-8 text
+function TextToSourceShort(const Text: RawUtf8; LF: TLineFeed = lfSystem): ShortString; overload;
+
 
 implementation
 
@@ -3481,7 +3484,7 @@ begin
   if jppDebugComment in Options then
   begin
     OnAddDebugComment := TextComment;
-    // preserve line feed for TextComment()
+    // detect the first source line feed for proper TextComment() mimics
     B := P;
     while not (P ^ in [#0, #10, #13]) do
       inc(P);
@@ -3681,10 +3684,13 @@ begin
       AppendShortChar('''', @line);
       inquote := not inquote;
     end;
-    if P^ >= ' ' then
-      AppendShortChar(P^, @line)
+    if P^ in [#32 .. #126] then
+      if P^ = '''' then
+        AppendShortTwoChars(ord('''') + ord('''') shl 8, @line)
+      else
+        AppendShortChar(P^, @line)
     else
-    begin
+    begin // control chars or 8-bit high values (may not be true UTF-8)
       AppendShortChar('#', @line);
       AppendShortByte(ord(P^), @line);
     end;
@@ -3713,6 +3719,17 @@ begin
   finally
     W.Free;
   end;
+end;
+
+function TextToSourceShort(const Text: RawUtf8; LF: TLineFeed): ShortString;
+var
+  W: TTextWriter;
+  temp: ShortString;
+begin
+  W := TTextWriter.CreateOwnedShort(result, temp);
+  TextToSource(W, pointer(Text), LINE_FEED[LF]);
+  W.FlushFinal;
+  W.Free;
 end;
 
 
