@@ -3647,6 +3647,12 @@ function IsDebuggerPresent: BOOL; stdcall;
 function IsDebuggerPresent: boolean;
 {$endif ODWINDOWS}
 
+/// on Delphi Wintel, trigger the IDE debugger - do nothing on FPC/Lazarus
+// - you can force this function to do nothing by setting the NOSETTHREADNAME
+// conditional, if you have issues with this feature when debugging your app
+procedure DebuggerBreak;
+  {$ifdef FPC} inline; {$endif} // Lazarus does not like "int 3" anyway
+
 /// return the time and memory usage information about a given process
 // - under Windows, is a wrapper around GetProcessTimes/GetProcessMemoryInfo
 // - on POSIX, is not implemented yet, and return false

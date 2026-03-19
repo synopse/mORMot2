@@ -3681,6 +3681,10 @@ begin
   result := fIsDebuggerPresent in _F0;
 end;
 
+procedure DebuggerBreak; // unsupported outside Delphi Wintel
+begin
+end;
+
 {$ifdef OSDARWIN}
 {$if defined(cpuarm) or defined(cpuaarch64) or defined(iphonesim)}
 const // FPC RTL defined wrong field lengths for TStatfs in darwin/ptypes.inc

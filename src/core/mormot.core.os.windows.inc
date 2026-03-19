@@ -1523,18 +1523,22 @@ begin
   result := false;
 end;
 
-
-{$ifdef FPC}
-  {$define NOSETTHREADNAME} // only tested and supported on Delphi
-{$endif FPC}
+// thread naming and "int 3" debug opcode only validated on Delphi Wintel
+{$ifndef WINTELDELPHI}
+  {$define NOSETTHREADNAME}
+{$endif WINTELDELPHI}
 
 const
   // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
   cSetThreadNameException = $406D1388;
 
-{$ifdef NOSETTHREADNAME}
+{$ifdef NOSETTHREADNAME} // only available on Delphi Wintel
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
+begin
+end;
+
+procedure DebuggerBreak;
 begin
 end;
 
@@ -1569,6 +1573,11 @@ begin
     {ignore}
   end;
   {$endif ISDELPHIXE2}
+end;
+
+procedure DebuggerBreak;
+asm
+    int  3
 end;
 
 {$endif NOSETTHREADNAME}
