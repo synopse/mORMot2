@@ -176,6 +176,7 @@ type
     procedure AddLog(condition: boolean; const msg: string);
     procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const);
+    procedure DoFailedEqual(const a, b, msg: RawUtf8);
     procedure OnBeforeEachBackgroundTask(Sender: TObject);
   public
     /// create the test case instance
@@ -307,9 +308,10 @@ type
     procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60;
       CallSynchronize: boolean = true);
     /// this method is triggered internally - e.g. by Check() - when a test failed
-    procedure TestFailed(const msg: string); overload;
+    procedure TestFailed(const msg: string; notify: boolean = false); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
-    procedure TestFailed(const msg: RawUtf8; const args: array of const); overload;
+    procedure TestFailed(const msg: RawUtf8; const args: array of const;
+      notify: boolean = false); overload;
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
@@ -486,7 +488,7 @@ type
     function Run: boolean; virtual;
     /// could be overriden to redirect the content to proper TSynLog.Log()
     procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
-      const TextArgs: array of const); virtual;
+      const TextArgs: array of const; DoDebuggerNotify: boolean = false); virtual;
     /// method information currently running
     // - is set by Run and available within TTestCase methods
     function CurrentMethodInfo: PSynTestMethodInfo;
@@ -831,7 +833,7 @@ begin
   end
   else
     fCheckLastMsg := 0;
-  fOwner.DoLog(LEV[condition], '%', [msg]);
+  fOwner.DoLog(LEV[condition], '%', [msg], {notify=}not condition);
 end;
 
 procedure TSynTestCase.Check(condition: boolean; const msg: string);
@@ -887,6 +889,17 @@ begin
     TestFailed(str{%H-});
 end;
 
+procedure TSynTestCase.DoFailedEqual(const a, b, msg: RawUtf8);
+var
+  str: string;
+begin
+  if HasConsole then
+  begin
+    ConsoleWrite(EQUAL_MSG, [a, b, msg], LOG_CONSOLE_COLORS[sllFail]);
+  end;
+  TestFailed(EQUAL_MSG, [a, b, msg], {notify=}false);
+end;
+
 procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
   const args: array of const);
 begin
@@ -917,8 +930,9 @@ function TSynTestCase.CheckEqual(const a, b: RawByteString; const msg: RawUtf8):
 begin
   inc(fAssertions);
   result := SortDynArrayRawByteString(a, b) = 0;
-  if not result or
-     (tcoLogEachCheck in fOptions) then
+  if not result then
+    DoFailedEqual(a, b, msg)
+  else if tcoLogEachCheck in fOptions then
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
@@ -1240,22 +1254,28 @@ begin
     NotifyProgress([timer.Stop]);
 end;
 
-procedure TSynTestCase.TestFailed(const msg: string);
+procedure TSynTestCase.TestFailed(const msg: string; notify: boolean);
 begin
   fOwner.fSafe.Lock; // protect when Check() is done from multiple threads
   try
-    fOwner.DoLog(sllFail, '#% %', [fAssertions - fAssertionsBeforeRun, msg]);
+    fOwner.DoLog(sllFail, '#% %', [fAssertions - fAssertionsBeforeRun, msg], notify);
     if Owner <> nil then // avoid GPF
       Owner.AddFailed(msg);
     inc(fAssertionsFailed);
   finally
     fOwner.fSafe.UnLock;
   end;
+  {$ifdef WINTELDELPHI}
+  if not notify and
+     IsDebuggerPresent then
+    DebuggerBreak;
+  {$endif WINTELDELPHI}
 end;
 
-procedure TSynTestCase.TestFailed(const msg: RawUtf8; const args: array of const);
+procedure TSynTestCase.TestFailed(const msg: RawUtf8; const args: array of const;
+  notify: boolean);
 begin
-  fOwner.DoLog(sllFail, msg, Args);
+  fOwner.DoLog(sllFail, msg, Args, notify);
 end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
@@ -1440,7 +1460,7 @@ begin
 end;
 
 procedure TSynTests.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
-  const TextArgs: array of const);
+  const TextArgs: array of const; DoDebuggerNotify: boolean);
 var
   txt: RawUtf8;
 begin
@@ -1451,7 +1471,7 @@ begin
   FormatUtf8(TextFmt, TextArgs, txt);
   if _CurrentMethodInfo <> nil then
     Prepend(txt, [_CurrentMethodInfo^.TestName, ': ']);
-  if Level = sllFail then
+  if DoDebuggerNotify then
     TSynLogTestLog.DebuggerNotify(Level, txt)
   else
     TSynLogTestLog.Add.Log(Level, txt)
