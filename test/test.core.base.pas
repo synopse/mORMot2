@@ -6510,7 +6510,8 @@ begin
       end;
     except
       on E: Exception do
-        CheckUtf8(false, '% for %[%]%', [E, length(U), EscapeToShort(U), length(up4)]);
+        CheckUtf8(false, '% for %[%]%',
+          [E, length(U), EscapeToShort(U), length(up4)]);
     end;
     U2 := LowerCase(U);
     Check(IsLower(U2));

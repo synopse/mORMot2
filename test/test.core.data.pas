@@ -4715,6 +4715,15 @@ begin
   CheckEqual(TextToSource('ab'#7, lfLF), '  ''ab''#7'#10);
   CheckEqual(TextToSource('ab'#7'cd', lfLF), '  ''ab''#7''cd'''#10);
   CheckEqual(TextToSource('ab'#7'cd'#1, lfLF), '  ''ab''#7''cd''#1'#10);
+  CheckEqual(TextToSource('ab'#7'cd'#1'e''f'#13#10, lfLF),
+    '  ''ab''#7''cd''#1''e''''f''#13#10'#10);
+  CheckEqualShort(TextToSourceShort(''), '');
+  CheckEqualShort(TextToSourceShort('ab', lfLF), '  ''ab'''#10);
+  CheckEqualShort(TextToSourceShort('ab'#7, lfLF), '  ''ab''#7'#10);
+  CheckEqualShort(TextToSourceShort('ab'#7'cd', lfLF), '  ''ab''#7''cd'''#10);
+  CheckEqualShort(TextToSourceShort('ab'#7'cd'#1, lfLF), '  ''ab''#7''cd''#1'#10);
+  CheckEqualShort(TextToSourceShort('ab'#7'cd'#1'e''f'#13#10, lfLF),
+    '  ''ab''#7''cd''#1''e''''f''#13#10'#10);
   s := RawUtf8OfChar('a', 211);
   s := Join(['ab'#7, s, #1'cd'#2, s, '.']);
   CheckHash(TextToSource(s, lfLF), $429F0213);
@@ -8064,7 +8073,8 @@ begin
     begin
       s := RandomIdentifier(i);
       Check(not NeedsHtmlEscape(pointer(s), hf));
-      CheckEqual(HtmlEscape(s), s, 'HtmlEscape');
+      CheckEqual(HtmlEscape(s, hf), s, 'HtmlEscape');
+      CheckEqual(ShortStringToUtf8(HtmlEscapeShort(s, hf)), s);
       Check(not NeedsXmlEscape(pointer(s)));
       CheckEqual(XmlEscape(s), s, 'XmlEscape');
     end;
@@ -8081,6 +8091,7 @@ begin
     Check((t = s) <> (hf <> hfNone));
     if hf <> hfNone then
       CheckEqual(t, '&amp; some');
+    CheckEqual(ShortStringToUtf8(HtmlEscapeShort(s, hf)), t);
   end;
   CheckEqual(XmlEscape('&'), '&amp;');
   CheckEqual(XmlEscape(' &'), ' &amp;');
