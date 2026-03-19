@@ -70,6 +70,12 @@ function HtmlEscapeString(const text: string;
   fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// escape some UTF-8 text into a HTML ShortString
+// - just a wrapper around TTextWriter.AddHtmlEscape() process,
+// replacing < > & " chars depending on the HTML layer
+function HtmlEscapeShort(const text: RawUtf8;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): ShortString;
+
 /// escape some RTL string text into UTF-8 HTML
 // - just a wrapper around TTextWriter.AddHtmlEscapeString() process,
 // replacing < > & " chars depending on the HTML layer
@@ -777,6 +783,25 @@ begin
   end
   else
     result := text;
+end;
+
+function HtmlEscapeShort(const text: RawUtf8; fmt: TTextWriterHtmlFormat): ShortString;
+var
+  temp: ShortString;
+  W: TTextWriter;
+begin
+  if NeedsHtmlEscape(pointer(text), fmt) then
+  begin
+    W := TTextWriter.CreateOwnedShort(result, temp);
+    try
+      __AddHtmlEscape(W, pointer(text), {TextLen=}0, fmt);
+      W.FlushFinal;
+    finally
+      W.Free;
+    end;
+  end
+  else
+    Ansi7StringToShortString(text, result);
 end;
 
 function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
