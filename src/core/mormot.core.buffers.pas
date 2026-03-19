@@ -2096,8 +2096,7 @@ function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;
 // - will be #0 terminated, with '...' characters trailing on dmax overflow
 // - ensure the destination buffer contains at least dmax bytes, which is
 // always the case when using LogEscape() and its local TLogEscape variable
-function EscapeBuffer(s: PAnsiChar; slen: integer;
-  d: PAnsiChar; dmax: integer): PAnsiChar;
+function EscapeBuffer(s: PAnsiChar; slen: PtrInt; d: PAnsiChar; dmax: PtrInt): PAnsiChar;
 
 type
   /// 512 bytes buffer to be allocated on stack when using LogEscape()
@@ -2111,23 +2110,25 @@ type
 // - the "enabled" parameter can be assigned from a process option, avoiding to
 // process the escape if verbose logs are disabled
 // - used e.g. to implement logBinaryFrameContent option for WebSockets
-function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
+function LogEscape(source: PAnsiChar; sourcelen: PtrInt; var temp: TLogEscape;
   enabled: boolean = true): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns a text buffer with the (hexadecimal) chars of the input binary
 // - is much slower than LogEscape/EscapeToShort, but has no size limitation
-function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8; overload;
+function LogEscapeFull(source: PAnsiChar; sourcelen: PtrInt): RawUtf8; overload;
 
 /// returns a text buffer with the (hexadecimal) chars of the input binary
 // - is much slower than LogEscape/EscapeToShort, but has no size limitation
 function LogEscapeFull(const source: RawByteString): RawUtf8; overload;
 
 /// fill a ShortString with the (hexadecimal) chars of the input text/binary
-function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; overload;
+function EscapeToShort(source: PAnsiChar; sourcelen: PtrInt): ShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a ShortString with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(const source: RawByteString): ShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill an UTF-8 buffer with the (hexadecimal) chars of the input text/binary
 // - as used e.g. by ContentToShort() or TSynLog.LogEscape()
@@ -9398,8 +9399,7 @@ begin
     AppendShortCharSafe('s', result);
 end;
 
-function EscapeBuffer(s: PAnsiChar; slen: integer;
-  d: PAnsiChar; dmax: integer): PAnsiChar;
+function EscapeBuffer(s: PAnsiChar; slen: PtrInt; d: PAnsiChar; dmax: PtrInt): PAnsiChar;
 var
   c: AnsiChar;
   tab: PWordArray;
@@ -9449,7 +9449,7 @@ begin
   result^ := #0;
 end;
 
-function LogEscape(source: PAnsiChar; sourcelen: integer;
+function LogEscape(source: PAnsiChar; sourcelen: PtrInt;
   var temp: TLogEscape; enabled: boolean): PAnsiChar;
 begin
   if enabled then
@@ -9467,7 +9467,7 @@ begin
   result := LogEscapeFull(pointer(source), length(source));
 end;
 
-function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8;
+function LogEscapeFull(source: PAnsiChar; sourcelen: PtrInt): RawUtf8;
 begin
   FastSetString(result{%H-}, sourcelen * 3); // worse case
   if sourcelen <> 0 then
@@ -9475,7 +9475,7 @@ begin
       pointer(source), sourcelen, pointer(result), sourcelen * 3 + 4)));
 end;
 
-function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString;
+function EscapeToShort(source: PAnsiChar; sourcelen: PtrInt): ShortString;
 begin
   result[0] := AnsiChar(
     EscapeBuffer(source, sourcelen, @result[1], high(result)) - @result[1]);
