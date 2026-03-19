@@ -796,12 +796,9 @@ begin
   if NeedsHtmlEscape(pointer(text), fmt) then
   begin
     W := TTextWriter.CreateOwnedShort(result, temp);
-    try
-      __AddHtmlEscape(W, pointer(text), {TextLen=}0, fmt);
-      W.FlushFinal;
-    finally
-      W.Free;
-    end;
+    __AddHtmlEscape(W, pointer(text), {TextLen=}0, fmt);
+    W.FlushFinal;
+    W.Free;
   end
   else
     Ansi7StringToShortString(text, result);
