@@ -617,9 +617,9 @@ begin
           while (PtrUInt(Text) < PtrUInt(TextLen)) and
                 (esc[Text^] = 0) do
             inc(Text)
-        else
+        else // this next loop is faster without TextLen overload
           while true do
-            if esc[Text^] = 0 then // this loop is faster than TextLen overload
+            if esc[Text^] = 0 then
               inc(Text)
             else
               break;
@@ -639,7 +639,7 @@ begin
     begin
       if TextLen <= 0 then
         TextLen := StrLen(Text);
-      W.AddNoJsonEscape(Text, TextLen);
+      W.AddNoJsonEscape(Text, TextLen); // hfNone
     end;
 end;
 
@@ -651,7 +651,7 @@ begin
   p := pointer(Text);
   if p <> nil then
     if Fmt <> hfNone then
-      __AddHtmlEscape(W, p, {TextLen=}0, Fmt) // faster with no TextLen
+      _AddHtmlEscape(W, p, {TextLen=}0, Fmt) // faster with no TextLen
     else
       W.AddNoJsonEscapeBig(p, PStrLen(p - _STRLEN)^) // seldom called
 end;
