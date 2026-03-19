@@ -2270,15 +2270,6 @@ begin
   s[6] := TERM_CTRL[(ord(Color) and 7)];
 end;
 
-procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  c: TShort7;
-begin
-  TextColorCmd(Color, c);
-  AppendShortToUtf8(c, s);
-end;
-
 procedure TextColor(Color: TConsoleColor);
 var
   c: TShort7;
@@ -2296,30 +2287,40 @@ begin
   // not implemented yet - but not much needed either
 end;
 
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+procedure ConsoleWriteBuf(Text: PUtf8Char; Len: PtrInt; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 var
-  s: RawUtf8;
+  c: TShort7;
+  tmp: TSynTempAdder; // no heap allocation up to 4KB of output
 begin
-  // pre-compute the whole chars to be sent to the console
   NoColor := NoColor or (not StdOutIsTTY);
   if NoColor and
      NoLineFeed then
-    s := Text // no memory allocation needed
+    tmp.Store.buf := nil // no memory allocation needed
   else
   begin
+    tmp.Init;
     if not NoColor then
-      TextColorAppend(Color, s);
-    AppendBufferToUtf8(pointer(Text), length(Text), s);
+    begin
+      TextColorCmd(Color, c);
+      tmp.AddShort(c);
+    end;
+    tmp.Add(Text, Len);
     if not NoLineFeed then
-      AppendShortToUtf8(#10, s);
+      tmp.AddDirect(#10);
     if not NoColor then
-      TextColorAppend(ccLightGray, s);
+    begin
+      TextColorCmd(ccLightGray, c);
+      tmp.AddShort(c);
+    end;
+    Text := tmp.Buffer;
+    Len := tmp.Size;
   end;
   // display whole line in a single syscall, and within our global lock
   ConsoleCriticalSection.Lock;
-  FileWriteAll(StdOut, pointer(s), length(s)); // UTF-8 console
+  FileWriteAll(StdOut, Text, Len); // UTF-8 console
   ConsoleCriticalSection.UnLock;
+  tmp.Store.Done;
 end;
 
 function UnixKeyPending: boolean;

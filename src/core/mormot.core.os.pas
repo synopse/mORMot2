@@ -3773,12 +3773,17 @@ procedure TextColor(Color: TConsoleColor);
 /// change the console text background color
 procedure TextBackground(Color: TConsoleColor);
 
-/// write some text to the console using a given color
+/// write some UTF-8 text to the console using a given color
 // - this method is protected by its own CriticalSection for output consistency
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
   NoLineFeed: boolean = false; NoColor: boolean = false); overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
-/// write some text to the console using the current color
+/// cross-platform write some UTF-8 text buffer to the console using a given color
+procedure ConsoleWriteBuf(Text: PUtf8Char; Len: PtrInt; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+
+/// write some UTF-8 text to the console using the current color
 // - similar to writeln() but redirect to ConsoleWrite(NoColor=true)
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); overload;
   {$ifdef HASINLINE} inline; {$endif}
@@ -3786,7 +3791,6 @@ procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); ove
 /// append a line feed to the console
 // - similar to writeln but redirect to ConsoleWrite() with proper thread safety
 procedure ConsoleWriteLn;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// will wait for the ENTER key to be pressed, with all needed waiting process
 // - on the main thread, will call Synchronize() for proper work e.g. with
@@ -8569,10 +8573,15 @@ begin
   AppendShortIntHex(OSVersionInt32, text); // identify and OS version
 end;
 
+procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+begin
+  ConsoleWriteBuf(pointer(Text), length(Text), Color, NoLineFeed, NoColor);
+end;
 
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
 begin
-  ConsoleWrite(Text, ccLightGray, NoLineFeed, {nocolor=}true);
+  ConsoleWriteBuf(pointer(Text), length(Text), ccLightGray, NoLineFeed, true);
 end;
 
 procedure ConsoleWriteLn;

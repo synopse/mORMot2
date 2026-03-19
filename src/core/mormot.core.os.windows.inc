@@ -2661,27 +2661,31 @@ begin
     SetConsoleTextAttribute(StdOut, TextAttr);
 end;
 
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+procedure ConsoleWriteBuf(Text: PUtf8Char; Len: PtrInt; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 var
-  txt: RawByteString;
-  l: PtrInt;
+  tmp: RawByteString; // the Windows console is so slow anyway
 begin
   if not HasConsole then
     exit;
-  txt := Utf8ToConsole(Text); // convert to final GetConsoleOutputCP() code page
-  l := length(txt);
+  if Len > 0 then
+    if not ConsoleNeedConversion(Text, Len) or
+       not Win32Utf8ToAnsi(Text, Len, ConsoleOutputCP, tmp) then
+      FastSetStringCP(tmp, Text, Len, CP_UTF8);
+  Len := length(tmp);
   if not NoLineFeed then
   begin
-    SetLength(txt, l + 2); // faster to reallocate than WriteFile() twice
-    PWord(@PByteArray(txt)[l])^ := EOLW;
-    inc(l, 2);
-  end;
+    SetLength(tmp, Len + 2); // faster to resize than WriteFile() twice
+    PWord(@PByteArray(tmp)[Len])^ := EOLW;
+    inc(Len, 2);
+  end
+  else if Len = 0 then
+    exit;
   ConsoleCriticalSection.Lock;
   try
     if not NoColor then
       TextColor(Color);
-    FileWriteAll(StdOut, pointer(txt), l);
+    FileWriteAll(StdOut, pointer(tmp), Len);
     if not NoColor then
       TextColor(ccLightGray);
     // FlushFileBuffers(StdOut); // don't: would block until read on the pipe
@@ -2790,19 +2794,6 @@ begin
     StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
   if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
     result := 0;
-end;
-
-function Utf8ToConsole(const S: RawUtf8): RawByteString;
-begin
-  if not IsAnsiCompatible(S) then // need some encoding conversion
-  begin
-    if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
-      ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall
-    if ConsoleOutputCP <> CP_UTF8 then
-      if Win32Utf8ToAnsi(pointer(S), length(S), ConsoleOutputCP, result) then
-        exit;
-  end;
-  result := S; // no conversion needed, or conversion failed
 end;
 
 function TFileVersion.RetrieveInformationFromFileName: boolean;
