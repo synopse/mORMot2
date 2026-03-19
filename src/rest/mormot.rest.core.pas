@@ -4248,10 +4248,12 @@ begin
         AddDirect('[');
         repeat
           AddJsonEscapeVarRec(v);
+          dec(n);
+          if n = 0 then
+            break;
           AddComma;
           inc(v);
-          dec(n);
-        until n = 0;
+        until false;
         AddDirect(']');
       end;
       AddDirect('}');
