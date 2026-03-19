@@ -155,6 +155,7 @@ type
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
     fBackgroundRun: TLoggedWorker;
+    fFailedCheckEqualMaxLen: integer;
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -783,6 +784,7 @@ begin
   inherited Create(Ident);
   fOwner := Owner;
   fOptions := Owner.Options;
+  fFailedCheckEqualMaxLen := 4096;
 end;
 
 procedure TSynTestCase.Setup;
@@ -899,7 +901,7 @@ begin
   if HasConsole then
   begin
     tmp := Make(['CheckEqual ', msg, ' len a=', length(a), ' b=', length(b), CRLF]);
-    if length(a) > 200 then
+    if length(a) > fFailedCheckEqualMaxLen then // default 4096
     begin
       // big strings should move to the first diff location, and escape output
       start := 0;
@@ -916,7 +918,7 @@ begin
                    EscapeToShort(pb + start, length(b) - start), CRLF]);
     end
     else
-      // small strings could be written as pascal constants for copy & paste
+      // strings up to 4KB could be written as pascal constants for copy & paste
       Append(tmp, [TextToSource(a), TextToSource(b)]);
     ConsoleWrite(tmp, LOG_CONSOLE_COLORS[sllFail], {nolf=}true);
   end;
