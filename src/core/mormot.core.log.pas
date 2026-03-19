@@ -1328,8 +1328,8 @@ type
     class function Void: TSynLogClass;
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
-    // - will force a manual breakpoint if tests are run from the Delphi IDE, or
-    // will output the message to the current console
+    // - will force a manual breakpoint if tests are run from the Delphi IDE,
+    // and will output the message to the current console
     class procedure DebuggerNotify(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const); overload;
     /// low-level method helper which can be called to make debugging easier
@@ -5656,39 +5656,17 @@ end;
 
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
-{$ifdef WIN64DELPHI} // Delphi Win64 has no 64-bit inline assembler
-{$ifdef CPUINTEL}
-procedure DebugBreak;
-asm
-     .noframe
-     int  3
-end;
-{$else}
-procedure DebugBreak; // no ARM64 assembler on Delphi
-begin
-end;
-{$endif CPUINTEL}
-{$endif WIN64DELPHI}
-
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
 begin
   if Text = '' then
     exit;
   Add.LogInternalText(Level, pointer(Text), length(Text), nil, 16384);
-  {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
-  {$ifdef OSWINDOWS}
-  if IsDebuggerPresent then
-    {$ifdef WIN64DELPHI}
-    DebugBreak
-    {$else}
-    asm
-      int  3
-    end
-    {$endif WIN64DELPHI}
-  else
-  {$endif OSWINDOWS}
-  {$endif ISDELPHI}
+  if HasConsole then
     ConsoleWrite('%  ', [Text], LOG_CONSOLE_COLORS[Level], {noLF=}true);
+  {$ifdef WINTELDELPHI}
+  if IsDebuggerPresent then
+    DebuggerBreak;
+  {$endif WINTELDELPHI}
 end;
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel;
