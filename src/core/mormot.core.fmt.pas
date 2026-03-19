@@ -13,6 +13,7 @@ unit mormot.core.fmt;
     - INI Files In-memory Access
     - TSynJsonFileSettings parent class
     - JSON and Text Preprocessor
+    - Source Code Generation Functions
 
   *****************************************************************************
 }
@@ -584,6 +585,34 @@ function TextPreprocessToFile(const Text: RawUtf8; const Dest: TFileName;
 /// pre-process any text with $".." and $(ident) expansion into a stream
 function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
   Flags: TPreprocFlags = []; const IncludeRoot: TFileName = ''): boolean;
+
+
+{ ********** Source Code Generation Functions }
+
+/// generate some pascal source code holding some data binary as constant
+// - can store sensitive information (e.g. certificates) within the executable
+// - generates a source code snippet of the following format:
+// ! const
+// !   // Comment
+// !   ConstName: array[0..2] of byte = (
+// !     $01, $02, $03);
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
+  Data: pointer; Len: integer; PerLine: integer = 16); overload;
+
+/// generate some pascal source code holding some data binary as constant
+// - can store sensitive information (e.g. certificates) within the executable
+// - generates a source code snippet of the following format:
+// ! const
+// !   // Comment
+// !   ConstName: array[0..2] of byte = (
+// !     $01, $02, $03);
+function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
+  Len: integer; PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
+
+/// generate some pascal source code holding some data binary as constant
+function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteString;
+  PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
+
 
 
 implementation
@@ -3528,6 +3557,79 @@ begin
       result := false;
   end;
 end;
+
+
+{ ********** Source Code Generation Functions }
+
+function BinToSource(const ConstName, Comment: RawUtf8;
+  Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
+var
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  if (Data = nil) or
+     (Len <= 0) or
+     (PerLine <= 0) then
+    result := ''
+  else
+  begin
+    W := TTextWriter.CreateOwnedStream(temp,
+      Len * 5 + 50 + length(Comment) + length(Suffix));
+    try
+      BinToSource(W, ConstName, Comment, Data, Len, PerLine);
+      if Suffix <> '' then
+      begin
+        W.AddString(Suffix);
+        W.AddCR;
+      end;
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
+function BinToSource(const ConstName, Comment: RawUtf8;
+  const Data: RawByteString; PerLine: integer; const Suffix: RawUtf8): RawUtf8;
+begin
+  result := BinToSource(ConstName, Comment, pointer(Data), length(Data), PerLine, Suffix);
+end;
+
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
+  Data: pointer; Len, PerLine: integer);
+var
+  line, i: integer;
+  P: PByte;
+begin
+  if (Dest = nil) or
+     (Data = nil) or
+     (Len <= 0) or
+     (PerLine <= 0) then
+    exit;
+  Dest.AddShorter('const');
+  if Comment <> '' then
+    Dest.Add(#13#10'  // %', [Comment]);
+  Dest.Add(#13#10'  %: array[0..%] of byte = (', [ConstName, Len - 1]);
+  P := pointer(Data);
+  repeat
+    if len > PerLine then
+      line := PerLine
+    else
+      line := Len;
+    Dest.AddShorter(#13#10'   ');
+    for i := 1 to line do
+    begin
+      Dest.AddDirect(' ', '$');
+      Dest.AddByteToHexLower(P^);
+      inc(P);
+      Dest.AddComma;
+    end;
+    dec(Len,line);
+  until Len = 0;
+  Dest.CancelLastComma;
+  Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
+end;
+
 
 
 procedure InitializeUnit;

@@ -34,8 +34,9 @@ uses
   mormot.core.data,
   mormot.core.datetime,
   mormot.core.variants,
-  mormot.core.json,
   mormot.core.rtti,
+  mormot.core.json,
+  mormot.core.fmt,
   mormot.core.search, // for EccKeyFileFind()
   mormot.crypt.core,
   mormot.crypt.secure,

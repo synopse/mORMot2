@@ -175,6 +175,7 @@ Binary, JSON and Text Advanced Formatting Functions
 - INI Files In-memory Access
 - `TSynJsonFileSettings` Parent Class
 - JSON and Text Preprocessor
+- Source Code Generation Functions
 
 ### mormot.core.collections
 
