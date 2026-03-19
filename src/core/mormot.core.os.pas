@@ -3969,7 +3969,7 @@ var
 // so you may consider using AnsiToUtf8() from mormot.core.unicode.pas with the
 // proper code page depending on each application
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
-
+  {$ifdef FPC} inline; {$endif}
 
 type
   /// encapsulate cross-platform loading of library files

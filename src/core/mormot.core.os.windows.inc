@@ -266,12 +266,12 @@ var
 begin
   result := false;
   tmpW.Init(L * 2);
-  L := Utf8ToUnicode(tmpW.Buf, L + 8, P, L); // use the RTL
+  L := Utf8ToUnicode(tmpW.Buf, L + 8, P, L); // convert to UTF-16 with the RTL
   if L > 0 then // valid UTF-8
   begin
     dec(L); // Utf8ToUnicode() included trailing #0
     tmpA.Init(L * 3);
-    L := Unicode_WideToAnsi(tmpW.buf, tmpA.buf, L, tmpA.len + 16, CP);
+    L := Unicode_WideToAnsi(tmpW.buf, tmpA.buf, L, tmpA.len + 16, CP); // WinAPI
     if L > 0 then
     begin
       FastSetStringCP(A, tmpA.buf, L, CP); // keep A untouched on failure
@@ -576,6 +576,23 @@ begin
      (StdOut = INVALID_HANDLE_VALUE) then
     // force setup StdOut global variable
     StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+end;
+
+function ConsoleNeedConversion(P: pointer; Len: PtrInt): boolean;
+begin
+  result := false;
+  if IsAnsiCompatible(P, Len) then
+    exit; // most common case
+  if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
+    ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall
+  result := ConsoleOutputCP <> CP_UTF8;
+end;
+
+function Utf8ToConsole(const S: RawUtf8): RawByteString;
+begin
+  if not ConsoleNeedConversion(pointer(S), length(S)) or
+     not Win32Utf8ToAnsi(pointer(S), length(S), ConsoleOutputCP, result) then
+    result := S; // no conversion needed, or conversion failed
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
