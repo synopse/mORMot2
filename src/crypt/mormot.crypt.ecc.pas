@@ -524,7 +524,7 @@ type
     function SaveToSource(const ConstName, Comment, PassWord: RawUtf8;
       IncludePassword: boolean = true; AFStripes: integer = 0;
       Pbkdf2Round: integer = 100; Aes: TAesAbstractClass = nil;
-      IncludeRaw: boolean = true): RawUtf8;
+      IncludeRaw: boolean = true; LF: TLineFeed = lfSystem): RawUtf8;
     /// read a private secret key from an encrypted secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
     // - returns TRUE on success, FALSE otherwise
@@ -3153,7 +3153,7 @@ end;
 function TEccCertificateSecret.SaveToSource(
   const ConstName, Comment, PassWord: RawUtf8; IncludePassword: boolean;
   AFStripes, Pbkdf2Round: integer; Aes: TAesAbstractClass;
-  IncludeRaw: boolean): RawUtf8;
+  IncludeRaw: boolean; LF: TLineFeed): RawUtf8;
 var
   data: RawByteString;
   name, suffix: RawUtf8;
@@ -3182,7 +3182,7 @@ begin
   if IncludeRaw then
     suffix := FormatUtf8('  %_RAW = ''%'';'#13#10'%', [name,
       mormot.core.text.BinToHex(@fPrivateKey, SizeOf(fPrivateKey)), suffix]);
-  result := BinToSource(name, Comment, pointer(data), length(data), 16, suffix)
+  result := BinToSource(name, Comment, pointer(data), length(data), 16, suffix, LF);
 end;
 
 function TEccCertificateSecret.SignToBase64(Data: pointer; Len: integer): RawUtf8;
