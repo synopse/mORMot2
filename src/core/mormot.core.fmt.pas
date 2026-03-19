@@ -605,6 +605,15 @@ function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteStrin
   PerLine: PtrInt = 16; const Suffix: RawUtf8 = '';
   LF: TLineFeed = lfSystem): RawUtf8; overload;
 
+/// generate some pascal source code holding some data binary as constant
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
+  Data: pointer; Len, PerLine: PtrInt; const LF: ShortString); overload;
+
+/// generate some pascal source code string constant from UTF-8 text buffer
+procedure TextToSource(Dest: TTextWriter; P: PUtf8Char; const LF: ShortString); overload;
+
+/// generate some pascal source code string constant from UTF-8 text
+function TextToSource(const Text: RawUtf8; LF: TLineFeed = lfSystem): RawUtf8; overload;
 
 
 implementation
@@ -3619,6 +3628,67 @@ begin
   Dest.Add(');%  %_LEN = SizeOf(%);%', [LF, ConstName, ConstName, LF]);
 end;
 
+procedure TextToSource(Dest: TTextWriter; P: PUtf8Char; const LF: ShortString);
+var
+  line: string[87];
+  inquote: boolean;
+begin
+  if P = nil then
+    exit;
+  inquote := false;
+  line[0] := #0;
+  while P^ <> #0 do
+  begin
+    if line[0] = #0 then
+      PCardinal(@line)^ := $202002
+    else if line[0] > #75 then
+    begin
+      if inquote then
+        AppendShortChar('''', @line);
+      inquote := false;
+      AppendShortTwoChars(ord(' ') + ord('+') shl 8, @line);
+      AppendShort(LF, line);
+      Dest.AddShort(line);
+      PCardinal(@line)^ := $202002;
+    end;
+    if (P^ < ' ') = inquote then
+    begin
+      AppendShortChar('''', @line);
+      inquote := not inquote;
+    end;
+    if P^ >= ' ' then
+      AppendShortChar(P^, @line)
+    else
+    begin
+      AppendShortChar('#', @line);
+      AppendShortByte(ord(P^), @line);
+    end;
+    inc(P);
+  end;
+  if line[0] = #0 then
+    exit;
+  if inquote then
+    AppendShortChar('''', @line);
+  AppendShort(LF, line);
+  Dest.AddShort(line);
+end;
+
+function TextToSource(const Text: RawUtf8; LF: TLineFeed): RawUtf8;
+var
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  result := '';
+  if Text = '' then
+    exit;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    TextToSource(W, pointer(Text), LINE_FEED[LF]);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
 
 
 procedure InitializeUnit;
