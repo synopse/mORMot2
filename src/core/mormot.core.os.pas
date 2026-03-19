@@ -47,7 +47,7 @@ type
   /// allow to customize the possible line feeds
   TLineFeed = (
     lfSystem,
-    lfCR,
+    lfLF,
     lfCRLF);
 
 const
