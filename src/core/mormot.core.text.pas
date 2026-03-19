@@ -384,12 +384,14 @@ type
   // this instance, but specified at constructor, maybe from the stack
   // - twfNoWriteToStreamException let WriteToStream silently fail - use
   // TTextWriter.NoWriteToStreamException property to specify this option
+  // - twfBufferAndDestIsShortString is set by CreateOwnedShort constructor
   TTextWriterFlag = (
     twfStreamIsOwned,
     twfFlushToStreamNoAutoResize,
     twfNoWriteToStreamException,
     twfStreamIsRawByteString,
-    twfBufferIsOnStack);
+    twfBufferIsOnStack,
+    twfBufferAndDestIsShortString);
 
   /// options set for a TTextWriter / TJsonWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
@@ -552,6 +554,7 @@ type
     fInitialStreamPosition: Int64;
     fCustomOptions: TTextWriterOptions;
     fFlags: TTextWriterFlags;
+    fShortStringMax: byte; // = high(Dest) for twfBufferAndDestIsShortString
     function GetTextLength: Int64;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
@@ -603,6 +606,9 @@ type
     // any pending data to the file
     constructor CreateOwnedFileStream(const aFileName: TFileName;
       aBufSize: PtrUInt = 16384);
+    /// the data will be written to a ShortString - another is used as temp buffer
+    // - don't forget to call FlushFinal before Free to actually fill aDest
+    constructor CreateOwnedShort(var aDest, aTemp: ShortString);
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
@@ -4176,6 +4182,17 @@ begin
   SetBuffer(nil, aBufSize);
 end;
 
+constructor TTextWriter.CreateOwnedShort(var aDest, aTemp: ShortString);
+begin
+  if high(aTemp) < TRAIL_BYTES then
+     ESynException.RaiseUtf8('%.CreateOwnedShort(temp[%])', [self, high(aTemp)]);
+  fFlags := [twfBufferIsOnStack, twfBufferAndDestIsShortString, twfFlushToStreamNoAutoResize];
+  InternalSetBuffer(@aTemp, high(aTemp) + 1);
+  aDest[0] := #0;
+  fStream := @aDest; // not a true TStream
+  fShortStringMax := high(aDest);
+end;
+
 destructor TTextWriter.Destroy;
 begin
   if twfStreamIsOwned in fFlags then
@@ -4473,6 +4490,13 @@ begin
     fOnFlushToStream(data, len);
   if (len <> 0) and
      Assigned(fStream) then
+    if twfBufferAndDestIsShortString in fFlags then
+    begin // here fStream is a PShortString not a TStream
+      AppendShortBuffer(data, len, fShortStringMax, pointer(fStream));
+      if PShortString(fStream)^[0] = #255 then
+        fStream := nil; // don't write anything anymore
+    end
+    else
     repeat
       written := fStream.Write(data^, len);
       if written <= 0 then
@@ -4597,7 +4621,8 @@ var
 begin
   FlushFinal;
   Len := fWrittenBytes - fInitialStreamPosition;
-  if Len = 0 then
+  if (Len = 0) or
+     (twfBufferAndDestIsShortString in fFlags) then
   begin
     result := '';
     exit;
@@ -4636,7 +4661,8 @@ begin
     exit;
   end;
   result := nil; // if the TStream has no proper memory buffer to return
-  if fInitialStreamPosition = 0 then
+  if (fInitialStreamPosition = 0) and
+     not (twfBufferAndDestIsShortString in fFlags) then
     if twfStreamIsRawByteString in fFlags then
     begin
       FlushFinal;
@@ -4659,7 +4685,8 @@ procedure TTextWriter.CancelAll;
 begin
   if self = nil then
     exit; // avoid GPF
-  if fWrittenBytes <> 0 then
+  if (fWrittenBytes <> 0) and
+     not (twfBufferAndDestIsShortString in fFlags) then
     fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
   B := fTempBuf - 1;
 end;
@@ -4672,7 +4699,8 @@ end;
 
 procedure TTextWriter.CancelAllWith(var temp: TTextWriterStackBuffer);
 begin
-  if fWrittenBytes <> 0 then
+  if (fWrittenBytes <> 0) and
+     not (twfBufferAndDestIsShortString in fFlags) then
     fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
   if twfBufferIsOnStack in fFlags then
     InternalSetBuffer(@temp, SizeOf(temp))
