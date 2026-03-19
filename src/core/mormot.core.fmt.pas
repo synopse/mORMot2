@@ -596,22 +596,14 @@ function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
 // !   // Comment
 // !   ConstName: array[0..2] of byte = (
 // !     $01, $02, $03);
-procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
-  Data: pointer; Len: integer; PerLine: integer = 16); overload;
-
-/// generate some pascal source code holding some data binary as constant
-// - can store sensitive information (e.g. certificates) within the executable
-// - generates a source code snippet of the following format:
-// ! const
-// !   // Comment
-// !   ConstName: array[0..2] of byte = (
-// !     $01, $02, $03);
 function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
-  Len: integer; PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
+  Len: PtrInt; PerLine: PtrInt = 16; const Suffix: RawUtf8 = '';
+  LF: TLineFeed = lfSystem): RawUtf8; overload;
 
 /// generate some pascal source code holding some data binary as constant
 function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteString;
-  PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
+  PerLine: PtrInt = 16; const Suffix: RawUtf8 = '';
+  LF: TLineFeed = lfSystem): RawUtf8; overload;
 
 
 
@@ -3561,44 +3553,43 @@ end;
 
 { ********** Source Code Generation Functions }
 
-function BinToSource(const ConstName, Comment: RawUtf8;
-  Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
+function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
+  Len, PerLine: PtrInt; const Suffix: RawUtf8; LF: TLineFeed): RawUtf8;
 var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
+  result := '';
   if (Data = nil) or
      (Len <= 0) or
      (PerLine <= 0) then
-    result := ''
-  else
-  begin
-    W := TTextWriter.CreateOwnedStream(temp,
-      Len * 5 + 50 + length(Comment) + length(Suffix));
-    try
-      BinToSource(W, ConstName, Comment, Data, Len, PerLine);
-      if Suffix <> '' then
-      begin
-        W.AddString(Suffix);
-        W.AddCR;
-      end;
-      W.SetText(result);
-    finally
-      W.Free;
+    exit;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    BinToSource(W, ConstName, Comment, Data, Len, PerLine, LINE_FEED[LF]);
+    if Suffix <> '' then
+    begin
+      W.AddString(Suffix);
+      W.AddShort(LINE_FEED[LF]);
     end;
+    W.SetText(result);
+  finally
+    W.Free;
   end;
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
-  const Data: RawByteString; PerLine: integer; const Suffix: RawUtf8): RawUtf8;
+  const Data: RawByteString; PerLine: PtrInt; const Suffix: RawUtf8;
+  LF: TLineFeed): RawUtf8;
 begin
-  result := BinToSource(ConstName, Comment, pointer(Data), length(Data), PerLine, Suffix);
+  result := BinToSource(ConstName, Comment, pointer(Data), length(Data),
+    PerLine, Suffix, LF);
 end;
 
 procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
-  Data: pointer; Len, PerLine: integer);
+  Data: pointer; Len, PerLine: PtrInt; const LF: ShortString);
 var
-  line, i: integer;
+  line, i: PtrInt;
   P: PByte;
 begin
   if (Dest = nil) or
@@ -3608,15 +3599,13 @@ begin
     exit;
   Dest.AddShorter('const');
   if Comment <> '' then
-    Dest.Add(#13#10'  // %', [Comment]);
-  Dest.Add(#13#10'  %: array[0..%] of byte = (', [ConstName, Len - 1]);
+    Dest.Add('%  // %', [LF, Comment]);
+  Dest.Add('%  %: array[0..%] of byte = (', [LF, ConstName, Len - 1]);
   P := pointer(Data);
   repeat
-    if len > PerLine then
-      line := PerLine
-    else
-      line := Len;
-    Dest.AddShorter(#13#10'   ');
+    Dest.AddShorter(LF);
+    Dest.AddDirect(' ', ' ', ' ');
+    line := MinPtrInt(Len, PerLine);
     for i := 1 to line do
     begin
       Dest.AddDirect(' ', '$');
@@ -3627,7 +3616,7 @@ begin
     dec(Len,line);
   until Len = 0;
   Dest.CancelLastComma;
-  Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
+  Dest.Add(');%  %_LEN = SizeOf(%);%', [LF, ConstName, ConstName, LF]);
 end;
 
 
