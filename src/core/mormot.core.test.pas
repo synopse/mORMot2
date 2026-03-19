@@ -308,10 +308,10 @@ type
     procedure RunWait(NotifyThreadCount: boolean = true; TimeoutSec: integer = 60;
       CallSynchronize: boolean = true);
     /// this method is triggered internally - e.g. by Check() - when a test failed
-    procedure TestFailed(const msg: string; notify: boolean = false); overload;
+    procedure TestFailed(const msg: string; notify: boolean = true); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
     procedure TestFailed(const msg: RawUtf8; const args: array of const;
-      notify: boolean = false); overload;
+      notify: boolean = true); overload;
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
