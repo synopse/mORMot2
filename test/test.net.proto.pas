@@ -1561,7 +1561,8 @@ begin
           Check(BufferIsKeyTab(keytab), 'keytab!');
           keytabfile := TemporaryFileName;
           FileFromString(keytab, keytabfile);
-          CheckEqual(FileIsKeyTabMachineAccountPrincipal(keytabfile, true), usr);
+          ku := FileIsKeyTabMachineAccountPrincipal(keytabfile, true);
+          CheckUtf8(IdemPropNameU(ku, usr), '%=%', [ku, usr]);
           {$ifdef OSPOSIX}
           one := TLdapClient.Create;
           try
