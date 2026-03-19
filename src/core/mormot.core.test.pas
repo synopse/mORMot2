@@ -1048,6 +1048,7 @@ function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
 var
   msg: string;
 begin
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
     Method(Params);
     result := false;
@@ -1065,6 +1066,7 @@ begin
         FormatString('% instead of %', [E, Raised], msg);
     end;
   end;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   Check(result, msg);
 end;
 
