@@ -39,6 +39,7 @@ uses
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.variants;
 
 
@@ -3256,10 +3257,10 @@ begin
   w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddShort('<!DOCTYPE html>'#13#10'<html>'#13#10'<head>'#13#10'<title>Index of /');
-    w.AddHtmlEscapeUtf8(Name); // paranoid
+    AddHtmlEscapeUtf8(w, Name); // paranoid
     w.AddShort('</title>'#13#10'</head>'#13#10 +
       '<body style="font-family:verdana">'#13#10'<h1>Index of /');
-    w.AddHtmlEscapeUtf8(Name);
+    AddHtmlEscapeUtf8(w, Name);
     w.AddShort('</h1>'#13#10'<table>'#13#10 +
       '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
       '<tr><th colspan="4"><hr></th></tr>'#13#10);
@@ -3281,7 +3282,7 @@ begin
         w.AddShort('</td><td><a href="');
         if Path <> '' then
         begin
-          w.AddHtmlEscapeUtf8(Path);
+          AddHtmlEscapeUtf8(w, Path);
           if Path[length(Path)] <> '/' then
             w.AddDirect('/');
         end;
@@ -3289,7 +3290,7 @@ begin
         if not isFile then
           w.AddDirect('/');
         w.AddDirect('"', '>');
-        w.AddHtmlEscapeUtf8(n);
+        AddHtmlEscapeUtf8(w, n);
         if not isFile then
           w.AddDirect('/');
         w.AddShort('</a></td><td>');

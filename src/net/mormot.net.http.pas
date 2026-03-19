@@ -266,7 +266,8 @@ function GetNextRange(var P: PUtf8Char): Qword;
 procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// append an IPv4 as '"name":"1.2.3.4"' JSON string
+/// append an IPv4 as "name":"1.2.3.4", JSON object field
+// - do nothing if IP is '0.0.0.0'
 procedure AddJsonWriterPropIP4(W: TTextWriter; const name: ShortString; ip4: pointer);
 
 const

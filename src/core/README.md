@@ -169,6 +169,7 @@ JSON functions shared by all framework units
 ### mormot.core.fmt
 
 Binary, JSON and Text Advanced Formatting Functions
+- HTML Text Conversions
 - Basic XML Conversions
 - Markup (e.g. Markdown or Emoji) process
 - INI Files In-memory Access

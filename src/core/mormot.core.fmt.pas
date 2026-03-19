@@ -7,6 +7,7 @@ unit mormot.core.fmt;
   *****************************************************************************
 
    Binary, JSON and Text Advanced Formatting Functions
+    - HTML Text Conversions
     - Basic XML Conversions
     - Markup (e.g. Markdown or Emoji) Process
     - INI Files In-memory Access
@@ -34,6 +35,55 @@ uses
   mormot.core.data,
   mormot.core.json,
   mormot.core.variants;
+
+
+{ ************* HTML Text Conversions }
+
+/// append some UTF-8 chars, escaping all HTML special chars as expected
+procedure AddHtmlEscapeUtf8(W: TTextWriter; const Text: RawUtf8;
+  Fmt: TTextWriterHtmlFormat = hfAnyWhere);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level function removing all &lt; &gt; &amp; &quot; HTML entities
+procedure AddHtmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+
+/// low-level function removing all HTML <tag> and &entities;
+procedure AddHtmlAsText(W: TTextWriter; p, tag: PUtf8Char; plen: PtrUInt);
+
+/// check if some UTF-8 text would need HTML escaping
+function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
+
+/// low-level conversion of an &amp; HTML entity into 32-bit Unicode Code Point
+function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
+
+/// escape some UTF-8 text into HTML
+// - just a wrapper around TTextWriter.AddHtmlEscape() process,
+// replacing < > & " chars depending on the HTML layer
+function HtmlEscape(const text: RawUtf8;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
+
+/// escape some RTL string text into UTF-8 HTML
+// - just a wrapper around TTextWriter.AddHtmlEscapeString() process,
+// replacing < > & " chars depending on the HTML layer
+function HtmlEscapeString(const text: string;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// escape some RTL string text into UTF-8 HTML
+// - just a wrapper around TTextWriter.AddHtmlEscapeString() process,
+// replacing < > & " chars depending on the HTML layer
+procedure HtmlEscapeString(const text: string; var result: RawUtf8;
+  fmt: TTextWriterHtmlFormat); overload;
+
+/// convert all &lt; &gt; &amp; &quot; HTML entities into their UTF-8 equivalency
+function HtmlUnescape(const text: RawUtf8): RawUtf8;
+
+/// minimal HTML-to-text conversion function
+// - trim all HTML <tag></tag> and &entities; - with minimal CRLF formatting
+function HtmlToText(const text: RawUtf8): RawUtf8;
+
+/// quickly detect <p> <div> <br> <li> <h#> HTML tags
+function HtmlTagNeedsCRLF(tag: PUtf8Char): boolean;
 
 
 { ************* Basic XML Conversions }
@@ -537,6 +587,369 @@ function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
 
 
 implementation
+
+
+{ ************* HTML Text Conversions }
+
+var
+  HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
+const
+  HTML_ESCAPED: array[1 .. 4] of TShort7 = (
+    '&lt;', '&gt;', '&amp;', '&quot;');
+
+procedure __AddHtmlEscape(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt;
+  Fmt: TTextWriterHtmlFormat);
+var
+  beg: PUtf8Char;
+  esc: PAnsiCharToByte;
+begin
+  if Text <> nil then
+    if Fmt <> hfNone then
+    begin
+      if TextLen > 0 then
+        inc(TextLen, PtrUInt(Text)) // PtrUInt(TextLen) = PtrUInt(TextEnd)
+      else
+        TextLen := 0;
+      esc := @HTML_ESC[Fmt];
+      beg := Text;
+      repeat
+        if TextLen <> 0 then
+          while (PtrUInt(Text) < PtrUInt(TextLen)) and
+                (esc[Text^] = 0) do
+            inc(Text)
+        else
+          while true do
+            if esc[Text^] = 0 then // this loop is faster than TextLen overload
+              inc(Text)
+            else
+              break;
+        W.AddNoJsonEscape(beg, Text - beg);
+        if (Text^ = #0) or
+           ((TextLen <> 0) and
+            (PtrUInt(Text) >= PtrUInt(TextLen))) then
+          exit;
+        W.AddShorter(HTML_ESCAPED[esc[Text^]]);
+        inc(Text);
+        beg := Text;
+      until (Text^ = #0) or
+            ((TextLen <> 0) and
+             (PtrUInt(Text) >= PtrUInt(TextLen)));
+    end
+    else
+    begin
+      if TextLen <= 0 then
+        TextLen := StrLen(Text);
+      W.AddNoJsonEscape(Text, TextLen);
+    end;
+end;
+
+procedure AddHtmlEscapeUtf8(W: TTextWriter; const Text: RawUtf8;
+  Fmt: TTextWriterHtmlFormat);
+var
+  p: PUtf8Char;
+begin
+  p := pointer(Text);
+  if p <> nil then
+    if Fmt <> hfNone then
+      __AddHtmlEscape(W, p, {TextLen=}0, Fmt) // faster with no TextLen
+    else
+      W.AddNoJsonEscapeBig(p, PStrLen(p - _STRLEN)^) // seldom called
+end;
+
+procedure AddHtmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+var
+  l: PtrUInt;
+  c: Ucs4CodePoint;
+begin
+  repeat
+    if amp = nil then
+    begin
+      amp := PosChar(p, plen, '&'); // use fast SSE2 asm on x86_64
+      if amp = nil then
+      begin
+        W.AddNoJsonEscape(p, plen); // no more content to escape
+        exit;
+      end;
+    end;
+    l := amp - p;
+    if l <> 0 then
+    begin
+      W.AddNoJsonEscape(p, l);
+      dec(plen, l);
+      if plen = 0 then
+        exit;
+      p := amp;
+    end;
+    amp := nil; // call PosChar() on next iteration
+    inc(p); // ignore '&'
+    dec(plen);
+    l := 0;
+    while (l < plen) and
+          (p[l] in ['a'..'z', 'A'..'Z', '1'..'4']) do
+      inc(l);
+    if p[l] = ';' then
+    begin
+      c := EntityToUcs4(p, l); // &lt; -> ord('<')
+      if c <> 0 then
+      begin
+        if c = $00a0 then             // &nbsp;
+          c := ord(' ');
+        if c <= $7f then              // &amp;
+          W.Add(AnsiChar(c))
+        else if c = $2026 then
+          W.AddShort4(DOT_24, 3)      // &hellip;
+        else
+          W.AddWideChar(WideChar(c)); // &Eacute;
+        inc(p, l + 1);
+        dec(plen, l + 1);
+        continue;
+      end;
+    end;
+    W.AddDirect('&');
+  until plen = 0;
+end;
+
+
+function NeedsHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat): boolean;
+var
+  esc: PAnsiCharToByte;
+begin
+  if (Text <> nil) and
+     (Fmt <> hfNone) then
+  begin
+    result := true;
+    esc := @HTML_ESC[Fmt];
+    while true do
+      if esc[Text^] = 0 then
+        inc(Text) // fast process of unescaped plain text
+      else if Text^ = #0 then
+        break     // no escape needed
+      else
+        exit;     // needs XML escape
+  end;
+  result := false;
+end;
+
+function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHtmlFormat): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  W: TTextWriter;
+begin
+  if NeedsHtmlEscape(pointer(text), fmt) then
+  begin
+    W := TTextWriter.CreateOwnedStream(temp);
+    try
+      __AddHtmlEscape(W, pointer(text), {TextLen=}0, fmt);
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end
+  else
+    result := text;
+end;
+
+function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
+begin
+  HtmlEscapeString(text, result, fmt);
+end;
+
+procedure HtmlEscapeString(const text: string; var result: RawUtf8; fmt: TTextWriterHtmlFormat);
+var
+  temp: TTextWriterStackBuffer;
+  W: TTextWriter;
+begin
+  {$ifdef UNICODE}
+  if fmt = hfNone then
+  begin
+    StringToUtf8(text, result);
+    exit;
+  end;
+  {$else}
+  if not NeedsHtmlEscape(pointer(text), fmt) then // work for any AnsiString
+  begin
+    if IsAnsiCompatible(text) then
+      result := text
+    else
+      StringToUtf8(text, result);
+    exit;
+  end;
+  {$endif UNICODE}
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.AddHtmlEscapeString(text, fmt);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+const // rough but efficient storage of all &xxx; entities for fast SSE2 search
+  HTML_UNESCAPE: array[1 .. 102] of array[0 .. 3] of AnsiChar = (
+    'amp',  'lt',   'gt',   'quot', 'rsqu', {6=}'ndas', {7=}'trad', {8=}'hell',
+    'nbsp', 'iexc', 'cent', 'poun', 'curr', 'yen',  'brvb', 'sect', 'uml',
+    'copy', 'ordf', 'laqu', 'not',  'shy',  'reg',  'macr', 'deg',  'plus',
+    'sup2', 'sup3', 'acut', 'micr', 'para', 'midd', 'cedi', 'sup1', 'ordm',
+    'raqu',  {37=}'frac',   'ique', 'Agra', 'Aacu', 'Acir', 'Atil',
+    'Auml', 'Arin', 'AEli', 'Cced', 'Egra', 'Eacu', 'Ecir', 'Euml', 'Igra',
+    'Iacu', 'Icir', 'Iuml', 'ETH',  'Ntil', 'Ogra', 'Oacu', 'Ocir', 'Otil',
+    'Ouml', 'time', 'Osla', 'Ugra', 'Uacu', 'Ucir', 'Uuml', 'Yacu', 'THOR',
+    'szli', 'agra', 'aacu', 'acir', 'atil', 'auml', 'arin', 'aeli', 'cced',
+    'egra', 'eacu', 'ecir', 'euml', 'igra', 'iacu', 'icir', 'iuml', 'eth',
+    'ntil', 'ogra', 'oacu', 'ocir', 'otil', 'ouml', 'divi', 'osla', 'ugra',
+    'uacu', 'ucir', 'uuml', 'yacu', 'thor', 'yuml');
+  HTML_UNESCAPED: array[1 .. 8] of word = (
+    ord('&'), ord('<'), ord('>'), ord('"'), ord(''''), ord('-'), 153, $2026);
+
+function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
+var
+  by4: cardinal;
+begin
+  result := 0;
+  if (len < 2) or (len > 6) then
+    exit;
+  by4 := 0;
+  MoveByOne(entity, @by4, MinPtrUInt(4, len));
+  result := IntegerScanIndex(@HTML_UNESCAPE, length(HTML_UNESCAPE), by4) + 1;
+  if result >= 37 then // adjust 'frac' as frac14', 'frac12' or 'frac34'
+    if result > 37 then
+      inc(result, 2)
+    else
+      case cardinal(PWord(entity + 4)^) of
+        ord('1') + ord('4') shl 8:
+          ;
+        ord('1') + ord('2') shl 8:
+          inc(result);
+        ord('3') + ord('4') shl 8:
+          inc(result, 2);
+      else
+        result := 0;
+      end;
+  if result <> 0 then
+    if result <= high(HTML_UNESCAPED) then
+      result := ord(HTML_UNESCAPED[result]) // non linear entities
+     else
+       inc(result, $00a0 - 9); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
+end;
+
+function HtmlUnescape(const text: RawUtf8): RawUtf8;
+var
+  W: TTextWriter;
+  amp: PUtf8CHar;
+  temp: TTextWriterStackBuffer;
+begin
+  amp := PosCharU(text, '&'); // use fast SSE2 asm on x86_64
+  if amp = nil then
+  begin
+    result := text; // nothing to change
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    AddHtmlUnescape(W, pointer(text), amp, length(text));
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function HtmlToText(const text: RawUtf8): RawUtf8;
+var
+  W: TTextWriter;
+  tag: PUtf8CHar;
+  temp: TTextWriterStackBuffer;
+begin
+  tag := PosCharU(text, '<'); // use fast SSE2 asm on x86_64
+  if tag = nil then
+  begin
+    result := HtmlUnescape(text); // no tag, but there may be some &entity;
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    AddHtmlAsText(W, pointer(text), tag, length(text));
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+
+function HtmlTagNeedsCRLF(tag: PUtf8Char): boolean;
+var
+  taglen: PtrUInt;
+begin
+  result := false;
+  if tag^ = '/' then
+    inc(tag); // identify </p> just like <p>
+  taglen := 0;
+  if tag[taglen] in ['a'..'z', 'A'..'Z'] then
+    repeat
+      inc(taglen);
+    until (taglen > 3) or
+          not (tag[taglen] in ['a'..'z', 'A'..'Z', '1'..'9']);
+  case taglen of
+    1:
+      result := tag^ in ['p', 'P'];
+    2:
+      case cardinal(PWord(tag)^) and $dfdf of
+        ord('B') + ord('R') shl 8,
+        ord('L') + ord('I') shl 8,
+        ord('H') + (ord('1') and $df) shl 8,
+        ord('H') + (ord('2') and $df) shl 8,
+        ord('H') + (ord('3') and $df) shl 8,
+        ord('H') + (ord('4') and $df) shl 8,
+        ord('H') + (ord('5') and $df) shl 8,
+        ord('H') + (ord('6') and $df) shl 8:
+          result := true;
+      end;
+    3:
+      result := PCardinal(tag)^ and $00dfdfdf =
+                  ord('D') + ord('I') shl 8 + ord('V') shl 16;
+  end;
+
+end;
+
+procedure AddHtmlAsText(W: TTextWriter; p, tag: PUtf8Char; plen: PtrUInt);
+var
+  l: PtrInt;
+begin
+  repeat
+    if tag = nil then
+    begin
+      tag := PosChar(p, plen, '<'); // use fast SSE2 asm on x86_64
+      if tag = nil then
+      begin
+        AddHtmlUnescape(W, p, nil, plen);
+        exit;
+      end;
+    end;
+    l := tag - p;
+    if l <> 0 then
+    begin
+      AddHtmlUnescape(W, p, nil, l);
+      dec(plen, l);
+      if plen = 0 then
+        exit;
+      p := tag;
+    end;
+    inc(p); // ignore '<'
+    dec(plen);
+    tag := PosChar(p, plen, '>');
+    if tag = nil then
+      W.Add('<') // not a real tag
+    else
+    begin
+      if HtmlTagNeedsCRLF(p) then
+        if W.LastChar >= ' ' then // <p> <h1> append once a line feed
+          W.AddDirect(#13, #10);
+      l := tag - p + 1;
+      inc(p, l);
+      dec(plen, l);
+    end;
+    tag := nil; // call PosChar() on next iteration
+  until plen = 0;
+end;
 
 
 { ************* Basic XML Conversions }
@@ -3123,6 +3536,23 @@ var
   e: TEmoji;
   esc: PAnsiCharToByte;
 begin
+  // HTML Efficient Parsing
+  esc := @HTML_ESC[hfAnyWhere]; // HTML_ESCAPED[1..4] = &lt; &gt; &amp; &quot;
+  esc[#0]  := 1;
+  esc['<'] := 1;
+  esc['>'] := 2;
+  esc['&'] := 3;
+  esc['"'] := 4;
+  esc := @HTML_ESC[hfOutsideAttributes];
+  esc[#0]  := 1;
+  esc['<'] := 1;
+  esc['>'] := 2;
+  esc['&'] := 3;
+  esc := @HTML_ESC[hfWithinAttributes];
+  esc[#0]  := 1;
+  esc['&'] := 3;
+  esc['"'] := 4;
+  _AddHtmlEscape := __AddHtmlEscape;
   // XML Efficient Parsing
   esc := @XML_ESC; // XML_ESCAPED[] = &#x09 &#x0a &#x0d &lt &gt &amp &quot &apos
   for c := #1 to #31 do
@@ -3136,7 +3566,7 @@ begin
   esc['&'] := 6;
   esc['"'] := 7;
   esc[''''] := 8;
-  // HTML/Emoji Efficient Parsing
+  // Emoji Efficient Parsing
   Assert(ord(high(TEmoji)) = $4f + 1);
   EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
   GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, scLowerCase);

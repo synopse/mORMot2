@@ -9454,7 +9454,7 @@ begin
         Dest.AddDirect('<', 't', 'd', '>');
       if Assigned(OnExportValue) and
          (r > 0) then
-        Dest.AddHtmlEscapeUtf8(OnExportValue(self, r, f, true), hfOutsideAttributes)
+        AddHtmlEscapeUtf8(Dest, OnExportValue(self, r, f, true), hfOutsideAttributes)
       else
         Dest.AddHtmlEscape(GetResults(o), hfOutsideAttributes);
       if r = 0 then
