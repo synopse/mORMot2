@@ -450,6 +450,9 @@ var
   // LoadGssApi() again
   GssLib_OS: TFileName = GssOSDef;
 
+  /// force a single library name for GSSAPI - for no system wide search
+  GssLib_ForceUnique: TFileName = '';
+
   /// global information filled by LoadGssApi() on failure
   GssApi_LastLoadError: string;
 
@@ -815,16 +818,22 @@ begin
   if GssApi <> nil then
     // already loaded
     exit;
-  tried := LibraryName + GssLib_Custom + GssLib_MIT + GssLib_Heimdal + GssLib_OS;
+  tried := GssLib_ForceUnique;
+  if tried = '' then
+    tried := LibraryName + GssLib_Custom + GssLib_MIT + GssLib_Heimdal + GssLib_OS;
   if GssApiTried = tried then
     // retry LoadLibrary() only if any of the .so names changed
     exit;
   GssApiTried := tried;
   api := TGssApi.Create;
-  api.TryFromExecutableFolder := true; // good idea to check local first
-  if api.TryLoadResolve(
-      [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS],
-      '', @GSS_ENTRIES, @@api.gss_import_name, nil, @GssApi_LastLoadError) then
+  api.TryFromExecutableFolder := GssLib_ForceUnique = ''; // check local first
+  if ((GssLib_ForceUnique = '') and
+      api.TryLoadResolve(
+        [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS], '',
+          @GSS_ENTRIES, @@api.gss_import_name, nil, @GssApi_LastLoadError)) or
+     ((GssLib_ForceUnique <> '') and
+      api.TryLoadResolve([GssLib_ForceUnique], '',
+        @GSS_ENTRIES, @@api.gss_import_name, nil, @GssApi_LastLoadError)) then
   begin
     if Assigned(api.gss_acquire_cred) and
        Assigned(api.gss_accept_sec_context) and
