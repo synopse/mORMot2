@@ -1275,7 +1275,7 @@ end;
 procedure TSynTestCase.TestFailed(const msg: RawUtf8; const args: array of const;
   notify: boolean);
 begin
-  fOwner.DoLog(sllFail, msg, Args, notify);
+  TestFailed(FormatString(msg, args), notify);
 end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
