@@ -4709,6 +4709,23 @@ var
   c: cardinal;
   s, exp: RawUtf8;
 begin
+  // validate source code generation
+  CheckEqual(TextToSource(''), '');
+  CheckEqual(TextToSource('ab', lfLF), '  ''ab'''#10);
+  CheckEqual(TextToSource('ab'#7, lfLF), '  ''ab''#7'#10);
+  CheckEqual(TextToSource('ab'#7'cd', lfLF), '  ''ab''#7''cd'''#10);
+  CheckEqual(TextToSource('ab'#7'cd'#1, lfLF), '  ''ab''#7''cd''#1'#10);
+  s := RawUtf8OfChar('a', 211);
+  s := Join(['ab'#7, s, #1'cd'#2, s, '.']);
+  CheckHash(TextToSource(s, lfLF), $429F0213);
+  AppendCharToRawUtf8(s, '1');
+  CheckHash(TextToSource(s, lfLF), $CE600C30);
+  AppendCharToRawUtf8(s, '2');
+  CheckHash(TextToSource(s, lfLF), $AE154C77);
+  AppendCharToRawUtf8(s, '3');
+  CheckHash(TextToSource(s, lfLF), $CD2B6983);
+  CheckHash(BinToSource('DATA', '', 'data', 16, '', lfLF), $2FEE1DC5);
+  CheckHash(BinToSource('DATA', 'some comment', s, 16, '', lfLF), $9F4563CE);
   // html escape and parsing
   CheckEqual(HtmlUnescape(''), '');
   CheckEqual(HtmlUnescape('test'), 'test');
